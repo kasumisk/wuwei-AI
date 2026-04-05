@@ -1,0 +1,19 @@
+{
+  "name": "@ai-platform/shared",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "@types/minimatch": "^6.0.0",
+    "typescript": "^5.7.3"
+  }
+}

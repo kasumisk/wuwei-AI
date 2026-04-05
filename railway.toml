@@ -1,0 +1,10 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "apps/api-server/Dockerfile"
+
+[deploy]
+startCommand = "node -e \"const ds=require('./dist/core/database/data-source');ds.default.initialize().then(()=>ds.default.runMigrations({transaction:'all'})).then(()=>ds.default.destroy()).then(()=>{console.log('Migrations complete, starting app...');require('./dist/main');}).catch(e=>{console.error('Migration failed:',e);process.exit(1);})\""
+healthcheckPath = "/api/health/live"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10

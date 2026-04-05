@@ -1,0 +1,47 @@
+# Node modules
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+.next/
+out/
+build/
+
+# Cache
+.turbo/
+.cache/
+.temp/
+
+# Logs
+*.log
+logs/
+
+# Environment files (管理通过 Vercel Dashboard)
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage/
+.nyc_output/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# AI generated (already in client .gitignore)
+.github/
+.shared/

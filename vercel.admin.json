@@ -1,0 +1,11 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "framework": null,
+  "installCommand": "pnpm install",
+  "buildCommand": "pnpm turbo build --filter=@ai-platform/admin",
+  "outputDirectory": "apps/admin/dist",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

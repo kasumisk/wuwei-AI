@@ -1,0 +1,21 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": "..",
+  "testEnvironment": "node",
+  "testRegex": "test/.*\\.spec\\.ts$",
+  "transform": {
+    "^.+\\.(t|j)s$": "ts-jest"
+  },
+  "collectCoverageFrom": [
+    "src/**/*.(t|j)s",
+    "!src/**/*.spec.ts",
+    "!src/main.ts",
+    "!src/**/*.module.ts"
+  ],
+  "coverageDirectory": "./coverage",
+  "moduleNameMapper": {
+    "^@/(.*)$": "<rootDir>/src/$1",
+    "^@ai-platform/shared$": "<rootDir>/../../packages/shared/src",
+    "^@ai-platform/constants$": "<rootDir>/../../packages/constants/src"
+  }
+}

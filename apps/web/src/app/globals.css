@@ -1,0 +1,135 @@
+@import 'tailwindcss';
+
+/* Tailwind v4: data-theme attribute dark mode, matched to next-themes ThemeProvider */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, monospace;
+  --font-headline: 'Manrope', ui-sans-serif, system-ui, sans-serif;
+
+  /* Nexus Quantum Design System — Light Theme */
+  --color-background: oklch(98.1% 0.0035 248.2);    /* #f7f9fb */
+  --color-foreground: oklch(22.4% 0.006 236.9);      /* #191c1e on-surface */
+  --color-card: oklch(100% 0 0);                      /* #ffffff surface-container-lowest */
+  --color-card-foreground: oklch(22.4% 0.006 236.9);
+  --color-popover: oklch(100% 0 0);
+  --color-popover-foreground: oklch(22.4% 0.006 236.9);
+
+  /* Primary — Electric Blue */
+  --color-primary: oklch(48.1% 0.176 257.7);          /* #0058be */
+  --color-primary-foreground: oklch(100% 0 0);         /* #ffffff */
+
+  /* Secondary — muted surface for shadcn semantics */
+  --color-secondary: oklch(96.6% 0.0035 248.2);       /* #f2f4f6 surface-container-low */
+  --color-secondary-foreground: oklch(22.4% 0.006 236.9);
+
+  /* Muted — subtle background */
+  --color-muted: oklch(94.8% 0.0035 248.2);           /* #eceef0 surface-container */
+  --color-muted-foreground: oklch(57% 0.022 270);      /* #727785 outline */
+
+  /* Accent — Cyber Purple */
+  --color-accent: oklch(50% 0.222 291.1);              /* #6b38d4 secondary/purple */
+  --color-accent-foreground: oklch(100% 0 0);
+
+  --color-destructive: oklch(50.6% 0.193 27.7);        /* #ba1a1a */
+  --color-destructive-foreground: oklch(100% 0 0);
+
+  --color-border: oklch(96.8% 0.023 274.7);            /* #c2c6d6 outline-variant */
+  --color-input: oklch(82.8% 0.023 274.7);
+  --color-ring: oklch(48.1% 0.176 257.7);              /* primary blue */
+
+  --radius: 0.5rem;
+
+  /* Extended palette for direct use */
+  --color-nexus-primary: oklch(48.1% 0.176 257.7);
+  --color-nexus-primary-container: oklch(56.6% 0.192 258.9);
+  --color-nexus-secondary: oklch(50% 0.222 291.1);
+  --color-nexus-secondary-container: oklch(58.4% 0.219 292.3);
+  --color-nexus-tertiary: oklch(46.7% 0.083 215.6);
+  --color-nexus-surface: oklch(98.1% 0.0035 248.2);
+  --color-nexus-surface-container: oklch(94.8% 0.0035 248.2);
+  --color-nexus-surface-dim: oklch(88% 0.005 248);
+  --color-nexus-primary-fixed: oklch(91.4% 0.041 270.5);
+  --color-nexus-primary-fixed-dim: oklch(82.8% 0.085 266.2);
+}
+
+@layer base {
+  [data-theme="dark"] {
+    /* Dark — deep blue-tinted surfaces */
+    --color-background: oklch(12% 0.02 260);
+    --color-foreground: oklch(95% 0.005 248);
+
+    --color-card: oklab(0.278998 -0.00710082 -0.0403727 / 0.5);
+    --color-card-foreground: oklch(95% 0.005 248);
+
+    --color-popover: oklch(18% 0.025 260);
+    --color-popover-foreground: oklch(95% 0.005 248);
+
+    /* Primary — brighter blue in dark mode */
+    --color-primary: oklch(70% 0.16 260);
+    --color-primary-foreground: oklch(98% 0.01 260);
+
+    --color-secondary: oklch(20% 0.025 260);
+    --color-secondary-foreground: oklch(90% 0.01 260);
+
+    --color-muted: oklch(18% 0.02 260);
+    --color-muted-foreground: oklch(65% 0.02 260);
+
+    /* Accent — brighter purple in dark */
+    --color-accent: oklch(70% 0.18 290);
+    --color-accent-foreground: oklch(98% 0.01 260);
+
+    --color-destructive: oklch(55% 0.22 25);
+    --color-destructive-foreground: oklch(98% 0.01 260);
+
+    --color-border: oklch(25% 0.03 260);
+    --color-input: oklch(28% 0.03 260);
+    --color-ring: oklch(70% 0.16 260);
+  }
+
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+  }
+}
+
+/* Utility classes */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.glass-morphism {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+[data-theme="dark"] .glass-morphism {
+  background: rgba(15, 20, 40, 0.7);
+}
+
+.ai-gradient-bg {
+  background: linear-gradient(
+    135deg,
+    rgba(0, 88, 190, 0.06),
+    rgba(107, 56, 212, 0.06)
+  );
+}
+
+[data-theme="dark"] .ai-gradient-bg {
+  background: linear-gradient(
+    135deg,
+    rgba(0, 88, 190, 0.15),
+    rgba(107, 56, 212, 0.15)
+  );
+}

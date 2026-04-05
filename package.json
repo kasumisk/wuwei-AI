@@ -1,0 +1,47 @@
+{
+  "name": "new-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Enterprise full-stack platform with Next.js, Vite Admin, and NestJS API",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "build:web": "turbo build --filter=@ai-platform/web",
+    "build:admin": "turbo build --filter=@ai-platform/admin",
+    "build:api": "turbo build --filter=@ai-platform/api-server",
+    "test": "turbo test",
+    "lint": "turbo lint",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
+    "clean": "turbo clean && rm -rf node_modules",
+    "db:generate": "turbo db:generate",
+    "db:migrate": "turbo db:migrate",
+    "db:studio": "turbo db:studio",
+    "type-check": "turbo type-check",
+    "deploy": "./scripts/deploy.sh",
+    "deploy:web": "./scripts/deploy.sh web",
+    "deploy:admin": "./scripts/deploy.sh admin",
+    "deploy:all": "./scripts/deploy.sh all",
+    "deploy:web:preview": "./scripts/deploy.sh web:preview",
+    "deploy:admin:preview": "./scripts/deploy.sh admin:preview",
+    "deploy:clean": "./scripts/deploy.sh clean",
+    "deploy:status": "./scripts/deploy.sh status",
+    "deploy:api": "./scripts/deploy-railway.sh deploy",
+    "deploy:api:init": "./scripts/deploy-railway.sh init",
+    "deploy:api:logs": "./scripts/deploy-railway.sh logs",
+    "deploy:api:health": "./scripts/deploy-railway.sh health",
+    "deploy:api:status": "./scripts/deploy-railway.sh status",
+    "deploy:api:db:init": "./scripts/deploy-railway.sh db:init",
+    "deploy:api:db:backup": "./scripts/deploy-railway.sh db:backup"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.3",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2",
+    "next": "^15.1.6"
+  },
+  "packageManager": "pnpm@10.28.2",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}
