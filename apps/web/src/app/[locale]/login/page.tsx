@@ -43,7 +43,7 @@ type Step = 'phone' | 'code';
 export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const { sendPhoneCode, loginWithPhone, getWechatAuthUrl, loading } = useAuth();
+  const { sendPhoneCode, loginWithPhone, getWechatAuthUrl, loginWithWechatToken, loading } = useAuth();
 
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('');
@@ -75,6 +75,25 @@ export default function LoginPage() {
     },
     [toast],
   );
+
+  /* ─── Handle WeChat OAuth callback token ─── */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const wechatToken = params.get('wechat_token');
+    const errorMsg = params.get('error');
+    if (wechatToken) {
+      // 清除 URL 参数，避免刷新重复触发
+      window.history.replaceState({}, '', window.location.pathname);
+      loginWithWechatToken(wechatToken)
+        .then(() => router.push('/'))
+        .catch(handleError);
+    } else if (errorMsg) {
+      window.history.replaceState({}, '', window.location.pathname);
+      toast({ title: decodeURIComponent(errorMsg), variant: 'destructive' });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /* ─── Send verification code ─── */
   const handleSendCode = async () => {
@@ -117,7 +136,9 @@ export default function LoginPage() {
   /* ─── WeChat login ─── */
   const handleWechatLogin = async () => {
     try {
-      const redirectUri = `${window.location.origin}/auth/wechat/callback`;
+      // redirect_uri 指向后端 callback，后端换 token 后再重定向回前端
+      const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://uway-api.dev-net.uk/api';
+      const redirectUri = `${apiBase}/app/auth/wechat/callback`;
       const { url } = await getWechatAuthUrl(redirectUri);
       if (url) window.location.href = url;
     } catch (err) {

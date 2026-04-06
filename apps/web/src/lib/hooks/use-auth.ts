@@ -171,6 +171,29 @@ export function useAuth() {
     [handleLoginResponse, setLoading],
   );
 
+  /** 用已有 JWT token（微信 OAuth 后端回调）完成登录 */
+  const loginWithWechatToken = useCallback(
+    async (jwtToken: string) => {
+      setLoading(true);
+      try {
+        // 先把 token 写入 localStorage，getProfile 会读取它
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('app_auth_token', jwtToken);
+        }
+        const profile = await getProfile();
+        setAuth(profile, jwtToken);
+      } catch {
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('app_auth_token');
+        }
+        throw new Error('微信登录失败，请重试');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [setAuth, setLoading],
+  );
+
   /** 恢复登录态（初始化时调用） */
   const restoreAuth = useCallback(async () => {
     if (initialized) return;
@@ -202,6 +225,7 @@ export function useAuth() {
     loginWithPhone,
     getWechatAuthUrl,
     loginWithWechat,
+    loginWithWechatToken,
     logout,
     restoreAuth,
   };

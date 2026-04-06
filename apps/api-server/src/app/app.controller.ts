@@ -138,6 +138,39 @@ export class AppAuthController {
   }
 
   /**
+   * 微信网页授权回调接口
+   * GET /api/app/auth/wechat/callback?code=xxx&state=xxx
+   * 微信授权后回调到此地址，换取 token 后重定向回前端
+   */
+  @Public()
+  @IgnoreResponseInterceptor()
+  @Get('wechat/callback')
+  @ApiOperation({ summary: '微信网页授权回调' })
+  async wechatCallback(
+    @Query('code') code: string,
+    @Query('state') state: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const frontendUrl =
+      process.env.WECHAT_FRONTEND_URL || 'https://uway.dev-net.uk';
+
+    if (!code) {
+      res.redirect(`${frontendUrl}/login?error=wechat_no_code`);
+      return;
+    }
+
+    try {
+      const data = await this.appAuthService.wechatLogin(code);
+      // 带 token 重定向回前端登录页，前端读取后存储
+      const redirectUrl = `${frontendUrl}/login?wechat_token=${data.token}&wechat_state=${state || ''}`;
+      res.redirect(redirectUrl);
+    } catch (err) {
+      const msg = err instanceof Error ? encodeURIComponent(err.message) : 'wechat_error';
+      res.redirect(`${frontendUrl}/login?error=${msg}`);
+    }
+  }
+
+  /**
    * 微信验签接口（微信测试号配置 URL 验证用）
    * GET /api/app/auth/wechat/verify
    * 必须返回纯文本 echostr，不能走全局响应拦截器
