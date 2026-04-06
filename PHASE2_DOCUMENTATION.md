@@ -70,8 +70,8 @@
           │                  │
           ▼                  ▼
    ┌──────────────┐  ┌──────────────┐
-   │ OpenAI API   │  │ PostgreSQL   │
-   │ (GPT-4o)     │  │ (TypeORM)    │
+   │ OpenRouter   │  │ PostgreSQL   │
+   │ (ERNIE VL)   │  │ (TypeORM)    │
    └──────────────┘  └──────────────┘
 ```
 
@@ -81,7 +81,7 @@
 |---|---|
 | 前端 | Next.js 16 + TypeScript + Tailwind CSS + Zustand |
 | 后端 | NestJS 11 + TypeORM + PostgreSQL |
-| AI | OpenAI GPT-4o Vision（多模态图像理解） |
+| AI | OpenRouter → 百度 ERNIE 4.5 VL（多模态图像理解，可配置其他视觉模型） |
 | 存储 | Cloudflare R2（S3 兼容） |
 | 部署 | 前端 Vercel / 后端 GCloud VM + PM2 + Nginx |
 
@@ -347,11 +347,11 @@ StorageService.upload() → Cloudflare R2
     ▼
 AnalyzeService.analyzeImage()
     │
-    ├─ 构造 GPT-4o Vision 请求
+    ├─ 构造多模态 Vision 请求
     │  (system prompt + image_url)
     │
     ▼
-OpenAI API (gpt-4o, temperature=0.3, max_tokens=1000)
+OpenRouter API → baidu/ernie-4.5-vl-28b-a3b (temperature=0.3, max_tokens=1000)
     │
     ▼
 解析 JSON 响应 → AnalysisResult
@@ -599,11 +599,27 @@ Authorization: Bearer <token>
 
 ## AI 分析引擎
 
+### 架构说明
+
+通过 **OpenRouter** 统一路由所有大模型调用，无需直接申请各模型提供商的 API Key。AnalyzeService 使用 OpenRouter 的 OpenAI 兼容接口，发送多模态（图片+文本）请求。
+
+**模型选择策略：**
+- 默认使用 `baidu/ernie-4.5-vl-28b-a3b`（百度文心视觉模型），在亚太区域无访问限制
+- 可通过 `VISION_MODEL` 环境变量切换到任意 OpenRouter 支持的视觉模型
+- 注意：`openai/gpt-4o`、`google/gemini-*`、`anthropic/claude-*` 在部分亚太区域受限
+
+**已验证可用的视觉模型（亚太区域）:**
+| 模型 | 价格(输入/输出 per 1M tokens) | 说明 |
+|------|------|------|
+| `baidu/ernie-4.5-vl-28b-a3b` | $0.14 / $0.56 | 百度文心，推荐 |
+| `bytedance-seed/seed-1.6-flash` | $0.075 / $0.30 | 字节跳动豆包 |
+| `meta-llama/llama-4-maverick` | - | Meta Llama 4 |
+
 ### 模型配置
 
 | 参数 | 值 |
 |------|---|
-| 模型 | GPT-4o（可通过 `VISION_MODEL` 配置） |
+| 模型 | baidu/ernie-4.5-vl-28b-a3b（可通过 `VISION_MODEL` 配置其他 OpenRouter 模型） |
 | Temperature | 0.3（低温度保证稳定性） |
 | Max Tokens | 1000 |
 | 图片质量 | `detail: low`（节省 token） |
@@ -762,10 +778,10 @@ DB_SSL=true
 APP_JWT_SECRET=xxx
 APP_JWT_EXPIRES_IN=30d
 
-# OpenAI (AI 分析必需)
-OPENAI_API_KEY=sk-proj-xxx
-OPENAI_BASE_URL=https://api.openai.com/v1   # 可选
-VISION_MODEL=gpt-4o                          # 可选，默认 gpt-4o
+# OpenRouter (AI 分析必需)
+OPENROUTER_API_KEY=sk-or-v1-xxx
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1  # 可选，默认 OpenRouter
+VISION_MODEL=baidu/ernie-4.5-vl-28b-a3b           # 可选，支持 OpenRouter 上所有视觉模型
 
 # 存储 (Cloudflare R2)
 S3_ENDPOINT=xxx
