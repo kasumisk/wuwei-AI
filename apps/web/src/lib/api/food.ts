@@ -5,8 +5,8 @@
  * 对接 api-server 的 /api/app/food/* 端点
  */
 
-import { clientGet, clientPost, clientPut, clientDelete, clientUpload } from '../client-api';
-import type { ApiResponse } from '../http-client';
+import { clientGet, clientPost, clientPut, clientDelete, clientUpload } from './client-api';
+import type { ApiResponse } from './http-client';
 
 // ==================== 辅助函数 ====================
 
