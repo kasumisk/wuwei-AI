@@ -43,6 +43,7 @@ export const toolRouteKeyMap: Record<string, string> = {
 export const publicRoutes = [
   '/',
   '/tools',
+  '/foods',
   ...Object.keys(toolRouteKeyMap).map((k) => `/tools/${k}`),
 ];
 

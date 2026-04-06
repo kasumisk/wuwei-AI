@@ -1009,7 +1009,882 @@ private getStaticSuggestions(hour: number, summary: DailySummary): string[] {
 
 ---
 
-## 十、Phase 4 — 打卡挑战（轻社交增长）
+## 十、热量查询 + 食物库（合并实施）
+
+> **战略意义**：SEO 免费获客 + 降低记录门槛（用户不一定每次都能拍照）。两个功能共享同一张 `foods` 表，后端统一实施，计划本周内上线。
+
+### 10.1 与现有代码的关系
+
+| 维度 | 现状 | 新增 |
+|------|------|------|
+| 数据表 | `food_records`（已有，记录用户吃了什么）| 新增 `foods`（食物库，静态数据）|
+| 后端模块 | `apps/api-server/src/app/` — `AppClientModule` | 扩展此模块 |
+| 现有 food 路由 | `POST /api/app/food/analyze`（AI 分析）`GET /api/app/food/records`（记录）| 需要新增食物库路由 |
+| `RecordSource` enum | `screenshot \| camera \| manual`（manual 已有）| 手动搜索记录直接用 `manual` |
+| `FoodItem` 接口 | `{name, calories, quantity?, category?}` | 扩展 `foodLibraryId?` 字段 |
+| 前端 web | `apps/web/src/app/[locale]/` — analyze, coach 等页面 | 新增 `/foods` 和 `/foods/[name]` |
+| sitemap | `apps/web/src/app/sitemap.ts`（已有 publicRoutes 模式）| 扩展动态食物页 |
+
+### 10.2 数据库设计
+
+#### foods 表（新增，Migration #14）
+
+```typescript
+// 新建迁移: apps/api-server/src/migrations/1744000000000-AddFoodLibraryTable.ts
+
+await queryRunner.query(`
+  CREATE TABLE IF NOT EXISTS "foods" (
+    "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    "name" VARCHAR(100) NOT NULL UNIQUE,
+    "aliases" VARCHAR(300),                  -- 逗号分隔别名："宫爆鸡丁,宫保鸡"
+    "category" VARCHAR(50) NOT NULL,         -- 主食|肉类|蔬菜|水果|豆制品|饮品|零食|汤类|调味料|外卖
+    "calories_per_100g" INT NOT NULL,        -- 每100g热量 kcal
+    "protein_per_100g" DECIMAL(5,1),         -- 蛋白质 g（可选，下期完善）
+    "fat_per_100g" DECIMAL(5,1),             -- 脂肪 g
+    "carbs_per_100g" DECIMAL(5,1),           -- 碳水 g
+    "standard_serving_g" INT DEFAULT 100,    -- 标准份量克数
+    "standard_serving_desc" VARCHAR(50),     -- "1份约200g"
+    "search_weight" INT DEFAULT 100,         -- 搜索排序权重
+    "is_verified" BOOLEAN DEFAULT true,
+    "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
+// 模糊搜索索引（中文 simple 分词器）
+await queryRunner.query(`
+  CREATE INDEX idx_foods_name_trgm ON foods USING gin(name gin_trgm_ops);
+  CREATE INDEX idx_foods_category ON foods(category);
+  CREATE INDEX idx_foods_weight ON foods(search_weight DESC);
+`);
+
+// 开启 pg_trgm 扩展（已有的话幂等）
+await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS pg_trgm;`);
+```
+
+> **注意**：优先用 `pg_trgm` 模糊匹配（中文单字匹配效果更好），配合 LIKE `%关键词%`。PostgreSQL 全文检索 `to_tsvector` 对中文无分词效果，不采用。
+
+#### FoodItem 接口扩展（food-record.entity.ts，无需迁移）
+
+```typescript
+// apps/api-server/src/entities/food-record.entity.ts
+export interface FoodItem {
+  name: string;
+  calories: number;
+  quantity?: string;
+  category?: string;
+  foodLibraryId?: string; // 新增：关联食物库 ID（手动记录时填充）
+}
+```
+
+### 10.3 后端实现（NestJS）
+
+#### 文件结构（新增 + 修改）
+
+```
+apps/api-server/src/
+├── entities/
+│   └── food-library.entity.ts          ← 新建 TypeORM 实体
+├── app/
+│   ├── controllers/
+│   │   ├── food.controller.ts           ← 修改：新增 from-library 端点
+│   │   └── food-library.controller.ts   ← 新建：公开查询接口（不需要 JWT）
+│   ├── services/
+│   │   └── food-library.service.ts      ← 新建：搜索 + 分类逻辑
+│   ├── dto/
+│   │   └── food.dto.ts                  ← 修改：新增 from-library 相关 DTO
+│   └── app-client.module.ts             ← 修改：注册新实体 + 服务 + 控制器
+├── migrations/
+│   └── 1744000000000-AddFoodLibraryTable.ts  ← 新建
+└── scripts/
+    └── seed-foods.ts                    ← 新建：种子数据脚本
+```
+
+#### FoodLibrary 实体
+
+```typescript
+// apps/api-server/src/entities/food-library.entity.ts
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
+
+@Entity('foods')
+@Index(['searchWeight'])
+export class FoodLibrary {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column({ type: 'varchar', length: 100, unique: true })
+  name: string;
+
+  @Column({ type: 'varchar', length: 300, nullable: true })
+  aliases?: string;
+
+  @Column({ type: 'varchar', length: 50 })
+  category: string;
+
+  @Column({ type: 'int', name: 'calories_per_100g' })
+  caloriesPer100g: number;
+
+  @Column({ type: 'decimal', precision: 5, scale: 1, nullable: true, name: 'protein_per_100g' })
+  proteinPer100g?: number;
+
+  @Column({ type: 'decimal', precision: 5, scale: 1, nullable: true, name: 'fat_per_100g' })
+  fatPer100g?: number;
+
+  @Column({ type: 'decimal', precision: 5, scale: 1, nullable: true, name: 'carbs_per_100g' })
+  carbsPer100g?: number;
+
+  @Column({ type: 'int', default: 100, name: 'standard_serving_g' })
+  standardServingG: number;
+
+  @Column({ type: 'varchar', length: 50, nullable: true, name: 'standard_serving_desc' })
+  standardServingDesc?: string;
+
+  @Column({ type: 'int', default: 100, name: 'search_weight' })
+  searchWeight: number;
+
+  @Column({ type: 'boolean', default: true, name: 'is_verified' })
+  isVerified: boolean;
+
+  @CreateDateColumn({ name: 'created_at' })
+  createdAt: Date;
+}
+```
+
+#### 公开路由（FoodLibraryController — 无 JWT 守卫）
+
+```typescript
+// apps/api-server/src/app/controllers/food-library.controller.ts
+@ApiTags('食物库（公开）')
+@Controller('foods')                       // ← /api/foods/...（无鉴权）
+export class FoodLibraryController {
+  // GET /api/foods/search?q=宫保鸡丁&limit=10
+  async search(@Query('q') q: string, @Query('limit') limit = 10) {}
+
+  // GET /api/foods/popular?category=主食&limit=20
+  async popular(@Query('category') category: string, @Query('limit') limit = 20) {}
+
+  // GET /api/foods/categories
+  async categories() {}
+
+  // GET /api/foods/:name  ← SEO 落地页数据接口
+  async findByName(@Param('name') name: string) {}
+}
+```
+
+#### 受保护路由（在现有 FoodController 新增一个端点）
+
+```typescript
+// apps/api-server/src/app/controllers/food.controller.ts （在现有类末尾添加）
+
+// POST /api/app/food/records/from-library
+@Post('records/from-library')
+@HttpCode(HttpStatus.CREATED)
+@ApiOperation({ summary: '从食物库搜索记录（手动记录入口）' })
+async addFromLibrary(
+  @CurrentAppUser() user: any,
+  @Body() dto: AddFromLibraryDto,
+): Promise<ApiResponse> {
+  const record = await this.foodLibraryService.addFromLibrary(user.id, dto);
+  return { success: true, code: 201, message: '记录已保存', data: record };
+}
+```
+
+> **设计决策**：不新增独立端点，`from-library` 内部仍调用现有 `FoodService.saveRecord()`，只是自动计算热量并设置 `source: 'manual'`。
+
+```typescript
+// AddFromLibraryDto（新增到 food.dto.ts）
+export class AddFromLibraryDto {
+  @IsUUID()  foodLibraryId: string;          // foods 表 ID
+  @IsInt() @Min(1)  servingGrams: number;    // 用户选择的克数
+  @IsEnum(MealType)  mealType: MealType;     // 餐次
+}
+```
+
+#### FoodLibraryService 核心搜索逻辑
+
+```typescript
+// apps/api-server/src/app/services/food-library.service.ts
+
+async search(q: string, limit = 10): Promise<FoodLibrary[]> {
+  return this.foodRepo
+    .createQueryBuilder('f')
+    .where('f.name ILIKE :q OR f.aliases ILIKE :q', { q: `%${q}%` })
+    .orderBy('f.search_weight', 'DESC')
+    .limit(Math.min(limit, 50))
+    .getMany();
+}
+
+async addFromLibrary(userId: string, dto: AddFromLibraryDto): Promise<FoodRecord> {
+  const food = await this.foodRepo.findOneByOrFail({ id: dto.foodLibraryId });
+  const calories = Math.round(food.caloriesPer100g * dto.servingGrams / 100);
+  
+  return this.foodService.saveRecord(userId, {
+    foods: [{
+      name: food.name,
+      calories,
+      quantity: `${dto.servingGrams}g`,
+      category: food.category,
+      foodLibraryId: food.id,      // 新增字段，JSONB 自动存储
+    }],
+    totalCalories: calories,
+    mealType: dto.mealType,
+    source: RecordSource.MANUAL,   // 关键：标记为手动记录
+  });
+}
+```
+
+#### AppClientModule 注册（修改）
+
+```typescript
+// apps/api-server/src/app/app-client.module.ts
+// 在 TypeOrmModule.forFeature([...]) 中新增：
+FoodLibrary,
+
+// 在 providers: [...] 中新增：
+FoodLibraryService,
+
+// 在 controllers: [...] 中新增：
+FoodLibraryController,
+```
+
+### 10.4 SEO 落地页（Next.js SSR）
+
+#### 新建文件
+
+```
+apps/web/src/app/[locale]/
+├── foods/
+│   ├── page.tsx            ← 热量查询首页（搜索框 + 热门分类）
+│   └── [name]/
+│       ├── page.tsx        ← 食物详情 SSR 页（SEO 核心）
+│       └── FoodDetailClient.tsx  ← 客户端交互组件（份量换算）
+```
+
+#### 食物详情页（SSR + generateMetadata）
+
+```typescript
+// apps/web/src/app/[locale]/foods/[name]/page.tsx
+
+// 优先从 URL params.name 解码后查 API
+export async function generateMetadata({ params }: { params: { name: string; locale: string } }) {
+  const name = decodeURIComponent(params.name);
+  const food = await fetch(`${API_URL}/api/foods/${encodeURIComponent(name)}`).then(r => r.json());
+  if (!food?.data) return {};
+  const f = food.data;
+  const servingCal = Math.round(f.caloriesPer100g * f.standardServingG / 100);
+  return {
+    title: `${f.name}热量是多少？每100g含${f.caloriesPer100g}kcal | 无畏健康`,
+    description: `${f.name}${f.standardServingDesc}约${servingCal}大卡，属于${f.category}类食物。查看详细营养成分并记录到今日饮食。`,
+    openGraph: { title: `${f.name} — ${f.caloriesPer100g}kcal/100g`, description: `...` },
+  };
+}
+
+export default async function FoodDetailPage({ params }) {
+  const food = await fetchFoodByName(decodeURIComponent(params.name));
+  if (!food) notFound();
+  return <FoodDetailClient food={food} />;
+}
+```
+
+#### Sitemap 扩展（修改现有 sitemap.ts）
+
+```typescript
+// apps/web/src/app/sitemap.ts — 在现有 publicRoutes 循环后追加：
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const entries = [/* 现有 publicRoutes 逻辑不变 */];
+
+  // 动态食物页
+  try {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/foods?limit=500`, { next: { revalidate: 86400 } });
+    const data = await res.json();
+    for (const food of data.data?.items ?? []) {
+      for (const locale of i18n.locales) {
+        entries.push({
+          url: getFullUrl(`/${locale}/foods/${encodeURIComponent(food.name)}`),
+          lastModified: new Date(),
+          changeFrequency: 'monthly' as const,
+          priority: 0.75,
+        });
+      }
+    }
+  } catch { /* 构建时 API 不可达，忽略 */ }
+
+  return entries;
+}
+```
+
+### 10.5 搜索页 UI 规划
+
+```
+/foods 页面（Web + App 内嵌 WebView 通用）
+
+┌─────────────────────────────────┐
+│  热量查询                        │
+├─────────────────────────────────┤
+│  🔍 [搜索食物名称...     ]       │  debounce 300ms → /api/foods/search
+├─────────────────────────────────┤
+│  ← 搜索为空时显示 → 搜索到时隐藏  │
+│  热门搜索:                       │
+│  [白米饭] [宫保鸡丁] [奶茶]      │
+│  [鸡胸肉] [苹果] [可乐]          │
+├─────────────────────────────────┤
+│  搜索结果:                       │
+│  ┌─────────────────────────┐    │
+│  │ 宫保鸡丁      260kcal    │    │  ← /100g
+│  │ 肉类 · 1份≈200g    [→]  │    │  ← 点击进详情
+│  └─────────────────────────┘    │
+│                                 │
+│  ── 没找到？试试 AI 分析图片 ──  │  ← 引流到 /analyze
+└─────────────────────────────────┘
+
+/foods/宫保鸡丁 页面
+
+┌─────────────────────────────────┐
+│  ← 返回                         │
+├─────────────────────────────────┤
+│  宫保鸡丁                        │
+│  分类：肉类                      │
+├─────────────────────────────────┤
+│  每 100g：260 kcal               │
+├─────────────────────────────────┤
+│  份量换算（客户端交互）            │
+│  ○ 100g         = 260 kcal      │
+│  ○ 1份（200g）  = 520 kcal      │
+│  ● 自定义 [___] g = ___ kcal    │
+├─────────────────────────────────┤
+│  [+ 加入今日记录]               │  ← 需登录，弹选餐次
+├─────────────────────────────────┤
+│  相关食物：麻婆豆腐 | 鱼香肉丝    │
+└─────────────────────────────────┘
+```
+
+---
+
+## 十一、种子数据规划
+
+> **数据策略**：参照中国食物成分表（中国疾控中心），手动整理 150 条高频食物，保证数据准确性。优先录入外卖常见菜品（SEO 搜索量最大）。
+
+### 11.1 种子数据清单（MVP 150 条）
+
+| 分类 | 数量 | 代表食物 |
+|------|------|---------|
+| 主食 | 25 | 白米饭、糙米饭、馒头、包子、饺子（水煮）、煎饺、面条（煮熟）、米粉、粥（白粥）、油条、烧饼、花卷、米线、螺蛳粉、拉面 |
+| 肉类/海鲜 | 35 | 宫保鸡丁、红烧肉、水煮鱼、清蒸鲈鱼、回锅肉、糖醋排骨、北京烤鸭、鸡胸肉（白水煮）、水煮虾、花甲、蒜蒸扇贝、牛排（煎）、炸鸡块、炸薯条、烤鸡腿 |
+| 蔬菜/豆制品 | 25 | 蒜炒青菜、西红柿炒鸡蛋、土豆丝（清炒）、麻婆豆腐、拍黄瓜、凉拌木耳、炒豆芽、地三鲜、炒藕片、炒西兰花、皮蛋豆腐、卤豆腐、油豆腐 |
+| 汤类 | 10 | 西红柿蛋汤、紫菜蛋花汤、排骨汤、冬瓜汤、豆腐汤、羊肉汤 |
+| 外卖/快餐 | 20 | 麦辣鸡腿堡、麦香鱼、麦当劳薯条（大）、百胜鸡腿堡、沙县炒饭、黄焖鸡米饭、盒饭（猪排饭）、冒菜、麻辣烫（中等碗）、烧腊饭 |
+| 水果 | 15 | 苹果、香蕉、西瓜、草莓、橙子、葡萄、芒果、哈密瓜、火龙果、桃子、梨、蓝莓、车厘子 |
+| 饮品/奶类 | 15 | 全脂牛奶、低脂牛奶、豆浆（无糖）、珍珠奶茶（正常糖）、美式咖啡（无糖）、拿铁咖啡、可乐（330ml）、橙汁（纯果汁）、运动饮料 |
+| 零食 | 5 | 薯片（薯条类）、辣条、奥利奥（4块）、核桃仁、鸡蛋 |
+
+### 11.2 种子数据脚本
+
+```typescript
+// apps/api-server/src/scripts/seed-foods.ts
+// 运行: ts-node -r tsconfig-paths/register src/scripts/seed-foods.ts
+
+import { createConnection } from 'typeorm';
+import { FoodLibrary } from '../entities/food-library.entity';
+
+const SEED_FOODS: Partial<FoodLibrary>[] = [
+  // ===== 主食 =====
+  { name: '白米饭', category: '主食', caloriesPer100g: 116, proteinPer100g: 2.6, fatPer100g: 0.3, carbsPer100g: 25.6, standardServingG: 200, standardServingDesc: '1碗约200g', searchWeight: 200 },
+  { name: '糙米饭', category: '主食', caloriesPer100g: 110, proteinPer100g: 2.8, fatPer100g: 0.9, carbsPer100g: 23.0, standardServingG: 200, standardServingDesc: '1碗约200g', searchWeight: 130 },
+  { name: '馒头', category: '主食', caloriesPer100g: 223, proteinPer100g: 7.0, fatPer100g: 1.1, carbsPer100g: 47.0, standardServingG: 80, standardServingDesc: '1个约80g', searchWeight: 180 },
+  { name: '包子（猪肉）', category: '主食', caloriesPer100g: 211, proteinPer100g: 9.5, fatPer100g: 7.1, carbsPer100g: 26.6, standardServingG: 90, standardServingDesc: '1个约90g', searchWeight: 170 },
+  { name: '煮饺子（猪肉白菜）', aliases: '水饺,饺子', category: '主食', caloriesPer100g: 203, proteinPer100g: 8.5, fatPer100g: 8.0, carbsPer100g: 24.5, standardServingG: 150, standardServingDesc: '1份约150g（10个）', searchWeight: 175 },
+  { name: '煮面条', aliases: '面条,挂面', category: '主食', caloriesPer100g: 110, proteinPer100g: 3.6, fatPer100g: 0.6, carbsPer100g: 23.0, standardServingG: 200, standardServingDesc: '1碗约200g（熟）', searchWeight: 170 },
+  { name: '油条', category: '主食', caloriesPer100g: 386, proteinPer100g: 6.9, fatPer100g: 17.6, carbsPer100g: 50.1, standardServingG: 80, standardServingDesc: '1根约80g', searchWeight: 160 },
+  // ===== 肉类 =====
+  { name: '宫保鸡丁', aliases: '宫爆鸡丁', category: '肉类', caloriesPer100g: 260, proteinPer100g: 15.0, fatPer100g: 17.0, carbsPer100g: 11.0, standardServingG: 200, standardServingDesc: '1份约200g', searchWeight: 200 },
+  { name: '鸡胸肉（水煮）', aliases: '水煮鸡胸,白煮鸡胸肉', category: '肉类', caloriesPer100g: 133, proteinPer100g: 30.4, fatPer100g: 1.6, carbsPer100g: 0, standardServingG: 150, standardServingDesc: '1块约150g', searchWeight: 190 },
+  { name: '红烧肉', category: '肉类', caloriesPer100g: 400, proteinPer100g: 14.0, fatPer100g: 35.0, carbsPer100g: 6.0, standardServingG: 150, standardServingDesc: '1份约150g', searchWeight: 185 },
+  { name: '水煮鱼', category: '肉类', caloriesPer100g: 150, proteinPer100g: 17.0, fatPer100g: 8.0, carbsPer100g: 2.5, standardServingG: 300, standardServingDesc: '1份约300g', searchWeight: 180 },
+  // ... (共 150 条，运行 seed 脚本填充其余数据)
+];
+
+async function seed() {
+  const conn = await createConnection();
+  const repo = conn.getRepository(FoodLibrary);
+  for (const food of SEED_FOODS) {
+    await repo.upsert(food as FoodLibrary, ['name']); // 幂等
+  }
+  console.log(`✅ 已导入 ${SEED_FOODS.length} 条食物数据`);
+  await conn.close();
+}
+seed();
+```
+
+---
+
+## 十二、Phase 8 — 分享能力（裂变增长关键）
+
+> **战略意义**：用户主动分享饮食打卡图片到朋友圈/小红书，带来零成本获客。每次分享相当于一次品牌曝光。
+
+### 10.2 后端设计
+
+#### 食物数据库表
+
+```sql
+-- 食物基础信息表（静态种子数据 + 可扩展）
+CREATE TABLE foods (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name VARCHAR(100) NOT NULL,               -- 宫保鸡丁
+  aliases VARCHAR(200),                      -- 别名，逗号分隔："宫爆鸡丁,宫保鸡"
+  category VARCHAR(50) NOT NULL,             -- 主食 | 蔬菜 | 肉类 | 豆制品 | 水果 | 饮品 | 零食 | 汤类 | 调味料
+  calories_per_100g INT NOT NULL,            -- 每 100g 热量 kcal
+  protein_per_100g DECIMAL(5,1),             -- 蛋白质 g
+  fat_per_100g DECIMAL(5,1),                 -- 脂肪 g
+  carbs_per_100g DECIMAL(5,1),               -- 碳水 g
+  standard_serving_g INT DEFAULT 100,        -- 标准份量克数（宫保鸡丁=200g/份）
+  standard_serving_desc VARCHAR(50),         -- "1份约200g"
+  image_url VARCHAR(300),                    -- 食物图片
+  search_weight INT DEFAULT 100,             -- 搜索权重（热门食物权重高）
+  source VARCHAR(20) DEFAULT 'seed',         -- seed | user | ai
+  is_verified BOOLEAN DEFAULT true,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 全文搜索索引
+CREATE INDEX idx_foods_name_search ON foods USING gin(
+  to_tsvector('simple', name || ' ' || COALESCE(aliases, ''))
+);
+CREATE INDEX idx_foods_category ON foods(category);
+CREATE INDEX idx_foods_weight ON foods(search_weight DESC);
+```
+
+#### 种子数据规划（MVP 100~150 条）
+
+| 分类 | 条目数 | 示例 |
+|------|--------|------|
+| 主食 | 25 | 白米饭、馒头、面条、包子、饺子、烧卖、米粉、粥... |
+| 肉类/蛋白 | 30 | 宫保鸡丁、红烧肉、水煮鱼、清蒸虾、烤鸭、牛排... |
+| 蔬菜 | 20 | 炒青菜、西红柿炒蛋、土豆丝、拍黄瓜... |
+| 外卖套餐 | 20 | 麦当劳巨无霸、肯德基全家桶、沙县炒饭... |
+| 水果 | 15 | 苹果、香蕉、西瓜、草莓... |
+| 饮品 | 20 | 奶茶(标准款)、可乐、橙汁、咖啡拿铁... |
+| 零食 | 15 | 薯片、辣条、奥利奥、坚果... |
+
+#### API 接口
+
+```
+# 搜索食物（App 搜索框 + SEO 数据源）
+GET  /api/foods/search?q=宫保鸡丁&limit=10
+Response: {
+  items: [{ id, name, category, calories_per_100g, standard_serving_g, standard_serving_desc, ... }],
+  total: 1
+}
+
+# 获取食物详情（SEO 页渲染数据源）
+GET  /api/foods/:id
+GET  /api/foods/by-name/:name     ← 支持 URL 友好形式查询
+
+# 热门食物分类列表
+GET  /api/foods/categories
+GET  /api/foods/popular?category=主食&limit=20
+
+# 搜索时记录到饮食记录
+POST /api/app/food/records/from-search
+Body: { foodId, servingCount, mealType }
+Authorization: Bearer <token>
+```
+
+### 10.3 SEO 落地页设计
+
+```
+URL 结构:
+  /foods              → 热量查询首页（含搜索框 + 热门分类）
+  /foods/[name]       → 单食物详情页（SSR，SEO核心）
+
+示例:
+  /foods/宫保鸡丁
+  /foods/白米饭
+  /foods/奶茶
+
+页面元素:
+  <title>宫保鸡丁热量是多少？每100g含520kcal | 无畏健康</title>
+  <description>宫保鸡丁每份（200g）约含1040大卡，蛋白质30g，脂肪58g...</description>
+
+落地页内容:
+  ┌────────────────────────────────────┐
+  │  🥜 宫保鸡丁                       │
+  │  每100g: 520 kcal                  │
+  ├────────────────────────────────────┤
+  │  份量换算:                          │
+  │  [100g] [1份≈200g] [自定义克数__]  │
+  │  → 对应热量: 1040 kcal             │
+  ├────────────────────────────────────┤
+  │  营养成分:                          │
+  │  蛋白质 30g | 脂肪 58g | 碳水 22g  │
+  ├────────────────────────────────────┤
+  │  [+ 加入今日记录]  [使用App查看更多] │
+  └────────────────────────────────────┘
+  
+  相关食物推荐: 麻婆豆腐 | 鱼香肉丝 | 红烧肉
+```
+
+#### Next.js SSR 实现要点
+
+```typescript
+// apps/web/src/app/[locale]/foods/[name]/page.tsx
+
+export async function generateMetadata({ params }) {
+  const food = await fetch(`${API_URL}/api/foods/by-name/${params.name}`).then(r => r.json());
+  return {
+    title: `${food.name}热量是多少？每100g含${food.calories_per_100g}kcal | 无畏健康`,
+    description: `${food.name}每份（${food.standard_serving_desc}）约含${Math.round(food.calories_per_100g * food.standard_serving_g / 100)}大卡...`,
+    // Open Graph 用于分享预览
+    openGraph: { title, description, images: [food.image_url] },
+  };
+}
+
+export default async function FoodDetailPage({ params }) {
+  const food = await getFoodByName(params.name); // 服务端 fetch，SEO 可索引
+  return <FoodDetailClient food={food} />;
+}
+```
+
+#### Sitemap 自动生成
+
+```typescript
+// apps/web/src/app/sitemap.ts
+export default async function sitemap() {
+  const foods = await fetch(`${API_URL}/api/foods?limit=1000`).then(r => r.json());
+  return foods.items.map(f => ({
+    url: `https://uway.dev-net.uk/zh/foods/${encodeURIComponent(f.name)}`,
+    lastModified: new Date(),
+    changeFrequency: 'monthly',
+    priority: 0.8,
+  }));
+}
+```
+
+### 10.4 前端搜索页（App 内嵌）
+
+```
+搜索页路由: /foods
+
+┌─────────────────────────────────┐
+│  🔍 [搜索食物热量...  ]         │  ← 搜索框，实时 debounce 300ms
+├─────────────────────────────────┤
+│  📷 或者 上传食物图片分析        │  ← 引流到已有 AI 分析功能
+├─────────────────────────────────┤
+│  热门搜索:                       │
+│  [白米饭] [宫保鸡丁] [奶茶]      │  ← 快捷标签
+│  [麦当劳] [馒头] [可乐]          │
+├─────────────────────────────────┤
+│  搜索结果:                       │
+│  ┌──────────────────────────┐   │
+│  │ 宫保鸡丁          520kcal │   │  ← 每100g
+│  │ 肉类 · 1份≈200g   [+ 记录] │  │
+│  └──────────────────────────┘   │
+└─────────────────────────────────┘
+```
+
+---
+
+## 十一、Phase 8 — 分享能力（裂变增长关键）
+
+> **战略意义**：用户主动分享饮食打卡图片到朋友圈/小红书，带来零成本获客。每次分享相当于一次品牌曝光。
+
+### 11.1 分享场景规划
+
+| 场景 | 触发时机 | 分享内容 | 目标平台 |
+|------|---------|---------|---------|
+| **今日饮食卡片** | 每天主动分享当日战报 | 今日热量 + 达标进度 + 打招呼语 | 朋友圈 / 小红书 |
+| **分析结果分享** | AI 分析完成后 | 菜品分析截图 + 热量数据 | 朋友圈 / 好友 |
+| **挑战完成分享** | 挑战连续打卡 N 天后 | 成就卡片（"我坚持了7天！"）| 朋友圈 / 小红书 |
+| **体重里程碑** | 体重下降 5/10 斤 | 变化对比数据卡 | 朋友圈 |
+
+### 11.2 分享图片设计（卡片模板）
+
+#### 模板 A：今日饮食战报
+
+```
+┌─────────────────────────────┐  比例 9:16 (1080×1920)
+│                             │
+│   无畏健康 · 今日战报         │  Logo + 日期
+│   2026年4月6日               │
+│                             │
+│       ┌──────────┐          │
+│       │ 🍽️ 1840 │          │  热量大数字（中央）
+│       │   kcal   │          │
+│       └──────────┘          │
+│                             │
+│   目标 2100kcal              │
+│   ████████████░░░  87%      │  进度条
+│   剩余 260 kcal              │
+│                             │
+│   今日三餐:                  │
+│   🌅 早餐 350kcal 燕麦粥     │
+│   ☀️  午餐 720kcal 宫保鸡丁  │
+│   🌙 晚餐 770kcal 清蒸鱼     │
+│                             │
+│   AI 教练点评:               │
+│   "今天蛋白质摄入充足，        │
+│    继续保持！"                │
+│                             │
+│   ── 扫码记录你的饮食 ──      │  二维码（可选）
+│           [QR]               │
+│                             │
+└─────────────────────────────┘
+```
+
+#### 模板 B：分析结果卡片
+
+```
+┌─────────────────────────────┐  比例 1:1（适合小红书）
+│  [食物图片缩略图]            │  用户上传的原图
+│                             │
+│  AI 识别结果:                │
+│  • 宫保鸡丁    520kcal      │
+│  • 白米饭      232kcal      │
+│  • 紫菜蛋花汤  80kcal       │
+│                             │
+│  合计: 832 kcal             │
+│  AI建议: 蔬菜偏少，建议...   │
+│                             │
+│  #健康饮食 #热量打卡 #无畏健康│
+└─────────────────────────────┘
+```
+
+### 12.3 Flutter App 技术实现方案
+
+#### 图片生成方案（设备端渲染）
+
+```dart
+// 推荐方案：FlutterWidget → 截图 → 分享
+// 优点：完全在设备端，无服务端成本，渲染速度快
+
+// 1. 将 Widget 渲染为图片
+Future<Uint8List> captureCard(GlobalKey key) async {
+  final boundary = key.currentContext!.findRenderObject() as RenderRepaintBoundary;
+  final image = await boundary.toImage(pixelRatio: 3.0); // 3x 高清
+  final byteData = await image.toByteData(format: ImageByteFormat.png);
+  return byteData!.buffer.asUint8List();
+}
+```
+
+#### 分享到微信朋友圈（推荐 fluwx 包）
+
+```yaml
+# pubspec.yaml
+dependencies:
+  fluwx: ^4.3.0             # 微信 SDK Flutter 封装
+  share_plus: ^10.0.0       # 通用系统分享（小红书/微博等）
+  image_gallery_saver: ^2.0.3  # 保存到相册
+```
+
+```dart
+// 方案一：分享图片到微信朋友圈（fluwx）
+import 'package:fluwx/fluwx.dart';
+
+Future<void> shareToWeChatTimeline(Uint8List imageBytes) async {
+  // 检查微信是否安装
+  final isInstalled = await isWeChatInstalled;
+  if (!isInstalled) {
+    // 降级：保存到相册 + 提示用户手动分享
+    await saveToGallery(imageBytes);
+    showSnackBar('图片已保存，请手动分享到朋友圈');
+    return;
+  }
+  
+  await shareToWeChat(
+    WeChatShareImageModel(
+      WChatScene.timeline,          // 分享到朋友圈
+      imageData: imageBytes,         // 图片二进制
+      // 或者: source: WeChatImage.file(path) 
+    ),
+  );
+}
+
+// 方案二：微信好友聊天分享
+Future<void> shareToWeChatSession(Uint8List imageBytes) async {
+  await shareToWeChat(
+    WeChatShareImageModel(
+      WChatScene.session,
+      imageData: imageBytes,
+    ),
+  );
+}
+```
+
+#### 分享到小红书（调研结论）
+
+> **结论：小红书无开放分享 SDK，推荐「保存图片 + 引导打开小红书」方案。**
+
+| 方案 | 可行性 | 体验 | 建议 |
+|------|-------|------|------|
+| 小红书官方 SDK | ❌ 无开放 SDK 给第三方 | — | 不可用 |
+| URL Scheme 直接跳转 | ⚠️ 无法直接携带图片 | 差 | 不推荐 |
+| **保存相册 + 引导** | ✅ 最通用 | 中 | **推荐** |
+| 系统分享菜单 | ✅ 可选小红书（若已安装）| 好 | 推荐 |
+
+```dart
+// 推荐：系统分享菜单（iOS/Android 原生），用户可选微信/小红书/微博
+import 'package:share_plus/share_plus.dart';
+
+Future<void> shareImage(Uint8List imageBytes) async {
+  // 1. 将图片写入临时文件
+  final tempDir = await getTemporaryDirectory();
+  final file = File('${tempDir.path}/wuwei_share_${DateTime.now().millisecondsSinceEpoch}.png');
+  await file.writeAsBytes(imageBytes);
+  
+  // 2. 调用系统分享菜单
+  await Share.shareXFiles(
+    [XFile(file.path, mimeType: 'image/png')],
+    text: '我今天通过"无畏健康"管理热量 🥗 #健康饮食 #热量打卡',
+  );
+}
+
+// 小红书独立入口：保存 + 引导跳转
+Future<void> shareToXiaohongshu(Uint8List imageBytes) async {
+  // 1. 保存到相册
+  await saveImageToGallery(imageBytes); // image_gallery_saver 或 gal 包
+  
+  // 2. 显示引导 Toast
+  showDialog(
+    title: '图片已保存',
+    content: '请打开小红书，选择「发布笔记」→「从相册选择」即可分享',
+    actions: [
+      TextButton('取消', onPressed: dismiss),
+      TextButton('打开小红书', onPressed: () async {
+        // 尝试 URL Scheme 打开小红书（若已安装）
+        final uri = Uri.parse('xhsdiscover://');
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri);
+        } else {
+          // 未安装：打开应用商店
+          await launchUrl(Uri.parse('https://www.xiaohongshu.com'));
+        }
+      }),
+    ],
+  );
+}
+```
+
+#### iOS 配置
+
+```xml
+<!-- ios/Runner/Info.plist -->
+<!-- 微信 SDK -->
+<key>CFBundleURLTypes</key>
+<array>
+  <dict>
+    <key>CFBundleURLSchemes</key>
+    <array>
+      <string>wx你的APPID</string>  <!-- 替换为真实 appid -->
+    </array>
+  </dict>
+</array>
+<key>LSApplicationQueriesSchemes</key>
+<array>
+  <string>weixin</string>
+  <string>weixinULAPI</string>
+  <string>xhsdiscover</string>   <!-- 小红书 -->
+</array>
+```
+
+#### Android 配置
+
+```xml
+<!-- android/app/src/main/AndroidManifest.xml -->
+<queries>
+  <package android:name="com.tencent.mm" />  <!-- 微信 -->
+  <package android:name="com.xingin.xhs" />   <!-- 小红书 -->
+</queries>
+```
+
+### 12.4 微信开放平台接入流程
+
+> **前提**：App 分享图片到朋友圈需要在微信开放平台注册移动应用
+
+1. **注册微信开放平台** → https://open.weixin.qq.com
+2. **创建移动应用**（填写 App 名称、包名/Bundle ID、签名）
+3. **申请「分享到微信朋友圈」权限**（需要已上架，或提交审核材料）
+4. **获取 AppID**（格式：`wx`开头的16位字符串）
+5. **Flutter 配置**：
+
+```dart
+// main.dart
+void main() async {
+  await registerWxApi(
+    appId: 'wx你的开放平台APPID',   // 注意：这里用开放平台 AppID，非公众号 AppID
+    doOnAndroid: true,
+    doOnIOS: true,
+    universalLink: 'https://uway.dev-net.uk/wx-universal-link/', // iOS Universal Link
+  );
+  runApp(MyApp());
+}
+```
+
+**审核材料（上架前内测方式）**：
+- 在微信开放平台添加测试人员（最多 5 个 openid），可绕过审核直接测试
+
+### 12.5 Web 端分享能力（Next.js）
+
+> Web 端无法直接调用微信 JS-SDK 分享图片到朋友圈（微信限制）。推荐替代方案：
+
+```typescript
+// Web 端分享策略
+
+// 1. 生成分享图片（Canvas + html2canvas）
+import html2canvas from 'html2canvas';
+
+async function generateShareImage(elementRef: HTMLElement): Promise<Blob> {
+  const canvas = await html2canvas(elementRef, {
+    scale: 2,        // 2x 高清
+    useCORS: true,   // 允许跨域图片
+    backgroundColor: null,
+  });
+  return new Promise(resolve => canvas.toBlob(blob => resolve(blob!), 'image/png'));
+}
+
+// 2. 下载到本地
+function downloadImage(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+}
+
+// 3. 给 Web 用户的分享引导
+// 微信内置浏览器：提示用户点击右上角「•••」→「分享到朋友圈」
+// 其他浏览器：下载图片后手动分享
+```
+
+### 12.6 后端辅助接口（可选）
+
+> 如果需要服务端渲染图片（用于 OGP 预览 / 更复杂的模板），可以考虑：
+
+```
+# 生成分享图片（服务端 Puppeteer 渲染）
+POST /api/app/share/generate
+Body: { type: 'daily_report' | 'food_analysis' | 'challenge', date?: string }
+Authorization: Bearer <token>
+Response: { imageUrl: "https://r2.storage/share/xxx.png" }
+```
+
+> **MVP 阶段建议**：先用设备端渲染（Flutter 方案），服务端渲染留给后期有高级模板需求时再做，避免引入 Puppeteer 的成本。
+
+### 12.7 分享文案模板
+
+```typescript
+const SHARE_TEXTS = {
+  daily_report: (calories, goal, date) => 
+    `${date}，我摄入了${calories}kcal（目标${goal}kcal），通过"无畏健康"轻松管理热量 💪\n#健康饮食 #热量打卡 #无畏健康`,
+  
+  analysis: (foods, totalCalories) =>
+    `AI 帮我分析了这顿饭：${foods.map(f => f.name).join('+')}，共${totalCalories}kcal ✨\n#外卖热量 #AI饮食分析`,
+  
+  challenge_complete: (days) =>
+    `我用"无畏健康"打卡了${days}天！健康饮食，坚持从今天开始 🎉\n#健康挑战 #打卡第${days}天`,
+};
+```
+
+---
+
+## 十三、Phase 4 — 打卡挑战（轻社交增长）
 
 > **核心目的**：提高次日留存。用户完成当日目标 → 连续打卡 → 成就感 → 留存。
 
@@ -1136,13 +2011,15 @@ TENCENT_SMS_TEMPLATE_ID=xxxxxxx
 
 ---
 
-## 十二、已完成功能清单（Phase 1 & 2）
+## 十二、已完成功能清单（Phase 1 & 2 & 3）
 
 | 模块 | 功能 | 状态 |
 |------|------|------|
+| **认证（Phase 1）** | | |
 | 认证 | 手机号验证码登录（万能码 888888）| ✅ |
 | 认证 | 微信网页扫码登录 | ✅ |
 | 认证 | 邮箱/匿名登录 | ✅ |
+| **饮食记录（Phase 2）** | | |
 | 饮食 | AI 食物图片分析（OpenRouter → ERNIE VL）| ✅ |
 | 饮食 | 图片上传 Cloudflare R2 | ✅ |
 | 饮食 | 饮食记录 CRUD | ✅ |
@@ -1150,21 +2027,123 @@ TENCENT_SMS_TEMPLATE_ID=xxxxxxx
 | 饮食 | 近 7 天趋势 | ✅ |
 | 档案 | 用户健康档案（身高体重活动等级）| ✅ |
 | 档案 | BMR 自动计算热量目标 | ✅ |
-| 前端 | 登录/首页/分析页/个人中心 | ✅ |
+| **AI 教练（Phase 3）** | | |
+| 教练 | 流式对话 API（SSE + OpenRouter DeepSeek）| ✅ |
+| 教练 | 对话历史持久化（coach_conversations 表）| ✅ |
+| 教练 | 用户饮食上下文注入（今日/近7天数据）| ✅ |
+| 教练 | 前端流式消息渲染（打字机效果）| ✅ |
+| 教练 | 会话管理（新建/历史/清除）| ✅ |
+| **前端 + 运维** | | |
+| 前端 | 登录/首页/分析页/个人中心/AI 教练页 | ✅ |
 | 前端 | 端到端流程测试通过 | ✅ |
 | 运维 | GCloud VM PM2 部署（`flutter-scaffold-4fd6c/openclaw`）| ✅ |
 | 运维 | Vercel 前端部署（https://uway.dev-net.uk）| ✅ |
 
-## 十三、下一步优先级列表
+## 十三、热量查询 + 食物库实施计划
 
-| 排序 | 任务 | 预计工时 | 依赖 |
-|------|------|---------|------|
-| 1 | AI 教练后端（对话 + 流式 SSE）| 2 天 | Phase 2 entities |
-| 2 | AI 教练前端页面 | 1.5 天 | 后端接口 |
-| 3 | 每日打卡挑战后端 | 1 天 | coach 表 |
-| 4 | 打卡挑战前端 | 1 天 | 后端接口 |
-| 5 | Redis 迁移（SMS + 教练历史）| 0.5 天 | Redis 实例 |
-| 6 | 前端性能优化（Skeleton + 缓存）| 1 天 | — |
-| 7 | 真实 SMS 接入 | 0.5 天 | 阿里云/腾讯账号 |
-| 8 | 微信小程序登录 | 1.5 天 | 小程序 AppID |
+> **目标**：本周内完成后端 + SEO 落地页 + Web 搜索页上线。以下为精确到文件级别的执行清单。
+
+### 13.1 后端任务（预计 2.5 天）
+
+#### Day 1 — 数据层
+
+| 步骤 | 操作 | 具体文件 |
+|------|------|---------|
+| 1 | 创建 FoodLibrary 实体 | `apps/api-server/src/entities/food-library.entity.ts`（新建）|
+| 2 | 创建 Migration | `apps/api-server/src/migrations/1744000000000-AddFoodLibraryTable.ts`（新建）|
+| 3 | 运行 Migration | `pnpm --filter api-server migration:run` |
+| 4 | 编写种子数据脚本 | `apps/api-server/src/scripts/seed-foods.ts`（新建，完整 150 条）|
+| 5 | 运行种子数据 | `ts-node src/scripts/seed-foods.ts` |
+
+#### Day 2 上午 — 后端 API
+
+| 步骤 | 操作 | 具体文件 |
+|------|------|---------|
+| 6 | 创建 FoodLibraryService | `apps/api-server/src/app/services/food-library.service.ts`（新建）|
+| 7 | 创建公开路由控制器 | `apps/api-server/src/app/controllers/food-library.controller.ts`（新建）|
+| 8 | 在 FoodController 添加端点 | `food.controller.ts` → 新增 `POST records/from-library` |
+| 9 | 更新 food.dto.ts | 新增 `AddFromLibraryDto` |
+| 10 | 注册到 AppClientModule | `app-client.module.ts` → 添加实体/服务/控制器 |
+| 11 | 接口测试 | Swagger `/api/docs` 验证 5 个接口 |
+
+#### 接口验收标准
+
+```
+✅ GET  /api/foods/search?q=鸡 → 返回列表，response time < 200ms
+✅ GET  /api/foods/popular?category=主食 → 返回热门
+✅ GET  /api/foods/categories → 返回分类列表
+✅ GET  /api/foods/宫保鸡丁 → 返回详情
+✅ POST /api/app/food/records/from-library → 登录后创建记录，source='manual'
+```
+
+### 13.2 前端任务（预计 2 天）
+
+#### Day 2 下午 + Day 3 — Web SEO 页
+
+| 步骤 | 操作 | 具体文件 |
+|------|------|---------|
+| 12 | 创建搜索首页 | `apps/web/src/app/[locale]/foods/page.tsx`（新建）|
+| 13 | 创建食物详情 SSR 页 | `apps/web/src/app/[locale]/foods/[name]/page.tsx`（新建）|
+| 14 | 创建客户端份量换算组件 | `apps/web/src/app/[locale]/foods/[name]/FoodDetailClient.tsx`（新建）|
+| 15 | 扩展 sitemap | `apps/web/src/app/sitemap.ts`（修改，追加动态食物页）|
+| 16 | 更新 publicRoutes | `apps/web/src/lib/seo/metadata.ts`（确认 /foods 已加入）|
+| 17 | 本地 SEO 验证 | `pnpm --filter web dev`，访问 `/zh/foods/宫保鸡丁`，看 meta title |
+
+#### 前端验收标准
+
+```
+✅ /foods    → 搜索框可用，热门标签展示
+✅ /foods/白米饭 → SSR 渲染，meta title 包含热量数字
+✅ 搜索 "鸡" → debounce 后展示结果列表
+✅ 点击食物 → 进入详情页，份量换算交互正確
+✅ sitemap.xml → 包含 /zh/foods/白米饭 等动态 URL
+✅ 页面在 Lighthouse → SEO score ≥ 90
+```
+
+### 13.3 部署任务（Day 3 下午）
+
+| 步骤 | 操作 |
+|------|------|
+| 18 | GCloud 跑 migration | SSH → `cd wuwei-ai-api && pnpm migration:run` |
+| 19 | GCloud 导入种子数据 | SSH → `ts-node src/scripts/seed-foods.ts` |
+| 20 | PM2 重启 API | `pm2 restart wuwei-api` |
+| 21 | Vercel 重新部署 Web | `git push` → Vercel 自动 CI/CD |
+| 22 | 线上冒烟测试 | 访问 https://uway.dev-net.uk/zh/foods 验证 |
+
+### 13.4 分工建议（若有团队）
+
+| 角色 | 工作 |
+|------|------|
+| 后端开发 | 步骤 1-11（实体+迁移+服务+接口）|
+| 前端开发 | 步骤 12-17（Web 页面 + SEO）|
+| 产品/运营 | 协助整理 150 条种子数据（Excel → ts 格式）|
+
+---
+
+## 十四、下一步优先级列表
+
+> 更新于 2026-04 | Phase 1 + Phase 2 + Phase 3 (AI 教练) 均已完成并部署。
+
+### 当前实施优先级
+
+| 排序 | 任务 | 预计工时 | 本章节参考 |
+|------|------|---------|-----------|
+| **🔥 1** | **食物库后端：实体+迁移+种子数据+API** | 1.5 天 | 章节 10.2~10.3 |
+| **🔥 2** | **SEO 落地页：/foods/[name] SSR** | 1 天 | 章节 10.4 |
+| **🔥 3** | **Web 搜索首页 /foods** | 0.5 天 | 章节 10.5 |
+| 4 | 部署到 GCloud + Vercel | 0.5 天 | 章节 13.3 |
+| 5 | 每日打卡挑战后端 + 前端 | 2 天 | 章节 十三（Phase 4）|
+| 6 | Flutter App 开发启动 | — | 分享能力在 App 阶段 |
+| 7 | Redis 迁移 | 0.5 天 | 章节 十四（Phase 5）|
+| 8 | 真实 SMS 接入 | 0.5 天 | — |
+
+### 关键前置条件清单
+
+| 条件 | 状态 | 备注 |
+|------|------|------|
+| GCloud VM 可 SSH | ✅ | IP 34.92.33.180，PM2 运行中 |
+| Vercel CI/CD | ✅ | push main 自动部署 |
+| PostgreSQL pg_trgm | ⚠️ 需确认 | migration 中自动 `CREATE EXTENSION IF NOT EXISTS pg_trgm` |
+| 食物种子数据 | ⚠️ 需整理 | 可先 30 条上线，分批补充 |
+| 微信开放平台 | ⚠️ App 才需要 | Flutter 开发时注册 |
 

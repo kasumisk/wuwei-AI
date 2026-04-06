@@ -5,6 +5,7 @@ import {
   IsInt,
   IsArray,
   IsBoolean,
+  IsUUID,
   ValidateNested,
   Min,
   Max,
@@ -196,3 +197,23 @@ export class SaveUserProfileDto {
   @Max(5000)
   dailyCalorieGoal?: number;
 }
+
+// ========== Food Library ==========
+
+export class AddFromLibraryDto {
+  @ApiProperty({ description: '食物库 ID' })
+  @IsUUID()
+  foodLibraryId: string;
+
+  @ApiProperty({ description: '用户选择的克数' })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(5000)
+  servingGrams: number;
+
+  @ApiProperty({ enum: MealType, description: '餐次' })
+  @IsEnum(MealType)
+  mealType: MealType;
+}
+

@@ -14,3 +14,4 @@ export * from './app-version.entity';
 export * from './app-version-package.entity';
 export * from './coach-conversation.entity';
 export * from './coach-message.entity';
+export * from './food-library.entity';

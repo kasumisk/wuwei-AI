@@ -30,12 +30,14 @@ import { StorageService } from '../../storage/storage.service';
 import { FoodService } from '../services/food.service';
 import { AnalyzeService } from '../services/analyze.service';
 import { UserProfileService } from '../services/user-profile.service';
+import { FoodLibraryService } from '../services/food-library.service';
 import {
   SaveFoodRecordDto,
   UpdateFoodRecordDto,
   FoodRecordQueryDto,
   SaveUserProfileDto,
   AnalyzeImageDto,
+  AddFromLibraryDto,
 } from '../dto/food.dto';
 
 @ApiTags('App 饮食记录')
@@ -48,6 +50,7 @@ export class FoodController {
     private readonly analyzeService: AnalyzeService,
     private readonly userProfileService: UserProfileService,
     private readonly storageService: StorageService,
+    private readonly foodLibraryService: FoodLibraryService,
   ) {}
 
   // ==================== 图片分析 ====================
@@ -118,6 +121,53 @@ export class FoodController {
       code: HttpStatus.CREATED,
       message: '记录已保存',
       data: record,
+    };
+  }
+
+  /**
+   * 从食物库添加饮食记录（手动记录入口）
+   * POST /api/app/food/records/from-library
+   */
+  @Post('records/from-library')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: '从食物库添加饮食记录' })
+  async addFromLibrary(
+    @CurrentAppUser() user: any,
+    @Body() dto: AddFromLibraryDto,
+  ): Promise<ApiResponse> {
+    const record = await this.foodLibraryService.addFromLibrary(
+      user.id,
+      dto.foodLibraryId,
+      dto.servingGrams,
+      dto.mealType,
+    );
+    return {
+      success: true,
+      code: HttpStatus.CREATED,
+      message: '记录已保存',
+      data: record,
+    };
+  }
+
+  /**
+   * 获取用户常吃食物
+   * GET /api/app/food/frequent-foods
+   */
+  @Get('frequent-foods')
+  @ApiOperation({ summary: '获取用户常吃食物排行' })
+  async getFrequentFoods(
+    @CurrentAppUser() user: any,
+    @Query('limit') limit?: string,
+  ): Promise<ApiResponse> {
+    const data = await this.foodLibraryService.getFrequent(
+      user.id,
+      limit ? parseInt(limit, 10) : 10,
+    );
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '获取成功',
+      data,
     };
   }
 
