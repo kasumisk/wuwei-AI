@@ -66,7 +66,7 @@ export class FoodController {
       new ParseFilePipe({
         validators: [
           new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 }),
-          new FileTypeValidator({ fileType: /(image\/(jpg|jpeg|png|webp|heic))$/i }),
+          new FileTypeValidator({ fileType: /^image\/(jpeg|png|webp|heic)$/ }),
         ],
       }),
     )
