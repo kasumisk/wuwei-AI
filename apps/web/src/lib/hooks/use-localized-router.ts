@@ -34,7 +34,7 @@ export function useLocalizedRouter() {
    * @param newLocale - 目标语言
    */
   const switchLocale = (newLocale: string) => {
-    const pathWithoutLocale = removeLocalePrefix(pathname);
+    const pathWithoutLocale = removeLocalePrefix(pathname ?? '/');
     const newPath = getLocalizedPath(pathWithoutLocale, newLocale);
     router.push(newPath);
   };
@@ -43,7 +43,7 @@ export function useLocalizedRouter() {
    * 获取当前路径（不带语言前缀）
    */
   const getCurrentPath = () => {
-    return removeLocalePrefix(pathname);
+    return removeLocalePrefix(pathname ?? '/');
   };
 
   return {

@@ -118,7 +118,7 @@ export default function LoginPage() {
   const handleWechatLogin = async () => {
     try {
       const redirectUri = `${window.location.origin}/auth/wechat/callback`;
-      const url = await getWechatAuthUrl(redirectUri);
+      const { url } = await getWechatAuthUrl(redirectUri);
       if (url) window.location.href = url;
     } catch (err) {
       handleError(err);

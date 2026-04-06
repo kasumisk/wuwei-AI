@@ -23,11 +23,12 @@ export function SiteHeader({ searchQuery = '', onSearchChange }: SiteHeaderProps
 
   // Determine active nav item from pathname
   const isActive = (pattern: RegExp) => {
+    const path = pathname ?? '';
     // Homepage is also a "Tools" active context
     if (pattern.source === '\\/tools') {
-      return /\/(tools|$)/.test(pathname.replace(/^\/[a-z]{2}/, ''));
+      return /\/(tools|$)/.test(path.replace(/^\/[a-z]{2}/, ''));
     }
-    return pattern.test(pathname);
+    return pattern.test(path);
   };
 
   return (
