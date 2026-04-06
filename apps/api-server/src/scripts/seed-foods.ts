@@ -15,6 +15,9 @@ const AppDataSource = new DataSource({
   synchronize: false,
   logging: false,
   entities: [FoodLibrary],
+  ...(process.env.DB_SSL === 'true' && {
+    ssl: { rejectUnauthorized: false },
+  }),
 });
 
 /**
