@@ -203,6 +203,19 @@ export class WechatCodeLoginDto {
 }
 
 /**
+ * 微信小程序登录 DTO（wx.login 获取 code）
+ */
+export class WechatMiniLoginDto {
+  @ApiProperty({ description: '小程序 wx.login 获取的 code' })
+  @IsString()
+  @IsNotEmpty({ message: '小程序 code 不能为空' })
+  code: string;
+}
+  @IsNotEmpty({ message: '微信授权 code 不能为空' })
+  code: string;
+}
+
+/**
  * 获取微信授权 URL DTO
  */
 export class WechatAuthUrlDto {

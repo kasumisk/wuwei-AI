@@ -26,6 +26,7 @@ import {
   PhoneVerifyDto,
   WechatCodeLoginDto,
   WechatAuthUrlDto,
+  WechatMiniLoginDto,
 } from './dto/auth.dto';
 import { Public } from '../core/decorators/public.decorator';
 import { IgnoreResponseInterceptor } from '../core/decorators/ignore-response-interceptor.decorator';
@@ -129,6 +130,24 @@ export class AppAuthController {
   @ApiOperation({ summary: '微信授权码登录' })
   async wechatLogin(@Body() dto: WechatCodeLoginDto): Promise<ApiResponse> {
     const data = await this.appAuthService.wechatLogin(dto.code);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '登录成功',
+      data,
+    };
+  }
+
+  /**
+   * 微信小程序登录（wx.login 获取 code）
+   * POST /api/app/auth/wechat/mini-login
+   */
+  @Public()
+  @Post('wechat/mini-login')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '微信小程序登录' })
+  async wechatMiniLogin(@Body() dto: WechatMiniLoginDto): Promise<ApiResponse> {
+    const data = await this.appAuthService.wechatMiniLogin(dto.code);
     return {
       success: true,
       code: HttpStatus.OK,

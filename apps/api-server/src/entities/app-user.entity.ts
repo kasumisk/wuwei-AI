@@ -38,6 +38,7 @@ export enum AppUserStatus {
 @Index(['deviceId'])
 @Index(['phone'], { unique: true, where: '"phone" IS NOT NULL' })
 @Index(['wechatOpenId'], { unique: true, where: '"wechat_open_id" IS NOT NULL' })
+@Index(['wechatMiniOpenId'], { unique: true, where: '"wechat_mini_open_id" IS NOT NULL' })
 @Index(['appleId'], { unique: true, where: '"apple_id" IS NOT NULL' })
 export class AppUser {
   @PrimaryGeneratedColumn('uuid')
@@ -120,6 +121,15 @@ export class AppUser {
     comment: '微信 unionId（跨平台唯一）',
   })
   wechatUnionId?: string;
+
+  @Column({
+    type: 'varchar',
+    length: 128,
+    nullable: true,
+    name: 'wechat_mini_open_id',
+    comment: '微信小程序 openId',
+  })
+  wechatMiniOpenId?: string;
 
   @Column({
     type: 'varchar',

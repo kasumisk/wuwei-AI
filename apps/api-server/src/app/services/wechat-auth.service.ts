@@ -25,6 +25,12 @@ export interface WechatUserInfo {
   sex?: number;
 }
 
+export interface WechatMiniSessionResult {
+  openid: string;
+  session_key: string;
+  unionid?: string;
+}
+
 @Injectable()
 export class WechatAuthService {
   private readonly logger = new Logger(WechatAuthService.name);
@@ -32,6 +38,8 @@ export class WechatAuthService {
   private readonly appId: string;
   private readonly appSecret: string;
   private readonly redirectUri: string;
+  private readonly miniAppId: string;
+  private readonly miniAppSecret: string;
 
   constructor(private readonly configService: ConfigService) {
     this.appId =
@@ -41,8 +49,15 @@ export class WechatAuthService {
       '9b324b9b2884934f2904c683ad4f50fe';
     this.redirectUri =
       this.configService.get<string>('WECHAT_REDIRECT_URI') || '';
+    this.miniAppId =
+      this.configService.get<string>('WECHAT_MINI_APPID') || '';
+    this.miniAppSecret =
+      this.configService.get<string>('WECHAT_MINI_SECRET') || '';
 
     this.logger.log(`微信登录已配置, appId: ${this.appId}`);
+    if (this.miniAppId) {
+      this.logger.log(`微信小程序已配置, miniAppId: ${this.miniAppId}`);
+    }
   }
 
   /**
@@ -145,6 +160,41 @@ export class WechatAuthService {
     );
 
     return userInfo;
+  }
+
+  /**
+   * 微信小程序登录：code → openid + session_key
+   * 调用 jscode2session 接口
+   */
+  async miniProgramLogin(code: string): Promise<WechatMiniSessionResult> {
+    if (!this.miniAppId || !this.miniAppSecret) {
+      throw new UnauthorizedException('微信小程序未配置 appid/secret');
+    }
+
+    const url =
+      `https://api.weixin.qq.com/sns/jscode2session` +
+      `?appid=${this.miniAppId}` +
+      `&secret=${this.miniAppSecret}` +
+      `&js_code=${code}` +
+      `&grant_type=authorization_code`;
+
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (data.errcode) {
+      this.logger.error(`小程序 code2session 失败: ${JSON.stringify(data)}`);
+      throw new UnauthorizedException(
+        `微信小程序登录失败: ${data.errmsg || '未知错误'}`,
+      );
+    }
+
+    this.logger.log(`小程序登录成功: openid=${data.openid}`);
+
+    return {
+      openid: data.openid,
+      session_key: data.session_key,
+      unionid: data.unionid,
+    };
   }
 
   /**

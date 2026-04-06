@@ -173,6 +173,59 @@ export class AppAuthService {
     };
   }
 
+  // ==================== 微信小程序登录 ====================
+
+  async wechatMiniLogin(code: string): Promise<AppLoginResponseDto> {
+    const session = await this.wechatAuthService.miniProgramLogin(code);
+
+    // 1. 先通过小程序 openid 查找
+    let user = await this.appUserRepository.findOne({
+      where: { wechatMiniOpenId: session.openid },
+    });
+
+    // 2. 如果有 unionid，尝试通过 unionid 查找已有用户（跨端关联）
+    if (!user && session.unionid) {
+      user = await this.appUserRepository.findOne({
+        where: { wechatUnionId: session.unionid },
+      });
+      if (user) {
+        // 关联小程序 openid 到已有用户
+        user.wechatMiniOpenId = session.openid;
+      }
+    }
+
+    let isNewUser = false;
+
+    if (!user) {
+      user = this.appUserRepository.create({
+        authType: AppUserAuthType.WECHAT_MINI,
+        wechatMiniOpenId: session.openid,
+        wechatUnionId: session.unionid || undefined,
+        nickname: `微信用户`,
+        status: AppUserStatus.ACTIVE,
+        lastLoginAt: new Date(),
+      });
+      user = await this.appUserRepository.save(user);
+      isNewUser = true;
+      this.logger.log(
+        `小程序用户创建成功: ${user.id}, openid: ${session.openid}`,
+      );
+    } else {
+      if (session.unionid && !user.wechatUnionId) {
+        user.wechatUnionId = session.unionid;
+      }
+      user.lastLoginAt = new Date();
+      user = await this.appUserRepository.save(user);
+    }
+
+    const token = this.generateToken(user);
+    return {
+      token,
+      user: this.toUserResponse(user),
+      isNewUser,
+    };
+  }
+
   /**
    * 微信消息验签（微信测试号配置 URL 验证用）
    */
