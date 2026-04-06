@@ -5,10 +5,12 @@ import {
   Put,
   Body,
   Query,
+  Res,
   HttpCode,
   HttpStatus,
   UseGuards,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AppAuthService } from './services/app-auth.service';
 import {
@@ -26,6 +28,7 @@ import {
   WechatAuthUrlDto,
 } from './dto/auth.dto';
 import { Public } from '../core/decorators/public.decorator';
+import { IgnoreResponseInterceptor } from '../core/decorators/ignore-response-interceptor.decorator';
 import { AppJwtAuthGuard } from './guards/app-jwt-auth.guard';
 import { CurrentAppUser } from './decorators/current-app-user.decorator';
 import { ApiResponse } from '../common/types/response.type';
@@ -137,8 +140,10 @@ export class AppAuthController {
   /**
    * 微信验签接口（微信测试号配置 URL 验证用）
    * GET /api/app/auth/wechat/verify
+   * 必须返回纯文本 echostr，不能走全局响应拦截器
    */
   @Public()
+  @IgnoreResponseInterceptor()
   @Get('wechat/verify')
   @ApiOperation({ summary: '微信服务器验签（测试号配置用）' })
   wechatVerify(
@@ -146,16 +151,15 @@ export class AppAuthController {
     @Query('timestamp') timestamp: string,
     @Query('nonce') nonce: string,
     @Query('echostr') echostr: string,
-  ): string {
+    @Res() res: Response,
+  ): void {
     const valid = this.appAuthService.verifyWechatSignature(
       signature,
       timestamp,
       nonce,
     );
-    if (valid) {
-      return echostr;
-    }
-    return 'fail';
+    (res as any).set('Content-Type', 'text/plain');
+    (res as any).send(valid ? echostr : 'fail');
   }
 
   // ==================== 邮箱登录 ====================
