@@ -3,6 +3,7 @@ import { BaseCapabilityAdapter } from './base.adapter';
 import { OpenAIAdapter } from './openai.adapter';
 import { DeepSeekAdapter } from './deepseek.adapter';
 import { QwenAdapter } from './qwen.adapter';
+import { OpenRouterAdapter } from './openrouter.adapter';
 
 /**
  * 适配器工厂
@@ -16,15 +17,14 @@ export class AdapterFactory {
     private readonly openaiAdapter: OpenAIAdapter,
     private readonly deepseekAdapter: DeepSeekAdapter,
     private readonly qwenAdapter: QwenAdapter,
+    private readonly openRouterAdapter: OpenRouterAdapter,
   ) {
     // 注册所有适配器
     this.adapters = new Map<string, BaseCapabilityAdapter>([
       ['openai', this.openaiAdapter],
       ['deepseek', this.deepseekAdapter],
       ['qwen', this.qwenAdapter],
-      // 后续可以添加更多适配器
-      // ['anthropic', this.anthropicAdapter],
-      // ['google', this.googleAdapter],
+      ['openrouter', this.openRouterAdapter],
     ]);
   }
 
