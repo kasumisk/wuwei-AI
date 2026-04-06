@@ -68,7 +68,7 @@ export class AnalyzeService {
       this.configService.get<string>('OPENROUTER_BASE_URL') ||
       'https://openrouter.ai/api/v1';
     this.model =
-      this.configService.get<string>('VISION_MODEL') || 'openai/gpt-4o';
+      this.configService.get<string>('VISION_MODEL') || 'baidu/ernie-4.5-vl-28b-a3b';
 
     if (!this.apiKey) {
       this.logger.warn('OPENROUTER_API_KEY 未配置，AI 分析功能将不可用');
