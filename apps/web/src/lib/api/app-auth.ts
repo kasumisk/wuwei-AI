@@ -27,3 +27,7 @@ export const updateProfile = appAuthService.updateProfile;
 export const upgradeAnonymous = appAuthService.upgradeAnonymous;
 export const refreshToken = appAuthService.refreshToken;
 export const logout = appAuthService.logout;
+export const sendPhoneCode = appAuthService.sendPhoneCode;
+export const phoneLogin = appAuthService.phoneLogin;
+export const getWechatAuthUrl = appAuthService.getWechatAuthUrl;
+export const wechatLogin = appAuthService.wechatLogin;

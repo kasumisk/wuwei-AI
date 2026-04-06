@@ -1,4 +1,4 @@
-import { PrivacyPolicyPage } from '@/page-components/legal/privacy-policy';
+import { PrivacyPolicyPage } from '@/pages/legal/privacy-policy';
 
 export const metadata = {
   title: 'Privacy Policy | Procify Toolkit',

@@ -4,11 +4,11 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { TextGenerationTest } from '@/page-components/gateway/text-generation';
-import { StreamGenerationTest } from '@/page-components/gateway/stream-generation';
-import { ImageGenerationTest } from '@/page-components/gateway/image-generation';
-import { ApiKeyConfig } from '@/page-components/gateway/api-key-config';
-import { TestHistory } from '@/page-components/gateway/test-history';
+import { TextGenerationTest } from '@/pages/gateway/text-generation';
+import { StreamGenerationTest } from '@/pages/gateway/stream-generation';
+import { ImageGenerationTest } from '@/pages/gateway/image-generation';
+import { ApiKeyConfig } from '@/pages/gateway/api-key-config';
+import { TestHistory } from '@/pages/gateway/test-history';
 import { Sparkles, MessageSquare, Image as ImageIcon, History, Settings } from 'lucide-react';
 
 export default function GatewayTestPage() {

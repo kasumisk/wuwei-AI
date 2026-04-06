@@ -1,4 +1,4 @@
-import { TermsOfServicePage } from '@/page-components/legal/terms-of-service';
+import { TermsOfServicePage } from '@/pages/legal/terms-of-service';
 
 export const metadata = {
   title: 'Terms of Service | Procify Toolkit',

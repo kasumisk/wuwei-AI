@@ -4,6 +4,7 @@ import {
   Get,
   Put,
   Body,
+  Query,
   HttpCode,
   HttpStatus,
   UseGuards,
@@ -11,9 +12,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AppAuthService } from './services/app-auth.service';
 import {
-  FirebaseLoginDto,
   AnonymousLoginDto,
-  GoogleLoginDto,
   EmailRegisterDto,
   EmailLoginDto,
   EmailCodeLoginDto,
@@ -21,6 +20,10 @@ import {
   ResetPasswordDto,
   UpdateAppUserProfileDto,
   UpgradeAnonymousDto,
+  PhoneSendCodeDto,
+  PhoneVerifyDto,
+  WechatCodeLoginDto,
+  WechatAuthUrlDto,
 } from './dto/auth.dto';
 import { Public } from '../core/decorators/public.decorator';
 import { AppJwtAuthGuard } from './guards/app-jwt-auth.guard';
@@ -52,16 +55,77 @@ export class AppAuthController {
     };
   }
 
+  // ==================== 手机号登录 ====================
+
   /**
-   * Firebase 登录（Google / Email via Firebase）
-   * POST /api/app/auth/firebase
+   * 发送短信验证码
+   * POST /api/app/auth/phone/send-code
    */
   @Public()
-  @Post('firebase')
+  @Post('phone/send-code')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Firebase 登录' })
-  async loginWithFirebase(@Body() dto: FirebaseLoginDto): Promise<ApiResponse> {
-    const data = await this.appAuthService.loginWithFirebase(dto.firebaseToken);
+  @ApiOperation({ summary: '发送短信验证码（开发模式：万能验证码 888888）' })
+  async sendPhoneCode(@Body() dto: PhoneSendCodeDto): Promise<ApiResponse> {
+    const data = await this.appAuthService.sendPhoneCode(dto.phone);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: data.message,
+      data: null,
+    };
+  }
+
+  /**
+   * 手机号验证码登录/注册
+   * POST /api/app/auth/phone/verify
+   */
+  @Public()
+  @Post('phone/verify')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '手机号验证码登录（新用户自动注册）' })
+  async phoneLogin(@Body() dto: PhoneVerifyDto): Promise<ApiResponse> {
+    const data = await this.appAuthService.phoneLogin(dto.phone, dto.code);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '登录成功',
+      data,
+    };
+  }
+
+  // ==================== 微信扫码登录 ====================
+
+  /**
+   * 获取微信授权 URL（给前端跳转用）
+   * POST /api/app/auth/wechat/auth-url
+   */
+  @Public()
+  @Post('wechat/auth-url')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '获取微信网页授权 URL' })
+  getWechatAuthUrl(@Body() dto: WechatAuthUrlDto): ApiResponse {
+    const url = this.appAuthService.getWechatAuthUrl(
+      dto.redirectUri,
+      dto.state,
+    );
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '获取成功',
+      data: { url },
+    };
+  }
+
+  /**
+   * 微信授权回调登录（前端把 code 提交过来）
+   * POST /api/app/auth/wechat/login
+   */
+  @Public()
+  @Post('wechat/login')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '微信授权码登录' })
+  async wechatLogin(@Body() dto: WechatCodeLoginDto): Promise<ApiResponse> {
+    const data = await this.appAuthService.wechatLogin(dto.code);
     return {
       success: true,
       code: HttpStatus.OK,
@@ -71,22 +135,30 @@ export class AppAuthController {
   }
 
   /**
-   * Google 授权登录
-   * POST /api/app/auth/google
+   * 微信验签接口（微信测试号配置 URL 验证用）
+   * GET /api/app/auth/wechat/verify
    */
   @Public()
-  @Post('google')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Google 授权登录' })
-  async googleLogin(@Body() dto: GoogleLoginDto): Promise<ApiResponse> {
-    const data = await this.appAuthService.googleLogin(dto.idToken);
-    return {
-      success: true,
-      code: HttpStatus.OK,
-      message: '登录成功',
-      data,
-    };
+  @Get('wechat/verify')
+  @ApiOperation({ summary: '微信服务器验签（测试号配置用）' })
+  wechatVerify(
+    @Query('signature') signature: string,
+    @Query('timestamp') timestamp: string,
+    @Query('nonce') nonce: string,
+    @Query('echostr') echostr: string,
+  ): string {
+    const valid = this.appAuthService.verifyWechatSignature(
+      signature,
+      timestamp,
+      nonce,
+    );
+    if (valid) {
+      return echostr;
+    }
+    return 'fail';
   }
+
+  // ==================== 邮箱登录 ====================
 
   /**
    * 邮箱密码注册

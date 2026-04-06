@@ -10,6 +10,10 @@ import {
   emailRegister,
   getProfile,
   logout as apiLogout,
+  sendPhoneCode as apiSendPhoneCode,
+  phoneLogin as apiPhoneLogin,
+  getWechatAuthUrl as apiGetWechatAuthUrl,
+  wechatLogin as apiWechatLogin,
   type AppLoginResponse,
 } from '@/lib/api/app-auth';
 
@@ -121,6 +125,52 @@ export function useAuth() {
     clearAuth();
   }, [clearAuth]);
 
+  /** 发送手机验证码 */
+  const sendPhoneCode = useCallback(async (phone: string) => {
+    setLoading(true);
+    try {
+      return await apiSendPhoneCode(phone);
+    } finally {
+      setLoading(false);
+    }
+  }, [setLoading]);
+
+  /** 手机验证码登录 */
+  const loginWithPhone = useCallback(
+    async (phone: string, code: string) => {
+      setLoading(true);
+      try {
+        const res = await apiPhoneLogin(phone, code, getDeviceId());
+        return handleLoginResponse(res);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [handleLoginResponse, setLoading],
+  );
+
+  /** 获取微信授权 URL */
+  const getWechatAuthUrl = useCallback(
+    async (redirectUri: string, state?: string) => {
+      return await apiGetWechatAuthUrl(redirectUri, state);
+    },
+    [],
+  );
+
+  /** 微信 code 登录 */
+  const loginWithWechat = useCallback(
+    async (code: string) => {
+      setLoading(true);
+      try {
+        const res = await apiWechatLogin(code);
+        return handleLoginResponse(res);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [handleLoginResponse, setLoading],
+  );
+
   /** 恢复登录态（初始化时调用） */
   const restoreAuth = useCallback(async () => {
     if (initialized) return;
@@ -148,6 +198,10 @@ export function useAuth() {
     loginWithFirebase,
     loginWithEmail,
     registerWithEmail,
+    sendPhoneCode,
+    loginWithPhone,
+    getWechatAuthUrl,
+    loginWithWechat,
     logout,
     restoreAuth,
   };

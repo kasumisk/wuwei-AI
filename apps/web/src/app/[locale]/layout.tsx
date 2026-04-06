@@ -1,7 +1,7 @@
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages } from 'next-intl/server';
 import { notFound } from 'next/navigation';
-import { Inter, Manrope } from 'next/font/google';
+import { Inter, Plus_Jakarta_Sans } from 'next/font/google';
 import { Providers } from '@/providers';
 import { Toaster } from '@/components/common/toaster';
 import { i18n, type Locale } from '@/lib/i18n/config';
@@ -15,7 +15,7 @@ const inter = Inter({
   display: 'swap',
 });
 
-const manrope = Manrope({
+const plusJakartaSans = Plus_Jakarta_Sans({
   subsets: ['latin'],
   variable: '--font-headline',
   display: 'swap',
@@ -46,7 +46,7 @@ export default async function LocaleLayout({
         <JsonLd data={buildOrganizationSchema()} />
         <JsonLd data={buildWebSiteSchema()} />
       </head>
-      <body className={`${inter.variable} ${manrope.variable}`}>
+      <body className={`${inter.variable} ${plusJakartaSans.variable}`}>
         <NextIntlClientProvider messages={messages}>
           <Providers>
             {children}

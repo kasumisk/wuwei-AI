@@ -22,8 +22,10 @@ async function unwrap<T>(promise: Promise<ApiResponse<T>>): Promise<T> {
 
 export interface AppUserInfo {
   id: string;
-  authType: 'anonymous' | 'google' | 'email';
+  authType: 'anonymous' | 'google' | 'email' | 'phone' | 'wechat' | 'wechat_mini' | 'apple';
   email?: string;
+  phone?: string;
+  phoneVerified?: boolean;
   nickname?: string;
   avatar?: string;
   status: string;
@@ -143,6 +145,49 @@ export const appAuthService = {
    */
   refreshToken: async (): Promise<{ token: string }> => {
     return unwrap(clientPost<{ token: string }>('/app/auth/refresh'));
+  },
+
+  // ==================== 手机号登录 ====================
+
+  /**
+   * 发送手机验证码
+   */
+  sendPhoneCode: async (phone: string): Promise<{ message: string }> => {
+    return unwrap(clientPost<{ message: string }>('/app/auth/phone/send-code', { phone }));
+  },
+
+  /**
+   * 手机验证码登录/注册
+   */
+  phoneLogin: async (
+    phone: string,
+    code: string,
+    deviceId?: string,
+  ): Promise<AppLoginResponse> => {
+    return unwrap(
+      clientPost<AppLoginResponse>('/app/auth/phone/verify', { phone, code, deviceId }),
+    );
+  },
+
+  // ==================== 微信登录 ====================
+
+  /**
+   * 获取微信授权 URL
+   */
+  getWechatAuthUrl: async (
+    redirectUri: string,
+    state?: string,
+  ): Promise<{ url: string }> => {
+    return unwrap(
+      clientPost<{ url: string }>('/app/auth/wechat/auth-url', { redirectUri, state }),
+    );
+  },
+
+  /**
+   * 微信 code 登录
+   */
+  wechatLogin: async (code: string): Promise<AppLoginResponse> => {
+    return unwrap(clientPost<AppLoginResponse>('/app/auth/wechat/login', { code }));
   },
 
   /**

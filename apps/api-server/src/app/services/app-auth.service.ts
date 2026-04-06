@@ -17,7 +17,8 @@ import {
   AppUserAuthType,
   AppUserStatus,
 } from '../../entities/app-user.entity';
-import { FirebaseAdminService } from './firebase-admin.service';
+import { SmsService } from './sms.service';
+import { WechatAuthService } from './wechat-auth.service';
 import type { AppLoginResponseDto, AppUserResponseDto } from '../dto/auth.dto';
 
 @Injectable()
@@ -32,7 +33,8 @@ export class AppAuthService {
     @InjectRepository(AppUser)
     private readonly appUserRepository: Repository<AppUser>,
     private readonly jwtService: JwtService,
-    private readonly firebaseAdminService: FirebaseAdminService,
+    private readonly smsService: SmsService,
+    private readonly wechatAuthService: WechatAuthService,
   ) {}
 
   // ==================== 匿名登录 ====================
@@ -68,76 +70,45 @@ export class AppAuthService {
     };
   }
 
-  // ==================== Firebase 登录 ====================
+  // ==================== 手机号登录 ====================
 
-  async loginWithFirebase(firebaseToken: string): Promise<AppLoginResponseDto> {
-    const decodedToken =
-      await this.firebaseAdminService.verifyIdToken(firebaseToken);
-    if (!decodedToken) {
-      throw new UnauthorizedException('Firebase token 验证失败');
+  async sendPhoneCode(phone: string): Promise<{ message: string }> {
+    return this.smsService.sendCode(phone);
+  }
+
+  async phoneLogin(
+    phone: string,
+    code: string,
+  ): Promise<AppLoginResponseDto> {
+    const valid = this.smsService.verifyCode(phone, code);
+    if (!valid) {
+      throw new UnauthorizedException('验证码错误或已过期');
     }
 
-    const firebaseUser = await this.firebaseAdminService.getUser(
-      decodedToken.uid,
-    );
-
-    // 确定认证类型
-    let authType = AppUserAuthType.EMAIL;
-    if (decodedToken.firebase?.sign_in_provider === 'google.com') {
-      authType = AppUserAuthType.GOOGLE;
-    }
-
-    // 查找已有用户（先通过 googleId/firebase uid，再通过 email）
-    let user: AppUser | null = null;
-    if (authType === AppUserAuthType.GOOGLE) {
-      user = await this.appUserRepository.findOne({
-        where: { googleId: decodedToken.uid },
-      });
-    }
-    if (!user && decodedToken.email) {
-      user = await this.appUserRepository.findOne({
-        where: { email: decodedToken.email },
-      });
-    }
+    let user = await this.appUserRepository.findOne({
+      where: { phone },
+    });
 
     let isNewUser = false;
 
-    if (user) {
-      // 更新已有用户信息
-      if (authType === AppUserAuthType.GOOGLE && !user.googleId) {
-        user.googleId = decodedToken.uid;
-      }
-      if (decodedToken.email && !user.email) {
-        user.email = decodedToken.email;
-        user.emailVerified = decodedToken.email_verified ?? false;
-      }
-      if (firebaseUser?.displayName && !user.nickname) {
-        user.nickname = firebaseUser.displayName;
-      }
-      if (firebaseUser?.photoURL && !user.avatar) {
-        user.avatar = firebaseUser.photoURL;
-      }
-      user.lastLoginAt = new Date();
-      user = await this.appUserRepository.save(user);
-    } else {
-      // 创建新用户
-      isNewUser = true;
-      const newUser = this.appUserRepository.create({
-        authType,
-        email: decodedToken.email || undefined,
-        emailVerified: decodedToken.email_verified ?? false,
-        googleId:
-          authType === AppUserAuthType.GOOGLE ? decodedToken.uid : undefined,
-        nickname:
-          firebaseUser?.displayName ||
-          decodedToken.name ||
-          decodedToken.email?.split('@')[0] ||
-          `user_${Date.now()}`,
-        avatar: firebaseUser?.photoURL || decodedToken.picture || undefined,
+    if (!user) {
+      user = this.appUserRepository.create({
+        authType: AppUserAuthType.PHONE,
+        phone,
+        phoneVerified: true,
+        nickname: `用户${phone.slice(-4)}`,
         status: AppUserStatus.ACTIVE,
         lastLoginAt: new Date(),
       });
-      user = await this.appUserRepository.save(newUser);
+      user = await this.appUserRepository.save(user);
+      isNewUser = true;
+      this.logger.log(`手机号用户创建成功: ${user.id}, phone: ${phone}`);
+    } else {
+      if (!user.phoneVerified) {
+        user.phoneVerified = true;
+      }
+      user.lastLoginAt = new Date();
+      user = await this.appUserRepository.save(user);
     }
 
     const token = this.generateToken(user);
@@ -146,6 +117,71 @@ export class AppAuthService {
       user: this.toUserResponse(user),
       isNewUser,
     };
+  }
+
+  // ==================== 微信扫码登录 ====================
+
+  getWechatAuthUrl(redirectUri: string, state?: string): string {
+    return this.wechatAuthService.getAuthUrl(redirectUri, state);
+  }
+
+  async wechatLogin(code: string): Promise<AppLoginResponseDto> {
+    const wechatUser = await this.wechatAuthService.loginWithCode(code);
+
+    // 先通过 openid 查找用户
+    let user = await this.appUserRepository.findOne({
+      where: { wechatOpenId: wechatUser.openid },
+    });
+
+    let isNewUser = false;
+
+    if (!user) {
+      user = this.appUserRepository.create({
+        authType: AppUserAuthType.WECHAT,
+        wechatOpenId: wechatUser.openid,
+        wechatUnionId: wechatUser.unionid || undefined,
+        nickname: wechatUser.nickname || `微信用户`,
+        avatar: wechatUser.headimgurl || undefined,
+        status: AppUserStatus.ACTIVE,
+        lastLoginAt: new Date(),
+      });
+      user = await this.appUserRepository.save(user);
+      isNewUser = true;
+      this.logger.log(
+        `微信用户创建成功: ${user.id}, openid: ${wechatUser.openid}`,
+      );
+    } else {
+      // 更新用户信息（微信头像/昵称可能变更）
+      if (wechatUser.nickname && wechatUser.nickname !== user.nickname) {
+        user.nickname = wechatUser.nickname;
+      }
+      if (wechatUser.headimgurl && wechatUser.headimgurl !== user.avatar) {
+        user.avatar = wechatUser.headimgurl;
+      }
+      if (wechatUser.unionid && !user.wechatUnionId) {
+        user.wechatUnionId = wechatUser.unionid;
+      }
+      user.lastLoginAt = new Date();
+      user = await this.appUserRepository.save(user);
+    }
+
+    const token = this.generateToken(user);
+    return {
+      token,
+      user: this.toUserResponse(user),
+      isNewUser,
+    };
+  }
+
+  /**
+   * 微信消息验签（微信测试号配置 URL 验证用）
+   */
+  verifyWechatSignature(
+    signature: string,
+    timestamp: string,
+    nonce: string,
+  ): boolean {
+    return this.wechatAuthService.verifySignature(signature, timestamp, nonce);
   }
 
   // ==================== Google 登录 ====================
@@ -585,10 +621,12 @@ export class AppAuthService {
       id: user.id,
       authType: user.authType,
       email: user.email,
+      phone: user.phone,
       nickname: user.nickname,
       avatar: user.avatar,
       status: user.status,
       emailVerified: user.emailVerified,
+      phoneVerified: user.phoneVerified,
       lastLoginAt: user.lastLoginAt,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,

@@ -10,7 +10,8 @@ import { AppVersionPackage } from '../entities/app-version-package.entity';
 // 服务
 import { AppAuthService } from './services/app-auth.service';
 import { AppUpdateService } from './services/app-update.service';
-import { FirebaseAdminService } from './services/firebase-admin.service';
+import { SmsService } from './services/sms.service';
+import { WechatAuthService } from './services/wechat-auth.service';
 // 控制器
 import { AppAuthController } from './app.controller';
 import { AppFileController } from './controllers/file.controller';
@@ -35,7 +36,8 @@ import { AppJwtAuthGuard } from './guards/app-jwt-auth.guard';
     // 服务
     AppAuthService,
     AppUpdateService,
-    FirebaseAdminService,
+    SmsService,
+    WechatAuthService,
     // 守卫和策略
     AppJwtStrategy,
     AppJwtAuthGuard,

@@ -5,6 +5,7 @@ import {
   IsEmail,
   IsOptional,
   MinLength,
+  Matches,
 } from 'class-validator';
 
 /**
@@ -155,6 +156,67 @@ export class UpgradeAnonymousDto {
   password: string;
 }
 
+// ==================== 手机号登录 DTOs ====================
+
+/**
+ * 发送短信验证码 DTO
+ */
+export class PhoneSendCodeDto {
+  @ApiProperty({ description: '手机号', example: '13800138000' })
+  @IsString()
+  @IsNotEmpty({ message: '手机号不能为空' })
+  @Matches(/^1[3-9]\d{9}$/, { message: '手机号格式不正确' })
+  phone: string;
+}
+
+/**
+ * 手机号验证码登录 DTO
+ */
+export class PhoneVerifyDto {
+  @ApiProperty({ description: '手机号', example: '13800138000' })
+  @IsString()
+  @IsNotEmpty({ message: '手机号不能为空' })
+  @Matches(/^1[3-9]\d{9}$/, { message: '手机号格式不正确' })
+  phone: string;
+
+  @ApiProperty({ description: '验证码（开发环境万能码 888888）', example: '888888' })
+  @IsString()
+  @IsNotEmpty({ message: '验证码不能为空' })
+  code: string;
+
+  @ApiPropertyOptional({ description: '设备ID（可选，用于匿名升级绑定）' })
+  @IsOptional()
+  @IsString()
+  deviceId?: string;
+}
+
+// ==================== 微信登录 DTOs ====================
+
+/**
+ * 微信扫码回调登录 DTO（前端拿到 code 后提交）
+ */
+export class WechatCodeLoginDto {
+  @ApiProperty({ description: '微信授权 code' })
+  @IsString()
+  @IsNotEmpty({ message: '微信授权 code 不能为空' })
+  code: string;
+}
+
+/**
+ * 获取微信授权 URL DTO
+ */
+export class WechatAuthUrlDto {
+  @ApiProperty({ description: '授权后回调的前端页面地址' })
+  @IsString()
+  @IsNotEmpty({ message: '回调地址不能为空' })
+  redirectUri: string;
+
+  @ApiPropertyOptional({ description: '防 CSRF state 参数' })
+  @IsOptional()
+  @IsString()
+  state?: string;
+}
+
 /**
  * App 用户信息响应
  */
@@ -162,10 +224,12 @@ export interface AppUserResponseDto {
   id: string;
   authType: string;
   email?: string;
+  phone?: string;
   nickname?: string;
   avatar?: string;
   status: string;
   emailVerified: boolean;
+  phoneVerified?: boolean;
   lastLoginAt?: Date;
   createdAt: Date;
   updatedAt: Date;

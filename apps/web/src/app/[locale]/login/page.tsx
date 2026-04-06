@@ -1,123 +1,94 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Eye, EyeOff, ShieldCheck, Lock } from 'lucide-react';
-import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/hooks/use-auth';
 import { useToast } from '@/lib/hooks/use-toast';
-import {
-  auth,
-  googleProvider,
-  signInWithPopup,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  sendPasswordResetEmail,
-} from '@/lib/firebase';
 
-/* ─── Icon Components ─── */
-function GoogleIcon() {
+/* ─── SVG Icon Components ─── */
+function IconPlant({ className = '' }: { className?: string }) {
   return (
-    <svg className="w-5 h-5" viewBox="0 0 24 24">
-      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
-      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+      <path d="M6 21h12v-2H6v2zm6-16c-.55 0-1 .45-1 1v6.07c-1.13.2-2 1.19-2 2.37V18h6v-3.56c0-1.18-.87-2.17-2-2.37V6c0-.55-.45-1-1-1zm4.5 1c0 2.49-2.01 4.5-4.5 4.5S7.5 8.49 7.5 6h-2C5.5 9.59 8.41 12.5 12 12.5S18.5 9.59 18.5 6h-2z" />
     </svg>
   );
 }
 
-function GitHubIcon() {
+function IconArrowForward({ className = '' }: { className?: string }) {
   return (
-    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-      <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+      <path d="m12 4-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z" />
     </svg>
   );
 }
 
-type AuthMode = 'login' | 'register' | 'reset';
+function IconChat({ className = '' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+      <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z" />
+    </svg>
+  );
+}
+
+function IconArrowBack({ className = '' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+      <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
+    </svg>
+  );
+}
+
+type Step = 'phone' | 'code';
 
 export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const t = useTranslations('auth');
-  const tc = useTranslations('common');
-  const { loginAnonymously, loginWithFirebase, loading } = useAuth();
-  const [mode, setMode] = useState<AuthMode>('login');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [nickname, setNickname] = useState('');
+  const { sendPhoneCode, loginWithPhone, getWechatAuthUrl, loading } = useAuth();
+
+  const [step, setStep] = useState<Step>('phone');
+  const [phone, setPhone] = useState('');
+  const [code, setCode] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const isLoading = loading || submitting;
 
-  const handleSuccess = (msg?: string) => {
-    toast({ title: msg || (mode === 'register' ? t('toast.registerSuccess') : t('toast.loginSuccess')) });
-    router.push('/');
-  };
-
-  const handleError = (err: unknown) => {
-    const msg = err instanceof Error ? err.message : t('toast.operationFailed');
-    toast({ title: msg, variant: 'destructive' });
-  };
-
-  const firebaseLogin = async (idToken: string) => {
-    await loginWithFirebase(idToken);
-  };
-
-  const handleGoogleLogin = async () => {
-    setSubmitting(true);
-    try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const idToken = await result.user.getIdToken();
-      await firebaseLogin(idToken);
-      handleSuccess();
-    } catch (err) {
-      handleError(err);
-    } finally {
-      setSubmitting(false);
+  /* ─── Countdown timer ─── */
+  useEffect(() => {
+    if (countdown <= 0) {
+      if (timerRef.current) clearInterval(timerRef.current);
+      return;
     }
-  };
+    timerRef.current = setInterval(() => {
+      setCountdown((c) => c - 1);
+    }, 1000);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [countdown]);
 
-  const handleEmailLogin = async () => {
-    setSubmitting(true);
-    try {
-      const credential = await signInWithEmailAndPassword(auth, email, password);
-      const idToken = await credential.user.getIdToken();
-      await firebaseLogin(idToken);
-      handleSuccess();
-    } catch (err) {
-      handleError(err);
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  const handleError = useCallback(
+    (err: unknown) => {
+      const msg = err instanceof Error ? err.message : '操作失败，请重试';
+      toast({ title: msg, variant: 'destructive' });
+    },
+    [toast],
+  );
 
-  const handleEmailRegister = async () => {
-    setSubmitting(true);
-    try {
-      const credential = await createUserWithEmailAndPassword(auth, email, password);
-      const idToken = await credential.user.getIdToken();
-      await firebaseLogin(idToken);
-      handleSuccess(t('toast.registerSuccess'));
-    } catch (err) {
-      handleError(err);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleResetPassword = async () => {
-    if (!email) {
-      toast({ title: t('toast.enterEmail'), variant: 'destructive' });
+  /* ─── Send verification code ─── */
+  const handleSendCode = async () => {
+    const trimmed = phone.replace(/\s/g, '');
+    if (!/^1\d{10}$/.test(trimmed)) {
+      toast({ title: '请输入正确的11位手机号', variant: 'destructive' });
       return;
     }
     setSubmitting(true);
     try {
-      await sendPasswordResetEmail(auth, email);
-      toast({ title: t('toast.resetEmailSent') });
-      setMode('login');
+      await sendPhoneCode(trimmed);
+      toast({ title: '验证码已发送' });
+      setStep('code');
+      setCountdown(60);
     } catch (err) {
       handleError(err);
     } finally {
@@ -125,284 +96,236 @@ export default function LoginPage() {
     }
   };
 
-  const handleAnonymousLogin = async () => {
+  /* ─── Verify code & login ─── */
+  const handleLogin = async () => {
+    if (code.length < 4) {
+      toast({ title: '请输入验证码', variant: 'destructive' });
+      return;
+    }
+    setSubmitting(true);
     try {
-      await loginAnonymously();
-      handleSuccess();
+      await loginWithPhone(phone.replace(/\s/g, ''), code);
+      toast({ title: '登录成功' });
+      router.push('/');
+    } catch (err) {
+      handleError(err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  /* ─── WeChat login ─── */
+  const handleWechatLogin = async () => {
+    try {
+      const redirectUri = `${window.location.origin}/auth/wechat/callback`;
+      const url = await getWechatAuthUrl(redirectUri);
+      if (url) window.location.href = url;
     } catch (err) {
       handleError(err);
     }
   };
 
-  const handleEmailSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (mode === 'reset') {
-      await handleResetPassword();
-    } else if (mode === 'register') {
-      await handleEmailRegister();
-    } else {
-      await handleEmailLogin();
+  /* ─── Resend code ─── */
+  const handleResend = async () => {
+    if (countdown > 0) return;
+    setSubmitting(true);
+    try {
+      await sendPhoneCode(phone.replace(/\s/g, ''));
+      toast({ title: '验证码已重新发送' });
+      setCountdown(60);
+    } catch (err) {
+      handleError(err);
+    } finally {
+      setSubmitting(false);
     }
   };
 
   return (
-    <main className="flex min-h-screen">
-      {/* ─── Left Visual Panel (desktop only) ─── */}
-      <section className="hidden lg:flex lg:w-7/12 relative overflow-hidden ai-gradient-bg flex-col justify-between p-16">
-        {/* Decorative blur circles */}
-        <div className="absolute inset-0 pointer-events-none bg-primary">
-        </div>
+    <main className="bg-background text-foreground min-h-screen flex flex-col items-center justify-center p-6 selection:bg-(--color-primary-container) relative overflow-hidden">
+      {/* Subtle Background Organic Shapes */}
+      <div className="fixed top-[-10%] right-[-10%] w-[60%] h-[50%] bg-surface-container-low rounded-full blur-[120px] -z-10" />
+      <div className="fixed bottom-[-5%] left-[-10%] w-[50%] h-[40%] bg-(--color-surface-variant)/40 rounded-full blur-[100px] -z-10" />
 
-       
-
-        {/* Top: Logo + Badge */}
-        <div className="relative z-10">
-          <div className="flex items-center gap-3">
-            <span className="text-white font-headline text-3xl font-black tracking-tighter">
-              {tc('appName')}
-            </span>
-            <span className="px-2 py-0.5 rounded bg-white/10 text-white/80 text-[10px] uppercase tracking-widest font-bold backdrop-blur-md border border-white/10">
-              Quantum Tier
-            </span>
+      <div className="w-full max-w-md flex flex-col space-y-12">
+        {/* Header Branding */}
+        <header className="space-y-4">
+          <div className="inline-flex items-center justify-center w-14 h-14 bg-primary rounded-2xl text-primary-foreground shadow-xl shadow-primary/10">
+            <IconPlant className="w-8 h-8" />
           </div>
-        </div>
-
-        {/* Middle: Tagline + Testimonial */}
-        <div className="relative z-10 max-w-xl">
-          <h1 className="font-headline text-5xl text-white font-extrabold tracking-tight leading-[1.1] mb-6">
-            {t('headline')} <br />
-            <span className="text-teal-200">{t('headlineHighlight')}</span>
-          </h1>
-          <p className="text-lg text-white/70 font-light leading-relaxed mb-12">
-            {t('description')}
-          </p>
-
-          {/* Testimonial glass card */}
-          <div className="glass-morphism p-8 rounded-xl border border-white/10 max-w-md">
-            <div className="flex items-center gap-4 mb-4">
-              <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-blue-200 bg-linear-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold text-lg">
-                A
-              </div>
-              <div>
-                <p className="font-headline font-bold text-white">{t('testimonial.author')}</p>
-                <p className="text-xs text-white/60">{t('testimonial.authorTitle')}</p>
-              </div>
-            </div>
-            <p className="italic text-white/70 leading-relaxed">
-              &ldquo;{t('testimonial.content')}&rdquo;
-            </p>
+          <div className="space-y-2">
+            {step === 'phone' ? (
+              <>
+                <h1 className="text-4xl md:text-5xl font-extrabold tracking-tighter text-foreground font-headline">
+                  欢迎回来
+                </h1>
+                <p className="text-muted-foreground text-lg leading-relaxed max-w-70">
+                  继续你的健康饮食之旅。
+                </p>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setStep('phone')}
+                  className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors mb-2"
+                >
+                  <IconArrowBack className="w-4 h-4" />
+                  返回
+                </button>
+                <h1 className="text-4xl md:text-5xl font-extrabold tracking-tighter text-foreground font-headline">
+                  输入验证码
+                </h1>
+                <p className="text-muted-foreground text-lg leading-relaxed max-w-75">
+                  验证码已发送至 +86 {phone}
+                </p>
+              </>
+            )}
           </div>
-        </div>
+        </header>
 
-        {/* Bottom: Footer links */}
-        <div className="relative z-10 flex gap-8 text-white/50 text-xs font-medium uppercase tracking-widest">
-          <span> {t('footer.copyright')}</span>
-          <span className="hover:text-white cursor-pointer transition-colors">{t('footer.privacy')}</span>
-          <span className="hover:text-white cursor-pointer transition-colors">{t('footer.security')}</span>
-        </div>
-      </section>
-
-      {/* ─── Right Auth Form Panel ─── */}
-      <section className="w-full lg:w-5/12 bg-white dark:bg-slate-950 flex flex-col justify-center items-center p-8 sm:p-16 overflow-y-auto">
-        <div className="w-full max-w-sm">
-          {/* Mobile logo */}
-          <div className="lg:hidden mb-12 flex justify-center">
-            <span className="bg-linear-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent font-headline text-3xl font-black tracking-tighter">
-              {tc('appName')}
-            </span>
-          </div>
-
-          {/* Heading */}
-          <div className="mb-10 text-center lg:text-left">
-            <h2 className="font-headline text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight mb-2">
-              {mode === 'register' ? t('mode.register') : mode === 'reset' ? t('mode.reset') : t('mode.login')}
-            </h2>
-            <p className="text-slate-500 dark:text-slate-400">
-              {mode === 'register'
-                ? t('subtitle.register')
-                : mode === 'reset'
-                  ? t('subtitle.reset')
-                  : t('subtitle.login')}
-            </p>
-          </div>
-
-          {/* Social Auth Buttons */}
-          {mode !== 'reset' && (
+        {/* Login Form */}
+        <section className="space-y-8">
+          {step === 'phone' ? (
             <>
-              <div className="grid grid-cols-1 gap-4 mb-8">
-                <button
-                  type="button"
-                  onClick={handleGoogleLogin}
-                  disabled={isLoading}
-                  className="flex items-center justify-center gap-3 w-full py-3.5 px-4 bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors rounded-xl font-semibold text-slate-900 dark:text-white border border-slate-200/60 dark:border-slate-700/60 disabled:opacity-50"
+              {/* Phone Input */}
+              <div className="space-y-4">
+                <label
+                  className="block text-xs font-bold tracking-[0.05em] uppercase text-muted-foreground ml-1"
+                  htmlFor="phone"
                 >
-                  <GoogleIcon />
-                  {t('social.google')}
-                </button>
-                <button
-                  type="button"
-                  disabled={isLoading}
-                  className="flex items-center justify-center gap-3 w-full py-3.5 px-4 bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors rounded-xl font-semibold text-slate-900 dark:text-white border border-slate-200/60 dark:border-slate-700/60 disabled:opacity-50"
-                >
-                  <GitHubIcon />
-                  {t('social.github')}
-                </button>
+                  手机号码
+                </label>
+                <div className="relative group">
+                  <div className="absolute left-5 top-1/2 -translate-y-1/2 flex items-center space-x-2 text-muted-foreground">
+                    <span className="text-base font-semibold">+86</span>
+                    <div className="w-px h-4 bg-(--color-outline-variant)/30" />
+                  </div>
+                  <input
+                    id="phone"
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel"
+                    placeholder="138 0000 0000"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value.replace(/[^\d\s]/g, ''))}
+                    disabled={isLoading}
+                    maxLength={13}
+                    className="w-full bg-(--color-surface-variant) border-none rounded-2xl py-5 pl-20 pr-6 text-lg font-medium text-foreground placeholder:text-muted-foreground/40 focus:ring-2 focus:ring-primary focus:bg-card transition-all outline-none"
+                  />
+                </div>
               </div>
 
-              {/* Divider */}
-              <div className="relative my-8">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-slate-200 dark:border-slate-700" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase tracking-widest font-bold">
-                  <span className="bg-white dark:bg-slate-950 px-4 text-slate-400">{t('form.divider')}</span>
-                </div>
-              </div>
+              {/* Continue Button */}
+              <button
+                type="button"
+                onClick={handleSendCode}
+                disabled={isLoading || phone.replace(/\s/g, '').length < 11}
+                className="w-full bg-primary text-primary-foreground font-bold py-5 rounded-full text-lg shadow-lg shadow-primary/20 active:scale-[0.98] transition-all flex items-center justify-center space-x-2 disabled:opacity-50 disabled:pointer-events-none"
+              >
+                <span>{isLoading ? '发送中...' : '获取验证码'}</span>
+                <IconArrowForward className="w-5 h-5" />
+              </button>
             </>
-          )}
-
-          {/* Email Form */}
-          <form onSubmit={handleEmailSubmit} className="space-y-5">
-            {mode === 'register' && (
-              <div>
-                <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-2" htmlFor="nickname">
-                  {t('form.nickname')}
+          ) : (
+            <>
+              {/* Code Input */}
+              <div className="space-y-4">
+                <label
+                  className="block text-xs font-bold tracking-[0.05em] uppercase text-muted-foreground ml-1"
+                  htmlFor="code"
+                >
+                  验证码
                 </label>
                 <input
-                  id="nickname"
-                  placeholder={t('form.optional')}
-                  value={nickname}
-                  onChange={(e) => setNickname(e.target.value)}
+                  id="code"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="输入6位验证码"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   disabled={isLoading}
-                  className="w-full px-4 py-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border-none focus:ring-2 focus:ring-blue-500/40 placeholder:text-slate-400 transition-all text-slate-900 dark:text-white"
+                  maxLength={6}
+                  className="w-full bg-(--color-surface-variant) border-none rounded-2xl py-5 px-6 text-center text-2xl font-bold tracking-[0.5em] text-foreground placeholder:text-muted-foreground/40 placeholder:text-base placeholder:tracking-normal focus:ring-2 focus:ring-primary focus:bg-card transition-all outline-none"
                 />
-              </div>
-            )}
-
-            <div>
-              <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-2" htmlFor="email">
-                {t('form.email')}
-              </label>
-              <input
-                id="email"
-                type="email"
-                placeholder={t('form.emailPlaceholder')}
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={isLoading}
-                className="w-full px-4 py-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border-none focus:ring-2 focus:ring-blue-500/40 placeholder:text-slate-400 transition-all text-slate-900 dark:text-white"
-              />
-            </div>
-
-            {mode !== 'reset' && (
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <label className="block text-sm font-semibold text-slate-900 dark:text-white" htmlFor="password">
-                    {t('form.password')}
-                  </label>
-                  {mode === 'login' && (
+                <div className="text-center">
+                  {countdown > 0 ? (
+                    <span className="text-sm text-muted-foreground">
+                      {countdown}s 后可重新发送
+                    </span>
+                  ) : (
                     <button
                       type="button"
-                      className="text-xs font-bold text-blue-600 hover:text-blue-800 dark:text-blue-400 transition-colors"
-                      onClick={() => setMode('reset')}
+                      onClick={handleResend}
+                      disabled={isLoading}
+                      className="text-sm font-bold text-primary hover:underline disabled:opacity-50"
                     >
-                      {t('form.forgotAccess')}
+                      重新发送验证码
                     </button>
                   )}
                 </div>
-                <div className="relative">
-                  <input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="••••••••"
-                    required
-                    minLength={6}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    disabled={isLoading}
-                    className="w-full px-4 py-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border-none focus:ring-2 focus:ring-blue-500/40 placeholder:text-slate-400 transition-all pr-12 text-slate-900 dark:text-white"
-                  />
-                  <button
-                    type="button"
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-600 transition-colors"
-                    onClick={() => setShowPassword(!showPassword)}
-                    tabIndex={-1}
-                  >
-                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                  </button>
-                </div>
               </div>
-            )}
 
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-headline font-bold rounded-xl shadow-[0_8px_16px_rgba(0,88,190,0.2)] hover:shadow-[0_12px_24px_rgba(0,88,190,0.3)] active:scale-[0.98] transition-all disabled:opacity-50 disabled:pointer-events-none"
-            >
-              {isLoading
-                ? tc('status.processing')
-                : mode === 'register'
-                  ? t('submit.register')
-                  : mode === 'reset'
-                    ? t('submit.reset')
-                    : t('submit.login')}
-            </button>
-          </form>
+              {/* Login Button */}
+              <button
+                type="button"
+                onClick={handleLogin}
+                disabled={isLoading || code.length < 4}
+                className="w-full bg-primary text-primary-foreground font-bold py-5 rounded-full text-lg shadow-lg shadow-primary/20 active:scale-[0.98] transition-all flex items-center justify-center space-x-2 disabled:opacity-50 disabled:pointer-events-none"
+              >
+                <span>{isLoading ? '登录中...' : '登录'}</span>
+                <IconArrowForward className="w-5 h-5" />
+              </button>
+            </>
+          )}
+        </section>
 
-          {/* Mode switching */}
-          <div className="mt-10 text-center">
-            <p className="text-slate-500 dark:text-slate-400 text-sm">
-              {mode === 'login' ? (
-                <>
-                  {t('switch.noAccount')}{' '}
-                  <button type="button" className="text-blue-600 dark:text-blue-400 font-bold hover:underline decoration-2 underline-offset-4" onClick={() => setMode('register')}>
-                    {t('switch.createFree')}
-                  </button>
-                </>
-              ) : (
-                <>
-                  {mode === 'reset' ? t('switch.rememberPassword') : t('switch.alreadyHaveAccount')}{' '}
-                  <button type="button" className="text-blue-600 dark:text-blue-400 font-bold hover:underline decoration-2 underline-offset-4" onClick={() => setMode('login')}>
-                    {t('switch.signIn')}
-                  </button>
-                </>
-              )}
-            </p>
+        {/* Divider */}
+        <div className="relative flex items-center justify-center py-2">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full h-px bg-(--color-outline-variant)/20" />
           </div>
+          <span className="relative px-4 bg-background text-xs font-bold tracking-widest uppercase text-muted-foreground/60">
+            其他登录方式
+          </span>
+        </div>
 
-          {/* Anonymous login */}
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-slate-200 dark:border-slate-700" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase tracking-widest font-bold">
-              <span className="bg-white dark:bg-slate-950 px-4 text-slate-400">{t('form.dividerOr')}</span>
-            </div>
-          </div>
-
+        {/* Social Login */}
+        <footer className="flex items-center justify-center space-x-6">
           <button
             type="button"
-            onClick={handleAnonymousLogin}
-            disabled={isLoading}
-            className="w-full py-3 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 font-medium transition-colors disabled:opacity-50"
+            onClick={handleWechatLogin}
+            className="w-14 h-14 flex items-center justify-center bg-(--color-surface-container-highest) rounded-full active:scale-95 transition-all hover:bg-surface-container-high group"
+            title="微信登录"
           >
-            {t('guest')}
+            <IconChat className="w-6 h-6 text-muted-foreground group-hover:text-foreground" />
           </button>
+        </footer>
 
-          {/* Trust badges */}
-          <div className="mt-12 flex items-center justify-center gap-6 opacity-30 grayscale hover:opacity-60 transition-opacity">
-            <div className="flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span className="text-[10px] font-bold uppercase tracking-widest">SOC2 Type II</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <Lock className="w-3.5 h-3.5" />
-              <span className="text-[10px] font-bold uppercase tracking-widest">AES-256</span>
-            </div>
-          </div>
+        {/* Decorative botanical image */}
+        <div className="pt-8 overflow-hidden rounded-2xl opacity-40">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            alt="botanical background"
+            className="w-full h-24 object-cover grayscale brightness-110"
+            src="https://lh3.googleusercontent.com/aida-public/AB6AXuCtSw8PzrAMHJe5BxNSAKCAy4GHxnD5_BpbtcWjlzckVY7cYRQybfvgQuQ76WvpdEPuuqCDScBfdszXUMx1SUbBmss7nDSYoEn5xApZvDqosCVu5DC32IHBvJjBzNRDypE34gs8mBv5O8EiESFumeBsdoZqZzucXI_Pd7WvXcWxe3RoYQx6swvv4WVuzztuyBeIGO77Nwg8Q_6pFoyEqVhAizJcfjZgy6DcfCtooVXjJPbILsMQ9Oc_uviSFXLTd2arINXcsl5XJHc"
+          />
         </div>
-      </section>
+      </div>
+
+      {/* Bottom Legal Links */}
+      <div className="fixed bottom-8 text-center w-full px-6">
+        <p className="text-[10px] text-muted-foreground/60 font-medium tracking-tight">
+          继续即表示您同意我们的{' '}
+          <a className="underline decoration-primary/30 hover:text-primary transition-colors" href="#">
+            隐私政策
+          </a>{' '}
+          和{' '}
+          <a className="underline decoration-primary/30 hover:text-primary transition-colors" href="#">
+            服务条款
+          </a>
+        </p>
+      </div>
     </main>
   );
 }

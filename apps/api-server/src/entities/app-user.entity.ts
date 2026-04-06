@@ -14,6 +14,10 @@ export enum AppUserAuthType {
   ANONYMOUS = 'anonymous',
   GOOGLE = 'google',
   EMAIL = 'email',
+  PHONE = 'phone',
+  WECHAT = 'wechat',
+  WECHAT_MINI = 'wechat_mini',
+  APPLE = 'apple',
 }
 
 /**
@@ -32,6 +36,9 @@ export enum AppUserStatus {
 @Index(['email'], { unique: true, where: '"email" IS NOT NULL' })
 @Index(['googleId'], { unique: true, where: '"google_id" IS NOT NULL' })
 @Index(['deviceId'])
+@Index(['phone'], { unique: true, where: '"phone" IS NOT NULL' })
+@Index(['wechatOpenId'], { unique: true, where: '"wechat_open_id" IS NOT NULL' })
+@Index(['appleId'], { unique: true, where: '"apple_id" IS NOT NULL' })
 export class AppUser {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -79,6 +86,49 @@ export class AppUser {
     comment: '设备ID（匿名用户标识）',
   })
   deviceId?: string;
+
+  @Column({
+    type: 'varchar',
+    length: 20,
+    nullable: true,
+    comment: '手机号',
+  })
+  phone?: string;
+
+  @Column({
+    type: 'boolean',
+    default: false,
+    name: 'phone_verified',
+    comment: '手机号是否已验证',
+  })
+  phoneVerified: boolean;
+
+  @Column({
+    type: 'varchar',
+    length: 128,
+    nullable: true,
+    name: 'wechat_open_id',
+    comment: '微信 openId',
+  })
+  wechatOpenId?: string;
+
+  @Column({
+    type: 'varchar',
+    length: 128,
+    nullable: true,
+    name: 'wechat_union_id',
+    comment: '微信 unionId（跨平台唯一）',
+  })
+  wechatUnionId?: string;
+
+  @Column({
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+    name: 'apple_id',
+    comment: 'Apple Sign In sub',
+  })
+  appleId?: string;
 
   @Column({
     type: 'varchar',
