@@ -1,8 +1,9 @@
 # 无畏 AI 健康助手 - 产品开发规划文档
 
-> 版本：v2.1 | 更新：2026-07-12
-> 
-> Phase 1 认证系统重构 ✅ 已完成
+> 版本：v3.0 | 更新：2026-04-06
+>
+> Phase 1 认证系统重构 ✅ 已完成  
+> Phase 2 食物分析 + 饮食记录 ✅ 已完成（线上通过端到端测试）
 
 ---
 
@@ -666,3 +667,502 @@ calculateDailyGoal(profile: UserProfile): number {
 | 人均日记录数 | ≥ 1.5 次/天 |
 
 > **核心原则**：只有当用户每点一次外卖就会打开这个 App，产品才算成功。
+
+---
+
+## 九、Phase 3 — AI 教练（核心新增功能）
+
+> 当前状态：底部导航"AI教练"入口已有，但点击还没有功能。
+> 
+> 目标：**让 AI 教练感觉像一个了解你饮食习惯的私人营养顾问，而不是一个问答机器人。**
+
+### 9.1 产品定义
+
+AI 教练不是通用聊天机器人，它有三个专属能力：
+
+| 能力 | 说明 | 示例 |
+|------|------|------|
+| **上下文感知** | 每次对话都掌握用户今日/近期饮食数据 | "你今天午饭吃了 550 卡，距离目标还差 1500 卡" |
+| **主动打招呼** | 根据时间段给出不同开场建议 | 早上：建议早餐；深夜：提醒睡前不要吃高GI食物 |
+| **图片分析联动** | 可在对话中直接分析上传图片 | 上传截图 → 立即给出热量 + 建议 |
+
+### 9.2 后端设计
+
+#### 新建数据库表
+
+```sql
+-- 对话会话（每个用户可有多个历史对话）
+CREATE TABLE coach_conversations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+  title VARCHAR(200),             -- 自动截取第一条消息作标题
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 消息记录
+CREATE TABLE coach_messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id UUID NOT NULL REFERENCES coach_conversations(id) ON DELETE CASCADE,
+  role VARCHAR(20) NOT NULL,      -- user | assistant
+  content TEXT NOT NULL,
+  tokens_used INT DEFAULT 0,      -- 记录 token 消耗（成本控制）
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_coach_messages_conv ON coach_messages(conversation_id, created_at ASC);
+```
+
+#### 系统 Prompt 设计（核心）
+
+```typescript
+// coach.service.ts - buildSystemPrompt()
+
+private async buildSystemPrompt(userId: string): Promise<string> {
+  const [profile, todaySummary, recentSummaries] = await Promise.all([
+    this.userProfileService.getProfile(userId),
+    this.foodService.getTodaySummary(userId),
+    this.foodService.getRecentSummaries(userId, 7),
+  ]);
+
+  const hour = new Date().getHours();
+  const timeHint =
+    hour < 10 ? '现在是早晨，用户可能还没吃早餐' :
+    hour < 14 ? '现在是午餐时间' :
+    hour < 18 ? '现在是下午' :
+    hour < 21 ? '现在是晚餐时间' :
+    '现在是夜间，提醒用户注意宵夜热量';
+
+  const bmi = profile
+    ? (profile.weightKg / (profile.heightCm / 100) ** 2).toFixed(1)
+    : null;
+
+  return `你是无畏健康的 AI 营养教练，风格亲切、专业、简洁。
+用中文回复，每条消息不超过 150 字，不要使用 Markdown 格式。
+
+【用户档案】
+${profile ? `
+- 性别：${profile.gender === 'male' ? '男' : '女'}
+- 年龄：${new Date().getFullYear() - profile.birthYear} 岁
+- BMI：${bmi}（身高 ${profile.heightCm}cm，体重 ${profile.weightKg}kg）
+- 活动等级：${profile.activityLevel}
+- 每日热量目标：${todaySummary.calorieGoal} kcal
+` : '用户尚未填写健康档案，可引导他去填写以获得更精准建议。'}
+
+【今日饮食】
+- 已摄入：${todaySummary.totalCalories} kcal / 目标 ${todaySummary.calorieGoal} kcal
+- 剩余：${todaySummary.remaining} kcal
+- 今日记录餐数：${todaySummary.mealCount} 餐
+
+【最近 7 天平均】
+- 日均摄入：${Math.round(recentSummaries.reduce((s, d) => s + d.totalCalories, 0) / 7)} kcal
+- 达标天数：${recentSummaries.filter(d => d.totalCalories <= (todaySummary.calorieGoal || 2000)).length} / 7 天
+
+【时间信息】${timeHint}
+
+根据以上信息，给出个性化、有温度的饮食建议。如果用户问某食物热量，直接给出估算值，不要说"建议咨询医生"。`;
+}
+```
+
+#### API 接口
+
+```
+# 发送消息（SSE 流式响应）
+POST /api/app/coach/chat
+Authorization: Bearer <token>
+Body: {
+  "message": "我今天吃了什么？",
+  "conversationId": "uuid（可选，不传则新建会话）"
+}
+
+# 获取历史对话列表
+GET /api/app/coach/conversations
+Authorization: Bearer <token>
+
+# 获取某次对话的消息历史
+GET /api/app/coach/conversations/:id/messages?page=1
+Authorization: Bearer <token>
+
+# 获取今日教练主动开场建议（每日首次进入时调用）
+GET /api/app/coach/daily-greeting
+Authorization: Bearer <token>
+Response: {
+  "greeting": "早上好！今天还没记录早餐，早餐很重要哦～",
+  "suggestions": ["帮我分析早餐", "今天该吃点啥", "我的目标完成了吗"]
+}
+
+# 删除对话（及其消息）
+DELETE /api/app/coach/conversations/:id
+Authorization: Bearer <token>
+```
+
+#### 流式响应实现方案
+
+```typescript
+// coach.controller.ts - 使用 SSE 流
+
+@Post('chat')
+@UseGuards(AppJwtAuthGuard)
+async chat(
+  @CurrentAppUser() user: any,
+  @Body() dto: CoachChatDto,
+  @Res() res: Response,
+): Promise<void> {
+  // 设置 SSE 响应头
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  // 构建或加载对话上下文（最近 10 条历史）
+  const { messages, conversationId } = await this.coachService.prepareContext(
+    user.id, dto.conversationId, dto.message,
+  );
+
+  // 通过 OpenRouter (DeepSeek-V3，成本低且中文好) 流式输出
+  const stream = await this.openRouterAdapter.generateTextStream({
+    messages,
+    model: 'deepseek/deepseek-chat-v3-0324',  // 中文对话首选
+    temperature: 0.7,
+    maxTokens: 400,
+  });
+
+  let fullText = '';
+  for await (const chunk of stream) {
+    if (chunk.delta) {
+      fullText += chunk.delta;
+      res.write(`data: ${JSON.stringify({ delta: chunk.delta, conversationId })}\n\n`);
+    }
+    if (chunk.done) {
+      // 保存消息到数据库
+      await this.coachService.saveMessage(conversationId, user.id, dto.message, fullText, chunk.usage?.totalTokens);
+      res.write(`data: ${JSON.stringify({ done: true, conversationId })}\n\n`);
+      res.end();
+    }
+  }
+}
+```
+
+#### AI 模型选择
+
+| 用途 | 模型 | 理由 |
+|------|------|------|
+| 日常对话 | `deepseek/deepseek-chat-v3-0324` | 亚太无限制，中文极强，成本超低（$0.27/M tokens） |
+| 带图片问答 | `baidu/ernie-4.5-vl-28b-a3b` | 已验证视觉能力 + 亚太可用 |
+| 降级备用 | `meta-llama/llama-4-maverick` | 亚太可用的备选 |
+
+> 每次对话最多携带最近 **10 条**历史消息 + system prompt，控制 context 长度 ≤ 4000 tokens。
+
+### 9.3 前端设计
+
+#### 页面路由
+
+`/apps/web/src/app/[locale]/coach/page.tsx`
+
+> 注意：`apps/web/src/app/[locale]/chat/page.tsx` 已有通用聊天骨架，可重构复用其 SSE 对接逻辑（`ServerSSETransport`）。
+
+#### 界面结构
+
+```
+┌─────────────────────────────────┐
+│  AI 营养教练         [历史记录]  │  ← 顶部导航栏
+├─────────────────────────────────┤
+│                                 │
+│  ┌─────────────────────────┐   │
+│  │ 🤖 早上好！              │   │  ← 每日开场卡片（GET /daily-greeting）
+│  │ 你今天还没吃早餐，       │   │
+│  │ 研究表明早餐可帮助...    │   │
+│  └─────────────────────────┘   │
+│                                 │
+│  ────── 快捷操作 ──────────    │
+│  [帮我分析早餐] [今天该吃啥]    │  ← Chip 快捷回复
+│  [我的目标进度]  [✍️ 自定义]   │
+│                                 │
+│  ─────── 对话区 ──────────     │
+│  👤 我今天能吃什么高蛋白午餐？  │
+│  🤖 根据你的目标（2100卡），   │
+│     今日午餐建议500-700卡，     │
+│     可选择...（流式输出）       │
+│                                 │
+└─────────────────────────────────┤
+│  ┌──────────────────────┐[📷][↑]│  ← 输入栏 + 上传图片 + 发送
+│  │ 问我任何饮食问题...   │      │
+│  └──────────────────────┘      │
+└─────────────────────────────────┘
+```
+
+#### 关键交互逻辑
+
+```typescript
+// coach/page.tsx 核心 hook
+
+const useCoach = () => {
+  // 接收 SSE 流式输出
+  const sendMessage = async (content: string) => {
+    setMessages(prev => [...prev, { role: 'user', content }]);
+    const assistantMsg = { role: 'assistant', content: '', streaming: true };
+    setMessages(prev => [...prev, assistantMsg]);
+
+    const res = await fetch('/api/app/coach/chat', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: content, conversationId }),
+    });
+
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const lines = decoder.decode(value).split('\n');
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = JSON.parse(line.slice(6));
+        if (data.delta) {
+          // 更新最后一条消息（流式追加）
+          setMessages(prev => {
+            const last = { ...prev[prev.length - 1] };
+            last.content += data.delta;
+            return [...prev.slice(0, -1), last];
+          });
+        }
+        if (data.done) {
+          setConversationId(data.conversationId);
+        }
+      }
+    }
+  };
+};
+```
+
+### 9.4 每日开场建议生成逻辑
+
+```typescript
+// coach.service.ts - getDailyGreeting()
+
+async getDailyGreeting(userId: string): Promise<DailyGreeting> {
+  const hour = new Date().getHours();
+  const summary = await this.foodService.getTodaySummary(userId);
+
+  // 根据时间 + 当日状态生成建议
+  const contextMap = {
+    morning_no_breakfast:  { hour: '<10', mealCount: 0 },
+    lunch_time:            { hour: '10-14', mealCount: 1 },
+    afternoon_over_goal:   { totalCalories: '>calorieGoal' },
+    evening_under_goal:    { hour: '>17', remaining: '>500' },
+  };
+
+  // 调用 AI 生成开场白（非流式，短文本）
+  const greeting = await this.openRouterAdapter.generateText({
+    model: 'deepseek/deepseek-chat-v3-0324',
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: '生成一条简短的开场白（30字内）和3个快捷问题' },
+    ],
+    maxTokens: 100,
+  });
+
+  // 固定快捷问题集（不依赖 AI，保证响应速度）
+  const suggestions = this.getStaticSuggestions(hour, summary);
+
+  return { greeting: greeting.text, suggestions };
+}
+
+private getStaticSuggestions(hour: number, summary: DailySummary): string[] {
+  if (hour < 10) return ['帮我规划今日饮食', '早餐吃什么好', '今天的热量目标是多少'];
+  if (hour < 14) return ['午餐怎么吃不超标', '帮我分析这顿午餐', '今天上午吃了多少'];
+  if (hour < 20) return ['今天还能吃多少', '晚餐推荐', '查看今日记录'];
+  return ['今天总结', '明天饮食建议', '宵夜热量低的选择'];
+}
+```
+
+### 9.5 开发排期（AI 教练模块，约 5 天）
+
+**Day 1：后端基础**
+- [ ] 新建 Migration：`coach_conversations` + `coach_messages`
+- [ ] 新建 `CoachEntity` × 2
+- [ ] 新建 `src/app/coach/` 模块（Module + Service + Controller + DTO）
+- [ ] `buildSystemPrompt()` 实现（注入用户档案 + 今日数据）
+
+**Day 2：流式对话接口**
+- [ ] `POST /api/app/coach/chat` SSE 流式端点
+- [ ] 对话历史载入（携带最近 10 条）
+- [ ] 消息持久化（对话结束后写库）
+- [ ] `GET /api/app/coach/daily-greeting` 接口
+
+**Day 3：前端页面**
+- [ ] `/coach/page.tsx` 重构（基于 `/chat/page.tsx` 骨架）
+- [ ] SSE 流式接收与逐字渲染
+- [ ] 快捷 Chip 快回复组件
+- [ ] 每日开场卡片（首次进入自动展示）
+
+**Day 4：图片问询 + 历史记录**
+- [ ] 对话框内上传图片 → 复用 `AnalyzeService`
+- [ ] 左滑历史对话列表（`/coach/conversations`）
+- [ ] 对话标题自动截取（第一条用户消息前 20 字）
+
+**Day 5：polish + 每日限额**
+- [ ] 每用户每日对话限额（`AI_COACH_DAILY_LIMIT=50` 次消息）
+- [ ] 底部导航 "AI教练" 标签页接入 `/coach`
+- [ ] 加载骨架屏 + 错误重试
+
+---
+
+## 十、Phase 4 — 打卡挑战（轻社交增长）
+
+> **核心目的**：提高次日留存。用户完成当日目标 → 连续打卡 → 成就感 → 留存。
+
+### 10.1 数据设计
+
+```sql
+CREATE TABLE challenges (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+  name VARCHAR(100) NOT NULL,           -- "7天健康饮食挑战"
+  type VARCHAR(20) DEFAULT 'calorie',   -- calorie | meal_count | no_takeout
+  target_value INT,                     -- 目标值（如热量目标 2000kcal）
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  status VARCHAR(20) DEFAULT 'active',  -- active | completed | failed
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE challenge_checkins (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  challenge_id UUID NOT NULL REFERENCES challenges(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES app_users(id),
+  date DATE NOT NULL,
+  completed BOOLEAN DEFAULT FALSE,
+  actual_value INT,                     -- 当日实际值
+  UNIQUE(challenge_id, date)
+);
+```
+
+### 10.2 挑战类型
+
+| 类型 | 说明 | 完成条件 |
+|------|------|---------|
+| `calorie` | 热量控制挑战 | 当日摄入 ≤ 目标热量 |
+| `meal_count` | 规律饮食挑战 | 当日记录 ≥ 3 餐 |
+| `record_streak` | 连续打卡挑战 | 连续 N 天有记录 |
+
+### 10.3 API 接口
+
+```
+POST /api/app/challenges              → 创建挑战（type, days: 7/14/30）
+GET  /api/app/challenges/active       → 当前进行中的挑战  
+GET  /api/app/challenges/:id          → 挑战详情 + 打卡日历
+POST /api/app/challenges/:id/checkin  → 手动打卡（系统每日 0 点自动执行）
+GET  /api/app/challenges/history      → 历史挑战记录
+```
+
+### 10.4 前端展示
+
+- 首页底部"每日打卡"区域改为真实数据
+- 进入"挑战"页可查看 7/14/30 天日历格
+- 完成当日打卡时触发动效（撒彩纸）
+- 连续打卡第 3/7/14/30 天给予成就徽章
+
+---
+
+## 十一、Phase 5 — 工程化优化（生产就绪）
+
+### 11.1 Redis 迁移（目前用内存存储，单实例可用）
+
+> 当前问题：验证码存在内存 Map，重启后失效；多实例部署时每台实例独立状态。
+
+```typescript
+// sms.service.ts 迁移到 Redis
+// 优先级：中（单机部署时不影响功能）
+
+// 验证码 Key: sms:verify:{phone}  TTL: 300s
+// 防刷 Key:   sms:lock:{phone}    TTL: 60s
+await this.redis.setex(`sms:verify:${phone}`, 300, code);
+const locked = await this.redis.exists(`sms:lock:${phone}`);
+```
+
+**涉及文件**：
+- `src/app/services/sms.service.ts`（注入 Redis，替换 Map）
+- `src/core/` 添加 `RedisModule`（基于 `ioredis`）
+- 环境变量：`REDIS_URL=redis://localhost:6379`
+
+### 11.2 每日定时任务
+
+```typescript
+// scheduler.service.ts（基于 @nestjs/schedule）
+
+// 每天 0:05 批量检查所有活跃挑战的打卡状态
+@Cron('5 0 * * *')
+async processDailyCheckins(): Promise<void> {
+  // 查找所有 active 挑战，对比 daily_summaries，自动标记
+}
+
+// 每天 0:10 生成每日 daily_summaries（确保昨日数据完整）
+@Cron('10 0 * * *')
+async generateDailySummaries(): Promise<void> {}
+```
+
+### 11.3 前端性能优化
+
+| 问题 | 方案 | 优先级 |
+|------|------|--------|
+| 首页数据冷启动慢 | Skeleton loading + Optimistic UI | P1 |
+| 图片上传无进度 | axios onUploadProgress + 进度条 | P1 |
+| AI 分析等待焦虑 | 分步进度提示（"正在识别菜品..."）| P0 |
+| 反复进出页面重新加载 | SWR/TanStack Query 客户端缓存（5min）| P2 |
+| 移动端键盘遮挡输入框 | `visualViewport` resize 事件处理 | P1（教练页） |
+
+### 11.4 真实 SMS 接入
+
+```bash
+# 阿里云 SMS
+SMS_PROVIDER=aliyun
+ALIYUN_ACCESS_KEY_ID=xxx
+ALIYUN_ACCESS_KEY_SECRET=xxx
+ALIYUN_SMS_SIGN_NAME=无畏健康
+ALIYUN_SMS_TEMPLATE_CODE=SMS_xxxxxxxxx
+
+# 腾讯云 SMS（备选）
+SMS_PROVIDER=tencent
+TENCENT_SECRET_ID=xxx
+TENCENT_SECRET_KEY=xxx
+TENCENT_SMS_APP_ID=xxx
+TENCENT_SMS_SIGN=无畏健康
+TENCENT_SMS_TEMPLATE_ID=xxxxxxx
+```
+
+> 接入前最终测试：移除万能验证码 `888888`（或限制为特定测试手机号）。
+
+---
+
+## 十二、已完成功能清单（Phase 1 & 2）
+
+| 模块 | 功能 | 状态 |
+|------|------|------|
+| 认证 | 手机号验证码登录（万能码 888888）| ✅ |
+| 认证 | 微信网页扫码登录 | ✅ |
+| 认证 | 邮箱/匿名登录 | ✅ |
+| 饮食 | AI 食物图片分析（OpenRouter → ERNIE VL）| ✅ |
+| 饮食 | 图片上传 Cloudflare R2 | ✅ |
+| 饮食 | 饮食记录 CRUD | ✅ |
+| 饮食 | 今日汇总（已摄入/目标/剩余）| ✅ |
+| 饮食 | 近 7 天趋势 | ✅ |
+| 档案 | 用户健康档案（身高体重活动等级）| ✅ |
+| 档案 | BMR 自动计算热量目标 | ✅ |
+| 前端 | 登录/首页/分析页/个人中心 | ✅ |
+| 前端 | 端到端流程测试通过 | ✅ |
+| 运维 | GCloud VM PM2 部署（`flutter-scaffold-4fd6c/openclaw`）| ✅ |
+| 运维 | Vercel 前端部署（https://uway.dev-net.uk）| ✅ |
+
+## 十三、下一步优先级列表
+
+| 排序 | 任务 | 预计工时 | 依赖 |
+|------|------|---------|------|
+| 1 | AI 教练后端（对话 + 流式 SSE）| 2 天 | Phase 2 entities |
+| 2 | AI 教练前端页面 | 1.5 天 | 后端接口 |
+| 3 | 每日打卡挑战后端 | 1 天 | coach 表 |
+| 4 | 打卡挑战前端 | 1 天 | 后端接口 |
+| 5 | Redis 迁移（SMS + 教练历史）| 0.5 天 | Redis 实例 |
+| 6 | 前端性能优化（Skeleton + 缓存）| 1 天 | — |
+| 7 | 真实 SMS 接入 | 0.5 天 | 阿里云/腾讯账号 |
+| 8 | 微信小程序登录 | 1.5 天 | 小程序 AppID |
+
