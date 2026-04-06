@@ -76,7 +76,8 @@ export const foodLibraryServerAPI = {
   },
 
   getAll: async (limit = 200): Promise<FoodLibraryItem[]> => {
-    return unwrap(serverGet<FoodLibraryItem[]>(`/foods?limit=${limit}`));
+    const result = await unwrap(serverGet<SearchResult>(`/foods?limit=${limit}`));
+    return result.items;
   },
 };
 
