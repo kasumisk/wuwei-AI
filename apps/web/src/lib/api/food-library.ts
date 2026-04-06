@@ -19,6 +19,15 @@ export interface FoodLibraryItem {
   isVerified: boolean;
 }
 
+export interface SearchResult {
+  items: FoodLibraryItem[];
+  total: number;
+}
+
+export interface FoodDetailResult extends FoodLibraryItem {
+  related: FoodLibraryItem[];
+}
+
 export interface FoodCategory {
   category: string;
   count: number;
@@ -44,7 +53,8 @@ async function unwrap<T>(promise: Promise<ApiResponse<T>>): Promise<T> {
 
 export const foodLibraryServerAPI = {
   search: async (q: string, limit = 20): Promise<FoodLibraryItem[]> => {
-    return unwrap(serverGet<FoodLibraryItem[]>(`/foods/search?q=${encodeURIComponent(q)}&limit=${limit}`));
+    const result = await unwrap(serverGet<SearchResult>(`/foods/search?q=${encodeURIComponent(q)}&limit=${limit}`));
+    return result.items;
   },
 
   getPopular: async (category?: string, limit = 20): Promise<FoodLibraryItem[]> => {
@@ -60,7 +70,9 @@ export const foodLibraryServerAPI = {
   },
 
   getByName: async (name: string): Promise<{ food: FoodLibraryItem; related: FoodLibraryItem[] }> => {
-    return unwrap(serverGet<{ food: FoodLibraryItem; related: FoodLibraryItem[] }>(`/foods/by-name/${encodeURIComponent(name)}`));
+    const result = await unwrap(serverGet<FoodDetailResult>(`/foods/by-name/${encodeURIComponent(name)}`));
+    const { related, ...food } = result;
+    return { food, related };
   },
 
   getAll: async (limit = 200): Promise<FoodLibraryItem[]> => {
@@ -72,7 +84,8 @@ export const foodLibraryServerAPI = {
 
 export const foodLibraryClientAPI = {
   search: async (q: string, limit = 20): Promise<FoodLibraryItem[]> => {
-    return unwrap(clientGet<FoodLibraryItem[]>(`/foods/search?q=${encodeURIComponent(q)}&limit=${limit}`));
+    const result = await unwrap(clientGet<SearchResult>(`/foods/search?q=${encodeURIComponent(q)}&limit=${limit}`));
+    return result.items;
   },
 
   getPopular: async (category?: string, limit = 20): Promise<FoodLibraryItem[]> => {
