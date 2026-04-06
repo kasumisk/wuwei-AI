@@ -2011,7 +2011,7 @@ TENCENT_SMS_TEMPLATE_ID=xxxxxxx
 
 ---
 
-## 十二、已完成功能清单（Phase 1 & 2 & 3）
+## 十二、已完成功能清单（Phase 1 & 2 & 3 & 食物库）
 
 | 模块 | 功能 | 状态 |
 |------|------|------|
@@ -2033,90 +2033,60 @@ TENCENT_SMS_TEMPLATE_ID=xxxxxxx
 | 教练 | 用户饮食上下文注入（今日/近7天数据）| ✅ |
 | 教练 | 前端流式消息渲染（打字机效果）| ✅ |
 | 教练 | 会话管理（新建/历史/清除）| ✅ |
+| **热量查询 + 食物库** | | |
+| 食物库 | FoodLibrary 实体 + Migration（pg_trgm 索引）| ✅ |
+| 食物库 | 145 条中国常见食物种子数据（8 大分类）| ✅ |
+| 食物库 | 公开搜索 API（ILIKE + 别名匹配）| ✅ |
+| 食物库 | 分类/热门/详情/全量 API | ✅ |
+| 食物库 | 从食物库一键添加饮食记录端点 | ✅ |
+| 食物库 | 用户常吃食物排行端点 | ✅ |
+| 食物库 | /foods 搜索页（SSR + 客户端搜索）| ✅ |
+| 食物库 | /foods/[name] 详情页（SSR + SEO + JSON-LD）| ✅ |
+| 食物库 | 份量计算器 + 营养成分动态计算 | ✅ |
+| 食物库 | Sitemap 动态食物页 + SEO 元数据 | ✅ |
 | **前端 + 运维** | | |
 | 前端 | 登录/首页/分析页/个人中心/AI 教练页 | ✅ |
 | 前端 | 端到端流程测试通过 | ✅ |
 | 运维 | GCloud VM PM2 部署（`flutter-scaffold-4fd6c/openclaw`）| ✅ |
 | 运维 | Vercel 前端部署（https://uway.dev-net.uk）| ✅ |
 
-## 十三、热量查询 + 食物库实施计划
+## 十三、热量查询 + 食物库实施计划 ✅ 已完成
 
-> **目标**：本周内完成后端 + SEO 落地页 + Web 搜索页上线。以下为精确到文件级别的执行清单。
+> **完成于 2026-04-06** | 后端 API + SEO 落地页 + Web 搜索页全部上线。
 
-### 13.1 后端任务（预计 2.5 天）
+### 实施产出清单
 
-#### Day 1 — 数据层
+| 文件 | 说明 | 状态 |
+|------|------|------|
+| `entities/food-library.entity.ts` | FoodLibrary 实体（UUID, 营养数据, pg_trgm索引）| ✅ |
+| `migrations/1744000000000-AddFoodLibraryTable.ts` | 创建 foods 表 + 3 个索引 | ✅ |
+| `scripts/seed-foods.data.ts` | 145 条中国食物种子数据集 | ✅ |
+| `scripts/seed-foods.ts` | 幂等导入脚本（支持 SSL） | ✅ |
+| `services/food-library.service.ts` | 搜索/分类/CRUD/从库添加记录/常吃排行 | ✅ |
+| `controllers/food-library.controller.ts` | 公开 API 6 个端点（无需 JWT）| ✅ |
+| `controllers/food.controller.ts` | 新增 `from-library` + `frequent-foods` 端点 | ✅ |
+| `dto/food.dto.ts` | 新增 AddFromLibraryDto | ✅ |
+| `app-client.module.ts` | 注册 FoodLibrary 实体/服务/控制器 | ✅ |
+| `database.module.ts` | 注册 FoodLibrary 实体到全局 TypeORM | ✅ |
+| `web/foods/page.tsx` | 搜索首页（SSR + 客户端交互）| ✅ |
+| `web/foods/FoodsClient.tsx` | 搜索页客户端组件（防抖搜索 + 分类筛选）| ✅ |
+| `web/foods/[name]/page.tsx` | 食物详情 SSR 页（generateMetadata + JSON-LD） | ✅ |
+| `web/foods/[name]/FoodDetailClient.tsx` | 详情页客户端（份量计算器 + 一键记录）| ✅ |
+| `web/lib/api/food-library.ts` | 服务端 + 客户端 API 封装 | ✅ |
+| `web/sitemap.ts` | 动态食物页入口 | ✅ |
+| `web/lib/seo/metadata.ts` | /foods 加入 publicRoutes | ✅ |
 
-| 步骤 | 操作 | 具体文件 |
-|------|------|---------|
-| 1 | 创建 FoodLibrary 实体 | `apps/api-server/src/entities/food-library.entity.ts`（新建）|
-| 2 | 创建 Migration | `apps/api-server/src/migrations/1744000000000-AddFoodLibraryTable.ts`（新建）|
-| 3 | 运行 Migration | `pnpm --filter api-server migration:run` |
-| 4 | 编写种子数据脚本 | `apps/api-server/src/scripts/seed-foods.ts`（新建，完整 150 条）|
-| 5 | 运行种子数据 | `ts-node src/scripts/seed-foods.ts` |
-
-#### Day 2 上午 — 后端 API
-
-| 步骤 | 操作 | 具体文件 |
-|------|------|---------|
-| 6 | 创建 FoodLibraryService | `apps/api-server/src/app/services/food-library.service.ts`（新建）|
-| 7 | 创建公开路由控制器 | `apps/api-server/src/app/controllers/food-library.controller.ts`（新建）|
-| 8 | 在 FoodController 添加端点 | `food.controller.ts` → 新增 `POST records/from-library` |
-| 9 | 更新 food.dto.ts | 新增 `AddFromLibraryDto` |
-| 10 | 注册到 AppClientModule | `app-client.module.ts` → 添加实体/服务/控制器 |
-| 11 | 接口测试 | Swagger `/api/docs` 验证 5 个接口 |
-
-#### 接口验收标准
-
-```
-✅ GET  /api/foods/search?q=鸡 → 返回列表，response time < 200ms
-✅ GET  /api/foods/popular?category=主食 → 返回热门
-✅ GET  /api/foods/categories → 返回分类列表
-✅ GET  /api/foods/宫保鸡丁 → 返回详情
-✅ POST /api/app/food/records/from-library → 登录后创建记录，source='manual'
-```
-
-### 13.2 前端任务（预计 2 天）
-
-#### Day 2 下午 + Day 3 — Web SEO 页
-
-| 步骤 | 操作 | 具体文件 |
-|------|------|---------|
-| 12 | 创建搜索首页 | `apps/web/src/app/[locale]/foods/page.tsx`（新建）|
-| 13 | 创建食物详情 SSR 页 | `apps/web/src/app/[locale]/foods/[name]/page.tsx`（新建）|
-| 14 | 创建客户端份量换算组件 | `apps/web/src/app/[locale]/foods/[name]/FoodDetailClient.tsx`（新建）|
-| 15 | 扩展 sitemap | `apps/web/src/app/sitemap.ts`（修改，追加动态食物页）|
-| 16 | 更新 publicRoutes | `apps/web/src/lib/seo/metadata.ts`（确认 /foods 已加入）|
-| 17 | 本地 SEO 验证 | `pnpm --filter web dev`，访问 `/zh/foods/宫保鸡丁`，看 meta title |
-
-#### 前端验收标准
+### API 端点验证
 
 ```
-✅ /foods    → 搜索框可用，热门标签展示
-✅ /foods/白米饭 → SSR 渲染，meta title 包含热量数字
-✅ 搜索 "鸡" → debounce 后展示结果列表
-✅ 点击食物 → 进入详情页，份量换算交互正確
-✅ sitemap.xml → 包含 /zh/foods/白米饭 等动态 URL
-✅ 页面在 Lighthouse → SEO score ≥ 90
+✅ GET  /api/foods/search?q=鸡     → 返回搜索结果
+✅ GET  /api/foods/popular          → 返回热门食物
+✅ GET  /api/foods/categories       → 9 个分类
+✅ GET  /api/foods/by-name/白米饭   → 详情 + related
+✅ GET  /api/foods?limit=200        → 全量数据（sitemap 用）
+✅ POST /api/app/food/records/from-library → 需登录，一键记录
+✅ GET  /api/app/food/frequent-foods      → 需登录，常吃排行
 ```
-
-### 13.3 部署任务（Day 3 下午）
-
-| 步骤 | 操作 |
-|------|------|
-| 18 | GCloud 跑 migration | SSH → `cd wuwei-ai-api && pnpm migration:run` |
-| 19 | GCloud 导入种子数据 | SSH → `ts-node src/scripts/seed-foods.ts` |
-| 20 | PM2 重启 API | `pm2 restart wuwei-api` |
-| 21 | Vercel 重新部署 Web | `git push` → Vercel 自动 CI/CD |
-| 22 | 线上冒烟测试 | 访问 https://uway.dev-net.uk/zh/foods 验证 |
-
-### 13.4 分工建议（若有团队）
-
-| 角色 | 工作 |
-|------|------|
-| 后端开发 | 步骤 1-11（实体+迁移+服务+接口）|
-| 前端开发 | 步骤 12-17（Web 页面 + SEO）|
-| 产品/运营 | 协助整理 150 条种子数据（Excel → ts 格式）|
 
 ---
 
@@ -2128,14 +2098,14 @@ TENCENT_SMS_TEMPLATE_ID=xxxxxxx
 
 | 排序 | 任务 | 预计工时 | 本章节参考 |
 |------|------|---------|-----------|
-| **🔥 1** | **食物库后端：实体+迁移+种子数据+API** | 1.5 天 | 章节 10.2~10.3 |
-| **🔥 2** | **SEO 落地页：/foods/[name] SSR** | 1 天 | 章节 10.4 |
-| **🔥 3** | **Web 搜索首页 /foods** | 0.5 天 | 章节 10.5 |
-| 4 | 部署到 GCloud + Vercel | 0.5 天 | 章节 13.3 |
-| 5 | 每日打卡挑战后端 + 前端 | 2 天 | 章节 十三（Phase 4）|
-| 6 | Flutter App 开发启动 | — | 分享能力在 App 阶段 |
-| 7 | Redis 迁移 | 0.5 天 | 章节 十四（Phase 5）|
-| 8 | 真实 SMS 接入 | 0.5 天 | — |
+| ~~🔥 1~~ | ~~**食物库后端：实体+迁移+种子数据+API**~~ | ~~1.5 天~~ | ✅ 已完成 |
+| ~~🔥 2~~ | ~~**SEO 落地页：/foods/[name] SSR**~~ | ~~1 天~~ | ✅ 已完成 |
+| ~~🔥 3~~ | ~~**Web 搜索首页 /foods**~~ | ~~0.5 天~~ | ✅ 已完成 |
+| ~~4~~ | ~~部署到 GCloud + Vercel~~ | ~~0.5 天~~ | ✅ 已完成 |
+| **🔥 1** | 每日打卡挑战后端 + 前端 | 2 天 | 章节 十三（Phase 4）|
+| **🔥 2** | Flutter App 开发启动 | — | 分享能力在 App 阶段 |
+| 3 | Redis 迁移 | 0.5 天 | 章节 十四（Phase 5）|
+| 4 | 真实 SMS 接入 | 0.5 天 | — |
 
 ### 关键前置条件清单
 
