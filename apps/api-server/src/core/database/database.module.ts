@@ -21,6 +21,8 @@ import { AppVersionPackage } from '../../entities/app-version-package.entity';
 import { FoodRecord } from '../../entities/food-record.entity';
 import { DailySummary } from '../../entities/daily-summary.entity';
 import { UserProfile } from '../../entities/user-profile.entity';
+import { CoachConversation } from '../../entities/coach-conversation.entity';
+import { CoachMessage } from '../../entities/coach-message.entity';
 
 @Module({
   imports: [
@@ -59,6 +61,9 @@ import { UserProfile } from '../../entities/user-profile.entity';
             FoodRecord,
             DailySummary,
             UserProfile,
+            // AI 教练
+            CoachConversation,
+            CoachMessage,
             // 文件转换记录
           ],
           synchronize: dbConfig.synchronize,

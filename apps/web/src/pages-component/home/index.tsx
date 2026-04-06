@@ -313,12 +313,12 @@ export function HomePage() {
           </span>
         </LocalizedLink>
         {/* AI Coach */}
-        <button className="flex flex-col items-center justify-center text-foreground/60 p-3 hover:text-primary transition-all active:scale-90 duration-300">
+        <LocalizedLink href="/coach" className="flex flex-col items-center justify-center text-foreground/60 p-3 hover:text-primary transition-all active:scale-90 duration-300">
           <IconSmartToy className="w-6 h-6" />
           <span className="text-[10px] font-bold uppercase tracking-[0.05em] mt-1">
             AI教练
           </span>
-        </button>
+        </LocalizedLink>
         {/* Challenge */}
         <button className="flex flex-col items-center justify-center text-foreground/60 p-3 hover:text-primary transition-all active:scale-90 duration-300">
           <IconTrophy className="w-6 h-6" />
