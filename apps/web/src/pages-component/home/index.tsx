@@ -1,33 +1,11 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/hooks/use-auth';
+import { useFood } from '@/lib/hooks/use-food';
 import { LocalizedLink } from '@/components/common/localized-link';
 import Image from 'next/image';
-
-/* ─── Mock Data (TODO: fetch from API) ─── */
-const mockCalories = { consumed: 860, goal: 2100 };
-const mockMacros = { protein: 84, proteinGoal: 140, carbs: 120, fats: 45 };
-const mockStreak = { current: 12, total: 30, bars: [40, 60, 55, 85, 90, 10, 10] };
-const mockMeals = [
-  {
-    id: '1',
-    name: '绿色女神沙拉碗',
-    mealType: '早餐',
-    calories: 420,
-    tag: '健康',
-    tagColor: 'bg-secondary text-secondary-foreground',
-    image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDrESAAwyTCSEr0iwKisM9RpPRNieUdFQSXAP2kCr9_eT5jCKRdSvS5OfLDSmsOD7GNolBe7tgwFg0K7fMR_sJSB5rb1v27Jz19x7_nraWQt_pN4UqBgHeuMl3GtgSe_Yx-fVZs7zRhzNyJIvIenGjgwSVa2Q43ZmEu8Ok9Fs1hwH22jc_Zd1oeskdwf4s36tWdMO3t0IabKLD5kc3kLOP9n0skhQLc8JMwr2KrDsTF8uR7G207EAr4RbazO6okH-_d19f65TS1iPA',
-  },
-  {
-    id: '2',
-    name: '墨西哥辣味塔可 (2x)',
-    mealType: '午餐',
-    calories: 580,
-    tag: '超标',
-    tagColor: 'bg-tertiary-container text-on-tertiary-container',
-    image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCM0xEwzvBMSn8jl3oH4I2n7xqK0mdhf07Vip7TMHEoqprf2Qo4hUHKFfrDkzODDtmeo7c6ACoeOFYxVPSV1YNC4kYuGd2kQ9PHIZr71DEw2N6sTFngBCeTw5t1Q27bER3wdVeTya9vRmjI7GhS99v-WymrZx-DhKu_GpHdy7ennnwialvBPNnGXaVUEofeNCKH4bSEZph3caDAu82RFS2xJZiBu6RzmfQ1y4PRM7TPfgviMfIBI5iIr0QCaQLGp68TJeekf8Wnfkk',
-  },
-];
+import type { FoodRecord, DailySummary } from '@/lib/api/food';
 
 /* ─── SVG Icon Components ─── */
 function IconSmartToy({ className = '' }: { className?: string }) {
@@ -96,11 +74,20 @@ function IconSettings({ className = '' }: { className?: string }) {
 
 export function HomePage() {
   const { user, isLoggedIn } = useAuth();
+  const { getTodaySummary, getTodayRecords } = useFood();
+  const [summary, setSummary] = useState<DailySummary>({ totalCalories: 0, calorieGoal: 2000, mealCount: 0, remaining: 2000 });
+  const [meals, setMeals] = useState<FoodRecord[]>([]);
 
-  const remaining = mockCalories.goal - mockCalories.consumed;
-  const caloriePercent = Math.round(
-    (mockCalories.consumed / mockCalories.goal) * 100,
-  );
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    getTodaySummary().then(setSummary).catch(() => {});
+    getTodayRecords().then(setMeals).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoggedIn]);
+
+  const calorieGoal = summary.calorieGoal || 2000;
+  const remaining = calorieGoal - summary.totalCalories;
+  const caloriePercent = Math.min(100, Math.round((summary.totalCalories / calorieGoal) * 100));
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans antialiased selection:bg-(--color-primary-container) selection:text-on-primary-container">
@@ -166,10 +153,13 @@ export function HomePage() {
                 扫描或上传你的外卖截图，即刻获取热量分析。
               </p>
             </div>
-            <button className="w-full bg-primary text-primary-foreground font-bold py-4 rounded-full flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-lg shadow-primary/20">
+            <LocalizedLink
+              href="/analyze"
+              className="w-full bg-primary text-primary-foreground font-bold py-4 rounded-full flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-lg shadow-primary/20"
+            >
               <IconCamera className="w-5 h-5" />
               拍照或上传截图
-            </button>
+            </LocalizedLink>
           </div>
         </section>
 
@@ -186,7 +176,7 @@ export function HomePage() {
                   {remaining.toLocaleString()}
                 </span>
                 <span className="text-muted-foreground font-medium">
-                  / {mockCalories.goal.toLocaleString()}
+                  / {calorieGoal.toLocaleString()}
                 </span>
               </div>
             </div>
@@ -202,38 +192,32 @@ export function HomePage() {
           <div className="bg-surface-container-high rounded-2xl p-5 flex flex-col gap-2">
             <div className="flex justify-between items-start">
               <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                蛋白质
+                已摄入
               </span>
               <IconFitness className="w-4 h-4 text-primary" />
             </div>
             <div className="mt-auto">
               <span className="text-2xl font-headline font-bold">
-                {mockMacros.protein}g
+                {summary.totalCalories}
               </span>
               <p className="text-xs text-muted-foreground">
-                目标: {mockMacros.proteinGoal}g
+                kcal
               </p>
             </div>
           </div>
 
-          {/* Carbs & Fats Card */}
+          {/* Meal Count Card */}
           <div className="bg-muted rounded-2xl p-5 flex flex-col gap-4">
             <div>
               <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                碳水 / 脂肪
+                今日记录
               </span>
               <div className="flex gap-4 mt-2">
                 <div>
                   <span className="text-xl font-headline font-bold">
-                    {mockMacros.carbs}g
+                    {summary.mealCount}
                   </span>
-                  <div className="h-1 w-8 bg-tertiary-container rounded-full mt-1" />
-                </div>
-                <div>
-                  <span className="text-xl font-headline font-bold">
-                    {mockMacros.fats}g
-                  </span>
-                  <div className="h-1 w-8 bg-secondary-dim rounded-full mt-1" />
+                  <p className="text-xs text-muted-foreground">餐</p>
                 </div>
               </div>
             </div>
@@ -243,32 +227,20 @@ export function HomePage() {
         {/* 30-Day Challenge Status */}
         <section className="mb-8">
           <div className="bg-surface-container-low rounded-2xl p-6">
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex justify-between items-center mb-4">
               <div>
-                <h3 className="text-lg font-headline font-bold">瘦身打卡</h3>
+                <h3 className="text-lg font-headline font-bold">健康打卡</h3>
                 <p className="text-sm text-muted-foreground">
-                  第 {mockStreak.current} 天 / 共 {mockStreak.total} 天
+                  今日已记录 {summary.mealCount} 餐
                 </p>
               </div>
               <div className="bg-tertiary-container text-on-tertiary-container px-3 py-1 rounded-full flex items-center gap-1">
                 <IconTrophy className="w-4 h-4" />
-                <span className="text-[10px] font-bold">金牌水平</span>
+                <span className="text-[10px] font-bold">坚持记录</span>
               </div>
             </div>
-            <div className="flex justify-between items-end gap-1 h-20">
-              {mockStreak.bars.map((height, i) => (
-                <div
-                  key={i}
-                  className={`w-full rounded-t-md ${height > 15 ? 'bg-primary' : 'bg-muted'}`}
-                  style={{
-                    height: `${height}%`,
-                    opacity: height > 15 ? 0.4 + i * 0.12 : 1,
-                  }}
-                />
-              ))}
-            </div>
-            <p className="mt-4 text-xs text-muted-foreground text-center italic">
-              &ldquo;你本周的坚持度超过了 85% 的用户！&rdquo;
+            <p className="text-xs text-muted-foreground text-center italic">
+              &ldquo;每天记录饮食，是健康管理的第一步！&rdquo;
             </p>
           </div>
         </section>
@@ -277,33 +249,45 @@ export function HomePage() {
         <section className="mb-8">
           <h3 className="text-lg font-headline font-bold mb-4 px-1">今日记录</h3>
           <div className="space-y-4">
-            {mockMeals.map((meal) => (
-              <div
-                key={meal.id}
-                className="flex items-center gap-4 bg-card p-4 rounded-2xl shadow-sm"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  className="w-14 h-14 rounded-full object-cover"
-                  src={meal.image}
-                  alt={meal.name}
-                />
-                <div className="flex-1">
-                  <h4 className="font-bold text-sm">{meal.name}</h4>
-                  <p className="text-xs text-muted-foreground">
-                    {meal.mealType} • {meal.calories} kcal
-                  </p>
-                </div>
-                <span
-                  className={`${meal.tagColor} px-2 py-1 rounded-md text-[10px] font-bold`}
+            {meals.map((meal) => {
+              const mealLabel = ({ breakfast: '早餐', lunch: '午餐', dinner: '晚餐', snack: '加餐' } as Record<string, string>)[meal.mealType] || meal.mealType;
+              const foodNames = meal.foods.map((f) => f.name).join('、');
+              return (
+                <div
+                  key={meal.id}
+                  className="flex items-center gap-4 bg-card p-4 rounded-2xl shadow-sm"
                 >
-                  {meal.tag}
-                </span>
-              </div>
-            ))}
+                  {meal.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      className="w-14 h-14 rounded-full object-cover"
+                      src={meal.imageUrl}
+                      alt={foodNames}
+                    />
+                  ) : (
+                    <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center">
+                      <IconCamera className="w-6 h-6 text-muted-foreground" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-bold text-sm truncate">{foodNames || '饮食记录'}</h4>
+                    <p className="text-xs text-muted-foreground">
+                      {mealLabel} • {meal.totalCalories} kcal
+                    </p>
+                  </div>
+                  {meal.isHealthy !== undefined && (
+                    <span
+                      className={`${meal.isHealthy ? 'bg-secondary text-secondary-foreground' : 'bg-tertiary-container text-on-tertiary-container'} px-2 py-1 rounded-md text-[10px] font-bold`}
+                    >
+                      {meal.isHealthy ? '健康' : '注意'}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
-          {mockMeals.length === 0 && (
+          {meals.length === 0 && (
             <div className="text-center py-12 text-muted-foreground">
               <p className="text-sm">还没有今日记录</p>
               <p className="text-xs mt-1">上传外卖截图开始记录吧</p>
@@ -322,12 +306,12 @@ export function HomePage() {
           </span>
         </div>
         {/* Analyzer */}
-        <button className="flex flex-col items-center justify-center text-foreground/60 p-3 hover:text-primary transition-all active:scale-90 duration-300">
+        <LocalizedLink href="/analyze" className="flex flex-col items-center justify-center text-foreground/60 p-3 hover:text-primary transition-all active:scale-90 duration-300">
           <IconScreenshot className="w-6 h-6" />
           <span className="text-[10px] font-bold uppercase tracking-[0.05em] mt-1">
             分析
           </span>
-        </button>
+        </LocalizedLink>
         {/* AI Coach */}
         <button className="flex flex-col items-center justify-center text-foreground/60 p-3 hover:text-primary transition-all active:scale-90 duration-300">
           <IconSmartToy className="w-6 h-6" />

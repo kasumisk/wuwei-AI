@@ -7,23 +7,40 @@ import { ConfigModule } from '@nestjs/config';
 import { AppUser } from '../entities/app-user.entity';
 import { AppVersion } from '../entities/app-version.entity';
 import { AppVersionPackage } from '../entities/app-version-package.entity';
+import { FoodRecord } from '../entities/food-record.entity';
+import { DailySummary } from '../entities/daily-summary.entity';
+import { UserProfile } from '../entities/user-profile.entity';
 // 服务
 import { AppAuthService } from './services/app-auth.service';
 import { AppUpdateService } from './services/app-update.service';
 import { SmsService } from './services/sms.service';
 import { WechatAuthService } from './services/wechat-auth.service';
+import { AnalyzeService } from './services/analyze.service';
+import { FoodService } from './services/food.service';
+import { UserProfileService } from './services/user-profile.service';
 // 控制器
 import { AppAuthController } from './app.controller';
 import { AppFileController } from './controllers/file.controller';
 import { AppUpdateController } from './controllers/update.controller';
+import { FoodController } from './controllers/food.controller';
 // 守卫和策略
 import { AppJwtStrategy } from './strategies/app-jwt.strategy';
 import { AppJwtAuthGuard } from './guards/app-jwt-auth.guard';
+// 存储模块
+import { StorageModule } from '../storage/storage.module';
 
 @Module({
   imports: [
     ConfigModule,
-    TypeOrmModule.forFeature([AppUser, AppVersion, AppVersionPackage]),
+    StorageModule,
+    TypeOrmModule.forFeature([
+      AppUser,
+      AppVersion,
+      AppVersionPackage,
+      FoodRecord,
+      DailySummary,
+      UserProfile,
+    ]),
     PassportModule.register({ defaultStrategy: 'app-jwt' }),
     JwtModule.register({
       secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
@@ -38,6 +55,9 @@ import { AppJwtAuthGuard } from './guards/app-jwt-auth.guard';
     AppUpdateService,
     SmsService,
     WechatAuthService,
+    AnalyzeService,
+    FoodService,
+    UserProfileService,
     // 守卫和策略
     AppJwtStrategy,
     AppJwtAuthGuard,
@@ -46,11 +66,14 @@ import { AppJwtAuthGuard } from './guards/app-jwt-auth.guard';
     AppAuthController,
     AppFileController,
     AppUpdateController,
+    FoodController,
   ],
   exports: [
     AppAuthService,
     AppUpdateService,
     AppJwtAuthGuard,
+    FoodService,
+    UserProfileService,
   ],
 })
 export class AppClientModule {}

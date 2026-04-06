@@ -1,0 +1,282 @@
+import {
+  Controller,
+  Post,
+  Get,
+  Put,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  HttpCode,
+  HttpStatus,
+  ParseFilePipe,
+  MaxFileSizeValidator,
+  FileTypeValidator,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiConsumes,
+} from '@nestjs/swagger';
+import { AppJwtAuthGuard } from '../guards/app-jwt-auth.guard';
+import { CurrentAppUser } from '../decorators/current-app-user.decorator';
+import { ApiResponse } from '../../common/types/response.type';
+import { StorageService } from '../../storage/storage.service';
+import { FoodService } from '../services/food.service';
+import { AnalyzeService } from '../services/analyze.service';
+import { UserProfileService } from '../services/user-profile.service';
+import {
+  SaveFoodRecordDto,
+  UpdateFoodRecordDto,
+  FoodRecordQueryDto,
+  SaveUserProfileDto,
+  AnalyzeImageDto,
+} from '../dto/food.dto';
+
+@ApiTags('App 饮食记录')
+@Controller('app/food')
+@UseGuards(AppJwtAuthGuard)
+@ApiBearerAuth()
+export class FoodController {
+  constructor(
+    private readonly foodService: FoodService,
+    private readonly analyzeService: AnalyzeService,
+    private readonly userProfileService: UserProfileService,
+    private readonly storageService: StorageService,
+  ) {}
+
+  // ==================== 图片分析 ====================
+
+  /**
+   * 上传图片并 AI 分析
+   * POST /api/app/food/analyze
+   */
+  @Post('analyze')
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: '上传食物图片 AI 分析' })
+  async analyzeImage(
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 }),
+          new FileTypeValidator({ fileType: /(jpg|jpeg|png|webp|heic)$/i }),
+        ],
+      }),
+    )
+    file: Express.Multer.File,
+    @Body() dto: AnalyzeImageDto,
+    @CurrentAppUser() user: any,
+  ): Promise<ApiResponse> {
+    // 1. 上传图片到 R2
+    const uploaded = await this.storageService.upload(
+      file.buffer,
+      file.originalname,
+      file.mimetype,
+      'food-images',
+    );
+
+    // 2. AI 分析
+    const result = await this.analyzeService.analyzeImage(
+      uploaded.url,
+      dto.mealType,
+    );
+
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '分析完成',
+      data: result,
+    };
+  }
+
+  // ==================== 饮食记录 CRUD ====================
+
+  /**
+   * 确认并保存饮食记录
+   * POST /api/app/food/records
+   */
+  @Post('records')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: '保存饮食记录' })
+  async saveRecord(
+    @CurrentAppUser() user: any,
+    @Body() dto: SaveFoodRecordDto,
+  ): Promise<ApiResponse> {
+    const record = await this.foodService.saveRecord(user.id, dto);
+    return {
+      success: true,
+      code: HttpStatus.CREATED,
+      message: '记录已保存',
+      data: record,
+    };
+  }
+
+  /**
+   * 获取今日所有记录
+   * GET /api/app/food/records/today
+   */
+  @Get('records/today')
+  @ApiOperation({ summary: '获取今日饮食记录' })
+  async getTodayRecords(@CurrentAppUser() user: any): Promise<ApiResponse> {
+    const records = await this.foodService.getTodayRecords(user.id);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '获取成功',
+      data: records,
+    };
+  }
+
+  /**
+   * 分页查询历史记录
+   * GET /api/app/food/records?page=1&limit=20&date=2026-04-06
+   */
+  @Get('records')
+  @ApiOperation({ summary: '查询饮食记录（分页）' })
+  async getRecords(
+    @CurrentAppUser() user: any,
+    @Query() query: FoodRecordQueryDto,
+  ): Promise<ApiResponse> {
+    const data = await this.foodService.getRecords(user.id, query);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '获取成功',
+      data,
+    };
+  }
+
+  /**
+   * 修改记录
+   * PUT /api/app/food/records/:id
+   */
+  @Put('records/:id')
+  @ApiOperation({ summary: '修改饮食记录' })
+  async updateRecord(
+    @CurrentAppUser() user: any,
+    @Param('id') id: string,
+    @Body() dto: UpdateFoodRecordDto,
+  ): Promise<ApiResponse> {
+    const record = await this.foodService.updateRecord(user.id, id, dto);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '更新成功',
+      data: record,
+    };
+  }
+
+  /**
+   * 删除记录
+   * DELETE /api/app/food/records/:id
+   */
+  @Delete('records/:id')
+  @ApiOperation({ summary: '删除饮食记录' })
+  async deleteRecord(
+    @CurrentAppUser() user: any,
+    @Param('id') id: string,
+  ): Promise<ApiResponse> {
+    await this.foodService.deleteRecord(user.id, id);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '删除成功',
+      data: null,
+    };
+  }
+
+  // ==================== 汇总 ====================
+
+  /**
+   * 获取今日汇总（已摄入/目标/剩余）
+   * GET /api/app/food/summary/today
+   */
+  @Get('summary/today')
+  @ApiOperation({ summary: '获取今日饮食汇总' })
+  async getTodaySummary(@CurrentAppUser() user: any): Promise<ApiResponse> {
+    const summary = await this.foodService.getTodaySummary(user.id);
+
+    // 补充热量目标
+    if (!summary.calorieGoal) {
+      summary.calorieGoal =
+        await this.userProfileService.getDailyCalorieGoal(user.id);
+      summary.remaining = Math.max(
+        0,
+        summary.calorieGoal - summary.totalCalories,
+      );
+    }
+
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '获取成功',
+      data: summary,
+    };
+  }
+
+  /**
+   * 获取最近 N 天汇总（趋势图）
+   * GET /api/app/food/summary/recent?days=7
+   */
+  @Get('summary/recent')
+  @ApiOperation({ summary: '获取最近 N 天饮食汇总' })
+  async getRecentSummaries(
+    @CurrentAppUser() user: any,
+    @Query('days') days?: string,
+  ): Promise<ApiResponse> {
+    const data = await this.foodService.getRecentSummaries(
+      user.id,
+      days ? parseInt(days, 10) : 7,
+    );
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '获取成功',
+      data,
+    };
+  }
+
+  // ==================== 用户健康档案 ====================
+
+  /**
+   * 获取用户健康档案
+   * GET /api/app/food/profile
+   */
+  @Get('profile')
+  @ApiOperation({ summary: '获取用户健康档案' })
+  async getProfile(@CurrentAppUser() user: any): Promise<ApiResponse> {
+    const profile = await this.userProfileService.getProfile(user.id);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '获取成功',
+      data: profile,
+    };
+  }
+
+  /**
+   * 保存/更新用户健康档案
+   * PUT /api/app/food/profile
+   */
+  @Put('profile')
+  @ApiOperation({ summary: '保存用户健康档案' })
+  async saveProfile(
+    @CurrentAppUser() user: any,
+    @Body() dto: SaveUserProfileDto,
+  ): Promise<ApiResponse> {
+    const profile = await this.userProfileService.saveProfile(user.id, dto);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '保存成功',
+      data: profile,
+    };
+  }
+}

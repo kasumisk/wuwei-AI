@@ -53,7 +53,7 @@ class ClientAPI extends HttpClient {
    */
   private getAuthToken(): string | null {
     if (typeof window === 'undefined') return null;
-    return localStorage.getItem('auth_token');
+    return localStorage.getItem('app_auth_token');
   }
 
   /**
@@ -61,7 +61,7 @@ class ClientAPI extends HttpClient {
    */
   private clearAuthToken(): void {
     if (typeof window === 'undefined') return;
-    localStorage.removeItem('auth_token');
+    localStorage.removeItem('app_auth_token');
   }
 
   /**
@@ -69,7 +69,7 @@ class ClientAPI extends HttpClient {
    */
   public setAuthToken(token: string): void {
     if (typeof window === 'undefined') return;
-    localStorage.setItem('auth_token', token);
+    localStorage.setItem('app_auth_token', token);
   }
 
   /**
