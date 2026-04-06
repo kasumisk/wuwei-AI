@@ -18,6 +18,9 @@ import { UserRole } from '../../entities/user-role.entity';
 import { RolePermission } from '../../entities/role-permission.entity';
 import { AppVersion } from '../../entities/app-version.entity';
 import { AppVersionPackage } from '../../entities/app-version-package.entity';
+import { FoodRecord } from '../../entities/food-record.entity';
+import { DailySummary } from '../../entities/daily-summary.entity';
+import { UserProfile } from '../../entities/user-profile.entity';
 
 @Module({
   imports: [
@@ -52,6 +55,10 @@ import { AppVersionPackage } from '../../entities/app-version-package.entity';
             // App 版本管理
             AppVersion,
             AppVersionPackage,
+            // 饮食记录相关
+            FoodRecord,
+            DailySummary,
+            UserProfile,
             // 文件转换记录
           ],
           synchronize: dbConfig.synchronize,
