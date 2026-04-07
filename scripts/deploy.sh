@@ -160,6 +160,10 @@ deploy_web() {
     
     cd "$ROOT_DIR"
     
+    # 切换 .vercelignore 为 web 专用版本
+    [ -f "$ROOT_DIR/.vercelignore" ] && cp "$ROOT_DIR/.vercelignore" "$ROOT_DIR/.vercelignore.bak"
+    cp "$ROOT_DIR/.vercelignore-web" "$ROOT_DIR/.vercelignore"
+    
     if [ "$preview" = "preview" ]; then
         echo -e "${YELLOW}预览部署模式...${NC}"
         if [ "$is_new_project" = true ]; then
@@ -180,6 +184,13 @@ deploy_web() {
     # 如果是新项目，保存配置
     if [ "$is_new_project" = true ]; then
         save_vercel_config "web"
+    fi
+    
+    # 恢复 .vercelignore
+    if [ -f "$ROOT_DIR/.vercelignore.bak" ]; then
+        mv "$ROOT_DIR/.vercelignore.bak" "$ROOT_DIR/.vercelignore"
+    else
+        rm -f "$ROOT_DIR/.vercelignore"
     fi
     
     cleanup_vercel_config
@@ -211,6 +222,10 @@ deploy_admin() {
     fi
     cp "$ROOT_DIR/vercel.admin.json" "$ROOT_DIR/vercel.json"
     
+    # 切换 .vercelignore 为 admin 专用版本
+    [ -f "$ROOT_DIR/.vercelignore" ] && cp "$ROOT_DIR/.vercelignore" "$ROOT_DIR/.vercelignore.bak"
+    cp "$ROOT_DIR/.vercelignore-admin" "$ROOT_DIR/.vercelignore"
+    
     if [ "$preview" = "preview" ]; then
         echo -e "${YELLOW}预览部署模式...${NC}"
         if [ "$is_new_project" = true ]; then
@@ -236,6 +251,13 @@ deploy_admin() {
     # 恢复原 vercel.json
     if [ -f "$ROOT_DIR/vercel.json.bak" ]; then
         mv "$ROOT_DIR/vercel.json.bak" "$ROOT_DIR/vercel.json"
+    fi
+    
+    # 恢复 .vercelignore
+    if [ -f "$ROOT_DIR/.vercelignore.bak" ]; then
+        mv "$ROOT_DIR/.vercelignore.bak" "$ROOT_DIR/.vercelignore"
+    else
+        rm -f "$ROOT_DIR/.vercelignore"
     fi
     
     cleanup_vercel_config

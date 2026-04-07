@@ -1,0 +1,28 @@
+# 只保留 apps/web 所需内容，排除其他所有 app
+
+# 其他 app（不需要上传）
+apps/admin
+apps/api-server
+apps/miniapp
+
+# 本地包（web 不依赖本地 packages）
+packages
+
+# 文档和脚本
+docs
+scripts
+
+# 构建产物（以防 gitignore 未覆盖）
+apps/web/.next
+apps/web/node_modules
+
+# 日志目录（gitignore 只忽略 *.log 文件，不忽略 logs 目录）
+**/logs
+
+# 测试和配置
+**/coverage
+**/*.tsbuildinfo
+
+# Vercel 项目缓存配置
+.vercel-web
+.vercel-admin

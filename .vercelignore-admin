@@ -1,0 +1,30 @@
+# Admin 部署时排除不需要的目录
+
+# 其他 app（不需要上传）
+apps/web
+apps/api-server
+apps/miniapp
+
+# packages: admin 依赖 constants 和 shared，只排除其他 packages
+packages/database
+packages/types
+packages/utils
+
+# 文档和脚本
+docs
+scripts
+
+# 构建产物
+apps/admin/.vite
+apps/admin/node_modules
+
+# 日志目录
+**/logs
+
+# 测试和构建缓存
+**/coverage
+**/*.tsbuildinfo
+
+# Vercel 项目缓存配置
+.vercel-web
+.vercel-admin
