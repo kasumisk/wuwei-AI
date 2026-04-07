@@ -1,7 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { UserProfile, ActivityLevel } from '../../entities/user-profile.entity';
+import {
+  UserProfile,
+  ActivityLevel,
+  GoalType,
+  GoalSpeed,
+  Discipline,
+} from '../../entities/user-profile.entity';
 import { SaveUserProfileDto } from '../dto/food.dto';
 
 @Injectable()
@@ -62,7 +68,7 @@ export class UserProfileService {
 
   /**
    * Harris-Benedict 公式计算每日热量目标
-   * 减肥模式：BMR × 活动系数 × 0.8（20% 热量缺口）
+   * 根据 goal 和 goalSpeed 动态调整热量缺口/盈余
    */
   calculateDailyGoal(profile: UserProfile): number {
     const age = new Date().getFullYear() - (profile.birthYear || 1990);
@@ -81,10 +87,51 @@ export class UserProfileService {
       [ActivityLevel.ACTIVE]: 1.725,
     };
 
-    const multiplier =
-      activityMultiplier[profile.activityLevel] || 1.375;
+    const tdee = bmr * (activityMultiplier[profile.activityLevel] || 1.375);
 
-    // 减肥缺口 20%
-    return Math.round(bmr * multiplier * 0.8);
+    // 目标系数：减脂 -20%，增肌 +10%，健康/习惯 维持
+    const goalMultiplier: Record<string, number> = {
+      [GoalType.FAT_LOSS]: 0.8,
+      [GoalType.MUSCLE_GAIN]: 1.1,
+      [GoalType.HEALTH]: 1.0,
+      [GoalType.HABIT]: 1.0,
+    };
+
+    // 速度修正：激进进一步降低 5%，佛系放宽 5%
+    const speedModifier: Record<string, number> = {
+      [GoalSpeed.AGGRESSIVE]: -0.05,
+      [GoalSpeed.STEADY]: 0,
+      [GoalSpeed.RELAXED]: 0.05,
+    };
+
+    const goalMult = goalMultiplier[profile.goal] ?? 0.8;
+    const speedMod = speedModifier[profile.goalSpeed] ?? 0;
+
+    return Math.round(tdee * (goalMult + speedMod));
+  }
+
+  /**
+   * 构建用户档案上下文字符串，供 AI 使用
+   */
+  buildUserContext(profile: UserProfile): string {
+    const lines: string[] = [];
+    if (profile.gender) lines.push(`性别: ${profile.gender === 'male' ? '男' : '女'}`);
+    if (profile.birthYear) lines.push(`年龄: ${new Date().getFullYear() - profile.birthYear}岁`);
+    if (profile.heightCm) lines.push(`身高: ${profile.heightCm}cm`);
+    if (profile.weightKg) lines.push(`体重: ${profile.weightKg}kg`);
+    if (profile.targetWeightKg) lines.push(`目标体重: ${profile.targetWeightKg}kg`);
+    if (profile.bodyFatPercent) lines.push(`体脂率: ${profile.bodyFatPercent}%`);
+    if (profile.goal) lines.push(`目标: ${profile.goal}`);
+    if (profile.goalSpeed) lines.push(`目标节奏: ${profile.goalSpeed}`);
+    if (profile.dailyCalorieGoal) lines.push(`每日热量目标: ${profile.dailyCalorieGoal}kcal`);
+    if (profile.mealsPerDay) lines.push(`每日餐次: ${profile.mealsPerDay}`);
+    if (profile.takeoutFrequency) lines.push(`外卖频率: ${profile.takeoutFrequency}`);
+    if (profile.canCook !== undefined) lines.push(`会做饭: ${profile.canCook ? '是' : '否'}`);
+    if (profile.foodPreferences?.length) lines.push(`饮食偏好: ${profile.foodPreferences.join(', ')}`);
+    if (profile.dietaryRestrictions?.length) lines.push(`忌口: ${profile.dietaryRestrictions.join(', ')}`);
+    if (profile.weakTimeSlots?.length) lines.push(`容易乱吃时段: ${profile.weakTimeSlots.join(', ')}`);
+    if (profile.bingeTriggers?.length) lines.push(`暴食触发: ${profile.bingeTriggers.join(', ')}`);
+    if (profile.discipline) lines.push(`自律程度: ${profile.discipline}`);
+    return lines.join('\n');
   }
 }

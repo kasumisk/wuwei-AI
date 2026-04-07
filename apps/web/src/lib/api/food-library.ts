@@ -1,4 +1,3 @@
-import { serverGet } from './server-api';
 import { clientGet, clientPost } from './client-api';
 import type { ApiResponse } from './http-client';
 
@@ -53,7 +52,7 @@ async function unwrap<T>(promise: Promise<ApiResponse<T>>): Promise<T> {
 
 export const foodLibraryServerAPI = {
   search: async (q: string, limit = 20): Promise<FoodLibraryItem[]> => {
-    const result = await unwrap(serverGet<SearchResult>(`/foods/search?q=${encodeURIComponent(q)}&limit=${limit}`));
+    const result = await unwrap(clientGet<SearchResult>(`/foods/search?q=${encodeURIComponent(q)}&limit=${limit}`));
     return result.items;
   },
 
@@ -62,21 +61,21 @@ export const foodLibraryServerAPI = {
     if (category) params.set('category', category);
     if (limit) params.set('limit', String(limit));
     const qs = params.toString();
-    return unwrap(serverGet<FoodLibraryItem[]>(`/foods/popular${qs ? `?${qs}` : ''}`));
+    return unwrap(clientGet<FoodLibraryItem[]>(`/foods/popular${qs ? `?${qs}` : ''}`));
   },
 
   getCategories: async (): Promise<FoodCategory[]> => {
-    return unwrap(serverGet<FoodCategory[]>('/foods/categories'));
+    return unwrap(clientGet<FoodCategory[]>('/foods/categories'));
   },
 
   getByName: async (name: string): Promise<{ food: FoodLibraryItem; related: FoodLibraryItem[] }> => {
-    const result = await unwrap(serverGet<FoodDetailResult>(`/foods/by-name/${encodeURIComponent(name)}`));
+    const result = await unwrap(clientGet<FoodDetailResult>(`/foods/by-name/${encodeURIComponent(name)}`));
     const { related, ...food } = result;
     return { food, related };
   },
 
   getAll: async (limit = 200): Promise<FoodLibraryItem[]> => {
-    const result = await unwrap(serverGet<SearchResult>(`/foods?limit=${limit}`));
+    const result = await unwrap(clientGet<SearchResult>(`/foods?limit=${limit}`));
     return result.items;
   },
 };
