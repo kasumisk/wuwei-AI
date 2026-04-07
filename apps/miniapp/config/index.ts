@@ -2,7 +2,6 @@ import { defineConfig, type UserConfigExport } from '@tarojs/cli'
 import path from 'path'
 import devConfig from './dev'
 import prodConfig from './prod'
-import vitePluginImp from 'vite-plugin-imp'
 import UnoCSS from 'unocss/vite'
 // https://taro-docs.jd.com/docs/next/config#defineconfig-辅助函数
 export default defineConfig<'vite'>(async (merge, { command, mode }) => {
@@ -20,6 +19,7 @@ export default defineConfig<'vite'>(async (merge, { command, mode }) => {
     outputRoot: 'dist',
     plugins: ['@tarojs/plugin-html'],
     defineConstants: {
+      'process.env.TARO_APP_API_URL': JSON.stringify('https://uway-api.dev-net.uk/api'),
     },
     copy: {
       patterns: [
@@ -34,18 +34,6 @@ export default defineConfig<'vite'>(async (merge, { command, mode }) => {
     compiler: {
       vitePlugins: [
         UnoCSS(),
-        vitePluginImp({
-        libList: [
-          {
-            libName: '@nutui/nutui-react-taro',
-            style: (name) => {
-              return `@nutui/nutui-react-taro/dist/esm/${name}/style/css`
-            },
-            replaceOldImport: false,
-            camel2DashComponentName: false,
-          }
-        ]
-      }),
       ],
       type: 'vite'
     },

@@ -2,9 +2,9 @@
 	"miniprogramRoot": "dist/",
 	"projectname": "miniapp",
 	"description": "uway",
-	"appid": "touristappid",
+	"appid": "wx4c9ad16fd13b34fd",
 	"setting": {
-		"urlCheck": true,
+		"urlCheck": false,
 		"es6": false,
     "enhance": false,
     "compileHotReLoad": false,

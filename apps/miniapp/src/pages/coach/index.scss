@@ -1,0 +1,40 @@
+.coach-bubble {
+  max-width: 75%;
+}
+
+.coach-user-bubble {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+}
+
+.coach-cursor {
+  color: #3b82f6;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.coach-input-bar {
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+}
+
+.coach-input {
+  height: 36px;
+  background: #f3f4f6;
+  border-radius: 18px;
+  padding: 0 16px;
+  font-size: 14px;
+}
+
+.coach-send-btn {
+  height: 36px;
+  line-height: 36px;
+  padding: 0 16px;
+  border-radius: 18px;
+  background: #3b82f6;
+  color: #fff;
+  font-size: 14px;
+  &::after { border: none; }
+}

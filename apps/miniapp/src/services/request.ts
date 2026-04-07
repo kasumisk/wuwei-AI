@@ -2,7 +2,7 @@ import Taro from '@tarojs/taro'
 import { getToken, clearAuth } from '@/utils/storage'
 import type { ApiResponse } from '@/types/api'
 
-const BASE_URL = 'https://uway-api.dev-net.uk/api'
+const BASE_URL = process.env.TARO_APP_API_URL || 'https://uway-api.dev-net.uk/api'
 
 interface RequestOptions {
   url: string
@@ -37,7 +37,7 @@ async function request<T = any>(options: RequestOptions): Promise<T> {
 
     if (res.statusCode === 401) {
       clearAuth()
-      Taro.redirectTo({ url: '/pages/login/index' })
+      Taro.reLaunch({ url: '/pages/login/index' })
       return Promise.reject(new Error('未授权，请重新登录'))
     }
 

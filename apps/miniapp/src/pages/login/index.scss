@@ -1,69 +1,47 @@
-.login-page {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-  padding: 80px 32px 40px;
-  background: #f7f8fa;
-}
-
-.login-header {
-  text-align: center;
-  margin-bottom: 60px;
-}
-
-.login-title {
-  display: block;
-  font-size: 48px;
-  font-weight: 700;
-  color: #1a1a1a;
-  margin-bottom: 12px;
-}
-
-.login-subtitle {
-  display: block;
-  font-size: 28px;
-  color: #999;
-}
-
-.login-body {
-  flex: 1;
-}
-
-.login-field {
-  margin-bottom: 24px;
-  background: #fff;
-  border-radius: 12px;
-  padding: 0 16px;
-}
-
-.login-code-row {
+/* Login - only styles UnoCSS cannot handle */
+.login-logo {
+  width: 120px;
+  height: 120px;
+  border-radius: 32px;
+  background: linear-gradient(135deg, #52c41a, #1890ff);
   display: flex;
   align-items: center;
-  gap: 16px;
+  justify-content: center;
 }
 
-.login-code-input {
-  flex: 1;
+.login-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 96px;
+  border-radius: 48px;
+  font-size: 32px;
+  font-weight: 600;
+  border: none;
+  &::after { border: none; }
+  &--primary {
+    background: #07c160;
+    color: #fff;
+    &::after { border: none; }
+  }
+  &--outline {
+    background: #fff;
+    color: #333;
+    border: 2px solid #e0e0e0;
+    &::after { border: none; }
+  }
 }
 
-.login-switch {
-  text-align: center;
-  margin-top: 32px;
-  padding: 16px;
-}
-
-.login-switch-text {
-  font-size: 26px;
+.login-code-btn {
+  flex-shrink: 0;
+  height: 64px;
+  padding: 0 24px;
+  background: #e6f7ff;
   color: #1890ff;
-}
-
-.login-footer {
-  text-align: center;
-  margin-top: auto;
-  padding-top: 40px;
-}
-
-.login-agreement {
-  font-size: 22px;
-  color: #bbb;
+  border-radius: 32px;
+  font-size: 24px;
+  border: none;
+  white-space: nowrap;
+  &::after { border: none; }
 }

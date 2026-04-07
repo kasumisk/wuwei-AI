@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 /**
@@ -49,11 +45,9 @@ export class WechatAuthService {
       '9b324b9b2884934f2904c683ad4f50fe';
     this.redirectUri =
       this.configService.get<string>('WECHAT_REDIRECT_URI') || '';
-    this.miniAppId =
-      this.configService.get<string>('WECHAT_MINI_APPID') || '';
+    this.miniAppId = this.configService.get<string>('WECHAT_MINI_APPID') || '';
     this.miniAppSecret =
       this.configService.get<string>('WECHAT_MINI_SECRET') || '';
-
     this.logger.log(`微信登录已配置, appId: ${this.appId}`);
     if (this.miniAppId) {
       this.logger.log(`微信小程序已配置, miniAppId: ${this.miniAppId}`);
@@ -211,10 +205,7 @@ export class WechatAuthService {
     const arr = [token, timestamp, nonce].sort();
     // 使用 crypto 进行 SHA1 计算
     const crypto = require('crypto');
-    const hash = crypto
-      .createHash('sha1')
-      .update(arr.join(''))
-      .digest('hex');
+    const hash = crypto.createHash('sha1').update(arr.join('')).digest('hex');
 
     return hash === signature;
   }

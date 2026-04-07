@@ -1,0 +1,61 @@
+.profile-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.profile-input {
+  width: 150px;
+  text-align: right;
+  font-size: 14px;
+  background: #f3f4f6;
+  border-radius: 8px;
+  padding: 4px 12px;
+  height: 32px;
+}
+
+.profile-opt {
+  padding: 6px 16px;
+  border-radius: 16px;
+  background: #f3f4f6;
+  font-size: 13px;
+  &--active { background: #eff6ff; color: #3b82f6; border: 1px solid #3b82f6; }
+}
+
+.profile-save-btn {
+  width: 100%;
+  height: 48px;
+  line-height: 48px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  &::after { border: none; }
+}
+
+.profile-cancel-btn {
+  width: 100%;
+  height: 48px;
+  line-height: 48px;
+  border-radius: 24px;
+  background: #fff;
+  color: #6b7280;
+  font-size: 16px;
+  &::after { border: none; }
+}
+
+.profile-logout-btn {
+  width: 100%;
+  height: 48px;
+  line-height: 48px;
+  border-radius: 24px;
+  background: #fff;
+  color: #ef4444;
+  font-size: 16px;
+  &::after { border: none; }
+}

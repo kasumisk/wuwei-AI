@@ -1,0 +1,24 @@
+.foods-search-input {
+  height: 36px;
+  background: #f3f4f6;
+  border-radius: 18px;
+  padding: 0 16px;
+  font-size: 14px;
+}
+
+.foods-categories {
+  white-space: nowrap;
+}
+
+.foods-cat--active {
+  border: 1px solid #3b82f6;
+}
+
+.foods-tag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  &--protein { background: #fff7e6; color: #fa8c16; }
+  &--fat { background: #fff1f0; color: #f5222d; }
+  &--carbs { background: #f6ffed; color: #52c41a; }
+}

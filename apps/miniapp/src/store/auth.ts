@@ -58,6 +58,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   logout() {
     clearAuth()
     set({ token: '', user: null, isLoggedIn: false })
-    Taro.redirectTo({ url: '/pages/login/index' })
+    Taro.reLaunch({ url: '/pages/login/index' })
   },
 }))
