@@ -1769,3 +1769,28 @@ export interface NutritionScoreResponse {
 - 每日营养目标计算基于数学公式，**零 AI 成本**
 - AI 调用次数不增加（只是 prompt 要求多返回几个字段）
 - MealPlan 推荐仍用规则引擎的 presets 模板
+
+---
+
+## 实施进度记录
+
+### 2025-07-04 — V6 六维营养评分系统 全量实施完成 ✅
+
+| 模块 | 状态 | 说明 |
+|------|------|------|
+| 数据库迁移 `1751000000000-AddNutritionDimensions` | ✅ 已部署 | food_records 6列 + daily_summaries 9列 |
+| `food-record.entity.ts` | ✅ 完成 | FoodItem 接口 +5 字段，Entity +6 列 |
+| `daily-summary.entity.ts` | ✅ 完成 | +9 列（蛋白/脂肪/碳水/质量/饱腹/评分/三大目标） |
+| `daily-plan.entity.ts` | ✅ 完成 | MealPlan 接口 +protein/fat/carbs |
+| `food.dto.ts` | ✅ 完成 | FoodItemDto +5, SaveFoodRecordDto +6 |
+| `nutrition-score.service.ts` | ✅ 新建 | 6维评分 + 4目标权重 + 罚分机制 + 亮点生成 |
+| `analyze.service.ts` | ✅ 重构 | 目标感知 Prompt 架构 + 后置评分 + 估算回退 |
+| `food.service.ts` | ✅ 重构 | 多维保存 + 多维汇总聚合 + 评分计算 |
+| `daily-plan.service.ts` | ✅ 重构 | 多维预算分配 + 目标策略 + 多维 presets |
+| `food.controller.ts` | ✅ 完成 | 新增 `GET /nutrition-score` 端点 |
+| `app-client.module.ts` | ✅ 完成 | 注册 NutritionScoreService |
+| `apps/web/src/lib/api/food.ts` | ✅ 完成 | 前端类型 + getNutritionScore API |
+| GCloud 部署 | ✅ 完成 | API 编译 + 迁移执行 + PM2 restart |
+| Vercel Web 部署 | ✅ 完成 | git push 自动触发 |
+
+**核心变更统计**: 15 files changed, 3274 insertions(+), 95 deletions(-)
