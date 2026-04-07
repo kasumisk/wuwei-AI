@@ -25,6 +25,11 @@ export interface FoodItem {
   calories: number;
   quantity?: string;
   category?: string;
+  protein?: number;
+  fat?: number;
+  carbs?: number;
+  quality?: number;
+  satiety?: number;
 }
 
 export interface AnalysisResult {
@@ -48,6 +53,15 @@ export interface AnalysisResult {
   };
   contextComment: string;
   encouragement: string;
+  // V6: 营养维度
+  totalProtein?: number;
+  totalFat?: number;
+  totalCarbs?: number;
+  avgQuality?: number;
+  avgSatiety?: number;
+  nutritionScore?: number;
+  scoreBreakdown?: NutritionScoreBreakdown;
+  highlights?: string[];
 }
 
 export interface FoodRecord {
@@ -80,6 +94,16 @@ export interface DailySummary {
   calorieGoal: number | null;
   mealCount: number;
   remaining: number;
+  // V6: 营养维度
+  totalProtein?: number;
+  totalFat?: number;
+  totalCarbs?: number;
+  avgQuality?: number;
+  avgSatiety?: number;
+  nutritionScore?: number;
+  proteinGoal?: number;
+  fatGoal?: number;
+  carbsGoal?: number;
 }
 
 export interface DailySummaryRecord {
@@ -126,6 +150,9 @@ export interface MealSuggestion {
 export interface MealPlan {
   foods: string;
   calories: number;
+  protein: number;
+  fat: number;
+  carbs: number;
   tip: string;
 }
 
@@ -209,6 +236,35 @@ export interface StreakStatus {
   todayStatus: 'on_track' | 'at_risk' | 'exceeded';
 }
 
+// V6: 营养评分
+export interface NutritionScoreBreakdown {
+  energy: number;
+  proteinRatio: number;
+  macroBalance: number;
+  foodQuality: number;
+  satiety: number;
+  stability: number;
+}
+
+export interface NutritionScoreResult {
+  totalScore: number;
+  breakdown: NutritionScoreBreakdown;
+  highlights: string[];
+  feedback: string;
+  goals: {
+    calories: number;
+    protein: number;
+    fat: number;
+    carbs: number;
+  };
+  intake: {
+    calories: number;
+    protein: number;
+    fat: number;
+    carbs: number;
+  };
+}
+
 // ==================== API 服务 ====================
 
 export const foodService = {
@@ -243,6 +299,13 @@ export const foodService = {
     compensation?: { diet?: string; activity?: string; nextMeal?: string };
     contextComment?: string;
     encouragement?: string;
+    // V6: 营养维度
+    totalProtein?: number;
+    totalFat?: number;
+    totalCarbs?: number;
+    avgQuality?: number;
+    avgSatiety?: number;
+    nutritionScore?: number;
   }): Promise<FoodRecord> => {
     return unwrap(clientPost<FoodRecord>('/app/food/records', data));
   },
@@ -407,6 +470,15 @@ export const foodService = {
    */
   getStreak: async (): Promise<StreakStatus> => {
     return unwrap(clientGet<StreakStatus>('/app/streak'));
+  },
+
+  // ── V6: 营养评分 ──
+
+  /**
+   * 获取今日营养评分详情
+   */
+  getNutritionScore: async (): Promise<NutritionScoreResult> => {
+    return unwrap(clientGet<NutritionScoreResult>('/app/food/nutrition-score'));
   },
 
   // ── V5: 教练风格 ──

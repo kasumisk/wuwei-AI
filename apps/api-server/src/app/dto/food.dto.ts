@@ -47,6 +47,31 @@ export class FoodItemDto {
   @IsOptional()
   @IsString()
   category?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  protein?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  fat?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  carbs?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  quality?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  satiety?: number;
 }
 
 // ========== Food Records ==========
@@ -134,6 +159,38 @@ export class SaveFoodRecordDto {
   @IsOptional()
   @IsString()
   encouragement?: string;
+
+  // ─── V6: 多维营养字段 ───
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  totalProtein?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  totalFat?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  totalCarbs?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  avgQuality?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  avgSatiety?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  nutritionScore?: number;
 }
 
 export class UpdateFoodRecordDto {

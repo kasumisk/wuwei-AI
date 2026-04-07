@@ -9,6 +9,9 @@ import {
 export interface MealPlan {
   foods: string;
   calories: number;
+  protein: number;
+  fat: number;
+  carbs: number;
   tip: string;
 }
 

@@ -37,6 +37,11 @@ export interface FoodItem {
   calories: number;
   quantity?: string;
   category?: string;
+  protein?: number;
+  fat?: number;
+  carbs?: number;
+  quality?: number;
+  satiety?: number;
 }
 
 /**
@@ -125,6 +130,26 @@ export class FoodRecord {
 
   @Column({ type: 'text', nullable: true, comment: '鼓励语' })
   encouragement?: string;
+
+  // ─── V6: 多维营养字段 ───
+
+  @Column({ type: 'decimal', precision: 6, scale: 1, default: 0, name: 'total_protein', comment: '本餐总蛋白质 g' })
+  totalProtein: number;
+
+  @Column({ type: 'decimal', precision: 6, scale: 1, default: 0, name: 'total_fat', comment: '本餐总脂肪 g' })
+  totalFat: number;
+
+  @Column({ type: 'decimal', precision: 6, scale: 1, default: 0, name: 'total_carbs', comment: '本餐总碳水 g' })
+  totalCarbs: number;
+
+  @Column({ type: 'decimal', precision: 3, scale: 1, default: 0, name: 'avg_quality', comment: '本餐食物平均质量分 1-10' })
+  avgQuality: number;
+
+  @Column({ type: 'decimal', precision: 3, scale: 1, default: 0, name: 'avg_satiety', comment: '本餐食物平均饱腹感 1-10' })
+  avgSatiety: number;
+
+  @Column({ type: 'int', default: 0, name: 'nutrition_score', comment: '本餐综合营养评分 0-100' })
+  nutritionScore: number;
 
   @Column({
     type: 'timestamp',

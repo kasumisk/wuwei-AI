@@ -33,6 +33,7 @@ import { UserProfileService } from '../services/user-profile.service';
 import { FoodLibraryService } from '../services/food-library.service';
 import { DailyPlanService } from '../services/daily-plan.service';
 import { BehaviorService } from '../services/behavior.service';
+import { NutritionScoreService } from '../services/nutrition-score.service';
 import {
   SaveFoodRecordDto,
   UpdateFoodRecordDto,
@@ -55,6 +56,7 @@ export class FoodController {
     private readonly foodLibraryService: FoodLibraryService,
     private readonly dailyPlanService: DailyPlanService,
     private readonly behaviorService: BehaviorService,
+    private readonly nutritionScoreService: NutritionScoreService,
   ) {}
 
   // ==================== 图片分析 ====================
@@ -408,6 +410,48 @@ export class FoodController {
       code: HttpStatus.OK,
       message: '反馈已记录',
       data: null,
+    };
+  }
+
+  // ==================== V6: 营养评分 ====================
+
+  /**
+   * 获取今日营养评分详情
+   * GET /api/app/food/nutrition-score
+   */
+  @Get('nutrition-score')
+  @ApiOperation({ summary: '获取今日营养评分详情' })
+  async getNutritionScore(@CurrentAppUser() user: any): Promise<ApiResponse> {
+    const [summary, profile] = await Promise.all([
+      this.foodService.getTodaySummary(user.id),
+      this.userProfileService.getProfile(user.id),
+    ]);
+
+    const goals = this.nutritionScoreService.calculateDailyGoals(profile);
+    const score = this.nutritionScoreService.calculateScore({
+      calories: summary.totalCalories,
+      targetCalories: goals.calories,
+      protein: summary.totalProtein || 0,
+      fat: summary.totalFat || 0,
+      carbs: summary.totalCarbs || 0,
+      foodQuality: summary.avgQuality || 3,
+      satiety: summary.avgSatiety || 3,
+    }, profile?.goal || 'health');
+
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '获取成功',
+      data: {
+        ...score,
+        goals,
+        intake: {
+          calories: summary.totalCalories,
+          protein: summary.totalProtein || 0,
+          fat: summary.totalFat || 0,
+          carbs: summary.totalCarbs || 0,
+        },
+      },
     };
   }
 

@@ -3,6 +3,8 @@ import {
   Logger,
   NotFoundException,
   ForbiddenException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between } from 'typeorm';
@@ -13,6 +15,8 @@ import {
   UpdateFoodRecordDto,
   FoodRecordQueryDto,
 } from '../dto/food.dto';
+import { NutritionScoreService } from './nutrition-score.service';
+import { UserProfileService } from './user-profile.service';
 
 @Injectable()
 export class FoodService {
@@ -23,6 +27,9 @@ export class FoodService {
     private readonly foodRepo: Repository<FoodRecord>,
     @InjectRepository(DailySummary)
     private readonly summaryRepo: Repository<DailySummary>,
+    private readonly nutritionScoreService: NutritionScoreService,
+    @Inject(forwardRef(() => UserProfileService))
+    private readonly userProfileService: UserProfileService,
   ) {}
 
   /**
@@ -50,6 +57,13 @@ export class FoodService {
       compensation: dto.compensation,
       contextComment: dto.contextComment,
       encouragement: dto.encouragement,
+      // V6: 多维营养字段
+      totalProtein: dto.totalProtein || 0,
+      totalFat: dto.totalFat || 0,
+      totalCarbs: dto.totalCarbs || 0,
+      avgQuality: dto.avgQuality || 0,
+      avgSatiety: dto.avgSatiety || 0,
+      nutritionScore: dto.nutritionScore || 0,
     });
 
     const saved = await this.foodRepo.save(record);
@@ -156,7 +170,21 @@ export class FoodService {
    */
   async getTodaySummary(
     userId: string,
-  ): Promise<{ totalCalories: number; calorieGoal: number | null; mealCount: number; remaining: number }> {
+  ): Promise<{
+    totalCalories: number;
+    calorieGoal: number | null;
+    mealCount: number;
+    remaining: number;
+    totalProtein: number;
+    totalFat: number;
+    totalCarbs: number;
+    avgQuality: number;
+    avgSatiety: number;
+    nutritionScore: number;
+    proteinGoal: number;
+    fatGoal: number;
+    carbsGoal: number;
+  }> {
     const today = new Date().toISOString().split('T')[0];
     let summary = await this.summaryRepo.findOne({
       where: { userId, date: today },
@@ -174,6 +202,15 @@ export class FoodService {
         calorieGoal: null,
         mealCount: records.length,
         remaining: 0,
+        totalProtein: records.reduce((s, r) => s + (Number(r.totalProtein) || 0), 0),
+        totalFat: records.reduce((s, r) => s + (Number(r.totalFat) || 0), 0),
+        totalCarbs: records.reduce((s, r) => s + (Number(r.totalCarbs) || 0), 0),
+        avgQuality: 0,
+        avgSatiety: 0,
+        nutritionScore: 0,
+        proteinGoal: 0,
+        fatGoal: 0,
+        carbsGoal: 0,
       };
     }
 
@@ -184,6 +221,15 @@ export class FoodService {
       remaining: summary.calorieGoal
         ? Math.max(0, summary.calorieGoal - summary.totalCalories)
         : 0,
+      totalProtein: Number(summary.totalProtein) || 0,
+      totalFat: Number(summary.totalFat) || 0,
+      totalCarbs: Number(summary.totalCarbs) || 0,
+      avgQuality: Number(summary.avgQuality) || 0,
+      avgSatiety: Number(summary.avgSatiety) || 0,
+      nutritionScore: Number(summary.nutritionScore) || 0,
+      proteinGoal: Number(summary.proteinGoal) || 0,
+      fatGoal: Number(summary.fatGoal) || 0,
+      carbsGoal: Number(summary.carbsGoal) || 0,
     };
   }
 
@@ -299,6 +345,43 @@ export class FoodService {
       0,
     );
 
+    // V6: 多维汇总
+    const totalProtein = records.reduce((s, r) => s + (Number(r.totalProtein) || 0), 0);
+    const totalFat = records.reduce((s, r) => s + (Number(r.totalFat) || 0), 0);
+    const totalCarbs = records.reduce((s, r) => s + (Number(r.totalCarbs) || 0), 0);
+
+    // 加权平均质量分和饱腹分（按热量权重）
+    const totalCal = totalCalories || 1;
+    const avgQuality = records.reduce(
+      (s, r) => s + (Number(r.avgQuality) || 0) * r.totalCalories, 0,
+    ) / totalCal;
+    const avgSatiety = records.reduce(
+      (s, r) => s + (Number(r.avgSatiety) || 0) * r.totalCalories, 0,
+    ) / totalCal;
+
+    // 营养目标（从用户档案计算）
+    let profile: any = null;
+    let goals = { calories: 2000, protein: 0, fat: 0, carbs: 0, quality: 7, satiety: 6 };
+    try {
+      profile = await this.userProfileService.getProfile(userId);
+      goals = this.nutritionScoreService.calculateDailyGoals(profile);
+    } catch { /* ignore */ }
+
+    // 综合评分
+    const goalType = profile?.goal || 'health';
+    const scoreResult = this.nutritionScoreService.calculateScore(
+      {
+        calories: totalCalories,
+        targetCalories: goals.calories,
+        protein: totalProtein,
+        fat: totalFat,
+        carbs: totalCarbs,
+        foodQuality: avgQuality,
+        satiety: avgSatiety,
+      },
+      goalType,
+    );
+
     let summary = await this.summaryRepo.findOne({
       where: { userId, date },
     });
@@ -314,6 +397,18 @@ export class FoodService {
         mealCount: records.length,
       });
     }
+
+    // V6: 更新多维字段
+    summary.totalProtein = totalProtein;
+    summary.totalFat = totalFat;
+    summary.totalCarbs = totalCarbs;
+    summary.avgQuality = Math.round(avgQuality * 10) / 10;
+    summary.avgSatiety = Math.round(avgSatiety * 10) / 10;
+    summary.nutritionScore = scoreResult.score;
+    summary.proteinGoal = goals.protein;
+    summary.fatGoal = goals.fat;
+    summary.carbsGoal = goals.carbs;
+    summary.calorieGoal = goals.calories;
 
     await this.summaryRepo.save(summary);
   }

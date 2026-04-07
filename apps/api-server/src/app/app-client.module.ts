@@ -33,6 +33,7 @@ import { FoodLibraryService } from './services/food-library.service';
 import { DailyPlanService } from './services/daily-plan.service';
 import { BehaviorService } from './services/behavior.service';
 import { GamificationService } from './services/gamification.service';
+import { NutritionScoreService } from './services/nutrition-score.service';
 // 控制器
 import { AppAuthController } from './app.controller';
 import { AppFileController } from './controllers/file.controller';
@@ -91,6 +92,7 @@ import { StorageModule } from '../storage/storage.module';
     DailyPlanService,
     BehaviorService,
     GamificationService,
+    NutritionScoreService,
     // 守卫和策略
     AppJwtStrategy,
     AppJwtAuthGuard,
@@ -115,6 +117,7 @@ import { StorageModule } from '../storage/storage.module';
     DailyPlanService,
     BehaviorService,
     GamificationService,
+    NutritionScoreService,
   ],
 })
 export class AppClientModule {}
