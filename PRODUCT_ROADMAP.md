@@ -1,6 +1,7 @@
 # 无畏健康 AI 饮食决策系统 — 完整产品路线图 & 实施方案
 
-> **版本**：v1.0 | **日期**：2026-04-07
+> **版本**：v2.0 | **日期**：2026-04-07
+> **最后更新**：2026-04-07 — V1~V5 全部实现完成，已部署生产环境
 >
 > **产品使命**：用 AI 改变用户饮食行为的系统，不是卡路里计算器。
 >
@@ -39,6 +40,11 @@
 | **AI 教练** | ✅ 完成 | SSE 流式对话, 上下文感知, 每日问候 |
 | **食物库** | ✅ 完成 | 150+ 食物, 模糊搜索, 分类浏览, SEO 落地页 |
 | **Web 前端** | ✅ 完成 | 首页/分析/教练/食物库/个人中心 |
+| **V1 AI 决策系统** | ✅ 完成 | 4级风险评级(SAFE/OK/LIMIT/AVOID) + 替代方案 + 补救策略 |
+| **V2 日计划引擎** | ✅ 完成 | 每日三餐+加餐计划 + 动态调整 |
+| **V3 行为建模** | ✅ 完成 | 用户画像 + 主动提醒(4场景) + 决策反馈闭环 |
+| **V4 游戏化** | ✅ 完成 | 10成就 + 4挑战 + 连胜系统(失败减半不归零) |
+| **V5 AI 人格** | ✅ 完成 | 3种教练风格(严格/友善/数据) + 人格化提示词 |
 
 ### 1.2 当前技术栈
 
@@ -53,13 +59,20 @@ AI:   OpenRouter → baidu/ernie-4.5-vl-28b-a3b (Vision) + deepseek-chat-v3 (Cha
 ### 1.3 当前数据库实体
 
 ```
-app_users           → 用户主表（多端认证）
-food_records        → 饮食记录（JSONB foods[]）
-daily_summaries     → 每日热量汇总
-user_profiles       → 用户健康档案
-coach_conversations → AI教练对话
-coach_messages      → 对话消息
-foods               → 食物库（150+ 种子数据）
+app_users              → 用户主表（多端认证）
+food_records           → 饮食记录（JSONB foods[] + V1 决策字段 8 列）
+daily_summaries        → 每日热量汇总
+user_profiles          → 用户健康档案
+coach_conversations    → AI教练对话
+coach_messages         → 对话消息
+foods                  → 食物库（150+ 种子数据）
+daily_plans            → V2 每日饮食计划（三餐+加餐+调整记录）
+user_behavior_profiles → V3 用户行为画像（偏好/风险时段/教练风格）
+ai_decision_logs       → V3 AI决策日志（输入/输出/反馈）
+achievements           → V4 成就定义（10条种子数据）
+user_achievements      → V4 用户已解锁成就
+challenges             → V4 挑战定义（4条种子数据）
+user_challenges        → V4 用户参与的挑战
 ```
 
 ### 1.4 当前 AI 分析能力（问题）
@@ -79,24 +92,24 @@ foods               → 食物库（150+ 种子数据）
 ## 二、版本演进路线（V1 → V5）
 
 ```
-V1 首页改版 + AI 决策     ← 当前要做（~4 天）
+V1 首页改版 + AI 决策     ✅ 已完成（2026-04-07）
   ↓
-V2 日计划引擎             ← 从单次判断 → 管理用户一天（~5 天）
+V2 日计划引擎             ✅ 已完成（2026-04-07）
   ↓
-V3 行为建模               ← 从通用建议 → 个性化理解（~5 天）
+V3 行为建模               ✅ 已完成（2026-04-07）
   ↓
-V4 游戏化引擎             ← 从工具 → 上瘾机制（~4 天）
+V4 游戏化引擎             ✅ 已完成（2026-04-07）
   ↓
-V5 AI 人格系统            ← 从机器 → 有温度的教练（~3 天）
+V5 AI 人格系统            ✅ 已完成（2026-04-07）
 ```
 
-| 版本 | 核心升级 | 用户感知变化 | 商业价值 |
-|------|---------|-------------|---------|
-| **V1** | 风险评级 + 替代方案 + 补救策略 | "AI告诉我能不能吃、怎么吃" | MVP 核心体验 |
-| **V2** | 每日饮食计划 + 动态调整 | "AI在管理我的一天" | 日活提升 |
-| **V3** | 用户画像 + 精准干预 | "这个AI懂我" | 留存壁垒 |
-| **V4** | 连胜系统 + 成就 + 补偿 | "我不想断签" | 付费转化 |
-| **V5** | 人格选择 + 情感反馈 | "像真人教练" | 长期付费 |
+| 版本 | 核心升级 | 用户感知变化 | 商业价值 | 状态 |
+|------|---------|-------------|---------|------|
+| **V1** | 风险评级 + 替代方案 + 补救策略 | "AI告诉我能不能吃、怎么吃" | MVP 核心体验 | ✅ 已上线 |
+| **V2** | 每日饮食计划 + 动态调整 | "AI在管理我的一天" | 日活提升 | ✅ 已上线 |
+| **V3** | 用户画像 + 精准干预 | "这个AI懂我" | 留存壁垒 | ✅ 已上线 |
+| **V4** | 连胜系统 + 成就 + 补偿 | "我不想断签" | 付费转化 | ✅ 已上线 |
+| **V5** | 人格选择 + 情感反馈 | "像真人教练" | 长期付费 | ✅ 已上线 |
 
 ---
 
@@ -1116,17 +1129,17 @@ if (user.avgComplianceRate > 0.8) {
 ### Migration 链
 
 ```
-已有:
+已有（✅ 生产环境已执行）:
   1742000000000 - AddFoodAndProfileTables    ← food_records, daily_summaries, user_profiles
   1743000000000 - AddCoachTables             ← coach_conversations, coach_messages
   1744000000000 - AddFoodLibraryTable        ← foods (食物库)
   1745000000000 - AddWechatMiniOpenId        ← app_users 微信小程序字段
 
-新增（按版本排列）:
-  V1: 1746000000000 - AddDecisionFields           ← food_records 新增决策字段
+V1-V5（✅ 2026-04-07 生产环境已执行）:
+  V1: 1746000000000 - AddDecisionFields           ← food_records 新增 8 列决策字段
   V2: 1747000000000 - AddDailyPlanTable            ← daily_plans
   V3: 1748000000000 - AddBehaviorTables            ← user_behavior_profiles, ai_decision_logs
-  V4: 1749000000000 - AddGamificationTables        ← achievements, user_achievements, challenges, user_challenges
+  V4: 1749000000000 - AddGamificationTables        ← achievements(10条) + user_achievements + challenges(4条) + user_challenges
 ```
 
 ### 最终 ER 图
@@ -1319,202 +1332,153 @@ PUT  /api/app/auth/profile
 
 ---
 
-## 十二、详细实施计划
+## 十二、实施完成记录
 
-### Phase V1：AI 决策 + 首页改版（~4 天）
+> **全部 V1-V5 已于 2026-04-07 完成开发并部署到生产环境。**
 
-> **优先级最高**，完成后产品核心体验质变。
+### Phase V1：AI 决策 + 首页改版 ✅
 
-#### Day 1：后端数据库 + 实体改造
-
+#### 后端变更
 ```
-[ ] 新建 Migration 1746000000000-AddDecisionFields
-    → food_records 新增 8 列
-[ ] 修改 food-record.entity.ts
-    → 新增 decision, riskLevel, reason, suggestion,
-      insteadOptions, compensation, contextComment, encouragement
-[ ] 修改 food.dto.ts
-    → SaveFoodRecordDto 新增 8 个可选字段
-[ ] 运行迁移测试
-    → cd apps/api-server && npx typeorm migration:run
+[x] 新建 Migration 1746000000000-AddDecisionFields → food_records 新增 8 列
+[x] 修改 food-record.entity.ts → 新增 decision/riskLevel/reason/suggestion 等字段
+[x] 修改 food.dto.ts → SaveFoodRecordDto 新增 8 个可选字段
+[x] 修改 analyze.service.ts → V2 prompt + buildUserContext + 4 级风险评级
+[x] 修改 food.service.ts → getMealSuggestion + buildMealSuggestion + getMealBudget
+[x] 修改 food.controller.ts → analyze 传入 userId + GET meal-suggestion 端点
 ```
 
-#### Day 2：AI 分析服务改造
-
+#### 前端变更
 ```
-[ ] 修改 analyze.service.ts
-    → 注入 FoodService + UserProfileService（constructor 添加依赖）
-    → 新增 buildUserContext(userId) 方法
-    → 替换 FOOD_ANALYSIS_PROMPT → V2 版本（含用户上下文 + 4 级风险 + 替代方案 + 补救策略）
-    → analyzeImage() 新增 userId 参数
-    → parseAnalysisResult() 扩展解析全部新字段
-[ ] 修改 food.controller.ts
-    → analyze 方法传入 user.id
-    → 新增 GET meal-suggestion 端点
-[ ] 修改 food.service.ts
-    → 新增 getMealSuggestion() + buildMealSuggestion() + getMealBudget()
-[ ] 本地接口联调测试
-    → curl POST /api/app/food/analyze (带图片)
-    → 验证返回包含 decision + compensation
-    → curl GET /api/app/food/meal-suggestion
-```
-
-#### Day 3：前端 UI 改造
-
-```
-[ ] 修改 web/src/lib/api/food.ts
-    → AnalysisResult 接口扩展，新增 MealSuggestion 接口
-[ ] 修改 web/src/lib/hooks/use-food.ts
-    → 新增 getMealSuggestion 方法
-[ ] 新建 web/src/components/decision-card.tsx
-    → 四级决策卡片 (SAFE/OK/LIMIT/AVOID)
-    → 展示: reason + suggestion + insteadOptions + compensation + encouragement
-[ ] 修改 web/src/app/[locale]/analyze/page.tsx
-    → result 步骤嵌入 DecisionCard
-    → 替代方案展示（insteadOptions 标签列表）
-    → 补救策略展示（diet/activity/nextMeal 三行）
-[ ] 重构 web/src/pages-component/home/index.tsx
-    → 去掉 AI Hero 区块
-    → 双入口（📷 拍照 → /analyze, ✍️ 搜索 → /foods）
-    → 新增今日建议区（调用 meal-suggestion）
-    → 底部导航改为 4 tab（去掉挑战）
-```
-
-#### Day 4：联调 + 部署
-
-```
-[ ] AI prompt 调优
-    → 测试 10+ 张不同菜品图片，验证决策准确性
-    → 验证替代方案是否"接近原需求"
-    → 验证补救措施是否可执行
-[ ] 端到端流程测试
-    → 登录 → 上传图片 → 看到决策卡片 → 确认记录 → 首页刷新
-    → 验证 meal-suggestion 按时段返回正确推荐
-[ ] 生产部署
-    → 服务器运行 Migration
-    → 部署后端代码
-    → 部署前端代码
-    → 线上验证
+[x] 新建 web/src/components/decision-card.tsx → 四级决策卡片
+[x] 修改 web/src/app/[locale]/analyze/page.tsx → 嵌入 DecisionCard
+[x] 重构 web/src/pages-component/home/index.tsx → 双入口 + 每日建议 + 决策徽章
+[x] 扩展 web/src/lib/api/food.ts → AnalysisResult 接口扩展
+[x] 扩展 web/src/lib/hooks/use-food.ts → getMealSuggestion
 ```
 
 ---
 
-### Phase V2：日计划引擎（~5 天）
+### Phase V2：日计划引擎 ✅
 
-#### Day 5：数据库 + 实体
-
+#### 后端变更
 ```
-[ ] 新建 Migration 1747000000000-AddDailyPlanTable
-[ ] 新建 daily-plan.entity.ts
-[ ] 修改 app-client.module.ts 注册
-```
-
-#### Day 6-7：后端服务
-
-```
-[ ] 新建 daily-plan.service.ts
-    → generatePlan()（基于用户档案 + 近 7 天数据）
-    → adjustPlan()（记录偏离后动态调整）
-    → getPlan()（获取或惰性生成）
-[ ] 新建计划生成 prompt（prompts/daily-plan.ts）
-[ ] 修改 food.controller.ts 新增 2 端点
-[ ] 修改 food.service.ts saveRecord 后触发 adjustPlan
+[x] 新建 Migration 1747000000000-AddDailyPlanTable
+[x] 新建 entities/daily-plan.entity.ts → MealPlan + PlanAdjustment 接口
+[x] 新建 services/daily-plan.service.ts → getPlan(惰性) + generatePlan(规则) + adjustPlan(动态)
+[x] 修改 food.controller.ts → GET daily-plan + POST daily-plan/adjust
+[x] 修改 app-client.module.ts → 注册 DailyPlan + DailyPlanService
 ```
 
-#### Day 8-9：前端 + 测试
-
+#### 前端变更
 ```
-[ ] 前端类型 + API 扩展
-[ ] 首页展示每日计划卡片
-[ ] 计划 vs 实际对比 UI
-[ ] 联调 + 部署
+[x] 扩展 food.ts → DailyPlanData/MealPlan 类型 + getDailyPlan/adjustDailyPlan API
+[x] 首页展示每日计划卡片（morningPlan/lunchPlan/dinnerPlan/snackPlan）
 ```
 
 ---
 
-### Phase V3：行为建模（~5 天）
+### Phase V3：行为建模 ✅
 
-#### Day 10-11：数据库 + 行为服务
-
+#### 后端变更
 ```
-[ ] 新建 Migration 1748000000000-AddBehaviorTables
-[ ] 新建 user-behavior-profile.entity.ts
-[ ] 新建 ai-decision-log.entity.ts
-[ ] 新建 behavior.service.ts
-```
-
-#### Day 12-13：预判 + 反馈闭环
-
-```
-[ ] 新建 proactive-reminder.service.ts
-[ ] saveRecord 后写 ai_decision_logs
-[ ] analyze prompt 注入行为画像上下文
-[ ] 新增 decision-feedback + proactive-check 接口
+[x] 新建 Migration 1748000000000-AddBehaviorTables → user_behavior_profiles + ai_decision_logs
+[x] 新建 entities/user-behavior-profile.entity.ts
+[x] 新建 entities/ai-decision-log.entity.ts
+[x] 新建 services/behavior.service.ts → getProfile + proactiveCheck(4场景) + getBehaviorContext
+[x] 修改 food.controller.ts → GET behavior-profile + GET proactive-check + POST decision-feedback
+[x] 修改 analyze.service.ts → 注入 BehaviorService，行为上下文融入 AI 分析
 ```
 
-#### Day 14：前端 + 测试
-
+#### 前端变更
 ```
-[ ] 前端提醒组件
-[ ] 决策反馈 UI（helpful/unhelpful 按钮）
-[ ] 联调 + 部署
+[x] 新建 web/src/components/proactive-reminder.tsx → 紧急度分级提醒
+[x] 扩展 food.ts → BehaviorProfile/ProactiveReminder 类型 + API 方法
+[x] 首页展示主动提醒区域
 ```
 
 ---
 
-### Phase V4：游戏化（~4 天）
+### Phase V4：游戏化 ✅
 
-#### Day 15-16：数据库 + 游戏化服务
-
+#### 后端变更
 ```
-[ ] 新建 Migration 1749000000000-AddGamificationTables
-[ ] 新建 4 个实体
-[ ] 新建 gamification.service.ts
-[ ] 种子数据脚本（成就 + 挑战）
+[x] 新建 Migration 1749000000000-AddGamificationTables → 4 表 + 种子数据(10成就+4挑战)
+[x] 新建 entities/achievement.entity.ts + user-achievement.entity.ts
+[x] 新建 entities/challenge.entity.ts + user-challenge.entity.ts
+[x] 新建 services/gamification.service.ts → 连胜(失败减半不归零) + 成就检测 + 挑战
+[x] 新建 controllers/gamification.controller.ts → GET achievements/challenges/streak + POST join
 ```
 
-#### Day 17-18：前端 + 测试
-
+#### 前端变更
 ```
-[ ] 挑战页（恢复底部导航第 4 tab）
-[ ] 成就展示
-[ ] 连胜状态 UI
-[ ] 联调 + 部署
+[x] 新建 web/src/components/achievement-badge.tsx → 成就徽章
+[x] 新建 web/src/app/[locale]/challenge/page.tsx → 挑战页(连胜+成就+挑战列表)
+[x] 扩展 food.ts → Achievement/Challenge/StreakStatus 类型 + API 方法
 ```
 
 ---
 
-### Phase V5：AI 人格（~3 天）
+### Phase V5：AI 人格 ✅
 
-#### Day 19：人格 Prompt + 后端
-
+#### 后端变更
 ```
-[ ] 新建 prompts/personas/ 目录
-[ ] 修改 analyze.service.ts 注入人格
-[ ] 修改 coach.service.ts buildSystemPrompt 注入人格
-[ ] 新增 PUT /api/app/coach/style 接口
+[x] 修改 analyze.service.ts → 注入 PERSONA_PROMPTS(strict/friendly/data) + 人格上下文
+[x] 修改 coach.service.ts → buildSystemPrompt 注入行为上下文 + 人格
+[x] 修改 coach.controller.ts → PUT /api/app/coach/style 接口
 ```
 
-#### Day 20-21：前端 + 测试
-
+#### 前端变更
 ```
-[ ] profile 页新增教练风格选择器
-[ ] 测试三种风格的输出差异
-[ ] 联调 + 部署
+[x] 修改 web/src/app/[locale]/profile/page.tsx → 教练风格选择器(3按钮) + 行为统计卡片
+[x] 扩展 food.ts → updateCoachStyle + getBehaviorProfile API
 ```
 
 ---
 
-### 总排期甘特图
+### 部署验证记录（2026-04-07）
+
+| 接口 | 方法 | 路径 | 状态 |
+|------|------|------|------|
+| V1 餐食建议 | GET | `/api/app/food/meal-suggestion` | ✅ 200 |
+| V2 每日计划 | GET | `/api/app/food/daily-plan` | ✅ 200 |
+| V2 计划调整 | POST | `/api/app/food/daily-plan/adjust` | ✅ 200 |
+| V3 行为画像 | GET | `/api/app/food/behavior-profile` | ✅ 200 |
+| V3 主动提醒 | GET | `/api/app/food/proactive-check` | ✅ 200 |
+| V3 决策反馈 | POST | `/api/app/food/decision-feedback` | ✅ 200 |
+| V4 成就列表 | GET | `/api/app/achievements` | ✅ 200 |
+| V4 挑战列表 | GET | `/api/app/challenges` | ✅ 200 |
+| V4 加入挑战 | POST | `/api/app/challenges/:id/join` | ✅ 200 |
+| V4 连胜状态 | GET | `/api/app/streak` | ✅ 200 |
+| V5 切换风格 | PUT | `/api/app/coach/style` | ✅ 200 |
+
+### 数据库迁移链
 
 ```
-Week 1:  [=====V1=====]
-Week 2:  [=========V2=========]
-Week 3:  [=========V3=========]
-Week 4:  [=======V4=======][==V5==]
-
-共计约 21 个开发日（~4-5 周）
+1742000000000-CreateFoodTables        ✅ (基础)
+1743000000000-AddCoachTables          ✅ (教练)
+1744000000000-AddFoodLibraryTable     ✅ (食物库)
+1745000000000-AddWechatMiniOpenId     ✅ (微信小程序)
+1746000000000-AddDecisionFields       ✅ V1 (决策字段)
+1747000000000-AddDailyPlanTable       ✅ V2 (日计划)
+1748000000000-AddBehaviorTables       ✅ V3 (行为建模)
+1749000000000-AddGamificationTables   ✅ V4 (游戏化)
 ```
+
+### 文件变更汇总
+
+| 类别 | 新增文件 | 修改文件 |
+|------|---------|---------|
+| **迁移** | 4 | 0 |
+| **实体** | 7 | 1 |
+| **服务** | 3 | 3 |
+| **控制器** | 1 | 2 |
+| **DTO** | 0 | 2 |
+| **模块** | 0 | 2 |
+| **前端组件** | 3 | 0 |
+| **前端页面** | 1 | 3 |
+| **前端API** | 0 | 2 |
+| **合计** | **19 新增** | **15 修改** |
 
 ---
 
