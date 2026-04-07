@@ -24,6 +24,13 @@ import { UserProfile } from '../../entities/user-profile.entity';
 import { CoachConversation } from '../../entities/coach-conversation.entity';
 import { CoachMessage } from '../../entities/coach-message.entity';
 import { FoodLibrary } from '../../entities/food-library.entity';
+import { DailyPlan } from '../../entities/daily-plan.entity';
+import { UserBehaviorProfile } from '../../entities/user-behavior-profile.entity';
+import { AiDecisionLog } from '../../entities/ai-decision-log.entity';
+import { Achievement } from '../../entities/achievement.entity';
+import { UserAchievement } from '../../entities/user-achievement.entity';
+import { Challenge } from '../../entities/challenge.entity';
+import { UserChallenge } from '../../entities/user-challenge.entity';
 
 @Module({
   imports: [
@@ -67,6 +74,16 @@ import { FoodLibrary } from '../../entities/food-library.entity';
             CoachMessage,
             // 食物库
             FoodLibrary,
+            // V2: 日计划
+            DailyPlan,
+            // V3: 行为建模
+            UserBehaviorProfile,
+            AiDecisionLog,
+            // V4: 游戏化
+            Achievement,
+            UserAchievement,
+            Challenge,
+            UserChallenge,
             // 文件转换记录
           ],
           synchronize: dbConfig.synchronize,
