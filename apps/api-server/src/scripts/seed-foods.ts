@@ -49,6 +49,9 @@ async function seedFoods() {
         standardServingG: food.standardServingG,
         standardServingDesc: food.standardServingDesc,
         searchWeight: food.searchWeight,
+        tags: food.tags || [],
+        source: food.source || 'official',
+        confidence: food.confidence ?? 0.95,
       });
       updated++;
     } else {
@@ -63,6 +66,9 @@ async function seedFoods() {
         standardServingG: food.standardServingG,
         standardServingDesc: food.standardServingDesc,
         searchWeight: food.searchWeight,
+        tags: food.tags || [],
+        source: food.source || 'official',
+        confidence: food.confidence ?? 0.95,
       }));
       inserted++;
     }

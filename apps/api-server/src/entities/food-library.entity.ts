@@ -66,6 +66,15 @@ export class FoodLibrary {
   @Column({ type: 'boolean', default: true, name: 'is_verified' })
   isVerified: boolean;
 
+  @Column({ type: 'jsonb', default: [], comment: '标签：高蛋白/低热量/高饱腹/高脂肪/高碳水/均衡/天然/外卖 等' })
+  tags: string[];
+
+  @Column({ type: 'varchar', length: 20, default: 'official', comment: '数据来源: official=官方/estimated=估算/ai=AI识别' })
+  source: 'official' | 'estimated' | 'ai';
+
+  @Column({ type: 'decimal', precision: 3, scale: 2, default: 1.0, comment: '营养数据置信度 0-1' })
+  confidence: number;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

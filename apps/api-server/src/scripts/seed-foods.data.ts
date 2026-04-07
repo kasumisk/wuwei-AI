@@ -18,6 +18,33 @@ export interface SeedFood {
   standardServingG: number;
   standardServingDesc: string;
   searchWeight: number;
+  tags?: string[];
+  source?: 'official' | 'estimated' | 'ai';
+  confidence?: number;
+}
+
+/**
+ * 根据营养数据自动推导 tags
+ */
+function deriveTags(food: Omit<SeedFood, 'tags'>): string[] {
+  const tags: string[] = [food.category];
+  const p = food.proteinPer100g ?? 0;
+  const f = food.fatPer100g ?? 0;
+  const c = food.carbsPer100g ?? 0;
+  const cal = food.caloriesPer100g;
+
+  if (p >= 15) tags.push('高蛋白');
+  if (cal <= 80) tags.push('低热量');
+  if (cal <= 30) tags.push('超低热量');
+  if (f >= 15) tags.push('高脂肪');
+  if (c >= 30) tags.push('高碳水');
+  if (f <= 3) tags.push('低脂');
+  if (p >= 10 && (f >= 5 || c >= 15)) tags.push('高饱腹');
+  if (['蔬菜', '水果', '豆制品'].includes(food.category)) tags.push('天然');
+  if (p >= 5 && p <= 25 && f >= 2 && f <= 15 && c >= 5 && c <= 35) tags.push('均衡');
+  if (food.category === '快餐') tags.push('外卖');
+
+  return [...new Set(tags)];
 }
 
 export const SEED_FOODS: SeedFood[] = [
@@ -181,4 +208,4 @@ export const SEED_FOODS: SeedFood[] = [
   { name: '蛋糕（奶油）', aliases: '生日蛋糕', category: '零食', caloriesPer100g: 348, proteinPer100g: 5.5, fatPer100g: 17.0, carbsPer100g: 43.0, standardServingG: 100, standardServingDesc: '1块约100g', searchWeight: 140 },
   { name: '冰淇淋', aliases: '雪糕', category: '零食', caloriesPer100g: 207, proteinPer100g: 3.5, fatPer100g: 11.0, carbsPer100g: 23.5, standardServingG: 80, standardServingDesc: '1个约80g', searchWeight: 145 },
   { name: '饼干（苏打）', aliases: '苏打饼干', category: '零食', caloriesPer100g: 408, proteinPer100g: 8.0, fatPer100g: 8.5, carbsPer100g: 75.0, standardServingG: 30, standardServingDesc: '4块约30g', searchWeight: 120 },
-];
+].map(food => ({ ...food, tags: deriveTags(food), source: 'official' as const, confidence: 0.95 }));
