@@ -41,6 +41,15 @@ export class FoodService {
       advice: dto.advice,
       isHealthy: dto.isHealthy,
       recordedAt: dto.recordedAt ? new Date(dto.recordedAt) : new Date(),
+      // V1: 决策字段
+      decision: dto.decision || 'SAFE',
+      riskLevel: dto.riskLevel,
+      reason: dto.reason,
+      suggestion: dto.suggestion,
+      insteadOptions: dto.insteadOptions || [],
+      compensation: dto.compensation,
+      contextComment: dto.contextComment,
+      encouragement: dto.encouragement,
     });
 
     const saved = await this.foodRepo.save(record);
@@ -195,6 +204,76 @@ export class FoodService {
       .andWhere('s.date >= :sinceDate', { sinceDate })
       .orderBy('s.date', 'ASC')
       .getMany();
+  }
+
+  // ─── V1: 下一餐推荐（规则引擎，零 AI 成本） ───
+
+  /**
+   * 获取下一餐推荐
+   */
+  async getMealSuggestion(
+    userId: string,
+  ): Promise<{
+    mealType: string;
+    remainingCalories: number;
+    suggestion: { foods: string; calories: number; tip: string };
+  }> {
+    const summary = await this.getTodaySummary(userId);
+    const goal = summary.calorieGoal || 2000;
+    const remaining = Math.max(0, goal - summary.totalCalories);
+    const hour = new Date().getHours();
+
+    let nextMeal: string;
+    if (hour < 9) nextMeal = 'breakfast';
+    else if (hour < 14) nextMeal = 'lunch';
+    else if (hour < 17) nextMeal = 'snack';
+    else nextMeal = 'dinner';
+
+    const suggestion = this.buildMealSuggestion(remaining, nextMeal, summary.mealCount);
+    return { mealType: nextMeal, remainingCalories: remaining, suggestion };
+  }
+
+  private buildMealSuggestion(
+    remaining: number,
+    mealType: string,
+    mealsEaten: number,
+  ): { foods: string; calories: number; tip: string } {
+    if (remaining <= 0) {
+      return { foods: '今日热量已达标', calories: 0, tip: '建议不再进食，喝水或零卡饮品' };
+    }
+
+    const budget = this.getMealBudget(mealType, remaining, mealsEaten);
+    const presets: Record<string, Array<{ min: number; foods: string; cal: number; tip: string }>> = {
+      breakfast: [
+        { min: 400, foods: '燕麦粥 + 水煮蛋 + 苹果', cal: 380, tip: '高蛋白早餐帮助减脂' },
+        { min: 300, foods: '全麦面包 + 牛奶', cal: 280, tip: '简单营养的早餐搭配' },
+        { min: 0, foods: '脱脂牛奶 + 香蕉', cal: 200, tip: '轻食早餐，控制总量' },
+      ],
+      lunch: [
+        { min: 600, foods: '鸡胸肉沙拉 + 糙米饭', cal: 550, tip: '高蛋白低脂午餐' },
+        { min: 450, foods: '清蒸鱼 + 蒜炒青菜 + 半碗米饭', cal: 420, tip: '清淡搭配，营养均衡' },
+        { min: 0, foods: '蔬菜沙拉 + 鸡蛋', cal: 300, tip: '控制午餐，晚餐留余量' },
+      ],
+      dinner: [
+        { min: 600, foods: '清蒸鱼 + 蒜炒青菜 + 半碗米饭', cal: 520, tip: '晚餐清淡为主' },
+        { min: 400, foods: '水煮虾 + 西兰花', cal: 380, tip: '高蛋白低碳晚餐' },
+        { min: 250, foods: '凉拌豆腐 + 拍黄瓜', cal: 220, tip: '额度不多，轻食为好' },
+        { min: 0, foods: '一碗清汤 + 蔬菜', cal: 150, tip: '额度紧张，极简晚餐' },
+      ],
+      snack: [
+        { min: 200, foods: '坚果一小把 + 酸奶', cal: 180, tip: '健康加餐，控制份量' },
+        { min: 0, foods: '黑咖啡或茶', cal: 5, tip: '零卡饮品不增加负担' },
+      ],
+    };
+
+    const options = presets[mealType] || presets.dinner;
+    const match = options.find((o) => budget >= o.min) || options[options.length - 1];
+    return { foods: match.foods, calories: match.cal, tip: match.tip };
+  }
+
+  private getMealBudget(mealType: string, remaining: number, _mealsEaten: number): number {
+    const ratios: Record<string, number> = { breakfast: 0.3, lunch: 0.4, dinner: 0.3, snack: 0.15 };
+    return Math.round(remaining * (ratios[mealType] || 0.3));
   }
 
   /**

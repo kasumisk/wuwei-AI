@@ -211,9 +211,6 @@ export class WechatMiniLoginDto {
   @IsNotEmpty({ message: '小程序 code 不能为空' })
   code: string;
 }
-  @IsNotEmpty({ message: '微信授权 code 不能为空' })
-  code: string;
-}
 
 /**
  * 获取微信授权 URL DTO

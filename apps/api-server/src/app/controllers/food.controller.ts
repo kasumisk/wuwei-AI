@@ -31,6 +31,8 @@ import { FoodService } from '../services/food.service';
 import { AnalyzeService } from '../services/analyze.service';
 import { UserProfileService } from '../services/user-profile.service';
 import { FoodLibraryService } from '../services/food-library.service';
+import { DailyPlanService } from '../services/daily-plan.service';
+import { BehaviorService } from '../services/behavior.service';
 import {
   SaveFoodRecordDto,
   UpdateFoodRecordDto,
@@ -51,6 +53,8 @@ export class FoodController {
     private readonly userProfileService: UserProfileService,
     private readonly storageService: StorageService,
     private readonly foodLibraryService: FoodLibraryService,
+    private readonly dailyPlanService: DailyPlanService,
+    private readonly behaviorService: BehaviorService,
   ) {}
 
   // ==================== 图片分析 ====================
@@ -92,6 +96,7 @@ export class FoodController {
     const result = await this.analyzeService.analyzeImage(
       uploaded.url,
       dto.mealType,
+      user.id,
     );
 
     return {
@@ -293,6 +298,116 @@ export class FoodController {
       code: HttpStatus.OK,
       message: '获取成功',
       data,
+    };
+  }
+
+  // ==================== 下一餐推荐 ====================
+
+  /**
+   * 获取下一餐推荐
+   * GET /api/app/food/meal-suggestion
+   */
+  @Get('meal-suggestion')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '获取下一餐推荐' })
+  async getMealSuggestion(@CurrentAppUser() user: any): Promise<ApiResponse> {
+    const suggestion = await this.foodService.getMealSuggestion(user.id);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '获取成功',
+      data: suggestion,
+    };
+  }
+
+  // ==================== V2: 每日计划 ====================
+
+  /**
+   * 获取今日计划（惰性生成）
+   * GET /api/app/food/daily-plan
+   */
+  @Get('daily-plan')
+  @ApiOperation({ summary: '获取今日饮食计划' })
+  async getDailyPlan(@CurrentAppUser() user: any): Promise<ApiResponse> {
+    const plan = await this.dailyPlanService.getPlan(user.id);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '获取成功',
+      data: plan,
+    };
+  }
+
+  /**
+   * 触发计划动态调整
+   * POST /api/app/food/daily-plan/adjust
+   */
+  @Post('daily-plan/adjust')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '触发饮食计划调整' })
+  async adjustDailyPlan(
+    @CurrentAppUser() user: any,
+    @Body() body: { reason: string },
+  ): Promise<ApiResponse> {
+    const result = await this.dailyPlanService.adjustPlan(user.id, body.reason);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '计划已调整',
+      data: result,
+    };
+  }
+
+  // ==================== V3: 行为建模 ====================
+
+  /**
+   * 获取行为画像
+   * GET /api/app/food/behavior-profile
+   */
+  @Get('behavior-profile')
+  @ApiOperation({ summary: '获取用户行为画像' })
+  async getBehaviorProfile(@CurrentAppUser() user: any): Promise<ApiResponse> {
+    const profile = await this.behaviorService.getProfile(user.id);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '获取成功',
+      data: profile,
+    };
+  }
+
+  /**
+   * 主动提醒检查
+   * GET /api/app/food/proactive-check
+   */
+  @Get('proactive-check')
+  @ApiOperation({ summary: '主动提醒检查' })
+  async proactiveCheck(@CurrentAppUser() user: any): Promise<ApiResponse> {
+    const reminder = await this.behaviorService.proactiveCheck(user.id);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '检查完成',
+      data: { reminder },
+    };
+  }
+
+  /**
+   * AI 决策反馈
+   * POST /api/app/food/decision-feedback
+   */
+  @Post('decision-feedback')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'AI 决策反馈' })
+  async decisionFeedback(
+    @Body() body: { recordId: string; followed: boolean; feedback: 'helpful' | 'unhelpful' | 'wrong' },
+  ): Promise<ApiResponse> {
+    await this.behaviorService.logFeedback(body.recordId, body.followed, body.feedback);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '反馈已记录',
+      data: null,
     };
   }
 

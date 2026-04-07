@@ -12,6 +12,14 @@ import { CoachConversation } from '../../entities/coach-conversation.entity';
 import { CoachMessage } from '../../entities/coach-message.entity';
 import { FoodService } from './food.service';
 import { UserProfileService } from './user-profile.service';
+import { BehaviorService } from './behavior.service';
+
+// V5: AI 人格 Prompt
+const PERSONA_PROMPTS: Record<string, string> = {
+  strict: `你的风格是严格教练：直接了当，不拐弯抹角。重点强调目标和纪律。语气坚定但不攻击。`,
+  friendly: `你的风格是暖心朋友：温和鼓励，理解失败很正常。避免强烈否定，多给替代方案。`,
+  data: `你的风格是数据分析师：客观冷静，用数字说话。减少情感表达，强调数据对比。`,
+};
 
 export interface DailyGreeting {
   greeting: string;
@@ -32,6 +40,7 @@ export class CoachService {
     private readonly msgRepo: Repository<CoachMessage>,
     private readonly foodService: FoodService,
     private readonly userProfileService: UserProfileService,
+    private readonly behaviorService: BehaviorService,
     private readonly configService: ConfigService,
   ) {
     this.apiKey =
@@ -56,10 +65,12 @@ export class CoachService {
    * 构建系统 Prompt（注入用户数据上下文）
    */
   async buildSystemPrompt(userId: string): Promise<string> {
-    const [profile, todaySummary, recentSummaries] = await Promise.all([
+    const [profile, todaySummary, recentSummaries, behaviorProfile, behaviorContext] = await Promise.all([
       this.userProfileService.getProfile(userId),
       this.foodService.getTodaySummary(userId),
       this.foodService.getRecentSummaries(userId, 7),
+      this.behaviorService.getProfile(userId).catch(() => null),
+      this.behaviorService.getBehaviorContext(userId).catch(() => ''),
     ]);
 
     const hour = new Date().getHours();
@@ -123,7 +134,9 @@ ${
 
 【时间信息】${timeHint}
 
-根据以上信息，给出个性化、有温度的饮食建议。如果用户问某食物热量，直接给出估算值，不要说"建议咨询医生"。`;
+根据以上信息，给出个性化、有温度的饮食建议。如果用户问某食物热量，直接给出估算值，不要说"建议咨询医生"。
+
+${behaviorContext ? behaviorContext + '\n' : ''}${PERSONA_PROMPTS[behaviorProfile?.coachStyle || 'friendly'] || ''}`;
   }
 
   /**

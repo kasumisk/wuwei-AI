@@ -11,6 +11,8 @@ import {
   Max,
   IsNumber,
   IsDateString,
+  IsIn,
+  IsObject,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -90,6 +92,48 @@ export class SaveFoodRecordDto {
   @IsOptional()
   @IsDateString()
   recordedAt?: string;
+
+  // ─── V1: AI 决策字段 ───
+
+  @ApiPropertyOptional({ enum: ['SAFE', 'OK', 'LIMIT', 'AVOID'] })
+  @IsOptional()
+  @IsIn(['SAFE', 'OK', 'LIMIT', 'AVOID'])
+  decision?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  riskLevel?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  reason?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  suggestion?: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  insteadOptions?: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsObject()
+  compensation?: { diet?: string; activity?: string; nextMeal?: string };
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  contextComment?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  encouragement?: string;
 }
 
 export class UpdateFoodRecordDto {

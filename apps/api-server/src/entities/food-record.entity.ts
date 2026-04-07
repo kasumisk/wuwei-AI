@@ -100,6 +100,32 @@ export class FoodRecord {
   })
   isHealthy?: boolean;
 
+  // ─── V1: AI 决策字段 ───
+
+  @Column({ type: 'varchar', length: 10, default: 'SAFE', comment: 'SAFE|OK|LIMIT|AVOID' })
+  decision: string;
+
+  @Column({ type: 'varchar', length: 5, nullable: true, name: 'risk_level', comment: '🟢🟡🟠🔴' })
+  riskLevel?: string;
+
+  @Column({ type: 'text', nullable: true, comment: '判断原因' })
+  reason?: string;
+
+  @Column({ type: 'text', nullable: true, comment: '可执行建议' })
+  suggestion?: string;
+
+  @Column({ type: 'jsonb', default: '[]', name: 'instead_options', comment: '替代方案' })
+  insteadOptions: string[];
+
+  @Column({ type: 'jsonb', nullable: true, comment: '补救策略 {diet, activity, nextMeal}' })
+  compensation?: { diet?: string; activity?: string; nextMeal?: string };
+
+  @Column({ type: 'text', nullable: true, name: 'context_comment', comment: '基于今日状态的点评' })
+  contextComment?: string;
+
+  @Column({ type: 'text', nullable: true, comment: '鼓励语' })
+  encouragement?: string;
+
   @Column({
     type: 'timestamp',
     name: 'recorded_at',

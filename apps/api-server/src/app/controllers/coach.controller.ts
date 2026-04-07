@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Put,
   Delete,
   Body,
   Param,
@@ -23,6 +24,7 @@ import { CurrentAppUser } from '../decorators/current-app-user.decorator';
 import { IgnoreResponseInterceptor } from '../../core/decorators/ignore-response-interceptor.decorator';
 import { ApiResponse } from '../../common/types/response.type';
 import { CoachService } from '../services/coach.service';
+import { BehaviorService } from '../services/behavior.service';
 import { CoachChatDto, CoachMessagesQueryDto } from '../dto/coach.dto';
 
 @ApiTags('App AI 教练')
@@ -32,7 +34,10 @@ import { CoachChatDto, CoachMessagesQueryDto } from '../dto/coach.dto';
 export class CoachController {
   private readonly logger = new Logger(CoachController.name);
 
-  constructor(private readonly coachService: CoachService) {}
+  constructor(
+    private readonly coachService: CoachService,
+    private readonly behaviorService: BehaviorService,
+  ) {}
 
   /**
    * 发送消息（SSE 流式响应）
@@ -231,6 +236,27 @@ export class CoachController {
       code: HttpStatus.OK,
       message: '获取成功',
       data,
+    };
+  }
+
+  // ==================== V5: 教练风格 ====================
+
+  /**
+   * 切换教练风格
+   * PUT /api/app/coach/style
+   */
+  @Put('style')
+  @ApiOperation({ summary: '切换教练风格' })
+  async updateCoachStyle(
+    @CurrentAppUser() user: any,
+    @Body() body: { style: 'strict' | 'friendly' | 'data' },
+  ): Promise<ApiResponse> {
+    const profile = await this.behaviorService.updateCoachStyle(user.id, body.style);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '教练风格已更新',
+      data: { coachStyle: profile.coachStyle },
     };
   }
 }

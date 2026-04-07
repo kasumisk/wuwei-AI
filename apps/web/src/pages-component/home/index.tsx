@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/hooks/use-auth';
 import { useFood } from '@/lib/hooks/use-food';
 import { LocalizedLink } from '@/components/common/localized-link';
+import { ProactiveReminderCard } from '@/components/proactive-reminder';
 import Image from 'next/image';
-import type { FoodRecord, DailySummary } from '@/lib/api/food';
+import type { FoodRecord, DailySummary, MealSuggestion, DailyPlanData, ProactiveReminder } from '@/lib/api/food';
 
 /* ─── SVG Icon Components ─── */
 function IconSmartToy({ className = '' }: { className?: string }) {
@@ -32,18 +33,10 @@ function IconCamera({ className = '' }: { className?: string }) {
   );
 }
 
-function IconTrophy({ className = '' }: { className?: string }) {
+function IconSearch({ className = '' }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
-      <path d="M19 5h-2V3H7v2H5c-1.1 0-2 .9-2 2v1c0 2.55 1.92 4.63 4.39 4.94.63 1.5 1.98 2.63 3.61 2.96V19H7v2h10v-2h-4v-3.1c1.63-.33 2.98-1.46 3.61-2.96C19.08 12.63 21 10.55 21 8V7c0-1.1-.9-2-2-2zM5 8V7h2v3.82C5.84 10.4 5 9.3 5 8zm14 0c0 1.3-.84 2.4-2 2.82V7h2v1z" />
-    </svg>
-  );
-}
-
-function IconFitness({ className = '' }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
-      <path d="M20.57 14.86L22 13.43 20.57 12 17 15.57 8.43 7 12 3.43 10.57 2 9.14 3.43 7.71 2 5.57 4.14 4.14 2.71 2.71 4.14l1.43 1.43L2 7.71l1.43 1.43L2 10.57 3.43 12 7 8.43 15.57 17 12 20.57 13.43 22l1.43-1.43L16.29 22l2.14-2.14 1.43 1.43 1.43-1.43-1.43-1.43L22 16.29z" />
+      <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
     </svg>
   );
 }
@@ -72,16 +65,29 @@ function IconSettings({ className = '' }: { className?: string }) {
   );
 }
 
+const MEAL_LABELS: Record<string, string> = {
+  breakfast: '早餐',
+  lunch: '午餐',
+  dinner: '晚餐',
+  snack: '加餐',
+};
+
 export function HomePage() {
   const { user, isLoggedIn } = useAuth();
-  const { getTodaySummary, getTodayRecords } = useFood();
+  const { getTodaySummary, getTodayRecords, getMealSuggestion, getDailyPlan, proactiveCheck } = useFood();
   const [summary, setSummary] = useState<DailySummary>({ totalCalories: 0, calorieGoal: 2000, mealCount: 0, remaining: 2000 });
   const [meals, setMeals] = useState<FoodRecord[]>([]);
+  const [mealSuggestion, setMealSuggestion] = useState<MealSuggestion | null>(null);
+  const [dailyPlan, setDailyPlan] = useState<DailyPlanData | null>(null);
+  const [reminder, setReminder] = useState<ProactiveReminder | null>(null);
 
   useEffect(() => {
     if (!isLoggedIn) return;
     getTodaySummary().then(setSummary).catch(() => {});
     getTodayRecords().then(setMeals).catch(() => {});
+    getMealSuggestion().then(setMealSuggestion).catch(() => {});
+    getDailyPlan().then(setDailyPlan).catch(() => {});
+    proactiveCheck().then((r) => setReminder(r.reminder)).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoggedIn]);
 
@@ -119,139 +125,134 @@ export function HomePage() {
       </nav>
 
       <main className="pt-24 pb-32 px-6 max-w-lg mx-auto">
-        {/* AI Coaching Insight Hero */}
-        <section className="mb-8">
-          <div className="relative overflow-hidden rounded-2xl bg-linear-to-br from-primary to-primary-dim p-6 text-primary-foreground shadow-lg">
-            <div className="relative z-10">
-              <div className="flex items-center gap-2 mb-3">
-                <IconSmartToy className="w-5 h-5 text-(--color-primary-container)" />
-                <span className="text-[10px] font-bold uppercase tracking-widest text-(--color-primary-container) font-sans">
-                  AI 健康教练
-                </span>
-              </div>
-              <p className="text-xl font-headline font-bold leading-tight mb-4">
-                你本周的外卖点单比上周二健康了
-                15%！今天午餐试试高蛋白选择吧。
-              </p>
-              <button className="bg-card text-primary font-bold px-5 py-2.5 rounded-full text-sm active:scale-95 transition-transform">
-                查看个性化建议
-              </button>
-            </div>
-            <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-(--color-primary-container) opacity-20 rounded-full blur-3xl" />
-          </div>
-        </section>
-
-        {/* Primary CTA: Scan Takeout */}
-        <section className="mb-8">
-          <div className="bg-card rounded-2xl p-6 flex flex-col items-center text-center gap-4 shadow-sm border border-(--color-outline-variant)/10">
-            <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center">
-              <IconScreenshot className="w-8 h-8 text-primary" />
-            </div>
-            <div className="space-y-1">
-              <h2 className="text-lg font-headline font-bold">新的外卖订单？</h2>
-              <p className="text-muted-foreground text-sm">
-                扫描或上传你的外卖截图，即刻获取热量分析。
-              </p>
-            </div>
-            <LocalizedLink
-              href="/analyze"
-              className="w-full bg-primary text-primary-foreground font-bold py-4 rounded-full flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-lg shadow-primary/20"
-            >
-              <IconCamera className="w-5 h-5" />
-              拍照或上传截图
-            </LocalizedLink>
-          </div>
-        </section>
-
-        {/* Bento Grid: Stats & Macros */}
-        <section className="grid grid-cols-2 gap-4 mb-8">
-          {/* Calorie Card */}
-          <div className="col-span-2 bg-card rounded-2xl p-6 shadow-sm flex flex-col justify-between overflow-hidden relative">
-            <div className="z-10">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                剩余卡路里
+        {/* 今日状态 */}
+        <section className="mb-6">
+          <div className="bg-card rounded-2xl p-6 shadow-sm">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              🎯 今日状态
+            </span>
+            <div className="flex items-baseline gap-2 mt-2">
+              <span className="text-4xl font-headline font-extrabold text-primary tracking-tighter">
+                {Math.max(0, remaining).toLocaleString()}
               </span>
-              <div className="flex items-baseline gap-2 mt-1">
-                <span className="text-5xl font-headline font-extrabold text-primary tracking-tighter">
-                  {remaining.toLocaleString()}
-                </span>
-                <span className="text-muted-foreground font-medium">
-                  / {calorieGoal.toLocaleString()}
-                </span>
-              </div>
+              <span className="text-muted-foreground font-medium">
+                / {calorieGoal.toLocaleString()} kcal
+              </span>
             </div>
-            <div className="mt-6 h-2 w-full bg-muted rounded-full overflow-hidden">
+            <div className="mt-4 h-2.5 w-full bg-muted rounded-full overflow-hidden">
               <div
-                className="h-full bg-primary rounded-full transition-all duration-500"
-                style={{ width: `${caloriePercent}%` }}
+                className={`h-full rounded-full transition-all duration-500 ${
+                  caloriePercent > 100 ? 'bg-red-500' : caloriePercent > 80 ? 'bg-orange-500' : 'bg-primary'
+                }`}
+                style={{ width: `${Math.min(caloriePercent, 100)}%` }}
               />
             </div>
-          </div>
-
-          {/* Protein Card */}
-          <div className="bg-surface-container-high rounded-2xl p-5 flex flex-col gap-2">
-            <div className="flex justify-between items-start">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                已摄入
-              </span>
-              <IconFitness className="w-4 h-4 text-primary" />
-            </div>
-            <div className="mt-auto">
-              <span className="text-2xl font-headline font-bold">
-                {summary.totalCalories}
-              </span>
-              <p className="text-xs text-muted-foreground">
-                kcal
-              </p>
-            </div>
-          </div>
-
-          {/* Meal Count Card */}
-          <div className="bg-muted rounded-2xl p-5 flex flex-col gap-4">
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                今日记录
-              </span>
-              <div className="flex gap-4 mt-2">
-                <div>
-                  <span className="text-xl font-headline font-bold">
-                    {summary.mealCount}
-                  </span>
-                  <p className="text-xs text-muted-foreground">餐</p>
-                </div>
-              </div>
+            <div className="flex justify-between mt-3 text-xs text-muted-foreground">
+              <span>已摄入 {summary.totalCalories} kcal</span>
+              <span>已记录 {summary.mealCount} 餐</span>
             </div>
           </div>
         </section>
 
-        {/* 30-Day Challenge Status */}
-        <section className="mb-8">
-          <div className="bg-surface-container-low rounded-2xl p-6">
-            <div className="flex justify-between items-center mb-4">
-              <div>
-                <h3 className="text-lg font-headline font-bold">健康打卡</h3>
-                <p className="text-sm text-muted-foreground">
-                  今日已记录 {summary.mealCount} 餐
-                </p>
-              </div>
-              <div className="bg-tertiary-container text-on-tertiary-container px-3 py-1 rounded-full flex items-center gap-1">
-                <IconTrophy className="w-4 h-4" />
-                <span className="text-[10px] font-bold">坚持记录</span>
-              </div>
-            </div>
-            <p className="text-xs text-muted-foreground text-center italic">
-              &ldquo;每天记录饮食，是健康管理的第一步！&rdquo;
-            </p>
-          </div>
+        {/* 核心入口：双按钮 */}
+        <section className="grid grid-cols-2 gap-4 mb-6">
+          <LocalizedLink
+            href="/analyze"
+            className="bg-primary text-primary-foreground rounded-2xl p-5 flex flex-col items-center gap-3 active:scale-[0.97] transition-all shadow-lg shadow-primary/20"
+          >
+            <IconCamera className="w-8 h-8" />
+            <span className="font-bold text-sm">📷 拍照识别</span>
+          </LocalizedLink>
+          <LocalizedLink
+            href="/foods"
+            className="bg-card border border-(--color-outline-variant)/20 rounded-2xl p-5 flex flex-col items-center gap-3 active:scale-[0.97] transition-all shadow-sm"
+          >
+            <IconSearch className="w-8 h-8 text-primary" />
+            <span className="font-bold text-sm">✍️ 手动搜索</span>
+          </LocalizedLink>
         </section>
 
-        {/* Meal Log List */}
+        {/* V3: 主动提醒 */}
+        {reminder && (
+          <section className="mb-6">
+            <ProactiveReminderCard reminder={reminder} onDismiss={() => setReminder(null)} />
+          </section>
+        )}
+
+        {/* V2: 每日计划 */}
+        {dailyPlan && (
+          <section className="mb-6">
+            <div className="bg-surface-container-low rounded-2xl p-5">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-lg">📅</span>
+                <h3 className="font-bold text-sm">今日饮食计划</h3>
+              </div>
+              {dailyPlan.strategy && (
+                <p className="text-xs text-muted-foreground mb-3">💡 {dailyPlan.strategy}</p>
+              )}
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { label: '早餐', plan: dailyPlan.morningPlan, emoji: '🌅' },
+                  { label: '午餐', plan: dailyPlan.lunchPlan, emoji: '☀️' },
+                  { label: '晚餐', plan: dailyPlan.dinnerPlan, emoji: '🌙' },
+                  { label: '加餐', plan: dailyPlan.snackPlan, emoji: '🍪' },
+                ].map(({ label, plan, emoji }) => plan && (
+                  <div key={label} className="bg-card rounded-xl p-3">
+                    <span className="text-xs font-bold text-muted-foreground">{emoji} {label}</span>
+                    <p className="text-xs mt-1 line-clamp-2">{plan.foods}</p>
+                    <span className="text-[10px] text-primary font-bold">{plan.calories} kcal</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* 今日建议 */}
+        {mealSuggestion && mealSuggestion.suggestion && (
+          <section className="mb-6">
+            <div className="bg-surface-container-low rounded-2xl p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-lg">🍽️</span>
+                <h3 className="font-bold text-sm">
+                  {MEAL_LABELS[mealSuggestion.mealType] || '下一餐'}推荐
+                </h3>
+              </div>
+              <p className="text-base font-medium">{mealSuggestion.suggestion.foods}</p>
+              <div className="flex items-center justify-between mt-3">
+                <span className="text-sm text-primary font-bold">
+                  ≈ {mealSuggestion.suggestion.calories} kcal
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  💡 {mealSuggestion.suggestion.tip}
+                </span>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* 今日记录 */}
         <section className="mb-8">
-          <h3 className="text-lg font-headline font-bold mb-4 px-1">今日记录</h3>
-          <div className="space-y-4">
+          <h3 className="text-lg font-headline font-bold mb-4 px-1">📋 今日记录</h3>
+          <div className="space-y-3">
             {meals.map((meal) => {
-              const mealLabel = ({ breakfast: '早餐', lunch: '午餐', dinner: '晚餐', snack: '加餐' } as Record<string, string>)[meal.mealType] || meal.mealType;
+              const mealLabel = MEAL_LABELS[meal.mealType] || meal.mealType;
               const foodNames = meal.foods.map((f) => f.name).join('、');
+              const decisionBadge = meal.decision && meal.decision !== 'SAFE' ? (
+                <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                  meal.decision === 'OK' ? 'bg-yellow-100 text-yellow-800' :
+                  meal.decision === 'LIMIT' ? 'bg-orange-100 text-orange-800' :
+                  meal.decision === 'AVOID' ? 'bg-red-100 text-red-800' :
+                  'bg-green-100 text-green-800'
+                }`}>
+                  {meal.decision === 'OK' ? '注意' : meal.decision === 'LIMIT' ? '少吃' : meal.decision === 'AVOID' ? '不建议' : '健康'}
+                </span>
+              ) : meal.isHealthy !== undefined ? (
+                <span className={`${meal.isHealthy ? 'bg-secondary text-secondary-foreground' : 'bg-tertiary-container text-on-tertiary-container'} px-2 py-0.5 rounded-md text-[10px] font-bold`}>
+                  {meal.isHealthy ? '健康' : '注意'}
+                </span>
+              ) : null;
+
               return (
                 <div
                   key={meal.id}
@@ -275,13 +276,7 @@ export function HomePage() {
                       {mealLabel} • {meal.totalCalories} kcal
                     </p>
                   </div>
-                  {meal.isHealthy !== undefined && (
-                    <span
-                      className={`${meal.isHealthy ? 'bg-secondary text-secondary-foreground' : 'bg-tertiary-container text-on-tertiary-container'} px-2 py-1 rounded-md text-[10px] font-bold`}
-                    >
-                      {meal.isHealthy ? '健康' : '注意'}
-                    </span>
-                  )}
+                  {decisionBadge}
                 </div>
               );
             })}
@@ -290,43 +285,36 @@ export function HomePage() {
           {meals.length === 0 && (
             <div className="text-center py-12 text-muted-foreground">
               <p className="text-sm">还没有今日记录</p>
-              <p className="text-xs mt-1">上传外卖截图开始记录吧</p>
+              <p className="text-xs mt-1">拍照或搜索食物开始记录吧</p>
             </div>
           )}
         </section>
       </main>
 
-      {/* Bottom Navigation */}
+      {/* Bottom Navigation — 4 tabs */}
       <nav className="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 pb-6 pt-2 glass-morphism z-50 rounded-t-4xl shadow-[0_-4px_40px_rgba(11,54,29,0.06)]">
-        {/* Dashboard (Active) */}
+        {/* 首页 (Active) */}
         <div className="flex flex-col items-center justify-center bg-(--color-surface-container-highest) dark:bg-primary text-foreground dark:text-primary-foreground rounded-full p-3 transition-all active:scale-90 duration-300">
           <IconGrid className="w-6 h-6" />
           <span className="text-[10px] font-bold uppercase tracking-[0.05em] mt-1">
             首页
           </span>
         </div>
-        {/* Analyzer */}
+        {/* 分析 */}
         <LocalizedLink href="/analyze" className="flex flex-col items-center justify-center text-foreground/60 p-3 hover:text-primary transition-all active:scale-90 duration-300">
           <IconScreenshot className="w-6 h-6" />
           <span className="text-[10px] font-bold uppercase tracking-[0.05em] mt-1">
             分析
           </span>
         </LocalizedLink>
-        {/* AI Coach */}
+        {/* AI教练 */}
         <LocalizedLink href="/coach" className="flex flex-col items-center justify-center text-foreground/60 p-3 hover:text-primary transition-all active:scale-90 duration-300">
           <IconSmartToy className="w-6 h-6" />
           <span className="text-[10px] font-bold uppercase tracking-[0.05em] mt-1">
             AI教练
           </span>
         </LocalizedLink>
-        {/* Challenge */}
-        <button className="flex flex-col items-center justify-center text-foreground/60 p-3 hover:text-primary transition-all active:scale-90 duration-300">
-          <IconTrophy className="w-6 h-6" />
-          <span className="text-[10px] font-bold uppercase tracking-[0.05em] mt-1">
-            挑战
-          </span>
-        </button>
-        {/* Profile */}
+        {/* 我的 */}
         <LocalizedLink
           href={isLoggedIn ? '/profile' : '/login'}
           className="flex flex-col items-center justify-center text-foreground/60 p-3 hover:text-primary transition-all active:scale-90 duration-300"

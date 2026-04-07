@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/use-auth';
 import { useFood } from '@/lib/hooks/use-food';
 import { useToast } from '@/lib/hooks/use-toast';
+import { DecisionCard } from '@/components/decision-card';
 import type { AnalysisResult, FoodItem } from '@/lib/api/food';
 
 type MealTypeOption = 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -79,6 +80,15 @@ export default function AnalyzePage() {
         mealType,
         advice: result.advice,
         isHealthy: result.isHealthy,
+        // V1: 决策字段
+        decision: result.decision,
+        riskLevel: result.riskLevel,
+        reason: result.reason,
+        suggestion: result.suggestion,
+        insteadOptions: result.insteadOptions,
+        compensation: result.compensation,
+        contextComment: result.contextComment,
+        encouragement: result.encouragement,
       });
       setStep('saved');
       toast({ title: '记录已保存！' });
@@ -216,26 +226,8 @@ export default function AnalyzePage() {
               <img src={previewUrl} alt="食物" className="w-full max-h-48 object-cover rounded-2xl" />
             )}
 
-            {/* Total & advice */}
-            <div className="bg-card rounded-2xl p-6 space-y-3">
-              <div className="flex items-baseline justify-between">
-                <div>
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">预估总热量</span>
-                  <div className="flex items-baseline gap-1 mt-1">
-                    <span className="text-4xl font-headline font-extrabold text-primary">{editedTotal}</span>
-                    <span className="text-muted-foreground">kcal</span>
-                  </div>
-                </div>
-                <span className={`px-3 py-1 rounded-full text-xs font-bold ${result.isHealthy ? 'bg-secondary text-secondary-foreground' : 'bg-tertiary-container text-on-tertiary-container'}`}>
-                  {result.isHealthy ? '健康' : '偏高'}
-                </span>
-              </div>
-              {result.advice && (
-                <p className="text-sm text-muted-foreground bg-muted rounded-xl p-3">
-                  💡 {result.advice}
-                </p>
-              )}
-            </div>
+            {/* AI 决策卡片 */}
+            <DecisionCard result={result} />
 
             {/* Food list (editable) */}
             <div className="space-y-3">

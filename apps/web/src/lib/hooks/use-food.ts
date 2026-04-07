@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { foodService, type AnalysisResult, type FoodRecord, type DailySummary, type UserProfile, type FoodItem, type DailySummaryRecord } from '@/lib/api/food';
+import { foodService, type AnalysisResult, type FoodRecord, type DailySummary, type UserProfile, type FoodItem, type DailySummaryRecord, type MealSuggestion, type DailyPlanData, type BehaviorProfile, type ProactiveReminder, type Achievement, type UserAchievement, type ChallengeItem, type UserChallengeItem, type StreakStatus } from '@/lib/api/food';
 
 /**
  * 饮食记录 + AI 分析 hook
@@ -29,6 +29,14 @@ export function useFood() {
     mealType?: string;
     advice?: string;
     isHealthy?: boolean;
+    decision?: string;
+    riskLevel?: string;
+    reason?: string;
+    suggestion?: string;
+    insteadOptions?: string[];
+    compensation?: { diet?: string; activity?: string; nextMeal?: string };
+    contextComment?: string;
+    encouragement?: string;
   }): Promise<FoodRecord> => {
     setLoading(true);
     try {
@@ -91,6 +99,55 @@ export function useFood() {
     }
   }, []);
 
+  /** 获取下一餐推荐 */
+  const getMealSuggestion = useCallback(async (): Promise<MealSuggestion> => {
+    return foodService.getMealSuggestion();
+  }, []);
+
+  // ── V2: 每日计划 ──
+  const getDailyPlan = useCallback(async (): Promise<DailyPlanData> => {
+    return foodService.getDailyPlan();
+  }, []);
+
+  const adjustDailyPlan = useCallback(async (reason: string) => {
+    return foodService.adjustDailyPlan(reason);
+  }, []);
+
+  // ── V3: 行为建模 ──
+  const getBehaviorProfile = useCallback(async (): Promise<BehaviorProfile> => {
+    return foodService.getBehaviorProfile();
+  }, []);
+
+  const proactiveCheck = useCallback(async (): Promise<{ reminder: ProactiveReminder | null }> => {
+    return foodService.proactiveCheck();
+  }, []);
+
+  const decisionFeedback = useCallback(async (recordId: string, followed: boolean, feedback: 'helpful' | 'unhelpful' | 'wrong') => {
+    return foodService.decisionFeedback(recordId, followed, feedback);
+  }, []);
+
+  // ── V4: 游戏化 ──
+  const getAchievements = useCallback(async (): Promise<{ all: Achievement[]; unlocked: UserAchievement[] }> => {
+    return foodService.getAchievements();
+  }, []);
+
+  const getChallenges = useCallback(async (): Promise<{ available: ChallengeItem[]; active: UserChallengeItem[] }> => {
+    return foodService.getChallenges();
+  }, []);
+
+  const joinChallenge = useCallback(async (challengeId: string): Promise<UserChallengeItem> => {
+    return foodService.joinChallenge(challengeId);
+  }, []);
+
+  const getStreak = useCallback(async (): Promise<StreakStatus> => {
+    return foodService.getStreak();
+  }, []);
+
+  // ── V5: 教练风格 ──
+  const updateCoachStyle = useCallback(async (style: 'strict' | 'friendly' | 'data') => {
+    return foodService.updateCoachStyle(style);
+  }, []);
+
   return {
     loading,
     analyzing,
@@ -103,5 +160,20 @@ export function useFood() {
     getRecentSummaries,
     getProfile,
     saveProfile,
+    getMealSuggestion,
+    // V2
+    getDailyPlan,
+    adjustDailyPlan,
+    // V3
+    getBehaviorProfile,
+    proactiveCheck,
+    decisionFeedback,
+    // V4
+    getAchievements,
+    getChallenges,
+    joinChallenge,
+    getStreak,
+    // V5
+    updateCoachStyle,
   };
 }

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/use-auth';
 import { useFood } from '@/lib/hooks/use-food';
 import { useToast } from '@/lib/hooks/use-toast';
-import type { UserProfile } from '@/lib/api/food';
+import type { UserProfile, BehaviorProfile } from '@/lib/api/food';
 
 const activityLabels: Record<string, string> = {
   sedentary: '久坐不动（办公室工作）',
@@ -14,13 +14,20 @@ const activityLabels: Record<string, string> = {
   active: '高强度（每天运动）',
 };
 
+const coachStyleLabels: Record<string, { label: string; desc: string; emoji: string }> = {
+  strict: { label: '严格教练', desc: '直接了当，目标导向', emoji: '🏋️' },
+  friendly: { label: '暖心朋友', desc: '温和鼓励，理解你', emoji: '🤗' },
+  data: { label: '数据理性', desc: '客观冷静，用数字说话', emoji: '📊' },
+};
+
 export default function ProfilePage() {
   const router = useRouter();
   const { user, isLoggedIn, logout } = useAuth();
-  const { getProfile, saveProfile, loading } = useFood();
+  const { getProfile, saveProfile, loading, getBehaviorProfile, updateCoachStyle } = useFood();
   const { toast } = useToast();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [behaviorProfile, setBehaviorProfile] = useState<BehaviorProfile | null>(null);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
     gender: '',
@@ -50,11 +57,22 @@ export default function ProfilePage() {
           dailyCalorieGoal: p.dailyCalorieGoal ? String(p.dailyCalorieGoal) : '',
         });
       } else {
-        setEditing(true); // 首次进入自动编辑
+        setEditing(true);
       }
     });
+    getBehaviorProfile().then(setBehaviorProfile).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoggedIn]);
+
+  const handleStyleChange = useCallback(async (style: 'strict' | 'friendly' | 'data') => {
+    try {
+      await updateCoachStyle(style);
+      setBehaviorProfile((prev) => prev ? { ...prev, coachStyle: style } : prev);
+      toast({ title: '教练风格已切换' });
+    } catch {
+      toast({ title: '切换失败', variant: 'destructive' });
+    }
+  }, [updateCoachStyle, toast]);
 
   const handleSave = useCallback(async () => {
     try {
@@ -254,6 +272,55 @@ export default function ProfilePage() {
             <p className="text-center text-muted-foreground text-sm py-6">加载中...</p>
           )}
         </div>
+
+        {/* V5: Coach Style Selector */}
+        <div className="bg-card rounded-2xl p-6 mb-6">
+          <h3 className="font-bold mb-4">🤖 AI 教练风格</h3>
+          <div className="space-y-2">
+            {Object.entries(coachStyleLabels).map(([key, { label, desc, emoji }]) => (
+              <button
+                key={key}
+                onClick={() => handleStyleChange(key as 'strict' | 'friendly' | 'data')}
+                className={`w-full px-4 py-3 rounded-xl text-left transition-all flex items-center gap-3 ${
+                  behaviorProfile?.coachStyle === key
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }`}
+              >
+                <span className="text-xl">{emoji}</span>
+                <div>
+                  <span className="text-sm font-bold block">{label}</span>
+                  <span className="text-xs opacity-80">{desc}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Stats */}
+        {behaviorProfile && (
+          <div className="bg-card rounded-2xl p-6 mb-6">
+            <h3 className="font-bold mb-4">📊 饮食数据</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="text-center">
+                <p className="text-2xl font-extrabold text-primary">{behaviorProfile.streakDays}</p>
+                <p className="text-xs text-muted-foreground">连续达标天数</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-extrabold text-primary">{behaviorProfile.longestStreak}</p>
+                <p className="text-xs text-muted-foreground">最长记录</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-extrabold text-primary">{behaviorProfile.totalRecords}</p>
+                <p className="text-xs text-muted-foreground">总记录数</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-extrabold text-primary">{Math.round(Number(behaviorProfile.avgComplianceRate) * 100)}%</p>
+                <p className="text-xs text-muted-foreground">健康率</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Logout */}
         <button
