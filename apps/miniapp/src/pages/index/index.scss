@@ -1,34 +1,238 @@
-/* Index page - only styles UnoCSS cannot handle */
-.hero-card {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 24px;
+// Green palette
+$green-dark: #1a4731;
+$green-primary: #166534;
+$green-light: #dcfce7;
+$green-pale: #f0fdf4;
+$green-border: #bbf7d0;
+$text-dark: #14532d;
+$text-muted: #6b7280;
+
+.idx-page {
+  min-height: 100vh;
+  background: #edf8f0;
+  box-sizing: border-box;
 }
 
-.progress-bar {
-  height: 8px;
-  background: #f0f0f0;
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  background: #1890ff;
-  border-radius: 4px;
-  transition: width 0.3s;
-}
-
-.cta-btn {
+// ── Header
+.idx-header {
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 88px;
-  background: #1890ff;
-  color: #fff;
-  border-radius: 44px;
-  font-size: 32px;
-  font-weight: 600;
-  border: none;
-  &::after { border: none; }
+  justify-content: space-between;
+  padding: 52px 20px 16px;
 }
+.idx-avatar {
+  width: 36px; height: 36px; border-radius: 18px;
+  background: $green-dark; display: flex; align-items: center; justify-content: center;
+}
+.idx-avatar-text { font-size: 16px; color: #fff; }
+.idx-app-name { font-size: 18px; font-weight: 700; color: $green-dark; }
+.idx-settings { font-size: 22px; }
+
+// ── Cards
+.idx-card {
+  background: #fff;
+  border-radius: 16px;
+  margin: 0 16px 12px;
+  padding: 18px 16px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+
+// ── Status card
+.idx-status-card { padding-bottom: 14px; }
+.idx-status-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.idx-status-label { font-size: 14px; font-weight: 600; color: $text-dark; }
+
+.idx-score-badge {
+  display: flex;
+  align-items: baseline;
+  border: 1.5px solid;
+  border-radius: 20px;
+  padding: 2px 10px;
+  gap: 2px;
+}
+.idx-score-num { font-size: 18px; font-weight: 700; }
+.idx-score-unit { font-size: 11px; font-weight: 600; }
+.idx-score-tag { font-size: 11px; margin-left: 2px; }
+
+.idx-cal-row {
+  display: flex;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+.idx-cal-consumed { font-size: 36px; font-weight: 800; color: $green-dark; }
+.idx-cal-sep { font-size: 18px; color: $text-muted; margin: 0 4px; }
+.idx-cal-goal { font-size: 16px; color: $text-muted; }
+
+.idx-prog-track {
+  height: 8px; background: $green-light; border-radius: 4px; overflow: hidden; margin-bottom: 8px;
+}
+.idx-prog-fill {
+  height: 100%; background: $green-primary; border-radius: 4px; transition: width 0.4s;
+}
+.idx-cal-footer {
+  display: flex; justify-content: space-between;
+}
+.idx-cal-sub { font-size: 12px; color: $text-muted; }
+
+// ── Metrics
+.idx-metrics {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid $green-light;
+}
+.idx-metrics-title {
+  display: block; font-size: 13px; font-weight: 600;
+  color: $text-dark; margin-bottom: 10px;
+}
+.idx-metric-row {
+  display: flex; align-items: center; margin-bottom: 10px;
+}
+.idx-metric-left {
+  display: flex; align-items: center; width: 90px; shrink: 0;
+}
+.idx-metric-icon { font-size: 14px; margin-right: 4px; }
+.idx-metric-name { font-size: 12px; color: $text-dark; font-weight: 500; }
+.idx-metric-weight {
+  font-size: 10px; color: #fff;
+  background: $green-primary; border-radius: 6px;
+  padding: 1px 5px; margin-left: 4px;
+}
+.idx-metric-right {
+  flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0;
+}
+.idx-metric-bar-track {
+  height: 5px; background: $green-light; border-radius: 3px; overflow: hidden;
+}
+.idx-metric-bar-fill { height: 100%; border-radius: 3px; transition: width 0.4s; }
+.idx-metric-val { font-size: 11px; color: $text-muted; text-align: right; }
+.idx-metric-unit { font-size: 10px; }
+
+// ── CTA buttons
+.idx-cta-row {
+  display: flex; gap: 10px;
+  margin: 0 16px 12px;
+}
+.idx-cta-main {
+  flex: 1.3;
+  background: $green-dark;
+  border-radius: 16px;
+  height: 80px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 4px;
+}
+.idx-cta-sub {
+  flex: 1;
+  background: #fff;
+  border-radius: 16px;
+  height: 80px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 4px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+.idx-cta-icon { font-size: 22px; }
+.idx-cta-main .idx-cta-text { font-size: 13px; font-weight: 600; color: #fff; }
+.idx-cta-sub .idx-cta-text { font-size: 13px; font-weight: 500; color: $text-dark; }
+
+// ── Section headers
+.idx-section-header {
+  display: flex; align-items: center; margin-bottom: 12px; gap: 6px;
+}
+.idx-section-emoji { font-size: 18px; }
+.idx-section-title { font-size: 15px; font-weight: 700; color: $text-dark; flex: 1; }
+.idx-section-date { font-size: 13px; color: $text-muted; }
+.idx-section-sub { font-size: 12px; color: #16a34a; font-weight: 500; }
+
+// ── Strategy
+.idx-strategy {
+  display: flex; align-items: flex-start; gap: 6px;
+  background: $green-pale; border-radius: 10px;
+  padding: 10px 12px; margin-bottom: 12px;
+}
+.idx-strategy-icon { font-size: 14px; flex-shrink: 0; }
+.idx-strategy-text { font-size: 12px; color: $text-dark; line-height: 1.6; }
+
+// ── Meal grid
+.idx-meal-grid {
+  display: flex; flex-wrap: wrap; gap: 8px;
+}
+.idx-meal-card {
+  width: calc(50% - 4px);
+  background: $green-pale;
+  border-radius: 12px;
+  padding: 10px 10px 8px;
+  box-sizing: border-box;
+}
+.idx-meal-card-header {
+  display: flex; align-items: center; gap: 4px; margin-bottom: 4px;
+}
+.idx-meal-emoji { font-size: 14px; }
+.idx-meal-label { font-size: 12px; font-weight: 600; color: $text-dark; }
+.idx-meal-foods { display: block; font-size: 11px; color: $text-muted; margin-bottom: 6px; line-height: 1.5; }
+.idx-meal-kcal { display: block; font-size: 13px; font-weight: 700; color: $green-primary; }
+.idx-meal-tip { display: block; font-size: 10px; color: $text-muted; margin-top: 3px; }
+
+// ── Scenario tabs
+.idx-tab-row {
+  display: flex; gap: 8px; margin-bottom: 12px;
+}
+.idx-tab {
+  flex: 1; text-align: center;
+  padding: 8px 0;
+  border-radius: 20px;
+  background: $green-light;
+  font-size: 13px; font-weight: 500;
+  color: $text-dark;
+  border: 1.5px solid $green-border;
+  &--on {
+    background: $green-dark;
+    border-color: $green-dark;
+    color: #fff;
+  }
+}
+.idx-scenario-card {
+  background: $green-pale;
+  border-radius: 12px;
+  padding: 14px;
+}
+.idx-scenario-foods { display: block; font-size: 14px; font-weight: 600; color: $text-dark; margin-bottom: 6px; }
+.idx-scenario-cal { display: block; font-size: 13px; color: $green-primary; font-weight: 500; margin-bottom: 4px; }
+.idx-scenario-tip { display: block; font-size: 12px; color: $text-muted; }
+
+// ── Record rows
+.idx-record-row {
+  display: flex; align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid $green-light;
+  &:last-child { border-bottom: none; }
+}
+.idx-record-img { margin-right: 12px; flex-shrink: 0; }
+.idx-record-thumb {
+  width: 48px; height: 48px; border-radius: 10px;
+  &--empty {
+    background: $green-light;
+    display: flex; align-items: center; justify-content: center;
+  }
+}
+.idx-record-thumb-emoji { font-size: 22px; }
+.idx-record-info { flex: 1; min-width: 0; }
+.idx-record-name { display: block; font-size: 13px; font-weight: 500; color: $text-dark; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.idx-record-meta { display: block; font-size: 11px; color: $text-muted; margin-top: 3px; }
+.idx-record-cal { text-align: right; margin-left: 12px; flex-shrink: 0; }
+.idx-record-kcal { display: block; font-size: 17px; font-weight: 700; color: $green-primary; }
+.idx-record-unit { display: block; font-size: 11px; color: $text-muted; }
+
+// ── Empty state
+.idx-empty {
+  background: #fff;
+  border-radius: 16px;
+  margin: 0 16px;
+  padding: 40px 20px;
+  text-align: center;
+}
+.idx-empty-text { font-size: 13px; color: $text-muted; }
+

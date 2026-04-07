@@ -5,6 +5,8 @@ import type {
   AnalysisResult,
   DailySummary,
   UserProfile,
+  DailyPlan,
+  MealSuggestion,
 } from '@/types/api'
 
 const API_BASE_URL = process.env.TARO_APP_API_URL || 'https://uway-api.dev-net.uk/api'
@@ -82,4 +84,14 @@ export function getProfile() {
 /** 保存健康档案 */
 export function saveProfile(data: Partial<UserProfile>) {
   return put<UserProfile>('/app/food/profile', data)
+}
+
+/** 获取今日饮食计划 */
+export function getDailyPlan() {
+  return get<DailyPlan>('/app/food/daily-plan')
+}
+
+/** 获取下一餐推荐 */
+export function getMealSuggestion() {
+  return get<MealSuggestion>('/app/food/meal-suggestion')
 }
