@@ -5,6 +5,7 @@ import { DailyPlan, MealPlan, PlanAdjustment } from '../../entities/daily-plan.e
 import { FoodService } from './food.service';
 import { UserProfileService } from './user-profile.service';
 import { NutritionScoreService } from './nutrition-score.service';
+import { RecommendationEngineService, MealTarget } from './recommendation-engine.service';
 
 @Injectable()
 export class DailyPlanService {
@@ -16,6 +17,7 @@ export class DailyPlanService {
     private readonly foodService: FoodService,
     private readonly userProfileService: UserProfileService,
     private readonly nutritionScoreService: NutritionScoreService,
+    private readonly recommendationEngine: RecommendationEngineService,
   ) {}
 
   /**
@@ -31,7 +33,7 @@ export class DailyPlanService {
   }
 
   /**
-   * 规则引擎生成每日计划（零 AI 成本）
+   * 规则引擎生成每日计划（基于食物库推荐，零 AI 成本）
    */
   private async generatePlan(userId: string, date: string): Promise<DailyPlan> {
     const [summary, profile] = await Promise.all([
@@ -45,27 +47,45 @@ export class DailyPlanService {
     // 按比例分配各餐「多维预算」
     const mealRatios = { morning: 0.25, lunch: 0.35, dinner: 0.30, snack: 0.10 };
 
-    const buildBudget = (r: number) => ({
+    const buildBudget = (r: number): MealTarget => ({
       calories: Math.round(goals.calories * r),
       protein: Math.round(goals.protein * r),
       fat: Math.round(goals.fat * r),
       carbs: Math.round(goals.carbs * r),
     });
 
-    const morningPlan = this.buildMealPlan('breakfast', buildBudget(mealRatios.morning), goalType);
-    const lunchPlan = this.buildMealPlan('lunch', buildBudget(mealRatios.lunch), goalType);
-    const dinnerPlan = this.buildMealPlan('dinner', buildBudget(mealRatios.dinner), goalType);
-    const snackPlan = this.buildMealPlan('snack', buildBudget(mealRatios.snack), goalType);
+    const consumed = {
+      calories: summary.totalCalories || 0,
+      protein: summary.totalProtein || 0,
+    };
+    const dailyTarget = { calories: goals.calories, protein: goals.protein };
+
+    // 并行从食物库推荐各餐
+    const [morningRec, lunchRec, dinnerRec, snackRec] = await Promise.all([
+      this.recommendationEngine.recommendMeal(userId, 'breakfast', goalType, consumed, buildBudget(mealRatios.morning), dailyTarget),
+      this.recommendationEngine.recommendMeal(userId, 'lunch', goalType, consumed, buildBudget(mealRatios.lunch), dailyTarget),
+      this.recommendationEngine.recommendMeal(userId, 'dinner', goalType, consumed, buildBudget(mealRatios.dinner), dailyTarget),
+      this.recommendationEngine.recommendMeal(userId, 'snack', goalType, consumed, buildBudget(mealRatios.snack), dailyTarget),
+    ]);
+
+    const toMealPlan = (rec: typeof morningRec): MealPlan => ({
+      foods: rec.displayText,
+      calories: rec.totalCalories,
+      protein: rec.totalProtein,
+      fat: rec.totalFat,
+      carbs: rec.totalCarbs,
+      tip: rec.tip,
+    });
 
     const strategy = this.buildStrategy(goals.calories, profile, goalType);
 
     const plan = this.planRepo.create({
       userId,
       date,
-      morningPlan,
-      lunchPlan,
-      dinnerPlan,
-      snackPlan,
+      morningPlan: toMealPlan(morningRec),
+      lunchPlan: toMealPlan(lunchRec),
+      dinnerPlan: toMealPlan(dinnerRec),
+      snackPlan: toMealPlan(snackRec),
       strategy,
       totalBudget: goals.calories,
       adjustments: [],
@@ -75,7 +95,7 @@ export class DailyPlanService {
   }
 
   /**
-   * 动态调整计划（记录偏离后调用）
+   * 动态调整计划（记录偏离后调用，基于食物库推荐）
    */
   async adjustPlan(userId: string, reason: string): Promise<{ updatedPlan: DailyPlan; adjustmentNote: string }> {
     const today = new Date().toISOString().split('T')[0];
@@ -84,10 +104,27 @@ export class DailyPlanService {
       plan = await this.generatePlan(userId, today);
     }
 
-    const summary = await this.foodService.getTodaySummary(userId);
-    const goal = plan.totalBudget || 2000;
+    const [summary, profile] = await Promise.all([
+      this.foodService.getTodaySummary(userId),
+      this.userProfileService.getProfile(userId),
+    ]);
+    const goals = this.nutritionScoreService.calculateDailyGoals(profile);
+    const goalType = profile?.goal || 'health';
+    const goal = plan.totalBudget || goals.calories;
     const remaining = Math.max(0, goal - summary.totalCalories);
     const hour = new Date().getHours();
+
+    const consumed = { calories: summary.totalCalories || 0, protein: summary.totalProtein || 0 };
+    const dailyTarget = { calories: goals.calories, protein: goals.protein };
+
+    const toMealPlan = (rec: any): MealPlan => ({
+      foods: rec.displayText,
+      calories: rec.totalCalories,
+      protein: rec.totalProtein,
+      fat: rec.totalFat,
+      carbs: rec.totalCarbs,
+      tip: rec.tip,
+    });
 
     // 根据剩余时段重新分配
     const adjustedMeals: Partial<Record<'morning' | 'lunch' | 'dinner' | 'snack', MealPlan>> = {};
@@ -103,17 +140,26 @@ export class DailyPlanService {
       // 午餐+晚餐重新分配
       const lunchBudget = Math.round(remaining * 0.55);
       const dinnerBudget = Math.round(remaining * 0.45);
-      adjustedMeals.lunch = this.buildMealPlan('lunch', { calories: lunchBudget, protein: 0, fat: 0, carbs: 0 }, 'health');
-      adjustedMeals.dinner = this.buildMealPlan('dinner', { calories: dinnerBudget, protein: 0, fat: 0, carbs: 0 }, 'health');
+      const proteinRem = Math.max(0, goals.protein - (summary.totalProtein || 0));
+      const [lunchRec, dinnerRec] = await Promise.all([
+        this.recommendationEngine.recommendMeal(userId, 'lunch', goalType, consumed,
+          { calories: lunchBudget, protein: Math.round(proteinRem * 0.55), fat: Math.round(goals.fat * 0.35), carbs: Math.round(goals.carbs * 0.35) }, dailyTarget),
+        this.recommendationEngine.recommendMeal(userId, 'dinner', goalType, consumed,
+          { calories: dinnerBudget, protein: Math.round(proteinRem * 0.45), fat: Math.round(goals.fat * 0.30), carbs: Math.round(goals.carbs * 0.30) }, dailyTarget),
+      ]);
+      adjustedMeals.lunch = toMealPlan(lunchRec);
+      adjustedMeals.dinner = toMealPlan(dinnerRec);
       plan.lunchPlan = adjustedMeals.lunch;
       plan.dinnerPlan = adjustedMeals.dinner;
       adjustmentNote = `午餐建议控制在 ${lunchBudget} kcal，晚餐 ${dinnerBudget} kcal`;
     } else if (hour < 18) {
       // 只调整晚餐
-      const dinnerBudget = remaining;
-      adjustedMeals.dinner = this.buildMealPlan('dinner', { calories: dinnerBudget, protein: 0, fat: 0, carbs: 0 }, 'health');
+      const proteinRem = Math.max(0, goals.protein - (summary.totalProtein || 0));
+      const dinnerRec = await this.recommendationEngine.recommendMeal(userId, 'dinner', goalType, consumed,
+        { calories: remaining, protein: proteinRem, fat: Math.round(goals.fat * 0.30), carbs: Math.round(goals.carbs * 0.30) }, dailyTarget);
+      adjustedMeals.dinner = toMealPlan(dinnerRec);
       plan.dinnerPlan = adjustedMeals.dinner;
-      adjustmentNote = `晚餐预算调整为 ${dinnerBudget} kcal`;
+      adjustmentNote = `晚餐预算调整为 ${remaining} kcal`;
     } else {
       adjustmentNote = `剩余 ${remaining} kcal，注意控制夜宵`;
     }
@@ -127,66 +173,6 @@ export class DailyPlanService {
 
     const updatedPlan = await this.planRepo.save(plan);
     return { updatedPlan, adjustmentNote };
-  }
-
-  /**
-   * 根据多维预算构建单餐计划
-   */
-  private buildMealPlan(
-    mealType: string,
-    budget: { calories: number; protein: number; fat: number; carbs: number },
-    goalType: string,
-  ): MealPlan {
-    const presets: Record<string, Array<{ min: number; foods: string; cal: number; protein: number; fat: number; carbs: number; tip: string }>> = {
-      breakfast: [
-        { min: 500, foods: '燕麦粥 + 水煮蛋×2 + 苹果 + 坚果', cal: 480, protein: 22, fat: 16, carbs: 58, tip: '高蛋白充能早餐' },
-        { min: 400, foods: '燕麦粥 + 水煮蛋 + 苹果', cal: 380, protein: 15, fat: 10, carbs: 52, tip: '均衡营养的早餐' },
-        { min: 300, foods: '全麦面包 + 牛奶', cal: 280, protein: 12, fat: 8, carbs: 38, tip: '简单营养搭配' },
-        { min: 200, foods: '酸奶 + 香蕉', cal: 200, protein: 8, fat: 5, carbs: 30, tip: '轻食早餐' },
-        { min: 0, foods: '脱脂牛奶', cal: 120, protein: 8, fat: 1, carbs: 12, tip: '极简补充' },
-      ],
-      lunch: [
-        { min: 700, foods: '鸡胸肉 + 糙米饭 + 蔬菜沙拉 + 汤', cal: 650, protein: 40, fat: 15, carbs: 75, tip: '丰富午餐' },
-        { min: 550, foods: '鸡胸肉沙拉 + 糙米饭', cal: 550, protein: 35, fat: 12, carbs: 60, tip: '高蛋白低脂午餐' },
-        { min: 400, foods: '清蒸鱼 + 蒜炒青菜 + 半碗米饭', cal: 420, protein: 28, fat: 10, carbs: 45, tip: '清淡均衡' },
-        { min: 300, foods: '蔬菜沙拉 + 鸡蛋', cal: 300, protein: 15, fat: 12, carbs: 28, tip: '控制午餐量' },
-        { min: 0, foods: '蔬菜汤 + 全麦面包', cal: 200, protein: 8, fat: 5, carbs: 30, tip: '轻量午餐' },
-      ],
-      dinner: [
-        { min: 600, foods: '清蒸鱼 + 蒜炒青菜 + 半碗米饭', cal: 520, protein: 32, fat: 12, carbs: 55, tip: '晚餐清淡为主' },
-        { min: 450, foods: '水煮虾 + 西兰花 + 少量主食', cal: 420, protein: 30, fat: 8, carbs: 40, tip: '高蛋白低碳' },
-        { min: 350, foods: '水煮虾 + 西兰花', cal: 350, protein: 28, fat: 6, carbs: 30, tip: '控碳晚餐' },
-        { min: 250, foods: '凉拌豆腐 + 拍黄瓜', cal: 220, protein: 12, fat: 8, carbs: 22, tip: '额度不多轻食为好' },
-        { min: 100, foods: '一碗清汤 + 蔬菜', cal: 150, protein: 5, fat: 3, carbs: 15, tip: '极简晚餐' },
-        { min: 0, foods: '温水 + 少量坚果', cal: 80, protein: 3, fat: 6, carbs: 3, tip: '额度紧张' },
-      ],
-      snack: [
-        { min: 250, foods: '坚果一小把 + 酸奶 + 水果', cal: 230, protein: 10, fat: 12, carbs: 22, tip: '健康加餐' },
-        { min: 150, foods: '坚果一小把 + 酸奶', cal: 180, protein: 8, fat: 10, carbs: 14, tip: '控量加餐' },
-        { min: 80, foods: '一个苹果', cal: 80, protein: 0, fat: 0, carbs: 20, tip: '水果补充' },
-        { min: 0, foods: '黑咖啡或茶', cal: 5, protein: 0, fat: 0, carbs: 0, tip: '零卡饮品' },
-      ],
-    };
-
-    // 根据目标类型微调 tip
-    const goalTips: Record<string, string> = {
-      fat_loss: '（减脂期优先蛋白质）',
-      muscle_gain: '（增肌期注意碳水补充）',
-      health: '',
-      habit: '',
-    };
-    const suffix = goalTips[goalType] || '';
-
-    const options = presets[mealType] || presets.dinner;
-    const match = options.find((o) => budget.calories >= o.min) || options[options.length - 1];
-    return {
-      foods: match.foods,
-      calories: match.cal,
-      protein: match.protein,
-      fat: match.fat,
-      carbs: match.carbs,
-      tip: match.tip + suffix,
-    };
   }
 
   /**
