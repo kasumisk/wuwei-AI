@@ -82,15 +82,7 @@ export function useFood() {
   }, []);
 
   /** 保存用户档案 */
-  const saveProfile = useCallback(async (data: {
-    gender?: string;
-    birthYear?: number;
-    heightCm?: number;
-    weightKg?: number;
-    targetWeightKg?: number;
-    activityLevel?: string;
-    dailyCalorieGoal?: number;
-  }): Promise<UserProfile> => {
+  const saveProfile = useCallback(async (data: Partial<UserProfile>): Promise<UserProfile> => {
     setLoading(true);
     try {
       return await foodService.saveProfile(data);

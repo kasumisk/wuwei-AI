@@ -118,13 +118,30 @@ export interface DailySummaryRecord {
 export interface UserProfile {
   id: string;
   userId: string;
+  // 基本信息
   gender?: string;
   birthYear?: number;
   heightCm?: number;
   weightKg?: number;
   targetWeightKg?: number;
+  bodyFatPercent?: number;
+  // 活动等级
   activityLevel: string;
   dailyCalorieGoal?: number;
+  // 健康目标
+  goal?: 'fat_loss' | 'muscle_gain' | 'health' | 'habit';
+  goalSpeed?: 'aggressive' | 'steady' | 'relaxed';
+  // 饮食习惯
+  mealsPerDay?: number;
+  takeoutFrequency?: 'never' | 'sometimes' | 'often';
+  canCook?: boolean;
+  foodPreferences?: string[];
+  dietaryRestrictions?: string[];
+  // 行为习惯
+  weakTimeSlots?: string[];
+  bingeTriggers?: string[];
+  discipline?: 'high' | 'medium' | 'low';
+  onboardingCompleted?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -136,6 +153,13 @@ export interface PaginatedRecords {
   limit: number;
 }
 
+export interface MealScenario {
+  scenario: string;
+  foods: string;
+  calories: number;
+  tip: string;
+}
+
 export interface MealSuggestion {
   mealType: string;
   remainingCalories: number;
@@ -144,6 +168,7 @@ export interface MealSuggestion {
     calories: number;
     tip: string;
   };
+  scenarios?: MealScenario[];
 }
 
 // V2: 每日计划
@@ -384,15 +409,7 @@ export const foodService = {
   /**
    * 保存用户健康档案
    */
-  saveProfile: async (data: {
-    gender?: string;
-    birthYear?: number;
-    heightCm?: number;
-    weightKg?: number;
-    targetWeightKg?: number;
-    activityLevel?: string;
-    dailyCalorieGoal?: number;
-  }): Promise<UserProfile> => {
+  saveProfile: async (data: Partial<UserProfile>): Promise<UserProfile> => {
     return unwrap(clientPut<UserProfile>('/app/food/profile', data));
   },
 

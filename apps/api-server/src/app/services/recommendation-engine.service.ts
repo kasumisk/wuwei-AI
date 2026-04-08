@@ -64,6 +64,27 @@ const CATEGORY_SATIETY: Record<string, number> = {
   '汤类': 4, '水果': 3, '快餐': 5, '零食': 2, '饮品': 2,
 };
 
+// ==================== 餐次偏好策略 ====================
+
+const MEAL_PREFERENCES: Record<string, { includeTags: string[]; excludeTags: string[] }> = {
+  breakfast: {
+    includeTags: ['早餐', '高碳水', '易消化'],
+    excludeTags: ['油炸', '重口味'],
+  },
+  lunch: {
+    includeTags: ['均衡'],
+    excludeTags: [],
+  },
+  dinner: {
+    includeTags: ['低碳水', '高蛋白', '清淡'],
+    excludeTags: ['高碳水', '甜品'],
+  },
+  snack: {
+    includeTags: ['低热量', '零食', '水果'],
+    excludeTags: ['油炸', '高脂肪'],
+  },
+};
+
 @Injectable()
 export class RecommendationEngineService {
   private readonly logger = new Logger(RecommendationEngineService.name);
@@ -82,6 +103,7 @@ export class RecommendationEngineService {
     consumed: { calories: number; protein: number },
     target: MealTarget,
     dailyTarget: { calories: number; protein: number },
+    mealType?: string,
   ): Constraint {
     const includeTags: string[] = [];
     const excludeTags: string[] = [];
@@ -104,6 +126,15 @@ export class RecommendationEngineService {
     if (calorieGap < 0) {
       includeTags.push('超低热量');
       excludeTags.push('高脂肪');
+    }
+
+    // 餐次偏好策略
+    if (mealType) {
+      const mealPref = MEAL_PREFERENCES[mealType];
+      if (mealPref) {
+        includeTags.push(...mealPref.includeTags);
+        excludeTags.push(...mealPref.excludeTags);
+      }
     }
 
     return {
@@ -341,9 +372,118 @@ export class RecommendationEngineService {
     };
   }
 
+  // ─── 7. 相似度惩罚多样化（替代 diversify，用于每日计划） ───
+
+  private similarity(a: FoodLibrary, b: FoodLibrary): number {
+    let score = 0;
+    if (a.category === b.category) score += 0.5;
+    const tagsA = a.tags || [];
+    const tagsB = b.tags || [];
+    score += tagsA.filter(t => tagsB.includes(t)).length * 0.1;
+    return score;
+  }
+
+  diversifyWithPenalty(
+    scored: ScoredFood[],
+    excludeNames: string[],
+    limit: number = 3,
+  ): ScoredFood[] {
+    const candidates = scored.filter(sf => !excludeNames.includes(sf.food.name));
+    const result: ScoredFood[] = [];
+
+    const remaining = [...candidates];
+    while (result.length < limit && remaining.length > 0) {
+      let bestIdx = 0;
+      let bestScore = -Infinity;
+
+      remaining.forEach((item, i) => {
+        let penalty = 0;
+        for (const selected of result) {
+          penalty += this.similarity(item.food, selected.food) * 0.3;
+        }
+        const finalScore = item.score - penalty;
+        if (finalScore > bestScore) {
+          bestScore = finalScore;
+          bestIdx = i;
+        }
+      });
+
+      result.push(remaining[bestIdx]);
+      remaining.splice(bestIdx, 1);
+    }
+
+    return result;
+  }
+
+  // ─── 8. 随机探索（ε-greedy 扰动） ───
+
+  private addExploration(scored: ScoredFood[], epsilon: number = 0.15): ScoredFood[] {
+    return scored.map(sf => ({
+      ...sf,
+      score: sf.score * (1 + (Math.random() - 0.5) * epsilon),
+    })).sort((a, b) => b.score - a.score);
+  }
+
+  // ─── 9. 从食物池推荐（供 DailyPlanService 串行调用，避免重复查库） ───
+
+  recommendMealFromPool(
+    allFoods: FoodLibrary[],
+    mealType: string,
+    goalType: string,
+    consumed: { calories: number; protein: number },
+    target: MealTarget,
+    dailyTarget: { calories: number; protein: number },
+    excludeNames: string[],
+  ): MealRecommendation {
+    // 约束生成（带餐次策略）
+    const constraints = this.generateConstraints(goalType, consumed, target, dailyTarget, mealType);
+
+    // 筛选
+    let candidates = this.filterFoods(allFoods, constraints);
+    if (candidates.length < 5) {
+      candidates = this.filterFoods(allFoods, { ...constraints, includeTags: [] });
+    }
+
+    // 评分
+    let scored: ScoredFood[] = candidates.map(food => ({
+      food,
+      score: this.scoreFood(food, goalType),
+      servingCalories: Math.round((food.caloriesPer100g * food.standardServingG) / 100),
+      servingProtein: Math.round(((food.proteinPer100g || 0) * food.standardServingG) / 100),
+      servingFat: Math.round(((food.fatPer100g || 0) * food.standardServingG) / 100),
+      servingCarbs: Math.round(((food.carbsPer100g || 0) * food.standardServingG) / 100),
+    })).sort((a, b) => b.score - a.score);
+
+    // 随机探索
+    scored = this.addExploration(scored, 0.15);
+
+    // 相似度惩罚 + 跨餐排除
+    const picks = this.diversifyWithPenalty(scored, excludeNames, 3);
+
+    // 聚合
+    const totalCalories = picks.reduce((s, p) => s + p.servingCalories, 0);
+    const totalProtein = picks.reduce((s, p) => s + p.servingProtein, 0);
+    const totalFat = picks.reduce((s, p) => s + p.servingFat, 0);
+    const totalCarbs = picks.reduce((s, p) => s + p.servingCarbs, 0);
+
+    const displayText = picks
+      .map(p => `${p.food.name}（${p.food.standardServingDesc}，${p.servingCalories}kcal）`)
+      .join(' + ');
+
+    const tip = this.buildTip(mealType, goalType, target, totalCalories);
+
+    return { foods: picks, totalCalories, totalProtein, totalFat, totalCarbs, displayText, tip };
+  }
+
+  // ─── 10. 暴露食物库查询（供 DailyPlanService 一次性获取） ───
+
+  async getAllFoods(): Promise<FoodLibrary[]> {
+    return this.foodLibraryRepo.find({ where: { isVerified: true } });
+  }
+
   // ─── 辅助 ───
 
-  private async getRecentFoodNames(userId: string, days: number): Promise<string[]> {
+  async getRecentFoodNames(userId: string, days: number): Promise<string[]> {
     try {
       const since = new Date();
       since.setDate(since.getDate() - days);

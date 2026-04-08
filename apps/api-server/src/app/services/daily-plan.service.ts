@@ -60,13 +60,33 @@ export class DailyPlanService {
     };
     const dailyTarget = { calories: goals.calories, protein: goals.protein };
 
-    // 并行从食物库推荐各餐
-    const [morningRec, lunchRec, dinnerRec, snackRec] = await Promise.all([
-      this.recommendationEngine.recommendMeal(userId, 'breakfast', goalType, consumed, buildBudget(mealRatios.morning), dailyTarget),
-      this.recommendationEngine.recommendMeal(userId, 'lunch', goalType, consumed, buildBudget(mealRatios.lunch), dailyTarget),
-      this.recommendationEngine.recommendMeal(userId, 'dinner', goalType, consumed, buildBudget(mealRatios.dinner), dailyTarget),
-      this.recommendationEngine.recommendMeal(userId, 'snack', goalType, consumed, buildBudget(mealRatios.snack), dailyTarget),
+    // 一次性获取食物库 + 最近记录（减少查询：8次→2次）
+    const [allFoods, recentFoodNames] = await Promise.all([
+      this.recommendationEngine.getAllFoods(),
+      this.recommendationEngine.getRecentFoodNames(userId, 3),
     ]);
+
+    // 串行生成4餐，每餐选完后排除已选食物
+    const excludeNames: string[] = [...recentFoodNames];
+
+    const morningRec = this.recommendationEngine.recommendMealFromPool(
+      allFoods, 'breakfast', goalType, consumed, buildBudget(mealRatios.morning), dailyTarget, excludeNames,
+    );
+    excludeNames.push(...morningRec.foods.map(f => f.food.name));
+
+    const lunchRec = this.recommendationEngine.recommendMealFromPool(
+      allFoods, 'lunch', goalType, consumed, buildBudget(mealRatios.lunch), dailyTarget, excludeNames,
+    );
+    excludeNames.push(...lunchRec.foods.map(f => f.food.name));
+
+    const dinnerRec = this.recommendationEngine.recommendMealFromPool(
+      allFoods, 'dinner', goalType, consumed, buildBudget(mealRatios.dinner), dailyTarget, excludeNames,
+    );
+    excludeNames.push(...dinnerRec.foods.map(f => f.food.name));
+
+    const snackRec = this.recommendationEngine.recommendMealFromPool(
+      allFoods, 'snack', goalType, consumed, buildBudget(mealRatios.snack), dailyTarget, excludeNames,
+    );
 
     const toMealPlan = (rec: typeof morningRec): MealPlan => ({
       foods: rec.displayText,

@@ -6,7 +6,7 @@ import { useFood } from '@/lib/hooks/use-food';
 import { LocalizedLink } from '@/components/common/localized-link';
 import { ProactiveReminderCard } from '@/components/proactive-reminder';
 import Image from 'next/image';
-import type { FoodRecord, DailySummary, MealSuggestion, DailyPlanData, ProactiveReminder } from '@/lib/api/food';
+import type { FoodRecord, DailySummary, MealSuggestion, DailyPlanData, ProactiveReminder, UserProfile } from '@/lib/api/food';
 
 /* ─── SVG Icon Components ─── */
 function IconSmartToy({ className = '' }: { className?: string }) {
@@ -65,6 +65,50 @@ function IconSettings({ className = '' }: { className?: string }) {
   );
 }
 
+// ── 根据目标给出评分标签
+function getScoreLabel(score: number) {
+  if (score >= 85) return { label: '优秀', color: 'text-emerald-600', bg: 'bg-emerald-50 border-emerald-300' };
+  if (score >= 70) return { label: '良好', color: 'text-blue-600', bg: 'bg-blue-50 border-blue-300' };
+  if (score >= 55) return { label: '一般', color: 'text-amber-600', bg: 'bg-amber-50 border-amber-300' };
+  return { label: '需改善', color: 'text-red-600', bg: 'bg-red-50 border-red-300' };
+}
+
+// ── 根据目标构建展示的营养维度（与小程序保持一致）
+function buildMetrics(summary: DailySummary, goal: string) {
+  const cal = summary.totalCalories || 0;
+  const calGoal = summary.calorieGoal || 2000;
+  const protein = Number(summary.totalProtein) || 0;
+  const proteinGoal = Number(summary.proteinGoal) || 0;
+  const carbs = Number(summary.totalCarbs) || 0;
+  const carbsGoal = Number(summary.carbsGoal) || 0;
+  const fat = Number(summary.totalFat) || 0;
+  const fatGoal = Number(summary.fatGoal) || 0;
+  const quality = Number(summary.avgQuality) || 0;
+
+  const pct = (v: number, g: number) => g > 0 ? Math.min(100, Math.round((v / g) * 100)) : 0;
+  const status = (v: number, g: number, inverse = false) => {
+    const r = g > 0 ? v / g : 0;
+    if (inverse) return r < 0.9 ? '✅' : r < 1.1 ? '⚠️' : '🔴';
+    return r < 0.7 ? '⚠️' : r <= 1.1 ? '✅' : '🔴';
+  };
+
+  if (goal === 'fat_loss') return [
+    { key: 'cal', label: '热量', val: cal, goal: calGoal, unit: 'kcal', pct: pct(cal, calGoal), icon: status(cal, calGoal, true), weight: '最重要' },
+    { key: 'protein', label: '蛋白质', val: protein, goal: proteinGoal, unit: 'g', pct: pct(protein, proteinGoal), icon: status(protein, proteinGoal), weight: '重要' },
+    { key: 'carbs', label: '碳水', val: carbs, goal: carbsGoal, unit: 'g', pct: pct(carbs, carbsGoal), icon: status(carbs, carbsGoal, true), weight: '控制' },
+  ];
+  if (goal === 'muscle_gain') return [
+    { key: 'protein', label: '蛋白质', val: protein, goal: proteinGoal, unit: 'g', pct: pct(protein, proteinGoal), icon: status(protein, proteinGoal), weight: '最重要' },
+    { key: 'cal', label: '热量', val: cal, goal: calGoal, unit: 'kcal', pct: pct(cal, calGoal), icon: status(cal, calGoal), weight: '重要' },
+    { key: 'carbs', label: '碳水', val: carbs, goal: carbsGoal, unit: 'g', pct: pct(carbs, carbsGoal), icon: status(carbs, carbsGoal), weight: '辅助' },
+  ];
+  return [
+    { key: 'quality', label: '食物质量', val: quality, goal: 10, unit: '分', pct: pct(quality, 10), icon: quality >= 7 ? '✅' : '⚠️', weight: '优先' },
+    { key: 'cal', label: '热量均衡', val: cal, goal: calGoal, unit: 'kcal', pct: pct(cal, calGoal), icon: status(cal, calGoal, true), weight: '' },
+    { key: 'fat', label: '脂肪', val: fat, goal: fatGoal, unit: 'g', pct: pct(fat, fatGoal), icon: status(fat, fatGoal, true), weight: '' },
+  ];
+}
+
 const MEAL_LABELS: Record<string, string> = {
   breakfast: '早餐',
   lunch: '午餐',
@@ -74,12 +118,14 @@ const MEAL_LABELS: Record<string, string> = {
 
 export function HomePage() {
   const { user, isLoggedIn } = useAuth();
-  const { getTodaySummary, getTodayRecords, getMealSuggestion, getDailyPlan, proactiveCheck } = useFood();
+  const { getTodaySummary, getTodayRecords, getMealSuggestion, getDailyPlan, proactiveCheck, getProfile } = useFood();
   const [summary, setSummary] = useState<DailySummary>({ totalCalories: 0, calorieGoal: 2000, mealCount: 0, remaining: 2000 });
   const [meals, setMeals] = useState<FoodRecord[]>([]);
   const [mealSuggestion, setMealSuggestion] = useState<MealSuggestion | null>(null);
   const [dailyPlan, setDailyPlan] = useState<DailyPlanData | null>(null);
   const [reminder, setReminder] = useState<ProactiveReminder | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [activeScenario, setActiveScenario] = useState(0);
 
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -88,12 +134,20 @@ export function HomePage() {
     getMealSuggestion().then(setMealSuggestion).catch(() => {});
     getDailyPlan().then(setDailyPlan).catch(() => {});
     proactiveCheck().then((r) => setReminder(r.reminder)).catch(() => {});
+    getProfile().then(setProfile).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoggedIn]);
 
   const calorieGoal = summary.calorieGoal || 2000;
   const remaining = calorieGoal - summary.totalCalories;
   const caloriePercent = Math.min(100, Math.round((summary.totalCalories / calorieGoal) * 100));
+  const goalType = profile?.goal || 'health';
+  const score = summary.nutritionScore || 0;
+  const scoreInfo = getScoreLabel(score);
+  const metrics = buildMetrics(summary, goalType);
+  const goalTitleMap: Record<string, string> = {
+    fat_loss: '🔥 减脂', muscle_gain: '💪 增肌', health: '🧘 健康维持', habit: '🌱 改善习惯',
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans antialiased selection:bg-(--color-primary-container) selection:text-on-primary-container">
@@ -128,9 +182,21 @@ export function HomePage() {
         {/* 今日状态 */}
         <section className="mb-6">
           <div className="bg-card rounded-2xl p-6 shadow-sm">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-              🎯 今日状态
-            </span>
+            {/* 标题行 + 评分徽章 */}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                🎯 今日状态
+              </span>
+              {score > 0 && (
+                <div className={`flex items-center gap-1 px-2.5 py-1 rounded-full border text-xs font-extrabold ${scoreInfo.bg} ${scoreInfo.color}`}>
+                  <span>{score}</span>
+                  <span>分</span>
+                  <span>{scoreInfo.label}</span>
+                </div>
+              )}
+            </div>
+
+            {/* 热量大数字 */}
             <div className="flex items-baseline gap-2 mt-2">
               <span className="text-4xl font-headline font-extrabold text-primary tracking-tighter">
                 {Math.max(0, remaining).toLocaleString()}
@@ -150,6 +216,44 @@ export function HomePage() {
             <div className="flex justify-between mt-3 text-xs text-muted-foreground">
               <span>已摄入 {summary.totalCalories} kcal</span>
               <span>已记录 {summary.mealCount} 餐</span>
+            </div>
+
+            {/* 目标维度指标（与小程序一致） */}
+            <div className="mt-4 pt-4 border-t border-border/40">
+              <p className="text-xs font-bold text-muted-foreground mb-3">
+                {goalTitleMap[goalType] || '🧘 健康维持'}用户关注
+              </p>
+              <div className="space-y-2.5">
+                {metrics.map((m) => (
+                  <div key={m.key} className="flex items-center gap-2">
+                    {/* 左：图标 + 名称 + 权重徽章 */}
+                    <div className="flex items-center gap-1.5 w-28 shrink-0">
+                      <span className="text-sm leading-none">{m.icon}</span>
+                      <span className="text-xs font-medium text-foreground">{m.label}</span>
+                      {m.weight && (
+                        <span className="text-[10px] font-bold bg-primary text-primary-foreground px-1.5 py-0.5 rounded-md leading-none">
+                          {m.weight}
+                        </span>
+                      )}
+                    </div>
+                    {/* 右：进度条 + 数值 */}
+                    <div className="flex-1 flex items-center gap-2">
+                      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{
+                            width: `${m.pct}%`,
+                            backgroundColor: m.pct > 100 ? '#ef4444' : '#16a34a',
+                          }}
+                        />
+                      </div>
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">
+                        {Math.round(m.val)}/{Math.round(m.goal)}{m.unit}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </section>
@@ -201,6 +305,9 @@ export function HomePage() {
                     <span className="text-xs font-bold text-muted-foreground">{emoji} {label}</span>
                     <p className="text-xs mt-1 line-clamp-2">{plan.foods}</p>
                     <span className="text-[10px] text-primary font-bold">{plan.calories} kcal</span>
+                    {plan.tip && (
+                      <p className="text-[10px] text-muted-foreground mt-1 line-clamp-1">💡 {plan.tip}</p>
+                    )}
                   </div>
                 ))}
               </div>
@@ -218,15 +325,50 @@ export function HomePage() {
                   {MEAL_LABELS[mealSuggestion.mealType] || '下一餐'}推荐
                 </h3>
               </div>
-              <p className="text-base font-medium">{mealSuggestion.suggestion.foods}</p>
-              <div className="flex items-center justify-between mt-3">
-                <span className="text-sm text-primary font-bold">
-                  ≈ {mealSuggestion.suggestion.calories} kcal
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  💡 {mealSuggestion.suggestion.tip}
-                </span>
-              </div>
+              {mealSuggestion.scenarios && mealSuggestion.scenarios.length > 0 ? (
+                <>
+                  {/* Scenario tabs */}
+                  <div className="flex gap-2 mb-3">
+                    {mealSuggestion.scenarios.map((s, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setActiveScenario(i)}
+                        className={`flex-1 py-1.5 rounded-full text-xs font-bold transition-all ${
+                          activeScenario === i
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-muted text-muted-foreground'
+                        }`}
+                      >
+                        {s.scenario}
+                      </button>
+                    ))}
+                  </div>
+                  {(() => {
+                    const s = mealSuggestion.scenarios![activeScenario];
+                    return s ? (
+                      <>
+                        <p className="text-base font-medium">{s.foods}</p>
+                        <div className="flex items-center justify-between mt-3">
+                          <span className="text-sm text-primary font-bold">≈ {s.calories} kcal</span>
+                          <span className="text-xs text-muted-foreground">💡 {s.tip}</span>
+                        </div>
+                      </>
+                    ) : null;
+                  })()}
+                </>
+              ) : (
+                <>
+                  <p className="text-base font-medium">{mealSuggestion.suggestion.foods}</p>
+                  <div className="flex items-center justify-between mt-3">
+                    <span className="text-sm text-primary font-bold">
+                      ≈ {mealSuggestion.suggestion.calories} kcal
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      💡 {mealSuggestion.suggestion.tip}
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
           </section>
         )}
