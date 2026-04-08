@@ -95,6 +95,18 @@ function Index() {
     if (!isLoggedIn) Taro.reLaunch({ url: '/pages/login/index' })
   }, [isLoggedIn])
 
+  // 档案未完善时跳转到引导填写页
+  useEffect(() => {
+    if (!isLoggedIn) return
+    foodService.getProfile().then(p => {
+      if (!p?.onboardingCompleted) {
+        Taro.redirectTo({ url: '/pages/health-profile/index?from=onboarding' })
+      }
+    }).catch(() => {})
+  // 只在首次进入时检查
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useDidShow(() => { fetchData() })
 
   if (!isLoggedIn) return null

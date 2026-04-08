@@ -85,6 +85,24 @@ const MEAL_PREFERENCES: Record<string, { includeTags: string[]; excludeTags: str
   },
 };
 
+// ==================== 角色模板（结构化选菜） ====================
+
+const MEAL_ROLES: Record<string, string[]> = {
+  breakfast: ['carb', 'protein', 'side'],
+  lunch:     ['carb', 'protein', 'veggie'],
+  dinner:    ['protein', 'veggie', 'side'],
+  snack:     ['snack1', 'snack2'],
+};
+
+const ROLE_CATEGORIES: Record<string, string[]> = {
+  carb:    ['主食'],
+  protein: ['肉类', '豆制品'],
+  veggie:  ['蔬菜'],
+  side:    ['汤类', '蔬菜', '豆制品', '饮品'],
+  snack1:  ['水果', '零食'],
+  snack2:  ['饮品', '零食', '水果'],
+};
+
 @Injectable()
 export class RecommendationEngineService {
   private readonly logger = new Logger(RecommendationEngineService.name);
@@ -96,7 +114,7 @@ export class RecommendationEngineService {
     private readonly foodRecordRepo: Repository<FoodRecord>,
   ) {}
 
-  // ─── 1. 约束生成 ───
+  // ─── 1. 约束生成（含用户档案融合） ───
 
   generateConstraints(
     goalType: string,
@@ -104,6 +122,7 @@ export class RecommendationEngineService {
     target: MealTarget,
     dailyTarget: { calories: number; protein: number },
     mealType?: string,
+    userProfile?: { dietaryRestrictions?: string[]; weakTimeSlots?: string[]; discipline?: string },
   ): Constraint {
     const includeTags: string[] = [];
     const excludeTags: string[] = [];
@@ -137,6 +156,41 @@ export class RecommendationEngineService {
       }
     }
 
+    // 用户档案约束融合
+    if (userProfile) {
+      // 饮食限制 → 排除标签
+      if (userProfile.dietaryRestrictions?.length) {
+        for (const restriction of userProfile.dietaryRestrictions) {
+          if (restriction === 'vegetarian') excludeTags.push('肉类');
+          else if (restriction === 'no_spicy') excludeTags.push('重口味');
+          else if (restriction === 'no_fried') excludeTags.push('油炸');
+          else if (restriction === 'low_sodium') excludeTags.push('高钠');
+          else excludeTags.push(restriction);
+        }
+      }
+
+      // 薄弱时段 → 更严格约束
+      const hour = new Date().getHours();
+      const isWeakSlot = userProfile.weakTimeSlots?.some(slot => {
+        if (slot === 'afternoon' && hour >= 14 && hour < 17) return true;
+        if (slot === 'evening' && hour >= 18 && hour < 21) return true;
+        if (slot === 'midnight' && (hour >= 21 || hour < 5)) return true;
+        return false;
+      });
+      if (isWeakSlot) {
+        excludeTags.push('高脂肪', '高碳水', '甜品');
+        includeTags.push('低热量');
+      }
+
+      // 自律程度 → 约束松紧度
+      if (userProfile.discipline === 'low') {
+        // 低自律：更宽松，避免过度限制导致放弃
+      } else if (userProfile.discipline === 'high') {
+        // 高自律：可以更严格
+        if (goalType === 'fat_loss') excludeTags.push('加工');
+      }
+    }
+
     return {
       includeTags: [...new Set(includeTags)],
       excludeTags: [...new Set(excludeTags)],
@@ -145,11 +199,17 @@ export class RecommendationEngineService {
     };
   }
 
-  // ─── 2. 食物筛选（宽松匹配: 命中任一 includeTag 即可） ───
+  // ─── 2. 食物筛选（宽松匹配: 命中任一 includeTag 即可 + 结构化 mealType 过滤） ───
 
-  filterFoods(foods: FoodLibrary[], constraint: Constraint): FoodLibrary[] {
+  filterFoods(foods: FoodLibrary[], constraint: Constraint, mealType?: string): FoodLibrary[] {
     return foods.filter(food => {
       const tags = food.tags || [];
+
+      // mealType 结构化过滤：食物有 mealTypes 字段时优先使用
+      if (mealType) {
+        const foodMealTypes: string[] = (food as any).mealTypes || [];
+        if (foodMealTypes.length > 0 && !foodMealTypes.includes(mealType)) return false;
+      }
 
       // includeTag: 至少命中一个（宽松）
       if (constraint.includeTags.length > 0) {
@@ -177,7 +237,7 @@ export class RecommendationEngineService {
     });
   }
 
-  // ─── 3. 食物评分 ───
+  // ─── 3. 食物评分（使用食物级别 qualityScore/satietyScore，带惩罚/加分项） ───
 
   scoreFood(food: FoodLibrary, goalType: string): number {
     const normalize = (v: number, max: number) => Math.min(v / max, 1);
@@ -187,8 +247,9 @@ export class RecommendationEngineService {
     const servingCarbs = ((food.carbsPer100g || 0) * food.standardServingG) / 100;
     const servingFat = ((food.fatPer100g || 0) * food.standardServingG) / 100;
 
-    const quality = CATEGORY_QUALITY[food.category] || 5;
-    const satiety = CATEGORY_SATIETY[food.category] || 4;
+    // 食物级别分数优先，分类级别兜底
+    const quality = (food as any).qualityScore || CATEGORY_QUALITY[food.category] || 5;
+    const satiety = (food as any).satietyScore || CATEGORY_SATIETY[food.category] || 4;
 
     const caloriesScore = 1 - normalize(servingCal, 800);
     const proteinScore = normalize(servingProtein, 50);
@@ -202,9 +263,27 @@ export class RecommendationEngineService {
 
     // 置信度加权
     const confidence = Number(food.confidence) || 0.5;
-    const rawScore = scores.reduce((sum, s, i) => sum + s * weights[i], 0);
+    let rawScore = scores.reduce((sum, s, i) => sum + s * weights[i], 0);
 
-    return rawScore * (0.7 + 0.3 * confidence); // 高置信度食物轻微加分
+    // 加工食品/油炸惩罚
+    if ((food as any).isProcessed) rawScore -= 0.06;
+    if ((food as any).isFried)     rawScore -= 0.08;
+
+    // 高纤维加分（每100g 纤维 >3g 加 0.03）
+    const fiber = (food as any).fiberPer100g || 0;
+    if (fiber >= 3) rawScore += 0.03;
+
+    // 高钠惩罚（每100g 钠 >600mg 扣 0.03）
+    const sodium = (food as any).sodiumPer100g || 0;
+    if (sodium > 600) rawScore -= 0.03;
+
+    // 低GI加分（减脂/健康目标下 GI<55 加 0.02）
+    const gi = (food as any).glycemicIndex || 0;
+    if (gi > 0 && gi < 55 && (goalType === 'fat_loss' || goalType === 'health')) {
+      rawScore += 0.02;
+    }
+
+    return Math.max(0, rawScore * (0.7 + 0.3 * confidence));
   }
 
   // ─── 4. 多样性控制 ───
@@ -251,14 +330,14 @@ export class RecommendationEngineService {
     const allFoods = await this.foodLibraryRepo.find({ where: { isVerified: true } });
 
     // 约束生成
-    const constraints = this.generateConstraints(goalType, consumed, target, dailyTarget);
+    const constraints = this.generateConstraints(goalType, consumed, target, dailyTarget, mealType);
 
-    // 筛选
-    let candidates = this.filterFoods(allFoods, constraints);
+    // 筛选（传递 mealType 进行结构化过滤）
+    let candidates = this.filterFoods(allFoods, constraints, mealType);
 
     // 如果筛选太严没有候选，放宽 includeTags
     if (candidates.length < 5) {
-      candidates = this.filterFoods(allFoods, { ...constraints, includeTags: [] });
+      candidates = this.filterFoods(allFoods, { ...constraints, includeTags: [] }, mealType);
     }
 
     // 评分排序
@@ -331,12 +410,12 @@ export class RecommendationEngineService {
         includeTags: [...new Set([...baseConstraints.includeTags, ...scenarioTags])],
       };
 
-      let candidates = this.filterFoods(allFoods, constraints);
+      let candidates = this.filterFoods(allFoods, constraints, mealType);
       if (candidates.length < 3) {
-        candidates = this.filterFoods(allFoods, { ...constraints, includeTags: scenarioTags });
+        candidates = this.filterFoods(allFoods, { ...constraints, includeTags: scenarioTags }, mealType);
       }
       if (candidates.length < 3) {
-        candidates = this.filterFoods(allFoods, { ...baseConstraints, includeTags: [] });
+        candidates = this.filterFoods(allFoods, { ...baseConstraints, includeTags: [] }, mealType);
       }
 
       const scored: ScoredFood[] = candidates.map(food => ({
@@ -376,11 +455,42 @@ export class RecommendationEngineService {
 
   private similarity(a: FoodLibrary, b: FoodLibrary): number {
     let score = 0;
-    if (a.category === b.category) score += 0.5;
+    if (a.category === b.category) score += 0.3;
+
+    // 主要食材相同 → 高相似度
+    const mainA = (a as any).mainIngredient || '';
+    const mainB = (b as any).mainIngredient || '';
+    if (mainA && mainB && mainA === mainB) score += 0.5;
+
+    // 子分类相同
+    const subA = (a as any).subCategory || '';
+    const subB = (b as any).subCategory || '';
+    if (subA && subB && subA === subB) score += 0.2;
+
+    // tag 重叠
     const tagsA = a.tags || [];
     const tagsB = b.tags || [];
-    score += tagsA.filter(t => tagsB.includes(t)).length * 0.1;
-    return score;
+    score += tagsA.filter(t => tagsB.includes(t)).length * 0.05;
+
+    return Math.min(score, 1);
+  }
+
+  // ─── 7.1 份量调整（缩放到目标预算） ───
+
+  private adjustPortions(picks: ScoredFood[], budget: number): ScoredFood[] {
+    const totalCal = picks.reduce((s, p) => s + p.servingCalories, 0);
+    if (totalCal <= 0) return picks;
+
+    const ratio = Math.max(0.6, Math.min(1.5, budget / totalCal));
+    if (Math.abs(ratio - 1) < 0.05) return picks; // 差距小于5%不调整
+
+    return picks.map(p => ({
+      ...p,
+      servingCalories: Math.round(p.servingCalories * ratio),
+      servingProtein: Math.round(p.servingProtein * ratio),
+      servingFat: Math.round(p.servingFat * ratio),
+      servingCarbs: Math.round(p.servingCarbs * ratio),
+    }));
   }
 
   diversifyWithPenalty(
@@ -424,7 +534,7 @@ export class RecommendationEngineService {
     })).sort((a, b) => b.score - a.score);
   }
 
-  // ─── 9. 从食物池推荐（供 DailyPlanService 串行调用，避免重复查库） ───
+  // ─── 9. 从食物池推荐（角色模板 + 份量调整，供 DailyPlanService 调用） ───
 
   recommendMealFromPool(
     allFoods: FoodLibrary[],
@@ -434,45 +544,102 @@ export class RecommendationEngineService {
     target: MealTarget,
     dailyTarget: { calories: number; protein: number },
     excludeNames: string[],
+    userPreferences?: { loves?: string[]; avoids?: string[] },
   ): MealRecommendation {
     // 约束生成（带餐次策略）
     const constraints = this.generateConstraints(goalType, consumed, target, dailyTarget, mealType);
 
-    // 筛选
-    let candidates = this.filterFoods(allFoods, constraints);
-    if (candidates.length < 5) {
-      candidates = this.filterFoods(allFoods, { ...constraints, includeTags: [] });
+    // 获取当前餐次的角色模板
+    const roles = MEAL_ROLES[mealType] || ['carb', 'protein', 'veggie'];
+    const picks: ScoredFood[] = [];
+    const usedNames = new Set(excludeNames);
+
+    for (const role of roles) {
+      // 按角色筛选对应分类
+      const roleCategories = ROLE_CATEGORIES[role] || [];
+      let roleCandidates = allFoods.filter(f =>
+        roleCategories.includes(f.category) && !usedNames.has(f.name),
+      );
+
+      // 对角色候选做 mealType 过滤
+      roleCandidates = roleCandidates.filter(f => {
+        const foodMealTypes: string[] = (f as any).mealTypes || [];
+        return foodMealTypes.length === 0 || foodMealTypes.includes(mealType);
+      });
+
+      // exclude tag 过滤
+      if (constraints.excludeTags.length > 0) {
+        roleCandidates = roleCandidates.filter(f => {
+          const tags = f.tags || [];
+          return !constraints.excludeTags.some(t => tags.includes(t));
+        });
+      }
+
+      // 如果角色候选为空，放宽到所有未使用的食物
+      if (roleCandidates.length === 0) {
+        roleCandidates = allFoods.filter(f => !usedNames.has(f.name));
+      }
+
+      // 评分 + 偏好加权
+      let scored: ScoredFood[] = roleCandidates.map(food => {
+        let score = this.scoreFood(food, goalType);
+
+        // 个性化偏好加权
+        if (userPreferences) {
+          const name = food.name;
+          const mainIng = (food as any).mainIngredient || '';
+          if (userPreferences.loves?.some(l => name.includes(l) || mainIng.includes(l))) {
+            score *= 1.12;
+          }
+          if (userPreferences.avoids?.some(a => name.includes(a) || mainIng.includes(a))) {
+            score *= 0.3;
+          }
+        }
+
+        return {
+          food,
+          score,
+          servingCalories: Math.round((food.caloriesPer100g * food.standardServingG) / 100),
+          servingProtein: Math.round(((food.proteinPer100g || 0) * food.standardServingG) / 100),
+          servingFat: Math.round(((food.fatPer100g || 0) * food.standardServingG) / 100),
+          servingCarbs: Math.round(((food.carbsPer100g || 0) * food.standardServingG) / 100),
+        };
+      }).sort((a, b) => b.score - a.score);
+
+      // 随机探索
+      scored = this.addExploration(scored, 0.15);
+
+      // 相似度惩罚：与已选食物的相似度降权
+      if (picks.length > 0) {
+        scored = scored.map(sf => {
+          const penalty = picks.reduce((sum, p) => sum + this.similarity(sf.food, p.food) * 0.3, 0);
+          return { ...sf, score: sf.score - penalty };
+        }).sort((a, b) => b.score - a.score);
+      }
+
+      // 选择该角色的最优食物
+      if (scored.length > 0) {
+        picks.push(scored[0]);
+        usedNames.add(scored[0].food.name);
+      }
     }
 
-    // 评分
-    let scored: ScoredFood[] = candidates.map(food => ({
-      food,
-      score: this.scoreFood(food, goalType),
-      servingCalories: Math.round((food.caloriesPer100g * food.standardServingG) / 100),
-      servingProtein: Math.round(((food.proteinPer100g || 0) * food.standardServingG) / 100),
-      servingFat: Math.round(((food.fatPer100g || 0) * food.standardServingG) / 100),
-      servingCarbs: Math.round(((food.carbsPer100g || 0) * food.standardServingG) / 100),
-    })).sort((a, b) => b.score - a.score);
-
-    // 随机探索
-    scored = this.addExploration(scored, 0.15);
-
-    // 相似度惩罚 + 跨餐排除
-    const picks = this.diversifyWithPenalty(scored, excludeNames, 3);
+    // 份量调整：使总热量接近预算
+    const adjustedPicks = this.adjustPortions(picks, target.calories);
 
     // 聚合
-    const totalCalories = picks.reduce((s, p) => s + p.servingCalories, 0);
-    const totalProtein = picks.reduce((s, p) => s + p.servingProtein, 0);
-    const totalFat = picks.reduce((s, p) => s + p.servingFat, 0);
-    const totalCarbs = picks.reduce((s, p) => s + p.servingCarbs, 0);
+    const totalCalories = adjustedPicks.reduce((s, p) => s + p.servingCalories, 0);
+    const totalProtein = adjustedPicks.reduce((s, p) => s + p.servingProtein, 0);
+    const totalFat = adjustedPicks.reduce((s, p) => s + p.servingFat, 0);
+    const totalCarbs = adjustedPicks.reduce((s, p) => s + p.servingCarbs, 0);
 
-    const displayText = picks
+    const displayText = adjustedPicks
       .map(p => `${p.food.name}（${p.food.standardServingDesc}，${p.servingCalories}kcal）`)
       .join(' + ');
 
     const tip = this.buildTip(mealType, goalType, target, totalCalories);
 
-    return { foods: picks, totalCalories, totalProtein, totalFat, totalCarbs, displayText, tip };
+    return { foods: adjustedPicks, totalCalories, totalProtein, totalFat, totalCarbs, displayText, tip };
   }
 
   // ─── 10. 暴露食物库查询（供 DailyPlanService 一次性获取） ───

@@ -54,6 +54,39 @@ export class FoodLibrary {
   @Column({ type: 'decimal', precision: 5, scale: 1, nullable: true, name: 'carbs_per_100g', comment: '碳水 g/100g' })
   carbsPer100g?: number;
 
+  @Column({ type: 'decimal', precision: 5, scale: 1, nullable: true, name: 'fiber_per_100g', comment: '膳食纤维 g/100g' })
+  fiberPer100g?: number;
+
+  @Column({ type: 'decimal', precision: 5, scale: 1, nullable: true, name: 'sugar_per_100g', comment: '糖 g/100g' })
+  sugarPer100g?: number;
+
+  @Column({ type: 'decimal', precision: 6, scale: 1, nullable: true, name: 'sodium_per_100g', comment: '钠 mg/100g' })
+  sodiumPer100g?: number;
+
+  @Column({ type: 'int', nullable: true, name: 'glycemic_index', comment: 'GI值' })
+  glycemicIndex?: number;
+
+  @Column({ type: 'boolean', default: false, name: 'is_processed', comment: '是否加工食品' })
+  isProcessed: boolean;
+
+  @Column({ type: 'boolean', default: false, name: 'is_fried', comment: '是否油炸' })
+  isFried: boolean;
+
+  @Column({ type: 'jsonb', default: [], name: 'meal_types', comment: '适合餐次: breakfast/lunch/dinner/snack' })
+  mealTypes: string[];
+
+  @Column({ type: 'varchar', length: 50, nullable: true, name: 'main_ingredient', comment: '主要食材' })
+  mainIngredient?: string;
+
+  @Column({ type: 'varchar', length: 50, nullable: true, name: 'sub_category', comment: '子分类' })
+  subCategory?: string;
+
+  @Column({ type: 'int', nullable: true, name: 'quality_score', comment: '食物品质评分 1-10' })
+  qualityScore?: number;
+
+  @Column({ type: 'int', nullable: true, name: 'satiety_score', comment: '饱腹感评分 1-10' })
+  satietyScore?: number;
+
   @Column({ type: 'int', default: 100, name: 'standard_serving_g', comment: '标准份量克数' })
   standardServingG: number;
 

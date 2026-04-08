@@ -20,6 +20,7 @@ import { Achievement } from '../entities/achievement.entity';
 import { UserAchievement } from '../entities/user-achievement.entity';
 import { Challenge } from '../entities/challenge.entity';
 import { UserChallenge } from '../entities/user-challenge.entity';
+import { RecommendationFeedback } from '../entities/recommendation-feedback.entity';
 // 服务
 import { AppAuthService } from './services/app-auth.service';
 import { AppUpdateService } from './services/app-update.service';
@@ -70,6 +71,7 @@ import { StorageModule } from '../storage/storage.module';
       UserAchievement,
       Challenge,
       UserChallenge,
+      RecommendationFeedback,
     ]),
     PassportModule.register({ defaultStrategy: 'app-jwt' }),
     JwtModule.register({

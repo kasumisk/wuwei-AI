@@ -7,133 +7,53 @@ $green-border: #bbf7d0;
 $text-primary: #14532d;
 $text-muted: #6b7280;
 
-// ── 我的 页面 ──
-.me-page {
+.pf-page {
   min-height: 100vh;
   background: #edf8f0;
-  display: flex;
-  flex-direction: column;
 }
 
-// 头部用户信息
-.me-header {
+.pf-loading {
   display: flex;
   align-items: center;
-  padding: 56px 20px 24px;
-  background: $green-dark;
+  justify-content: center;
+  height: 100vh;
+  background: #edf8f0;
 }
-.me-avatar {
-  width: 64px; height: 64px;
-  border-radius: 32px;
-  background: $green-light;
+.pf-loading-text { color: $text-muted; font-size: 14px; }
+
+.pf-header {
+  display: flex;
+  align-items: flex-start;
+  padding: 48px 20px 16px;
+  background: #edf8f0;
+}
+.pf-back {
+  width: 36px; height: 36px;
   display: flex; align-items: center; justify-content: center;
-  margin-right: 16px;
+  border-radius: 18px;
+  background: $green-light;
+  margin-right: 12px;
   flex-shrink: 0;
 }
-.me-avatar-text {
-  font-size: 26px;
-  font-weight: 700;
-  color: $green-dark;
-}
-.me-user-info { display: flex; flex-direction: column; }
-.me-name {
-  font-size: 18px;
-  font-weight: 700;
-  color: #fff;
-}
-.me-phone {
-  font-size: 13px;
-  color: rgba(255,255,255,0.65);
-  margin-top: 4px;
-}
-
-// 健康概览卡片
-.me-card {
-  background: #fff;
-  border-radius: 16px;
-  margin: 16px 16px 0;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
-  &--summary { padding: 16px; }
-}
-.me-summary-row {
-  display: flex;
-  align-items: center;
-}
-.me-summary-item {
-  flex: 1;
+.pf-back-icon { font-size: 18px; color: $green-dark; }
+.pf-header-content {
   display: flex;
   flex-direction: column;
-  align-items: center;
 }
-.me-summary-val {
-  font-size: 15px;
-  font-weight: 600;
-  color: $green-dark;
-}
-.me-summary-key {
-  font-size: 11px;
-  color: $text-muted;
-  margin-top: 3px;
-}
-.me-summary-divider {
-  width: 1px;
-  height: 36px;
-  background: $green-border;
-}
+.pf-title { font-size: 20px; font-weight: 700; color: $green-dark; }
+.pf-subtitle { font-size: 13px; color: $text-muted; margin-top: 4px; }
 
-// 菜单区
-.me-section {
+.pf-body { padding: 0 16px 40px; }
+
+.pf-card {
   background: #fff;
   border-radius: 16px;
-  margin: 12px 16px 0;
-  overflow: hidden;
+  padding: 20px 16px;
+  margin-bottom: 12px;
   box-shadow: 0 1px 4px rgba(0,0,0,0.05);
 }
-.me-menu-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px;
-  border-bottom: 1px solid #f0fdf4;
-  &:last-child { border-bottom: none; }
-}
-.me-menu-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.me-menu-icon { font-size: 18px; }
-.me-menu-label { font-size: 15px; color: $text-primary; font-weight: 500; }
-.me-menu-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.me-menu-badge {
-  font-size: 11px;
-  color: #d97706;
-  background: #fef3c7;
-  border-radius: 8px;
-  padding: 2px 8px;
-}
-.me-menu-arrow { font-size: 20px; color: $text-muted; }
 
-// 退出登录
-.me-footer {
-  padding: 24px 16px 40px;
-  margin-top: auto;
-}
-.me-logout-btn {
-  width: 100%;
-  height: 48px;
-  line-height: 48px;
-  border-radius: 24px;
-  background: #fff;
-  color: #ef4444;
-  font-size: 15px;
-  border: 1.5px solid #fecaca;
-  &::after { border: none; }
-}
+.pf-section-title {
   display: block;
   font-size: 15px;
   font-weight: 600;
@@ -169,7 +89,6 @@ $text-muted: #6b7280;
   border: 1.5px solid $green-border;
 }
 
-// Gender row
 .pf-gender-row {
   display: flex;
   gap: 10px;
@@ -193,7 +112,6 @@ $text-muted: #6b7280;
   }
 }
 
-// 2-col layout
 .pf-row-2col {
   display: flex;
   gap: 10px;
@@ -205,7 +123,6 @@ $text-muted: #6b7280;
   .pf-input { width: 100%; }
 }
 
-// Option rows (activity / goal)
 .pf-option {
   background: $green-light;
   border-radius: 12px;
@@ -222,7 +139,6 @@ $text-muted: #6b7280;
 .pf-option-label { display: block; font-size: 14px; color: $text-primary; font-weight: 500; }
 .pf-option-desc { display: block; font-size: 12px; color: $text-muted; margin-top: 2px; }
 
-// Speed 3-col
 .pf-row-3col {
   display: flex;
   gap: 8px;
@@ -244,7 +160,6 @@ $text-muted: #6b7280;
 .pf-speed-label { display: block; font-size: 13px; font-weight: 600; color: $text-primary; }
 .pf-speed-desc { display: block; font-size: 11px; color: $text-muted; margin-top: 2px; }
 
-// Chips row
 .pf-row-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .pf-num-btn {
   padding: 8px 16px;
@@ -260,7 +175,6 @@ $text-muted: #6b7280;
   }
 }
 
-// Multi-select chips
 .pf-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .pf-chip {
   padding: 7px 14px;
@@ -276,7 +190,6 @@ $text-muted: #6b7280;
   }
 }
 
-// Actions
 .pf-actions { padding: 8px 0; }
 .pf-save-btn {
   width: 100%;
@@ -290,15 +203,14 @@ $text-muted: #6b7280;
   margin-bottom: 12px;
   &::after { border: none; }
 }
-.pf-logout-btn {
+.pf-skip-btn {
   width: 100%;
-  height: 48px;
-  line-height: 48px;
-  border-radius: 24px;
-  background: #fff;
-  color: #ef4444;
-  font-size: 15px;
-  border: 1.5px solid #fecaca;
+  height: 44px;
+  line-height: 44px;
+  border-radius: 22px;
+  background: transparent;
+  color: $text-muted;
+  font-size: 14px;
+  border: 1.5px solid #e5e7eb;
   &::after { border: none; }
 }
-

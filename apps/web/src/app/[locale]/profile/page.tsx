@@ -4,528 +4,155 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/use-auth';
 import { useFood } from '@/lib/hooks/use-food';
-import { useToast } from '@/lib/hooks/use-toast';
 import type { UserProfile, BehaviorProfile } from '@/lib/api/food';
+import { LocalizedLink } from '@/components/common/localized-link';
 
-const activityOptions = [
-  { key: 'sedentary', label: '久坐不动（办公室工作）' },
-  { key: 'light', label: '轻度活动（偶尔散步）' },
-  { key: 'moderate', label: '中度活动（每周运动 3-5 次）' },
-  { key: 'active', label: '高强度（每天运动）' },
-];
-
-const goalOptions = [
-  { key: 'fat_loss', label: '减脂', emoji: '🔥', desc: '减少体脂，塑造体型' },
-  { key: 'muscle_gain', label: '增肌', emoji: '💪', desc: '增加肌肉量，提升力量' },
-  { key: 'health', label: '保持健康', emoji: '🧘', desc: '维持健康体重和状态' },
-  { key: 'habit', label: '改善习惯', emoji: '🌱', desc: '养成规律饮食的好习惯' },
-];
-
-const goalSpeedOptions = [
-  { key: 'aggressive', label: '激进', desc: '快速见效' },
-  { key: 'steady', label: '稳定', desc: '推荐' },
-  { key: 'relaxed', label: '佛系', desc: '慢慢来' },
-];
-
-const takeoutOptions = [
-  { key: 'never', label: '很少' },
-  { key: 'sometimes', label: '偶尔' },
-  { key: 'often', label: '经常' },
-];
-
-const disciplineOptions = [
-  { key: 'high', label: '很强' },
-  { key: 'medium', label: '一般' },
-  { key: 'low', label: '容易放弃' },
-];
-
-const coachStyleLabels: Record<string, { label: string; desc: string; emoji: string }> = {
-  strict: { label: '严格教练', desc: '直接了当，目标导向', emoji: '🏋️' },
-  friendly: { label: '暖心朋友', desc: '温和鼓励，理解你', emoji: '🤗' },
-  data: { label: '数据理性', desc: '客观冷静，用数字说话', emoji: '📊' },
+const goalLabelMap: Record<string, string> = {
+  fat_loss: '🔥 减脂',
+  muscle_gain: '💪 增肌',
+  health: '🧘 保持健康',
+  habit: '🌱 改善习惯',
 };
 
-const foodPreferenceOptions = [
-  { key: 'sweet', label: '甜食' },
-  { key: 'fried', label: '油炸' },
-  { key: 'carbs', label: '碳水' },
-  { key: 'meat', label: '肉类' },
-  { key: 'spicy', label: '辛辣' },
-];
+const activityLabelMap: Record<string, string> = {
+  sedentary: '久坐不动',
+  light: '轻度活动',
+  moderate: '中度活动',
+  active: '高强度',
+};
 
-const dietaryRestrictionOptions = [
-  { key: 'no_beef', label: '不吃牛肉' },
-  { key: 'vegetarian', label: '素食' },
-  { key: 'lactose_free', label: '乳糖不耐' },
-  { key: 'halal', label: '清真' },
-];
-
-const weakSlotOptions = [
-  { key: 'afternoon', label: '下午' },
-  { key: 'evening', label: '傍晚' },
-  { key: 'midnight', label: '深夜' },
-];
-
-function toggleArr(arr: string[], val: string): string[] {
-  return arr.includes(val) ? arr.filter((x) => x !== val) : [...arr, val];
+function ChevronRight() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20" className="text-muted-foreground">
+      <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
+    </svg>
+  );
 }
 
 export default function ProfilePage() {
   const router = useRouter();
   const { user, isLoggedIn, logout } = useAuth();
-  const { getProfile, saveProfile, loading, getBehaviorProfile, updateCoachStyle } = useFood();
-  const { toast } = useToast();
+  const { getProfile, getBehaviorProfile } = useFood();
 
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [behaviorProfile, setBehaviorProfile] = useState<BehaviorProfile | null>(null);
-  const [form, setForm] = useState({
-    gender: 'male',
-    birthYear: '',
-    heightCm: '',
-    weightKg: '',
-    targetWeightKg: '',
-    activityLevel: 'light',
-    dailyCalorieGoal: '',
-    goal: 'health' as 'fat_loss' | 'muscle_gain' | 'health' | 'habit',
-    goalSpeed: 'steady' as 'aggressive' | 'steady' | 'relaxed',
-    mealsPerDay: 3,
-    takeoutFrequency: 'sometimes' as 'never' | 'sometimes' | 'often',
-    canCook: true,
-    foodPreferences: [] as string[],
-    dietaryRestrictions: [] as string[],
-    weakTimeSlots: [] as string[],
-    discipline: 'medium' as 'high' | 'medium' | 'low',
-  });
 
   useEffect(() => {
     if (!isLoggedIn) {
       router.push('/login');
       return;
     }
-    getProfile().then((p) => {
-      if (p) {
-        setForm({
-          gender: p.gender || 'male',
-          birthYear: p.birthYear ? String(p.birthYear) : '',
-          heightCm: p.heightCm ? String(p.heightCm) : '',
-          weightKg: p.weightKg ? String(p.weightKg) : '',
-          targetWeightKg: p.targetWeightKg ? String(p.targetWeightKg) : '',
-          activityLevel: p.activityLevel || 'light',
-          dailyCalorieGoal: p.dailyCalorieGoal ? String(p.dailyCalorieGoal) : '',
-          goal: p.goal || 'health',
-          goalSpeed: p.goalSpeed || 'steady',
-          mealsPerDay: p.mealsPerDay || 3,
-          takeoutFrequency: p.takeoutFrequency || 'sometimes',
-          canCook: p.canCook !== undefined ? p.canCook : true,
-          foodPreferences: p.foodPreferences || [],
-          dietaryRestrictions: p.dietaryRestrictions || [],
-          weakTimeSlots: p.weakTimeSlots || [],
-          discipline: p.discipline || 'medium',
-        });
-      }
-    });
+    getProfile().then(setProfile).catch(() => {});
     getBehaviorProfile().then(setBehaviorProfile).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoggedIn]);
-
-  const up = useCallback(<K extends keyof typeof form>(key: K, value: typeof form[K]) => {
-    setForm((f) => ({ ...f, [key]: value }));
-  }, []);
-
-  const toggleChip = useCallback((key: 'foodPreferences' | 'dietaryRestrictions' | 'weakTimeSlots', val: string) => {
-    setForm((f) => ({ ...f, [key]: toggleArr(f[key], val) }));
-  }, []);
-
-  const handleSave = useCallback(async () => {
-    try {
-      const data: Partial<UserProfile> = {
-        activityLevel: form.activityLevel,
-        goal: form.goal,
-        goalSpeed: form.goalSpeed,
-        mealsPerDay: form.mealsPerDay,
-        takeoutFrequency: form.takeoutFrequency,
-        canCook: form.canCook,
-        foodPreferences: form.foodPreferences,
-        dietaryRestrictions: form.dietaryRestrictions,
-        weakTimeSlots: form.weakTimeSlots,
-        discipline: form.discipline,
-      };
-      if (form.gender) data.gender = form.gender;
-      if (form.birthYear) data.birthYear = parseInt(form.birthYear);
-      if (form.heightCm) data.heightCm = parseFloat(form.heightCm);
-      if (form.weightKg) data.weightKg = parseFloat(form.weightKg);
-      if (form.targetWeightKg) data.targetWeightKg = parseFloat(form.targetWeightKg);
-      if (form.dailyCalorieGoal) data.dailyCalorieGoal = parseInt(form.dailyCalorieGoal);
-
-      await saveProfile(data);
-      toast({ title: '保存成功' });
-    } catch (err) {
-      toast({ title: err instanceof Error ? err.message : '保存失败', variant: 'destructive' });
-    }
-  }, [form, saveProfile, toast]);
-
-  const handleStyleChange = useCallback(async (style: 'strict' | 'friendly' | 'data') => {
-    try {
-      await updateCoachStyle(style);
-      setBehaviorProfile((prev) => prev ? { ...prev, coachStyle: style } : prev);
-      toast({ title: '教练风格已切换' });
-    } catch {
-      toast({ title: '切换失败', variant: 'destructive' });
-    }
-  }, [updateCoachStyle, toast]);
 
   const handleLogout = useCallback(async () => {
     await logout();
     router.push('/login');
   }, [logout, router]);
 
-  // 分节标题组件
-  const SectionTitle = ({ children }: { children: React.ReactNode }) => (
-    <p className="text-sm font-extrabold text-foreground mt-6 mb-3 first:mt-0">{children}</p>
-  );
-
-  const SubLabel = ({ children }: { children: React.ReactNode }) => (
-    <p className="text-xs font-semibold text-muted-foreground mb-2">{children}</p>
-  );
-
-  const Divider = () => (
-    <div className="border-t border-border/40 my-5" />
-  );
-
-  const ChipRow = ({
-    field, options,
-  }: { field: 'foodPreferences' | 'dietaryRestrictions' | 'weakTimeSlots'; options: { key: string; label: string }[] }) => (
-    <div className="flex flex-wrap gap-2">
-      {options.map(({ key, label }) => {
-        const active = form[field].includes(key);
-        return (
-          <button
-            key={key}
-            onClick={() => toggleChip(field, key)}
-            className={`px-3 py-1.5 rounded-full text-sm font-bold transition-all ${
-              active ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
-            }`}
-          >
-            {label}
-          </button>
-        );
-      })}
-    </div>
-  );
-
-  const BtnGroup = ({
-    options, value, onChange,
-  }: { options: { key: string; label: string }[]; value: string; onChange: (k: string) => void }) => (
-    <div className="flex gap-2">
-      {options.map(({ key, label }) => (
-        <button
-          key={key}
-          onClick={() => onChange(key)}
-          className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${
-            value === key ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
-          }`}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  );
+  const displayName = user?.nickname || user?.phone || user?.email || 'uWay 用户';
+  const initials = displayName.charAt(0).toUpperCase();
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <nav className="sticky top-0 z-50 glass-morphism">
-        <div className="flex items-center px-6 py-4 max-w-lg mx-auto">
-          <button onClick={() => router.back()} className="mr-4 text-foreground/70 hover:text-foreground">
-            <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
-              <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
-            </svg>
-          </button>
-          <h1 className="text-xl font-extrabold font-headline tracking-tight">健康档案</h1>
-        </div>
-      </nav>
-
-      <main className="px-6 py-6 max-w-lg mx-auto pb-32">
-
-        {/* 用户信息 */}
-        <div className="bg-card rounded-2xl p-5 mb-5 flex items-center gap-4">
-          <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center overflow-hidden border-2 border-(--color-primary-container) shrink-0">
-            {user?.avatar ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={user.avatar} alt="avatar" className="w-full h-full object-cover" />
-            ) : (
-              <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28" className="text-primary">
-                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-              </svg>
-            )}
+      {/* 用户头部 */}
+      <div className="bg-primary px-6 pt-14 pb-8">
+        <div className="max-w-lg mx-auto flex items-center gap-4">
+          <div className="w-16 h-16 rounded-full bg-primary-foreground/20 border-2 border-primary-foreground/30 flex items-center justify-center shrink-0">
+            <span className="text-2xl font-extrabold text-primary-foreground">{initials}</span>
           </div>
           <div>
-            <p className="font-bold">{user?.nickname || '无畏用户'}</p>
-            <p className="text-xs text-muted-foreground">{user?.phone || user?.email || '匿名用户'}</p>
+            <p className="text-lg font-extrabold text-primary-foreground">{displayName}</p>
+            {user?.phone && (
+              <p className="text-sm text-primary-foreground/70">
+                {user.phone.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2')}
+              </p>
+            )}
+            {user?.email && !user?.phone && (
+              <p className="text-sm text-primary-foreground/70">{user.email}</p>
+            )}
           </div>
         </div>
+      </div>
 
-        {/* ── 统一档案卡片 ── */}
-        <div className="bg-card rounded-2xl p-6 mb-5">
+      <main className="px-6 py-5 max-w-lg mx-auto pb-24 space-y-4">
 
-          {/* 基本信息 */}
-          <SectionTitle>基本信息</SectionTitle>
-
-          <SubLabel>性别</SubLabel>
-          <BtnGroup
-            options={[{ key: 'male', label: '男' }, { key: 'female', label: '女' }]}
-            value={form.gender}
-            onChange={(k) => up('gender', k)}
-          />
-
-          <div className="mt-4">
-            <SubLabel>出生年份</SubLabel>
-            <input
-              type="number"
-              value={form.birthYear}
-              onChange={(e) => up('birthYear', e.target.value)}
-              placeholder="例如 1995"
-              className="w-full px-4 py-2.5 rounded-xl bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 mt-4">
-            <div>
-              <SubLabel>身高 (cm)</SubLabel>
-              <input
-                type="number"
-                value={form.heightCm}
-                onChange={(e) => up('heightCm', e.target.value)}
-                placeholder="170"
-                className="w-full px-4 py-2.5 rounded-xl bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
-              />
+        {/* 健康概览 */}
+        {profile && (
+          <div className="bg-card rounded-2xl p-4 grid grid-cols-4 gap-2">
+            <div className="text-center">
+              <p className="text-lg font-extrabold text-primary">{profile.heightCm || '--'}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">身高 cm</p>
             </div>
-            <div>
-              <SubLabel>体重 (kg)</SubLabel>
-              <input
-                type="number"
-                value={form.weightKg}
-                onChange={(e) => up('weightKg', e.target.value)}
-                placeholder="65"
-                className="w-full px-4 py-2.5 rounded-xl bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
-              />
+            <div className="text-center border-l border-border/40">
+              <p className="text-lg font-extrabold text-primary">{profile.weightKg || '--'}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">体重 kg</p>
             </div>
-          </div>
-
-          <div className="mt-4">
-            <SubLabel>目标体重 (kg)</SubLabel>
-            <input
-              type="number"
-              value={form.targetWeightKg}
-              onChange={(e) => up('targetWeightKg', e.target.value)}
-              placeholder="60"
-              className="w-full px-4 py-2.5 rounded-xl bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
-            />
-          </div>
-
-          <Divider />
-
-          {/* 活动等级 */}
-          <SectionTitle>活动等级</SectionTitle>
-          <div className="space-y-2">
-            {activityOptions.map(({ key, label }) => (
-              <button
-                key={key}
-                onClick={() => up('activityLevel', key)}
-                className={`w-full px-4 py-3 rounded-xl text-left text-sm font-medium transition-all ${
-                  form.activityLevel === key
-                    ? 'bg-primary text-primary-foreground font-bold'
-                    : 'bg-muted text-muted-foreground'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          <Divider />
-
-          {/* 你的目标 */}
-          <SectionTitle>🎯 你的目标</SectionTitle>
-
-          <SubLabel>主要目标</SubLabel>
-          <div className="grid grid-cols-2 gap-2">
-            {goalOptions.map(({ key, label, emoji, desc }) => (
-              <button
-                key={key}
-                onClick={() => up('goal', key as typeof form.goal)}
-                className={`py-3 px-3 rounded-xl text-sm font-bold transition-all text-left ${
-                  form.goal === key
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground'
-                }`}
-              >
-                <span className="text-base">{emoji} {label}</span>
-                <p className={`text-[11px] mt-0.5 font-normal ${form.goal === key ? 'opacity-80' : 'opacity-60'}`}>{desc}</p>
-              </button>
-            ))}
-          </div>
-
-          <div className="mt-4">
-            <SubLabel>目标速度</SubLabel>
-            <div className="flex gap-2">
-              {goalSpeedOptions.map(({ key, label, desc }) => (
-                <button
-                  key={key}
-                  onClick={() => up('goalSpeed', key as typeof form.goalSpeed)}
-                  className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all flex flex-col items-center gap-0.5 ${
-                    form.goalSpeed === key
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground'
-                  }`}
-                >
-                  <span>{label}</span>
-                  <span className={`text-[10px] font-normal ${form.goalSpeed === key ? 'opacity-80' : 'opacity-60'}`}>{desc}</span>
-                </button>
-              ))}
+            <div className="text-center border-l border-border/40">
+              <p className="text-base font-extrabold text-primary leading-5">{profile.goal ? goalLabelMap[profile.goal] : '--'}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">目标</p>
             </div>
-          </div>
-
-          <Divider />
-
-          {/* 饮食习惯 */}
-          <SectionTitle>🥗 饮食习惯</SectionTitle>
-
-          <SubLabel>一天几餐</SubLabel>
-          <div className="flex gap-2">
-            {[2, 3, 4, 5].map((n) => (
-              <button
-                key={n}
-                onClick={() => up('mealsPerDay', n)}
-                className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${
-                  form.mealsPerDay === n
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground'
-                }`}
-              >
-                {n} 餐
-              </button>
-            ))}
-          </div>
-
-          <div className="mt-4">
-            <SubLabel>外卖频率</SubLabel>
-            <BtnGroup
-              options={takeoutOptions}
-              value={form.takeoutFrequency}
-              onChange={(k) => up('takeoutFrequency', k as typeof form.takeoutFrequency)}
-            />
-          </div>
-
-          <div className="mt-4">
-            <SubLabel>是否会做饭</SubLabel>
-            <BtnGroup
-              options={[{ key: 'yes', label: '会做饭' }, { key: 'no', label: '不会' }]}
-              value={form.canCook ? 'yes' : 'no'}
-              onChange={(k) => up('canCook', k === 'yes')}
-            />
-          </div>
-
-          <div className="mt-4">
-            <SubLabel>饮食偏好（可多选）</SubLabel>
-            <ChipRow field="foodPreferences" options={foodPreferenceOptions} />
-          </div>
-
-          <div className="mt-4">
-            <SubLabel>忌口（可多选）</SubLabel>
-            <ChipRow field="dietaryRestrictions" options={dietaryRestrictionOptions} />
-          </div>
-
-          <Divider />
-
-          {/* 行为习惯 */}
-          <SectionTitle>🧠 行为习惯</SectionTitle>
-
-          <SubLabel>自律程度</SubLabel>
-          <BtnGroup
-            options={disciplineOptions}
-            value={form.discipline}
-            onChange={(k) => up('discipline', k as typeof form.discipline)}
-          />
-
-          <div className="mt-4">
-            <SubLabel>容易乱吃时段（可多选）</SubLabel>
-            <ChipRow field="weakTimeSlots" options={weakSlotOptions} />
-          </div>
-
-          <Divider />
-
-          {/* 热量目标 */}
-          <SubLabel>每日热量目标 (kcal，留空自动计算)</SubLabel>
-          <input
-            type="number"
-            value={form.dailyCalorieGoal}
-            onChange={(e) => up('dailyCalorieGoal', e.target.value)}
-            placeholder="自动计算"
-            className="w-full px-4 py-2.5 rounded-xl bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
-          />
-
-          {/* 保存按钮 */}
-          <button
-            onClick={handleSave}
-            disabled={loading}
-            className="w-full mt-6 bg-primary text-primary-foreground font-bold py-4 rounded-full active:scale-[0.98] transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
-          >
-            {loading ? '保存中...' : '保存档案'}
-          </button>
-        </div>
-
-        {/* AI 教练风格 */}
-        <div className="bg-card rounded-2xl p-6 mb-5">
-          <h3 className="font-bold mb-4">🤖 AI 教练风格</h3>
-          <div className="space-y-2">
-            {Object.entries(coachStyleLabels).map(([key, { label, desc, emoji }]) => (
-              <button
-                key={key}
-                onClick={() => handleStyleChange(key as 'strict' | 'friendly' | 'data')}
-                className={`w-full px-4 py-3 rounded-xl text-left transition-all flex items-center gap-3 ${
-                  behaviorProfile?.coachStyle === key
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                }`}
-              >
-                <span className="text-xl">{emoji}</span>
-                <div>
-                  <span className="text-sm font-bold block">{label}</span>
-                  <span className="text-xs opacity-80">{desc}</span>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* 饮食数据 */}
-        {behaviorProfile && (
-          <div className="bg-card rounded-2xl p-6 mb-5">
-            <h3 className="font-bold mb-4">📊 饮食数据</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="text-center">
-                <p className="text-2xl font-extrabold text-primary">{behaviorProfile.streakDays}</p>
-                <p className="text-xs text-muted-foreground">连续达标天数</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-extrabold text-primary">{behaviorProfile.longestStreak}</p>
-                <p className="text-xs text-muted-foreground">最长记录</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-extrabold text-primary">{behaviorProfile.totalRecords}</p>
-                <p className="text-xs text-muted-foreground">总记录数</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-extrabold text-primary">{Math.round(Number(behaviorProfile.avgComplianceRate) * 100)}%</p>
-                <p className="text-xs text-muted-foreground">健康率</p>
-              </div>
+            <div className="text-center border-l border-border/40">
+              <p className="text-base font-extrabold text-primary leading-5">{profile.activityLevel ? activityLabelMap[profile.activityLevel] : '--'}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">活动</p>
             </div>
           </div>
         )}
 
+        {/* 饮食数据 */}
+        {behaviorProfile && (
+          <div className="bg-card rounded-2xl p-4 grid grid-cols-4 gap-2">
+            <div className="text-center">
+              <p className="text-xl font-extrabold text-primary">{behaviorProfile.streakDays}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">连续天数</p>
+            </div>
+            <div className="text-center border-l border-border/40">
+              <p className="text-xl font-extrabold text-primary">{behaviorProfile.longestStreak}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">最长记录</p>
+            </div>
+            <div className="text-center border-l border-border/40">
+              <p className="text-xl font-extrabold text-primary">{behaviorProfile.totalRecords}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">总记录数</p>
+            </div>
+            <div className="text-center border-l border-border/40">
+              <p className="text-xl font-extrabold text-primary">{Math.round(Number(behaviorProfile.avgComplianceRate) * 100)}%</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">健康率</p>
+            </div>
+          </div>
+        )}
+
+        {/* 菜单列表 */}
+        <div className="bg-card rounded-2xl overflow-hidden divide-y divide-border/40">
+          <LocalizedLink
+            href="/health-profile"
+            className="flex items-center justify-between px-5 py-4 hover:bg-muted/50 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-xl">📋</span>
+              <div>
+                <p className="text-sm font-bold">健康档案</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {profile?.onboardingCompleted ? '身高 / 体重 / 目标 / 饮食习惯' : '未完善，点击填写'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {!profile?.onboardingCompleted && (
+                <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                  未完善
+                </span>
+              )}
+              <ChevronRight />
+            </div>
+          </LocalizedLink>
+        </div>
+
         {/* 退出登录 */}
         <button
           onClick={handleLogout}
-          className="w-full bg-muted text-destructive font-bold py-4 rounded-full active:scale-[0.98] transition-all"
+          className="w-full bg-muted text-destructive font-bold py-4 rounded-2xl active:scale-[0.98] transition-all"
         >
           退出登录
         </button>

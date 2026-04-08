@@ -8,6 +8,7 @@ export default defineAppConfig({
     'pages/login/index',
     'pages/foods/detail',
     'pages/records/index',
+    'pages/health-profile/index',
   ],
   window: {
     backgroundTextStyle: 'light',

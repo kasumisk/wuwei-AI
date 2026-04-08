@@ -31,6 +31,7 @@ import { Achievement } from '../../entities/achievement.entity';
 import { UserAchievement } from '../../entities/user-achievement.entity';
 import { Challenge } from '../../entities/challenge.entity';
 import { UserChallenge } from '../../entities/user-challenge.entity';
+import { RecommendationFeedback } from '../../entities/recommendation-feedback.entity';
 
 @Module({
   imports: [
@@ -84,6 +85,8 @@ import { UserChallenge } from '../../entities/user-challenge.entity';
             UserAchievement,
             Challenge,
             UserChallenge,
+            // 推荐反馈
+            RecommendationFeedback,
             // 文件转换记录
           ],
           synchronize: dbConfig.synchronize,

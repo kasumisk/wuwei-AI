@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/use-auth';
+import { useFood } from '@/lib/hooks/use-food';
 import { useToast } from '@/lib/hooks/use-toast';
 
 /* ─── SVG Icon Components ─── */
@@ -44,6 +45,22 @@ export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
   const { sendPhoneCode, loginWithPhone, getWechatAuthUrl, loginWithWechatToken, loading } = useAuth();
+  const { getProfile } = useFood();
+
+  /** 登录成功后根据档案完成情况决定跳转目标 */
+  const redirectAfterLogin = useCallback(async () => {
+    try {
+      const profile = await getProfile();
+      if (profile?.onboardingCompleted) {
+        router.push('/');
+      } else {
+        router.push('/health-profile?from=onboarding');
+      }
+    } catch {
+      // 新用户尚未创建档案 → 引导填写
+      router.push('/health-profile?from=onboarding');
+    }
+  }, [getProfile, router]);
 
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('');
@@ -86,7 +103,7 @@ export default function LoginPage() {
       // 清除 URL 参数，避免刷新重复触发
       window.history.replaceState({}, '', window.location.pathname);
       loginWithWechatToken(wechatToken)
-        .then(() => router.push('/'))
+        .then(() => redirectAfterLogin())
         .catch(handleError);
     } else if (errorMsg) {
       window.history.replaceState({}, '', window.location.pathname);
@@ -125,7 +142,7 @@ export default function LoginPage() {
     try {
       await loginWithPhone(phone.replace(/\s/g, ''), code);
       toast({ title: '登录成功' });
-      router.push('/');
+      await redirectAfterLogin();
     } catch (err) {
       handleError(err);
     } finally {

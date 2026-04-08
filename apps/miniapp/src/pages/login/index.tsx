@@ -3,7 +3,23 @@ import { View, Text, Input, Button } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import { useAuthStore } from '@/store/auth'
 import { post } from '@/services/request'
+import * as foodService from '@/services/food'
 import './index.scss'
+
+/** 登录成功后根据档案完成情况决定跳转目标 */
+async function redirectAfterLogin() {
+  try {
+    const profile = await foodService.getProfile()
+    if (profile?.onboardingCompleted) {
+      Taro.switchTab({ url: '/pages/index/index' })
+    } else {
+      Taro.redirectTo({ url: '/pages/health-profile/index?from=onboarding' })
+    }
+  } catch {
+    // 获取档案失败（新用户尚未创建档案），引导去填写
+    Taro.redirectTo({ url: '/pages/health-profile/index?from=onboarding' })
+  }
+}
 
 type LoginMode = 'wechat' | 'phone'
 
@@ -22,7 +38,7 @@ function LoginPage() {
     setLoading(true)
     try {
       await wxLogin()
-      Taro.switchTab({ url: '/pages/index/index' })
+      await redirectAfterLogin()
     } catch (err: any) {
       Taro.showToast({ title: err?.message || '登录失败', icon: 'none' })
     } finally {
@@ -65,7 +81,7 @@ function LoginPage() {
     setLoading(true)
     try {
       await phoneLogin(phone, code)
-      Taro.switchTab({ url: '/pages/index/index' })
+      await redirectAfterLogin()
     } catch (err: any) {
       Taro.showToast({ title: err?.message || '登录失败', icon: 'none' })
     } finally {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/use-auth';
 import { useFood } from '@/lib/hooks/use-food';
 import { LocalizedLink } from '@/components/common/localized-link';
@@ -118,6 +119,7 @@ const MEAL_LABELS: Record<string, string> = {
 
 export function HomePage() {
   const { user, isLoggedIn } = useAuth();
+  const router = useRouter();
   const { getTodaySummary, getTodayRecords, getMealSuggestion, getDailyPlan, proactiveCheck, getProfile } = useFood();
   const [summary, setSummary] = useState<DailySummary>({ totalCalories: 0, calorieGoal: 2000, mealCount: 0, remaining: 2000 });
   const [meals, setMeals] = useState<FoodRecord[]>([]);
@@ -126,6 +128,18 @@ export function HomePage() {
   const [reminder, setReminder] = useState<ProactiveReminder | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [activeScenario, setActiveScenario] = useState(0);
+
+  // 安全网：登录且未完成引导时跳转公共档案填写页
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    getProfile().then((p) => {
+      if (!p?.onboardingCompleted) {
+        router.replace('/health-profile?from=onboarding');
+      }
+    }).catch(() => {});
+  // 只在首次进入时检查
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!isLoggedIn) return;
