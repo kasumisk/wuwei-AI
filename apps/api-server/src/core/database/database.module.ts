@@ -24,6 +24,11 @@ import { UserProfile } from '../../entities/user-profile.entity';
 import { CoachConversation } from '../../entities/coach-conversation.entity';
 import { CoachMessage } from '../../entities/coach-message.entity';
 import { FoodLibrary } from '../../entities/food-library.entity';
+import { FoodTranslation } from '../../entities/food-translation.entity';
+import { FoodSource } from '../../entities/food-source.entity';
+import { FoodChangeLog } from '../../entities/food-change-log.entity';
+import { FoodConflict } from '../../entities/food-conflict.entity';
+import { FoodRegionalInfo } from '../../entities/food-regional-info.entity';
 import { DailyPlan } from '../../entities/daily-plan.entity';
 import { UserBehaviorProfile } from '../../entities/user-behavior-profile.entity';
 import { AiDecisionLog } from '../../entities/ai-decision-log.entity';
@@ -75,6 +80,11 @@ import { RecommendationFeedback } from '../../entities/recommendation-feedback.e
             CoachMessage,
             // 食物库
             FoodLibrary,
+            FoodTranslation,
+            FoodSource,
+            FoodChangeLog,
+            FoodConflict,
+            FoodRegionalInfo,
             // V2: 日计划
             DailyPlan,
             // V3: 行为建模

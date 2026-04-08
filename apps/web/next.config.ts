@@ -7,7 +7,9 @@ const withNextIntl = createNextIntlPlugin('./src/lib/i18n/request.ts');
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   images: {
-    domains: [],
+    domains: [
+      'lh3.googleusercontent.com'
+    ],
   },
   async rewrites() {
     if (process.env.NODE_ENV === 'production') {

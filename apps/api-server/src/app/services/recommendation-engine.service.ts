@@ -224,12 +224,12 @@ export class RecommendationEngineService {
       }
 
       // 热量上限（按标准份量）
-      const servingCal = (food.caloriesPer100g * food.standardServingG) / 100;
+      const servingCal = (food.calories * food.standardServingG) / 100;
       if (servingCal > constraint.maxCalories) return false;
 
       // 蛋白质下限
-      if (constraint.minProtein > 0 && food.proteinPer100g) {
-        const servingProtein = (food.proteinPer100g * food.standardServingG) / 100;
+      if (constraint.minProtein > 0 && food.protein) {
+        const servingProtein = (food.protein * food.standardServingG) / 100;
         if (servingProtein < constraint.minProtein) return false;
       }
 
@@ -242,10 +242,10 @@ export class RecommendationEngineService {
   scoreFood(food: FoodLibrary, goalType: string): number {
     const normalize = (v: number, max: number) => Math.min(v / max, 1);
 
-    const servingCal = (food.caloriesPer100g * food.standardServingG) / 100;
-    const servingProtein = ((food.proteinPer100g || 0) * food.standardServingG) / 100;
-    const servingCarbs = ((food.carbsPer100g || 0) * food.standardServingG) / 100;
-    const servingFat = ((food.fatPer100g || 0) * food.standardServingG) / 100;
+    const servingCal = (food.calories * food.standardServingG) / 100;
+    const servingProtein = ((food.protein || 0) * food.standardServingG) / 100;
+    const servingCarbs = ((food.carbs || 0) * food.standardServingG) / 100;
+    const servingFat = ((food.fat || 0) * food.standardServingG) / 100;
 
     // 食物级别分数优先，分类级别兜底
     const quality = (food as any).qualityScore || CATEGORY_QUALITY[food.category] || 5;
@@ -270,11 +270,11 @@ export class RecommendationEngineService {
     if ((food as any).isFried)     rawScore -= 0.08;
 
     // 高纤维加分（每100g 纤维 >3g 加 0.03）
-    const fiber = (food as any).fiberPer100g || 0;
+    const fiber = (food as any).fiber || 0;
     if (fiber >= 3) rawScore += 0.03;
 
     // 高钠惩罚（每100g 钠 >600mg 扣 0.03）
-    const sodium = (food as any).sodiumPer100g || 0;
+    const sodium = (food as any).sodium || 0;
     if (sodium > 600) rawScore -= 0.03;
 
     // 低GI加分（减脂/健康目标下 GI<55 加 0.02）
@@ -342,10 +342,10 @@ export class RecommendationEngineService {
 
     // 评分排序
     const scored: ScoredFood[] = candidates.map(food => {
-      const servingCalories = Math.round((food.caloriesPer100g * food.standardServingG) / 100);
-      const servingProtein = Math.round(((food.proteinPer100g || 0) * food.standardServingG) / 100);
-      const servingFat = Math.round(((food.fatPer100g || 0) * food.standardServingG) / 100);
-      const servingCarbs = Math.round(((food.carbsPer100g || 0) * food.standardServingG) / 100);
+      const servingCalories = Math.round((food.calories * food.standardServingG) / 100);
+      const servingProtein = Math.round(((food.protein || 0) * food.standardServingG) / 100);
+      const servingFat = Math.round(((food.fat || 0) * food.standardServingG) / 100);
+      const servingCarbs = Math.round(((food.carbs || 0) * food.standardServingG) / 100);
 
       return {
         food,
@@ -421,10 +421,10 @@ export class RecommendationEngineService {
       const scored: ScoredFood[] = candidates.map(food => ({
         food,
         score: this.scoreFood(food, goalType),
-        servingCalories: Math.round((food.caloriesPer100g * food.standardServingG) / 100),
-        servingProtein: Math.round(((food.proteinPer100g || 0) * food.standardServingG) / 100),
-        servingFat: Math.round(((food.fatPer100g || 0) * food.standardServingG) / 100),
-        servingCarbs: Math.round(((food.carbsPer100g || 0) * food.standardServingG) / 100),
+        servingCalories: Math.round((food.calories * food.standardServingG) / 100),
+        servingProtein: Math.round(((food.protein || 0) * food.standardServingG) / 100),
+        servingFat: Math.round(((food.fat || 0) * food.standardServingG) / 100),
+        servingCarbs: Math.round(((food.carbs || 0) * food.standardServingG) / 100),
       })).sort((a, b) => b.score - a.score);
 
       const picks = this.diversify(scored, recentFoodNames, 2);
@@ -599,10 +599,10 @@ export class RecommendationEngineService {
         return {
           food,
           score,
-          servingCalories: Math.round((food.caloriesPer100g * food.standardServingG) / 100),
-          servingProtein: Math.round(((food.proteinPer100g || 0) * food.standardServingG) / 100),
-          servingFat: Math.round(((food.fatPer100g || 0) * food.standardServingG) / 100),
-          servingCarbs: Math.round(((food.carbsPer100g || 0) * food.standardServingG) / 100),
+          servingCalories: Math.round((food.calories * food.standardServingG) / 100),
+          servingProtein: Math.round(((food.protein || 0) * food.standardServingG) / 100),
+          servingFat: Math.round(((food.fat || 0) * food.standardServingG) / 100),
+          servingCarbs: Math.round(((food.carbs || 0) * food.standardServingG) / 100),
         };
       }).sort((a, b) => b.score - a.score);
 

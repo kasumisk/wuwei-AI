@@ -28,6 +28,9 @@ const PATH = {
     APP_USERS: '/admin/app-users',
     // 食物库管理
     FOOD_LIBRARY: '/admin/food-library',
+    FOOD_LIBRARY_CONFLICTS: '/admin/food-library/conflicts',
+    // 食物数据管道
+    FOOD_PIPELINE: '/admin/food-pipeline',
     // 内容管理
     CONTENT_FOOD_RECORDS: '/admin/content/food-records',
     CONTENT_DAILY_PLANS: '/admin/content/daily-plans',

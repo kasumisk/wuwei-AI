@@ -10,6 +10,7 @@ import { LangChainModule } from './langchain/langchain.module';
 import { AppClientModule } from './app/app-client.module';
 import { StorageModule } from './storage/storage.module';
 import { CompressModule } from './compress/compress.module';
+import { FoodPipelineModule } from './food-pipeline/food-pipeline.module';
 import { AllExceptionsFilter } from './core/filters/all-exceptions.filter';
 import { LoggerMiddleware } from './core/middlewares/logger.middleware';
 import { ResponseInterceptor } from './core/interceptors/response.interceptor';
@@ -25,6 +26,7 @@ import { Reflector } from '@nestjs/core';
     AppClientModule,
     StorageModule,
     CompressModule,
+    FoodPipelineModule,
   ],
   controllers: [AppController],
   providers: [

@@ -19,6 +19,10 @@ import { AppVersion } from '../entities/app-version.entity';
 import { AppVersionPackage } from '../entities/app-version-package.entity';
 // 内容管理实体
 import { FoodLibrary } from '../entities/food-library.entity';
+import { FoodTranslation } from '../entities/food-translation.entity';
+import { FoodSource } from '../entities/food-source.entity';
+import { FoodChangeLog } from '../entities/food-change-log.entity';
+import { FoodConflict } from '../entities/food-conflict.entity';
 import { FoodRecord } from '../entities/food-record.entity';
 import { DailyPlan } from '../entities/daily-plan.entity';
 import { DailySummary } from '../entities/daily-summary.entity';
@@ -95,6 +99,10 @@ import { RbacPermissionGuard } from './guards/rbac-permission.guard';
       AppVersionPackage,
       // 内容管理实体
       FoodLibrary,
+      FoodTranslation,
+      FoodSource,
+      FoodChangeLog,
+      FoodConflict,
       FoodRecord,
       DailyPlan,
       DailySummary,

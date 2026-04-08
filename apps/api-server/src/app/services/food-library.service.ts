@@ -126,7 +126,7 @@ export class FoodLibraryService {
     mealType: MealType,
   ): Promise<FoodRecord> {
     const food = await this.findById(foodLibraryId);
-    const calories = Math.round((food.caloriesPer100g * servingGrams) / 100);
+    const calories = Math.round((food.calories * servingGrams) / 100);
 
     // 复用现有的 FoodService.saveRecord
     return this.foodService.saveRecord(userId, {
@@ -212,8 +212,9 @@ export class FoodLibraryService {
       // 自动推导 qualityScore（如果为空）
       if (!food.qualityScore) {
         const categoryQuality: Record<string, number> = {
-          '蔬菜': 8, '水果': 7, '豆制品': 7, '汤类': 6,
-          '肉类': 6, '主食': 5, '快餐': 3, '零食': 2, '饮品': 3,
+          veggie: 8, fruit: 7, dairy: 6, protein: 6,
+          grain: 5, composite: 4, beverage: 3, snack: 2,
+          fat: 4, condiment: 3,
         };
         changes.qualityScore = categoryQuality[food.category] || 5;
       }
@@ -221,8 +222,9 @@ export class FoodLibraryService {
       // 自动推导 satietyScore（如果为空）
       if (!food.satietyScore) {
         const categorySatiety: Record<string, number> = {
-          '肉类': 7, '主食': 7, '豆制品': 6, '蔬菜': 5,
-          '汤类': 4, '水果': 3, '快餐': 5, '零食': 2, '饮品': 2,
+          protein: 7, grain: 7, dairy: 6, veggie: 5,
+          composite: 5, fruit: 3, fat: 4, snack: 2,
+          beverage: 2, condiment: 1,
         };
         changes.satietyScore = categorySatiety[food.category] || 4;
       }
@@ -230,22 +232,23 @@ export class FoodLibraryService {
       // 自动推导 mealTypes（如果为空数组）
       if (!food.mealTypes || (food.mealTypes as string[]).length === 0) {
         const mealTypeMap: Record<string, string[]> = {
-          '主食': ['breakfast', 'lunch', 'dinner'],
-          '肉类': ['lunch', 'dinner'],
-          '蔬菜': ['lunch', 'dinner'],
-          '豆制品': ['lunch', 'dinner'],
-          '汤类': ['lunch', 'dinner'],
-          '水果': ['snack'],
-          '饮品': ['breakfast', 'snack'],
-          '零食': ['snack'],
-          '快餐': ['lunch', 'dinner'],
+          grain: ['breakfast', 'lunch', 'dinner'],
+          protein: ['lunch', 'dinner'],
+          veggie: ['lunch', 'dinner'],
+          dairy: ['breakfast', 'snack'],
+          composite: ['lunch', 'dinner'],
+          fruit: ['snack'],
+          beverage: ['breakfast', 'snack'],
+          snack: ['snack'],
+          fat: ['lunch', 'dinner'],
+          condiment: ['lunch', 'dinner'],
         };
         changes.mealTypes = mealTypeMap[food.category] || ['lunch', 'dinner'];
       }
 
       // 自动推导 isProcessed
       if (food.isProcessed === undefined || food.isProcessed === null) {
-        changes.isProcessed = ['快餐', '零食'].includes(food.category) ||
+        changes.isProcessed = ['snack', 'composite'].includes(food.category) ||
           /加工|方便|速食|罐头|腌/.test(food.name);
       }
 

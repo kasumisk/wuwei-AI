@@ -1,6 +1,8 @@
-import { IsString, IsOptional, IsInt, IsBoolean, IsNumber, IsArray, Min, Max, IsEnum } from 'class-validator';
+import { IsString, IsOptional, IsInt, IsBoolean, IsNumber, IsArray, IsObject, Min, Max, IsEnum, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+
+// ==================== 查询 DTO ====================
 
 export class GetFoodLibraryQueryDto {
   @ApiPropertyOptional()
@@ -30,6 +32,11 @@ export class GetFoodLibraryQueryDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsString()
+  status?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsBoolean()
   @Type(() => Boolean)
   isVerified?: boolean;
@@ -37,10 +44,16 @@ export class GetFoodLibraryQueryDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  source?: string;
+  primarySource?: string;
 }
 
+// ==================== 食物 CRUD DTO ====================
+
 export class CreateFoodLibraryDto {
+  @ApiProperty()
+  @IsString()
+  code: string;
+
   @ApiProperty()
   @IsString()
   name: string;
@@ -50,56 +63,169 @@ export class CreateFoodLibraryDto {
   @IsString()
   aliases?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  barcode?: string;
+
+  @ApiPropertyOptional({ enum: ['draft', 'active', 'archived', 'merged'] })
+  @IsOptional()
+  @IsString()
+  status?: string;
+
   @ApiProperty()
   @IsString()
   category: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  subCategory?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  foodGroup?: string;
+
+  // 宏量营养素
   @ApiProperty()
   @Type(() => Number)
-  @IsInt()
-  caloriesPer100g: number;
+  @IsNumber()
+  calories: number;
 
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  proteinPer100g?: number;
+  protein?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  fatPer100g?: number;
+  fat?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  carbsPer100g?: number;
+  carbs?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  fiberPer100g?: number;
+  fiber?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  sugarPer100g?: number;
+  sugar?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  sodiumPer100g?: number;
+  saturatedFat?: number;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  transFat?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  cholesterol?: number;
+
+  // 微量营养素
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  sodium?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  potassium?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  calcium?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  iron?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  vitaminA?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  vitaminC?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  vitaminD?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  vitaminE?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  vitaminB12?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  folate?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  zinc?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  magnesium?: number;
+
+  // 健康评估
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   glycemicIndex?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  glycemicLoad?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -113,9 +239,52 @@ export class CreateFoodLibraryDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(4)
+  processingLevel?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  allergens?: string[];
+
+  // 决策引擎
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  @Max(10)
+  qualityScore?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  @Max(10)
+  satietyScore?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  nutrientDensity?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsArray()
   @IsString({ each: true })
   mealTypes?: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  tags?: string[];
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -124,25 +293,10 @@ export class CreateFoodLibraryDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsString()
-  subCategory?: string;
+  @IsObject()
+  compatibility?: Record<string, string[]>;
 
-  @ApiPropertyOptional()
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(10)
-  qualityScore?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(10)
-  satietyScore?: number;
-
+  // 份量
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
@@ -156,9 +310,36 @@ export class CreateFoodLibraryDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsArray()
+  commonPortions?: Array<{ name: string; grams: number }>;
+
+  // 媒体
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  imageUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  thumbnailUrl?: string;
+
+  // 数据溯源
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  primarySource?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  primarySourceId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @Type(() => Number)
-  @IsInt()
-  searchWeight?: number;
+  @IsNumber()
+  confidence?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -167,28 +348,100 @@ export class CreateFoodLibraryDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  tags?: string[];
+  @Type(() => Number)
+  @IsInt()
+  searchWeight?: number;
+}
 
-  @ApiPropertyOptional({ enum: ['official', 'estimated', 'ai'] })
+export class UpdateFoodLibraryDto extends PartialType(CreateFoodLibraryDto) {}
+
+export class BatchImportFoodDto {
+  @ApiProperty({ type: [CreateFoodLibraryDto] })
+  @IsArray()
+  foods: CreateFoodLibraryDto[];
+}
+
+// ==================== 翻译 DTO ====================
+
+export class CreateFoodTranslationDto {
+  @ApiProperty()
+  @IsString()
+  locale: string;
+
+  @ApiProperty()
+  @IsString()
+  name: string;
+
+  @ApiPropertyOptional()
   @IsOptional()
-  @IsEnum(['official', 'estimated', 'ai'])
-  source?: 'official' | 'estimated' | 'ai';
+  @IsString()
+  aliases?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  servingDesc?: string;
+}
+
+export class UpdateFoodTranslationDto extends PartialType(CreateFoodTranslationDto) {}
+
+// ==================== 数据来源 DTO ====================
+
+export class CreateFoodSourceDto {
+  @ApiProperty()
+  @IsString()
+  sourceType: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sourceId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sourceUrl?: string;
+
+  @ApiProperty()
+  @IsObject()
+  rawData: Record<string, any>;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsObject()
+  mappedData?: Record<string, any>;
 
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   confidence?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isPrimary?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  priority?: number;
 }
 
-export class UpdateFoodLibraryDto extends CreateFoodLibraryDto {
-  // 所有字段均可选（继承自 CreateFoodLibraryDto，但都有 @IsOptional）
-}
+// ==================== 冲突解决 DTO ====================
 
-export class BatchImportFoodDto {
-  @ApiProperty({ type: [CreateFoodLibraryDto] })
-  @IsArray()
-  foods: CreateFoodLibraryDto[];
+export class ResolveFoodConflictDto {
+  @ApiProperty()
+  @IsString()
+  resolution: string;
+
+  @ApiProperty()
+  @IsString()
+  resolvedValue: string;
 }
