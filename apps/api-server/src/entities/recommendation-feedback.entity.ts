@@ -21,7 +21,7 @@ export class RecommendationFeedback {
   userId: string;
 
   /** 推荐所属餐次 */
-  @Column({ length: 20 })
+  @Column({ name: 'meal_type', length: 20 })
   mealType: string;
 
   /** 推荐的食物名称 */

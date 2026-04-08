@@ -17,6 +17,19 @@ import { UserRole } from '../entities/user-role.entity';
 import { RolePermission } from '../entities/role-permission.entity';
 import { AppVersion } from '../entities/app-version.entity';
 import { AppVersionPackage } from '../entities/app-version-package.entity';
+// 内容管理实体
+import { FoodLibrary } from '../entities/food-library.entity';
+import { FoodRecord } from '../entities/food-record.entity';
+import { DailyPlan } from '../entities/daily-plan.entity';
+import { DailySummary } from '../entities/daily-summary.entity';
+import { CoachConversation } from '../entities/coach-conversation.entity';
+import { CoachMessage } from '../entities/coach-message.entity';
+import { Achievement } from '../entities/achievement.entity';
+import { UserAchievement } from '../entities/user-achievement.entity';
+import { Challenge } from '../entities/challenge.entity';
+import { UserChallenge } from '../entities/user-challenge.entity';
+import { RecommendationFeedback } from '../entities/recommendation-feedback.entity';
+import { AiDecisionLog } from '../entities/ai-decision-log.entity';
 // 服务
 import { AdminService } from './admin.service';
 import { AdminUserService } from './services/admin-user.service';
@@ -50,6 +63,12 @@ import { AppVersionPackageController } from './controllers/app-version-package.c
 // App 用户管理控制器
 import { AppUserManagementController } from './controllers/app-user-management.controller';
 import { FileController } from './controllers/file.controller';
+// 食物库 & 内容管理
+import { FoodLibraryManagementService } from './services/food-library-management.service';
+import { ContentManagementService } from './services/content-management.service';
+import { FoodLibraryManagementController } from './controllers/food-library-management.controller';
+import { ContentManagementController } from './controllers/content-management.controller';
+import { GamificationManagementController } from './controllers/gamification-management.controller';
 // 守卫和策略
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
@@ -74,6 +93,19 @@ import { RbacPermissionGuard } from './guards/rbac-permission.guard';
       RolePermission,
       AppVersion,
       AppVersionPackage,
+      // 内容管理实体
+      FoodLibrary,
+      FoodRecord,
+      DailyPlan,
+      DailySummary,
+      CoachConversation,
+      CoachMessage,
+      Achievement,
+      UserAchievement,
+      Challenge,
+      UserChallenge,
+      RecommendationFeedback,
+      AiDecisionLog,
     ]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
@@ -99,6 +131,9 @@ import { RbacPermissionGuard } from './guards/rbac-permission.guard';
     AppVersionPackageService,
     // App 用户管理
     AppUserManagementService,
+    // 食物库 & 内容管理
+    FoodLibraryManagementService,
+    ContentManagementService,
     // 守卫和策略
     JwtStrategy,
     JwtAuthGuard,
@@ -123,6 +158,10 @@ import { RbacPermissionGuard } from './guards/rbac-permission.guard';
     AppUserManagementController,
     // 文件管理控制器
     FileController,
+    // 食物库 & 内容管理控制器
+    FoodLibraryManagementController,
+    ContentManagementController,
+    GamificationManagementController,
   ],
   exports: [
     AdminService,

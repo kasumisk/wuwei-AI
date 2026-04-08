@@ -26,6 +26,17 @@ const PATH = {
     APP_VERSION_STORE_DEFAULTS: '/admin/app-versions/store-defaults/packages',
     // App 用户管理
     APP_USERS: '/admin/app-users',
+    // 食物库管理
+    FOOD_LIBRARY: '/admin/food-library',
+    // 内容管理
+    CONTENT_FOOD_RECORDS: '/admin/content/food-records',
+    CONTENT_DAILY_PLANS: '/admin/content/daily-plans',
+    CONTENT_CONVERSATIONS: '/admin/content/conversations',
+    CONTENT_RECOMMENDATION_FEEDBACK: '/admin/content/recommendation-feedback',
+    CONTENT_AI_DECISION_LOGS: '/admin/content/ai-decision-logs',
+    // 游戏化管理
+    GAMIFICATION_ACHIEVEMENTS: '/admin/gamification/achievements',
+    GAMIFICATION_CHALLENGES: '/admin/gamification/challenges',
   },
 };
 
