@@ -360,6 +360,23 @@ export class FoodController {
     };
   }
 
+  /**
+   * 强制重新生成今日计划（删除缓存后重新推荐）
+   * POST /api/app/food/daily-plan/regenerate
+   */
+  @Post('daily-plan/regenerate')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '强制重新生成今日饮食计划' })
+  async regenerateDailyPlan(@CurrentAppUser() user: any): Promise<ApiResponse> {
+    const plan = await this.dailyPlanService.regeneratePlan(user.id);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '计划已重新生成',
+      data: plan,
+    };
+  }
+
   // ==================== V3: 行为建模 ====================
 
   /**

@@ -33,6 +33,15 @@ export class DailyPlanService {
   }
 
   /**
+   * 强制重新生成今日计划（删除缓存后重新生成）
+   */
+  async regeneratePlan(userId: string): Promise<DailyPlan> {
+    const today = new Date().toISOString().split('T')[0];
+    await this.planRepo.delete({ userId, date: today });
+    return this.generatePlan(userId, today);
+  }
+
+  /**
    * 规则引擎生成每日计划（基于食物库推荐，零 AI 成本）
    */
   private async generatePlan(userId: string, date: string): Promise<DailyPlan> {
