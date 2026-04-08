@@ -22,16 +22,13 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "clean": "rm -rf dist coverage",
-    "db:seed": "ts-node -r tsconfig-paths/register src/scripts/seed.ts",
-    "db:seed-admin": "ts-node -r tsconfig-paths/register src/scripts/seed-admin.ts",
-    "db:seed-permissions": "ts-node -r tsconfig-paths/register src/scripts/seed-permissions.ts",
-    "db:init": "ts-node -r tsconfig-paths/register src/scripts/init-system.ts",
-    "db:seed-data": "npm run build && node dist/apps/server/src/scripts/seed-data.js",
-    "migration:generate": "typeorm migration:generate -d src/core/database/data-source.ts",
-    "migration:run": "typeorm migration:run -d src/core/database/data-source.ts",
-    "migration:revert": "typeorm migration:revert -d src/core/database/data-source.ts",
-    "gateway:init": "ts-node -r tsconfig-paths/register src/gateway/init-test-data.ts",
-    "gateway:test": "ts-node -r tsconfig-paths/register src/gateway/test-gateway.ts"
+    "db:reset": "ts-node -r tsconfig-paths/register src/scripts/db-reset.ts",
+    "migration:generate": "nest build && npx typeorm migration:generate -d dist/infrastructure/database/data-source.js",
+    "migration:run": "nest build && npx typeorm migration:run -d dist/infrastructure/database/data-source.js",
+    "migration:revert": "nest build && npx typeorm migration:revert -d dist/infrastructure/database/data-source.js",
+    "migration:show": "nest build && npx typeorm migration:show -d dist/infrastructure/database/data-source.js",
+    "schema:sync": "nest build && npx typeorm schema:sync -d dist/infrastructure/database/data-source.js",
+    "schema:log": "nest build && npx typeorm schema:log -d dist/infrastructure/database/data-source.js"
   },
   "dependencies": {
     "@ai-platform/constants": "workspace:*",
