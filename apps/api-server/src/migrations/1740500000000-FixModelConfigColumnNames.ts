@@ -39,9 +39,17 @@ export class FixModelConfigColumnNames1740500000000 implements MigrationInterfac
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`ALTER TABLE model_configs RENAME COLUMN "customApiKey"    TO custom_api_key`);
-    await queryRunner.query(`ALTER TABLE model_configs RENAME COLUMN "customTimeout"   TO custom_timeout`);
-    await queryRunner.query(`ALTER TABLE model_configs RENAME COLUMN "customRetries"   TO custom_retries`);
-    await queryRunner.query(`ALTER TABLE model_configs RENAME COLUMN "configMetadata"  TO config_metadata`);
+    await queryRunner.query(
+      `ALTER TABLE model_configs RENAME COLUMN "customApiKey"    TO custom_api_key`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE model_configs RENAME COLUMN "customTimeout"   TO custom_timeout`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE model_configs RENAME COLUMN "customRetries"   TO custom_retries`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE model_configs RENAME COLUMN "configMetadata"  TO config_metadata`,
+    );
   }
 }

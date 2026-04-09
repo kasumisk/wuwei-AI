@@ -62,17 +62,11 @@ export async function sendCoachMessage(
   message: string,
   conversationId: string | null,
   callbacks: CoachStreamCallbacks,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<void> {
-  const token =
-    typeof window !== 'undefined'
-      ? localStorage.getItem('app_auth_token')
-      : null;
+  const token = typeof window !== 'undefined' ? localStorage.getItem('app_auth_token') : null;
 
-  const apiUrl =
-    typeof window !== 'undefined'
-      ? (process.env.NEXT_PUBLIC_API_URL || '')
-      : '';
+  const apiUrl = typeof window !== 'undefined' ? process.env.NEXT_PUBLIC_API_URL || '' : '';
 
   const res = await fetch(`${apiUrl}/app/coach/chat`, {
     method: 'POST',
@@ -158,7 +152,7 @@ export const coachService = {
   getMessages: async (
     conversationId: string,
     page?: number,
-    limit?: number,
+    limit?: number
   ): Promise<CoachMessagesPaginated> => {
     const params = new URLSearchParams();
     if (page) params.set('page', String(page));
@@ -166,8 +160,8 @@ export const coachService = {
     const qs = params.toString();
     return unwrap(
       clientGet<CoachMessagesPaginated>(
-        `/app/coach/conversations/${conversationId}/messages${qs ? `?${qs}` : ''}`,
-      ),
+        `/app/coach/conversations/${conversationId}/messages${qs ? `?${qs}` : ''}`
+      )
     );
   },
 
@@ -175,8 +169,6 @@ export const coachService = {
    * 删除对话
    */
   deleteConversation: async (conversationId: string): Promise<void> => {
-    await unwrap(
-      clientDelete<null>(`/app/coach/conversations/${conversationId}`),
-    );
+    await unwrap(clientDelete<null>(`/app/coach/conversations/${conversationId}`));
   },
 };

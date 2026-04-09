@@ -33,7 +33,7 @@ export default async function LocaleLayout({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
-  
+
   if (!i18n.locales.includes(locale as (typeof i18n.locales)[number])) {
     notFound();
   }

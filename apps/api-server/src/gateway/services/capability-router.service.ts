@@ -1,9 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ModelConfig } from '../../entities/model-config.entity';
-import { Provider } from '../../entities/provider.entity';
-import { ClientCapabilityPermission } from '../../entities/client-capability-permission.entity';
+import { ModelConfig } from '../../modules/provider/entities/model-config.entity';
+import { Provider } from '../../modules/provider/entities/provider.entity';
+import { ClientCapabilityPermission } from '../../modules/client/entities/client-capability-permission.entity';
 
 export interface RouteResult {
   modelConfig: ModelConfig;

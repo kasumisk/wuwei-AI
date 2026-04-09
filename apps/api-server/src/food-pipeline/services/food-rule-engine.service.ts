@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { FoodLibrary } from '../../entities/food-library.entity';
+import { FoodLibrary } from '../../modules/food/entities/food-library.entity';
 
 /**
  * 食物规则引擎服务
@@ -23,36 +23,49 @@ export class FoodRuleEngineService {
     if (food.calories != null && food.calories <= 100) tags.push('low_calorie');
     if (food.sodium != null && food.sodium <= 120) tags.push('low_sodium');
     if (food.sugar != null && food.sugar <= 5) tags.push('low_sugar');
-    if (food.glycemicIndex != null && food.glycemicIndex <= 55) tags.push('low_gi');
+    if (food.glycemicIndex != null && food.glycemicIndex <= 55)
+      tags.push('low_gi');
 
     // 目标适配标签
-    if (p(food.protein) >= 20 && food.fat != null && food.fat <= 10) tags.push('muscle_gain');
-    if (food.calories != null && food.calories <= 150 && p(food.fiber) >= 3) tags.push('weight_loss');
-    if (food.carbs != null && food.carbs <= 10 && p(food.fat) >= 10) tags.push('keto');
+    if (p(food.protein) >= 20 && food.fat != null && food.fat <= 10)
+      tags.push('muscle_gain');
+    if (food.calories != null && food.calories <= 150 && p(food.fiber) >= 3)
+      tags.push('weight_loss');
+    if (food.carbs != null && food.carbs <= 10 && p(food.fat) >= 10)
+      tags.push('keto');
 
     if (
-      food.category && ['veggie', 'fruit', 'grain'].includes(food.category) &&
+      food.category &&
+      ['veggie', 'fruit', 'grain'].includes(food.category) &&
       !food.allergens?.includes('dairy') &&
       !food.allergens?.includes('egg')
     ) {
       tags.push('vegan');
     }
 
-    if (food.glycemicIndex != null && food.glycemicIndex <= 55 && food.sugar != null && food.sugar <= 5) {
+    if (
+      food.glycemicIndex != null &&
+      food.glycemicIndex <= 55 &&
+      food.sugar != null &&
+      food.sugar <= 5
+    ) {
       tags.push('diabetes_friendly');
     }
 
     if (
-      food.saturatedFat != null && food.saturatedFat <= 2 &&
+      food.saturatedFat != null &&
+      food.saturatedFat <= 2 &&
       (food.transFat == null || food.transFat <= 0) &&
-      food.sodium != null && food.sodium <= 300
+      food.sodium != null &&
+      food.sodium <= 300
     ) {
       tags.push('heart_healthy');
     }
 
     // 属性标签
     if (food.processingLevel === 1) tags.push('natural');
-    if (food.processingLevel != null && food.processingLevel <= 2) tags.push('whole_food');
+    if (food.processingLevel != null && food.processingLevel <= 2)
+      tags.push('whole_food');
     if (!food.isProcessed && !food.isFried) tags.push('natural');
 
     // 去重
@@ -159,28 +172,67 @@ export class FoodRuleEngineService {
 
     // Daily Reference Values (DRV)
     const DRV = {
-      protein: 50, fiber: 28, vitaminA: 900, vitaminC: 90, vitaminD: 20,
-      calcium: 1300, iron: 18, potassium: 4700, magnesium: 420,
-      saturatedFat: 20, sugar: 50, sodium: 2300,
+      protein: 50,
+      fiber: 28,
+      vitaminA: 900,
+      vitaminC: 90,
+      vitaminD: 20,
+      calcium: 1300,
+      iron: 18,
+      potassium: 4700,
+      magnesium: 420,
+      saturatedFat: 20,
+      sugar: 50,
+      sodium: 2300,
     };
 
     let nrf = 0;
 
     // 9 nutrients to encourage (% DRV per 100kcal, capped at 100%)
-    nrf += Math.min(((food.protein || 0) * per100kcal / DRV.protein) * 100, 100);
-    nrf += Math.min(((food.fiber || 0) * per100kcal / DRV.fiber) * 100, 100);
-    nrf += Math.min(((food.vitaminA || 0) * per100kcal / DRV.vitaminA) * 100, 100);
-    nrf += Math.min(((food.vitaminC || 0) * per100kcal / DRV.vitaminC) * 100, 100);
-    nrf += Math.min(((food.vitaminD || 0) * per100kcal / DRV.vitaminD) * 100, 100);
-    nrf += Math.min(((food.calcium || 0) * per100kcal / DRV.calcium) * 100, 100);
-    nrf += Math.min(((food.iron || 0) * per100kcal / DRV.iron) * 100, 100);
-    nrf += Math.min(((food.potassium || 0) * per100kcal / DRV.potassium) * 100, 100);
-    nrf += Math.min(((food.magnesium || 0) * per100kcal / DRV.magnesium) * 100, 100);
+    nrf += Math.min(
+      (((food.protein || 0) * per100kcal) / DRV.protein) * 100,
+      100,
+    );
+    nrf += Math.min((((food.fiber || 0) * per100kcal) / DRV.fiber) * 100, 100);
+    nrf += Math.min(
+      (((food.vitaminA || 0) * per100kcal) / DRV.vitaminA) * 100,
+      100,
+    );
+    nrf += Math.min(
+      (((food.vitaminC || 0) * per100kcal) / DRV.vitaminC) * 100,
+      100,
+    );
+    nrf += Math.min(
+      (((food.vitaminD || 0) * per100kcal) / DRV.vitaminD) * 100,
+      100,
+    );
+    nrf += Math.min(
+      (((food.calcium || 0) * per100kcal) / DRV.calcium) * 100,
+      100,
+    );
+    nrf += Math.min((((food.iron || 0) * per100kcal) / DRV.iron) * 100, 100);
+    nrf += Math.min(
+      (((food.potassium || 0) * per100kcal) / DRV.potassium) * 100,
+      100,
+    );
+    nrf += Math.min(
+      (((food.magnesium || 0) * per100kcal) / DRV.magnesium) * 100,
+      100,
+    );
 
     // 3 nutrients to limit (penalty if exceeding DRV)
-    nrf -= Math.max(((food.saturatedFat || 0) * per100kcal / DRV.saturatedFat) * 100 - 100, 0);
-    nrf -= Math.max(((food.sugar || 0) * per100kcal / DRV.sugar) * 100 - 100, 0);
-    nrf -= Math.max(((food.sodium || 0) * per100kcal / DRV.sodium) * 100 - 100, 0);
+    nrf -= Math.max(
+      (((food.saturatedFat || 0) * per100kcal) / DRV.saturatedFat) * 100 - 100,
+      0,
+    );
+    nrf -= Math.max(
+      (((food.sugar || 0) * per100kcal) / DRV.sugar) * 100 - 100,
+      0,
+    );
+    nrf -= Math.max(
+      (((food.sodium || 0) * per100kcal) / DRV.sodium) * 100 - 100,
+      0,
+    );
 
     // 归一化 (NRF 9.3 range ~0-900, scale to 0-100)
     return Math.round(Math.max(0, nrf / 9) * 10) / 10;
@@ -210,7 +262,8 @@ export class FoodRuleEngineService {
     actualCalories: number;
     error: number;
   } | null {
-    if (!food.calories || !food.protein || !food.fat || !food.carbs) return null;
+    if (!food.calories || !food.protein || !food.fat || !food.carbs)
+      return null;
 
     const expected =
       food.protein * 4 + food.carbs * 4 + food.fat * 9 + (food.fiber || 0) * 2;

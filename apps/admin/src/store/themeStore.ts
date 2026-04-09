@@ -10,7 +10,7 @@ interface ThemeState {
   primaryColor: string;
   collapsed: boolean;
   locale: string;
-  
+
   // Actions
   setMode: (mode: ThemeMode) => void;
   setPrimaryColor: (color: string) => void;
@@ -43,9 +43,11 @@ export const useThemeStore = create<ThemeState>()(
 );
 
 // 获取 Ant Design 主题配置
-export const getAntdTheme = (themeState: Pick<ThemeState, 'mode' | 'primaryColor'>): ThemeConfig => {
+export const getAntdTheme = (
+  themeState: Pick<ThemeState, 'mode' | 'primaryColor'>
+): ThemeConfig => {
   const { mode, primaryColor } = themeState;
-  
+
   return {
     token: {
       colorPrimary: primaryColor,

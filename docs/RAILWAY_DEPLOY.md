@@ -50,12 +50,12 @@
 
 ### 当前部署信息
 
-| 服务 | 平台 | 地址 |
-|------|------|------|
-| API Server | Railway | `https://api-server-production-dfcb.up.railway.app` |
+| 服务       | 平台    | 地址                                                                      |
+| ---------- | ------- | ------------------------------------------------------------------------- |
+| API Server | Railway | `https://api-server-production-dfcb.up.railway.app`                       |
 | PostgreSQL | Railway | 内网 `postgres.railway.internal:5432` / 公网 `metro.proxy.rlwy.net:33335` |
-| Web 前端 | Vercel | 通过 Vercel 配置 |
-| Admin 后台 | Vercel | 通过 Vercel 配置 |
+| Web 前端   | Vercel  | 通过 Vercel 配置                                                          |
+| Admin 后台 | Vercel  | 通过 Vercel 配置                                                          |
 
 ---
 
@@ -193,31 +193,31 @@ npx ts-node -r tsconfig-paths/register src/scripts/init-system.ts
 
 ### 必需变量
 
-| 变量 | 说明 | 生产环境值 |
-|------|------|-----------|
-| `NODE_ENV` | 运行环境 | `production` |
-| `PORT` | 服务端口 | `3000` |
-| `DB_HOST` | 数据库地址 | `postgres.railway.internal` |
-| `DB_PORT` | 数据库端口 | `5432` |
-| `DB_USERNAME` | 数据库用户 | `postgres` |
-| `DB_PASSWORD` | 数据库密码 | 从 Railway Postgres 服务获取 |
-| `DB_DATABASE` | 数据库名 | `railway` |
+| 变量             | 说明           | 生产环境值                           |
+| ---------------- | -------------- | ------------------------------------ |
+| `NODE_ENV`       | 运行环境       | `production`                         |
+| `PORT`           | 服务端口       | `3000`                               |
+| `DB_HOST`        | 数据库地址     | `postgres.railway.internal`          |
+| `DB_PORT`        | 数据库端口     | `5432`                               |
+| `DB_USERNAME`    | 数据库用户     | `postgres`                           |
+| `DB_PASSWORD`    | 数据库密码     | 从 Railway Postgres 服务获取         |
+| `DB_DATABASE`    | 数据库名       | `railway`                            |
 | `DB_SYNCHRONIZE` | 自动同步表结构 | `true`（首次），建议后续改为 `false` |
-| `LOG_LEVEL` | 日志级别 | `info` |
-| `API_PREFIX` | API 路径前缀 | `api` |
-| `API_VERSION` | API 版本 | `v1` |
+| `LOG_LEVEL`      | 日志级别       | `info`                               |
+| `API_PREFIX`     | API 路径前缀   | `api`                                |
+| `API_VERSION`    | API 版本       | `v1`                                 |
 
 ### 可选变量（业务功能）
 
-| 变量 | 说明 | 默认值 |
-|------|------|--------|
-| `OKX_API_BASE_URL` | OKX API 地址 | `https://web3.okx.com` |
-| `OKX_PROJECT` | OKX 项目 ID | - |
-| `OKX_API_KEY` | OKX API 密钥 | - |
-| `OKX_SECRET_KEY` | OKX 密钥 | - |
-| `OKX_PASSPHRASE` | OKX API 密码 | - |
-| `OKX_WEB3_RPC_URL` | Web3 RPC 地址 | `https://eth.llamarpc.com` |
-| `OPENAI_API_KEY` | OpenAI 密钥（RAG 功能） | - |
+| 变量               | 说明                    | 默认值                     |
+| ------------------ | ----------------------- | -------------------------- |
+| `OKX_API_BASE_URL` | OKX API 地址            | `https://web3.okx.com`     |
+| `OKX_PROJECT`      | OKX 项目 ID             | -                          |
+| `OKX_API_KEY`      | OKX API 密钥            | -                          |
+| `OKX_SECRET_KEY`   | OKX 密钥                | -                          |
+| `OKX_PASSPHRASE`   | OKX API 密码            | -                          |
+| `OKX_WEB3_RPC_URL` | Web3 RPC 地址           | `https://eth.llamarpc.com` |
+| `OPENAI_API_KEY`   | OpenAI 密钥（RAG 功能） | -                          |
 
 ### 管理环境变量
 
@@ -260,12 +260,12 @@ npx ts-node -r tsconfig-paths/register src/scripts/init-system.ts
 
 ### 初始化后的默认数据
 
-| 数据 | 内容 |
-|------|------|
-| **角色** | SUPER_ADMIN（超级管理员）、ADMIN（管理员） |
-| **权限** | 24+ 个菜单和操作权限 |
-| **管理员** | 用户名: `admin`，密码: `admin123` |
-| **数据表** | 11 张表（users, roles, permissions 等） |
+| 数据       | 内容                                       |
+| ---------- | ------------------------------------------ |
+| **角色**   | SUPER_ADMIN（超级管理员）、ADMIN（管理员） |
+| **权限**   | 24+ 个菜单和操作权限                       |
+| **管理员** | 用户名: `admin`，密码: `admin123`          |
+| **数据表** | 11 张表（users, roles, permissions 等）    |
 
 > ⚠️ **重要**: 部署到生产环境后，请立即修改默认管理员密码！
 
@@ -326,10 +326,10 @@ railway redeploy
 
 ### 健康检查端点
 
-| 端点 | 方法 | 说明 | 认证 |
-|------|------|------|------|
-| `GET /api/health` | 完整状态 | 数据库连接、运行时间 | 无需 |
-| `GET /api/health/live` | 存活探针 | 返回 `{alive: true}` | 无需 |
+| 端点                    | 方法     | 说明                    | 认证 |
+| ----------------------- | -------- | ----------------------- | ---- |
+| `GET /api/health`       | 完整状态 | 数据库连接、运行时间    | 无需 |
+| `GET /api/health/live`  | 存活探针 | 返回 `{alive: true}`    | 无需 |
 | `GET /api/health/ready` | 就绪探针 | 返回 `{ready: boolean}` | 无需 |
 
 ### 手动检查
@@ -485,17 +485,18 @@ new-platform/
 
 ### Railway 免费额度（Starter 计划）
 
-| 资源 | 额度 |
-|------|------|
-| 执行时间 | $5/月 |
-| 内存 | 8 GB |
-| CPU | 8 vCPU |
-| 磁盘 | 1 GB |
-| 网络 | 100 GB |
+| 资源     | 额度   |
+| -------- | ------ |
+| 执行时间 | $5/月  |
+| 内存     | 8 GB   |
+| CPU      | 8 vCPU |
+| 磁盘     | 1 GB   |
+| 网络     | 100 GB |
 
 ### 监控资源使用
 
 在 Railway Dashboard 中查看:
+
 - **CPU 使用率**: 正常应低于 50%
 - **内存使用**: NestJS 通常 150-300 MB
 - **磁盘使用**: PostgreSQL 数据量

@@ -5,6 +5,7 @@
 ## ✨ 特性
 
 ### 核心功能
+
 - 🚀 **现代技术栈**: Vite + React 18 + TypeScript + Ant Design Pro
 - 📱 **响应式设计**: 支持桌面和移动端
 - 🎨 **主题定制**: 支持亮色/暗色主题切换，自定义主题色
@@ -12,6 +13,7 @@
 - 🔐 **权限控制**: 基于角色和权限的访问控制
 
 ### 核心组件
+
 - 📑 **多标签页**: 支持页面标签的增删切换，保持页面状态
 - 🛣️ **自动路由**: 基于文件系统自动生成路由配置
 - 📊 **状态管理**: 使用 Zustand 进行全局状态管理，支持持久化
@@ -21,6 +23,7 @@
 - 🛡️ **错误边界**: 全局错误捕获和友好的错误提示
 
 ### 页面功能
+
 - 📈 **导航栏**: 数据展示和统计图表
 - 👥 **用户管理**: 用户列表和表单操作
 - 📊 **图表展示**: 数据可视化展示
@@ -29,25 +32,30 @@
 ## 🚀 快速开始
 
 ### 环境要求
+
 - Node.js >= 16
 - pnpm >= 7
 
 ### 安装依赖
+
 ```bash
 pnpm install
 ```
 
 ### 启动开发服务器
+
 ```bash
 pnpm dev
 ```
 
 ### 构建生产版本
+
 ```bash
 pnpm build
 ```
 
 ### 预览生产版本
+
 ```bash
 pnpm preview
 ```
@@ -90,6 +98,7 @@ src/
 ## 🔧 技术栈
 
 ### 核心依赖
+
 - **框架**: React 18.3+
 - **构建工具**: Vite 7.1+
 - **语言**: TypeScript 5.8+
@@ -101,6 +110,7 @@ src/
 - **数据请求**: TanStack React Query 5.89+
 
 ### 开发工具
+
 - **代码规范**: ESLint + TypeScript ESLint
 - **样式处理**: CSS Modules
 - **图标**: Ant Design Icons
@@ -111,16 +121,19 @@ src/
 项目使用 Zustand 进行状态管理，包含以下 Store：
 
 ### 用户状态 (userStore)
+
 - 用户信息管理
 - 登录状态
 - 权限角色
 
 ### 标签页状态 (tabStore)
+
 - 标签页增删
 - 标签页切换
 - 状态持久化
 
 ### 主题状态 (themeStore)
+
 - 主题模式切换
 - 主题色配置
 - 侧边栏状态
@@ -129,6 +142,7 @@ src/
 ## 🎨 主题配置
 
 系统支持：
+
 - 🌞 亮色/暗色主题切换
 - 🎨 自定义主题色
 - 📱 响应式布局
@@ -144,7 +158,7 @@ import AuthWrapper, { useAuth } from '@/components/AuthWrapper';
 // 组件级权限控制
 <AuthWrapper roles={['admin']} permissions={['user:create']}>
   <Button>管理员专用按钮</Button>
-</AuthWrapper>
+</AuthWrapper>;
 
 // Hook 方式权限检查
 const { hasRole, hasPermission } = useAuth();
@@ -169,6 +183,7 @@ return <div>{t('dashboard')}</div>;
 支持两种路由配置方式：
 
 ### 1. 文件系统路由（推荐）
+
 在页面组件中导出 `routeConfig`：
 
 ```tsx
@@ -182,11 +197,13 @@ export const routeConfig = {
 ```
 
 ### 2. 手动路由配置
+
 在 `router/index.tsx` 中手动定义路由。
 
 ## 🚀 部署
 
 ### 构建
+
 ```bash
 pnpm build
 ```
@@ -194,6 +211,7 @@ pnpm build
 构建产物在 `dist` 目录中，可以部署到任何静态文件服务器。
 
 ### 环境变量
+
 创建 `.env.local` 文件配置环境变量：
 
 ```env

@@ -33,6 +33,7 @@ JWT_SECRET="生成一个随机字符串"
 ```
 
 **生成随机密钥**：
+
 ```bash
 # 在 macOS/Linux 上
 openssl rand -base64 32
@@ -64,8 +65,9 @@ pnpm dev
 ```
 
 这将启动：
+
 - Next.js 主应用: http://localhost:3000
-- Vite 后台管理: http://localhost:5173  
+- Vite 后台管理: http://localhost:5173
 - NestJS API 服务: http://localhost:4000
 
 ### 方式 2: 单独启动某个应用
@@ -116,6 +118,7 @@ pnpm --version  # 应该 >= 9.0.0
 ### Q2: 数据库连接失败
 
 检查：
+
 1. PostgreSQL 是否已启动
 2. DATABASE_URL 连接字符串是否正确
 3. 数据库是否已创建
@@ -123,6 +126,7 @@ pnpm --version  # 应该 >= 9.0.0
 ### Q3: 端口被占用
 
 如果端口冲突，可以修改端口：
+
 - Next.js: 修改 `apps/web/package.json` 中的 dev 脚本，添加 `-p 3001`
 - Vite: 修改 `apps/admin/vite.config.ts` 中的 `server.port`
 - NestJS: 修改 `.env` 中的 `PORT` 变量

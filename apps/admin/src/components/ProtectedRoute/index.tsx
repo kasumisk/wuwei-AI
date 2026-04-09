@@ -49,13 +49,13 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
       if (queryToken) {
         console.log('Found token in query params, setting new token');
         setToken(queryToken);
-        
+
         // 清除 URL 中的 token 参数
         const newSearchParams = new URLSearchParams(searchParams);
         newSearchParams.delete('token');
         const newUrl = `${location.pathname}${newSearchParams.toString() ? '?' + newSearchParams.toString() : ''}`;
         window.history.replaceState({}, '', newUrl);
-        
+
         // 验证新 token
         await validateToken();
       }
@@ -66,22 +66,33 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
         // 没有 token 或已有用户信息，直接标记为已验证
         setHasValidatedInSession(true);
       }
-      
+
       setIsInitialized(true);
     };
 
     initializeAuth();
-  }, [queryToken, token, user, setToken, validateToken, hasValidatedInSession, searchParams, location.pathname]);
+  }, [
+    queryToken,
+    token,
+    user,
+    setToken,
+    validateToken,
+    hasValidatedInSession,
+    searchParams,
+    location.pathname,
+  ]);
 
   // 正在验证 token 时显示加载状态
   if (!isInitialized || isValidating) {
     return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        height: '100vh' 
-      }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '100vh',
+        }}
+      >
         <Spin size="large" tip="验证登录状态..." />
       </div>
     );

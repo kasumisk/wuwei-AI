@@ -119,12 +119,12 @@ pnpm deploy:preview
 
 在 GitHub 仓库的 Settings -> Secrets and variables -> Actions 中添加：
 
-| Secret 名称 | 说明 | 获取方式 |
-|------------|------|---------|
-| `VERCEL_TOKEN` | Vercel API Token | [Vercel Tokens](https://vercel.com/account/tokens) |
-| `VERCEL_ORG_ID` | 组织/团队 ID | `vercel link` 后查看 `.vercel/project.json` |
-| `VERCEL_PROJECT_ID_WEB` | Web 项目 ID | 同上 |
-| `VERCEL_PROJECT_ID_ADMIN` | Admin 项目 ID | 同上 |
+| Secret 名称               | 说明             | 获取方式                                           |
+| ------------------------- | ---------------- | -------------------------------------------------- |
+| `VERCEL_TOKEN`            | Vercel API Token | [Vercel Tokens](https://vercel.com/account/tokens) |
+| `VERCEL_ORG_ID`           | 组织/团队 ID     | `vercel link` 后查看 `.vercel/project.json`        |
+| `VERCEL_PROJECT_ID_WEB`   | Web 项目 ID      | 同上                                               |
+| `VERCEL_PROJECT_ID_ADMIN` | Admin 项目 ID    | 同上                                               |
 
 ### 触发部署
 
@@ -171,11 +171,11 @@ VITE_APP_TITLE=后台管理系统
 
 ### 推荐域名结构
 
-| 应用 | 域名示例 |
-|-----|---------|
+| 应用        | 域名示例                                     |
+| ----------- | -------------------------------------------- |
 | Next.js Web | `app.yourdomain.com` 或 `www.yourdomain.com` |
-| Vite Admin | `admin.yourdomain.com` |
-| API Server | `api.yourdomain.com` |
+| Vite Admin  | `admin.yourdomain.com`                       |
+| API Server  | `api.yourdomain.com`                         |
 
 ## 构建优化
 
@@ -284,9 +284,7 @@ fly deploy
 
 ```json
 {
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
-  ]
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }
 ```
 

@@ -17,21 +17,11 @@ import {
   Statistic,
   Popconfirm,
 } from 'antd';
-import {
-  WarningOutlined,
-  CheckCircleOutlined,
-  SyncOutlined,
-} from '@ant-design/icons';
+import { WarningOutlined, CheckCircleOutlined, SyncOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
-import {
-  foodLibraryApi,
-  type FoodConflictDto,
-} from '@/services/foodLibraryService';
-import {
-  useResolveAllConflicts,
-  useQualityReport,
-} from '@/services/foodPipelineService';
+import { foodLibraryApi, type FoodConflictDto } from '@/services/foodLibraryService';
+import { useResolveAllConflicts, useQualityReport } from '@/services/foodPipelineService';
 
 export const routeConfig = {
   name: 'conflicts',
@@ -130,7 +120,7 @@ const ConflictsPage: React.FC = () => {
       dataIndex: 'resolvedValue',
       width: 120,
       search: false,
-      render: (v) => v ? <Tag color="green">{v as string}</Tag> : '-',
+      render: (v) => (v ? <Tag color="green">{v as string}</Tag> : '-'),
     },
     {
       title: '解决人',
@@ -150,7 +140,9 @@ const ConflictsPage: React.FC = () => {
       width: 100,
       search: false,
       render: (_, record) =>
-        !record.resolution || record.resolution === 'pending' || record.resolution === 'needs_review' ? (
+        !record.resolution ||
+        record.resolution === 'pending' ||
+        record.resolution === 'needs_review' ? (
           <Button type="link" onClick={() => handleResolve(record)}>
             解决
           </Button>
@@ -171,12 +163,22 @@ const ConflictsPage: React.FC = () => {
         </Col>
         <Col xs={8}>
           <Card>
-            <Statistic title="待处理" value={report?.conflicts?.pending || 0} valueStyle={{ color: report?.conflicts?.pending ? '#cf1322' : '#3f8600' }} prefix={<WarningOutlined />} />
+            <Statistic
+              title="待处理"
+              value={report?.conflicts?.pending || 0}
+              valueStyle={{ color: report?.conflicts?.pending ? '#cf1322' : '#3f8600' }}
+              prefix={<WarningOutlined />}
+            />
           </Card>
         </Col>
         <Col xs={8}>
           <Card>
-            <Statistic title="已解决" value={report?.conflicts?.resolved || 0} valueStyle={{ color: '#3f8600' }} prefix={<CheckCircleOutlined />} />
+            <Statistic
+              title="已解决"
+              value={report?.conflicts?.resolved || 0}
+              valueStyle={{ color: '#3f8600' }}
+              prefix={<CheckCircleOutlined />}
+            />
           </Card>
         </Col>
       </Row>
@@ -233,19 +235,22 @@ const ConflictsPage: React.FC = () => {
               <Descriptions.Item label="各来源值">
                 {currentConflict.sources?.map((s, i) => (
                   <div key={i}>
-                    <Tag color="blue">{s.source}</Tag>: {typeof s.value === 'object' ? JSON.stringify(s.value) : String(s.value)}
+                    <Tag color="blue">{s.source}</Tag>:{' '}
+                    {typeof s.value === 'object' ? JSON.stringify(s.value) : String(s.value)}
                   </div>
                 ))}
               </Descriptions.Item>
             </Descriptions>
             <Form form={resolveForm} layout="vertical">
               <Form.Item name="resolution" label="解决方式" rules={[{ required: true }]}>
-                <Select options={[
-                  { label: '选择最高优先级来源', value: 'highest_priority' },
-                  { label: '取加权平均值', value: 'weighted_average' },
-                  { label: '手动指定值', value: 'manual' },
-                  { label: '忽略冲突', value: 'ignored' },
-                ]} />
+                <Select
+                  options={[
+                    { label: '选择最高优先级来源', value: 'highest_priority' },
+                    { label: '取加权平均值', value: 'weighted_average' },
+                    { label: '手动指定值', value: 'manual' },
+                    { label: '忽略冲突', value: 'ignored' },
+                  ]}
+                />
               </Form.Item>
               <Form.Item name="resolvedValue" label="解决值" rules={[{ required: true }]}>
                 <Input placeholder="输入最终采用的值" />

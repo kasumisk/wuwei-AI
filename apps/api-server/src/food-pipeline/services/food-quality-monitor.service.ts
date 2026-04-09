@@ -1,11 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull, Not } from 'typeorm';
-import { FoodLibrary } from '../../entities/food-library.entity';
-import { FoodConflict } from '../../entities/food-conflict.entity';
-import { FoodChangeLog } from '../../entities/food-change-log.entity';
-import { FoodTranslation } from '../../entities/food-translation.entity';
-import { FoodSource } from '../../entities/food-source.entity';
+import { FoodLibrary } from '../../modules/food/entities/food-library.entity';
+import { FoodConflict } from '../../modules/food/entities/food-conflict.entity';
+import { FoodChangeLog } from '../../modules/food/entities/food-change-log.entity';
+import { FoodTranslation } from '../../modules/food/entities/food-translation.entity';
+import { FoodSource } from '../../modules/food/entities/food-source.entity';
 
 export interface QualityReport {
   timestamp: Date;
@@ -53,11 +53,16 @@ export class FoodQualityMonitorService {
   private readonly logger = new Logger(FoodQualityMonitorService.name);
 
   constructor(
-    @InjectRepository(FoodLibrary) private readonly foodRepo: Repository<FoodLibrary>,
-    @InjectRepository(FoodConflict) private readonly conflictRepo: Repository<FoodConflict>,
-    @InjectRepository(FoodChangeLog) private readonly changeLogRepo: Repository<FoodChangeLog>,
-    @InjectRepository(FoodTranslation) private readonly translationRepo: Repository<FoodTranslation>,
-    @InjectRepository(FoodSource) private readonly sourceRepo: Repository<FoodSource>,
+    @InjectRepository(FoodLibrary)
+    private readonly foodRepo: Repository<FoodLibrary>,
+    @InjectRepository(FoodConflict)
+    private readonly conflictRepo: Repository<FoodConflict>,
+    @InjectRepository(FoodChangeLog)
+    private readonly changeLogRepo: Repository<FoodChangeLog>,
+    @InjectRepository(FoodTranslation)
+    private readonly translationRepo: Repository<FoodTranslation>,
+    @InjectRepository(FoodSource)
+    private readonly sourceRepo: Repository<FoodSource>,
   ) {}
 
   /**
@@ -107,7 +112,7 @@ export class FoodQualityMonitorService {
       .addSelect('COUNT(*)', 'count')
       .groupBy('f.status')
       .getRawMany();
-    return Object.fromEntries(result.map(r => [r.status, Number(r.count)]));
+    return Object.fromEntries(result.map((r) => [r.status, Number(r.count)]));
   }
 
   private async getByCategory() {
@@ -117,7 +122,9 @@ export class FoodQualityMonitorService {
       .addSelect('COUNT(*)', 'count')
       .groupBy('f.category')
       .getRawMany()
-      .then(r => r.map(x => ({ category: x.category, count: Number(x.count) })));
+      .then((r) =>
+        r.map((x) => ({ category: x.category, count: Number(x.count) })),
+      );
   }
 
   private async getBySource() {
@@ -127,19 +134,54 @@ export class FoodQualityMonitorService {
       .addSelect('COUNT(*)', 'count')
       .groupBy('f.primarySource')
       .getRawMany()
-      .then(r => r.map(x => ({ source: x.source, count: Number(x.count) })));
+      .then((r) =>
+        r.map((x) => ({ source: x.source, count: Number(x.count) })),
+      );
   }
 
   private async getCompleteness() {
     const total = await this.foodRepo.count();
-    const [withProtein, withMicro, withGI, withAllergens, withCompat, withTags, withImage] = await Promise.all([
-      this.foodRepo.createQueryBuilder('f').where('f.protein IS NOT NULL').getCount(),
-      this.foodRepo.createQueryBuilder('f').where('f.vitaminA IS NOT NULL OR f.vitaminC IS NOT NULL OR f.calcium IS NOT NULL').getCount(),
-      this.foodRepo.createQueryBuilder('f').where('f.glycemicIndex IS NOT NULL').getCount(),
-      this.foodRepo.createQueryBuilder('f').where("f.allergens IS NOT NULL AND f.allergens != '[]'::jsonb").getCount(),
-      this.foodRepo.createQueryBuilder('f').where("f.compatibility IS NOT NULL AND f.compatibility != '{}'::jsonb").getCount(),
-      this.foodRepo.createQueryBuilder('f').where("f.tags IS NOT NULL AND f.tags != '[]'::jsonb AND jsonb_array_length(f.tags) > 0").getCount(),
-      this.foodRepo.createQueryBuilder('f').where('f.imageUrl IS NOT NULL').getCount(),
+    const [
+      withProtein,
+      withMicro,
+      withGI,
+      withAllergens,
+      withCompat,
+      withTags,
+      withImage,
+    ] = await Promise.all([
+      this.foodRepo
+        .createQueryBuilder('f')
+        .where('f.protein IS NOT NULL')
+        .getCount(),
+      this.foodRepo
+        .createQueryBuilder('f')
+        .where(
+          'f.vitaminA IS NOT NULL OR f.vitaminC IS NOT NULL OR f.calcium IS NOT NULL',
+        )
+        .getCount(),
+      this.foodRepo
+        .createQueryBuilder('f')
+        .where('f.glycemicIndex IS NOT NULL')
+        .getCount(),
+      this.foodRepo
+        .createQueryBuilder('f')
+        .where("f.allergens IS NOT NULL AND f.allergens != '[]'::jsonb")
+        .getCount(),
+      this.foodRepo
+        .createQueryBuilder('f')
+        .where("f.compatibility IS NOT NULL AND f.compatibility != '{}'::jsonb")
+        .getCount(),
+      this.foodRepo
+        .createQueryBuilder('f')
+        .where(
+          "f.tags IS NOT NULL AND f.tags != '[]'::jsonb AND jsonb_array_length(f.tags) > 0",
+        )
+        .getCount(),
+      this.foodRepo
+        .createQueryBuilder('f')
+        .where('f.imageUrl IS NOT NULL')
+        .getCount(),
     ]);
     return {
       total,
@@ -172,8 +214,12 @@ export class FoodQualityMonitorService {
     // 宏量营养素不一致检查
     const macroInconsistent = await this.foodRepo
       .createQueryBuilder('f')
-      .where('f.protein IS NOT NULL AND f.fat IS NOT NULL AND f.carbs IS NOT NULL')
-      .andWhere(`ABS(f.calories - (f.protein * 4 + f.carbs * 4 + f.fat * 9)) / NULLIF(f.calories, 0) > 0.15`)
+      .where(
+        'f.protein IS NOT NULL AND f.fat IS NOT NULL AND f.carbs IS NOT NULL',
+      )
+      .andWhere(
+        `ABS(f.calories - (f.protein * 4 + f.carbs * 4 + f.fat * 9)) / NULLIF(f.calories, 0) > 0.15`,
+      )
       .getCount();
 
     return {
@@ -204,7 +250,9 @@ export class FoodQualityMonitorService {
       .addSelect('COUNT(*)', 'count')
       .groupBy('t.locale')
       .getRawMany()
-      .then(r => r.map(x => ({ locale: x.locale, count: Number(x.count) })));
+      .then((r) =>
+        r.map((x) => ({ locale: x.locale, count: Number(x.count) })),
+      );
 
     const withTranslation = await this.translationRepo
       .createQueryBuilder('t')

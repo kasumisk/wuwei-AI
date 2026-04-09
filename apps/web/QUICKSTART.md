@@ -22,26 +22,32 @@
 ### 1. 查看运行效果
 
 开发服务器已经在运行：
+
 ```
 🌐 本地地址: http://localhost:3000
 ```
 
 访问查看：
+
 - `/zh` - 中文版本
 - `/en` - 英文版本
 
 ### 2. 测试功能
 
 #### 🎨 主题切换
+
 点击右上角的月亮/太阳图标切换深色/浅色主题
 
 #### 🌍 语言切换
+
 点击右上角的语言图标在中英文之间切换
 
 #### 🐻 Zustand 测试
+
 点击 "Zustand Test" 按钮查看状态管理效果
 
 #### 🔄 React Query 测试
+
 查看用户列表卡片，数据自动从 API 获取并缓存
 
 ---
@@ -88,28 +94,33 @@ pnpm dlx shadcn@latest add table
 ## 📂 主要文件位置
 
 ### 创建新页面
+
 ```
 src/app/[locale]/your-page/page.tsx
 ```
 
 ### 创建新 API
+
 ```
 src/app/api/your-endpoint/route.ts
 ```
 
 ### 添加翻译
+
 ```
 messages/zh.json  # 中文
 messages/en.json  # 英文
 ```
 
 ### 创建新组件
+
 ```
 src/components/features/your-component.tsx  # 功能组件
 src/components/common/your-component.tsx     # 通用组件
 ```
 
 ### 添加自定义 Hook
+
 ```
 src/lib/hooks/use-your-hook.ts
 ```
@@ -121,6 +132,7 @@ src/lib/hooks/use-your-hook.ts
 ### 示例 1: 创建新页面
 
 1. 创建页面文件：
+
 ```tsx
 // src/app/[locale]/about/page.tsx
 'use client';
@@ -129,7 +141,7 @@ import { useTranslations } from 'next-intl';
 
 export default function AboutPage() {
   const t = useTranslations();
-  
+
   return (
     <div>
       <h1>{t('about.title')}</h1>
@@ -139,6 +151,7 @@ export default function AboutPage() {
 ```
 
 2. 添加翻译：
+
 ```json
 // messages/zh.json
 {
@@ -213,6 +226,7 @@ const { count, increment } = useAppStore();
 ```
 
 添加图标：
+
 - `public/icon-192x192.png`
 - `public/icon-512x512.png`
 
@@ -252,6 +266,7 @@ NEXT_PUBLIC_API_URL=https://api.example.com
 ## 🎉 开始构建你的应用吧！
 
 有问题？查看：
+
 - 控制台错误信息
 - TypeScript 类型提示
 - ESLint 警告

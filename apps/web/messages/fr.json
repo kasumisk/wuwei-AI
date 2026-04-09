@@ -324,27 +324,51 @@
       "title": "Fonctionnalités de l'API",
       "auth": {
         "title": "🔐 Gestion de l'authentification",
-        "items": ["Ajout automatique du token Authorization", "Gestion automatique de l'expiration du token", "Compatible côté serveur et client"]
+        "items": [
+          "Ajout automatique du token Authorization",
+          "Gestion automatique de l'expiration du token",
+          "Compatible côté serveur et client"
+        ]
       },
       "request": {
         "title": "🔄 Gestion des requêtes",
-        "items": ["Mécanisme de relance automatique", "Contrôle du délai d'expiration", "Intercepteurs de requêtes/réponses"]
+        "items": [
+          "Mécanisme de relance automatique",
+          "Contrôle du délai d'expiration",
+          "Intercepteurs de requêtes/réponses"
+        ]
       },
       "error": {
         "title": "⚠️ Gestion des erreurs",
-        "items": ["Type d'erreur unifié (APIError)", "Messages d'erreur détaillés", "Messages d'erreur configurables"]
+        "items": [
+          "Type d'erreur unifié (APIError)",
+          "Messages d'erreur détaillés",
+          "Messages d'erreur configurables"
+        ]
       },
       "types": {
         "title": "📝 Sécurité des types",
-        "items": ["Support complet TypeScript", "Types de réponse génériques", "Encapsulation de la couche service"]
+        "items": [
+          "Support complet TypeScript",
+          "Types de réponse génériques",
+          "Encapsulation de la couche service"
+        ]
       },
       "files": {
         "title": "📤 Opérations sur les fichiers",
-        "items": ["Envoi de fichiers (suivi de progression)", "Téléchargement de fichiers", "Envoi par lots de plusieurs fichiers"]
+        "items": [
+          "Envoi de fichiers (suivi de progression)",
+          "Téléchargement de fichiers",
+          "Envoi par lots de plusieurs fichiers"
+        ]
       },
       "logging": {
         "title": "📊 Journalisation",
-        "items": ["Journaux de requêtes", "Journaux d'erreurs", "Séparation environnement dev/production"]
+        "items": [
+          "Journaux de requêtes",
+          "Journaux d'erreurs",
+          "Séparation environnement dev/production"
+        ]
       }
     },
     "docs": {

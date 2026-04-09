@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { UsageRecord } from '../../entities/usage-record.entity';
+import { UsageRecord } from '../../modules/provider/entities/usage-record.entity';
 
 // 简单的内存缓存（生产环境应使用 Redis）
 const quotaCache = new Map<string, { value: number; expiresAt: number }>();

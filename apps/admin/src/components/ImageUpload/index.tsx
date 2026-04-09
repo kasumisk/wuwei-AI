@@ -24,7 +24,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
   category = 'image' as UploadParams['category'],
 }) => {
   const [loading, setLoading] = useState(false);
-  
+
   const uploadMutation = useUploadImage({
     onSuccess: (response) => {
       setLoading(false);
@@ -63,14 +63,16 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
   };
 
   // 构造fileList
-  const fileList: UploadFile[] = value ? [
-    {
-      uid: '1',
-      name: 'image',
-      status: 'done',
-      url: value,
-    }
-  ] : [];
+  const fileList: UploadFile[] = value
+    ? [
+        {
+          uid: '1',
+          name: 'image',
+          status: 'done',
+          url: value,
+        },
+      ]
+    : [];
 
   const uploadButton = (
     <div>

@@ -54,23 +54,13 @@ const UserManagementIndex: React.FC = () => {
 
       <Card title="快速操作">
         <Space>
-          <Button 
-            type="primary" 
-            icon={<UserOutlined />}
-            onClick={() => navigate('/user/list')}
-          >
+          <Button type="primary" icon={<UserOutlined />} onClick={() => navigate('/user/list')}>
             查看用户列表
           </Button>
-          <Button 
-            icon={<UserAddOutlined />}
-            onClick={() => navigate('/user/form')}
-          >
+          <Button icon={<UserAddOutlined />} onClick={() => navigate('/user/form')}>
             新增用户
           </Button>
-          <Button 
-            icon={<TeamOutlined />}
-            onClick={() => navigate('/user/management')}
-          >
+          <Button icon={<TeamOutlined />} onClick={() => navigate('/user/management')}>
             用户管理(Query版本)
           </Button>
         </Space>

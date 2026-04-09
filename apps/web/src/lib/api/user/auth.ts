@@ -71,13 +71,15 @@ export const appAuthService = {
   emailRegister: async (
     email: string,
     password: string,
-    nickname?: string,
+    nickname?: string
   ): Promise<AppLoginResponse> => {
-    return unwrap(clientPost<AppLoginResponse>('/app/auth/email/register', {
-      email,
-      password,
-      nickname,
-    }));
+    return unwrap(
+      clientPost<AppLoginResponse>('/app/auth/email/register', {
+        email,
+        password,
+        nickname,
+      })
+    );
   },
 
   /**
@@ -99,7 +101,7 @@ export const appAuthService = {
    */
   sendEmailCode: async (
     email: string,
-    type: 'login' | 'register' | 'reset' = 'login',
+    type: 'login' | 'register' | 'reset' = 'login'
   ): Promise<{ message: string }> => {
     return unwrap(clientPost<{ message: string }>('/app/auth/email/send-code', { email, type }));
   },
@@ -110,13 +112,15 @@ export const appAuthService = {
   resetPassword: async (
     email: string,
     code: string,
-    newPassword: string,
+    newPassword: string
   ): Promise<{ message: string }> => {
-    return unwrap(clientPost<{ message: string }>('/app/auth/email/reset-password', {
-      email,
-      code,
-      newPassword,
-    }));
+    return unwrap(
+      clientPost<{ message: string }>('/app/auth/email/reset-password', {
+        email,
+        code,
+        newPassword,
+      })
+    );
   },
 
   /**
@@ -159,13 +163,9 @@ export const appAuthService = {
   /**
    * 手机验证码登录/注册
    */
-  phoneLogin: async (
-    phone: string,
-    code: string,
-    deviceId?: string,
-  ): Promise<AppLoginResponse> => {
+  phoneLogin: async (phone: string, code: string, deviceId?: string): Promise<AppLoginResponse> => {
     return unwrap(
-      clientPost<AppLoginResponse>('/app/auth/phone/verify', { phone, code, deviceId }),
+      clientPost<AppLoginResponse>('/app/auth/phone/verify', { phone, code, deviceId })
     );
   },
 
@@ -174,13 +174,8 @@ export const appAuthService = {
   /**
    * 获取微信授权 URL
    */
-  getWechatAuthUrl: async (
-    redirectUri: string,
-    state?: string,
-  ): Promise<{ url: string }> => {
-    return unwrap(
-      clientPost<{ url: string }>('/app/auth/wechat/auth-url', { redirectUri, state }),
-    );
+  getWechatAuthUrl: async (redirectUri: string, state?: string): Promise<{ url: string }> => {
+    return unwrap(clientPost<{ url: string }>('/app/auth/wechat/auth-url', { redirectUri, state }));
   },
 
   /**

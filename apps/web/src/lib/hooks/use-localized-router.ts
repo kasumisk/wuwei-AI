@@ -62,12 +62,12 @@ export function useLocalizedRouter() {
 export function getLocalizedPath(path: string, locale: string): string {
   // 确保路径以 / 开头
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  
+
   // 如果是默认语言（英文），不添加前缀
   if (locale === i18n.defaultLocale) {
     return normalizedPath;
   }
-  
+
   // 其他语言添加语言前缀
   return `/${locale}${normalizedPath}`;
 }
@@ -93,10 +93,10 @@ export function removeLocalePrefix(pathname: string): string {
  */
 export function getAllLocalizedPaths(path: string): Record<string, string> {
   const paths: Record<string, string> = {};
-  
+
   for (const locale of i18n.locales) {
     paths[locale] = getLocalizedPath(path, locale);
   }
-  
+
   return paths;
 }

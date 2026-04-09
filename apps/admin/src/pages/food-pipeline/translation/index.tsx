@@ -18,14 +18,8 @@ import {
   Col,
   Statistic,
 } from 'antd';
-import {
-  TranslationOutlined,
-  GlobalOutlined,
-} from '@ant-design/icons';
-import {
-  useBatchAiTranslate,
-  useQualityReport,
-} from '@/services/foodPipelineService';
+import { TranslationOutlined, GlobalOutlined } from '@ant-design/icons';
+import { useBatchAiTranslate, useQualityReport } from '@/services/foodPipelineService';
 
 export const routeConfig = {
   name: 'translation',
@@ -59,21 +53,33 @@ const TranslationPage: React.FC = () => {
 
   const translationStats = report?.translations;
   const localeColumns = [
-    { title: '语言', dataIndex: 'locale', key: 'locale', render: (v: string) => {
-      const opt = LOCALE_OPTIONS.find(o => o.value === v);
-      return <Tag color="purple">{opt?.label || v}</Tag>;
-    }},
+    {
+      title: '语言',
+      dataIndex: 'locale',
+      key: 'locale',
+      render: (v: string) => {
+        const opt = LOCALE_OPTIONS.find((o) => o.value === v);
+        return <Tag color="purple">{opt?.label || v}</Tag>;
+      },
+    },
     { title: '已翻译数量', dataIndex: 'count', key: 'count' },
-    { title: '覆盖率', dataIndex: 'coverage', key: 'coverage', render: (v: number) => (
-      <Tag color={v > 80 ? 'green' : v > 50 ? 'orange' : 'red'}>{v.toFixed(1)}%</Tag>
-    )},
+    {
+      title: '覆盖率',
+      dataIndex: 'coverage',
+      key: 'coverage',
+      render: (v: number) => (
+        <Tag color={v > 80 ? 'green' : v > 50 ? 'orange' : 'red'}>{v.toFixed(1)}%</Tag>
+      ),
+    },
   ];
 
   const localeData = translationStats?.byLocale
     ? Object.entries(translationStats.byLocale).map(([locale, count]) => ({
         locale,
         count: count as number,
-        coverage: report?.summary?.totalFoods ? ((count as number) / report.summary.totalFoods) * 100 : 0,
+        coverage: report?.summary?.totalFoods
+          ? ((count as number) / report.summary.totalFoods) * 100
+          : 0,
       }))
     : [];
 
@@ -83,17 +89,29 @@ const TranslationPage: React.FC = () => {
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={12} sm={8}>
           <Card>
-            <Statistic title="总翻译条目" value={translationStats?.totalTranslations || 0} prefix={<GlobalOutlined />} />
+            <Statistic
+              title="总翻译条目"
+              value={translationStats?.totalTranslations || 0}
+              prefix={<GlobalOutlined />}
+            />
           </Card>
         </Col>
         <Col xs={12} sm={8}>
           <Card>
-            <Statistic title="未翻译食物" value={translationStats?.untranslatedCount || 0} valueStyle={{ color: translationStats?.untranslatedCount ? '#cf1322' : '#3f8600' }} />
+            <Statistic
+              title="未翻译食物"
+              value={translationStats?.untranslatedCount || 0}
+              valueStyle={{ color: translationStats?.untranslatedCount ? '#cf1322' : '#3f8600' }}
+            />
           </Card>
         </Col>
         <Col xs={12} sm={8}>
           <Card>
-            <Statistic title="支持语言数" value={localeData.length} prefix={<TranslationOutlined />} />
+            <Statistic
+              title="支持语言数"
+              value={localeData.length}
+              prefix={<TranslationOutlined />}
+            />
           </Card>
         </Col>
       </Row>
@@ -112,7 +130,13 @@ const TranslationPage: React.FC = () => {
       )}
 
       {/* 批量翻译 */}
-      <Card title={<Space><TranslationOutlined /> AI 批量翻译（DeepSeek V3）</Space>}>
+      <Card
+        title={
+          <Space>
+            <TranslationOutlined /> AI 批量翻译（DeepSeek V3）
+          </Space>
+        }
+      >
         <Alert
           message="AI 翻译功能"
           description="使用 DeepSeek V3 大语言模型将食物名称、别名、描述和份量描述翻译为目标语言。翻译结果存储到 food_translations 表，支持多语言 App 展示。"
@@ -127,7 +151,11 @@ const TranslationPage: React.FC = () => {
           onFinish={(values) => batchTranslate.mutate(values)}
           style={{ maxWidth: 600 }}
         >
-          <Form.Item name="targetLocale" label="目标语言" rules={[{ required: true, message: '请选择目标语言' }]}>
+          <Form.Item
+            name="targetLocale"
+            label="目标语言"
+            rules={[{ required: true, message: '请选择目标语言' }]}
+          >
             <Select options={LOCALE_OPTIONS} />
           </Form.Item>
           <Form.Item name="untranslatedOnly" label="仅处理未翻译的" valuePropName="checked">
@@ -137,7 +165,13 @@ const TranslationPage: React.FC = () => {
             <InputNumber min={1} max={200} style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item>
-            <Button type="primary" htmlType="submit" icon={<TranslationOutlined />} loading={batchTranslate.isPending} size="large">
+            <Button
+              type="primary"
+              htmlType="submit"
+              icon={<TranslationOutlined />}
+              loading={batchTranslate.isPending}
+              size="large"
+            >
               开始批量翻译
             </Button>
           </Form.Item>
@@ -157,7 +191,8 @@ const TranslationPage: React.FC = () => {
                 <Tag color="blue">
                   {result.translated + result.failed > 0
                     ? ((result.translated / (result.translated + result.failed)) * 100).toFixed(1)
-                    : 0}%
+                    : 0}
+                  %
                 </Tag>
               </Descriptions.Item>
             </Descriptions>

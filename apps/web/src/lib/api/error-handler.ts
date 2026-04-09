@@ -17,11 +17,11 @@ export class APIError extends Error {
    * 从响应数据创建 APIError
    */
   static fromResponse(statusCode: number, data: Record<string, unknown>): APIError {
-    const message = 
+    const message =
       (typeof data.message === 'string' ? data.message : '') ||
       (typeof data.error === 'string' ? data.error : '') ||
       '请求失败';
-      
+
     return new APIError(
       statusCode,
       message,

@@ -21,8 +21,7 @@ const PATH = {
     PERMISSION_TEMPLATES: '/admin/permission-templates',
     // 应用版本管理
     APP_VERSIONS: '/admin/app-versions',
-    APP_VERSION_PACKAGES: (versionId: string) =>
-      `/admin/app-versions/${versionId}/packages`,
+    APP_VERSION_PACKAGES: (versionId: string) => `/admin/app-versions/${versionId}/packages`,
     APP_VERSION_STORE_DEFAULTS: '/admin/app-versions/store-defaults/packages',
     // App 用户管理
     APP_USERS: '/admin/app-users',

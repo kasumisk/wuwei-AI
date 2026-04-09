@@ -119,78 +119,93 @@ export const gamificationApi = {
 // ==================== React Query Hooks ====================
 
 export const useCreateAchievement = (
-  options?: UseMutationOptions<AchievementDto, Error, CreateAchievementDto>,
+  options?: UseMutationOptions<AchievementDto, Error, CreateAchievementDto>
 ) => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data) => gamificationApi.createAchievement(data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: gamificationQueryKeys.achievements.all }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: gamificationQueryKeys.achievements.all }),
     ...options,
   });
 };
 
 export const useUpdateAchievement = (
-  options?: UseMutationOptions<AchievementDto, Error, { id: string; data: Partial<CreateAchievementDto> }>,
+  options?: UseMutationOptions<
+    AchievementDto,
+    Error,
+    { id: string; data: Partial<CreateAchievementDto> }
+  >
 ) => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, data }) => gamificationApi.updateAchievement(id, data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: gamificationQueryKeys.achievements.all }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: gamificationQueryKeys.achievements.all }),
     ...options,
   });
 };
 
 export const useDeleteAchievement = (
-  options?: UseMutationOptions<{ message: string }, Error, string>,
+  options?: UseMutationOptions<{ message: string }, Error, string>
 ) => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id) => gamificationApi.deleteAchievement(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: gamificationQueryKeys.achievements.all }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: gamificationQueryKeys.achievements.all }),
     ...options,
   });
 };
 
 export const useCreateChallenge = (
-  options?: UseMutationOptions<ChallengeDto, Error, CreateChallengeDto>,
+  options?: UseMutationOptions<ChallengeDto, Error, CreateChallengeDto>
 ) => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data) => gamificationApi.createChallenge(data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: gamificationQueryKeys.challenges.all }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: gamificationQueryKeys.challenges.all }),
     ...options,
   });
 };
 
 export const useUpdateChallenge = (
-  options?: UseMutationOptions<ChallengeDto, Error, { id: string; data: Partial<CreateChallengeDto> }>,
+  options?: UseMutationOptions<
+    ChallengeDto,
+    Error,
+    { id: string; data: Partial<CreateChallengeDto> }
+  >
 ) => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, data }) => gamificationApi.updateChallenge(id, data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: gamificationQueryKeys.challenges.all }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: gamificationQueryKeys.challenges.all }),
     ...options,
   });
 };
 
 export const useToggleChallengeActive = (
-  options?: UseMutationOptions<ChallengeDto, Error, string>,
+  options?: UseMutationOptions<ChallengeDto, Error, string>
 ) => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id) => gamificationApi.toggleChallengeActive(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: gamificationQueryKeys.challenges.all }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: gamificationQueryKeys.challenges.all }),
     ...options,
   });
 };
 
 export const useDeleteChallenge = (
-  options?: UseMutationOptions<{ message: string }, Error, string>,
+  options?: UseMutationOptions<{ message: string }, Error, string>
 ) => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id) => gamificationApi.deleteChallenge(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: gamificationQueryKeys.challenges.all }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: gamificationQueryKeys.challenges.all }),
     ...options,
   });
 };

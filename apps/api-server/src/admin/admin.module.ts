@@ -70,14 +70,15 @@ import { FileController } from './controllers/file.controller';
 // 食物库 & 内容管理
 import { FoodLibraryManagementService } from './services/food-library-management.service';
 import { ContentManagementService } from './services/content-management.service';
+import { AppDataQueryService } from './services/app-data-query.service';
 import { FoodLibraryManagementController } from './controllers/food-library-management.controller';
 import { ContentManagementController } from './controllers/content-management.controller';
 import { GamificationManagementController } from './controllers/gamification-management.controller';
 // 守卫和策略
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { RolesGuard } from './guards/roles.guard';
-import { RbacPermissionGuard } from './guards/rbac-permission.guard';
+import { RolesGuard } from '../modules/auth/admin/roles.guard';
+import { RbacPermissionGuard } from '../modules/auth/admin/rbac-permission.guard';
 
 @Module({
   imports: [
@@ -142,6 +143,7 @@ import { RbacPermissionGuard } from './guards/rbac-permission.guard';
     // 食物库 & 内容管理
     FoodLibraryManagementService,
     ContentManagementService,
+    AppDataQueryService,
     // 守卫和策略
     JwtStrategy,
     JwtAuthGuard,

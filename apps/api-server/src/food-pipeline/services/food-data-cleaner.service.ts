@@ -52,8 +52,16 @@ export class FoodDataCleanerService {
   };
 
   private readonly VALID_CATEGORIES = [
-    'protein', 'grain', 'veggie', 'fruit', 'dairy',
-    'fat', 'beverage', 'snack', 'condiment', 'composite',
+    'protein',
+    'grain',
+    'veggie',
+    'fruit',
+    'dairy',
+    'fat',
+    'beverage',
+    'snack',
+    'condiment',
+    'composite',
   ];
 
   /**
@@ -81,24 +89,39 @@ export class FoodDataCleanerService {
       const val = (raw as any)[field];
       if (val != null) {
         if (val < min || val > max) {
-          warnings.push(`${field}=${val} out of range [${min},${max}], clamped`);
+          warnings.push(
+            `${field}=${val} out of range [${min},${max}], clamped`,
+          );
           cleaned[field] = Math.max(min, Math.min(max, val));
         }
       }
     }
 
     // 4. 单位转换: 如果热量单位是 kJ → kcal
-    if (cleaned.calories > 900 && raw.rawPayload?.nutriments?.['energy-kj_100g']) {
+    if (
+      cleaned.calories > 900 &&
+      raw.rawPayload?.nutriments?.['energy-kj_100g']
+    ) {
       cleaned.calories = Math.round((cleaned.calories / 4.184) * 10) / 10;
       warnings.push('Converted kJ to kcal');
     }
 
     // 5. 宏量营养素交叉验证
-    if (cleaned.protein != null && cleaned.fat != null && cleaned.carbs != null) {
-      const expected = cleaned.protein * 4 + cleaned.carbs * 4 + cleaned.fat * 9 + (cleaned.fiber || 0) * 2;
+    if (
+      cleaned.protein != null &&
+      cleaned.fat != null &&
+      cleaned.carbs != null
+    ) {
+      const expected =
+        cleaned.protein * 4 +
+        cleaned.carbs * 4 +
+        cleaned.fat * 9 +
+        (cleaned.fiber || 0) * 2;
       const error = Math.abs(cleaned.calories - expected) / cleaned.calories;
       if (error > 0.15) {
-        warnings.push(`Macro inconsistency: actual=${cleaned.calories}kcal, expected=${Math.round(expected)}kcal, error=${(error * 100).toFixed(1)}%`);
+        warnings.push(
+          `Macro inconsistency: actual=${cleaned.calories}kcal, expected=${Math.round(expected)}kcal, error=${(error * 100).toFixed(1)}%`,
+        );
       }
     }
 
@@ -126,7 +149,10 @@ export class FoodDataCleanerService {
   /**
    * 批量清洗
    */
-  cleanBatch(items: NormalizedFoodData[]): { cleaned: CleanedFoodData[]; discarded: number } {
+  cleanBatch(items: NormalizedFoodData[]): {
+    cleaned: CleanedFoodData[];
+    discarded: number;
+  } {
     const cleaned: CleanedFoodData[] = [];
     let discarded = 0;
     for (const item of items) {
@@ -149,7 +175,8 @@ export class FoodDataCleanerService {
 
     // 必须字段
     if (!food.name) errors.push('name is required');
-    if (!food.calories || food.calories <= 0) errors.push('calories is required and must be > 0');
+    if (!food.calories || food.calories <= 0)
+      errors.push('calories is required and must be > 0');
 
     // 范围检查
     if (food.calories && (food.calories < 0 || food.calories > 900)) {
@@ -168,8 +195,15 @@ export class FoodDataCleanerService {
 
     // 宏量一致性检查
     if (food.protein != null && food.fat != null && food.carbs != null) {
-      const expected = food.protein * 4 + food.carbs * 4 + food.fat * 9 + (food.fiber || 0) * 2;
-      const error = food.calories > 0 ? Math.abs(food.calories - expected) / food.calories : 0;
+      const expected =
+        food.protein * 4 +
+        food.carbs * 4 +
+        food.fat * 9 +
+        (food.fiber || 0) * 2;
+      const error =
+        food.calories > 0
+          ? Math.abs(food.calories - expected) / food.calories
+          : 0;
       if (error > 0.25) {
         warnings.push(`High macro inconsistency: ${(error * 100).toFixed(1)}%`);
       }
@@ -196,12 +230,19 @@ export class FoodDataCleanerService {
 
     // 关键字段完整度加分
     const keyFields = ['protein', 'fat', 'carbs', 'fiber', 'sodium'];
-    const filledCount = keyFields.filter(f => food[f] != null).length;
+    const filledCount = keyFields.filter((f) => food[f] != null).length;
     score += (filledCount / keyFields.length) * 0.15;
 
     // 微量营养素完整度加分
-    const microFields = ['vitaminA', 'vitaminC', 'calcium', 'iron', 'potassium', 'zinc'];
-    const microCount = microFields.filter(f => food[f] != null).length;
+    const microFields = [
+      'vitaminA',
+      'vitaminC',
+      'calcium',
+      'iron',
+      'potassium',
+      'zinc',
+    ];
+    const microCount = microFields.filter((f) => food[f] != null).length;
     score += (microCount / microFields.length) * 0.1;
 
     // 分类加分
@@ -216,10 +257,10 @@ export class FoodDataCleanerService {
   private cleanText(text: string): string {
     if (!text) return '';
     return text
-      .replace(/<[^>]+>/g, '')       // Remove HTML
-      .replace(/[\t\r\n]+/g, ' ')    // Normalize whitespace
-      .replace(/\s+/g, ' ')         // Multiple spaces → single
-      .replace(/[，]/g, ',')         // 全角逗号 → 半角
+      .replace(/<[^>]+>/g, '') // Remove HTML
+      .replace(/[\t\r\n]+/g, ' ') // Normalize whitespace
+      .replace(/\s+/g, ' ') // Multiple spaces → single
+      .replace(/[，]/g, ',') // 全角逗号 → 半角
       .replace(/[（]/g, '(')
       .replace(/[）]/g, ')')
       .trim();

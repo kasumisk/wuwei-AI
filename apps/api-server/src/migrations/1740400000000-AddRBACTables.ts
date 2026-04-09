@@ -72,7 +72,11 @@ export class AddRBACTables1740400000000 implements MigrationInterface {
     await queryRunner.query(`DROP TABLE IF EXISTS "role_permissions"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "permissions"`);
     await queryRunner.query(`DROP TYPE IF EXISTS "http_method_enum" CASCADE`);
-    await queryRunner.query(`DROP TYPE IF EXISTS "permission_status_enum" CASCADE`);
-    await queryRunner.query(`DROP TYPE IF EXISTS "permission_type_enum" CASCADE`);
+    await queryRunner.query(
+      `DROP TYPE IF EXISTS "permission_status_enum" CASCADE`,
+    );
+    await queryRunner.query(
+      `DROP TYPE IF EXISTS "permission_type_enum" CASCADE`,
+    );
   }
 }

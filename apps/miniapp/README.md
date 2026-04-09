@@ -4,16 +4,16 @@
 
 ## 技术栈
 
-| 类别 | 方案 | 版本 |
-|------|------|------|
-| 框架 | Taro 4 (Vite) | 4.1.11 |
-| UI | React | ^18.0.0 |
-| 组件库 | NutUI React Taro | ^2.6.14 |
-| 状态管理 | Zustand | latest |
-| 服务端状态 | TanStack React Query | latest |
-| 原子化样式 | UnoCSS (preset-wind3) | latest |
-| 请求层 | Taro.request 封装 | — |
-| API 后端 | https://uway-api.dev-net.uk | NestJS |
+| 类别       | 方案                        | 版本    |
+| ---------- | --------------------------- | ------- |
+| 框架       | Taro 4 (Vite)               | 4.1.11  |
+| UI         | React                       | ^18.0.0 |
+| 组件库     | NutUI React Taro            | ^2.6.14 |
+| 状态管理   | Zustand                     | latest  |
+| 服务端状态 | TanStack React Query        | latest  |
+| 原子化样式 | UnoCSS (preset-wind3)       | latest  |
+| 请求层     | Taro.request 封装           | —       |
+| API 后端   | https://uway-api.dev-net.uk | NestJS  |
 
 ## 目录结构
 
@@ -124,19 +124,20 @@ WECHAT_MINI_SECRET=你的小程序AppSecret
 ### 请求层 (`services/request.ts`)
 
 基于 `Taro.request` 封装，特性：
+
 - 自动注入 `Authorization: Bearer <token>`
 - 统一错误处理 & Toast 提示
 - 401 自动清除登录态并跳转登录页
 - 支持 `noAuth` 选项跳过 token 注入
 
 ```typescript
-import { get, post } from '@/services/request'
+import { get, post } from '@/services/request';
 
 // 需要登录的接口
-const user = await get<UserInfo>('/app/auth/profile')
+const user = await get<UserInfo>('/app/auth/profile');
 
 // 无需登录的接口
-const res = await post('/app/auth/phone/send-code', { phone }, { noAuth: true })
+const res = await post('/app/auth/phone/send-code', { phone }, { noAuth: true });
 ```
 
 ### 状态管理 (`store/auth.ts`)
@@ -144,16 +145,16 @@ const res = await post('/app/auth/phone/send-code', { phone }, { noAuth: true })
 Zustand store，管理登录态：
 
 ```typescript
-const { isLoggedIn, user, wxLogin, phoneLogin, logout } = useAuthStore()
+const { isLoggedIn, user, wxLogin, phoneLogin, logout } = useAuthStore();
 
 // 微信一键登录
-await wxLogin()    // Taro.login() → API → 存 token
+await wxLogin(); // Taro.login() → API → 存 token
 
 // 手机号登录
-await phoneLogin('13800138000', '888888')
+await phoneLogin('13800138000', '888888');
 
 // 退出
-logout()
+logout();
 ```
 
 ### React Query (`services/queryClient.ts`)
@@ -161,14 +162,14 @@ logout()
 全局 QueryClient 已在 `app.ts` 中通过 `QueryClientProvider` 注入：
 
 ```typescript
-import { useQuery } from '@tanstack/react-query'
-import { getProfile } from '@/services/auth'
+import { useQuery } from '@tanstack/react-query';
+import { getProfile } from '@/services/auth';
 
 function MyComponent() {
   const { data: user } = useQuery({
     queryKey: ['profile'],
     queryFn: getProfile,
-  })
+  });
 }
 ```
 
@@ -180,9 +181,7 @@ function MyComponent() {
 - 小程序不支持的特殊字符自动转义（`:`→`-cl-`、`[`→`-bl-` 等）
 
 ```tsx
-<View className="flex items-center justify-center p-4 text-sm text-gray-600">
-  Hello UnoCSS
-</View>
+<View className="flex items-center justify-center p-4 text-sm text-gray-600">Hello UnoCSS</View>
 ```
 
 ## 登录流程
@@ -215,14 +214,14 @@ function MyComponent() {
 
 ### 后端接口
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
+| 方法 | 路径                              | 说明                          |
+| ---- | --------------------------------- | ----------------------------- |
 | POST | `/api/app/auth/wechat/mini-login` | 小程序 wx.login code 换 token |
-| POST | `/api/app/auth/phone/send-code` | 发送手机验证码 |
-| POST | `/api/app/auth/phone/verify` | 手机号 + 验证码登录 |
-| GET  | `/api/app/auth/profile` | 获取当前用户信息（需 token） |
-| PUT  | `/api/app/auth/profile` | 更新用户资料（需 token） |
-| POST | `/api/app/auth/refresh` | 刷新 token |
+| POST | `/api/app/auth/phone/send-code`   | 发送手机验证码                |
+| POST | `/api/app/auth/phone/verify`      | 手机号 + 验证码登录           |
+| GET  | `/api/app/auth/profile`           | 获取当前用户信息（需 token）  |
+| PUT  | `/api/app/auth/profile`           | 更新用户资料（需 token）      |
+| POST | `/api/app/auth/refresh`           | 刷新 token                    |
 
 ## 常用命令
 
@@ -258,9 +257,9 @@ export default defineAppConfig({
   pages: [
     'pages/index/index',
     'pages/login/index',
-    'pages/my-new-page/index',  // 新增
+    'pages/my-new-page/index', // 新增
   ],
-})
+});
 ```
 
 ## 注意事项

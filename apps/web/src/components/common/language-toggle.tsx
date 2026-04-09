@@ -1,20 +1,20 @@
-"use client";
+'use client';
 
-import { Button } from "@/components/ui/button";
+import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Languages } from "lucide-react";
-import { useLocalizedRouter } from "@/lib/hooks/use-localized-router";
+} from '@/components/ui/dropdown-menu';
+import { Languages } from 'lucide-react';
+import { useLocalizedRouter } from '@/lib/hooks/use-localized-router';
 
 const languages = [
-  { code: "en", name: "English", flag: "🇬🇧" },
-  { code: "zh", name: "中文", flag: "🇨🇳" },
-  { code: "fr", name: "Français", flag: "🇫🇷" },
-  { code: "ja", name: "日本語", flag: "🇯🇵" },
+  { code: 'en', name: 'English', flag: '🇬🇧' },
+  { code: 'zh', name: '中文', flag: '🇨🇳' },
+  { code: 'fr', name: 'Français', flag: '🇫🇷' },
+  { code: 'ja', name: '日本語', flag: '🇯🇵' },
 ];
 
 export function LanguageToggle() {
@@ -33,7 +33,7 @@ export function LanguageToggle() {
           <DropdownMenuItem
             key={lang.code}
             onClick={() => switchLocale(lang.code)}
-            className={locale === lang.code ? "bg-accent" : ""}
+            className={locale === lang.code ? 'bg-accent' : ''}
           >
             <span className="mr-2">{lang.flag}</span>
             {lang.name}

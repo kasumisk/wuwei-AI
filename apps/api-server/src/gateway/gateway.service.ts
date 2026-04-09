@@ -2,8 +2,8 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { Client } from '../entities/client.entity';
-import { UsageRecord } from '../entities/usage-record.entity';
+import { Client } from '../modules/client/entities/client.entity';
+import { UsageRecord } from '../modules/provider/entities/usage-record.entity';
 import { CapabilityRouter } from './services/capability-router.service';
 
 @Injectable()

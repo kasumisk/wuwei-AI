@@ -324,19 +324,35 @@
       "title": "API Features",
       "auth": {
         "title": "🔐 Auth Management",
-        "items": ["Auto-add Authorization token", "Token expiry auto-handling", "Supports server and client side"]
+        "items": [
+          "Auto-add Authorization token",
+          "Token expiry auto-handling",
+          "Supports server and client side"
+        ]
       },
       "request": {
         "title": "🔄 Request Management",
-        "items": ["Auto-retry mechanism", "Request timeout control", "Request/response interceptors"]
+        "items": [
+          "Auto-retry mechanism",
+          "Request timeout control",
+          "Request/response interceptors"
+        ]
       },
       "error": {
         "title": "⚠️ Error Handling",
-        "items": ["Unified error type (APIError)", "Detailed error messages", "Configurable error prompts"]
+        "items": [
+          "Unified error type (APIError)",
+          "Detailed error messages",
+          "Configurable error prompts"
+        ]
       },
       "types": {
         "title": "📝 Type Safety",
-        "items": ["Full TypeScript support", "Generic response types", "Service layer encapsulation"]
+        "items": [
+          "Full TypeScript support",
+          "Generic response types",
+          "Service layer encapsulation"
+        ]
       },
       "files": {
         "title": "📤 File Operations",

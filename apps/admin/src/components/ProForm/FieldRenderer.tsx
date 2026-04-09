@@ -44,19 +44,14 @@ const FieldRenderer: React.FC<FieldRendererProps> = ({ config }) => {
   } = config;
 
   // 处理必填规则
-  const fieldRules = required
-    ? [{ required: true, message: `${label}不能为空` }, ...rules]
-    : rules;
+  const fieldRules = required ? [{ required: true, message: `${label}不能为空` }, ...rules] : rules;
 
   // 安全的 fieldProps 类型转换
   const safeFieldProps = fieldProps as any;
 
   switch (type) {
-      
     case 'divider':
-      return (
-        <Divider />
-      );
+      return <Divider />;
     case 'text':
       return (
         <ProFormText
@@ -327,10 +322,10 @@ const FieldRenderer: React.FC<FieldRendererProps> = ({ config }) => {
           rules={fieldRules}
           fieldProps={{
             ...safeFieldProps,
-            treeData: options.map((opt: Record<string, unknown>) => ({ 
-              ...opt, 
+            treeData: options.map((opt: Record<string, unknown>) => ({
+              ...opt,
               key: String(opt.value),
-              title: opt.label 
+              title: opt.label,
             })),
           }}
           formItemProps={formItemProps}

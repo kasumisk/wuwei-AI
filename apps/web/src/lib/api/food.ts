@@ -1,7 +1,17 @@
 'use client';
 
 /**
- * 饮食记录 + AI 分析 + 用户档案 API 服务
+ * @deprecated 此文件已拆分为独立模块，请使用:
+ * - @/lib/api/profile (用户档案)
+ * - @/lib/api/food-record (食物记录)
+ * - @/lib/api/recommendation (推荐/计划)
+ * - @/lib/api/gamification (成就/挑战)
+ *
+ * 类型请从 @/types/user 和 @/types/food 导入
+ *
+ * 此文件保留仅用于向后兼容
+ *
+ * 原文件: 饮食记录 + AI 分析 + 用户档案 API 服务
  * 对接 api-server 的 /api/app/food/* 端点
  */
 
@@ -355,9 +365,7 @@ export const foodService = {
     if (params?.limit) searchParams.set('limit', String(params.limit));
     if (params?.date) searchParams.set('date', params.date);
     const qs = searchParams.toString();
-    return unwrap(
-      clientGet<PaginatedRecords>(`/app/food/records${qs ? `?${qs}` : ''}`),
-    );
+    return unwrap(clientGet<PaginatedRecords>(`/app/food/records${qs ? `?${qs}` : ''}`));
   },
 
   /**
@@ -371,7 +379,7 @@ export const foodService = {
       mealType?: string;
       advice?: string;
       isHealthy?: boolean;
-    },
+    }
   ): Promise<FoodRecord> => {
     return unwrap(clientPut<FoodRecord>(`/app/food/records/${id}`, data));
   },
@@ -394,9 +402,7 @@ export const foodService = {
    * 获取最近 N 天汇总
    */
   getRecentSummaries: async (days: number = 7): Promise<DailySummaryRecord[]> => {
-    return unwrap(
-      clientGet<DailySummaryRecord[]>(`/app/food/summary/recent?days=${days}`),
-    );
+    return unwrap(clientGet<DailySummaryRecord[]>(`/app/food/summary/recent?days=${days}`));
   },
 
   /**
@@ -432,8 +438,15 @@ export const foodService = {
   /**
    * 触发计划调整
    */
-  adjustDailyPlan: async (reason: string): Promise<{ updatedPlan: DailyPlanData; adjustmentNote: string }> => {
-    return unwrap(clientPost<{ updatedPlan: DailyPlanData; adjustmentNote: string }>('/app/food/daily-plan/adjust', { reason }));
+  adjustDailyPlan: async (
+    reason: string
+  ): Promise<{ updatedPlan: DailyPlanData; adjustmentNote: string }> => {
+    return unwrap(
+      clientPost<{ updatedPlan: DailyPlanData; adjustmentNote: string }>(
+        '/app/food/daily-plan/adjust',
+        { reason }
+      )
+    );
   },
 
   // ── V3: 行为建模 ──
@@ -455,7 +468,11 @@ export const foodService = {
   /**
    * AI 决策反馈
    */
-  decisionFeedback: async (recordId: string, followed: boolean, feedback: 'helpful' | 'unhelpful' | 'wrong'): Promise<void> => {
+  decisionFeedback: async (
+    recordId: string,
+    followed: boolean,
+    feedback: 'helpful' | 'unhelpful' | 'wrong'
+  ): Promise<void> => {
     await unwrap(clientPost<null>('/app/food/decision-feedback', { recordId, followed, feedback }));
   },
 
@@ -465,14 +482,18 @@ export const foodService = {
    * 获取成就列表
    */
   getAchievements: async (): Promise<{ all: Achievement[]; unlocked: UserAchievement[] }> => {
-    return unwrap(clientGet<{ all: Achievement[]; unlocked: UserAchievement[] }>('/app/achievements'));
+    return unwrap(
+      clientGet<{ all: Achievement[]; unlocked: UserAchievement[] }>('/app/achievements')
+    );
   },
 
   /**
    * 获取挑战列表
    */
   getChallenges: async (): Promise<{ available: ChallengeItem[]; active: UserChallengeItem[] }> => {
-    return unwrap(clientGet<{ available: ChallengeItem[]; active: UserChallengeItem[] }>('/app/challenges'));
+    return unwrap(
+      clientGet<{ available: ChallengeItem[]; active: UserChallengeItem[] }>('/app/challenges')
+    );
   },
 
   /**
@@ -503,7 +524,9 @@ export const foodService = {
   /**
    * 切换教练风格
    */
-  updateCoachStyle: async (style: 'strict' | 'friendly' | 'data'): Promise<{ coachStyle: string }> => {
+  updateCoachStyle: async (
+    style: 'strict' | 'friendly' | 'data'
+  ): Promise<{ coachStyle: string }> => {
     return unwrap(clientPut<{ coachStyle: string }>('/app/coach/style', { style }));
   },
 };

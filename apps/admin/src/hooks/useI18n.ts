@@ -3,7 +3,7 @@ import { locales } from '@/locales';
 
 export const useI18n = () => {
   const { locale } = useThemeStore();
-  
+
   const t = (key: string, defaultValue?: string): string => {
     const currentLocale = locale as keyof typeof locales;
     const messages = locales[currentLocale] || locales['zh-CN'];

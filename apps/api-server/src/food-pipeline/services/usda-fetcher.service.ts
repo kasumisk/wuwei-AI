@@ -77,27 +77,27 @@ export class UsdaFetcherService {
 
   // USDA nutrientId → 字段映射
   private readonly NUTRIENT_MAP: Record<number, string> = {
-    1008: 'calories',     // Energy (kcal)
-    1003: 'protein',      // Protein
-    1004: 'fat',          // Total lipid (fat)
-    1005: 'carbs',        // Carbohydrate, by difference
-    1079: 'fiber',        // Fiber, total dietary
-    2000: 'sugar',        // Sugars, total
+    1008: 'calories', // Energy (kcal)
+    1003: 'protein', // Protein
+    1004: 'fat', // Total lipid (fat)
+    1005: 'carbs', // Carbohydrate, by difference
+    1079: 'fiber', // Fiber, total dietary
+    2000: 'sugar', // Sugars, total
     1258: 'saturatedFat', // Fatty acids, total saturated
-    1257: 'transFat',     // Fatty acids, total trans
-    1253: 'cholesterol',  // Cholesterol
-    1093: 'sodium',       // Sodium, Na
-    1092: 'potassium',    // Potassium, K
-    1087: 'calcium',      // Calcium, Ca
-    1089: 'iron',         // Iron, Fe
-    1106: 'vitaminA',     // Vitamin A, RAE
-    1162: 'vitaminC',     // Vitamin C
-    1114: 'vitaminD',     // Vitamin D (D2 + D3)
-    1109: 'vitaminE',     // Vitamin E (alpha-tocopherol)
-    1178: 'vitaminB12',   // Vitamin B-12
-    1177: 'folate',       // Folate, total
-    1095: 'zinc',         // Zinc, Zn
-    1090: 'magnesium',    // Magnesium, Mg
+    1257: 'transFat', // Fatty acids, total trans
+    1253: 'cholesterol', // Cholesterol
+    1093: 'sodium', // Sodium, Na
+    1092: 'potassium', // Potassium, K
+    1087: 'calcium', // Calcium, Ca
+    1089: 'iron', // Iron, Fe
+    1106: 'vitaminA', // Vitamin A, RAE
+    1162: 'vitaminC', // Vitamin C
+    1114: 'vitaminD', // Vitamin D (D2 + D3)
+    1109: 'vitaminE', // Vitamin E (alpha-tocopherol)
+    1178: 'vitaminB12', // Vitamin B-12
+    1177: 'folate', // Folate, total
+    1095: 'zinc', // Zinc, Zn
+    1090: 'magnesium', // Magnesium, Mg
   };
 
   // USDA category → 标准 category 映射
@@ -116,9 +116,9 @@ export class UsdaFetcherService {
     'Breakfast Cereals': 'grain',
     'Baked Products': 'grain',
     'Dairy and Egg Products': 'dairy',
-    'Beverages': 'beverage',
-    'Snacks': 'snack',
-    'Sweets': 'snack',
+    Beverages: 'beverage',
+    Snacks: 'snack',
+    Sweets: 'snack',
     'Spices and Herbs': 'condiment',
     'Fats and Oils': 'fat',
     'Nut and Seed Products': 'fat',
@@ -136,14 +136,20 @@ export class UsdaFetcherService {
   ) {
     this.apiKey = this.configService.get<string>('USDA_API_KEY') || '';
     if (!this.apiKey) {
-      this.logger.warn('USDA_API_KEY not configured. USDA fetcher will not work. Get a free key at https://fdc.nal.usda.gov/api-key-signup.html');
+      this.logger.warn(
+        'USDA_API_KEY not configured. USDA fetcher will not work. Get a free key at https://fdc.nal.usda.gov/api-key-signup.html',
+      );
     }
   }
 
   /**
    * 搜索 USDA 食物数据
    */
-  async search(query: string, pageSize = 25, pageNumber = 1): Promise<{ foods: NormalizedFoodData[]; totalHits: number }> {
+  async search(
+    query: string,
+    pageSize = 25,
+    pageNumber = 1,
+  ): Promise<{ foods: NormalizedFoodData[]; totalHits: number }> {
     const url = `${this.baseUrl}/foods/search`;
     const { data } = await firstValueFrom(
       this.httpService.get<UsdaSearchResponse>(url, {
@@ -158,7 +164,7 @@ export class UsdaFetcherService {
     );
 
     return {
-      foods: data.foods.map(f => this.normalize(f)),
+      foods: data.foods.map((f) => this.normalize(f)),
       totalHits: data.totalHits,
     };
   }
@@ -187,17 +193,23 @@ export class UsdaFetcherService {
   async batchGet(fdcIds: number[]): Promise<NormalizedFoodData[]> {
     const url = `${this.baseUrl}/foods`;
     const { data } = await firstValueFrom(
-      this.httpService.post<UsdaRawFood[]>(url, { fdcIds }, {
-        params: { api_key: this.apiKey },
-      }),
+      this.httpService.post<UsdaRawFood[]>(
+        url,
+        { fdcIds },
+        {
+          params: { api_key: this.apiKey },
+        },
+      ),
     );
-    return data.map(f => this.normalize(f));
+    return data.map((f) => this.normalize(f));
   }
 
   /**
    * 批量同步：分页拉取全部 Foundation + SR Legacy 食物
    */
-  async *syncAll(options: { pageSize?: number; maxPages?: number } = {}): AsyncGenerator<NormalizedFoodData[]> {
+  async *syncAll(
+    options: { pageSize?: number; maxPages?: number } = {},
+  ): AsyncGenerator<NormalizedFoodData[]> {
     const pageSize = options.pageSize || 200;
     const maxPages = options.maxPages || Infinity;
     let pageNumber = 1;
@@ -238,7 +250,9 @@ export class UsdaFetcherService {
       rawPayload: raw as any,
       fetchedAt: new Date(),
       name: raw.description,
-      category: (raw.foodCategory ? this.CATEGORY_MAP[raw.foodCategory] : undefined) || undefined,
+      category:
+        (raw.foodCategory ? this.CATEGORY_MAP[raw.foodCategory] : undefined) ||
+        undefined,
       calories: nutrients.calories || 0,
       protein: nutrients.protein,
       fat: nutrients.fat,
@@ -264,6 +278,6 @@ export class UsdaFetcherService {
   }
 
   private sleep(ms: number) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

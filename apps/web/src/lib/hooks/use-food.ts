@@ -1,7 +1,31 @@
 'use client';
 
+/**
+ * @deprecated Use feature-specific hooks instead:
+ * - useHomeData() from @/features/home/hooks/use-home-data
+ * - useFoodAnalysis() from @/features/food-analysis/hooks/use-food-analysis
+ * - useProfile() from @/features/profile/hooks/use-profile
+ * - useChallenges() from @/features/challenge/hooks/use-challenges
+ */
 import { useState, useCallback } from 'react';
-import { foodService, type AnalysisResult, type FoodRecord, type DailySummary, type UserProfile, type FoodItem, type DailySummaryRecord, type MealSuggestion, type DailyPlanData, type BehaviorProfile, type ProactiveReminder, type Achievement, type UserAchievement, type ChallengeItem, type UserChallengeItem, type StreakStatus } from '@/lib/api/food';
+import {
+  foodService,
+  type AnalysisResult,
+  type FoodRecord,
+  type DailySummary,
+  type UserProfile,
+  type FoodItem,
+  type DailySummaryRecord,
+  type MealSuggestion,
+  type DailyPlanData,
+  type BehaviorProfile,
+  type ProactiveReminder,
+  type Achievement,
+  type UserAchievement,
+  type ChallengeItem,
+  type UserChallengeItem,
+  type StreakStatus,
+} from '@/lib/api/food';
 
 /**
  * 饮食记录 + AI 分析 hook
@@ -11,40 +35,46 @@ export function useFood() {
   const [analyzing, setAnalyzing] = useState(false);
 
   /** 上传图片 AI 分析 */
-  const analyzeImage = useCallback(async (file: File, mealType?: string): Promise<AnalysisResult> => {
-    setAnalyzing(true);
-    try {
-      return await foodService.analyzeImage(file, mealType);
-    } finally {
-      setAnalyzing(false);
-    }
-  }, []);
+  const analyzeImage = useCallback(
+    async (file: File, mealType?: string): Promise<AnalysisResult> => {
+      setAnalyzing(true);
+      try {
+        return await foodService.analyzeImage(file, mealType);
+      } finally {
+        setAnalyzing(false);
+      }
+    },
+    []
+  );
 
   /** 保存饮食记录 */
-  const saveRecord = useCallback(async (data: {
-    requestId?: string;
-    imageUrl?: string;
-    foods: FoodItem[];
-    totalCalories: number;
-    mealType?: string;
-    advice?: string;
-    isHealthy?: boolean;
-    decision?: string;
-    riskLevel?: string;
-    reason?: string;
-    suggestion?: string;
-    insteadOptions?: string[];
-    compensation?: { diet?: string; activity?: string; nextMeal?: string };
-    contextComment?: string;
-    encouragement?: string;
-  }): Promise<FoodRecord> => {
-    setLoading(true);
-    try {
-      return await foodService.saveRecord(data);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const saveRecord = useCallback(
+    async (data: {
+      requestId?: string;
+      imageUrl?: string;
+      foods: FoodItem[];
+      totalCalories: number;
+      mealType?: string;
+      advice?: string;
+      isHealthy?: boolean;
+      decision?: string;
+      riskLevel?: string;
+      reason?: string;
+      suggestion?: string;
+      insteadOptions?: string[];
+      compensation?: { diet?: string; activity?: string; nextMeal?: string };
+      contextComment?: string;
+      encouragement?: string;
+    }): Promise<FoodRecord> => {
+      setLoading(true);
+      try {
+        return await foodService.saveRecord(data);
+      } finally {
+        setLoading(false);
+      }
+    },
+    []
+  );
 
   /** 获取今日记录 */
   const getTodayRecords = useCallback(async (): Promise<FoodRecord[]> => {
@@ -52,9 +82,12 @@ export function useFood() {
   }, []);
 
   /** 分页查询记录 */
-  const getRecords = useCallback(async (params?: { page?: number; limit?: number; date?: string }) => {
-    return foodService.getRecords(params);
-  }, []);
+  const getRecords = useCallback(
+    async (params?: { page?: number; limit?: number; date?: string }) => {
+      return foodService.getRecords(params);
+    },
+    []
+  );
 
   /** 删除记录 */
   const deleteRecord = useCallback(async (id: string): Promise<void> => {
@@ -114,16 +147,25 @@ export function useFood() {
     return foodService.proactiveCheck();
   }, []);
 
-  const decisionFeedback = useCallback(async (recordId: string, followed: boolean, feedback: 'helpful' | 'unhelpful' | 'wrong') => {
-    return foodService.decisionFeedback(recordId, followed, feedback);
-  }, []);
+  const decisionFeedback = useCallback(
+    async (recordId: string, followed: boolean, feedback: 'helpful' | 'unhelpful' | 'wrong') => {
+      return foodService.decisionFeedback(recordId, followed, feedback);
+    },
+    []
+  );
 
   // ── V4: 游戏化 ──
-  const getAchievements = useCallback(async (): Promise<{ all: Achievement[]; unlocked: UserAchievement[] }> => {
+  const getAchievements = useCallback(async (): Promise<{
+    all: Achievement[];
+    unlocked: UserAchievement[];
+  }> => {
     return foodService.getAchievements();
   }, []);
 
-  const getChallenges = useCallback(async (): Promise<{ available: ChallengeItem[]; active: UserChallengeItem[] }> => {
+  const getChallenges = useCallback(async (): Promise<{
+    available: ChallengeItem[];
+    active: UserChallengeItem[];
+  }> => {
     return foodService.getChallenges();
   }, []);
 

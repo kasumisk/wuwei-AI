@@ -17,7 +17,7 @@ export default new DataSource({
   database: process.env.DB_DATABASE || 'ai_platform',
   synchronize: false, // 生产环境必须为 false
   logging: process.env.NODE_ENV === 'development',
-  entities: ['dist/entities/**/*.js'],
+  entities: ['dist/entities/**/*.js', 'dist/modules/*/entities/*.js'],
   migrations: ['dist/migrations/**/*.js'],
   migrationsTableName: 'migrations',
   ...(process.env.DB_SSL === 'true' && {

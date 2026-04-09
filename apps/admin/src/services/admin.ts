@@ -1,9 +1,6 @@
-import { request } from "@/utils/request";
-import { PATH } from "./path";
-import {
-  useMutation,
-  type UseMutationOptions,
-} from "@tanstack/react-query";
+import { request } from '@/utils/request';
+import { PATH } from './path';
+import { useMutation, type UseMutationOptions } from '@tanstack/react-query';
 
 // 上传参数接口
 export interface UploadParams {
@@ -60,9 +57,7 @@ export const adminApi = {
 };
 
 // 上传文件 Hook
-export const useUploadFile = (
-  options?: UseMutationOptions<UploadResult, Error, UploadParams>
-) => {
+export const useUploadFile = (options?: UseMutationOptions<UploadResult, Error, UploadParams>) => {
   return useMutation({
     mutationFn: (params: UploadParams) => adminApi.uploadFile(params),
     ...options,

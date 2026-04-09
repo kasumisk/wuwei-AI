@@ -25,5 +25,5 @@ createRoot(document.getElementById('root')!).render(
         <RouterProvider router={router} />
       </ConfigProvider>
     </QueryClientProvider>
-  </StrictMode>,
+  </StrictMode>
 );

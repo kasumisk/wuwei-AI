@@ -13,7 +13,7 @@ export const FOOD_CATEGORIES = [
 ] as const;
 
 export const CATEGORY_MAP = Object.fromEntries(
-  FOOD_CATEGORIES.map((c) => [c.value, c.label]),
+  FOOD_CATEGORIES.map((c) => [c.value, c.label])
 ) as Record<string, string>;
 
 // 食物状态

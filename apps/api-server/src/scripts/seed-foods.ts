@@ -1,6 +1,6 @@
 import { DataSource } from 'typeorm';
 import { config } from 'dotenv';
-import { FoodLibrary } from '../entities/food-library.entity';
+import { FoodLibrary } from '../modules/food/entities/food-library.entity';
 import { SEED_FOODS } from './seed-foods.data';
 
 config();
@@ -21,7 +21,10 @@ const AppDataSource = new DataSource({
 });
 
 /** 将 SeedFood 映射为 FoodLibrary 实体字段 */
-function mapToEntity(food: (typeof SEED_FOODS)[number], code: string): Partial<FoodLibrary> {
+function mapToEntity(
+  food: (typeof SEED_FOODS)[number],
+  code: string,
+): Partial<FoodLibrary> {
   return {
     code,
     name: food.name,
@@ -114,7 +117,9 @@ async function seedFoods() {
     }
   }
 
-  console.log(`✅ 食物库导入完成: 新增 ${inserted} 条, 更新 ${updated} 条 (共 ${SEED_FOODS.length} 条)`);
+  console.log(
+    `✅ 食物库导入完成: 新增 ${inserted} 条, 更新 ${updated} 条 (共 ${SEED_FOODS.length} 条)`,
+  );
   await AppDataSource.destroy();
 }
 

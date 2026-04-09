@@ -201,8 +201,7 @@ export const foodLibraryApi = {
   getStatistics: (): Promise<FoodLibraryStatistics> =>
     request.get(`${PATH.ADMIN.FOOD_LIBRARY}/statistics`),
 
-  getCategories: (): Promise<string[]> =>
-    request.get(`${PATH.ADMIN.FOOD_LIBRARY}/categories`),
+  getCategories: (): Promise<string[]> => request.get(`${PATH.ADMIN.FOOD_LIBRARY}/categories`),
 
   create: (data: CreateFoodLibraryDto): Promise<FoodLibraryDto> =>
     request.post(PATH.ADMIN.FOOD_LIBRARY, data),
@@ -219,17 +218,25 @@ export const foodLibraryApi = {
   updateStatus: (id: string, status: string): Promise<FoodLibraryDto> =>
     request.post(`${PATH.ADMIN.FOOD_LIBRARY}/${id}/status`, { status }),
 
-  batchImport: (foods: CreateFoodLibraryDto[]): Promise<{ imported: number; skipped: number; errors: string[] }> =>
+  batchImport: (
+    foods: CreateFoodLibraryDto[]
+  ): Promise<{ imported: number; skipped: number; errors: string[] }> =>
     request.post(`${PATH.ADMIN.FOOD_LIBRARY}/batch-import`, { foods }),
 
   // 翻译
   getTranslations: (foodId: string): Promise<FoodTranslationDto[]> =>
     request.get(`${PATH.ADMIN.FOOD_LIBRARY}/${foodId}/translations`),
 
-  createTranslation: (foodId: string, data: Partial<FoodTranslationDto>): Promise<FoodTranslationDto> =>
+  createTranslation: (
+    foodId: string,
+    data: Partial<FoodTranslationDto>
+  ): Promise<FoodTranslationDto> =>
     request.post(`${PATH.ADMIN.FOOD_LIBRARY}/${foodId}/translations`, data),
 
-  updateTranslation: (translationId: string, data: Partial<FoodTranslationDto>): Promise<FoodTranslationDto> =>
+  updateTranslation: (
+    translationId: string,
+    data: Partial<FoodTranslationDto>
+  ): Promise<FoodTranslationDto> =>
     request.put(`${PATH.ADMIN.FOOD_LIBRARY}/translations/${translationId}`, data),
 
   deleteTranslation: (translationId: string): Promise<{ message: string }> =>
@@ -250,17 +257,25 @@ export const foodLibraryApi = {
     request.get(`${PATH.ADMIN.FOOD_LIBRARY}/${foodId}/change-logs`),
 
   // 冲突
-  getConflicts: (params?: { foodId?: string; resolution?: string; page?: number; pageSize?: number }): Promise<{ list: FoodConflictDto[]; total: number }> =>
+  getConflicts: (params?: {
+    foodId?: string;
+    resolution?: string;
+    page?: number;
+    pageSize?: number;
+  }): Promise<{ list: FoodConflictDto[]; total: number }> =>
     request.get(PATH.ADMIN.FOOD_LIBRARY_CONFLICTS, params),
 
-  resolveConflict: (conflictId: string, data: { resolution: string; resolvedValue: string }): Promise<FoodConflictDto> =>
+  resolveConflict: (
+    conflictId: string,
+    data: { resolution: string; resolvedValue: string }
+  ): Promise<FoodConflictDto> =>
     request.post(`${PATH.ADMIN.FOOD_LIBRARY}/conflicts/${conflictId}/resolve`, data),
 };
 
 // ==================== React Query Hooks ====================
 
 export const useFoodLibraryStatistics = (
-  options?: Omit<UseQueryOptions<FoodLibraryStatistics>, 'queryKey' | 'queryFn'>,
+  options?: Omit<UseQueryOptions<FoodLibraryStatistics>, 'queryKey' | 'queryFn'>
 ) =>
   useQuery({
     queryKey: foodLibraryQueryKeys.statistics,
@@ -305,7 +320,7 @@ export const useFoodChangeLogs = (foodId: string, enabled = true) =>
   });
 
 export const useCreateFood = (
-  options?: UseMutationOptions<FoodLibraryDto, Error, CreateFoodLibraryDto>,
+  options?: UseMutationOptions<FoodLibraryDto, Error, CreateFoodLibraryDto>
 ) => {
   const queryClient = useQueryClient();
   return useMutation({
@@ -316,7 +331,11 @@ export const useCreateFood = (
 };
 
 export const useUpdateFood = (
-  options?: UseMutationOptions<FoodLibraryDto, Error, { id: string; data: Partial<CreateFoodLibraryDto> }>,
+  options?: UseMutationOptions<
+    FoodLibraryDto,
+    Error,
+    { id: string; data: Partial<CreateFoodLibraryDto> }
+  >
 ) => {
   const queryClient = useQueryClient();
   return useMutation({
@@ -326,9 +345,7 @@ export const useUpdateFood = (
   });
 };
 
-export const useDeleteFood = (
-  options?: UseMutationOptions<{ message: string }, Error, string>,
-) => {
+export const useDeleteFood = (options?: UseMutationOptions<{ message: string }, Error, string>) => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id) => foodLibraryApi.remove(id),
@@ -338,7 +355,7 @@ export const useDeleteFood = (
 };
 
 export const useToggleFoodVerified = (
-  options?: UseMutationOptions<FoodLibraryDto, Error, string>,
+  options?: UseMutationOptions<FoodLibraryDto, Error, string>
 ) => {
   const queryClient = useQueryClient();
   return useMutation({

@@ -30,6 +30,8 @@ import { SmsService } from './services/sms.service';
 import { WechatAuthService } from './services/wechat-auth.service';
 import { AnalyzeService } from './services/analyze.service';
 import { FoodService } from './services/food.service';
+import { FoodRecordService } from './services/food-record.service';
+import { DailySummaryService } from './services/daily-summary.service';
 import { UserProfileService } from './services/user-profile.service';
 import { CoachService } from './services/coach.service';
 import { FoodLibraryService } from './services/food-library.service';
@@ -38,6 +40,10 @@ import { BehaviorService } from './services/behavior.service';
 import { GamificationService } from './services/gamification.service';
 import { NutritionScoreService } from './services/nutrition-score.service';
 import { RecommendationEngineService } from './services/recommendation-engine.service';
+import { ConstraintGeneratorService } from './services/recommendation/constraint-generator.service';
+import { FoodFilterService } from './services/recommendation/food-filter.service';
+import { FoodScorerService } from './services/recommendation/food-scorer.service';
+import { MealAssemblerService } from './services/recommendation/meal-assembler.service';
 import { ProfileInferenceService } from './services/profile-inference.service';
 import { ProfileCacheService } from './services/profile-cache.service';
 import { ProfileCronService } from './services/profile-cron.service';
@@ -46,7 +52,12 @@ import { CollectionTriggerService } from './services/collection-trigger.service'
 import { AppAuthController } from './app.controller';
 import { AppFileController } from './controllers/file.controller';
 import { AppUpdateController } from './controllers/update.controller';
-import { FoodController } from './controllers/food.controller';
+import { FoodAnalyzeController } from './controllers/food-analyze.controller';
+import { FoodRecordController } from './controllers/food-record.controller';
+import { FoodSummaryController } from './controllers/food-summary.controller';
+import { FoodPlanController } from './controllers/food-plan.controller';
+import { FoodBehaviorController } from './controllers/food-behavior.controller';
+import { FoodNutritionController } from './controllers/food-nutrition.controller';
 import { CoachController } from './controllers/coach.controller';
 import { FoodLibraryController } from './controllers/food-library.controller';
 import { GamificationController } from './controllers/gamification.controller';
@@ -97,6 +108,8 @@ import { StorageModule } from '../storage/storage.module';
     SmsService,
     WechatAuthService,
     AnalyzeService,
+    FoodRecordService,
+    DailySummaryService,
     FoodService,
     UserProfileService,
     CoachService,
@@ -106,6 +119,10 @@ import { StorageModule } from '../storage/storage.module';
     GamificationService,
     NutritionScoreService,
     RecommendationEngineService,
+    ConstraintGeneratorService,
+    FoodFilterService,
+    FoodScorerService,
+    MealAssemblerService,
     ProfileInferenceService,
     ProfileCacheService,
     ProfileCronService,
@@ -118,7 +135,12 @@ import { StorageModule } from '../storage/storage.module';
     AppAuthController,
     AppFileController,
     AppUpdateController,
-    FoodController,
+    FoodAnalyzeController,
+    FoodRecordController,
+    FoodSummaryController,
+    FoodPlanController,
+    FoodBehaviorController,
+    FoodNutritionController,
     CoachController,
     FoodLibraryController,
     GamificationController,
@@ -129,6 +151,8 @@ import { StorageModule } from '../storage/storage.module';
     AppUpdateService,
     AppJwtAuthGuard,
     FoodService,
+    FoodRecordService,
+    DailySummaryService,
     UserProfileService,
     CoachService,
     FoodLibraryService,

@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ClientCapabilityPermission } from '../../entities/client-capability-permission.entity';
+import { ClientCapabilityPermission } from '../../modules/client/entities/client-capability-permission.entity';
 
 @Injectable()
 export class CapabilityPermissionGuard implements CanActivate {

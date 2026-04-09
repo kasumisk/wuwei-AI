@@ -26,28 +26,25 @@ export class OpenRouterAdapter extends BaseCapabilityAdapter {
   private readonly apiKey: string;
 
   // OpenRouter 定价表（USD per 1M tokens）
-  private readonly pricing: Record<
-    string,
-    { input: number; output: number }
-  > = {
-    'openai/gpt-4o': { input: 2.5, output: 10 },
-    'openai/gpt-4o-mini': { input: 0.15, output: 0.6 },
-    'openai/gpt-4.1': { input: 2, output: 8 },
-    'openai/gpt-4.1-mini': { input: 0.4, output: 1.6 },
-    'openai/gpt-4.1-nano': { input: 0.1, output: 0.4 },
-    'anthropic/claude-sonnet-4': { input: 3, output: 15 },
-    'anthropic/claude-3.5-haiku': { input: 0.8, output: 4 },
-    'google/gemini-2.5-pro-preview': { input: 1.25, output: 10 },
-    'google/gemini-2.5-flash-preview': { input: 0.15, output: 0.6 },
-    'meta-llama/llama-4-maverick': { input: 0.2, output: 0.6 },
-    'deepseek/deepseek-chat-v3': { input: 0.3, output: 0.8 },
-  };
+  private readonly pricing: Record<string, { input: number; output: number }> =
+    {
+      'openai/gpt-4o': { input: 2.5, output: 10 },
+      'openai/gpt-4o-mini': { input: 0.15, output: 0.6 },
+      'openai/gpt-4.1': { input: 2, output: 8 },
+      'openai/gpt-4.1-mini': { input: 0.4, output: 1.6 },
+      'openai/gpt-4.1-nano': { input: 0.1, output: 0.4 },
+      'anthropic/claude-sonnet-4': { input: 3, output: 15 },
+      'anthropic/claude-3.5-haiku': { input: 0.8, output: 4 },
+      'google/gemini-2.5-pro-preview': { input: 1.25, output: 10 },
+      'google/gemini-2.5-flash-preview': { input: 0.15, output: 0.6 },
+      'meta-llama/llama-4-maverick': { input: 0.2, output: 0.6 },
+      'deepseek/deepseek-chat-v3': { input: 0.3, output: 0.8 },
+    };
 
   constructor(private readonly configService: ConfigService) {
     super();
 
-    this.apiKey =
-      this.configService.get<string>('OPENROUTER_API_KEY') || '';
+    this.apiKey = this.configService.get<string>('OPENROUTER_API_KEY') || '';
     if (!this.apiKey) {
       this.logger.warn(
         'OPENROUTER_API_KEY not configured. OpenRouter adapter will not work.',
@@ -189,8 +186,7 @@ export class OpenRouterAdapter extends BaseCapabilityAdapter {
                   usage: {
                     promptTokens: totalTokens.prompt,
                     completionTokens: totalTokens.completion,
-                    totalTokens:
-                      totalTokens.prompt + totalTokens.completion,
+                    totalTokens: totalTokens.prompt + totalTokens.completion,
                   },
                 });
                 subscriber.complete();
@@ -207,15 +203,11 @@ export class OpenRouterAdapter extends BaseCapabilityAdapter {
                     });
                   }
                   if (data.usage) {
-                    totalTokens.prompt =
-                      data.usage.prompt_tokens || 0;
-                    totalTokens.completion =
-                      data.usage.completion_tokens || 0;
+                    totalTokens.prompt = data.usage.prompt_tokens || 0;
+                    totalTokens.completion = data.usage.completion_tokens || 0;
                   }
                 } catch {
-                  this.logger.warn(
-                    `Failed to parse SSE data: ${line}`,
-                  );
+                  this.logger.warn(`Failed to parse SSE data: ${line}`);
                 }
               }
             }
@@ -230,8 +222,7 @@ export class OpenRouterAdapter extends BaseCapabilityAdapter {
                 usage: {
                   promptTokens: totalTokens.prompt,
                   completionTokens: totalTokens.completion,
-                  totalTokens:
-                    totalTokens.prompt + totalTokens.completion,
+                  totalTokens: totalTokens.prompt + totalTokens.completion,
                 },
               });
               subscriber.complete();
@@ -239,9 +230,7 @@ export class OpenRouterAdapter extends BaseCapabilityAdapter {
           });
 
           response.data.on('error', (err: Error) => {
-            this.logger.error(
-              `OpenRouter stream error: ${err.message}`,
-            );
+            this.logger.error(`OpenRouter stream error: ${err.message}`);
             subscriber.error(err);
           });
         })
@@ -282,9 +271,7 @@ export class OpenRouterAdapter extends BaseCapabilityAdapter {
         revisedPrompt: response.data.data[0]?.revised_prompt,
       };
     } catch (error) {
-      this.logger.error(
-        `OpenRouter image generation error: ${error.message}`,
-      );
+      this.logger.error(`OpenRouter image generation error: ${error.message}`);
       this.handleError(error);
     }
   }

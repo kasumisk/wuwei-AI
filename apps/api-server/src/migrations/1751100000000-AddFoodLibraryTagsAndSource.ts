@@ -14,9 +14,15 @@ export class AddFoodLibraryTagsAndSource1751100000000 implements MigrationInterf
         ADD COLUMN IF NOT EXISTS confidence DECIMAL(3,2) DEFAULT 1.00
     `);
 
-    await queryRunner.query(`COMMENT ON COLUMN foods.tags IS '标签数组: 高蛋白/低热量/高饱腹/高脂肪/高碳水/均衡/天然/外卖 等'`);
-    await queryRunner.query(`COMMENT ON COLUMN foods.source IS '数据来源: official/estimated/ai'`);
-    await queryRunner.query(`COMMENT ON COLUMN foods.confidence IS '营养数据置信度 0-1'`);
+    await queryRunner.query(
+      `COMMENT ON COLUMN foods.tags IS '标签数组: 高蛋白/低热量/高饱腹/高脂肪/高碳水/均衡/天然/外卖 等'`,
+    );
+    await queryRunner.query(
+      `COMMENT ON COLUMN foods.source IS '数据来源: official/estimated/ai'`,
+    );
+    await queryRunner.query(
+      `COMMENT ON COLUMN foods.confidence IS '营养数据置信度 0-1'`,
+    );
 
     // 2. 基于营养数据自动回填 tags（纯 SQL，覆盖所有已有记录）
     //    规则：
@@ -74,8 +80,12 @@ export class AddFoodLibraryTagsAndSource1751100000000 implements MigrationInterf
     `);
 
     // 3. 对已验证的数据设置高置信度
-    await queryRunner.query(`UPDATE foods SET confidence = 0.95 WHERE is_verified = true`);
-    await queryRunner.query(`UPDATE foods SET confidence = 0.70 WHERE is_verified = false`);
+    await queryRunner.query(
+      `UPDATE foods SET confidence = 0.95 WHERE is_verified = true`,
+    );
+    await queryRunner.query(
+      `UPDATE foods SET confidence = 0.70 WHERE is_verified = false`,
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';
-import { FoodLibrary } from '../../entities/food-library.entity';
+import { FoodLibrary } from '../../modules/food/entities/food-library.entity';
 
 export interface AiLabelResult {
   category: string;
@@ -28,8 +28,16 @@ export class FoodAiLabelService {
   private readonly maxRetries = 3;
 
   private readonly VALID_CATEGORIES = [
-    'protein', 'grain', 'veggie', 'fruit', 'dairy',
-    'fat', 'beverage', 'snack', 'condiment', 'composite',
+    'protein',
+    'grain',
+    'veggie',
+    'fruit',
+    'dairy',
+    'fat',
+    'beverage',
+    'snack',
+    'condiment',
+    'composite',
   ];
 
   constructor(private readonly configService: ConfigService) {
@@ -61,7 +69,11 @@ export class FoodAiLabelService {
           model: 'deepseek-chat',
           response_format: { type: 'json_object' },
           messages: [
-            { role: 'system', content: '你是食品营养分析专家。对输入的食物数据进行分类标注，严格按指定JSON格式返回。不要添加任何多余文字。' },
+            {
+              role: 'system',
+              content:
+                '你是食品营养分析专家。对输入的食物数据进行分类标注，严格按指定JSON格式返回。不要添加任何多余文字。',
+            },
             { role: 'user', content: prompt },
           ],
           temperature: 0.1,
@@ -75,9 +87,13 @@ export class FoodAiLabelService {
         const validated = this.validateResult(result);
         if (validated) return validated;
 
-        this.logger.warn(`Label attempt ${attempt} validation failed for "${food.name}"`);
+        this.logger.warn(
+          `Label attempt ${attempt} validation failed for "${food.name}"`,
+        );
       } catch (e) {
-        this.logger.warn(`Label attempt ${attempt} failed for "${food.name}": ${e.message}`);
+        this.logger.warn(
+          `Label attempt ${attempt} failed for "${food.name}": ${e.message}`,
+        );
         if (attempt < this.maxRetries) await this.sleep(1000 * attempt);
       }
     }
@@ -89,12 +105,17 @@ export class FoodAiLabelService {
   /**
    * 批量标注食物（分批处理，每批最多10个）
    */
-  async labelBatch(foods: Partial<FoodLibrary>[], batchSize = 10): Promise<Map<number, AiLabelResult>> {
+  async labelBatch(
+    foods: Partial<FoodLibrary>[],
+    batchSize = 10,
+  ): Promise<Map<number, AiLabelResult>> {
     const results = new Map<number, AiLabelResult>();
 
     for (let i = 0; i < foods.length; i += batchSize) {
       const batch = foods.slice(i, i + batchSize);
-      this.logger.log(`Labeling batch ${Math.floor(i / batchSize) + 1}, items: ${batch.length}`);
+      this.logger.log(
+        `Labeling batch ${Math.floor(i / batchSize) + 1}, items: ${batch.length}`,
+      );
 
       try {
         const batchResults = await this.labelBatchRequest(batch);
@@ -117,7 +138,9 @@ export class FoodAiLabelService {
     return results;
   }
 
-  private async labelBatchRequest(foods: Partial<FoodLibrary>[]): Promise<Map<number, AiLabelResult>> {
+  private async labelBatchRequest(
+    foods: Partial<FoodLibrary>[],
+  ): Promise<Map<number, AiLabelResult>> {
     const prompt = this.buildBatchPrompt(foods);
     const results = new Map<number, AiLabelResult>();
 
@@ -125,7 +148,11 @@ export class FoodAiLabelService {
       model: 'deepseek-chat',
       response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: '你是食品营养分析专家。对输入的食物数据进行批量标注，严格按指定JSON格式返回。' },
+        {
+          role: 'system',
+          content:
+            '你是食品营养分析专家。对输入的食物数据进行批量标注，严格按指定JSON格式返回。',
+        },
         { role: 'user', content: prompt },
       ],
       temperature: 0.1,
@@ -176,9 +203,12 @@ export class FoodAiLabelService {
   }
 
   private buildBatchPrompt(foods: Partial<FoodLibrary>[]): string {
-    const foodList = foods.map((f, i) =>
-      `[${i}] ${f.name || 'unknown'}: ${f.calories ?? '-'}kcal, P:${f.protein ?? '-'}g, F:${f.fat ?? '-'}g, C:${f.carbs ?? '-'}g, Fiber:${f.fiber ?? '-'}g`
-    ).join('\n');
+    const foodList = foods
+      .map(
+        (f, i) =>
+          `[${i}] ${f.name || 'unknown'}: ${f.calories ?? '-'}kcal, P:${f.protein ?? '-'}g, F:${f.fat ?? '-'}g, C:${f.carbs ?? '-'}g, Fiber:${f.fiber ?? '-'}g`,
+      )
+      .join('\n');
 
     return `请对以下 ${foods.length} 个食物进行批量标注。
 
@@ -213,7 +243,11 @@ ${foodList}
 
     // 基本验证
     if (!r.category || !this.VALID_CATEGORIES.includes(r.category)) return null;
-    if (typeof r.processingLevel !== 'number' || r.processingLevel < 1 || r.processingLevel > 4) {
+    if (
+      typeof r.processingLevel !== 'number' ||
+      r.processingLevel < 1 ||
+      r.processingLevel > 4
+    ) {
       r.processingLevel = 1;
     }
     if (!Array.isArray(r.mealTypes)) r.mealTypes = [];
@@ -226,6 +260,6 @@ ${foodList}
   }
 
   private sleep(ms: number) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

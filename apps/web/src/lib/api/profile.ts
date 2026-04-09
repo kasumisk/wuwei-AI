@@ -1,0 +1,81 @@
+'use client';
+
+/**
+ * 用户档案 API 服务
+ * 从 food.ts 拆分，负责用户档案的 CRUD 和引导流
+ */
+
+import { clientGet, clientPut, clientPost } from './client-api';
+import type { ApiResponse } from './http-client';
+import type { UserProfile, BehaviorProfile } from '@/types/user';
+
+async function unwrap<T>(promise: Promise<ApiResponse<T>>): Promise<T> {
+  const res = await promise;
+  if (!res.success) {
+    throw new Error(res.message || '请求失败');
+  }
+  return res.data;
+}
+
+export const profileService = {
+  /** 获取用户健康档案 */
+  getProfile: async (): Promise<UserProfile | null> => {
+    return unwrap(clientGet<UserProfile | null>('/app/food/profile'));
+  },
+
+  /** 保存用户健康档案（旧接口兼容） */
+  saveProfile: async (data: Partial<UserProfile>): Promise<UserProfile> => {
+    return unwrap(clientPut<UserProfile>('/app/food/profile', data));
+  },
+
+  /** 获取行为画像 */
+  getBehaviorProfile: async (): Promise<BehaviorProfile> => {
+    return unwrap(clientGet<BehaviorProfile>('/app/food/behavior-profile'));
+  },
+
+  // ── 引导流 API（对接后端分步 onboarding）──
+
+  /** 分步保存引导数据 */
+  saveOnboardingStep: async (
+    step: number,
+    data: Record<string, unknown>
+  ): Promise<{
+    nextStep: number | null;
+    completeness: number;
+    computed?: { bmr?: number; tdee?: number; recommendedCalories?: number };
+  }> => {
+    return unwrap(clientPost(`/app/user-profile/onboarding/step/${step}`, data));
+  },
+
+  /** 跳过某步 */
+  skipOnboardingStep: async (
+    step: number
+  ): Promise<{
+    nextStep: number | null;
+    completeness: number;
+  }> => {
+    return unwrap(clientPost(`/app/user-profile/onboarding/skip/${step}`, {}));
+  },
+
+  /** 获取补全建议 */
+  getCompletionSuggestions: async (): Promise<{
+    currentCompleteness: number;
+    suggestions: Array<{
+      field: string;
+      priority: 'high' | 'medium' | 'low';
+      reason: string;
+      estimatedImpact: string;
+    }>;
+  }> => {
+    return unwrap(clientGet('/app/user-profile/completion-suggestions'));
+  },
+
+  /** 获取目标迁移建议 */
+  getGoalTransition: async (): Promise<{
+    suggestedGoal: string;
+    reason: string;
+    impact: string;
+  } | null> => {
+    return unwrap(clientGet('/app/user-profile/goal-transition'));
+  },
+};

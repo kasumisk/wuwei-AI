@@ -3,12 +3,12 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { HttpModule } from '@nestjs/axios';
 import { ScheduleModule } from '@nestjs/schedule';
-import { FoodLibrary } from '../entities/food-library.entity';
-import { FoodTranslation } from '../entities/food-translation.entity';
-import { FoodSource } from '../entities/food-source.entity';
-import { FoodChangeLog } from '../entities/food-change-log.entity';
-import { FoodConflict } from '../entities/food-conflict.entity';
-import { FoodRegionalInfo } from '../entities/food-regional-info.entity';
+import { FoodLibrary } from '../modules/food/entities/food-library.entity';
+import { FoodTranslation } from '../modules/food/entities/food-translation.entity';
+import { FoodSource } from '../modules/food/entities/food-source.entity';
+import { FoodChangeLog } from '../modules/food/entities/food-change-log.entity';
+import { FoodConflict } from '../modules/food/entities/food-conflict.entity';
+import { FoodRegionalInfo } from '../modules/food/entities/food-regional-info.entity';
 // Services
 import { FoodRuleEngineService } from './services/food-rule-engine.service';
 import { UsdaFetcherService } from './services/usda-fetcher.service';

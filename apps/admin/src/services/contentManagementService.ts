@@ -168,7 +168,8 @@ export const contentQueryKeys = {
   },
   feedback: {
     all: ['recommendationFeedback'] as const,
-    list: (params?: GetRecommendationFeedbackQuery) => ['recommendationFeedback', 'list', params] as const,
+    list: (params?: GetRecommendationFeedbackQuery) =>
+      ['recommendationFeedback', 'list', params] as const,
     statistics: ['recommendationFeedback', 'statistics'] as const,
   },
   aiLogs: {
@@ -208,7 +209,9 @@ export const contentApi = {
     request.delete(`${PATH.ADMIN.CONTENT_CONVERSATIONS}/${id}`),
 
   // 推荐反馈
-  getRecommendationFeedback: (params?: GetRecommendationFeedbackQuery): Promise<ListResponse<RecommendationFeedbackDto>> =>
+  getRecommendationFeedback: (
+    params?: GetRecommendationFeedbackQuery
+  ): Promise<ListResponse<RecommendationFeedbackDto>> =>
     request.get(PATH.ADMIN.CONTENT_RECOMMENDATION_FEEDBACK, params),
   getFeedbackStatistics: (): Promise<any> =>
     request.get(`${PATH.ADMIN.CONTENT_RECOMMENDATION_FEEDBACK}/statistics`),
@@ -223,7 +226,7 @@ export const contentApi = {
 // ==================== React Query Hooks ====================
 
 export const useDeleteFoodRecord = (
-  options?: UseMutationOptions<{ message: string }, Error, string>,
+  options?: UseMutationOptions<{ message: string }, Error, string>
 ) => {
   const queryClient = useQueryClient();
   return useMutation({
@@ -234,12 +237,13 @@ export const useDeleteFoodRecord = (
 };
 
 export const useDeleteConversation = (
-  options?: UseMutationOptions<{ message: string }, Error, string>,
+  options?: UseMutationOptions<{ message: string }, Error, string>
 ) => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id) => contentApi.deleteConversation(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: contentQueryKeys.conversations.all }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: contentQueryKeys.conversations.all }),
     ...options,
   });
 };

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';
-import { FoodLibrary } from '../../entities/food-library.entity';
+import { FoodLibrary } from '../../modules/food/entities/food-library.entity';
 
 export interface TranslationResult {
   locale: string;
@@ -45,7 +45,10 @@ export class FoodAiTranslateService {
   /**
    * 翻译单个食物到目标语言
    */
-  async translateFood(food: Partial<FoodLibrary>, targetLocale: string): Promise<TranslationResult | null> {
+  async translateFood(
+    food: Partial<FoodLibrary>,
+    targetLocale: string,
+  ): Promise<TranslationResult | null> {
     if (!this.apiKey) return null;
     const langName = this.LOCALE_NAMES[targetLocale] || targetLocale;
 
@@ -71,7 +74,10 @@ export class FoodAiTranslateService {
         model: 'deepseek-chat',
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: '你是食品翻译专家，严格按JSON格式返回翻译结果。' },
+          {
+            role: 'system',
+            content: '你是食品翻译专家，严格按JSON格式返回翻译结果。',
+          },
           { role: 'user', content: prompt },
         ],
         temperature: 0.2,
@@ -90,7 +96,9 @@ export class FoodAiTranslateService {
         servingDesc: parsed.serving_desc || parsed.servingDesc || '',
       };
     } catch (e) {
-      this.logger.error(`Translation failed for "${food.name}" to ${targetLocale}: ${e.message}`);
+      this.logger.error(
+        `Translation failed for "${food.name}" to ${targetLocale}: ${e.message}`,
+      );
       return null;
     }
   }
@@ -98,9 +106,14 @@ export class FoodAiTranslateService {
   /**
    * 翻译单个食物到全部支持语言
    */
-  async translateToAll(food: Partial<FoodLibrary>, excludeLocales: string[] = []): Promise<TranslationResult[]> {
+  async translateToAll(
+    food: Partial<FoodLibrary>,
+    excludeLocales: string[] = [],
+  ): Promise<TranslationResult[]> {
     const results: TranslationResult[] = [];
-    const targets = Object.keys(this.LOCALE_NAMES).filter(l => !excludeLocales.includes(l));
+    const targets = Object.keys(this.LOCALE_NAMES).filter(
+      (l) => !excludeLocales.includes(l),
+    );
 
     for (const locale of targets) {
       const result = await this.translateFood(food, locale);
@@ -123,7 +136,10 @@ export class FoodAiTranslateService {
 
     for (let i = 0; i < foods.length; i += batchSize) {
       const batch = foods.slice(i, i + batchSize);
-      const batchResults = await this.translateBatchRequest(batch, targetLocale);
+      const batchResults = await this.translateBatchRequest(
+        batch,
+        targetLocale,
+      );
 
       for (const [idx, result] of batchResults) {
         results.set(i + idx, result);
@@ -141,9 +157,12 @@ export class FoodAiTranslateService {
     const langName = this.LOCALE_NAMES[targetLocale] || targetLocale;
     const results = new Map<number, TranslationResult>();
 
-    const foodList = foods.map((f, i) =>
-      `[${i}] ${f.name} (${f.category || '-'}, ${f.calories || '-'}kcal)`
-    ).join('\n');
+    const foodList = foods
+      .map(
+        (f, i) =>
+          `[${i}] ${f.name} (${f.category || '-'}, ${f.calories || '-'}kcal)`,
+      )
+      .join('\n');
 
     const prompt = `请将以下 ${foods.length} 个食物翻译为 ${targetLocale} (${langName})。
 
@@ -159,7 +178,10 @@ ${foodList}
         model: 'deepseek-chat',
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: '你是食品翻译专家，严格按JSON格式返回翻译结果。' },
+          {
+            role: 'system',
+            content: '你是食品翻译专家，严格按JSON格式返回翻译结果。',
+          },
           { role: 'user', content: prompt },
         ],
         temperature: 0.2,
@@ -185,13 +207,15 @@ ${foodList}
         }
       }
     } catch (e) {
-      this.logger.error(`Batch translation to ${targetLocale} failed: ${e.message}`);
+      this.logger.error(
+        `Batch translation to ${targetLocale} failed: ${e.message}`,
+      );
     }
 
     return results;
   }
 
   private sleep(ms: number) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

@@ -103,10 +103,10 @@ const RoleManagement: React.FC = () => {
   const { data: templates } = usePermissionTemplates();
 
   // 获取选中角色的权限
-  const {
-    data: rolePermissions,
-    refetch: refetchRolePermissions,
-  } = useRolePermissions(selectedRole?.id || '', { enabled: !!selectedRole?.id });
+  const { data: rolePermissions, refetch: refetchRolePermissions } = useRolePermissions(
+    selectedRole?.id || '',
+    { enabled: !!selectedRole?.id }
+  );
 
   // 当角色权限加载完成后，设置选中的权限
   useEffect(() => {
@@ -520,7 +520,8 @@ const RoleManagement: React.FC = () => {
                 继承权限: <Text strong>{inheritedPermissionIds.length}</Text>
               </span>
               <span>
-                总权限: <Text strong>{new Set([...checkedKeys, ...inheritedPermissionIds]).size}</Text>
+                总权限:{' '}
+                <Text strong>{new Set([...checkedKeys, ...inheritedPermissionIds]).size}</Text>
               </span>
             </Space>
           }

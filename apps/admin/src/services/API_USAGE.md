@@ -77,12 +77,10 @@ export const userApi = {
     request.get<PageResponse<User>>('/users', params),
 
   // 获取用户详情
-  getUserById: (id: string): Promise<User> =>
-    request.get<User>(`/users/${id}`),
+  getUserById: (id: string): Promise<User> => request.get<User>(`/users/${id}`),
 
   // 创建用户
-  createUser: (data: CreateUserParams): Promise<User> =>
-    request.post<User>('/users', data),
+  createUser: (data: CreateUserParams): Promise<User> => request.post<User>('/users', data),
 };
 ```
 
@@ -101,7 +99,7 @@ export const useUsers = (params?: PageParams) => {
 // 变更 Hook
 export const useCreateUser = () => {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: userApi.createUser,
     onSuccess: () => {
@@ -117,15 +115,15 @@ export const useCreateUser = () => {
 ```typescript
 const UserManagement = () => {
   const [pagination, setPagination] = useState({ page: 1, pageSize: 10 });
-  
+
   // 获取数据
   const { data, isLoading, error, refetch } = useUsers(pagination);
-  
+
   // 删除操作
   const deleteUser = useDeleteUser({
     onSuccess: () => message.success('删除成功'),
   });
-  
+
   return (
     <Table
       dataSource={data?.list}
@@ -147,22 +145,22 @@ const UserManagement = () => {
 ```typescript
 const useUpdateUser = () => {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: userApi.updateUser,
     onMutate: async (variables) => {
       // 取消正在进行的查询
       await queryClient.cancelQueries({ queryKey: queryKeys.userDetail(variables.id) });
-      
+
       // 获取当前数据
       const previousUser = queryClient.getQueryData(queryKeys.userDetail(variables.id));
-      
+
       // 乐观更新
       queryClient.setQueryData(queryKeys.userDetail(variables.id), {
         ...previousUser,
         ...variables,
       });
-      
+
       return { previousUser };
     },
     onError: (error, variables, context) => {
@@ -194,11 +192,11 @@ const UserDashboard = ({ userId }: { userId: string }) => {
   const userQuery = useUser(userId);
   const postsQuery = useUserPosts(userId);
   const statsQuery = useUserStats(userId);
-  
+
   if (userQuery.isLoading || postsQuery.isLoading || statsQuery.isLoading) {
     return <Loading />;
   }
-  
+
   return (
     <div>
       <UserInfo user={userQuery.data} />
@@ -242,12 +240,12 @@ VITE_API_BASE_URL=https://api.example.com
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 1,                    // 重试次数
-      staleTime: 5 * 60 * 1000,   // 5分钟缓存
+      retry: 1, // 重试次数
+      staleTime: 5 * 60 * 1000, // 5分钟缓存
       refetchOnWindowFocus: false, // 窗口聚焦时不重新获取
     },
     mutations: {
-      retry: 0,                    // 变更操作不重试
+      retry: 0, // 变更操作不重试
     },
   },
 });

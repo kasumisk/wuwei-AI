@@ -1,16 +1,5 @@
 import React, { useRef } from 'react';
-import {
-  Card,
-  Button,
-  Space,
-  Tag,
-  Popconfirm,
-  message,
-  Row,
-  Col,
-  Statistic,
-  Tooltip,
-} from 'antd';
+import { Card, Button, Space, Tag, Popconfirm, message, Row, Col, Statistic, Tooltip } from 'antd';
 import {
   PlusOutlined,
   EditOutlined,
@@ -31,12 +20,7 @@ import {
   useFoodLibraryStatistics,
   type FoodLibraryDto,
 } from '@/services/foodLibraryService';
-import {
-  FOOD_CATEGORIES,
-  STATUS_MAP,
-  SOURCE_MAP,
-  CATEGORY_MAP,
-} from '../constants';
+import { FOOD_CATEGORIES, STATUS_MAP, SOURCE_MAP, CATEGORY_MAP } from '../constants';
 
 export const routeConfig = {
   name: 'food-list',
@@ -81,9 +65,7 @@ const FoodLibraryList: React.FC = () => {
       width: 140,
       fixed: 'left',
       render: (_, record) => (
-        <a onClick={() => navigate(`/food-library/detail/${record.id}`)}>
-          {record.name}
-        </a>
+        <a onClick={() => navigate(`/food-library/detail/${record.id}`)}>{record.name}</a>
       ),
     },
     {
@@ -95,16 +77,14 @@ const FoodLibraryList: React.FC = () => {
         return <Tag color={s.color}>{s.text}</Tag>;
       },
       valueEnum: Object.fromEntries(
-        Object.entries(STATUS_MAP).map(([k, v]) => [k, { text: v.text }]),
+        Object.entries(STATUS_MAP).map(([k, v]) => [k, { text: v.text }])
       ),
     },
     {
       title: '分类',
       dataIndex: 'category',
       width: 100,
-      valueEnum: Object.fromEntries(
-        FOOD_CATEGORIES.map((c) => [c.value, { text: c.label }]),
-      ),
+      valueEnum: Object.fromEntries(FOOD_CATEGORIES.map((c) => [c.value, { text: c.label }])),
       render: (_, r) => <Tag>{CATEGORY_MAP[r.category] || r.category}</Tag>,
     },
     {
@@ -172,12 +152,8 @@ const FoodLibraryList: React.FC = () => {
       title: '来源',
       dataIndex: 'primarySource',
       width: 100,
-      valueEnum: Object.fromEntries(
-        Object.entries(SOURCE_MAP).map(([k, v]) => [k, { text: v }]),
-      ),
-      render: (_, r) => (
-        <Tag>{SOURCE_MAP[r.primarySource] || r.primarySource}</Tag>
-      ),
+      valueEnum: Object.fromEntries(Object.entries(SOURCE_MAP).map(([k, v]) => [k, { text: v }])),
+      render: (_, r) => <Tag>{SOURCE_MAP[r.primarySource] || r.primarySource}</Tag>,
     },
     {
       title: '版本',
@@ -224,10 +200,7 @@ const FoodLibraryList: React.FC = () => {
           >
             编辑
           </Button>
-          <Popconfirm
-            title="确认删除？"
-            onConfirm={() => deleteMutation.mutate(record.id)}
-          >
+          <Popconfirm title="确认删除？" onConfirm={() => deleteMutation.mutate(record.id)}>
             <Button type="link" size="small" danger icon={<DeleteOutlined />}>
               删除
             </Button>
@@ -248,11 +221,7 @@ const FoodLibraryList: React.FC = () => {
           </Col>
           <Col span={4}>
             <Card size="small">
-              <Statistic
-                title="已验证"
-                value={stats.verified}
-                valueStyle={{ color: '#3f8600' }}
-              />
+              <Statistic title="已验证" value={stats.verified} valueStyle={{ color: '#3f8600' }} />
             </Card>
           </Col>
           <Col span={4}>
@@ -260,11 +229,7 @@ const FoodLibraryList: React.FC = () => {
               <Statistic
                 title="未验证"
                 value={stats.total - stats.verified}
-                valueStyle={
-                  stats.total - stats.verified > 0
-                    ? { color: '#cf1322' }
-                    : undefined
-                }
+                valueStyle={stats.total - stats.verified > 0 ? { color: '#cf1322' } : undefined}
               />
             </Card>
           </Col>
@@ -275,10 +240,7 @@ const FoodLibraryList: React.FC = () => {
           </Col>
           <Col span={4}>
             <Card size="small">
-              <Statistic
-                title="数据来源"
-                value={stats.bySource?.length || 0}
-              />
+              <Statistic title="数据来源" value={stats.bySource?.length || 0} />
             </Card>
           </Col>
           <Col span={4}>
@@ -286,9 +248,7 @@ const FoodLibraryList: React.FC = () => {
               <Statistic
                 title="待处理冲突"
                 value={stats.pendingConflicts || 0}
-                valueStyle={
-                  stats.pendingConflicts ? { color: '#cf1322' } : undefined
-                }
+                valueStyle={stats.pendingConflicts ? { color: '#cf1322' } : undefined}
               />
             </Card>
           </Col>

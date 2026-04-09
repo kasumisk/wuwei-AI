@@ -1,8 +1,5 @@
 import { Card, Row, Col, Statistic, Progress } from 'antd';
-import {
-  ArrowUpOutlined,
-  ArrowDownOutlined,
-} from '@ant-design/icons';
+import { ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
 
 // 路由配置
 export const routeConfig = {
@@ -18,13 +15,13 @@ const ChartsPage = () => {
   const salesData = {
     today: 12543,
     yesterday: 11289,
-    growth: ((12543 - 11289) / 11289 * 100).toFixed(1),
+    growth: (((12543 - 11289) / 11289) * 100).toFixed(1),
   };
 
   const visitorData = {
     today: 8523,
     yesterday: 9234,
-    growth: ((8523 - 9234) / 9234 * 100).toFixed(1),
+    growth: (((8523 - 9234) / 9234) * 100).toFixed(1),
   };
 
   return (
@@ -42,12 +39,7 @@ const ChartsPage = () => {
             />
             <div style={{ marginTop: 16 }}>
               <div>昨日销售额: {salesData.yesterday} 元</div>
-              <Progress 
-                percent={75} 
-                size="small" 
-                style={{ marginTop: 8 }}
-                status="active"
-              />
+              <Progress percent={75} size="small" style={{ marginTop: 8 }} status="active" />
             </div>
           </Card>
         </Col>
@@ -64,33 +56,28 @@ const ChartsPage = () => {
             />
             <div style={{ marginTop: 16 }}>
               <div>昨日访客: {visitorData.yesterday} 人</div>
-              <Progress 
-                percent={60} 
-                size="small" 
-                style={{ marginTop: 8 }}
-                status="exception"
-              />
+              <Progress percent={60} size="small" style={{ marginTop: 8 }} status="exception" />
             </div>
           </Card>
         </Col>
 
         <Col span={24}>
           <Card title="趋势图表">
-            <div style={{ 
-              height: 300, 
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              borderRadius: 8,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'white',
-              fontSize: 18
-            }}>
+            <div
+              style={{
+                height: 300,
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                borderRadius: 8,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'white',
+                fontSize: 18,
+              }}
+            >
               图表组件区域
               <br />
-              <small style={{ marginTop: 8, opacity: 0.8 }}>
-                可集成 ECharts、AntV 等图表库
-              </small>
+              <small style={{ marginTop: 8, opacity: 0.8 }}>可集成 ECharts、AntV 等图表库</small>
             </div>
           </Card>
         </Col>

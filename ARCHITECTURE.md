@@ -103,16 +103,19 @@ new-platform/
 ## 技术栈分布
 
 ### 应用层
+
 - **apps/web**: Next.js 15 + TypeScript + Tailwind CSS
 - **apps/admin**: Vite 6 + React 19 + Ant Design
 - **apps/api-server**: NestJS 10 + TypeScript
 
 ### 共享层
+
 - **packages/database**: Prisma ORM + PostgreSQL
 - **packages/types**: TypeScript 类型定义
 - **packages/utils**: 通用工具函数
 
 ### 工程化
+
 - **Monorepo**: Turborepo
 - **包管理**: pnpm workspace
 - **代码质量**: ESLint + Prettier
@@ -120,15 +123,16 @@ new-platform/
 
 ## 端口分配
 
-| 应用 | 端口 | 用途 |
-|------|------|------|
-| Next.js | 3000 | C端主应用 |
-| Vite | 5173 | 后台管理系统 |
-| NestJS | 4000 | API 服务 |
+| 应用    | 端口 | 用途         |
+| ------- | ---- | ------------ |
+| Next.js | 3000 | C端主应用    |
+| Vite    | 5173 | 后台管理系统 |
+| NestJS  | 4000 | API 服务     |
 
 ## API 路由规划
 
 ### C端 API (Next.js)
+
 ```
 /api/auth/*         - 用户认证
 /api/user/*         - 用户信息
@@ -136,6 +140,7 @@ new-platform/
 ```
 
 ### 管理后台 API (NestJS)
+
 ```
 /api/admin/auth/*      - 管理员认证
 /api/admin/users/*     - 用户管理

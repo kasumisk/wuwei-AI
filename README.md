@@ -20,6 +20,7 @@ new-platform/
 ## 📦 技术栈
 
 ### C端主应用 (apps/web)
+
 - **框架**: Next.js 15 (App Router)
 - **语言**: TypeScript
 - **样式**: Tailwind CSS
@@ -27,6 +28,7 @@ new-platform/
 - **认证**: NextAuth.js v5
 
 ### 后台管理系统 (apps/admin)
+
 - **构建**: Vite 6
 - **框架**: React 19
 - **UI**: Ant Design 5
@@ -34,16 +36,19 @@ new-platform/
 - **状态管理**: Zustand + TanStack Query
 
 ### 后端服务 (apps/api-server)
+
 - **框架**: NestJS 10
 - **API**: RESTful + Swagger
 - **认证**: JWT + Passport
 - **验证**: class-validator
 
 ### 数据层
+
 - **ORM**: Prisma
 - **数据库**: PostgreSQL
 
 ### 工程化
+
 - **Monorepo**: Turborepo
 - **包管理**: pnpm
 - **代码规范**: ESLint + Prettier
@@ -85,6 +90,7 @@ pnpm dev
 ```
 
 访问地址：
+
 - C端主应用: http://localhost:3000
 - 后台管理: http://localhost:5173
 - API 服务: http://localhost:4000
@@ -122,6 +128,7 @@ pnpm clean            # 清理所有构建产物
 #### 1. Next.js 主应用
 
 在 Vercel 中创建新项目，配置：
+
 - **Framework Preset**: Next.js
 - **Root Directory**: `apps/web`
 - **Build Command**: `pnpm turbo build --filter=web`
@@ -130,6 +137,7 @@ pnpm clean            # 清理所有构建产物
 #### 2. Vite 后台管理
 
 在 Vercel 中创建新项目，配置：
+
 - **Framework Preset**: Other
 - **Root Directory**: `apps/admin`
 - **Build Command**: `pnpm turbo build --filter=admin`
@@ -162,6 +170,7 @@ JWT_SECRET=
 ## 📂 项目结构说明
 
 ### apps/web - Next.js 主应用
+
 ```
 src/
 ├── app/              # App Router 页面
@@ -172,6 +181,7 @@ src/
 ```
 
 ### apps/admin - Vite 后台管理
+
 ```
 src/
 ├── pages/           # 页面组件
@@ -184,6 +194,7 @@ src/
 ```
 
 ### apps/api-server - NestJS 后端
+
 ```
 src/
 ├── modules/         # 业务模块

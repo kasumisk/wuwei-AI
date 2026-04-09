@@ -75,8 +75,7 @@ export const appUserApi = {
   getAppUsers: (params?: GetAppUsersQuery): Promise<AppUsersListResponse> =>
     request.get(PATH.ADMIN.APP_USERS, params),
 
-  getAppUserById: (id: string): Promise<AppUserDto> =>
-    request.get(`${PATH.ADMIN.APP_USERS}/${id}`),
+  getAppUserById: (id: string): Promise<AppUserDto> => request.get(`${PATH.ADMIN.APP_USERS}/${id}`),
 
   getStatistics: (): Promise<AppUserStatistics> =>
     request.get(`${PATH.ADMIN.APP_USERS}/statistics`),
@@ -98,7 +97,7 @@ export const appUserApi = {
 
 export const useAppUsers = (
   params?: GetAppUsersQuery,
-  options?: Omit<UseQueryOptions<AppUsersListResponse>, 'queryKey' | 'queryFn'>,
+  options?: Omit<UseQueryOptions<AppUsersListResponse>, 'queryKey' | 'queryFn'>
 ) =>
   useQuery({
     queryKey: appUserQueryKeys.list(params),
@@ -108,7 +107,7 @@ export const useAppUsers = (
   });
 
 export const useAppUserStatistics = (
-  options?: Omit<UseQueryOptions<AppUserStatistics>, 'queryKey' | 'queryFn'>,
+  options?: Omit<UseQueryOptions<AppUserStatistics>, 'queryKey' | 'queryFn'>
 ) =>
   useQuery({
     queryKey: appUserQueryKeys.statistics,
@@ -118,7 +117,7 @@ export const useAppUserStatistics = (
   });
 
 export const useUpdateAppUser = (
-  options?: UseMutationOptions<AppUserDto, Error, { id: string; data: UpdateAppUserDto }>,
+  options?: UseMutationOptions<AppUserDto, Error, { id: string; data: UpdateAppUserDto }>
 ) => {
   const queryClient = useQueryClient();
   return useMutation({
@@ -131,9 +130,7 @@ export const useUpdateAppUser = (
   });
 };
 
-export const useBanAppUser = (
-  options?: UseMutationOptions<{ message: string }, Error, string>,
-) => {
+export const useBanAppUser = (options?: UseMutationOptions<{ message: string }, Error, string>) => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id) => appUserApi.banAppUser(id),
@@ -143,7 +140,7 @@ export const useBanAppUser = (
 };
 
 export const useUnbanAppUser = (
-  options?: UseMutationOptions<{ message: string }, Error, string>,
+  options?: UseMutationOptions<{ message: string }, Error, string>
 ) => {
   const queryClient = useQueryClient();
   return useMutation({
@@ -154,7 +151,7 @@ export const useUnbanAppUser = (
 };
 
 export const useDeleteAppUser = (
-  options?: UseMutationOptions<{ message: string }, Error, string>,
+  options?: UseMutationOptions<{ message: string }, Error, string>
 ) => {
   const queryClient = useQueryClient();
   return useMutation({

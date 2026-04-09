@@ -1,24 +1,9 @@
 import React, { useRef, useState } from 'react';
-import {
-  Card,
-  Tag,
-  Button,
-  Modal,
-  Descriptions,
-  Row,
-  Col,
-  Statistic,
-} from 'antd';
-import {
-  EyeOutlined,
-  ReloadOutlined,
-} from '@ant-design/icons';
+import { Card, Tag, Button, Modal, Descriptions, Row, Col, Statistic } from 'antd';
+import { EyeOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
-import {
-  contentApi,
-  type DailyPlanDto,
-} from '@/services/contentManagementService';
+import { contentApi, type DailyPlanDto } from '@/services/contentManagementService';
 
 export const routeConfig = {
   name: 'daily-plans',
@@ -43,12 +28,23 @@ const DailyPlansPage: React.FC = () => {
     if (!plan) return null;
     return (
       <Card size="small" title={title} style={{ marginBottom: 8 }}>
-        <p><strong>食物：</strong>{plan.foods}</p>
+        <p>
+          <strong>食物：</strong>
+          {plan.foods}
+        </p>
         <Row gutter={16}>
-          <Col span={6}><Statistic title="热量" value={plan.calories} suffix="kcal" /></Col>
-          <Col span={6}><Statistic title="蛋白质" value={plan.protein} suffix="g" /></Col>
-          <Col span={6}><Statistic title="脂肪" value={plan.fat} suffix="g" /></Col>
-          <Col span={6}><Statistic title="碳水" value={plan.carbs} suffix="g" /></Col>
+          <Col span={6}>
+            <Statistic title="热量" value={plan.calories} suffix="kcal" />
+          </Col>
+          <Col span={6}>
+            <Statistic title="蛋白质" value={plan.protein} suffix="g" />
+          </Col>
+          <Col span={6}>
+            <Statistic title="脂肪" value={plan.fat} suffix="g" />
+          </Col>
+          <Col span={6}>
+            <Statistic title="碳水" value={plan.carbs} suffix="g" />
+          </Col>
         </Row>
         {plan.tip && <p style={{ marginTop: 8, color: '#888' }}>{plan.tip}</p>}
       </Card>
@@ -56,11 +52,28 @@ const DailyPlansPage: React.FC = () => {
   };
 
   const columns: ProColumns<DailyPlanDto>[] = [
-    { title: '用户ID', dataIndex: 'userId', width: 120, render: (v) => (v as string)?.slice(0, 8) + '...' },
+    {
+      title: '用户ID',
+      dataIndex: 'userId',
+      width: 120,
+      render: (v) => (v as string)?.slice(0, 8) + '...',
+    },
     { title: '日期', dataIndex: 'date', width: 120, valueType: 'date' },
-    { title: '总预算', dataIndex: 'totalBudget', width: 100, search: false, render: (v) => v ? `${v} kcal` : '-' },
+    {
+      title: '总预算',
+      dataIndex: 'totalBudget',
+      width: 100,
+      search: false,
+      render: (v) => (v ? `${v} kcal` : '-'),
+    },
     { title: '策略', dataIndex: 'strategy', width: 200, search: false, ellipsis: true },
-    { title: '调整次数', dataIndex: 'adjustments', width: 80, search: false, render: (_, r) => r.adjustments?.length || 0 },
+    {
+      title: '调整次数',
+      dataIndex: 'adjustments',
+      width: 80,
+      search: false,
+      render: (_, r) => r.adjustments?.length || 0,
+    },
     {
       title: '创建时间',
       dataIndex: 'createdAt',
@@ -73,7 +86,12 @@ const DailyPlansPage: React.FC = () => {
       width: 80,
       search: false,
       render: (_, record) => (
-        <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => handleViewDetail(record.id)}>
+        <Button
+          type="link"
+          size="small"
+          icon={<EyeOutlined />}
+          onClick={() => handleViewDetail(record.id)}
+        >
           查看
         </Button>
       ),
@@ -96,7 +114,13 @@ const DailyPlansPage: React.FC = () => {
         pagination={{ defaultPageSize: 20, showSizeChanger: true }}
         headerTitle="每日计划列表"
         toolBarRender={() => [
-          <Button key="reload" icon={<ReloadOutlined />} onClick={() => actionRef.current?.reload()}>刷新</Button>,
+          <Button
+            key="reload"
+            icon={<ReloadOutlined />}
+            onClick={() => actionRef.current?.reload()}
+          >
+            刷新
+          </Button>,
         ]}
       />
 
@@ -112,7 +136,9 @@ const DailyPlansPage: React.FC = () => {
             <Descriptions bordered size="small" column={2} style={{ marginBottom: 16 }}>
               <Descriptions.Item label="日期">{currentPlan.date}</Descriptions.Item>
               <Descriptions.Item label="总预算">{currentPlan.totalBudget} kcal</Descriptions.Item>
-              <Descriptions.Item label="策略" span={2}>{currentPlan.strategy}</Descriptions.Item>
+              <Descriptions.Item label="策略" span={2}>
+                {currentPlan.strategy}
+              </Descriptions.Item>
             </Descriptions>
             {renderMealPlan(currentPlan.morningPlan, '🌅 早餐')}
             {renderMealPlan(currentPlan.lunchPlan, '☀️ 午餐')}

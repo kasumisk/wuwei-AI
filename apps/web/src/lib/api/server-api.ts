@@ -45,7 +45,7 @@ class ServerAPI extends HttpClient {
    */
   public withToken(token: string) {
     const clonedInstance = { ...this };
-    
+
     clonedInstance.addRequestInterceptor({
       onFulfilled: (config) => {
         config.headers = config.headers || {};

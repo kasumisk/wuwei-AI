@@ -37,9 +37,7 @@ const FormDemo: React.FC = () => {
         type: 'text',
         required: true,
         placeholder: '请输入邮箱',
-        rules: [
-          { type: 'email', message: '请输入有效的邮箱地址' },
-        ],
+        rules: [{ type: 'email', message: '请输入有效的邮箱地址' }],
         colProps: { span: 12 },
       },
       {
@@ -148,13 +146,11 @@ const FormDemo: React.FC = () => {
           <Button type="primary" onClick={() => setModalVisible(true)}>
             弹窗表单
           </Button>
-          <Button onClick={() => setDrawerVisible(true)}>
-            抽屉表单
-          </Button>
+          <Button onClick={() => setDrawerVisible(true)}>抽屉表单</Button>
         </Space>
-        
+
         <Divider>普通表单</Divider>
-        
+
         <ConfigurableProForm
           config={formConfig}
           mode="normal"

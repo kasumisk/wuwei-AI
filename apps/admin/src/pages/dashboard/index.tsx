@@ -1,4 +1,3 @@
-
 // 路由配置
 export const routeConfig = {
   name: 'dashboard',
@@ -12,13 +11,7 @@ export const routeConfig = {
 };
 
 const Dashboard = () => {
-
-  return (
-    <div>
-
-      dashborad
-    </div>
-  )
+  return <div>dashborad</div>;
 };
 
 export default Dashboard;

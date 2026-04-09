@@ -7,9 +7,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * - 原始表由 TypeORM synchronize 创建，platform 为 NOT NULL
  * - 此迁移将其改为 nullable，表示"全平台通用"版本
  */
-export class MakeAppVersionPlatformNullable1740200000000
-  implements MigrationInterface
-{
+export class MakeAppVersionPlatformNullable1740200000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     // 先确保 enum 类型存在（以防表是通过迁移而非 synchronize 创建的）
     await queryRunner.query(`

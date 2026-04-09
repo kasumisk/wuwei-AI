@@ -3,11 +3,8 @@
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/hooks/use-auth';
-import {
-  foodLibraryClientAPI,
-  type FoodLibraryItem,
-} from '@/lib/api/food-library';
+import { useAuth } from '@/features/auth/hooks/use-auth';
+import { foodLibraryClientAPI, type FoodLibraryItem } from '@/lib/api/food-library';
 
 interface FoodDetailClientProps {
   locale: string;
@@ -16,16 +13,16 @@ interface FoodDetailClientProps {
 }
 
 const categoryEmoji: Record<string, string> = {
-  '主食': '🍚',
-  '肉类': '🥩',
-  '蔬菜': '🥬',
-  '水果': '🍎',
-  '豆制品': '🫘',
-  '汤类': '🍲',
-  '饮品': '🥤',
-  '零食': '🍪',
-  '快餐': '🍔',
-  '调味料': '🧂',
+  主食: '🍚',
+  肉类: '🥩',
+  蔬菜: '🥬',
+  水果: '🍎',
+  豆制品: '🫘',
+  汤类: '🍲',
+  饮品: '🥤',
+  零食: '🍪',
+  快餐: '🍔',
+  调味料: '🧂',
 };
 
 const mealTypeLabels: Record<string, string> = {
@@ -35,11 +32,7 @@ const mealTypeLabels: Record<string, string> = {
   snack: '加餐',
 };
 
-export default function FoodDetailClient({
-  locale,
-  food,
-  relatedFoods,
-}: FoodDetailClientProps) {
+export default function FoodDetailClient({ locale, food, relatedFoods }: FoodDetailClientProps) {
   const router = useRouter();
   const { isLoggedIn } = useAuth();
 
@@ -83,13 +76,16 @@ export default function FoodDetailClient({
   const presetServings = [
     { label: '50g', value: 50 },
     { label: '100g', value: 100 },
-    { label: food.standardServingDesc || `${food.standardServingG}g`, value: food.standardServingG },
+    {
+      label: food.standardServingDesc || `${food.standardServingG}g`,
+      value: food.standardServingG,
+    },
     { label: '200g', value: 200 },
     { label: '300g', value: 300 },
   ];
   // 去重
   const uniqueServings = presetServings.filter(
-    (s, i, arr) => arr.findIndex((a) => a.value === s.value) === i,
+    (s, i, arr) => arr.findIndex((a) => a.value === s.value) === i
   );
 
   return (
@@ -102,7 +98,12 @@ export default function FoodDetailClient({
             className="p-1.5 rounded-lg hover:bg-muted transition-colors"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15 19l-7-7 7-7"
+              />
             </svg>
           </button>
           <h1 className="text-lg font-semibold truncate">{food.name}</h1>
@@ -125,9 +126,7 @@ export default function FoodDetailClient({
 
           {/* 核心热量数据 */}
           <div className="bg-background/80 rounded-xl p-4 text-center">
-            <p className="text-sm text-muted-foreground mb-1">
-              {servingGrams}g 热量
-            </p>
+            <p className="text-sm text-muted-foreground mb-1">{servingGrams}g 热量</p>
             <p className="text-4xl font-bold text-primary">
               {computed.calories}
               <span className="text-base font-normal text-muted-foreground ml-1">kcal</span>
@@ -166,8 +165,8 @@ export default function FoodDetailClient({
 
           {/* 每100g基准 */}
           <p className="text-xs text-muted-foreground text-center">
-            每100g：{food.caloriesPer100g}kcal · 蛋白质{food.proteinPer100g ?? '-'}g · 
-            脂肪{food.fatPer100g ?? '-'}g · 碳水{food.carbsPer100g ?? '-'}g
+            每100g：{food.caloriesPer100g}kcal · 蛋白质{food.proteinPer100g ?? '-'}g · 脂肪
+            {food.fatPer100g ?? '-'}g · 碳水{food.carbsPer100g ?? '-'}g
           </p>
         </div>
 
@@ -180,9 +179,10 @@ export default function FoodDetailClient({
                 key={s.value}
                 onClick={() => setServingGrams(s.value)}
                 className={`px-3 py-1.5 rounded-full text-sm transition-all
-                  ${servingGrams === s.value
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'bg-muted hover:bg-muted/80 text-foreground'
+                  ${
+                    servingGrams === s.value
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'bg-muted hover:bg-muted/80 text-foreground'
                   }`}
               >
                 {s.label}
@@ -213,9 +213,10 @@ export default function FoodDetailClient({
                 key={key}
                 onClick={() => setMealType(key)}
                 className={`flex-1 py-2 rounded-xl text-sm font-medium transition-all
-                  ${mealType === key
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'bg-muted hover:bg-muted/80 text-foreground'
+                  ${
+                    mealType === key
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'bg-muted hover:bg-muted/80 text-foreground'
                   }`}
               >
                 {label}
@@ -274,9 +275,10 @@ export default function FoodDetailClient({
             onClick={handleAddRecord}
             disabled={adding}
             className={`w-full py-3 rounded-xl font-medium text-sm transition-all
-              ${added
-                ? 'bg-green-500 text-white'
-                : 'bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98]'
+              ${
+                added
+                  ? 'bg-green-500 text-white'
+                  : 'bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98]'
               }
               disabled:opacity-60`}
           >

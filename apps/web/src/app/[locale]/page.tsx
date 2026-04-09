@@ -1,6 +1,6 @@
 import { getTranslations } from 'next-intl/server';
 import { getLocale } from 'next-intl/server';
-import { HomePage } from '@/pages-component/home';
+import { HomePage } from '@/features/home/components/home-page';
 import { buildPageMetadata } from '@/lib/seo/metadata';
 import type { Locale } from '@/lib/i18n/config';
 

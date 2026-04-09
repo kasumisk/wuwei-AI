@@ -1,6 +1,6 @@
 import AppDataSource from '../core/database/data-source-dev';
-import { Provider } from '../entities/provider.entity';
-import { ModelConfig } from '../entities/model-config.entity';
+import { Provider } from '../modules/provider/entities/provider.entity';
+import { ModelConfig } from '../modules/provider/entities/model-config.entity';
 import {
   ProviderType,
   ProviderStatus,

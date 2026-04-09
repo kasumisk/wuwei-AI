@@ -1,12 +1,5 @@
 import React, { useRef } from 'react';
-import {
-  Card,
-  Tag,
-  Button,
-  Row,
-  Col,
-  Statistic,
-} from 'antd';
+import { Card, Tag, Button, Row, Col, Statistic } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
@@ -48,7 +41,12 @@ const RecommendationFeedbackPage: React.FC = () => {
   });
 
   const columns: ProColumns<RecommendationFeedbackDto>[] = [
-    { title: '用户ID', dataIndex: 'userId', width: 120, render: (v) => (v as string)?.slice(0, 8) + '...' },
+    {
+      title: '用户ID',
+      dataIndex: 'userId',
+      width: 120,
+      render: (v) => (v as string)?.slice(0, 8) + '...',
+    },
     {
       title: '餐次',
       dataIndex: 'mealType',
@@ -61,14 +59,28 @@ const RecommendationFeedbackPage: React.FC = () => {
       title: '操作',
       dataIndex: 'action',
       width: 80,
-      valueEnum: Object.fromEntries(Object.entries(actionMap).map(([k, v]) => [k, { text: v.text }])),
+      valueEnum: Object.fromEntries(
+        Object.entries(actionMap).map(([k, v]) => [k, { text: v.text }])
+      ),
       render: (_, r) => {
         const a = actionMap[r.action];
         return a ? <Tag color={a.color}>{a.text}</Tag> : r.action;
       },
     },
-    { title: '替换食物', dataIndex: 'replacementFood', width: 120, search: false, render: (v) => v || '-' },
-    { title: '推荐分数', dataIndex: 'recommendationScore', width: 80, search: false, render: (v) => v ? Number(v).toFixed(2) : '-' },
+    {
+      title: '替换食物',
+      dataIndex: 'replacementFood',
+      width: 120,
+      search: false,
+      render: (v) => v || '-',
+    },
+    {
+      title: '推荐分数',
+      dataIndex: 'recommendationScore',
+      width: 80,
+      search: false,
+      render: (v) => (v ? Number(v).toFixed(2) : '-'),
+    },
     { title: '目标类型', dataIndex: 'goalType', width: 80, search: false },
     { title: '时间', dataIndex: 'createdAt', width: 160, valueType: 'dateTime', search: false },
   ];
@@ -77,11 +89,26 @@ const RecommendationFeedbackPage: React.FC = () => {
     <>
       {stats && (
         <Row gutter={16} style={{ marginBottom: 16 }}>
-          <Col span={6}><Card><Statistic title="总反馈数" value={stats.total} /></Card></Col>
-          <Col span={6}><Card><Statistic title="接受率" value={stats.acceptRate} suffix="%" valueStyle={{ color: '#3f8600' }} /></Card></Col>
+          <Col span={6}>
+            <Card>
+              <Statistic title="总反馈数" value={stats.total} />
+            </Card>
+          </Col>
+          <Col span={6}>
+            <Card>
+              <Statistic
+                title="接受率"
+                value={stats.acceptRate}
+                suffix="%"
+                valueStyle={{ color: '#3f8600' }}
+              />
+            </Card>
+          </Col>
           {stats.byAction?.map((a: any) => (
             <Col span={6} key={a.action}>
-              <Card><Statistic title={actionMap[a.action]?.text || a.action} value={a.count} /></Card>
+              <Card>
+                <Statistic title={actionMap[a.action]?.text || a.action} value={a.count} />
+              </Card>
             </Col>
           ))}
         </Row>
@@ -92,7 +119,11 @@ const RecommendationFeedbackPage: React.FC = () => {
         actionRef={actionRef}
         request={async (params) => {
           const { current, pageSize, ...rest } = params;
-          const res = await contentApi.getRecommendationFeedback({ page: current, pageSize, ...rest });
+          const res = await contentApi.getRecommendationFeedback({
+            page: current,
+            pageSize,
+            ...rest,
+          });
           return { data: res.list, total: res.total, success: true };
         }}
         rowKey="id"
@@ -101,7 +132,13 @@ const RecommendationFeedbackPage: React.FC = () => {
         pagination={{ defaultPageSize: 20, showSizeChanger: true }}
         headerTitle="推荐反馈列表"
         toolBarRender={() => [
-          <Button key="reload" icon={<ReloadOutlined />} onClick={() => actionRef.current?.reload()}>刷新</Button>,
+          <Button
+            key="reload"
+            icon={<ReloadOutlined />}
+            onClick={() => actionRef.current?.reload()}
+          >
+            刷新
+          </Button>,
         ]}
       />
     </>

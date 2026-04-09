@@ -1,27 +1,10 @@
 import React, { useRef, useState } from 'react';
-import {
-  Card,
-  Button,
-  Space,
-  Tag,
-  message,
-  Modal,
-  Form,
-  Input,
-  Select,
-  Typography,
-} from 'antd';
-import {
-  ArrowLeftOutlined,
-  CheckOutlined,
-} from '@ant-design/icons';
+import { Card, Button, Space, Tag, message, Modal, Form, Input, Select, Typography } from 'antd';
+import { ArrowLeftOutlined, CheckOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
 import { useNavigate } from 'react-router-dom';
-import {
-  foodLibraryApi,
-  type FoodConflictDto,
-} from '@/services/foodLibraryService';
+import { foodLibraryApi, type FoodConflictDto } from '@/services/foodLibraryService';
 import { RESOLUTION_OPTIONS } from '../constants';
 
 export const routeConfig = {
@@ -155,8 +138,12 @@ const FoodConflictsPage: React.FC = () => {
     <div>
       <Card size="small" style={{ marginBottom: 16 }}>
         <Space>
-          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/food-library/list')}>返回列表</Button>
-          <Typography.Title level={4} style={{ margin: 0 }}>数据冲突管理</Typography.Title>
+          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/food-library/list')}>
+            返回列表
+          </Button>
+          <Typography.Title level={4} style={{ margin: 0 }}>
+            数据冲突管理
+          </Typography.Title>
         </Space>
       </Card>
 
@@ -184,7 +171,11 @@ const FoodConflictsPage: React.FC = () => {
       <Modal
         title={`解决冲突 - ${currentConflict?.field || ''}`}
         open={resolveModalOpen}
-        onCancel={() => { setResolveModalOpen(false); setCurrentConflict(null); resolveForm.resetFields(); }}
+        onCancel={() => {
+          setResolveModalOpen(false);
+          setCurrentConflict(null);
+          resolveForm.resetFields();
+        }}
         onOk={handleResolve}
       >
         {currentConflict && (
@@ -193,17 +184,26 @@ const FoodConflictsPage: React.FC = () => {
             <div style={{ marginTop: 8 }}>
               {currentConflict.sources?.map((s, i) => (
                 <Tag key={i} color="blue" style={{ marginBottom: 4 }}>
-                  {s.source}: {typeof s.value === 'object' ? JSON.stringify(s.value) : String(s.value)}
+                  {s.source}:{' '}
+                  {typeof s.value === 'object' ? JSON.stringify(s.value) : String(s.value)}
                 </Tag>
               ))}
             </div>
           </div>
         )}
         <Form form={resolveForm} layout="vertical">
-          <Form.Item name="resolution" label="解决方式" rules={[{ required: true, message: '请选择解决方式' }]}>
+          <Form.Item
+            name="resolution"
+            label="解决方式"
+            rules={[{ required: true, message: '请选择解决方式' }]}
+          >
             <Select options={RESOLUTION_OPTIONS} />
           </Form.Item>
-          <Form.Item name="resolvedValue" label="采用值" rules={[{ required: true, message: '请输入采用值' }]}>
+          <Form.Item
+            name="resolvedValue"
+            label="采用值"
+            rules={[{ required: true, message: '请输入采用值' }]}
+          >
             <Input placeholder="输入最终采用的值" />
           </Form.Item>
         </Form>

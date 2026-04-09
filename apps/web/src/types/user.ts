@@ -1,0 +1,81 @@
+/**
+ * 用户相关类型定义（统一）
+ */
+
+// ── 枚举类型 ──
+export type GoalType = 'fat_loss' | 'muscle_gain' | 'health' | 'habit';
+export type GoalSpeed = 'aggressive' | 'steady' | 'relaxed';
+export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'active';
+export type Discipline = 'high' | 'medium' | 'low';
+export type TakeoutFrequency = 'never' | 'sometimes' | 'often';
+
+// ── 用户信息 ──
+export interface AppUserInfo {
+  id: string;
+  authType: string;
+  email?: string;
+  phone?: string;
+  nickname?: string;
+  avatar?: string;
+  status: string;
+  emailVerified: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AppLoginResponse {
+  user: AppUserInfo;
+  token: string;
+}
+
+// ── 用户档案 ──
+export interface UserProfile {
+  id: string;
+  userId: string;
+  // 基本信息
+  gender?: string;
+  birthYear?: number;
+  heightCm?: number;
+  weightKg?: number;
+  targetWeightKg?: number;
+  bodyFatPercent?: number;
+  // 活动等级
+  activityLevel: string;
+  dailyCalorieGoal?: number;
+  // 健康目标
+  goal?: GoalType;
+  goalSpeed?: GoalSpeed;
+  // 饮食习惯
+  mealsPerDay?: number;
+  takeoutFrequency?: TakeoutFrequency;
+  canCook?: boolean;
+  foodPreferences?: string[];
+  dietaryRestrictions?: string[];
+  allergens?: string[];
+  healthConditions?: string[];
+  // 行为习惯
+  weakTimeSlots?: string[];
+  bingeTriggers?: string[];
+  discipline?: Discipline;
+  // 元数据
+  onboardingCompleted?: boolean;
+  onboardingStep?: number;
+  dataCompleteness?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ── 行为画像 ──
+export interface BehaviorProfile {
+  id: string;
+  userId: string;
+  foodPreferences: { loves?: string[]; avoids?: string[]; frequentFoods?: string[] };
+  bingeRiskHours: number[];
+  failureTriggers: string[];
+  avgComplianceRate: number;
+  coachStyle: string;
+  totalRecords: number;
+  healthyRecords: number;
+  streakDays: number;
+  longestStreak: number;
+}

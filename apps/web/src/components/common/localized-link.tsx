@@ -26,7 +26,7 @@ export function LocalizedLink({
   asButton = false,
 }: LocalizedLinkProps) {
   const { locale } = useLocalizedRouter();
-  
+
   // 使用 getLocalizedPath 来构建本地化路径
   const localizedHref = getLocalizedPath(href, locale);
 

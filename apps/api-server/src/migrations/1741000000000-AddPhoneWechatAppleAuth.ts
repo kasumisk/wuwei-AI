@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddPhoneWechatAppleAuth1741000000000
-  implements MigrationInterface
-{
+export class AddPhoneWechatAppleAuth1741000000000 implements MigrationInterface {
   name = 'AddPhoneWechatAppleAuth1741000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -50,15 +48,11 @@ export class AddPhoneWechatAppleAuth1741000000000
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(
-      `DROP INDEX IF EXISTS "IDX_app_users_apple_id"`,
-    );
+    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_app_users_apple_id"`);
     await queryRunner.query(
       `DROP INDEX IF EXISTS "IDX_app_users_wechat_open_id"`,
     );
-    await queryRunner.query(
-      `DROP INDEX IF EXISTS "IDX_app_users_phone"`,
-    );
+    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_app_users_phone"`);
 
     await queryRunner.query(`
       ALTER TABLE "app_users"

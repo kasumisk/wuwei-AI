@@ -5,9 +5,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * - foods: 新增营养维度字段 (fiber, sugar, sodium, GI) + 分类字段 (isProcessed, isFried, mealTypes, mainIngredient, subCategory) + 评分字段 (qualityScore, satietyScore)
  * - recommendation_feedbacks: 新增推荐反馈记录表
  */
-export class AddFoodLibraryEnhancedFields1752000000000
-  implements MigrationInterface
-{
+export class AddFoodLibraryEnhancedFields1752000000000 implements MigrationInterface {
   name = 'AddFoodLibraryEnhancedFields1752000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -20,10 +18,18 @@ export class AddFoodLibraryEnhancedFields1752000000000
         ADD COLUMN IF NOT EXISTS glycemic_index    INT           DEFAULT NULL
     `);
 
-    await queryRunner.query(`COMMENT ON COLUMN foods.fiber_per_100g  IS '膳食纤维 g/100g'`);
-    await queryRunner.query(`COMMENT ON COLUMN foods.sugar_per_100g  IS '糖 g/100g'`);
-    await queryRunner.query(`COMMENT ON COLUMN foods.sodium_per_100g IS '钠 mg/100g'`);
-    await queryRunner.query(`COMMENT ON COLUMN foods.glycemic_index  IS 'GI血糖指数'`);
+    await queryRunner.query(
+      `COMMENT ON COLUMN foods.fiber_per_100g  IS '膳食纤维 g/100g'`,
+    );
+    await queryRunner.query(
+      `COMMENT ON COLUMN foods.sugar_per_100g  IS '糖 g/100g'`,
+    );
+    await queryRunner.query(
+      `COMMENT ON COLUMN foods.sodium_per_100g IS '钠 mg/100g'`,
+    );
+    await queryRunner.query(
+      `COMMENT ON COLUMN foods.glycemic_index  IS 'GI血糖指数'`,
+    );
 
     // ── 2. foods 表：新增食物分类/属性字段 ─────────────────────────────
     await queryRunner.query(`
@@ -35,11 +41,21 @@ export class AddFoodLibraryEnhancedFields1752000000000
         ADD COLUMN IF NOT EXISTS sub_category      VARCHAR(50)   DEFAULT NULL
     `);
 
-    await queryRunner.query(`COMMENT ON COLUMN foods.is_processed    IS '是否加工食品'`);
-    await queryRunner.query(`COMMENT ON COLUMN foods.is_fried        IS '是否油炸食品'`);
-    await queryRunner.query(`COMMENT ON COLUMN foods.meal_types      IS '适合餐次: breakfast/lunch/dinner/snack'`);
-    await queryRunner.query(`COMMENT ON COLUMN foods.main_ingredient IS '主要食材 (如 猪肉/鸡蛋/大米 等)'`);
-    await queryRunner.query(`COMMENT ON COLUMN foods.sub_category    IS '子分类 (如 红肉/白肉/粗粮 等)'`);
+    await queryRunner.query(
+      `COMMENT ON COLUMN foods.is_processed    IS '是否加工食品'`,
+    );
+    await queryRunner.query(
+      `COMMENT ON COLUMN foods.is_fried        IS '是否油炸食品'`,
+    );
+    await queryRunner.query(
+      `COMMENT ON COLUMN foods.meal_types      IS '适合餐次: breakfast/lunch/dinner/snack'`,
+    );
+    await queryRunner.query(
+      `COMMENT ON COLUMN foods.main_ingredient IS '主要食材 (如 猪肉/鸡蛋/大米 等)'`,
+    );
+    await queryRunner.query(
+      `COMMENT ON COLUMN foods.sub_category    IS '子分类 (如 红肉/白肉/粗粮 等)'`,
+    );
 
     // ── 3. foods 表：新增评分字段 ──────────────────────────────────────
     await queryRunner.query(`
@@ -48,8 +64,12 @@ export class AddFoodLibraryEnhancedFields1752000000000
         ADD COLUMN IF NOT EXISTS satiety_score     INT           DEFAULT NULL
     `);
 
-    await queryRunner.query(`COMMENT ON COLUMN foods.quality_score   IS '食物品质综合评分 1-10'`);
-    await queryRunner.query(`COMMENT ON COLUMN foods.satiety_score   IS '饱腹感评分 1-10'`);
+    await queryRunner.query(
+      `COMMENT ON COLUMN foods.quality_score   IS '食物品质综合评分 1-10'`,
+    );
+    await queryRunner.query(
+      `COMMENT ON COLUMN foods.satiety_score   IS '饱腹感评分 1-10'`,
+    );
 
     // ── 4. foods: 根据已有数据回填部分字段 ────────────────────────────────
     // 根据分类默认设置 is_processed
@@ -115,7 +135,9 @@ export class AddFoodLibraryEnhancedFields1752000000000
         ON recommendation_feedbacks (user_id)
     `);
 
-    await queryRunner.query(`COMMENT ON TABLE recommendation_feedbacks IS '用户对推荐食物的反馈记录，用于持续优化推荐模型'`);
+    await queryRunner.query(
+      `COMMENT ON TABLE recommendation_feedbacks IS '用户对推荐食物的反馈记录，用于持续优化推荐模型'`,
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

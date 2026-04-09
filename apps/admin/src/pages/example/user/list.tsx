@@ -44,8 +44,8 @@ const UserList = () => {
       key: 'action',
       render: (_: unknown, record: { id: number }) => (
         <Space size="middle">
-          <Button 
-            type="link" 
+          <Button
+            type="link"
             icon={<EyeOutlined />}
             onClick={() => navigate(`/example/user/${record.id}`)}
           >

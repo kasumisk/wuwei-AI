@@ -5,7 +5,7 @@ import { FoodConflictResolverService } from './food-conflict-resolver.service';
 import { FoodQualityMonitorService } from './food-quality-monitor.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { FoodLibrary } from '../../entities/food-library.entity';
+import { FoodLibrary } from '../../modules/food/entities/food-library.entity';
 
 /**
  * 食物数据同步定时任务 (Phase 2/3)
@@ -18,7 +18,8 @@ export class FoodSyncSchedulerService {
     private readonly orchestrator: FoodPipelineOrchestratorService,
     private readonly conflictResolver: FoodConflictResolverService,
     private readonly qualityMonitor: FoodQualityMonitorService,
-    @InjectRepository(FoodLibrary) private readonly foodRepo: Repository<FoodLibrary>,
+    @InjectRepository(FoodLibrary)
+    private readonly foodRepo: Repository<FoodLibrary>,
   ) {}
 
   /**
@@ -28,22 +29,41 @@ export class FoodSyncSchedulerService {
   async monthlyUsdaSync() {
     this.logger.log('Starting monthly USDA sync...');
     const commonCategories = [
-      'chicken', 'beef', 'pork', 'fish', 'egg',
-      'rice', 'bread', 'pasta', 'potato', 'oat',
-      'broccoli', 'spinach', 'carrot', 'tomato', 'onion',
-      'apple', 'banana', 'orange', 'strawberry',
-      'milk', 'yogurt', 'cheese',
+      'chicken',
+      'beef',
+      'pork',
+      'fish',
+      'egg',
+      'rice',
+      'bread',
+      'pasta',
+      'potato',
+      'oat',
+      'broccoli',
+      'spinach',
+      'carrot',
+      'tomato',
+      'onion',
+      'apple',
+      'banana',
+      'orange',
+      'strawberry',
+      'milk',
+      'yogurt',
+      'cheese',
     ];
 
     for (const query of commonCategories) {
       try {
         const result = await this.orchestrator.importFromUsda(query, 50);
-        this.logger.log(`USDA sync "${query}": created=${result.created}, updated=${result.updated}`);
+        this.logger.log(
+          `USDA sync "${query}": created=${result.created}, updated=${result.updated}`,
+        );
       } catch (e) {
         this.logger.error(`USDA sync "${query}" failed: ${e.message}`);
       }
       // Rate limiting
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise((resolve) => setTimeout(resolve, 2000));
     }
   }
 
@@ -54,7 +74,9 @@ export class FoodSyncSchedulerService {
   async dailyConflictResolution() {
     this.logger.log('Starting daily conflict resolution...');
     const result = await this.conflictResolver.resolveAllPending();
-    this.logger.log(`Daily conflict resolution: ${result.resolved} resolved, ${result.needsReview} need review`);
+    this.logger.log(
+      `Daily conflict resolution: ${result.resolved} resolved, ${result.needsReview} need review`,
+    );
   }
 
   /**
@@ -63,7 +85,10 @@ export class FoodSyncSchedulerService {
   @Cron(CronExpression.EVERY_DAY_AT_5AM)
   async dailyScoreCalculation() {
     this.logger.log('Starting daily score calculation...');
-    const result = await this.orchestrator.batchApplyRules({ limit: 1000, recalcAll: false });
+    const result = await this.orchestrator.batchApplyRules({
+      limit: 1000,
+      recalcAll: false,
+    });
     this.logger.log(`Score calculation done: ${result.processed} processed`);
   }
 
@@ -74,7 +99,9 @@ export class FoodSyncSchedulerService {
   async weeklyQualityReport() {
     this.logger.log('Generating weekly quality report...');
     const report = await this.qualityMonitor.generateReport();
-    this.logger.log(`Quality Report: total=${report.totalFoods}, verified=${report.quality.verified}, pending_conflicts=${report.conflicts.pending}, translations=${report.translations.total}`);
+    this.logger.log(
+      `Quality Report: total=${report.totalFoods}, verified=${report.quality.verified}, pending_conflicts=${report.conflicts.pending}, translations=${report.translations.total}`,
+    );
   }
 
   /**

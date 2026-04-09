@@ -22,14 +22,17 @@ export class FoodImageRecognitionService {
   private readonly provider: string;
 
   constructor(private readonly configService: ConfigService) {
-    this.provider = this.configService.get<string>('FOOD_IMAGE_PROVIDER') || 'deepseek';
-    this.apiKey = this.configService.get<string>(
-      this.provider === 'openai' ? 'OPENAI_API_KEY' : 'DEEPSEEK_API_KEY',
-    ) || '';
+    this.provider =
+      this.configService.get<string>('FOOD_IMAGE_PROVIDER') || 'deepseek';
+    this.apiKey =
+      this.configService.get<string>(
+        this.provider === 'openai' ? 'OPENAI_API_KEY' : 'DEEPSEEK_API_KEY',
+      ) || '';
 
-    const baseURL = this.provider === 'openai'
-      ? 'https://api.openai.com/v1'
-      : 'https://api.deepseek.com';
+    const baseURL =
+      this.provider === 'openai'
+        ? 'https://api.openai.com/v1'
+        : 'https://api.deepseek.com';
 
     this.client = axios.create({
       baseURL,
@@ -61,7 +64,8 @@ export class FoodImageRecognitionService {
         messages: [
           {
             role: 'system',
-            content: '你是食物图片识别专家。请识别图片中的所有食物，返回JSON格式结果。',
+            content:
+              '你是食物图片识别专家。请识别图片中的所有食物，返回JSON格式结果。',
           },
           {
             role: 'user',
@@ -88,13 +92,19 @@ export class FoodImageRecognitionService {
       const parsed = JSON.parse(content);
       const foods = parsed.foods || [];
 
-      return foods.map((f: any) => ({
-        name: f.name || '',
-        nameEn: f.name_en || f.nameEn || '',
-        confidence: f.confidence || 0.5,
-        category: f.category,
-        estimatedCalories: f.estimated_calories_per_100g || f.estimatedCalories,
-      })).sort((a: FoodRecognitionResult, b: FoodRecognitionResult) => b.confidence - a.confidence);
+      return foods
+        .map((f: any) => ({
+          name: f.name || '',
+          nameEn: f.name_en || f.nameEn || '',
+          confidence: f.confidence || 0.5,
+          category: f.category,
+          estimatedCalories:
+            f.estimated_calories_per_100g || f.estimatedCalories,
+        }))
+        .sort(
+          (a: FoodRecognitionResult, b: FoodRecognitionResult) =>
+            b.confidence - a.confidence,
+        );
     } catch (e) {
       this.logger.error(`Food image recognition failed: ${e.message}`);
       return [];
@@ -116,7 +126,8 @@ export class FoodImageRecognitionService {
         messages: [
           {
             role: 'system',
-            content: '你是食物图片识别专家。请识别图片中的所有食物，返回JSON格式结果。',
+            content:
+              '你是食物图片识别专家。请识别图片中的所有食物，返回JSON格式结果。',
           },
           {
             role: 'user',

@@ -186,10 +186,10 @@ export function generateTextStream(
       if (!response.ok) {
         const errorText = await response.text();
         try {
-            const errorJson = JSON.parse(errorText);
-            throw new Error(errorJson.message || `HTTP error! status: ${response.status}`);
+          const errorJson = JSON.parse(errorText);
+          throw new Error(errorJson.message || `HTTP error! status: ${response.status}`);
         } catch (e) {
-            throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+          throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
         }
       }
 
@@ -212,7 +212,7 @@ export function generateTextStream(
 
         for (const line of lines) {
           if (line.trim() === '') continue;
-          
+
           // 解析 SSE 格式 (data: {...})
           if (line.startsWith('data: ')) {
             const dataStr = line.slice(6);
@@ -233,13 +233,12 @@ export function generateTextStream(
               if (data.usage) {
                 onComplete(data.usage);
               }
-              
+
               // 如果有 finishReason 且不是 null，也可以视为结束（虽然通常伴随 usage）
               if (data.finishReason === 'stop' && !data.usage) {
-                  // 如果没有 usage 但结束了，可能需要等待 usage 或者直接结束
-                  // 这里不做操作，等待 usage
+                // 如果没有 usage 但结束了，可能需要等待 usage 或者直接结束
+                // 这里不做操作，等待 usage
               }
-
             } catch (e) {
               console.error('Failed to parse SSE message:', e);
             }

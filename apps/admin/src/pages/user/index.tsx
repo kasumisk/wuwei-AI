@@ -150,20 +150,13 @@ const AppUserManagement: React.FC = () => {
       width: 200,
       render: (_: any, record: AppUserDto) => (
         <Space>
-          <Avatar
-            size={32}
-            src={record.avatar}
-            icon={<UserOutlined />}
-            style={{ flexShrink: 0 }}
-          />
+          <Avatar size={32} src={record.avatar} icon={<UserOutlined />} style={{ flexShrink: 0 }} />
           <div>
             <div style={{ fontWeight: 500, lineHeight: 1.4 }}>
               {record.nickname || <span style={{ color: '#bbb' }}>无昵称</span>}
             </div>
             <div style={{ fontSize: 11, color: '#999', lineHeight: 1.4 }}>
-              <Tooltip title={record.id}>
-                {record.id.slice(0, 8)}...
-              </Tooltip>
+              <Tooltip title={record.id}>{record.id.slice(0, 8)}...</Tooltip>
             </div>
           </div>
         </Space>
@@ -199,7 +192,11 @@ const AppUserManagement: React.FC = () => {
         email: { text: '邮箱' },
       },
       render: (_: any, record: AppUserDto) => {
-        const cfg = authTypeConfig[record.authType] || { color: 'default', icon: null, text: record.authType };
+        const cfg = authTypeConfig[record.authType] || {
+          color: 'default',
+          icon: null,
+          text: record.authType,
+        };
         return (
           <Tag color={cfg.color} icon={cfg.icon}>
             {cfg.text}
@@ -229,9 +226,11 @@ const AppUserManagement: React.FC = () => {
       valueType: 'dateTime',
       search: false,
       render: (_: any, record: AppUserDto) =>
-        record.lastLoginAt
-          ? new Date(record.lastLoginAt).toLocaleString('zh-CN')
-          : <span style={{ color: '#bbb' }}>—</span>,
+        record.lastLoginAt ? (
+          new Date(record.lastLoginAt).toLocaleString('zh-CN')
+        ) : (
+          <span style={{ color: '#bbb' }}>—</span>
+        ),
     },
     {
       title: '注册时间',
@@ -327,11 +326,7 @@ const AppUserManagement: React.FC = () => {
           }
         }}
         toolBarRender={() => [
-          <Button
-            key="stats"
-            icon={<BarChartOutlined />}
-            onClick={() => setStatsVisible(true)}
-          >
+          <Button key="stats" icon={<BarChartOutlined />} onClick={() => setStatsVisible(true)}>
             统计
           </Button>,
           <Button

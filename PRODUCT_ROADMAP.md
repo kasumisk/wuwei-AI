@@ -31,20 +31,20 @@
 
 ### 1.1 已完成模块清单
 
-| 模块 | 状态 | 核心能力 |
-|------|------|---------|
-| **认证系统** | ✅ 完成 | 手机号+验证码、微信扫码、匿名、邮箱密码 |
-| **AI 图片分析** | ✅ 完成 | 上传图片 → AI 识别菜品 → 返回热量估算 |
-| **饮食记录** | ✅ 完成 | 保存/编辑/删除记录, 今日汇总, 历史分页 |
-| **用户档案** | ✅ 完成 | 身体数据 + BMR 计算 + 每日热量目标 |
-| **AI 教练** | ✅ 完成 | SSE 流式对话, 上下文感知, 每日问候 |
-| **食物库** | ✅ 完成 | 150+ 食物, 模糊搜索, 分类浏览, SEO 落地页 |
-| **Web 前端** | ✅ 完成 | 首页/分析/教练/食物库/个人中心 |
+| 模块               | 状态    | 核心能力                                               |
+| ------------------ | ------- | ------------------------------------------------------ |
+| **认证系统**       | ✅ 完成 | 手机号+验证码、微信扫码、匿名、邮箱密码                |
+| **AI 图片分析**    | ✅ 完成 | 上传图片 → AI 识别菜品 → 返回热量估算                  |
+| **饮食记录**       | ✅ 完成 | 保存/编辑/删除记录, 今日汇总, 历史分页                 |
+| **用户档案**       | ✅ 完成 | 身体数据 + BMR 计算 + 每日热量目标                     |
+| **AI 教练**        | ✅ 完成 | SSE 流式对话, 上下文感知, 每日问候                     |
+| **食物库**         | ✅ 完成 | 150+ 食物, 模糊搜索, 分类浏览, SEO 落地页              |
+| **Web 前端**       | ✅ 完成 | 首页/分析/教练/食物库/个人中心                         |
 | **V1 AI 决策系统** | ✅ 完成 | 4级风险评级(SAFE/OK/LIMIT/AVOID) + 替代方案 + 补救策略 |
-| **V2 日计划引擎** | ✅ 完成 | 每日三餐+加餐计划 + 动态调整 |
-| **V3 行为建模** | ✅ 完成 | 用户画像 + 主动提醒(4场景) + 决策反馈闭环 |
-| **V4 游戏化** | ✅ 完成 | 10成就 + 4挑战 + 连胜系统(失败减半不归零) |
-| **V5 AI 人格** | ✅ 完成 | 3种教练风格(严格/友善/数据) + 人格化提示词 |
+| **V2 日计划引擎**  | ✅ 完成 | 每日三餐+加餐计划 + 动态调整                           |
+| **V3 行为建模**    | ✅ 完成 | 用户画像 + 主动提醒(4场景) + 决策反馈闭环              |
+| **V4 游戏化**      | ✅ 完成 | 10成就 + 4挑战 + 连胜系统(失败减半不归零)              |
+| **V5 AI 人格**     | ✅ 完成 | 3种教练风格(严格/友善/数据) + 人格化提示词             |
 
 ### 1.2 当前技术栈
 
@@ -103,13 +103,13 @@ V4 游戏化引擎             ✅ 已完成（2026-04-07）
 V5 AI 人格系统            ✅ 已完成（2026-04-07）
 ```
 
-| 版本 | 核心升级 | 用户感知变化 | 商业价值 | 状态 |
-|------|---------|-------------|---------|------|
+| 版本   | 核心升级                       | 用户感知变化               | 商业价值     | 状态      |
+| ------ | ------------------------------ | -------------------------- | ------------ | --------- |
 | **V1** | 风险评级 + 替代方案 + 补救策略 | "AI告诉我能不能吃、怎么吃" | MVP 核心体验 | ✅ 已上线 |
-| **V2** | 每日饮食计划 + 动态调整 | "AI在管理我的一天" | 日活提升 | ✅ 已上线 |
-| **V3** | 用户画像 + 精准干预 | "这个AI懂我" | 留存壁垒 | ✅ 已上线 |
-| **V4** | 连胜系统 + 成就 + 补偿 | "我不想断签" | 付费转化 | ✅ 已上线 |
-| **V5** | 人格选择 + 情感反馈 | "像真人教练" | 长期付费 | ✅ 已上线 |
+| **V2** | 每日饮食计划 + 动态调整        | "AI在管理我的一天"         | 日活提升     | ✅ 已上线 |
+| **V3** | 用户画像 + 精准干预            | "这个AI懂我"               | 留存壁垒     | ✅ 已上线 |
+| **V4** | 连胜系统 + 成就 + 补偿         | "我不想断签"               | 付费转化     | ✅ 已上线 |
+| **V5** | 人格选择 + 情感反馈            | "像真人教练"               | 长期付费     | ✅ 已上线 |
 
 ---
 
@@ -160,7 +160,7 @@ V5 AI 人格系统            ✅ 已完成（2026-04-07）
 
 ```json
 {
-  "foods": [{"name": "宫保鸡丁", "calories": 520, "quantity": "1份约200g", "category": "蛋白质"}],
+  "foods": [{ "name": "宫保鸡丁", "calories": 520, "quantity": "1份约200g", "category": "蛋白质" }],
   "totalCalories": 850,
   "mealType": "lunch",
   "advice": "蔬菜偏少，建议加一份绿叶菜",
@@ -172,7 +172,7 @@ V5 AI 人格系统            ✅ 已完成（2026-04-07）
 
 ```json
 {
-  "foods": [{"name": "宫保鸡丁", "calories": 520, "quantity": "1份约200g", "category": "蛋白质"}],
+  "foods": [{ "name": "宫保鸡丁", "calories": 520, "quantity": "1份约200g", "category": "蛋白质" }],
   "totalCalories": 850,
   "mealType": "lunch",
   "decision": "LIMIT",
@@ -194,12 +194,12 @@ V5 AI 人格系统            ✅ 已完成（2026-04-07）
 
 ### 3.3 四级风险评级（替代二元判断）
 
-| 等级 | 标识 | 含义 | 触发条件 |
-|------|------|------|---------|
-| 🟢 SAFE | 放心吃 | 纯健康食材/热量充足 | 剩余热量 >50% 且食物清淡 |
-| 🟡 OK | 可以吃但注意 | 整体可控 | 剩余热量 30-50% 或中等热量 |
-| 🟠 LIMIT | 少吃/控制份量 | 热量偏高或营养失衡 | 剩余热量 <30% 或高脂高糖 |
-| 🔴 AVOID | 建议不吃 | 严重超标 | 已超标或极高热量垃圾食品 |
+| 等级     | 标识          | 含义                | 触发条件                   |
+| -------- | ------------- | ------------------- | -------------------------- |
+| 🟢 SAFE  | 放心吃        | 纯健康食材/热量充足 | 剩余热量 >50% 且食物清淡   |
+| 🟡 OK    | 可以吃但注意  | 整体可控            | 剩余热量 30-50% 或中等热量 |
+| 🟠 LIMIT | 少吃/控制份量 | 热量偏高或营养失衡  | 剩余热量 <30% 或高脂高糖   |
+| 🔴 AVOID | 建议不吃      | 严重超标            | 已超标或极高热量垃圾食品   |
 
 ### 3.4 后端实现方案
 
@@ -313,7 +313,7 @@ export interface AnalysisResult {
 // apps/api-server/src/app/services/analyze.service.ts
 
 const FOOD_ANALYSIS_PROMPT_V2 = (userContext: string) =>
-`你是专业减脂饮食教练，风格：朋友式、简洁、可执行。
+  `你是专业减脂饮食教练，风格：朋友式、简洁、可执行。
 你的目标不是提供营养知识，而是帮助用户做"吃或不吃"的决策。
 
 ${userContext}
@@ -625,10 +625,30 @@ export interface MealSuggestion {
 // apps/web/src/components/decision-card.tsx
 
 const DECISION_CONFIG = {
-  SAFE:  { emoji: '🟢', label: '放心吃', bgClass: 'bg-green-50 border-green-200', textClass: 'text-green-800' },
-  OK:    { emoji: '🟡', label: '注意份量', bgClass: 'bg-yellow-50 border-yellow-200', textClass: 'text-yellow-800' },
-  LIMIT: { emoji: '🟠', label: '建议少吃', bgClass: 'bg-orange-50 border-orange-200', textClass: 'text-orange-800' },
-  AVOID: { emoji: '🔴', label: '不建议', bgClass: 'bg-red-50 border-red-200', textClass: 'text-red-800' },
+  SAFE: {
+    emoji: '🟢',
+    label: '放心吃',
+    bgClass: 'bg-green-50 border-green-200',
+    textClass: 'text-green-800',
+  },
+  OK: {
+    emoji: '🟡',
+    label: '注意份量',
+    bgClass: 'bg-yellow-50 border-yellow-200',
+    textClass: 'text-yellow-800',
+  },
+  LIMIT: {
+    emoji: '🟠',
+    label: '建议少吃',
+    bgClass: 'bg-orange-50 border-orange-200',
+    textClass: 'text-orange-800',
+  },
+  AVOID: {
+    emoji: '🔴',
+    label: '不建议',
+    bgClass: 'bg-red-50 border-red-200',
+    textClass: 'text-red-800',
+  },
 };
 ```
 
@@ -643,19 +663,19 @@ const DECISION_CONFIG = {
 
 ### 3.6 V1 文件变更清单
 
-| 文件 | 操作 | 说明 |
-|------|------|------|
-| `api-server/src/migrations/1746000000000-AddDecisionFields.ts` | **新建** | 8 个新列 |
-| `api-server/src/entities/food-record.entity.ts` | **修改** | 新增 8 个属性 |
-| `api-server/src/app/services/analyze.service.ts` | **修改** | V2 prompt + buildUserContext + 注入 FoodService/UserProfileService |
-| `api-server/src/app/services/food.service.ts` | **修改** | 新增 getMealSuggestion + buildMealSuggestion |
-| `api-server/src/app/controllers/food.controller.ts` | **修改** | analyze 传 userId + 新增 meal-suggestion 端点 |
-| `api-server/src/app/dto/food.dto.ts` | **修改** | SaveFoodRecordDto 新增 8 字段 |
-| `web/src/lib/api/food.ts` | **修改** | AnalysisResult 扩展 + MealSuggestion 接口 |
-| `web/src/lib/hooks/use-food.ts` | **修改** | 新增 getMealSuggestion |
-| `web/src/components/decision-card.tsx` | **新建** | 四级决策卡片组件 |
-| `web/src/pages-component/home/index.tsx` | **重构** | 首页全面改版 |
-| `web/src/app/[locale]/analyze/page.tsx` | **修改** | 结果步骤嵌入 DecisionCard |
+| 文件                                                           | 操作     | 说明                                                               |
+| -------------------------------------------------------------- | -------- | ------------------------------------------------------------------ |
+| `api-server/src/migrations/1746000000000-AddDecisionFields.ts` | **新建** | 8 个新列                                                           |
+| `api-server/src/entities/food-record.entity.ts`                | **修改** | 新增 8 个属性                                                      |
+| `api-server/src/app/services/analyze.service.ts`               | **修改** | V2 prompt + buildUserContext + 注入 FoodService/UserProfileService |
+| `api-server/src/app/services/food.service.ts`                  | **修改** | 新增 getMealSuggestion + buildMealSuggestion                       |
+| `api-server/src/app/controllers/food.controller.ts`            | **修改** | analyze 传 userId + 新增 meal-suggestion 端点                      |
+| `api-server/src/app/dto/food.dto.ts`                           | **修改** | SaveFoodRecordDto 新增 8 字段                                      |
+| `web/src/lib/api/food.ts`                                      | **修改** | AnalysisResult 扩展 + MealSuggestion 接口                          |
+| `web/src/lib/hooks/use-food.ts`                                | **修改** | 新增 getMealSuggestion                                             |
+| `web/src/components/decision-card.tsx`                         | **新建** | 四级决策卡片组件                                                   |
+| `web/src/pages-component/home/index.tsx`                       | **重构** | 首页全面改版                                                       |
+| `web/src/app/[locale]/analyze/page.tsx`                        | **修改** | 结果步骤嵌入 DecisionCard                                          |
 
 ---
 
@@ -735,15 +755,15 @@ Response: { updatedPlan, adjustmentNote }
 
 ### 4.5 实施文件清单
 
-| 文件 | 操作 |
-|------|------|
-| `migrations/1747000000000-AddDailyPlanTable.ts` | 新建 |
-| `entities/daily-plan.entity.ts` | 新建 |
-| `services/daily-plan.service.ts` | 新建 |
-| `controllers/food.controller.ts` | 新增 2 端点 |
-| `app-client.module.ts` | 注册新实体和服务 |
-| `web/src/lib/api/food.ts` | 新增 DailyPlan 接口 |
-| `web/src/pages-component/home/index.tsx` | 展示每日计划卡片 |
+| 文件                                            | 操作                |
+| ----------------------------------------------- | ------------------- |
+| `migrations/1747000000000-AddDailyPlanTable.ts` | 新建                |
+| `entities/daily-plan.entity.ts`                 | 新建                |
+| `services/daily-plan.service.ts`                | 新建                |
+| `controllers/food.controller.ts`                | 新增 2 端点         |
+| `app-client.module.ts`                          | 注册新实体和服务    |
+| `web/src/lib/api/food.ts`                       | 新增 DailyPlan 接口 |
+| `web/src/pages-component/home/index.tsx`        | 展示每日计划卡片    |
 
 ---
 
@@ -841,7 +861,7 @@ class BehaviorService {
     return `
 【用户行为画像】
 - 偏好食物：${profile.foodPreferences?.loves?.join('、') || '未知'}
-- 容易暴食时段：${profile.bingeRiskHours?.map(h => h + ':00').join('、') || '无'}
+- 容易暴食时段：${profile.bingeRiskHours?.map((h) => h + ':00').join('、') || '无'}
 - 建议执行率：${Math.round((profile.avgComplianceRate || 0) * 100)}%
 - 连续达标天数：${profile.streakDays} 天`;
   }
@@ -884,17 +904,17 @@ async check(userId: string): Promise<ProactiveReminder | null> {
 
 ### 5.5 实施文件清单
 
-| 文件 | 操作 |
-|------|------|
-| `migrations/1748000000000-AddBehaviorTables.ts` | 新建 |
-| `entities/user-behavior-profile.entity.ts` | 新建 |
-| `entities/ai-decision-log.entity.ts` | 新建 |
-| `services/behavior.service.ts` | 新建 |
-| `services/proactive-reminder.service.ts` | 新建 |
-| `controllers/food.controller.ts` | 新增 proactive-check 端点 |
-| `services/analyze.service.ts` | buildUserContext 注入行为画像 |
-| `services/food.service.ts` | saveRecord 后写 ai_decision_logs |
-| `web/src/components/proactive-reminder.tsx` | 新建前端提醒组件 |
+| 文件                                            | 操作                             |
+| ----------------------------------------------- | -------------------------------- |
+| `migrations/1748000000000-AddBehaviorTables.ts` | 新建                             |
+| `entities/user-behavior-profile.entity.ts`      | 新建                             |
+| `entities/ai-decision-log.entity.ts`            | 新建                             |
+| `services/behavior.service.ts`                  | 新建                             |
+| `services/proactive-reminder.service.ts`        | 新建                             |
+| `controllers/food.controller.ts`                | 新增 proactive-check 端点        |
+| `services/analyze.service.ts`                   | buildUserContext 注入行为画像    |
+| `services/food.service.ts`                      | saveRecord 后写 ai_decision_logs |
+| `web/src/components/proactive-reminder.tsx`     | 新建前端提醒组件                 |
 
 ---
 
@@ -904,13 +924,13 @@ async check(userId: string): Promise<ProactiveReminder | null> {
 
 ### 6.1 核心机制
 
-| 机制 | 设计 | 心理学原理 |
-|------|------|-----------|
-| **连胜系统** | 连续 N 天达标解锁奖励 | 损失厌恶 |
-| **失败不归零** | 断签扣一部分进度而非清零 | 防止放弃 |
-| **成就徽章** | 里程碑徽章（7天/30天/体重-5kg） | 成就感 |
-| **对比激励** | "你已经比 70% 的人做得好了" | 社会比较 |
-| **进步感** | 周报展示进步趋势 | 自我效能 |
+| 机制           | 设计                            | 心理学原理 |
+| -------------- | ------------------------------- | ---------- |
+| **连胜系统**   | 连续 N 天达标解锁奖励           | 损失厌恶   |
+| **失败不归零** | 断签扣一部分进度而非清零        | 防止放弃   |
+| **成就徽章**   | 里程碑徽章（7天/30天/体重-5kg） | 成就感     |
+| **对比激励**   | "你已经比 70% 的人做得好了"     | 社会比较   |
+| **进步感**     | 周报展示进步趋势                | 自我效能   |
 
 ### 6.2 数据库设计
 
@@ -992,18 +1012,18 @@ async updateStreak(userId: string): Promise<void> {
 
 ### 6.4 实施文件清单
 
-| 文件 | 操作 |
-|------|------|
-| `migrations/1749000000000-AddGamificationTables.ts` | 新建 |
-| `entities/achievement.entity.ts` | 新建 |
-| `entities/user-achievement.entity.ts` | 新建 |
-| `entities/challenge.entity.ts` | 新建 |
-| `entities/user-challenge.entity.ts` | 新建 |
-| `services/gamification.service.ts` | 新建 |
-| `controllers/gamification.controller.ts` | 新建 |
-| `scripts/seed-achievements.ts` | 新建（种子数据） |
-| `web/src/app/[locale]/challenge/page.tsx` | 新建 |
-| `web/src/components/achievement-badge.tsx` | 新建 |
+| 文件                                                | 操作             |
+| --------------------------------------------------- | ---------------- |
+| `migrations/1749000000000-AddGamificationTables.ts` | 新建             |
+| `entities/achievement.entity.ts`                    | 新建             |
+| `entities/user-achievement.entity.ts`               | 新建             |
+| `entities/challenge.entity.ts`                      | 新建             |
+| `entities/user-challenge.entity.ts`                 | 新建             |
+| `services/gamification.service.ts`                  | 新建             |
+| `controllers/gamification.controller.ts`            | 新建             |
+| `scripts/seed-achievements.ts`                      | 新建（种子数据） |
+| `web/src/app/[locale]/challenge/page.tsx`           | 新建             |
+| `web/src/components/achievement-badge.tsx`          | 新建             |
 
 ---
 
@@ -1013,11 +1033,11 @@ async updateStreak(userId: string): Promise<void> {
 
 ### 7.1 三种人格模型
 
-| 人格 | 风格 | 示例输出 | 适合用户 |
-|------|------|---------|---------|
-| **严格教练** | 直接、目标导向 | "不建议吃，这会影响你的目标" | 自律强的用户 |
-| **暖心朋友** | 温和、鼓励为主 | "可以少吃一点～偶尔享受也没关系" | 容易放弃的用户 |
-| **数据理性** | 客观、数据驱动 | "这顿 850 卡，建议控制在 50% 份量" | 理性型用户 |
+| 人格         | 风格           | 示例输出                           | 适合用户       |
+| ------------ | -------------- | ---------------------------------- | -------------- |
+| **严格教练** | 直接、目标导向 | "不建议吃，这会影响你的目标"       | 自律强的用户   |
+| **暖心朋友** | 温和、鼓励为主 | "可以少吃一点～偶尔享受也没关系"   | 容易放弃的用户 |
+| **数据理性** | 客观、数据驱动 | "这顿 850 卡，建议控制在 50% 份量" | 理性型用户     |
 
 ### 7.2 实现方案
 
@@ -1062,12 +1082,12 @@ if (user.avgComplianceRate > 0.8) {
 
 ### 7.4 实施文件清单
 
-| 文件 | 操作 |
-|------|------|
-| `services/analyze.service.ts` | 注入人格 prompt |
-| `services/coach.service.ts` | buildSystemPrompt 注入人格 |
-| `web/src/app/[locale]/profile/page.tsx` | 新增教练风格选择器 |
-| `dto/food.dto.ts` | SaveUserProfileDto 已有 coachStyle 在行为表 |
+| 文件                                    | 操作                                        |
+| --------------------------------------- | ------------------------------------------- |
+| `services/analyze.service.ts`           | 注入人格 prompt                             |
+| `services/coach.service.ts`             | buildSystemPrompt 注入人格                  |
+| `web/src/app/[locale]/profile/page.tsx` | 新增教练风格选择器                          |
+| `dto/food.dto.ts`                       | SaveUserProfileDto 已有 coachStyle 在行为表 |
 
 ---
 
@@ -1114,13 +1134,13 @@ if (user.avgComplianceRate > 0.8) {
 
 ### 实现映射
 
-| AI 层 | 对应代码位置 | 当前状态 | 目标版本 |
-|--------|------------|---------|---------|
-| 感知层 | `analyze.service.ts` (Vision API) | ✅ 有 | V1 增强 |
-| 用户模型层 | `user-profile.entity.ts` + 新建 `user-behavior-profile` | 部分 | V3 完善 |
-| 决策层 | `FOOD_ANALYSIS_PROMPT` + `buildMealSuggestion()` | ❌ 无 | V1 新建 |
-| 表达层 | `PERSONA_PROMPTS` | ❌ 无 | V5 新建 |
-| 反馈系统 | `ai_decision_logs` | ❌ 无 | V3 新建 |
+| AI 层      | 对应代码位置                                            | 当前状态 | 目标版本 |
+| ---------- | ------------------------------------------------------- | -------- | -------- |
+| 感知层     | `analyze.service.ts` (Vision API)                       | ✅ 有    | V1 增强  |
+| 用户模型层 | `user-profile.entity.ts` + 新建 `user-behavior-profile` | 部分     | V3 完善  |
+| 决策层     | `FOOD_ANALYSIS_PROMPT` + `buildMealSuggestion()`        | ❌ 无    | V1 新建  |
+| 表达层     | `PERSONA_PROMPTS`                                       | ❌ 无    | V5 新建  |
+| 反馈系统   | `ai_decision_logs`                                      | ❌ 无    | V3 新建  |
 
 ---
 
@@ -1192,10 +1212,10 @@ apps/api-server/src/prompts/
 
 ```typescript
 function buildFullPrompt(
-  taskPrompt: string,          // 具体任务（分析/计划/建议）
-  userContext: string,         // 来自 UserProfile + DailySummary
-  behaviorContext: string,     // 来自 UserBehaviorProfile（V3）
-  personaPrompt: string,      // 来自 PERSONA_PROMPTS（V5）
+  taskPrompt: string, // 具体任务（分析/计划/建议）
+  userContext: string, // 来自 UserProfile + DailySummary
+  behaviorContext: string, // 来自 UserBehaviorProfile（V3）
+  personaPrompt: string // 来自 PERSONA_PROMPTS（V5）
 ): string {
   return `${personaPrompt}\n\n${userContext}\n\n${behaviorContext}\n\n${taskPrompt}`;
 }
@@ -1203,12 +1223,12 @@ function buildFullPrompt(
 
 ### 10.3 各版本 Prompt 升级路径
 
-| 版本 | Prompt 变化 |
-|------|------------|
-| V1 | 新增 `userContext`（今日摄入/剩余），输出新增 decision/compensation |
-| V2 | 新增 `dailyPlanPrompt`（生成每日计划） |
-| V3 | 新增 `behaviorContext`（偏好/暴食时段/执行率） |
-| V5 | 新增 `personaPrompt`（三种人格可切换） |
+| 版本 | Prompt 变化                                                         |
+| ---- | ------------------------------------------------------------------- |
+| V1   | 新增 `userContext`（今日摄入/剩余），输出新增 decision/compensation |
+| V2   | 新增 `dailyPlanPrompt`（生成每日计划）                              |
+| V3   | 新增 `behaviorContext`（偏好/暴食时段/执行率）                      |
+| V5   | 新增 `personaPrompt`（三种人格可切换）                              |
 
 ---
 
@@ -1339,6 +1359,7 @@ PUT  /api/app/auth/profile
 ### Phase V1：AI 决策 + 首页改版 ✅
 
 #### 后端变更
+
 ```
 [x] 新建 Migration 1746000000000-AddDecisionFields → food_records 新增 8 列
 [x] 修改 food-record.entity.ts → 新增 decision/riskLevel/reason/suggestion 等字段
@@ -1349,6 +1370,7 @@ PUT  /api/app/auth/profile
 ```
 
 #### 前端变更
+
 ```
 [x] 新建 web/src/components/decision-card.tsx → 四级决策卡片
 [x] 修改 web/src/app/[locale]/analyze/page.tsx → 嵌入 DecisionCard
@@ -1362,6 +1384,7 @@ PUT  /api/app/auth/profile
 ### Phase V2：日计划引擎 ✅
 
 #### 后端变更
+
 ```
 [x] 新建 Migration 1747000000000-AddDailyPlanTable
 [x] 新建 entities/daily-plan.entity.ts → MealPlan + PlanAdjustment 接口
@@ -1371,6 +1394,7 @@ PUT  /api/app/auth/profile
 ```
 
 #### 前端变更
+
 ```
 [x] 扩展 food.ts → DailyPlanData/MealPlan 类型 + getDailyPlan/adjustDailyPlan API
 [x] 首页展示每日计划卡片（morningPlan/lunchPlan/dinnerPlan/snackPlan）
@@ -1381,6 +1405,7 @@ PUT  /api/app/auth/profile
 ### Phase V3：行为建模 ✅
 
 #### 后端变更
+
 ```
 [x] 新建 Migration 1748000000000-AddBehaviorTables → user_behavior_profiles + ai_decision_logs
 [x] 新建 entities/user-behavior-profile.entity.ts
@@ -1391,6 +1416,7 @@ PUT  /api/app/auth/profile
 ```
 
 #### 前端变更
+
 ```
 [x] 新建 web/src/components/proactive-reminder.tsx → 紧急度分级提醒
 [x] 扩展 food.ts → BehaviorProfile/ProactiveReminder 类型 + API 方法
@@ -1402,6 +1428,7 @@ PUT  /api/app/auth/profile
 ### Phase V4：游戏化 ✅
 
 #### 后端变更
+
 ```
 [x] 新建 Migration 1749000000000-AddGamificationTables → 4 表 + 种子数据(10成就+4挑战)
 [x] 新建 entities/achievement.entity.ts + user-achievement.entity.ts
@@ -1411,6 +1438,7 @@ PUT  /api/app/auth/profile
 ```
 
 #### 前端变更
+
 ```
 [x] 新建 web/src/components/achievement-badge.tsx → 成就徽章
 [x] 新建 web/src/app/[locale]/challenge/page.tsx → 挑战页(连胜+成就+挑战列表)
@@ -1422,6 +1450,7 @@ PUT  /api/app/auth/profile
 ### Phase V5：AI 人格 ✅
 
 #### 后端变更
+
 ```
 [x] 修改 analyze.service.ts → 注入 PERSONA_PROMPTS(strict/friendly/data) + 人格上下文
 [x] 修改 coach.service.ts → buildSystemPrompt 注入行为上下文 + 人格
@@ -1429,6 +1458,7 @@ PUT  /api/app/auth/profile
 ```
 
 #### 前端变更
+
 ```
 [x] 修改 web/src/app/[locale]/profile/page.tsx → 教练风格选择器(3按钮) + 行为统计卡片
 [x] 扩展 food.ts → updateCoachStyle + getBehaviorProfile API
@@ -1438,19 +1468,19 @@ PUT  /api/app/auth/profile
 
 ### 部署验证记录（2026-04-07）
 
-| 接口 | 方法 | 路径 | 状态 |
-|------|------|------|------|
-| V1 餐食建议 | GET | `/api/app/food/meal-suggestion` | ✅ 200 |
-| V2 每日计划 | GET | `/api/app/food/daily-plan` | ✅ 200 |
+| 接口        | 方法 | 路径                              | 状态   |
+| ----------- | ---- | --------------------------------- | ------ |
+| V1 餐食建议 | GET  | `/api/app/food/meal-suggestion`   | ✅ 200 |
+| V2 每日计划 | GET  | `/api/app/food/daily-plan`        | ✅ 200 |
 | V2 计划调整 | POST | `/api/app/food/daily-plan/adjust` | ✅ 200 |
-| V3 行为画像 | GET | `/api/app/food/behavior-profile` | ✅ 200 |
-| V3 主动提醒 | GET | `/api/app/food/proactive-check` | ✅ 200 |
+| V3 行为画像 | GET  | `/api/app/food/behavior-profile`  | ✅ 200 |
+| V3 主动提醒 | GET  | `/api/app/food/proactive-check`   | ✅ 200 |
 | V3 决策反馈 | POST | `/api/app/food/decision-feedback` | ✅ 200 |
-| V4 成就列表 | GET | `/api/app/achievements` | ✅ 200 |
-| V4 挑战列表 | GET | `/api/app/challenges` | ✅ 200 |
-| V4 加入挑战 | POST | `/api/app/challenges/:id/join` | ✅ 200 |
-| V4 连胜状态 | GET | `/api/app/streak` | ✅ 200 |
-| V5 切换风格 | PUT | `/api/app/coach/style` | ✅ 200 |
+| V4 成就列表 | GET  | `/api/app/achievements`           | ✅ 200 |
+| V4 挑战列表 | GET  | `/api/app/challenges`             | ✅ 200 |
+| V4 加入挑战 | POST | `/api/app/challenges/:id/join`    | ✅ 200 |
+| V4 连胜状态 | GET  | `/api/app/streak`                 | ✅ 200 |
+| V5 切换风格 | PUT  | `/api/app/coach/style`            | ✅ 200 |
 
 ### 数据库迁移链
 
@@ -1467,18 +1497,18 @@ PUT  /api/app/auth/profile
 
 ### 文件变更汇总
 
-| 类别 | 新增文件 | 修改文件 |
-|------|---------|---------|
-| **迁移** | 4 | 0 |
-| **实体** | 7 | 1 |
-| **服务** | 3 | 3 |
-| **控制器** | 1 | 2 |
-| **DTO** | 0 | 2 |
-| **模块** | 0 | 2 |
-| **前端组件** | 3 | 0 |
-| **前端页面** | 1 | 3 |
-| **前端API** | 0 | 2 |
-| **合计** | **19 新增** | **15 修改** |
+| 类别         | 新增文件    | 修改文件    |
+| ------------ | ----------- | ----------- |
+| **迁移**     | 4           | 0           |
+| **实体**     | 7           | 1           |
+| **服务**     | 3           | 3           |
+| **控制器**   | 1           | 2           |
+| **DTO**      | 0           | 2           |
+| **模块**     | 0           | 2           |
+| **前端组件** | 3           | 0           |
+| **前端页面** | 1           | 3           |
+| **前端API**  | 0           | 2           |
+| **合计**     | **19 新增** | **15 修改** |
 
 ---
 
@@ -1486,16 +1516,16 @@ PUT  /api/app/auth/profile
 
 ### 13.1 免费 vs 付费
 
-| 功能 | 免费 | Pro (¥19-39/月) |
-|------|------|-----------------|
-| AI 分析 | 3 次/天 | 无限 |
-| 饮食记录 | ✅ | ✅ |
-| 今日建议 | ✅ | ✅ |
-| AI 教练 | 5 条/天 | 无限 |
-| 每日计划 | ❌ | ✅ (V2) |
-| 行为分析 | ❌ | ✅ (V3) |
-| 教练风格选择 | ❌ | ✅ (V5) |
-| 挑战模式 | 基础 | 高级 (V4) |
+| 功能         | 免费    | Pro (¥19-39/月) |
+| ------------ | ------- | --------------- |
+| AI 分析      | 3 次/天 | 无限            |
+| 饮食记录     | ✅      | ✅              |
+| 今日建议     | ✅      | ✅              |
+| AI 教练      | 5 条/天 | 无限            |
+| 每日计划     | ❌      | ✅ (V2)         |
+| 行为分析     | ❌      | ✅ (V3)         |
+| 教练风格选择 | ❌      | ✅ (V5)         |
+| 挑战模式     | 基础    | 高级 (V4)       |
 
 ### 13.2 增长飞轮
 

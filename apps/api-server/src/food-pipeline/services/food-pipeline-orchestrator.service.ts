@@ -1,13 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { FoodLibrary } from '../../entities/food-library.entity';
-import { FoodTranslation } from '../../entities/food-translation.entity';
-import { FoodSource } from '../../entities/food-source.entity';
-import { FoodChangeLog } from '../../entities/food-change-log.entity';
+import { FoodLibrary } from '../../modules/food/entities/food-library.entity';
+import { FoodTranslation } from '../../modules/food/entities/food-translation.entity';
+import { FoodSource } from '../../modules/food/entities/food-source.entity';
+import { FoodChangeLog } from '../../modules/food/entities/food-change-log.entity';
 import { UsdaFetcherService, NormalizedFoodData } from './usda-fetcher.service';
 import { OpenFoodFactsService } from './openfoodfacts.service';
-import { FoodDataCleanerService, CleanedFoodData } from './food-data-cleaner.service';
+import {
+  FoodDataCleanerService,
+  CleanedFoodData,
+} from './food-data-cleaner.service';
 import { FoodRuleEngineService } from './food-rule-engine.service';
 import { FoodAiLabelService } from './food-ai-label.service';
 import { FoodAiTranslateService } from './food-ai-translate.service';
@@ -32,10 +35,14 @@ export class FoodPipelineOrchestratorService {
   private readonly logger = new Logger(FoodPipelineOrchestratorService.name);
 
   constructor(
-    @InjectRepository(FoodLibrary) private readonly foodRepo: Repository<FoodLibrary>,
-    @InjectRepository(FoodTranslation) private readonly translationRepo: Repository<FoodTranslation>,
-    @InjectRepository(FoodSource) private readonly sourceRepo: Repository<FoodSource>,
-    @InjectRepository(FoodChangeLog) private readonly changeLogRepo: Repository<FoodChangeLog>,
+    @InjectRepository(FoodLibrary)
+    private readonly foodRepo: Repository<FoodLibrary>,
+    @InjectRepository(FoodTranslation)
+    private readonly translationRepo: Repository<FoodTranslation>,
+    @InjectRepository(FoodSource)
+    private readonly sourceRepo: Repository<FoodSource>,
+    @InjectRepository(FoodChangeLog)
+    private readonly changeLogRepo: Repository<FoodChangeLog>,
     private readonly usdaFetcher: UsdaFetcherService,
     private readonly offService: OpenFoodFactsService,
     private readonly cleaner: FoodDataCleanerService,
@@ -50,7 +57,14 @@ export class FoodPipelineOrchestratorService {
 
   async importFromUsda(query: string, maxItems = 100): Promise<ImportResult> {
     this.logger.log(`Starting USDA import: query="${query}", max=${maxItems}`);
-    const result: ImportResult = { total: 0, created: 0, updated: 0, skipped: 0, errors: 0, details: [] };
+    const result: ImportResult = {
+      total: 0,
+      created: 0,
+      updated: 0,
+      skipped: 0,
+      errors: 0,
+      details: [],
+    };
 
     try {
       const pageSize = Math.min(maxItems, 200);
@@ -63,7 +77,9 @@ export class FoodPipelineOrchestratorService {
       // 清洗
       const { cleaned, discarded } = this.cleaner.cleanBatch(rawFoods);
       result.skipped += discarded;
-      result.details.push(`Cleaned: ${cleaned.length}, discarded: ${discarded}`);
+      result.details.push(
+        `Cleaned: ${cleaned.length}, discarded: ${discarded}`,
+      );
 
       // 逐条入库
       for (const food of cleaned) {
@@ -79,7 +95,9 @@ export class FoodPipelineOrchestratorService {
       result.details.push(`Import error: ${e.message}`);
     }
 
-    this.logger.log(`USDA import done: created=${result.created}, updated=${result.updated}, errors=${result.errors}`);
+    this.logger.log(
+      `USDA import done: created=${result.created}, updated=${result.updated}, errors=${result.errors}`,
+    );
     return result;
   }
 
@@ -92,7 +110,14 @@ export class FoodPipelineOrchestratorService {
     const cleaned = this.cleaner.clean(normalized);
     if (!cleaned) return null;
 
-    const result: ImportResult = { total: 1, created: 0, updated: 0, skipped: 0, errors: 0, details: [] };
+    const result: ImportResult = {
+      total: 1,
+      created: 0,
+      updated: 0,
+      skipped: 0,
+      errors: 0,
+      details: [],
+    };
     await this.persistSingleFood(cleaned, result);
 
     if (result.created > 0 || result.updated > 0) {
@@ -103,7 +128,9 @@ export class FoodPipelineOrchestratorService {
 
   // ==================== 批量 AI 标注 ====================
 
-  async batchAiLabel(options: { category?: string; unlabeled?: boolean; limit?: number } = {}): Promise<{
+  async batchAiLabel(
+    options: { category?: string; unlabeled?: boolean; limit?: number } = {},
+  ): Promise<{
     labeled: number;
     failed: number;
   }> {
@@ -130,11 +157,14 @@ export class FoodPipelineOrchestratorService {
 
       try {
         const update: Partial<FoodLibrary> = {};
-        if (!food.category && labelResult.category) update.category = labelResult.category as any;
+        if (!food.category && labelResult.category)
+          update.category = labelResult.category as any;
         if (!food.subCategory) update.subCategory = labelResult.subCategory;
         if (!food.foodGroup) update.foodGroup = labelResult.foodGroup;
-        if (!food.mainIngredient) update.mainIngredient = labelResult.mainIngredient;
-        if (!food.processingLevel) update.processingLevel = labelResult.processingLevel;
+        if (!food.mainIngredient)
+          update.mainIngredient = labelResult.mainIngredient;
+        if (!food.processingLevel)
+          update.processingLevel = labelResult.processingLevel;
         if (!food.mealTypes?.length) update.mealTypes = labelResult.mealTypes;
         if (!food.allergens?.length) update.allergens = labelResult.allergens;
         if (!food.compatibility || !Object.keys(food.compatibility).length) {
@@ -147,7 +177,13 @@ export class FoodPipelineOrchestratorService {
 
         if (Object.keys(update).length > 0) {
           await this.foodRepo.update(food.id, update);
-          await this.logChange(food.id, food.dataVersion, 'update', update, 'ai_label');
+          await this.logChange(
+            food.id,
+            food.dataVersion,
+            'update',
+            update,
+            'ai_label',
+          );
           labeled++;
         }
       } catch (e) {
@@ -182,21 +218,32 @@ export class FoodPipelineOrchestratorService {
     let qb = this.foodRepo.createQueryBuilder('f');
 
     if (options.untranslatedOnly) {
-      qb = qb.leftJoin('f.translations', 't', 't.locale = :locale', { locale: options.targetLocale })
+      qb = qb
+        .leftJoin('f.translations', 't', 't.locale = :locale', {
+          locale: options.targetLocale,
+        })
         .where('t.id IS NULL');
     }
     qb.take(options.limit || 100);
 
     const foods = await qb.getMany();
-    this.logger.log(`AI translating ${foods.length} foods to ${options.targetLocale}`);
+    this.logger.log(
+      `AI translating ${foods.length} foods to ${options.targetLocale}`,
+    );
 
-    const results = await this.aiTranslate.translateBatch(foods, options.targetLocale);
+    const results = await this.aiTranslate.translateBatch(
+      foods,
+      options.targetLocale,
+    );
     let translated = 0;
     let failed = 0;
 
     for (const [idx, result] of results) {
       const food = foods[idx];
-      if (!food || !result.name) { failed++; continue; }
+      if (!food || !result.name) {
+        failed++;
+        continue;
+      }
 
       try {
         await this.translationRepo.upsert(
@@ -221,7 +268,9 @@ export class FoodPipelineOrchestratorService {
 
   // ==================== 批量规则计算 ====================
 
-  async batchApplyRules(options: { limit?: number; recalcAll?: boolean } = {}): Promise<{ processed: number }> {
+  async batchApplyRules(
+    options: { limit?: number; recalcAll?: boolean } = {},
+  ): Promise<{ processed: number }> {
     const qb = this.foodRepo.createQueryBuilder('f');
     if (!options.recalcAll) {
       qb.where('f.qualityScore IS NULL OR f.satietyScore IS NULL');
@@ -262,7 +311,10 @@ export class FoodPipelineOrchestratorService {
       if (dup.matchType === 'source_id') {
         // 同来源更新: 合并数据
         const mergedFields = this.dedup.mergeFood(dup.existingFood, food, 50);
-        const scores = this.ruleEngine.applyAllRules({ ...dup.existingFood, ...mergedFields });
+        const scores = this.ruleEngine.applyAllRules({
+          ...dup.existingFood,
+          ...mergedFields,
+        });
         await this.foodRepo.update(dup.existingFood.id, {
           ...mergedFields,
           ...scores,
@@ -280,11 +332,19 @@ export class FoodPipelineOrchestratorService {
           food.primarySource,
         );
 
-        await this.logChange(dup.existingFood.id, dup.existingFood.dataVersion + 1, 'update', mergedFields, 'pipeline');
+        await this.logChange(
+          dup.existingFood.id,
+          dup.existingFood.dataVersion + 1,
+          'update',
+          mergedFields,
+          'pipeline',
+        );
         result.updated++;
       } else {
         result.skipped++;
-        result.details.push(`Skipped duplicate: ${food.name} (${dup.matchType}, similarity=${dup.similarity})`);
+        result.details.push(
+          `Skipped duplicate: ${food.name} (${dup.matchType}, similarity=${dup.similarity})`,
+        );
       }
     } else {
       // 新增
@@ -332,7 +392,13 @@ export class FoodPipelineOrchestratorService {
       await this.saveSource(saved.id, food);
 
       // 记录变更日志
-      await this.logChange(saved.id, 1, 'create', { name: food.name }, 'pipeline');
+      await this.logChange(
+        saved.id,
+        1,
+        'create',
+        { name: food.name },
+        'pipeline',
+      );
 
       result.created++;
     }
@@ -354,7 +420,13 @@ export class FoodPipelineOrchestratorService {
     );
   }
 
-  private async logChange(foodId: string, version: number, action: string, changes: Record<string, any>, operator: string) {
+  private async logChange(
+    foodId: string,
+    version: number,
+    action: string,
+    changes: Record<string, any>,
+    operator: string,
+  ) {
     await this.changeLogRepo.save(
       this.changeLogRepo.create({
         foodId,

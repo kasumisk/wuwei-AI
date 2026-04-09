@@ -16,7 +16,11 @@ export class AddWechatMiniOpenId1745000000000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_app_users_wechat_mini_open_id"`);
-    await queryRunner.query(`ALTER TABLE "app_users" DROP COLUMN IF EXISTS "wechat_mini_open_id"`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_app_users_wechat_mini_open_id"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "app_users" DROP COLUMN IF EXISTS "wechat_mini_open_id"`,
+    );
   }
 }

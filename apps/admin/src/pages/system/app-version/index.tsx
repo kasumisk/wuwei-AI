@@ -65,10 +65,11 @@ import globalModal from '@/utils/modal';
 
 // ==================== 常量配置 ====================
 
-const platformConfig: Record<AppPlatform, { color: string; icon: React.ReactNode; text: string }> = {
-  android: { color: 'green', icon: <AndroidOutlined />, text: 'Android' },
-  ios: { color: 'blue', icon: <AppleOutlined />, text: 'iOS' },
-};
+const platformConfig: Record<AppPlatform, { color: string; icon: React.ReactNode; text: string }> =
+  {
+    android: { color: 'green', icon: <AndroidOutlined />, text: 'Android' },
+    ios: { color: 'blue', icon: <AppleOutlined />, text: 'iOS' },
+  };
 
 const updateTypeConfig: Record<UpdateType, { color: string; text: string }> = {
   optional: { color: 'processing', text: '可选更新' },
@@ -81,7 +82,10 @@ const statusConfig: Record<AppVersionStatus, { color: string; text: string }> = 
   archived: { color: 'warning', text: '已归档' },
 };
 
-const channelConfig: Record<AppChannel, { color: string; text: string; icon?: React.ReactNode; isStore: boolean }> = {
+const channelConfig: Record<
+  AppChannel,
+  { color: string; text: string; icon?: React.ReactNode; isStore: boolean }
+> = {
   official: { color: 'blue', text: '官方渠道', icon: <LinkOutlined />, isStore: false },
   beta: { color: 'purple', text: '测试渠道', isStore: false },
   app_store: { color: 'geekblue', text: 'App Store', icon: <AppleOutlined />, isStore: true },
@@ -95,7 +99,10 @@ function formatFileSize(bytes: number): string {
   const units = ['B', 'KB', 'MB', 'GB'];
   let index = 0;
   let size = bytes;
-  while (size >= 1024 && index < units.length - 1) { size /= 1024; index++; }
+  while (size >= 1024 && index < units.length - 1) {
+    size /= 1024;
+    index++;
+  }
   return `${size.toFixed(1)} ${units[index]}`;
 }
 
@@ -119,11 +126,19 @@ const PackageManager: React.FC<PackageManagerProps> = ({ version, onClose }) => 
   const { data: packages = [], isLoading } = useAppVersionPackages(version.id);
 
   const createPackageMutation = useCreatePackage(version.id, {
-    onSuccess: () => { message.success('渠道包创建成功'); setPackageFormVisible(false); resetForm(); },
+    onSuccess: () => {
+      message.success('渠道包创建成功');
+      setPackageFormVisible(false);
+      resetForm();
+    },
     onError: (e: any) => message.error(`创建失败: ${e.message}`),
   });
   const updatePackageMutation = useUpdatePackage(version.id, {
-    onSuccess: () => { message.success('更新成功'); setPackageFormVisible(false); resetForm(); },
+    onSuccess: () => {
+      message.success('更新成功');
+      setPackageFormVisible(false);
+      resetForm();
+    },
     onError: (e: any) => message.error(`更新失败: ${e.message}`),
   });
   const deletePackageMutation = useDeletePackage(version.id, {
@@ -142,7 +157,10 @@ const PackageManager: React.FC<PackageManagerProps> = ({ version, onClose }) => 
     setSelectedPlatform('android');
   };
 
-  const openCreate = () => { resetForm(); setPackageFormVisible(true); };
+  const openCreate = () => {
+    resetForm();
+    setPackageFormVisible(true);
+  };
 
   const openEdit = (pkg: AppVersionPackageDto) => {
     setEditingPackage(pkg);
@@ -178,7 +196,11 @@ const PackageManager: React.FC<PackageManagerProps> = ({ version, onClose }) => 
       channel: values.channel,
       downloadUrl: uploadedFileInfo?.url || values.downloadUrl,
       fileSize: isStore ? 0 : (uploadedFileInfo?.size ?? values.fileSize ?? 0),
-      checksum: isStore ? undefined : (uploadedFileInfo ? `md5:${uploadedFileInfo.md5}` : values.checksum),
+      checksum: isStore
+        ? undefined
+        : uploadedFileInfo
+          ? `md5:${uploadedFileInfo.md5}`
+          : values.checksum,
       enabled: true,
     };
     if (editingPackage) {
@@ -189,7 +211,7 @@ const PackageManager: React.FC<PackageManagerProps> = ({ version, onClose }) => 
   };
 
   const isStore = STORE_CHANNELS.includes(selectedChannel);
-  const availableChannels = (Object.keys(channelConfig) as AppChannel[]);
+  const availableChannels = Object.keys(channelConfig) as AppChannel[];
 
   const pkgColumns = [
     {
@@ -198,7 +220,13 @@ const PackageManager: React.FC<PackageManagerProps> = ({ version, onClose }) => 
       width: 100,
       render: (platform: AppPlatform) => {
         const cfg = platformConfig[platform];
-        return cfg ? <Tag color={cfg.color} icon={cfg.icon}>{cfg.text}</Tag> : '-';
+        return cfg ? (
+          <Tag color={cfg.color} icon={cfg.icon}>
+            {cfg.text}
+          </Tag>
+        ) : (
+          '-'
+        );
       },
     },
     {
@@ -206,7 +234,11 @@ const PackageManager: React.FC<PackageManagerProps> = ({ version, onClose }) => 
       dataIndex: 'channel',
       render: (channel: AppChannel) => {
         const cfg = channelConfig[channel] || { color: 'default', text: channel, isStore: false };
-        return <Tag color={cfg.color} icon={cfg.icon}>{cfg.text}</Tag>;
+        return (
+          <Tag color={cfg.color} icon={cfg.icon}>
+            {cfg.text}
+          </Tag>
+        );
       },
     },
     {
@@ -214,7 +246,19 @@ const PackageManager: React.FC<PackageManagerProps> = ({ version, onClose }) => 
       dataIndex: 'downloadUrl',
       ellipsis: true,
       render: (url: string) => (
-        <a href={url} target="_blank" rel="noreferrer" style={{ maxWidth: 260, display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'middle' }}>
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          style={{
+            maxWidth: 260,
+            display: 'inline-block',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            verticalAlign: 'middle',
+          }}
+        >
           {url}
         </a>
       ),
@@ -229,7 +273,14 @@ const PackageManager: React.FC<PackageManagerProps> = ({ version, onClose }) => 
       title: '校验值',
       dataIndex: 'checksum',
       width: 160,
-      render: (v: string) => v ? <Tooltip title={v}><code style={{ fontSize: 11 }}>{v.slice(0, 20)}…</code></Tooltip> : '-',
+      render: (v: string) =>
+        v ? (
+          <Tooltip title={v}>
+            <code style={{ fontSize: 11 }}>{v.slice(0, 20)}…</code>
+          </Tooltip>
+        ) : (
+          '-'
+        ),
     },
     {
       title: '启用',
@@ -249,9 +300,24 @@ const PackageManager: React.FC<PackageManagerProps> = ({ version, onClose }) => 
       width: 130,
       render: (_: any, record: AppVersionPackageDto) => (
         <Space size="small">
-          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => openEdit(record)}>编辑</Button>
-          <Popconfirm title="确定删除该渠道包？" onConfirm={() => deletePackageMutation.mutate(record.id)} okText="删除" cancelText="取消">
-            <Button type="link" size="small" danger icon={<DeleteOutlined />} loading={deletePackageMutation.isPending}>删除</Button>
+          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => openEdit(record)}>
+            编辑
+          </Button>
+          <Popconfirm
+            title="确定删除该渠道包？"
+            onConfirm={() => deletePackageMutation.mutate(record.id)}
+            okText="删除"
+            cancelText="取消"
+          >
+            <Button
+              type="link"
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              loading={deletePackageMutation.isPending}
+            >
+              删除
+            </Button>
           </Popconfirm>
         </Space>
       ),
@@ -264,14 +330,19 @@ const PackageManager: React.FC<PackageManagerProps> = ({ version, onClose }) => 
         title={
           <Space>
             {version.platform ? (
-              <Tag color={platformConfig[version.platform].color} icon={platformConfig[version.platform].icon}>
+              <Tag
+                color={platformConfig[version.platform].color}
+                icon={platformConfig[version.platform].icon}
+              >
                 {platformConfig[version.platform].text}
               </Tag>
             ) : (
               <Tag color="cyan">全平台</Tag>
             )}
             <span>v{version.version} — 渠道包管理</span>
-            <Tag color={statusConfig[version.status].color}>{statusConfig[version.status].text}</Tag>
+            <Tag color={statusConfig[version.status].color}>
+              {statusConfig[version.status].text}
+            </Tag>
           </Space>
         }
         open
@@ -299,25 +370,50 @@ const PackageManager: React.FC<PackageManagerProps> = ({ version, onClose }) => 
       <Modal
         title={editingPackage ? '编辑渠道包' : '添加渠道包'}
         open={packageFormVisible}
-        onCancel={() => { setPackageFormVisible(false); resetForm(); }}
+        onCancel={() => {
+          setPackageFormVisible(false);
+          resetForm();
+        }}
         onOk={handleSubmit}
         confirmLoading={createPackageMutation.isPending || updatePackageMutation.isPending}
         destroyOnClose
         width={520}
       >
         <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
-          <Form.Item name="platform" label="平台" rules={[{ required: true, message: '请选择平台' }]}>
+          <Form.Item
+            name="platform"
+            label="平台"
+            rules={[{ required: true, message: '请选择平台' }]}
+          >
             <Select
               placeholder="选择平台"
               disabled={!!editingPackage}
               onChange={(v: AppPlatform) => setSelectedPlatform(v)}
               options={[
-                { label: <Space><AndroidOutlined /> Android</Space>, value: 'android' },
-                { label: <Space><AppleOutlined /> iOS</Space>, value: 'ios' },
+                {
+                  label: (
+                    <Space>
+                      <AndroidOutlined /> Android
+                    </Space>
+                  ),
+                  value: 'android',
+                },
+                {
+                  label: (
+                    <Space>
+                      <AppleOutlined /> iOS
+                    </Space>
+                  ),
+                  value: 'ios',
+                },
               ]}
             />
           </Form.Item>
-          <Form.Item name="channel" label="分发渠道" rules={[{ required: true, message: '请选择渠道' }]}>
+          <Form.Item
+            name="channel"
+            label="分发渠道"
+            rules={[{ required: true, message: '请选择渠道' }]}
+          >
             <Select
               placeholder="选择渠道"
               disabled={!!editingPackage}
@@ -327,7 +423,11 @@ const PackageManager: React.FC<PackageManagerProps> = ({ version, onClose }) => 
                   <Space>
                     {channelConfig[ch].icon}
                     {channelConfig[ch].text}
-                    {channelConfig[ch].isStore && <Tag color="orange" style={{ fontSize: 11 }}>商店</Tag>}
+                    {channelConfig[ch].isStore && (
+                      <Tag color="orange" style={{ fontSize: 11 }}>
+                        商店
+                      </Tag>
+                    )}
                   </Space>
                 ),
                 value: ch,
@@ -381,25 +481,50 @@ const PackageManager: React.FC<PackageManagerProps> = ({ version, onClose }) => 
                     }
                   }}
                 >
-                  <p className="ant-upload-drag-icon"><UploadOutlined /></p>
-                  <p className="ant-upload-text">{uploading ? '上传中...' : '点击或拖拽安装包到此区域'}</p>
-                  <p className="ant-upload-hint">支持 .apk / .ipa / .aab，上传后自动填充链接、大小、MD5</p>
+                  <p className="ant-upload-drag-icon">
+                    <UploadOutlined />
+                  </p>
+                  <p className="ant-upload-text">
+                    {uploading ? '上传中...' : '点击或拖拽安装包到此区域'}
+                  </p>
+                  <p className="ant-upload-hint">
+                    支持 .apk / .ipa / .aab，上传后自动填充链接、大小、MD5
+                  </p>
                 </Upload.Dragger>
                 {uploadedFileInfo && (
-                  <div style={{ marginTop: 8, padding: '8px 12px', background: '#f6ffed', borderRadius: 6, border: '1px solid #b7eb8f', fontSize: 12 }}>
-                    ✅ {uploadedFileInfo.originalName} · {formatFileSize(uploadedFileInfo.size)} · MD5: {uploadedFileInfo.md5}
+                  <div
+                    style={{
+                      marginTop: 8,
+                      padding: '8px 12px',
+                      background: '#f6ffed',
+                      borderRadius: 6,
+                      border: '1px solid #b7eb8f',
+                      fontSize: 12,
+                    }}
+                  >
+                    ✅ {uploadedFileInfo.originalName} · {formatFileSize(uploadedFileInfo.size)} ·
+                    MD5: {uploadedFileInfo.md5}
                   </div>
                 )}
               </Form.Item>
 
-              <Form.Item name="downloadUrl" label="下载链接" rules={[{ required: true, message: '请上传文件或手动填写链接' }]}>
+              <Form.Item
+                name="downloadUrl"
+                label="下载链接"
+                rules={[{ required: true, message: '请上传文件或手动填写链接' }]}
+              >
                 <Input placeholder="上传后自动填入，也可手动输入" disabled={!!uploadedFileInfo} />
               </Form.Item>
 
               <Row gutter={12}>
                 <Col span={12}>
                   <Form.Item name="fileSize" label="文件大小（字节）">
-                    <InputNumber style={{ width: '100%' }} placeholder="上传后自动填入" disabled={!!uploadedFileInfo} min={0} />
+                    <InputNumber
+                      style={{ width: '100%' }}
+                      placeholder="上传后自动填入"
+                      disabled={!!uploadedFileInfo}
+                      min={0}
+                    />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
@@ -423,33 +548,62 @@ const AppVersionManagement: React.FC = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [statsVisible, setStatsVisible] = useState(false);
-  const [packageManagerVersion, setPackageManagerVersion] = useState<AppVersionInfoDto | null>(null);
+  const [packageManagerVersion, setPackageManagerVersion] = useState<AppVersionInfoDto | null>(
+    null
+  );
   const actionRef = useRef<ActionType>(null);
 
   const createMutation = useCreateAppVersion({
-    onSuccess: () => { message.success('创建成功'); setModalVisible(false); setCurrentRecord(null); actionRef.current?.reload(); },
+    onSuccess: () => {
+      message.success('创建成功');
+      setModalVisible(false);
+      setCurrentRecord(null);
+      actionRef.current?.reload();
+    },
     onError: (e: any) => message.error(`创建失败: ${e.message}`),
   });
   const updateMutation = useUpdateAppVersion({
-    onSuccess: () => { message.success('更新成功'); setModalVisible(false); setCurrentRecord(null); actionRef.current?.reload(); },
+    onSuccess: () => {
+      message.success('更新成功');
+      setModalVisible(false);
+      setCurrentRecord(null);
+      actionRef.current?.reload();
+    },
     onError: (e: any) => message.error(`更新失败: ${e.message}`),
   });
   const deleteMutation = useDeleteAppVersion({
-    onSuccess: () => { message.success('删除成功'); actionRef.current?.reload(); },
+    onSuccess: () => {
+      message.success('删除成功');
+      actionRef.current?.reload();
+    },
     onError: (e: any) => message.error(`删除失败: ${e.message}`),
   });
   const publishMutation = usePublishAppVersion({
-    onSuccess: () => { message.success('发布成功'); actionRef.current?.reload(); },
+    onSuccess: () => {
+      message.success('发布成功');
+      actionRef.current?.reload();
+    },
     onError: (e: any) => message.error(`发布失败: ${e.message}`),
   });
   const archiveMutation = useArchiveAppVersion({
-    onSuccess: () => { message.success('归档成功'); actionRef.current?.reload(); },
+    onSuccess: () => {
+      message.success('归档成功');
+      actionRef.current?.reload();
+    },
     onError: (e: any) => message.error(`归档失败: ${e.message}`),
   });
   const { data: stats } = useAppVersionStats({ enabled: statsVisible });
 
-  const handleCreate = () => { setIsEditMode(false); setCurrentRecord(null); setModalVisible(true); };
-  const handleEdit = (record: AppVersionInfoDto) => { setIsEditMode(true); setCurrentRecord(record); setModalVisible(true); };
+  const handleCreate = () => {
+    setIsEditMode(false);
+    setCurrentRecord(null);
+    setModalVisible(true);
+  };
+  const handleEdit = (record: AppVersionInfoDto) => {
+    setIsEditMode(true);
+    setCurrentRecord(record);
+    setModalVisible(true);
+  };
   const handleDelete = (id: string) => (deleteMutation.mutate as any)(id);
 
   const handlePublish = (record: AppVersionInfoDto) => {
@@ -480,10 +634,14 @@ const AppVersionManagement: React.FC = () => {
       grayPercent: values.grayPercent ? Number(values.grayPercent) : 0,
       grayRelease: values.grayRelease ?? false,
       i18nDescription: values.i18nDescription
-        ? (typeof values.i18nDescription === 'string' ? JSON.parse(values.i18nDescription) : values.i18nDescription)
+        ? typeof values.i18nDescription === 'string'
+          ? JSON.parse(values.i18nDescription)
+          : values.i18nDescription
         : undefined,
       metadata: values.metadata
-        ? (typeof values.metadata === 'string' ? JSON.parse(values.metadata) : values.metadata)
+        ? typeof values.metadata === 'string'
+          ? JSON.parse(values.metadata)
+          : values.metadata
         : undefined,
     };
     if (isEditMode && currentRecord) {
@@ -558,10 +716,18 @@ const AppVersionManagement: React.FC = () => {
         return (
           <Space size={4} wrap>
             {pkgs.map((p) => {
-              const cfg = channelConfig[p.channel as AppChannel] || { color: 'default', text: p.channel, isStore: false };
+              const cfg = channelConfig[p.channel as AppChannel] || {
+                color: 'default',
+                text: p.channel,
+                isStore: false,
+              };
               return (
                 <Tooltip key={p.id} title={p.enabled ? '已启用' : '已禁用'}>
-                  <Tag color={p.enabled ? cfg.color : 'default'} icon={cfg.icon} style={{ margin: 0 }}>
+                  <Tag
+                    color={p.enabled ? cfg.color : 'default'}
+                    icon={cfg.icon}
+                    style={{ margin: 0 }}
+                  >
                     {cfg.text}
                   </Tag>
                 </Tooltip>
@@ -613,14 +779,35 @@ const AppVersionManagement: React.FC = () => {
           >
             渠道包
           </Button>
-          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>编辑</Button>
+          <Button
+            type="link"
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => handleEdit(record)}
+          >
+            编辑
+          </Button>
           {record.status === 'draft' && (
-            <Button type="link" size="small" icon={<CloudUploadOutlined />} onClick={() => handlePublish(record)} loading={publishMutation.isPending} style={{ color: '#52c41a' }}>
+            <Button
+              type="link"
+              size="small"
+              icon={<CloudUploadOutlined />}
+              onClick={() => handlePublish(record)}
+              loading={publishMutation.isPending}
+              style={{ color: '#52c41a' }}
+            >
               发布
             </Button>
           )}
           {record.status === 'published' && (
-            <Button type="link" size="small" icon={<StopOutlined />} onClick={() => handleArchive(record)} loading={archiveMutation.isPending} style={{ color: '#faad14' }}>
+            <Button
+              type="link"
+              size="small"
+              icon={<StopOutlined />}
+              onClick={() => handleArchive(record)}
+              loading={archiveMutation.isPending}
+              style={{ color: '#faad14' }}
+            >
               归档
             </Button>
           )}
@@ -632,7 +819,15 @@ const AppVersionManagement: React.FC = () => {
               okText="确定"
               cancelText="取消"
             >
-              <Button type="link" size="small" danger icon={<DeleteOutlined />} loading={deleteMutation.isPending}>删除</Button>
+              <Button
+                type="link"
+                size="small"
+                danger
+                icon={<DeleteOutlined />}
+                loading={deleteMutation.isPending}
+              >
+                删除
+              </Button>
             </Popconfirm>
           )}
         </Space>
@@ -659,7 +854,10 @@ const AppVersionManagement: React.FC = () => {
         label: '更新类型',
         type: 'select',
         required: true,
-        options: [{ label: '可选更新', value: 'optional' }, { label: '强制更新', value: 'force' }],
+        options: [
+          { label: '可选更新', value: 'optional' },
+          { label: '强制更新', value: 'force' },
+        ],
         fieldProps: { placeholder: '选择更新类型' },
       },
       {
@@ -693,7 +891,11 @@ const AppVersionManagement: React.FC = () => {
         name: 'grayPercent',
         label: '灰度比例 (%)',
         type: 'slider',
-        fieldProps: { min: 0, max: 100, marks: { 0: '0%', 25: '25%', 50: '50%', 75: '75%', 100: '100%' } },
+        fieldProps: {
+          min: 0,
+          max: 100,
+          marks: { 0: '0%', 25: '25%', 50: '50%', 75: '75%', 100: '100%' },
+        },
       },
       {
         name: 'releaseDate',
@@ -705,7 +907,10 @@ const AppVersionManagement: React.FC = () => {
         name: 'i18nDescription',
         label: '多语言描述 (JSON)',
         type: 'textarea',
-        fieldProps: { rows: 3, placeholder: '{"zh-CN": "中文描述", "en-US": "English description"}' },
+        fieldProps: {
+          rows: 3,
+          placeholder: '{"zh-CN": "中文描述", "en-US": "English description"}',
+        },
       },
       {
         name: 'metadata',
@@ -742,11 +947,25 @@ const AppVersionManagement: React.FC = () => {
           }
         }}
         toolBarRender={() => [
-          <Button key="stats" icon={<BarChartOutlined />} onClick={() => setStatsVisible(true)}>统计</Button>,
-          <Button key="refresh" icon={<ReloadOutlined />} onClick={() => actionRef.current?.reload()}>刷新</Button>,
-          <Button key="create" type="primary" icon={<PlusOutlined />} onClick={handleCreate}>新增版本</Button>,
+          <Button key="stats" icon={<BarChartOutlined />} onClick={() => setStatsVisible(true)}>
+            统计
+          </Button>,
+          <Button
+            key="refresh"
+            icon={<ReloadOutlined />}
+            onClick={() => actionRef.current?.reload()}
+          >
+            刷新
+          </Button>,
+          <Button key="create" type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
+            新增版本
+          </Button>,
         ]}
-        pagination={{ defaultPageSize: 10, showSizeChanger: true, showTotal: (total: number) => `共 ${total} 个版本` }}
+        pagination={{
+          defaultPageSize: 10,
+          showSizeChanger: true,
+          showTotal: (total: number) => `共 ${total} 个版本`,
+        }}
         search={{ labelWidth: 'auto' }}
       />
 
@@ -760,8 +979,12 @@ const AppVersionManagement: React.FC = () => {
           currentRecord
             ? {
                 ...currentRecord,
-                i18nDescription: currentRecord.i18nDescription ? JSON.stringify(currentRecord.i18nDescription, null, 2) : undefined,
-                metadata: currentRecord.metadata ? JSON.stringify(currentRecord.metadata, null, 2) : undefined,
+                i18nDescription: currentRecord.i18nDescription
+                  ? JSON.stringify(currentRecord.i18nDescription, null, 2)
+                  : undefined,
+                metadata: currentRecord.metadata
+                  ? JSON.stringify(currentRecord.metadata, null, 2)
+                  : undefined,
               }
             : { updateType: 'optional', grayRelease: false, grayPercent: 0 }
         }
@@ -779,13 +1002,27 @@ const AppVersionManagement: React.FC = () => {
       )}
 
       {/* 统计弹窗 */}
-      <Modal title="版本统计" open={statsVisible} onCancel={() => setStatsVisible(false)} footer={null} width={520}>
+      <Modal
+        title="版本统计"
+        open={statsVisible}
+        onCancel={() => setStatsVisible(false)}
+        footer={null}
+        width={520}
+      >
         {stats && (
           <Row gutter={[16, 16]}>
-            <Col span={12}><Statistic title="总版本数" value={stats.total} /></Col>
-            <Col span={12}><Statistic title="已发布" value={stats.published} valueStyle={{ color: '#52c41a' }} /></Col>
-            <Col span={12}><Statistic title="草稿" value={stats.draft} /></Col>
-            <Col span={12}><Statistic title="已归档" value={stats.archived} valueStyle={{ color: '#faad14' }} /></Col>
+            <Col span={12}>
+              <Statistic title="总版本数" value={stats.total} />
+            </Col>
+            <Col span={12}>
+              <Statistic title="已发布" value={stats.published} valueStyle={{ color: '#52c41a' }} />
+            </Col>
+            <Col span={12}>
+              <Statistic title="草稿" value={stats.draft} />
+            </Col>
+            <Col span={12}>
+              <Statistic title="已归档" value={stats.archived} valueStyle={{ color: '#faad14' }} />
+            </Col>
           </Row>
         )}
       </Modal>
@@ -803,4 +1040,3 @@ export const routeConfig = {
   requireAuth: true,
   requireAdmin: true,
 };
-

@@ -103,7 +103,11 @@ const AiLabelPage: React.FC = () => {
 
       {/* AI 智能标注 */}
       <Card
-        title={<Space><RobotOutlined /> AI 智能标注（DeepSeek V3）</Space>}
+        title={
+          <Space>
+            <RobotOutlined /> AI 智能标注（DeepSeek V3）
+          </Space>
+        }
         style={{ marginBottom: 16 }}
       >
         <Alert
@@ -134,7 +138,12 @@ const AiLabelPage: React.FC = () => {
             <InputNumber min={1} max={500} style={{ width: 100 }} />
           </Form.Item>
           <Form.Item>
-            <Button type="primary" htmlType="submit" icon={<RobotOutlined />} loading={batchLabel.isPending}>
+            <Button
+              type="primary"
+              htmlType="submit"
+              icon={<RobotOutlined />}
+              loading={batchLabel.isPending}
+            >
               开始 AI 标注
             </Button>
           </Form.Item>
@@ -153,8 +162,12 @@ const AiLabelPage: React.FC = () => {
               <Descriptions.Item label="成功率">
                 <Tag color="blue">
                   {labelResult.labeled + labelResult.failed > 0
-                    ? ((labelResult.labeled / (labelResult.labeled + labelResult.failed)) * 100).toFixed(1)
-                    : 0}%
+                    ? (
+                        (labelResult.labeled / (labelResult.labeled + labelResult.failed)) *
+                        100
+                      ).toFixed(1)
+                    : 0}
+                  %
                 </Tag>
               </Descriptions.Item>
             </Descriptions>
@@ -163,7 +176,13 @@ const AiLabelPage: React.FC = () => {
       </Card>
 
       {/* 规则引擎计算 */}
-      <Card title={<Space><CalculatorOutlined /> 规则引擎（评分与标签计算）</Space>}>
+      <Card
+        title={
+          <Space>
+            <CalculatorOutlined /> 规则引擎（评分与标签计算）
+          </Space>
+        }
+      >
         <Alert
           message="规则引擎功能"
           description="基于营养数据自动计算：品质评分(qualityScore)、饱腹感评分(satietyScore)、NRF9.3营养密度(nutrientDensity)，以及自动生成标签（high_protein, low_fat, keto, vegan 等）。"
@@ -184,7 +203,12 @@ const AiLabelPage: React.FC = () => {
             <InputNumber min={1} max={5000} style={{ width: 120 }} />
           </Form.Item>
           <Form.Item>
-            <Button type="primary" htmlType="submit" icon={<CalculatorOutlined />} loading={batchRules.isPending}>
+            <Button
+              type="primary"
+              htmlType="submit"
+              icon={<CalculatorOutlined />}
+              loading={batchRules.isPending}
+            >
               开始计算
             </Button>
           </Form.Item>

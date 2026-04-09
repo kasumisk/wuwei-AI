@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/hooks/use-auth';
+import { useAuth } from '@/features/auth/hooks/use-auth';
 import {
   sendCoachMessage,
   coachService,
@@ -76,58 +76,60 @@ export default function CoachPage() {
       // 添加用户消息
       setMessages((prev) => [...prev, { role: 'user', content }]);
       // 添加空的助手消息（流式填充）
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: '', streaming: true },
-      ]);
+      setMessages((prev) => [...prev, { role: 'assistant', content: '', streaming: true }]);
 
       const ctrl = new AbortController();
       abortRef.current = ctrl;
 
-      await sendCoachMessage(content, conversationId, {
-        onDelta: (delta) => {
-          setMessages((prev) => {
-            const updated = [...prev];
-            const last = updated[updated.length - 1];
-            if (last && last.role === 'assistant') {
-              updated[updated.length - 1] = {
-                ...last,
-                content: last.content + delta,
-              };
-            }
-            return updated;
-          });
+      await sendCoachMessage(
+        content,
+        conversationId,
+        {
+          onDelta: (delta) => {
+            setMessages((prev) => {
+              const updated = [...prev];
+              const last = updated[updated.length - 1];
+              if (last && last.role === 'assistant') {
+                updated[updated.length - 1] = {
+                  ...last,
+                  content: last.content + delta,
+                };
+              }
+              return updated;
+            });
+          },
+          onDone: (newConvId) => {
+            setConversationId(newConvId);
+            setMessages((prev) => {
+              const updated = [...prev];
+              const last = updated[updated.length - 1];
+              if (last) {
+                updated[updated.length - 1] = { ...last, streaming: false };
+              }
+              return updated;
+            });
+            setIsStreaming(false);
+          },
+          onError: (error) => {
+            setMessages((prev) => {
+              const updated = [...prev];
+              const last = updated[updated.length - 1];
+              if (last && last.role === 'assistant') {
+                updated[updated.length - 1] = {
+                  ...last,
+                  content: error || '抱歉，出现了错误，请重试。',
+                  streaming: false,
+                };
+              }
+              return updated;
+            });
+            setIsStreaming(false);
+          },
         },
-        onDone: (newConvId) => {
-          setConversationId(newConvId);
-          setMessages((prev) => {
-            const updated = [...prev];
-            const last = updated[updated.length - 1];
-            if (last) {
-              updated[updated.length - 1] = { ...last, streaming: false };
-            }
-            return updated;
-          });
-          setIsStreaming(false);
-        },
-        onError: (error) => {
-          setMessages((prev) => {
-            const updated = [...prev];
-            const last = updated[updated.length - 1];
-            if (last && last.role === 'assistant') {
-              updated[updated.length - 1] = {
-                ...last,
-                content: error || '抱歉，出现了错误，请重试。',
-                streaming: false,
-              };
-            }
-            return updated;
-          });
-          setIsStreaming(false);
-        },
-      }, ctrl.signal);
+        ctrl.signal
+      );
     },
-    [inputValue, isStreaming, conversationId],
+    [inputValue, isStreaming, conversationId]
   );
 
   // 停止生成
@@ -184,7 +186,7 @@ export default function CoachPage() {
         // 忽略错误
       }
     },
-    [conversationId],
+    [conversationId]
   );
 
   // 新对话
@@ -211,7 +213,12 @@ export default function CoachPage() {
             className="p-1.5 rounded-lg hover:bg-muted transition-colors"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15 19l-7-7 7-7"
+              />
             </svg>
           </button>
           <h1 className="text-lg font-semibold">AI 营养教练</h1>
@@ -223,7 +230,12 @@ export default function CoachPage() {
             title="新对话"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 4v16m8-8H4"
+              />
             </svg>
           </button>
           <button
@@ -235,7 +247,12 @@ export default function CoachPage() {
             title="历史记录"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
             </svg>
           </button>
         </div>
@@ -251,7 +268,12 @@ export default function CoachPage() {
               className="p-2 rounded-lg hover:bg-muted transition-colors"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
               </svg>
             </button>
           </div>
@@ -264,13 +286,8 @@ export default function CoachPage() {
                 key={conv.id}
                 className="flex items-center justify-between p-3 rounded-lg hover:bg-muted transition-colors cursor-pointer"
               >
-                <button
-                  onClick={() => loadConversation(conv)}
-                  className="flex-1 text-left"
-                >
-                  <p className="text-sm font-medium truncate">
-                    {conv.title || '新对话'}
-                  </p>
+                <button onClick={() => loadConversation(conv)} className="flex-1 text-left">
+                  <p className="text-sm font-medium truncate">{conv.title || '新对话'}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {new Date(conv.updatedAt).toLocaleDateString('zh-CN')}
                   </p>
@@ -283,7 +300,12 @@ export default function CoachPage() {
                   className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                    />
                   </svg>
                 </button>
               </div>
@@ -316,9 +338,7 @@ export default function CoachPage() {
 
                   {/* 快捷操作 */}
                   <div className="space-y-2">
-                    <p className="text-xs text-muted-foreground font-medium px-1">
-                      快捷提问
-                    </p>
+                    <p className="text-xs text-muted-foreground font-medium px-1">快捷提问</p>
                     <div className="flex flex-wrap gap-2">
                       {greeting.suggestions.map((s, i) => (
                         <button
@@ -390,7 +410,12 @@ export default function CoachPage() {
               className="h-10 w-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0 disabled:opacity-30 transition-colors"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19V5m0 0l-7 7m7-7l7 7" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 19V5m0 0l-7 7m7-7l7 7"
+                />
               </svg>
             </button>
           )}

@@ -36,7 +36,7 @@ export const appFileService = {
   upload: async (
     file: File,
     category: FileCategory = 'image',
-    onProgress?: (percent: number) => void,
+    onProgress?: (percent: number) => void
   ): Promise<UploadResult> => {
     const formData = new FormData();
     formData.append('file', file);
@@ -60,7 +60,7 @@ export const appFileService = {
   getPresignedUrl: async (
     fileName: string,
     mimeType: string,
-    category: FileCategory = 'image',
+    category: FileCategory = 'image'
   ): Promise<PresignedUploadResult> => {
     const response = await clientAPI.post<PresignedUploadResult>('/app/files/presigned-url', {
       fileName,
@@ -78,7 +78,7 @@ export const appFileService = {
    */
   directUpload: async (
     file: File,
-    category: FileCategory = 'image',
+    category: FileCategory = 'image'
   ): Promise<{ key: string; url: string }> => {
     // 获取预签名 URL
     const presigned = await appFileService.getPresignedUrl(file.name, file.type, category);

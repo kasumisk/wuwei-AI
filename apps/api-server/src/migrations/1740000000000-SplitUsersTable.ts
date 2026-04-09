@@ -167,7 +167,9 @@ export class SplitUsersTable1740000000000 implements MigrationInterface {
     // 3. 将现有 users 表数据迁移到 admin_users
     // 仅迁移管理员用户（is_admin = true 或 role = 'admin'）
     // 如果 admin_users 已有数据，则跳过迁移（避免重复）
-    const adminUsersCount = await queryRunner.query(`SELECT COUNT(*) FROM admin_users`);
+    const adminUsersCount = await queryRunner.query(
+      `SELECT COUNT(*) FROM admin_users`,
+    );
     const hasAdminUsers = parseInt(adminUsersCount[0].count, 10) > 0;
 
     const usersTableExists = await queryRunner.query(`

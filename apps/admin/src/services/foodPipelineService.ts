@@ -119,11 +119,17 @@ export const foodPipelineApi = {
     request.get(`${PATH.ADMIN.FOOD_PIPELINE}/openfoodfacts/search`, { query, pageSize }),
 
   // AI
-  batchAiLabel: (data: { category?: string; unlabeled?: boolean; limit?: number }): Promise<AiLabelResult> =>
-    request.post(`${PATH.ADMIN.FOOD_PIPELINE}/ai/label`, data),
+  batchAiLabel: (data: {
+    category?: string;
+    unlabeled?: boolean;
+    limit?: number;
+  }): Promise<AiLabelResult> => request.post(`${PATH.ADMIN.FOOD_PIPELINE}/ai/label`, data),
 
-  batchAiTranslate: (data: { targetLocale: string; limit?: number; untranslatedOnly?: boolean }): Promise<AiTranslateResult> =>
-    request.post(`${PATH.ADMIN.FOOD_PIPELINE}/ai/translate`, data),
+  batchAiTranslate: (data: {
+    targetLocale: string;
+    limit?: number;
+    untranslatedOnly?: boolean;
+  }): Promise<AiTranslateResult> => request.post(`${PATH.ADMIN.FOOD_PIPELINE}/ai/translate`, data),
 
   // 规则引擎
   batchApplyRules: (data: { limit?: number; recalcAll?: boolean }): Promise<RulesApplyResult> =>
@@ -158,7 +164,7 @@ export const useQualityReport = () =>
   });
 
 export const useImportUsda = (
-  options?: UseMutationOptions<ImportResult, Error, { query: string; maxItems?: number }>,
+  options?: UseMutationOptions<ImportResult, Error, { query: string; maxItems?: number }>
 ) => {
   const queryClient = useQueryClient();
   return useMutation({
@@ -172,7 +178,11 @@ export const useImportUsda = (
 };
 
 export const useBatchAiLabel = (
-  options?: UseMutationOptions<AiLabelResult, Error, { category?: string; unlabeled?: boolean; limit?: number }>,
+  options?: UseMutationOptions<
+    AiLabelResult,
+    Error,
+    { category?: string; unlabeled?: boolean; limit?: number }
+  >
 ) => {
   const queryClient = useQueryClient();
   return useMutation({
@@ -183,7 +193,11 @@ export const useBatchAiLabel = (
 };
 
 export const useBatchAiTranslate = (
-  options?: UseMutationOptions<AiTranslateResult, Error, { targetLocale: string; limit?: number; untranslatedOnly?: boolean }>,
+  options?: UseMutationOptions<
+    AiTranslateResult,
+    Error,
+    { targetLocale: string; limit?: number; untranslatedOnly?: boolean }
+  >
 ) => {
   const queryClient = useQueryClient();
   return useMutation({
@@ -194,7 +208,7 @@ export const useBatchAiTranslate = (
 };
 
 export const useBatchApplyRules = (
-  options?: UseMutationOptions<RulesApplyResult, Error, { limit?: number; recalcAll?: boolean }>,
+  options?: UseMutationOptions<RulesApplyResult, Error, { limit?: number; recalcAll?: boolean }>
 ) => {
   const queryClient = useQueryClient();
   return useMutation({
@@ -204,9 +218,7 @@ export const useBatchApplyRules = (
   });
 };
 
-export const useResolveAllConflicts = (
-  options?: UseMutationOptions<any, Error, void>,
-) => {
+export const useResolveAllConflicts = (options?: UseMutationOptions<any, Error, void>) => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => foodPipelineApi.resolveAllConflicts(),
@@ -215,9 +227,7 @@ export const useResolveAllConflicts = (
   });
 };
 
-export const useLookupBarcode = (
-  options?: UseMutationOptions<any, Error, string>,
-) => {
+export const useLookupBarcode = (options?: UseMutationOptions<any, Error, string>) => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (barcode) => foodPipelineApi.lookupBarcode(barcode),
@@ -227,7 +237,7 @@ export const useLookupBarcode = (
 };
 
 export const useRecognizeImage = (
-  options?: UseMutationOptions<ImageRecognitionResult, Error, File>,
+  options?: UseMutationOptions<ImageRecognitionResult, Error, File>
 ) =>
   useMutation({
     mutationFn: (file) => foodPipelineApi.recognizeImage(file),
@@ -235,7 +245,7 @@ export const useRecognizeImage = (
   });
 
 export const useRecognizeImageByUrl = (
-  options?: UseMutationOptions<ImageRecognitionResult, Error, string>,
+  options?: UseMutationOptions<ImageRecognitionResult, Error, string>
 ) =>
   useMutation({
     mutationFn: (url) => foodPipelineApi.recognizeImageByUrl(url),

@@ -1,20 +1,6 @@
 import React, { useRef } from 'react';
-import {
-  Card,
-  Tag,
-  Space,
-  Row,
-  Col,
-  Statistic,
-  Popconfirm,
-  message,
-  Button,
-  Image,
-} from 'antd';
-import {
-  DeleteOutlined,
-  ReloadOutlined,
-} from '@ant-design/icons';
+import { Card, Tag, Space, Row, Col, Statistic, Popconfirm, message, Button, Image } from 'antd';
+import { DeleteOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
 import { useQuery } from '@tanstack/react-query';
@@ -50,7 +36,10 @@ const decisionMap: Record<string, { text: string; color: string }> = {
 const FoodRecordsPage: React.FC = () => {
   const actionRef = useRef<ActionType>(null);
   const deleteMutation = useDeleteFoodRecord({
-    onSuccess: () => { message.success('已删除'); actionRef.current?.reload(); },
+    onSuccess: () => {
+      message.success('已删除');
+      actionRef.current?.reload();
+    },
     onError: (e: any) => message.error(`删除失败: ${e.message}`),
   });
 
@@ -65,14 +54,15 @@ const FoodRecordsPage: React.FC = () => {
       title: '用户',
       dataIndex: 'userId',
       width: 120,
-      render: (_, record) => record.user?.nickname || record.user?.email || record.userId?.slice(0, 8),
+      render: (_, record) =>
+        record.user?.nickname || record.user?.email || record.userId?.slice(0, 8),
     },
     {
       title: '餐次',
       dataIndex: 'mealType',
       width: 80,
       valueEnum: Object.fromEntries(
-        Object.entries(mealTypeMap).map(([k, v]) => [k, { text: v.text }]),
+        Object.entries(mealTypeMap).map(([k, v]) => [k, { text: v.text }])
       ),
       render: (_, record) => {
         const m = mealTypeMap[record.mealType];
@@ -87,18 +77,28 @@ const FoodRecordsPage: React.FC = () => {
       render: (_, record) => (
         <Space wrap size={[0, 4]}>
           {record.foods?.slice(0, 3).map((f, i) => (
-            <Tag key={i}>{f.name} ({f.calories}kcal)</Tag>
+            <Tag key={i}>
+              {f.name} ({f.calories}kcal)
+            </Tag>
           ))}
           {record.foods?.length > 3 && <Tag>+{record.foods.length - 3}</Tag>}
         </Space>
       ),
     },
-    { title: '总热量', dataIndex: 'totalCalories', width: 90, search: false, render: (v) => `${v} kcal` },
+    {
+      title: '总热量',
+      dataIndex: 'totalCalories',
+      width: 90,
+      search: false,
+      render: (v) => `${v} kcal`,
+    },
     {
       title: '决策',
       dataIndex: 'decision',
       width: 80,
-      valueEnum: Object.fromEntries(Object.entries(decisionMap).map(([k, v]) => [k, { text: v.text }])),
+      valueEnum: Object.fromEntries(
+        Object.entries(decisionMap).map(([k, v]) => [k, { text: v.text }])
+      ),
       render: (_, record) => {
         const d = decisionMap[record.decision];
         return d ? <Tag color={d.color}>{d.text}</Tag> : record.decision;
@@ -111,9 +111,17 @@ const FoodRecordsPage: React.FC = () => {
       dataIndex: 'imageUrl',
       width: 80,
       search: false,
-      render: (_, record) => record.imageUrl
-        ? <Image src={record.imageUrl} width={40} height={40} style={{ objectFit: 'cover', borderRadius: 4 }} />
-        : '-',
+      render: (_, record) =>
+        record.imageUrl ? (
+          <Image
+            src={record.imageUrl}
+            width={40}
+            height={40}
+            style={{ objectFit: 'cover', borderRadius: 4 }}
+          />
+        ) : (
+          '-'
+        ),
     },
     {
       title: '记录时间',
@@ -128,7 +136,9 @@ const FoodRecordsPage: React.FC = () => {
       search: false,
       render: (_, record) => (
         <Popconfirm title="确认删除？" onConfirm={() => deleteMutation.mutate(record.id)}>
-          <Button type="link" size="small" danger icon={<DeleteOutlined />}>删除</Button>
+          <Button type="link" size="small" danger icon={<DeleteOutlined />}>
+            删除
+          </Button>
         </Popconfirm>
       ),
     },
@@ -138,13 +148,29 @@ const FoodRecordsPage: React.FC = () => {
     <>
       {stats && (
         <Row gutter={16} style={{ marginBottom: 16 }}>
-          <Col span={8}><Card><Statistic title="总记录数" value={stats.total} /></Card></Col>
-          <Col span={8}><Card><Statistic title="今日记录" value={stats.todayCount} valueStyle={{ color: '#3f8600' }} /></Card></Col>
+          <Col span={8}>
+            <Card>
+              <Statistic title="总记录数" value={stats.total} />
+            </Card>
+          </Col>
+          <Col span={8}>
+            <Card>
+              <Statistic
+                title="今日记录"
+                value={stats.todayCount}
+                valueStyle={{ color: '#3f8600' }}
+              />
+            </Card>
+          </Col>
           <Col span={8}>
             <Card>
               <Space wrap>
                 {stats.byMealType?.map((m: any) => (
-                  <Statistic key={m.mealType} title={mealTypeMap[m.mealType]?.text || m.mealType} value={m.count} />
+                  <Statistic
+                    key={m.mealType}
+                    title={mealTypeMap[m.mealType]?.text || m.mealType}
+                    value={m.count}
+                  />
                 ))}
               </Space>
             </Card>
@@ -166,7 +192,13 @@ const FoodRecordsPage: React.FC = () => {
         pagination={{ defaultPageSize: 20, showSizeChanger: true }}
         headerTitle="饮食记录列表"
         toolBarRender={() => [
-          <Button key="reload" icon={<ReloadOutlined />} onClick={() => actionRef.current?.reload()}>刷新</Button>,
+          <Button
+            key="reload"
+            icon={<ReloadOutlined />}
+            onClick={() => actionRef.current?.reload()}
+          >
+            刷新
+          </Button>,
         ]}
       />
     </>

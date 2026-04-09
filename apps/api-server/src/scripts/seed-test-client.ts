@@ -1,7 +1,7 @@
 import * as bcrypt from 'bcrypt';
 import AppDataSource from '../core/database/data-source-dev';
-import { Client } from '../entities/client.entity';
-import { ClientCapabilityPermission } from '../entities/client-capability-permission.entity';
+import { Client } from '../modules/client/entities/client.entity';
+import { ClientCapabilityPermission } from '../modules/client/entities/client-capability-permission.entity';
 
 async function seedTestClient() {
   try {

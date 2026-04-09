@@ -13,15 +13,15 @@ export const routeConfig = {
 const { Option } = Select;
 
 const SettingsPage = () => {
-  const { 
-    mode, 
-    primaryColor, 
-    collapsed, 
+  const {
+    mode,
+    primaryColor,
+    collapsed,
     locale,
-    setMode, 
-    setPrimaryColor, 
-    setCollapsed, 
-    setLocale 
+    setMode,
+    setPrimaryColor,
+    setCollapsed,
+    setLocale,
   } = useThemeStore();
 
   const [form] = Form.useForm();
@@ -53,9 +53,9 @@ const SettingsPage = () => {
           }}
         >
           <Divider orientation="left">外观设置</Divider>
-          
+
           <Form.Item label="暗色模式" name="darkMode">
-            <Switch 
+            <Switch
               checked={mode === 'dark'}
               onChange={(checked) => setMode(checked ? 'dark' : 'light')}
               checkedChildren="暗色"
@@ -72,14 +72,7 @@ const SettingsPage = () => {
                 presets={[
                   {
                     label: '推荐',
-                    colors: [
-                      '#1677ff',
-                      '#722ed1',
-                      '#13c2c2',
-                      '#52c41a',
-                      '#fa8c16',
-                      '#f5222d',
-                    ],
+                    colors: ['#1677ff', '#722ed1', '#13c2c2', '#52c41a', '#fa8c16', '#f5222d'],
                   },
                 ]}
               />
@@ -90,7 +83,7 @@ const SettingsPage = () => {
           </Form.Item>
 
           <Form.Item label="自动折叠侧边栏" name="autoCollapse">
-            <Switch 
+            <Switch
               checked={collapsed}
               onChange={setCollapsed}
               checkedChildren="开启"
@@ -126,9 +119,7 @@ const SettingsPage = () => {
               <Button type="primary" onClick={handleSave}>
                 保存设置
               </Button>
-              <Button onClick={handleReset}>
-                重置设置
-              </Button>
+              <Button onClick={handleReset}>重置设置</Button>
             </Space>
           </Form.Item>
         </Form>

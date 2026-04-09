@@ -16,11 +16,7 @@ import {
   Empty,
   Spin,
 } from 'antd';
-import {
-  SearchOutlined,
-  CloudDownloadOutlined,
-  DatabaseOutlined,
-} from '@ant-design/icons';
+import { SearchOutlined, CloudDownloadOutlined, DatabaseOutlined } from '@ant-design/icons';
 import {
   foodPipelineApi,
   useImportUsda,
@@ -97,7 +93,7 @@ const UsdaImportPage: React.FC = () => {
       title: '分类',
       dataIndex: 'foodCategory',
       width: 150,
-      render: (v: string) => v ? <Tag>{v}</Tag> : '-',
+      render: (v: string) => (v ? <Tag>{v}</Tag> : '-'),
     },
     {
       title: '数据类型',
@@ -117,7 +113,11 @@ const UsdaImportPage: React.FC = () => {
   return (
     <div>
       <Card
-        title={<Space><CloudDownloadOutlined /> USDA FoodData Central 数据导入</Space>}
+        title={
+          <Space>
+            <CloudDownloadOutlined /> USDA FoodData Central 数据导入
+          </Space>
+        }
         style={{ marginBottom: 16 }}
       >
         <Alert
@@ -136,7 +136,12 @@ const UsdaImportPage: React.FC = () => {
             style={{ width: 400 }}
             prefix={<SearchOutlined />}
           />
-          <Button type="primary" onClick={handleSearch} loading={searchLoading} icon={<SearchOutlined />}>
+          <Button
+            type="primary"
+            onClick={handleSearch}
+            loading={searchLoading}
+            icon={<SearchOutlined />}
+          >
             搜索预览
           </Button>
           <Button
@@ -152,7 +157,9 @@ const UsdaImportPage: React.FC = () => {
 
       {/* 搜索结果 */}
       {searchResult && (
-        <Card title={`搜索结果（共 ${searchResult.totalHits} 条，显示前 ${searchResult.foods.length} 条）`}>
+        <Card
+          title={`搜索结果（共 ${searchResult.totalHits} 条，显示前 ${searchResult.foods.length} 条）`}
+        >
           <Table
             dataSource={searchResult.foods}
             columns={columns}
@@ -183,9 +190,22 @@ const UsdaImportPage: React.FC = () => {
             </Descriptions.Item>
           </Descriptions>
           {importResult.details?.length > 0 && (
-            <div style={{ marginTop: 12, maxHeight: 200, overflow: 'auto', background: '#f5f5f5', padding: 12, borderRadius: 4 }}>
+            <div
+              style={{
+                marginTop: 12,
+                maxHeight: 200,
+                overflow: 'auto',
+                background: '#f5f5f5',
+                padding: 12,
+                borderRadius: 4,
+              }}
+            >
               {importResult.details.map((d: string, i: number) => (
-                <div key={i}><Text type="secondary" style={{ fontSize: 12 }}>{d}</Text></div>
+                <div key={i}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    {d}
+                  </Text>
+                </div>
               ))}
             </div>
           )}

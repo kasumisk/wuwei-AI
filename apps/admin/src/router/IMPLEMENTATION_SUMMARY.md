@@ -7,21 +7,25 @@
 ## 🚀 核心功能
 
 ### 1. 自动路由生成
+
 - ✅ 基于 `src/pages/` 目录结构自动扫描页面文件
 - ✅ 根据文件路径自动生成对应的路由配置
 - ✅ 支持 `index.tsx` 和直接文件名两种模式
 
 ### 2. 手动配置覆盖
+
 - ✅ 在 `routeUtils.ts` 中的 `manualRouteConfigs` 对象配置手动规则
 - ✅ 手动配置优先级高于自动生成的配置
 - ✅ 支持菜单排序、图标、权限等各种覆盖
 
 ### 3. 动态菜单生成
+
 - ✅ BasicLayout 现在使用动态生成的菜单
 - ✅ 移除了硬编码的菜单配置
 - ✅ 支持字符串图标自动转换为 Ant Design 组件
 
 ### 4. 嵌套路由支持
+
 - ✅ 支持通过 `parentPath` 配置父子关系
 - ✅ 自动构建嵌套菜单结构
 - ✅ 支持多级嵌套
@@ -29,6 +33,7 @@
 ## 📁 主要修改文件
 
 ### 核心文件
+
 1. **`src/utils/routeUtils.ts`** - 路由生成核心逻辑
    - 扩展了自动路由生成功能
    - 添加了手动配置覆盖机制
@@ -50,6 +55,7 @@
    - 支持图标字符串转组件
 
 ### 示例文件
+
 5. **`src/pages/auto-route-demo/index.tsx`** - 演示页面
    - 展示自动路由功能
    - 提供配置示例
@@ -60,6 +66,7 @@
 ## 🔧 配置示例
 
 ### 页面组件配置
+
 ```tsx
 // src/pages/example/index.tsx
 export const routeConfig = {
@@ -72,6 +79,7 @@ export const routeConfig = {
 ```
 
 ### 手动覆盖配置
+
 ```tsx
 // src/utils/routeUtils.ts
 const manualRouteConfigs = {
@@ -88,33 +96,38 @@ const manualRouteConfigs = {
 ## 🎯 优势对比
 
 ### 之前（手动配置）
+
 ❌ 需要在多个地方维护路由配置  
 ❌ 容易出现不一致的情况  
 ❌ 添加新页面需要手动更新路由和菜单  
-❌ 代码重复度高  
+❌ 代码重复度高
 
 ### 现在（自动配置）
+
 ✅ 只需在页面组件中导出配置  
 ✅ 路由和菜单自动生成，保持一致  
 ✅ 添加新页面自动出现在菜单中  
-✅ 代码简洁，维护成本低  
+✅ 代码简洁，维护成本低
 
 ## 📊 技术实现
 
 ### 路径映射规则
-| 文件路径 | 生成路由 | 说明 |
-|---------|---------|------|
+
+| 文件路径                         | 生成路由     | 说明             |
+| -------------------------------- | ------------ | ---------------- |
 | `/src/pages/dashboard/index.tsx` | `/dashboard` | 目录 + index.tsx |
-| `/src/pages/user/list.tsx` | `/user/list` | 文件路径直映射 |
-| `/src/pages/settings/index.tsx` | `/settings` | 目录 + index.tsx |
+| `/src/pages/user/list.tsx`       | `/user/list` | 文件路径直映射   |
+| `/src/pages/settings/index.tsx`  | `/settings`  | 目录 + index.tsx |
 
 ### 配置合并策略
+
 1. 读取页面组件的 `routeConfig` 导出
 2. 读取 `manualRouteConfigs` 中的手动配置
 3. 手动配置覆盖自动配置
 4. 生成最终的路由配置
 
 ### 菜单生成流程
+
 1. 扫描页面文件
 2. 生成路由配置
 3. 构建嵌套结构
@@ -124,12 +137,14 @@ const manualRouteConfigs = {
 ## 🛠️ 开发体验
 
 ### 添加新页面的步骤
+
 1. 在 `src/pages/` 下创建页面文件
 2. 导出 `routeConfig` 配置
 3. 导出页面组件
 4. 刷新浏览器即可看到新菜单
 
 ### 调试功能
+
 - 浏览器控制台显示生成的路由配置
 - 支持热重载，修改配置立即生效
 - TypeScript 类型检查确保配置正确
@@ -137,6 +152,7 @@ const manualRouteConfigs = {
 ## 🔮 扩展能力
 
 ### 已支持的功能
+
 - ✅ 权限控制 (`requireAuth`, `roles`)
 - ✅ 菜单控制 (`hideInMenu`, `order`)
 - ✅ 图标配置 (`icon`)
@@ -145,6 +161,7 @@ const manualRouteConfigs = {
 - ✅ 面包屑导航
 
 ### 可扩展的功能
+
 - 🔄 动态权限控制
 - 🔄 国际化支持
 - 🔄 路由缓存策略
@@ -176,6 +193,7 @@ const manualRouteConfigs = {
 ## 📞 技术支持
 
 如有问题，请查看：
+
 - [详细使用文档](./AUTO_ROUTE_GUIDE.md)
 - [快速开始指南](./QUICK_START.md)
 - 浏览器控制台的调试信息

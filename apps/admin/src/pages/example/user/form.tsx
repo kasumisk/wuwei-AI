@@ -29,12 +29,7 @@ const UserForm = () => {
 
   return (
     <Card title="用户表单">
-      <Form
-        form={form}
-        layout="vertical"
-        onFinish={onFinish}
-        autoComplete="off"
-      >
+      <Form form={form} layout="vertical" onFinish={onFinish} autoComplete="off">
         <Row gutter={16}>
           <Col span={12}>
             <Form.Item
@@ -70,17 +65,8 @@ const UserForm = () => {
             </Form.Item>
           </Col>
           <Col span={12}>
-            <Form.Item
-              label="年龄"
-              name="age"
-              rules={[{ required: true, message: '请输入年龄!' }]}
-            >
-              <InputNumber
-                min={1}
-                max={120}
-                placeholder="请输入年龄"
-                style={{ width: '100%' }}
-              />
+            <Form.Item label="年龄" name="age" rules={[{ required: true, message: '请输入年龄!' }]}>
+              <InputNumber min={1} max={120} placeholder="请输入年龄" style={{ width: '100%' }} />
             </Form.Item>
           </Col>
         </Row>

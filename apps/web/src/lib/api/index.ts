@@ -27,6 +27,12 @@ export {
   createServerAPIWithToken,
 } from './server-api';
 
+// 拆分后的 API 服务
+export { profileService } from './profile';
+export { foodRecordService } from './food-record';
+export { recommendationService } from './recommendation';
+export { gamificationService } from './gamification';
+
 // 类型定义
 export type {
   RequestConfig,

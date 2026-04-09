@@ -13,7 +13,10 @@ export default new DataSource({
   database: process.env.DB_DATABASE || 'ai_platform',
   synchronize: false,
   logging: true,
-  entities: [path.join(__dirname, '../../entities/*.entity.ts')],
+  entities: [
+    path.join(__dirname, '../../entities/*.entity.ts'),
+    path.join(__dirname, '../../modules/*/entities/*.entity.ts'),
+  ],
   migrations: [path.join(__dirname, '../../migrations/*.ts')],
   migrationsTableName: 'migrations',
 });

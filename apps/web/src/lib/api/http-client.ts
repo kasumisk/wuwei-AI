@@ -1,4 +1,10 @@
-import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
+import axios, {
+  AxiosError,
+  AxiosInstance,
+  AxiosRequestConfig,
+  AxiosResponse,
+  InternalAxiosRequestConfig,
+} from 'axios';
 import { APIError } from './error-handler';
 import { logger } from '../monitoring/logger';
 
@@ -20,7 +26,9 @@ export interface ApiResponse<T = unknown> {
 
 // 请求拦截器配置
 export interface RequestInterceptor {
-  onFulfilled?: (config: InternalAxiosRequestConfig) => InternalAxiosRequestConfig | Promise<InternalAxiosRequestConfig>;
+  onFulfilled?: (
+    config: InternalAxiosRequestConfig
+  ) => InternalAxiosRequestConfig | Promise<InternalAxiosRequestConfig>;
   onRejected?: (error: AxiosError) => AxiosError;
 }
 
@@ -140,7 +148,7 @@ export class HttpClient {
       // 服务器返回错误
       const { status, data } = error.response;
       apiError = APIError.fromResponse(status, data as Record<string, unknown>);
-      
+
       logger.error('API Error Response', {
         url: error.config?.url,
         status,
@@ -199,10 +207,7 @@ export class HttpClient {
   /**
    * GET 请求
    */
-  public async get<T = unknown>(
-    url: string,
-    config?: RequestConfig
-  ): Promise<ApiResponse<T>> {
+  public async get<T = unknown>(url: string, config?: RequestConfig): Promise<ApiResponse<T>> {
     const response = await this.instance.get<ApiResponse<T>>(url, config);
     return response.data;
   }
@@ -246,10 +251,7 @@ export class HttpClient {
   /**
    * DELETE 请求
    */
-  public async delete<T = unknown>(
-    url: string,
-    config?: RequestConfig
-  ): Promise<ApiResponse<T>> {
+  public async delete<T = unknown>(url: string, config?: RequestConfig): Promise<ApiResponse<T>> {
     const response = await this.instance.delete<ApiResponse<T>>(url, config);
     return response.data;
   }

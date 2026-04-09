@@ -3,16 +3,16 @@ import {
   AdminUser,
   AdminRole,
   AdminUserStatus,
-} from '../entities/admin-user.entity';
-import { Role, RoleStatus } from '../entities/role.entity';
+} from '../modules/user/entities/admin-user.entity';
+import { Role, RoleStatus } from '../modules/rbac/entities/role.entity';
 import {
   Permission,
   PermissionType,
   PermissionStatus,
   HttpMethod,
-} from '../entities/permission.entity';
-import { RolePermission } from '../entities/role-permission.entity';
-import { UserRole as UserRoleEntity } from '../entities/user-role.entity';
+} from '../modules/rbac/entities/permission.entity';
+import { RolePermission } from '../modules/rbac/entities/role-permission.entity';
+import { UserRole as UserRoleEntity } from '../modules/rbac/entities/user-role.entity';
 import * as bcrypt from 'bcrypt';
 
 /**

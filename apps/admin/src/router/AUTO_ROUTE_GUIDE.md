@@ -95,19 +95,19 @@ const manualRouteConfigs: Record<string, ManualRouteConfig> = {
 
 ```tsx
 interface RouteConfig {
-  path: string;                 // 路由路径
-  name: string;                 // 路由名称
+  path: string; // 路由路径
+  name: string; // 路由名称
   component: React.ComponentType; // 组件
   meta?: {
-    title: string;              // 显示标题
-    icon?: string;              // 图标名称
-    hideInMenu?: boolean;       // 是否在菜单中隐藏
-    requireAuth?: boolean;      // 是否需要认证
-    roles?: string[];           // 允许的角色
-    order?: number;             // 菜单排序
-    parentPath?: string;        // 父路径
+    title: string; // 显示标题
+    icon?: string; // 图标名称
+    hideInMenu?: boolean; // 是否在菜单中隐藏
+    requireAuth?: boolean; // 是否需要认证
+    roles?: string[]; // 允许的角色
+    order?: number; // 菜单排序
+    parentPath?: string; // 父路径
   };
-  children?: RouteConfig[];     // 子路由
+  children?: RouteConfig[]; // 子路由
 }
 ```
 
@@ -116,27 +116,27 @@ interface RouteConfig {
 ```tsx
 interface ManualRouteConfig {
   meta?: {
-    title?: string;             // 覆盖标题
-    icon?: string;              // 覆盖图标
-    hideInMenu?: boolean;       // 覆盖菜单显示
-    requireAuth?: boolean;      // 覆盖认证要求
-    roles?: string[];           // 覆盖角色要求
-    order?: number;             // 覆盖排序
-    parentPath?: string;        // 覆盖父路径
+    title?: string; // 覆盖标题
+    icon?: string; // 覆盖图标
+    hideInMenu?: boolean; // 覆盖菜单显示
+    requireAuth?: boolean; // 覆盖认证要求
+    roles?: string[]; // 覆盖角色要求
+    order?: number; // 覆盖排序
+    parentPath?: string; // 覆盖父路径
   };
-  redirect?: string;            // 重定向路径
-  disabled?: boolean;           // 是否禁用
+  redirect?: string; // 重定向路径
+  disabled?: boolean; // 是否禁用
 }
 ```
 
 ## 📁 文件路径映射
 
-| 文件路径 | 生成的路由路径 | 说明 |
-|---------|---------------|------|
-| `/src/pages/dashboard/index.tsx` | `/dashboard` | 目录下的 index.tsx |
-| `/src/pages/user/list.tsx` | `/user/list` | 直接文件名 |
-| `/src/pages/user/form.tsx` | `/user/form` | 直接文件名 |
-| `/src/pages/settings/index.tsx` | `/settings` | 目录下的 index.tsx |
+| 文件路径                         | 生成的路由路径 | 说明               |
+| -------------------------------- | -------------- | ------------------ |
+| `/src/pages/dashboard/index.tsx` | `/dashboard`   | 目录下的 index.tsx |
+| `/src/pages/user/list.tsx`       | `/user/list`   | 直接文件名         |
+| `/src/pages/user/form.tsx`       | `/user/form`   | 直接文件名         |
+| `/src/pages/settings/index.tsx`  | `/settings`    | 目录下的 index.tsx |
 
 ## 🎨 支持的图标
 
@@ -144,14 +144,14 @@ interface ManualRouteConfig {
 
 ```tsx
 // 常用图标示例
-icon: 'DashboardOutlined'    // 导航栏
-icon: 'UserOutlined'         // 用户
-icon: 'FormOutlined'         // 表单
-icon: 'SettingOutlined'      // 设置
-icon: 'TableOutlined'        // 表格
-icon: 'BarChartOutlined'     // 图表
-icon: 'FileOutlined'         // 文件
-icon: 'FolderOutlined'       // 文件夹
+icon: 'DashboardOutlined'; // 导航栏
+icon: 'UserOutlined'; // 用户
+icon: 'FormOutlined'; // 表单
+icon: 'SettingOutlined'; // 设置
+icon: 'TableOutlined'; // 表格
+icon: 'BarChartOutlined'; // 图表
+icon: 'FileOutlined'; // 文件
+icon: 'FolderOutlined'; // 文件夹
 ```
 
 ## 🔐 权限控制
@@ -162,7 +162,7 @@ icon: 'FolderOutlined'       // 文件夹
 export const routeConfig = {
   name: 'admin',
   title: '管理页面',
-  requireAuth: true,           // 需要登录
+  requireAuth: true, // 需要登录
   roles: ['admin', 'manager'], // 允许的角色
 };
 ```
@@ -173,7 +173,7 @@ export const routeConfig = {
 export const routeConfig = {
   name: 'hidden',
   title: '隐藏页面',
-  hideInMenu: true,            // 不在菜单中显示
+  hideInMenu: true, // 不在菜单中显示
 };
 ```
 
@@ -207,7 +207,7 @@ const manualRouteConfigs = {
   },
   '/user/list': {
     meta: {
-      parentPath: '/user',     // 手动指定父路径
+      parentPath: '/user', // 手动指定父路径
     },
   },
 };
@@ -290,6 +290,7 @@ export const routeConfig = {
 ### 配置验证
 
 运行项目后检查：
+
 - [ ] 所有页面路由正常访问
 - [ ] 菜单显示正确
 - [ ] 图标显示正常

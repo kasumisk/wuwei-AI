@@ -2,7 +2,7 @@ import { Controller, Get } from '@nestjs/common';
 import { Public } from '../core/decorators/public.decorator';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ModelConfig } from '../entities/model-config.entity';
+import { ModelConfig } from '../modules/provider/entities/model-config.entity';
 
 @Controller('health')
 export class HealthController {

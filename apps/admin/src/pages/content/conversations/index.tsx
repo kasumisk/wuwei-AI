@@ -44,7 +44,10 @@ const ConversationsPage: React.FC = () => {
   const [currentConversation, setCurrentConversation] = useState<ConversationDto | null>(null);
 
   const deleteMutation = useDeleteConversation({
-    onSuccess: () => { message.success('已删除'); actionRef.current?.reload(); },
+    onSuccess: () => {
+      message.success('已删除');
+      actionRef.current?.reload();
+    },
     onError: (e: any) => message.error(`删除失败: ${e.message}`),
   });
 
@@ -65,7 +68,8 @@ const ConversationsPage: React.FC = () => {
       title: '用户',
       dataIndex: 'userId',
       width: 120,
-      render: (_, record) => record.user?.nickname || record.user?.email || (record.userId as string)?.slice(0, 8),
+      render: (_, record) =>
+        record.user?.nickname || record.user?.email || (record.userId as string)?.slice(0, 8),
     },
     { title: '标题', dataIndex: 'title', width: 200, ellipsis: true, render: (v) => v || '无标题' },
     {
@@ -89,9 +93,18 @@ const ConversationsPage: React.FC = () => {
       search: false,
       render: (_, record) => (
         <Space>
-          <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => handleViewDetail(record.id)}>查看</Button>
+          <Button
+            type="link"
+            size="small"
+            icon={<EyeOutlined />}
+            onClick={() => handleViewDetail(record.id)}
+          >
+            查看
+          </Button>
           <Popconfirm title="确认删除该对话？" onConfirm={() => deleteMutation.mutate(record.id)}>
-            <Button type="link" size="small" danger icon={<DeleteOutlined />}>删除</Button>
+            <Button type="link" size="small" danger icon={<DeleteOutlined />}>
+              删除
+            </Button>
           </Popconfirm>
         </Space>
       ),
@@ -102,9 +115,21 @@ const ConversationsPage: React.FC = () => {
     <>
       {stats && (
         <Row gutter={16} style={{ marginBottom: 16 }}>
-          <Col span={8}><Card><Statistic title="总对话数" value={stats.totalConversations} /></Card></Col>
-          <Col span={8}><Card><Statistic title="总消息数" value={stats.totalMessages} /></Card></Col>
-          <Col span={8}><Card><Statistic title="总Token消耗" value={stats.totalTokensUsed} /></Card></Col>
+          <Col span={8}>
+            <Card>
+              <Statistic title="总对话数" value={stats.totalConversations} />
+            </Card>
+          </Col>
+          <Col span={8}>
+            <Card>
+              <Statistic title="总消息数" value={stats.totalMessages} />
+            </Card>
+          </Col>
+          <Col span={8}>
+            <Card>
+              <Statistic title="总Token消耗" value={stats.totalTokensUsed} />
+            </Card>
+          </Col>
         </Row>
       )}
 
@@ -122,7 +147,13 @@ const ConversationsPage: React.FC = () => {
         pagination={{ defaultPageSize: 20, showSizeChanger: true }}
         headerTitle="AI 对话列表"
         toolBarRender={() => [
-          <Button key="reload" icon={<ReloadOutlined />} onClick={() => actionRef.current?.reload()}>刷新</Button>,
+          <Button
+            key="reload"
+            icon={<ReloadOutlined />}
+            onClick={() => actionRef.current?.reload()}
+          >
+            刷新
+          </Button>,
         ]}
       />
 
@@ -156,13 +187,15 @@ const ConversationsPage: React.FC = () => {
                     </Space>
                   }
                   description={
-                    <div style={{
-                      whiteSpace: 'pre-wrap',
-                      background: msg.role === 'user' ? '#e6f7ff' : '#f6ffed',
-                      padding: '8px 12px',
-                      borderRadius: 8,
-                      marginTop: 4,
-                    }}>
+                    <div
+                      style={{
+                        whiteSpace: 'pre-wrap',
+                        background: msg.role === 'user' ? '#e6f7ff' : '#f6ffed',
+                        padding: '8px 12px',
+                        borderRadius: 8,
+                        marginTop: 4,
+                      }}
+                    >
                       {msg.content}
                     </div>
                   }

@@ -21,42 +21,78 @@ export class GlobalFoodDatabaseUpgrade1753000000000 implements MigrationInterfac
     // ══════════════════════════════════════════════════════════════
     // 1. RENAME 旧列名 → 新列名
     // ══════════════════════════════════════════════════════════════
-    await queryRunner.query(`
+    await queryRunner
+      .query(
+        `
       ALTER TABLE foods RENAME COLUMN "calories_per_100g" TO "calories"
-    `).catch(() => { /* 列可能已被重命名 */ });
+    `,
+      )
+      .catch(() => {
+        /* 列可能已被重命名 */
+      });
 
-    await queryRunner.query(`
+    await queryRunner
+      .query(
+        `
       ALTER TABLE foods RENAME COLUMN "protein_per_100g" TO "protein"
-    `).catch(() => {});
+    `,
+      )
+      .catch(() => {});
 
-    await queryRunner.query(`
+    await queryRunner
+      .query(
+        `
       ALTER TABLE foods RENAME COLUMN "fat_per_100g" TO "fat"
-    `).catch(() => {});
+    `,
+      )
+      .catch(() => {});
 
-    await queryRunner.query(`
+    await queryRunner
+      .query(
+        `
       ALTER TABLE foods RENAME COLUMN "carbs_per_100g" TO "carbs"
-    `).catch(() => {});
+    `,
+      )
+      .catch(() => {});
 
-    await queryRunner.query(`
+    await queryRunner
+      .query(
+        `
       ALTER TABLE foods RENAME COLUMN "fiber_per_100g" TO "fiber"
-    `).catch(() => {});
+    `,
+      )
+      .catch(() => {});
 
-    await queryRunner.query(`
+    await queryRunner
+      .query(
+        `
       ALTER TABLE foods RENAME COLUMN "sugar_per_100g" TO "sugar"
-    `).catch(() => {});
+    `,
+      )
+      .catch(() => {});
 
-    await queryRunner.query(`
+    await queryRunner
+      .query(
+        `
       ALTER TABLE foods RENAME COLUMN "sodium_per_100g" TO "sodium"
-    `).catch(() => {});
+    `,
+      )
+      .catch(() => {});
 
-    await queryRunner.query(`
+    await queryRunner
+      .query(
+        `
       ALTER TABLE foods RENAME COLUMN "source" TO "primary_source"
-    `).catch(() => {});
+    `,
+      )
+      .catch(() => {});
 
     // ══════════════════════════════════════════════════════════════
     // 2. ALTER 列类型 (精度调整)
     // ══════════════════════════════════════════════════════════════
-    await queryRunner.query(`
+    await queryRunner
+      .query(
+        `
       ALTER TABLE foods
         ALTER COLUMN "calories" TYPE DECIMAL(7,1) USING "calories"::DECIMAL(7,1),
         ALTER COLUMN "protein" TYPE DECIMAL(6,1) USING "protein"::DECIMAL(6,1),
@@ -64,7 +100,9 @@ export class GlobalFoodDatabaseUpgrade1753000000000 implements MigrationInterfac
         ALTER COLUMN "carbs" TYPE DECIMAL(6,1) USING "carbs"::DECIMAL(6,1),
         ALTER COLUMN "quality_score" TYPE DECIMAL(3,1) USING "quality_score"::DECIMAL(3,1),
         ALTER COLUMN "satiety_score" TYPE DECIMAL(3,1) USING "satiety_score"::DECIMAL(3,1)
-    `).catch(() => {});
+    `,
+      )
+      .catch(() => {});
 
     // ══════════════════════════════════════════════════════════════
     // 3. ADD 新列到 foods 表
@@ -145,19 +183,27 @@ export class GlobalFoodDatabaseUpgrade1753000000000 implements MigrationInterfac
     // 4. 设置 code 唯一约束 & 生成已有数据的 code
     // ══════════════════════════════════════════════════════════════
     // 为已有数据生成 code (FOOD_CN_XXXX)
-    await queryRunner.query(`
+    await queryRunner
+      .query(
+        `
       UPDATE foods SET code = 'FOOD_CN_' || LPAD(ROW_NUMBER::TEXT, 4, '0')
       FROM (
         SELECT id, ROW_NUMBER() OVER (ORDER BY created_at) AS ROW_NUMBER
         FROM foods WHERE code IS NULL
       ) sub
       WHERE foods.id = sub.id
-    `).catch(() => {});
+    `,
+      )
+      .catch(() => {});
 
     // 设置 code NOT NULL + UNIQUE
-    await queryRunner.query(`
+    await queryRunner
+      .query(
+        `
       ALTER TABLE foods ALTER COLUMN "code" SET NOT NULL
-    `).catch(() => {});
+    `,
+      )
+      .catch(() => {});
 
     await queryRunner.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS "IDX_foods_code_unique" ON foods ("code")
@@ -191,12 +237,24 @@ export class GlobalFoodDatabaseUpgrade1753000000000 implements MigrationInterfac
     // ══════════════════════════════════════════════════════════════
     // 6. GIN 索引
     // ══════════════════════════════════════════════════════════════
-    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_foods_tags_gin" ON foods USING GIN ("tags")`);
-    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_foods_meal_types_gin" ON foods USING GIN ("meal_types")`);
-    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_foods_allergens_gin" ON foods USING GIN ("allergens")`);
-    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_foods_status" ON foods ("status")`);
-    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_foods_barcode" ON foods ("barcode") WHERE barcode IS NOT NULL`);
-    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_foods_primary_source" ON foods ("primary_source")`);
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS "IDX_foods_tags_gin" ON foods USING GIN ("tags")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS "IDX_foods_meal_types_gin" ON foods USING GIN ("meal_types")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS "IDX_foods_allergens_gin" ON foods USING GIN ("allergens")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS "IDX_foods_status" ON foods ("status")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS "IDX_foods_barcode" ON foods ("barcode") WHERE barcode IS NOT NULL`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS "IDX_foods_primary_source" ON foods ("primary_source")`,
+    );
 
     // ══════════════════════════════════════════════════════════════
     // 7. 创建 food_translations 表
@@ -215,8 +273,12 @@ export class GlobalFoodDatabaseUpgrade1753000000000 implements MigrationInterfac
         CONSTRAINT "UQ_food_translations_food_locale" UNIQUE ("food_id", "locale")
       )
     `);
-    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_food_translations_food_id" ON food_translations ("food_id")`);
-    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_food_translations_locale" ON food_translations ("locale")`);
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS "IDX_food_translations_food_id" ON food_translations ("food_id")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS "IDX_food_translations_locale" ON food_translations ("locale")`,
+    );
 
     // ══════════════════════════════════════════════════════════════
     // 8. 创建 food_sources 表
@@ -237,8 +299,12 @@ export class GlobalFoodDatabaseUpgrade1753000000000 implements MigrationInterfac
         "created_at"    TIMESTAMP    NOT NULL DEFAULT NOW()
       )
     `);
-    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_food_sources_food_id" ON food_sources ("food_id")`);
-    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_food_sources_type" ON food_sources ("source_type")`);
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS "IDX_food_sources_food_id" ON food_sources ("food_id")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS "IDX_food_sources_type" ON food_sources ("source_type")`,
+    );
 
     // ══════════════════════════════════════════════════════════════
     // 9. 创建 food_change_logs 表
@@ -255,7 +321,9 @@ export class GlobalFoodDatabaseUpgrade1753000000000 implements MigrationInterfac
         "created_at"  TIMESTAMP    NOT NULL DEFAULT NOW()
       )
     `);
-    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_food_change_logs_food_version" ON food_change_logs ("food_id", "version")`);
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS "IDX_food_change_logs_food_version" ON food_change_logs ("food_id", "version")`,
+    );
 
     // ══════════════════════════════════════════════════════════════
     // 10. 创建 food_conflicts 表
@@ -273,7 +341,9 @@ export class GlobalFoodDatabaseUpgrade1753000000000 implements MigrationInterfac
         "created_at"     TIMESTAMP    NOT NULL DEFAULT NOW()
       )
     `);
-    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_food_conflicts_food_id" ON food_conflicts ("food_id")`);
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS "IDX_food_conflicts_food_id" ON food_conflicts ("food_id")`,
+    );
 
     // ══════════════════════════════════════════════════════════════
     // 11. 创建 food_regional_info 表
@@ -291,8 +361,12 @@ export class GlobalFoodDatabaseUpgrade1753000000000 implements MigrationInterfac
         CONSTRAINT "UQ_food_regional_info_food_region" UNIQUE ("food_id", "region")
       )
     `);
-    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_food_regional_info_food_id" ON food_regional_info ("food_id")`);
-    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_food_regional_info_region" ON food_regional_info ("region")`);
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS "IDX_food_regional_info_food_id" ON food_regional_info ("food_id")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS "IDX_food_regional_info_region" ON food_regional_info ("region")`,
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
@@ -361,21 +435,43 @@ export class GlobalFoodDatabaseUpgrade1753000000000 implements MigrationInterfac
     `);
 
     // 回滚列名
-    await queryRunner.query(`ALTER TABLE foods RENAME COLUMN "calories" TO "calories_per_100g"`).catch(() => {});
-    await queryRunner.query(`ALTER TABLE foods RENAME COLUMN "protein" TO "protein_per_100g"`).catch(() => {});
-    await queryRunner.query(`ALTER TABLE foods RENAME COLUMN "fat" TO "fat_per_100g"`).catch(() => {});
-    await queryRunner.query(`ALTER TABLE foods RENAME COLUMN "carbs" TO "carbs_per_100g"`).catch(() => {});
-    await queryRunner.query(`ALTER TABLE foods RENAME COLUMN "fiber" TO "fiber_per_100g"`).catch(() => {});
-    await queryRunner.query(`ALTER TABLE foods RENAME COLUMN "sugar" TO "sugar_per_100g"`).catch(() => {});
-    await queryRunner.query(`ALTER TABLE foods RENAME COLUMN "sodium" TO "sodium_per_100g"`).catch(() => {});
-    await queryRunner.query(`ALTER TABLE foods RENAME COLUMN "primary_source" TO "source"`).catch(() => {});
+    await queryRunner
+      .query(
+        `ALTER TABLE foods RENAME COLUMN "calories" TO "calories_per_100g"`,
+      )
+      .catch(() => {});
+    await queryRunner
+      .query(`ALTER TABLE foods RENAME COLUMN "protein" TO "protein_per_100g"`)
+      .catch(() => {});
+    await queryRunner
+      .query(`ALTER TABLE foods RENAME COLUMN "fat" TO "fat_per_100g"`)
+      .catch(() => {});
+    await queryRunner
+      .query(`ALTER TABLE foods RENAME COLUMN "carbs" TO "carbs_per_100g"`)
+      .catch(() => {});
+    await queryRunner
+      .query(`ALTER TABLE foods RENAME COLUMN "fiber" TO "fiber_per_100g"`)
+      .catch(() => {});
+    await queryRunner
+      .query(`ALTER TABLE foods RENAME COLUMN "sugar" TO "sugar_per_100g"`)
+      .catch(() => {});
+    await queryRunner
+      .query(`ALTER TABLE foods RENAME COLUMN "sodium" TO "sodium_per_100g"`)
+      .catch(() => {});
+    await queryRunner
+      .query(`ALTER TABLE foods RENAME COLUMN "primary_source" TO "source"`)
+      .catch(() => {});
 
     // 回滚列类型
-    await queryRunner.query(`
+    await queryRunner
+      .query(
+        `
       ALTER TABLE foods
         ALTER COLUMN "calories_per_100g" TYPE INT USING "calories_per_100g"::INT,
         ALTER COLUMN "quality_score" TYPE INT USING "quality_score"::INT,
         ALTER COLUMN "satiety_score" TYPE INT USING "satiety_score"::INT
-    `).catch(() => {});
+    `,
+      )
+      .catch(() => {});
   }
 }

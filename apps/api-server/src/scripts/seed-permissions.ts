@@ -3,15 +3,15 @@
  * 运行方式：npx ts-node -r tsconfig-paths/register src/scripts/seed-permissions.ts
  */
 import AppDataSource from '../core/database/data-source-dev';
-import { Role, RoleStatus } from '../entities/role.entity';
+import { Role, RoleStatus } from '../modules/rbac/entities/role.entity';
 import {
   Permission,
   PermissionType,
   PermissionStatus,
   HttpMethod,
-} from '../entities/permission.entity';
-import { PermissionTemplate } from '../entities/permission-template.entity';
-import { RolePermission } from '../entities/role-permission.entity';
+} from '../modules/rbac/entities/permission.entity';
+import { PermissionTemplate } from '../modules/rbac/entities/permission-template.entity';
+import { RolePermission } from '../modules/rbac/entities/role-permission.entity';
 
 // 预定义角色
 const roles: Partial<Role>[] = [

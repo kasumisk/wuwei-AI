@@ -81,7 +81,7 @@ export function buildBreadcrumbSchema(items: BreadcrumbItem[]) {
 // ─── ItemList Schema (for tool listing page) ───
 export function buildToolListSchema(
   tools: { name: string; slug: string; description: string }[],
-  locale: Locale,
+  locale: Locale
 ) {
   return {
     '@context': 'https://schema.org',

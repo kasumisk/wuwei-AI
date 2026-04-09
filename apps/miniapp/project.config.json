@@ -1,25 +1,25 @@
 {
-	"miniprogramRoot": "dist/",
-	"projectname": "miniapp",
-	"description": "uway",
-	"appid": "wx4c9ad16fd13b34fd",
-	"setting": {
-		"urlCheck": false,
-		"es6": false,
+  "miniprogramRoot": "dist/",
+  "projectname": "miniapp",
+  "description": "uway",
+  "appid": "wx4c9ad16fd13b34fd",
+  "setting": {
+    "urlCheck": false,
+    "es6": false,
     "enhance": false,
     "compileHotReLoad": false,
-		"postcss": false,
-		"preloadBackgroundData": false,
-		"minified": false,
-		"newFeature": true,
-		"autoAudits": false,
-		"coverView": true,
-		"showShadowRootInWxmlPanel": false,
-		"scopeDataCheck": false,
-		"useCompilerModule": false
-	},
-	"compileType": "miniprogram",
-	"simulatorType": "wechat",
-	"simulatorPluginLibVersion": {},
-	"condition": {}
+    "postcss": false,
+    "preloadBackgroundData": false,
+    "minified": false,
+    "newFeature": true,
+    "autoAudits": false,
+    "coverView": true,
+    "showShadowRootInWxmlPanel": false,
+    "scopeDataCheck": false,
+    "useCompilerModule": false
+  },
+  "compileType": "miniprogram",
+  "simulatorType": "wechat",
+  "simulatorPluginLibVersion": {},
+  "condition": {}
 }

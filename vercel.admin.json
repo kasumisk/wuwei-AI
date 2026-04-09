@@ -5,7 +5,5 @@
   "installCommand": "pnpm install",
   "buildCommand": "pnpm turbo build --filter=@ai-platform/admin",
   "outputDirectory": "apps/admin/dist",
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
-  ]
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }

@@ -13,7 +13,7 @@ export interface TabItem {
 interface TabState {
   tabs: TabItem[];
   activeKey: string;
-  
+
   // Actions
   addTab: (tab: TabItem) => void;
   removeTab: (key: string) => void;
@@ -33,8 +33,8 @@ export const useTabStore = create<TabState>()(
 
       addTab: (tab) => {
         const { tabs } = get();
-        const existingTab = tabs.find(t => t.key === tab.key);
-        
+        const existingTab = tabs.find((t) => t.key === tab.key);
+
         if (!existingTab) {
           set({
             tabs: [...tabs, tab],
@@ -47,16 +47,16 @@ export const useTabStore = create<TabState>()(
 
       removeTab: (key) => {
         const { tabs, activeKey } = get();
-        const newTabs = tabs.filter(tab => tab.key !== key);
-        
+        const newTabs = tabs.filter((tab) => tab.key !== key);
+
         let newActiveKey = activeKey;
         if (activeKey === key && newTabs.length > 0) {
           // 如果关闭的是当前激活的标签，切换到上一个或下一个标签
-          const currentIndex = tabs.findIndex(tab => tab.key === key);
+          const currentIndex = tabs.findIndex((tab) => tab.key === key);
           const targetIndex = currentIndex > 0 ? currentIndex - 1 : 0;
           newActiveKey = newTabs[targetIndex]?.key || '';
         }
-        
+
         set({
           tabs: newTabs,
           activeKey: newActiveKey,
@@ -72,7 +72,7 @@ export const useTabStore = create<TabState>()(
 
       removeOtherTabs: (keepKey) => {
         const { tabs } = get();
-        const keepTab = tabs.find(tab => tab.key === keepKey);
+        const keepTab = tabs.find((tab) => tab.key === keepKey);
         if (keepTab) {
           set({
             tabs: [keepTab],
@@ -87,22 +87,18 @@ export const useTabStore = create<TabState>()(
 
       updateTab: (key, updates) => {
         const { tabs } = get();
-        const newTabs = tabs.map(tab => 
-          tab.key === key ? { ...tab, ...updates } : tab
-        );
+        const newTabs = tabs.map((tab) => (tab.key === key ? { ...tab, ...updates } : tab));
         set({ tabs: newTabs });
       },
 
       refreshTab: (key) => {
         // 触发标签页刷新，实际的缓存清理在 KeepAlive 组件中处理
         const { tabs } = get();
-        const tab = tabs.find(t => t.key === key);
+        const tab = tabs.find((t) => t.key === key);
         if (tab) {
           // 通过更新时间戳来触发组件重新渲染
-          set({ 
-            tabs: tabs.map(t => 
-              t.key === key ? { ...t, timestamp: Date.now() } : t
-            )
+          set({
+            tabs: tabs.map((t) => (t.key === key ? { ...t, timestamp: Date.now() } : t)),
           });
         }
       },

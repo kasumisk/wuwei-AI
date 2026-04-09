@@ -12,9 +12,9 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../admin/guards/jwt-auth.guard';
-import { RolesGuard } from '../admin/guards/roles.guard';
-import { Roles } from '../admin/decorators/roles.decorator';
+import { JwtAuthGuard } from '../modules/auth/admin/jwt-auth.guard';
+import { RolesGuard } from '../modules/rbac/admin/roles.guard';
+import { Roles } from '../modules/rbac/admin/roles.decorator';
 import { ApiResponse } from '../common/types/response.type';
 import { FoodPipelineOrchestratorService } from './services/food-pipeline-orchestrator.service';
 import { UsdaFetcherService } from './services/usda-fetcher.service';
@@ -47,8 +47,16 @@ export class FoodPipelineController {
   async importUsda(
     @Body() body: { query: string; maxItems?: number },
   ): Promise<ApiResponse> {
-    const result = await this.orchestrator.importFromUsda(body.query, body.maxItems || 100);
-    return { success: true, code: HttpStatus.OK, message: '导入完成', data: result };
+    const result = await this.orchestrator.importFromUsda(
+      body.query,
+      body.maxItems || 100,
+    );
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '导入完成',
+      data: result,
+    };
   }
 
   @Get('usda/search')
@@ -68,9 +76,19 @@ export class FoodPipelineController {
   async lookupBarcode(@Param('code') code: string): Promise<ApiResponse> {
     const food = await this.orchestrator.importByBarcode(code);
     if (!food) {
-      return { success: false, code: HttpStatus.NOT_FOUND, message: '未找到产品', data: null };
+      return {
+        success: false,
+        code: HttpStatus.NOT_FOUND,
+        message: '未找到产品',
+        data: null,
+      };
     }
-    return { success: true, code: HttpStatus.OK, message: '查询成功', data: food };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '查询成功',
+      data: food,
+    };
   }
 
   @Get('openfoodfacts/search')
@@ -91,16 +109,31 @@ export class FoodPipelineController {
     @Body() body: { category?: string; unlabeled?: boolean; limit?: number },
   ): Promise<ApiResponse> {
     const result = await this.orchestrator.batchAiLabel(body);
-    return { success: true, code: HttpStatus.OK, message: 'AI标注完成', data: result };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: 'AI标注完成',
+      data: result,
+    };
   }
 
   @Post('ai/translate')
   @ApiOperation({ summary: '批量 AI 翻译' })
   async batchAiTranslate(
-    @Body() body: { targetLocale: string; limit?: number; untranslatedOnly?: boolean },
+    @Body()
+    body: {
+      targetLocale: string;
+      limit?: number;
+      untranslatedOnly?: boolean;
+    },
   ): Promise<ApiResponse> {
     const result = await this.orchestrator.batchAiTranslate(body);
-    return { success: true, code: HttpStatus.OK, message: '翻译完成', data: result };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '翻译完成',
+      data: result,
+    };
   }
 
   // ==================== 规则引擎 ====================
@@ -111,7 +144,12 @@ export class FoodPipelineController {
     @Body() body: { limit?: number; recalcAll?: boolean },
   ): Promise<ApiResponse> {
     const result = await this.orchestrator.batchApplyRules(body);
-    return { success: true, code: HttpStatus.OK, message: '规则计算完成', data: result };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '规则计算完成',
+      data: result,
+    };
   }
 
   // ==================== 冲突解决 ====================
@@ -120,7 +158,12 @@ export class FoodPipelineController {
   @ApiOperation({ summary: '自动解决所有待处理冲突' })
   async resolveAllConflicts(): Promise<ApiResponse> {
     const result = await this.orchestrator.resolveAllConflicts();
-    return { success: true, code: HttpStatus.OK, message: '冲突解决完成', data: result };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '冲突解决完成',
+      data: result,
+    };
   }
 
   // ==================== 图片识别 ====================
@@ -130,18 +173,37 @@ export class FoodPipelineController {
   @UseInterceptors(FileInterceptor('image'))
   async recognizeImage(@UploadedFile() file: any): Promise<ApiResponse> {
     if (!file) {
-      return { success: false, code: HttpStatus.BAD_REQUEST, message: '请上传图片', data: null };
+      return {
+        success: false,
+        code: HttpStatus.BAD_REQUEST,
+        message: '请上传图片',
+        data: null,
+      };
     }
     const imageBase64 = file.buffer.toString('base64');
     const results = await this.imageRecognition.recognizeFood(imageBase64);
-    return { success: true, code: HttpStatus.OK, message: '识别完成', data: results };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '识别完成',
+      data: results,
+    };
   }
 
   @Post('recognize/url')
   @ApiOperation({ summary: '通过URL识别食物图片' })
-  async recognizeImageByUrl(@Body() body: { imageUrl: string }): Promise<ApiResponse> {
-    const results = await this.imageRecognition.recognizeFoodByUrl(body.imageUrl);
-    return { success: true, code: HttpStatus.OK, message: '识别完成', data: results };
+  async recognizeImageByUrl(
+    @Body() body: { imageUrl: string },
+  ): Promise<ApiResponse> {
+    const results = await this.imageRecognition.recognizeFoodByUrl(
+      body.imageUrl,
+    );
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '识别完成',
+      data: results,
+    };
   }
 
   // ==================== 数据质量监控 ====================
@@ -150,6 +212,11 @@ export class FoodPipelineController {
   @ApiOperation({ summary: '数据质量监控报告' })
   async getQualityReport(): Promise<ApiResponse> {
     const report = await this.qualityMonitor.generateReport();
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data: report };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '获取成功',
+      data: report,
+    };
   }
 }

@@ -1,9 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull } from 'typeorm';
-import { FoodConflict } from '../../entities/food-conflict.entity';
-import { FoodLibrary } from '../../entities/food-library.entity';
-import { FoodChangeLog } from '../../entities/food-change-log.entity';
+import { FoodConflict } from '../../modules/food/entities/food-conflict.entity';
+import { FoodLibrary } from '../../modules/food/entities/food-library.entity';
+import { FoodChangeLog } from '../../modules/food/entities/food-change-log.entity';
 
 /**
  * 食物数据冲突自动解决服务
@@ -48,9 +48,18 @@ export class FoodConflictResolverService {
     const conflicts: FoodConflict[] = [];
 
     const numericFields = [
-      'calories', 'protein', 'fat', 'carbs', 'fiber', 'sugar',
-      'sodium', 'potassium', 'calcium', 'iron',
-      'glycemicIndex', 'processingLevel',
+      'calories',
+      'protein',
+      'fat',
+      'carbs',
+      'fiber',
+      'sugar',
+      'sodium',
+      'potassium',
+      'calcium',
+      'iron',
+      'glycemicIndex',
+      'processingLevel',
     ];
 
     for (const field of numericFields) {
@@ -79,7 +88,11 @@ export class FoodConflictResolverService {
     }
 
     // 分类冲突
-    if (existingValues.category && incomingValues.category && existingValues.category !== incomingValues.category) {
+    if (
+      existingValues.category &&
+      incomingValues.category &&
+      existingValues.category !== incomingValues.category
+    ) {
       const existing = await this.conflictRepo.findOne({
         where: { foodId, field: 'category', resolution: IsNull() },
       });
@@ -88,7 +101,10 @@ export class FoodConflictResolverService {
           foodId,
           field: 'category',
           sources: [
-            { source: existingValues.primarySource || 'existing', value: existingValues.category },
+            {
+              source: existingValues.primarySource || 'existing',
+              value: existingValues.category,
+            },
             { source: incomingSource, value: incomingValues.category },
           ],
         });
@@ -102,7 +118,10 @@ export class FoodConflictResolverService {
   /**
    * 自动解决待处理冲突
    */
-  async resolveAllPending(): Promise<{ resolved: number; needsReview: number }> {
+  async resolveAllPending(): Promise<{
+    resolved: number;
+    needsReview: number;
+  }> {
     const pendingConflicts = await this.conflictRepo.find({
       where: { resolution: IsNull() },
       relations: ['food'],
@@ -132,7 +151,9 @@ export class FoodConflictResolverService {
       }
     }
 
-    this.logger.log(`Conflict resolution: ${resolved} resolved, ${needsReview} need review`);
+    this.logger.log(
+      `Conflict resolution: ${resolved} resolved, ${needsReview} need review`,
+    );
     return { resolved, needsReview };
   }
 
@@ -148,7 +169,9 @@ export class FoodConflictResolverService {
 
     // 获取各来源优先级
     const sorted = [...sources].sort(
-      (a, b) => (this.SOURCE_PRIORITY[b.source] || 0) - (this.SOURCE_PRIORITY[a.source] || 0),
+      (a, b) =>
+        (this.SOURCE_PRIORITY[b.source] || 0) -
+        (this.SOURCE_PRIORITY[a.source] || 0),
     );
 
     const highPriorityValue = sorted[0].value;
@@ -156,42 +179,68 @@ export class FoodConflictResolverService {
 
     // 过敏原特殊处理: 取并集
     if (conflict.field === 'allergens') {
-      const union = [...new Set(sources.flatMap(s => Array.isArray(s.value) ? s.value : []))];
-      return { resolution: 'union_safety', resolvedValue: JSON.stringify(union) };
+      const union = [
+        ...new Set(
+          sources.flatMap((s) => (Array.isArray(s.value) ? s.value : [])),
+        ),
+      ];
+      return {
+        resolution: 'union_safety',
+        resolvedValue: JSON.stringify(union),
+      };
     }
 
     // 分类冲突: 取高优先级
     if (conflict.field === 'category') {
-      return { resolution: 'highest_priority', resolvedValue: String(highPriorityValue) };
+      return {
+        resolution: 'highest_priority',
+        resolvedValue: String(highPriorityValue),
+      };
     }
 
     // 数值冲突
-    if (typeof highPriorityValue === 'number' && typeof lowPriorityValue === 'number') {
-      const diff = highPriorityValue > 0
-        ? Math.abs(highPriorityValue - lowPriorityValue) / highPriorityValue
-        : 1;
+    if (
+      typeof highPriorityValue === 'number' &&
+      typeof lowPriorityValue === 'number'
+    ) {
+      const diff =
+        highPriorityValue > 0
+          ? Math.abs(highPriorityValue - lowPriorityValue) / highPriorityValue
+          : 1;
 
       if (diff < 0.05) {
         // < 5%: 取高优先级
-        return { resolution: 'highest_priority', resolvedValue: String(highPriorityValue) };
+        return {
+          resolution: 'highest_priority',
+          resolvedValue: String(highPriorityValue),
+        };
       } else if (diff <= 0.15) {
         // 5-15%: 加权平均
-        const weights = sources.map(s => this.SOURCE_PRIORITY[s.source] || 50);
+        const weights = sources.map(
+          (s) => this.SOURCE_PRIORITY[s.source] || 50,
+        );
         const totalWeight = weights.reduce((a, b) => a + b, 0);
-        const weighted = sources.reduce(
-          (sum, s, i) => sum + (Number(s.value) || 0) * weights[i],
-          0,
-        ) / totalWeight;
+        const weighted =
+          sources.reduce(
+            (sum, s, i) => sum + (Number(s.value) || 0) * weights[i],
+            0,
+          ) / totalWeight;
         return {
           resolution: 'weighted_average',
           resolvedValue: String(Math.round(weighted * 10) / 10),
         };
       } else {
         // > 15%: 需人工审核
-        return { resolution: 'needs_review', resolvedValue: String(highPriorityValue) };
+        return {
+          resolution: 'needs_review',
+          resolvedValue: String(highPriorityValue),
+        };
       }
     }
 
-    return { resolution: 'highest_priority', resolvedValue: String(highPriorityValue) };
+    return {
+      resolution: 'highest_priority',
+      resolvedValue: String(highPriorityValue),
+    };
   }
 }

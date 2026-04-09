@@ -82,7 +82,10 @@ export class OpenFoodFactsService {
       const url = `${this.baseUrl}/product/${barcode}`;
       const { data } = await firstValueFrom(
         this.httpService.get(url, {
-          params: { fields: 'code,product_name,product_name_en,product_name_zh,brands,categories_tags,nova_group,nutriscore_grade,nutriments,allergens_tags,image_url,image_small_url' },
+          params: {
+            fields:
+              'code,product_name,product_name_en,product_name_zh,brands,categories_tags,nova_group,nutriscore_grade,nutriments,allergens_tags,image_url,image_small_url',
+          },
           headers: { 'User-Agent': 'WuweiAI/1.0 (https://wuwei.ai)' },
         }),
       );
@@ -102,7 +105,11 @@ export class OpenFoodFactsService {
   /**
    * 关键字搜索
    */
-  async search(query: string, pageSize = 25, page = 1): Promise<{ foods: NormalizedFoodData[]; count: number }> {
+  async search(
+    query: string,
+    pageSize = 25,
+    page = 1,
+  ): Promise<{ foods: NormalizedFoodData[]; count: number }> {
     try {
       const { data } = await firstValueFrom(
         this.httpService.get(`${this.baseUrl}/search`, {
@@ -110,7 +117,8 @@ export class OpenFoodFactsService {
             search_terms: query,
             page_size: pageSize,
             page,
-            fields: 'code,product_name,product_name_en,product_name_zh,brands,categories_tags,nova_group,nutriscore_grade,nutriments,allergens_tags,image_url,image_small_url',
+            fields:
+              'code,product_name,product_name_en,product_name_zh,brands,categories_tags,nova_group,nutriscore_grade,nutriments,allergens_tags,image_url,image_small_url',
             json: 1,
           },
           headers: { 'User-Agent': 'WuweiAI/1.0 (https://wuwei.ai)' },
@@ -118,7 +126,9 @@ export class OpenFoodFactsService {
       );
 
       return {
-        foods: (data.products || []).map((p: OffProduct) => this.normalize(p)).filter(Boolean),
+        foods: (data.products || [])
+          .map((p: OffProduct) => this.normalize(p))
+          .filter(Boolean),
         count: data.count || 0,
       };
     } catch (e) {
@@ -129,17 +139,26 @@ export class OpenFoodFactsService {
 
   private normalize(product: OffProduct): NormalizedFoodData | null {
     const n = product.nutriments || {};
-    const calories = n['energy-kcal_100g'] || (n['energy-kj_100g'] ? n['energy-kj_100g'] / 4.184 : 0);
+    const calories =
+      n['energy-kcal_100g'] ||
+      (n['energy-kj_100g'] ? n['energy-kj_100g'] / 4.184 : 0);
     if (!calories || calories <= 0) return null;
 
-    const name = product.product_name_zh || product.product_name_en || product.product_name || '';
+    const name =
+      product.product_name_zh ||
+      product.product_name_en ||
+      product.product_name ||
+      '';
     if (!name) return null;
 
     // 映射分类
     let category: string | undefined;
     for (const tag of product.categories_tags || []) {
       const mapped = this.CATEGORY_MAP[tag];
-      if (mapped) { category = mapped; break; }
+      if (mapped) {
+        category = mapped;
+        break;
+      }
     }
 
     // 映射过敏原

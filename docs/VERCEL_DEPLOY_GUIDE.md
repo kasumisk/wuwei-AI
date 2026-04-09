@@ -5,12 +5,14 @@
 由于 Vercel CLI 存在 "Missing files" 的已知问题（特别是在 monorepo 项目中），**推荐使用 Git 推送自动部署**：
 
 ### 1. 确保项目已连接到 Git
+
 ```bash
 git remote -v
 # 应该看到你的 GitHub/GitLab 仓库
 ```
 
 ### 2. 推送代码触发部署
+
 ```bash
 git add .
 git commit -m "Update deployment configuration"
@@ -20,6 +22,7 @@ git push origin main
 Vercel 会自动检测推送并开始构建部署。
 
 ### 3. 在 Vercel Dashboard 查看部署状态
+
 - 访问 https://vercel.com/dashboard
 - 选择对应的项目
 - 查看 Deployments 标签页
@@ -40,7 +43,7 @@ cp -r .vercel-web .vercel
 vercel deploy --build-env ENABLE_SOURCE_MAPS=false
 # 部署成功后，在 Vercel Dashboard 手动将其提升到生产环境
 
-# Admin 项目  
+# Admin 项目
 cp -r .vercel-admin .vercel
 cp vercel.admin.json vercel.json
 vercel deploy --build-env ENABLE_SOURCE_MAPS=false
@@ -96,6 +99,7 @@ Vercel CLI 的 "Missing files" 错误通常由以下原因引起：
 ## 最佳实践
 
 ### 1. 优先使用 Git 推送部署
+
 - ✅ 更稳定可靠
 - ✅ 自动化程度高
 - ✅ 避免本地环境差异
@@ -104,6 +108,7 @@ Vercel CLI 的 "Missing files" 错误通常由以下原因引起：
 ### 2. 在 Vercel Dashboard 配置项目
 
 #### Web 项目设置
+
 1. 登录 https://vercel.com/dashboard
 2. 选择 `new-platform` 项目
 3. Settings → General → Build & Development Settings
@@ -113,6 +118,7 @@ Vercel CLI 的 "Missing files" 错误通常由以下原因引起：
    - **Root Directory**: `.` (保持为根目录)
 
 #### Admin 项目设置（如果已创建）
+
 1. 选择 `new-platform-admin` 项目
 2. Settings → General → Build & Development Settings
    - **Build Command**: `pnpm install --no-frozen-lockfile && pnpm turbo build --filter=@ai-platform/admin`
@@ -121,15 +127,18 @@ Vercel CLI 的 "Missing files" 错误通常由以下原因引起：
    - **Root Directory**: `.`
 
 ### 3. 使用环境变量
+
 在 Vercel Dashboard → Settings → Environment Variables 添加：
 
 **Web 项目**:
+
 ```
 NEXT_PUBLIC_API_URL=你的API地址
 NEXT_TELEMETRY_DISABLED=1
 ```
 
 **Admin 项目**:
+
 ```
 VITE_API_URL=你的API地址
 ```
@@ -161,6 +170,7 @@ chmod +x quick-deploy.sh
 ## 验证部署
 
 部署完成后访问：
+
 - **Web**: https://new-platform.vercel.app 或你的自定义域名
 - **Admin**: https://new-platform-admin.vercel.app 或自定义域名
 
@@ -176,6 +186,7 @@ chmod +x quick-deploy.sh
 4. 确认没有部署保护设置阻止部署
 
 如果仍然失败，考虑：
+
 - 重新连接 Git 仓库
 - 创建新的 Vercel 项目
 - 联系 Vercel 支持

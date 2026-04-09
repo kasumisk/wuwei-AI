@@ -13,12 +13,7 @@ import {
   Select,
   Switch,
 } from 'antd';
-import {
-  PlusOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  ReloadOutlined,
-} from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
 import {
@@ -46,19 +41,36 @@ const ChallengesPage: React.FC = () => {
   const actionRef = useRef<ActionType>(null);
 
   const createMutation = useCreateChallenge({
-    onSuccess: () => { message.success('创建成功'); setFormVisible(false); form.resetFields(); actionRef.current?.reload(); },
+    onSuccess: () => {
+      message.success('创建成功');
+      setFormVisible(false);
+      form.resetFields();
+      actionRef.current?.reload();
+    },
     onError: (e: any) => message.error(`创建失败: ${e.message}`),
   });
   const updateMutation = useUpdateChallenge({
-    onSuccess: () => { message.success('更新成功'); setFormVisible(false); setEditing(null); form.resetFields(); actionRef.current?.reload(); },
+    onSuccess: () => {
+      message.success('更新成功');
+      setFormVisible(false);
+      setEditing(null);
+      form.resetFields();
+      actionRef.current?.reload();
+    },
     onError: (e: any) => message.error(`更新失败: ${e.message}`),
   });
   const deleteMutation = useDeleteChallenge({
-    onSuccess: () => { message.success('已删除'); actionRef.current?.reload(); },
+    onSuccess: () => {
+      message.success('已删除');
+      actionRef.current?.reload();
+    },
     onError: (e: any) => message.error(`删除失败: ${e.message}`),
   });
   const toggleActiveMutation = useToggleChallengeActive({
-    onSuccess: () => { message.success('状态已更新'); actionRef.current?.reload(); },
+    onSuccess: () => {
+      message.success('状态已更新');
+      actionRef.current?.reload();
+    },
   });
 
   const handleEdit = (record: ChallengeDto) => {
@@ -79,8 +91,19 @@ const ChallengesPage: React.FC = () => {
   const columns: ProColumns<ChallengeDto>[] = [
     { title: '标题', dataIndex: 'title', width: 200 },
     { title: '描述', dataIndex: 'description', width: 250, ellipsis: true, search: false },
-    { title: '类型', dataIndex: 'type', width: 100, render: (v) => v ? <Tag>{v as string}</Tag> : '-' },
-    { title: '持续天数', dataIndex: 'durationDays', width: 80, search: false, render: (v) => `${v} 天` },
+    {
+      title: '类型',
+      dataIndex: 'type',
+      width: 100,
+      render: (v) => (v ? <Tag>{v as string}</Tag> : '-'),
+    },
+    {
+      title: '持续天数',
+      dataIndex: 'durationDays',
+      width: 80,
+      search: false,
+      render: (v) => `${v} 天`,
+    },
     {
       title: '状态',
       dataIndex: 'isActive',
@@ -96,16 +119,31 @@ const ChallengesPage: React.FC = () => {
         </Tag>
       ),
     },
-    { title: '参与人数', dataIndex: 'participantCount', width: 80, search: false, render: (v) => <Tag color="blue">{v as number}</Tag> },
+    {
+      title: '参与人数',
+      dataIndex: 'participantCount',
+      width: 80,
+      search: false,
+      render: (v) => <Tag color="blue">{v as number}</Tag>,
+    },
     {
       title: '操作',
       width: 120,
       search: false,
       render: (_, record) => (
         <Space>
-          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>编辑</Button>
+          <Button
+            type="link"
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => handleEdit(record)}
+          >
+            编辑
+          </Button>
           <Popconfirm title="确认删除？" onConfirm={() => deleteMutation.mutate(record.id)}>
-            <Button type="link" size="small" danger icon={<DeleteOutlined />}>删除</Button>
+            <Button type="link" size="small" danger icon={<DeleteOutlined />}>
+              删除
+            </Button>
           </Popconfirm>
         </Space>
       ),
@@ -128,17 +166,36 @@ const ChallengesPage: React.FC = () => {
         pagination={{ defaultPageSize: 20, showSizeChanger: true }}
         headerTitle="挑战列表"
         toolBarRender={() => [
-          <Button key="add" type="primary" icon={<PlusOutlined />} onClick={() => { setEditing(null); form.resetFields(); setFormVisible(true); }}>
+          <Button
+            key="add"
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => {
+              setEditing(null);
+              form.resetFields();
+              setFormVisible(true);
+            }}
+          >
             新增挑战
           </Button>,
-          <Button key="reload" icon={<ReloadOutlined />} onClick={() => actionRef.current?.reload()}>刷新</Button>,
+          <Button
+            key="reload"
+            icon={<ReloadOutlined />}
+            onClick={() => actionRef.current?.reload()}
+          >
+            刷新
+          </Button>,
         ]}
       />
 
       <Modal
         title={editing ? '编辑挑战' : '新增挑战'}
         open={formVisible}
-        onCancel={() => { setFormVisible(false); setEditing(null); form.resetFields(); }}
+        onCancel={() => {
+          setFormVisible(false);
+          setEditing(null);
+          form.resetFields();
+        }}
         onOk={handleSubmit}
         confirmLoading={createMutation.isPending || updateMutation.isPending}
       >
@@ -150,12 +207,15 @@ const ChallengesPage: React.FC = () => {
             <Input.TextArea rows={3} />
           </Form.Item>
           <Form.Item name="type" label="类型">
-            <Select allowClear options={[
-              { label: '连续打卡', value: 'streak' },
-              { label: '饮食控制', value: 'diet' },
-              { label: '运动', value: 'exercise' },
-              { label: '综合', value: 'comprehensive' },
-            ]} />
+            <Select
+              allowClear
+              options={[
+                { label: '连续打卡', value: 'streak' },
+                { label: '饮食控制', value: 'diet' },
+                { label: '运动', value: 'exercise' },
+                { label: '综合', value: 'comprehensive' },
+              ]}
+            />
           </Form.Item>
           <Form.Item name="durationDays" label="持续天数" rules={[{ required: true }]}>
             <InputNumber min={1} style={{ width: '100%' }} />

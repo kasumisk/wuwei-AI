@@ -1,10 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/hooks/use-auth';
-import { useFood } from '@/lib/hooks/use-food';
-import type { UserProfile, BehaviorProfile } from '@/lib/api/food';
+import { useAuth } from '@/features/auth/hooks/use-auth';
+import { useProfile } from '@/features/profile/hooks/use-profile';
 import { LocalizedLink } from '@/components/common/localized-link';
 
 const goalLabelMap: Record<string, string> = {
@@ -23,7 +22,13 @@ const activityLabelMap: Record<string, string> = {
 
 function ChevronRight() {
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20" className="text-muted-foreground">
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      width="20"
+      height="20"
+      className="text-muted-foreground"
+    >
       <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
     </svg>
   );
@@ -32,20 +37,11 @@ function ChevronRight() {
 export default function ProfilePage() {
   const router = useRouter();
   const { user, isLoggedIn, logout } = useAuth();
-  const { getProfile, getBehaviorProfile } = useFood();
+  const { profile, behaviorProfile } = useProfile();
 
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [behaviorProfile, setBehaviorProfile] = useState<BehaviorProfile | null>(null);
-
-  useEffect(() => {
-    if (!isLoggedIn) {
-      router.push('/login');
-      return;
-    }
-    getProfile().then(setProfile).catch(() => {});
-    getBehaviorProfile().then(setBehaviorProfile).catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoggedIn]);
+  if (!isLoggedIn) {
+    router.push('/login');
+  }
 
   const handleLogout = useCallback(async () => {
     await logout();
@@ -78,7 +74,6 @@ export default function ProfilePage() {
       </div>
 
       <main className="px-6 py-5 max-w-lg mx-auto pb-24 space-y-4">
-
         {/* 健康概览 */}
         {profile && (
           <div className="bg-card rounded-2xl p-4 grid grid-cols-4 gap-2">
@@ -91,11 +86,15 @@ export default function ProfilePage() {
               <p className="text-[11px] text-muted-foreground mt-0.5">体重 kg</p>
             </div>
             <div className="text-center border-l border-border/40">
-              <p className="text-base font-extrabold text-primary leading-5">{profile.goal ? goalLabelMap[profile.goal] : '--'}</p>
+              <p className="text-base font-extrabold text-primary leading-5">
+                {profile.goal ? goalLabelMap[profile.goal] : '--'}
+              </p>
               <p className="text-[11px] text-muted-foreground mt-0.5">目标</p>
             </div>
             <div className="text-center border-l border-border/40">
-              <p className="text-base font-extrabold text-primary leading-5">{profile.activityLevel ? activityLabelMap[profile.activityLevel] : '--'}</p>
+              <p className="text-base font-extrabold text-primary leading-5">
+                {profile.activityLevel ? activityLabelMap[profile.activityLevel] : '--'}
+              </p>
               <p className="text-[11px] text-muted-foreground mt-0.5">活动</p>
             </div>
           </div>
@@ -117,7 +116,9 @@ export default function ProfilePage() {
               <p className="text-[11px] text-muted-foreground mt-0.5">总记录数</p>
             </div>
             <div className="text-center border-l border-border/40">
-              <p className="text-xl font-extrabold text-primary">{Math.round(Number(behaviorProfile.avgComplianceRate) * 100)}%</p>
+              <p className="text-xl font-extrabold text-primary">
+                {Math.round(Number(behaviorProfile.avgComplianceRate) * 100)}%
+              </p>
               <p className="text-[11px] text-muted-foreground mt-0.5">健康率</p>
             </div>
           </div>
@@ -126,7 +127,7 @@ export default function ProfilePage() {
         {/* 菜单列表 */}
         <div className="bg-card rounded-2xl overflow-hidden divide-y divide-border/40">
           <LocalizedLink
-            href="/health-profile"
+            href="/profile/edit"
             className="flex items-center justify-between px-5 py-4 hover:bg-muted/50 transition-colors"
           >
             <div className="flex items-center gap-3">
@@ -134,7 +135,9 @@ export default function ProfilePage() {
               <div>
                 <p className="text-sm font-bold">健康档案</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {profile?.onboardingCompleted ? '身高 / 体重 / 目标 / 饮食习惯' : '未完善，点击填写'}
+                  {profile?.onboardingCompleted
+                    ? '身高 / 体重 / 目标 / 饮食习惯'
+                    : '未完善，点击填写'}
                 </p>
               </div>
             </div>

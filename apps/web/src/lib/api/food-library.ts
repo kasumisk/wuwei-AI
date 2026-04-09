@@ -52,7 +52,9 @@ async function unwrap<T>(promise: Promise<ApiResponse<T>>): Promise<T> {
 
 export const foodLibraryServerAPI = {
   search: async (q: string, limit = 20): Promise<FoodLibraryItem[]> => {
-    const result = await unwrap(clientGet<SearchResult>(`/foods/search?q=${encodeURIComponent(q)}&limit=${limit}`));
+    const result = await unwrap(
+      clientGet<SearchResult>(`/foods/search?q=${encodeURIComponent(q)}&limit=${limit}`)
+    );
     return result.items;
   },
 
@@ -68,8 +70,12 @@ export const foodLibraryServerAPI = {
     return unwrap(clientGet<FoodCategory[]>('/foods/categories'));
   },
 
-  getByName: async (name: string): Promise<{ food: FoodLibraryItem; related: FoodLibraryItem[] }> => {
-    const result = await unwrap(clientGet<FoodDetailResult>(`/foods/by-name/${encodeURIComponent(name)}`));
+  getByName: async (
+    name: string
+  ): Promise<{ food: FoodLibraryItem; related: FoodLibraryItem[] }> => {
+    const result = await unwrap(
+      clientGet<FoodDetailResult>(`/foods/by-name/${encodeURIComponent(name)}`)
+    );
     const { related, ...food } = result;
     return { food, related };
   },
@@ -84,7 +90,9 @@ export const foodLibraryServerAPI = {
 
 export const foodLibraryClientAPI = {
   search: async (q: string, limit = 20): Promise<FoodLibraryItem[]> => {
-    const result = await unwrap(clientGet<SearchResult>(`/foods/search?q=${encodeURIComponent(q)}&limit=${limit}`));
+    const result = await unwrap(
+      clientGet<SearchResult>(`/foods/search?q=${encodeURIComponent(q)}&limit=${limit}`)
+    );
     return result.items;
   },
 
@@ -100,12 +108,18 @@ export const foodLibraryClientAPI = {
     return unwrap(clientGet<FoodCategory[]>('/foods/categories'));
   },
 
-  addFromLibrary: async (foodLibraryId: string, servingGrams: number, mealType: string): Promise<unknown> => {
-    return unwrap(clientPost('/app/food/records/from-library', {
-      foodLibraryId,
-      servingGrams,
-      mealType,
-    }));
+  addFromLibrary: async (
+    foodLibraryId: string,
+    servingGrams: number,
+    mealType: string
+  ): Promise<unknown> => {
+    return unwrap(
+      clientPost('/app/food/records/from-library', {
+        foodLibraryId,
+        servingGrams,
+        mealType,
+      })
+    );
   },
 
   getFrequentFoods: async (limit = 10): Promise<FrequentFood[]> => {

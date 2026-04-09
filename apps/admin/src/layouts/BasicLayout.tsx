@@ -52,7 +52,7 @@ const Layout: React.FC = () => {
       }
 
       // 管理员用户拥有所有权限
-      const isAdmin = (user.role === 'admin' || user.role === 'super_admin');
+      const isAdmin = user.role === 'admin' || user.role === 'super_admin';
       if (isAdmin) {
         console.log('✅ 管理员用户，允许访问');
         return true;

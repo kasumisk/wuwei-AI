@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { HealthController } from './health.controller';
-import { ModelConfig } from '../entities/model-config.entity';
+import { ModelConfig } from '../modules/provider/entities/model-config.entity';
 
 @Module({
   imports: [TypeOrmModule.forFeature([ModelConfig])],

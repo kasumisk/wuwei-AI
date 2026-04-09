@@ -43,13 +43,7 @@ export default async function FoodDetailPage({
   try {
     const { food, related } = await foodLibraryServerAPI.getByName(decodedName);
 
-    return (
-      <FoodDetailClient
-        locale={locale}
-        food={food}
-        relatedFoods={related}
-      />
-    );
+    return <FoodDetailClient locale={locale} food={food} relatedFoods={related} />;
   } catch {
     notFound();
   }

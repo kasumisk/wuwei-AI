@@ -13,14 +13,14 @@ export const locales = {
     refresh: '刷新',
     loading: '加载中...',
     noData: '暂无数据',
-    
+
     // 菜单
     dashboard: '导航栏',
     userManagement: '用户管理',
     userList: '用户列表',
     userForm: '用户表单',
     settings: '系统设置',
-    
+
     // 表单标签
     username: '用户名',
     email: '邮箱',
@@ -30,20 +30,20 @@ export const locales = {
     birthDate: '出生日期',
     remark: '备注',
     status: '状态',
-    
+
     // 状态
     active: '活跃',
     inactive: '禁用',
     male: '男',
     female: '女',
-    
+
     // 消息
     'form.required': '此字段为必填项',
     'form.email.invalid': '请输入有效的邮箱地址',
     'operation.success': '操作成功',
     'operation.failed': '操作失败',
   },
-  
+
   'en-US': {
     // Common
     confirm: 'Confirm',
@@ -58,14 +58,14 @@ export const locales = {
     refresh: 'Refresh',
     loading: 'Loading...',
     noData: 'No Data',
-    
+
     // Menu
     dashboard: 'Dashboard',
     userManagement: 'User Management',
     userList: 'User List',
     userForm: 'User Form',
     settings: 'Settings',
-    
+
     // Form labels
     username: 'Username',
     email: 'Email',
@@ -75,13 +75,13 @@ export const locales = {
     birthDate: 'Birth Date',
     remark: 'Remark',
     status: 'Status',
-    
+
     // Status
     active: 'Active',
     inactive: 'Inactive',
     male: 'Male',
     female: 'Female',
-    
+
     // Messages
     'form.required': 'This field is required',
     'form.email.invalid': 'Please enter a valid email address',

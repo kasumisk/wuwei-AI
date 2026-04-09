@@ -7,7 +7,7 @@
 - **框架**: Next.js 15 (App Router)
 - **语言**: TypeScript
 - **样式**: Tailwind CSS + shadcn/ui
-- **状态管理**: 
+- **状态管理**:
   - Zustand (全局 UI 状态)
   - @tanstack/react-query (服务器状态)
 - **国际化**: next-intl
@@ -83,6 +83,7 @@ pnpm dlx shadcn@latest add dialog
 ## 🌍 国际化
 
 支持的语言：
+
 - 英语 (en)
 - 简体中文 (zh)
 
@@ -104,7 +105,7 @@ t('common.welcome');
 ```tsx
 import { ThemeToggle } from '@/components/common/theme-toggle';
 
-<ThemeToggle />
+<ThemeToggle />;
 ```
 
 ## 📱 PWA 支持

@@ -91,16 +91,28 @@ const UserDetailPage: React.FC = () => {
           }
           style={{ marginBottom: 16 }}
         />
-        
+
         <Card title="🔗 动态路由演示">
-          <p>这是一个动态路由页面，路径为 <code>/user/:id</code></p>
-          <p>当前请求的参数：<Tag color="blue">id = {id}</Tag></p>
+          <p>
+            这是一个动态路由页面，路径为 <code>/user/:id</code>
+          </p>
+          <p>
+            当前请求的参数：<Tag color="blue">id = {id}</Tag>
+          </p>
           <p>你可以尝试访问以下链接：</p>
           <ul>
-            <li><a href="/user/1">/user/1</a></li>
-            <li><a href="/user/2">/user/2</a></li>
-            <li><a href="/user/3">/user/3</a></li>
-            <li><a href="/user/999">/user/999</a> (不存在的用户)</li>
+            <li>
+              <a href="/user/1">/user/1</a>
+            </li>
+            <li>
+              <a href="/user/2">/user/2</a>
+            </li>
+            <li>
+              <a href="/user/3">/user/3</a>
+            </li>
+            <li>
+              <a href="/user/999">/user/999</a> (不存在的用户)
+            </li>
           </ul>
         </Card>
       </div>
@@ -121,10 +133,7 @@ const UserDetailPage: React.FC = () => {
         }
         extra={
           <Space>
-            <Button 
-              icon={<ArrowLeftOutlined />} 
-              onClick={() => navigate('/user/list')}
-            >
+            <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/user/list')}>
               返回列表
             </Button>
             <Button type="primary" icon={<EditOutlined />}>

@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/hooks/use-auth';
-import { useFood } from '@/lib/hooks/use-food';
+import { useAuth } from '@/features/auth/hooks/use-auth';
+import { profileService } from '@/lib/api/profile';
 import { useToast } from '@/lib/hooks/use-toast';
 
 /* ─── SVG Icon Components ─── */
@@ -44,23 +44,24 @@ type Step = 'phone' | 'code';
 export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const { sendPhoneCode, loginWithPhone, getWechatAuthUrl, loginWithWechatToken, loading } = useAuth();
-  const { getProfile } = useFood();
+  const { sendPhoneCode, loginWithPhone, getWechatAuthUrl, loginWithWechatToken, loading } =
+    useAuth();
 
   /** 登录成功后根据档案完成情况决定跳转目标 */
   const redirectAfterLogin = useCallback(async () => {
     try {
-      const profile = await getProfile();
+      const profile = await profileService.getProfile();
       if (profile?.onboardingCompleted) {
         router.push('/');
       } else {
-        router.push('/health-profile?from=onboarding');
+        const startStep = profile?.onboardingStep ?? 1;
+        router.push(`/onboarding?step=${startStep}`);
       }
     } catch {
       // 新用户尚未创建档案 → 引导填写
-      router.push('/health-profile?from=onboarding');
+      router.push('/onboarding');
     }
-  }, [getProfile, router]);
+  }, [router]);
 
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('');
@@ -90,7 +91,7 @@ export default function LoginPage() {
       const msg = err instanceof Error ? err.message : '操作失败，请重试';
       toast({ title: msg, variant: 'destructive' });
     },
-    [toast],
+    [toast]
   );
 
   /* ─── Handle WeChat OAuth callback token ─── */
@@ -109,7 +110,7 @@ export default function LoginPage() {
       window.history.replaceState({}, '', window.location.pathname);
       toast({ title: decodeURIComponent(errorMsg), variant: 'destructive' });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* ─── Send verification code ─── */
@@ -288,9 +289,7 @@ export default function LoginPage() {
                 />
                 <div className="text-center">
                   {countdown > 0 ? (
-                    <span className="text-sm text-muted-foreground">
-                      {countdown}s 后可重新发送
-                    </span>
+                    <span className="text-sm text-muted-foreground">{countdown}s 后可重新发送</span>
                   ) : (
                     <button
                       type="button"
@@ -355,11 +354,17 @@ export default function LoginPage() {
       <div className="fixed bottom-8 text-center w-full px-6">
         <p className="text-[10px] text-muted-foreground/60 font-medium tracking-tight">
           继续即表示您同意我们的{' '}
-          <a className="underline decoration-primary/30 hover:text-primary transition-colors" href="#">
+          <a
+            className="underline decoration-primary/30 hover:text-primary transition-colors"
+            href="#"
+          >
             隐私政策
           </a>{' '}
           和{' '}
-          <a className="underline decoration-primary/30 hover:text-primary transition-colors" href="#">
+          <a
+            className="underline decoration-primary/30 hover:text-primary transition-colors"
+            href="#"
+          >
             服务条款
           </a>
         </p>

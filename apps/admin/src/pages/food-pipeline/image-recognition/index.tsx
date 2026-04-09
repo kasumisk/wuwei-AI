@@ -14,12 +14,7 @@ import {
   Row,
   Col,
 } from 'antd';
-import {
-  PictureOutlined,
-  UploadOutlined,
-  LinkOutlined,
-  CameraOutlined,
-} from '@ant-design/icons';
+import { PictureOutlined, UploadOutlined, LinkOutlined, CameraOutlined } from '@ant-design/icons';
 import type { UploadFile } from 'antd';
 import {
   useRecognizeImage,
@@ -89,16 +84,14 @@ const ImageRecognitionPage: React.FC = () => {
       dataIndex: 'confidence',
       key: 'confidence',
       render: (v: number) => (
-        <Tag color={v > 0.8 ? 'green' : v > 0.5 ? 'orange' : 'red'}>
-          {(v * 100).toFixed(1)}%
-        </Tag>
+        <Tag color={v > 0.8 ? 'green' : v > 0.5 ? 'orange' : 'red'}>{(v * 100).toFixed(1)}%</Tag>
       ),
     },
     {
       title: '估算热量',
       dataIndex: 'estimatedCalories',
       key: 'estimatedCalories',
-      render: (v: number) => v ? `${v} kcal` : '-',
+      render: (v: number) => (v ? `${v} kcal` : '-'),
     },
     {
       title: '估算份量',
@@ -121,7 +114,13 @@ const ImageRecognitionPage: React.FC = () => {
       <Row gutter={[16, 16]}>
         {/* 上传图片 */}
         <Col xs={24} md={12}>
-          <Card title={<Space><UploadOutlined /> 上传图片识别</Space>}>
+          <Card
+            title={
+              <Space>
+                <UploadOutlined /> 上传图片识别
+              </Space>
+            }
+          >
             <Upload.Dragger
               accept="image/*"
               showUploadList={false}
@@ -139,7 +138,13 @@ const ImageRecognitionPage: React.FC = () => {
 
         {/* URL 识别 */}
         <Col xs={24} md={12}>
-          <Card title={<Space><LinkOutlined /> URL 图片识别</Space>}>
+          <Card
+            title={
+              <Space>
+                <LinkOutlined /> URL 图片识别
+              </Space>
+            }
+          >
             <Space direction="vertical" style={{ width: '100%' }}>
               <Input
                 placeholder="输入图片 URL"
@@ -171,12 +176,18 @@ const ImageRecognitionPage: React.FC = () => {
                 <img
                   src={previewSrc}
                   alt="food preview"
-                  style={{ width: '100%', maxHeight: 300, objectFit: 'contain', borderRadius: 8, border: '1px solid #f0f0f0' }}
+                  style={{
+                    width: '100%',
+                    maxHeight: 300,
+                    objectFit: 'contain',
+                    borderRadius: 8,
+                    border: '1px solid #f0f0f0',
+                  }}
                 />
               </Col>
             )}
             <Col xs={24} md={previewSrc ? 16 : 24}>
-              {(recognizeImage.isPending || recognizeByUrl.isPending) ? (
+              {recognizeImage.isPending || recognizeByUrl.isPending ? (
                 <div style={{ textAlign: 'center', padding: 40 }}>
                   <CameraOutlined style={{ fontSize: 32, color: '#1890ff' }} spin />
                   <div style={{ marginTop: 8 }}>

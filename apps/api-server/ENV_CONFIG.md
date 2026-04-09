@@ -66,10 +66,11 @@ REQUEST_RETRY_DELAY=1000
    - 签名生成算法问题 - 检查签名生成代码是否正确
 
 3. 调试401错误：
+
    ```bash
    # 启用更详细的日志
    LOG_LEVEL=debug npm run start
-   
+
    # 观察日志中的请求头和签名信息
    # 确保每个请求有正确的以下头信息：
    # - OK-ACCESS-PROJECT
@@ -90,12 +91,14 @@ REQUEST_RETRY_DELAY=1000
 ### 常见代理配置示例
 
 #### HTTP代理
+
 ```
 PROXY_HOST=127.0.0.1
 PROXY_PORT=7890
 ```
 
 #### 带认证的Socks5代理
+
 ```
 PROXY_HOST=127.0.0.1
 PROXY_PORT=1080
@@ -148,6 +151,7 @@ PROXY_PASSWORD=pass
 ### CORS 跨域问题
 
 如果遇到跨域问题，可以：
+
 1. 确保请求中包含 `origin=*` 参数
 2. 检查浏览器控制台中的具体错误信息
 3. 考虑使用代理服务器中转请求
@@ -155,6 +159,7 @@ PROXY_PASSWORD=pass
 ### 连接超时
 
 如果请求超时，可以尝试：
+
 1. 增加 REQUEST_TIMEOUT 环境变量的值
 2. 增加 REQUEST_RETRIES 次数
 3. 检查网络连接质量
@@ -163,6 +168,7 @@ PROXY_PASSWORD=pass
 ### 请求被拒绝
 
 对于授权错误，请确保以下内容正确：
+
 - API KEY格式正确
 - SECRET KEY未泄露
 - Passphrase与创建API时设置的一致
@@ -171,8 +177,9 @@ PROXY_PASSWORD=pass
 ### 检查连接状态
 
 可以使用健康检查API来验证服务连接状态：
+
 ```
 GET /api/okx/health
 ```
 
-这个端点会返回OKX API和Web3连接的健康状态。 
+这个端点会返回OKX API和Web3连接的健康状态。
