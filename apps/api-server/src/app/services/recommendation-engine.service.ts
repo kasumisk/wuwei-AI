@@ -3,6 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { FoodLibrary } from '../../entities/food-library.entity';
 import { FoodRecord } from '../../entities/food-record.entity';
+import { RecommendationFeedback } from '../../entities/recommendation-feedback.entity';
+import { GoalType } from './nutrition-score.service';
 
 // ==================== 类型 ====================
 
@@ -40,8 +42,6 @@ export interface MealRecommendation {
   tip: string;
 }
 
-type GoalType = 'fat_loss' | 'muscle_gain' | 'health' | 'habit';
-
 // ==================== 评分权重 ====================
 
 const SCORE_WEIGHTS: Record<GoalType, number[]> = {
@@ -52,40 +52,42 @@ const SCORE_WEIGHTS: Record<GoalType, number[]> = {
   habit:               [0.20, 0.15,    0.10,  0.10, 0.25,   0.20],
 };
 
-// ==================== 食物品质/饱腹分推导 ====================
+// ==================== 食物品质/饱腹分推导（对齐 FoodCategory 英文枚举） ====================
 
 const CATEGORY_QUALITY: Record<string, number> = {
-  '蔬菜': 8, '水果': 7, '豆制品': 7, '汤类': 6,
-  '肉类': 6, '主食': 5, '快餐': 3, '零食': 2, '饮品': 3,
+  veggie: 8, fruit: 7, dairy: 7, protein: 6,
+  grain: 5, composite: 4, snack: 2, beverage: 3,
+  fat: 3, condiment: 3,
 };
 
 const CATEGORY_SATIETY: Record<string, number> = {
-  '肉类': 7, '主食': 7, '豆制品': 6, '蔬菜': 5,
-  '汤类': 4, '水果': 3, '快餐': 5, '零食': 2, '饮品': 2,
+  protein: 7, grain: 7, dairy: 6, veggie: 5,
+  composite: 5, fruit: 3, snack: 2, beverage: 2,
+  fat: 3, condiment: 1,
 };
 
-// ==================== 餐次偏好策略 ====================
+// ==================== 餐次偏好策略（对齐 FoodLibrary.tags 英文标签） ====================
 
 const MEAL_PREFERENCES: Record<string, { includeTags: string[]; excludeTags: string[] }> = {
   breakfast: {
-    includeTags: ['早餐', '高碳水', '易消化'],
-    excludeTags: ['油炸', '重口味'],
+    includeTags: ['breakfast', 'high_carb', 'easy_digest'],
+    excludeTags: ['fried', 'heavy_flavor'],
   },
   lunch: {
-    includeTags: ['均衡'],
+    includeTags: ['balanced'],
     excludeTags: [],
   },
   dinner: {
-    includeTags: ['低碳水', '高蛋白', '清淡'],
-    excludeTags: ['高碳水', '甜品'],
+    includeTags: ['low_carb', 'high_protein', 'light'],
+    excludeTags: ['high_carb', 'dessert'],
   },
   snack: {
-    includeTags: ['低热量', '零食', '水果'],
-    excludeTags: ['油炸', '高脂肪'],
+    includeTags: ['low_calorie', 'snack', 'fruit'],
+    excludeTags: ['fried', 'high_fat'],
   },
 };
 
-// ==================== 角色模板（结构化选菜） ====================
+// ==================== 角色模板（结构化选菜，对齐 FoodCategory 英文枚举） ====================
 
 const MEAL_ROLES: Record<string, string[]> = {
   breakfast: ['carb', 'protein', 'side'],
@@ -95,12 +97,12 @@ const MEAL_ROLES: Record<string, string[]> = {
 };
 
 const ROLE_CATEGORIES: Record<string, string[]> = {
-  carb:    ['主食'],
-  protein: ['肉类', '豆制品'],
-  veggie:  ['蔬菜'],
-  side:    ['汤类', '蔬菜', '豆制品', '饮品'],
-  snack1:  ['水果', '零食'],
-  snack2:  ['饮品', '零食', '水果'],
+  carb:    ['grain', 'composite'],
+  protein: ['protein', 'dairy'],
+  veggie:  ['veggie'],
+  side:    ['veggie', 'dairy', 'beverage', 'fruit'],
+  snack1:  ['fruit', 'snack'],
+  snack2:  ['beverage', 'snack', 'fruit'],
 };
 
 @Injectable()
@@ -112,6 +114,8 @@ export class RecommendationEngineService {
     private readonly foodLibraryRepo: Repository<FoodLibrary>,
     @InjectRepository(FoodRecord)
     private readonly foodRecordRepo: Repository<FoodRecord>,
+    @InjectRepository(RecommendationFeedback)
+    private readonly feedbackRepo: Repository<RecommendationFeedback>,
   ) {}
 
   // ─── 1. 约束生成（含用户档案融合） ───
@@ -122,16 +126,22 @@ export class RecommendationEngineService {
     target: MealTarget,
     dailyTarget: { calories: number; protein: number },
     mealType?: string,
-    userProfile?: { dietaryRestrictions?: string[]; weakTimeSlots?: string[]; discipline?: string },
+    userProfile?: {
+      dietaryRestrictions?: string[];
+      weakTimeSlots?: string[];
+      discipline?: string;
+      allergens?: string[];
+      healthConditions?: string[];
+    },
   ): Constraint {
     const includeTags: string[] = [];
     const excludeTags: string[] = [];
 
     // 目标驱动
     if (goalType === 'fat_loss') {
-      includeTags.push('高蛋白');
+      includeTags.push('high_protein');
     } else if (goalType === 'muscle_gain') {
-      includeTags.push('高蛋白');
+      includeTags.push('high_protein');
     } else if (goalType === 'health') {
       // health 不强制 tags，保持多样
     }
@@ -140,11 +150,11 @@ export class RecommendationEngineService {
     const proteinGap = dailyTarget.protein - consumed.protein;
     const calorieGap = dailyTarget.calories - consumed.calories;
 
-    if (proteinGap > 30) includeTags.push('高蛋白');
-    if (calorieGap < 300) includeTags.push('低热量');
+    if (proteinGap > 30) includeTags.push('high_protein');
+    if (calorieGap < 300) includeTags.push('low_calorie');
     if (calorieGap < 0) {
-      includeTags.push('超低热量');
-      excludeTags.push('高脂肪');
+      includeTags.push('ultra_low_calorie');
+      excludeTags.push('high_fat');
     }
 
     // 餐次偏好策略
@@ -158,13 +168,41 @@ export class RecommendationEngineService {
 
     // 用户档案约束融合
     if (userProfile) {
+      // ⚠️ 过敏原 → 硬约束排除（安全性优先，不可被探索覆盖）
+      if (userProfile.allergens?.length) {
+        for (const allergen of userProfile.allergens) {
+          excludeTags.push(`allergen_${allergen}`);
+        }
+      }
+
+      // 健康状况 → 动态约束注入
+      if (userProfile.healthConditions?.length) {
+        for (const condition of userProfile.healthConditions) {
+          if (condition === 'diabetes_type2') {
+            excludeTags.push('high_sugar', 'high_gi');
+            includeTags.push('low_gi');
+          } else if (condition === 'hypertension') {
+            excludeTags.push('high_sodium');
+            includeTags.push('low_sodium');
+          } else if (condition === 'high_cholesterol') {
+            excludeTags.push('high_cholesterol');
+          } else if (condition === 'gout') {
+            excludeTags.push('high_purine');
+          } else if (condition === 'kidney_disease') {
+            excludeTags.push('high_potassium', 'high_phosphorus');
+          } else if (condition === 'fatty_liver') {
+            excludeTags.push('high_fat', 'high_sugar');
+          }
+        }
+      }
+
       // 饮食限制 → 排除标签
       if (userProfile.dietaryRestrictions?.length) {
         for (const restriction of userProfile.dietaryRestrictions) {
-          if (restriction === 'vegetarian') excludeTags.push('肉类');
-          else if (restriction === 'no_spicy') excludeTags.push('重口味');
-          else if (restriction === 'no_fried') excludeTags.push('油炸');
-          else if (restriction === 'low_sodium') excludeTags.push('高钠');
+          if (restriction === 'vegetarian') excludeTags.push('meat');
+          else if (restriction === 'no_spicy') excludeTags.push('heavy_flavor');
+          else if (restriction === 'no_fried') excludeTags.push('fried');
+          else if (restriction === 'low_sodium') excludeTags.push('high_sodium');
           else excludeTags.push(restriction);
         }
       }
@@ -178,8 +216,8 @@ export class RecommendationEngineService {
         return false;
       });
       if (isWeakSlot) {
-        excludeTags.push('高脂肪', '高碳水', '甜品');
-        includeTags.push('低热量');
+        excludeTags.push('high_fat', 'high_carb', 'dessert');
+        includeTags.push('low_calorie');
       }
 
       // 自律程度 → 约束松紧度
@@ -187,7 +225,7 @@ export class RecommendationEngineService {
         // 低自律：更宽松，避免过度限制导致放弃
       } else if (userProfile.discipline === 'high') {
         // 高自律：可以更严格
-        if (goalType === 'fat_loss') excludeTags.push('加工');
+        if (goalType === 'fat_loss') excludeTags.push('processed');
       }
     }
 
@@ -201,14 +239,20 @@ export class RecommendationEngineService {
 
   // ─── 2. 食物筛选（宽松匹配: 命中任一 includeTag 即可 + 结构化 mealType 过滤） ───
 
-  filterFoods(foods: FoodLibrary[], constraint: Constraint, mealType?: string): FoodLibrary[] {
+  filterFoods(foods: FoodLibrary[], constraint: Constraint, mealType?: string, userAllergens?: string[]): FoodLibrary[] {
     return foods.filter(food => {
       const tags = food.tags || [];
 
       // mealType 结构化过滤：食物有 mealTypes 字段时优先使用
       if (mealType) {
-        const foodMealTypes: string[] = (food as any).mealTypes || [];
+        const foodMealTypes: string[] = food.mealTypes || [];
         if (foodMealTypes.length > 0 && !foodMealTypes.includes(mealType)) return false;
+      }
+
+      // ⚠️ 过敏原直接匹配：基于食物自身 allergens 字段排除（安全优先）
+      if (userAllergens?.length) {
+        const foodAllergens: string[] = food.allergens || [];
+        if (userAllergens.some(a => foodAllergens.includes(a))) return false;
       }
 
       // includeTag: 至少命中一个（宽松）
@@ -237,24 +281,33 @@ export class RecommendationEngineService {
     });
   }
 
-  // ─── 3. 食物评分（使用食物级别 qualityScore/satietyScore，带惩罚/加分项） ───
+  // ─── 3. 食物评分（非线性多维评分，带惩罚/加分项） ───
 
-  scoreFood(food: FoodLibrary, goalType: string): number {
-    const normalize = (v: number, max: number) => Math.min(v / max, 1);
-
+  scoreFood(food: FoodLibrary, goalType: string, target?: MealTarget): number {
     const servingCal = (food.calories * food.standardServingG) / 100;
     const servingProtein = ((food.protein || 0) * food.standardServingG) / 100;
     const servingCarbs = ((food.carbs || 0) * food.standardServingG) / 100;
     const servingFat = ((food.fat || 0) * food.standardServingG) / 100;
 
     // 食物级别分数优先，分类级别兜底
-    const quality = (food as any).qualityScore || CATEGORY_QUALITY[food.category] || 5;
-    const satiety = (food as any).satietyScore || CATEGORY_SATIETY[food.category] || 4;
+    const quality = food.qualityScore || CATEGORY_QUALITY[food.category] || 5;
+    const satiety = food.satietyScore || CATEGORY_SATIETY[food.category] || 4;
 
-    const caloriesScore = 1 - normalize(servingCal, 800);
-    const proteinScore = normalize(servingProtein, 50);
-    const carbsScore = 1 - normalize(servingCarbs, 100);
-    const fatScore = 1 - normalize(servingFat, 50);
+    // ── 热量评分：钟形函数（替代线性递减）──
+    const targetCal = target?.calories || 400;
+    const caloriesScore = this.calcEnergyScore(servingCal, targetCal, goalType);
+
+    // ── 蛋白质评分：分段函数（有达标区间）──
+    const proteinScore = this.calcProteinScore(servingProtein, servingCal, goalType);
+
+    // ── 碳水/脂肪：保持区间评分 ──
+    const carbsScore = servingCal > 0
+      ? this.rangeScore((servingCarbs * 4) / servingCal, 0.40, 0.55)
+      : 0.5;
+    const fatScore = servingCal > 0
+      ? this.rangeScore((servingFat * 9) / servingCal, 0.20, 0.35)
+      : 0.5;
+
     const qualityScore = quality / 10;
     const satietyScore = satiety / 10;
 
@@ -266,24 +319,87 @@ export class RecommendationEngineService {
     let rawScore = scores.reduce((sum, s, i) => sum + s * weights[i], 0);
 
     // 加工食品/油炸惩罚
-    if ((food as any).isProcessed) rawScore -= 0.06;
-    if ((food as any).isFried)     rawScore -= 0.08;
+    if (food.isProcessed) rawScore -= 0.06;
+    if (food.isFried)     rawScore -= 0.08;
+
+    // NOVA-4 超加工额外惩罚
+    if (food.processingLevel === 4) rawScore -= 0.05;
 
     // 高纤维加分（每100g 纤维 >3g 加 0.03）
-    const fiber = (food as any).fiber || 0;
+    const fiber = food.fiber || 0;
     if (fiber >= 3) rawScore += 0.03;
 
     // 高钠惩罚（每100g 钠 >600mg 扣 0.03）
-    const sodium = (food as any).sodium || 0;
+    const sodium = food.sodium || 0;
     if (sodium > 600) rawScore -= 0.03;
 
+    // 反式脂肪惩罚
+    const transFat = food.transFat || 0;
+    if (transFat > 0.5) rawScore -= 0.05;
+
     // 低GI加分（减脂/健康目标下 GI<55 加 0.02）
-    const gi = (food as any).glycemicIndex || 0;
+    const gi = food.glycemicIndex || 0;
     if (gi > 0 && gi < 55 && (goalType === 'fat_loss' || goalType === 'health')) {
       rawScore += 0.02;
     }
 
     return Math.max(0, rawScore * (0.7 + 0.3 * confidence));
+  }
+
+  // ─── 评分辅助函数 ───
+
+  /**
+   * 热量评分 — 高斯钟形函数
+   * 以目标热量为中心，偏离越大分数越低。σ 根据目标类型动态调整。
+   * 返回 0-1 范围的分数。
+   */
+  private calcEnergyScore(actual: number, target: number, goalType: string): number {
+    if (target <= 0) return 0.8;
+    const sigmaRatio: Record<string, number> = {
+      fat_loss: 0.12, muscle_gain: 0.20, health: 0.15, habit: 0.25,
+    };
+    const sigma = target * (sigmaRatio[goalType] || 0.15);
+    const diff = actual - target;
+    let score = Math.exp(-(diff * diff) / (2 * sigma * sigma));
+
+    // 非对称惩罚：减脂超标扣更重，增肌不足扣更重
+    if (goalType === 'fat_loss' && diff > 0) {
+      score *= 0.85;
+    }
+    if (goalType === 'muscle_gain' && diff < 0) {
+      score *= 0.90;
+    }
+    return score;
+  }
+
+  /**
+   * 蛋白质评分 — 分段函数
+   * 不足区线性增长，达标区满分，超标区缓慢下降。返回 0-1 范围。
+   */
+  private calcProteinScore(protein: number, calories: number, goalType: string): number {
+    if (calories <= 0) return 0.8;
+    const ratio = (protein * 4) / calories;
+    const ranges: Record<string, [number, number]> = {
+      fat_loss:    [0.25, 0.35],
+      muscle_gain: [0.25, 0.40],
+      health:      [0.15, 0.25],
+      habit:       [0.12, 0.30],
+    };
+    const [min, max] = ranges[goalType] || [0.15, 0.25];
+
+    if (ratio >= min && ratio <= max) return 1.0;
+    if (ratio < min) return Math.max(0, 0.3 + 0.7 * (ratio / min));
+    // 超标区 — 蛋白质多一些问题不大，缓慢衰减
+    return Math.max(0, 1.0 - 0.5 * ((ratio - max) / 0.15));
+  }
+
+  /**
+   * 区间评分 — 在 [min, max] 范围内满分，偏离越远分数越低
+   */
+  private rangeScore(value: number, min: number, max: number): number {
+    if (value >= min && value <= max) return 1.0;
+    const diff = value < min ? min - value : value - max;
+    return Math.max(0, 1.0 - diff * 2);
   }
 
   // ─── 4. 多样性控制 ───
@@ -316,7 +432,7 @@ export class RecommendationEngineService {
     return result;
   }
 
-  // ─── 5. 核心推荐函数 ───
+  // ─── 5. 核心推荐函数（供外部实时调用，内部委托 recommendMealFromPool） ───
 
   async recommendMeal(
     userId: string,
@@ -325,65 +441,32 @@ export class RecommendationEngineService {
     consumed: { calories: number; protein: number },
     target: MealTarget,
     dailyTarget: { calories: number; protein: number },
+    userProfile?: {
+      dietaryRestrictions?: string[];
+      weakTimeSlots?: string[];
+      discipline?: string;
+      allergens?: string[];
+      healthConditions?: string[];
+    },
   ): Promise<MealRecommendation> {
-    // 从数据库获取所有食物
-    const allFoods = await this.foodLibraryRepo.find({ where: { isVerified: true } });
+    const [allFoods, recentFoodNames, feedbackWeights] = await Promise.all([
+      this.getAllFoods(),
+      this.getRecentFoodNames(userId, 3),
+      this.getUserFeedbackWeights(userId),
+    ]);
 
-    // 约束生成
-    const constraints = this.generateConstraints(goalType, consumed, target, dailyTarget, mealType);
-
-    // 筛选（传递 mealType 进行结构化过滤）
-    let candidates = this.filterFoods(allFoods, constraints, mealType);
-
-    // 如果筛选太严没有候选，放宽 includeTags
-    if (candidates.length < 5) {
-      candidates = this.filterFoods(allFoods, { ...constraints, includeTags: [] }, mealType);
-    }
-
-    // 评分排序
-    const scored: ScoredFood[] = candidates.map(food => {
-      const servingCalories = Math.round((food.calories * food.standardServingG) / 100);
-      const servingProtein = Math.round(((food.protein || 0) * food.standardServingG) / 100);
-      const servingFat = Math.round(((food.fat || 0) * food.standardServingG) / 100);
-      const servingCarbs = Math.round(((food.carbs || 0) * food.standardServingG) / 100);
-
-      return {
-        food,
-        score: this.scoreFood(food, goalType),
-        servingCalories,
-        servingProtein,
-        servingFat,
-        servingCarbs,
-      };
-    }).sort((a, b) => b.score - a.score);
-
-    // 获取最近吃过的食物名
-    const recentFoodNames = await this.getRecentFoodNames(userId, 3);
-
-    // 多样化
-    const picks = this.diversify(scored, recentFoodNames, 3);
-
-    // 聚合
-    const totalCalories = picks.reduce((s, p) => s + p.servingCalories, 0);
-    const totalProtein = picks.reduce((s, p) => s + p.servingProtein, 0);
-    const totalFat = picks.reduce((s, p) => s + p.servingFat, 0);
-    const totalCarbs = picks.reduce((s, p) => s + p.servingCarbs, 0);
-
-    const displayText = picks
-      .map(p => `${p.food.name}（${p.food.standardServingDesc}，${p.servingCalories}kcal）`)
-      .join(' + ');
-
-    const tip = this.buildTip(mealType, goalType, target, totalCalories);
-
-    return {
-      foods: picks,
-      totalCalories,
-      totalProtein,
-      totalFat,
-      totalCarbs,
-      displayText,
-      tip,
-    };
+    return this.recommendMealFromPool(
+      allFoods,
+      mealType,
+      goalType,
+      consumed,
+      target,
+      dailyTarget,
+      recentFoodNames,
+      undefined,
+      feedbackWeights,
+      userProfile,
+    );
   }
 
   // ─── 6. 场景化推荐（外卖/便利店/家里） ───
@@ -395,14 +478,23 @@ export class RecommendationEngineService {
     consumed: { calories: number; protein: number },
     target: MealTarget,
     dailyTarget: { calories: number; protein: number },
+    userProfile?: {
+      dietaryRestrictions?: string[];
+      weakTimeSlots?: string[];
+      discipline?: string;
+      allergens?: string[];
+      healthConditions?: string[];
+    },
   ): Promise<{
     takeout: MealRecommendation;
     convenience: MealRecommendation;
     homeCook: MealRecommendation;
   }> {
-    const allFoods = await this.foodLibraryRepo.find({ where: { isVerified: true } });
+    const allFoods = await this.getAllFoods();
     const recentFoodNames = await this.getRecentFoodNames(userId, 3);
-    const baseConstraints = this.generateConstraints(goalType, consumed, target, dailyTarget);
+    const baseConstraints = this.generateConstraints(goalType, consumed, target, dailyTarget, undefined, userProfile);
+
+    const userAllergens = userProfile?.allergens;
 
     const buildForScenario = (scenarioTags: string[], scenarioName: string): MealRecommendation => {
       const constraints: Constraint = {
@@ -410,44 +502,57 @@ export class RecommendationEngineService {
         includeTags: [...new Set([...baseConstraints.includeTags, ...scenarioTags])],
       };
 
-      let candidates = this.filterFoods(allFoods, constraints, mealType);
+      let candidates = this.filterFoods(allFoods, constraints, mealType, userAllergens);
       if (candidates.length < 3) {
-        candidates = this.filterFoods(allFoods, { ...constraints, includeTags: scenarioTags }, mealType);
+        candidates = this.filterFoods(allFoods, { ...constraints, includeTags: scenarioTags }, mealType, userAllergens);
       }
       if (candidates.length < 3) {
-        candidates = this.filterFoods(allFoods, { ...baseConstraints, includeTags: [] }, mealType);
+        candidates = this.filterFoods(allFoods, { ...baseConstraints, includeTags: [] }, mealType, userAllergens);
       }
 
-      const scored: ScoredFood[] = candidates.map(food => ({
-        food,
-        score: this.scoreFood(food, goalType),
-        servingCalories: Math.round((food.calories * food.standardServingG) / 100),
-        servingProtein: Math.round(((food.protein || 0) * food.standardServingG) / 100),
-        servingFat: Math.round(((food.fat || 0) * food.standardServingG) / 100),
-        servingCarbs: Math.round(((food.carbs || 0) * food.standardServingG) / 100),
-      })).sort((a, b) => b.score - a.score);
-
+      const scored = this.scoreFoodsWithServing(candidates, goalType, target);
       const picks = this.diversify(scored, recentFoodNames, 2);
-      const totalCalories = picks.reduce((s, p) => s + p.servingCalories, 0);
-      const totalProtein = picks.reduce((s, p) => s + p.servingProtein, 0);
-      const totalFat = picks.reduce((s, p) => s + p.servingFat, 0);
-      const totalCarbs = picks.reduce((s, p) => s + p.servingCarbs, 0);
-
-      return {
-        foods: picks,
-        totalCalories,
-        totalProtein,
-        totalFat,
-        totalCarbs,
-        displayText: picks.map(p => p.food.name).join(' + '),
-        tip: `${scenarioName}推荐，约 ${totalCalories} kcal`,
-      };
+      return this.aggregateMealResult(picks, `${scenarioName}推荐，约 ${picks.reduce((s, p) => s + p.servingCalories, 0)} kcal`);
     };
 
     return {
-      takeout: buildForScenario(['外卖', '快餐'], '外卖'),
-      convenience: buildForScenario(['低热量', '零食', '饮品'], '便利店'),
-      homeCook: buildForScenario(['天然', '蔬菜', '肉类'], '在家做'),
+      takeout: buildForScenario(['takeout', 'fast_food'], '外卖'),
+      convenience: buildForScenario(['low_calorie', 'snack', 'beverage'], '便利店'),
+      homeCook: buildForScenario(['natural', 'veggie', 'protein'], '在家做'),
+    };
+  }
+
+  // ─── 辅助：批量评分 + 按标准份量计算营养 ───
+
+  private scoreFoodsWithServing(candidates: FoodLibrary[], goalType: string, target?: MealTarget): ScoredFood[] {
+    return candidates.map(food => ({
+      food,
+      score: this.scoreFood(food, goalType, target),
+      ...this.calcServingNutrition(food),
+    })).sort((a, b) => b.score - a.score);
+  }
+
+  // ─── 辅助：聚合推荐结果 ───
+
+  private aggregateMealResult(picks: ScoredFood[], tip: string): MealRecommendation {
+    const totalCalories = picks.reduce((s, p) => s + p.servingCalories, 0);
+    const totalProtein = picks.reduce((s, p) => s + p.servingProtein, 0);
+    const totalFat = picks.reduce((s, p) => s + p.servingFat, 0);
+    const totalCarbs = picks.reduce((s, p) => s + p.servingCarbs, 0);
+    const displayText = picks
+      .map(p => `${p.food.name}（${p.food.standardServingDesc}，${p.servingCalories}kcal）`)
+      .join(' + ');
+    return { foods: picks, totalCalories, totalProtein, totalFat, totalCarbs, displayText, tip };
+  }
+
+  // ─── 辅助：按标准份量计算食物营养 ───
+
+  private calcServingNutrition(food: FoodLibrary): Pick<ScoredFood, 'servingCalories' | 'servingProtein' | 'servingFat' | 'servingCarbs'> {
+    return {
+      servingCalories: Math.round((food.calories * food.standardServingG) / 100),
+      servingProtein: Math.round(((food.protein || 0) * food.standardServingG) / 100),
+      servingFat: Math.round(((food.fat || 0) * food.standardServingG) / 100),
+      servingCarbs: Math.round(((food.carbs || 0) * food.standardServingG) / 100),
     };
   }
 
@@ -458,13 +563,13 @@ export class RecommendationEngineService {
     if (a.category === b.category) score += 0.3;
 
     // 主要食材相同 → 高相似度
-    const mainA = (a as any).mainIngredient || '';
-    const mainB = (b as any).mainIngredient || '';
+    const mainA = a.mainIngredient || '';
+    const mainB = b.mainIngredient || '';
     if (mainA && mainB && mainA === mainB) score += 0.5;
 
     // 子分类相同
-    const subA = (a as any).subCategory || '';
-    const subB = (b as any).subCategory || '';
+    const subA = a.subCategory || '';
+    const subB = b.subCategory || '';
     if (subA && subB && subA === subB) score += 0.2;
 
     // tag 重叠
@@ -477,20 +582,42 @@ export class RecommendationEngineService {
 
   // ─── 7.1 份量调整（缩放到目标预算） ───
 
+  /**
+   * 份量调整 — 优先使用 commonPortions 约束，兜底线性缩放
+   * 每个食物的缩放比例被 commonPortions 的最小/最大份量限制，避免不合理份量。
+   */
   private adjustPortions(picks: ScoredFood[], budget: number): ScoredFood[] {
     const totalCal = picks.reduce((s, p) => s + p.servingCalories, 0);
     if (totalCal <= 0) return picks;
 
-    const ratio = Math.max(0.6, Math.min(1.5, budget / totalCal));
-    if (Math.abs(ratio - 1) < 0.05) return picks; // 差距小于5%不调整
+    const globalRatio = budget / totalCal;
+    if (Math.abs(globalRatio - 1) < 0.05) return picks; // 差距小于5%不调整
 
-    return picks.map(p => ({
-      ...p,
-      servingCalories: Math.round(p.servingCalories * ratio),
-      servingProtein: Math.round(p.servingProtein * ratio),
-      servingFat: Math.round(p.servingFat * ratio),
-      servingCarbs: Math.round(p.servingCarbs * ratio),
-    }));
+    return picks.map(p => {
+      // 确定该食物的合理缩放范围
+      const portions = p.food.commonPortions || [];
+      let minRatio = 0.6;
+      let maxRatio = 1.5;
+
+      if (portions.length > 0) {
+        const standardG = p.food.standardServingG || 100;
+        const portionGrams = portions.map(pt => pt.grams);
+        const minG = Math.min(...portionGrams);
+        const maxG = Math.max(...portionGrams);
+        minRatio = Math.max(0.5, minG / standardG);
+        maxRatio = Math.min(2.0, maxG / standardG);
+      }
+
+      const clampedRatio = Math.max(minRatio, Math.min(maxRatio, globalRatio));
+
+      return {
+        ...p,
+        servingCalories: Math.round(p.servingCalories * clampedRatio),
+        servingProtein: Math.round(p.servingProtein * clampedRatio),
+        servingFat: Math.round(p.servingFat * clampedRatio),
+        servingCarbs: Math.round(p.servingCarbs * clampedRatio),
+      };
+    });
   }
 
   diversifyWithPenalty(
@@ -545,9 +672,17 @@ export class RecommendationEngineService {
     dailyTarget: { calories: number; protein: number },
     excludeNames: string[],
     userPreferences?: { loves?: string[]; avoids?: string[] },
+    feedbackWeights?: Record<string, number>,
+    userProfile?: {
+      dietaryRestrictions?: string[];
+      weakTimeSlots?: string[];
+      discipline?: string;
+      allergens?: string[];
+      healthConditions?: string[];
+    },
   ): MealRecommendation {
-    // 约束生成（带餐次策略）
-    const constraints = this.generateConstraints(goalType, consumed, target, dailyTarget, mealType);
+    // 约束生成（带餐次策略 + 用户档案融合）
+    const constraints = this.generateConstraints(goalType, consumed, target, dailyTarget, mealType, userProfile);
 
     // 获取当前餐次的角色模板
     const roles = MEAL_ROLES[mealType] || ['carb', 'protein', 'veggie'];
@@ -563,7 +698,7 @@ export class RecommendationEngineService {
 
       // 对角色候选做 mealType 过滤
       roleCandidates = roleCandidates.filter(f => {
-        const foodMealTypes: string[] = (f as any).mealTypes || [];
+        const foodMealTypes: string[] = f.mealTypes || [];
         return foodMealTypes.length === 0 || foodMealTypes.includes(mealType);
       });
 
@@ -575,6 +710,14 @@ export class RecommendationEngineService {
         });
       }
 
+      // ⚠️ 过敏原直接匹配过滤（安全性：基于食物自身的 allergens 字段）
+      if (userProfile?.allergens?.length) {
+        roleCandidates = roleCandidates.filter(f => {
+          const foodAllergens: string[] = f.allergens || [];
+          return !userProfile.allergens!.some(a => foodAllergens.includes(a));
+        });
+      }
+
       // 如果角色候选为空，放宽到所有未使用的食物
       if (roleCandidates.length === 0) {
         roleCandidates = allFoods.filter(f => !usedNames.has(f.name));
@@ -582,12 +725,12 @@ export class RecommendationEngineService {
 
       // 评分 + 偏好加权
       let scored: ScoredFood[] = roleCandidates.map(food => {
-        let score = this.scoreFood(food, goalType);
+        let score = this.scoreFood(food, goalType, target);
 
         // 个性化偏好加权
         if (userPreferences) {
           const name = food.name;
-          const mainIng = (food as any).mainIngredient || '';
+          const mainIng = food.mainIngredient || '';
           if (userPreferences.loves?.some(l => name.includes(l) || mainIng.includes(l))) {
             score *= 1.12;
           }
@@ -596,13 +739,15 @@ export class RecommendationEngineService {
           }
         }
 
+        // 反馈学习权重：基于历史接受/跳过率调整
+        if (feedbackWeights && feedbackWeights[food.name]) {
+          score *= feedbackWeights[food.name];
+        }
+
         return {
           food,
           score,
-          servingCalories: Math.round((food.calories * food.standardServingG) / 100),
-          servingProtein: Math.round(((food.protein || 0) * food.standardServingG) / 100),
-          servingFat: Math.round(((food.fat || 0) * food.standardServingG) / 100),
-          servingCarbs: Math.round(((food.carbs || 0) * food.standardServingG) / 100),
+          ...this.calcServingNutrition(food),
         };
       }).sort((a, b) => b.score - a.score);
 
@@ -626,26 +771,59 @@ export class RecommendationEngineService {
 
     // 份量调整：使总热量接近预算
     const adjustedPicks = this.adjustPortions(picks, target.calories);
-
-    // 聚合
-    const totalCalories = adjustedPicks.reduce((s, p) => s + p.servingCalories, 0);
-    const totalProtein = adjustedPicks.reduce((s, p) => s + p.servingProtein, 0);
-    const totalFat = adjustedPicks.reduce((s, p) => s + p.servingFat, 0);
-    const totalCarbs = adjustedPicks.reduce((s, p) => s + p.servingCarbs, 0);
-
-    const displayText = adjustedPicks
-      .map(p => `${p.food.name}（${p.food.standardServingDesc}，${p.servingCalories}kcal）`)
-      .join(' + ');
-
-    const tip = this.buildTip(mealType, goalType, target, totalCalories);
-
-    return { foods: adjustedPicks, totalCalories, totalProtein, totalFat, totalCarbs, displayText, tip };
+    const tip = this.buildTip(mealType, goalType, target, adjustedPicks.reduce((s, p) => s + p.servingCalories, 0));
+    return this.aggregateMealResult(adjustedPicks, tip);
   }
 
   // ─── 10. 暴露食物库查询（供 DailyPlanService 一次性获取） ───
 
   async getAllFoods(): Promise<FoodLibrary[]> {
     return this.foodLibraryRepo.find({ where: { isVerified: true } });
+  }
+
+  // ─── 11. 反馈学习 — 从 RecommendationFeedback 提取用户偏好 ───
+
+  /**
+   * 分析用户的推荐反馈，提取偏好权重。
+   * - accepted 的食物加权（loves 候选）
+   * - skipped/replaced 的食物降权（avoids 候选）
+   * 返回食物名 → 权重系数的映射（默认 1.0，范围 0.3-1.3）
+   */
+  async getUserFeedbackWeights(userId: string): Promise<Record<string, number>> {
+    const weights: Record<string, number> = {};
+    try {
+      const since = new Date();
+      since.setDate(since.getDate() - 30); // 最近30天
+
+      const feedbacks = await this.feedbackRepo
+        .createQueryBuilder('f')
+        .where('f.user_id = :userId', { userId })
+        .andWhere('f.created_at >= :since', { since })
+        .getMany();
+
+      // 统计每个食物的接受/跳过次数
+      const stats: Record<string, { accepted: number; rejected: number }> = {};
+      for (const fb of feedbacks) {
+        if (!stats[fb.foodName]) stats[fb.foodName] = { accepted: 0, rejected: 0 };
+        if (fb.action === 'accepted') {
+          stats[fb.foodName].accepted++;
+        } else {
+          stats[fb.foodName].rejected++;
+        }
+      }
+
+      // 计算权重系数
+      for (const [name, s] of Object.entries(stats)) {
+        const total = s.accepted + s.rejected;
+        if (total < 2) continue; // 数据不足跳过
+        const acceptRate = s.accepted / total;
+        // 映射到 0.3-1.3 范围: 50% 接受率 → 1.0, 100% → 1.3, 0% → 0.3
+        weights[name] = 0.3 + acceptRate * 1.0;
+      }
+    } catch (err) {
+      this.logger.warn(`获取反馈权重失败: ${err}`);
+    }
+    return weights;
   }
 
   // ─── 辅助 ───

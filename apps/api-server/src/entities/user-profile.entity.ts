@@ -223,6 +223,123 @@ export class UserProfile {
   })
   onboardingCompleted: boolean;
 
+  // ==================== V2: 扩展字段 ====================
+
+  @Column({
+    type: 'jsonb',
+    default: [],
+    name: 'allergens',
+    comment: '过敏原：milk/eggs/fish/shellfish/tree_nuts/peanuts/wheat/soybeans/sesame/sulfites',
+  })
+  allergens: string[];
+
+  @Column({
+    type: 'jsonb',
+    default: [],
+    name: 'health_conditions',
+    comment: '健康状况：diabetes_type2/hypertension/high_cholesterol/gout/kidney_disease/fatty_liver/pcos/ibs',
+  })
+  healthConditions: string[];
+
+  @Column({
+    type: 'jsonb',
+    default: {},
+    name: 'exercise_profile',
+    comment: '运动概况：{type, frequencyPerWeek, avgDurationMinutes}',
+  })
+  exerciseProfile: {
+    type?: 'none' | 'cardio' | 'strength' | 'mixed';
+    frequencyPerWeek?: number;
+    avgDurationMinutes?: number;
+  };
+
+  @Column({
+    type: 'varchar',
+    length: 20,
+    nullable: true,
+    name: 'cooking_skill_level',
+    comment: '烹饪水平：none/basic/intermediate/advanced',
+  })
+  cookingSkillLevel?: string;
+
+  @Column({
+    type: 'jsonb',
+    default: {},
+    name: 'taste_intensity',
+    comment: '口味强度偏好：{spicy:0-5, sweet:0-5, salty:0-5, sour:0-5}',
+  })
+  tasteIntensity: Record<string, number>;
+
+  @Column({
+    type: 'jsonb',
+    default: [],
+    name: 'cuisine_preferences',
+    comment: '菜系偏好：chinese/japanese/western/korean/thai...',
+  })
+  cuisinePreferences: string[];
+
+  @Column({
+    type: 'varchar',
+    length: 10,
+    nullable: true,
+    name: 'budget_level',
+    comment: '预算水平：low/medium/high',
+  })
+  budgetLevel?: string;
+
+  @Column({
+    type: 'int',
+    default: 1,
+    name: 'family_size',
+    comment: '家庭人数：1=独居',
+  })
+  familySize: number;
+
+  @Column({
+    type: 'boolean',
+    default: false,
+    name: 'meal_prep_willing',
+    comment: '是否愿意备餐',
+  })
+  mealPrepWilling: boolean;
+
+  @Column({
+    type: 'varchar',
+    length: 5,
+    default: 'CN',
+    name: 'region_code',
+    comment: '地区代码',
+  })
+  regionCode: string;
+
+  // ==================== 元数据 ====================
+
+  @Column({
+    type: 'int',
+    default: 0,
+    name: 'onboarding_step',
+    comment: '当前引导进度：0-4',
+  })
+  onboardingStep: number;
+
+  @Column({
+    type: 'decimal',
+    precision: 3,
+    scale: 2,
+    default: 0,
+    name: 'data_completeness',
+    comment: '数据完整度：0.00-1.00',
+  })
+  dataCompleteness: number;
+
+  @Column({
+    type: 'int',
+    default: 1,
+    name: 'profile_version',
+    comment: 'Schema 版本',
+  })
+  profileVersion: number;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

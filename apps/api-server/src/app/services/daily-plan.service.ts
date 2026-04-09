@@ -60,6 +60,15 @@ export class DailyPlanService {
     const goals = this.nutritionScoreService.calculateDailyGoals(profile);
     const goalType = profile?.goal || 'health';
 
+    // 提取用户档案约束（过敏原、健康状况等传递给推荐引擎）
+    const userProfileConstraints = profile ? {
+      dietaryRestrictions: profile.dietaryRestrictions || [],
+      weakTimeSlots: profile.weakTimeSlots || [],
+      discipline: profile.discipline,
+      allergens: profile.allergens || [],
+      healthConditions: profile.healthConditions || [],
+    } : undefined;
+
     // 按比例分配各餐「多维预算」
     const mealRatios = { morning: 0.25, lunch: 0.35, dinner: 0.3, snack: 0.1 };
 
@@ -76,10 +85,11 @@ export class DailyPlanService {
     };
     const dailyTarget = { calories: goals.calories, protein: goals.protein };
 
-    // 一次性获取食物库 + 最近记录（减少查询：8次→2次）
-    const [allFoods, recentFoodNames] = await Promise.all([
+    // 一次性获取食物库 + 最近记录 + 反馈权重（减少查询）
+    const [allFoods, recentFoodNames, feedbackWeights] = await Promise.all([
       this.recommendationEngine.getAllFoods(),
       this.recommendationEngine.getRecentFoodNames(userId, 3),
+      this.recommendationEngine.getUserFeedbackWeights(userId),
     ]);
 
     // 用户偏好提取（loves/avoids）
@@ -103,6 +113,8 @@ export class DailyPlanService {
       dailyTarget,
       excludeNames,
       userPreferences,
+      feedbackWeights,
+      userProfileConstraints,
     );
     excludeNames.push(...morningRec.foods.map((f) => f.food.name));
 
@@ -115,6 +127,8 @@ export class DailyPlanService {
       dailyTarget,
       excludeNames,
       userPreferences,
+      feedbackWeights,
+      userProfileConstraints,
     );
     excludeNames.push(...lunchRec.foods.map((f) => f.food.name));
 
@@ -127,6 +141,8 @@ export class DailyPlanService {
       dailyTarget,
       excludeNames,
       userPreferences,
+      feedbackWeights,
+      userProfileConstraints,
     );
     excludeNames.push(...dinnerRec.foods.map((f) => f.food.name));
 
@@ -139,6 +155,8 @@ export class DailyPlanService {
       dailyTarget,
       excludeNames,
       userPreferences,
+      feedbackWeights,
+      userProfileConstraints,
     );
 
     const toMealPlan = (rec: typeof morningRec): MealPlan => ({
@@ -150,7 +168,26 @@ export class DailyPlanService {
       tip: rec.tip,
     });
 
-    const strategy = this.buildStrategy(goals.calories, profile, goalType);
+    // ── 跨餐营养补偿校验 ──
+    // 汇总 4 餐总宏量，检查是否严重偏离目标
+    const allRecs = [morningRec, lunchRec, dinnerRec, snackRec];
+    const planTotals = {
+      calories: allRecs.reduce((s, r) => s + r.totalCalories, 0),
+      protein: allRecs.reduce((s, r) => s + r.totalProtein, 0),
+      carbs: allRecs.reduce((s, r) => s + r.totalCarbs, 0),
+    };
+
+    // 如果全天蛋白质严重不足（<70%目标），给晚餐追加高蛋白提示
+    const proteinRatio = planTotals.protein / goals.protein;
+    let compensationTip = '';
+    if (proteinRatio < 0.7) {
+      compensationTip = '全天蛋白质不足，建议晚餐加一份鸡蛋或豆腐';
+    } else if (planTotals.calories > goals.calories * 1.15) {
+      compensationTip = '全天热量偏高，建议减少加餐或晚餐份量';
+    }
+
+    const strategy = this.buildStrategy(goals.calories, profile, goalType)
+      + (compensationTip ? `；${compensationTip}` : '');
 
     const plan = this.planRepo.create({
       userId,
@@ -189,6 +226,15 @@ export class DailyPlanService {
     const goal = plan.totalBudget || goals.calories;
     const remaining = Math.max(0, goal - summary.totalCalories);
     const hour = new Date().getHours();
+
+    // 提取用户档案约束
+    const userProfileConstraints = profile ? {
+      dietaryRestrictions: profile.dietaryRestrictions || [],
+      weakTimeSlots: profile.weakTimeSlots || [],
+      discipline: profile.discipline,
+      allergens: profile.allergens || [],
+      healthConditions: profile.healthConditions || [],
+    } : undefined;
 
     const consumed = {
       calories: summary.totalCalories || 0,
@@ -252,6 +298,9 @@ export class DailyPlanService {
         },
         dailyTarget,
         excludeNames,
+        undefined,
+        undefined,
+        userProfileConstraints,
       );
       excludeNames.push(...lunchRec.foods.map((f) => f.food.name));
 
@@ -268,6 +317,9 @@ export class DailyPlanService {
         },
         dailyTarget,
         excludeNames,
+        undefined,
+        undefined,
+        userProfileConstraints,
       );
 
       adjustedMeals.lunch = toMealPlan(lunchRec);
@@ -299,6 +351,9 @@ export class DailyPlanService {
         },
         dailyTarget,
         recentNames,
+        undefined,
+        undefined,
+        userProfileConstraints,
       );
       adjustedMeals.dinner = toMealPlan(dinnerRec);
       plan.dinnerPlan = adjustedMeals.dinner;

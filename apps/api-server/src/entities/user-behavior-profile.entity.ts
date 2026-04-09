@@ -44,6 +44,20 @@ export class UserBehaviorProfile {
   @Column({ name: 'longest_streak', type: 'int', default: 0 })
   longestStreak: number;
 
+  @Column({ name: 'meal_timing_patterns', type: 'jsonb', default: '{}' })
+  mealTimingPatterns: {
+    breakfast?: string;
+    lunch?: string;
+    dinner?: string;
+    snack?: string;
+  };
+
+  @Column({ name: 'portion_tendency', type: 'varchar', length: 10, default: 'normal' })
+  portionTendency: string;
+
+  @Column({ name: 'replacement_patterns', type: 'jsonb', default: '{}' })
+  replacementPatterns: Record<string, number>;
+
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 }

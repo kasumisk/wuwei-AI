@@ -21,6 +21,8 @@ import { UserAchievement } from '../entities/user-achievement.entity';
 import { Challenge } from '../entities/challenge.entity';
 import { UserChallenge } from '../entities/user-challenge.entity';
 import { RecommendationFeedback } from '../entities/recommendation-feedback.entity';
+import { UserInferredProfile } from '../entities/user-inferred-profile.entity';
+import { ProfileSnapshot } from '../entities/profile-snapshot.entity';
 // 服务
 import { AppAuthService } from './services/app-auth.service';
 import { AppUpdateService } from './services/app-update.service';
@@ -36,6 +38,10 @@ import { BehaviorService } from './services/behavior.service';
 import { GamificationService } from './services/gamification.service';
 import { NutritionScoreService } from './services/nutrition-score.service';
 import { RecommendationEngineService } from './services/recommendation-engine.service';
+import { ProfileInferenceService } from './services/profile-inference.service';
+import { ProfileCacheService } from './services/profile-cache.service';
+import { ProfileCronService } from './services/profile-cron.service';
+import { CollectionTriggerService } from './services/collection-trigger.service';
 // 控制器
 import { AppAuthController } from './app.controller';
 import { AppFileController } from './controllers/file.controller';
@@ -44,6 +50,7 @@ import { FoodController } from './controllers/food.controller';
 import { CoachController } from './controllers/coach.controller';
 import { FoodLibraryController } from './controllers/food-library.controller';
 import { GamificationController } from './controllers/gamification.controller';
+import { UserProfileController } from './controllers/user-profile.controller';
 // 守卫和策略
 import { AppJwtStrategy } from './strategies/app-jwt.strategy';
 import { AppJwtAuthGuard } from './guards/app-jwt-auth.guard';
@@ -72,6 +79,8 @@ import { StorageModule } from '../storage/storage.module';
       Challenge,
       UserChallenge,
       RecommendationFeedback,
+      UserInferredProfile,
+      ProfileSnapshot,
     ]),
     PassportModule.register({ defaultStrategy: 'app-jwt' }),
     JwtModule.register({
@@ -97,6 +106,10 @@ import { StorageModule } from '../storage/storage.module';
     GamificationService,
     NutritionScoreService,
     RecommendationEngineService,
+    ProfileInferenceService,
+    ProfileCacheService,
+    ProfileCronService,
+    CollectionTriggerService,
     // 守卫和策略
     AppJwtStrategy,
     AppJwtAuthGuard,
@@ -109,6 +122,7 @@ import { StorageModule } from '../storage/storage.module';
     CoachController,
     FoodLibraryController,
     GamificationController,
+    UserProfileController,
   ],
   exports: [
     AppAuthService,
@@ -123,6 +137,9 @@ import { StorageModule } from '../storage/storage.module';
     GamificationService,
     NutritionScoreService,
     RecommendationEngineService,
+    ProfileInferenceService,
+    ProfileCacheService,
+    CollectionTriggerService,
   ],
 })
 export class AppClientModule {}

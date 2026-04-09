@@ -350,6 +350,12 @@ export class SaveUserProfileDto {
   @IsString({ each: true })
   dietaryRestrictions?: string[];
 
+  @ApiPropertyOptional({ type: [String], description: '⚠️ 过敏原 milk/eggs/fish/shellfish/tree_nuts/peanuts/wheat/soybeans/sesame/sulfites' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  allergens?: string[];
+
   // ---- 行为习惯 ----
 
   @ApiPropertyOptional({ type: [String], description: '容易乱吃时段 afternoon/evening/midnight' })

@@ -100,16 +100,44 @@ export class NutritionScoreService {
 
   // ─── 各维度评分 ───
 
-  private calcEnergyScore(actual: number, target: number): number {
+  /**
+   * 热量评分 — 高斯钟形函数
+   * 接近目标最优，偏差越大分数越低。
+   * σ 根据目标类型动态调整（减脂严格、增肌宽松）。
+   * 非对称惩罚：减脂超标扣更重，增肌不足扣更重。
+   */
+  private calcEnergyScore(actual: number, target: number, goal?: string): number {
     if (target <= 0) return 80;
-    return this.clamp(100 - (Math.abs(actual - target) / target) * 100);
+    const sigmaRatio: Record<string, number> = {
+      fat_loss: 0.12, muscle_gain: 0.20, health: 0.15, habit: 0.25,
+    };
+    const sigma = target * (sigmaRatio[goal || 'health'] || 0.15);
+    const diff = actual - target;
+    let score = 100 * Math.exp(-(diff * diff) / (2 * sigma * sigma));
+
+    // 非对称惩罚
+    if (goal === 'fat_loss' && diff > 0) {
+      score *= 0.85;
+    }
+    if (goal === 'muscle_gain' && diff < 0) {
+      score *= 0.90;
+    }
+    return this.clamp(score);
   }
 
+  /**
+   * 蛋白质评分 — 分段函数
+   * 不足区线性增长，达标区满分，超标区缓慢下降。
+   */
   private calcProteinRatioScore(protein: number, calories: number, goal: string): number {
     if (calories <= 0) return 80;
     const ratio = (protein * 4) / calories;
     const [min, max] = PROTEIN_RATIO_RANGES[goal] || [0.15, 0.25];
-    return this.rangeScore(ratio, min, max);
+
+    if (ratio >= min && ratio <= max) return 100;
+    if (ratio < min) return this.clamp(30 + 70 * (ratio / min));
+    // 超标区缓慢衰减
+    return this.clamp(100 - 50 * ((ratio - max) / 0.15));
   }
 
   private calcMacroScore(carbs: number, fat: number, calories: number): number {
@@ -196,7 +224,7 @@ export class NutritionScoreService {
     goal: string,
     stabilityData?: { streakDays: number; avgMealsPerDay: number; targetMeals: number },
   ): NutritionScoreResult {
-    const energy = this.calcEnergyScore(input.calories, input.targetCalories);
+    const energy = this.calcEnergyScore(input.calories, input.targetCalories, goal);
     const proteinRatio = this.calcProteinRatioScore(input.protein, input.calories, goal);
     const macroBalance = this.calcMacroScore(input.carbs, input.fat, input.calories);
     const foodQuality = this.clamp(input.foodQuality * 10, 0, 100);

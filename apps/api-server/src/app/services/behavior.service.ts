@@ -3,6 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserBehaviorProfile } from '../../entities/user-behavior-profile.entity';
 import { AiDecisionLog } from '../../entities/ai-decision-log.entity';
+import { RecommendationFeedback } from '../../entities/recommendation-feedback.entity';
+import { FoodRecord } from '../../entities/food-record.entity';
 import { FoodService } from './food.service';
 
 export interface ProactiveReminder {
@@ -20,6 +22,10 @@ export class BehaviorService {
     private readonly behaviorRepo: Repository<UserBehaviorProfile>,
     @InjectRepository(AiDecisionLog)
     private readonly logRepo: Repository<AiDecisionLog>,
+    @InjectRepository(RecommendationFeedback)
+    private readonly feedbackRepo: Repository<RecommendationFeedback>,
+    @InjectRepository(FoodRecord)
+    private readonly foodRecordRepo: Repository<FoodRecord>,
     private readonly foodService: FoodService,
   ) {}
 
@@ -232,7 +238,165 @@ export class BehaviorService {
     };
     profile.bingeRiskHours = bingeHours;
 
+    // ── 推荐反馈分析（loves/avoids 带时间衰减）──
+    await this.analyzeRecommendationFeedback(userId, profile);
+
+    // ── 用餐时间模式推断 ──
+    await this.analyzeMealTimingPatterns(userId, profile);
+
+    // ── 替换模式分析 ──
+    await this.analyzeReplacementPatterns(userId, profile);
+
     await this.behaviorRepo.save(profile);
     this.logger.log(`用户 ${userId} 行为分析完成，常用食物 ${frequentFoods.length} 种，风险时段 ${bingeHours.length} 个`);
+  }
+
+  /**
+   * 分析推荐反馈，提取 loves/avoids（指数时间衰减）
+   * 衰减公式: weight = e^(-0.05 × days_since)
+   * 30 天前权重 ≈ 0.22, 60 天前 ≈ 0.05
+   */
+  private async analyzeRecommendationFeedback(
+    userId: string,
+    profile: UserBehaviorProfile,
+  ): Promise<void> {
+    const sixtyDaysAgo = new Date();
+    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+
+    const feedbacks = await this.feedbackRepo
+      .createQueryBuilder('f')
+      .where('f.user_id = :userId', { userId })
+      .andWhere('f.created_at >= :since', { since: sixtyDaysAgo })
+      .getMany();
+
+    if (feedbacks.length < 5) return;
+
+    const now = Date.now();
+    const foodScores: Record<string, number> = {};
+
+    for (const fb of feedbacks) {
+      const daysSince = Math.floor(
+        (now - (fb.createdAt as Date).getTime()) / (1000 * 60 * 60 * 24),
+      );
+      const decayWeight = Math.exp(-0.05 * daysSince);
+
+      let score: number;
+      switch (fb.action) {
+        case 'accepted':
+          score = 1.0;
+          break;
+        case 'replaced':
+          score = -0.5;
+          break;
+        case 'skipped':
+          score = -0.8;
+          break;
+        default:
+          score = 0;
+      }
+
+      foodScores[fb.foodName] = (foodScores[fb.foodName] || 0) + score * decayWeight;
+    }
+
+    // 提取 loves（正分 Top 10）和 avoids（负分 Top 10）
+    const sorted = Object.entries(foodScores).sort(([, a], [, b]) => b - a);
+    const loves = sorted
+      .filter(([, s]) => s > 0.3)
+      .slice(0, 10)
+      .map(([name]) => name);
+    const avoids = sorted
+      .filter(([, s]) => s < -0.3)
+      .slice(-10)
+      .map(([name]) => name);
+
+    profile.foodPreferences = {
+      ...profile.foodPreferences,
+      loves,
+      avoids,
+    };
+  }
+
+  /**
+   * 从食物记录推断用餐时间模式
+   */
+  private async analyzeMealTimingPatterns(
+    userId: string,
+    profile: UserBehaviorProfile,
+  ): Promise<void> {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const records = await this.foodRecordRepo
+      .createQueryBuilder('r')
+      .where('r.user_id = :userId', { userId })
+      .andWhere('r.created_at >= :since', { since: thirtyDaysAgo })
+      .getMany();
+
+    if (records.length < 10) return;
+
+    const mealTimes: Record<string, number[]> = {
+      breakfast: [],
+      lunch: [],
+      dinner: [],
+      snack: [],
+    };
+
+    for (const record of records) {
+      const hour = (record.createdAt as Date).getHours();
+      if (hour >= 5 && hour < 10) mealTimes.breakfast.push(hour);
+      else if (hour >= 10 && hour < 14) mealTimes.lunch.push(hour);
+      else if (hour >= 16 && hour < 21) mealTimes.dinner.push(hour);
+      else mealTimes.snack.push(hour);
+    }
+
+    const avgHour = (hours: number[]): string | undefined => {
+      if (hours.length < 3) return undefined;
+      const avg = Math.round(hours.reduce((a, b) => a + b, 0) / hours.length);
+      return `${avg}:00`;
+    };
+
+    profile.mealTimingPatterns = {
+      breakfast: avgHour(mealTimes.breakfast),
+      lunch: avgHour(mealTimes.lunch),
+      dinner: avgHour(mealTimes.dinner),
+      snack: avgHour(mealTimes.snack),
+    };
+  }
+
+  /**
+   * 分析替换模式（A→B 的替换频率）
+   */
+  private async analyzeReplacementPatterns(
+    userId: string,
+    profile: UserBehaviorProfile,
+  ): Promise<void> {
+    const sixtyDaysAgo = new Date();
+    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+
+    const replacements = await this.feedbackRepo
+      .createQueryBuilder('f')
+      .where('f.user_id = :userId', { userId })
+      .andWhere('f.action = :action', { action: 'replaced' })
+      .andWhere('f.replacement_food IS NOT NULL')
+      .andWhere('f.created_at >= :since', { since: sixtyDaysAgo })
+      .getMany();
+
+    if (replacements.length < 3) return;
+
+    const patterns: Record<string, number> = {};
+    for (const fb of replacements) {
+      const key = `${fb.foodName}→${fb.replacementFood}`;
+      patterns[key] = (patterns[key] || 0) + 1;
+    }
+
+    // 保留出现 ≥ 2 次的替换模式
+    const filtered: Record<string, number> = {};
+    for (const [key, count] of Object.entries(patterns)) {
+      if (count >= 2) {
+        filtered[key] = count;
+      }
+    }
+
+    profile.replacementPatterns = filtered;
   }
 }

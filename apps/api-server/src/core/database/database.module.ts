@@ -37,6 +37,8 @@ import { UserAchievement } from '../../entities/user-achievement.entity';
 import { Challenge } from '../../entities/challenge.entity';
 import { UserChallenge } from '../../entities/user-challenge.entity';
 import { RecommendationFeedback } from '../../entities/recommendation-feedback.entity';
+import { UserInferredProfile } from '../../entities/user-inferred-profile.entity';
+import { ProfileSnapshot } from '../../entities/profile-snapshot.entity';
 
 @Module({
   imports: [
@@ -97,6 +99,9 @@ import { RecommendationFeedback } from '../../entities/recommendation-feedback.e
             UserChallenge,
             // 推荐反馈
             RecommendationFeedback,
+            // 用户画像推断 + 快照
+            UserInferredProfile,
+            ProfileSnapshot,
             // 文件转换记录
           ],
           synchronize: dbConfig.synchronize,
