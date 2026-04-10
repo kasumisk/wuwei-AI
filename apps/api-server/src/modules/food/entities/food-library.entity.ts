@@ -169,6 +169,27 @@ export class FoodLibrary {
   })
   sugar?: number;
 
+  // ═══ V4 Phase 4.7: 糖分细分 ═══
+  @Column({
+    type: 'decimal',
+    precision: 5,
+    scale: 1,
+    nullable: true,
+    name: 'added_sugar',
+    comment: '添加糖 g/100g（NRF 9.3 精度提升）',
+  })
+  addedSugar?: number;
+
+  @Column({
+    type: 'decimal',
+    precision: 5,
+    scale: 1,
+    nullable: true,
+    name: 'natural_sugar',
+    comment: '天然糖 g/100g（水果/乳糖等）',
+  })
+  naturalSugar?: number;
+
   @Column({
     type: 'decimal',
     precision: 5,
@@ -311,6 +332,119 @@ export class FoodLibrary {
     comment: '镁 mg/100g',
   })
   magnesium?: number;
+
+  // ═══ V4 Phase 4.6: 痛风/肾病量化字段 ═══
+  @Column({
+    type: 'decimal',
+    precision: 7,
+    scale: 1,
+    nullable: true,
+    comment: '嘌呤 mg/100g（痛风约束）',
+  })
+  purine?: number;
+
+  @Column({
+    type: 'decimal',
+    precision: 7,
+    scale: 1,
+    nullable: true,
+    comment: '磷 mg/100g（肾病约束）',
+  })
+  phosphorus?: number;
+
+  // ═══ V5 Phase 2.11: 嵌入扩展字段（96维支撑） ═══
+
+  @Column({
+    type: 'varchar',
+    length: 30,
+    nullable: true,
+    comment:
+      '菜系分类: chinese/western/japanese_korean/southeast_asian/mediterranean/indian/middle_eastern/latin_american',
+  })
+  cuisine?: string;
+
+  @Column({
+    type: 'jsonb',
+    nullable: true,
+    name: 'flavor_profile',
+    comment: '口味特征: { spicy, sweet, salty, sour, umami, bitter } 各 0-1',
+  })
+  flavorProfile?: {
+    spicy?: number;
+    sweet?: number;
+    salty?: number;
+    sour?: number;
+    umami?: number;
+    bitter?: number;
+  };
+
+  @Column({
+    type: 'varchar',
+    length: 20,
+    nullable: true,
+    name: 'cooking_method',
+    comment: '主要烹饪方式: steam/boil/stir_fry/roast/fry/raw',
+  })
+  cookingMethod?: string;
+
+  @Column({
+    type: 'int',
+    nullable: true,
+    name: 'prep_time_minutes',
+    comment: '准备时间（分钟）',
+  })
+  prepTimeMinutes?: number;
+
+  @Column({
+    type: 'int',
+    nullable: true,
+    name: 'cook_time_minutes',
+    comment: '烹饪时间（分钟）',
+  })
+  cookTimeMinutes?: number;
+
+  @Column({
+    type: 'varchar',
+    length: 10,
+    nullable: true,
+    name: 'skill_required',
+    comment: '烹饪技能需求: easy/medium/hard',
+  })
+  skillRequired?: string;
+
+  @Column({
+    type: 'int',
+    nullable: true,
+    name: 'estimated_cost_level',
+    comment: '估计成本等级 1-5（1=便宜，5=昂贵）',
+  })
+  estimatedCostLevel?: number;
+
+  @Column({
+    type: 'int',
+    nullable: true,
+    name: 'shelf_life_days',
+    comment: '保质期（天）',
+  })
+  shelfLifeDays?: number;
+
+  @Column({
+    type: 'varchar',
+    length: 10,
+    nullable: true,
+    name: 'fodmap_level',
+    comment: 'FODMAP 等级: low/moderate/high',
+  })
+  fodmapLevel?: string;
+
+  @Column({
+    type: 'varchar',
+    length: 10,
+    nullable: true,
+    name: 'oxalate_level',
+    comment: '草酸等级: low/moderate/high',
+  })
+  oxalateLevel?: string;
 
   // ═══ 健康评估 ═══
   @Column({
@@ -537,6 +671,42 @@ export class FoodLibrary {
 
   @Column({ type: 'int', default: 0, comment: '用户使用次数统计' })
   popularity: number;
+
+  // ═══ V4→V5: 食物嵌入向量（V4: 64维, V5: 96维） ═══
+  @Column({
+    type: 'float4',
+    array: true,
+    nullable: true,
+    name: 'embedding',
+    comment: '96维特征向量（V5 2.11），用于相似度搜索（应用层模式）',
+  })
+  embedding?: number[];
+
+  /**
+   * V5 4.1: pgvector 原生向量列
+   *
+   * 使用 PostgreSQL pgvector 扩展的 vector(96) 类型，
+   * 支持 HNSW 索引加速 ANN 搜索。
+   * 与 embedding (float4[]) 并存，由迁移脚本从 embedding 回填。
+   *
+   * 注意：TypeORM 不原生支持 vector 类型，这里声明为 string，
+   * 实际存取由 VectorSearchService 中的原生 SQL 处理。
+   */
+  @Column({
+    type: 'varchar',
+    nullable: true,
+    name: 'embedding_v5',
+    comment: 'pgvector 96维向量（V5 4.1），HNSW 索引列',
+  })
+  embeddingV5?: string;
+
+  @Column({
+    type: 'timestamp',
+    nullable: true,
+    name: 'embedding_updated_at',
+    comment: '嵌入向量最后更新时间',
+  })
+  embeddingUpdatedAt?: Date;
 
   // ═══ 时间戳 ═══
   @CreateDateColumn({ name: 'created_at' })

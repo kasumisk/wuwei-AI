@@ -14,6 +14,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AppJwtAuthGuard } from '../../auth/app/app-jwt-auth.guard';
 import { CurrentAppUser } from '../../auth/app/current-app-user.decorator';
+import { AppUserPayload } from '../../auth/app/app-user-payload.type';
 import { ApiResponse } from '../../../common/types/response.type';
 import { UserProfileService } from './user-profile.service';
 import { ProfileInferenceService } from './profile-inference.service';
@@ -49,7 +50,7 @@ export class UserProfileController {
   async saveOnboardingStep(
     @Param('step', ParseIntPipe) step: number,
     @Body() body: any,
-    @CurrentAppUser() user: any,
+    @CurrentAppUser() user: AppUserPayload,
   ): Promise<ApiResponse> {
     if (step < 1 || step > 4) {
       throw new BadRequestException('Step 必须为 1-4');
@@ -79,7 +80,7 @@ export class UserProfileController {
   @ApiOperation({ summary: '跳过引导步骤（仅 step 3-4 可跳过）' })
   async skipOnboardingStep(
     @Param('step', ParseIntPipe) step: number,
-    @CurrentAppUser() user: any,
+    @CurrentAppUser() user: AppUserPayload,
   ): Promise<ApiResponse> {
     if (step < 3 || step > 4) {
       throw new BadRequestException('仅 Step 3 和 Step 4 可跳过');
@@ -106,7 +107,9 @@ export class UserProfileController {
    */
   @Get('full')
   @ApiOperation({ summary: '获取完整用户画像（三层聚合）' })
-  async getFullProfile(@CurrentAppUser() user: any): Promise<ApiResponse> {
+  async getFullProfile(
+    @CurrentAppUser() user: AppUserPayload,
+  ): Promise<ApiResponse> {
     const profile = await this.userProfileService.getFullProfile(user.id);
     return {
       success: true,
@@ -124,7 +127,7 @@ export class UserProfileController {
   @ApiOperation({ summary: '更新声明数据（部分更新）' })
   async updateDeclaredProfile(
     @Body() dto: UpdateDeclaredProfileDto,
-    @CurrentAppUser() user: any,
+    @CurrentAppUser() user: AppUserPayload,
   ): Promise<ApiResponse> {
     const profile = await this.userProfileService.updateDeclaredProfile(
       user.id,
@@ -145,7 +148,7 @@ export class UserProfileController {
   @Get('completion-suggestions')
   @ApiOperation({ summary: '获取档案补全建议' })
   async getCompletionSuggestions(
-    @CurrentAppUser() user: any,
+    @CurrentAppUser() user: AppUserPayload,
   ): Promise<ApiResponse> {
     const result = await this.userProfileService.getCompletionSuggestions(
       user.id,
@@ -167,7 +170,9 @@ export class UserProfileController {
   @Post('infer/refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '手动触发推断数据更新' })
-  async refreshInference(@CurrentAppUser() user: any): Promise<ApiResponse> {
+  async refreshInference(
+    @CurrentAppUser() user: AppUserPayload,
+  ): Promise<ApiResponse> {
     const inferred = await this.profileInferenceService.refreshInference(
       user.id,
     );
@@ -186,7 +191,7 @@ export class UserProfileController {
   @Get('goal-transition')
   @ApiOperation({ summary: '获取目标迁移建议' })
   async getGoalTransitionSuggestion(
-    @CurrentAppUser() user: any,
+    @CurrentAppUser() user: AppUserPayload,
   ): Promise<ApiResponse> {
     const suggestion =
       await this.profileInferenceService.getGoalTransitionSuggestion(user.id);
@@ -207,7 +212,7 @@ export class UserProfileController {
   @Get('collection-triggers')
   @ApiOperation({ summary: '获取字段收集提醒（App 打开时调用）' })
   async getCollectionTriggers(
-    @CurrentAppUser() user: any,
+    @CurrentAppUser() user: AppUserPayload,
   ): Promise<ApiResponse> {
     const reminders =
       await this.collectionTriggerService.checkCollectionTriggers(user.id);

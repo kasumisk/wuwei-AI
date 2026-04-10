@@ -27,6 +27,10 @@ export enum RecordSource {
   SCREENSHOT = 'screenshot',
   CAMERA = 'camera',
   MANUAL = 'manual',
+  /** V6.1: 文本分析后保存 */
+  TEXT_ANALYSIS = 'text_analysis',
+  /** V6.1: 图片分析后保存 */
+  IMAGE_ANALYSIS = 'image_analysis',
 }
 
 /**
@@ -70,6 +74,16 @@ export class FoodRecord {
     comment: '记录来源',
   })
   source: RecordSource;
+
+  /** V6.1: 关联的分析记录 ID（food_analysis_record.id） */
+  @Column({
+    type: 'uuid',
+    nullable: true,
+    name: 'analysis_id',
+    comment: '关联分析记录 ID',
+  })
+  @Index('idx_food_record_analysis_id')
+  analysisId?: string;
 
   @Column({ type: 'text', nullable: true, name: 'recognized_text' })
   recognizedText?: string;

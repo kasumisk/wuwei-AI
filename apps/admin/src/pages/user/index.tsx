@@ -26,9 +26,11 @@ import {
   BarChartOutlined,
   GoogleOutlined,
   MailOutlined,
+  EyeOutlined,
 } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
+import { useNavigate } from 'react-router-dom';
 import {
   useUpdateAppUser,
   useBanAppUser,
@@ -57,6 +59,7 @@ const statusConfig: Record<AppUserStatus, { color: string; text: string }> = {
 // ==================== 主组件 ====================
 
 const AppUserManagement: React.FC = () => {
+  const navigate = useNavigate();
   const [editingUser, setEditingUser] = useState<AppUserDto | null>(null);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [statsVisible, setStatsVisible] = useState(false);
@@ -243,10 +246,18 @@ const AppUserManagement: React.FC = () => {
       title: '操作',
       key: 'actions',
       fixed: 'right',
-      width: 200,
+      width: 250,
       search: false,
       render: (_: any, record: AppUserDto) => (
         <Space size="small">
+          <Button
+            type="link"
+            size="small"
+            icon={<EyeOutlined />}
+            onClick={() => navigate(`/user/detail/${record.id}`)}
+          >
+            画像
+          </Button>
           <Button
             type="link"
             size="small"

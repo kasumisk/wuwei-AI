@@ -1,8 +1,8 @@
 {
   "common": {
-    "appName": "Procify toolkit",
-    "appTitle": "Procify toolkit - 在线工具",
-    "appDescription": "生产级在线工具平台，集成 AI 能力",
+    "appName": "无畏健康",
+    "appTitle": "无畏健康 - AI 营养管家",
+    "appDescription": "您的智能 AI 营养助手，提供个性化健康与饮食指导",
     "status": {
       "success": "成功",
       "error": "错误",
@@ -40,17 +40,17 @@
     "toggleLanguage": "切换语言"
   },
   "auth": {
-    "tier": "量子等级",
+    "tier": "高级计划",
     "headline": "策划你未来的",
-    "headlineHighlight": "智能助手。",
-    "description": "体验为精确而设计的工作空间。Procify toolkit 通过定制的神经处理，将混乱的数据转化为优雅、可操作的洞察。",
+    "headlineHighlight": "健康生活。",
+    "description": "体验为您的健康而设计的 AI 营养助手。无畏健康提供个性化饮食指导、智能膳食规划和切实可行的健康建议，助您达成健康目标。",
     "testimonial": {
-      "author": "Adrian Voss",
-      "authorTitle": "Arca Lab 研究总监",
-      "content": "Procify 不仅是一个工具；它是一个数字策展人，比我们使用过的任何系统都更理解我们创意工作流程的细微差别。"
+      "author": "陈医生",
+      "authorTitle": "认证营养师",
+      "content": "无畏健康彻底改变了我指导客户的方式。它的 AI 驱动膳食规划和营养分析非常准确且易于使用。"
     },
     "footer": {
-      "copyright": "© 2026 Procify toolkit 生态系统",
+      "copyright": "© 2026 无畏健康",
       "privacy": "隐私架构",
       "security": "安全协议"
     },
@@ -80,7 +80,7 @@
       "forgotAccess": "忘记密码？"
     },
     "submit": {
-      "login": "登录 Procify",
+      "login": "登录无畏健康",
       "register": "创建工作空间",
       "reset": "发送重置邮件"
     },
@@ -102,8 +102,8 @@
   },
   "home": {
     "featured": {
-      "title": "Procify 新功能",
-      "subtitle": "探索生成式智能的最新前沿。",
+      "title": "无畏健康新功能",
+      "subtitle": "探索营养与健康之旅的最新功能。",
       "newFeature": "新功能",
       "productivity": "生产力",
       "trending": "热门",

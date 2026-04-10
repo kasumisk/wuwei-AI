@@ -19,6 +19,7 @@ export function useAuth() {
     useAuthStore();
 
   const isLoggedIn = !!token && !!user;
+  const isAnonymous = isLoggedIn && user?.authType === 'anonymous';
 
   const handleLoginResponse = useCallback(
     (res: AppLoginResponse) => {
@@ -165,6 +166,13 @@ export function useAuth() {
   const restoreAuth = useCallback(async () => {
     if (initialized) return;
     if (!token) {
+      // 无 token: 自动匿名登录，让用户零门槛体验
+      try {
+        const res = await appAuthService.anonymousLogin(getDeviceId());
+        setAuth(res.user, res.token);
+      } catch {
+        // 匿名登录失败（网络等）不阻塞，用户仍可浏览
+      }
       setInitialized();
       return;
     }
@@ -181,6 +189,7 @@ export function useAuth() {
     user,
     token,
     isLoggedIn,
+    isAnonymous,
     initialized,
     loading,
     loginAnonymously,

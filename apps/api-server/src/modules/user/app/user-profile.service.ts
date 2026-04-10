@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   UserProfile,
   ActivityLevel,
@@ -11,6 +12,7 @@ import {
 import { UserInferredProfile } from '../entities/user-inferred-profile.entity';
 import { UserBehaviorProfile } from '../entities/user-behavior-profile.entity';
 import { ProfileSnapshot } from '../entities/profile-snapshot.entity';
+import { WeightHistory } from '../entities/weight-history.entity';
 import { ProfileCacheService } from './profile-cache.service';
 import {
   OnboardingStep1Dto,
@@ -20,6 +22,10 @@ import {
   UpdateDeclaredProfileDto,
 } from './dto/user-profile.dto';
 import { SaveUserProfileDto } from 'src/modules/diet/app/food.dto';
+import {
+  DomainEvents,
+  ProfileUpdatedEvent,
+} from '../../../core/events/domain-events';
 
 /** 字段权重表 — 权重越高，对推荐质量影响越大 */
 const FIELD_WEIGHTS: Record<string, number> = {
@@ -69,7 +75,10 @@ export class UserProfileService {
     private readonly behaviorRepo: Repository<UserBehaviorProfile>,
     @InjectRepository(ProfileSnapshot)
     private readonly snapshotRepo: Repository<ProfileSnapshot>,
+    @InjectRepository(WeightHistory)
+    private readonly weightHistoryRepo: Repository<WeightHistory>,
     private readonly profileCacheService: ProfileCacheService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /**
@@ -77,6 +86,17 @@ export class UserProfileService {
    */
   async getProfile(userId: string): Promise<UserProfile | null> {
     return this.profileRepo.findOne({ where: { userId } });
+  }
+
+  /**
+   * 获取用户时区（IANA 格式），无档案时返回默认值 Asia/Shanghai
+   */
+  async getTimezone(userId: string): Promise<string> {
+    const profile = await this.profileRepo.findOne({
+      where: { userId },
+      select: ['timezone'],
+    });
+    return profile?.timezone || 'Asia/Shanghai';
   }
 
   /**
@@ -111,6 +131,20 @@ export class UserProfileService {
 
     const saved = await this.profileRepo.save(profile);
 
+    // V5 3.1: 体重变化时记录历史
+    if (
+      dto.weightKg &&
+      (!oldProfile || Number(oldProfile.weightKg) !== Number(dto.weightKg))
+    ) {
+      const source = oldProfile ? 'manual' : 'onboarding';
+      await this.recordWeightHistory(
+        userId,
+        Number(dto.weightKg),
+        dto.bodyFatPercent != null ? Number(dto.bodyFatPercent) : null,
+        source,
+      );
+    }
+
     // 失效缓存
     this.profileCacheService.invalidate(userId);
 
@@ -121,6 +155,27 @@ export class UserProfileService {
 
     // 同步更新推断数据
     await this.syncInferredProfile(saved);
+
+    // V6 Phase 1.2 + 2.17: 发布画像更新事件（含变更前后值）
+    const dtoKeys = Object.keys(dto);
+    const beforeVals: Record<string, unknown> = {};
+    const afterVals: Record<string, unknown> = {};
+    for (const k of dtoKeys) {
+      beforeVals[k] = oldProfile ? (oldProfile as any)[k] : null;
+      afterVals[k] = (saved as any)[k];
+    }
+    this.eventEmitter.emit(
+      DomainEvents.PROFILE_UPDATED,
+      new ProfileUpdatedEvent(
+        userId,
+        'declared',
+        'manual',
+        dtoKeys,
+        beforeVals,
+        afterVals,
+        oldProfile ? '用户手动更新档案' : '用户首次创建档案',
+      ),
+    );
 
     return saved;
   }
@@ -173,11 +228,42 @@ export class UserProfileService {
     profile.dataCompleteness = this.calculateCompleteness(profile);
     const saved = await this.profileRepo.save(profile);
 
+    // V5 3.1: 引导步骤中填写体重时记录历史（Step 2 包含 weightKg）
+    if ('weightKg' in dto && dto.weightKg) {
+      await this.recordWeightHistory(
+        userId,
+        Number(dto.weightKg),
+        'bodyFatPercent' in dto && dto.bodyFatPercent != null
+          ? Number(dto.bodyFatPercent)
+          : null,
+        'onboarding',
+      );
+    }
+
     // 失效缓存
     this.profileCacheService.invalidate(userId);
 
     // 同步推断数据
     const computed = await this.syncInferredProfile(saved);
+
+    // V6 Phase 1.2 + 2.17: 引导步骤保存后发布画像更新事件
+    const onboardingFields = Object.keys(dto);
+    const onboardingAfter: Record<string, unknown> = {};
+    for (const k of onboardingFields) {
+      onboardingAfter[k] = (saved as any)[k];
+    }
+    this.eventEmitter.emit(
+      DomainEvents.PROFILE_UPDATED,
+      new ProfileUpdatedEvent(
+        userId,
+        'declared',
+        'manual',
+        onboardingFields,
+        {}, // 引导流无前值
+        onboardingAfter,
+        `引导步骤 ${step} 完成`,
+      ),
+    );
 
     return {
       profile: saved,
@@ -280,11 +366,51 @@ export class UserProfileService {
     profile.dataCompleteness = this.calculateCompleteness(profile);
     const saved = await this.profileRepo.save(profile);
 
+    // V5 3.1: 体重变化时记录历史
+    if (dto.weightKg && Number(oldProfile.weightKg) !== Number(dto.weightKg)) {
+      await this.recordWeightHistory(
+        userId,
+        Number(dto.weightKg),
+        dto.bodyFatPercent != null
+          ? Number(dto.bodyFatPercent)
+          : saved.bodyFatPercent != null
+            ? Number(saved.bodyFatPercent)
+            : null,
+        'manual',
+      );
+    }
+
     // 失效缓存
     this.profileCacheService.invalidate(userId);
 
     await this.createSnapshotIfNeeded(userId, oldProfile, saved);
     await this.syncInferredProfile(saved);
+
+    // V6 Phase 1.2: 发布画像更新事件（含变更字段信息）
+    const changedFields = Object.keys(dto).filter(
+      (k) =>
+        JSON.stringify((oldProfile as any)[k]) !==
+        JSON.stringify((saved as any)[k]),
+    );
+    // V6 2.17: 构建变更前后值
+    const declaredBefore: Record<string, unknown> = {};
+    const declaredAfter: Record<string, unknown> = {};
+    for (const k of changedFields) {
+      declaredBefore[k] = (oldProfile as any)[k];
+      declaredAfter[k] = (saved as any)[k];
+    }
+    this.eventEmitter.emit(
+      DomainEvents.PROFILE_UPDATED,
+      new ProfileUpdatedEvent(
+        userId,
+        'declared',
+        'manual',
+        changedFields,
+        declaredBefore,
+        declaredAfter,
+        '用户更新声明画像',
+      ),
+    );
 
     return saved;
   }
@@ -418,11 +544,17 @@ export class UserProfileService {
    */
   calculateDailyGoal(profile: UserProfile): number {
     const bmr = this.calculateBMR(profile);
-    const tdee = this.calculateTDEE(bmr, profile.activityLevel);
+    const tdee = this.calculateTDEE(
+      bmr,
+      profile.activityLevel,
+      profile.exerciseProfile,
+      Number(profile.weightKg) || undefined,
+    );
     return this.calculateRecommendedCalories(
       tdee,
       profile.goal,
       profile.goalSpeed,
+      profile.gender,
     );
   }
 
@@ -467,6 +599,34 @@ export class UserProfileService {
   }
 
   // ==================== 内部方法 ====================
+
+  /**
+   * V5 Phase 3.1: 记录体重历史
+   * 当体重发生变化时插入一条 weight_history 记录，支撑 goalProgress 趋势分析
+   */
+  private async recordWeightHistory(
+    userId: string,
+    weightKg: number,
+    bodyFatPercent: number | null | undefined,
+    source: 'manual' | 'device' | 'onboarding',
+  ): Promise<void> {
+    try {
+      await this.weightHistoryRepo.save({
+        userId,
+        weightKg,
+        bodyFatPercent: bodyFatPercent ?? null,
+        source,
+      });
+      this.logger.debug(
+        `用户 ${userId} 体重历史已记录: ${weightKg}kg (${source})`,
+      );
+    } catch (err) {
+      // 体重记录失败不阻塞主流程
+      this.logger.warn(
+        `用户 ${userId} 体重历史记录失败: ${(err as Error).message}`,
+      );
+    }
+  }
 
   /**
    * 计算数据完整度（加权）
@@ -551,11 +711,17 @@ export class UserProfileService {
     }
 
     const bmr = this.calculateBMR(profile);
-    const tdee = this.calculateTDEE(bmr, profile.activityLevel);
+    const tdee = this.calculateTDEE(
+      bmr,
+      profile.activityLevel,
+      profile.exerciseProfile,
+      Number(profile.weightKg) || undefined,
+    );
     const recommendedCalories = this.calculateRecommendedCalories(
       tdee,
       profile.goal,
       profile.goalSpeed,
+      profile.gender,
     );
 
     inferred.estimatedBMR = Math.round(bmr);
@@ -567,12 +733,18 @@ export class UserProfileService {
     );
     inferred.lastComputedAt = new Date();
 
-    // 置信度
+    // 置信度 — exerciseProfile 可用时 TDEE 精度更高
+    const hasExerciseDetail =
+      profile.exerciseProfile?.type &&
+      profile.exerciseProfile.type !== 'none' &&
+      profile.exerciseProfile.frequencyPerWeek &&
+      profile.exerciseProfile.avgDurationMinutes;
     inferred.confidenceScores = {
       ...inferred.confidenceScores,
+      // V4: bodyFatPercent 现在直接影响 BMR 公式选择 (Katch-McArdle vs Harris-Benedict)
       estimatedBMR: profile.bodyFatPercent ? 0.95 : 0.85,
-      estimatedTDEE: 0.8,
-      recommendedCalories: 0.8,
+      estimatedTDEE: hasExerciseDetail ? 0.9 : 0.8,
+      recommendedCalories: hasExerciseDetail ? 0.88 : 0.8,
       macroTargets: 0.75,
     };
 
@@ -580,11 +752,29 @@ export class UserProfileService {
   }
 
   /**
-   * 计算 BMR (Harris-Benedict)
+   * 计算 BMR
+   *
+   * V4 Phase 3.3: 当 bodyFatPercent 可用时使用 Katch-McArdle 公式
+   *   BMR = 370 + 21.6 × LeanBodyMass(kg)
+   *   LeanBodyMass = weight × (1 - bodyFatPercent / 100)
+   *
+   * 回退: 无体脂数据时使用 Harris-Benedict 公式（原逻辑）
    */
   private calculateBMR(profile: UserProfile): number {
-    const age = new Date().getFullYear() - (profile.birthYear || 1990);
     const weight = Number(profile.weightKg) || 65;
+
+    // Katch-McArdle: 当体脂率可用且在合理范围 (3%~60%)
+    if (
+      profile.bodyFatPercent != null &&
+      profile.bodyFatPercent >= 3 &&
+      profile.bodyFatPercent <= 60
+    ) {
+      const leanMass = weight * (1 - profile.bodyFatPercent / 100);
+      return 370 + 21.6 * leanMass;
+    }
+
+    // Harris-Benedict fallback
+    const age = new Date().getFullYear() - (profile.birthYear || 1990);
     const height = Number(profile.heightCm) || 170;
 
     return profile.gender === 'male'
@@ -594,24 +784,82 @@ export class UserProfileService {
 
   /**
    * 计算 TDEE
+   * 当 exerciseProfile 可用时，采用"基础活动乘数 + 运动消耗叠加"精细计算:
+   *   TDEE = BMR × NEAT乘数 + 日均运动消耗(EAT)
+   * 其中 EAT = (MET-1) × weightKg × durationHours × frequencyPerWeek / 7
+   * MET 值参考 ACSM: cardio=6.0, strength=5.0, mixed=5.5
+   *
+   * 无 exerciseProfile 时回退到经典 activityLevel 粗粒度乘数
    */
-  private calculateTDEE(bmr: number, activityLevel: ActivityLevel): number {
-    const multiplier: Record<string, number> = {
+  private calculateTDEE(
+    bmr: number,
+    activityLevel: ActivityLevel,
+    exerciseProfile?: {
+      type?: 'none' | 'cardio' | 'strength' | 'mixed';
+      frequencyPerWeek?: number;
+      avgDurationMinutes?: number;
+    },
+    weightKg?: number,
+  ): number {
+    // 如果有可用的运动详情，使用精细计算
+    const hasExerciseData =
+      exerciseProfile &&
+      exerciseProfile.type &&
+      exerciseProfile.type !== 'none' &&
+      exerciseProfile.frequencyPerWeek &&
+      exerciseProfile.frequencyPerWeek > 0 &&
+      exerciseProfile.avgDurationMinutes &&
+      exerciseProfile.avgDurationMinutes > 0;
+
+    if (hasExerciseData && weightKg) {
+      // NEAT 乘数（仅日常活动，不含运动）
+      const neatMultiplier: Record<string, number> = {
+        [ActivityLevel.SEDENTARY]: 1.2,
+        [ActivityLevel.LIGHT]: 1.3,
+        [ActivityLevel.MODERATE]: 1.4,
+        [ActivityLevel.ACTIVE]: 1.5,
+      };
+
+      // 运动类型 MET 值（中等强度参考 ACSM）
+      const metValues: Record<string, number> = {
+        cardio: 6.0,
+        strength: 5.0,
+        mixed: 5.5,
+      };
+
+      const neat = neatMultiplier[activityLevel] || 1.3;
+      const met = metValues[exerciseProfile.type!] || 5.5;
+      const durationHours = exerciseProfile.avgDurationMinutes! / 60;
+      const frequency = exerciseProfile.frequencyPerWeek!;
+
+      // 每次运动消耗 = (MET - 1) × 体重 × 时长
+      // 减 1 是因为 BMR 已经包含了静息代谢
+      const perSessionCal = (met - 1) * weightKg * durationHours;
+      // 折算日均
+      const dailyExerciseCal = (perSessionCal * frequency) / 7;
+
+      return bmr * neat + dailyExerciseCal;
+    }
+
+    // 回退：无运动详情时使用经典粗粒度乘数
+    const classicMultiplier: Record<string, number> = {
       [ActivityLevel.SEDENTARY]: 1.2,
       [ActivityLevel.LIGHT]: 1.375,
       [ActivityLevel.MODERATE]: 1.55,
       [ActivityLevel.ACTIVE]: 1.725,
     };
-    return bmr * (multiplier[activityLevel] || 1.375);
+    return bmr * (classicMultiplier[activityLevel] || 1.375);
   }
 
   /**
    * 计算推荐摄入热量
+   * V5 Phase 1.7: 增加安全下限保护（女性 1200 kcal / 男性 1500 kcal）
    */
   private calculateRecommendedCalories(
     tdee: number,
     goal: GoalType,
     goalSpeed: GoalSpeed,
+    gender?: string,
   ): number {
     const goalMultiplier: Record<string, number> = {
       [GoalType.FAT_LOSS]: 0.8,
@@ -626,7 +874,11 @@ export class UserProfileService {
     };
     const goalMult = goalMultiplier[goal] ?? 1.0;
     const speedMod = speedModifier[goalSpeed] ?? 0;
-    return Math.round(tdee * (goalMult + speedMod));
+    const raw = Math.round(tdee * (goalMult + speedMod));
+
+    // 安全下限：女性 1200 kcal，男性 1500 kcal，性别未知取 1200
+    const minCalories = gender === 'male' ? 1500 : 1200;
+    return Math.max(raw, minCalories);
   }
 
   /**

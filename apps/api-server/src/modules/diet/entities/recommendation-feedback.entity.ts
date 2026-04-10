@@ -4,7 +4,10 @@ import {
   Column,
   CreateDateColumn,
   Index,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import { AppUser } from '../../user/entities/app-user.entity';
 
 /**
  * 推荐反馈实体
@@ -16,9 +19,13 @@ export class RecommendationFeedback {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'user_id' })
+  @Column({ name: 'user_id', type: 'uuid' })
   @Index()
   userId: string;
+
+  @ManyToOne(() => AppUser, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'user_id' })
+  user: AppUser;
 
   /** 推荐所属餐次 */
   @Column({ name: 'meal_type', length: 20 })
@@ -53,6 +60,15 @@ export class RecommendationFeedback {
   /** 用户目标类型（快照，方便分析） */
   @Column({ name: 'goal_type', length: 20, nullable: true })
   goalType: string;
+
+  /** V5 3.7: A/B 实验 ID（记录反馈时所属实验，便于指标聚合） */
+  @Column({ name: 'experiment_id', type: 'uuid', nullable: true })
+  @Index()
+  experimentId: string;
+
+  /** V5 3.7: A/B 实验分组名（如 'control', 'variant_a'） */
+  @Column({ name: 'group_id', length: 50, nullable: true })
+  groupId: string;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

@@ -2,9 +2,11 @@ import { Controller, Get, Query, UseGuards, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AppJwtAuthGuard } from '../../auth/app/app-jwt-auth.guard';
 import { CurrentAppUser } from '../../auth/app/current-app-user.decorator';
+import { AppUserPayload } from '../../auth/app/app-user-payload.type';
 import { ApiResponse } from '../../../common/types/response.type';
 import { FoodService } from './food.service';
 import { UserProfileService } from '../../user/app/user-profile.service';
+import { RecentSummaryQueryDto } from './food.dto';
 
 @ApiTags('App 饮食汇总')
 @Controller('app/food')
@@ -22,7 +24,9 @@ export class FoodSummaryController {
    */
   @Get('summary/today')
   @ApiOperation({ summary: '获取今日饮食汇总' })
-  async getTodaySummary(@CurrentAppUser() user: any): Promise<ApiResponse> {
+  async getTodaySummary(
+    @CurrentAppUser() user: AppUserPayload,
+  ): Promise<ApiResponse> {
     const summary = await this.foodService.getTodaySummary(user.id);
 
     // 补充热量目标
@@ -51,12 +55,12 @@ export class FoodSummaryController {
   @Get('summary/recent')
   @ApiOperation({ summary: '获取最近 N 天饮食汇总' })
   async getRecentSummaries(
-    @CurrentAppUser() user: any,
-    @Query('days') days?: string,
+    @CurrentAppUser() user: AppUserPayload,
+    @Query() query: RecentSummaryQueryDto,
   ): Promise<ApiResponse> {
     const data = await this.foodService.getRecentSummaries(
       user.id,
-      days ? parseInt(days, 10) : 7,
+      query.days ?? 7,
     );
     return {
       success: true,

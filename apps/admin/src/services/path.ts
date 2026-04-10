@@ -39,6 +39,20 @@ const PATH = {
     // 游戏化管理
     GAMIFICATION_ACHIEVEMENTS: '/admin/gamification/achievements',
     GAMIFICATION_CHALLENGES: '/admin/gamification/challenges',
+    // 分析记录管理
+    ANALYSIS_RECORDS: '/admin/analysis-records',
+    // 订阅管理
+    SUBSCRIPTIONS: '/admin/subscriptions',
+    // 策略管理
+    STRATEGIES: '/admin/strategies',
+    // 转化漏斗
+    CONVERSION_FUNNEL: '/admin/analytics/funnel',
+    // A/B 实验管理
+    AB_EXPERIMENTS: '/admin/ab-experiments',
+    // 推荐调试
+    RECOMMENDATION_DEBUG: '/admin/recommendation-debug',
+    // 用户画像看板
+    USER_DASHBOARD: '/admin/user-dashboard',
   },
 };
 

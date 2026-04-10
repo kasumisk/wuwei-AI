@@ -3,6 +3,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserProfile } from '../entities/user-profile.entity';
 import { UserBehaviorProfile } from '../entities/user-behavior-profile.entity';
+import { UserInferredProfile } from '../entities/user-inferred-profile.entity';
+import { RecommendationFeedback } from '../../diet/entities/recommendation-feedback.entity';
+import { FoodRecord } from '../../diet/entities/food-record.entity';
+import { FoodLibrary } from '../../food/entities/food-library.entity';
+import { ReminderDismissal } from '../entities/reminder-dismissal.entity';
 
 /**
  * 持续收集触发器
@@ -10,11 +15,11 @@ import { UserBehaviorProfile } from '../entities/user-behavior-profile.entity';
  *
  * 触发规则：
  * - 使用 7 天 + Step 3 未填 → 提醒 allergens, dietaryRestrictions
- * - 连续替换同类食物 ≥ 3 次 → 确认偏好（Toast）
+ * - V4 规则 6: 连续替换同类食物 ≥ 3 次 → 确认偏好（Toast）
  * - 使用 14 天 → cookingSkillLevel, budgetLevel
  * - 使用 30 天 → exerciseProfile
- * - 目标达成/停滞 → 调整 goal, goalSpeed
- * - 累计记录 ≥ 50 次 → tasteIntensity（可自动推断）
+ * - V4 规则 7: 目标达成/停滞 → 调整 goal, goalSpeed
+ * - V4 规则 8: 累计记录 ≥ 50 次 → tasteIntensity（可自动推断）
  */
 export interface CollectionReminder {
   type: 'popup' | 'toast' | 'card' | 'settings_guide';
@@ -36,6 +41,16 @@ export class CollectionTriggerService {
     private readonly profileRepo: Repository<UserProfile>,
     @InjectRepository(UserBehaviorProfile)
     private readonly behaviorRepo: Repository<UserBehaviorProfile>,
+    @InjectRepository(UserInferredProfile)
+    private readonly inferredRepo: Repository<UserInferredProfile>,
+    @InjectRepository(RecommendationFeedback)
+    private readonly feedbackRepo: Repository<RecommendationFeedback>,
+    @InjectRepository(FoodRecord)
+    private readonly foodRecordRepo: Repository<FoodRecord>,
+    @InjectRepository(FoodLibrary)
+    private readonly foodLibraryRepo: Repository<FoodLibrary>,
+    @InjectRepository(ReminderDismissal)
+    private readonly dismissalRepo: Repository<ReminderDismissal>,
   ) {}
 
   /**
@@ -52,7 +67,16 @@ export class CollectionTriggerService {
 
     const reminders: CollectionReminder[] = [];
     const completeness = Number(profile.dataCompleteness || 0);
-    const usageDays = behavior?.totalRecords || 0;
+    // V4 修复 B7: 使用日历天数替代 totalRecords
+    // totalRecords 是按食物记录计数，一天记 7 餐 = 7，不等于使用天数
+    const createdAt =
+      profile.createdAt instanceof Date
+        ? profile.createdAt
+        : new Date(profile.createdAt);
+    const usageDays = Math.max(
+      0,
+      Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24)),
+    );
 
     // ── 规则 1: 使用 7 天 + Step 3 核心字段未填 ──
     if (usageDays >= 7) {
@@ -161,12 +185,279 @@ export class CollectionTriggerService {
       });
     }
 
+    // ── 规则 6: 连续替换同品类 ≥3 次 → 确认偏好 ──
+    try {
+      const categoryPreference =
+        await this.detectRepeatedCategoryReplacement(userId);
+      if (categoryPreference) {
+        reminders.push({
+          type: 'toast',
+          field: 'preferenceConfirmation',
+          title: `你似乎更喜欢「${categoryPreference}」类食物`,
+          message: '我们注意到你连续多次替换为同类食物，是否确认这个偏好？',
+          priority: 'low',
+          dismissable: true,
+          nextReminderDays: 30,
+        });
+      }
+    } catch (err) {
+      this.logger.warn(`Rule 6 (category replacement) failed: ${err}`);
+    }
+
+    // ── 规则 7: 目标达成/停滞 → 调整目标建议 ──
+    try {
+      const goalSuggestion = await this.detectGoalAdjustmentNeed(userId);
+      if (goalSuggestion) {
+        reminders.push(goalSuggestion);
+      }
+    } catch (err) {
+      this.logger.warn(`Rule 7 (goal adjustment) failed: ${err}`);
+    }
+
+    // ── 规则 8: 累计记录 ≥ 50 次 + tasteIntensity 未填 → 自动推断 ──
+    try {
+      const tasteReminder = await this.detectTasteIntensityInference(
+        userId,
+        profile,
+      );
+      if (tasteReminder) {
+        reminders.push(tasteReminder);
+      }
+    } catch (err) {
+      this.logger.warn(`Rule 8 (taste intensity) failed: ${err}`);
+    }
+
     // 按优先级排序，每次最多返回 2 条提醒（避免骚扰）
     const priorityOrder = { high: 0, medium: 1, low: 2 };
     reminders.sort(
       (a, b) => priorityOrder[a.priority] - priorityOrder[b.priority],
     );
 
-    return reminders.slice(0, 2);
+    // V5 3.9: 过滤已关闭且在冷却期内的提醒
+    const filtered = await this.filterDismissedReminders(userId, reminders);
+
+    return filtered.slice(0, 2);
+  }
+
+  /**
+   * V5 3.9: 用户关闭提醒
+   *
+   * 使用 UPSERT 语义：如果已有关闭记录则更新 dismissedAt，
+   * 否则插入新记录。基于 UNIQUE(user_id, reminder_type) 约束。
+   */
+  async dismissReminder(userId: string, reminderType: string): Promise<void> {
+    await this.dismissalRepo.upsert(
+      {
+        userId,
+        reminderType,
+        dismissedAt: new Date(),
+      },
+      {
+        conflictPaths: ['userId', 'reminderType'],
+      },
+    );
+    this.logger.debug(`用户 ${userId} 关闭了提醒: ${reminderType}`);
+  }
+
+  /**
+   * V5 3.9: 过滤已关闭且仍在冷却期内的提醒
+   *
+   * 逻辑：
+   * - 查询该用户所有关闭记录
+   * - 对每条提醒，检查是否有对应关闭记录
+   * - 如果有关闭记录且 dismissedAt + nextReminderDays > 当前时间 → 过滤掉
+   * - 如果 nextReminderDays 为 null → 永久关闭，始终过滤
+   * - 如果 dismissable 为 false → 不可关闭的提醒不受影响
+   */
+  private async filterDismissedReminders(
+    userId: string,
+    reminders: CollectionReminder[],
+  ): Promise<CollectionReminder[]> {
+    if (reminders.length === 0) return reminders;
+
+    const dismissals = await this.dismissalRepo.find({
+      where: { userId },
+    });
+
+    if (dismissals.length === 0) return reminders;
+
+    // 构建 reminderType → dismissedAt 映射
+    const dismissalMap = new Map<string, Date>();
+    for (const d of dismissals) {
+      dismissalMap.set(d.reminderType, new Date(d.dismissedAt));
+    }
+
+    const now = Date.now();
+
+    return reminders.filter((reminder) => {
+      // 不可关闭的提醒不受去重影响
+      if (!reminder.dismissable) return true;
+
+      const dismissedAt = dismissalMap.get(reminder.field);
+      if (!dismissedAt) return true; // 未关闭过，保留
+
+      // nextReminderDays 为 null → 永久关闭
+      if (reminder.nextReminderDays === null) return false;
+
+      // 检查是否已超过冷却期
+      const cooldownMs = reminder.nextReminderDays * 24 * 60 * 60 * 1000;
+      const cooldownExpiry = dismissedAt.getTime() + cooldownMs;
+
+      return now >= cooldownExpiry; // 冷却期已过 → 保留
+    });
+  }
+
+  /**
+   * 规则 6: 检测连续替换同品类食物 ≥3 次
+   * 查询最近 10 条 replaced 反馈，按时间倒序检查连续同品类
+   */
+  private async detectRepeatedCategoryReplacement(
+    userId: string,
+  ): Promise<string | null> {
+    // 获取最近 10 条替换反馈
+    const recentReplacements = await this.feedbackRepo.find({
+      where: { userId, action: 'replaced' as const },
+      order: { createdAt: 'DESC' },
+      take: 10,
+    });
+
+    if (recentReplacements.length < 3) return null;
+
+    // 获取替换目标食物的品类信息
+    // replacementFood 是食物名，需要在 food_library 中查找品类
+    const replacementNames = recentReplacements
+      .map((r) => r.replacementFood)
+      .filter((name): name is string => !!name);
+
+    if (replacementNames.length < 3) return null;
+
+    // 批量查询食物品类
+    const foods = await this.foodLibraryRepo
+      .createQueryBuilder('f')
+      .select(['f.name', 'f.category'])
+      .where('f.name IN (:...names)', { names: replacementNames })
+      .getMany();
+
+    const nameToCategory = new Map<string, string>();
+    for (const food of foods) {
+      nameToCategory.set(food.name, food.category);
+    }
+
+    // 按时间顺序检测连续同品类（从最近开始）
+    let streak = 1;
+    let currentCategory: string | null = null;
+
+    for (const replacement of recentReplacements) {
+      if (!replacement.replacementFood) continue;
+      const category = nameToCategory.get(replacement.replacementFood);
+      if (!category) continue;
+
+      if (currentCategory === null) {
+        currentCategory = category;
+        streak = 1;
+      } else if (category === currentCategory) {
+        streak++;
+        if (streak >= 3) {
+          return this.categoryToDisplayName(currentCategory);
+        }
+      } else {
+        // 连续中断，从当前开始重新计数
+        currentCategory = category;
+        streak = 1;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * 规则 7: 检测目标达成或停滞，建议调整
+   */
+  private async detectGoalAdjustmentNeed(
+    userId: string,
+  ): Promise<CollectionReminder | null> {
+    const inferred = await this.inferredRepo.findOne({ where: { userId } });
+    if (!inferred?.goalProgress) return null;
+
+    const { progressPercent, trend } = inferred.goalProgress;
+
+    // 目标即将达成 (≥90%)
+    if (progressPercent != null && progressPercent >= 90) {
+      return {
+        type: 'card',
+        field: 'goal',
+        title: '🎉 目标即将达成！',
+        message: `你的目标已完成 ${Math.round(progressPercent)}%，是否设定新的目标？`,
+        priority: 'medium',
+        dismissable: true,
+        nextReminderDays: 7,
+      };
+    }
+
+    // 停滞 (trend === 'plateau')
+    if (trend === 'plateau') {
+      return {
+        type: 'card',
+        field: 'goalSpeed',
+        title: '📊 进展似乎有些停滞',
+        message:
+          '你的体重/指标近期波动不大，是否要调整目标速度或重新评估计划？',
+        priority: 'medium',
+        dismissable: true,
+        nextReminderDays: 14,
+      };
+    }
+
+    return null;
+  }
+
+  /**
+   * 规则 8: 累计记录 ≥50 条 + tasteIntensity 未填 → 提示可自动推断
+   */
+  private async detectTasteIntensityInference(
+    userId: string,
+    profile: UserProfile,
+  ): Promise<CollectionReminder | null> {
+    // 检查 tasteIntensity 是否已有有效值
+    const tasteIntensity = profile.tasteIntensity as Record<string, number>;
+    if (tasteIntensity && Object.keys(tasteIntensity).length > 0) {
+      // 检查是否所有值都是默认值（0）
+      const hasNonDefault = Object.values(tasteIntensity).some((v) => v > 0);
+      if (hasNonDefault) return null;
+    }
+
+    // 统计用户的饮食记录总数
+    const recordCount = await this.foodRecordRepo.count({
+      where: { userId },
+    });
+
+    if (recordCount < 50) return null;
+
+    return {
+      type: 'settings_guide',
+      field: 'tasteIntensity',
+      title: '🍽️ 我们可以帮你分析口味偏好',
+      message: `你已记录 ${recordCount} 餐，系统可以根据你的饮食历史自动推断口味偏好，让推荐更精准`,
+      priority: 'low',
+      dismissable: true,
+      nextReminderDays: 30,
+    };
+  }
+
+  /** 品类代码 → 显示名称 */
+  private categoryToDisplayName(category: string): string {
+    const map: Record<string, string> = {
+      protein: '蛋白质',
+      grain: '谷物',
+      veggie: '蔬菜',
+      fruit: '水果',
+      dairy: '乳制品',
+      fat: '油脂',
+      beverage: '饮品',
+      snack: '零食',
+      condiment: '调味品',
+      composite: '复合菜肴',
+    };
+    return map[category] || category;
   }
 }

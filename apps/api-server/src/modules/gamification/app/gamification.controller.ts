@@ -10,6 +10,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AppJwtAuthGuard } from '../../auth/app/app-jwt-auth.guard';
 import { CurrentAppUser } from '../../auth/app/current-app-user.decorator';
+import { AppUserPayload } from '../../auth/app/app-user-payload.type';
 import { ApiResponse } from '../../../common/types/response.type';
 import { GamificationService } from './gamification.service';
 
@@ -26,7 +27,9 @@ export class GamificationController {
    */
   @Get('achievements')
   @ApiOperation({ summary: '获取成就列表' })
-  async getAchievements(@CurrentAppUser() user: any): Promise<ApiResponse> {
+  async getAchievements(
+    @CurrentAppUser() user: AppUserPayload,
+  ): Promise<ApiResponse> {
     const data = await this.gamificationService.getAchievements(user.id);
     return {
       success: true,
@@ -42,7 +45,9 @@ export class GamificationController {
    */
   @Get('challenges')
   @ApiOperation({ summary: '获取挑战列表' })
-  async getChallenges(@CurrentAppUser() user: any): Promise<ApiResponse> {
+  async getChallenges(
+    @CurrentAppUser() user: AppUserPayload,
+  ): Promise<ApiResponse> {
     const data = await this.gamificationService.getChallenges(user.id);
     return {
       success: true,
@@ -60,7 +65,7 @@ export class GamificationController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '参加挑战' })
   async joinChallenge(
-    @CurrentAppUser() user: any,
+    @CurrentAppUser() user: AppUserPayload,
     @Param('id') id: string,
   ): Promise<ApiResponse> {
     const userChallenge = await this.gamificationService.joinChallenge(
@@ -81,7 +86,9 @@ export class GamificationController {
    */
   @Get('streak')
   @ApiOperation({ summary: '获取连胜状态' })
-  async getStreak(@CurrentAppUser() user: any): Promise<ApiResponse> {
+  async getStreak(
+    @CurrentAppUser() user: AppUserPayload,
+  ): Promise<ApiResponse> {
     const data = await this.gamificationService.getStreakStatus(user.id);
     return {
       success: true,

@@ -24,57 +24,47 @@ export class AddFoodLibraryTagsAndSource1751100000000 implements MigrationInterf
       `COMMENT ON COLUMN foods.confidence IS '营养数据置信度 0-1'`,
     );
 
-    // 2. 基于营养数据自动回填 tags（纯 SQL，覆盖所有已有记录）
-    //    规则：
-    //    - 高蛋白: protein_per_100g >= 15
-    //    - 低热量: calories_per_100g <= 80
-    //    - 超低热量: calories_per_100g <= 30
-    //    - 高脂肪: fat_per_100g >= 15
-    //    - 高碳水: carbs_per_100g >= 30
-    //    - 低脂: fat_per_100g <= 3
-    //    - 高饱腹: protein_per_100g >= 10 AND (fat_per_100g >= 5 OR carbs_per_100g >= 15)
-    //    - 天然: category IN (蔬菜, 水果)
-    //    - 均衡: 10 <= protein <= 25 AND 3 <= fat <= 15 AND 10 <= carbs <= 35
-    //    - 外卖: category = 快餐
-    //    - category 本身也作为 tag
+    // 2. 基于营养数据自动回填 tags（兼容新旧 foods schema）
+    const currentSchemaColumns = await queryRunner.query(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_name = 'foods'
+        AND column_name IN ('calories', 'protein', 'fat', 'carbs')
+    `);
+
+    const useCurrentSchema = currentSchemaColumns.length === 4;
+    const caloriesColumn = useCurrentSchema ? 'calories' : 'calories_per_100g';
+    const proteinColumn = useCurrentSchema ? 'protein' : 'protein_per_100g';
+    const fatColumn = useCurrentSchema ? 'fat' : 'fat_per_100g';
+    const carbsColumn = useCurrentSchema ? 'carbs' : 'carbs_per_100g';
+
     await queryRunner.query(`
       UPDATE foods SET tags = (
-        SELECT jsonb_agg(DISTINCT tag) FROM (
-          -- 分类标签
+        SELECT COALESCE(jsonb_agg(DISTINCT tag), '[]'::jsonb) FROM (
           SELECT category AS tag
           UNION ALL
-          -- 高蛋白
-          SELECT '高蛋白' WHERE COALESCE(protein_per_100g, 0) >= 15
+          SELECT 'high_protein' WHERE COALESCE(${proteinColumn}, 0) >= 15
           UNION ALL
-          -- 低热量
-          SELECT '低热量' WHERE calories_per_100g <= 80
+          SELECT 'low_calorie' WHERE COALESCE(${caloriesColumn}, 0) <= 80
           UNION ALL
-          -- 超低热量
-          SELECT '超低热量' WHERE calories_per_100g <= 30
+          SELECT 'ultra_low_calorie' WHERE COALESCE(${caloriesColumn}, 0) <= 30
           UNION ALL
-          -- 高脂肪
-          SELECT '高脂肪' WHERE COALESCE(fat_per_100g, 0) >= 15
+          SELECT 'high_fat' WHERE COALESCE(${fatColumn}, 0) >= 15
           UNION ALL
-          -- 高碳水
-          SELECT '高碳水' WHERE COALESCE(carbs_per_100g, 0) >= 30
+          SELECT 'high_carb' WHERE COALESCE(${carbsColumn}, 0) >= 30
           UNION ALL
-          -- 低脂
-          SELECT '低脂' WHERE COALESCE(fat_per_100g, 0) <= 3
+          SELECT 'low_fat' WHERE COALESCE(${fatColumn}, 0) <= 3
           UNION ALL
-          -- 高饱腹 (高蛋白 + 有一定脂肪或碳水)
-          SELECT '高饱腹' WHERE COALESCE(protein_per_100g, 0) >= 10
-            AND (COALESCE(fat_per_100g, 0) >= 5 OR COALESCE(carbs_per_100g, 0) >= 15)
+          SELECT 'high_satiety' WHERE COALESCE(${proteinColumn}, 0) >= 10
+            AND (COALESCE(${fatColumn}, 0) >= 5 OR COALESCE(${carbsColumn}, 0) >= 15)
           UNION ALL
-          -- 天然
-          SELECT '天然' WHERE category IN ('蔬菜', '水果', '豆制品')
+          SELECT 'natural' WHERE category IN ('veggie', 'fruit', 'dairy', '蔬菜', '水果', '豆制品')
           UNION ALL
-          -- 均衡
-          SELECT '均衡' WHERE COALESCE(protein_per_100g, 0) BETWEEN 5 AND 25
-            AND COALESCE(fat_per_100g, 0) BETWEEN 2 AND 15
-            AND COALESCE(carbs_per_100g, 0) BETWEEN 5 AND 35
+          SELECT 'balanced' WHERE COALESCE(${proteinColumn}, 0) BETWEEN 5 AND 25
+            AND COALESCE(${fatColumn}, 0) BETWEEN 2 AND 15
+            AND COALESCE(${carbsColumn}, 0) BETWEEN 5 AND 35
           UNION ALL
-          -- 外卖
-          SELECT '外卖' WHERE category = '快餐'
+          SELECT 'takeout' WHERE category IN ('composite', '快餐')
         ) sub WHERE tag IS NOT NULL
       )
     `);

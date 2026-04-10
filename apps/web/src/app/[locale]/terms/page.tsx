@@ -1,8 +1,8 @@
 import { TermsOfServicePage } from '@/components/common/legal/terms-of-service';
 
 export const metadata = {
-  title: 'Terms of Service | Procify Toolkit',
-  description: 'Terms of Service for Procify Toolkit — rules and guidelines for using the app.',
+  title: '服务条款 | 无畏健康 uWay Health',
+  description: '无畏健康 uWay Health 服务条款 — 使用本应用的规则和指引。',
 };
 
 export default function TermsPage() {

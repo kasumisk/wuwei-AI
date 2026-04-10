@@ -47,8 +47,8 @@ export function TermsOfServicePage() {
             </div>
             <p className="text-slate-600 dark:text-slate-400 leading-7 mb-8">
               By using{' '}
-              <strong className="text-slate-800 dark:text-slate-200">Procify Toolkit</strong>, you
-              agree to these terms.
+              <strong className="text-slate-800 dark:text-slate-200">无畏健康 uWay Health</strong>,
+              you agree to these terms.
             </p>
 
             <Section title="1. Services">
@@ -141,7 +141,7 @@ export function TermsOfServicePage() {
             </div>
             <p className="text-slate-600 dark:text-slate-400 leading-7 mb-8">
               欢迎使用{' '}
-              <strong className="text-slate-800 dark:text-slate-200">Procify Toolkit</strong>
+              <strong className="text-slate-800 dark:text-slate-200">无畏健康 uWay Health</strong>
               。使用本应用即表示您同意以下条款。
             </p>
 

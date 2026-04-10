@@ -3,7 +3,9 @@
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/features/auth/hooks/use-auth';
+import { useToast } from '@/lib/hooks/use-toast';
 import { foodLibraryClientAPI, type FoodLibraryItem } from '@/lib/api/food-library';
 
 interface FoodDetailClientProps {
@@ -35,6 +37,8 @@ const mealTypeLabels: Record<string, string> = {
 export default function FoodDetailClient({ locale, food, relatedFoods }: FoodDetailClientProps) {
   const router = useRouter();
   const { isLoggedIn } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const [servingGrams, setServingGrams] = useState(food.standardServingG);
   const [mealType, setMealType] = useState('lunch');
@@ -63,8 +67,16 @@ export default function FoodDetailClient({ locale, food, relatedFoods }: FoodDet
       await foodLibraryClientAPI.addFromLibrary(food.id, servingGrams, mealType);
       setAdded(true);
       setTimeout(() => setAdded(false), 2000);
+      // 刷新首页相关缓存
+      queryClient.invalidateQueries({ queryKey: ['daily-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['nutrition-score'] });
+      queryClient.invalidateQueries({ queryKey: ['daily-plan'] });
     } catch {
-      // 静默处理
+      toast({
+        title: '添加失败',
+        description: '记录食物时出错，请稍后重试',
+        variant: 'destructive',
+      });
     } finally {
       setAdding(false);
     }
@@ -269,7 +281,7 @@ export default function FoodDetailClient({ locale, food, relatedFoods }: FoodDet
       </main>
 
       {/* 底部固定操作栏 */}
-      <div className="fixed bottom-0 left-0 w-full bg-background/80 backdrop-blur-sm border-t border-border px-4 py-3 pb-safe z-10">
+      <div className="fixed bottom-[3.5rem] left-0 w-full bg-background/80 backdrop-blur-sm border-t border-border px-4 py-3 pb-safe z-10">
         <div className="max-w-2xl mx-auto">
           <button
             onClick={handleAddRecord}

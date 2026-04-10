@@ -5,7 +5,14 @@ import { UserBehaviorProfile } from '../../user/entities/user-behavior-profile.e
 import { AiDecisionLog } from '../entities/ai-decision-log.entity';
 import { RecommendationFeedback } from '../entities/recommendation-feedback.entity';
 import { FoodRecord } from '../entities/food-record.entity';
+import { DailySummary } from '../entities/daily-summary.entity';
 import { FoodService } from './food.service';
+import { UserProfileService } from '../../user/app/user-profile.service';
+import {
+  getUserLocalDate,
+  getUserLocalHour,
+  DEFAULT_TIMEZONE,
+} from '../../../common/utils/timezone.util';
 
 export interface ProactiveReminder {
   type: 'binge_risk' | 'meal_reminder' | 'streak_warning' | 'pattern_alert';
@@ -26,7 +33,10 @@ export class BehaviorService {
     private readonly feedbackRepo: Repository<RecommendationFeedback>,
     @InjectRepository(FoodRecord)
     private readonly foodRecordRepo: Repository<FoodRecord>,
+    @InjectRepository(DailySummary)
+    private readonly dailySummaryRepo: Repository<DailySummary>,
     private readonly foodService: FoodService,
+    private readonly userProfileService: UserProfileService,
   ) {}
 
   /**
@@ -95,33 +105,82 @@ export class BehaviorService {
 
   /**
    * 更新连胜天数（每次 saveRecord 后调用）
+   *
+   * V4 重写修复:
+   * - B1: 使用 lastStreakDate 防止同一天重复递增 streakDays
+   * - B2: 昨日未达标时 streakDays 归零
+   * - B3: avgComplianceRate 按天计算（近 30 天窗口）
    */
   async updateStreak(userId: string): Promise<void> {
-    const summary = await this.foodService.getTodaySummary(userId);
-    const goal = summary.calorieGoal || 2000;
     const profile = await this.getProfile(userId);
+    const tz = await this.userProfileService.getTimezone(userId);
+    const today = getUserLocalDate(tz);
 
+    // 递增总记录数（仍按记录计数，用于其他用途如 collection-trigger）
     profile.totalRecords += 1;
 
-    if (summary.totalCalories <= goal) {
-      profile.healthyRecords += 1;
+    // 防止同一天重复评估 streak（修复 B1）
+    if (profile.lastStreakDate === today) {
+      await this.behaviorRepo.save(profile);
+      return;
     }
 
-    // 简化的连胜逻辑：在 getTodaySummary 时判断当天是否达标
-    if (summary.totalCalories > 0 && summary.totalCalories <= goal) {
-      profile.streakDays += 1;
-      if (profile.streakDays > profile.longestStreak) {
-        profile.longestStreak = profile.streakDays;
+    // 查询昨日汇总判断是否达标
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = getUserLocalDate(tz, yesterday);
+
+    const yesterdaySummary = await this.dailySummaryRepo.findOne({
+      where: { userId, date: yesterdayStr },
+    });
+
+    if (yesterdaySummary) {
+      const goal = yesterdaySummary.calorieGoal || 2000;
+      const actual = yesterdaySummary.totalCalories || 0;
+      // 达标条件：有进食记录 && 热量在目标的 80%~110% 之间
+      const isCompliant =
+        actual > 0 && actual >= goal * 0.8 && actual <= goal * 1.1;
+
+      if (isCompliant) {
+        profile.streakDays += 1;
+        if (profile.streakDays > profile.longestStreak) {
+          profile.longestStreak = profile.streakDays;
+        }
+      } else {
+        // 修复 B2: 不达标归零
+        profile.streakDays = 0;
       }
     }
+    // 如果昨日无记录（首日或刚注册），不改变 streak
 
-    // 更新执行率
-    if (profile.totalRecords > 0) {
-      profile.avgComplianceRate = Number(
-        (profile.healthyRecords / profile.totalRecords).toFixed(2),
-      );
-    }
+    // 修复 B3: 合规率按天计算（近 30 天滑动窗口）
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const sinceDate = thirtyDaysAgo.toISOString().slice(0, 10);
 
+    const complianceResult = await this.dailySummaryRepo
+      .createQueryBuilder('s')
+      .select('COUNT(*)', 'total_days')
+      .addSelect(
+        `SUM(CASE WHEN s.total_calories > 0
+          AND s.calorie_goal IS NOT NULL
+          AND s.total_calories >= s.calorie_goal * 0.8
+          AND s.total_calories <= s.calorie_goal * 1.1
+          THEN 1 ELSE 0 END)`,
+        'healthy_days',
+      )
+      .where('s.user_id = :userId', { userId })
+      .andWhere('s.date >= :sinceDate', { sinceDate })
+      .getRawOne();
+
+    const totalDays = Number(complianceResult?.total_days) || 0;
+    const healthyDays = Number(complianceResult?.healthy_days) || 0;
+
+    profile.avgComplianceRate =
+      totalDays > 0 ? Number((healthyDays / totalDays).toFixed(2)) : 0;
+    profile.healthyRecords = healthyDays; // 现在表示健康天数
+
+    profile.lastStreakDate = today;
     await this.behaviorRepo.save(profile);
   }
 
@@ -153,7 +212,8 @@ export class BehaviorService {
    * 主动检查提醒
    */
   async proactiveCheck(userId: string): Promise<ProactiveReminder | null> {
-    const hour = new Date().getHours();
+    const tz = await this.userProfileService.getTimezone(userId);
+    const hour = getUserLocalHour(tz);
     const profile = await this.behaviorRepo.findOne({ where: { userId } });
     const summary = await this.foodService.getTodaySummary(userId);
 
@@ -214,6 +274,7 @@ export class BehaviorService {
     if (logs.length < 5) return; // 数据不足
 
     const profile = await this.getProfile(userId);
+    const tz = await this.userProfileService.getTimezone(userId);
 
     // 识别常用食物
     const foodCounts: Record<string, number> = {};
@@ -234,7 +295,7 @@ export class BehaviorService {
     const hourCounts: Record<number, number> = {};
     for (const log of logs) {
       if (log.decision === 'AVOID' || log.decision === 'LIMIT') {
-        const h = new Date(log.createdAt).getHours();
+        const h = getUserLocalHour(tz, new Date(log.createdAt));
         hourCounts[h] = (hourCounts[h] || 0) + 1;
       }
     }
@@ -253,7 +314,7 @@ export class BehaviorService {
     await this.analyzeRecommendationFeedback(userId, profile);
 
     // ── 用餐时间模式推断 ──
-    await this.analyzeMealTimingPatterns(userId, profile);
+    await this.analyzeMealTimingPatterns(userId, profile, tz);
 
     // ── 替换模式分析 ──
     await this.analyzeReplacementPatterns(userId, profile);
@@ -336,6 +397,7 @@ export class BehaviorService {
   private async analyzeMealTimingPatterns(
     userId: string,
     profile: UserBehaviorProfile,
+    timezone: string,
   ): Promise<void> {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -356,7 +418,7 @@ export class BehaviorService {
     };
 
     for (const record of records) {
-      const hour = (record.createdAt as Date).getHours();
+      const hour = getUserLocalHour(timezone, record.createdAt as Date);
       if (hour >= 5 && hour < 10) mealTimes.breakfast.push(hour);
       else if (hour >= 10 && hour < 14) mealTimes.lunch.push(hour);
       else if (hour >= 16 && hour < 21) mealTimes.dinner.push(hour);

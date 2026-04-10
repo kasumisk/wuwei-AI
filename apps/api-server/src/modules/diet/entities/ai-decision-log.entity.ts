@@ -3,7 +3,10 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import { AppUser } from '../../user/entities/app-user.entity';
 
 @Entity('ai_decision_logs')
 export class AiDecisionLog {
@@ -12,6 +15,10 @@ export class AiDecisionLog {
 
   @Column({ name: 'user_id', type: 'uuid' })
   userId: string;
+
+  @ManyToOne(() => AppUser, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'user_id' })
+  user: AppUser;
 
   @Column({ name: 'record_id', type: 'uuid', nullable: true })
   recordId: string | null;

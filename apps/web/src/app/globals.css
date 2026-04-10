@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@plugin '@tailwindcss/typography';
 
 /* Tailwind v4: data-theme attribute dark mode, matched to next-themes ThemeProvider */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
@@ -71,7 +72,7 @@
 }
 
 @layer base {
-  [data-theme="dark"] {
+  [data-theme='dark'] {
     /* Dark — Deep green-tinted surfaces */
     --color-background: #0a1f12;
     --color-foreground: #ddffe2;
@@ -146,11 +147,15 @@
   -webkit-backdrop-filter: blur(12px);
 }
 
-[data-theme="dark"] .glass-morphism {
+[data-theme='dark'] .glass-morphism {
   background: rgba(10, 31, 18, 0.7);
 }
 
 /* Material Symbols */
 .material-symbols-outlined {
-  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 24;
 }

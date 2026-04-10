@@ -32,15 +32,31 @@ interface UsdaSearchResponse {
 }
 
 /** 标准化后的食物数据 */
+export interface ImportMetadata {
+  group?: 'regular' | 'special';
+  specialReason?: string;
+  extraTags?: string[];
+  desiredStatus?: 'draft' | 'active';
+  desiredVerified?: boolean;
+  desiredVerifiedBy?: string;
+  desiredSearchWeight?: number;
+  operator?: string;
+}
+
 export interface NormalizedFoodData {
-  sourceType: 'usda';
+  sourceType: string;
   sourceId: string;
   sourceUrl: string;
   rawPayload: Record<string, any>;
+  mappedData?: Record<string, any>;
   fetchedAt: Date;
+  code?: string;
   // 映射后的标准字段
   name: string;
+  aliases?: string;
   category?: string;
+  subCategory?: string;
+  foodGroup?: string;
   calories: number;
   protein?: number;
   fat?: number;
@@ -62,6 +78,23 @@ export interface NormalizedFoodData {
   folate?: number;
   zinc?: number;
   magnesium?: number;
+  phosphorus?: number;
+  glycemicIndex?: number;
+  glycemicLoad?: number;
+  isProcessed?: boolean;
+  isFried?: boolean;
+  processingLevel?: number;
+  allergens?: string[];
+  mealTypes?: string[];
+  tags?: string[];
+  mainIngredient?: string;
+  compatibility?: Record<string, string[]>;
+  standardServingG?: number;
+  standardServingDesc?: string;
+  commonPortions?: Array<{ name: string; grams: number }>;
+  barcode?: string;
+  searchWeight?: number;
+  importMetadata?: ImportMetadata;
 }
 
 /**

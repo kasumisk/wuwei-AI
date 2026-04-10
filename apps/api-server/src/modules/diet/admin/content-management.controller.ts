@@ -12,6 +12,7 @@ import { JwtAuthGuard } from '../../auth/admin/jwt-auth.guard';
 import { RolesGuard } from '../../rbac/admin/roles.guard';
 import { Roles } from '../../rbac/admin/roles.decorator';
 import { ContentManagementService } from './content-management.service';
+import { RecommendationQualityService } from './recommendation-quality.service';
 import {
   GetFoodRecordsQueryDto,
   GetDailyPlansQueryDto,
@@ -27,7 +28,10 @@ import { ApiResponse } from '../../../common/types/response.type';
 @Roles('admin', 'super_admin')
 @ApiBearerAuth()
 export class ContentManagementController {
-  constructor(private readonly contentService: ContentManagementService) {}
+  constructor(
+    private readonly contentService: ContentManagementService,
+    private readonly qualityService: RecommendationQualityService,
+  ) {}
 
   // ==================== 饮食记录 ====================
 
@@ -144,6 +148,57 @@ export class ContentManagementController {
   @ApiOperation({ summary: '获取AI决策日志统计' })
   async getAiLogStatistics(): Promise<ApiResponse> {
     const data = await this.contentService.getAiLogStatistics();
+    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+  }
+
+  // ==================== V4 Phase 3.6: 推荐质量仪表盘 ====================
+
+  @Get('recommendation-quality/overview')
+  @ApiOperation({ summary: '推荐质量概览（接受率/替换率/跳过率）' })
+  async getQualityOverview(@Query('days') days?: string): Promise<ApiResponse> {
+    const data = await this.qualityService.getQualityOverview(
+      days ? parseInt(days, 10) : 30,
+    );
+    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+  }
+
+  @Get('recommendation-quality/by-goal')
+  @ApiOperation({ summary: '按目标类型的接受率分布' })
+  async getAcceptanceByGoal(
+    @Query('days') days?: string,
+  ): Promise<ApiResponse> {
+    const data = await this.qualityService.getAcceptanceByGoalType(
+      days ? parseInt(days, 10) : 30,
+    );
+    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+  }
+
+  @Get('recommendation-quality/by-meal')
+  @ApiOperation({ summary: '按餐次的接受率分布' })
+  async getAcceptanceByMeal(
+    @Query('days') days?: string,
+  ): Promise<ApiResponse> {
+    const data = await this.qualityService.getAcceptanceByMealType(
+      days ? parseInt(days, 10) : 30,
+    );
+    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+  }
+
+  @Get('recommendation-quality/trend')
+  @ApiOperation({ summary: '推荐质量日趋势' })
+  async getQualityTrend(@Query('days') days?: string): Promise<ApiResponse> {
+    const data = await this.qualityService.getDailyTrend(
+      days ? parseInt(days, 10) : 30,
+    );
+    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+  }
+
+  @Get('recommendation-quality/plan-coverage')
+  @ApiOperation({ summary: '计划覆盖统计' })
+  async getPlanCoverage(@Query('days') days?: string): Promise<ApiResponse> {
+    const data = await this.qualityService.getPlanCoverage(
+      days ? parseInt(days, 10) : 30,
+    );
     return { success: true, code: HttpStatus.OK, message: '获取成功', data };
   }
 }

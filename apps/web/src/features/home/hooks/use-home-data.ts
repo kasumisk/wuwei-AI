@@ -24,12 +24,6 @@ export function useHomeData() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const dailyPlanQuery = useQuery({
-    queryKey: ['daily-plan'],
-    queryFn: () => recommendationService.getDailyPlan(),
-    staleTime: 5 * 60 * 1000,
-  });
-
   const reminderQuery = useQuery({
     queryKey: ['proactive-check'],
     queryFn: () => recommendationService.proactiveCheck(),
@@ -42,6 +36,12 @@ export function useHomeData() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const recentSummariesQuery = useQuery({
+    queryKey: ['recent-summaries', 7],
+    queryFn: () => foodRecordService.getRecentSummaries(7),
+    staleTime: 5 * 60 * 1000,
+  });
+
   return {
     summary: summaryQuery.data ?? {
       totalCalories: 0,
@@ -51,9 +51,9 @@ export function useHomeData() {
     },
     records: recordsQuery.data ?? [],
     suggestion: suggestionQuery.data ?? null,
-    dailyPlan: dailyPlanQuery.data ?? null,
     reminder: reminderQuery.data?.reminder ?? null,
     profile: profileQuery.data ?? null,
+    recentSummaries: recentSummariesQuery.data ?? [],
     isLoading: summaryQuery.isLoading || recordsQuery.isLoading,
   };
 }

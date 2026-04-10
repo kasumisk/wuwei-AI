@@ -3,12 +3,39 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/features/auth/hooks/use-auth';
+import { useToast } from '@/lib/hooks/use-toast';
+import { useQueryClient } from '@tanstack/react-query';
+import { useSubscription } from '@/features/subscription/hooks/use-subscription';
+import ReactMarkdown from 'react-markdown';
 import {
   sendCoachMessage,
   coachService,
   type CoachConversation,
   type DailyGreeting,
 } from '@/lib/api/coach';
+import { gamificationService } from '@/lib/api/gamification';
+import { useProfile } from '@/features/profile/hooks/use-profile';
+
+const COACH_STYLES = [
+  {
+    value: 'friendly' as const,
+    label: '温和鼓励',
+    icon: '😊',
+    desc: '以积极正面的方式引导，注重鼓励和支持',
+  },
+  {
+    value: 'strict' as const,
+    label: '严格督促',
+    icon: '💪',
+    desc: '直接指出问题，给出明确的改进要求',
+  },
+  {
+    value: 'data' as const,
+    label: '数据分析',
+    icon: '📊',
+    desc: '用数据说话，客观呈现营养摄入趋势',
+  },
+];
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -19,6 +46,10 @@ interface ChatMessage {
 export default function CoachPage() {
   const router = useRouter();
   const { isLoggedIn } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { behaviorProfile } = useProfile();
+  const { isFree, triggerPaywall } = useSubscription();
 
   // 状态
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -28,6 +59,8 @@ export default function CoachPage() {
   const [greeting, setGreeting] = useState<DailyGreeting | null>(null);
   const [conversations, setConversations] = useState<CoachConversation[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [showStylePicker, setShowStylePicker] = useState(false);
+  const [updatingStyle, setUpdatingStyle] = useState(false);
   const [loadingGreeting, setLoadingGreeting] = useState(true);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -152,25 +185,28 @@ export default function CoachPage() {
       const convs = await coachService.getConversations();
       setConversations(convs);
     } catch {
-      // 忽略错误
+      toast({ title: '加载历史对话失败', variant: 'destructive' });
     }
-  }, []);
+  }, [toast]);
 
   // 加载对话消息
-  const loadConversation = useCallback(async (conv: CoachConversation) => {
-    try {
-      const data = await coachService.getMessages(conv.id);
-      const msgs: ChatMessage[] = data.items.map((m) => ({
-        role: m.role as 'user' | 'assistant',
-        content: m.content,
-      }));
-      setMessages(msgs);
-      setConversationId(conv.id);
-      setShowHistory(false);
-    } catch {
-      // 忽略错误
-    }
-  }, []);
+  const loadConversation = useCallback(
+    async (conv: CoachConversation) => {
+      try {
+        const data = await coachService.getMessages(conv.id);
+        const msgs: ChatMessage[] = data.items.map((m) => ({
+          role: m.role as 'user' | 'assistant',
+          content: m.content,
+        }));
+        setMessages(msgs);
+        setConversationId(conv.id);
+        setShowHistory(false);
+      } catch {
+        toast({ title: '加载对话失败', variant: 'destructive' });
+      }
+    },
+    [toast]
+  );
 
   // 删除对话
   const deleteConversation = useCallback(
@@ -182,11 +218,12 @@ export default function CoachPage() {
           setMessages([]);
           setConversationId(null);
         }
+        toast({ title: '对话已删除' });
       } catch {
-        // 忽略错误
+        toast({ title: '删除失败', variant: 'destructive' });
       }
     },
-    [conversationId]
+    [conversationId, toast]
   );
 
   // 新对话
@@ -195,6 +232,28 @@ export default function CoachPage() {
     setConversationId(null);
     setShowHistory(false);
   }, []);
+
+  // 切换教练风格
+  const handleStyleChange = useCallback(
+    async (style: 'strict' | 'friendly' | 'data') => {
+      if (updatingStyle) return;
+      setUpdatingStyle(true);
+      try {
+        await gamificationService.updateCoachStyle(style);
+        queryClient.invalidateQueries({ queryKey: ['profile', 'behavior'] });
+        const label = COACH_STYLES.find((s) => s.value === style)?.label || style;
+        toast({ title: `教练风格已切换为「${label}」` });
+        setShowStylePicker(false);
+      } catch {
+        toast({ title: '切换失败，请稍后再试', variant: 'destructive' });
+      } finally {
+        setUpdatingStyle(false);
+      }
+    },
+    [updatingStyle, queryClient, toast]
+  );
+
+  const currentStyle = behaviorProfile?.coachStyle || 'friendly';
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -255,8 +314,94 @@ export default function CoachPage() {
               />
             </svg>
           </button>
+          <button
+            onClick={() => setShowStylePicker(true)}
+            className="p-2 rounded-lg hover:bg-muted transition-colors"
+            title="教练风格"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+              />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+              />
+            </svg>
+          </button>
         </div>
       </header>
+
+      {/* 教练风格选择面板 */}
+      {showStylePicker && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40"
+          onClick={() => setShowStylePicker(false)}
+        >
+          <div
+            className="bg-card rounded-t-2xl w-full max-w-lg p-5 pb-8 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold">选择教练风格</h3>
+              <button
+                onClick={() => setShowStylePicker(false)}
+                className="p-1 rounded-lg hover:bg-muted transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground mb-4">
+              切换后，AI 教练的回复语气和侧重点会随之调整
+            </p>
+            <div className="space-y-2">
+              {COACH_STYLES.map((style) => {
+                const isActive = currentStyle === style.value;
+                return (
+                  <button
+                    key={style.value}
+                    onClick={() => handleStyleChange(style.value)}
+                    disabled={updatingStyle || isActive}
+                    className={`w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all ${
+                      isActive
+                        ? 'bg-primary/10 border-2 border-primary'
+                        : 'bg-muted/50 border-2 border-transparent hover:bg-muted'
+                    } disabled:opacity-60`}
+                  >
+                    <span className="text-2xl flex-shrink-0">{style.icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold">{style.label}</span>
+                        {isActive && (
+                          <span className="text-[10px] font-medium text-primary bg-primary/10 px-1.5 py-0.5 rounded-full">
+                            当前
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">{style.desc}</p>
+                    </div>
+                    {updatingStyle && !isActive && (
+                      <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 历史记录面板 */}
       {showHistory && (
@@ -315,7 +460,7 @@ export default function CoachPage() {
       )}
 
       {/* 消息区域 */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-32">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-40">
         {/* 每日问候卡片 */}
         {messages.length === 0 && (
           <div className="space-y-4 mt-4">
@@ -335,6 +480,26 @@ export default function CoachPage() {
                       </p>
                     </div>
                   </div>
+
+                  {/* 免费用户配额提示 */}
+                  {isFree && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 flex items-center justify-between">
+                      <span className="text-xs text-amber-700">免费版：每天可对话 5 次</span>
+                      <button
+                        onClick={() =>
+                          triggerPaywall({
+                            code: 'coach_limit',
+                            message: '升级解锁无限 AI 教练对话',
+                            recommendedTier: 'pro',
+                            triggerScene: 'analysis_limit',
+                          })
+                        }
+                        className="text-xs text-primary font-bold shrink-0 ml-2"
+                      >
+                        升级
+                      </button>
+                    </div>
+                  )}
 
                   {/* 快捷操作 */}
                   <div className="space-y-2">
@@ -372,7 +537,13 @@ export default function CoachPage() {
                   : 'bg-muted text-foreground rounded-bl-md'
               }`}
             >
-              <p className="whitespace-pre-wrap">{msg.content}</p>
+              {msg.role === 'user' ? (
+                <p className="whitespace-pre-wrap">{msg.content}</p>
+              ) : (
+                <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-2 prose-headings:text-foreground prose-strong:text-foreground">
+                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+                </div>
+              )}
               {msg.streaming && (
                 <span className="inline-block w-1.5 h-4 bg-current opacity-60 animate-pulse ml-0.5 align-text-bottom" />
               )}
@@ -382,7 +553,7 @@ export default function CoachPage() {
       </div>
 
       {/* 输入栏 */}
-      <div className="fixed bottom-0 left-0 w-full bg-background/80 backdrop-blur-sm border-t border-border px-4 py-3 pb-safe">
+      <div className="fixed bottom-[3.5rem] left-0 w-full bg-background/80 backdrop-blur-sm border-t border-border px-4 py-3 pb-safe">
         <form onSubmit={handleSubmit} className="flex items-center gap-2 max-w-2xl mx-auto">
           <input
             ref={inputRef}

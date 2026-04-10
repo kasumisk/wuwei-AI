@@ -1,7 +1,7 @@
 {
-  "short_name": "Next App",
-  "name": "Next.js PWA Application",
-  "description": "A Progressive Web App built with Next.js",
+  "short_name": "无畏健康",
+  "name": "无畏健康 uWay Health",
+  "description": "你的 AI 营养管家 — 拍照识别食物、个性化营养分析、智能饮食推荐",
   "icons": [
     {
       "src": "/icon-192x192.png",
@@ -22,7 +22,7 @@
   ],
   "start_url": "/",
   "display": "standalone",
-  "theme_color": "#000000",
+  "theme_color": "#10b981",
   "background_color": "#ffffff",
   "orientation": "portrait"
 }

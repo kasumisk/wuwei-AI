@@ -24,11 +24,11 @@ export interface PageParams {
  */
 export interface PageResponse<T = any> {
   records: T[];
+  list: T[];
   total: number;
-  current: number;
-  size: number;
-  pages: number;
-  orders?: any[];
+  page: number;
+  pageSize: number;
+  totalPages: number;
 }
 
 /**

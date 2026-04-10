@@ -138,4 +138,36 @@ export class AppUserManagementController {
       data,
     };
   }
+
+  /**
+   * 获取用户行为画像
+   */
+  @Get(':id/behavior-profile')
+  @ApiOperation({ summary: '获取用户行为画像（食物偏好、依从率、连续打卡等）' })
+  async getBehaviorProfile(@Param('id') id: string): Promise<ApiResponse> {
+    const data = await this.appUserManagementService.getBehaviorProfile(id);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '获取用户行为画像成功',
+      data,
+    };
+  }
+
+  /**
+   * 获取用户推断画像
+   */
+  @Get(':id/inferred-profile')
+  @ApiOperation({
+    summary: '获取用户推断画像（BMR/TDEE、宏量素目标、流失风险、目标进度等）',
+  })
+  async getInferredProfile(@Param('id') id: string): Promise<ApiResponse> {
+    const data = await this.appUserManagementService.getInferredProfile(id);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '获取用户推断画像成功',
+      data,
+    };
+  }
 }

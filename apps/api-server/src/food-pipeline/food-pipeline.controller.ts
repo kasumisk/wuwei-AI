@@ -152,6 +152,24 @@ export class FoodPipelineController {
     };
   }
 
+  @Post('rules/backfill-nutrient-scores')
+  @ApiOperation({
+    summary: '批量回填营养密度分数（nutrientDensity/qualityScore/satietyScore）',
+  })
+  async backfillNutrientScores(
+    @Body() body: { batchSize?: number },
+  ): Promise<ApiResponse> {
+    const result = await this.orchestrator.backfillNutrientScores(
+      body.batchSize,
+    );
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '回填完成',
+      data: result,
+    };
+  }
+
   // ==================== 冲突解决 ====================
 
   @Post('conflicts/resolve-all')

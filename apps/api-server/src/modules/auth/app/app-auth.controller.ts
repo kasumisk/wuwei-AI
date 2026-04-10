@@ -32,6 +32,7 @@ import { Public } from '../../../core/decorators/public.decorator';
 import { IgnoreResponseInterceptor } from '../../../core/decorators/ignore-response-interceptor.decorator';
 import { AppJwtAuthGuard } from './app-jwt-auth.guard';
 import { CurrentAppUser } from './current-app-user.decorator';
+import { AppUserPayload } from './app-user-payload.type';
 import { ApiResponse } from '../../../common/types/response.type';
 
 @ApiTags('App 用户认证')
@@ -325,7 +326,9 @@ export class AppAuthController {
   @UseGuards(AppJwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: '获取当前用户信息' })
-  async getProfile(@CurrentAppUser() user: any): Promise<ApiResponse> {
+  async getProfile(
+    @CurrentAppUser() user: AppUserPayload,
+  ): Promise<ApiResponse> {
     const data = await this.appAuthService.getUserInfo(user.id);
     return {
       success: true,
@@ -344,7 +347,7 @@ export class AppAuthController {
   @ApiBearerAuth()
   @ApiOperation({ summary: '更新用户资料' })
   async updateProfile(
-    @CurrentAppUser() user: any,
+    @CurrentAppUser() user: AppUserPayload,
     @Body() dto: UpdateAppUserProfileDto,
   ): Promise<ApiResponse> {
     const data = await this.appAuthService.updateProfile(user.id, dto);
@@ -366,7 +369,7 @@ export class AppAuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '匿名用户升级（绑定邮箱）' })
   async upgradeAnonymous(
-    @CurrentAppUser() user: any,
+    @CurrentAppUser() user: AppUserPayload,
     @Body() dto: UpgradeAnonymousDto,
   ): Promise<ApiResponse> {
     const data = await this.appAuthService.upgradeAnonymous(
@@ -391,7 +394,9 @@ export class AppAuthController {
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '刷新 Token' })
-  async refreshToken(@CurrentAppUser() user: any): Promise<ApiResponse> {
+  async refreshToken(
+    @CurrentAppUser() user: AppUserPayload,
+  ): Promise<ApiResponse> {
     const data = await this.appAuthService.refreshToken(user.id);
     return {
       success: true,

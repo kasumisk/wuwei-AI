@@ -22,19 +22,24 @@ export function useFoodLibrary({
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [categoryFoods, setCategoryFoods] = useState<FoodLibraryItem[]>([]);
   const [loadingCategory, setLoadingCategory] = useState(false);
+  const [searchError, setSearchError] = useState(false);
+  const [categoryError, setCategoryError] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleSearch = useCallback(async (q: string) => {
     if (!q.trim()) {
       setResults([]);
+      setSearchError(false);
       return;
     }
     setSearching(true);
+    setSearchError(false);
     try {
       const data = await foodLibraryClientAPI.search(q, 20);
       setResults(data);
     } catch {
       setResults([]);
+      setSearchError(true);
     } finally {
       setSearching(false);
     }
@@ -58,21 +63,39 @@ export function useFoodLibrary({
       if (activeCategory === category) {
         setActiveCategory(null);
         setCategoryFoods([]);
+        setCategoryError(false);
         return;
       }
       setActiveCategory(category);
       setLoadingCategory(true);
+      setCategoryError(false);
       try {
         const data = await foodLibraryClientAPI.getPopular(category, 50);
         setCategoryFoods(data);
       } catch {
         setCategoryFoods([]);
+        setCategoryError(true);
       } finally {
         setLoadingCategory(false);
       }
     },
     [activeCategory]
   );
+
+  const retryCategory = useCallback(async () => {
+    if (!activeCategory) return;
+    setLoadingCategory(true);
+    setCategoryError(false);
+    try {
+      const data = await foodLibraryClientAPI.getPopular(activeCategory, 50);
+      setCategoryFoods(data);
+    } catch {
+      setCategoryFoods([]);
+      setCategoryError(true);
+    } finally {
+      setLoadingCategory(false);
+    }
+  }, [activeCategory]);
 
   const clearSearch = useCallback(() => {
     setQuery('');
@@ -107,5 +130,8 @@ export function useFoodLibrary({
     showSearchResults,
     showCategoryFoods,
     displayFoods,
+    searchError,
+    categoryError,
+    retryCategory,
   };
 }

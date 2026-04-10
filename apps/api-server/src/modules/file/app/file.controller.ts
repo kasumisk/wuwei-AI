@@ -19,6 +19,7 @@ import {
 } from '@nestjs/swagger';
 import { AppJwtAuthGuard } from '../../auth/app/app-jwt-auth.guard';
 import { CurrentAppUser } from '../../auth/app/current-app-user.decorator';
+import { AppUserPayload } from '../../auth/app/app-user-payload.type';
 import { StorageService } from '../../../storage/storage.service';
 import {
   UploadFileDto,
@@ -56,7 +57,7 @@ export class AppFileController {
     )
     file: Express.Multer.File,
     @Body() dto: UploadFileDto,
-    @CurrentAppUser() user: any,
+    @CurrentAppUser() user: AppUserPayload,
   ): Promise<ApiResponse> {
     const category = dto.category || FileCategory.IMAGE;
     const folder = `${category}/user-${user.id}`;
@@ -83,7 +84,7 @@ export class AppFileController {
   @SwaggerResponse({ status: 200, type: PresignedUploadResponseDto })
   async getPresignedUrl(
     @Body() dto: PresignedUploadDto,
-    @CurrentAppUser() user: any,
+    @CurrentAppUser() user: AppUserPayload,
   ): Promise<ApiResponse> {
     const category = dto.category || FileCategory.IMAGE;
     const folder = `${category}/user-${user.id}`;

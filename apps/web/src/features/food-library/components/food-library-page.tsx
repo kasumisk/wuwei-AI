@@ -1,10 +1,16 @@
 'use client';
 
-import { useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useFoodLibrary } from '@/features/food-library/hooks/use-food-library';
-import type { FoodLibraryItem, FoodCategory } from '@/lib/api/food-library';
+import { QuickLogPanel } from './quick-log-panel';
+import {
+  foodLibraryClientAPI,
+  type FoodLibraryItem,
+  type FoodCategory,
+  type FrequentFood,
+} from '@/lib/api/food-library';
 
 // 分类 emoji 映射
 const categoryEmoji: Record<string, string> = {
@@ -47,6 +53,23 @@ export function FoodLibraryPage({
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // 快速记录面板状态
+  const [logTarget, setLogTarget] = useState<FoodLibraryItem | null>(null);
+
+  // 常吃食物
+  const [frequentFoods, setFrequentFoods] = useState<FrequentFood[]>([]);
+  const [frequentLoaded, setFrequentLoaded] = useState(false);
+
+  useEffect(() => {
+    foodLibraryClientAPI
+      .getFrequentFoods(8)
+      .then((data) => {
+        setFrequentFoods(data);
+        setFrequentLoaded(true);
+      })
+      .catch(() => setFrequentLoaded(true));
+  }, []);
+
   const {
     query,
     onQueryChange,
@@ -61,45 +84,76 @@ export function FoodLibraryPage({
     displayFoods,
     results,
     categoryFoods,
+    searchError,
+    categoryError,
+    retryCategory,
   } = useFoodLibrary({ initialCategories, initialPopularFoods });
 
   const localePath = locale === 'en' ? '' : `/${locale}`;
 
   const renderFoodCard = (food: FoodLibraryItem) => (
-    <Link
+    <div
       key={food.id}
-      href={`${localePath}/foods/${encodeURIComponent(food.name)}`}
-      className="block p-4 rounded-xl border border-border hover:border-primary/30 hover:shadow-md 
+      className="p-4 rounded-xl border border-border hover:border-primary/30 hover:shadow-md 
         transition-all duration-200 bg-card"
     >
       <div className="flex items-start justify-between mb-2">
-        <div className="flex items-center gap-2">
+        <Link
+          href={`${localePath}/foods/${encodeURIComponent(food.name)}`}
+          className="flex items-center gap-2 flex-1 min-w-0"
+        >
           <span className="text-lg">{categoryEmoji[food.category] || '🍽️'}</span>
           <h3 className="font-medium text-foreground">{food.name}</h3>
+          {food.isVerified && (
+            <span
+              className="shrink-0 text-[10px] font-medium text-primary bg-primary/10 px-1.5 py-0.5 rounded-full"
+              title="官方验证数据"
+            >
+              ✓ 已验证
+            </span>
+          )}
+        </Link>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-sm font-semibold text-primary">{food.caloriesPer100g} kcal</span>
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setLogTarget(food);
+            }}
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-primary text-primary-foreground text-lg font-bold hover:bg-primary/90 active:scale-95 transition-all shadow-sm"
+            title="快速记录"
+          >
+            +
+          </button>
         </div>
-        <span className="text-sm font-semibold text-primary">{food.caloriesPer100g} kcal</span>
       </div>
-      <p className="text-xs text-muted-foreground mb-2">
-        每100g · {food.standardServingDesc || `标准份${food.standardServingG}g`}
-      </p>
-      <div className="flex gap-2">
-        {food.proteinPer100g != null && (
-          <span className={`text-xs px-2 py-0.5 rounded-full ${getNutrientColor('蛋白质')}`}>
-            蛋白质 {food.proteinPer100g}g
-          </span>
-        )}
-        {food.fatPer100g != null && (
-          <span className={`text-xs px-2 py-0.5 rounded-full ${getNutrientColor('脂肪')}`}>
-            脂肪 {food.fatPer100g}g
-          </span>
-        )}
-        {food.carbsPer100g != null && (
-          <span className={`text-xs px-2 py-0.5 rounded-full ${getNutrientColor('碳水')}`}>
-            碳水 {food.carbsPer100g}g
-          </span>
-        )}
-      </div>
-    </Link>
+      <Link href={`${localePath}/foods/${encodeURIComponent(food.name)}`} className="block">
+        <p className="text-xs text-muted-foreground mb-2">
+          每100g · {food.standardServingDesc || `标准份${food.standardServingG}g`}
+          {food.aliases && food.aliases.length > 0 && (
+            <span className="ml-1">· 又名: {food.aliases.split(',').slice(0, 3).join('、')}</span>
+          )}
+        </p>
+        <div className="flex gap-2">
+          {food.proteinPer100g != null && (
+            <span className={`text-xs px-2 py-0.5 rounded-full ${getNutrientColor('蛋白质')}`}>
+              蛋白质 {food.proteinPer100g}g
+            </span>
+          )}
+          {food.fatPer100g != null && (
+            <span className={`text-xs px-2 py-0.5 rounded-full ${getNutrientColor('脂肪')}`}>
+              脂肪 {food.fatPer100g}g
+            </span>
+          )}
+          {food.carbsPer100g != null && (
+            <span className={`text-xs px-2 py-0.5 rounded-full ${getNutrientColor('碳水')}`}>
+              碳水 {food.carbsPer100g}g
+            </span>
+          )}
+        </div>
+      </Link>
+    </div>
   );
 
   return (
@@ -173,7 +227,34 @@ export function FoodLibraryPage({
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-4 py-4 space-y-6">
+      <main className="max-w-2xl mx-auto px-4 py-4 pb-24 space-y-6">
+        {/* 常吃食物快捷区 */}
+        {!showSearchResults && frequentLoaded && frequentFoods.length > 0 && (
+          <div className="space-y-2">
+            <h2 className="text-sm font-medium text-muted-foreground px-1">⚡ 你的常吃食物</h2>
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+              {frequentFoods.map((ff) => (
+                <button
+                  key={ff.name}
+                  onClick={() => {
+                    if (ff.food) setLogTarget(ff.food);
+                  }}
+                  disabled={!ff.food}
+                  className="shrink-0 flex items-center gap-2 px-3 py-2 rounded-xl bg-card border border-border hover:border-primary/30 transition-all active:scale-[0.97] disabled:opacity-50"
+                >
+                  <span className="text-sm">{categoryEmoji[ff.food?.category || ''] || '🍽️'}</span>
+                  <div className="text-left">
+                    <p className="text-xs font-bold">{ff.name}</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      吃过{ff.count}次{ff.food ? ` · ${ff.food.caloriesPer100g}kcal/100g` : ''}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {!showSearchResults && categories.length > 0 && (
           <div className="space-y-2">
             <h2 className="text-sm font-medium text-muted-foreground px-1">食物分类</h2>
@@ -207,15 +288,40 @@ export function FoodLibraryPage({
 
         {showSearchResults && !searching && results.length === 0 && (
           <div className="text-center py-12">
-            <span className="text-4xl">🔍</span>
-            <p className="mt-2 text-muted-foreground">未找到「{query}」相关食物</p>
-            <p className="text-sm text-muted-foreground mt-1">试试搜索其他关键词</p>
+            {searchError ? (
+              <>
+                <span className="text-4xl">⚠️</span>
+                <p className="mt-2 text-muted-foreground">搜索出错，请稍后重试</p>
+                <button
+                  onClick={() => onQueryChange(query)}
+                  className="mt-3 text-sm text-primary hover:underline"
+                >
+                  重新搜索
+                </button>
+              </>
+            ) : (
+              <>
+                <span className="text-4xl">🔍</span>
+                <p className="mt-2 text-muted-foreground">未找到「{query}」相关食物</p>
+                <p className="text-sm text-muted-foreground mt-1">试试搜索其他关键词</p>
+              </>
+            )}
           </div>
         )}
 
         {showCategoryFoods && loadingCategory && (
           <div className="flex items-center justify-center py-8">
             <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          </div>
+        )}
+
+        {showCategoryFoods && !loadingCategory && categoryError && (
+          <div className="text-center py-8">
+            <span className="text-3xl">⚠️</span>
+            <p className="mt-2 text-sm text-muted-foreground">加载分类失败，请稍后重试</p>
+            <button onClick={retryCategory} className="mt-2 text-sm text-primary hover:underline">
+              重试
+            </button>
           </div>
         )}
 
@@ -238,6 +344,9 @@ export function FoodLibraryPage({
           </p>
         )}
       </main>
+
+      {/* 快速记录面板 */}
+      {logTarget && <QuickLogPanel food={logTarget} onClose={() => setLogTarget(null)} />}
     </div>
   );
 }

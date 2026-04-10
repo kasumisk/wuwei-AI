@@ -3,7 +3,7 @@ import { i18n, type Locale } from '@/lib/i18n/config';
 
 // ─── Site Configuration ───
 export const siteConfig = {
-  name: 'Procify toolkit',
+  name: '无畏健康 uWay Health',
   url: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
   ogImage: '/og-image.png',
   icons: {
@@ -20,32 +20,11 @@ const ogLocaleMap: Record<Locale, string> = {
   ja: 'ja_JP',
 };
 
-// ─── Tool page route → translation key mapping ───
-export const toolRouteKeyMap: Record<string, string> = {
-  'image-converter': 'imageConverter',
-  'image-compressor': 'imageCompressor',
-  'color-picker': 'colorPicker',
-  'image-cropper': 'imageCropper',
-  'video-converter': 'videoConverter',
-  'video-compressor': 'videoCompressor',
-  'pdf-to-image': 'pdfToImage',
-  'image-to-pdf': 'imageToPdf',
-  'pdf-to-text': 'pdfToText',
-  'pdf-merge-split': 'pdfMergeSplit',
-  'json-formatter': 'jsonFormatter',
-  regex: 'regexTester',
-  timestamp: 'timestampConverter',
-  base64: 'base64',
-  qrcode: 'qrcode',
-};
+// ─── Page route → translation key mapping ───
+export const toolRouteKeyMap: Record<string, string> = {};
 
 // ─── All public routes for sitemap / hreflang ───
-export const publicRoutes = [
-  '/',
-  '/tools',
-  '/foods',
-  ...Object.keys(toolRouteKeyMap).map((k) => `/tools/${k}`),
-];
+export const publicRoutes = ['/', '/foods', '/analyze', '/coach', '/plan'];
 
 // ─── Helper: build locale path ───
 export function getLocalePath(path: string, locale: Locale): string {

@@ -8,6 +8,7 @@ import {
 } from '../entities/user-profile.entity';
 import { UserInferredProfile } from '../entities/user-inferred-profile.entity';
 import { UserBehaviorProfile } from '../entities/user-behavior-profile.entity';
+import { inferUserSegment } from './segmentation.util';
 
 export interface GoalTransitionSuggestion {
   currentGoal: GoalType;
@@ -50,11 +51,22 @@ export class ProfileInferenceService {
       inferred = this.inferredRepo.create({ userId });
     }
 
-    // 用户分段
-    inferred.userSegment = this.inferUserSegment(profile, behavior);
+    // 用户分段 — 统一使用 segmentation.util (V4 A4, V5 3.4 升级)
+    const segBehavior:
+      | import('./segmentation.util').SegmentBehaviorInput
+      | null = behavior
+      ? {
+          avgComplianceRate: behavior.avgComplianceRate ?? undefined,
+          totalRecords: behavior.totalRecords ?? 0,
+          // refreshInference 为手动触发，无法精确算 daysSinceLastRecord/usageDays
+          // 此处留空，cron 会在批量更新时填充精确值
+        }
+      : null;
+    const segResult = inferUserSegment(profile.goal, segBehavior);
+    inferred.userSegment = segResult.segment;
     inferred.confidenceScores = {
       ...inferred.confidenceScores,
-      userSegment: behavior && behavior.totalRecords >= 14 ? 0.7 : 0.4,
+      userSegment: segResult.confidence,
     };
 
     // 最优餐次推断（基于行为数据）
@@ -72,30 +84,44 @@ export class ProfileInferenceService {
     }
 
     // 目标进展
+    // V5 3.1: goalProgress 现在主要由 profile-cron.service 基于 weight_history 计算
+    // 此处仅做简易回退：当 cron 尚未计算（无 weight_history 数据）时，基于 profile 体重粗略估算
     if (profile.targetWeightKg && profile.weightKg) {
       const startWeight =
         inferred.goalProgress?.startWeight || Number(profile.weightKg);
       const currentWeight = Number(profile.weightKg);
       const targetWeight = Number(profile.targetWeightKg);
-      const totalDelta = Math.abs(startWeight - targetWeight);
-      const currentDelta = Math.abs(startWeight - currentWeight);
+      const totalDelta = startWeight - targetWeight;
       const progressPercent =
-        totalDelta > 0
-          ? Math.round((currentDelta / totalDelta) * 1000) / 10
+        Math.abs(totalDelta) > 0.1
+          ? Math.min(
+              100,
+              Math.max(0, ((startWeight - currentWeight) / totalDelta) * 100),
+            )
           : 0;
 
-      inferred.goalProgress = {
-        startWeight: inferred.goalProgress?.startWeight || startWeight,
-        currentWeight,
-        progressPercent: Math.min(100, progressPercent),
-        estimatedWeeksLeft: inferred.goalProgress?.estimatedWeeksLeft,
-        trend:
-          progressPercent >= 100
-            ? 'ahead'
-            : progressPercent > 0
-              ? 'on_track'
-              : 'behind',
-      };
+      // 仅在 cron 尚未填充 trend 时设置简易值
+      if (!inferred.goalProgress?.trend) {
+        const weightDiff = currentWeight - startWeight;
+        let trend: 'losing' | 'gaining' | 'plateau' | 'fluctuating' = 'plateau';
+        if (weightDiff < -0.5) trend = 'losing';
+        else if (weightDiff > 0.5) trend = 'gaining';
+
+        inferred.goalProgress = {
+          ...inferred.goalProgress,
+          startWeight: inferred.goalProgress?.startWeight || startWeight,
+          currentWeight,
+          targetWeight,
+          progressPercent: Number(Math.min(100, progressPercent).toFixed(1)),
+          trend,
+        };
+      } else {
+        // cron 已计算过，仅更新 currentWeight（用户可能刚改了体重）
+        inferred.goalProgress = {
+          ...inferred.goalProgress,
+          currentWeight,
+        };
+      }
     }
 
     inferred.lastComputedAt = new Date();
@@ -127,9 +153,10 @@ export class ProfileInferenceService {
       };
     }
 
-    // 长期停滞（进展缓慢）
+    // 长期停滞（进展缓慢）— V5: 'behind' 映射为 plateau 或 fluctuating
     if (
-      inferred?.goalProgress?.trend === 'behind' &&
+      (inferred?.goalProgress?.trend === 'plateau' ||
+        inferred?.goalProgress?.trend === 'fluctuating') &&
       inferred?.goalProgress?.estimatedWeeksLeft &&
       inferred.goalProgress.estimatedWeeksLeft > 20
     ) {
@@ -156,30 +183,5 @@ export class ProfileInferenceService {
     }
 
     return null;
-  }
-
-  /**
-   * 推断用户分段
-   */
-  private inferUserSegment(
-    profile: UserProfile,
-    behavior: UserBehaviorProfile | null,
-  ): string {
-    const complianceRate = Number(behavior?.avgComplianceRate ?? 0);
-    const goal = profile.goal;
-
-    if (goal === GoalType.MUSCLE_GAIN) return 'muscle_builder';
-
-    if (complianceRate >= 0.7) {
-      return goal === GoalType.FAT_LOSS
-        ? 'disciplined_loser'
-        : 'active_maintainer';
-    }
-
-    if (complianceRate < 0.4 && behavior && behavior.totalRecords >= 14) {
-      return 'binge_risk';
-    }
-
-    return 'casual_maintainer';
   }
 }

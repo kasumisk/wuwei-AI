@@ -75,11 +75,11 @@ cp .env.example .env
 ### 3. 初始化数据库
 
 ```bash
-# 生成 Prisma Client
-pnpm db:generate
-
-# 运行数据库迁移
+# 运行 API Server 的 TypeORM 迁移
 pnpm db:migrate
+
+# 查看待执行迁移
+pnpm db:migrate:show
 ```
 
 ### 4. 启动开发服务器
@@ -113,9 +113,9 @@ pnpm lint             # 代码检查
 pnpm format           # 格式化代码
 
 # 数据库
-pnpm db:generate      # 生成 Prisma Client
-pnpm db:migrate       # 运行数据库迁移
-pnpm db:studio        # 打开 Prisma Studio
+pnpm db:migrate       # 运行 API Server 的 TypeORM 迁移
+pnpm db:migrate:show  # 查看待执行迁移
+pnpm db:studio        # 打开 Prisma Studio（legacy packages/database）
 
 # 清理
 pnpm clean            # 清理所有构建产物
@@ -221,9 +221,10 @@ src/
 
 ### 数据库 Schema 修改
 
-1. 编辑 `packages/database/prisma/schema.prisma`
-2. 运行迁移：`pnpm db:migrate`
-3. 更新代码中的类型引用
+1. 修改 api-server 的实体或手写迁移文件
+2. 生成迁移：`pnpm db:migration:generate -- src/migrations/YourMigrationName`
+3. 执行迁移：`pnpm db:migrate`
+4. 如果你还在使用 legacy Prisma 包，再单独维护 `packages/database/prisma/schema.prisma`
 
 ## 📚 相关文档
 

@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { FoodRecord } from '../entities/food-record.entity';
 import { DailySummary } from '../entities/daily-summary.entity';
 import {
@@ -8,9 +9,23 @@ import {
 } from './food.dto';
 import { NutritionScoreService } from './nutrition-score.service';
 import { UserProfileService } from '../../user/app/user-profile.service';
-import { RecommendationEngineService } from './recommendation-engine.service';
+import {
+  RecommendationEngineService,
+  WhyNotResult,
+} from './recommendation-engine.service';
 import { FoodRecordService } from './food-record.service';
 import { DailySummaryService } from './daily-summary.service';
+import {
+  getUserLocalHour,
+  DEFAULT_TIMEZONE,
+} from '../../../common/utils/timezone.util';
+import { MEAL_RATIOS } from './recommendation/recommendation.types';
+import {
+  DomainEvents,
+  MealRecordedEvent,
+  RecommendationGeneratedEvent,
+} from '../../../core/events/domain-events';
+import { PrecomputeService } from './precompute.service';
 
 @Injectable()
 export class FoodService {
@@ -22,6 +37,8 @@ export class FoodService {
     private readonly nutritionScoreService: NutritionScoreService,
     private readonly userProfileService: UserProfileService,
     private readonly recommendationEngine: RecommendationEngineService,
+    private readonly eventEmitter: EventEmitter2,
+    private readonly precomputeService: PrecomputeService,
   ) {}
 
   /**
@@ -38,6 +55,19 @@ export class FoodService {
       .updateDailySummary(userId, saved.recordedAt)
       .catch((err) => this.logger.error(`更新每日汇总失败: ${err.message}`));
 
+    // V6 Phase 1.2: 发布饮食记录事件
+    this.eventEmitter.emit(
+      DomainEvents.MEAL_RECORDED,
+      new MealRecordedEvent(
+        userId,
+        dto.mealType || 'unknown',
+        dto.foods?.map((f) => f.name).filter(Boolean) || [],
+        dto.totalCalories || 0,
+        'manual',
+        saved.id,
+      ),
+    );
+
     return saved;
   }
 
@@ -45,7 +75,8 @@ export class FoodService {
    * 获取今日记录
    */
   async getTodayRecords(userId: string): Promise<FoodRecord[]> {
-    return this.foodRecordService.getTodayRecords(userId);
+    const tz = await this.userProfileService.getTimezone(userId);
+    return this.foodRecordService.getTodayRecords(userId, tz);
   }
 
   /**
@@ -87,9 +118,17 @@ export class FoodService {
 
   /**
    * 删除记录
+   * V5 1.9: 删除后异步更新 DailySummary（V4 遗漏）
    */
   async deleteRecord(userId: string, recordId: string): Promise<void> {
-    await this.foodRecordService.deleteRecord(userId, recordId);
+    const deleted = await this.foodRecordService.deleteRecord(userId, recordId);
+    // 异步更新当日汇总，不阻塞删除响应
+    const recordDate = (deleted.recordedAt ?? deleted.createdAt) as Date;
+    this.dailySummaryService
+      .updateDailySummary(userId, recordDate)
+      .catch((err) => {
+        this.logger.warn(`删除记录后更新日汇总失败: ${(err as Error).message}`);
+      });
   }
 
   /**
@@ -133,7 +172,8 @@ export class FoodService {
     const goalType = profile?.goal || 'health';
     const goal = summary.calorieGoal || goals.calories;
     const remaining = Math.max(0, goal - summary.totalCalories);
-    const hour = new Date().getHours();
+    const tz = profile?.timezone || DEFAULT_TIMEZONE;
+    const hour = getUserLocalHour(tz);
 
     let nextMeal: string;
     if (hour < 9) nextMeal = 'breakfast';
@@ -153,14 +193,70 @@ export class FoodService {
       };
     }
 
-    // 计算预算比例
-    const ratios: Record<string, number> = {
-      breakfast: 0.3,
-      lunch: 0.4,
-      dinner: 0.3,
-      snack: 0.15,
-    };
-    const ratio = ratios[nextMeal] || 0.3;
+    // V6 Phase 1.10: 优先查询预计算结果（延迟 < 200ms）
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const precomputed = await this.precomputeService.getPrecomputed(
+      userId,
+      todayStr,
+      nextMeal,
+    );
+    if (precomputed) {
+      const { result: mainRec, scenarioResults } = precomputed;
+
+      // 发布推荐生成事件（标记来自预计算）
+      this.eventEmitter.emit(
+        DomainEvents.RECOMMENDATION_GENERATED,
+        new RecommendationGeneratedEvent(
+          userId,
+          nextMeal,
+          mainRec.foods?.length ?? 0,
+          0, // latencyMs ≈ 0（预计算命中）
+          true, // fromPrecompute
+        ),
+      );
+
+      const scenarios = scenarioResults
+        ? Object.entries(scenarioResults).map(([key, rec]) => {
+            const scenarioLabels: Record<string, string> = {
+              takeout: '外卖',
+              convenience: '便利店',
+              homeCook: '在家做',
+            };
+            const r = rec as {
+              displayText?: string;
+              totalCalories?: number;
+              tip?: string;
+            };
+            return {
+              scenario: scenarioLabels[key] || key,
+              foods: r.displayText || '',
+              calories: r.totalCalories || 0,
+              tip: r.tip || '',
+            };
+          })
+        : undefined;
+
+      this.logger.debug(
+        `预计算命中: userId=${userId}, meal=${nextMeal}, date=${todayStr}`,
+      );
+
+      return {
+        mealType: nextMeal,
+        remainingCalories: remaining,
+        suggestion: {
+          foods: mainRec.displayText,
+          calories: mainRec.totalCalories,
+          tip: mainRec.tip,
+        },
+        scenarios,
+      };
+    }
+
+    // 预计算未命中 → 回退到实时计算（现有逻辑不变）
+
+    // V5 1.10: 使用统一的 MEAL_RATIOS 替代硬编码比例
+    const mealRatios = MEAL_RATIOS[goalType] || MEAL_RATIOS.health;
+    const ratio = mealRatios[nextMeal] || 0.25;
     const calBudget = Math.round(remaining * ratio);
     const proteinRem = Math.max(0, goals.protein - (summary.totalProtein || 0));
 
@@ -177,6 +273,7 @@ export class FoodService {
     };
 
     // 并行获取：通用推荐 + 场景化推荐
+    const startTime = Date.now();
     const [mainRec, scenarioRecs] = await Promise.all([
       this.recommendationEngine.recommendMeal(
         userId,
@@ -195,6 +292,19 @@ export class FoodService {
         dailyTarget,
       ),
     ]);
+    const latencyMs = Date.now() - startTime;
+
+    // V6 Phase 1.2: 发布推荐生成事件
+    this.eventEmitter.emit(
+      DomainEvents.RECOMMENDATION_GENERATED,
+      new RecommendationGeneratedEvent(
+        userId,
+        nextMeal,
+        mainRec.foods?.length ?? 0,
+        latencyMs,
+        false, // fromPrecompute — Phase 1.10 预计算实现后会根据实际情况设置
+      ),
+    );
 
     const scenarios = Object.entries(scenarioRecs).map(([key, rec]) => {
       const scenarioLabels: Record<string, string> = {
@@ -220,5 +330,74 @@ export class FoodService {
       },
       scenarios,
     };
+  }
+
+  // ─── V6 2.8: 反向解释 API ───
+
+  /**
+   * 解释"为什么不推荐某食物"
+   *
+   * 与 getMealSuggestion 共享同一套目标计算逻辑，
+   * 对用户指定的食物跑评分 + 过滤分析，返回不推荐原因 + 替代方案。
+   *
+   * @param userId    用户 ID
+   * @param foodName  用户查询的食物名
+   * @param mealType  餐次类型
+   */
+  async explainWhyNot(
+    userId: string,
+    foodName: string,
+    mealType: string,
+  ): Promise<WhyNotResult> {
+    const [summary, profile] = await Promise.all([
+      this.getTodaySummary(userId),
+      this.userProfileService.getProfile(userId),
+    ]);
+
+    const goals = this.nutritionScoreService.calculateDailyGoals(profile);
+    const goalType = profile?.goal || 'health';
+
+    // 计算该餐次的营养预算
+    const mealRatios = MEAL_RATIOS[goalType] || MEAL_RATIOS.health;
+    const ratio = mealRatios[mealType] || 0.25;
+    const remaining = Math.max(
+      0,
+      (summary.calorieGoal || goals.calories) - summary.totalCalories,
+    );
+    const calBudget = Math.round(remaining * ratio);
+    const proteinRem = Math.max(0, goals.protein - (summary.totalProtein || 0));
+
+    const consumed = {
+      calories: summary.totalCalories || 0,
+      protein: summary.totalProtein || 0,
+    };
+    const dailyTarget = { calories: goals.calories, protein: goals.protein };
+    const target = {
+      calories: calBudget,
+      protein: Math.round(proteinRem * ratio),
+      fat: Math.round(goals.fat * ratio),
+      carbs: Math.round(goals.carbs * ratio),
+    };
+
+    const userConstraints = profile
+      ? {
+          dietaryRestrictions: profile.dietaryRestrictions || [],
+          allergens: profile.allergens || [],
+          healthConditions: profile.healthConditions || [],
+          regionCode: profile.regionCode || 'CN',
+          timezone: profile.timezone,
+        }
+      : undefined;
+
+    return this.recommendationEngine.scoreAndExplainWhyNot(
+      userId,
+      foodName,
+      mealType,
+      goalType,
+      target,
+      dailyTarget,
+      consumed,
+      userConstraints,
+    );
   }
 }

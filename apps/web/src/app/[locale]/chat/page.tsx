@@ -101,7 +101,7 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="container mx-auto p-4 h-[calc(100vh-4rem)] flex gap-4">
+    <div className="container mx-auto p-4 pb-20 h-[calc(100vh-4rem)] flex gap-4">
       {/* Settings Sidebar (Desktop) */}
       <div
         className={cn(

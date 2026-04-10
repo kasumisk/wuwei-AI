@@ -48,7 +48,7 @@ export function PrivacyPolicyPage() {
             <p className="text-slate-600 dark:text-slate-400 leading-7 mb-8">
               We value your privacy. This Privacy Policy explains how we collect, use, and protect
               your information when you use{' '}
-              <strong className="text-slate-800 dark:text-slate-200">Procify Toolkit</strong>.
+              <strong className="text-slate-800 dark:text-slate-200">无畏健康 uWay Health</strong>.
             </p>
 
             <Section title="1. Information We Collect">
@@ -145,7 +145,7 @@ export function PrivacyPolicyPage() {
             </div>
             <p className="text-slate-600 dark:text-slate-400 leading-7 mb-8">
               欢迎使用{' '}
-              <strong className="text-slate-800 dark:text-slate-200">Procify Toolkit</strong>
+              <strong className="text-slate-800 dark:text-slate-200">无畏健康 uWay Health</strong>
               （以下简称&ldquo;本应用&rdquo;）。我们非常重视您的隐私和个人信息保护。本隐私政策说明我们如何收集、使用和保护您的信息。
             </p>
 

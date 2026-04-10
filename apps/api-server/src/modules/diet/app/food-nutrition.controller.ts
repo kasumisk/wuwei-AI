@@ -9,6 +9,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AppJwtAuthGuard } from '../../auth/app/app-jwt-auth.guard';
 import { CurrentAppUser } from '../../auth/app/current-app-user.decorator';
+import { AppUserPayload } from '../../auth/app/app-user-payload.type';
 import { ApiResponse } from '../../../common/types/response.type';
 import { FoodService } from './food.service';
 import { UserProfileService } from '../../user/app/user-profile.service';
@@ -32,7 +33,9 @@ export class FoodNutritionController {
    */
   @Get('nutrition-score')
   @ApiOperation({ summary: '获取今日营养评分详情' })
-  async getNutritionScore(@CurrentAppUser() user: any): Promise<ApiResponse> {
+  async getNutritionScore(
+    @CurrentAppUser() user: AppUserPayload,
+  ): Promise<ApiResponse> {
     const [summary, profile] = await Promise.all([
       this.foodService.getTodaySummary(user.id),
       this.userProfileService.getProfile(user.id),
@@ -75,7 +78,9 @@ export class FoodNutritionController {
    */
   @Get('profile')
   @ApiOperation({ summary: '获取用户健康档案' })
-  async getProfile(@CurrentAppUser() user: any): Promise<ApiResponse> {
+  async getProfile(
+    @CurrentAppUser() user: AppUserPayload,
+  ): Promise<ApiResponse> {
     const profile = await this.userProfileService.getProfile(user.id);
     return {
       success: true,
@@ -92,7 +97,7 @@ export class FoodNutritionController {
   @Put('profile')
   @ApiOperation({ summary: '保存用户健康档案' })
   async saveProfile(
-    @CurrentAppUser() user: any,
+    @CurrentAppUser() user: AppUserPayload,
     @Body() dto: SaveUserProfileDto,
   ): Promise<ApiResponse> {
     const profile = await this.userProfileService.saveProfile(user.id, dto);

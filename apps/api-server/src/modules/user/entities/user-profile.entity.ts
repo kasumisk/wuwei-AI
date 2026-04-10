@@ -319,6 +319,15 @@ export class UserProfile {
   })
   regionCode: string;
 
+  @Column({
+    type: 'varchar',
+    length: 50,
+    default: 'Asia/Shanghai',
+    name: 'timezone',
+    comment: 'IANA 时区字符串，如 Asia/Shanghai',
+  })
+  timezone: string;
+
   // ==================== 元数据 ====================
 
   @Column({

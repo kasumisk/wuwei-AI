@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { FoodLibrary } from '../../../food/entities/food-library.entity';
 import { Constraint } from './recommendation.types';
+import { hasAllergenConflict } from './allergen-filter.util';
 
 @Injectable()
 export class FoodFilterService {
@@ -20,10 +21,9 @@ export class FoodFilterService {
           return false;
       }
 
-      // 过敏原直接匹配
-      if (userAllergens?.length) {
-        const foodAllergens: string[] = food.allergens || [];
-        if (userAllergens.some((a) => foodAllergens.includes(a))) return false;
+      // 过敏原过滤 — 统一使用 allergen-filter.util (V4 A6)
+      if (userAllergens?.length && hasAllergenConflict(food, userAllergens)) {
+        return false;
       }
 
       // includeTag: 至少命中一个（宽松）

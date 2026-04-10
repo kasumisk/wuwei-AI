@@ -7,27 +7,16 @@ import { useHomeData } from '@/features/home/hooks/use-home-data';
 import { LocalizedLink } from '@/components/common/localized-link';
 import { ProactiveReminderCard } from './proactive-reminder';
 import { TodayStatus } from './today-status';
+import { MealRecordCard } from './meal-record-card';
+import { GoalTransitionCard } from './goal-transition-card';
+import { NutritionScoreCard } from './nutrition-score-card';
+import { WeeklyTrendCard } from './weekly-trend-card';
 import { CompletionPrompt } from '@/features/profile/components/completion-prompt';
+import { useUnreadCount } from '@/features/notification/hooks/use-notifications';
 import Image from 'next/image';
-import type { FoodRecord } from '@/types/food';
+import type { FoodRecord, MealSuggestion, DailySummary } from '@/types/food';
 
 /* ─── SVG Icon Components ─── */
-function IconSmartToy({ className = '' }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
-      <path d="M20 9V7c0-1.1-.9-2-2-2h-3c0-1.66-1.34-3-3-3S9 3.34 9 5H6c-1.1 0-2 .9-2 2v2c-1.66 0-3 1.34-3 3s1.34 3 3 3v4c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-4c1.66 0 3-1.34 3-3s-1.34-3-3-3zM7.5 11.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5S9.83 13 9 13s-1.5-.67-1.5-1.5zM16 17H8v-2h8v2zm-1-4c-.83 0-1.5-.67-1.5-1.5S14.17 10 15 10s1.5.67 1.5 1.5S15.83 13 15 13z" />
-    </svg>
-  );
-}
-
-function IconScreenshot({ className = '' }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
-      <path d="M11 2v4H2v14h20V6h-9V2h-2zm0 6V6h2v2h7v12H4V8h7zm-4 2h2v2H7v-2zm4 0h2v2h-2v-2zm4 0h2v2h-2v-2z" />
-    </svg>
-  );
-}
-
 function IconCamera({ className = '' }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
@@ -52,14 +41,6 @@ function IconPerson({ className = '' }: { className?: string }) {
   );
 }
 
-function IconGrid({ className = '' }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
-      <path d="M3 3v8h8V3H3zm6 6H5V5h4v4zm-6 4v8h8v-8H3zm6 6H5v-4h4v4zm4-16v8h8V3h-8zm6 6h-4V5h4v4zm-6 4v8h8v-8h-8zm6 6h-4v-4h4v4z" />
-    </svg>
-  );
-}
-
 function IconSettings({ className = '' }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
@@ -68,13 +49,6 @@ function IconSettings({ className = '' }: { className?: string }) {
   );
 }
 
-const MEAL_LABELS: Record<string, string> = {
-  breakfast: '早餐',
-  lunch: '午餐',
-  dinner: '晚餐',
-  snack: '加餐',
-};
-
 export function HomePage() {
   const { user, isLoggedIn } = useAuth();
   const router = useRouter();
@@ -82,16 +56,18 @@ export function HomePage() {
     summary,
     records: meals,
     suggestion: mealSuggestion,
-    dailyPlan,
     reminder,
     profile,
+    recentSummaries,
+    isLoading,
   } = useHomeData();
-  const [activeScenario, setActiveScenario] = useState(0);
   const [dismissedReminder, setDismissedReminder] = useState(false);
   const [dismissedCompletion, setDismissedCompletion] = useState(false);
+  const [dismissedGoalTransition, setDismissedGoalTransition] = useState(false);
+  const { data: unreadData } = useUnreadCount(isLoggedIn);
+  const unreadCount = unreadData?.unreadCount ?? 0;
 
   // 安全网：登录且未完成引导时跳转分步引导
-  // useHomeData 中已 fetch profile, 这里只做跳转检查
   if (isLoggedIn && profile && !profile.onboardingCompleted) {
     const startStep = profile.onboardingStep ?? 1;
     router.replace(`/onboarding?step=${startStep}`);
@@ -120,265 +96,212 @@ export function HomePage() {
               无畏健康
             </h1>
           </div>
-          <button className="w-10 h-10 flex items-center justify-center rounded-full hover:opacity-80 transition-opacity active:scale-95 duration-200 text-primary">
-            <IconSettings className="w-6 h-6" />
-          </button>
+          <div className="flex items-center gap-1">
+            {/* 通知铃铛 */}
+            <LocalizedLink
+              href="/notifications"
+              className="w-10 h-10 flex items-center justify-center rounded-full hover:opacity-80 transition-opacity active:scale-95 duration-200 text-primary relative"
+              aria-label={`通知${unreadCount > 0 ? `（${unreadCount > 99 ? '99+' : unreadCount}条未读）` : ''}`}
+            >
+              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
+              </svg>
+              {unreadCount > 0 && (
+                <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+            </LocalizedLink>
+            {/* 设置/个人 */}
+            <LocalizedLink
+              href="/profile"
+              className="w-10 h-10 flex items-center justify-center rounded-full hover:opacity-80 transition-opacity active:scale-95 duration-200 text-primary"
+              aria-label="设置"
+            >
+              <IconSettings className="w-6 h-6" />
+            </LocalizedLink>
+          </div>
         </div>
       </nav>
 
       <main className="pt-24 pb-32 px-6 max-w-lg mx-auto">
-        {/* 今日状态 */}
-        <TodayStatus summary={summary} profile={profile} />
-
-        {/* 档案完善提醒 */}
-        {!dismissedCompletion && (
-          <CompletionPrompt onDismiss={() => setDismissedCompletion(true)} />
-        )}
-
-        {/* 核心入口：双按钮 */}
-        <section className="grid grid-cols-2 gap-4 mb-6">
-          <LocalizedLink
-            href="/analyze"
-            className="bg-primary text-primary-foreground rounded-2xl p-5 flex flex-col items-center gap-3 active:scale-[0.97] transition-all shadow-lg shadow-primary/20"
-          >
-            <IconCamera className="w-8 h-8" />
-            <span className="font-bold text-sm">📷 拍照识别</span>
-          </LocalizedLink>
-          <LocalizedLink
-            href="/foods"
-            className="bg-card border border-(--color-outline-variant)/20 rounded-2xl p-5 flex flex-col items-center gap-3 active:scale-[0.97] transition-all shadow-sm"
-          >
-            <IconSearch className="w-8 h-8 text-primary" />
-            <span className="font-bold text-sm">✍️ 手动搜索</span>
-          </LocalizedLink>
-        </section>
-
-        {/* V3: 主动提醒 */}
-        {reminder && !dismissedReminder && (
-          <section className="mb-6">
-            <ProactiveReminderCard
-              reminder={reminder}
-              onDismiss={() => setDismissedReminder(true)}
-            />
-          </section>
-        )}
-
-        {/* V2: 每日计划 */}
-        {dailyPlan && (
-          <section className="mb-6">
-            <div className="bg-surface-container-low rounded-2xl p-5">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-lg">📅</span>
-                <h3 className="font-bold text-sm">今日饮食计划</h3>
-              </div>
-              {dailyPlan.strategy && (
-                <p className="text-xs text-muted-foreground mb-3">💡 {dailyPlan.strategy}</p>
-              )}
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { label: '早餐', plan: dailyPlan.morningPlan, emoji: '🌅' },
-                  { label: '午餐', plan: dailyPlan.lunchPlan, emoji: '☀️' },
-                  { label: '晚餐', plan: dailyPlan.dinnerPlan, emoji: '🌙' },
-                  { label: '加餐', plan: dailyPlan.snackPlan, emoji: '🍪' },
-                ].map(
-                  ({ label, plan, emoji }) =>
-                    plan && (
-                      <div key={label} className="bg-card rounded-xl p-3">
-                        <span className="text-xs font-bold text-muted-foreground">
-                          {emoji} {label}
-                        </span>
-                        <p className="text-xs mt-1 line-clamp-2">{plan.foods}</p>
-                        <span className="text-[10px] text-primary font-bold">
-                          {plan.calories} kcal
-                        </span>
-                        {plan.tip && (
-                          <p className="text-[10px] text-muted-foreground mt-1 line-clamp-1">
-                            💡 {plan.tip}
-                          </p>
-                        )}
-                      </div>
-                    )
-                )}
+        {/* Loading 骨架屏 */}
+        {isLoading && (
+          <div className="space-y-4 animate-pulse">
+            {/* 今日状态骨架 */}
+            <div className="bg-card rounded-2xl p-5 space-y-3">
+              <div className="h-4 w-24 bg-muted rounded" />
+              <div className="h-8 w-32 bg-muted rounded" />
+              <div className="flex gap-3">
+                <div className="h-3 w-16 bg-muted rounded" />
+                <div className="h-3 w-16 bg-muted rounded" />
               </div>
             </div>
-          </section>
-        )}
-
-        {/* 今日建议 */}
-        {mealSuggestion && mealSuggestion.suggestion && (
-          <section className="mb-6">
-            <div className="bg-surface-container-low rounded-2xl p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-lg">🍽️</span>
-                <h3 className="font-bold text-sm">
-                  {MEAL_LABELS[mealSuggestion.mealType] || '下一餐'}推荐
-                </h3>
-              </div>
-              {mealSuggestion.scenarios && mealSuggestion.scenarios.length > 0 ? (
-                <>
-                  <div className="flex gap-2 mb-3">
-                    {mealSuggestion.scenarios.map((s, i) => (
-                      <button
-                        key={i}
-                        onClick={() => setActiveScenario(i)}
-                        className={`flex-1 py-1.5 rounded-full text-xs font-bold transition-all ${
-                          activeScenario === i
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-muted text-muted-foreground'
-                        }`}
-                      >
-                        {s.scenario}
-                      </button>
-                    ))}
-                  </div>
-                  {(() => {
-                    const s = mealSuggestion.scenarios![activeScenario];
-                    return s ? (
-                      <>
-                        <p className="text-base font-medium">{s.foods}</p>
-                        <div className="flex items-center justify-between mt-3">
-                          <span className="text-sm text-primary font-bold">
-                            ≈ {s.calories} kcal
-                          </span>
-                          <span className="text-xs text-muted-foreground">💡 {s.tip}</span>
-                        </div>
-                      </>
-                    ) : null;
-                  })()}
-                </>
-              ) : (
-                <>
-                  <p className="text-base font-medium">{mealSuggestion.suggestion.foods}</p>
-                  <div className="flex items-center justify-between mt-3">
-                    <span className="text-sm text-primary font-bold">
-                      ≈ {mealSuggestion.suggestion.calories} kcal
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      💡 {mealSuggestion.suggestion.tip}
-                    </span>
-                  </div>
-                </>
-              )}
+            {/* 按钮区域骨架 */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="h-24 bg-muted rounded-2xl" />
+              <div className="h-24 bg-muted rounded-2xl" />
             </div>
-          </section>
+            {/* 记录列表骨架 */}
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="bg-card rounded-xl p-4 space-y-2">
+                  <div className="h-4 w-20 bg-muted rounded" />
+                  <div className="h-3 w-full bg-muted rounded" />
+                  <div className="h-3 w-2/3 bg-muted rounded" />
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
-        {/* 今日记录 */}
-        <MealList meals={meals} />
+        {/* 正常内容 */}
+        {!isLoading && (
+          <>
+            {/* 今日状态 */}
+            <TodayStatus summary={summary} profile={profile} />
+
+            {/* 今日营养评分 */}
+            <NutritionScoreCard />
+
+            {/* 近7天趋势 */}
+            <WeeklyTrendCard summaries={recentSummaries} />
+
+            {/* 档案完善提醒 */}
+            {!dismissedCompletion && (
+              <CompletionPrompt onDismiss={() => setDismissedCompletion(true)} />
+            )}
+
+            {/* AI 目标迁移建议 */}
+            {!dismissedGoalTransition && (
+              <GoalTransitionCard onDismiss={() => setDismissedGoalTransition(true)} />
+            )}
+
+            {/* 核心入口：双按钮 */}
+            <section className="grid grid-cols-2 gap-4 mb-6">
+              <LocalizedLink
+                href="/analyze"
+                className="bg-primary text-primary-foreground rounded-2xl p-5 flex flex-col items-center gap-3 active:scale-[0.97] transition-all shadow-lg shadow-primary/20"
+              >
+                <IconCamera className="w-8 h-8" />
+                <span className="font-bold text-sm">AI 食物分析</span>
+              </LocalizedLink>
+              <LocalizedLink
+                href="/foods"
+                className="bg-card border border-(--color-outline-variant)/20 rounded-2xl p-5 flex flex-col items-center gap-3 active:scale-[0.97] transition-all shadow-sm"
+              >
+                <IconSearch className="w-8 h-8 text-primary" />
+                <span className="font-bold text-sm">食物库搜索</span>
+              </LocalizedLink>
+            </section>
+
+            {/* V3: 主动提醒 */}
+            {reminder && !dismissedReminder && (
+              <section className="mb-6">
+                <ProactiveReminderCard
+                  reminder={reminder}
+                  onDismiss={() => setDismissedReminder(true)}
+                />
+              </section>
+            )}
+
+            {/* 下一餐建议（精简版，详细计划跳转 /plan） */}
+            {mealSuggestion && mealSuggestion.suggestion && (
+              <NextMealHint suggestion={mealSuggestion} summary={summary} />
+            )}
+
+            {/* 今日记录 */}
+            <MealList meals={meals} />
+          </>
+        )}
       </main>
-
-      {/* Bottom Navigation */}
-      <BottomNav isLoggedIn={isLoggedIn} />
     </div>
   );
 }
 
 /* ─── Sub-components ─── */
 
+/** 精简版下一餐建议 — 只显示核心信息 + 跳转 /plan */
+function NextMealHint({
+  suggestion,
+  summary,
+}: {
+  suggestion: MealSuggestion;
+  summary: DailySummary;
+}) {
+  const mealLabels: Record<string, string> = {
+    breakfast: '早餐',
+    lunch: '午餐',
+    dinner: '晚餐',
+    snack: '加餐',
+  };
+  const label = mealLabels[suggestion.mealType] || '下一餐';
+
+  return (
+    <section className="mb-6">
+      <LocalizedLink href="/plan" className="block group">
+        <div className="bg-card rounded-2xl p-4 border border-(--color-outline-variant)/10 active:scale-[0.99] transition-all">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-bold flex items-center gap-1.5">
+              <span className="text-primary">AI</span> {label}建议
+            </h3>
+            <span className="text-xs text-primary font-medium flex items-center gap-0.5 group-hover:gap-1 transition-all">
+              查看完整计划
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 5l7 7-7 7"
+                />
+              </svg>
+            </span>
+          </div>
+          <p className="text-sm text-foreground/80 line-clamp-2">{suggestion.suggestion.foods}</p>
+          <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+            <span>{suggestion.suggestion.calories} kcal</span>
+            {suggestion.remainingCalories > 0 && (
+              <span>剩余预算 {suggestion.remainingCalories} kcal</span>
+            )}
+          </div>
+          {suggestion.suggestion.tip && (
+            <p className="text-xs text-muted-foreground mt-1.5 italic">
+              {suggestion.suggestion.tip}
+            </p>
+          )}
+        </div>
+      </LocalizedLink>
+    </section>
+  );
+}
+
 function MealList({ meals }: { meals: FoodRecord[] }) {
   return (
     <section className="mb-8">
-      <h3 className="text-lg font-headline font-bold mb-4 px-1">📋 今日记录</h3>
+      <div className="flex items-center justify-between mb-4 px-1">
+        <h3 className="text-lg font-headline font-bold">今日记录</h3>
+        <LocalizedLink
+          href="/history"
+          className="text-xs text-primary font-medium flex items-center gap-0.5 hover:opacity-80"
+        >
+          全部历史
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </LocalizedLink>
+      </div>
       <div className="space-y-3">
-        {meals.map((meal) => {
-          const mealLabel = MEAL_LABELS[meal.mealType] || meal.mealType;
-          const foodNames = meal.foods.map((f) => f.name).join('、');
-          const decisionBadge =
-            meal.decision && meal.decision !== 'SAFE' ? (
-              <span
-                className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                  meal.decision === 'OK'
-                    ? 'bg-yellow-100 text-yellow-800'
-                    : meal.decision === 'LIMIT'
-                      ? 'bg-orange-100 text-orange-800'
-                      : meal.decision === 'AVOID'
-                        ? 'bg-red-100 text-red-800'
-                        : 'bg-green-100 text-green-800'
-                }`}
-              >
-                {meal.decision === 'OK'
-                  ? '注意'
-                  : meal.decision === 'LIMIT'
-                    ? '少吃'
-                    : meal.decision === 'AVOID'
-                      ? '不建议'
-                      : '健康'}
-              </span>
-            ) : meal.isHealthy !== undefined ? (
-              <span
-                className={`${meal.isHealthy ? 'bg-secondary text-secondary-foreground' : 'bg-tertiary-container text-on-tertiary-container'} px-2 py-0.5 rounded-md text-[10px] font-bold`}
-              >
-                {meal.isHealthy ? '健康' : '注意'}
-              </span>
-            ) : null;
-
-          return (
-            <div
-              key={meal.id}
-              className="flex items-center gap-4 bg-card p-4 rounded-2xl shadow-sm"
-            >
-              {meal.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  className="w-14 h-14 rounded-full object-cover"
-                  src={meal.imageUrl}
-                  alt={foodNames}
-                />
-              ) : (
-                <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center">
-                  <IconCamera className="w-6 h-6 text-muted-foreground" />
-                </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <h4 className="font-bold text-sm truncate">{foodNames || '饮食记录'}</h4>
-                <p className="text-xs text-muted-foreground">
-                  {mealLabel} • {meal.totalCalories} kcal
-                </p>
-              </div>
-              {decisionBadge}
-            </div>
-          );
-        })}
+        {meals.map((meal) => (
+          <MealRecordCard key={meal.id} meal={meal} />
+        ))}
       </div>
 
       {meals.length === 0 && (
         <div className="text-center py-12 text-muted-foreground">
           <p className="text-sm">还没有今日记录</p>
-          <p className="text-xs mt-1">拍照或搜索食物开始记录吧</p>
+          <p className="text-xs mt-1">拍照或输入文字描述开始记录吧</p>
         </div>
       )}
     </section>
-  );
-}
-
-function BottomNav({ isLoggedIn }: { isLoggedIn: boolean }) {
-  return (
-    <nav className="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 pb-6 pt-2 glass-morphism z-50 rounded-t-4xl shadow-[0_-4px_40px_rgba(11,54,29,0.06)]">
-      <div className="flex flex-col items-center justify-center bg-(--color-surface-container-highest) dark:bg-primary text-foreground dark:text-primary-foreground rounded-full p-3 transition-all active:scale-90 duration-300">
-        <IconGrid className="w-6 h-6" />
-        <span className="text-[10px] font-bold uppercase tracking-[0.05em] mt-1">首页</span>
-      </div>
-      <LocalizedLink
-        href="/analyze"
-        className="flex flex-col items-center justify-center text-foreground/60 p-3 hover:text-primary transition-all active:scale-90 duration-300"
-      >
-        <IconScreenshot className="w-6 h-6" />
-        <span className="text-[10px] font-bold uppercase tracking-[0.05em] mt-1">分析</span>
-      </LocalizedLink>
-      <LocalizedLink
-        href="/coach"
-        className="flex flex-col items-center justify-center text-foreground/60 p-3 hover:text-primary transition-all active:scale-90 duration-300"
-      >
-        <IconSmartToy className="w-6 h-6" />
-        <span className="text-[10px] font-bold uppercase tracking-[0.05em] mt-1">AI教练</span>
-      </LocalizedLink>
-      <LocalizedLink
-        href={isLoggedIn ? '/profile' : '/login'}
-        className="flex flex-col items-center justify-center text-foreground/60 p-3 hover:text-primary transition-all active:scale-90 duration-300"
-      >
-        <IconPerson className="w-6 h-6" />
-        <span className="text-[10px] font-bold uppercase tracking-[0.05em] mt-1">我的</span>
-      </LocalizedLink>
-    </nav>
   );
 }

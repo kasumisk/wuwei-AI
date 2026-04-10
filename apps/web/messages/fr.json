@@ -1,8 +1,8 @@
 {
   "common": {
-    "appName": "Procify toolkit",
-    "appTitle": "Procify toolkit - Outils en ligne",
-    "appDescription": "Plateforme d'outils en ligne prête pour la production avec intégration IA",
+    "appName": "uWay Health",
+    "appTitle": "uWay Health - Assistant Nutrition IA",
+    "appDescription": "Votre assistant nutrition intelligent alimenté par l'IA pour des conseils personnalisés en santé et alimentation",
     "status": {
       "success": "Succès",
       "error": "Erreur",
@@ -40,17 +40,17 @@
     "toggleLanguage": "Changer de langue"
   },
   "auth": {
-    "tier": "Niveau Quantum",
+    "tier": "Forfait Premium",
     "headline": "L'intelligence qui",
-    "headlineHighlight": "façonne votre avenir.",
-    "description": "Découvrez un espace de travail conçu pour la précision. Procify toolkit transforme les données chaotiques en informations élégantes et exploitables grâce à un traitement neuronal sur mesure.",
+    "headlineHighlight": "nourrit votre vie.",
+    "description": "Découvrez un assistant nutrition propulsé par l'IA, conçu pour votre bien-être. uWay Health offre des conseils alimentaires personnalisés, une planification de repas intelligente et des recommandations santé adaptées à vos objectifs.",
     "testimonial": {
-      "author": "Adrian Voss",
-      "authorTitle": "Directeur de recherche, Arca Lab",
-      "content": "Procify n'est pas qu'un simple outil ; c'est un curateur numérique qui comprend les nuances de nos flux de travail créatifs mieux que tout autre système que nous avons utilisé."
+      "author": "Dr. Emily Chen",
+      "authorTitle": "Nutritionniste certifiée",
+      "content": "uWay Health a transformé la façon dont j'accompagne mes clients. Sa planification de repas et son analyse nutritionnelle pilotées par l'IA sont remarquablement précises et faciles à utiliser."
     },
     "footer": {
-      "copyright": "© 2026 Procify toolkit Ecosystem",
+      "copyright": "© 2026 uWay Health",
       "privacy": "Architecture de confidentialité",
       "security": "Protocole de sécurité"
     },
@@ -80,7 +80,7 @@
       "forgotAccess": "Mot de passe oublié ?"
     },
     "submit": {
-      "login": "Se connecter à Procify",
+      "login": "Se connecter à uWay Health",
       "register": "Créer l'espace de travail",
       "reset": "Envoyer l'e-mail de réinitialisation"
     },
@@ -102,8 +102,8 @@
   },
   "home": {
     "featured": {
-      "title": "Nouveautés Procify",
-      "subtitle": "Découvrez les dernières avancées de l'intelligence générative.",
+      "title": "Nouveautés uWay Health",
+      "subtitle": "Découvrez les dernières fonctionnalités pour votre parcours nutrition et santé.",
       "newFeature": "Nouveauté",
       "productivity": "Productivité",
       "trending": "Tendance",

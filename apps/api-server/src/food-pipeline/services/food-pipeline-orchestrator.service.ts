@@ -5,7 +5,11 @@ import { FoodLibrary } from '../../modules/food/entities/food-library.entity';
 import { FoodTranslation } from '../../modules/food/entities/food-translation.entity';
 import { FoodSource } from '../../modules/food/entities/food-source.entity';
 import { FoodChangeLog } from '../../modules/food/entities/food-change-log.entity';
-import { UsdaFetcherService, NormalizedFoodData } from './usda-fetcher.service';
+import {
+  UsdaFetcherService,
+  NormalizedFoodData,
+  ImportMetadata,
+} from './usda-fetcher.service';
 import { OpenFoodFactsService } from './openfoodfacts.service';
 import {
   FoodDataCleanerService,
@@ -124,6 +128,45 @@ export class FoodPipelineOrchestratorService {
       return this.foodRepo.findOne({ where: { barcode } });
     }
     return null;
+  }
+
+  async importNormalizedFoods(
+    normalizedFoods: NormalizedFoodData[],
+    sourceLabel = 'custom',
+  ): Promise<ImportResult> {
+    this.logger.log(
+      `Starting normalized import: source=${sourceLabel}, total=${normalizedFoods.length}`,
+    );
+
+    const result: ImportResult = {
+      total: normalizedFoods.length,
+      created: 0,
+      updated: 0,
+      skipped: 0,
+      errors: 0,
+      details: [],
+    };
+
+    const { cleaned, discarded } = this.cleaner.cleanBatch(normalizedFoods);
+    result.skipped += discarded;
+    result.details.push(
+      `Cleaned: ${cleaned.length}, discarded: ${discarded}, source=${sourceLabel}`,
+    );
+
+    for (const food of cleaned) {
+      try {
+        await this.persistSingleFood(food, result);
+      } catch (e) {
+        result.errors++;
+        result.details.push(`Error: ${food.name} - ${e.message}`);
+      }
+    }
+
+    this.logger.log(
+      `Normalized import done: source=${sourceLabel}, created=${result.created}, updated=${result.updated}, skipped=${result.skipped}, errors=${result.errors}`,
+    );
+
+    return result;
   }
 
   // ==================== 批量 AI 标注 ====================
@@ -304,58 +347,71 @@ export class FoodPipelineOrchestratorService {
   // ==================== 内部方法 ====================
 
   private async persistSingleFood(food: CleanedFoodData, result: ImportResult) {
+    const directives = this.resolveImportMetadata(food.importMetadata);
+
     // 去重检查
     const dup = await this.dedup.findDuplicate(food);
 
     if (dup) {
-      if (dup.matchType === 'source_id') {
-        // 同来源更新: 合并数据
-        const mergedFields = this.dedup.mergeFood(dup.existingFood, food, 50);
-        const scores = this.ruleEngine.applyAllRules({
-          ...dup.existingFood,
-          ...mergedFields,
-        });
-        await this.foodRepo.update(dup.existingFood.id, {
-          ...mergedFields,
-          ...scores,
-          dataVersion: dup.existingFood.dataVersion + 1,
-        });
+      const mergedFields = this.dedup.mergeFood(
+        dup.existingFood,
+        food,
+        this.getSourcePriority(food.primarySource),
+      );
+      const combinedTags = [
+        ...(dup.existingFood.tags || []),
+        ...(food.tags || []),
+        ...directives.extraTags,
+      ];
+      const scores = this.ruleEngine.applyAllRules({
+        ...dup.existingFood,
+        ...mergedFields,
+        tags: [...new Set(combinedTags)],
+      });
 
-        // 记录来源
-        await this.saveSource(dup.existingFood.id, food);
+      await this.foodRepo.update(dup.existingFood.id, {
+        ...mergedFields,
+        dataVersion: dup.existingFood.dataVersion + 1,
+        ...scores,
+        tags: [
+          ...new Set([
+            ...(mergedFields.tags || []),
+            ...combinedTags,
+            ...(scores.tags || []),
+          ]),
+        ],
+      });
 
-        // 检测冲突
-        await this.conflictResolver.detectConflicts(
-          dup.existingFood.id,
-          dup.existingFood,
-          food,
-          food.primarySource,
-        );
+      await this.saveSource(dup.existingFood.id, food);
+      await this.conflictResolver.detectConflicts(
+        dup.existingFood.id,
+        dup.existingFood,
+        food,
+        food.primarySource,
+      );
 
-        await this.logChange(
-          dup.existingFood.id,
-          dup.existingFood.dataVersion + 1,
-          'update',
-          mergedFields,
-          'pipeline',
-        );
-        result.updated++;
-      } else {
-        result.skipped++;
-        result.details.push(
-          `Skipped duplicate: ${food.name} (${dup.matchType}, similarity=${dup.similarity})`,
-        );
-      }
+      await this.logChange(
+        dup.existingFood.id,
+        dup.existingFood.dataVersion + 1,
+        'update',
+        mergedFields,
+        directives.operator,
+      );
+      result.updated++;
     } else {
       // 新增
       const scores = this.ruleEngine.applyAllRules(food);
-      const code = await this.generateCode();
+      const code = food.code || (await this.generateCode());
+      const tags = [...new Set([...(food.tags || []), ...directives.extraTags, ...scores.tags])];
 
       const newFood = this.foodRepo.create({
         code,
         name: food.name,
+        aliases: food.aliases,
         category: (food.category || 'composite') as any,
-        status: 'draft' as any,
+        subCategory: food.subCategory,
+        foodGroup: food.foodGroup,
+        status: directives.status as any,
         calories: food.calories,
         protein: food.protein,
         fat: food.fat,
@@ -377,13 +433,30 @@ export class FoodPipelineOrchestratorService {
         folate: food.folate,
         zinc: food.zinc,
         magnesium: food.magnesium,
-        barcode: food.rawPayload?.code || undefined,
+        phosphorus: food.phosphorus,
+        glycemicIndex: food.glycemicIndex,
+        glycemicLoad: food.glycemicLoad,
+        isProcessed: food.isProcessed ?? false,
+        isFried: food.isFried ?? false,
+        processingLevel: food.processingLevel ?? 1,
+        allergens: food.allergens || [],
+        mealTypes: food.mealTypes || [],
+        mainIngredient: food.mainIngredient,
+        compatibility: food.compatibility || {},
+        standardServingG: food.standardServingG ?? 100,
+        standardServingDesc: food.standardServingDesc,
+        commonPortions: food.commonPortions || [],
+        searchWeight: food.searchWeight ?? directives.searchWeight,
+        barcode: food.barcode || food.rawPayload?.code || undefined,
         primarySource: food.primarySource,
         primarySourceId: food.primarySourceId,
         confidence: food.confidence,
         dataVersion: 1,
-        isVerified: false,
+        isVerified: directives.isVerified,
+        verifiedBy: directives.isVerified ? directives.verifiedBy : undefined,
+        verifiedAt: directives.isVerified ? new Date() : undefined,
         ...scores,
+        tags,
       });
 
       const saved = await this.foodRepo.save(newFood);
@@ -397,7 +470,7 @@ export class FoodPipelineOrchestratorService {
         1,
         'create',
         { name: food.name },
-        'pipeline',
+        directives.operator,
       );
 
       result.created++;
@@ -405,19 +478,33 @@ export class FoodPipelineOrchestratorService {
   }
 
   private async saveSource(foodId: string, food: CleanedFoodData) {
-    await this.sourceRepo.save(
-      this.sourceRepo.create({
+    const existing = await this.sourceRepo.findOne({
+      where: {
         foodId,
         sourceType: food.primarySource,
         sourceId: food.primarySourceId,
-        sourceUrl: food.sourceUrl || undefined,
-        rawData: food.rawPayload || {},
-        confidence: food.confidence,
-        isPrimary: true,
-        priority: food.primarySource === 'usda' ? 100 : 50,
-        fetchedAt: food.fetchedAt || new Date(),
-      }),
-    );
+      },
+    });
+
+    const payload = {
+      foodId,
+      sourceType: food.primarySource,
+      sourceId: food.primarySourceId,
+      sourceUrl: food.sourceUrl || undefined,
+      rawData: food.rawPayload || {},
+      mappedData: food.mappedData,
+      confidence: food.confidence,
+      isPrimary: true,
+      priority: this.getSourcePriority(food.primarySource),
+      fetchedAt: food.fetchedAt || new Date(),
+    };
+
+    if (existing) {
+      await this.sourceRepo.update(existing.id, payload);
+      return;
+    }
+
+    await this.sourceRepo.save(this.sourceRepo.create(payload));
   }
 
   private async logChange(
@@ -441,5 +528,105 @@ export class FoodPipelineOrchestratorService {
   private async generateCode(): Promise<string> {
     const count = await this.foodRepo.count();
     return `FOOD_G_${String(count + 1).padStart(5, '0')}`;
+  }
+
+  private resolveImportMetadata(importMetadata?: ImportMetadata): {
+    status: 'draft' | 'active';
+    isVerified: boolean;
+    verifiedBy?: string;
+    searchWeight: number;
+    extraTags: string[];
+    operator: string;
+  } {
+    return {
+      status: importMetadata?.desiredStatus || 'draft',
+      isVerified: importMetadata?.desiredVerified ?? false,
+      verifiedBy: importMetadata?.desiredVerifiedBy,
+      searchWeight: importMetadata?.desiredSearchWeight ?? 100,
+      extraTags: importMetadata?.extraTags || [],
+      operator: importMetadata?.operator || 'pipeline',
+    };
+  }
+
+  private getSourcePriority(sourceType: string): number {
+    const priorities: Record<string, number> = {
+      usda: 100,
+      cn_food_composition: 95,
+      openfoodfacts: 80,
+      manual: 70,
+      ai: 40,
+      crawl: 30,
+    };
+
+    return priorities[sourceType] || 50;
+  }
+
+  // ==================== 批量回填营养密度分数 ====================
+
+  /**
+   * 批量回填 nutrientDensity / qualityScore / satietyScore / tags
+   * 对 nutrientDensity 为 null 或 0 的记录，使用 FoodRuleEngineService 重新计算
+   * 同时更新 qualityScore / satietyScore 确保一致性
+   *
+   * @param batchSize 每批处理条数，默认 200
+   * @returns 更新总数
+   */
+  async backfillNutrientScores(batchSize = 200): Promise<{
+    total: number;
+    updated: number;
+    errors: number;
+  }> {
+    this.logger.log('开始批量回填营养密度分数...');
+
+    const total = await this.foodRepo
+      .createQueryBuilder('f')
+      .where('f.nutrientDensity IS NULL OR f.nutrientDensity = 0')
+      .getCount();
+
+    if (total === 0) {
+      this.logger.log('所有食物记录已有 nutrientDensity，无需回填');
+      return { total: 0, updated: 0, errors: 0 };
+    }
+
+    this.logger.log(`发现 ${total} 条需要回填的记录`);
+
+    let updated = 0;
+    let errors = 0;
+    let offset = 0;
+
+    while (offset < total) {
+      const foods = await this.foodRepo
+        .createQueryBuilder('f')
+        .where('f.nutrientDensity IS NULL OR f.nutrientDensity = 0')
+        .orderBy('f.id', 'ASC')
+        .take(batchSize)
+        .getMany();
+
+      if (foods.length === 0) break;
+
+      for (const food of foods) {
+        try {
+          const scores = this.ruleEngine.applyAllRules(food);
+          await this.foodRepo.update(food.id, {
+            nutrientDensity: scores.nutrientDensity,
+            qualityScore: scores.qualityScore,
+            satietyScore: scores.satietyScore,
+            tags: [...new Set([...(food.tags || []), ...scores.tags])],
+          });
+          updated++;
+        } catch (err) {
+          errors++;
+          this.logger.warn(`回填失败 [${food.id}] ${food.name}: ${err}`);
+        }
+      }
+
+      offset += foods.length;
+      this.logger.log(`进度: ${Math.min(offset, total)}/${total}`);
+    }
+
+    this.logger.log(
+      `批量回填完成: 总计=${total}, 更新=${updated}, 错误=${errors}`,
+    );
+    return { total, updated, errors };
   }
 }

@@ -2,12 +2,17 @@
 
 import { HttpClient } from './http-client';
 import { env } from '../env';
+import { useAuthStore } from '@/features/auth/store/auth-store';
+import { useToastStore } from '@/lib/hooks/use-toast';
 
 /**
  * 客户端 API 实例
  * 用于浏览器端的 API 调用
  */
 class ClientAPI extends HttpClient {
+  /** 防止 401 重复跳转 */
+  private isRedirectingToLogin = false;
+
   constructor() {
     super(env.NEXT_PUBLIC_API_URL, 30000);
 
@@ -31,16 +36,43 @@ class ClientAPI extends HttpClient {
     // 添加客户端特定的响应拦截器
     this.addResponseInterceptor({
       onRejected: (error) => {
-        // 处理特定错误码
+        // 处理 401 未授权：清除登录态并跳转登录页
         if (error.statusCode === 401) {
-          // 未授权，清除 token 并跳转登录
           this.clearAuthToken();
-          // window.location.href = '/login';
+          // 同时清除 Zustand auth state
+          try {
+            useAuthStore.getState().clearAuth();
+          } catch {
+            // auth store 可能尚未初始化，忽略
+          }
+          // 跳转登录页（防止并发请求重复跳转）
+          if (typeof window !== 'undefined' && !this.isRedirectingToLogin) {
+            this.isRedirectingToLogin = true;
+            // 获取当前 locale 前缀以支持国际化路由
+            const { pathname } = window.location;
+            // 不在登录页时才跳转，避免死循环
+            if (!pathname.endsWith('/login')) {
+              const localeMatch = pathname.match(/^\/(en|zh|fr|ja)(\/|$)/);
+              const prefix = localeMatch ? `/${localeMatch[1]}` : '';
+              window.location.href = `${prefix}/login`;
+            } else {
+              this.isRedirectingToLogin = false;
+            }
+          }
         }
 
-        // 可以在这里集成 Toast 通知
+        // 处理 500+ 服务端错误：显示 Toast 通知
         if (error.statusCode >= 500) {
-          // toast.error('服务器错误，请稍后重试');
+          try {
+            useToastStore.getState().addToast({
+              title: '服务器错误',
+              description: '服务暂时不可用，请稍后重试',
+              variant: 'destructive',
+              duration: 5000,
+            });
+          } catch {
+            // toast store 可能尚未初始化，忽略
+          }
         }
 
         return error;

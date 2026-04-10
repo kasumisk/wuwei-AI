@@ -38,7 +38,7 @@ export function SiteHeader({ searchQuery = '', onSearchChange }: SiteHeaderProps
         <div className="flex items-center gap-8">
           <LocalizedLink href="/">
             <h1 className="text-xl font-bold bg-linear-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent font-headline cursor-pointer">
-              Procify toolkit
+              无畏健康
             </h1>
           </LocalizedLink>
           <nav className="hidden md:flex items-center gap-6">

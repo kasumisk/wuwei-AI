@@ -15,6 +15,10 @@ import type {
   DailySummary,
   DailySummaryRecord,
   NutritionScoreResult,
+  AnalyzeTextRequest,
+  SaveAnalysisRequest,
+  AnalysisHistoryItem,
+  AnalysisHistoryResponse,
 } from '@/types/food';
 
 async function unwrap<T>(promise: Promise<ApiResponse<T>>): Promise<T> {
@@ -122,5 +126,38 @@ export const foodRecordService = {
     feedback: 'helpful' | 'unhelpful' | 'wrong'
   ): Promise<void> => {
     await unwrap(clientPost<null>('/app/food/decision-feedback', { recordId, followed, feedback }));
+  },
+
+  // ── Phase 2: 文字分析 + 分析历史 ──
+
+  /** 文字描述分析食物 */
+  analyzeText: async (data: AnalyzeTextRequest): Promise<AnalysisResult> => {
+    return unwrap(clientPost<AnalysisResult>('/app/food/analyze-text', data));
+  },
+
+  /** 将分析结果保存为饮食记录（简化版，只需 analysisId） */
+  saveAnalysis: async (data: SaveAnalysisRequest): Promise<FoodRecord> => {
+    return unwrap(clientPost<FoodRecord>('/app/food/analyze-save', data));
+  },
+
+  /** 获取分析历史（分页 + 类型筛选） */
+  getAnalysisHistory: async (params?: {
+    page?: number;
+    pageSize?: number;
+    inputType?: 'text' | 'image';
+  }): Promise<AnalysisHistoryResponse> => {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', String(params.page));
+    if (params?.pageSize) searchParams.set('pageSize', String(params.pageSize));
+    if (params?.inputType) searchParams.set('inputType', params.inputType);
+    const qs = searchParams.toString();
+    return unwrap(
+      clientGet<AnalysisHistoryResponse>(`/app/food/analysis/history${qs ? `?${qs}` : ''}`)
+    );
+  },
+
+  /** 获取单个分析详情 */
+  getAnalysisDetail: async (analysisId: string): Promise<AnalysisResult> => {
+    return unwrap(clientGet<AnalysisResult>(`/app/food/analysis/${analysisId}`));
   },
 };

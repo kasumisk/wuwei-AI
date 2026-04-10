@@ -21,71 +21,117 @@ export class GlobalFoodDatabaseUpgrade1753000000000 implements MigrationInterfac
     // ══════════════════════════════════════════════════════════════
     // 1. RENAME 旧列名 → 新列名
     // ══════════════════════════════════════════════════════════════
-    await queryRunner
-      .query(
-        `
-      ALTER TABLE foods RENAME COLUMN "calories_per_100g" TO "calories"
-    `,
-      )
-      .catch(() => {
-        /* 列可能已被重命名 */
-      });
+    await queryRunner.query(`
+      DO $$ BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'foods' AND column_name = 'calories_per_100g'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'foods' AND column_name = 'calories'
+        ) THEN
+          ALTER TABLE foods RENAME COLUMN "calories_per_100g" TO "calories";
+        END IF;
+      END $$;
+    `);
 
-    await queryRunner
-      .query(
-        `
-      ALTER TABLE foods RENAME COLUMN "protein_per_100g" TO "protein"
-    `,
-      )
-      .catch(() => {});
+    await queryRunner.query(`
+      DO $$ BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'foods' AND column_name = 'protein_per_100g'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'foods' AND column_name = 'protein'
+        ) THEN
+          ALTER TABLE foods RENAME COLUMN "protein_per_100g" TO "protein";
+        END IF;
+      END $$;
+    `);
 
-    await queryRunner
-      .query(
-        `
-      ALTER TABLE foods RENAME COLUMN "fat_per_100g" TO "fat"
-    `,
-      )
-      .catch(() => {});
+    await queryRunner.query(`
+      DO $$ BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'foods' AND column_name = 'fat_per_100g'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'foods' AND column_name = 'fat'
+        ) THEN
+          ALTER TABLE foods RENAME COLUMN "fat_per_100g" TO "fat";
+        END IF;
+      END $$;
+    `);
 
-    await queryRunner
-      .query(
-        `
-      ALTER TABLE foods RENAME COLUMN "carbs_per_100g" TO "carbs"
-    `,
-      )
-      .catch(() => {});
+    await queryRunner.query(`
+      DO $$ BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'foods' AND column_name = 'carbs_per_100g'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'foods' AND column_name = 'carbs'
+        ) THEN
+          ALTER TABLE foods RENAME COLUMN "carbs_per_100g" TO "carbs";
+        END IF;
+      END $$;
+    `);
 
-    await queryRunner
-      .query(
-        `
-      ALTER TABLE foods RENAME COLUMN "fiber_per_100g" TO "fiber"
-    `,
-      )
-      .catch(() => {});
+    await queryRunner.query(`
+      DO $$ BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'foods' AND column_name = 'fiber_per_100g'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'foods' AND column_name = 'fiber'
+        ) THEN
+          ALTER TABLE foods RENAME COLUMN "fiber_per_100g" TO "fiber";
+        END IF;
+      END $$;
+    `);
 
-    await queryRunner
-      .query(
-        `
-      ALTER TABLE foods RENAME COLUMN "sugar_per_100g" TO "sugar"
-    `,
-      )
-      .catch(() => {});
+    await queryRunner.query(`
+      DO $$ BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'foods' AND column_name = 'sugar_per_100g'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'foods' AND column_name = 'sugar'
+        ) THEN
+          ALTER TABLE foods RENAME COLUMN "sugar_per_100g" TO "sugar";
+        END IF;
+      END $$;
+    `);
 
-    await queryRunner
-      .query(
-        `
-      ALTER TABLE foods RENAME COLUMN "sodium_per_100g" TO "sodium"
-    `,
-      )
-      .catch(() => {});
+    await queryRunner.query(`
+      DO $$ BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'foods' AND column_name = 'sodium_per_100g'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'foods' AND column_name = 'sodium'
+        ) THEN
+          ALTER TABLE foods RENAME COLUMN "sodium_per_100g" TO "sodium";
+        END IF;
+      END $$;
+    `);
 
-    await queryRunner
-      .query(
-        `
-      ALTER TABLE foods RENAME COLUMN "source" TO "primary_source"
-    `,
-      )
-      .catch(() => {});
+    await queryRunner.query(`
+      DO $$ BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'foods' AND column_name = 'source'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'foods' AND column_name = 'primary_source'
+        ) THEN
+          ALTER TABLE foods RENAME COLUMN "source" TO "primary_source";
+        END IF;
+      END $$;
+    `);
 
     // ══════════════════════════════════════════════════════════════
     // 2. ALTER 列类型 (精度调整)

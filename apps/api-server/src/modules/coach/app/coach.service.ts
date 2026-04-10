@@ -13,6 +13,10 @@ import { CoachMessage } from '../entities/coach-message.entity';
 import { FoodService } from '../../diet/app/food.service';
 import { UserProfileService } from '../../user/app/user-profile.service';
 import { BehaviorService } from '../../diet/app/behavior.service';
+import {
+  getUserLocalHour,
+  DEFAULT_TIMEZONE,
+} from '../../../common/utils/timezone.util';
 
 // V5: AI 人格 Prompt
 const PERSONA_PROMPTS: Record<string, string> = {
@@ -76,7 +80,7 @@ export class CoachService {
       this.behaviorService.getBehaviorContext(userId).catch(() => ''),
     ]);
 
-    const hour = new Date().getHours();
+    const hour = getUserLocalHour(profile?.timezone || DEFAULT_TIMEZONE);
     const timeHint =
       hour < 10
         ? '现在是早晨，用户可能还没吃早餐'
@@ -330,7 +334,8 @@ ${behaviorContext ? behaviorContext + '\n' : ''}${PERSONA_PROMPTS[behaviorProfil
    * 获取每日开场问候
    */
   async getDailyGreeting(userId: string): Promise<DailyGreeting> {
-    const hour = new Date().getHours();
+    const tz = await this.userProfileService.getTimezone(userId);
+    const hour = getUserLocalHour(tz);
     const summary = await this.foodService.getTodaySummary(userId);
 
     // 补充热量目标

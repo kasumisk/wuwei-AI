@@ -1,9 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserProfile } from '../entities/user-profile.entity';
 import { UserBehaviorProfile } from '../entities/user-behavior-profile.entity';
 import { UserInferredProfile } from '../entities/user-inferred-profile.entity';
+import { RedisCacheService } from '../../../core/redis/redis-cache.service';
+import { TieredCacheManager, TieredCacheNamespace } from '../../../core/cache';
 
 /**
  * 三层画像聚合结果
@@ -14,29 +16,23 @@ export interface FullUserProfile {
   inferred: UserInferredProfile | null;
 }
 
-interface CacheEntry {
-  data: FullUserProfile;
-  expireAt: number;
-}
-
 /**
  * 用户画像缓存层
- * 推荐引擎每次调用都需要画像数据，缓存避免重复查询
  *
- * TTL 策略：
- * - 声明数据 5 分钟（用户修改不频繁）
- * - Profile 更新时主动失效
+ * V6 Phase 1.7: 迁移到 TieredCacheManager 统一缓存抽象
+ *
+ * 原 V5 4.5 手写的 LRU + Singleflight + 双层 TTL 逻辑
+ * 现在由 TieredCacheNamespace 统一提供：
+ * - L1 内存 LRU（5000 条，2 分钟 TTL）
+ * - L2 Redis（10 分钟 TTL）
+ * - Singleflight 防穿透
+ *
+ * 本 Service 只保留业务逻辑（DB 加载、便捷方法、失效策略）。
  */
 @Injectable()
-export class ProfileCacheService {
+export class ProfileCacheService implements OnModuleInit {
   private readonly logger = new Logger(ProfileCacheService.name);
-  private readonly cache = new Map<string, CacheEntry>();
-
-  /** 默认缓存 TTL: 5 分钟 */
-  private readonly DEFAULT_TTL = 5 * 60 * 1000;
-
-  /** 缓存容量上限（防止内存泄漏） */
-  private readonly MAX_ENTRIES = 5000;
+  private cache: TieredCacheNamespace<FullUserProfile>;
 
   constructor(
     @InjectRepository(UserProfile)
@@ -45,36 +41,37 @@ export class ProfileCacheService {
     private readonly behaviorRepo: Repository<UserBehaviorProfile>,
     @InjectRepository(UserInferredProfile)
     private readonly inferredRepo: Repository<UserInferredProfile>,
+    private readonly redis: RedisCacheService,
+    private readonly cacheManager: TieredCacheManager,
   ) {}
 
+  onModuleInit(): void {
+    // 创建 profile namespace — 配置与原 V5 4.5 保持一致
+    this.cache = this.cacheManager.createNamespace<FullUserProfile>({
+      namespace: 'profile',
+      l1MaxEntries: 5000,
+      l1TtlMs: 2 * 60 * 1000, // 内存 2 分钟
+      l2TtlMs: 10 * 60 * 1000, // Redis 10 分钟
+    });
+  }
+
   /**
-   * 获取完整画像（优先缓存）
+   * 获取完整画像（L1 → L2 → DB，带 Singleflight 防穿透）
    */
   async getFullProfile(userId: string): Promise<FullUserProfile> {
-    const cached = this.cache.get(userId);
-    if (cached && cached.expireAt > Date.now()) {
-      return cached.data;
-    }
+    return this.cache.getOrSet(userId, () => this.loadFromDB(userId));
+  }
 
+  /**
+   * 从数据库并行加载三层画像
+   */
+  private async loadFromDB(userId: string): Promise<FullUserProfile> {
     const [declared, observed, inferred] = await Promise.all([
       this.profileRepo.findOne({ where: { userId } }),
       this.behaviorRepo.findOne({ where: { userId } }),
       this.inferredRepo.findOne({ where: { userId } }),
     ]);
-
-    const full: FullUserProfile = { declared, observed, inferred };
-
-    // 淘汰策略：超出容量时清理过期条目
-    if (this.cache.size >= this.MAX_ENTRIES) {
-      this.evictExpired();
-    }
-
-    this.cache.set(userId, {
-      data: full,
-      expireAt: Date.now() + this.DEFAULT_TTL,
-    });
-
-    return full;
+    return { declared, observed, inferred };
   }
 
   /**
@@ -87,6 +84,7 @@ export class ProfileCacheService {
         discipline: string;
         allergens: string[];
         healthConditions: string[];
+        regionCode: string; // V4 修复 A7: 传递 regionCode
       }
     | undefined
   > {
@@ -99,44 +97,45 @@ export class ProfileCacheService {
       discipline: declared.discipline || 'medium',
       allergens: declared.allergens || [],
       healthConditions: declared.healthConditions || [],
+      regionCode: declared.regionCode || 'CN', // V4 修复 A7
     };
   }
 
   /**
-   * Profile 更新时清除缓存
+   * Profile 更新时清除缓存（L1 + L2）
    */
   invalidate(userId: string): void {
-    this.cache.delete(userId);
+    this.cache.invalidate(userId).catch(() => {
+      /* non-critical */
+    });
   }
 
   /**
    * 批量失效（Cron 任务后调用）
    */
   invalidateAll(): void {
-    this.cache.clear();
+    this.cache.invalidateAll().catch(() => {
+      /* non-critical */
+    });
   }
 
   /**
    * 获取缓存统计（监控用）
    */
-  getStats(): { size: number; maxSize: number } {
-    return { size: this.cache.size, maxSize: this.MAX_ENTRIES };
-  }
-
-  /**
-   * 清理过期条目
-   */
-  private evictExpired(): void {
-    const now = Date.now();
-    let evicted = 0;
-    for (const [key, entry] of this.cache) {
-      if (entry.expireAt <= now) {
-        this.cache.delete(key);
-        evicted++;
-      }
-    }
-    if (evicted > 0) {
-      this.logger.debug(`缓存清理: 淘汰 ${evicted} 条过期条目`);
-    }
+  getStats(): {
+    memorySize: number;
+    maxSize: number;
+    memTtlMs: number;
+    redisTtlMs: number;
+    redisConnected: boolean;
+  } {
+    const stats = this.cache.getStats();
+    return {
+      memorySize: stats.l1Size,
+      maxSize: stats.l1MaxEntries,
+      memTtlMs: 2 * 60 * 1000,
+      redisTtlMs: 10 * 60 * 1000,
+      redisConnected: this.redis.isConnected,
+    };
   }
 }

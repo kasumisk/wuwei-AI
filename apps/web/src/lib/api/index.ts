@@ -31,7 +31,10 @@ export {
 export { profileService } from './profile';
 export { foodRecordService } from './food-record';
 export { recommendationService } from './recommendation';
+export { foodPlanService } from './food-plan';
 export { gamificationService } from './gamification';
+export { subscriptionService } from './subscription';
+export { notificationService } from './notification';
 
 // 类型定义
 export type {

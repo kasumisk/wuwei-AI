@@ -4,6 +4,16 @@ import { Injectable } from '@nestjs/common';
 
 export type GoalType = 'fat_loss' | 'muscle_gain' | 'health' | 'habit';
 
+/**
+ * V4: 用于 calculateDailyGoals 的用户画像字段子集
+ * 替代 `profile: any` (修复 D1)
+ */
+export interface DailyGoalProfile {
+  weightKg?: number | null;
+  dailyCalorieGoal?: number | null;
+  goal?: string | null;
+}
+
 export interface DailyNutritionGoals {
   calories: number;
   protein: number;
@@ -21,6 +31,10 @@ export interface NutritionInput {
   fat: number;
   foodQuality: number; // 1-10
   satiety: number; // 1-10
+  /** 血糖指数 0-100，可选 */
+  glycemicIndex?: number;
+  /** 标准份量碳水克数，用于计算 GL */
+  carbsPerServing?: number;
 }
 
 export interface NutritionScoreBreakdown {
@@ -30,6 +44,7 @@ export interface NutritionScoreBreakdown {
   foodQuality: number;
   satiety: number;
   stability: number;
+  glycemicImpact: number;
 }
 
 export interface NutritionScoreResult {
@@ -43,36 +58,40 @@ export interface NutritionScoreResult {
 
 const GOAL_WEIGHTS: Record<string, Record<string, number>> = {
   fat_loss: {
-    energy: 0.35,
-    proteinRatio: 0.25,
-    macroBalance: 0.15,
-    foodQuality: 0.1,
-    satiety: 0.1,
+    energy: 0.3,
+    proteinRatio: 0.22,
+    macroBalance: 0.13,
+    foodQuality: 0.08,
+    satiety: 0.08,
     stability: 0.05,
+    glycemicImpact: 0.14,
   },
   muscle_gain: {
-    proteinRatio: 0.3,
-    energy: 0.25,
-    macroBalance: 0.2,
-    foodQuality: 0.1,
+    proteinRatio: 0.28,
+    energy: 0.23,
+    macroBalance: 0.18,
+    foodQuality: 0.09,
     satiety: 0.05,
     stability: 0.1,
+    glycemicImpact: 0.07,
   },
   health: {
-    foodQuality: 0.3,
-    macroBalance: 0.2,
-    energy: 0.15,
-    satiety: 0.15,
+    foodQuality: 0.25,
+    macroBalance: 0.18,
+    energy: 0.13,
+    satiety: 0.13,
     proteinRatio: 0.1,
-    stability: 0.1,
+    stability: 0.09,
+    glycemicImpact: 0.12,
   },
   habit: {
-    foodQuality: 0.25,
-    satiety: 0.2,
-    energy: 0.2,
-    proteinRatio: 0.15,
-    macroBalance: 0.1,
+    foodQuality: 0.22,
+    satiety: 0.18,
+    energy: 0.18,
+    proteinRatio: 0.13,
+    macroBalance: 0.09,
     stability: 0.1,
+    glycemicImpact: 0.1,
   },
 };
 
@@ -99,9 +118,20 @@ export class NutritionScoreService {
     return this.clamp(100 - diff * 200);
   }
 
+  /**
+   * 对数映射 — 将 1-10 映射到 0-100
+   * 低分区差异大（边际效用高），高分区差异小（边际效用递减）
+   */
+  private logScale100(value: number): number {
+    const clamped = Math.max(0, Math.min(10, value));
+    return (Math.log(1 + clamped) / Math.log(11)) * 100;
+  }
+
   // ─── 每日目标计算 ───
 
-  calculateDailyGoals(profile: any): DailyNutritionGoals {
+  calculateDailyGoals(
+    profile: DailyGoalProfile | null | undefined,
+  ): DailyNutritionGoals {
     const weight = Number(profile?.weightKg) || 65;
     const calorieGoal = profile?.dailyCalorieGoal || 2000;
     const goal = profile?.goal || 'health';
@@ -199,6 +229,26 @@ export class NutritionScoreService {
     );
   }
 
+  /**
+   * 血糖影响评分 — Sigmoid(GL)
+   * 使用血糖负荷 GL = GI × 碳水(g) / 100，比 GI 更准确反映实际血糖冲击。
+   * GL < 10 → ~95分（低血糖负荷）
+   * GL 10-20 → ~75分（中等）
+   * GL > 20 → 分数急剧下降
+   */
+  private calcGlycemicImpactScore(
+    glycemicIndex?: number,
+    carbsPerServing?: number,
+  ): number {
+    // 无 GI 数据 → 给中等分，不影响整体评分
+    if (!glycemicIndex || glycemicIndex <= 0) return 75;
+    // 无碳水数据 → 仅基于 GI 做粗略评分
+    const carbs = carbsPerServing ?? 15; // 默认 15g 碳水作为 fallback
+    const gl = (glycemicIndex * carbs) / 100;
+    // Sigmoid: score = 100 / (1 + e^(0.3 * (GL - 15)))
+    return this.clamp(100 / (1 + Math.exp(0.3 * (gl - 15))));
+  }
+
   private calcStabilityScore(
     streakDays: number,
     avgMealsPerDay: number,
@@ -253,6 +303,8 @@ export class NutritionScoreService {
     if (scores.macroBalance < 50) hl.push('⚠️ 碳水/脂肪比例失衡');
     if (scores.foodQuality < 40) hl.push('⚠️ 加工食品偏多');
     if (scores.satiety < 40) hl.push('⚠️ 饱腹感不足，容易饿');
+    if (scores.glycemicImpact < 40)
+      hl.push('⚠️ 血糖负荷较高，注意搭配低GI食物');
 
     if (scores.energy >= 85) hl.push('✅ 热量控制良好');
     if (scores.proteinRatio >= 85) hl.push('✅ 蛋白质摄入充足');
@@ -297,8 +349,8 @@ export class NutritionScoreService {
       input.fat,
       input.calories,
     );
-    const foodQuality = this.clamp(input.foodQuality * 10, 0, 100);
-    const satiety = this.clamp(input.satiety * 10, 0, 100);
+    const foodQuality = this.logScale100(input.foodQuality);
+    const satiety = this.logScale100(input.satiety);
     const stability = stabilityData
       ? this.calcStabilityScore(
           stabilityData.streakDays,
@@ -306,6 +358,10 @@ export class NutritionScoreService {
           stabilityData.targetMeals,
         )
       : 80;
+    const glycemicImpact = this.calcGlycemicImpactScore(
+      input.glycemicIndex,
+      input.carbsPerServing,
+    );
 
     const w = GOAL_WEIGHTS[goal] || GOAL_WEIGHTS.health;
     let score =
@@ -314,7 +370,8 @@ export class NutritionScoreService {
       macroBalance * w.macroBalance +
       foodQuality * w.foodQuality +
       satiety * w.satiety +
-      stability * w.stability;
+      stability * w.stability +
+      glycemicImpact * (w.glycemicImpact || 0);
 
     score = this.applyPenalties(score, input);
 
@@ -325,6 +382,7 @@ export class NutritionScoreService {
       foodQuality,
       satiety,
       stability,
+      glycemicImpact,
     };
     const highlights = this.generateHighlights(breakdown, input);
     const decision = this.scoreToDecision(score);

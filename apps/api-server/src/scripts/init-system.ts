@@ -14,6 +14,7 @@ import {
 import { RolePermission } from '../modules/rbac/entities/role-permission.entity';
 import { UserRole as UserRoleEntity } from '../modules/rbac/entities/user-role.entity';
 import * as bcrypt from 'bcrypt';
+import { seedSubscriptionPlans } from './seed-subscription-plans.shared';
 
 /**
  * 系统完整初始化脚本
@@ -31,6 +32,9 @@ async function initSystem() {
   const userRoleRepo = AppDataSource.getRepository(UserRoleEntity);
 
   try {
+    // ========== 0. 初始化默认订阅计划 ==========
+    await seedSubscriptionPlans(AppDataSource);
+
     // ========== 1. 创建角色 ==========
     console.log('📦 第一步：创建系统角色...\n');
 

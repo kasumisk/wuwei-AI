@@ -1,8 +1,8 @@
 {
   "common": {
-    "appName": "Procify toolkit",
-    "appTitle": "Procify toolkit - Online Tools",
-    "appDescription": "Production-ready online tools platform with AI integration",
+    "appName": "uWay Health",
+    "appTitle": "uWay Health - AI Nutrition Assistant",
+    "appDescription": "Your intelligent AI nutrition assistant for personalized health and dietary guidance",
     "status": {
       "success": "Success",
       "error": "Error",
@@ -40,17 +40,17 @@
     "toggleLanguage": "Toggle language"
   },
   "auth": {
-    "tier": "Quantum Tier",
+    "tier": "Premium Plan",
     "headline": "The intelligence that",
-    "headlineHighlight": "curates your future.",
-    "description": "Experience a workspace designed for precision. Procify toolkit transforms chaotic data into elegant, actionable insights with bespoke neural processing.",
+    "headlineHighlight": "nourishes your life.",
+    "description": "Experience an AI-powered nutrition assistant designed for your well-being. uWay Health provides personalized dietary guidance, smart meal planning, and actionable health insights tailored to your goals.",
     "testimonial": {
-      "author": "Adrian Voss",
-      "authorTitle": "Director of Research, Arca Lab",
-      "content": "Procify isn't just a tool; it's a digital curator that understands the nuance of our creative workflows better than any system we've used."
+      "author": "Dr. Emily Chen",
+      "authorTitle": "Certified Nutritionist",
+      "content": "uWay Health has transformed how I guide my clients. Its AI-driven meal planning and nutritional analysis are remarkably accurate and easy to use."
     },
     "footer": {
-      "copyright": "© 2026 Procify toolkit Ecosystem",
+      "copyright": "© 2026 uWay Health",
       "privacy": "Privacy Architecture",
       "security": "Security Protocol"
     },
@@ -80,7 +80,7 @@
       "forgotAccess": "Forgot Access?"
     },
     "submit": {
-      "login": "Sign In to Procify",
+      "login": "Sign In to uWay Health",
       "register": "Create Workspace",
       "reset": "Send Reset Email"
     },
@@ -102,8 +102,8 @@
   },
   "home": {
     "featured": {
-      "title": "New in Procify",
-      "subtitle": "Discover the latest frontier of generative intelligence.",
+      "title": "New in uWay Health",
+      "subtitle": "Discover the latest features for your nutrition and health journey.",
       "newFeature": "New Feature",
       "productivity": "Productivity",
       "trending": "Trending",

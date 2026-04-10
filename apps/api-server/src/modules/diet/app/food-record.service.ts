@@ -12,6 +12,10 @@ import {
   UpdateFoodRecordDto,
   FoodRecordQueryDto,
 } from './food.dto';
+import {
+  getUserLocalDayBounds,
+  DEFAULT_TIMEZONE,
+} from '../../../common/utils/timezone.util';
 
 @Injectable()
 export class FoodRecordService {
@@ -54,6 +58,9 @@ export class FoodRecordService {
       avgQuality: dto.avgQuality || 0,
       avgSatiety: dto.avgSatiety || 0,
       nutritionScore: dto.nutritionScore || 0,
+      // V6.1: 分析关联
+      ...(dto.analysisId ? { analysisId: dto.analysisId } : {}),
+      ...(dto.source ? { source: dto.source } : {}),
     });
 
     return this.foodRepo.save(record);
@@ -61,15 +68,13 @@ export class FoodRecordService {
 
   /**
    * 获取今日记录
+   * @param timezone IANA 时区字符串，用于确定"今天"的边界
    */
-  async getTodayRecords(userId: string): Promise<FoodRecord[]> {
-    const today = new Date();
-    const startOfDay = new Date(
-      today.getFullYear(),
-      today.getMonth(),
-      today.getDate(),
-    );
-    const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+  async getTodayRecords(
+    userId: string,
+    timezone: string = DEFAULT_TIMEZONE,
+  ): Promise<FoodRecord[]> {
+    const { startOfDay, endOfDay } = getUserLocalDayBounds(timezone);
 
     return this.foodRepo.find({
       where: {
@@ -136,12 +141,13 @@ export class FoodRecordService {
   /**
    * 删除记录
    */
-  async deleteRecord(userId: string, recordId: string): Promise<void> {
+  async deleteRecord(userId: string, recordId: string): Promise<FoodRecord> {
     const record = await this.foodRepo.findOne({ where: { id: recordId } });
     if (!record) throw new NotFoundException('记录不存在');
     if (record.userId !== userId) throw new ForbiddenException('无权操作');
 
     await this.foodRepo.remove(record);
+    return record;
   }
 
   /**

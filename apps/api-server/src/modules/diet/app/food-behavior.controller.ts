@@ -10,8 +10,10 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AppJwtAuthGuard } from '../../auth/app/app-jwt-auth.guard';
 import { CurrentAppUser } from '../../auth/app/current-app-user.decorator';
+import { AppUserPayload } from '../../auth/app/app-user-payload.type';
 import { ApiResponse } from '../../../common/types/response.type';
 import { BehaviorService } from './behavior.service';
+import { DecisionFeedbackDto } from './food.dto';
 
 @ApiTags('App 行为建模')
 @Controller('app/food')
@@ -26,7 +28,9 @@ export class FoodBehaviorController {
    */
   @Get('behavior-profile')
   @ApiOperation({ summary: '获取用户行为画像' })
-  async getBehaviorProfile(@CurrentAppUser() user: any): Promise<ApiResponse> {
+  async getBehaviorProfile(
+    @CurrentAppUser() user: AppUserPayload,
+  ): Promise<ApiResponse> {
     const profile = await this.behaviorService.getProfile(user.id);
     return {
       success: true,
@@ -42,7 +46,9 @@ export class FoodBehaviorController {
    */
   @Get('proactive-check')
   @ApiOperation({ summary: '主动提醒检查' })
-  async proactiveCheck(@CurrentAppUser() user: any): Promise<ApiResponse> {
+  async proactiveCheck(
+    @CurrentAppUser() user: AppUserPayload,
+  ): Promise<ApiResponse> {
     const reminder = await this.behaviorService.proactiveCheck(user.id);
     return {
       success: true,
@@ -60,17 +66,12 @@ export class FoodBehaviorController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'AI 决策反馈' })
   async decisionFeedback(
-    @Body()
-    body: {
-      recordId: string;
-      followed: boolean;
-      feedback: 'helpful' | 'unhelpful' | 'wrong';
-    },
+    @Body() dto: DecisionFeedbackDto,
   ): Promise<ApiResponse> {
     await this.behaviorService.logFeedback(
-      body.recordId,
-      body.followed,
-      body.feedback,
+      dto.recordId,
+      dto.followed,
+      dto.feedback,
     );
     return {
       success: true,

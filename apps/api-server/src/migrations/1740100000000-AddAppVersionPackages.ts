@@ -49,7 +49,7 @@ export class AddAppVersionPackages1740100000000 implements MigrationInterface {
 
     // 1. 创建渠道包表
     await queryRunner.query(`
-      CREATE TABLE "app_version_packages" (
+      CREATE TABLE IF NOT EXISTS "app_version_packages" (
         "id"          UUID        NOT NULL DEFAULT uuid_generate_v4(),
         "versionId"   UUID        NOT NULL,
         "channel"     VARCHAR(50) NOT NULL,
@@ -69,7 +69,7 @@ export class AddAppVersionPackages1740100000000 implements MigrationInterface {
     `);
 
     await queryRunner.query(`
-      CREATE INDEX "IDX_app_version_packages_versionId"
+      CREATE INDEX IF NOT EXISTS "IDX_app_version_packages_versionId"
         ON "app_version_packages" ("versionId")
     `);
 
@@ -91,6 +91,7 @@ export class AddAppVersionPackages1740100000000 implements MigrationInterface {
           true
         FROM "app_versions"
         WHERE "downloadUrl" IS NOT NULL AND "downloadUrl" != ''
+        ON CONFLICT ("versionId", "channel") DO NOTHING
       `);
 
       // 3. 删除 app_versions 中的渠道包相关列

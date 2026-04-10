@@ -17,6 +17,7 @@ export interface DedupMatch {
 @Injectable()
 export class FoodDedupService {
   private readonly logger = new Logger(FoodDedupService.name);
+  private selectableColumnsPromise: Promise<string[]> | null = null;
 
   constructor(
     @InjectRepository(FoodLibrary)
@@ -29,9 +30,7 @@ export class FoodDedupService {
   async findDuplicate(food: CleanedFoodData): Promise<DedupMatch | null> {
     // 优先级 1: 条形码精确匹配
     if (food.rawPayload?.code) {
-      const barMatch = await this.foodRepo.findOne({
-        where: { barcode: food.rawPayload.code },
-      });
+      const barMatch = await this.findOneSafe({ barcode: food.rawPayload.code });
       if (barMatch) {
         return {
           existingFood: barMatch,
@@ -43,11 +42,9 @@ export class FoodDedupService {
 
     // 优先级 2: 来源ID匹配 (source_type + source_id)
     if (food.primarySource && food.primarySourceId) {
-      const sourceMatch = await this.foodRepo.findOne({
-        where: {
-          primarySource: food.primarySource,
-          primarySourceId: food.primarySourceId,
-        },
+      const sourceMatch = await this.findOneSafe({
+        primarySource: food.primarySource,
+        primarySourceId: food.primarySourceId,
       });
       if (sourceMatch) {
         return {
@@ -63,9 +60,7 @@ export class FoodDedupService {
     if (!nameNormalized) return null;
 
     // 3a: 精确名称匹配
-    const exactMatch = await this.foodRepo.findOne({
-      where: { name: food.name },
-    });
+    const exactMatch = await this.findOneSafe({ name: food.name });
     if (exactMatch) {
       return {
         existingFood: exactMatch,
@@ -75,8 +70,10 @@ export class FoodDedupService {
     }
 
     // 3b: 模糊名称匹配（使用 ILIKE + 营养数据辅助）
+    const selectColumns = await this.getSelectableColumns();
     const candidates = await this.foodRepo
       .createQueryBuilder('f')
+      .select(selectColumns)
       .where('f.name ILIKE :name', {
         name: `%${nameNormalized.substring(0, 20)}%`,
       })
@@ -132,6 +129,7 @@ export class FoodDedupService {
 
     // 补充缺失字段（不覆盖已有数据，除非来源优先级更高）
     const fields = [
+      'aliases',
       'barcode',
       'category',
       'subCategory',
@@ -153,9 +151,12 @@ export class FoodDedupService {
       'folate',
       'zinc',
       'magnesium',
+      'phosphorus',
       'glycemicIndex',
       'glycemicLoad',
       'processingLevel',
+      'mainIngredient',
+      'standardServingDesc',
       'imageUrl',
       'thumbnailUrl',
     ];
@@ -168,6 +169,17 @@ export class FoodDedupService {
       }
     }
 
+    // 同 source_id 更新时，允许结构化字段被最新映射结果纠正
+    if (incoming.category && existing.category !== incoming.category) {
+      merged.category = incoming.category;
+    }
+    if (incoming.subCategory && existing.subCategory !== incoming.subCategory) {
+      merged.subCategory = incoming.subCategory;
+    }
+    if (incoming.foodGroup && existing.foodGroup !== incoming.foodGroup) {
+      merged.foodGroup = incoming.foodGroup;
+    }
+
     // 合并数组字段（去重取并集）
     if (incoming.rawPayload?.allergens) {
       const existingAllergens = existing.allergens || [];
@@ -178,9 +190,69 @@ export class FoodDedupService {
     }
 
     const existingTags = existing.tags || [];
-    merged.tags = [...new Set([...existingTags])];
+    const incomingTags = incoming.tags || incoming.importMetadata?.extraTags || [];
+    merged.tags = [...new Set([...existingTags, ...incomingTags])];
+
+    if (incoming.mealTypes?.length) {
+      merged.mealTypes = [
+        ...new Set([...(existing.mealTypes || []), ...incoming.mealTypes]),
+      ];
+    }
 
     return merged;
+  }
+
+  private async findOneSafe(
+    where: Record<string, string>,
+  ): Promise<FoodLibrary | null> {
+    const selectColumns = await this.getSelectableColumns();
+    const qb = this.foodRepo.createQueryBuilder('f').select(selectColumns);
+
+    Object.entries(where).forEach(([field, value], index) => {
+      const operator = index === 0 ? 'where' : 'andWhere';
+      qb[operator](`f.${field} = :${field}`, { [field]: value });
+    });
+
+    return qb.getOne();
+  }
+
+  private async getSelectableColumns(): Promise<string[]> {
+    if (!this.selectableColumnsPromise) {
+      this.selectableColumnsPromise = this.loadSelectableColumns();
+    }
+
+    return this.selectableColumnsPromise;
+  }
+
+  private async loadSelectableColumns(): Promise<string[]> {
+    const existingColumns: Array<{ column_name: string }> =
+      await this.foodRepo.query(
+        `SELECT column_name
+         FROM information_schema.columns
+         WHERE table_schema = current_schema()
+           AND table_name = $1`,
+        ['foods'],
+      );
+
+    const existingColumnNames = new Set(
+      existingColumns.map((column) => column.column_name),
+    );
+
+    const selectableColumns = this.foodRepo.metadata.columns
+      .filter((column) => existingColumnNames.has(column.databaseName))
+      .map((column) => `f.${column.propertyPath}`);
+
+    const missingColumns = this.foodRepo.metadata.columns
+      .filter((column) => !existingColumnNames.has(column.databaseName))
+      .map((column) => column.databaseName);
+
+    if (missingColumns.length > 0) {
+      this.logger.warn(
+        `Dedup query skipped missing columns: ${missingColumns.join(', ')}`,
+      );
+    }
+
+    return selectableColumns;
   }
 
   /**

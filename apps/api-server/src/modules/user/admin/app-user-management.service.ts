@@ -6,6 +6,10 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AppUser, AppUserStatus } from '../entities/app-user.entity';
+import { UserProfile } from '../entities/user-profile.entity';
+import { UserBehaviorProfile } from '../entities/user-behavior-profile.entity';
+import { UserInferredProfile } from '../entities/user-inferred-profile.entity';
+import { ProfileChangeLog } from '../entities/profile-change-log.entity';
 import {
   GetAppUsersQueryDto,
   UpdateAppUserByAdminDto,
@@ -16,6 +20,14 @@ export class AppUserManagementService {
   constructor(
     @InjectRepository(AppUser)
     private readonly appUserRepository: Repository<AppUser>,
+    @InjectRepository(UserProfile)
+    private readonly userProfileRepository: Repository<UserProfile>,
+    @InjectRepository(UserBehaviorProfile)
+    private readonly behaviorProfileRepository: Repository<UserBehaviorProfile>,
+    @InjectRepository(UserInferredProfile)
+    private readonly inferredProfileRepository: Repository<UserInferredProfile>,
+    @InjectRepository(ProfileChangeLog)
+    private readonly profileChangeLogRepository: Repository<ProfileChangeLog>,
   ) {}
 
   /**
@@ -167,6 +179,106 @@ export class AppUserManagementService {
       total,
       byAuthType: { anonymous, google, email },
       byStatus: { active, banned },
+    };
+  }
+
+  /**
+   * 获取用户行为画像
+   * 包含：行为画像 + 声明档案 + 近期画像变更日志
+   */
+  async getBehaviorProfile(userId: string) {
+    // 验证用户存在
+    const user = await this.appUserRepository.findOne({
+      where: { id: userId },
+    });
+    if (!user) {
+      throw new NotFoundException(`App 用户 #${userId} 不存在`);
+    }
+
+    // 并行查询行为画像、声明档案、近期变更日志
+    const [behaviorProfile, declaredProfile, recentChangeLogs] =
+      await Promise.all([
+        this.behaviorProfileRepository.findOne({ where: { userId } }),
+        this.userProfileRepository.findOne({ where: { userId } }),
+        this.profileChangeLogRepository.find({
+          where: { userId, changeType: 'behavior' as any },
+          order: { createdAt: 'DESC' },
+          take: 20,
+        }),
+      ]);
+
+    return {
+      user: {
+        id: user.id,
+        nickname: user.nickname,
+        authType: user.authType,
+        status: user.status,
+        createdAt: user.createdAt,
+      },
+      behaviorProfile: behaviorProfile || null,
+      declaredProfile: declaredProfile
+        ? {
+            goal: declaredProfile.goal,
+            goalSpeed: declaredProfile.goalSpeed,
+            gender: declaredProfile.gender,
+            birthYear: declaredProfile.birthYear,
+            heightCm: declaredProfile.heightCm,
+            weightKg: declaredProfile.weightKg,
+            targetWeightKg: declaredProfile.targetWeightKg,
+            activityLevel: declaredProfile.activityLevel,
+            dailyCalorieGoal: declaredProfile.dailyCalorieGoal,
+            discipline: declaredProfile.discipline,
+            mealsPerDay: declaredProfile.mealsPerDay,
+            takeoutFrequency: declaredProfile.takeoutFrequency,
+            canCook: declaredProfile.canCook,
+            foodPreferences: declaredProfile.foodPreferences,
+            dietaryRestrictions: declaredProfile.dietaryRestrictions,
+            allergens: declaredProfile.allergens,
+            healthConditions: declaredProfile.healthConditions,
+            cuisinePreferences: declaredProfile.cuisinePreferences,
+            weakTimeSlots: declaredProfile.weakTimeSlots,
+            bingeTriggers: declaredProfile.bingeTriggers,
+            dataCompleteness: declaredProfile.dataCompleteness,
+            onboardingCompleted: declaredProfile.onboardingCompleted,
+          }
+        : null,
+      recentChangeLogs,
+    };
+  }
+
+  /**
+   * 获取用户推断画像
+   * 包含：推断画像 + 目标进度 + 近期推断变更日志
+   */
+  async getInferredProfile(userId: string) {
+    // 验证用户存在
+    const user = await this.appUserRepository.findOne({
+      where: { id: userId },
+    });
+    if (!user) {
+      throw new NotFoundException(`App 用户 #${userId} 不存在`);
+    }
+
+    // 并行查询推断画像、近期变更日志
+    const [inferredProfile, recentChangeLogs] = await Promise.all([
+      this.inferredProfileRepository.findOne({ where: { userId } }),
+      this.profileChangeLogRepository.find({
+        where: { userId, changeType: 'inferred' as any },
+        order: { createdAt: 'DESC' },
+        take: 20,
+      }),
+    ]);
+
+    return {
+      user: {
+        id: user.id,
+        nickname: user.nickname,
+        authType: user.authType,
+        status: user.status,
+        createdAt: user.createdAt,
+      },
+      inferredProfile: inferredProfile || null,
+      recentChangeLogs,
     };
   }
 }

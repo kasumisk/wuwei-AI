@@ -1,8 +1,8 @@
 {
   "common": {
-    "appName": "Procify toolkit",
-    "appTitle": "Procify toolkit - オンラインツール",
-    "appDescription": "AI統合を備えた本格的なオンラインツールプラットフォーム",
+    "appName": "uWay Health",
+    "appTitle": "uWay Health - AI栄養アシスタント",
+    "appDescription": "パーソナライズされた健康・食事ガイダンスを提供するAI栄養アシスタント",
     "status": {
       "success": "成功",
       "error": "エラー",
@@ -40,17 +40,17 @@
     "toggleLanguage": "言語を切り替え"
   },
   "auth": {
-    "tier": "Quantum Tier",
-    "headline": "あなたの未来を",
-    "headlineHighlight": "キュレーションする知性。",
-    "description": "精密さのためにデザインされたワークスペースを体験してください。Procify toolkitは、カオスなデータを洗練された実用的なインサイトへと、独自のニューラル処理で変換します。",
+    "tier": "プレミアムプラン",
+    "headline": "あなたの生活を",
+    "headlineHighlight": "栄養で支える知性。",
+    "description": "あなたの健康のためにデザインされたAI栄養アシスタントを体験してください。uWay Healthは、パーソナライズされた食事ガイダンス、スマートな食事プランニング、そしてあなたの目標に合わせた実用的な健康アドバイスを提供します。",
     "testimonial": {
-      "author": "Adrian Voss",
-      "authorTitle": "リサーチディレクター、Arca Lab",
-      "content": "Procifyは単なるツールではありません。私たちのクリエイティブワークフローのニュアンスを、これまで使用したどのシステムよりも理解するデジタルキュレーターです。"
+      "author": "Dr. Emily Chen",
+      "authorTitle": "認定栄養士",
+      "content": "uWay Healthは、クライアントへのガイダンス方法を一変させました。AIによる食事プランニングと栄養分析は非常に正確で使いやすいです。"
     },
     "footer": {
-      "copyright": "© 2026 Procify toolkit Ecosystem",
+      "copyright": "© 2026 uWay Health",
       "privacy": "プライバシーアーキテクチャ",
       "security": "セキュリティプロトコル"
     },
@@ -80,7 +80,7 @@
       "forgotAccess": "パスワードを忘れましたか？"
     },
     "submit": {
-      "login": "Procifyにサインイン",
+      "login": "uWay Healthにサインイン",
       "register": "ワークスペースを作成",
       "reset": "リセットメールを送信"
     },
@@ -102,8 +102,8 @@
   },
   "home": {
     "featured": {
-      "title": "Procifyの新機能",
-      "subtitle": "生成AIの最新フロンティアを発見してください。",
+      "title": "uWay Healthの新機能",
+      "subtitle": "栄養と健康の旅における最新機能をご紹介します。",
       "newFeature": "新機能",
       "productivity": "生産性",
       "trending": "トレンド",

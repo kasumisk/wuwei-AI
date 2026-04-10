@@ -47,11 +47,11 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 如果你使用本地 PostgreSQL：
 
 ```bash
-# 生成 Prisma Client
-pnpm db:generate
-
-# 运行数据库迁移
+# 运行 API Server 的 TypeORM 迁移
 pnpm db:migrate
+
+# 查看待执行迁移
+pnpm db:migrate:show
 ```
 
 如果使用 Vercel Postgres 或 Supabase，请先在对应平台创建数据库，然后复制连接字符串到 `.env` 文件。
@@ -131,7 +131,16 @@ pnpm --version  # 应该 >= 9.0.0
 - Vite: 修改 `apps/admin/vite.config.ts` 中的 `server.port`
 - NestJS: 修改 `.env` 中的 `PORT` 变量
 
-### Q4: Prisma Client 未生成
+### Q4: 数据库迁移没有执行
+
+优先检查 TypeORM 迁移状态：
+
+```bash
+pnpm db:migrate:show
+pnpm db:migrate
+```
+
+### Q5: Prisma Client 未生成
 
 手动生成：
 

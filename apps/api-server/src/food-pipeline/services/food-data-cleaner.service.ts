@@ -222,6 +222,7 @@ export class FoodDataCleanerService {
     const sourceBonus: Record<string, number> = {
       usda: 0.2,
       openfoodfacts: 0.1,
+      cn_food_composition: 0.18,
       ai: 0.05,
       manual: 0.15,
       crawl: 0.05,

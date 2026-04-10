@@ -17,6 +17,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Response } from 'express';
 import { AppJwtAuthGuard } from '../../auth/app/app-jwt-auth.guard';
 import { CurrentAppUser } from '../../auth/app/current-app-user.decorator';
+import { AppUserPayload } from '../../auth/app/app-user-payload.type';
 import { IgnoreResponseInterceptor } from '../../../core/decorators/ignore-response-interceptor.decorator';
 import { ApiResponse } from '../../../common/types/response.type';
 import { CoachService } from './coach.service';
@@ -43,7 +44,7 @@ export class CoachController {
   @IgnoreResponseInterceptor()
   @ApiOperation({ summary: 'AI 教练聊天（SSE 流式）' })
   async chat(
-    @CurrentAppUser() user: any,
+    @CurrentAppUser() user: AppUserPayload,
     @Body() dto: CoachChatDto,
     @Res() res: Response,
   ): Promise<void> {
@@ -157,7 +158,9 @@ export class CoachController {
    */
   @Get('conversations')
   @ApiOperation({ summary: '获取教练对话列表' })
-  async getConversations(@CurrentAppUser() user: any): Promise<ApiResponse> {
+  async getConversations(
+    @CurrentAppUser() user: AppUserPayload,
+  ): Promise<ApiResponse> {
     const data = await this.coachService.getConversations(user.id);
     return {
       success: true,
@@ -174,7 +177,7 @@ export class CoachController {
   @Get('conversations/:id/messages')
   @ApiOperation({ summary: '获取对话消息历史' })
   async getMessages(
-    @CurrentAppUser() user: any,
+    @CurrentAppUser() user: AppUserPayload,
     @Param('id') id: string,
     @Query() query: CoachMessagesQueryDto,
   ): Promise<ApiResponse> {
@@ -196,7 +199,7 @@ export class CoachController {
   @Delete('conversations/:id')
   @ApiOperation({ summary: '删除教练对话' })
   async deleteConversation(
-    @CurrentAppUser() user: any,
+    @CurrentAppUser() user: AppUserPayload,
     @Param('id') id: string,
   ): Promise<ApiResponse> {
     await this.coachService.deleteConversation(id, user.id);
@@ -214,7 +217,9 @@ export class CoachController {
    */
   @Get('daily-greeting')
   @ApiOperation({ summary: '获取每日教练问候' })
-  async getDailyGreeting(@CurrentAppUser() user: any): Promise<ApiResponse> {
+  async getDailyGreeting(
+    @CurrentAppUser() user: AppUserPayload,
+  ): Promise<ApiResponse> {
     const data = await this.coachService.getDailyGreeting(user.id);
     return {
       success: true,
@@ -233,7 +238,7 @@ export class CoachController {
   @Put('style')
   @ApiOperation({ summary: '切换教练风格' })
   async updateCoachStyle(
-    @CurrentAppUser() user: any,
+    @CurrentAppUser() user: AppUserPayload,
     @Body() body: { style: 'strict' | 'friendly' | 'data' },
   ): Promise<ApiResponse> {
     const profile = await this.behaviorService.updateCoachStyle(

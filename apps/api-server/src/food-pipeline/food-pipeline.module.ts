@@ -22,6 +22,7 @@ import { FoodImageRecognitionService } from './services/food-image-recognition.s
 import { FoodPipelineOrchestratorService } from './services/food-pipeline-orchestrator.service';
 import { FoodSyncSchedulerService } from './services/food-sync-scheduler.service';
 import { FoodQualityMonitorService } from './services/food-quality-monitor.service';
+import { CnFoodCompositionImporterService } from './services/cn-food-composition-importer.service';
 // Controller
 import { FoodPipelineController } from './food-pipeline.controller';
 
@@ -52,6 +53,7 @@ import { FoodPipelineController } from './food-pipeline.controller';
     FoodPipelineOrchestratorService,
     FoodSyncSchedulerService,
     FoodQualityMonitorService,
+    CnFoodCompositionImporterService,
   ],
   controllers: [FoodPipelineController],
   exports: [
@@ -59,6 +61,7 @@ import { FoodPipelineController } from './food-pipeline.controller';
     FoodPipelineOrchestratorService,
     FoodImageRecognitionService,
     FoodQualityMonitorService,
+    CnFoodCompositionImporterService,
   ],
 })
 export class FoodPipelineModule {}

@@ -3,7 +3,10 @@ import {
   PrimaryGeneratedColumn,
   Column,
   UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import { AppUser } from './app-user.entity';
 
 @Entity('user_behavior_profiles')
 export class UserBehaviorProfile {
@@ -12,6 +15,10 @@ export class UserBehaviorProfile {
 
   @Column({ name: 'user_id', type: 'uuid', unique: true })
   userId: string;
+
+  @ManyToOne(() => AppUser, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'user_id' })
+  user: AppUser;
 
   @Column({ name: 'food_preferences', type: 'jsonb', default: '{}' })
   foodPreferences: {
@@ -73,6 +80,18 @@ export class UserBehaviorProfile {
 
   @Column({ name: 'replacement_patterns', type: 'jsonb', default: '{}' })
   replacementPatterns: Record<string, number>;
+
+  /**
+   * 上次 streak 评估的日期 (YYYY-MM-DD)
+   * 用于防止同一天重复递增 streakDays (修复 B1)
+   */
+  @Column({
+    name: 'last_streak_date',
+    type: 'varchar',
+    length: 10,
+    nullable: true,
+  })
+  lastStreakDate: string | null;
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;

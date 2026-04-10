@@ -4,7 +4,13 @@ import {
   MealTarget,
   UserProfileConstraints,
   MEAL_PREFERENCES,
+  HealthCondition,
+  normalizeHealthCondition,
 } from './recommendation.types';
+import {
+  getUserLocalHour,
+  DEFAULT_TIMEZONE,
+} from '../../../../common/utils/timezone.util';
 
 @Injectable()
 export class ConstraintGeneratorService {
@@ -15,6 +21,8 @@ export class ConstraintGeneratorService {
     dailyTarget: { calories: number; protein: number },
     mealType?: string,
     userProfile?: UserProfileConstraints,
+    /** V5: IANA 时区字符串（如 'Asia/Shanghai'），替代 V4 的 timezoneOffset 数字 */
+    timezone?: string,
   ): Constraint {
     const includeTags: string[] = [];
     const excludeTags: string[] = [];
@@ -55,22 +63,24 @@ export class ConstraintGeneratorService {
         }
       }
 
-      // 健康状况 → 动态约束注入
+      // 健康状况 → 动态约束注入 (V4: 使用标准枚举，兼容旧命名)
       if (userProfile.healthConditions?.length) {
-        for (const condition of userProfile.healthConditions) {
-          if (condition === 'diabetes_type2') {
+        for (const rawCondition of userProfile.healthConditions) {
+          const condition =
+            normalizeHealthCondition(rawCondition) ?? rawCondition;
+          if (condition === HealthCondition.DIABETES_TYPE2) {
             excludeTags.push('high_sugar', 'high_gi');
             includeTags.push('low_gi');
-          } else if (condition === 'hypertension') {
+          } else if (condition === HealthCondition.HYPERTENSION) {
             excludeTags.push('high_sodium');
             includeTags.push('low_sodium');
-          } else if (condition === 'high_cholesterol') {
+          } else if (condition === HealthCondition.HYPERLIPIDEMIA) {
             excludeTags.push('high_cholesterol');
-          } else if (condition === 'gout') {
+          } else if (condition === HealthCondition.GOUT) {
             excludeTags.push('high_purine');
-          } else if (condition === 'kidney_disease') {
+          } else if (condition === HealthCondition.KIDNEY_DISEASE) {
             excludeTags.push('high_potassium', 'high_phosphorus');
-          } else if (condition === 'fatty_liver') {
+          } else if (condition === HealthCondition.FATTY_LIVER) {
             excludeTags.push('high_fat', 'high_sugar');
           }
         }
@@ -89,7 +99,8 @@ export class ConstraintGeneratorService {
       }
 
       // 薄弱时段 → 更严格约束
-      const hour = new Date().getHours();
+      // V5: 使用 IANA 时区替代 V4 的 timezoneOffset 数字
+      const hour = getUserLocalHour(timezone || DEFAULT_TIMEZONE);
       const isWeakSlot = userProfile.weakTimeSlots?.some((slot) => {
         if (slot === 'afternoon' && hour >= 14 && hour < 17) return true;
         if (slot === 'evening' && hour >= 18 && hour < 21) return true;

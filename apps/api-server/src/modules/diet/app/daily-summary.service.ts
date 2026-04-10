@@ -5,6 +5,10 @@ import { DailySummary } from '../entities/daily-summary.entity';
 import { NutritionScoreService } from './nutrition-score.service';
 import { UserProfileService } from '../../user/app/user-profile.service';
 import { FoodRecordService } from './food-record.service';
+import {
+  getUserLocalDate,
+  getUserLocalDayBounds,
+} from '../../../common/utils/timezone.util';
 
 @Injectable()
 export class DailySummaryService {
@@ -36,14 +40,15 @@ export class DailySummaryService {
     fatGoal: number;
     carbsGoal: number;
   }> {
-    const today = new Date().toISOString().split('T')[0];
+    const tz = await this.userProfileService.getTimezone(userId);
+    const today = getUserLocalDate(tz);
     const summary = await this.summaryRepo.findOne({
       where: { userId, date: today },
     });
 
     if (!summary) {
       // 实时计算
-      const records = await this.foodRecordService.getTodayRecords(userId);
+      const records = await this.foodRecordService.getTodayRecords(userId, tz);
       const totalCalories = records.reduce(
         (sum, r) => sum + r.totalCalories,
         0,
@@ -97,9 +102,10 @@ export class DailySummaryService {
     userId: string,
     days: number = 7,
   ): Promise<DailySummary[]> {
+    const tz = await this.userProfileService.getTimezone(userId);
     const since = new Date();
     since.setDate(since.getDate() - days);
-    const sinceDate = since.toISOString().split('T')[0];
+    const sinceDate = getUserLocalDate(tz, since);
 
     return this.summaryRepo
       .createQueryBuilder('s')
@@ -113,9 +119,9 @@ export class DailySummaryService {
    * 更新某天的每日汇总
    */
   async updateDailySummary(userId: string, recordDate: Date): Promise<void> {
-    const date = recordDate.toISOString().split('T')[0];
-    const startOfDay = new Date(`${date}T00:00:00.000Z`);
-    const endOfDay = new Date(`${date}T23:59:59.999Z`);
+    const tz = await this.userProfileService.getTimezone(userId);
+    const date = getUserLocalDate(tz, recordDate);
+    const { startOfDay, endOfDay } = getUserLocalDayBounds(tz, recordDate);
 
     const records = await this.foodRecordService.getRecordsByDateRange(
       userId,
@@ -150,7 +156,11 @@ export class DailySummaryService {
       ) / totalCal;
 
     // 营养目标（从用户档案计算）
-    let profile: any = null;
+    let profile: {
+      goal?: string;
+      weightKg?: number | null;
+      dailyCalorieGoal?: number | null;
+    } | null = null;
     let goals = {
       calories: 2000,
       protein: 0,

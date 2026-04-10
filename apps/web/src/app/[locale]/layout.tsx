@@ -4,6 +4,8 @@ import { notFound } from 'next/navigation';
 import { Inter, Plus_Jakarta_Sans } from 'next/font/google';
 import { Providers } from '@/providers';
 import { Toaster } from '@/components/common/toaster';
+import { BottomNav } from '@/components/common/bottom-nav';
+import { PaywallModal } from '@/features/subscription/components/paywall-modal';
 import { i18n, type Locale } from '@/lib/i18n/config';
 import { JsonLd } from '@/lib/seo/JsonLd';
 import { buildOrganizationSchema, buildWebSiteSchema } from '@/lib/seo/structured-data';
@@ -50,6 +52,8 @@ export default async function LocaleLayout({
         <NextIntlClientProvider messages={messages}>
           <Providers>
             {children}
+            <BottomNav />
+            <PaywallModal />
             <Toaster />
           </Providers>
         </NextIntlClientProvider>

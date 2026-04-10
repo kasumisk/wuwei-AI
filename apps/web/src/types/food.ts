@@ -231,3 +231,137 @@ export interface NutritionScoreResult {
     carbs: number;
   };
 }
+
+// ── 周计划 ──
+export interface MealFoodItem {
+  foodId: string;
+  name: string;
+  servingDesc: string;
+  calories: number;
+  protein: number;
+  fat: number;
+  carbs: number;
+  category: string;
+}
+
+export interface MealFoodExplanation {
+  reason: string;
+  benefits: string[];
+}
+
+export interface MealPlanDetailed extends MealPlan {
+  foodItems?: MealFoodItem[];
+  explanations?: Record<string, MealFoodExplanation>;
+}
+
+export interface DailyPlanSummary {
+  date: string;
+  isNew: boolean;
+  totalCalories: number;
+  totalProtein: number;
+  totalFat: number;
+  totalCarbs: number;
+  meals: {
+    morning: MealPlanDetailed | null;
+    lunch: MealPlanDetailed | null;
+    dinner: MealPlanDetailed | null;
+    snack: MealPlanDetailed | null;
+  };
+}
+
+export interface WeeklyNutritionSummary {
+  avgCalories: number;
+  avgProtein: number;
+  avgFat: number;
+  avgCarbs: number;
+  calorieCV: number;
+  uniqueFoodCount: number;
+}
+
+export interface WeeklyPlanData {
+  weekStart: string;
+  weekEnd: string;
+  plans: DailyPlanSummary[];
+  weeklyNutrition: WeeklyNutritionSummary;
+}
+
+// ── 文字分析请求 ──
+export interface AnalyzeTextRequest {
+  text: string; // 1-500 chars
+  mealType?: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+}
+
+// ── 保存分析到记录 ──
+export interface SaveAnalysisRequest {
+  analysisId: string; // UUID
+  mealType?: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+  recordedAt?: string; // ISO date string
+}
+
+// ── 分析历史 ──
+export interface AnalysisHistoryItem {
+  id: string;
+  inputType: 'text' | 'image';
+  inputText?: string;
+  imageUrl?: string;
+  mealType?: string;
+  totalCalories: number;
+  foodCount: number;
+  decision?: string;
+  isHealthy?: boolean;
+  createdAt: string;
+}
+
+export interface AnalysisHistoryResponse {
+  items: AnalysisHistoryItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+// ── 食物替代 ──
+export interface SubstituteItem {
+  foodId: string;
+  name: string;
+  category: string;
+  subCategory: string;
+  mainIngredient: string;
+  servingDesc: string;
+  servingCalories: number;
+  servingProtein: number;
+  servingFat: number;
+  servingCarbs: number;
+  substituteScore: number;
+  similarity: number;
+  nutritionProximity: number;
+  historicalCount: number;
+  imageUrl: string;
+  thumbnailUrl: string;
+}
+
+// ── "为什么不推荐" 解释 ──
+export interface ExplainWhyNotResult {
+  foodName: string;
+  mealType: string;
+  explanation: string;
+  reasons: string[];
+  alternatives: string[];
+}
+
+// ── 推荐反馈 ──
+export type FeedbackAction = 'accepted' | 'replaced' | 'skipped';
+
+export interface FeedbackRatings {
+  taste?: number;
+  portion?: number;
+  price?: number;
+  timing?: number;
+  comment?: string;
+}
+
+// ── 反馈统计 ──
+export interface FeedbackStats {
+  perFood: Record<string, { count: number; avgScore: number }>;
+  global: { totalFeedbacks: number; avgScore: number };
+  days: number;
+}

@@ -23,11 +23,19 @@ export class ResponseWrapper {
 
   /**
    * 失败响应
+   *
+   * V6.1: 新增可选 data 参数，用于付费墙等场景返回额外信息
    */
-  static error(message = '操作失败', code = 500): ApiResponse<null> {
+  static error(message?: string, code?: number): ApiResponse<null>;
+  static error<T>(message: string, code: number, data: T): ApiResponse<T>;
+  static error<T = null>(
+    message = '操作失败',
+    code = 500,
+    data?: T,
+  ): ApiResponse<T | null> {
     return {
       code,
-      data: null,
+      data: data ?? null,
       message,
       success: false,
     };
