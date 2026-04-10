@@ -1,7 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { FoodRecord } from '../entities/food-record.entity';
-import { DailySummary } from '../entities/daily-summary.entity';
 import {
   SaveFoodRecordDto,
   UpdateFoodRecordDto,
@@ -19,7 +17,10 @@ import {
   getUserLocalHour,
   DEFAULT_TIMEZONE,
 } from '../../../common/utils/timezone.util';
-import { MEAL_RATIOS } from './recommendation/recommendation.types';
+import {
+  MEAL_RATIOS,
+  UserProfileConstraints,
+} from './recommendation/recommendation.types';
 import {
   DomainEvents,
   MealRecordedEvent,
@@ -44,15 +45,12 @@ export class FoodService {
   /**
    * 保存饮食记录（委托 + 异步更新汇总）
    */
-  async saveRecord(
-    userId: string,
-    dto: SaveFoodRecordDto,
-  ): Promise<FoodRecord> {
+  async saveRecord(userId: string, dto: SaveFoodRecordDto): Promise<any> {
     const saved = await this.foodRecordService.saveRecord(userId, dto);
 
     // 异步更新每日汇总
     this.dailySummaryService
-      .updateDailySummary(userId, saved.recordedAt)
+      .updateDailySummary(userId, saved.recorded_at)
       .catch((err) => this.logger.error(`更新每日汇总失败: ${err.message}`));
 
     // V6 Phase 1.2: 发布饮食记录事件
@@ -74,7 +72,7 @@ export class FoodService {
   /**
    * 获取今日记录
    */
-  async getTodayRecords(userId: string): Promise<FoodRecord[]> {
+  async getTodayRecords(userId: string): Promise<any[]> {
     const tz = await this.userProfileService.getTimezone(userId);
     return this.foodRecordService.getTodayRecords(userId, tz);
   }
@@ -86,7 +84,7 @@ export class FoodService {
     userId: string,
     query: FoodRecordQueryDto,
   ): Promise<{
-    items: FoodRecord[];
+    items: any[];
     total: number;
     page: number;
     limit: number;
@@ -101,7 +99,7 @@ export class FoodService {
     userId: string,
     recordId: string,
     dto: UpdateFoodRecordDto,
-  ): Promise<FoodRecord> {
+  ): Promise<any> {
     const record = await this.foodRecordService.updateRecord(
       userId,
       recordId,
@@ -110,7 +108,7 @@ export class FoodService {
 
     // 异步更新每日汇总
     this.dailySummaryService
-      .updateDailySummary(userId, record.recordedAt)
+      .updateDailySummary(userId, record.recorded_at)
       .catch((err) => this.logger.error(`更新每日汇总失败: ${err.message}`));
 
     return record;
@@ -123,7 +121,7 @@ export class FoodService {
   async deleteRecord(userId: string, recordId: string): Promise<void> {
     const deleted = await this.foodRecordService.deleteRecord(userId, recordId);
     // 异步更新当日汇总，不阻塞删除响应
-    const recordDate = (deleted.recordedAt ?? deleted.createdAt) as Date;
+    const recordDate = (deleted.recorded_at ?? deleted.created_at) as Date;
     this.dailySummaryService
       .updateDailySummary(userId, recordDate)
       .catch((err) => {
@@ -141,10 +139,7 @@ export class FoodService {
   /**
    * 获取最近 N 天的汇总数据（趋势图用）
    */
-  async getRecentSummaries(
-    userId: string,
-    days: number = 7,
-  ): Promise<DailySummary[]> {
+  async getRecentSummaries(userId: string, days: number = 7): Promise<any[]> {
     return this.dailySummaryService.getRecentSummaries(userId, days);
   }
 
@@ -379,12 +374,12 @@ export class FoodService {
       carbs: Math.round(goals.carbs * ratio),
     };
 
-    const userConstraints = profile
+    const userConstraints: UserProfileConstraints | undefined = profile
       ? {
-          dietaryRestrictions: profile.dietaryRestrictions || [],
-          allergens: profile.allergens || [],
-          healthConditions: profile.healthConditions || [],
-          regionCode: profile.regionCode || 'CN',
+          dietaryRestrictions: (profile.dietary_restrictions as string[]) || [],
+          allergens: (profile.allergens as string[]) || [],
+          healthConditions: (profile.health_conditions as string[]) || [],
+          regionCode: (profile.region_code as string) || 'CN',
           timezone: profile.timezone,
         }
       : undefined;

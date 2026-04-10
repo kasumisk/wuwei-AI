@@ -4,16 +4,11 @@ import {
   ExecutionContext,
   ForbiddenException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { ClientCapabilityPermission } from '../../modules/client/entities/client-capability-permission.entity';
+import { PrismaService } from '../../core/prisma/prisma.service';
 
 @Injectable()
 export class CapabilityPermissionGuard implements CanActivate {
-  constructor(
-    @InjectRepository(ClientCapabilityPermission)
-    private readonly permissionRepository: Repository<ClientCapabilityPermission>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
@@ -32,13 +27,14 @@ export class CapabilityPermissionGuard implements CanActivate {
     }
 
     // 检查客户端是否有该能力的权限
-    const permission = await this.permissionRepository.findOne({
-      where: {
-        clientId: client.id,
-        capabilityType,
-        enabled: true,
-      },
-    });
+    const permission =
+      await this.prisma.client_capability_permissions.findFirst({
+        where: {
+          client_id: client.id,
+          capability_type: capabilityType,
+          enabled: true,
+        },
+      });
 
     if (!permission) {
       throw new ForbiddenException(`您没有访问 ${capabilityType} 能力的权限`);

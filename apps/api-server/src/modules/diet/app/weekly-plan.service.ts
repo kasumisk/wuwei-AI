@@ -1,11 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { DailyPlan, MealPlan } from '../entities/daily-plan.entity';
+import { MealPlan } from '../diet.types';
 import { DailyPlanService, PreloadedContext } from './daily-plan.service';
 import { UserProfileService } from '../../user/app/user-profile.service';
 import { RecommendationEngineService } from './recommendation-engine.service';
 import { getUserLocalDate } from '../../../common/utils/timezone.util';
+import { PrismaService } from '../../../core/prisma/prisma.service';
 
 /**
  * 周计划生成服务 (V4 Phase 4.3)
@@ -62,8 +61,7 @@ export class WeeklyPlanService {
   private readonly logger = new Logger(WeeklyPlanService.name);
 
   constructor(
-    @InjectRepository(DailyPlan)
-    private readonly planRepo: Repository<DailyPlan>,
+    private readonly prisma: PrismaService,
     private readonly dailyPlanService: DailyPlanService,
     private readonly userProfileService: UserProfileService,
     private readonly recommendationEngine: RecommendationEngineService,
@@ -80,16 +78,14 @@ export class WeeklyPlanService {
     const { monday, sunday, dates } = this.getCurrentWeekDates(tz);
 
     // 查询本周已有的计划
-    const existingPlans = await this.planRepo
-      .createQueryBuilder('p')
-      .where('p.userId = :userId', { userId })
-      .andWhere('p.date >= :start AND p.date <= :end', {
-        start: monday,
-        end: sunday,
-      })
-      .getMany();
+    const existingPlans = (await this.prisma.daily_plans.findMany({
+      where: {
+        user_id: userId,
+        date: { gte: monday, lte: sunday },
+      },
+    })) as any[];
 
-    const existingMap = new Map<string, DailyPlan>();
+    const existingMap = new Map<string, any>();
     for (const plan of existingPlans) {
       existingMap.set(plan.date, plan);
     }
@@ -103,7 +99,7 @@ export class WeeklyPlanService {
     // V5 2.5: 一次性预加载所有共享数据，避免 N天×5 次重复查询
     // 先获取 profile（用于确定 regionCode），再并行加载其余数据
     const profile = await this.userProfileService.getProfile(userId);
-    const regionCode = profile?.regionCode || 'CN';
+    const regionCode = profile?.region_code || 'CN';
 
     const [
       allFoods,
@@ -209,12 +205,12 @@ export class WeeklyPlanService {
   /**
    * 从计划中提取所有食物名
    */
-  private extractFoodNames(plan: DailyPlan, target: Set<string>): void {
+  private extractFoodNames(plan: any, target: Set<string>): void {
     const meals = [
-      plan.morningPlan,
-      plan.lunchPlan,
-      plan.dinnerPlan,
-      plan.snackPlan,
+      plan.morning_plan ?? plan.morningPlan,
+      plan.lunch_plan ?? plan.lunchPlan,
+      plan.dinner_plan ?? plan.dinnerPlan,
+      plan.snack_plan ?? plan.snackPlan,
     ];
     for (const meal of meals) {
       if (!meal?.foodItems) continue;
@@ -227,12 +223,12 @@ export class WeeklyPlanService {
   /**
    * 将 DailyPlan 转换为摘要
    */
-  private toPlanSummary(plan: DailyPlan, isNew: boolean): DailyPlanSummary {
+  private toPlanSummary(plan: any, isNew: boolean): DailyPlanSummary {
     const meals = {
-      morning: plan.morningPlan,
-      lunch: plan.lunchPlan,
-      dinner: plan.dinnerPlan,
-      snack: plan.snackPlan,
+      morning: plan.morning_plan ?? plan.morningPlan,
+      lunch: plan.lunch_plan ?? plan.lunchPlan,
+      dinner: plan.dinner_plan ?? plan.dinnerPlan,
+      snack: plan.snack_plan ?? plan.snackPlan,
     };
 
     const totalCalories =

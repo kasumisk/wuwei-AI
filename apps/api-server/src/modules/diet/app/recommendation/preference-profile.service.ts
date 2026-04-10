@@ -1,9 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { FoodRecord } from '../../entities/food-record.entity';
-import { RecommendationFeedback } from '../../entities/recommendation-feedback.entity';
-import { FoodRegionalInfo } from '../../../food/entities/food-regional-info.entity';
+import { PrismaService } from '../../../../core/prisma/prisma.service';
 import { UserPreferenceProfile } from './recommendation.types';
 
 /**
@@ -18,14 +14,7 @@ import { UserPreferenceProfile } from './recommendation.types';
 export class PreferenceProfileService {
   private readonly logger = new Logger(PreferenceProfileService.name);
 
-  constructor(
-    @InjectRepository(RecommendationFeedback)
-    private readonly feedbackRepo: Repository<RecommendationFeedback>,
-    @InjectRepository(FoodRecord)
-    private readonly foodRecordRepo: Repository<FoodRecord>,
-    @InjectRepository(FoodRegionalInfo)
-    private readonly regionalInfoRepo: Repository<FoodRegionalInfo>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * 构建用户偏好画像 — 从反馈记录按 category/mainIngredient/foodGroup 聚合
@@ -54,14 +43,15 @@ export class PreferenceProfileService {
         food_group: string;
         food_name: string;
         created_at: Date | string;
-      }> = await this.feedbackRepo.query(
+      }> = await this.prisma.$queryRawUnsafe(
         `SELECT rf.action, rf.food_name, rf.created_at,
                 fl.category, fl.main_ingredient, fl.food_group
          FROM recommendation_feedbacks rf
-         LEFT JOIN food_library fl ON fl.id = rf.food_id
+         LEFT JOIN foods fl ON fl.id = rf.food_id
          WHERE rf.user_id = $1
            AND rf.created_at >= $2`,
-        [userId, since],
+        userId,
+        since,
       );
 
       if (rows.length < 3) return empty;
@@ -151,7 +141,7 @@ export class PreferenceProfileService {
   async getRegionalBoostMap(region: string): Promise<Record<string, number>> {
     const boostMap: Record<string, number> = {};
     try {
-      const infos = await this.regionalInfoRepo.find({
+      const infos = await this.prisma.food_regional_info.findMany({
         where: { region },
       });
 
@@ -160,7 +150,7 @@ export class PreferenceProfileService {
         switch (info.availability) {
           case 'common':
             // 高流行度的常见食物额外加分
-            boost = info.localPopularity > 50 ? 1.08 : 1.02;
+            boost = (info.local_popularity ?? 0) > 50 ? 1.08 : 1.02;
             break;
           case 'seasonal':
             boost = 0.95;
@@ -170,7 +160,7 @@ export class PreferenceProfileService {
             break;
         }
         if (boost !== 1.0) {
-          boostMap[info.foodId] = boost;
+          boostMap[info.food_id] = boost;
         }
       }
     } catch (err) {
@@ -187,14 +177,16 @@ export class PreferenceProfileService {
       const since = new Date();
       since.setDate(since.getDate() - days);
 
-      const records: Array<{ name: string }> = await this.foodRecordRepo.query(
-        `SELECT DISTINCT food_item->>'name' AS name
-         FROM food_records fr
-         CROSS JOIN LATERAL jsonb_array_elements(fr.foods) AS food_item
-         WHERE fr.user_id = $1
-           AND fr.recorded_at >= $2`,
-        [userId, since],
-      );
+      const records: Array<{ name: string }> =
+        await this.prisma.$queryRawUnsafe(
+          `SELECT DISTINCT food_item->>'name' AS name
+           FROM food_records fr
+           CROSS JOIN LATERAL jsonb_array_elements(fr.foods) AS food_item
+           WHERE fr.user_id = $1
+             AND fr.recorded_at >= $2`,
+          userId,
+          since,
+        );
 
       return records.map((r) => r.name);
     } catch {

@@ -12,18 +12,14 @@
  * - 查询支持分页，防止大量日志导致响应过大
  */
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThanOrEqual, Between } from 'typeorm';
 import { OnEvent } from '@nestjs/event-emitter';
 import {
   DomainEvents,
   ProfileUpdatedEvent,
 } from '../../../core/events/domain-events';
-import {
-  ProfileChangeLog,
-  ProfileChangeType,
-  ProfileChangeSource,
-} from '../entities/profile-change-log.entity';
+import { ProfileChangeType, ProfileChangeSource } from '../user.types';
+import { profile_change_log as ProfileChangeLog } from '@prisma/client';
+import { PrismaService } from '../../../core/prisma/prisma.service';
 
 // ─── 查询 DTO ───
 
@@ -66,10 +62,7 @@ const MAX_PAGE_SIZE = 100;
 export class ProfileChangeLogService {
   private readonly logger = new Logger(ProfileChangeLogService.name);
 
-  constructor(
-    @InjectRepository(ProfileChangeLog)
-    private readonly changeLogRepo: Repository<ProfileChangeLog>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   // ─── 事件监听 ───
 
@@ -91,13 +84,13 @@ export class ProfileChangeLogService {
       }
 
       await this.createLog({
-        userId: event.userId,
-        changeType: event.updateType as ProfileChangeType,
+        user_id: event.userId,
+        change_type: event.updateType as ProfileChangeType,
         source: (event.source as ProfileChangeSource) || 'event',
-        changedFields: event.changedFields,
-        beforeValues: event.beforeValues || {},
-        afterValues: event.afterValues || {},
-        triggerEvent: event.eventName,
+        changed_fields: event.changedFields as any,
+        before_values: (event.beforeValues || {}) as any,
+        after_values: (event.afterValues || {}) as any,
+        trigger_event: event.eventName,
         reason: event.reason || null,
         metadata: null,
       });
@@ -121,16 +114,26 @@ export class ProfileChangeLogService {
    * 自动计算下一个版本号（用户级隔离）。
    */
   async createLog(
-    params: Omit<ProfileChangeLog, 'id' | 'version' | 'createdAt'>,
+    params: Omit<ProfileChangeLog, 'id' | 'version' | 'created_at'>,
   ): Promise<ProfileChangeLog> {
-    const nextVersion = await this.getNextVersion(params.userId);
+    const nextVersion = await this.getNextVersion(params.user_id);
 
-    const log = this.changeLogRepo.create({
-      ...params,
-      version: nextVersion,
+    const log = await this.prisma.profile_change_log.create({
+      data: {
+        user_id: params.user_id,
+        version: nextVersion,
+        change_type: params.change_type,
+        source: params.source,
+        changed_fields: params.changed_fields as any,
+        before_values: params.before_values as any,
+        after_values: params.after_values as any,
+        trigger_event: params.trigger_event,
+        reason: params.reason,
+        metadata: params.metadata as any,
+      },
     });
 
-    return this.changeLogRepo.save(log);
+    return log as any;
   }
 
   // ─── 查询 API ───
@@ -149,30 +152,33 @@ export class ProfileChangeLogService {
     const skip = (page - 1) * limit;
 
     // 构建查询条件
-    const where: Record<string, unknown> = { userId: query.userId };
+    const where: any = { user_id: query.userId };
 
     if (query.changeType) {
-      where.changeType = query.changeType;
+      where.change_type = query.changeType;
     }
 
     if (query.startDate && query.endDate) {
-      where.createdAt = Between(
-        new Date(query.startDate),
-        new Date(query.endDate),
-      );
+      where.created_at = {
+        gte: new Date(query.startDate),
+        lte: new Date(query.endDate),
+      };
     }
 
-    const [items, total] = await this.changeLogRepo.findAndCount({
-      where,
-      order: { version: 'DESC' },
-      skip,
-      take: limit,
-    });
+    const [items, total] = await Promise.all([
+      this.prisma.profile_change_log.findMany({
+        where,
+        orderBy: { version: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.profile_change_log.count({ where }),
+    ]);
 
     const latestVersion = await this.getLatestVersion(query.userId);
 
     return {
-      items,
+      items: items as any,
       total,
       page,
       limit,
@@ -189,9 +195,10 @@ export class ProfileChangeLogService {
     userId: string,
     version: number,
   ): Promise<ProfileChangeLog | null> {
-    return this.changeLogRepo.findOne({
-      where: { userId, version },
+    const log = await this.prisma.profile_change_log.findFirst({
+      where: { user_id: userId, version },
     });
+    return log as any;
   }
 
   /**
@@ -203,26 +210,26 @@ export class ProfileChangeLogService {
     userId: string,
     version: number,
   ): Promise<ProfileChangeLog[]> {
-    return this.changeLogRepo.find({
+    const logs = await this.prisma.profile_change_log.findMany({
       where: {
-        userId,
-        version: LessThanOrEqual(version),
+        user_id: userId,
+        version: { lte: version },
       },
-      order: { version: 'ASC' },
+      orderBy: { version: 'asc' },
     });
+    return logs as any;
   }
 
   /**
    * 获取用户最新版本号
    */
   async getLatestVersion(userId: string): Promise<number> {
-    const result = await this.changeLogRepo
-      .createQueryBuilder('log')
-      .select('MAX(log.version)', 'maxVersion')
-      .where('log.userId = :userId', { userId })
-      .getRawOne();
+    const result = await this.prisma.profile_change_log.aggregate({
+      where: { user_id: userId },
+      _max: { version: true },
+    });
 
-    return result?.maxVersion || 0;
+    return result._max.version || 0;
   }
 
   /**
@@ -236,38 +243,36 @@ export class ProfileChangeLogService {
     changesByType: Record<string, number>;
     lastChangeAt: Date | null;
   }> {
-    const totalChanges = await this.changeLogRepo.count({
-      where: { userId },
+    const totalChanges = await this.prisma.profile_change_log.count({
+      where: { user_id: userId },
     });
 
     const latestVersion = await this.getLatestVersion(userId);
 
     // 按类型统计变更次数
-    const typeStats = await this.changeLogRepo
-      .createQueryBuilder('log')
-      .select('log.changeType', 'changeType')
-      .addSelect('COUNT(*)', 'count')
-      .where('log.userId = :userId', { userId })
-      .groupBy('log.changeType')
-      .getRawMany();
+    const typeStats = await this.prisma.profile_change_log.groupBy({
+      by: ['change_type'],
+      where: { user_id: userId },
+      _count: { _all: true },
+    });
 
     const changesByType: Record<string, number> = {};
     for (const stat of typeStats) {
-      changesByType[stat.changeType] = parseInt(stat.count, 10);
+      changesByType[stat.change_type] = stat._count._all;
     }
 
     // 最后一次变更时间
-    const lastLog = await this.changeLogRepo.findOne({
-      where: { userId },
-      order: { createdAt: 'DESC' },
-      select: ['createdAt'],
+    const lastLog = await this.prisma.profile_change_log.findFirst({
+      where: { user_id: userId },
+      orderBy: { created_at: 'desc' },
+      select: { created_at: true },
     });
 
     return {
       totalChanges,
       latestVersion,
       changesByType,
-      lastChangeAt: lastLog?.createdAt || null,
+      lastChangeAt: lastLog?.created_at || null,
     };
   }
 

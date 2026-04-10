@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
 import { ConfigModule } from './config/config.module';
-import { DatabaseModule } from './database/database.module';
+import { PrismaModule } from './prisma/prisma.module';
 import { LoggerModule } from './logger/logger.module';
 import { RedisModule } from './redis/redis.module';
 import { CacheModule } from './cache/cache.module';
@@ -11,7 +11,7 @@ import { AllExceptionsFilter } from './filters/all-exceptions.filter';
 @Module({
   imports: [
     ConfigModule,
-    DatabaseModule,
+    PrismaModule,
     LoggerModule,
     RedisModule,
     CacheModule,
@@ -26,7 +26,6 @@ import { AllExceptionsFilter } from './filters/all-exceptions.filter';
   ],
   exports: [
     ConfigModule,
-    DatabaseModule,
     LoggerModule,
     RedisModule,
     CacheModule,

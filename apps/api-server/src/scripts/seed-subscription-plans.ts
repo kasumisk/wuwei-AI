@@ -2,16 +2,16 @@
  * 默认订阅计划种子脚本
  * 运行方式：npx ts-node -r tsconfig-paths/register src/scripts/seed-subscription-plans.ts
  */
-import AppDataSource from '../core/database/data-source-dev';
+import { PrismaClient } from '@prisma/client';
 import { seedSubscriptionPlans } from './seed-subscription-plans.shared';
 
-async function seed() {
-  await AppDataSource.initialize();
+const prisma = new PrismaClient();
 
+async function seed() {
   try {
-    await seedSubscriptionPlans(AppDataSource);
+    await seedSubscriptionPlans(prisma);
   } finally {
-    await AppDataSource.destroy();
+    await prisma.$disconnect();
   }
 }
 

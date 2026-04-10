@@ -1,5 +1,4 @@
-import { DataSource } from 'typeorm';
-import { SubscriptionPlan } from '../modules/subscription/entities/subscription-plan.entity';
+import { PrismaClient } from '@prisma/client';
 import {
   BillingCycle,
   SubscriptionTier,
@@ -64,36 +63,46 @@ const DEFAULT_SUBSCRIPTION_PLAN_SEEDS: SubscriptionPlanSeed[] = [
  * 幂等规则：按 tier + billingCycle 查找，存在则更新，不存在则创建。
  */
 export async function seedSubscriptionPlans(
-  dataSource: DataSource,
+  prisma: PrismaClient,
 ): Promise<void> {
-  const planRepo = dataSource.getRepository(SubscriptionPlan);
-
   console.log('📦 初始化默认订阅计划...\n');
 
   for (const planSeed of DEFAULT_SUBSCRIPTION_PLAN_SEEDS) {
-    const existing = await planRepo.findOne({
+    const existing = await prisma.subscription_plan.findFirst({
       where: {
         tier: planSeed.tier,
-        billingCycle: planSeed.billingCycle,
+        billing_cycle: planSeed.billingCycle,
       },
     });
 
-    const payload: Partial<SubscriptionPlan> = {
-      ...planSeed,
+    const payload = {
+      name: planSeed.name,
+      description: planSeed.description,
+      tier: planSeed.tier,
+      billing_cycle: planSeed.billingCycle,
+      price_cents: planSeed.priceCents,
+      currency: planSeed.currency,
+      apple_product_id: planSeed.appleProductId,
+      wechat_product_id: planSeed.wechatProductId,
+      sort_order: planSeed.sortOrder,
+      is_active: planSeed.isActive,
       entitlements: { ...TIER_ENTITLEMENTS[planSeed.tier] },
     };
 
     if (existing) {
-      Object.assign(existing, payload);
-      await planRepo.save(existing);
+      await prisma.subscription_plan.update({
+        where: { id: existing.id },
+        data: payload,
+      });
       console.log(
         `  ⏭️  已更新套餐: ${planSeed.name} (${planSeed.tier}/${planSeed.billingCycle})`,
       );
       continue;
     }
 
-    const created = planRepo.create(payload);
-    await planRepo.save(created);
+    await prisma.subscription_plan.create({
+      data: payload,
+    });
     console.log(
       `  ✅ 已创建套餐: ${planSeed.name} (${planSeed.priceCents / 100} ${planSeed.currency})`,
     );

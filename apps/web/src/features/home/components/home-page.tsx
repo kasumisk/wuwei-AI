@@ -13,6 +13,7 @@ import { NutritionScoreCard } from './nutrition-score-card';
 import { WeeklyTrendCard } from './weekly-trend-card';
 import { CompletionPrompt } from '@/features/profile/components/completion-prompt';
 import { useUnreadCount } from '@/features/notification/hooks/use-notifications';
+import { MEAL_LABELS } from '@/lib/constants/food';
 import Image from 'next/image';
 import type { FoodRecord, MealSuggestion, DailySummary } from '@/types/food';
 
@@ -229,13 +230,7 @@ function NextMealHint({
   suggestion: MealSuggestion;
   summary: DailySummary;
 }) {
-  const mealLabels: Record<string, string> = {
-    breakfast: '早餐',
-    lunch: '午餐',
-    dinner: '晚餐',
-    snack: '加餐',
-  };
-  const label = mealLabels[suggestion.mealType] || '下一餐';
+  const label = MEAL_LABELS[suggestion.mealType] || '下一餐';
 
   return (
     <section className="mb-6">

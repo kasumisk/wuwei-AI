@@ -16,13 +16,13 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { MealType, RecordSource } from '../entities/food-record.entity';
+import { MealType, RecordSource } from '../diet.types';
 import {
   ActivityLevel,
   GoalType,
   GoalSpeed,
   Discipline,
-} from '../../user/entities/user-profile.entity';
+} from '../../user/user.types';
 
 // ========== Analyze ==========
 

@@ -20,16 +20,9 @@
  */
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { FoodLibraryService } from './food-library.service';
-import { FoodLibrary } from '../entities/food-library.entity';
-import {
-  FoodAnalysisRecord,
-  AnalysisRecordStatus,
-  PersistStatus,
-} from '../entities/food-analysis-record.entity';
+import { AnalysisRecordStatus, PersistStatus } from '../food.types';
 import { FoodService } from '../../diet/app/food.service';
 import { UserProfileService } from '../../user/app/user-profile.service';
 import { BehaviorService } from '../../diet/app/behavior.service';
@@ -55,6 +48,7 @@ import {
   DomainEvents,
   AnalysisCompletedEvent,
 } from '../../../core/events/domain-events';
+import { PrismaService } from '../../../core/prisma/prisma.service';
 
 // ==================== 常量 ====================
 
@@ -142,7 +136,7 @@ interface ParsedFoodItem {
   /** 标准化名称 */
   normalizedName?: string;
   /** 匹配到的标准食物库条目 */
-  libraryMatch?: FoodLibrary;
+  libraryMatch?: any;
   /** 数量描述 */
   quantity?: string;
   /** 估算重量（克） */
@@ -197,8 +191,7 @@ export class TextFoodAnalysisService {
     private readonly userProfileService: UserProfileService,
     private readonly behaviorService: BehaviorService,
     private readonly nutritionScoreService: NutritionScoreService,
-    @InjectRepository(FoodAnalysisRecord)
-    private readonly analysisRecordRepo: Repository<FoodAnalysisRecord>,
+    private readonly prisma: PrismaService,
     // V6.1 Phase 2.6: 域事件发射
     private readonly eventEmitter: EventEmitter2,
   ) {
@@ -473,9 +466,7 @@ export class TextFoodAnalysisService {
   /**
    * 匹配标准食物库（精确名 → 模糊搜索）
    */
-  private async matchFoodLibrary(
-    foodName: string,
-  ): Promise<FoodLibrary | null> {
+  private async matchFoodLibrary(foodName: string): Promise<any | null> {
     try {
       // 精确匹配
       const exact = await this.foodLibraryService
@@ -484,15 +475,18 @@ export class TextFoodAnalysisService {
       if (exact) return exact;
 
       // 模糊搜索取第一个高相关结果
-      const results = await this.foodLibraryService.search(foodName, 3);
+      const results = (await this.foodLibraryService.search(
+        foodName,
+        3,
+      )) as any[];
       if (results.length > 0) {
         // 如果模糊搜索结果的名称包含搜索词或搜索词包含结果名称，认为匹配
         const bestMatch = results.find(
-          (r) =>
+          (r: any) =>
             r.name.includes(foodName) ||
             foodName.includes(r.name) ||
             (r.aliases &&
-              r.aliases.split(',').some((a) => a.trim() === foodName)),
+              r.aliases.split(',').some((a: string) => a.trim() === foodName)),
         );
         if (bestMatch) return bestMatch;
       }
@@ -505,12 +499,9 @@ export class TextFoodAnalysisService {
   /**
    * 解析份量克数
    */
-  private resolveServingGrams(
-    quantity: string | undefined,
-    food: FoodLibrary,
-  ): number {
+  private resolveServingGrams(quantity: string | undefined, food: any): number {
     if (!quantity) {
-      return food.standardServingG || DEFAULT_SERVING_GRAMS;
+      return food.standard_serving_g || DEFAULT_SERVING_GRAMS;
     }
 
     // 数字单位（200g、100ml）
@@ -525,21 +516,21 @@ export class TextFoodAnalysisService {
     if (mapped) return mapped;
 
     // 食物库自带的常用份量匹配
-    if (food.commonPortions && food.commonPortions.length > 0) {
-      const portion = food.commonPortions.find((p) =>
+    if (food.common_portions && (food.common_portions as any[]).length > 0) {
+      const portion = (food.common_portions as any[]).find((p: any) =>
         quantity!.includes(p.name),
       );
       if (portion) return portion.grams;
     }
 
-    return food.standardServingG || DEFAULT_SERVING_GRAMS;
+    return food.standard_serving_g || DEFAULT_SERVING_GRAMS;
   }
 
   /**
    * 从标准食物库匹配结果构建 ParsedFoodItem
    */
   private buildFromLibraryMatch(
-    food: FoodLibrary,
+    food: any,
     quantity: string | undefined,
     servingGrams: number,
   ): ParsedFoodItem {
@@ -946,14 +937,14 @@ export class TextFoodAnalysisService {
           foods.reduce(
             (s, f) =>
               s +
-              (f.libraryMatch ? Number(f.libraryMatch.qualityScore) || 5 : 5),
+              (f.libraryMatch ? Number(f.libraryMatch.quality_score) || 5 : 5),
             0,
           ) / Math.max(1, foods.length);
         const avgSatiety =
           foods.reduce(
             (s, f) =>
               s +
-              (f.libraryMatch ? Number(f.libraryMatch.satietyScore) || 5 : 5),
+              (f.libraryMatch ? Number(f.libraryMatch.satiety_score) || 5 : 5),
             0,
           ) / Math.max(1, foods.length);
 
@@ -1040,40 +1031,40 @@ export class TextFoodAnalysisService {
     const matchedCount = parsedFoods.filter((f) => f.libraryMatch).length;
     const candidateCount = parsedFoods.length - matchedCount;
 
-    const record = this.analysisRecordRepo.create({
-      id: analysisId,
-      userId,
-      inputType: 'text',
-      rawText,
-      mealType: mealType || null,
-      status: AnalysisRecordStatus.COMPLETED,
-      recognizedPayload: {
-        terms: parsedFoods.map((f) => ({
-          name: f.name,
-          quantity: f.quantity,
-          fromLibrary: !!f.libraryMatch,
-        })),
+    await this.prisma.food_analysis_record.create({
+      data: {
+        id: analysisId,
+        user_id: userId,
+        input_type: 'text',
+        raw_text: rawText,
+        meal_type: mealType || null,
+        status: AnalysisRecordStatus.COMPLETED,
+        recognized_payload: {
+          terms: parsedFoods.map((f) => ({
+            name: f.name,
+            quantity: f.quantity,
+            fromLibrary: !!f.libraryMatch,
+          })),
+        } as any,
+        normalized_payload: {
+          foods: result.foods,
+        } as any,
+        nutrition_payload: {
+          totals: result.totals,
+          score: result.score,
+        } as any,
+        decision_payload: {
+          decision: result.decision,
+          alternatives: result.alternatives,
+          explanation: result.explanation,
+        } as any,
+        confidence_score: result.score.confidenceScore,
+        quality_score: result.score.healthScore,
+        matched_food_count: matchedCount,
+        candidate_food_count: candidateCount,
+        persist_status: PersistStatus.PENDING,
       },
-      normalizedPayload: {
-        foods: result.foods,
-      },
-      nutritionPayload: {
-        totals: result.totals,
-        score: result.score,
-      },
-      decisionPayload: {
-        decision: result.decision,
-        alternatives: result.alternatives,
-        explanation: result.explanation,
-      },
-      confidenceScore: result.score.confidenceScore,
-      qualityScore: result.score.healthScore,
-      matchedFoodCount: matchedCount,
-      candidateFoodCount: candidateCount,
-      persistStatus: PersistStatus.PENDING,
     });
-
-    await this.analysisRecordRepo.save(record);
     this.logger.debug(`分析记录已保存: ${analysisId}`);
   }
 }

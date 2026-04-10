@@ -23,8 +23,6 @@
  * - 去重匹配采用名称层精确/ILIKE 匹配（Phase 3.3 再做语义层）
  */
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { OnEvent } from '@nestjs/event-emitter';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
@@ -32,19 +30,7 @@ import {
   AnalysisCompletedEvent,
   CandidateCreatedEvent,
 } from '../../../core/events/domain-events';
-import {
-  FoodAnalysisRecord,
-  PersistStatus,
-} from '../entities/food-analysis-record.entity';
-import { FoodLibrary } from '../entities/food-library.entity';
-import {
-  FoodCandidate,
-  CandidateSourceType,
-} from '../entities/food-candidate.entity';
-import {
-  AnalysisFoodLink,
-  MatchType,
-} from '../entities/analysis-food-link.entity';
+import { PersistStatus, CandidateSourceType, MatchType } from '../food.types';
 import {
   DataQualityService,
   QualityTier,
@@ -56,6 +42,7 @@ import {
   AnalyzedFoodItem,
 } from './analysis-result.types';
 import { SubscriptionTier } from '../../subscription/subscription.types';
+import { PrismaService } from '../../../core/prisma/prisma.service';
 
 // ==================== 内部类型 ====================
 
@@ -91,14 +78,7 @@ export class AnalysisIngestionService {
   private readonly logger = new Logger(AnalysisIngestionService.name);
 
   constructor(
-    @InjectRepository(FoodAnalysisRecord)
-    private readonly analysisRecordRepo: Repository<FoodAnalysisRecord>,
-    @InjectRepository(FoodLibrary)
-    private readonly foodLibraryRepo: Repository<FoodLibrary>,
-    @InjectRepository(FoodCandidate)
-    private readonly candidateRepo: Repository<FoodCandidate>,
-    @InjectRepository(AnalysisFoodLink)
-    private readonly linkRepo: Repository<AnalysisFoodLink>,
+    private readonly prisma: PrismaService,
     private readonly dataQualityService: DataQualityService,
     private readonly candidateAggregationService: CandidateAggregationService,
     private readonly eventEmitter: EventEmitter2,
@@ -133,7 +113,7 @@ export class AnalysisIngestionService {
    */
   async ingest(analysisId: string, userId: string): Promise<void> {
     // 1. 加载分析记录
-    const record = await this.analysisRecordRepo.findOne({
+    const record = await this.prisma.food_analysis_record.findUnique({
       where: { id: analysisId },
     });
     if (!record) {
@@ -142,9 +122,9 @@ export class AnalysisIngestionService {
     }
 
     // 2. 跳过已处理的记录（幂等保护）
-    if (record.persistStatus !== PersistStatus.PENDING) {
+    if (record.persist_status !== PersistStatus.PENDING) {
       this.logger.debug(
-        `分析记录已处理: ${analysisId}, status=${record.persistStatus}`,
+        `分析记录已处理: ${analysisId}, status=${record.persist_status}`,
       );
       return;
     }
@@ -153,7 +133,7 @@ export class AnalysisIngestionService {
     const analysisResult = this.reconstructResult(record);
     if (!analysisResult || analysisResult.foods.length === 0) {
       this.logger.debug(`分析结果为空，标记 IGNORED: ${analysisId}`);
-      await this.updateRecordStatus(record, PersistStatus.IGNORED, null);
+      await this.updateRecordStatus(record.id, PersistStatus.IGNORED, null);
       return;
     }
 
@@ -177,7 +157,7 @@ export class AnalysisIngestionService {
     if (qualityResult.tier === QualityTier.LOW_QUALITY) {
       // 低质量: 只保留记录，不创建关联和候选
       await this.updateRecordStatus(
-        record,
+        record.id,
         PersistStatus.IGNORED,
         qualityResult.totalScore,
       );
@@ -199,7 +179,7 @@ export class AnalysisIngestionService {
     const hasCandidate = candidateCount > 0;
 
     // 决定最终入库状态
-    let persistStatus: PersistStatus;
+    let persistStatus: string;
     if (hasLinked && !hasCandidate) {
       persistStatus = PersistStatus.LINKED;
     } else if (hasCandidate) {
@@ -208,13 +188,15 @@ export class AnalysisIngestionService {
       persistStatus = PersistStatus.IGNORED;
     }
 
-    record.matchedFoodCount = matchedCount;
-    record.candidateFoodCount = candidateCount;
-    await this.updateRecordStatus(
-      record,
-      persistStatus,
-      qualityResult.totalScore,
-    );
+    await this.prisma.food_analysis_record.update({
+      where: { id: record.id },
+      data: {
+        matched_food_count: matchedCount,
+        candidate_food_count: candidateCount,
+        persist_status: persistStatus,
+        quality_score: qualityResult.totalScore,
+      },
+    });
 
     this.logger.log(
       `入库编排完成: analysisId=${analysisId}, userId=${userId}, ` +
@@ -230,12 +212,13 @@ export class AnalysisIngestionService {
    *
    * 分析记录存储的是分段的 payload，需要组装回统一结构
    */
-  private reconstructResult(
-    record: FoodAnalysisRecord,
-  ): FoodAnalysisResultV61 | null {
-    const nutrition = record.nutritionPayload as Record<string, unknown> | null;
-    const decision = record.decisionPayload as Record<string, unknown> | null;
-    const recognized = record.recognizedPayload as Record<
+  private reconstructResult(record: any): FoodAnalysisResultV61 | null {
+    const nutrition = record.nutrition_payload as Record<
+      string,
+      unknown
+    > | null;
+    const decision = record.decision_payload as Record<string, unknown> | null;
+    const recognized = record.recognized_payload as Record<
       string,
       unknown
     > | null;
@@ -249,11 +232,11 @@ export class AnalysisIngestionService {
 
     return {
       analysisId: record.id,
-      inputType: record.inputType,
+      inputType: record.input_type,
       inputSnapshot: {
-        rawText: record.rawText ?? undefined,
-        imageUrl: record.imageUrl ?? undefined,
-        mealType: record.mealType as
+        rawText: record.raw_text ?? undefined,
+        imageUrl: record.image_url ?? undefined,
+        mealType: record.meal_type as
           | 'breakfast'
           | 'lunch'
           | 'dinner'
@@ -270,7 +253,7 @@ export class AnalysisIngestionService {
       score: (nutrition['score'] ?? {
         healthScore: 0,
         nutritionScore: 0,
-        confidenceScore: record.confidenceScore ?? 0,
+        confidenceScore: record.confidence_score ?? 0,
       }) as FoodAnalysisResultV61['score'],
       decision: (decision ?? {
         recommendation: 'caution',
@@ -293,9 +276,7 @@ export class AnalysisIngestionService {
   /**
    * 批量查标准库：精确名 + ILIKE 别名
    */
-  private async batchSearchLibrary(
-    foods: AnalyzedFoodItem[],
-  ): Promise<FoodLibrary[]> {
+  private async batchSearchLibrary(foods: AnalyzedFoodItem[]): Promise<any[]> {
     if (foods.length === 0) return [];
 
     const names = new Set<string>();
@@ -308,19 +289,20 @@ export class AnalysisIngestionService {
     const nameArray = Array.from(names);
     const lowerNames = nameArray.map((n) => n.toLowerCase());
 
-    // 精确名 + 别名 ILIKE 匹配
-    return this.foodLibraryRepo
-      .createQueryBuilder('f')
-      .where('LOWER(f.name) IN (:...names)', { names: lowerNames })
-      .orWhere(
-        nameArray
-          .map((_, i) => `LOWER(f.aliases) LIKE :alias${i}`)
-          .join(' OR '),
-        Object.fromEntries(
-          nameArray.map((n, i) => [`alias${i}`, `%${n.toLowerCase()}%`]),
-        ),
-      )
-      .getMany();
+    // Build alias LIKE conditions
+    const aliasConditions = nameArray
+      .map((_, i) => `LOWER(aliases) LIKE $${lowerNames.length + i + 1}`)
+      .join(' OR ');
+    const aliasParams = nameArray.map((n) => `%${n.toLowerCase()}%`);
+
+    // Build IN placeholders
+    const inPlaceholders = lowerNames.map((_, i) => `$${i + 1}`).join(', ');
+
+    return this.prisma.$queryRawUnsafe(
+      `SELECT * FROM foods WHERE LOWER(name) IN (${inPlaceholders}) OR ${aliasConditions}`,
+      ...lowerNames,
+      ...aliasParams,
+    );
   }
 
   /**
@@ -328,16 +310,16 @@ export class AnalysisIngestionService {
    */
   private async processEachFood(
     result: FoodAnalysisResultV61,
-    matchedLibraryFoods: FoodLibrary[],
+    matchedLibraryFoods: any[],
     qualityResult: QualityScoreResult,
   ): Promise<FoodItemIngestionResult[]> {
-    // 建立标准库食物索引（名称 → FoodLibrary）
-    const libraryByName = new Map<string, FoodLibrary>();
+    // 建立标准库食物索引（名称 → food）
+    const libraryByName = new Map<string, any>();
     for (const lib of matchedLibraryFoods) {
-      libraryByName.set(lib.name.toLowerCase(), lib);
+      libraryByName.set((lib.name as string).toLowerCase(), lib);
       // 也索引别名
       if (lib.aliases) {
-        for (const alias of lib.aliases.split(',')) {
+        for (const alias of (lib.aliases as string).split(',')) {
           libraryByName.set(alias.trim().toLowerCase(), lib);
         }
       }
@@ -379,7 +361,7 @@ export class AnalysisIngestionService {
     analysisId: string,
     inputType: 'text' | 'image',
     food: AnalyzedFoodItem,
-    libraryByName: Map<string, FoodLibrary>,
+    libraryByName: Map<string, any>,
     qualityResult: QualityScoreResult,
   ): Promise<FoodItemIngestionResult> {
     // Step 1: 尝试匹配标准食物库
@@ -450,9 +432,9 @@ export class AnalysisIngestionService {
    */
   private findLibraryMatch(
     food: AnalyzedFoodItem,
-    libraryByName: Map<string, FoodLibrary>,
+    libraryByName: Map<string, any>,
   ): {
-    libraryFood: FoodLibrary;
+    libraryFood: any;
     matchType: MatchType;
     confidence: number;
   } | null {
@@ -483,7 +465,7 @@ export class AnalysisIngestionService {
     // 3. 已有 foodLibraryId 的情况（AI 分析时已关联）
     if (food.foodLibraryId) {
       const preLinked = Array.from(libraryByName.values()).find(
-        (f) => f.id === food.foodLibraryId,
+        (f: any) => f.id === food.foodLibraryId,
       );
       if (preLinked) {
         return {
@@ -509,26 +491,32 @@ export class AnalysisIngestionService {
     const canonicalName = (food.normalizedName ?? food.name).trim();
 
     // 1. 查找已有候选（精确名匹配）
-    const existing = await this.candidateRepo.findOne({
-      where: { canonicalName },
+    const existing = await this.prisma.food_candidate.findFirst({
+      where: { canonical_name: canonicalName },
     });
 
     if (existing) {
       // 命中已有候选 → 递增命中计数、更新平均置信度
-      existing.sourceCount += 1;
-      existing.avgConfidence = this.updateAvgConfidence(
-        existing.avgConfidence,
-        existing.sourceCount,
+      const newSourceCount = (existing.source_count ?? 0) + 1;
+      const newAvgConfidence = this.updateAvgConfidence(
+        Number(existing.avg_confidence),
+        newSourceCount,
         (food.confidence ?? 0) * 100,
       );
-      existing.lastSeenAt = new Date();
+      const newQualityScore =
+        qualityScore > Number(existing.quality_score)
+          ? qualityScore
+          : Number(existing.quality_score);
 
-      // 更新质量分（取更高值）
-      if (qualityScore > existing.qualityScore) {
-        existing.qualityScore = qualityScore;
-      }
-
-      await this.candidateRepo.save(existing);
+      await this.prisma.food_candidate.update({
+        where: { id: existing.id },
+        data: {
+          source_count: newSourceCount,
+          avg_confidence: newAvgConfidence,
+          last_seen_at: new Date(),
+          quality_score: newQualityScore,
+        },
+      });
 
       // 创建 link 关联到候选
       await this.createFoodLink(
@@ -544,53 +532,57 @@ export class AnalysisIngestionService {
     }
 
     // 2. 创建新候选
-    const candidate = this.candidateRepo.create({
-      canonicalName,
-      aliases:
-        food.normalizedName && food.normalizedName !== food.name
-          ? [food.name]
-          : [],
-      category: food.category ?? null,
-      estimatedNutrition: {
-        caloriesPer100g: food.estimatedWeightGrams
-          ? Math.round((food.calories / food.estimatedWeightGrams) * 100)
-          : undefined,
-        proteinPer100g:
-          food.estimatedWeightGrams && food.protein != null
-            ? Math.round(
-                (food.protein / food.estimatedWeightGrams) * 100 * 10,
-              ) / 10
+    const saved = await this.prisma.food_candidate.create({
+      data: {
+        canonical_name: canonicalName,
+        aliases:
+          food.normalizedName && food.normalizedName !== food.name
+            ? [food.name]
+            : [],
+        category: food.category ?? null,
+        estimated_nutrition: {
+          caloriesPer100g: food.estimatedWeightGrams
+            ? Math.round((food.calories / food.estimatedWeightGrams) * 100)
             : undefined,
-        fatPer100g:
-          food.estimatedWeightGrams && food.fat != null
-            ? Math.round((food.fat / food.estimatedWeightGrams) * 100 * 10) / 10
-            : undefined,
-        carbsPer100g:
-          food.estimatedWeightGrams && food.carbs != null
-            ? Math.round((food.carbs / food.estimatedWeightGrams) * 100 * 10) /
-              10
-            : undefined,
-        fiberPer100g:
-          food.estimatedWeightGrams && food.fiber != null
-            ? Math.round((food.fiber / food.estimatedWeightGrams) * 100 * 10) /
-              10
-            : undefined,
-        sodiumPer100g:
-          food.estimatedWeightGrams && food.sodium != null
-            ? Math.round((food.sodium / food.estimatedWeightGrams) * 100 * 10) /
-              10
-            : undefined,
+          proteinPer100g:
+            food.estimatedWeightGrams && food.protein != null
+              ? Math.round(
+                  (food.protein / food.estimatedWeightGrams) * 100 * 10,
+                ) / 10
+              : undefined,
+          fatPer100g:
+            food.estimatedWeightGrams && food.fat != null
+              ? Math.round((food.fat / food.estimatedWeightGrams) * 100 * 10) /
+                10
+              : undefined,
+          carbsPer100g:
+            food.estimatedWeightGrams && food.carbs != null
+              ? Math.round(
+                  (food.carbs / food.estimatedWeightGrams) * 100 * 10,
+                ) / 10
+              : undefined,
+          fiberPer100g:
+            food.estimatedWeightGrams && food.fiber != null
+              ? Math.round(
+                  (food.fiber / food.estimatedWeightGrams) * 100 * 10,
+                ) / 10
+              : undefined,
+          sodiumPer100g:
+            food.estimatedWeightGrams && food.sodium != null
+              ? Math.round(
+                  (food.sodium / food.estimatedWeightGrams) * 100 * 10,
+                ) / 10
+              : undefined,
+        },
+        source_type:
+          inputType === 'image'
+            ? CandidateSourceType.IMAGE_ANALYSIS
+            : CandidateSourceType.TEXT_ANALYSIS,
+        source_count: 1,
+        avg_confidence: (food.confidence ?? 0) * 100,
+        quality_score: qualityScore,
       },
-      sourceType:
-        inputType === 'image'
-          ? CandidateSourceType.IMAGE_ANALYSIS
-          : CandidateSourceType.TEXT_ANALYSIS,
-      sourceCount: 1,
-      avgConfidence: (food.confidence ?? 0) * 100,
-      qualityScore,
     });
-
-    const saved = await this.candidateRepo.save(candidate);
 
     // 创建 link 关联到新候选
     await this.createFoodLink(
@@ -627,30 +619,34 @@ export class AnalysisIngestionService {
     matchType: MatchType,
     confidence: number,
   ): Promise<void> {
-    const link = this.linkRepo.create({
-      analysisId,
-      foodName: food.name,
-      foodLibraryId,
-      foodCandidateId,
-      matchType,
-      confidence,
+    await this.prisma.analysis_food_link.create({
+      data: {
+        analysis_id: analysisId,
+        food_name: food.name,
+        food_library_id: foodLibraryId,
+        food_candidate_id: foodCandidateId,
+        match_type: matchType,
+        confidence,
+      },
     });
-    await this.linkRepo.save(link);
   }
 
   /**
    * 更新分析记录的入库状态和质量分
    */
   private async updateRecordStatus(
-    record: FoodAnalysisRecord,
-    status: PersistStatus,
+    recordId: string,
+    status: string,
     qualityScore: number | null,
   ): Promise<void> {
-    record.persistStatus = status;
+    const data: any = { persist_status: status };
     if (qualityScore !== null) {
-      record.qualityScore = qualityScore;
+      data.quality_score = qualityScore;
     }
-    await this.analysisRecordRepo.save(record);
+    await this.prisma.food_analysis_record.update({
+      where: { id: recordId },
+      data,
+    });
   }
 
   /**

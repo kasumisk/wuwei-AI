@@ -1,9 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, IsNull } from 'typeorm';
-import { FoodConflict } from '../../modules/food/entities/food-conflict.entity';
-import { FoodLibrary } from '../../modules/food/entities/food-library.entity';
-import { FoodChangeLog } from '../../modules/food/entities/food-change-log.entity';
+import { PrismaService } from '../../core/prisma/prisma.service';
 
 /**
  * 食物数据冲突自动解决服务
@@ -27,14 +23,7 @@ export class FoodConflictResolverService {
     crawl: 30,
   };
 
-  constructor(
-    @InjectRepository(FoodConflict)
-    private readonly conflictRepo: Repository<FoodConflict>,
-    @InjectRepository(FoodLibrary)
-    private readonly foodRepo: Repository<FoodLibrary>,
-    @InjectRepository(FoodChangeLog)
-    private readonly changeLogRepo: Repository<FoodChangeLog>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * 检测并记录冲突
@@ -44,8 +33,8 @@ export class FoodConflictResolverService {
     existingValues: Record<string, any>,
     incomingValues: Record<string, any>,
     incomingSource: string,
-  ): Promise<FoodConflict[]> {
-    const conflicts: FoodConflict[] = [];
+  ): Promise<any[]> {
+    const conflicts: any[] = [];
 
     const numericFields = [
       'calories',
@@ -71,20 +60,28 @@ export class FoodConflictResolverService {
       const diff = oldVal > 0 ? Math.abs(oldVal - newVal) / oldVal : 1;
       if (diff < 0.05) continue; // 差异小于5%忽略
 
-      const existing = await this.conflictRepo.findOne({
-        where: { foodId, field, resolution: IsNull() },
+      const existing = await this.prisma.food_conflicts.findFirst({
+        where: { food_id: foodId, field, resolution: null },
       });
       if (existing) continue; // 已有未解决的冲突
 
-      const conflict = this.conflictRepo.create({
-        foodId,
-        field,
-        sources: [
-          { source: existingValues.primarySource || 'existing', value: oldVal },
-          { source: incomingSource, value: newVal },
-        ],
+      const conflict = await this.prisma.food_conflicts.create({
+        data: {
+          food_id: foodId,
+          field,
+          sources: [
+            {
+              source:
+                existingValues.primarySource ||
+                existingValues.primary_source ||
+                'existing',
+              value: oldVal,
+            },
+            { source: incomingSource, value: newVal },
+          ],
+        },
       });
-      conflicts.push(await this.conflictRepo.save(conflict));
+      conflicts.push(conflict);
     }
 
     // 分类冲突
@@ -93,22 +90,27 @@ export class FoodConflictResolverService {
       incomingValues.category &&
       existingValues.category !== incomingValues.category
     ) {
-      const existing = await this.conflictRepo.findOne({
-        where: { foodId, field: 'category', resolution: IsNull() },
+      const existing = await this.prisma.food_conflicts.findFirst({
+        where: { food_id: foodId, field: 'category', resolution: null },
       });
       if (!existing) {
-        const conflict = this.conflictRepo.create({
-          foodId,
-          field: 'category',
-          sources: [
-            {
-              source: existingValues.primarySource || 'existing',
-              value: existingValues.category,
-            },
-            { source: incomingSource, value: incomingValues.category },
-          ],
+        const conflict = await this.prisma.food_conflicts.create({
+          data: {
+            food_id: foodId,
+            field: 'category',
+            sources: [
+              {
+                source:
+                  existingValues.primarySource ||
+                  existingValues.primary_source ||
+                  'existing',
+                value: existingValues.category,
+              },
+              { source: incomingSource, value: incomingValues.category },
+            ],
+          },
         });
-        conflicts.push(await this.conflictRepo.save(conflict));
+        conflicts.push(conflict);
       }
     }
 
@@ -122,9 +124,9 @@ export class FoodConflictResolverService {
     resolved: number;
     needsReview: number;
   }> {
-    const pendingConflicts = await this.conflictRepo.find({
-      where: { resolution: IsNull() },
-      relations: ['food'],
+    const pendingConflicts = await this.prisma.food_conflicts.findMany({
+      where: { resolution: null },
+      include: { foods: true },
     });
 
     let resolved = 0;
@@ -133,17 +135,25 @@ export class FoodConflictResolverService {
     for (const conflict of pendingConflicts) {
       const result = this.autoResolve(conflict);
       if (result) {
-        conflict.resolution = result.resolution;
-        conflict.resolvedValue = result.resolvedValue;
-        conflict.resolvedBy = 'auto_pipeline';
-        conflict.resolvedAt = new Date();
-        await this.conflictRepo.save(conflict);
+        await this.prisma.food_conflicts.update({
+          where: { id: conflict.id },
+          data: {
+            resolution: result.resolution,
+            resolved_value: result.resolvedValue,
+            resolved_by: 'auto_pipeline',
+            resolved_at: new Date(),
+          },
+        });
 
         // 更新食物数据
         if (result.resolution !== 'needs_review') {
-          await this.foodRepo.update(conflict.foodId, {
-            [conflict.field]: result.resolvedValue,
-          } as any);
+          // Use raw SQL for dynamic field update since field names may be camelCase or snake_case
+          const snakeField = this.toSnakeCase(conflict.field);
+          await this.prisma.$executeRawUnsafe(
+            `UPDATE foods SET "${snakeField}" = $1 WHERE id = $2::uuid`,
+            result.resolvedValue,
+            conflict.food_id,
+          );
           resolved++;
         } else {
           needsReview++;
@@ -158,9 +168,49 @@ export class FoodConflictResolverService {
   }
 
   /**
+   * Convert camelCase field name to snake_case for DB column.
+   */
+  private toSnakeCase(field: string): string {
+    const mapping: Record<string, string> = {
+      glycemicIndex: 'glycemic_index',
+      glycemicLoad: 'glycemic_load',
+      processingLevel: 'processing_level',
+      saturatedFat: 'saturated_fat',
+      transFat: 'trans_fat',
+      vitaminA: 'vitamin_a',
+      vitaminC: 'vitamin_c',
+      vitaminD: 'vitamin_d',
+      vitaminE: 'vitamin_e',
+      vitaminB12: 'vitamin_b12',
+      mainIngredient: 'main_ingredient',
+      subCategory: 'sub_category',
+      foodGroup: 'food_group',
+      qualityScore: 'quality_score',
+      satietyScore: 'satiety_score',
+      nutrientDensity: 'nutrient_density',
+      isProcessed: 'is_processed',
+      isFried: 'is_fried',
+      mealTypes: 'meal_types',
+      imageUrl: 'image_url',
+      thumbnailUrl: 'thumbnail_url',
+      primarySource: 'primary_source',
+      primarySourceId: 'primary_source_id',
+      dataVersion: 'data_version',
+      searchWeight: 'search_weight',
+      standardServingG: 'standard_serving_g',
+      standardServingDesc: 'standard_serving_desc',
+      commonPortions: 'common_portions',
+      isVerified: 'is_verified',
+      verifiedBy: 'verified_by',
+      verifiedAt: 'verified_at',
+    };
+    return mapping[field] || field;
+  }
+
+  /**
    * 单条自动解决逻辑
    */
-  private autoResolve(conflict: FoodConflict): {
+  private autoResolve(conflict: any): {
     resolution: string;
     resolvedValue: string;
   } | null {

@@ -2,25 +2,13 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { usePlanAdjust } from '@/features/home/hooks/use-plan-adjust';
+import { foodPlanService } from '@/lib/api/food-plan';
 import { useToast } from '@/lib/hooks/use-toast';
+import { MEAL_LABELS, GOAL_LABELS } from '@/lib/constants/food';
 import type { MealSuggestion, DailySummary } from '@/types/food';
 import type { UserProfile } from '@/types/user';
 
 /* ─── 常量 ─── */
-
-const MEAL_LABELS: Record<string, string> = {
-  breakfast: '早餐',
-  lunch: '午餐',
-  dinner: '晚餐',
-  snack: '加餐',
-};
-
-const GOAL_LABELS: Record<string, string> = {
-  fat_loss: '减脂',
-  muscle_gain: '增肌',
-  health: '健康维持',
-  habit: '改善习惯',
-};
 
 const DISLIKE_REASONS = [
   { key: 'taste', label: '不喜欢这类食物' },
@@ -101,12 +89,23 @@ export function MealRecommendationCard({
     return suggestion.suggestion;
   }, [suggestion, activeScenario]);
 
-  // 喜欢
+  // 喜欢 → 提交 accepted 反馈
   const handleLike = useCallback(() => {
     setFeedbackGiven('like');
     setShowDislikeOptions(false);
     toast({ title: '已记录偏好，会推荐更多类似食物' });
-  }, [toast]);
+    // fire-and-forget：不阻塞 UI
+    foodPlanService
+      .submitFeedback({
+        mealType: suggestion.mealType,
+        foodName: currentContent.foods,
+        action: 'accepted',
+        goalType: profile?.goal,
+      })
+      .catch(() => {
+        /* 静默失败 — 不影响用户体验 */
+      });
+  }, [toast, suggestion.mealType, currentContent.foods, profile?.goal]);
 
   // 换一个
   const handleSwap = useCallback(
@@ -130,12 +129,23 @@ export function MealRecommendationCard({
     setShowDislikeOptions(true);
   }, []);
 
-  // 选择不喜欢的原因 → 自动换一个
+  // 选择不喜欢的原因 → 提交 skipped 反馈 → 自动换一个
   const handleDislikeReason = useCallback(
     (reason: string) => {
+      // fire-and-forget：提交反馈
+      foodPlanService
+        .submitFeedback({
+          mealType: suggestion.mealType,
+          foodName: currentContent.foods,
+          action: 'skipped',
+          goalType: profile?.goal,
+        })
+        .catch(() => {
+          /* 静默失败 */
+        });
       handleSwap(`用户不想吃：${reason}`);
     },
-    [handleSwap]
+    [handleSwap, suggestion.mealType, currentContent.foods, profile?.goal]
   );
 
   const mealLabel = MEAL_LABELS[suggestion.mealType] || '下一餐';

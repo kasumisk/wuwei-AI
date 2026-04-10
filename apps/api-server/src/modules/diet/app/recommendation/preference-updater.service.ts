@@ -1,7 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { FoodLibrary } from '../../../food/entities/food-library.entity';
+import { PrismaService } from '../../../../core/prisma/prisma.service';
 
 /**
  * 偏好自动更新服务 (V4 Phase 3.1)
@@ -66,10 +64,7 @@ export class PreferenceUpdaterService {
   private readonly NAME_WEIGHT_MIN = 0.7;
   private readonly NAME_WEIGHT_MAX = 1.2;
 
-  constructor(
-    @InjectRepository(FoodLibrary)
-    private readonly foodLibraryRepo: Repository<FoodLibrary>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * 根据反馈增量更新偏好权重
@@ -163,21 +158,36 @@ export class PreferenceUpdaterService {
     foodGroup?: string;
   }> {
     try {
-      let food: FoodLibrary | null = null;
+      let food: {
+        id: string;
+        category: string | null;
+        main_ingredient: string | null;
+        food_group: string | null;
+      } | null = null;
 
       // 优先按 ID 查找
       if (foodId) {
-        food = await this.foodLibraryRepo.findOne({
+        food = await this.prisma.foods.findFirst({
           where: { id: foodId },
-          select: ['id', 'category', 'mainIngredient', 'foodGroup'],
+          select: {
+            id: true,
+            category: true,
+            main_ingredient: true,
+            food_group: true,
+          },
         });
       }
 
       // 回退到按名称查找
       if (!food && foodName) {
-        food = await this.foodLibraryRepo.findOne({
+        food = await this.prisma.foods.findFirst({
           where: { name: foodName },
-          select: ['id', 'category', 'mainIngredient', 'foodGroup'],
+          select: {
+            id: true,
+            category: true,
+            main_ingredient: true,
+            food_group: true,
+          },
         });
       }
 
@@ -190,8 +200,8 @@ export class PreferenceUpdaterService {
 
       return {
         category: food.category || undefined,
-        mainIngredient: food.mainIngredient || undefined,
-        foodGroup: food.foodGroup || undefined,
+        mainIngredient: food.main_ingredient || undefined,
+        foodGroup: food.food_group || undefined,
       };
     } catch (err) {
       this.logger.warn(`查找食物维度失败: ${err}`);

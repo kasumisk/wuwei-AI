@@ -1,11 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { FoodLibrary } from '../../modules/food/entities/food-library.entity';
+import { PrismaService } from '../../core/prisma/prisma.service';
 import { CleanedFoodData } from './food-data-cleaner.service';
 
 export interface DedupMatch {
-  existingFood: FoodLibrary;
+  existingFood: any;
   similarity: number;
   matchType: 'barcode' | 'source_id' | 'name_exact' | 'name_fuzzy';
 }
@@ -17,12 +15,8 @@ export interface DedupMatch {
 @Injectable()
 export class FoodDedupService {
   private readonly logger = new Logger(FoodDedupService.name);
-  private selectableColumnsPromise: Promise<string[]> | null = null;
 
-  constructor(
-    @InjectRepository(FoodLibrary)
-    private readonly foodRepo: Repository<FoodLibrary>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * 查找重复项
@@ -30,7 +24,9 @@ export class FoodDedupService {
   async findDuplicate(food: CleanedFoodData): Promise<DedupMatch | null> {
     // 优先级 1: 条形码精确匹配
     if (food.rawPayload?.code) {
-      const barMatch = await this.findOneSafe({ barcode: food.rawPayload.code });
+      const barMatch = await this.prisma.foods.findFirst({
+        where: { barcode: food.rawPayload.code },
+      });
       if (barMatch) {
         return {
           existingFood: barMatch,
@@ -42,9 +38,11 @@ export class FoodDedupService {
 
     // 优先级 2: 来源ID匹配 (source_type + source_id)
     if (food.primarySource && food.primarySourceId) {
-      const sourceMatch = await this.findOneSafe({
-        primarySource: food.primarySource,
-        primarySourceId: food.primarySourceId,
+      const sourceMatch = await this.prisma.foods.findFirst({
+        where: {
+          primary_source: food.primarySource,
+          primary_source_id: food.primarySourceId,
+        },
       });
       if (sourceMatch) {
         return {
@@ -60,7 +58,9 @@ export class FoodDedupService {
     if (!nameNormalized) return null;
 
     // 3a: 精确名称匹配
-    const exactMatch = await this.findOneSafe({ name: food.name });
+    const exactMatch = await this.prisma.foods.findFirst({
+      where: { name: food.name },
+    });
     if (exactMatch) {
       return {
         existingFood: exactMatch,
@@ -70,18 +70,16 @@ export class FoodDedupService {
     }
 
     // 3b: 模糊名称匹配（使用 ILIKE + 营养数据辅助）
-    const selectColumns = await this.getSelectableColumns();
-    const candidates = await this.foodRepo
-      .createQueryBuilder('f')
-      .select(selectColumns)
-      .where('f.name ILIKE :name', {
-        name: `%${nameNormalized.substring(0, 20)}%`,
-      })
-      .orWhere('f.aliases ILIKE :name', {
-        name: `%${nameNormalized.substring(0, 20)}%`,
-      })
-      .limit(10)
-      .getMany();
+    const searchPattern = nameNormalized.substring(0, 20);
+    const candidates = await this.prisma.foods.findMany({
+      where: {
+        OR: [
+          { name: { contains: searchPattern, mode: 'insensitive' } },
+          { aliases: { contains: searchPattern, mode: 'insensitive' } },
+        ],
+      },
+      take: 10,
+    });
 
     let bestMatch: DedupMatch | null = null;
 
@@ -115,57 +113,52 @@ export class FoodDedupService {
    * 合并食物数据（保留高优先级来源数据）
    */
   mergeFood(
-    existing: FoodLibrary,
+    existing: any,
     incoming: CleanedFoodData,
     sourcePriority: number,
-  ): Partial<FoodLibrary> {
-    const FIELD_PRIORITIES: Record<string, string[]> = {
-      high: ['calories', 'protein', 'fat', 'carbs'],
-      medium: ['fiber', 'sugar', 'sodium', 'category'],
-      low: ['glycemicIndex', 'processingLevel', 'qualityScore'],
-    };
-
-    const merged: Partial<FoodLibrary> = {};
+  ): Record<string, any> {
+    const merged: Record<string, any> = {};
 
     // 补充缺失字段（不覆盖已有数据，除非来源优先级更高）
-    const fields = [
-      'aliases',
-      'barcode',
-      'category',
-      'subCategory',
-      'foodGroup',
-      'fiber',
-      'sugar',
-      'saturatedFat',
-      'transFat',
-      'cholesterol',
-      'sodium',
-      'potassium',
-      'calcium',
-      'iron',
-      'vitaminA',
-      'vitaminC',
-      'vitaminD',
-      'vitaminE',
-      'vitaminB12',
-      'folate',
-      'zinc',
-      'magnesium',
-      'phosphorus',
-      'glycemicIndex',
-      'glycemicLoad',
-      'processingLevel',
-      'mainIngredient',
-      'standardServingDesc',
-      'imageUrl',
-      'thumbnailUrl',
+    // Note: existing uses snake_case (Prisma), incoming uses camelCase
+    const fieldMappings: Array<{ incoming: string; existing: string }> = [
+      { incoming: 'aliases', existing: 'aliases' },
+      { incoming: 'barcode', existing: 'barcode' },
+      { incoming: 'category', existing: 'category' },
+      { incoming: 'subCategory', existing: 'sub_category' },
+      { incoming: 'foodGroup', existing: 'food_group' },
+      { incoming: 'fiber', existing: 'fiber' },
+      { incoming: 'sugar', existing: 'sugar' },
+      { incoming: 'saturatedFat', existing: 'saturated_fat' },
+      { incoming: 'transFat', existing: 'trans_fat' },
+      { incoming: 'cholesterol', existing: 'cholesterol' },
+      { incoming: 'sodium', existing: 'sodium' },
+      { incoming: 'potassium', existing: 'potassium' },
+      { incoming: 'calcium', existing: 'calcium' },
+      { incoming: 'iron', existing: 'iron' },
+      { incoming: 'vitaminA', existing: 'vitamin_a' },
+      { incoming: 'vitaminC', existing: 'vitamin_c' },
+      { incoming: 'vitaminD', existing: 'vitamin_d' },
+      { incoming: 'vitaminE', existing: 'vitamin_e' },
+      { incoming: 'vitaminB12', existing: 'vitamin_b12' },
+      { incoming: 'folate', existing: 'folate' },
+      { incoming: 'zinc', existing: 'zinc' },
+      { incoming: 'magnesium', existing: 'magnesium' },
+      { incoming: 'phosphorus', existing: 'phosphorus' },
+      { incoming: 'glycemicIndex', existing: 'glycemic_index' },
+      { incoming: 'glycemicLoad', existing: 'glycemic_load' },
+      { incoming: 'processingLevel', existing: 'processing_level' },
+      { incoming: 'mainIngredient', existing: 'main_ingredient' },
+      { incoming: 'standardServingDesc', existing: 'standard_serving_desc' },
+      { incoming: 'imageUrl', existing: 'image_url' },
+      { incoming: 'thumbnailUrl', existing: 'thumbnail_url' },
     ];
 
-    for (const field of fields) {
-      const existingVal = (existing as any)[field];
-      const incomingVal = (incoming as any)[field];
+    for (const mapping of fieldMappings) {
+      const existingVal = existing[mapping.existing];
+      const incomingVal = (incoming as any)[mapping.incoming];
       if (existingVal == null && incomingVal != null) {
-        (merged as any)[field] = incomingVal;
+        merged[mapping.existing] = incomingVal;
       }
     }
 
@@ -173,86 +166,40 @@ export class FoodDedupService {
     if (incoming.category && existing.category !== incoming.category) {
       merged.category = incoming.category;
     }
-    if (incoming.subCategory && existing.subCategory !== incoming.subCategory) {
-      merged.subCategory = incoming.subCategory;
+    if (
+      incoming.subCategory &&
+      existing.sub_category !== incoming.subCategory
+    ) {
+      merged.sub_category = incoming.subCategory;
     }
-    if (incoming.foodGroup && existing.foodGroup !== incoming.foodGroup) {
-      merged.foodGroup = incoming.foodGroup;
+    if (incoming.foodGroup && existing.food_group !== incoming.foodGroup) {
+      merged.food_group = incoming.foodGroup;
     }
 
     // 合并数组字段（去重取并集）
     if (incoming.rawPayload?.allergens) {
-      const existingAllergens = existing.allergens || [];
+      const existingAllergens = (existing.allergens as any[]) || [];
       const incomingAllergens = incoming.rawPayload.allergens || [];
       merged.allergens = [
         ...new Set([...existingAllergens, ...incomingAllergens]),
       ];
     }
 
-    const existingTags = existing.tags || [];
-    const incomingTags = incoming.tags || incoming.importMetadata?.extraTags || [];
+    const existingTags = (existing.tags as any[]) || [];
+    const incomingTags =
+      incoming.tags || incoming.importMetadata?.extraTags || [];
     merged.tags = [...new Set([...existingTags, ...incomingTags])];
 
     if (incoming.mealTypes?.length) {
-      merged.mealTypes = [
-        ...new Set([...(existing.mealTypes || []), ...incoming.mealTypes]),
+      merged.meal_types = [
+        ...new Set([
+          ...((existing.meal_types as any[]) || []),
+          ...incoming.mealTypes,
+        ]),
       ];
     }
 
     return merged;
-  }
-
-  private async findOneSafe(
-    where: Record<string, string>,
-  ): Promise<FoodLibrary | null> {
-    const selectColumns = await this.getSelectableColumns();
-    const qb = this.foodRepo.createQueryBuilder('f').select(selectColumns);
-
-    Object.entries(where).forEach(([field, value], index) => {
-      const operator = index === 0 ? 'where' : 'andWhere';
-      qb[operator](`f.${field} = :${field}`, { [field]: value });
-    });
-
-    return qb.getOne();
-  }
-
-  private async getSelectableColumns(): Promise<string[]> {
-    if (!this.selectableColumnsPromise) {
-      this.selectableColumnsPromise = this.loadSelectableColumns();
-    }
-
-    return this.selectableColumnsPromise;
-  }
-
-  private async loadSelectableColumns(): Promise<string[]> {
-    const existingColumns: Array<{ column_name: string }> =
-      await this.foodRepo.query(
-        `SELECT column_name
-         FROM information_schema.columns
-         WHERE table_schema = current_schema()
-           AND table_name = $1`,
-        ['foods'],
-      );
-
-    const existingColumnNames = new Set(
-      existingColumns.map((column) => column.column_name),
-    );
-
-    const selectableColumns = this.foodRepo.metadata.columns
-      .filter((column) => existingColumnNames.has(column.databaseName))
-      .map((column) => `f.${column.propertyPath}`);
-
-    const missingColumns = this.foodRepo.metadata.columns
-      .filter((column) => !existingColumnNames.has(column.databaseName))
-      .map((column) => column.databaseName);
-
-    if (missingColumns.length > 0) {
-      this.logger.warn(
-        `Dedup query skipped missing columns: ${missingColumns.join(', ')}`,
-      );
-    }
-
-    return selectableColumns;
   }
 
   /**
@@ -293,16 +240,17 @@ export class FoodDedupService {
    * 营养数据相似度
    */
   private calculateNutritionSimilarity(
-    a: Partial<FoodLibrary>,
-    b: Partial<FoodLibrary>,
+    a: Partial<any>,
+    b: Partial<any>,
   ): number {
-    const fields = ['calories', 'protein', 'fat', 'carbs'] as const;
+    // a is CleanedFoodData (camelCase), b is Prisma result (snake_case)
+    const fieldsA = ['calories', 'protein', 'fat', 'carbs'] as const;
     let matchCount = 0;
     let totalCount = 0;
 
-    for (const field of fields) {
-      const va = (a as any)[field];
-      const vb = (b as any)[field];
+    for (const field of fieldsA) {
+      const va = a[field];
+      const vb = b[field];
       if (va != null && vb != null && va > 0) {
         totalCount++;
         const diff = Math.abs(va - vb) / va;

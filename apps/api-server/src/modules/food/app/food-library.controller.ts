@@ -45,10 +45,10 @@ export class FoodLibraryController {
       };
     }
 
-    const items = await this.foodLibraryService.search(
+    const items = (await this.foodLibraryService.search(
       q.trim(),
       limit ? parseInt(limit, 10) : 10,
-    );
+    )) as any[];
 
     return {
       success: true,

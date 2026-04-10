@@ -1,11 +1,7 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-// 实体
-import { AppUser } from '../user/entities/app-user.entity';
-import { AdminUser } from '../user/entities/admin-user.entity';
 // App 端
 import { AppAuthController } from './app/app-auth.controller';
 import { AppAuthService } from './app/app-auth.service';
@@ -22,7 +18,6 @@ import { JwtAuthGuard } from './admin/jwt-auth.guard';
 @Module({
   imports: [
     ConfigModule,
-    TypeOrmModule.forFeature([AppUser, AdminUser]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],

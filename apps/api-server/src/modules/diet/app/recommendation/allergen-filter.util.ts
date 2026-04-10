@@ -1,4 +1,4 @@
-import { FoodLibrary } from '../../../food/entities/food-library.entity';
+import { FoodLibrary } from '../../../food/food.types';
 
 /**
  * V4 Phase 2.4 — 过敏原过滤统一工具 (A6)

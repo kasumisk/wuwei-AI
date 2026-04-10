@@ -18,10 +18,9 @@
  * 4. 用户连续触发 caution/avoid 时（precision_upgrade）
  */
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { SubscriptionTriggerLog } from '../entities/subscription-trigger-log.entity';
+import { subscription_trigger_log as SubscriptionTriggerLog } from '@prisma/client';
+import { PrismaService } from '../../../core/prisma/prisma.service';
 import {
   AccessDecision,
   PaywallInfo,
@@ -66,8 +65,7 @@ export class PaywallTriggerService {
   private readonly logger = new Logger(PaywallTriggerService.name);
 
   constructor(
-    @InjectRepository(SubscriptionTriggerLog)
-    private readonly triggerLogRepo: Repository<SubscriptionTriggerLog>,
+    private readonly prisma: PrismaService,
     // V6.1 Phase 2.6: 域事件发射
     private readonly eventEmitter: EventEmitter2,
   ) {}
@@ -173,17 +171,17 @@ export class PaywallTriggerService {
    */
   async recordTrigger(input: PaywallTriggerInput): Promise<string | undefined> {
     try {
-      const log = this.triggerLogRepo.create({
-        userId: input.userId,
-        triggerScene: input.triggerScene,
-        feature: input.feature,
-        currentTier: input.currentTier,
-        recommendedPlan: input.recommendedPlan,
-        abBucket: input.abBucket || null,
-        converted: false,
+      const saved = await this.prisma.subscription_trigger_log.create({
+        data: {
+          user_id: input.userId,
+          trigger_scene: input.triggerScene,
+          feature: input.feature,
+          current_tier: input.currentTier,
+          recommended_plan: input.recommendedPlan,
+          ab_bucket: input.abBucket || null,
+          converted: false,
+        },
       });
-
-      const saved = await this.triggerLogRepo.save(log);
       this.logger.debug(
         `付费墙触发已记录: userId=${input.userId}, scene=${input.triggerScene}, feature=${input.feature}`,
       );
@@ -219,17 +217,17 @@ export class PaywallTriggerService {
     // 标记最近 7 天内未转化的触发日志
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-    const result = await this.triggerLogRepo
-      .createQueryBuilder()
-      .update(SubscriptionTriggerLog)
-      .set({ converted: true })
-      .where('user_id = :userId', { userId })
-      .andWhere('converted = false')
-      .andWhere('recommended_plan = :tier', { tier: convertedTier })
-      .andWhere('created_at >= :since', { since: sevenDaysAgo })
-      .execute();
+    const result = await this.prisma.subscription_trigger_log.updateMany({
+      where: {
+        user_id: userId,
+        converted: false,
+        recommended_plan: convertedTier,
+        created_at: { gte: sevenDaysAgo },
+      },
+      data: { converted: true },
+    });
 
-    const affected = result.affected || 0;
+    const affected = result.count;
     if (affected > 0) {
       this.logger.log(
         `已标记 ${affected} 条触发日志为已转化: userId=${userId}, tier=${convertedTier}`,
@@ -246,11 +244,12 @@ export class PaywallTriggerService {
     hoursBack: number = 24,
   ): Promise<number> {
     const since = new Date(Date.now() - hoursBack * 60 * 60 * 1000);
-    return this.triggerLogRepo
-      .createQueryBuilder('log')
-      .where('log.user_id = :userId', { userId })
-      .andWhere('log.created_at >= :since', { since })
-      .getCount();
+    return this.prisma.subscription_trigger_log.count({
+      where: {
+        user_id: userId,
+        created_at: { gte: since },
+      },
+    });
   }
 
   // ==================== 私有方法 ====================

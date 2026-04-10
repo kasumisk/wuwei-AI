@@ -10,9 +10,6 @@
  * 推荐引擎在 Phase 2.2 中注入 StrategyResolver 使用。
  */
 import { Global, Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { Strategy } from './entities/strategy.entity';
-import { StrategyAssignment } from './entities/strategy-assignment.entity';
 import { StrategyService } from './app/strategy.service';
 import { StrategyResolver } from './app/strategy-resolver.service';
 import { StrategyManagementController } from './admin/strategy-management.controller';
@@ -20,7 +17,6 @@ import { StrategyManagementService } from './admin/strategy-management.service';
 
 @Global()
 @Module({
-  imports: [TypeOrmModule.forFeature([Strategy, StrategyAssignment])],
   controllers: [StrategyManagementController],
   providers: [StrategyService, StrategyResolver, StrategyManagementService],
   exports: [StrategyService, StrategyResolver],

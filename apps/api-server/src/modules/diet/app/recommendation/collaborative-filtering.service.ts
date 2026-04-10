@@ -1,9 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { FoodRecord } from '../../entities/food-record.entity';
-import { RecommendationFeedback } from '../../entities/recommendation-feedback.entity';
+import { PrismaService } from '../../../../core/prisma/prisma.service';
 import { RedisCacheService } from '../../../../core/redis/redis-cache.service';
 
 /**
@@ -89,10 +86,7 @@ export class CollaborativeFilteringService {
   private itemSimilarity: Map<string, Map<string, number>> = new Map();
 
   constructor(
-    @InjectRepository(FoodRecord)
-    private readonly foodRecordRepo: Repository<FoodRecord>,
-    @InjectRepository(RecommendationFeedback)
-    private readonly feedbackRepo: Repository<RecommendationFeedback>,
+    private readonly prisma: PrismaService,
     private readonly redisCache: RedisCacheService,
   ) {}
 
@@ -408,27 +402,28 @@ export class CollaborativeFilteringService {
       userId: string;
       foodName: string;
       createdAt: Date | string;
-    }> = await this.foodRecordRepo
-      .createQueryBuilder('r')
-      .select('r.user_id', 'userId')
-      .addSelect("unnest_food.value->>'name'", 'foodName')
-      .addSelect('r.created_at', 'createdAt')
-      .innerJoin('jsonb_array_elements(r.foods)', 'unnest_food', 'TRUE')
-      .where("unnest_food.value->>'name' IS NOT NULL")
-      .andWhere('r.created_at >= :since', { since: sinceDate })
-      .getRawMany();
+    }> = await this.prisma.$queryRawUnsafe(
+      `SELECT r.user_id AS "userId",
+              unnest_food.value->>'name' AS "foodName",
+              r.created_at AS "createdAt"
+       FROM food_records r
+       INNER JOIN LATERAL jsonb_array_elements(r.foods) AS unnest_food ON TRUE
+       WHERE unnest_food.value->>'name' IS NOT NULL
+         AND r.created_at >= $1`,
+      sinceDate,
+    );
 
     // 2. 获取所有反馈记录（反馈不设时间窗口，因为显式反馈始终有价值）
     const feedbacks: Array<{
       userId: string;
       foodName: string;
       action: string;
-    }> = await this.feedbackRepo
-      .createQueryBuilder('f')
-      .select('f.user_id', 'userId')
-      .addSelect('f.food_name', 'foodName')
-      .addSelect('f.action', 'action')
-      .getRawMany();
+    }> = await this.prisma.$queryRawUnsafe(
+      `SELECT f.user_id AS "userId",
+              f.food_name AS "foodName",
+              f.action AS "action"
+       FROM recommendation_feedbacks f`,
+    );
 
     // 3. 构建用户向量
     const userMap = new Map<string, Map<string, number>>();

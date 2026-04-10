@@ -27,6 +27,7 @@ import {
   RecommendationFeedbackDto,
   ExplainWhyNotDto,
 } from './food.dto';
+import { UserProfileConstraints } from './recommendation/recommendation.types';
 
 @ApiTags('App 饮食计划')
 @Controller('app/food')
@@ -169,12 +170,12 @@ export class FoodPlanController {
   ): Promise<ApiResponse> {
     // 加载用户画像 + 偏好
     const profile = await this.userProfileService.getProfile(user.id);
-    const userConstraints = profile
+    const userConstraints: UserProfileConstraints | undefined = profile
       ? {
-          dietaryRestrictions: profile.dietaryRestrictions || [],
-          allergens: profile.allergens || [],
-          healthConditions: profile.healthConditions || [],
-          regionCode: profile.regionCode || 'CN',
+          dietaryRestrictions: (profile.dietary_restrictions as string[]) || [],
+          allergens: (profile.allergens as string[]) || [],
+          healthConditions: (profile.health_conditions as string[]) || [],
+          regionCode: (profile.region_code as string) || 'CN',
           timezone: profile.timezone,
         }
       : undefined;

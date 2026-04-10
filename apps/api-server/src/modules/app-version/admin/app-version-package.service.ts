@@ -4,14 +4,8 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import {
-  AppVersionPackage,
-  AppChannel,
-  STORE_CHANNELS,
-} from '../entities/app-version-package.entity';
-import { AppVersion } from '../entities/app-version.entity';
+import { PrismaService } from '../../../core/prisma/prisma.service';
+import { AppChannel, STORE_CHANNELS } from '../app-version.types';
 import {
   CreateAppVersionPackageDto,
   UpdateAppVersionPackageDto,
@@ -21,30 +15,24 @@ import { ConfigService } from '@nestjs/config';
 @Injectable()
 export class AppVersionPackageService {
   constructor(
-    @InjectRepository(AppVersionPackage)
-    private readonly packageRepository: Repository<AppVersionPackage>,
-    @InjectRepository(AppVersion)
-    private readonly versionRepository: Repository<AppVersion>,
+    private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
   ) {}
 
   /** 获取某版本的所有渠道包 */
-  async findByVersion(versionId: string): Promise<AppVersionPackage[]> {
+  async findByVersion(versionId: string) {
     await this.assertVersionExists(versionId);
-    return this.packageRepository.find({
+    return this.prisma.app_version_packages.findMany({
       where: { versionId },
-      order: { channel: 'ASC' },
+      orderBy: { channel: 'asc' },
     });
   }
 
   /** 创建渠道包 */
-  async create(
-    versionId: string,
-    dto: CreateAppVersionPackageDto,
-  ): Promise<AppVersionPackage> {
+  async create(versionId: string, dto: CreateAppVersionPackageDto) {
     await this.assertVersionExists(versionId);
 
-    const existing = await this.packageRepository.findOne({
+    const existing = await this.prisma.app_version_packages.findFirst({
       where: { versionId, channel: dto.channel, platform: dto.platform },
     });
     if (existing) {
@@ -63,17 +51,17 @@ export class AppVersionPackageService {
       throw new BadRequestException('下载链接不能为空');
     }
 
-    const pkg = this.packageRepository.create({
-      versionId,
-      platform: dto.platform,
-      channel: dto.channel,
-      downloadUrl,
-      fileSize: dto.fileSize ?? 0,
-      checksum: dto.checksum,
-      enabled: dto.enabled ?? true,
+    return this.prisma.app_version_packages.create({
+      data: {
+        versionId,
+        platform: dto.platform,
+        channel: dto.channel,
+        downloadUrl,
+        fileSize: dto.fileSize ?? 0,
+        checksum: dto.checksum,
+        enabled: dto.enabled ?? true,
+      },
     });
-
-    return this.packageRepository.save(pkg);
   }
 
   /** 更新渠道包 */
@@ -81,10 +69,13 @@ export class AppVersionPackageService {
     versionId: string,
     packageId: string,
     dto: UpdateAppVersionPackageDto,
-  ): Promise<AppVersionPackage> {
+  ) {
     const pkg = await this.findOne(versionId, packageId);
-    Object.assign(pkg, dto);
-    return this.packageRepository.save(pkg);
+
+    return this.prisma.app_version_packages.update({
+      where: { id: pkg.id },
+      data: dto,
+    });
   }
 
   /** 删除渠道包 */
@@ -93,25 +84,22 @@ export class AppVersionPackageService {
     packageId: string,
   ): Promise<{ message: string }> {
     const pkg = await this.findOne(versionId, packageId);
-    await this.packageRepository.remove(pkg);
+    await this.prisma.app_version_packages.delete({ where: { id: pkg.id } });
     return { message: '渠道包删除成功' };
   }
 
   /** 切换渠道包启用状态 */
-  async toggleEnabled(
-    versionId: string,
-    packageId: string,
-  ): Promise<AppVersionPackage> {
+  async toggleEnabled(versionId: string, packageId: string) {
     const pkg = await this.findOne(versionId, packageId);
-    pkg.enabled = !pkg.enabled;
-    return this.packageRepository.save(pkg);
+
+    return this.prisma.app_version_packages.update({
+      where: { id: pkg.id },
+      data: { enabled: !pkg.enabled },
+    });
   }
 
-  private async findOne(
-    versionId: string,
-    packageId: string,
-  ): Promise<AppVersionPackage> {
-    const pkg = await this.packageRepository.findOne({
+  private async findOne(versionId: string, packageId: string) {
+    const pkg = await this.prisma.app_version_packages.findFirst({
       where: { id: packageId, versionId },
     });
     if (!pkg) {
@@ -121,7 +109,7 @@ export class AppVersionPackageService {
   }
 
   private async assertVersionExists(versionId: string): Promise<void> {
-    const count = await this.versionRepository.count({
+    const count = await this.prisma.app_versions.count({
       where: { id: versionId },
     });
     if (!count) {

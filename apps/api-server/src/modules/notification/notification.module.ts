@@ -10,25 +10,14 @@
  * 模块设计为 @Global()，其他模块可直接注入 NotificationService 发送通知。
  */
 import { Module, Global } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
-import { Notification } from './entities/notification.entity';
-import { NotificationPreference } from './entities/notification-preference.entity';
-import { DeviceToken } from './entities/device-token.entity';
 import { NotificationService } from './app/notification.service';
 import { NotificationProcessor } from './app/notification.processor';
 import { NotificationController } from './app/notification.controller';
 
 @Global()
 @Module({
-  imports: [
-    ConfigModule,
-    TypeOrmModule.forFeature([
-      Notification,
-      NotificationPreference,
-      DeviceToken,
-    ]),
-  ],
+  imports: [ConfigModule],
   controllers: [NotificationController],
   providers: [NotificationService, NotificationProcessor],
   exports: [NotificationService],

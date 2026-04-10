@@ -1,79 +1,72 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { FoodLibrary } from '../entities/food-library.entity';
-import {
-  FoodRecord,
-  MealType,
-  RecordSource,
-} from '../../diet/entities/food-record.entity';
+import { MealType } from '../../diet/diet.types';
 import { FoodService } from '../../diet/app/food.service';
+import { PrismaService } from '../../../core/prisma/prisma.service';
 
 @Injectable()
 export class FoodLibraryService {
   private readonly logger = new Logger(FoodLibraryService.name);
 
   constructor(
-    @InjectRepository(FoodLibrary)
-    private readonly foodLibraryRepo: Repository<FoodLibrary>,
-    @InjectRepository(FoodRecord)
-    private readonly foodRecordRepo: Repository<FoodRecord>,
+    private readonly prisma: PrismaService,
     private readonly foodService: FoodService,
   ) {}
 
   /**
    * 模糊搜索食物（ILIKE + 别名匹配）
    */
-  async search(q: string, limit: number = 10): Promise<FoodLibrary[]> {
+  async search(q: string, limit: number = 10) {
     const safeLimit = Math.min(Math.max(limit, 1), 50);
     const pattern = `%${q}%`;
 
-    return this.foodLibraryRepo
-      .createQueryBuilder('f')
-      .where('f.name ILIKE :pattern OR f.aliases ILIKE :pattern', { pattern })
-      .orderBy('f.search_weight', 'DESC')
-      .addOrderBy('f.name', 'ASC')
-      .limit(safeLimit)
-      .getMany();
+    return this.prisma.$queryRawUnsafe(
+      `SELECT * FROM foods
+       WHERE name ILIKE $1 OR aliases ILIKE $1
+       ORDER BY search_weight DESC, name ASC
+       LIMIT $2`,
+      pattern,
+      safeLimit,
+    );
   }
 
   /**
    * 按分类获取热门食物
    */
-  async getPopular(
-    category?: string,
-    limit: number = 20,
-  ): Promise<FoodLibrary[]> {
+  async getPopular(category?: string, limit: number = 20) {
     const safeLimit = Math.min(Math.max(limit, 1), 50);
-    const qb = this.foodLibraryRepo
-      .createQueryBuilder('f')
-      .where('f.is_verified = true');
 
+    const where: any = { is_verified: true };
     if (category) {
-      qb.andWhere('f.category = :category', { category });
+      where.category = category;
     }
 
-    return qb.orderBy('f.search_weight', 'DESC').limit(safeLimit).getMany();
+    return this.prisma.foods.findMany({
+      where,
+      orderBy: { search_weight: 'desc' },
+      take: safeLimit,
+    });
   }
 
   /**
    * 获取所有分类及条目数
    */
   async getCategories(): Promise<Array<{ category: string; count: number }>> {
-    return this.foodLibraryRepo
-      .createQueryBuilder('f')
-      .select('f.category', 'category')
-      .addSelect('COUNT(*)', 'count')
-      .groupBy('f.category')
-      .orderBy('count', 'DESC')
-      .getRawMany();
+    const result = await this.prisma.$queryRawUnsafe<
+      Array<{ category: string; count: string }>
+    >(
+      `SELECT category, COUNT(*)::text AS count FROM foods GROUP BY category ORDER BY count DESC`,
+    );
+    return result.map((r) => ({
+      category: r.category,
+      count: Number(r.count),
+    }));
   }
 
   /**
    * 按名称精确查找（SEO 落地页使用）
    */
-  async findByName(name: string): Promise<FoodLibrary> {
-    const food = await this.foodLibraryRepo.findOne({
+  async findByName(name: string) {
+    const food = await this.prisma.foods.findFirst({
       where: { name },
     });
     if (!food) {
@@ -85,8 +78,8 @@ export class FoodLibraryService {
   /**
    * 按 ID 查找
    */
-  async findById(id: string): Promise<FoodLibrary> {
-    const food = await this.foodLibraryRepo.findOne({
+  async findById(id: string) {
+    const food = await this.prisma.foods.findUnique({
       where: { id },
     });
     if (!food) {
@@ -98,27 +91,30 @@ export class FoodLibraryService {
   /**
    * 获取同分类的相关食物
    */
-  async getRelated(name: string, limit: number = 5): Promise<FoodLibrary[]> {
+  async getRelated(name: string, limit: number = 5) {
     const food = await this.findByName(name);
-    return this.foodLibraryRepo
-      .createQueryBuilder('f')
-      .where('f.category = :category', { category: food.category })
-      .andWhere('f.name != :name', { name })
-      .orderBy('f.search_weight', 'DESC')
-      .limit(limit)
-      .getMany();
+    return this.prisma.foods.findMany({
+      where: {
+        category: food.category,
+        name: { not: name },
+      },
+      orderBy: { search_weight: 'desc' },
+      take: limit,
+    });
   }
 
   /**
    * 获取所有食物（分页，供 sitemap 或 admin 使用）
    */
-  async findAll(
-    limit: number = 500,
-  ): Promise<{ items: FoodLibrary[]; total: number }> {
-    const [items, total] = await this.foodLibraryRepo.findAndCount({
-      order: { searchWeight: 'DESC' },
-      take: Math.min(limit, 1000),
-    });
+  async findAll(limit: number = 500) {
+    const take = Math.min(limit, 1000);
+    const [items, total] = await Promise.all([
+      this.prisma.foods.findMany({
+        orderBy: { search_weight: 'desc' },
+        take,
+      }),
+      this.prisma.foods.count(),
+    ]);
     return { items, total };
   }
 
@@ -130,9 +126,9 @@ export class FoodLibraryService {
     foodLibraryId: string,
     servingGrams: number,
     mealType: MealType,
-  ): Promise<FoodRecord> {
+  ) {
     const food = await this.findById(foodLibraryId);
-    const calories = Math.round((food.calories * servingGrams) / 100);
+    const calories = Math.round((Number(food.calories) * servingGrams) / 100);
 
     // 复用现有的 FoodService.saveRecord
     return this.foodService.saveRecord(userId, {
@@ -152,13 +148,10 @@ export class FoodLibraryService {
   /**
    * 获取用户常用食物（基于历史记录频次）
    */
-  async getFrequent(
-    userId: string,
-    limit: number = 10,
-  ): Promise<FoodLibrary[]> {
+  async getFrequent(userId: string, limit: number = 10) {
     // 从 food_records 的 JSONB foods 字段中统计用户常用食物名
     const frequentNames: Array<{ name: string }> =
-      await this.foodRecordRepo.query(
+      await this.prisma.$queryRawUnsafe(
         `SELECT food_item->>'name' AS name, COUNT(*) AS frequency
        FROM food_records fr
        CROSS JOIN LATERAL jsonb_array_elements(fr.foods) AS food_item
@@ -166,41 +159,42 @@ export class FoodLibraryService {
        GROUP BY food_item->>'name'
        ORDER BY frequency DESC
        LIMIT $2`,
-        [userId, limit],
+        userId,
+        limit,
       );
 
     if (frequentNames.length === 0) return [];
 
     const names = frequentNames.map((r) => r.name);
-    return this.foodLibraryRepo
-      .createQueryBuilder('f')
-      .where('f.name IN (:...names)', { names })
-      .getMany();
+    return this.prisma.foods.findMany({
+      where: { name: { in: names } },
+    });
   }
 
   /**
    * 新增食物条目（管理员 / 后台用）
    */
-  async create(data: Partial<FoodLibrary>): Promise<FoodLibrary> {
-    const food = this.foodLibraryRepo.create(data);
-    return this.foodLibraryRepo.save(food);
+  async create(data: any) {
+    return this.prisma.foods.create({ data });
   }
 
   /**
    * 更新食物条目
    */
-  async update(id: string, data: Partial<FoodLibrary>): Promise<FoodLibrary> {
-    const food = await this.findById(id);
-    Object.assign(food, data);
-    return this.foodLibraryRepo.save(food);
+  async update(id: string, data: any) {
+    await this.findById(id);
+    return this.prisma.foods.update({
+      where: { id },
+      data,
+    });
   }
 
   /**
    * 删除食物条目
    */
   async remove(id: string): Promise<void> {
-    const food = await this.findById(id);
-    await this.foodLibraryRepo.remove(food);
+    await this.findById(id);
+    await this.prisma.foods.delete({ where: { id } });
   }
 
   /**
@@ -208,14 +202,14 @@ export class FoodLibraryService {
    * 用于数据迁移或新入库食物的字段补全
    */
   async enrichMissingFields(): Promise<{ updated: number }> {
-    const foods = await this.foodLibraryRepo.find();
+    const foods = await this.prisma.foods.findMany();
     let updated = 0;
 
     for (const food of foods) {
-      const changes: Partial<FoodLibrary> = {};
+      const changes: Record<string, any> = {};
 
       // 自动推导 qualityScore（如果为空）
-      if (!food.qualityScore) {
+      if (!food.quality_score) {
         const categoryQuality: Record<string, number> = {
           veggie: 8,
           fruit: 7,
@@ -228,11 +222,11 @@ export class FoodLibraryService {
           fat: 4,
           condiment: 3,
         };
-        changes.qualityScore = categoryQuality[food.category] || 5;
+        changes.quality_score = categoryQuality[food.category] || 5;
       }
 
       // 自动推导 satietyScore（如果为空）
-      if (!food.satietyScore) {
+      if (!food.satiety_score) {
         const categorySatiety: Record<string, number> = {
           protein: 7,
           grain: 7,
@@ -245,11 +239,11 @@ export class FoodLibraryService {
           beverage: 2,
           condiment: 1,
         };
-        changes.satietyScore = categorySatiety[food.category] || 4;
+        changes.satiety_score = categorySatiety[food.category] || 4;
       }
 
       // 自动推导 mealTypes（如果为空数组）
-      if (!food.mealTypes || (food.mealTypes as string[]).length === 0) {
+      if (!food.meal_types || (food.meal_types as string[]).length === 0) {
         const mealTypeMap: Record<string, string[]> = {
           grain: ['breakfast', 'lunch', 'dinner'],
           protein: ['lunch', 'dinner'],
@@ -262,24 +256,26 @@ export class FoodLibraryService {
           fat: ['lunch', 'dinner'],
           condiment: ['lunch', 'dinner'],
         };
-        changes.mealTypes = mealTypeMap[food.category] || ['lunch', 'dinner'];
+        changes.meal_types = mealTypeMap[food.category] || ['lunch', 'dinner'];
       }
 
       // 自动推导 isProcessed
-      if (food.isProcessed === undefined || food.isProcessed === null) {
-        changes.isProcessed =
+      if (food.is_processed === undefined || food.is_processed === null) {
+        changes.is_processed =
           ['snack', 'composite'].includes(food.category) ||
           /加工|方便|速食|罐头|腌/.test(food.name);
       }
 
       // 自动推导 isFried
-      if (food.isFried === undefined || food.isFried === null) {
-        changes.isFried = /炸|煎饺|油条|锅贴|油炸|煎饼/.test(food.name);
+      if (food.is_fried === undefined || food.is_fried === null) {
+        changes.is_fried = /炸|煎饺|油条|锅贴|油炸|煎饼/.test(food.name);
       }
 
       if (Object.keys(changes).length > 0) {
-        Object.assign(food, changes);
-        await this.foodLibraryRepo.save(food);
+        await this.prisma.foods.update({
+          where: { id: food.id },
+          data: changes,
+        });
         updated++;
       }
     }

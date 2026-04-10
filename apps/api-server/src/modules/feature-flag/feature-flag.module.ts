@@ -7,14 +7,11 @@
  * - 配合 A/B 实验系统：Feature Flag 控制"是否可见"，A/B 实验控制"用哪个版本"
  */
 import { Global, Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { FeatureFlag } from './entities/feature-flag.entity';
 import { FeatureFlagService } from './feature-flag.service';
 import { FeatureFlagManagementController } from './admin/feature-flag-management.controller';
 
 @Global()
 @Module({
-  imports: [TypeOrmModule.forFeature([FeatureFlag])],
   controllers: [FeatureFlagManagementController],
   providers: [FeatureFlagService],
   exports: [FeatureFlagService],

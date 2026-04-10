@@ -19,10 +19,21 @@
  * - 保证同一用户对同一 flag 的结果稳定（不会每次请求结果不同）
  */
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { RedisCacheService } from '../../core/redis/redis-cache.service';
-import { FeatureFlag, FeatureFlagType } from './entities/feature-flag.entity';
+import { PrismaService } from '../../core/prisma/prisma.service';
+import { feature_flag } from '@prisma/client';
+
+/** 功能开关类型 */
+export enum FeatureFlagType {
+  /** 全局开/关 */
+  BOOLEAN = 'boolean',
+  /** 百分比放量 */
+  PERCENTAGE = 'percentage',
+  /** 白名单/黑名单 */
+  USER_LIST = 'user_list',
+  /** 按用户画像段 */
+  SEGMENT = 'segment',
+}
 
 /** Redis 缓存 key 前缀 */
 const CACHE_PREFIX = 'ff';
@@ -38,8 +49,7 @@ export class FeatureFlagService {
   private readonly logger = new Logger(FeatureFlagService.name);
 
   constructor(
-    @InjectRepository(FeatureFlag)
-    private readonly flagRepo: Repository<FeatureFlag>,
+    private readonly prisma: PrismaService,
     private readonly redis: RedisCacheService,
   ) {}
 
@@ -70,7 +80,8 @@ export class FeatureFlagService {
 
       case FeatureFlagType.PERCENTAGE: {
         if (!userId) return false;
-        const percentage = flag.config?.percentage ?? 0;
+        const config = flag.config as Record<string, any>;
+        const percentage = config?.percentage ?? 0;
         if (percentage >= 100) return true;
         if (percentage <= 0) return false;
         // 使用 userId + key 的哈希保证结果稳定
@@ -80,9 +91,10 @@ export class FeatureFlagService {
 
       case FeatureFlagType.USER_LIST: {
         if (!userId) return false;
-        const blacklist: string[] = flag.config?.blacklist ?? [];
+        const config = flag.config as Record<string, any>;
+        const blacklist: string[] = config?.blacklist ?? [];
         if (blacklist.includes(userId)) return false;
-        const whitelist: string[] = flag.config?.whitelist ?? [];
+        const whitelist: string[] = config?.whitelist ?? [];
         // 如果有白名单，只有在白名单中的用户才启用
         if (whitelist.length > 0) return whitelist.includes(userId);
         // 没有白名单配置，则所有非黑名单用户都启用
@@ -91,7 +103,8 @@ export class FeatureFlagService {
 
       case FeatureFlagType.SEGMENT: {
         if (!userSegment) return false;
-        const segments: string[] = flag.config?.segments ?? [];
+        const config = flag.config as Record<string, any>;
+        const segments: string[] = config?.segments ?? [];
         return segments.includes(userSegment);
       }
 
@@ -125,13 +138,13 @@ export class FeatureFlagService {
   /**
    * 获取所有功能开关（Admin 列表页）
    */
-  async getAllFlags(): Promise<FeatureFlag[]> {
+  async getAllFlags(): Promise<feature_flag[]> {
     // 先查缓存
-    const cached = await this.redis.get<FeatureFlag[]>(ALL_FLAGS_CACHE_KEY);
+    const cached = await this.redis.get<feature_flag[]>(ALL_FLAGS_CACHE_KEY);
     if (cached) return cached;
 
-    const flags = await this.flagRepo.find({
-      order: { createdAt: 'DESC' },
+    const flags = await this.prisma.feature_flag.findMany({
+      orderBy: { created_at: 'desc' },
     });
 
     await this.redis.set(ALL_FLAGS_CACHE_KEY, flags, ALL_FLAGS_CACHE_TTL_MS);
@@ -142,18 +155,39 @@ export class FeatureFlagService {
    * 创建或更新功能开关
    */
   async upsertFlag(
-    data: Partial<FeatureFlag> & { key: string },
-  ): Promise<FeatureFlag> {
-    let flag = await this.flagRepo.findOne({ where: { key: data.key } });
+    data: Partial<feature_flag> & { key: string },
+  ): Promise<feature_flag> {
+    let flag = await this.prisma.feature_flag.findUnique({
+      where: { key: data.key },
+    });
 
     if (flag) {
       // 更新
-      Object.assign(flag, data);
-      flag = await this.flagRepo.save(flag);
+      flag = await this.prisma.feature_flag.update({
+        where: { id: flag.id },
+        data: {
+          ...(data.name !== undefined && { name: data.name }),
+          ...(data.description !== undefined && {
+            description: data.description,
+          }),
+          ...(data.type !== undefined && { type: data.type }),
+          ...(data.enabled !== undefined && { enabled: data.enabled }),
+          ...(data.config !== undefined && { config: data.config as any }),
+        },
+      });
       this.logger.log(`功能开关已更新: ${data.key}`);
     } else {
       // 创建
-      flag = await this.flagRepo.save(this.flagRepo.create(data));
+      flag = await this.prisma.feature_flag.create({
+        data: {
+          key: data.key,
+          name: data.name!,
+          description: data.description ?? null,
+          type: data.type ?? FeatureFlagType.BOOLEAN,
+          enabled: data.enabled ?? false,
+          config: (data.config as any) ?? {},
+        },
+      });
       this.logger.log(`功能开关已创建: ${data.key}`);
     }
 
@@ -167,7 +201,7 @@ export class FeatureFlagService {
    * 删除功能开关
    */
   async deleteFlag(key: string): Promise<void> {
-    await this.flagRepo.delete({ key });
+    await this.prisma.feature_flag.delete({ where: { key } });
     await this.invalidateCache(key);
     this.logger.log(`功能开关已删除: ${key}`);
   }
@@ -177,15 +211,15 @@ export class FeatureFlagService {
   /**
    * 获取单个 flag（带 Redis 缓存）
    */
-  private async getFlag(key: string): Promise<FeatureFlag | null> {
+  private async getFlag(key: string): Promise<feature_flag | null> {
     const cacheKey = this.redis.buildKey(CACHE_PREFIX, key);
 
     // 1. 查 Redis 缓存
-    const cached = await this.redis.get<FeatureFlag>(cacheKey);
+    const cached = await this.redis.get<feature_flag>(cacheKey);
     if (cached) return cached;
 
     // 2. 查 DB
-    const flag = await this.flagRepo.findOne({ where: { key } });
+    const flag = await this.prisma.feature_flag.findUnique({ where: { key } });
     if (!flag) return null;
 
     // 3. 写入缓存

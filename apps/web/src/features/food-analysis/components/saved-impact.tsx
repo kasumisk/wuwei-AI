@@ -2,16 +2,10 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { foodRecordService } from '@/lib/api/food-record';
+import { MEAL_LABELS } from '@/lib/constants/food';
 import type { DailySummary } from '@/types/food';
 
 /* ─── 工具函数 ─── */
-
-const mealLabels: Record<string, string> = {
-  breakfast: '早餐',
-  lunch: '午餐',
-  dinner: '晚餐',
-  snack: '加餐',
-};
 
 function pct(val: number, goal: number): number {
   return goal > 0 ? Math.min(100, Math.round((val / goal) * 100)) : 0;
@@ -116,7 +110,7 @@ export function SavedImpact({ mealType, onReset, onGoHome, onGoToPlan }: SavedIm
     staleTime: 0, // 强制刷新
   });
 
-  const mealLabel = mealLabels[mealType] || '这餐';
+  const mealLabel = MEAL_LABELS[mealType] || '这餐';
 
   if (isLoading || !summary) {
     return (

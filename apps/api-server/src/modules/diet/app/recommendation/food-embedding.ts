@@ -1,4 +1,4 @@
-import { FoodLibrary } from '../../../food/entities/food-library.entity';
+import { FoodLibrary } from '../../../food/food.types';
 
 /**
  * 食物嵌入服务 (V4 Phase 4.1 → V5 Phase 2.11: 64→96 维扩展)

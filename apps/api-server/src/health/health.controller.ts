@@ -1,15 +1,10 @@
 import { Controller, Get } from '@nestjs/common';
 import { Public } from '../core/decorators/public.decorator';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { ModelConfig } from '../modules/provider/entities/model-config.entity';
+import { PrismaService } from '../core/prisma/prisma.service';
 
 @Controller('health')
 export class HealthController {
-  constructor(
-    @InjectRepository(ModelConfig)
-    private modelConfigRepository: Repository<ModelConfig>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * 健康检查端点
@@ -29,7 +24,7 @@ export class HealthController {
     let capabilityCount = 0;
 
     try {
-      capabilityCount = await this.modelConfigRepository.count();
+      capabilityCount = await this.prisma.model_configs.count();
     } catch {
       dbStatus = 'unhealthy';
     }
@@ -51,7 +46,7 @@ export class HealthController {
   @Get('ready')
   async ready(): Promise<{ ready: boolean }> {
     try {
-      await this.modelConfigRepository.count();
+      await this.prisma.model_configs.count();
       return { ready: true };
     } catch {
       return { ready: false };

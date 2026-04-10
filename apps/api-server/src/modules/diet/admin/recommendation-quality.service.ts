@@ -1,8 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { DailyPlan } from '../entities/daily-plan.entity';
-import { RecommendationFeedback } from '../entities/recommendation-feedback.entity';
+import { Prisma } from '@prisma/client';
+import { PrismaService } from '../../../core/prisma/prisma.service';
 
 /**
  * 推荐质量分析服务 (V4 Phase 3.6)
@@ -74,12 +72,7 @@ export interface PlanCoverage {
 export class RecommendationQualityService {
   private readonly logger = new Logger(RecommendationQualityService.name);
 
-  constructor(
-    @InjectRepository(DailyPlan)
-    private readonly planRepo: Repository<DailyPlan>,
-    @InjectRepository(RecommendationFeedback)
-    private readonly feedbackRepo: Repository<RecommendationFeedback>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * 获取推荐质量概览
@@ -92,30 +85,22 @@ export class RecommendationQualityService {
 
     try {
       // 使用 SQL 聚合在数据库端完成统计，避免将全部实体加载到内存
-      const rows: Array<{
-        total: string;
-        accepted: string;
-        replaced: string;
-        skipped: string;
-        activeUsers: string;
-      }> = await this.feedbackRepo
-        .createQueryBuilder('f')
-        .select('COUNT(*)', 'total')
-        .addSelect(
-          "SUM(CASE WHEN f.action = 'accepted' THEN 1 ELSE 0 END)",
-          'accepted',
-        )
-        .addSelect(
-          "SUM(CASE WHEN f.action = 'replaced' THEN 1 ELSE 0 END)",
-          'replaced',
-        )
-        .addSelect(
-          "SUM(CASE WHEN f.action = 'skipped' THEN 1 ELSE 0 END)",
-          'skipped',
-        )
-        .addSelect('COUNT(DISTINCT f.user_id)', 'activeUsers')
-        .where('f.created_at >= :since', { since })
-        .getRawMany();
+      const rows = await this.prisma.$queryRaw<
+        Array<{
+          total: bigint;
+          accepted: bigint;
+          replaced: bigint;
+          skipped: bigint;
+          activeUsers: bigint;
+        }>
+      >`SELECT
+          COUNT(*) as total,
+          SUM(CASE WHEN action = 'accepted' THEN 1 ELSE 0 END) as accepted,
+          SUM(CASE WHEN action = 'replaced' THEN 1 ELSE 0 END) as replaced,
+          SUM(CASE WHEN action = 'skipped' THEN 1 ELSE 0 END) as skipped,
+          COUNT(DISTINCT user_id) as "activeUsers"
+        FROM recommendation_feedbacks
+        WHERE created_at >= ${since}`;
 
       const row = rows[0];
       const total = Number(row?.total ?? 0);
@@ -174,35 +159,34 @@ export class RecommendationQualityService {
     since.setDate(since.getDate() - days);
 
     try {
-      const rows: Array<{
-        date: string;
-        total: string;
-        accepted: string;
-        replaced: string;
-        skipped: string;
-      }> = await this.feedbackRepo.query(
-        `SELECT
-           DATE(created_at) as date,
-           COUNT(*) as total,
-           COUNT(*) FILTER (WHERE action = 'accepted') as accepted,
-           COUNT(*) FILTER (WHERE action = 'replaced') as replaced,
-           COUNT(*) FILTER (WHERE action = 'skipped') as skipped
-         FROM recommendation_feedbacks
-         WHERE created_at >= $1
-         GROUP BY DATE(created_at)
-         ORDER BY date`,
-        [since],
-      );
+      const rows = await this.prisma.$queryRaw<
+        Array<{
+          date: string;
+          total: bigint;
+          accepted: bigint;
+          replaced: bigint;
+          skipped: bigint;
+        }>
+      >`SELECT
+          DATE(created_at) as date,
+          COUNT(*) as total,
+          COUNT(*) FILTER (WHERE action = 'accepted') as accepted,
+          COUNT(*) FILTER (WHERE action = 'replaced') as replaced,
+          COUNT(*) FILTER (WHERE action = 'skipped') as skipped
+        FROM recommendation_feedbacks
+        WHERE created_at >= ${since}
+        GROUP BY DATE(created_at)
+        ORDER BY date`;
 
       return rows.map((r) => {
-        const total = parseInt(r.total, 10);
-        const accepted = parseInt(r.accepted, 10);
+        const total = Number(r.total);
+        const accepted = Number(r.accepted);
         return {
-          date: r.date,
+          date: String(r.date),
           total,
           accepted,
-          replaced: parseInt(r.replaced, 10),
-          skipped: parseInt(r.skipped, 10),
+          replaced: Number(r.replaced),
+          skipped: Number(r.skipped),
           acceptanceRate: total > 0 ? accepted / total : 0,
         };
       });
@@ -224,23 +208,21 @@ export class RecommendationQualityService {
 
     try {
       // 使用 SQL 聚合在数据库端完成统计，避免将全部计划实体加载到内存
-      const rows: Array<{
-        totalPlans: string;
-        adjustedPlans: string;
-        avgCalories: string | null;
-        uniqueUsers: string;
-      }> = await this.planRepo
-        .createQueryBuilder('p')
-        .select('COUNT(*)', 'totalPlans')
-        .addSelect(
-          'SUM(CASE WHEN jsonb_array_length(p.adjustments) > 0 THEN 1 ELSE 0 END)',
-          'adjustedPlans',
-        )
-        .addSelect('AVG(p.total_budget)', 'avgCalories')
-        .addSelect('COUNT(DISTINCT p.user_id)', 'uniqueUsers')
-        .where('p.date >= :since', { since: sinceDate })
-        .andWhere('p.date <= :to', { to: toDate })
-        .getRawMany();
+      const rows = await this.prisma.$queryRaw<
+        Array<{
+          totalPlans: bigint;
+          adjustedPlans: bigint;
+          avgCalories: number | null;
+          uniqueUsers: bigint;
+        }>
+      >`SELECT
+          COUNT(*) as "totalPlans",
+          SUM(CASE WHEN jsonb_array_length(adjustments) > 0 THEN 1 ELSE 0 END) as "adjustedPlans",
+          AVG(total_budget) as "avgCalories",
+          COUNT(DISTINCT user_id) as "uniqueUsers"
+        FROM daily_plans
+        WHERE date >= ${sinceDate}
+          AND date <= ${toDate}`;
 
       const row = rows[0];
       return {
@@ -279,26 +261,27 @@ export class RecommendationQualityService {
     const column = columnMap[field];
 
     try {
-      const rows: Array<{
-        dimension: string;
-        total: string;
-        accepted: string;
-      }> = await this.feedbackRepo.query(
-        `SELECT
-           ${column} as dimension,
+      const rows = await this.prisma.$queryRaw<
+        Array<{
+          dimension: string;
+          total: bigint;
+          accepted: bigint;
+        }>
+      >(
+        Prisma.sql`SELECT
+           ${Prisma.raw(column)} as dimension,
            COUNT(*) as total,
            COUNT(*) FILTER (WHERE action = 'accepted') as accepted
          FROM recommendation_feedbacks
-         WHERE created_at >= $1
-           AND ${column} IS NOT NULL
-         GROUP BY ${column}
+         WHERE created_at >= ${since}
+           AND ${Prisma.raw(column)} IS NOT NULL
+         GROUP BY ${Prisma.raw(column)}
          ORDER BY total DESC`,
-        [since],
       );
 
       return rows.map((r) => {
-        const total = parseInt(r.total, 10);
-        const accepted = parseInt(r.accepted, 10);
+        const total = Number(r.total);
+        const accepted = Number(r.accepted);
         return {
           dimension: r.dimension,
           total,

@@ -1,11 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between } from 'typeorm';
-import { AppUser } from '../../user/entities/app-user.entity';
-import { FoodAnalysisRecord } from '../../food/entities/food-analysis-record.entity';
-import { SubscriptionTriggerLog } from '../../subscription/entities/subscription-trigger-log.entity';
-import { PaymentRecord } from '../../subscription/entities/payment-record.entity';
-import { Subscription } from '../../subscription/entities/subscription.entity';
+import { PrismaService } from '../../../core/prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import {
   GetConversionFunnelQueryDto,
   GetConversionTrendQueryDto,
@@ -15,28 +10,17 @@ import {
  * 转化漏斗分析服务
  *
  * 五步漏斗模型:
- *   1. 注册用户 — app_user.created_at 在时间范围内
- *   2. 使用功能 — food_analysis_record 有记录的去重用户数
- *   3. 触发付费墙 — subscription_trigger_log 有记录的去重用户数
- *   4. 发起支付 — payment_record 有记录的去重用户数
- *   5. 支付成功 — payment_record status='success' 的去重用户数
+ *   1. 注册用户 — app_users.created_at 在时间范围内
+ *   2. 使用功能 — food_analysis_records 有记录的去重用户数
+ *   3. 触发付费墙 — subscription_trigger_logs 有记录的去重用户数
+ *   4. 发起支付 — payment_records 有记录的去重用户数
+ *   5. 支付成功 — payment_records status='success' 的去重用户数
  */
 @Injectable()
 export class ConversionFunnelService {
   private readonly logger = new Logger(ConversionFunnelService.name);
 
-  constructor(
-    @InjectRepository(AppUser)
-    private readonly appUserRepo: Repository<AppUser>,
-    @InjectRepository(FoodAnalysisRecord)
-    private readonly analysisRecordRepo: Repository<FoodAnalysisRecord>,
-    @InjectRepository(SubscriptionTriggerLog)
-    private readonly triggerLogRepo: Repository<SubscriptionTriggerLog>,
-    @InjectRepository(PaymentRecord)
-    private readonly paymentRecordRepo: Repository<PaymentRecord>,
-    @InjectRepository(Subscription)
-    private readonly subscriptionRepo: Repository<Subscription>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * 获取转化漏斗数据
@@ -49,94 +33,154 @@ export class ConversionFunnelService {
     const end = new Date(endDate);
 
     // Step 1: 注册用户数
-    const registeredQb = this.appUserRepo
-      .createQueryBuilder('u')
-      .where('u.created_at BETWEEN :start AND :end', { start, end });
-
+    let registeredResult: any[];
     if (authType) {
-      registeredQb.andWhere('u.auth_type = :authType', { authType });
+      registeredResult = await this.prisma.$queryRaw(Prisma.sql`
+        SELECT COUNT(*) AS "cnt"
+        FROM app_users
+        WHERE created_at BETWEEN ${start} AND ${end}
+          AND auth_type = ${authType}
+      `);
+    } else {
+      registeredResult = await this.prisma.$queryRaw(Prisma.sql`
+        SELECT COUNT(*) AS "cnt"
+        FROM app_users
+        WHERE created_at BETWEEN ${start} AND ${end}
+      `);
     }
-
-    const registeredCount = await registeredQb.getCount();
-
-    // 获取这批用户的 ID 列表（子查询复用）
-    const userSubQuery = registeredQb.select('u.id').getQuery();
-    const userSubParams = { start, end, ...(authType ? { authType } : {}) };
+    const registeredCount = parseInt(registeredResult[0]?.cnt || '0', 10);
 
     // Step 2: 使用功能（食物分析）的去重用户数
-    const usedFeatureCount = await this.analysisRecordRepo
-      .createQueryBuilder('r')
-      .select('COUNT(DISTINCT r.user_id)', 'cnt')
-      .where('r.created_at BETWEEN :start AND :end', { start, end })
-      .andWhere(
-        `r.user_id IN (${this.appUserRepo
-          .createQueryBuilder('u')
-          .select('u.id')
-          .where('u.created_at BETWEEN :start AND :end')
-          .andWhere(authType ? 'u.auth_type = :authType' : '1=1')
-          .getQuery()})`,
-      )
-      .setParameters(userSubParams)
-      .getRawOne()
-      .then((r) => parseInt(r?.cnt || '0', 10));
+    let usedFeatureResult: any[];
+    if (authType) {
+      usedFeatureResult = await this.prisma.$queryRaw(Prisma.sql`
+        SELECT COUNT(DISTINCT r.user_id) AS "cnt"
+        FROM food_analysis_records r
+        WHERE r.created_at BETWEEN ${start} AND ${end}
+          AND r.user_id IN (
+            SELECT u.id FROM app_users u
+            WHERE u.created_at BETWEEN ${start} AND ${end}
+              AND u.auth_type = ${authType}
+          )
+      `);
+    } else {
+      usedFeatureResult = await this.prisma.$queryRaw(Prisma.sql`
+        SELECT COUNT(DISTINCT r.user_id) AS "cnt"
+        FROM food_analysis_records r
+        WHERE r.created_at BETWEEN ${start} AND ${end}
+          AND r.user_id IN (
+            SELECT u.id FROM app_users u
+            WHERE u.created_at BETWEEN ${start} AND ${end}
+          )
+      `);
+    }
+    const usedFeatureCount = parseInt(usedFeatureResult[0]?.cnt || '0', 10);
 
     // Step 3: 触发付费墙的去重用户数
-    const triggerQb = this.triggerLogRepo
-      .createQueryBuilder('t')
-      .select('COUNT(DISTINCT t.user_id)', 'cnt')
-      .where('t.created_at BETWEEN :start AND :end', { start, end })
-      .andWhere(
-        `t.user_id IN (${this.appUserRepo
-          .createQueryBuilder('u')
-          .select('u.id')
-          .where('u.created_at BETWEEN :start AND :end')
-          .andWhere(authType ? 'u.auth_type = :authType' : '1=1')
-          .getQuery()})`,
-      )
-      .setParameters(userSubParams);
-
-    if (triggerScene) {
-      triggerQb.andWhere('t.trigger_scene = :triggerScene', { triggerScene });
+    let triggeredResult: any[];
+    if (authType && triggerScene) {
+      triggeredResult = await this.prisma.$queryRaw(Prisma.sql`
+        SELECT COUNT(DISTINCT t.user_id) AS "cnt"
+        FROM subscription_trigger_logs t
+        WHERE t.created_at BETWEEN ${start} AND ${end}
+          AND t.trigger_scene = ${triggerScene}
+          AND t.user_id IN (
+            SELECT u.id FROM app_users u
+            WHERE u.created_at BETWEEN ${start} AND ${end}
+              AND u.auth_type = ${authType}
+          )
+      `);
+    } else if (authType) {
+      triggeredResult = await this.prisma.$queryRaw(Prisma.sql`
+        SELECT COUNT(DISTINCT t.user_id) AS "cnt"
+        FROM subscription_trigger_logs t
+        WHERE t.created_at BETWEEN ${start} AND ${end}
+          AND t.user_id IN (
+            SELECT u.id FROM app_users u
+            WHERE u.created_at BETWEEN ${start} AND ${end}
+              AND u.auth_type = ${authType}
+          )
+      `);
+    } else if (triggerScene) {
+      triggeredResult = await this.prisma.$queryRaw(Prisma.sql`
+        SELECT COUNT(DISTINCT t.user_id) AS "cnt"
+        FROM subscription_trigger_logs t
+        WHERE t.created_at BETWEEN ${start} AND ${end}
+          AND t.trigger_scene = ${triggerScene}
+          AND t.user_id IN (
+            SELECT u.id FROM app_users u
+            WHERE u.created_at BETWEEN ${start} AND ${end}
+          )
+      `);
+    } else {
+      triggeredResult = await this.prisma.$queryRaw(Prisma.sql`
+        SELECT COUNT(DISTINCT t.user_id) AS "cnt"
+        FROM subscription_trigger_logs t
+        WHERE t.created_at BETWEEN ${start} AND ${end}
+          AND t.user_id IN (
+            SELECT u.id FROM app_users u
+            WHERE u.created_at BETWEEN ${start} AND ${end}
+          )
+      `);
     }
-
-    const triggeredCount = await triggerQb
-      .getRawOne()
-      .then((r) => parseInt(r?.cnt || '0', 10));
+    const triggeredCount = parseInt(triggeredResult[0]?.cnt || '0', 10);
 
     // Step 4: 发起支付的去重用户数
-    const initiatedPaymentCount = await this.paymentRecordRepo
-      .createQueryBuilder('p')
-      .select('COUNT(DISTINCT p.user_id)', 'cnt')
-      .where('p.created_at BETWEEN :start AND :end', { start, end })
-      .andWhere(
-        `p.user_id IN (${this.appUserRepo
-          .createQueryBuilder('u')
-          .select('u.id')
-          .where('u.created_at BETWEEN :start AND :end')
-          .andWhere(authType ? 'u.auth_type = :authType' : '1=1')
-          .getQuery()})`,
-      )
-      .setParameters(userSubParams)
-      .getRawOne()
-      .then((r) => parseInt(r?.cnt || '0', 10));
+    let initiatedPaymentResult: any[];
+    if (authType) {
+      initiatedPaymentResult = await this.prisma.$queryRaw(Prisma.sql`
+        SELECT COUNT(DISTINCT p.user_id) AS "cnt"
+        FROM payment_records p
+        WHERE p.created_at BETWEEN ${start} AND ${end}
+          AND p.user_id IN (
+            SELECT u.id FROM app_users u
+            WHERE u.created_at BETWEEN ${start} AND ${end}
+              AND u.auth_type = ${authType}
+          )
+      `);
+    } else {
+      initiatedPaymentResult = await this.prisma.$queryRaw(Prisma.sql`
+        SELECT COUNT(DISTINCT p.user_id) AS "cnt"
+        FROM payment_records p
+        WHERE p.created_at BETWEEN ${start} AND ${end}
+          AND p.user_id IN (
+            SELECT u.id FROM app_users u
+            WHERE u.created_at BETWEEN ${start} AND ${end}
+          )
+      `);
+    }
+    const initiatedPaymentCount = parseInt(
+      initiatedPaymentResult[0]?.cnt || '0',
+      10,
+    );
 
     // Step 5: 支付成功的去重用户数
-    const paidCount = await this.paymentRecordRepo
-      .createQueryBuilder('p')
-      .select('COUNT(DISTINCT p.user_id)', 'cnt')
-      .where('p.created_at BETWEEN :start AND :end', { start, end })
-      .andWhere('p.status = :payStatus', { payStatus: 'success' })
-      .andWhere(
-        `p.user_id IN (${this.appUserRepo
-          .createQueryBuilder('u')
-          .select('u.id')
-          .where('u.created_at BETWEEN :start AND :end')
-          .andWhere(authType ? 'u.auth_type = :authType' : '1=1')
-          .getQuery()})`,
-      )
-      .setParameters(userSubParams)
-      .getRawOne()
-      .then((r) => parseInt(r?.cnt || '0', 10));
+    let paidResult: any[];
+    if (authType) {
+      paidResult = await this.prisma.$queryRaw(Prisma.sql`
+        SELECT COUNT(DISTINCT p.user_id) AS "cnt"
+        FROM payment_records p
+        WHERE p.created_at BETWEEN ${start} AND ${end}
+          AND p.status = 'success'
+          AND p.user_id IN (
+            SELECT u.id FROM app_users u
+            WHERE u.created_at BETWEEN ${start} AND ${end}
+              AND u.auth_type = ${authType}
+          )
+      `);
+    } else {
+      paidResult = await this.prisma.$queryRaw(Prisma.sql`
+        SELECT COUNT(DISTINCT p.user_id) AS "cnt"
+        FROM payment_records p
+        WHERE p.created_at BETWEEN ${start} AND ${end}
+          AND p.status = 'success'
+          AND p.user_id IN (
+            SELECT u.id FROM app_users u
+            WHERE u.created_at BETWEEN ${start} AND ${end}
+          )
+      `);
+    }
+    const paidCount = parseInt(paidResult[0]?.cnt || '0', 10);
 
     // 构建漏斗步骤
     const steps = [
@@ -195,45 +239,51 @@ export class ConversionFunnelService {
     const end = new Date(endDate);
 
     // PostgreSQL 日期截断表达式
-    const dateTrunc =
-      granularity === 'week'
-        ? "date_trunc('week', u.created_at)"
-        : granularity === 'month'
-          ? "date_trunc('month', u.created_at)"
-          : "date_trunc('day', u.created_at)";
+    let dateTruncInterval: string;
+    switch (granularity) {
+      case 'week':
+        dateTruncInterval = 'week';
+        break;
+      case 'month':
+        dateTruncInterval = 'month';
+        break;
+      default:
+        dateTruncInterval = 'day';
+    }
 
     // 注册趋势
-    const registrationTrend = await this.appUserRepo
-      .createQueryBuilder('u')
-      .select(`${dateTrunc}`, 'period')
-      .addSelect('COUNT(*)', 'count')
-      .where('u.created_at BETWEEN :start AND :end', { start, end })
-      .groupBy(dateTrunc)
-      .orderBy(dateTrunc, 'ASC')
-      .getRawMany();
+    const registrationTrend: any[] = await this.prisma.$queryRawUnsafe(
+      `SELECT date_trunc('${dateTruncInterval}', created_at) AS "period", COUNT(*) AS "count"
+       FROM app_users
+       WHERE created_at BETWEEN $1 AND $2
+       GROUP BY date_trunc('${dateTruncInterval}', created_at)
+       ORDER BY "period" ASC`,
+      start,
+      end,
+    );
 
     // 付费墙触发趋势
-    const triggerDateTrunc = dateTrunc.replace(/u\./g, 't.');
-    const triggerTrend = await this.triggerLogRepo
-      .createQueryBuilder('t')
-      .select(`${triggerDateTrunc}`, 'period')
-      .addSelect('COUNT(DISTINCT t.user_id)', 'count')
-      .where('t.created_at BETWEEN :start AND :end', { start, end })
-      .groupBy(triggerDateTrunc)
-      .orderBy(triggerDateTrunc, 'ASC')
-      .getRawMany();
+    const triggerTrend: any[] = await this.prisma.$queryRawUnsafe(
+      `SELECT date_trunc('${dateTruncInterval}', created_at) AS "period", COUNT(DISTINCT user_id) AS "count"
+       FROM subscription_trigger_logs
+       WHERE created_at BETWEEN $1 AND $2
+       GROUP BY date_trunc('${dateTruncInterval}', created_at)
+       ORDER BY "period" ASC`,
+      start,
+      end,
+    );
 
     // 支付成功趋势
-    const payDateTrunc = dateTrunc.replace(/u\./g, 'p.');
-    const paymentTrend = await this.paymentRecordRepo
-      .createQueryBuilder('p')
-      .select(`${payDateTrunc}`, 'period')
-      .addSelect('COUNT(DISTINCT p.user_id)', 'count')
-      .where('p.created_at BETWEEN :start AND :end', { start, end })
-      .andWhere('p.status = :status', { status: 'success' })
-      .groupBy(payDateTrunc)
-      .orderBy(payDateTrunc, 'ASC')
-      .getRawMany();
+    const paymentTrend: any[] = await this.prisma.$queryRawUnsafe(
+      `SELECT date_trunc('${dateTruncInterval}', created_at) AS "period", COUNT(DISTINCT user_id) AS "count"
+       FROM payment_records
+       WHERE created_at BETWEEN $1 AND $2
+         AND status = 'success'
+       GROUP BY date_trunc('${dateTruncInterval}', created_at)
+       ORDER BY "period" ASC`,
+      start,
+      end,
+    );
 
     // 合并为时间轴数据
     const periodMap = new Map<

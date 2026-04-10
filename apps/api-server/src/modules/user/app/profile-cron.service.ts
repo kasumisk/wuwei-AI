@@ -1,13 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { UserProfile } from '../entities/user-profile.entity';
-import { UserBehaviorProfile } from '../entities/user-behavior-profile.entity';
-import { UserInferredProfile } from '../entities/user-inferred-profile.entity';
-import { WeightHistory } from '../entities/weight-history.entity';
-import { FoodRecord } from '../../diet/entities/food-record.entity';
-import { RecommendationFeedback } from '../../diet/entities/recommendation-feedback.entity';
 import { ProfileCacheService } from './profile-cache.service';
 import { inferUserSegment } from './segmentation.util';
 import {
@@ -16,6 +8,7 @@ import {
   DEFAULT_TIMEZONE,
 } from '../../../common/utils/timezone.util';
 import { RedisCacheService } from '../../../core/redis/redis-cache.service';
+import { PrismaService } from '../../../core/prisma/prisma.service';
 
 /**
  * 用户画像定时任务
@@ -29,18 +22,7 @@ export class ProfileCronService {
   private readonly logger = new Logger(ProfileCronService.name);
 
   constructor(
-    @InjectRepository(UserProfile)
-    private readonly profileRepo: Repository<UserProfile>,
-    @InjectRepository(UserBehaviorProfile)
-    private readonly behaviorRepo: Repository<UserBehaviorProfile>,
-    @InjectRepository(UserInferredProfile)
-    private readonly inferredRepo: Repository<UserInferredProfile>,
-    @InjectRepository(FoodRecord)
-    private readonly foodRecordRepo: Repository<FoodRecord>,
-    @InjectRepository(RecommendationFeedback)
-    private readonly feedbackRepo: Repository<RecommendationFeedback>,
-    @InjectRepository(WeightHistory)
-    private readonly weightHistoryRepo: Repository<WeightHistory>,
+    private readonly prisma: PrismaService,
     private readonly profileCacheService: ProfileCacheService,
     private readonly redisCacheService: RedisCacheService,
   ) {}
@@ -65,43 +47,47 @@ export class ProfileCronService {
 
     try {
       // V5 3.3: 批处理 + 并发优化
-      const behaviors = await this.behaviorRepo.find();
+      const behaviors = await this.prisma.user_behavior_profiles.findMany();
       const behaviorResult = await this.processBatched(
-        behaviors,
+        behaviors as any[],
         (behavior) => this.updateDailyBehavior(behavior),
         '每日行为更新',
       );
 
       // V5 3.1/3.2: 更新 goalProgress + optimalMealCount
-      const inferred = await this.inferredRepo.find();
+      const inferred = await this.prisma.user_inferred_profiles.findMany();
       let goalProgressUpdated = 0;
       let optimalMealCountUpdated = 0;
 
       const inferredResult = await this.processBatched(
-        inferred,
+        inferred as any[],
         async (inf) => {
           const gpChanged = await this.updateGoalProgress(inf);
           if (gpChanged) goalProgressUpdated++;
 
           // optimalMealCount: 基于对应 behavior 的 mealTimingPatterns
-          const behavior = behaviors.find((b) => b.userId === inf.userId);
-          if (behavior?.mealTimingPatterns) {
+          const behavior = behaviors.find((b) => b.user_id === inf.user_id);
+          if (behavior?.meal_timing_patterns) {
             const stableSlots = (
               ['breakfast', 'lunch', 'dinner', 'snack'] as const
-            ).filter((k) => behavior.mealTimingPatterns[k]).length;
+            ).filter((k) => (behavior.meal_timing_patterns as any)[k]).length;
             if (stableSlots > 0) {
               const newCount = Math.max(3, stableSlots);
-              if (inf.optimalMealCount !== newCount) {
-                inf.optimalMealCount = newCount;
-                inf.confidenceScores = {
-                  ...inf.confidenceScores,
-                  optimalMealCount: Math.min(
-                    0.9,
-                    0.5 + (behavior.totalRecords || 0) * 0.01,
-                  ),
-                };
-                inf.lastComputedAt = new Date();
-                await this.inferredRepo.save(inf);
+              if (inf.optimal_meal_count !== newCount) {
+                await this.prisma.user_inferred_profiles.update({
+                  where: { user_id: inf.user_id },
+                  data: {
+                    optimal_meal_count: newCount,
+                    confidence_scores: {
+                      ...((inf.confidence_scores as any) || {}),
+                      optimalMealCount: Math.min(
+                        0.9,
+                        0.5 + (behavior.total_records || 0) * 0.01,
+                      ),
+                    },
+                    last_computed_at: new Date(),
+                  },
+                });
                 optimalMealCountUpdated++;
               }
             }
@@ -130,40 +116,41 @@ export class ProfileCronService {
   /**
    * 更新单个用户的行为数据（30 天滑动窗口）
    */
-  private async updateDailyBehavior(
-    behavior: UserBehaviorProfile,
-  ): Promise<void> {
-    const userId = behavior.userId;
+  private async updateDailyBehavior(behavior: any): Promise<void> {
+    const userId = behavior.user_id;
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     // 30 天窗口内的食物记录
-    const records = await this.foodRecordRepo
-      .createQueryBuilder('r')
-      .where('r.user_id = :userId', { userId })
-      .andWhere('r.created_at >= :since', { since: thirtyDaysAgo })
-      .getMany();
+    const records = await this.prisma.food_records.findMany({
+      where: {
+        user_id: userId,
+        created_at: { gte: thirtyDaysAgo },
+      },
+    });
 
     if (records.length === 0) return;
 
     // 更新执行率（30 天窗口）
-    const profile = await this.profileRepo.findOne({ where: { userId } });
-    const dailyGoal = profile?.dailyCalorieGoal || 2000;
+    const profile = await this.prisma.user_profiles.findUnique({
+      where: { user_id: userId },
+    });
+    const dailyGoal = profile?.daily_calorie_goal || 2000;
     const tz = profile?.timezone || DEFAULT_TIMEZONE;
 
     // 按用户本地日期聚合（避免 UTC 日期跨时区偏移）
     const dailyCalories: Record<string, number> = {};
     for (const record of records) {
-      const day = getUserLocalDate(tz, record.createdAt as Date);
+      const day = getUserLocalDate(tz, record.created_at as Date);
       dailyCalories[day] =
-        (dailyCalories[day] || 0) + (record.totalCalories || 0);
+        (dailyCalories[day] || 0) + (Number(record.total_calories) || 0);
     }
 
     const totalDays = Object.keys(dailyCalories).length;
     const healthyDays = Object.values(dailyCalories).filter(
       (cal) => cal <= dailyGoal,
     ).length;
-    behavior.avgComplianceRate =
+    const avgComplianceRate =
       totalDays > 0 ? Number((healthyDays / totalDays).toFixed(2)) : 0;
 
     // 推断用餐时间模式（使用用户本地时区的小时数）
@@ -174,7 +161,7 @@ export class ProfileCronService {
       snack: [],
     };
     for (const record of records) {
-      const hour = getUserLocalHour(tz, record.createdAt as Date);
+      const hour = getUserLocalHour(tz, record.created_at as Date);
       if (hour >= 5 && hour < 10) mealTimes.breakfast.push(hour);
       else if (hour >= 10 && hour < 14) mealTimes.lunch.push(hour);
       else if (hour >= 16 && hour < 21) mealTimes.dinner.push(hour);
@@ -187,7 +174,7 @@ export class ProfileCronService {
       return `${avg}:00`;
     };
 
-    behavior.mealTimingPatterns = {
+    const mealTimingPatterns = {
       breakfast: avgHour(mealTimes.breakfast),
       lunch: avgHour(mealTimes.lunch),
       dinner: avgHour(mealTimes.dinner),
@@ -202,9 +189,9 @@ export class ProfileCronService {
     // 按小时桶统计卡路里
     const hourlyCalories: Record<number, number[]> = {};
     for (const record of records) {
-      const hour = getUserLocalHour(tz, record.createdAt as Date);
+      const hour = getUserLocalHour(tz, record.created_at as Date);
       if (!hourlyCalories[hour]) hourlyCalories[hour] = [];
-      hourlyCalories[hour].push(record.totalCalories || 0);
+      hourlyCalories[hour].push(Number(record.total_calories) || 0);
     }
     // 日均小时桶均值 = dailyAvgCal / 活跃餐次数（以3为默认）
     const activeMealSlots = Math.max(3, Object.keys(hourlyCalories).length);
@@ -219,26 +206,34 @@ export class ProfileCronService {
         bingeRiskHours.push(Number(hourStr));
       }
     }
-    behavior.bingeRiskHours = bingeRiskHours.sort((a, b) => a - b);
 
     // V5 3.2: 填充 portionTendency — 实际每餐卡路里 vs 计划每餐卡路里
-    const mealsPerDay = profile?.mealsPerDay || 3;
+    const mealsPerDay = profile?.meals_per_day || 3;
     const plannedPerMeal = dailyGoal / mealsPerDay;
+    let portionTendency = behavior.portion_tendency;
     if (plannedPerMeal > 0 && records.length >= 5) {
       const avgActualPerMeal =
-        records.reduce((sum, r) => sum + (r.totalCalories || 0), 0) /
+        records.reduce((sum, r) => sum + (Number(r.total_calories) || 0), 0) /
         records.length;
       const ratio = avgActualPerMeal / plannedPerMeal;
       if (ratio > 1.15) {
-        behavior.portionTendency = 'large';
+        portionTendency = 'large';
       } else if (ratio < 0.85) {
-        behavior.portionTendency = 'small';
+        portionTendency = 'small';
       } else {
-        behavior.portionTendency = 'normal';
+        portionTendency = 'normal';
       }
     }
 
-    await this.behaviorRepo.save(behavior);
+    await this.prisma.user_behavior_profiles.update({
+      where: { user_id: userId },
+      data: {
+        avg_compliance_rate: avgComplianceRate,
+        meal_timing_patterns: mealTimingPatterns as any,
+        binge_risk_hours: bingeRiskHours.sort((a, b) => a - b),
+        portion_tendency: portionTendency,
+      },
+    });
   }
 
   // ================================================================
@@ -260,11 +255,11 @@ export class ProfileCronService {
     const startTime = Date.now();
 
     try {
-      const inferred = await this.inferredRepo.find();
+      const inferred = await this.prisma.user_inferred_profiles.findMany();
 
       // V5 3.3: 批处理 + 并发优化
       const result = await this.processBatched(
-        inferred,
+        inferred as any[],
         (inf) => this.updateWeeklySegmentation(inf),
         '每周分段更新',
       );
@@ -283,18 +278,18 @@ export class ProfileCronService {
     }
   }
 
-  private async updateWeeklySegmentation(
-    inferred: UserInferredProfile,
-  ): Promise<void> {
-    const userId = inferred.userId;
+  private async updateWeeklySegmentation(inferred: any): Promise<void> {
+    const userId = inferred.user_id;
     const [profile, behavior] = await Promise.all([
-      this.profileRepo.findOne({ where: { userId } }),
-      this.behaviorRepo.findOne({ where: { userId } }),
+      this.prisma.user_profiles.findUnique({ where: { user_id: userId } }),
+      this.prisma.user_behavior_profiles.findUnique({
+        where: { user_id: userId },
+      }),
     ]);
 
     if (!profile) return;
 
-    const complianceRate = Number(behavior?.avgComplianceRate ?? 0);
+    const complianceRate = Number(behavior?.avg_compliance_rate ?? 0);
 
     // V5 3.4: 计算 daysSinceLastRecord 和 usageDays 供分段使用
     const lastRecordDate = await this.getLastRecordDate(userId);
@@ -305,25 +300,27 @@ export class ProfileCronService {
       : 999;
 
     // usageDays: 首条记录到现在的天数
-    const firstRecord = await this.foodRecordRepo.findOne({
-      where: { userId },
-      order: { createdAt: 'ASC' },
+    const firstRecord = await this.prisma.food_records.findFirst({
+      where: { user_id: userId },
+      orderBy: { created_at: 'asc' },
     });
     const usageDays = firstRecord
       ? Math.floor(
-          (Date.now() - (firstRecord.createdAt as Date).getTime()) /
+          (Date.now() - (firstRecord.created_at as Date).getTime()) /
             (1000 * 60 * 60 * 24),
         )
       : 0;
 
     // 用户分段 — V5 3.4: 升级版 segmentation (含 new_user/returning_user/交叉分类)
-    const segmentResult = inferUserSegment(profile.goal, {
-      avgComplianceRate: behavior?.avgComplianceRate,
-      totalRecords: behavior?.totalRecords,
+    const segmentResult = inferUserSegment(profile.goal as any, {
+      avgComplianceRate:
+        behavior?.avg_compliance_rate != null
+          ? Number(behavior.avg_compliance_rate)
+          : undefined,
+      totalRecords: behavior?.total_records ?? undefined,
       daysSinceLastRecord,
       usageDays,
     });
-    inferred.userSegment = segmentResult.segment;
 
     let churnRisk = 0;
     if (daysSinceLastRecord >= 14) churnRisk = 0.9;
@@ -332,48 +329,56 @@ export class ProfileCronService {
     else if (complianceRate < 0.3) churnRisk = 0.5;
     else churnRisk = 0.1;
 
-    inferred.churnRisk = Number(churnRisk.toFixed(2));
-
     // 营养缺口分析（基于最近 7 天食物记录）
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    const weeklyRecords = await this.foodRecordRepo
-      .createQueryBuilder('r')
-      .where('r.user_id = :userId', { userId })
-      .andWhere('r.created_at >= :since', { since: sevenDaysAgo })
-      .getMany();
+    const weeklyRecords = await this.prisma.food_records.findMany({
+      where: {
+        user_id: userId,
+        created_at: { gte: sevenDaysAgo },
+      },
+    });
 
+    let nutritionGaps = inferred.nutrition_gaps as any;
     if (weeklyRecords.length >= 5) {
       const gaps: string[] = [];
       const avgProtein =
-        weeklyRecords.reduce((s, r) => s + (Number(r.totalProtein) || 0), 0) /
+        weeklyRecords.reduce((s, r) => s + (Number(r.total_protein) || 0), 0) /
         weeklyRecords.length;
       const avgCalories =
-        weeklyRecords.reduce((s, r) => s + (Number(r.totalCalories) || 0), 0) /
+        weeklyRecords.reduce((s, r) => s + (Number(r.total_calories) || 0), 0) /
         weeklyRecords.length;
 
-      const macroTargets = (inferred.macroTargets as any) || {};
+      const macroTargets = (inferred.macro_targets as any) || {};
       if (macroTargets.proteinG && avgProtein < macroTargets.proteinG * 0.6) {
         gaps.push('protein');
       }
-      const dailyGoal = Number(profile?.dailyCalorieGoal) || 2000;
+      const dailyGoal = Number(profile?.daily_calorie_goal) || 2000;
       if (avgCalories < dailyGoal * 0.5) gaps.push('calories_deficit');
 
-      inferred.nutritionGaps = gaps;
+      nutritionGaps = gaps;
     }
 
     // 置信度 — V5 3.4: 使用 segmentResult 的 confidence
-    inferred.confidenceScores = {
-      ...inferred.confidenceScores,
+    const confidenceScores = {
+      ...((inferred.confidence_scores as any) || {}),
       userSegment: segmentResult.confidence,
       segmentSecondaryFlags: segmentResult.secondaryFlags.length,
       churnRisk: daysSinceLastRecord < 999 ? 0.8 : 0.3,
       nutritionGaps: weeklyRecords.length >= 10 ? 0.7 : 0.4,
     };
 
-    inferred.lastComputedAt = new Date();
-    await this.inferredRepo.save(inferred);
+    await this.prisma.user_inferred_profiles.update({
+      where: { user_id: userId },
+      data: {
+        user_segment: segmentResult.segment,
+        churn_risk: Number(churnRisk.toFixed(2)),
+        nutrition_gaps: nutritionGaps,
+        confidence_scores: confidenceScores as any,
+        last_computed_at: new Date(),
+      },
+    });
   }
 
   // ================================================================
@@ -395,11 +400,11 @@ export class ProfileCronService {
     const startTime = Date.now();
 
     try {
-      const inferred = await this.inferredRepo.find();
+      const inferred = await this.prisma.user_inferred_profiles.findMany();
 
       // V5 3.3: 批处理 + 并发优化
       const result = await this.processBatched(
-        inferred,
+        inferred as any[],
         (inf) => this.updateTastePrefVector(inf),
         '口味偏好更新',
       );
@@ -449,15 +454,15 @@ export class ProfileCronService {
     const NEUTRAL_THRESHOLD = 0.02; // |weight - 1.0| < 0.02 → 清理
 
     try {
-      const allInferred = await this.inferredRepo.find();
+      const allInferred = await this.prisma.user_inferred_profiles.findMany();
 
       // V5 3.3: 批处理 + 并发优化
       const result = await this.processBatched(
-        allInferred,
+        allInferred as any[],
         async (inf) => {
-          if (!inf.preferenceWeights) return;
+          if (!inf.preference_weights) return;
 
-          const weights = inf.preferenceWeights as Record<
+          const weights = inf.preference_weights as Record<
             string,
             Record<string, number> | string | number
           >;
@@ -488,8 +493,12 @@ export class ProfileCronService {
           }
 
           if (changed) {
-            inf.preferenceWeights = weights as Record<string, unknown>;
-            await this.inferredRepo.save(inf);
+            await this.prisma.user_inferred_profiles.update({
+              where: { user_id: inf.user_id },
+              data: {
+                preference_weights: weights as any,
+              },
+            });
           }
         },
         '偏好权重衰减',
@@ -509,19 +518,18 @@ export class ProfileCronService {
     }
   }
 
-  private async updateTastePrefVector(
-    inferred: UserInferredProfile,
-  ): Promise<void> {
-    const userId = inferred.userId;
+  private async updateTastePrefVector(inferred: any): Promise<void> {
+    const userId = inferred.user_id;
     const sixtyDaysAgo = new Date();
     sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
 
     // 从反馈中提取接受的食物（带时间衰减）
-    const feedbacks = await this.feedbackRepo
-      .createQueryBuilder('f')
-      .where('f.user_id = :userId', { userId })
-      .andWhere('f.created_at >= :since', { since: sixtyDaysAgo })
-      .getMany();
+    const feedbacks = await this.prisma.recommendation_feedbacks.findMany({
+      where: {
+        user_id: userId,
+        created_at: { gte: sixtyDaysAgo },
+      },
+    });
 
     if (feedbacks.length < 10) return;
 
@@ -531,13 +539,13 @@ export class ProfileCronService {
 
     for (const fb of feedbacks) {
       const daysSince = Math.floor(
-        (now - (fb.createdAt as Date).getTime()) / (1000 * 60 * 60 * 24),
+        (now - (fb.created_at as Date).getTime()) / (1000 * 60 * 60 * 24),
       );
       const decayWeight = Math.exp(-0.05 * daysSince);
       const multiplier = fb.action === 'accepted' ? 1 : -0.5;
 
       // 使用食物名作为简化向量维度
-      const key = fb.foodName || 'unknown';
+      const key = fb.food_name || 'unknown';
       tagWeights[key] = (tagWeights[key] || 0) + multiplier * decayWeight;
     }
 
@@ -548,15 +556,21 @@ export class ProfileCronService {
       .map(([name, weight]) => ({ name, weight: Number(weight.toFixed(3)) }));
 
     // 存储为权重数组（number[]），仅保存 Top 20 食物的衰减权重
-    inferred.tastePrefVector = sorted.map((item) => item.weight);
+    const tastePrefVector = sorted.map((item) => item.weight);
 
-    inferred.confidenceScores = {
-      ...inferred.confidenceScores,
+    const confidenceScores = {
+      ...((inferred.confidence_scores as any) || {}),
       tastePrefVector: Math.min(0.9, 0.3 + feedbacks.length * 0.01),
     };
 
-    inferred.lastComputedAt = new Date();
-    await this.inferredRepo.save(inferred);
+    await this.prisma.user_inferred_profiles.update({
+      where: { user_id: userId },
+      data: {
+        taste_pref_vector: tastePrefVector,
+        confidence_scores: confidenceScores as any,
+        last_computed_at: new Date(),
+      },
+    });
   }
 
   // ================================================================
@@ -577,29 +591,28 @@ export class ProfileCronService {
    *
    * @returns 是否有实质更新
    */
-  private async updateGoalProgress(
-    inferred: UserInferredProfile,
-  ): Promise<boolean> {
-    const userId = inferred.userId;
+  private async updateGoalProgress(inferred: any): Promise<boolean> {
+    const userId = inferred.user_id;
 
     // 获取用户档案（需要 targetWeightKg）
-    const profile = await this.profileRepo.findOne({ where: { userId } });
-    if (!profile?.targetWeightKg) return false;
+    const profile = await this.prisma.user_profiles.findUnique({
+      where: { user_id: userId },
+    });
+    if (!profile?.target_weight_kg) return false;
 
     // 查询体重历史（按时间升序）
-    const weightRecords = await this.weightHistoryRepo
-      .createQueryBuilder('wh')
-      .where('wh.user_id = :userId', { userId })
-      .orderBy('wh.recorded_at', 'ASC')
-      .getMany();
+    const weightRecords = await this.prisma.weight_history.findMany({
+      where: { user_id: userId },
+      orderBy: { recorded_at: 'asc' },
+    });
 
     if (weightRecords.length === 0) return false;
 
-    const startWeight = Number(weightRecords[0].weightKg);
+    const startWeight = Number(weightRecords[0].weight_kg);
     const currentWeight = Number(
-      weightRecords[weightRecords.length - 1].weightKg,
+      weightRecords[weightRecords.length - 1].weight_kg,
     );
-    const targetWeight = Number(profile.targetWeightKg);
+    const targetWeight = Number(profile.target_weight_kg);
 
     // 进度百分比: 避免除零
     const totalDelta = startWeight - targetWeight;
@@ -614,8 +627,9 @@ export class ProfileCronService {
     // 趋势 & 周均变化量: 基于近 4 周（28 天）的记录
     const fourWeeksAgo = new Date();
     fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
+    // NOTE: weightRecords come from Prisma (weight_history table) — uses snake_case fields
     const recentRecords = weightRecords.filter(
-      (r) => (r.recordedAt as Date).getTime() >= fourWeeksAgo.getTime(),
+      (r) => (r.recorded_at as Date).getTime() >= fourWeeksAgo.getTime(),
     );
 
     let trend: 'losing' | 'gaining' | 'plateau' | 'fluctuating' = 'plateau';
@@ -627,11 +641,11 @@ export class ProfileCronService {
       const last = recentRecords[recentRecords.length - 1];
       const daySpan = Math.max(
         1,
-        ((last.recordedAt as Date).getTime() -
-          (first.recordedAt as Date).getTime()) /
+        ((last.recorded_at as Date).getTime() -
+          (first.recorded_at as Date).getTime()) /
           (1000 * 60 * 60 * 24),
       );
-      const totalChange = Number(last.weightKg) - Number(first.weightKg);
+      const totalChange = Number(last.weight_kg) - Number(first.weight_kg);
       weeklyRateKg = Number(((totalChange / daySpan) * 7).toFixed(2));
 
       // 趋势判断
@@ -640,11 +654,11 @@ export class ProfileCronService {
         let directionChanges = 0;
         for (let i = 2; i < recentRecords.length; i++) {
           const prev =
-            Number(recentRecords[i - 1].weightKg) -
-            Number(recentRecords[i - 2].weightKg);
+            Number(recentRecords[i - 1].weight_kg) -
+            Number(recentRecords[i - 2].weight_kg);
           const curr =
-            Number(recentRecords[i].weightKg) -
-            Number(recentRecords[i - 1].weightKg);
+            Number(recentRecords[i].weight_kg) -
+            Number(recentRecords[i - 1].weight_kg);
           if ((prev > 0 && curr < 0) || (prev < 0 && curr > 0)) {
             directionChanges++;
           }
@@ -683,7 +697,7 @@ export class ProfileCronService {
     }
 
     // 更新 goalProgress
-    inferred.goalProgress = {
+    const goalProgress = {
       startWeight,
       currentWeight,
       targetWeight,
@@ -694,22 +708,28 @@ export class ProfileCronService {
     };
 
     // 更新置信度: 数据越多越可信
-    inferred.confidenceScores = {
-      ...inferred.confidenceScores,
+    const confidenceScores = {
+      ...((inferred.confidence_scores as any) || {}),
       goalProgress: Math.min(0.95, 0.3 + weightRecords.length * 0.05),
     };
 
-    inferred.lastComputedAt = new Date();
-    await this.inferredRepo.save(inferred);
+    await this.prisma.user_inferred_profiles.update({
+      where: { user_id: userId },
+      data: {
+        goal_progress: goalProgress as any,
+        confidence_scores: confidenceScores as any,
+        last_computed_at: new Date(),
+      },
+    });
     return true;
   }
 
   private async getLastRecordDate(userId: string): Promise<Date | null> {
-    const record = await this.foodRecordRepo.findOne({
-      where: { userId },
-      order: { createdAt: 'DESC' },
+    const record = await this.prisma.food_records.findFirst({
+      where: { user_id: userId },
+      orderBy: { created_at: 'desc' },
     });
-    return record ? (record.createdAt as Date) : null;
+    return record ? (record.created_at as Date) : null;
   }
 
   /**
@@ -723,7 +743,7 @@ export class ProfileCronService {
    * @param label 日志标识
    * @returns { succeeded, failed } 统计
    */
-  private async processBatched<T extends { userId?: string }>(
+  private async processBatched<T extends { user_id?: string }>(
     items: T[],
     processor: (item: T) => Promise<void>,
     label: string,

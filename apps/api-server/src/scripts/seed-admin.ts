@@ -1,41 +1,35 @@
-import AppDataSource from '../core/database/data-source-dev';
-import {
-  AdminUser,
-  AdminRole,
-  AdminUserStatus,
-} from '../modules/user/entities/admin-user.entity';
-import { Role, RoleStatus } from '../modules/rbac/entities/role.entity';
-import { UserRole as UserRoleEntity } from '../modules/rbac/entities/user-role.entity';
+import { PrismaClient } from '@prisma/client';
+import { AdminRole, AdminUserStatus } from '../modules/user/user.types';
+import { RoleStatus } from '../modules/rbac/rbac.types';
 import * as bcrypt from 'bcrypt';
+
+const prisma = new PrismaClient();
 
 /**
  * 管理员种子数据脚本
  * 创建默认管理员账号并分配 SUPER_ADMIN 角色
  */
 async function seedAdmin() {
-  await AppDataSource.initialize();
-  const userRepository = AppDataSource.getRepository(AdminUser);
-  const roleRepository = AppDataSource.getRepository(Role);
-  const userRoleRepository = AppDataSource.getRepository(UserRoleEntity);
-
   console.log('🌱 开始植入管理员种子数据...\n');
 
   try {
     // 1. 确保 SUPER_ADMIN 角色存在
     console.log('🔐 检查 SUPER_ADMIN 角色...');
-    let superAdminRole = await roleRepository.findOne({
+    let superAdminRole = await prisma.roles.findFirst({
       where: { code: 'SUPER_ADMIN' },
     });
 
     if (!superAdminRole) {
       console.log('  ⚠️  SUPER_ADMIN 角色不存在，正在创建...');
-      superAdminRole = await roleRepository.save({
-        code: 'SUPER_ADMIN',
-        name: '超级管理员',
-        description: '系统超级管理员，拥有所有权限',
-        isSystem: true,
-        status: RoleStatus.ACTIVE,
-        sort: 0,
+      superAdminRole = await prisma.roles.create({
+        data: {
+          code: 'SUPER_ADMIN',
+          name: '超级管理员',
+          description: '系统超级管理员，拥有所有权限',
+          is_system: true,
+          status: RoleStatus.ACTIVE,
+          sort: 0,
+        },
       });
       console.log('  ✓ SUPER_ADMIN 角色创建成功');
     } else {
@@ -49,7 +43,7 @@ async function seedAdmin() {
     const adminPassword = 'admin123';
 
     // 检查管理员是否已存在
-    let existingAdmin = await userRepository.findOne({
+    let existingAdmin = await prisma.admin_users.findFirst({
       where: { username: adminUsername },
     });
 
@@ -60,14 +54,16 @@ async function seedAdmin() {
       const hashedPassword = await bcrypt.hash(adminPassword, 10);
 
       // 创建管理员
-      existingAdmin = await userRepository.save({
-        username: adminUsername,
-        email: 'admin@example.com',
-        password: hashedPassword,
-        role: AdminRole.SUPER_ADMIN,
-        status: AdminUserStatus.ACTIVE,
-        nickname: '系统管理员',
-        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=admin',
+      existingAdmin = await prisma.admin_users.create({
+        data: {
+          username: adminUsername,
+          email: 'admin@example.com',
+          password: hashedPassword,
+          role: AdminRole.SUPER_ADMIN,
+          status: AdminUserStatus.ACTIVE,
+          nickname: '系统管理员',
+          avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=admin',
+        },
       });
 
       console.log(
@@ -79,17 +75,19 @@ async function seedAdmin() {
 
     // 3. 分配 SUPER_ADMIN 角色给管理员
     console.log('\n🔗 分配角色到管理员...');
-    const existingUserRole = await userRoleRepository.findOne({
+    const existingUserRole = await prisma.user_roles.findFirst({
       where: {
-        userId: existingAdmin.id,
-        roleId: superAdminRole.id,
+        user_id: existingAdmin.id,
+        role_id: superAdminRole.id,
       },
     });
 
     if (!existingUserRole) {
-      await userRoleRepository.save({
-        userId: existingAdmin.id,
-        roleId: superAdminRole.id,
+      await prisma.user_roles.create({
+        data: {
+          user_id: existingAdmin.id,
+          role_id: superAdminRole.id,
+        },
       });
       console.log('  ✓ SUPER_ADMIN 角色已分配给管理员');
     } else {
@@ -110,18 +108,20 @@ async function seedAdmin() {
     ];
 
     for (const userData of testUsers) {
-      const existingUser = await userRepository.findOne({
+      const existingUser = await prisma.admin_users.findFirst({
         where: { username: userData.username },
       });
 
       if (!existingUser) {
         const hashedPassword = await bcrypt.hash(userData.password, 10);
         const { password: _pwd, ...userDataWithoutPassword } = userData;
-        await userRepository.save({
-          ...userDataWithoutPassword,
-          password: hashedPassword,
-          status: AdminUserStatus.ACTIVE,
-          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${userData.username}`,
+        await prisma.admin_users.create({
+          data: {
+            ...userDataWithoutPassword,
+            password: hashedPassword,
+            status: AdminUserStatus.ACTIVE,
+            avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${userData.username}`,
+          },
         });
         console.log(
           `  ✓ 创建: ${userData.username} (密码: ${userData.password})`,
@@ -144,7 +144,7 @@ async function seedAdmin() {
   } catch (error) {
     console.error('❌ 管理员种子数据植入失败:', error);
   } finally {
-    await AppDataSource.destroy();
+    await prisma.$disconnect();
   }
 }
 

@@ -3,24 +3,9 @@
 import { useState, useCallback } from 'react';
 import { useDecisionFeedback } from '@/features/home/hooks/use-decision-feedback';
 import { useToast } from '@/lib/hooks/use-toast';
+import { DECISION_CONFIG_COMPACT, MEAL_LABELS } from '@/lib/constants/food';
 import { LocalizedLink } from '@/components/common/localized-link';
 import type { FoodRecord } from '@/types/food';
-
-/* ─── 决策标签配置 ─── */
-
-const DECISION_CONFIG: Record<string, { label: string; bg: string; text: string }> = {
-  OK: { label: '注意', bg: 'bg-yellow-100', text: 'text-yellow-800' },
-  LIMIT: { label: '少吃', bg: 'bg-orange-100', text: 'text-orange-800' },
-  AVOID: { label: '不建议', bg: 'bg-red-100', text: 'text-red-800' },
-  SAFE: { label: '健康', bg: 'bg-green-100', text: 'text-green-800' },
-};
-
-const MEAL_LABELS: Record<string, string> = {
-  breakfast: '早餐',
-  lunch: '午餐',
-  dinner: '晚餐',
-  snack: '加餐',
-};
 
 /* ─── SVG Icons ─── */
 
@@ -77,7 +62,7 @@ export function MealRecordCard({ meal }: MealRecordCardProps) {
   // 是否有决策标签
   const decisionKey = meal.decision && meal.decision !== 'SAFE' ? meal.decision : null;
   const decisionStyle = decisionKey
-    ? DECISION_CONFIG[decisionKey]
+    ? DECISION_CONFIG_COMPACT[decisionKey]
     : meal.isHealthy !== undefined
       ? meal.isHealthy
         ? { label: '健康', bg: 'bg-secondary', text: 'text-secondary-foreground' }

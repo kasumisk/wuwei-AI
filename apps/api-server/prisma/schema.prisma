@@ -1,0 +1,1355 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearchPostgres"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model ab_experiments {
+  id          String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String                     @db.VarChar(100)
+  description String?
+  goal_type   String                     @default("*") @db.VarChar(30)
+  status      ab_experiments_status_enum @default(draft)
+  groups      Json                       @default("[]")
+  start_date  DateTime?                  @db.Timestamp(6)
+  end_date    DateTime?                  @db.Timestamp(6)
+  created_at  DateTime                   @default(now()) @db.Timestamp(6)
+  updated_at  DateTime                   @default(now()) @db.Timestamp(6)
+
+  @@index([status], map: "IDX_ab_experiments_status")
+}
+
+model achievements {
+  id           String  @id(map: "PK_1bc19c37c6249f70186f318d71d") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  code         String  @unique(map: "UQ_cd74882f69ff37d7330e89c63d5") @db.VarChar(50)
+  name         String  @db.VarChar(100)
+  description  String?
+  icon         String? @db.VarChar(10)
+  category     String? @db.VarChar(30)
+  threshold    Int
+  reward_type  String? @db.VarChar(30)
+  reward_value Int     @default(0)
+}
+
+model admin_users {
+  id            String                  @id(map: "PK_06744d221bb6145dc61e5dc441d") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  username      String                  @unique(map: "IDX_2873882c38e8c07d98cb64f962") @db.VarChar(100)
+  password      String                  @db.VarChar(255)
+  email         String?                 @unique(map: "IDX_dcd0c8a4b10af9c986e510b9ec") @db.VarChar(255)
+  phone         String?                 @db.VarChar(20)
+  role          admin_users_role_enum   @default(admin)
+  status        admin_users_status_enum @default(active)
+  avatar        String?                 @db.VarChar(255)
+  nickname      String?                 @db.VarChar(100)
+  last_login_at DateTime?               @db.Timestamp(6)
+  created_at    DateTime                @default(now()) @db.Timestamp(6)
+  updated_at    DateTime                @default(now()) @db.Timestamp(6)
+  user_roles    user_roles[]
+}
+
+model ai_decision_logs {
+  id              String   @id(map: "PK_e5aa864516bc349d6e085024cee") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id         String   @db.Uuid
+  record_id       String?  @db.Uuid
+  input_context   Json?
+  input_image_url String?
+  decision        String?  @db.VarChar(10)
+  risk_level      String?  @db.VarChar(5)
+  full_response   Json?
+  user_followed   Boolean?
+  user_feedback   String?  @db.VarChar(20)
+  actual_outcome  String?  @db.VarChar(20)
+  created_at      DateTime @default(now()) @db.Timestamp(6)
+
+  @@index([user_id, created_at(sort: Desc)], map: "idx_ai_logs_user")
+}
+
+model analysis_food_link {
+  id                   String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  analysis_id          String               @db.Uuid
+  food_library_id      String?              @db.Uuid
+  food_candidate_id    String?              @db.Uuid
+  food_name            String               @db.VarChar(120)
+  match_type           String               @db.VarChar(20)
+  confidence           Decimal?             @default(0) @db.Decimal(5, 2)
+  created_at           DateTime?            @default(now()) @db.Timestamptz(6)
+  food_analysis_record food_analysis_record @relation(fields: [analysis_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_afl_analysis")
+  food_candidate       food_candidate?      @relation(fields: [food_candidate_id], references: [id], onUpdate: NoAction, map: "fk_afl_food_candidate")
+  foods                foods?               @relation(fields: [food_library_id], references: [id], onUpdate: NoAction, map: "fk_afl_food_library")
+
+  @@index([analysis_id], map: "idx_analysis_food_link_analysis_id")
+  @@index([food_candidate_id], map: "idx_analysis_food_link_food_candidate_id")
+  @@index([food_library_id], map: "idx_analysis_food_link_food_library_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model app_users {
+  id                     String                   @id(map: "PK_9b97e4fbff9c2f3918fda27f999") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  auth_type              app_users_auth_type_enum @default(anonymous)
+  email                  String?                  @unique(map: "IDX_28d5834968612821f4675a9f7a") @db.VarChar(255)
+  password               String?                  @db.VarChar(255)
+  google_id              String?                  @unique(map: "IDX_77751cf159acfefb704456e4f6") @db.VarChar(255)
+  device_id              String?                  @db.VarChar(255)
+  phone                  String?                  @unique(map: "IDX_app_users_phone") @db.VarChar(20)
+  phone_verified         Boolean                  @default(false)
+  wechat_open_id         String?                  @unique(map: "IDX_45e81ae90b9a0d7fb2b72e21b2") @db.VarChar(128)
+  wechat_union_id        String?                  @db.VarChar(128)
+  wechat_mini_open_id    String?                  @unique(map: "IDX_app_users_wechat_mini_open_id") @db.VarChar(128)
+  apple_id               String?                  @unique(map: "IDX_458012dc4bdbf3309edd3205da") @db.VarChar(255)
+  nickname               String?                  @db.VarChar(100)
+  avatar                 String?                  @db.VarChar(255)
+  status                 app_users_status_enum    @default(active)
+  email_verified         Boolean                  @default(false)
+  last_login_at          DateTime?                @db.Timestamp(6)
+  metadata               Json?
+  created_at             DateTime                 @default(now()) @db.Timestamp(6)
+  updated_at             DateTime                 @default(now()) @db.Timestamp(6)
+  coach_conversations    coach_conversations[]
+  daily_summaries        daily_summaries[]
+  food_records           food_records[]
+  profile_snapshots      profile_snapshots[]
+  user_inferred_profiles user_inferred_profiles?
+  user_profiles          user_profiles?
+
+  @@index([device_id], map: "IDX_601d4f4be742d3ca28891c0207")
+}
+
+model app_version_packages {
+  id           String                             @id(map: "PK_cf82df0345378efd08dd5683389") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  versionId    String                             @db.Uuid
+  platform     app_version_packages_platform_enum
+  channel      String                             @db.VarChar(50)
+  downloadUrl  String                             @db.VarChar(1000)
+  fileSize     BigInt                             @default(0)
+  checksum     String?                            @db.VarChar(255)
+  enabled      Boolean                            @default(true)
+  createdAt    DateTime                           @default(now()) @db.Timestamp(6)
+  updatedAt    DateTime                           @default(now()) @db.Timestamp(6)
+  app_versions app_versions                       @relation(fields: [versionId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_ecb85e41b68428adb8df8fc0a01")
+
+  @@unique([versionId, channel, platform], map: "IDX_app_version_packages_version_channel_platform")
+  @@index([versionId], map: "IDX_app_version_packages_versionId")
+}
+
+model app_versions {
+  id                    String                       @id(map: "PK_8d36b0dcf0c026c7aad923c80fd") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  platform              app_versions_platform_enum?
+  version               String                       @db.VarChar(50)
+  versionCode           Int
+  updateType            app_versions_updateType_enum @default(optional)
+  title                 String                       @db.VarChar(255)
+  description           String
+  minSupportVersion     String?                      @db.VarChar(50)
+  minSupportVersionCode Int?
+  status                app_versions_status_enum     @default(draft)
+  grayRelease           Boolean                      @default(false)
+  grayPercent           Int                          @default(0)
+  releaseDate           DateTime?                    @db.Timestamp(6)
+  i18nDescription       Json?
+  metadata              Json?
+  createdAt             DateTime                     @default(now()) @db.Timestamp(6)
+  updatedAt             DateTime                     @default(now()) @db.Timestamp(6)
+  app_version_packages  app_version_packages[]
+
+  @@unique([platform, version], map: "IDX_6222da359534e48044dce6829e")
+}
+
+model challenges {
+  id            String  @id(map: "PK_1e664e93171e20fe4d6125466af") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  title         String  @db.VarChar(100)
+  description   String?
+  type          String? @db.VarChar(30)
+  duration_days Int
+  rules         Json?
+  is_active     Boolean @default(true)
+}
+
+model client_capability_permissions {
+  id                 String   @id(map: "PK_c1a6818a8b4efddd7f349efd371") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  client_id          String   @db.Uuid
+  capability_type    String   @db.VarChar(100)
+  enabled            Boolean  @default(true)
+  rate_limit         Int      @default(60)
+  quota_limit        BigInt?
+  preferred_provider String?  @db.VarChar(50)
+  allowed_providers  String?
+  allowed_models     String?
+  config             Json?
+  created_at         DateTime @default(now()) @db.Timestamp(6)
+  clients            clients  @relation(fields: [client_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_ad53318f3e760401ed26580a61a")
+
+  @@unique([client_id, capability_type], map: "IDX_60603413d17812e8ef04288227")
+}
+
+model clients {
+  id                            String                          @id(map: "PK_f1ab7cf3a5714dbc6bb4e1c28a4") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name                          String                          @db.VarChar(255)
+  api_key                       String                          @unique(map: "IDX_740fe6d4fd0cd0ff47d766c8e0") @db.VarChar(255)
+  api_secret                    String                          @db.VarChar(255)
+  status                        String                          @default("active") @db.VarChar(20)
+  quota_config                  Json?
+  description                   String?
+  metadata                      Json?
+  created_at                    DateTime                        @default(now()) @db.Timestamp(6)
+  updated_at                    DateTime                        @default(now()) @db.Timestamp(6)
+  client_capability_permissions client_capability_permissions[]
+}
+
+model coach_conversations {
+  id             String           @id(map: "PK_a39c641e9cb65d97f4297f6e48e") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id        String           @db.Uuid
+  title          String?          @db.VarChar(200)
+  created_at     DateTime         @default(now()) @db.Timestamp(6)
+  updated_at     DateTime         @default(now()) @db.Timestamp(6)
+  app_users      app_users        @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_28e39678e3cbc5deced6c3b5f7e")
+  coach_messages coach_messages[]
+
+  @@index([user_id, updated_at], map: "IDX_64b7c797968982036808dd8928")
+  @@index([user_id, updated_at(sort: Desc)], map: "idx_coach_conversations_user")
+}
+
+model coach_messages {
+  id                  String              @id(map: "PK_d739031ac3c1470a4d96a9bfe8f") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  conversation_id     String              @db.Uuid
+  role                String              @db.VarChar(20)
+  content             String
+  tokens_used         Int                 @default(0)
+  created_at          DateTime            @default(now()) @db.Timestamp(6)
+  coach_conversations coach_conversations @relation(fields: [conversation_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_10a0fc9e61c8d70b657decdc02c")
+
+  @@index([conversation_id, created_at], map: "IDX_ce15bf83d158339d1460ef5046")
+}
+
+model daily_plans {
+  id           String   @id(map: "PK_ebf4c93c574708a8ba6919252df") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id      String   @db.Uuid
+  date         DateTime @db.Date
+  morning_plan Json?
+  lunch_plan   Json?
+  dinner_plan  Json?
+  snack_plan   Json?
+  adjustments  Json     @default("[]")
+  strategy     String?
+  total_budget Int?
+  created_at   DateTime @default(now()) @db.Timestamp(6)
+  updated_at   DateTime @default(now()) @db.Timestamp(6)
+
+  @@index([user_id, date(sort: Desc)], map: "idx_daily_plans_user_date")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model daily_summaries {
+  id              String    @id(map: "PK_2d7ed4d1fd3c764c045b6945c4a") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id         String    @db.Uuid
+  date            DateTime  @db.Date
+  total_calories  Int       @default(0)
+  calorie_goal    Int?
+  meal_count      Int       @default(0)
+  total_protein   Decimal   @default(0) @db.Decimal(7, 1)
+  total_fat       Decimal   @default(0) @db.Decimal(7, 1)
+  total_carbs     Decimal   @default(0) @db.Decimal(7, 1)
+  avg_quality     Decimal   @default(0) @db.Decimal(3, 1)
+  avg_satiety     Decimal   @default(0) @db.Decimal(3, 1)
+  nutrition_score Int       @default(0)
+  protein_goal    Decimal   @default(0) @db.Decimal(6, 1)
+  fat_goal        Decimal   @default(0) @db.Decimal(6, 1)
+  carbs_goal      Decimal   @default(0) @db.Decimal(6, 1)
+  created_at      DateTime  @default(now()) @db.Timestamp(6)
+  updated_at      DateTime  @default(now()) @db.Timestamp(6)
+  app_users       app_users @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_b8fe1bf443d817a306fbda45040")
+
+  @@unique([user_id, date], map: "UQ_2bec94b8d146beda9ec7c984e41")
+}
+
+model device_token {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String   @db.Uuid
+  token      String   @db.VarChar(500)
+  device_id  String   @db.VarChar(200)
+  platform   String   @db.VarChar(10)
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([user_id, device_id], map: "idx_device_token_lookup")
+  @@index([user_id], map: "idx_device_token_user")
+}
+
+model document_embeddings {
+  id        String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  text      String?
+  metadata  Json?
+  embedding Unsupported("vector")?
+}
+
+model feature_flag {
+  id          String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key         String                 @unique @db.VarChar(100)
+  name        String                 @db.VarChar(200)
+  description String?
+  type        feature_flag_type_enum @default(boolean)
+  enabled     Boolean                @default(false)
+  config      Json                   @default("{}")
+  created_at  DateTime               @default(now()) @db.Timestamp(6)
+  updated_at  DateTime               @default(now()) @db.Timestamp(6)
+
+  @@index([key], map: "IDX_feature_flag_key")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model feedback_details {
+  id                       String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  feedback_id              String                   @db.Uuid
+  user_id                  String                   @db.Uuid
+  food_name                String                   @db.VarChar(100)
+  meal_type                String                   @db.VarChar(20)
+  taste_rating             Int?                     @db.SmallInt
+  portion_rating           Int?                     @db.SmallInt
+  price_rating             Int?                     @db.SmallInt
+  timing_rating            Int?                     @db.SmallInt
+  comment                  String?
+  dwell_time_ms            Int?
+  detail_expanded          Boolean?
+  created_at               DateTime?                @default(now()) @db.Timestamptz(6)
+  recommendation_feedbacks recommendation_feedbacks @relation(fields: [feedback_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_feedback_details_feedback")
+
+  @@index([feedback_id], map: "IDX_feedback_details_feedback_id")
+  @@index([user_id, created_at], map: "IDX_feedback_details_user_created")
+  @@index([user_id], map: "IDX_feedback_details_user_id")
+}
+
+model food_analysis_record {
+  id                   String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id              String               @db.Uuid
+  input_type           String               @db.VarChar(10)
+  raw_text             String?
+  image_url            String?              @db.VarChar(500)
+  meal_type            String?              @db.VarChar(20)
+  status               String               @default("completed") @db.VarChar(20)
+  recognized_payload   Json?
+  normalized_payload   Json?
+  nutrition_payload    Json?
+  decision_payload     Json?
+  confidence_score     Decimal?             @db.Decimal(5, 2)
+  quality_score        Decimal?             @db.Decimal(5, 2)
+  matched_food_count   Int                  @default(0)
+  candidate_food_count Int                  @default(0)
+  persist_status       String               @default("pending") @db.VarChar(20)
+  source_request_id    String?              @db.VarChar(64)
+  created_at           DateTime?            @default(now()) @db.Timestamptz(6)
+  analysis_food_link   analysis_food_link[]
+
+  @@index([input_type], map: "idx_food_analysis_record_input_type")
+  @@index([source_request_id], map: "idx_food_analysis_record_source_request")
+  @@index([status], map: "idx_food_analysis_record_status")
+  @@index([user_id, created_at(sort: Desc)], map: "idx_food_analysis_record_user_created")
+  @@index([user_id], map: "idx_food_analysis_record_user_id")
+}
+
+model food_candidate {
+  id                  String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  canonical_name      String               @db.VarChar(120)
+  aliases             Json?                @default("[]")
+  category            String?              @db.VarChar(30)
+  estimated_nutrition Json?
+  source_type         String               @db.VarChar(20)
+  source_count        Int?                 @default(1)
+  avg_confidence      Decimal?             @default(0) @db.Decimal(5, 2)
+  quality_score       Decimal?             @default(0) @db.Decimal(5, 2)
+  review_status       String?              @default("pending") @db.VarChar(20)
+  merged_food_id      String?              @db.Uuid
+  first_seen_at       DateTime?            @default(now()) @db.Timestamptz(6)
+  last_seen_at        DateTime?            @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime?            @default(now()) @db.Timestamptz(6)
+  analysis_food_link  analysis_food_link[]
+
+  @@index([canonical_name], map: "idx_food_candidate_canonical_name")
+  @@index([review_status], map: "idx_food_candidate_review_status")
+  @@index([source_count(sort: Desc)], map: "idx_food_candidate_source_count")
+  @@index([source_type], map: "idx_food_candidate_source_type")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model food_change_logs {
+  id         String   @id(map: "PK_717727f76e41ee87d1cfc893745") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  food_id    String   @db.Uuid
+  version    Int
+  action     String   @db.VarChar(20)
+  changes    Json
+  reason     String?
+  operator   String?  @db.VarChar(100)
+  created_at DateTime @default(now()) @db.Timestamp(6)
+  foods      foods    @relation(fields: [food_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_3bed3ebac60097ade2410992361")
+
+  @@index([food_id, version], map: "IDX_c05fd8febec4e6c891d55037bb")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model food_conflicts {
+  id             String    @id(map: "PK_37c15f451790ed4ba5c66c8d82c") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  food_id        String    @db.Uuid
+  field          String    @db.VarChar(50)
+  sources        Json
+  resolution     String?   @db.VarChar(20)
+  resolved_value String?
+  resolved_by    String?   @db.VarChar(100)
+  resolved_at    DateTime? @db.Timestamp(6)
+  created_at     DateTime  @default(now()) @db.Timestamp(6)
+  foods          foods     @relation(fields: [food_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_c38e8be317412e0e211bde36c2c")
+
+  @@index([food_id], map: "IDX_c38e8be317412e0e211bde36c2")
+  @@index([resolution], map: "IDX_f70f77608ec0d03dcb273d28b7")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model food_records {
+  id              String                      @id(map: "PK_11f84af71017274532ef98f5d43") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id         String                      @db.Uuid
+  image_url       String?                     @db.VarChar(500)
+  source          food_records_source_enum    @default(screenshot)
+  recognized_text String?
+  foods           Json                        @default("[]")
+  total_calories  Int                         @default(0)
+  meal_type       food_records_meal_type_enum @default(lunch)
+  advice          String?
+  is_healthy      Boolean?
+  decision        String                      @default("SAFE") @db.VarChar(10)
+  risk_level      String?                     @db.VarChar(5)
+  reason          String?
+  suggestion      String?
+  instead_options Json                        @default("[]")
+  compensation    Json?
+  context_comment String?
+  encouragement   String?
+  total_protein   Decimal                     @default(0) @db.Decimal(6, 1)
+  total_fat       Decimal                     @default(0) @db.Decimal(6, 1)
+  total_carbs     Decimal                     @default(0) @db.Decimal(6, 1)
+  avg_quality     Decimal                     @default(0) @db.Decimal(3, 1)
+  avg_satiety     Decimal                     @default(0) @db.Decimal(3, 1)
+  nutrition_score Int                         @default(0)
+  recorded_at     DateTime                    @default(now()) @db.Timestamp(6)
+  created_at      DateTime                    @default(now()) @db.Timestamp(6)
+  updated_at      DateTime                    @default(now()) @db.Timestamp(6)
+  analysis_id     String?                     @db.Uuid
+  app_users       app_users                   @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_ec3b604a6a49e32b3b7261e8b16")
+
+  @@index([user_id, recorded_at], map: "IDX_b60a81211f912774c20ff25101")
+  @@index([analysis_id], map: "idx_food_record_analysis_id")
+  @@index([user_id, recorded_at(sort: Desc)], map: "idx_food_records_user_recorded")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model food_regional_info {
+  id                String   @id(map: "PK_a85c86ffa0a1e8ad0b7b650d0e0") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  food_id           String   @db.Uuid
+  region            String   @db.VarChar(10)
+  local_popularity  Int      @default(0)
+  local_price_range String?  @db.VarChar(20)
+  availability      String?  @db.VarChar(20)
+  regulatory_info   Json?
+  created_at        DateTime @default(now()) @db.Timestamp(6)
+  foods             foods    @relation(fields: [food_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_999e5485019b3efa2aae0a557f5")
+
+  @@unique([food_id, region], map: "UQ_41a17bad128becea48895910fa6")
+  @@index([food_id], map: "IDX_food_regional_info_food_id")
+  @@index([region], map: "IDX_food_regional_info_region")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model food_sources {
+  id          String   @id(map: "PK_43211afdee8a61e9634d7c6865c") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  food_id     String   @db.Uuid
+  source_type String   @db.VarChar(50)
+  source_id   String?  @db.VarChar(200)
+  source_url  String?  @db.VarChar(500)
+  raw_data    Json
+  mapped_data Json?
+  confidence  Decimal  @default(0.8) @db.Decimal(3, 2)
+  is_primary  Boolean  @default(false)
+  priority    Int      @default(50)
+  fetched_at  DateTime @default(now()) @db.Timestamp(6)
+  created_at  DateTime @default(now()) @db.Timestamp(6)
+  foods       foods    @relation(fields: [food_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_dd78760b3ccd557a6be426c896f")
+
+  @@index([source_type], map: "IDX_c358d4034107dae538d5e906e9")
+  @@index([food_id], map: "IDX_dd78760b3ccd557a6be426c896")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model food_translations {
+  id           String   @id(map: "PK_f7e8f00e342c52db74bf2820e19") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  food_id      String   @db.Uuid
+  locale       String   @db.VarChar(10)
+  name         String   @db.VarChar(200)
+  aliases      String?
+  description  String?
+  serving_desc String?  @db.VarChar(100)
+  created_at   DateTime @default(now()) @db.Timestamp(6)
+  updated_at   DateTime @default(now()) @db.Timestamp(6)
+  foods        foods    @relation(fields: [food_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_880ef718b1e294d7cbeb2c7265a")
+
+  @@unique([food_id, locale], map: "UQ_5ce4d8b4f0dad567d3b81052e34")
+  @@index([locale], map: "IDX_eafdca1bd9632ceabd94d182f2")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model foods {
+  id                    String                 @id(map: "PK_0cc83421325632f61fa27a52b59") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  code                  String                 @unique(map: "IDX_94114b6498bb8a8c102e194b8c") @db.VarChar(50)
+  name                  String                 @unique(map: "UQ_c3cf46642750fce8fea692ad946") @db.VarChar(100)
+  aliases               String?                @db.VarChar(300)
+  barcode               String?                @db.VarChar(50)
+  status                String                 @default("draft") @db.VarChar(20)
+  category              String                 @db.VarChar(30)
+  sub_category          String?                @db.VarChar(50)
+  food_group            String?                @db.VarChar(30)
+  calories              Decimal                @db.Decimal(7, 1)
+  protein               Decimal?               @db.Decimal(6, 1)
+  fat                   Decimal?               @db.Decimal(6, 1)
+  carbs                 Decimal?               @db.Decimal(6, 1)
+  fiber                 Decimal?               @db.Decimal(5, 1)
+  sugar                 Decimal?               @db.Decimal(5, 1)
+  saturated_fat         Decimal?               @db.Decimal(5, 1)
+  trans_fat             Decimal?               @db.Decimal(5, 2)
+  cholesterol           Decimal?               @db.Decimal(6, 1)
+  sodium                Decimal?               @db.Decimal(7, 1)
+  potassium             Decimal?               @db.Decimal(7, 1)
+  calcium               Decimal?               @db.Decimal(7, 1)
+  iron                  Decimal?               @db.Decimal(5, 2)
+  vitamin_a             Decimal?               @db.Decimal(7, 1)
+  vitamin_c             Decimal?               @db.Decimal(6, 1)
+  vitamin_d             Decimal?               @db.Decimal(5, 2)
+  vitamin_e             Decimal?               @db.Decimal(5, 2)
+  vitamin_b12           Decimal?               @db.Decimal(5, 2)
+  folate                Decimal?               @db.Decimal(6, 1)
+  zinc                  Decimal?               @db.Decimal(5, 2)
+  magnesium             Decimal?               @db.Decimal(6, 1)
+  glycemic_index        Int?
+  glycemic_load         Decimal?               @db.Decimal(5, 1)
+  is_processed          Boolean                @default(false)
+  is_fried              Boolean                @default(false)
+  processing_level      Int                    @default(1)
+  allergens             Json                   @default("[]")
+  quality_score         Decimal?               @db.Decimal(3, 1)
+  satiety_score         Decimal?               @db.Decimal(3, 1)
+  nutrient_density      Decimal?               @db.Decimal(5, 1)
+  meal_types            Json                   @default("[]")
+  tags                  Json                   @default("[]")
+  main_ingredient       String?                @db.VarChar(50)
+  compatibility         Json                   @default("{}")
+  standard_serving_g    Int                    @default(100)
+  standard_serving_desc String?                @db.VarChar(100)
+  common_portions       Json                   @default("[]")
+  image_url             String?                @db.VarChar(500)
+  thumbnail_url         String?                @db.VarChar(500)
+  primary_source        String                 @default("manual") @db.VarChar(50)
+  primary_source_id     String?                @db.VarChar(100)
+  data_version          Int                    @default(1)
+  confidence            Decimal                @default(1) @db.Decimal(3, 2)
+  is_verified           Boolean                @default(false)
+  verified_by           String?                @db.VarChar(100)
+  verified_at           DateTime?              @db.Timestamp(6)
+  search_weight         Int                    @default(100)
+  popularity            Int                    @default(0)
+  created_at            DateTime               @default(now()) @db.Timestamp(6)
+  updated_at            DateTime               @default(now()) @db.Timestamp(6)
+  source                String?                @default("official") @db.VarChar(20)
+  fiber_per_100g        Decimal?               @db.Decimal(5, 1)
+  sugar_per_100g        Decimal?               @db.Decimal(5, 1)
+  sodium_per_100g       Decimal?               @db.Decimal(6, 1)
+  added_sugar           Decimal?               @db.Decimal(5, 1)
+  natural_sugar         Decimal?               @db.Decimal(5, 1)
+  purine                Decimal?               @db.Decimal(7, 1)
+  phosphorus            Decimal?               @db.Decimal(7, 1)
+  embedding             Float[]                @db.Real
+  embedding_updated_at  DateTime?              @db.Timestamp(6)
+  cuisine               String?                @db.VarChar(30)
+  flavor_profile        Json?
+  cooking_method        String?                @db.VarChar(20)
+  prep_time_minutes     Int?
+  cook_time_minutes     Int?
+  skill_required        String?                @db.VarChar(10)
+  estimated_cost_level  Int?
+  shelf_life_days       Int?
+  fodmap_level          String?                @db.VarChar(10)
+  oxalate_level         String?                @db.VarChar(10)
+  embedding_v5          Unsupported("vector")?
+  analysis_food_link    analysis_food_link[]
+  food_change_logs      food_change_logs[]
+  food_conflicts        food_conflicts[]
+  food_regional_info    food_regional_info[]
+  food_sources          food_sources[]
+  food_translations     food_translations[]
+
+  @@index([primary_source], map: "IDX_0e3bd85e37aa82a7ccdd76e135")
+  @@index([search_weight], map: "IDX_5f8b45ec9d0608cffe04d3afbe")
+  @@index([status], map: "IDX_68aa1d0fe3ef6b57e4fd922033")
+  @@index([barcode], map: "IDX_94919a5b0af8952c73beb42fbc")
+  @@index([category], map: "IDX_c147959a431fea61665d0e8bf4")
+  @@index([allergens], map: "IDX_foods_allergens_gin", type: Gin)
+  @@index([barcode], map: "IDX_foods_barcode")
+  @@index([meal_types], map: "IDX_foods_meal_types_gin", type: Gin)
+  @@index([primary_source], map: "IDX_foods_primary_source")
+  @@index([status], map: "IDX_foods_status")
+  @@index([tags], map: "IDX_foods_tags_gin", type: Gin)
+  @@index([cooking_method], map: "idx_food_library_cooking_method")
+  @@index([cuisine], map: "idx_food_library_cuisine")
+  @@index([category], map: "idx_foods_category")
+  @@index([name(ops: raw("gin_trgm_ops"))], map: "idx_foods_name_trgm", type: Gin)
+  @@index([search_weight(sort: Desc)], map: "idx_foods_weight")
+}
+
+model migrations {
+  id        Int    @id(map: "PK_8c82d7f526340ab734260ea46be") @default(autoincrement())
+  timestamp BigInt
+  name      String @db.VarChar
+}
+
+model model_configs {
+  id                    String                            @id(map: "PK_37b8d27a688c96443f78bdb3e3c") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  providerId            String                            @db.Uuid
+  modelName             String                            @db.VarChar(100)
+  displayName           String                            @db.VarChar(100)
+  capabilityType        model_configs_capabilitytype_enum
+  enabled               Boolean                           @default(true)
+  priority              Int                               @default(0)
+  status                model_configs_status_enum         @default(active)
+  inputCostPer1kTokens  Decimal                           @db.Decimal(10, 6)
+  outputCostPer1kTokens Decimal                           @db.Decimal(10, 6)
+  currency              model_configs_currency_enum       @default(USD)
+  maxTokens             Int
+  maxRequestsPerMinute  Int?
+  contextWindow         Int
+  streaming             Boolean                           @default(false)
+  functionCalling       Boolean                           @default(false)
+  vision                Boolean                           @default(false)
+  endpoint              String?                           @db.VarChar(500)
+  customApiKey          String?                           @db.VarChar(500)
+  customTimeout         Int?
+  customRetries         Int?
+  configMetadata        Json?
+  metadata              Json?
+  createdAt             DateTime                          @default(now()) @db.Timestamp(6)
+  updatedAt             DateTime                          @default(now()) @db.Timestamp(6)
+  custom_api_key        String?                           @db.VarChar(500)
+  custom_timeout        Int?
+  custom_retries        Int?
+  config_metadata       Json?
+  providers             providers                         @relation(fields: [providerId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_43d272f8e0fb42c6736b0fdc119")
+
+  @@unique([providerId, modelName, capabilityType], map: "IDX_94e209ecbfca512f7f7f24269f")
+  @@index([capabilityType, enabled], map: "IDX_model_configs_capability_enabled")
+}
+
+model notification {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String    @db.Uuid
+  type       String    @db.VarChar(30)
+  title      String    @db.VarChar(200)
+  body       String
+  data       Json?
+  is_read    Boolean   @default(false)
+  read_at    DateTime? @db.Timestamptz(6)
+  is_pushed  Boolean   @default(false)
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@index([user_id, created_at], map: "idx_notification_user_created")
+  @@index([user_id, is_read], map: "idx_notification_user_unread")
+}
+
+model notification_preference {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id       String   @unique(map: "idx_notification_pref_user") @db.Uuid
+  push_enabled  Boolean  @default(true)
+  enabled_types Json     @default("[]")
+  quiet_start   String?  @db.VarChar(5)
+  quiet_end     String?  @db.VarChar(5)
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime @default(now()) @db.Timestamptz(6)
+}
+
+model payment_record {
+  id                      String    @id(map: "PK_payment_record") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                 String    @db.Uuid
+  subscription_id         String?   @db.Uuid
+  order_no                String    @unique(map: "idx_payment_order") @db.VarChar(64)
+  channel                 String    @db.VarChar(32)
+  amount_cents            Int
+  currency                String    @default("CNY") @db.VarChar(8)
+  status                  String    @default("pending") @db.VarChar(32)
+  platform_transaction_id String?   @db.VarChar(512)
+  callback_payload        Json?
+  refund_amount_cents     Int       @default(0)
+  paid_at                 DateTime? @db.Timestamptz(6)
+  refunded_at             DateTime? @db.Timestamptz(6)
+  created_at              DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@index([channel, status], map: "idx_payment_channel_status")
+  @@index([status], map: "idx_payment_status")
+  @@index([user_id], map: "idx_payment_user")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model permission_templates {
+  id                  String   @id(map: "PK_58491c665954fb0fc0f0378e677") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  code                String   @unique(map: "UQ_0eac5e983d19cd89c54c37b6ecc") @db.VarChar(50)
+  name                String   @db.VarChar(100)
+  description         String?  @db.VarChar(500)
+  permission_patterns String
+  is_system           Boolean  @default(false)
+  created_at          DateTime @default(now()) @db.Timestamp(6)
+  updated_at          DateTime @default(now()) @db.Timestamp(6)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model permissions {
+  id                String                   @id(map: "PK_920331560282b8bd21bb02290df") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  code              String                   @unique(map: "UQ_8dad765629e83229da6feda1c1d") @db.VarChar(100)
+  name              String                   @db.VarChar(100)
+  type              permissions_type_enum
+  action            permissions_action_enum?
+  resource          String?                  @db.VarChar(200)
+  parent_id         String?                  @db.Uuid
+  icon              String?                  @db.VarChar(50)
+  description       String?                  @db.VarChar(500)
+  status            permissions_status_enum  @default(active)
+  is_system         Boolean                  @default(false)
+  sort              Int                      @default(0)
+  created_at        DateTime                 @default(now()) @db.Timestamp(6)
+  updated_at        DateTime                 @default(now()) @db.Timestamp(6)
+  permissions       permissions?             @relation("permissionsTopermissions", fields: [parent_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_e152e0aa9e0df7ed44539db894c")
+  other_permissions permissions[]            @relation("permissionsTopermissions")
+  role_permissions  role_permissions[]
+}
+
+model precomputed_recommendations {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id          String   @db.Uuid
+  date             String   @db.VarChar(10)
+  meal_type        String   @db.VarChar(20)
+  result           Json
+  scenario_results Json?
+  strategy_version String   @db.VarChar(50)
+  computed_at      DateTime @default(now()) @db.Timestamptz(6)
+  expires_at       DateTime @db.Timestamptz(6)
+  is_used          Boolean  @default(false)
+
+  @@unique([user_id, date, meal_type], map: "uq_precomputed_user_date_meal")
+  @@index([expires_at], map: "idx_precomputed_expires")
+}
+
+model profile_change_log {
+  id             String   @id(map: "PK_profile_change_log") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id        String   @db.Uuid
+  version        Int
+  change_type    String   @db.VarChar(32)
+  source         String   @db.VarChar(32)
+  changed_fields Json     @default("[]")
+  before_values  Json     @default("{}")
+  after_values   Json     @default("{}")
+  trigger_event  String?  @db.VarChar(128)
+  reason         String?
+  metadata       Json?
+  created_at     DateTime @default(now()) @db.Timestamp(6)
+
+  @@index([created_at], map: "idx_profile_change_log_created")
+  @@index([user_id], map: "idx_profile_change_log_user")
+  @@index([user_id, change_type], map: "idx_profile_change_log_user_type")
+  @@index([user_id, version], map: "idx_profile_change_log_user_version")
+}
+
+model profile_snapshots {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id        String    @db.Uuid
+  snapshot       Json
+  trigger_type   String    @db.VarChar(30)
+  changed_fields Json
+  created_at     DateTime? @default(now()) @db.Timestamp(6)
+  app_users      app_users @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id, created_at(sort: Desc)], map: "idx_snapshot_user_time")
+}
+
+model providers {
+  id              String                @id(map: "PK_af13fc2ebf382fe0dad2e4793aa") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name            String                @unique(map: "IDX_d735474e539e674ba3702eddc4") @db.VarChar(100)
+  type            providers_type_enum
+  baseUrl         String                @db.VarChar(500)
+  apiKey          String                @db.VarChar(500)
+  enabled         Boolean               @default(true)
+  healthCheckUrl  String?               @db.VarChar(500)
+  timeout         Int                   @default(30000)
+  retryCount      Int                   @default(3)
+  status          providers_status_enum @default(active)
+  lastHealthCheck DateTime?             @db.Timestamp(6)
+  metadata        Json?
+  createdAt       DateTime              @default(now()) @db.Timestamp(6)
+  updatedAt       DateTime              @default(now()) @db.Timestamp(6)
+  model_configs   model_configs[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model recommendation_feedbacks {
+  id                   String             @id(map: "PK_538c99577bef661f2eff1325862") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id              String             @db.VarChar
+  meal_type            String             @db.VarChar(20)
+  food_name            String             @db.VarChar(100)
+  food_id              String?            @db.VarChar
+  action               String             @db.VarChar(20)
+  replacement_food     String?            @db.VarChar(100)
+  recommendation_score Decimal?           @db.Decimal(5, 3)
+  goal_type            String?            @db.VarChar(20)
+  experiment_id        String?            @db.VarChar
+  group_id             String?            @db.VarChar
+  created_at           DateTime           @default(now()) @db.Timestamp(6)
+  feedback_details     feedback_details[]
+
+  @@index([user_id], map: "IDX_84be6fe526b10313d0015fbdea")
+  @@index([user_id, created_at], map: "IDX_f3a0234ecd1f178e4c36fb8f00")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model role_permissions {
+  id            String      @id(map: "PK_84059017c90bfcb701b8fa42297") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  role_id       String      @db.Uuid
+  permission_id String      @db.Uuid
+  created_at    DateTime    @default(now()) @db.Timestamp(6)
+  permissions   permissions @relation(fields: [permission_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_17022daf3f885f7d35423e9971e")
+  roles         roles       @relation(fields: [role_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_178199805b901ccd220ab7740ec")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model roles {
+  id               String             @id(map: "PK_c1433d71a4838793a49dcad46ab") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  code             String             @unique(map: "UQ_f6d54f95c31b73fb1bdd8e91d0c") @db.VarChar(50)
+  name             String             @db.VarChar(100)
+  parent_id        String?            @db.Uuid
+  description      String?            @db.VarChar(500)
+  status           roles_status_enum  @default(active)
+  is_system        Boolean            @default(false)
+  sort             Int                @default(0)
+  created_at       DateTime           @default(now()) @db.Timestamp(6)
+  updated_at       DateTime           @default(now()) @db.Timestamp(6)
+  role_permissions role_permissions[]
+  roles            roles?             @relation("rolesToroles", fields: [parent_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_3e97eeaf865aeda0d20c0c5c509")
+  other_roles      roles[]            @relation("rolesToroles")
+  user_roles       user_roles[]
+}
+
+model strategy {
+  id           String   @id(map: "PK_strategy") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String   @db.VarChar(128)
+  description  String?
+  scope        String   @default("global") @db.VarChar(32)
+  scope_target String?  @db.VarChar(128)
+  config       Json     @default("{}")
+  status       String   @default("draft") @db.VarChar(16)
+  version      Int      @default(1)
+  priority     Int      @default(0)
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([scope, status], map: "idx_strategy_scope_status")
+  @@index([scope, scope_target, status], map: "idx_strategy_scope_target")
+}
+
+model strategy_assignment {
+  id              String    @id(map: "PK_strategy_assignment") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id         String    @db.Uuid
+  strategy_id     String    @db.Uuid
+  assignment_type String    @default("manual") @db.VarChar(32)
+  source          String?   @db.VarChar(128)
+  is_active       Boolean   @default(true)
+  active_from     DateTime? @db.Timestamptz(6)
+  active_until    DateTime? @db.Timestamptz(6)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@index([strategy_id], map: "idx_strategy_assignment_strategy")
+  @@index([user_id], map: "idx_strategy_assignment_user")
+  @@index([user_id, assignment_type], map: "idx_strategy_assignment_user_type")
+}
+
+model subscription {
+  id                       String            @id(map: "PK_subscription") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                  String            @db.Uuid
+  plan_id                  String            @db.Uuid
+  status                   String            @default("active") @db.VarChar(32)
+  payment_channel          String            @db.VarChar(32)
+  starts_at                DateTime          @db.Timestamptz(6)
+  expires_at               DateTime          @db.Timestamptz(6)
+  cancelled_at             DateTime?         @db.Timestamptz(6)
+  auto_renew               Boolean           @default(true)
+  platform_subscription_id String?           @db.VarChar(512)
+  grace_period_ends_at     DateTime?         @db.Timestamptz(6)
+  created_at               DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime          @default(now()) @db.Timestamptz(6)
+  subscription_plan        subscription_plan @relation(fields: [plan_id], references: [id], onUpdate: NoAction, map: "FK_subscription_plan")
+
+  @@index([expires_at], map: "idx_subscription_expires")
+  @@index([user_id], map: "idx_subscription_user")
+  @@index([user_id, status], map: "idx_subscription_user_status")
+}
+
+model subscription_plan {
+  id                String         @id(map: "PK_subscription_plan") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name              String         @db.VarChar(128)
+  description       String?
+  tier              String         @db.VarChar(32)
+  billing_cycle     String         @db.VarChar(32)
+  price_cents       Int
+  currency          String         @default("CNY") @db.VarChar(8)
+  entitlements      Json           @default("{}")
+  apple_product_id  String?        @db.VarChar(256)
+  wechat_product_id String?        @db.VarChar(256)
+  sort_order        Int            @default(0)
+  is_active         Boolean        @default(true)
+  created_at        DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime       @default(now()) @db.Timestamptz(6)
+  subscription      subscription[]
+
+  @@index([is_active], map: "idx_subscription_plan_active")
+  @@index([tier], map: "idx_subscription_plan_tier")
+}
+
+model subscription_trigger_log {
+  id               String   @id(map: "PK_5130854651b572f030f3ed0ac96") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id          String   @db.Uuid
+  trigger_scene    String   @db.VarChar(30)
+  feature          String   @db.VarChar(50)
+  current_tier     String   @db.VarChar(20)
+  recommended_plan String   @db.VarChar(20)
+  ab_bucket        String?  @db.VarChar(20)
+  converted        Boolean  @default(false)
+  created_at       DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([converted], map: "idx_trigger_log_converted")
+  @@index([trigger_scene], map: "idx_trigger_log_scene")
+  @@index([user_id, created_at], map: "idx_trigger_log_user_created")
+  @@index([user_id], map: "idx_trigger_log_user_id")
+}
+
+model usage_quota {
+  id          String   @id(map: "PK_usage_quota") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id     String   @db.Uuid
+  feature     String   @db.VarChar(64)
+  used        Int      @default(0)
+  quota_limit Int      @default(0)
+  cycle       String   @default("daily") @db.VarChar(16)
+  reset_at    DateTime @db.Timestamptz(6)
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([user_id, feature], map: "idx_usage_quota_user_feature")
+  @@index([reset_at], map: "idx_usage_quota_reset")
+}
+
+model usage_records {
+  id              String   @id(map: "PK_e511cf9f7dc53851569f87467a5") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  client_id       String   @db.Uuid
+  request_id      String   @db.VarChar(255)
+  capability_type String   @db.VarChar(100)
+  provider        String   @db.VarChar(50)
+  model           String   @db.VarChar(100)
+  status          String   @db.VarChar(20)
+  usage           Json
+  cost            Decimal  @db.Decimal(10, 6)
+  response_time   Int
+  metadata        Json?
+  timestamp       DateTime @default(now()) @db.Timestamp(6)
+
+  @@index([capability_type, timestamp], map: "IDX_0616a784ab63d9f654498cd84b")
+  @@index([provider, timestamp], map: "IDX_1f7f090f5d081ae21593ab3844")
+  @@index([client_id, timestamp], map: "IDX_d397b87d28105b361b8f5a840d")
+}
+
+model user_achievements {
+  id             String   @id(map: "PK_3d94aba7e9ed55365f68b5e77fa") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id        String   @db.Uuid
+  achievement_id String   @db.Uuid
+  unlocked_at    DateTime @default(now()) @db.Timestamp(6)
+}
+
+model user_behavior_profiles {
+  id                   String   @id(map: "PK_80d69430cb45fe3d5af5540de7b") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id              String   @unique(map: "UQ_4a98fb7c71270ccf2e6ebb5552c") @db.Uuid
+  food_preferences     Json     @default("{}")
+  binge_risk_hours     Json     @default("[]")
+  failure_triggers     Json     @default("[]")
+  avg_compliance_rate  Decimal  @default(0) @db.Decimal(3, 2)
+  coach_style          String   @default("friendly") @db.VarChar(20)
+  total_records        Int      @default(0)
+  healthy_records      Int      @default(0)
+  streak_days          Int      @default(0)
+  longest_streak       Int      @default(0)
+  updated_at           DateTime @default(now()) @db.Timestamp(6)
+  meal_timing_patterns Json?    @default("{}")
+  portion_tendency     String?  @default("normal") @db.VarChar(10)
+  replacement_patterns Json?    @default("{}")
+  last_streak_date     String?  @db.VarChar(10)
+}
+
+model user_challenges {
+  id               String    @id(map: "PK_7c111333fc0e3a23528503498de") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id          String    @db.Uuid
+  challenge_id     String    @db.Uuid
+  started_at       DateTime  @default(now()) @db.Timestamp(6)
+  current_progress Int       @default(0)
+  max_progress     Int
+  status           String    @default("active") @db.VarChar(20)
+  completed_at     DateTime? @db.Timestamp(6)
+}
+
+model user_inferred_profiles {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id              String    @unique @db.Uuid
+  estimated_bmr        Int?
+  estimated_tdee       Int?
+  recommended_calories Int?
+  macro_targets        Json?     @default("{}")
+  user_segment         String?   @db.VarChar(30)
+  churn_risk           Decimal?  @default(0) @db.Decimal(3, 2)
+  optimal_meal_count   Int?
+  taste_pref_vector    Json?     @default("[]")
+  nutrition_gaps       Json?     @default("[]")
+  goal_progress        Json?     @default("{}")
+  confidence_scores    Json?     @default("{}")
+  last_computed_at     DateTime? @db.Timestamp(6)
+  updated_at           DateTime? @default(now()) @db.Timestamp(6)
+  preference_weights   Json?
+  app_users            app_users @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id], map: "idx_inferred_user")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model user_profiles {
+  id                   String                            @id(map: "PK_1ec6662219f4605723f1e41b6cb") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id              String                            @unique(map: "UQ_6ca9503d77ae39b4b5a6cc3ba88") @db.Uuid
+  gender               String?                           @db.VarChar(10)
+  birth_year           Int?
+  height_cm            Decimal?                          @db.Decimal(5, 1)
+  weight_kg            Decimal?                          @db.Decimal(5, 1)
+  target_weight_kg     Decimal?                          @db.Decimal(5, 1)
+  activity_level       user_profiles_activity_level_enum @default(light)
+  daily_calorie_goal   Int?
+  goal                 String                            @default("health") @db.VarChar(30)
+  goal_speed           String                            @default("steady") @db.VarChar(20)
+  body_fat_percent     Decimal?                          @db.Decimal(4, 1)
+  meals_per_day        Int                               @default(3)
+  takeout_frequency    String                            @default("sometimes") @db.VarChar(20)
+  can_cook             Boolean                           @default(true)
+  food_preferences     Json                              @default("[]")
+  dietary_restrictions Json                              @default("[]")
+  weak_time_slots      Json                              @default("[]")
+  binge_triggers       Json                              @default("[]")
+  discipline           String                            @default("medium") @db.VarChar(20)
+  onboarding_completed Boolean                           @default(false)
+  created_at           DateTime                          @default(now()) @db.Timestamp(6)
+  updated_at           DateTime                          @default(now()) @db.Timestamp(6)
+  allergens            Json?                             @default("[]")
+  health_conditions    Json?                             @default("[]")
+  exercise_profile     Json?                             @default("{}")
+  cooking_skill_level  String?                           @db.VarChar(20)
+  taste_intensity      Json?                             @default("{}")
+  cuisine_preferences  Json?                             @default("[]")
+  budget_level         String?                           @db.VarChar(10)
+  family_size          Int?                              @default(1)
+  meal_prep_willing    Boolean?                          @default(false)
+  region_code          String?                           @default("CN") @db.VarChar(5)
+  onboarding_step      Int?                              @default(0)
+  data_completeness    Decimal?                          @default(0) @db.Decimal(3, 2)
+  profile_version      Int?                              @default(1)
+  timezone             String                            @default("Asia/Shanghai") @db.VarChar(50)
+  app_users            app_users                         @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_6ca9503d77ae39b4b5a6cc3ba88")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model user_roles {
+  id          String      @id(map: "PK_8acd5cf26ebd158416f477de799") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id     String      @db.Uuid
+  role_id     String      @db.Uuid
+  created_at  DateTime    @default(now()) @db.Timestamp(6)
+  roles       roles       @relation(fields: [role_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_b23c65e50a758245a33ee35fda1")
+  admin_users admin_users @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_user_roles_admin_user_id")
+}
+
+enum ab_experiments_status_enum {
+  draft
+  running
+  paused
+  completed
+}
+
+enum activity_level_enum {
+  sedentary
+  light
+  moderate
+  active
+}
+
+enum admin_role_enum {
+  super_admin
+  admin
+}
+
+enum admin_user_status_enum {
+  active
+  inactive
+  suspended
+}
+
+enum admin_users_role_enum {
+  super_admin
+  admin
+}
+
+enum admin_users_status_enum {
+  active
+  inactive
+  suspended
+}
+
+enum app_user_auth_type_enum {
+  anonymous
+  google
+  email
+  phone
+  wechat
+  wechat_mini
+  apple
+}
+
+enum app_user_status_enum {
+  active
+  inactive
+  banned
+}
+
+enum app_users_auth_type_enum {
+  anonymous
+  google
+  email
+  phone
+  wechat
+  wechat_mini
+  apple
+}
+
+enum app_users_status_enum {
+  active
+  inactive
+  banned
+}
+
+enum app_version_packages_platform_enum {
+  android
+  ios
+}
+
+enum app_versions_platform_enum {
+  android
+  ios
+}
+
+enum app_versions_status_enum {
+  draft
+  published
+  archived
+}
+
+enum app_versions_updateType_enum {
+  optional
+  force
+}
+
+enum capability_type_enum {
+  text_generation  @map("text.generation")
+  text_completion  @map("text.completion")
+  text_embedding   @map("text.embedding")
+  image_generation @map("image.generation")
+  image_edit       @map("image.edit")
+  speech_to_text   @map("speech.to_text")
+  text_to_speech   @map("text.to_speech")
+  translation
+  moderation
+}
+
+enum currency_enum {
+  USD
+  CNY
+}
+
+enum feature_flag_type_enum {
+  boolean
+  percentage
+  user_list
+  segment
+}
+
+enum food_records_meal_type_enum {
+  breakfast
+  lunch
+  dinner
+  snack
+}
+
+enum food_records_source_enum {
+  screenshot
+  camera
+  manual
+  text_analysis
+  image_analysis
+}
+
+enum http_method_enum {
+  GET
+  POST
+  PUT
+  DELETE
+  PATCH
+}
+
+enum meal_type_enum {
+  breakfast
+  lunch
+  dinner
+  snack
+}
+
+enum model_configs_capabilitytype_enum {
+  text_generation  @map("text.generation")
+  text_completion  @map("text.completion")
+  text_embedding   @map("text.embedding")
+  image_generation @map("image.generation")
+  image_edit       @map("image.edit")
+  speech_to_text   @map("speech.to_text")
+  text_to_speech   @map("text.to_speech")
+  translation
+  moderation
+}
+
+enum model_configs_currency_enum {
+  USD
+  CNY
+}
+
+enum model_configs_status_enum {
+  active
+  inactive
+  deprecated
+}
+
+enum model_status_enum {
+  active
+  inactive
+  deprecated
+}
+
+enum permission_status_enum {
+  active
+  inactive
+}
+
+enum permission_type_enum {
+  menu
+  operation
+}
+
+enum permissions_action_enum {
+  GET
+  POST
+  PUT
+  DELETE
+  PATCH
+}
+
+enum permissions_status_enum {
+  active
+  inactive
+}
+
+enum permissions_type_enum {
+  menu
+  operation
+}
+
+enum provider_status_enum {
+  active
+  inactive
+  error
+}
+
+enum provider_type_enum {
+  openai
+  anthropic
+  deepseek
+  qwen
+  google
+  baidu
+  alibaba
+  tencent
+  custom
+}
+
+enum providers_status_enum {
+  active
+  inactive
+  error
+}
+
+enum providers_type_enum {
+  openai
+  anthropic
+  deepseek
+  qwen
+  google
+  baidu
+  alibaba
+  tencent
+  custom
+}
+
+enum record_source_enum {
+  screenshot
+  camera
+  manual
+}
+
+enum roles_status_enum {
+  active
+  inactive
+}
+
+enum user_profiles_activity_level_enum {
+  sedentary
+  light
+  moderate
+  active
+}
+
+model weight_history {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id          String   @db.Uuid
+  weight_kg        Decimal  @db.Decimal(5, 1)
+  body_fat_percent Decimal? @db.Decimal(4, 1)
+  source           String   @default("manual") @db.VarChar(20)
+  recorded_at      DateTime @default(now()) @db.Timestamp(6)
+
+  @@index([user_id, recorded_at], map: "idx_weight_history_user_recorded")
+}
+
+model reminder_dismissals {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id       String   @db.Uuid
+  reminder_type String   @db.VarChar(50)
+  dismissed_at  DateTime @default(now()) @db.Timestamp(6)
+
+  @@unique([user_id, reminder_type], map: "uq_reminder_user_type")
+  @@index([user_id])
+}

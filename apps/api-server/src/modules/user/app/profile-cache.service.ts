@@ -1,11 +1,12 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { UserProfile } from '../entities/user-profile.entity';
-import { UserBehaviorProfile } from '../entities/user-behavior-profile.entity';
-import { UserInferredProfile } from '../entities/user-inferred-profile.entity';
+import {
+  user_profiles as UserProfile,
+  user_behavior_profiles as UserBehaviorProfile,
+  user_inferred_profiles as UserInferredProfile,
+} from '@prisma/client';
 import { RedisCacheService } from '../../../core/redis/redis-cache.service';
 import { TieredCacheManager, TieredCacheNamespace } from '../../../core/cache';
+import { PrismaService } from '../../../core/prisma/prisma.service';
 
 /**
  * 三层画像聚合结果
@@ -35,12 +36,7 @@ export class ProfileCacheService implements OnModuleInit {
   private cache: TieredCacheNamespace<FullUserProfile>;
 
   constructor(
-    @InjectRepository(UserProfile)
-    private readonly profileRepo: Repository<UserProfile>,
-    @InjectRepository(UserBehaviorProfile)
-    private readonly behaviorRepo: Repository<UserBehaviorProfile>,
-    @InjectRepository(UserInferredProfile)
-    private readonly inferredRepo: Repository<UserInferredProfile>,
+    private readonly prisma: PrismaService,
     private readonly redis: RedisCacheService,
     private readonly cacheManager: TieredCacheManager,
   ) {}
@@ -67,11 +63,19 @@ export class ProfileCacheService implements OnModuleInit {
    */
   private async loadFromDB(userId: string): Promise<FullUserProfile> {
     const [declared, observed, inferred] = await Promise.all([
-      this.profileRepo.findOne({ where: { userId } }),
-      this.behaviorRepo.findOne({ where: { userId } }),
-      this.inferredRepo.findOne({ where: { userId } }),
+      this.prisma.user_profiles.findUnique({ where: { user_id: userId } }),
+      this.prisma.user_behavior_profiles.findUnique({
+        where: { user_id: userId },
+      }),
+      this.prisma.user_inferred_profiles.findUnique({
+        where: { user_id: userId },
+      }),
     ]);
-    return { declared, observed, inferred };
+    return {
+      declared: declared as any,
+      observed: observed as any,
+      inferred: inferred as any,
+    };
   }
 
   /**
@@ -92,12 +96,12 @@ export class ProfileCacheService implements OnModuleInit {
     if (!declared) return undefined;
 
     return {
-      dietaryRestrictions: declared.dietaryRestrictions || [],
-      weakTimeSlots: declared.weakTimeSlots || [],
+      dietaryRestrictions: (declared.dietary_restrictions as string[]) || [],
+      weakTimeSlots: (declared.weak_time_slots as string[]) || [],
       discipline: declared.discipline || 'medium',
-      allergens: declared.allergens || [],
-      healthConditions: declared.healthConditions || [],
-      regionCode: declared.regionCode || 'CN', // V4 修复 A7
+      allergens: (declared.allergens as string[]) || [],
+      healthConditions: (declared.health_conditions as string[]) || [],
+      regionCode: declared.region_code || 'CN', // V4 修复 A7
     };
   }
 

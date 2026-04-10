@@ -20,7 +20,7 @@ import {
   GoalType,
   GoalSpeed,
   Discipline,
-} from '../../entities/user-profile.entity';
+} from '../../user.types';
 
 // ========== Onboarding Step DTOs ==========
 

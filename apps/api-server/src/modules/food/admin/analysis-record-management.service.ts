@@ -1,8 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { FoodAnalysisRecord } from '../entities/food-analysis-record.entity';
-import { AppUser } from '../../user/entities/app-user.entity';
+import { PrismaService } from '../../../core/prisma/prisma.service';
 import {
   GetAnalysisRecordsQueryDto,
   ReviewAnalysisRecordDto,
@@ -12,12 +9,7 @@ import {
 export class AnalysisRecordManagementService {
   private readonly logger = new Logger(AnalysisRecordManagementService.name);
 
-  constructor(
-    @InjectRepository(FoodAnalysisRecord)
-    private readonly analysisRepo: Repository<FoodAnalysisRecord>,
-    @InjectRepository(AppUser)
-    private readonly appUserRepo: Repository<AppUser>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * 获取分析记录列表（分页 + 筛选）
@@ -37,61 +29,81 @@ export class AnalysisRecordManagementService {
       keyword,
     } = query;
 
-    const qb = this.analysisRepo
-      .createQueryBuilder('ar')
-      .orderBy('ar.created_at', 'DESC');
+    // Build dynamic WHERE clauses
+    const conditions: string[] = ['1=1'];
+    const params: any[] = [];
+    let paramIdx = 1;
 
     if (userId) {
-      qb.andWhere('ar.user_id = :userId', { userId });
+      conditions.push(`ar.user_id = $${paramIdx++}`);
+      params.push(userId);
     }
     if (inputType) {
-      qb.andWhere('ar.input_type = :inputType', { inputType });
+      conditions.push(`ar.input_type = $${paramIdx++}`);
+      params.push(inputType);
     }
     if (status) {
-      qb.andWhere('ar.status = :status', { status });
+      conditions.push(`ar.status = $${paramIdx++}`);
+      params.push(status);
     }
     if (reviewStatus) {
-      qb.andWhere('ar.review_status = :reviewStatus', { reviewStatus });
+      conditions.push(`ar.review_status = $${paramIdx++}`);
+      params.push(reviewStatus);
     }
     if (minConfidence !== undefined) {
-      qb.andWhere('ar.confidence_score >= :minConfidence', { minConfidence });
+      conditions.push(`ar.confidence_score >= $${paramIdx++}`);
+      params.push(minConfidence);
     }
     if (maxConfidence !== undefined) {
-      qb.andWhere('ar.confidence_score <= :maxConfidence', { maxConfidence });
+      conditions.push(`ar.confidence_score <= $${paramIdx++}`);
+      params.push(maxConfidence);
     }
     if (startDate) {
-      qb.andWhere('ar.created_at >= :startDate', { startDate });
+      conditions.push(`ar.created_at >= $${paramIdx++}`);
+      params.push(startDate);
     }
     if (endDate) {
-      qb.andWhere('ar.created_at <= :endDate', {
-        endDate: `${endDate} 23:59:59`,
-      });
+      conditions.push(`ar.created_at <= $${paramIdx++}`);
+      params.push(`${endDate} 23:59:59`);
     }
     if (keyword) {
-      qb.andWhere('ar.raw_text ILIKE :keyword', { keyword: `%${keyword}%` });
+      conditions.push(`ar.raw_text ILIKE $${paramIdx++}`);
+      params.push(`%${keyword}%`);
     }
 
-    const total = await qb.getCount();
-    const list = await qb
-      .skip((page - 1) * pageSize)
-      .take(pageSize)
-      .getMany();
+    const whereClause = conditions.join(' AND ');
+
+    const totalResult = await this.prisma.$queryRawUnsafe<[{ count: string }]>(
+      `SELECT COUNT(*)::text AS count FROM food_analysis_record ar WHERE ${whereClause}`,
+      ...params,
+    );
+    const total = parseInt(totalResult[0]?.count ?? '0', 10);
+
+    const offset = (page - 1) * pageSize;
+    const list = await this.prisma.$queryRawUnsafe<any[]>(
+      `SELECT * FROM food_analysis_record ar
+       WHERE ${whereClause}
+       ORDER BY ar.created_at DESC
+       LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
+      ...params,
+      pageSize,
+      offset,
+    );
 
     // 批量获取用户信息
-    const userIds = [...new Set(list.map((r) => r.userId))];
+    const userIds = [...new Set(list.map((r) => r.user_id))];
     const users =
       userIds.length > 0
-        ? await this.appUserRepo
-            .createQueryBuilder('u')
-            .select(['u.id', 'u.nickname', 'u.avatar', 'u.email'])
-            .whereInIds(userIds)
-            .getMany()
+        ? await this.prisma.app_users.findMany({
+            where: { id: { in: userIds } },
+            select: { id: true, nickname: true, avatar: true, email: true },
+          })
         : [];
     const userMap = new Map(users.map((u) => [u.id, u]));
 
     const listWithUser = list.map((r) => ({
       ...r,
-      user: userMap.get(r.userId) || null,
+      user: userMap.get(r.user_id) || null,
     }));
 
     return {
@@ -107,13 +119,21 @@ export class AnalysisRecordManagementService {
    * 获取分析记录详情
    */
   async getAnalysisRecordDetail(id: string) {
-    const record = await this.analysisRepo.findOne({ where: { id } });
+    const record = await this.prisma.food_analysis_record.findUnique({
+      where: { id },
+    });
     if (!record) throw new NotFoundException('分析记录不存在');
 
     // 获取用户信息
-    const user = await this.appUserRepo.findOne({
-      where: { id: record.userId },
-      select: ['id', 'nickname', 'avatar', 'email', 'phone'],
+    const user = await this.prisma.app_users.findUnique({
+      where: { id: record.user_id },
+      select: {
+        id: true,
+        nickname: true,
+        avatar: true,
+        email: true,
+        phone: true,
+      },
     });
 
     return { ...record, user };
@@ -127,16 +147,21 @@ export class AnalysisRecordManagementService {
     dto: ReviewAnalysisRecordDto,
     adminUserId: string,
   ) {
-    const record = await this.analysisRepo.findOne({ where: { id } });
+    const record = await this.prisma.food_analysis_record.findUnique({
+      where: { id },
+    });
     if (!record) throw new NotFoundException('分析记录不存在');
 
-    record.reviewStatus = dto.reviewStatus;
-    record.reviewedBy = adminUserId;
-    record.reviewedAt = new Date();
-    record.reviewNote = dto.reviewNote || null;
-
-    await this.analysisRepo.save(record);
-    return record;
+    const updated = await this.prisma.food_analysis_record.update({
+      where: { id },
+      data: {
+        review_status: dto.reviewStatus,
+        reviewed_by: adminUserId,
+        reviewed_at: new Date(),
+        review_note: dto.reviewNote || null,
+      } as any,
+    });
+    return updated;
   }
 
   /**
@@ -144,65 +169,64 @@ export class AnalysisRecordManagementService {
    */
   async getAnalysisStatistics() {
     // 总量统计
-    const totalCount = await this.analysisRepo.count();
-    const textCount = await this.analysisRepo.count({
-      where: { inputType: 'text' },
-    });
-    const imageCount = await this.analysisRepo.count({
-      where: { inputType: 'image' },
-    });
+    const [totalCount, textCount, imageCount] = await Promise.all([
+      this.prisma.food_analysis_record.count(),
+      this.prisma.food_analysis_record.count({
+        where: { input_type: 'text' },
+      }),
+      this.prisma.food_analysis_record.count({
+        where: { input_type: 'image' },
+      }),
+    ]);
 
     // 今日统计
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const todayCount = await this.analysisRepo
-      .createQueryBuilder('ar')
-      .where('ar.created_at >= :today', { today })
-      .getCount();
+    const todayCount = await this.prisma.food_analysis_record.count({
+      where: { created_at: { gte: today } },
+    });
 
     // 状态分布
-    const statusDist = await this.analysisRepo
-      .createQueryBuilder('ar')
-      .select('ar.status', 'status')
-      .addSelect('COUNT(*)', 'count')
-      .groupBy('ar.status')
-      .getRawMany();
+    const statusDist = await this.prisma.$queryRawUnsafe<
+      { status: string; count: string }[]
+    >(
+      `SELECT status, COUNT(*)::text AS count FROM food_analysis_record GROUP BY status`,
+    );
 
     // 审核状态分布
-    const reviewDist = await this.analysisRepo
-      .createQueryBuilder('ar')
-      .select('ar.review_status', 'reviewStatus')
-      .addSelect('COUNT(*)', 'count')
-      .groupBy('ar.review_status')
-      .getRawMany();
+    const reviewDist = await this.prisma.$queryRawUnsafe<
+      { reviewStatus: string; count: string }[]
+    >(
+      `SELECT review_status AS "reviewStatus", COUNT(*)::text AS count FROM food_analysis_record GROUP BY review_status`,
+    );
 
     // 置信度分布 (0-20, 20-40, 40-60, 60-80, 80-100)
-    const confidenceDist = await this.analysisRepo
-      .createQueryBuilder('ar')
-      .select(
-        `CASE 
+    const confidenceDist = await this.prisma.$queryRawUnsafe<
+      { range: string; count: string }[]
+    >(
+      `SELECT
+        CASE
           WHEN confidence_score < 20 THEN '0-20'
           WHEN confidence_score < 40 THEN '20-40'
           WHEN confidence_score < 60 THEN '40-60'
           WHEN confidence_score < 80 THEN '60-80'
           ELSE '80-100'
-        END`,
-        'range',
-      )
-      .addSelect('COUNT(*)', 'count')
-      .where('ar.confidence_score IS NOT NULL')
-      .groupBy('range')
-      .getRawMany();
+        END AS range,
+        COUNT(*)::text AS count
+       FROM food_analysis_record
+       WHERE confidence_score IS NOT NULL
+       GROUP BY range`,
+    );
 
     // 准确率（已审核的记录中准确的占比）
-    const reviewedCount = await this.analysisRepo
-      .createQueryBuilder('ar')
-      .where('ar.review_status != :pending', { pending: 'pending' })
-      .getCount();
-    const accurateCount = await this.analysisRepo
-      .createQueryBuilder('ar')
-      .where('ar.review_status = :accurate', { accurate: 'accurate' })
-      .getCount();
+    const [reviewedCount, accurateCount] = await Promise.all([
+      this.prisma.food_analysis_record.count({
+        where: { review_status: { not: 'pending' } } as any,
+      }),
+      this.prisma.food_analysis_record.count({
+        where: { review_status: 'accurate' } as any,
+      }),
+    ]);
     const accuracyRate =
       reviewedCount > 0 ? (accurateCount / reviewedCount) * 100 : 0;
 
@@ -227,18 +251,20 @@ export class AnalysisRecordManagementService {
    * 热门分析食物排名
    */
   async getPopularAnalyzedFoods(limit: number = 20) {
-    // 从 recognized_payload 中提取食物名称并聚合
-    const results = await this.analysisRepo
-      .createQueryBuilder('ar')
-      .select('ar.raw_text', 'rawText')
-      .addSelect('COUNT(*)', 'count')
-      .where('ar.input_type = :type', { type: 'text' })
-      .andWhere('ar.status = :status', { status: 'completed' })
-      .andWhere('ar.raw_text IS NOT NULL')
-      .groupBy('ar.raw_text')
-      .orderBy('count', 'DESC')
-      .limit(limit)
-      .getRawMany();
+    // 从 raw_text 中提取食物名称并聚合
+    const results = await this.prisma.$queryRawUnsafe<
+      { rawText: string; count: string }[]
+    >(
+      `SELECT raw_text AS "rawText", COUNT(*)::text AS count
+       FROM food_analysis_record
+       WHERE input_type = 'text'
+         AND status = 'completed'
+         AND raw_text IS NOT NULL
+       GROUP BY raw_text
+       ORDER BY COUNT(*) DESC
+       LIMIT $1`,
+      limit,
+    );
 
     return results;
   }

@@ -1,17 +1,4 @@
 import { Module, forwardRef } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-// 实体
-import { FoodLibrary } from './entities/food-library.entity';
-import { FoodTranslation } from './entities/food-translation.entity';
-import { FoodSource } from './entities/food-source.entity';
-import { FoodChangeLog } from './entities/food-change-log.entity';
-import { FoodConflict } from './entities/food-conflict.entity';
-import { FoodRegionalInfo } from './entities/food-regional-info.entity';
-// V6.1: 食物分析记录
-import { FoodAnalysisRecord } from './entities/food-analysis-record.entity';
-// V6.1 Phase 2: 候选食物 + 分析-食物关联
-import { FoodCandidate } from './entities/food-candidate.entity';
-import { AnalysisFoodLink } from './entities/analysis-food-link.entity';
 // App 端
 import { FoodLibraryController } from './app/food-library.controller';
 import { FoodLibraryService } from './app/food-library.service';
@@ -38,25 +25,9 @@ import { AnalysisRecordManagementController } from './admin/analysis-record-mana
 import { AnalysisRecordManagementService } from './admin/analysis-record-management.service';
 import { DietModule } from '../diet/diet.module';
 import { UserModule } from '../user/user.module';
-import { AppUser } from '../user/entities/app-user.entity';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([
-      FoodLibrary,
-      FoodTranslation,
-      FoodSource,
-      FoodChangeLog,
-      FoodConflict,
-      FoodRegionalInfo,
-      FoodAnalysisRecord,
-      FoodCandidate, // V6.1 Phase 2
-      AnalysisFoodLink, // V6.1 Phase 2
-      AppUser,
-    ]),
-    forwardRef(() => DietModule),
-    forwardRef(() => UserModule),
-  ],
+  imports: [forwardRef(() => DietModule), forwardRef(() => UserModule)],
   controllers: [
     FoodLibraryController,
     FoodAnalyzeController,
@@ -92,7 +63,6 @@ import { AppUser } from '../user/entities/app-user.entity';
     DataQualityService,
     AnalysisIngestionService,
     CandidateAggregationService,
-    TypeOrmModule,
   ],
 })
 export class FoodModule {}

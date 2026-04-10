@@ -9,47 +9,50 @@
  *   npx ts-node -r tsconfig-paths/register src/scripts/recalc-streak-compliance.ts
  */
 
-import AppDataSource from '../core/database/data-source-dev';
-import { UserBehaviorProfile } from '../modules/user/entities/user-behavior-profile.entity';
-import { DailySummary } from '../modules/diet/entities/daily-summary.entity';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 /** 判断某天是否达标: 有记录 && 热量在目标的 80%-110% */
-function isCompliantDay(summary: DailySummary): boolean {
-  const goal = summary.calorieGoal || 2000;
-  const actual = summary.totalCalories || 0;
+function isCompliantDay(summary: {
+  calorie_goal: number | null;
+  total_calories: number;
+}): boolean {
+  const goal = summary.calorie_goal || 2000;
+  const actual = summary.total_calories || 0;
   return actual > 0 && actual >= goal * 0.8 && actual <= goal * 1.1;
 }
 
 async function recalc() {
   try {
-    await AppDataSource.initialize();
     console.log('Database connected');
 
-    const behaviorRepo = AppDataSource.getRepository(UserBehaviorProfile);
-    const summaryRepo = AppDataSource.getRepository(DailySummary);
-
-    const profiles = await behaviorRepo.find();
+    const profiles = await prisma.user_behavior_profiles.findMany();
     console.log(`Found ${profiles.length} behavior profiles to recalculate`);
 
     let updatedCount = 0;
 
     for (const profile of profiles) {
-      const userId = profile.userId;
+      const userId = profile.user_id;
 
       // 获取该用户所有 DailySummary，按日期升序
-      const summaries = await summaryRepo.find({
-        where: { userId },
-        order: { date: 'ASC' },
+      const summaries = await prisma.daily_summaries.findMany({
+        where: { user_id: userId },
+        orderBy: { date: 'asc' },
       });
 
       if (summaries.length === 0) {
         // 无记录，全部归零
-        profile.streakDays = 0;
-        profile.longestStreak = 0;
-        profile.healthyRecords = 0;
-        profile.avgComplianceRate = 0;
-        profile.lastStreakDate = null;
-        await behaviorRepo.save(profile);
+        await prisma.user_behavior_profiles.update({
+          where: { id: profile.id },
+          data: {
+            streak_days: 0,
+            longest_streak: 0,
+            healthy_records: 0,
+            avg_compliance_rate: 0,
+            last_streak_date: null,
+          },
+        });
         updatedCount++;
         continue;
       }
@@ -86,34 +89,45 @@ async function recalc() {
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       const sinceDate = thirtyDaysAgo.toISOString().slice(0, 10);
 
-      const recentSummaries = summaries.filter((s) => s.date >= sinceDate);
+      const recentSummaries = summaries.filter(
+        (s) => s.date.toISOString().slice(0, 10) >= sinceDate,
+      );
       const totalDays = recentSummaries.length;
       const healthyDays = recentSummaries.filter(isCompliantDay).length;
 
       // ── 更新 ──
-      profile.streakDays = currentStreak;
-      profile.longestStreak = longestStreak;
-      profile.healthyRecords = healthyDays;
-      profile.avgComplianceRate =
+      const avgComplianceRate =
         totalDays > 0 ? Number((healthyDays / totalDays).toFixed(2)) : 0;
       // lastStreakDate 设为最后一条记录的日期
-      profile.lastStreakDate = summaries[summaries.length - 1].date;
+      const lastStreakDate = summaries[summaries.length - 1].date
+        .toISOString()
+        .slice(0, 10);
 
-      await behaviorRepo.save(profile);
+      await prisma.user_behavior_profiles.update({
+        where: { id: profile.id },
+        data: {
+          streak_days: currentStreak,
+          longest_streak: longestStreak,
+          healthy_records: healthyDays,
+          avg_compliance_rate: avgComplianceRate,
+          last_streak_date: lastStreakDate,
+        },
+      });
       updatedCount++;
 
       console.log(
         `  [${updatedCount}/${profiles.length}] userId=${userId} ` +
           `streak=${currentStreak} longest=${longestStreak} ` +
           `healthy=${healthyDays}/${totalDays} ` +
-          `compliance=${profile.avgComplianceRate}`,
+          `compliance=${avgComplianceRate}`,
       );
     }
 
     console.log(`\nRecalculation complete. Updated ${updatedCount} profiles.`);
-    await AppDataSource.destroy();
+    await prisma.$disconnect();
   } catch (error) {
     console.error('Recalculation failed:', error);
+    await prisma.$disconnect();
     process.exit(1);
   }
 }

@@ -1,11 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, IsNull, Not } from 'typeorm';
-import { FoodLibrary } from '../../modules/food/entities/food-library.entity';
-import { FoodConflict } from '../../modules/food/entities/food-conflict.entity';
-import { FoodChangeLog } from '../../modules/food/entities/food-change-log.entity';
-import { FoodTranslation } from '../../modules/food/entities/food-translation.entity';
-import { FoodSource } from '../../modules/food/entities/food-source.entity';
+import { Prisma } from '@prisma/client';
+import { PrismaService } from '../../core/prisma/prisma.service';
 
 export interface QualityReport {
   timestamp: Date;
@@ -52,18 +47,7 @@ export interface QualityReport {
 export class FoodQualityMonitorService {
   private readonly logger = new Logger(FoodQualityMonitorService.name);
 
-  constructor(
-    @InjectRepository(FoodLibrary)
-    private readonly foodRepo: Repository<FoodLibrary>,
-    @InjectRepository(FoodConflict)
-    private readonly conflictRepo: Repository<FoodConflict>,
-    @InjectRepository(FoodChangeLog)
-    private readonly changeLogRepo: Repository<FoodChangeLog>,
-    @InjectRepository(FoodTranslation)
-    private readonly translationRepo: Repository<FoodTranslation>,
-    @InjectRepository(FoodSource)
-    private readonly sourceRepo: Repository<FoodSource>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * 生成完整质量报告
@@ -80,7 +64,7 @@ export class FoodQualityMonitorService {
       translations,
       recentChanges,
     ] = await Promise.all([
-      this.foodRepo.count(),
+      this.prisma.foods.count(),
       this.getByStatus(),
       this.getByCategory(),
       this.getBySource(),
@@ -106,41 +90,35 @@ export class FoodQualityMonitorService {
   }
 
   private async getByStatus(): Promise<Record<string, number>> {
-    const result = await this.foodRepo
-      .createQueryBuilder('f')
-      .select('f.status', 'status')
-      .addSelect('COUNT(*)', 'count')
-      .groupBy('f.status')
-      .getRawMany();
-    return Object.fromEntries(result.map((r) => [r.status, Number(r.count)]));
+    const result = await this.prisma.$queryRaw<
+      Array<{ status: string; count: number }>
+    >(
+      Prisma.sql`SELECT status, COUNT(*)::int as count FROM foods GROUP BY status`,
+    );
+    return Object.fromEntries(result.map((r) => [r.status, r.count]));
   }
 
   private async getByCategory() {
-    return this.foodRepo
-      .createQueryBuilder('f')
-      .select('f.category', 'category')
-      .addSelect('COUNT(*)', 'count')
-      .groupBy('f.category')
-      .getRawMany()
-      .then((r) =>
-        r.map((x) => ({ category: x.category, count: Number(x.count) })),
-      );
+    const result = await this.prisma.$queryRaw<
+      Array<{ category: string; count: number }>
+    >(
+      Prisma.sql`SELECT category, COUNT(*)::int as count FROM foods GROUP BY category`,
+    );
+    return result.map((x) => ({ category: x.category, count: x.count }));
   }
 
   private async getBySource() {
-    return this.foodRepo
-      .createQueryBuilder('f')
-      .select('f.primarySource', 'source')
-      .addSelect('COUNT(*)', 'count')
-      .groupBy('f.primarySource')
-      .getRawMany()
-      .then((r) =>
-        r.map((x) => ({ source: x.source, count: Number(x.count) })),
-      );
+    const result = await this.prisma.$queryRaw<
+      Array<{ source: string; count: number }>
+    >(
+      Prisma.sql`SELECT primary_source as source, COUNT(*)::int as count FROM foods GROUP BY primary_source`,
+    );
+    return result.map((x) => ({ source: x.source, count: x.count }));
   }
 
   private async getCompleteness() {
-    const total = await this.foodRepo.count();
+    const total = await this.prisma.foods.count();
+
     const [
       withProtein,
       withMicro,
@@ -150,39 +128,43 @@ export class FoodQualityMonitorService {
       withTags,
       withImage,
     ] = await Promise.all([
-      this.foodRepo
-        .createQueryBuilder('f')
-        .where('f.protein IS NOT NULL')
-        .getCount(),
-      this.foodRepo
-        .createQueryBuilder('f')
-        .where(
-          'f.vitaminA IS NOT NULL OR f.vitaminC IS NOT NULL OR f.calcium IS NOT NULL',
-        )
-        .getCount(),
-      this.foodRepo
-        .createQueryBuilder('f')
-        .where('f.glycemicIndex IS NOT NULL')
-        .getCount(),
-      this.foodRepo
-        .createQueryBuilder('f')
-        .where("f.allergens IS NOT NULL AND f.allergens != '[]'::jsonb")
-        .getCount(),
-      this.foodRepo
-        .createQueryBuilder('f')
-        .where("f.compatibility IS NOT NULL AND f.compatibility != '{}'::jsonb")
-        .getCount(),
-      this.foodRepo
-        .createQueryBuilder('f')
-        .where(
-          "f.tags IS NOT NULL AND f.tags != '[]'::jsonb AND jsonb_array_length(f.tags) > 0",
-        )
-        .getCount(),
-      this.foodRepo
-        .createQueryBuilder('f')
-        .where('f.imageUrl IS NOT NULL')
-        .getCount(),
+      this.prisma
+        .$queryRaw<
+          [{ count: number }]
+        >(Prisma.sql`SELECT COUNT(*)::int as count FROM foods WHERE protein IS NOT NULL`)
+        .then((r) => r[0].count),
+      this.prisma
+        .$queryRaw<
+          [{ count: number }]
+        >(Prisma.sql`SELECT COUNT(*)::int as count FROM foods WHERE vitamin_a IS NOT NULL OR vitamin_c IS NOT NULL OR calcium IS NOT NULL`)
+        .then((r) => r[0].count),
+      this.prisma
+        .$queryRaw<
+          [{ count: number }]
+        >(Prisma.sql`SELECT COUNT(*)::int as count FROM foods WHERE glycemic_index IS NOT NULL`)
+        .then((r) => r[0].count),
+      this.prisma
+        .$queryRaw<
+          [{ count: number }]
+        >(Prisma.sql`SELECT COUNT(*)::int as count FROM foods WHERE allergens IS NOT NULL AND allergens != '[]'::jsonb`)
+        .then((r) => r[0].count),
+      this.prisma
+        .$queryRaw<
+          [{ count: number }]
+        >(Prisma.sql`SELECT COUNT(*)::int as count FROM foods WHERE compatibility IS NOT NULL AND compatibility != '{}'::jsonb`)
+        .then((r) => r[0].count),
+      this.prisma
+        .$queryRaw<
+          [{ count: number }]
+        >(Prisma.sql`SELECT COUNT(*)::int as count FROM foods WHERE tags IS NOT NULL AND tags != '[]'::jsonb AND jsonb_array_length(tags) > 0`)
+        .then((r) => r[0].count),
+      this.prisma
+        .$queryRaw<
+          [{ count: number }]
+        >(Prisma.sql`SELECT COUNT(*)::int as count FROM foods WHERE image_url IS NOT NULL`)
+        .then((r) => r[0].count),
     ]);
+
     return {
       total,
       withProtein,
@@ -197,74 +179,65 @@ export class FoodQualityMonitorService {
 
   private async getQuality() {
     const [verified, unverified] = await Promise.all([
-      this.foodRepo.count({ where: { isVerified: true } }),
-      this.foodRepo.count({ where: { isVerified: false } }),
+      this.prisma.foods.count({ where: { is_verified: true } }),
+      this.prisma.foods.count({ where: { is_verified: false } }),
     ]);
 
-    const avgConf = await this.foodRepo
-      .createQueryBuilder('f')
-      .select('AVG(f.confidence)', 'avg')
-      .getRawOne();
+    const avgConf = await this.prisma.$queryRaw<[{ avg: number | null }]>(
+      Prisma.sql`SELECT AVG(confidence) as avg FROM foods`,
+    );
 
-    const lowConfidence = await this.foodRepo
-      .createQueryBuilder('f')
-      .where('f.confidence < 0.6')
-      .getCount();
+    const lowConfResult = await this.prisma.$queryRaw<[{ count: number }]>(
+      Prisma.sql`SELECT COUNT(*)::int as count FROM foods WHERE confidence < 0.6`,
+    );
 
     // 宏量营养素不一致检查
-    const macroInconsistent = await this.foodRepo
-      .createQueryBuilder('f')
-      .where(
-        'f.protein IS NOT NULL AND f.fat IS NOT NULL AND f.carbs IS NOT NULL',
-      )
-      .andWhere(
-        `ABS(f.calories - (f.protein * 4 + f.carbs * 4 + f.fat * 9)) / NULLIF(f.calories, 0) > 0.15`,
-      )
-      .getCount();
+    const macroResult = await this.prisma.$queryRaw<[{ count: number }]>(
+      Prisma.sql`SELECT COUNT(*)::int as count FROM foods WHERE protein IS NOT NULL AND fat IS NOT NULL AND carbs IS NOT NULL AND ABS(calories - (protein * 4 + carbs * 4 + fat * 9)) / NULLIF(calories, 0) > 0.15`,
+    );
 
     return {
       verified,
       unverified,
-      avgConfidence: Math.round((avgConf?.avg || 0) * 100) / 100,
-      lowConfidence,
-      macroInconsistent,
+      avgConfidence: Math.round((avgConf[0]?.avg || 0) * 100) / 100,
+      lowConfidence: lowConfResult[0].count,
+      macroInconsistent: macroResult[0].count,
     };
   }
 
   private async getConflicts() {
     const [total, pending, resolved, needsReview] = await Promise.all([
-      this.conflictRepo.count(),
-      this.conflictRepo.count({ where: { resolution: IsNull() } }),
-      this.conflictRepo.count({ where: { resolution: Not(IsNull()) } }),
-      this.conflictRepo.count({ where: { resolution: 'needs_review' } }),
+      this.prisma.food_conflicts.count(),
+      this.prisma.food_conflicts.count({ where: { resolution: null } }),
+      this.prisma.food_conflicts.count({
+        where: { resolution: { not: null } },
+      }),
+      this.prisma.food_conflicts.count({
+        where: { resolution: 'needs_review' },
+      }),
     ]);
     return { total, pending, resolved, needsReview };
   }
 
   private async getTranslations() {
-    const total = await this.translationRepo.count();
+    const total = await this.prisma.food_translations.count();
 
-    const locales = await this.translationRepo
-      .createQueryBuilder('t')
-      .select('t.locale', 'locale')
-      .addSelect('COUNT(*)', 'count')
-      .groupBy('t.locale')
-      .getRawMany()
-      .then((r) =>
-        r.map((x) => ({ locale: x.locale, count: Number(x.count) })),
-      );
+    const locales = await this.prisma.$queryRaw<
+      Array<{ locale: string; count: number }>
+    >(
+      Prisma.sql`SELECT locale, COUNT(*)::int as count FROM food_translations GROUP BY locale`,
+    );
 
-    const withTranslation = await this.translationRepo
-      .createQueryBuilder('t')
-      .select('COUNT(DISTINCT t.foodId)', 'count')
-      .getRawOne();
+    const withTranslation = await this.prisma.$queryRaw<[{ count: number }]>(
+      Prisma.sql`SELECT COUNT(DISTINCT food_id)::int as count FROM food_translations`,
+    );
 
-    const totalFoods = await this.foodRepo.count();
-    const foodsWithTranslation = Number(withTranslation?.count || 0);
+    const totalFoods = await this.prisma.foods.count();
+    const foodsWithTranslation = withTranslation[0]?.count || 0;
 
     return {
       total,
-      locales,
+      locales: locales.map((x) => ({ locale: x.locale, count: x.count })),
       foodsWithTranslation,
       foodsWithoutTranslation: totalFoods - foodsWithTranslation,
     };
@@ -273,9 +246,10 @@ export class FoodQualityMonitorService {
   private async getRecentChanges() {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    return this.changeLogRepo
-      .createQueryBuilder('cl')
-      .where('cl.createdAt >= :since', { since: sevenDaysAgo })
-      .getCount();
+    return this.prisma.food_change_logs.count({
+      where: {
+        created_at: { gte: sevenDaysAgo },
+      },
+    });
   }
 }

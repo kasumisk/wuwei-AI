@@ -3,7 +3,7 @@
  */
 import { IsUUID, IsOptional, IsEnum, IsDateString } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { MealType } from '../../diet/entities/food-record.entity';
+import { MealType } from '../../diet/diet.types';
 
 export class SaveAnalysisToRecordDto {
   /** 分析记录 ID（food_analysis_record.id） */

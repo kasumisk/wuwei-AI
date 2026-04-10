@@ -3,9 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { FoodPipelineOrchestratorService } from './food-pipeline-orchestrator.service';
 import { FoodConflictResolverService } from './food-conflict-resolver.service';
 import { FoodQualityMonitorService } from './food-quality-monitor.service';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { FoodLibrary } from '../../modules/food/entities/food-library.entity';
+import { PrismaService } from '../../core/prisma/prisma.service';
 
 /**
  * 食物数据同步定时任务 (Phase 2/3)
@@ -18,8 +16,7 @@ export class FoodSyncSchedulerService {
     private readonly orchestrator: FoodPipelineOrchestratorService,
     private readonly conflictResolver: FoodConflictResolverService,
     private readonly qualityMonitor: FoodQualityMonitorService,
-    @InjectRepository(FoodLibrary)
-    private readonly foodRepo: Repository<FoodLibrary>,
+    private readonly prisma: PrismaService,
   ) {}
 
   /**
@@ -111,7 +108,7 @@ export class FoodSyncSchedulerService {
   async hourlyPopularityUpdate() {
     // 基于 food_records 表统计最近7天的使用次数
     try {
-      await this.foodRepo.query(`
+      await this.prisma.$executeRawUnsafe(`
         UPDATE foods f
         SET popularity = COALESCE(sub.usage_count, 0)
         FROM (

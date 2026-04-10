@@ -11,7 +11,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { MealType } from '../../diet/entities/food-record.entity';
+import { MealType } from '../../diet/diet.types';
 
 export class AnalyzeTextDto {
   /** 食物文本描述（如"鸡胸肉"、"一份牛肉面加卤蛋"） */

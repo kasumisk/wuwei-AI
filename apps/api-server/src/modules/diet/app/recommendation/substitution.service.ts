@@ -1,8 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { FoodLibrary } from '../../../food/entities/food-library.entity';
-import { RecommendationFeedback } from '../../entities/recommendation-feedback.entity';
+import { PrismaService } from '../../../../core/prisma/prisma.service';
 import { FoodScorerService } from './food-scorer.service';
 import { MealAssemblerService } from './meal-assembler.service';
 import {
@@ -37,7 +34,7 @@ const RELATED_CATEGORIES: Record<string, string[]> = {
  * 替代候选项 — findSubstitutes() 返回结构
  */
 export interface SubstituteCandidate {
-  food: FoodLibrary;
+  food: any;
   /** 综合替代评分 (0~1) */
   substituteScore: number;
   /** 与原食物的相似度 (0~1) */
@@ -78,10 +75,7 @@ export class SubstitutionService {
   private readonly logger = new Logger(SubstitutionService.name);
 
   constructor(
-    @InjectRepository(FoodLibrary)
-    private readonly foodLibraryRepo: Repository<FoodLibrary>,
-    @InjectRepository(RecommendationFeedback)
-    private readonly feedbackRepo: Repository<RecommendationFeedback>,
+    private readonly prisma: PrismaService,
     private readonly foodScorer: FoodScorerService,
     private readonly mealAssembler: MealAssemblerService,
   ) {}
@@ -107,7 +101,7 @@ export class SubstitutionService {
     preferenceProfile?: UserPreferenceProfile,
   ): Promise<SubstituteCandidate[]> {
     // 1. 加载原食物
-    const originalFood = await this.foodLibraryRepo.findOne({
+    const originalFood = await this.prisma.foods.findFirst({
       where: { id: foodId },
     });
     if (!originalFood) {
@@ -116,8 +110,8 @@ export class SubstitutionService {
     }
 
     // 2. 加载候选池 — 同 category 优先，V4 E7: 不足时扩展到相关品类
-    let candidates = await this.foodLibraryRepo.find({
-      where: { isVerified: true, category: originalFood.category },
+    let candidates = await this.prisma.foods.findMany({
+      where: { is_verified: true, category: originalFood.category },
     });
 
     // 排除自身
@@ -131,14 +125,13 @@ export class SubstitutionService {
     if (candidates.length < MIN_SAME_CATEGORY) {
       const relatedCategories = RELATED_CATEGORIES[originalFood.category] || [];
       if (relatedCategories.length > 0) {
-        const crossCandidates = await this.foodLibraryRepo
-          .createQueryBuilder('f')
-          .where('f.is_verified = :verified', { verified: true })
-          .andWhere('f.category IN (:...categories)', {
-            categories: relatedCategories,
-          })
-          .andWhere('f.id != :originalId', { originalId: originalFood.id })
-          .getMany();
+        const crossCandidates = await this.prisma.foods.findMany({
+          where: {
+            is_verified: true,
+            category: { in: relatedCategories },
+            id: { not: originalFood.id },
+          },
+        });
         // 合并，去重
         const existingIds = new Set(candidates.map((c) => c.id));
         for (const cc of crossCandidates) {
@@ -152,7 +145,7 @@ export class SubstitutionService {
     // mealType 过滤
     if (mealType) {
       const mtFiltered = candidates.filter((f) => {
-        const mt: string[] = f.mealTypes || [];
+        const mt: string[] = (f as any).meal_types || [];
         return mt.length === 0 || mt.includes(mealType);
       });
       // 兜底：如果过滤后太少，保留未过滤集
@@ -161,7 +154,10 @@ export class SubstitutionService {
 
     // 排除过敏原 — 统一使用 allergen-filter.util (V4 A6)
     if (userConstraints?.allergens?.length) {
-      candidates = filterByAllergens(candidates, userConstraints.allergens);
+      candidates = filterByAllergens(
+        candidates as any,
+        userConstraints.allergens,
+      ) as any;
     }
 
     // 排除 excludeNames
@@ -179,14 +175,19 @@ export class SubstitutionService {
     );
 
     // 4. 计算每个候选的综合替代评分
-    const origServing = this.foodScorer.calcServingNutrition(originalFood);
+    const origServing = this.foodScorer.calcServingNutrition(
+      originalFood as any,
+    );
 
     const scored: SubstituteCandidate[] = candidates.map((candidate) => {
-      const serving = this.foodScorer.calcServingNutrition(candidate);
+      const serving = this.foodScorer.calcServingNutrition(candidate as any);
       const isCrossCategory = !sameCategoryCandidateIds.has(candidate.id);
 
       // 4a. 相似度 (0~1) — 复用 MealAssembler 的逻辑
-      const sim = this.mealAssembler.similarity(originalFood, candidate);
+      const sim = this.mealAssembler.similarity(
+        originalFood as any,
+        candidate as any,
+      );
 
       // 4b. 营养接近度 — 基于热量和蛋白质的相对距离
       const calDiff =
@@ -221,9 +222,9 @@ export class SubstitutionService {
           sum += (catW - 0.3) / 1.0;
           factors++;
         }
-        if (candidate.mainIngredient) {
+        if (candidate.main_ingredient) {
           const ingW =
-            preferenceProfile.ingredientWeights[candidate.mainIngredient];
+            preferenceProfile.ingredientWeights[candidate.main_ingredient];
           if (ingW !== undefined) {
             sum += (ingW - 0.3) / 1.0;
             factors++;
@@ -280,18 +281,19 @@ export class SubstitutionService {
       const since = new Date();
       since.setDate(since.getDate() - 90); // 90天窗口
 
-      const feedbacks = await this.feedbackRepo
-        .createQueryBuilder('f')
-        .where('f.user_id = :userId', { userId })
-        .andWhere('f.action = :action', { action: 'replaced' })
-        .andWhere('f.food_name = :foodName', { foodName: originalFoodName })
-        .andWhere('f.replacement_food IS NOT NULL')
-        .andWhere('f.created_at >= :since', { since })
-        .getMany();
+      const feedbacks = await this.prisma.recommendation_feedbacks.findMany({
+        where: {
+          user_id: userId,
+          action: 'replaced',
+          food_name: originalFoodName,
+          replacement_food: { not: null },
+          created_at: { gte: since },
+        },
+      });
 
       for (const fb of feedbacks) {
-        if (fb.replacementFood) {
-          map[fb.replacementFood] = (map[fb.replacementFood] || 0) + 1;
+        if (fb.replacement_food) {
+          map[fb.replacement_food] = (map[fb.replacement_food] || 0) + 1;
         }
       }
     } catch (err) {

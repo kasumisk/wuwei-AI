@@ -20,7 +20,7 @@
  */
 
 import { Injectable } from '@nestjs/common';
-import { FoodLibrary } from '../../../food/entities/food-library.entity';
+import { FoodLibrary } from '../../../food/food.types';
 import {
   ScoringExplanation,
   ExplanationV2,

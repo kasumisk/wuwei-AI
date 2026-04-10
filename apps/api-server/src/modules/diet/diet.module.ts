@@ -1,27 +1,5 @@
 import { Module, forwardRef } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
-// 本模块实体
-import { FoodRecord } from './entities/food-record.entity';
-import { DailySummary } from './entities/daily-summary.entity';
-import { DailyPlan } from './entities/daily-plan.entity';
-import { AiDecisionLog } from './entities/ai-decision-log.entity';
-import { RecommendationFeedback } from './entities/recommendation-feedback.entity';
-import { FeedbackDetail } from './entities/feedback-detail.entity';
-import { ABExperiment } from './entities/ab-experiment.entity';
-import { PrecomputedRecommendation } from './entities/precomputed-recommendation.entity';
-// 跨模块实体
-import { UserBehaviorProfile } from '../user/entities/user-behavior-profile.entity';
-import { UserInferredProfile } from '../user/entities/user-inferred-profile.entity';
-import { FoodLibrary } from '../food/entities/food-library.entity';
-import { FoodRegionalInfo } from '../food/entities/food-regional-info.entity';
-// ContentManagement 所需实体 (跨模块)
-import { Achievement } from '../gamification/entities/achievement.entity';
-import { UserAchievement } from '../gamification/entities/user-achievement.entity';
-import { Challenge } from '../gamification/entities/challenge.entity';
-import { UserChallenge } from '../gamification/entities/user-challenge.entity';
-import { CoachConversation } from '../coach/entities/coach-conversation.entity';
-import { CoachMessage } from '../coach/entities/coach-message.entity';
 // 依赖模块
 import { UserModule } from '../user/user.module';
 import { FoodModule } from '../food/food.module';
@@ -68,32 +46,7 @@ import { RecommendationDebugController } from './admin/recommendation-debug.cont
 import { RecommendationDebugService } from './admin/recommendation-debug.service';
 
 @Module({
-  imports: [
-    ConfigModule,
-    UserModule,
-    forwardRef(() => FoodModule),
-    TypeOrmModule.forFeature([
-      FoodRecord,
-      DailySummary,
-      DailyPlan,
-      AiDecisionLog,
-      RecommendationFeedback,
-      FeedbackDetail,
-      ABExperiment,
-      PrecomputedRecommendation,
-      UserBehaviorProfile,
-      UserInferredProfile,
-      FoodLibrary,
-      FoodRegionalInfo,
-      // ContentManagement 需要的实体
-      Achievement,
-      UserAchievement,
-      Challenge,
-      UserChallenge,
-      CoachConversation,
-      CoachMessage,
-    ]),
-  ],
+  imports: [ConfigModule, UserModule, forwardRef(() => FoodModule)],
   controllers: [
     FoodRecordController,
     FoodSummaryController,

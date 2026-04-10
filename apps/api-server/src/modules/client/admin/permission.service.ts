@@ -4,10 +4,7 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
-import { ClientCapabilityPermission } from '../entities/client-capability-permission.entity';
-import { Client } from '../entities/client.entity';
+import { PrismaService } from '../../../core/prisma/prisma.service';
 import {
   CreatePermissionDto,
   UpdatePermissionDto,
@@ -17,19 +14,14 @@ import {
 
 @Injectable()
 export class PermissionService {
-  constructor(
-    @InjectRepository(ClientCapabilityPermission)
-    private readonly permissionRepository: Repository<ClientCapabilityPermission>,
-    @InjectRepository(Client)
-    private readonly clientRepository: Repository<Client>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * 获取客户端的所有权限
    */
   async findByClient(clientId: string) {
     // 检查客户端是否存在
-    const client = await this.clientRepository.findOne({
+    const client = await this.prisma.clients.findUnique({
       where: { id: clientId },
     });
 
@@ -37,10 +29,11 @@ export class PermissionService {
       throw new NotFoundException(`客户端 #${clientId} 不存在`);
     }
 
-    const permissions = await this.permissionRepository.find({
-      where: { clientId },
-      order: { createdAt: 'DESC' },
-    });
+    const permissions =
+      await this.prisma.client_capability_permissions.findMany({
+        where: { client_id: clientId },
+        orderBy: { created_at: 'desc' },
+      });
 
     return permissions;
   }
@@ -49,9 +42,10 @@ export class PermissionService {
    * 获取权限详情
    */
   async findOne(permissionId: string) {
-    const permission = await this.permissionRepository.findOne({
-      where: { id: permissionId },
-    });
+    const permission =
+      await this.prisma.client_capability_permissions.findUnique({
+        where: { id: permissionId },
+      });
 
     if (!permission) {
       throw new NotFoundException(`权限 #${permissionId} 不存在`);
@@ -65,7 +59,7 @@ export class PermissionService {
    */
   async create(createPermissionDto: CreatePermissionDto) {
     // 检查客户端是否存在
-    const client = await this.clientRepository.findOne({
+    const client = await this.prisma.clients.findUnique({
       where: { id: createPermissionDto.clientId },
     });
 
@@ -76,10 +70,10 @@ export class PermissionService {
     }
 
     // 检查是否已存在相同的权限
-    const existing = await this.permissionRepository.findOne({
+    const existing = await this.prisma.client_capability_permissions.findFirst({
       where: {
-        clientId: createPermissionDto.clientId,
-        capabilityType: createPermissionDto.capabilityType,
+        client_id: createPermissionDto.clientId,
+        capability_type: createPermissionDto.capabilityType,
       },
     });
 
@@ -89,66 +83,89 @@ export class PermissionService {
       );
     }
 
-    const permission = this.permissionRepository.create(createPermissionDto);
-    return await this.permissionRepository.save(permission);
+    return await this.prisma.client_capability_permissions.create({
+      data: {
+        client_id: createPermissionDto.clientId,
+        capability_type: createPermissionDto.capabilityType,
+        enabled: createPermissionDto.enabled,
+        rate_limit: createPermissionDto.rateLimit,
+        quota_limit: createPermissionDto.quotaLimit,
+        preferred_provider: createPermissionDto.preferredProvider,
+        allowed_providers:
+          createPermissionDto.allowedProviders?.join(',') ?? null,
+        allowed_models: createPermissionDto.allowedModels?.join(',') ?? null,
+        config: createPermissionDto.config,
+      },
+    });
   }
 
   /**
    * 更新权限
    */
   async update(permissionId: string, updatePermissionDto: UpdatePermissionDto) {
-    const permission = await this.permissionRepository.findOne({
-      where: { id: permissionId },
-    });
+    const permission =
+      await this.prisma.client_capability_permissions.findUnique({
+        where: { id: permissionId },
+      });
 
     if (!permission) {
       throw new NotFoundException(`权限 #${permissionId} 不存在`);
     }
 
+    const updateData: any = {};
+
     // 如果更新配置，合并配置对象
     if (updatePermissionDto.config) {
-      permission.config = {
-        ...permission.config,
+      updateData.config = {
+        ...(permission.config as object),
         ...updatePermissionDto.config,
       };
     }
 
     // 更新其他字段
     if (updatePermissionDto.enabled !== undefined) {
-      permission.enabled = updatePermissionDto.enabled;
+      updateData.enabled = updatePermissionDto.enabled;
     }
     if (updatePermissionDto.rateLimit !== undefined) {
-      permission.rateLimit = updatePermissionDto.rateLimit;
+      updateData.rate_limit = updatePermissionDto.rateLimit;
     }
     if (updatePermissionDto.quotaLimit !== undefined) {
-      permission.quotaLimit = updatePermissionDto.quotaLimit;
+      updateData.quota_limit = updatePermissionDto.quotaLimit;
     }
     if (updatePermissionDto.preferredProvider !== undefined) {
-      permission.preferredProvider = updatePermissionDto.preferredProvider;
+      updateData.preferred_provider = updatePermissionDto.preferredProvider;
     }
     if (updatePermissionDto.allowedProviders !== undefined) {
-      permission.allowedProviders = updatePermissionDto.allowedProviders;
+      updateData.allowed_providers =
+        updatePermissionDto.allowedProviders?.join(',') ?? null;
     }
     if (updatePermissionDto.allowedModels !== undefined) {
-      permission.allowedModels = updatePermissionDto.allowedModels;
+      updateData.allowed_models =
+        updatePermissionDto.allowedModels?.join(',') ?? null;
     }
 
-    return await this.permissionRepository.save(permission);
+    return await this.prisma.client_capability_permissions.update({
+      where: { id: permissionId },
+      data: updateData,
+    });
   }
 
   /**
    * 删除权限
    */
   async remove(permissionId: string) {
-    const permission = await this.permissionRepository.findOne({
-      where: { id: permissionId },
-    });
+    const permission =
+      await this.prisma.client_capability_permissions.findUnique({
+        where: { id: permissionId },
+      });
 
     if (!permission) {
       throw new NotFoundException(`权限 #${permissionId} 不存在`);
     }
 
-    await this.permissionRepository.remove(permission);
+    await this.prisma.client_capability_permissions.delete({
+      where: { id: permissionId },
+    });
 
     return { message: '权限删除成功' };
   }
@@ -158,7 +175,7 @@ export class PermissionService {
    */
   async batchUpdate(clientId: string, batchDto: BatchUpdatePermissionsDto) {
     // 检查客户端是否存在
-    const client = await this.clientRepository.findOne({
+    const client = await this.prisma.clients.findUnique({
       where: { id: clientId },
     });
 
@@ -176,23 +193,27 @@ export class PermissionService {
     for (const item of batchDto.permissions) {
       try {
         // 查找现有权限
-        let permission = await this.permissionRepository.findOne({
-          where: {
-            clientId,
-            capabilityType: item.capabilityType,
-          },
-        });
+        const permission =
+          await this.prisma.client_capability_permissions.findFirst({
+            where: {
+              client_id: clientId,
+              capability_type: item.capabilityType,
+            },
+          });
 
         if (permission) {
           // 更新现有权限
-          permission.enabled = item.enabled;
+          const updateData: any = { enabled: item.enabled };
           if (item.rateLimit !== undefined) {
-            permission.rateLimit = item.rateLimit;
+            updateData.rate_limit = item.rateLimit;
           }
           if (item.quotaLimit !== undefined) {
-            permission.quotaLimit = item.quotaLimit;
+            updateData.quota_limit = item.quotaLimit;
           }
-          await this.permissionRepository.save(permission);
+          await this.prisma.client_capability_permissions.update({
+            where: { id: permission.id },
+            data: updateData,
+          });
           results.push({
             capabilityType: item.capabilityType,
             action: 'updated',
@@ -200,14 +221,15 @@ export class PermissionService {
           });
         } else {
           // 创建新权限
-          permission = this.permissionRepository.create({
-            clientId,
-            capabilityType: item.capabilityType,
-            enabled: item.enabled,
-            rateLimit: item.rateLimit || 60,
-            quotaLimit: item.quotaLimit,
+          await this.prisma.client_capability_permissions.create({
+            data: {
+              client_id: clientId,
+              capability_type: item.capabilityType,
+              enabled: item.enabled,
+              rate_limit: item.rateLimit || 60,
+              quota_limit: item.quotaLimit,
+            },
           });
-          await this.permissionRepository.save(permission);
           results.push({
             capabilityType: item.capabilityType,
             action: 'created',
@@ -239,13 +261,14 @@ export class PermissionService {
     clientId: string,
     capabilityType: string,
   ): Promise<boolean> {
-    const permission = await this.permissionRepository.findOne({
-      where: {
-        clientId,
-        capabilityType,
-        enabled: true,
-      },
-    });
+    const permission =
+      await this.prisma.client_capability_permissions.findFirst({
+        where: {
+          client_id: clientId,
+          capability_type: capabilityType,
+          enabled: true,
+        },
+      });
 
     return !!permission;
   }
@@ -254,12 +277,13 @@ export class PermissionService {
    * 获取客户端的权限配置
    */
   async getPermissionConfig(clientId: string, capabilityType: string) {
-    const permission = await this.permissionRepository.findOne({
-      where: {
-        clientId,
-        capabilityType,
-      },
-    });
+    const permission =
+      await this.prisma.client_capability_permissions.findFirst({
+        where: {
+          client_id: clientId,
+          capability_type: capabilityType,
+        },
+      });
 
     return permission || null;
   }

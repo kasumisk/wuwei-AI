@@ -30,13 +30,14 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import * as crypto from 'crypto';
+import { PrismaService } from '../../../core/prisma/prisma.service';
 import { SubscriptionService } from './subscription.service';
-import { SubscriptionPlan } from '../entities/subscription-plan.entity';
-import { Subscription } from '../entities/subscription.entity';
-import { PaymentRecord } from '../entities/payment-record.entity';
+import {
+  subscription_plan as SubscriptionPlan,
+  subscription as Subscription,
+  payment_record as PaymentRecord,
+} from '@prisma/client';
 import { PaymentChannel, PaymentStatus } from '../subscription.types';
 import {
   AppleTransactionInfo,
@@ -75,12 +76,7 @@ export class AppleIapService {
   constructor(
     private readonly configService: ConfigService,
     private readonly subscriptionService: SubscriptionService,
-    @InjectRepository(SubscriptionPlan)
-    private readonly planRepo: Repository<SubscriptionPlan>,
-    @InjectRepository(Subscription)
-    private readonly subRepo: Repository<Subscription>,
-    @InjectRepository(PaymentRecord)
-    private readonly paymentRepo: Repository<PaymentRecord>,
+    private readonly prisma: PrismaService,
     private readonly eventEmitter: EventEmitter2,
   ) {
     this.bundleId = this.configService.get<string>('APPLE_BUNDLE_ID', '');
@@ -141,9 +137,11 @@ export class AppleIapService {
       }
 
       // 4. 查找对应的订阅计划
-      const plan = await this.planRepo.findOneBy({
-        appleProductId: transaction.productId,
-        isActive: true,
+      const plan = await this.prisma.subscription_plan.findFirst({
+        where: {
+          apple_product_id: transaction.productId,
+          is_active: true,
+        },
       });
       if (!plan) {
         this.logger.warn(
@@ -153,8 +151,8 @@ export class AppleIapService {
       }
 
       // 5. 检查是否已处理过（防重复）
-      const existingPayment = await this.paymentRepo.findOneBy({
-        orderNo: `apple_${transaction.transactionId}`,
+      const existingPayment = await this.prisma.payment_record.findUnique({
+        where: { order_no: `apple_${transaction.transactionId}` },
       });
       if (existingPayment) {
         this.logger.log(
@@ -168,7 +166,7 @@ export class AppleIapService {
         userId,
         orderNo: `apple_${transaction.transactionId}`,
         channel: PaymentChannel.APPLE_IAP,
-        amountCents: transaction.price ?? plan.priceCents,
+        amountCents: transaction.price ?? plan.price_cents,
         currency: transaction.currency ?? plan.currency,
       });
 
@@ -183,7 +181,7 @@ export class AppleIapService {
       // 8. 创建/续费订阅
       const expiresAt = transaction.expiresDate
         ? new Date(transaction.expiresDate)
-        : this.calcExpiresDate(plan);
+        : this.calcExpiresDate(plan as any);
 
       await this.subscriptionService.createSubscription({
         userId,
@@ -417,12 +415,12 @@ export class AppleIapService {
     if (!subscription) return;
 
     // 更新支付记录为已退款
-    const paymentRecord = await this.paymentRepo.findOneBy({
-      orderNo: `apple_${txn.transactionId}`,
+    const paymentRecord = await this.prisma.payment_record.findUnique({
+      where: { order_no: `apple_${txn.transactionId}` },
     });
     if (paymentRecord) {
       await this.subscriptionService.updatePaymentStatus(
-        paymentRecord.orderNo,
+        paymentRecord.order_no,
         PaymentStatus.REFUNDED,
       );
     }
@@ -542,9 +540,9 @@ export class AppleIapService {
     expiresAt: Date;
   } | null> {
     // 通过 platformSubscriptionId 查找
-    const sub = await this.subRepo.findOne({
-      where: { platformSubscriptionId: originalTransactionId },
-      order: { createdAt: 'DESC' },
+    const sub = await this.prisma.subscription.findFirst({
+      where: { platform_subscription_id: originalTransactionId },
+      orderBy: { created_at: 'desc' },
     });
 
     if (!sub) {
@@ -554,7 +552,7 @@ export class AppleIapService {
       return null;
     }
 
-    return { id: sub.id, userId: sub.userId, expiresAt: sub.expiresAt };
+    return { id: sub.id, userId: sub.user_id, expiresAt: sub.expires_at };
   }
 
   /**
@@ -629,9 +627,9 @@ export class AppleIapService {
   /**
    * 根据计划计费周期计算到期时间
    */
-  private calcExpiresDate(plan: SubscriptionPlan): Date {
+  private calcExpiresDate(plan: any): Date {
     const now = new Date();
-    switch (plan.billingCycle) {
+    switch (plan.billing_cycle) {
       case 'monthly':
         return new Date(now.setMonth(now.getMonth() + 1));
       case 'quarterly':

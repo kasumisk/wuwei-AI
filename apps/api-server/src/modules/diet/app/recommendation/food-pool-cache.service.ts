@@ -1,7 +1,5 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { FoodLibrary } from '../../../food/entities/food-library.entity';
+import { PrismaService } from '../../../../core/prisma/prisma.service';
 import { RedisCacheService } from '../../../../core/redis/redis-cache.service';
 import {
   TieredCacheManager,
@@ -44,7 +42,7 @@ const REFRESH_AHEAD_MS = 2 * 60 * 1000;
 /** L1 容量上限：20 条（10 个品类 + 余量） */
 const L1_MAX_ENTRIES = 20;
 
-const FOOD_POOL_SELECTABLE_PROPERTIES: Array<keyof FoodLibrary> = [
+const FOOD_POOL_SELECTABLE_COLUMNS: string[] = [
   'id',
   'code',
   'name',
@@ -52,67 +50,67 @@ const FOOD_POOL_SELECTABLE_PROPERTIES: Array<keyof FoodLibrary> = [
   'barcode',
   'status',
   'category',
-  'subCategory',
-  'foodGroup',
+  'sub_category',
+  'food_group',
   'calories',
   'protein',
   'fat',
   'carbs',
   'fiber',
   'sugar',
-  'saturatedFat',
-  'transFat',
+  'saturated_fat',
+  'trans_fat',
   'cholesterol',
   'sodium',
   'potassium',
   'calcium',
   'iron',
-  'vitaminA',
-  'vitaminC',
-  'vitaminD',
-  'vitaminE',
-  'vitaminB12',
+  'vitamin_a',
+  'vitamin_c',
+  'vitamin_d',
+  'vitamin_e',
+  'vitamin_b12',
   'folate',
   'zinc',
   'magnesium',
-  'glycemicIndex',
-  'glycemicLoad',
-  'isProcessed',
-  'isFried',
-  'processingLevel',
+  'glycemic_index',
+  'glycemic_load',
+  'is_processed',
+  'is_fried',
+  'processing_level',
   'allergens',
-  'qualityScore',
-  'satietyScore',
-  'nutrientDensity',
-  'mealTypes',
+  'quality_score',
+  'satiety_score',
+  'nutrient_density',
+  'meal_types',
   'tags',
-  'mainIngredient',
+  'main_ingredient',
   'compatibility',
-  'standardServingG',
-  'standardServingDesc',
-  'commonPortions',
-  'primarySource',
-  'primarySourceId',
-  'dataVersion',
+  'standard_serving_g',
+  'standard_serving_desc',
+  'common_portions',
+  'primary_source',
+  'primary_source_id',
+  'data_version',
   'confidence',
-  'isVerified',
-  'verifiedBy',
-  'verifiedAt',
-  'searchWeight',
+  'is_verified',
+  'verified_by',
+  'verified_at',
+  'search_weight',
   'popularity',
-  'createdAt',
-  'updatedAt',
+  'created_at',
+  'updated_at',
   // V5 4.6: 嵌入扩展字段（用于 96 维嵌入生成 + 可解释性）
   'cuisine',
-  'flavorProfile',
-  'cookingMethod',
-  'prepTimeMinutes',
-  'cookTimeMinutes',
-  'skillRequired',
-  'estimatedCostLevel',
-  'shelfLifeDays',
-  'fodmapLevel',
-  'oxalateLevel',
+  'flavor_profile',
+  'cooking_method',
+  'prep_time_minutes',
+  'cook_time_minutes',
+  'skill_required',
+  'estimated_cost_level',
+  'shelf_life_days',
+  'fodmap_level',
+  'oxalate_level',
 ];
 
 /**
@@ -134,7 +132,7 @@ export class FoodPoolCacheService implements OnModuleInit {
   private readonly logger = new Logger(FoodPoolCacheService.name);
 
   /** V6 1.7: 统一缓存 namespace，key = 品类名 */
-  private cache: TieredCacheNamespace<FoodLibrary[]>;
+  private cache: TieredCacheNamespace<any[]>;
 
   private selectableColumnsPromise: Promise<string[]> | null = null;
   /** V5 2.7: 品类微量营养素均值缓存（与食物池同步刷新） */
@@ -142,15 +140,14 @@ export class FoodPoolCacheService implements OnModuleInit {
     null;
 
   constructor(
-    @InjectRepository(FoodLibrary)
-    private readonly foodLibraryRepo: Repository<FoodLibrary>,
+    private readonly prisma: PrismaService,
     private readonly redis: RedisCacheService,
     private readonly cacheManager: TieredCacheManager,
   ) {}
 
   onModuleInit(): void {
     // 创建 food_pool namespace — 配置继承原 V5 4.3/4.4 参数
-    this.cache = this.cacheManager.createNamespace<FoodLibrary[]>({
+    this.cache = this.cacheManager.createNamespace<any[]>({
       namespace: 'food_pool',
       l1MaxEntries: L1_MAX_ENTRIES,
       l1TtlMs: L1_TTL_MS,
@@ -163,7 +160,7 @@ export class FoodPoolCacheService implements OnModuleInit {
    * 获取已验证的活跃食物列表（聚合所有品类分片）
    * 接口兼容旧版，调用方无需修改
    */
-  async getVerifiedFoods(): Promise<FoodLibrary[]> {
+  async getVerifiedFoods(): Promise<any[]> {
     const results = await Promise.all(
       FOOD_CATEGORIES.map((cat) => this.getVerifiedFoodsByCategory(cat)),
     );
@@ -182,7 +179,7 @@ export class FoodPoolCacheService implements OnModuleInit {
    * V5 4.3: 按品类获取已验证的活跃食物列表
    * V6 1.7: 迁移到 TieredCacheNamespace，自动 L1→L2→DB 穿透 + refresh-ahead
    */
-  async getVerifiedFoodsByCategory(category: string): Promise<FoodLibrary[]> {
+  async getVerifiedFoodsByCategory(category: string): Promise<any[]> {
     return this.cache.getOrSet(category, () =>
       this.loadCategoryFromDB(category),
     );
@@ -191,14 +188,16 @@ export class FoodPoolCacheService implements OnModuleInit {
   /**
    * V5 4.3: 从数据库加载指定品类的已验证食物
    */
-  private async loadCategoryFromDB(category: string): Promise<FoodLibrary[]> {
+  private async loadCategoryFromDB(category: string): Promise<any[]> {
     const selectColumns = await this.getSelectableColumns();
-    const foods = await this.foodLibraryRepo
-      .createQueryBuilder('food')
-      .select(selectColumns)
-      .where('food.isVerified = :isVerified', { isVerified: true })
-      .andWhere('food.category = :category', { category })
-      .getMany();
+    const columnList = selectColumns.join(', ');
+    const foods: any[] = await this.prisma.$queryRawUnsafe(
+      `SELECT ${columnList}
+       FROM foods
+       WHERE is_verified = true
+         AND category = $1`,
+      category,
+    );
 
     this.logger.debug(
       `Food pool shard [${category}] loaded from DB: ${foods.length} foods`,
@@ -220,12 +219,12 @@ export class FoodPoolCacheService implements OnModuleInit {
 
   private async loadSelectableColumns(): Promise<string[]> {
     const existingColumns: Array<{ column_name: string }> =
-      await this.foodLibraryRepo.query(
+      await this.prisma.$queryRawUnsafe(
         `SELECT column_name
          FROM information_schema.columns
          WHERE table_schema = current_schema()
            AND table_name = $1`,
-        ['foods'],
+        'foods',
       );
 
     const existingColumnNames = new Set(
@@ -233,23 +232,13 @@ export class FoodPoolCacheService implements OnModuleInit {
     );
     const missingColumnNames: string[] = [];
 
-    const selectableColumns = FOOD_POOL_SELECTABLE_PROPERTIES.flatMap(
-      (propertyName) => {
-        const column =
-          this.foodLibraryRepo.metadata.findColumnWithPropertyName(
-            propertyName,
-          );
-
-        if (!column) {
-          return [];
+    const selectableColumns = FOOD_POOL_SELECTABLE_COLUMNS.filter(
+      (columnName) => {
+        if (!existingColumnNames.has(columnName)) {
+          missingColumnNames.push(columnName);
+          return false;
         }
-
-        if (!existingColumnNames.has(column.databaseName)) {
-          missingColumnNames.push(column.databaseName);
-          return [];
-        }
-
-        return [`food.${column.propertyPath}`];
+        return true;
       },
     );
 

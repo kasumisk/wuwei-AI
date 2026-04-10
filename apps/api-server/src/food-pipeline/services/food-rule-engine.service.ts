@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { FoodLibrary } from '../../modules/food/entities/food-library.entity';
+import { FoodLibrary } from '../../modules/food/food.types';
 
 /**
  * 食物规则引擎服务

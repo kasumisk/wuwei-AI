@@ -1,7 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, IsNull, Not } from 'typeorm';
-import { FoodLibrary } from '../../../food/entities/food-library.entity';
+import { PrismaService } from '../../../../core/prisma/prisma.service';
+import { FoodLibrary } from '../../../food/food.types';
 import {
   computeFoodEmbedding,
   cosineSimilarity,
@@ -44,8 +43,7 @@ export class VectorSearchService implements OnModuleInit {
   private pgvectorAvailable = false;
 
   /** 内存中的嵌入向量索引（应用层模式回退用） */
-  private embeddingIndex: Map<string, { food: FoodLibrary; vec: number[] }> =
-    new Map();
+  private embeddingIndex: Map<string, { food: any; vec: number[] }> = new Map();
   private indexBuiltAt = 0;
 
   /** 索引缓存 TTL（毫秒） */
@@ -55,8 +53,7 @@ export class VectorSearchService implements OnModuleInit {
   private static readonly HNSW_EF_SEARCH = 100;
 
   constructor(
-    @InjectRepository(FoodLibrary)
-    private readonly foodRepo: Repository<FoodLibrary>,
+    private readonly prisma: PrismaService,
     private readonly redisCache: RedisCacheService,
   ) {}
 
@@ -73,9 +70,10 @@ export class VectorSearchService implements OnModuleInit {
   private async detectPgvector(): Promise<void> {
     try {
       // 检测 pgvector 扩展是否安装
-      const result: Array<{ extname: string }> = await this.foodRepo.query(
-        `SELECT extname FROM pg_extension WHERE extname = 'vector'`,
-      );
+      const result: Array<{ extname: string }> =
+        await this.prisma.$queryRawUnsafe(
+          `SELECT extname FROM pg_extension WHERE extname = 'vector'`,
+        );
       if (result.length === 0) {
         this.logger.log('pgvector 扩展未安装，使用应用层模式（内存暴力搜索）');
         this.pgvectorAvailable = false;
@@ -84,7 +82,7 @@ export class VectorSearchService implements OnModuleInit {
 
       // 检测 embedding_v5 列是否存在
       const colCheck: Array<{ column_name: string }> =
-        await this.foodRepo.query(
+        await this.prisma.$queryRawUnsafe(
           `SELECT column_name FROM information_schema.columns
          WHERE table_name = 'foods' AND column_name = 'embedding_v5'`,
         );
@@ -116,14 +114,16 @@ export class VectorSearchService implements OnModuleInit {
     const startTime = Date.now();
 
     // 查找所有缺失嵌入的 active 食物
-    const foods = await this.foodRepo.find({
-      where: { embedding: IsNull(), status: 'active' as any },
-    });
+    const foods: any[] = await this.prisma.$queryRawUnsafe(
+      `SELECT * FROM "foods" WHERE "embedding" IS NULL AND "status" = 'active'`,
+    );
 
     if (foods.length === 0) {
-      const total = await this.foodRepo.count({
-        where: { embedding: Not(IsNull()) },
-      });
+      const countResult: Array<{ count: string }> =
+        await this.prisma.$queryRawUnsafe(
+          `SELECT COUNT(*)::text AS "count" FROM "foods" WHERE "embedding" IS NOT NULL`,
+        );
+      const total = Number(countResult[0]?.count ?? 0);
       return { synced: 0, total };
     }
 
@@ -135,20 +135,22 @@ export class VectorSearchService implements OnModuleInit {
       const batch = foods.slice(i, i + BATCH_SIZE);
 
       for (const food of batch) {
-        const vec = computeFoodEmbedding(food);
-        const updateData: Record<string, any> = {
-          embedding: vec,
-          embeddingUpdatedAt: new Date(),
-        };
-
+        const vec = computeFoodEmbedding(food as any);
         // 同时更新 float4[] embedding
-        await this.foodRepo.update(food.id, updateData);
+        await this.prisma.foods.update({
+          where: { id: food.id },
+          data: {
+            embedding: vec,
+            embedding_updated_at: new Date(),
+          },
+        });
 
         // V5 4.1: 如果 pgvector 可用，同步写入 embedding_v5
         if (this.pgvectorAvailable) {
-          await this.foodRepo.query(
+          await this.prisma.$queryRawUnsafe(
             `UPDATE "foods" SET "embedding_v5" = $1::vector WHERE "id" = $2`,
-            [`[${vec.join(',')}]`, food.id],
+            `[${vec.join(',')}]`,
+            food.id,
           );
         }
       }
@@ -165,9 +167,11 @@ export class VectorSearchService implements OnModuleInit {
       `Synced ${synced} food embeddings in ${elapsed}ms (pgvector=${this.pgvectorAvailable})`,
     );
 
-    const total = await this.foodRepo.count({
-      where: { embedding: Not(IsNull()) },
-    });
+    const total: number = await this.prisma
+      .$queryRawUnsafe(
+        `SELECT COUNT(*)::int AS "count" FROM "foods" WHERE "embedding" IS NOT NULL`,
+      )
+      .then((rows: Array<{ count: number }>) => rows[0]?.count ?? 0);
     return { synced, total };
   }
 
@@ -260,12 +264,12 @@ export class VectorSearchService implements OnModuleInit {
     params.push(topK);
 
     // 设置 HNSW ef_search 参数（在查询前）
-    await this.foodRepo.query(
+    await this.prisma.$queryRawUnsafe(
       `SET LOCAL hnsw.ef_search = ${VectorSearchService.HNSW_EF_SEARCH}`,
     );
 
     const rows: Array<{ foodId: string; similarity: string }> =
-      await this.foodRepo.query(sql, params);
+      await this.prisma.$queryRawUnsafe(sql, ...params);
 
     return rows.map((r) => ({
       foodId: r.foodId,
@@ -284,9 +288,9 @@ export class VectorSearchService implements OnModuleInit {
   ): Promise<SimilarFoodResult[]> {
     // 先获取目标食物的 embedding_v5
     const targetRows: Array<{ embedding_v5: string }> =
-      await this.foodRepo.query(
+      await this.prisma.$queryRawUnsafe(
         `SELECT "embedding_v5" FROM "foods" WHERE "id" = $1 AND "embedding_v5" IS NOT NULL`,
-        [foodId],
+        foodId,
       );
 
     if (targetRows.length === 0) {
@@ -339,7 +343,7 @@ export class VectorSearchService implements OnModuleInit {
       carbs: string;
       fiber: string;
       similarity: string;
-    }> = await this.foodRepo.query(sql, params);
+    }> = await this.prisma.$queryRawUnsafe(sql, ...params);
 
     // 后置过滤排除列表 + 转换为 SimilarFoodResult
     const results: SimilarFoodResult[] = [];
@@ -348,15 +352,16 @@ export class VectorSearchService implements OnModuleInit {
       if (results.length >= topK) break;
 
       // 构造轻量 FoodLibrary 对象（核心字段）
-      const food = new FoodLibrary();
-      food.id = row.id;
-      food.name = row.name;
-      food.category = row.category;
-      food.calories = Number(row.calories);
-      food.protein = row.protein != null ? Number(row.protein) : undefined;
-      food.fat = row.fat != null ? Number(row.fat) : undefined;
-      food.carbs = row.carbs != null ? Number(row.carbs) : undefined;
-      food.fiber = row.fiber != null ? Number(row.fiber) : undefined;
+      const food: FoodLibrary = {
+        id: row.id,
+        name: row.name,
+        category: row.category,
+        calories: Number(row.calories),
+        protein: row.protein != null ? Number(row.protein) : undefined,
+        fat: row.fat != null ? Number(row.fat) : undefined,
+        carbs: row.carbs != null ? Number(row.carbs) : undefined,
+        fiber: row.fiber != null ? Number(row.fiber) : undefined,
+      } as FoodLibrary;
 
       results.push({ food, similarity: Number(row.similarity) });
     }
@@ -423,11 +428,11 @@ export class VectorSearchService implements OnModuleInit {
     // 在 DB 中计算平均嵌入
     const placeholders = foodIds.map((_, i) => `$${i + 1}`).join(',');
     const avgResult: Array<{ avg_embedding: string }> =
-      await this.foodRepo.query(
+      await this.prisma.$queryRawUnsafe(
         `SELECT avg(embedding_v5)::vector AS avg_embedding
          FROM "foods"
          WHERE id IN (${placeholders}) AND embedding_v5 IS NOT NULL`,
-        foodIds,
+        ...foodIds,
       );
 
     if (!avgResult[0]?.avg_embedding) {
@@ -474,18 +479,19 @@ export class VectorSearchService implements OnModuleInit {
       carbs: string;
       fiber: string;
       similarity: string;
-    }> = await this.foodRepo.query(sql, params);
+    }> = await this.prisma.$queryRawUnsafe(sql, ...params);
 
     return rows.slice(0, topK).map((row) => {
-      const food = new FoodLibrary();
-      food.id = row.id;
-      food.name = row.name;
-      food.category = row.category;
-      food.calories = Number(row.calories);
-      food.protein = row.protein != null ? Number(row.protein) : undefined;
-      food.fat = row.fat != null ? Number(row.fat) : undefined;
-      food.carbs = row.carbs != null ? Number(row.carbs) : undefined;
-      food.fiber = row.fiber != null ? Number(row.fiber) : undefined;
+      const food: FoodLibrary = {
+        id: row.id,
+        name: row.name,
+        category: row.category,
+        calories: Number(row.calories),
+        protein: row.protein != null ? Number(row.protein) : undefined,
+        fat: row.fat != null ? Number(row.fat) : undefined,
+        carbs: row.carbs != null ? Number(row.carbs) : undefined,
+        fiber: row.fiber != null ? Number(row.fiber) : undefined,
+      } as FoodLibrary;
       return { food, similarity: Number(row.similarity) };
     });
   }
@@ -544,8 +550,11 @@ export class VectorSearchService implements OnModuleInit {
     const vec = computeFoodEmbedding(food);
 
     // 异步持久化 float4[] embedding（不阻塞返回）
-    this.foodRepo
-      .update(food.id, { embedding: vec, embeddingUpdatedAt: new Date() })
+    this.prisma.foods
+      .update({
+        where: { id: food.id },
+        data: { embedding: vec, embedding_updated_at: new Date() },
+      })
       .catch((err) =>
         this.logger.warn(
           `Failed to persist embedding for ${food.id}: ${err.message}`,
@@ -554,10 +563,11 @@ export class VectorSearchService implements OnModuleInit {
 
     // V5 4.1: 同步写入 pgvector 列
     if (this.pgvectorAvailable) {
-      this.foodRepo
-        .query(
+      this.prisma
+        .$queryRawUnsafe(
           `UPDATE "foods" SET "embedding_v5" = $1::vector WHERE "id" = $2`,
-          [`[${vec.join(',')}]`, food.id],
+          `[${vec.join(',')}]`,
+          food.id,
         )
         .catch((err) =>
           this.logger.warn(
@@ -573,7 +583,7 @@ export class VectorSearchService implements OnModuleInit {
    * 获取或构建内存索引（应用层模式回退用）
    */
   private async getOrBuildIndex(): Promise<
-    Map<string, { food: FoodLibrary; vec: number[] }>
+    Map<string, { food: any; vec: number[] }>
   > {
     const now = Date.now();
     if (
@@ -586,9 +596,9 @@ export class VectorSearchService implements OnModuleInit {
     const startTime = Date.now();
 
     // 加载所有有嵌入的食物
-    const foods = await this.foodRepo.find({
-      where: { embedding: Not(IsNull()) },
-    });
+    const foods: any[] = await this.prisma.$queryRawUnsafe(
+      `SELECT * FROM "foods" WHERE "embedding" IS NOT NULL`,
+    );
 
     this.embeddingIndex.clear();
     for (const food of foods) {

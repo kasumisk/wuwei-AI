@@ -4,13 +4,7 @@ import {
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { FoodLibrary } from '../entities/food-library.entity';
-import { FoodTranslation } from '../entities/food-translation.entity';
-import { FoodSource } from '../entities/food-source.entity';
-import { FoodChangeLog } from '../entities/food-change-log.entity';
-import { FoodConflict } from '../entities/food-conflict.entity';
+import { PrismaService } from '../../../core/prisma/prisma.service';
 import {
   GetFoodLibraryQueryDto,
   CreateFoodLibraryDto,
@@ -25,18 +19,7 @@ import {
 export class FoodLibraryManagementService {
   private readonly logger = new Logger(FoodLibraryManagementService.name);
 
-  constructor(
-    @InjectRepository(FoodLibrary)
-    private readonly foodLibraryRepo: Repository<FoodLibrary>,
-    @InjectRepository(FoodTranslation)
-    private readonly translationRepo: Repository<FoodTranslation>,
-    @InjectRepository(FoodSource)
-    private readonly sourceRepo: Repository<FoodSource>,
-    @InjectRepository(FoodChangeLog)
-    private readonly changeLogRepo: Repository<FoodChangeLog>,
-    @InjectRepository(FoodConflict)
-    private readonly conflictRepo: Repository<FoodConflict>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   // ==================== 食物 CRUD ====================
 
@@ -50,34 +33,54 @@ export class FoodLibraryManagementService {
       primarySource,
       status,
     } = query;
-    const qb = this.foodLibraryRepo.createQueryBuilder('f');
+
+    // Build dynamic WHERE clauses for ILIKE support
+    const conditions: string[] = ['1=1'];
+    const params: any[] = [];
+    let paramIdx = 1;
 
     if (keyword) {
-      qb.andWhere(
-        '(f.name ILIKE :kw OR f.aliases ILIKE :kw OR f.code ILIKE :kw)',
-        { kw: `%${keyword}%` },
+      conditions.push(
+        `(f.name ILIKE $${paramIdx} OR f.aliases ILIKE $${paramIdx} OR f.code ILIKE $${paramIdx})`,
       );
+      params.push(`%${keyword}%`);
+      paramIdx++;
     }
     if (category) {
-      qb.andWhere('f.category = :category', { category });
+      conditions.push(`f.category = $${paramIdx++}`);
+      params.push(category);
     }
     if (status) {
-      qb.andWhere('f.status = :status', { status });
+      conditions.push(`f.status = $${paramIdx++}`);
+      params.push(status);
     }
     if (isVerified !== undefined) {
-      qb.andWhere('f.isVerified = :isVerified', { isVerified });
+      conditions.push(`f.is_verified = $${paramIdx++}`);
+      params.push(isVerified);
     }
     if (primarySource) {
-      qb.andWhere('f.primarySource = :primarySource', { primarySource });
+      conditions.push(`f.primary_source = $${paramIdx++}`);
+      params.push(primarySource);
     }
 
-    qb.orderBy('f.searchWeight', 'DESC').addOrderBy('f.createdAt', 'DESC');
+    const whereClause = conditions.join(' AND ');
+    const offset = (page - 1) * pageSize;
 
-    const total = await qb.getCount();
-    const list = await qb
-      .skip((page - 1) * pageSize)
-      .take(pageSize)
-      .getMany();
+    const totalResult = await this.prisma.$queryRawUnsafe<[{ count: string }]>(
+      `SELECT COUNT(*)::text AS count FROM foods f WHERE ${whereClause}`,
+      ...params,
+    );
+    const total = parseInt(totalResult[0]?.count ?? '0', 10);
+
+    const list = await this.prisma.$queryRawUnsafe<any[]>(
+      `SELECT * FROM foods f
+       WHERE ${whereClause}
+       ORDER BY f.search_weight DESC, f.created_at DESC
+       LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
+      ...params,
+      pageSize,
+      offset,
+    );
 
     return {
       list,
@@ -88,50 +91,55 @@ export class FoodLibraryManagementService {
     };
   }
 
-  async findOne(id: string): Promise<FoodLibrary> {
-    const food = await this.foodLibraryRepo.findOne({
-      where: { id },
-      relations: ['translations', 'sources', 'conflicts'],
-    });
+  async findOne(id: string) {
+    const food = await this.prisma.foods.findUnique({ where: { id } });
     if (!food) {
       throw new NotFoundException('食物不存在');
     }
-    return food;
+    // Load relations separately
+    const [translations, sources, conflicts] = await Promise.all([
+      this.prisma.food_translations.findMany({ where: { food_id: id } }),
+      this.prisma.food_sources.findMany({ where: { food_id: id } }),
+      this.prisma.food_conflicts.findMany({ where: { food_id: id } }),
+    ]);
+    return { ...food, translations, sources, conflicts };
   }
 
-  async create(dto: CreateFoodLibraryDto): Promise<FoodLibrary> {
-    const existing = await this.foodLibraryRepo.findOne({
-      where: { name: dto.name },
+  async create(dto: CreateFoodLibraryDto) {
+    const existing = await this.prisma.foods.findFirst({
+      where: { name: (dto as any).name },
     });
     if (existing) {
-      throw new ConflictException(`食物 "${dto.name}" 已存在`);
+      throw new ConflictException(`食物 "${(dto as any).name}" 已存在`);
     }
-    const codeExisting = await this.foodLibraryRepo.findOne({
-      where: { code: dto.code },
+    const codeExisting = await this.prisma.foods.findFirst({
+      where: { code: (dto as any).code },
     });
     if (codeExisting) {
-      throw new ConflictException(`编码 "${dto.code}" 已存在`);
+      throw new ConflictException(`编码 "${(dto as any).code}" 已存在`);
     }
-    const food = this.foodLibraryRepo.create(dto);
-    const saved = await this.foodLibraryRepo.save(food);
+    const saved = await this.prisma.foods.create({ data: dto as any });
 
     // 写变更日志
-    await this.createChangeLog(saved.id, 1, 'create', dto, '创建食物', 'admin');
+    await this.createChangeLog(
+      saved.id,
+      1,
+      'create',
+      dto as any,
+      '创建食物',
+      'admin',
+    );
     return saved;
   }
 
-  async update(
-    id: string,
-    dto: UpdateFoodLibraryDto,
-    operator = 'admin',
-  ): Promise<FoodLibrary> {
+  async update(id: string, dto: UpdateFoodLibraryDto, operator = 'admin') {
     const food = await this.findOne(id);
-    if (dto.name && dto.name !== food.name) {
-      const existing = await this.foodLibraryRepo.findOne({
-        where: { name: dto.name },
+    if ((dto as any).name && (dto as any).name !== food.name) {
+      const existing = await this.prisma.foods.findFirst({
+        where: { name: (dto as any).name },
       });
       if (existing) {
-        throw new ConflictException(`食物 "${dto.name}" 已存在`);
+        throw new ConflictException(`食物 "${(dto as any).name}" 已存在`);
       }
     }
 
@@ -143,14 +151,16 @@ export class FoodLibraryManagementService {
       }
     }
 
-    Object.assign(food, dto);
-    food.dataVersion = (food.dataVersion || 1) + 1;
-    const saved = await this.foodLibraryRepo.save(food);
+    const newVersion = (food.data_version || 1) + 1;
+    const saved = await this.prisma.foods.update({
+      where: { id },
+      data: { ...(dto as any), data_version: newVersion },
+    });
 
     if (Object.keys(changes).length > 0) {
       await this.createChangeLog(
         id,
-        saved.dataVersion,
+        saved.data_version,
         'update',
         changes,
         undefined,
@@ -162,7 +172,7 @@ export class FoodLibraryManagementService {
 
   async remove(id: string): Promise<{ message: string }> {
     const food = await this.findOne(id);
-    await this.foodLibraryRepo.remove(food);
+    await this.prisma.foods.delete({ where: { id } });
     return { message: `食物 "${food.name}" 已删除` };
   }
 
@@ -175,38 +185,45 @@ export class FoodLibraryManagementService {
 
     for (const dto of foods) {
       try {
-        const existing = await this.foodLibraryRepo.findOne({
-          where: { code: dto.code },
+        const existing = await this.prisma.foods.findFirst({
+          where: { code: (dto as any).code },
         });
         if (existing) {
           skipped++;
           continue;
         }
-        const food = this.foodLibraryRepo.create(dto);
-        await this.foodLibraryRepo.save(food);
+        await this.prisma.foods.create({ data: dto as any });
         imported++;
       } catch (e) {
-        errors.push(`${dto.code} (${dto.name}): ${e.message}`);
+        errors.push(
+          `${(dto as any).code} (${(dto as any).name}): ${e.message}`,
+        );
       }
     }
 
     return { imported, skipped, errors };
   }
 
-  async toggleVerified(id: string, operator = 'admin'): Promise<FoodLibrary> {
+  async toggleVerified(id: string, operator = 'admin') {
     const food = await this.findOne(id);
-    food.isVerified = !food.isVerified;
-    food.verifiedBy = food.isVerified ? operator : undefined;
-    food.verifiedAt = food.isVerified ? new Date() : undefined;
-    food.dataVersion = (food.dataVersion || 1) + 1;
-    const saved = await this.foodLibraryRepo.save(food);
+    const newIsVerified = !food.is_verified;
+    const newVersion = (food.data_version || 1) + 1;
+    const saved = await this.prisma.foods.update({
+      where: { id },
+      data: {
+        is_verified: newIsVerified,
+        verified_by: newIsVerified ? operator : null,
+        verified_at: newIsVerified ? new Date() : null,
+        data_version: newVersion,
+      },
+    });
 
     await this.createChangeLog(
       id,
-      saved.dataVersion,
+      saved.data_version,
       'verify',
       {
-        isVerified: { old: !food.isVerified, new: food.isVerified },
+        isVerified: { old: !newIsVerified, new: newIsVerified },
       },
       undefined,
       operator,
@@ -214,20 +231,21 @@ export class FoodLibraryManagementService {
     return saved;
   }
 
-  async updateStatus(
-    id: string,
-    newStatus: string,
-    operator = 'admin',
-  ): Promise<FoodLibrary> {
+  async updateStatus(id: string, newStatus: string, operator = 'admin') {
     const food = await this.findOne(id);
     const oldStatus = food.status;
-    food.status = newStatus;
-    food.dataVersion = (food.dataVersion || 1) + 1;
-    const saved = await this.foodLibraryRepo.save(food);
+    const newVersion = (food.data_version || 1) + 1;
+    const saved = await this.prisma.foods.update({
+      where: { id },
+      data: {
+        status: newStatus,
+        data_version: newVersion,
+      },
+    });
 
     await this.createChangeLog(
       id,
-      saved.dataVersion,
+      saved.data_version,
       newStatus === 'archived' ? 'archive' : 'update',
       {
         status: { old: oldStatus, new: newStatus },
@@ -241,35 +259,29 @@ export class FoodLibraryManagementService {
   // ==================== 统计 ====================
 
   async getStatistics() {
-    const total = await this.foodLibraryRepo.count();
-    const verified = await this.foodLibraryRepo.count({
-      where: { isVerified: true },
-    });
+    const [total, verified] = await Promise.all([
+      this.prisma.foods.count(),
+      this.prisma.foods.count({ where: { is_verified: true } }),
+    ]);
     const unverified = total - verified;
 
-    const byCategory = await this.foodLibraryRepo
-      .createQueryBuilder('f')
-      .select('f.category', 'category')
-      .addSelect('COUNT(*)', 'count')
-      .groupBy('f.category')
-      .orderBy('count', 'DESC')
-      .getRawMany();
+    const byCategory = await this.prisma.$queryRawUnsafe<
+      { category: string; count: string }[]
+    >(
+      `SELECT category, COUNT(*)::text AS count FROM foods GROUP BY category ORDER BY COUNT(*) DESC`,
+    );
 
-    const bySource = await this.foodLibraryRepo
-      .createQueryBuilder('f')
-      .select('f.primarySource', 'source')
-      .addSelect('COUNT(*)', 'count')
-      .groupBy('f.primarySource')
-      .getRawMany();
+    const bySource = await this.prisma.$queryRawUnsafe<
+      { source: string; count: string }[]
+    >(
+      `SELECT primary_source AS source, COUNT(*)::text AS count FROM foods GROUP BY primary_source`,
+    );
 
-    const byStatus = await this.foodLibraryRepo
-      .createQueryBuilder('f')
-      .select('f.status', 'status')
-      .addSelect('COUNT(*)', 'count')
-      .groupBy('f.status')
-      .getRawMany();
+    const byStatus = await this.prisma.$queryRawUnsafe<
+      { status: string; count: string }[]
+    >(`SELECT status, COUNT(*)::text AS count FROM foods GROUP BY status`);
 
-    const conflictCount = await this.conflictRepo.count({
+    const conflictCount = await this.prisma.food_conflicts.count({
       where: { resolution: 'pending' },
     });
 
@@ -285,84 +297,90 @@ export class FoodLibraryManagementService {
   }
 
   async getCategories(): Promise<string[]> {
-    const result = await this.foodLibraryRepo
-      .createQueryBuilder('f')
-      .select('DISTINCT f.category', 'category')
-      .orderBy('f.category', 'ASC')
-      .getRawMany();
+    const result = await this.prisma.$queryRawUnsafe<{ category: string }[]>(
+      `SELECT DISTINCT category FROM foods ORDER BY category ASC`,
+    );
     return result.map((r) => r.category);
   }
 
   // ==================== 翻译管理 ====================
 
   async getTranslations(foodId: string) {
-    return this.translationRepo.find({
-      where: { foodId },
-      order: { locale: 'ASC' },
+    return this.prisma.food_translations.findMany({
+      where: { food_id: foodId },
+      orderBy: { locale: 'asc' },
     });
   }
 
   async createTranslation(foodId: string, dto: CreateFoodTranslationDto) {
     await this.findOne(foodId); // validate food exists
-    const existing = await this.translationRepo.findOne({
-      where: { foodId, locale: dto.locale },
+    const existing = await this.prisma.food_translations.findFirst({
+      where: { food_id: foodId, locale: (dto as any).locale },
     });
     if (existing) {
-      throw new ConflictException(`该食物的 ${dto.locale} 翻译已存在`);
+      throw new ConflictException(`该食物的 ${(dto as any).locale} 翻译已存在`);
     }
-    const translation = this.translationRepo.create({ ...dto, foodId });
-    return this.translationRepo.save(translation);
+    return this.prisma.food_translations.create({
+      data: { ...(dto as any), food_id: foodId },
+    });
   }
 
   async updateTranslation(
     translationId: string,
     dto: UpdateFoodTranslationDto,
   ) {
-    const translation = await this.translationRepo.findOne({
+    const translation = await this.prisma.food_translations.findUnique({
       where: { id: translationId },
     });
     if (!translation) throw new NotFoundException('翻译记录不存在');
-    Object.assign(translation, dto);
-    return this.translationRepo.save(translation);
+    return this.prisma.food_translations.update({
+      where: { id: translationId },
+      data: dto as any,
+    });
   }
 
   async deleteTranslation(translationId: string) {
-    const translation = await this.translationRepo.findOne({
+    const translation = await this.prisma.food_translations.findUnique({
       where: { id: translationId },
     });
     if (!translation) throw new NotFoundException('翻译记录不存在');
-    await this.translationRepo.remove(translation);
+    await this.prisma.food_translations.delete({
+      where: { id: translationId },
+    });
     return { message: '翻译已删除' };
   }
 
   // ==================== 数据来源管理 ====================
 
   async getSources(foodId: string) {
-    return this.sourceRepo.find({
-      where: { foodId },
-      order: { priority: 'DESC' },
+    return this.prisma.food_sources.findMany({
+      where: { food_id: foodId },
+      orderBy: { priority: 'desc' },
     });
   }
 
   async createSource(foodId: string, dto: CreateFoodSourceDto) {
     await this.findOne(foodId);
-    const source = this.sourceRepo.create({ ...dto, foodId });
-    return this.sourceRepo.save(source);
+    return this.prisma.food_sources.create({
+      data: { ...(dto as any), food_id: foodId },
+    });
   }
 
   async deleteSource(sourceId: string) {
-    const source = await this.sourceRepo.findOne({ where: { id: sourceId } });
+    const source = await this.prisma.food_sources.findUnique({
+      where: { id: sourceId },
+    });
     if (!source) throw new NotFoundException('来源记录不存在');
-    await this.sourceRepo.remove(source);
+    await this.prisma.food_sources.delete({ where: { id: sourceId } });
     return { message: '来源已删除' };
   }
 
   // ==================== 变更日志 ====================
 
   async getChangeLogs(foodId: string) {
-    return this.changeLogRepo.find({
-      where: { foodId },
-      order: { version: 'DESC' },
+    return this.prisma.food_change_logs.findMany({
+      where: { food_id: foodId },
+      orderBy: { version: 'desc' },
       take: 50,
     });
   }
@@ -375,15 +393,16 @@ export class FoodLibraryManagementService {
     reason?: string,
     operator?: string,
   ) {
-    const log = this.changeLogRepo.create({
-      foodId,
-      version,
-      action,
-      changes,
-      reason,
-      operator,
+    return this.prisma.food_change_logs.create({
+      data: {
+        food_id: foodId,
+        version,
+        action,
+        changes,
+        reason: reason ?? null,
+        operator: operator ?? null,
+      },
     });
-    return this.changeLogRepo.save(log);
   }
 
   // ==================== 冲突管理 ====================
@@ -395,20 +414,22 @@ export class FoodLibraryManagementService {
     pageSize?: number;
   }) {
     const { foodId, resolution, page = 1, pageSize = 20 } = query;
-    const qb = this.conflictRepo
-      .createQueryBuilder('c')
-      .leftJoinAndSelect('c.food', 'f');
 
-    if (foodId) qb.andWhere('c.foodId = :foodId', { foodId });
-    if (resolution) qb.andWhere('c.resolution = :resolution', { resolution });
+    const where: any = {};
+    if (foodId) where.food_id = foodId;
+    if (resolution) where.resolution = resolution;
 
-    qb.orderBy('c.createdAt', 'DESC');
+    const [list, total] = await Promise.all([
+      this.prisma.food_conflicts.findMany({
+        where,
+        include: { foods: true },
+        orderBy: { created_at: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.food_conflicts.count({ where }),
+    ]);
 
-    const total = await qb.getCount();
-    const list = await qb
-      .skip((page - 1) * pageSize)
-      .take(pageSize)
-      .getMany();
     return { list, total, page, pageSize };
   }
 
@@ -417,15 +438,19 @@ export class FoodLibraryManagementService {
     dto: ResolveFoodConflictDto,
     operator = 'admin',
   ) {
-    const conflict = await this.conflictRepo.findOne({
+    const conflict = await this.prisma.food_conflicts.findUnique({
       where: { id: conflictId },
     });
     if (!conflict) throw new NotFoundException('冲突记录不存在');
 
-    conflict.resolution = dto.resolution;
-    conflict.resolvedValue = dto.resolvedValue;
-    conflict.resolvedBy = operator;
-    conflict.resolvedAt = new Date();
-    return this.conflictRepo.save(conflict);
+    return this.prisma.food_conflicts.update({
+      where: { id: conflictId },
+      data: {
+        resolution: (dto as any).resolution,
+        resolved_value: (dto as any).resolvedValue,
+        resolved_by: operator,
+        resolved_at: new Date(),
+      },
+    });
   }
 }

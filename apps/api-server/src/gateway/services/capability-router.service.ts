@@ -1,13 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { ModelConfig } from '../../modules/provider/entities/model-config.entity';
-import { Provider } from '../../modules/provider/entities/provider.entity';
-import { ClientCapabilityPermission } from '../../modules/client/entities/client-capability-permission.entity';
+import { PrismaService } from '../../core/prisma/prisma.service';
 
 export interface RouteResult {
-  modelConfig: ModelConfig;
-  provider: Provider;
+  modelConfig: any;
+  provider: any;
   model: string;
   endpoint: string;
   apiKey: string;
@@ -16,14 +12,7 @@ export interface RouteResult {
 
 @Injectable()
 export class CapabilityRouter {
-  constructor(
-    @InjectRepository(ModelConfig)
-    private readonly modelRepository: Repository<ModelConfig>,
-    @InjectRepository(Provider)
-    private readonly providerRepository: Repository<Provider>,
-    @InjectRepository(ClientCapabilityPermission)
-    private readonly permissionRepository: Repository<ClientCapabilityPermission>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * 根据能力类型和客户端权限路由到最佳模型
@@ -37,81 +26,86 @@ export class CapabilityRouter {
     requestedModel?: string,
   ): Promise<RouteResult> {
     // 获取客户端权限配置
-    const permission = await this.permissionRepository.findOne({
-      where: {
-        clientId,
-        capabilityType,
-        enabled: true,
-      },
-    });
-
-    let queryBuilder = this.modelRepository
-      .createQueryBuilder('model')
-      .leftJoinAndSelect('model.provider', 'provider')
-      .where('model.capabilityType = :capabilityType', { capabilityType })
-      .andWhere('model.enabled = :enabled', { enabled: true })
-      .andWhere('provider.enabled = :providerEnabled', {
-        providerEnabled: true,
-      });
-
-    // ✅ 新增：检查允许的提供商列表
-    if (
-      permission?.allowedProviders &&
-      permission.allowedProviders.length > 0
-    ) {
-      const lowerProviders = permission.allowedProviders.map((p) =>
-        p.toLowerCase(),
-      );
-      queryBuilder = queryBuilder.andWhere(
-        'LOWER(provider.name) IN (:...providers)',
-        {
-          providers: lowerProviders,
+    const permission =
+      await this.prisma.client_capability_permissions.findFirst({
+        where: {
+          client_id: clientId,
+          capability_type: capabilityType,
+          enabled: true,
         },
-      );
-    }
-
-    // ✅ 新增：检查允许的模型列表
-    if (permission?.allowedModels && permission.allowedModels.length > 0) {
-      queryBuilder = queryBuilder.andWhere('model.modelName IN (:...models)', {
-        models: permission.allowedModels,
       });
-    }
 
     // ✅ 增强：如果请求指定了模型，验证是否在允许列表中
     if (requestedModel) {
+      const allowedModelsList = permission?.allowed_models
+        ? permission.allowed_models.split(',')
+        : [];
       if (
-        permission?.allowedModels &&
-        permission.allowedModels.length > 0 &&
-        !permission.allowedModels.includes(requestedModel)
+        allowedModelsList.length > 0 &&
+        !allowedModelsList.includes(requestedModel)
       ) {
         throw new NotFoundException(`模型 ${requestedModel} 不在允许列表中`);
       }
-      queryBuilder = queryBuilder.andWhere('model.modelName = :model', {
-        model: requestedModel,
+    }
+
+    // Build where clause for model query
+    const modelWhere: any = {
+      capabilityType: capabilityType as any,
+      enabled: true,
+      providers: { enabled: true },
+    };
+
+    // ✅ 新增：检查允许的模型列表
+    const allowedModels = permission?.allowed_models
+      ? permission.allowed_models.split(',')
+      : [];
+    if (allowedModels.length > 0) {
+      modelWhere.modelName = { in: allowedModels };
+    }
+
+    // 如果请求指定了模型
+    if (requestedModel) {
+      modelWhere.modelName = requestedModel;
+    }
+
+    let models = await this.prisma.model_configs.findMany({
+      where: modelWhere,
+      include: { providers: true },
+      orderBy: { priority: 'asc' },
+    });
+
+    // ✅ 新增：检查允许的提供商列表（case-insensitive filtering in JS）
+    const allowedProviders = permission?.allowed_providers
+      ? permission.allowed_providers.split(',')
+      : [];
+    if (allowedProviders.length > 0) {
+      const lowerProviders = allowedProviders.map((p) => p.toLowerCase());
+      models = models.filter(
+        (m) =>
+          m.providers &&
+          lowerProviders.includes(m.providers.name.toLowerCase()),
+      );
+    }
+
+    // 如果客户端指定了首选提供商，提升其优先级（排序）
+    if (permission?.preferred_provider) {
+      const preferred = (permission.preferred_provider as string).toLowerCase();
+      models.sort((a, b) => {
+        const aPriority =
+          a.providers && a.providers.name.toLowerCase() === preferred ? 0 : 1;
+        const bPriority =
+          b.providers && b.providers.name.toLowerCase() === preferred ? 0 : 1;
+        if (aPriority !== bPriority) return aPriority - bPriority;
+        return a.priority - b.priority;
       });
     }
-
-    // 如果客户端指定了首选提供商，提升其优先级
-    if (permission?.preferredProvider) {
-      queryBuilder = queryBuilder
-        .addSelect(
-          `CASE WHEN LOWER(provider.name) = :preferred THEN 0 ELSE 1 END`,
-          'provider_priority',
-        )
-        .setParameter('preferred', permission.preferredProvider.toLowerCase())
-        .orderBy('provider_priority', 'ASC');
-    }
-
-    // 按模型优先级排序（越小越优先）
-    queryBuilder = queryBuilder.addOrderBy('model.priority', 'ASC');
-
-    const models = await queryBuilder.getMany();
 
     if (!models || models.length === 0) {
       const hint = requestedModel
         ? `（请求的模型: ${requestedModel}）`
-        : permission?.allowedModels?.length
-          ? `（允许的模型: ${JSON.stringify(permission.allowedModels)}）`
+        : permission?.allowed_models &&
+            permission.allowed_models.split(',').length
+          ? `（允许的模型: ${JSON.stringify(permission.allowed_models.split(','))}）`
           : '';
       throw new NotFoundException(
         `未找到可用的 ${capabilityType} 模型配置${hint}`,
@@ -120,7 +114,7 @@ export class CapabilityRouter {
 
     // 选择第一个（优先级最高的）
     const selected = models[0];
-    const provider = selected.provider;
+    const provider = selected.providers;
 
     // 使用模型的自定义配置，否则回退到 Provider 配置
     const endpoint = selected.endpoint || provider.baseUrl;
@@ -135,8 +129,8 @@ export class CapabilityRouter {
       config: {
         timeout: selected.customTimeout || provider.timeout,
         retries: selected.customRetries || provider.retryCount,
-        fallbackEnabled: permission?.config?.fallbackEnabled ?? true,
-        ...selected.configMetadata,
+        fallbackEnabled: (permission?.config as any)?.fallbackEnabled ?? true,
+        ...((selected.configMetadata as object) || {}),
       },
     };
   }
@@ -149,35 +143,29 @@ export class CapabilityRouter {
     capabilityType: string,
     excludeProviderIds: string[],
   ): Promise<RouteResult | null> {
-    const queryBuilder = this.modelRepository
-      .createQueryBuilder('model')
-      .leftJoinAndSelect('model.provider', 'provider')
-      .where('model.capabilityType = :capabilityType', { capabilityType })
-      .andWhere('model.enabled = :enabled', { enabled: true })
-      .andWhere('provider.enabled = :providerEnabled', {
-        providerEnabled: true,
-      });
+    const modelWhere: any = {
+      capabilityType: capabilityType as any,
+      enabled: true,
+      providers: { enabled: true },
+    };
 
     // 排除已失败的提供商
     if (excludeProviderIds.length > 0) {
-      queryBuilder.andWhere(
-        'model.providerId NOT IN (:...excludeProviderIds)',
-        {
-          excludeProviderIds,
-        },
-      );
+      modelWhere.providerId = { notIn: excludeProviderIds };
     }
 
-    queryBuilder.orderBy('model.priority', 'ASC');
-
-    const models = await queryBuilder.getMany();
+    const models = await this.prisma.model_configs.findMany({
+      where: modelWhere,
+      include: { providers: true },
+      orderBy: { priority: 'asc' },
+    });
 
     if (!models || models.length === 0) {
       return null;
     }
 
     const selected = models[0];
-    const provider = selected.provider;
+    const provider = selected.providers;
 
     const endpoint = selected.endpoint || provider.baseUrl;
     const apiKey = selected.customApiKey || provider.apiKey;
@@ -191,7 +179,7 @@ export class CapabilityRouter {
       config: {
         timeout: selected.customTimeout || provider.timeout,
         retries: selected.customRetries || provider.retryCount,
-        ...selected.configMetadata,
+        ...((selected.configMetadata as object) || {}),
       },
     };
   }

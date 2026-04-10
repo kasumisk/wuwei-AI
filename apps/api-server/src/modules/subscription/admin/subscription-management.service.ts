@@ -3,14 +3,15 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { SubscriptionPlan } from '../entities/subscription-plan.entity';
-import { Subscription } from '../entities/subscription.entity';
-import { PaymentRecord } from '../entities/payment-record.entity';
-import { UsageQuota } from '../entities/usage-quota.entity';
-import { SubscriptionTriggerLog } from '../entities/subscription-trigger-log.entity';
-import { AppUser } from '../../user/entities/app-user.entity';
+import {
+  Prisma,
+  subscription_plan as SubscriptionPlan,
+  subscription as Subscription,
+  payment_record as PaymentRecord,
+  usage_quota as UsageQuota,
+  subscription_trigger_log as SubscriptionTriggerLog,
+  app_users as AppUser,
+} from '@prisma/client';
 import {
   SubscriptionStatus,
   SubscriptionTier,
@@ -27,23 +28,11 @@ import {
   GetUsageQuotasQueryDto,
   GetTriggerStatsQueryDto,
 } from './dto/subscription-management.dto';
+import { PrismaService } from '../../../core/prisma/prisma.service';
 
 @Injectable()
 export class SubscriptionManagementService {
-  constructor(
-    @InjectRepository(SubscriptionPlan)
-    private readonly planRepository: Repository<SubscriptionPlan>,
-    @InjectRepository(Subscription)
-    private readonly subscriptionRepository: Repository<Subscription>,
-    @InjectRepository(PaymentRecord)
-    private readonly paymentRecordRepository: Repository<PaymentRecord>,
-    @InjectRepository(UsageQuota)
-    private readonly usageQuotaRepository: Repository<UsageQuota>,
-    @InjectRepository(SubscriptionTriggerLog)
-    private readonly triggerLogRepository: Repository<SubscriptionTriggerLog>,
-    @InjectRepository(AppUser)
-    private readonly appUserRepository: Repository<AppUser>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   // ==================== 订阅计划管理 ====================
 
@@ -53,22 +42,25 @@ export class SubscriptionManagementService {
   async findPlans(query: GetSubscriptionPlansQueryDto) {
     const { page = 1, pageSize = 10, tier, isActive } = query;
 
-    const qb = this.planRepository.createQueryBuilder('plan');
-
+    const where: any = {};
     if (tier) {
-      qb.andWhere('plan.tier = :tier', { tier });
+      where.tier = tier;
     }
-
     if (isActive !== undefined) {
-      qb.andWhere('plan.isActive = :isActive', { isActive });
+      where.is_active = isActive;
     }
-
-    qb.orderBy('plan.sortOrder', 'ASC').addOrderBy('plan.createdAt', 'DESC');
 
     const skip = (page - 1) * pageSize;
-    qb.skip(skip).take(pageSize);
 
-    const [list, total] = await qb.getManyAndCount();
+    const [list, total] = await Promise.all([
+      this.prisma.subscription_plan.findMany({
+        where,
+        orderBy: [{ sort_order: 'asc' }, { created_at: 'desc' }],
+        skip,
+        take: pageSize,
+      }),
+      this.prisma.subscription_plan.count({ where }),
+    ]);
 
     return {
       list,
@@ -83,48 +75,56 @@ export class SubscriptionManagementService {
    * 创建订阅计划
    */
   async createPlan(dto: CreateSubscriptionPlanDto) {
-    const plan = this.planRepository.create({
-      name: dto.name,
-      description: dto.description ?? null,
-      tier: dto.tier,
-      billingCycle: dto.billingCycle,
-      priceCents: dto.priceCents,
-      currency: dto.currency ?? 'CNY',
-      entitlements: dto.entitlements,
-      appleProductId: dto.appleProductId ?? null,
-      wechatProductId: dto.wechatProductId ?? null,
-      sortOrder: dto.sortOrder ?? 0,
+    return this.prisma.subscription_plan.create({
+      data: {
+        name: dto.name,
+        description: dto.description ?? null,
+        tier: dto.tier,
+        billing_cycle: dto.billingCycle,
+        price_cents: dto.priceCents,
+        currency: dto.currency ?? 'CNY',
+        entitlements: dto.entitlements as any,
+        apple_product_id: dto.appleProductId ?? null,
+        wechat_product_id: dto.wechatProductId ?? null,
+        sort_order: dto.sortOrder ?? 0,
+      },
     });
-
-    return this.planRepository.save(plan);
   }
 
   /**
    * 更新订阅计划
    */
   async updatePlan(id: string, dto: UpdateSubscriptionPlanDto) {
-    const plan = await this.planRepository.findOne({ where: { id } });
+    const plan = await this.prisma.subscription_plan.findUnique({
+      where: { id },
+    });
 
     if (!plan) {
       throw new NotFoundException(`订阅计划 #${id} 不存在`);
     }
 
     // 只更新传入的字段
-    if (dto.name !== undefined) plan.name = dto.name;
-    if (dto.description !== undefined) plan.description = dto.description;
-    if (dto.tier !== undefined) plan.tier = dto.tier;
-    if (dto.billingCycle !== undefined) plan.billingCycle = dto.billingCycle;
-    if (dto.priceCents !== undefined) plan.priceCents = dto.priceCents;
-    if (dto.currency !== undefined) plan.currency = dto.currency;
-    if (dto.entitlements !== undefined) plan.entitlements = dto.entitlements;
+    const updateData: any = {};
+    if (dto.name !== undefined) updateData.name = dto.name;
+    if (dto.description !== undefined) updateData.description = dto.description;
+    if (dto.tier !== undefined) updateData.tier = dto.tier;
+    if (dto.billingCycle !== undefined)
+      updateData.billing_cycle = dto.billingCycle;
+    if (dto.priceCents !== undefined) updateData.price_cents = dto.priceCents;
+    if (dto.currency !== undefined) updateData.currency = dto.currency;
+    if (dto.entitlements !== undefined)
+      updateData.entitlements = dto.entitlements;
     if (dto.appleProductId !== undefined)
-      plan.appleProductId = dto.appleProductId;
+      updateData.apple_product_id = dto.appleProductId;
     if (dto.wechatProductId !== undefined)
-      plan.wechatProductId = dto.wechatProductId;
-    if (dto.sortOrder !== undefined) plan.sortOrder = dto.sortOrder;
-    if (dto.isActive !== undefined) plan.isActive = dto.isActive;
+      updateData.wechat_product_id = dto.wechatProductId;
+    if (dto.sortOrder !== undefined) updateData.sort_order = dto.sortOrder;
+    if (dto.isActive !== undefined) updateData.is_active = dto.isActive;
 
-    return this.planRepository.save(plan);
+    return this.prisma.subscription_plan.update({
+      where: { id },
+      data: updateData,
+    });
   }
 
   // ==================== 用户订阅管理 ====================
@@ -144,59 +144,54 @@ export class SubscriptionManagementService {
       endDate,
     } = query;
 
-    const qb = this.subscriptionRepository
-      .createQueryBuilder('sub')
-      .leftJoinAndSelect('sub.plan', 'plan')
-      .leftJoin(AppUser, 'user', 'user.id = sub.userId')
-      .addSelect(['user.id', 'user.nickname', 'user.avatar', 'user.email']);
-
+    const where: any = {};
     if (userId) {
-      qb.andWhere('sub.userId = :userId', { userId });
+      where.user_id = userId;
     }
-
     if (status) {
-      qb.andWhere('sub.status = :status', { status });
+      where.status = status;
     }
-
     if (paymentChannel) {
-      qb.andWhere('sub.paymentChannel = :paymentChannel', { paymentChannel });
+      where.payment_channel = paymentChannel;
     }
-
     if (planId) {
-      qb.andWhere('sub.planId = :planId', { planId });
+      where.plan_id = planId;
     }
-
-    if (startDate) {
-      qb.andWhere('sub.createdAt >= :startDate', { startDate });
+    if (startDate || endDate) {
+      where.created_at = {};
+      if (startDate) where.created_at.gte = startDate;
+      if (endDate) where.created_at.lte = endDate;
     }
-
-    if (endDate) {
-      qb.andWhere('sub.createdAt <= :endDate', { endDate });
-    }
-
-    qb.orderBy('sub.createdAt', 'DESC');
 
     const skip = (page - 1) * pageSize;
-    qb.skip(skip).take(pageSize);
 
-    const [rawList, total] = await qb.getManyAndCount();
+    const [rawList, total] = await Promise.all([
+      this.prisma.subscription.findMany({
+        where,
+        include: { subscription_plan: true },
+        orderBy: { created_at: 'desc' },
+        skip,
+        take: pageSize,
+      }),
+      this.prisma.subscription.count({ where }),
+    ]);
 
     // 批量查询用户信息
-    const userIds = [...new Set(rawList.map((s) => s.userId))];
+    const userIds = [...new Set(rawList.map((s) => s.user_id))];
     const users =
       userIds.length > 0
-        ? await this.appUserRepository
-            .createQueryBuilder('user')
-            .select(['user.id', 'user.nickname', 'user.avatar', 'user.email'])
-            .where('user.id IN (:...userIds)', { userIds })
-            .getMany()
+        ? await this.prisma.app_users.findMany({
+            where: { id: { in: userIds } },
+            select: { id: true, nickname: true, avatar: true, email: true },
+          })
         : [];
 
     const userMap = new Map(users.map((u) => [u.id, u]));
 
     const list = rawList.map((sub) => ({
       ...sub,
-      user: userMap.get(sub.userId) ?? null,
+      plan: sub.subscription_plan,
+      user: userMap.get(sub.user_id) ?? null,
     }));
 
     return {
@@ -212,9 +207,9 @@ export class SubscriptionManagementService {
    * 获取订阅详情（含计划、支付记录、用量配额）
    */
   async getSubscriptionDetail(id: string) {
-    const subscription = await this.subscriptionRepository.findOne({
+    const subscription = await this.prisma.subscription.findUnique({
       where: { id },
-      relations: ['plan'],
+      include: { subscription_plan: true },
     });
 
     if (!subscription) {
@@ -222,26 +217,26 @@ export class SubscriptionManagementService {
     }
 
     // 查询用户信息
-    const user = await this.appUserRepository
-      .createQueryBuilder('user')
-      .select(['user.id', 'user.nickname', 'user.avatar', 'user.email'])
-      .where('user.id = :userId', { userId: subscription.userId })
-      .getOne();
+    const user = await this.prisma.app_users.findUnique({
+      where: { id: subscription.user_id },
+      select: { id: true, nickname: true, avatar: true, email: true },
+    });
 
     // 查询关联支付记录
-    const paymentRecords = await this.paymentRecordRepository.find({
-      where: { subscriptionId: id },
-      order: { createdAt: 'DESC' },
+    const paymentRecords = await this.prisma.payment_record.findMany({
+      where: { subscription_id: id },
+      orderBy: { created_at: 'desc' },
     });
 
     // 查询用户用量配额
-    const usageQuotas = await this.usageQuotaRepository.find({
-      where: { userId: subscription.userId },
-      order: { feature: 'ASC' },
+    const usageQuotas = await this.prisma.usage_quota.findMany({
+      where: { user_id: subscription.user_id },
+      orderBy: { feature: 'asc' },
     });
 
     return {
       ...subscription,
+      plan: subscription.subscription_plan,
       user,
       paymentRecords,
       usageQuotas,
@@ -252,7 +247,7 @@ export class SubscriptionManagementService {
    * 延长订阅到期时间
    */
   async extendSubscription(id: string, dto: ExtendSubscriptionDto) {
-    const subscription = await this.subscriptionRepository.findOne({
+    const subscription = await this.prisma.subscription.findUnique({
       where: { id },
     });
 
@@ -261,26 +256,33 @@ export class SubscriptionManagementService {
     }
 
     const baseDate =
-      subscription.expiresAt > new Date() ? subscription.expiresAt : new Date();
+      subscription.expires_at > new Date()
+        ? subscription.expires_at
+        : new Date();
 
     const newExpiresAt = new Date(baseDate);
     newExpiresAt.setDate(newExpiresAt.getDate() + dto.extendDays);
 
-    subscription.expiresAt = newExpiresAt;
+    const updateData: any = {
+      expires_at: newExpiresAt,
+    };
 
     // 如果订阅已过期，自动恢复为活跃状态
     if (subscription.status === SubscriptionStatus.EXPIRED) {
-      subscription.status = SubscriptionStatus.ACTIVE;
+      updateData.status = SubscriptionStatus.ACTIVE;
     }
 
-    return this.subscriptionRepository.save(subscription);
+    return this.prisma.subscription.update({
+      where: { id },
+      data: updateData,
+    });
   }
 
   /**
    * 变更订阅计划
    */
   async changeSubscriptionPlan(id: string, dto: ChangeSubscriptionPlanDto) {
-    const subscription = await this.subscriptionRepository.findOne({
+    const subscription = await this.prisma.subscription.findUnique({
       where: { id },
     });
 
@@ -288,7 +290,7 @@ export class SubscriptionManagementService {
       throw new NotFoundException(`订阅记录 #${id} 不存在`);
     }
 
-    const newPlan = await this.planRepository.findOne({
+    const newPlan = await this.prisma.subscription_plan.findUnique({
       where: { id: dto.newPlanId },
     });
 
@@ -296,9 +298,10 @@ export class SubscriptionManagementService {
       throw new NotFoundException(`订阅计划 #${dto.newPlanId} 不存在`);
     }
 
-    subscription.planId = dto.newPlanId;
-
-    return this.subscriptionRepository.save(subscription);
+    return this.prisma.subscription.update({
+      where: { id },
+      data: { plan_id: dto.newPlanId },
+    });
   }
 
   // ==================== 支付记录管理 ====================
@@ -318,55 +321,52 @@ export class SubscriptionManagementService {
       orderNo,
     } = query;
 
-    const qb = this.paymentRecordRepository.createQueryBuilder('pr');
-
+    const where: any = {};
     if (userId) {
-      qb.andWhere('pr.userId = :userId', { userId });
+      where.user_id = userId;
     }
-
     if (status) {
-      qb.andWhere('pr.status = :status', { status });
+      where.status = status;
     }
-
     if (channel) {
-      qb.andWhere('pr.channel = :channel', { channel });
+      where.channel = channel;
     }
-
-    if (startDate) {
-      qb.andWhere('pr.createdAt >= :startDate', { startDate });
+    if (startDate || endDate) {
+      where.created_at = {};
+      if (startDate) where.created_at.gte = startDate;
+      if (endDate) where.created_at.lte = endDate;
     }
-
-    if (endDate) {
-      qb.andWhere('pr.createdAt <= :endDate', { endDate });
-    }
-
     if (orderNo) {
-      qb.andWhere('pr.orderNo LIKE :orderNo', { orderNo: `%${orderNo}%` });
+      where.order_no = { contains: orderNo };
     }
-
-    qb.orderBy('pr.createdAt', 'DESC');
 
     const skip = (page - 1) * pageSize;
-    qb.skip(skip).take(pageSize);
 
-    const [rawList, total] = await qb.getManyAndCount();
+    const [rawList, total] = await Promise.all([
+      this.prisma.payment_record.findMany({
+        where,
+        orderBy: { created_at: 'desc' },
+        skip,
+        take: pageSize,
+      }),
+      this.prisma.payment_record.count({ where }),
+    ]);
 
     // 批量查询用户信息
-    const userIds = [...new Set(rawList.map((r) => r.userId))];
+    const userIds = [...new Set(rawList.map((r) => r.user_id))];
     const users =
       userIds.length > 0
-        ? await this.appUserRepository
-            .createQueryBuilder('user')
-            .select(['user.id', 'user.nickname', 'user.avatar', 'user.email'])
-            .where('user.id IN (:...userIds)', { userIds })
-            .getMany()
+        ? await this.prisma.app_users.findMany({
+            where: { id: { in: userIds } },
+            select: { id: true, nickname: true, avatar: true, email: true },
+          })
         : [];
 
     const userMap = new Map(users.map((u) => [u.id, u]));
 
     const list = rawList.map((record) => ({
       ...record,
-      user: userMap.get(record.userId) ?? null,
+      user: userMap.get(record.user_id) ?? null,
     }));
 
     return {
@@ -386,17 +386,15 @@ export class SubscriptionManagementService {
   async getUserUsageQuotas(query: GetUsageQuotasQueryDto) {
     const { userId, feature } = query;
 
-    const qb = this.usageQuotaRepository
-      .createQueryBuilder('uq')
-      .where('uq.userId = :userId', { userId });
-
+    const where: any = { user_id: userId };
     if (feature) {
-      qb.andWhere('uq.feature = :feature', { feature });
+      where.feature = feature;
     }
 
-    qb.orderBy('uq.feature', 'ASC');
-
-    const list = await qb.getMany();
+    const list = await this.prisma.usage_quota.findMany({
+      where,
+      orderBy: { feature: 'asc' },
+    });
 
     return { list, userId };
   }
@@ -405,7 +403,7 @@ export class SubscriptionManagementService {
    * 重置用量配额（将 used 归零）
    */
   async resetUsageQuota(quotaId: string) {
-    const quota = await this.usageQuotaRepository.findOne({
+    const quota = await this.prisma.usage_quota.findUnique({
       where: { id: quotaId },
     });
 
@@ -413,9 +411,10 @@ export class SubscriptionManagementService {
       throw new NotFoundException(`用量配额记录 #${quotaId} 不存在`);
     }
 
-    quota.used = 0;
-
-    return this.usageQuotaRepository.save(quota);
+    return this.prisma.usage_quota.update({
+      where: { id: quotaId },
+      data: { used: 0 },
+    });
   }
 
   // ==================== 统计概览 ====================
@@ -429,68 +428,62 @@ export class SubscriptionManagementService {
    */
   async getSubscriptionOverview() {
     // 各等级订阅人数
-    const tierStats = await this.subscriptionRepository
-      .createQueryBuilder('sub')
-      .leftJoin('sub.plan', 'plan')
-      .select('plan.tier', 'tier')
-      .addSelect('COUNT(sub.id)', 'count')
-      .where('sub.status = :status', { status: SubscriptionStatus.ACTIVE })
-      .groupBy('plan.tier')
-      .getRawMany();
+    const tierStats = await this.prisma.$queryRaw`
+      SELECT p.tier, COUNT(s.id)::int as count
+      FROM subscription s
+      LEFT JOIN subscription_plan p ON p.id = s.plan_id
+      WHERE s.status = ${SubscriptionStatus.ACTIVE}
+      GROUP BY p.tier`;
 
     // 活跃订阅总数
-    const activeCount = await this.subscriptionRepository.count({
+    const activeCount = await this.prisma.subscription.count({
       where: { status: SubscriptionStatus.ACTIVE },
     });
 
     // MRR: 活跃订阅的月收入（将季度和年度价格折算为月度）
-    const mrrResult = await this.subscriptionRepository
-      .createQueryBuilder('sub')
-      .leftJoin('sub.plan', 'plan')
-      .select(
-        `SUM(
-          CASE plan.billingCycle
-            WHEN 'monthly' THEN plan.priceCents
-            WHEN 'quarterly' THEN ROUND(plan.priceCents / 3.0)
-            WHEN 'yearly' THEN ROUND(plan.priceCents / 12.0)
-            ELSE 0
-          END
-        )`,
-        'mrr',
-      )
-      .where('sub.status = :status', { status: SubscriptionStatus.ACTIVE })
-      .getRawOne();
+    const mrrResult = await this.prisma.$queryRaw<
+      Array<{ mrr: number | null }>
+    >`
+      SELECT SUM(
+        CASE p.billing_cycle
+          WHEN 'monthly' THEN p.price_cents
+          WHEN 'quarterly' THEN ROUND(p.price_cents / 3.0)
+          WHEN 'yearly' THEN ROUND(p.price_cents / 12.0)
+          ELSE 0
+        END
+      )::int as mrr
+      FROM subscription s
+      LEFT JOIN subscription_plan p ON p.id = s.plan_id
+      WHERE s.status = ${SubscriptionStatus.ACTIVE}`;
 
-    const mrr = parseInt(mrrResult?.mrr ?? '0', 10);
+    const mrr = (mrrResult as any)[0]?.mrr ?? 0;
 
     // 最近 7 天新增订阅数
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    const recentNewSubscribers = await this.subscriptionRepository
-      .createQueryBuilder('sub')
-      .where('sub.createdAt >= :since', { since: sevenDaysAgo })
-      .getCount();
+    const recentNewSubscribers = await this.prisma.subscription.count({
+      where: { created_at: { gte: sevenDaysAgo } },
+    });
 
     // 各状态订阅统计
-    const statusStats = await this.subscriptionRepository
-      .createQueryBuilder('sub')
-      .select('sub.status', 'status')
-      .addSelect('COUNT(sub.id)', 'count')
-      .groupBy('sub.status')
-      .getRawMany();
+    const statusStats = await this.prisma.$queryRaw`
+      SELECT status, COUNT(id)::int as count
+      FROM subscription
+      GROUP BY status`;
 
     // 支付收入统计（本月成功支付总额）
     const monthStart = new Date();
     monthStart.setDate(1);
     monthStart.setHours(0, 0, 0, 0);
 
-    const monthlyRevenue = await this.paymentRecordRepository
-      .createQueryBuilder('pr')
-      .select('SUM(pr.amountCents)', 'total')
-      .where('pr.status = :status', { status: PaymentStatus.SUCCESS })
-      .andWhere('pr.paidAt >= :monthStart', { monthStart })
-      .getRawOne();
+    const monthlyRevenue = await this.prisma.$queryRaw<
+      Array<{ total: number | null }>
+    >`
+      SELECT COALESCE(SUM(amount_cents), 0)::int as total
+      FROM payment_record
+      WHERE status = ${PaymentStatus.SUCCESS}
+      AND paid_at >= ${monthStart}`;
 
     return {
       tierStats,
@@ -498,7 +491,7 @@ export class SubscriptionManagementService {
       mrr,
       recentNewSubscribers,
       statusStats,
-      monthlyRevenue: parseInt(monthlyRevenue?.total ?? '0', 10),
+      monthlyRevenue: (monthlyRevenue as any)[0]?.total ?? 0,
     };
   }
 
@@ -516,58 +509,40 @@ export class SubscriptionManagementService {
     sinceDate.setDate(sinceDate.getDate() - days);
 
     // 按功能分组统计
-    const byFeatureQb = this.triggerLogRepository
-      .createQueryBuilder('log')
-      .select('log.feature', 'feature')
-      .addSelect('COUNT(log.id)', 'totalTriggers')
-      .addSelect(
-        'SUM(CASE WHEN log.converted = true THEN 1 ELSE 0 END)',
-        'conversions',
-      )
-      .where('log.createdAt >= :sinceDate', { sinceDate })
-      .groupBy('log.feature');
-
-    if (feature) {
-      byFeatureQb.andWhere('log.feature = :feature', { feature });
-    }
-
-    if (triggerScene) {
-      byFeatureQb.andWhere('log.triggerScene = :triggerScene', {
-        triggerScene,
-      });
-    }
-
-    const byFeature = await byFeatureQb.getRawMany();
+    const byFeature = await this.prisma.$queryRaw<
+      Array<{ feature: string; totalTriggers: number; conversions: number }>
+    >`
+      SELECT feature, COUNT(id)::int as "totalTriggers",
+        SUM(CASE WHEN converted = true THEN 1 ELSE 0 END)::int as conversions
+      FROM subscription_trigger_log
+      WHERE created_at >= ${sinceDate}
+      ${feature ? Prisma.sql`AND feature = ${feature}` : Prisma.empty}
+      ${triggerScene ? Prisma.sql`AND trigger_scene = ${triggerScene}` : Prisma.empty}
+      GROUP BY feature`;
 
     // 按场景分组统计
-    const bySceneQb = this.triggerLogRepository
-      .createQueryBuilder('log')
-      .select('log.triggerScene', 'triggerScene')
-      .addSelect('COUNT(log.id)', 'totalTriggers')
-      .addSelect(
-        'SUM(CASE WHEN log.converted = true THEN 1 ELSE 0 END)',
-        'conversions',
-      )
-      .where('log.createdAt >= :sinceDate', { sinceDate })
-      .groupBy('log.triggerScene');
-
-    if (feature) {
-      bySceneQb.andWhere('log.feature = :feature', { feature });
-    }
-
-    if (triggerScene) {
-      bySceneQb.andWhere('log.triggerScene = :triggerScene', { triggerScene });
-    }
-
-    const byScene = await bySceneQb.getRawMany();
+    const byScene = await this.prisma.$queryRaw<
+      Array<{
+        triggerScene: string;
+        totalTriggers: number;
+        conversions: number;
+      }>
+    >`
+      SELECT trigger_scene as "triggerScene", COUNT(id)::int as "totalTriggers",
+        SUM(CASE WHEN converted = true THEN 1 ELSE 0 END)::int as conversions
+      FROM subscription_trigger_log
+      WHERE created_at >= ${sinceDate}
+      ${feature ? Prisma.sql`AND feature = ${feature}` : Prisma.empty}
+      ${triggerScene ? Prisma.sql`AND trigger_scene = ${triggerScene}` : Prisma.empty}
+      GROUP BY trigger_scene`;
 
     // 计算转化率
     const enrichWithRate = (
-      items: Array<{ totalTriggers: string; conversions: string }>,
+      items: Array<{ totalTriggers: number; conversions: number }>,
     ) =>
       items.map((item) => {
-        const total = parseInt(item.totalTriggers, 10);
-        const converted = parseInt(item.conversions, 10);
+        const total = Number(item.totalTriggers);
+        const converted = Number(item.conversions);
         return {
           ...item,
           totalTriggers: total,
@@ -578,34 +553,28 @@ export class SubscriptionManagementService {
       });
 
     // 按等级分组统计
-    const byTierQb = this.triggerLogRepository
-      .createQueryBuilder('log')
-      .select('log.currentTier', 'currentTier')
-      .addSelect('COUNT(log.id)', 'totalTriggers')
-      .addSelect(
-        'SUM(CASE WHEN log.converted = true THEN 1 ELSE 0 END)',
-        'conversions',
-      )
-      .where('log.createdAt >= :sinceDate', { sinceDate })
-      .groupBy('log.currentTier');
-
-    if (feature) {
-      byTierQb.andWhere('log.feature = :feature', { feature });
-    }
-
-    if (triggerScene) {
-      byTierQb.andWhere('log.triggerScene = :triggerScene', { triggerScene });
-    }
-
-    const byTier = await byTierQb.getRawMany();
+    const byTier = await this.prisma.$queryRaw<
+      Array<{
+        currentTier: string;
+        totalTriggers: number;
+        conversions: number;
+      }>
+    >`
+      SELECT current_tier as "currentTier", COUNT(id)::int as "totalTriggers",
+        SUM(CASE WHEN converted = true THEN 1 ELSE 0 END)::int as conversions
+      FROM subscription_trigger_log
+      WHERE created_at >= ${sinceDate}
+      ${feature ? Prisma.sql`AND feature = ${feature}` : Prisma.empty}
+      ${triggerScene ? Prisma.sql`AND trigger_scene = ${triggerScene}` : Prisma.empty}
+      GROUP BY current_tier`;
 
     // 汇总
     const totalTriggers = byFeature.reduce(
-      (sum, item) => sum + parseInt(item.totalTriggers, 10),
+      (sum, item) => sum + Number(item.totalTriggers),
       0,
     );
     const totalConversions = byFeature.reduce(
-      (sum, item) => sum + parseInt(item.conversions, 10),
+      (sum, item) => sum + Number(item.conversions),
       0,
     );
 

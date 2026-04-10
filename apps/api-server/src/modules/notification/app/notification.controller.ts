@@ -43,7 +43,7 @@ import { AppJwtAuthGuard } from '../../auth/app/app-jwt-auth.guard';
 import { CurrentAppUser } from '../../auth/app/current-app-user.decorator';
 import { AppUserPayload } from '../../auth/app/app-user-payload.type';
 import { NotificationService } from './notification.service';
-import { DevicePlatform } from '../entities/device-token.entity';
+import { DevicePlatform } from '../notification.types';
 
 // ─── DTO ───
 
@@ -154,7 +154,11 @@ export class NotificationController {
       dto.deviceId,
       dto.platform,
     );
-    return { id: token.id, deviceId: token.deviceId, platform: token.platform };
+    return {
+      id: token.id,
+      deviceId: token.device_id,
+      platform: token.platform,
+    };
   }
 
   @Delete('device')
@@ -174,10 +178,10 @@ export class NotificationController {
   async getPreference(@CurrentAppUser() user: AppUserPayload) {
     const pref = await this.notificationService.getPreference(user.id);
     return {
-      pushEnabled: pref.pushEnabled,
-      enabledTypes: pref.enabledTypes,
-      quietStart: pref.quietStart,
-      quietEnd: pref.quietEnd,
+      pushEnabled: pref.push_enabled,
+      enabledTypes: pref.enabled_types,
+      quietStart: pref.quiet_start,
+      quietEnd: pref.quiet_end,
     };
   }
 
@@ -187,12 +191,27 @@ export class NotificationController {
     @CurrentAppUser() user: AppUserPayload,
     @Body() dto: UpdatePreferenceDto,
   ) {
-    const pref = await this.notificationService.updatePreference(user.id, dto);
+    const updates: Partial<{
+      push_enabled: boolean;
+      enabled_types: string[];
+      quiet_start: string | null;
+      quiet_end: string | null;
+    }> = {};
+    if (dto.pushEnabled !== undefined) updates.push_enabled = dto.pushEnabled;
+    if (dto.enabledTypes !== undefined)
+      updates.enabled_types = dto.enabledTypes;
+    if (dto.quietStart !== undefined) updates.quiet_start = dto.quietStart;
+    if (dto.quietEnd !== undefined) updates.quiet_end = dto.quietEnd;
+
+    const pref = await this.notificationService.updatePreference(
+      user.id,
+      updates,
+    );
     return {
-      pushEnabled: pref.pushEnabled,
-      enabledTypes: pref.enabledTypes,
-      quietStart: pref.quietStart,
-      quietEnd: pref.quietEnd,
+      pushEnabled: pref.push_enabled,
+      enabledTypes: pref.enabled_types,
+      quietStart: pref.quiet_start,
+      quietEnd: pref.quiet_end,
     };
   }
 }

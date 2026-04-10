@@ -1,12 +1,14 @@
 'use client';
 
+import { useQuery } from '@tanstack/react-query';
 import { usePlanData } from '@/features/plan/hooks/use-plan-data';
 import { DailyPlanCard } from '@/features/home/components/daily-plan-card';
 import { MealRecommendationCard } from '@/features/home/components/meal-recommendation-card';
 import { WeeklyPlanCard } from './weekly-plan-card';
 import { WhyNotCard } from './why-not-card';
 import { useAuth } from '@/features/auth/hooks/use-auth';
-import { useHomeData } from '@/features/home/hooks/use-home-data';
+import { foodRecordService } from '@/lib/api/food-record';
+import { profileService } from '@/lib/api/profile';
 import { useSubscription } from '@/features/subscription/hooks/use-subscription';
 import { LocalizedLink } from '@/components/common/localized-link';
 import { useToast } from '@/lib/hooks/use-toast';
@@ -29,8 +31,24 @@ export function PlanPage() {
     explainResult,
   } = usePlanData();
 
-  // 首页数据 for MealRecommendationCard context
-  const { summary, profile } = useHomeData();
+  // 只取 MealRecommendationCard 需要的 summary 和 profile（不拉取全部首页数据）
+  const { data: summary } = useQuery({
+    queryKey: ['summary', 'today'],
+    queryFn: () => foodRecordService.getTodaySummary(),
+    staleTime: 60 * 1000,
+  });
+  const { data: profile } = useQuery({
+    queryKey: ['profile'],
+    queryFn: () => profileService.getProfile(),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const summaryFallback = summary ?? {
+    totalCalories: 0,
+    calorieGoal: 2000,
+    mealCount: 0,
+    remaining: 2000,
+  };
 
   // 未登录
   if (!isLoggedIn) {
@@ -96,7 +114,11 @@ export function PlanPage() {
 
       {/* 下一餐推荐 */}
       {suggestion && suggestion.suggestion && (
-        <MealRecommendationCard suggestion={suggestion} summary={summary} profile={profile} />
+        <MealRecommendationCard
+          suggestion={suggestion}
+          summary={summaryFallback}
+          profile={profile ?? null}
+        />
       )}
 
       {/* 今日计划 */}

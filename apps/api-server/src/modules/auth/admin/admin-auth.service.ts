@@ -5,14 +5,10 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import {
-  AdminUser,
-  AdminRole,
-  AdminUserStatus,
-} from '../../user/entities/admin-user.entity';
+import { AdminRole, AdminUserStatus } from '../../user/user.types';
+import { admin_users as AdminUser } from '@prisma/client';
+import { PrismaService } from '../../../core/prisma/prisma.service';
 import {
   LoginDto,
   LoginByPhoneDto,
@@ -32,8 +28,7 @@ export class AdminService {
     new Map();
 
   constructor(
-    @InjectRepository(AdminUser)
-    private readonly adminUserRepository: Repository<AdminUser>,
+    private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
   ) {}
 
@@ -44,12 +39,11 @@ export class AdminService {
     const { username, password } = loginDto;
 
     // 查找管理员用户 (支持用户名、邮箱登录)
-    const user = await this.adminUserRepository
-      .createQueryBuilder('user')
-      .addSelect('user.password')
-      .where('user.username = :username', { username })
-      .orWhere('user.email = :username', { username })
-      .getOne();
+    const user = await this.prisma.admin_users.findFirst({
+      where: {
+        OR: [{ username }, { email: username }],
+      },
+    });
 
     if (!user) {
       throw new UnauthorizedException('用户名或密码错误');
@@ -67,12 +61,13 @@ export class AdminService {
     }
 
     // 更新最后登录时间
-    await this.adminUserRepository.update(user.id, {
-      lastLoginAt: new Date(),
+    await this.prisma.admin_users.update({
+      where: { id: user.id },
+      data: { last_login_at: new Date() },
     });
 
     // 生成 JWT
-    const token = this.generateToken(user);
+    const token = this.generateToken(user as any);
 
     // 移除密码字段
     const { password: _loginPwd, ...userWithoutPassword } = user;
@@ -94,19 +89,20 @@ export class AdminService {
     }
 
     // 查找管理员用户
-    const user = await this.adminUserRepository.findOne({ where: { phone } });
+    const user = await this.prisma.admin_users.findFirst({ where: { phone } });
 
     if (!user) {
       throw new UnauthorizedException('该手机号未注册管理员账号');
     }
 
     // 更新最后登录时间
-    await this.adminUserRepository.update(user.id, {
-      lastLoginAt: new Date(),
+    await this.prisma.admin_users.update({
+      where: { id: user.id },
+      data: { last_login_at: new Date() },
     });
 
     // 生成 JWT
-    const token = this.generateToken(user);
+    const token = this.generateToken(user as any);
 
     return { token, user: user as any };
   }
@@ -143,8 +139,10 @@ export class AdminService {
     const { username, email, phone, password } = registerDto;
 
     // 检查用户名是否已存在
-    const existingUser = await this.adminUserRepository.findOne({
-      where: [{ username }, ...(email ? [{ email }] : [])],
+    const existingUser = await this.prisma.admin_users.findFirst({
+      where: {
+        OR: [{ username }, ...(email ? [{ email }] : [])],
+      },
     });
 
     if (existingUser) {
@@ -160,17 +158,19 @@ export class AdminService {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // 创建管理员用户
-    const user = await this.adminUserRepository.save({
-      username,
-      email,
-      phone,
-      password: hashedPassword,
-      role: AdminRole.ADMIN,
-      status: AdminUserStatus.ACTIVE,
+    const user = await this.prisma.admin_users.create({
+      data: {
+        username,
+        email,
+        phone,
+        password: hashedPassword,
+        role: AdminRole.ADMIN,
+        status: AdminUserStatus.ACTIVE,
+      },
     });
 
     // 生成 JWT
-    const token = this.generateToken(user);
+    const token = this.generateToken(user as any);
 
     // 移除密码字段
     const { password: _pwd, ...userWithoutPassword } = user;
@@ -201,7 +201,7 @@ export class AdminService {
    * 获取用户信息
    */
   async getUserInfo(userId: string): Promise<UserDto> {
-    const user = await this.adminUserRepository.findOne({
+    const user = await this.prisma.admin_users.findUnique({
       where: { id: userId },
     });
 
@@ -225,7 +225,10 @@ export class AdminService {
       throw new BadRequestException('用户不存在');
     }
 
-    await this.adminUserRepository.update(userId, updateProfileDto as any);
+    await this.prisma.admin_users.update({
+      where: { id: userId },
+      data: updateProfileDto as any,
+    });
 
     const updatedUser = await this.findById(userId);
     if (!updatedUser) {
@@ -238,13 +241,14 @@ export class AdminService {
    * 根据ID查找管理员用户
    */
   async findById(id: string): Promise<AdminUser | null> {
-    return this.adminUserRepository.findOne({ where: { id } });
+    const user = await this.prisma.admin_users.findUnique({ where: { id } });
+    return user as AdminUser | null;
   }
 
   /**
    * 生成 JWT Token
    */
-  private generateToken(user: AdminUser): string {
+  private generateToken(user: any): string {
     const payload = {
       sub: user.id,
       username: user.username,

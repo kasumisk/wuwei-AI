@@ -1,30 +1,21 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { Client } from '../modules/client/entities/client.entity';
-import { UsageRecord } from '../modules/provider/entities/usage-record.entity';
+import { PrismaService } from '../core/prisma/prisma.service';
 import { CapabilityRouter } from './services/capability-router.service';
 
 @Injectable()
 export class GatewayService {
   constructor(
-    @InjectRepository(Client)
-    private readonly clientRepository: Repository<Client>,
-    @InjectRepository(UsageRecord)
-    private readonly usageRecordRepository: Repository<UsageRecord>,
+    private readonly prisma: PrismaService,
     private readonly capabilityRouter: CapabilityRouter,
   ) {}
 
   /**
    * 验证客户端 API Key 和 Secret
    */
-  async validateClient(
-    apiKey: string,
-    apiSecret: string,
-  ): Promise<Client | null> {
-    const client = await this.clientRepository.findOne({
-      where: { apiKey },
+  async validateClient(apiKey: string, apiSecret: string) {
+    const client = await this.prisma.clients.findFirst({
+      where: { api_key: apiKey },
     });
 
     if (!client) {
@@ -37,7 +28,7 @@ export class GatewayService {
     }
 
     // 验证 API Secret
-    const isValid = await bcrypt.compare(apiSecret, client.apiSecret);
+    const isValid = await bcrypt.compare(apiSecret, client.api_secret);
     if (!isValid) {
       return null;
     }
@@ -63,21 +54,21 @@ export class GatewayService {
     cost: number;
     responseTime: number;
     metadata?: any;
-  }): Promise<UsageRecord> {
-    const usageRecord = this.usageRecordRepository.create({
-      clientId: data.clientId,
-      requestId: data.requestId,
-      capabilityType: data.capabilityType,
-      provider: data.provider,
-      model: data.model,
-      status: data.status,
-      usage: data.usage || {},
-      cost: data.cost,
-      responseTime: data.responseTime,
-      metadata: data.metadata,
-      timestamp: new Date(),
+  }) {
+    return await this.prisma.usage_records.create({
+      data: {
+        client_id: data.clientId,
+        request_id: data.requestId,
+        capability_type: data.capabilityType,
+        provider: data.provider,
+        model: data.model,
+        status: data.status,
+        usage: data.usage || {},
+        cost: data.cost,
+        response_time: data.responseTime,
+        metadata: data.metadata,
+        timestamp: new Date(),
+      },
     });
-
-    return await this.usageRecordRepository.save(usageRecord);
   }
 }

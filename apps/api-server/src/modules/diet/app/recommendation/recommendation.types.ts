@@ -1,4 +1,4 @@
-import { FoodLibrary } from '../../../food/entities/food-library.entity';
+import { FoodLibrary } from '../../../food/food.types';
 import { GoalType } from '../nutrition-score.service';
 import { ScoringExplanation } from './scoring-explanation.interface';
 import { ShortTermProfile } from '../../../user/app/realtime-profile.service';

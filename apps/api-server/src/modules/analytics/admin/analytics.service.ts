@@ -1,8 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between } from 'typeorm';
-import { UsageRecord } from '../../provider/entities/usage-record.entity';
-import { Client } from '../../client/entities/client.entity';
+import { PrismaService } from '../../../core/prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import {
   GetOverviewQueryDto,
   GetTopClientsQueryDto,
@@ -15,30 +13,27 @@ import { TimeInterval, GroupBy } from '@ai-platform/shared';
 
 @Injectable()
 export class AnalyticsService {
-  constructor(
-    @InjectRepository(UsageRecord)
-    private readonly usageRecordRepository: Repository<UsageRecord>,
-    @InjectRepository(Client)
-    private readonly clientRepository: Repository<Client>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * 获取总览数据
    */
   async getOverview(query: GetOverviewQueryDto) {
     const { startDate, endDate } = query;
+    const start = new Date(startDate);
+    const end = new Date(endDate);
 
     // 总请求数
-    const totalRequests = await this.usageRecordRepository.count({
+    const totalRequests = await this.prisma.usage_records.count({
       where: {
-        timestamp: Between(new Date(startDate), new Date(endDate)),
+        timestamp: { gte: start, lte: end },
       },
     });
 
     // 成功请求数
-    const successRequests = await this.usageRecordRepository.count({
+    const successRequests = await this.prisma.usage_records.count({
       where: {
-        timestamp: Between(new Date(startDate), new Date(endDate)),
+        timestamp: { gte: start, lte: end },
         status: 'success',
       },
     });
@@ -48,37 +43,33 @@ export class AnalyticsService {
       totalRequests > 0 ? (successRequests / totalRequests) * 100 : 0;
 
     // 平均响应时间和总成本
-    const stats = await this.usageRecordRepository
-      .createQueryBuilder('record')
-      .select('AVG(record.responseTime)', 'avgResponseTime')
-      .addSelect('SUM(record.cost)', 'totalCost')
-      .addSelect(
-        "SUM((record.usage->>'inputTokens')::int + (record.usage->>'outputTokens')::int)",
-        'totalTokens',
-      )
-      .where('record.timestamp BETWEEN :startDate AND :endDate', {
-        startDate,
-        endDate,
-      })
-      .getRawOne();
+    const stats: any[] = await this.prisma.$queryRaw(Prisma.sql`
+      SELECT
+        AVG(response_time) AS "avgResponseTime",
+        SUM(cost) AS "totalCost",
+        SUM((usage->>'inputTokens')::int + (usage->>'outputTokens')::int) AS "totalTokens"
+      FROM usage_records
+      WHERE timestamp BETWEEN ${start} AND ${end}
+    `);
+
+    const statsRow = stats[0] || {};
 
     // 独立客户端数
-    const uniqueClients = await this.usageRecordRepository
-      .createQueryBuilder('record')
-      .select('COUNT(DISTINCT record.clientId)', 'count')
-      .where('record.timestamp BETWEEN :startDate AND :endDate', {
-        startDate,
-        endDate,
-      })
-      .getRawOne();
+    const uniqueClientsResult: any[] = await this.prisma.$queryRaw(Prisma.sql`
+      SELECT COUNT(DISTINCT client_id) AS "count"
+      FROM usage_records
+      WHERE timestamp BETWEEN ${start} AND ${end}
+    `);
+
+    const uniqueClientsRow = uniqueClientsResult[0] || {};
 
     return {
       totalRequests,
       successRate: Math.round(successRate * 100) / 100,
-      avgResponseTime: Math.round(parseFloat(stats.avgResponseTime) || 0),
-      totalCost: parseFloat(stats.totalCost) || 0,
-      totalTokens: parseInt(stats.totalTokens) || 0,
-      uniqueClients: parseInt(uniqueClients.count) || 0,
+      avgResponseTime: Math.round(parseFloat(statsRow.avgResponseTime) || 0),
+      totalCost: parseFloat(statsRow.totalCost) || 0,
+      totalTokens: parseInt(statsRow.totalTokens) || 0,
+      uniqueClients: parseInt(uniqueClientsRow.count) || 0,
     };
   }
 
@@ -87,34 +78,29 @@ export class AnalyticsService {
    */
   async getTopClients(query: GetTopClientsQueryDto) {
     const { startDate, endDate, limit = 10 } = query;
+    const start = new Date(startDate);
+    const end = new Date(endDate);
 
-    const topClients = await this.usageRecordRepository
-      .createQueryBuilder('record')
-      .select('record.clientId', 'clientId')
-      .addSelect('COUNT(*)', 'totalRequests')
-      .addSelect(
-        'CAST(SUM(CASE WHEN record.status = :status THEN 1 ELSE 0 END) AS FLOAT) / COUNT(*) * 100',
-        'successRate',
-      )
-      .addSelect('AVG(record.responseTime)', 'avgResponseTime')
-      .addSelect('SUM(record.cost)', 'totalCost')
-      .addSelect(
-        "SUM((record.usage->>'inputTokens')::int + (record.usage->>'outputTokens')::int)",
-        'totalTokens',
-      )
-      .where('record.timestamp BETWEEN :startDate AND :endDate', {
-        startDate,
-        endDate,
-        status: 'success',
-      })
-      .groupBy('record.clientId')
-      .orderBy('totalRequests', 'DESC')
-      .limit(limit)
-      .getRawMany();
+    const topClients: any[] = await this.prisma.$queryRaw(Prisma.sql`
+      SELECT
+        client_id AS "clientId",
+        COUNT(*) AS "totalRequests",
+        CAST(SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS FLOAT) / COUNT(*) * 100 AS "successRate",
+        AVG(response_time) AS "avgResponseTime",
+        SUM(cost) AS "totalCost",
+        SUM((usage->>'inputTokens')::int + (usage->>'outputTokens')::int) AS "totalTokens"
+      FROM usage_records
+      WHERE timestamp BETWEEN ${start} AND ${end}
+      GROUP BY client_id
+      ORDER BY COUNT(*) DESC
+      LIMIT ${limit}
+    `);
 
     // 获取客户端名称
     const clientIds = topClients.map((c) => c.clientId);
-    const clients = await this.clientRepository.findByIds(clientIds);
+    const clients = await this.prisma.clients.findMany({
+      where: { id: { in: clientIds } },
+    });
     const clientMap = new Map(clients.map((c) => [c.id, c.name]));
 
     return topClients.map((client) => ({
@@ -133,36 +119,41 @@ export class AnalyticsService {
    */
   async getCapabilityUsage(query: GetCapabilityUsageQueryDto) {
     const { startDate, endDate, capabilityType } = query;
+    const start = new Date(startDate);
+    const end = new Date(endDate);
 
-    const queryBuilder = this.usageRecordRepository
-      .createQueryBuilder('record')
-      .select('record.capabilityType', 'capabilityType')
-      .addSelect('COUNT(*)', 'totalRequests')
-      .addSelect(
-        'CAST(SUM(CASE WHEN record.status = :status THEN 1 ELSE 0 END) AS FLOAT) / COUNT(*) * 100',
-        'successRate',
-      )
-      .addSelect('AVG(record.responseTime)', 'avgResponseTime')
-      .addSelect('SUM(record.cost)', 'totalCost')
-      .addSelect(
-        "SUM((record.usage->>'inputTokens')::int + (record.usage->>'outputTokens')::int)",
-        'totalTokens',
-      )
-      .where('record.timestamp BETWEEN :startDate AND :endDate', {
-        startDate,
-        endDate,
-        status: 'success',
-      })
-      .groupBy('record.capabilityType')
-      .orderBy('totalRequests', 'DESC');
+    let usage: any[];
 
     if (capabilityType) {
-      queryBuilder.andWhere('record.capabilityType = :capabilityType', {
-        capabilityType,
-      });
+      usage = await this.prisma.$queryRaw(Prisma.sql`
+        SELECT
+          capability_type AS "capabilityType",
+          COUNT(*) AS "totalRequests",
+          CAST(SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS FLOAT) / COUNT(*) * 100 AS "successRate",
+          AVG(response_time) AS "avgResponseTime",
+          SUM(cost) AS "totalCost",
+          SUM((usage->>'inputTokens')::int + (usage->>'outputTokens')::int) AS "totalTokens"
+        FROM usage_records
+        WHERE timestamp BETWEEN ${start} AND ${end}
+          AND capability_type = ${capabilityType}
+        GROUP BY capability_type
+        ORDER BY COUNT(*) DESC
+      `);
+    } else {
+      usage = await this.prisma.$queryRaw(Prisma.sql`
+        SELECT
+          capability_type AS "capabilityType",
+          COUNT(*) AS "totalRequests",
+          CAST(SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS FLOAT) / COUNT(*) * 100 AS "successRate",
+          AVG(response_time) AS "avgResponseTime",
+          SUM(cost) AS "totalCost",
+          SUM((usage->>'inputTokens')::int + (usage->>'outputTokens')::int) AS "totalTokens"
+        FROM usage_records
+        WHERE timestamp BETWEEN ${start} AND ${end}
+        GROUP BY capability_type
+        ORDER BY COUNT(*) DESC
+      `);
     }
-
-    const usage = await queryBuilder.getRawMany();
 
     return usage.map((u) => ({
       capabilityType: u.capabilityType,
@@ -179,6 +170,8 @@ export class AnalyticsService {
    */
   async getTimeSeries(query: GetTimeSeriesQueryDto) {
     const { startDate, endDate, interval, metric = 'requests' } = query;
+    const start = new Date(startDate);
+    const end = new Date(endDate);
 
     let dateFormat: string;
     switch (interval) {
@@ -211,23 +204,21 @@ export class AnalyticsService {
           "SUM((usage->>'inputTokens')::int + (usage->>'outputTokens')::int)";
         break;
       case 'responseTime':
-        valueSelect = 'AVG(record.responseTime)';
+        valueSelect = 'AVG(response_time)';
         break;
       default:
         valueSelect = 'COUNT(*)';
     }
 
-    const data = await this.usageRecordRepository
-      .createQueryBuilder('record')
-      .select(dateFormat, 'timestamp')
-      .addSelect(valueSelect, 'value')
-      .where('record.timestamp BETWEEN :startDate AND :endDate', {
-        startDate,
-        endDate,
-      })
-      .groupBy('timestamp')
-      .orderBy('timestamp', 'ASC')
-      .getRawMany();
+    const data: any[] = await this.prisma.$queryRawUnsafe(
+      `SELECT ${dateFormat} AS "timestamp", ${valueSelect} AS "value"
+       FROM usage_records
+       WHERE timestamp BETWEEN $1 AND $2
+       GROUP BY ${dateFormat}
+       ORDER BY "timestamp" ASC`,
+      start,
+      end,
+    );
 
     return data.map((d) => ({
       timestamp: d.timestamp,
@@ -240,48 +231,41 @@ export class AnalyticsService {
    */
   async getCostAnalysis(query: GetCostAnalysisQueryDto) {
     const { startDate, endDate, groupBy } = query;
+    const start = new Date(startDate);
+    const end = new Date(endDate);
 
     let groupField: string;
-    let nameField: string;
 
     switch (groupBy) {
       case GroupBy.CLIENT:
-        groupField = 'record.clientId';
-        nameField = 'clientId';
+        groupField = 'client_id';
         break;
       case GroupBy.CAPABILITY:
-        groupField = 'record.capabilityType';
-        nameField = 'capabilityType';
+        groupField = 'capability_type';
         break;
       case GroupBy.PROVIDER:
-        groupField = 'record.provider';
-        nameField = 'provider';
+        groupField = 'provider';
         break;
       case GroupBy.MODEL:
-        groupField = 'record.model';
-        nameField = 'model';
+        groupField = 'model';
         break;
       default:
-        groupField = 'record.clientId';
-        nameField = 'clientId';
+        groupField = 'client_id';
     }
 
-    const items = await this.usageRecordRepository
-      .createQueryBuilder('record')
-      .select(groupField, 'id')
-      .addSelect('SUM(record.cost)', 'cost')
-      .addSelect('COUNT(*)', 'requests')
-      .addSelect(
-        "SUM((record.usage->>'inputTokens')::int + (record.usage->>'outputTokens')::int)",
-        'tokens',
-      )
-      .where('record.timestamp BETWEEN :startDate AND :endDate', {
-        startDate,
-        endDate,
-      })
-      .groupBy(groupField)
-      .orderBy('cost', 'DESC')
-      .getRawMany();
+    const items: any[] = await this.prisma.$queryRawUnsafe(
+      `SELECT
+         ${groupField} AS "id",
+         SUM(cost) AS "cost",
+         COUNT(*) AS "requests",
+         SUM((usage->>'inputTokens')::int + (usage->>'outputTokens')::int) AS "tokens"
+       FROM usage_records
+       WHERE timestamp BETWEEN $1 AND $2
+       GROUP BY ${groupField}
+       ORDER BY SUM(cost) DESC`,
+      start,
+      end,
+    );
 
     // 计算总成本
     const totalCost = items.reduce(
@@ -293,7 +277,9 @@ export class AnalyticsService {
     let nameMap = new Map<string, string>();
     if (groupBy === GroupBy.CLIENT) {
       const clientIds = items.map((i) => i.id);
-      const clients = await this.clientRepository.findByIds(clientIds);
+      const clients = await this.prisma.clients.findMany({
+        where: { id: { in: clientIds } },
+      });
       nameMap = new Map(clients.map((c) => [c.id, c.name]));
     }
 
@@ -317,28 +303,27 @@ export class AnalyticsService {
    */
   async getErrorAnalysis(query: GetErrorAnalysisQueryDto) {
     const { startDate, endDate, limit = 10 } = query;
+    const start = new Date(startDate);
+    const end = new Date(endDate);
 
-    const errors = await this.usageRecordRepository
-      .createQueryBuilder('record')
-      .select("record.metadata->>'errorCode'", 'errorType')
-      .addSelect("record.metadata->>'errorMessage'", 'errorMessage')
-      .addSelect('COUNT(*)', 'count')
-      .addSelect('MAX(record.timestamp)', 'lastOccurrence')
-      .where('record.timestamp BETWEEN :startDate AND :endDate', {
-        startDate,
-        endDate,
-      })
-      .andWhere('record.status != :status', { status: 'success' })
-      .groupBy("record.metadata->>'errorCode'")
-      .addGroupBy("record.metadata->>'errorMessage'")
-      .orderBy('count', 'DESC')
-      .limit(limit)
-      .getRawMany();
+    const errors: any[] = await this.prisma.$queryRaw(Prisma.sql`
+      SELECT
+        metadata->>'errorCode' AS "errorType",
+        metadata->>'errorMessage' AS "errorMessage",
+        COUNT(*) AS "count",
+        MAX(timestamp) AS "lastOccurrence"
+      FROM usage_records
+      WHERE timestamp BETWEEN ${start} AND ${end}
+        AND status != 'success'
+      GROUP BY metadata->>'errorCode', metadata->>'errorMessage'
+      ORDER BY COUNT(*) DESC
+      LIMIT ${limit}
+    `);
 
     // 总错误数
-    const totalErrors = await this.usageRecordRepository.count({
+    const totalErrors = await this.prisma.usage_records.count({
       where: {
-        timestamp: Between(new Date(startDate), new Date(endDate)),
+        timestamp: { gte: start, lte: end },
         status: 'failed',
       },
     });

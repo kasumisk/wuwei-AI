@@ -1,12 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectDataSource } from '@nestjs/typeorm';
 import { promises as fs } from 'fs';
 import { basename, join } from 'path';
-import { DataSource } from 'typeorm';
-import {
-  ImportMetadata,
-  NormalizedFoodData,
-} from './usda-fetcher.service';
+import { PrismaService } from '../../core/prisma/prisma.service';
+import { ImportMetadata, NormalizedFoodData } from './usda-fetcher.service';
 import {
   FoodPipelineOrchestratorService,
   ImportResult,
@@ -147,8 +143,7 @@ export class CnFoodCompositionImporterService {
   };
 
   constructor(
-    @InjectDataSource()
-    private readonly dataSource: DataSource,
+    private readonly prisma: PrismaService,
     private readonly orchestrator: FoodPipelineOrchestratorService,
   ) {}
 
@@ -170,7 +165,11 @@ export class CnFoodCompositionImporterService {
       const items = JSON.parse(content) as JsonVisionRecord[];
 
       for (const item of items) {
-        const normalized = this.normalizeRecord(item, fileName, fileClassification);
+        const normalized = this.normalizeRecord(
+          item,
+          fileName,
+          fileClassification,
+        );
         if (!normalized) {
           continue;
         }
@@ -214,7 +213,11 @@ export class CnFoodCompositionImporterService {
       carotene: this.parseNumeric(record.carotene, 'carotene', traceFields),
       retinol: this.parseNumeric(record.retinol, 'retinol', traceFields),
       thiamin: this.parseNumeric(record.thiamin, 'thiamin', traceFields),
-      riboflavin: this.parseNumeric(record.riboflavin, 'riboflavin', traceFields),
+      riboflavin: this.parseNumeric(
+        record.riboflavin,
+        'riboflavin',
+        traceFields,
+      ),
       niacin: this.parseNumeric(record.niacin, 'niacin', traceFields),
       selenium: this.parseNumeric(record.Se, 'selenium', traceFields),
       copper: this.parseNumeric(record.Cu, 'copper', traceFields),
@@ -245,19 +248,32 @@ export class CnFoodCompositionImporterService {
       category: classification.category,
       subCategory: classification.subCategory,
       foodGroup: classification.foodGroup,
-      calories: this.parseNumeric(record.energyKCal, 'energyKCal', traceFields) || 0,
+      calories:
+        this.parseNumeric(record.energyKCal, 'energyKCal', traceFields) || 0,
       protein: this.parseNumeric(record.protein, 'protein', traceFields),
       fat: this.parseNumeric(record.fat, 'fat', traceFields),
       carbs: this.parseNumeric(record.CHO, 'CHO', traceFields),
-      fiber: this.parseNumeric(record.dietaryFiber, 'dietaryFiber', traceFields),
-      cholesterol: this.parseNumeric(record.cholesterol, 'cholesterol', traceFields),
+      fiber: this.parseNumeric(
+        record.dietaryFiber,
+        'dietaryFiber',
+        traceFields,
+      ),
+      cholesterol: this.parseNumeric(
+        record.cholesterol,
+        'cholesterol',
+        traceFields,
+      ),
       sodium: this.parseNumeric(record.Na, 'Na', traceFields),
       potassium: this.parseNumeric(record.K, 'K', traceFields),
       calcium: this.parseNumeric(record.Ca, 'Ca', traceFields),
       iron: this.parseNumeric(record.Fe, 'Fe', traceFields),
       vitaminA: this.parseNumeric(record.vitaminA, 'vitaminA', traceFields),
       vitaminC: this.parseNumeric(record.vitaminC, 'vitaminC', traceFields),
-      vitaminE: this.parseNumeric(record.vitaminETotal, 'vitaminETotal', traceFields),
+      vitaminE: this.parseNumeric(
+        record.vitaminETotal,
+        'vitaminETotal',
+        traceFields,
+      ),
       zinc: this.parseNumeric(record.Zn, 'Zn', traceFields),
       magnesium: this.parseNumeric(record.Mg, 'Mg', traceFields),
       phosphorus: this.parseNumeric(record.P, 'P', traceFields),
@@ -369,13 +385,14 @@ export class CnFoodCompositionImporterService {
   }
 
   private async ensureFoodSchemaColumns(): Promise<void> {
-    const existingColumns: Array<{ column_name: string }> =
-      await this.dataSource.query(
-        `SELECT column_name
-         FROM information_schema.columns
-         WHERE table_schema = current_schema()
-           AND table_name = 'foods'`,
-      );
+    const existingColumns = await this.prisma.$queryRawUnsafe<
+      Array<{ column_name: string }>
+    >(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = current_schema()
+         AND table_name = 'foods'`,
+    );
 
     const existingColumnNames = new Set(
       existingColumns.map((column) => column.column_name),
@@ -434,7 +451,7 @@ export class CnFoodCompositionImporterService {
       }
 
       this.logger.warn(`foods 表缺少列 ${column.name}，导入前自动补齐`);
-      await this.dataSource.query(column.sql);
+      await this.prisma.$executeRawUnsafe(column.sql);
     }
   }
 }

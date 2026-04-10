@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useRef, useEffect, useCallback } from 'react';
 import type { DailySummaryRecord } from '@/types/food';
 
 interface WeeklyTrendCardProps {
@@ -8,17 +9,33 @@ interface WeeklyTrendCardProps {
 
 const DAY_LABELS = ['日', '一', '二', '三', '四', '五', '六'];
 
-function formatShortDate(dateStr: string): string {
-  const d = new Date(dateStr);
-  return `${d.getMonth() + 1}/${d.getDate()}`;
-}
-
 function getDayLabel(dateStr: string): string {
   const d = new Date(dateStr);
   return DAY_LABELS[d.getDay()];
 }
 
 export function WeeklyTrendCard({ summaries }: WeeklyTrendCardProps) {
+  const [activeBar, setActiveBar] = useState<string | null>(null);
+  const chartRef = useRef<HTMLDivElement>(null);
+
+  // 点击图表外部时关闭 tooltip
+  const handleClickOutside = useCallback((e: MouseEvent | TouchEvent) => {
+    if (chartRef.current && !chartRef.current.contains(e.target as Node)) {
+      setActiveBar(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeBar) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+        document.removeEventListener('touchstart', handleClickOutside);
+      };
+    }
+  }, [activeBar, handleClickOutside]);
+
   // 不够数据不展示
   if (!summaries || summaries.length < 2) return null;
 
@@ -83,23 +100,45 @@ export function WeeklyTrendCard({ summaries }: WeeklyTrendCardProps) {
       </div>
 
       {/* 简易柱状图 */}
-      <div className="flex items-end gap-1.5 h-20 mb-2">
+      <div ref={chartRef} className="flex items-end gap-1.5 h-20 mb-2">
         {sorted.map((day) => {
           const heightPercent = chartMax > 0 ? (day.totalCalories / chartMax) * 100 : 0;
           const isToday = new Date(day.date).toDateString() === new Date().toDateString();
           const goal = day.calorieGoal ?? 2000;
           const overBudget = day.totalCalories > goal;
+          const isActive = activeBar === day.date;
+
+          const toggleBar = () => {
+            setActiveBar(isActive ? null : day.date);
+          };
 
           return (
-            <div key={day.date} className="flex-1 flex flex-col items-center gap-1 group relative">
-              {/* Tooltip on hover */}
-              <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-foreground text-background text-[10px] px-2 py-0.5 rounded-md whitespace-nowrap pointer-events-none z-10">
+            <div
+              key={day.date}
+              className="flex-1 flex flex-col items-center gap-1 group relative cursor-pointer"
+              role="button"
+              tabIndex={0}
+              aria-label={`${getDayLabel(day.date)}，${day.totalCalories} 千卡${overBudget ? '，超出目标' : ''}`}
+              onClick={toggleBar}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  toggleBar();
+                }
+              }}
+            >
+              {/* Tooltip: 点击/触摸时固定显示，桌面端也保留 hover */}
+              <div
+                className={`absolute -top-8 left-1/2 -translate-x-1/2 transition-opacity bg-foreground text-background text-[10px] px-2 py-0.5 rounded-md whitespace-nowrap pointer-events-none z-10 ${
+                  isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                }`}
+              >
                 {day.totalCalories} kcal
               </div>
               <div
                 className={`w-full rounded-t-md transition-all duration-300 ${
                   isToday ? 'bg-primary' : overBudget ? 'bg-orange-400' : 'bg-primary/30'
-                }`}
+                } ${isActive ? 'ring-2 ring-primary/50' : ''}`}
                 style={{
                   height: `${Math.max(heightPercent, 4)}%`,
                   minHeight: '3px',

@@ -14,8 +14,6 @@
  */
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { FoodService } from '../../diet/app/food.service';
 import { UserProfileService } from '../../user/app/user-profile.service';
 import { BehaviorService } from '../../diet/app/behavior.service';
@@ -27,10 +25,7 @@ import {
   getUserLocalHour,
   DEFAULT_TIMEZONE,
 } from '../../../common/utils/timezone.util';
-import {
-  FoodAnalysisRecord,
-  AnalysisRecordStatus,
-} from '../entities/food-analysis-record.entity';
+import { AnalysisRecordStatus } from '../food.types';
 import {
   FoodAnalysisResultV61,
   AnalyzedFoodItem,
@@ -42,6 +37,7 @@ import {
   IngestionDecision,
 } from './analysis-result.types';
 import { AnalysisResult } from './analyze.service';
+import { PrismaService } from '../../../core/prisma/prisma.service';
 
 // ==================== Prompt 常量（从 analyze.service.ts 迁移） ====================
 
@@ -262,8 +258,7 @@ export class ImageFoodAnalysisService {
     private readonly userProfileService: UserProfileService,
     private readonly behaviorService: BehaviorService,
     private readonly nutritionScoreService: NutritionScoreService,
-    @InjectRepository(FoodAnalysisRecord)
-    private readonly analysisRecordRepo: Repository<FoodAnalysisRecord>,
+    private readonly prisma: PrismaService,
   ) {
     this.apiKey =
       this.configService.get<string>('OPENROUTER_API_KEY') ||
@@ -509,12 +504,12 @@ ${gc.focus}
       if (profile) {
         if (profile.gender)
           ctx += `\n- 性别：${profile.gender === 'male' ? '男' : '女'}`;
-        if (profile.activityLevel)
-          ctx += `\n- 活动等级：${profile.activityLevel}`;
-        if (profile.foodPreferences?.length)
-          ctx += `\n- 饮食偏好：${profile.foodPreferences.join('、')}`;
-        if (profile.dietaryRestrictions?.length)
-          ctx += `\n- 忌口：${profile.dietaryRestrictions.join('、')}`;
+        if (profile.activity_level)
+          ctx += `\n- 活动等级：${profile.activity_level}`;
+        if ((profile.food_preferences as string[])?.length)
+          ctx += `\n- 饮食偏好：${(profile.food_preferences as string[]).join('、')}`;
+        if ((profile.dietary_restrictions as string[])?.length)
+          ctx += `\n- 忌口：${(profile.dietary_restrictions as string[]).join('、')}`;
       }
 
       return { context: ctx, goalType, profile };
@@ -835,32 +830,32 @@ ${gc.focus}
     legacyResult: AnalysisResult,
     v61Result: FoodAnalysisResultV61,
   ): Promise<void> {
-    const record = this.analysisRecordRepo.create({
-      id: analysisId,
-      userId,
-      inputType: 'image',
-      rawText: null,
-      imageUrl,
-      mealType: mealType || null,
-      status: AnalysisRecordStatus.COMPLETED,
-      recognizedPayload: { foods: v61Result.foods },
-      normalizedPayload: null,
-      nutritionPayload: {
-        totals: v61Result.totals,
-        score: v61Result.score,
+    await this.prisma.food_analysis_record.create({
+      data: {
+        id: analysisId,
+        user_id: userId,
+        input_type: 'image',
+        raw_text: null,
+        image_url: imageUrl,
+        meal_type: mealType || null,
+        status: AnalysisRecordStatus.COMPLETED,
+        recognized_payload: { foods: v61Result.foods } as any,
+        normalized_payload: null as any,
+        nutrition_payload: {
+          totals: v61Result.totals,
+          score: v61Result.score,
+        } as any,
+        decision_payload: {
+          decision: v61Result.decision,
+          alternatives: v61Result.alternatives,
+          explanation: v61Result.explanation,
+        } as any,
+        confidence_score: v61Result.score.confidenceScore,
+        quality_score: null,
+        matched_food_count: 0,
+        candidate_food_count: 0,
       },
-      decisionPayload: {
-        decision: v61Result.decision,
-        alternatives: v61Result.alternatives,
-        explanation: v61Result.explanation,
-      },
-      confidenceScore: v61Result.score.confidenceScore,
-      qualityScore: null,
-      matchedFoodCount: 0,
-      candidateFoodCount: 0,
     });
-
-    await this.analysisRecordRepo.save(record);
     this.logger.debug(`图片分析记录已保存: analysisId=${analysisId}`);
   }
 }

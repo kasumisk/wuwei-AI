@@ -25,7 +25,7 @@ import {
   MultiObjectiveDimension,
   MULTI_OBJECTIVE_DIMENSIONS,
 } from '../../../strategy/strategy.types';
-import { FoodLibrary } from '../../../food/entities/food-library.entity';
+import { FoodLibrary } from '../../../food/food.types';
 
 // ─── 默认配置 ───
 

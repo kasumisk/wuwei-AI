@@ -4,19 +4,15 @@ import {
   ExecutionContext,
   ForbiddenException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { UsageRecord } from '../../modules/provider/entities/usage-record.entity';
+import { Prisma } from '@prisma/client';
+import { PrismaService } from '../../core/prisma/prisma.service';
 
 // 简单的内存缓存（生产环境应使用 Redis）
 const quotaCache = new Map<string, { value: number; expiresAt: number }>();
 
 @Injectable()
 export class QuotaGuard implements CanActivate {
-  constructor(
-    @InjectRepository(UsageRecord)
-    private readonly usageRecordRepository: Repository<UsageRecord>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
@@ -91,15 +87,11 @@ export class QuotaGuard implements CanActivate {
       return cached.value;
     }
 
-    const result = await this.usageRecordRepository
-      .createQueryBuilder('record')
-      .select('SUM(record.cost)', 'total')
-      .where('record.clientId = :clientId', { clientId })
-      .andWhere('record.timestamp >= :start', { start: today })
-      .andWhere('record.timestamp < :end', { end: tomorrow })
-      .getRawOne();
+    const result = await this.prisma.$queryRaw<[{ total: string | null }]>(
+      Prisma.sql`SELECT SUM(cost) as total FROM usage_records WHERE client_id = ${clientId} AND timestamp >= ${today} AND timestamp < ${tomorrow}`,
+    );
 
-    const total = parseFloat(result?.total) || 0;
+    const total = parseFloat(result?.[0]?.total ?? '') || 0;
     quotaCache.set(cacheKey, { value: total, expiresAt: now + 5 * 60 * 1000 });
 
     return total;
@@ -120,15 +112,11 @@ export class QuotaGuard implements CanActivate {
       return cached.value;
     }
 
-    const result = await this.usageRecordRepository
-      .createQueryBuilder('record')
-      .select('SUM(record.cost)', 'total')
-      .where('record.clientId = :clientId', { clientId })
-      .andWhere('record.timestamp >= :start', { start: monthStart })
-      .andWhere('record.timestamp < :end', { end: monthEnd })
-      .getRawOne();
+    const result = await this.prisma.$queryRaw<[{ total: string | null }]>(
+      Prisma.sql`SELECT SUM(cost) as total FROM usage_records WHERE client_id = ${clientId} AND timestamp >= ${monthStart} AND timestamp < ${monthEnd}`,
+    );
 
-    const total = parseFloat(result?.total) || 0;
+    const total = parseFloat(result?.[0]?.total ?? '') || 0;
     quotaCache.set(cacheKey, {
       value: total,
       expiresAt: nowMs + 10 * 60 * 1000,
@@ -157,26 +145,18 @@ export class QuotaGuard implements CanActivate {
 
     if (capabilityType.startsWith('text.')) {
       // 统计 token 总数
-      const result = await this.usageRecordRepository
-        .createQueryBuilder('record')
-        .select("SUM(CAST(record.usage->>'totalTokens' AS INTEGER))", 'total')
-        .where('record.clientId = :clientId', { clientId })
-        .andWhere('record.capabilityType = :capabilityType', { capabilityType })
-        .andWhere('record.timestamp >= :start', { start: monthStart })
-        .getRawOne();
+      const result = await this.prisma.$queryRaw<[{ total: string | null }]>(
+        Prisma.sql`SELECT SUM(CAST(usage->>'totalTokens' AS INTEGER)) as total FROM usage_records WHERE client_id = ${clientId} AND capability_type = ${capabilityType} AND timestamp >= ${monthStart}`,
+      );
 
-      total = parseInt(result?.total) || 0;
+      total = parseInt(result?.[0]?.total ?? '') || 0;
     } else if (capabilityType.startsWith('image.')) {
       // 统计图片数量
-      const result = await this.usageRecordRepository
-        .createQueryBuilder('record')
-        .select("SUM(CAST(record.usage->>'imageCount' AS INTEGER))", 'total')
-        .where('record.clientId = :clientId', { clientId })
-        .andWhere('record.capabilityType = :capabilityType', { capabilityType })
-        .andWhere('record.timestamp >= :start', { start: monthStart })
-        .getRawOne();
+      const result = await this.prisma.$queryRaw<[{ total: string | null }]>(
+        Prisma.sql`SELECT SUM(CAST(usage->>'imageCount' AS INTEGER)) as total FROM usage_records WHERE client_id = ${clientId} AND capability_type = ${capabilityType} AND timestamp >= ${monthStart}`,
+      );
 
-      total = parseInt(result?.total) || 0;
+      total = parseInt(result?.[0]?.total ?? '') || 0;
     }
 
     quotaCache.set(cacheKey, {

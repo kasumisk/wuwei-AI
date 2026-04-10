@@ -2,17 +2,15 @@
  * App 版本种子数据脚本
  * 运行方式：npx ts-node -r tsconfig-paths/register src/scripts/seed-app-versions.ts
  */
-import AppDataSource from '../core/database/data-source-dev';
+import { PrismaClient } from '@prisma/client';
 import {
-  AppVersion,
   AppPlatform,
   UpdateType,
   AppVersionStatus,
-} from '../modules/app-version/entities/app-version.entity';
-import {
-  AppVersionPackage,
   AppChannel,
-} from '../modules/app-version/entities/app-version-package.entity';
+} from '../modules/app-version/app-version.types';
+
+const prisma = new PrismaClient();
 
 function parseVersionCode(version: string): number {
   const parts = version.split('.').map(Number);
@@ -20,8 +18,29 @@ function parseVersionCode(version: string): number {
 }
 
 interface VersionSeedData {
-  version: Partial<AppVersion>;
-  packages: Partial<AppVersionPackage>[];
+  version: {
+    platform?: AppPlatform;
+    version: string;
+    versionCode: number;
+    updateType: UpdateType;
+    title: string;
+    description: string;
+    minSupportVersion?: string;
+    minSupportVersionCode?: number;
+    status: AppVersionStatus;
+    grayRelease: boolean;
+    grayPercent: number;
+    releaseDate?: Date;
+    i18nDescription?: Record<string, string>;
+  };
+  packages: {
+    platform: AppPlatform;
+    channel: AppChannel;
+    downloadUrl: string;
+    fileSize: number;
+    checksum?: string;
+    enabled: boolean;
+  }[];
 }
 
 const versionSeeds: VersionSeedData[] = [
@@ -216,15 +235,10 @@ const versionSeeds: VersionSeedData[] = [
 async function seed() {
   console.log('🔄 开始初始化 App 版本数据...');
 
-  await AppDataSource.initialize();
-
-  const versionRepo = AppDataSource.getRepository(AppVersion);
-  const packageRepo = AppDataSource.getRepository(AppVersionPackage);
-
   for (const seed of versionSeeds) {
     const { version: versionData, packages: pkgDataList } = seed;
 
-    let versionEntity = await versionRepo.findOne({
+    let versionEntity = await prisma.app_versions.findFirst({
       where: {
         platform: versionData.platform,
         version: versionData.version,
@@ -236,26 +250,47 @@ async function seed() {
         `  ⏭️  版本已存在: ${versionData.platform} v${versionData.version}`,
       );
     } else {
-      versionEntity = versionRepo.create(versionData);
-      await versionRepo.save(versionEntity);
+      versionEntity = await prisma.app_versions.create({
+        data: {
+          platform: versionData.platform,
+          version: versionData.version,
+          versionCode: versionData.versionCode,
+          updateType: versionData.updateType,
+          title: versionData.title,
+          description: versionData.description,
+          minSupportVersion: versionData.minSupportVersion,
+          minSupportVersionCode: versionData.minSupportVersionCode,
+          status: versionData.status,
+          grayRelease: versionData.grayRelease,
+          grayPercent: versionData.grayPercent,
+          releaseDate: versionData.releaseDate,
+          i18nDescription: versionData.i18nDescription,
+        },
+      });
       console.log(
         `  ✅ 创建版本: ${versionData.platform} v${versionData.version} (${versionData.status})`,
       );
     }
 
     for (const pkgData of pkgDataList) {
-      const existingPkg = await packageRepo.findOne({
+      const existingPkg = await prisma.app_version_packages.findFirst({
         where: {
           versionId: versionEntity.id,
           channel: pkgData.channel as string,
         },
       });
       if (!existingPkg) {
-        const pkg = packageRepo.create({
-          ...pkgData,
-          versionId: versionEntity.id,
+        await prisma.app_version_packages.create({
+          data: {
+            versionId: versionEntity.id,
+            platform: pkgData.platform,
+            channel: pkgData.channel,
+            downloadUrl: pkgData.downloadUrl,
+            fileSize: pkgData.fileSize,
+            checksum: pkgData.checksum,
+            enabled: pkgData.enabled,
+          },
         });
-        await packageRepo.save(pkg);
         console.log(`    📦 添加渠道包: ${pkgData.channel}`);
       }
     }
@@ -266,10 +301,11 @@ async function seed() {
   console.log('  - Android 版本: 4 个 (3 发布/归档, 1 草稿灰度)');
   console.log('  - iOS 版本: 2 个 (全部发布/归档)');
 
-  await AppDataSource.destroy();
+  await prisma.$disconnect();
 }
 
-seed().catch((err) => {
+seed().catch(async (err) => {
   console.error('❌ 初始化失败:', err);
+  await prisma.$disconnect();
   process.exit(1);
 });

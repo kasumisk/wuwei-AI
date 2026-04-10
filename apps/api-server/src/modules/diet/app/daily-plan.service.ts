@@ -1,17 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { PrismaService } from '../../../core/prisma/prisma.service';
 import {
-  DailyPlan,
   MealPlan,
   MealFoodItem,
   MealFoodExplanation,
   PlanAdjustment,
-} from '../entities/daily-plan.entity';
-import { FoodLibrary } from '../../food/entities/food-library.entity';
+} from '../diet.types';
+import { user_profiles as UserProfile } from '@prisma/client';
+import { FoodLibrary } from '../../food/food.types';
 import { FoodService } from './food.service';
 import { UserProfileService } from '../../user/app/user-profile.service';
-import { UserProfile } from '../../user/entities/user-profile.entity';
 import { NutritionScoreService } from './nutrition-score.service';
 import {
   RecommendationEngineService,
@@ -112,8 +110,7 @@ export class DailyPlanService {
   private readonly logger = new Logger(DailyPlanService.name);
 
   constructor(
-    @InjectRepository(DailyPlan)
-    private readonly planRepo: Repository<DailyPlan>,
+    private readonly prisma: PrismaService,
     private readonly foodService: FoodService,
     private readonly userProfileService: UserProfileService,
     private readonly nutritionScoreService: NutritionScoreService,
@@ -126,10 +123,12 @@ export class DailyPlanService {
    * 获取今日计划（惰性生成：不存在则自动创建）
    * 使用 Redis setNX 幂等锁防止并发重复生成
    */
-  async getPlan(userId: string): Promise<DailyPlan> {
+  async getPlan(userId: string): Promise<any> {
     const tz = await this.userProfileService.getTimezone(userId);
     const today = getUserLocalDate(tz);
-    let plan = await this.planRepo.findOne({ where: { userId, date: today } });
+    let plan = await this.prisma.daily_plans.findFirst({
+      where: { user_id: userId, date: new Date(today) },
+    });
     if (plan) return plan;
 
     // 幂等锁：30 秒过期，防止并发生成
@@ -138,7 +137,9 @@ export class DailyPlanService {
     if (!acquired) {
       // 锁已被占用，等待后重试读取
       await this.waitForPlan(userId, today);
-      plan = await this.planRepo.findOne({ where: { userId, date: today } });
+      plan = await this.prisma.daily_plans.findFirst({
+        where: { user_id: userId, date: new Date(today) },
+      });
       if (plan) return plan;
       // 超时后 fallback：直接生成（极端情况）
     }
@@ -148,7 +149,7 @@ export class DailyPlanService {
     } finally {
       await this.redis.del(lockKey);
     }
-    return plan;
+    return plan!;
   }
 
   /**
@@ -164,8 +165,8 @@ export class DailyPlanService {
     while (waited < maxWaitMs) {
       await new Promise((r) => setTimeout(r, interval));
       waited += interval;
-      const plan = await this.planRepo.findOne({
-        where: { userId, date },
+      const plan = await this.prisma.daily_plans.findFirst({
+        where: { user_id: userId, date: new Date(date) },
       });
       if (plan) return;
     }
@@ -174,10 +175,12 @@ export class DailyPlanService {
   /**
    * 强制重新生成今日计划（删除缓存后重新生成）
    */
-  async regeneratePlan(userId: string): Promise<DailyPlan> {
+  async regeneratePlan(userId: string): Promise<any> {
     const tz = await this.userProfileService.getTimezone(userId);
     const today = getUserLocalDate(tz);
-    await this.planRepo.delete({ userId, date: today });
+    await this.prisma.daily_plans.deleteMany({
+      where: { user_id: userId, date: new Date(today) },
+    });
     return this.generatePlan(userId, today);
   }
 
@@ -193,12 +196,14 @@ export class DailyPlanService {
   async regenerateMeal(
     userId: string,
     mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack',
-  ): Promise<DailyPlan> {
+  ): Promise<any> {
     const tz = await this.userProfileService.getTimezone(userId);
     const today = getUserLocalDate(tz);
 
     // 确保今日计划存在
-    let plan = await this.planRepo.findOne({ where: { userId, date: today } });
+    let plan: any = await this.prisma.daily_plans.findFirst({
+      where: { user_id: userId, date: new Date(today) },
+    });
     if (!plan) {
       plan = await this.generatePlan(userId, today);
     }
@@ -211,14 +216,14 @@ export class DailyPlanService {
     const goals = this.nutritionScoreService.calculateDailyGoals(profile);
     const goalType = profile?.goal || 'health';
 
-    const userProfileConstraints = profile
+    const userProfileConstraints: UserProfileConstraints | undefined = profile
       ? {
-          dietaryRestrictions: profile.dietaryRestrictions || [],
-          weakTimeSlots: profile.weakTimeSlots || [],
-          discipline: profile.discipline,
-          allergens: profile.allergens || [],
-          healthConditions: profile.healthConditions || [],
-          regionCode: profile.regionCode || 'CN',
+          dietaryRestrictions: (profile.dietary_restrictions as string[]) || [],
+          weakTimeSlots: (profile.weak_time_slots as string[]) || [],
+          discipline: profile.discipline as string | undefined,
+          allergens: (profile.allergens as string[]) || [],
+          healthConditions: (profile.health_conditions as string[]) || [],
+          regionCode: (profile.region_code as string) || 'CN',
           timezone: profile.timezone,
         }
       : undefined;
@@ -228,12 +233,12 @@ export class DailyPlanService {
     // 餐次 → plan 字段 & 比例 key 的映射
     const MEAL_TO_PLAN_KEY: Record<
       string,
-      'morningPlan' | 'lunchPlan' | 'dinnerPlan' | 'snackPlan'
+      'morning_plan' | 'lunch_plan' | 'dinner_plan' | 'snack_plan'
     > = {
-      breakfast: 'morningPlan',
-      lunch: 'lunchPlan',
-      dinner: 'dinnerPlan',
-      snack: 'snackPlan',
+      breakfast: 'morning_plan',
+      lunch: 'lunch_plan',
+      dinner: 'dinner_plan',
+      snack: 'snack_plan',
     };
 
     const planKey = MEAL_TO_PLAN_KEY[mealType];
@@ -258,7 +263,7 @@ export class DailyPlanService {
 
     const excludeNames: string[] = [];
     for (const pk of otherPlanKeys) {
-      const otherMeal = plan[pk] as MealPlan | null;
+      const otherMeal = (plan as any)[pk] as MealPlan | null;
       if (otherMeal?.foodItems) {
         for (const item of otherMeal.foodItems) {
           excludeNames.push(item.name);
@@ -313,9 +318,12 @@ export class DailyPlanService {
     );
 
     // 仅更新指定餐次
-    plan[planKey] = toMealPlan(newRec, explanations);
+    const updatedMealPlan = toMealPlan(newRec, explanations);
 
-    return this.planRepo.save(plan);
+    return this.prisma.daily_plans.update({
+      where: { id: plan.id },
+      data: { [planKey]: updatedMealPlan },
+    }) as any;
   }
 
   /**
@@ -330,8 +338,10 @@ export class DailyPlanService {
     date: string,
     weekExcludeNames?: Set<string>,
     preloaded?: PreloadedContext,
-  ): Promise<DailyPlan> {
-    const existing = await this.planRepo.findOne({ where: { userId, date } });
+  ): Promise<any> {
+    const existing = await this.prisma.daily_plans.findFirst({
+      where: { user_id: userId, date: new Date(date) },
+    });
     if (existing) return existing;
     return this.generatePlan(userId, date, weekExcludeNames, preloaded);
   }
@@ -346,7 +356,7 @@ export class DailyPlanService {
     date: string,
     weekExcludeNames?: Set<string>,
     preloaded?: PreloadedContext,
-  ): Promise<DailyPlan> {
+  ): Promise<any> {
     // V5 2.5: 使用预加载数据或现场查询
     const [summary, profile] = preloaded
       ? [await this.foodService.getTodaySummary(userId), preloaded.profile]
@@ -359,14 +369,14 @@ export class DailyPlanService {
     const goalType = profile?.goal || 'health';
 
     // 提取用户档案约束（过敏原、健康状况等传递给推荐引擎）
-    const userProfileConstraints = profile
+    const userProfileConstraints: UserProfileConstraints | undefined = profile
       ? {
-          dietaryRestrictions: profile.dietaryRestrictions || [],
-          weakTimeSlots: profile.weakTimeSlots || [],
-          discipline: profile.discipline,
-          allergens: profile.allergens || [],
-          healthConditions: profile.healthConditions || [],
-          regionCode: profile.regionCode || 'CN',
+          dietaryRestrictions: (profile.dietary_restrictions as string[]) || [],
+          weakTimeSlots: (profile.weak_time_slots as string[]) || [],
+          discipline: profile.discipline as string | undefined,
+          allergens: (profile.allergens as string[]) || [],
+          healthConditions: (profile.health_conditions as string[]) || [],
+          regionCode: (profile.region_code as string) || 'CN',
           timezone: profile.timezone,
         }
       : undefined;
@@ -406,7 +416,7 @@ export class DailyPlanService {
       ));
 
     // 用户偏好提取（loves/avoids）
-    const foodPreferences = profile?.foodPreferences || [];
+    const foodPreferences = (profile?.food_preferences as any[]) || [];
     const userPreferences: { loves?: string[]; avoids?: string[] } = {};
     // 从 foodPreferences 和 behaviorProfile 提取偏好，暂时保持简单
     if (foodPreferences.length > 0) {
@@ -576,19 +586,21 @@ export class DailyPlanService {
       ),
     );
 
-    const plan = this.planRepo.create({
-      userId,
-      date,
-      morningPlan: toMealPlan(allRecs[0], mealExplanations[0]),
-      lunchPlan: toMealPlan(allRecs[1], mealExplanations[1]),
-      dinnerPlan: toMealPlan(allRecs[2], mealExplanations[2]),
-      snackPlan: toMealPlan(allRecs[3], mealExplanations[3]),
-      strategy,
-      totalBudget: goals.calories,
-      adjustments: [],
+    const plan = await this.prisma.daily_plans.create({
+      data: {
+        user_id: userId,
+        date: new Date(date),
+        morning_plan: toMealPlan(allRecs[0], mealExplanations[0]) as any,
+        lunch_plan: toMealPlan(allRecs[1], mealExplanations[1]) as any,
+        dinner_plan: toMealPlan(allRecs[2], mealExplanations[2]) as any,
+        snack_plan: toMealPlan(allRecs[3], mealExplanations[3]) as any,
+        strategy,
+        total_budget: goals.calories,
+        adjustments: [],
+      },
     });
 
-    return this.planRepo.save(plan);
+    return plan;
   }
 
   /**
@@ -597,33 +609,35 @@ export class DailyPlanService {
   async adjustPlan(
     userId: string,
     reason: string,
-  ): Promise<{ updatedPlan: DailyPlan; adjustmentNote: string }> {
+  ): Promise<{ updatedPlan: any; adjustmentNote: string }> {
     const [summary, profile] = await Promise.all([
       this.foodService.getTodaySummary(userId),
       this.userProfileService.getProfile(userId),
     ]);
     const tz = profile?.timezone || DEFAULT_TIMEZONE;
     const today = getUserLocalDate(tz);
-    let plan = await this.planRepo.findOne({ where: { userId, date: today } });
+    let plan: any = await this.prisma.daily_plans.findFirst({
+      where: { user_id: userId, date: new Date(today) },
+    });
     if (!plan) {
       plan = await this.generatePlan(userId, today);
     }
 
     const goals = this.nutritionScoreService.calculateDailyGoals(profile);
     const goalType = profile?.goal || 'health';
-    const goal = plan.totalBudget || goals.calories;
+    const goal = plan.total_budget || goals.calories;
     const remaining = Math.max(0, goal - summary.totalCalories);
     const hour = getUserLocalHour(tz);
 
     // 提取用户档案约束
-    const userProfileConstraints = profile
+    const userProfileConstraints: UserProfileConstraints | undefined = profile
       ? {
-          dietaryRestrictions: profile.dietaryRestrictions || [],
-          weakTimeSlots: profile.weakTimeSlots || [],
-          discipline: profile.discipline,
-          allergens: profile.allergens || [],
-          healthConditions: profile.healthConditions || [],
-          regionCode: profile.regionCode || 'CN',
+          dietaryRestrictions: (profile.dietary_restrictions as string[]) || [],
+          weakTimeSlots: (profile.weak_time_slots as string[]) || [],
+          discipline: profile.discipline as string | undefined,
+          allergens: (profile.allergens as string[]) || [],
+          healthConditions: (profile.health_conditions as string[]) || [],
+          regionCode: (profile.region_code as string) || 'CN',
           timezone: profile.timezone,
         }
       : undefined;
@@ -651,7 +665,7 @@ export class DailyPlanService {
           carbs: 15,
           tip: t('adjust.fallbackDinnerTip'),
         };
-        plan.dinnerPlan = adjustedMeals.dinner;
+        plan.dinner_plan = adjustedMeals.dinner as any;
       }
     } else if (hour < 12) {
       // 午餐+晚餐重新分配
@@ -707,8 +721,8 @@ export class DailyPlanService {
 
       adjustedMeals.lunch = toMealPlan(lunchRec);
       adjustedMeals.dinner = toMealPlan(dinnerRec);
-      plan.lunchPlan = adjustedMeals.lunch;
-      plan.dinnerPlan = adjustedMeals.dinner;
+      plan.lunch_plan = adjustedMeals.lunch as any;
+      plan.dinner_plan = adjustedMeals.dinner as any;
       adjustmentNote = t('adjust.lunchDinner', { lunchBudget, dinnerBudget });
     } else if (hour < 18) {
       // 只调整晚餐
@@ -739,7 +753,7 @@ export class DailyPlanService {
         userProfileConstraints,
       );
       adjustedMeals.dinner = toMealPlan(dinnerRec);
-      plan.dinnerPlan = adjustedMeals.dinner;
+      plan.dinner_plan = adjustedMeals.dinner as any;
       adjustmentNote = t('adjust.dinnerBudget', { remaining });
     } else {
       adjustmentNote = t('adjust.nightSnack', { remaining });
@@ -750,10 +764,19 @@ export class DailyPlanService {
       reason,
       newPlan: adjustedMeals,
     };
-    plan.adjustments = [...(plan.adjustments || []), adjustment];
+    const existingAdjustments = (plan.adjustments as any[]) || [];
 
-    const updatedPlan = await this.planRepo.save(plan);
-    return { updatedPlan, adjustmentNote };
+    const updatedPlan = await this.prisma.daily_plans.update({
+      where: { id: plan.id },
+      data: {
+        morning_plan: plan.morning_plan ?? undefined,
+        lunch_plan: plan.lunch_plan ?? undefined,
+        dinner_plan: plan.dinner_plan ?? undefined,
+        snack_plan: plan.snack_plan ?? undefined,
+        adjustments: [...existingAdjustments, adjustment],
+      },
+    });
+    return { updatedPlan: updatedPlan as any, adjustmentNote };
   }
 
   /**

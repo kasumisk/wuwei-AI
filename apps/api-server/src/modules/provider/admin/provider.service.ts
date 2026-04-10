@@ -4,9 +4,7 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like } from 'typeorm';
-import { Provider } from '../entities/provider.entity';
+import { PrismaService } from '../../../core/prisma/prisma.service';
 import {
   CreateProviderDto,
   UpdateProviderDto,
@@ -17,10 +15,7 @@ import { ProviderStatus } from '@ai-platform/shared';
 
 @Injectable()
 export class ProviderService {
-  constructor(
-    @InjectRepository(Provider)
-    private readonly providerRepository: Repository<Provider>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * 获取提供商列表（分页）
@@ -28,32 +23,33 @@ export class ProviderService {
   async findAll(query: GetProvidersQueryDto) {
     const { page = 1, pageSize = 10, keyword, type, status } = query;
 
-    const queryBuilder = this.providerRepository.createQueryBuilder('provider');
+    const where: any = {};
 
     // 搜索条件
     if (keyword) {
-      queryBuilder.andWhere('provider.name LIKE :keyword', {
-        keyword: `%${keyword}%`,
-      });
+      where.name = { contains: keyword };
     }
 
     // 筛选条件
     if (type) {
-      queryBuilder.andWhere('provider.type = :type', { type });
+      where.type = type;
     }
 
     if (status) {
-      queryBuilder.andWhere('provider.status = :status', { status });
+      where.status = status;
     }
 
-    // 排序：按创建时间降序
-    queryBuilder.orderBy('provider.createdAt', 'DESC');
-
-    // 分页
     const skip = (page - 1) * pageSize;
-    queryBuilder.skip(skip).take(pageSize);
 
-    const [list, total] = await queryBuilder.getManyAndCount();
+    const [list, total] = await Promise.all([
+      this.prisma.providers.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: pageSize,
+      }),
+      this.prisma.providers.count({ where }),
+    ]);
 
     // 隐藏敏感信息（API Key）
     const sanitizedList = list.map((provider) => ({
@@ -73,7 +69,7 @@ export class ProviderService {
    * 获取提供商详情
    */
   async findOne(id: string) {
-    const provider = await this.providerRepository.findOne({
+    const provider = await this.prisma.providers.findUnique({
       where: { id },
     });
 
@@ -93,7 +89,7 @@ export class ProviderService {
    */
   async create(createProviderDto: CreateProviderDto) {
     // 检查是否已存在相同名称的提供商
-    const existing = await this.providerRepository.findOne({
+    const existing = await this.prisma.providers.findFirst({
       where: {
         name: createProviderDto.name,
         type: createProviderDto.type,
@@ -107,15 +103,15 @@ export class ProviderService {
     }
 
     // 设置默认值
-    const provider = this.providerRepository.create({
-      ...createProviderDto,
-      enabled: createProviderDto.enabled ?? true,
-      timeout: createProviderDto.timeout ?? 30000,
-      retryCount: createProviderDto.retryCount ?? 3,
-      status: ProviderStatus.ACTIVE,
+    const savedProvider = await this.prisma.providers.create({
+      data: {
+        ...createProviderDto,
+        enabled: createProviderDto.enabled ?? true,
+        timeout: createProviderDto.timeout ?? 30000,
+        retryCount: createProviderDto.retryCount ?? 3,
+        status: ProviderStatus.ACTIVE,
+      },
     });
-
-    const savedProvider = await this.providerRepository.save(provider);
 
     // 返回时隐藏 API Key
     return {
@@ -128,7 +124,7 @@ export class ProviderService {
    * 更新提供商
    */
   async update(id: string, updateProviderDto: UpdateProviderDto) {
-    const provider = await this.providerRepository.findOne({
+    const provider = await this.prisma.providers.findUnique({
       where: { id },
     });
 
@@ -137,9 +133,10 @@ export class ProviderService {
     }
 
     // 合并更新
-    Object.assign(provider, updateProviderDto);
-
-    const updatedProvider = await this.providerRepository.save(provider);
+    const updatedProvider = await this.prisma.providers.update({
+      where: { id },
+      data: updateProviderDto,
+    });
 
     // 返回时隐藏 API Key
     return {
@@ -152,9 +149,9 @@ export class ProviderService {
    * 删除提供商
    */
   async remove(id: string) {
-    const provider = await this.providerRepository.findOne({
+    const provider = await this.prisma.providers.findUnique({
       where: { id },
-      relations: ['models'],
+      include: { model_configs: true },
     });
 
     if (!provider) {
@@ -162,13 +159,13 @@ export class ProviderService {
     }
 
     // 检查是否有关联的模型
-    if (provider.models && provider.models.length > 0) {
+    if (provider.model_configs && provider.model_configs.length > 0) {
       throw new BadRequestException(
-        `无法删除提供商，存在 ${provider.models.length} 个关联的模型配置`,
+        `无法删除提供商，存在 ${provider.model_configs.length} 个关联的模型配置`,
       );
     }
 
-    await this.providerRepository.remove(provider);
+    await this.prisma.providers.delete({ where: { id } });
 
     return { message: '提供商删除成功' };
   }
@@ -177,7 +174,7 @@ export class ProviderService {
    * 测试提供商连接
    */
   async test(testDto: TestProviderDto) {
-    const provider = await this.providerRepository.findOne({
+    const provider = await this.prisma.providers.findUnique({
       where: { id: testDto.providerId },
     });
 
@@ -203,9 +200,13 @@ export class ProviderService {
       const latency = Date.now() - startTime;
 
       // 更新健康检查时间和状态
-      provider.lastHealthCheck = new Date();
-      provider.status = ProviderStatus.ACTIVE;
-      await this.providerRepository.save(provider);
+      await this.prisma.providers.update({
+        where: { id: testDto.providerId },
+        data: {
+          lastHealthCheck: new Date(),
+          status: ProviderStatus.ACTIVE,
+        },
+      });
 
       return {
         success: true,
@@ -214,9 +215,13 @@ export class ProviderService {
       };
     } catch (error) {
       // 更新状态为错误
-      provider.status = ProviderStatus.ERROR;
-      provider.lastHealthCheck = new Date();
-      await this.providerRepository.save(provider);
+      await this.prisma.providers.update({
+        where: { id: testDto.providerId },
+        data: {
+          lastHealthCheck: new Date(),
+          status: ProviderStatus.ERROR,
+        },
+      });
 
       return {
         success: false,
@@ -229,7 +234,7 @@ export class ProviderService {
    * 获取提供商健康状态
    */
   async getHealth(id: string) {
-    const provider = await this.providerRepository.findOne({
+    const provider = await this.prisma.providers.findUnique({
       where: { id },
     });
 
@@ -248,7 +253,7 @@ export class ProviderService {
    * 批量检查所有提供商的健康状态
    */
   async checkAllHealth() {
-    const providers = await this.providerRepository.find({
+    const providers = await this.prisma.providers.findMany({
       where: { enabled: true },
     });
 
@@ -258,24 +263,34 @@ export class ProviderService {
           // TODO: 实际健康检查逻辑
           await new Promise((resolve) => setTimeout(resolve, 50));
 
-          provider.status = ProviderStatus.ACTIVE;
-          provider.lastHealthCheck = new Date();
-          await this.providerRepository.save(provider);
+          const now = new Date();
+          await this.prisma.providers.update({
+            where: { id: provider.id },
+            data: {
+              status: ProviderStatus.ACTIVE,
+              lastHealthCheck: now,
+            },
+          });
 
           return {
             providerId: provider.id,
             status: ProviderStatus.ACTIVE,
-            lastCheck: provider.lastHealthCheck,
+            lastCheck: now,
           };
         } catch (error) {
-          provider.status = ProviderStatus.ERROR;
-          provider.lastHealthCheck = new Date();
-          await this.providerRepository.save(provider);
+          const now = new Date();
+          await this.prisma.providers.update({
+            where: { id: provider.id },
+            data: {
+              status: ProviderStatus.ERROR,
+              lastHealthCheck: now,
+            },
+          });
 
           return {
             providerId: provider.id,
             status: ProviderStatus.ERROR,
-            lastCheck: provider.lastHealthCheck,
+            lastCheck: now,
             error: error.message,
           };
         }

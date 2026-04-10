@@ -3,7 +3,7 @@
  * 创建测试客户端和能力配置
  */
 
-import { DataSource } from 'typeorm';
+import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { config } from 'dotenv';
 
@@ -13,20 +13,10 @@ config();
 async function initTestData() {
   console.log('🚀 开始初始化 Gateway 测试数据...\n');
 
-  // 创建数据库连接
-  const dataSource = new DataSource({
-    type: 'postgres',
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '5432'),
-    username: process.env.DB_USER || 'xiehaiji',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'ai_platform',
-    entities: ['src/entities/*.entity.ts'],
-    synchronize: false,
-  });
+  const prisma = new PrismaClient();
 
   try {
-    await dataSource.initialize();
+    await prisma.$connect();
     console.log('✅ 数据库连接成功\n');
 
     // 1. 创建测试客户端
@@ -36,10 +26,9 @@ async function initTestData() {
     const hashedSecret = await bcrypt.hash(apiSecret, 10);
 
     // 检查客户端是否已存在
-    const existingClient = await dataSource.query(
-      'SELECT id FROM clients WHERE api_key = $1',
-      [apiKey],
-    );
+    const existingClient = await prisma.$queryRaw<{ id: string }[]>`
+      SELECT id FROM clients WHERE api_key = ${apiKey}
+    `;
 
     let clientId: string;
 
@@ -47,27 +36,20 @@ async function initTestData() {
       clientId = existingClient[0].id;
       console.log(`  ℹ️  测试客户端已存在 (ID: ${clientId})`);
     } else {
-      const result = await dataSource.query(
-        `INSERT INTO clients (
+      const quotaConfig = JSON.stringify({
+        dailyQuota: 10, // 日配额 $10
+        monthlyQuota: 100, // 月配额 $100
+      });
+      const result = await prisma.$queryRaw<{ id: string }[]>`
+        INSERT INTO clients (
           name, 
           api_key, 
           api_secret, 
           status, 
           rate_limit,
           quota_config
-        ) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-        [
-          'Gateway 测试客户端',
-          apiKey,
-          hashedSecret,
-          'active',
-          100, // 每分钟 100 次请求
-          JSON.stringify({
-            dailyQuota: 10, // 日配额 $10
-            monthlyQuota: 100, // 月配额 $100
-          }),
-        ],
-      );
+        ) VALUES (${'Gateway 测试客户端'}, ${apiKey}, ${hashedSecret}, ${'active'}, ${100}, ${quotaConfig}::jsonb) RETURNING id
+      `;
       clientId = result[0].id;
       console.log(`  ✅ 创建成功 (ID: ${clientId})`);
     }
@@ -124,42 +106,35 @@ async function initTestData() {
 
     const configIds: string[] = [];
 
-    for (const config of capabilityConfigs) {
-      const existing = await dataSource.query(
-        'SELECT id FROM capability_configs WHERE capability_type = $1 AND provider = $2 AND model = $3',
-        [config.capability_type, config.provider, config.model],
-      );
+    for (const capConfig of capabilityConfigs) {
+      const existing = await prisma.$queryRaw<{ id: string }[]>`
+        SELECT id FROM capability_configs WHERE capability_type = ${capConfig.capability_type} AND provider = ${capConfig.provider} AND model = ${capConfig.model}
+      `;
 
       if (existing.length > 0) {
         const configId = existing[0].id;
-        await dataSource.query(
-          'UPDATE capability_configs SET config = $1, is_active = $2, updated_at = NOW() WHERE id = $3',
-          [JSON.stringify(config.config), config.is_active, configId],
-        );
+        const configJson = JSON.stringify(capConfig.config);
+        await prisma.$queryRaw`
+          UPDATE capability_configs SET config = ${configJson}::jsonb, is_active = ${capConfig.is_active}, updated_at = NOW() WHERE id = ${configId}::uuid
+        `;
         console.log(
-          `  ℹ️  更新配置: ${config.provider} ${config.model} (ID: ${configId})`,
+          `  ℹ️  更新配置: ${capConfig.provider} ${capConfig.model} (ID: ${configId})`,
         );
         configIds.push(configId);
       } else {
-        const result = await dataSource.query(
-          `INSERT INTO capability_configs (
+        const configJson = JSON.stringify(capConfig.config);
+        const result = await prisma.$queryRaw<{ id: string }[]>`
+          INSERT INTO capability_configs (
             capability_type,
             provider,
             model,
             config,
             is_active
-          ) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-          [
-            config.capability_type,
-            config.provider,
-            config.model,
-            JSON.stringify(config.config),
-            config.is_active,
-          ],
-        );
+          ) VALUES (${capConfig.capability_type}, ${capConfig.provider}, ${capConfig.model}, ${configJson}::jsonb, ${capConfig.is_active}) RETURNING id
+        `;
         const configId = result[0].id;
         console.log(
-          `  ✅ 创建配置: ${config.provider} ${config.model} (ID: ${configId})`,
+          `  ✅ 创建配置: ${capConfig.provider} ${capConfig.model} (ID: ${configId})`,
         );
         configIds.push(configId);
       }
@@ -170,45 +145,48 @@ async function initTestData() {
 
     for (let i = 0; i < configIds.length; i++) {
       const configId = configIds[i];
-      const config = capabilityConfigs[i];
+      const capConfig = capabilityConfigs[i];
 
-      const existing = await dataSource.query(
-        'SELECT id FROM client_capability_permissions WHERE client_id = $1 AND config_id = $2',
-        [clientId, configId],
-      );
+      const existing = await prisma.$queryRaw<{ id: string }[]>`
+        SELECT id FROM client_capability_permissions WHERE client_id = ${clientId}::uuid AND config_id = ${configId}::uuid
+      `;
 
       if (existing.length > 0) {
         const priority =
-          config.provider === 'openai' ? (i === 0 ? 10 : 9) : i === 2 ? 8 : 7;
-        await dataSource.query(
-          'UPDATE client_capability_permissions SET enabled = $1, priority = $2, updated_at = NOW() WHERE id = $3',
-          [true, priority, existing[0].id],
-        );
+          capConfig.provider === 'openai'
+            ? i === 0
+              ? 10
+              : 9
+            : i === 2
+              ? 8
+              : 7;
+        await prisma.$queryRaw`
+          UPDATE client_capability_permissions SET enabled = ${true}, priority = ${priority}, updated_at = NOW() WHERE id = ${existing[0].id}::uuid
+        `;
         console.log(
-          `  ℹ️  更新权限: ${config.provider} ${config.model} (优先级: ${priority})`,
+          `  ℹ️  更新权限: ${capConfig.provider} ${capConfig.model} (优先级: ${priority})`,
         );
       } else {
-        await dataSource.query(
-          `INSERT INTO client_capability_permissions (
+        const priority =
+          capConfig.provider === 'openai'
+            ? i === 0
+              ? 10
+              : 9
+            : i === 2
+              ? 8
+              : 7;
+        await prisma.$queryRaw`
+          INSERT INTO client_capability_permissions (
             client_id,
             capability_type,
             config_id,
             enabled,
             priority,
             max_requests_per_minute
-          ) VALUES ($1, $2, $3, $4, $5, $6)`,
-          [
-            clientId,
-            config.capability_type,
-            configId,
-            true,
-            // OpenAI 优先级 10/9, DeepSeek 优先级 8/7
-            config.provider === 'openai' ? (i === 0 ? 10 : 9) : i === 2 ? 8 : 7,
-            100, // 统一速率限制
-          ],
-        );
+          ) VALUES (${clientId}::uuid, ${capConfig.capability_type}, ${configId}::uuid, ${true}, ${priority}, ${100})
+        `;
         console.log(
-          `  ✅ 创建权限: ${config.provider} ${config.model} (优先级: ${config.provider === 'openai' ? (i === 0 ? 10 : 9) : i === 2 ? 8 : 7})`,
+          `  ✅ 创建权限: ${capConfig.provider} ${capConfig.model} (优先级: ${priority})`,
         );
       }
     }
@@ -223,7 +201,7 @@ async function initTestData() {
     console.error('❌ 初始化失败:', error);
     throw error;
   } finally {
-    await dataSource.destroy();
+    await prisma.$disconnect();
   }
 }
 

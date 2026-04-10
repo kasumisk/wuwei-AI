@@ -23,13 +23,6 @@
  * - PaywallTriggerService: 付费墙触发策略 + 转化漏斗记录
  */
 import { Global, Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { SubscriptionPlan } from './entities/subscription-plan.entity';
-import { Subscription } from './entities/subscription.entity';
-import { PaymentRecord } from './entities/payment-record.entity';
-import { UsageQuota } from './entities/usage-quota.entity';
-// V6.1: 付费墙触发日志
-import { SubscriptionTriggerLog } from './entities/subscription-trigger-log.entity';
 import { SubscriptionService } from './app/subscription.service';
 import { SubscriptionGuard } from './app/subscription.guard';
 import { QuotaService } from './app/quota.service';
@@ -43,22 +36,11 @@ import { AppleIapController } from './app/apple-iap.controller';
 import { WechatPayService } from './app/wechat-pay.service';
 import { WechatPayController } from './app/wechat-pay.controller';
 // Phase 1: 订阅管理后台
-import { AppUser } from '../user/entities/app-user.entity';
 import { SubscriptionManagementController } from './admin/subscription-management.controller';
 import { SubscriptionManagementService } from './admin/subscription-management.service';
 
 @Global()
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([
-      SubscriptionPlan,
-      Subscription,
-      PaymentRecord,
-      UsageQuota,
-      SubscriptionTriggerLog, // V6.1: 付费墙触发日志
-      AppUser, // Phase 1: 订阅管理后台需要查询用户信息
-    ]),
-  ],
   controllers: [
     AppleIapController,
     WechatPayController,

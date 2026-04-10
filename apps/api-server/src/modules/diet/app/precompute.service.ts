@@ -13,14 +13,11 @@
  * - 未命中 → 回退到实时计算（现有逻辑不变）
  */
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThan, MoreThan } from 'typeorm';
 import { Cron } from '@nestjs/schedule';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { OnEvent } from '@nestjs/event-emitter';
-import { PrecomputedRecommendation } from '../entities/precomputed-recommendation.entity';
-import { FoodRecord } from '../entities/food-record.entity';
+import { PrismaService } from '../../../core/prisma/prisma.service';
 import { MealRecommendation } from './recommendation/recommendation.types';
 import {
   DomainEvents,
@@ -51,10 +48,7 @@ export class PrecomputeService {
   private readonly logger = new Logger(PrecomputeService.name);
 
   constructor(
-    @InjectRepository(PrecomputedRecommendation)
-    private readonly precomputeRepo: Repository<PrecomputedRecommendation>,
-    @InjectRepository(FoodRecord)
-    private readonly foodRecordRepo: Repository<FoodRecord>,
+    private readonly prisma: PrismaService,
     @InjectQueue(QUEUE_NAMES.RECOMMENDATION_PRECOMPUTE)
     private readonly precomputeQueue: Queue,
   ) {}
@@ -74,28 +68,33 @@ export class PrecomputeService {
     result: MealRecommendation;
     scenarioResults: Record<string, unknown> | null;
   } | null> {
-    const record = await this.precomputeRepo.findOne({
+    const record = await this.prisma.precomputed_recommendations.findFirst({
       where: {
-        userId,
+        user_id: userId,
         date,
-        mealType,
-        strategyVersion: CURRENT_STRATEGY_VERSION,
-        expiresAt: MoreThan(new Date()),
+        meal_type: mealType,
+        strategy_version: CURRENT_STRATEGY_VERSION,
+        expires_at: { gt: new Date() },
       },
     });
 
     if (!record) return null;
 
     // 标记为已使用（异步，不阻塞返回）
-    if (!record.isUsed) {
-      this.precomputeRepo.update(record.id, { isUsed: true }).catch(() => {
-        /* non-critical */
-      });
+    if (!record.is_used) {
+      this.prisma.precomputed_recommendations
+        .update({ where: { id: record.id }, data: { is_used: true } })
+        .catch(() => {
+          /* non-critical */
+        });
     }
 
     return {
       result: record.result as unknown as MealRecommendation,
-      scenarioResults: record.scenarioResults,
+      scenarioResults: record.scenario_results as Record<
+        string,
+        unknown
+      > | null,
     };
   }
 
@@ -114,33 +113,32 @@ export class PrecomputeService {
     // 计算过期时间: date 当天 23:59:59
     const expiresAt = new Date(`${date}T23:59:59`);
 
-    // TypeORM upsert 的 _QueryDeepPartialEntity 与 jsonb 字段类型不兼容，
-    // 使用 query builder + 类型断言绕过
-    await this.precomputeRepo
-      .createQueryBuilder()
-      .insert()
-      .into(PrecomputedRecommendation)
-      .values({
-        userId,
-        date,
-        mealType,
+    await this.prisma.precomputed_recommendations.upsert({
+      where: {
+        user_id_date_meal_type: {
+          user_id: userId,
+          date,
+          meal_type: mealType,
+        },
+      },
+      update: {
         result: result as any,
-        scenarioResults: (scenarioResults || null) as any,
-        strategyVersion: CURRENT_STRATEGY_VERSION,
-        expiresAt,
-        isUsed: false,
-      })
-      .orUpdate(
-        [
-          'result',
-          'scenario_results',
-          'strategy_version',
-          'expires_at',
-          'is_used',
-        ],
-        ['user_id', 'date', 'meal_type'],
-      )
-      .execute();
+        scenario_results: (scenarioResults || null) as any,
+        strategy_version: CURRENT_STRATEGY_VERSION,
+        expires_at: expiresAt,
+        is_used: false,
+      },
+      create: {
+        user_id: userId,
+        date,
+        meal_type: mealType,
+        result: result as any,
+        scenario_results: (scenarioResults || null) as any,
+        strategy_version: CURRENT_STRATEGY_VERSION,
+        expires_at: expiresAt,
+        is_used: false,
+      },
+    });
 
     this.logger.debug(
       `预计算已存储: userId=${userId}, date=${date}, mealType=${mealType}`,
@@ -207,14 +205,17 @@ export class PrecomputeService {
       tomorrow.setDate(tomorrow.getDate() + 1);
       const tomorrowStr = tomorrow.toISOString().slice(0, 10);
 
-      const deleteResult = await this.precomputeRepo.delete([
-        { userId: event.userId, date: today },
-        { userId: event.userId, date: tomorrowStr },
-      ]);
+      const deleteResult =
+        await this.prisma.precomputed_recommendations.deleteMany({
+          where: {
+            user_id: event.userId,
+            date: { in: [today, tomorrowStr] },
+          },
+        });
 
-      if (deleteResult.affected && deleteResult.affected > 0) {
+      if (deleteResult.count > 0) {
         this.logger.debug(
-          `预计算已失效: userId=${event.userId}, 删除 ${deleteResult.affected} 条, 原因=${event.updateType}`,
+          `预计算已失效: userId=${event.userId}, 删除 ${deleteResult.count} 条, 原因=${event.updateType}`,
         );
       }
     } catch (err) {
@@ -231,11 +232,11 @@ export class PrecomputeService {
    */
   @Cron('0 4 * * *', { name: 'cleanup-precomputed' })
   async cleanupExpired(): Promise<void> {
-    const result = await this.precomputeRepo.delete({
-      expiresAt: LessThan(new Date()),
+    const result = await this.prisma.precomputed_recommendations.deleteMany({
+      where: { expires_at: { lt: new Date() } },
     });
-    if (result.affected && result.affected > 0) {
-      this.logger.log(`清理过期预计算: ${result.affected} 条`);
+    if (result.count > 0) {
+      this.logger.log(`清理过期预计算: ${result.count} 条`);
     }
   }
 
@@ -248,12 +249,12 @@ export class PrecomputeService {
     const since = new Date();
     since.setDate(since.getDate() - ACTIVE_USER_DAYS);
 
-    const results = await this.foodRecordRepo
-      .createQueryBuilder('record')
-      .select('DISTINCT record.user_id', 'userId')
-      .where('record.created_at > :since', { since })
-      .getRawMany<{ userId: string }>();
+    const results = await this.prisma.food_records.findMany({
+      where: { created_at: { gt: since } },
+      select: { user_id: true },
+      distinct: ['user_id'],
+    });
 
-    return results.map((r) => r.userId);
+    return results.map((r) => r.user_id);
   }
 }

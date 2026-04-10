@@ -18,9 +18,7 @@
  *   < 50:  标记低质量，不参与候选聚合（low_quality）
  */
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { FoodLibrary } from '../entities/food-library.entity';
+import { PrismaService } from '../../../core/prisma/prisma.service';
 import {
   FoodAnalysisResultV61,
   AnalyzedFoodItem,
@@ -81,7 +79,7 @@ export interface QualityScoreContext {
   /** 用户是否已确认（保存到饮食记录） */
   userConfirmed?: boolean;
   /** 匹配到的标准食物（由调用方提前查询好传入，避免重复查库） */
-  matchedLibraryFoods?: FoodLibrary[];
+  matchedLibraryFoods?: any[];
 }
 
 // ==================== 评分因子权重配置 ====================
@@ -122,10 +120,7 @@ const CALORIE_CONFLICT_RATIO = 0.3;
 export class DataQualityService {
   private readonly logger = new Logger(DataQualityService.name);
 
-  constructor(
-    @InjectRepository(FoodLibrary)
-    private readonly foodLibraryRepo: Repository<FoodLibrary>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   // ==================== 公共 API ====================
 
@@ -141,7 +136,7 @@ export class DataQualityService {
     // 如果调用方没传入已匹配的标准食物，按名称批量查一次
     const matchedLibraryFoods =
       context.matchedLibraryFoods ??
-      (await this.batchFindByNames(result.foods));
+      ((await this.batchFindByNames(result.foods)) as any[]);
 
     // 计算各因子
     const factors: QualityFactorDetail[] = [
@@ -216,7 +211,7 @@ export class DataQualityService {
    */
   private scoreMatchCompleteness(
     foods: AnalyzedFoodItem[],
-    matchedLibraryFoods: FoodLibrary[],
+    matchedLibraryFoods: any[],
   ): QualityFactorDetail {
     if (foods.length === 0) {
       return this.buildFactor(
@@ -227,7 +222,7 @@ export class DataQualityService {
     }
 
     const matchedNames = new Set(
-      matchedLibraryFoods.map((f) => f.name.toLowerCase()),
+      matchedLibraryFoods.map((f: any) => (f.name as string).toLowerCase()),
     );
 
     // 统计已有 foodLibraryId 或名称命中标准库的食物数
@@ -353,7 +348,7 @@ export class DataQualityService {
    */
   private scoreDataConflict(
     foods: AnalyzedFoodItem[],
-    matchedLibraryFoods: FoodLibrary[],
+    matchedLibraryFoods: any[],
   ): QualityFactorDetail {
     if (foods.length === 0 || matchedLibraryFoods.length === 0) {
       // 无法做冲突检查时给默认中间分（不惩罚也不加分）
@@ -361,9 +356,9 @@ export class DataQualityService {
     }
 
     // 按名称建立标准库食物索引
-    const libraryMap = new Map<string, FoodLibrary>();
+    const libraryMap = new Map<string, any>();
     for (const lib of matchedLibraryFoods) {
-      libraryMap.set(lib.name.toLowerCase(), lib);
+      libraryMap.set((lib.name as string).toLowerCase(), lib);
     }
 
     let conflictCount = 0;
@@ -445,9 +440,7 @@ export class DataQualityService {
    *
    * 用于调用方没有预查询时的兜底
    */
-  private async batchFindByNames(
-    foods: AnalyzedFoodItem[],
-  ): Promise<FoodLibrary[]> {
+  private async batchFindByNames(foods: AnalyzedFoodItem[]) {
     if (foods.length === 0) return [];
 
     // 收集所有需要查询的名称（原始名 + 标准化名）
@@ -459,13 +452,12 @@ export class DataQualityService {
 
     if (names.size === 0) return [];
 
-    // 使用 IN 查询 + ILIKE 别名匹配太复杂，这里用精确名称 IN 查询
-    // 对于别名匹配的场景，后续 AnalysisIngestionService 会做更精细的搜索
-    return this.foodLibraryRepo
-      .createQueryBuilder('f')
-      .where('LOWER(f.name) IN (:...names)', {
-        names: Array.from(names).map((n) => n.toLowerCase()),
-      })
-      .getMany();
+    const lowerNames = Array.from(names).map((n) => n.toLowerCase());
+
+    // 使用 raw query for LOWER() comparison
+    return this.prisma.$queryRawUnsafe(
+      `SELECT * FROM foods WHERE LOWER(name) IN (${lowerNames.map((_, i) => `$${i + 1}`).join(', ')})`,
+      ...lowerNames,
+    );
   }
 }

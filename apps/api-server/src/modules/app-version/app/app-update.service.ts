@@ -1,12 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import {
-  AppVersion,
-  UpdateType,
-  AppVersionStatus,
-} from '../entities/app-version.entity';
-import { AppVersionPackage } from '../entities/app-version-package.entity';
+import { PrismaService } from '../../../core/prisma/prisma.service';
+import { UpdateType, AppVersionStatus } from '../app-version.types';
 import {
   CheckUpdateDto,
   GetLatestVersionQueryDto,
@@ -15,12 +9,7 @@ import {
 
 @Injectable()
 export class AppUpdateService {
-  constructor(
-    @InjectRepository(AppVersion)
-    private readonly appVersionRepository: Repository<AppVersion>,
-    @InjectRepository(AppVersionPackage)
-    private readonly packageRepository: Repository<AppVersionPackage>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * 将语义化版本号转换为数值（用于比较）
@@ -44,22 +33,22 @@ export class AppUpdateService {
 
     const currentVersionCode = this.parseVersionCode(current_version);
 
-    const queryBuilder = this.appVersionRepository
-      .createQueryBuilder('version')
-      .leftJoinAndSelect('version.packages', 'pkg', 'pkg.enabled = true')
-      .andWhere('version.status = :status', {
+    const latestVersion = await this.prisma.app_versions.findFirst({
+      where: {
         status: AppVersionStatus.PUBLISHED,
-      })
-      .orderBy('version.versionCode', 'DESC');
-
-    if (platform) {
-      queryBuilder.andWhere(
-        '(version.platform = :platform OR version.platform IS NULL)',
-        { platform },
-      );
-    }
-
-    const latestVersion = await queryBuilder.getOne();
+        ...(platform
+          ? {
+              OR: [{ platform }, { platform: null }],
+            }
+          : {}),
+      },
+      include: {
+        app_version_packages: {
+          where: { enabled: true },
+        },
+      },
+      orderBy: { versionCode: 'desc' },
+    });
 
     if (!latestVersion || latestVersion.versionCode <= currentVersionCode) {
       return { need_update: false };
@@ -67,36 +56,36 @@ export class AppUpdateService {
 
     // 优先匹配指定渠道的包，否则取第一个可用包
     const pkg =
-      latestVersion.packages?.find((p) => p.channel === channel) ||
-      latestVersion.packages?.[0];
+      latestVersion.app_version_packages?.find((p) => p.channel === channel) ||
+      latestVersion.app_version_packages?.[0];
 
     // 灰度发布检查
     if (latestVersion.grayRelease && latestVersion.grayPercent < 100) {
       if (device_id) {
         const hash = this.hashDeviceId(device_id);
         if (hash > latestVersion.grayPercent) {
-          const fallbackBuilder = this.appVersionRepository
-            .createQueryBuilder('version')
-            .leftJoinAndSelect('version.packages', 'pkg', 'pkg.enabled = true')
-            .where('version.status = :status', {
+          const fallbackVersion = await this.prisma.app_versions.findFirst({
+            where: {
               status: AppVersionStatus.PUBLISHED,
-            })
-            .andWhere('version.versionCode > :currentCode', {
-              currentCode: currentVersionCode,
-            })
-            .andWhere(
-              '(version.grayRelease = false OR version.grayPercent = 100)',
-            )
-            .orderBy('version.versionCode', 'DESC');
-
-          if (platform) {
-            fallbackBuilder.andWhere(
-              '(version.platform = :platform OR version.platform IS NULL)',
-              { platform },
-            );
-          }
-
-          const fallbackVersion = await fallbackBuilder.getOne();
+              versionCode: { gt: currentVersionCode },
+              OR: [{ grayRelease: false }, { grayPercent: 100 }],
+              ...(platform
+                ? {
+                    AND: [
+                      {
+                        OR: [{ platform }, { platform: null }],
+                      },
+                    ],
+                  }
+                : {}),
+            },
+            include: {
+              app_version_packages: {
+                where: { enabled: true },
+              },
+            },
+            orderBy: { versionCode: 'desc' },
+          });
 
           if (!fallbackVersion) {
             return { need_update: false };
@@ -104,8 +93,9 @@ export class AppUpdateService {
 
           return this.buildUpdateResponse(
             fallbackVersion,
-            fallbackVersion.packages?.find((p) => p.channel === channel) ||
-              fallbackVersion.packages?.[0],
+            fallbackVersion.app_version_packages?.find(
+              (p) => p.channel === channel,
+            ) || fallbackVersion.app_version_packages?.[0],
             currentVersionCode,
             language,
           );
@@ -127,33 +117,39 @@ export class AppUpdateService {
   async getLatestVersion(query: GetLatestVersionQueryDto) {
     const { platform, channel: _channel = 'official', language } = query;
 
-    const queryBuilder = this.appVersionRepository
-      .createQueryBuilder('version')
-      .leftJoinAndSelect('version.packages', 'pkg', 'pkg.enabled = true')
-      .where('version.status = :status', {
+    const latestVersion = await this.prisma.app_versions.findFirst({
+      where: {
         status: AppVersionStatus.PUBLISHED,
-      })
-      .orderBy('version.versionCode', 'DESC');
-
-    if (platform) {
-      queryBuilder.andWhere(
-        '(version.platform = :platform OR version.platform IS NULL)',
-        { platform },
-      );
-    }
-
-    const latestVersion = await queryBuilder.getOne();
+        ...(platform
+          ? {
+              OR: [{ platform }, { platform: null }],
+            }
+          : {}),
+      },
+      include: {
+        app_version_packages: {
+          where: { enabled: true },
+        },
+      },
+      orderBy: { versionCode: 'desc' },
+    });
 
     if (!latestVersion) {
       throw new NotFoundException('暂无可用版本');
     }
 
     let description = latestVersion.description;
-    if (language && latestVersion.i18nDescription?.[language]) {
-      description = latestVersion.i18nDescription[language];
+    if (
+      language &&
+      latestVersion.i18nDescription &&
+      (latestVersion.i18nDescription as Record<string, string>)[language]
+    ) {
+      description = (latestVersion.i18nDescription as Record<string, string>)[
+        language
+      ];
     }
 
-    const packages = (latestVersion.packages || []).map((pkg) => ({
+    const packages = (latestVersion.app_version_packages || []).map((pkg) => ({
       id: pkg.id,
       platform: pkg.platform,
       channel: pkg.channel,
@@ -183,29 +179,35 @@ export class AppUpdateService {
   async getVersionHistory(query: GetVersionHistoryQueryDto) {
     const { platform, page = 1, pageSize = 10, language } = query;
 
-    const queryBuilder = this.appVersionRepository
-      .createQueryBuilder('version')
-      .where('version.status = :status', {
-        status: AppVersionStatus.PUBLISHED,
-      })
-      .orderBy('version.versionCode', 'DESC');
-
-    if (platform) {
-      queryBuilder.andWhere(
-        '(version.platform = :platform OR version.platform IS NULL)',
-        { platform },
-      );
-    }
+    const where = {
+      status: AppVersionStatus.PUBLISHED as any,
+      ...(platform
+        ? {
+            OR: [{ platform }, { platform: null }],
+          }
+        : {}),
+    };
 
     const skip = (page - 1) * pageSize;
-    queryBuilder.skip(skip).take(pageSize);
 
-    const [versions, total] = await queryBuilder.getManyAndCount();
+    const [versions, total] = await Promise.all([
+      this.prisma.app_versions.findMany({
+        where,
+        orderBy: { versionCode: 'desc' },
+        skip,
+        take: pageSize,
+      }),
+      this.prisma.app_versions.count({ where }),
+    ]);
 
     const list = versions.map((v) => {
       let description = v.description;
-      if (language && v.i18nDescription?.[language]) {
-        description = v.i18nDescription[language];
+      if (
+        language &&
+        v.i18nDescription &&
+        (v.i18nDescription as Record<string, string>)[language]
+      ) {
+        description = (v.i18nDescription as Record<string, string>)[language];
       }
       return {
         version: v.version,
@@ -224,8 +226,8 @@ export class AppUpdateService {
   // ==================== 私有方法 ====================
 
   private buildUpdateResponse(
-    version: AppVersion,
-    pkg: AppVersionPackage | undefined,
+    version: any,
+    pkg: any | undefined,
     currentVersionCode: number,
     language?: string,
   ) {
@@ -238,8 +240,14 @@ export class AppUpdateService {
     }
 
     let description = version.description;
-    if (language && version.i18nDescription?.[language]) {
-      description = version.i18nDescription[language];
+    if (
+      language &&
+      version.i18nDescription &&
+      (version.i18nDescription as Record<string, string>)[language]
+    ) {
+      description = (version.i18nDescription as Record<string, string>)[
+        language
+      ];
     }
 
     return {

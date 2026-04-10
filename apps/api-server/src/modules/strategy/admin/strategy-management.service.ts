@@ -4,10 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Strategy } from '../entities/strategy.entity';
-import { StrategyAssignment } from '../entities/strategy-assignment.entity';
+import { PrismaService } from '../../../core/prisma/prisma.service';
 import { StrategyService } from '../app/strategy.service';
 import {
   GetStrategiesQueryDto,
@@ -24,10 +21,7 @@ export class StrategyManagementService {
   private readonly logger = new Logger(StrategyManagementService.name);
 
   constructor(
-    @InjectRepository(Strategy)
-    private readonly strategyRepo: Repository<Strategy>,
-    @InjectRepository(StrategyAssignment)
-    private readonly assignmentRepo: Repository<StrategyAssignment>,
+    private readonly prisma: PrismaService,
     private readonly strategyService: StrategyService,
   ) {}
 
@@ -36,26 +30,26 @@ export class StrategyManagementService {
   async findStrategies(query: GetStrategiesQueryDto) {
     const { page = 1, pageSize = 20, keyword, scope, status } = query;
 
-    const qb = this.strategyRepo.createQueryBuilder('s');
+    const where = {
+      ...(keyword && {
+        OR: [
+          { name: { contains: keyword, mode: 'insensitive' as const } },
+          { description: { contains: keyword, mode: 'insensitive' as const } },
+        ],
+      }),
+      ...(scope && { scope }),
+      ...(status && { status }),
+    };
 
-    if (keyword) {
-      qb.andWhere('(s.name ILIKE :keyword OR s.description ILIKE :keyword)', {
-        keyword: `%${keyword}%`,
-      });
-    }
-    if (scope) {
-      qb.andWhere('s.scope = :scope', { scope });
-    }
-    if (status) {
-      qb.andWhere('s.status = :status', { status });
-    }
-
-    qb.orderBy('s.priority', 'DESC')
-      .addOrderBy('s.updatedAt', 'DESC')
-      .skip((page - 1) * pageSize)
-      .take(pageSize);
-
-    const [list, total] = await qb.getManyAndCount();
+    const [list, total] = await Promise.all([
+      this.prisma.strategy.findMany({
+        where,
+        orderBy: [{ priority: 'desc' }, { updated_at: 'desc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.strategy.count({ where }),
+    ]);
 
     return {
       list,
@@ -69,14 +63,14 @@ export class StrategyManagementService {
   // ==================== 策略详情 ====================
 
   async getStrategyDetail(id: string) {
-    const strategy = await this.strategyRepo.findOneBy({ id });
+    const strategy = await this.prisma.strategy.findUnique({ where: { id } });
     if (!strategy) {
       throw new NotFoundException(`策略 ${id} 不存在`);
     }
 
     // 同时查询该策略的活跃分配数
-    const activeAssignmentCount = await this.assignmentRepo.count({
-      where: { strategyId: id, isActive: true },
+    const activeAssignmentCount = await this.prisma.strategy_assignment.count({
+      where: { strategy_id: id, is_active: true },
     });
 
     return {
@@ -126,7 +120,9 @@ export class StrategyManagementService {
 
   async assignStrategy(strategyId: string, dto: AssignStrategyDto) {
     // 验证策略存在且为 active
-    const strategy = await this.strategyRepo.findOneBy({ id: strategyId });
+    const strategy = await this.prisma.strategy.findUnique({
+      where: { id: strategyId },
+    });
     if (!strategy) {
       throw new NotFoundException(`策略 ${strategyId} 不存在`);
     }
@@ -135,14 +131,14 @@ export class StrategyManagementService {
     }
 
     // 先取消该用户该策略的现有分配（避免重复）
-    await this.assignmentRepo
-      .createQueryBuilder()
-      .update(StrategyAssignment)
-      .set({ isActive: false })
-      .where('strategy_id = :strategyId', { strategyId })
-      .andWhere('user_id = :userId', { userId: dto.userId })
-      .andWhere('is_active = true')
-      .execute();
+    await this.prisma.strategy_assignment.updateMany({
+      where: {
+        strategy_id: strategyId,
+        user_id: dto.userId,
+        is_active: true,
+      },
+      data: { is_active: false },
+    });
 
     return this.strategyService.assignToUser({
       userId: dto.userId,
@@ -157,22 +153,21 @@ export class StrategyManagementService {
   async getAssignments(strategyId: string, query: GetAssignmentsQueryDto) {
     const { page = 1, pageSize = 20, isActive, assignmentType } = query;
 
-    const qb = this.assignmentRepo
-      .createQueryBuilder('a')
-      .where('a.strategy_id = :strategyId', { strategyId });
+    const where = {
+      strategy_id: strategyId,
+      ...(isActive !== undefined && { is_active: isActive }),
+      ...(assignmentType && { assignment_type: assignmentType }),
+    };
 
-    if (isActive !== undefined) {
-      qb.andWhere('a.is_active = :isActive', { isActive });
-    }
-    if (assignmentType) {
-      qb.andWhere('a.assignment_type = :assignmentType', { assignmentType });
-    }
-
-    qb.orderBy('a.createdAt', 'DESC')
-      .skip((page - 1) * pageSize)
-      .take(pageSize);
-
-    const [list, total] = await qb.getManyAndCount();
+    const [list, total] = await Promise.all([
+      this.prisma.strategy_assignment.findMany({
+        where,
+        orderBy: { created_at: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.strategy_assignment.count({ where }),
+    ]);
 
     return {
       list,
@@ -188,9 +183,8 @@ export class StrategyManagementService {
     assignmentId: string,
     dto: RemoveAssignmentDto,
   ) {
-    const assignment = await this.assignmentRepo.findOneBy({
-      id: assignmentId,
-      strategyId,
+    const assignment = await this.prisma.strategy_assignment.findFirst({
+      where: { id: assignmentId, strategy_id: strategyId },
     });
     if (!assignment) {
       throw new NotFoundException(`分配记录 ${assignmentId} 不存在`);
@@ -204,27 +198,38 @@ export class StrategyManagementService {
   // ==================== 策略统计概览 ====================
 
   async getStrategyOverview() {
-    const totalStrategies = await this.strategyRepo.count();
-    const activeStrategies = await this.strategyRepo.count({
-      where: { status: StrategyStatus.ACTIVE },
-    });
-    const draftStrategies = await this.strategyRepo.count({
-      where: { status: StrategyStatus.DRAFT },
-    });
-    const archivedStrategies = await this.strategyRepo.count({
-      where: { status: StrategyStatus.ARCHIVED },
-    });
-    const totalAssignments = await this.assignmentRepo.count({
-      where: { isActive: true },
-    });
+    const [
+      totalStrategies,
+      activeStrategies,
+      draftStrategies,
+      archivedStrategies,
+      totalAssignments,
+      scopeGroups,
+    ] = await Promise.all([
+      this.prisma.strategy.count(),
+      this.prisma.strategy.count({
+        where: { status: StrategyStatus.ACTIVE },
+      }),
+      this.prisma.strategy.count({
+        where: { status: StrategyStatus.DRAFT },
+      }),
+      this.prisma.strategy.count({
+        where: { status: StrategyStatus.ARCHIVED },
+      }),
+      this.prisma.strategy_assignment.count({
+        where: { is_active: true },
+      }),
+      this.prisma.strategy.groupBy({
+        by: ['scope'],
+        _count: { _all: true },
+      }),
+    ]);
 
     // 按 scope 分布
-    const scopeDistribution = await this.strategyRepo
-      .createQueryBuilder('s')
-      .select('s.scope', 'scope')
-      .addSelect('COUNT(*)', 'count')
-      .groupBy('s.scope')
-      .getRawMany();
+    const scopeDistribution = scopeGroups.map((g) => ({
+      scope: g.scope,
+      count: g._count._all,
+    }));
 
     return {
       totalStrategies,

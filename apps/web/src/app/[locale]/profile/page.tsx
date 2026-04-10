@@ -6,14 +6,8 @@ import { useAuth } from '@/features/auth/hooks/use-auth';
 import { useProfile } from '@/features/profile/hooks/use-profile';
 import { useSubscription } from '@/features/subscription/hooks/use-subscription';
 import { LocalizedLink } from '@/components/common/localized-link';
+import { GOAL_LABELS_EMOJI } from '@/lib/constants/food';
 import type { BehaviorProfile } from '@/types/user';
-
-const goalLabelMap: Record<string, string> = {
-  fat_loss: '🔥 减脂',
-  muscle_gain: '💪 增肌',
-  health: '🧘 保持健康',
-  habit: '🌱 改善习惯',
-};
 
 const activityLabelMap: Record<string, string> = {
   sedentary: '久坐不动',
@@ -139,7 +133,7 @@ export default function ProfilePage() {
             </div>
             <div className="text-center border-l border-border/40">
               <p className="text-base font-extrabold text-primary leading-5">
-                {profile.goal ? goalLabelMap[profile.goal] : '--'}
+                {profile.goal ? GOAL_LABELS_EMOJI[profile.goal] : '--'}
               </p>
               <p className="text-[11px] text-muted-foreground mt-0.5">目标</p>
             </div>

@@ -9,7 +9,7 @@
  * - 当前方案高亮
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useSubscription } from '@/features/subscription/hooks/use-subscription';
 import { subscriptionService } from '@/lib/api/subscription';
 import { useLocalizedRouter } from '@/lib/hooks/use-localized-router';
@@ -21,35 +21,51 @@ import type { SubscriptionTier } from '@/types/subscription';
 const TIERS: {
   tier: SubscriptionTier;
   name: string;
-  price: string;
-  priceNote: string;
+  monthlyPrice: string;
+  yearlyPrice: string;
+  yearlySaving: string;
+  priceNoteMonthly: string;
+  priceNoteYearly: string;
   badge?: string;
-  planId: string;
+  monthlyPlanId: string;
+  yearlyPlanId: string;
   color: string;
 }[] = [
   {
     tier: 'free',
     name: '免费版',
-    price: '¥0',
-    priceNote: '永久免费',
-    planId: 'plan_free',
+    monthlyPrice: '¥0',
+    yearlyPrice: '¥0',
+    yearlySaving: '',
+    priceNoteMonthly: '永久免费',
+    priceNoteYearly: '永久免费',
+    monthlyPlanId: 'plan_free',
+    yearlyPlanId: 'plan_free',
     color: 'border-border',
   },
   {
     tier: 'pro',
     name: 'Pro',
-    price: '¥19.9',
-    priceNote: '/月',
-    badge: '推荐',
-    planId: 'plan_pro_monthly',
+    monthlyPrice: '¥19.9',
+    yearlyPrice: '¥15.9',
+    yearlySaving: '省20%',
+    priceNoteMonthly: '/月',
+    priceNoteYearly: '/月 (年付 ¥190.8)',
+    badge: '最受欢迎',
+    monthlyPlanId: 'plan_pro_monthly',
+    yearlyPlanId: 'plan_pro_yearly',
     color: 'border-primary',
   },
   {
     tier: 'premium',
     name: 'Premium',
-    price: '¥39.9',
-    priceNote: '/月',
-    planId: 'plan_premium_monthly',
+    monthlyPrice: '¥39.9',
+    yearlyPrice: '¥31.9',
+    yearlySaving: '省20%',
+    priceNoteMonthly: '/月',
+    priceNoteYearly: '/月 (年付 ¥382.8)',
+    monthlyPlanId: 'plan_premium_monthly',
+    yearlyPlanId: 'plan_premium_yearly',
     color: 'border-amber-500',
   },
 ];
@@ -59,10 +75,21 @@ export function PricingPage() {
   const { tier: currentTier, updateTier } = useSubscription();
   const { toast } = useToast();
   const [purchasing, setPurchasing] = useState<string | null>(null);
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [downgradeConfirm, setDowngradeConfirm] = useState<{
     planId: string;
     targetTier: SubscriptionTier;
   } | null>(null);
+  const [celebration, setCelebration] = useState<{
+    tierName: string;
+  } | null>(null);
+
+  // 自动关闭庆祝弹窗
+  useEffect(() => {
+    if (!celebration) return;
+    const timer = setTimeout(() => setCelebration(null), 4000);
+    return () => clearTimeout(timer);
+  }, [celebration]);
 
   /** 安全返回：有历史则 back()，否则跳首页 */
   const handleBack = useCallback(() => {
@@ -107,9 +134,8 @@ export function PricingPage() {
         if (subscriptionService.isMockMode()) {
           const result = await subscriptionService.mockPurchase(planId);
           updateTier(result.tier);
-          toast({
-            title: `已升级到 ${TIERS.find((t) => t.tier === result.tier)?.name || result.tier}（模拟支付）`,
-          });
+          const tierName = TIERS.find((t) => t.tier === result.tier)?.name || result.tier;
+          setCelebration({ tierName });
         } else {
           // 真实模式：创建微信订单
           await subscriptionService.createWechatOrder(planId);
@@ -148,9 +174,43 @@ export function PricingPage() {
 
       <main className="px-6 py-6 max-w-lg mx-auto pb-32">
         {/* 副标题 */}
-        <p className="text-sm text-muted-foreground mb-6 text-center">
+        <p className="text-sm text-muted-foreground mb-4 text-center">
           选择最适合你的计划，让 AI 营养管家为你服务
         </p>
+
+        {/* 月付/年付切换 */}
+        <div className="flex items-center justify-center gap-3 mb-6">
+          <span
+            className={`text-sm font-medium ${billingCycle === 'monthly' ? 'text-foreground' : 'text-muted-foreground'}`}
+          >
+            月付
+          </span>
+          <button
+            onClick={() => setBillingCycle((c) => (c === 'monthly' ? 'yearly' : 'monthly'))}
+            role="switch"
+            aria-checked={billingCycle === 'yearly'}
+            aria-label="切换月付/年付"
+            className={`relative w-12 h-7 rounded-full transition-colors ${
+              billingCycle === 'yearly' ? 'bg-primary' : 'bg-muted-foreground/30'
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform ${
+                billingCycle === 'yearly' ? 'translate-x-5' : ''
+              }`}
+            />
+          </button>
+          <span
+            className={`text-sm font-medium ${billingCycle === 'yearly' ? 'text-foreground' : 'text-muted-foreground'}`}
+          >
+            年付
+          </span>
+          {billingCycle === 'yearly' && (
+            <span className="text-[10px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
+              省20%
+            </span>
+          )}
+        </div>
 
         {/* 三列卡片 */}
         <div className="space-y-4 mb-8">
@@ -163,14 +223,18 @@ export function PricingPage() {
               (t.tier === 'free' && currentTier !== 'free') ||
               (t.tier === 'pro' && currentTier === 'premium');
 
+            const price = billingCycle === 'yearly' ? t.yearlyPrice : t.monthlyPrice;
+            const priceNote = billingCycle === 'yearly' ? t.priceNoteYearly : t.priceNoteMonthly;
+            const planId = billingCycle === 'yearly' ? t.yearlyPlanId : t.monthlyPlanId;
+
             return (
               <div
                 key={t.tier}
                 className={`relative rounded-2xl border-2 ${t.color} bg-card overflow-hidden transition-all ${
                   isCurrent ? 'ring-2 ring-primary/30' : ''
-                }`}
+                } ${t.badge ? 'shadow-lg shadow-primary/10' : ''}`}
               >
-                {/* 徽章 */}
+                {/* 徽章（最受欢迎 强调） */}
                 {t.badge && (
                   <div className="absolute top-0 right-0 bg-primary text-primary-foreground text-[10px] font-bold px-3 py-1 rounded-bl-xl">
                     {t.badge}
@@ -190,8 +254,13 @@ export function PricingPage() {
 
                   {/* 价格 */}
                   <div className="flex items-baseline gap-1 mb-4">
-                    <span className="text-3xl font-extrabold">{t.price}</span>
-                    <span className="text-sm text-muted-foreground">{t.priceNote}</span>
+                    <span className="text-3xl font-extrabold">{price}</span>
+                    <span className="text-sm text-muted-foreground">{priceNote}</span>
+                    {billingCycle === 'yearly' && t.yearlySaving && (
+                      <span className="text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full ml-1">
+                        {t.yearlySaving}
+                      </span>
+                    )}
                   </div>
 
                   {/* CTA */}
@@ -201,11 +270,11 @@ export function PricingPage() {
                     </div>
                   ) : isUpgrade ? (
                     <button
-                      onClick={() => handlePurchase(t.planId, t.tier)}
+                      onClick={() => handlePurchase(planId, t.tier)}
                       disabled={!!purchasing}
                       className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-bold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
                     >
-                      {purchasing === t.planId ? (
+                      {purchasing === planId ? (
                         <>
                           <span className="animate-spin inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full" />
                           处理中...
@@ -216,7 +285,7 @@ export function PricingPage() {
                     </button>
                   ) : isDowngrade ? (
                     <button
-                      onClick={() => handlePurchase(t.planId, t.tier)}
+                      onClick={() => handlePurchase(planId, t.tier)}
                       disabled={!!purchasing}
                       className="w-full py-3 rounded-xl bg-muted text-foreground font-bold text-sm active:scale-[0.98] transition-all disabled:opacity-50"
                     >
@@ -229,34 +298,44 @@ export function PricingPage() {
           })}
         </div>
 
-        {/* 功能对比表 */}
+        {/* 功能对比表（语义化 table） */}
         <div className="bg-card rounded-2xl overflow-hidden">
           <div className="px-4 py-3 border-b border-border/40">
-            <h3 className="text-sm font-bold">功能对比</h3>
+            <h3 className="text-sm font-bold" id="comparison-heading">
+              功能对比
+            </h3>
           </div>
 
-          {/* 表头 */}
-          <div className="grid grid-cols-4 gap-0 px-4 py-2 bg-muted/50 text-xs font-bold text-muted-foreground">
-            <div className="col-span-1">功能</div>
-            <div className="text-center">免费版</div>
-            <div className="text-center">Pro</div>
-            <div className="text-center">Premium</div>
-          </div>
-
-          {/* 表体 */}
-          {TIER_COMPARISON.map((row, i) => (
-            <div
-              key={row.label}
-              className={`grid grid-cols-4 gap-0 px-4 py-2.5 text-xs ${
-                i % 2 === 0 ? '' : 'bg-muted/20'
-              }`}
-            >
-              <div className="col-span-1 font-medium">{row.label}</div>
-              <FeatureCell value={row.free} tier="free" currentTier={currentTier} />
-              <FeatureCell value={row.pro} tier="pro" currentTier={currentTier} />
-              <FeatureCell value={row.premium} tier="premium" currentTier={currentTier} />
-            </div>
-          ))}
+          <table className="w-full text-xs" aria-labelledby="comparison-heading">
+            <thead>
+              <tr className="bg-muted/50">
+                <th scope="col" className="text-left px-4 py-2 font-bold text-muted-foreground">
+                  功能
+                </th>
+                <th scope="col" className="text-center px-2 py-2 font-bold text-muted-foreground">
+                  免费版
+                </th>
+                <th scope="col" className="text-center px-2 py-2 font-bold text-muted-foreground">
+                  Pro
+                </th>
+                <th scope="col" className="text-center px-2 py-2 font-bold text-muted-foreground">
+                  Premium
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {TIER_COMPARISON.map((row, i) => (
+                <tr key={row.label} className={i % 2 === 0 ? '' : 'bg-muted/20'}>
+                  <th scope="row" className="text-left px-4 py-2.5 font-medium">
+                    {row.label}
+                  </th>
+                  <FeatureCell value={row.free} tier="free" currentTier={currentTier} />
+                  <FeatureCell value={row.pro} tier="pro" currentTier={currentTier} />
+                  <FeatureCell value={row.premium} tier="premium" currentTier={currentTier} />
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
 
         {/* 模拟模式提示 */}
@@ -334,11 +413,66 @@ export function PricingPage() {
           </div>
         </div>
       )}
+
+      {/* 升级成功庆祝弹窗 */}
+      {celebration && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-in fade-in duration-300"
+            onClick={() => setCelebration(null)}
+            aria-hidden="true"
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="celebration-title"
+            className="relative bg-card rounded-3xl shadow-2xl w-[85%] max-w-sm overflow-hidden animate-in zoom-in-90 duration-300"
+          >
+            {/* 顶部渐变装饰 */}
+            <div className="bg-gradient-to-br from-primary via-primary/90 to-primary/70 px-6 pt-8 pb-6 text-center text-primary-foreground">
+              {/* 庆祝图标 */}
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary-foreground/20 mb-4 animate-bounce">
+                <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                  <path
+                    fillRule="evenodd"
+                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </div>
+              <h3 id="celebration-title" className="text-xl font-extrabold mb-1">
+                升级成功！
+              </h3>
+              <p className="text-sm text-primary-foreground/80">欢迎使用 {celebration.tierName}</p>
+            </div>
+            <div className="px-6 py-5 text-center">
+              <p className="text-sm text-muted-foreground mb-4">
+                所有高级功能已解锁，立即体验 AI 营养管家的完整能力
+              </p>
+              <button
+                onClick={() => {
+                  setCelebration(null);
+                  push('/');
+                }}
+                className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-bold text-sm active:scale-[0.98] transition-all shadow-lg shadow-primary/20"
+              >
+                开始使用
+              </button>
+              <button
+                onClick={() => setCelebration(null)}
+                className="w-full mt-2 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                留在当前页
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-/** 单元格渲染：布尔 → 图标，字符串 → 文字 */
+/** 单元格渲染：布尔 → 图标，字符串 → 文字（语义化 td） */
 function FeatureCell({
   value,
   tier,
@@ -352,35 +486,46 @@ function FeatureCell({
 
   if (typeof value === 'boolean') {
     return (
-      <div className="flex justify-center">
-        {value ? (
-          <svg
-            className={`w-4 h-4 ${isCurrent ? 'text-primary' : 'text-green-500'}`}
-            fill="currentColor"
-            viewBox="0 0 20 20"
-          >
-            <path
-              fillRule="evenodd"
-              d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-              clipRule="evenodd"
-            />
-          </svg>
-        ) : (
-          <svg className="w-4 h-4 text-muted-foreground/40" fill="currentColor" viewBox="0 0 20 20">
-            <path
-              fillRule="evenodd"
-              d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-              clipRule="evenodd"
-            />
-          </svg>
-        )}
-      </div>
+      <td className="text-center px-2 py-2.5">
+        <span className="inline-flex justify-center">
+          {value ? (
+            <svg
+              className={`w-4 h-4 ${isCurrent ? 'text-primary' : 'text-green-500'}`}
+              fill="currentColor"
+              viewBox="0 0 20 20"
+              aria-hidden="true"
+            >
+              <path
+                fillRule="evenodd"
+                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                clipRule="evenodd"
+              />
+            </svg>
+          ) : (
+            <svg
+              className="w-4 h-4 text-muted-foreground/40"
+              fill="currentColor"
+              viewBox="0 0 20 20"
+              aria-hidden="true"
+            >
+              <path
+                fillRule="evenodd"
+                d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                clipRule="evenodd"
+              />
+            </svg>
+          )}
+        </span>
+        <span className="sr-only">{value ? '支持' : '不支持'}</span>
+      </td>
     );
   }
 
   return (
-    <div className={`text-center ${isCurrent ? 'text-primary font-bold' : 'text-foreground'}`}>
+    <td
+      className={`text-center px-2 py-2.5 ${isCurrent ? 'text-primary font-bold' : 'text-foreground'}`}
+    >
       {value}
-    </div>
+    </td>
   );
 }

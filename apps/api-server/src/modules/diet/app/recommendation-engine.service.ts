@@ -1,10 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { FoodLibrary } from '../../food/entities/food-library.entity';
-import { FoodRegionalInfo } from '../../food/entities/food-regional-info.entity';
-import { FoodRecord } from '../entities/food-record.entity';
-import { RecommendationFeedback } from '../entities/recommendation-feedback.entity';
+import { FoodLibrary } from '../../food/food.types';
 import { GoalType } from './nutrition-score.service';
 import { ConstraintGeneratorService } from './recommendation/constraint-generator.service';
 import { FoodFilterService } from './recommendation/food-filter.service';
@@ -98,14 +93,6 @@ export class RecommendationEngineService {
   private readonly logger = new Logger(RecommendationEngineService.name);
 
   constructor(
-    @InjectRepository(FoodLibrary)
-    private readonly foodLibraryRepo: Repository<FoodLibrary>,
-    @InjectRepository(FoodRecord)
-    private readonly foodRecordRepo: Repository<FoodRecord>,
-    @InjectRepository(RecommendationFeedback)
-    private readonly feedbackRepo: Repository<RecommendationFeedback>,
-    @InjectRepository(FoodRegionalInfo)
-    private readonly regionalInfoRepo: Repository<FoodRegionalInfo>,
     private readonly constraintGenerator: ConstraintGeneratorService,
     private readonly foodFilter: FoodFilterService,
     private readonly foodScorer: FoodScorerService,

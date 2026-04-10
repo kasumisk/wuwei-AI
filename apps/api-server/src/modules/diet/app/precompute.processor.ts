@@ -51,8 +51,8 @@ export class PrecomputeProcessor extends WorkerHost {
       // 从 declared 画像构造 DailyGoalProfile，调用 calculateDailyGoals
       const goalType = declared.goal || 'health';
       const goals = this.nutritionScore.calculateDailyGoals({
-        weightKg: declared.weightKg,
-        dailyCalorieGoal: declared.dailyCalorieGoal,
+        weightKg: declared.weight_kg?.toNumber() ?? null,
+        dailyCalorieGoal: declared.daily_calorie_goal,
         goal: goalType,
       });
 
@@ -61,12 +61,12 @@ export class PrecomputeProcessor extends WorkerHost {
       const dailyTarget = { calories: goals.calories, protein: goals.protein };
 
       const userConstraints: UserProfileConstraints = {
-        dietaryRestrictions: declared.dietaryRestrictions || [],
-        weakTimeSlots: declared.weakTimeSlots || [],
+        dietaryRestrictions: (declared.dietary_restrictions as string[]) || [],
+        weakTimeSlots: (declared.weak_time_slots as string[]) || [],
         discipline: declared.discipline || 'medium',
-        allergens: declared.allergens || [],
-        healthConditions: declared.healthConditions || [],
-        regionCode: declared.regionCode || 'CN',
+        allergens: (declared.allergens as string[]) || [],
+        healthConditions: (declared.health_conditions as string[]) || [],
+        regionCode: declared.region_code || 'CN',
       };
 
       // 3. 逐餐次生成推荐

@@ -12,7 +12,7 @@ import {
   IsDateString,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ExperimentStatus } from '../../entities/ab-experiment.entity';
+import { ExperimentStatus } from '../../diet.types';
 
 // ==================== Query DTOs ====================
 

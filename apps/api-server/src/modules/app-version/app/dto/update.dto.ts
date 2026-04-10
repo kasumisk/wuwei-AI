@@ -9,7 +9,7 @@ import {
   Matches,
   IsNotEmpty,
 } from 'class-validator';
-import { AppPlatform } from '../../entities/app-version.entity';
+import { AppPlatform } from '../../app-version.types';
 
 /**
  * 客户端检查更新请求 DTO

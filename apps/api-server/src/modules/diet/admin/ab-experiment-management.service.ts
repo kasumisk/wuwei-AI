@@ -4,12 +4,8 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import {
-  ABExperiment,
-  ExperimentStatus,
-} from '../entities/ab-experiment.entity';
+import { PrismaService } from '../../../core/prisma/prisma.service';
+import { ExperimentStatus } from '../diet.types';
 import { ABTestingService } from '../app/recommendation/ab-testing.service';
 import {
   GetExperimentsQueryDto,
@@ -17,14 +13,14 @@ import {
   UpdateExperimentDto,
   UpdateExperimentStatusDto,
 } from './dto/ab-experiment-management.dto';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class ABExperimentManagementService {
   private readonly logger = new Logger(ABExperimentManagementService.name);
 
   constructor(
-    @InjectRepository(ABExperiment)
-    private readonly experimentRepo: Repository<ABExperiment>,
+    private readonly prisma: PrismaService,
     private readonly abTestingService: ABTestingService,
   ) {}
 
@@ -33,25 +29,30 @@ export class ABExperimentManagementService {
   async findExperiments(query: GetExperimentsQueryDto) {
     const { page = 1, pageSize = 20, keyword, status, goalType } = query;
 
-    const qb = this.experimentRepo.createQueryBuilder('e');
+    const where: Prisma.ab_experimentsWhereInput = {};
 
     if (keyword) {
-      qb.andWhere('(e.name ILIKE :keyword OR e.description ILIKE :keyword)', {
-        keyword: `%${keyword}%`,
-      });
+      where.OR = [
+        { name: { contains: keyword, mode: 'insensitive' } },
+        { description: { contains: keyword, mode: 'insensitive' } },
+      ];
     }
     if (status) {
-      qb.andWhere('e.status = :status', { status });
+      where.status = status;
     }
     if (goalType) {
-      qb.andWhere('e.goalType = :goalType', { goalType });
+      where.goal_type = goalType;
     }
 
-    qb.orderBy('e.createdAt', 'DESC')
-      .skip((page - 1) * pageSize)
-      .take(pageSize);
-
-    const [list, total] = await qb.getManyAndCount();
+    const [list, total] = await Promise.all([
+      this.prisma.ab_experiments.findMany({
+        where,
+        orderBy: { created_at: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.ab_experiments.count({ where }),
+    ]);
 
     return {
       list,
@@ -65,19 +66,16 @@ export class ABExperimentManagementService {
   // ==================== 统计概览 ====================
 
   async getOverview() {
-    const statusCounts = await this.experimentRepo
-      .createQueryBuilder('e')
-      .select('e.status', 'status')
-      .addSelect('COUNT(*)::int', 'count')
-      .groupBy('e.status')
-      .getRawMany();
+    const statusCounts = await this.prisma.$queryRaw<
+      Array<{ status: string; count: number }>
+    >`SELECT status, COUNT(*)::int as count FROM ab_experiments GROUP BY status`;
 
     const statusMap: Record<string, number> = {};
     for (const row of statusCounts) {
       statusMap[row.status] = Number(row.count);
     }
 
-    const total = await this.experimentRepo.count();
+    const total = await this.prisma.ab_experiments.count();
 
     return {
       total,
@@ -91,18 +89,21 @@ export class ABExperimentManagementService {
   // ==================== 详情 ====================
 
   async getExperimentDetail(id: string) {
-    const experiment = await this.experimentRepo.findOne({ where: { id } });
+    const experiment = await this.prisma.ab_experiments.findFirst({
+      where: { id },
+    });
     if (!experiment) {
       throw new NotFoundException(`实验 ${id} 不存在`);
     }
 
     // 计算分组流量汇总
+    const groups = experiment.groups as any[];
     const totalTraffic =
-      experiment.groups?.reduce((sum, g) => sum + g.trafficRatio, 0) || 0;
+      groups?.reduce((sum: number, g: any) => sum + g.trafficRatio, 0) || 0;
 
     return {
       ...experiment,
-      groupCount: experiment.groups?.length || 0,
+      groupCount: groups?.length || 0,
       totalTraffic: Math.round(totalTraffic * 100) / 100,
     };
   }
@@ -129,10 +130,10 @@ export class ABExperimentManagementService {
     const experiment = await this.abTestingService.createExperiment({
       name: dto.name,
       description: dto.description,
-      goalType: dto.goalType || '*',
-      groups: dto.groups,
-      startDate: dto.startDate ? new Date(dto.startDate) : undefined,
-      endDate: dto.endDate ? new Date(dto.endDate) : undefined,
+      goal_type: dto.goalType || '*',
+      groups: dto.groups as any,
+      start_date: dto.startDate ? new Date(dto.startDate) : undefined,
+      end_date: dto.endDate ? new Date(dto.endDate) : undefined,
     });
 
     this.logger.log(`A/B 实验已创建: ${experiment.id} - ${experiment.name}`);
@@ -142,7 +143,9 @@ export class ABExperimentManagementService {
   // ==================== 更新 ====================
 
   async updateExperiment(id: string, dto: UpdateExperimentDto) {
-    const experiment = await this.experimentRepo.findOne({ where: { id } });
+    const experiment = await this.prisma.ab_experiments.findFirst({
+      where: { id },
+    });
     if (!experiment) {
       throw new NotFoundException(`实验 ${id} 不存在`);
     }
@@ -173,15 +176,18 @@ export class ABExperimentManagementService {
     }
 
     // 更新字段
-    if (dto.name !== undefined) experiment.name = dto.name;
-    if (dto.description !== undefined) experiment.description = dto.description;
-    if (dto.goalType !== undefined) experiment.goalType = dto.goalType;
-    if (dto.groups !== undefined) experiment.groups = dto.groups;
-    if (dto.startDate !== undefined)
-      experiment.startDate = new Date(dto.startDate);
-    if (dto.endDate !== undefined) experiment.endDate = new Date(dto.endDate);
+    const data: any = {};
+    if (dto.name !== undefined) data.name = dto.name;
+    if (dto.description !== undefined) data.description = dto.description;
+    if (dto.goalType !== undefined) data.goal_type = dto.goalType;
+    if (dto.groups !== undefined) data.groups = dto.groups;
+    if (dto.startDate !== undefined) data.start_date = new Date(dto.startDate);
+    if (dto.endDate !== undefined) data.end_date = new Date(dto.endDate);
 
-    const saved = await this.experimentRepo.save(experiment);
+    const saved = await this.prisma.ab_experiments.update({
+      where: { id },
+      data,
+    });
     this.logger.log(`A/B 实验已更新: ${id}`);
     return saved;
   }
@@ -212,7 +218,9 @@ export class ABExperimentManagementService {
 
   async getExperimentMetrics(id: string) {
     // 先验证实验存在
-    const experiment = await this.experimentRepo.findOne({ where: { id } });
+    const experiment = await this.prisma.ab_experiments.findFirst({
+      where: { id },
+    });
     if (!experiment) {
       throw new NotFoundException(`实验 ${id} 不存在`);
     }
@@ -232,7 +240,9 @@ export class ABExperimentManagementService {
 
   async getExperimentAnalysis(id: string) {
     // 先验证实验存在
-    const experiment = await this.experimentRepo.findOne({ where: { id } });
+    const experiment = await this.prisma.ab_experiments.findFirst({
+      where: { id },
+    });
     if (!experiment) {
       throw new NotFoundException(`实验 ${id} 不存在`);
     }

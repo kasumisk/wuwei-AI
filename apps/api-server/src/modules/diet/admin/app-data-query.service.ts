@@ -1,13 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { FoodRecord } from '../entities/food-record.entity';
-import { DailyPlan } from '../entities/daily-plan.entity';
-import { DailySummary } from '../entities/daily-summary.entity';
-import { CoachConversation } from '../../coach/entities/coach-conversation.entity';
-import { CoachMessage } from '../../coach/entities/coach-message.entity';
-import { RecommendationFeedback } from '../entities/recommendation-feedback.entity';
-import { AiDecisionLog } from '../entities/ai-decision-log.entity';
+import { PrismaService } from '../../../core/prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import {
   GetFoodRecordsQueryDto,
   GetDailyPlansQueryDto,
@@ -25,22 +18,7 @@ import {
 export class AppDataQueryService {
   private readonly logger = new Logger(AppDataQueryService.name);
 
-  constructor(
-    @InjectRepository(FoodRecord)
-    private readonly foodRecordRepo: Repository<FoodRecord>,
-    @InjectRepository(DailyPlan)
-    private readonly dailyPlanRepo: Repository<DailyPlan>,
-    @InjectRepository(DailySummary)
-    private readonly dailySummaryRepo: Repository<DailySummary>,
-    @InjectRepository(CoachConversation)
-    private readonly conversationRepo: Repository<CoachConversation>,
-    @InjectRepository(CoachMessage)
-    private readonly messageRepo: Repository<CoachMessage>,
-    @InjectRepository(RecommendationFeedback)
-    private readonly feedbackRepo: Repository<RecommendationFeedback>,
-    @InjectRepository(AiDecisionLog)
-    private readonly aiLogRepo: Repository<AiDecisionLog>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   // ==================== 饮食记录 ====================
 
@@ -54,34 +32,79 @@ export class AppDataQueryService {
       endDate,
       keyword,
     } = query;
-    const qb = this.foodRecordRepo
-      .createQueryBuilder('r')
-      .leftJoinAndSelect('r.user', 'user');
+
+    const where: any = {};
 
     if (userId) {
-      qb.andWhere('r.user_id = :userId', { userId });
+      where.user_id = userId;
     }
     if (mealType) {
-      qb.andWhere('r.meal_type = :mealType', { mealType });
+      where.meal_type = mealType;
     }
-    if (startDate) {
-      qb.andWhere('r.recorded_at >= :startDate', { startDate });
-    }
-    if (endDate) {
-      qb.andWhere('r.recorded_at <= :endDate', {
-        endDate: `${endDate} 23:59:59`,
-      });
-    }
-    if (keyword) {
-      qb.andWhere('r.foods::text ILIKE :kw', { kw: `%${keyword}%` });
+    if (startDate || endDate) {
+      where.recorded_at = {};
+      if (startDate) {
+        where.recorded_at.gte = new Date(startDate);
+      }
+      if (endDate) {
+        where.recorded_at.lte = new Date(`${endDate} 23:59:59`);
+      }
     }
 
-    qb.orderBy('r.recordedAt', 'DESC');
-    const total = await qb.getCount();
-    const list = await qb
-      .skip((page - 1) * pageSize)
-      .take(pageSize)
-      .getMany();
+    // For keyword search on JSONB 'foods' column, use raw SQL filter
+    // Prisma doesn't natively support ILIKE on cast jsonb::text
+    if (keyword) {
+      where.AND = [
+        {
+          foods: {
+            string_contains: keyword,
+          },
+        },
+      ];
+    }
+
+    const [total, list] = await Promise.all([
+      keyword
+        ? this.prisma.$queryRaw<[{ count: bigint }]>`
+            SELECT COUNT(*) as count FROM food_records
+            WHERE foods::text ILIKE ${'%' + keyword + '%'}
+            ${userId ? Prisma.sql`AND user_id = ${userId}::uuid` : Prisma.empty}
+            ${mealType ? Prisma.sql`AND meal_type = ${mealType}` : Prisma.empty}
+            ${startDate ? Prisma.sql`AND recorded_at >= ${new Date(startDate)}` : Prisma.empty}
+            ${endDate ? Prisma.sql`AND recorded_at <= ${new Date(`${endDate} 23:59:59`)}` : Prisma.empty}
+          `.then((rows) => Number(rows[0]?.count ?? 0))
+        : this.prisma.food_records.count({
+            where: (() => {
+              const w = { ...where };
+              delete w.AND;
+              return w;
+            })(),
+          }),
+      keyword
+        ? this.prisma.$queryRaw<any[]>`
+            SELECT r.*, row_to_json(u.*) as user FROM food_records r
+            LEFT JOIN users u ON r.user_id = u.id
+            WHERE r.foods::text ILIKE ${'%' + keyword + '%'}
+            ${userId ? Prisma.sql`AND r.user_id = ${userId}::uuid` : Prisma.empty}
+            ${mealType ? Prisma.sql`AND r.meal_type = ${mealType}` : Prisma.empty}
+            ${startDate ? Prisma.sql`AND r.recorded_at >= ${new Date(startDate)}` : Prisma.empty}
+            ${endDate ? Prisma.sql`AND r.recorded_at <= ${new Date(`${endDate} 23:59:59`)}` : Prisma.empty}
+            ORDER BY r.recorded_at DESC
+            OFFSET ${(page - 1) * pageSize}
+            LIMIT ${pageSize}
+          `
+        : this.prisma.food_records.findMany({
+            where: (() => {
+              const w = { ...where };
+              delete w.AND;
+              return w;
+            })(),
+            include: { app_users: true },
+            orderBy: { recorded_at: 'desc' },
+            skip: (page - 1) * pageSize,
+            take: pageSize,
+          }),
+    ]);
 
     return {
       list,
@@ -93,60 +116,72 @@ export class AppDataQueryService {
   }
 
   async getFoodRecordDetail(id: string) {
-    const record = await this.foodRecordRepo.findOne({
+    const record = await this.prisma.food_records.findFirst({
       where: { id },
-      relations: ['user'],
+      include: { app_users: true },
     });
     if (!record) throw new NotFoundException('饮食记录不存在');
     return record;
   }
 
   async deleteFoodRecord(id: string) {
-    const record = await this.getFoodRecordDetail(id);
-    await this.foodRecordRepo.remove(record);
+    await this.getFoodRecordDetail(id);
+    await this.prisma.food_records.delete({ where: { id } });
     return { message: '饮食记录已删除' };
   }
 
   async getFoodRecordStatistics() {
-    const total = await this.foodRecordRepo.count();
+    const total = await this.prisma.food_records.count();
     const today = new Date().toISOString().split('T')[0];
-    const todayCount = await this.foodRecordRepo
-      .createQueryBuilder('r')
-      .where('DATE(r.recorded_at) = :today', { today })
-      .getCount();
 
-    const byMealType = await this.foodRecordRepo
-      .createQueryBuilder('r')
-      .select('r.meal_type', 'mealType')
-      .addSelect('COUNT(*)', 'count')
-      .groupBy('r.meal_type')
-      .getRawMany();
+    const todayCountResult = await this.prisma.$queryRaw<
+      [{ count: bigint }]
+    >`SELECT COUNT(*) as count FROM food_records WHERE DATE(recorded_at) = ${today}`;
+    const todayCount = Number(todayCountResult[0]?.count ?? 0);
 
-    return { total, todayCount, byMealType };
+    const byMealType = await this.prisma.$queryRaw<
+      Array<{ mealType: string; count: bigint }>
+    >`SELECT meal_type as "mealType", COUNT(*) as count FROM food_records GROUP BY meal_type`;
+
+    return {
+      total,
+      todayCount,
+      byMealType: byMealType.map((r) => ({
+        mealType: r.mealType,
+        count: Number(r.count),
+      })),
+    };
   }
 
   // ==================== 每日计划 ====================
 
   async findDailyPlans(query: GetDailyPlansQueryDto) {
     const { page = 1, pageSize = 20, userId, startDate, endDate } = query;
-    const qb = this.dailyPlanRepo.createQueryBuilder('p');
+
+    const where: any = {};
 
     if (userId) {
-      qb.andWhere('p.user_id = :userId', { userId });
+      where.user_id = userId;
     }
-    if (startDate) {
-      qb.andWhere('p.date >= :startDate', { startDate });
-    }
-    if (endDate) {
-      qb.andWhere('p.date <= :endDate', { endDate });
+    if (startDate || endDate) {
+      where.date = {};
+      if (startDate) {
+        where.date.gte = startDate;
+      }
+      if (endDate) {
+        where.date.lte = endDate;
+      }
     }
 
-    qb.orderBy('p.date', 'DESC').addOrderBy('p.createdAt', 'DESC');
-    const total = await qb.getCount();
-    const list = await qb
-      .skip((page - 1) * pageSize)
-      .take(pageSize)
-      .getMany();
+    const [total, list] = await Promise.all([
+      this.prisma.daily_plans.count({ where }),
+      this.prisma.daily_plans.findMany({
+        where,
+        orderBy: [{ date: 'desc' }, { created_at: 'desc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
 
     return {
       list,
@@ -158,7 +193,7 @@ export class AppDataQueryService {
   }
 
   async getDailyPlanDetail(id: string) {
-    const plan = await this.dailyPlanRepo.findOne({ where: { id } });
+    const plan = await this.prisma.daily_plans.findFirst({ where: { id } });
     if (!plan) throw new NotFoundException('每日计划不存在');
     return plan;
   }
@@ -167,23 +202,26 @@ export class AppDataQueryService {
 
   async findConversations(query: GetCoachConversationsQueryDto) {
     const { page = 1, pageSize = 20, userId, keyword } = query;
-    const qb = this.conversationRepo
-      .createQueryBuilder('c')
-      .leftJoinAndSelect('c.user', 'user');
+
+    const where: any = {};
 
     if (userId) {
-      qb.andWhere('c.user_id = :userId', { userId });
+      where.user_id = userId;
     }
     if (keyword) {
-      qb.andWhere('c.title ILIKE :kw', { kw: `%${keyword}%` });
+      where.title = { contains: keyword, mode: 'insensitive' };
     }
 
-    qb.orderBy('c.updatedAt', 'DESC');
-    const total = await qb.getCount();
-    const list = await qb
-      .skip((page - 1) * pageSize)
-      .take(pageSize)
-      .getMany();
+    const [total, list] = await Promise.all([
+      this.prisma.coach_conversations.count({ where }),
+      this.prisma.coach_conversations.findMany({
+        where,
+        include: { app_users: true },
+        orderBy: { updated_at: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
 
     return {
       list,
@@ -195,39 +233,41 @@ export class AppDataQueryService {
   }
 
   async getConversationDetail(id: string) {
-    const conversation = await this.conversationRepo.findOne({
+    const conversation = await this.prisma.coach_conversations.findFirst({
       where: { id },
-      relations: ['user', 'messages'],
+      include: {
+        app_users: true,
+        coach_messages: {
+          orderBy: { created_at: 'asc' },
+        },
+      },
     });
     if (!conversation) throw new NotFoundException('对话不存在');
-
-    conversation.messages?.sort(
-      (a, b) =>
-        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-    );
 
     return conversation;
   }
 
   async deleteConversation(id: string) {
-    const conversation = await this.conversationRepo.findOne({ where: { id } });
+    const conversation = await this.prisma.coach_conversations.findFirst({
+      where: { id },
+    });
     if (!conversation) throw new NotFoundException('对话不存在');
-    await this.conversationRepo.remove(conversation);
+    await this.prisma.coach_conversations.delete({ where: { id } });
     return { message: '对话已删除' };
   }
 
   async getConversationStatistics() {
-    const total = await this.conversationRepo.count();
-    const totalMessages = await this.messageRepo.count();
-    const totalTokens = await this.messageRepo
-      .createQueryBuilder('m')
-      .select('SUM(m.tokens_used)', 'total')
-      .getRawOne();
+    const total = await this.prisma.coach_conversations.count();
+    const totalMessages = await this.prisma.coach_messages.count();
+
+    const totalTokens = await this.prisma.$queryRaw<
+      [{ total: bigint | null }]
+    >`SELECT SUM(tokens_used) as total FROM coach_messages`;
 
     return {
       totalConversations: total,
       totalMessages,
-      totalTokensUsed: parseInt(totalTokens?.total || '0'),
+      totalTokensUsed: Number(totalTokens[0]?.total ?? 0),
     };
   }
 
@@ -235,24 +275,28 @@ export class AppDataQueryService {
 
   async findRecommendationFeedback(query: GetRecommendationFeedbackQueryDto) {
     const { page = 1, pageSize = 20, userId, action, mealType } = query;
-    const qb = this.feedbackRepo.createQueryBuilder('f');
+
+    const where: any = {};
 
     if (userId) {
-      qb.andWhere('f.user_id = :userId', { userId });
+      where.user_id = userId;
     }
     if (action) {
-      qb.andWhere('f.action = :action', { action });
+      where.action = action;
     }
     if (mealType) {
-      qb.andWhere('f.mealType = :mealType', { mealType });
+      where.meal_type = mealType;
     }
 
-    qb.orderBy('f.createdAt', 'DESC');
-    const total = await qb.getCount();
-    const list = await qb
-      .skip((page - 1) * pageSize)
-      .take(pageSize)
-      .getMany();
+    const [total, list] = await Promise.all([
+      this.prisma.recommendation_feedbacks.count({ where }),
+      this.prisma.recommendation_feedbacks.findMany({
+        where,
+        orderBy: { created_at: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
 
     return {
       list,
@@ -264,22 +308,23 @@ export class AppDataQueryService {
   }
 
   async getFeedbackStatistics() {
-    const total = await this.feedbackRepo.count();
-    const byAction = await this.feedbackRepo
-      .createQueryBuilder('f')
-      .select('f.action', 'action')
-      .addSelect('COUNT(*)', 'count')
-      .groupBy('f.action')
-      .getRawMany();
+    const total = await this.prisma.recommendation_feedbacks.count();
 
-    const acceptRate = byAction.find((a) => a.action === 'accepted');
+    const byAction = await this.prisma.$queryRaw<
+      Array<{ action: string; count: bigint }>
+    >`SELECT action, COUNT(*) as count FROM recommendation_feedbacks GROUP BY action`;
+
+    const byActionMapped = byAction.map((a) => ({
+      action: a.action,
+      count: Number(a.count),
+    }));
+
+    const acceptRate = byActionMapped.find((a) => a.action === 'accepted');
     return {
       total,
-      byAction,
+      byAction: byActionMapped,
       acceptRate:
-        total > 0
-          ? ((parseInt(acceptRate?.count || '0') / total) * 100).toFixed(1)
-          : '0',
+        total > 0 ? (((acceptRate?.count || 0) / total) * 100).toFixed(1) : '0',
     };
   }
 
@@ -287,24 +332,28 @@ export class AppDataQueryService {
 
   async findAiDecisionLogs(query: GetAiDecisionLogsQueryDto) {
     const { page = 1, pageSize = 20, userId, decision, riskLevel } = query;
-    const qb = this.aiLogRepo.createQueryBuilder('l');
+
+    const where: any = {};
 
     if (userId) {
-      qb.andWhere('l.user_id = :userId', { userId });
+      where.user_id = userId;
     }
     if (decision) {
-      qb.andWhere('l.decision = :decision', { decision });
+      where.decision = decision;
     }
     if (riskLevel) {
-      qb.andWhere('l.risk_level = :riskLevel', { riskLevel });
+      where.risk_level = riskLevel;
     }
 
-    qb.orderBy('l.createdAt', 'DESC');
-    const total = await qb.getCount();
-    const list = await qb
-      .skip((page - 1) * pageSize)
-      .take(pageSize)
-      .getMany();
+    const [total, list] = await Promise.all([
+      this.prisma.ai_decision_logs.count({ where }),
+      this.prisma.ai_decision_logs.findMany({
+        where,
+        orderBy: { created_at: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
 
     return {
       list,
@@ -316,21 +365,26 @@ export class AppDataQueryService {
   }
 
   async getAiLogStatistics() {
-    const total = await this.aiLogRepo.count();
-    const byDecision = await this.aiLogRepo
-      .createQueryBuilder('l')
-      .select('l.decision', 'decision')
-      .addSelect('COUNT(*)', 'count')
-      .groupBy('l.decision')
-      .getRawMany();
+    const total = await this.prisma.ai_decision_logs.count();
 
-    const byRisk = await this.aiLogRepo
-      .createQueryBuilder('l')
-      .select('l.risk_level', 'riskLevel')
-      .addSelect('COUNT(*)', 'count')
-      .groupBy('l.risk_level')
-      .getRawMany();
+    const byDecision = await this.prisma.$queryRaw<
+      Array<{ decision: string; count: bigint }>
+    >`SELECT decision, COUNT(*) as count FROM ai_decision_logs GROUP BY decision`;
 
-    return { total, byDecision, byRisk };
+    const byRisk = await this.prisma.$queryRaw<
+      Array<{ riskLevel: string; count: bigint }>
+    >`SELECT risk_level as "riskLevel", COUNT(*) as count FROM ai_decision_logs GROUP BY risk_level`;
+
+    return {
+      total,
+      byDecision: byDecision.map((d) => ({
+        decision: d.decision,
+        count: Number(d.count),
+      })),
+      byRisk: byRisk.map((r) => ({
+        riskLevel: r.riskLevel,
+        count: Number(r.count),
+      })),
+    };
   }
 }

@@ -3,12 +3,10 @@ import {
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import * as crypto from 'crypto';
 import * as bcrypt from 'bcrypt';
-import { Client } from '../entities/client.entity';
-import { UsageRecord } from '../../provider/entities/usage-record.entity';
+import { PrismaService } from '../../../core/prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import {
   CreateClientDto,
   UpdateClientDto,
@@ -18,12 +16,7 @@ import {
 
 @Injectable()
 export class ClientService {
-  constructor(
-    @InjectRepository(Client)
-    private readonly clientRepository: Repository<Client>,
-    @InjectRepository(UsageRecord)
-    private readonly usageRecordRepository: Repository<UsageRecord>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * 生成 API Key
@@ -47,35 +40,39 @@ export class ClientService {
   async findAll(query: GetClientsQueryDto) {
     const { page = 1, pageSize = 10, keyword, status } = query;
 
-    const queryBuilder = this.clientRepository.createQueryBuilder('client');
+    const where: Prisma.clientsWhereInput = {};
 
     // 搜索条件
     if (keyword) {
-      queryBuilder.andWhere(
-        '(client.name LIKE :keyword OR client.description LIKE :keyword)',
-        { keyword: `%${keyword}%` },
-      );
+      where.OR = [
+        { name: { contains: keyword, mode: 'insensitive' } },
+        { description: { contains: keyword, mode: 'insensitive' } },
+      ];
     }
 
     if (status) {
-      queryBuilder.andWhere('client.status = :status', { status });
+      where.status = status;
     }
-
-    // 排序
-    queryBuilder.orderBy('client.createdAt', 'DESC');
 
     // 分页
     const skip = (page - 1) * pageSize;
-    queryBuilder.skip(skip).take(pageSize);
 
-    const [list, total] = await queryBuilder.getManyAndCount();
+    const [list, total] = await Promise.all([
+      this.prisma.clients.findMany({
+        where,
+        skip,
+        take: pageSize,
+        orderBy: { created_at: 'desc' },
+      }),
+      this.prisma.clients.count({ where }),
+    ]);
 
     // 隐藏 API Secret
     const sanitizedList = list.map((client) => {
-      const { apiSecret, ...rest } = client;
+      const { api_secret, ...rest } = client;
       return {
         ...rest,
-        apiSecret: '********', // 隐藏敏感信息
+        api_secret: '********', // 隐藏敏感信息
       };
     });
 
@@ -92,19 +89,19 @@ export class ClientService {
    * 获取客户端详情
    */
   async findOne(id: string) {
-    const client = await this.clientRepository.findOne({
+    const client = await this.prisma.clients.findUnique({
       where: { id },
-      relations: ['permissions'],
+      include: { client_capability_permissions: true },
     });
 
     if (!client) {
       throw new NotFoundException(`客户端 #${id} 不存在`);
     }
 
-    const { apiSecret, ...rest } = client;
+    const { api_secret, ...rest } = client;
     return {
       ...rest,
-      apiSecret: '********',
+      api_secret: '********',
     };
   }
 
@@ -117,19 +114,20 @@ export class ClientService {
     const apiSecret = this.generateApiSecret();
     const hashedSecret = await bcrypt.hash(apiSecret, 10);
 
-    const client = this.clientRepository.create({
-      ...createClientDto,
-      apiKey,
-      apiSecret: hashedSecret,
-      status: 'active',
+    const savedClient = await this.prisma.clients.create({
+      data: {
+        ...createClientDto,
+        metadata: createClientDto.metadata as any,
+        api_key: apiKey,
+        api_secret: hashedSecret,
+        status: 'active',
+      },
     });
-
-    const savedClient = await this.clientRepository.save(client);
 
     return {
       client: {
         ...savedClient,
-        apiSecret: '********',
+        api_secret: '********',
       },
       apiKey,
       apiSecret, // 仅在创建时返回明文 Secret
@@ -140,20 +138,24 @@ export class ClientService {
    * 更新客户端
    */
   async update(id: string, updateClientDto: UpdateClientDto) {
-    const client = await this.clientRepository.findOne({ where: { id } });
+    const client = await this.prisma.clients.findUnique({ where: { id } });
 
     if (!client) {
       throw new NotFoundException(`客户端 #${id} 不存在`);
     }
 
-    Object.assign(client, updateClientDto);
+    const updatedClient = await this.prisma.clients.update({
+      where: { id },
+      data: {
+        ...updateClientDto,
+        metadata: updateClientDto.metadata as any,
+      },
+    });
 
-    const updatedClient = await this.clientRepository.save(client);
-
-    const { apiSecret, ...rest } = updatedClient;
+    const { api_secret, ...rest } = updatedClient;
     return {
       ...rest,
-      apiSecret: '********',
+      api_secret: '********',
     };
   }
 
@@ -161,13 +163,13 @@ export class ClientService {
    * 删除客户端
    */
   async remove(id: string) {
-    const client = await this.clientRepository.findOne({ where: { id } });
+    const client = await this.prisma.clients.findUnique({ where: { id } });
 
     if (!client) {
       throw new NotFoundException(`客户端 #${id} 不存在`);
     }
 
-    await this.clientRepository.remove(client);
+    await this.prisma.clients.delete({ where: { id } });
 
     return { message: '客户端删除成功' };
   }
@@ -176,7 +178,7 @@ export class ClientService {
    * 重新生成 API Secret
    */
   async regenerateSecret(id: string) {
-    const client = await this.clientRepository.findOne({ where: { id } });
+    const client = await this.prisma.clients.findUnique({ where: { id } });
 
     if (!client) {
       throw new NotFoundException(`客户端 #${id} 不存在`);
@@ -185,11 +187,13 @@ export class ClientService {
     const newApiSecret = this.generateApiSecret();
     const hashedSecret = await bcrypt.hash(newApiSecret, 10);
 
-    client.apiSecret = hashedSecret;
-    await this.clientRepository.save(client);
+    await this.prisma.clients.update({
+      where: { id },
+      data: { api_secret: hashedSecret },
+    });
 
     return {
-      apiKey: client.apiKey,
+      apiKey: client.api_key,
       apiSecret: newApiSecret, // 返回新的明文 Secret
       message: 'API Secret 已重新生成，请妥善保存',
     };
@@ -198,15 +202,18 @@ export class ClientService {
   /**
    * 根据 API Key 查找客户端
    */
-  async findByApiKey(apiKey: string): Promise<Client | null> {
-    return this.clientRepository.findOne({ where: { apiKey } });
+  async findByApiKey(apiKey: string) {
+    return this.prisma.clients.findFirst({ where: { api_key: apiKey } });
   }
 
   /**
    * 验证 API Secret
    */
-  async validateApiSecret(client: Client, apiSecret: string): Promise<boolean> {
-    return bcrypt.compare(apiSecret, client.apiSecret);
+  async validateApiSecret(
+    client: { api_secret: string },
+    apiSecret: string,
+  ): Promise<boolean> {
+    return bcrypt.compare(apiSecret, client.api_secret);
   }
 
   /**
@@ -214,7 +221,7 @@ export class ClientService {
    */
   async getUsageStats(clientId: string, query: GetClientUsageQueryDto) {
     // 检查客户端是否存在
-    const client = await this.clientRepository.findOne({
+    const client = await this.prisma.clients.findUnique({
       where: { id: clientId },
     });
 
@@ -224,28 +231,22 @@ export class ClientService {
 
     const { startDate, endDate } = query;
 
-    // 基础统计查询
-    const statsQuery = this.usageRecordRepository
-      .createQueryBuilder('record')
-      .where('record.clientId = :clientId', { clientId })
-      .andWhere('record.timestamp BETWEEN :startDate AND :endDate', {
-        startDate,
-        endDate,
-      });
-
     // 总请求数
-    const totalRequests = await statsQuery.getCount();
+    const totalRequests = await this.prisma.usage_records.count({
+      where: {
+        client_id: clientId,
+        timestamp: { gte: new Date(startDate), lte: new Date(endDate) },
+      },
+    });
 
     // 成功请求数
-    const successRequests = await this.usageRecordRepository
-      .createQueryBuilder('record')
-      .where('record.clientId = :clientId', { clientId })
-      .andWhere('record.timestamp BETWEEN :startDate AND :endDate', {
-        startDate,
-        endDate,
-      })
-      .andWhere('record.status = :status', { status: 'success' })
-      .getCount();
+    const successRequests = await this.prisma.usage_records.count({
+      where: {
+        client_id: clientId,
+        timestamp: { gte: new Date(startDate), lte: new Date(endDate) },
+        status: 'success',
+      },
+    });
 
     // 失败请求数
     const failedRequests = totalRequests - successRequests;
@@ -257,48 +258,37 @@ export class ClientService {
         : 0;
 
     // 聚合统计（总成本、平均响应时间、Tokens）
-    const aggregateResult = await this.usageRecordRepository
-      .createQueryBuilder('record')
-      .select('SUM(record.cost)', 'totalCost')
-      .addSelect('AVG(record.responseTime)', 'avgResponseTime')
-      .addSelect("SUM((record.usage->>'inputTokens')::int)", 'totalInputTokens')
-      .addSelect(
-        "SUM((record.usage->>'outputTokens')::int)",
-        'totalOutputTokens',
-      )
-      .where('record.clientId = :clientId', { clientId })
-      .andWhere('record.timestamp BETWEEN :startDate AND :endDate', {
-        startDate,
-        endDate,
-      })
-      .getRawOne();
+    const aggregateResult: any[] = await this.prisma.$queryRaw(Prisma.sql`
+      SELECT
+        SUM(cost) AS "totalCost",
+        AVG(response_time) AS "avgResponseTime",
+        SUM((usage->>'inputTokens')::int) AS "totalInputTokens",
+        SUM((usage->>'outputTokens')::int) AS "totalOutputTokens"
+      FROM usage_records
+      WHERE client_id = ${clientId}
+        AND timestamp BETWEEN ${new Date(startDate)} AND ${new Date(endDate)}
+    `);
 
-    const totalCost = parseFloat(aggregateResult.totalCost) || 0;
-    const avgResponseTime = Math.round(
-      parseFloat(aggregateResult.avgResponseTime) || 0,
-    );
-    const totalInputTokens = parseInt(aggregateResult.totalInputTokens) || 0;
-    const totalOutputTokens = parseInt(aggregateResult.totalOutputTokens) || 0;
+    const agg = aggregateResult[0] || {};
+    const totalCost = parseFloat(agg.totalCost) || 0;
+    const avgResponseTime = Math.round(parseFloat(agg.avgResponseTime) || 0);
+    const totalInputTokens = parseInt(agg.totalInputTokens) || 0;
+    const totalOutputTokens = parseInt(agg.totalOutputTokens) || 0;
     const totalTokens = totalInputTokens + totalOutputTokens;
 
     // 按能力类型统计
-    const byCapabilityRaw = await this.usageRecordRepository
-      .createQueryBuilder('record')
-      .select('record.capabilityType', 'capabilityType')
-      .addSelect('COUNT(*)', 'requestCount')
-      .addSelect('SUM(record.cost)', 'cost')
-      .addSelect(
-        "SUM((record.usage->>'inputTokens')::int + (record.usage->>'outputTokens')::int)",
-        'tokens',
-      )
-      .where('record.clientId = :clientId', { clientId })
-      .andWhere('record.timestamp BETWEEN :startDate AND :endDate', {
-        startDate,
-        endDate,
-      })
-      .groupBy('record.capabilityType')
-      .orderBy('requestCount', 'DESC')
-      .getRawMany();
+    const byCapabilityRaw: any[] = await this.prisma.$queryRaw(Prisma.sql`
+      SELECT
+        capability_type AS "capabilityType",
+        COUNT(*) AS "requestCount",
+        SUM(cost) AS "cost",
+        SUM((usage->>'inputTokens')::int + (usage->>'outputTokens')::int) AS "tokens"
+      FROM usage_records
+      WHERE client_id = ${clientId}
+        AND timestamp BETWEEN ${new Date(startDate)} AND ${new Date(endDate)}
+      GROUP BY capability_type
+      ORDER BY COUNT(*) DESC
+    `);
 
     const byCapability = byCapabilityRaw.map((item) => ({
       capabilityType: item.capabilityType,
@@ -308,24 +298,18 @@ export class ClientService {
     }));
 
     // 时间序列数据（按天）
-    const timeSeriesRaw = await this.usageRecordRepository
-      .createQueryBuilder('record')
-      .select('TO_CHAR(record.timestamp, :format)', 'date')
-      .addSelect('COUNT(*)', 'requests')
-      .addSelect('SUM(record.cost)', 'cost')
-      .addSelect(
-        "SUM((record.usage->>'inputTokens')::int + (record.usage->>'outputTokens')::int)",
-        'tokens',
-      )
-      .where('record.clientId = :clientId', { clientId })
-      .andWhere('record.timestamp BETWEEN :startDate AND :endDate', {
-        startDate,
-        endDate,
-      })
-      .groupBy('date')
-      .orderBy('date', 'ASC')
-      .setParameters({ format: 'YYYY-MM-DD' })
-      .getRawMany();
+    const timeSeriesRaw: any[] = await this.prisma.$queryRaw(Prisma.sql`
+      SELECT
+        TO_CHAR(timestamp, 'YYYY-MM-DD') AS "date",
+        COUNT(*) AS "requests",
+        SUM(cost) AS "cost",
+        SUM((usage->>'inputTokens')::int + (usage->>'outputTokens')::int) AS "tokens"
+      FROM usage_records
+      WHERE client_id = ${clientId}
+        AND timestamp BETWEEN ${new Date(startDate)} AND ${new Date(endDate)}
+      GROUP BY TO_CHAR(timestamp, 'YYYY-MM-DD')
+      ORDER BY "date" ASC
+    `);
 
     const timeSeries = timeSeriesRaw.map((item) => ({
       date: item.date,

@@ -1,14 +1,7 @@
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { HttpModule } from '@nestjs/axios';
 import { ScheduleModule } from '@nestjs/schedule';
-import { FoodLibrary } from '../modules/food/entities/food-library.entity';
-import { FoodTranslation } from '../modules/food/entities/food-translation.entity';
-import { FoodSource } from '../modules/food/entities/food-source.entity';
-import { FoodChangeLog } from '../modules/food/entities/food-change-log.entity';
-import { FoodConflict } from '../modules/food/entities/food-conflict.entity';
-import { FoodRegionalInfo } from '../modules/food/entities/food-regional-info.entity';
 // Services
 import { FoodRuleEngineService } from './services/food-rule-engine.service';
 import { UsdaFetcherService } from './services/usda-fetcher.service';
@@ -28,14 +21,6 @@ import { FoodPipelineController } from './food-pipeline.controller';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([
-      FoodLibrary,
-      FoodTranslation,
-      FoodSource,
-      FoodChangeLog,
-      FoodConflict,
-      FoodRegionalInfo,
-    ]),
     ConfigModule,
     HttpModule.register({ timeout: 30000 }),
     ScheduleModule.forRoot(),

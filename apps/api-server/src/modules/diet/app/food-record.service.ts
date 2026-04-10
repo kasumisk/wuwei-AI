@@ -4,9 +4,9 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between } from 'typeorm';
-import { FoodRecord, MealType } from '../entities/food-record.entity';
+import { PrismaService } from '../../../core/prisma/prisma.service';
+import { Prisma } from '@prisma/client';
+import { MealType } from '../diet.types';
 import {
   SaveFoodRecordDto,
   UpdateFoodRecordDto,
@@ -21,67 +21,58 @@ import {
 export class FoodRecordService {
   private readonly logger = new Logger(FoodRecordService.name);
 
-  constructor(
-    @InjectRepository(FoodRecord)
-    private readonly foodRepo: Repository<FoodRecord>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * 保存饮食记录
    */
-  async saveRecord(
-    userId: string,
-    dto: SaveFoodRecordDto,
-  ): Promise<FoodRecord> {
-    const record = this.foodRepo.create({
-      userId,
-      imageUrl: dto.imageUrl,
-      foods: dto.foods,
-      totalCalories: dto.totalCalories,
-      mealType: (dto.mealType as MealType) || MealType.LUNCH,
-      advice: dto.advice,
-      isHealthy: dto.isHealthy,
-      recordedAt: dto.recordedAt ? new Date(dto.recordedAt) : new Date(),
-      // V1: 决策字段
-      decision: dto.decision || 'SAFE',
-      riskLevel: dto.riskLevel,
-      reason: dto.reason,
-      suggestion: dto.suggestion,
-      insteadOptions: dto.insteadOptions || [],
-      compensation: dto.compensation,
-      contextComment: dto.contextComment,
-      encouragement: dto.encouragement,
-      // V6: 多维营养字段
-      totalProtein: dto.totalProtein || 0,
-      totalFat: dto.totalFat || 0,
-      totalCarbs: dto.totalCarbs || 0,
-      avgQuality: dto.avgQuality || 0,
-      avgSatiety: dto.avgSatiety || 0,
-      nutritionScore: dto.nutritionScore || 0,
-      // V6.1: 分析关联
-      ...(dto.analysisId ? { analysisId: dto.analysisId } : {}),
-      ...(dto.source ? { source: dto.source } : {}),
+  async saveRecord(userId: string, dto: SaveFoodRecordDto) {
+    return this.prisma.food_records.create({
+      data: {
+        user_id: userId,
+        image_url: dto.imageUrl,
+        foods: dto.foods as any,
+        total_calories: dto.totalCalories,
+        meal_type: ((dto.mealType as string) || 'lunch') as any,
+        advice: dto.advice,
+        is_healthy: dto.isHealthy,
+        recorded_at: dto.recordedAt ? new Date(dto.recordedAt) : new Date(),
+        // V1: 决策字段
+        decision: dto.decision || 'SAFE',
+        risk_level: dto.riskLevel,
+        reason: dto.reason,
+        suggestion: dto.suggestion,
+        instead_options: dto.insteadOptions || [],
+        compensation: dto.compensation as any,
+        context_comment: dto.contextComment,
+        encouragement: dto.encouragement,
+        // V6: 多维营养字段
+        total_protein: dto.totalProtein || 0,
+        total_fat: dto.totalFat || 0,
+        total_carbs: dto.totalCarbs || 0,
+        avg_quality: dto.avgQuality || 0,
+        avg_satiety: dto.avgSatiety || 0,
+        nutrition_score: dto.nutritionScore || 0,
+        // V6.1: 分析关联
+        ...(dto.analysisId ? { analysis_id: dto.analysisId } : {}),
+        ...(dto.source ? { source: dto.source as any } : {}),
+      },
     });
-
-    return this.foodRepo.save(record);
   }
 
   /**
    * 获取今日记录
    * @param timezone IANA 时区字符串，用于确定"今天"的边界
    */
-  async getTodayRecords(
-    userId: string,
-    timezone: string = DEFAULT_TIMEZONE,
-  ): Promise<FoodRecord[]> {
+  async getTodayRecords(userId: string, timezone: string = DEFAULT_TIMEZONE) {
     const { startOfDay, endOfDay } = getUserLocalDayBounds(timezone);
 
-    return this.foodRepo.find({
+    return this.prisma.food_records.findMany({
       where: {
-        userId,
-        recordedAt: Between(startOfDay, endOfDay),
+        user_id: userId,
+        recorded_at: { gte: startOfDay, lte: endOfDay },
       },
-      order: { recordedAt: 'DESC' },
+      orderBy: { recorded_at: 'desc' },
     });
   }
 
@@ -92,7 +83,7 @@ export class FoodRecordService {
     userId: string,
     query: FoodRecordQueryDto,
   ): Promise<{
-    items: FoodRecord[];
+    items: any[];
     total: number;
     page: number;
     limit: number;
@@ -100,19 +91,25 @@ export class FoodRecordService {
     const page = query.page || 1;
     const limit = query.limit || 20;
 
-    const qb = this.foodRepo
-      .createQueryBuilder('r')
-      .where('r.user_id = :userId', { userId });
+    const where: any = { user_id: userId };
 
     if (query.date) {
-      qb.andWhere('DATE(r.recorded_at) = :date', { date: query.date });
+      // Filter by date: use raw SQL DATE() or construct day bounds
+      const dayStart = new Date(`${query.date}T00:00:00.000Z`);
+      const dayEnd = new Date(`${query.date}T23:59:59.999Z`);
+      where.recorded_at = { gte: dayStart, lte: dayEnd };
     }
 
-    qb.orderBy('r.recorded_at', 'DESC')
-      .skip((page - 1) * limit)
-      .take(limit);
+    const [items, total] = await Promise.all([
+      this.prisma.food_records.findMany({
+        where,
+        orderBy: { recorded_at: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.food_records.count({ where }),
+    ]);
 
-    const [items, total] = await qb.getManyAndCount();
     return { items, total, page, limit };
   }
 
@@ -123,45 +120,49 @@ export class FoodRecordService {
     userId: string,
     recordId: string,
     dto: UpdateFoodRecordDto,
-  ): Promise<FoodRecord> {
-    const record = await this.foodRepo.findOne({ where: { id: recordId } });
+  ) {
+    const record = await this.prisma.food_records.findUnique({
+      where: { id: recordId },
+    });
     if (!record) throw new NotFoundException('记录不存在');
-    if (record.userId !== userId) throw new ForbiddenException('无权操作');
+    if (record.user_id !== userId) throw new ForbiddenException('无权操作');
 
-    if (dto.foods !== undefined) record.foods = dto.foods;
+    const data: any = {};
+    if (dto.foods !== undefined) data.foods = dto.foods;
     if (dto.totalCalories !== undefined)
-      record.totalCalories = dto.totalCalories;
-    if (dto.mealType !== undefined) record.mealType = dto.mealType as MealType;
-    if (dto.advice !== undefined) record.advice = dto.advice;
-    if (dto.isHealthy !== undefined) record.isHealthy = dto.isHealthy;
+      data.total_calories = dto.totalCalories;
+    if (dto.mealType !== undefined) data.meal_type = dto.mealType as any;
+    if (dto.advice !== undefined) data.advice = dto.advice;
+    if (dto.isHealthy !== undefined) data.is_healthy = dto.isHealthy;
 
-    return this.foodRepo.save(record);
+    return this.prisma.food_records.update({
+      where: { id: recordId },
+      data,
+    });
   }
 
   /**
    * 删除记录
    */
-  async deleteRecord(userId: string, recordId: string): Promise<FoodRecord> {
-    const record = await this.foodRepo.findOne({ where: { id: recordId } });
+  async deleteRecord(userId: string, recordId: string) {
+    const record = await this.prisma.food_records.findUnique({
+      where: { id: recordId },
+    });
     if (!record) throw new NotFoundException('记录不存在');
-    if (record.userId !== userId) throw new ForbiddenException('无权操作');
+    if (record.user_id !== userId) throw new ForbiddenException('无权操作');
 
-    await this.foodRepo.remove(record);
+    await this.prisma.food_records.delete({ where: { id: recordId } });
     return record;
   }
 
   /**
    * 获取指定日期的记录（内部方法，供 DailySummaryService 调用）
    */
-  async getRecordsByDateRange(
-    userId: string,
-    start: Date,
-    end: Date,
-  ): Promise<FoodRecord[]> {
-    return this.foodRepo.find({
+  async getRecordsByDateRange(userId: string, start: Date, end: Date) {
+    return this.prisma.food_records.findMany({
       where: {
-        userId,
-        recordedAt: Between(start, end),
+        user_id: userId,
+        recorded_at: { gte: start, lte: end },
       },
     });
   }

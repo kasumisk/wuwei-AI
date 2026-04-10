@@ -1,10 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Achievement } from '../../gamification/entities/achievement.entity';
-import { UserAchievement } from '../../gamification/entities/user-achievement.entity';
-import { Challenge } from '../../gamification/entities/challenge.entity';
-import { UserChallenge } from '../../gamification/entities/user-challenge.entity';
+import { PrismaService } from '../../../core/prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import {
   GetFoodRecordsQueryDto,
   GetDailyPlansQueryDto,
@@ -25,14 +21,7 @@ export class ContentManagementService {
   private readonly logger = new Logger(ContentManagementService.name);
 
   constructor(
-    @InjectRepository(Achievement)
-    private readonly achievementRepo: Repository<Achievement>,
-    @InjectRepository(UserAchievement)
-    private readonly userAchievementRepo: Repository<UserAchievement>,
-    @InjectRepository(Challenge)
-    private readonly challengeRepo: Repository<Challenge>,
-    @InjectRepository(UserChallenge)
-    private readonly userChallengeRepo: Repository<UserChallenge>,
+    private readonly prisma: PrismaService,
     private readonly appDataQuery: AppDataQueryService,
   ) {}
 
@@ -86,33 +75,35 @@ export class ContentManagementService {
 
   async findAchievements(query: GetAchievementsQueryDto) {
     const { page = 1, pageSize = 20, keyword, category } = query;
-    const qb = this.achievementRepo.createQueryBuilder('a');
+
+    const where: any = {};
 
     if (keyword) {
-      qb.andWhere('(a.name ILIKE :kw OR a.code ILIKE :kw)', {
-        kw: `%${keyword}%`,
-      });
+      where.OR = [
+        { name: { contains: keyword, mode: 'insensitive' } },
+        { code: { contains: keyword, mode: 'insensitive' } },
+      ];
     }
     if (category) {
-      qb.andWhere('a.category = :category', { category });
+      where.category = category;
     }
 
-    const total = await qb.getCount();
-    const list = await qb
-      .skip((page - 1) * pageSize)
-      .take(pageSize)
-      .getMany();
+    const [total, list] = await Promise.all([
+      this.prisma.achievements.count({ where }),
+      this.prisma.achievements.findMany({
+        where,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
 
     // 获取每个成就的解锁人数
-    const unlockCounts = await this.userAchievementRepo
-      .createQueryBuilder('ua')
-      .select('ua.achievement_id', 'achievementId')
-      .addSelect('COUNT(*)', 'count')
-      .groupBy('ua.achievement_id')
-      .getRawMany();
+    const unlockCounts = await this.prisma.$queryRaw<
+      Array<{ achievementId: string; count: bigint }>
+    >`SELECT achievement_id as "achievementId", COUNT(*) as count FROM user_achievements GROUP BY achievement_id`;
 
     const countMap = new Map(
-      unlockCounts.map((u) => [u.achievementId, parseInt(u.count)]),
+      unlockCounts.map((u) => [u.achievementId, Number(u.count)]),
     );
     const listWithCounts = list.map((a) => ({
       ...a,
@@ -129,21 +120,26 @@ export class ContentManagementService {
   }
 
   async createAchievement(dto: CreateAchievementDto) {
-    const achievement = this.achievementRepo.create(dto);
-    return this.achievementRepo.save(achievement);
+    return this.prisma.achievements.create({ data: dto as any });
   }
 
   async updateAchievement(id: string, dto: UpdateAchievementDto) {
-    const achievement = await this.achievementRepo.findOne({ where: { id } });
+    const achievement = await this.prisma.achievements.findFirst({
+      where: { id },
+    });
     if (!achievement) throw new NotFoundException('成就不存在');
-    Object.assign(achievement, dto);
-    return this.achievementRepo.save(achievement);
+    return this.prisma.achievements.update({
+      where: { id },
+      data: dto as any,
+    });
   }
 
   async deleteAchievement(id: string) {
-    const achievement = await this.achievementRepo.findOne({ where: { id } });
+    const achievement = await this.prisma.achievements.findFirst({
+      where: { id },
+    });
     if (!achievement) throw new NotFoundException('成就不存在');
-    await this.achievementRepo.remove(achievement);
+    await this.prisma.achievements.delete({ where: { id } });
     return { message: '成就已删除' };
   }
 
@@ -151,31 +147,32 @@ export class ContentManagementService {
 
   async findChallenges(query: GetChallengesQueryDto) {
     const { page = 1, pageSize = 20, keyword, type } = query;
-    const qb = this.challengeRepo.createQueryBuilder('c');
+
+    const where: any = {};
 
     if (keyword) {
-      qb.andWhere('c.title ILIKE :kw', { kw: `%${keyword}%` });
+      where.title = { contains: keyword, mode: 'insensitive' };
     }
     if (type) {
-      qb.andWhere('c.type = :type', { type });
+      where.type = type;
     }
 
-    const total = await qb.getCount();
-    const list = await qb
-      .skip((page - 1) * pageSize)
-      .take(pageSize)
-      .getMany();
+    const [total, list] = await Promise.all([
+      this.prisma.challenges.count({ where }),
+      this.prisma.challenges.findMany({
+        where,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
 
     // 获取每个挑战的参与人数
-    const joinCounts = await this.userChallengeRepo
-      .createQueryBuilder('uc')
-      .select('uc.challenge_id', 'challengeId')
-      .addSelect('COUNT(*)', 'count')
-      .groupBy('uc.challenge_id')
-      .getRawMany();
+    const joinCounts = await this.prisma.$queryRaw<
+      Array<{ challengeId: string; count: bigint }>
+    >`SELECT challenge_id as "challengeId", COUNT(*) as count FROM user_challenges GROUP BY challenge_id`;
 
     const countMap = new Map(
-      joinCounts.map((j) => [j.challengeId, parseInt(j.count)]),
+      joinCounts.map((j) => [j.challengeId, Number(j.count)]),
     );
     const listWithCounts = list.map((c) => ({
       ...c,
@@ -192,29 +189,38 @@ export class ContentManagementService {
   }
 
   async createChallenge(dto: CreateChallengeDto) {
-    const challenge = this.challengeRepo.create(dto);
-    return this.challengeRepo.save(challenge);
+    return this.prisma.challenges.create({ data: dto as any });
   }
 
   async updateChallenge(id: string, dto: UpdateChallengeDto) {
-    const challenge = await this.challengeRepo.findOne({ where: { id } });
+    const challenge = await this.prisma.challenges.findFirst({
+      where: { id },
+    });
     if (!challenge) throw new NotFoundException('挑战不存在');
-    Object.assign(challenge, dto);
-    return this.challengeRepo.save(challenge);
+    return this.prisma.challenges.update({
+      where: { id },
+      data: dto as any,
+    });
   }
 
   async deleteChallenge(id: string) {
-    const challenge = await this.challengeRepo.findOne({ where: { id } });
+    const challenge = await this.prisma.challenges.findFirst({
+      where: { id },
+    });
     if (!challenge) throw new NotFoundException('挑战不存在');
-    await this.challengeRepo.remove(challenge);
+    await this.prisma.challenges.delete({ where: { id } });
     return { message: '挑战已删除' };
   }
 
   async toggleChallengeActive(id: string) {
-    const challenge = await this.challengeRepo.findOne({ where: { id } });
+    const challenge = await this.prisma.challenges.findFirst({
+      where: { id },
+    });
     if (!challenge) throw new NotFoundException('挑战不存在');
-    challenge.isActive = !challenge.isActive;
-    return this.challengeRepo.save(challenge);
+    return this.prisma.challenges.update({
+      where: { id },
+      data: { is_active: !challenge.is_active },
+    });
   }
 
   // ==================== 推荐反馈查询（委托） ====================

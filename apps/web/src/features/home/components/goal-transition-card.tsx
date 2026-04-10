@@ -3,15 +3,9 @@
 import { useState, useCallback } from 'react';
 import { useGoalTransition } from '@/features/home/hooks/use-goal-transition';
 import { useToast } from '@/lib/hooks/use-toast';
+import { GOAL_LABELS } from '@/lib/constants/food';
 
 /* ─── 常量 ─── */
-
-const GOAL_LABELS: Record<string, string> = {
-  fat_loss: '减脂',
-  muscle_gain: '增肌',
-  health: '健康维持',
-  habit: '改善习惯',
-};
 
 const GOAL_EMOJI: Record<string, string> = {
   fat_loss: '🔥',

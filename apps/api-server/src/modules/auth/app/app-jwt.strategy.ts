@@ -1,9 +1,8 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { AppUser } from '../../user/entities/app-user.entity';
+import { PrismaService } from '../../../core/prisma/prisma.service';
+import { app_users as AppUser } from '@prisma/client';
 
 export interface AppJwtPayload {
   sub: string;
@@ -15,10 +14,7 @@ export interface AppJwtPayload {
 
 @Injectable()
 export class AppJwtStrategy extends PassportStrategy(Strategy, 'app-jwt') {
-  constructor(
-    @InjectRepository(AppUser)
-    private readonly appUserRepository: Repository<AppUser>,
-  ) {
+  constructor(private readonly prisma: PrismaService) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
@@ -33,7 +29,7 @@ export class AppJwtStrategy extends PassportStrategy(Strategy, 'app-jwt') {
       throw new UnauthorizedException('非 App 用户令牌');
     }
 
-    const user = await this.appUserRepository.findOne({
+    const user = await this.prisma.app_users.findUnique({
       where: { id: payload.sub },
     });
 
@@ -47,7 +43,7 @@ export class AppJwtStrategy extends PassportStrategy(Strategy, 'app-jwt') {
 
     return {
       id: user.id,
-      authType: user.authType,
+      authType: user.auth_type,
       email: user.email,
       nickname: user.nickname,
       type: 'app',

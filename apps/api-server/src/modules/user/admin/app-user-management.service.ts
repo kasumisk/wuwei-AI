@@ -3,32 +3,16 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { AppUser, AppUserStatus } from '../entities/app-user.entity';
-import { UserProfile } from '../entities/user-profile.entity';
-import { UserBehaviorProfile } from '../entities/user-behavior-profile.entity';
-import { UserInferredProfile } from '../entities/user-inferred-profile.entity';
-import { ProfileChangeLog } from '../entities/profile-change-log.entity';
+import { AppUserStatus } from '../user.types';
 import {
   GetAppUsersQueryDto,
   UpdateAppUserByAdminDto,
 } from './dto/app-user-management.dto';
+import { PrismaService } from '../../../core/prisma/prisma.service';
 
 @Injectable()
 export class AppUserManagementService {
-  constructor(
-    @InjectRepository(AppUser)
-    private readonly appUserRepository: Repository<AppUser>,
-    @InjectRepository(UserProfile)
-    private readonly userProfileRepository: Repository<UserProfile>,
-    @InjectRepository(UserBehaviorProfile)
-    private readonly behaviorProfileRepository: Repository<UserBehaviorProfile>,
-    @InjectRepository(UserInferredProfile)
-    private readonly inferredProfileRepository: Repository<UserInferredProfile>,
-    @InjectRepository(ProfileChangeLog)
-    private readonly profileChangeLogRepository: Repository<ProfileChangeLog>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * 获取 App 用户列表（分页）
@@ -36,29 +20,34 @@ export class AppUserManagementService {
   async findAll(query: GetAppUsersQueryDto) {
     const { page = 1, pageSize = 10, keyword, authType, status } = query;
 
-    const queryBuilder = this.appUserRepository.createQueryBuilder('user');
+    const where: any = {};
 
     if (keyword) {
-      queryBuilder.andWhere(
-        '(user.nickname LIKE :keyword OR user.email LIKE :keyword)',
-        { keyword: `%${keyword}%` },
-      );
+      where.OR = [
+        { nickname: { contains: keyword, mode: 'insensitive' } },
+        { email: { contains: keyword, mode: 'insensitive' } },
+      ];
     }
 
     if (authType) {
-      queryBuilder.andWhere('user.authType = :authType', { authType });
+      where.auth_type = authType;
     }
 
     if (status) {
-      queryBuilder.andWhere('user.status = :status', { status });
+      where.status = status;
     }
 
-    queryBuilder.orderBy('user.createdAt', 'DESC');
-
     const skip = (page - 1) * pageSize;
-    queryBuilder.skip(skip).take(pageSize);
 
-    const [list, total] = await queryBuilder.getManyAndCount();
+    const [list, total] = await Promise.all([
+      this.prisma.app_users.findMany({
+        where,
+        orderBy: { created_at: 'desc' },
+        skip,
+        take: pageSize,
+      }),
+      this.prisma.app_users.count({ where }),
+    ]);
 
     return {
       list,
@@ -73,7 +62,7 @@ export class AppUserManagementService {
    * 获取 App 用户详情
    */
   async findOne(id: string) {
-    const user = await this.appUserRepository.findOne({ where: { id } });
+    const user = await this.prisma.app_users.findUnique({ where: { id } });
 
     if (!user) {
       throw new NotFoundException(`App 用户 #${id} 不存在`);
@@ -86,20 +75,22 @@ export class AppUserManagementService {
    * 更新 App 用户信息（管理员操作）
    */
   async update(id: string, dto: UpdateAppUserByAdminDto) {
-    const user = await this.appUserRepository.findOne({ where: { id } });
+    const user = await this.prisma.app_users.findUnique({ where: { id } });
 
     if (!user) {
       throw new NotFoundException(`App 用户 #${id} 不存在`);
     }
 
-    if (dto.status) {
-      user.status = dto.status as AppUserStatus;
-    }
-    if (dto.nickname !== undefined) user.nickname = dto.nickname;
-    if (dto.avatar !== undefined) user.avatar = dto.avatar;
-    if (dto.email !== undefined) user.email = dto.email;
+    const data: any = {};
+    if (dto.status) data.status = dto.status;
+    if (dto.nickname !== undefined) data.nickname = dto.nickname;
+    if (dto.avatar !== undefined) data.avatar = dto.avatar;
+    if (dto.email !== undefined) data.email = dto.email;
 
-    const updated = await this.appUserRepository.save(user);
+    const updated = await this.prisma.app_users.update({
+      where: { id },
+      data,
+    });
     return updated;
   }
 
@@ -107,14 +98,16 @@ export class AppUserManagementService {
    * 封禁 App 用户
    */
   async ban(id: string) {
-    const user = await this.appUserRepository.findOne({ where: { id } });
+    const user = await this.prisma.app_users.findUnique({ where: { id } });
 
     if (!user) {
       throw new NotFoundException(`App 用户 #${id} 不存在`);
     }
 
-    user.status = AppUserStatus.BANNED;
-    await this.appUserRepository.save(user);
+    await this.prisma.app_users.update({
+      where: { id },
+      data: { status: AppUserStatus.BANNED as any },
+    });
 
     return { message: '用户已封禁' };
   }
@@ -123,18 +116,20 @@ export class AppUserManagementService {
    * 解封 App 用户
    */
   async unban(id: string) {
-    const user = await this.appUserRepository.findOne({ where: { id } });
+    const user = await this.prisma.app_users.findUnique({ where: { id } });
 
     if (!user) {
       throw new NotFoundException(`App 用户 #${id} 不存在`);
     }
 
-    if (user.status !== AppUserStatus.BANNED) {
+    if (user.status !== (AppUserStatus.BANNED as any)) {
       throw new BadRequestException('用户未被封禁');
     }
 
-    user.status = AppUserStatus.ACTIVE;
-    await this.appUserRepository.save(user);
+    await this.prisma.app_users.update({
+      where: { id },
+      data: { status: AppUserStatus.ACTIVE as any },
+    });
 
     return { message: '用户已解封' };
   }
@@ -143,13 +138,13 @@ export class AppUserManagementService {
    * 删除 App 用户
    */
   async remove(id: string) {
-    const user = await this.appUserRepository.findOne({ where: { id } });
+    const user = await this.prisma.app_users.findUnique({ where: { id } });
 
     if (!user) {
       throw new NotFoundException(`App 用户 #${id} 不存在`);
     }
 
-    await this.appUserRepository.remove(user);
+    await this.prisma.app_users.delete({ where: { id } });
 
     return { message: '用户已删除' };
   }
@@ -158,22 +153,18 @@ export class AppUserManagementService {
    * 获取 App 用户统计
    */
   async getStatistics() {
-    const total = await this.appUserRepository.count();
-    const anonymous = await this.appUserRepository.count({
-      where: { authType: 'anonymous' as any },
-    });
-    const google = await this.appUserRepository.count({
-      where: { authType: 'google' as any },
-    });
-    const email = await this.appUserRepository.count({
-      where: { authType: 'email' as any },
-    });
-    const active = await this.appUserRepository.count({
-      where: { status: AppUserStatus.ACTIVE },
-    });
-    const banned = await this.appUserRepository.count({
-      where: { status: AppUserStatus.BANNED },
-    });
+    const [total, anonymous, google, email, active, banned] = await Promise.all(
+      [
+        this.prisma.app_users.count(),
+        this.prisma.app_users.count({
+          where: { auth_type: 'anonymous' as any },
+        }),
+        this.prisma.app_users.count({ where: { auth_type: 'google' as any } }),
+        this.prisma.app_users.count({ where: { auth_type: 'email' as any } }),
+        this.prisma.app_users.count({ where: { status: 'active' as any } }),
+        this.prisma.app_users.count({ where: { status: 'banned' as any } }),
+      ],
+    );
 
     return {
       total,
@@ -188,7 +179,7 @@ export class AppUserManagementService {
    */
   async getBehaviorProfile(userId: string) {
     // 验证用户存在
-    const user = await this.appUserRepository.findOne({
+    const user = await this.prisma.app_users.findUnique({
       where: { id: userId },
     });
     if (!user) {
@@ -198,11 +189,13 @@ export class AppUserManagementService {
     // 并行查询行为画像、声明档案、近期变更日志
     const [behaviorProfile, declaredProfile, recentChangeLogs] =
       await Promise.all([
-        this.behaviorProfileRepository.findOne({ where: { userId } }),
-        this.userProfileRepository.findOne({ where: { userId } }),
-        this.profileChangeLogRepository.find({
-          where: { userId, changeType: 'behavior' as any },
-          order: { createdAt: 'DESC' },
+        this.prisma.user_behavior_profiles.findUnique({
+          where: { user_id: userId },
+        }),
+        this.prisma.user_profiles.findUnique({ where: { user_id: userId } }),
+        this.prisma.profile_change_log.findMany({
+          where: { user_id: userId, change_type: 'behavior' as any },
+          orderBy: { created_at: 'desc' },
           take: 20,
         }),
       ]);
@@ -211,35 +204,35 @@ export class AppUserManagementService {
       user: {
         id: user.id,
         nickname: user.nickname,
-        authType: user.authType,
+        authType: user.auth_type,
         status: user.status,
-        createdAt: user.createdAt,
+        createdAt: user.created_at,
       },
       behaviorProfile: behaviorProfile || null,
       declaredProfile: declaredProfile
         ? {
             goal: declaredProfile.goal,
-            goalSpeed: declaredProfile.goalSpeed,
+            goalSpeed: declaredProfile.goal_speed,
             gender: declaredProfile.gender,
-            birthYear: declaredProfile.birthYear,
-            heightCm: declaredProfile.heightCm,
-            weightKg: declaredProfile.weightKg,
-            targetWeightKg: declaredProfile.targetWeightKg,
-            activityLevel: declaredProfile.activityLevel,
-            dailyCalorieGoal: declaredProfile.dailyCalorieGoal,
+            birthYear: declaredProfile.birth_year,
+            heightCm: declaredProfile.height_cm,
+            weightKg: declaredProfile.weight_kg,
+            targetWeightKg: declaredProfile.target_weight_kg,
+            activityLevel: declaredProfile.activity_level,
+            dailyCalorieGoal: declaredProfile.daily_calorie_goal,
             discipline: declaredProfile.discipline,
-            mealsPerDay: declaredProfile.mealsPerDay,
-            takeoutFrequency: declaredProfile.takeoutFrequency,
-            canCook: declaredProfile.canCook,
-            foodPreferences: declaredProfile.foodPreferences,
-            dietaryRestrictions: declaredProfile.dietaryRestrictions,
+            mealsPerDay: declaredProfile.meals_per_day,
+            takeoutFrequency: declaredProfile.takeout_frequency,
+            canCook: declaredProfile.can_cook,
+            foodPreferences: declaredProfile.food_preferences,
+            dietaryRestrictions: declaredProfile.dietary_restrictions,
             allergens: declaredProfile.allergens,
-            healthConditions: declaredProfile.healthConditions,
-            cuisinePreferences: declaredProfile.cuisinePreferences,
-            weakTimeSlots: declaredProfile.weakTimeSlots,
-            bingeTriggers: declaredProfile.bingeTriggers,
-            dataCompleteness: declaredProfile.dataCompleteness,
-            onboardingCompleted: declaredProfile.onboardingCompleted,
+            healthConditions: declaredProfile.health_conditions,
+            cuisinePreferences: declaredProfile.cuisine_preferences,
+            weakTimeSlots: declaredProfile.weak_time_slots,
+            bingeTriggers: declaredProfile.binge_triggers,
+            dataCompleteness: declaredProfile.data_completeness,
+            onboardingCompleted: declaredProfile.onboarding_completed,
           }
         : null,
       recentChangeLogs,
@@ -252,7 +245,7 @@ export class AppUserManagementService {
    */
   async getInferredProfile(userId: string) {
     // 验证用户存在
-    const user = await this.appUserRepository.findOne({
+    const user = await this.prisma.app_users.findUnique({
       where: { id: userId },
     });
     if (!user) {
@@ -261,10 +254,12 @@ export class AppUserManagementService {
 
     // 并行查询推断画像、近期变更日志
     const [inferredProfile, recentChangeLogs] = await Promise.all([
-      this.inferredProfileRepository.findOne({ where: { userId } }),
-      this.profileChangeLogRepository.find({
-        where: { userId, changeType: 'inferred' as any },
-        order: { createdAt: 'DESC' },
+      this.prisma.user_inferred_profiles.findUnique({
+        where: { user_id: userId },
+      }),
+      this.prisma.profile_change_log.findMany({
+        where: { user_id: userId, change_type: 'inferred' as any },
+        orderBy: { created_at: 'desc' },
         take: 20,
       }),
     ]);
@@ -273,9 +268,9 @@ export class AppUserManagementService {
       user: {
         id: user.id,
         nickname: user.nickname,
-        authType: user.authType,
+        authType: user.auth_type,
         status: user.status,
-        createdAt: user.createdAt,
+        createdAt: user.created_at,
       },
       inferredProfile: inferredProfile || null,
       recentChangeLogs,

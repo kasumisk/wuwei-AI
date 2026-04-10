@@ -14,7 +14,10 @@ import {
   WhyNotDto,
   QualityDashboardQueryDto,
 } from './dto/recommendation-debug.dto';
-import { MealTarget } from '../app/recommendation/recommendation.types';
+import {
+  MealTarget,
+  UserProfileConstraints,
+} from '../app/recommendation/recommendation.types';
 import { UserExperimentAssignment } from '../app/recommendation/ab-testing.service';
 import { StrategyConfig } from '../../strategy/strategy.types';
 
@@ -51,7 +54,7 @@ export class RecommendationDebugService {
     }
 
     const goalType = dto.goalType || profile.goal || 'health';
-    const dailyCalorieGoal = profile.dailyCalorieGoal || 2000;
+    const dailyCalorieGoal = profile.daily_calorie_goal || 2000;
     // 蛋白质目标: ~25% 热量来自蛋白质 (1g = 4kcal)
     const dailyProteinGoal = Math.round((dailyCalorieGoal * 0.25) / 4);
     // 脂肪目标: ~25% 热量来自脂肪 (1g = 9kcal)
@@ -86,11 +89,11 @@ export class RecommendationDebugService {
     };
 
     // 3. 构建 userProfile 约束
-    const userProfileConstraints = {
-      allergens: profile.allergens || [],
-      dietaryRestrictions: profile.dietaryRestrictions || [],
-      healthConditions: profile.healthConditions || [],
-      regionCode: profile.regionCode || 'CN',
+    const userProfileConstraints: UserProfileConstraints = {
+      allergens: (profile.allergens as string[]) || [],
+      dietaryRestrictions: (profile.dietary_restrictions as string[]) || [],
+      healthConditions: (profile.health_conditions as string[]) || [],
+      regionCode: profile.region_code || 'CN',
       timezone: profile.timezone || 'Asia/Shanghai',
     };
 
@@ -142,7 +145,7 @@ export class RecommendationDebugService {
     }
 
     const goalType = dto.goalType || profile.goal || 'health';
-    const dailyCalorieGoal = profile.dailyCalorieGoal || 2000;
+    const dailyCalorieGoal = profile.daily_calorie_goal || 2000;
     const dailyProteinGoal = Math.round((dailyCalorieGoal * 0.25) / 4);
     const dailyFatGoal = Math.round((dailyCalorieGoal * 0.25) / 9);
     const dailyCarbsGoal = Math.round((dailyCalorieGoal * 0.5) / 4);
@@ -169,11 +172,11 @@ export class RecommendationDebugService {
 
     const consumed = { calories: 0, protein: 0 };
 
-    const userProfileConstraints = {
-      allergens: profile.allergens || [],
-      dietaryRestrictions: profile.dietaryRestrictions || [],
-      healthConditions: profile.healthConditions || [],
-      regionCode: profile.regionCode || 'CN',
+    const userProfileConstraints: UserProfileConstraints = {
+      allergens: (profile.allergens as string[]) || [],
+      dietaryRestrictions: (profile.dietary_restrictions as string[]) || [],
+      healthConditions: (profile.health_conditions as string[]) || [],
+      regionCode: profile.region_code || 'CN',
       timezone: profile.timezone || 'Asia/Shanghai',
     };
 

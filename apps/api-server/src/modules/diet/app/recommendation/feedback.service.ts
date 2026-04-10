@@ -1,10 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { RecommendationFeedback } from '../../entities/recommendation-feedback.entity';
-import { FeedbackDetail } from '../../entities/feedback-detail.entity';
-import { UserInferredProfile } from '../../../user/entities/user-inferred-profile.entity';
+import { PrismaService } from '../../../../core/prisma/prisma.service';
 import { FoodFeedbackStats } from './recommendation.types';
 import {
   PreferenceUpdaterService,
@@ -47,12 +43,7 @@ export class RecommendationFeedbackService {
   private readonly logger = new Logger(RecommendationFeedbackService.name);
 
   constructor(
-    @InjectRepository(RecommendationFeedback)
-    private readonly feedbackRepo: Repository<RecommendationFeedback>,
-    @InjectRepository(FeedbackDetail)
-    private readonly detailRepo: Repository<FeedbackDetail>,
-    @InjectRepository(UserInferredProfile)
-    private readonly inferredProfileRepo: Repository<UserInferredProfile>,
+    private readonly prisma: PrismaService,
     private readonly preferenceUpdater: PreferenceUpdaterService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
@@ -83,19 +74,20 @@ export class RecommendationFeedbackService {
   }): Promise<void> {
     try {
       // 1. 保存主反馈记录（与之前一致）
-      const feedback = new RecommendationFeedback();
-      feedback.userId = params.userId;
-      feedback.mealType = params.mealType;
-      feedback.foodName = params.foodName;
-      feedback.foodId = params.foodId ?? (null as any);
-      feedback.action = params.action;
-      feedback.replacementFood = params.replacementFood ?? (null as any);
-      feedback.recommendationScore =
-        params.recommendationScore ?? (null as any);
-      feedback.goalType = params.goalType ?? (null as any);
-      feedback.experimentId = params.experimentId ?? (null as any);
-      feedback.groupId = params.groupId ?? (null as any);
-      await this.feedbackRepo.save(feedback);
+      const feedback = await this.prisma.recommendation_feedbacks.create({
+        data: {
+          user_id: params.userId,
+          meal_type: params.mealType,
+          food_name: params.foodName,
+          food_id: params.foodId ?? null,
+          action: params.action,
+          replacement_food: params.replacementFood ?? null,
+          recommendation_score: params.recommendationScore ?? null,
+          goal_type: params.goalType ?? null,
+          experiment_id: params.experimentId ?? null,
+          group_id: params.groupId ?? null,
+        },
+      });
 
       // 2. V6 2.19: 如果有多维评分或隐式信号，保存详情记录
       const hasRatings = params.ratings && this.hasAnyRating(params.ratings);
@@ -103,25 +95,21 @@ export class RecommendationFeedbackService {
         params.implicitSignals && this.hasAnySignal(params.implicitSignals);
 
       if (hasRatings || hasSignals) {
-        const detail = new FeedbackDetail();
-        detail.feedbackId = feedback.id;
-        detail.userId = params.userId;
-        detail.foodName = params.foodName;
-        detail.mealType = params.mealType;
-
-        if (params.ratings) {
-          detail.tasteRating = params.ratings.taste ?? null;
-          detail.portionRating = params.ratings.portion ?? null;
-          detail.priceRating = params.ratings.price ?? null;
-          detail.timingRating = params.ratings.timing ?? null;
-          detail.comment = params.ratings.comment ?? null;
-        }
-        if (params.implicitSignals) {
-          detail.dwellTimeMs = params.implicitSignals.dwellTimeMs ?? null;
-          detail.detailExpanded = params.implicitSignals.detailExpanded ?? null;
-        }
-
-        await this.detailRepo.save(detail);
+        await this.prisma.feedback_details.create({
+          data: {
+            feedback_id: feedback.id,
+            user_id: params.userId,
+            food_name: params.foodName,
+            meal_type: params.mealType,
+            taste_rating: params.ratings?.taste ?? null,
+            portion_rating: params.ratings?.portion ?? null,
+            price_rating: params.ratings?.price ?? null,
+            timing_rating: params.ratings?.timing ?? null,
+            comment: params.ratings?.comment ?? null,
+            dwell_time_ms: params.implicitSignals?.dwellTimeMs ?? null,
+            detail_expanded: params.implicitSignals?.detailExpanded ?? null,
+          },
+        });
         this.logger.debug(
           `多维反馈详情已记录: [${params.foodName}] ` +
             `taste=${params.ratings?.taste ?? '-'} ` +
@@ -185,21 +173,17 @@ export class RecommendationFeedbackService {
 
       // 使用 SQL GROUP BY 在数据库端完成聚合，避免加载全部实体到内存
       const rows: { foodName: string; accepted: string; rejected: string }[] =
-        await this.feedbackRepo
-          .createQueryBuilder('f')
-          .select('f.food_name', 'foodName')
-          .addSelect(
-            "SUM(CASE WHEN f.action = 'accepted' THEN 1 ELSE 0 END)",
-            'accepted',
-          )
-          .addSelect(
-            "SUM(CASE WHEN f.action != 'accepted' THEN 1 ELSE 0 END)",
-            'rejected',
-          )
-          .where('f.user_id = :userId', { userId })
-          .andWhere('f.created_at >= :since', { since })
-          .groupBy('f.food_name')
-          .getRawMany();
+        await this.prisma.$queryRawUnsafe(
+          `SELECT f.food_name AS "foodName",
+                  SUM(CASE WHEN f.action = 'accepted' THEN 1 ELSE 0 END) AS "accepted",
+                  SUM(CASE WHEN f.action != 'accepted' THEN 1 ELSE 0 END) AS "rejected"
+           FROM recommendation_feedbacks f
+           WHERE f.user_id = $1
+             AND f.created_at >= $2
+           GROUP BY f.food_name`,
+          userId,
+          since,
+        );
 
       for (const row of rows) {
         stats[row.foodName] = {
@@ -238,18 +222,20 @@ export class RecommendationFeedbackService {
         avgPrice: string | null;
         avgTiming: string | null;
         cnt: string;
-      }[] = await this.detailRepo
-        .createQueryBuilder('d')
-        .select('d.food_name', 'foodName')
-        .addSelect('AVG(d.taste_rating)', 'avgTaste')
-        .addSelect('AVG(d.portion_rating)', 'avgPortion')
-        .addSelect('AVG(d.price_rating)', 'avgPrice')
-        .addSelect('AVG(d.timing_rating)', 'avgTiming')
-        .addSelect('COUNT(*)', 'cnt')
-        .where('d.user_id = :userId', { userId })
-        .andWhere('d.created_at >= :since', { since })
-        .groupBy('d.food_name')
-        .getRawMany();
+      }[] = await this.prisma.$queryRawUnsafe(
+        `SELECT d.food_name AS "foodName",
+                AVG(d.taste_rating) AS "avgTaste",
+                AVG(d.portion_rating) AS "avgPortion",
+                AVG(d.price_rating) AS "avgPrice",
+                AVG(d.timing_rating) AS "avgTiming",
+                COUNT(*) AS "cnt"
+         FROM feedback_details d
+         WHERE d.user_id = $1
+           AND d.created_at >= $2
+         GROUP BY d.food_name`,
+        userId,
+        since,
+      );
 
       for (const row of rows) {
         result[row.foodName] = {
@@ -286,22 +272,26 @@ export class RecommendationFeedbackService {
       const since = new Date();
       since.setDate(since.getDate() - days);
 
-      const row = await this.detailRepo
-        .createQueryBuilder('d')
-        .select('AVG(d.taste_rating)', 'avgTaste')
-        .addSelect('AVG(d.portion_rating)', 'avgPortion')
-        .addSelect('AVG(d.price_rating)', 'avgPrice')
-        .addSelect('AVG(d.timing_rating)', 'avgTiming')
-        .addSelect('COUNT(*)', 'cnt')
-        .where('d.user_id = :userId', { userId })
-        .andWhere('d.created_at >= :since', { since })
-        .getRawOne<{
-          avgTaste: string | null;
-          avgPortion: string | null;
-          avgPrice: string | null;
-          avgTiming: string | null;
-          cnt: string;
-        }>();
+      const rows: Array<{
+        avgTaste: string | null;
+        avgPortion: string | null;
+        avgPrice: string | null;
+        avgTiming: string | null;
+        cnt: string;
+      }> = await this.prisma.$queryRawUnsafe(
+        `SELECT AVG(d.taste_rating) AS "avgTaste",
+                AVG(d.portion_rating) AS "avgPortion",
+                AVG(d.price_rating) AS "avgPrice",
+                AVG(d.timing_rating) AS "avgTiming",
+                COUNT(*) AS "cnt"
+         FROM feedback_details d
+         WHERE d.user_id = $1
+           AND d.created_at >= $2`,
+        userId,
+        since,
+      );
+
+      const row = rows[0] ?? null;
 
       return {
         avgTaste: row?.avgTaste
@@ -343,12 +333,12 @@ export class RecommendationFeedbackService {
     action: 'accepted' | 'replaced' | 'skipped';
   }): Promise<void> {
     // 1. 读取当前增量权重
-    let inferredProfile = await this.inferredProfileRepo.findOne({
-      where: { userId: params.userId },
+    let inferredProfile = await this.prisma.user_inferred_profiles.findFirst({
+      where: { user_id: params.userId },
     });
 
     const currentWeights =
-      (inferredProfile?.preferenceWeights as IncrementalPreferenceWeights | null) ??
+      (inferredProfile?.preference_weights as IncrementalPreferenceWeights | null) ??
       null;
 
     // 2. 增量更新
@@ -359,18 +349,20 @@ export class RecommendationFeedbackService {
 
     // 3. 写回
     if (inferredProfile) {
-      inferredProfile.preferenceWeights = updatedWeights as unknown as Record<
-        string,
-        unknown
-      >;
-      await this.inferredProfileRepo.save(inferredProfile);
+      await this.prisma.user_inferred_profiles.update({
+        where: { id: inferredProfile.id },
+        data: {
+          preference_weights: updatedWeights as any,
+        },
+      });
     } else {
       // 如果没有推断画像，创建一个最小的（仅包含偏好权重）
-      inferredProfile = this.inferredProfileRepo.create({
-        userId: params.userId,
-        preferenceWeights: updatedWeights as unknown as Record<string, unknown>,
+      await this.prisma.user_inferred_profiles.create({
+        data: {
+          user_id: params.userId,
+          preference_weights: updatedWeights as any,
+        },
       });
-      await this.inferredProfileRepo.save(inferredProfile);
     }
 
     this.logger.debug(

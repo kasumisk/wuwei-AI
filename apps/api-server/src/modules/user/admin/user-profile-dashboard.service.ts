@@ -1,27 +1,14 @@
 import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { AppUser } from '../entities/app-user.entity';
-import { UserProfile } from '../entities/user-profile.entity';
-import { UserBehaviorProfile } from '../entities/user-behavior-profile.entity';
-import { UserInferredProfile } from '../entities/user-inferred-profile.entity';
+import { Prisma } from '@prisma/client';
 import {
   UserGrowthTrendQueryDto,
   ProfileDistributionQueryDto,
 } from './dto/user-profile-dashboard.dto';
+import { PrismaService } from '../../../core/prisma/prisma.service';
 
 @Injectable()
 export class UserProfileDashboardService {
-  constructor(
-    @InjectRepository(AppUser)
-    private readonly appUserRepository: Repository<AppUser>,
-    @InjectRepository(UserProfile)
-    private readonly userProfileRepository: Repository<UserProfile>,
-    @InjectRepository(UserBehaviorProfile)
-    private readonly behaviorProfileRepository: Repository<UserBehaviorProfile>,
-    @InjectRepository(UserInferredProfile)
-    private readonly inferredProfileRepository: Repository<UserInferredProfile>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   // ==================== 用户增长趋势 ====================
 
@@ -42,30 +29,36 @@ export class UserProfileDashboardService {
     }
 
     // 注册趋势（按时间粒度分组）
-    const trend = await this.appUserRepository
-      .createQueryBuilder('u')
-      .select(`date_trunc('${dateTrunc}', u.created_at)::date`, 'date')
-      .addSelect('COUNT(*)::int', 'count')
-      .addSelect(
-        `SUM(COUNT(*)) OVER (ORDER BY date_trunc('${dateTrunc}', u.created_at))::int`,
-        'cumulative',
-      )
-      .where(`u.created_at >= NOW() - INTERVAL '${days} days'`)
-      .groupBy(`date_trunc('${dateTrunc}', u.created_at)`)
-      .orderBy(`date_trunc('${dateTrunc}', u.created_at)`, 'ASC')
-      .getRawMany();
+    const trend = await this.prisma.$queryRaw<
+      Array<{ date: Date; count: number; cumulative: number }>
+    >(
+      Prisma.sql`
+        SELECT
+          date_trunc(${dateTrunc}, created_at)::date AS date,
+          COUNT(*)::int AS count,
+          SUM(COUNT(*)) OVER (ORDER BY date_trunc(${dateTrunc}, created_at))::int AS cumulative
+        FROM app_users
+        WHERE created_at >= NOW() - CAST(${days + ' days'} AS INTERVAL)
+        GROUP BY date_trunc(${dateTrunc}, created_at)
+        ORDER BY date_trunc(${dateTrunc}, created_at) ASC
+      `,
+    );
 
     // 按 authType 的注册趋势
-    const byAuthType = await this.appUserRepository
-      .createQueryBuilder('u')
-      .select(`date_trunc('${dateTrunc}', u.created_at)::date`, 'date')
-      .addSelect('u.auth_type', 'authType')
-      .addSelect('COUNT(*)::int', 'count')
-      .where(`u.created_at >= NOW() - INTERVAL '${days} days'`)
-      .groupBy(`date_trunc('${dateTrunc}', u.created_at)`)
-      .addGroupBy('u.auth_type')
-      .orderBy(`date_trunc('${dateTrunc}', u.created_at)`, 'ASC')
-      .getRawMany();
+    const byAuthType = await this.prisma.$queryRaw<
+      Array<{ date: Date; authType: string; count: number }>
+    >(
+      Prisma.sql`
+        SELECT
+          date_trunc(${dateTrunc}, created_at)::date AS date,
+          auth_type AS "authType",
+          COUNT(*)::int AS count
+        FROM app_users
+        WHERE created_at >= NOW() - CAST(${days + ' days'} AS INTERVAL)
+        GROUP BY date_trunc(${dateTrunc}, created_at), auth_type
+        ORDER BY date_trunc(${dateTrunc}, created_at) ASC
+      `,
+    );
 
     // 转换 byAuthType 为 per-date 格式
     const authTypeMap: Record<string, Record<string, number>> = {};
@@ -92,7 +85,7 @@ export class UserProfileDashboardService {
     });
 
     // 总计
-    const totalUsers = await this.appUserRepository.count();
+    const totalUsers = await this.prisma.app_users.count();
     const periodNewUsers = trend.reduce(
       (sum: number, row: any) => sum + Number(row.count),
       0,
@@ -113,112 +106,150 @@ export class UserProfileDashboardService {
     const days = query.days || 90;
 
     // 1. authType 分布
-    const authTypeDistribution = await this.appUserRepository
-      .createQueryBuilder('u')
-      .select('u.auth_type', 'authType')
-      .addSelect('COUNT(*)::int', 'count')
-      .where(`u.created_at >= NOW() - INTERVAL '${days} days'`)
-      .groupBy('u.auth_type')
-      .getRawMany();
+    const authTypeDistribution = await this.prisma.$queryRaw<
+      Array<{ authType: string; count: number }>
+    >(
+      Prisma.sql`
+        SELECT auth_type AS "authType", COUNT(*)::int AS count
+        FROM app_users
+        WHERE created_at >= NOW() - CAST(${days + ' days'} AS INTERVAL)
+        GROUP BY auth_type
+      `,
+    );
 
     // 2. 目标类型分布（来自 user_profiles）
-    const goalDistribution = await this.userProfileRepository
-      .createQueryBuilder('p')
-      .select('p.goal', 'goal')
-      .addSelect('COUNT(*)::int', 'count')
-      .where('p.goal IS NOT NULL')
-      .groupBy('p.goal')
-      .getRawMany();
+    const goalDistribution = await this.prisma.$queryRaw<
+      Array<{ goal: string; count: number }>
+    >(
+      Prisma.sql`
+        SELECT goal, COUNT(*)::int AS count
+        FROM user_profiles
+        WHERE goal IS NOT NULL
+        GROUP BY goal
+      `,
+    );
 
     // 3. 活动等级分布
-    const activityLevelDistribution = await this.userProfileRepository
-      .createQueryBuilder('p')
-      .select('p.activity_level', 'activityLevel')
-      .addSelect('COUNT(*)::int', 'count')
-      .where('p.activity_level IS NOT NULL')
-      .groupBy('p.activity_level')
-      .getRawMany();
+    const activityLevelDistribution = await this.prisma.$queryRaw<
+      Array<{ activityLevel: string; count: number }>
+    >(
+      Prisma.sql`
+        SELECT activity_level AS "activityLevel", COUNT(*)::int AS count
+        FROM user_profiles
+        WHERE activity_level IS NOT NULL
+        GROUP BY activity_level
+      `,
+    );
 
     // 4. 性别分布
-    const genderDistribution = await this.userProfileRepository
-      .createQueryBuilder('p')
-      .select('p.gender', 'gender')
-      .addSelect('COUNT(*)::int', 'count')
-      .where('p.gender IS NOT NULL')
-      .groupBy('p.gender')
-      .getRawMany();
+    const genderDistribution = await this.prisma.$queryRaw<
+      Array<{ gender: string; count: number }>
+    >(
+      Prisma.sql`
+        SELECT gender, COUNT(*)::int AS count
+        FROM user_profiles
+        WHERE gender IS NOT NULL
+        GROUP BY gender
+      `,
+    );
 
     // 5. onboarding 完成率
-    const totalProfiles = await this.userProfileRepository.count();
-    const completedOnboarding = await this.userProfileRepository.count({
-      where: { onboardingCompleted: true },
+    const totalProfiles = await this.prisma.user_profiles.count();
+    const completedOnboarding = await this.prisma.user_profiles.count({
+      where: { onboarding_completed: true },
     });
 
     // 6. 行为画像统计（依从率分布、平均连续天数）
-    const behaviorStats = await this.behaviorProfileRepository
-      .createQueryBuilder('bp')
-      .select('COUNT(*)::int', 'totalWithBehavior')
-      .addSelect('AVG(bp.avg_compliance_rate)', 'avgComplianceRate')
-      .addSelect('AVG(bp.streak_days)', 'avgStreakDays')
-      .addSelect('MAX(bp.longest_streak)', 'maxLongestStreak')
-      .addSelect('AVG(bp.total_records)', 'avgTotalRecords')
-      .getRawOne();
+    const behaviorStats = await this.prisma.$queryRaw<
+      Array<{
+        totalWithBehavior: number;
+        avgComplianceRate: number;
+        avgStreakDays: number;
+        maxLongestStreak: number;
+        avgTotalRecords: number;
+      }>
+    >(
+      Prisma.sql`
+        SELECT
+          COUNT(*)::int AS "totalWithBehavior",
+          AVG(avg_compliance_rate) AS "avgComplianceRate",
+          AVG(streak_days) AS "avgStreakDays",
+          MAX(longest_streak) AS "maxLongestStreak",
+          AVG(total_records) AS "avgTotalRecords"
+        FROM user_behavior_profiles
+      `,
+    );
+    const behaviorStatsRow = behaviorStats?.[0] || null;
 
     // 7. 推断画像统计（流失风险分布、BMR/TDEE 均值）
-    const inferredStats = await this.inferredProfileRepository
-      .createQueryBuilder('ip')
-      .select('COUNT(*)::int', 'totalWithInferred')
-      .addSelect('AVG(ip.estimated_bmr)', 'avgBMR')
-      .addSelect('AVG(ip.estimated_tdee)', 'avgTDEE')
-      .addSelect('AVG(ip.recommended_calories)', 'avgRecommendedCalories')
-      .addSelect('AVG(ip.churn_risk)', 'avgChurnRisk')
-      .getRawOne();
+    const inferredStats = await this.prisma.$queryRaw<
+      Array<{
+        totalWithInferred: number;
+        avgBMR: number;
+        avgTDEE: number;
+        avgRecommendedCalories: number;
+        avgChurnRisk: number;
+      }>
+    >(
+      Prisma.sql`
+        SELECT
+          COUNT(*)::int AS "totalWithInferred",
+          AVG(estimated_bmr) AS "avgBMR",
+          AVG(estimated_tdee) AS "avgTDEE",
+          AVG(recommended_calories) AS "avgRecommendedCalories",
+          AVG(churn_risk) AS "avgChurnRisk"
+        FROM user_inferred_profiles
+      `,
+    );
+    const inferredStatsRow = inferredStats?.[0] || null;
 
     // 8. 流失风险分段
-    const churnRiskSegments = await this.inferredProfileRepository
-      .createQueryBuilder('ip')
-      .select(
-        `CASE 
-          WHEN ip.churn_risk < 0.3 THEN 'low'
-          WHEN ip.churn_risk < 0.6 THEN 'medium'
-          ELSE 'high'
-        END`,
-        'segment',
-      )
-      .addSelect('COUNT(*)::int', 'count')
-      .where('ip.churn_risk IS NOT NULL')
-      .groupBy(
-        `CASE 
-          WHEN ip.churn_risk < 0.3 THEN 'low'
-          WHEN ip.churn_risk < 0.6 THEN 'medium'
-          ELSE 'high'
-        END`,
-      )
-      .getRawMany();
+    const churnRiskSegments = await this.prisma.$queryRaw<
+      Array<{ segment: string; count: number }>
+    >(
+      Prisma.sql`
+        SELECT
+          CASE
+            WHEN churn_risk < 0.3 THEN 'low'
+            WHEN churn_risk < 0.6 THEN 'medium'
+            ELSE 'high'
+          END AS segment,
+          COUNT(*)::int AS count
+        FROM user_inferred_profiles
+        WHERE churn_risk IS NOT NULL
+        GROUP BY
+          CASE
+            WHEN churn_risk < 0.3 THEN 'low'
+            WHEN churn_risk < 0.6 THEN 'medium'
+            ELSE 'high'
+          END
+      `,
+    );
 
     // 9. 依从率分段
-    const complianceSegments = await this.behaviorProfileRepository
-      .createQueryBuilder('bp')
-      .select(
-        `CASE 
-          WHEN bp.avg_compliance_rate >= 0.8 THEN 'excellent'
-          WHEN bp.avg_compliance_rate >= 0.6 THEN 'good'
-          WHEN bp.avg_compliance_rate >= 0.4 THEN 'fair'
-          ELSE 'poor'
-        END`,
-        'segment',
-      )
-      .addSelect('COUNT(*)::int', 'count')
-      .where('bp.avg_compliance_rate IS NOT NULL')
-      .groupBy(
-        `CASE 
-          WHEN bp.avg_compliance_rate >= 0.8 THEN 'excellent'
-          WHEN bp.avg_compliance_rate >= 0.6 THEN 'good'
-          WHEN bp.avg_compliance_rate >= 0.4 THEN 'fair'
-          ELSE 'poor'
-        END`,
-      )
-      .getRawMany();
+    const complianceSegments = await this.prisma.$queryRaw<
+      Array<{ segment: string; count: number }>
+    >(
+      Prisma.sql`
+        SELECT
+          CASE
+            WHEN avg_compliance_rate >= 0.8 THEN 'excellent'
+            WHEN avg_compliance_rate >= 0.6 THEN 'good'
+            WHEN avg_compliance_rate >= 0.4 THEN 'fair'
+            ELSE 'poor'
+          END AS segment,
+          COUNT(*)::int AS count
+        FROM user_behavior_profiles
+        WHERE avg_compliance_rate IS NOT NULL
+        GROUP BY
+          CASE
+            WHEN avg_compliance_rate >= 0.8 THEN 'excellent'
+            WHEN avg_compliance_rate >= 0.6 THEN 'good'
+            WHEN avg_compliance_rate >= 0.4 THEN 'fair'
+            ELSE 'poor'
+          END
+      `,
+    );
 
     return {
       days,
@@ -239,27 +270,27 @@ export class UserProfileDashboardService {
             : 0,
       },
       behaviorStats: {
-        totalWithBehavior: Number(behaviorStats?.totalWithBehavior || 0),
+        totalWithBehavior: Number(behaviorStatsRow?.totalWithBehavior || 0),
         avgComplianceRate: Number(
-          Number(behaviorStats?.avgComplianceRate || 0).toFixed(3),
+          Number(behaviorStatsRow?.avgComplianceRate || 0).toFixed(3),
         ),
         avgStreakDays: Number(
-          Number(behaviorStats?.avgStreakDays || 0).toFixed(1),
+          Number(behaviorStatsRow?.avgStreakDays || 0).toFixed(1),
         ),
-        maxLongestStreak: Number(behaviorStats?.maxLongestStreak || 0),
+        maxLongestStreak: Number(behaviorStatsRow?.maxLongestStreak || 0),
         avgTotalRecords: Number(
-          Number(behaviorStats?.avgTotalRecords || 0).toFixed(1),
+          Number(behaviorStatsRow?.avgTotalRecords || 0).toFixed(1),
         ),
       },
       inferredStats: {
-        totalWithInferred: Number(inferredStats?.totalWithInferred || 0),
-        avgBMR: Number(Number(inferredStats?.avgBMR || 0).toFixed(0)),
-        avgTDEE: Number(Number(inferredStats?.avgTDEE || 0).toFixed(0)),
+        totalWithInferred: Number(inferredStatsRow?.totalWithInferred || 0),
+        avgBMR: Number(Number(inferredStatsRow?.avgBMR || 0).toFixed(0)),
+        avgTDEE: Number(Number(inferredStatsRow?.avgTDEE || 0).toFixed(0)),
         avgRecommendedCalories: Number(
-          Number(inferredStats?.avgRecommendedCalories || 0).toFixed(0),
+          Number(inferredStatsRow?.avgRecommendedCalories || 0).toFixed(0),
         ),
         avgChurnRisk: Number(
-          Number(inferredStats?.avgChurnRisk || 0).toFixed(3),
+          Number(inferredStatsRow?.avgChurnRisk || 0).toFixed(3),
         ),
       },
     };
@@ -268,43 +299,46 @@ export class UserProfileDashboardService {
   // ==================== 活跃用户统计 ====================
 
   async getActiveStats(days: number = 30) {
-    // DAU（今日登录）
-    const dau = await this.appUserRepository
-      .createQueryBuilder('u')
-      .where(`u.last_login_at >= CURRENT_DATE`)
-      .getCount();
+    // DAU（今日登录）— use raw SQL for CURRENT_DATE
+    const dauResult = await this.prisma.$queryRaw<Array<{ count: number }>>(
+      Prisma.sql`SELECT COUNT(*)::int AS count FROM app_users WHERE last_login_at >= CURRENT_DATE`,
+    );
+    const dau = dauResult[0]?.count || 0;
 
     // WAU（7 日内登录）
-    const wau = await this.appUserRepository
-      .createQueryBuilder('u')
-      .where(`u.last_login_at >= NOW() - INTERVAL '7 days'`)
-      .getCount();
+    const wauResult = await this.prisma.$queryRaw<Array<{ count: number }>>(
+      Prisma.sql`SELECT COUNT(*)::int AS count FROM app_users WHERE last_login_at >= NOW() - INTERVAL '7 days'`,
+    );
+    const wau = wauResult[0]?.count || 0;
 
     // MAU（30 日内登录）
-    const mau = await this.appUserRepository
-      .createQueryBuilder('u')
-      .where(`u.last_login_at >= NOW() - INTERVAL '30 days'`)
-      .getCount();
+    const mauResult = await this.prisma.$queryRaw<Array<{ count: number }>>(
+      Prisma.sql`SELECT COUNT(*)::int AS count FROM app_users WHERE last_login_at >= NOW() - INTERVAL '30 days'`,
+    );
+    const mau = mauResult[0]?.count || 0;
 
     // 总用户 & 状态分布
-    const totalUsers = await this.appUserRepository.count();
-    const activeUsers = await this.appUserRepository.count({
-      where: { status: 'active' as any },
-    });
-    const bannedUsers = await this.appUserRepository.count({
-      where: { status: 'banned' as any },
-    });
+    const [totalUsers, activeUsers, bannedUsers] = await Promise.all([
+      this.prisma.app_users.count(),
+      this.prisma.app_users.count({ where: { status: 'active' as any } }),
+      this.prisma.app_users.count({ where: { status: 'banned' as any } }),
+    ]);
 
     // 日活趋势（过去 N 天，每天有多少用户登录）
-    const dailyActive = await this.appUserRepository
-      .createQueryBuilder('u')
-      .select(`date_trunc('day', u.last_login_at)::date`, 'date')
-      .addSelect('COUNT(*)::int', 'count')
-      .where(`u.last_login_at >= NOW() - INTERVAL '${days} days'`)
-      .andWhere('u.last_login_at IS NOT NULL')
-      .groupBy(`date_trunc('day', u.last_login_at)`)
-      .orderBy(`date_trunc('day', u.last_login_at)`, 'ASC')
-      .getRawMany();
+    const dailyActive = await this.prisma.$queryRaw<
+      Array<{ date: Date; count: number }>
+    >(
+      Prisma.sql`
+        SELECT
+          date_trunc('day', last_login_at)::date AS date,
+          COUNT(*)::int AS count
+        FROM app_users
+        WHERE last_login_at >= NOW() - CAST(${days + ' days'} AS INTERVAL)
+          AND last_login_at IS NOT NULL
+        GROUP BY date_trunc('day', last_login_at)
+        ORDER BY date_trunc('day', last_login_at) ASC
+      `,
+    );
 
     const dailyActiveTrend = dailyActive.map((row) => ({
       date:

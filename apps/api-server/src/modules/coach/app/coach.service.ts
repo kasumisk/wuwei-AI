@@ -6,10 +6,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { CoachConversation } from '../entities/coach-conversation.entity';
-import { CoachMessage } from '../entities/coach-message.entity';
+import { PrismaService } from '../../../core/prisma/prisma.service';
 import { FoodService } from '../../diet/app/food.service';
 import { UserProfileService } from '../../user/app/user-profile.service';
 import { BehaviorService } from '../../diet/app/behavior.service';
@@ -38,10 +35,7 @@ export class CoachService {
   private readonly chatModel: string;
 
   constructor(
-    @InjectRepository(CoachConversation)
-    private readonly convRepo: Repository<CoachConversation>,
-    @InjectRepository(CoachMessage)
-    private readonly msgRepo: Repository<CoachMessage>,
+    private readonly prisma: PrismaService,
     private readonly foodService: FoodService,
     private readonly userProfileService: UserProfileService,
     private readonly behaviorService: BehaviorService,
@@ -93,10 +87,10 @@ export class CoachService {
               : '现在是夜间，提醒用户注意宵夜热量';
 
     const bmi =
-      profile && profile.heightCm && profile.weightKg
+      profile && profile.height_cm && profile.weight_kg
         ? (
-            Number(profile.weightKg) /
-            (Number(profile.heightCm) / 100) ** 2
+            Number(profile.weight_kg) /
+            (Number(profile.height_cm) / 100) ** 2
           ).toFixed(1)
         : null;
 
@@ -122,9 +116,9 @@ export class CoachService {
 ${
   profile
     ? `- 性别：${profile.gender === 'male' ? '男' : '女'}
-- 年龄：${new Date().getFullYear() - (profile.birthYear || 1990)} 岁
-- BMI：${bmi}（身高 ${profile.heightCm}cm，体重 ${profile.weightKg}kg）
-- 活动等级：${profile.activityLevel}
+- 年龄：${new Date().getFullYear() - (profile.birth_year || 1990)} 岁
+- BMI：${bmi}（身高 ${profile.height_cm}cm，体重 ${profile.weight_kg}kg）
+- 活动等级：${profile.activity_level}
 - 每日热量目标：${todaySummary.calorieGoal || 2000} kcal`
     : '用户尚未填写健康档案，可引导他去填写以获得更精准建议。'
 }
@@ -164,29 +158,32 @@ ${behaviorContext ? behaviorContext + '\n' : ''}${PERSONA_PROMPTS[behaviorProfil
 
     // 新建会话
     if (!convId) {
-      const conv = this.convRepo.create({
-        userId,
-        title: message.substring(0, 100),
+      const saved = await this.prisma.coach_conversations.create({
+        data: {
+          user_id: userId,
+          title: message.substring(0, 100),
+        },
       });
-      const saved = await this.convRepo.save(conv);
       convId = saved.id;
     } else {
       // 验证对话归属
-      const conv = await this.convRepo.findOne({
-        where: { id: convId, userId },
+      const conv = await this.prisma.coach_conversations.findFirst({
+        where: { id: convId, user_id: userId },
       });
       if (!conv) {
         throw new NotFoundException('对话不存在');
       }
       // 更新时间戳
-      conv.updatedAt = new Date();
-      await this.convRepo.save(conv);
+      await this.prisma.coach_conversations.update({
+        where: { id: convId },
+        data: { updated_at: new Date() },
+      });
     }
 
     // 加载最近 10 条历史消息
-    const history = await this.msgRepo.find({
-      where: { conversationId: convId },
-      order: { createdAt: 'DESC' },
+    const history = await this.prisma.coach_messages.findMany({
+      where: { conversation_id: convId },
+      orderBy: { created_at: 'desc' },
       take: 10,
     });
     history.reverse();
@@ -246,43 +243,47 @@ ${behaviorContext ? behaviorContext + '\n' : ''}${PERSONA_PROMPTS[behaviorProfil
     tokensUsed?: number,
   ): Promise<void> {
     // 保存用户消息
-    await this.msgRepo.save(
-      this.msgRepo.create({
-        conversationId,
+    await this.prisma.coach_messages.create({
+      data: {
+        conversation_id: conversationId,
         role: 'user',
         content: userMessage,
-        tokensUsed: 0,
-      }),
-    );
+        tokens_used: 0,
+      },
+    });
 
     // 保存助手回复
-    await this.msgRepo.save(
-      this.msgRepo.create({
-        conversationId,
+    await this.prisma.coach_messages.create({
+      data: {
+        conversation_id: conversationId,
         role: 'assistant',
         content: assistantMessage,
-        tokensUsed: tokensUsed || 0,
-      }),
-    );
+        tokens_used: tokensUsed || 0,
+      },
+    });
 
     // 更新会话标题（如果还没有标题或是第一条消息）
-    const conv = await this.convRepo.findOne({
+    const conv = await this.prisma.coach_conversations.findFirst({
       where: { id: conversationId },
     });
     if (conv && (!conv.title || conv.title === userMessage.substring(0, 100))) {
-      conv.title = userMessage.substring(0, 100);
-      conv.updatedAt = new Date();
-      await this.convRepo.save(conv);
+      await this.prisma.coach_conversations.update({
+        where: { id: conversationId },
+        data: {
+          title: userMessage.substring(0, 100),
+          updated_at: new Date(),
+        },
+      });
     }
   }
 
   /**
    * 获取对话列表
    */
-  async getConversations(userId: string): Promise<CoachConversation[]> {
-    return this.convRepo.find({
-      where: { userId },
-      order: { updatedAt: 'DESC' },
+  async getConversations(userId: string): Promise<any[]> {
+    return this.prisma.coach_conversations.findMany({
+      where: { user_id: userId },
+      orderBy: { updated_at: 'desc' },
       take: 50,
     });
   }
@@ -295,21 +296,28 @@ ${behaviorContext ? behaviorContext + '\n' : ''}${PERSONA_PROMPTS[behaviorProfil
     userId: string,
     page: number = 1,
     limit: number = 50,
-  ): Promise<{ items: CoachMessage[]; total: number }> {
+  ): Promise<{ items: any[]; total: number }> {
     // 验证对话归属
-    const conv = await this.convRepo.findOne({
-      where: { id: conversationId, userId },
+    const conv = await this.prisma.coach_conversations.findFirst({
+      where: { id: conversationId, user_id: userId },
     });
     if (!conv) {
       throw new NotFoundException('对话不存在');
     }
 
-    const [items, total] = await this.msgRepo.findAndCount({
-      where: { conversationId },
-      order: { createdAt: 'ASC' },
-      skip: (page - 1) * limit,
-      take: limit,
-    });
+    const skip = (page - 1) * limit;
+
+    const [items, total] = await Promise.all([
+      this.prisma.coach_messages.findMany({
+        where: { conversation_id: conversationId },
+        orderBy: { created_at: 'asc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.coach_messages.count({
+        where: { conversation_id: conversationId },
+      }),
+    ]);
 
     return { items, total };
   }
@@ -321,13 +329,15 @@ ${behaviorContext ? behaviorContext + '\n' : ''}${PERSONA_PROMPTS[behaviorProfil
     conversationId: string,
     userId: string,
   ): Promise<void> {
-    const conv = await this.convRepo.findOne({
-      where: { id: conversationId, userId },
+    const conv = await this.prisma.coach_conversations.findFirst({
+      where: { id: conversationId, user_id: userId },
     });
     if (!conv) {
       throw new NotFoundException('对话不存在');
     }
-    await this.convRepo.remove(conv);
+    await this.prisma.coach_conversations.delete({
+      where: { id: conversationId },
+    });
   }
 
   /**

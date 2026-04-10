@@ -1,6 +1,4 @@
-import AppDataSource from '../core/database/data-source-dev';
-import { Provider } from '../modules/provider/entities/provider.entity';
-import { ModelConfig } from '../modules/provider/entities/model-config.entity';
+import { PrismaClient } from '@prisma/client';
 import {
   ProviderType,
   ProviderStatus,
@@ -9,14 +7,11 @@ import {
   CapabilityType,
 } from '@ai-platform/shared';
 
+const prisma = new PrismaClient();
+
 async function seed() {
   try {
-    // 初始化数据库连接
-    await AppDataSource.initialize();
     console.log('✅ Database connection established');
-
-    const providerRepository = AppDataSource.getRepository(Provider);
-    const modelRepository = AppDataSource.getRepository(ModelConfig);
 
     // ============ 第一步：插入 Providers ============
     console.log('\n📦 Seeding Providers...');
@@ -73,9 +68,9 @@ async function seed() {
       },
     ];
 
-    const savedProviders: Provider[] = [];
+    const savedProviders: Array<{ id: string; name: string }> = [];
     for (const providerData of providers) {
-      const existing = await providerRepository.findOne({
+      const existing = await prisma.providers.findFirst({
         where: { name: providerData.name },
       });
       if (existing) {
@@ -84,8 +79,7 @@ async function seed() {
         );
         savedProviders.push(existing);
       } else {
-        const provider = providerRepository.create(providerData);
-        const saved = await providerRepository.save(provider);
+        const saved = await prisma.providers.create({ data: providerData });
         savedProviders.push(saved);
         console.log(`  ✅ Created provider: ${providerData.name}`);
       }
@@ -267,11 +261,11 @@ async function seed() {
     ];
 
     for (const modelData of models) {
-      const existing = await modelRepository.findOne({
+      const existing = await prisma.model_configs.findFirst({
         where: {
           providerId: modelData.providerId,
           modelName: modelData.modelName,
-          capabilityType: modelData.capabilityType,
+          capabilityType: modelData.capabilityType as any,
         },
       });
 
@@ -280,8 +274,7 @@ async function seed() {
           `  ⏭️  Model "${modelData.modelName}" already exists, skipping`,
         );
       } else {
-        const model = modelRepository.create(modelData);
-        await modelRepository.save(model);
+        await prisma.model_configs.create({ data: modelData as any });
         console.log(`  ✅ Created model: ${modelData.displayName}`);
       }
     }
@@ -291,7 +284,7 @@ async function seed() {
     console.log(`  - Providers: ${savedProviders.length}`);
     console.log(`  - Models: ${models.length}`);
 
-    await AppDataSource.destroy();
+    await prisma.$disconnect();
   } catch (error) {
     console.error('❌ Seed failed:', error);
     process.exit(1);

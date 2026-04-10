@@ -4,14 +4,8 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import {
-  AppVersion,
-  UpdateType,
-  AppVersionStatus,
-} from '../entities/app-version.entity';
-import { AppVersionPackage } from '../entities/app-version-package.entity';
+import { PrismaService } from '../../../core/prisma/prisma.service';
+import { UpdateType, AppVersionStatus } from '../app-version.types';
 import {
   CreateAppVersionDto,
   UpdateAppVersionDto,
@@ -22,12 +16,7 @@ import {
 
 @Injectable()
 export class AppVersionService {
-  constructor(
-    @InjectRepository(AppVersion)
-    private readonly appVersionRepository: Repository<AppVersion>,
-    @InjectRepository(AppVersionPackage)
-    private readonly packageRepository: Repository<AppVersionPackage>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * 将语义化版本号转换为数值（用于比较）
@@ -51,35 +40,39 @@ export class AppVersionService {
       updateType,
     } = query;
 
-    const queryBuilder = this.appVersionRepository
-      .createQueryBuilder('version')
-      .leftJoinAndSelect('version.packages', 'packages');
+    const where: any = {};
 
     if (keyword) {
-      queryBuilder.andWhere(
-        '(version.version LIKE :keyword OR version.title LIKE :keyword)',
-        { keyword: `%${keyword}%` },
-      );
+      where.OR = [
+        { version: { contains: keyword, mode: 'insensitive' } },
+        { title: { contains: keyword, mode: 'insensitive' } },
+      ];
     }
 
     if (platform) {
-      queryBuilder.andWhere('version.platform = :platform', { platform });
+      where.platform = platform;
     }
 
     if (status) {
-      queryBuilder.andWhere('version.status = :status', { status });
+      where.status = status;
     }
 
     if (updateType) {
-      queryBuilder.andWhere('version.updateType = :updateType', { updateType });
+      where.updateType = updateType;
     }
 
-    queryBuilder.orderBy('version.versionCode', 'DESC');
-
     const skip = (page - 1) * pageSize;
-    queryBuilder.skip(skip).take(pageSize);
 
-    const [list, total] = await queryBuilder.getManyAndCount();
+    const [list, total] = await Promise.all([
+      this.prisma.app_versions.findMany({
+        where,
+        include: { app_version_packages: true },
+        orderBy: { versionCode: 'desc' },
+        skip,
+        take: pageSize,
+      }),
+      this.prisma.app_versions.count({ where }),
+    ]);
 
     return { list, total, page, pageSize };
   }
@@ -88,9 +81,9 @@ export class AppVersionService {
    * 获取版本详情（含渠道包）
    */
   async findOne(id: string) {
-    const version = await this.appVersionRepository.findOne({
+    const version = await this.prisma.app_versions.findUnique({
       where: { id },
-      relations: ['packages'],
+      include: { app_version_packages: true },
     });
 
     if (!version) {
@@ -109,9 +102,9 @@ export class AppVersionService {
     if (createDto.platform) {
       where.platform = createDto.platform;
     } else {
-      where.platform = null as any;
+      where.platform = null;
     }
-    const existing = await this.appVersionRepository.findOne({ where });
+    const existing = await this.prisma.app_versions.findFirst({ where });
 
     if (existing) {
       const platLabel = createDto.platform || '全平台';
@@ -125,26 +118,28 @@ export class AppVersionService {
       ? this.parseVersionCode(createDto.minSupportVersion)
       : undefined;
 
-    const appVersion = this.appVersionRepository.create({
-      ...createDto,
-      versionCode,
-      minSupportVersionCode,
-      status: createDto.status || AppVersionStatus.DRAFT,
-      grayRelease: createDto.grayRelease || false,
-      grayPercent: createDto.grayPercent || 0,
-      releaseDate: createDto.releaseDate
-        ? new Date(createDto.releaseDate)
-        : undefined,
+    const appVersion = await this.prisma.app_versions.create({
+      data: {
+        ...createDto,
+        versionCode,
+        minSupportVersionCode,
+        status: createDto.status || AppVersionStatus.DRAFT,
+        grayRelease: createDto.grayRelease || false,
+        grayPercent: createDto.grayPercent || 0,
+        releaseDate: createDto.releaseDate
+          ? new Date(createDto.releaseDate)
+          : undefined,
+      },
     });
 
-    return await this.appVersionRepository.save(appVersion);
+    return appVersion;
   }
 
   /**
    * 更新版本
    */
   async update(id: string, updateDto: UpdateAppVersionDto) {
-    const version = await this.appVersionRepository.findOne({
+    const version = await this.prisma.app_versions.findUnique({
       where: { id },
     });
 
@@ -174,26 +169,28 @@ export class AppVersionService {
     }
 
     // 计算 minSupportVersionCode
+    const data: any = { ...updateDto };
     if (updateDto.minSupportVersion) {
-      (updateDto as any).minSupportVersionCode = this.parseVersionCode(
+      data.minSupportVersionCode = this.parseVersionCode(
         updateDto.minSupportVersion,
       );
     }
 
     if (updateDto.releaseDate) {
-      (updateDto as any).releaseDate = new Date(updateDto.releaseDate);
+      data.releaseDate = new Date(updateDto.releaseDate);
     }
 
-    Object.assign(version, updateDto);
-
-    return await this.appVersionRepository.save(version);
+    return await this.prisma.app_versions.update({
+      where: { id },
+      data,
+    });
   }
 
   /**
    * 删除版本
    */
   async remove(id: string) {
-    const version = await this.appVersionRepository.findOne({
+    const version = await this.prisma.app_versions.findUnique({
       where: { id },
     });
 
@@ -205,7 +202,7 @@ export class AppVersionService {
       throw new BadRequestException('已发布的版本不能直接删除，请先归档');
     }
 
-    await this.appVersionRepository.remove(version);
+    await this.prisma.app_versions.delete({ where: { id } });
 
     return { message: '版本删除成功' };
   }
@@ -214,7 +211,7 @@ export class AppVersionService {
    * 发布版本
    */
   async publish(id: string, publishDto?: PublishAppVersionDto) {
-    const version = await this.appVersionRepository.findOne({
+    const version = await this.prisma.app_versions.findUnique({
       where: { id },
     });
 
@@ -230,19 +227,22 @@ export class AppVersionService {
       throw new BadRequestException('已归档版本不能发布');
     }
 
-    version.status = AppVersionStatus.PUBLISHED;
-    version.releaseDate = publishDto?.releaseDate
-      ? new Date(publishDto.releaseDate)
-      : new Date();
-
-    return await this.appVersionRepository.save(version);
+    return await this.prisma.app_versions.update({
+      where: { id },
+      data: {
+        status: AppVersionStatus.PUBLISHED,
+        releaseDate: publishDto?.releaseDate
+          ? new Date(publishDto.releaseDate)
+          : new Date(),
+      },
+    });
   }
 
   /**
    * 归档版本
    */
   async archive(id: string) {
-    const version = await this.appVersionRepository.findOne({
+    const version = await this.prisma.app_versions.findUnique({
       where: { id },
     });
 
@@ -254,9 +254,10 @@ export class AppVersionService {
       throw new BadRequestException('版本已经归档');
     }
 
-    version.status = AppVersionStatus.ARCHIVED;
-
-    return await this.appVersionRepository.save(version);
+    return await this.prisma.app_versions.update({
+      where: { id },
+      data: { status: AppVersionStatus.ARCHIVED },
+    });
   }
 
   /**
@@ -274,22 +275,22 @@ export class AppVersionService {
     const currentVersionCode = this.parseVersionCode(current_version);
 
     // 查找最新的已发布版本（匹配平台或全平台通用），同时加载渠道包
-    const queryBuilder = this.appVersionRepository
-      .createQueryBuilder('version')
-      .leftJoinAndSelect('version.packages', 'pkg', 'pkg.enabled = true')
-      .where('version.status = :status', {
+    const latestVersion = await this.prisma.app_versions.findFirst({
+      where: {
         status: AppVersionStatus.PUBLISHED,
-      })
-      .orderBy('version.versionCode', 'DESC');
-
-    if (platform) {
-      queryBuilder.andWhere(
-        '(version.platform = :platform OR version.platform IS NULL)',
-        { platform },
-      );
-    }
-
-    const latestVersion = await queryBuilder.getOne();
+        ...(platform
+          ? {
+              OR: [{ platform }, { platform: null }],
+            }
+          : {}),
+      },
+      include: {
+        app_version_packages: {
+          where: { enabled: true },
+        },
+      },
+      orderBy: { versionCode: 'desc' },
+    });
 
     // 无最新版本或当前已是最新
     if (!latestVersion || latestVersion.versionCode <= currentVersionCode) {
@@ -298,8 +299,8 @@ export class AppVersionService {
 
     // 取匹配渠道的包，优先匹配指定渠道，否则取第一个可用包
     const pkg =
-      latestVersion.packages?.find((p) => p.channel === channel) ||
-      latestVersion.packages?.[0];
+      latestVersion.app_version_packages?.find((p) => p.channel === channel) ||
+      latestVersion.app_version_packages?.[0];
 
     // 灰度发布检查
     if (latestVersion.grayRelease && latestVersion.grayPercent < 100) {
@@ -307,36 +308,37 @@ export class AppVersionService {
         const hash = this.hashDeviceId(device_id);
         if (hash > latestVersion.grayPercent) {
           // 不在灰度范围，查找上一个全量发布版本
-          const fallbackBuilder = this.appVersionRepository
-            .createQueryBuilder('version')
-            .leftJoinAndSelect('version.packages', 'pkg', 'pkg.enabled = true')
-            .where('version.status = :status', {
+          const fallbackVersion = await this.prisma.app_versions.findFirst({
+            where: {
               status: AppVersionStatus.PUBLISHED,
-            })
-            .andWhere('version.versionCode > :currentCode', {
-              currentCode: currentVersionCode,
-            })
-            .andWhere(
-              '(version.grayRelease = false OR version.grayPercent = 100)',
-            )
-            .orderBy('version.versionCode', 'DESC');
-
-          if (platform) {
-            fallbackBuilder.andWhere(
-              '(version.platform = :platform OR version.platform IS NULL)',
-              { platform },
-            );
-          }
-
-          const fallbackVersion = await fallbackBuilder.getOne();
+              versionCode: { gt: currentVersionCode },
+              OR: [{ grayRelease: false }, { grayPercent: 100 }],
+              ...(platform
+                ? {
+                    AND: [
+                      {
+                        OR: [{ platform }, { platform: null }],
+                      },
+                    ],
+                  }
+                : {}),
+            },
+            include: {
+              app_version_packages: {
+                where: { enabled: true },
+              },
+            },
+            orderBy: { versionCode: 'desc' },
+          });
 
           if (!fallbackVersion) {
             return { need_update: false };
           }
 
           const fallbackPkg =
-            fallbackVersion.packages?.find((p) => p.channel === channel) ||
-            fallbackVersion.packages?.[0];
+            fallbackVersion.app_version_packages?.find(
+              (p) => p.channel === channel,
+            ) || fallbackVersion.app_version_packages?.[0];
           return this.buildUpdateResponse(
             fallbackVersion,
             fallbackPkg,
@@ -359,8 +361,8 @@ export class AppVersionService {
    * 构建更新响应
    */
   private buildUpdateResponse(
-    version: AppVersion,
-    pkg: AppVersionPackage | undefined,
+    version: any,
+    pkg: any | undefined,
     currentVersionCode: number,
     language?: string,
   ) {
@@ -373,8 +375,14 @@ export class AppVersionService {
     }
 
     let description = version.description;
-    if (language && version.i18nDescription?.[language]) {
-      description = version.i18nDescription[language];
+    if (
+      language &&
+      version.i18nDescription &&
+      (version.i18nDescription as Record<string, string>)[language]
+    ) {
+      description = (version.i18nDescription as Record<string, string>)[
+        language
+      ];
     }
 
     return {
@@ -405,27 +413,29 @@ export class AppVersionService {
    * 获取版本统计信息
    */
   async getStats() {
-    const total = await this.appVersionRepository.count();
-    const published = await this.appVersionRepository.count({
-      where: { status: AppVersionStatus.PUBLISHED },
-    });
-    const draft = await this.appVersionRepository.count({
-      where: { status: AppVersionStatus.DRAFT },
-    });
-
-    const platformStats = await this.appVersionRepository
-      .createQueryBuilder('version')
-      .select('version.platform', 'platform')
-      .addSelect('COUNT(*)', 'count')
-      .groupBy('version.platform')
-      .getRawMany();
+    const [total, published, draft, platformStats] = await Promise.all([
+      this.prisma.app_versions.count(),
+      this.prisma.app_versions.count({
+        where: { status: AppVersionStatus.PUBLISHED },
+      }),
+      this.prisma.app_versions.count({
+        where: { status: AppVersionStatus.DRAFT },
+      }),
+      this.prisma.app_versions.groupBy({
+        by: ['platform'],
+        _count: { _all: true },
+      }),
+    ]);
 
     return {
       total,
       published,
       draft,
       archived: total - published - draft,
-      platformStats,
+      platformStats: platformStats.map((s) => ({
+        platform: s.platform,
+        count: s._count._all,
+      })),
     };
   }
 }

@@ -10,6 +10,7 @@ import { useSubscription } from '@/features/subscription/hooks/use-subscription'
 import { LocalizedLink } from '@/components/common/localized-link';
 import { useLocalizedRouter } from '@/lib/hooks/use-localized-router';
 import { useToast } from '@/lib/hooks/use-toast';
+import { MEAL_LABELS } from '@/lib/constants/food';
 import type { AnalysisHistoryItem } from '@/types/food';
 
 type FilterType = 'all' | 'text' | 'image';
@@ -268,9 +269,7 @@ function HistoryItem({ item }: { item: AnalysisHistoryItem }) {
             </span>
             {item.mealType && (
               <span className="text-xs text-muted-foreground">
-                {{ breakfast: '早餐', lunch: '午餐', dinner: '晚餐', snack: '加餐' }[
-                  item.mealType
-                ] || item.mealType}
+                {MEAL_LABELS[item.mealType] || item.mealType}
               </span>
             )}
           </div>

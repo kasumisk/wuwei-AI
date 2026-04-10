@@ -13,17 +13,26 @@
  * - 也可通过域事件监听自动触发（Phase 1 暂不自动监听，留给 Phase 2 精细化）
  */
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import {
-  Notification,
-  NotificationType,
-} from '../entities/notification.entity';
-import { NotificationPreference } from '../entities/notification-preference.entity';
-import { DeviceToken, DevicePlatform } from '../entities/device-token.entity';
+import { PrismaService } from '../../../core/prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { QUEUE_NAMES } from '../../../core/queue/queue.constants';
+
+// ─── 类型定义 ───
+
+/** 通知类型枚举 */
+export type NotificationType =
+  | 'meal_reminder' // 餐次提醒
+  | 'streak_risk' // 连续性风险
+  | 'goal_progress' // 目标进展
+  | 'weekly_report' // 周报就绪
+  | 'coach_nudge' // 教练提醒
+  | 'precomputed_ready' // 推荐就绪
+  | 'system'; // 系统通知
+
+/** 设备平台 */
+export type DevicePlatform = 'ios' | 'android' | 'web';
 
 // ─── Job 数据结构 ───
 
@@ -54,17 +63,25 @@ export interface SendNotificationParams {
   push?: boolean;
 }
 
+// ─── 偏好类型 ───
+
+interface NotificationPreferenceData {
+  id?: string;
+  user_id: string;
+  push_enabled: boolean;
+  enabled_types: string[];
+  quiet_start: string | null;
+  quiet_end: string | null;
+  created_at?: Date;
+  updated_at?: Date;
+}
+
 @Injectable()
 export class NotificationService {
   private readonly logger = new Logger(NotificationService.name);
 
   constructor(
-    @InjectRepository(Notification)
-    private readonly notificationRepo: Repository<Notification>,
-    @InjectRepository(NotificationPreference)
-    private readonly preferenceRepo: Repository<NotificationPreference>,
-    @InjectRepository(DeviceToken)
-    private readonly deviceTokenRepo: Repository<DeviceToken>,
+    private readonly prisma: PrismaService,
     @InjectQueue(QUEUE_NAMES.NOTIFICATION)
     private readonly notificationQueue: Queue,
   ) {}
@@ -78,7 +95,7 @@ export class NotificationService {
    * 2. 创建站内信记录
    * 3. 如果 push=true 且用户开启推送，投递到队列异步推送
    */
-  async send(params: SendNotificationParams): Promise<Notification | null> {
+  async send(params: SendNotificationParams) {
     const { userId, type, title, body, data, push = true } = params;
 
     // 检查用户偏好
@@ -91,17 +108,18 @@ export class NotificationService {
     }
 
     // 创建站内信
-    const notification = this.notificationRepo.create({
-      userId,
-      type,
-      title,
-      body,
-      data: data || null,
+    const saved = await this.prisma.notification.create({
+      data: {
+        user_id: userId,
+        type,
+        title,
+        body,
+        data: (data ?? undefined) as Prisma.InputJsonValue | undefined,
+      },
     });
-    const saved = await this.notificationRepo.save(notification);
 
     // 投递推送任务
-    if (push && preference.pushEnabled) {
+    if (push && preference.push_enabled) {
       const jobData: NotificationJobData = {
         notificationId: saved.id,
         userId,
@@ -128,13 +146,18 @@ export class NotificationService {
     userId: string,
     page = 1,
     limit = 20,
-  ): Promise<{ items: Notification[]; total: number }> {
-    const [items, total] = await this.notificationRepo.findAndCount({
-      where: { userId },
-      order: { createdAt: 'DESC' },
-      skip: (page - 1) * limit,
-      take: limit,
-    });
+  ): Promise<{ items: any[]; total: number }> {
+    const [items, total] = await Promise.all([
+      this.prisma.notification.findMany({
+        where: { user_id: userId },
+        orderBy: { created_at: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.notification.count({
+        where: { user_id: userId },
+      }),
+    ]);
     return { items, total };
   }
 
@@ -142,8 +165,8 @@ export class NotificationService {
    * 查询未读通知数量
    */
   async getUnreadCount(userId: string): Promise<number> {
-    return this.notificationRepo.count({
-      where: { userId, isRead: false },
+    return this.prisma.notification.count({
+      where: { user_id: userId, is_read: false },
     });
   }
 
@@ -151,21 +174,21 @@ export class NotificationService {
    * 标记单条通知为已读
    */
   async markAsRead(userId: string, notificationId: string): Promise<void> {
-    await this.notificationRepo.update(
-      { id: notificationId, userId },
-      { isRead: true, readAt: new Date() },
-    );
+    await this.prisma.notification.updateMany({
+      where: { id: notificationId, user_id: userId },
+      data: { is_read: true, read_at: new Date() },
+    });
   }
 
   /**
    * 标记用户所有通知为已读
    */
   async markAllAsRead(userId: string): Promise<number> {
-    const result = await this.notificationRepo.update(
-      { userId, isRead: false },
-      { isRead: true, readAt: new Date() },
-    );
-    return result.affected || 0;
+    const result = await this.prisma.notification.updateMany({
+      where: { user_id: userId, is_read: false },
+      data: { is_read: true, read_at: new Date() },
+    });
+    return result.count;
   }
 
   // ─── 偏好管理 ───
@@ -173,18 +196,20 @@ export class NotificationService {
   /**
    * 获取用户通知偏好（不存在则返回默认值）
    */
-  async getPreference(userId: string): Promise<NotificationPreference> {
-    const pref = await this.preferenceRepo.findOne({ where: { userId } });
-    if (pref) return pref;
+  async getPreference(userId: string): Promise<NotificationPreferenceData> {
+    const pref = await this.prisma.notification_preference.findFirst({
+      where: { user_id: userId },
+    });
+    if (pref) return pref as unknown as NotificationPreferenceData;
 
     // 返回默认偏好（不持久化，用户主动修改时才存储）
-    const defaultPref = new NotificationPreference();
-    defaultPref.userId = userId;
-    defaultPref.pushEnabled = true;
-    defaultPref.enabledTypes = [];
-    defaultPref.quietStart = null;
-    defaultPref.quietEnd = null;
-    return defaultPref;
+    return {
+      user_id: userId,
+      push_enabled: true,
+      enabled_types: [],
+      quiet_start: null,
+      quiet_end: null,
+    };
   }
 
   /**
@@ -192,19 +217,24 @@ export class NotificationService {
    */
   async updatePreference(
     userId: string,
-    updates: Partial<
-      Pick<
-        NotificationPreference,
-        'pushEnabled' | 'enabledTypes' | 'quietStart' | 'quietEnd'
-      >
-    >,
-  ): Promise<NotificationPreference> {
-    let pref = await this.preferenceRepo.findOne({ where: { userId } });
-    if (!pref) {
-      pref = this.preferenceRepo.create({ userId });
-    }
-    Object.assign(pref, updates);
-    return this.preferenceRepo.save(pref);
+    updates: Partial<{
+      push_enabled: boolean;
+      enabled_types: string[];
+      quiet_start: string | null;
+      quiet_end: string | null;
+    }>,
+  ): Promise<NotificationPreferenceData> {
+    const result = await this.prisma.notification_preference.upsert({
+      where: { user_id: userId },
+      create: {
+        user_id: userId,
+        ...updates,
+      },
+      update: {
+        ...updates,
+      },
+    });
+    return result as unknown as NotificationPreferenceData;
   }
 
   // ─── 设备令牌管理 ───
@@ -219,42 +249,47 @@ export class NotificationService {
     token: string,
     deviceId: string,
     platform: DevicePlatform,
-  ): Promise<DeviceToken> {
-    let existing = await this.deviceTokenRepo.findOne({
-      where: { userId, deviceId },
+  ) {
+    const existing = await this.prisma.device_token.findFirst({
+      where: { user_id: userId, device_id: deviceId },
     });
     if (existing) {
-      existing.token = token;
-      existing.platform = platform;
-      existing.isActive = true;
-      return this.deviceTokenRepo.save(existing);
+      return this.prisma.device_token.update({
+        where: { id: existing.id },
+        data: {
+          token,
+          platform,
+          is_active: true,
+        },
+      });
     }
-    const newToken = this.deviceTokenRepo.create({
-      userId,
-      token,
-      deviceId,
-      platform,
-      isActive: true,
+    return this.prisma.device_token.create({
+      data: {
+        user_id: userId,
+        token,
+        device_id: deviceId,
+        platform,
+        is_active: true,
+      },
     });
-    return this.deviceTokenRepo.save(newToken);
   }
 
   /**
    * 注销设备令牌（登出时调用）
    */
   async deactivateDeviceToken(userId: string, deviceId: string): Promise<void> {
-    await this.deviceTokenRepo.update(
-      { userId, deviceId },
-      { isActive: false },
-    );
+    await this.prisma.device_token.updateMany({
+      where: { user_id: userId, device_id: deviceId },
+      data: { is_active: false },
+    });
   }
 
   /**
    * 获取用户所有活跃设备令牌
    */
-  async getActiveDeviceTokens(userId: string): Promise<DeviceToken[]> {
-    return this.deviceTokenRepo.find({
-      where: { userId, isActive: true },
+  async getActiveDeviceTokens(userId: string) {
+    return this.prisma.device_token.findMany({
+      where: { user_id: userId, is_active: true },
     });
   }
 
@@ -262,17 +297,20 @@ export class NotificationService {
    * 标记令牌为失效（FCM 返回 invalid token 时调用）
    */
   async invalidateToken(tokenValue: string): Promise<void> {
-    await this.deviceTokenRepo.update(
-      { token: tokenValue },
-      { isActive: false },
-    );
+    await this.prisma.device_token.updateMany({
+      where: { token: tokenValue },
+      data: { is_active: false },
+    });
   }
 
   /**
    * 标记通知为已推送（Processor 成功推送后调用）
    */
   async markAsPushed(notificationId: string): Promise<void> {
-    await this.notificationRepo.update(notificationId, { isPushed: true });
+    await this.prisma.notification.update({
+      where: { id: notificationId },
+      data: { is_pushed: true },
+    });
   }
 
   // ─── 便捷发送方法 ───
@@ -350,12 +388,12 @@ export class NotificationService {
    * enabledTypes 非空 → 仅允许列表中的类型
    */
   private isTypeAllowed(
-    preference: NotificationPreference,
+    preference: NotificationPreferenceData,
     type: NotificationType,
   ): boolean {
-    if (!preference.enabledTypes || preference.enabledTypes.length === 0) {
+    if (!preference.enabled_types || preference.enabled_types.length === 0) {
       return true; // 空列表 = 全部接收
     }
-    return preference.enabledTypes.includes(type);
+    return preference.enabled_types.includes(type);
   }
 }

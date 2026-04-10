@@ -1,7 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { RecommendationFeedback } from '../../entities/recommendation-feedback.entity';
+import { PrismaService } from '../../../../core/prisma/prisma.service';
 import { RedisCacheService } from '../../../../core/redis/redis-cache.service';
 import { GoalType } from '../nutrition-score.service';
 import { SCORE_DIMENSIONS, SCORE_WEIGHTS } from './recommendation.types';
@@ -72,8 +70,7 @@ export class WeightLearnerService {
   private readonly logger = new Logger(WeightLearnerService.name);
 
   constructor(
-    @InjectRepository(RecommendationFeedback)
-    private readonly feedbackRepo: Repository<RecommendationFeedback>,
+    private readonly prisma: PrismaService,
     private readonly redis: RedisCacheService,
   ) {}
 
@@ -111,12 +108,18 @@ export class WeightLearnerService {
     since.setDate(since.getDate() - FEEDBACK_WINDOW_DAYS);
 
     // 获取近 N 天反馈
-    const feedbacks = await this.feedbackRepo
-      .createQueryBuilder('f')
-      .select(['f.action', 'f.goalType', 'f.mealType', 'f.foodId'])
-      .where('f.createdAt >= :since', { since })
-      .andWhere('f.goalType IS NOT NULL')
-      .getMany();
+    const feedbacks = await this.prisma.recommendation_feedbacks.findMany({
+      where: {
+        created_at: { gte: since },
+        goal_type: { not: null },
+      },
+      select: {
+        action: true,
+        goal_type: true,
+        meal_type: true,
+        food_id: true,
+      },
+    });
 
     if (feedbacks.length === 0) {
       this.logger.debug('No feedback data in window, skipping weight learning');
@@ -124,11 +127,12 @@ export class WeightLearnerService {
     }
 
     // 按 goalType 分组
-    const grouped = new Map<string, RecommendationFeedback[]>();
+    const grouped = new Map<string, typeof feedbacks>();
     for (const fb of feedbacks) {
-      const group = grouped.get(fb.goalType) || [];
+      const goalType = fb.goal_type!;
+      const group = grouped.get(goalType) || [];
       group.push(fb);
-      grouped.set(fb.goalType, group);
+      grouped.set(goalType, group);
     }
 
     const results: Record<string, { sampleCount: number; offsets: number[] }> =
@@ -178,7 +182,12 @@ export class WeightLearnerService {
    * 这是一个保守但稳定的策略。
    */
   private computeGradient(
-    feedbacks: RecommendationFeedback[],
+    feedbacks: Array<{
+      action: string;
+      goal_type: string | null;
+      meal_type: string;
+      food_id: string | null;
+    }>,
     baseline: number[],
   ): WeightOffset {
     const dimCount = SCORE_DIMENSIONS.length;

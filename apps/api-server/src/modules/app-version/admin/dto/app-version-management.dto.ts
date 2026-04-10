@@ -17,8 +17,8 @@ import {
   AppPlatform,
   UpdateType,
   AppVersionStatus,
-} from '../../entities/app-version.entity';
-import { AppChannel } from '../../entities/app-version-package.entity';
+  AppChannel,
+} from '../../app-version.types';
 
 // ==================== Query DTOs ====================
 

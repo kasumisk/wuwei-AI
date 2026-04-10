@@ -6,17 +6,13 @@ import {
   Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import nodeFetch from 'node-fetch';
-import {
-  AppUser,
-  AppUserAuthType,
-  AppUserStatus,
-} from '../../user/entities/app-user.entity';
+import { AppUserAuthType, AppUserStatus } from '../../user/user.types';
+import { app_users as AppUser } from '@prisma/client';
+import { PrismaService } from '../../../core/prisma/prisma.service';
 import { SmsService } from './sms.service';
 import { WechatAuthService } from './wechat-auth.service';
 import type { AppLoginResponseDto, AppUserResponseDto } from './dto/auth.dto';
@@ -30,8 +26,7 @@ export class AppAuthService {
     new Map();
 
   constructor(
-    @InjectRepository(AppUser)
-    private readonly appUserRepository: Repository<AppUser>,
+    private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly smsService: SmsService,
     private readonly wechatAuthService: WechatAuthService,
@@ -40,32 +35,34 @@ export class AppAuthService {
   // ==================== 匿名登录 ====================
 
   async anonymousLogin(deviceId: string): Promise<AppLoginResponseDto> {
-    let user = await this.appUserRepository.findOne({
-      where: { deviceId, authType: AppUserAuthType.ANONYMOUS },
+    let user = await this.prisma.app_users.findFirst({
+      where: { device_id: deviceId, auth_type: AppUserAuthType.ANONYMOUS },
     });
 
     let isNewUser = false;
 
     if (!user) {
-      user = this.appUserRepository.create({
-        authType: AppUserAuthType.ANONYMOUS,
-        deviceId,
-        nickname: `用户${crypto.randomBytes(3).toString('hex')}`,
-        status: AppUserStatus.ACTIVE,
+      user = await this.prisma.app_users.create({
+        data: {
+          auth_type: AppUserAuthType.ANONYMOUS,
+          device_id: deviceId,
+          nickname: `用户${crypto.randomBytes(3).toString('hex')}`,
+          status: AppUserStatus.ACTIVE,
+        },
       });
-      user = await this.appUserRepository.save(user);
       isNewUser = true;
       this.logger.log(`匿名用户创建成功: ${user.id}, deviceId: ${deviceId}`);
     }
 
-    await this.appUserRepository.update(user.id, {
-      lastLoginAt: new Date(),
+    await this.prisma.app_users.update({
+      where: { id: user.id },
+      data: { last_login_at: new Date() },
     });
 
-    const token = this.generateToken(user);
+    const token = this.generateToken(user as any);
     return {
       token,
-      user: this.toUserResponse(user),
+      user: this.toUserResponse(user as any),
       isNewUser,
     };
   }
@@ -82,36 +79,39 @@ export class AppAuthService {
       throw new UnauthorizedException('验证码错误或已过期');
     }
 
-    let user = await this.appUserRepository.findOne({
+    let user = await this.prisma.app_users.findFirst({
       where: { phone },
     });
 
     let isNewUser = false;
 
     if (!user) {
-      user = this.appUserRepository.create({
-        authType: AppUserAuthType.PHONE,
-        phone,
-        phoneVerified: true,
-        nickname: `用户${phone.slice(-4)}`,
-        status: AppUserStatus.ACTIVE,
-        lastLoginAt: new Date(),
+      user = await this.prisma.app_users.create({
+        data: {
+          auth_type: AppUserAuthType.PHONE,
+          phone,
+          phone_verified: true,
+          nickname: `用户${phone.slice(-4)}`,
+          status: AppUserStatus.ACTIVE,
+          last_login_at: new Date(),
+        },
       });
-      user = await this.appUserRepository.save(user);
       isNewUser = true;
       this.logger.log(`手机号用户创建成功: ${user.id}, phone: ${phone}`);
     } else {
-      if (!user.phoneVerified) {
-        user.phoneVerified = true;
-      }
-      user.lastLoginAt = new Date();
-      user = await this.appUserRepository.save(user);
+      user = await this.prisma.app_users.update({
+        where: { id: user.id },
+        data: {
+          phone_verified: user.phone_verified ? undefined : true,
+          last_login_at: new Date(),
+        },
+      });
     }
 
-    const token = this.generateToken(user);
+    const token = this.generateToken(user as any);
     return {
       token,
-      user: this.toUserResponse(user),
+      user: this.toUserResponse(user as any),
       isNewUser,
     };
   }
@@ -126,46 +126,50 @@ export class AppAuthService {
     const wechatUser = await this.wechatAuthService.loginWithCode(code);
 
     // 先通过 openid 查找用户
-    let user = await this.appUserRepository.findOne({
-      where: { wechatOpenId: wechatUser.openid },
+    let user = await this.prisma.app_users.findFirst({
+      where: { wechat_open_id: wechatUser.openid },
     });
 
     let isNewUser = false;
 
     if (!user) {
-      user = this.appUserRepository.create({
-        authType: AppUserAuthType.WECHAT,
-        wechatOpenId: wechatUser.openid,
-        wechatUnionId: wechatUser.unionid || undefined,
-        nickname: wechatUser.nickname || `微信用户`,
-        avatar: wechatUser.headimgurl || undefined,
-        status: AppUserStatus.ACTIVE,
-        lastLoginAt: new Date(),
+      user = await this.prisma.app_users.create({
+        data: {
+          auth_type: AppUserAuthType.WECHAT,
+          wechat_open_id: wechatUser.openid,
+          wechat_union_id: wechatUser.unionid || undefined,
+          nickname: wechatUser.nickname || `微信用户`,
+          avatar: wechatUser.headimgurl || undefined,
+          status: AppUserStatus.ACTIVE,
+          last_login_at: new Date(),
+        },
       });
-      user = await this.appUserRepository.save(user);
       isNewUser = true;
       this.logger.log(
         `微信用户创建成功: ${user.id}, openid: ${wechatUser.openid}`,
       );
     } else {
       // 更新用户信息（微信头像/昵称可能变更）
+      const updateData: Record<string, any> = { last_login_at: new Date() };
       if (wechatUser.nickname && wechatUser.nickname !== user.nickname) {
-        user.nickname = wechatUser.nickname;
+        updateData.nickname = wechatUser.nickname;
       }
       if (wechatUser.headimgurl && wechatUser.headimgurl !== user.avatar) {
-        user.avatar = wechatUser.headimgurl;
+        updateData.avatar = wechatUser.headimgurl;
       }
-      if (wechatUser.unionid && !user.wechatUnionId) {
-        user.wechatUnionId = wechatUser.unionid;
+      if (wechatUser.unionid && !user.wechat_union_id) {
+        updateData.wechat_union_id = wechatUser.unionid;
       }
-      user.lastLoginAt = new Date();
-      user = await this.appUserRepository.save(user);
+      user = await this.prisma.app_users.update({
+        where: { id: user.id },
+        data: updateData,
+      });
     }
 
-    const token = this.generateToken(user);
+    const token = this.generateToken(user as any);
     return {
       token,
-      user: this.toUserResponse(user),
+      user: this.toUserResponse(user as any),
       isNewUser,
     };
   }
@@ -176,49 +180,56 @@ export class AppAuthService {
     const session = await this.wechatAuthService.miniProgramLogin(code);
 
     // 1. 先通过小程序 openid 查找
-    let user = await this.appUserRepository.findOne({
-      where: { wechatMiniOpenId: session.openid },
+    let user = await this.prisma.app_users.findFirst({
+      where: { wechat_mini_open_id: session.openid },
     });
 
     // 2. 如果有 unionid，尝试通过 unionid 查找已有用户（跨端关联）
     if (!user && session.unionid) {
-      user = await this.appUserRepository.findOne({
-        where: { wechatUnionId: session.unionid },
+      user = await this.prisma.app_users.findFirst({
+        where: { wechat_union_id: session.unionid },
       });
       if (user) {
         // 关联小程序 openid 到已有用户
-        user.wechatMiniOpenId = session.openid;
+        user = await this.prisma.app_users.update({
+          where: { id: user.id },
+          data: { wechat_mini_open_id: session.openid },
+        });
       }
     }
 
     let isNewUser = false;
 
     if (!user) {
-      user = this.appUserRepository.create({
-        authType: AppUserAuthType.WECHAT_MINI,
-        wechatMiniOpenId: session.openid,
-        wechatUnionId: session.unionid || undefined,
-        nickname: `微信用户`,
-        status: AppUserStatus.ACTIVE,
-        lastLoginAt: new Date(),
+      user = await this.prisma.app_users.create({
+        data: {
+          auth_type: AppUserAuthType.WECHAT_MINI,
+          wechat_mini_open_id: session.openid,
+          wechat_union_id: session.unionid || undefined,
+          nickname: `微信用户`,
+          status: AppUserStatus.ACTIVE,
+          last_login_at: new Date(),
+        },
       });
-      user = await this.appUserRepository.save(user);
       isNewUser = true;
       this.logger.log(
         `小程序用户创建成功: ${user.id}, openid: ${session.openid}`,
       );
     } else {
-      if (session.unionid && !user.wechatUnionId) {
-        user.wechatUnionId = session.unionid;
+      const updateData: Record<string, any> = { last_login_at: new Date() };
+      if (session.unionid && !user.wechat_union_id) {
+        updateData.wechat_union_id = session.unionid;
       }
-      user.lastLoginAt = new Date();
-      user = await this.appUserRepository.save(user);
+      user = await this.prisma.app_users.update({
+        where: { id: user.id },
+        data: updateData,
+      });
     }
 
-    const token = this.generateToken(user);
+    const token = this.generateToken(user as any);
     return {
       token,
-      user: this.toUserResponse(user),
+      user: this.toUserResponse(user as any),
       isNewUser,
     };
   }
@@ -239,55 +250,62 @@ export class AppAuthService {
   async googleLogin(idToken: string): Promise<AppLoginResponseDto> {
     const googleUserInfo = await this.verifyGoogleToken(idToken);
 
-    let user = await this.appUserRepository.findOne({
-      where: { googleId: googleUserInfo.sub },
+    let user = await this.prisma.app_users.findFirst({
+      where: { google_id: googleUserInfo.sub },
     });
 
     let isNewUser = false;
 
     if (!user) {
       if (googleUserInfo.email) {
-        const existingEmailUser = await this.appUserRepository.findOne({
+        const existingEmailUser = await this.prisma.app_users.findFirst({
           where: { email: googleUserInfo.email },
         });
         if (existingEmailUser) {
-          existingEmailUser.googleId = googleUserInfo.sub;
-          existingEmailUser.emailVerified = true;
+          const updateData: Record<string, any> = {
+            google_id: googleUserInfo.sub,
+            email_verified: true,
+          };
           if (!existingEmailUser.avatar && googleUserInfo.picture) {
-            existingEmailUser.avatar = googleUserInfo.picture;
+            updateData.avatar = googleUserInfo.picture;
           }
           if (!existingEmailUser.nickname && googleUserInfo.name) {
-            existingEmailUser.nickname = googleUserInfo.name;
+            updateData.nickname = googleUserInfo.name;
           }
-          user = await this.appUserRepository.save(existingEmailUser);
+          user = await this.prisma.app_users.update({
+            where: { id: existingEmailUser.id },
+            data: updateData,
+          });
           this.logger.log(`Google 账号绑定到已有邮箱用户: ${user.id}`);
         }
       }
 
       if (!user) {
-        user = this.appUserRepository.create({
-          authType: AppUserAuthType.GOOGLE,
-          googleId: googleUserInfo.sub,
-          email: googleUserInfo.email,
-          nickname: googleUserInfo.name || `Google用户`,
-          avatar: googleUserInfo.picture,
-          emailVerified: !!googleUserInfo.email_verified,
-          status: AppUserStatus.ACTIVE,
+        user = await this.prisma.app_users.create({
+          data: {
+            auth_type: AppUserAuthType.GOOGLE,
+            google_id: googleUserInfo.sub,
+            email: googleUserInfo.email,
+            nickname: googleUserInfo.name || `Google用户`,
+            avatar: googleUserInfo.picture,
+            email_verified: !!googleUserInfo.email_verified,
+            status: AppUserStatus.ACTIVE,
+          },
         });
-        user = await this.appUserRepository.save(user);
         isNewUser = true;
         this.logger.log(`Google 用户创建成功: ${user.id}`);
       }
     }
 
-    await this.appUserRepository.update(user.id, {
-      lastLoginAt: new Date(),
+    await this.prisma.app_users.update({
+      where: { id: user.id },
+      data: { last_login_at: new Date() },
     });
 
-    const token = this.generateToken(user);
+    const token = this.generateToken(user as any);
     return {
       token,
-      user: this.toUserResponse(user),
+      user: this.toUserResponse(user as any),
       isNewUser,
     };
   }
@@ -299,7 +317,7 @@ export class AppAuthService {
     password: string,
     nickname?: string,
   ): Promise<AppLoginResponseDto> {
-    const existing = await this.appUserRepository.findOne({
+    const existing = await this.prisma.app_users.findFirst({
       where: { email },
     });
 
@@ -309,22 +327,22 @@ export class AppAuthService {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const user = this.appUserRepository.create({
-      authType: AppUserAuthType.EMAIL,
-      email,
-      password: hashedPassword,
-      nickname: nickname || `用户${crypto.randomBytes(3).toString('hex')}`,
-      emailVerified: false,
-      status: AppUserStatus.ACTIVE,
+    const savedUser = await this.prisma.app_users.create({
+      data: {
+        auth_type: AppUserAuthType.EMAIL,
+        email,
+        password: hashedPassword,
+        nickname: nickname || `用户${crypto.randomBytes(3).toString('hex')}`,
+        email_verified: false,
+        status: AppUserStatus.ACTIVE,
+      },
     });
-
-    const savedUser = await this.appUserRepository.save(user);
     this.logger.log(`邮箱用户注册成功: ${savedUser.id}, email: ${email}`);
 
-    const token = this.generateToken(savedUser);
+    const token = this.generateToken(savedUser as any);
     return {
       token,
-      user: this.toUserResponse(savedUser),
+      user: this.toUserResponse(savedUser as any),
       isNewUser: true,
     };
   }
@@ -333,11 +351,9 @@ export class AppAuthService {
     email: string,
     password: string,
   ): Promise<AppLoginResponseDto> {
-    const user = await this.appUserRepository
-      .createQueryBuilder('user')
-      .addSelect('user.password')
-      .where('user.email = :email', { email })
-      .getOne();
+    const user = await this.prisma.app_users.findFirst({
+      where: { email },
+    });
 
     if (!user) {
       throw new UnauthorizedException('邮箱或密码错误');
@@ -356,14 +372,15 @@ export class AppAuthService {
       throw new UnauthorizedException('账号已被禁用');
     }
 
-    await this.appUserRepository.update(user.id, {
-      lastLoginAt: new Date(),
+    await this.prisma.app_users.update({
+      where: { id: user.id },
+      data: { last_login_at: new Date() },
     });
 
-    const token = this.generateToken(user);
+    const token = this.generateToken(user as any);
     return {
       token,
-      user: this.toUserResponse(user),
+      user: this.toUserResponse(user as any),
       isNewUser: false,
     };
   }
@@ -376,37 +393,41 @@ export class AppAuthService {
       throw new UnauthorizedException('验证码错误或已过期');
     }
 
-    let user = await this.appUserRepository.findOne({
+    let user = await this.prisma.app_users.findFirst({
       where: { email },
     });
 
     let isNewUser = false;
 
     if (!user) {
-      user = this.appUserRepository.create({
-        authType: AppUserAuthType.EMAIL,
-        email,
-        nickname: `用户${crypto.randomBytes(3).toString('hex')}`,
-        emailVerified: true,
-        status: AppUserStatus.ACTIVE,
+      user = await this.prisma.app_users.create({
+        data: {
+          auth_type: AppUserAuthType.EMAIL,
+          email,
+          nickname: `用户${crypto.randomBytes(3).toString('hex')}`,
+          email_verified: true,
+          status: AppUserStatus.ACTIVE,
+        },
       });
-      user = await this.appUserRepository.save(user);
       isNewUser = true;
     } else {
-      if (!user.emailVerified) {
-        user.emailVerified = true;
-        await this.appUserRepository.save(user);
+      if (!user.email_verified) {
+        await this.prisma.app_users.update({
+          where: { id: user.id },
+          data: { email_verified: true },
+        });
       }
     }
 
-    await this.appUserRepository.update(user.id, {
-      lastLoginAt: new Date(),
+    await this.prisma.app_users.update({
+      where: { id: user.id },
+      data: { last_login_at: new Date() },
     });
 
-    const token = this.generateToken(user);
+    const token = this.generateToken(user as any);
     return {
       token,
-      user: this.toUserResponse(user),
+      user: this.toUserResponse(user as any),
       isNewUser,
     };
   }
@@ -440,18 +461,19 @@ export class AppAuthService {
       throw new BadRequestException('验证码错误或已过期');
     }
 
-    const user = await this.appUserRepository
-      .createQueryBuilder('user')
-      .addSelect('user.password')
-      .where('user.email = :email', { email })
-      .getOne();
+    const user = await this.prisma.app_users.findFirst({
+      where: { email },
+    });
 
     if (!user) {
       throw new BadRequestException('用户不存在');
     }
 
-    user.password = await bcrypt.hash(newPassword, 10);
-    await this.appUserRepository.save(user);
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await this.prisma.app_users.update({
+      where: { id: user.id },
+      data: { password: hashedPassword },
+    });
 
     return { message: '密码重置成功' };
   }
@@ -459,7 +481,7 @@ export class AppAuthService {
   // ==================== 用户信息管理 ====================
 
   async getUserInfo(userId: string): Promise<AppUserResponseDto> {
-    const user = await this.appUserRepository.findOne({
+    const user = await this.prisma.app_users.findUnique({
       where: { id: userId },
     });
 
@@ -467,14 +489,14 @@ export class AppAuthService {
       throw new UnauthorizedException('用户不存在');
     }
 
-    return this.toUserResponse(user);
+    return this.toUserResponse(user as any);
   }
 
   async updateProfile(
     userId: string,
     data: { nickname?: string; avatar?: string },
   ): Promise<AppUserResponseDto> {
-    const user = await this.appUserRepository.findOne({
+    const user = await this.prisma.app_users.findUnique({
       where: { id: userId },
     });
 
@@ -482,11 +504,15 @@ export class AppAuthService {
       throw new BadRequestException('用户不存在');
     }
 
-    if (data.nickname !== undefined) user.nickname = data.nickname;
-    if (data.avatar !== undefined) user.avatar = data.avatar;
+    const updateData: Record<string, any> = {};
+    if (data.nickname !== undefined) updateData.nickname = data.nickname;
+    if (data.avatar !== undefined) updateData.avatar = data.avatar;
 
-    const updated = await this.appUserRepository.save(user);
-    return this.toUserResponse(updated);
+    const updated = await this.prisma.app_users.update({
+      where: { id: userId },
+      data: updateData,
+    });
+    return this.toUserResponse(updated as any);
   }
 
   async upgradeAnonymous(
@@ -494,7 +520,7 @@ export class AppAuthService {
     email: string,
     password: string,
   ): Promise<AppLoginResponseDto> {
-    const user = await this.appUserRepository.findOne({
+    const user = await this.prisma.app_users.findUnique({
       where: { id: userId },
     });
 
@@ -502,33 +528,37 @@ export class AppAuthService {
       throw new BadRequestException('用户不存在');
     }
 
-    if (user.authType !== AppUserAuthType.ANONYMOUS) {
+    if (user.auth_type !== AppUserAuthType.ANONYMOUS) {
       throw new BadRequestException('仅匿名用户可升级');
     }
 
-    const existing = await this.appUserRepository.findOne({
+    const existing = await this.prisma.app_users.findFirst({
       where: { email },
     });
     if (existing) {
       throw new ConflictException('该邮箱已被注册');
     }
 
-    user.authType = AppUserAuthType.EMAIL;
-    user.email = email;
-    user.password = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const updated = await this.prisma.app_users.update({
+      where: { id: userId },
+      data: {
+        auth_type: AppUserAuthType.EMAIL,
+        email,
+        password: hashedPassword,
+      },
+    });
 
-    const updated = await this.appUserRepository.save(user);
-
-    const token = this.generateToken(updated);
+    const token = this.generateToken(updated as any);
     return {
       token,
-      user: this.toUserResponse(updated),
+      user: this.toUserResponse(updated as any),
       isNewUser: false,
     };
   }
 
   async refreshToken(userId: string): Promise<{ token: string }> {
-    const user = await this.appUserRepository.findOne({
+    const user = await this.prisma.app_users.findUnique({
       where: { id: userId },
     });
 
@@ -540,20 +570,21 @@ export class AppAuthService {
       throw new UnauthorizedException('账号已被禁用');
     }
 
-    const token = this.generateToken(user);
+    const token = this.generateToken(user as any);
     return { token };
   }
 
   async findById(id: string): Promise<AppUser | null> {
-    return this.appUserRepository.findOne({ where: { id } });
+    const user = await this.prisma.app_users.findUnique({ where: { id } });
+    return user as AppUser | null;
   }
 
   // ==================== 私有方法 ====================
 
-  private generateToken(user: AppUser): string {
+  private generateToken(user: any): string {
     const payload = {
       sub: user.id,
-      authType: user.authType,
+      authType: user.authType ?? user.auth_type,
       type: 'app',
     };
 
@@ -666,20 +697,20 @@ export class AppAuthService {
     return true;
   }
 
-  private toUserResponse(user: AppUser): AppUserResponseDto {
+  private toUserResponse(user: any): AppUserResponseDto {
     return {
       id: user.id,
-      authType: user.authType,
+      authType: user.authType ?? user.auth_type,
       email: user.email,
       phone: user.phone,
       nickname: user.nickname,
       avatar: user.avatar,
       status: user.status,
-      emailVerified: user.emailVerified,
-      phoneVerified: user.phoneVerified,
-      lastLoginAt: user.lastLoginAt,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
+      emailVerified: user.emailVerified ?? user.email_verified,
+      phoneVerified: user.phoneVerified ?? user.phone_verified,
+      lastLoginAt: user.lastLoginAt ?? user.last_login_at,
+      createdAt: user.createdAt ?? user.created_at,
+      updatedAt: user.updatedAt ?? user.updated_at,
     };
   }
 }

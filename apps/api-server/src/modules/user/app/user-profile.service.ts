@@ -1,18 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { ActivityLevel, GoalType, GoalSpeed, Discipline } from '../user.types';
 import {
-  UserProfile,
-  ActivityLevel,
-  GoalType,
-  GoalSpeed,
-  Discipline,
-} from '../entities/user-profile.entity';
-import { UserInferredProfile } from '../entities/user-inferred-profile.entity';
-import { UserBehaviorProfile } from '../entities/user-behavior-profile.entity';
-import { ProfileSnapshot } from '../entities/profile-snapshot.entity';
-import { WeightHistory } from '../entities/weight-history.entity';
+  user_profiles as UserProfile,
+  user_inferred_profiles as UserInferredProfile,
+  user_behavior_profiles as UserBehaviorProfile,
+  profile_snapshots as ProfileSnapshot,
+} from '@prisma/client';
 import { ProfileCacheService } from './profile-cache.service';
 import {
   OnboardingStep1Dto,
@@ -26,6 +20,7 @@ import {
   DomainEvents,
   ProfileUpdatedEvent,
 } from '../../../core/events/domain-events';
+import { PrismaService } from '../../../core/prisma/prisma.service';
 
 /** 字段权重表 — 权重越高，对推荐质量影响越大 */
 const FIELD_WEIGHTS: Record<string, number> = {
@@ -67,16 +62,7 @@ export class UserProfileService {
   private readonly logger = new Logger(UserProfileService.name);
 
   constructor(
-    @InjectRepository(UserProfile)
-    private readonly profileRepo: Repository<UserProfile>,
-    @InjectRepository(UserInferredProfile)
-    private readonly inferredRepo: Repository<UserInferredProfile>,
-    @InjectRepository(UserBehaviorProfile)
-    private readonly behaviorRepo: Repository<UserBehaviorProfile>,
-    @InjectRepository(ProfileSnapshot)
-    private readonly snapshotRepo: Repository<ProfileSnapshot>,
-    @InjectRepository(WeightHistory)
-    private readonly weightHistoryRepo: Repository<WeightHistory>,
+    private readonly prisma: PrismaService,
     private readonly profileCacheService: ProfileCacheService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
@@ -85,16 +71,18 @@ export class UserProfileService {
    * 获取用户档案
    */
   async getProfile(userId: string): Promise<UserProfile | null> {
-    return this.profileRepo.findOne({ where: { userId } });
+    return this.prisma.user_profiles.findUnique({
+      where: { user_id: userId },
+    }) as any;
   }
 
   /**
    * 获取用户时区（IANA 格式），无档案时返回默认值 Asia/Shanghai
    */
   async getTimezone(userId: string): Promise<string> {
-    const profile = await this.profileRepo.findOne({
-      where: { userId },
-      select: ['timezone'],
+    const profile = await this.prisma.user_profiles.findUnique({
+      where: { user_id: userId },
+      select: { timezone: true },
     });
     return profile?.timezone || 'Asia/Shanghai';
   }
@@ -106,35 +94,55 @@ export class UserProfileService {
     userId: string,
     dto: SaveUserProfileDto,
   ): Promise<UserProfile> {
-    let profile = await this.profileRepo.findOne({ where: { userId } });
+    let profile = await this.prisma.user_profiles.findUnique({
+      where: { user_id: userId },
+    });
     const oldProfile = profile ? { ...profile } : null;
 
+    // Map DTO camelCase fields to snake_case DB fields
+    const mappedData = this.mapDtoToDbFields(dto);
+
     if (profile) {
-      Object.assign(profile, dto);
+      // Merge mapped data
+      profile = { ...profile, ...mappedData } as any;
     } else {
-      profile = this.profileRepo.create({ userId, ...dto });
+      profile = { user_id: userId, ...mappedData } as any;
     }
 
     // 如果未手动设置热量目标且有足够信息，自动计算
     if (
       !dto.dailyCalorieGoal &&
-      profile.gender &&
-      profile.birthYear &&
-      profile.heightCm &&
-      profile.weightKg
+      profile!.gender &&
+      profile!.birth_year &&
+      profile!.height_cm &&
+      profile!.weight_kg
     ) {
-      profile.dailyCalorieGoal = this.calculateDailyGoal(profile);
+      (profile as any).daily_calorie_goal = this.calculateDailyGoal(
+        profile as any,
+      );
     }
 
     // 更新完整度
-    profile.dataCompleteness = this.calculateCompleteness(profile);
+    (profile as any).data_completeness = this.calculateCompleteness(
+      profile as any,
+    );
 
-    const saved = await this.profileRepo.save(profile);
+    let saved: any;
+    if (oldProfile) {
+      saved = await this.prisma.user_profiles.update({
+        where: { user_id: userId },
+        data: this.extractWritableFields(profile) as any,
+      });
+    } else {
+      saved = await this.prisma.user_profiles.create({
+        data: this.extractWritableFields(profile) as any,
+      });
+    }
 
     // V5 3.1: 体重变化时记录历史
     if (
       dto.weightKg &&
-      (!oldProfile || Number(oldProfile.weightKg) !== Number(dto.weightKg))
+      (!oldProfile || Number(oldProfile.weight_kg) !== Number(dto.weightKg))
     ) {
       const source = oldProfile ? 'manual' : 'onboarding';
       await this.recordWeightHistory(
@@ -161,8 +169,9 @@ export class UserProfileService {
     const beforeVals: Record<string, unknown> = {};
     const afterVals: Record<string, unknown> = {};
     for (const k of dtoKeys) {
-      beforeVals[k] = oldProfile ? (oldProfile as any)[k] : null;
-      afterVals[k] = (saved as any)[k];
+      const dbKey = this.camelToSnake(k);
+      beforeVals[k] = oldProfile ? (oldProfile as any)[dbKey] : null;
+      afterVals[k] = (saved as any)[dbKey];
     }
     this.eventEmitter.emit(
       DomainEvents.PROFILE_UPDATED,
@@ -177,7 +186,7 @@ export class UserProfileService {
       ),
     );
 
-    return saved;
+    return saved as any;
   }
 
   // ==================== 分步引导流 ====================
@@ -199,34 +208,58 @@ export class UserProfileService {
     nextStep: number | null;
     completeness: number;
   }> {
-    let profile = await this.profileRepo.findOne({ where: { userId } });
+    let profile = await this.prisma.user_profiles.findUnique({
+      where: { user_id: userId },
+    });
+
+    const mappedData = this.mapDtoToDbFields(dto);
+
     if (!profile) {
-      profile = this.profileRepo.create({ userId });
+      profile = { user_id: userId, ...mappedData } as any;
+    } else {
+      profile = { ...profile, ...mappedData } as any;
     }
 
     // 合并步骤数据
-    Object.assign(profile, dto);
-    profile.onboardingStep = step;
+    (profile as any).onboarding_step = step;
 
     // Step 2 完成后即可计算 BMR
     if (
       step >= 2 &&
-      profile.gender &&
-      profile.birthYear &&
-      profile.heightCm &&
-      profile.weightKg &&
-      !profile.dailyCalorieGoal
+      profile!.gender &&
+      profile!.birth_year &&
+      profile!.height_cm &&
+      profile!.weight_kg &&
+      !profile!.daily_calorie_goal
     ) {
-      profile.dailyCalorieGoal = this.calculateDailyGoal(profile);
+      (profile as any).daily_calorie_goal = this.calculateDailyGoal(
+        profile as any,
+      );
     }
 
     // Step 4 完成 → 标记引导完成
     if (step >= 4) {
-      profile.onboardingCompleted = true;
+      (profile as any).onboarding_completed = true;
     }
 
-    profile.dataCompleteness = this.calculateCompleteness(profile);
-    const saved = await this.profileRepo.save(profile);
+    (profile as any).data_completeness = this.calculateCompleteness(
+      profile as any,
+    );
+
+    let saved: any;
+    const existing = await this.prisma.user_profiles.findUnique({
+      where: { user_id: userId },
+    });
+    if (existing) {
+      saved = await this.prisma.user_profiles.update({
+        where: { user_id: userId },
+        data: this.extractWritableFields(profile) as any,
+      });
+    } else {
+      saved = await this.prisma.user_profiles.create({
+        data: this.extractWritableFields(profile) as any,
+      });
+    }
 
     // V5 3.1: 引导步骤中填写体重时记录历史（Step 2 包含 weightKg）
     if ('weightKg' in dto && dto.weightKg) {
@@ -250,7 +283,8 @@ export class UserProfileService {
     const onboardingFields = Object.keys(dto);
     const onboardingAfter: Record<string, unknown> = {};
     for (const k of onboardingFields) {
-      onboardingAfter[k] = (saved as any)[k];
+      const dbKey = this.camelToSnake(k);
+      onboardingAfter[k] = (saved as any)[dbKey];
     }
     this.eventEmitter.emit(
       DomainEvents.PROFILE_UPDATED,
@@ -266,14 +300,14 @@ export class UserProfileService {
     );
 
     return {
-      profile: saved,
+      profile: saved as any,
       computed: {
-        bmr: computed?.estimatedBMR,
-        tdee: computed?.estimatedTDEE,
-        recommendedCalories: computed?.recommendedCalories,
+        bmr: computed?.estimated_bmr ?? undefined,
+        tdee: computed?.estimated_tdee ?? undefined,
+        recommendedCalories: computed?.recommended_calories ?? undefined,
       },
       nextStep: step < 4 ? step + 1 : null,
-      completeness: Number(saved.dataCompleteness),
+      completeness: Number(saved.data_completeness),
     };
   }
 
@@ -284,22 +318,39 @@ export class UserProfileService {
     userId: string,
     step: number,
   ): Promise<{ nextStep: number | null; completeness: number }> {
-    let profile = await this.profileRepo.findOne({ where: { userId } });
-    if (!profile) {
-      profile = this.profileRepo.create({ userId });
-    }
+    let profile = await this.prisma.user_profiles.findUnique({
+      where: { user_id: userId },
+    });
 
-    profile.onboardingStep = step;
+    const updateData: any = {
+      onboarding_step: step,
+    };
+
     if (step >= 4) {
-      profile.onboardingCompleted = true;
+      updateData.onboarding_completed = true;
     }
 
-    profile.dataCompleteness = this.calculateCompleteness(profile);
-    await this.profileRepo.save(profile);
+    if (profile) {
+      // Compute completeness with merged data
+      const merged = { ...profile, ...updateData };
+      updateData.data_completeness = this.calculateCompleteness(merged as any);
+      profile = await this.prisma.user_profiles.update({
+        where: { user_id: userId },
+        data: updateData,
+      });
+    } else {
+      updateData.user_id = userId;
+      updateData.data_completeness = this.calculateCompleteness(
+        updateData as any,
+      );
+      profile = await this.prisma.user_profiles.create({
+        data: updateData,
+      });
+    }
 
     return {
       nextStep: step < 4 ? step + 1 : null,
-      completeness: Number(profile.dataCompleteness),
+      completeness: Number(profile.data_completeness),
     };
   }
 
@@ -319,19 +370,23 @@ export class UserProfileService {
     };
   }> {
     const [declared, observed, inferred] = await Promise.all([
-      this.profileRepo.findOne({ where: { userId } }),
-      this.behaviorRepo.findOne({ where: { userId } }),
-      this.inferredRepo.findOne({ where: { userId } }),
+      this.prisma.user_profiles.findUnique({ where: { user_id: userId } }),
+      this.prisma.user_behavior_profiles.findUnique({
+        where: { user_id: userId },
+      }),
+      this.prisma.user_inferred_profiles.findUnique({
+        where: { user_id: userId },
+      }),
     ]);
 
     return {
-      declared,
-      observed,
-      inferred,
+      declared: declared as any,
+      observed: observed as any,
+      inferred: inferred as any,
       meta: {
-        completeness: Number(declared?.dataCompleteness ?? 0),
-        onboardingStep: declared?.onboardingStep ?? 0,
-        profileVersion: declared?.profileVersion ?? 1,
+        completeness: Number(declared?.data_completeness ?? 0),
+        onboardingStep: declared?.onboarding_step ?? 0,
+        profileVersion: declared?.profile_version ?? 1,
       },
     };
   }
@@ -343,38 +398,61 @@ export class UserProfileService {
     userId: string,
     dto: UpdateDeclaredProfileDto,
   ): Promise<UserProfile> {
-    let profile = await this.profileRepo.findOne({ where: { userId } });
+    let profile = await this.prisma.user_profiles.findUnique({
+      where: { user_id: userId },
+    });
+
+    const mappedData = this.mapDtoToDbFields(dto);
+
     if (!profile) {
-      profile = this.profileRepo.create({ userId });
+      profile = { user_id: userId } as any;
     }
 
     const oldProfile = { ...profile };
-    Object.assign(profile, dto);
+    const merged = { ...profile, ...mappedData };
 
     // 重算热量（如果体重/身高/目标等变化且用户未手动设定）
     if (
       (dto.weightKg || dto.heightCm || dto.goal || dto.activityLevel) &&
       !dto.dailyCalorieGoal &&
-      profile.gender &&
-      profile.birthYear &&
-      profile.heightCm &&
-      profile.weightKg
+      merged.gender &&
+      merged.birth_year &&
+      merged.height_cm &&
+      merged.weight_kg
     ) {
-      profile.dailyCalorieGoal = this.calculateDailyGoal(profile);
+      (merged as any).daily_calorie_goal = this.calculateDailyGoal(
+        merged as any,
+      );
     }
 
-    profile.dataCompleteness = this.calculateCompleteness(profile);
-    const saved = await this.profileRepo.save(profile);
+    (merged as any).data_completeness = this.calculateCompleteness(
+      merged as any,
+    );
+
+    let saved: any;
+    const existing = await this.prisma.user_profiles.findUnique({
+      where: { user_id: userId },
+    });
+    if (existing) {
+      saved = await this.prisma.user_profiles.update({
+        where: { user_id: userId },
+        data: this.extractWritableFields(merged) as any,
+      });
+    } else {
+      saved = await this.prisma.user_profiles.create({
+        data: this.extractWritableFields(merged) as any,
+      });
+    }
 
     // V5 3.1: 体重变化时记录历史
-    if (dto.weightKg && Number(oldProfile.weightKg) !== Number(dto.weightKg)) {
+    if (dto.weightKg && Number(oldProfile.weight_kg) !== Number(dto.weightKg)) {
       await this.recordWeightHistory(
         userId,
         Number(dto.weightKg),
         dto.bodyFatPercent != null
           ? Number(dto.bodyFatPercent)
-          : saved.bodyFatPercent != null
-            ? Number(saved.bodyFatPercent)
+          : saved.body_fat_percent != null
+            ? Number(saved.body_fat_percent)
             : null,
         'manual',
       );
@@ -387,17 +465,20 @@ export class UserProfileService {
     await this.syncInferredProfile(saved);
 
     // V6 Phase 1.2: 发布画像更新事件（含变更字段信息）
-    const changedFields = Object.keys(dto).filter(
-      (k) =>
-        JSON.stringify((oldProfile as any)[k]) !==
-        JSON.stringify((saved as any)[k]),
-    );
+    const changedFields = Object.keys(dto).filter((k) => {
+      const dbKey = this.camelToSnake(k);
+      return (
+        JSON.stringify((oldProfile as any)[dbKey]) !==
+        JSON.stringify((saved as any)[dbKey])
+      );
+    });
     // V6 2.17: 构建变更前后值
     const declaredBefore: Record<string, unknown> = {};
     const declaredAfter: Record<string, unknown> = {};
     for (const k of changedFields) {
-      declaredBefore[k] = (oldProfile as any)[k];
-      declaredAfter[k] = (saved as any)[k];
+      const dbKey = this.camelToSnake(k);
+      declaredBefore[k] = (oldProfile as any)[dbKey];
+      declaredAfter[k] = (saved as any)[dbKey];
     }
     this.eventEmitter.emit(
       DomainEvents.PROFILE_UPDATED,
@@ -412,7 +493,7 @@ export class UserProfileService {
       ),
     );
 
-    return saved;
+    return saved as any;
   }
 
   /**
@@ -427,7 +508,9 @@ export class UserProfileService {
     }>;
     currentCompleteness: number;
   }> {
-    const profile = await this.profileRepo.findOne({ where: { userId } });
+    const profile = await this.prisma.user_profiles.findUnique({
+      where: { user_id: userId },
+    });
     if (!profile) {
       return { suggestions: [], currentCompleteness: 0 };
     }
@@ -523,7 +606,7 @@ export class UserProfileService {
 
     return {
       suggestions,
-      currentCompleteness: Number(profile.dataCompleteness),
+      currentCompleteness: Number(profile.data_completeness),
     };
   }
 
@@ -532,7 +615,7 @@ export class UserProfileService {
    */
   async getDailyCalorieGoal(userId: string): Promise<number> {
     const profile = await this.getProfile(userId);
-    if (profile?.dailyCalorieGoal) return profile.dailyCalorieGoal;
+    if (profile?.daily_calorie_goal) return profile.daily_calorie_goal;
 
     // 无档案时返回默认值
     return 2000;
@@ -542,18 +625,22 @@ export class UserProfileService {
    * Harris-Benedict 公式计算每日热量目标
    * 根据 goal 和 goalSpeed 动态调整热量缺口/盈余
    */
-  calculateDailyGoal(profile: UserProfile): number {
+  /**
+   * Harris-Benedict 公式计算每日热量目标
+   * 根据 goal 和 goalSpeed 动态调整热量缺口/盈余
+   */
+  calculateDailyGoal(profile: any): number {
     const bmr = this.calculateBMR(profile);
     const tdee = this.calculateTDEE(
       bmr,
-      profile.activityLevel,
-      profile.exerciseProfile,
-      Number(profile.weightKg) || undefined,
+      profile.activity_level ?? profile.activityLevel,
+      profile.exercise_profile ?? profile.exerciseProfile,
+      Number(profile.weight_kg ?? profile.weightKg) || undefined,
     );
     return this.calculateRecommendedCalories(
       tdee,
       profile.goal,
-      profile.goalSpeed,
+      profile.goal_speed ?? profile.goalSpeed,
       profile.gender,
     );
   }
@@ -561,40 +648,52 @@ export class UserProfileService {
   /**
    * 构建用户档案上下文字符串，供 AI 使用
    */
-  buildUserContext(profile: UserProfile): string {
+  buildUserContext(profile: any): string {
     const lines: string[] = [];
-    if (profile.gender)
-      lines.push(`性别: ${profile.gender === 'male' ? '男' : '女'}`);
-    if (profile.birthYear)
-      lines.push(`年龄: ${new Date().getFullYear() - profile.birthYear}岁`);
-    if (profile.heightCm) lines.push(`身高: ${profile.heightCm}cm`);
-    if (profile.weightKg) lines.push(`体重: ${profile.weightKg}kg`);
-    if (profile.targetWeightKg)
-      lines.push(`目标体重: ${profile.targetWeightKg}kg`);
-    if (profile.bodyFatPercent)
-      lines.push(`体脂率: ${profile.bodyFatPercent}%`);
-    if (profile.goal) lines.push(`目标: ${profile.goal}`);
-    if (profile.goalSpeed) lines.push(`目标节奏: ${profile.goalSpeed}`);
-    if (profile.dailyCalorieGoal)
-      lines.push(`每日热量目标: ${profile.dailyCalorieGoal}kcal`);
-    if (profile.mealsPerDay) lines.push(`每日餐次: ${profile.mealsPerDay}`);
-    if (profile.takeoutFrequency)
-      lines.push(`外卖频率: ${profile.takeoutFrequency}`);
-    if (profile.canCook !== undefined)
-      lines.push(`会做饭: ${profile.canCook ? '是' : '否'}`);
-    if (profile.foodPreferences?.length)
-      lines.push(`饮食偏好: ${profile.foodPreferences.join(', ')}`);
-    if (profile.dietaryRestrictions?.length)
-      lines.push(`忌口: ${profile.dietaryRestrictions.join(', ')}`);
-    if (profile.allergens?.length)
-      lines.push(`⚠️过敏原: ${profile.allergens.join(', ')}`);
-    if (profile.healthConditions?.length)
-      lines.push(`健康状况: ${profile.healthConditions.join(', ')}`);
-    if (profile.weakTimeSlots?.length)
-      lines.push(`容易乱吃时段: ${profile.weakTimeSlots.join(', ')}`);
-    if (profile.bingeTriggers?.length)
-      lines.push(`暴食触发: ${profile.bingeTriggers.join(', ')}`);
-    if (profile.discipline) lines.push(`自律程度: ${profile.discipline}`);
+    const g = (camel: string, snake: string) =>
+      profile[snake] ?? profile[camel];
+    if (g('gender', 'gender'))
+      lines.push(`性别: ${g('gender', 'gender') === 'male' ? '男' : '女'}`);
+    if (g('birthYear', 'birth_year'))
+      lines.push(
+        `年龄: ${new Date().getFullYear() - g('birthYear', 'birth_year')}岁`,
+      );
+    if (g('heightCm', 'height_cm'))
+      lines.push(`身高: ${g('heightCm', 'height_cm')}cm`);
+    if (g('weightKg', 'weight_kg'))
+      lines.push(`体重: ${g('weightKg', 'weight_kg')}kg`);
+    if (g('targetWeightKg', 'target_weight_kg'))
+      lines.push(`目标体重: ${g('targetWeightKg', 'target_weight_kg')}kg`);
+    if (g('bodyFatPercent', 'body_fat_percent'))
+      lines.push(`体脂率: ${g('bodyFatPercent', 'body_fat_percent')}%`);
+    if (g('goal', 'goal')) lines.push(`目标: ${g('goal', 'goal')}`);
+    if (g('goalSpeed', 'goal_speed'))
+      lines.push(`目标节奏: ${g('goalSpeed', 'goal_speed')}`);
+    if (g('dailyCalorieGoal', 'daily_calorie_goal'))
+      lines.push(
+        `每日热量目标: ${g('dailyCalorieGoal', 'daily_calorie_goal')}kcal`,
+      );
+    if (g('mealsPerDay', 'meals_per_day'))
+      lines.push(`每日餐次: ${g('mealsPerDay', 'meals_per_day')}`);
+    if (g('takeoutFrequency', 'takeout_frequency'))
+      lines.push(`外卖频率: ${g('takeoutFrequency', 'takeout_frequency')}`);
+    const canCook = g('canCook', 'can_cook');
+    if (canCook !== undefined) lines.push(`会做饭: ${canCook ? '是' : '否'}`);
+    const foodPrefs = g('foodPreferences', 'food_preferences');
+    if (foodPrefs?.length) lines.push(`饮食偏好: ${foodPrefs.join(', ')}`);
+    const dietRestrictions = g('dietaryRestrictions', 'dietary_restrictions');
+    if (dietRestrictions?.length)
+      lines.push(`忌口: ${dietRestrictions.join(', ')}`);
+    const allergens = g('allergens', 'allergens');
+    if (allergens?.length) lines.push(`⚠️过敏原: ${allergens.join(', ')}`);
+    const healthConds = g('healthConditions', 'health_conditions');
+    if (healthConds?.length) lines.push(`健康状况: ${healthConds.join(', ')}`);
+    const weakSlots = g('weakTimeSlots', 'weak_time_slots');
+    if (weakSlots?.length) lines.push(`容易乱吃时段: ${weakSlots.join(', ')}`);
+    const triggers = g('bingeTriggers', 'binge_triggers');
+    if (triggers?.length) lines.push(`暴食触发: ${triggers.join(', ')}`);
+    if (g('discipline', 'discipline'))
+      lines.push(`自律程度: ${g('discipline', 'discipline')}`);
     return lines.join('\n');
   }
 
@@ -611,11 +710,13 @@ export class UserProfileService {
     source: 'manual' | 'device' | 'onboarding',
   ): Promise<void> {
     try {
-      await this.weightHistoryRepo.save({
-        userId,
-        weightKg,
-        bodyFatPercent: bodyFatPercent ?? null,
-        source,
+      await this.prisma.weight_history.create({
+        data: {
+          user_id: userId,
+          weight_kg: weightKg,
+          body_fat_percent: bodyFatPercent ?? null,
+          source,
+        },
       });
       this.logger.debug(
         `用户 ${userId} 体重历史已记录: ${weightKg}kg (${source})`,
@@ -631,12 +732,39 @@ export class UserProfileService {
   /**
    * 计算数据完整度（加权）
    */
-  calculateCompleteness(profile: UserProfile): number {
+  calculateCompleteness(profile: any): number {
     const totalWeight = Object.values(FIELD_WEIGHTS).reduce((a, b) => a + b, 0);
     let filledWeight = 0;
 
+    // Map camelCase field names to snake_case for Prisma records
+    const fieldMapping: Record<string, string> = {
+      gender: 'gender',
+      birthYear: 'birth_year',
+      heightCm: 'height_cm',
+      weightKg: 'weight_kg',
+      goal: 'goal',
+      activityLevel: 'activity_level',
+      targetWeightKg: 'target_weight_kg',
+      mealsPerDay: 'meals_per_day',
+      dietaryRestrictions: 'dietary_restrictions',
+      allergens: 'allergens',
+      foodPreferences: 'food_preferences',
+      takeoutFrequency: 'takeout_frequency',
+      discipline: 'discipline',
+      weakTimeSlots: 'weak_time_slots',
+      bingeTriggers: 'binge_triggers',
+      canCook: 'can_cook',
+      exerciseProfile: 'exercise_profile',
+      cookingSkillLevel: 'cooking_skill_level',
+      healthConditions: 'health_conditions',
+      budgetLevel: 'budget_level',
+      tasteIntensity: 'taste_intensity',
+    };
+
     for (const [field, weight] of Object.entries(FIELD_WEIGHTS)) {
-      const value = (profile as any)[field];
+      const snakeField = fieldMapping[field] || field;
+      // Support both camelCase and snake_case
+      const value = profile[snakeField] ?? profile[field];
       if (value === null || value === undefined) continue;
       if (Array.isArray(value) && value.length === 0) continue;
       if (
@@ -656,12 +784,23 @@ export class UserProfileService {
    */
   private async createSnapshotIfNeeded(
     userId: string,
-    oldProfile: Partial<UserProfile>,
-    newProfile: UserProfile,
+    oldProfile: any,
+    newProfile: any,
   ): Promise<void> {
+    // Map camelCase critical fields to snake_case
+    const criticalFieldMapping: Record<string, string> = {
+      goal: 'goal',
+      goalSpeed: 'goal_speed',
+      weightKg: 'weight_kg',
+      allergens: 'allergens',
+      dietaryRestrictions: 'dietary_restrictions',
+      healthConditions: 'health_conditions',
+    };
+
     const changed = CRITICAL_FIELDS.filter((f) => {
-      const oldVal = (oldProfile as any)[f];
-      const newVal = (newProfile as any)[f];
+      const dbField = criticalFieldMapping[f] || f;
+      const oldVal = oldProfile[dbField];
+      const newVal = newProfile[dbField];
       return JSON.stringify(oldVal) !== JSON.stringify(newVal);
     });
 
@@ -676,11 +815,13 @@ export class UserProfileService {
           ? 'restriction_change'
           : 'field_update';
 
-    await this.snapshotRepo.save({
-      userId,
-      snapshot: oldProfile,
-      triggerType,
-      changedFields: changed,
+    await this.prisma.profile_snapshots.create({
+      data: {
+        user_id: userId,
+        snapshot: oldProfile as any,
+        trigger_type: triggerType,
+        changed_fields: changed,
+      },
     });
 
     this.logger.log(
@@ -691,64 +832,80 @@ export class UserProfileService {
   /**
    * 同步更新推断数据（BMR/TDEE/macroTargets）
    */
-  private async syncInferredProfile(
-    profile: UserProfile,
-  ): Promise<UserInferredProfile | null> {
-    if (
-      !profile.gender ||
-      !profile.birthYear ||
-      !profile.heightCm ||
-      !profile.weightKg
-    ) {
+  private async syncInferredProfile(profile: any): Promise<any | null> {
+    const gender = profile.gender;
+    const birthYear = profile.birth_year ?? profile.birthYear;
+    const heightCm = profile.height_cm ?? profile.heightCm;
+    const weightKg = profile.weight_kg ?? profile.weightKg;
+    const userId = profile.user_id ?? profile.userId;
+
+    if (!gender || !birthYear || !heightCm || !weightKg) {
       return null;
     }
 
-    let inferred = await this.inferredRepo.findOne({
-      where: { userId: profile.userId },
+    const inferred = await this.prisma.user_inferred_profiles.findUnique({
+      where: { user_id: userId },
     });
-    if (!inferred) {
-      inferred = this.inferredRepo.create({ userId: profile.userId });
-    }
 
     const bmr = this.calculateBMR(profile);
+    const activityLevel = profile.activity_level ?? profile.activityLevel;
+    const exerciseProfile = profile.exercise_profile ?? profile.exerciseProfile;
+    const goal = profile.goal;
+    const goalSpeed = profile.goal_speed ?? profile.goalSpeed;
+    const bodyFatPercent = profile.body_fat_percent ?? profile.bodyFatPercent;
+
     const tdee = this.calculateTDEE(
       bmr,
-      profile.activityLevel,
-      profile.exerciseProfile,
-      Number(profile.weightKg) || undefined,
+      activityLevel,
+      exerciseProfile,
+      Number(weightKg) || undefined,
     );
     const recommendedCalories = this.calculateRecommendedCalories(
       tdee,
-      profile.goal,
-      profile.goalSpeed,
-      profile.gender,
+      goal,
+      goalSpeed,
+      gender,
     );
 
-    inferred.estimatedBMR = Math.round(bmr);
-    inferred.estimatedTDEE = Math.round(tdee);
-    inferred.recommendedCalories = recommendedCalories;
-    inferred.macroTargets = this.calculateMacroTargets(
-      recommendedCalories,
-      profile.goal,
-    );
-    inferred.lastComputedAt = new Date();
+    const macroTargets = this.calculateMacroTargets(recommendedCalories, goal);
 
     // 置信度 — exerciseProfile 可用时 TDEE 精度更高
     const hasExerciseDetail =
-      profile.exerciseProfile?.type &&
-      profile.exerciseProfile.type !== 'none' &&
-      profile.exerciseProfile.frequencyPerWeek &&
-      profile.exerciseProfile.avgDurationMinutes;
-    inferred.confidenceScores = {
-      ...inferred.confidenceScores,
+      exerciseProfile?.type &&
+      exerciseProfile.type !== 'none' &&
+      exerciseProfile.frequencyPerWeek &&
+      exerciseProfile.avgDurationMinutes;
+    const confidenceScores = {
+      ...((inferred?.confidence_scores as any) || {}),
       // V4: bodyFatPercent 现在直接影响 BMR 公式选择 (Katch-McArdle vs Harris-Benedict)
-      estimatedBMR: profile.bodyFatPercent ? 0.95 : 0.85,
+      estimatedBMR: bodyFatPercent ? 0.95 : 0.85,
       estimatedTDEE: hasExerciseDetail ? 0.9 : 0.8,
       recommendedCalories: hasExerciseDetail ? 0.88 : 0.8,
       macroTargets: 0.75,
     };
 
-    return this.inferredRepo.save(inferred);
+    const data = {
+      estimated_bmr: Math.round(bmr),
+      estimated_tdee: Math.round(tdee),
+      recommended_calories: recommendedCalories,
+      macro_targets: macroTargets as any,
+      last_computed_at: new Date(),
+      confidence_scores: confidenceScores as any,
+    };
+
+    if (inferred) {
+      return this.prisma.user_inferred_profiles.update({
+        where: { user_id: userId },
+        data,
+      });
+    } else {
+      return this.prisma.user_inferred_profiles.create({
+        data: {
+          user_id: userId,
+          ...data,
+        },
+      });
+    }
   }
 
   /**
@@ -760,22 +917,20 @@ export class UserProfileService {
    *
    * 回退: 无体脂数据时使用 Harris-Benedict 公式（原逻辑）
    */
-  private calculateBMR(profile: UserProfile): number {
-    const weight = Number(profile.weightKg) || 65;
+  private calculateBMR(profile: any): number {
+    const weight = Number(profile.weight_kg ?? profile.weightKg) || 65;
+    const bodyFatPercent = profile.body_fat_percent ?? profile.bodyFatPercent;
 
     // Katch-McArdle: 当体脂率可用且在合理范围 (3%~60%)
-    if (
-      profile.bodyFatPercent != null &&
-      profile.bodyFatPercent >= 3 &&
-      profile.bodyFatPercent <= 60
-    ) {
-      const leanMass = weight * (1 - profile.bodyFatPercent / 100);
+    if (bodyFatPercent != null && bodyFatPercent >= 3 && bodyFatPercent <= 60) {
+      const leanMass = weight * (1 - bodyFatPercent / 100);
       return 370 + 21.6 * leanMass;
     }
 
     // Harris-Benedict fallback
-    const age = new Date().getFullYear() - (profile.birthYear || 1990);
-    const height = Number(profile.heightCm) || 170;
+    const birthYear = profile.birth_year ?? profile.birthYear ?? 1990;
+    const age = new Date().getFullYear() - birthYear;
+    const height = Number(profile.height_cm ?? profile.heightCm) || 170;
 
     return profile.gender === 'male'
       ? 88.362 + 13.397 * weight + 4.799 * height - 5.677 * age
@@ -901,5 +1056,34 @@ export class UserProfileService {
       carbG: Math.round((calories * cRatio) / 4),
       fatG: Math.round((calories * fRatio) / 9),
     };
+  }
+
+  // ==================== Prisma 辅助方法 ====================
+
+  /** camelCase → snake_case */
+  private camelToSnake(str: string): string {
+    return str.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+  }
+
+  /** Map DTO (camelCase) fields to DB (snake_case) fields */
+  private mapDtoToDbFields(dto: Record<string, any>): Record<string, any> {
+    const mapped: Record<string, any> = {};
+    for (const [key, value] of Object.entries(dto)) {
+      if (value === undefined) continue;
+      mapped[this.camelToSnake(key)] = value;
+    }
+    return mapped;
+  }
+
+  /** Extract writable fields for Prisma create/update (excludes id) */
+  private extractWritableFields(profile: any): Record<string, any> {
+    const data: Record<string, any> = {};
+    const skipFields = ['id', 'created_at', 'updated_at'];
+    for (const [key, value] of Object.entries(profile)) {
+      if (skipFields.includes(key)) continue;
+      if (value === undefined) continue;
+      data[key] = value;
+    }
+    return data;
   }
 }

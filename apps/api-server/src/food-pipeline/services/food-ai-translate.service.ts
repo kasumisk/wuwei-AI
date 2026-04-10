@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';
-import { FoodLibrary } from '../../modules/food/entities/food-library.entity';
+import { FoodLibrary } from '../../modules/food/food.types';
 
 export interface TranslationResult {
   locale: string;

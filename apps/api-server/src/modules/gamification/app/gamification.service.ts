@@ -1,11 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Achievement } from '../entities/achievement.entity';
-import { UserAchievement } from '../entities/user-achievement.entity';
-import { Challenge } from '../entities/challenge.entity';
-import { UserChallenge } from '../entities/user-challenge.entity';
-import { UserBehaviorProfile } from '../../user/entities/user-behavior-profile.entity';
+import { PrismaService } from '../../../core/prisma/prisma.service';
 import { FoodService } from '../../diet/app/food.service';
 
 export interface StreakStatus {
@@ -19,16 +13,7 @@ export class GamificationService {
   private readonly logger = new Logger(GamificationService.name);
 
   constructor(
-    @InjectRepository(Achievement)
-    private readonly achievementRepo: Repository<Achievement>,
-    @InjectRepository(UserAchievement)
-    private readonly userAchievementRepo: Repository<UserAchievement>,
-    @InjectRepository(Challenge)
-    private readonly challengeRepo: Repository<Challenge>,
-    @InjectRepository(UserChallenge)
-    private readonly userChallengeRepo: Repository<UserChallenge>,
-    @InjectRepository(UserBehaviorProfile)
-    private readonly behaviorRepo: Repository<UserBehaviorProfile>,
+    private readonly prisma: PrismaService,
     private readonly foodService: FoodService,
   ) {}
 
@@ -36,12 +21,12 @@ export class GamificationService {
    * 获取所有成就 + 用户已解锁
    */
   async getAchievements(userId: string): Promise<{
-    all: Achievement[];
-    unlocked: UserAchievement[];
+    all: any[];
+    unlocked: any[];
   }> {
     const [all, unlocked] = await Promise.all([
-      this.achievementRepo.find(),
-      this.userAchievementRepo.find({ where: { userId } }),
+      this.prisma.achievements.findMany(),
+      this.prisma.user_achievements.findMany({ where: { user_id: userId } }),
     ]);
     return { all, unlocked };
   }
@@ -49,15 +34,19 @@ export class GamificationService {
   /**
    * 检查并解锁成就
    */
-  async checkAchievements(userId: string): Promise<UserAchievement[]> {
-    const profile = await this.behaviorRepo.findOne({ where: { userId } });
+  async checkAchievements(userId: string): Promise<any[]> {
+    const profile = await this.prisma.user_behavior_profiles.findFirst({
+      where: { user_id: userId },
+    });
     if (!profile) return [];
 
-    const all = await this.achievementRepo.find();
-    const unlocked = await this.userAchievementRepo.find({ where: { userId } });
-    const unlockedIds = new Set(unlocked.map((u) => u.achievementId));
+    const all = await this.prisma.achievements.findMany();
+    const unlocked = await this.prisma.user_achievements.findMany({
+      where: { user_id: userId },
+    });
+    const unlockedIds = new Set(unlocked.map((u) => u.achievement_id));
 
-    const newlyUnlocked: UserAchievement[] = [];
+    const newlyUnlocked: any[] = [];
 
     for (const achievement of all) {
       if (unlockedIds.has(achievement.id)) continue;
@@ -66,30 +55,32 @@ export class GamificationService {
 
       switch (achievement.category) {
         case 'streak':
-          qualified = profile.streakDays >= achievement.threshold;
+          qualified = profile.streak_days >= achievement.threshold;
           break;
         case 'record':
-          qualified = profile.totalRecords >= achievement.threshold;
+          qualified = profile.total_records >= achievement.threshold;
           break;
         case 'milestone':
           if (achievement.code === 'healthy_rate_80') {
             qualified =
-              profile.totalRecords >= 10 &&
-              Number(profile.avgComplianceRate) * 100 >= achievement.threshold;
+              profile.total_records >= 10 &&
+              Number(profile.avg_compliance_rate) * 100 >=
+                achievement.threshold;
           } else if (achievement.code === 'first_analyze') {
-            qualified = profile.totalRecords >= 1;
+            qualified = profile.total_records >= 1;
           } else if (achievement.code === 'first_plan') {
-            qualified = profile.totalRecords >= 1; // simplified check
+            qualified = profile.total_records >= 1; // simplified check
           }
           break;
       }
 
       if (qualified) {
-        const ua = this.userAchievementRepo.create({
-          userId,
-          achievementId: achievement.id,
+        const saved = await this.prisma.user_achievements.create({
+          data: {
+            user_id: userId,
+            achievement_id: achievement.id,
+          },
         });
-        const saved = await this.userAchievementRepo.save(ua);
         newlyUnlocked.push(saved);
         this.logger.log(`用户 ${userId} 解锁成就: ${achievement.name}`);
       }
@@ -102,12 +93,14 @@ export class GamificationService {
    * 获取挑战列表
    */
   async getChallenges(userId: string): Promise<{
-    available: Challenge[];
-    active: UserChallenge[];
+    available: any[];
+    active: any[];
   }> {
     const [available, active] = await Promise.all([
-      this.challengeRepo.find({ where: { isActive: true } }),
-      this.userChallengeRepo.find({ where: { userId, status: 'active' } }),
+      this.prisma.challenges.findMany({ where: { is_active: true } }),
+      this.prisma.user_challenges.findMany({
+        where: { user_id: userId, status: 'active' },
+      }),
     ]);
     return { available, active };
   }
@@ -115,37 +108,36 @@ export class GamificationService {
   /**
    * 参加挑战
    */
-  async joinChallenge(
-    userId: string,
-    challengeId: string,
-  ): Promise<UserChallenge> {
-    const challenge = await this.challengeRepo.findOne({
+  async joinChallenge(userId: string, challengeId: string): Promise<any> {
+    const challenge = await this.prisma.challenges.findUnique({
       where: { id: challengeId },
     });
     if (!challenge) throw new NotFoundException('挑战不存在');
 
     // 检查是否已参加
-    const existing = await this.userChallengeRepo.findOne({
-      where: { userId, challengeId, status: 'active' },
+    const existing = await this.prisma.user_challenges.findFirst({
+      where: { user_id: userId, challenge_id: challengeId, status: 'active' },
     });
     if (existing) return existing;
 
-    const userChallenge = this.userChallengeRepo.create({
-      userId,
-      challengeId,
-      maxProgress: challenge.durationDays,
-      currentProgress: 0,
-      status: 'active',
+    return this.prisma.user_challenges.create({
+      data: {
+        user_id: userId,
+        challenge_id: challengeId,
+        max_progress: challenge.duration_days,
+        current_progress: 0,
+        status: 'active',
+      },
     });
-
-    return this.userChallengeRepo.save(userChallenge);
   }
 
   /**
    * 获取连胜状态
    */
   async getStreakStatus(userId: string): Promise<StreakStatus> {
-    const profile = await this.behaviorRepo.findOne({ where: { userId } });
+    const profile = await this.prisma.user_behavior_profiles.findFirst({
+      where: { user_id: userId },
+    });
     const summary = await this.foodService.getTodaySummary(userId);
     const goal = summary.calorieGoal || 2000;
 
@@ -157,8 +149,8 @@ export class GamificationService {
     }
 
     return {
-      current: profile?.streakDays || 0,
-      longest: profile?.longestStreak || 0,
+      current: profile?.streak_days || 0,
+      longest: profile?.longest_streak || 0,
       todayStatus,
     };
   }
@@ -169,23 +161,36 @@ export class GamificationService {
   async updateStreak(userId: string): Promise<void> {
     const summary = await this.foodService.getTodaySummary(userId);
     const goal = summary.calorieGoal || 2000;
-    let profile = await this.behaviorRepo.findOne({ where: { userId } });
+    let profile = await this.prisma.user_behavior_profiles.findFirst({
+      where: { user_id: userId },
+    });
 
     if (!profile) {
-      profile = this.behaviorRepo.create({ userId });
+      profile = await this.prisma.user_behavior_profiles.create({
+        data: { user_id: userId },
+      });
     }
 
+    let streakDays = profile.streak_days;
+    let longestStreak = profile.longest_streak;
+
     if (summary.totalCalories > 0 && summary.totalCalories <= goal) {
-      profile.streakDays += 1;
-      if (profile.streakDays > profile.longestStreak) {
-        profile.longestStreak = profile.streakDays;
+      streakDays += 1;
+      if (streakDays > longestStreak) {
+        longestStreak = streakDays;
       }
     } else if (summary.totalCalories > goal) {
       // 失败不归零：扣一半（最少1天）
-      profile.streakDays = Math.max(0, Math.floor(profile.streakDays * 0.5));
+      streakDays = Math.max(0, Math.floor(streakDays * 0.5));
     }
 
-    await this.behaviorRepo.save(profile);
+    await this.prisma.user_behavior_profiles.update({
+      where: { id: profile.id },
+      data: {
+        streak_days: streakDays,
+        longest_streak: longestStreak,
+      },
+    });
 
     // 自动检查成就
     await this.checkAchievements(userId).catch((err) =>
@@ -197,18 +202,26 @@ export class GamificationService {
    * 更新挑战进度
    */
   async updateChallengeProgress(userId: string): Promise<void> {
-    const activeChallenges = await this.userChallengeRepo.find({
-      where: { userId, status: 'active' },
+    const activeChallenges = await this.prisma.user_challenges.findMany({
+      where: { user_id: userId, status: 'active' },
     });
 
     for (const uc of activeChallenges) {
-      uc.currentProgress += 1;
-      if (uc.currentProgress >= uc.maxProgress) {
-        uc.status = 'completed';
-        uc.completedAt = new Date();
-        this.logger.log(`用户 ${userId} 完成挑战 ${uc.challengeId}`);
+      const newProgress = uc.current_progress + 1;
+      const completed = newProgress >= uc.max_progress;
+
+      await this.prisma.user_challenges.update({
+        where: { id: uc.id },
+        data: {
+          current_progress: newProgress,
+          status: completed ? 'completed' : 'active',
+          completed_at: completed ? new Date() : undefined,
+        },
+      });
+
+      if (completed) {
+        this.logger.log(`用户 ${userId} 完成挑战 ${uc.challenge_id}`);
       }
-      await this.userChallengeRepo.save(uc);
     }
   }
 }

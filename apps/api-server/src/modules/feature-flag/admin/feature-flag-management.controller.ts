@@ -31,7 +31,7 @@ import { RolesGuard } from '../../rbac/admin/roles.guard';
 import { Roles } from '../../rbac/admin/roles.decorator';
 import { ApiResponse } from '../../../common/types/response.type';
 import { FeatureFlagService } from '../feature-flag.service';
-import { FeatureFlagType } from '../entities/feature-flag.entity';
+import { FeatureFlagType } from '../feature-flag.types';
 
 // ─── DTO ───
 

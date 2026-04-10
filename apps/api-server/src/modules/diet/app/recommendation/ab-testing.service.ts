@@ -1,12 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import {
-  ABExperiment,
-  ExperimentGroup,
-  ExperimentStatus,
-} from '../../entities/ab-experiment.entity';
-import { RecommendationFeedback } from '../../entities/recommendation-feedback.entity';
+import { PrismaService } from '../../../../core/prisma/prisma.service';
+import { ab_experiments as ABExperiment } from '@prisma/client';
+import { ExperimentGroup, ExperimentStatus } from '../../diet.types';
 import { GoalType } from '../nutrition-score.service';
 import { SCORE_WEIGHTS } from './recommendation.types';
 import {
@@ -110,12 +105,7 @@ export class ABTestingService {
   private cacheExpiry = 0;
   private readonly CACHE_TTL_MS = 60_000; // 60 seconds
 
-  constructor(
-    @InjectRepository(ABExperiment)
-    private readonly experimentRepo: Repository<ABExperiment>,
-    @InjectRepository(RecommendationFeedback)
-    private readonly feedbackRepo: Repository<RecommendationFeedback>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * 获取用户在指定目标类型下的实验分组
@@ -215,7 +205,7 @@ export class ABTestingService {
     userId: string,
     experiment: ABExperiment,
   ): ExperimentGroup | null {
-    const groups = experiment.groups;
+    const groups = experiment.groups as unknown as ExperimentGroup[];
     if (!groups || groups.length === 0) return null;
 
     // FNV-1a 哈希 → 0-1 之间的确定性值
@@ -255,16 +245,16 @@ export class ABTestingService {
     if (Date.now() < this.cacheExpiry) return;
 
     try {
-      const running = await this.experimentRepo.find({
+      const running = await this.prisma.ab_experiments.findMany({
         where: { status: ExperimentStatus.RUNNING },
       });
 
       const newCache = new Map<string, ABExperiment>();
       for (const exp of running) {
         // 检查时间窗口
-        if (exp.startDate && new Date(exp.startDate) > new Date()) continue;
-        if (exp.endDate && new Date(exp.endDate) < new Date()) continue;
-        newCache.set(exp.goalType, exp);
+        if (exp.start_date && new Date(exp.start_date) > new Date()) continue;
+        if (exp.end_date && new Date(exp.end_date) < new Date()) continue;
+        newCache.set(exp.goal_type, exp as unknown as ABExperiment);
       }
 
       this.experimentCache = newCache;
@@ -294,28 +284,20 @@ export class ABTestingService {
       skipped: string;
       avgScore: string;
       sampleSize: string;
-    }> = await this.feedbackRepo
-      .createQueryBuilder('f')
-      .select('f.group_id', 'groupId')
-      .addSelect('COUNT(*)::int', 'total')
-      .addSelect(
-        "SUM(CASE WHEN f.action = 'accepted' THEN 1 ELSE 0 END)::int",
-        'accepted',
-      )
-      .addSelect(
-        "SUM(CASE WHEN f.action = 'replaced' THEN 1 ELSE 0 END)::int",
-        'replaced',
-      )
-      .addSelect(
-        "SUM(CASE WHEN f.action = 'skipped' THEN 1 ELSE 0 END)::int",
-        'skipped',
-      )
-      .addSelect('AVG(f.recommendation_score)', 'avgScore')
-      .addSelect('COUNT(DISTINCT f.user_id)::int', 'sampleSize')
-      .where('f.experiment_id = :experimentId', { experimentId })
-      .andWhere('f.group_id IS NOT NULL')
-      .groupBy('f.group_id')
-      .getRawMany();
+    }> = await this.prisma.$queryRawUnsafe(
+      `SELECT f.group_id AS "groupId",
+              COUNT(*)::int AS "total",
+              SUM(CASE WHEN f.action = 'accepted' THEN 1 ELSE 0 END)::int AS "accepted",
+              SUM(CASE WHEN f.action = 'replaced' THEN 1 ELSE 0 END)::int AS "replaced",
+              SUM(CASE WHEN f.action = 'skipped' THEN 1 ELSE 0 END)::int AS "skipped",
+              AVG(f.recommendation_score) AS "avgScore",
+              COUNT(DISTINCT f.user_id)::int AS "sampleSize"
+       FROM recommendation_feedbacks f
+       WHERE f.experiment_id = $1
+         AND f.group_id IS NOT NULL
+       GROUP BY f.group_id`,
+      experimentId,
+    );
 
     return rows.map((r) => {
       const total = Number(r.total);
@@ -348,7 +330,7 @@ export class ABTestingService {
    */
   async analyzeExperiment(experimentId: string): Promise<ExperimentAnalysis> {
     // 1. 加载实验
-    const experiment = await this.experimentRepo.findOneOrFail({
+    const experiment = await this.prisma.ab_experiments.findUniqueOrThrow({
       where: { id: experimentId },
     });
 
@@ -660,7 +642,10 @@ export class ABTestingService {
    * 列出所有实验
    */
   async listExperiments(): Promise<ABExperiment[]> {
-    return this.experimentRepo.find({ order: { createdAt: 'DESC' } });
+    const results = await this.prisma.ab_experiments.findMany({
+      orderBy: { created_at: 'desc' },
+    });
+    return results as unknown as ABExperiment[];
   }
 
   /**
@@ -668,8 +653,9 @@ export class ABTestingService {
    */
   async createExperiment(data: Partial<ABExperiment>): Promise<ABExperiment> {
     // 验证分组 trafficRatio 之和 = 1.0
-    if (data.groups?.length) {
-      const totalRatio = data.groups.reduce((s, g) => s + g.trafficRatio, 0);
+    const groups = data.groups as unknown as ExperimentGroup[] | undefined;
+    if (groups?.length) {
+      const totalRatio = groups.reduce((s, g) => s + g.trafficRatio, 0);
       if (Math.abs(totalRatio - 1.0) > 0.01) {
         throw new Error(
           `Group traffic ratios must sum to 1.0, got ${totalRatio}`,
@@ -677,8 +663,17 @@ export class ABTestingService {
       }
     }
 
-    const experiment = this.experimentRepo.create(data);
-    return this.experimentRepo.save(experiment);
+    const result = await this.prisma.ab_experiments.create({
+      data: {
+        name: data.name!,
+        goal_type: data.goal_type ?? '*',
+        status: data.status ?? ExperimentStatus.DRAFT,
+        groups: (data.groups as any) ?? [],
+        start_date: data.start_date ?? null,
+        end_date: data.end_date ?? null,
+      },
+    });
+    return result as unknown as ABExperiment;
   }
 
   /**
@@ -688,33 +683,36 @@ export class ABTestingService {
     id: string,
     status: ExperimentStatus,
   ): Promise<ABExperiment> {
-    const experiment = await this.experimentRepo.findOneOrFail({
+    const experiment = await this.prisma.ab_experiments.findUniqueOrThrow({
       where: { id },
     });
 
     // 防止同一 goalType 多个 running 实验
     if (status === ExperimentStatus.RUNNING) {
-      const existing = await this.experimentRepo.findOne({
+      const existing = await this.prisma.ab_experiments.findFirst({
         where: {
-          goalType: experiment.goalType,
+          goal_type: experiment.goal_type,
           status: ExperimentStatus.RUNNING,
         },
       });
       if (existing && existing.id !== id) {
         throw new Error(
-          `Another experiment (${existing.name}) is already running for goalType=${experiment.goalType}`,
+          `Another experiment (${existing.name}) is already running for goalType=${experiment.goal_type}`,
         );
       }
     }
 
-    experiment.status = status;
-    if (status === ExperimentStatus.RUNNING && !experiment.startDate) {
-      experiment.startDate = new Date();
+    const updateData: Record<string, any> = { status };
+    if (status === ExperimentStatus.RUNNING && !experiment.start_date) {
+      updateData.start_date = new Date();
     }
 
-    const saved = await this.experimentRepo.save(experiment);
+    const saved = await this.prisma.ab_experiments.update({
+      where: { id },
+      data: updateData,
+    });
     // 立即失效缓存
     this.cacheExpiry = 0;
-    return saved;
+    return saved as unknown as ABExperiment;
   }
 }

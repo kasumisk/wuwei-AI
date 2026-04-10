@@ -1,10 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { FoodLibrary } from '../../modules/food/entities/food-library.entity';
-import { FoodTranslation } from '../../modules/food/entities/food-translation.entity';
-import { FoodSource } from '../../modules/food/entities/food-source.entity';
-import { FoodChangeLog } from '../../modules/food/entities/food-change-log.entity';
+import { Prisma } from '@prisma/client';
+import { PrismaService } from '../../core/prisma/prisma.service';
 import {
   UsdaFetcherService,
   NormalizedFoodData,
@@ -39,14 +35,7 @@ export class FoodPipelineOrchestratorService {
   private readonly logger = new Logger(FoodPipelineOrchestratorService.name);
 
   constructor(
-    @InjectRepository(FoodLibrary)
-    private readonly foodRepo: Repository<FoodLibrary>,
-    @InjectRepository(FoodTranslation)
-    private readonly translationRepo: Repository<FoodTranslation>,
-    @InjectRepository(FoodSource)
-    private readonly sourceRepo: Repository<FoodSource>,
-    @InjectRepository(FoodChangeLog)
-    private readonly changeLogRepo: Repository<FoodChangeLog>,
+    private readonly prisma: PrismaService,
     private readonly usdaFetcher: UsdaFetcherService,
     private readonly offService: OpenFoodFactsService,
     private readonly cleaner: FoodDataCleanerService,
@@ -107,7 +96,7 @@ export class FoodPipelineOrchestratorService {
 
   // ==================== 条形码查询导入 ====================
 
-  async importByBarcode(barcode: string): Promise<FoodLibrary | null> {
+  async importByBarcode(barcode: string) {
     const normalized = await this.offService.getByBarcode(barcode);
     if (!normalized) return null;
 
@@ -125,7 +114,7 @@ export class FoodPipelineOrchestratorService {
     await this.persistSingleFood(cleaned, result);
 
     if (result.created > 0 || result.updated > 0) {
-      return this.foodRepo.findOne({ where: { barcode } });
+      return this.prisma.foods.findFirst({ where: { barcode } });
     }
     return null;
   }
@@ -177,20 +166,25 @@ export class FoodPipelineOrchestratorService {
     labeled: number;
     failed: number;
   }> {
-    const qb = this.foodRepo.createQueryBuilder('f');
+    const where: Prisma.foodsWhereInput = {};
 
     if (options.category) {
-      qb.andWhere('f.category = :cat', { cat: options.category });
+      where.category = options.category;
     }
     if (options.unlabeled) {
-      qb.andWhere("(f.tags IS NULL OR f.tags = '[]'::jsonb)");
+      where.OR = [
+        { tags: { equals: Prisma.DbNull } },
+        { tags: { equals: [] } },
+      ];
     }
-    qb.take(options.limit || 100);
 
-    const foods = await qb.getMany();
+    const foods = await this.prisma.foods.findMany({
+      where,
+      take: options.limit || 100,
+    });
     this.logger.log(`AI labeling ${foods.length} foods`);
 
-    const labelResults = await this.aiLabel.labelBatch(foods);
+    const labelResults = await this.aiLabel.labelBatch(foods as any);
     let labeled = 0;
     let failed = 0;
 
@@ -199,30 +193,38 @@ export class FoodPipelineOrchestratorService {
       if (!food) continue;
 
       try {
-        const update: Partial<FoodLibrary> = {};
+        const update: Record<string, any> = {};
         if (!food.category && labelResult.category)
-          update.category = labelResult.category as any;
-        if (!food.subCategory) update.subCategory = labelResult.subCategory;
-        if (!food.foodGroup) update.foodGroup = labelResult.foodGroup;
-        if (!food.mainIngredient)
-          update.mainIngredient = labelResult.mainIngredient;
-        if (!food.processingLevel)
-          update.processingLevel = labelResult.processingLevel;
-        if (!food.mealTypes?.length) update.mealTypes = labelResult.mealTypes;
-        if (!food.allergens?.length) update.allergens = labelResult.allergens;
-        if (!food.compatibility || !Object.keys(food.compatibility).length) {
+          update.category = labelResult.category;
+        if (!food.sub_category) update.sub_category = labelResult.subCategory;
+        if (!food.food_group) update.food_group = labelResult.foodGroup;
+        if (!food.main_ingredient)
+          update.main_ingredient = labelResult.mainIngredient;
+        if (!food.processing_level)
+          update.processing_level = labelResult.processingLevel;
+        if (!(food.meal_types as any[])?.length)
+          update.meal_types = labelResult.mealTypes;
+        if (!(food.allergens as any[])?.length)
+          update.allergens = labelResult.allergens;
+        if (
+          !food.compatibility ||
+          !Object.keys(food.compatibility as object).length
+        ) {
           update.compatibility = labelResult.compatibility;
         }
 
         // 合并标签
-        const existingTags = food.tags || [];
+        const existingTags = (food.tags as any[]) || [];
         update.tags = [...new Set([...existingTags, ...labelResult.tags])];
 
         if (Object.keys(update).length > 0) {
-          await this.foodRepo.update(food.id, update);
+          await this.prisma.foods.update({
+            where: { id: food.id },
+            data: update,
+          });
           await this.logChange(
             food.id,
-            food.dataVersion,
+            food.data_version,
             'update',
             update,
             'ai_label',
@@ -236,14 +238,21 @@ export class FoodPipelineOrchestratorService {
 
     // 利用标注结果重新计算分数
     for (const food of foods) {
-      const updated = await this.foodRepo.findOne({ where: { id: food.id } });
+      const updated = await this.prisma.foods.findUnique({
+        where: { id: food.id },
+      });
       if (updated) {
-        const scores = this.ruleEngine.applyAllRules(updated);
-        await this.foodRepo.update(food.id, {
-          qualityScore: scores.qualityScore,
-          satietyScore: scores.satietyScore,
-          nutrientDensity: scores.nutrientDensity,
-          tags: [...new Set([...(updated.tags || []), ...scores.tags])],
+        const scores = this.ruleEngine.applyAllRules(updated as any);
+        await this.prisma.foods.update({
+          where: { id: food.id },
+          data: {
+            quality_score: scores.qualityScore,
+            satiety_score: scores.satietyScore,
+            nutrient_density: scores.nutrientDensity,
+            tags: [
+              ...new Set([...((updated.tags as any[]) || []), ...scores.tags]),
+            ],
+          },
         });
       }
     }
@@ -258,24 +267,26 @@ export class FoodPipelineOrchestratorService {
     limit?: number;
     untranslatedOnly?: boolean;
   }): Promise<{ translated: number; failed: number }> {
-    let qb = this.foodRepo.createQueryBuilder('f');
+    let where: Prisma.foodsWhereInput = {};
 
     if (options.untranslatedOnly) {
-      qb = qb
-        .leftJoin('f.translations', 't', 't.locale = :locale', {
-          locale: options.targetLocale,
-        })
-        .where('t.id IS NULL');
+      where = {
+        food_translations: {
+          none: { locale: options.targetLocale },
+        },
+      };
     }
-    qb.take(options.limit || 100);
 
-    const foods = await qb.getMany();
+    const foods = await this.prisma.foods.findMany({
+      where,
+      take: options.limit || 100,
+    });
     this.logger.log(
       `AI translating ${foods.length} foods to ${options.targetLocale}`,
     );
 
     const results = await this.aiTranslate.translateBatch(
-      foods,
+      foods as any,
       options.targetLocale,
     );
     let translated = 0;
@@ -289,17 +300,28 @@ export class FoodPipelineOrchestratorService {
       }
 
       try {
-        await this.translationRepo.upsert(
-          {
-            foodId: food.id,
+        await this.prisma.food_translations.upsert({
+          where: {
+            food_id_locale: {
+              food_id: food.id,
+              locale: result.locale,
+            },
+          },
+          create: {
+            food_id: food.id,
             locale: result.locale,
             name: result.name,
             aliases: result.aliases,
             description: result.description,
-            servingDesc: result.servingDesc,
+            serving_desc: result.servingDesc,
           },
-          ['foodId', 'locale'],
-        );
+          update: {
+            name: result.name,
+            aliases: result.aliases,
+            description: result.description,
+            serving_desc: result.servingDesc,
+          },
+        });
         translated++;
       } catch (e) {
         failed++;
@@ -314,23 +336,30 @@ export class FoodPipelineOrchestratorService {
   async batchApplyRules(
     options: { limit?: number; recalcAll?: boolean } = {},
   ): Promise<{ processed: number }> {
-    const qb = this.foodRepo.createQueryBuilder('f');
+    let where: Prisma.foodsWhereInput = {};
     if (!options.recalcAll) {
-      qb.where('f.qualityScore IS NULL OR f.satietyScore IS NULL');
+      where = {
+        OR: [{ quality_score: null }, { satiety_score: null }],
+      };
     }
-    qb.take(options.limit || 500);
 
-    const foods = await qb.getMany();
+    const foods = await this.prisma.foods.findMany({
+      where,
+      take: options.limit || 500,
+    });
     let processed = 0;
 
     for (const food of foods) {
-      const scores = this.ruleEngine.applyAllRules(food);
-      const existingTags = food.tags || [];
-      await this.foodRepo.update(food.id, {
-        qualityScore: scores.qualityScore,
-        satietyScore: scores.satietyScore,
-        nutrientDensity: scores.nutrientDensity,
-        tags: [...new Set([...existingTags, ...scores.tags])],
+      const scores = this.ruleEngine.applyAllRules(food as any);
+      const existingTags = (food.tags as any[]) || [];
+      await this.prisma.foods.update({
+        where: { id: food.id },
+        data: {
+          quality_score: scores.qualityScore,
+          satiety_score: scores.satietyScore,
+          nutrient_density: scores.nutrientDensity,
+          tags: [...new Set([...existingTags, ...scores.tags])],
+        },
       });
       processed++;
     }
@@ -359,7 +388,7 @@ export class FoodPipelineOrchestratorService {
         this.getSourcePriority(food.primarySource),
       );
       const combinedTags = [
-        ...(dup.existingFood.tags || []),
+        ...((dup.existingFood.tags as any[]) || []),
         ...(food.tags || []),
         ...directives.extraTags,
       ];
@@ -369,17 +398,23 @@ export class FoodPipelineOrchestratorService {
         tags: [...new Set(combinedTags)],
       });
 
-      await this.foodRepo.update(dup.existingFood.id, {
+      // Map camelCase mergedFields to snake_case for Prisma update
+      const prismaData = this.mapToSnakeCase({
         ...mergedFields,
-        dataVersion: dup.existingFood.dataVersion + 1,
+        dataVersion: dup.existingFood.data_version + 1,
         ...scores,
         tags: [
           ...new Set([
-            ...(mergedFields.tags || []),
+            ...((mergedFields as any).tags || []),
             ...combinedTags,
             ...(scores.tags || []),
           ]),
         ],
+      });
+
+      await this.prisma.foods.update({
+        where: { id: dup.existingFood.id },
+        data: prismaData,
       });
 
       await this.saveSource(dup.existingFood.id, food);
@@ -392,7 +427,7 @@ export class FoodPipelineOrchestratorService {
 
       await this.logChange(
         dup.existingFood.id,
-        dup.existingFood.dataVersion + 1,
+        dup.existingFood.data_version + 1,
         'update',
         mergedFields,
         directives.operator,
@@ -402,64 +437,74 @@ export class FoodPipelineOrchestratorService {
       // 新增
       const scores = this.ruleEngine.applyAllRules(food);
       const code = food.code || (await this.generateCode());
-      const tags = [...new Set([...(food.tags || []), ...directives.extraTags, ...scores.tags])];
+      const tags = [
+        ...new Set([
+          ...(food.tags || []),
+          ...directives.extraTags,
+          ...scores.tags,
+        ]),
+      ];
 
-      const newFood = this.foodRepo.create({
-        code,
-        name: food.name,
-        aliases: food.aliases,
-        category: (food.category || 'composite') as any,
-        subCategory: food.subCategory,
-        foodGroup: food.foodGroup,
-        status: directives.status as any,
-        calories: food.calories,
-        protein: food.protein,
-        fat: food.fat,
-        carbs: food.carbs,
-        fiber: food.fiber,
-        sugar: food.sugar,
-        saturatedFat: food.saturatedFat,
-        transFat: food.transFat,
-        cholesterol: food.cholesterol,
-        sodium: food.sodium,
-        potassium: food.potassium,
-        calcium: food.calcium,
-        iron: food.iron,
-        vitaminA: food.vitaminA,
-        vitaminC: food.vitaminC,
-        vitaminD: food.vitaminD,
-        vitaminE: food.vitaminE,
-        vitaminB12: food.vitaminB12,
-        folate: food.folate,
-        zinc: food.zinc,
-        magnesium: food.magnesium,
-        phosphorus: food.phosphorus,
-        glycemicIndex: food.glycemicIndex,
-        glycemicLoad: food.glycemicLoad,
-        isProcessed: food.isProcessed ?? false,
-        isFried: food.isFried ?? false,
-        processingLevel: food.processingLevel ?? 1,
-        allergens: food.allergens || [],
-        mealTypes: food.mealTypes || [],
-        mainIngredient: food.mainIngredient,
-        compatibility: food.compatibility || {},
-        standardServingG: food.standardServingG ?? 100,
-        standardServingDesc: food.standardServingDesc,
-        commonPortions: food.commonPortions || [],
-        searchWeight: food.searchWeight ?? directives.searchWeight,
-        barcode: food.barcode || food.rawPayload?.code || undefined,
-        primarySource: food.primarySource,
-        primarySourceId: food.primarySourceId,
-        confidence: food.confidence,
-        dataVersion: 1,
-        isVerified: directives.isVerified,
-        verifiedBy: directives.isVerified ? directives.verifiedBy : undefined,
-        verifiedAt: directives.isVerified ? new Date() : undefined,
-        ...scores,
-        tags,
+      const saved = await this.prisma.foods.create({
+        data: {
+          code,
+          name: food.name,
+          aliases: food.aliases,
+          category: (food.category || 'composite') as any,
+          sub_category: food.subCategory,
+          food_group: food.foodGroup,
+          status: directives.status as any,
+          calories: food.calories,
+          protein: food.protein,
+          fat: food.fat,
+          carbs: food.carbs,
+          fiber: food.fiber,
+          sugar: food.sugar,
+          saturated_fat: food.saturatedFat,
+          trans_fat: food.transFat,
+          cholesterol: food.cholesterol,
+          sodium: food.sodium,
+          potassium: food.potassium,
+          calcium: food.calcium,
+          iron: food.iron,
+          vitamin_a: food.vitaminA,
+          vitamin_c: food.vitaminC,
+          vitamin_d: food.vitaminD,
+          vitamin_e: food.vitaminE,
+          vitamin_b12: food.vitaminB12,
+          folate: food.folate,
+          zinc: food.zinc,
+          magnesium: food.magnesium,
+          phosphorus: food.phosphorus,
+          glycemic_index: food.glycemicIndex,
+          glycemic_load: food.glycemicLoad,
+          is_processed: food.isProcessed ?? false,
+          is_fried: food.isFried ?? false,
+          processing_level: food.processingLevel ?? 1,
+          allergens: food.allergens || [],
+          meal_types: food.mealTypes || [],
+          main_ingredient: food.mainIngredient,
+          compatibility: food.compatibility || {},
+          standard_serving_g: food.standardServingG ?? 100,
+          standard_serving_desc: food.standardServingDesc,
+          common_portions: food.commonPortions || [],
+          search_weight: food.searchWeight ?? directives.searchWeight,
+          barcode: food.barcode || food.rawPayload?.code || undefined,
+          primary_source: food.primarySource,
+          primary_source_id: food.primarySourceId,
+          confidence: food.confidence,
+          data_version: 1,
+          is_verified: directives.isVerified,
+          verified_by: directives.isVerified
+            ? directives.verifiedBy
+            : undefined,
+          verified_at: directives.isVerified ? new Date() : undefined,
+          quality_score: scores.qualityScore,
+          satiety_score: scores.satietyScore,
+          nutrient_density: scores.nutrientDensity,
+          tags,
+        },
       });
-
-      const saved = await this.foodRepo.save(newFood);
 
       // 记录来源
       await this.saveSource(saved.id, food);
@@ -478,33 +523,36 @@ export class FoodPipelineOrchestratorService {
   }
 
   private async saveSource(foodId: string, food: CleanedFoodData) {
-    const existing = await this.sourceRepo.findOne({
+    const existing = await this.prisma.food_sources.findFirst({
       where: {
-        foodId,
-        sourceType: food.primarySource,
-        sourceId: food.primarySourceId,
+        food_id: foodId,
+        source_type: food.primarySource,
+        source_id: food.primarySourceId,
       },
     });
 
     const payload = {
-      foodId,
-      sourceType: food.primarySource,
-      sourceId: food.primarySourceId,
-      sourceUrl: food.sourceUrl || undefined,
-      rawData: food.rawPayload || {},
-      mappedData: food.mappedData,
+      food_id: foodId,
+      source_type: food.primarySource,
+      source_id: food.primarySourceId,
+      source_url: food.sourceUrl || undefined,
+      raw_data: food.rawPayload || {},
+      mapped_data: food.mappedData,
       confidence: food.confidence,
-      isPrimary: true,
+      is_primary: true,
       priority: this.getSourcePriority(food.primarySource),
-      fetchedAt: food.fetchedAt || new Date(),
+      fetched_at: food.fetchedAt || new Date(),
     };
 
     if (existing) {
-      await this.sourceRepo.update(existing.id, payload);
+      await this.prisma.food_sources.update({
+        where: { id: existing.id },
+        data: payload,
+      });
       return;
     }
 
-    await this.sourceRepo.save(this.sourceRepo.create(payload));
+    await this.prisma.food_sources.create({ data: payload });
   }
 
   private async logChange(
@@ -514,19 +562,19 @@ export class FoodPipelineOrchestratorService {
     changes: Record<string, any>,
     operator: string,
   ) {
-    await this.changeLogRepo.save(
-      this.changeLogRepo.create({
-        foodId,
+    await this.prisma.food_change_logs.create({
+      data: {
+        food_id: foodId,
         version,
         action,
         changes,
         operator,
-      }),
-    );
+      },
+    });
   }
 
   private async generateCode(): Promise<string> {
-    const count = await this.foodRepo.count();
+    const count = await this.prisma.foods.count();
     return `FOOD_G_${String(count + 1).padStart(5, '0')}`;
   }
 
@@ -561,6 +609,52 @@ export class FoodPipelineOrchestratorService {
     return priorities[sourceType] || 50;
   }
 
+  /**
+   * Map camelCase keys from mergedFields/scores to Prisma snake_case field names.
+   */
+  private mapToSnakeCase(obj: Record<string, any>): Record<string, any> {
+    const mapping: Record<string, string> = {
+      qualityScore: 'quality_score',
+      satietyScore: 'satiety_score',
+      nutrientDensity: 'nutrient_density',
+      dataVersion: 'data_version',
+      primarySource: 'primary_source',
+      primarySourceId: 'primary_source_id',
+      subCategory: 'sub_category',
+      foodGroup: 'food_group',
+      mainIngredient: 'main_ingredient',
+      processingLevel: 'processing_level',
+      mealTypes: 'meal_types',
+      standardServingG: 'standard_serving_g',
+      standardServingDesc: 'standard_serving_desc',
+      commonPortions: 'common_portions',
+      searchWeight: 'search_weight',
+      isProcessed: 'is_processed',
+      isFried: 'is_fried',
+      isVerified: 'is_verified',
+      verifiedBy: 'verified_by',
+      verifiedAt: 'verified_at',
+      imageUrl: 'image_url',
+      thumbnailUrl: 'thumbnail_url',
+      saturatedFat: 'saturated_fat',
+      transFat: 'trans_fat',
+      glycemicIndex: 'glycemic_index',
+      glycemicLoad: 'glycemic_load',
+      vitaminA: 'vitamin_a',
+      vitaminC: 'vitamin_c',
+      vitaminD: 'vitamin_d',
+      vitaminE: 'vitamin_e',
+      vitaminB12: 'vitamin_b12',
+    };
+
+    const result: Record<string, any> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      const mappedKey = mapping[key] || key;
+      result[mappedKey] = value;
+    }
+    return result;
+  }
+
   // ==================== 批量回填营养密度分数 ====================
 
   /**
@@ -578,10 +672,11 @@ export class FoodPipelineOrchestratorService {
   }> {
     this.logger.log('开始批量回填营养密度分数...');
 
-    const total = await this.foodRepo
-      .createQueryBuilder('f')
-      .where('f.nutrientDensity IS NULL OR f.nutrientDensity = 0')
-      .getCount();
+    const total = await this.prisma.foods.count({
+      where: {
+        OR: [{ nutrient_density: null }, { nutrient_density: 0 }],
+      },
+    });
 
     if (total === 0) {
       this.logger.log('所有食物记录已有 nutrientDensity，无需回填');
@@ -595,23 +690,29 @@ export class FoodPipelineOrchestratorService {
     let offset = 0;
 
     while (offset < total) {
-      const foods = await this.foodRepo
-        .createQueryBuilder('f')
-        .where('f.nutrientDensity IS NULL OR f.nutrientDensity = 0')
-        .orderBy('f.id', 'ASC')
-        .take(batchSize)
-        .getMany();
+      const foods = await this.prisma.foods.findMany({
+        where: {
+          OR: [{ nutrient_density: null }, { nutrient_density: 0 }],
+        },
+        orderBy: { id: 'asc' },
+        take: batchSize,
+      });
 
       if (foods.length === 0) break;
 
       for (const food of foods) {
         try {
-          const scores = this.ruleEngine.applyAllRules(food);
-          await this.foodRepo.update(food.id, {
-            nutrientDensity: scores.nutrientDensity,
-            qualityScore: scores.qualityScore,
-            satietyScore: scores.satietyScore,
-            tags: [...new Set([...(food.tags || []), ...scores.tags])],
+          const scores = this.ruleEngine.applyAllRules(food as any);
+          await this.prisma.foods.update({
+            where: { id: food.id },
+            data: {
+              nutrient_density: scores.nutrientDensity,
+              quality_score: scores.qualityScore,
+              satiety_score: scores.satietyScore,
+              tags: [
+                ...new Set([...((food.tags as any[]) || []), ...scores.tags]),
+              ],
+            },
           });
           updated++;
         } catch (err) {
