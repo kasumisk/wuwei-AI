@@ -253,8 +253,10 @@ export class RecommendationEngineService {
     convenience: MealRecommendation;
     homeCook: MealRecommendation;
   }> {
-    const allFoods = await this.getAllFoods();
-    const recentFoodNames = await this.getRecentFoodNames(userId, 3);
+    const [allFoods, recentFoodNames] = await Promise.all([
+      this.getAllFoods(),
+      this.getRecentFoodNames(userId, 3),
+    ]);
     const baseConstraints = this.constraintGenerator.generateConstraints(
       goalType,
       consumed,
@@ -1149,8 +1151,11 @@ export class RecommendationEngineService {
     // 2f. 短期拒绝历史
     const shortTermProfile =
       await this.realtimeProfile.getShortTermProfile(userId);
-    const recallConfig = (await this.resolveStrategyForUser(userId, goalType))
-      ?.config?.recall;
+    const resolvedStrategy = await this.resolveStrategyForUser(
+      userId,
+      goalType,
+    );
+    const recallConfig = resolvedStrategy?.config?.recall;
     const rejectThreshold = recallConfig?.shortTermRejectThreshold ?? 2;
     const rejectCount = shortTermProfile?.rejectedFoods?.[food.name] || 0;
     if (rejectCount >= rejectThreshold) {
@@ -1160,10 +1165,6 @@ export class RecommendationEngineService {
     }
 
     // 3. 跑评分流程（即使被硬过滤也跑分，用于分析弱维度）
-    const resolvedStrategy = await this.resolveStrategyForUser(
-      userId,
-      goalType,
-    );
     const penaltyCtx: HealthModifierContext = {
       allergens: userProfile?.allergens,
       healthConditions: userProfile?.healthConditions,

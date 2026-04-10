@@ -62,6 +62,7 @@ export const foodRecordService = {
     avgQuality?: number;
     avgSatiety?: number;
     nutritionScore?: number;
+    source?: string;
   }): Promise<FoodRecord> => {
     return unwrap(clientPost<FoodRecord>('/app/food/records', data));
   },

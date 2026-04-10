@@ -42,6 +42,12 @@ export function useHomeData() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const nutritionScoreQuery = useQuery({
+    queryKey: ['nutrition-score'],
+    queryFn: () => foodRecordService.getNutritionScore(),
+    staleTime: 5 * 60 * 1000,
+  });
+
   return {
     summary: summaryQuery.data ?? {
       totalCalories: 0,
@@ -54,6 +60,11 @@ export function useHomeData() {
     reminder: reminderQuery.data?.reminder ?? null,
     profile: profileQuery.data ?? null,
     recentSummaries: recentSummariesQuery.data ?? [],
-    isLoading: summaryQuery.isLoading || recordsQuery.isLoading,
+    nutritionScore: nutritionScoreQuery.data ?? null,
+    isLoading:
+      summaryQuery.isLoading ||
+      recordsQuery.isLoading ||
+      profileQuery.isLoading ||
+      nutritionScoreQuery.isLoading,
   };
 }

@@ -1,8 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { foodRecordService } from '@/lib/api/food-record';
 import type { NutritionScoreResult } from '@/types/food';
 
 const DIMENSION_LABELS: Record<string, { label: string; icon: string }> = {
@@ -12,6 +10,7 @@ const DIMENSION_LABELS: Record<string, { label: string; icon: string }> = {
   foodQuality: { label: '食物质量', icon: '🌿' },
   satiety: { label: '饱腹感', icon: '😌' },
   stability: { label: '血糖稳定', icon: '📈' },
+  glycemicImpact: { label: '血糖影响', icon: '🩸' },
 };
 
 function scoreColor(score: number): string {
@@ -32,28 +31,12 @@ function ringColor(score: number): string {
   return 'stroke-red-500';
 }
 
-export function NutritionScoreCard() {
+interface NutritionScoreCardProps {
+  scoreData: NutritionScoreResult | null;
+}
+
+export function NutritionScoreCard({ scoreData }: NutritionScoreCardProps) {
   const [expanded, setExpanded] = useState(false);
-
-  const { data: scoreData, isLoading } = useQuery<NutritionScoreResult>({
-    queryKey: ['nutrition-score'],
-    queryFn: () => foodRecordService.getNutritionScore(),
-    staleTime: 5 * 60 * 1000,
-  });
-
-  if (isLoading) {
-    return (
-      <section className="bg-card rounded-2xl p-5 shadow-sm mb-6 animate-pulse">
-        <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-full bg-muted" />
-          <div className="flex-1 space-y-2">
-            <div className="h-4 bg-muted rounded w-1/3" />
-            <div className="h-3 bg-muted rounded w-2/3" />
-          </div>
-        </div>
-      </section>
-    );
-  }
 
   if (!scoreData) return null;
 

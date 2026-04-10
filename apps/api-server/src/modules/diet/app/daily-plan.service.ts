@@ -675,11 +675,10 @@ export class DailyPlanService {
         0,
         goals.protein - (summary.totalProtein || 0),
       );
-      const allFoods = await this.recommendationEngine.getAllFoods();
-      const recentNames = await this.recommendationEngine.getRecentFoodNames(
-        userId,
-        3,
-      );
+      const [allFoods, recentNames] = await Promise.all([
+        this.recommendationEngine.getAllFoods(),
+        this.recommendationEngine.getRecentFoodNames(userId, 3),
+      ]);
       const excludeNames = [...recentNames];
 
       const lunchRec = this.recommendationEngine.recommendMealFromPool(
@@ -730,11 +729,10 @@ export class DailyPlanService {
         0,
         goals.protein - (summary.totalProtein || 0),
       );
-      const allFoods = await this.recommendationEngine.getAllFoods();
-      const recentNames = await this.recommendationEngine.getRecentFoodNames(
-        userId,
-        3,
-      );
+      const [allFoods, recentNames] = await Promise.all([
+        this.recommendationEngine.getAllFoods(),
+        this.recommendationEngine.getRecentFoodNames(userId, 3),
+      ]);
       const dinnerRec = this.recommendationEngine.recommendMealFromPool(
         allFoods,
         'dinner',

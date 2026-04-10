@@ -42,6 +42,13 @@ export interface FeedbackDimensionStats {
 export class RecommendationFeedbackService {
   private readonly logger = new Logger(RecommendationFeedbackService.name);
 
+  /** 5 分钟 TTL 内存缓存 — getUserFeedbackStats 每次推荐都调用 */
+  private static readonly CACHE_TTL = 5 * 60 * 1000;
+  private feedbackStatsCache = new Map<
+    string,
+    { data: Record<string, FoodFeedbackStats>; ts: number }
+  >();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly preferenceUpdater: PreferenceUpdaterService,
@@ -152,6 +159,9 @@ export class RecommendationFeedbackService {
         foodId: params.foodId,
         action: params.action,
       }).catch((err) => this.logger.warn(`偏好增量更新失败 (非阻塞): ${err}`));
+
+      // 5. 清除该用户的反馈统计缓存（新反馈已写入）
+      this.feedbackStatsCache.delete(params.userId);
     } catch (err) {
       this.logger.error(`保存反馈失败: ${err}`);
       throw err;
@@ -166,6 +176,15 @@ export class RecommendationFeedbackService {
   async getUserFeedbackStats(
     userId: string,
   ): Promise<Record<string, FoodFeedbackStats>> {
+    // 检查缓存
+    const cached = this.feedbackStatsCache.get(userId);
+    if (
+      cached &&
+      Date.now() - cached.ts < RecommendationFeedbackService.CACHE_TTL
+    ) {
+      return cached.data;
+    }
+
     const stats: Record<string, FoodFeedbackStats> = {};
     try {
       const since = new Date();
@@ -191,6 +210,9 @@ export class RecommendationFeedbackService {
           rejected: Number(row.rejected),
         };
       }
+
+      // 写入缓存
+      this.feedbackStatsCache.set(userId, { data: stats, ts: Date.now() });
     } catch (err) {
       this.logger.warn(`获取反馈统计失败: ${err}`);
     }

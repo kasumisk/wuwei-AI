@@ -29,6 +29,26 @@ import {
 } from './food.dto';
 import { UserProfileConstraints } from './recommendation/recommendation.types';
 
+/**
+ * 将 Prisma daily_plans 行（snake_case）转换为前端期望的 camelCase 格式
+ */
+function toDailyPlanResponse(plan: any) {
+  if (!plan) return plan;
+  return {
+    id: plan.id,
+    date: plan.date,
+    morningPlan: plan.morning_plan ?? null,
+    lunchPlan: plan.lunch_plan ?? null,
+    dinnerPlan: plan.dinner_plan ?? null,
+    snackPlan: plan.snack_plan ?? null,
+    adjustments: plan.adjustments ?? [],
+    strategy: plan.strategy ?? null,
+    totalBudget: plan.total_budget ?? null,
+    createdAt: plan.created_at,
+    updatedAt: plan.updated_at,
+  };
+}
+
 @ApiTags('App 饮食计划')
 @Controller('app/food')
 @UseGuards(AppJwtAuthGuard)
@@ -77,7 +97,7 @@ export class FoodPlanController {
       success: true,
       code: HttpStatus.OK,
       message: '获取成功',
-      data: plan,
+      data: toDailyPlanResponse(plan),
     };
   }
 
@@ -120,7 +140,7 @@ export class FoodPlanController {
       success: true,
       code: HttpStatus.OK,
       message: '计划已调整',
-      data: result,
+      data: toDailyPlanResponse(result),
     };
   }
 
@@ -147,7 +167,7 @@ export class FoodPlanController {
       success: true,
       code: HttpStatus.OK,
       message: mealType ? `${mealType} 已重新生成` : '计划已重新生成',
-      data: plan,
+      data: toDailyPlanResponse(plan),
     };
   }
 

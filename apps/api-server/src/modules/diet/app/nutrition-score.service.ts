@@ -182,7 +182,7 @@ export class NutritionScoreService {
     const sigmaRatio: Record<string, number> = {
       fat_loss: 0.12,
       muscle_gain: 0.2,
-      health: 0.15,
+      health: 0.25,
       habit: 0.25,
     };
     const sigma = target * (sigmaRatio[goal || 'health'] || 0.15);
@@ -280,7 +280,7 @@ export class NutritionScoreService {
     if (input.calories > 0 && (input.protein * 4) / input.calories < 0.1) {
       penalized *= 0.8;
     }
-    if (input.foodQuality < 2) {
+    if (input.foodQuality > 0 && input.foodQuality < 2) {
       penalized *= 0.85;
     }
     return Math.round(penalized);

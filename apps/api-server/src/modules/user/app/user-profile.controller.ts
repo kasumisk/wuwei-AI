@@ -10,6 +10,7 @@ import {
   HttpStatus,
   ParseIntPipe,
   BadRequestException,
+  ValidationPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AppJwtAuthGuard } from '../../auth/app/app-jwt-auth.guard';
@@ -49,18 +50,46 @@ export class UserProfileController {
   @ApiOperation({ summary: '分步保存引导数据（step 1-4）' })
   async saveOnboardingStep(
     @Param('step', ParseIntPipe) step: number,
-    @Body() body: any,
+    @Body(new ValidationPipe({ transform: true, whitelist: true }))
+    body:
+      | OnboardingStep1Dto
+      | OnboardingStep2Dto
+      | OnboardingStep3Dto
+      | OnboardingStep4Dto,
     @CurrentAppUser() user: AppUserPayload,
   ): Promise<ApiResponse> {
     if (step < 1 || step > 4) {
       throw new BadRequestException('Step 必须为 1-4');
     }
 
-    // 根据步骤验证具体的 DTO 类型由 pipe 处理，这里按步骤转换
+    // NestJS ValidationPipe 在 union type 下不会按 step 选择 DTO，
+    // 需要手动用 plainToInstance + validate 来按步骤验证
+    const { plainToInstance } = await import('class-transformer');
+    const { validate } = await import('class-validator');
+
+    const dtoClassMap: Record<number, new () => any> = {
+      1: OnboardingStep1Dto,
+      2: OnboardingStep2Dto,
+      3: OnboardingStep3Dto,
+      4: OnboardingStep4Dto,
+    };
+    const DtoClass = dtoClassMap[step];
+    const dtoInstance = plainToInstance(DtoClass, body);
+    const errors = await validate(dtoInstance, {
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    });
+    if (errors.length > 0) {
+      const messages = errors
+        .map((e) => Object.values(e.constraints || {}).join(', '))
+        .join('; ');
+      throw new BadRequestException(`步骤 ${step} 数据验证失败: ${messages}`);
+    }
+
     const result = await this.userProfileService.saveOnboardingStep(
       user.id,
       step,
-      body,
+      dtoInstance,
     );
 
     return {

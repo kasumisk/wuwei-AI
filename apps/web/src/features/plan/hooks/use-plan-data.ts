@@ -36,7 +36,7 @@ export function usePlanData() {
 
   // 下一餐推荐
   const { data: suggestion, isLoading: suggestionLoading } = useQuery({
-    queryKey: ['mealSuggestion'],
+    queryKey: ['meal-suggestion'],
     queryFn: () => recommendationService.getMealSuggestion(),
     enabled: isLoggedIn,
     staleTime: 5 * 60 * 1000,
@@ -48,7 +48,7 @@ export function usePlanData() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['daily-plan'] });
       queryClient.invalidateQueries({ queryKey: ['weeklyPlan'] });
-      queryClient.invalidateQueries({ queryKey: ['mealSuggestion'] });
+      queryClient.invalidateQueries({ queryKey: ['meal-suggestion'] });
     },
   });
 
@@ -57,7 +57,7 @@ export function usePlanData() {
     mutationFn: (reason: string) => recommendationService.adjustDailyPlan(reason),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['daily-plan'] });
-      queryClient.invalidateQueries({ queryKey: ['mealSuggestion'] });
+      queryClient.invalidateQueries({ queryKey: ['meal-suggestion'] });
     },
   });
 

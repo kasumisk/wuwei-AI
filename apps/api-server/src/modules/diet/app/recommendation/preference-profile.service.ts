@@ -14,6 +14,17 @@ import { UserPreferenceProfile } from './recommendation.types';
 export class PreferenceProfileService {
   private readonly logger = new Logger(PreferenceProfileService.name);
 
+  /** 5 分钟 TTL 内存缓存 — 避免每次推荐都执行 SQL 聚合 */
+  private static readonly CACHE_TTL = 5 * 60 * 1000;
+  private preferenceCache = new Map<
+    string,
+    { data: UserPreferenceProfile; ts: number }
+  >();
+  private regionalCache = new Map<
+    string,
+    { data: Record<string, number>; ts: number }
+  >();
+
   constructor(private readonly prisma: PrismaService) {}
 
   /**
@@ -24,6 +35,12 @@ export class PreferenceProfileService {
   async getUserPreferenceProfile(
     userId: string,
   ): Promise<UserPreferenceProfile> {
+    // 检查缓存
+    const cached = this.preferenceCache.get(userId);
+    if (cached && Date.now() - cached.ts < PreferenceProfileService.CACHE_TTL) {
+      return cached.data;
+    }
+
     const empty: UserPreferenceProfile = {
       categoryWeights: {},
       ingredientWeights: {},
@@ -117,12 +134,17 @@ export class PreferenceProfileService {
         foodNameWeights[name] = 0.7 + rate * 0.5;
       }
 
-      return {
+      const result: UserPreferenceProfile = {
         categoryWeights: aggregate((r) => r.category),
         ingredientWeights: aggregate((r) => r.main_ingredient),
         foodGroupWeights: aggregate((r) => r.food_group),
         foodNameWeights,
       };
+
+      // 写入缓存
+      this.preferenceCache.set(userId, { data: result, ts: Date.now() });
+
+      return result;
     } catch (err) {
       this.logger.warn(`构建偏好画像失败: ${err}`);
       return empty;
@@ -131,14 +153,20 @@ export class PreferenceProfileService {
 
   /**
    * 获取指定地区的食物评分偏移映射
-   * 返回 foodId → 乘数 (0.85 ~ 1.08)
-   *   common + 高流行度 → 1.05~1.08（本地常见食物加分）
-   *   common → 1.02（可获得但流行度一般）
-   *   seasonal → 0.95（季节性，获取不稳定）
-   *   rare → 0.85（当地罕见，获取困难）
+   * 返回 foodId → 乘数 (0.70 ~ 1.20)
+   *   common + 高流行度 → 1.10~1.20（本地常见食物加分）
+   *   common → 1.05（可获得但流行度一般）
+   *   seasonal → 0.90（季节性，获取不稳定）
+   *   rare → 0.70（当地罕见，获取困难）
    *   无数据 → 不在映射中（×1.0 不调整）
    */
   async getRegionalBoostMap(region: string): Promise<Record<string, number>> {
+    // 检查缓存
+    const cached = this.regionalCache.get(region);
+    if (cached && Date.now() - cached.ts < PreferenceProfileService.CACHE_TTL) {
+      return cached.data;
+    }
+
     const boostMap: Record<string, number> = {};
     try {
       const infos = await this.prisma.food_regional_info.findMany({
@@ -149,20 +177,24 @@ export class PreferenceProfileService {
         let boost = 1.0;
         switch (info.availability) {
           case 'common':
-            // 高流行度的常见食物额外加分
-            boost = (info.local_popularity ?? 0) > 50 ? 1.08 : 1.02;
+            // 高流行度的常见食物额外加分（范围扩大: 1.08→1.20, 1.02→1.05）
+            boost = (info.local_popularity ?? 0) > 50 ? 1.2 : 1.05;
             break;
           case 'seasonal':
-            boost = 0.95;
+            boost = 0.9;
             break;
           case 'rare':
-            boost = 0.85;
+            // 罕见食物惩罚加大（0.85→0.70）
+            boost = 0.7;
             break;
         }
         if (boost !== 1.0) {
           boostMap[info.food_id] = boost;
         }
       }
+
+      // 写入缓存
+      this.regionalCache.set(region, { data: boostMap, ts: Date.now() });
     } catch (err) {
       this.logger.warn(`加载地区信息失败 [${region}]: ${err}`);
     }

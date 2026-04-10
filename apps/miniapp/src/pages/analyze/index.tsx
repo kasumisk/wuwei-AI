@@ -50,6 +50,17 @@ function AnalyzePage() {
     setSaving(true);
     try {
       const totalCalories = editFoods.reduce((sum, f) => sum + (f.calories || 0), 0);
+      const totalProtein = editFoods.reduce((sum, f) => sum + (f.protein || 0), 0);
+      const totalFat = editFoods.reduce((sum, f) => sum + (f.fat || 0), 0);
+      const totalCarbs = editFoods.reduce((sum, f) => sum + (f.carbs || 0), 0);
+      const avgQuality =
+        editFoods.length > 0
+          ? editFoods.reduce((sum, f) => sum + (f.quality || 5), 0) / editFoods.length
+          : 5;
+      const avgSatiety =
+        editFoods.length > 0
+          ? editFoods.reduce((sum, f) => sum + (f.satiety || 5), 0) / editFoods.length
+          : 5;
       await foodService.saveRecord({
         foods: editFoods,
         totalCalories,
@@ -58,6 +69,11 @@ function AnalyzePage() {
         advice: result.advice,
         isHealthy: result.isHealthy,
         source: 'camera',
+        totalProtein,
+        totalFat,
+        totalCarbs,
+        avgQuality: Math.round(avgQuality * 10) / 10,
+        avgSatiety: Math.round(avgSatiety * 10) / 10,
       });
       setStep('saved');
     } catch (err: any) {

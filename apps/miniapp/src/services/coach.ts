@@ -27,6 +27,14 @@ export function sendMessageStream(
   const token = getToken();
   let fullText = '';
   let newConvId = conversationId || '';
+  let done = false; // 防止 onDone 被调用多次
+  let lineBuffer = ''; // 跨 chunk 行缓冲
+
+  function finalize() {
+    if (done) return;
+    done = true;
+    onDone(fullText, newConvId);
+  }
 
   const task = Taro.request({
     url: `${API_BASE_URL}/app/coach/chat`,
@@ -39,10 +47,13 @@ export function sendMessageStream(
     data: { message, conversationId },
     enableChunked: true,
     success: () => {
-      onDone(fullText, newConvId);
+      // 流结束 — 仅在 [DONE] 未触发时收尾
+      finalize();
     },
     fail: (err) => {
-      onError(new Error(err.errMsg || '请求失败'));
+      if (!done) {
+        onError(new Error(err.errMsg || '请求失败'));
+      }
     },
   } as any);
 
@@ -50,12 +61,19 @@ export function sendMessageStream(
   (task as any).onChunkReceived?.((res: { data: ArrayBuffer }) => {
     try {
       const text = new TextDecoder().decode(res.data);
-      const lines = text.split('\n');
+      // 将缓冲的不完整行与新数据拼接
+      const combined = lineBuffer + text;
+      const lines = combined.split('\n');
+      // 最后一个元素可能是不完整行，保留到下次
+      lineBuffer = lines.pop() || '';
+
       for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const data = line.slice(6).trim();
+        const trimmed = line.trim();
+        if (!trimmed) continue; // 空行跳过
+        if (trimmed.startsWith('data: ')) {
+          const data = trimmed.slice(6).trim();
           if (data === '[DONE]') {
-            onDone(fullText, newConvId);
+            finalize();
             return;
           }
           try {

@@ -601,6 +601,8 @@ model foods {
   @@index([category], map: "idx_foods_category")
   @@index([name(ops: raw("gin_trgm_ops"))], map: "idx_foods_name_trgm", type: Gin)
   @@index([search_weight(sort: Desc)], map: "idx_foods_weight")
+  @@index([is_verified, category], map: "idx_foods_verified_category")
+  @@index([aliases(ops: raw("gin_trgm_ops"))], map: "idx_foods_aliases_trgm", type: Gin)
 }
 
 model migrations {
@@ -811,6 +813,7 @@ model recommendation_feedbacks {
 
   @@index([user_id], map: "IDX_84be6fe526b10313d0015fbdea")
   @@index([user_id, created_at], map: "IDX_f3a0234ecd1f178e4c36fb8f00")
+  @@index([food_id], map: "idx_rec_feedbacks_food_id")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -973,6 +976,8 @@ model user_achievements {
   user_id        String   @db.Uuid
   achievement_id String   @db.Uuid
   unlocked_at    DateTime @default(now()) @db.Timestamp(6)
+
+  @@index([user_id], map: "idx_user_achievements_user_id")
 }
 
 model user_behavior_profiles {
@@ -1003,6 +1008,8 @@ model user_challenges {
   max_progress     Int
   status           String    @default("active") @db.VarChar(20)
   completed_at     DateTime? @db.Timestamp(6)
+
+  @@index([user_id, status], map: "idx_user_challenges_user_status")
 }
 
 model user_inferred_profiles {

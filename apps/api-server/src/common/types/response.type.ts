@@ -52,11 +52,11 @@ export class ResponseWrapper {
   ): ApiResponse<PageResponse<T>> {
     return this.success({
       records,
+      list: records,
       total,
-      current,
-      size,
-      pages: Math.ceil(total / size),
-      orders: [],
+      page: current,
+      pageSize: size,
+      totalPages: Math.ceil(total / size),
     });
   }
 }

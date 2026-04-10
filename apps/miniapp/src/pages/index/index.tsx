@@ -161,9 +161,11 @@ function Index() {
   const [plan, setPlan] = useState<DailyPlan | null>(null);
   const [suggestion, setSuggestion] = useState<MealSuggestion | null>(null);
   const [activeScenario, setActiveScenario] = useState(0);
+  const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     if (!isLoggedIn) return;
+    setLoading(true);
     try {
       const [s, r, p, pl, sug] = await Promise.all([
         foodService.getTodaySummary(),
@@ -177,33 +179,64 @@ function Index() {
       setProfile(p);
       setPlan(pl);
       setSuggestion(sug);
-    } catch {}
+
+      // 档案未完善时跳转到引导填写页（复用已获取的 profile，避免重复请求）
+      if (p && !p.onboardingCompleted) {
+        Taro.redirectTo({ url: '/pages/health-profile/index?from=onboarding' });
+      }
+    } catch (err) {
+      Taro.showToast({ title: '数据加载失败，请下拉刷新', icon: 'none', duration: 2000 });
+    } finally {
+      setLoading(false);
+    }
   }, [isLoggedIn]);
 
   useEffect(() => {
     if (!isLoggedIn) Taro.reLaunch({ url: '/pages/login/index' });
   }, [isLoggedIn]);
 
-  // 档案未完善时跳转到引导填写页
-  useEffect(() => {
-    if (!isLoggedIn) return;
-    foodService
-      .getProfile()
-      .then((p) => {
-        if (!p?.onboardingCompleted) {
-          Taro.redirectTo({ url: '/pages/health-profile/index?from=onboarding' });
-        }
-      })
-      .catch(() => {});
-    // 只在首次进入时检查
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   useDidShow(() => {
     fetchData();
   });
 
   if (!isLoggedIn) return null;
+
+  // Loading 骨架屏
+  if (loading) {
+    return (
+      <ScrollView className="idx-page" scrollY>
+        <View className="idx-header">
+          <View className="idx-avatar">
+            <Text className="idx-avatar-text">...</Text>
+          </View>
+          <Text className="idx-app-name">无畏健康</Text>
+        </View>
+        <View className="idx-card idx-status-card" style={{ opacity: 0.5 }}>
+          <View
+            style={{
+              height: '20px',
+              width: '80px',
+              background: '#e5e7eb',
+              borderRadius: '4px',
+              marginBottom: '12px',
+            }}
+          />
+          <View
+            style={{
+              height: '32px',
+              width: '140px',
+              background: '#e5e7eb',
+              borderRadius: '4px',
+              marginBottom: '8px',
+            }}
+          />
+          <View
+            style={{ height: '8px', width: '100%', background: '#e5e7eb', borderRadius: '4px' }}
+          />
+        </View>
+      </ScrollView>
+    );
+  }
 
   const goal = summary?.calorieGoal || 2000;
   const consumed = summary?.totalCalories || 0;

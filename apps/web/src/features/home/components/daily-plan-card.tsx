@@ -151,6 +151,9 @@ export function DailyPlanCard({ dailyPlan }: DailyPlanCardProps) {
       totalProtein?: number;
       totalFat?: number;
       totalCarbs?: number;
+      avgQuality?: number;
+      avgSatiety?: number;
+      source?: string;
     }) => foodRecordService.saveRecord(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['records'] });
@@ -203,6 +206,9 @@ export function DailyPlanCard({ dailyPlan }: DailyPlanCardProps) {
           totalProtein: plan.protein > 0 ? plan.protein : undefined,
           totalFat: plan.fat > 0 ? plan.fat : undefined,
           totalCarbs: plan.carbs > 0 ? plan.carbs : undefined,
+          avgQuality: 5,
+          avgSatiety: 5,
+          source: 'manual',
         });
         toast({ title: `${slotLabel}已记录` });
       } catch {

@@ -35,6 +35,11 @@ export interface FoodItem {
   calories: number;
   quantity?: string;
   category?: string;
+  protein?: number;
+  fat?: number;
+  carbs?: number;
+  quality?: number;
+  satiety?: number;
 }
 
 /** 分析结果 */
@@ -43,6 +48,7 @@ export interface AnalysisResult {
   totalCalories: number;
   advice?: string;
   isHealthy?: boolean;
+  imageUrl?: string;
 }
 
 /** 食物记录 */

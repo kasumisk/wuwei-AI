@@ -9,6 +9,7 @@ import {
   MicroNutrientDefaults,
   buildCategoryMicroAverages,
 } from './recommendation.types';
+import { FoodLibrary } from '../../../food/food.types';
 
 // ==================== V5 4.3: 品类分片常量 ====================
 
@@ -113,6 +114,149 @@ const FOOD_POOL_SELECTABLE_COLUMNS: string[] = [
   'oxalate_level',
 ];
 
+// ==================== Raw row → FoodLibrary 映射 ====================
+
+/** 安全转 number：Prisma Decimal / string / null → number */
+function n(v: unknown): number {
+  if (v == null) return 0;
+  const num = Number(v);
+  return Number.isFinite(num) ? num : 0;
+}
+
+/** 可选 number（null 保留为 undefined） */
+function nOpt(v: unknown): number | undefined {
+  if (v == null) return undefined;
+  const num = Number(v);
+  return Number.isFinite(num) ? num : undefined;
+}
+
+/** 安全解析 JSON 字段（raw query 返回时可能已是 object，也可能是 string） */
+function jsonParse<T>(v: unknown, fallback: T): T {
+  if (v == null) return fallback;
+  if (typeof v === 'object') return v as T;
+  if (typeof v === 'string') {
+    try {
+      return JSON.parse(v) as T;
+    } catch {
+      return fallback;
+    }
+  }
+  return fallback;
+}
+
+/**
+ * 将 $queryRawUnsafe 返回的 snake_case 行转为 FoodLibrary（camelCase + 正确类型）
+ */
+function mapRowToFoodLibrary(row: Record<string, unknown>): FoodLibrary {
+  return {
+    id: String(row.id ?? ''),
+    code: String(row.code ?? ''),
+    name: String(row.name ?? ''),
+    aliases: row.aliases != null ? String(row.aliases) : undefined,
+    barcode: row.barcode != null ? String(row.barcode) : undefined,
+    status: String(row.status ?? 'draft'),
+    category: String(row.category ?? ''),
+    subCategory:
+      row.sub_category != null ? String(row.sub_category) : undefined,
+    foodGroup: row.food_group != null ? String(row.food_group) : undefined,
+
+    // 核心营养素 — Decimal → number
+    calories: n(row.calories),
+    protein: nOpt(row.protein),
+    fat: nOpt(row.fat),
+    carbs: nOpt(row.carbs),
+    fiber: nOpt(row.fiber),
+    sugar: nOpt(row.sugar),
+    addedSugar: nOpt(row.added_sugar),
+    naturalSugar: nOpt(row.natural_sugar),
+    saturatedFat: nOpt(row.saturated_fat),
+    transFat: nOpt(row.trans_fat),
+    cholesterol: nOpt(row.cholesterol),
+    sodium: nOpt(row.sodium),
+    potassium: nOpt(row.potassium),
+    calcium: nOpt(row.calcium),
+    iron: nOpt(row.iron),
+    vitaminA: nOpt(row.vitamin_a),
+    vitaminC: nOpt(row.vitamin_c),
+    vitaminD: nOpt(row.vitamin_d),
+    vitaminE: nOpt(row.vitamin_e),
+    vitaminB12: nOpt(row.vitamin_b12),
+    folate: nOpt(row.folate),
+    zinc: nOpt(row.zinc),
+    magnesium: nOpt(row.magnesium),
+    purine: nOpt(row.purine),
+    phosphorus: nOpt(row.phosphorus),
+
+    // 烹饪/风味扩展
+    cuisine: row.cuisine != null ? String(row.cuisine) : undefined,
+    flavorProfile: jsonParse(row.flavor_profile, undefined),
+    cookingMethod:
+      row.cooking_method != null ? String(row.cooking_method) : undefined,
+    prepTimeMinutes: nOpt(row.prep_time_minutes) as number | undefined,
+    cookTimeMinutes: nOpt(row.cook_time_minutes) as number | undefined,
+    skillRequired:
+      row.skill_required != null ? String(row.skill_required) : undefined,
+    estimatedCostLevel: nOpt(row.estimated_cost_level) as number | undefined,
+    shelfLifeDays: nOpt(row.shelf_life_days) as number | undefined,
+    fodmapLevel:
+      row.fodmap_level != null ? String(row.fodmap_level) : undefined,
+    oxalateLevel:
+      row.oxalate_level != null ? String(row.oxalate_level) : undefined,
+
+    // 评分/指数
+    glycemicIndex: nOpt(row.glycemic_index) as number | undefined,
+    glycemicLoad: nOpt(row.glycemic_load),
+    isProcessed: Boolean(row.is_processed),
+    isFried: Boolean(row.is_fried),
+    processingLevel: n(row.processing_level) || 1,
+    allergens: jsonParse<string[]>(row.allergens, []),
+    qualityScore: nOpt(row.quality_score),
+    satietyScore: nOpt(row.satiety_score),
+    nutrientDensity: nOpt(row.nutrient_density),
+    mealTypes: jsonParse<string[]>(row.meal_types, []),
+    tags: jsonParse<string[]>(row.tags, []),
+    mainIngredient:
+      row.main_ingredient != null ? String(row.main_ingredient) : undefined,
+    compatibility: jsonParse<Record<string, string[]>>(row.compatibility, {}),
+
+    // 份量
+    standardServingG: n(row.standard_serving_g) || 100,
+    standardServingDesc:
+      row.standard_serving_desc != null
+        ? String(row.standard_serving_desc)
+        : undefined,
+    commonPortions: jsonParse<Array<{ name: string; grams: number }>>(
+      row.common_portions,
+      [],
+    ),
+
+    // 媒体
+    imageUrl: row.image_url != null ? String(row.image_url) : undefined,
+    thumbnailUrl:
+      row.thumbnail_url != null ? String(row.thumbnail_url) : undefined,
+
+    // 来源/版本
+    primarySource: String(row.primary_source ?? 'manual'),
+    primarySourceId:
+      row.primary_source_id != null ? String(row.primary_source_id) : undefined,
+    dataVersion: n(row.data_version) || 1,
+    confidence: n(row.confidence) || 1,
+    isVerified: Boolean(row.is_verified),
+    verifiedBy: row.verified_by != null ? String(row.verified_by) : undefined,
+    verifiedAt:
+      row.verified_at != null ? new Date(row.verified_at as string) : undefined,
+    searchWeight: n(row.search_weight) || 100,
+    popularity: n(row.popularity),
+    embedding: row.embedding != null ? (row.embedding as number[]) : undefined,
+    embeddingUpdatedAt:
+      row.embedding_updated_at != null
+        ? new Date(row.embedding_updated_at as string)
+        : undefined,
+    createdAt: new Date((row.created_at as string) || Date.now()),
+    updatedAt: new Date((row.updated_at as string) || Date.now()),
+  };
+}
+
 /**
  * 食物池缓存服务
  *
@@ -132,7 +276,7 @@ export class FoodPoolCacheService implements OnModuleInit {
   private readonly logger = new Logger(FoodPoolCacheService.name);
 
   /** V6 1.7: 统一缓存 namespace，key = 品类名 */
-  private cache: TieredCacheNamespace<any[]>;
+  private cache: TieredCacheNamespace<FoodLibrary[]>;
 
   private selectableColumnsPromise: Promise<string[]> | null = null;
   /** V5 2.7: 品类微量营养素均值缓存（与食物池同步刷新） */
@@ -147,7 +291,7 @@ export class FoodPoolCacheService implements OnModuleInit {
 
   onModuleInit(): void {
     // 创建 food_pool namespace — 配置继承原 V5 4.3/4.4 参数
-    this.cache = this.cacheManager.createNamespace<any[]>({
+    this.cache = this.cacheManager.createNamespace<FoodLibrary[]>({
       namespace: 'food_pool',
       l1MaxEntries: L1_MAX_ENTRIES,
       l1TtlMs: L1_TTL_MS,
@@ -160,7 +304,7 @@ export class FoodPoolCacheService implements OnModuleInit {
    * 获取已验证的活跃食物列表（聚合所有品类分片）
    * 接口兼容旧版，调用方无需修改
    */
-  async getVerifiedFoods(): Promise<any[]> {
+  async getVerifiedFoods(): Promise<FoodLibrary[]> {
     const results = await Promise.all(
       FOOD_CATEGORIES.map((cat) => this.getVerifiedFoodsByCategory(cat)),
     );
@@ -179,7 +323,7 @@ export class FoodPoolCacheService implements OnModuleInit {
    * V5 4.3: 按品类获取已验证的活跃食物列表
    * V6 1.7: 迁移到 TieredCacheNamespace，自动 L1→L2→DB 穿透 + refresh-ahead
    */
-  async getVerifiedFoodsByCategory(category: string): Promise<any[]> {
+  async getVerifiedFoodsByCategory(category: string): Promise<FoodLibrary[]> {
     return this.cache.getOrSet(category, () =>
       this.loadCategoryFromDB(category),
     );
@@ -187,11 +331,12 @@ export class FoodPoolCacheService implements OnModuleInit {
 
   /**
    * V5 4.3: 从数据库加载指定品类的已验证食物
+   * #12 fix: 原始 SQL 行（snake_case + Decimal 字符串）→ FoodLibrary（camelCase + number）
    */
-  private async loadCategoryFromDB(category: string): Promise<any[]> {
+  private async loadCategoryFromDB(category: string): Promise<FoodLibrary[]> {
     const selectColumns = await this.getSelectableColumns();
     const columnList = selectColumns.join(', ');
-    const foods: any[] = await this.prisma.$queryRawUnsafe(
+    const rows: any[] = await this.prisma.$queryRawUnsafe(
       `SELECT ${columnList}
        FROM foods
        WHERE is_verified = true
@@ -200,13 +345,13 @@ export class FoodPoolCacheService implements OnModuleInit {
     );
 
     this.logger.debug(
-      `Food pool shard [${category}] loaded from DB: ${foods.length} foods`,
+      `Food pool shard [${category}] loaded from DB: ${rows.length} foods`,
     );
 
     // 品类数据变化时清除均值缓存以便下次重算
     this.categoryMicroAverages = null;
 
-    return foods;
+    return rows.map(mapRowToFoodLibrary);
   }
 
   private async getSelectableColumns(): Promise<string[]> {

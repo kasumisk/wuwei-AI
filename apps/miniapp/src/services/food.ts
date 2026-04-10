@@ -11,10 +11,22 @@ import type {
 
 const API_BASE_URL = process.env.TARO_APP_API_URL || 'https://uway-api.dev-net.uk/api';
 
-/** 上传图片并分析食物 */
+/** 等待指定毫秒 */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * 上传图片并分析食物（异步队列 + 轮询）
+ *
+ * 后端 POST /app/food/analyze 返回 { requestId, status: 'processing', imageUrl }
+ * 需要轮询 GET /app/food/analyze/:requestId 直到 completed / failed
+ */
 export async function analyzeImage(filePath: string, mealType: string): Promise<AnalysisResult> {
   const token = Taro.getStorageSync('app_auth_token') || '';
-  const res = await Taro.uploadFile({
+
+  // 1. 提交分析任务
+  const uploadRes = await Taro.uploadFile({
     url: `${API_BASE_URL}/app/food/analyze`,
     filePath,
     name: 'file',
@@ -23,9 +35,52 @@ export async function analyzeImage(filePath: string, mealType: string): Promise<
       Authorization: `Bearer ${token}`,
     },
   });
-  const body = JSON.parse(res.data);
-  if (!body.success) throw new Error(body.message || '分析失败');
-  return body.data;
+  const submitBody = JSON.parse(uploadRes.data);
+  if (!submitBody.success) throw new Error(submitBody.message || '分析提交失败');
+
+  const { requestId, imageUrl } = submitBody.data as {
+    requestId: string;
+    status: string;
+    imageUrl: string;
+  };
+
+  // 2. 轮询获取结果（最多 60 秒，间隔 2 秒）
+  const maxAttempts = 30;
+  const pollInterval = 2000;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    await sleep(pollInterval);
+
+    const pollResult = await get<{
+      requestId: string;
+      status: string;
+      error?: string;
+      // completed 时返回的旧格式字段
+      foods?: AnalysisResult['foods'];
+      totalCalories?: number;
+      advice?: string;
+      isHealthy?: boolean;
+      imageUrl?: string;
+    }>(`/app/food/analyze/${requestId}`);
+
+    if (pollResult.status === 'completed') {
+      return {
+        foods: pollResult.foods || [],
+        totalCalories: pollResult.totalCalories || 0,
+        advice: pollResult.advice,
+        isHealthy: pollResult.isHealthy,
+        imageUrl: pollResult.imageUrl || imageUrl,
+      };
+    }
+
+    if (pollResult.status === 'failed') {
+      throw new Error(pollResult.error || 'AI 分析失败');
+    }
+
+    // status === 'processing' → 继续轮询
+  }
+
+  throw new Error('分析超时，请稍后重试');
 }
 
 /** 保存食物记录 */
@@ -37,6 +92,11 @@ export function saveRecord(data: {
   source?: string;
   advice?: string;
   isHealthy?: boolean;
+  totalProtein?: number;
+  totalFat?: number;
+  totalCarbs?: number;
+  avgQuality?: number;
+  avgSatiety?: number;
 }) {
   return post<FoodRecord>('/app/food/records', data);
 }

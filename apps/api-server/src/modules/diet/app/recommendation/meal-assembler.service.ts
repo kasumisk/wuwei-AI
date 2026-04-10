@@ -303,7 +303,8 @@ export class MealAssemblerService {
       .map((p) =>
         t('display.foodItem', {
           name: p.food.name,
-          serving: p.food.standardServingDesc || '',
+          serving:
+            p.food.standardServingDesc || `${p.food.standardServingG || 100}g`,
           calories: p.servingCalories,
         }),
       )

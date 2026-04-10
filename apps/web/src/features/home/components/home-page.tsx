@@ -60,6 +60,7 @@ export function HomePage() {
     reminder,
     profile,
     recentSummaries,
+    nutritionScore,
     isLoading,
   } = useHomeData();
   const [dismissedReminder, setDismissedReminder] = useState(false);
@@ -163,7 +164,7 @@ export function HomePage() {
             <TodayStatus summary={summary} profile={profile} />
 
             {/* 今日营养评分 */}
-            <NutritionScoreCard />
+            <NutritionScoreCard scoreData={nutritionScore} />
 
             {/* 近7天趋势 */}
             <WeeklyTrendCard summaries={recentSummaries} />

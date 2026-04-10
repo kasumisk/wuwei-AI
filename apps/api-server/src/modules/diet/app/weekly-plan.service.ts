@@ -81,13 +81,18 @@ export class WeeklyPlanService {
     const existingPlans = (await this.prisma.daily_plans.findMany({
       where: {
         user_id: userId,
-        date: { gte: monday, lte: sunday },
+        date: { gte: new Date(monday), lte: new Date(sunday) },
       },
     })) as any[];
 
     const existingMap = new Map<string, any>();
     for (const plan of existingPlans) {
-      existingMap.set(plan.date, plan);
+      // plan.date is a Date object from Prisma; normalize to YYYY-MM-DD string for lookup
+      const dateKey =
+        plan.date instanceof Date
+          ? plan.date.toISOString().slice(0, 10)
+          : String(plan.date).slice(0, 10);
+      existingMap.set(dateKey, plan);
     }
 
     // 收集已有计划中的食物名（用于跨天多样性）
@@ -256,7 +261,10 @@ export class WeeklyPlanService {
       (meals.snack?.carbs ?? 0);
 
     return {
-      date: plan.date,
+      date:
+        plan.date instanceof Date
+          ? plan.date.toISOString().slice(0, 10)
+          : String(plan.date).slice(0, 10),
       isNew,
       totalCalories,
       totalProtein,

@@ -183,8 +183,8 @@ export class DailySummaryService {
         protein: totalProtein,
         fat: totalFat,
         carbs: totalCarbs,
-        foodQuality: avgQuality,
-        satiety: avgSatiety,
+        foodQuality: avgQuality || 3,
+        satiety: avgSatiety || 3,
       },
       goalType,
     );

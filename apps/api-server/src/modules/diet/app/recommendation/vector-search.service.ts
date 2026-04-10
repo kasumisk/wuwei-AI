@@ -134,25 +134,36 @@ export class VectorSearchService implements OnModuleInit {
     for (let i = 0; i < foods.length; i += BATCH_SIZE) {
       const batch = foods.slice(i, i + BATCH_SIZE);
 
-      for (const food of batch) {
-        const vec = computeFoodEmbedding(food as any);
-        // 同时更新 float4[] embedding
-        await this.prisma.foods.update({
-          where: { id: food.id },
-          data: {
-            embedding: vec,
-            embedding_updated_at: new Date(),
-          },
-        });
+      // 预计算所有嵌入向量
+      const embeddings = batch.map((food) => ({
+        id: food.id as string,
+        vec: computeFoodEmbedding(food as any),
+      }));
 
-        // V5 4.1: 如果 pgvector 可用，同步写入 embedding_v5
-        if (this.pgvectorAvailable) {
-          await this.prisma.$queryRawUnsafe(
-            `UPDATE "foods" SET "embedding_v5" = $1::vector WHERE "id" = $2`,
-            `[${vec.join(',')}]`,
-            food.id,
-          );
-        }
+      // 使用 $transaction 批量写入，减少 N 次独立 DB 往返为 1 次事务
+      await this.prisma.$transaction(
+        embeddings.map(({ id, vec }) =>
+          this.prisma.foods.update({
+            where: { id },
+            data: {
+              embedding: vec,
+              embedding_updated_at: new Date(),
+            },
+          }),
+        ),
+      );
+
+      // V5 4.1: 如果 pgvector 可用，批量同步写入 embedding_v5
+      if (this.pgvectorAvailable) {
+        await this.prisma.$transaction(
+          embeddings.map(({ id, vec }) =>
+            this.prisma.$queryRawUnsafe(
+              `UPDATE "foods" SET "embedding_v5" = $1::vector WHERE "id" = $2`,
+              `[${vec.join(',')}]`,
+              id,
+            ),
+          ),
+        );
       }
 
       synced += batch.length;
@@ -263,13 +274,14 @@ export class VectorSearchService implements OnModuleInit {
     sql += ` ORDER BY f.embedding_v5 <=> $1::vector LIMIT $${paramIdx}`;
     params.push(topK);
 
-    // 设置 HNSW ef_search 参数（在查询前）
-    await this.prisma.$queryRawUnsafe(
-      `SET LOCAL hnsw.ef_search = ${VectorSearchService.HNSW_EF_SEARCH}`,
-    );
-
+    // SET LOCAL 必须与查询在同一事务中才生效
     const rows: Array<{ foodId: string; similarity: string }> =
-      await this.prisma.$queryRawUnsafe(sql, ...params);
+      await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRawUnsafe(
+          `SET LOCAL hnsw.ef_search = ${VectorSearchService.HNSW_EF_SEARCH}`,
+        );
+        return tx.$queryRawUnsafe(sql, ...params);
+      });
 
     return rows.map((r) => ({
       foodId: r.foodId,

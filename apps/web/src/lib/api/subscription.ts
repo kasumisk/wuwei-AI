@@ -206,11 +206,7 @@ export const subscriptionService = {
       return SEED_PLANS;
     }
     try {
-      const res = await unwrap(
-        clientGet<{ list: SubscriptionPlan[] }>(
-          '/admin/subscriptions/plans?isActive=true&pageSize=10'
-        )
-      );
+      const res = await unwrap(clientGet<{ list: SubscriptionPlan[] }>('/app/subscription/plans'));
       return res.list;
     } catch {
       return SEED_PLANS;

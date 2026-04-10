@@ -211,6 +211,7 @@ export interface NutritionScoreBreakdown {
   foodQuality: number;
   satiety: number;
   stability: number;
+  glycemicImpact: number;
 }
 
 export interface NutritionScoreResult {

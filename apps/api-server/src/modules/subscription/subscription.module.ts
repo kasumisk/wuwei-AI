@@ -38,6 +38,8 @@ import { WechatPayController } from './app/wechat-pay.controller';
 // Phase 1: 订阅管理后台
 import { SubscriptionManagementController } from './admin/subscription-management.controller';
 import { SubscriptionManagementService } from './admin/subscription-management.service';
+// App 端订阅计划查询
+import { SubscriptionPlansController } from './app/subscription-plans.controller';
 
 @Global()
 @Module({
@@ -45,6 +47,7 @@ import { SubscriptionManagementService } from './admin/subscription-management.s
     AppleIapController,
     WechatPayController,
     SubscriptionManagementController,
+    SubscriptionPlansController,
   ],
   providers: [
     PlanEntitlementResolver,

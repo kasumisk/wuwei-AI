@@ -1,5 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { MealType } from '../../diet/diet.types';
+import { MealType, RecordSource } from '../../diet/diet.types';
 import { FoodService } from '../../diet/app/food.service';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 
@@ -129,6 +129,18 @@ export class FoodLibraryService {
   ) {
     const food = await this.findById(foodLibraryId);
     const calories = Math.round((Number(food.calories) * servingGrams) / 100);
+    const protein =
+      food.protein != null
+        ? Math.round(((Number(food.protein) * servingGrams) / 100) * 10) / 10
+        : 0;
+    const fat =
+      food.fat != null
+        ? Math.round(((Number(food.fat) * servingGrams) / 100) * 10) / 10
+        : 0;
+    const carbs =
+      food.carbs != null
+        ? Math.round(((Number(food.carbs) * servingGrams) / 100) * 10) / 10
+        : 0;
 
     // 复用现有的 FoodService.saveRecord
     return this.foodService.saveRecord(userId, {
@@ -138,10 +150,17 @@ export class FoodLibraryService {
           calories,
           quantity: `${servingGrams}g`,
           category: food.category,
+          protein,
+          fat,
+          carbs,
         },
       ],
       totalCalories: calories,
+      totalProtein: protein,
+      totalFat: fat,
+      totalCarbs: carbs,
       mealType,
+      source: RecordSource.MANUAL,
     });
   }
 
@@ -200,84 +219,88 @@ export class FoodLibraryService {
   /**
    * 批量自动补全缺失字段（基于规则推导，无 AI 成本）
    * 用于数据迁移或新入库食物的字段补全
+   * V6 优化: 按 category 分组使用 updateMany 替代逐条 update，减少 DB 往返
    */
   async enrichMissingFields(): Promise<{ updated: number }> {
     const foods = await this.prisma.foods.findMany();
     let updated = 0;
 
+    const categoryQuality: Record<string, number> = {
+      veggie: 8,
+      fruit: 7,
+      dairy: 6,
+      protein: 6,
+      grain: 5,
+      composite: 4,
+      beverage: 3,
+      snack: 2,
+      fat: 4,
+      condiment: 3,
+    };
+    const categorySatiety: Record<string, number> = {
+      protein: 7,
+      grain: 7,
+      dairy: 6,
+      veggie: 5,
+      composite: 5,
+      fruit: 3,
+      fat: 4,
+      snack: 2,
+      beverage: 2,
+      condiment: 1,
+    };
+    const mealTypeMap: Record<string, string[]> = {
+      grain: ['breakfast', 'lunch', 'dinner'],
+      protein: ['lunch', 'dinner'],
+      veggie: ['lunch', 'dinner'],
+      dairy: ['breakfast', 'snack'],
+      composite: ['lunch', 'dinner'],
+      fruit: ['snack'],
+      beverage: ['breakfast', 'snack'],
+      snack: ['snack'],
+      fat: ['lunch', 'dinner'],
+      condiment: ['lunch', 'dinner'],
+    };
+
+    // 收集需要逐条更新的食物（因 isProcessed/isFried 依赖食物名，无法 updateMany）
+    const batchUpdates: Array<{ id: string; data: Record<string, any> }> = [];
+
     for (const food of foods) {
       const changes: Record<string, any> = {};
 
-      // 自动推导 qualityScore（如果为空）
       if (!food.quality_score) {
-        const categoryQuality: Record<string, number> = {
-          veggie: 8,
-          fruit: 7,
-          dairy: 6,
-          protein: 6,
-          grain: 5,
-          composite: 4,
-          beverage: 3,
-          snack: 2,
-          fat: 4,
-          condiment: 3,
-        };
         changes.quality_score = categoryQuality[food.category] || 5;
       }
-
-      // 自动推导 satietyScore（如果为空）
       if (!food.satiety_score) {
-        const categorySatiety: Record<string, number> = {
-          protein: 7,
-          grain: 7,
-          dairy: 6,
-          veggie: 5,
-          composite: 5,
-          fruit: 3,
-          fat: 4,
-          snack: 2,
-          beverage: 2,
-          condiment: 1,
-        };
         changes.satiety_score = categorySatiety[food.category] || 4;
       }
-
-      // 自动推导 mealTypes（如果为空数组）
       if (!food.meal_types || (food.meal_types as string[]).length === 0) {
-        const mealTypeMap: Record<string, string[]> = {
-          grain: ['breakfast', 'lunch', 'dinner'],
-          protein: ['lunch', 'dinner'],
-          veggie: ['lunch', 'dinner'],
-          dairy: ['breakfast', 'snack'],
-          composite: ['lunch', 'dinner'],
-          fruit: ['snack'],
-          beverage: ['breakfast', 'snack'],
-          snack: ['snack'],
-          fat: ['lunch', 'dinner'],
-          condiment: ['lunch', 'dinner'],
-        };
         changes.meal_types = mealTypeMap[food.category] || ['lunch', 'dinner'];
       }
-
-      // 自动推导 isProcessed
       if (food.is_processed === undefined || food.is_processed === null) {
         changes.is_processed =
           ['snack', 'composite'].includes(food.category) ||
           /加工|方便|速食|罐头|腌/.test(food.name);
       }
-
-      // 自动推导 isFried
       if (food.is_fried === undefined || food.is_fried === null) {
         changes.is_fried = /炸|煎饺|油条|锅贴|油炸|煎饼/.test(food.name);
       }
 
       if (Object.keys(changes).length > 0) {
-        await this.prisma.foods.update({
-          where: { id: food.id },
-          data: changes,
-        });
-        updated++;
+        batchUpdates.push({ id: food.id, data: changes });
       }
+    }
+
+    // 使用 $transaction 批量写入（每批 200 条）
+    const TX_BATCH = 200;
+    for (let i = 0; i < batchUpdates.length; i += TX_BATCH) {
+      const chunk = batchUpdates.slice(i, i + TX_BATCH);
+      await this.prisma.$transaction(
+        chunk.map(({ id, data }) =>
+          this.prisma.foods.update({ where: { id }, data }),
+        ),
+      );
+      updated += chunk.length;
     }
 
     this.logger.log(
