@@ -26,6 +26,8 @@ export const THROTTLE_TIERS = {
   USER_API: 'user-api',
   /** AI 重计算（userId 级，严格） */
   AI_HEAVY: 'ai-heavy',
+  /** V6.4: 严格限流（低频高消耗接口，独立计数器） */
+  STRICT: 'strict',
 } as const;
 
 // ─── 默认限流参数（用于 ThrottlerModule.forRoot） ───
@@ -45,6 +47,12 @@ export const THROTTLE_CONFIG = [
     name: THROTTLE_TIERS.AI_HEAVY,
     ttl: 60000,
     limit: 5,
+  },
+  {
+    // V6.4: 新增独立 tier，避免与 AI_HEAVY 共享计数器
+    name: THROTTLE_TIERS.STRICT,
+    ttl: 60000,
+    limit: 3,
   },
 ];
 
@@ -80,11 +88,12 @@ export function UserApiThrottle(limit = 30, ttlSeconds = 60) {
  * 严格限流（默认 3 req/60s）
  *
  * 适用: 导出、批量操作等低频高消耗接口
+ * V6.4: 使用独立 STRICT tier，不再与 AI_HEAVY 共享计数器
  */
 export function StrictThrottle(limit = 3, ttlSeconds = 60) {
   return applyDecorators(
     Throttle({
-      [THROTTLE_TIERS.AI_HEAVY]: { limit, ttl: ttlSeconds * 1000 },
+      [THROTTLE_TIERS.STRICT]: { limit, ttl: ttlSeconds * 1000 },
     }),
   );
 }

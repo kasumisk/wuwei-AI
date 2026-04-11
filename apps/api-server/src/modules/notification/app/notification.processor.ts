@@ -10,12 +10,16 @@
  * firebase-admin 的 App 实例通过 FirebaseAdminService 获取。
  * 如果 Firebase 未初始化（如开发环境），推送会被跳过但站内信仍然保留。
  */
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Job } from 'bullmq';
 import * as admin from 'firebase-admin';
-import { QUEUE_NAMES } from '../../../core/queue/queue.constants';
+import {
+  QUEUE_NAMES,
+  QUEUE_DEFAULT_OPTIONS,
+  DeadLetterService,
+} from '../../../core/queue';
 import {
   NotificationService,
   NotificationJobData,
@@ -29,6 +33,8 @@ export class NotificationProcessor extends WorkerHost {
   constructor(
     private readonly notificationService: NotificationService,
     private readonly configService: ConfigService,
+    // V6.5 Phase 2A: DLQ 服务
+    private readonly deadLetterService: DeadLetterService,
   ) {
     super();
     // 尝试获取已初始化的 Firebase App 实例
@@ -135,6 +141,26 @@ export class NotificationProcessor extends WorkerHost {
         `FCM 推送异常: userId=${userId}, ${(err as Error).message}`,
       );
       throw err; // 让 BullMQ 重试
+    }
+  }
+
+  /**
+   * V6.5 Phase 2A: BullMQ failed 事件钩子
+   * 当 job 重试耗尽（最终失败）时，存入 DLQ
+   */
+  @OnWorkerEvent('failed')
+  async onFailed(job: Job<NotificationJobData>, error: Error): Promise<void> {
+    const maxAttempts =
+      job.opts?.attempts ??
+      QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.NOTIFICATION].maxRetries + 1;
+    if (job.attemptsMade >= maxAttempts) {
+      await this.deadLetterService.storeFailedJob(
+        QUEUE_NAMES.NOTIFICATION,
+        job.id ?? 'unknown',
+        job.data,
+        error.message,
+        job.attemptsMade,
+      );
     }
   }
 }

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
 import { RedisCacheService } from '../../../../core/redis/redis-cache.service';
+import { SemanticRecallService } from './semantic-recall.service';
 
 /**
  * 协同过滤服务 (V4 Phase 4.4, V5 2.9 时间衰减, V5 2.10 Cron, V5 4.2 Item-based CF)
@@ -14,6 +15,11 @@ import { RedisCacheService } from '../../../../core/redis/redis-cache.service';
  *
  * 最终 CF 分数 = 0.4 × user-based + 0.6 × item-based（item-based 权重更高）
  * 当其中一种模式数据不足时，自动使用另一种模式的全部权重。
+ *
+ * V6.3 P2-10: 增量更新
+ * - 定时全量重建改为：周日 01:00 全量重建 + 每日 01:00 增量更新
+ * - 增量更新只重算有新交互的用户行 + 涉及食物的物品列
+ * - O(n²) → O(k*n)，k = 有变化的用户/食物数
  *
  * 数据来源:
  * 1. food_records — 隐式正信号（V5 2.9 时间衰减）
@@ -88,46 +94,337 @@ export class CollaborativeFilteringService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redisCache: RedisCacheService,
+    private readonly semanticRecall: SemanticRecallService,
   ) {}
 
   // ================================================================
-  //  V5 2.10: 每日凌晨 1:00 定时重建 CF 矩阵
+  //  V6.3 P2-10: 每日凌晨 1:00 增量更新，周日 01:00 全量重建
   // ================================================================
 
   /**
-   * 定时重建协同过滤交互矩阵
+   * 每日增量更新 CF 矩阵（周一~周六）
    *
-   * 设计动机:
-   * - 矩阵构建涉及大量 DB 查询和计算，放在请求路径中会阻塞响应
-   * - 每天凌晨 1:00 预构建，请求时直接使用内存缓存
-   * - 分布式锁确保多实例部署时只有一个实例执行
-   * - 内存缓存 TTL 设为 25h（90000s），确保覆盖两次 Cron 之间的间隔
+   * 只重算昨天有新交互的用户行 + 涉及食物的物品相似列
+   * 复杂度: O(k*n)，k = 变化用户/食物数
    */
-  @Cron('0 1 * * *')
-  async scheduledMatrixRebuild(): Promise<void> {
-    await this.redisCache.runWithLock(
-      'cf_matrix_rebuild',
-      10 * 60 * 1000, // 10 分钟过期
-      () => this.doScheduledRebuild(),
+  @Cron('0 1 * * 1-6')
+  async scheduledIncrementalUpdate(): Promise<void> {
+    await this.redisCache.runWithLock('cf_matrix_rebuild', 10 * 60 * 1000, () =>
+      this.doIncrementalUpdate(),
+    );
+  }
+
+  /**
+   * 每周日全量重建（保留原有逻辑兜底）
+   */
+  @Cron('0 1 * * 0')
+  async scheduledFullRebuild(): Promise<void> {
+    await this.redisCache.runWithLock('cf_matrix_rebuild', 10 * 60 * 1000, () =>
+      this.doScheduledRebuild(),
     );
   }
 
   private async doScheduledRebuild(): Promise<void> {
-    this.logger.log('开始定时重建 CF 交互矩阵...');
+    this.logger.log('开始定时全量重建 CF 交互矩阵...');
     const startTime = Date.now();
 
     try {
       const result = await this.rebuildMatrix();
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       this.logger.log(
-        `CF 矩阵定时重建完成: ${result.userCount} 用户, ${result.itemPairCount} 食物相似对, 耗时 ${elapsed}s`,
+        `CF 矩阵全量重建完成: ${result.userCount} 用户, ${result.itemPairCount} 食物相似对, 耗时 ${elapsed}s`,
       );
     } catch (err) {
       this.logger.error(
-        `CF 矩阵定时重建失败: ${(err as Error).message}`,
+        `CF 矩阵全量重建失败: ${(err as Error).message}`,
         (err as Error).stack,
       );
     }
+  }
+
+  /**
+   * V6.3 P2-10: 增量更新逻辑
+   *
+   * 1. 获取昨天有新交互的用户 ID 列表
+   * 2. 只重算这些用户的交互向量行
+   * 3. 获取涉及的食物列表，增量更新 item similarity
+   * 4. 清除受影响用户的 CF 分数缓存
+   */
+  private async doIncrementalUpdate(): Promise<void> {
+    this.logger.log('开始增量更新 CF 矩阵...');
+    const startTime = Date.now();
+
+    try {
+      // 如果还没有基础矩阵，降级为全量重建
+      if (!this.cachedMatrix || this.cachedMatrix.length === 0) {
+        this.logger.log('增量更新: 无基础矩阵，降级为全量重建');
+        await this.doScheduledRebuild();
+        return;
+      }
+
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+      // 1. 获取昨天有新交互的用户 ID
+      const changedUsers = await this.getChangedUsersSince(yesterday);
+      if (changedUsers.length === 0) {
+        this.logger.log('增量更新: 无变化用户，跳过');
+        return;
+      }
+
+      // 2. 重算变化用户的交互向量
+      const now = Date.now();
+      const sinceDate = new Date(
+        now - CF_CONFIG.IMPLICIT_DECAY_DAYS * 86400000,
+      );
+
+      let updatedCount = 0;
+      const affectedFoods = new Set<string>();
+
+      for (const userId of changedUsers) {
+        const newVec = await this.rebuildUserRow(userId, sinceDate, now);
+
+        // 收集该用户涉及的食物
+        if (newVec) {
+          for (const foodName of newVec.interactions.keys()) {
+            affectedFoods.add(foodName);
+          }
+        }
+
+        // 更新矩阵中的用户向量
+        const existingIdx = this.cachedMatrix.findIndex(
+          (v) => v.userId === userId,
+        );
+        if (newVec && newVec.interactions.size >= CF_CONFIG.MIN_INTERACTIONS) {
+          if (existingIdx >= 0) {
+            // 收集旧向量涉及的食物
+            for (const foodName of this.cachedMatrix[
+              existingIdx
+            ].interactions.keys()) {
+              affectedFoods.add(foodName);
+            }
+            this.cachedMatrix[existingIdx] = newVec;
+          } else {
+            this.cachedMatrix.push(newVec);
+          }
+          updatedCount++;
+        } else if (existingIdx >= 0) {
+          // 用户交互数不足，从矩阵移除
+          for (const foodName of this.cachedMatrix[
+            existingIdx
+          ].interactions.keys()) {
+            affectedFoods.add(foodName);
+          }
+          this.cachedMatrix.splice(existingIdx, 1);
+          updatedCount++;
+        }
+      }
+
+      // 3. 增量更新涉及食物的 item similarity
+      let itemPairsUpdated = 0;
+      if (affectedFoods.size > 0) {
+        itemPairsUpdated = this.incrementalItemSimilarityUpdate(
+          this.cachedMatrix,
+          affectedFoods,
+        );
+      }
+
+      this.matrixBuiltAt = Date.now();
+
+      // 4. 清除受影响用户的 CF 分数缓存
+      for (const userId of changedUsers) {
+        await this.redisCache.del(`cf:scores:${userId}`);
+      }
+
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      this.logger.log(
+        `CF 增量更新完成: ${changedUsers.length} 变化用户, ${updatedCount} 向量更新, ` +
+          `${affectedFoods.size} 食物涉及, ${itemPairsUpdated} item pairs 更新, 耗时 ${elapsed}s`,
+      );
+    } catch (err) {
+      this.logger.error(
+        `CF 增量更新失败，降级为全量重建: ${(err as Error).message}`,
+        (err as Error).stack,
+      );
+      // 增量失败则降级全量
+      await this.doScheduledRebuild();
+    }
+  }
+
+  /**
+   * V6.3 P2-10: 获取某时间点之后有新交互的用户 ID 列表
+   */
+  private async getChangedUsersSince(since: Date): Promise<string[]> {
+    // 从 food_records 和 recommendation_feedbacks 中获取有新记录的用户
+    const rows: Array<{ userId: string }> = await this.prisma.$queryRawUnsafe(
+      `SELECT DISTINCT user_id AS "userId" FROM (
+        SELECT user_id FROM food_records WHERE created_at >= $1
+        UNION
+        SELECT user_id::uuid FROM recommendation_feedbacks WHERE created_at >= $1
+      ) AS changed_users`,
+      since,
+    );
+    return rows.map((r) => r.userId);
+  }
+
+  /**
+   * V6.3 P2-10: 重建单个用户的交互向量
+   */
+  private async rebuildUserRow(
+    userId: string,
+    sinceDate: Date,
+    now: number,
+  ): Promise<UserInteractionVector | null> {
+    // 获取该用户的食物记录
+    const recordRows: Array<{
+      foodName: string;
+      createdAt: Date | string;
+    }> = await this.prisma.$queryRawUnsafe(
+      `SELECT unnest_food.value->>'name' AS "foodName",
+              r.created_at AS "createdAt"
+       FROM food_records r
+       INNER JOIN LATERAL jsonb_array_elements(r.foods) AS unnest_food ON TRUE
+       WHERE r.user_id = $1::uuid
+         AND unnest_food.value->>'name' IS NOT NULL
+         AND r.created_at >= $2`,
+      userId,
+      sinceDate,
+    );
+
+    // 获取该用户的反馈
+    const feedbacks: Array<{
+      foodName: string;
+      action: string;
+    }> = await this.prisma.$queryRawUnsafe(
+      `SELECT f.food_name AS "foodName", f.action AS "action"
+       FROM recommendation_feedbacks f
+       WHERE f.user_id = $1`,
+      userId,
+    );
+
+    const interactions = new Map<string, number>();
+
+    // 隐式信号 — 时间衰减
+    for (const row of recordRows) {
+      const { foodName } = row;
+      if (!foodName) continue;
+      const createdAt =
+        row.createdAt instanceof Date
+          ? row.createdAt.getTime()
+          : new Date(row.createdAt).getTime();
+      const daysSince = (now - createdAt) / 86400000;
+      const decayWeight = Math.exp(-0.02 * daysSince);
+      interactions.set(
+        foodName,
+        (interactions.get(foodName) ?? 0) + decayWeight,
+      );
+    }
+
+    // 显式信号
+    for (const row of feedbacks) {
+      const { foodName, action } = row;
+      if (!foodName) continue;
+      const signal = FEEDBACK_SIGNAL[action] ?? 0;
+      interactions.set(foodName, (interactions.get(foodName) ?? 0) + signal);
+    }
+
+    if (interactions.size === 0) return null;
+
+    let normSq = 0;
+    for (const val of interactions.values()) {
+      normSq += val * val;
+    }
+
+    return {
+      userId,
+      interactions,
+      norm: Math.sqrt(normSq),
+    };
+  }
+
+  /**
+   * V6.3 P2-10: 增量更新 item similarity — 只重算涉及的食物列
+   *
+   * @returns 更新的相似对数量
+   */
+  private incrementalItemSimilarityUpdate(
+    matrix: UserInteractionVector[],
+    affectedFoods: Set<string>,
+  ): number {
+    // 转置受影响食物的 用户向量
+    const foodUsers = new Map<string, Map<string, number>>();
+    for (const userVec of matrix) {
+      for (const [foodName, score] of userVec.interactions) {
+        if (score <= 0) continue;
+        if (!foodUsers.has(foodName)) foodUsers.set(foodName, new Map());
+        foodUsers.get(foodName)!.set(userVec.userId, score);
+      }
+    }
+
+    // 准备所有可计算食物的 norm
+    const foodNorms = new Map<string, number>();
+    for (const [foodName, users] of foodUsers) {
+      if (users.size < CF_CONFIG.ITEM_MIN_COMMON_USERS) continue;
+      let normSq = 0;
+      for (const val of users.values()) normSq += val * val;
+      foodNorms.set(foodName, Math.sqrt(normSq));
+    }
+
+    let pairsUpdated = 0;
+
+    // 只对 affectedFoods 中的食物重算其相似度行
+    for (const targetFood of affectedFoods) {
+      const targetUsers = foodUsers.get(targetFood);
+      const targetNorm = foodNorms.get(targetFood);
+      if (
+        !targetUsers ||
+        !targetNorm ||
+        targetUsers.size < CF_CONFIG.ITEM_MIN_COMMON_USERS
+      ) {
+        this.itemSimilarity.delete(targetFood);
+        continue;
+      }
+
+      const topSimilar: Array<{ name: string; sim: number }> = [];
+
+      for (const [otherFood, otherNorm] of foodNorms) {
+        if (otherFood === targetFood) continue;
+        const otherUsers = foodUsers.get(otherFood)!;
+
+        const [smaller, larger] =
+          targetUsers.size <= otherUsers.size
+            ? [targetUsers, otherUsers]
+            : [otherUsers, targetUsers];
+
+        let dotProduct = 0;
+        let commonUsers = 0;
+        for (const [userId, valA] of smaller) {
+          const valB = larger.get(userId);
+          if (valB !== undefined) {
+            dotProduct += valA * valB;
+            commonUsers++;
+          }
+        }
+
+        if (commonUsers < CF_CONFIG.ITEM_MIN_COMMON_USERS) continue;
+        const sim = dotProduct / (targetNorm * otherNorm);
+        if (sim > CF_CONFIG.ITEM_MIN_SIMILARITY) {
+          topSimilar.push({ name: otherFood, sim });
+        }
+      }
+
+      if (topSimilar.length > 0) {
+        topSimilar.sort((a, b) => b.sim - a.sim);
+        const topK = topSimilar.slice(0, CF_CONFIG.ITEM_TOP_K_SIMILAR);
+        const simMap = new Map<string, number>();
+        for (const { name, sim } of topK) simMap.set(name, sim);
+        this.itemSimilarity.set(targetFood, simMap);
+        pairsUpdated += topK.length;
+      } else {
+        this.itemSimilarity.delete(targetFood);
+      }
+    }
+
+    return pairsUpdated;
   }
 
   /**
@@ -152,10 +449,10 @@ export class CollaborativeFilteringService {
       !targetVec ||
       targetVec.interactions.size < CF_CONFIG.MIN_INTERACTIONS
     ) {
-      // 冷启动：返回空
-      const empty: CFScoreMap = { scores: {}, similarUserCount: 0 };
-      await this.redisCache.set(cacheKey, empty, CF_CONFIG.SCORE_CACHE_TTL);
-      return empty;
+      // V6.5 Phase 3E: 冷启动 fallback — 用语义召回替代空白 CF
+      const fallback = await this.semanticColdStartFallback(userId);
+      await this.redisCache.set(cacheKey, fallback, CF_CONFIG.SCORE_CACHE_TTL);
+      return fallback;
     }
 
     // 4. User-based CF 分数
@@ -516,6 +813,72 @@ export class CollaborativeFilteringService {
    */
   async invalidateUserCache(userId: string): Promise<void> {
     await this.redisCache.del(`cf:scores:${userId}`);
+  }
+
+  // ================================================================
+  //  V6.5 Phase 3E: 语义冷启动 fallback
+  // ================================================================
+
+  /**
+   * 冷启动用户（<5 交互）的 CF fallback：
+   * 使用 SemanticRecallService 基于少量正向反馈构建语义画像，
+   * 召回语义相似食物并转换为合成 CF 分数。
+   *
+   * 合成分数按相似度排名线性递减（rank 1 → 0.8, rank N → 0.3），
+   * 让冷启动用户也能获得有意义的 CF boost，而非空白。
+   *
+   * @returns CFScoreMap — 如果语义召回也无结果则返回空 scores
+   */
+  private async semanticColdStartFallback(userId: string): Promise<CFScoreMap> {
+    try {
+      // 召回最多 30 个语义相似食物
+      const foodIds = await this.semanticRecall.recallSimilarFoods(
+        userId,
+        30,
+        [],
+      );
+
+      if (foodIds.length === 0) {
+        return { scores: {}, similarUserCount: 0 };
+      }
+
+      // 查询食物名称（CF 分数以 food name 为 key）
+      const foods = await this.prisma.foods.findMany({
+        where: { id: { in: foodIds } },
+        select: { id: true, name: true },
+      });
+
+      if (foods.length === 0) {
+        return { scores: {}, similarUserCount: 0 };
+      }
+
+      // 保持召回顺序（相似度从高到低），生成线性递减的合成分数
+      // rank 0 → 0.8, 末位 → 0.3
+      const idToName = new Map(foods.map((f) => [f.id, f.name]));
+      const orderedNames: string[] = [];
+      for (const id of foodIds) {
+        const name = idToName.get(id);
+        if (name) orderedNames.push(name);
+      }
+
+      const scores: Record<string, number> = {};
+      const count = orderedNames.length;
+      for (let i = 0; i < count; i++) {
+        // 线性插值: 0.8 → 0.3
+        scores[orderedNames[i]] = 0.8 - (0.5 * i) / Math.max(count - 1, 1);
+      }
+
+      this.logger.log(
+        `CF 冷启动 fallback: userId=${userId}, 语义召回 ${count} 个食物`,
+      );
+
+      return { scores, similarUserCount: 0 };
+    } catch (err) {
+      this.logger.warn(
+        `CF 冷启动 semantic fallback 失败 (userId=${userId}): ${(err as Error).message}`,
+      );
+      return { scores: {}, similarUserCount: 0 };
+    }
   }
 
   /**

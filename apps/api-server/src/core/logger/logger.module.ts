@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { WinstonModule } from 'nest-winston';
 import * as winston from 'winston';
+import 'winston-daily-rotate-file';
 import { Config } from '../config/configuration';
 
 /**
@@ -61,17 +62,25 @@ const clsContextFormat = winston.format((info) => {
                 }),
               ),
             }),
-            new winston.transports.File({
-              filename: 'logs/error.log',
+            // V6.4: 日志轮转 — 错误日志每日轮转，保留 14 天
+            new winston.transports.DailyRotateFile({
+              filename: 'logs/error-%DATE%.log',
+              datePattern: 'YYYY-MM-DD',
               level: 'error',
+              maxFiles: '14d',
+              maxSize: '50m',
               format: winston.format.combine(
                 winston.format.timestamp(),
                 clsContextFormat(),
                 winston.format.json(),
               ),
             }),
-            new winston.transports.File({
-              filename: 'logs/combined.log',
+            // V6.4: 日志轮转 — 综合日志每日轮转，保留 7 天
+            new winston.transports.DailyRotateFile({
+              filename: 'logs/combined-%DATE%.log',
+              datePattern: 'YYYY-MM-DD',
+              maxFiles: '7d',
+              maxSize: '100m',
               format: winston.format.combine(
                 winston.format.timestamp(),
                 clsContextFormat(),

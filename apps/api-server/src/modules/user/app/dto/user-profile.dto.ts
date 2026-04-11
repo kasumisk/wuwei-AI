@@ -362,4 +362,107 @@ export class UpdateDeclaredProfileDto {
   @IsOptional()
   @IsString()
   regionCode?: string;
+
+  // ─── V6.4 P1: 暴露 exerciseSchedule ───
+  @ApiPropertyOptional({
+    description: '每周运动计划',
+    example: {
+      mon: { startHour: 7, durationHours: 1, type: 'cardio' },
+      wed: { startHour: 18, durationHours: 1.5, type: 'strength' },
+    },
+  })
+  @IsOptional()
+  @IsObject()
+  exerciseSchedule?: Record<
+    string,
+    { startHour: number; durationHours: number; type?: string }
+  >;
+
+  // ─── V6.6 Phase 2-C: 生活方式画像字段 ───
+
+  @ApiPropertyOptional({
+    enum: ['poor', 'fair', 'good'],
+    description: '睡眠质量',
+  })
+  @IsOptional()
+  @IsIn(['poor', 'fair', 'good'])
+  sleepQuality?: string;
+
+  @ApiPropertyOptional({
+    enum: ['low', 'medium', 'high'],
+    description: '压力水平',
+  })
+  @IsOptional()
+  @IsIn(['low', 'medium', 'high'])
+  stressLevel?: string;
+
+  @ApiPropertyOptional({
+    minimum: 500,
+    maximum: 5000,
+    description: '每日目标饮水量 (ml)',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(500)
+  @Max(5000)
+  hydrationGoal?: number;
+
+  @ApiPropertyOptional({ type: [String], description: '正在服用的补剂列表' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  supplementsUsed?: string[];
+
+  @ApiPropertyOptional({
+    enum: ['early_bird', 'standard', 'late_eater'],
+    description: '用餐时间偏好',
+  })
+  @IsOptional()
+  @IsIn(['early_bird', 'standard', 'late_eater'])
+  mealTimingPreference?: string;
+}
+
+// ========== V6.5 Phase 3F: 用户推荐偏好 DTO ==========
+
+import {
+  PopularityPreference,
+  CookingEffort,
+  BudgetSensitivity,
+} from '../../user.types';
+
+/**
+ * 用户推荐偏好设置 DTO
+ *
+ * 三个维度均为可选 — 未设置的维度使用策略默认值：
+ * - popularityPreference: 大众化(popular) / 平衡(balanced) / 探索型(adventurous)
+ * - cookingEffort: 快手(quick) / 适中(moderate) / 精致(elaborate)
+ * - budgetSensitivity: 便宜(budget) / 适中(moderate) / 不限(unlimited)
+ */
+export class UpdateRecommendationPreferencesDto {
+  @ApiPropertyOptional({
+    enum: PopularityPreference,
+    description:
+      '大众化偏好：popular=常见食物优先, balanced=默认, adventurous=探索新食物',
+  })
+  @IsOptional()
+  @IsEnum(PopularityPreference)
+  popularityPreference?: PopularityPreference;
+
+  @ApiPropertyOptional({
+    enum: CookingEffort,
+    description:
+      '烹饪投入：quick=≤30min快手, moderate=≤60min适中, elaborate=不限',
+  })
+  @IsOptional()
+  @IsEnum(CookingEffort)
+  cookingEffort?: CookingEffort;
+
+  @ApiPropertyOptional({
+    enum: BudgetSensitivity,
+    description: '预算敏感度：budget=便宜优先, moderate=适中, unlimited=不限',
+  })
+  @IsOptional()
+  @IsEnum(BudgetSensitivity)
+  budgetSensitivity?: BudgetSensitivity;
 }

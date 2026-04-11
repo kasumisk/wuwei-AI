@@ -13,8 +13,15 @@ import {
   AssignStrategyDto,
   GetAssignmentsQueryDto,
   RemoveAssignmentDto,
+  UpdateRealismConfigDto,
+  ApplyRealismToSegmentDto,
 } from './dto/strategy-management.dto';
-import { StrategyStatus } from '../strategy.types';
+import {
+  StrategyStatus,
+  RealismConfig,
+  PRESET_REALISM,
+  DEFAULT_REALISM,
+} from '../strategy.types';
 
 @Injectable()
 export class StrategyManagementService {
@@ -239,5 +246,187 @@ export class StrategyManagementService {
       totalActiveAssignments: totalAssignments,
       scopeDistribution,
     };
+  }
+
+  // ==================== V6.5 Phase 3H: Realism 配置管理 ====================
+
+  /**
+   * 获取所有活跃策略的 realism 配置概览
+   *
+   * 返回每个活跃策略的 realism 配置，以及与默认值的差异，
+   * 便于 Admin 一目了然地查看整个系统的现实性约束状况。
+   */
+  async getRealismOverview() {
+    const activeStrategies = await this.prisma.strategy.findMany({
+      where: { status: StrategyStatus.ACTIVE },
+      orderBy: [{ scope: 'asc' }, { priority: 'desc' }],
+      select: {
+        id: true,
+        name: true,
+        scope: true,
+        scope_target: true,
+        config: true,
+      },
+    });
+
+    return {
+      defaultRealism: { ...DEFAULT_REALISM },
+      presets: PRESET_REALISM,
+      strategies: activeStrategies.map((s) => {
+        const config = s.config as Record<string, any> | null;
+        const realism = (config?.realism as RealismConfig | undefined) ?? null;
+        return {
+          strategyId: s.id,
+          strategyName: s.name,
+          scope: s.scope,
+          scopeTarget: s.scope_target,
+          realism,
+          isCustom: realism !== null,
+        };
+      }),
+    };
+  }
+
+  /**
+   * 更新指定策略的 realism 配置
+   *
+   * 只修改 config.realism 子字段，不影响策略其他配置维度。
+   * 支持部分更新（传入的字段覆盖，未传入的保留原值）。
+   */
+  async updateStrategyRealism(strategyId: string, dto: UpdateRealismConfigDto) {
+    const strategy = await this.prisma.strategy.findUnique({
+      where: { id: strategyId },
+    });
+    if (!strategy) {
+      throw new NotFoundException(`策略 ${strategyId} 不存在`);
+    }
+
+    const existingConfig = (strategy.config as Record<string, any>) ?? {};
+    const existingRealism = (existingConfig.realism as RealismConfig) ?? {};
+
+    // 部分合并：dto 中已定义的字段覆盖原值
+    const mergedRealism: RealismConfig = {
+      ...existingRealism,
+      ...this.pickDefined(dto),
+    };
+
+    const newConfig = {
+      ...existingConfig,
+      realism: mergedRealism,
+    };
+
+    const updated = await this.strategyService.update(strategyId, {
+      config: newConfig,
+    });
+
+    this.logger.log(
+      `策略 ${strategyId} realism 配置已更新: ${JSON.stringify(mergedRealism)}`,
+    );
+
+    return {
+      strategyId: updated.id,
+      strategyName: updated.name,
+      realism: mergedRealism,
+    };
+  }
+
+  /**
+   * 将预设 realism 配置应用到指定策略
+   *
+   * 可选预设: warm_start, re_engage, precision, discovery
+   */
+  async applyRealismPreset(strategyId: string, presetName: string) {
+    const preset = PRESET_REALISM[presetName];
+    if (!preset) {
+      throw new BadRequestException(
+        `未知预设名 "${presetName}"，可选: ${Object.keys(PRESET_REALISM).join(', ')}`,
+      );
+    }
+
+    const strategy = await this.prisma.strategy.findUnique({
+      where: { id: strategyId },
+    });
+    if (!strategy) {
+      throw new NotFoundException(`策略 ${strategyId} 不存在`);
+    }
+
+    const existingConfig = (strategy.config as Record<string, any>) ?? {};
+    const newConfig = {
+      ...existingConfig,
+      realism: { ...preset },
+    };
+
+    const updated = await this.strategyService.update(strategyId, {
+      config: newConfig,
+    });
+
+    this.logger.log(`策略 ${strategyId} 已应用预设 realism: ${presetName}`);
+
+    return {
+      strategyId: updated.id,
+      strategyName: updated.name,
+      appliedPreset: presetName,
+      realism: preset,
+    };
+  }
+
+  /**
+   * 按分群批量应用 realism 配置
+   *
+   * 查找所有 scope=goal_type 且 scope_target 匹配分群名称的策略，
+   * 批量更新 realism 配置。
+   */
+  async applyRealismToSegment(dto: ApplyRealismToSegmentDto) {
+    // 找到匹配分群的所有策略
+    const strategies = await this.prisma.strategy.findMany({
+      where: {
+        status: StrategyStatus.ACTIVE,
+        OR: [
+          { scope: 'goal_type', scope_target: dto.segment },
+          { name: { contains: dto.segment, mode: 'insensitive' } },
+        ],
+      },
+    });
+
+    if (strategies.length === 0) {
+      throw new NotFoundException(`未找到匹配分群 "${dto.segment}" 的活跃策略`);
+    }
+
+    const realismUpdate = this.pickDefined(dto.realism);
+    const results: Array<{ strategyId: string; strategyName: string }> = [];
+
+    for (const s of strategies) {
+      const existingConfig = (s.config as Record<string, any>) ?? {};
+      const existingRealism = (existingConfig.realism as RealismConfig) ?? {};
+      const newConfig = {
+        ...existingConfig,
+        realism: { ...existingRealism, ...realismUpdate },
+      };
+      await this.strategyService.update(s.id, { config: newConfig });
+      results.push({ strategyId: s.id, strategyName: s.name });
+    }
+
+    this.logger.log(
+      `已将 realism 配置应用到分群 "${dto.segment}" 的 ${results.length} 个策略`,
+    );
+
+    return {
+      segment: dto.segment,
+      appliedRealism: realismUpdate,
+      updatedStrategies: results,
+    };
+  }
+
+  /**
+   * 从对象中提取已定义（非 undefined）的字段
+   */
+  private pickDefined(obj: object): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (value !== undefined) {
+        result[key] = value;
+      }
+    }
+    return result;
   }
 }

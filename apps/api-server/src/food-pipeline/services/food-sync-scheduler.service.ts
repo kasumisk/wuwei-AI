@@ -20,9 +20,10 @@ export class FoodSyncSchedulerService {
   ) {}
 
   /**
-   * 每月1号凌晨3点同步 USDA 常见食物数据
+   * 每月1号凌晨 5:30 同步 USDA 常见食物数据
+   * V6.4: 从 03:00 移到 05:30 避免与 daily-precompute / weeklySegmentation 叠加
    */
-  @Cron('0 3 1 * *')
+  @Cron('30 5 1 * *')
   async monthlyUsdaSync() {
     this.logger.log('Starting monthly USDA sync...');
     const commonCategories = [
@@ -103,8 +104,9 @@ export class FoodSyncSchedulerService {
 
   /**
    * 每小时更新热门食物 popularity（基于使用频率）
+   * V6.4: 从 :00 移到 :30 避免与 quota-reset 同时执行
    */
-  @Cron(CronExpression.EVERY_HOUR)
+  @Cron('30 * * * *')
   async hourlyPopularityUpdate() {
     // 基于 food_records 表统计最近7天的使用次数
     try {

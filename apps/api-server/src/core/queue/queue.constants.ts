@@ -8,13 +8,17 @@
 // ─── 队列名称 ───
 
 export const QUEUE_NAMES = {
-  /** 画像实时更新 — 反馈/行为 → 短期画像更新 */
+  /**
+   * @deprecated V6.2: 已移除注册 — 画像更新通过 EventEmitter2 事件驱动 + Cron 实现
+   */
   PROFILE_UPDATE: 'profile-update',
 
   /** 每日推荐预计算 — 凌晨批量为活跃用户生成次日推荐 */
   RECOMMENDATION_PRECOMPUTE: 'recommendation-precompute',
 
-  /** 反馈处理 — 权重学习 + 画像更新 */
+  /**
+   * @deprecated V6.2: 已移除注册 — 反馈处理在 feedback.service.ts 中同步完成
+   */
   FEEDBACK_PROCESS: 'feedback-process',
 
   /** AI 图片分析 — 长耗时异步任务 */
@@ -23,8 +27,14 @@ export const QUEUE_NAMES = {
   /** 通知推送 — FCM / 站内信 */
   NOTIFICATION: 'notification',
 
-  /** 数据导出 — CSV / PDF 生成 */
+  /** 数据导出 — CSV / PDF 生成（Phase 3 实现 Processor） */
   EXPORT: 'export',
+
+  /** V6.3 P2-7: AI 菜谱批量生成 */
+  RECIPE_GENERATION: 'recipe-generation',
+
+  /** V6.5 Phase 3B: 食物 Embedding 异步生成 */
+  EMBEDDING_GENERATION: 'embedding-generation',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -75,5 +85,17 @@ export const QUEUE_DEFAULT_OPTIONS: Record<
     maxRetries: 1,
     backoffType: 'fixed',
     backoffDelay: 5000,
+  },
+  [QUEUE_NAMES.RECIPE_GENERATION]: {
+    concurrency: 2,
+    maxRetries: 2,
+    backoffType: 'exponential',
+    backoffDelay: 5000,
+  },
+  [QUEUE_NAMES.EMBEDDING_GENERATION]: {
+    concurrency: 5,
+    maxRetries: 2,
+    backoffType: 'exponential',
+    backoffDelay: 2000,
   },
 };

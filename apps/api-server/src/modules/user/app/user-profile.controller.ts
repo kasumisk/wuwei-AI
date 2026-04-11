@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Put,
   Patch,
   Body,
   Param,
@@ -26,6 +27,7 @@ import {
   OnboardingStep3Dto,
   OnboardingStep4Dto,
   UpdateDeclaredProfileDto,
+  UpdateRecommendationPreferencesDto,
 } from './dto/user-profile.dto';
 
 @ApiTags('用户画像')
@@ -167,6 +169,57 @@ export class UserProfileController {
       code: HttpStatus.OK,
       message: '更新成功',
       data: profile,
+    };
+  }
+
+  // ==================== V6.5 推荐偏好 API ====================
+
+  /**
+   * 更新推荐偏好设置
+   * PUT /api/app/user-profile/recommendation-preferences
+   *
+   * 三个维度均为可选：
+   * - popularityPreference: popular / balanced / adventurous
+   * - cookingEffort: quick / moderate / elaborate
+   * - budgetSensitivity: budget / moderate / unlimited
+   */
+  @Put('recommendation-preferences')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '更新推荐偏好设置（大众化/烹饪投入/预算）' })
+  async updateRecommendationPreferences(
+    @Body(new ValidationPipe({ transform: true, whitelist: true }))
+    dto: UpdateRecommendationPreferencesDto,
+    @CurrentAppUser() user: AppUserPayload,
+  ): Promise<ApiResponse> {
+    const prefs = await this.userProfileService.updateRecommendationPreferences(
+      user.id,
+      dto,
+    );
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '推荐偏好更新成功',
+      data: prefs,
+    };
+  }
+
+  /**
+   * 获取推荐偏好设置
+   * GET /api/app/user-profile/recommendation-preferences
+   */
+  @Get('recommendation-preferences')
+  @ApiOperation({ summary: '获取推荐偏好设置' })
+  async getRecommendationPreferences(
+    @CurrentAppUser() user: AppUserPayload,
+  ): Promise<ApiResponse> {
+    const prefs = await this.userProfileService.getRecommendationPreferences(
+      user.id,
+    );
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '获取成功',
+      data: prefs,
     };
   }
 

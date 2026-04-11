@@ -74,7 +74,8 @@ export class AppAuthService {
   }
 
   async phoneLogin(phone: string, code: string): Promise<AppLoginResponseDto> {
-    const valid = this.smsService.verifyCode(phone, code);
+    // V6.4: verifyCode 已改为异步（Redis 存储）
+    const valid = await this.smsService.verifyCode(phone, code);
     if (!valid) {
       throw new UnauthorizedException('验证码错误或已过期');
     }

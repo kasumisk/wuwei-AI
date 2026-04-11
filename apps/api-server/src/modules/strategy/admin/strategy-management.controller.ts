@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Patch,
   Delete,
   Body,
   Param,
@@ -10,7 +11,12 @@ import {
   UseGuards,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/admin/jwt-auth.guard';
 import { RolesGuard } from '../../rbac/admin/roles.guard';
 import { Roles } from '../../rbac/admin/roles.decorator';
@@ -22,6 +28,8 @@ import {
   AssignStrategyDto,
   GetAssignmentsQueryDto,
   RemoveAssignmentDto,
+  UpdateRealismConfigDto,
+  ApplyRealismToSegmentDto,
 } from './dto/strategy-management.dto';
 import { ApiResponse } from '../../../common/types/response.type';
 
@@ -172,6 +180,90 @@ export class StrategyManagementController {
       success: true,
       code: HttpStatus.OK,
       message: '分配已取消',
+      data,
+    };
+  }
+
+  // ==================== V6.5 Phase 3H: Realism 配置管理 ====================
+
+  @Get('realism/overview')
+  @ApiOperation({
+    summary: '获取所有活跃策略的 Realism 配置概览',
+    description: '返回系统默认值、预设值、以及每个活跃策略当前的 realism 配置',
+  })
+  async getRealismOverview(): Promise<ApiResponse> {
+    const data = await this.strategyManagementService.getRealismOverview();
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '获取 Realism 配置概览成功',
+      data,
+    };
+  }
+
+  @Patch(':id/realism')
+  @ApiOperation({
+    summary: '更新策略的 Realism 配置',
+    description:
+      '只修改 config.realism 子字段，不影响策略其他配置维度。支持部分更新。',
+  })
+  async updateRealism(
+    @Param('id') id: string,
+    @Body() dto: UpdateRealismConfigDto,
+  ): Promise<ApiResponse> {
+    const data = await this.strategyManagementService.updateStrategyRealism(
+      id,
+      dto,
+    );
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: 'Realism 配置更新成功',
+      data,
+    };
+  }
+
+  @Post(':id/realism/preset')
+  @ApiOperation({
+    summary: '将预设 Realism 配置应用到策略',
+    description: '可选预设: warm_start, re_engage, precision, discovery',
+  })
+  @ApiQuery({
+    name: 'preset',
+    required: true,
+    description: '预设名称',
+    enum: ['warm_start', 're_engage', 'precision', 'discovery'],
+  })
+  async applyRealismPreset(
+    @Param('id') id: string,
+    @Query('preset') preset: string,
+  ): Promise<ApiResponse> {
+    const data = await this.strategyManagementService.applyRealismPreset(
+      id,
+      preset,
+    );
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: `已应用预设 "${preset}"`,
+      data,
+    };
+  }
+
+  @Post('realism/apply-to-segment')
+  @ApiOperation({
+    summary: '按分群批量应用 Realism 配置',
+    description: '查找匹配分群名称的所有活跃策略，批量更新 realism 配置',
+  })
+  async applyRealismToSegment(
+    @Body() dto: ApplyRealismToSegmentDto,
+  ): Promise<ApiResponse> {
+    const data =
+      await this.strategyManagementService.applyRealismToSegment(dto);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: `Realism 配置已应用到分群 "${dto.segment}"`,
       data,
     };
   }

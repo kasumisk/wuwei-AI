@@ -37,7 +37,7 @@ export const DomainEvents = {
   ANALYSIS_FAILED: 'food.analysis.failed',
 
   // V6.1 Phase 2: 候选食物事件
-  CANDIDATE_CREATED: 'food.candidate.created',
+  // V6.5 Phase 1L: CANDIDATE_CREATED 已删除（零 listener，属死事件）
   CANDIDATE_PROMOTED: 'food.candidate.promoted',
 
   // V6.1 Phase 2: 订阅付费墙触发
@@ -111,6 +111,8 @@ export class FeedbackSubmittedEvent {
     public readonly ratings?: FeedbackRatings,
     /** V6 2.19: 隐式行为信号 */
     public readonly implicitSignals?: ImplicitSignals,
+    /** V6.2 A5 fix: 食物品类（protein/grain/veggie 等），用于短期画像品类偏好学习 */
+    public readonly foodCategory?: string,
   ) {}
 }
 
@@ -326,25 +328,7 @@ export class AnalysisFailedEvent {
   ) {}
 }
 
-/**
- * 候选食物创建时触发
- * 监听方: 数据治理统计
- */
-export class CandidateCreatedEvent {
-  readonly eventName = DomainEvents.CANDIDATE_CREATED;
-  readonly timestamp = new Date();
-
-  constructor(
-    /** 候选食物 ID */
-    public readonly candidateId: string,
-    /** 食物名称 */
-    public readonly foodName: string,
-    /** 来源分析 ID */
-    public readonly sourceAnalysisId: string,
-    /** 初始置信度 */
-    public readonly confidenceScore: number,
-  ) {}
-}
+// V6.1 Phase 2: 候选食物事件（V6.5 Phase 1L: CandidateCreatedEvent 已删除，零 listener）
 
 /**
  * 候选食物提升为正式食物时触发

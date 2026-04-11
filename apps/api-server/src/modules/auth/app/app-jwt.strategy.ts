@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, Logger } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PrismaService } from '../../../core/prisma/prisma.service';
@@ -12,14 +12,34 @@ export interface AppJwtPayload {
   exp?: number;
 }
 
+/**
+ * V6.4 P0: 获取 JWT 密钥（统一逻辑，生产环境禁止使用默认值）
+ * 注意：main.ts 启动时已对生产环境做了强制校验，此处为双重保护
+ */
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (secret) return secret;
+
+  const isProduction = process.env.NODE_ENV === 'production';
+  if (isProduction) {
+    // 此分支理论上不会执行到（main.ts 已拦截），作为防御性编程
+    throw new Error('JWT_SECRET 未配置，生产环境禁止启动');
+  }
+
+  Logger.warn(
+    'JWT_SECRET 未设置，使用开发默认值。切勿在生产环境使用！',
+    'AppJwtStrategy',
+  );
+  return 'dev-only-secret-do-not-use-in-production';
+}
+
 @Injectable()
 export class AppJwtStrategy extends PassportStrategy(Strategy, 'app-jwt') {
   constructor(private readonly prisma: PrismaService) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey:
-        process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+      secretOrKey: getJwtSecret(),
     });
   }
 

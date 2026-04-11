@@ -9,6 +9,9 @@ import { CollectionTriggerService } from './app/collection-trigger.service';
 import { RealtimeProfileService } from './app/realtime-profile.service';
 import { ProfileChangeLogService } from './app/profile-change-log.service';
 import { ContextualProfileService } from './app/contextual-profile.service';
+import { ProfileResolverService } from './app/profile-resolver.service';
+// V6.2 3.8: 目标达成事件监听器
+import { GoalAchievedListener } from './app/goal-achieved.listener';
 // Admin 端
 import { AdminUserController } from './admin/admin-user.controller';
 import { AppUserManagementController } from './admin/app-user-management.controller';
@@ -16,6 +19,8 @@ import { UserProfileDashboardController } from './admin/user-profile-dashboard.c
 import { AdminUserService } from './admin/admin-user.service';
 import { AppUserManagementService } from './admin/app-user-management.service';
 import { UserProfileDashboardService } from './admin/user-profile-dashboard.service';
+import { ChurnPredictionService } from './app/churn-prediction.service';
+import { ChurnPredictionController } from './admin/churn-prediction.controller';
 
 @Module({
   controllers: [
@@ -23,6 +28,7 @@ import { UserProfileDashboardService } from './admin/user-profile-dashboard.serv
     AdminUserController,
     AppUserManagementController,
     UserProfileDashboardController,
+    ChurnPredictionController, // V6.5 Phase 3L: 用户流失预测 Admin API
   ],
   providers: [
     UserProfileService,
@@ -33,6 +39,9 @@ import { UserProfileDashboardService } from './admin/user-profile-dashboard.serv
     RealtimeProfileService,
     ProfileChangeLogService,
     ContextualProfileService,
+    ProfileResolverService,
+    GoalAchievedListener, // V6.2 3.8: 目标达成事件监听器
+    ChurnPredictionService, // V6.5 Phase 3L: 用户流失预测
     AdminUserService,
     AppUserManagementService,
     UserProfileDashboardService,
@@ -45,6 +54,8 @@ import { UserProfileDashboardService } from './admin/user-profile-dashboard.serv
     RealtimeProfileService,
     ProfileChangeLogService,
     ContextualProfileService,
+    ProfileResolverService,
+    ChurnPredictionService, // V6.5 Phase 3L: 供 ProfileCronService 使用
   ],
 })
 export class UserModule {}

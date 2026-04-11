@@ -22,12 +22,20 @@ import { JwtAuthGuard } from './admin/jwt-auth.guard';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        secret:
-          configService.get<string>('JWT_SECRET') ||
-          'your-secret-key-change-in-production',
-        signOptions: { expiresIn: '7d' },
-      }),
+      useFactory: (configService: ConfigService) => {
+        const secret = configService.get<string>('JWT_SECRET');
+        const isProduction =
+          configService.get<string>('NODE_ENV') === 'production';
+
+        if (!secret && isProduction) {
+          throw new Error('JWT_SECRET 未配置，生产环境禁止启动');
+        }
+
+        return {
+          secret: secret || 'dev-only-secret-do-not-use-in-production',
+          signOptions: { expiresIn: '7d' },
+        };
+      },
     }),
   ],
   controllers: [AppAuthController, AdminController],

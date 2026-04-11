@@ -14,8 +14,7 @@
  *       4. 命中已有标准食物 → 建立 analysis_food_link
  *       5. 未命中但质量高 → 创建 food_candidate
  *       6. 未命中且质量低 → 只保留分析记录，不入食物候选
- *       7. 发出 CANDIDATE_CREATED 事件（如有新建候选）
- *       8. 更新 food_analysis_record 的质量分和入库状态
+ *       7. 更新 food_analysis_record 的质量分和入库状态
  *
  * 架构决策:
  * - 异步监听 ANALYSIS_COMPLETED，不阻塞分析主流程
@@ -28,7 +27,6 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   DomainEvents,
   AnalysisCompletedEvent,
-  CandidateCreatedEvent,
 } from '../../../core/events/domain-events';
 import { PersistStatus, CandidateSourceType, MatchType } from '../food.types';
 import {
@@ -299,7 +297,7 @@ export class AnalysisIngestionService {
     const inPlaceholders = lowerNames.map((_, i) => `$${i + 1}`).join(', ');
 
     return this.prisma.$queryRawUnsafe(
-      `SELECT * FROM foods WHERE LOWER(name) IN (${inPlaceholders}) OR ${aliasConditions}`,
+      `SELECT id, name, aliases, category FROM foods WHERE LOWER(name) IN (${inPlaceholders}) OR ${aliasConditions}`,
       ...lowerNames,
       ...aliasParams,
     );
@@ -594,16 +592,7 @@ export class AnalysisIngestionService {
       (food.confidence ?? 0) * 100,
     );
 
-    // 发出候选创建事件
-    this.eventEmitter.emit(
-      DomainEvents.CANDIDATE_CREATED,
-      new CandidateCreatedEvent(
-        saved.id,
-        canonicalName,
-        analysisId,
-        (food.confidence ?? 0) * 100,
-      ),
-    );
+    // V6.5 Phase 1L: CANDIDATE_CREATED 事件已删除（零 listener，属死代码）
 
     return { candidateId: saved.id, created: true, matched: false };
   }

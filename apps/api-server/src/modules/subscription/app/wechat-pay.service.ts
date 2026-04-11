@@ -111,13 +111,18 @@ export class WechatPayService {
     // 2. 生成订单号
     const orderNo = this.generateOrderNo();
 
-    // 3. 创建内部支付记录
+    // 3. 创建内部支付记录（F5 fix: 在 callback_payload 中保存 planId，避免金额匹配歧义）
     await this.subscriptionService.createPaymentRecord({
       userId,
       orderNo,
       channel: PaymentChannel.WECHAT_PAY,
       amountCents: plan.price_cents,
       currency: plan.currency,
+    });
+    // 立即将 planId 写入 callback_payload，供回调时直接使用
+    await this.prisma.payment_record.update({
+      where: { order_no: orderNo },
+      data: { callback_payload: { plan_id: planId } },
     });
 
     // 4. 调用微信支付 APP 下单 API
@@ -169,9 +174,8 @@ export class WechatPayService {
     body: WechatPayNotificationBody,
     headers: Record<string, string>,
   ): Promise<void> {
-    // 1. 验证通知签名（生产环境必须验证）
-    // 注意: 完整的验签需要获取微信平台证书，此处预留接口
-    // TODO: 生产环境需实现完整的签名验证
+    // 1. S2 fix: 验证微信支付通知签名（SHA256-RSA2048）
+    this.verifyNotificationSignature(body, headers);
 
     // 2. 解密通知数据
     const transaction = this.decryptNotification(body.resource);
@@ -251,7 +255,7 @@ export class WechatPayService {
     );
 
     // 查找计划并创建订阅
-    // 从支付记录的 subscriptionId 或根据金额匹配计划
+    // F5 fix: 优先从 callback_payload 中取 plan_id，避免金额匹配歧义
     const plan = await this.findPlanByPayment(payment as any);
     if (!plan) {
       this.logger.error(
@@ -371,6 +375,90 @@ export class WechatPayService {
   }
 
   /**
+   * S2 fix: 验证微信支付通知签名
+   *
+   * 微信支付 API v3 通知签名验证流程:
+   * 1. 从 headers 提取: Wechatpay-Timestamp, Wechatpay-Nonce, Wechatpay-Signature, Wechatpay-Serial
+   * 2. 构造验签串: ${timestamp}\n${nonce}\n${body_json}\n
+   * 3. 使用微信平台证书的公钥 (SHA256-RSA2048) 验证签名
+   *
+   * 平台证书获取:
+   * - 通过环境变量 WECHAT_PAY_PLATFORM_CERT 配置（PEM 格式）
+   * - 或调用 /v3/certificates 接口动态获取（需解密），后续版本可增加自动拉取+缓存
+   *
+   * @throws BadRequestException 签名验证失败时抛出
+   */
+  private verifyNotificationSignature(
+    body: WechatPayNotificationBody,
+    headers: Record<string, string>,
+  ): void {
+    // 从环境变量读取微信平台证书（PEM 格式）
+    const platformCert = this.configService.get<string>(
+      'WECHAT_PAY_PLATFORM_CERT',
+      '',
+    );
+
+    if (!platformCert) {
+      // 平台证书未配置时仅记录警告，不阻断流程
+      // 这样可以在开发环境跳过验签，生产环境通过配置证书启用
+      this.logger.warn(
+        '微信平台证书未配置（WECHAT_PAY_PLATFORM_CERT），跳过通知签名验证。' +
+          '生产环境必须配置此证书！',
+      );
+      return;
+    }
+
+    // 标准化 header key（微信返回的 header key 大小写可能不一致）
+    const normalizedHeaders: Record<string, string> = {};
+    for (const [key, value] of Object.entries(headers)) {
+      normalizedHeaders[key.toLowerCase()] = value;
+    }
+
+    const timestamp = normalizedHeaders['wechatpay-timestamp'];
+    const nonce = normalizedHeaders['wechatpay-nonce'];
+    const signature = normalizedHeaders['wechatpay-signature'];
+    const serial = normalizedHeaders['wechatpay-serial'];
+
+    if (!timestamp || !nonce || !signature) {
+      throw new BadRequestException('微信支付通知缺少签名信息');
+    }
+
+    // 检查时间戳（防重放攻击 — 5 分钟窗口）
+    const now = Math.floor(Date.now() / 1000);
+    const ts = parseInt(timestamp, 10);
+    if (Math.abs(now - ts) > 300) {
+      this.logger.warn(
+        `微信支付通知时间戳过期: timestamp=${timestamp}, now=${now}`,
+      );
+      throw new BadRequestException('通知时间戳过期');
+    }
+
+    // 构造验签串: timestamp\nnonce\nbody_json\n
+    const bodyStr = JSON.stringify(body);
+    const message = `${timestamp}\n${nonce}\n${bodyStr}\n`;
+
+    // SHA256-RSA2048 验签
+    try {
+      const verify = crypto.createVerify('SHA256');
+      verify.update(message);
+      const isValid = verify.verify(platformCert, signature, 'base64');
+
+      if (!isValid) {
+        this.logger.warn(
+          `微信支付通知签名验证失败: serial=${serial || 'unknown'}`,
+        );
+        throw new BadRequestException('通知签名验证失败');
+      }
+
+      this.logger.debug('微信支付通知签名验证通过');
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      this.logger.error(`微信支付签名验证异常: ${(err as Error).message}`);
+      throw new BadRequestException('通知签名验证失败');
+    }
+  }
+
+  /**
    * RSA-SHA256 签名
    */
   private rsaSign(message: string): string {
@@ -437,10 +525,29 @@ export class WechatPayService {
   }
 
   /**
-   * 根据支付记录查找对应的订阅计划
+   * F5 fix: 根据支付记录查找对应的订阅计划
+   *
+   * 优先从 callback_payload.plan_id 精确匹配（V6.2 新增），
+   * 回退到金额+货币匹配（兼容 V6.2 之前创建的订单）
    */
   private async findPlanByPayment(payment: any): Promise<any> {
-    // 优先通过金额 + 货币匹配
+    // 优先: 从 callback_payload 取 plan_id（V6.2 创建的订单）
+    const callbackPayload = payment.callback_payload as Record<
+      string,
+      unknown
+    > | null;
+    const planId = callbackPayload?.plan_id as string | undefined;
+    if (planId) {
+      const plan = await this.prisma.subscription_plan.findFirst({
+        where: { id: planId, is_active: true },
+      });
+      if (plan) return plan;
+      this.logger.warn(
+        `callback_payload 中的 plan_id=${planId} 未找到有效计划，回退到金额匹配`,
+      );
+    }
+
+    // 回退: 通过金额 + 货币匹配（兼容旧订单）
     return this.prisma.subscription_plan.findFirst({
       where: {
         price_cents: payment.amount_cents,

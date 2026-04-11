@@ -10,10 +10,14 @@
  * 3. 调用 RecommendationEngineService 生成各餐推荐
  * 4. 存储到 precomputed_recommendations 表
  */
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
-import { QUEUE_NAMES } from '../../../core/queue/queue.constants';
+import {
+  QUEUE_NAMES,
+  QUEUE_DEFAULT_OPTIONS,
+  DeadLetterService,
+} from '../../../core/queue';
 import { PrecomputeService, PrecomputeJobData } from './precompute.service';
 import { RecommendationEngineService } from './recommendation-engine.service';
 import { ProfileCacheService } from '../../user/app/profile-cache.service';
@@ -29,6 +33,8 @@ export class PrecomputeProcessor extends WorkerHost {
     private readonly recommendationEngine: RecommendationEngineService,
     private readonly profileCache: ProfileCacheService,
     private readonly nutritionScore: NutritionScoreService,
+    // V6.5 Phase 2A: DLQ 服务
+    private readonly deadLetterService: DeadLetterService,
   ) {
     super();
   }
@@ -67,6 +73,11 @@ export class PrecomputeProcessor extends WorkerHost {
         allergens: (declared.allergens as string[]) || [],
         healthConditions: (declared.health_conditions as string[]) || [],
         regionCode: declared.region_code || 'CN',
+        // V6.2 3.4: 声明画像新字段
+        cookingSkillLevel: declared.cooking_skill_level as string | undefined,
+        budgetLevel: declared.budget_level as string | undefined,
+        cuisinePreferences:
+          (declared.cuisine_preferences as string[]) || undefined,
       };
 
       // 3. 逐餐次生成推荐
@@ -135,6 +146,27 @@ export class PrecomputeProcessor extends WorkerHost {
         `预计算失败: userId=${userId}, date=${date}, ${(err as Error).message}`,
       );
       throw err; // 让 BullMQ 重试
+    }
+  }
+
+  /**
+   * V6.5 Phase 2A: BullMQ failed 事件钩子
+   * 当 job 重试耗尽（最终失败）时，存入 DLQ
+   */
+  @OnWorkerEvent('failed')
+  async onFailed(job: Job<PrecomputeJobData>, error: Error): Promise<void> {
+    const maxAttempts =
+      job.opts?.attempts ??
+      QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.RECOMMENDATION_PRECOMPUTE].maxRetries +
+        1;
+    if (job.attemptsMade >= maxAttempts) {
+      await this.deadLetterService.storeFailedJob(
+        QUEUE_NAMES.RECOMMENDATION_PRECOMPUTE,
+        job.id ?? 'unknown',
+        job.data,
+        error.message,
+        job.attemptsMade,
+      );
     }
   }
 }

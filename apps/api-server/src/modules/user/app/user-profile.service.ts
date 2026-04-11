@@ -1,6 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { ActivityLevel, GoalType, GoalSpeed, Discipline } from '../user.types';
+import {
+  ActivityLevel,
+  GoalType,
+  GoalSpeed,
+  Discipline,
+  RecommendationPreferences,
+  PopularityPreference,
+  CookingEffort,
+  BudgetSensitivity,
+} from '../user.types';
 import {
   user_profiles as UserProfile,
   user_inferred_profiles as UserInferredProfile,
@@ -14,6 +23,7 @@ import {
   OnboardingStep3Dto,
   OnboardingStep4Dto,
   UpdateDeclaredProfileDto,
+  UpdateRecommendationPreferencesDto,
 } from './dto/user-profile.dto';
 import { SaveUserProfileDto } from 'src/modules/diet/app/food.dto';
 import {
@@ -129,10 +139,10 @@ export class UserProfileService {
 
     let saved: any;
     if (oldProfile) {
-      saved = await this.prisma.user_profiles.update({
-        where: { user_id: userId },
-        data: this.extractWritableFields(profile) as any,
-      });
+      saved = await this.updateProfileWithVersion(
+        userId,
+        this.extractWritableFields(profile) as any,
+      );
     } else {
       saved = await this.prisma.user_profiles.create({
         data: this.extractWritableFields(profile) as any,
@@ -251,10 +261,10 @@ export class UserProfileService {
       where: { user_id: userId },
     });
     if (existing) {
-      saved = await this.prisma.user_profiles.update({
-        where: { user_id: userId },
-        data: this.extractWritableFields(profile) as any,
-      });
+      saved = await this.updateProfileWithVersion(
+        userId,
+        this.extractWritableFields(profile) as any,
+      );
     } else {
       saved = await this.prisma.user_profiles.create({
         data: this.extractWritableFields(profile) as any,
@@ -278,6 +288,11 @@ export class UserProfileService {
 
     // 同步推断数据
     const computed = await this.syncInferredProfile(saved);
+
+    // V6.2 F3: Onboarding 完成时确保行为画像存在
+    if (step >= 4) {
+      await this.ensureBehaviorProfile(userId);
+    }
 
     // V6 Phase 1.2 + 2.17: 引导步骤保存后发布画像更新事件
     const onboardingFields = Object.keys(dto);
@@ -334,10 +349,7 @@ export class UserProfileService {
       // Compute completeness with merged data
       const merged = { ...profile, ...updateData };
       updateData.data_completeness = this.calculateCompleteness(merged as any);
-      profile = await this.prisma.user_profiles.update({
-        where: { user_id: userId },
-        data: updateData,
-      });
+      profile = await this.updateProfileWithVersion(userId, updateData);
     } else {
       updateData.user_id = userId;
       updateData.data_completeness = this.calculateCompleteness(
@@ -348,9 +360,35 @@ export class UserProfileService {
       });
     }
 
+    // V6.2 F3: 跳过引导完成时也需同步推断画像、创建行为画像、发布事件
+    if (step >= 4) {
+      // 失效缓存
+      this.profileCacheService.invalidate(userId);
+
+      // 同步推断数据（基于已有的 profile 字段计算 BMR/TDEE）
+      await this.syncInferredProfile(profile);
+
+      // 确保行为画像存在
+      await this.ensureBehaviorProfile(userId);
+
+      // 发布画像更新事件，通知下游服务
+      this.eventEmitter.emit(
+        DomainEvents.PROFILE_UPDATED,
+        new ProfileUpdatedEvent(
+          userId,
+          'declared',
+          'manual',
+          ['onboarding_completed'],
+          {},
+          { onboarding_completed: true },
+          `引导步骤 ${step} 跳过完成`,
+        ),
+      );
+    }
+
     return {
       nextStep: step < 4 ? step + 1 : null,
-      completeness: Number(profile.data_completeness),
+      completeness: Number(profile!.data_completeness),
     };
   }
 
@@ -434,10 +472,10 @@ export class UserProfileService {
       where: { user_id: userId },
     });
     if (existing) {
-      saved = await this.prisma.user_profiles.update({
-        where: { user_id: userId },
-        data: this.extractWritableFields(merged) as any,
-      });
+      saved = await this.updateProfileWithVersion(
+        userId,
+        this.extractWritableFields(merged) as any,
+      );
     } else {
       saved = await this.prisma.user_profiles.create({
         data: this.extractWritableFields(merged) as any,
@@ -909,6 +947,24 @@ export class UserProfileService {
   }
 
   /**
+   * V6.2 F3: 确保用户行为画像存在（Onboarding 完成时调用）
+   * 使用 findUnique + create 模式避免重复创建
+   */
+  private async ensureBehaviorProfile(userId: string): Promise<void> {
+    const existing = await this.prisma.user_behavior_profiles.findUnique({
+      where: { user_id: userId },
+    });
+    if (!existing) {
+      await this.prisma.user_behavior_profiles.create({
+        data: { user_id: userId },
+      });
+      this.logger.log(
+        `Created behavior profile for user ${userId} on onboarding completion`,
+      );
+    }
+  }
+
+  /**
    * 计算 BMR
    *
    * V4 Phase 3.3: 当 bodyFatPercent 可用时使用 Katch-McArdle 公式
@@ -1078,12 +1134,142 @@ export class UserProfileService {
   /** Extract writable fields for Prisma create/update (excludes id) */
   private extractWritableFields(profile: any): Record<string, any> {
     const data: Record<string, any> = {};
-    const skipFields = ['id', 'created_at', 'updated_at'];
+    const skipFields = ['id', 'created_at', 'updated_at', 'profile_version'];
     for (const [key, value] of Object.entries(profile)) {
       if (skipFields.includes(key)) continue;
       if (value === undefined) continue;
       data[key] = value;
     }
     return data;
+  }
+
+  /**
+   * V6.2 3.7: 原子递增 profile_version 的 update 包装
+   *
+   * 使用 Prisma 的 `increment` 操作确保并发安全。
+   * profile_version 被 extractWritableFields 排除，
+   * 避免被覆盖为旧值。
+   */
+  private async updateProfileWithVersion(
+    userId: string,
+    data: Record<string, any>,
+  ): Promise<any> {
+    return this.prisma.user_profiles.update({
+      where: { user_id: userId },
+      data: {
+        ...data,
+        profile_version: { increment: 1 },
+      },
+    });
+  }
+
+  // ================================================================
+  //  V6.5 Phase 3F: 用户推荐偏好设置
+  // ================================================================
+
+  /**
+   * 保存/更新用户推荐偏好
+   *
+   * 存入 user_profiles.recommendation_preferences JSON 字段，
+   * 供 StrategyResolver 在策略合并时作为 realism 覆盖层。
+   */
+  async updateRecommendationPreferences(
+    userId: string,
+    dto: UpdateRecommendationPreferencesDto,
+  ): Promise<RecommendationPreferences> {
+    const prefs: RecommendationPreferences = {};
+    if (dto.popularityPreference)
+      prefs.popularityPreference = dto.popularityPreference;
+    if (dto.cookingEffort) prefs.cookingEffort = dto.cookingEffort;
+    if (dto.budgetSensitivity) prefs.budgetSensitivity = dto.budgetSensitivity;
+
+    await this.prisma.user_profiles.update({
+      where: { user_id: userId },
+      data: { recommendation_preferences: prefs as any },
+    });
+
+    this.logger.log(
+      `用户推荐偏好已更新 userId=${userId}: ${JSON.stringify(prefs)}`,
+    );
+
+    // 清除画像缓存以便下次推荐使用最新偏好
+    this.profileCacheService.invalidate(userId);
+
+    return prefs;
+  }
+
+  /**
+   * 获取用户推荐偏好（从 DB 读取，未设置则返回空对象）
+   */
+  async getRecommendationPreferences(
+    userId: string,
+  ): Promise<RecommendationPreferences> {
+    const profile = await this.prisma.user_profiles.findUnique({
+      where: { user_id: userId },
+      select: { recommendation_preferences: true },
+    });
+
+    return (
+      (profile?.recommendation_preferences as RecommendationPreferences) ?? {}
+    );
+  }
+
+  /**
+   * 将用户推荐偏好转换为 RealismConfig 覆盖
+   *
+   * 映射规则：
+   * - popularityPreference: popular→threshold=40, balanced→不覆盖, adventurous→threshold=5
+   * - cookingEffort: quick→weekday=30/weekend=60, moderate→weekday=60/weekend=120, elaborate→不启用
+   * - budgetSensitivity: budget→启用预算过滤, moderate→不覆盖, unlimited→关闭预算过滤
+   *
+   * 返回部分 RealismConfig，由策略合并层 merge 到最终配置中。
+   * 仅包含用户显式设置的维度，未设置的维度返回 undefined（不覆盖策略默认值）。
+   */
+  static toRealismOverride(
+    prefs: RecommendationPreferences,
+  ): Record<string, any> {
+    const override: Record<string, any> = {};
+
+    // 大众化偏好 → commonalityThreshold
+    switch (prefs.popularityPreference) {
+      case PopularityPreference.POPULAR:
+        override.commonalityThreshold = 40;
+        break;
+      case PopularityPreference.ADVENTUROUS:
+        override.commonalityThreshold = 5;
+        override.executabilityWeightMultiplier = 0.7;
+        break;
+      // BALANCED → 不覆盖
+    }
+
+    // 烹饪投入 → cookTimeCap
+    switch (prefs.cookingEffort) {
+      case CookingEffort.QUICK:
+        override.cookTimeCapEnabled = true;
+        override.weekdayCookTimeCap = 30;
+        override.weekendCookTimeCap = 60;
+        break;
+      case CookingEffort.MODERATE:
+        override.cookTimeCapEnabled = true;
+        override.weekdayCookTimeCap = 60;
+        override.weekendCookTimeCap = 120;
+        break;
+      case CookingEffort.ELABORATE:
+        override.cookTimeCapEnabled = false;
+        break;
+    }
+
+    // 预算敏感度 → budgetFilter
+    switch (prefs.budgetSensitivity) {
+      case BudgetSensitivity.BUDGET:
+        override.budgetFilterEnabled = true;
+        break;
+      case BudgetSensitivity.UNLIMITED:
+        override.budgetFilterEnabled = false;
+        break;
+      // MODERATE → 不覆盖
+    }
+
+    return override;
   }
 }

@@ -45,7 +45,8 @@ export type MealScene =
   | 'weekend_lunch'
   | 'weekend_dinner'
   | 'weekend_snack'
-  | 'late_night';
+  | 'late_night'
+  | 'post_exercise';
 
 /** 日期类型 */
 export type DayType = 'weekday' | 'weekend';
@@ -149,6 +150,12 @@ const SCENE_WEIGHT_MODIFIERS: Record<
     satiety: 0.8, // 深夜不追求饱腹
     fat: 1.15, // 控制脂肪摄入
   },
+  post_exercise: {
+    protein: 1.3, // 运动后蛋白质需求大增
+    carbs: 1.2, // 运动后需要补充糖原
+    calories: 0.9, // 稍放宽热量限制（已消耗）
+    satiety: 1.1, // 运动后需要适度饱腹
+  },
 };
 
 /**
@@ -209,6 +216,12 @@ const SCENE_CONSTRAINT_HINTS: Record<MealScene, ContextConstraintHints> = {
     calorieMultiplier: 0.8, // 深夜削减 20% 热量
     description: '深夜进食 — 严格控制热量和血糖，优选易消化食物',
   },
+  post_exercise: {
+    preferTags: ['high_protein', 'balanced', 'easy_digest'],
+    avoidTags: ['fried', 'high_fat', 'dessert'],
+    calorieMultiplier: 1.1, // 运动后允许多 10% 热量
+    description: '运动后进食 — 高蛋白恢复肌肉，适量碳水补充糖原',
+  },
 };
 
 // ─── 服务实现 ───
@@ -224,6 +237,7 @@ export class ContextualProfileService {
    * @param mealType 当前餐次类型（已由上层推断）
    * @param shortTermProfile 短期画像（可选，用于个性化调整）
    * @param now 当前时间（可选，主要用于测试注入）
+   * @param exerciseSchedule 每周运动计划（可选，JSON格式）
    * @returns 上下文画像
    */
   detectScene(
@@ -231,6 +245,10 @@ export class ContextualProfileService {
     mealType: string,
     shortTermProfile?: ShortTermProfile | null,
     now?: Date,
+    exerciseSchedule?: Record<
+      string,
+      { startHour: number; durationHours: number }
+    > | null,
   ): ContextualProfile {
     const date = now || new Date();
     const localHour = getUserLocalHour(timezone, date);
@@ -241,6 +259,13 @@ export class ContextualProfileService {
 
     // 第一步: 基于时间 + 日期类型 推断场景
     let scene = this.inferScene(mealType, dayType, localHour, isWeekend);
+
+    // 第 1.5 步: post_exercise 检测（优先级高于普通餐次但低于 late_night）
+    if (scene !== 'late_night' && exerciseSchedule) {
+      if (this.detectPostExercise(exerciseSchedule, dayOfWeek, localHour)) {
+        scene = 'post_exercise';
+      }
+    }
 
     // 第二步: 根据短期画像微调场景（如用户周末总是很晚才吃第一餐 → brunch）
     scene = this.refineWithBehavior(
@@ -380,6 +405,43 @@ export class ContextualProfileService {
     }
 
     return scene;
+  }
+
+  /**
+   * 检测当前是否处于运动后窗口期
+   *
+   * 根据用户设置的 exerciseSchedule（每周运动计划）判断：
+   * 如果今天有运动安排，且当前时间在运动结束后 0~2 小时内 → post_exercise
+   *
+   * exerciseSchedule 格式: { "mon": { "startHour": 7, "durationHours": 1 }, ... }
+   * dayOfWeek: 0=周日, 1=周一, ..., 6=周六
+   */
+  private detectPostExercise(
+    exerciseSchedule: Record<
+      string,
+      { startHour: number; durationHours: number }
+    >,
+    dayOfWeek: number,
+    localHour: number,
+  ): boolean {
+    // dayOfWeek → 星期名映射
+    const dayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+    const dayName = dayNames[dayOfWeek];
+    if (!dayName) return false;
+
+    const todayExercise = exerciseSchedule[dayName];
+    if (
+      !todayExercise ||
+      !todayExercise.startHour ||
+      !todayExercise.durationHours
+    ) {
+      return false;
+    }
+
+    const exerciseEndHour =
+      todayExercise.startHour + todayExercise.durationHours;
+    // 运动结束后 0~2 小时内属于 post_exercise 窗口
+    return localHour >= exerciseEndHour && localHour <= exerciseEndHour + 2;
   }
 
   /**

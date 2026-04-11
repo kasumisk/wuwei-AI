@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { FoodLibrary } from '../../../food/food.types';
 import {
   ScoredFood,
@@ -6,10 +6,19 @@ import {
   MealRecommendation,
   FoodFeedbackStats,
 } from './recommendation.types';
+import { ScoredRecipe } from '../../../recipe/recipe.types';
+import { AssemblyPolicyConfig } from '../../../strategy/strategy.types';
 import { t } from './i18n-messages';
+import { ExplanationGeneratorService } from './explanation-generator.service';
 
 @Injectable()
 export class MealAssemblerService {
+  private readonly logger = new Logger(MealAssemblerService.name);
+
+  constructor(
+    private readonly explanationGenerator: ExplanationGeneratorService,
+  ) {}
+
   /**
    * 多维多样性控制
    * - 排除最近吃过的食物名
@@ -194,12 +203,32 @@ export class MealAssemblerService {
     return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
   }
 
-  /** 份量调整：缩放到目标预算，支持边界裁剪 + 步进量化 */
-  adjustPortions(picks: ScoredFood[], budget: number): ScoredFood[] {
+  /**
+   * 份量调整：缩放到目标预算，支持边界裁剪 + 步进量化
+   *
+   * @param portionTendency V6.2 Phase 2.14: 用户份量倾向（'small'|'normal'|'large'），
+   *                        来自行为画像 user_behavior_profiles.portion_tendency。
+   *                        'small' → 份量系数 ×0.9（偏小 10%）
+   *                        'large' → 份量系数 ×1.1（偏大 10%）
+   *                        'normal' / undefined → 不调整
+   */
+  adjustPortions(
+    picks: ScoredFood[],
+    budget: number,
+    portionTendency?: string | null,
+  ): ScoredFood[] {
     const totalCal = picks.reduce((s, p) => s + p.servingCalories, 0);
     if (totalCal <= 0) return picks;
 
-    const globalRatio = budget / totalCal;
+    let globalRatio = budget / totalCal;
+
+    // V6.2 Phase 2.14: 根据用户份量倾向微调缩放比
+    if (portionTendency === 'small') {
+      globalRatio *= 0.9;
+    } else if (portionTendency === 'large') {
+      globalRatio *= 1.1;
+    }
+
     if (Math.abs(globalRatio - 1) < 0.05) return picks;
 
     // 第一轮: 逐个食物计算最佳缩放比，受边界约束
@@ -294,11 +323,23 @@ export class MealAssemblerService {
   }
 
   /** 聚合推荐结果 */
-  aggregateMealResult(picks: ScoredFood[], tip: string): MealRecommendation {
+  aggregateMealResult(
+    picks: ScoredFood[],
+    tip: string,
+    goalType?: string,
+    userProfile?:
+      | import('./recommendation.types').UserProfileConstraints
+      | null,
+  ): MealRecommendation {
     const totalCalories = picks.reduce((s, p) => s + p.servingCalories, 0);
     const totalProtein = picks.reduce((s, p) => s + p.servingProtein, 0);
     const totalFat = picks.reduce((s, p) => s + p.servingFat, 0);
     const totalCarbs = picks.reduce((s, p) => s + p.servingCarbs, 0);
+    const mealExplanation = this.explanationGenerator.explainMealComposition(
+      picks,
+      userProfile,
+      goalType,
+    );
     const displayText = picks
       .map((p) =>
         t('display.foodItem', {
@@ -317,7 +358,212 @@ export class MealAssemblerService {
       totalCarbs,
       displayText,
       tip,
+      mealExplanation: mealExplanation ?? undefined,
     };
+  }
+
+  // ==================== V6.3 P2-8: 菜谱组装模式 ====================
+
+  /**
+   * 菜谱优先组装
+   *
+   * 流程:
+   * 1. 从 scoredRecipes 中选择评分最高的 1-2 道菜谱作为主菜
+   * 2. 计算菜谱的总营养（热量、蛋白质、脂肪、碳水）
+   * 3. 计算与目标的营养缺口
+   * 4. 用单品食物候选池补充缺口（如需要额外蔬菜、主食）
+   * 5. 降级: 如果没有可用菜谱或菜谱池为空，回退到原有食物组合模式
+   *
+   * @param scoredRecipes 已评分的菜谱（降序排列）
+   * @param foodCandidates 单品食物候选池（已评分）
+   * @param target 本餐营养目标
+   * @param assembly 组装策略配置
+   * @param portionTendency 用户份量倾向
+   * @returns 组装后的 ScoredFood[] 或 null（表示应降级到原有模式）
+   */
+  assembleMealWithRecipes(
+    scoredRecipes: ScoredRecipe[],
+    foodCandidates: ScoredFood[],
+    target: MealTarget,
+    assembly?: AssemblyPolicyConfig,
+    portionTendency?: string | null,
+  ): ScoredFood[] | null {
+    if (!assembly?.preferRecipe || scoredRecipes.length === 0) {
+      return null; // 降级到原有食物组合模式
+    }
+
+    return this.assembleFromRecipes(
+      scoredRecipes,
+      foodCandidates,
+      target,
+      portionTendency,
+    );
+  }
+
+  /**
+   * 从菜谱构建餐次
+   *
+   * 选择 1-2 道主菜谱 → 将菜谱营养转为 ScoredFood 结构 →
+   * 计算缺口 → 用单品食物补充 → 份量调整
+   */
+  private assembleFromRecipes(
+    scoredRecipes: ScoredRecipe[],
+    foodCandidates: ScoredFood[],
+    target: MealTarget,
+    portionTendency?: string | null,
+  ): ScoredFood[] {
+    const result: ScoredFood[] = [];
+    let remainingCalories = target.calories;
+    let remainingProtein = target.protein;
+
+    // 选 1-2 道菜谱（贪心：依次选评分最高的，直到热量超 80% 目标或 2 道）
+    const maxRecipes = 2;
+    const usedRecipeIds = new Set<string>();
+
+    for (const sr of scoredRecipes) {
+      if (result.length >= maxRecipes) break;
+      if (usedRecipeIds.has(sr.recipe.id)) continue;
+
+      const recipeCal = sr.recipe.caloriesPerServing ?? 0;
+      // 跳过热量为 0 或者单道菜谱就超出目标 120% 的
+      if (recipeCal <= 0 || recipeCal > target.calories * 1.2) continue;
+
+      // 如果加上这道菜谱会让热量超标太多（>110%），跳过
+      const totalAfter = target.calories - remainingCalories + recipeCal;
+      if (totalAfter > target.calories * 1.1 && result.length > 0) continue;
+
+      // 将菜谱转为 ScoredFood 结构
+      const recipeScoredFood = this.recipeToScoredFood(sr);
+      result.push(recipeScoredFood);
+      usedRecipeIds.add(sr.recipe.id);
+
+      remainingCalories -= recipeCal;
+      remainingProtein -= sr.recipe.proteinPerServing ?? 0;
+    }
+
+    // 如果没有选中任何菜谱，降级返回 null（但此方法被 assembleFromRecipes 内部调用，
+    // 上层已检查，此处兜底用空数组 + 补充食物）
+    if (result.length === 0) {
+      // 直接从食物候选池选择
+      return this.adjustPortions(
+        this.diversify(foodCandidates, [], 3),
+        target.calories,
+        portionTendency,
+      );
+    }
+
+    // 计算缺口：如果剩余热量 > 目标的 15%，用单品食物补充
+    if (
+      remainingCalories > target.calories * 0.15 &&
+      foodCandidates.length > 0
+    ) {
+      // 从候选池中补充 1-2 个低热量食物（蔬菜/主食类）
+      const maxSupplements = Math.min(2, Math.ceil(remainingCalories / 150));
+      const supplements = this.selectSupplements(
+        foodCandidates,
+        remainingCalories,
+        remainingProtein,
+        maxSupplements,
+      );
+      result.push(...supplements);
+    }
+
+    return this.adjustPortions(result, target.calories, portionTendency);
+  }
+
+  /**
+   * 将 ScoredRecipe 转换为 ScoredFood 结构
+   *
+   * 菜谱没有真实的 FoodLibrary 实体，这里构造一个虚拟的 FoodLibrary 对象，
+   * 包含菜谱的基本信息和营养数据。只填充推荐流程需要的字段。
+   */
+  private recipeToScoredFood(sr: ScoredRecipe): ScoredFood {
+    const recipe = sr.recipe;
+    const virtualFood: FoodLibrary = {
+      id: recipe.id,
+      code: `recipe_${recipe.id.slice(0, 8)}`,
+      name: recipe.name,
+      status: 'active',
+      category: recipe.cuisine || '菜谱',
+      calories: recipe.caloriesPerServing ?? 0,
+      protein: recipe.proteinPerServing ?? 0,
+      fat: recipe.fatPerServing ?? 0,
+      carbs: recipe.carbsPerServing ?? 0,
+      fiber: recipe.fiberPerServing ?? 0,
+      isProcessed: false,
+      isFried: false,
+      processingLevel: 0,
+      allergens: [],
+      mealTypes: [],
+      tags: recipe.tags ?? [],
+      compatibility: {},
+      standardServingG: 100,
+      standardServingDesc: `${recipe.servings}人份`,
+      commonPortions: [],
+      primarySource: 'recipe',
+      dataVersion: 1,
+      confidence: 1,
+      isVerified: false,
+      searchWeight: 0,
+      popularity: recipe.usageCount ?? 0,
+      commonalityScore: 60, // 菜谱默认中等大众化
+      createdAt: recipe.createdAt,
+      updatedAt: recipe.updatedAt,
+    };
+
+    return {
+      food: virtualFood,
+      score: sr.score,
+      servingCalories: recipe.caloriesPerServing ?? 0,
+      servingProtein: recipe.proteinPerServing ?? 0,
+      servingFat: recipe.fatPerServing ?? 0,
+      servingCarbs: recipe.carbsPerServing ?? 0,
+      servingFiber: recipe.fiberPerServing ?? 0,
+      servingGL: 0,
+    };
+  }
+
+  /**
+   * 从候选池中选择补充食物（填补菜谱的营养缺口）
+   *
+   * 优先选择蔬菜类和主食类，避免与菜谱中食材重复
+   */
+  private selectSupplements(
+    candidates: ScoredFood[],
+    remainingCal: number,
+    remainingProtein: number,
+    maxCount: number,
+  ): ScoredFood[] {
+    // 优先低热量的蔬菜/谷物类
+    const sorted = [...candidates].sort((a, b) => {
+      // 蔬菜类优先（热量缺口主要靠蔬菜/主食补充）
+      const aIsVeg =
+        a.food.category?.includes('蔬菜') || a.food.category?.includes('veggie')
+          ? 1
+          : 0;
+      const bIsVeg =
+        b.food.category?.includes('蔬菜') || b.food.category?.includes('veggie')
+          ? 1
+          : 0;
+      if (aIsVeg !== bIsVeg) return bIsVeg - aIsVeg;
+
+      // 然后按评分排序
+      return b.score - a.score;
+    });
+
+    const result: ScoredFood[] = [];
+    let calBudget = remainingCal;
+
+    for (const sf of sorted) {
+      if (result.length >= maxCount) break;
+      if (sf.servingCalories <= 0) continue;
+      if (sf.servingCalories > calBudget * 1.3) continue; // 单品不超过剩余预算的 130%
+
+      result.push(sf);
+      calBudget -= sf.servingCalories;
+    }
+
+    return result;
   }
 
   /** 构建推荐提示 (V4: i18n) */

@@ -129,29 +129,49 @@ export class WeeklyPlanService {
       regionalBoostMap,
     };
 
-    // 按日期顺序生成缺失的计划
+    // V6.3 P1-9: 并行化生成缺失的计划
+    // 将缺失日期收集后 Promise.all 并行生成，替代串行 for-of 循环
+    // 所有缺失天共享同一份 weekFoodNames 排除集（已有计划的食物名），
+    // 牺牲缺失天之间的严格互斥多样性，换取 ~50% 延迟降低
     const dailySummaries: DailyPlanSummary[] = [];
+    const missingDates: string[] = [];
+    const existingDates: { date: string; plan: any }[] = [];
 
     for (const date of dates) {
-      let plan = existingMap.get(date);
-      let isNew = false;
-
-      if (!plan) {
-        // V5 2.3: 传入跨天排除集，保证周内食物多样性
-        // V5 2.5: 传入预加载上下文，避免重复查询
-        plan = await this.dailyPlanService.generatePlanForDate(
-          userId,
-          date,
-          weekFoodNames,
-          preloaded,
-        );
-        isNew = true;
-
-        // 更新已用食物名
-        this.extractFoodNames(plan, weekFoodNames);
+      const plan = existingMap.get(date);
+      if (plan) {
+        existingDates.push({ date, plan });
+      } else {
+        missingDates.push(date);
       }
+    }
 
-      dailySummaries.push(this.toPlanSummary(plan, isNew));
+    // 并行生成所有缺失天的计划
+    const generatedPlans = await Promise.all(
+      missingDates.map((date) =>
+        this.dailyPlanService
+          .generatePlanForDate(userId, date, weekFoodNames, preloaded)
+          .then((plan) => ({ date, plan })),
+      ),
+    );
+
+    // 将生成的食物名加入排除集（供后续查询/展示使用）
+    for (const { plan } of generatedPlans) {
+      this.extractFoodNames(plan, weekFoodNames);
+    }
+
+    // 按原始日期顺序组装结果
+    const generatedMap = new Map(generatedPlans.map((g) => [g.date, g.plan]));
+    for (const date of dates) {
+      const existing = existingMap.get(date);
+      if (existing) {
+        dailySummaries.push(this.toPlanSummary(existing, false));
+      } else {
+        const plan = generatedMap.get(date);
+        if (plan) {
+          dailySummaries.push(this.toPlanSummary(plan, true));
+        }
+      }
     }
 
     // 计算周汇总

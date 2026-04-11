@@ -99,3 +99,53 @@ export enum Discipline {
   MEDIUM = 'medium', // 一般
   LOW = 'low', // 容易放弃
 }
+
+// ─── V6.5 Phase 3F: 用户推荐偏好 ───
+
+/**
+ * 大众化偏好: 用户希望推荐偏大众还是偏探索
+ * - popular: 优先推荐常见、容易买到的食物（高 commonalityThreshold）
+ * - balanced: 默认平衡
+ * - adventurous: 喜欢尝试新食物（低 commonalityThreshold）
+ */
+export enum PopularityPreference {
+  POPULAR = 'popular',
+  BALANCED = 'balanced',
+  ADVENTUROUS = 'adventurous',
+}
+
+/**
+ * 烹饪投入偏好: 用户愿意花多少时间做饭
+ * - quick: 快手菜（≤30min）
+ * - moderate: 适中（≤60min）
+ * - elaborate: 精致（不限制）
+ */
+export enum CookingEffort {
+  QUICK = 'quick',
+  MODERATE = 'moderate',
+  ELABORATE = 'elaborate',
+}
+
+/**
+ * 预算偏好: 用户对食材价格的敏感度
+ * - budget: 优先便宜食材
+ * - moderate: 默认适中
+ * - unlimited: 不限预算
+ */
+export enum BudgetSensitivity {
+  BUDGET = 'budget',
+  MODERATE = 'moderate',
+  UNLIMITED = 'unlimited',
+}
+
+/**
+ * 用户推荐偏好（存储在 user_profiles.recommendation_preferences JSON 字段中）
+ */
+export interface RecommendationPreferences {
+  /** 大众化/探索型偏好 */
+  popularityPreference?: PopularityPreference;
+  /** 烹饪投入偏好（快手/适中/精致） */
+  cookingEffort?: CookingEffort;
+  /** 预算敏感度 */
+  budgetSensitivity?: BudgetSensitivity;
+}

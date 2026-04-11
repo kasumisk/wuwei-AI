@@ -98,6 +98,20 @@ export interface AnalyzedFoodItem {
   fiber?: number;
   /** 钠（毫克，深度营养拆解字段） */
   sodium?: number;
+  /** V6.3 P1-11: 饱和脂肪（克） */
+  saturatedFat?: number | null;
+  /** V6.3 P1-11: 添加糖（克） */
+  addedSugar?: number | null;
+  /** V6.3 P1-11: 维生素A（μg RAE） */
+  vitaminA?: number | null;
+  /** V6.3 P1-11: 维生素C（mg） */
+  vitaminC?: number | null;
+  /** V6.3 P1-11: 钙（mg） */
+  calcium?: number | null;
+  /** V6.3 P1-11: 铁（mg） */
+  iron?: number | null;
+  /** V6.3 P1-11: 是否为 AI 估算值 */
+  estimated?: boolean;
 }
 
 /** 汇总营养数据 */

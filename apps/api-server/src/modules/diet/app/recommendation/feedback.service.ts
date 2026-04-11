@@ -78,6 +78,8 @@ export class RecommendationFeedbackService {
     ratings?: FeedbackRatings;
     /** V6 2.19: 隐式行为信号 */
     implicitSignals?: ImplicitSignals;
+    /** V6.4 Phase 3.5: 推荐追踪 ID（来自推荐响应） */
+    traceId?: string;
   }): Promise<void> {
     try {
       // 1. 保存主反馈记录（与之前一致）
@@ -93,6 +95,7 @@ export class RecommendationFeedbackService {
           goal_type: params.goalType ?? null,
           experiment_id: params.experimentId ?? null,
           group_id: params.groupId ?? null,
+          trace_id: params.traceId ?? null, // V6.4 Phase 3.5: 归因追踪
         },
       });
 
@@ -133,6 +136,16 @@ export class RecommendationFeedbackService {
       );
 
       // 3. V6 Phase 1.2: 发布域事件（V6 2.19 扩展载荷含 ratings + implicitSignals）
+      // V6.2 A5 fix: 查询食物品类用于短期画像品类偏好学习
+      let foodCategory: string | undefined;
+      if (params.foodId) {
+        const food = await this.prisma.foods.findUnique({
+          where: { id: params.foodId },
+          select: { category: true },
+        });
+        foodCategory = food?.category ?? undefined;
+      }
+
       this.eventEmitter.emit(
         DomainEvents.FEEDBACK_SUBMITTED,
         new FeedbackSubmittedEvent(
@@ -148,6 +161,7 @@ export class RecommendationFeedbackService {
           params.groupId,
           params.ratings,
           params.implicitSignals,
+          foodCategory,
         ),
       );
 

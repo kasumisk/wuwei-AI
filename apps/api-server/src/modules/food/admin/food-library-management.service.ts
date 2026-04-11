@@ -73,7 +73,32 @@ export class FoodLibraryManagementService {
     const total = parseInt(totalResult[0]?.count ?? '0', 10);
 
     const list = await this.prisma.$queryRawUnsafe<any[]>(
-      `SELECT * FROM foods f
+      `SELECT
+         f.id, f.code, f.name, f.aliases, f.barcode, f.status,
+         f.category, f.sub_category, f.food_group,
+         f.calories, f.protein, f.fat, f.carbs, f.fiber, f.sugar,
+         f.added_sugar, f.natural_sugar, f.saturated_fat, f.trans_fat,
+         f.cholesterol, f.sodium, f.potassium, f.calcium, f.iron,
+         f.vitamin_a, f.vitamin_c, f.vitamin_d, f.vitamin_e,
+         f.vitamin_b12, f.folate, f.zinc, f.magnesium,
+         f.purine, f.phosphorus,
+         f.glycemic_index, f.glycemic_load,
+         f.is_processed, f.is_fried, f.processing_level,
+         f.allergens, f.quality_score, f.satiety_score, f.nutrient_density,
+         f.meal_types, f.tags, f.main_ingredient, f.compatibility,
+         f.standard_serving_g, f.standard_serving_desc, f.common_portions,
+         f.image_url, f.thumbnail_url,
+         f.primary_source, f.primary_source_id,
+         f.data_version, f.confidence, f.is_verified,
+         f.verified_by, f.verified_at,
+         f.search_weight, f.popularity,
+         f.cuisine, f.flavor_profile, f.cooking_method,
+         f.prep_time_minutes, f.cook_time_minutes, f.skill_required,
+         f.estimated_cost_level, f.shelf_life_days,
+         f.fodmap_level, f.oxalate_level,
+         f.available_channels, f.commonality_score,
+         f.created_at, f.updated_at
+       FROM foods f
        WHERE ${whereClause}
        ORDER BY f.search_weight DESC, f.created_at DESC
        LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,

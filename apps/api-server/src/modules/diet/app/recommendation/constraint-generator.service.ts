@@ -23,6 +23,8 @@ export class ConstraintGeneratorService {
     userProfile?: UserProfileConstraints,
     /** V5: IANA 时区字符串（如 'Asia/Shanghai'），替代 V4 的 timezoneOffset 数字 */
     timezone?: string,
+    /** V6.3 P1-3: 暴食风险时段（小时桶列表），来自行为画像 */
+    bingeRiskHours?: number[] | null,
   ): Constraint {
     const includeTags: string[] = [];
     const excludeTags: string[] = [];
@@ -120,10 +122,20 @@ export class ConstraintGeneratorService {
       }
     }
 
+    // V6.3 P1-3: 暴食风险时段紧缩 — 当前小时处于用户的暴食高风险时段时，
+    // 收紧卡路里上限 15%，并排除高卡/甜品/油炸类食物
+    let maxCalories = target.calories * 1.15;
+    const currentHour = getUserLocalHour(timezone || DEFAULT_TIMEZONE);
+    if (bingeRiskHours?.length && bingeRiskHours.includes(currentHour)) {
+      maxCalories = target.calories * 0.98; // 紧缩到目标的 98%（原值为 115%）
+      excludeTags.push('high_calorie', 'dessert', 'fried');
+      includeTags.push('low_calorie', 'high_protein');
+    }
+
     return {
       includeTags: [...new Set(includeTags)],
       excludeTags: [...new Set(excludeTags)],
-      maxCalories: target.calories * 1.15,
+      maxCalories,
       minProtein: target.protein * 0.5,
     };
   }

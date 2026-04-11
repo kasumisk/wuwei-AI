@@ -23,6 +23,7 @@ import {
   UserPreferenceProfile,
   UserProfileConstraints,
   MealRecommendation,
+  ROLE_CATEGORIES,
 } from './recommendation/recommendation.types';
 import { optimizeDailyPlan, MealSlot } from './recommendation/global-optimizer';
 import { t } from './recommendation/i18n-messages';
@@ -31,6 +32,10 @@ import {
   getUserLocalHour,
   DEFAULT_TIMEZONE,
 } from '../../../common/utils/timezone.util';
+import { ProfileResolverService } from '../../user/app/profile-resolver.service';
+import { StrategyResolver } from '../../strategy/app/strategy-resolver.service';
+import type { ExplainPolicyConfig } from '../../strategy/strategy.types';
+import { AdaptiveExplanationDepthService } from './recommendation/adaptive-explanation-depth.service';
 
 /**
  * V5 2.5: 预加载上下文 — 周计划批量生成时一次性查询，避免 N天×5 次重复 DB 查询
@@ -105,6 +110,18 @@ function toMealPlan(
   };
 }
 
+/**
+ * V6.5 Phase 2L: 根据食物 category 反查角色
+ * ROLE_CATEGORIES: { carb: ['grain','composite'], protein: ['protein','dairy'], ... }
+ * 返回匹配的第一个 role，无匹配时返回 'side'
+ */
+function categoryToRole(category: string): string {
+  for (const [role, cats] of Object.entries(ROLE_CATEGORIES)) {
+    if (cats.includes(category)) return role;
+  }
+  return 'side';
+}
+
 @Injectable()
 export class DailyPlanService {
   private readonly logger = new Logger(DailyPlanService.name);
@@ -117,6 +134,12 @@ export class DailyPlanService {
     private readonly recommendationEngine: RecommendationEngineService,
     private readonly explanationGenerator: ExplanationGeneratorService,
     private readonly redis: RedisCacheService,
+    /** V6.3 P1-4: 统一画像聚合 — 获取 optimalMealCount */
+    private readonly profileResolver: ProfileResolverService,
+    /** V6.3 P2-3: 策略解析器 — 获取 explain policy 控制解释详细程度 */
+    private readonly strategyResolver: StrategyResolver,
+    /** V6.5 Phase 3K: 自适应解释深度 — 根据用户互动意愿调整详细度 */
+    private readonly adaptiveDepth: AdaptiveExplanationDepthService,
   ) {}
 
   /**
@@ -293,37 +316,61 @@ export class DailyPlanService {
     ];
 
     // 使用推荐引擎生成新的单餐
-    const newRec = this.recommendationEngine.recommendMealFromPool(
+    const newRec = await this.recommendationEngine.recommendMealFromPool({
       allFoods,
       mealType,
       goalType,
       consumed,
-      mealTarget,
+      target: mealTarget,
       dailyTarget,
-      fullExcludeNames,
-      undefined,
+      excludeNames: fullExcludeNames,
       feedbackStats,
-      userProfileConstraints,
+      userProfile: userProfileConstraints,
       preferenceProfile,
       regionalBoostMap,
+      userId, // V6.5 Phase 3D
+    });
+
+    // V6.3 P2-3: 解析策略获取 explain policy
+    let explainPolicy: ExplainPolicyConfig | undefined;
+    try {
+      const resolved = await this.strategyResolver.resolve(userId, goalType);
+      explainPolicy = resolved.config?.explain;
+    } catch {
+      // 策略解析失败不影响单餐替换
+    }
+
+    // V6.5 Phase 3K: 自适应解释深度覆盖
+    const resolvedDetailLevel = await this.adaptiveDepth.resolveDepth(
+      explainPolicy?.detailLevel ?? 'standard',
+      userId,
     );
 
-    // V5 3.6 + V6 2.7: 为单餐生成用户可读解释（含 V2 可视化数据）
+    // V5 3.6 + V6 2.7 + V6.3 P2-3: 为单餐生成用户可读解释（含 V2 可视化数据）
     const explanations = this.buildMealExplanations(
       newRec,
       userProfileConstraints,
       goalType,
       mealTarget,
       mealType,
+      explainPolicy,
+      userId,
+      resolvedDetailLevel,
     );
 
     // 仅更新指定餐次
     const updatedMealPlan = toMealPlan(newRec, explanations);
 
-    return this.prisma.daily_plans.update({
+    const updatedPlan = await this.prisma.daily_plans.update({
       where: { id: plan.id },
       data: { [planKey]: updatedMealPlan },
-    }) as any;
+    });
+
+    // V6.5 Phase 2L: 替换该餐次的 daily_plan_items
+    await this.deletePlanItems(plan.id, [mealType]);
+    await this.writePlanItems(plan.id, { [mealType]: newRec });
+
+    return updatedPlan as any;
   }
 
   /**
@@ -384,6 +431,59 @@ export class DailyPlanService {
     // V4: 按目标类型使用自适应餐次比例 (修复 E3)
     const mealRatios = MEAL_RATIOS[goalType] || MEAL_RATIOS.health;
 
+    // V6.3 P1-4: 从推断画像获取 optimalMealCount，动态决定餐次数量
+    // 优先级: optimalMealCount(推断) > meals_per_day(声明) > 默认3
+    let optimalMealCount: number | undefined;
+    try {
+      const enrichedProfile = await this.profileResolver.resolve(userId);
+      optimalMealCount =
+        enrichedProfile.inferred?.optimalMealCount ?? undefined;
+    } catch {
+      // 画像获取失败不影响计划生成
+    }
+
+    // V6.3 P2-3: 解析策略获取 explain policy，控制解释详细程度
+    let explainPolicy: ExplainPolicyConfig | undefined;
+    try {
+      const resolved = await this.strategyResolver.resolve(userId, goalType);
+      explainPolicy = resolved.config?.explain;
+    } catch {
+      // 策略解析失败不影响计划生成，使用默认行为（standard）
+    }
+
+    // V6.5 Phase 3K: 自适应解释深度覆盖（一次解析，所有餐次复用）
+    const resolvedDetailLevel = await this.adaptiveDepth.resolveDepth(
+      explainPolicy?.detailLevel ?? 'standard',
+      userId,
+    );
+
+    const effectiveMealCount = optimalMealCount ?? profile?.meals_per_day ?? 3;
+
+    // V6.3 P1-4: 根据餐次数量选择要生成的餐类型
+    // 2餐: lunch + dinner
+    // 3餐: breakfast + lunch + dinner
+    // 4餐: breakfast + lunch + dinner + snack
+    // 5餐: breakfast + morning_snack + lunch + afternoon_snack + dinner（超出当前支持，降级为4餐）
+    const ALL_MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
+    let activeMealTypes: readonly string[];
+    if (effectiveMealCount <= 2) {
+      activeMealTypes = ['lunch', 'dinner'];
+    } else if (effectiveMealCount === 3) {
+      activeMealTypes = ['breakfast', 'lunch', 'dinner'];
+    } else {
+      activeMealTypes = ALL_MEAL_TYPES; // 4+
+    }
+
+    // 重新分配比例（仅活跃餐次分享 100% 热量）
+    const activeRatioSum = activeMealTypes.reduce(
+      (sum, mt) => sum + (mealRatios[mt] || 0.25),
+      0,
+    );
+    const normalizedRatios: Record<string, number> = {};
+    for (const mt of activeMealTypes) {
+      normalizedRatios[mt] = (mealRatios[mt] || 0.25) / activeRatioSum;
+    }
+
     const buildBudget = (r: number): MealTarget => ({
       calories: Math.round(goals.calories * r),
       protein: Math.round(goals.protein * r),
@@ -424,78 +524,53 @@ export class DailyPlanService {
       // 后续可从 behaviorProfile.foodPreferences.loves/avoids 获取更精准的食物名
     }
 
-    // 串行生成4餐，每餐选完后排除已选食物
+    // V6.3 P1-4: 动态餐次生成 — 基于 activeMealTypes 串行生成
+    // 每餐选完后排除已选食物
     // V5 2.3: 合并跨天排除集，保证周内食物多样性
     const excludeNames: string[] = [
       ...recentFoodNames,
       ...(weekExcludeNames ?? []),
     ];
 
-    const morningRec = this.recommendationEngine.recommendMealFromPool(
-      allFoods,
-      'breakfast',
-      goalType,
-      consumed,
-      buildBudget(mealRatios.breakfast),
-      dailyTarget,
-      excludeNames,
-      userPreferences,
-      feedbackStats,
-      userProfileConstraints,
-      preferenceProfile,
-      regionalBoostMap,
-    );
-    excludeNames.push(...morningRec.foods.map((f) => f.food.name));
+    const mealRecMap: Record<string, MealRecommendation> = {};
+    for (const mt of activeMealTypes) {
+      const rec = await this.recommendationEngine.recommendMealFromPool({
+        allFoods,
+        mealType: mt,
+        goalType,
+        consumed,
+        target: buildBudget(normalizedRatios[mt]),
+        dailyTarget,
+        excludeNames,
+        userPreferences,
+        feedbackStats,
+        userProfile: userProfileConstraints,
+        preferenceProfile,
+        regionalBoostMap,
+        userId, // V6.5 Phase 3D
+      });
+      mealRecMap[mt] = rec;
+      excludeNames.push(...rec.foods.map((f) => f.food.name));
+    }
 
-    const lunchRec = this.recommendationEngine.recommendMealFromPool(
-      allFoods,
-      'lunch',
-      goalType,
-      consumed,
-      buildBudget(mealRatios.lunch),
-      dailyTarget,
-      excludeNames,
-      userPreferences,
-      feedbackStats,
-      userProfileConstraints,
-      preferenceProfile,
-      regionalBoostMap,
-    );
-    excludeNames.push(...lunchRec.foods.map((f) => f.food.name));
-
-    const dinnerRec = this.recommendationEngine.recommendMealFromPool(
-      allFoods,
-      'dinner',
-      goalType,
-      consumed,
-      buildBudget(mealRatios.dinner),
-      dailyTarget,
-      excludeNames,
-      userPreferences,
-      feedbackStats,
-      userProfileConstraints,
-      preferenceProfile,
-      regionalBoostMap,
-    );
-    excludeNames.push(...dinnerRec.foods.map((f) => f.food.name));
-
-    const snackRec = this.recommendationEngine.recommendMealFromPool(
-      allFoods,
-      'snack',
-      goalType,
-      consumed,
-      buildBudget(mealRatios.snack),
-      dailyTarget,
-      excludeNames,
-      userPreferences,
-      feedbackStats,
-      userProfileConstraints,
-      preferenceProfile,
-      regionalBoostMap,
-    );
+    // V6.3 P1-4: 将动态餐次映射回固定的 4 槽位
+    // 未激活的餐次使用空占位（不生成推荐）
+    const emptyRec: MealRecommendation = {
+      foods: [],
+      totalCalories: 0,
+      totalProtein: 0,
+      totalFat: 0,
+      totalCarbs: 0,
+      displayText: '',
+      tip: '',
+    };
+    const morningRec = mealRecMap['breakfast'] || emptyRec;
+    const lunchRec = mealRecMap['lunch'] || emptyRec;
+    const dinnerRec = mealRecMap['dinner'] || emptyRec;
+    const snackRec = mealRecMap['snack'] || emptyRec;
 
     // ── V5 Phase 2.1: 全局优化器集成 ──
-    // 替代 V4 的单餐补偿逻辑，使用迭代贪心改进在全天 4 餐间做食物替换
+    // 替代 V4 的单餐补偿逻辑，使用迭代贪心改进在全天餐次间做食物替换
     const allRecs = [morningRec, lunchRec, dinnerRec, snackRec];
     const mealTypes = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
 
@@ -510,12 +585,12 @@ export class DailyPlanService {
       glycemicLoad: 80,
     };
 
-    // 将 4 餐推荐结果 → MealSlot[] 供优化器使用
+    // 将推荐结果 → MealSlot[] 供优化器使用
     const mealSlots: MealSlot[] = allRecs.map((rec, i) => ({
       mealType: mealTypes[i],
       picks: [...rec.foods],
       candidates: rec.candidates || [],
-      target: buildBudget(mealRatios[mealTypes[i]]),
+      target: buildBudget(normalizedRatios[mealTypes[i]] || 0),
     }));
 
     // 运行全局优化器（V5: 最多 12 轮迭代贪心改进，含食物替换+份量调整）
@@ -575,30 +650,59 @@ export class DailyPlanService {
       this.buildStrategy(goals.calories, profile, goalType, profile?.timezone) +
       (compensationTip ? `；${compensationTip}` : '');
 
-    // V5 3.6 + V6 2.7: 为每餐生成用户可读解释（含 V2 可视化数据）
+    // V5 3.6 + V6 2.7 + V6.3 P2-3: 为每餐生成用户可读解释（含 V2 可视化数据）
+    // explainPolicy 控制解释详细程度和雷达图可见性
+    // V6.5 Phase 3K: resolvedDetailLevel 由自适应深度覆盖
     const mealExplanations = allRecs.map((rec, i) =>
       this.buildMealExplanations(
         rec,
         userProfileConstraints,
         goalType,
-        buildBudget(mealRatios[mealTypes[i]]),
+        buildBudget(normalizedRatios[mealTypes[i]] || 0),
         mealTypes[i],
+        explainPolicy,
+        userId,
+        resolvedDetailLevel,
       ),
     );
 
+    // V6.3 P1-4: 仅为活跃餐次生成 plan 数据，非活跃餐次存 null
     const plan = await this.prisma.daily_plans.create({
       data: {
         user_id: userId,
         date: new Date(date),
-        morning_plan: toMealPlan(allRecs[0], mealExplanations[0]) as any,
-        lunch_plan: toMealPlan(allRecs[1], mealExplanations[1]) as any,
-        dinner_plan: toMealPlan(allRecs[2], mealExplanations[2]) as any,
-        snack_plan: toMealPlan(allRecs[3], mealExplanations[3]) as any,
+        morning_plan: activeMealTypes.includes('breakfast')
+          ? (toMealPlan(allRecs[0], mealExplanations[0]) as any)
+          : undefined,
+        lunch_plan: activeMealTypes.includes('lunch')
+          ? (toMealPlan(allRecs[1], mealExplanations[1]) as any)
+          : undefined,
+        dinner_plan: activeMealTypes.includes('dinner')
+          ? (toMealPlan(allRecs[2], mealExplanations[2]) as any)
+          : undefined,
+        snack_plan: activeMealTypes.includes('snack')
+          ? (toMealPlan(allRecs[3], mealExplanations[3]) as any)
+          : undefined,
         strategy,
         total_budget: goals.calories,
         adjustments: [],
       },
     });
+
+    // V6.5 Phase 2L: 同步写入 daily_plan_items 规范化表
+    const itemMealMap: Record<string, MealRecommendation> = {};
+    const mealTypeToKey: [string, string][] = [
+      ['breakfast', 'breakfast'],
+      ['lunch', 'lunch'],
+      ['dinner', 'dinner'],
+      ['snack', 'snack'],
+    ];
+    for (const [mt] of mealTypeToKey) {
+      if (activeMealTypes.includes(mt) && mealRecMap[mt]) {
+        itemMealMap[mt] = mealRecMap[mt];
+      }
+    }
+    await this.writePlanItems(plan.id, itemMealMap);
 
     return plan;
   }
@@ -652,6 +756,8 @@ export class DailyPlanService {
     const adjustedMeals: Partial<
       Record<'morning' | 'lunch' | 'dinner' | 'snack', MealPlan>
     > = {};
+    // V6.5 Phase 2L: 跟踪调整过程中生成的 MealRecommendation（用于写入 daily_plan_items）
+    const adjustedRecs: Record<string, MealRecommendation> = {};
     let adjustmentNote = '';
 
     if (remaining <= 0) {
@@ -681,12 +787,12 @@ export class DailyPlanService {
       ]);
       const excludeNames = [...recentNames];
 
-      const lunchRec = this.recommendationEngine.recommendMealFromPool(
+      const lunchRec = await this.recommendationEngine.recommendMealFromPool({
         allFoods,
-        'lunch',
+        mealType: 'lunch',
         goalType,
         consumed,
-        {
+        target: {
           calories: lunchBudget,
           protein: Math.round(proteinRem * 0.55),
           fat: Math.round(goals.fat * 0.35),
@@ -694,18 +800,17 @@ export class DailyPlanService {
         },
         dailyTarget,
         excludeNames,
-        undefined,
-        undefined,
-        userProfileConstraints,
-      );
+        userProfile: userProfileConstraints,
+        userId, // V6.5 Phase 3D
+      });
       excludeNames.push(...lunchRec.foods.map((f) => f.food.name));
 
-      const dinnerRec = this.recommendationEngine.recommendMealFromPool(
+      const dinnerRec = await this.recommendationEngine.recommendMealFromPool({
         allFoods,
-        'dinner',
+        mealType: 'dinner',
         goalType,
         consumed,
-        {
+        target: {
           calories: dinnerBudget,
           protein: Math.round(proteinRem * 0.45),
           fat: Math.round(goals.fat * 0.3),
@@ -713,13 +818,14 @@ export class DailyPlanService {
         },
         dailyTarget,
         excludeNames,
-        undefined,
-        undefined,
-        userProfileConstraints,
-      );
+        userProfile: userProfileConstraints,
+        userId, // V6.5 Phase 3D
+      });
 
       adjustedMeals.lunch = toMealPlan(lunchRec);
       adjustedMeals.dinner = toMealPlan(dinnerRec);
+      adjustedRecs['lunch'] = lunchRec;
+      adjustedRecs['dinner'] = dinnerRec;
       plan.lunch_plan = adjustedMeals.lunch as any;
       plan.dinner_plan = adjustedMeals.dinner as any;
       adjustmentNote = t('adjust.lunchDinner', { lunchBudget, dinnerBudget });
@@ -733,24 +839,24 @@ export class DailyPlanService {
         this.recommendationEngine.getAllFoods(),
         this.recommendationEngine.getRecentFoodNames(userId, 3),
       ]);
-      const dinnerRec = this.recommendationEngine.recommendMealFromPool(
+      const dinnerRec = await this.recommendationEngine.recommendMealFromPool({
         allFoods,
-        'dinner',
+        mealType: 'dinner',
         goalType,
         consumed,
-        {
+        target: {
           calories: remaining,
           protein: proteinRem,
           fat: Math.round(goals.fat * 0.3),
           carbs: Math.round(goals.carbs * 0.3),
         },
         dailyTarget,
-        recentNames,
-        undefined,
-        undefined,
-        userProfileConstraints,
-      );
+        excludeNames: recentNames,
+        userProfile: userProfileConstraints,
+        userId, // V6.5 Phase 3D
+      });
       adjustedMeals.dinner = toMealPlan(dinnerRec);
+      adjustedRecs['dinner'] = dinnerRec;
       plan.dinner_plan = adjustedMeals.dinner as any;
       adjustmentNote = t('adjust.dinnerBudget', { remaining });
     } else {
@@ -774,12 +880,25 @@ export class DailyPlanService {
         adjustments: [...existingAdjustments, adjustment],
       },
     });
+
+    // V6.5 Phase 2L: 同步更新 daily_plan_items（仅调整了推荐的餐次）
+    const adjustedMealTypes = Object.keys(adjustedRecs);
+    if (adjustedMealTypes.length > 0) {
+      await this.deletePlanItems(plan.id, adjustedMealTypes);
+      await this.writePlanItems(plan.id, adjustedRecs);
+    }
+
     return { updatedPlan: updatedPlan as any, adjustmentNote };
   }
 
   /**
    * V5 3.6: 为一餐推荐结果生成用户可读解释（可序列化格式）
    * V6 2.7: 同时生成 ExplainV2 可视化数据结构（嵌套在 v2 字段中）
+   * V6.3 P2-3: 根据 ExplainPolicyConfig 控制解释输出级别
+   *   - simple:   仅 V1 基础解释（primaryReason 缩短，无 scoreBreakdown）
+   *   - standard: V1 + V2（当前默认行为）
+   *   - detailed: V1 + V2 + 完整 scoreBreakdown
+   *   - showNutritionRadar: 控制是否附带雷达图数据
    *
    * 将 ExplanationGeneratorService 的输出转为 MealFoodExplanation（轻量 JSONB 友好）
    */
@@ -791,37 +910,153 @@ export class DailyPlanService {
     target?: MealTarget,
     /** V6 2.7: 餐次类型（用于雷达图权重计算） */
     mealType?: string,
+    /** V6.3 P2-3: 解释策略配置（控制详细程度和雷达图可见性） */
+    explainPolicy?: ExplainPolicyConfig,
+    userId?: string,
+    /** V6.5 Phase 3K: 自适应覆盖后的 detailLevel（如果已预计算） */
+    resolvedDetailLevel?: 'simple' | 'standard' | 'detailed',
   ): Record<string, MealFoodExplanation> | undefined {
+    const detailLevel =
+      resolvedDetailLevel ?? explainPolicy?.detailLevel ?? 'standard';
+    const showNutritionRadar = explainPolicy?.showNutritionRadar ?? true;
+    const styleVariant = this.explanationGenerator.resolveStyleVariant(userId);
+
+    // V1 基础解释 — 所有级别都生成
     const map = this.explanationGenerator.generateBatch(
       rec.foods,
       userProfileConstraints,
       goalType,
+      undefined,
+      styleVariant,
     );
     if (map.size === 0) return undefined;
 
-    // V6 2.7: 同时生成 V2 可视化解释（如果有 target 参数）
-    const v2Map = target
-      ? this.explanationGenerator.generateV2Batch(
-          rec.foods,
-          target,
-          userProfileConstraints,
-          goalType,
-          mealType,
-        )
-      : null;
+    // V6.3 P2-3: simple 级别不生成 V2 可视化数据
+    // V6 2.7: standard/detailed 级别同时生成 V2 可视化解释
+    const v2Map =
+      target && detailLevel !== 'simple'
+        ? this.explanationGenerator.generateV2Batch(
+            rec.foods,
+            target,
+            userProfileConstraints,
+            goalType,
+            mealType,
+            undefined,
+            styleVariant,
+          )
+        : null;
 
     const result: Record<string, MealFoodExplanation> = {};
     for (const [foodId, exp] of map) {
+      // V6.3 P2-3: simple 级别 — 截断 primaryReason，省略 scoreBreakdown
+      const primaryReason =
+        detailLevel === 'simple'
+          ? exp.primaryReason.split('；')[0] || exp.primaryReason
+          : exp.primaryReason;
+
+      const scoreBreakdown =
+        detailLevel === 'simple' ? undefined : exp.scoreBreakdown;
+
+      // V6.3 P2-3: 如果 showNutritionRadar=false，从 V2 数据中去除雷达图
+      let v2Data = v2Map?.get(foodId);
+      if (v2Data && !showNutritionRadar) {
+        v2Data = {
+          ...v2Data,
+          radarChart: { dimensions: [] },
+        };
+      }
+
       result[foodId] = {
-        primaryReason: exp.primaryReason,
+        primaryReason,
         nutritionHighlights: exp.nutritionHighlights,
         healthTip: exp.healthTip,
-        scoreBreakdown: exp.scoreBreakdown,
+        scoreBreakdown,
         // V6 2.7: 附带 V2 可视化数据（前端支持时使用）
-        v2: v2Map?.get(foodId),
+        v2: v2Data,
       };
     }
     return result;
+  }
+
+  // ── V6.5 Phase 2L: daily_plan_items 规范化写入 ──
+
+  /**
+   * 将一餐的 MealRecommendation 拆成 daily_plan_items 行
+   */
+  private buildItemRows(
+    planId: string,
+    mealType: string,
+    rec: MealRecommendation,
+  ): Array<{
+    daily_plan_id: string;
+    meal_type: string;
+    role: string;
+    food_id: string | null;
+    recipe_id: string | null;
+    food_name: string;
+    calories: number | null;
+    protein: number | null;
+    fat: number | null;
+    carbs: number | null;
+    score: number | null;
+    sort_order: number;
+  }> {
+    return rec.foods.map((sf, idx) => ({
+      daily_plan_id: planId,
+      meal_type: mealType,
+      role: categoryToRole(sf.food.category || ''),
+      food_id: sf.food.id || null,
+      recipe_id: null,
+      food_name: sf.food.name,
+      calories: sf.servingCalories ?? null,
+      protein: sf.servingProtein ?? null,
+      fat: sf.servingFat ?? null,
+      carbs: sf.servingCarbs ?? null,
+      score: sf.score ?? null,
+      sort_order: idx,
+    }));
+  }
+
+  /**
+   * 为一个 plan 批量写入 daily_plan_items（多餐）
+   * mealRecMap: mealType → MealRecommendation
+   */
+  private async writePlanItems(
+    planId: string,
+    mealRecMap: Record<string, MealRecommendation>,
+  ): Promise<void> {
+    const rows = Object.entries(mealRecMap).flatMap(([mt, rec]) =>
+      rec.foods.length > 0 ? this.buildItemRows(planId, mt, rec) : [],
+    );
+    if (rows.length === 0) return;
+    try {
+      await this.prisma.daily_plan_items.createMany({ data: rows });
+    } catch (err) {
+      this.logger.warn(
+        `daily_plan_items 写入失败 (planId=${planId}): ${(err as Error).message}`,
+      );
+    }
+  }
+
+  /**
+   * 删除指定 plan 指定餐次的 items（单餐替换/调整时使用）
+   * 如果不传 mealTypes 则删除该 plan 全部 items
+   */
+  private async deletePlanItems(
+    planId: string,
+    mealTypes?: string[],
+  ): Promise<void> {
+    try {
+      const where: any = { daily_plan_id: planId };
+      if (mealTypes && mealTypes.length > 0) {
+        where.meal_type = { in: mealTypes };
+      }
+      await this.prisma.daily_plan_items.deleteMany({ where });
+    } catch (err) {
+      this.logger.warn(
+        `daily_plan_items 删除失败 (planId=${planId}): ${(err as Error).message}`,
+      );
+    }
   }
 
   /**

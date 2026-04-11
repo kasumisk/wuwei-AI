@@ -8,6 +8,7 @@ import {
 import {
   MicroNutrientDefaults,
   buildCategoryMicroAverages,
+  AcquisitionChannel,
 } from './recommendation.types';
 import { FoodLibrary } from '../../../food/food.types';
 
@@ -112,6 +113,10 @@ const FOOD_POOL_SELECTABLE_COLUMNS: string[] = [
   'shelf_life_days',
   'fodmap_level',
   'oxalate_level',
+  // V6.4 Phase 3.3: 可获取渠道
+  'available_channels',
+  // V6.5: 大众化评分
+  'commonality_score',
 ];
 
 // ==================== Raw row → FoodLibrary 映射 ====================
@@ -254,6 +259,15 @@ function mapRowToFoodLibrary(row: Record<string, unknown>): FoodLibrary {
         : undefined,
     createdAt: new Date((row.created_at as string) || Date.now()),
     updatedAt: new Date((row.updated_at as string) || Date.now()),
+    // V6.4 Phase 3.3: 可获取渠道
+    availableChannels: jsonParse<string[]>(row.available_channels, [
+      'home_cook',
+      'restaurant',
+      'delivery',
+      'convenience',
+    ]),
+    // V6.5: 大众化评分
+    commonalityScore: n(row.commonality_score) || 50,
   };
 }
 
@@ -317,6 +331,33 @@ export class FoodPoolCacheService implements OnModuleInit {
       );
     }
     return allFoods;
+  }
+
+  /**
+   * V6.4 Phase 3.3: 按获取渠道过滤已验证食物
+   *
+   * 在已缓存的品类数据基础上做内存过滤（不增加 DB 查询），
+   * channel=unknown 时返回全量（不过滤）。
+   *
+   * @param channel 获取渠道
+   * @returns 过滤后的食物列表
+   */
+  async getVerifiedFoodsByChannel(
+    channel: AcquisitionChannel,
+  ): Promise<FoodLibrary[]> {
+    const allFoods = await this.getVerifiedFoods();
+
+    // unknown = 不过滤
+    if (channel === AcquisitionChannel.UNKNOWN) {
+      return allFoods;
+    }
+
+    return allFoods.filter((food) => {
+      const channels = (food as any).availableChannels as string[] | undefined;
+      // 没有设置 availableChannels 的食物默认所有渠道可用
+      if (!channels || channels.length === 0) return true;
+      return channels.includes(channel);
+    });
   }
 
   /**

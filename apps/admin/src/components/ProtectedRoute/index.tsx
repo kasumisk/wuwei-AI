@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { Navigate, useLocation } from 'react-router-dom';
 import { Spin } from 'antd';
 import { useUserStore } from '@/store';
 import authApi from '@/services/authService';
@@ -11,79 +11,57 @@ interface ProtectedRouteProps {
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const { user, token, setToken, setUser, logout } = useUserStore();
   const location = useLocation();
-  const [searchParams] = useSearchParams();
-  const [isValidating, setIsValidating] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [hasValidatedInSession, setHasValidatedInSession] = useState(false);
-
-  const queryToken = searchParams.get('token');
+  const initRef = useRef(false);
 
   // 验证 token 的有效性
   const validateToken = useCallback(async () => {
     try {
-      setIsValidating(true);
       const userInfo = await authApi.getUserInfo();
       setUser(userInfo);
-      setHasValidatedInSession(true); // 标记本次会话已验证过
       return true;
     } catch (error) {
       console.error('Token validation failed:', error);
-      // Token 无效，清除所有登录信息
       logout();
-      setHasValidatedInSession(true); // 即使失败也标记为已验证，避免重复验证
       return false;
-    } finally {
-      setIsValidating(false);
     }
   }, [setUser, logout]);
 
+  // 只在首次挂载时执行一次认证初始化
   useEffect(() => {
-    // 如果本次会话已经验证过，直接初始化完成
-    if (hasValidatedInSession) {
-      setIsInitialized(true);
-      return;
-    }
+    if (initRef.current) return;
+    initRef.current = true;
 
     const initializeAuth = async () => {
-      // 1. 如果 URL 中有 token 参数，优先使用它
+      // 检查 URL 中是否有 token 参数
+      const searchParams = new URLSearchParams(window.location.search);
+      const queryToken = searchParams.get('token');
+
       if (queryToken) {
-        console.log('Found token in query params, setting new token');
+        // URL 中有 token，使用它
         setToken(queryToken);
 
         // 清除 URL 中的 token 参数
-        const newSearchParams = new URLSearchParams(searchParams);
-        newSearchParams.delete('token');
-        const newUrl = `${location.pathname}${newSearchParams.toString() ? '?' + newSearchParams.toString() : ''}`;
+        searchParams.delete('token');
+        const newUrl = `${window.location.pathname}${searchParams.toString() ? '?' + searchParams.toString() : ''}`;
         window.history.replaceState({}, '', newUrl);
 
         // 验证新 token
         await validateToken();
-      }
-      // 2. 如果已有 token 且用户信息不存在，验证其有效性
-      else if (token && !user) {
+      } else if (token && !user) {
+        // 有 token 但无用户信息，验证 token
         await validateToken();
-      } else {
-        // 没有 token 或已有用户信息，直接标记为已验证
-        setHasValidatedInSession(true);
       }
 
       setIsInitialized(true);
     };
 
     initializeAuth();
-  }, [
-    queryToken,
-    token,
-    user,
-    setToken,
-    validateToken,
-    hasValidatedInSession,
-    searchParams,
-    location.pathname,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // 正在验证 token 时显示加载状态
-  if (!isInitialized || isValidating) {
+  // 首次初始化完成前，显示 loading（仅此一次）
+  if (!isInitialized) {
     return (
       <div
         style={{

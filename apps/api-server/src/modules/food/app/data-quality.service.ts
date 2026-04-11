@@ -456,7 +456,7 @@ export class DataQualityService {
 
     // 使用 raw query for LOWER() comparison
     return this.prisma.$queryRawUnsafe(
-      `SELECT * FROM foods WHERE LOWER(name) IN (${lowerNames.map((_, i) => `$${i + 1}`).join(', ')})`,
+      `SELECT id, name, aliases, category FROM foods WHERE LOWER(name) IN (${lowerNames.map((_, i) => `$${i + 1}`).join(', ')})`,
       ...lowerNames,
     );
   }

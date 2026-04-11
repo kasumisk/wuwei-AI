@@ -12,11 +12,15 @@
  * 重试策略：指数退避，最多 2 次重试（见 queue.constants.ts）
  * 并发控制：3 个并发 worker（避免 AI API 并发过高）
  */
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { QUEUE_NAMES, QUEUE_DEFAULT_OPTIONS } from '../../../core/queue';
+import {
+  QUEUE_NAMES,
+  QUEUE_DEFAULT_OPTIONS,
+  DeadLetterService,
+} from '../../../core/queue';
 import { AnalyzeService } from './analyze.service';
 import {
   DomainEvents,
@@ -41,6 +45,8 @@ export class FoodAnalysisProcessor extends WorkerHost {
     private readonly analyzeService: AnalyzeService,
     // V6.1 Phase 2.6: 域事件发射（分析失败）
     private readonly eventEmitter: EventEmitter2,
+    // V6.5 Phase 2A: DLQ 服务
+    private readonly deadLetterService: DeadLetterService,
   ) {
     super();
   }
@@ -92,6 +98,26 @@ export class FoodAnalysisProcessor extends WorkerHost {
 
       // 重新抛出让 BullMQ 进行重试判断
       throw err;
+    }
+  }
+
+  /**
+   * V6.5 Phase 2A: BullMQ failed 事件钩子
+   * 当 job 重试耗尽（最终失败）时，存入 DLQ
+   */
+  @OnWorkerEvent('failed')
+  async onFailed(job: Job<FoodAnalysisJobData>, error: Error): Promise<void> {
+    const maxAttempts =
+      job.opts?.attempts ??
+      QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_ANALYSIS].maxRetries + 1;
+    if (job.attemptsMade >= maxAttempts) {
+      await this.deadLetterService.storeFailedJob(
+        QUEUE_NAMES.FOOD_ANALYSIS,
+        job.id ?? 'unknown',
+        job.data,
+        error.message,
+        job.attemptsMade,
+      );
     }
   }
 }

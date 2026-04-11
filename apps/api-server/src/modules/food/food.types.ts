@@ -162,4 +162,8 @@ export interface FoodLibrary {
   embeddingUpdatedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
+  /** V6.4 Phase 3.3: 可获取渠道列表 */
+  availableChannels?: string[];
+  /** V6.5: 大众化评分 0-100，0=极罕见, 50=一般, 100=日常必备 */
+  commonalityScore: number;
 }

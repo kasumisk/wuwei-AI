@@ -95,6 +95,11 @@ export class RecommendationDebugService {
       healthConditions: (profile.health_conditions as string[]) || [],
       regionCode: profile.region_code || 'CN',
       timezone: profile.timezone || 'Asia/Shanghai',
+      // V6.2 3.4: 声明画像新字段
+      cookingSkillLevel: profile.cooking_skill_level as string | undefined,
+      budgetLevel: profile.budget_level as string | undefined,
+      cuisinePreferences:
+        (profile.cuisine_preferences as string[]) || undefined,
     };
 
     // 4. 调用推荐引擎
@@ -178,6 +183,11 @@ export class RecommendationDebugService {
       healthConditions: (profile.health_conditions as string[]) || [],
       regionCode: profile.region_code || 'CN',
       timezone: profile.timezone || 'Asia/Shanghai',
+      // V6.2 3.4: 声明画像新字段
+      cookingSkillLevel: profile.cooking_skill_level as string | undefined,
+      budgetLevel: profile.budget_level as string | undefined,
+      cuisinePreferences:
+        (profile.cuisine_preferences as string[]) || undefined,
     };
 
     // 2. 调用反向解释
@@ -255,22 +265,10 @@ export class RecommendationDebugService {
 
   async getQualityDashboard(query: QualityDashboardQueryDto) {
     const days = query.days || 30;
-
-    const [overview, byGoal, byMeal, trend, planCoverage] = await Promise.all([
-      this.qualityService.getQualityOverview(days),
-      this.qualityService.getAcceptanceByGoalType(days),
-      this.qualityService.getAcceptanceByMealType(days),
-      this.qualityService.getDailyTrend(days),
-      this.qualityService.getPlanCoverage(days),
-    ]);
-
+    const summary = await this.qualityService.getDashboardSummary(days);
     return {
       days,
-      overview,
-      byGoal,
-      byMeal,
-      trend,
-      planCoverage,
+      ...summary,
     };
   }
 }

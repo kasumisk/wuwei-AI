@@ -18,8 +18,11 @@
  * - 使用 userId 的哈希值 mod 100 确定是否命中
  * - 保证同一用户对同一 flag 的结果稳定（不会每次请求结果不同）
  */
-import { Injectable, Logger } from '@nestjs/common';
-import { RedisCacheService } from '../../core/redis/redis-cache.service';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  TieredCacheManager,
+  TieredCacheNamespace,
+} from '../../core/cache/tiered-cache-manager';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { feature_flag } from '@prisma/client';
 
@@ -35,23 +38,33 @@ export enum FeatureFlagType {
   SEGMENT = 'segment',
 }
 
-/** Redis 缓存 key 前缀 */
-const CACHE_PREFIX = 'ff';
+/** Redis 缓存 namespace */
+const CACHE_NAMESPACE = 'ff';
 /** 单个 flag 缓存 TTL: 30 秒 */
 const FLAG_CACHE_TTL_MS = 30_000;
-/** 全量 flag 列表缓存 TTL: 30 秒 */
-const ALL_FLAGS_CACHE_TTL_MS = 30_000;
 /** 全量 flag 列表缓存 key */
-const ALL_FLAGS_CACHE_KEY = 'ff:__all__';
+const ALL_FLAGS_KEY = '__all__';
 
 @Injectable()
-export class FeatureFlagService {
+export class FeatureFlagService implements OnModuleInit {
   private readonly logger = new Logger(FeatureFlagService.name);
+
+  /** V6.2 3.9: TieredCache namespace */
+  private cache!: TieredCacheNamespace<any>;
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly redis: RedisCacheService,
+    private readonly cacheManager: TieredCacheManager,
   ) {}
+
+  onModuleInit(): void {
+    this.cache = this.cacheManager.createNamespace<any>({
+      namespace: CACHE_NAMESPACE,
+      l1MaxEntries: 200,
+      l1TtlMs: FLAG_CACHE_TTL_MS,
+      l2TtlMs: FLAG_CACHE_TTL_MS,
+    });
+  }
 
   // ==================== 核心查询接口 ====================
 
@@ -139,16 +152,11 @@ export class FeatureFlagService {
    * 获取所有功能开关（Admin 列表页）
    */
   async getAllFlags(): Promise<feature_flag[]> {
-    // 先查缓存
-    const cached = await this.redis.get<feature_flag[]>(ALL_FLAGS_CACHE_KEY);
-    if (cached) return cached;
-
-    const flags = await this.prisma.feature_flag.findMany({
-      orderBy: { created_at: 'desc' },
+    return this.cache.getOrSet(ALL_FLAGS_KEY, async () => {
+      return this.prisma.feature_flag.findMany({
+        orderBy: { created_at: 'desc' },
+      });
     });
-
-    await this.redis.set(ALL_FLAGS_CACHE_KEY, flags, ALL_FLAGS_CACHE_TTL_MS);
-    return flags;
   }
 
   /**
@@ -212,19 +220,16 @@ export class FeatureFlagService {
    * 获取单个 flag（带 Redis 缓存）
    */
   private async getFlag(key: string): Promise<feature_flag | null> {
-    const cacheKey = this.redis.buildKey(CACHE_PREFIX, key);
+    // 使用 getOrSet：L1 → L2 → DB 穿透
+    // 注意：getOrSet 不区分 null 值，所以 flag 不存在时仍会重复查询 DB
+    // 但 30s TTL 足够短，影响可忽略
+    const cached = await this.cache.get(key);
+    if (cached) return cached as feature_flag;
 
-    // 1. 查 Redis 缓存
-    const cached = await this.redis.get<feature_flag>(cacheKey);
-    if (cached) return cached;
-
-    // 2. 查 DB
     const flag = await this.prisma.feature_flag.findUnique({ where: { key } });
     if (!flag) return null;
 
-    // 3. 写入缓存
-    await this.redis.set(cacheKey, flag, FLAG_CACHE_TTL_MS);
-
+    await this.cache.set(key, flag);
     return flag;
   }
 
@@ -232,10 +237,9 @@ export class FeatureFlagService {
    * 清除 flag 相关缓存
    */
   private async invalidateCache(key: string): Promise<void> {
-    const cacheKey = this.redis.buildKey(CACHE_PREFIX, key);
     await Promise.all([
-      this.redis.del(cacheKey),
-      this.redis.del(ALL_FLAGS_CACHE_KEY),
+      this.cache.invalidate(key),
+      this.cache.invalidate(ALL_FLAGS_KEY),
     ]);
   }
 

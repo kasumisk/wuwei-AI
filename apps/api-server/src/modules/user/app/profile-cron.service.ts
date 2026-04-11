@@ -9,13 +9,14 @@ import {
 } from '../../../common/utils/timezone.util';
 import { RedisCacheService } from '../../../core/redis/redis-cache.service';
 import { PrismaService } from '../../../core/prisma/prisma.service';
+import { StrategySelectorService } from '../../strategy/app/strategy-selector.service';
+import { ChurnPredictionService } from './churn-prediction.service';
 
 /**
  * 用户画像定时任务
  *
  * - 每日 02:00 → 更新 avgComplianceRate, streakDays, mealTimingPatterns
  * - 每周一 03:00 → 更新 userSegment, churnRisk, nutritionGaps
- * - 每 14 天 → 更新 tastePrefVector（口味偏好向量）
  */
 @Injectable()
 export class ProfileCronService {
@@ -25,6 +26,10 @@ export class ProfileCronService {
     private readonly prisma: PrismaService,
     private readonly profileCacheService: ProfileCacheService,
     private readonly redisCacheService: RedisCacheService,
+    /** V6.3 P2-2: 分群→策略自动映射 */
+    private readonly strategySelectorService: StrategySelectorService,
+    /** V6.5 Phase 3L: 多维特征流失预测 */
+    private readonly churnPredictionService: ChurnPredictionService,
   ) {}
 
   // ================================================================
@@ -46,27 +51,27 @@ export class ProfileCronService {
     const startTime = Date.now();
 
     try {
-      // V5 3.3: 批处理 + 并发优化
-      const behaviors = await this.prisma.user_behavior_profiles.findMany();
-      const behaviorResult = await this.processBatched(
-        behaviors as any[],
-        (behavior) => this.updateDailyBehavior(behavior),
+      // V6.2 3.6: 游标分页替代全量 findMany
+      const behaviorResult = await this.processCursorPaged(
+        'user_behavior_profiles',
+        (behavior: any) => this.updateDailyBehavior(behavior),
         '每日行为更新',
       );
 
       // V5 3.1/3.2: 更新 goalProgress + optimalMealCount
-      const inferred = await this.prisma.user_inferred_profiles.findMany();
       let goalProgressUpdated = 0;
       let optimalMealCountUpdated = 0;
 
-      const inferredResult = await this.processBatched(
-        inferred as any[],
-        async (inf) => {
+      const inferredResult = await this.processCursorPaged(
+        'user_inferred_profiles',
+        async (inf: any) => {
           const gpChanged = await this.updateGoalProgress(inf);
           if (gpChanged) goalProgressUpdated++;
 
           // optimalMealCount: 基于对应 behavior 的 mealTimingPatterns
-          const behavior = behaviors.find((b) => b.user_id === inf.user_id);
+          const behavior = await this.prisma.user_behavior_profiles.findUnique({
+            where: { user_id: inf.user_id },
+          });
           if (behavior?.meal_timing_patterns) {
             const stableSlots = (
               ['breakfast', 'lunch', 'dinner', 'snack'] as const
@@ -101,9 +106,9 @@ export class ProfileCronService {
 
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       this.logger.log(
-        `每日画像更新完成: 行为=${behaviorResult.succeeded}/${behaviors.length}(失败${behaviorResult.failed}), ` +
+        `每日画像更新完成: 行为=${behaviorResult.succeeded}/${behaviorResult.total}(失败${behaviorResult.failed}), ` +
           `goalProgress=${goalProgressUpdated}, optimalMealCount=${optimalMealCountUpdated}, ` +
-          `推断=${inferredResult.succeeded}/${inferred.length}(失败${inferredResult.failed}), 耗时 ${elapsed}s`,
+          `推断=${inferredResult.succeeded}/${inferredResult.total}(失败${inferredResult.failed}), 耗时 ${elapsed}s`,
       );
     } catch (err) {
       this.logger.error(
@@ -255,12 +260,10 @@ export class ProfileCronService {
     const startTime = Date.now();
 
     try {
-      const inferred = await this.prisma.user_inferred_profiles.findMany();
-
-      // V5 3.3: 批处理 + 并发优化
-      const result = await this.processBatched(
-        inferred as any[],
-        (inf) => this.updateWeeklySegmentation(inf),
+      // V6.2 3.6: 游标分页替代全量 findMany
+      const result = await this.processCursorPaged(
+        'user_inferred_profiles',
+        (inf: any) => this.updateWeeklySegmentation(inf),
         '每周分段更新',
       );
 
@@ -268,7 +271,7 @@ export class ProfileCronService {
 
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       this.logger.log(
-        `每周分段更新完成: ${result.succeeded}/${inferred.length}(失败${result.failed}), 耗时 ${elapsed}s`,
+        `每周分段更新完成: ${result.succeeded}/${result.total}(失败${result.failed}), 耗时 ${elapsed}s`,
       );
     } catch (err) {
       this.logger.error(
@@ -322,12 +325,15 @@ export class ProfileCronService {
       usageDays,
     });
 
-    let churnRisk = 0;
-    if (daysSinceLastRecord >= 14) churnRisk = 0.9;
-    else if (daysSinceLastRecord >= 7) churnRisk = 0.7;
-    else if (daysSinceLastRecord >= 3) churnRisk = 0.4;
-    else if (complianceRate < 0.3) churnRisk = 0.5;
-    else churnRisk = 0.1;
+    // V6.5 Phase 3L: 多维特征流失预测（替代简单 5 条规则）
+    const churnResult = await this.churnPredictionService.computeChurnRisk(
+      userId,
+      daysSinceLastRecord,
+      complianceRate,
+      behavior?.streak_days ?? 0,
+      behavior?.total_records ?? 0,
+    );
+    const churnRisk = churnResult.churnRisk;
 
     // 营养缺口分析（基于最近 7 天食物记录）
     const sevenDaysAgo = new Date();
@@ -360,12 +366,12 @@ export class ProfileCronService {
       nutritionGaps = gaps;
     }
 
-    // 置信度 — V5 3.4: 使用 segmentResult 的 confidence
+    // 置信度 — V5 3.4: 使用 segmentResult 的 confidence; V6.5 Phase 3L: churn 置信度来自预测模型
     const confidenceScores = {
       ...((inferred.confidence_scores as any) || {}),
       userSegment: segmentResult.confidence,
       segmentSecondaryFlags: segmentResult.secondaryFlags.length,
-      churnRisk: daysSinceLastRecord < 999 ? 0.8 : 0.3,
+      churnRisk: churnResult.confidence,
       nutritionGaps: weeklyRecords.length >= 10 ? 0.7 : 0.4,
     };
 
@@ -379,46 +385,17 @@ export class ProfileCronService {
         last_computed_at: new Date(),
       },
     });
-  }
 
-  // ================================================================
-  //  每 14 天（隔周日 04:00）— 口味偏好向量
-  // ================================================================
-
-  @Cron('0 4 1,15 * *')
-  async biweeklyTastePrefUpdate(): Promise<void> {
-    // V5 1.11: 分布式锁
-    await this.redisCacheService.runWithLock(
-      'biweekly_taste_pref_update',
-      15 * 60 * 1000,
-      () => this.doBiweeklyTastePrefUpdate(),
-    );
-  }
-
-  private async doBiweeklyTastePrefUpdate(): Promise<void> {
-    this.logger.log('开始口味偏好向量更新...');
-    const startTime = Date.now();
-
+    // V6.3 P2-2: 分群变更时自动映射推荐策略
     try {
-      const inferred = await this.prisma.user_inferred_profiles.findMany();
-
-      // V5 3.3: 批处理 + 并发优化
-      const result = await this.processBatched(
-        inferred as any[],
-        (inf) => this.updateTastePrefVector(inf),
-        '口味偏好更新',
-      );
-
-      this.profileCacheService.invalidateAll();
-
-      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-      this.logger.log(
-        `口味偏好更新完成: ${result.succeeded}/${inferred.length}(失败${result.failed}), 耗时 ${elapsed}s`,
+      await this.strategySelectorService.selectAndAssign(
+        userId,
+        segmentResult.segment,
       );
     } catch (err) {
-      this.logger.error(
-        `口味偏好更新失败: ${(err as Error).message}`,
-        (err as Error).stack,
+      // 策略映射失败不应阻断画像更新
+      this.logger.warn(
+        `策略自动映射失败 (user=${userId}, segment=${segmentResult.segment}): ${(err as Error).message}`,
       );
     }
   }
@@ -454,12 +431,10 @@ export class ProfileCronService {
     const NEUTRAL_THRESHOLD = 0.02; // |weight - 1.0| < 0.02 → 清理
 
     try {
-      const allInferred = await this.prisma.user_inferred_profiles.findMany();
-
-      // V5 3.3: 批处理 + 并发优化
-      const result = await this.processBatched(
-        allInferred as any[],
-        async (inf) => {
+      // V6.2 3.6: 游标分页替代全量 findMany
+      const result = await this.processCursorPaged(
+        'user_inferred_profiles',
+        async (inf: any) => {
           if (!inf.preference_weights) return;
 
           const weights = inf.preference_weights as Record<
@@ -508,7 +483,7 @@ export class ProfileCronService {
 
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       this.logger.log(
-        `偏好权重衰减完成: ${result.succeeded}/${allInferred.length}(失败${result.failed}), 耗时 ${elapsed}s`,
+        `偏好权重衰减完成: ${result.succeeded}/${result.total}(失败${result.failed}), 耗时 ${elapsed}s`,
       );
     } catch (err) {
       this.logger.error(
@@ -516,61 +491,6 @@ export class ProfileCronService {
         (err as Error).stack,
       );
     }
-  }
-
-  private async updateTastePrefVector(inferred: any): Promise<void> {
-    const userId = inferred.user_id;
-    const sixtyDaysAgo = new Date();
-    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
-
-    // 从反馈中提取接受的食物（带时间衰减）
-    const feedbacks = await this.prisma.recommendation_feedbacks.findMany({
-      where: {
-        user_id: userId,
-        created_at: { gte: sixtyDaysAgo },
-      },
-    });
-
-    if (feedbacks.length < 10) return;
-
-    // 按 tag 聚合加权统计（指数衰减: e^(-0.05 × days_since)）
-    const tagWeights: Record<string, number> = {};
-    const now = Date.now();
-
-    for (const fb of feedbacks) {
-      const daysSince = Math.floor(
-        (now - (fb.created_at as Date).getTime()) / (1000 * 60 * 60 * 24),
-      );
-      const decayWeight = Math.exp(-0.05 * daysSince);
-      const multiplier = fb.action === 'accepted' ? 1 : -0.5;
-
-      // 使用食物名作为简化向量维度
-      const key = fb.food_name || 'unknown';
-      tagWeights[key] = (tagWeights[key] || 0) + multiplier * decayWeight;
-    }
-
-    // 归一化为 Top 20 偏好向量
-    const sorted = Object.entries(tagWeights)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 20)
-      .map(([name, weight]) => ({ name, weight: Number(weight.toFixed(3)) }));
-
-    // 存储为权重数组（number[]），仅保存 Top 20 食物的衰减权重
-    const tastePrefVector = sorted.map((item) => item.weight);
-
-    const confidenceScores = {
-      ...((inferred.confidence_scores as any) || {}),
-      tastePrefVector: Math.min(0.9, 0.3 + feedbacks.length * 0.01),
-    };
-
-    await this.prisma.user_inferred_profiles.update({
-      where: { user_id: userId },
-      data: {
-        taste_pref_vector: tastePrefVector,
-        confidence_scores: confidenceScores as any,
-        last_computed_at: new Date(),
-      },
-    });
   }
 
   // ================================================================
@@ -781,5 +701,65 @@ export class ProfileCronService {
     }
 
     return { succeeded, failed };
+  }
+
+  /**
+   * V6.2 3.6: 游标分页批量处理 — 替代全量 findMany() + processBatched
+   *
+   * 使用 Prisma cursor-based pagination 逐页加载数据，
+   * 避免一次性加载全量用户到内存。
+   *
+   * @param model Prisma model 名称（user_behavior_profiles / user_inferred_profiles）
+   * @param processor 每条记录的处理函数
+   * @param label 日志标签
+   * @param pageSize 每页大小（默认 100）
+   */
+  async processCursorPaged<T extends { user_id: string }>(
+    model: 'user_behavior_profiles' | 'user_inferred_profiles',
+    processor: (item: T) => Promise<void>,
+    label: string,
+    pageSize: number = 100,
+  ): Promise<{ succeeded: number; failed: number; total: number }> {
+    const CONCURRENCY = 5;
+    let succeeded = 0;
+    let failed = 0;
+    let total = 0;
+    let cursor: string | undefined;
+
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const page = (await (this.prisma[model] as any).findMany({
+        take: pageSize,
+        ...(cursor ? { skip: 1, cursor: { user_id: cursor } } : {}),
+        orderBy: { user_id: 'asc' },
+      })) as T[];
+
+      if (page.length === 0) break;
+
+      total += page.length;
+      cursor = page[page.length - 1].user_id;
+
+      // 并发限制处理
+      for (let i = 0; i < page.length; i += CONCURRENCY) {
+        const chunk = page.slice(i, i + CONCURRENCY);
+        const results = await Promise.allSettled(
+          chunk.map((item) => processor(item)),
+        );
+        for (const result of results) {
+          if (result.status === 'fulfilled') {
+            succeeded++;
+          } else {
+            failed++;
+          }
+        }
+      }
+
+      this.logger.log(`[${label}] 进度: ${total} 条已处理`);
+
+      // 如果返回不足一页，说明已到末尾
+      if (page.length < pageSize) break;
+    }
+
+    return { succeeded, failed, total };
   }
 }

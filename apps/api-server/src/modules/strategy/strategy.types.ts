@@ -31,6 +31,8 @@ export const SCORE_DIMENSION_NAMES = [
   'nutrientDensity',
   'inflammation',
   'fiber',
+  'seasonality',
+  'executability',
 ] as const;
 
 export type StrategyScoreDimension = (typeof SCORE_DIMENSION_NAMES)[number];
@@ -43,7 +45,7 @@ export type StrategyScoreDimension = (typeof SCORE_DIMENSION_NAMES)[number];
  * 所有字段均为可选: 缺失字段使用系统默认值（recommendation.types.ts 中的硬编码常量）
  */
 export interface RankPolicyConfig {
-  /** 基础评分权重覆盖（按目标类型，10 维数组） */
+  /** 基础评分权重覆盖（按目标类型，12 维数组） */
   baseWeights?: Partial<Record<GoalType, number[]>>;
   /** 餐次权重修正系数覆盖 */
   mealModifiers?: Record<
@@ -210,6 +212,69 @@ export interface MultiObjectiveConfig {
   costSensitivity?: number;
 }
 
+// ─── V6.3 组装策略 ───
+
+/**
+ * 组装策略配置 — 控制 MealAssembler 阶段的行为
+ *
+ * 决定是优先推荐菜谱还是原料，以及多样性水平
+ */
+export interface AssemblyPolicyConfig {
+  /** 是否优先推荐菜谱（true 时优先从 Recipe 池选择，false 时走原有食物组合模式） */
+  preferRecipe?: boolean;
+  /**
+   * 多样性级别
+   * - low: 严格营养匹配，品类集中
+   * - medium: 平衡营养与多样性
+   * - high: 尽可能多样化品类和菜系
+   */
+  diversityLevel?: 'low' | 'medium' | 'high';
+}
+
+// ─── V6.3 解释策略 ───
+
+/**
+ * 解释策略配置 — 控制推荐解释的详细程度和展示方式
+ */
+export interface ExplainPolicyConfig {
+  /**
+   * 解释详细程度
+   * - simple: 一句话解释（适合新用户，减少认知负担）
+   * - standard: 标准解释（营养概览 + 推荐理由）
+   * - detailed: 详细解释（完整营养数据 + 各维度评分 + 健康修正说明）
+   */
+  detailLevel?: 'simple' | 'standard' | 'detailed';
+  /** 是否展示营养雷达图数据 */
+  showNutritionRadar?: boolean;
+}
+
+// ─── V6.5 现实性策略 ───
+
+/**
+ * 现实性策略配置 — 控制推荐结果的现实可执行性
+ *
+ * 核心思想: 推荐的食物不仅要营养合理，还要用户实际能获取、有能力制作、
+ * 符合预算和时间约束。这是 V6.5 "让推荐更贴近现实" 的关键参数。
+ */
+export interface RealismConfig {
+  /** 是否启用现实性过滤 */
+  enabled?: boolean;
+  /** 大众化最低阈值（0-100，默认 20），commonalityScore 低于此值的食物被过滤 */
+  commonalityThreshold?: number;
+  /** 是否启用预算过滤 */
+  budgetFilterEnabled?: boolean;
+  /** 是否启用烹饪时间过滤 */
+  cookTimeCapEnabled?: boolean;
+  /** 工作日烹饪时间上限（分钟，默认 45） */
+  weekdayCookTimeCap?: number;
+  /** 周末烹饪时间上限（分钟，默认 120） */
+  weekendCookTimeCap?: number;
+  /** 可执行性评分权重倍数（1.0=默认，2.0=双倍权重，默认 1.0） */
+  executabilityWeightMultiplier?: number;
+  /** V6.6 Phase 2-D: 食堂模式 — 跳过烹饪时间过滤，提高大众化阈值到 60 */
+  canteenMode?: boolean;
+}
+
 // ─── 完整策略配置 ───
 
 /**
@@ -231,6 +296,12 @@ export interface StrategyConfig {
   multiObjective?: MultiObjectiveConfig;
   /** V6 2.6: 自适应探索策略 — 新用户高探索、老用户低探索 */
   exploration?: ExplorationPolicyConfig;
+  /** V6.3 P2-1: 组装策略 — 菜谱优先 / 多样性级别 */
+  assembly?: AssemblyPolicyConfig;
+  /** V6.3 P2-1: 解释策略 — 详细程度 / 雷达图 */
+  explain?: ExplainPolicyConfig;
+  /** V6.5: 现实性策略 — 大众化过滤 / 预算 / 烹饪时间 / 可执行性权重 */
+  realism?: RealismConfig;
 }
 
 // ─── 策略状态枚举 ───
@@ -288,3 +359,62 @@ export enum AssignmentType {
   /** 按用户画像段自动分配 */
   SEGMENT = 'segment',
 }
+
+// ─── V6.5 预设 realism 默认值 ───
+
+/**
+ * 4 套预设策略的 realism 参数
+ * 在数据库初始化或策略创建时使用
+ */
+export const PRESET_REALISM: Record<string, RealismConfig> = {
+  warm_start: {
+    enabled: true,
+    commonalityThreshold: 40,
+    budgetFilterEnabled: true,
+    cookTimeCapEnabled: true,
+    weekdayCookTimeCap: 30,
+    weekendCookTimeCap: 90,
+    executabilityWeightMultiplier: 1.5,
+  },
+  re_engage: {
+    enabled: true,
+    commonalityThreshold: 30,
+    budgetFilterEnabled: true,
+    cookTimeCapEnabled: true,
+    weekdayCookTimeCap: 40,
+    weekendCookTimeCap: 120,
+    executabilityWeightMultiplier: 1.3,
+  },
+  precision: {
+    enabled: true,
+    commonalityThreshold: 15,
+    budgetFilterEnabled: false,
+    cookTimeCapEnabled: false,
+    weekdayCookTimeCap: 60,
+    weekendCookTimeCap: 180,
+    executabilityWeightMultiplier: 0.8,
+  },
+  discovery: {
+    enabled: true,
+    commonalityThreshold: 10,
+    budgetFilterEnabled: false,
+    cookTimeCapEnabled: false,
+    weekdayCookTimeCap: 90,
+    weekendCookTimeCap: 180,
+    executabilityWeightMultiplier: 0.7,
+  },
+};
+
+/**
+ * 默认 realism 配置（无策略配置时的 fallback）
+ */
+export const DEFAULT_REALISM: Required<RealismConfig> = {
+  enabled: true,
+  commonalityThreshold: 20,
+  budgetFilterEnabled: false,
+  cookTimeCapEnabled: false,
+  weekdayCookTimeCap: 45,
+  weekendCookTimeCap: 120,
+  executabilityWeightMultiplier: 1.0,
+  canteenMode: false,
+};

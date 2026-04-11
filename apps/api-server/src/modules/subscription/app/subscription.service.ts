@@ -16,7 +16,12 @@
  * - 等级查询结果缓存 5 分钟，减轻每次请求的 DB 查询
  * - 免费用户不创建 Subscription 记录，查询返回 null 时降级为 Free
  */
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleInit,
+} from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   subscription_plan as SubscriptionPlan,
@@ -35,9 +40,16 @@ import {
   UNLIMITED,
   FeatureEntitlements,
 } from '../subscription.types';
-import { RedisCacheService } from '../../../core/redis/redis-cache.service';
+import {
+  TieredCacheManager,
+  TieredCacheNamespace,
+} from '../../../core/cache/tiered-cache-manager';
 import { PlanEntitlementResolver } from './plan-entitlement-resolver.service';
 import { PrismaService } from '../../../core/prisma/prisma.service';
+import {
+  DomainEvents,
+  SubscriptionChangedEvent,
+} from '../../../core/events/domain-events';
 
 /** 用户订阅状态概要（缓存友好的扁平结构） */
 export interface UserSubscriptionSummary {
@@ -55,21 +67,31 @@ export interface UserSubscriptionSummary {
   entitlements: FeatureEntitlements;
 }
 
-/** 缓存 key 前缀 */
-const CACHE_PREFIX = 'sub:user:';
 /** 缓存 TTL: 5 分钟 */
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 @Injectable()
-export class SubscriptionService {
+export class SubscriptionService implements OnModuleInit {
   private readonly logger = new Logger(SubscriptionService.name);
+
+  /** V6.2 3.9: 订阅摘要 TieredCache namespace */
+  private cache!: TieredCacheNamespace<UserSubscriptionSummary>;
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly redis: RedisCacheService,
+    private readonly cacheManager: TieredCacheManager,
     private readonly eventEmitter: EventEmitter2,
     private readonly entitlementResolver: PlanEntitlementResolver,
   ) {}
+
+  onModuleInit(): void {
+    this.cache = this.cacheManager.createNamespace<UserSubscriptionSummary>({
+      namespace: 'sub_user',
+      l1MaxEntries: 500,
+      l1TtlMs: 2 * 60 * 1000, // L1: 2 分钟
+      l2TtlMs: CACHE_TTL_MS, // L2: 5 分钟
+    });
+  }
 
   // ==================== 计划管理（Admin） ====================
 
@@ -179,12 +201,15 @@ export class SubscriptionService {
 
     // 4. 缓存失效 + 事件
     await this.invalidateUserCache(params.userId);
-    this.eventEmitter.emit('subscription.changed', {
-      userId: params.userId,
-      subscriptionId: saved.id,
-      tier: plan.tier,
-      action: 'created',
-    });
+    this.eventEmitter.emit(
+      DomainEvents.SUBSCRIPTION_CHANGED,
+      new SubscriptionChangedEvent(
+        params.userId,
+        SubscriptionTier.FREE,
+        plan.tier as string,
+        'purchase',
+      ),
+    );
 
     this.logger.log(
       `用户 ${params.userId} 订阅已创建: ${plan.name} -> ${params.expiresAt.toISOString()}`,
@@ -209,12 +234,15 @@ export class SubscriptionService {
     });
 
     await this.invalidateUserCache(userId);
-    this.eventEmitter.emit('subscription.changed', {
-      userId,
-      subscriptionId: saved.id,
-      tier: sub.subscription_plan.tier,
-      action: 'cancelled',
-    });
+    this.eventEmitter.emit(
+      DomainEvents.SUBSCRIPTION_CHANGED,
+      new SubscriptionChangedEvent(
+        userId,
+        sub.subscription_plan.tier as string,
+        sub.subscription_plan.tier as string,
+        'cancel',
+      ),
+    );
 
     this.logger.log(
       `用户 ${userId} 已取消订阅，将于 ${sub.expires_at.toISOString()} 失效`,
@@ -256,12 +284,15 @@ export class SubscriptionService {
     });
 
     await this.invalidateUserCache(userId);
-    this.eventEmitter.emit('subscription.changed', {
-      userId,
-      subscriptionId: saved.id,
-      tier: sub.subscription_plan.tier,
-      action: 'renewed',
-    });
+    this.eventEmitter.emit(
+      DomainEvents.SUBSCRIPTION_CHANGED,
+      new SubscriptionChangedEvent(
+        userId,
+        sub.subscription_plan.tier as string,
+        sub.subscription_plan.tier as string,
+        'upgrade',
+      ),
+    );
 
     this.logger.log(
       `用户 ${userId} 订阅已续费至 ${newExpiresAt.toISOString()}`,
@@ -283,7 +314,8 @@ export class SubscriptionService {
           {
             user_id: userId,
             status: SubscriptionStatus.CANCELLED,
-            expires_at: { lte: new Date() },
+            // S3 fix: gte = 未过期（expires_at >= now），而非 lte（已过期）
+            expires_at: { gte: new Date() },
           },
         ],
       },
@@ -299,11 +331,7 @@ export class SubscriptionService {
    * 缓存 5 分钟，订阅变更时主动失效。
    */
   async getUserSummary(userId: string): Promise<UserSubscriptionSummary> {
-    return this.redis.getOrSet<UserSubscriptionSummary>(
-      `${CACHE_PREFIX}${userId}`,
-      CACHE_TTL_MS,
-      async () => this.buildUserSummary(userId),
-    );
+    return this.cache.getOrSet(userId, () => this.buildUserSummary(userId));
   }
 
   /**
@@ -403,6 +431,7 @@ export class SubscriptionService {
    */
   async processExpiredSubscriptions(): Promise<number> {
     const now = new Date();
+    const gracePeriodEndsAt = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
 
     // 查找已过期但仍活跃的订阅
     const expired = await this.prisma.subscription.findMany({
@@ -410,35 +439,49 @@ export class SubscriptionService {
         status: SubscriptionStatus.ACTIVE,
         expires_at: { lt: now },
       },
+      include: { subscription_plan: true },
     });
 
     let count = 0;
-    for (const sub of expired) {
-      if (sub.auto_renew) {
-        // 自动续费用户 → 宽限期（3 天）
-        await this.prisma.subscription.update({
-          where: { id: sub.id },
+
+    if (expired.length > 0) {
+      // V6.3 P1-6: 按 auto_renew 分组，批量 UPDATE 替代逐条更新
+      const autoRenewIds = expired.filter((s) => s.auto_renew).map((s) => s.id);
+      const manualIds = expired.filter((s) => !s.auto_renew).map((s) => s.id);
+
+      if (autoRenewIds.length > 0) {
+        await this.prisma.subscription.updateMany({
+          where: { id: { in: autoRenewIds } },
           data: {
             status: SubscriptionStatus.GRACE_PERIOD,
-            grace_period_ends_at: new Date(
-              now.getTime() + 3 * 24 * 60 * 60 * 1000,
-            ),
+            grace_period_ends_at: gracePeriodEndsAt,
           },
         });
-      } else {
-        // 手动续费用户 → 直接过期
-        await this.prisma.subscription.update({
-          where: { id: sub.id },
+      }
+
+      if (manualIds.length > 0) {
+        await this.prisma.subscription.updateMany({
+          where: { id: { in: manualIds } },
           data: { status: SubscriptionStatus.EXPIRED },
         });
       }
-      await this.invalidateUserCache(sub.user_id);
-      this.eventEmitter.emit('subscription.changed', {
-        userId: sub.user_id,
-        subscriptionId: sub.id,
-        action: sub.auto_renew ? 'grace_period' : 'expired',
-      });
-      count++;
+
+      // 事件和缓存失效仍需逐条（每条包含不同 userId/tier）
+      for (const sub of expired) {
+        await this.invalidateUserCache(sub.user_id);
+        this.eventEmitter.emit(
+          DomainEvents.SUBSCRIPTION_CHANGED,
+          new SubscriptionChangedEvent(
+            sub.user_id,
+            sub.subscription_plan.tier as string,
+            sub.auto_renew
+              ? (sub.subscription_plan.tier as string)
+              : SubscriptionTier.FREE,
+            sub.auto_renew ? 'downgrade' : 'expire',
+          ),
+        );
+        count++;
+      }
     }
 
     // 处理宽限期结束的订阅
@@ -447,32 +490,43 @@ export class SubscriptionService {
         status: SubscriptionStatus.GRACE_PERIOD,
         grace_period_ends_at: { lt: now },
       },
+      include: { subscription_plan: true },
     });
 
-    for (const sub of graceExpired) {
-      await this.prisma.subscription.update({
-        where: { id: sub.id },
+    if (graceExpired.length > 0) {
+      // V6.3 P1-6: 批量 UPDATE
+      await this.prisma.subscription.updateMany({
+        where: {
+          id: { in: graceExpired.map((s) => s.id) },
+        },
         data: { status: SubscriptionStatus.EXPIRED },
       });
-      await this.invalidateUserCache(sub.user_id);
 
-      // 重置为免费配额
-      const freePlan = await this.prisma.subscription_plan.findFirst({
-        where: {
-          tier: SubscriptionTier.FREE,
-          is_active: true,
-        },
-      });
-      if (freePlan) {
-        await this.initQuotas(sub.user_id, freePlan);
+      for (const sub of graceExpired) {
+        await this.invalidateUserCache(sub.user_id);
+
+        // 重置为免费配额
+        const freePlan = await this.prisma.subscription_plan.findFirst({
+          where: {
+            tier: SubscriptionTier.FREE,
+            is_active: true,
+          },
+        });
+        if (freePlan) {
+          await this.initQuotas(sub.user_id, freePlan);
+        }
+
+        this.eventEmitter.emit(
+          DomainEvents.SUBSCRIPTION_CHANGED,
+          new SubscriptionChangedEvent(
+            sub.user_id,
+            sub.subscription_plan.tier as string,
+            SubscriptionTier.FREE,
+            'expire',
+          ),
+        );
+        count++;
       }
-
-      this.eventEmitter.emit('subscription.changed', {
-        userId: sub.user_id,
-        subscriptionId: sub.id,
-        action: 'expired',
-      });
-      count++;
     }
 
     if (count > 0) {
@@ -495,7 +549,8 @@ export class SubscriptionService {
           {
             user_id: userId,
             status: SubscriptionStatus.CANCELLED,
-            expires_at: { lte: new Date() },
+            // S3 fix: gte = 未过期（expires_at >= now），而非 lte（已过期）
+            expires_at: { gte: new Date() },
           },
         ],
       },
@@ -650,6 +705,6 @@ export class SubscriptionService {
    * 清除用户订阅缓存
    */
   private async invalidateUserCache(userId: string): Promise<void> {
-    await this.redis.del(`${CACHE_PREFIX}${userId}`);
+    await this.cache.invalidate(userId);
   }
 }

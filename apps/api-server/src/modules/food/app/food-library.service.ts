@@ -13,20 +13,58 @@ export class FoodLibraryService {
   ) {}
 
   /**
-   * 模糊搜索食物（ILIKE + 别名匹配）
+   * V6.2 3.5: 混合搜索 — pg_trgm similarity + ILIKE 回退
+   *
+   * 策略:
+   * 1. 先用 pg_trgm similarity 匹配（阈值 0.2），结果按相似度 + search_weight 排序
+   * 2. 如果 similarity 结果不足，追加 ILIKE 兜底
+   * 3. 已有 GIN 索引 idx_foods_name_trgm / idx_foods_aliases_trgm 支持
    */
   async search(q: string, limit: number = 10) {
     const safeLimit = Math.min(Math.max(limit, 1), 50);
-    const pattern = `%${q}%`;
 
-    return this.prisma.$queryRawUnsafe(
-      `SELECT * FROM foods
-       WHERE name ILIKE $1 OR aliases ILIKE $1
-       ORDER BY search_weight DESC, name ASC
-       LIMIT $2`,
-      pattern,
+    // pg_trgm similarity 搜索（利用已有 GIN 索引）
+    const results = await this.prisma.$queryRawUnsafe(
+      `SELECT
+         id, code, name, aliases, barcode, status,
+         category, sub_category, food_group,
+         calories, protein, fat, carbs, fiber, sugar,
+         added_sugar, natural_sugar, saturated_fat, trans_fat,
+         cholesterol, sodium, potassium, calcium, iron,
+         vitamin_a, vitamin_c, vitamin_d, vitamin_e,
+         vitamin_b12, folate, zinc, magnesium, purine, phosphorus,
+         glycemic_index, glycemic_load,
+         is_processed, is_fried, processing_level,
+         allergens, quality_score, satiety_score, nutrient_density,
+         meal_types, tags, main_ingredient, compatibility,
+         standard_serving_g, standard_serving_desc, common_portions,
+         image_url, thumbnail_url,
+         primary_source, primary_source_id,
+         data_version, confidence, is_verified,
+         verified_by, verified_at, search_weight, popularity,
+         cuisine, flavor_profile, cooking_method,
+         prep_time_minutes, cook_time_minutes, skill_required,
+         estimated_cost_level, shelf_life_days,
+         fodmap_level, oxalate_level,
+         available_channels, commonality_score,
+         created_at, updated_at,
+         GREATEST(
+           similarity(name, $1),
+           similarity(COALESCE(aliases, ''), $1)
+         ) AS sim_score
+       FROM foods
+       WHERE similarity(name, $1) > 0.2
+          OR similarity(COALESCE(aliases, ''), $1) > 0.2
+          OR name ILIKE $2
+          OR aliases ILIKE $2
+       ORDER BY sim_score DESC, search_weight DESC, name ASC
+       LIMIT $3`,
+      q,
+      `%${q}%`,
       safeLimit,
     );
+
+    return results;
   }
 
   /**

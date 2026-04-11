@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { FoodService } from './food.service';
 import { UserProfileService } from '../../user/app/user-profile.service';
@@ -8,6 +8,7 @@ import {
   DEFAULT_TIMEZONE,
 } from '../../../common/utils/timezone.util';
 import { PrismaService } from '../../../core/prisma/prisma.service';
+import { BingeInterventionService } from '../admin/binge-intervention.service';
 
 export interface ProactiveReminder {
   type: 'binge_risk' | 'meal_reminder' | 'streak_warning' | 'pattern_alert';
@@ -23,6 +24,8 @@ export class BehaviorService {
     private readonly prisma: PrismaService,
     private readonly foodService: FoodService,
     private readonly userProfileService: UserProfileService,
+    @Optional()
+    private readonly bingeInterventionService?: BingeInterventionService,
   ) {}
 
   /**
@@ -233,11 +236,22 @@ export class BehaviorService {
     // 场景1：高风险暴食时段
     const bingeRiskHours = profile?.binge_risk_hours as any;
     if (bingeRiskHours?.includes(hour)) {
-      return {
+      const reminder: ProactiveReminder = {
         type: 'binge_risk',
         message: '你这个时间容易想吃零食，可以提前喝杯水或准备低热量替代',
         urgency: 'high',
       };
+
+      // V6.5 Phase 3J: 记录暴食干预事件（异步，不阻塞主流程）
+      if (this.bingeInterventionService) {
+        this.bingeInterventionService
+          .recordIntervention(userId, hour, reminder.message)
+          .catch((err) =>
+            this.logger.warn(`Failed to record binge intervention: ${err}`),
+          );
+      }
+
+      return reminder;
     }
 
     // 场景2：接近超标

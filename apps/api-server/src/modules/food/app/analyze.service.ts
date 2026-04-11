@@ -27,6 +27,24 @@ export interface AnalysisResult {
     carbs?: number;
     quality?: number;
     satiety?: number;
+    /** V6.3 P1-11: 膳食纤维 (g) */
+    fiber?: number;
+    /** V6.3 P1-11: 钠 (mg) */
+    sodium?: number;
+    /** V6.3 P1-11: 饱和脂肪 (g) */
+    saturatedFat?: number | null;
+    /** V6.3 P1-11: 添加糖 (g) */
+    addedSugar?: number | null;
+    /** V6.3 P1-11: 维生素A (μg RAE) */
+    vitaminA?: number | null;
+    /** V6.3 P1-11: 维生素C (mg) */
+    vitaminC?: number | null;
+    /** V6.3 P1-11: 钙 (mg) */
+    calcium?: number | null;
+    /** V6.3 P1-11: 铁 (mg) */
+    iron?: number | null;
+    /** V6.3 P1-11: 是否为 AI 估算值 */
+    estimated?: boolean;
   }>;
   totalCalories: number;
   totalProtein: number;

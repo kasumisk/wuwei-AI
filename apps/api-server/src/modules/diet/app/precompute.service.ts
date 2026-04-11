@@ -2,10 +2,12 @@
  * V6 Phase 1.10 — PrecomputeService（每日推荐预计算）
  *
  * 核心职责：
- * 1. Cron 调度: 凌晨 3:00 为活跃用户生成次日三餐推荐
+ * 1. Cron 调度: 凌晨 3:00 为活跃用户生成次日三餐推荐（兜底）
  * 2. 队列驱动: 通过 BullMQ `recommendation-precompute` 队列并发处理
  * 3. 查询接口: 推荐请求时优先读取预计算结果
  * 4. 失效机制: 画像变更事件 → 删除该用户当日预计算
+ * 5. V6.3 P2-11: 事件驱动单用户预计算 — 画像变更/饮食记录/反馈提交
+ *    均触发单用户预计算 job（防抖 5 分钟，同一用户不重复入队）
  *
  * 集成方式：
  * - FoodService.getRecommendation() 先查 getPrecomputed()
@@ -22,6 +24,8 @@ import { MealRecommendation } from './recommendation/recommendation.types';
 import {
   DomainEvents,
   ProfileUpdatedEvent,
+  MealRecordedEvent,
+  FeedbackSubmittedEvent,
 } from '../../../core/events/domain-events';
 import { QUEUE_NAMES } from '../../../core/queue/queue.constants';
 
@@ -190,14 +194,14 @@ export class PrecomputeService {
     );
   }
 
-  // ─── 事件监听: 画像变更失效 ───
+  // ─── 事件监听: 画像变更失效 + 单用户预计算 ───
 
   /**
-   * 监听画像更新事件 → 删除该用户当日及次日的预计算
+   * 监听画像更新事件 → 删除该用户当日及次日的预计算 → 触发单用户重计算
    *
    * 画像变更意味着推荐策略可能不同，预计算结果过时需要重新计算。
    */
-  @OnEvent(DomainEvents.PROFILE_UPDATED)
+  @OnEvent(DomainEvents.PROFILE_UPDATED, { async: true })
   async handleProfileUpdated(event: ProfileUpdatedEvent): Promise<void> {
     try {
       const today = new Date().toISOString().slice(0, 10);
@@ -218,6 +222,9 @@ export class PrecomputeService {
           `预计算已失效: userId=${event.userId}, 删除 ${deleteResult.count} 条, 原因=${event.updateType}`,
         );
       }
+
+      // V6.3 P2-11: 触发单用户预计算（防抖）
+      await this.triggerSingleUserPrecompute(event.userId, 'profile_updated');
     } catch (err) {
       this.logger.warn(
         `预计算失效失败: userId=${event.userId}, ${(err as Error).message}`,
@@ -225,12 +232,101 @@ export class PrecomputeService {
     }
   }
 
+  // ─── V6.3 P2-11: 事件驱动单用户预计算 ───
+
+  /**
+   * 监听饮食记录事件 → 触发单用户预计算
+   *
+   * 用户记录了新的饮食数据后，已有预计算可能不再准确（如剩余热量预算变化），
+   * 需要重新计算当日剩余餐次的推荐。
+   */
+  @OnEvent(DomainEvents.MEAL_RECORDED, { async: true })
+  async handleMealRecorded(event: MealRecordedEvent): Promise<void> {
+    try {
+      await this.triggerSingleUserPrecompute(event.userId, 'meal_recorded');
+    } catch (err) {
+      this.logger.warn(
+        `饮食记录触发预计算失败: userId=${event.userId}, ${(err as Error).message}`,
+      );
+    }
+  }
+
+  /**
+   * 监听反馈提交事件 → 触发单用户预计算
+   *
+   * 用户提交反馈后偏好权重可能变化，推荐结果需要更新。
+   */
+  @OnEvent(DomainEvents.FEEDBACK_SUBMITTED, { async: true })
+  async handleFeedbackSubmitted(event: FeedbackSubmittedEvent): Promise<void> {
+    try {
+      await this.triggerSingleUserPrecompute(
+        event.userId,
+        'feedback_submitted',
+      );
+    } catch (err) {
+      this.logger.warn(
+        `反馈触发预计算失败: userId=${event.userId}, ${(err as Error).message}`,
+      );
+    }
+  }
+
+  /**
+   * V6.3 P2-11: 触发单用户预计算
+   *
+   * 防抖机制: 使用 jobId 实现 5 分钟防抖 — 同一用户在 5 分钟内的多次事件
+   * 只会创建一个 job（BullMQ 的 jobId 唯一性保证）。
+   *
+   * @param userId 用户 ID
+   * @param trigger 触发原因（用于日志和调试）
+   */
+  private async triggerSingleUserPrecompute(
+    userId: string,
+    trigger: string,
+  ): Promise<void> {
+    const today = new Date().toISOString().slice(0, 10);
+    // 5 分钟时间窗口生成唯一 slot（同一 slot 内只入队一次）
+    const debounceSlot = Math.floor(Date.now() / (5 * 60 * 1000));
+    const jobId = `precompute:event:${userId}:${today}:${debounceSlot}`;
+
+    try {
+      await this.precomputeQueue.add(
+        `event-precompute-${userId}`,
+        {
+          userId,
+          date: today,
+          mealTypes: [...MEAL_TYPES],
+        } satisfies PrecomputeJobData,
+        {
+          jobId,
+          attempts: 2,
+          backoff: { type: 'exponential' as const, delay: 5000 },
+          // 延迟 30 秒执行，避免短时间内多次画像更新导致的重复计算
+          delay: 30_000,
+        },
+      );
+
+      this.logger.debug(
+        `事件驱动预计算已入队: userId=${userId}, trigger=${trigger}, jobId=${jobId}`,
+      );
+    } catch (err) {
+      // BullMQ 对重复 jobId 会抛出错误（已有相同 job），这是预期行为
+      if ((err as Error).message?.includes('Job already exists')) {
+        this.logger.debug(
+          `事件驱动预计算已在队列中（防抖生效）: userId=${userId}, trigger=${trigger}`,
+        );
+      } else {
+        throw err;
+      }
+    }
+  }
+
   // ─── 清理 ───
 
   /**
-   * 每日清理过期的预计算记录（凌晨 4:00）
+   * 每日清理过期的预计算记录（凌晨 4:15）
+   * V6.4: 从 04:00 移到 04:15 避免与 dailyConflictResolution 同时执行
    */
-  @Cron('0 4 * * *', { name: 'cleanup-precomputed' })
+  @Cron('15 4 * * *', { name: 'cleanup-precomputed' })
   async cleanupExpired(): Promise<void> {
     const result = await this.prisma.precomputed_recommendations.deleteMany({
       where: { expires_at: { lt: new Date() } },
@@ -243,18 +339,39 @@ export class PrecomputeService {
   // ─── 私有方法 ───
 
   /**
-   * 获取最近 7 天有饮食记录的活跃用户 ID
+   * V6.2 3.6: 获取最近 7 天有饮食记录的活跃用户 ID（游标分页）
+   *
+   * 使用 raw SQL DISTINCT + LIMIT/OFFSET 分页，避免一次性加载全量。
+   * 由于只返回 user_id，内存占用已经较小，但在用户量级大时仍有好处。
    */
   private async getActiveUserIds(): Promise<string[]> {
     const since = new Date();
     since.setDate(since.getDate() - ACTIVE_USER_DAYS);
 
-    const results = await this.prisma.food_records.findMany({
-      where: { created_at: { gt: since } },
-      select: { user_id: true },
-      distinct: ['user_id'],
-    });
+    const PAGE_SIZE = 1000;
+    const userIds: string[] = [];
+    let offset = 0;
 
-    return results.map((r) => r.user_id);
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const page = await this.prisma.$queryRawUnsafe<
+        Array<{ user_id: string }>
+      >(
+        `SELECT DISTINCT user_id FROM food_records
+         WHERE created_at > $1
+         ORDER BY user_id
+         LIMIT $2 OFFSET $3`,
+        since,
+        PAGE_SIZE,
+        offset,
+      );
+
+      if (page.length === 0) break;
+      userIds.push(...page.map((r) => r.user_id));
+      if (page.length < PAGE_SIZE) break;
+      offset += PAGE_SIZE;
+    }
+
+    return userIds;
   }
 }

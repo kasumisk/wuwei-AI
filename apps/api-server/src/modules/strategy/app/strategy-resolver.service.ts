@@ -28,6 +28,9 @@ import {
   MealPolicyConfig,
   MultiObjectiveConfig,
   ExplorationPolicyConfig,
+  AssemblyPolicyConfig,
+  ExplainPolicyConfig,
+  RealismConfig,
 } from '../strategy.types';
 import { RedisCacheService } from '../../../core/redis/redis-cache.service';
 
@@ -184,6 +187,9 @@ export class StrategyResolver {
         base.exploration,
         override.exploration,
       ),
+      assembly: this.mergeAssembly(base.assembly, override.assembly),
+      explain: this.mergeExplain(base.explain, override.explain),
+      realism: this.mergeRealism(base.realism, override.realism),
     };
   }
 
@@ -307,6 +313,65 @@ export class StrategyResolver {
       baseMax: override.baseMax ?? base.baseMax,
       maturityShrink: override.maturityShrink ?? base.maturityShrink,
       matureThreshold: override.matureThreshold ?? base.matureThreshold,
+    };
+  }
+
+  // ─── V6.3 P2-1: 新增合并方法 ───
+
+  private mergeAssembly(
+    base?: AssemblyPolicyConfig,
+    override?: AssemblyPolicyConfig,
+  ): AssemblyPolicyConfig | undefined {
+    if (!base && !override) return undefined;
+    if (!base) return override;
+    if (!override) return base;
+
+    return {
+      preferRecipe: override.preferRecipe ?? base.preferRecipe,
+      diversityLevel: override.diversityLevel ?? base.diversityLevel,
+    };
+  }
+
+  private mergeExplain(
+    base?: ExplainPolicyConfig,
+    override?: ExplainPolicyConfig,
+  ): ExplainPolicyConfig | undefined {
+    if (!base && !override) return undefined;
+    if (!base) return override;
+    if (!override) return base;
+
+    return {
+      detailLevel: override.detailLevel ?? base.detailLevel,
+      showNutritionRadar:
+        override.showNutritionRadar ?? base.showNutritionRadar,
+    };
+  }
+
+  // ─── V6.5: 新增合并方法 ───
+
+  private mergeRealism(
+    base?: RealismConfig,
+    override?: RealismConfig,
+  ): RealismConfig | undefined {
+    if (!base && !override) return undefined;
+    if (!base) return override;
+    if (!override) return base;
+
+    return {
+      enabled: override.enabled ?? base.enabled,
+      commonalityThreshold:
+        override.commonalityThreshold ?? base.commonalityThreshold,
+      budgetFilterEnabled:
+        override.budgetFilterEnabled ?? base.budgetFilterEnabled,
+      cookTimeCapEnabled:
+        override.cookTimeCapEnabled ?? base.cookTimeCapEnabled,
+      weekdayCookTimeCap:
+        override.weekdayCookTimeCap ?? base.weekdayCookTimeCap,
+      weekendCookTimeCap:
+        override.weekendCookTimeCap ?? base.weekendCookTimeCap,
+      executabilityWeightMultiplier:
+        override.executabilityWeightMultiplier ??
+        base.executabilityWeightMultiplier,
     };
   }
 }

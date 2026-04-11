@@ -15,10 +15,10 @@ model ab_experiments {
   goal_type   String                     @default("*") @db.VarChar(30)
   status      ab_experiments_status_enum @default(draft)
   groups      Json                       @default("[]")
-  start_date  DateTime?                  @db.Timestamp(6)
-  end_date    DateTime?                  @db.Timestamp(6)
-  created_at  DateTime                   @default(now()) @db.Timestamp(6)
-  updated_at  DateTime                   @default(now()) @db.Timestamp(6)
+  start_date  DateTime?                  @db.Timestamptz(6)
+  end_date    DateTime?                  @db.Timestamptz(6)
+  created_at  DateTime                   @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime                   @default(now()) @db.Timestamptz(6)
 
   @@index([status], map: "IDX_ab_experiments_status")
 }
@@ -45,9 +45,9 @@ model admin_users {
   status        admin_users_status_enum @default(active)
   avatar        String?                 @db.VarChar(255)
   nickname      String?                 @db.VarChar(100)
-  last_login_at DateTime?               @db.Timestamp(6)
-  created_at    DateTime                @default(now()) @db.Timestamp(6)
-  updated_at    DateTime                @default(now()) @db.Timestamp(6)
+  last_login_at DateTime?               @db.Timestamptz(6)
+  created_at    DateTime                @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime                @default(now()) @db.Timestamptz(6)
   user_roles    user_roles[]
 }
 
@@ -63,7 +63,7 @@ model ai_decision_logs {
   user_followed   Boolean?
   user_feedback   String?  @db.VarChar(20)
   actual_outcome  String?  @db.VarChar(20)
-  created_at      DateTime @default(now()) @db.Timestamp(6)
+  created_at      DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([user_id, created_at(sort: Desc)], map: "idx_ai_logs_user")
 }
@@ -104,16 +104,22 @@ model app_users {
   avatar                 String?                  @db.VarChar(255)
   status                 app_users_status_enum    @default(active)
   email_verified         Boolean                  @default(false)
-  last_login_at          DateTime?                @db.Timestamp(6)
+  last_login_at          DateTime?                @db.Timestamptz(6)
   metadata               Json?
-  created_at             DateTime                 @default(now()) @db.Timestamp(6)
-  updated_at             DateTime                 @default(now()) @db.Timestamp(6)
+  created_at             DateTime                 @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime                 @default(now()) @db.Timestamptz(6)
   coach_conversations    coach_conversations[]
   daily_summaries        daily_summaries[]
   food_records           food_records[]
   profile_snapshots      profile_snapshots[]
   user_inferred_profiles user_inferred_profiles?
   user_profiles          user_profiles?
+  /// V6.5 Phase 2I: FK 补齐 — 反向关联
+  daily_plans            daily_plans[]
+  user_behavior_profiles user_behavior_profiles?
+  strategy_assignments   strategy_assignment[]
+  notifications          notification[]
+  weight_histories       weight_history[]
 
   @@index([device_id], map: "IDX_601d4f4be742d3ca28891c0207")
 }
@@ -127,8 +133,8 @@ model app_version_packages {
   fileSize     BigInt                             @default(0)
   checksum     String?                            @db.VarChar(255)
   enabled      Boolean                            @default(true)
-  createdAt    DateTime                           @default(now()) @db.Timestamp(6)
-  updatedAt    DateTime                           @default(now()) @db.Timestamp(6)
+  createdAt    DateTime                           @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime                           @default(now()) @db.Timestamptz(6)
   app_versions app_versions                       @relation(fields: [versionId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_ecb85e41b68428adb8df8fc0a01")
 
   @@unique([versionId, channel, platform], map: "IDX_app_version_packages_version_channel_platform")
@@ -148,11 +154,11 @@ model app_versions {
   status                app_versions_status_enum     @default(draft)
   grayRelease           Boolean                      @default(false)
   grayPercent           Int                          @default(0)
-  releaseDate           DateTime?                    @db.Timestamp(6)
+  releaseDate           DateTime?                    @db.Timestamptz(6)
   i18nDescription       Json?
   metadata              Json?
-  createdAt             DateTime                     @default(now()) @db.Timestamp(6)
-  updatedAt             DateTime                     @default(now()) @db.Timestamp(6)
+  createdAt             DateTime                     @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime                     @default(now()) @db.Timestamptz(6)
   app_version_packages  app_version_packages[]
 
   @@unique([platform, version], map: "IDX_6222da359534e48044dce6829e")
@@ -179,7 +185,7 @@ model client_capability_permissions {
   allowed_providers  String?
   allowed_models     String?
   config             Json?
-  created_at         DateTime @default(now()) @db.Timestamp(6)
+  created_at         DateTime @default(now()) @db.Timestamptz(6)
   clients            clients  @relation(fields: [client_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_ad53318f3e760401ed26580a61a")
 
   @@unique([client_id, capability_type], map: "IDX_60603413d17812e8ef04288227")
@@ -194,8 +200,8 @@ model clients {
   quota_config                  Json?
   description                   String?
   metadata                      Json?
-  created_at                    DateTime                        @default(now()) @db.Timestamp(6)
-  updated_at                    DateTime                        @default(now()) @db.Timestamp(6)
+  created_at                    DateTime                        @default(now()) @db.Timestamptz(6)
+  updated_at                    DateTime                        @default(now()) @db.Timestamptz(6)
   client_capability_permissions client_capability_permissions[]
 }
 
@@ -203,8 +209,8 @@ model coach_conversations {
   id             String           @id(map: "PK_a39c641e9cb65d97f4297f6e48e") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   user_id        String           @db.Uuid
   title          String?          @db.VarChar(200)
-  created_at     DateTime         @default(now()) @db.Timestamp(6)
-  updated_at     DateTime         @default(now()) @db.Timestamp(6)
+  created_at     DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime         @default(now()) @db.Timestamptz(6)
   app_users      app_users        @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_28e39678e3cbc5deced6c3b5f7e")
   coach_messages coach_messages[]
 
@@ -218,7 +224,7 @@ model coach_messages {
   role                String              @db.VarChar(20)
   content             String
   tokens_used         Int                 @default(0)
-  created_at          DateTime            @default(now()) @db.Timestamp(6)
+  created_at          DateTime            @default(now()) @db.Timestamptz(6)
   coach_conversations coach_conversations @relation(fields: [conversation_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_10a0fc9e61c8d70b657decdc02c")
 
   @@index([conversation_id, created_at], map: "IDX_ce15bf83d158339d1460ef5046")
@@ -235,8 +241,11 @@ model daily_plans {
   adjustments  Json     @default("[]")
   strategy     String?
   total_budget Int?
-  created_at   DateTime @default(now()) @db.Timestamp(6)
-  updated_at   DateTime @default(now()) @db.Timestamp(6)
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime @default(now()) @db.Timestamptz(6)
+  daily_plan_items daily_plan_items[]
+  /// V6.5 Phase 2I: FK 补齐
+  user         app_users @relation(fields: [user_id], references: [id], onDelete: Cascade, map: "fk_daily_plans_user")
 
   @@index([user_id, date(sort: Desc)], map: "idx_daily_plans_user_date")
 }
@@ -258,8 +267,8 @@ model daily_summaries {
   protein_goal    Decimal   @default(0) @db.Decimal(6, 1)
   fat_goal        Decimal   @default(0) @db.Decimal(6, 1)
   carbs_goal      Decimal   @default(0) @db.Decimal(6, 1)
-  created_at      DateTime  @default(now()) @db.Timestamp(6)
-  updated_at      DateTime  @default(now()) @db.Timestamp(6)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime  @default(now()) @db.Timestamptz(6)
   app_users       app_users @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_b8fe1bf443d817a306fbda45040")
 
   @@unique([user_id, date], map: "UQ_2bec94b8d146beda9ec7c984e41")
@@ -294,8 +303,8 @@ model feature_flag {
   type        feature_flag_type_enum @default(boolean)
   enabled     Boolean                @default(false)
   config      Json                   @default("{}")
-  created_at  DateTime               @default(now()) @db.Timestamp(6)
-  updated_at  DateTime               @default(now()) @db.Timestamp(6)
+  created_at  DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime               @default(now()) @db.Timestamptz(6)
 
   @@index([key], map: "IDX_feature_flag_key")
 }
@@ -382,7 +391,7 @@ model food_change_logs {
   changes    Json
   reason     String?
   operator   String?  @db.VarChar(100)
-  created_at DateTime @default(now()) @db.Timestamp(6)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
   foods      foods    @relation(fields: [food_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_3bed3ebac60097ade2410992361")
 
   @@index([food_id, version], map: "IDX_c05fd8febec4e6c891d55037bb")
@@ -397,8 +406,8 @@ model food_conflicts {
   resolution     String?   @db.VarChar(20)
   resolved_value String?
   resolved_by    String?   @db.VarChar(100)
-  resolved_at    DateTime? @db.Timestamp(6)
-  created_at     DateTime  @default(now()) @db.Timestamp(6)
+  resolved_at    DateTime? @db.Timestamptz(6)
+  created_at     DateTime  @default(now()) @db.Timestamptz(6)
   foods          foods     @relation(fields: [food_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_c38e8be317412e0e211bde36c2c")
 
   @@index([food_id], map: "IDX_c38e8be317412e0e211bde36c2")
@@ -431,9 +440,9 @@ model food_records {
   avg_quality     Decimal                     @default(0) @db.Decimal(3, 1)
   avg_satiety     Decimal                     @default(0) @db.Decimal(3, 1)
   nutrition_score Int                         @default(0)
-  recorded_at     DateTime                    @default(now()) @db.Timestamp(6)
-  created_at      DateTime                    @default(now()) @db.Timestamp(6)
-  updated_at      DateTime                    @default(now()) @db.Timestamp(6)
+  recorded_at     DateTime                    @default(now()) @db.Timestamptz(6)
+  created_at      DateTime                    @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime                    @default(now()) @db.Timestamptz(6)
   analysis_id     String?                     @db.Uuid
   app_users       app_users                   @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_ec3b604a6a49e32b3b7261e8b16")
 
@@ -451,7 +460,7 @@ model food_regional_info {
   local_price_range String?  @db.VarChar(20)
   availability      String?  @db.VarChar(20)
   regulatory_info   Json?
-  created_at        DateTime @default(now()) @db.Timestamp(6)
+  created_at        DateTime @default(now()) @db.Timestamptz(6)
   foods             foods    @relation(fields: [food_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_999e5485019b3efa2aae0a557f5")
 
   @@unique([food_id, region], map: "UQ_41a17bad128becea48895910fa6")
@@ -471,8 +480,8 @@ model food_sources {
   confidence  Decimal  @default(0.8) @db.Decimal(3, 2)
   is_primary  Boolean  @default(false)
   priority    Int      @default(50)
-  fetched_at  DateTime @default(now()) @db.Timestamp(6)
-  created_at  DateTime @default(now()) @db.Timestamp(6)
+  fetched_at  DateTime @default(now()) @db.Timestamptz(6)
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
   foods       foods    @relation(fields: [food_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_dd78760b3ccd557a6be426c896f")
 
   @@index([source_type], map: "IDX_c358d4034107dae538d5e906e9")
@@ -488,8 +497,8 @@ model food_translations {
   aliases      String?
   description  String?
   serving_desc String?  @db.VarChar(100)
-  created_at   DateTime @default(now()) @db.Timestamp(6)
-  updated_at   DateTime @default(now()) @db.Timestamp(6)
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime @default(now()) @db.Timestamptz(6)
   foods        foods    @relation(fields: [food_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_880ef718b1e294d7cbeb2c7265a")
 
   @@unique([food_id, locale], map: "UQ_5ce4d8b4f0dad567d3b81052e34")
@@ -552,21 +561,21 @@ model foods {
   confidence            Decimal                @default(1) @db.Decimal(3, 2)
   is_verified           Boolean                @default(false)
   verified_by           String?                @db.VarChar(100)
-  verified_at           DateTime?              @db.Timestamp(6)
+  verified_at           DateTime?              @db.Timestamptz(6)
   search_weight         Int                    @default(100)
   popularity            Int                    @default(0)
-  created_at            DateTime               @default(now()) @db.Timestamp(6)
-  updated_at            DateTime               @default(now()) @db.Timestamp(6)
+  created_at            DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime               @default(now()) @db.Timestamptz(6)
   source                String?                @default("official") @db.VarChar(20)
-  fiber_per_100g        Decimal?               @db.Decimal(5, 1)
-  sugar_per_100g        Decimal?               @db.Decimal(5, 1)
-  sodium_per_100g       Decimal?               @db.Decimal(6, 1)
+  fiber_per_100g        Decimal?               @db.Decimal(5, 1) /// @deprecated V6.5: 使用 fiber 字段，此字段将在后续版本删除
+  sugar_per_100g        Decimal?               @db.Decimal(5, 1) /// @deprecated V6.5: 使用 sugar 字段，此字段将在后续版本删除
+  sodium_per_100g       Decimal?               @db.Decimal(6, 1) /// @deprecated V6.5: 使用 sodium 字段，此字段将在后续版本删除
   added_sugar           Decimal?               @db.Decimal(5, 1)
   natural_sugar         Decimal?               @db.Decimal(5, 1)
   purine                Decimal?               @db.Decimal(7, 1)
   phosphorus            Decimal?               @db.Decimal(7, 1)
   embedding             Float[]                @db.Real
-  embedding_updated_at  DateTime?              @db.Timestamp(6)
+  embedding_updated_at  DateTime?              @db.Timestamptz(6)
   cuisine               String?                @db.VarChar(30)
   flavor_profile        Json?
   cooking_method        String?                @db.VarChar(20)
@@ -577,19 +586,19 @@ model foods {
   shelf_life_days       Int?
   fodmap_level          String?                @db.VarChar(10)
   oxalate_level         String?                @db.VarChar(10)
+  available_channels    Json                   @default("[\"home_cook\",\"restaurant\",\"delivery\",\"convenience\"]") /// 可获取渠道: home_cook/restaurant/delivery/convenience
+  commonality_score     Int                    @default(50) /// 大众化评分 0-100: 0=极罕见, 50=一般, 100=日常必备
   embedding_v5          Unsupported("vector")?
   analysis_food_link    analysis_food_link[]
+  daily_plan_items      daily_plan_items[]
   food_change_logs      food_change_logs[]
   food_conflicts        food_conflicts[]
   food_regional_info    food_regional_info[]
   food_sources          food_sources[]
   food_translations     food_translations[]
+  recipe_ingredients    recipe_ingredients[]
 
-  @@index([primary_source], map: "IDX_0e3bd85e37aa82a7ccdd76e135")
   @@index([search_weight], map: "IDX_5f8b45ec9d0608cffe04d3afbe")
-  @@index([status], map: "IDX_68aa1d0fe3ef6b57e4fd922033")
-  @@index([barcode], map: "IDX_94919a5b0af8952c73beb42fbc")
-  @@index([category], map: "IDX_c147959a431fea61665d0e8bf4")
   @@index([allergens], map: "IDX_foods_allergens_gin", type: Gin)
   @@index([barcode], map: "IDX_foods_barcode")
   @@index([meal_types], map: "IDX_foods_meal_types_gin", type: Gin)
@@ -603,6 +612,7 @@ model foods {
   @@index([search_weight(sort: Desc)], map: "idx_foods_weight")
   @@index([is_verified, category], map: "idx_foods_verified_category")
   @@index([aliases(ops: raw("gin_trgm_ops"))], map: "idx_foods_aliases_trgm", type: Gin)
+  @@index([commonality_score], map: "idx_foods_commonality")
 }
 
 model migrations {
@@ -635,8 +645,8 @@ model model_configs {
   customRetries         Int?
   configMetadata        Json?
   metadata              Json?
-  createdAt             DateTime                          @default(now()) @db.Timestamp(6)
-  updatedAt             DateTime                          @default(now()) @db.Timestamp(6)
+  createdAt             DateTime                          @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime                          @default(now()) @db.Timestamptz(6)
   custom_api_key        String?                           @db.VarChar(500)
   custom_timeout        Int?
   custom_retries        Int?
@@ -658,6 +668,8 @@ model notification {
   read_at    DateTime? @db.Timestamptz(6)
   is_pushed  Boolean   @default(false)
   created_at DateTime  @default(now()) @db.Timestamptz(6)
+  /// V6.5 Phase 2I: FK 补齐
+  user       app_users @relation(fields: [user_id], references: [id], onDelete: Cascade, map: "fk_notification_user")
 
   @@index([user_id, created_at], map: "idx_notification_user_created")
   @@index([user_id, is_read], map: "idx_notification_user_unread")
@@ -704,8 +716,8 @@ model permission_templates {
   description         String?  @db.VarChar(500)
   permission_patterns String
   is_system           Boolean  @default(false)
-  created_at          DateTime @default(now()) @db.Timestamp(6)
-  updated_at          DateTime @default(now()) @db.Timestamp(6)
+  created_at          DateTime @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime @default(now()) @db.Timestamptz(6)
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -722,8 +734,8 @@ model permissions {
   status            permissions_status_enum  @default(active)
   is_system         Boolean                  @default(false)
   sort              Int                      @default(0)
-  created_at        DateTime                 @default(now()) @db.Timestamp(6)
-  updated_at        DateTime                 @default(now()) @db.Timestamp(6)
+  created_at        DateTime                 @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime                 @default(now()) @db.Timestamptz(6)
   permissions       permissions?             @relation("permissionsTopermissions", fields: [parent_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_e152e0aa9e0df7ed44539db894c")
   other_permissions permissions[]            @relation("permissionsTopermissions")
   role_permissions  role_permissions[]
@@ -757,7 +769,7 @@ model profile_change_log {
   trigger_event  String?  @db.VarChar(128)
   reason         String?
   metadata       Json?
-  created_at     DateTime @default(now()) @db.Timestamp(6)
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([created_at], map: "idx_profile_change_log_created")
   @@index([user_id], map: "idx_profile_change_log_user")
@@ -771,7 +783,7 @@ model profile_snapshots {
   snapshot       Json
   trigger_type   String    @db.VarChar(30)
   changed_fields Json
-  created_at     DateTime? @default(now()) @db.Timestamp(6)
+  created_at     DateTime? @default(now()) @db.Timestamptz(6)
   app_users      app_users @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([user_id, created_at(sort: Desc)], map: "idx_snapshot_user_time")
@@ -788,10 +800,10 @@ model providers {
   timeout         Int                   @default(30000)
   retryCount      Int                   @default(3)
   status          providers_status_enum @default(active)
-  lastHealthCheck DateTime?             @db.Timestamp(6)
+  lastHealthCheck DateTime?             @db.Timestamptz(6)
   metadata        Json?
-  createdAt       DateTime              @default(now()) @db.Timestamp(6)
-  updatedAt       DateTime              @default(now()) @db.Timestamp(6)
+  createdAt       DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime              @default(now()) @db.Timestamptz(6)
   model_configs   model_configs[]
 }
 
@@ -808,12 +820,14 @@ model recommendation_feedbacks {
   goal_type            String?            @db.VarChar(20)
   experiment_id        String?            @db.VarChar
   group_id             String?            @db.VarChar
-  created_at           DateTime           @default(now()) @db.Timestamp(6)
+  trace_id             String?            @db.Uuid /// 关联 recommendation_traces.id，用于归因分析
+  created_at           DateTime           @default(now()) @db.Timestamptz(6)
   feedback_details     feedback_details[]
 
   @@index([user_id], map: "IDX_84be6fe526b10313d0015fbdea")
   @@index([user_id, created_at], map: "IDX_f3a0234ecd1f178e4c36fb8f00")
   @@index([food_id], map: "idx_rec_feedbacks_food_id")
+  @@index([trace_id], map: "idx_rec_feedbacks_trace_id")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -821,7 +835,7 @@ model role_permissions {
   id            String      @id(map: "PK_84059017c90bfcb701b8fa42297") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   role_id       String      @db.Uuid
   permission_id String      @db.Uuid
-  created_at    DateTime    @default(now()) @db.Timestamp(6)
+  created_at    DateTime    @default(now()) @db.Timestamptz(6)
   permissions   permissions @relation(fields: [permission_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_17022daf3f885f7d35423e9971e")
   roles         roles       @relation(fields: [role_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_178199805b901ccd220ab7740ec")
 }
@@ -836,8 +850,8 @@ model roles {
   status           roles_status_enum  @default(active)
   is_system        Boolean            @default(false)
   sort             Int                @default(0)
-  created_at       DateTime           @default(now()) @db.Timestamp(6)
-  updated_at       DateTime           @default(now()) @db.Timestamp(6)
+  created_at       DateTime           @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime           @default(now()) @db.Timestamptz(6)
   role_permissions role_permissions[]
   roles            roles?             @relation("rolesToroles", fields: [parent_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_3e97eeaf865aeda0d20c0c5c509")
   other_roles      roles[]            @relation("rolesToroles")
@@ -856,6 +870,8 @@ model strategy {
   priority     Int      @default(0)
   created_at   DateTime @default(now()) @db.Timestamptz(6)
   updated_at   DateTime @default(now()) @db.Timestamptz(6)
+  /// V6.5 Phase 2I: FK 补齐 — 反向关联
+  strategy_assignments strategy_assignment[]
 
   @@index([scope, status], map: "idx_strategy_scope_status")
   @@index([scope, scope_target, status], map: "idx_strategy_scope_target")
@@ -864,7 +880,7 @@ model strategy {
 model strategy_assignment {
   id              String    @id(map: "PK_strategy_assignment") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   user_id         String    @db.Uuid
-  strategy_id     String    @db.Uuid
+  strategy_id     String?   @db.Uuid
   assignment_type String    @default("manual") @db.VarChar(32)
   source          String?   @db.VarChar(128)
   is_active       Boolean   @default(true)
@@ -872,6 +888,9 @@ model strategy_assignment {
   active_until    DateTime? @db.Timestamptz(6)
   created_at      DateTime  @default(now()) @db.Timestamptz(6)
   updated_at      DateTime  @default(now()) @db.Timestamptz(6)
+  /// V6.5 Phase 2I: FK 补齐
+  user            app_users @relation(fields: [user_id], references: [id], onDelete: Cascade, map: "fk_strategy_assignment_user")
+  strategy_ref    strategy? @relation(fields: [strategy_id], references: [id], onDelete: SetNull, map: "fk_strategy_assignment_strategy")
 
   @@index([strategy_id], map: "idx_strategy_assignment_strategy")
   @@index([user_id], map: "idx_strategy_assignment_user")
@@ -964,7 +983,7 @@ model usage_records {
   cost            Decimal  @db.Decimal(10, 6)
   response_time   Int
   metadata        Json?
-  timestamp       DateTime @default(now()) @db.Timestamp(6)
+  timestamp       DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([capability_type, timestamp], map: "IDX_0616a784ab63d9f654498cd84b")
   @@index([provider, timestamp], map: "IDX_1f7f090f5d081ae21593ab3844")
@@ -975,7 +994,7 @@ model user_achievements {
   id             String   @id(map: "PK_3d94aba7e9ed55365f68b5e77fa") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   user_id        String   @db.Uuid
   achievement_id String   @db.Uuid
-  unlocked_at    DateTime @default(now()) @db.Timestamp(6)
+  unlocked_at    DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([user_id], map: "idx_user_achievements_user_id")
 }
@@ -992,22 +1011,24 @@ model user_behavior_profiles {
   healthy_records      Int      @default(0)
   streak_days          Int      @default(0)
   longest_streak       Int      @default(0)
-  updated_at           DateTime @default(now()) @db.Timestamp(6)
+  updated_at           DateTime @default(now()) @db.Timestamptz(6)
   meal_timing_patterns Json?    @default("{}")
   portion_tendency     String?  @default("normal") @db.VarChar(10)
   replacement_patterns Json?    @default("{}")
   last_streak_date     String?  @db.VarChar(10)
+  /// V6.5 Phase 2I: FK 补齐
+  user                 app_users @relation(fields: [user_id], references: [id], onDelete: Cascade, map: "fk_behavior_profiles_user")
 }
 
 model user_challenges {
   id               String    @id(map: "PK_7c111333fc0e3a23528503498de") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   user_id          String    @db.Uuid
   challenge_id     String    @db.Uuid
-  started_at       DateTime  @default(now()) @db.Timestamp(6)
+  started_at       DateTime  @default(now()) @db.Timestamptz(6)
   current_progress Int       @default(0)
   max_progress     Int
   status           String    @default("active") @db.VarChar(20)
-  completed_at     DateTime? @db.Timestamp(6)
+  completed_at     DateTime? @db.Timestamptz(6)
 
   @@index([user_id, status], map: "idx_user_challenges_user_status")
 }
@@ -1026,8 +1047,8 @@ model user_inferred_profiles {
   nutrition_gaps       Json?     @default("[]")
   goal_progress        Json?     @default("{}")
   confidence_scores    Json?     @default("{}")
-  last_computed_at     DateTime? @db.Timestamp(6)
-  updated_at           DateTime? @default(now()) @db.Timestamp(6)
+  last_computed_at     DateTime? @db.Timestamptz(6)
+  updated_at           DateTime? @default(now()) @db.Timestamptz(6)
   preference_weights   Json?
   app_users            app_users @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
@@ -1057,11 +1078,12 @@ model user_profiles {
   binge_triggers       Json                              @default("[]")
   discipline           String                            @default("medium") @db.VarChar(20)
   onboarding_completed Boolean                           @default(false)
-  created_at           DateTime                          @default(now()) @db.Timestamp(6)
-  updated_at           DateTime                          @default(now()) @db.Timestamp(6)
+  created_at           DateTime                          @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime                          @default(now()) @db.Timestamptz(6)
   allergens            Json?                             @default("[]")
   health_conditions    Json?                             @default("[]")
   exercise_profile     Json?                             @default("{}")
+  exercise_schedule    Json?                             @default("{}") /// V6.3 P2-9: 每周运动计划 { "mon": { "startHour": 7, "durationHours": 1 }, ... }
   cooking_skill_level  String?                           @db.VarChar(20)
   taste_intensity      Json?                             @default("{}")
   cuisine_preferences  Json?                             @default("[]")
@@ -1073,6 +1095,12 @@ model user_profiles {
   data_completeness    Decimal?                          @default(0) @db.Decimal(3, 2)
   profile_version      Int?                              @default(1)
   timezone             String                            @default("Asia/Shanghai") @db.VarChar(50)
+  recommendation_preferences Json?                      @default("{}") /// V6.5 Phase 3F: 用户推荐偏好 { popularityPreference, cookingEffort, budgetSensitivity }
+  sleep_quality          String?                           @db.Text /// V6.6 Phase 2-C: 睡眠质量 poor|fair|good
+  stress_level           String?                           @db.Text /// V6.6 Phase 2-C: 压力水平 low|medium|high
+  hydration_goal         Int?                                       /// V6.6 Phase 2-C: 每日目标饮水量 (ml)
+  supplements_used       Json                              @default("[]") /// V6.6 Phase 2-C: 正在服用的补剂列表
+  meal_timing_preference String?                           @db.Text /// V6.6 Phase 2-C: 用餐时间偏好 early_bird|standard|late_eater
   app_users            app_users                         @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_6ca9503d77ae39b4b5a6cc3ba88")
 }
 
@@ -1081,7 +1109,7 @@ model user_roles {
   id          String      @id(map: "PK_8acd5cf26ebd158416f477de799") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   user_id     String      @db.Uuid
   role_id     String      @db.Uuid
-  created_at  DateTime    @default(now()) @db.Timestamp(6)
+  created_at  DateTime    @default(now()) @db.Timestamptz(6)
   roles       roles       @relation(fields: [role_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_b23c65e50a758245a33ee35fda1")
   admin_users admin_users @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_user_roles_admin_user_id")
 }
@@ -1346,7 +1374,9 @@ model weight_history {
   weight_kg        Decimal  @db.Decimal(5, 1)
   body_fat_percent Decimal? @db.Decimal(4, 1)
   source           String   @default("manual") @db.VarChar(20)
-  recorded_at      DateTime @default(now()) @db.Timestamp(6)
+  recorded_at      DateTime @default(now()) @db.Timestamptz(6)
+  /// V6.5 Phase 2I: FK 补齐
+  user             app_users @relation(fields: [user_id], references: [id], onDelete: Cascade, map: "fk_weight_history_user")
 
   @@index([user_id, recorded_at], map: "idx_weight_history_user_recorded")
 }
@@ -1355,8 +1385,230 @@ model reminder_dismissals {
   id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   user_id       String   @db.Uuid
   reminder_type String   @db.VarChar(50)
-  dismissed_at  DateTime @default(now()) @db.Timestamp(6)
+  dismissed_at  DateTime @default(now()) @db.Timestamptz(6)
 
   @@unique([user_id, reminder_type], map: "uq_reminder_user_type")
   @@index([user_id])
+}
+
+model recipes {
+  id                   String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                 String               @db.VarChar(200)
+  description          String?
+  cuisine              String?              @db.VarChar(50)
+  difficulty           Int                  @default(1) @db.SmallInt
+  prep_time_minutes    Int?
+  cook_time_minutes    Int?
+  servings             Int                  @default(1) @db.SmallInt
+  tags                 String[]
+  instructions         Json?
+  image_url            String?              @db.VarChar(500)
+  source               String               @default("ai_generated") @db.VarChar(50)
+  calories_per_serving Decimal?             @db.Decimal(8, 2)
+  protein_per_serving  Decimal?             @db.Decimal(8, 2)
+  fat_per_serving      Decimal?             @db.Decimal(8, 2)
+  carbs_per_serving    Decimal?             @db.Decimal(8, 2)
+  fiber_per_serving    Decimal?             @db.Decimal(8, 2)
+  quality_score        Decimal              @default(0) @db.Decimal(5, 2)
+  usage_count          Int                  @default(0)
+  review_status        String               @default("approved") @db.VarChar(20)
+  submitted_by         String?              @db.Uuid
+  reviewed_by          String?              @db.Uuid
+  reviewed_at          DateTime?            @db.Timestamptz(6)
+  review_note          String?
+  is_active            Boolean              @default(true)
+  available_channels   Json                 @default("[\"home_cook\"]") /// 可获取渠道: home_cook/restaurant/delivery/convenience
+  created_at           DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime             @default(now()) @db.Timestamptz(6)
+  recipe_ingredients   recipe_ingredients[]
+  recipe_translations  recipe_translations[]
+  recipe_ratings       recipe_ratings[]
+  daily_plan_items     daily_plan_items[]
+
+  @@index([cuisine], map: "idx_recipes_cuisine")
+  @@index([difficulty], map: "idx_recipes_difficulty")
+  @@index([review_status], map: "idx_recipes_review_status")
+  @@index([tags], map: "idx_recipes_tags", type: Gin)
+  @@index([quality_score(sort: Desc)], map: "idx_recipes_quality")
+}
+
+model recipe_ingredients {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  recipe_id       String   @db.Uuid
+  food_id         String?  @db.Uuid
+  ingredient_name String   @db.VarChar(100)
+  amount          Decimal? @db.Decimal(8, 2)
+  unit            String?  @db.VarChar(20)
+  is_optional     Boolean  @default(false)
+  sort_order      Int      @default(0) @db.SmallInt
+
+  recipe recipes  @relation(fields: [recipe_id], references: [id], onDelete: Cascade)
+  food   foods?   @relation(fields: [food_id], references: [id], onDelete: SetNull)
+
+  @@index([recipe_id], map: "idx_recipe_ingredients_recipe")
+  @@index([food_id], map: "idx_recipe_ingredients_food")
+}
+
+/// 推荐归因追踪表 — 记录每次推荐请求的完整上下文和评分快照，用于效果归因和策略优化
+model recommendation_traces {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id           String   @db.Uuid
+  meal_type         String   @db.VarChar(20)
+  goal_type         String   @db.VarChar(30)
+  channel           String   @default("unknown") @db.VarChar(20)
+  strategy_id       String?  @db.Uuid
+  strategy_version  String?  @db.VarChar(50)
+  experiment_id     String?  @db.Uuid
+  group_id          String?  @db.VarChar(30)
+  pipeline_snapshot Json?    /// 推荐管道完整快照：权重、过滤器、boost 参数等
+  top_foods         Json?    /// 最终推荐的 top-N 食物列表（含评分明细）
+  score_stats       Json?    /// 评分统计：min/max/avg/std 各维度
+  food_pool_size    Int?     /// 候选池大小
+  filters_applied   Json?    /// 应用的过滤器及过滤数量
+  duration_ms       Int?     /// 推荐计算耗时（毫秒）
+  created_at        DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([user_id, created_at(sort: Desc)], map: "idx_rec_traces_user_created")
+  @@index([strategy_id], map: "idx_rec_traces_strategy")
+  @@index([experiment_id], map: "idx_rec_traces_experiment")
+  @@index([channel], map: "idx_rec_traces_channel")
+  @@index([created_at], map: "idx_rec_traces_created")
+}
+
+/// 菜谱多语言翻译表
+model recipe_translations {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  recipe_id    String   @db.Uuid
+  locale       String   @db.VarChar(10)
+  name         String   @db.VarChar(200)
+  description  String?
+  instructions Json?    /// 翻译后的步骤说明
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime @default(now()) @db.Timestamptz(6)
+
+  recipe recipes @relation(fields: [recipe_id], references: [id], onDelete: Cascade)
+
+  @@unique([recipe_id, locale], map: "uq_recipe_translation_recipe_locale")
+  @@index([locale], map: "idx_recipe_translations_locale")
+}
+
+// =====================================================================
+// V6.5 新增 Models
+// =====================================================================
+
+/// 死信队列 — BullMQ 永久失败任务存储，用于审计和重放
+model dead_letter_jobs {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  queue_name    String    @db.VarChar(50)
+  job_id        String    @db.VarChar(100)
+  job_data      Json
+  error_message String    @db.Text
+  attempts_made Int       @default(0)
+  status        String    @default("pending") @db.VarChar(20) /// pending / retried / discarded
+  failed_at     DateTime  @default(now()) @db.Timestamptz(6)
+  retried_at    DateTime? @db.Timestamptz(6)
+  created_at    DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@index([queue_name, status], map: "idx_dlj_queue_status")
+  @@index([failed_at], map: "idx_dlj_failed_at")
+}
+
+/// 每日计划食物明细 — daily_plans JSON 规范化
+model daily_plan_items {
+  id            String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  daily_plan_id String  @db.Uuid
+  meal_type     String  @db.VarChar(20) /// morning / lunch / dinner / snack
+  role          String  @db.VarChar(20) /// carb / protein / veggie / side / snack
+  food_id       String? @db.Uuid
+  recipe_id     String? @db.Uuid
+  food_name     String  @db.VarChar(200)
+  calories      Float?
+  protein       Float?
+  fat           Float?
+  carbs         Float?
+  score         Float?
+  sort_order    Int     @default(0)
+
+  daily_plan daily_plans @relation(fields: [daily_plan_id], references: [id], onDelete: Cascade)
+  food       foods?      @relation(fields: [food_id], references: [id])
+  recipe     recipes?    @relation(fields: [recipe_id], references: [id])
+
+  @@index([daily_plan_id, meal_type], map: "idx_dpi_plan_meal")
+  @@index([food_id], map: "idx_dpi_food")
+  @@index([recipe_id], map: "idx_dpi_recipe")
+}
+
+/// 菜谱用户评分
+model recipe_ratings {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  recipe_id  String   @db.Uuid
+  user_id    String   @db.Uuid
+  rating     Int      @db.SmallInt /// 1-5
+  comment    String?  @db.Text
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @updatedAt @db.Timestamptz(6)
+
+  recipe recipes @relation(fields: [recipe_id], references: [id], onDelete: Cascade)
+
+  @@unique([recipe_id, user_id], map: "uq_recipe_rating_recipe_user")
+  @@index([user_id], map: "idx_recipe_ratings_user")
+  @@index([recipe_id], map: "idx_recipe_ratings_recipe")
+}
+
+/// 策略调优历史 — 记录策略自动/手动切换的效果
+model strategy_tuning_log {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  segment_name      String   @db.VarChar(50)
+  previous_strategy String   @db.VarChar(50)
+  new_strategy      String   @db.VarChar(50)
+  previous_rate     Float
+  new_rate          Float
+  improvement       Float
+  auto_applied      Boolean  @default(false)
+  created_at        DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([segment_name], map: "idx_stl_segment")
+  @@index([created_at], map: "idx_stl_created")
+}
+
+/// 替换模式聚合 — 用户 A→B 替换行为的频率统计，用于推荐权重调整
+model replacement_patterns {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id        String   @db.Uuid
+  from_food_id   String   @db.Uuid
+  from_food_name String   @db.VarChar(200)
+  to_food_id     String   @db.Uuid
+  to_food_name   String   @db.VarChar(200)
+  frequency      Int      @default(1)
+  last_occurred  DateTime @default(now()) @db.Timestamptz(6)
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([user_id, from_food_id, to_food_id], map: "uq_replacement_pattern")
+  @@index([user_id], map: "idx_rp_user")
+  @@index([from_food_id], map: "idx_rp_from_food")
+}
+
+/// V6.5 Phase 3J: 暴食干预效果追踪 — 记录每次暴食干预事件及后续行为变化
+model binge_intervention_logs {
+  id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id               String   @db.Uuid
+  /// 干预触发时段（24h 制）
+  trigger_hour          Int      @db.SmallInt
+  /// 干预消息内容
+  message               String   @db.VarChar(500)
+  /// 干预前 2h 卡路里摄入
+  pre_calories          Float?
+  /// 干预后 3h 卡路里摄入（异步回填）
+  post_calories         Float?
+  /// 干预是否有效：post_calories < pre_expected 视为有效（异步回填）
+  effective             Boolean?
+  /// 用户是否在干预后 3h 内新增了食物记录
+  had_post_record       Boolean?
+  /// 异步评估时间
+  evaluated_at          DateTime? @db.Timestamptz(6)
+  created_at            DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@index([user_id, created_at], map: "idx_bil_user_created")
+  @@index([effective], map: "idx_bil_effective")
 }

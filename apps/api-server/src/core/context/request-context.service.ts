@@ -29,7 +29,13 @@ export const CLS_KEYS = {
   USER_ID: 'userId',
   /** 请求开始时间戳（用于计算耗时） */
   START_TIME: 'startTime',
+  /** V6.6 Phase 3-B: 请求语言（zh/en/ja），由 I18nMiddleware 写入 */
+  LOCALE: 'locale',
 } as const;
+
+/** V6.6 Phase 3-B: 支持的语言列表 */
+export const SUPPORTED_LOCALES = ['zh', 'en', 'ja'] as const;
+export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 
 @Injectable()
 export class RequestContextService {
@@ -57,6 +63,11 @@ export class RequestContextService {
     return Date.now() - this.startTime;
   }
 
+  /** V6.6 Phase 3-B: 获取当前请求语言（默认 'zh'） */
+  get locale(): string {
+    return this.cls.get(CLS_KEYS.LOCALE) || 'zh';
+  }
+
   // ─── 写入器（仅供中间件/Guard 调用） ───
 
   /** 设置请求 ID */
@@ -72,6 +83,11 @@ export class RequestContextService {
   /** 设置请求开始时间 */
   setStartTime(ts: number): void {
     this.cls.set(CLS_KEYS.START_TIME, ts);
+  }
+
+  /** V6.6 Phase 3-B: 设置当前请求语言 */
+  setLocale(locale: string): void {
+    this.cls.set(CLS_KEYS.LOCALE, locale);
   }
 
   // ─── CLS 底层访问（高级用法） ───

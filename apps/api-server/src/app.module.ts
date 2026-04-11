@@ -1,6 +1,7 @@
 import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerStorageRedisService } from 'nestjs-throttler-storage-redis';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -8,6 +9,8 @@ import { AppService } from './app.service';
 import { CoreModule } from './core/core.module';
 import { StorageModule } from './storage/storage.module';
 import { QueueModule } from './core/queue/queue.module';
+// V6.4: Prometheus 可观测性
+import { MetricsModule, MetricsMiddleware } from './core/metrics';
 // 业务模块
 import { AuthModule } from './modules/auth/auth.module';
 import { UserModule } from './modules/user/user.module';
@@ -29,6 +32,8 @@ import { NotificationModule } from './modules/notification/notification.module';
 import { StrategyModule } from './modules/strategy/strategy.module';
 // V6 Phase 2.12: 订阅模块（计划管理 + 用户订阅 + 支付 + 用量配额）
 import { SubscriptionModule } from './modules/subscription/subscription.module';
+// V6.3 P2-6: 菜谱模块
+import { RecipeModule } from './modules/recipe/recipe.module';
 // 系统服务
 import { HealthModule } from './health/health.module';
 import { GatewayModule } from './gateway/gateway.module';
@@ -38,11 +43,20 @@ import { FoodPipelineModule } from './food-pipeline/food-pipeline.module';
 // 全局
 import { AllExceptionsFilter } from './core/filters/all-exceptions.filter';
 import { LoggerMiddleware } from './core/middlewares/logger.middleware';
+import { I18nMiddleware } from './core/i18n/i18n.middleware';
 import { ResponseInterceptor } from './core/interceptors/response.interceptor';
-// V6 Phase 1.12: 分层限流
+// V6 Phase 1.12: 分层限流（default: 100/60s, user-api: 30/60s, ai-heavy: 5/60s）
 import { UserThrottlerGuard, THROTTLE_CONFIG } from './core/throttle';
+// V6.6 Phase 1-B: ThrottlerModule Redis 化需要 RedisCacheService
+import { RedisCacheService } from './core/redis/redis-cache.service';
 // V6 Phase 1.13: 请求上下文拦截器（Guard 后同步 userId 到 CLS）
 import { ClsUserInterceptor } from './core/context';
+// V6.5 Phase 1H: Circuit Breaker（全局熔断保护）
+import { CircuitBreakerModule } from './core/circuit-breaker';
+// V6.5 Phase 1I: EventEmitter2 全局错误处理
+import { EventErrorHandler } from './core/events';
+// V6.5 Phase 1J: ScheduleModule 全局注册（从 food-pipeline.module 迁移）
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
@@ -60,8 +74,24 @@ import { ClsUserInterceptor } from './core/context';
     }),
     // V6 Phase 1.3: BullMQ 异步任务队列 — 复用现有 Redis 实例
     QueueModule,
-    // V6 Phase 1.12: 分层限流（default: 100/60s, user-api: 30/60s, ai-heavy: 5/60s）
-    ThrottlerModule.forRoot(THROTTLE_CONFIG),
+    // V6.4: Prometheus 指标收集 + /metrics 端点
+    MetricsModule,
+    // V6.5 Phase 1H: Circuit Breaker 全局模块（保护外部服务调用）
+    CircuitBreakerModule,
+    // V6.5 Phase 1J: @nestjs/schedule 全局注册（Cron 任务调度，从 FoodPipelineModule 迁移）
+    ScheduleModule.forRoot(),
+    // V6 Phase 1.12 + V6.6 Phase 1-B: 分层限流，Redis 持久化存储（多实例安全）
+    // Redis 不可用时 ThrottlerStorageRedisService 内部回退为内存存储
+    ThrottlerModule.forRootAsync({
+      imports: [CoreModule],
+      inject: [RedisCacheService],
+      useFactory: (redisCache: RedisCacheService) => ({
+        throttlers: THROTTLE_CONFIG,
+        storage: redisCache.isConnected
+          ? new ThrottlerStorageRedisService(redisCache.getClient())
+          : undefined, // undefined → 使用默认内存存储（Redis 不可用时降级）
+      }),
+    }),
     // 业务模块（12个）
     AuthModule,
     UserModule,
@@ -83,6 +113,8 @@ import { ClsUserInterceptor } from './core/context';
     StrategyModule,
     // V6 Phase 2.12: 订阅模块（@Global，全局可用 — 计划/订阅/支付/配额）
     SubscriptionModule,
+    // V6.3 P2-6: 菜谱模块（CRUD + 评分）
+    RecipeModule,
     // 系统服务
     HealthModule,
     GatewayModule,
@@ -93,6 +125,8 @@ import { ClsUserInterceptor } from './core/context';
   controllers: [AppController],
   providers: [
     AppService,
+    // V6.5 Phase 1I: 全局事件错误处理（OnModuleInit 自动注册 error handler）
+    EventErrorHandler,
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     { provide: APP_INTERCEPTOR, useClass: ResponseInterceptor },
     // V6 Phase 1.13: Guard 认证后同步 userId 到 CLS 上下文
@@ -103,5 +137,9 @@ import { ClsUserInterceptor } from './core/context';
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer.apply(LoggerMiddleware).forRoutes('*');
+    // V6.4: HTTP 请求 Prometheus 指标采集
+    consumer.apply(MetricsMiddleware).forRoutes('*');
+    // V6.6 Phase 3-B: Accept-Language 检测，写入 CLS locale
+    consumer.apply(I18nMiddleware).forRoutes('*');
   }
 }

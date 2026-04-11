@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { HttpModule } from '@nestjs/axios';
-import { ScheduleModule } from '@nestjs/schedule';
 // Services
 import { FoodRuleEngineService } from './services/food-rule-engine.service';
 import { UsdaFetcherService } from './services/usda-fetcher.service';
@@ -23,7 +22,7 @@ import { FoodPipelineController } from './food-pipeline.controller';
   imports: [
     ConfigModule,
     HttpModule.register({ timeout: 30000 }),
-    ScheduleModule.forRoot(),
+    // V6.5 Phase 1J: ScheduleModule.forRoot() 已迁移到 AppModule（全局唯一注册）
   ],
   providers: [
     FoodRuleEngineService,

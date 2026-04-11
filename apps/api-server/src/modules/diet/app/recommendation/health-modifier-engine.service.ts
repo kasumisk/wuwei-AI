@@ -1,10 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { FoodLibrary } from '../../../food/food.types';
 import {
   HealthCondition,
   normalizeHealthConditions,
 } from './recommendation.types';
 import { matchAllergens } from './allergen-filter.util';
+import { RedisCacheService } from '../../../../core/redis/redis-cache.service';
+import { MetricsService } from '../../../../core/metrics/metrics.service';
 
 // ==================== 类型 ====================
 
@@ -66,6 +69,12 @@ export interface HealthConditionWithSeverity {
 
 // ==================== Service ====================
 
+/** L2 缓存 TTL（2 小时），食物营养数据变化低频，缓存窗口可以较长 */
+const L2_CACHE_TTL_MS = 2 * 60 * 60 * 1000;
+
+/** L2 缓存 key 前缀 */
+const L2_KEY_PREFIX = 'health_mod';
+
 /**
  * 健康修正引擎（V5 2.8: 由 PenaltyEngineService 重命名）
  *
@@ -75,15 +84,212 @@ export interface HealthConditionWithSeverity {
  * 3. 目标相关惩罚（减脂高糖/增肌低蛋白）
  * 4. 健康状况惩罚（糖尿病/高血压/高血脂/痛风/肾病/脂肪肝/IBS/贫血）
  * 5. 正向健康增益（高血脂+Omega3/糖尿病+低GI/高血压+高钾低钠/贫血+高铁/骨质疏松+高钙）
+ *
+ * V6.4: 二级缓存架构
+ * - L1: 请求级内存 Map（同一请求内 context 固定，key=foodId）
+ * - L2: Redis 缓存（跨请求复用，key=contextHash:foodId，TTL=2h）
+ * - Redis 不可用时自动降级为仅 L1
  */
 @Injectable()
 export class HealthModifierEngineService {
+  private readonly logger = new Logger(HealthModifierEngineService.name);
+
+  constructor(
+    private readonly redis: RedisCacheService,
+    private readonly metrics: MetricsService,
+  ) {}
+
+  // ── 上下文哈希（L2 缓存 key 的一部分） ──
+
   /**
-   * 对单个食物执行健康修正管道
+   * 将 HealthModifierContext 哈希为短字符串，用于 L2 缓存 key。
+   * 相同的过敏原 + 健康状况 + 目标类型 → 相同的 hash。
+   * 生成 8 字节 hex（16 字符），碰撞概率可忽略。
+   */
+  hashContext(context?: HealthModifierContext): string {
+    if (!context) return 'none';
+
+    // 排序保证顺序无关
+    const allergens = (context.allergens || []).slice().sort().join(',');
+    const conditions = (context.healthConditions || [])
+      .map((c) => (typeof c === 'string' ? c : `${c.condition}:${c.severity}`))
+      .sort()
+      .join(',');
+    const goal = context.goalType || '';
+
+    const raw = `${allergens}|${conditions}|${goal}`;
+    return createHash('sha256').update(raw).digest('hex').slice(0, 16);
+  }
+
+  /**
+   * 构建 L2 缓存 key
+   * 格式: health_mod:{contextHash}:{foodId}
+   */
+  private buildL2Key(contextHash: string, foodId: string): string {
+    return this.redis.buildKey(L2_KEY_PREFIX, contextHash, foodId);
+  }
+
+  // ── 缓存失效 ──
+
+  /**
+   * 当用户健康档案变更（过敏原/健康状况/目标）时调用，
+   * 清除该 context 对应的所有 L2 缓存。
+   *
+   * 由调用方（如 UserProfileService）在更新用户档案后触发。
+   *
+   * @param context 旧的或新的健康上下文（两者都应清除）
+   * @returns 清除的 key 数量
+   */
+  async invalidateL2Cache(context?: HealthModifierContext): Promise<number> {
+    const contextHash = this.hashContext(context);
+    const prefix = this.redis.buildKey(L2_KEY_PREFIX, contextHash) + ':';
+    const deleted = await this.redis.delByPrefix(prefix);
+    if (deleted > 0) {
+      this.logger.log(
+        `Invalidated ${deleted} L2 cache entries for context hash ${contextHash}`,
+      );
+    }
+    return deleted;
+  }
+
+  // ── 评估入口 ──
+
+  /**
+   * 对单个食物执行健康修正管道（同步）
    * 返回最终乘数、结构化修正项列表和否决标志
    * finalMultiplier = 0 表示一票否决，该食物不应被推荐
+   *
+   * V6.4: L1 请求级缓存（同步查找），L2 Redis 由 preloadL2Cache / flushToL2 处理
+   *
+   * @param food    食物数据
+   * @param context 健康修正上下文（过敏原、健康状况、目标）
+   * @param cache   V6.3 P1-8: 请求级缓存（L1），key=foodId
    */
   evaluate(
+    food: FoodLibrary,
+    context?: HealthModifierContext,
+    cache?: Map<string, HealthModifierResult>,
+  ): HealthModifierResult {
+    const foodId = food.id;
+
+    // ── L1: 请求级内存缓存 ──
+    if (cache && foodId) {
+      const l1Hit = cache.get(foodId);
+      if (l1Hit) {
+        this.metrics.cacheOperations.inc({
+          tier: 'l1',
+          operation: 'get',
+          result: 'hit',
+        });
+        return l1Hit;
+      }
+      this.metrics.cacheOperations.inc({
+        tier: 'l1',
+        operation: 'get',
+        result: 'miss',
+      });
+    }
+
+    // ── 计算 ──
+    const result = this.evaluateInternal(food, context);
+
+    // ── 写入 L1 ──
+    if (cache && foodId) {
+      cache.set(foodId, result);
+    }
+
+    return result;
+  }
+
+  // ── L2 Redis 批量预热 & 回写（异步，由调用方在评分管道前后调用） ──
+
+  /**
+   * V6.4: 批量预热 L2 缓存 → L1 Map
+   *
+   * 在推荐管道开始前调用，将候选食物的 L2 缓存批量加载到 L1 Map 中。
+   * 使用 Redis MGET 减少 RTT。
+   *
+   * @param foodIds   候选食物 ID 列表
+   * @param context   健康修正上下文
+   * @param cache     L1 请求级缓存（会被 mutate 填充）
+   * @returns         L2 命中数量
+   */
+  async preloadL2Cache(
+    foodIds: string[],
+    context: HealthModifierContext | undefined,
+    cache: Map<string, HealthModifierResult>,
+  ): Promise<number> {
+    if (foodIds.length === 0) return 0;
+
+    const contextHash = this.hashContext(context);
+    const l2Keys = foodIds.map((id) => this.buildL2Key(contextHash, id));
+    const results = await this.redis.mget<HealthModifierResult>(l2Keys);
+
+    let hitCount = 0;
+    for (let i = 0; i < foodIds.length; i++) {
+      const val = results[i];
+      if (val !== null) {
+        cache.set(foodIds[i], val);
+        hitCount++;
+      }
+    }
+
+    this.metrics.cacheOperations.inc(
+      { tier: 'l2', operation: 'get', result: 'hit' },
+      hitCount,
+    );
+    this.metrics.cacheOperations.inc(
+      { tier: 'l2', operation: 'get', result: 'miss' },
+      foodIds.length - hitCount,
+    );
+
+    if (hitCount > 0) {
+      this.logger.debug(
+        `L2 preload: ${hitCount}/${foodIds.length} hits for context ${contextHash}`,
+      );
+    }
+
+    return hitCount;
+  }
+
+  /**
+   * V6.4: 将 L1 缓存中新计算的结果批量写入 L2（异步，fire-and-forget）
+   *
+   * 在推荐管道完成后调用。对比 L1 Map 中哪些 key 是新计算的（即 preload 时不在 L2 中），
+   * 将它们批量写入 Redis。
+   *
+   * @param cache        L1 请求级缓存
+   * @param preloadedIds 预热阶段命中的 foodId 集合（这些不需要回写）
+   * @param context      健康修正上下文
+   */
+  flushToL2(
+    cache: Map<string, HealthModifierResult>,
+    preloadedIds: Set<string>,
+    context?: HealthModifierContext,
+  ): void {
+    const contextHash = this.hashContext(context);
+    let writeCount = 0;
+
+    for (const [foodId, result] of cache) {
+      if (preloadedIds.has(foodId)) continue; // 已在 L2 中，不需要回写
+      const l2Key = this.buildL2Key(contextHash, foodId);
+      this.redis.set(l2Key, result, L2_CACHE_TTL_MS).catch(() => {
+        // RedisCacheService 内部已有日志
+      });
+      writeCount++;
+    }
+
+    if (writeCount > 0) {
+      this.logger.debug(
+        `L2 flush: wrote ${writeCount} new entries for context ${contextHash}`,
+      );
+    }
+  }
+
+  /**
+   * 内部评估逻辑（从 evaluate 分离以支持缓存）
+   */
+  private evaluateInternal(
     food: FoodLibrary,
     context?: HealthModifierContext,
   ): HealthModifierResult {
@@ -193,13 +399,19 @@ export class HealthModifierEngineService {
 
   /**
    * 批量评估 — 返回非否决食物列表及其修正因子
+   *
+   * V6.4: 支持 L2 缓存预热 + 回写。
+   * 如需 L2 缓存，调用方应在调用前先执行 preloadL2Cache，调用后执行 flushToL2。
+   *
+   * @param cache V6.3 P1-8: 请求级缓存（L1）
    */
   evaluateBatch(
     foods: FoodLibrary[],
     context?: HealthModifierContext,
+    cache?: Map<string, HealthModifierResult>,
   ): Array<{ food: FoodLibrary; penalty: HealthModifierResult }> {
     return foods
-      .map((food) => ({ food, penalty: this.evaluate(food, context) }))
+      .map((food) => ({ food, penalty: this.evaluate(food, context, cache) }))
       .filter(({ penalty }) => !penalty.isVetoed);
   }
 

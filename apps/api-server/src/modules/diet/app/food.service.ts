@@ -267,6 +267,22 @@ export class FoodService {
       carbs: Math.round(goals.carbs * ratio),
     };
 
+    // S4 fix: 构建 userConstraints 传入推荐引擎，确保过敏原/忌口/健康状况被过滤
+    const userConstraints: UserProfileConstraints | undefined = profile
+      ? {
+          dietaryRestrictions: (profile.dietary_restrictions as string[]) || [],
+          allergens: (profile.allergens as string[]) || [],
+          healthConditions: (profile.health_conditions as string[]) || [],
+          regionCode: (profile.region_code as string) || 'CN',
+          timezone: profile.timezone,
+          // V6.2 3.4: 声明画像新字段接入推荐
+          cookingSkillLevel: profile.cooking_skill_level as string | undefined,
+          budgetLevel: profile.budget_level as string | undefined,
+          cuisinePreferences:
+            (profile.cuisine_preferences as string[]) || undefined,
+        }
+      : undefined;
+
     // 并行获取：通用推荐 + 场景化推荐
     const startTime = Date.now();
     const [mainRec, scenarioRecs] = await Promise.all([
@@ -277,6 +293,7 @@ export class FoodService {
         consumed,
         budget,
         dailyTarget,
+        userConstraints,
       ),
       this.recommendationEngine.recommendByScenario(
         userId,
@@ -285,6 +302,7 @@ export class FoodService {
         consumed,
         budget,
         dailyTarget,
+        userConstraints,
       ),
     ]);
     const latencyMs = Date.now() - startTime;

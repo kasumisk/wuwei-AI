@@ -201,4 +201,15 @@ export class ContentManagementController {
     );
     return { success: true, code: HttpStatus.OK, message: '获取成功', data };
   }
+
+  @Get('recommendation-quality/dashboard')
+  @ApiOperation({ summary: '推荐效果仪表盘总览' })
+  async getRecommendationDashboard(
+    @Query('days') days?: string,
+  ): Promise<ApiResponse> {
+    const data = await this.qualityService.getDashboardSummary(
+      days ? parseInt(days, 10) : 30,
+    );
+    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+  }
 }

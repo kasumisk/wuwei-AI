@@ -37,11 +37,30 @@ import {
   SCORE_DIMENSIONS,
   ScoreDimension,
   computeWeights,
+  AcquisitionChannel,
+  EnrichedProfileContext,
 } from './recommendation.types';
 import { GoalType } from '../../app/nutrition-score.service';
 import { t, Locale } from './i18n-messages';
+import {
+  MealCompositionScorer,
+  MealCompositionScore,
+} from './meal-composition-scorer.service';
 
 // ==================== 用户可读解释类型 ====================
+
+/**
+ * V6.6 Phase 2-E: 推荐变化解释
+ * 今日推荐与昨日显著不同时生成，向用户说明变化原因
+ */
+export interface DeltaExplanation {
+  /** 今日新出现（昨日没有）的食物名称列表 */
+  changedFoods: string[];
+  /** 主要变化原因（人类可读） */
+  primaryReason: string;
+  /** 置信度 — 数据质量越高置信度越高 */
+  confidence: 'high' | 'medium' | 'low';
+}
 
 /** 营养亮点标签 */
 export interface NutritionTag {
@@ -71,7 +90,45 @@ export interface UserFacingExplanation {
   healthTip?: string;
   /** 评分概览（简化版，最多 5 个维度） */
   scoreBreakdown: SimpleScoreBar[];
+  /** V6.3 P3-3: 解释风格实验分桶 */
+  styleVariant?: 'concise' | 'coaching';
 }
+
+/** V6.3 P3-1: 整餐层面解释 */
+/** V6.5 Phase 2E: 从一句话升级为结构化整餐分析 */
+export interface MealCompositionExplanation {
+  /** 一句话解释为什么这样搭配 */
+  summary: string;
+  /** V6.5: 整餐组合评分（由 MealCompositionScorer 计算） */
+  compositionScore?: MealCompositionScore;
+  /** V6.5: 营养互补关系列表 */
+  complementaryPairs?: ComplementaryPairExplanation[];
+  /** V6.5: 宏量营养素分布 */
+  macroBalance?: MacroBalanceInfo;
+  /** V6.5: 多样性建议（如"建议增加一道蒸菜"） */
+  diversityTips?: string[];
+}
+
+/** V6.5: 营养互补对解释 */
+export interface ComplementaryPairExplanation {
+  nutrientA: string;
+  foodA: string;
+  nutrientB: string;
+  foodB: string;
+  benefit: string;
+}
+
+/** V6.5: 宏量营养素分布信息 */
+export interface MacroBalanceInfo {
+  caloriesTotal: number;
+  proteinPct: number;
+  carbsPct: number;
+  fatPct: number;
+  /** 与目标的匹配度 0-100 */
+  targetMatch: number;
+}
+
+export type ExplanationStyleVariant = 'concise' | 'coaching';
 
 // ==================== 内部工具函数 ====================
 
@@ -99,6 +156,271 @@ function getGoalLabel(goalType: string | undefined, locale?: Locale): string {
 
 @Injectable()
 export class ExplanationGeneratorService {
+  constructor(
+    /** V6.5 Phase 2E: 整餐组合评分器 */
+    private readonly mealCompositionScorer: MealCompositionScorer,
+  ) {}
+
+  /**
+   * V6.3 P3-1: 解释整餐搭配逻辑
+   * V6.5 Phase 2E: 升级为结构化整餐分析
+   *
+   * 包含：组合评分、互补营养素对、宏量分布、多样性建议。
+   */
+  explainMealComposition(
+    picks: ScoredFood[],
+    userProfile?: UserProfileConstraints | null,
+    goalType?: string,
+    locale?: Locale,
+    target?: MealTarget,
+  ): MealCompositionExplanation {
+    const summary = this.buildMealSummary(picks, userProfile, goalType, locale);
+
+    // V6.5: 使用 MealCompositionScorer 计算组合评分
+    const compositionScore =
+      this.mealCompositionScorer.scoreMealComposition(picks);
+
+    const complementaryPairs = this.detectComplementaryPairs(picks);
+    const macroBalance = this.calcMacroBalance(picks, target);
+    const diversityTips = this.generateDiversityTips(picks, compositionScore);
+
+    return {
+      summary,
+      compositionScore,
+      complementaryPairs: complementaryPairs.length
+        ? complementaryPairs
+        : undefined,
+      macroBalance,
+      diversityTips: diversityTips.length ? diversityTips : undefined,
+    };
+  }
+
+  // ─── V6.5 Phase 2E: 整餐解释增强私有方法 ───
+
+  /**
+   * 检测整餐中的营养互补关系
+   */
+  private detectComplementaryPairs(
+    picks: ScoredFood[],
+  ): ComplementaryPairExplanation[] {
+    if (picks.length < 2) return [];
+
+    const PAIRS: ReadonlyArray<{
+      a: keyof FoodLibrary;
+      b: keyof FoodLibrary;
+      labelA: string;
+      labelB: string;
+      benefit: string;
+    }> = [
+      {
+        a: 'iron',
+        b: 'vitaminC',
+        labelA: '铁',
+        labelB: '维生素C',
+        benefit: '维C帮助铁吸收，提高铁的生物利用率',
+      },
+      {
+        a: 'calcium',
+        b: 'vitaminD',
+        labelA: '钙',
+        labelB: '维生素D',
+        benefit: '维D促进钙的肠道吸收',
+      },
+      {
+        a: 'fat',
+        b: 'vitaminA',
+        labelA: '脂肪',
+        labelB: '维生素A',
+        benefit: '脂肪帮助脂溶性维生素A的吸收',
+      },
+      {
+        a: 'protein',
+        b: 'vitaminB12',
+        labelA: '蛋白质',
+        labelB: '维生素B12',
+        benefit: 'B12参与蛋白质代谢和合成',
+      },
+    ];
+
+    const result: ComplementaryPairExplanation[] = [];
+
+    for (const pair of PAIRS) {
+      const foodWithA = picks.find((p) => {
+        const val = p.food[pair.a];
+        return typeof val === 'number' && val > 0;
+      });
+      const foodWithB = picks.find((p) => {
+        const val = p.food[pair.b];
+        return typeof val === 'number' && val > 0;
+      });
+
+      if (foodWithA && foodWithB && foodWithA.food.id !== foodWithB.food.id) {
+        result.push({
+          nutrientA: pair.labelA,
+          foodA: foodWithA.food.name,
+          nutrientB: pair.labelB,
+          foodB: foodWithB.food.name,
+          benefit: pair.benefit,
+        });
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * 计算宏量营养素分布
+   */
+  private calcMacroBalance(
+    picks: ScoredFood[],
+    target?: MealTarget,
+  ): MacroBalanceInfo {
+    const caloriesTotal = picks.reduce((s, p) => s + p.servingCalories, 0);
+    const totalProtein = picks.reduce((s, p) => s + p.servingProtein, 0);
+    const totalCarbs = picks.reduce((s, p) => s + p.servingCarbs, 0);
+    const totalFat = picks.reduce((s, p) => s + p.servingFat, 0);
+
+    // 宏量营养素热量计算（4:4:9）
+    const proteinCal = totalProtein * 4;
+    const carbsCal = totalCarbs * 4;
+    const fatCal = totalFat * 9;
+    const totalMacroCal = proteinCal + carbsCal + fatCal || 1;
+
+    const proteinPct = Math.round((proteinCal / totalMacroCal) * 100);
+    const carbsPct = Math.round((carbsCal / totalMacroCal) * 100);
+    const fatPct = Math.round((fatCal / totalMacroCal) * 100);
+
+    // 计算与目标的匹配度
+    let targetMatch = 50; // 默认中等
+    if (target) {
+      const calDiff =
+        target.calories > 0
+          ? Math.abs(caloriesTotal - target.calories) / target.calories
+          : 0;
+      const proteinDiff =
+        target.protein > 0
+          ? Math.abs(totalProtein - target.protein) / target.protein
+          : 0;
+      // 匹配度 = 100 - 平均偏差百分比 * 100，下限 0
+      const avgDiff = (calDiff + proteinDiff) / 2;
+      targetMatch = Math.max(0, Math.round((1 - avgDiff) * 100));
+    }
+
+    return {
+      caloriesTotal: Math.round(caloriesTotal),
+      proteinPct,
+      carbsPct,
+      fatPct,
+      targetMatch,
+    };
+  }
+
+  /**
+   * 生成多样性改善建议
+   */
+  private generateDiversityTips(
+    picks: ScoredFood[],
+    compositionScore?: MealCompositionScore,
+  ): string[] {
+    const tips: string[] = [];
+
+    if (!compositionScore) return tips;
+
+    if (compositionScore.ingredientDiversity < 60) {
+      tips.push('部分食材重复，建议替换为不同食材的菜品');
+    }
+
+    if (compositionScore.cookingMethodDiversity < 50) {
+      // 找到最常见的烹饪方式
+      const methods = picks
+        .map((p) => p.food.cookingMethod)
+        .filter(Boolean) as string[];
+      const methodCount = new Map<string, number>();
+      for (const m of methods) {
+        methodCount.set(m, (methodCount.get(m) ?? 0) + 1);
+      }
+      const dominant = [...methodCount.entries()].sort(
+        (a, b) => b[1] - a[1],
+      )[0];
+      if (dominant && dominant[1] > 1) {
+        const alternatives =
+          dominant[0] === '炒'
+            ? '蒸或煮'
+            : dominant[0] === '炸'
+              ? '蒸或烤'
+              : '其他烹饪方式';
+        tips.push(`${dominant[0]}类菜品较多，建议增加一道${alternatives}的菜`);
+      }
+    }
+
+    if (compositionScore.flavorBalance < 40) {
+      tips.push('口味较为单一，建议搭配不同风味的菜品');
+    }
+
+    if (compositionScore.nutritionComplementarity < 25) {
+      tips.push('建议搭配富含维C的蔬菜水果，帮助铁等矿物质的吸收');
+    }
+
+    return tips;
+  }
+
+  /**
+   * 原有 summary 生成逻辑（从 explainMealComposition 提取）
+   */
+  private buildMealSummary(
+    picks: ScoredFood[],
+    userProfile?: UserProfileConstraints | null,
+    goalType?: string,
+    locale?: Locale,
+  ): string {
+    const topProtein = [...picks].sort(
+      (a, b) => b.servingProtein - a.servingProtein,
+    )[0];
+    const topFiber = [...picks].sort(
+      (a, b) => b.servingFiber - a.servingFiber,
+    )[0];
+    const topScore = [...picks].sort((a, b) => b.score - a.score)[0];
+
+    const segments: string[] = [];
+
+    if (topProtein && topProtein.servingProtein >= 10) {
+      segments.push(`${topProtein.food.name}提供主要蛋白质`);
+    }
+
+    if (
+      topFiber &&
+      topFiber.servingFiber >= 3 &&
+      topFiber.food.id !== topProtein?.food.id
+    ) {
+      segments.push(`${topFiber.food.name}补充膳食纤维和饱腹感`);
+    }
+
+    if (topScore?.explanation) {
+      const topDim = this.rankDimensions(topScore.explanation)[0]?.dim;
+      if (topDim === 'nutrientDensity') {
+        segments.push('整体搭配注重营养密度');
+      } else if (topDim === 'glycemic') {
+        segments.push('整体搭配兼顾血糖稳定');
+      } else if (topDim === 'protein') {
+        segments.push('整体搭配偏向高蛋白恢复');
+      } else if (topDim === 'fiber') {
+        segments.push('整体搭配强调纤维补充');
+      }
+    }
+
+    if (segments.length === 0) {
+      segments.push(
+        `这餐围绕${getGoalLabel(goalType, locale)}目标做了均衡搭配`,
+      );
+    }
+
+    if (userProfile?.healthConditions?.length) {
+      segments.push('并兼顾你的健康约束');
+    }
+
+    return segments.join('，');
+  }
+
   /**
    * 为单个推荐食物生成用户可读解释
    *
@@ -113,6 +435,7 @@ export class ExplanationGeneratorService {
     userProfile?: UserProfileConstraints | null,
     goalType?: string,
     locale?: Locale,
+    styleVariant: ExplanationStyleVariant = 'concise',
   ): UserFacingExplanation | null {
     const explanation = scored.explanation;
     if (!explanation) return null;
@@ -159,11 +482,17 @@ export class ExplanationGeneratorService {
       reasons.push(t('explain.reason.fallback', { goal: goalLabel }, locale));
     }
 
+    const primaryReason =
+      styleVariant === 'coaching'
+        ? `${reasons.join('；')}。继续按这个方向吃，更容易贴近${goalLabel}目标`
+        : reasons.join('；');
+
     return {
-      primaryReason: reasons.join('；'),
+      primaryReason,
       nutritionHighlights: highlights.slice(0, 3),
       healthTip: healthTip?.tip,
       scoreBreakdown,
+      styleVariant,
     };
   }
 
@@ -175,10 +504,17 @@ export class ExplanationGeneratorService {
     userProfile?: UserProfileConstraints | null,
     goalType?: string,
     locale?: Locale,
+    styleVariant: ExplanationStyleVariant = 'concise',
   ): Map<string, UserFacingExplanation> {
     const result = new Map<string, UserFacingExplanation>();
     for (const scored of scoredFoods) {
-      const explanation = this.generate(scored, userProfile, goalType, locale);
+      const explanation = this.generate(
+        scored,
+        userProfile,
+        goalType,
+        locale,
+        styleVariant,
+      );
       if (explanation) {
         result.set(scored.food.id, explanation);
       }
@@ -208,12 +544,19 @@ export class ExplanationGeneratorService {
     goalType?: string,
     mealType?: string,
     locale?: Locale,
+    styleVariant: ExplanationStyleVariant = 'concise',
   ): ExplanationV2 | null {
     const explanation = scored.explanation;
     if (!explanation) return null;
 
     // 复用 V1 生成器获取基础文案（传递 locale）
-    const v1 = this.generate(scored, userProfile, goalType, locale);
+    const v1 = this.generate(
+      scored,
+      userProfile,
+      goalType,
+      locale,
+      styleVariant,
+    );
     if (!v1) return null;
 
     // 构建 10 维雷达图数据（传递 locale）
@@ -240,6 +583,7 @@ export class ExplanationGeneratorService {
       radarChart,
       progressBars,
       comparisonCard,
+      styleVariant,
 
       // locale 标记（V6 2.11: 标记当前解释使用的语言）
       locale: locale || 'zh-CN',
@@ -256,6 +600,7 @@ export class ExplanationGeneratorService {
     goalType?: string,
     mealType?: string,
     locale?: Locale,
+    styleVariant: ExplanationStyleVariant = 'concise',
   ): Map<string, ExplanationV2> {
     const result = new Map<string, ExplanationV2>();
     for (const scored of scoredFoods) {
@@ -266,12 +611,31 @@ export class ExplanationGeneratorService {
         goalType,
         mealType,
         locale,
+        styleVariant,
       );
       if (explanationV2) {
         result.set(scored.food.id, explanationV2);
       }
     }
     return result;
+  }
+
+  /**
+   * V6.3 P3-3: 稳定解释风格分桶
+   *
+   * 先用轻量哈希实现 deterministic bucket，后续可无缝切换到真实 ab_experiments。
+   */
+  resolveStyleVariant(userId?: string | null): ExplanationStyleVariant {
+    if (!userId) return 'concise';
+
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < userId.length; i++) {
+      hash ^= userId.charCodeAt(i);
+      hash = (hash * 0x01000193) | 0;
+    }
+
+    const bucket = (hash >>> 0) / 0xffffffff;
+    return bucket < 0.5 ? 'concise' : 'coaching';
   }
 
   // ==================== 私有方法 ====================
@@ -906,5 +1270,120 @@ export class ExplanationGeneratorService {
     if (percent < lowerThreshold) return 'under';
     if (percent > upperThreshold) return 'over';
     return 'optimal';
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // V6.6 Phase 2-E: 变化解释 & 渠道解释
+  // ──────────────────────────────────────────────────────────────────────────
+
+  /**
+   * 变化解释：今天推荐 X，昨天推荐 Y，向用户解释为什么变了
+   * 仅在今日推荐与昨日显著不同（有新食物出现）时返回非 null 结果。
+   *
+   * @param todayTop      今日推荐的食物列表（FoodLibrary）
+   * @param yesterdayTop  昨日推荐的食物列表（FoodLibrary）
+   * @param profile       增强型画像上下文（用于判断变化原因和数据质量）
+   * @returns DeltaExplanation 或 null（推荐未显著变化时）
+   */
+  generateDeltaExplanation(
+    todayTop: FoodLibrary[],
+    yesterdayTop: FoodLibrary[],
+    profile: EnrichedProfileContext,
+  ): DeltaExplanation | null {
+    const yesterdayIds = new Set(yesterdayTop.map((f) => f.id));
+    const newFoods = todayTop.filter((f) => !yesterdayIds.has(f.id));
+
+    // 今日推荐无新食物 → 无变化，不生成解释
+    if (newFoods.length === 0) return null;
+
+    const primaryReason = this.detectChangeReason(
+      profile,
+      yesterdayTop,
+      todayTop,
+    );
+
+    // 数据质量评估：有足够的声明画像 + 行为画像 → 高置信度
+    const hasRichProfile =
+      !!profile.declared &&
+      !!profile.inferred &&
+      !!profile.observed &&
+      (profile.observed.totalRecords ?? 0) >= 7;
+
+    return {
+      changedFoods: newFoods.map((f) => f.name),
+      primaryReason,
+      confidence: hasRichProfile ? 'high' : 'medium',
+    };
+  }
+
+  /**
+   * 推断推荐变化的主要原因
+   * 优先级：营养缺口变化 > 场景变化 > 策略刷新 > 多样性轮换
+   */
+  private detectChangeReason(
+    profile: EnrichedProfileContext,
+    yesterdayTop: FoodLibrary[],
+    todayTop: FoodLibrary[],
+  ): string {
+    // 1. 场景变化（上下文画像不同）
+    if (profile.contextual?.scene) {
+      const scene = profile.contextual.scene;
+      if (scene === 'post_exercise')
+        return '今日有运动计划，已为你优化了蛋白质补充';
+      if (scene === 'late_night') return '深夜时段，已为你调整为更轻量的选择';
+      if (
+        scene === 'weekday_lunch' ||
+        scene === 'weekday_dinner' ||
+        scene === 'weekday_breakfast'
+      )
+        return '工作日场景，推荐更方便快手的搭配';
+    }
+
+    // 2. 营养缺口存在
+    const gaps = profile.inferred?.nutritionGaps;
+    if (gaps?.length) {
+      return `根据近期饮食分析，你的 ${gaps.slice(0, 2).join('、')} 摄入偏少，已优先推荐含量更高的食物`;
+    }
+
+    // 3. 品类多样性轮换（今昨日品类重叠少）
+    const yesterdayCategories = new Set(yesterdayTop.map((f) => f.category));
+    const todayCategories = new Set(todayTop.map((f) => f.category));
+    const overlapCount = [...todayCategories].filter((c) =>
+      yesterdayCategories.has(c),
+    ).length;
+    if (overlapCount <= todayCategories.size / 2) {
+      return '为保持饮食多样性，今日为你推荐了不同类型的食物组合';
+    }
+
+    // 4. 默认：策略定期刷新
+    return '推荐系统已根据你的饮食习惯更新了今日方案';
+  }
+
+  /**
+   * 渠道过滤解释：因为当前渠道（如外卖、食堂），过滤了 N 个不适合的选项
+   *
+   * @param channel       当前推荐渠道
+   * @param filteredCount 被渠道过滤的食物数量
+   * @param locale        语言（默认 zh-CN）
+   * @returns 用户可读的解释字符串，filteredCount = 0 时返回 null
+   */
+  generateChannelFilterExplanation(
+    channel: AcquisitionChannel,
+    filteredCount: number,
+    locale: Locale = 'zh-CN',
+  ): string | null {
+    if (filteredCount <= 0) return null;
+
+    const channelNames: Partial<Record<AcquisitionChannel, string>> = {
+      [AcquisitionChannel.DELIVERY]: '外卖',
+      [AcquisitionChannel.HOME_COOK]: '自己做',
+      [AcquisitionChannel.CANTEEN]: '食堂',
+      [AcquisitionChannel.CONVENIENCE]: '便利店',
+      [AcquisitionChannel.RESTAURANT]: '餐厅',
+    };
+
+    const channelName = channelNames[channel] ?? '当前场景';
+
+    return `基于你当前的${channelName}场景，已筛除 ${filteredCount} 个不适合的选项`;
   }
 }

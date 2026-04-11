@@ -1,3 +1,11 @@
+/**
+ * V6.5 Phase 1G: QuotaGuard — Redis 分布式配额缓存
+ *
+ * 改动：从全局内存 Map 迁移到 RedisCacheService，
+ * 支持多实例部署下的配额共享和一致性。
+ *
+ * 降级策略：Redis 不可用时回退到内存 Map（单实例降级保护）。
+ */
 import {
   Injectable,
   CanActivate,
@@ -6,13 +14,25 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../core/prisma/prisma.service';
+import { RedisCacheService } from '../../core/redis/redis-cache.service';
 
-// 简单的内存缓存（生产环境应使用 Redis）
-const quotaCache = new Map<string, { value: number; expiresAt: number }>();
+/** 内存降级缓存 */
+const memoryFallback = new Map<string, { value: number; expiresAt: number }>();
+
+/** 缓存 TTL 常量 */
+const DAILY_CACHE_TTL_MS = 5 * 60 * 1000; // 5 分钟
+const MONTHLY_CACHE_TTL_MS = 10 * 60 * 1000; // 10 分钟
+const CAPABILITY_CACHE_TTL_MS = 5 * 60 * 1000; // 5 分钟
+
+/** Redis key 前缀 */
+const KEY_PREFIX = 'quota:';
 
 @Injectable()
 export class QuotaGuard implements CanActivate {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly redis: RedisCacheService,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
@@ -72,6 +92,46 @@ export class QuotaGuard implements CanActivate {
   }
 
   /**
+   * 统一缓存读取 — 优先 Redis，降级内存
+   */
+  private async getCached(key: string): Promise<number | null> {
+    // Redis 优先
+    if (this.redis.isConnected) {
+      const val = await this.redis.get<number>(`${KEY_PREFIX}${key}`);
+      if (val !== null) return val;
+    }
+
+    // 内存降级
+    const now = Date.now();
+    const cached = memoryFallback.get(key);
+    if (cached && now < cached.expiresAt) {
+      return cached.value;
+    }
+
+    return null;
+  }
+
+  /**
+   * 统一缓存写入 — 双写 Redis + 内存
+   */
+  private async setCached(
+    key: string,
+    value: number,
+    ttlMs: number,
+  ): Promise<void> {
+    // Redis 写入
+    if (this.redis.isConnected) {
+      await this.redis.set(`${KEY_PREFIX}${key}`, value, ttlMs);
+    }
+
+    // 内存也写一份（作为 fallback + L1）
+    memoryFallback.set(key, {
+      value,
+      expiresAt: Date.now() + ttlMs,
+    });
+  }
+
+  /**
    * 获取客户端今日成本使用额度
    */
   private async getDailyCostUsage(clientId: string): Promise<number> {
@@ -81,18 +141,15 @@ export class QuotaGuard implements CanActivate {
     tomorrow.setDate(tomorrow.getDate() + 1);
 
     const cacheKey = `daily_cost:${clientId}:${today.toISOString().split('T')[0]}`;
-    const now = Date.now();
-    const cached = quotaCache.get(cacheKey);
-    if (cached && now < cached.expiresAt) {
-      return cached.value;
-    }
+    const cached = await this.getCached(cacheKey);
+    if (cached !== null) return cached;
 
     const result = await this.prisma.$queryRaw<[{ total: string | null }]>(
       Prisma.sql`SELECT SUM(cost) as total FROM usage_records WHERE client_id = ${clientId} AND timestamp >= ${today} AND timestamp < ${tomorrow}`,
     );
 
     const total = parseFloat(result?.[0]?.total ?? '') || 0;
-    quotaCache.set(cacheKey, { value: total, expiresAt: now + 5 * 60 * 1000 });
+    await this.setCached(cacheKey, total, DAILY_CACHE_TTL_MS);
 
     return total;
   }
@@ -106,21 +163,15 @@ export class QuotaGuard implements CanActivate {
     const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
     const cacheKey = `monthly_cost:${clientId}:${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const nowMs = Date.now();
-    const cached = quotaCache.get(cacheKey);
-    if (cached && nowMs < cached.expiresAt) {
-      return cached.value;
-    }
+    const cached = await this.getCached(cacheKey);
+    if (cached !== null) return cached;
 
     const result = await this.prisma.$queryRaw<[{ total: string | null }]>(
       Prisma.sql`SELECT SUM(cost) as total FROM usage_records WHERE client_id = ${clientId} AND timestamp >= ${monthStart} AND timestamp < ${monthEnd}`,
     );
 
     const total = parseFloat(result?.[0]?.total ?? '') || 0;
-    quotaCache.set(cacheKey, {
-      value: total,
-      expiresAt: nowMs + 10 * 60 * 1000,
-    });
+    await this.setCached(cacheKey, total, MONTHLY_CACHE_TTL_MS);
 
     return total;
   }
@@ -136,33 +187,24 @@ export class QuotaGuard implements CanActivate {
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
     const cacheKey = `capability:${clientId}:${capabilityType}:${now.getFullYear()}-${now.getMonth() + 1}`;
-    const cached = quotaCache.get(cacheKey);
-    if (cached && Date.now() < cached.expiresAt) {
-      return cached.value;
-    }
+    const cached = await this.getCached(cacheKey);
+    if (cached !== null) return cached;
 
     let total = 0;
 
     if (capabilityType.startsWith('text.')) {
-      // 统计 token 总数
       const result = await this.prisma.$queryRaw<[{ total: string | null }]>(
         Prisma.sql`SELECT SUM(CAST(usage->>'totalTokens' AS INTEGER)) as total FROM usage_records WHERE client_id = ${clientId} AND capability_type = ${capabilityType} AND timestamp >= ${monthStart}`,
       );
-
       total = parseInt(result?.[0]?.total ?? '') || 0;
     } else if (capabilityType.startsWith('image.')) {
-      // 统计图片数量
       const result = await this.prisma.$queryRaw<[{ total: string | null }]>(
         Prisma.sql`SELECT SUM(CAST(usage->>'imageCount' AS INTEGER)) as total FROM usage_records WHERE client_id = ${clientId} AND capability_type = ${capabilityType} AND timestamp >= ${monthStart}`,
       );
-
       total = parseInt(result?.[0]?.total ?? '') || 0;
     }
 
-    quotaCache.set(cacheKey, {
-      value: total,
-      expiresAt: Date.now() + 5 * 60 * 1000,
-    });
+    await this.setCached(cacheKey, total, CAPABILITY_CACHE_TTL_MS);
 
     return total;
   }
@@ -171,20 +213,15 @@ export class QuotaGuard implements CanActivate {
    * 预估请求成本
    */
   private estimateRequestCost(body: any, capabilityType?: string): number {
-    // 简单的成本预估逻辑
     if (capabilityType?.startsWith('text.')) {
       const maxTokens = body.maxTokens || 1000;
       const promptLength = (body.prompt || '').length;
-      const estimatedInputTokens = Math.ceil(promptLength / 4); // 粗略估计
-
-      // 假设平均成本 $0.01/1K tokens
+      const estimatedInputTokens = Math.ceil(promptLength / 4);
       return ((estimatedInputTokens + maxTokens) / 1000) * 0.01;
     } else if (capabilityType?.startsWith('image.')) {
       const count = body.n || 1;
-      // 假设平均成本 $0.04/图
       return count * 0.04;
     }
-
     return 0;
   }
 }

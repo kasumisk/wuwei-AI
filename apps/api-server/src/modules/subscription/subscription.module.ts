@@ -40,6 +40,10 @@ import { SubscriptionManagementController } from './admin/subscription-managemen
 import { SubscriptionManagementService } from './admin/subscription-management.service';
 // App 端订阅计划查询
 import { SubscriptionPlansController } from './app/subscription-plans.controller';
+// V6.2: 订阅变更事件监听器
+import { SubscriptionEventListener } from './app/subscription-event.listener';
+// V6.2: 付费墙分析事件监听器
+import { PaywallAnalyticsListener } from './app/paywall-analytics.listener';
 
 @Global()
 @Module({
@@ -60,6 +64,8 @@ import { SubscriptionPlansController } from './app/subscription-plans.controller
     AppleIapService,
     WechatPayService,
     SubscriptionManagementService, // Phase 1: 订阅管理后台
+    SubscriptionEventListener, // V6.2: 订阅变更事件监听器
+    PaywallAnalyticsListener, // V6.2: 付费墙分析监听器
   ],
   exports: [
     PlanEntitlementResolver,

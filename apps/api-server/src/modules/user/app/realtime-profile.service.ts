@@ -23,9 +23,12 @@
  * - 推荐引擎通过 getShortTermProfile(userId) 读取短期画像
  * - 合并策略：短期权重 0.6 + 长期权重 0.4（在推荐引擎侧实现）
  */
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { RedisCacheService } from '../../../core/redis/redis-cache.service';
+import {
+  TieredCacheManager,
+  TieredCacheNamespace,
+} from '../../../core/cache/tiered-cache-manager';
 import {
   DomainEvents,
   FeedbackSubmittedEvent,
@@ -92,8 +95,8 @@ export interface ShortTermProfile {
 
 // ─── 常量 ───
 
-/** Redis key 前缀 */
-const REDIS_KEY_PREFIX = 'short_term_profile';
+/** Redis key namespace */
+const CACHE_NAMESPACE = 'short_term_profile';
 
 /** 短期画像 TTL: 7 天 */
 const PROFILE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -107,10 +110,22 @@ const MAX_REJECTED_FOODS = 100;
 // ─── 服务实现 ───
 
 @Injectable()
-export class RealtimeProfileService {
+export class RealtimeProfileService implements OnModuleInit {
   private readonly logger = new Logger(RealtimeProfileService.name);
 
-  constructor(private readonly redis: RedisCacheService) {}
+  /** V6.2 3.9: TieredCache namespace */
+  private cache!: TieredCacheNamespace<ShortTermProfile>;
+
+  constructor(private readonly cacheManager: TieredCacheManager) {}
+
+  onModuleInit(): void {
+    this.cache = this.cacheManager.createNamespace<ShortTermProfile>({
+      namespace: CACHE_NAMESPACE,
+      l1MaxEntries: 1000,
+      l1TtlMs: 5 * 60 * 1000, // L1: 5 分钟
+      l2TtlMs: PROFILE_TTL_MS, // L2: 7 天
+    });
+  }
 
   // ─── 公共读取接口 ───
 
@@ -121,8 +136,7 @@ export class RealtimeProfileService {
    * Redis 不可用时返回 null，推荐引擎降级为仅使用长期画像。
    */
   async getShortTermProfile(userId: string): Promise<ShortTermProfile | null> {
-    const key = this.buildKey(userId);
-    return this.redis.get<ShortTermProfile>(key);
+    return this.cache.get(userId);
   }
 
   /**
@@ -145,8 +159,7 @@ export class RealtimeProfileService {
    * 手动失效用户短期画像
    */
   async invalidate(userId: string): Promise<void> {
-    const key = this.buildKey(userId);
-    await this.redis.del(key);
+    await this.cache.invalidate(userId);
     this.logger.debug(`短期画像已失效: userId=${userId}`);
   }
 
@@ -155,7 +168,7 @@ export class RealtimeProfileService {
   /**
    * 监听反馈提交事件 → 更新口味偏好 + 拒绝模式
    */
-  @OnEvent(DomainEvents.FEEDBACK_SUBMITTED)
+  @OnEvent(DomainEvents.FEEDBACK_SUBMITTED, { async: true })
   async handleFeedbackSubmitted(event: FeedbackSubmittedEvent): Promise<void> {
     try {
       const profile = await this.getOrCreateProfile(event.userId);
@@ -170,10 +183,9 @@ export class RealtimeProfileService {
         this.trimRejectedFoods(profile);
       }
 
-      // 2. 更新品类偏好（如果有 goalType 可推断品类，这里按 action 维度记录）
-      // 注意: event 中没有 category 字段，使用 foodName 作为 key
-      // 实际场景中推荐引擎会传入品类信息，此处做通用统计
-      const categoryKey = event.mealType || 'unknown';
+      // 2. 更新品类偏好（V6.2 A5 fix: 使用食物品类而非 mealType 作为 key）
+      // foodCategory 由 feedback.service.ts 从食物库查询后传入
+      const categoryKey = event.foodCategory || 'unknown';
       if (!profile.categoryPreferences[categoryKey]) {
         profile.categoryPreferences[categoryKey] = {
           accepted: 0,
@@ -206,7 +218,7 @@ export class RealtimeProfileService {
   /**
    * 监听饮食记录事件 → 更新活跃时段 + 摄入趋势
    */
-  @OnEvent(DomainEvents.MEAL_RECORDED)
+  @OnEvent(DomainEvents.MEAL_RECORDED, { async: true })
   async handleMealRecorded(event: MealRecordedEvent): Promise<void> {
     try {
       const profile = await this.getOrCreateProfile(event.userId);
@@ -334,8 +346,7 @@ export class RealtimeProfileService {
     userId: string,
     profile: ShortTermProfile,
   ): Promise<void> {
-    const key = this.buildKey(userId);
-    await this.redis.set(key, profile, PROFILE_TTL_MS);
+    await this.cache.set(userId, profile);
   }
 
   /**
@@ -352,12 +363,5 @@ export class RealtimeProfileService {
     for (let i = 0; i < toRemove; i++) {
       delete profile.rejectedFoods[entries[i][0]];
     }
-  }
-
-  /**
-   * 构建 Redis key
-   */
-  private buildKey(userId: string): string {
-    return this.redis.buildKey(REDIS_KEY_PREFIX, userId);
   }
 }

@@ -155,22 +155,17 @@ export class QuotaService {
 
   /**
    * 批量获取用户所有计次功能的配额状态
+   *
+   * V6.4 P2: 去除内联重置逻辑。
+   * 原因：查询操作不应触发写入，过期配额由每小时 Cron（resetExpiredQuotas）统一重置。
+   * 此处仅标记是否已过期供前端展示，不修改数据库。
    */
   async getAllQuotaStatus(userId: string): Promise<QuotaStatus[]> {
     const quotas = await this.prisma.usage_quota.findMany({
       where: { user_id: userId },
     });
-    const now = new Date();
-    const results: QuotaStatus[] = [];
 
-    for (const quota of quotas) {
-      if (quota.reset_at && quota.reset_at <= now) {
-        await this.resetSingleQuota(quota);
-      }
-      results.push(this.toStatus(quota));
-    }
-
-    return results;
+    return quotas.map((quota) => this.toStatus(quota));
   }
 
   // ==================== Cron 定时重置 ====================
@@ -184,23 +179,29 @@ export class QuotaService {
   @Cron('0 * * * *', { name: 'quota-reset' })
   async resetExpiredQuotas(): Promise<number> {
     const now = new Date();
-    const batchSize = 500;
     let totalReset = 0;
 
-    // 分批处理
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-      const expired = await this.prisma.usage_quota.findMany({
-        where: { reset_at: { lte: now } },
-        take: batchSize,
+    // V6.3 P1-6: 按 cycle 分组批量 UPDATE，替代逐条 resetSingleQuota
+    // 同一 cycle 类型的所有过期配额 reset_at 相同，可用 updateMany 一次性处理
+    const cycles = [
+      QuotaCycle.DAILY,
+      QuotaCycle.WEEKLY,
+      QuotaCycle.MONTHLY,
+    ] as const;
+
+    for (const cycle of cycles) {
+      const nextResetAt = this.calcNextReset(now, cycle);
+      const result = await this.prisma.usage_quota.updateMany({
+        where: {
+          reset_at: { lte: now },
+          cycle,
+        },
+        data: {
+          used: 0,
+          reset_at: nextResetAt,
+        },
       });
-
-      if (expired.length === 0) break;
-
-      for (const quota of expired) {
-        await this.resetSingleQuota(quota);
-        totalReset++;
-      }
+      totalReset += result.count;
     }
 
     if (totalReset > 0) {

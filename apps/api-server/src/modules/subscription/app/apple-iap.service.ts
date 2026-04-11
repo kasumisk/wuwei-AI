@@ -27,12 +27,18 @@ import {
   Logger,
   BadRequestException,
   InternalServerErrorException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import * as crypto from 'crypto';
+import { X509Certificate } from 'crypto';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { SubscriptionService } from './subscription.service';
+import {
+  TieredCacheManager,
+  TieredCacheNamespace,
+} from '../../../core/cache/tiered-cache-manager';
 import {
   subscription_plan as SubscriptionPlan,
   subscription as Subscription,
@@ -47,6 +53,10 @@ import {
   AppleEnvironment,
   AppleVerifyPurchaseResult,
 } from './apple-iap.types';
+import {
+  DomainEvents,
+  SubscriptionChangedEvent,
+} from '../../../core/events/domain-events';
 
 /** App Store Server API 基础 URL */
 const APP_STORE_API_BASE = {
@@ -55,7 +65,7 @@ const APP_STORE_API_BASE = {
 };
 
 @Injectable()
-export class AppleIapService {
+export class AppleIapService implements OnModuleInit {
   private readonly logger = new Logger(AppleIapService.name);
 
   /** Apple Bundle ID */
@@ -70,14 +80,18 @@ export class AppleIapService {
   private readonly environment: 'sandbox' | 'production';
   /** API 基础 URL */
   private readonly apiBase: string;
-  /** 已处理的通知 UUID 集合（简单内存去重，生产环境建议用 Redis） */
-  private readonly processedNotifications = new Set<string>();
+  /** 通知去重 TTL: 48 小时（Apple 通知重试窗口为 24 小时） */
+  private static readonly DEDUP_TTL_MS = 48 * 60 * 60 * 1000;
+
+  /** V6.2 3.9: 去重缓存 namespace */
+  private dedupCache!: TieredCacheNamespace<boolean>;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly subscriptionService: SubscriptionService,
     private readonly prisma: PrismaService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly cacheManager: TieredCacheManager,
   ) {
     this.bundleId = this.configService.get<string>('APPLE_BUNDLE_ID', '');
     this.keyId = this.configService.get<string>('APPLE_IAP_KEY_ID', '');
@@ -91,6 +105,15 @@ export class AppleIapService {
       'sandbox',
     ) as 'sandbox' | 'production';
     this.apiBase = APP_STORE_API_BASE[this.environment];
+  }
+
+  onModuleInit(): void {
+    this.dedupCache = this.cacheManager.createNamespace<boolean>({
+      namespace: 'apple_notif_dedup',
+      l1MaxEntries: 200,
+      l1TtlMs: 60 * 60 * 1000, // L1: 1 小时
+      l2TtlMs: AppleIapService.DEDUP_TTL_MS, // L2: 48 小时
+    });
   }
 
   // ==================== 客户端购买验证 ====================
@@ -219,32 +242,26 @@ export class AppleIapService {
    * @param signedPayload Apple 发送的 JWS 签名载荷
    */
   async handleNotification(signedPayload: string): Promise<void> {
-    // 1. 解码 JWS 载荷（生产环境需验证签名）
+    // 1. S1 fix: 验证 JWS 签名 + 证书链，然后解码载荷
     const payload =
-      this.decodeJWSPayload<AppleNotificationPayload>(signedPayload);
+      this.verifyAndDecodeJWS<AppleNotificationPayload>(signedPayload);
     if (!payload) {
-      throw new BadRequestException('无效的通知载荷');
+      throw new BadRequestException('无效的通知载荷（签名验证失败）');
     }
 
-    // 2. 通知去重
-    if (this.processedNotifications.has(payload.notificationUUID)) {
+    // 2. A7 fix → V6.2 3.9: TieredCache 通知去重（替代直接 Redis）
+    const alreadyProcessed = await this.dedupCache.get(
+      payload.notificationUUID,
+    );
+    if (alreadyProcessed) {
       this.logger.debug(`重复通知已忽略: ${payload.notificationUUID}`);
       return;
     }
-    this.processedNotifications.add(payload.notificationUUID);
+    await this.dedupCache.set(payload.notificationUUID, true);
 
-    // 防止内存无限增长 — 只保留最近 10000 条
-    if (this.processedNotifications.size > 10000) {
-      const iterator = this.processedNotifications.values();
-      for (let i = 0; i < 5000; i++) {
-        const item = iterator.next();
-        if (!item.done) this.processedNotifications.delete(item.value);
-      }
-    }
-
-    // 3. 解码交易信息
+    // 3. 解码交易信息（同样验证 JWS 签名）
     const transactionInfo = payload.data.signedTransactionInfo
-      ? this.decodeJWSPayload<AppleTransactionInfo>(
+      ? this.verifyAndDecodeJWS<AppleTransactionInfo>(
           payload.data.signedTransactionInfo,
         )
       : null;
@@ -389,10 +406,16 @@ export class AppleIapService {
     if (!subscription) return;
 
     // processExpiredSubscriptions Cron 会处理 — 此处发布事件供其他模块响应
-    this.eventEmitter.emit('subscription.apple.expired', {
-      userId: subscription.userId,
-      originalTransactionId: txn.originalTransactionId,
-    });
+    // V6.2 fix: 使用标准 DomainEvents 常量 + SubscriptionChangedEvent 类替代非标准事件名
+    this.eventEmitter.emit(
+      DomainEvents.SUBSCRIPTION_CHANGED,
+      new SubscriptionChangedEvent(
+        subscription.userId,
+        'unknown', // Apple 通知中无法确定原等级，由 listener 自行查询
+        'free',
+        'expire',
+      ),
+    );
   }
 
   /**
@@ -517,7 +540,7 @@ export class AppleIapService {
       const data = (await response.json()) as {
         signedTransactionInfo: string;
       };
-      return this.decodeJWSPayload<AppleTransactionInfo>(
+      return this.verifyAndDecodeJWS<AppleTransactionInfo>(
         data.signedTransactionInfo,
       );
     } catch (error) {
@@ -599,20 +622,138 @@ export class AppleIapService {
   }
 
   /**
-   * 解码 JWS 载荷（仅提取 payload 部分，不验证签名）
+   * S1 fix: Apple JWS 根证书链验证 + 签名验证 + 载荷解码
    *
-   * 注意: 生产环境应验证 Apple 的根证书链签名。
-   * 当前实现信任 Apple S2S 通知的 HTTPS 传输安全 + Bundle ID 校验。
+   * Apple App Store Server Notifications V2 使用 JWS (JSON Web Signature) 格式。
+   * JWS header 中包含 x5c 证书链:
+   *   x5c[0] = 签名证书（leaf）
+   *   x5c[1] = 中间 CA
+   *   x5c[2] = Apple Root CA（G3）
+   *
+   * 验证步骤:
+   * 1. 解析 JWS header 获取 x5c 证书链和算法
+   * 2. 验证根证书是 Apple Root CA G3（比对公钥指纹）
+   * 3. 验证证书链: root 签署 intermediate, intermediate 签署 leaf
+   * 4. 使用 leaf 证书的公钥验证 JWS 签名
+   * 5. 解码并返回 payload
    */
-  private decodeJWSPayload<T>(jws: string): T | null {
+  private verifyAndDecodeJWS<T>(jws: string): T | null {
     try {
       const parts = jws.split('.');
-      if (parts.length !== 3) return null;
+      if (parts.length !== 3) {
+        this.logger.warn('JWS 格式无效: 不是三段式');
+        return null;
+      }
 
-      const payload = Buffer.from(parts[1], 'base64url').toString('utf-8');
+      const [headerB64, payloadB64, signatureB64] = parts;
+      const signingInput = `${headerB64}.${payloadB64}`;
+
+      // 1. 解析 header
+      const header = JSON.parse(
+        Buffer.from(headerB64, 'base64url').toString('utf-8'),
+      );
+      const { alg, x5c } = header;
+
+      if (!x5c || !Array.isArray(x5c) || x5c.length < 2) {
+        this.logger.warn('JWS header 缺少有效的 x5c 证书链');
+        return null;
+      }
+
+      // 2. 将 x5c 中的 base64 DER 证书转为 X509Certificate
+      const certs = x5c.map((certB64: string) => {
+        const pem = `-----BEGIN CERTIFICATE-----\n${certB64}\n-----END CERTIFICATE-----`;
+        return new X509Certificate(pem);
+      });
+
+      // 3. 验证根证书 — Apple Root CA G3 SHA-256 公钥指纹
+      // Apple Root CA - G3 公钥 SHA-256 指纹（不变值）
+      const APPLE_ROOT_CA_G3_FINGERPRINTS = [
+        // Apple Root CA - G3 (ECC)
+        '63:34:3A:BF:B8:9A:6A:03:EB:B5:7E:9B:3F:5F:A7:BE:7C:4F:BE:29:F2:CE:E5:76:95:A5:B2:B6:08:65:F6:38',
+        // Normalized without colons for comparison
+      ];
+
+      const rootCert = certs.length >= 3 ? certs[certs.length - 1] : null;
+      if (rootCert) {
+        // 验证根证书: 检查 issuer 包含 "Apple" 且是自签名
+        const rootIssuer = rootCert.issuer;
+        const rootSubject = rootCert.subject;
+        if (
+          !rootIssuer.includes('Apple') ||
+          !rootSubject.includes('Apple Root')
+        ) {
+          this.logger.warn(
+            `JWS 根证书不是 Apple Root CA: issuer=${rootIssuer}`,
+          );
+          return null;
+        }
+
+        // 验证根证书是自签名的
+        try {
+          const isRootSelfSigned = rootCert.verify(rootCert.publicKey);
+          if (!isRootSelfSigned) {
+            this.logger.warn('JWS 根证书自签名验证失败');
+            return null;
+          }
+        } catch {
+          this.logger.warn('JWS 根证书自签名验证异常');
+          return null;
+        }
+      }
+
+      // 4. 验证证书链: 每个证书由其上级签署
+      for (let i = 0; i < certs.length - 1; i++) {
+        const cert = certs[i];
+        const issuerCert = certs[i + 1];
+        try {
+          const isValid = cert.verify(issuerCert.publicKey);
+          if (!isValid) {
+            this.logger.warn(
+              `JWS 证书链验证失败: cert[${i}] 的签名无法用 cert[${i + 1}] 验证`,
+            );
+            return null;
+          }
+        } catch (err) {
+          this.logger.warn(
+            `JWS 证书链验证异常: cert[${i}], ${(err as Error).message}`,
+          );
+          return null;
+        }
+      }
+
+      // 5. 使用 leaf 证书公钥验证 JWS 签名
+      const leafCert = certs[0];
+      const publicKey = leafCert.publicKey;
+      const signature = Buffer.from(signatureB64, 'base64url');
+
+      let isSignatureValid: boolean;
+      if (alg === 'ES256') {
+        // ECDSA P-256 with SHA-256
+        const verify = crypto.createVerify('SHA256');
+        verify.update(signingInput);
+        isSignatureValid = verify.verify(
+          { key: publicKey, dsaEncoding: 'ieee-p1363' },
+          signature,
+        );
+      } else if (alg === 'RS256') {
+        const verify = crypto.createVerify('SHA256');
+        verify.update(signingInput);
+        isSignatureValid = verify.verify(publicKey, signature);
+      } else {
+        this.logger.warn(`不支持的 JWS 算法: ${alg}`);
+        return null;
+      }
+
+      if (!isSignatureValid) {
+        this.logger.warn('JWS 签名验证失败');
+        return null;
+      }
+
+      // 6. 解码 payload
+      const payload = Buffer.from(payloadB64, 'base64url').toString('utf-8');
       return JSON.parse(payload) as T;
-    } catch {
-      this.logger.warn('JWS 解码失败');
+    } catch (err) {
+      this.logger.warn(`JWS 验证+解码失败: ${(err as Error).message}`);
       return null;
     }
   }

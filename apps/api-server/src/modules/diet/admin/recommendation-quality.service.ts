@@ -68,6 +68,23 @@ export interface PlanCoverage {
   uniqueUsers: number;
 }
 
+export interface RecommendationDashboardSummary {
+  overview: QualityOverview;
+  byGoal: AcceptanceByDimension[];
+  byMeal: AcceptanceByDimension[];
+  trend: DailyTrend[];
+  planCoverage: PlanCoverage;
+  precompute: {
+    total: number;
+    used: number;
+    usageRate: number;
+  };
+  abTesting: {
+    totalFeedbacksWithExperiment: number;
+    experimentCoverageRate: number;
+  };
+}
+
 @Injectable()
 export class RecommendationQualityService {
   private readonly logger = new Logger(RecommendationQualityService.name);
@@ -242,6 +259,66 @@ export class RecommendationQualityService {
         uniqueUsers: 0,
       };
     }
+  }
+
+  /**
+   * V6.3 P3-9: 推荐效果仪表盘聚合
+   */
+  async getDashboardSummary(
+    days = 30,
+  ): Promise<RecommendationDashboardSummary> {
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+
+    const [
+      overview,
+      byGoal,
+      byMeal,
+      trend,
+      planCoverage,
+      precomputeRow,
+      abRow,
+    ] = await Promise.all([
+      this.getQualityOverview(days),
+      this.getAcceptanceByGoalType(days),
+      this.getAcceptanceByMealType(days),
+      this.getDailyTrend(days),
+      this.getPlanCoverage(days),
+      this.prisma.$queryRaw<Array<{ total: bigint; used: bigint }>>`SELECT
+            COUNT(*) as total,
+            COUNT(*) FILTER (WHERE is_used = true) as used
+          FROM precomputed_recommendations
+          WHERE computed_at >= ${since}`,
+      this.prisma.$queryRaw<
+        Array<{ total: bigint; withExperiment: bigint }>
+      >`SELECT
+            COUNT(*) as total,
+            COUNT(*) FILTER (WHERE experiment_id IS NOT NULL) as "withExperiment"
+          FROM recommendation_feedbacks
+          WHERE created_at >= ${since}`,
+    ]);
+
+    const precomputeTotal = Number(precomputeRow[0]?.total ?? 0);
+    const precomputeUsed = Number(precomputeRow[0]?.used ?? 0);
+    const abTotal = Number(abRow[0]?.total ?? 0);
+    const abWithExperiment = Number(abRow[0]?.withExperiment ?? 0);
+
+    return {
+      overview,
+      byGoal,
+      byMeal,
+      trend,
+      planCoverage,
+      precompute: {
+        total: precomputeTotal,
+        used: precomputeUsed,
+        usageRate: precomputeTotal > 0 ? precomputeUsed / precomputeTotal : 0,
+      },
+      abTesting: {
+        totalFeedbacksWithExperiment: abWithExperiment,
+        experimentCoverageRate: abTotal > 0 ? abWithExperiment / abTotal : 0,
+      },
+    };
   }
 
   /**

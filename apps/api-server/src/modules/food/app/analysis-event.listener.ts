@@ -19,7 +19,7 @@
  * - 通过 PrecomputeService（diet 模块 export）失效预计算
  * - 所有操作异步执行，不阻塞分析主流程
  */
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import {
   DomainEvents,
@@ -27,7 +27,10 @@ import {
   AnalysisFailedEvent,
 } from '../../../core/events/domain-events';
 import { RealtimeProfileService } from '../../user/app/realtime-profile.service';
-import { RedisCacheService } from '../../../core/redis/redis-cache.service';
+import {
+  TieredCacheManager,
+  TieredCacheNamespace,
+} from '../../../core/cache/tiered-cache-manager';
 
 // ─── 分析画像扩展结构 ───
 
@@ -60,8 +63,8 @@ export interface AnalysisShortTermProfile {
 
 // ─── 常量 ───
 
-/** 分析画像 Redis key 前缀 */
-const ANALYSIS_PROFILE_PREFIX = 'analysis_profile';
+/** 分析画像 Redis key namespace */
+const ANALYSIS_PROFILE_NAMESPACE = 'analysis_profile';
 
 /** 分析画像 TTL: 7 天（与短期画像一致） */
 const ANALYSIS_PROFILE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -75,13 +78,25 @@ const MAX_ANALYZED_FOODS = 30;
 // ─── 服务实现 ───
 
 @Injectable()
-export class AnalysisEventListener {
+export class AnalysisEventListener implements OnModuleInit {
   private readonly logger = new Logger(AnalysisEventListener.name);
 
+  /** V6.2 3.9: TieredCache namespace */
+  private cache!: TieredCacheNamespace<AnalysisShortTermProfile>;
+
   constructor(
-    private readonly redis: RedisCacheService,
+    private readonly cacheManager: TieredCacheManager,
     private readonly realtimeProfileService: RealtimeProfileService,
   ) {}
+
+  onModuleInit(): void {
+    this.cache = this.cacheManager.createNamespace<AnalysisShortTermProfile>({
+      namespace: ANALYSIS_PROFILE_NAMESPACE,
+      l1MaxEntries: 500,
+      l1TtlMs: 5 * 60 * 1000, // L1: 5 分钟
+      l2TtlMs: ANALYSIS_PROFILE_TTL_MS, // L2: 7 天
+    });
+  }
 
   // ─── 事件监听 ───
 
@@ -180,8 +195,7 @@ export class AnalysisEventListener {
   async getAnalysisProfile(
     userId: string,
   ): Promise<AnalysisShortTermProfile | null> {
-    const key = this.buildKey(userId);
-    return this.redis.get<AnalysisShortTermProfile>(key);
+    return this.cache.get(userId);
   }
 
   /**
@@ -230,14 +244,6 @@ export class AnalysisEventListener {
     userId: string,
     profile: AnalysisShortTermProfile,
   ): Promise<void> {
-    const key = this.buildKey(userId);
-    await this.redis.set(key, profile, ANALYSIS_PROFILE_TTL_MS);
-  }
-
-  /**
-   * 构建 Redis key
-   */
-  private buildKey(userId: string): string {
-    return this.redis.buildKey(ANALYSIS_PROFILE_PREFIX, userId);
+    await this.cache.set(userId, profile);
   }
 }

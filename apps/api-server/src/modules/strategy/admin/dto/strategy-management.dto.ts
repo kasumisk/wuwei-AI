@@ -6,8 +6,11 @@ import {
   IsEnum,
   IsUUID,
   IsDateString,
+  IsBoolean,
+  IsNumber,
   Min,
   Max,
+  ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -178,4 +181,90 @@ export class RemoveAssignmentDto {
   @ApiProperty({ description: '用户ID' })
   @IsUUID()
   userId: string;
+}
+
+// ==================== V6.5 Phase 3H: Realism 配置 DTO ====================
+
+/**
+ * Realism 配置更新 DTO（带验证）
+ *
+ * 与 RealismConfig 接口一致，但增加了 class-validator 装饰器，
+ * 确保 Admin 面板传入的配置值在合理范围内。
+ */
+export class UpdateRealismConfigDto {
+  @ApiPropertyOptional({ description: '是否启用现实性过滤' })
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      '大众化最低阈值（0-100），commonalityScore 低于此值的食物被过滤',
+    minimum: 0,
+    maximum: 100,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  commonalityThreshold?: number;
+
+  @ApiPropertyOptional({ description: '是否启用预算过滤' })
+  @IsOptional()
+  @IsBoolean()
+  budgetFilterEnabled?: boolean;
+
+  @ApiPropertyOptional({ description: '是否启用烹饪时间过滤' })
+  @IsOptional()
+  @IsBoolean()
+  cookTimeCapEnabled?: boolean;
+
+  @ApiPropertyOptional({
+    description: '工作日烹饪时间上限（分钟，5-180）',
+    minimum: 5,
+    maximum: 180,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(5)
+  @Max(180)
+  weekdayCookTimeCap?: number;
+
+  @ApiPropertyOptional({
+    description: '周末烹饪时间上限（分钟，5-360）',
+    minimum: 5,
+    maximum: 360,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(5)
+  @Max(360)
+  weekendCookTimeCap?: number;
+
+  @ApiPropertyOptional({
+    description: '可执行性评分权重倍数（0.1-5.0，1.0=默认）',
+    minimum: 0.1,
+    maximum: 5.0,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0.1)
+  @Max(5.0)
+  executabilityWeightMultiplier?: number;
+}
+
+/**
+ * 按分群批量应用 Realism 配置 DTO
+ */
+export class ApplyRealismToSegmentDto {
+  @ApiProperty({
+    description: '分群名称（如 warm_start, re_engage, precision, discovery）',
+  })
+  @IsString()
+  segment: string;
+
+  @ApiProperty({ description: 'Realism 配置' })
+  @ValidateNested()
+  @Type(() => UpdateRealismConfigDto)
+  realism: UpdateRealismConfigDto;
 }

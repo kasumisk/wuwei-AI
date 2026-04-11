@@ -58,6 +58,7 @@ export interface MealPlan {
 /**
  * V5 3.6: 持久化在 MealPlan 中的食物解释（轻量版，仅存储文案不存储 ScoringExplanation）
  * V6 2.7: 新增可选 V2 可视化数据（radarChart, progressBars, comparisonCard）
+ * V6.3 P2-3: scoreBreakdown 改为可选（simple 级别不输出）
  */
 export interface MealFoodExplanation {
   primaryReason: string;
@@ -67,7 +68,7 @@ export interface MealFoodExplanation {
     value: string;
   }>;
   healthTip?: string;
-  scoreBreakdown: Array<{ dimension: string; score: number }>;
+  scoreBreakdown?: Array<{ dimension: string; score: number }>;
   /** V6 2.7: 完整 V2 可视化解释（可选，前端支持时使用） */
   v2?: ExplanationV2;
 }

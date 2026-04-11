@@ -1,4 +1,5 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
 import {
   user_profiles as UserProfile,
   user_behavior_profiles as UserBehaviorProfile,
@@ -7,6 +8,10 @@ import {
 import { RedisCacheService } from '../../../core/redis/redis-cache.service';
 import { TieredCacheManager, TieredCacheNamespace } from '../../../core/cache';
 import { PrismaService } from '../../../core/prisma/prisma.service';
+import {
+  DomainEvents,
+  ProfileUpdatedEvent,
+} from '../../../core/events/domain-events';
 
 /**
  * 三层画像聚合结果
@@ -89,10 +94,11 @@ export class ProfileCacheService implements OnModuleInit {
         allergens: string[];
         healthConditions: string[];
         regionCode: string; // V4 修复 A7: 传递 regionCode
+        portionTendency?: string; // V6.2 Phase 2.14
       }
     | undefined
   > {
-    const { declared } = await this.getFullProfile(userId);
+    const { declared, observed } = await this.getFullProfile(userId);
     if (!declared) return undefined;
 
     return {
@@ -102,6 +108,7 @@ export class ProfileCacheService implements OnModuleInit {
       allergens: (declared.allergens as string[]) || [],
       healthConditions: (declared.health_conditions as string[]) || [],
       regionCode: declared.region_code || 'CN', // V4 修复 A7
+      portionTendency: observed?.portion_tendency || undefined, // V6.2 Phase 2.14
     };
   }
 
@@ -112,6 +119,19 @@ export class ProfileCacheService implements OnModuleInit {
     this.cache.invalidate(userId).catch(() => {
       /* non-critical */
     });
+  }
+
+  /**
+   * V6.2 A3 fix: 事件驱动缓存失效
+   * 监听 PROFILE_UPDATED 事件，自动清除对应用户的画像缓存，
+   * 避免画像更新后缓存滞后（最长 L1 TTL 2 分钟）。
+   */
+  @OnEvent(DomainEvents.PROFILE_UPDATED, { async: true })
+  handleProfileUpdated(event: ProfileUpdatedEvent): void {
+    this.logger.debug(
+      `Cache invalidated for user ${event.userId} due to profile update (${event.updateType})`,
+    );
+    this.invalidate(event.userId);
   }
 
   /**

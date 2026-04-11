@@ -20,7 +20,7 @@ export interface DimensionScore {
 
 /** 完整评分解释 */
 export interface ScoringExplanation {
-  /** 10 维营养评分分解 (V5 2.6: 新增 fiber) */
+  /** 12 维营养评分分解 (V5 2.6: fiber, V6.4: seasonality, V6.5: executability) */
   dimensions: {
     calories: DimensionScore;
     protein: DimensionScore;
@@ -32,10 +32,15 @@ export interface ScoringExplanation {
     nutrientDensity: DimensionScore;
     inflammation: DimensionScore;
     fiber: DimensionScore; // V5 2.6: 膳食纤维评分
+    seasonality: DimensionScore; // V6.4 Phase 3.4: 时令感知评分
+    executability: DimensionScore; // V6.5: 可执行性评分
   };
 
   /** NOVA 加工惩罚乘数 (0.55-1.0) */
   novaPenalty: number;
+
+  /** V6.2 3.3: 添加糖惩罚分 (0 ~ -15) */
+  addedSugarPenalty: number;
 
   /** 健康修正引擎结果 (V5 2.8: 由 penaltyResult 保留字段名，类型不变) */
   penaltyResult: {
@@ -76,6 +81,18 @@ export interface ScoringExplanation {
 
   /** V6.1 Phase 3.5: 分析画像加权乘数（近期分析分类兴趣加成 + 风险食物惩罚） */
   analysisBoost: number;
+
+  /** V6.5 Phase 1E: 生活方式画像综合乘数（味道/菜系/预算/技能/备餐意愿） */
+  lifestyleBoost: number;
+
+  /** V6.3 P2-4: 声明偏好加成 — Onboarding foodPreferences 匹配食物 tags/category */
+  foodPrefBoost: number;
+
+  /** V6.3 P2-4: 热门食物加成 — 冷启动用户的 popularity 加权（交互多时衰减为 0） */
+  popularityBoost: number;
+
+  /** V6.6 Phase 2-B: 替换反馈乘数 — 来自 replacement_patterns 的降权/增权因子 */
+  replacementBoost: number;
 
   /** 最终分数 */
   finalScore: number;
@@ -184,6 +201,8 @@ export interface ExplanationV2 {
   whyNotExplanation?: string;
   /** 付费预览提示（"升级查看完整分析"）— 2.9 实现 */
   upgradeTeaser?: string;
+  /** V6.3 P3-3: 解释风格实验分桶 */
+  styleVariant?: 'concise' | 'coaching';
   /** 语言标识（默认 'zh-CN'）— 2.10/2.11 实现 */
   locale: string;
 }
