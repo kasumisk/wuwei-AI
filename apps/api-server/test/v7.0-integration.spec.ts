@@ -40,6 +40,11 @@ import {
 import type { FoodLibrary } from '../src/modules/food/food.types';
 import { FoodScorerService } from '../src/modules/diet/app/recommendation/food-scorer.service';
 import { ExplanationGeneratorService } from '../src/modules/diet/app/recommendation/explanation-generator.service';
+import { InsightGeneratorService } from '../src/modules/diet/app/recommendation/insight-generator.service';
+import { ExplanationTierService } from '../src/modules/diet/app/recommendation/explanation-tier.service';
+import { NaturalLanguageExplainerService } from '../src/modules/diet/app/recommendation/natural-language-explainer.service';
+import { MealExplanationService } from '../src/modules/diet/app/recommendation/meal-explanation.service';
+import { ComparisonExplanationService } from '../src/modules/diet/app/recommendation/comparison-explanation.service';
 
 // ─── Test Helpers ───
 
@@ -744,6 +749,11 @@ describe('ExplanationGenerator Goal Progress Insights (Phase 3-D)', () => {
     jest.clearAllMocks();
     generator = new ExplanationGeneratorService(
       mockMealCompositionScorer as any,
+      new InsightGeneratorService(),
+      new ExplanationTierService(),
+      new NaturalLanguageExplainerService(),
+      new MealExplanationService(mockMealCompositionScorer as any),
+      new ComparisonExplanationService(),
     );
   });
 

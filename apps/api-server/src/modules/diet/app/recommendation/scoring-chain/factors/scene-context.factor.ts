@@ -30,6 +30,9 @@ export class SceneContextFactor implements ScoringFactor {
   private profile: SceneScoringProfile | undefined;
   /** V7.3: 该因子自身的强度覆盖乘数 */
   private selfStrength = 1.0;
+  /** V7.5: 场景 boost clamp 范围 */
+  private clampMin = 0.8;
+  private clampMax = 1.2;
 
   isApplicable(ctx: PipelineContext): boolean {
     // V7.3: 有 sceneContext.sceneType 或 V7.2 兼容的 sceneWeightModifiers 即可
@@ -39,6 +42,10 @@ export class SceneContextFactor implements ScoringFactor {
   }
 
   init(ctx: PipelineContext): void {
+    // V7.5: 从调参配置读取 clamp 范围
+    this.clampMin = ctx.tuning?.sceneBoostClampMin ?? 0.8;
+    this.clampMax = ctx.tuning?.sceneBoostClampMax ?? 1.2;
+
     // V7.3: 尝试加载场景评分配置
     const sceneType = ctx.sceneContext?.sceneType;
     if (sceneType) {
@@ -64,7 +71,10 @@ export class SceneContextFactor implements ScoringFactor {
       if (adjustValues.length > 0) {
         const product = adjustValues.reduce((p, v) => p * v, 1.0);
         this.sceneBoost = Math.pow(product, 1 / adjustValues.length);
-        this.sceneBoost = Math.max(0.8, Math.min(1.2, this.sceneBoost));
+        this.sceneBoost = Math.max(
+          this.clampMin,
+          Math.min(this.clampMax, this.sceneBoost),
+        );
       } else {
         this.sceneBoost = 1.0;
       }
@@ -83,7 +93,10 @@ export class SceneContextFactor implements ScoringFactor {
       if (modValues.length > 0) {
         const product = modValues.reduce((p, v) => p * v, 1.0);
         this.sceneBoost = Math.pow(product, 1 / modValues.length);
-        this.sceneBoost = Math.max(0.8, Math.min(1.2, this.sceneBoost));
+        this.sceneBoost = Math.max(
+          this.clampMin,
+          Math.min(this.clampMax, this.sceneBoost),
+        );
       } else {
         this.sceneBoost = 1.0;
       }
@@ -98,7 +111,10 @@ export class SceneContextFactor implements ScoringFactor {
   ): ScoringAdjustment | null {
     // 应用 selfStrength 到 sceneBoost
     const effectiveBoost = 1.0 + (this.sceneBoost - 1.0) * this.selfStrength;
-    const clampedBoost = Math.max(0.8, Math.min(1.2, effectiveBoost));
+    const clampedBoost = Math.max(
+      this.clampMin,
+      Math.min(this.clampMax, effectiveBoost),
+    );
 
     if (Math.abs(clampedBoost - 1.0) < 1e-6) return null;
 

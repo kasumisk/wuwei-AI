@@ -181,7 +181,7 @@ const Layout: React.FC = () => {
                 location={{
                   pathname: location.pathname,
                 }}
-                title="Heylync 运营管理"
+                title="运营管理"
                 logo="https://gw.alipayobjects.com/zos/antfincdn/PmY%24TNNDBI/logo.svg"
                 menuHeaderRender={(logo, title) => (
                   <div

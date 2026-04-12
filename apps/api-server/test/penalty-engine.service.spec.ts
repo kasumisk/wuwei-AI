@@ -4,7 +4,11 @@ import {
   HealthModifierResult,
   HealthConditionWithSeverity,
 } from '../src/modules/diet/app/recommendation/health-modifier-engine.service';
-import { FoodLibrary } from '../src/modules/food/entities/food-library.entity';
+import { FoodLibrary } from '../src/modules/food/food.types';
+import {
+  createMockRedisCacheService,
+  createMockMetricsService,
+} from './helpers/mock-factories';
 
 // ───────────────────── helpers ─────────────────────
 
@@ -68,7 +72,10 @@ describe('HealthModifierEngineService', () => {
   let service: HealthModifierEngineService;
 
   beforeEach(() => {
-    service = new HealthModifierEngineService();
+    service = new HealthModifierEngineService(
+      createMockRedisCacheService() as any,
+      createMockMetricsService() as any,
+    );
   });
 
   // ═══════════════════════════════════════════════

@@ -14,6 +14,8 @@ import {
   Tooltip,
   Avatar,
   Progress,
+  Divider,
+  Typography,
 } from 'antd';
 import {
   ReloadOutlined,
@@ -24,6 +26,9 @@ import {
   FileTextOutlined,
   PictureOutlined,
   UserOutlined,
+  FireOutlined,
+  ClockCircleOutlined,
+  ExperimentOutlined,
 } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
@@ -31,11 +36,14 @@ import { useNavigate } from 'react-router-dom';
 import {
   analysisRecordApi,
   useAnalysisStatistics,
+  usePopularFoods,
   useReviewAnalysisRecord,
   type AnalysisRecordDto,
   type ReviewStatus,
   type AnalysisInputType,
 } from '@/services/analysisRecordService';
+
+const { Text } = Typography;
 
 // ==================== 常量配置 ====================
 
@@ -58,13 +66,17 @@ const reviewStatusConfig: Record<ReviewStatus, { color: string; text: string }> 
 const AnalysisRecordList: React.FC = () => {
   const navigate = useNavigate();
   const actionRef = useRef<ActionType>(null);
-  const [statsVisible, setStatsVisible] = useState(false);
   const [reviewModalVisible, setReviewModalVisible] = useState(false);
   const [reviewingRecord, setReviewingRecord] = useState<AnalysisRecordDto | null>(null);
   const [reviewStatus, setReviewStatus] = useState<ReviewStatus>('approved');
   const [reviewNote, setReviewNote] = useState('');
 
-  const { data: stats } = useAnalysisStatistics({ enabled: statsVisible });
+  // 始终加载统计和热门食物（不再放在弹窗中）
+  const { data: stats, isLoading: statsLoading } = useAnalysisStatistics();
+  const { data: popularFoods, isLoading: popularLoading } = usePopularFoods({
+    limit: 10,
+    days: 7,
+  });
 
   const reviewMutation = useReviewAnalysisRecord({
     onSuccess: () => {
@@ -214,46 +226,153 @@ const AnalysisRecordList: React.FC = () => {
   // ==================== 渲染 ====================
 
   return (
-    <Card>
-      <ProTable<AnalysisRecordDto>
-        actionRef={actionRef}
-        rowKey="id"
-        headerTitle="AI 分析记录"
-        columns={columns}
-        scroll={{ x: 1000 }}
-        request={async (params, sort) => {
-          try {
-            const { list, total } = await analysisRecordApi.getRecords({
-              page: params.current,
-              pageSize: params.pageSize,
-              inputType: params.inputType || undefined,
-              reviewStatus: params.reviewStatus || undefined,
-              userId: params.userId || undefined,
-            });
-            return { data: list || [], total: total || 0, success: true };
-          } catch {
-            return { data: [], total: 0, success: false };
+    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      {/* 统计卡片行（常驻） */}
+      <Row gutter={[16, 16]}>
+        <Col xs={12} sm={8} lg={4}>
+          <Card size="small" hoverable loading={statsLoading}>
+            <Statistic
+              title="总记录数"
+              value={stats?.total ?? '-'}
+              prefix={<BarChartOutlined style={{ color: '#1677ff' }} />}
+              valueStyle={{ fontSize: 22 }}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={8} lg={4}>
+          <Card size="small" hoverable loading={statsLoading}>
+            <Statistic
+              title="今日新增"
+              value={stats?.todayCount ?? '-'}
+              prefix={<ClockCircleOutlined style={{ color: '#52c41a' }} />}
+              valueStyle={{ color: '#52c41a', fontSize: 22 }}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={8} lg={4}>
+          <Card size="small" hoverable loading={statsLoading}>
+            <Statistic
+              title="平均置信度"
+              value={stats ? (stats.avgConfidence * 100).toFixed(1) : '-'}
+              suffix="%"
+              prefix={<ExperimentOutlined style={{ color: '#1677ff' }} />}
+              valueStyle={{
+                color: stats && stats.avgConfidence >= 0.8 ? '#52c41a' : '#faad14',
+                fontSize: 22,
+              }}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={8} lg={4}>
+          <Card size="small" hoverable loading={statsLoading}>
+            <Statistic
+              title="图片识别"
+              value={stats?.byInputType.image ?? '-'}
+              prefix={<PictureOutlined style={{ color: '#52c41a' }} />}
+              valueStyle={{ fontSize: 22 }}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={8} lg={4}>
+          <Card size="small" hoverable loading={statsLoading}>
+            <Statistic
+              title="文本识别"
+              value={stats?.byInputType.text ?? '-'}
+              prefix={<FileTextOutlined style={{ color: '#1677ff' }} />}
+              valueStyle={{ fontSize: 22 }}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={8} lg={4}>
+          <Card size="small" hoverable loading={statsLoading}>
+            <Tooltip title="待审核记录数，点击可筛选">
+              <Statistic
+                title="待审核"
+                value={stats?.byReviewStatus.pending ?? '-'}
+                prefix={<ClockCircleOutlined style={{ color: '#faad14' }} />}
+                valueStyle={{
+                  color: stats && stats.byReviewStatus.pending > 10 ? '#ff4d4f' : '#faad14',
+                  fontSize: 22,
+                }}
+              />
+            </Tooltip>
+          </Card>
+        </Col>
+      </Row>
+
+      {/* 热门食物面板（常驻） */}
+      {popularFoods && popularFoods.length > 0 && (
+        <Card
+          title={
+            <Space>
+              <FireOutlined style={{ color: '#ff4d4f' }} />
+              <span>热门分析食物（近 7 天 Top 10）</span>
+            </Space>
           }
-        }}
-        toolBarRender={() => [
-          <Button key="stats" icon={<BarChartOutlined />} onClick={() => setStatsVisible(true)}>
-            统计
-          </Button>,
-          <Button
-            key="refresh"
-            icon={<ReloadOutlined />}
-            onClick={() => actionRef.current?.reload()}
-          >
-            刷新
-          </Button>,
-        ]}
-        pagination={{
-          defaultPageSize: 20,
-          showSizeChanger: true,
-          showTotal: (total: number) => `共 ${total} 条记录`,
-        }}
-        search={{ labelWidth: 'auto' }}
-      />
+          size="small"
+        >
+          <Row gutter={[8, 8]}>
+            {popularFoods.map((food, i) => (
+              <Col key={food.foodName}>
+                <Tooltip
+                  title={`出现 ${food.count} 次 | 平均置信度 ${(food.avgConfidence * 100).toFixed(0)}%`}
+                >
+                  <Tag
+                    color={i < 3 ? 'red' : i < 6 ? 'orange' : 'default'}
+                    style={{ padding: '4px 10px', fontSize: 13, cursor: 'default' }}
+                  >
+                    {i < 3 && <FireOutlined style={{ marginRight: 4 }} />}
+                    {food.foodName}
+                    <Text type="secondary" style={{ marginLeft: 6, fontSize: 11 }}>
+                      {food.count}次
+                    </Text>
+                  </Tag>
+                </Tooltip>
+              </Col>
+            ))}
+          </Row>
+        </Card>
+      )}
+
+      {/* 表格 */}
+      <Card>
+        <ProTable<AnalysisRecordDto>
+          actionRef={actionRef}
+          rowKey="id"
+          headerTitle="AI 分析记录"
+          columns={columns}
+          scroll={{ x: 1000 }}
+          request={async (params, sort) => {
+            try {
+              const { list, total } = await analysisRecordApi.getRecords({
+                page: params.current,
+                pageSize: params.pageSize,
+                inputType: params.inputType || undefined,
+                reviewStatus: params.reviewStatus || undefined,
+                userId: params.userId || undefined,
+              });
+              return { data: list || [], total: total || 0, success: true };
+            } catch {
+              return { data: [], total: 0, success: false };
+            }
+          }}
+          toolBarRender={() => [
+            <Button
+              key="refresh"
+              icon={<ReloadOutlined />}
+              onClick={() => actionRef.current?.reload()}
+            >
+              刷新
+            </Button>,
+          ]}
+          pagination={{
+            defaultPageSize: 20,
+            showSizeChanger: true,
+            showTotal: (total: number) => `共 ${total} 条记录`,
+          }}
+          search={{ labelWidth: 'auto' }}
+        />
+      </Card>
 
       {/* 审核弹窗 */}
       <Modal
@@ -289,70 +408,7 @@ const AnalysisRecordList: React.FC = () => {
           />
         </div>
       </Modal>
-
-      {/* 统计弹窗 */}
-      <Modal
-        title="分析记录统计"
-        open={statsVisible}
-        onCancel={() => setStatsVisible(false)}
-        footer={null}
-        width={560}
-      >
-        {stats && (
-          <>
-            <Row gutter={[16, 16]}>
-              <Col span={8}>
-                <Statistic title="总记录数" value={stats.total} />
-              </Col>
-              <Col span={8}>
-                <Statistic
-                  title="今日新增"
-                  value={stats.todayCount}
-                  valueStyle={{ color: '#1677ff' }}
-                />
-              </Col>
-              <Col span={8}>
-                <Statistic
-                  title="平均置信度"
-                  value={(stats.avgConfidence * 100).toFixed(1)}
-                  suffix="%"
-                  valueStyle={{ color: stats.avgConfidence >= 0.8 ? '#52c41a' : '#faad14' }}
-                />
-              </Col>
-            </Row>
-            <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-              <Col span={12}>
-                <Card size="small" title="输入类型分布">
-                  <Statistic title="文本识别" value={stats.byInputType.text} />
-                  <Statistic
-                    title="图片识别"
-                    value={stats.byInputType.image}
-                    style={{ marginTop: 8 }}
-                  />
-                </Card>
-              </Col>
-              <Col span={12}>
-                <Card size="small" title="审核状态分布">
-                  <Statistic title="待审核" value={stats.byReviewStatus.pending} />
-                  <Statistic
-                    title="已通过"
-                    value={stats.byReviewStatus.approved}
-                    valueStyle={{ color: '#52c41a' }}
-                    style={{ marginTop: 8 }}
-                  />
-                  <Statistic
-                    title="已拒绝"
-                    value={stats.byReviewStatus.rejected}
-                    valueStyle={{ color: '#ff4d4f' }}
-                    style={{ marginTop: 8 }}
-                  />
-                </Card>
-              </Col>
-            </Row>
-          </>
-        )}
-      </Modal>
-    </Card>
+    </Space>
   );
 };
 

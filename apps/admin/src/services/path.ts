@@ -53,6 +53,18 @@ const PATH = {
     RECOMMENDATION_DEBUG: '/admin/recommendation-debug',
     // 用户画像看板
     USER_DASHBOARD: '/admin/user-dashboard',
+    // 流失预测
+    CHURN_PREDICTION: '/admin/churn-prediction',
+    // 功能开关
+    FEATURE_FLAGS: '/admin/feature-flags',
+    // 评分参数配置
+    SCORING_CONFIG: '/admin/scoring-config',
+    // 策略效果分析
+    STRATEGY_EFFECTIVENESS: '/admin/strategy-effectiveness',
+    // Thompson Sampling 收敛
+    THOMPSON_SAMPLING: '/admin/thompson-sampling',
+    // 暴食干预效果
+    BINGE_INTERVENTION: '/admin/binge-intervention',
   },
 };
 

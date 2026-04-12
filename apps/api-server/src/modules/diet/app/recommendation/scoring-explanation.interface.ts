@@ -20,7 +20,7 @@ export interface DimensionScore {
 
 /** 完整评分解释 */
 export interface ScoringExplanation {
-  /** 12 维营养评分分解 (V5 2.6: fiber, V6.4: seasonality, V6.5: executability) */
+  /** 12 维营养评分分解 (V5 2.6: fiber, V6.4: seasonality, V6.5: executability, V6.9: popularity, V7.4: acquisition) */
   dimensions: {
     calories: DimensionScore;
     protein: DimensionScore;
@@ -34,6 +34,8 @@ export interface ScoringExplanation {
     fiber: DimensionScore; // V5 2.6: 膳食纤维评分
     seasonality: DimensionScore; // V6.4 Phase 3.4: 时令感知评分
     executability: DimensionScore; // V6.5: 可执行性评分
+    popularity?: DimensionScore; // V6.9 Phase 1-D: 大众化/常见度评分
+    acquisition?: DimensionScore; // V7.4 Phase 3-C: 食物可获得性评分
   };
 
   /** NOVA 加工惩罚乘数 (0.55-1.0) */

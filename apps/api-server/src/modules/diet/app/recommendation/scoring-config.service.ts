@@ -1,7 +1,10 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
 import { RedisCacheService } from '../../../../core/redis/redis-cache.service';
-import { ScoringConfigSnapshot } from './recommendation.types';
+import {
+  ScoringConfigSnapshot,
+  RecommendationTuningConfig,
+} from './recommendation.types';
 import { GoalType } from '../../app/nutrition-score.service';
 
 /**
@@ -111,6 +114,94 @@ export class ScoringConfigService implements OnModuleInit {
     }, this.SHARD_CACHE_TTL_MS);
 
     return merged;
+  }
+
+  /**
+   * V7.5: 快捷获取调参配置（同步，热路径零 IO）
+   *
+   * 从已加载的全局配置中提取 tuning 部分。
+   * 如果全局配置尚未加载，返回默认值。
+   */
+  getTuning(): Required<RecommendationTuningConfig> {
+    const tuning = this.config?.tuning ?? {};
+    return { ...this.getTuningDefaults(), ...tuning };
+  }
+
+  /**
+   * V7.5: 调参配置默认值
+   */
+  getTuningDefaults(): Required<RecommendationTuningConfig> {
+    return {
+      // ── MealAssembler ──
+      similarityWeights: {
+        category: 0.3,
+        mainIngredient: 0.5,
+        subCategory: 0.2,
+        tagOverlap: 0.05,
+      },
+      diversitySimilarityPenalty: 0.3,
+      compatibilityGoodBonus: 0.05,
+      compatibilityBadPenalty: -0.1,
+      compatibilityClampMin: -0.15,
+      compatibilityClampMax: 0.15,
+
+      // ── PipelineBuilder ──
+      optimizerCandidateLimit: 8,
+      diversityHighMultiplier: 1.5,
+      diversityLowMultiplier: 0.5,
+      baseExplorationRate: 0.15,
+      dishPriorityDivisorScene: 500,
+      dishPriorityDivisorNormal: 1000,
+      semiPreparedMultiplierScene: 1.08,
+      semiPreparedMultiplierNormal: 1.03,
+      ingredientMultiplierScene: 0.9,
+      conflictMaxRounds: 3,
+      ingredientDiversityThreshold: 60,
+      cookingMethodDiversityThreshold: 50,
+
+      // ── ConstraintGenerator ──
+      proteinGapThreshold: 30,
+      calorieGapThreshold: 300,
+      calorieCeilingMultiplier: 1.15,
+      bingeRiskCalorieMultiplier: 0.98,
+      minProteinRatio: 0.5,
+
+      // ── SceneContextFactor ──
+      sceneBoostClampMin: 0.8,
+      sceneBoostClampMax: 1.2,
+
+      // ── AnalysisProfileFactor ──
+      categoryInterestPerCount: 0.02,
+      categoryInterestCap: 0.08,
+      riskFoodPenalty: 0.7,
+
+      // ── PreferenceSignalFactor ──
+      declaredPrefPerMatch: 0.05,
+      declaredPrefCap: 0.15,
+
+      // ── LifestyleBoostFactor ──
+      factorWaterHighThreshold: 80,
+      nutrientBoostClampMin: 0.85,
+      nutrientBoostClampMax: 1.15,
+      nutrientBoostDeltaMultiplier: 0.05,
+
+      // ── ShortTermProfileFactor ──
+      shortTermMinInteractions: 3,
+
+      // ── PopularityFactor ──
+      popularityNormalizationDivisor: 100,
+
+      // ── FoodScorer 残余 ──
+      cuisineWeightBoostCoeff: 0.2,
+      channelMatchBonus: 0.1,
+      acquisitionScoreMap: {
+        1: 1.0,
+        2: 0.85,
+        3: 0.65,
+        4: 0.4,
+        5: 0.15,
+      },
+    };
   }
 
   /**
@@ -470,6 +561,9 @@ export class ScoringConfigService implements OnModuleInit {
       defaultConfidence: 0.5,
       maxAddedSugarPenalty: -15,
       rangeOutPenaltySteepness: 2,
+
+      // ── V7.5: 推荐调参配置 ──
+      tuning: this.getTuningDefaults(),
     };
   }
 
@@ -513,6 +607,19 @@ export class ScoringConfigService implements OnModuleInit {
       substitutionWeights: {
         ...defaults.substitutionWeights!,
         ...(partial.substitutionWeights ?? {}),
+      },
+      // V7.5: tuning 深度合并
+      tuning: {
+        ...defaults.tuning!,
+        ...(partial.tuning ?? {}),
+        similarityWeights: {
+          ...defaults.tuning!.similarityWeights!,
+          ...(partial.tuning?.similarityWeights ?? {}),
+        },
+        acquisitionScoreMap: {
+          ...defaults.tuning!.acquisitionScoreMap!,
+          ...(partial.tuning?.acquisitionScoreMap ?? {}),
+        },
       },
     };
   }

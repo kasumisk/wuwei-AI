@@ -128,6 +128,46 @@ export interface UpdatePlanDto {
   isActive?: boolean;
 }
 
+export interface UsageQuotaItem {
+  id: string;
+  user_id: string;
+  feature: string;
+  used: number;
+  quota_limit: number;
+  cycle: 'daily' | 'weekly' | 'monthly';
+  reset_at: string | null;
+}
+
+export interface UsageQuotasResponse {
+  userId: string;
+  list: UsageQuotaItem[];
+}
+
+export interface GetTriggerStatsParams {
+  days?: number;
+  feature?: string;
+  triggerScene?: string;
+}
+
+export interface TriggerStatsByGroup {
+  feature?: string;
+  triggerScene?: string;
+  currentTier?: string;
+  totalTriggers: number;
+  conversions: number;
+  conversionRate: number;
+}
+
+export interface TriggerStatsResponse {
+  days: number;
+  totalTriggers: number;
+  totalConversions: number;
+  overallConversionRate: number;
+  byFeature: TriggerStatsByGroup[];
+  byScene: TriggerStatsByGroup[];
+  byTier: TriggerStatsByGroup[];
+}
+
 // ==================== Query Keys ====================
 
 const _all = ['subscriptions'] as const;
@@ -141,13 +181,17 @@ export const subscriptionQueryKeys = {
   payments: (params?: GetPaymentRecordsQuery) => [..._all, 'payments', params] as const,
   overview: [..._all, 'overview'] as const,
   userQuota: (userId: string) => [..._all, 'quota', userId] as const,
+  usageQuotas: (userId: string, feature?: string) =>
+    [..._all, 'usage-quotas', userId, feature] as const,
+  triggerStats: (params?: GetTriggerStatsParams) => [..._all, 'trigger-stats', params] as const,
 };
 
 // ==================== API ====================
 
 export const subscriptionApi = {
   // --- Plans ---
-  getPlans: (): Promise<PageResponse<SubscriptionPlanDto>> => request.get(`${PATH.ADMIN.SUBSCRIPTIONS}/plans`),
+  getPlans: (): Promise<PageResponse<SubscriptionPlanDto>> =>
+    request.get(`${PATH.ADMIN.SUBSCRIPTIONS}/plans`),
 
   getPlanById: (id: string): Promise<SubscriptionPlanDto> =>
     request.get(`${PATH.ADMIN.SUBSCRIPTIONS}/plans/${id}`),
@@ -179,9 +223,20 @@ export const subscriptionApi = {
   getOverview: (): Promise<SubscriptionOverview> =>
     request.get(`${PATH.ADMIN.SUBSCRIPTIONS}/overview`),
 
-  // --- User Quota ---
+  // --- User Quota (legacy per-user) ---
   getUserQuota: (userId: string): Promise<Record<string, unknown>> =>
     request.get(`${PATH.ADMIN.SUBSCRIPTIONS}/users/${userId}/quota`),
+
+  // --- Usage Quotas (admin list) ---
+  getUsageQuotas: (params: { userId: string; feature?: string }): Promise<UsageQuotasResponse> =>
+    request.get(`${PATH.ADMIN.SUBSCRIPTIONS}/usage-quotas`, params),
+
+  resetUsageQuota: (id: string): Promise<UsageQuotaItem> =>
+    request.put(`${PATH.ADMIN.SUBSCRIPTIONS}/usage-quotas/${id}/reset`, {}),
+
+  // --- Trigger Stats ---
+  getTriggerStats: (params?: GetTriggerStatsParams): Promise<TriggerStatsResponse> =>
+    request.get(`${PATH.ADMIN.SUBSCRIPTIONS}/trigger-stats`, params),
 };
 
 // ==================== React Query Hooks ====================
@@ -295,6 +350,42 @@ export const useSubscriptionOverview = (
   useQuery({
     queryKey: subscriptionQueryKeys.overview,
     queryFn: () => subscriptionApi.getOverview(),
+    staleTime: 5 * 60 * 1000,
+    ...options,
+  });
+
+// Usage Quotas
+export const useUsageQuotas = (
+  userId: string,
+  feature?: string,
+  options?: Omit<UseQueryOptions<UsageQuotasResponse>, 'queryKey' | 'queryFn'>
+) =>
+  useQuery({
+    queryKey: subscriptionQueryKeys.usageQuotas(userId, feature),
+    queryFn: () => subscriptionApi.getUsageQuotas({ userId, feature }),
+    enabled: !!userId,
+    staleTime: 2 * 60 * 1000,
+    ...options,
+  });
+
+export const useResetUsageQuota = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => subscriptionApi.resetUsageQuota(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: subscriptionQueryKeys.all });
+    },
+  });
+};
+
+// Trigger Stats
+export const useTriggerStats = (
+  params?: GetTriggerStatsParams,
+  options?: Omit<UseQueryOptions<TriggerStatsResponse>, 'queryKey' | 'queryFn'>
+) =>
+  useQuery({
+    queryKey: subscriptionQueryKeys.triggerStats(params),
+    queryFn: () => subscriptionApi.getTriggerStats(params),
     staleTime: 5 * 60 * 1000,
     ...options,
   });

@@ -17,6 +17,7 @@ import {
   Avatar,
   Tooltip,
   Timeline,
+  Badge,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -26,6 +27,14 @@ import {
   HistoryOutlined,
   FireOutlined,
   TrophyOutlined,
+  CrownOutlined,
+  CoffeeOutlined,
+  LikeOutlined,
+  ThunderboltOutlined,
+  DollarOutlined,
+  SwapOutlined,
+  StopOutlined,
+  CheckCircleOutlined,
 } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
@@ -36,6 +45,19 @@ import {
   type InferredProfileDto,
   type ProfileChangeLogDto,
 } from '@/services/appUserManagementService';
+import {
+  contentApi,
+  type FoodRecordDto,
+  type RecommendationFeedbackDto,
+} from '@/services/contentManagementService';
+import {
+  useSubscriptions,
+  usePaymentRecords,
+  type SubscriptionDto,
+  type PaymentRecordDto,
+} from '@/services/subscriptionManagementService';
+import { useUserStrategy, type UserStrategyResult } from '@/services/recommendDebugService';
+import { useQuery } from '@tanstack/react-query';
 
 // ==================== 常量映射 ====================
 
@@ -551,6 +573,506 @@ const ChangeLogsTab: React.FC<{ logs: ProfileChangeLogDto[] }> = ({ logs }) => {
   );
 };
 
+// ==================== 子组件: 订阅信息（新增） ====================
+
+const SUBSCRIPTION_STATUS_MAP: Record<string, { color: string; text: string }> = {
+  active: { color: 'success', text: '生效中' },
+  expired: { color: 'default', text: '已过期' },
+  canceled: { color: 'warning', text: '已取消' },
+  past_due: { color: 'error', text: '逾期' },
+  trialing: { color: 'processing', text: '试用中' },
+};
+
+const TIER_LABELS_SUB: Record<string, string> = {
+  free: '免费版',
+  pro: 'Pro',
+  premium: 'Premium',
+};
+
+const SubscriptionTab: React.FC<{ userId: string }> = ({ userId }) => {
+  const { data: subData, isLoading: subLoading } = useSubscriptions({ userId, pageSize: 5 });
+  const { data: payData, isLoading: payLoading } = usePaymentRecords({ userId, pageSize: 10 });
+
+  if (subLoading || payLoading) return <Spin />;
+
+  const subs = subData?.list || [];
+  const payments = payData?.list || [];
+
+  if (!subs.length && !payments.length) {
+    return <Empty description="该用户暂无订阅记录" />;
+  }
+
+  const subColumns = [
+    {
+      title: '套餐',
+      dataIndex: 'tier',
+      width: 100,
+      render: (v: string) => (
+        <Tag color={v === 'premium' ? 'purple' : v === 'pro' ? 'blue' : 'default'}>
+          {TIER_LABELS_SUB[v] || v}
+        </Tag>
+      ),
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      width: 100,
+      render: (v: string) => {
+        const cfg = SUBSCRIPTION_STATUS_MAP[v] || { color: 'default', text: v };
+        return <Badge status={cfg.color as any} text={cfg.text} />;
+      },
+    },
+    {
+      title: '计费周期',
+      dataIndex: 'billingCycle',
+      width: 100,
+      render: (v: string) =>
+        v === 'monthly' ? '月付' : v === 'yearly' ? '年付' : v === 'lifetime' ? '终身' : v,
+    },
+    {
+      title: '支付渠道',
+      dataIndex: 'paymentChannel',
+      width: 120,
+    },
+    {
+      title: '开始时间',
+      dataIndex: 'startDate',
+      width: 120,
+      render: (v: string) => (v ? new Date(v).toLocaleDateString('zh-CN') : '-'),
+    },
+    {
+      title: '到期时间',
+      dataIndex: 'endDate',
+      width: 120,
+      render: (v: string) => (v ? new Date(v).toLocaleDateString('zh-CN') : '-'),
+    },
+  ];
+
+  const payColumns = [
+    {
+      title: '金额',
+      dataIndex: 'amount',
+      width: 100,
+      render: (v: number, record: PaymentRecordDto) =>
+        `${record.currency?.toUpperCase() || ''} ${(v / 100).toFixed(2)}`,
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      width: 80,
+      render: (v: string) => (
+        <Tag color={v === 'succeeded' ? 'success' : v === 'pending' ? 'processing' : 'error'}>
+          {v}
+        </Tag>
+      ),
+    },
+    { title: '渠道', dataIndex: 'paymentChannel', width: 100 },
+    {
+      title: '时间',
+      dataIndex: 'createdAt',
+      width: 170,
+      render: (v: string) => new Date(v).toLocaleString('zh-CN'),
+    },
+  ];
+
+  return (
+    <div>
+      <Card title="订阅记录" size="small" style={{ marginBottom: 16 }}>
+        <Table dataSource={subs} columns={subColumns} rowKey="id" size="small" pagination={false} />
+      </Card>
+      {payments.length > 0 && (
+        <Card title="支付记录" size="small">
+          <Table
+            dataSource={payments}
+            columns={payColumns}
+            rowKey="id"
+            size="small"
+            pagination={{ pageSize: 5, size: 'small' }}
+          />
+        </Card>
+      )}
+    </div>
+  );
+};
+
+// ==================== 子组件: 饮食记录（新增） ====================
+
+const MEAL_LABELS: Record<string, string> = {
+  breakfast: '早餐',
+  lunch: '午餐',
+  dinner: '晚餐',
+  snack: '加餐',
+};
+
+const FoodRecordsTab: React.FC<{ userId: string }> = ({ userId }) => {
+  const [page, setPage] = useState(1);
+  const { data, isLoading } = useQuery({
+    queryKey: ['userFoodRecords', userId, page],
+    queryFn: () => contentApi.getFoodRecords({ userId, page, pageSize: 10 }),
+    enabled: !!userId,
+    staleTime: 2 * 60 * 1000,
+  });
+
+  if (isLoading) return <Spin />;
+  if (!data?.list?.length) return <Empty description="该用户暂无饮食记录" />;
+
+  const columns = [
+    {
+      title: '餐类',
+      dataIndex: 'mealType',
+      width: 80,
+      render: (v: string) => <Tag>{MEAL_LABELS[v] || v}</Tag>,
+    },
+    {
+      title: '食物',
+      dataIndex: 'foods',
+      render: (foods: FoodRecordDto['foods']) => (
+        <Space wrap size={4}>
+          {foods?.map((f, i) => (
+            <Tag key={i}>
+              {f.name} ({f.calories}kcal)
+            </Tag>
+          ))}
+        </Space>
+      ),
+    },
+    {
+      title: '总热量',
+      dataIndex: 'totalCalories',
+      width: 100,
+      render: (v: number) => <Typography.Text strong>{v} kcal</Typography.Text>,
+    },
+    {
+      title: '营养分',
+      dataIndex: 'nutritionScore',
+      width: 80,
+      render: (v: number) => (
+        <Tag color={v >= 80 ? 'success' : v >= 60 ? 'warning' : 'error'}>{v}</Tag>
+      ),
+    },
+    {
+      title: '决策',
+      dataIndex: 'decision',
+      width: 80,
+      render: (v: string) => <Tag color="blue">{v}</Tag>,
+    },
+    {
+      title: '风险',
+      dataIndex: 'riskLevel',
+      width: 80,
+      render: (v: string) =>
+        v ? (
+          <Tag color={v === 'high' ? 'error' : v === 'medium' ? 'warning' : 'success'}>{v}</Tag>
+        ) : (
+          '-'
+        ),
+    },
+    {
+      title: '时间',
+      dataIndex: 'recordedAt',
+      width: 170,
+      render: (v: string) => new Date(v).toLocaleString('zh-CN'),
+    },
+  ];
+
+  return (
+    <Table
+      dataSource={data.list}
+      columns={columns}
+      rowKey="id"
+      size="small"
+      pagination={{
+        current: page,
+        total: data.total,
+        pageSize: 10,
+        size: 'small',
+        onChange: setPage,
+        showTotal: (t) => `共 ${t} 条`,
+      }}
+    />
+  );
+};
+
+// ==================== 子组件: 推荐反馈（新增） ====================
+
+const ACTION_CONFIG: Record<string, { color: string; icon: React.ReactNode; text: string }> = {
+  accept: { color: 'success', icon: <CheckCircleOutlined />, text: '接受' },
+  replace: { color: 'warning', icon: <SwapOutlined />, text: '替换' },
+  skip: { color: 'error', icon: <StopOutlined />, text: '跳过' },
+};
+
+const RecommendFeedbackTab: React.FC<{ userId: string }> = ({ userId }) => {
+  const [page, setPage] = useState(1);
+  const { data, isLoading } = useQuery({
+    queryKey: ['userRecommendFeedback', userId, page],
+    queryFn: () => contentApi.getRecommendationFeedback({ userId, page, pageSize: 10 }),
+    enabled: !!userId,
+    staleTime: 2 * 60 * 1000,
+  });
+
+  if (isLoading) return <Spin />;
+  if (!data?.list?.length) return <Empty description="该用户暂无推荐反馈" />;
+
+  // 计算简要统计
+  const all = data.list;
+  const acceptCount = all.filter((r) => r.action === 'accept').length;
+  const replaceCount = all.filter((r) => r.action === 'replace').length;
+  const skipCount = all.filter((r) => r.action === 'skip').length;
+
+  const columns = [
+    {
+      title: '餐类',
+      dataIndex: 'mealType',
+      width: 80,
+      render: (v: string) => <Tag>{MEAL_LABELS[v] || v}</Tag>,
+    },
+    {
+      title: '推荐食物',
+      dataIndex: 'foodName',
+      width: 160,
+    },
+    {
+      title: '操作',
+      dataIndex: 'action',
+      width: 80,
+      render: (v: string) => {
+        const cfg = ACTION_CONFIG[v] || { color: 'default', icon: null, text: v };
+        return (
+          <Tag icon={cfg.icon} color={cfg.color}>
+            {cfg.text}
+          </Tag>
+        );
+      },
+    },
+    {
+      title: '替换食物',
+      dataIndex: 'replacementFood',
+      width: 140,
+      render: (v: string | undefined) => v || '-',
+    },
+    {
+      title: '推荐分',
+      dataIndex: 'recommendationScore',
+      width: 80,
+      render: (v: number | undefined) => (v !== undefined ? v.toFixed(2) : '-'),
+    },
+    {
+      title: '目标',
+      dataIndex: 'goalType',
+      width: 80,
+      render: (v: string | undefined) => (v ? <Tag color="blue">{goalLabels[v] || v}</Tag> : '-'),
+    },
+    {
+      title: '时间',
+      dataIndex: 'createdAt',
+      width: 170,
+      render: (v: string) => new Date(v).toLocaleString('zh-CN'),
+    },
+  ];
+
+  return (
+    <div>
+      <Row gutter={16} style={{ marginBottom: 16 }}>
+        <Col span={8}>
+          <Card size="small">
+            <Statistic
+              title="接受"
+              value={acceptCount}
+              prefix={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
+              valueStyle={{ color: '#52c41a' }}
+            />
+          </Card>
+        </Col>
+        <Col span={8}>
+          <Card size="small">
+            <Statistic
+              title="替换"
+              value={replaceCount}
+              prefix={<SwapOutlined style={{ color: '#faad14' }} />}
+              valueStyle={{ color: '#faad14' }}
+            />
+          </Card>
+        </Col>
+        <Col span={8}>
+          <Card size="small">
+            <Statistic
+              title="跳过"
+              value={skipCount}
+              prefix={<StopOutlined style={{ color: '#ff4d4f' }} />}
+              valueStyle={{ color: '#ff4d4f' }}
+            />
+          </Card>
+        </Col>
+      </Row>
+      <Table
+        dataSource={data.list}
+        columns={columns}
+        rowKey="id"
+        size="small"
+        pagination={{
+          current: page,
+          total: data.total,
+          pageSize: 10,
+          size: 'small',
+          onChange: setPage,
+          showTotal: (t) => `共 ${t} 条`,
+        }}
+      />
+    </div>
+  );
+};
+
+// ==================== 子组件: 策略信息（新增） ====================
+
+const SCOPE_LABELS: Record<string, string> = {
+  global: '全局',
+  goal_type: '目标类型',
+  experiment: '实验',
+  user: '用户专属',
+};
+
+const StrategyTab: React.FC<{ userId: string }> = ({ userId }) => {
+  const { data, isLoading } = useUserStrategy(userId);
+
+  if (isLoading) return <Spin />;
+  if (!data) return <Empty description="该用户暂无策略分配" />;
+
+  const { resolvedStrategy, experimentAssignment, experimentStrategy } = data;
+
+  return (
+    <div>
+      {/* 当前策略概要 */}
+      <Row gutter={16} style={{ marginBottom: 16 }}>
+        <Col span={8}>
+          <Card size="small">
+            <Statistic title="目标类型" value={goalLabels[data.goalType] || data.goalType} />
+          </Card>
+        </Col>
+        <Col span={8}>
+          <Card size="small">
+            <Statistic title="有画像" value={data.hasProfile ? '是' : '否'} />
+          </Card>
+        </Col>
+        <Col span={8}>
+          <Card size="small">
+            <Statistic title="实验分组" value={experimentAssignment?.groupName || '无实验'} />
+          </Card>
+        </Col>
+      </Row>
+
+      {/* 已解析策略 */}
+      <Card
+        title={
+          <Space>
+            <ThunderboltOutlined />
+            <span>当前生效策略</span>
+          </Space>
+        }
+        size="small"
+        style={{ marginBottom: 16 }}
+      >
+        <Descriptions bordered column={2} size="small">
+          <Descriptions.Item label="策略名称">
+            <Typography.Text strong>{resolvedStrategy.strategyName}</Typography.Text>
+          </Descriptions.Item>
+          <Descriptions.Item label="策略 ID">
+            <Typography.Text copyable style={{ fontSize: 11 }}>
+              {resolvedStrategy.strategyId}
+            </Typography.Text>
+          </Descriptions.Item>
+          <Descriptions.Item label="来源">
+            <Space wrap>
+              {resolvedStrategy.sources.map((s) => (
+                <Tag key={s} color="blue">
+                  {s}
+                </Tag>
+              ))}
+            </Space>
+          </Descriptions.Item>
+          <Descriptions.Item label="解析时间">
+            {new Date(resolvedStrategy.resolvedAt).toLocaleString('zh-CN')}
+          </Descriptions.Item>
+        </Descriptions>
+
+        <Card title="策略配置" size="small" type="inner" style={{ marginTop: 12 }}>
+          <pre
+            style={{
+              background: '#f5f5f5',
+              padding: 8,
+              borderRadius: 4,
+              fontSize: 11,
+              maxHeight: 300,
+              overflow: 'auto',
+            }}
+          >
+            {JSON.stringify(resolvedStrategy.config, null, 2)}
+          </pre>
+        </Card>
+      </Card>
+
+      {/* 实验分配 */}
+      {experimentAssignment && (
+        <Card
+          title={
+            <Space>
+              <FireOutlined />
+              <span>实验分配</span>
+            </Space>
+          }
+          size="small"
+          style={{ marginBottom: 16 }}
+        >
+          <Descriptions bordered column={2} size="small">
+            <Descriptions.Item label="实验名称">
+              {experimentAssignment.experimentName}
+            </Descriptions.Item>
+            <Descriptions.Item label="实验 ID">
+              <Typography.Text copyable style={{ fontSize: 11 }}>
+                {experimentAssignment.experimentId}
+              </Typography.Text>
+            </Descriptions.Item>
+            <Descriptions.Item label="分组">
+              <Tag color="green">{experimentAssignment.groupName}</Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label="评分权重覆盖">
+              {experimentAssignment.scoreWeightOverrides ? (
+                <pre style={{ fontSize: 11, margin: 0 }}>
+                  {JSON.stringify(experimentAssignment.scoreWeightOverrides, null, 2)}
+                </pre>
+              ) : (
+                <span style={{ color: '#bbb' }}>无覆盖</span>
+              )}
+            </Descriptions.Item>
+          </Descriptions>
+        </Card>
+      )}
+
+      {/* 实验策略（如有） */}
+      {experimentStrategy && (
+        <Card title="实验策略配置" size="small">
+          <Descriptions bordered column={2} size="small">
+            <Descriptions.Item label="实验 ID">{experimentStrategy.experimentId}</Descriptions.Item>
+            <Descriptions.Item label="分组">{experimentStrategy.groupName}</Descriptions.Item>
+          </Descriptions>
+          <pre
+            style={{
+              background: '#f5f5f5',
+              padding: 8,
+              borderRadius: 4,
+              fontSize: 11,
+              maxHeight: 200,
+              overflow: 'auto',
+              marginTop: 8,
+            }}
+          >
+            {JSON.stringify(experimentStrategy.config, null, 2)}
+          </pre>
+        </Card>
+      )}
+    </div>
+  );
+};
+
 // ==================== 主组件 ====================
 
 const UserDetailPage: React.FC = () => {
@@ -624,6 +1146,42 @@ const UserDetailPage: React.FC = () => {
                 </span>
               ),
               children: <InferredProfileTab inferred={inferredData?.inferredProfile || null} />,
+            },
+            {
+              key: 'subscription',
+              label: (
+                <span>
+                  <CrownOutlined /> 订阅信息
+                </span>
+              ),
+              children: <SubscriptionTab userId={id!} />,
+            },
+            {
+              key: 'foodRecords',
+              label: (
+                <span>
+                  <CoffeeOutlined /> 饮食记录
+                </span>
+              ),
+              children: <FoodRecordsTab userId={id!} />,
+            },
+            {
+              key: 'feedback',
+              label: (
+                <span>
+                  <LikeOutlined /> 推荐反馈
+                </span>
+              ),
+              children: <RecommendFeedbackTab userId={id!} />,
+            },
+            {
+              key: 'strategy',
+              label: (
+                <span>
+                  <ThunderboltOutlined /> 策略
+                </span>
+              ),
+              children: <StrategyTab userId={id!} />,
             },
             {
               key: 'changeLogs',

@@ -1,102 +1,58 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { FoodLibrary } from '../../food/food.types';
-import { GoalType } from './nutrition-score.service';
 import { ConstraintGeneratorService } from './recommendation/constraint-generator.service';
-import { FoodFilterService } from './recommendation/food-filter.service';
 import { FoodScorerService } from './recommendation/food-scorer.service';
 import { MealAssemblerService } from './recommendation/meal-assembler.service';
 import {
   MealTarget,
-  Constraint,
   ScoredFood,
   MealRecommendation,
   UserProfileConstraints,
-  UserPreferenceProfile,
-  FoodFeedbackStats,
   PipelineContext,
   MEAL_ROLES,
   MealFromPoolRequest,
 } from './recommendation/recommendation.types';
 import { HealthModifierContext } from './recommendation/health-modifier-engine.service';
 import { FoodPoolCacheService } from './recommendation/food-pool-cache.service';
-import { RecommendationFeedbackService } from './recommendation/feedback.service';
-import { PreferenceProfileService } from './recommendation/preference-profile.service';
-import {
-  SubstitutionService,
-  SubstituteCandidate,
-} from './recommendation/substitution.service';
 import {
   hasAllergenConflict,
   matchAllergens,
 } from './recommendation/allergen-filter.util';
 import { ExplanationGeneratorService } from './recommendation/explanation-generator.service';
 import { t } from './recommendation/i18n-messages';
-import { WeightLearnerService } from './recommendation/weight-learner.service';
-import {
-  RealtimeProfileService,
-  ShortTermProfile,
-} from '../../user/app/realtime-profile.service';
-import {
-  ContextualProfile,
-  ContextualProfileService,
-} from '../../user/app/contextual-profile.service';
-import { StrategyResolver } from '../../strategy/app/strategy-resolver.service';
-import { ResolvedStrategy } from '../../strategy/strategy.types';
-import { ABTestingService } from './recommendation/ab-testing.service';
 import {
   TieredCacheManager,
   TieredCacheNamespace,
 } from '../../../core/cache/tiered-cache-manager';
 import { AnalysisShortTermProfile } from '../../food/app/analysis-event.listener';
-import { ProfileResolverService } from '../../user/app/profile-resolver.service';
 import { RecipeService } from '../../recipe/app/recipe.service';
 import { ScoredRecipe } from '../../recipe/recipe.types';
 import {
   EnrichedProfileContext,
-  AcquisitionChannel,
   inferAcquisitionChannel,
   SceneContext,
 } from './recommendation/recommendation.types';
-import {
-  MealCompositionScorer,
-  MealCompositionScore,
-} from './recommendation/meal-composition-scorer.service';
+import { MealCompositionScorer } from './recommendation/meal-composition-scorer.service';
 import { ReplacementFeedbackInjectorService } from './recommendation/replacement-feedback-injector.service';
-import { UserProfileService } from '../../user/app/user-profile.service';
 import { RealisticFilterService } from './recommendation/realistic-filter.service';
-import { LearnedRankingService } from './recommendation/learned-ranking.service';
 import { FoodI18nService } from './food-i18n.service';
 import { RequestContextService } from '../../../core/context/request-context.service';
 import { ScoringConfigService } from './recommendation/scoring-config.service';
 import { PipelineBuilderService } from './recommendation/pipeline-builder.service';
 import { SceneResolverService } from './recommendation/scene-resolver.service';
 import { RecipeAssemblerService } from './recommendation/recipe-assembler.service';
-import { GoalPhaseService } from '../../user/app/goal-phase.service';
-import { GoalTrackerService } from '../../user/app/goal-tracker.service';
 import type { EnrichedProfileWithDomain } from '../../user/app/profile-resolver.service';
 import { DailyPlanContextService } from './recommendation/daily-plan-context.service';
-import { ExecutionTrackerService } from './recommendation/execution-tracker.service';
 import { InsightGeneratorService } from './recommendation/insight-generator.service';
 import type { InsightContext } from './recommendation/insight.types';
-import type { KitchenProfile } from '../../user/user.types';
 // V7.3 P3-D: 模板集成
 import { MealTemplateService } from './recommendation/meal-template.service';
 // V7.3 P3-E: Factor学习集成
 import { FactorLearnerService } from './recommendation/factor-learner.service';
-
-// 向后兼容：re-export SubstituteCandidate 和所有类型
-export type { SubstituteCandidate } from './recommendation/substitution.service';
-export type {
-  MealTarget,
-  Constraint,
-  ScoredFood,
-  MealRecommendation,
-  MealFromPoolRequest,
-} from './recommendation/recommendation.types';
-export type {
-  ScoringExplanation,
-  DimensionScore,
-} from './recommendation/scoring-explanation.interface';
+// V7.6 P1-B: 画像聚合 Facade
+import { ProfileAggregatorService } from './recommendation/profile-aggregator.service';
+// V7.6 P1-C: 策略解析 Facade
+import { StrategyResolverFacade } from './recommendation/strategy-resolver-facade.service';
 
 /** V6 2.8: 反向解释 API 返回结构 */
 export interface WhyNotResult {
@@ -128,39 +84,21 @@ export class RecommendationEngineService implements OnModuleInit {
 
   constructor(
     private readonly constraintGenerator: ConstraintGeneratorService,
-    private readonly foodFilter: FoodFilterService,
     private readonly foodScorer: FoodScorerService,
     private readonly mealAssembler: MealAssemblerService,
     private readonly foodPoolCache: FoodPoolCacheService,
-    private readonly feedbackService: RecommendationFeedbackService,
-    private readonly preferenceProfileService: PreferenceProfileService,
-    private readonly substitutionService: SubstitutionService,
-    private readonly weightLearner: WeightLearnerService,
-    private readonly realtimeProfile: RealtimeProfileService,
-    /** V6 2.2: 策略解析器（来自全局 StrategyModule） */
-    private readonly strategyResolver: StrategyResolver,
-    /** V6 2.4: A/B 实验服务（策略 ↔ 实验打通） */
-    private readonly abTestingService: ABTestingService,
     /** V6 2.8: 推荐解释生成器（反向解释 API） */
     private readonly explanationGenerator: ExplanationGeneratorService,
     /** V6.2 3.9: TieredCacheManager — 创建分析画像共享 namespace，替代直接 Redis 读取 */
     private readonly cacheManager: TieredCacheManager,
-    /** V6.2 Phase 2.12: 上下文画像服务 — 场景检测 */
-    private readonly contextualProfileService: ContextualProfileService,
-    /** V6.3 P1-1: 统一画像聚合 — 替代手动拼装 declared/observed/inferred/shortTerm/contextual */
-    private readonly profileResolver: ProfileResolverService,
     /** V6.3 P2-8: 菜谱服务 — 用于菜谱模式组装 */
     private readonly recipeService: RecipeService,
     /** V6.5 Phase 2C/2D: 整餐组合评分器 */
     private readonly mealCompositionScorer: MealCompositionScorer,
-    /** V6.5 Phase 3F: 用户画像服务（获取推荐偏好） */
-    private readonly userProfileService: UserProfileService,
     /** V6.5 Phase 3G: 现实性过滤服务（场景动态 realism + 候选过滤） */
     private readonly realisticFilterService: RealisticFilterService,
     /** V6.6 Phase 2-B: 替换反馈权重注入服务 */
     private readonly replacementFeedbackInjector: ReplacementFeedbackInjectorService,
-    /** V6.6 Phase 3-A: per-segment 学习权重优化服务 */
-    private readonly learnedRankingService: LearnedRankingService,
     /** V6.6 Phase 3-B: 推荐结果多语言服务 */
     private readonly foodI18nService: FoodI18nService,
     /** V6.6 Phase 3-B: 请求上下文（读取 locale） */
@@ -172,20 +110,18 @@ export class RecommendationEngineService implements OnModuleInit {
     private readonly sceneResolver: SceneResolverService,
     /** V6.9 Phase 1-E: 菜谱组装器（管道后组装菜谱方案） */
     private readonly recipeAssembler: RecipeAssemblerService,
-    /** V7.0 Phase 3-A: 分阶段目标管理（获取 EffectiveGoal） */
-    private readonly goalPhaseService: GoalPhaseService,
-    /** V7.0 Phase 3-A: 目标进度追踪（获取 GoalProgress） */
-    private readonly goalTrackerService: GoalTrackerService,
     /** V7.1 P3-A: 日计划上下文服务（跨餐补偿计算） */
     private readonly dailyPlanContextService: DailyPlanContextService,
-    /** V7.1 P3-D: 执行追踪服务（获取高频替换模式） */
-    private readonly executionTrackerService: ExecutionTrackerService,
     /** V7.2 P3-C: 结构化洞察生成器（替代 ExplanationGenerator.generateStructuredInsights 的 9 参数调用） */
     private readonly insightGenerator: InsightGeneratorService,
     /** V7.3 P3-D: 餐食模板服务（场景模板匹配 + 槽位填充） */
     private readonly mealTemplateService: MealTemplateService,
     /** V7.3 P3-E: Factor 权重学习服务（用户反馈驱动的因子强度调整） */
     private readonly factorLearnerService: FactorLearnerService,
+    /** V7.6 P1-B: 画像聚合 Facade — 替代 9 个画像相关 DI */
+    private readonly profileAggregator: ProfileAggregatorService,
+    /** V7.6 P1-C: 策略解析 Facade — 替代 strategyResolver + abTestingService */
+    private readonly strategyFacade: StrategyResolverFacade,
   ) {}
 
   onModuleInit(): void {
@@ -200,62 +136,6 @@ export class RecommendationEngineService implements OnModuleInit {
       });
   }
 
-  // ─── 向后兼容：委托到子服务 ───
-
-  generateConstraints(
-    goalType: string,
-    consumed: { calories: number; protein: number },
-    target: MealTarget,
-    dailyTarget: { calories: number; protein: number },
-    mealType?: string,
-    userProfile?: UserProfileConstraints,
-    timezone?: string,
-  ): Constraint {
-    return this.constraintGenerator.generateConstraints(
-      goalType,
-      consumed,
-      target,
-      dailyTarget,
-      mealType,
-      userProfile,
-      timezone,
-    );
-  }
-
-  filterFoods(
-    foods: FoodLibrary[],
-    constraint: Constraint,
-    mealType?: string,
-    userAllergens?: string[],
-  ): FoodLibrary[] {
-    return this.foodFilter.filterFoods(
-      foods,
-      constraint,
-      mealType,
-      userAllergens,
-    );
-  }
-
-  scoreFood(food: FoodLibrary, goalType: string, target?: MealTarget): number {
-    return this.foodScorer.scoreFood(food, goalType, target);
-  }
-
-  diversify(
-    foods: ScoredFood[],
-    recentFoodNames: string[],
-    limit: number = 3,
-  ): ScoredFood[] {
-    return this.mealAssembler.diversify(foods, recentFoodNames, limit);
-  }
-
-  diversifyWithPenalty(
-    scored: ScoredFood[],
-    excludeNames: string[],
-    limit: number = 3,
-  ): ScoredFood[] {
-    return this.mealAssembler.diversifyWithPenalty(scored, excludeNames, limit);
-  }
-
   // ─── 核心推荐函数 ───
 
   async recommendMeal(
@@ -267,71 +147,37 @@ export class RecommendationEngineService implements OnModuleInit {
     dailyTarget: { calories: number; protein: number },
     userProfile?: UserProfileConstraints,
   ): Promise<MealRecommendation> {
-    // V6.3 P1-1: 通过 ProfileResolverService 统一聚合五层画像，
-    // 替代原来手动调用 realtimeProfile.getShortTermProfile() + contextualProfileService.detectScene()
-    const [
-      allFoods,
+    // V7.6 P1-B: 通过 ProfileAggregatorService 聚合全部画像数据
+    const [allFoods, profileData, resolvedStrategy, analysisProfile] =
+      await Promise.all([
+        this.getAllFoods(),
+        this.profileAggregator.aggregateForRecommendation(userId, mealType),
+        this.strategyFacade.resolveStrategyForUser(userId, goalType),
+        this.getAnalysisProfile(userId),
+      ]);
+
+    const {
       recentFoodNames,
       feedbackStats,
       preferenceProfile,
       enrichedProfile,
-      // V6 2.2: 并行解析策略
-      resolvedStrategy,
-      // V6.1 Phase 3.5: 并行获取分析画像
-      analysisProfile,
-      // V7.0 Phase 3-A: 并行获取有效目标 + 目标进度
       effectiveGoal,
       goalProgress,
-      // V7.1 P3-B: 并行获取厨房设备画像
       kitchenProfile,
-      // V7.1 P3-D: 并行获取高频替换模式
       substitutions,
-    ] = await Promise.all([
-      this.getAllFoods(),
-      this.getRecentFoodNames(userId, 3),
-      this.getUserFeedbackStats(userId),
-      this.getUserPreferenceProfile(userId),
-      // V7.0 Phase 3-A: 升级为 resolveWithDomainProfiles，附加强类型领域画像
-      this.profileResolver.resolveWithDomainProfiles(userId, mealType),
-      // V6 2.2: 并行解析用户策略
-      this.resolveStrategyForUser(userId, goalType),
-      // V6.1 Phase 3.5: 直接读 Redis（避免 FoodModule 循环依赖）
-      this.getAnalysisProfile(userId),
-      // V7.0 Phase 3-A: 获取分阶段目标（含 CompoundGoal 解析 + 权重调整）
-      this.goalPhaseService.getCurrentGoal(userId),
-      // V7.0 Phase 3-A: 获取目标进度（14天合规率 + 执行率 + 连续天数）
-      this.goalTrackerService.getProgress(userId),
-      // V7.1 P3-B: 厨房设备画像（用于 HOME_COOK 场景设备过滤）
-      this.userProfileService.getKitchenProfile(userId),
-      // V7.1 P3-D: 高频替换模式（供 PreferenceSignal 计算替换 boost）
-      this.executionTrackerService.getTopSubstitutions(userId),
-    ]);
+      learnedWeightOverrides,
+      regionalBoostMap,
+    } = profileData;
+
+    // V6.3 P1-1: shortTerm 和 contextual 直接从 enrichedProfile 中获取
+    const shortTermProfile = enrichedProfile.shortTerm;
+    const contextualProfile = enrichedProfile.contextual;
 
     // V6.3 P1-1: 使用 EnrichedProfileContext 作为 userProfile（向后兼容，因为 extends UserProfileConstraints）
     // 如果调用方传入了 userProfile，将其非空字段合并到 enrichedProfile 上（调用方覆盖优先）
     const mergedProfile: EnrichedProfileContext = userProfile
       ? { ...enrichedProfile, ...this.pickDefinedFields(userProfile) }
       : enrichedProfile;
-
-    // V6.3 P1-1: shortTerm 和 contextual 直接从 enrichedProfile 中获取
-    const shortTermProfile = enrichedProfile.shortTerm;
-    const contextualProfile = enrichedProfile.contextual;
-
-    // V6.6 Phase 3-A: 获取 per-segment 学习权重（feature flag 控制，失败不阻断推荐）
-    const userSegment = enrichedProfile.inferred?.userSegment;
-    let learnedWeightOverrides: number[] | null = null;
-    try {
-      learnedWeightOverrides =
-        await this.learnedRankingService.getLearnedWeights(userSegment, userId);
-    } catch (err) {
-      this.logger.debug(
-        `LearnedRankingService.getLearnedWeights failed (user=${userId}): ${(err as Error).message}`,
-      );
-    }
-
-    const regionalBoostMap = await this.getRegionalBoostMap(
-      mergedProfile.regionCode || 'CN',
-    );
 
     // V6.3 P2-8: 菜谱优先模式 — 当策略配置 assembly.preferRecipe=true 时
     // 提前异步获取评分菜谱候选
@@ -528,12 +374,12 @@ export class RecommendationEngineService implements OnModuleInit {
     convenience: MealRecommendation;
     homeCook: MealRecommendation;
   }> {
-    // V6.3 P1-1: 通过 ProfileResolverService 聚合五层画像
-    const [allFoods, recentFoodNames, enrichedProfile] = await Promise.all([
+    // V7.6 P1-B: 通过 ProfileAggregatorService 聚合场景画像数据
+    const [allFoods, scenarioData] = await Promise.all([
       this.getAllFoods(),
-      this.getRecentFoodNames(userId, 3),
-      this.profileResolver.resolve(userId, mealType),
+      this.profileAggregator.aggregateForScenario(userId, mealType),
     ]);
+    const { recentFoodNames, enrichedProfile } = scenarioData;
 
     // V6.3 P1-1: 合并调用方传入的 userProfile 覆盖
     const mergedProfile: EnrichedProfileContext = userProfile
@@ -881,6 +727,7 @@ export class RecommendationEngineService implements OnModuleInit {
         kitchenProfile, // V7.1 P3-B: 厨房设备画像
         substitutions, // V7.1 P3-D: 高频替换模式
         realismOverride: req.realismOverride, // V7.2 P3-B: 用户端现实策略覆盖
+        tuning: this.scoringConfigService.getTuning(), // V7.5 P3-A: 调参配置
       };
 
       // V6.5 Phase 3G: 菜谱模式也应用场景动态 realism
@@ -985,6 +832,7 @@ export class RecommendationEngineService implements OnModuleInit {
       kitchenProfile, // V7.1 P3-B: 厨房设备画像
       substitutions, // V7.1 P3-D: 高频替换模式
       realismOverride: req.realismOverride, // V7.2 P3-B: 用户端现实策略覆盖
+      tuning: this.scoringConfigService.getTuning(), // V7.5 P3-A: 调参配置
     };
 
     // V7.3 P3-D: 模板匹配 — 如果场景和餐次有对应模板，设置到上下文中
@@ -1303,8 +1151,8 @@ export class RecommendationEngineService implements OnModuleInit {
 
     // 2f. 短期拒绝历史
     const shortTermProfile =
-      await this.realtimeProfile.getShortTermProfile(userId);
-    const resolvedStrategy = await this.resolveStrategyForUser(
+      await this.profileAggregator.getShortTermProfile(userId);
+    const resolvedStrategy = await this.strategyFacade.resolveStrategyForUser(
       userId,
       goalType,
     );
@@ -1396,92 +1244,6 @@ export class RecommendationEngineService implements OnModuleInit {
 
   // ─── 数据访问 ───
 
-  /**
-   * V6 2.2: 安全地解析用户策略
-   * V6 2.4: 策略 ↔ A/B 实验打通 — 解析策略后叠加实验配置层
-   *
-   * 最终优先级（从低到高）:
-   *   1. 系统硬编码默认值
-   *   2. 全局默认策略
-   *   3. 目标类型策略
-   *   4. A/B 实验组策略 ← 2.4 新增
-   *   5. 用户级手动分配策略
-   *
-   * 策略解析失败不应阻断推荐流程，返回 null 回退到系统默认
-   */
-  private async resolveStrategyForUser(
-    userId: string,
-    goalType: string,
-  ): Promise<ResolvedStrategy | null> {
-    try {
-      // 1. 从 StrategyResolver 获取基础策略（已合并 global → goal_type → user）
-      let resolved = await this.strategyResolver.resolve(userId, goalType);
-
-      // 2. V6 2.4: 叠加 A/B 实验策略层
-      // 实验优先级高于 goal_type 策略，但低于 user 手动分配
-      // 注意: StrategyResolver 的 user assignment 已在 resolved 中，
-      // 这里的实验策略作为额外层叠加，user assignment 仍然最高
-      try {
-        const experimentResult =
-          await this.abTestingService.resolveExperimentStrategy(
-            userId,
-            goalType,
-          );
-        if (experimentResult) {
-          const source = `experiment:${experimentResult.experimentId}/${experimentResult.groupName}`;
-          resolved = this.strategyResolver.mergeConfigOverride(
-            resolved,
-            experimentResult.config,
-            source,
-          );
-          this.logger.debug(
-            `用户 ${userId} 命中实验 ${experimentResult.experimentId}, 组=${experimentResult.groupName}`,
-          );
-        }
-      } catch (expErr) {
-        // 实验层失败不影响基础策略
-        this.logger.warn(`A/B 实验策略解析失败 (user=${userId}): ${expErr}`);
-      }
-
-      // 3. V6.5 Phase 3F: 叠加用户推荐偏好覆盖（最高优先级 realism 层）
-      // 用户在 App 中设置的大众化/烹饪投入/预算偏好 → 转换为 RealismConfig 覆盖
-      // V7.2 P3-B: 新增 realismLevel 维度（strict/normal/relaxed/off）
-      try {
-        const recPrefs =
-          await this.userProfileService.getRecommendationPreferences(userId);
-        if (
-          recPrefs.popularityPreference ||
-          recPrefs.cookingEffort ||
-          recPrefs.budgetSensitivity ||
-          recPrefs.realismLevel
-        ) {
-          const realismOverride =
-            UserProfileService.toRealismOverride(recPrefs);
-          if (Object.keys(realismOverride).length > 0) {
-            resolved = this.strategyResolver.mergeConfigOverride(
-              resolved,
-              { realism: realismOverride },
-              'user_recommendation_preferences',
-            );
-            this.logger.debug(
-              `用户 ${userId} 推荐偏好覆盖: ${JSON.stringify(realismOverride)}`,
-            );
-          }
-        }
-      } catch (prefErr) {
-        // 偏好层失败不影响策略
-        this.logger.warn(`用户推荐偏好加载失败 (user=${userId}): ${prefErr}`);
-      }
-
-      return resolved;
-    } catch (err) {
-      this.logger.warn(
-        `策略解析失败 (user=${userId}, goal=${goalType}), 回退到系统默认: ${err}`,
-      );
-      return null;
-    }
-  }
-
   async getAllFoods(): Promise<FoodLibrary[]> {
     const foods = await this.foodPoolCache.getVerifiedFoods();
     // V5 2.7: 同步品类微量营养素均值到评分服务（用于缺失值插补）
@@ -1489,50 +1251,6 @@ export class RecommendationEngineService implements OnModuleInit {
       this.foodPoolCache.getCategoryMicroAverages(),
     );
     return foods;
-  }
-
-  /**
-   * V5 4.7: 获取指定 goalType 的在线学习权重
-   * 返回 null 表示没有学习数据，使用默认基线权重
-   */
-  async getLearnedWeights(goalType: string): Promise<number[] | null> {
-    return this.weightLearner.getLearnedWeights(goalType as GoalType);
-  }
-
-  /**
-   * 获取指定地区的食物评分偏移映射
-   * @deprecated 使用 PreferenceProfileService.getRegionalBoostMap() 替代
-   */
-  async getRegionalBoostMap(region: string): Promise<Record<string, number>> {
-    return this.preferenceProfileService.getRegionalBoostMap(region);
-  }
-
-  /**
-   * 获取用户对每个食物的反馈统计 — 用于 Thompson Sampling
-   * @deprecated 使用 RecommendationFeedbackService.getUserFeedbackStats() 替代
-   */
-  async getUserFeedbackStats(
-    userId: string,
-  ): Promise<Record<string, FoodFeedbackStats>> {
-    return this.feedbackService.getUserFeedbackStats(userId);
-  }
-
-  /**
-   * 构建用户偏好画像
-   * @deprecated 使用 PreferenceProfileService.getUserPreferenceProfile() 替代
-   */
-  async getUserPreferenceProfile(
-    userId: string,
-  ): Promise<UserPreferenceProfile> {
-    return this.preferenceProfileService.getUserPreferenceProfile(userId);
-  }
-
-  /**
-   * 获取用户近期食物名
-   * @deprecated 使用 PreferenceProfileService.getRecentFoodNames() 替代
-   */
-  async getRecentFoodNames(userId: string, days: number): Promise<string[]> {
-    return this.preferenceProfileService.getRecentFoodNames(userId, days);
   }
 
   /**
@@ -1552,62 +1270,5 @@ export class RecommendationEngineService implements OnModuleInit {
       );
       return null;
     }
-  }
-
-  // ─── 食物替代建议 ───
-
-  /**
-   * 为指定食物查找替代候选
-   * @deprecated 使用 SubstitutionService.findSubstitutes() 替代
-   */
-  async findSubstitutes(
-    foodId: string,
-    userId: string,
-    mealType?: string,
-    topK = 5,
-    excludeNames: string[] = [],
-    userConstraints?: UserProfileConstraints,
-    preferenceProfile?: UserPreferenceProfile,
-  ): Promise<SubstituteCandidate[]> {
-    return this.substitutionService.findSubstitutes(
-      foodId,
-      userId,
-      mealType,
-      topK,
-      excludeNames,
-      userConstraints,
-      preferenceProfile,
-    );
-  }
-
-  // ─── 反馈写入 ───
-
-  /**
-   * 提交推荐反馈
-   * @deprecated 使用 RecommendationFeedbackService.submitFeedback() 替代
-   */
-  async submitFeedback(params: {
-    userId: string;
-    mealType: string;
-    foodName: string;
-    foodId?: string;
-    action: 'accepted' | 'replaced' | 'skipped';
-    replacementFood?: string;
-    recommendationScore?: number;
-    goalType?: string;
-    experimentId?: string;
-    groupId?: string;
-    /** V6 2.19: 多维评分 */
-    ratings?: {
-      taste?: number;
-      portion?: number;
-      price?: number;
-      timing?: number;
-      comment?: string;
-    };
-    /** V6 2.19: 隐式行为信号 */
-    implicitSignals?: { dwellTimeMs?: number; detailExpanded?: boolean };
-  }): Promise<void> {
-    return this.feedbackService.submitFeedback(params);
   }
 }

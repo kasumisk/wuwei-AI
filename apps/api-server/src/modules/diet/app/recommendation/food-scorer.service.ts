@@ -238,7 +238,10 @@ export class FoodScorerService {
     const executabilityScore = this.calcExecutabilityScore(food, scoringConfig);
 
     // V6.9 Phase 1-D: 大众化/常见度评分 — 基于 commonalityScore + 渠道加分
-    const popularityScore = this.scorePopularity(food, channel);
+    const popularityScore = this.scorePopularity(food, channel, scoringConfig);
+
+    // V7.4 Phase 3-C: 食物可获得性评分 — 基于 acquisitionDifficulty（1-5 → 0-1 反转）
+    const acquisitionScore = this.calcAcquisitionScore(food, scoringConfig);
 
     const weights = computeWeights(
       goalType as GoalType,
@@ -283,6 +286,7 @@ export class FoodScorerService {
       seasonalityScore, // V6.4 Phase 3.4: 第 11 维
       executabilityScore, // V6.5: 第 12 维
       popularityScore, // V6.9 Phase 1-D: 第 13 维
+      acquisitionScore, // V7.4 Phase 3-C: 第 14 维
     ];
 
     // V6.8: 默认置信度从配置读取
@@ -354,7 +358,9 @@ export class FoodScorerService {
       const cuisineWeight = preferencesProfile.cuisineWeights[food.cuisine];
       if (cuisineWeight !== undefined) {
         // 将 [0, 1] 权重映射到 [-0.1, +0.1] boost
-        cuisineBoost = (cuisineWeight - 0.5) * 0.2;
+        cuisineBoost =
+          (cuisineWeight - 0.5) *
+          (scoringConfig?.tuning?.cuisineWeightBoostCoeff ?? 0.2);
         rawScore *= 1 + cuisineBoost;
       }
     }
@@ -406,6 +412,14 @@ export class FoodScorerService {
           raw: scores[11],
           weighted: scores[11] * (weights[11] ?? 0),
         }, // V6.5
+        popularity: {
+          raw: scores[12] ?? 0,
+          weighted: (scores[12] ?? 0) * (weights[12] ?? 0),
+        }, // V6.9 Phase 1-D
+        acquisition: {
+          raw: scores[13] ?? 0,
+          weighted: (scores[13] ?? 0) * (weights[13] ?? 0),
+        }, // V7.4 Phase 3-C
       },
       novaPenalty,
       addedSugarPenalty,
@@ -1079,6 +1093,7 @@ export class FoodScorerService {
   private scorePopularity(
     food: FoodLibrary,
     channel?: AcquisitionChannel,
+    cfg?: ScoringConfigSnapshot | null,
   ): number {
     // 基础大众化分: commonalityScore 0-100 → 归一化到 0-1
     const basePop = (food.commonalityScore ?? 50) / 100;
@@ -1086,7 +1101,7 @@ export class FoodScorerService {
     // 渠道调整: 如果食物在当前渠道有明确标注且包含该渠道，加分
     let channelBonus = 0;
     if (channel && food.availableChannels?.includes(channel)) {
-      channelBonus = 0.1;
+      channelBonus = cfg?.tuning?.channelMatchBonus ?? 0.1;
     }
 
     return Math.min(1, basePop + channelBonus);
@@ -1118,5 +1133,39 @@ export class FoodScorerService {
     };
     const waterMap = cfg?.categoryWaterMap ?? DEFAULT_CATEGORY_WATER_MAP;
     return waterMap[food.category] ?? 50;
+  }
+
+  // ─── V7.4 Phase 3-C: 食物可获得性评分 ───
+
+  /**
+   * 基于 acquisitionDifficulty (1-5) 计算可获得性评分。
+   *
+   * 映射逻辑:
+   * - 1 (随处可得) → 1.0
+   * - 2 (常见)     → 0.85
+   * - 3 (普通)     → 0.65
+   * - 4 (较难)     → 0.40
+   * - 5 (稀有)     → 0.15
+   *
+   * 非线性映射（不是简单线性反转），因为用户体验中
+   * "随处可得"和"常见"的差距远小于"较难"和"稀有"的差距。
+   *
+   * 评分范围: 0-1
+   */
+  private calcAcquisitionScore(
+    food: FoodLibrary,
+    cfg?: ScoringConfigSnapshot | null,
+  ): number {
+    const difficulty = food.acquisitionDifficulty ?? 3;
+    // 非线性映射表: difficulty 1-5 → score（V7.5: 从配置读取）
+    const DEFAULT_MAP: Record<number, number> = {
+      1: 1.0,
+      2: 0.85,
+      3: 0.65,
+      4: 0.4,
+      5: 0.15,
+    };
+    const scoreMap = cfg?.tuning?.acquisitionScoreMap ?? DEFAULT_MAP;
+    return scoreMap[Math.min(5, Math.max(1, difficulty))] ?? 0.65;
   }
 }

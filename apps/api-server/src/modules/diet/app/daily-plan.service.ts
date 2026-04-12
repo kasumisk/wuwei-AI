@@ -11,10 +11,9 @@ import { FoodLibrary } from '../../food/food.types';
 import { FoodService } from './food.service';
 import { UserProfileService } from '../../user/app/user-profile.service';
 import { NutritionScoreService } from './nutrition-score.service';
-import {
-  RecommendationEngineService,
-  MealTarget,
-} from './recommendation-engine.service';
+import { RecommendationEngineService } from './recommendation-engine.service';
+import { PreferenceProfileService } from './recommendation/preference-profile.service';
+import { RecommendationFeedbackService } from './recommendation/feedback.service';
 import { ExplanationGeneratorService } from './recommendation/explanation-generator.service';
 import { RedisCacheService } from '../../../core/redis/redis-cache.service';
 import {
@@ -24,6 +23,7 @@ import {
   UserProfileConstraints,
   MealRecommendation,
   ROLE_CATEGORIES,
+  MealTarget,
 } from './recommendation/recommendation.types';
 import { optimizeDailyPlan, MealSlot } from './recommendation/global-optimizer';
 import { t } from './recommendation/i18n-messages';
@@ -140,6 +140,8 @@ export class DailyPlanService {
     private readonly strategyResolver: StrategyResolver,
     /** V6.5 Phase 3K: 自适应解释深度 — 根据用户互动意愿调整详细度 */
     private readonly adaptiveDepth: AdaptiveExplanationDepthService,
+    private readonly preferenceProfileService: PreferenceProfileService,
+    private readonly feedbackService: RecommendationFeedbackService,
   ) {}
 
   /**
@@ -303,10 +305,10 @@ export class DailyPlanService {
       regionalBoostMap,
     ] = await Promise.all([
       this.recommendationEngine.getAllFoods(),
-      this.recommendationEngine.getRecentFoodNames(userId, 3),
-      this.recommendationEngine.getUserFeedbackStats(userId),
-      this.recommendationEngine.getUserPreferenceProfile(userId),
-      this.recommendationEngine.getRegionalBoostMap(
+      this.preferenceProfileService.getRecentFoodNames(userId, 3),
+      this.feedbackService.getUserFeedbackStats(userId),
+      this.preferenceProfileService.getUserPreferenceProfile(userId),
+      this.preferenceProfileService.getRegionalBoostMap(
         userProfileConstraints?.regionCode || 'CN',
       ),
     ]);
@@ -502,16 +504,16 @@ export class DailyPlanService {
       preloaded?.allFoods ?? (await this.recommendationEngine.getAllFoods());
     const recentFoodNames =
       preloaded?.recentFoodNames ??
-      (await this.recommendationEngine.getRecentFoodNames(userId, 3));
+      (await this.preferenceProfileService.getRecentFoodNames(userId, 3));
     const feedbackStats =
       preloaded?.feedbackStats ??
-      (await this.recommendationEngine.getUserFeedbackStats(userId));
+      (await this.feedbackService.getUserFeedbackStats(userId));
     const preferenceProfile =
       preloaded?.preferenceProfile ??
-      (await this.recommendationEngine.getUserPreferenceProfile(userId));
+      (await this.preferenceProfileService.getUserPreferenceProfile(userId));
     const regionalBoostMap =
       preloaded?.regionalBoostMap ??
-      (await this.recommendationEngine.getRegionalBoostMap(
+      (await this.preferenceProfileService.getRegionalBoostMap(
         userProfileConstraints?.regionCode || 'CN',
       ));
 
@@ -783,7 +785,7 @@ export class DailyPlanService {
       );
       const [allFoods, recentNames] = await Promise.all([
         this.recommendationEngine.getAllFoods(),
-        this.recommendationEngine.getRecentFoodNames(userId, 3),
+        this.preferenceProfileService.getRecentFoodNames(userId, 3),
       ]);
       const excludeNames = [...recentNames];
 
@@ -837,7 +839,7 @@ export class DailyPlanService {
       );
       const [allFoods, recentNames] = await Promise.all([
         this.recommendationEngine.getAllFoods(),
-        this.recommendationEngine.getRecentFoodNames(userId, 3),
+        this.preferenceProfileService.getRecentFoodNames(userId, 3),
       ]);
       const dinnerRec = await this.recommendationEngine.recommendMealFromPool({
         allFoods,

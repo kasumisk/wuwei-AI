@@ -1,0 +1,372 @@
+/**
+ * V7.8 P2: ScoringConfigService 单元测试
+ */
+import { ScoringConfigService } from '../src/modules/diet/app/recommendation/scoring-config.service';
+import {
+  createMockPrismaService,
+  createMockRedisCacheService,
+} from './helpers/mock-factories';
+
+describe('ScoringConfigService', () => {
+  let service: ScoringConfigService;
+  let mockPrisma: ReturnType<typeof createMockPrismaService>;
+  let mockRedis: ReturnType<typeof createMockRedisCacheService>;
+
+  beforeEach(() => {
+    mockPrisma = createMockPrismaService();
+    mockRedis = createMockRedisCacheService();
+    service = new ScoringConfigService(mockPrisma as any, mockRedis as any);
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // getDefaults
+  // ════════════════════════════════════════════════════════════
+
+  describe('getDefaults', () => {
+    it('should return a complete ScoringConfigSnapshot with all required keys', () => {
+      const defaults = service.getDefaults();
+
+      // V6.7 原有参数
+      expect(defaults.executabilitySubWeights).toBeDefined();
+      expect(defaults.nrf93SigmoidCenter).toBe(150);
+      expect(defaults.nrf93SigmoidSlope).toBe(0.01);
+      expect(defaults.novaBase).toHaveLength(5);
+      expect(defaults.energySigmaRatios).toBeDefined();
+
+      // V6.8 新增参数
+      expect(defaults.proteinRangeByGoal).toBeDefined();
+      expect(defaults.proteinRangeByGoal!.fat_loss).toEqual([0.25, 0.35]);
+      expect(defaults.categoryGiMap).toBeDefined();
+      expect(defaults.categoryWaterMap).toBeDefined();
+      expect(defaults.substitutionWeights).toBeDefined();
+
+      // NOVA 微调
+      expect(defaults.novaHighFiberThreshold).toBe(3);
+      expect(defaults.novaHighFiberRelief).toBe(0.05);
+      expect(defaults.novaClampMin).toEqual([0.75, 0.45]);
+      expect(defaults.novaClampMax).toEqual([0.95, 0.7]);
+
+      // 杂项
+      expect(defaults.defaultQualityScore).toBe(5);
+      expect(defaults.defaultSatietyScore).toBe(4);
+    });
+
+    it('should include V7.5 tuning config with all required fields', () => {
+      const defaults = service.getDefaults();
+      const tuning = defaults.tuning!;
+
+      // MealAssembler tuning
+      expect(tuning.similarityWeights).toBeDefined();
+      expect(tuning.diversitySimilarityPenalty).toBe(0.3);
+      expect(tuning.compatibilityGoodBonus).toBe(0.05);
+
+      // PipelineBuilder tuning
+      expect(tuning.optimizerCandidateLimit).toBe(8);
+      expect(tuning.baseExplorationRate).toBe(0.15);
+      expect(tuning.conflictMaxRounds).toBe(3);
+
+      // ConstraintGenerator tuning
+      expect(tuning.proteinGapThreshold).toBe(30);
+      expect(tuning.calorieGapThreshold).toBe(300);
+
+      // FoodScorer 残余
+      expect(tuning.cuisineWeightBoostCoeff).toBe(0.2);
+      expect(tuning.acquisitionScoreMap).toBeDefined();
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // getTuning / getTuningDefaults
+  // ════════════════════════════════════════════════════════════
+
+  describe('getTuning', () => {
+    it('should return full tuning defaults when no config is loaded', () => {
+      const tuning = service.getTuning();
+      expect(tuning.diversitySimilarityPenalty).toBe(0.3);
+      expect(tuning.optimizerCandidateLimit).toBe(8);
+      expect(tuning.proteinGapThreshold).toBe(30);
+    });
+
+    it('should merge loaded config tuning with defaults', async () => {
+      // 模拟 Redis 返回一个带部分 tuning 的配置
+      mockRedis.get.mockResolvedValueOnce({
+        tuning: {
+          diversitySimilarityPenalty: 0.5,
+          // 其他 tuning 字段缺失，应从 defaults 补齐
+        },
+      });
+
+      await service.onModuleInit();
+      const tuning = service.getTuning();
+
+      // 覆盖的值
+      expect(tuning.diversitySimilarityPenalty).toBe(0.5);
+      // 默认值保持
+      expect(tuning.optimizerCandidateLimit).toBe(8);
+      expect(tuning.proteinGapThreshold).toBe(30);
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // onModuleInit
+  // ════════════════════════════════════════════════════════════
+
+  describe('onModuleInit', () => {
+    it('should load config from Redis cache when available', async () => {
+      const cachedConfig = {
+        nrf93SigmoidCenter: 200,
+        nrf93SigmoidSlope: 0.02,
+      };
+      mockRedis.get.mockResolvedValueOnce(cachedConfig);
+
+      await service.onModuleInit();
+      const config = await service.getConfig();
+
+      expect(config.nrf93SigmoidCenter).toBe(200);
+      expect(config.nrf93SigmoidSlope).toBe(0.02);
+      // defaults should fill in the rest
+      expect(config.novaBase).toHaveLength(5);
+    });
+
+    it('should fall back to DB when Redis is unavailable', async () => {
+      mockRedis.get.mockRejectedValueOnce(new Error('Redis down'));
+      mockPrisma.feature_flag.findUnique.mockResolvedValueOnce({
+        key: 'scoring_config_v68',
+        config: { nrf93SigmoidCenter: 180 },
+      });
+      mockRedis.set.mockResolvedValueOnce(undefined);
+
+      await service.onModuleInit();
+      const config = await service.getConfig();
+
+      expect(config.nrf93SigmoidCenter).toBe(180);
+    });
+
+    it('should fall back to v67 config when v68 not found', async () => {
+      mockRedis.get.mockResolvedValueOnce(null); // Redis miss
+      mockPrisma.feature_flag.findUnique
+        .mockResolvedValueOnce(null) // v68 not found
+        .mockResolvedValueOnce({
+          key: 'scoring_config_v67',
+          config: { inflammationCenter: 25 },
+        });
+      mockRedis.set.mockResolvedValueOnce(undefined);
+
+      await service.onModuleInit();
+      const config = await service.getConfig();
+
+      expect(config.inflammationCenter).toBe(25);
+    });
+
+    it('should use defaults when both Redis and DB fail', async () => {
+      mockRedis.get.mockRejectedValueOnce(new Error('Redis down'));
+      mockPrisma.feature_flag.findUnique.mockRejectedValueOnce(
+        new Error('DB down'),
+      );
+
+      await service.onModuleInit();
+      const config = await service.getConfig();
+
+      // Should return defaults
+      expect(config.nrf93SigmoidCenter).toBe(150);
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // getConfig with shard
+  // ════════════════════════════════════════════════════════════
+
+  describe('getConfig with shard', () => {
+    beforeEach(async () => {
+      // Init with defaults
+      mockRedis.get.mockResolvedValueOnce(null);
+      mockPrisma.feature_flag.findUnique
+        .mockResolvedValueOnce(null) // v68
+        .mockResolvedValueOnce(null); // v67
+      mockRedis.set.mockResolvedValue(undefined);
+      await service.onModuleInit();
+    });
+
+    it('should return global config when shard is empty', async () => {
+      const config = await service.getConfig({});
+      expect(config.nrf93SigmoidCenter).toBe(150);
+    });
+
+    it('should merge shard override with global config', async () => {
+      // Redis miss for shard
+      mockRedis.get.mockResolvedValueOnce(null);
+      // DB has shard config
+      mockPrisma.feature_flag.findUnique.mockResolvedValueOnce({
+        key: 'scoring_config_shard_fat_loss',
+        config: { nrf93SigmoidCenter: 120, inflammationCenter: 30 },
+      });
+      mockRedis.set.mockResolvedValue(undefined);
+
+      const config = await service.getConfig({ goalType: 'fat_loss' as any });
+      expect(config.nrf93SigmoidCenter).toBe(120);
+      expect(config.inflammationCenter).toBe(30);
+      // Non-overridden defaults preserved
+      expect(config.novaBase).toHaveLength(5);
+    });
+
+    it('should return global config when shard not found', async () => {
+      mockRedis.get.mockResolvedValue(null);
+      mockPrisma.feature_flag.findUnique.mockResolvedValue(null);
+
+      const config = await service.getConfig({
+        goalType: 'nonexistent' as any,
+      });
+      expect(config.nrf93SigmoidCenter).toBe(150);
+    });
+
+    it('should use shard memory cache on second call', async () => {
+      // First call loads from DB
+      mockRedis.get.mockResolvedValueOnce(null);
+      mockPrisma.feature_flag.findUnique.mockResolvedValueOnce({
+        key: 'scoring_config_shard_fat_loss',
+        config: { nrf93SigmoidCenter: 120 },
+      });
+      mockRedis.set.mockResolvedValue(undefined);
+
+      await service.getConfig({ goalType: 'fat_loss' as any });
+
+      // Second call should use memory cache (no new DB calls)
+      const callCount = mockPrisma.feature_flag.findUnique.mock.calls.length;
+      await service.getConfig({ goalType: 'fat_loss' as any });
+      expect(mockPrisma.feature_flag.findUnique.mock.calls.length).toBe(
+        callCount,
+      );
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // updateConfig
+  // ════════════════════════════════════════════════════════════
+
+  describe('updateConfig', () => {
+    beforeEach(async () => {
+      mockRedis.get.mockResolvedValueOnce(null);
+      mockPrisma.feature_flag.findUnique
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null);
+      mockRedis.set.mockResolvedValue(undefined);
+      await service.onModuleInit();
+    });
+
+    it('should merge partial update with defaults and persist', async () => {
+      mockPrisma.feature_flag.upsert.mockResolvedValueOnce({} as any);
+
+      const updated = await service.updateConfig({
+        nrf93SigmoidCenter: 200,
+      });
+
+      expect(updated.nrf93SigmoidCenter).toBe(200);
+      // Defaults preserved
+      expect(updated.nrf93SigmoidSlope).toBe(0.01);
+
+      // Verify DB upsert was called
+      expect(mockPrisma.feature_flag.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { key: 'scoring_config_v68' },
+        }),
+      );
+
+      // Verify Redis cache was set
+      expect(mockRedis.set).toHaveBeenCalled();
+    });
+
+    it('should clear shard cache on update', async () => {
+      // First, load a shard
+      mockRedis.get.mockResolvedValueOnce(null);
+      mockPrisma.feature_flag.findUnique.mockResolvedValueOnce({
+        key: 'scoring_config_shard_fat_loss',
+        config: { nrf93SigmoidCenter: 120 },
+      });
+
+      await service.getConfig({ goalType: 'fat_loss' as any });
+
+      // Update global config — should clear shard cache
+      mockPrisma.feature_flag.upsert.mockResolvedValueOnce({} as any);
+      await service.updateConfig({ nrf93SigmoidCenter: 300 });
+
+      // Shard should be reloaded (not from memory cache)
+      mockRedis.get.mockResolvedValueOnce(null);
+      mockPrisma.feature_flag.findUnique.mockResolvedValueOnce(null);
+      const shardConfig = await service.getConfig({
+        goalType: 'fat_loss' as any,
+      });
+
+      // Should be the new global value (shard override was cleared)
+      expect(shardConfig.nrf93SigmoidCenter).toBe(300);
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // clearShardCache
+  // ════════════════════════════════════════════════════════════
+
+  describe('clearShardCache', () => {
+    it('should clear all shard memory cache entries', async () => {
+      // Init
+      mockRedis.get.mockResolvedValueOnce(null);
+      mockPrisma.feature_flag.findUnique
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null);
+      mockRedis.set.mockResolvedValue(undefined);
+      await service.onModuleInit();
+
+      // Load a shard
+      mockRedis.get.mockResolvedValueOnce(null);
+      mockPrisma.feature_flag.findUnique.mockResolvedValueOnce({
+        key: 'scoring_config_shard_health',
+        config: { nrf93SigmoidCenter: 100 },
+      });
+      await service.getConfig({ goalType: 'health' as any });
+
+      // Clear
+      service.clearShardCache();
+
+      // Next call should re-query
+      mockRedis.get.mockResolvedValueOnce(null);
+      mockPrisma.feature_flag.findUnique.mockResolvedValueOnce(null);
+      const config = await service.getConfig({ goalType: 'health' as any });
+      expect(config.nrf93SigmoidCenter).toBe(150); // defaults since shard gone
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // Deep merge
+  // ════════════════════════════════════════════════════════════
+
+  describe('deep merge behavior', () => {
+    it('should deep merge nested objects without losing unset sub-fields', async () => {
+      mockRedis.get.mockResolvedValueOnce({
+        executabilitySubWeights: {
+          commonality: 0.5,
+          // cost, cookTime, skill should be preserved from defaults
+        },
+      });
+
+      await service.onModuleInit();
+      const config = await service.getConfig();
+
+      expect(config.executabilitySubWeights.commonality).toBe(0.5);
+      expect(config.executabilitySubWeights.cost).toBe(0.25); // default
+      expect(config.executabilitySubWeights.cookTime).toBe(0.25); // default
+    });
+
+    it('should deep merge tuning.similarityWeights', async () => {
+      mockRedis.get.mockResolvedValueOnce({
+        tuning: {
+          similarityWeights: { category: 0.6 },
+        },
+      });
+
+      await service.onModuleInit();
+      const config = await service.getConfig();
+
+      expect(config.tuning!.similarityWeights!.category).toBe(0.6);
+      expect(config.tuning!.similarityWeights!.mainIngredient).toBe(0.5); // default
+    });
+  });
+});

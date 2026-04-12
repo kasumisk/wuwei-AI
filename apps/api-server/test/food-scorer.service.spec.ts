@@ -5,7 +5,12 @@ import {
   MicroNutrientDefaults,
   buildCategoryMicroAverages,
 } from '../src/modules/diet/app/recommendation/recommendation.types';
-import { FoodLibrary } from '../src/modules/food/entities/food-library.entity';
+import { FoodLibrary } from '../src/modules/food/food.types';
+import {
+  createMockRecommendationConfigService,
+  createMockNutritionTargetService,
+  createMockSeasonalityService,
+} from './helpers/mock-factories';
 
 // ─── Mock HealthModifierEngineService ───
 
@@ -90,7 +95,12 @@ describe('FoodScorerService', () => {
       modifiers: [],
       isVetoed: false,
     });
-    service = new FoodScorerService(mockHealthModifierEngine as any);
+    service = new FoodScorerService(
+      mockHealthModifierEngine as any,
+      createMockRecommendationConfigService() as any,
+      createMockNutritionTargetService() as any,
+      createMockSeasonalityService() as any,
+    );
   });
 
   // ════════════════════════════════════════════════════════════
@@ -175,24 +185,26 @@ describe('FoodScorerService', () => {
       expect(result.explanation.novaPenalty).toBe(1.0);
     });
 
-    it('NOVA 3 (processed foods) → multiplier 0.85', () => {
+    it('NOVA 3 (processed foods) → multiplier 0.95 (base 0.85 + lowSugar +0.05 + lowSatFat +0.05)', () => {
       const food = createMockFood({ processingLevel: 3 });
       const result = service.scoreFoodDetailed({
         food,
         goalType: 'health',
         target: defaultTarget,
       });
-      expect(result.explanation.novaPenalty).toBe(0.85);
+      // V6.7+: NOVA 3 base=0.85, mock food has sugar=0 (<5, +0.05) + satFat=1.0 (<3, +0.05)
+      expect(result.explanation.novaPenalty).toBeCloseTo(0.95, 5);
     });
 
-    it('NOVA 4 (ultra-processed) → multiplier 0.55', () => {
+    it('NOVA 4 (ultra-processed) → multiplier 0.65 (base 0.55 + lowSugar +0.05 + lowSatFat +0.05)', () => {
       const food = createMockFood({ processingLevel: 4 });
       const result = service.scoreFoodDetailed({
         food,
         goalType: 'health',
         target: defaultTarget,
       });
-      expect(result.explanation.novaPenalty).toBe(0.55);
+      // V6.7+: NOVA 4 base=0.55, mock food has sugar=0 (<5, +0.05) + satFat=1.0 (<3, +0.05)
+      expect(result.explanation.novaPenalty).toBeCloseTo(0.65, 5);
     });
 
     it('NOVA 4 should produce a lower score than NOVA 1 for the same food', () => {
@@ -564,7 +576,8 @@ describe('FoodScorerService', () => {
         target: defaultTarget,
       });
 
-      expect(result.explanation.novaPenalty).toBe(0.85);
+      // V6.7+: NOVA 3 base=0.85, mock food has sugar=0 (<5, +0.05) + satFat with confidence=0.8
+      expect(result.explanation.novaPenalty).toBeCloseTo(0.95, 5);
       expect(result.explanation.confidenceFactor).toBeCloseTo(
         0.7 + 0.3 * 0.8,
         5,
@@ -709,10 +722,15 @@ describe('FoodScorerService', () => {
         allergens: ['dairy'],
       });
 
-      expect(mockHealthModifierEngine.evaluate).toHaveBeenCalledWith(food, {
-        allergens: ['dairy'],
-        goalType: 'fat_loss',
-      });
+      // V7.4+: evaluate now takes 3 args: (food, context, healthModifierCache)
+      expect(mockHealthModifierEngine.evaluate).toHaveBeenCalledWith(
+        food,
+        {
+          allergens: ['dairy'],
+          goalType: 'fat_loss',
+        },
+        undefined,
+      );
     });
 
     it('should apply penalty multiplier to the score', () => {
@@ -800,7 +818,7 @@ describe('FoodScorerService', () => {
   // ════════════════════════════════════════════════════════════
 
   describe('glycemic impact score', () => {
-    it('should return 0.75 when GI is 0 (no data)', () => {
+    it('should return high score when GI is 0 and carbs is 0 (estimated from category)', () => {
       const food = createMockFood({
         glycemicIndex: 0,
         glycemicLoad: 0,
@@ -812,8 +830,9 @@ describe('FoodScorerService', () => {
         target: defaultTarget,
       });
 
-      // GI=0 → returns 0.75
-      expect(result.explanation.dimensions.glycemic.raw).toBeCloseTo(0.75, 2);
+      // GI=0 (falsy) → estimateGI from category 'protein' = 40
+      // GL = (40 * 0) / 100 = 0 (carbs=0), so glycemic score ≈ 1/(1+exp(-4.5)) ≈ 0.989
+      expect(result.explanation.dimensions.glycemic.raw).toBeGreaterThan(0.95);
     });
 
     it('should score higher for low GL foods than high GL foods', () => {
@@ -1145,6 +1164,8 @@ describe('FoodScorerService', () => {
         iron: 2,
         potassium: 300,
         fiber: 3,
+        zinc: 1,
+        magnesium: 30,
       });
       service.setCategoryMicroDefaults(defaults);
       const resultImputed = service.scoreFoodDetailed({
@@ -1165,7 +1186,7 @@ describe('FoodScorerService', () => {
     });
 
     it('should NOT override existing food values with imputed values', () => {
-      // 食物有完整的微量营养素数据（所有值 > 0）
+      // 食物有完整的微量营养素数据（所有值 > 0，含 V7.3 NRF11.4 新增的 zinc/magnesium）
       const food = createMockFood({
         category: 'protein',
         protein: 25,
@@ -1177,6 +1198,8 @@ describe('FoodScorerService', () => {
         calcium: 300,
         iron: 5,
         potassium: 600,
+        zinc: 3,
+        magnesium: 80,
       });
 
       // 设置较低的品类默认值
@@ -1190,6 +1213,8 @@ describe('FoodScorerService', () => {
         iron: 1,
         potassium: 100,
         fiber: 0.5,
+        zinc: 0.5,
+        magnesium: 15,
       });
 
       // 先无插补

@@ -21,6 +21,10 @@ export class AnalysisProfileFactor implements ScoringFactor {
   readonly order = 35;
 
   private analysisProfile: AnalysisProfile | null = null;
+  /** V7.5: 从调参配置读取 */
+  private categoryInterestPerCount = 0.02;
+  private categoryInterestCap = 0.08;
+  private riskFoodPenalty = 0.7;
 
   isApplicable(ctx: PipelineContext): boolean {
     return !!ctx.analysisProfile;
@@ -28,6 +32,13 @@ export class AnalysisProfileFactor implements ScoringFactor {
 
   init(ctx: PipelineContext): void {
     this.analysisProfile = (ctx.analysisProfile as AnalysisProfile) ?? null;
+    // V7.5: 从调参配置读取阈值
+    const tuning = ctx.tuning;
+    if (tuning) {
+      this.categoryInterestPerCount = tuning.categoryInterestPerCount;
+      this.categoryInterestCap = tuning.categoryInterestCap;
+      this.riskFoodPenalty = tuning.riskFoodPenalty;
+    }
   }
 
   computeAdjustment(
@@ -44,15 +55,18 @@ export class AnalysisProfileFactor implements ScoringFactor {
     const categoryCount =
       this.analysisProfile.recentAnalyzedCategories[food.category] ?? 0;
     if (categoryCount > 0) {
-      const categoryInterestBoost = Math.min(categoryCount * 0.02, 0.08);
+      const categoryInterestBoost = Math.min(
+        categoryCount * this.categoryInterestPerCount,
+        this.categoryInterestCap,
+      );
       boost *= 1 + categoryInterestBoost;
       parts.push(`cat_interest+${(categoryInterestBoost * 100).toFixed(0)}%`);
     }
 
     // 风险食物惩罚
     if (this.analysisProfile.recentRiskFoods?.includes(food.name)) {
-      boost *= 0.7;
-      parts.push('risk_food×0.7');
+      boost *= this.riskFoodPenalty;
+      parts.push(`risk_food×${this.riskFoodPenalty}`);
     }
 
     if (boost === 1.0) return null;

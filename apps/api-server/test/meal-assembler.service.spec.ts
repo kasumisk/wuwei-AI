@@ -1,9 +1,14 @@
 import { MealAssemblerService } from '../src/modules/diet/app/recommendation/meal-assembler.service';
-import { FoodLibrary } from '../src/modules/food/entities/food-library.entity';
+import { FoodLibrary } from '../src/modules/food/food.types';
 import {
   ScoredFood,
   FoodFeedbackStats,
 } from '../src/modules/diet/app/recommendation/recommendation.types';
+import {
+  createMockExplanationGeneratorService,
+  createMockPreferenceProfileService,
+  createMockScoringConfigService,
+} from './helpers/mock-factories';
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -74,7 +79,11 @@ describe('MealAssemblerService', () => {
 
   beforeEach(() => {
     foodCounter = 0;
-    service = new MealAssemblerService();
+    service = new MealAssemblerService(
+      createMockExplanationGeneratorService() as any,
+      createMockPreferenceProfileService() as any,
+      createMockScoringConfigService() as any,
+    );
   });
 
   // ═══════════════════════════════════════════════════════════

@@ -116,11 +116,25 @@ export interface FoodLibrary {
   vitaminD?: number;
   vitaminE?: number;
   vitaminB12?: number;
+  /** V7.5: 维生素 B6，单位 mg */
+  vitaminB6?: number;
   folate?: number;
   zinc?: number;
   magnesium?: number;
   purine?: number;
   phosphorus?: number;
+
+  // ─── V7.4 Phase 3-A: 精细化营养字段 ───
+
+  /** V7.4: Omega-3 脂肪酸 (EPA+DHA+ALA)，单位 mg */
+  omega3?: number;
+  /** V7.4: Omega-6 脂肪酸 (亚油酸为主)，单位 mg */
+  omega6?: number;
+  /** V7.4: 可溶性膳食纤维，单位 g */
+  solubleFiber?: number;
+  /** V7.4: 不可溶性膳食纤维，单位 g */
+  insolubleFiber?: number;
+
   cuisine?: string;
   flavorProfile?: {
     spicy?: number;
@@ -136,6 +150,8 @@ export interface FoodLibrary {
   skillRequired?: string;
   estimatedCostLevel?: number;
   shelfLifeDays?: number;
+  /** V7.5: 含水率百分比 (0-100)，用于水分摄入评估 */
+  waterContentPercent?: number;
   fodmapLevel?: string;
   oxalateLevel?: string;
   glycemicIndex?: number;
@@ -196,6 +212,11 @@ export interface FoodLibrary {
   foodForm?: FoodForm;
   /** V7.3: 成品菜推荐优先级 (0-100, 仅dish/semi_prepared有值, 用于推荐排序偏好) */
   dishPriority?: number;
+
+  // ─── V7.4 Phase 1-B: 食物可获得性 ───
+
+  /** V7.4: 食物可获得性难度 (1=随处可得, 2=常见, 3=普通, 4=较难, 5=稀有) */
+  acquisitionDifficulty?: number;
 }
 
 // ─── V7.0 Phase 1-D: 类型辅助视图 ───
@@ -235,6 +256,11 @@ export interface FoodNutritionView {
   phosphorus: number;
   glycemicIndex: number;
   glycemicLoad: number;
+  // V7.4 Phase 3-A: 精细化营养字段
+  omega3: number;
+  omega6: number;
+  solubleFiber: number;
+  insolubleFiber: number;
 }
 
 /**
@@ -311,6 +337,11 @@ export function extractNutrition(food: FoodLibrary): FoodNutritionView {
     phosphorus: Number(food.phosphorus) || 0,
     glycemicIndex: Number(food.glycemicIndex) || 0,
     glycemicLoad: Number(food.glycemicLoad) || 0,
+    // V7.4 Phase 3-A: 精细化营养字段
+    omega3: Number(food.omega3) || 0,
+    omega6: Number(food.omega6) || 0,
+    solubleFiber: Number(food.solubleFiber) || 0,
+    insolubleFiber: Number(food.insolubleFiber) || 0,
   };
 }
 

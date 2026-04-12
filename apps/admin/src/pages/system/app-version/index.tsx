@@ -547,7 +547,6 @@ const AppVersionManagement: React.FC = () => {
   const [currentRecord, setCurrentRecord] = useState<AppVersionInfoDto | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
-  const [statsVisible, setStatsVisible] = useState(false);
   const [packageManagerVersion, setPackageManagerVersion] = useState<AppVersionInfoDto | null>(
     null
   );
@@ -592,7 +591,7 @@ const AppVersionManagement: React.FC = () => {
     },
     onError: (e: any) => message.error(`归档失败: ${e.message}`),
   });
-  const { data: stats } = useAppVersionStats({ enabled: statsVisible });
+  const { data: stats } = useAppVersionStats();
 
   const handleCreate = () => {
     setIsEditMode(false);
@@ -925,6 +924,42 @@ const AppVersionManagement: React.FC = () => {
 
   return (
     <Card>
+      {/* 常驻统计卡片行 */}
+      {stats && (
+        <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
+          <Col xs={12} sm={6}>
+            <Card size="small" variant="borderless" style={{ background: '#fafafa' }}>
+              <Statistic title="总版本数" value={stats.total} prefix={<AppstoreOutlined />} />
+            </Card>
+          </Col>
+          <Col xs={12} sm={6}>
+            <Card size="small" variant="borderless" style={{ background: '#fafafa' }}>
+              <Statistic
+                title="已发布"
+                value={stats.published}
+                valueStyle={{ color: '#52c41a' }}
+                prefix={<CloudUploadOutlined />}
+              />
+            </Card>
+          </Col>
+          <Col xs={12} sm={6}>
+            <Card size="small" variant="borderless" style={{ background: '#fafafa' }}>
+              <Statistic title="草稿" value={stats.draft} />
+            </Card>
+          </Col>
+          <Col xs={12} sm={6}>
+            <Card size="small" variant="borderless" style={{ background: '#fafafa' }}>
+              <Statistic
+                title="已归档"
+                value={stats.archived}
+                valueStyle={{ color: '#faad14' }}
+                prefix={<StopOutlined />}
+              />
+            </Card>
+          </Col>
+        </Row>
+      )}
+
       <ProTable<AppVersionInfoDto>
         actionRef={actionRef}
         rowKey="id"
@@ -947,9 +982,6 @@ const AppVersionManagement: React.FC = () => {
           }
         }}
         toolBarRender={() => [
-          <Button key="stats" icon={<BarChartOutlined />} onClick={() => setStatsVisible(true)}>
-            统计
-          </Button>,
           <Button
             key="refresh"
             icon={<ReloadOutlined />}
@@ -1000,32 +1032,6 @@ const AppVersionManagement: React.FC = () => {
           onClose={() => setPackageManagerVersion(null)}
         />
       )}
-
-      {/* 统计弹窗 */}
-      <Modal
-        title="版本统计"
-        open={statsVisible}
-        onCancel={() => setStatsVisible(false)}
-        footer={null}
-        width={520}
-      >
-        {stats && (
-          <Row gutter={[16, 16]}>
-            <Col span={12}>
-              <Statistic title="总版本数" value={stats.total} />
-            </Col>
-            <Col span={12}>
-              <Statistic title="已发布" value={stats.published} valueStyle={{ color: '#52c41a' }} />
-            </Col>
-            <Col span={12}>
-              <Statistic title="草稿" value={stats.draft} />
-            </Col>
-            <Col span={12}>
-              <Statistic title="已归档" value={stats.archived} valueStyle={{ color: '#faad14' }} />
-            </Col>
-          </Row>
-        )}
-      </Modal>
     </Card>
   );
 };

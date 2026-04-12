@@ -18,23 +18,29 @@ export class PopularityFactor implements ScoringFactor {
   private enabled = false;
   private popularWeight = 0;
   private coldStartFactor = 1;
+  /** V7.5: 人气归一化除数 */
+  private popularityNormalizationDivisor = 100;
 
   isApplicable(ctx: PipelineContext): boolean {
     const recallConfig = ctx.resolvedStrategy?.config?.recall;
-    const popularEnabled = (recallConfig as any)?.sources?.popular?.enabled;
+    const popularEnabled = recallConfig?.sources?.popular?.enabled;
     return !!popularEnabled;
   }
 
   init(ctx: PipelineContext): void {
     const recallConfig = ctx.resolvedStrategy?.config?.recall;
-    this.enabled = !!(recallConfig as any)?.sources?.popular?.enabled;
-    this.popularWeight = (recallConfig as any)?.sources?.popular?.weight ?? 0;
+    this.enabled = !!recallConfig?.sources?.popular?.enabled;
+    this.popularWeight = recallConfig?.sources?.popular?.weight ?? 0;
 
     if (!this.enabled || this.popularWeight <= 0) return;
 
+    // V7.5: 从调参配置读取归一化除数
+    this.popularityNormalizationDivisor =
+      ctx.tuning?.popularityNormalizationDivisor ?? 100;
+
     // 计算冷启动因子
     const explorationConfig = ctx.resolvedStrategy?.config?.exploration;
-    const matureThreshold = (explorationConfig as any)?.matureThreshold ?? 50;
+    const matureThreshold = explorationConfig?.matureThreshold ?? 50;
 
     let totalInteractions = 0;
     if (ctx.feedbackStats) {
@@ -55,7 +61,10 @@ export class PopularityFactor implements ScoringFactor {
       return null;
     }
 
-    const normalizedPop = Math.min(food.popularity / 100, 1);
+    const normalizedPop = Math.min(
+      food.popularity / this.popularityNormalizationDivisor,
+      1,
+    );
     const boost = 1 + this.popularWeight * normalizedPop * this.coldStartFactor;
 
     if (boost === 1.0) return null;

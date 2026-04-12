@@ -3,6 +3,7 @@ import {
   MealTarget,
   UserProfileConstraints,
 } from '../src/modules/diet/app/recommendation/recommendation.types';
+import { createMockScoringConfigService } from './helpers/mock-factories';
 
 describe('ConstraintGeneratorService', () => {
   let service: ConstraintGeneratorService;
@@ -19,7 +20,9 @@ describe('ConstraintGeneratorService', () => {
   const defaultDailyTarget = { calories: 2000, protein: 100 };
 
   beforeEach(() => {
-    service = new ConstraintGeneratorService();
+    service = new ConstraintGeneratorService(
+      createMockScoringConfigService() as any,
+    );
   });
 
   // ==================== 1. Basic return shape ====================

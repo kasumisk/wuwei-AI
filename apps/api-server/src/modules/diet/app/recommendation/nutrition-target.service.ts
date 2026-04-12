@@ -41,6 +41,14 @@ export interface NutritionTargets {
   magnesium: number;
   /** V7.3 NRF11.4: 反式脂肪上限 (g/天) */
   transFatLimit: number;
+
+  // ─── V7.4 Phase 3-B: NRF13.5 可选扩展 ───
+  /** V7.4: Omega-3 推荐摄入 (mg/天)，心血管用户自动升级 */
+  omega3?: number;
+  /** V7.4: 可溶性纤维推荐摄入 (g/天)，心血管用户自动升级 */
+  solubleFiber?: number;
+  /** V7.4: 是否启用 NRF13.5 模式（omega3 + solubleFiber 作为额外正向维度） */
+  nrf13_5Enabled?: boolean;
 }
 
 /**
@@ -102,6 +110,23 @@ export class NutritionTargetService {
 
     // 健康状况修正
     return this.applyHealthConditionAdjustments(base, conditions);
+  }
+
+  /**
+   * V7.4 Phase 3-B: 判断是否应启用 NRF13.5 模式
+   *
+   * 触发条件：用户有心血管相关健康状况（高血脂、高血压、脂肪肝）
+   * 启用后 nutrient density 评分会额外考虑 omega3 和可溶性纤维
+   */
+  shouldEnableNrf13_5(conditions: (string | HealthCondition)[]): boolean {
+    const cardiovascularConditions = [
+      HealthCondition.HYPERLIPIDEMIA,
+      HealthCondition.HYPERTENSION,
+      HealthCondition.FATTY_LIVER,
+    ];
+    return conditions.some((c) =>
+      cardiovascularConditions.includes(c as HealthCondition),
+    );
   }
 
   // ==================== 各营养素计算 ====================
@@ -225,6 +250,10 @@ export class NutritionTargetService {
           // 高血压: 钠限制 1500mg（AHA 推荐），钾增加到 4700mg
           result.sodiumLimit = Math.min(result.sodiumLimit, 1500);
           result.potassium = Math.max(result.potassium, 4700);
+          // V7.4 NRF13.5: 高血压也受益于 omega3
+          result.nrf13_5Enabled = true;
+          result.omega3 = Math.max(result.omega3 ?? 0, 1600); // AHA 推荐 1.6g/天
+          result.solubleFiber = Math.max(result.solubleFiber ?? 0, 7); // 适量可溶性纤维辅助降压
           break;
 
         case HealthCondition.DIABETES_TYPE2:
@@ -257,6 +286,10 @@ export class NutritionTargetService {
           result.fiber = Math.max(result.fiber, 30); // 纤维有助降血脂
           // V7.3: 反式脂肪收紧到 0g（高血脂应完全避免反式脂肪）
           result.transFatLimit = 0;
+          // V7.4 NRF13.5: 启用 omega3 + 可溶性纤维目标
+          result.nrf13_5Enabled = true;
+          result.omega3 = Math.max(result.omega3 ?? 0, 2000); // AHA 推荐高血脂 2g/天
+          result.solubleFiber = Math.max(result.solubleFiber ?? 0, 10); // 10g/天可溶性纤维（NCEP ATP III）
           break;
 
         case HealthCondition.FATTY_LIVER:
@@ -265,6 +298,10 @@ export class NutritionTargetService {
           result.saturatedFatLimit = Math.min(result.saturatedFatLimit, 15);
           // V7.3: 反式脂肪收紧到 0g（脂肪肝应完全避免反式脂肪）
           result.transFatLimit = 0;
+          // V7.4 NRF13.5: 脂肪肝受益于 omega3
+          result.nrf13_5Enabled = true;
+          result.omega3 = Math.max(result.omega3 ?? 0, 1000); // 1g/天基础推荐
+          result.solubleFiber = Math.max(result.solubleFiber ?? 0, 5); // 适量可溶性纤维
           break;
 
         // GOUT, CELIAC_DISEASE, IBS: 主要通过约束标签排除处理，营养目标不变

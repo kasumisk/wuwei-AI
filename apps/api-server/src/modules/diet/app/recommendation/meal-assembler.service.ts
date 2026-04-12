@@ -11,6 +11,7 @@ import { AssemblyPolicyConfig } from '../../../strategy/strategy.types';
 import { t } from './i18n-messages';
 import { ExplanationGeneratorService } from './explanation-generator.service';
 import { PreferenceProfileService } from './preference-profile.service';
+import { ScoringConfigService } from './scoring-config.service';
 
 @Injectable()
 export class MealAssemblerService {
@@ -19,6 +20,7 @@ export class MealAssemblerService {
   constructor(
     private readonly explanationGenerator: ExplanationGeneratorService,
     private readonly preferenceProfileService: PreferenceProfileService,
+    private readonly scoringConfigService: ScoringConfigService,
   ) {}
 
   /**
@@ -94,7 +96,9 @@ export class MealAssemblerService {
       remaining.forEach((item, i) => {
         let penalty = 0;
         for (const selected of result) {
-          penalty += this.similarity(item.food, selected.food) * 0.3;
+          penalty +=
+            this.similarity(item.food, selected.food) *
+            this.scoringConfigService.getTuning().diversitySimilarityPenalty;
         }
         const finalScore = item.score - penalty;
         if (finalScore > bestScore) {
@@ -543,20 +547,22 @@ export class MealAssemblerService {
 
   /** 食物相似度计算 */
   similarity(a: FoodLibrary, b: FoodLibrary): number {
+    const sw = this.scoringConfigService.getTuning().similarityWeights;
     let score = 0;
-    if (a.category === b.category) score += 0.3;
+    if (a.category === b.category) score += sw.category ?? 0.3;
 
     const mainA = a.mainIngredient || '';
     const mainB = b.mainIngredient || '';
-    if (mainA && mainB && mainA === mainB) score += 0.5;
+    if (mainA && mainB && mainA === mainB) score += sw.mainIngredient ?? 0.5;
 
     const subA = a.subCategory || '';
     const subB = b.subCategory || '';
-    if (subA && subB && subA === subB) score += 0.2;
+    if (subA && subB && subA === subB) score += sw.subCategory ?? 0.2;
 
     const tagsA = a.tags || [];
     const tagsB = b.tags || [];
-    score += tagsA.filter((t) => tagsB.includes(t)).length * 0.05;
+    score +=
+      tagsA.filter((t) => tagsB.includes(t)).length * (sw.tagOverlap ?? 0.05);
 
     return Math.min(score, 1);
   }
@@ -577,6 +583,7 @@ export class MealAssemblerService {
   compatibilityBonus(candidate: FoodLibrary, picks: FoodLibrary[]): number {
     if (picks.length === 0) return 0;
 
+    const tuning = this.scoringConfigService.getTuning();
     let bonus = 0;
     const candidateCompat = candidate.compatibility || {};
     const candidateGoodWith: string[] = candidateCompat['goodWith'] || [];
@@ -594,7 +601,7 @@ export class MealAssemblerService {
             g === pick.name || g === pick.category || g === pick.mainIngredient,
         )
       ) {
-        bonus += 0.05;
+        bonus += tuning.compatibilityGoodBonus;
       }
 
       // 正向：已选的 goodWith 匹配候选的名字/分类
@@ -606,7 +613,7 @@ export class MealAssemblerService {
             g === candidate.mainIngredient,
         )
       ) {
-        bonus += 0.05;
+        bonus += tuning.compatibilityGoodBonus;
       }
 
       // 负向：候选的 badWith 匹配已选
@@ -616,7 +623,7 @@ export class MealAssemblerService {
             b === pick.name || b === pick.category || b === pick.mainIngredient,
         )
       ) {
-        bonus -= 0.1;
+        bonus += tuning.compatibilityBadPenalty;
       }
 
       // 负向：已选的 badWith 匹配候选
@@ -628,11 +635,14 @@ export class MealAssemblerService {
             b === candidate.mainIngredient,
         )
       ) {
-        bonus -= 0.1;
+        bonus += tuning.compatibilityBadPenalty;
       }
     }
 
     // 裁剪到合理范围
-    return Math.max(-0.15, Math.min(0.15, bonus));
+    return Math.max(
+      tuning.compatibilityClampMin,
+      Math.min(tuning.compatibilityClampMax, bonus),
+    );
   }
 }

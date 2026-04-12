@@ -3,8 +3,12 @@
  *
  * 从 DietModule 拆分出来的推荐解释相关服务。
  * 包含 ExplanationGenerator, InsightGenerator, ExplanationTier, NL Explainer 等。
+ *
+ * V7.4 P1-D: ExplanationGeneratorService 需要 MealCompositionScorer（来自 RecommendationModule），
+ * 通过 forwardRef 解决循环依赖。
  */
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
+import { RecommendationModule } from './recommendation.module';
 import { ExplanationGeneratorService } from './app/recommendation/explanation-generator.service';
 import { InsightGeneratorService } from './app/recommendation/insight-generator.service';
 import { ExplanationTierService } from './app/recommendation/explanation-tier.service';
@@ -25,6 +29,10 @@ const EXPLANATION_PROVIDERS = [
 ];
 
 @Module({
+  imports: [
+    // V7.4 P1-D: 需要 MealCompositionScorer from RecommendationModule
+    forwardRef(() => RecommendationModule),
+  ],
   providers: EXPLANATION_PROVIDERS,
   exports: EXPLANATION_PROVIDERS,
 })

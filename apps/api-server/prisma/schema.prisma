@@ -56,47 +56,82 @@ model achievements {
   reward_value Int     @default(0)
 }
 
+/// 后台管理员账号表 — 存储运营/技术人员的登录凭证和权限角色
 model admin_users {
+  /// 主键 UUID
   id            String                  @id(map: "PK_06744d221bb6145dc61e5dc441d") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 登录用户名，全局唯一
   username      String                  @unique(map: "IDX_2873882c38e8c07d98cb64f962") @db.VarChar(100)
+  /// 登录密码（bcrypt 哈希）
   password      String                  @db.VarChar(255)
+  /// 管理员邮箱，全局唯一
   email         String?                 @unique(map: "IDX_dcd0c8a4b10af9c986e510b9ec") @db.VarChar(255)
+  /// 手机号
   phone         String?                 @db.VarChar(20)
+  /// 角色：super_admin=超级管理员, admin=普通管理员
   role          admin_users_role_enum   @default(admin)
+  /// 账号状态：active=正常, inactive=停用, suspended=封禁
   status        admin_users_status_enum @default(active)
+  /// 头像 URL
   avatar        String?                 @db.VarChar(255)
+  /// 显示昵称
   nickname      String?                 @db.VarChar(100)
+  /// 最后登录时间
   last_login_at DateTime?               @db.Timestamptz(6)
+  /// 创建时间
   created_at    DateTime                @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
   updated_at    DateTime                @default(now()) @db.Timestamptz(6)
   user_roles    user_roles[]
 }
 
+/// AI 决策日志表 — 记录每次 AI 对食物记录的决策结果及用户反馈，用于模型效果评估
 model ai_decision_logs {
+  /// 主键 UUID
   id              String   @id(map: "PK_e5aa864516bc349d6e085024cee") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 关联的用户 ID
   user_id         String   @db.Uuid
+  /// 关联的食物记录 ID（可为空，如纯咨询场景）
   record_id       String?  @db.Uuid
+  /// AI 决策时的输入上下文（JSON，含用户画像快照、食物信息等）
   input_context   Json?
+  /// 输入图片 URL（图片识别场景）
   input_image_url String?
+  /// AI 决策结论：SAFE=安全可食/WARN=警告/STOP=建议停止
   decision        String?  @db.VarChar(10)
+  /// 风险等级：low/mid/high
   risk_level      String?  @db.VarChar(5)
+  /// AI 完整响应（原始 JSON，含推理链路）
   full_response   Json?
+  /// 用户是否遵从了 AI 建议
   user_followed   Boolean?
+  /// 用户对 AI 决策的主观反馈（helpful/not_helpful/wrong 等）
   user_feedback   String?  @db.VarChar(20)
+  /// 实际结果（用于后验分析，如 blood_sugar_ok/overeat 等）
   actual_outcome  String?  @db.VarChar(20)
+  /// 创建时间
   created_at      DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([user_id, created_at(sort: Desc)], map: "idx_ai_logs_user")
 }
 
+/// 分析记录与食物库的关联表 — 将一次识别分析中的每种食物与正式食物库或候选库关联
 model analysis_food_link {
+  /// 主键 UUID
   id                   String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 关联的食物分析记录 ID
   analysis_id          String               @db.Uuid
+  /// 匹配到的正式食物库 ID（精确匹配时填写）
   food_library_id      String?              @db.Uuid
+  /// 匹配到的候选食物 ID（模糊/新食物时填写）
   food_candidate_id    String?              @db.Uuid
+  /// 识别出的食物名称（原始文本）
   food_name            String               @db.VarChar(120)
+  /// 匹配类型：exact=精确匹配, fuzzy=模糊匹配, candidate=候选新食物, unknown=未知
   match_type           String               @db.VarChar(20)
+  /// 匹配置信度 0.00-100.00（百分比，小数点 2 位）
   confidence           Decimal?             @default(0) @db.Decimal(5, 2)
+  /// 创建时间
   created_at           DateTime?            @default(now()) @db.Timestamptz(6)
   food_analysis_record food_analysis_record @relation(fields: [analysis_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_afl_analysis")
   food_candidate       food_candidate?      @relation(fields: [food_candidate_id], references: [id], onUpdate: NoAction, map: "fk_afl_food_candidate")
@@ -108,26 +143,47 @@ model analysis_food_link {
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// App 终端用户账号表 — 存储用户的认证信息、账号状态及各第三方登录标识
 model app_users {
+  /// 主键 UUID
   id                     String                   @id(map: "PK_9b97e4fbff9c2f3918fda27f999") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 登录方式：anonymous=匿名, google=谷歌, email=邮箱, phone=手机号, wechat=微信公众号, wechat_mini=微信小程序, apple=苹果
   auth_type              app_users_auth_type_enum @default(anonymous)
+  /// 用户邮箱，全局唯一
   email                  String?                  @unique(map: "IDX_28d5834968612821f4675a9f7a") @db.VarChar(255)
+  /// 邮箱登录密码（bcrypt 哈希）
   password               String?                  @db.VarChar(255)
+  /// Google OAuth 用户唯一 ID
   google_id              String?                  @unique(map: "IDX_77751cf159acfefb704456e4f6") @db.VarChar(255)
+  /// 设备唯一标识（匿名用户主键）
   device_id              String?                  @db.VarChar(255)
+  /// 手机号，全局唯一（国际格式，如 +8613812345678）
   phone                  String?                  @unique(map: "IDX_app_users_phone") @db.VarChar(20)
+  /// 手机号是否已验证
   phone_verified         Boolean                  @default(false)
+  /// 微信公众号 OpenID，全局唯一
   wechat_open_id         String?                  @unique(map: "IDX_45e81ae90b9a0d7fb2b72e21b2") @db.VarChar(128)
+  /// 微信 UnionID（同一微信主体下跨应用统一标识）
   wechat_union_id        String?                  @db.VarChar(128)
+  /// 微信小程序 OpenID，全局唯一
   wechat_mini_open_id    String?                  @unique(map: "IDX_app_users_wechat_mini_open_id") @db.VarChar(128)
+  /// Apple Sign In 用户唯一 ID
   apple_id               String?                  @unique(map: "IDX_458012dc4bdbf3309edd3205da") @db.VarChar(255)
+  /// 用户昵称（来自第三方授权或自填）
   nickname               String?                  @db.VarChar(100)
+  /// 头像 URL
   avatar                 String?                  @db.VarChar(255)
+  /// 账号状态：active=正常, inactive=未激活, banned=封禁
   status                 app_users_status_enum    @default(active)
+  /// 邮箱是否已验证
   email_verified         Boolean                  @default(false)
+  /// 最后登录时间
   last_login_at          DateTime?                @db.Timestamptz(6)
+  /// 扩展元数据（JSON，存放三方 OAuth 原始信息等）
   metadata               Json?
+  /// 创建时间
   created_at             DateTime                 @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
   updated_at             DateTime                 @default(now()) @db.Timestamptz(6)
   coach_conversations    coach_conversations[]
   daily_summaries        daily_summaries[]
@@ -145,16 +201,27 @@ model app_users {
   @@index([device_id], map: "IDX_601d4f4be742d3ca28891c0207")
 }
 
+/// App 版本安装包表 — 存储每个版本对应的各平台、各渠道安装包信息
 model app_version_packages {
+  /// 主键 UUID
   id           String                             @id(map: "PK_cf82df0345378efd08dd5683389") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 关联的版本 ID（外键 → app_versions.id）
   versionId    String                             @db.Uuid
+  /// 平台：android / ios
   platform     app_version_packages_platform_enum
+  /// 发布渠道（如 "official"、"huawei"、"appstore"、"gray"）
   channel      String                             @db.VarChar(50)
+  /// 安装包下载地址
   downloadUrl  String                             @db.VarChar(1000)
+  /// 安装包文件大小，单位 Bytes
   fileSize     BigInt                             @default(0)
+  /// 文件完整性校验码（如 SHA256）
   checksum     String?                            @db.VarChar(255)
+  /// 是否启用此安装包
   enabled      Boolean                            @default(true)
+  /// 创建时间
   createdAt    DateTime                           @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
   updatedAt    DateTime                           @default(now()) @db.Timestamptz(6)
   app_versions app_versions                       @relation(fields: [versionId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_ecb85e41b68428adb8df8fc0a01")
 
@@ -162,75 +229,130 @@ model app_version_packages {
   @@index([versionId], map: "IDX_app_version_packages_versionId")
 }
 
+/// App 版本信息表 — 管理 iOS/Android 各版本的发布状态、灰度策略和更新类型
 model app_versions {
+  /// 主键 UUID
   id                    String                       @id(map: "PK_8d36b0dcf0c026c7aad923c80fd") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 目标平台：android / ios；为空表示全平台
   platform              app_versions_platform_enum?
+  /// 版本号字符串（如 "2.3.1"）
   version               String                       @db.VarChar(50)
+  /// 版本号整数（用于比较大小，如 231）
   versionCode           Int
+  /// 更新类型：optional=可选更新, force=强制更新
   updateType            app_versions_updateType_enum @default(optional)
+  /// 版本更新标题
   title                 String                       @db.VarChar(255)
+  /// 版本更新说明（ChangeLog）
   description           String
+  /// 最低支持版本号字符串（低于此版本必须强制更新）
   minSupportVersion     String?                      @db.VarChar(50)
+  /// 最低支持版本整数
   minSupportVersionCode Int?
+  /// 发布状态：draft=草稿, published=已发布, archived=已归档
   status                app_versions_status_enum     @default(draft)
+  /// 是否开启灰度发布
   grayRelease           Boolean                      @default(false)
+  /// 灰度发布比例 0-100（百分比）
   grayPercent           Int                          @default(0)
+  /// 计划发布时间
   releaseDate           DateTime?                    @db.Timestamptz(6)
+  /// 多语言描述（JSON，key=locale，value=描述文字）
   i18nDescription       Json?
+  /// 扩展元数据
   metadata              Json?
+  /// 创建时间
   createdAt             DateTime                     @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
   updatedAt             DateTime                     @default(now()) @db.Timestamptz(6)
   app_version_packages  app_version_packages[]
 
   @@unique([platform, version], map: "IDX_6222da359534e48044dce6829e")
 }
 
+/// 挑战任务配置表 — 定义各类打卡/挑战活动的规则和奖励
 model challenges {
+  /// 主键 UUID
   id            String  @id(map: "PK_1e664e93171e20fe4d6125466af") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 挑战标题（如 "7天低脂挑战"）
   title         String  @db.VarChar(100)
+  /// 挑战详情描述
   description   String?
+  /// 挑战类型（如 calorie/nutrition/streak/weight）
   type          String? @db.VarChar(30)
+  /// 挑战持续天数
   duration_days Int
+  /// 挑战规则（JSON，如每日目标、判定条件等）
   rules         Json?
+  /// 是否当前可报名/展示
   is_active     Boolean @default(true)
 }
 
+/// 客户端能力权限配置表 — 控制每个 API 客户端可调用的 AI 能力及其限流/配额规则
 model client_capability_permissions {
+  /// 主键 UUID
   id                 String   @id(map: "PK_c1a6818a8b4efddd7f349efd371") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 关联的客户端 ID（外键 → clients.id）
   client_id          String   @db.Uuid
+  /// 能力类型（如 text.generation/image.generation/text.embedding 等）
   capability_type    String   @db.VarChar(100)
+  /// 是否启用该能力
   enabled            Boolean  @default(true)
+  /// 每分钟请求限制（QPS 上限）
   rate_limit         Int      @default(60)
+  /// 配额总量上限（如每月 Token 数，null=不限制）
   quota_limit        BigInt?
+  /// 首选 AI 提供商（如 openai/anthropic/qwen）
   preferred_provider String?  @db.VarChar(50)
+  /// 允许使用的提供商列表（逗号分隔）
   allowed_providers  String?
+  /// 允许使用的模型列表（逗号分隔）
   allowed_models     String?
+  /// 额外配置（JSON）
   config             Json?
+  /// 创建时间
   created_at         DateTime @default(now()) @db.Timestamptz(6)
   clients            clients  @relation(fields: [client_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_ad53318f3e760401ed26580a61a")
 
   @@unique([client_id, capability_type], map: "IDX_60603413d17812e8ef04288227")
 }
 
+/// API 客户端接入凭证表 — 管理第三方或内部服务的 API 访问密钥和配额
 model clients {
+  /// 主键 UUID
   id                            String                          @id(map: "PK_f1ab7cf3a5714dbc6bb4e1c28a4") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 客户端名称（如 "admin-panel"、"mobile-app"）
   name                          String                          @db.VarChar(255)
+  /// API Key（用于请求认证，全局唯一）
   api_key                       String                          @unique(map: "IDX_740fe6d4fd0cd0ff47d766c8e0") @db.VarChar(255)
+  /// API Secret（与 API Key 配对，用于签名验证）
   api_secret                    String                          @db.VarChar(255)
+  /// 客户端状态（active=正常, inactive=停用）
   status                        String                          @default("active") @db.VarChar(20)
+  /// 总配额配置（JSON，如每月 Token 上限、并发数等）
   quota_config                  Json?
+  /// 客户端描述
   description                   String?
+  /// 扩展元数据（JSON）
   metadata                      Json?
+  /// 创建时间
   created_at                    DateTime                        @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
   updated_at                    DateTime                        @default(now()) @db.Timestamptz(6)
   client_capability_permissions client_capability_permissions[]
 }
 
+/// AI 健康教练会话表 — 一个会话包含多轮对话，对应用户与 AI Coach 的一次完整交流
 model coach_conversations {
+  /// 主键 UUID
   id             String           @id(map: "PK_a39c641e9cb65d97f4297f6e48e") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 关联的用户 ID
   user_id        String           @db.Uuid
+  /// 会话标题（可由 AI 自动生成或用户命名）
   title          String?          @db.VarChar(200)
+  /// 会话创建时间
   created_at     DateTime         @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间（有新消息时更新）
   updated_at     DateTime         @default(now()) @db.Timestamptz(6)
   app_users      app_users        @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_28e39678e3cbc5deced6c3b5f7e")
   coach_messages coach_messages[]
@@ -239,30 +361,50 @@ model coach_conversations {
   @@index([user_id, updated_at(sort: Desc)], map: "idx_coach_conversations_user")
 }
 
+/// AI 教练消息表 — 存储会话中每一条用户或 AI 消息
 model coach_messages {
+  /// 主键 UUID
   id                  String              @id(map: "PK_d739031ac3c1470a4d96a9bfe8f") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 关联的会话 ID
   conversation_id     String              @db.Uuid
+  /// 消息角色：user=用户发送, assistant=AI 回复, system=系统消息
   role                String              @db.VarChar(20)
+  /// 消息正文（Markdown 格式）
   content             String
+  /// 本条消息消耗的 Token 数（0 表示系统消息或未统计）
   tokens_used         Int                 @default(0)
+  /// 消息创建时间
   created_at          DateTime            @default(now()) @db.Timestamptz(6)
   coach_conversations coach_conversations @relation(fields: [conversation_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_10a0fc9e61c8d70b657decdc02c")
 
   @@index([conversation_id, created_at], map: "IDX_ce15bf83d158339d1460ef5046")
 }
 
+/// 每日餐食计划表 — 存储 AI 为用户生成的当日四餐推荐计划
 model daily_plans {
+  /// 主键 UUID
   id           String   @id(map: "PK_ebf4c93c574708a8ba6919252df") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 关联的用户 ID
   user_id      String   @db.Uuid
+  /// 计划日期（仅日期部分，无时区）
   date         DateTime @db.Date
+  /// 早餐计划（JSON，含推荐食物列表及营养目标）
   morning_plan Json?
+  /// 午餐计划（JSON）
   lunch_plan   Json?
+  /// 晚餐计划（JSON）
   dinner_plan  Json?
+  /// 加餐/零食计划（JSON）
   snack_plan   Json?
+  /// 用户对计划的调整记录（JSON 数组，每次替换/拒绝均记录）
   adjustments  Json     @default("[]")
+  /// 生成此计划所使用的策略标识（如策略名称或版本）
   strategy     String?
+  /// 当日总热量预算，单位 kcal
   total_budget Int?
+  /// 创建时间
   created_at   DateTime @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
   updated_at   DateTime @default(now()) @db.Timestamptz(6)
   daily_plan_items daily_plan_items[]
   /// V6.5 Phase 2I: FK 补齐
@@ -272,78 +414,134 @@ model daily_plans {
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// 每日营养汇总表 — 按天聚合用户所有食物记录的营养摄入，用于日报告和趋势分析
 model daily_summaries {
+  /// 主键 UUID
   id              String    @id(map: "PK_2d7ed4d1fd3c764c045b6945c4a") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 关联的用户 ID
   user_id         String    @db.Uuid
+  /// 汇总日期
   date            DateTime  @db.Date
+  /// 当日累计摄入热量，单位 kcal
   total_calories  Int       @default(0)
+  /// 当日热量目标，单位 kcal（来自用户档案或 AI 计算）
   calorie_goal    Int?
+  /// 当日记录的餐次数量
   meal_count      Int       @default(0)
+  /// 当日累计蛋白质摄入，单位 g
   total_protein   Decimal   @default(0) @db.Decimal(7, 1)
+  /// 当日累计脂肪摄入，单位 g
   total_fat       Decimal   @default(0) @db.Decimal(7, 1)
+  /// 当日累计碳水摄入，单位 g
   total_carbs     Decimal   @default(0) @db.Decimal(7, 1)
+  /// 当日食物品质平均分（1-10）
   avg_quality     Decimal   @default(0) @db.Decimal(3, 1)
+  /// 当日饱腹感平均分（1-10）
   avg_satiety     Decimal   @default(0) @db.Decimal(3, 1)
+  /// 综合营养评分 0-100（热量达成率 + 三大营养素均衡度的综合评分）
   nutrition_score Int       @default(0)
+  /// 蛋白质目标，单位 g
   protein_goal    Decimal   @default(0) @db.Decimal(6, 1)
+  /// 脂肪目标，单位 g
   fat_goal        Decimal   @default(0) @db.Decimal(6, 1)
+  /// 碳水目标，单位 g
   carbs_goal      Decimal   @default(0) @db.Decimal(6, 1)
+  /// 创建时间
   created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
   updated_at      DateTime  @default(now()) @db.Timestamptz(6)
   app_users       app_users @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_b8fe1bf443d817a306fbda45040")
 
   @@unique([user_id, date], map: "UQ_2bec94b8d146beda9ec7c984e41")
 }
 
+/// 设备推送 Token 表 — 存储用户各设备的推送令牌（APNs/FCM），用于消息推送
 model device_token {
+  /// 主键 UUID
   id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 关联的用户 ID
   user_id    String   @db.Uuid
+  /// 推送 Token（APNs device token 或 FCM registration token）
   token      String   @db.VarChar(500)
+  /// 设备唯一标识（客户端生成，用于去重）
   device_id  String   @db.VarChar(200)
+  /// 平台：ios / android
   platform   String   @db.VarChar(10)
+  /// 是否有效（用户退出登录或 Token 过期时置 false）
   is_active  Boolean  @default(true)
+  /// 创建时间
   created_at DateTime @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
   updated_at DateTime @default(now()) @db.Timestamptz(6)
 
   @@unique([user_id, device_id], map: "idx_device_token_lookup")
   @@index([user_id], map: "idx_device_token_user")
 }
 
+/// 文档向量嵌入表 — 存储 RAG 知识库文档片段及其向量表示，用于语义检索
 model document_embeddings {
+  /// 主键 UUID
   id        String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 文档原始文本片段
   text      String?
+  /// 元数据（JSON，如来源文件名、chunk 索引、标签等）
   metadata  Json?
+  /// 文本向量（pgvector 类型，支持余弦/L2 距离查询）
   embedding Unsupported("vector")?
 }
 
+/// 功能开关配置表 — 动态控制功能的开启/关闭及灰度策略，无需重新部署
 model feature_flag {
+  /// 主键 UUID
   id          String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 开关唯一标识键（如 "enable_v2_recommender"）
   key         String                 @unique @db.VarChar(100)
+  /// 开关展示名称
   name        String                 @db.VarChar(200)
+  /// 开关描述
   description String?
+  /// 开关类型：boolean=全量开关, percentage=按比例灰度, user_list=白名单用户, segment=用户分群
   type        feature_flag_type_enum @default(boolean)
+  /// 是否全量启用（boolean 类型时使用）
   enabled     Boolean                @default(false)
+  /// 详细配置（JSON，根据 type 有不同结构，如灰度比例或白名单 ID 列表）
   config      Json                   @default("{}")
+  /// 创建时间
   created_at  DateTime               @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
   updated_at  DateTime               @default(now()) @db.Timestamptz(6)
 
   @@index([key], map: "IDX_feature_flag_key")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// 推荐反馈明细表 — 记录用户对单个推荐食物的多维度评分（口味/份量/价格/时机）
 model feedback_details {
+  /// 主键 UUID
   id                       String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 关联的推荐反馈 ID（外键 → recommendation_feedbacks.id）
   feedback_id              String                   @db.Uuid
+  /// 关联的用户 ID
   user_id                  String                   @db.Uuid
+  /// 被评分的食物名称
   food_name                String                   @db.VarChar(100)
+  /// 餐次类型：breakfast/lunch/dinner/snack
   meal_type                String                   @db.VarChar(20)
+  /// 口味评分 1-5
   taste_rating             Int?                     @db.SmallInt
+  /// 份量评分 1-5（1=太少, 3=刚好, 5=太多）
   portion_rating           Int?                     @db.SmallInt
+  /// 价格评分 1-5（1=太贵, 3=合理, 5=很划算）
   price_rating             Int?                     @db.SmallInt
+  /// 时机评分 1-5（评估该食物推荐的时间是否合适）
   timing_rating            Int?                     @db.SmallInt
+  /// 用户文字评论
   comment                  String?
+  /// 用户在推荐卡片上的停留时长（毫秒），用于隐式兴趣信号
   dwell_time_ms            Int?
+  /// 用户是否展开了食物详情
   detail_expanded          Boolean?
+  /// 创建时间
   created_at               DateTime?                @default(now()) @db.Timestamptz(6)
   recommendation_feedbacks recommendation_feedbacks @relation(fields: [feedback_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_feedback_details_feedback")
 
@@ -352,24 +550,43 @@ model feedback_details {
   @@index([user_id], map: "IDX_feedback_details_user_id")
 }
 
+/// 食物识别分析记录表 — 存储每次 AI 识别请求的输入、中间结果和最终决策快照
 model food_analysis_record {
+  /// 主键 UUID
   id                   String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 关联的用户 ID
   user_id              String               @db.Uuid
+  /// 输入类型：text=文字输入, image=图片识别
   input_type           String               @db.VarChar(10)
+  /// 用户输入的原始文字（文字识别场景）
   raw_text             String?
+  /// 用户上传的图片 URL（图片识别场景）
   image_url            String?              @db.VarChar(500)
+  /// 餐次类型：breakfast/lunch/dinner/snack
   meal_type            String?              @db.VarChar(20)
+  /// 识别状态：pending=处理中, completed=完成, failed=失败
   status               String               @default("completed") @db.VarChar(20)
+  /// 识别结果原始 JSON（AI 返回的食物识别列表）
   recognized_payload   Json?
+  /// 标准化后的食物列表 JSON（映射到食物库后的结果）
   normalized_payload   Json?
+  /// 营养计算结果 JSON（汇总热量、三大营养素等）
   nutrition_payload    Json?
+  /// AI 健康决策 JSON（SAFE/WARN/STOP 及原因）
   decision_payload     Json?
+  /// 整体识别置信度 0.00-100.00
   confidence_score     Decimal?             @db.Decimal(5, 2)
+  /// 整体质量分 0.00-100.00（用于评估识别结果可靠性）
   quality_score        Decimal?             @db.Decimal(5, 2)
+  /// 成功匹配到食物库的食物数量
   matched_food_count   Int                  @default(0)
+  /// 识别出但未入库的候选食物数量
   candidate_food_count Int                  @default(0)
+  /// 持久化状态：pending=待写入food_records, done=已写入, skip=跳过
   persist_status       String               @default("pending") @db.VarChar(20)
+  /// 来源请求 ID（用于幂等校验，防止重复处理）
   source_request_id    String?              @db.VarChar(64)
+  /// 创建时间
   created_at           DateTime?            @default(now()) @db.Timestamptz(6)
   analysis_food_link   analysis_food_link[]
 
@@ -380,20 +597,35 @@ model food_analysis_record {
   @@index([user_id], map: "idx_food_analysis_record_user_id")
 }
 
+/// 候选食物池表 — 存储 AI 识别到但尚未入正式食物库的新食物，供人工审核后合并
 model food_candidate {
+  /// 主键 UUID
   id                  String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 标准化后的食物名称（去除修饰词后的规范名）
   canonical_name      String               @db.VarChar(120)
+  /// 其他别名（JSON 字符串数组）
   aliases             Json?                @default("[]")
+  /// 食物分类（如 grain/vegetable/meat 等，可为空表示待标注）
   category            String?              @db.VarChar(30)
+  /// AI 估算的营养信息（JSON，精度较低，供参考）
   estimated_nutrition Json?
+  /// 数据来源类型：ai=AI 识别, user=用户提交, scrape=爬取
   source_type         String               @db.VarChar(20)
+  /// 该候选食物出现次数（越多优先级越高）
   source_count        Int?                 @default(1)
+  /// 历次识别的平均置信度 0.00-100.00
   avg_confidence      Decimal?             @default(0) @db.Decimal(5, 2)
+  /// 数据质量评分 0.00-100.00
   quality_score       Decimal?             @default(0) @db.Decimal(5, 2)
+  /// 审核状态：pending=待审核, approved=已批准入库, rejected=已拒绝, merged=已合并
   review_status       String?              @default("pending") @db.VarChar(20)
+  /// 合并到的正式食物 ID（approved/merged 时填写）
   merged_food_id      String?              @db.Uuid
+  /// 首次出现时间
   first_seen_at       DateTime?            @default(now()) @db.Timestamptz(6)
+  /// 最近一次出现时间
   last_seen_at        DateTime?            @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
   updated_at          DateTime?            @default(now()) @db.Timestamptz(6)
   analysis_food_link  analysis_food_link[]
 
@@ -404,14 +636,23 @@ model food_candidate {
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// 食物变更日志表 — 记录食物库每次字段修改的历史快照，用于审计和回滚
 model food_change_logs {
+  /// 主键 UUID
   id         String   @id(map: "PK_717727f76e41ee87d1cfc893745") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 关联的食物 ID
   food_id    String   @db.Uuid
+  /// 变更版本号（单调递增，与 foods.data_version 对应）
   version    Int
+  /// 变更操作：create=新建, update=更新, archive=归档, merge=合并
   action     String   @db.VarChar(20)
+  /// 变更内容（JSON，记录 before/after 差异）
   changes    Json
+  /// 变更原因说明
   reason     String?
+  /// 操作人（管理员用户名或系统标识）
   operator   String?  @db.VarChar(100)
+  /// 变更时间
   created_at DateTime @default(now()) @db.Timestamptz(6)
   foods      foods    @relation(fields: [food_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_3bed3ebac60097ade2410992361")
 
@@ -419,15 +660,25 @@ model food_change_logs {
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// 食物数据冲突表 — 记录多数据源对同一字段存在分歧时的冲突信息，供人工仲裁
 model food_conflicts {
+  /// 主键 UUID
   id             String    @id(map: "PK_37c15f451790ed4ba5c66c8d82c") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 关联的食物 ID
   food_id        String    @db.Uuid
+  /// 发生冲突的字段名
   field          String    @db.VarChar(50)
+  /// 各来源的值（JSON 数组，每项含 source/value/confidence）
   sources        Json
+  /// 处理方式：pending=待处理, auto=自动解决, manual=人工解决, ignored=忽略
   resolution     String?   @db.VarChar(20)
+  /// 最终采用的值（字符串化）
   resolved_value String?
+  /// 处理人
   resolved_by    String?   @db.VarChar(100)
+  /// 处理时间
   resolved_at    DateTime? @db.Timestamptz(6)
+  /// 冲突发现时间
   created_at     DateTime  @default(now()) @db.Timestamptz(6)
   foods          foods     @relation(fields: [food_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_c38e8be317412e0e211bde36c2c")
 
@@ -436,34 +687,63 @@ model food_conflicts {
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// 用户食物记录表 — 存储用户每次拍照/上传/手动录入的饮食记录及 AI 分析结果
 model food_records {
+  /// 主键 UUID
   id              String                      @id(map: "PK_11f84af71017274532ef98f5d43") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 关联的用户 ID
   user_id         String                      @db.Uuid
+  /// 用户上传的食物图片 URL
   image_url       String?                     @db.VarChar(500)
+  /// 记录来源：screenshot=截图, camera=拍照, manual=手动录入, text_analysis=文字分析, image_analysis=图片识别
   source          food_records_source_enum    @default(screenshot)
+  /// OCR/NLP 识别的原始文字
   recognized_text String?
+  /// 识别出的食物列表（JSON 数组，含名称、重量、热量等）
   foods           Json                        @default("[]")
+  /// 本餐合计热量，单位 kcal
   total_calories  Int                         @default(0)
+  /// 餐次类型：breakfast=早餐, lunch=午餐, dinner=晚餐, snack=加餐
   meal_type       food_records_meal_type_enum @default(lunch)
+  /// AI 饮食建议文字
   advice          String?
+  /// AI 判定是否健康
   is_healthy      Boolean?
+  /// AI 决策结论：SAFE=安全, WARN=警告, STOP=建议停止
   decision        String                      @default("SAFE") @db.VarChar(10)
+  /// 风险等级：low/mid/high
   risk_level      String?                     @db.VarChar(5)
+  /// AI 给出的风险原因
   reason          String?
+  /// AI 改善建议
   suggestion      String?
+  /// AI 推荐的替代食物（JSON 数组）
   instead_options Json                        @default("[]")
+  /// 补偿方案（JSON，如本餐热量超标后的运动或饮食补偿建议）
   compensation    Json?
+  /// AI 上下文点评（结合用户状态的个性化说明）
   context_comment String?
+  /// AI 正向鼓励文字
   encouragement   String?
+  /// 本餐蛋白质，单位 g
   total_protein   Decimal                     @default(0) @db.Decimal(6, 1)
+  /// 本餐脂肪，单位 g
   total_fat       Decimal                     @default(0) @db.Decimal(6, 1)
+  /// 本餐碳水，单位 g
   total_carbs     Decimal                     @default(0) @db.Decimal(6, 1)
+  /// 本餐食物平均品质分（1-10）
   avg_quality     Decimal                     @default(0) @db.Decimal(3, 1)
+  /// 本餐饱腹感平均分（1-10）
   avg_satiety     Decimal                     @default(0) @db.Decimal(3, 1)
+  /// 本餐营养评分 0-100
   nutrition_score Int                         @default(0)
+  /// 用户记录的实际进食时间（默认为记录创建时间）
   recorded_at     DateTime                    @default(now()) @db.Timestamptz(6)
+  /// 创建时间
   created_at      DateTime                    @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
   updated_at      DateTime                    @default(now()) @db.Timestamptz(6)
+  /// 关联的食物识别分析记录 ID（来自 food_analysis_record）
   analysis_id     String?                     @db.Uuid
   app_users       app_users                   @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_ec3b604a6a49e32b3b7261e8b16")
 
@@ -473,14 +753,23 @@ model food_records {
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// 食物区域信息表 — 存储同一食物在不同地区的流行度、价格和季节性数据
 model food_regional_info {
+  /// 主键 UUID
   id                String   @id(map: "PK_a85c86ffa0a1e8ad0b7b650d0e0") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 关联的食物 ID
   food_id           String   @db.Uuid
+  /// 地区编码（ISO 3166-1 alpha-2，如 CN/US/JP）
   region            String   @db.VarChar(10)
+  /// 本地受欢迎程度 0-100
   local_popularity  Int      @default(0)
+  /// 本地价格区间（如 "5-15"，单位当地货币）
   local_price_range String?  @db.VarChar(20)
+  /// 供应可获取性：year_round=全年, seasonal=季节性, rare=稀少
   availability      String?  @db.VarChar(20)
+  /// 当地法规信息（JSON，如允许添加剂、营养标签要求等）
   regulatory_info   Json?
+  /// 创建时间
   created_at        DateTime @default(now()) @db.Timestamptz(6)
   foods             foods    @relation(fields: [food_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_999e5485019b3efa2aae0a557f5")
   month_weights     Json?    @db.JsonB /// V7.0: 食物级月份权重（12 元素数组 0-1），替代品类级峰值月份
@@ -491,18 +780,31 @@ model food_regional_info {
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// 食物数据来源表 — 记录每条食物数据的原始来源、置信度和抓取时间，支持多源融合
 model food_sources {
+  /// 主键 UUID
   id          String   @id(map: "PK_43211afdee8a61e9634d7c6865c") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 关联的食物 ID
   food_id     String   @db.Uuid
+  /// 来源类型（如 usda/cfsb/off/ai/manual/import）
   source_type String   @db.VarChar(50)
+  /// 来源系统内的原始 ID（如 USDA FDC ID）
   source_id   String?  @db.VarChar(200)
+  /// 来源原始 URL
   source_url  String?  @db.VarChar(500)
+  /// 来源原始数据（JSON 完整快照）
   raw_data    Json
+  /// 映射后的标准化数据（JSON，已转换为系统字段格式）
   mapped_data Json?
+  /// 数据置信度 0.00-1.00（官方来源一般为 0.95+）
   confidence  Decimal  @default(0.8) @db.Decimal(3, 2)
+  /// 是否为主要数据源（foods.primary_source 对应的那条）
   is_primary  Boolean  @default(false)
+  /// 优先级 0-100（高优先级来源数据冲突时优先采用）
   priority    Int      @default(50)
+  /// 数据抓取/录入时间
   fetched_at  DateTime @default(now()) @db.Timestamptz(6)
+  /// 记录创建时间
   created_at  DateTime @default(now()) @db.Timestamptz(6)
   foods       foods    @relation(fields: [food_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_dd78760b3ccd557a6be426c896f")
 
@@ -511,15 +813,25 @@ model food_sources {
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// 食物多语言翻译表 — 存储食物名称、描述在各语言下的本地化文本
 model food_translations {
+  /// 主键 UUID
   id           String   @id(map: "PK_f7e8f00e342c52db74bf2820e19") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 关联的食物 ID
   food_id      String   @db.Uuid
+  /// 语言区域代码（如 zh-CN/en-US/ja-JP）
   locale       String   @db.VarChar(10)
+  /// 该语言下的食物名称
   name         String   @db.VarChar(200)
+  /// 该语言下的食物别名（逗号分隔）
   aliases      String?
+  /// 该语言下的食物描述
   description  String?
+  /// 标准份量说明（本地化，如 "1 bowl (200g)"）
   serving_desc String?  @db.VarChar(100)
+  /// 创建时间
   created_at   DateTime @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
   updated_at   DateTime @default(now()) @db.Timestamptz(6)
   foods        foods    @relation(fields: [food_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_880ef718b1e294d7cbeb2c7265a")
 
@@ -554,6 +866,8 @@ model foods {
   food_form             String?                @default("ingredient") @db.VarChar(20)
   /// 成品菜推荐优先级 0-100，值越高越优先推荐；仅 dish/semi_prepared 有值（V7.3）
   dish_priority         Int?
+  /// 食物可获得性难度 1-5（1=随处可得, 2=常见, 3=普通, 4=较难, 5=稀有）（V7.4）
+  acquisition_difficulty Int?                   @default(3)
 
   // ─── 宏量营养素（per 100g 可食部分）────────────────────────────────────
   /// 热量，单位 kcal
@@ -598,6 +912,8 @@ model foods {
   vitamin_e             Decimal?               @db.Decimal(5, 2)
   /// 维生素 B12，单位 μg
   vitamin_b12           Decimal?               @db.Decimal(5, 2)
+  /// 维生素 B6，单位 mg
+  vitamin_b6            Decimal?               @db.Decimal(5, 2)
   /// 叶酸，单位 μg DFE
   folate                Decimal?               @db.Decimal(6, 1)
   /// 锌，单位 mg
@@ -608,6 +924,16 @@ model foods {
   phosphorus            Decimal?               @db.Decimal(7, 1)
   /// 嘌呤，单位 mg（痛风饮食管理关键字段）
   purine                Decimal?               @db.Decimal(7, 1)
+
+  // ─── V7.4 Phase 3-A: 精细化营养字段 ──────────────────────────────────
+  /// Omega-3 脂肪酸 (EPA+DHA+ALA)，单位 mg
+  omega3                Decimal?               @db.Decimal(7, 1)
+  /// Omega-6 脂肪酸 (亚油酸为主)，单位 mg
+  omega6                Decimal?               @db.Decimal(7, 1)
+  /// 可溶性膳食纤维，单位 g（果胶/β-葡聚糖/菊粉等，有助降血脂血糖）
+  soluble_fiber         Decimal?               @db.Decimal(5, 1)
+  /// 不可溶性膳食纤维，单位 g（纤维素/半纤维素/木质素等，有助肠道蠕动）
+  insoluble_fiber       Decimal?               @db.Decimal(5, 1)
 
   // ─── 健康评估 ──────────────────────────────────────────────────────────
   /// 血糖生成指数 GI（0-100，>70 为高 GI）
@@ -686,6 +1012,8 @@ model foods {
   estimated_cost_level  Int?
   /// 保质期，单位天（0 表示当日食用）
   shelf_life_days       Int?
+  /// 含水率百分比（0-100，用于水分摄入评估）
+  water_content_percent Decimal?               @db.Decimal(5, 2)
 
   // ─── 媒体资源 ──────────────────────────────────────────────────────────
   /// 食物完整图片 URL
@@ -755,41 +1083,75 @@ model foods {
   @@index([food_form], map: "idx_foods_food_form")
 }
 
+/// 数据库迁移记录表 — 由 TypeORM 自动维护，记录已执行的迁移文件（勿手动修改）
 model migrations {
+  /// 自增主键
   id        Int    @id(map: "PK_8c82d7f526340ab734260ea46be") @default(autoincrement())
+  /// 迁移时间戳（毫秒级，用于排序）
   timestamp BigInt
+  /// 迁移文件名
   name      String @db.VarChar
 }
 
+/// AI 模型配置表 — 存储每个 Provider 下各模型的能力参数、费率和访问限制
 model model_configs {
+  /// 主键 UUID
   id                    String                            @id(map: "PK_37b8d27a688c96443f78bdb3e3c") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 关联的 AI 提供商 ID（外键 → providers.id）
   providerId            String                            @db.Uuid
+  /// 模型标识名（如 "gpt-4o"、"claude-3-5-sonnet"）
   modelName             String                            @db.VarChar(100)
+  /// 模型展示名称（中文友好名）
   displayName           String                            @db.VarChar(100)
+  /// 能力类型：text.generation/text.embedding/image.generation 等
   capabilityType        model_configs_capabilitytype_enum
+  /// 是否启用该模型
   enabled               Boolean                           @default(true)
+  /// 路由优先级（值越大优先级越高）
   priority              Int                               @default(0)
+  /// 模型状态：active=正常, inactive=停用, deprecated=已废弃
   status                model_configs_status_enum         @default(active)
+  /// 输入 Token 费率（每千 Token 美元/人民币）
   inputCostPer1kTokens  Decimal                           @db.Decimal(10, 6)
+  /// 输出 Token 费率（每千 Token）
   outputCostPer1kTokens Decimal                           @db.Decimal(10, 6)
+  /// 计费货币：USD=美元, CNY=人民币
   currency              model_configs_currency_enum       @default(USD)
+  /// 单次请求最大 Token 数（输入+输出）
   maxTokens             Int
+  /// 每分钟最大请求次数（RPM），null=不限制
   maxRequestsPerMinute  Int?
+  /// 上下文窗口大小（Token 数）
   contextWindow         Int
+  /// 是否支持流式响应（SSE）
   streaming             Boolean                           @default(false)
+  /// 是否支持 Function Calling
   functionCalling       Boolean                           @default(false)
+  /// 是否支持图片/视觉输入
   vision                Boolean                           @default(false)
+  /// 自定义 API Endpoint（覆盖 Provider 默认地址）
   endpoint              String?                           @db.VarChar(500)
+  /// 自定义 API Key（覆盖 Provider 默认 Key，camelCase 版本）
   customApiKey          String?                           @db.VarChar(500)
+  /// 自定义超时时间（毫秒，camelCase 版本）
   customTimeout         Int?
+  /// 自定义重试次数（camelCase 版本）
   customRetries         Int?
+  /// 额外配置元数据（JSON，camelCase 版本）
   configMetadata        Json?
+  /// 扩展元数据（JSON）
   metadata              Json?
+  /// 创建时间
   createdAt             DateTime                          @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
   updatedAt             DateTime                          @default(now()) @db.Timestamptz(6)
+  /// @deprecated 请使用 customApiKey（snake_case 旧版字段）
   custom_api_key        String?                           @db.VarChar(500)
+  /// @deprecated 请使用 customTimeout（snake_case 旧版字段）
   custom_timeout        Int?
+  /// @deprecated 请使用 customRetries（snake_case 旧版字段）
   custom_retries        Int?
+  /// @deprecated 请使用 configMetadata（snake_case 旧版字段）
   config_metadata       Json?
   providers             providers                         @relation(fields: [providerId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_43d272f8e0fb42c6736b0fdc119")
 
@@ -797,16 +1159,27 @@ model model_configs {
   @@index([capabilityType, enabled], map: "IDX_model_configs_capability_enabled")
 }
 
+/// 用户通知消息表 — 存储发送给用户的系统通知、推送消息记录
 model notification {
+  /// 主键 UUID
   id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 关联的用户 ID
   user_id    String    @db.Uuid
+  /// 通知类型（如 reminder/achievement/system/coach 等）
   type       String    @db.VarChar(30)
+  /// 通知标题
   title      String    @db.VarChar(200)
+  /// 通知正文
   body       String
+  /// 附加数据（JSON，如跳转参数、关联记录 ID 等）
   data       Json?
+  /// 是否已读
   is_read    Boolean   @default(false)
+  /// 已读时间
   read_at    DateTime? @db.Timestamptz(6)
+  /// 是否已通过推送（APNs/FCM）发送
   is_pushed  Boolean   @default(false)
+  /// 创建时间
   created_at DateTime  @default(now()) @db.Timestamptz(6)
   /// V6.5 Phase 2I: FK 补齐
   user       app_users @relation(fields: [user_id], references: [id], onDelete: Cascade, map: "fk_notification_user")
@@ -815,32 +1188,57 @@ model notification {
   @@index([user_id, is_read], map: "idx_notification_user_unread")
 }
 
+/// 用户通知偏好设置表 — 每用户一条，控制推送开关、免打扰时段等
 model notification_preference {
+  /// 主键 UUID
   id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 关联的用户 ID（唯一，每用户一条）
   user_id       String   @unique(map: "idx_notification_pref_user") @db.Uuid
+  /// 是否开启推送通知
   push_enabled  Boolean  @default(true)
+  /// 允许接收的通知类型列表（JSON 数组，如 ["reminder","achievement"]；空数组=全部接收）
   enabled_types Json     @default("[]")
+  /// 免打扰开始时间（24h 制，如 "22:00"）
   quiet_start   String?  @db.VarChar(5)
+  /// 免打扰结束时间（24h 制，如 "08:00"）
   quiet_end     String?  @db.VarChar(5)
+  /// 创建时间
   created_at    DateTime @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
   updated_at    DateTime @default(now()) @db.Timestamptz(6)
 }
 
+/// 支付记录表 — 存储每笔充值/订阅支付的流水信息
 model payment_record {
+  /// 主键 UUID
   id                      String    @id(map: "PK_payment_record") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 关联的用户 ID
   user_id                 String    @db.Uuid
+  /// 关联的订阅 ID（如为订阅支付则填写）
   subscription_id         String?   @db.Uuid
+  /// 系统内部订单号（全局唯一）
   order_no                String    @unique(map: "idx_payment_order") @db.VarChar(64)
+  /// 支付渠道：wechat/alipay/apple/google 等
   channel                 String    @db.VarChar(32)
+  /// 支付金额（分），如 998 = 9.98 元
   amount_cents            Int
+  /// 货币代码（默认 CNY）
   currency                String    @default("CNY") @db.VarChar(8)
+  /// 支付状态：pending=待支付, success=成功, failed=失败, refunded=已退款
   status                  String    @default("pending") @db.VarChar(32)
+  /// 第三方支付平台的交易流水号
   platform_transaction_id String?   @db.VarChar(512)
+  /// 支付平台回调原始数据（JSON）
   callback_payload        Json?
+  /// 已退款金额（分），默认 0
   refund_amount_cents     Int       @default(0)
+  /// 支付成功时间
   paid_at                 DateTime? @db.Timestamptz(6)
+  /// 退款时间
   refunded_at             DateTime? @db.Timestamptz(6)
+  /// 创建时间
   created_at              DateTime  @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
   updated_at              DateTime  @default(now()) @db.Timestamptz(6)
 
   @@index([channel, status], map: "idx_payment_channel_status")
@@ -849,68 +1247,116 @@ model payment_record {
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// 权限模板表 — 预定义角色权限集合，方便批量分配权限
 model permission_templates {
+  /// 主键 UUID
   id                  String   @id(map: "PK_58491c665954fb0fc0f0378e677") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 模板唯一编码（如 "food_editor"、"report_viewer"）
   code                String   @unique(map: "UQ_0eac5e983d19cd89c54c37b6ecc") @db.VarChar(50)
+  /// 模板展示名称
   name                String   @db.VarChar(100)
+  /// 模板描述
   description         String?  @db.VarChar(500)
+  /// 权限码匹配规则（支持通配符，如 "food:*" 或逗号分隔多条）
   permission_patterns String
+  /// 是否为系统内置模板（系统模板不可删除）
   is_system           Boolean  @default(false)
+  /// 创建时间
   created_at          DateTime @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
   updated_at          DateTime @default(now()) @db.Timestamptz(6)
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// 权限定义表 — 存储系统中所有可分配的菜单权限和操作权限
 model permissions {
+  /// 主键 UUID
   id                String                   @id(map: "PK_920331560282b8bd21bb02290df") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 权限唯一编码（如 "food:list"、"food:edit"）
   code              String                   @unique(map: "UQ_8dad765629e83229da6feda1c1d") @db.VarChar(100)
+  /// 权限展示名称
   name              String                   @db.VarChar(100)
+  /// 权限类型：menu=菜单权限（控制页面显示）, operation=操作权限（控制按钮/接口）
   type              permissions_type_enum
+  /// HTTP 方法（操作权限时填写：GET/POST/PUT/DELETE/PATCH）
   action            permissions_action_enum?
+  /// 资源路径（操作权限时填写，如 "/api/food/:id"）
   resource          String?                  @db.VarChar(200)
+  /// 父级权限 ID（树形结构，null=顶级权限）
   parent_id         String?                  @db.Uuid
+  /// 菜单图标标识
   icon              String?                  @db.VarChar(50)
+  /// 权限描述
   description       String?                  @db.VarChar(500)
+  /// 权限状态：active=启用, inactive=停用
   status            permissions_status_enum  @default(active)
+  /// 是否为系统内置权限（系统权限不可删除）
   is_system         Boolean                  @default(false)
+  /// 菜单排序值（值越小越靠前）
   sort              Int                      @default(0)
+  /// 创建时间
   created_at        DateTime                 @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
   updated_at        DateTime                 @default(now()) @db.Timestamptz(6)
   permissions       permissions?             @relation("permissionsTopermissions", fields: [parent_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_e152e0aa9e0df7ed44539db894c")
   other_permissions permissions[]            @relation("permissionsTopermissions")
   role_permissions  role_permissions[]
 }
 
+/// 预计算推荐缓存表 — 提前计算并缓存用户的餐食推荐结果，实现毫秒级响应
 model precomputed_recommendations {
+  /// 主键 UUID
   id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 关联的用户 ID
   user_id          String   @db.Uuid
+  /// 推荐日期（格式 YYYY-MM-DD）
   date             String   @db.VarChar(10)
+  /// 餐次类型：breakfast/lunch/dinner/snack
   meal_type        String   @db.VarChar(20)
   /// V6.9 Phase 3-B: 渠道维度（切换渠道时不命中旧缓存）
   channel          String   @default("unknown") @db.VarChar(30)
+  /// 推荐结果（JSON，含 top-N 食物列表及评分）
   result           Json
+  /// 多场景推荐结果（JSON，如不同渠道/偏好的备选推荐）
   scenario_results Json?
+  /// 生成此缓存所用的策略版本号
   strategy_version String   @db.VarChar(50)
+  /// 缓存计算时间
   computed_at      DateTime @default(now()) @db.Timestamptz(6)
+  /// 缓存过期时间（过期后重新计算）
   expires_at       DateTime @db.Timestamptz(6)
+  /// 是否已被使用（用户实际请求后标记 true）
   is_used          Boolean  @default(false)
 
   @@unique([user_id, date, meal_type, channel], map: "uq_precomputed_user_date_meal_channel")
   @@index([expires_at], map: "idx_precomputed_expires")
 }
 
+/// 用户档案变更日志表 — 记录用户资料每次修改的完整 before/after 快照，用于审计和智能推断
 model profile_change_log {
+  /// 主键 UUID
   id             String   @id(map: "PK_profile_change_log") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 关联的用户 ID
   user_id        String   @db.Uuid
+  /// 变更后的档案版本号（与 user_profiles.profile_version 对应）
   version        Int
+  /// 变更类型（如 onboarding/manual_update/ai_infer/sync 等）
   change_type    String   @db.VarChar(32)
+  /// 变更触发来源（如 app/admin/system/webhook）
   source         String   @db.VarChar(32)
+  /// 本次变更涉及的字段名列表（JSON 数组）
   changed_fields Json     @default("[]")
+  /// 变更前的字段值（JSON 对象）
   before_values  Json     @default("{}")
+  /// 变更后的字段值（JSON 对象）
   after_values   Json     @default("{}")
+  /// 触发变更的事件标识（如 "food_record_created"、"onboarding_step_3"）
   trigger_event  String?  @db.VarChar(128)
+  /// 变更原因说明
   reason         String?
+  /// 扩展元数据
   metadata       Json?
+  /// 创建时间
   created_at     DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([created_at], map: "idx_profile_change_log_created")
@@ -919,50 +1365,86 @@ model profile_change_log {
   @@index([user_id, version], map: "idx_profile_change_log_user_version")
 }
 
+/// 用户档案快照表 — 在关键节点（如档案更新、模型推断）保存用户完整画像快照
 model profile_snapshots {
+  /// 主键 UUID
   id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 关联的用户 ID
   user_id        String    @db.Uuid
+  /// 完整档案快照（JSON，包含 user_profiles + user_inferred_profiles 的合并数据）
   snapshot       Json
+  /// 触发快照的类型（如 onboarding_complete/profile_update/weekly_sync）
   trigger_type   String    @db.VarChar(30)
+  /// 被快照涵盖的变更字段列表（JSON 数组）
   changed_fields Json
+  /// 快照创建时间
   created_at     DateTime? @default(now()) @db.Timestamptz(6)
   app_users      app_users @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([user_id, created_at(sort: Desc)], map: "idx_snapshot_user_time")
 }
 
+/// AI 服务提供商配置表 — 存储 OpenAI/Anthropic/Qwen 等各提供商的接入信息
 model providers {
+  /// 主键 UUID
   id              String                @id(map: "PK_af13fc2ebf382fe0dad2e4793aa") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 提供商名称（全局唯一，如 "openai-main"）
   name            String                @unique(map: "IDX_d735474e539e674ba3702eddc4") @db.VarChar(100)
+  /// 提供商类型：openai/anthropic/deepseek/qwen/google/baidu/alibaba/tencent/custom
   type            providers_type_enum
+  /// API Base URL（如 "https://api.openai.com/v1"）
   baseUrl         String                @db.VarChar(500)
+  /// API Key（加密存储）
   apiKey          String                @db.VarChar(500)
+  /// 是否启用
   enabled         Boolean               @default(true)
+  /// 健康检查 URL（定时 ping 检测可用性）
   healthCheckUrl  String?               @db.VarChar(500)
+  /// 请求超时时间，单位毫秒（默认 30000ms）
   timeout         Int                   @default(30000)
+  /// 失败重试次数
   retryCount      Int                   @default(3)
+  /// 提供商状态：active=正常, inactive=停用, error=异常
   status          providers_status_enum @default(active)
+  /// 最后一次健康检查时间
   lastHealthCheck DateTime?             @db.Timestamptz(6)
+  /// 扩展元数据（JSON，如代理配置、自定义 Header 等）
   metadata        Json?
+  /// 创建时间
   createdAt       DateTime              @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
   updatedAt       DateTime              @default(now()) @db.Timestamptz(6)
   model_configs   model_configs[]
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// 推荐反馈汇总表 — 记录用户对每次食物推荐的整体行为（采纳/替换/拒绝），用于算法迭代
 model recommendation_feedbacks {
+  /// 主键 UUID
   id                   String             @id(map: "PK_538c99577bef661f2eff1325862") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 关联的用户 ID
   user_id              String             @db.VarChar
+  /// 餐次类型：breakfast/lunch/dinner/snack
   meal_type            String             @db.VarChar(20)
+  /// 被推荐的食物名称
   food_name            String             @db.VarChar(100)
+  /// 被推荐的食物 ID（存在于食物库时填写）
   food_id              String?            @db.VarChar
+  /// 用户行为：accept=接受, replace=替换, reject=拒绝, skip=跳过
   action               String             @db.VarChar(20)
+  /// 替换后的食物名称（action=replace 时填写）
   replacement_food     String?            @db.VarChar(100)
+  /// 推荐算法给出的评分 0.000-1.000
   recommendation_score Decimal?           @db.Decimal(5, 3)
+  /// 用户当前的目标类型（如 fat_loss/muscle_gain/health）
   goal_type            String?            @db.VarChar(20)
+  /// 关联的 A/B 实验 ID
   experiment_id        String?            @db.VarChar
+  /// 命中的实验分组 ID
   group_id             String?            @db.VarChar
+  /// 关联 recommendation_traces.id，用于归因分析
   trace_id             String?            @db.Uuid /// 关联 recommendation_traces.id，用于归因分析
+  /// 反馈时间
   created_at           DateTime           @default(now()) @db.Timestamptz(6)
   feedback_details     feedback_details[]
 
@@ -973,26 +1455,42 @@ model recommendation_feedbacks {
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// 角色权限关联表 — 多对多关联 roles 和 permissions
 model role_permissions {
+  /// 主键 UUID
   id            String      @id(map: "PK_84059017c90bfcb701b8fa42297") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 角色 ID（外键 → roles.id）
   role_id       String      @db.Uuid
+  /// 权限 ID（外键 → permissions.id）
   permission_id String      @db.Uuid
+  /// 授权时间
   created_at    DateTime    @default(now()) @db.Timestamptz(6)
   permissions   permissions @relation(fields: [permission_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_17022daf3f885f7d35423e9971e")
   roles         roles       @relation(fields: [role_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_178199805b901ccd220ab7740ec")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// 角色定义表 — 存储后台管理员角色层级树（支持父子角色继承）
 model roles {
+  /// 主键 UUID
   id               String             @id(map: "PK_c1433d71a4838793a49dcad46ab") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 角色唯一编码（如 "super_admin"、"food_manager"）
   code             String             @unique(map: "UQ_f6d54f95c31b73fb1bdd8e91d0c") @db.VarChar(50)
+  /// 角色展示名称
   name             String             @db.VarChar(100)
+  /// 父角色 ID（支持树形角色继承，null=顶级角色）
   parent_id        String?            @db.Uuid
+  /// 角色描述
   description      String?            @db.VarChar(500)
+  /// 角色状态：active=启用, inactive=停用
   status           roles_status_enum  @default(active)
+  /// 是否为系统内置角色（系统角色不可删除）
   is_system        Boolean            @default(false)
+  /// 显示排序值（值越小越靠前）
   sort             Int                @default(0)
+  /// 创建时间
   created_at       DateTime           @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
   updated_at       DateTime           @default(now()) @db.Timestamptz(6)
   role_permissions role_permissions[]
   roles            roles?             @relation("rolesToroles", fields: [parent_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_3e97eeaf865aeda0d20c0c5c509")
@@ -1000,17 +1498,29 @@ model roles {
   user_roles       user_roles[]
 }
 
+/// 推荐策略配置表 — 定义不同场景/用户群的食物推荐策略，支持全局/分群/上下文匹配
 model strategy {
+  /// 主键 UUID
   id           String   @id(map: "PK_strategy") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 策略名称（如 "fat_loss_standard_v2"）
   name         String   @db.VarChar(128)
+  /// 策略详情描述
   description  String?
+  /// 策略作用域：global=全局默认, segment=用户分群, context=上下文动态匹配
   scope        String   @default("global") @db.VarChar(32)
+  /// 作用域目标值（scope=segment 时为分群名；scope=context 时为空，由 context_condition 决定）
   scope_target String?  @db.VarChar(128)
+  /// 策略具体参数（JSON，含权重、过滤器、boost 参数等）
   config       Json     @default("{}")
+  /// 策略状态：draft=草稿, active=启用, inactive=停用
   status       String   @default("draft") @db.VarChar(16)
+  /// 版本号（每次修改递增）
   version      Int      @default(1)
+  /// 当多个策略同时匹配时的优先级（值越大越优先）
   priority     Int      @default(0)
+  /// 创建时间
   created_at   DateTime @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
   updated_at   DateTime @default(now()) @db.Timestamptz(6)
   context_condition Json? @db.JsonB /// V7.0: 上下文策略匹配条件（scope=context 时使用）{ timeOfDay?, dayType?, season?, userLifecycle?, goalPhaseType? }
   /// V6.5 Phase 2I: FK 补齐 — 反向关联
@@ -1020,16 +1530,27 @@ model strategy {
   @@index([scope, scope_target, status], map: "idx_strategy_scope_target")
 }
 
+/// 用户策略分配表 — 记录每个用户当前使用哪个推荐策略及分配来源
 model strategy_assignment {
+  /// 主键 UUID
   id              String    @id(map: "PK_strategy_assignment") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 关联的用户 ID
   user_id         String    @db.Uuid
+  /// 分配的策略 ID（null 表示使用全局默认策略）
   strategy_id     String?   @db.Uuid
+  /// 分配方式：manual=人工分配, auto=系统自动, ab_test=A/B 实验分配
   assignment_type String    @default("manual") @db.VarChar(32)
+  /// 分配来源标识（如 A/B 实验 ID 或人工操作标识）
   source          String?   @db.VarChar(128)
+  /// 是否当前激活
   is_active       Boolean   @default(true)
+  /// 策略生效开始时间（null=立即生效）
   active_from     DateTime? @db.Timestamptz(6)
+  /// 策略生效结束时间（null=永久有效）
   active_until    DateTime? @db.Timestamptz(6)
+  /// 创建时间
   created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
   updated_at      DateTime  @default(now()) @db.Timestamptz(6)
   /// V6.5 Phase 2I: FK 补齐
   user            app_users @relation(fields: [user_id], references: [id], onDelete: Cascade, map: "fk_strategy_assignment_user")
@@ -1040,19 +1561,33 @@ model strategy_assignment {
   @@index([user_id, assignment_type], map: "idx_strategy_assignment_user_type")
 }
 
+/// 用户订阅记录表 — 存储用户的会员订阅状态、有效期和自动续费信息
 model subscription {
+  /// 主键 UUID
   id                       String            @id(map: "PK_subscription") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 关联的用户 ID
   user_id                  String            @db.Uuid
+  /// 订阅的套餐 ID（外键 → subscription_plan.id）
   plan_id                  String            @db.Uuid
+  /// 订阅状态：active=有效, expired=已过期, cancelled=已取消, grace=宽限期
   status                   String            @default("active") @db.VarChar(32)
+  /// 支付渠道：wechat/alipay/apple/google
   payment_channel          String            @db.VarChar(32)
+  /// 订阅开始时间
   starts_at                DateTime          @db.Timestamptz(6)
+  /// 订阅到期时间
   expires_at               DateTime          @db.Timestamptz(6)
+  /// 取消时间（主动取消时记录）
   cancelled_at             DateTime?         @db.Timestamptz(6)
+  /// 是否开启自动续费
   auto_renew               Boolean           @default(true)
+  /// 第三方平台的订阅 ID（如 Apple 的 original_transaction_id）
   platform_subscription_id String?           @db.VarChar(512)
+  /// 宽限期结束时间（到期后仍可使用的宽限期截止时间）
   grace_period_ends_at     DateTime?         @db.Timestamptz(6)
+  /// 创建时间
   created_at               DateTime          @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
   updated_at               DateTime          @default(now()) @db.Timestamptz(6)
   subscription_plan        subscription_plan @relation(fields: [plan_id], references: [id], onUpdate: NoAction, map: "FK_subscription_plan")
 
@@ -1061,20 +1596,35 @@ model subscription {
   @@index([user_id, status], map: "idx_subscription_user_status")
 }
 
+/// 订阅套餐定义表 — 存储各会员档位的价格、权益和支付平台商品 ID
 model subscription_plan {
+  /// 主键 UUID
   id                String         @id(map: "PK_subscription_plan") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 套餐名称（如 "月度会员"、"年度会员"）
   name              String         @db.VarChar(128)
+  /// 套餐描述
   description       String?
+  /// 套餐档位：free=免费, basic=基础, pro=专业, premium=尊享
   tier              String         @db.VarChar(32)
+  /// 计费周期：monthly=月付, quarterly=季付, yearly=年付, lifetime=买断
   billing_cycle     String         @db.VarChar(32)
+  /// 价格（分），如 2980 = 29.80 元
   price_cents       Int
+  /// 货币代码（默认 CNY）
   currency          String         @default("CNY") @db.VarChar(8)
+  /// 套餐权益配置（JSON，如 { ai_analysis_daily: 100, coach_messages: 500 }）
   entitlements      Json           @default("{}")
+  /// Apple App Store 内购商品 ID
   apple_product_id  String?        @db.VarChar(256)
+  /// 微信支付商品 ID
   wechat_product_id String?        @db.VarChar(256)
+  /// 套餐在列表中的排序值（值越小越靠前）
   sort_order        Int            @default(0)
+  /// 是否上架（false=下架，不可新购）
   is_active         Boolean        @default(true)
+  /// 创建时间
   created_at        DateTime       @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
   updated_at        DateTime       @default(now()) @db.Timestamptz(6)
   subscription      subscription[]
 
@@ -1082,15 +1632,25 @@ model subscription_plan {
   @@index([tier], map: "idx_subscription_plan_tier")
 }
 
+/// 订阅触发日志表 — 记录用户触发付费引导的场景，用于转化率分析
 model subscription_trigger_log {
+  /// 主键 UUID
   id               String   @id(map: "PK_5130854651b572f030f3ed0ac96") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 关联的用户 ID
   user_id          String   @db.Uuid
+  /// 触发场景（如 ai_limit_reached/feature_locked/onboarding_upsell）
   trigger_scene    String   @db.VarChar(30)
+  /// 触发时使用的功能标识（如 ai_analysis/coach_message）
   feature          String   @db.VarChar(50)
+  /// 用户当前会员档位
   current_tier     String   @db.VarChar(20)
+  /// 推荐购买的套餐档位
   recommended_plan String   @db.VarChar(20)
+  /// 命中的 A/B 实验分桶
   ab_bucket        String?  @db.VarChar(20)
+  /// 是否最终转化为付费（异步更新）
   converted        Boolean  @default(false)
+  /// 触发时间
   created_at       DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([converted], map: "idx_trigger_log_converted")
@@ -1099,33 +1659,56 @@ model subscription_trigger_log {
   @@index([user_id], map: "idx_trigger_log_user_id")
 }
 
+/// 用户功能配额表 — 跟踪每位用户各项功能的使用量及剩余配额
 model usage_quota {
+  /// 主键 UUID
   id          String   @id(map: "PK_usage_quota") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 关联的用户 ID
   user_id     String   @db.Uuid
+  /// 功能标识（如 ai_analysis/coach_message/food_scan）
   feature     String   @db.VarChar(64)
+  /// 当前周期已使用次数
   used        Int      @default(0)
+  /// 当前周期配额上限（0=不限制）
   quota_limit Int      @default(0)
+  /// 配额重置周期：daily=每日, weekly=每周, monthly=每月
   cycle       String   @default("daily") @db.VarChar(16)
+  /// 下次重置时间
   reset_at    DateTime @db.Timestamptz(6)
+  /// 创建时间
   created_at  DateTime @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
   updated_at  DateTime @default(now()) @db.Timestamptz(6)
 
   @@unique([user_id, feature], map: "idx_usage_quota_user_feature")
   @@index([reset_at], map: "idx_usage_quota_reset")
 }
 
+/// AI 能力调用记录表 — 记录每次 API 请求的提供商、模型、费用和响应时间，用于成本分析
 model usage_records {
+  /// 主键 UUID
   id              String   @id(map: "PK_e511cf9f7dc53851569f87467a5") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 调用方客户端 ID
   client_id       String   @db.Uuid
+  /// 请求唯一 ID（用于去重和追踪）
   request_id      String   @db.VarChar(255)
+  /// 调用的能力类型（如 text.generation/image.generation）
   capability_type String   @db.VarChar(100)
+  /// 实际使用的 AI 提供商（如 openai/anthropic）
   provider        String   @db.VarChar(50)
+  /// 实际使用的模型名称（如 gpt-4o）
   model           String   @db.VarChar(100)
+  /// 请求状态：success=成功, failed=失败, timeout=超时
   status          String   @db.VarChar(20)
+  /// Token 使用量（JSON，含 prompt_tokens/completion_tokens/total_tokens）
   usage           Json
+  /// 本次请求费用（单位：美元或人民币，取决于 provider 设置）
   cost            Decimal  @db.Decimal(10, 6)
+  /// 响应时间，单位毫秒
   response_time   Int
+  /// 扩展元数据（JSON）
   metadata        Json?
+  /// 请求时间戳
   timestamp       DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([capability_type, timestamp], map: "IDX_0616a784ab63d9f654498cd84b")
@@ -1133,65 +1716,113 @@ model usage_records {
   @@index([client_id, timestamp], map: "IDX_d397b87d28105b361b8f5a840d")
 }
 
+/// 用户成就解锁记录表 — 记录用户何时解锁了哪项成就
 model user_achievements {
+  /// 主键 UUID
   id             String   @id(map: "PK_3d94aba7e9ed55365f68b5e77fa") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 关联的用户 ID
   user_id        String   @db.Uuid
+  /// 解锁的成就 ID（外键 → achievements.id）
   achievement_id String   @db.Uuid
+  /// 解锁时间
   unlocked_at    DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([user_id], map: "idx_user_achievements_user_id")
 }
 
+/// 用户行为画像表 — 通过历史记录自动学习的行为模式，辅助个性化推荐
 model user_behavior_profiles {
+  /// 主键 UUID
   id                   String   @id(map: "PK_80d69430cb45fe3d5af5540de7b") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 关联的用户 ID（唯一，每用户一条）
   user_id              String   @unique(map: "UQ_4a98fb7c71270ccf2e6ebb5552c") @db.Uuid
+  /// 食物偏好映射（JSON，key=food_id，value=偏好分 0-1）
   food_preferences     Json     @default("{}")
+  /// 暴食风险时段（JSON 数组，24h 制小时，如 [21,22,23]）
   binge_risk_hours     Json     @default("[]")
+  /// 失控触发因素（JSON 数组，如 ["stress","late_night","social_eating"]）
   failure_triggers     Json     @default("[]")
+  /// 平均计划执行率 0.00-1.00
   avg_compliance_rate  Decimal  @default(0) @db.Decimal(3, 2)
+  /// AI Coach 风格偏好：friendly=友好鼓励, strict=严格监督, analytical=数据分析
   coach_style          String   @default("friendly") @db.VarChar(20)
+  /// 总饮食记录数
   total_records        Int      @default(0)
+  /// 健康饮食记录数（decision=SAFE 的记录）
   healthy_records      Int      @default(0)
+  /// 当前连续健康打卡天数
   streak_days          Int      @default(0)
+  /// 历史最长连续健康打卡天数
   longest_streak       Int      @default(0)
+  /// 最后更新时间
   updated_at           DateTime @default(now()) @db.Timestamptz(6)
+  /// 用餐时间规律（JSON，如 { "breakfast": "08:00", "lunch": "12:30" }）
   meal_timing_patterns Json?    @default("{}")
+  /// 份量倾向：small=偏少, normal=正常, large=偏多
   portion_tendency     String?  @default("normal") @db.VarChar(10)
+  /// 替换模式统计（JSON，如 { "from_food_id": { "to_food_id": count } }）
   replacement_patterns Json?    @default("{}")
+  /// 最后一次连续打卡的日期（格式 YYYY-MM-DD）
   last_streak_date     String?  @db.VarChar(10)
   /// V6.5 Phase 2I: FK 补齐
   user                 app_users @relation(fields: [user_id], references: [id], onDelete: Cascade, map: "fk_behavior_profiles_user")
 }
 
+/// 用户挑战参与记录表 — 记录用户参与每个挑战的进度和完成状态
 model user_challenges {
+  /// 主键 UUID
   id               String    @id(map: "PK_7c111333fc0e3a23528503498de") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 关联的用户 ID
   user_id          String    @db.Uuid
+  /// 关联的挑战 ID（外键 → challenges.id）
   challenge_id     String    @db.Uuid
+  /// 报名/开始时间
   started_at       DateTime  @default(now()) @db.Timestamptz(6)
+  /// 当前进度值（如已连续打卡 4 天）
   current_progress Int       @default(0)
+  /// 目标进度值（对应 challenges.duration_days）
   max_progress     Int
+  /// 挑战状态：active=进行中, completed=已完成, failed=已失败, abandoned=已放弃
   status           String    @default("active") @db.VarChar(20)
+  /// 完成时间
   completed_at     DateTime? @db.Timestamptz(6)
 
   @@index([user_id, status], map: "idx_user_challenges_user_status")
 }
 
+/// 用户推断画像表 — 由 AI 根据行为数据计算的隐式健康指标，每用户一条，定期更新
 model user_inferred_profiles {
+  /// 主键 UUID
   id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 关联的用户 ID（唯一）
   user_id              String    @unique @db.Uuid
+  /// AI 估算的基础代谢率（BMR），单位 kcal/天
   estimated_bmr        Int?
+  /// AI 估算的总能量消耗（TDEE），单位 kcal/天
   estimated_tdee       Int?
+  /// AI 推荐每日摄入热量，单位 kcal
   recommended_calories Int?
+  /// 三大营养素目标（JSON，如 { protein_g: 120, fat_g: 60, carbs_g: 200 }）
   macro_targets        Json?     @default("{}")
+  /// 用户分群标签（如 weight_loss_moderate/maintenance/muscle_gain）
   user_segment         String?   @db.VarChar(30)
+  /// 流失风险评分 0.00-1.00（值越高越容易流失）
   churn_risk           Decimal?  @default(0) @db.Decimal(3, 2)
+  /// AI 推荐每日最优餐次数
   optimal_meal_count   Int?
+  /// 口味偏好向量（JSON 数组，与食物 flavor_profile 格式对应）
   taste_pref_vector    Json?     @default("[]")
+  /// 营养缺口分析（JSON 数组，如 [{"nutrient":"iron","gap_level":"high"}]）
   nutrition_gaps       Json?     @default("[]")
+  /// 目标阶段进度（JSON，如 { stage: "early", week: 2, compliance: 0.7 }）
   goal_progress        Json?     @default("{}")
+  /// 各推断字段的置信度分布（JSON，key=字段名，value=置信度 0-1）
   confidence_scores    Json?     @default("{}")
+  /// 最后一次 AI 计算时间
   last_computed_at     DateTime? @db.Timestamptz(6)
+  /// 最后更新时间
   updated_at           DateTime? @default(now()) @db.Timestamptz(6)
+  /// 推荐偏好权重（JSON，用于推荐引擎的个性化权重调整）
   preference_weights   Json?
   app_users            app_users @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
@@ -1199,44 +1830,82 @@ model user_inferred_profiles {
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// 用户健康档案表 — 存储用户身体指标、饮食偏好、生活习惯等核心健康数据，每用户一条
 model user_profiles {
+  /// 主键 UUID
   id                   String                            @id(map: "PK_1ec6662219f4605723f1e41b6cb") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 关联的用户 ID（唯一）
   user_id              String                            @unique(map: "UQ_6ca9503d77ae39b4b5a6cc3ba88") @db.Uuid
+  /// 性别：male=男, female=女, other=其他
   gender               String?                           @db.VarChar(10)
+  /// 出生年份（如 1990）
   birth_year           Int?
+  /// 身高，单位 cm
   height_cm            Decimal?                          @db.Decimal(5, 1)
+  /// 当前体重，单位 kg
   weight_kg            Decimal?                          @db.Decimal(5, 1)
+  /// 目标体重，单位 kg
   target_weight_kg     Decimal?                          @db.Decimal(5, 1)
+  /// 活动水平：sedentary=久坐, light=轻度活动, moderate=中度活动, active=高强度活动
   activity_level       user_profiles_activity_level_enum @default(light)
+  /// 每日热量目标，单位 kcal（手动设置或由 AI 推荐）
   daily_calorie_goal   Int?
+  /// 健康目标：fat_loss=减脂, muscle_gain=增肌, health=健康维持, weight_gain=增重
   goal                 String                            @default("health") @db.VarChar(30)
+  /// 减脂/增肌速度：slow=慢速, steady=稳健, fast=快速
   goal_speed           String                            @default("steady") @db.VarChar(20)
+  /// 体脂率，单位 %（小数，如 20.5 表示 20.5%）
   body_fat_percent     Decimal?                          @db.Decimal(4, 1)
+  /// 每日用餐次数（默认 3 餐）
   meals_per_day        Int                               @default(3)
+  /// 外卖频率：rarely=很少, sometimes=偶尔, often=经常, always=每天
   takeout_frequency    String                            @default("sometimes") @db.VarChar(20)
+  /// 是否会自己做饭
   can_cook             Boolean                           @default(true)
+  /// 口味/食物偏好（JSON 数组，如 ["辣食","海鲜"]）
   food_preferences     Json                              @default("[]")
+  /// 饮食禁忌/限制（JSON 数组，如 ["vegetarian","halal","gluten_free"]）
   dietary_restrictions Json                              @default("[]")
+  /// 意志力薄弱时段（JSON 数组，如 [{"hour":22,"reason":"加班"}]）
   weak_time_slots      Json                              @default("[]")
+  /// 暴食/失控触发因素（JSON 数组，如 ["stress","social_dinner","late_night"]）
   binge_triggers       Json                              @default("[]")
+  /// 饮食自律程度：low=自律差, medium=一般, high=自律强
   discipline           String                            @default("medium") @db.VarChar(20)
+  /// 新手引导是否已完成
   onboarding_completed Boolean                           @default(false)
+  /// 创建时间
   created_at           DateTime                          @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
   updated_at           DateTime                          @default(now()) @db.Timestamptz(6)
+  /// 过敏原列表（JSON 数组，如 ["peanuts","shellfish"]）
   allergens            Json?                             @default("[]")
+  /// 健康状况/慢性病（JSON 数组，如 ["diabetes","hypertension","gout"]）
   health_conditions    Json?                             @default("[]")
+  /// 运动档案（JSON，如 { type: "running", frequency: 3, duration: 45 }）
   exercise_profile     Json?                             @default("{}")
   exercise_schedule    Json?                             @default("{}") /// V6.3 P2-9: 每周运动计划 { "mon": { "startHour": 7, "durationHours": 1 }, ... }
+  /// 烹饪技能等级：beginner=初级, intermediate=中级, advanced=高级
   cooking_skill_level  String?                           @db.VarChar(20)
+  /// 口味浓淡偏好（JSON，如 { salty: 3, sweet: 2, spicy: 4 }，0-5 分制）
   taste_intensity      Json?                             @default("{}")
+  /// 喜爱的菜系（JSON 数组，如 ["chinese","japanese"]）
   cuisine_preferences  Json?                             @default("[]")
+  /// 饮食预算等级：low=低预算, medium=中等, high=高端
   budget_level         String?                           @db.VarChar(10)
+  /// 家庭人口数（用于计算食材用量，默认 1=单人）
   family_size          Int?                              @default(1)
+  /// 是否愿意提前备餐（周末备菜等）
   meal_prep_willing    Boolean?                          @default(false)
+  /// 所在地区代码（ISO 3166-1 alpha-2，影响食物季节性推荐，默认 CN）
   region_code          String?                           @default("CN") @db.VarChar(5)
+  /// 当前新手引导步骤（0=未开始，步骤数递增）
   onboarding_step      Int?                              @default(0)
+  /// 档案数据完整度 0.00-1.00（填写字段数/总字段数）
   data_completeness    Decimal?                          @default(0) @db.Decimal(3, 2)
+  /// 档案版本号（每次修改递增，用于触发重新计算推荐）
   profile_version      Int?                              @default(1)
+  /// 用户时区（IANA 格式，如 "Asia/Shanghai"）
   timezone             String                            @default("Asia/Shanghai") @db.VarChar(50)
   recommendation_preferences Json?                      @default("{}") /// V6.5 Phase 3F: 用户推荐偏好 { popularityPreference, cookingEffort, budgetSensitivity }
   sleep_quality          String?                           @db.Text /// V6.6 Phase 2-C: 睡眠质量 poor|fair|good
@@ -1252,10 +1921,15 @@ model user_profiles {
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// 管理员用户角色关联表 — 多对多关联 admin_users 和 roles
 model user_roles {
+  /// 主键 UUID
   id          String      @id(map: "PK_8acd5cf26ebd158416f477de799") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 管理员用户 ID（外键 → admin_users.id）
   user_id     String      @db.Uuid
+  /// 角色 ID（外键 → roles.id）
   role_id     String      @db.Uuid
+  /// 授权时间
   created_at  DateTime    @default(now()) @db.Timestamptz(6)
   roles       roles       @relation(fields: [role_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_b23c65e50a758245a33ee35fda1")
   admin_users admin_users @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_user_roles_admin_user_id")
@@ -1515,12 +2189,19 @@ enum user_profiles_activity_level_enum {
   active
 }
 
+/// 用户体重历史记录表 — 按时间序列记录每次体重和体脂率的测量值
 model weight_history {
+  /// 主键 UUID
   id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 关联的用户 ID
   user_id          String   @db.Uuid
+  /// 测量体重，单位 kg
   weight_kg        Decimal  @db.Decimal(5, 1)
+  /// 测量体脂率，单位 %（可选）
   body_fat_percent Decimal? @db.Decimal(4, 1)
+  /// 数据来源：manual=手动录入, scale=智能秤, import=导入
   source           String   @default("manual") @db.VarChar(20)
+  /// 测量记录时间
   recorded_at      DateTime @default(now()) @db.Timestamptz(6)
   /// V6.5 Phase 2I: FK 补齐
   user             app_users @relation(fields: [user_id], references: [id], onDelete: Cascade, map: "fk_weight_history_user")
@@ -1528,44 +2209,77 @@ model weight_history {
   @@index([user_id, recorded_at], map: "idx_weight_history_user_recorded")
 }
 
+/// 提醒关闭记录表 — 记录用户对各类系统提醒的关闭操作，防止重复打扰
 model reminder_dismissals {
+  /// 主键 UUID
   id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 关联的用户 ID
   user_id       String   @db.Uuid
+  /// 提醒类型标识（如 onboarding_tip/calorie_warning/binge_alert）
   reminder_type String   @db.VarChar(50)
+  /// 关闭时间
   dismissed_at  DateTime @default(now()) @db.Timestamptz(6)
 
   @@unique([user_id, reminder_type], map: "uq_reminder_user_type")
   @@index([user_id])
 }
 
+/// 菜谱表 — 存储 AI 生成或人工录入的菜谱，包含营养信息、烹饪步骤及审核状态
 model recipes {
+  /// 主键 UUID
   id                   String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 菜谱名称
   name                 String               @db.VarChar(200)
+  /// 菜谱描述
   description          String?
+  /// 菜系（如 chinese/japanese/western/korean）
   cuisine              String?              @db.VarChar(50)
+  /// 制作难度：1=简单, 2=中等, 3=较难, 4=困难, 5=专业
   difficulty           Int                  @default(1) @db.SmallInt
+  /// 备料时间，单位分钟
   prep_time_minutes    Int?
+  /// 烹饪时间，单位分钟
   cook_time_minutes    Int?
+  /// 份数（默认 1 人份）
   servings             Int                  @default(1) @db.SmallInt
+  /// 标签列表（如 ["低脂","高蛋白","快手菜"]）
   tags                 String[]
+  /// 烹饪步骤（JSON 数组，每步含 step/description/image_url）
   instructions         Json?
+  /// 菜谱封面图 URL
   image_url            String?              @db.VarChar(500)
+  /// 数据来源：ai_generated=AI 生成, user_submitted=用户提交, curated=人工精选
   source               String               @default("ai_generated") @db.VarChar(50)
+  /// 每份热量，单位 kcal
   calories_per_serving Decimal?             @db.Decimal(8, 2)
+  /// 每份蛋白质，单位 g
   protein_per_serving  Decimal?             @db.Decimal(8, 2)
+  /// 每份脂肪，单位 g
   fat_per_serving      Decimal?             @db.Decimal(8, 2)
+  /// 每份碳水化合物，单位 g
   carbs_per_serving    Decimal?             @db.Decimal(8, 2)
+  /// 每份膳食纤维，单位 g
   fiber_per_serving    Decimal?             @db.Decimal(8, 2)
+  /// 综合质量评分 0.00-5.00（AI 评估的营养均衡度、做法完整性等）
   quality_score        Decimal              @default(0) @db.Decimal(5, 2)
+  /// 被推荐/引用次数（用于热度排序）
   usage_count          Int                  @default(0)
+  /// 审核状态：pending=待审核, approved=已通过, rejected=已拒绝
   review_status        String               @default("approved") @db.VarChar(20)
+  /// 提交人用户 ID（用户提交时填写）
   submitted_by         String?              @db.Uuid
+  /// 审核人管理员 ID
   reviewed_by          String?              @db.Uuid
+  /// 审核时间
   reviewed_at          DateTime?            @db.Timestamptz(6)
+  /// 审核备注（拒绝时填写原因）
   review_note          String?
+  /// 是否上架（false=下架，不可推荐）
   is_active            Boolean              @default(true)
   available_channels   Json                 @default("[\"home_cook\"]") /// 可获取渠道: home_cook/restaurant/delivery/convenience
+  /// 创建时间
   created_at           DateTime             @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
   updated_at           DateTime             @default(now()) @db.Timestamptz(6)
   recipe_ingredients   recipe_ingredients[]
   recipe_translations  recipe_translations[]
@@ -1579,14 +2293,23 @@ model recipes {
   @@index([quality_score(sort: Desc)], map: "idx_recipes_quality")
 }
 
+/// 菜谱食材明细表 — 存储每道菜谱所需的食材列表及用量
 model recipe_ingredients {
+  /// 主键 UUID
   id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 关联的菜谱 ID（外键 → recipes.id）
   recipe_id       String   @db.Uuid
+  /// 对应食物库中的食物 ID（可选，无精确匹配时为 null）
   food_id         String?  @db.Uuid
+  /// 食材名称（展示用，如"鸡胸肉"）
   ingredient_name String   @db.VarChar(100)
+  /// 用量数值（如 200）
   amount          Decimal? @db.Decimal(8, 2)
+  /// 用量单位（如 g/ml/个/勺）
   unit            String?  @db.VarChar(20)
+  /// 是否为可选食材（false=必选，true=可省略）
   is_optional     Boolean  @default(false)
+  /// 显示排序（值越小越靠前）
   sort_order      Int      @default(0) @db.SmallInt
 
   recipe recipes  @relation(fields: [recipe_id], references: [id], onDelete: Cascade)
@@ -1598,14 +2321,23 @@ model recipe_ingredients {
 
 /// 推荐归因追踪表 — 记录每次推荐请求的完整上下文和评分快照，用于效果归因和策略优化
 model recommendation_traces {
+  /// 主键 UUID
   id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 关联的用户 ID
   user_id           String   @db.Uuid
+  /// 餐次类型：breakfast/lunch/dinner/snack
   meal_type         String   @db.VarChar(20)
+  /// 用户当前目标类型（如 fat_loss/muscle_gain/health）
   goal_type         String   @db.VarChar(30)
+  /// 推荐渠道（如 home_cook/restaurant/delivery，默认 unknown）
   channel           String   @default("unknown") @db.VarChar(20)
+  /// 所用策略 ID（外键 → strategy.id，null=使用全局默认策略）
   strategy_id       String?  @db.Uuid
+  /// 所用策略版本号
   strategy_version  String?  @db.VarChar(50)
+  /// 关联的 A/B 实验 ID
   experiment_id     String?  @db.Uuid
+  /// 命中的实验分组标识
   group_id          String?  @db.VarChar(30)
   pipeline_snapshot Json?    /// 推荐管道完整快照：权重、过滤器、boost 参数等
   top_foods         Json?    /// 最终推荐的 top-N 食物列表（含评分明细）
@@ -1613,6 +2345,7 @@ model recommendation_traces {
   food_pool_size    Int?     /// 候选池大小
   filters_applied   Json?    /// 应用的过滤器及过滤数量
   duration_ms       Int?     /// 推荐计算耗时（毫秒）
+  /// 推荐请求时间
   created_at        DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([user_id, created_at(sort: Desc)], map: "idx_rec_traces_user_created")
@@ -1622,15 +2355,22 @@ model recommendation_traces {
   @@index([created_at], map: "idx_rec_traces_created")
 }
 
-/// 菜谱多语言翻译表
+/// 菜谱多语言翻译表 — 存储菜谱的多语言名称、描述和步骤说明，每条记录对应一种语言
 model recipe_translations {
+  /// 主键 UUID
   id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 关联的菜谱 ID（外键 → recipes.id）
   recipe_id    String   @db.Uuid
+  /// 语言区域代码（如 zh-CN/en-US/ja-JP）
   locale       String   @db.VarChar(10)
+  /// 该语言下的菜谱名称
   name         String   @db.VarChar(200)
+  /// 该语言下的菜谱描述
   description  String?
   instructions Json?    /// 翻译后的步骤说明
+  /// 创建时间
   created_at   DateTime @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
   updated_at   DateTime @default(now()) @db.Timestamptz(6)
 
   recipe recipes @relation(fields: [recipe_id], references: [id], onDelete: Cascade)
@@ -1645,35 +2385,55 @@ model recipe_translations {
 
 /// 死信队列 — BullMQ 永久失败任务存储，用于审计和重放
 model dead_letter_jobs {
+  /// 主键 UUID
   id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 所属队列名称（如 recommendation/notification）
   queue_name    String    @db.VarChar(50)
+  /// BullMQ 任务 ID
   job_id        String    @db.VarChar(100)
+  /// 任务原始数据（JSON）
   job_data      Json
+  /// 最终失败的错误信息
   error_message String    @db.Text
+  /// 已重试次数
   attempts_made Int       @default(0)
   status        String    @default("pending") @db.VarChar(20) /// pending / retried / discarded
+  /// 任务失败时间
   failed_at     DateTime  @default(now()) @db.Timestamptz(6)
+  /// 最后一次手动重试时间
   retried_at    DateTime? @db.Timestamptz(6)
+  /// 记录创建时间
   created_at    DateTime  @default(now()) @db.Timestamptz(6)
 
   @@index([queue_name, status], map: "idx_dlj_queue_status")
   @@index([failed_at], map: "idx_dlj_failed_at")
 }
 
-/// 每日计划食物明细 — daily_plans JSON 规范化
+/// 每日计划食物明细 — daily_plans JSON 规范化，每行代表一个餐次中的一个食物/菜谱项
 model daily_plan_items {
+  /// 主键 UUID
   id            String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 关联的每日计划 ID（外键 → daily_plans.id）
   daily_plan_id String  @db.Uuid
   meal_type     String  @db.VarChar(20) /// morning / lunch / dinner / snack
   role          String  @db.VarChar(20) /// carb / protein / veggie / side / snack
+  /// 关联的食物 ID（food_id 和 recipe_id 二选一）
   food_id       String? @db.Uuid
+  /// 关联的菜谱 ID（food_id 和 recipe_id 二选一）
   recipe_id     String? @db.Uuid
+  /// 食物/菜谱名称（冗余存储，方便展示）
   food_name     String  @db.VarChar(200)
+  /// 热量，单位 kcal
   calories      Float?
+  /// 蛋白质，单位 g
   protein       Float?
+  /// 脂肪，单位 g
   fat           Float?
+  /// 碳水化合物，单位 g
   carbs         Float?
+  /// 推荐分数 0-1（推荐引擎给出的综合评分）
   score         Float?
+  /// 餐次内排序（值越小越靠前）
   sort_order    Int     @default(0)
 
   daily_plan daily_plans @relation(fields: [daily_plan_id], references: [id], onDelete: Cascade)
@@ -1685,14 +2445,20 @@ model daily_plan_items {
   @@index([recipe_id], map: "idx_dpi_recipe")
 }
 
-/// 菜谱用户评分
+/// 菜谱用户评分表 — 存储用户对菜谱的评分和评论，每用户每菜谱一条
 model recipe_ratings {
+  /// 主键 UUID
   id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 关联的菜谱 ID（外键 → recipes.id）
   recipe_id  String   @db.Uuid
+  /// 评分用户 ID
   user_id    String   @db.Uuid
   rating     Int      @db.SmallInt /// 1-5
+  /// 用户评论文字（可选）
   comment    String?  @db.Text
+  /// 创建时间
   created_at DateTime @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
   updated_at DateTime @updatedAt @db.Timestamptz(6)
 
   recipe recipes @relation(fields: [recipe_id], references: [id], onDelete: Cascade)
@@ -1702,16 +2468,25 @@ model recipe_ratings {
   @@index([recipe_id], map: "idx_recipe_ratings_recipe")
 }
 
-/// 策略调优历史 — 记录策略自动/手动切换的效果
+/// 策略调优历史 — 记录推荐策略自动或手动切换前后的效果对比，用于策略迭代评估
 model strategy_tuning_log {
+  /// 主键 UUID
   id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 调优针对的用户分群名称（如 fat_loss_active）
   segment_name      String   @db.VarChar(50)
+  /// 切换前使用的策略名称
   previous_strategy String   @db.VarChar(50)
+  /// 切换后使用的策略名称
   new_strategy      String   @db.VarChar(50)
+  /// 切换前的指标值（如采纳率）
   previous_rate     Float
+  /// 切换后的指标值（如采纳率）
   new_rate          Float
+  /// 改善幅度（new_rate - previous_rate）
   improvement       Float
+  /// 是否由系统自动应用（true=自动，false=人工触发）
   auto_applied      Boolean  @default(false)
+  /// 记录创建时间
   created_at        DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([segment_name], map: "idx_stl_segment")
@@ -1720,17 +2495,27 @@ model strategy_tuning_log {
 
 /// 替换模式聚合 — 用户 A→B 替换行为的频率统计，用于推荐权重调整
 model replacement_patterns {
+  /// 主键 UUID
   id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 关联的用户 ID
   user_id        String   @db.Uuid
+  /// 被替换的原食物 ID
   from_food_id   String   @db.Uuid
+  /// 被替换的原食物名称（冗余存储）
   from_food_name String   @db.VarChar(200)
+  /// 替换成的目标食物 ID
   to_food_id     String   @db.Uuid
+  /// 替换成的目标食物名称（冗余存储）
   to_food_name   String   @db.VarChar(200)
+  /// 该替换发生的总次数
   frequency      Int      @default(1)
+  /// 最近一次发生替换的时间
   last_occurred  DateTime @default(now()) @db.Timestamptz(6)
   /// V6.7 Phase 2-E: 替换发生的餐次类型（breakfast/lunch/dinner/snack）
   meal_type      String?  @db.Text
+  /// 创建时间
   created_at     DateTime @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
   updated_at     DateTime @updatedAt @db.Timestamptz(6)
 
   @@unique([user_id, from_food_id, to_food_id], map: "uq_replacement_pattern")
@@ -1741,24 +2526,32 @@ model replacement_patterns {
 
 /// V6.9 Phase 2-C: 推荐执行记录 — 追踪推荐→实际执行的闭环，计算执行率
 model recommendation_executions {
+  /// 主键 UUID
   id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 关联的用户 ID
   user_id           String    @db.Uuid
+  /// 关联的推荐 ID（来源于推荐引擎的请求 ID，可选）
   recommendation_id String?   @db.VarChar(255)
+  /// 餐次类型：breakfast/lunch/dinner/snack
   meal_type         String    @db.VarChar(20)
   recommended_foods Json      /// 推荐的食物 ID 列表
   executed_foods    Json?     /// 实际执行的食物 ID 列表（分析结果回填）
   execution_rate    Float?    /// 执行率 0-1（匹配的食物数/推荐的食物数）
   deviation_notes   Json?     /// 偏差记录（替换/增加/减少了什么）
+  /// 推荐发出时间
   created_at        DateTime  @default(now()) @db.Timestamptz(6)
+  /// 用户实际执行（进餐）时间（异步回填）
   executed_at       DateTime? @db.Timestamptz(6)
 
   @@index([user_id, created_at], map: "idx_rec_exec_user_created")
   @@index([user_id, meal_type], map: "idx_rec_exec_user_meal")
 }
 
-/// V6.5 Phase 3J: 暴食干预效果追踪 — 记录每次暴食干预事件及后续行为变化
+/// V6.5 Phase 3J: 暴食干预效果追踪 — 记录每次暴食干预事件及后续行为变化，用于评估干预有效性
 model binge_intervention_logs {
+  /// 主键 UUID
   id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 关联的用户 ID
   user_id               String   @db.Uuid
   /// 干预触发时段（24h 制）
   trigger_hour          Int      @db.SmallInt
@@ -1774,15 +2567,18 @@ model binge_intervention_logs {
   had_post_record       Boolean?
   /// 异步评估时间
   evaluated_at          DateTime? @db.Timestamptz(6)
+  /// 记录创建时间
   created_at            DateTime  @default(now()) @db.Timestamptz(6)
 
   @@index([user_id, created_at], map: "idx_bil_user_created")
   @@index([effective], map: "idx_bil_effective")
 }
 
-/// V7.0: 目标阶段表 — 存储 CompoundGoal 中的各个阶段
+/// V7.0: 目标阶段表 — 存储 CompoundGoal 中各个阶段的配置与执行状态
 model goal_phases {
+  /// 主键 UUID
   id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 关联的用户 ID
   user_id            String    @db.Uuid
   goal_type          String    @db.VarChar(50) /// GoalType: fat_loss/muscle_gain/health/habit
   name               String    @db.VarChar(100) /// 阶段名称（用户可见）
@@ -1793,7 +2589,9 @@ model goal_phases {
   is_active          Boolean   @default(false)  /// 当前是否激活
   started_at         DateTime? @db.Timestamptz(6) /// 阶段开始时间
   completed_at       DateTime? @db.Timestamptz(6) /// 阶段完成时间
+  /// 创建时间
   created_at         DateTime  @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
   updated_at         DateTime  @default(now()) @db.Timestamptz(6)
 
   @@index([user_id, is_active], map: "idx_goal_phases_user_active")

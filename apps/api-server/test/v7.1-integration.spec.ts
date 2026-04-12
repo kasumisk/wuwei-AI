@@ -29,6 +29,11 @@ import {
 import type { FoodLibrary } from '../src/modules/food/food.types';
 import { FoodScorerService } from '../src/modules/diet/app/recommendation/food-scorer.service';
 import { ExplanationGeneratorService } from '../src/modules/diet/app/recommendation/explanation-generator.service';
+import { InsightGeneratorService } from '../src/modules/diet/app/recommendation/insight-generator.service';
+import { ExplanationTierService } from '../src/modules/diet/app/recommendation/explanation-tier.service';
+import { NaturalLanguageExplainerService } from '../src/modules/diet/app/recommendation/natural-language-explainer.service';
+import { MealExplanationService } from '../src/modules/diet/app/recommendation/meal-explanation.service';
+import { ComparisonExplanationService } from '../src/modules/diet/app/recommendation/comparison-explanation.service';
 import { PreferenceProfileService } from '../src/modules/diet/app/recommendation/preference-profile.service';
 import { DailyPlanContextService } from '../src/modules/diet/app/recommendation/daily-plan-context.service';
 import { AvailabilityScorerService } from '../src/modules/diet/app/recommendation/availability-scorer.service';
@@ -459,7 +464,14 @@ describe('V7.1 Integration Tests', () => {
     let generator: ExplanationGeneratorService;
 
     beforeEach(() => {
-      generator = new (ExplanationGeneratorService as any)({});
+      generator = new ExplanationGeneratorService(
+        {} as any,
+        new InsightGeneratorService(),
+        new ExplanationTierService(),
+        new NaturalLanguageExplainerService(),
+        new MealExplanationService({} as any),
+        new ComparisonExplanationService(),
+      );
     });
 
     it('should generate substitution_rationale insight when food is a frequent substitution target', () => {

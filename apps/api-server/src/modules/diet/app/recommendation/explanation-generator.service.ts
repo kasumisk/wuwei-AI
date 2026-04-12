@@ -2,14 +2,15 @@
  * V5 Phase 3.5 — 推荐解释生成器
  * V6 Phase 2.7 — ExplainV2: 可视化解释数据结构
  * V6 Phase 2.11 — i18n L2: 推荐解释模板国际化
+ * V7.6 P2: 拆分为 3 个子服务，本文件保留核心 generate/generateV2/explainWhyNot
  *
  * 将 ScoringExplanation（技术评分）转换为用户可读的推荐理由。
  *
- * V6 2.11 重构:
- * - 所有硬编码中文文案迁移到 i18n-messages.ts 的 explain.* key
- * - DIMENSION_LABELS / GOAL_TEXT 改为通过 t() 动态查询
- * - generate/generateV2/explainWhyNot 方法新增可选 locale 参数
- * - 支持 zh-CN / en-US / ja-JP 三语解释输出
+ * V7.6 P2 拆分:
+ * - explanation.types.ts        — 所有 interface/type 定义
+ * - meal-explanation.service.ts — 整餐解释（explainMealComposition + 互补对 + 多样性）
+ * - comparison-explanation.service.ts — 对比/替代/变化/渠道解释
+ * - 本文件保留: generate, generateV2, explainWhyNot, 付费门控委托, 洞察委托, NL委托
  *
  * 设计原则：
  * - 仅对最终推荐的食物（Top-K）调用，不影响批量评分性能
@@ -49,10 +50,7 @@ import { t, Locale } from './i18n-messages';
 import type { EffectiveGoal } from '../../../user/app/goal-phase.service';
 import type { GoalProgress } from '../../../user/app/goal-tracker.service';
 import type { SubstitutionPattern } from './execution-tracker.service';
-import {
-  MealCompositionScorer,
-  MealCompositionScore,
-} from './meal-composition-scorer.service';
+import { MealCompositionScorer } from './meal-composition-scorer.service';
 import { InsightGeneratorService } from './insight-generator.service';
 import { createInsightContext } from './insight.types';
 import { ExplanationTierService } from './explanation-tier.service';
@@ -63,94 +61,38 @@ import {
 } from './natural-language-explainer.service';
 import type { ScoringAdjustment } from './scoring-chain/scoring-factor.interface';
 
-// ==================== 用户可读解释类型 ====================
+// V7.6 P2: 拆分后的子服务
+import { MealExplanationService } from './meal-explanation.service';
+import { ComparisonExplanationService } from './comparison-explanation.service';
 
-/**
- * V6.6 Phase 2-E: 推荐变化解释
- * 今日推荐与昨日显著不同时生成，向用户说明变化原因
- */
-export interface DeltaExplanation {
-  /** 今日新出现（昨日没有）的食物名称列表 */
-  changedFoods: string[];
-  /** 主要变化原因（人类可读） */
-  primaryReason: string;
-  /** 置信度 — 数据质量越高置信度越高 */
-  confidence: 'high' | 'medium' | 'low';
-}
+// V7.6 P2-A: 类型从 explanation.types.ts re-export（保持向后兼容）
+export type {
+  DeltaExplanation,
+  NutritionTag,
+  SimpleScoreBar,
+  UserFacingExplanation,
+  MealCompositionExplanation,
+  ComplementaryPairExplanation,
+  MacroBalanceInfo,
+  ComparisonExplanation,
+  SubstitutionExplanation,
+} from './explanation.types';
 
-/** 营养亮点标签 */
-export interface NutritionTag {
-  /** 标签文案：如 "高蛋白" | "低GI" | "富含膳食纤维" */
-  label: string;
-  /** 标签倾向 */
-  type: 'positive' | 'neutral';
-  /** 具体数值描述：如 "28g 蛋白质" | "GI 35" */
-  value: string;
-}
-
-/** 简化评分柱 */
-export interface SimpleScoreBar {
-  /** 维度名称（国际化后的显示名） */
-  dimension: string;
-  /** 0-100 分 */
-  score: number;
-}
-
-/** 用户可读的推荐解释 */
-export interface UserFacingExplanation {
-  /** 主要推荐理由（1-2 句话） */
-  primaryReason: string;
-  /** 营养亮点标签（最多 3 个） */
-  nutritionHighlights: NutritionTag[];
-  /** 健康相关提示（如果有健康条件） */
-  healthTip?: string;
-  /** 评分概览（简化版，最多 5 个维度） */
-  scoreBreakdown: SimpleScoreBar[];
-  /** V6.3 P3-3: 解释风格实验分桶 */
-  styleVariant?: 'concise' | 'coaching';
-}
-
-/** V6.3 P3-1: 整餐层面解释 */
-/** V6.5 Phase 2E: 从一句话升级为结构化整餐分析 */
-export interface MealCompositionExplanation {
-  /** 一句话解释为什么这样搭配 */
-  summary: string;
-  /** V6.5: 整餐组合评分（由 MealCompositionScorer 计算） */
-  compositionScore?: MealCompositionScore;
-  /** V6.5: 营养互补关系列表 */
-  complementaryPairs?: ComplementaryPairExplanation[];
-  /** V6.5: 宏量营养素分布 */
-  macroBalance?: MacroBalanceInfo;
-  /** V6.5: 多样性建议（如"建议增加一道蒸菜"） */
-  diversityTips?: string[];
-}
-
-/** V6.5: 营养互补对解释 */
-export interface ComplementaryPairExplanation {
-  nutrientA: string;
-  foodA: string;
-  nutrientB: string;
-  foodB: string;
-  benefit: string;
-}
-
-/** V6.5: 宏量营养素分布信息 */
-export interface MacroBalanceInfo {
-  caloriesTotal: number;
-  proteinPct: number;
-  carbsPct: number;
-  fatPct: number;
-  /** 与目标的匹配度 0-100 */
-  targetMatch: number;
-}
-
-export type ExplanationStyleVariant = 'concise' | 'coaching';
+export type { ExplanationStyleVariant } from './explanation.types';
+import type {
+  ExplanationStyleVariant,
+  NutritionTag,
+  UserFacingExplanation,
+  MealCompositionExplanation,
+  ComparisonExplanation,
+  SubstitutionExplanation,
+  DeltaExplanation,
+} from './explanation.types';
 
 // ==================== 内部工具函数 ====================
 
 /**
  * 获取评分维度的国际化标签
- * V6 2.11: 从 t('explain.dim.*') 动态获取，替代原硬编码 DIMENSION_LABELS
  */
 function getDimensionLabel(dim: ScoreDimension, locale?: Locale): string {
   return t(`explain.dim.${dim}`, {}, locale);
@@ -158,7 +100,6 @@ function getDimensionLabel(dim: ScoreDimension, locale?: Locale): string {
 
 /**
  * 获取目标类型的国际化文案
- * V6 2.11: 从 t('explain.goal.*') 动态获取，替代原硬编码 GOAL_TEXT
  */
 function getGoalLabel(goalType: string | undefined, locale?: Locale): string {
   if (
@@ -172,23 +113,24 @@ function getGoalLabel(goalType: string | undefined, locale?: Locale): string {
 
 @Injectable()
 export class ExplanationGeneratorService {
-  /** V7.2 P2-E: 内部洞察生成器实例（无 DI 依赖，直接实例化） */
-  private readonly insightGenerator = new InsightGeneratorService();
-  /** V7.2 P2-F: 内部付费分层服务实例（无 DI 依赖，直接实例化） */
-  private readonly tierService = new ExplanationTierService();
-  /** V7.3 P2-B: 自然语言解释器实例（无 DI 依赖，直接实例化） */
-  private readonly nlExplainer = new NaturalLanguageExplainerService();
-
   constructor(
     /** V6.5 Phase 2E: 整餐组合评分器 */
     private readonly mealCompositionScorer: MealCompositionScorer,
+    /** V7.4 DI修复: 洞察生成器（原 new InsightGeneratorService()） */
+    private readonly insightGenerator: InsightGeneratorService,
+    /** V7.4 DI修复: 解释分层服务（原 new ExplanationTierService()） */
+    private readonly tierService: ExplanationTierService,
+    /** V7.4 DI修复: 自然语言解释器（原 new NaturalLanguageExplainerService()） */
+    private readonly nlExplainer: NaturalLanguageExplainerService,
+    /** V7.6 P2-B: 整餐解释服务 */
+    private readonly mealExplanation: MealExplanationService,
+    /** V7.6 P2-C: 对比/替代解释服务 */
+    private readonly comparisonExplanation: ComparisonExplanationService,
   ) {}
 
   /**
    * V6.3 P3-1: 解释整餐搭配逻辑
-   * V6.5 Phase 2E: 升级为结构化整餐分析
-   *
-   * 包含：组合评分、互补营养素对、宏量分布、多样性建议。
+   * V7.6 P2-B: 委托给 MealExplanationService
    */
   explainMealComposition(
     picks: ScoredFood[],
@@ -197,289 +139,17 @@ export class ExplanationGeneratorService {
     locale?: Locale,
     target?: MealTarget,
   ): MealCompositionExplanation {
-    const summary = this.buildMealSummary(picks, userProfile, goalType, locale);
-
-    // V6.5: 使用 MealCompositionScorer 计算组合评分
-    const compositionScore =
-      this.mealCompositionScorer.scoreMealComposition(picks);
-
-    const complementaryPairs = this.detectComplementaryPairs(picks, locale);
-    const macroBalance = this.calcMacroBalance(picks, target);
-    const diversityTips = this.generateDiversityTips(
+    return this.mealExplanation.explainMealComposition(
       picks,
-      compositionScore,
+      userProfile,
+      goalType,
       locale,
+      target,
     );
-
-    return {
-      summary,
-      compositionScore,
-      complementaryPairs: complementaryPairs.length
-        ? complementaryPairs
-        : undefined,
-      macroBalance,
-      diversityTips: diversityTips.length ? diversityTips : undefined,
-    };
-  }
-
-  // ─── V6.5 Phase 2E: 整餐解释增强私有方法 ───
-
-  /**
-   * 检测整餐中的营养互补关系
-   */
-  private detectComplementaryPairs(
-    picks: ScoredFood[],
-    locale?: Locale,
-  ): ComplementaryPairExplanation[] {
-    if (picks.length < 2) return [];
-
-    const PAIRS: ReadonlyArray<{
-      a: keyof FoodLibrary;
-      b: keyof FoodLibrary;
-      labelAKey: string;
-      labelBKey: string;
-      benefitKey: string;
-    }> = [
-      {
-        a: 'iron',
-        b: 'vitaminC',
-        labelAKey: 'explain.synergy.label.iron',
-        labelBKey: 'explain.synergy.label.vitaminC',
-        benefitKey: 'explain.synergy.iron_vitaminC',
-      },
-      {
-        a: 'calcium',
-        b: 'vitaminD',
-        labelAKey: 'explain.synergy.label.calcium',
-        labelBKey: 'explain.synergy.label.vitaminD',
-        benefitKey: 'explain.synergy.calcium_vitaminD',
-      },
-      {
-        a: 'fat',
-        b: 'vitaminA',
-        labelAKey: 'explain.synergy.label.fat',
-        labelBKey: 'explain.synergy.label.vitaminA',
-        benefitKey: 'explain.synergy.fat_vitaminA',
-      },
-      {
-        a: 'protein',
-        b: 'vitaminB12',
-        labelAKey: 'explain.synergy.label.protein',
-        labelBKey: 'explain.synergy.label.vitaminB12',
-        benefitKey: 'explain.synergy.protein_vitaminB12',
-      },
-    ];
-
-    const result: ComplementaryPairExplanation[] = [];
-
-    for (const pair of PAIRS) {
-      const foodWithA = picks.find((p) => {
-        const val = p.food[pair.a];
-        return typeof val === 'number' && val > 0;
-      });
-      const foodWithB = picks.find((p) => {
-        const val = p.food[pair.b];
-        return typeof val === 'number' && val > 0;
-      });
-
-      if (foodWithA && foodWithB && foodWithA.food.id !== foodWithB.food.id) {
-        result.push({
-          nutrientA: t(pair.labelAKey, {}, locale),
-          foodA: foodWithA.food.name,
-          nutrientB: t(pair.labelBKey, {}, locale),
-          foodB: foodWithB.food.name,
-          benefit: t(pair.benefitKey, {}, locale),
-        });
-      }
-    }
-
-    return result;
-  }
-
-  /**
-   * 计算宏量营养素分布
-   */
-  private calcMacroBalance(
-    picks: ScoredFood[],
-    target?: MealTarget,
-  ): MacroBalanceInfo {
-    const caloriesTotal = picks.reduce((s, p) => s + p.servingCalories, 0);
-    const totalProtein = picks.reduce((s, p) => s + p.servingProtein, 0);
-    const totalCarbs = picks.reduce((s, p) => s + p.servingCarbs, 0);
-    const totalFat = picks.reduce((s, p) => s + p.servingFat, 0);
-
-    // 宏量营养素热量计算（4:4:9）
-    const proteinCal = totalProtein * 4;
-    const carbsCal = totalCarbs * 4;
-    const fatCal = totalFat * 9;
-    const totalMacroCal = proteinCal + carbsCal + fatCal || 1;
-
-    const proteinPct = Math.round((proteinCal / totalMacroCal) * 100);
-    const carbsPct = Math.round((carbsCal / totalMacroCal) * 100);
-    const fatPct = Math.round((fatCal / totalMacroCal) * 100);
-
-    // 计算与目标的匹配度
-    let targetMatch = 50; // 默认中等
-    if (target) {
-      const calDiff =
-        target.calories > 0
-          ? Math.abs(caloriesTotal - target.calories) / target.calories
-          : 0;
-      const proteinDiff =
-        target.protein > 0
-          ? Math.abs(totalProtein - target.protein) / target.protein
-          : 0;
-      // 匹配度 = 100 - 平均偏差百分比 * 100，下限 0
-      const avgDiff = (calDiff + proteinDiff) / 2;
-      targetMatch = Math.max(0, Math.round((1 - avgDiff) * 100));
-    }
-
-    return {
-      caloriesTotal: Math.round(caloriesTotal),
-      proteinPct,
-      carbsPct,
-      fatPct,
-      targetMatch,
-    };
-  }
-
-  /**
-   * 生成多样性改善建议
-   */
-  private generateDiversityTips(
-    picks: ScoredFood[],
-    compositionScore?: MealCompositionScore,
-    locale?: Locale,
-  ): string[] {
-    const tips: string[] = [];
-
-    if (!compositionScore) return tips;
-
-    if (compositionScore.ingredientDiversity < 60) {
-      tips.push(t('explain.diversity.ingredientRepeat', {}, locale));
-    }
-
-    if (compositionScore.cookingMethodDiversity < 50) {
-      // 找到最常见的烹饪方式
-      const methods = picks
-        .map((p) => p.food.cookingMethod)
-        .filter(Boolean) as string[];
-      const methodCount = new Map<string, number>();
-      for (const m of methods) {
-        methodCount.set(m, (methodCount.get(m) ?? 0) + 1);
-      }
-      const dominant = [...methodCount.entries()].sort(
-        (a, b) => b[1] - a[1],
-      )[0];
-      if (dominant && dominant[1] > 1) {
-        const altKey =
-          dominant[0] === '炒'
-            ? 'explain.diversity.cookAlt.stir_fry'
-            : dominant[0] === '炸'
-              ? 'explain.diversity.cookAlt.deep_fry'
-              : 'explain.diversity.cookAlt.default';
-        tips.push(
-          t(
-            'explain.diversity.cookingMethodTooMany',
-            { method: dominant[0], alternative: t(altKey, {}, locale) },
-            locale,
-          ),
-        );
-      }
-    }
-
-    if (compositionScore.flavorHarmony < 40) {
-      tips.push(t('explain.diversity.flavorMonotone', {}, locale));
-    }
-
-    // V6.7 Phase 2-C: 质感多样性建议
-    if (
-      compositionScore.textureDiversity != null &&
-      compositionScore.textureDiversity < 40
-    ) {
-      tips.push(t('explain.diversity.textureMonotone', {}, locale));
-    }
-
-    if (compositionScore.nutritionComplementarity < 25) {
-      tips.push(t('explain.diversity.addVitaminC', {}, locale));
-    }
-
-    return tips;
-  }
-
-  /**
-   * 原有 summary 生成逻辑（从 explainMealComposition 提取）
-   */
-  private buildMealSummary(
-    picks: ScoredFood[],
-    userProfile?: UserProfileConstraints | null,
-    goalType?: string,
-    locale?: Locale,
-  ): string {
-    const topProtein = [...picks].sort(
-      (a, b) => b.servingProtein - a.servingProtein,
-    )[0];
-    const topFiber = [...picks].sort(
-      (a, b) => b.servingFiber - a.servingFiber,
-    )[0];
-    const topScore = [...picks].sort((a, b) => b.score - a.score)[0];
-
-    const segments: string[] = [];
-
-    if (topProtein && topProtein.servingProtein >= 10) {
-      segments.push(
-        t('explain.meal.mainProtein', { name: topProtein.food.name }, locale),
-      );
-    }
-
-    if (
-      topFiber &&
-      topFiber.servingFiber >= 3 &&
-      topFiber.food.id !== topProtein?.food.id
-    ) {
-      segments.push(
-        t('explain.meal.fiberSource', { name: topFiber.food.name }, locale),
-      );
-    }
-
-    if (topScore?.explanation) {
-      const topDim = this.rankDimensions(topScore.explanation)[0]?.dim;
-      if (topDim === 'nutrientDensity') {
-        segments.push(t('explain.meal.theme.nutrientDensity', {}, locale));
-      } else if (topDim === 'glycemic') {
-        segments.push(t('explain.meal.theme.glycemic', {}, locale));
-      } else if (topDim === 'protein') {
-        segments.push(t('explain.meal.theme.protein', {}, locale));
-      } else if (topDim === 'fiber') {
-        segments.push(t('explain.meal.theme.fiber', {}, locale));
-      }
-    }
-
-    if (segments.length === 0) {
-      segments.push(
-        t(
-          'explain.meal.goalBalance',
-          { goal: getGoalLabel(goalType, locale) },
-          locale,
-        ),
-      );
-    }
-
-    if (userProfile?.healthConditions?.length) {
-      segments.push(t('explain.meal.healthConstraint', {}, locale));
-    }
-
-    return segments.join('，');
   }
 
   /**
    * 为单个推荐食物生成用户可读解释
-   *
-   * @param scored  评分后的食物（须含 explanation）
-   * @param userProfile 用户健康/饮食约束
-   * @param goalType 用户目标类型
-   * @param locale   可选语言覆盖（V6 2.11 新增）
-   * @returns UserFacingExplanation，如果无评分数据则返回 null
    */
   generate(
     scored: ScoredFood,
@@ -521,12 +191,10 @@ export class ExplanationGeneratorService {
     }
 
     // ── 3. 评分概览（取加权分最高的 5 个维度） ──
-    const scoreBreakdown: SimpleScoreBar[] = dimEntries
-      .slice(0, 5)
-      .map(({ dim, raw }) => ({
-        dimension: getDimensionLabel(dim, locale),
-        score: Math.round(raw * 100),
-      }));
+    const scoreBreakdown = dimEntries.slice(0, 5).map(({ dim, raw }) => ({
+      dimension: getDimensionLabel(dim, locale),
+      score: Math.round(raw * 100),
+    }));
 
     // ── 4. 兜底：无理由时提供通用文案 ──
     if (reasons.length === 0) {
@@ -577,16 +245,6 @@ export class ExplanationGeneratorService {
 
   /**
    * 为单个推荐食物生成 V2 完整可视化解释
-   *
-   * 包含: 雷达图 (10 维) + 营养素进度条 + 对比卡片 + 原有 V1 字段
-   *
-   * @param scored      评分后的食物（须含 explanation）
-   * @param target      餐次目标（用于进度条计算）
-   * @param userProfile 用户健康/饮食约束
-   * @param goalType    用户目标类型
-   * @param mealType    餐次类型（可选，用于计算权重）
-   * @param locale      可选语言覆盖（V6 2.11 新增）
-   * @returns ExplanationV2，如果无评分数据则返回 null
    */
   generateV2(
     scored: ScoredFood,
@@ -600,7 +258,7 @@ export class ExplanationGeneratorService {
     const explanation = scored.explanation;
     if (!explanation) return null;
 
-    // 复用 V1 生成器获取基础文案（传递 locale）
+    // 复用 V1 生成器获取基础文案
     const v1 = this.generate(
       scored,
       userProfile,
@@ -610,7 +268,7 @@ export class ExplanationGeneratorService {
     );
     if (!v1) return null;
 
-    // 构建 10 维雷达图数据（传递 locale）
+    // 构建 10 维雷达图数据
     const radarChart = this.buildRadarChart(
       explanation,
       (goalType as GoalType) || 'health',
@@ -618,7 +276,7 @@ export class ExplanationGeneratorService {
       locale,
     );
 
-    // 构建营养素进度条（传递 locale）
+    // 构建营养素进度条
     const progressBars = this.buildProgressBars(scored, target, locale);
 
     // 构建对比卡片
@@ -636,7 +294,7 @@ export class ExplanationGeneratorService {
       comparisonCard,
       styleVariant,
 
-      // locale 标记（V6 2.11: 标记当前解释使用的语言）
+      // locale 标记
       locale: locale || 'zh-CN',
     };
   }
@@ -673,8 +331,6 @@ export class ExplanationGeneratorService {
 
   /**
    * V6.3 P3-3: 稳定解释风格分桶
-   *
-   * 先用轻量哈希实现 deterministic bucket，后续可无缝切换到真实 ab_experiments。
    */
   resolveStyleVariant(userId?: string | null): ExplanationStyleVariant {
     if (!userId) return 'concise';
@@ -705,7 +361,6 @@ export class ExplanationGeneratorService {
 
   /**
    * 根据维度和食物数据构建亮点标签 + 理由文案
-   * V6 2.11: 所有文案通过 t() 国际化
    */
   private buildDimensionHighlight(
     dim: ScoreDimension,
@@ -825,7 +480,6 @@ export class ExplanationGeneratorService {
 
   /**
    * 根据用户健康条件和食物属性生成针对性健康提示
-   * V6 2.11: 所有文案通过 t() 国际化
    */
   private buildHealthTip(
     food: FoodLibrary,
@@ -947,13 +601,8 @@ export class ExplanationGeneratorService {
   // ==================== V6 2.9: 付费预览解释（商业化钩子） ====================
 
   /**
-   * V6 2.9: 付费内容门控 — 对 ExplanationV2 应用付费预览策略
-   *
-   * V7.2 P2-F: 委托给 ExplanationTierService.applyUpgradeTeaser()
-   *
-   * @param explanation  完整的 V2 解释对象
-   * @param isPremium    用户是否为付费用户
-   * @returns 门控后的 ExplanationV2（免费用户裁剪版 / 付费用户原样）
+   * V6 2.9: 付费内容门控
+   * V7.2 P2-F: 委托给 ExplanationTierService
    */
   applyUpgradeTeaser(
     explanation: ExplanationV2,
@@ -964,8 +613,6 @@ export class ExplanationGeneratorService {
 
   /**
    * V6 2.9: 批量应用付费预览门控
-   *
-   * V7.2 P2-F: 委托给 ExplanationTierService.applyUpgradeTeaserBatch()
    */
   applyUpgradeTeaserBatch(
     explanations: Map<string, ExplanationV2>,
@@ -974,26 +621,10 @@ export class ExplanationGeneratorService {
     return this.tierService.applyUpgradeTeaserBatch(explanations, isPremium);
   }
 
-  // ==================== V6 2.8: 反向解释（"为什么不推荐 X？"） ====================
+  // ==================== V6 2.8: 反向解释 ====================
 
   /**
    * 为指定食物生成反向解释 — 分析该食物未被推荐的原因
-   * V6 2.11: 所有文案通过 t() 国际化
-   *
-   * 分析维度（按优先级）：
-   * 1. 硬过滤原因（过敏原冲突、餐次不匹配、禁忌标签、热量超标、蛋白不足）
-   * 2. 健康修正否决（penaltyResult.vetoed = true）
-   * 3. 评分偏低维度（各维度分数 < 0.4 的维度列出）
-   * 4. 偏好不匹配（用户 avoids 列表命中）
-   * 5. 短期拒绝历史
-   *
-   * @param food         食物库对象
-   * @param scored       该食物跑完评分流程后的 ScoredFood（含 explanation）
-   * @param filterReasons 硬过滤原因列表（由调用方预先检测）
-   * @param userProfile  用户画像约束
-   * @param goalType     用户目标类型
-   * @param locale       可选语言覆盖（V6 2.11 新增）
-   * @returns 用户可读的反向解释文案
    */
   explainWhyNot(
     food: FoodLibrary,
@@ -1006,12 +637,12 @@ export class ExplanationGeneratorService {
     const reasons: string[] = [];
     const goalLabel = getGoalLabel(goalType, locale);
 
-    // ── 1. 硬过滤原因 — 直接被排除，无法进入评分阶段 ──
+    // ── 1. 硬过滤原因 ──
     if (filterReasons.length > 0) {
       reasons.push(...filterReasons);
     }
 
-    // ── 2. 健康修正否决 — 被健康引擎直接否决 ──
+    // ── 2. 健康修正否决 ──
     if (scored?.explanation?.penaltyResult?.vetoed) {
       const penaltyReasons = scored.explanation.penaltyResult.reasons;
       if (penaltyReasons.length > 0) {
@@ -1041,7 +672,7 @@ export class ExplanationGeneratorService {
       );
     }
 
-    // ── 4. 评分偏低维度分析 — 找到拉低总分的维度 ──
+    // ── 4. 评分偏低维度分析 ──
     if (scored?.explanation) {
       const weakDims: string[] = [];
       for (const dim of SCORE_DIMENSIONS) {
@@ -1088,10 +719,6 @@ export class ExplanationGeneratorService {
 
   /**
    * 构建 10 维雷达图数据
-   * V6 2.11: 维度标签通过 t() 国际化
-   *
-   * 每个维度包含: 原始分 (0-1)、当前权重 (0-1)、基准线分数
-   * 前端可直接渲染为雷达图/蛛网图
    */
   private buildRadarChart(
     explanation: ScoringExplanation,
@@ -1099,7 +726,6 @@ export class ExplanationGeneratorService {
     mealType?: string,
     locale?: Locale,
   ): RadarChartData {
-    // 获取当前目标+餐次下的归一化权重
     const weights = computeWeights(goalType, mealType);
 
     const dimensions: RadarChartDimension[] = SCORE_DIMENSIONS.map((dim, i) => {
@@ -1109,7 +735,6 @@ export class ExplanationGeneratorService {
         label: getDimensionLabel(dim, locale),
         score: d?.raw ?? 0,
         weight: weights[i] ?? 0,
-        // 基准线: 暂用 0.5（中位线），后续可从用户群体画像系统填充真实均值
         benchmark: 0.5,
       };
     });
@@ -1119,10 +744,6 @@ export class ExplanationGeneratorService {
 
   /**
    * 构建营养素进度条数据
-   * V6 2.11: 营养素名称通过 t() 国际化
-   *
-   * 将食物的份量营养与餐次目标对比，计算完成百分比和状态
-   * 前端可渲染为水平进度条组
    */
   private buildProgressBars(
     scored: ScoredFood,
@@ -1192,7 +813,7 @@ export class ExplanationGeneratorService {
         target: Math.round(target.fiber * 10) / 10,
         unit: 'g',
         percent: Math.round(percent),
-        status: this.nutrientStatus(percent, 60, 200), // 纤维越多越好，上限放宽
+        status: this.nutrientStatus(percent, 60, 200),
       });
     }
 
@@ -1201,20 +822,13 @@ export class ExplanationGeneratorService {
 
   /**
    * 构建对比卡片数据
-   *
-   * vsUserAvg: 基于 finalScore 与理论中位分 (0.5) 的差异
-   * vsHealthyTarget: 基于 10 维评分的加权健康达标率
-   * trend7d: 暂为空数组（由画像系统在返回时填充 7 日趋势数据）
    */
   private buildComparisonCard(explanation: ScoringExplanation): ComparisonData {
-    // 综合评分与中位基准的差异 (-1 ~ 1)
-    // finalScore 通常在 0~2 范围，归一化为 -1~1 区间
     const normalizedScore = Math.min(
       1,
       Math.max(-1, (explanation.finalScore - 0.5) / 0.5),
     );
 
-    // 健康达标率: 计算 10 维中有多少维度的原始分 >= 0.6（合格线）
     let qualifiedCount = 0;
     for (const dim of SCORE_DIMENSIONS) {
       const d = explanation.dimensions[dim];
@@ -1227,7 +841,7 @@ export class ExplanationGeneratorService {
     return {
       vsUserAvg: Math.round(normalizedScore * 100) / 100,
       vsHealthyTarget: Math.round(healthTarget * 100) / 100,
-      trend7d: [], // 暂为空，由画像系统在上层填充
+      trend7d: [],
     };
   }
 
@@ -1245,125 +859,35 @@ export class ExplanationGeneratorService {
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // V6.6 Phase 2-E: 变化解释 & 渠道解释
+  // V6.6 Phase 2-E: 变化解释 & 渠道解释 — V7.6 P2-C 委托
   // ──────────────────────────────────────────────────────────────────────────
 
   /**
-   * 变化解释：今天推荐 X，昨天推荐 Y，向用户解释为什么变了
-   * 仅在今日推荐与昨日显著不同（有新食物出现）时返回非 null 结果。
-   *
-   * @param todayTop      今日推荐的食物列表（FoodLibrary）
-   * @param yesterdayTop  昨日推荐的食物列表（FoodLibrary）
-   * @param profile       增强型画像上下文（用于判断变化原因和数据质量）
-   * @returns DeltaExplanation 或 null（推荐未显著变化时）
+   * 变化解释 — V7.6 P2-C 委托给 ComparisonExplanationService
    */
   generateDeltaExplanation(
     todayTop: FoodLibrary[],
     yesterdayTop: FoodLibrary[],
     profile: EnrichedProfileContext,
   ): DeltaExplanation | null {
-    const yesterdayIds = new Set(yesterdayTop.map((f) => f.id));
-    const newFoods = todayTop.filter((f) => !yesterdayIds.has(f.id));
-
-    // 今日推荐无新食物 → 无变化，不生成解释
-    if (newFoods.length === 0) return null;
-
-    const primaryReason = this.detectChangeReason(
-      profile,
-      yesterdayTop,
+    return this.comparisonExplanation.generateDeltaExplanation(
       todayTop,
+      yesterdayTop,
+      profile,
     );
-
-    // 数据质量评估：有足够的声明画像 + 行为画像 → 高置信度
-    const hasRichProfile =
-      !!profile.declared &&
-      !!profile.inferred &&
-      !!profile.observed &&
-      (profile.observed.totalRecords ?? 0) >= 7;
-
-    return {
-      changedFoods: newFoods.map((f) => f.name),
-      primaryReason,
-      confidence: hasRichProfile ? 'high' : 'medium',
-    };
   }
 
   /**
-   * 推断推荐变化的主要原因
-   * 优先级：营养缺口变化 > 场景变化 > 策略刷新 > 多样性轮换
-   */
-  private detectChangeReason(
-    profile: EnrichedProfileContext,
-    yesterdayTop: FoodLibrary[],
-    todayTop: FoodLibrary[],
-  ): string {
-    // 1. 场景变化（上下文画像不同）
-    if (profile.contextual?.scene) {
-      const scene = profile.contextual.scene;
-      if (scene === 'post_exercise') return t('explain.delta.postExercise');
-      if (scene === 'late_night') return t('explain.delta.lateNight');
-      if (
-        scene === 'weekday_lunch' ||
-        scene === 'weekday_dinner' ||
-        scene === 'weekday_breakfast'
-      )
-        return t('explain.delta.weekday');
-    }
-
-    // 2. 营养缺口存在
-    const gaps = profile.inferred?.nutritionGaps;
-    if (gaps?.length) {
-      return t('explain.delta.nutritionGap', {
-        gaps: gaps.slice(0, 2).join('、'),
-      });
-    }
-
-    // 3. 品类多样性轮换（今昨日品类重叠少）
-    const yesterdayCategories = new Set(yesterdayTop.map((f) => f.category));
-    const todayCategories = new Set(todayTop.map((f) => f.category));
-    const overlapCount = [...todayCategories].filter((c) =>
-      yesterdayCategories.has(c),
-    ).length;
-    if (overlapCount <= todayCategories.size / 2) {
-      return t('explain.delta.diversityRotation');
-    }
-
-    // 4. 默认：策略定期刷新
-    return t('explain.delta.strategyRefresh');
-  }
-
-  /**
-   * 渠道过滤解释：因为当前渠道（如外卖、食堂），过滤了 N 个不适合的选项
-   *
-   * @param channel       当前推荐渠道
-   * @param filteredCount 被渠道过滤的食物数量
-   * @param locale        语言（默认 zh-CN）
-   * @returns 用户可读的解释字符串，filteredCount = 0 时返回 null
+   * 渠道过滤解释 — V7.6 P2-C 委托给 ComparisonExplanationService
    */
   generateChannelFilterExplanation(
     channel: AcquisitionChannel,
     filteredCount: number,
     locale: Locale = 'zh-CN',
   ): string | null {
-    if (filteredCount <= 0) return null;
-
-    const channelKeyMap: Partial<Record<AcquisitionChannel, string>> = {
-      [AcquisitionChannel.DELIVERY]: 'explain.channel.delivery',
-      [AcquisitionChannel.HOME_COOK]: 'explain.channel.homeCook',
-      [AcquisitionChannel.CANTEEN]: 'explain.channel.canteen',
-      [AcquisitionChannel.CONVENIENCE]: 'explain.channel.convenience',
-      [AcquisitionChannel.RESTAURANT]: 'explain.channel.restaurant',
-    };
-
-    const channelName = t(
-      channelKeyMap[channel] ?? 'explain.channel.default',
-      {},
-      locale,
-    );
-
-    return t(
-      'explain.channel.filterNote',
-      { channel: channelName, count: String(filteredCount) },
+    return this.comparisonExplanation.generateChannelFilterExplanation(
+      channel,
+      filteredCount,
       locale,
     );
   }
@@ -1371,21 +895,7 @@ export class ExplanationGeneratorService {
   // ─── V6.9 Phase 2-B: 结构化洞察生成 ───
 
   /**
-   * 为已推荐的整餐生成结构化洞察列表
-   *
-   * V7.2 P2-E: 委托给 InsightGeneratorService.generate()
-   * 保留原签名以向后兼容，内部通过 createInsightContext 转换为 InsightContext 对象。
-   *
-   * @param foods              已推荐的食物列表
-   * @param target             餐次营养目标
-   * @param sceneContext       场景上下文（可选）
-   * @param dailyPlan          日计划状态（可选，用于多样性提示）
-   * @param _locale            语言（可选）
-   * @param effectiveGoal      有效目标（可选，V7.0 目标进度洞察）
-   * @param goalProgress       目标进度（可选，V7.0 目标进度洞察）
-   * @param crossMealAdjustment 跨餐补偿调整（可选，V7.1 P3-E）
-   * @param substitutions      高频替换模式（可选，V7.1 P3-E）
-   * @returns 按重要性降序排列的洞察列表
+   * V7.2 P2-E: 委托给 InsightGeneratorService
    */
   generateStructuredInsights(
     foods: ScoredFood[],
@@ -1416,15 +926,6 @@ export class ExplanationGeneratorService {
 
   /**
    * V7.3 P2-E: 为单个推荐食物生成自然语言叙述
-   *
-   * 将 ScoringChain 产出的 ScoringAdjustment[] 转换为人类可读的中文推荐理由。
-   * 与 generate() 的区别：generate() 基于 10 维评分维度，
-   * 而本方法基于 ScoringFactor 链的调整记录，更精确地反映推荐决策路径。
-   *
-   * @param food         推荐的食物
-   * @param adjustments  ScoringChain 对该食物的调整记录
-   * @param ctx          叙述上下文（目标、餐次、营养缺口等）
-   * @returns 自然语言叙述字符串
    */
   generateNarrativeExplanation(
     food: FoodLibrary,
@@ -1436,14 +937,6 @@ export class ExplanationGeneratorService {
 
   /**
    * V7.3 P2-E: 为单个推荐食物生成结构化"为什么推荐"解释
-   *
-   * 返回 WhyThisDishExplanation，包含主要原因 + 营养说明 + 场景说明 + 完整叙述。
-   * 适用于用户点击"为什么推荐这个"时的详情展示。
-   *
-   * @param scored       评分后的食物
-   * @param adjustments  ScoringChain 调整记录
-   * @param ctx          叙述上下文
-   * @returns 结构化的推荐解释
    */
   generateWhyThisDishExplanation(
     scored: ScoredFood,
@@ -1455,14 +948,6 @@ export class ExplanationGeneratorService {
 
   /**
    * V7.3 P2-E: 批量生成自然语言叙述
-   *
-   * 为一餐中的多个推荐食物批量生成自然语言解释。
-   * 调用方需要提供每个食物对应的 ScoringAdjustment[]。
-   *
-   * @param scoredFoods        评分后的食物列表
-   * @param adjustmentsMap     食物 ID → ScoringAdjustment[] 映射
-   * @param ctx                叙述上下文
-   * @returns 食物 ID → 自然语言叙述 映射
    */
   generateNarrativeBatch(
     scoredFoods: ScoredFood[],
@@ -1480,5 +965,43 @@ export class ExplanationGeneratorService {
       result.set(scored.food.id, narrative);
     }
     return result;
+  }
+
+  // ─── V7.4 P2-F: 对比解释 + 替代解释 — V7.6 P2-C 委托 ───
+
+  /**
+   * V7.4 P2-F: 生成两个食物之间的对比解释 — 委托给 ComparisonExplanationService
+   */
+  generateComparisonExplanation(
+    recommended: ScoredFood,
+    alternative: ScoredFood,
+    goalType: string,
+    locale: Locale = 'zh-CN',
+  ): ComparisonExplanation {
+    return this.comparisonExplanation.generateComparisonExplanation(
+      recommended,
+      alternative,
+      goalType,
+      locale,
+    );
+  }
+
+  /**
+   * V7.4 P2-F: 生成食物替代解释 — 委托给 ComparisonExplanationService
+   */
+  generateSubstitutionExplanation(
+    original: ScoredFood,
+    substitute: ScoredFood,
+    goalType: string,
+    target: MealTarget,
+    locale: Locale = 'zh-CN',
+  ): SubstitutionExplanation {
+    return this.comparisonExplanation.generateSubstitutionExplanation(
+      original,
+      substitute,
+      goalType,
+      target,
+      locale,
+    );
   }
 }

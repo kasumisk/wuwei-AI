@@ -14,6 +14,7 @@ import {
   Select,
   InputNumber,
   Popconfirm,
+  Tooltip,
 } from 'antd';
 import {
   PlusOutlined,
@@ -21,11 +22,15 @@ import {
   EyeOutlined,
   PlayCircleOutlined,
   StopOutlined,
-  BarChartOutlined,
   GlobalOutlined,
   UserOutlined,
   ExperimentOutlined,
   AimOutlined,
+  CopyOutlined,
+  ThunderboltOutlined,
+  FileOutlined,
+  InboxOutlined,
+  TeamOutlined,
 } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
@@ -71,11 +76,11 @@ export const routeConfig = {
 const StrategyList: React.FC = () => {
   const navigate = useNavigate();
   const actionRef = useRef<ActionType>(null);
-  const [overviewVisible, setOverviewVisible] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [createForm] = Form.useForm();
 
-  const { data: overview } = useStrategyOverview({ enabled: overviewVisible });
+  // 始终加载概览统计
+  const { data: overview, isLoading: overviewLoading } = useStrategyOverview();
 
   const createMutation = useCreateStrategy({
     onSuccess: () => {
@@ -102,6 +107,20 @@ const StrategyList: React.FC = () => {
     },
     onError: (error: any) => message.error(`归档失败: ${error.message}`),
   });
+
+  // ==================== 复制策略 ====================
+
+  const handleClone = (record: StrategyDto) => {
+    createForm.setFieldsValue({
+      name: `${record.name} (副本)`,
+      description: record.description || '',
+      scope: record.scope,
+      scopeTarget: record.scopeTarget || '',
+      priority: record.priority,
+      config: JSON.stringify(record.config, null, 2),
+    });
+    setCreateModalVisible(true);
+  };
 
   // ==================== 列定义 ====================
 
@@ -207,7 +226,7 @@ const StrategyList: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 200,
+      width: 260,
       fixed: 'right',
       hideInSearch: true,
       render: (_, record) => (
@@ -220,6 +239,16 @@ const StrategyList: React.FC = () => {
           >
             详情
           </Button>
+          <Tooltip title="复制策略配置创建新策略">
+            <Button
+              type="link"
+              size="small"
+              icon={<CopyOutlined />}
+              onClick={() => handleClone(record)}
+            >
+              复制
+            </Button>
+          </Tooltip>
           {record.status === 'draft' && (
             <Popconfirm
               title="激活策略"
@@ -269,6 +298,72 @@ const StrategyList: React.FC = () => {
 
   return (
     <>
+      {/* 常驻统计卡片行 */}
+      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+        <Col xs={12} sm={8} md={4}>
+          <Card size="small" loading={overviewLoading}>
+            <Statistic
+              title="策略总数"
+              value={overview?.totalStrategies ?? '-'}
+              prefix={<FileOutlined />}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={8} md={4}>
+          <Card size="small" loading={overviewLoading}>
+            <Statistic
+              title="激活中"
+              value={overview?.activeStrategies ?? '-'}
+              valueStyle={{ color: '#52c41a' }}
+              prefix={<ThunderboltOutlined />}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={8} md={4}>
+          <Card size="small" loading={overviewLoading}>
+            <Statistic
+              title="草稿"
+              value={overview?.draftStrategies ?? '-'}
+              prefix={<InboxOutlined />}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={8} md={4}>
+          <Card size="small" loading={overviewLoading}>
+            <Statistic
+              title="已归档"
+              value={overview?.archivedStrategies ?? '-'}
+              valueStyle={{ color: '#faad14' }}
+              prefix={<StopOutlined />}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={8} md={4}>
+          <Card size="small" loading={overviewLoading}>
+            <Statistic
+              title="活跃分配"
+              value={overview?.totalActiveAssignments ?? '-'}
+              valueStyle={{ color: '#1677ff' }}
+              prefix={<TeamOutlined />}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={8} md={4}>
+          <Card size="small" loading={overviewLoading}>
+            <Space wrap size={[4, 4]}>
+              {overview?.scopeDistribution.map((item) => (
+                <Tag
+                  key={item.scope}
+                  color={scopeConfig[item.scope as StrategyScope]?.color || 'default'}
+                >
+                  {scopeConfig[item.scope as StrategyScope]?.text || item.scope}: {item.count}
+                </Tag>
+              )) ?? <span style={{ color: '#999' }}>-</span>}
+            </Space>
+          </Card>
+        </Col>
+      </Row>
+
       <ProTable<StrategyDto>
         headerTitle="推荐策略管理"
         actionRef={actionRef}
@@ -292,11 +387,11 @@ const StrategyList: React.FC = () => {
         }}
         toolBarRender={() => [
           <Button
-            key="overview"
-            icon={<BarChartOutlined />}
-            onClick={() => setOverviewVisible(true)}
+            key="refresh"
+            icon={<ReloadOutlined />}
+            onClick={() => actionRef.current?.reload()}
           >
-            统计概览
+            刷新
           </Button>,
           <Button
             key="create"
@@ -310,71 +405,6 @@ const StrategyList: React.FC = () => {
         pagination={{ defaultPageSize: 20, showSizeChanger: true }}
         search={{ labelWidth: 'auto' }}
       />
-
-      {/* 统计概览弹窗 */}
-      <Modal
-        title="策略统计概览"
-        open={overviewVisible}
-        onCancel={() => setOverviewVisible(false)}
-        footer={null}
-        width={640}
-      >
-        {overview && (
-          <>
-            <Row gutter={[16, 16]}>
-              <Col span={8}>
-                <Card size="small">
-                  <Statistic title="策略总数" value={overview.totalStrategies} />
-                </Card>
-              </Col>
-              <Col span={8}>
-                <Card size="small">
-                  <Statistic
-                    title="激活中"
-                    value={overview.activeStrategies}
-                    valueStyle={{ color: '#52c41a' }}
-                  />
-                </Card>
-              </Col>
-              <Col span={8}>
-                <Card size="small">
-                  <Statistic title="草稿" value={overview.draftStrategies} />
-                </Card>
-              </Col>
-              <Col span={8}>
-                <Card size="small">
-                  <Statistic
-                    title="已归档"
-                    value={overview.archivedStrategies}
-                    valueStyle={{ color: '#faad14' }}
-                  />
-                </Card>
-              </Col>
-              <Col span={8}>
-                <Card size="small">
-                  <Statistic
-                    title="活跃分配数"
-                    value={overview.totalActiveAssignments}
-                    valueStyle={{ color: '#1677ff' }}
-                  />
-                </Card>
-              </Col>
-            </Row>
-            <Card size="small" title="按范围分布" style={{ marginTop: 16 }}>
-              <Space wrap>
-                {overview.scopeDistribution.map((item) => (
-                  <Tag
-                    key={item.scope}
-                    color={scopeConfig[item.scope as StrategyScope]?.color || 'default'}
-                  >
-                    {scopeConfig[item.scope as StrategyScope]?.text || item.scope}: {item.count}
-                  </Tag>
-                ))}
-              </Space>
-            </Card>
-          </>
-        )}
-      </Modal>
 
       {/* 创建策略弹窗 */}
       <Modal

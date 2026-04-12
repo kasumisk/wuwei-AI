@@ -3,6 +3,8 @@ import { MealPlan } from '../diet.types';
 import { DailyPlanService, PreloadedContext } from './daily-plan.service';
 import { UserProfileService } from '../../user/app/user-profile.service';
 import { RecommendationEngineService } from './recommendation-engine.service';
+import { PreferenceProfileService } from './recommendation/preference-profile.service';
+import { RecommendationFeedbackService } from './recommendation/feedback.service';
 import { getUserLocalDate } from '../../../common/utils/timezone.util';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 
@@ -65,6 +67,8 @@ export class WeeklyPlanService {
     private readonly dailyPlanService: DailyPlanService,
     private readonly userProfileService: UserProfileService,
     private readonly recommendationEngine: RecommendationEngineService,
+    private readonly preferenceProfileService: PreferenceProfileService,
+    private readonly feedbackService: RecommendationFeedbackService,
   ) {}
 
   /**
@@ -114,10 +118,10 @@ export class WeeklyPlanService {
       regionalBoostMap,
     ] = await Promise.all([
       this.recommendationEngine.getAllFoods(),
-      this.recommendationEngine.getRecentFoodNames(userId, 7),
-      this.recommendationEngine.getUserFeedbackStats(userId),
-      this.recommendationEngine.getUserPreferenceProfile(userId),
-      this.recommendationEngine.getRegionalBoostMap(regionCode),
+      this.preferenceProfileService.getRecentFoodNames(userId, 7),
+      this.feedbackService.getUserFeedbackStats(userId),
+      this.preferenceProfileService.getUserPreferenceProfile(userId),
+      this.preferenceProfileService.getRegionalBoostMap(regionCode),
     ]);
 
     const preloaded: PreloadedContext = {

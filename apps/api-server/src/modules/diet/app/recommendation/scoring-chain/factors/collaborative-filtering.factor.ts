@@ -24,8 +24,7 @@ export class CollaborativeFilteringFactor implements ScoringFactor {
 
   init(ctx: PipelineContext): void {
     this.cfScores = ctx.cfScores ?? {};
-    this.cfBoostCap =
-      (ctx.resolvedStrategy?.config?.boost as any)?.cfBoostCap ?? 0.15;
+    this.cfBoostCap = ctx.resolvedStrategy?.config?.boost?.cfBoostCap ?? 0.15;
   }
 
   computeAdjustment(

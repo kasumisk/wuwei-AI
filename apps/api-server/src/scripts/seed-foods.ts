@@ -73,6 +73,13 @@ function mapToData(
     // V7.3: 食物大众化
     food_form: food.foodForm ?? 'ingredient',
     dish_priority: food.dishPriority ?? undefined,
+    // V7.4: 食物可获得性
+    acquisition_difficulty: food.acquisitionDifficulty ?? 3,
+    // V7.4 Phase 3-A: 精细化营养字段
+    omega3: food.omega3 ?? undefined,
+    omega6: food.omega6 ?? undefined,
+    soluble_fiber: food.solubleFiber ?? undefined,
+    insoluble_fiber: food.insolubleFiber ?? undefined,
   };
 }
 

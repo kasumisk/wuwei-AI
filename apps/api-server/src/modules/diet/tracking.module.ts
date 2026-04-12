@@ -22,6 +22,11 @@ const TRACKING_PROVIDERS = [
 
 @Module({
   providers: TRACKING_PROVIDERS,
-  exports: TRACKING_PROVIDERS,
+  exports: [
+    // V7.5 P3-C: 只导出被外部模块实际注入的 3 个 service（原 5 个全部导出）
+    ExecutionTrackerService, // → RecommendationEngineService
+    RecommendationFeedbackService, // → RecommendationEngineService, DailyPlanService, FoodPlanController, WeeklyPlanService
+    PreferenceProfileService, // → RecommendationEngineService, DailyPlanService, FoodPlanController, WeeklyPlanService, PipelineBuilderService, MealAssemblerService
+  ],
 })
 export class TrackingModule {}

@@ -16,7 +16,7 @@
  * - 结果后处理（份量调整、解释生成、多语言）
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { FoodLibrary } from '../../../food/food.types';
 import { GoalType } from '../nutrition-score.service';
 import { FoodScorerService } from './food-scorer.service';
@@ -28,7 +28,6 @@ import {
   ROLE_CATEGORIES,
   FoodFeedbackStats,
   EnrichedProfileContext,
-  ScoringConfigSnapshot,
   PipelineDegradation,
 } from './recommendation.types';
 import {
@@ -40,10 +39,7 @@ import {
   multiObjectiveOptimize,
   extractRankedFoods,
 } from './multi-objective-optimizer';
-import {
-  mapLifestyleToScoringFactors,
-  ScoringFactors,
-} from './profile-scoring-mapper';
+import { mapLifestyleToScoringFactors } from './profile-scoring-mapper';
 import { NutritionTargetService } from './nutrition-target.service';
 import { SemanticRecallService } from './semantic-recall.service';
 import {
@@ -58,12 +54,22 @@ import { MealCompositionScorer } from './meal-composition-scorer.service';
 import { StrategyAutoTuner } from '../../../strategy/app/strategy-auto-tuner.service';
 import { PreferenceProfileService } from './preference-profile.service';
 import { ScoringChainService } from './scoring-chain/scoring-chain.service';
-
-/** V5 2.1: 每个角色最多保留的候选数量，供全局优化器替换用 */
-const OPTIMIZER_CANDIDATE_LIMIT = 8;
+import type { RecommendationStrategy } from './recommendation-strategy.types';
+import {
+  PreferenceSignalFactor,
+  RegionalBoostFactor,
+  CollaborativeFilteringFactor,
+  ShortTermProfileFactor,
+  SceneContextFactor,
+  AnalysisProfileFactor,
+  LifestyleBoostFactor,
+  PopularityFactor,
+  ReplacementFeedbackFactor,
+  RuleWeightFactor,
+} from './scoring-chain/factors';
 
 @Injectable()
-export class PipelineBuilderService {
+export class PipelineBuilderService implements OnModuleInit {
   private readonly logger = new Logger(PipelineBuilderService.name);
 
   constructor(
@@ -85,6 +91,64 @@ export class PipelineBuilderService {
     /** V7.2 P3-A: 链式评分管道服务 */
     private readonly scoringChainService: ScoringChainService,
   ) {}
+
+  // ─── V7.4 P1-E: 模块初始化时注册 10 个评分因子 ───
+
+  /**
+   * 在 NestJS 模块初始化时注册所有 ScoringFactor 到 ScoringChainService。
+   *
+   * V7.4: 将 V7.2 创建的 10 个 ScoringFactor 实现正式注册到链式评分管道，
+   * 取代 rankCandidatesLegacy 中的 14 个内联 boost 块。
+   * LifestyleBoostFactor 需要两个 lambda 来桥接 DI 服务：
+   * - getLifestyleFactors: 从 PipelineContext 提取 lifestyle → mapLifestyleToScoringFactors
+   * - getLifestyleAdjustment: 从 PipelineContext 提取 declared → lifestyleScoringAdapter.adapt()
+   */
+  onModuleInit(): void {
+    this.scoringChainService.registerFactors([
+      new PreferenceSignalFactor(),
+      new RegionalBoostFactor(),
+      new CollaborativeFilteringFactor(),
+      new ShortTermProfileFactor(),
+      new SceneContextFactor(),
+      new AnalysisProfileFactor(),
+      new LifestyleBoostFactor(
+        // getLifestyleFactors: 从 ctx.userProfile.lifestyle 提取画像→评分函数
+        (ctx) => {
+          const enriched = ctx.userProfile as
+            | EnrichedProfileContext
+            | undefined;
+          return mapLifestyleToScoringFactors(enriched?.lifestyle ?? null);
+        },
+        // getLifestyleAdjustment: 从 ctx.userProfile.declared 提取生活方式营养素调整
+        (ctx) => {
+          const enriched = ctx.userProfile as
+            | EnrichedProfileContext
+            | undefined;
+          if (!enriched?.declared) return null;
+          return this.lifestyleScoringAdapter.adapt(
+            {
+              sleepQuality: enriched.declared.sleepQuality,
+              stressLevel: enriched.declared.stressLevel,
+              supplementsUsed: enriched.declared.supplementsUsed,
+              hydrationGoal: enriched.declared.hydrationGoal,
+              mealTimingPreference: enriched.declared.mealTimingPreference,
+              exerciseIntensity: enriched.declared.exerciseIntensity,
+              alcoholFrequency: enriched.declared.alcoholFrequency,
+              age: enriched.declared.age,
+            },
+            ctx.mealType,
+          );
+        },
+      ),
+      new PopularityFactor(),
+      new ReplacementFeedbackFactor(),
+      new RuleWeightFactor(),
+    ]);
+
+    this.logger.log(
+      `Registered ${this.scoringChainService.getFactors().length} scoring factors via ScoringChain`,
+    );
+  }
 
   // ─── Stage 1: Recall（候选召回） ───
 
@@ -194,7 +258,7 @@ export class PipelineBuilderService {
     if (ctx.channel && ctx.channel !== 'unknown') {
       const beforeCount = candidates.length;
       candidates = candidates.filter((f) => {
-        const channels = (f as any).availableChannels as string[] | undefined;
+        const channels = f.availableChannels;
         // 没有设置渠道的食物默认所有渠道可用
         if (!channels || channels.length === 0) return true;
         return channels.includes(ctx.channel!);
@@ -284,19 +348,15 @@ export class PipelineBuilderService {
    * 精排阶段 — 多维评分 + 偏好加权
    *
    * V6.4: 改为 async 以支持 L2 缓存预热 + 回写
-   * V7.2 P3-A: 如果 ScoringChainService 已注册因子，使用链式评分管道替代
-   *            14个内联 boost 块；否则回退到原始实现（向后兼容）。
+   * V7.2 P3-A: 链式评分管道替代 14 个内联 boost 块
+   * V7.4 P1-E: 移除 legacy fallback 分支，ScoringFactor 在 onModuleInit 中注册，
+   *            直接走 rankCandidatesViaChain 路径。
    */
   async rankCandidates(
     ctx: PipelineContext,
     candidates: FoodLibrary[],
   ): Promise<ScoredFood[]> {
-    // 如果链式评分管道已注册因子，使用新路径
-    if (this.scoringChainService.getFactors().length > 0) {
-      return this.rankCandidatesViaChain(ctx, candidates);
-    }
-    // 否则回退到原始内联实现
-    return this.rankCandidatesLegacy(ctx, candidates);
+    return this.rankCandidatesViaChain(ctx, candidates);
   }
 
   /**
@@ -379,10 +439,12 @@ export class PipelineBuilderService {
     const baseExplanations = baseResults.map((r) => r.explanation);
 
     // Phase B: 链式评分管道
+    // V7.4 P2-C: 合并推荐策略的 factorStrengthOverrides 到 factorAdjustments
+    const mergedCtx = this.mergeStrategyFactorOverrides(ctx);
     const chainResults = this.scoringChainService.executeChain(
       baseFoods,
       baseScores,
-      ctx,
+      mergedCtx,
     );
 
     // Phase C: 合并结果 → ScoredFood[]
@@ -415,415 +477,6 @@ export class PipelineBuilderService {
   }
 
   /**
-   * 原始内联 boost 实现（V7.2 之前的 rankCandidates 逻辑）
-   *
-   * 保留用于 ScoringChain 未注册因子时的回退路径，
-   * 确保完全向后兼容。Phase 3 集成完成后可逐步移除。
-   */
-  private async rankCandidatesLegacy(
-    ctx: PipelineContext,
-    candidates: FoodLibrary[],
-  ): Promise<ScoredFood[]> {
-    const penaltyCtx: HealthModifierContext = {
-      allergens: ctx.userProfile?.allergens,
-      healthConditions: ctx.userProfile?.healthConditions,
-      goalType: ctx.goalType,
-    };
-
-    // V6.3 P1-2: 从 EnrichedProfileContext 提取 nutritionGaps
-    const nutritionGaps = (
-      ctx.userProfile as EnrichedProfileContext | undefined
-    )?.inferred?.nutritionGaps;
-
-    // V6.3 P1-10: 计算个性化营养目标
-    const enrichedCtx = ctx.userProfile as EnrichedProfileContext | undefined;
-    const nutritionTargets = this.buildNutritionTargets(enrichedCtx);
-
-    // V6.7 Phase 1-B: 从 ScoringConfigService 加载评分参数快照
-    const scoringConfig = await this.scoringConfigService.getConfig();
-
-    // V6.3 P1-8: 健康修正请求级缓存
-    const healthModifierCache = new Map<
-      string,
-      import('./health-modifier-engine.service').HealthModifierResult
-    >();
-
-    // V6.4: L2 缓存预热
-    const candidateIds = candidates.map((f) => f.id).filter(Boolean);
-    await this.healthModifierEngine.preloadL2Cache(
-      candidateIds,
-      penaltyCtx,
-      healthModifierCache,
-    );
-    const preloadedIds = new Set(healthModifierCache.keys());
-
-    // V6.5 Phase 1E: 画像→评分因子
-    const lifestyleFactors: ScoringFactors = mapLifestyleToScoringFactors(
-      (ctx.userProfile as EnrichedProfileContext | undefined)?.lifestyle ??
-        null,
-    );
-
-    // V6.6 Phase 2-C: 生活方式营养素优先级调整
-    const enrichedForLifestyle = ctx.userProfile as
-      | EnrichedProfileContext
-      | undefined;
-    const lifestyleAdjustment = enrichedForLifestyle?.declared
-      ? this.lifestyleScoringAdapter.adapt(
-          {
-            sleepQuality: enrichedForLifestyle.declared.sleepQuality,
-            stressLevel: enrichedForLifestyle.declared.stressLevel,
-            supplementsUsed: enrichedForLifestyle.declared.supplementsUsed,
-            hydrationGoal: enrichedForLifestyle.declared.hydrationGoal,
-            mealTimingPreference:
-              enrichedForLifestyle.declared.mealTimingPreference,
-            exerciseIntensity: enrichedForLifestyle.declared.exerciseIntensity, // V6.8
-            alcoholFrequency: enrichedForLifestyle.declared.alcoholFrequency, // V6.8 Phase 3-B
-            age: enrichedForLifestyle.declared.age, // V6.8 Phase 3-B
-          },
-          ctx.mealType,
-        )
-      : null;
-
-    const scored: ScoredFood[] = candidates
-      .map((food) => {
-        // V7.1 P3-C: 计算统一偏好信号（per-food）
-        // 在 ScoringContext 中传递给 FoodScorer，替代 inline 菜系 boost
-        const foodFeedbackStat = ctx.feedbackStats?.[food.id] ?? null;
-        const preferenceSignal =
-          this.preferenceProfileService.computePreferenceSignal(
-            food,
-            foodFeedbackStat,
-            ctx.preferenceProfile ?? null,
-            ctx.domainProfiles?.preferences ?? null,
-            ctx.substitutions ?? null,
-          );
-
-        const detailed = this.foodScorer.scoreFoodDetailed({
-          food,
-          goalType: ctx.goalType,
-          target: ctx.target,
-          penaltyContext: penaltyCtx,
-          mealType: ctx.mealType,
-          statusFlags: undefined,
-          weightOverrides: ctx.weightOverrides,
-          mealWeightOverrides: ctx.mealWeightOverrides,
-          rankPolicy: ctx.resolvedStrategy?.config?.rank,
-          nutritionGaps,
-          healthModifierCache,
-          nutritionTargets,
-          // V6.8 Phase 1-B: lifestyleAdjustment 不再传给 food-scorer，统一通过 lifestyleNutrientBoost 路径
-          scoringConfig,
-          // V7.0 Phase 3-C: 偏好画像（cuisineWeights 等）— fallback 用
-          preferencesProfile: ctx.domainProfiles?.preferences,
-          // V7.1 P3-C: 统一偏好信号
-          preferenceSignal,
-        });
-        let score = detailed.score;
-        const explanation = detailed.explanation;
-
-        // V6 2.2: 从策略配置读取 boost 参数
-        const boostConfig = ctx.resolvedStrategy?.config?.boost;
-
-        // 用户偏好加权
-        let preferenceBoost = 1.0;
-        if (ctx.userPreferences) {
-          const name = food.name;
-          const mainIng = food.mainIngredient || '';
-          const lovesMultiplier =
-            boostConfig?.preference?.lovesMultiplier ?? 1.12;
-          const avoidsMultiplier =
-            boostConfig?.preference?.avoidsMultiplier ?? 0.3;
-          if (
-            ctx.userPreferences.loves?.some(
-              (l) => name.includes(l) || mainIng.includes(l),
-            )
-          ) {
-            preferenceBoost = lovesMultiplier;
-          }
-          if (
-            ctx.userPreferences.avoids?.some(
-              (a) => name.includes(a) || mainIng.includes(a),
-            )
-          ) {
-            preferenceBoost = avoidsMultiplier;
-          }
-        }
-        score *= preferenceBoost;
-        explanation.preferenceBoost = preferenceBoost;
-
-        // 偏好画像四维加权
-        let profileBoost = 1.0;
-        if (ctx.preferenceProfile) {
-          const catW = ctx.preferenceProfile.categoryWeights[food.category];
-          if (catW !== undefined) {
-            profileBoost *= catW;
-          }
-
-          const ingW = food.mainIngredient
-            ? ctx.preferenceProfile.ingredientWeights[food.mainIngredient]
-            : undefined;
-          if (ingW !== undefined) {
-            profileBoost *= ingW;
-          }
-
-          const grpW = food.foodGroup
-            ? ctx.preferenceProfile.foodGroupWeights[food.foodGroup]
-            : undefined;
-          if (grpW !== undefined) {
-            profileBoost *= grpW;
-          }
-
-          // 食物名偏好
-          const nameW = ctx.preferenceProfile.foodNameWeights[food.name];
-          if (nameW !== undefined) {
-            profileBoost *= nameW;
-          }
-        }
-        score *= profileBoost;
-        explanation.profileBoost = profileBoost;
-
-        // 地区感知偏移
-        let regionalBoost = 1.0;
-        if (ctx.regionalBoostMap) {
-          const regionW = ctx.regionalBoostMap[food.id];
-          if (regionW !== undefined) {
-            regionalBoost = regionW;
-          }
-        }
-        score *= regionalBoost;
-        explanation.regionalBoost = regionalBoost;
-
-        // V4 Phase 4.4: 协同过滤加成
-        const cfBoostCap = boostConfig?.cfBoostCap ?? 0.15;
-        let cfBoost = 0;
-        if (ctx.cfScores) {
-          const cfScore = ctx.cfScores[food.id];
-          if (cfScore !== undefined && cfScore > 0) {
-            cfBoost = cfScore * cfBoostCap;
-            score *= 1 + cfBoost;
-          }
-        }
-        explanation.cfBoost = cfBoost;
-
-        // V6 1.9: 短期画像偏好调整
-        const shortTermBoostRange = boostConfig?.shortTerm?.boostRange ?? [
-          0.9, 1.1,
-        ];
-        const singleRejectPenalty =
-          boostConfig?.shortTerm?.singleRejectPenalty ?? 0.85;
-        let shortTermBoost = 1.0;
-        if (ctx.shortTermProfile?.categoryPreferences) {
-          const mealPref =
-            ctx.shortTermProfile.categoryPreferences[ctx.mealType];
-          if (mealPref) {
-            const total =
-              mealPref.accepted + mealPref.rejected + mealPref.replaced;
-            if (total >= 3) {
-              const acceptRate = mealPref.accepted / total;
-              const [minBoost, maxBoost] = shortTermBoostRange;
-              shortTermBoost = minBoost + acceptRate * (maxBoost - minBoost);
-            }
-          }
-          const rejCount = ctx.shortTermProfile.rejectedFoods?.[food.name] || 0;
-          if (rejCount === 1) {
-            shortTermBoost *= singleRejectPenalty;
-          }
-        }
-        score *= shortTermBoost;
-        explanation.shortTermBoost = shortTermBoost;
-
-        // V6 2.18: 上下文场景加权
-        let sceneBoost = 1.0;
-        if (ctx.contextualProfile?.sceneWeightModifiers) {
-          const mods = ctx.contextualProfile.sceneWeightModifiers;
-          const modValues = Object.values(mods).filter(
-            (v) => v !== undefined,
-          ) as number[];
-          if (modValues.length > 0) {
-            const product = modValues.reduce((p, v) => p * v, 1.0);
-            sceneBoost = Math.pow(product, 1 / modValues.length);
-            sceneBoost = Math.max(0.8, Math.min(1.2, sceneBoost));
-          }
-        }
-        score *= sceneBoost;
-        explanation.sceneBoost = sceneBoost;
-
-        // V6.1 Phase 3.5: 分析画像加权
-        let analysisBoost = 1.0;
-        if (ctx.analysisProfile) {
-          const analyzedCategories =
-            ctx.analysisProfile.recentAnalyzedCategories;
-          const categoryCount = analyzedCategories[food.category] ?? 0;
-          if (categoryCount > 0) {
-            const categoryInterestBoost = Math.min(categoryCount * 0.02, 0.08);
-            analysisBoost *= 1 + categoryInterestBoost;
-          }
-          if (ctx.analysisProfile.recentRiskFoods?.includes(food.name)) {
-            analysisBoost *= 0.7;
-          }
-        }
-        score *= analysisBoost;
-        explanation.analysisBoost = analysisBoost;
-
-        // V6.5 Phase 1E: 画像→评分因子
-        const lifestyleBoost =
-          lifestyleFactors.tasteMatch(food) *
-          lifestyleFactors.cuisineMatch(food) *
-          lifestyleFactors.budgetMatch(food) *
-          lifestyleFactors.skillMatch(food) *
-          lifestyleFactors.mealPrepMatch(food);
-        score *= lifestyleBoost;
-        explanation.lifestyleBoost = lifestyleBoost;
-
-        // V6.6 Phase 2-C → V6.8 Phase 1-B: 生活方式营养素优先级调整加成
-        // V6.8: 消除双重消费 — food-scorer 不再直接消费 lifestyle 信号，
-        // 所有 lifestyle 影响统一通过此路径
-        let lifestyleNutrientBoost = 1.0;
-        if (
-          lifestyleAdjustment &&
-          Object.keys(lifestyleAdjustment).length > 0
-        ) {
-          const foodNutrientValues: Record<string, number> = {
-            magnesium: Number((food as any).magnesium) || 0,
-            vitaminC: Number((food as any).vitaminC) || 0,
-            vitaminD: Number((food as any).vitaminD) || 0,
-            vitaminB12: Number((food as any).vitaminB12) || 0,
-            vitaminB6: Number((food as any).vitaminB6) || 0,
-            calcium: Number((food as any).calcium) || 0,
-            iron: Number((food as any).iron) || 0,
-            omega3: Number((food as any).omega3) || 0,
-            zinc: Number((food as any).zinc) || 0,
-            folate: Number((food as any).folate) || 0,
-            potassium: Number((food as any).potassium) || 0,
-          };
-
-          // V6.8: tryptophan 使用标签匹配（食物库通常无 tryptophan 字段）
-          const TRYPTOPHAN_RICH_TAGS =
-            scoringConfig?.lifestyleTryptophanTags ?? [
-              'poultry',
-              'dairy',
-              'banana',
-              'oats',
-              'eggs',
-              'seeds',
-              'nuts',
-              'turkey',
-            ];
-          const hasTryptophan = TRYPTOPHAN_RICH_TAGS.some(
-            (t) =>
-              food.tags?.includes(t) ||
-              food.category === t ||
-              food.mainIngredient?.toLowerCase().includes(t),
-          );
-          if (hasTryptophan) {
-            foodNutrientValues['tryptophan'] = 1;
-          }
-
-          // V6.8: waterContent 使用品类估算（食物库通常无 waterContent 字段）
-          const waterPct =
-            Number((food as any).waterContentPercent) ||
-            this.estimateWaterContentForLifestyle(food, scoringConfig);
-          const waterHighThreshold =
-            scoringConfig?.lifestyleWaterHighThreshold ?? 80;
-          if (waterPct > waterHighThreshold) {
-            foodNutrientValues['waterContent'] = 1;
-          }
-
-          let cumulativeDelta = 0;
-          for (const [nutrient, delta] of Object.entries(lifestyleAdjustment)) {
-            const val = foodNutrientValues[nutrient];
-            if (val !== undefined && val > 0) {
-              cumulativeDelta += delta;
-            }
-          }
-          lifestyleNutrientBoost = Math.max(
-            0.85,
-            Math.min(1.15, 1 + cumulativeDelta * 0.05),
-          );
-        }
-        score *= lifestyleNutrientBoost;
-
-        // V6.3 P2-4: 声明偏好加成
-        let foodPrefBoost = 1.0;
-        const declaredFoodPrefs = (
-          ctx.userProfile as EnrichedProfileContext | undefined
-        )?.declared?.foodPreferences;
-        if (declaredFoodPrefs?.length) {
-          const foodTags = food.tags || [];
-          const foodCat = food.category || '';
-          const foodSubCat = (food as any).subCategory || '';
-          const matchCount = declaredFoodPrefs.filter(
-            (pref) =>
-              foodTags.includes(pref) ||
-              foodCat === pref ||
-              foodSubCat === pref,
-          ).length;
-          if (matchCount > 0) {
-            foodPrefBoost = 1 + Math.min(matchCount * 0.05, 0.15);
-          }
-        }
-        score *= foodPrefBoost;
-        explanation.foodPrefBoost = foodPrefBoost;
-
-        // V6.3 P2-4: 热门食物加成
-        let popularityBoost = 1.0;
-        const recallConfig = ctx.resolvedStrategy?.config?.recall;
-        const popularEnabled = recallConfig?.sources?.popular?.enabled;
-        const popularWeight = recallConfig?.sources?.popular?.weight ?? 0;
-        if (popularEnabled && popularWeight > 0 && food.popularity > 0) {
-          const explorationConfig = ctx.resolvedStrategy?.config?.exploration;
-          const matureThreshold = explorationConfig?.matureThreshold ?? 50;
-          let totalInteractions = 0;
-          if (ctx.feedbackStats) {
-            for (const stats of Object.values(ctx.feedbackStats)) {
-              totalInteractions +=
-                (stats.accepted ?? 0) + (stats.rejected ?? 0);
-            }
-          }
-          const maturity = Math.min(1, totalInteractions / matureThreshold);
-          const coldStartFactor = 1 - maturity;
-          const normalizedPop = Math.min(food.popularity / 100, 1);
-          popularityBoost = 1 + popularWeight * normalizedPop * coldStartFactor;
-        }
-        score *= popularityBoost;
-        explanation.popularityBoost = popularityBoost;
-
-        // V6.6 Phase 2-B: 替换反馈乘数
-        const replacementBoost = ctx.replacementWeightMap?.get(food.id) ?? 1.0;
-        if (replacementBoost !== 1.0) {
-          score *= replacementBoost;
-        }
-        explanation.replacementBoost = replacementBoost;
-
-        // V6.6 Phase 2-A: 语义补充路 ruleWeight 折扣
-        const ruleWeight = (food as any).__ruleWeight as number | undefined;
-        if (ruleWeight !== undefined && ruleWeight < 1.0) {
-          score *= ruleWeight;
-        }
-
-        // 更新 explanation 的 finalScore
-        explanation.finalScore = score;
-
-        return {
-          food,
-          score,
-          ...this.foodScorer.calcServingNutrition(food),
-          explanation,
-        };
-      })
-      .sort((a, b) => b.score - a.score);
-
-    // V6.4: L2 缓存回写
-    this.healthModifierEngine.flushToL2(
-      healthModifierCache,
-      preloadedIds,
-      penaltyCtx,
-    );
-
-    return scored;
-  }
-
-  /**
    * V6.3 P2-12: 统一构建个性化营养目标
    */
   buildNutritionTargets(enrichedCtx?: EnrichedProfileContext) {
@@ -842,6 +495,43 @@ export class PipelineBuilderService {
     );
   }
 
+  /**
+   * V7.4 P2-C: 合并推荐策略的 factorStrengthOverrides 到 PipelineContext.factorAdjustments
+   *
+   * 合并规则：
+   * - 如果 V7.3 FactorLearner 已有学习强度，与 V7.4 策略强度相乘
+   *   （例如 FactorLearner=1.2, 策略=0.8 → 最终=0.96）
+   * - 如果 FactorLearner 无数据，直接使用策略强度
+   *
+   * 返回一个浅克隆的 PipelineContext，不修改原始 ctx。
+   */
+  private mergeStrategyFactorOverrides(ctx: PipelineContext): PipelineContext {
+    const strategy = ctx.recommendationStrategy?.strategy;
+    if (!strategy) return ctx;
+
+    const overrides = strategy.rank.factorStrengthOverrides;
+    if (!overrides || Object.keys(overrides).length === 0) return ctx;
+
+    const merged = new Map(ctx.factorAdjustments ?? []);
+    for (const [factorName, strategyStrength] of Object.entries(overrides)) {
+      const existing = merged.get(factorName) ?? 1.0;
+      merged.set(factorName, existing * strategyStrength);
+    }
+
+    return { ...ctx, factorAdjustments: merged };
+  }
+
+  /**
+   * V7.4 P2-C: 获取当前推荐策略（如果已设置）
+   *
+   * 供 recall/rerank 阶段使用。
+   */
+  private getRecommendationStrategy(
+    ctx: PipelineContext,
+  ): RecommendationStrategy | undefined {
+    return ctx.recommendationStrategy?.strategy;
+  }
+
   // ─── Stage 3: Rerank（重排 + 探索 + 选择） ───
 
   /**
@@ -857,11 +547,12 @@ export class PipelineBuilderService {
     const assemblyConfig = ctx.resolvedStrategy?.config?.assembly;
     const baseSimilarityCoeff =
       ctx.resolvedStrategy?.config?.boost?.similarityPenaltyCoeff ?? 0.3;
+    const tuning = ctx.tuning;
     const diversityMultiplier =
       assemblyConfig?.diversityLevel === 'high'
-        ? 1.5
+        ? (tuning?.diversityHighMultiplier ?? 1.5)
         : assemblyConfig?.diversityLevel === 'low'
-          ? 0.5
+          ? (tuning?.diversityLowMultiplier ?? 0.5)
           : 1.0;
     const similarityCoeff = baseSimilarityCoeff * diversityMultiplier;
 
@@ -893,7 +584,7 @@ export class PipelineBuilderService {
       totalInteractions,
       tsConvergence,
     );
-    const rateScale = adaptiveRate / 0.15;
+    const rateScale = adaptiveRate / (tuning?.baseExplorationRate ?? 0.15);
 
     const midPoint = (baseMin + baseMax) / 2;
     const halfSpan =
@@ -931,16 +622,24 @@ export class PipelineBuilderService {
       let formMultiplier = 1.0;
 
       if (form === 'dish') {
-        // 成品菜: 基础 boost + dishPriority(0-100) 映射为 0-20% 额外加分
+        // 成品菜: 基础 boost + dishPriority(0-100) 映射为额外加分
         formMultiplier = isDishPreferredScene
-          ? 1.0 + (sf.food.dishPriority || 50) / 500 // 外出场景: 1.10 ~ 1.20
-          : 1.0 + (sf.food.dishPriority || 50) / 1000; // 非外出场景: 1.05 ~ 1.10
+          ? 1.0 +
+            (sf.food.dishPriority || 50) /
+              (tuning?.dishPriorityDivisorScene ?? 500) // 外出场景
+          : 1.0 +
+            (sf.food.dishPriority || 50) /
+              (tuning?.dishPriorityDivisorNormal ?? 1000); // 非外出场景
       } else if (form === 'semi_prepared') {
         // 半成品: 中等 boost
-        formMultiplier = isDishPreferredScene ? 1.08 : 1.03;
+        formMultiplier = isDishPreferredScene
+          ? (tuning?.semiPreparedMultiplierScene ?? 1.08)
+          : (tuning?.semiPreparedMultiplierNormal ?? 1.03);
       } else {
         // 原材料(ingredient): 外出场景适度降权
-        formMultiplier = isDishPreferredScene ? 0.9 : 1.0;
+        formMultiplier = isDishPreferredScene
+          ? (tuning?.ingredientMultiplierScene ?? 0.9)
+          : 1.0;
       }
 
       return { ...sf, score: sf.score * formMultiplier };
@@ -1164,6 +863,26 @@ export class PipelineBuilderService {
         realistic = recalled;
       }
 
+      // V7.4 P2-C: 推荐策略 — acquisitionDifficulty 过滤
+      // 如果策略设定了 acquisitionDifficultyMax，过滤掉获取难度超标的食物
+      const recStrategy = this.getRecommendationStrategy(ctx);
+      if (recStrategy) {
+        const maxDiff = recStrategy.rerank.acquisitionDifficultyMax;
+        const before = realistic.length;
+        const filtered = realistic.filter(
+          (f) => (f.acquisitionDifficulty ?? 3) <= maxDiff,
+        );
+        // 只在过滤后仍有足够候选时应用（至少保留3个）
+        if (filtered.length >= 3) {
+          realistic = filtered;
+          if (before !== filtered.length) {
+            this.logger.debug(
+              `Strategy [${recStrategy.name}] filtered ${before - filtered.length} foods by acquisitionDifficulty > ${maxDiff}`,
+            );
+          }
+        }
+      }
+
       // Stage 2: Rank
       let ranked: ScoredFood[];
       try {
@@ -1225,7 +944,8 @@ export class PipelineBuilderService {
       }
 
       // V5 2.1: 收集候选
-      allCandidates.push(...finalRanked.slice(0, OPTIMIZER_CANDIDATE_LIMIT));
+      const optimizerLimit = ctx.tuning?.optimizerCandidateLimit ?? 8;
+      allCandidates.push(...finalRanked.slice(0, optimizerLimit));
 
       // Stage 3: Rerank → Top-1
       let selected: ScoredFood | null;
@@ -1265,6 +985,22 @@ export class PipelineBuilderService {
       }
     }
 
+    // V7.4 P2-C: 推荐策略 — maxSameCategory 同品类限制
+    // 如果策略设定了最大同品类食物数量，超出时替换最低分的重复品类食物
+    const recStrategyFinal = this.getRecommendationStrategy(ctx);
+    if (recStrategyFinal && picks.length >= 2) {
+      try {
+        this.enforceMaxSameCategory(
+          picks,
+          allCandidates,
+          usedNames,
+          recStrategyFinal.rerank.maxSameCategory,
+        );
+      } catch (e) {
+        this.logger.debug(`maxSameCategory enforcement failed, skipping: ${e}`);
+      }
+    }
+
     if (degradations.length > 0) {
       this.logger.warn(
         `Pipeline completed with ${degradations.length} degradation(s): ${degradations.map((d) => d.stage).join(', ')}`,
@@ -1275,6 +1011,58 @@ export class PipelineBuilderService {
   }
 
   /**
+   * V7.4 P2-C: 同品类数量限制
+   *
+   * 检查 picks 中每个品类的食物数量是否超过 maxSameCategory，
+   * 如果超过则用候选中不同品类的食物替换最低分的重复品类食物。
+   */
+  private enforceMaxSameCategory(
+    picks: ScoredFood[],
+    candidates: ScoredFood[],
+    usedNames: Set<string>,
+    maxSameCategory: number,
+  ): void {
+    const categoryCounts = new Map<string, number>();
+    for (const p of picks) {
+      const cat = p.food.category;
+      categoryCounts.set(cat, (categoryCounts.get(cat) ?? 0) + 1);
+    }
+
+    for (const [category, count] of categoryCounts) {
+      if (count <= maxSameCategory) continue;
+
+      // 找到同品类的食物，按分数升序（先替换最低分的）
+      const sameCat = picks
+        .filter((p) => p.food.category === category)
+        .sort((a, b) => a.score - b.score);
+
+      const excessCount = count - maxSameCategory;
+      let replaced = 0;
+
+      for (const weakest of sameCat) {
+        if (replaced >= excessCount) break;
+
+        const weakIdx = picks.indexOf(weakest);
+        if (weakIdx === -1) continue;
+
+        // 寻找不同品类的替代
+        const replacement = candidates.find(
+          (c) => c.food.category !== category && !usedNames.has(c.food.name),
+        );
+
+        if (replacement) {
+          this.logger.debug(
+            `Strategy maxSameCategory: 替换过多的 ${category} "${weakest.food.name}" → "${replacement.food.name}"`,
+          );
+          picks[weakIdx] = replacement;
+          usedNames.add(replacement.food.name);
+          replaced++;
+        }
+      }
+    }
+  }
+
+  /**
    * V6.8 Phase 3-F: 多轮冲突解决（从 executeRolePipeline 提取）
    */
   private resolveCompositionConflicts(
@@ -1282,13 +1070,18 @@ export class PipelineBuilderService {
     allCandidates: ScoredFood[],
     usedNames: Set<string>,
   ): void {
-    const maxRounds = 3;
+    const tuning = this.scoringConfigService.getTuning();
+    const maxRounds = tuning.conflictMaxRounds;
     for (let round = 0; round < maxRounds; round++) {
       const compositionScore =
         this.mealCompositionScorer.scoreMealComposition(picks);
 
-      const hasIngredientConflict = compositionScore.ingredientDiversity < 60;
-      const hasCookingConflict = compositionScore.cookingMethodDiversity < 50;
+      const hasIngredientConflict =
+        compositionScore.ingredientDiversity <
+        tuning.ingredientDiversityThreshold;
+      const hasCookingConflict =
+        compositionScore.cookingMethodDiversity <
+        tuning.cookingMethodDiversityThreshold;
 
       if (!hasIngredientConflict && !hasCookingConflict) {
         if (round > 0) {
@@ -1339,31 +1132,5 @@ export class PipelineBuilderService {
     const avgVariance = totalVariance / entries.length;
     const maxVariance = 1 / 12;
     return Math.max(0, Math.min(1, 1 - avgVariance / maxVariance));
-  }
-
-  // ─── V6.8 Phase 1-B: Lifestyle 含水率估算（从 food-scorer 迁移） ───
-
-  /**
-   * 基于品类估算食物含水率。
-   * 从 food-scorer.estimateWaterContent 迁移，用于 lifestyle waterContent 信号匹配。
-   */
-  private estimateWaterContentForLifestyle(
-    food: FoodLibrary,
-    cfg?: ScoringConfigSnapshot | null,
-  ): number {
-    const DEFAULT_MAP: Record<string, number> = {
-      veggie: 90,
-      fruit: 85,
-      beverage: 95,
-      dairy: 87,
-      protein: 65,
-      grain: 12,
-      composite: 55,
-      snack: 5,
-      fat: 0,
-      condiment: 50,
-    };
-    const waterMap = cfg?.categoryWaterMap ?? DEFAULT_MAP;
-    return waterMap[food.category] ?? 50;
   }
 }

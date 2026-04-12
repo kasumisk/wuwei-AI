@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import {
   Card,
   Button,
@@ -11,10 +11,35 @@ import {
   Input,
   InputNumber,
   Select,
+  Row,
+  Col,
+  Statistic,
+  Progress,
+  Typography,
+  Tooltip,
 } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons';
+import {
+  PlusOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  ReloadOutlined,
+  TrophyOutlined,
+  StarOutlined,
+  CopyOutlined,
+  UserOutlined,
+  CrownOutlined,
+} from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+} from 'recharts';
 import {
   gamificationApi,
   useCreateAchievement,
@@ -24,6 +49,8 @@ import {
   type CreateAchievementDto,
 } from '@/services/gamificationService';
 
+const { Text } = Typography;
+
 export const routeConfig = {
   name: 'achievements',
   title: '成就管理',
@@ -32,11 +59,27 @@ export const routeConfig = {
   requireAuth: true,
 };
 
+// ==================== 分类配置 ====================
+
+const CATEGORY_CONFIG: Record<string, { label: string; color: string }> = {
+  streak: { label: '打卡', color: 'orange' },
+  record: { label: '记录', color: 'blue' },
+  diet: { label: '饮食', color: 'green' },
+  social: { label: '社交', color: 'purple' },
+};
+
+const REWARD_TYPE_CONFIG: Record<string, { label: string; color: string }> = {
+  points: { label: '积分', color: 'gold' },
+  badge: { label: '徽章', color: 'cyan' },
+  title: { label: '称号', color: 'magenta' },
+};
+
 const AchievementsPage: React.FC = () => {
   const [formVisible, setFormVisible] = useState(false);
   const [editing, setEditing] = useState<AchievementDto | null>(null);
   const [form] = Form.useForm();
   const actionRef = useRef<ActionType>(null);
+  const [allData, setAllData] = useState<AchievementDto[]>([]);
 
   const createMutation = useCreateAchievement({
     onSuccess: () => {
@@ -71,6 +114,16 @@ const AchievementsPage: React.FC = () => {
     setFormVisible(true);
   };
 
+  const handleCopy = (record: AchievementDto) => {
+    setEditing(null);
+    form.setFieldsValue({
+      ...record,
+      code: `${record.code}_copy`,
+      name: `${record.name}（副本）`,
+    });
+    setFormVisible(true);
+  };
+
   const handleSubmit = async () => {
     const values = await form.validateFields();
     if (editing) {
@@ -80,6 +133,38 @@ const AchievementsPage: React.FC = () => {
     }
   };
 
+  // 概览统计
+  const overview = useMemo(() => {
+    if (!allData.length) return null;
+    const total = allData.length;
+    const totalUnlocks = allData.reduce((s, a) => s + (a.unlockCount ?? 0), 0);
+    const categoryDist = allData.reduce(
+      (acc, a) => {
+        const cat = a.category || 'uncategorized';
+        acc[cat] = (acc[cat] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>
+    );
+    const mostUnlocked = [...allData].sort(
+      (a, b) => (b.unlockCount ?? 0) - (a.unlockCount ?? 0)
+    )[0];
+    const leastUnlocked = [...allData]
+      .filter((a) => (a.unlockCount ?? 0) > 0)
+      .sort((a, b) => (a.unlockCount ?? 0) - (b.unlockCount ?? 0))[0];
+    const avgThreshold = allData.reduce((s, a) => s + a.threshold, 0) / total;
+    return { total, totalUnlocks, categoryDist, mostUnlocked, leastUnlocked, avgThreshold };
+  }, [allData]);
+
+  // 分类柱状图数据
+  const categoryChartData = useMemo(() => {
+    if (!overview) return [];
+    return Object.entries(overview.categoryDist).map(([key, count]) => ({
+      name: CATEGORY_CONFIG[key]?.label || key,
+      count,
+    }));
+  }, [overview]);
+
   const columns: ProColumns<AchievementDto>[] = [
     {
       title: '图标',
@@ -88,37 +173,59 @@ const AchievementsPage: React.FC = () => {
       search: false,
       render: (v) => <span style={{ fontSize: 20 }}>{(v as string) || '🏆'}</span>,
     },
-    { title: '编码', dataIndex: 'code', width: 120 },
+    { title: '编码', dataIndex: 'code', width: 120, copyable: true },
     { title: '名称', dataIndex: 'name', width: 150 },
     { title: '描述', dataIndex: 'description', width: 200, ellipsis: true, search: false },
     {
       title: '分类',
       dataIndex: 'category',
       width: 80,
-      render: (v) => (v ? <Tag>{v as string}</Tag> : '-'),
+      render: (v) => {
+        const cat = CATEGORY_CONFIG[v as string];
+        return cat ? <Tag color={cat.color}>{cat.label}</Tag> : v ? <Tag>{v as string}</Tag> : '-';
+      },
     },
-    { title: '门槛值', dataIndex: 'threshold', width: 80, search: false },
     {
-      title: '奖励类型',
-      dataIndex: 'rewardType',
+      title: '门槛值',
+      dataIndex: 'threshold',
       width: 80,
       search: false,
-      render: (v) => v || '-',
+      sorter: true,
     },
-    { title: '奖励值', dataIndex: 'rewardValue', width: 80, search: false },
+    {
+      title: '奖励',
+      key: 'reward',
+      width: 120,
+      search: false,
+      render: (_, record) => {
+        const rtCfg = REWARD_TYPE_CONFIG[record.rewardType ?? ''];
+        return (
+          <Space size={4}>
+            {rtCfg ? <Tag color={rtCfg.color}>{rtCfg.label}</Tag> : record.rewardType || '-'}
+            {record.rewardValue ? <Text strong>x{record.rewardValue}</Text> : null}
+          </Space>
+        );
+      },
+    },
     {
       title: '解锁人数',
       dataIndex: 'unlockCount',
-      width: 80,
+      width: 100,
       search: false,
-      render: (v) => <Tag color="blue">{v as number}</Tag>,
+      sorter: true,
+      render: (v) => (
+        <Space>
+          <UserOutlined style={{ color: '#1890ff' }} />
+          <Text strong>{v as number}</Text>
+        </Space>
+      ),
     },
     {
       title: '操作',
-      width: 120,
+      width: 160,
       search: false,
       render: (_, record) => (
-        <Space>
+        <Space size={0}>
           <Button
             type="link"
             size="small"
@@ -127,10 +234,16 @@ const AchievementsPage: React.FC = () => {
           >
             编辑
           </Button>
+          <Tooltip title="复制为新成就">
+            <Button
+              type="link"
+              size="small"
+              icon={<CopyOutlined />}
+              onClick={() => handleCopy(record)}
+            />
+          </Tooltip>
           <Popconfirm title="确认删除？" onConfirm={() => deleteMutation.mutate(record.id)}>
-            <Button type="link" size="small" danger icon={<DeleteOutlined />}>
-              删除
-            </Button>
+            <Button type="link" size="small" danger icon={<DeleteOutlined />} />
           </Popconfirm>
         </Space>
       ),
@@ -139,12 +252,69 @@ const AchievementsPage: React.FC = () => {
 
   return (
     <>
+      {/* 常驻概览卡片行 */}
+      {overview && (
+        <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
+          <Col xs={12} sm={8} lg={4}>
+            <Card size="small" variant="borderless" style={{ background: '#fafafa' }}>
+              <Statistic title="成就总数" value={overview.total} prefix={<TrophyOutlined />} />
+            </Card>
+          </Col>
+          <Col xs={12} sm={8} lg={4}>
+            <Card size="small" variant="borderless" style={{ background: '#fafafa' }}>
+              <Statistic
+                title="总解锁人次"
+                value={overview.totalUnlocks}
+                prefix={<UserOutlined />}
+                valueStyle={{ color: '#1890ff' }}
+              />
+            </Card>
+          </Col>
+          <Col xs={12} sm={8} lg={4}>
+            <Card size="small" variant="borderless" style={{ background: '#fafafa' }}>
+              <Statistic title="分类数" value={Object.keys(overview.categoryDist).length} />
+            </Card>
+          </Col>
+          <Col xs={12} sm={8} lg={4}>
+            <Card size="small" variant="borderless" style={{ background: '#fafafa' }}>
+              <Statistic title="平均门槛" value={overview.avgThreshold.toFixed(0)} />
+            </Card>
+          </Col>
+          <Col xs={12} sm={8} lg={4}>
+            <Card size="small" variant="borderless" style={{ background: '#fafafa' }}>
+              <Statistic
+                title="最热门成就"
+                value={overview.mostUnlocked?.name || '-'}
+                valueStyle={{ fontSize: 14 }}
+                prefix={<CrownOutlined style={{ color: '#faad14' }} />}
+              />
+            </Card>
+          </Col>
+          <Col xs={12} sm={8} lg={4}>
+            <Card size="small" variant="borderless" style={{ background: '#fafafa' }}>
+              <ResponsiveContainer width="100%" height={50}>
+                <BarChart
+                  data={categoryChartData}
+                  margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
+                >
+                  <Bar dataKey="count" fill="#1890ff" barSize={12} radius={[2, 2, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+              <Text type="secondary" style={{ fontSize: 11 }}>
+                分类分布
+              </Text>
+            </Card>
+          </Col>
+        </Row>
+      )}
+
       <ProTable<AchievementDto>
         columns={columns}
         actionRef={actionRef}
         request={async (params) => {
           const { current, pageSize, ...rest } = params;
           const res = await gamificationApi.getAchievements({ page: current, pageSize, ...rest });
+          setAllData(res.list || []);
           return { data: res.list, total: res.total, success: true };
         }}
         rowKey="id"

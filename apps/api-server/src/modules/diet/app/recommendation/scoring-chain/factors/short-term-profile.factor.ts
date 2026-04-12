@@ -20,6 +20,8 @@ export class ShortTermProfileFactor implements ScoringFactor {
   private mealType = '';
   private boostRange: [number, number] = [0.9, 1.1];
   private singleRejectPenalty = 0.85;
+  /** V7.5: 最小交互数 */
+  private minInteractions = 3;
 
   isApplicable(ctx: PipelineContext): boolean {
     return !!ctx.shortTermProfile?.categoryPreferences;
@@ -28,10 +30,12 @@ export class ShortTermProfileFactor implements ScoringFactor {
   init(ctx: PipelineContext): void {
     this.shortTermProfile = ctx.shortTermProfile ?? null;
     this.mealType = ctx.mealType;
-    const boostConfig = ctx.resolvedStrategy?.config?.boost as any;
+    const boostConfig = ctx.resolvedStrategy?.config?.boost;
     this.boostRange = boostConfig?.shortTerm?.boostRange ?? [0.9, 1.1];
     this.singleRejectPenalty =
       boostConfig?.shortTerm?.singleRejectPenalty ?? 0.85;
+    // V7.5: 从调参配置读取最小交互数
+    this.minInteractions = ctx.tuning?.shortTermMinInteractions ?? 3;
   }
 
   computeAdjustment(
@@ -45,7 +49,7 @@ export class ShortTermProfileFactor implements ScoringFactor {
     const mealPref = this.shortTermProfile.categoryPreferences?.[this.mealType];
     if (mealPref) {
       const total = mealPref.accepted + mealPref.rejected + mealPref.replaced;
-      if (total >= 3) {
+      if (total >= this.minInteractions) {
         const acceptRate = mealPref.accepted / total;
         const [minBoost, maxBoost] = this.boostRange;
         boost = minBoost + acceptRate * (maxBoost - minBoost);

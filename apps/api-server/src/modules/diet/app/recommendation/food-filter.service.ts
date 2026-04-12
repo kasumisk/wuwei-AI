@@ -93,7 +93,8 @@ export class FoodFilterService {
       switch (condition) {
         case 'diabetes':
           // 极高 GI 食物硬排除
-          if ((food as any).glycemicIndex > 85) return true;
+          if (food.glycemicIndex != null && food.glycemicIndex > 85)
+            return true;
           break;
         case 'gout':
           // 高嘌呤食物硬排除
@@ -101,7 +102,7 @@ export class FoodFilterService {
           break;
         case 'kidney_disease':
           // 极高钾食物硬排除
-          if ((food as any).potassium > 500) return true;
+          if (food.potassium != null && food.potassium > 500) return true;
           break;
         case 'celiac':
           // 含麸质食物硬排除

@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useMemo } from 'react';
 import {
   Card,
   Button,
@@ -12,10 +12,10 @@ import {
   Form,
   Input,
   Select,
-  InputNumber,
   DatePicker,
   Popconfirm,
-  Divider,
+  Tooltip,
+  Badge,
 } from 'antd';
 import {
   PlusOutlined,
@@ -23,8 +23,12 @@ import {
   PlayCircleOutlined,
   PauseCircleOutlined,
   CheckCircleOutlined,
-  BarChartOutlined,
-  DeleteOutlined,
+  CopyOutlined,
+  ReloadOutlined,
+  ExperimentOutlined,
+  RocketOutlined,
+  ClockCircleOutlined,
+  FileTextOutlined,
 } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
@@ -63,11 +67,11 @@ export const routeConfig = {
 const ABExperimentList: React.FC = () => {
   const navigate = useNavigate();
   const actionRef = useRef<ActionType>(null);
-  const [overviewVisible, setOverviewVisible] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [createForm] = Form.useForm();
 
-  const { data: overview } = useExperimentOverview({ enabled: overviewVisible });
+  // 始终加载概览数据
+  const { data: overview, isLoading: overviewLoading } = useExperimentOverview();
 
   const createMutation = useCreateExperiment({
     onSuccess: () => {
@@ -86,6 +90,60 @@ const ABExperimentList: React.FC = () => {
     },
     onError: (error: any) => message.error(`状态更新失败: ${error.message}`),
   });
+
+  // 复制实验：预填表单
+  const handleClone = (record: ExperimentDto) => {
+    createForm.setFieldsValue({
+      name: `${record.name} (副本)`,
+      description: record.description || '',
+      goalType: record.goalType || '*',
+      groups: JSON.stringify(record.groups || [], null, 2),
+    });
+    setCreateModalVisible(true);
+  };
+
+  // ==================== 概览统计卡片 ====================
+
+  const overviewCards = useMemo(() => {
+    if (!overview) return null;
+    const items = [
+      {
+        title: '实验总数',
+        value: overview.total,
+        icon: <ExperimentOutlined style={{ fontSize: 24, color: '#1677ff' }} />,
+        color: undefined,
+      },
+      {
+        title: '运行中',
+        value: overview.running,
+        icon: <RocketOutlined style={{ fontSize: 24, color: '#1677ff' }} />,
+        color: '#1677ff',
+        suffix:
+          overview.total > 0
+            ? `(${((overview.running / overview.total) * 100).toFixed(0)}%)`
+            : undefined,
+      },
+      {
+        title: '草稿',
+        value: overview.draft,
+        icon: <FileTextOutlined style={{ fontSize: 24, color: '#8c8c8c' }} />,
+        color: undefined,
+      },
+      {
+        title: '已暂停',
+        value: overview.paused,
+        icon: <ClockCircleOutlined style={{ fontSize: 24, color: '#faad14' }} />,
+        color: '#faad14',
+      },
+      {
+        title: '已完成',
+        value: overview.completed,
+        icon: <CheckCircleOutlined style={{ fontSize: 24, color: '#52c41a' }} />,
+        color: '#52c41a',
+      },
+    ];
+    return items;
+  }, [overview]);
 
   // ==================== 列定义 ====================
 
@@ -120,20 +178,17 @@ const ABExperimentList: React.FC = () => {
       },
       render: (_, record) => {
         const cfg = statusConfig[record.status];
-        return <Tag color={cfg.color}>{cfg.text}</Tag>;
+        return record.status === 'running' ? (
+          <Badge status="processing" text={<Tag color={cfg.color}>{cfg.text}</Tag>} />
+        ) : (
+          <Tag color={cfg.color}>{cfg.text}</Tag>
+        );
       },
     },
     {
-      title: '分组数',
-      key: 'groupCount',
-      width: 80,
-      hideInSearch: true,
-      render: (_, record) => <Tag>{record.groups?.length || 0} 组</Tag>,
-    },
-    {
-      title: '分组详情',
+      title: '分组',
       key: 'groups',
-      width: 250,
+      width: 200,
       hideInSearch: true,
       render: (_, record) => (
         <Space size={[4, 4]} wrap>
@@ -146,20 +201,21 @@ const ABExperimentList: React.FC = () => {
       ),
     },
     {
-      title: '开始时间',
-      dataIndex: 'startDate',
-      width: 160,
-      valueType: 'dateTime',
+      title: '时间范围',
+      key: 'timeRange',
+      width: 180,
       hideInSearch: true,
-      render: (_, record) => record.startDate || '-',
-    },
-    {
-      title: '结束时间',
-      dataIndex: 'endDate',
-      width: 160,
-      valueType: 'dateTime',
-      hideInSearch: true,
-      render: (_, record) => record.endDate || '-',
+      render: (_, record) => {
+        const start = record.startDate
+          ? new Date(record.startDate).toLocaleDateString('zh-CN')
+          : '-';
+        const end = record.endDate ? new Date(record.endDate).toLocaleDateString('zh-CN') : '-';
+        return (
+          <span style={{ fontSize: 12 }}>
+            {start} ~ {end}
+          </span>
+        );
+      },
     },
     {
       title: '创建时间',
@@ -178,7 +234,7 @@ const ABExperimentList: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 240,
+      width: 260,
       fixed: 'right',
       hideInSearch: true,
       render: (_, record) => (
@@ -191,6 +247,16 @@ const ABExperimentList: React.FC = () => {
           >
             详情
           </Button>
+          <Tooltip title="以此实验为模板创建新实验">
+            <Button
+              type="link"
+              size="small"
+              icon={<CopyOutlined />}
+              onClick={() => handleClone(record)}
+            >
+              复制
+            </Button>
+          </Tooltip>
           {record.status === 'draft' && (
             <Popconfirm
               title="启动实验"
@@ -203,15 +269,26 @@ const ABExperimentList: React.FC = () => {
             </Popconfirm>
           )}
           {record.status === 'running' && (
-            <Popconfirm
-              title="暂停实验"
-              description="暂停后将停止分流，确认？"
-              onConfirm={() => statusMutation.mutate({ id: record.id, status: 'paused' })}
-            >
-              <Button type="link" size="small" icon={<PauseCircleOutlined />}>
-                暂停
-              </Button>
-            </Popconfirm>
+            <>
+              <Popconfirm
+                title="暂停实验"
+                description="暂停后将停止分流，确认？"
+                onConfirm={() => statusMutation.mutate({ id: record.id, status: 'paused' })}
+              >
+                <Button type="link" size="small" icon={<PauseCircleOutlined />}>
+                  暂停
+                </Button>
+              </Popconfirm>
+              <Popconfirm
+                title="结束实验"
+                description="结束后将标记为完成，确认？"
+                onConfirm={() => statusMutation.mutate({ id: record.id, status: 'completed' })}
+              >
+                <Button type="link" size="small" danger icon={<CheckCircleOutlined />}>
+                  完成
+                </Button>
+              </Popconfirm>
+            </>
           )}
           {record.status === 'paused' && (
             <>
@@ -229,22 +306,11 @@ const ABExperimentList: React.FC = () => {
                 description="结束后将标记为完成且不可恢复，确认？"
                 onConfirm={() => statusMutation.mutate({ id: record.id, status: 'completed' })}
               >
-                <Button type="link" size="small" icon={<CheckCircleOutlined />}>
+                <Button type="link" size="small" danger icon={<CheckCircleOutlined />}>
                   完成
                 </Button>
               </Popconfirm>
             </>
-          )}
-          {(record.status === 'running' || record.status === 'paused') && (
-            <Popconfirm
-              title="结束实验"
-              description="结束后将标记为完成，确认？"
-              onConfirm={() => statusMutation.mutate({ id: record.id, status: 'completed' })}
-            >
-              <Button type="link" size="small" danger icon={<CheckCircleOutlined />}>
-                完成
-              </Button>
-            </Popconfirm>
           )}
         </Space>
       ),
@@ -280,13 +346,35 @@ const ABExperimentList: React.FC = () => {
   };
 
   return (
-    <>
+    <Space direction="vertical" style={{ width: '100%' }} size="middle">
+      {/* 常驻概览统计卡片行 */}
+      <Row gutter={[16, 16]}>
+        {(overviewCards || []).map((item) => (
+          <Col key={item.title} xs={12} sm={8} md={6} lg={4} xl={4}>
+            <Card size="small" loading={overviewLoading} variant="borderless">
+              <Statistic
+                title={item.title}
+                value={item.value}
+                prefix={item.icon}
+                suffix={
+                  item.suffix ? (
+                    <span style={{ fontSize: 12, color: '#8c8c8c' }}>{item.suffix}</span>
+                  ) : undefined
+                }
+                valueStyle={item.color ? { color: item.color } : undefined}
+              />
+            </Card>
+          </Col>
+        ))}
+      </Row>
+
+      {/* 实验列表 */}
       <ProTable<ExperimentDto>
         headerTitle="A/B 实验管理"
         actionRef={actionRef}
         rowKey="id"
         columns={columns}
-        scroll={{ x: 1400 }}
+        scroll={{ x: 1300 }}
         request={async (params) => {
           const { current, pageSize, keyword, status } = params;
           const res = await abExperimentApi.getExperiments({
@@ -303,17 +391,31 @@ const ABExperimentList: React.FC = () => {
         }}
         toolBarRender={() => [
           <Button
-            key="overview"
-            icon={<BarChartOutlined />}
-            onClick={() => setOverviewVisible(true)}
+            key="refresh"
+            icon={<ReloadOutlined />}
+            onClick={() => actionRef.current?.reload()}
           >
-            统计概览
+            刷新
           </Button>,
           <Button
             key="create"
             type="primary"
             icon={<PlusOutlined />}
-            onClick={() => setCreateModalVisible(true)}
+            onClick={() => {
+              createForm.resetFields();
+              createForm.setFieldsValue({
+                goalType: '*',
+                groups: JSON.stringify(
+                  [
+                    { name: 'control', trafficRatio: 0.5 },
+                    { name: 'variant_a', trafficRatio: 0.5 },
+                  ],
+                  null,
+                  2
+                ),
+              });
+              setCreateModalVisible(true);
+            }}
           >
             创建实验
           </Button>,
@@ -322,58 +424,7 @@ const ABExperimentList: React.FC = () => {
         search={{ labelWidth: 'auto' }}
       />
 
-      {/* 统计概览弹窗 */}
-      <Modal
-        title="A/B 实验统计概览"
-        open={overviewVisible}
-        onCancel={() => setOverviewVisible(false)}
-        footer={null}
-        width={600}
-      >
-        {overview && (
-          <Row gutter={[16, 16]}>
-            <Col span={8}>
-              <Card size="small">
-                <Statistic title="实验总数" value={overview.total} />
-              </Card>
-            </Col>
-            <Col span={8}>
-              <Card size="small">
-                <Statistic
-                  title="运行中"
-                  value={overview.running}
-                  valueStyle={{ color: '#1677ff' }}
-                />
-              </Card>
-            </Col>
-            <Col span={8}>
-              <Card size="small">
-                <Statistic title="草稿" value={overview.draft} />
-              </Card>
-            </Col>
-            <Col span={8}>
-              <Card size="small">
-                <Statistic
-                  title="已暂停"
-                  value={overview.paused}
-                  valueStyle={{ color: '#faad14' }}
-                />
-              </Card>
-            </Col>
-            <Col span={8}>
-              <Card size="small">
-                <Statistic
-                  title="已完成"
-                  value={overview.completed}
-                  valueStyle={{ color: '#52c41a' }}
-                />
-              </Card>
-            </Col>
-          </Row>
-        )}
-      </Modal>
-
-      {/* 创建实验弹窗 */}
+      {/* 创建 / 复制实验弹窗 */}
       <Modal
         title="创建 A/B 实验"
         open={createModalVisible}
@@ -443,14 +494,6 @@ const ABExperimentList: React.FC = () => {
                 },
               },
             ]}
-            initialValue={JSON.stringify(
-              [
-                { name: 'control', trafficRatio: 0.5 },
-                { name: 'variant_a', trafficRatio: 0.5 },
-              ],
-              null,
-              2
-            )}
           >
             <Input.TextArea
               rows={8}
@@ -460,7 +503,7 @@ const ABExperimentList: React.FC = () => {
           </Form.Item>
         </Form>
       </Modal>
-    </>
+    </Space>
   );
 };
 

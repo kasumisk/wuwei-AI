@@ -1,11 +1,13 @@
-import { Test, TestingModule } from '@nestjs/testing';
+/**
+ * GatewayService 单元测试 — V7.7 重写
+ *
+ * V7.7 变更：TypeORM repository mock → Prisma mock（对齐 V7.4+ 实现）
+ * 使用直接构造函数注入 mock，与 v6.9~v7.4 集成测试一致的风格。
+ */
+
 import { UnauthorizedException } from '@nestjs/common';
-import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { GatewayService } from '../src/gateway/gateway.service';
-import { Client } from '../src/entities/client.entity';
-import { UsageRecord } from '../src/entities/usage-record.entity';
 import { CapabilityRouter } from '../src/gateway/services/capability-router.service';
 
 // Mock bcrypt
@@ -14,75 +16,48 @@ const mockedBcrypt = bcrypt as jest.Mocked<typeof bcrypt>;
 
 describe('GatewayService', () => {
   let service: GatewayService;
-  let clientRepository: Repository<Client>;
-  let usageRecordRepository: Repository<UsageRecord>;
-  let capabilityRouter: CapabilityRouter;
+  let mockPrisma: any;
+  let mockCapabilityRouter: any;
 
+  // 使用 snake_case 字段名（Prisma schema 格式）
   const mockClient = {
     id: 'client-123',
     name: 'Test Client',
-    apiKey: 'test-api-key',
-    apiSecret: '$2b$10$hashedSecret',
+    api_key: 'test-api-key',
+    api_secret: '$2b$10$hashedSecret',
     status: 'active',
     description: 'Test description',
-    createdAt: new Date(),
-    updatedAt: new Date(),
+    created_at: new Date(),
+    updated_at: new Date(),
   };
 
-  const mockClientRepository = {
-    findOne: jest.fn(),
-    create: jest.fn(),
-    save: jest.fn(),
-  };
-
-  const mockUsageRecordRepository = {
-    create: jest.fn(),
-    save: jest.fn(),
-    findOne: jest.fn(),
-    find: jest.fn(),
-  };
-
-  const mockCapabilityRouter = {
-    route: jest.fn(),
-    getAvailableProviders: jest.fn(),
-  };
-
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        GatewayService,
-        {
-          provide: getRepositoryToken(Client),
-          useValue: mockClientRepository,
-        },
-        {
-          provide: getRepositoryToken(UsageRecord),
-          useValue: mockUsageRecordRepository,
-        },
-        {
-          provide: CapabilityRouter,
-          useValue: mockCapabilityRouter,
-        },
-      ],
-    }).compile();
-
-    service = module.get<GatewayService>(GatewayService);
-    clientRepository = module.get<Repository<Client>>(
-      getRepositoryToken(Client),
-    );
-    usageRecordRepository = module.get<Repository<UsageRecord>>(
-      getRepositoryToken(UsageRecord),
-    );
-    capabilityRouter = module.get<CapabilityRouter>(CapabilityRouter);
-  });
-
-  afterEach(() => {
+  beforeEach(() => {
     jest.clearAllMocks();
+
+    mockPrisma = {
+      clients: {
+        findFirst: jest.fn(),
+      },
+      usage_records: {
+        create: jest.fn(),
+      },
+    };
+
+    mockCapabilityRouter = {
+      route: jest.fn(),
+      fallback: jest.fn(),
+    };
+
+    service = new GatewayService(mockPrisma, mockCapabilityRouter);
   });
+
+  // ═══════════════════════════════════════════════════════════
+  // validateClient
+  // ═══════════════════════════════════════════════════════════
 
   describe('validateClient', () => {
     it('应该成功验证有效的客户端凭据', async () => {
-      mockClientRepository.findOne.mockResolvedValue(mockClient);
+      mockPrisma.clients.findFirst.mockResolvedValue(mockClient);
       mockedBcrypt.compare.mockResolvedValue(true as never);
 
       const result = await service.validateClient(
@@ -91,17 +66,17 @@ describe('GatewayService', () => {
       );
 
       expect(result).toEqual(mockClient);
-      expect(mockClientRepository.findOne).toHaveBeenCalledWith({
-        where: { apiKey: 'test-api-key' },
+      expect(mockPrisma.clients.findFirst).toHaveBeenCalledWith({
+        where: { api_key: 'test-api-key' },
       });
       expect(bcrypt.compare).toHaveBeenCalledWith(
         'test-secret',
-        mockClient.apiSecret,
+        mockClient.api_secret,
       );
     });
 
     it('应该在客户端不存在时返回 null', async () => {
-      mockClientRepository.findOne.mockResolvedValue(null);
+      mockPrisma.clients.findFirst.mockResolvedValue(null);
 
       const result = await service.validateClient(
         'invalid-api-key',
@@ -109,18 +84,15 @@ describe('GatewayService', () => {
       );
 
       expect(result).toBeNull();
-      expect(mockClientRepository.findOne).toHaveBeenCalledWith({
-        where: { apiKey: 'invalid-api-key' },
+      expect(mockPrisma.clients.findFirst).toHaveBeenCalledWith({
+        where: { api_key: 'invalid-api-key' },
       });
       expect(bcrypt.compare).not.toHaveBeenCalled();
     });
 
     it('应该在客户端被停用时抛出 UnauthorizedException', async () => {
-      const inactiveClient = {
-        ...mockClient,
-        status: 'inactive',
-      };
-      mockClientRepository.findOne.mockResolvedValue(inactiveClient);
+      const inactiveClient = { ...mockClient, status: 'inactive' };
+      mockPrisma.clients.findFirst.mockResolvedValue(inactiveClient);
 
       await expect(
         service.validateClient('test-api-key', 'test-secret'),
@@ -131,7 +103,7 @@ describe('GatewayService', () => {
     });
 
     it('应该在 API Secret 不匹配时返回 null', async () => {
-      mockClientRepository.findOne.mockResolvedValue(mockClient);
+      mockPrisma.clients.findFirst.mockResolvedValue(mockClient);
       mockedBcrypt.compare.mockResolvedValue(false as never);
 
       const result = await service.validateClient(
@@ -142,12 +114,12 @@ describe('GatewayService', () => {
       expect(result).toBeNull();
       expect(bcrypt.compare).toHaveBeenCalledWith(
         'wrong-secret',
-        mockClient.apiSecret,
+        mockClient.api_secret,
       );
     });
 
     it('应该处理数据库查询错误', async () => {
-      mockClientRepository.findOne.mockRejectedValue(
+      mockPrisma.clients.findFirst.mockRejectedValue(
         new Error('Database error'),
       );
 
@@ -157,7 +129,7 @@ describe('GatewayService', () => {
     });
 
     it('应该处理 bcrypt 比较错误', async () => {
-      mockClientRepository.findOne.mockResolvedValue(mockClient);
+      mockPrisma.clients.findFirst.mockResolvedValue(mockClient);
       mockedBcrypt.compare.mockRejectedValue(
         new Error('Bcrypt error') as never,
       );
@@ -167,6 +139,10 @@ describe('GatewayService', () => {
       ).rejects.toThrow('Bcrypt error');
     });
   });
+
+  // ═══════════════════════════════════════════════════════════
+  // recordUsage
+  // ═══════════════════════════════════════════════════════════
 
   describe('recordUsage', () => {
     const mockUsageData = {
@@ -188,49 +164,59 @@ describe('GatewayService', () => {
     };
 
     it('应该成功记录使用情况', async () => {
-      const mockUsageRecord = {
+      const createdRecord = {
         id: 'usage-789',
-        ...mockUsageData,
+        client_id: 'client-123',
+        request_id: 'req-456',
+        capability_type: 'TEXT_GENERATION',
+        provider: 'openai',
+        model: 'gpt-4',
+        status: 'success',
+        usage: { inputTokens: 100, outputTokens: 200 },
+        cost: 0.05,
+        response_time: 1500,
+        metadata: { temperature: 0.7 },
         timestamp: expect.any(Date),
       };
 
-      mockUsageRecordRepository.create.mockReturnValue(mockUsageRecord);
-      mockUsageRecordRepository.save.mockResolvedValue(mockUsageRecord);
+      mockPrisma.usage_records.create.mockResolvedValue(createdRecord);
 
       const result = await service.recordUsage(mockUsageData);
 
-      expect(result).toEqual(mockUsageRecord);
-      expect(mockUsageRecordRepository.create).toHaveBeenCalledWith({
-        ...mockUsageData,
-        timestamp: expect.any(Date),
+      expect(result).toEqual(createdRecord);
+      expect(mockPrisma.usage_records.create).toHaveBeenCalledWith({
+        data: {
+          client_id: 'client-123',
+          request_id: 'req-456',
+          capability_type: 'TEXT_GENERATION',
+          provider: 'openai',
+          model: 'gpt-4',
+          status: 'success',
+          usage: { inputTokens: 100, outputTokens: 200 },
+          cost: 0.05,
+          response_time: 1500,
+          metadata: { temperature: 0.7 },
+          timestamp: expect.any(Date),
+        },
       });
-      expect(mockUsageRecordRepository.save).toHaveBeenCalledWith(
-        mockUsageRecord,
-      );
     });
 
     it('应该处理没有 usage 字段的情况', async () => {
-      const dataWithoutUsage = {
-        ...mockUsageData,
-        usage: undefined,
-      };
+      const dataWithoutUsage = { ...mockUsageData, usage: undefined };
 
-      const mockUsageRecord = {
+      const createdRecord = {
         id: 'usage-789',
-        ...dataWithoutUsage,
         usage: {},
-        timestamp: expect.any(Date),
+        status: 'success',
       };
-
-      mockUsageRecordRepository.create.mockReturnValue(mockUsageRecord);
-      mockUsageRecordRepository.save.mockResolvedValue(mockUsageRecord);
+      mockPrisma.usage_records.create.mockResolvedValue(createdRecord);
 
       const result = await service.recordUsage(dataWithoutUsage);
 
-      expect(result.usage).toEqual({});
-      expect(mockUsageRecordRepository.create).toHaveBeenCalledWith(
+      // 实际代码 data.usage || {} 会传 {}
+      expect(mockPrisma.usage_records.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          usage: {},
+          data: expect.objectContaining({ usage: {} }),
         }),
       );
     });
@@ -240,25 +226,22 @@ describe('GatewayService', () => {
         ...mockUsageData,
         status: 'failed' as const,
         cost: 0,
-        metadata: {
-          error: 'API timeout',
-        },
+        metadata: { error: 'API timeout' },
       };
 
-      const mockUsageRecord = {
+      const createdRecord = {
         id: 'usage-fail',
-        ...failedUsageData,
-        timestamp: expect.any(Date),
+        status: 'failed',
+        cost: 0,
+        metadata: { error: 'API timeout' },
       };
-
-      mockUsageRecordRepository.create.mockReturnValue(mockUsageRecord);
-      mockUsageRecordRepository.save.mockResolvedValue(mockUsageRecord);
+      mockPrisma.usage_records.create.mockResolvedValue(createdRecord);
 
       const result = await service.recordUsage(failedUsageData);
 
       expect(result.status).toBe('failed');
       expect(result.cost).toBe(0);
-      expect(result.metadata?.error).toBe('API timeout');
+      expect((result as any).metadata?.error).toBe('API timeout');
     });
 
     it('应该记录超时状态', async () => {
@@ -267,14 +250,8 @@ describe('GatewayService', () => {
         status: 'timeout' as const,
       };
 
-      const mockUsageRecord = {
-        id: 'usage-timeout',
-        ...timeoutUsageData,
-        timestamp: expect.any(Date),
-      };
-
-      mockUsageRecordRepository.create.mockReturnValue(mockUsageRecord);
-      mockUsageRecordRepository.save.mockResolvedValue(mockUsageRecord);
+      const createdRecord = { id: 'usage-timeout', status: 'timeout' };
+      mockPrisma.usage_records.create.mockResolvedValue(createdRecord);
 
       const result = await service.recordUsage(timeoutUsageData);
 
@@ -282,11 +259,7 @@ describe('GatewayService', () => {
     });
 
     it('应该处理保存错误', async () => {
-      mockUsageRecordRepository.create.mockReturnValue({
-        ...mockUsageData,
-        timestamp: new Date(),
-      });
-      mockUsageRecordRepository.save.mockRejectedValue(
+      mockPrisma.usage_records.create.mockRejectedValue(
         new Error('Database save error'),
       );
 
@@ -300,70 +273,55 @@ describe('GatewayService', () => {
         ...mockUsageData,
         capabilityType: 'IMAGE_GENERATION',
         model: 'dall-e-3',
-        usage: {
-          imagesGenerated: 1,
-        },
+        usage: { imagesGenerated: 1 },
       };
 
-      const mockUsageRecord = {
+      const createdRecord = {
         id: 'usage-image',
-        ...imageUsageData,
-        timestamp: expect.any(Date),
+        capability_type: 'IMAGE_GENERATION',
+        usage: { imagesGenerated: 1 },
       };
-
-      mockUsageRecordRepository.create.mockReturnValue(mockUsageRecord);
-      mockUsageRecordRepository.save.mockResolvedValue(mockUsageRecord);
+      mockPrisma.usage_records.create.mockResolvedValue(createdRecord);
 
       const result = await service.recordUsage(imageUsageData);
 
-      expect(result.capabilityType).toBe('IMAGE_GENERATION');
-      expect(result.usage.imagesGenerated).toBe(1);
+      expect(result.capability_type).toBe('IMAGE_GENERATION');
+      expect((result as any).usage.imagesGenerated).toBe(1);
     });
 
     it('应该正确处理成本计算', async () => {
       const highCostData = {
         ...mockUsageData,
-        usage: {
-          inputTokens: 10000,
-          outputTokens: 20000,
-        },
+        usage: { inputTokens: 10000, outputTokens: 20000 },
         cost: 5.5,
       };
 
-      const mockUsageRecord = {
+      const createdRecord = {
         id: 'usage-high-cost',
-        ...highCostData,
-        timestamp: expect.any(Date),
+        cost: 5.5,
+        usage: { inputTokens: 10000, outputTokens: 20000 },
       };
-
-      mockUsageRecordRepository.create.mockReturnValue(mockUsageRecord);
-      mockUsageRecordRepository.save.mockResolvedValue(mockUsageRecord);
+      mockPrisma.usage_records.create.mockResolvedValue(createdRecord);
 
       const result = await service.recordUsage(highCostData);
 
       expect(result.cost).toBe(5.5);
-      expect(result.usage.inputTokens).toBe(10000);
-      expect(result.usage.outputTokens).toBe(20000);
+      expect((result as any).usage.inputTokens).toBe(10000);
+      expect((result as any).usage.outputTokens).toBe(20000);
     });
 
     it('应该记录响应时间', async () => {
-      const slowRequestData = {
-        ...mockUsageData,
-        responseTime: 5000, // 5 秒
-      };
+      const slowRequestData = { ...mockUsageData, responseTime: 5000 };
 
-      const mockUsageRecord = {
+      const createdRecord = {
         id: 'usage-slow',
-        ...slowRequestData,
-        timestamp: expect.any(Date),
+        response_time: 5000,
       };
-
-      mockUsageRecordRepository.create.mockReturnValue(mockUsageRecord);
-      mockUsageRecordRepository.save.mockResolvedValue(mockUsageRecord);
+      mockPrisma.usage_records.create.mockResolvedValue(createdRecord);
 
       const result = await service.recordUsage(slowRequestData);
 
-      expect(result.responseTime).toBe(5000);
+      expect(result.response_time).toBe(5000);
     });
 
     it('应该处理复杂的元数据', async () => {
@@ -372,39 +330,30 @@ describe('GatewayService', () => {
         metadata: {
           temperature: 0.9,
           maxTokens: 2000,
-          topP: 0.95,
-          frequencyPenalty: 0.5,
-          presencePenalty: 0.5,
-          customHeaders: {
-            'X-Custom-Header': 'value',
-          },
-          additionalInfo: {
-            nested: {
-              data: true,
-            },
-          },
+          nested: { data: true },
         },
       };
 
-      const mockUsageRecord = {
+      const createdRecord = {
         id: 'usage-complex',
-        ...complexMetadata,
-        timestamp: expect.any(Date),
+        metadata: complexMetadata.metadata,
       };
-
-      mockUsageRecordRepository.create.mockReturnValue(mockUsageRecord);
-      mockUsageRecordRepository.save.mockResolvedValue(mockUsageRecord);
+      mockPrisma.usage_records.create.mockResolvedValue(createdRecord);
 
       const result = await service.recordUsage(complexMetadata);
 
       expect(result.metadata).toEqual(complexMetadata.metadata);
-      expect(result.metadata?.additionalInfo.nested.data).toBe(true);
+      expect((result as any).metadata.nested.data).toBe(true);
     });
   });
 
+  // ═══════════════════════════════════════════════════════════
+  // 边缘情况
+  // ═══════════════════════════════════════════════════════════
+
   describe('边缘情况', () => {
     it('应该处理空字符串 API Key', async () => {
-      mockClientRepository.findOne.mockResolvedValue(null);
+      mockPrisma.clients.findFirst.mockResolvedValue(null);
 
       const result = await service.validateClient('', 'test-secret');
 
@@ -412,7 +361,7 @@ describe('GatewayService', () => {
     });
 
     it('应该处理空字符串 API Secret', async () => {
-      mockClientRepository.findOne.mockResolvedValue(mockClient);
+      mockPrisma.clients.findFirst.mockResolvedValue(mockClient);
       mockedBcrypt.compare.mockResolvedValue(false as never);
 
       const result = await service.validateClient('test-api-key', '');
@@ -422,36 +371,28 @@ describe('GatewayService', () => {
 
     it('应该处理零成本的使用记录', async () => {
       const zeroCostData = {
-        ...{
-          clientId: 'client-123',
-          requestId: 'req-456',
-          capabilityType: 'TEXT_GENERATION',
-          provider: 'openai',
-          model: 'gpt-4',
-          status: 'success' as const,
-          usage: {
-            inputTokens: 0,
-            outputTokens: 0,
-          },
-          cost: 0,
-          responseTime: 100,
-        },
+        clientId: 'client-123',
+        requestId: 'req-456',
+        capabilityType: 'TEXT_GENERATION',
+        provider: 'openai',
+        model: 'gpt-4',
+        status: 'success' as const,
+        usage: { inputTokens: 0, outputTokens: 0 },
+        cost: 0,
+        responseTime: 100,
       };
 
-      const mockUsageRecord = {
+      const createdRecord = {
         id: 'usage-zero',
-        ...zeroCostData,
-        timestamp: expect.any(Date),
+        cost: 0,
+        usage: { inputTokens: 0, outputTokens: 0 },
       };
-
-      mockUsageRecordRepository.create.mockReturnValue(mockUsageRecord);
-      mockUsageRecordRepository.save.mockResolvedValue(mockUsageRecord);
+      mockPrisma.usage_records.create.mockResolvedValue(createdRecord);
 
       const result = await service.recordUsage(zeroCostData);
 
       expect(result.cost).toBe(0);
-      expect(result.usage.inputTokens).toBe(0);
-      expect(result.usage.outputTokens).toBe(0);
+      expect((result as any).usage.inputTokens).toBe(0);
     });
 
     it('应该处理极短的响应时间', async () => {
@@ -462,26 +403,20 @@ describe('GatewayService', () => {
         provider: 'openai',
         model: 'gpt-3.5-turbo',
         status: 'success' as const,
-        usage: {
-          inputTokens: 1,
-          outputTokens: 1,
-        },
+        usage: { inputTokens: 1, outputTokens: 1 },
         cost: 0.000001,
-        responseTime: 1, // 1ms
+        responseTime: 1,
       };
 
-      const mockUsageRecord = {
+      const createdRecord = {
         id: 'usage-quick',
-        ...quickRequestData,
-        timestamp: expect.any(Date),
+        response_time: 1,
       };
-
-      mockUsageRecordRepository.create.mockReturnValue(mockUsageRecord);
-      mockUsageRecordRepository.save.mockResolvedValue(mockUsageRecord);
+      mockPrisma.usage_records.create.mockResolvedValue(createdRecord);
 
       const result = await service.recordUsage(quickRequestData);
 
-      expect(result.responseTime).toBe(1);
+      expect(result.response_time).toBe(1);
     });
   });
 });

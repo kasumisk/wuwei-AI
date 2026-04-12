@@ -19,6 +19,8 @@ import { DailyPlanService } from './daily-plan.service';
 import { WeeklyPlanService } from './weekly-plan.service';
 import { RecommendationEngineService } from './recommendation-engine.service';
 import { RecommendationFeedbackService } from './recommendation/feedback.service';
+import { PreferenceProfileService } from './recommendation/preference-profile.service';
+import { SubstitutionService } from './recommendation/substitution.service';
 import { UserProfileService } from '../../user/app/user-profile.service';
 import {
   AdjustPlanDto,
@@ -61,6 +63,8 @@ export class FoodPlanController {
     private readonly recommendationEngine: RecommendationEngineService,
     private readonly feedbackService: RecommendationFeedbackService,
     private readonly userProfileService: UserProfileService,
+    private readonly preferenceProfileService: PreferenceProfileService,
+    private readonly substitutionService: SubstitutionService,
   ) {}
 
   /**
@@ -201,9 +205,9 @@ export class FoodPlanController {
       : undefined;
 
     const preferenceProfile =
-      await this.recommendationEngine.getUserPreferenceProfile(user.id);
+      await this.preferenceProfileService.getUserPreferenceProfile(user.id);
 
-    const substitutes = await this.recommendationEngine.findSubstitutes(
+    const substitutes = await this.substitutionService.findSubstitutes(
       query.foodId,
       user.id,
       query.mealType,
@@ -259,7 +263,7 @@ export class FoodPlanController {
     @CurrentAppUser() user: AppUserPayload,
     @Body() dto: RecommendationFeedbackDto,
   ): Promise<ApiResponse> {
-    await this.recommendationEngine.submitFeedback({
+    await this.feedbackService.submitFeedback({
       userId: user.id,
       mealType: dto.mealType,
       foodName: dto.foodName,

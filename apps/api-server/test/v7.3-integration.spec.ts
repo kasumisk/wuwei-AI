@@ -55,6 +55,12 @@ import {
 import { RequestScopedCacheService } from '../src/core/cache/request-scoped-cache.service';
 import { CacheWarmupService } from '../src/core/cache/cache-warmup.service';
 import { ExplanationGeneratorService } from '../src/modules/diet/app/recommendation/explanation-generator.service';
+import { MealCompositionScorer } from '../src/modules/diet/app/recommendation/meal-composition-scorer.service';
+import { InsightGeneratorService } from '../src/modules/diet/app/recommendation/insight-generator.service';
+import { ExplanationTierService } from '../src/modules/diet/app/recommendation/explanation-tier.service';
+import { MealExplanationService } from '../src/modules/diet/app/recommendation/meal-explanation.service';
+import { ComparisonExplanationService } from '../src/modules/diet/app/recommendation/comparison-explanation.service';
+import { RedisCacheService } from '../src/core/redis/redis-cache.service';
 
 // ─── Test Helpers ───
 
@@ -664,7 +670,14 @@ describe('V7.3 Integration Tests', () => {
     let service: FactorLearnerService;
 
     beforeEach(() => {
-      service = new FactorLearnerService();
+      // V7.4: FactorLearnerService now requires RedisCacheService;
+      // pass a mock that triggers memory-fallback mode
+      const mockRedis = {
+        hSet: jest.fn().mockRejectedValue(new Error('mock-redis')),
+        hGetAll: jest.fn().mockRejectedValue(new Error('mock-redis')),
+        expireNX: jest.fn().mockRejectedValue(new Error('mock-redis')),
+      } as unknown as RedisCacheService;
+      service = new FactorLearnerService(mockRedis);
     });
 
     it('should attribute feedback based on adjustment contribution', () => {
@@ -737,7 +750,7 @@ describe('V7.3 Integration Tests', () => {
       const attributions = service.attributeFeedback(adjustments, 'accept');
       await service.updateFactorWeights('user-1', 'weight_loss', attributions);
 
-      expect(service.getFeedbackCount('user-1', 'weight_loss')).toBe(1);
+      expect(await service.getFeedbackCount('user-1', 'weight_loss')).toBe(1);
     });
 
     it('should return empty map before cold start threshold', async () => {
@@ -1038,8 +1051,7 @@ describe('V7.3 Integration Tests', () => {
   describe('CacheWarmupService — 启动预热 (P3-B)', () => {
     it('should call warmup on application bootstrap without throwing', async () => {
       // CacheWarmupService uses @Optional() dependencies
-      const warmupService = new CacheWarmupService(null, null);
-      // Should not throw even with null dependencies
+      const warmupService = new CacheWarmupService(null, null, null);
       await expect(
         warmupService.onApplicationBootstrap(),
       ).resolves.not.toThrow();
@@ -1053,7 +1065,7 @@ describe('V7.3 Integration Tests', () => {
           .mockRejectedValue(new Error('DB connection failed')),
       } as any;
 
-      const warmupService = new CacheWarmupService(mockFoodPool, null);
+      const warmupService = new CacheWarmupService(mockFoodPool, null, null);
       // Should not throw — fire-and-forget with catch
       await expect(
         warmupService.onApplicationBootstrap(),
@@ -1074,7 +1086,8 @@ describe('V7.3 Integration Tests', () => {
       expect(RecommendationModule).toBeDefined();
     });
 
-    it('should have ExplanationModule importable', () => {
+    it('should have ExplanationModule importable (V7.5: merged into RecommendationModule)', () => {
+      // V7.5 P3-C: ExplanationModule 仍然存在但 providers 已合并回 RecommendationModule
       const ExplanationModule =
         require('../src/modules/diet/explanation.module').ExplanationModule;
       expect(ExplanationModule).toBeDefined();
@@ -1199,8 +1212,19 @@ describe('V7.3 Integration Tests', () => {
     let generator: ExplanationGeneratorService;
 
     beforeEach(() => {
-      // ExplanationGeneratorService creates NaturalLanguageExplainerService internally
-      generator = new ExplanationGeneratorService();
+      // V7.4: ExplanationGeneratorService now requires 4 DI dependencies
+      const mockScorer = {} as MealCompositionScorer;
+      const mockInsight = new InsightGeneratorService();
+      const mockTier = new ExplanationTierService();
+      const mockNlExplainer = new NaturalLanguageExplainerService();
+      generator = new ExplanationGeneratorService(
+        mockScorer,
+        mockInsight,
+        mockTier,
+        mockNlExplainer,
+        new MealExplanationService(mockScorer),
+        new ComparisonExplanationService(),
+      );
     });
 
     it('should have generateNarrativeExplanation method', () => {

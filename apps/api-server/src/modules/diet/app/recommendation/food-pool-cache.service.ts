@@ -72,6 +72,7 @@ const FOOD_POOL_SELECTABLE_COLUMNS: string[] = [
   'vitamin_d',
   'vitamin_e',
   'vitamin_b12',
+  'vitamin_b6',
   'folate',
   'zinc',
   'magnesium',
@@ -111,6 +112,8 @@ const FOOD_POOL_SELECTABLE_COLUMNS: string[] = [
   'skill_required',
   'estimated_cost_level',
   'shelf_life_days',
+  // V7.5 P1-C: 含水量百分比
+  'water_content_percent',
   'fodmap_level',
   'oxalate_level',
   // V6.4 Phase 3.3: 可获取渠道
@@ -120,6 +123,13 @@ const FOOD_POOL_SELECTABLE_COLUMNS: string[] = [
   // V7.3 Phase 1-A: 食物大众化扩展
   'food_form',
   'dish_priority',
+  // V7.4 Phase 1-B: 食物可获得性
+  'acquisition_difficulty',
+  // V7.4 Phase 3-A: 精细化营养字段
+  'omega3',
+  'omega6',
+  'soluble_fiber',
+  'insoluble_fiber',
 ];
 
 // ==================== Raw row → FoodLibrary 映射 ====================
@@ -189,11 +199,17 @@ function mapRowToFoodLibrary(row: Record<string, unknown>): FoodLibrary {
     vitaminD: nOpt(row.vitamin_d),
     vitaminE: nOpt(row.vitamin_e),
     vitaminB12: nOpt(row.vitamin_b12),
+    vitaminB6: nOpt(row.vitamin_b6),
     folate: nOpt(row.folate),
     zinc: nOpt(row.zinc),
     magnesium: nOpt(row.magnesium),
     purine: nOpt(row.purine),
     phosphorus: nOpt(row.phosphorus),
+    // V7.4 Phase 3-A: 精细化营养字段
+    omega3: nOpt(row.omega3),
+    omega6: nOpt(row.omega6),
+    solubleFiber: nOpt(row.soluble_fiber),
+    insolubleFiber: nOpt(row.insoluble_fiber),
 
     // 烹饪/风味扩展
     cuisine: row.cuisine != null ? String(row.cuisine) : undefined,
@@ -206,6 +222,7 @@ function mapRowToFoodLibrary(row: Record<string, unknown>): FoodLibrary {
       row.skill_required != null ? String(row.skill_required) : undefined,
     estimatedCostLevel: nOpt(row.estimated_cost_level) as number | undefined,
     shelfLifeDays: nOpt(row.shelf_life_days) as number | undefined,
+    waterContentPercent: nOpt(row.water_content_percent),
     fodmapLevel:
       row.fodmap_level != null ? String(row.fodmap_level) : undefined,
     oxalateLevel:
@@ -277,6 +294,10 @@ function mapRowToFoodLibrary(row: Record<string, unknown>): FoodLibrary {
         ? (String(row.food_form) as FoodLibrary['foodForm'])
         : undefined,
     dishPriority: nOpt(row.dish_priority) as number | undefined,
+    // V7.4 Phase 1-B: 食物可获得性
+    acquisitionDifficulty: nOpt(row.acquisition_difficulty) as
+      | number
+      | undefined,
   };
 }
 
@@ -362,7 +383,7 @@ export class FoodPoolCacheService implements OnModuleInit {
     }
 
     return allFoods.filter((food) => {
-      const channels = (food as any).availableChannels as string[] | undefined;
+      const channels = food.availableChannels;
       // 没有设置 availableChannels 的食物默认所有渠道可用
       if (!channels || channels.length === 0) return true;
       return channels.includes(channel);

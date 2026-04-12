@@ -31,6 +31,9 @@ export class PreferenceSignalFactor implements ScoringFactor {
   private foodGroupWeights: Record<string, number> = {};
   private foodNameWeights: Record<string, number> = {};
   private declaredFoodPrefs: string[] = [];
+  /** V7.5: 声明偏好调参 */
+  private declaredPrefPerMatch = 0.05;
+  private declaredPrefCap = 0.15;
 
   isApplicable(_ctx: PipelineContext): boolean {
     return true; // 始终适用，无数据时返回 1.0
@@ -42,10 +45,8 @@ export class PreferenceSignalFactor implements ScoringFactor {
     // preferenceBoost 数据
     this.loves = ctx.userPreferences?.loves ?? [];
     this.avoids = ctx.userPreferences?.avoids ?? [];
-    this.lovesMultiplier =
-      (boostConfig as any)?.preference?.lovesMultiplier ?? 1.12;
-    this.avoidsMultiplier =
-      (boostConfig as any)?.preference?.avoidsMultiplier ?? 0.3;
+    this.lovesMultiplier = boostConfig?.preference?.lovesMultiplier ?? 1.12;
+    this.avoidsMultiplier = boostConfig?.preference?.avoidsMultiplier ?? 0.3;
 
     // profileBoost 数据
     if (ctx.preferenceProfile) {
@@ -59,6 +60,12 @@ export class PreferenceSignalFactor implements ScoringFactor {
     this.declaredFoodPrefs =
       (ctx.userProfile as EnrichedProfileContext | undefined)?.declared
         ?.foodPreferences ?? [];
+
+    // V7.5: 从调参配置读取声明偏好阈值
+    if (ctx.tuning) {
+      this.declaredPrefPerMatch = ctx.tuning.declaredPrefPerMatch;
+      this.declaredPrefCap = ctx.tuning.declaredPrefCap;
+    }
   }
 
   computeAdjustment(
@@ -99,13 +106,18 @@ export class PreferenceSignalFactor implements ScoringFactor {
     if (this.declaredFoodPrefs.length > 0) {
       const foodTags = food.tags || [];
       const foodCat = food.category || '';
-      const foodSubCat = (food as any).subCategory || '';
+      const foodSubCat = food.subCategory || '';
       const matchCount = this.declaredFoodPrefs.filter(
         (pref) =>
           foodTags.includes(pref) || foodCat === pref || foodSubCat === pref,
       ).length;
       if (matchCount > 0) {
-        const fpBoost = 1 + Math.min(matchCount * 0.05, 0.15);
+        const fpBoost =
+          1 +
+          Math.min(
+            matchCount * this.declaredPrefPerMatch,
+            this.declaredPrefCap,
+          );
         multiplier *= fpBoost;
         parts.push(`declared×${fpBoost.toFixed(2)}`);
       }

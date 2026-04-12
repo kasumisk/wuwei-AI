@@ -135,12 +135,15 @@ const zhCN: Record<string, string> = {
   'explain.dim.nutrientDensity': '营养密度',
   'explain.dim.inflammation': '抗炎指数',
   'explain.dim.fiber': '膳食纤维',
+  'explain.dim.seasonality': '时令应季',
+  'explain.dim.acquisition': '获取便利',
 
   // ── V6 2.11: 目标类型文案 ──
   'explain.goal.fat_loss': '减脂',
   'explain.goal.muscle_gain': '增肌',
   'explain.goal.health': '健康维持',
   'explain.goal.habit': '饮食习惯养成',
+  'explain.goal.daily': '日常',
   'explain.goal.default': '你的饮食',
 
   // ── V6 2.11: 推荐理由文案 ──
@@ -703,6 +706,37 @@ const zhCN: Record<string, string> = {
   'explain.dim.popularity': '流行度',
   'explain.dim.executability': '可执行性',
   'explain.dim.diversity': '多样性',
+
+  // ════════════════════════════════════════════════════════
+  // V7.4 Phase 2-F: 对比解释 + 替代解释 i18n
+  // ════════════════════════════════════════════════════════
+
+  // ── compare: 食物对比解释 ──
+  'compare.caloriesLower': '热量更低（{{recCal}} vs {{altCal}} kcal）',
+  'compare.caloriesHigher': '热量较高（{{recCal}} vs {{altCal}} kcal）',
+  'compare.proteinRicher': '蛋白质更丰富（{{recProt}}g vs {{altProt}}g）',
+  'compare.fiberBetter': '膳食纤维更充足',
+  'compare.easierToAcquire': '更容易获取',
+  'compare.summary.noAdvantage':
+    '综合{{goalText}}目标评估，「{{recName}}」整体评分更优。',
+  'compare.summary.withAdvantage':
+    '相比「{{altName}}」，推荐「{{recName}}」因为{{advText}}{{scoreNote}}。',
+  'compare.summary.scoreHigher': '，综合评分高出 {{scorePercent}}%',
+
+  // ── substitute: 食物替代解释 ──
+  'substitute.direction.increase': '增加',
+  'substitute.direction.decrease': '减少',
+  'substitute.caloriesChange': '热量{{direction}} {{amount}} kcal',
+  'substitute.proteinChange': '蛋白质{{direction}} {{amount}}g',
+  'substitute.fiberChange': '膳食纤维{{direction}} {{amount}}g',
+  'substitute.quality.good': '很好的',
+  'substitute.quality.acceptable': '可以接受的',
+  'substitute.category.same': '同品类替换，',
+  'substitute.category.cross': '跨品类替换，',
+  'substitute.impacts.note': '需注意：{{impacts}}',
+  'substitute.impacts.minor': '营养影响较小',
+  'substitute.suggestion':
+    '「{{subName}}」是「{{origName}}」{{quality}}替代。{{categoryNote}}{{impactText}}。',
 };
 
 // ==================== en-US 英文 ====================
@@ -830,12 +864,15 @@ const enUS: Record<string, string> = {
   'explain.dim.nutrientDensity': 'Nutrient Density',
   'explain.dim.inflammation': 'Anti-inflammation',
   'explain.dim.fiber': 'Dietary Fiber',
+  'explain.dim.seasonality': 'Seasonality',
+  'explain.dim.acquisition': 'Acquisition Ease',
 
   // ── V6 2.11: Goal type text ──
   'explain.goal.fat_loss': 'fat loss',
   'explain.goal.muscle_gain': 'muscle gain',
   'explain.goal.health': 'health maintenance',
   'explain.goal.habit': 'eating habit building',
+  'explain.goal.daily': 'daily',
   'explain.goal.default': 'your diet',
 
   // ── V6 2.11: Recommendation reasons ──
@@ -1494,6 +1531,37 @@ const enUS: Record<string, string> = {
   'explain.dim.popularity': 'Popularity',
   'explain.dim.executability': 'Executability',
   'explain.dim.diversity': 'Diversity',
+
+  // ════════════════════════════════════════════════════════
+  // V7.4 Phase 2-F: Comparison + Substitution i18n
+  // ════════════════════════════════════════════════════════
+
+  // ── compare: food comparison explanation ──
+  'compare.caloriesLower': 'Lower calories ({{recCal}} vs {{altCal}} kcal)',
+  'compare.caloriesHigher': 'Higher calories ({{recCal}} vs {{altCal}} kcal)',
+  'compare.proteinRicher': 'Richer in protein ({{recProt}}g vs {{altProt}}g)',
+  'compare.fiberBetter': 'Better dietary fiber',
+  'compare.easierToAcquire': 'Easier to acquire',
+  'compare.summary.noAdvantage':
+    '{{recName}} is recommended over {{altName}} based on overall {{goalText}} assessment.',
+  'compare.summary.withAdvantage':
+    '{{recName}} is recommended over {{altName}}. {{advText}}{{scoreNote}}',
+  'compare.summary.scoreHigher': ' Overall score is {{scorePercent}}% higher.',
+
+  // ── substitute: food substitution explanation ──
+  'substitute.direction.increase': 'increase',
+  'substitute.direction.decrease': 'decrease',
+  'substitute.caloriesChange': 'Calories {{direction}} by {{amount}} kcal',
+  'substitute.proteinChange': 'Protein {{direction}} by {{amount}}g',
+  'substitute.fiberChange': 'Dietary fiber {{direction}} by {{amount}}g',
+  'substitute.quality.good': 'a good',
+  'substitute.quality.acceptable': 'an acceptable',
+  'substitute.category.same': '',
+  'substitute.category.cross': '',
+  'substitute.impacts.note': 'Note: {{impacts}}.',
+  'substitute.impacts.minor': '',
+  'substitute.suggestion':
+    '{{subName}} is {{quality}} substitute for {{origName}}.{{impactText}}',
 };
 
 const jaJP: Record<string, string> = {
@@ -1617,12 +1685,15 @@ const jaJP: Record<string, string> = {
   'explain.dim.nutrientDensity': '栄養密度',
   'explain.dim.inflammation': '抗炎症指数',
   'explain.dim.fiber': '食物繊維',
+  'explain.dim.seasonality': '旬の食材',
+  'explain.dim.acquisition': '入手しやすさ',
 
   // ── V6 2.11: 目標タイプテキスト ──
   'explain.goal.fat_loss': '減量',
   'explain.goal.muscle_gain': '増量',
   'explain.goal.health': '健康維持',
   'explain.goal.habit': '食習慣づくり',
+  'explain.goal.daily': '日常',
   'explain.goal.default': 'あなたの食事',
 
   // ── V6 2.11: おすすめ理由 ──
@@ -2260,6 +2331,38 @@ const jaJP: Record<string, string> = {
   'explain.dim.popularity': '人気度',
   'explain.dim.executability': '実行可能性',
   'explain.dim.diversity': '多様性',
+
+  // ════════════════════════════════════════════════════════
+  // V7.4 Phase 2-F: 比較 + 代替説明 i18n
+  // ════════════════════════════════════════════════════════
+
+  // ── compare: 食品比較説明 ──
+  'compare.caloriesLower': 'カロリーが低い（{{recCal}} vs {{altCal}} kcal）',
+  'compare.caloriesHigher': 'カロリーが高い（{{recCal}} vs {{altCal}} kcal）',
+  'compare.proteinRicher':
+    'タンパク質がより豊富（{{recProt}}g vs {{altProt}}g）',
+  'compare.fiberBetter': '食物繊維がより充実',
+  'compare.easierToAcquire': 'より入手しやすい',
+  'compare.summary.noAdvantage':
+    '{{goalText}}目標の総合評価で、「{{recName}}」が全体的に高評価です。',
+  'compare.summary.withAdvantage':
+    '「{{altName}}」と比較して、「{{recName}}」をおすすめする理由は{{advText}}{{scoreNote}}。',
+  'compare.summary.scoreHigher': '、総合スコアが {{scorePercent}}% 高い',
+
+  // ── substitute: 食品代替説明 ──
+  'substitute.direction.increase': '増加',
+  'substitute.direction.decrease': '減少',
+  'substitute.caloriesChange': 'カロリー{{direction}} {{amount}} kcal',
+  'substitute.proteinChange': 'タンパク質{{direction}} {{amount}}g',
+  'substitute.fiberChange': '食物繊維{{direction}} {{amount}}g',
+  'substitute.quality.good': 'とても良い',
+  'substitute.quality.acceptable': '許容できる',
+  'substitute.category.same': '同カテゴリの置き換え、',
+  'substitute.category.cross': '異カテゴリの置き換え、',
+  'substitute.impacts.note': '注意：{{impacts}}',
+  'substitute.impacts.minor': '栄養への影響は軽微',
+  'substitute.suggestion':
+    '「{{subName}}」は「{{origName}}」の{{quality}}代替です。{{categoryNote}}{{impactText}}。',
 };
 
 // ==================== 消息注册表 ====================

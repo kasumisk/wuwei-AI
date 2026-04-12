@@ -2,8 +2,7 @@
  * V7.3 P3-C: DietModule（瘦身后的聚合模块）
  *
  * 从原来的 66+ providers 单体模块拆分为：
- * - RecommendationModule: 推荐管道核心（Pipeline, Scorer, Filter, ScoringChain, etc.）
- * - ExplanationModule: 推荐解释生成（Explanation, Insight, NL Explainer, etc.）
+ * - RecommendationModule: 推荐管道核心 + 解释生成（V7.5 P3-C 合并原 ExplanationModule）
  * - TrackingModule: 用户行为追踪与反馈学习（Feedback, WeightLearner, Execution, etc.）
  * - DietModule: 聚合器 + 控制器 + 领域服务 + Admin 服务 + 事件监听器
  *
@@ -18,16 +17,15 @@ import { ConfigModule } from '@nestjs/config';
 import { UserModule } from '../user/user.module';
 import { FoodModule } from '../food/food.module';
 import { RecipeModule } from '../recipe/recipe.module';
-// V7.3 子模块
+// V7.3 子模块（V7.5 P3-C: ExplanationModule 已合并回 RecommendationModule）
 import { RecommendationModule } from './recommendation.module';
-import { ExplanationModule } from './explanation.module';
 import { TrackingModule } from './tracking.module';
 // App 端控制器
-import { FoodRecordController } from './app/food-record.controller';
-import { FoodSummaryController } from './app/food-summary.controller';
-import { FoodPlanController } from './app/food-plan.controller';
-import { FoodBehaviorController } from './app/food-behavior.controller';
-import { FoodNutritionController } from './app/food-nutrition.controller';
+import { FoodRecordController } from './app/controllers/food-record.controller';
+import { FoodSummaryController } from './app/controllers/food-summary.controller';
+import { FoodPlanController } from './app/controllers/food-plan.controller';
+import { FoodBehaviorController } from './app/controllers/food-behavior.controller';
+import { FoodNutritionController } from './app/controllers/food-nutrition.controller';
 // 领域服务（不属于推荐/解释/追踪子模块）
 import { FoodService } from './app/food.service';
 import { FoodRecordService } from './app/food-record.service';
@@ -35,7 +33,6 @@ import { DailySummaryService } from './app/daily-summary.service';
 import { DailyPlanService } from './app/daily-plan.service';
 import { NutritionScoreService } from './app/nutrition-score.service';
 import { BehaviorService } from './app/behavior.service';
-import { FoodI18nService } from './app/food-i18n.service';
 import { WeeklyPlanService } from './app/weekly-plan.service';
 import { PrecomputeService } from './app/precompute.service';
 import { PrecomputeProcessor } from './app/precompute.processor';
@@ -69,9 +66,8 @@ import { BingeInterventionService } from './admin/binge-intervention.service';
     UserModule,
     forwardRef(() => FoodModule),
     RecipeModule,
-    // V7.3 P3-C: 子模块
+    // V7.3 P3-C: 子模块（V7.5: ExplanationModule 已合并回 RecommendationModule）
     RecommendationModule,
-    ExplanationModule,
     TrackingModule,
   ],
   controllers: [
@@ -96,7 +92,6 @@ import { BingeInterventionService } from './admin/binge-intervention.service';
     DailyPlanService,
     NutritionScoreService,
     BehaviorService,
-    FoodI18nService,
     WeeklyPlanService,
     PrecomputeService,
     PrecomputeProcessor,
@@ -126,9 +121,8 @@ import { BingeInterventionService } from './admin/binge-intervention.service';
     ContentManagementService,
     PrecomputeService,
     ExportService,
-    // V7.3: re-export 子模块，让外部模块也能访问推荐/解释/追踪服务
+    // V7.3: re-export 子模块，让外部模块也能访问推荐/追踪服务
     RecommendationModule,
-    ExplanationModule,
     TrackingModule,
   ],
 })

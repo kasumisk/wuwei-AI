@@ -11,9 +11,12 @@ import {
   getUserLocalHour,
   DEFAULT_TIMEZONE,
 } from '../../../../common/utils/timezone.util';
+import { ScoringConfigService } from './scoring-config.service';
 
 @Injectable()
 export class ConstraintGeneratorService {
+  constructor(private readonly scoringConfigService: ScoringConfigService) {}
+
   generateConstraints(
     goalType: string,
     consumed: { calories: number; protein: number },
@@ -39,9 +42,12 @@ export class ConstraintGeneratorService {
     // 状态驱动
     const proteinGap = dailyTarget.protein - consumed.protein;
     const calorieGap = dailyTarget.calories - consumed.calories;
+    const tuning = this.scoringConfigService.getTuning();
 
-    if (proteinGap > 30) includeTags.push('high_protein');
-    if (calorieGap < 300) includeTags.push('low_calorie');
+    if (proteinGap > tuning.proteinGapThreshold)
+      includeTags.push('high_protein');
+    if (calorieGap < tuning.calorieGapThreshold)
+      includeTags.push('low_calorie');
     if (calorieGap < 0) {
       includeTags.push('ultra_low_calorie');
       excludeTags.push('high_fat');
@@ -123,11 +129,11 @@ export class ConstraintGeneratorService {
     }
 
     // V6.3 P1-3: 暴食风险时段紧缩 — 当前小时处于用户的暴食高风险时段时，
-    // 收紧卡路里上限 15%，并排除高卡/甜品/油炸类食物
-    let maxCalories = target.calories * 1.15;
+    // 收紧卡路里上限，并排除高卡/甜品/油炸类食物
+    let maxCalories = target.calories * tuning.calorieCeilingMultiplier;
     const currentHour = getUserLocalHour(timezone || DEFAULT_TIMEZONE);
     if (bingeRiskHours?.length && bingeRiskHours.includes(currentHour)) {
-      maxCalories = target.calories * 0.98; // 紧缩到目标的 98%（原值为 115%）
+      maxCalories = target.calories * tuning.bingeRiskCalorieMultiplier;
       excludeTags.push('high_calorie', 'dessert', 'fried');
       includeTags.push('low_calorie', 'high_protein');
     }
@@ -136,7 +142,7 @@ export class ConstraintGeneratorService {
       includeTags: [...new Set(includeTags)],
       excludeTags: [...new Set(excludeTags)],
       maxCalories,
-      minProtein: target.protein * 0.5,
+      minProtein: target.protein * tuning.minProteinRatio,
     };
   }
 }

@@ -17,7 +17,7 @@ import { Injectable } from '@nestjs/common';
 import type { FoodLibrary } from '../../../food/food.types';
 import type { ScoredFood } from './recommendation.types';
 import type { ScoringAdjustment } from './scoring-chain/scoring-factor.interface';
-import { t } from './i18n-messages';
+import { t, type Locale } from './i18n-messages';
 
 // ─── 类型定义 ───
 
@@ -125,7 +125,8 @@ export class NaturalLanguageExplainerService {
     let nutritionNote: string | undefined;
     if (ctx.nutritionGaps?.length) {
       const matchingGaps = ctx.nutritionGaps.filter((gap) => {
-        const val = Number((foodLib as any)[gap]) || 0;
+        const val =
+          Number((foodLib as unknown as Record<string, unknown>)[gap]) || 0;
         return val > 0;
       });
       if (matchingGaps.length > 0) {
@@ -146,7 +147,7 @@ export class NaturalLanguageExplainerService {
       sceneNote = t(
         'narrative.scene_fit',
         { food: foodName, scene: ctx.mealType, reason: sceneAdj.reason },
-        ctx.locale as any,
+        ctx.locale as Locale,
       );
     }
 
@@ -198,7 +199,8 @@ export class NaturalLanguageExplainerService {
     // 补充营养缺口理由
     if (reasons.length < maxReasons && ctx.nutritionGaps?.length) {
       const matchingGaps = ctx.nutritionGaps.filter((gap) => {
-        const val = Number((food as any)[gap]) || 0;
+        const val =
+          Number((food as unknown as Record<string, unknown>)[gap]) || 0;
         return val > 0;
       });
       if (matchingGaps.length > 0) {
@@ -207,7 +209,7 @@ export class NaturalLanguageExplainerService {
           t(
             'narrative.nutrition_gap',
             { nutrient: gapName, food: foodName },
-            ctx.locale as any,
+            ctx.locale as Locale,
           ),
         );
       }
@@ -220,7 +222,11 @@ export class NaturalLanguageExplainerService {
       ctx.executionRate > 0.7
     ) {
       reasons.push(
-        t('narrative.execution_boost', { food: foodName }, ctx.locale as any),
+        t(
+          'narrative.execution_boost',
+          { food: foodName },
+          ctx.locale as Locale,
+        ),
       );
     }
 
@@ -235,7 +241,7 @@ export class NaturalLanguageExplainerService {
     foodName: string,
     ctx: NarrativeContext,
   ): string | null {
-    const locale = ctx.locale as any;
+    const locale = ctx.locale as Locale;
     const direction = adj.multiplier > 1.0 ? '加分' : '适度调整';
 
     switch (adj.factorName) {

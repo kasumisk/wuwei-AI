@@ -19,6 +19,9 @@ import {
   Row,
   Col,
   Statistic,
+  Progress,
+  Alert,
+  Typography,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -31,6 +34,7 @@ import {
   AimOutlined,
   ExperimentOutlined,
   UserOutlined,
+  TeamOutlined,
 } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
@@ -94,6 +98,18 @@ const StrategyDetail: React.FC = () => {
   const [assignModalVisible, setAssignModalVisible] = useState(false);
   const [assignForm] = Form.useForm();
 
+  // 批量分配弹窗
+  const [batchAssignVisible, setBatchAssignVisible] = useState(false);
+  const [batchAssignForm] = Form.useForm();
+  const [batchProgress, setBatchProgress] = useState<{
+    running: boolean;
+    total: number;
+    completed: number;
+    succeeded: number;
+    failed: number;
+    errors: Array<{ userId: string; error: string }>;
+  }>({ running: false, total: 0, completed: 0, succeeded: 0, failed: 0, errors: [] });
+
   // 分配列表
   const [assignmentPage, setAssignmentPage] = useState(1);
   const [assignments, setAssignments] = useState<StrategyAssignmentDto[]>([]);
@@ -154,6 +170,98 @@ const StrategyDetail: React.FC = () => {
   };
 
   // ==================== 编辑提交 ====================
+
+  // ==================== 批量分配 ====================
+
+  const handleBatchAssign = async () => {
+    if (!id) return;
+    try {
+      const values = await batchAssignForm.validateFields();
+      const raw: string = values.userIds || '';
+      // 支持逗号、换行、空格分隔
+      const userIds = raw
+        .split(/[,\n\s]+/)
+        .map((s: string) => s.trim())
+        .filter((s: string) => s.length > 0);
+
+      if (userIds.length === 0) {
+        message.warning('请输入至少一个用户 ID');
+        return;
+      }
+
+      // 去重
+      const uniqueIds = [...new Set(userIds)];
+      if (uniqueIds.length !== userIds.length) {
+        message.info(`已自动去重：${userIds.length} → ${uniqueIds.length} 个用户`);
+      }
+
+      setBatchProgress({
+        running: true,
+        total: uniqueIds.length,
+        completed: 0,
+        succeeded: 0,
+        failed: 0,
+        errors: [],
+      });
+
+      const assignmentType = values.assignmentType || 'manual';
+      const source = values.source || undefined;
+      const activeFrom = values.activeRange?.[0]?.toISOString();
+      const activeUntil = values.activeRange?.[1]?.toISOString();
+
+      let succeeded = 0;
+      let failed = 0;
+      const errors: Array<{ userId: string; error: string }> = [];
+
+      for (let i = 0; i < uniqueIds.length; i++) {
+        try {
+          await strategyApi.assignStrategy(id, {
+            userId: uniqueIds[i],
+            assignmentType,
+            source,
+            activeFrom,
+            activeUntil,
+          });
+          succeeded++;
+        } catch (err: any) {
+          failed++;
+          errors.push({
+            userId: uniqueIds[i],
+            error: err?.message || '未知错误',
+          });
+        }
+        setBatchProgress((prev) => ({
+          ...prev,
+          completed: i + 1,
+          succeeded,
+          failed,
+          errors: [...errors],
+        }));
+      }
+
+      setBatchProgress((prev) => ({ ...prev, running: false }));
+
+      if (failed === 0) {
+        message.success(`批量分配完成：${succeeded} 个用户全部成功`);
+        setBatchAssignVisible(false);
+        batchAssignForm.resetFields();
+        setBatchProgress({
+          running: false,
+          total: 0,
+          completed: 0,
+          succeeded: 0,
+          failed: 0,
+          errors: [],
+        });
+        loadAssignments();
+      } else {
+        message.warning(`批量分配完成：${succeeded} 成功，${failed} 失败`);
+        loadAssignments();
+      }
+    } catch {
+      // 表单验证失败
+    }
+  };
 
   const handleEdit = () => {
     if (!strategy) return;
@@ -420,13 +528,31 @@ const StrategyDetail: React.FC = () => {
                 <>
                   <Space style={{ marginBottom: 16 }}>
                     {strategy.status === 'active' && (
-                      <Button
-                        type="primary"
-                        icon={<UserAddOutlined />}
-                        onClick={() => setAssignModalVisible(true)}
-                      >
-                        分配给用户
-                      </Button>
+                      <>
+                        <Button
+                          type="primary"
+                          icon={<UserAddOutlined />}
+                          onClick={() => setAssignModalVisible(true)}
+                        >
+                          分配给用户
+                        </Button>
+                        <Button
+                          icon={<TeamOutlined />}
+                          onClick={() => {
+                            setBatchAssignVisible(true);
+                            setBatchProgress({
+                              running: false,
+                              total: 0,
+                              completed: 0,
+                              succeeded: 0,
+                              failed: 0,
+                              errors: [],
+                            });
+                          }}
+                        >
+                          批量分配
+                        </Button>
+                      </>
                     )}
                     <Button onClick={() => loadAssignments(assignmentPage)}>刷新</Button>
                   </Space>
@@ -559,6 +685,157 @@ const StrategyDetail: React.FC = () => {
             />
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* 批量分配弹窗 */}
+      <Modal
+        title={
+          <Space>
+            <TeamOutlined />
+            <span>批量分配策略</span>
+          </Space>
+        }
+        open={batchAssignVisible}
+        onCancel={() => {
+          if (batchProgress.running) {
+            message.warning('批量分配正在执行中，请等待完成');
+            return;
+          }
+          setBatchAssignVisible(false);
+          batchAssignForm.resetFields();
+          setBatchProgress({
+            running: false,
+            total: 0,
+            completed: 0,
+            succeeded: 0,
+            failed: 0,
+            errors: [],
+          });
+        }}
+        onOk={handleBatchAssign}
+        confirmLoading={batchProgress.running}
+        okText={batchProgress.running ? '分配中...' : '开始批量分配'}
+        okButtonProps={{ disabled: batchProgress.running }}
+        width={640}
+        maskClosable={!batchProgress.running}
+      >
+        <Form form={batchAssignForm} layout="vertical">
+          <Form.Item
+            name="userIds"
+            label={
+              <Space>
+                <span>用户 ID 列表</span>
+                <Typography.Text type="secondary">（支持逗号、换行、空格分隔）</Typography.Text>
+              </Space>
+            }
+            rules={[{ required: true, message: '请输入至少一个用户 ID' }]}
+          >
+            <Input.TextArea
+              rows={6}
+              placeholder={`粘贴用户 UUID，每行一个或用逗号分隔：\nuuid-001\nuuid-002\nuuid-003`}
+              disabled={batchProgress.running}
+            />
+          </Form.Item>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                name="assignmentType"
+                label="分配类型"
+                initialValue="manual"
+                rules={[{ required: true, message: '请选择分配类型' }]}
+              >
+                <Select
+                  disabled={batchProgress.running}
+                  options={[
+                    { label: '手动分配', value: 'manual' },
+                    { label: '实验分配', value: 'experiment' },
+                    { label: '段落分配', value: 'segment' },
+                  ]}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="source" label="来源标识">
+                <Input placeholder="批量操作 / 操作人ID" disabled={batchProgress.running} />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Form.Item name="activeRange" label="生效时间范围">
+            <DatePicker.RangePicker
+              showTime
+              style={{ width: '100%' }}
+              placeholder={['开始时间（可选）', '结束时间（可选）']}
+              disabled={batchProgress.running}
+            />
+          </Form.Item>
+        </Form>
+
+        {/* 批量进度 */}
+        {(batchProgress.running || batchProgress.completed > 0) && (
+          <div style={{ marginTop: 16 }}>
+            <Progress
+              percent={
+                batchProgress.total > 0
+                  ? Math.round((batchProgress.completed / batchProgress.total) * 100)
+                  : 0
+              }
+              status={
+                batchProgress.running
+                  ? 'active'
+                  : batchProgress.failed > 0
+                    ? 'exception'
+                    : 'success'
+              }
+            />
+            <Row gutter={16} style={{ marginTop: 8 }}>
+              <Col span={8}>
+                <Statistic
+                  title="成功"
+                  value={batchProgress.succeeded}
+                  suffix={`/ ${batchProgress.total}`}
+                  valueStyle={{ color: '#52c41a', fontSize: 16 }}
+                />
+              </Col>
+              <Col span={8}>
+                <Statistic
+                  title="失败"
+                  value={batchProgress.failed}
+                  valueStyle={{
+                    color: batchProgress.failed > 0 ? '#ff4d4f' : '#999',
+                    fontSize: 16,
+                  }}
+                />
+              </Col>
+              <Col span={8}>
+                <Statistic
+                  title="进度"
+                  value={batchProgress.completed}
+                  suffix={`/ ${batchProgress.total}`}
+                  valueStyle={{ fontSize: 16 }}
+                />
+              </Col>
+            </Row>
+
+            {batchProgress.errors.length > 0 && (
+              <Alert
+                type="error"
+                showIcon
+                style={{ marginTop: 12 }}
+                message={`${batchProgress.errors.length} 个用户分配失败`}
+                description={
+                  <div style={{ maxHeight: 150, overflow: 'auto', fontSize: 12 }}>
+                    {batchProgress.errors.map((e, i) => (
+                      <div key={i}>
+                        <Typography.Text code>{e.userId}</Typography.Text>
+                        <span style={{ color: '#ff4d4f', marginLeft: 8 }}>{e.error}</span>
+                      </div>
+                    ))}
+                  </div>
+                }
+              />
+            )}
+          </div>
+        )}
       </Modal>
     </>
   );

@@ -33,6 +33,11 @@ export class LifestyleBoostFactor implements ScoringFactor {
 
   private lifestyleFactors: LifestyleScoringFunctions | null = null;
   private lifestyleAdjustment: Record<string, number> | null = null;
+  /** V7.5: 调参配置 */
+  private factorWaterHighThreshold = 80;
+  private nutrientBoostClampMin = 0.85;
+  private nutrientBoostClampMax = 1.15;
+  private nutrientBoostDeltaMultiplier = 0.05;
 
   /**
    * 构造时传入外部依赖
@@ -56,6 +61,14 @@ export class LifestyleBoostFactor implements ScoringFactor {
   init(ctx: PipelineContext): void {
     this.lifestyleFactors = this.getLifestyleFactors(ctx);
     this.lifestyleAdjustment = this.getLifestyleAdjustment(ctx);
+    // V7.5: 从调参配置读取阈值
+    if (ctx.tuning) {
+      this.factorWaterHighThreshold = ctx.tuning.factorWaterHighThreshold;
+      this.nutrientBoostClampMin = ctx.tuning.nutrientBoostClampMin;
+      this.nutrientBoostClampMax = ctx.tuning.nutrientBoostClampMax;
+      this.nutrientBoostDeltaMultiplier =
+        ctx.tuning.nutrientBoostDeltaMultiplier;
+    }
   }
 
   computeAdjustment(
@@ -81,17 +94,17 @@ export class LifestyleBoostFactor implements ScoringFactor {
       Object.keys(this.lifestyleAdjustment).length > 0
     ) {
       const foodNutrientValues: Record<string, number> = {
-        magnesium: Number((food as any).magnesium) || 0,
-        vitaminC: Number((food as any).vitaminC) || 0,
-        vitaminD: Number((food as any).vitaminD) || 0,
-        vitaminB12: Number((food as any).vitaminB12) || 0,
-        vitaminB6: Number((food as any).vitaminB6) || 0,
-        calcium: Number((food as any).calcium) || 0,
-        iron: Number((food as any).iron) || 0,
-        omega3: Number((food as any).omega3) || 0,
-        zinc: Number((food as any).zinc) || 0,
-        folate: Number((food as any).folate) || 0,
-        potassium: Number((food as any).potassium) || 0,
+        magnesium: Number(food.magnesium) || 0,
+        vitaminC: Number(food.vitaminC) || 0,
+        vitaminD: Number(food.vitaminD) || 0,
+        vitaminB12: Number(food.vitaminB12) || 0,
+        vitaminB6: Number(food.vitaminB6) || 0,
+        calcium: Number(food.calcium) || 0,
+        iron: Number(food.iron) || 0,
+        omega3: Number(food.omega3) || 0,
+        zinc: Number(food.zinc) || 0,
+        folate: Number(food.folate) || 0,
+        potassium: Number(food.potassium) || 0,
       };
 
       // tryptophan 使用标签匹配
@@ -116,8 +129,8 @@ export class LifestyleBoostFactor implements ScoringFactor {
       }
 
       // waterContent 使用品类估算
-      const waterPct = Number((food as any).waterContentPercent) || 0;
-      if (waterPct > 80) {
+      const waterPct = Number(food.waterContentPercent) || 0;
+      if (waterPct > this.factorWaterHighThreshold) {
         foodNutrientValues['waterContent'] = 1;
       }
 
@@ -132,8 +145,11 @@ export class LifestyleBoostFactor implements ScoringFactor {
       }
 
       const nutrientBoost = Math.max(
-        0.85,
-        Math.min(1.15, 1 + cumulativeDelta * 0.05),
+        this.nutrientBoostClampMin,
+        Math.min(
+          this.nutrientBoostClampMax,
+          1 + cumulativeDelta * this.nutrientBoostDeltaMultiplier,
+        ),
       );
       multiplier *= nutrientBoost;
     }

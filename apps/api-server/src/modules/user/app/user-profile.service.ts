@@ -27,7 +27,7 @@ import {
   UpdateDeclaredProfileDto,
   UpdateRecommendationPreferencesDto,
 } from './dto/user-profile.dto';
-import { SaveUserProfileDto } from 'src/modules/diet/app/food.dto';
+import { SaveUserProfileDto } from '../../diet/app/dto/food.dto';
 import {
   DomainEvents,
   ProfileUpdatedEvent,

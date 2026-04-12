@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Card,
   Descriptions,
@@ -21,6 +21,9 @@ import {
   message,
   Popconfirm,
   Result,
+  Progress,
+  Tooltip,
+  Divider,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -32,6 +35,10 @@ import {
   BarChartOutlined,
   ExperimentOutlined,
   WarningOutlined,
+  RocketOutlined,
+  CopyOutlined,
+  TeamOutlined,
+  SendOutlined,
 } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
@@ -40,10 +47,18 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
+  Tooltip as RTooltip,
   Legend,
   ResponsiveContainer,
+  PieChart,
+  Pie,
   Cell,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Radar,
+  ReferenceLine,
 } from 'recharts';
 import {
   useExperimentDetail,
@@ -51,6 +66,7 @@ import {
   useExperimentAnalysis,
   useUpdateExperiment,
   useUpdateExperimentStatus,
+  useCreateExperiment,
   type ExperimentDto,
   type ExperimentStatus,
   type ExperimentMetric,
@@ -77,9 +93,41 @@ export const routeConfig = {
   requireAdmin: true,
 };
 
-// ==================== 指标图表组件 ====================
+// ==================== 流量分配饼图 ====================
 
-const MetricsChart: React.FC<{ metrics: ExperimentMetric[] }> = ({ metrics }) => {
+const TrafficPieChart: React.FC<{ groups: ExperimentDto['groups'] }> = ({ groups }) => {
+  if (!groups?.length) return null;
+  const data = groups.map((g) => ({
+    name: g.name,
+    value: Math.round(g.trafficRatio * 100),
+  }));
+
+  return (
+    <ResponsiveContainer width="100%" height={200}>
+      <PieChart>
+        <Pie
+          data={data}
+          cx="50%"
+          cy="50%"
+          innerRadius={50}
+          outerRadius={80}
+          paddingAngle={2}
+          dataKey="value"
+          label={({ name, value }) => `${name}: ${value}%`}
+        >
+          {data.map((_, i) => (
+            <Cell key={i} fill={COLORS[i % COLORS.length]} />
+          ))}
+        </Pie>
+        <RTooltip formatter={(value: number) => `${value}%`} />
+      </PieChart>
+    </ResponsiveContainer>
+  );
+};
+
+// ==================== 指标对比图 ====================
+
+const MetricsCompareChart: React.FC<{ metrics: ExperimentMetric[] }> = ({ metrics }) => {
   if (!metrics?.length) return <Alert message="暂无指标数据" type="info" showIcon />;
 
   const chartData = metrics.map((m) => ({
@@ -101,8 +149,9 @@ const MetricsChart: React.FC<{ metrics: ExperimentMetric[] }> = ({ metrics }) =>
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis dataKey="group" />
         <YAxis unit="%" />
-        <Tooltip formatter={(value: number) => `${value}%`} />
+        <RTooltip formatter={(value: number) => `${value}%`} />
         <Legend />
+        <ReferenceLine y={50} stroke="#52c41a" strokeDasharray="5 5" label="目标线" />
         <Bar dataKey="接受率" fill="#52c41a" />
         <Bar dataKey="替换率" fill="#faad14" />
         <Bar dataKey="跳过率" fill="#f5222d" />
@@ -111,9 +160,67 @@ const MetricsChart: React.FC<{ metrics: ExperimentMetric[] }> = ({ metrics }) =>
   );
 };
 
+// ==================== 多维雷达对比 ====================
+
+const MetricsRadarChart: React.FC<{ metrics: ExperimentMetric[] }> = ({ metrics }) => {
+  if (!metrics?.length || metrics.length < 2) return null;
+
+  // 归一化各维度到 0-100
+  const maxSample = Math.max(...metrics.map((m) => m.sampleSize), 1);
+  const maxRec = Math.max(...metrics.map((m) => m.totalRecommendations), 1);
+  const maxScore = Math.max(...metrics.map((m) => m.avgNutritionScore), 1);
+
+  const dimensions = [
+    { key: '接受率', getter: (m: ExperimentMetric) => m.acceptanceRate * 100 },
+    { key: '样本量', getter: (m: ExperimentMetric) => (m.sampleSize / maxSample) * 100 },
+    { key: '推荐量', getter: (m: ExperimentMetric) => (m.totalRecommendations / maxRec) * 100 },
+    { key: '营养评分', getter: (m: ExperimentMetric) => (m.avgNutritionScore / maxScore) * 100 },
+    {
+      key: '互动率',
+      getter: (m: ExperimentMetric) =>
+        m.totalRecommendations > 0
+          ? ((m.acceptedCount + m.replacedCount) / m.totalRecommendations) * 100
+          : 0,
+    },
+  ];
+
+  const radarData = dimensions.map((dim) => {
+    const entry: Record<string, string | number> = { dimension: dim.key };
+    metrics.forEach((m) => {
+      entry[m.groupId] = Math.round(dim.getter(m) * 10) / 10;
+    });
+    return entry;
+  });
+
+  return (
+    <ResponsiveContainer width="100%" height={300}>
+      <RadarChart data={radarData}>
+        <PolarGrid />
+        <PolarAngleAxis dataKey="dimension" />
+        <PolarRadiusAxis domain={[0, 100]} />
+        {metrics.map((m, i) => (
+          <Radar
+            key={m.groupId}
+            name={m.groupId}
+            dataKey={m.groupId}
+            stroke={COLORS[i % COLORS.length]}
+            fill={COLORS[i % COLORS.length]}
+            fillOpacity={0.15}
+          />
+        ))}
+        <Legend />
+        <RTooltip />
+      </RadarChart>
+    </ResponsiveContainer>
+  );
+};
+
 // ==================== 分析报告组件 ====================
 
-const AnalysisReport: React.FC<{ analysis: ExperimentAnalysis }> = ({ analysis }) => {
+const AnalysisReport: React.FC<{
+  analysis: ExperimentAnalysis;
+  onPromoteWinner?: (winnerGroup: string) => void;
+}> = ({ analysis, onPromoteWinner }) => {
   return (
     <Space direction="vertical" style={{ width: '100%' }} size="large">
       {/* 结论 */}
@@ -133,7 +240,7 @@ const AnalysisReport: React.FC<{ analysis: ExperimentAnalysis }> = ({ analysis }
         showIcon={false}
       />
 
-      {/* 获胜组 */}
+      {/* 获胜组 + 推广按钮 */}
       {analysis.winner && (
         <Card size="small">
           <Result
@@ -141,13 +248,26 @@ const AnalysisReport: React.FC<{ analysis: ExperimentAnalysis }> = ({ analysis }
             title={`获胜组: ${analysis.winner}`}
             subTitle={analysis.conclusion}
             status="info"
+            extra={
+              onPromoteWinner && (
+                <Tooltip title="将获胜组的配置推广为正式策略">
+                  <Button
+                    type="primary"
+                    icon={<RocketOutlined />}
+                    onClick={() => onPromoteWinner(analysis.winner!)}
+                  >
+                    推广获胜策略
+                  </Button>
+                </Tooltip>
+              )
+            }
           />
         </Card>
       )}
 
       {/* 两两比较 */}
       {analysis.comparisons.length > 0 && (
-        <Card title="统计显著性比较" size="small">
+        <Card title="统计显著性比较 (卡方检验)" size="small">
           <Table
             dataSource={analysis.comparisons}
             rowKey={(r) => `${r.controlGroup}-${r.treatmentGroup}`}
@@ -177,21 +297,42 @@ const AnalysisReport: React.FC<{ analysis: ExperimentAnalysis }> = ({ analysis }
                 title: 'p 值',
                 key: 'pValue',
                 width: 100,
-                render: (_, r) => (
-                  <Text type={r.significance.pValue < 0.05 ? 'success' : undefined}>
-                    {r.significance.pValue.toFixed(4)}
-                  </Text>
-                ),
+                render: (_, r) => {
+                  const p = r.significance.pValue;
+                  return (
+                    <Text type={p < 0.05 ? 'success' : p < 0.1 ? 'warning' : undefined}>
+                      {p.toFixed(4)}
+                      {p < 0.01 && ' ***'}
+                      {p >= 0.01 && p < 0.05 && ' **'}
+                      {p >= 0.05 && p < 0.1 && ' *'}
+                    </Text>
+                  );
+                },
+              },
+              {
+                title: '自由度',
+                key: 'df',
+                width: 80,
+                render: (_, r) => r.significance.df,
               },
               {
                 title: '接受率提升',
                 key: 'lift',
-                width: 120,
+                width: 130,
                 render: (_, r) => (
-                  <Text type={r.acceptanceRateLift > 0 ? 'success' : 'danger'}>
-                    {r.acceptanceRateLift > 0 ? '+' : ''}
-                    {r.acceptanceRateLift}%
-                  </Text>
+                  <Space>
+                    <Text type={r.acceptanceRateLift > 0 ? 'success' : 'danger'}>
+                      {r.acceptanceRateLift > 0 ? '+' : ''}
+                      {r.acceptanceRateLift}%
+                    </Text>
+                    <Progress
+                      percent={Math.min(Math.abs(r.acceptanceRateLift), 100)}
+                      size="small"
+                      showInfo={false}
+                      strokeColor={r.acceptanceRateLift > 0 ? '#52c41a' : '#f5222d'}
+                      style={{ width: 50 }}
+                    />
+                  </Space>
                 ),
               },
             ]}
@@ -233,6 +374,72 @@ const ABExperimentDetail: React.FC = () => {
     onError: (error: any) => message.error(`状态更新失败: ${error.message}`),
   });
 
+  // 推广获胜策略：跳转到策略创建页，预填获胜组的配置
+  const handlePromoteWinner = (winnerGroup: string) => {
+    if (!experiment) return;
+    const group = experiment.groups?.find((g) => g.name === winnerGroup);
+    if (!group) {
+      message.warning('未找到获胜组配置');
+      return;
+    }
+    // 将获胜组配置编码为查询参数，策略创建页面可读取
+    const params = new URLSearchParams({
+      fromExperiment: experiment.id,
+      experimentName: experiment.name,
+      winnerGroup: winnerGroup,
+      goalType: experiment.goalType,
+    });
+    if (group.scoreWeightOverrides) {
+      params.set('scoreWeights', JSON.stringify(group.scoreWeightOverrides));
+    }
+    if (group.mealWeightOverrides) {
+      params.set('mealWeights', JSON.stringify(group.mealWeightOverrides));
+    }
+    navigate(`/strategy/create?${params.toString()}`);
+    message.info('已跳转到策略创建页面，已预填获胜组配置');
+  };
+
+  // 复制实验
+  const handleCloneExperiment = () => {
+    if (!experiment) return;
+    const params = new URLSearchParams({
+      cloneFrom: experiment.id,
+      name: `${experiment.name} (副本)`,
+      goalType: experiment.goalType,
+      groups: JSON.stringify(experiment.groups),
+    });
+    navigate(`/ab-experiments/list?${params.toString()}`);
+  };
+
+  // 实验持续时间
+  const experimentDuration = useMemo(() => {
+    if (!experiment?.startDate) return null;
+    const start = new Date(experiment.startDate);
+    const end = experiment.endDate ? new Date(experiment.endDate) : new Date();
+    const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    return days;
+  }, [experiment]);
+
+  // 总样本量
+  const totalSampleSize = useMemo(() => {
+    if (!metricsData?.metrics) return 0;
+    return metricsData.metrics.reduce((sum, m) => sum + m.sampleSize, 0);
+  }, [metricsData]);
+
+  // 总推荐数
+  const totalRecommendations = useMemo(() => {
+    if (!metricsData?.metrics) return 0;
+    return metricsData.metrics.reduce((sum, m) => sum + m.totalRecommendations, 0);
+  }, [metricsData]);
+
+  // 最佳接受率组
+  const bestAcceptanceGroup = useMemo(() => {
+    if (!metricsData?.metrics?.length) return null;
+    return metricsData.metrics.reduce((best, m) =>
+      m.acceptanceRate > best.acceptanceRate ? m : best
+    );
+  }, [metricsData]);
+
   if (isLoading) return <Spin size="large" style={{ display: 'block', margin: '100px auto' }} />;
   if (!experiment) return <Alert message="实验不存在" type="error" showIcon />;
 
@@ -269,9 +476,9 @@ const ABExperimentDetail: React.FC = () => {
 
   return (
     <Space direction="vertical" style={{ width: '100%' }} size="large">
-      {/* 头部 */}
+      {/* 头部操作 */}
       <Card>
-        <Space style={{ marginBottom: 16 }}>
+        <Space style={{ marginBottom: 16 }} wrap>
           <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/ab-experiments/list')}>
             返回列表
           </Button>
@@ -280,6 +487,11 @@ const ABExperimentDetail: React.FC = () => {
               编辑
             </Button>
           )}
+          <Tooltip title="以此实验为模板创建新实验">
+            <Button icon={<CopyOutlined />} onClick={handleCloneExperiment}>
+              复制
+            </Button>
+          </Tooltip>
           {experiment.status === 'draft' && (
             <Popconfirm
               title="启动实验？"
@@ -316,13 +528,31 @@ const ABExperimentDetail: React.FC = () => {
               </Popconfirm>
             </>
           )}
+          {/* 运行中也可直接完成 */}
+          {experiment.status === 'running' && (
+            <Popconfirm
+              title="直接结束实验？"
+              description="结束后将标记为完成，确认？"
+              onConfirm={() => statusMutation.mutate({ id: id!, status: 'completed' })}
+            >
+              <Button danger icon={<CheckCircleOutlined />}>
+                完成
+              </Button>
+            </Popconfirm>
+          )}
         </Space>
 
-        <Descriptions bordered column={2}>
+        <Descriptions bordered column={{ xs: 1, sm: 2, md: 2, lg: 2 }}>
           <Descriptions.Item label="实验名称" span={2}>
-            {experiment.name}
+            <Text strong style={{ fontSize: 16 }}>
+              {experiment.name}
+            </Text>
           </Descriptions.Item>
-          <Descriptions.Item label="实验 ID">{experiment.id}</Descriptions.Item>
+          <Descriptions.Item label="实验 ID">
+            <Text copyable style={{ fontSize: 12, fontFamily: 'monospace' }}>
+              {experiment.id}
+            </Text>
+          </Descriptions.Item>
           <Descriptions.Item label="状态">
             <Tag color={cfg.color}>{cfg.text}</Tag>
           </Descriptions.Item>
@@ -331,7 +561,9 @@ const ABExperimentDetail: React.FC = () => {
               {experiment.goalType === '*' ? '全部' : experiment.goalType}
             </Tag>
           </Descriptions.Item>
-          <Descriptions.Item label="分组数">{experiment.groups?.length || 0} 组</Descriptions.Item>
+          <Descriptions.Item label="分组数">
+            <Tag icon={<TeamOutlined />}>{experiment.groups?.length || 0} 组</Tag>
+          </Descriptions.Item>
           <Descriptions.Item label="描述" span={2}>
             {experiment.description || '-'}
           </Descriptions.Item>
@@ -342,63 +574,135 @@ const ABExperimentDetail: React.FC = () => {
         </Descriptions>
       </Card>
 
-      {/* 分组配置 */}
-      <Card title="分组配置" size="small">
-        <Table
-          dataSource={experiment.groups || []}
-          rowKey="name"
-          pagination={false}
-          size="small"
-          columns={[
-            {
-              title: '分组名称',
-              dataIndex: 'name',
-              width: 150,
-              render: (name: string) => (
-                <Tag color={name.toLowerCase().includes('control') ? 'blue' : 'green'}>{name}</Tag>
-              ),
-            },
-            {
-              title: '流量占比',
-              dataIndex: 'trafficRatio',
-              width: 120,
-              render: (ratio: number) => `${(ratio * 100).toFixed(0)}%`,
-            },
-            {
-              title: '评分权重覆盖',
-              dataIndex: 'scoreWeightOverrides',
-              render: (val: any) =>
-                val ? (
-                  <Paragraph
-                    ellipsis={{ rows: 1, expandable: true }}
-                    style={{ margin: 0, fontFamily: 'monospace', fontSize: 12 }}
-                  >
-                    {JSON.stringify(val)}
-                  </Paragraph>
-                ) : (
-                  <Text type="secondary">使用默认</Text>
-                ),
-            },
-            {
-              title: '餐次权重覆盖',
-              dataIndex: 'mealWeightOverrides',
-              render: (val: any) =>
-                val ? (
-                  <Paragraph
-                    ellipsis={{ rows: 1, expandable: true }}
-                    style={{ margin: 0, fontFamily: 'monospace', fontSize: 12 }}
-                  >
-                    {JSON.stringify(val)}
-                  </Paragraph>
-                ) : (
-                  <Text type="secondary">使用默认</Text>
-                ),
-            },
-          ]}
-        />
-      </Card>
+      {/* 核心指标概览（非草稿状态显示） */}
+      {experiment.status !== 'draft' && (
+        <Row gutter={[16, 16]}>
+          <Col xs={12} sm={6}>
+            <Card size="small" variant="borderless">
+              <Statistic
+                title="总样本量"
+                value={totalSampleSize}
+                prefix={<TeamOutlined style={{ color: '#1677ff' }} />}
+                loading={metricsLoading}
+              />
+            </Card>
+          </Col>
+          <Col xs={12} sm={6}>
+            <Card size="small" variant="borderless">
+              <Statistic
+                title="总推荐数"
+                value={totalRecommendations}
+                prefix={<SendOutlined style={{ color: '#722ed1' }} />}
+                loading={metricsLoading}
+              />
+            </Card>
+          </Col>
+          <Col xs={12} sm={6}>
+            <Card size="small" variant="borderless">
+              <Statistic
+                title="最佳接受率"
+                value={
+                  bestAcceptanceGroup ? (bestAcceptanceGroup.acceptanceRate * 100).toFixed(1) : '-'
+                }
+                suffix={bestAcceptanceGroup ? '%' : ''}
+                prefix={<TrophyOutlined style={{ color: '#faad14' }} />}
+                valueStyle={{ color: '#52c41a' }}
+                loading={metricsLoading}
+              />
+              {bestAcceptanceGroup && (
+                <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: 4 }}>
+                  {bestAcceptanceGroup.groupId}
+                </div>
+              )}
+            </Card>
+          </Col>
+          <Col xs={12} sm={6}>
+            <Card size="small" variant="borderless">
+              <Statistic
+                title="实验时长"
+                value={experimentDuration ?? '-'}
+                suffix={experimentDuration ? '天' : ''}
+                prefix={<ExperimentOutlined style={{ color: '#13c2c2' }} />}
+              />
+            </Card>
+          </Col>
+        </Row>
+      )}
 
-      {/* Tabs: 指标 / 分析报告 / 原始 JSON */}
+      {/* 分组配置 + 流量分配 */}
+      <Row gutter={[16, 16]}>
+        <Col xs={24} lg={16}>
+          <Card title="分组配置" size="small">
+            <Table
+              dataSource={experiment.groups || []}
+              rowKey="name"
+              pagination={false}
+              size="small"
+              columns={[
+                {
+                  title: '分组名称',
+                  dataIndex: 'name',
+                  width: 150,
+                  render: (name: string, _, i) => (
+                    <Tag color={COLORS[i % COLORS.length]}>{name}</Tag>
+                  ),
+                },
+                {
+                  title: '流量占比',
+                  dataIndex: 'trafficRatio',
+                  width: 150,
+                  render: (ratio: number) => (
+                    <Space>
+                      <Progress
+                        percent={Math.round(ratio * 100)}
+                        size="small"
+                        style={{ width: 80 }}
+                      />
+                    </Space>
+                  ),
+                },
+                {
+                  title: '评分权重覆盖',
+                  dataIndex: 'scoreWeightOverrides',
+                  render: (val: Record<string, number[]> | null) =>
+                    val ? (
+                      <Paragraph
+                        ellipsis={{ rows: 1, expandable: true }}
+                        style={{ margin: 0, fontFamily: 'monospace', fontSize: 12 }}
+                      >
+                        {JSON.stringify(val)}
+                      </Paragraph>
+                    ) : (
+                      <Text type="secondary">使用默认</Text>
+                    ),
+                },
+                {
+                  title: '餐次权重覆盖',
+                  dataIndex: 'mealWeightOverrides',
+                  render: (val: Record<string, Record<string, number>> | null) =>
+                    val ? (
+                      <Paragraph
+                        ellipsis={{ rows: 1, expandable: true }}
+                        style={{ margin: 0, fontFamily: 'monospace', fontSize: 12 }}
+                      >
+                        {JSON.stringify(val)}
+                      </Paragraph>
+                    ) : (
+                      <Text type="secondary">使用默认</Text>
+                    ),
+                },
+              ]}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} lg={8}>
+          <Card title="流量分配" size="small">
+            <TrafficPieChart groups={experiment.groups} />
+          </Card>
+        </Col>
+      </Row>
+
+      {/* Tabs: 指标 / 雷达图 / 分析报告 / 原始 JSON */}
       <Card>
         <Tabs
           items={[
@@ -413,59 +717,91 @@ const ABExperimentDetail: React.FC = () => {
                 <Spin />
               ) : (
                 <Space direction="vertical" style={{ width: '100%' }} size="large">
-                  {/* 指标概览卡片 */}
+                  {/* 分组指标卡片 */}
                   {metricsData?.metrics && metricsData.metrics.length > 0 && (
                     <Row gutter={[16, 16]}>
-                      {metricsData.metrics.map((m, i) => (
-                        <Col
-                          span={Math.max(6, Math.floor(24 / metricsData.metrics.length))}
-                          key={m.groupId}
-                        >
-                          <Card
-                            size="small"
-                            title={<Tag color={COLORS[i % COLORS.length]}>{m.groupId}</Tag>}
+                      {metricsData.metrics.map((m, i) => {
+                        const isBest = bestAcceptanceGroup?.groupId === m.groupId;
+                        return (
+                          <Col
+                            span={Math.max(6, Math.floor(24 / metricsData.metrics.length))}
+                            key={m.groupId}
                           >
-                            <Row gutter={[8, 8]}>
-                              <Col span={12}>
-                                <Statistic
-                                  title="样本量"
-                                  value={m.sampleSize}
-                                  valueStyle={{ fontSize: 18 }}
-                                />
-                              </Col>
-                              <Col span={12}>
-                                <Statistic
-                                  title="总推荐数"
-                                  value={m.totalRecommendations}
-                                  valueStyle={{ fontSize: 18 }}
-                                />
-                              </Col>
-                              <Col span={12}>
-                                <Statistic
-                                  title="接受率"
-                                  value={(m.acceptanceRate * 100).toFixed(1)}
-                                  suffix="%"
-                                  valueStyle={{ fontSize: 18, color: '#52c41a' }}
-                                />
-                              </Col>
-                              <Col span={12}>
-                                <Statistic
-                                  title="平均评分"
-                                  value={m.avgNutritionScore.toFixed(2)}
-                                  valueStyle={{ fontSize: 18 }}
-                                />
-                              </Col>
-                            </Row>
-                          </Card>
-                        </Col>
-                      ))}
+                            <Card
+                              size="small"
+                              title={
+                                <Space>
+                                  <Tag color={COLORS[i % COLORS.length]}>{m.groupId}</Tag>
+                                  {isBest && (
+                                    <Tag color="gold" icon={<TrophyOutlined />}>
+                                      领先
+                                    </Tag>
+                                  )}
+                                </Space>
+                              }
+                              style={
+                                isBest ? { borderColor: '#faad14', borderWidth: 2 } : undefined
+                              }
+                            >
+                              <Row gutter={[8, 8]}>
+                                <Col span={12}>
+                                  <Statistic
+                                    title="样本量"
+                                    value={m.sampleSize}
+                                    valueStyle={{ fontSize: 18 }}
+                                  />
+                                </Col>
+                                <Col span={12}>
+                                  <Statistic
+                                    title="总推荐数"
+                                    value={m.totalRecommendations}
+                                    valueStyle={{ fontSize: 18 }}
+                                  />
+                                </Col>
+                                <Col span={12}>
+                                  <Statistic
+                                    title="接受率"
+                                    value={(m.acceptanceRate * 100).toFixed(1)}
+                                    suffix="%"
+                                    valueStyle={{ fontSize: 18, color: '#52c41a' }}
+                                  />
+                                </Col>
+                                <Col span={12}>
+                                  <Statistic
+                                    title="平均评分"
+                                    value={m.avgNutritionScore.toFixed(2)}
+                                    valueStyle={{ fontSize: 18 }}
+                                  />
+                                </Col>
+                              </Row>
+                            </Card>
+                          </Col>
+                        );
+                      })}
                     </Row>
                   )}
 
-                  {/* 指标对比图 */}
-                  <Card title="分组指标对比" size="small">
-                    <MetricsChart metrics={metricsData?.metrics || []} />
-                  </Card>
+                  {/* 图表并排：柱状图 + 雷达图 */}
+                  <Row gutter={[16, 16]}>
+                    <Col xs={24} lg={14}>
+                      <Card title="分组指标对比" size="small">
+                        <MetricsCompareChart metrics={metricsData?.metrics || []} />
+                      </Card>
+                    </Col>
+                    <Col xs={24} lg={10}>
+                      <Card title="多维能力雷达" size="small">
+                        {metricsData?.metrics && metricsData.metrics.length >= 2 ? (
+                          <MetricsRadarChart metrics={metricsData.metrics} />
+                        ) : (
+                          <Alert
+                            message="至少需要 2 个分组数据才能展示雷达图"
+                            type="info"
+                            showIcon
+                          />
+                        )}
+                      </Card>
+                    </Col>
+                  </Row>
 
                   {/* 指标明细表 */}
                   {metricsData?.metrics && (
@@ -476,7 +812,14 @@ const ABExperimentDetail: React.FC = () => {
                         pagination={false}
                         size="small"
                         columns={[
-                          { title: '分组', dataIndex: 'groupId', width: 120 },
+                          {
+                            title: '分组',
+                            dataIndex: 'groupId',
+                            width: 120,
+                            render: (text: string, _, i) => (
+                              <Tag color={COLORS[i % COLORS.length]}>{text}</Tag>
+                            ),
+                          },
                           { title: '样本量', dataIndex: 'sampleSize', width: 80 },
                           { title: '总推荐', dataIndex: 'totalRecommendations', width: 80 },
                           { title: '接受', dataIndex: 'acceptedCount', width: 80 },
@@ -486,6 +829,7 @@ const ABExperimentDetail: React.FC = () => {
                             title: '接受率',
                             key: 'rate',
                             width: 100,
+                            sorter: (a, b) => a.acceptanceRate - b.acceptanceRate,
                             render: (_, r) => (
                               <Text type="success">{(r.acceptanceRate * 100).toFixed(2)}%</Text>
                             ),
@@ -494,6 +838,7 @@ const ABExperimentDetail: React.FC = () => {
                             title: '平均评分',
                             dataIndex: 'avgNutritionScore',
                             width: 100,
+                            sorter: (a, b) => a.avgNutritionScore - b.avgNutritionScore,
                             render: (v: number) => v?.toFixed(3) || '-',
                           },
                         ]}
@@ -513,7 +858,12 @@ const ABExperimentDetail: React.FC = () => {
               children: analysisLoading ? (
                 <Spin />
               ) : analysis ? (
-                <AnalysisReport analysis={analysis} />
+                <AnalysisReport
+                  analysis={analysis}
+                  onPromoteWinner={
+                    analysis.canConclude && analysis.winner ? handlePromoteWinner : undefined
+                  }
+                />
               ) : (
                 <Alert message="暂无分析数据" type="info" showIcon />
               ),
@@ -522,18 +872,65 @@ const ABExperimentDetail: React.FC = () => {
               key: 'json',
               label: '原始 JSON',
               children: (
-                <pre
-                  style={{
-                    background: '#f5f5f5',
-                    padding: 16,
-                    borderRadius: 8,
-                    overflow: 'auto',
-                    maxHeight: 500,
-                    fontSize: 12,
-                  }}
-                >
-                  {JSON.stringify(experiment, null, 2)}
-                </pre>
+                <Tabs
+                  type="card"
+                  items={[
+                    {
+                      key: 'experiment',
+                      label: '实验配置',
+                      children: (
+                        <pre
+                          style={{
+                            background: '#f5f5f5',
+                            padding: 16,
+                            borderRadius: 8,
+                            overflow: 'auto',
+                            maxHeight: 500,
+                            fontSize: 12,
+                          }}
+                        >
+                          {JSON.stringify(experiment, null, 2)}
+                        </pre>
+                      ),
+                    },
+                    {
+                      key: 'metrics-json',
+                      label: '指标数据',
+                      children: (
+                        <pre
+                          style={{
+                            background: '#f5f5f5',
+                            padding: 16,
+                            borderRadius: 8,
+                            overflow: 'auto',
+                            maxHeight: 500,
+                            fontSize: 12,
+                          }}
+                        >
+                          {JSON.stringify(metricsData, null, 2)}
+                        </pre>
+                      ),
+                    },
+                    {
+                      key: 'analysis-json',
+                      label: '分析报告',
+                      children: (
+                        <pre
+                          style={{
+                            background: '#f5f5f5',
+                            padding: 16,
+                            borderRadius: 8,
+                            overflow: 'auto',
+                            maxHeight: 500,
+                            fontSize: 12,
+                          }}
+                        >
+                          {JSON.stringify(analysis, null, 2)}
+                        </pre>
+                      ),
+                    },
+                  ]}
+                />
               ),
             },
           ]}

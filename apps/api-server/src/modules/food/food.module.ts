@@ -34,7 +34,7 @@ import { DietModule } from '../diet/diet.module';
 import { UserModule } from '../user/user.module';
 
 @Module({
-  imports: [forwardRef(() => DietModule), forwardRef(() => UserModule)],
+  imports: [forwardRef(() => DietModule), UserModule],
   controllers: [
     FoodLibraryController,
     FoodAnalyzeController,

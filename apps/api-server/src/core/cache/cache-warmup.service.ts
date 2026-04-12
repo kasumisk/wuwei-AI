@@ -12,21 +12,31 @@
  * - 异步 fire-and-forget，预热失败仅 warn 不影响启动
  * - 可选依赖注入（允许没有 FoodPoolCacheService 或 PrismaService 时降级）
  * - 日志记录预热耗时和结果
+ *
+ * V7.4 P1-F: 新增用户画像预热
+ * - 注入 ProfileResolverService，遍历活跃用户调用 resolve() 触发 L1/L2 缓存回填
+ * - 并发控制：每批 WARMUP_CONCURRENCY 个用户并行预热，避免启动时 DB 压力过大
  */
 import {
+  Inject,
   Injectable,
   Logger,
   OnApplicationBootstrap,
   Optional,
+  forwardRef,
 } from '@nestjs/common';
 import { FoodPoolCacheService } from '../../modules/diet/app/recommendation/food-pool-cache.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ProfileResolverService } from '../../modules/user/app/profile-resolver.service';
 
 /** 预热活跃用户画像的最大数量 */
 const MAX_WARMUP_USERS = 100;
 
 /** 活跃用户时间窗口: 7 天 */
 const ACTIVE_WINDOW_DAYS = 7;
+
+/** V7.4 P1-F: 并发预热用户画像的批大小 */
+const WARMUP_CONCURRENCY = 5;
 
 @Injectable()
 export class CacheWarmupService implements OnApplicationBootstrap {
@@ -35,6 +45,9 @@ export class CacheWarmupService implements OnApplicationBootstrap {
   constructor(
     @Optional() private readonly foodPoolCache: FoodPoolCacheService | null,
     @Optional() private readonly prisma: PrismaService | null,
+    @Optional()
+    @Inject(forwardRef(() => ProfileResolverService))
+    private readonly profileResolver: ProfileResolverService | null,
   ) {}
 
   /**
@@ -107,8 +120,9 @@ export class CacheWarmupService implements OnApplicationBootstrap {
    * 查询最近 ACTIVE_WINDOW_DAYS 天内有食物记录的用户 ID，
    * 最多 MAX_WARMUP_USERS 个。
    *
-   * 注意：这里只是查询并触发缓存加载，不直接操作用户画像。
-   * 实际预热逻辑委托给各缓存 namespace 的 getOrSet。
+   * V7.4 P1-F: 遍历活跃用户，调用 ProfileResolverService.resolve()
+   * 触发 ProfileCacheService 的 L1/L2 缓存回填。
+   * 并发控制：每批 WARMUP_CONCURRENCY 个用户并行预热。
    *
    * @returns 预热的用户数量
    */
@@ -136,14 +150,45 @@ export class CacheWarmupService implements OnApplicationBootstrap {
         orderBy: { recorded_at: 'desc' },
       });
 
-      const elapsed = Date.now() - startTime;
+      const queryElapsed = Date.now() - startTime;
       this.logger.log(
-        `Active user query: ${activeUsers.length} users found in ${elapsed}ms`,
+        `Active user query: ${activeUsers.length} users found in ${queryElapsed}ms`,
       );
 
-      // 目前仅完成用户 ID 查询，后续可在此处触发 PreferenceProfile 预加载
-      // 当前不实际预热用户画像（避免引入循环依赖），仅记录活跃用户数
-      return activeUsers.length;
+      // V7.4 P1-F: 调用 ProfileResolverService.resolve() 预热用户画像缓存
+      if (!this.profileResolver) {
+        this.logger.debug(
+          'ProfileResolverService not available, skipping profile resolve warmup',
+        );
+        return activeUsers.length;
+      }
+
+      let warmedUp = 0;
+      const userIds = activeUsers.map((u) => u.user_id);
+
+      // 分批并发预热，避免启动时 DB 压力过大
+      for (let i = 0; i < userIds.length; i += WARMUP_CONCURRENCY) {
+        const batch = userIds.slice(i, i + WARMUP_CONCURRENCY);
+        const results = await Promise.allSettled(
+          batch.map((userId) => this.profileResolver!.resolve(userId)),
+        );
+        for (const result of results) {
+          if (result.status === 'fulfilled') {
+            warmedUp++;
+          } else {
+            this.logger.debug(
+              `Profile warmup failed for one user: ${result.reason?.message || result.reason}`,
+            );
+          }
+        }
+      }
+
+      const totalElapsed = Date.now() - startTime;
+      this.logger.log(
+        `User profile warmup: ${warmedUp}/${activeUsers.length} profiles resolved in ${totalElapsed}ms`,
+      );
+
+      return warmedUp;
     } catch (err) {
       this.logger.warn(
         `User profile warmup failed (non-blocking): ${(err as Error).message}`,
