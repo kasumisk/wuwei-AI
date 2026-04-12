@@ -5,9 +5,10 @@
  *
  * 合并优先级（从高到低）:
  *   1. 用户级分配（MANUAL / EXPERIMENT / SEGMENT）
- *   2. 目标类型策略（scope=GOAL_TYPE, scopeTarget=goalType）
- *   3. 全局默认策略（scope=GLOBAL）
- *   4. 系统硬编码默认值（recommendation.types.ts 中的常量）
+ *   2. V7.0: 上下文策略（scope=CONTEXT，按时段/工作日/季节/生命周期匹配）
+ *   3. 目标类型策略（scope=GOAL_TYPE, scopeTarget=goalType）
+ *   4. 全局默认策略（scope=GLOBAL）
+ *   5. 系统硬编码默认值（recommendation.types.ts 中的常量）
  *
  * 合并规则:
  * - 深度合并 StrategyConfig，高优先级的非空字段覆盖低优先级
@@ -31,6 +32,8 @@ import {
   AssemblyPolicyConfig,
   ExplainPolicyConfig,
   RealismConfig,
+  ContextStrategyCondition,
+  StrategyContextInput,
 } from '../strategy.types';
 import { RedisCacheService } from '../../../core/redis/redis-cache.service';
 
@@ -53,15 +56,20 @@ export class StrategyResolver {
    *
    * @param userId 用户 ID
    * @param goalType 目标类型
+   * @param contextInput V7.0: 可选的上下文输入（用于 CONTEXT scope 匹配）
    * @returns 合并后的 ResolvedStrategy
    */
-  async resolve(userId: string, goalType: string): Promise<ResolvedStrategy> {
+  async resolve(
+    userId: string,
+    goalType: string,
+    contextInput?: StrategyContextInput,
+  ): Promise<ResolvedStrategy> {
     const cacheKey = `${CACHE_PREFIX}${userId}:${goalType}`;
 
     const cached = await this.redis.getOrSet<ResolvedStrategy>(
       cacheKey,
       RESOLVE_CACHE_TTL * 1000,
-      () => this.doResolve(userId, goalType),
+      () => this.doResolve(userId, goalType, contextInput),
     );
 
     return cached!;
@@ -95,10 +103,14 @@ export class StrategyResolver {
 
   /**
    * 实际的策略解析逻辑（不带缓存）
+   *
+   * V7.0 合并优先级（从低到高）:
+   *   GLOBAL → GOAL_TYPE → CONTEXT → EXPERIMENT/USER
    */
   private async doResolve(
     userId: string,
     goalType: string,
+    contextInput?: StrategyContextInput,
   ): Promise<ResolvedStrategy> {
     const sources: string[] = [];
     const configs: StrategyConfig[] = [];
@@ -120,7 +132,16 @@ export class StrategyResolver {
       sources.push(`goal:${goalStrategy.id}`);
     }
 
-    // 3. 用户级分配策略（最高优先级）
+    // 3. V7.0: 上下文策略（CONTEXT scope）
+    if (contextInput) {
+      const contextStrategy = await this.matchContextStrategy(contextInput);
+      if (contextStrategy) {
+        configs.push(contextStrategy.config);
+        sources.push(`context:${contextStrategy.id}`);
+      }
+    }
+
+    // 4. 用户级分配策略（最高优先级）
     const assignment = await this.strategyService.getUserAssignment(userId);
     if (assignment) {
       const userStrategy = await this.strategyService.findById(
@@ -147,6 +168,112 @@ export class StrategyResolver {
       config: mergedConfig,
       resolvedAt: Date.now(),
     };
+  }
+
+  /**
+   * V7.0: 从所有 CONTEXT scope 策略中找最佳匹配
+   *
+   * 匹配逻辑:
+   * 1. 获取所有 active 的 CONTEXT 策略
+   * 2. 逐个检查 context_condition — 所有指定的字段都必须匹配
+   * 3. 选择匹配维度数最多的（最具体的）策略
+   * 4. 全部不匹配返回 null（跳过此层）
+   */
+  private async matchContextStrategy(
+    input: StrategyContextInput,
+  ): Promise<any | null> {
+    const strategies = await this.strategyService.getContextStrategies();
+    if (!strategies.length) {
+      return null;
+    }
+
+    let bestMatch: any = null;
+    let bestScore = 0;
+
+    for (const strategy of strategies) {
+      const condition =
+        strategy.context_condition as ContextStrategyCondition | null;
+      if (!condition) continue;
+
+      const { matches, score } = this.evaluateCondition(condition, input);
+      if (matches && score > bestScore) {
+        bestMatch = strategy;
+        bestScore = score;
+      }
+    }
+
+    if (bestMatch) {
+      this.logger.debug(
+        `Context strategy matched: ${bestMatch.name} (score=${bestScore})`,
+      );
+    }
+
+    return bestMatch;
+  }
+
+  /**
+   * V7.0: 评估单个上下文条件是否匹配
+   *
+   * 规则:
+   * - 缺失字段视为"不限制"（通配，不增加 score）
+   * - 所有指定的字段都必须匹配（AND 逻辑）
+   * - score = 匹配的字段数（越多越具体）
+   */
+  private evaluateCondition(
+    condition: ContextStrategyCondition,
+    input: StrategyContextInput,
+  ): { matches: boolean; score: number } {
+    let score = 0;
+
+    // 时段匹配
+    if (condition.timeOfDay?.length) {
+      if (!condition.timeOfDay.includes(input.timeOfDay)) {
+        return { matches: false, score: 0 };
+      }
+      score++;
+    }
+
+    // 工作日/周末匹配
+    if (condition.dayType?.length) {
+      if (!condition.dayType.includes(input.dayType)) {
+        return { matches: false, score: 0 };
+      }
+      score++;
+    }
+
+    // 季节匹配
+    if (condition.season?.length) {
+      if (!condition.season.includes(input.season)) {
+        return { matches: false, score: 0 };
+      }
+      score++;
+    }
+
+    // 用户生命周期匹配
+    if (condition.userLifecycle?.length) {
+      if (!condition.userLifecycle.includes(input.lifecycle)) {
+        return { matches: false, score: 0 };
+      }
+      score++;
+    }
+
+    // 目标阶段类型匹配
+    if (condition.goalPhaseType?.length) {
+      if (
+        !input.goalPhaseType ||
+        !condition.goalPhaseType.includes(input.goalPhaseType)
+      ) {
+        return { matches: false, score: 0 };
+      }
+      score++;
+    }
+
+    // 没有指定任何条件的策略不匹配（避免空条件通配所有）
+    if (score === 0) {
+      return { matches: false, score: 0 };
+    }
+
+    return { matches: true, score };
   }
 
   /**

@@ -21,6 +21,130 @@ export class FoodLibraryManagementService {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  // ==================== DTO → DB 字段映射 ====================
+  // Prisma 使用 snake_case，DTO 新增字段使用 camelCase，需要手动映射。
+  // 其他字段（code/name/aliases 等）Prisma 已通过 @map 自动映射，无需重复处理。
+  private mapDtoToDb(dto: Record<string, any>): Record<string, any> {
+    const {
+      subCategory,
+      foodGroup,
+      foodForm,
+      dishPriority,
+      addedSugar,
+      naturalSugar,
+      saturatedFat,
+      transFat,
+      vitaminA,
+      vitaminC,
+      vitaminD,
+      vitaminE,
+      vitaminB12,
+      glycemicIndex,
+      glycemicLoad,
+      isProcessed,
+      isFried,
+      processingLevel,
+      fodmapLevel,
+      oxalateLevel,
+      qualityScore,
+      satietyScore,
+      nutrientDensity,
+      mealTypes,
+      mainIngredient,
+      ingredientList,
+      availableChannels,
+      commonalityScore,
+      standardServingG,
+      standardServingDesc,
+      commonPortions,
+      flavorProfile,
+      cookingMethod,
+      cookingMethods,
+      requiredEquipment,
+      servingTemperature,
+      textureTags,
+      dishType,
+      prepTimeMinutes,
+      cookTimeMinutes,
+      skillRequired,
+      estimatedCostLevel,
+      shelfLifeDays,
+      imageUrl,
+      thumbnailUrl,
+      primarySource,
+      primarySourceId,
+      isVerified,
+      searchWeight,
+      ...rest
+    } = dto;
+
+    const mapped: Record<string, any> = { ...rest };
+
+    if (subCategory !== undefined) mapped.sub_category = subCategory;
+    if (foodGroup !== undefined) mapped.food_group = foodGroup;
+    if (foodForm !== undefined) mapped.food_form = foodForm;
+    if (dishPriority !== undefined) mapped.dish_priority = dishPriority;
+    if (addedSugar !== undefined) mapped.added_sugar = addedSugar;
+    if (naturalSugar !== undefined) mapped.natural_sugar = naturalSugar;
+    if (saturatedFat !== undefined) mapped.saturated_fat = saturatedFat;
+    if (transFat !== undefined) mapped.trans_fat = transFat;
+    if (vitaminA !== undefined) mapped.vitamin_a = vitaminA;
+    if (vitaminC !== undefined) mapped.vitamin_c = vitaminC;
+    if (vitaminD !== undefined) mapped.vitamin_d = vitaminD;
+    if (vitaminE !== undefined) mapped.vitamin_e = vitaminE;
+    if (vitaminB12 !== undefined) mapped.vitamin_b12 = vitaminB12;
+    if (glycemicIndex !== undefined) mapped.glycemic_index = glycemicIndex;
+    if (glycemicLoad !== undefined) mapped.glycemic_load = glycemicLoad;
+    if (isProcessed !== undefined) mapped.is_processed = isProcessed;
+    if (isFried !== undefined) mapped.is_fried = isFried;
+    if (processingLevel !== undefined)
+      mapped.processing_level = processingLevel;
+    if (fodmapLevel !== undefined) mapped.fodmap_level = fodmapLevel;
+    if (oxalateLevel !== undefined) mapped.oxalate_level = oxalateLevel;
+    if (qualityScore !== undefined) mapped.quality_score = qualityScore;
+    if (satietyScore !== undefined) mapped.satiety_score = satietyScore;
+    if (nutrientDensity !== undefined)
+      mapped.nutrient_density = nutrientDensity;
+    if (mealTypes !== undefined) mapped.meal_types = mealTypes;
+    if (mainIngredient !== undefined) mapped.main_ingredient = mainIngredient;
+    if (ingredientList !== undefined) mapped.ingredient_list = ingredientList;
+    if (availableChannels !== undefined)
+      mapped.available_channels = availableChannels;
+    if (commonalityScore !== undefined)
+      mapped.commonality_score = commonalityScore;
+    if (standardServingG !== undefined)
+      mapped.standard_serving_g = standardServingG;
+    if (standardServingDesc !== undefined)
+      mapped.standard_serving_desc = standardServingDesc;
+    if (commonPortions !== undefined) mapped.common_portions = commonPortions;
+    if (flavorProfile !== undefined) mapped.flavor_profile = flavorProfile;
+    if (cookingMethod !== undefined) mapped.cooking_method = cookingMethod;
+    if (cookingMethods !== undefined) mapped.cooking_methods = cookingMethods;
+    if (requiredEquipment !== undefined)
+      mapped.required_equipment = requiredEquipment;
+    if (servingTemperature !== undefined)
+      mapped.serving_temperature = servingTemperature;
+    if (textureTags !== undefined) mapped.texture_tags = textureTags;
+    if (dishType !== undefined) mapped.dish_type = dishType;
+    if (prepTimeMinutes !== undefined)
+      mapped.prep_time_minutes = prepTimeMinutes;
+    if (cookTimeMinutes !== undefined)
+      mapped.cook_time_minutes = cookTimeMinutes;
+    if (skillRequired !== undefined) mapped.skill_required = skillRequired;
+    if (estimatedCostLevel !== undefined)
+      mapped.estimated_cost_level = estimatedCostLevel;
+    if (shelfLifeDays !== undefined) mapped.shelf_life_days = shelfLifeDays;
+    if (imageUrl !== undefined) mapped.image_url = imageUrl;
+    if (thumbnailUrl !== undefined) mapped.thumbnail_url = thumbnailUrl;
+    if (primarySource !== undefined) mapped.primary_source = primarySource;
+    if (primarySourceId !== undefined)
+      mapped.primary_source_id = primarySourceId;
+    if (isVerified !== undefined) mapped.is_verified = isVerified;
+    if (searchWeight !== undefined) mapped.search_weight = searchWeight;
+
+    return mapped;
+  }
+
   // ==================== 食物 CRUD ====================
 
   async findAll(query: GetFoodLibraryQueryDto) {
@@ -28,6 +152,8 @@ export class FoodLibraryManagementService {
       page = 1,
       pageSize = 20,
       keyword,
+      name,
+      code,
       category,
       isVerified,
       primarySource,
@@ -39,6 +165,7 @@ export class FoodLibraryManagementService {
     const params: any[] = [];
     let paramIdx = 1;
 
+    // keyword：同时模糊匹配 name / aliases / code（兼容旧调用方）
     if (keyword) {
       conditions.push(
         `(f.name ILIKE $${paramIdx} OR f.aliases ILIKE $${paramIdx} OR f.code ILIKE $${paramIdx})`,
@@ -46,21 +173,44 @@ export class FoodLibraryManagementService {
       params.push(`%${keyword}%`);
       paramIdx++;
     }
+    // name：ProTable 列搜索直接传 name，单独模糊匹配名称和别名
+    if (name && !keyword) {
+      conditions.push(
+        `(f.name ILIKE $${paramIdx} OR f.aliases ILIKE $${paramIdx})`,
+      );
+      params.push(`%${name}%`);
+      paramIdx++;
+    }
+    // code：编码独立模糊搜索
+    if (code && !keyword) {
+      conditions.push(`f.code ILIKE $${paramIdx}`);
+      params.push(`%${code}%`);
+      paramIdx++;
+    }
     if (category) {
-      conditions.push(`f.category = $${paramIdx++}`);
+      conditions.push(`f.category = $${paramIdx}`);
       params.push(category);
+      paramIdx++;
     }
     if (status) {
-      conditions.push(`f.status = $${paramIdx++}`);
+      conditions.push(`f.status = $${paramIdx}`);
       params.push(status);
+      paramIdx++;
     }
     if (isVerified !== undefined) {
-      conditions.push(`f.is_verified = $${paramIdx++}`);
-      params.push(isVerified);
+      // URL query string 传来可能是字符串 "true"/"false"，强制转为布尔值
+      const boolVal =
+        typeof isVerified === 'string'
+          ? (isVerified as string) === 'true'
+          : Boolean(isVerified);
+      conditions.push(`f.is_verified = $${paramIdx}`);
+      params.push(boolVal);
+      paramIdx++;
     }
     if (primarySource) {
-      conditions.push(`f.primary_source = $${paramIdx++}`);
+      conditions.push(`f.primary_source = $${paramIdx}`);
       params.push(primarySource);
+      paramIdx++;
     }
 
     const whereClause = conditions.join(' AND ');
@@ -72,36 +222,55 @@ export class FoodLibraryManagementService {
     );
     const total = parseInt(totalResult[0]?.count ?? '0', 10);
 
+    // 修复：避免在同一模板字符串中使用 paramIdx++（求值顺序不确定）
+    const limitIdx = paramIdx;
+    const offsetIdx = paramIdx + 1;
+
     const list = await this.prisma.$queryRawUnsafe<any[]>(
       `SELECT
+         -- 基本信息
          f.id, f.code, f.name, f.aliases, f.barcode, f.status,
          f.category, f.sub_category, f.food_group,
+         f.food_form, f.dish_priority,
+         -- 宏量营养素（per 100g）
          f.calories, f.protein, f.fat, f.carbs, f.fiber, f.sugar,
          f.added_sugar, f.natural_sugar, f.saturated_fat, f.trans_fat,
-         f.cholesterol, f.sodium, f.potassium, f.calcium, f.iron,
+         f.cholesterol,
+         -- 微量营养素（per 100g）
+         f.sodium, f.potassium, f.calcium, f.iron,
          f.vitamin_a, f.vitamin_c, f.vitamin_d, f.vitamin_e,
          f.vitamin_b12, f.folate, f.zinc, f.magnesium,
-         f.purine, f.phosphorus,
+         f.phosphorus, f.purine,
+         -- 健康评估
          f.glycemic_index, f.glycemic_load,
          f.is_processed, f.is_fried, f.processing_level,
+         f.fodmap_level, f.oxalate_level,
          f.allergens, f.quality_score, f.satiety_score, f.nutrient_density,
-         f.meal_types, f.tags, f.main_ingredient, f.compatibility,
+         -- 标签与推荐决策
+         f.meal_types, f.tags,
+         f.main_ingredient, f.ingredient_list,
+         f.compatibility, f.available_channels, f.commonality_score,
+         -- 份量信息
          f.standard_serving_g, f.standard_serving_desc, f.common_portions,
+         -- 烹饪与风味
+         f.cuisine, f.flavor_profile,
+         f.cooking_method, f.cooking_methods,
+         f.required_equipment, f.serving_temperature,
+         f.texture_tags, f.dish_type,
+         f.prep_time_minutes, f.cook_time_minutes, f.skill_required,
+         f.estimated_cost_level, f.shelf_life_days,
+         -- 媒体资源
          f.image_url, f.thumbnail_url,
+         -- 数据溯源与质控
          f.primary_source, f.primary_source_id,
          f.data_version, f.confidence, f.is_verified,
          f.verified_by, f.verified_at,
          f.search_weight, f.popularity,
-         f.cuisine, f.flavor_profile, f.cooking_method,
-         f.prep_time_minutes, f.cook_time_minutes, f.skill_required,
-         f.estimated_cost_level, f.shelf_life_days,
-         f.fodmap_level, f.oxalate_level,
-         f.available_channels, f.commonality_score,
          f.created_at, f.updated_at
        FROM foods f
        WHERE ${whereClause}
        ORDER BY f.search_weight DESC, f.created_at DESC
-       LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
+       LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
       ...params,
       pageSize,
       offset,
@@ -132,18 +301,20 @@ export class FoodLibraryManagementService {
 
   async create(dto: CreateFoodLibraryDto) {
     const existing = await this.prisma.foods.findFirst({
-      where: { name: (dto as any).name },
+      where: { name: dto.name },
     });
     if (existing) {
-      throw new ConflictException(`食物 "${(dto as any).name}" 已存在`);
+      throw new ConflictException(`食物 "${dto.name}" 已存在`);
     }
     const codeExisting = await this.prisma.foods.findFirst({
-      where: { code: (dto as any).code },
+      where: { code: dto.code },
     });
     if (codeExisting) {
-      throw new ConflictException(`编码 "${(dto as any).code}" 已存在`);
+      throw new ConflictException(`编码 "${dto.code}" 已存在`);
     }
-    const saved = await this.prisma.foods.create({ data: dto as any });
+    const saved = await this.prisma.foods.create({
+      data: this.mapDtoToDb(dto) as any,
+    });
 
     // 写变更日志
     await this.createChangeLog(
@@ -159,9 +330,9 @@ export class FoodLibraryManagementService {
 
   async update(id: string, dto: UpdateFoodLibraryDto, operator = 'admin') {
     const food = await this.findOne(id);
-    if ((dto as any).name && (dto as any).name !== food.name) {
+    if (dto.name && dto.name !== food.name) {
       const existing = await this.prisma.foods.findFirst({
-        where: { name: (dto as any).name },
+        where: { name: dto.name },
       });
       if (existing) {
         throw new ConflictException(`食物 "${(dto as any).name}" 已存在`);
@@ -179,7 +350,7 @@ export class FoodLibraryManagementService {
     const newVersion = (food.data_version || 1) + 1;
     const saved = await this.prisma.foods.update({
       where: { id },
-      data: { ...(dto as any), data_version: newVersion },
+      data: { ...this.mapDtoToDb(dto), data_version: newVersion },
     });
 
     if (Object.keys(changes).length > 0) {
@@ -211,18 +382,26 @@ export class FoodLibraryManagementService {
     for (const dto of foods) {
       try {
         const existing = await this.prisma.foods.findFirst({
-          where: { code: (dto as any).code },
+          where: { code: dto.code },
         });
         if (existing) {
           skipped++;
           continue;
         }
-        await this.prisma.foods.create({ data: dto as any });
+        const saved = await this.prisma.foods.create({
+          data: this.mapDtoToDb(dto) as any,
+        });
+        await this.createChangeLog(
+          saved.id,
+          1,
+          'create',
+          dto as any,
+          '批量导入',
+          'admin',
+        );
         imported++;
       } catch (e) {
-        errors.push(
-          `${(dto as any).code} (${(dto as any).name}): ${e.message}`,
-        );
+        errors.push(`${dto.code} (${dto.name}): ${e.message}`);
       }
     }
 
@@ -402,12 +581,18 @@ export class FoodLibraryManagementService {
 
   // ==================== 变更日志 ====================
 
-  async getChangeLogs(foodId: string) {
-    return this.prisma.food_change_logs.findMany({
-      where: { food_id: foodId },
-      orderBy: { version: 'desc' },
-      take: 50,
-    });
+  async getChangeLogs(foodId: string, page = 1, pageSize = 20) {
+    const skip = (page - 1) * pageSize;
+    const [list, total] = await Promise.all([
+      this.prisma.food_change_logs.findMany({
+        where: { food_id: foodId },
+        orderBy: { version: 'desc' },
+        skip,
+        take: pageSize,
+      }),
+      this.prisma.food_change_logs.count({ where: { food_id: foodId } }),
+    ]);
+    return { list, total, page, pageSize };
   }
 
   private async createChangeLog(

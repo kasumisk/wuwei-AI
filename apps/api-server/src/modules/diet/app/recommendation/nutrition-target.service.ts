@@ -35,6 +35,12 @@ export interface NutritionTargets {
   addedSugarLimit: number;
   /** 钠上限 (mg/天) */
   sodiumLimit: number;
+  /** V7.3 NRF11.4: 锌 (mg/天) */
+  zinc: number;
+  /** V7.3 NRF11.4: 镁 (mg/天) */
+  magnesium: number;
+  /** V7.3 NRF11.4: 反式脂肪上限 (g/天) */
+  transFatLimit: number;
 }
 
 /**
@@ -88,6 +94,10 @@ export class NutritionTargetService {
       saturatedFatLimit: 20, // g, FDA DV 2020
       addedSugarLimit: 50, // g, FDA DV 2020 (WHO 建议 25g 更严格)
       sodiumLimit: 2300, // mg, FDA DV
+      // V7.3 NRF11.4 新增
+      zinc: this.calcZinc(gender, age),
+      magnesium: this.calcMagnesium(gender, age),
+      transFatLimit: 2.2, // g, WHO 建议 <1% 总能量，按 2000kcal 估算约 2.2g
     };
 
     // 健康状况修正
@@ -181,6 +191,25 @@ export class NutritionTargetService {
   // ==================== 健康状况修正 ====================
 
   /**
+   * V7.3 NRF11.4: 锌 (mg/天)
+   * 中国 DRI 2023: 男 12.5mg, 女 7.5mg
+   * FDA DV: 11mg
+   */
+  private calcZinc(gender: string, age: number): number {
+    if (gender === 'female') return 7.5;
+    return 12.5;
+  }
+
+  /**
+   * V7.3 NRF11.4: 镁 (mg/天)
+   * 中国 DRI 2023: 成人 330mg; USDA: 男 420mg, 女 320mg
+   * 取中间值: 男 400mg, 女 330mg
+   */
+  private calcMagnesium(gender: string, age: number): number {
+    return gender === 'male' ? 400 : 330;
+  }
+
+  /**
    * 根据健康状况调整营养目标
    * 基于临床营养指南的保守调整
    */
@@ -226,12 +255,16 @@ export class NutritionTargetService {
           // 高血脂: 饱和脂肪收紧到 13g（<总热量7%，按2000kcal估算）
           result.saturatedFatLimit = Math.min(result.saturatedFatLimit, 13);
           result.fiber = Math.max(result.fiber, 30); // 纤维有助降血脂
+          // V7.3: 反式脂肪收紧到 0g（高血脂应完全避免反式脂肪）
+          result.transFatLimit = 0;
           break;
 
         case HealthCondition.FATTY_LIVER:
           // 脂肪肝: 添加糖收紧，饱和脂肪收紧
           result.addedSugarLimit = Math.min(result.addedSugarLimit, 25);
           result.saturatedFatLimit = Math.min(result.saturatedFatLimit, 15);
+          // V7.3: 反式脂肪收紧到 0g（脂肪肝应完全避免反式脂肪）
+          result.transFatLimit = 0;
           break;
 
         // GOUT, CELIAC_DISEASE, IBS: 主要通过约束标签排除处理，营养目标不变

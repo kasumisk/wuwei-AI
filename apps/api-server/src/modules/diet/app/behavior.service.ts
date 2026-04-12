@@ -9,6 +9,7 @@ import {
 } from '../../../common/utils/timezone.util';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { BingeInterventionService } from '../admin/binge-intervention.service';
+import { t } from './recommendation/i18n-messages';
 
 export interface ProactiveReminder {
   type: 'binge_risk' | 'meal_reminder' | 'streak_warning' | 'pattern_alert';
@@ -203,21 +204,25 @@ export class BehaviorService {
     });
     if (!profile) return '';
 
-    const parts: string[] = ['【用户行为画像】'];
+    const parts: string[] = [t('behavior.prompt.sectionHeader')];
     const foodPreferences = profile.food_preferences as any;
     if (foodPreferences?.loves?.length) {
-      parts.push(`- 偏好食物：${foodPreferences.loves.join('、')}`);
+      parts.push(
+        `${t('behavior.prompt.preferredFoods')}${foodPreferences.loves.join(t('behavior.prompt.separator'))}`,
+      );
     }
     const bingeRiskHours = profile.binge_risk_hours as any;
     if (bingeRiskHours?.length) {
       parts.push(
-        `- 容易暴食时段：${bingeRiskHours.map((h: number) => h + ':00').join('、')}`,
+        `${t('behavior.prompt.bingePeriods')}${bingeRiskHours.map((h: number) => h + ':00').join(t('behavior.prompt.separator'))}`,
       );
     }
     parts.push(
-      `- 建议执行率：${Math.round((Number(profile.avg_compliance_rate) || 0) * 100)}%`,
+      `${t('behavior.prompt.suggestionRate')}${Math.round((Number(profile.avg_compliance_rate) || 0) * 100)}%`,
     );
-    parts.push(`- 连续达标天数：${profile.streak_days} 天`);
+    parts.push(
+      `${t('behavior.prompt.streakDays')}${profile.streak_days}${t('behavior.prompt.streakUnit')}`,
+    );
 
     return parts.join('\n');
   }
@@ -238,7 +243,7 @@ export class BehaviorService {
     if (bingeRiskHours?.includes(hour)) {
       const reminder: ProactiveReminder = {
         type: 'binge_risk',
-        message: '你这个时间容易想吃零食，可以提前喝杯水或准备低热量替代',
+        message: t('behavior.notification.snackReminder'),
         urgency: 'high',
       };
 
@@ -260,7 +265,9 @@ export class BehaviorService {
     if (remaining > 0 && remaining < goal * 0.15 && hour < 20) {
       return {
         type: 'pattern_alert',
-        message: `剩余 ${remaining} kcal，注意控制后续饮食`,
+        message: t('behavior.notification.remainingCalories', {
+          remaining: String(remaining),
+        }),
         urgency: 'medium',
       };
     }
@@ -269,7 +276,7 @@ export class BehaviorService {
     if (hour >= 12 && hour <= 14 && summary.mealCount === 0) {
       return {
         type: 'meal_reminder',
-        message: '别忘了记录午餐，让 AI 帮你规划下午和晚上的饮食',
+        message: t('behavior.notification.lunchReminder'),
         urgency: 'low',
       };
     }
@@ -280,7 +287,9 @@ export class BehaviorService {
       if (caloriePercent > 0.9 && caloriePercent <= 1.0) {
         return {
           type: 'streak_warning',
-          message: `已连续达标 ${profile.streak_days} 天，今天差一点就超标了，注意控制！`,
+          message: t('behavior.notification.streakWarning', {
+            streakDays: String(profile.streak_days),
+          }),
           urgency: 'high',
         };
       }

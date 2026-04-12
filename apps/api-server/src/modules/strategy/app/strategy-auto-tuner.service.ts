@@ -1,21 +1,32 @@
 /**
- * V6.5 Phase 2F — 策略自动调优服务
+ * V6.8 Phase 2-C — 策略自动调优服务（Redis 同步升级）
  *
- * 每周一凌晨 04:00 执行：
+ * V6.8 变更:
+ * - SEGMENT_STRATEGY_MAP 从 module-level 常量迁移到 Redis Hash（支持多实例同步）
+ * - 新增 SegmentStrategyStore（本地缓存 + Redis Hash + 版本号 + Pub/Sub 失效）
+ * - 最小样本量从 5 提升到 30
+ * - 新增 Wilson score interval 显著性检验
+ *
+ * 定时任务:
+ *   每周一凌晨 04:00 执行：
  *   1. 分析过去 7 天各 segment 在各策略下的接受率
- *   2. 找出每个 segment 表现最佳的策略
- *   3. 与当前 SEGMENT_STRATEGY_MAP 对比，生成调优建议
- *   4. 高置信度（提升 > 50%）：自动应用；低置信度：仅记录日志
- *
- * 同时提供 calcAdaptiveExplorationRate() 供推荐引擎动态调整探索率。
+ *   2. 找出每个 segment 表现最佳的策略（Wilson lower bound）
+ *   3. 与当前映射对比，生成调优建议
+ *   4. 高置信度（实验组 Wilson lower > 对照 Wilson upper）：自动应用；低置信度：仅记录日志
  *
  * 依赖:
  *   - PrismaService: 查询 traces/feedbacks/user_profiles_extended
- *   - StrategySelectorService: 获取当前映射、执行策略重分配
+ *   - RedisCacheService: 存储 segment→strategy 映射，支持跨实例同步
  */
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../../core/prisma/prisma.service';
+import { RedisCacheService } from '../../../core/redis/redis-cache.service';
 
 // ==================== 类型 ====================
 
@@ -47,17 +58,27 @@ export interface AutoTuneResult {
   skippedCount: number;
 }
 
-// ==================== 当前映射（与 StrategySelectorService 保持一致） ====================
+/** V6.8: segment→strategy 映射条目 */
+interface SegmentMapping {
+  strategyKey: string;
+  appliedAt: string;
+  source: 'default' | 'auto_tuner' | 'db_restore';
+}
 
-/**
- * 运行时可变的 segment → strategy 映射。
- * 初始值与 StrategySelectorService.SEGMENT_STRATEGY_MAP 保持一致。
- * 自动调优时直接修改此映射。
- *
- * V6.6 Phase 1-C: 启动时从 strategy_tuning_log 恢复最新的自动应用记录，
- * 重启后不再回退到硬编码默认值。
- */
-const SEGMENT_STRATEGY_MAP: Record<string, string> = {
+// ==================== V6.8: Redis key 常量 ====================
+
+/** Redis Hash key: 存储所有 segment→strategy 映射 */
+const REDIS_SEGMENT_MAP_KEY = 'strategy:segment_map';
+/** Redis key: 版本号（用于本地缓存失效） */
+const REDIS_SEGMENT_VERSION_KEY = 'strategy:segment_map:version';
+/** Redis Pub/Sub channel: 映射更新通知 */
+const REDIS_MAPPING_CHANNEL = 'strategy:mapping:updated';
+
+/** V6.8: 最小样本量（从 5 提升到 30） */
+const MIN_SAMPLE_SIZE = 30;
+
+/** 默认初始映射（首次启动或 Redis 不可用时使用） */
+const DEFAULT_SEGMENT_MAP: Record<string, string> = {
   new_user: 'warm_start',
   returning_user: 're_engage',
   disciplined_loser: 'precision',
@@ -68,53 +89,141 @@ const SEGMENT_STRATEGY_MAP: Record<string, string> = {
 };
 
 @Injectable()
-export class StrategyAutoTuner implements OnModuleInit {
+export class StrategyAutoTuner implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(StrategyAutoTuner.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  // ── V6.8: 本地缓存（避免每次读 Redis） ──
+  private localCache = new Map<string, SegmentMapping>();
+  private localVersion = 0;
 
-  // ==================== 启动恢复 ====================
+  /** V6.8: Pub/Sub 订阅客户端（独立于主连接） */
+  private subscriber: any = null;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly redis: RedisCacheService,
+  ) {}
+
+  // ==================== 启动与销毁 ====================
 
   /**
-   * V6.6 Phase 1-C: 从 strategy_tuning_log 恢复最新的自动应用记录
-   *
-   * 每个 segment 只取最近一次 auto_applied=true 的记录，
-   * 将 new_strategy 写入内存映射，恢复上次调优结果。
+   * V6.8: 启动时初始化映射
+   * 1. 从 Redis Hash 加载现有映射（如果有）
+   * 2. 如果 Redis 无数据，从 DB strategy_tuning_log 恢复
+   * 3. 如果都没有，写入默认映射到 Redis
+   * 4. 订阅 Pub/Sub 通知
    */
   async onModuleInit(): Promise<void> {
     try {
-      // 取所有 auto_applied=true 的记录，按时间倒序
-      const allApplied = await this.prisma.strategy_tuning_log.findMany({
-        where: { auto_applied: true },
-        orderBy: { created_at: 'desc' },
-        select: { segment_name: true, new_strategy: true, created_at: true },
-      });
-
-      // 每个 segment 只取最新一条（findMany 已按 desc 排序）
-      const recovered = new Set<string>();
-      for (const log of allApplied) {
-        if (!recovered.has(log.segment_name)) {
-          SEGMENT_STRATEGY_MAP[log.segment_name] = log.new_strategy;
-          recovered.add(log.segment_name);
-        }
-      }
-
-      if (recovered.size > 0) {
+      // 尝试从 Redis 加载
+      const loaded = await this.loadFromRedis();
+      if (loaded) {
         this.logger.log(
-          `StrategyAutoTuner: 从 DB 恢复了 ${recovered.size} 个分群的策略映射: ` +
-            `[${Array.from(recovered).join(', ')}]`,
+          `SegmentStrategyStore: 从 Redis 加载了 ${this.localCache.size} 个映射`,
         );
       } else {
-        this.logger.log(
-          'StrategyAutoTuner: 无历史调优记录，使用硬编码默认映射',
-        );
+        // Redis 无数据 → 从 DB 恢复
+        await this.restoreFromDb();
       }
+
+      // 订阅 Pub/Sub（异步，不阻塞启动）
+      this.subscribeToPubSub().catch((err) => {
+        this.logger.warn(
+          `Pub/Sub 订阅失败（不影响功能）: ${(err as Error).message}`,
+        );
+      });
     } catch (err) {
-      // 恢复失败不阻塞启动，使用默认映射继续运行
       this.logger.warn(
-        `StrategyAutoTuner: 启动恢复失败，使用默认映射: ${(err as Error).message}`,
+        `StrategyAutoTuner: 启动初始化失败，使用默认映射: ${(err as Error).message}`,
       );
+      this.seedDefaults();
     }
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    if (this.subscriber) {
+      try {
+        await this.subscriber.unsubscribe(REDIS_MAPPING_CHANNEL);
+        this.subscriber.disconnect();
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  // ==================== V6.8: 映射读写（本地缓存 + Redis） ====================
+
+  /**
+   * V6.8: 获取 segment 的策略映射
+   * 读取流程: 本地缓存 → (版本检查) → Redis → 默认值
+   */
+  async getCurrentMappingAsync(segment: string): Promise<string> {
+    await this.ensureFresh();
+    return (
+      this.localCache.get(segment)?.strategyKey ??
+      DEFAULT_SEGMENT_MAP[segment] ??
+      'balanced'
+    );
+  }
+
+  /**
+   * 获取当前 segment → strategy 映射（同步版，从本地缓存读取）
+   * 注意: 首次调用前需确保 onModuleInit 已完成
+   */
+  getCurrentMapping(segment: string): string | undefined {
+    return (
+      this.localCache.get(segment)?.strategyKey ?? DEFAULT_SEGMENT_MAP[segment]
+    );
+  }
+
+  /**
+   * 获取当前所有映射（供 Admin API 展示）
+   */
+  async getAllMappings(): Promise<Record<string, string>> {
+    await this.ensureFresh();
+    const result: Record<string, string> = { ...DEFAULT_SEGMENT_MAP };
+    for (const [k, v] of this.localCache) {
+      result[k] = v.strategyKey;
+    }
+    return result;
+  }
+
+  /**
+   * V6.8: 设置 segment→strategy 映射（写 Redis + Pub/Sub 通知）
+   */
+  async setMapping(
+    segment: string,
+    strategyKey: string,
+    source: 'auto_tuner' | 'db_restore' = 'auto_tuner',
+  ): Promise<void> {
+    const mapping: SegmentMapping = {
+      strategyKey,
+      appliedAt: new Date().toISOString(),
+      source,
+    };
+
+    // 1. 写 Redis Hash
+    await this.redis.hSet(
+      REDIS_SEGMENT_MAP_KEY,
+      segment,
+      JSON.stringify(mapping),
+    );
+
+    // 2. 自增版本号
+    await this.redis.incr(REDIS_SEGMENT_VERSION_KEY);
+
+    // 3. Pub/Sub 通知其他实例
+    try {
+      if (this.redis.isConnected) {
+        const client = this.redis.getClient();
+        await client.publish(REDIS_MAPPING_CHANNEL, segment);
+      }
+    } catch {
+      // Pub/Sub 失败不影响功能，其他实例会通过版本号同步
+    }
+
+    // 4. 更新本地缓存
+    this.localCache.set(segment, mapping);
   }
 
   // ==================== 定时任务入口 ====================
@@ -143,22 +252,30 @@ export class StrategyAutoTuner implements OnModuleInit {
       };
     }
 
-    // 2. 找出每个 segment 的最佳策略
+    // 2. V6.8: 找出每个 segment 的最佳策略（使用 Wilson lower bound）
     const segmentBest = new Map<
       string,
-      { strategyName: string; rate: number; feedbacks: number }
+      {
+        strategyName: string;
+        rate: number;
+        feedbacks: number;
+        wilsonLower: number;
+      }
     >();
 
     for (const row of stats) {
-      // 需要足够样本量（至少 5 条反馈）
-      if (row.totalFeedbacks < 5) continue;
+      // V6.8: 最小样本量从 5 提升到 30
+      if (row.totalFeedbacks < MIN_SAMPLE_SIZE) continue;
+
+      const wLower = this.wilsonLower(row.acceptedCount, row.totalFeedbacks);
 
       const current = segmentBest.get(row.segmentName);
-      if (!current || row.acceptanceRate > current.rate) {
+      if (!current || wLower > current.wilsonLower) {
         segmentBest.set(row.segmentName, {
           strategyName: row.strategyName,
           rate: row.acceptanceRate,
           feedbacks: row.totalFeedbacks,
+          wilsonLower: wLower,
         });
       }
     }
@@ -170,11 +287,21 @@ export class StrategyAutoTuner implements OnModuleInit {
       if (!currentStrategy) continue;
 
       if (currentStrategy !== best.strategyName && best.rate > 0.3) {
-        // 查找当前策略在同一 segment 的接受率
-        const currentRate = this.getStatsRate(stats, segment, currentStrategy);
+        // V6.8: 使用 Wilson interval 比较
+        const currentStats = stats.find(
+          (s) =>
+            s.segmentName === segment && s.strategyName === currentStrategy,
+        );
+        const currentRate = currentStats?.acceptanceRate ?? 0;
+        const currentWilsonUpper = currentStats
+          ? this.wilsonUpper(
+              currentStats.acceptedCount,
+              currentStats.totalFeedbacks,
+            )
+          : 0;
 
-        // 仅在新策略接受率比当前高 20%+ 时建议切换
-        if (best.rate > currentRate * 1.2) {
+        // V6.8: 只有当实验组 Wilson lower > 对照 Wilson upper 才判定显著
+        if (best.wilsonLower > currentWilsonUpper) {
           suggestions.push({
             segment,
             currentStrategy,
@@ -187,7 +314,7 @@ export class StrategyAutoTuner implements OnModuleInit {
       }
     }
 
-    // 4. 自动应用高置信度调整，低置信度仅记录
+    // 4. 自动应用高置信度调整
     let appliedCount = 0;
     let skippedCount = 0;
 
@@ -199,7 +326,8 @@ export class StrategyAutoTuner implements OnModuleInit {
       await this.logTuningDecision(suggestion, isHighConfidence);
 
       if (isHighConfidence) {
-        this.applyStrategySwitch(suggestion);
+        // V6.8: 写入 Redis（替代内存修改）
+        await this.setMapping(suggestion.segment, suggestion.suggestedStrategy);
         appliedCount++;
         this.logger.log(
           `自动策略切换: ${suggestion.segment} ` +
@@ -255,29 +383,181 @@ export class StrategyAutoTuner implements OnModuleInit {
     return Math.max(0.02, baseRate * interactionDecay * convergenceDecay);
   }
 
-  // ==================== 查询分析 ====================
+  // ==================== V6.8: Wilson Score Interval ====================
 
   /**
-   * 获取当前 segment → strategy 映射
+   * V6.8: Wilson score interval — lower bound
+   * 用于保守估计真实接受率的下界
+   *
+   * @param successes 成功次数
+   * @param total 总次数
+   * @param z Z 值（默认 1.96 = 95% 置信度）
    */
-  getCurrentMapping(segment: string): string | undefined {
-    return SEGMENT_STRATEGY_MAP[segment];
+  private wilsonLower(successes: number, total: number, z = 1.96): number {
+    if (total === 0) return 0;
+    const p = successes / total;
+    const denominator = 1 + (z * z) / total;
+    const center = p + (z * z) / (2 * total);
+    const spread = z * Math.sqrt((p * (1 - p) + (z * z) / (4 * total)) / total);
+    return (center - spread) / denominator;
   }
 
   /**
-   * 获取当前所有映射（供 Admin API 展示）
+   * V6.8: Wilson score interval — upper bound
+   * 用于乐观估计真实接受率的上界
    */
-  getAllMappings(): Record<string, string> {
-    return { ...SEGMENT_STRATEGY_MAP };
+  private wilsonUpper(successes: number, total: number, z = 1.96): number {
+    if (total === 0) return 0;
+    const p = successes / total;
+    const denominator = 1 + (z * z) / total;
+    const center = p + (z * z) / (2 * total);
+    const spread = z * Math.sqrt((p * (1 - p) + (z * z) / (4 * total)) / total);
+    return (center + spread) / denominator;
+  }
+
+  // ==================== 内部方法 ====================
+
+  /**
+   * V6.8: 从 Redis Hash 加载所有映射到本地缓存
+   * @returns true 如果 Redis 有数据
+   */
+  private async loadFromRedis(): Promise<boolean> {
+    const all = await this.redis.hGetAll(REDIS_SEGMENT_MAP_KEY);
+    if (!all || Object.keys(all).length === 0) return false;
+
+    this.localCache.clear();
+    for (const [k, v] of Object.entries(all)) {
+      try {
+        this.localCache.set(k, JSON.parse(v));
+      } catch {
+        // 跳过无法解析的条目
+      }
+    }
+
+    // 同步版本号
+    const versionStr = await this.redis.get<number>(REDIS_SEGMENT_VERSION_KEY);
+    this.localVersion = versionStr ?? 0;
+
+    return this.localCache.size > 0;
+  }
+
+  /**
+   * V6.8: 确保本地缓存是最新的（通过版本号比对）
+   * 如果 Redis 版本号 > 本地版本号，重新加载
+   */
+  private async ensureFresh(): Promise<void> {
+    if (!this.redis.isConnected) return;
+
+    try {
+      const remoteVersion = await this.redis.get<number>(
+        REDIS_SEGMENT_VERSION_KEY,
+      );
+      const rv = remoteVersion ?? 0;
+      if (rv > this.localVersion) {
+        await this.loadFromRedis();
+      }
+    } catch {
+      // 版本检查失败，继续使用本地缓存
+    }
+  }
+
+  /**
+   * V6.6 → V6.8: 从 DB strategy_tuning_log 恢复最新的自动应用记录
+   * 恢复后写入 Redis Hash
+   */
+  private async restoreFromDb(): Promise<void> {
+    try {
+      const allApplied = await this.prisma.strategy_tuning_log.findMany({
+        where: { auto_applied: true },
+        orderBy: { created_at: 'desc' },
+        select: { segment_name: true, new_strategy: true, created_at: true },
+      });
+
+      // 先加载默认映射
+      this.seedDefaults();
+
+      // 每个 segment 只取最新一条
+      const recovered = new Set<string>();
+      for (const log of allApplied) {
+        if (!recovered.has(log.segment_name)) {
+          const mapping: SegmentMapping = {
+            strategyKey: log.new_strategy,
+            appliedAt: log.created_at.toISOString(),
+            source: 'db_restore',
+          };
+          this.localCache.set(log.segment_name, mapping);
+          recovered.add(log.segment_name);
+        }
+      }
+
+      // 写入 Redis Hash
+      for (const [segment, mapping] of this.localCache) {
+        await this.redis.hSet(
+          REDIS_SEGMENT_MAP_KEY,
+          segment,
+          JSON.stringify(mapping),
+        );
+      }
+      await this.redis.incr(REDIS_SEGMENT_VERSION_KEY);
+      this.localVersion++;
+
+      if (recovered.size > 0) {
+        this.logger.log(
+          `SegmentStrategyStore: 从 DB 恢复了 ${recovered.size} 个映射并写入 Redis`,
+        );
+      } else {
+        this.logger.log('SegmentStrategyStore: 无历史调优记录，使用默认映射');
+      }
+    } catch (err) {
+      this.logger.warn(`DB 恢复失败，使用默认映射: ${(err as Error).message}`);
+      this.seedDefaults();
+    }
+  }
+
+  /**
+   * 将默认映射加载到本地缓存
+   */
+  private seedDefaults(): void {
+    this.localCache.clear();
+    for (const [segment, strategy] of Object.entries(DEFAULT_SEGMENT_MAP)) {
+      this.localCache.set(segment, {
+        strategyKey: strategy,
+        appliedAt: new Date().toISOString(),
+        source: 'default',
+      });
+    }
+  }
+
+  /**
+   * V6.8: 订阅 Pub/Sub 通知（跨实例同步）
+   * 收到消息时刷新本地缓存版本号，下次 ensureFresh 时重新加载
+   */
+  private async subscribeToPubSub(): Promise<void> {
+    if (!this.redis.isConnected) return;
+
+    try {
+      // ioredis: 订阅需要用独立连接（duplicate）
+      const client = this.redis.getClient();
+      this.subscriber = client.duplicate();
+
+      await this.subscriber.subscribe(REDIS_MAPPING_CHANNEL);
+
+      this.subscriber.on('message', (_channel: string, _message: string) => {
+        // 收到通知 → 将本地版本号置零，下次 ensureFresh 时重新加载
+        this.localVersion = 0;
+        this.logger.debug(
+          `Pub/Sub: 收到映射更新通知 (segment=${_message})，下次读取将刷新缓存`,
+        );
+      });
+
+      this.logger.debug('Pub/Sub: 已订阅策略映射更新通知');
+    } catch (err) {
+      this.logger.warn(`Pub/Sub 订阅失败: ${(err as Error).message}`);
+    }
   }
 
   /**
    * 查询过去 N 天各 segment × strategy 的效果统计
-   *
-   * 通过 JOIN：
-   *   recommendation_traces (strategy_id) →
-   *   recommendation_feedbacks (trace_id) →
-   *   user_profiles_extended (user_segment)
    */
   private async querySegmentStrategyStats(
     startDate: Date,
@@ -337,13 +617,6 @@ export class StrategyAutoTuner implements OnModuleInit {
       (s) => s.segmentName === segment && s.strategyName === strategyName,
     );
     return match?.acceptanceRate ?? 0;
-  }
-
-  /**
-   * 应用策略切换（内存级别）
-   */
-  private applyStrategySwitch(suggestion: TuningSuggestion): void {
-    SEGMENT_STRATEGY_MAP[suggestion.segment] = suggestion.suggestedStrategy;
   }
 
   /**

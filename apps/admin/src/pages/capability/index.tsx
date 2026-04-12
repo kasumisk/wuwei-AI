@@ -5,7 +5,7 @@ export const routeConfig = {
   name: 'CapabilityManagement',
   title: '能力管理',
   icon: <ApiOutlined />,
-  order: 3,
+  order: 98,
   hideInMenu: false,
   requireAuth: true,
   requireAdmin: true,

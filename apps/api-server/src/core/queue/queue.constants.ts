@@ -35,6 +35,9 @@ export const QUEUE_NAMES = {
 
   /** V6.5 Phase 3B: 食物 Embedding 异步生成 */
   EMBEDDING_GENERATION: 'embedding-generation',
+
+  /** V6.6: 食物数据 AI 补全回填 */
+  FOOD_ENRICHMENT: 'food-enrichment',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -97,5 +100,11 @@ export const QUEUE_DEFAULT_OPTIONS: Record<
     maxRetries: 2,
     backoffType: 'exponential',
     backoffDelay: 2000,
+  },
+  [QUEUE_NAMES.FOOD_ENRICHMENT]: {
+    concurrency: 3,
+    maxRetries: 2,
+    backoffType: 'exponential',
+    backoffDelay: 5000,
   },
 };

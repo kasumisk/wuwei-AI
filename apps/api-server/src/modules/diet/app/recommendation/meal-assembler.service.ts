@@ -10,6 +10,7 @@ import { ScoredRecipe } from '../../../recipe/recipe.types';
 import { AssemblyPolicyConfig } from '../../../strategy/strategy.types';
 import { t } from './i18n-messages';
 import { ExplanationGeneratorService } from './explanation-generator.service';
+import { PreferenceProfileService } from './preference-profile.service';
 
 @Injectable()
 export class MealAssemblerService {
@@ -17,6 +18,7 @@ export class MealAssemblerService {
 
   constructor(
     private readonly explanationGenerator: ExplanationGeneratorService,
+    private readonly preferenceProfileService: PreferenceProfileService,
   ) {}
 
   /**
@@ -111,20 +113,16 @@ export class MealAssemblerService {
   /**
    * Thompson Sampling 探索（V6 2.6: 自适应探索范围）
    *
+   * V7.2 P2-G: 采样逻辑委托给 PreferenceProfileService.sampleBeta()，
+   * 消除了与 PreferenceProfileService 之间的代码重复。
+   * Phase 3 (P3-A) ScoringChain 集成后此方法可完全移除。
+   *
    * 每个食物从 Beta(α, β) 分布中采样一个探索系数 ∈ [0, 1]，
    * 映射到 [minMult, maxMult] 后乘以原始分数，再排序。
    *
-   * - 新食物（无反馈）→ Beta(1,1) = 均匀分布 → 探索系数随机 → 有机会被推到前面
-   * - 多次接受的食物 → Beta(大α, 小β) → 采样集中在高端 → 稳定加分
-   * - 多次拒绝的食物 → Beta(小α, 大β) → 采样集中在低端 → 自然沉底
-   *
-   * V6 2.6: explorationRange 参数由推荐引擎根据用户成熟度自适应计算
-   * - 新用户: [0.3, 1.7] — 高探索
-   * - 成熟用户: [0.7, 1.3] — 高利用
-   *
    * @param scored 已评分的食物列表
    * @param feedbackStats 每个食物名的反馈统计 {accepted, rejected}
-   * @param explorationRange 探索系数映射范围 [min, max]（默认 [0.5, 1.5]，向后兼容）
+   * @param explorationRange 探索系数映射范围 [min, max]（默认 [0.5, 1.5]）
    */
   addExploration(
     scored: ScoredFood[],
@@ -138,8 +136,8 @@ export class MealAssemblerService {
         // Beta 先验: α = accepted + 1, β = rejected + 1
         const alpha = (stats?.accepted ?? 0) + 1;
         const beta = (stats?.rejected ?? 0) + 1;
-        // 从 Beta(α, β) 采样，映射到 [minMult, maxMult] 作为探索系数
-        const sample = this.sampleBeta(alpha, beta);
+        // 委托给 PreferenceProfileService 的采样实现
+        const sample = this.preferenceProfileService.sampleBeta(alpha, beta);
         const explorationMultiplier = minMult + sample * (maxMult - minMult);
         return {
           ...sf,
@@ -147,60 +145,6 @@ export class MealAssemblerService {
         };
       })
       .sort((a, b) => b.score - a.score);
-  }
-
-  /**
-   * Beta 分布采样 — Jöhnk's algorithm
-   * 对于 α,β 均较小的场景（典型反馈次数 <100），该算法高效且精确
-   */
-  private sampleBeta(alpha: number, beta: number): number {
-    // 特殊情况: Beta(1,1) = Uniform(0,1)
-    if (alpha === 1 && beta === 1) return Math.random();
-
-    const gammaA = this.sampleGamma(alpha);
-    const gammaB = this.sampleGamma(beta);
-    const sum = gammaA + gammaB;
-    if (sum === 0) return 0.5;
-    return gammaA / sum;
-  }
-
-  /**
-   * Gamma 分布采样 — Marsaglia & Tsang's method
-   * 用于通过 Gamma 采样构造 Beta 分布: Beta(a,b) = Ga(a) / (Ga(a) + Ga(b))
-   */
-  private sampleGamma(shape: number): number {
-    if (shape < 1) {
-      // shape < 1: 用 shape+1 采样后做幂变换
-      const g = this.sampleGamma(shape + 1);
-      return g * Math.pow(Math.random(), 1 / shape);
-    }
-
-    // Marsaglia & Tsang's method for shape >= 1
-    const d = shape - 1 / 3;
-    const c = 1 / Math.sqrt(9 * d);
-
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-      let x: number;
-      let v: number;
-      do {
-        x = this.sampleStdNormal();
-        v = 1 + c * x;
-      } while (v <= 0);
-
-      v = v * v * v;
-      const u = Math.random();
-
-      if (u < 1 - 0.0331 * (x * x) * (x * x)) return d * v;
-      if (Math.log(u) < 0.5 * x * x + d * (1 - v + Math.log(v))) return d * v;
-    }
-  }
-
-  /** Box-Muller 标准正态分布采样 */
-  private sampleStdNormal(): number {
-    const u1 = Math.random();
-    const u2 = Math.random();
-    return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
   }
 
   /**
@@ -484,7 +428,7 @@ export class MealAssemblerService {
       code: `recipe_${recipe.id.slice(0, 8)}`,
       name: recipe.name,
       status: 'active',
-      category: recipe.cuisine || '菜谱',
+      category: recipe.cuisine || t('meal.recipe.categoryFallback'),
       calories: recipe.caloriesPerServing ?? 0,
       protein: recipe.proteinPerServing ?? 0,
       fat: recipe.fatPerServing ?? 0,
@@ -498,7 +442,9 @@ export class MealAssemblerService {
       tags: recipe.tags ?? [],
       compatibility: {},
       standardServingG: 100,
-      standardServingDesc: `${recipe.servings}人份`,
+      standardServingDesc: t('meal.recipe.servings', {
+        servings: String(recipe.servings),
+      }),
       commonPortions: [],
       primarySource: 'recipe',
       dataVersion: 1,
@@ -538,11 +484,13 @@ export class MealAssemblerService {
     const sorted = [...candidates].sort((a, b) => {
       // 蔬菜类优先（热量缺口主要靠蔬菜/主食补充）
       const aIsVeg =
-        a.food.category?.includes('蔬菜') || a.food.category?.includes('veggie')
+        a.food.category?.includes(t('meal.recipe.vegetable')) ||
+        a.food.category?.includes('veggie')
           ? 1
           : 0;
       const bIsVeg =
-        b.food.category?.includes('蔬菜') || b.food.category?.includes('veggie')
+        b.food.category?.includes(t('meal.recipe.vegetable')) ||
+        b.food.category?.includes('veggie')
           ? 1
           : 0;
       if (aIsVeg !== bIsVeg) return bIsVeg - aIsVeg;

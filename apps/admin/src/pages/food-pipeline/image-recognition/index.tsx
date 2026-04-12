@@ -55,6 +55,17 @@ const ImageRecognitionPage: React.FC = () => {
   });
 
   const handleUpload = (file: File) => {
+    // 文件类型校验
+    if (!file.type.startsWith('image/')) {
+      message.error('仅支持图片文件（JPG、PNG、WebP 等）');
+      return false;
+    }
+    // 文件大小校验：最大 5MB
+    const MAX_SIZE_MB = 5;
+    if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+      message.error(`图片大小不能超过 ${MAX_SIZE_MB}MB`);
+      return false;
+    }
     // Preview
     const reader = new FileReader();
     reader.onload = (e) => setPreviewSrc(e.target?.result as string);

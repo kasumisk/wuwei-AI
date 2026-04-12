@@ -14,8 +14,199 @@ import type { HealthModifierContext } from './health-modifier-engine.service';
 import type { HealthModifierResult } from './health-modifier-engine.service';
 import type { NutritionTargets } from './nutrition-target.service';
 import type { LifestyleNutrientAdjustment } from './lifestyle-scoring-adapter.service';
+import type { EffectiveGoal } from '../../../user/app/goal-phase.service';
+import type { GoalProgress } from '../../../user/app/goal-tracker.service';
+import type { DomainProfiles } from '../../../user/domain/profile-factory';
+import type { PreferencesProfile } from '../../../user/domain/preferences-profile';
+import type { KitchenProfile } from '../../../user/user.types';
 
 // ==================== 类型 ====================
+
+// -------------------- V6.9 Phase 1-A: 场景化推荐 --------------------
+
+/**
+ * V6.9 Phase 1-A: 场景类型枚举
+ *
+ * 12 种用餐场景，由 SceneResolver 根据 (渠道 × 餐次 × 行为学习) 推断。
+ * 每种场景携带默认的时间/烹饪/标签约束（见 SceneConstraints）。
+ */
+export type SceneType =
+  | 'quick_breakfast'
+  | 'leisurely_brunch'
+  | 'office_lunch'
+  | 'home_cooking'
+  | 'eating_out'
+  | 'convenience_meal'
+  | 'canteen_meal'
+  | 'post_workout'
+  | 'late_night_snack'
+  | 'family_dinner'
+  | 'meal_prep'
+  | 'general';
+
+/**
+ * V6.9 Phase 1-A: 场景约束
+ *
+ * 每种 SceneType 对应一组默认约束（可被 ScoringConfigSnapshot 覆盖）。
+ * 约束字段均为可选 — null 表示"不限制"。
+ */
+export interface SceneConstraints {
+  /** 最大备料时间（分钟），null=不限 */
+  maxPrepTime?: number | null;
+  /** 最大烹饪时间（分钟），null=不限 */
+  maxCookTime?: number | null;
+  /** 偏好的烹饪方式 */
+  preferredCookingMethods?: string[];
+  /** 偏好的食物标签 */
+  preferredTags?: string[];
+  /** 排除的食物标签 */
+  excludedTags?: string[];
+  /** 份数（1=单人，3=家庭，5=批量备餐） */
+  servingCount?: number;
+  /** 是否要求便携（如带饭） */
+  portable?: boolean;
+}
+
+/**
+ * V6.9 Phase 1-A: 场景上下文
+ *
+ * SceneResolver.resolve() 的返回值。
+ * 替代原有的 AcquisitionChannel 单一值，包含渠道+场景+置信度+约束。
+ * 下游消费者：RealisticFilter、FoodScorer(executability)、ExplanationGenerator。
+ */
+export interface SceneContext {
+  /** 获取渠道 */
+  channel: AcquisitionChannel;
+  /** 场景类型 */
+  sceneType: SceneType;
+  /** 现实性严格度 — strict: 严格过滤 / normal: 标准 / relaxed: 宽松 / off: 关闭 (V7.2) */
+  realismLevel: RealismLevel;
+  /** 推断置信度 [0,1]，<0.6 时应退化到 'general' */
+  confidence: number;
+  /** 推断来源 */
+  source: 'user_explicit' | 'behavior_learned' | 'rule_inferred' | 'default';
+  /** 该场景下的食物约束 */
+  sceneConstraints: SceneConstraints;
+}
+
+// -------------------- END V6.9 Phase 1-A --------------------
+
+// -------------------- V6.9 Phase 1-C: 渠道可获得性 --------------------
+
+/**
+ * V6.9 Phase 1-C: 渠道可获得性评分结果
+ *
+ * 由 AvailabilityScorerService 计算。
+ * 替代静态 commonalityScore，提供渠道感知的可获得性。
+ */
+export interface AvailabilityScore {
+  /** 在当前渠道下的可获得性 0-1（0=几乎买不到，1=随处可见） */
+  channelAvailability: number;
+  /** 综合可获得性（考虑渠道+季节+地区，Phase 3-E 扩展） */
+  overallAvailability: number;
+  /** 评分来源: food_data=食物有渠道标注, channel_default=渠道×品类矩阵, regional_enhanced=区域/季节增强, time_aware=时段感知, time_region_enhanced=时段+区域综合, fallback=兜底 */
+  source:
+    | 'food_data'
+    | 'channel_default'
+    | 'regional_enhanced'
+    | 'time_aware'
+    | 'time_region_enhanced'
+    | 'fallback';
+}
+
+// -------------------- END V6.9 Phase 1-C --------------------
+
+// -------------------- V6.9 Phase 2-A: 跨餐多样性上下文 --------------------
+
+/**
+ * V6.9 Phase 2-A: 日计划状态
+ *
+ * 在推荐多餐时追踪已推荐食物，对跨餐重复施加惩罚。
+ * 由 DailyPlanContextService 管理生命周期（createEmpty → updateAfterMeal）。
+ */
+export interface DailyPlanState {
+  /** 当日已推荐的食物 ID 集合 */
+  usedFoodIds: Set<string>;
+  /** 当日已推荐的食物名集合 */
+  usedFoodNames: Set<string>;
+  /** 当日已推荐的品类计数 */
+  categoryCounts: Record<string, number>;
+  /** 当日已推荐的烹饪方式计数 */
+  cookingMethodCounts: Record<string, number>;
+  /** 当日已推荐的主食材集合 */
+  usedMainIngredients: Set<string>;
+  /** 当日已累计的营养素 */
+  accumulatedNutrition: {
+    calories: number;
+    protein: number;
+    fat: number;
+    carbs: number;
+    fiber: number;
+  };
+
+  // ─── V7.1 Phase 1-D: 多样性追踪扩展 ───
+
+  /** V7.1: 风味统计（spicy, sweet, sour, savory, bland 等） */
+  flavorCounts: Record<string, number>;
+  /** V7.1: 温度统计（hot, cold, warm, room_temp） */
+  temperatureCounts: Record<string, number>;
+  /** V7.1: 已用菜系集合（用于跨餐菜系多样性） */
+  usedCuisines: Set<string>;
+  /** V7.1: 已完成餐数（用于跨餐联动计算） */
+  mealCount: number;
+}
+
+// -------------------- END V6.9 Phase 2-A --------------------
+
+// -------------------- V6.9 Phase 2-B: 结构化可解释性 --------------------
+
+/**
+ * V6.9 Phase 2-B: 洞察类型枚举
+ */
+export type InsightType =
+  | 'nutrient_contribution' // 营养素贡献（如"提供 35% 蛋白质目标"）
+  | 'goal_alignment' // 目标匹配度（如"符合减脂低碳策略"）
+  | 'health_benefit' // 健康收益（如"富含膳食纤维，有助消化"）
+  | 'diversity_note' // 多样性提示（如"今日首次出现海鲜类"）
+  | 'scene_match' // 场景匹配（如"适合快手早餐，仅需 10 分钟"）
+  | 'execution_tip' // 执行建议（如"可在前一天晚上备好食材"）
+  | 'goal_progress' // V7.0 Phase 3-D: 目标进度洞察（如"已完成减脂阶段 85%"）
+  | 'substitution_rationale' // V7.1 方向 4A: 替换解释（如"你常用烤鸡胸替代煎鸡胸"）
+  | 'cross_meal_context' // V7.1 方向 4A: 跨餐补偿（如"午餐蛋白不足，晚餐加强"）
+  | 'actionable_tip' // V7.1 方向 4A: 行动建议（如"建议搭配一份绿叶蔬菜"）
+  | 'contrastive'; // V7.1 方向 4B: 对比解释（如"推荐 A 而非 B，因为..."）
+
+/**
+ * V6.9 Phase 2-B: 洞察可视化数据
+ */
+export interface InsightVisualization {
+  /** 可视化类型 */
+  chartType: 'progress_bar' | 'pie_chart' | 'comparison' | 'badge';
+  /** 可视化数据 */
+  data: Record<string, number | string>;
+}
+
+/**
+ * V6.9 Phase 2-B: 结构化推荐洞察
+ *
+ * 在现有自然语言解释基础上，输出结构化的 insights 数据，前端可做可视化展示。
+ */
+export interface StructuredInsight {
+  /** 洞察类型 */
+  type: InsightType;
+  /** 洞察标题（i18n key） */
+  titleKey: string;
+  /** 洞察内容（i18n key + vars） */
+  contentKey: string;
+  /** 模板变量 */
+  vars: Record<string, string | number>;
+  /** 可视化数据（可选） */
+  visualization?: InsightVisualization;
+  /** 重要性 0-1 */
+  importance: number;
+}
+
+// -------------------- END V6.9 Phase 2-B --------------------
 
 /**
  * V6.4 Phase 3.2: 食物获取渠道枚举
@@ -198,6 +389,12 @@ export interface Constraint {
   excludeTags: string[];
   maxCalories: number;
   minProtein: number;
+  /** V6.8 Phase 3-A: 用户健康状况（用于硬约束排除） */
+  healthConditions?: string[];
+  /** V6.8 Phase 3-A: 就餐渠道（外卖/便利店/在家做） */
+  channel?: string;
+  /** V6.8 Phase 3-A: 用户烹饪技能等级（1-5） */
+  skillLevel?: number;
 }
 
 export interface ScoredFood {
@@ -238,7 +435,7 @@ export interface PipelineContext {
   userProfile?: UserProfileConstraints;
   preferenceProfile?: UserPreferenceProfile;
   regionalBoostMap?: Record<string, number>;
-  /** V4 Phase 4.4: 协同过滤推荐分（食物名 → 0~1） */
+  /** V4 Phase 4.4: 协同过滤推荐分（V6.7: food ID → 0~1） */
   cfScores?: Record<string, number>;
   /** V5 4.7: 在线学习后的权重覆盖（传递给 food-scorer） */
   weightOverrides?: number[] | null;
@@ -254,6 +451,34 @@ export interface PipelineContext {
   analysisProfile?: AnalysisShortTermProfile | null;
   /** V6.4 Phase 3.2: 当前推荐的获取渠道（用于候选池过滤） */
   channel?: AcquisitionChannel;
+  /** V6.9 Phase 1-E: 场景上下文（由 SceneResolver 解析，包含渠道、场景类型、约束等） */
+  sceneContext?: SceneContext;
+  /** V7.0 Phase 3-A: 解析后的有效目标（含复合目标 + 当前阶段 + 权重调整） */
+  effectiveGoal?: EffectiveGoal;
+  /** V7.0 Phase 3-A: 目标进度（热量/蛋白合规率、执行率、连续天数等） */
+  goalProgress?: GoalProgress | null;
+  /** V7.0 Phase 3-A: 领域画像（强类型营养画像 + 偏好画像） */
+  domainProfiles?: DomainProfiles;
+  /** V7.2 P2-C: 用户端现实策略覆盖（"今天想挑战一下" vs "今天想简单吃"） */
+  realismOverride?: {
+    level: RealismLevel;
+  };
+  /** V7.1 P3-A: 跨餐营养补偿调整（由 DailyPlanContextService.computeCrossMealAdjustment 产出） */
+  crossMealAdjustment?: CrossMealAdjustment;
+  /** V7.1 P3-B: 用户厨房设备画像（用于 HOME_COOK 场景设备过滤） */
+  kitchenProfile?: KitchenProfile | null;
+  /** V7.1 P3-D: 用户高频替换模式（供 PreferenceProfileService.computePreferenceSignal 使用） */
+  substitutions?: Array<{
+    fromFoodId: string;
+    fromFoodName: string;
+    toFoodId: string;
+    toFoodName: string;
+    frequency: number;
+  }>;
+  /** V7.3 P3-D: 匹配到的餐食模板（由 MealTemplateService.matchTemplate 设置） */
+  matchedTemplate?: import('./meal-template.types').MealTemplate;
+  /** V7.3 P3-E: Factor 强度用户调整（由 FactorLearner 提供） */
+  factorAdjustments?: import('./factor-learner.service').FactorAdjustmentMap;
 }
 
 export interface MealRecommendation {
@@ -273,10 +498,97 @@ export interface MealRecommendation {
   compositionScore?: {
     ingredientDiversity: number;
     cookingMethodDiversity: number;
-    flavorBalance: number;
+    /** V6.7 Phase 1-D: 替代原 flavorBalance */
+    flavorHarmony: number;
     nutritionComplementarity: number;
+    /** V6.7 Phase 2-C: 质感多样性 */
+    textureDiversity: number;
     overall: number;
   };
+  /** V6.8 Phase 3-F: 管道降级记录（如有阶段降级则记录） */
+  degradations?: PipelineDegradation[];
+  /** V6.9 Phase 1-B: 菜谱方案（如果成功组装） */
+  recipes?: AssembledRecipe[];
+  /** V6.9 Phase 1-B: 方案主题标签（如 "快手早餐"、"家常菜"） */
+  planTheme?: string;
+  /** V6.9 Phase 1-B: 执行难度 0-1（0=零准备，1=专业厨师级） */
+  executionDifficulty?: number;
+  /** V6.9 Phase 2-B: 结构化洞察列表 */
+  insights?: StructuredInsight[];
+  /** V7.0 Phase 3-D: 目标进度提示（如 "本周热量合规率 92%，继续保持"） */
+  goalProgressTip?: string;
+  /** V7.0 Phase 3-D: 阶段转换提示（如 "减脂期第 3 周，即将进入维持期"） */
+  phaseTransitionHint?: string;
+  /** V7.3 P3-D: 使用的模板 ID（如果匹配到模板） */
+  templateId?: string;
+  /** V7.3 P3-D: 每道菜的自然语言推荐理由 */
+  dishExplanations?: Array<{
+    primaryReason: string;
+    nutritionNote?: string;
+    sceneNote?: string;
+    narrative: string;
+  }>;
+}
+
+/**
+ * V6.9 Phase 1-B: 组装后的菜谱方案
+ *
+ * 由 RecipeAssemblerService 生成。可以是：
+ * - 数据库匹配的菜谱（isAssembled=false）：食材匹配率 >= 60%
+ * - 智能组装方案（isAssembled=true）：基于食材角色模板自动生成
+ */
+export interface AssembledRecipe {
+  /** 菜谱 ID（如果匹配到数据库菜谱） */
+  recipeId?: string;
+  /** 菜谱名称 */
+  name: string;
+  /** 组成食材（来自 ScoredFood） */
+  ingredients: ScoredFood[];
+  /** 总热量 */
+  totalCalories: number;
+  /** 总蛋白质 */
+  totalProtein: number;
+  /** 预估烹饪时间（分钟） */
+  estimatedCookTime: number;
+  /** 所需技能等级 */
+  skillLevel: string;
+  /** 适合的渠道 */
+  suitableChannels: AcquisitionChannel[];
+  /** 菜谱评分（综合营养+可执行性+匹配度） */
+  recipeScore: number;
+  /** 是否是智能组装的（vs 数据库匹配的） */
+  isAssembled: boolean;
+  /** V7.3 P2-D: 菜谱营养聚合（组合食材的总营养） */
+  recipeNutrition?: RecipeNutrition;
+}
+
+/**
+ * V7.3 P2-D: 菜谱组合营养数据
+ *
+ * 将菜谱中所有食材的营养素按份量加权聚合。
+ * 所有值基于食材的实际用量（非 per 100g）。
+ */
+export interface RecipeNutrition {
+  calories: number;
+  protein: number;
+  fat: number;
+  carbs: number;
+  fiber: number;
+  sodium: number;
+  saturatedFat: number;
+  transFat: number;
+  sugar: number;
+  addedSugar: number;
+  vitaminA: number;
+  vitaminC: number;
+  vitaminD: number;
+  vitaminE: number;
+  calcium: number;
+  iron: number;
+  potassium: number;
+  zinc: number;
+  magnesium: number;
+  cholesterol: number;
 }
 
 export interface UserProfileConstraints {
@@ -350,6 +662,14 @@ export interface EnrichedProfileContext extends UserProfileConstraints {
     hydrationGoal?: number | null;
     supplementsUsed?: string[] | null;
     mealTimingPreference?: string | null;
+    /** V6.8 Phase 1-B: 运动强度（'low'|'medium'|'high'） */
+    exerciseIntensity?: string | null;
+    /** V6.8 Phase 3-B: 饮酒频率 */
+    alcoholFrequency?: string | null;
+    /** V6.8 Phase 3-B: 年龄 */
+    age?: number | null;
+    /** V6.8 Phase 3-C: 声明层置信度 0-1（受新鲜度衰减影响） */
+    confidence?: number;
   } | null;
 
   /** 推断画像 — 系统计算的营养/行为推断 */
@@ -387,6 +707,48 @@ export interface EnrichedProfileContext extends UserProfileConstraints {
 
   /** V6.6 Phase 2-C: 生活方式营养素优先级调整 — 由 LifestyleScoringAdapter 生成 */
   lifestyleAdjustment?: Record<string, number> | null;
+
+  /** V6.8 Phase 1-D: 跨层冲突检测结果 */
+  conflicts: ProfileConflict[];
+
+  /** V6.8 Phase 1-D: 声明画像新鲜度 0-1（半年衰减到 0） */
+  profileFreshness: number;
+}
+
+/**
+ * V6.8 Phase 1-D: 画像冲突检测结果
+ *
+ * 在 ProfileResolver 的 5 层合并后检测跨层矛盾（如用户声明减脂但实际摄入超标），
+ * 记录冲突字段、双方值、解决策略及置信度，供下游评分/解释/trace 使用。
+ */
+export interface ProfileConflict {
+  /** 冲突字段标识 */
+  field: string;
+  /** 声明层的值 */
+  declaredValue: any;
+  /** 观察层的值 */
+  observedValue: any;
+  /** 解决策略 */
+  resolution: 'use_declared' | 'use_observed' | 'blend';
+  /** 置信度 0-1（基于观察数据量） */
+  confidence: number;
+  /** 冲突原因标识 */
+  reason: string;
+}
+
+/**
+ * V6.8 Phase 3-F: 管道阶段降级记录
+ *
+ * 当管道的某个阶段（Recall/Rank/Rerank 等）执行失败时，
+ * 记录降级信息供 trace/调试使用，而不是让整个推荐流程崩溃。
+ */
+export interface PipelineDegradation {
+  /** 降级的管道阶段 */
+  stage: string;
+  /** 降级原因（错误信息） */
+  reason: string;
+  /** 使用的降级策略 */
+  fallbackUsed: string;
 }
 
 /**
@@ -418,6 +780,12 @@ export interface LifestyleProfile {
   supplementsUsed?: string[] | null;
   /** V6.6 Phase 2-C: 用餐时间偏好 */
   mealTimingPreference?: string | null;
+  /** V6.8 Phase 3-B: 运动强度 */
+  exerciseIntensity?: 'none' | 'light' | 'moderate' | 'high' | null;
+  /** V6.8 Phase 3-B: 饮酒频率 */
+  alcoholFrequency?: 'never' | 'occasional' | 'frequent' | null;
+  /** V6.8 Phase 3-B: 年龄 */
+  age?: number | null;
 }
 
 /**
@@ -471,6 +839,32 @@ export interface MealFromPoolRequest {
   channel?: AcquisitionChannel;
   /** V6.5 Phase 3D: 用户 ID（供语义召回等异步服务使用） */
   userId?: string;
+  /** V6.9 Phase 1-E: 场景上下文（由 SceneResolver 解析） */
+  sceneContext?: SceneContext;
+  /** V6.9 Phase 2-D: 用户端现实策略覆盖（"今天想挑战一下" vs "今天想简单吃"） */
+  realismOverride?: {
+    level: RealismLevel;
+  };
+  /** V6.9 Phase 2-D: 日计划状态（跨餐多样性，由上游传入） */
+  dailyPlanState?: DailyPlanState;
+  /** V7.0 Phase 3-A: 解析后的有效目标（含复合目标 + 当前阶段 + 权重调整） */
+  effectiveGoal?: EffectiveGoal;
+  /** V7.0 Phase 3-A: 目标进度（热量/蛋白合规率、执行率、连续天数等） */
+  goalProgress?: GoalProgress | null;
+  /** V7.0 Phase 3-A: 领域画像（强类型营养画像 + 偏好画像） */
+  domainProfiles?: DomainProfiles;
+  /** V7.1 P3-A: 跨餐营养补偿调整 */
+  crossMealAdjustment?: CrossMealAdjustment;
+  /** V7.1 P3-B: 用户厨房设备画像 */
+  kitchenProfile?: KitchenProfile | null;
+  /** V7.1 P3-D: 用户高频替换模式 */
+  substitutions?: Array<{
+    fromFoodId: string;
+    fromFoodName: string;
+    toFoodId: string;
+    toFoodName: string;
+    frequency: number;
+  }>;
 }
 
 /**
@@ -504,7 +898,7 @@ export interface UserPreferenceProfile {
 
 // ==================== 评分权重 ====================
 
-/** 维度名称 — 与 SCORE_WEIGHTS 数组索引对应 */
+/** 维度名称 — 与 SCORE_WEIGHTS 数组索引对应 (V6.9: 12→13维，新增 popularity) */
 export const SCORE_DIMENSIONS = [
   'calories',
   'protein',
@@ -518,24 +912,26 @@ export const SCORE_DIMENSIONS = [
   'fiber', // V5 2.6: 膳食纤维评分维度
   'seasonality', // V6.4 Phase 3.4: 时令感知评分维度
   'executability', // V6.5: 可执行性评分维度
+  'popularity', // V6.9 Phase 1-D: 大众化/常见度评分维度
 ] as const;
 
 export type ScoreDimension = (typeof SCORE_DIMENSIONS)[number];
 
-/** 基础权重 — 按目标类型 (V6.5: 11→12 维，新增 executability) */
+/** 基础权重 — 按目标类型 (V6.9: 12→13 维，新增 popularity) */
 export const SCORE_WEIGHTS: Record<GoalType, number[]> = {
-  //                    [cal,  prot, carbs, fat,  qual, sat,  glyc, nDens, inflam, fiber, season, exec]
+  //                    [cal,  prot, carbs, fat,  qual, sat,  glyc, nDens, inflam, fiber, season, exec, popul]
   fat_loss: [
-    0.16, 0.15, 0.07, 0.05, 0.05, 0.06, 0.11, 0.09, 0.06, 0.04, 0.03, 0.13,
+    0.15, 0.14, 0.07, 0.05, 0.05, 0.06, 0.1, 0.08, 0.06, 0.04, 0.03, 0.1, 0.07,
   ],
   muscle_gain: [
-    0.15, 0.2, 0.1, 0.05, 0.05, 0.04, 0.09, 0.08, 0.04, 0.03, 0.03, 0.14,
+    0.14, 0.18, 0.09, 0.05, 0.05, 0.04, 0.08, 0.07, 0.04, 0.03, 0.03, 0.11,
+    0.09,
   ],
   health: [
-    0.06, 0.05, 0.04, 0.04, 0.14, 0.06, 0.1, 0.16, 0.1, 0.07, 0.05, 0.13,
+    0.06, 0.05, 0.04, 0.04, 0.13, 0.06, 0.09, 0.15, 0.09, 0.07, 0.05, 0.1, 0.07,
   ],
   habit: [
-    0.1, 0.08, 0.05, 0.05, 0.13, 0.11, 0.08, 0.08, 0.07, 0.04, 0.04, 0.17,
+    0.09, 0.07, 0.05, 0.05, 0.11, 0.1, 0.07, 0.07, 0.06, 0.04, 0.04, 0.13, 0.12,
   ],
 };
 
@@ -784,7 +1180,7 @@ export const ROLE_CATEGORIES: Record<string, string[]> = {
 
 /**
  * 微量营养素默认值 — 用于插补缺失数据
- * 字段对应 NRF 9.3 评分所需的 9 个鼓励项和 3 个限制项中的微量元素
+ * 字段对应 NRF 11.4 评分所需的 11 个鼓励项和 4 个限制项中的微量元素
  */
 export interface MicroNutrientDefaults {
   vitaminA: number; // ug RAE / 100g
@@ -795,6 +1191,8 @@ export interface MicroNutrientDefaults {
   iron: number; // mg / 100g
   potassium: number; // mg / 100g
   fiber: number; // g / 100g
+  zinc: number; // V7.3 NRF11.4: mg / 100g
+  magnesium: number; // V7.3 NRF11.4: mg / 100g
 }
 
 /** 需要插补的微量营养素字段名列表 */
@@ -807,6 +1205,8 @@ const MICRO_FIELDS: (keyof MicroNutrientDefaults)[] = [
   'iron',
   'potassium',
   'fiber',
+  'zinc',
+  'magnesium',
 ];
 
 /**
@@ -864,6 +1264,8 @@ function calcGroupAverage(foods: FoodLibrary[]): MicroNutrientDefaults {
     iron: 0,
     potassium: 0,
     fiber: 0,
+    zinc: 0,
+    magnesium: 0,
   };
   const counts: Record<keyof MicroNutrientDefaults, number> = {
     vitaminA: 0,
@@ -874,6 +1276,8 @@ function calcGroupAverage(foods: FoodLibrary[]): MicroNutrientDefaults {
     iron: 0,
     potassium: 0,
     fiber: 0,
+    zinc: 0,
+    magnesium: 0,
   };
 
   for (const food of foods) {
@@ -893,16 +1297,56 @@ function calcGroupAverage(foods: FoodLibrary[]): MicroNutrientDefaults {
   return result;
 }
 
+// ==================== V6.7 Phase 2-B: RecallMetadata ====================
+
+/**
+ * V6.7 Phase 2-B: 三路召回元数据
+ *
+ * 记录每个召回候选的来源信息，用于：
+ * - RecallMerger 合并去重时确定 ruleWeight
+ * - rankCandidates 阶段读取 semanticScore / cfScore 做精细化加分
+ * - 调试追踪（recommendation-trace）
+ */
+export interface RecallMetadata {
+  foodId: string;
+  /** 候选来源集合：rule / semantic / cf */
+  sources: Set<'rule' | 'semantic' | 'cf'>;
+  /** 语义召回相似度 (0-1)，未命中则为 0 */
+  semanticScore: number;
+  /** CF 推荐分 (0-1)，未命中则为 0 */
+  cfScore: number;
+  /** 最终权重乘数（规则路 = 1.0，非规则路折扣） */
+  ruleWeight: number;
+}
+
+/**
+ * V6.7 Phase 2-B: CF 召回结果
+ */
+export interface CFRecallResult {
+  foodId: string;
+  cfScore: number;
+}
+
 // ==================== V6.7 Phase 1-A: ScoringContext ====================
 
 /**
- * V6.7 Phase 1-B: 可运行时配置的评分参数快照
+ * V6.7 Phase 1-B: 评分参数快照
  *
  * 从 ScoringConfigService 加载，集中管理分散在 10+ service 中的 42+ 硬编码常量。
- * Phase 1-A 先定义接口，Phase 1-B 实现 ScoringConfigService。
- * 在 1-B 完成前，FoodScorer 内部使用硬编码默认值（行为不变）。
+ * 支持运行时通过 Admin API 更新，无需重部署。
+ *
+ * 分区说明：
+ * - FoodScorer: 12维评分 + NOVA/addedSugar 惩罚 + 置信度
+ * - RecallMerger: 三路召回权重 + 品类候选上限
+ * - RealisticFilter: 最小候选数 + 食堂通用度阈值
+ * - MealComposition: 5维组合评分权重
+ * - ReplacementFeedback: 替换反馈衰减/频率参数
+ * - CF: 用户/物品协同过滤权重
+ * - Lifestyle: 生活方式营养素 boost 系数
  */
 export interface ScoringConfigSnapshot {
+  // ── FoodScorer 参数 ──
+
   /** 可执行性评分的子权重 */
   executabilitySubWeights: {
     commonality: number;
@@ -910,22 +1354,260 @@ export interface ScoringConfigSnapshot {
     cookTime: number;
     skill: number;
   };
-  /** NRF 9.3 Sigmoid 中心点 */
+  /** NRF 9.3 Sigmoid 中心点（默认 150） */
   nrf93SigmoidCenter: number;
-  /** NRF 9.3 Sigmoid 斜率 */
+  /** NRF 9.3 Sigmoid 斜率（默认 0.01） */
   nrf93SigmoidSlope: number;
-  /** 炎症指数 Sigmoid 中心点 */
+  /** 炎症指数 Sigmoid 中心点（默认 20） */
   inflammationCenter: number;
-  /** 炎症指数 Sigmoid 斜率 */
+  /** 炎症指数 Sigmoid 斜率（默认 0.08） */
   inflammationSlope: number;
-  /** 添加糖惩罚阈值 (g → 每 N g 扣分) */
+  /** 添加糖惩罚阈值 (g → 每 N g 扣分，默认 10) */
   addedSugarPenaltyPerGrams: number;
-  /** 置信度下限 */
+  /** 置信度下限（默认 0.7） */
   confidenceFloor: number;
-  /** NOVA 基准惩罚乘数 [NOVA0兜底, NOVA1, NOVA2, NOVA3, NOVA4] */
+  /** NOVA 基准惩罚乘数 [NOVA0兜底, NOVA1, NOVA2, NOVA3, NOVA4]（默认 [1.0, 1.0, 1.0, 0.85, 0.55]） */
   novaBase: number[];
-  /** 热量评分 Sigma 比例（per-goal） */
+  /** 热量评分 Sigma 比例（per-goal，默认 { fat_loss: 0.12, muscle_gain: 0.2, health: 0.15, habit: 0.25 }） */
   energySigmaRatios: Record<string, number>;
+
+  // ── RecallMerger 参数 ──
+
+  /** 语义召回独占权重（默认 0.7） */
+  semanticOnlyWeight: number;
+  /** CF 召回独占权重（默认 0.6） */
+  cfOnlyWeight: number;
+  /** 非规则候选每品类上限（默认 5） */
+  maxCandidatesPerCategoryForNonRule: number;
+
+  // ── RealisticFilter 参数 ──
+
+  /** 最小候选数量（默认 5） */
+  minCandidates: number;
+  /** 食堂场景通用度阈值（默认 60） */
+  canteenCommonalityThreshold: number;
+
+  // ── MealComposition 参数 ──
+
+  /** 整餐组合评分 5 维权重 */
+  compositionWeights: {
+    ingredientDiversity: number;
+    cookingMethodDiversity: number;
+    flavorHarmony: number;
+    nutritionComplementarity: number;
+    textureDiversity: number;
+  };
+
+  // ── ReplacementFeedback 参数 ──
+
+  /** 被替换食物的分数乘数（默认 0.8，降权） */
+  replacedFromMultiplier: number;
+  /** 替换为食物的分数乘数（默认 1.12，增权） */
+  replacedToMultiplier: number;
+  /** 替换反馈衰减天数（默认 30） */
+  replacementDecayDays: number;
+  /** 替换反馈最低频次门槛（默认 2） */
+  replacementMinFrequency: number;
+
+  // ── CF 参数 ──
+
+  /** 用户协同过滤权重（默认 0.4） */
+  cfUserBasedWeight: number;
+  /** 物品协同过滤权重（默认 0.6） */
+  cfItemBasedWeight: number;
+
+  // ── Lifestyle 参数 ──
+
+  /** 睡眠差 → 色氨酸 boost（默认 0.15） */
+  lifestyleSleepPoorTryptophanBoost: number;
+  /** 睡眠差 → 镁 boost（默认 0.1） */
+  lifestyleSleepPoorMagnesiumBoost: number;
+  /** 压力高 → 维C boost（默认 0.12） */
+  lifestyleStressHighVitCBoost: number;
+
+  // ────────────────────────────────────────────────────
+  // V6.8 新增参数（全部可选，未提供时使用 getDefaults() 中的硬编码默认值）
+  // ────────────────────────────────────────────────────
+
+  // ── V6.8 蛋白质评分参数 ──
+
+  /** 每目标蛋白质理想热量占比范围（默认 { fat_loss: [0.25,0.35], muscle_gain: [0.25,0.4], health: [0.15,0.25], habit: [0.12,0.3] }） */
+  proteinRangeByGoal?: Record<string, [number, number]>;
+  /** 低于范围时的线性斜率系数（默认 0.3） */
+  proteinBelowRangeCoeff?: number;
+  /** 低于范围时的基础分（默认 0.7） */
+  proteinBelowRangeBase?: number;
+  /** 超出范围时的衰减系数（默认 0.5） */
+  proteinAboveRangeDecay?: number;
+  /** 超出范围时的分母（默认 0.15） */
+  proteinAboveRangeDiv?: number;
+
+  // ── V6.8 能量评分参数 ──
+
+  /** 减脂超标惩罚乘数（默认 0.85） */
+  energyFatLossPenalty?: number;
+  /** 增肌不足惩罚乘数（默认 0.9） */
+  energyMuscleGainPenalty?: number;
+  /** target<=0 时默认分（默认 0.8） */
+  energyDefaultScore?: number;
+  /** calories<=0 时蛋白质默认分（默认 0.8） */
+  proteinDefaultScore?: number;
+
+  // ── V6.8 GI/GL 评分参数 ──
+
+  /** 无法估算时 GI 默认分（默认 0.75） */
+  giDefaultScore?: number;
+  /** GL Sigmoid 斜率（默认 0.3） */
+  glSigmoidSlope?: number;
+  /** GL Sigmoid 中心点（默认 15） */
+  glSigmoidCenter?: number;
+  /** 品类 GI 估算 map */
+  categoryGiMap?: Record<string, number>;
+  /** 品类未知时 fallback GI（默认 55） */
+  giFallback?: number;
+  /** 每 NOVA 级加工 GI 增量（默认 5） */
+  giProcessingStep?: number;
+  /** 每克纤维 GI 减量（默认 2） */
+  giFiberReduction?: number;
+  /** 纤维 GI 减量上限（默认 15） */
+  giFiberReductionCap?: number;
+
+  // ── V6.8 NRF 9.3 Gap Bonus 参数 ──
+
+  /** 最低 %DV 才触发 bonus（默认 15） */
+  nrfGapThreshold?: number;
+  /** 单营养素最大 bonus（默认 20） */
+  nrfGapMaxBonus?: number;
+  /** 总 bonus 上限（默认 80） */
+  nrfGapTotalCap?: number;
+  /** 是否启用连续函数（默认 true）；false 则使用 V6.7 二值逻辑 */
+  nrfGapContinuous?: boolean;
+
+  // ── V6.8 NOVA 微调参数 ──
+
+  /** 高纤维缓解阈值 g/100g（默认 3） */
+  novaHighFiberThreshold?: number;
+  /** 高纤维缓解量（默认 0.05） */
+  novaHighFiberRelief?: number;
+  /** 低糖缓解阈值 g（默认 5） */
+  novaLowSugarThreshold?: number;
+  /** 低糖缓解量（默认 0.05） */
+  novaLowSugarRelief?: number;
+  /** 低饱和脂肪缓解阈值 g（默认 3） */
+  novaLowSatFatThreshold?: number;
+  /** 低饱和脂肪缓解量（默认 0.05） */
+  novaLowSatFatRelief?: number;
+  /** 高钠加重阈值 mg（默认 800） */
+  novaHighSodiumThreshold?: number;
+  /** 高钠加重量（默认 0.05） */
+  novaHighSodiumPenalty?: number;
+  /** NOVA 3/4 最小惩罚 clamp（默认 [0.75, 0.45]） */
+  novaClampMin?: [number, number];
+  /** NOVA 3/4 最大惩罚 clamp（默认 [0.95, 0.7]） */
+  novaClampMax?: [number, number];
+
+  // ── V6.8 炎症公式参数 ──
+
+  /** 反式脂肪促炎除数（默认 2） */
+  inflammTransFatDiv?: number;
+  /** 反式脂肪促炎上限（默认 50） */
+  inflammTransFatMax?: number;
+  /** 饱和脂肪促炎除数（默认 10） */
+  inflammSatFatDiv?: number;
+  /** 饱和脂肪促炎上限（默认 30） */
+  inflammSatFatMax?: number;
+  /** 抗炎纤维除数（默认 5） */
+  inflammFiberDiv?: number;
+  /** 抗炎纤维上限（默认 40） */
+  inflammFiberMax?: number;
+
+  // ── V6.8 烹饪便利阈值 ──
+
+  /** 快手菜阈值 分钟（默认 15） */
+  cookTimeQuick?: number;
+  /** 快手菜分数（默认 1.0） */
+  cookTimeQuickScore?: number;
+  /** 中等时间阈值 分钟（默认 30） */
+  cookTimeMedium?: number;
+  /** 中等时间分数（默认 0.8） */
+  cookTimeMediumScore?: number;
+  /** 长时间阈值 分钟（默认 60） */
+  cookTimeLong?: number;
+  /** 长时间分数（默认 0.5） */
+  cookTimeLongScore?: number;
+  /** 免烹饪分数（默认 0.8） */
+  cookTimeZeroScore?: number;
+
+  // ── V6.8 品类含水量估算 ──
+
+  /** 品类含水量 map（默认 { veggie:90, fruit:85, ... }） */
+  categoryWaterMap?: Record<string, number>;
+
+  // ── V6.8 Lifestyle 调整参数 ──
+
+  /** 高含水率阈值（默认 80） */
+  lifestyleWaterHighThreshold?: number;
+  /** 高含水率乘数（默认 0.8） */
+  lifestyleWaterHighMultiplier?: number;
+  /** 中含水率阈值（默认 60） */
+  lifestyleWaterMedThreshold?: number;
+  /** 中含水率乘数（默认 0.4） */
+  lifestyleWaterMedMultiplier?: number;
+  /** 色氨酸丰富食物标签列表 */
+  lifestyleTryptophanTags?: string[];
+
+  // ── V6.8 替换营养接近度权重 ──
+
+  /** 替换服务的多维营养接近度权重 */
+  substitutionWeights?: {
+    calories: number;
+    protein: number;
+    fat: number;
+    carbs: number;
+    gi: number;
+    micronutrients: number;
+  };
+
+  // ── V6.8 杂项默认值 ──
+
+  /** 品质分默认值（默认 5） */
+  defaultQualityScore?: number;
+  /** 饱腹分默认值（默认 4） */
+  defaultSatietyScore?: number;
+  /** 默认餐次热量目标（默认 400） */
+  defaultMealCalorieTarget?: number;
+  /** calories=0 时碳水/脂肪默认分（默认 0.5） */
+  defaultCarbFatScore?: number;
+  /** 默认置信度（默认 0.5） */
+  defaultConfidence?: number;
+  /** 添加糖惩罚上限（默认 -15） */
+  maxAddedSugarPenalty?: number;
+  /** 区间外惩罚陡度（默认 2） */
+  rangeOutPenaltySteepness?: number;
+
+  // ────────────────────────────────────────────────────
+  // V6.9 新增参数（全部可选）
+  // ────────────────────────────────────────────────────
+
+  // ── V6.9 Phase 2-A: 跨餐多样性惩罚参数 ──
+
+  /** 跨餐多样性惩罚配置 */
+  crossMealDiversityPenalties?: {
+    /** 名称完全重复惩罚（默认 -0.3） */
+    nameDuplicate?: number;
+    /** 主食材重复惩罚（默认 -0.2） */
+    mainIngredientDuplicate?: number;
+    /** 品类过度使用惩罚（默认 -0.15） */
+    categoryOveruse?: number;
+    /** 烹饪方式过度使用惩罚（默认 -0.1） */
+    cookingMethodOveruse?: number;
+    /** 品类过度使用阈值（默认 3） */
+    categoryThreshold?: number;
+    /** 烹饪方式过度使用阈值（默认 2） */
+    cookingMethodThreshold?: number;
+    /** 惩罚下限（默认 -0.5） */
+    minPenalty?: number;
+  };
 }
 
 /**
@@ -964,4 +1646,217 @@ export interface ScoringContext {
   lifestyleAdjustment?: LifestyleNutrientAdjustment | null;
   /** V6.7: 评分参数快照（Phase 1-B 实现，1-A 阶段 optional） */
   scoringConfig?: ScoringConfigSnapshot | null;
+  /** V6.9 Phase 1-D: 当前获取渠道（用于 popularity 维度评分） */
+  channel?: AcquisitionChannel;
+  /** V7.0 Phase 3-C: 解析后的有效目标（含阶段权重调整） */
+  effectiveGoal?: EffectiveGoal;
+  /** V7.0 Phase 3-C: 用户偏好画像（菜系权重、口味偏好等） */
+  preferencesProfile?: PreferencesProfile;
+  /** V7.1 P3-C: 统一偏好信号（由 PreferenceProfileService.computePreferenceSignal 计算） */
+  preferenceSignal?: PreferenceSignal;
+}
+
+// -------------------- V7.1 Phase 1-C: 新增类型定义 --------------------
+
+/**
+ * V7.1 方向 1A: 执行匹配结果
+ *
+ * 语义执行匹配的三级匹配结果，替代原有的纯 ID 精确匹配。
+ * - exact:           食物 ID 完全一致 → 1.0
+ * - same_ingredient: 主食材相同（如烤鸡胸 vs 煎鸡胸）→ 0.7
+ * - same_category:   同品类（如不同蛋白质食物）→ 0.4
+ * - same_food_group: 同食物组 → 0.2
+ * - none:            完全不匹配 → 0.0
+ */
+export interface ExecutionMatchResult {
+  /** 推荐的食物 ID */
+  recommendedFoodId: string;
+  /** 实际执行的食物 ID（none 时为 null） */
+  executedFoodId: string | null;
+  /** 匹配级别 */
+  matchLevel:
+    | 'exact'
+    | 'same_ingredient'
+    | 'same_category'
+    | 'same_food_group'
+    | 'none';
+  /** 匹配得分 */
+  matchScore: number;
+}
+
+/** V7.1 方向 1A: 匹配级别 → 得分映射 */
+export const EXECUTION_MATCH_SCORES: Record<
+  ExecutionMatchResult['matchLevel'],
+  number
+> = {
+  exact: 1.0,
+  same_ingredient: 0.7,
+  same_category: 0.4,
+  same_food_group: 0.2,
+  none: 0.0,
+};
+
+/**
+ * V7.1 方向 2A: 跨餐调整
+ *
+ * 基于前序餐次的营养累计，对后续餐次的推荐目标和权重进行补偿调整。
+ * 由 DailyPlanContextService.computeCrossMealAdjustment() 产出。
+ */
+export interface CrossMealAdjustment {
+  /** 热量目标倍数（0.9 ~ 1.15），1.0 = 不调整 */
+  calorieMultiplier: number;
+  /** 权重覆盖（仅包含需要调整的维度） */
+  weightOverrides: Partial<Record<ScoreDimension, number>>;
+  /** 菜系多样性加分（0 ~ 0.1），前餐菜系单一时触发 */
+  cuisineDiversityBonus: number;
+  /** 调整原因（用于可解释性） */
+  reason: string;
+}
+
+/**
+ * V7.1 方向 3B: 统一偏好信号
+ *
+ * 将 Thompson Sampling 探索信号和 PreferenceProfile 利用信号
+ * 统一为一个综合信号，避免两套独立机制。
+ */
+export interface PreferenceSignal {
+  /** Thompson Sampling 探索系数（Beta 分布采样） */
+  explorationMultiplier: number;
+  /** 品类偏好 boost（来自反馈统计，0.3 ~ 1.3） */
+  categoryBoost: number;
+  /** 食材偏好 boost（来自反馈统计，0.3 ~ 1.3） */
+  ingredientBoost: number;
+  /** 替换模式 boost（来自替换追踪，0 ~ 0.1） */
+  substitutionBoost: number;
+  /** 菜系偏好 boost（来自 PreferencesProfile，±10%） */
+  cuisineBoost: number;
+  /** 综合乘数 = 各信号加权合成 */
+  combined: number;
+}
+
+/**
+ * V7.1 方向 5B: 渠道时段可获得性
+ *
+ * 不同渠道在不同时段的可获得性分数，
+ * 如：便利店深夜高，食堂深夜为 0，外卖凌晨低。
+ */
+export interface ChannelTimeAvailability {
+  /** 早上 06:00-10:00 */
+  morning: number;
+  /** 中午 10:00-14:00 */
+  midday: number;
+  /** 下午/晚上 14:00-21:00 */
+  evening: number;
+  /** 深夜 21:00-06:00 */
+  lateNight: number;
+}
+
+// -------------------- V7.2 Phase 1-B: 现实策略可配置化 --------------------
+
+/**
+ * V7.2: 现实性级别枚举
+ *
+ * 控制 RealisticFilter 的过滤严格度。
+ * 场景→默认级别映射：
+ * - HOME_COOK: normal
+ * - RESTAURANT: relaxed
+ * - DELIVERY: relaxed
+ * - CANTEEN: strict
+ * - CONVENIENCE: strict
+ * - UNKNOWN: normal
+ */
+export type RealismLevel = 'strict' | 'normal' | 'relaxed' | 'off';
+
+/**
+ * V7.2: 现实性级别预设参数
+ *
+ * 每个 RealismLevel 对应一组完整的过滤阈值，
+ * 替代 RealisticFilter 中的硬编码逻辑。
+ */
+export interface RealismPreset {
+  /** 大众化最低阈值（commonalityScore 低于此值被过滤；0 = 不过滤） */
+  commonalityThreshold: number;
+  /** 是否启用预算过滤 */
+  budgetFilterEnabled: boolean;
+  /** 烹饪时间上限（分钟；Infinity = 不限） */
+  cookTimeCap: number;
+  /** 是否启用食堂模式过滤 */
+  canteenFilterEnabled: boolean;
+  /** 最高允许的烹饪技能等级（1-5；Infinity = 不限） */
+  maxSkillLevel: number;
+  /** 是否启用设备过滤 */
+  equipmentFilterEnabled: boolean;
+}
+
+/**
+ * V7.2: 四档现实性预设
+ */
+export const REALISM_PRESETS: Record<RealismLevel, RealismPreset> = {
+  strict: {
+    commonalityThreshold: 40,
+    budgetFilterEnabled: true,
+    cookTimeCap: 45,
+    canteenFilterEnabled: true,
+    maxSkillLevel: 2,
+    equipmentFilterEnabled: true,
+  },
+  normal: {
+    commonalityThreshold: 30,
+    budgetFilterEnabled: true,
+    cookTimeCap: 60,
+    canteenFilterEnabled: true,
+    maxSkillLevel: 3,
+    equipmentFilterEnabled: true,
+  },
+  relaxed: {
+    commonalityThreshold: 10,
+    budgetFilterEnabled: false,
+    cookTimeCap: 120,
+    canteenFilterEnabled: false,
+    maxSkillLevel: 5,
+    equipmentFilterEnabled: false,
+  },
+  off: {
+    commonalityThreshold: 0,
+    budgetFilterEnabled: false,
+    cookTimeCap: Infinity,
+    canteenFilterEnabled: false,
+    maxSkillLevel: Infinity,
+    equipmentFilterEnabled: false,
+  },
+};
+
+/**
+ * V7.2: 场景→默认现实级别映射
+ */
+export const SCENE_DEFAULT_REALISM: Record<AcquisitionChannel, RealismLevel> = {
+  [AcquisitionChannel.HOME_COOK]: 'normal',
+  [AcquisitionChannel.RESTAURANT]: 'relaxed',
+  [AcquisitionChannel.DELIVERY]: 'relaxed',
+  [AcquisitionChannel.CANTEEN]: 'strict',
+  [AcquisitionChannel.CONVENIENCE]: 'strict',
+  [AcquisitionChannel.UNKNOWN]: 'normal',
+};
+
+// -------------------- END V7.2 Phase 1-B --------------------
+
+/**
+ * V7.1 方向 4B: 对比解释
+ *
+ * "为什么推荐 A 而不是 B"的对比解释数据，
+ * 只在两者 ScoreBreakdown 差异 > 15% 时触发。
+ */
+export interface ContrastiveInsight {
+  /** 推荐的食物名 */
+  recommended: string;
+  /** 对比的食物名（通常取 Top-6~10 中的一个） */
+  alternative: string;
+  /** 推荐食物的优势维度 */
+  advantageDimension: ScoreDimension;
+  /** 推荐食物在该维度的得分 */
+  advantageValue: number;
+  /** 对比食物在该维度的得分 */
+  alternativeValue: number;
+  /** 差异百分比 */
+  differencePercent: number;
 }

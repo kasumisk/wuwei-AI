@@ -29,7 +29,21 @@ import {
   ContextualProfileService,
   ContextualProfile,
 } from './contextual-profile.service';
-import { EnrichedProfileContext } from '../../diet/app/recommendation/recommendation.types';
+import {
+  EnrichedProfileContext,
+  ProfileConflict,
+} from '../../diet/app/recommendation/recommendation.types';
+import { ProfileFactory, DomainProfiles } from '../domain/profile-factory';
+
+/**
+ * V7.0 Phase 2-F: 带领域画像的聚合结果
+ *
+ * 在 EnrichedProfileContext 基础上，附加强类型领域画像。
+ * Phase 3 的 RecommendationEngine 将消费此类型。
+ */
+export interface EnrichedProfileWithDomain extends EnrichedProfileContext {
+  domainProfiles: DomainProfiles;
+}
 
 @Injectable()
 export class ProfileResolverService {
@@ -96,6 +110,40 @@ export class ProfileResolverService {
   }
 
   /**
+   * V7.0 Phase 2-F: 聚合所有画像层 + 生成强类型领域模型
+   *
+   * 在 resolve() 基础上，通过 ProfileFactory 将 EnrichedProfileContext
+   * 转换为 NutritionProfile + PreferencesProfile 领域实体。
+   *
+   * Phase 3 的 RecommendationEngine.recommendMeal() 将使用此方法替代 resolve()，
+   * 在 PipelineContext 中传递 domainProfiles。
+   *
+   * @param userId 用户 ID
+   * @param mealType 当前餐次类型（可选）
+   * @returns EnrichedProfileWithDomain — 包含五层画像 + 基础约束 + 领域画像
+   */
+  async resolveWithDomainProfiles(
+    userId: string,
+    mealType?: string,
+  ): Promise<EnrichedProfileWithDomain> {
+    const context = await this.resolve(userId, mealType);
+
+    // ProfileFactory 是纯静态类，无 I/O，直接同步调用
+    const domainProfiles = ProfileFactory.fromEnrichedContext(context);
+
+    this.logger.debug(
+      `Domain profiles built for user ${userId}: ` +
+        `nutrition(bmr=${domainProfiles.nutrition.bmr}, tdee=${domainProfiles.nutrition.tdee}, confidence=${domainProfiles.nutrition.confidence.toFixed(2)}), ` +
+        `preferences(cuisine=${Object.keys(domainProfiles.preferences.cuisineWeights).length} entries, philosophy=${domainProfiles.preferences.dietaryPhilosophy})`,
+    );
+
+    return {
+      ...context,
+      domainProfiles,
+    };
+  }
+
+  /**
    * 从各层画像构建 EnrichedProfileContext
    * 基础约束字段从 declared 层自动提取
    */
@@ -106,7 +154,7 @@ export class ProfileResolverService {
     shortTerm: import('./realtime-profile.service').ShortTermProfile | null,
     contextual: ContextualProfile | null,
   ): EnrichedProfileContext {
-    return {
+    const context: EnrichedProfileContext = {
       // ── 基础约束字段（向后兼容 UserProfileConstraints） ──
       dietaryRestrictions: (declared?.dietary_restrictions as string[]) || [],
       weakTimeSlots: (declared?.weak_time_slots as string[]) || [],
@@ -160,15 +208,21 @@ export class ProfileResolverService {
                 { startHour: number; durationHours: number }
               >) ?? undefined,
             // V6.6 Phase 2-C: 生活方式画像字段
-            sleepQuality: (declared as any).sleep_quality ?? undefined,
-            stressLevel: (declared as any).stress_level ?? undefined,
-            hydrationGoal: (declared as any).hydration_goal
-              ? Number((declared as any).hydration_goal)
+            sleepQuality: declared.sleep_quality ?? undefined,
+            stressLevel: declared.stress_level ?? undefined,
+            hydrationGoal: declared.hydration_goal
+              ? Number(declared.hydration_goal)
               : undefined,
             supplementsUsed:
-              ((declared as any).supplements_used as string[]) ?? undefined,
-            mealTimingPreference:
-              (declared as any).meal_timing_preference ?? undefined,
+              (declared.supplements_used as string[]) ?? undefined,
+            mealTimingPreference: declared.meal_timing_preference ?? undefined,
+            // V6.8 Phase 3-B: 运动/酒精/年龄
+            exerciseIntensity: declared.exercise_intensity ?? undefined,
+            alcoholFrequency: declared.alcohol_frequency ?? undefined,
+            // V6.8 Phase 3-C: age 从 birth_year 动态计算
+            age: declared.birth_year
+              ? new Date().getFullYear() - declared.birth_year
+              : undefined,
           }
         : null,
 
@@ -228,17 +282,151 @@ export class ProfileResolverService {
             familySize: declared.family_size ?? 1,
             mealPrepWilling: declared.meal_prep_willing ?? false,
             // V6.6 Phase 2-C: 新增生活方式字段
-            sleepQuality: (declared as any).sleep_quality ?? null,
-            stressLevel: (declared as any).stress_level ?? null,
-            hydrationGoal: (declared as any).hydration_goal
-              ? Number((declared as any).hydration_goal)
+            sleepQuality: declared.sleep_quality ?? null,
+            stressLevel: declared.stress_level ?? null,
+            hydrationGoal: declared.hydration_goal
+              ? Number(declared.hydration_goal)
               : null,
-            supplementsUsed:
-              ((declared as any).supplements_used as string[]) ?? null,
-            mealTimingPreference:
-              (declared as any).meal_timing_preference ?? null,
+            supplementsUsed: (declared.supplements_used as string[]) ?? null,
+            mealTimingPreference: declared.meal_timing_preference ?? null,
+            // V6.8 Phase 3-B: 新增生活方式字段
+            exerciseIntensity:
+              (declared.exercise_intensity as
+                | 'none'
+                | 'light'
+                | 'moderate'
+                | 'high'
+                | null) ?? null,
+            alcoholFrequency:
+              (declared.alcohol_frequency as
+                | 'never'
+                | 'occasional'
+                | 'frequent'
+                | null) ?? null,
+            // V6.8 Phase 3-C: age 从 birth_year 动态计算
+            age: declared.birth_year
+              ? new Date().getFullYear() - declared.birth_year
+              : null,
           }
         : null,
+
+      // ── V6.8 Phase 1-D: 冲突解决层 ──
+      conflicts: [],
+      profileFreshness: 0,
     };
+
+    // V6.8 Phase 1-D: 冲突检测与调和
+    this.resolveConflicts(context, declared, observed);
+
+    // V6.8 Phase 3-C: 画像新鲜度衰减 — 当画像过于陈旧时降低 declared 层权重
+    if (context.declared && context.profileFreshness < 0.3) {
+      context.declared.confidence =
+        (context.declared.confidence ?? 1.0) * context.profileFreshness;
+      this.logger.debug(
+        `Profile freshness ${context.profileFreshness.toFixed(2)} < 0.3, declared confidence decayed to ${context.declared.confidence.toFixed(2)}`,
+      );
+    }
+
+    return context;
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // V6.8 Phase 1-D: 冲突解决层
+  // ════════════════════════════════════════════════════════════════
+
+  /**
+   * 冲突检测与调和
+   *
+   * 在 5 层画像合并完成后，检测声明层与行为层之间的矛盾：
+   * 1. 新鲜度衰减 — 声明画像超过半年逐渐失效
+   * 2. 目标 vs 实际摄入 — 减脂目标但实际热量超标
+   * 3. 活动水平 vs 实际步频 — 声明高活动量但行为画像显示低合规
+   * 4. 烹饪技能 vs 实际选择 — 声明会做饭但实际高外卖频率
+   *
+   * 冲突数据附加到 context.conflicts[]，供 trace/解释使用。
+   */
+  private resolveConflicts(
+    context: EnrichedProfileContext,
+    declared: UserProfile | null,
+    observed: UserBehaviorProfile | null,
+  ): void {
+    const conflicts: ProfileConflict[] = [];
+
+    // ── 1. 新鲜度计算 ──
+    // declared.updated_at 距今天数 → 半年（180天）线性衰减到 0
+    const daysSinceUpdate = declared?.updated_at
+      ? (Date.now() - new Date(declared.updated_at).getTime()) / 86400000
+      : 365;
+    context.profileFreshness = Math.max(0, 1 - daysSinceUpdate / 180);
+
+    // ── 2. 目标 vs 行为冲突 ──
+    // 用户声明减脂，但短期画像显示实际摄入远超目标
+    if (context.declared?.goal === 'fat_loss') {
+      const targetCal =
+        context.declared.dailyCalorieGoal ??
+        context.inferred?.recommendedCalories ??
+        2000;
+      // 从短期画像的 dailyIntakes 计算近期平均摄入
+      const intakes = context.shortTerm?.dailyIntakes;
+      let recentAvgCal: number | null = null;
+      if (intakes && intakes.length > 0) {
+        const totalCal = intakes.reduce((sum, d) => sum + d.calories, 0);
+        recentAvgCal = totalCal / intakes.length;
+      }
+      if (recentAvgCal !== null && recentAvgCal > targetCal * 1.2) {
+        conflicts.push({
+          field: 'goal_compliance',
+          declaredValue: 'fat_loss',
+          observedValue: `avg ${Math.round(recentAvgCal)} kcal (target ${targetCal})`,
+          resolution: context.profileFreshness > 0.5 ? 'use_declared' : 'blend',
+          confidence: Math.min(1, (observed?.total_records ?? 0) / 30),
+          reason: 'declared_goal_conflicts_with_observed_intake',
+        });
+      }
+    }
+
+    // ── 3. 活动水平 vs 实际合规 ──
+    // 用户声明 active/very_active，但实际合规率很低（<40%），
+    // 说明可能高估了自己的活动水平
+    if (
+      context.declared?.activityLevel &&
+      ['active', 'very_active'].includes(context.declared.activityLevel) &&
+      context.observed?.avgComplianceRate !== undefined &&
+      context.observed.avgComplianceRate < 0.4
+    ) {
+      conflicts.push({
+        field: 'activity_level',
+        declaredValue: context.declared.activityLevel,
+        observedValue: `compliance ${Math.round((context.observed.avgComplianceRate ?? 0) * 100)}%`,
+        resolution: context.profileFreshness > 0.7 ? 'use_declared' : 'blend',
+        confidence: Math.min(1, (observed?.total_records ?? 0) / 20),
+        reason: 'high_declared_activity_but_low_compliance',
+      });
+    }
+
+    // ── 4. 烹饪技能 vs 实际选择模式 ──
+    // 用户声明会做饭（canCook=true），但外卖频率为 often/always
+    if (
+      context.declared?.canCook === true &&
+      context.declared?.takeoutFrequency &&
+      ['often', 'always'].includes(context.declared.takeoutFrequency)
+    ) {
+      conflicts.push({
+        field: 'cooking_pattern',
+        declaredValue: `canCook=true, skill=${context.declared.cookingSkillLevel ?? 'unknown'}`,
+        observedValue: `takeoutFrequency=${context.declared.takeoutFrequency}`,
+        resolution: 'blend',
+        confidence: 0.6, // 基于声明数据，置信度中等
+        reason: 'declared_cook_but_high_takeout_frequency',
+      });
+    }
+
+    context.conflicts = conflicts;
+
+    if (conflicts.length > 0) {
+      this.logger.debug(
+        `Detected ${conflicts.length} profile conflict(s): ${conflicts.map((c) => c.field).join(', ')}`,
+      );
+    }
   }
 }

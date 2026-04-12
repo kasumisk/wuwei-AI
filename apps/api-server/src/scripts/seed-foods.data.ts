@@ -69,6 +69,12 @@ export interface SeedFood {
   tags?: string[];
   primarySource?: string;
   confidence?: number;
+
+  // ═══ V7.3: 食物大众化 ═══
+  /** 食物形态: ingredient=原材料, dish=成品菜, semi_prepared=半成品 */
+  foodForm?: 'ingredient' | 'dish' | 'semi_prepared';
+  /** 成品菜推荐优先级 (0-100, 仅dish/semi_prepared有值) */
+  dishPriority?: number;
 }
 
 /**

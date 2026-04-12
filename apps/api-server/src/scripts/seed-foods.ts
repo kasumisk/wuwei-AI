@@ -70,6 +70,9 @@ function mapToData(
     data_version: 1,
     is_verified: true,
     verified_by: 'seed-script',
+    // V7.3: 食物大众化
+    food_form: food.foodForm ?? 'ingredient',
+    dish_priority: food.dishPriority ?? undefined,
   };
 }
 

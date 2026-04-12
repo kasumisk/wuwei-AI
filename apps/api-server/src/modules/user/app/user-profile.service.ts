@@ -9,6 +9,8 @@ import {
   PopularityPreference,
   CookingEffort,
   BudgetSensitivity,
+  KitchenProfile,
+  DEFAULT_KITCHEN_PROFILE,
 } from '../user.types';
 import {
   user_profiles as UserProfile,
@@ -1182,6 +1184,8 @@ export class UserProfileService {
       prefs.popularityPreference = dto.popularityPreference;
     if (dto.cookingEffort) prefs.cookingEffort = dto.cookingEffort;
     if (dto.budgetSensitivity) prefs.budgetSensitivity = dto.budgetSensitivity;
+    // V7.2 P3-B: 复制现实性级别偏好
+    if (dto.realismLevel) prefs.realismLevel = dto.realismLevel;
 
     await this.prisma.user_profiles.update({
       where: { user_id: userId },
@@ -1270,6 +1274,93 @@ export class UserProfileService {
       // MODERATE → 不覆盖
     }
 
+    // V7.2 P3-B: realismLevel 预设 → 作为全局覆盖
+    // 优先级高于上面的单维度覆盖：如果用户同时设置了 realismLevel 和 cookingEffort，
+    // realismLevel 的 cookTimeCap 会覆盖 cookingEffort 的设置
+    if (prefs.realismLevel && prefs.realismLevel !== 'normal') {
+      switch (prefs.realismLevel) {
+        case 'strict':
+          // 强制收紧：大众化≥40, 预算+烹饪时间都启用, 上限收紧
+          override.commonalityThreshold = Math.max(
+            override.commonalityThreshold ?? 0,
+            40,
+          );
+          override.budgetFilterEnabled = true;
+          override.cookTimeCapEnabled = true;
+          override.weekdayCookTimeCap = Math.min(
+            override.weekdayCookTimeCap ?? 45,
+            30,
+          );
+          override.weekendCookTimeCap = Math.min(
+            override.weekendCookTimeCap ?? 120,
+            60,
+          );
+          override.canteenMode = true;
+          break;
+        case 'relaxed':
+          // 放宽：大众化阈值降低, 关闭预算和时间过滤
+          override.commonalityThreshold = Math.min(
+            override.commonalityThreshold ?? 20,
+            10,
+          );
+          override.budgetFilterEnabled = false;
+          override.cookTimeCapEnabled = false;
+          break;
+        case 'off':
+          // 关闭所有现实性过滤
+          override.enabled = false;
+          break;
+      }
+    }
+
     return override;
+  }
+
+  /**
+   * V7.1 P3-B: 获取用户厨房设备画像
+   *
+   * 从 user_profiles.kitchen_profile (JSON) 读取。
+   * 无数据时返回 null（调用方应使用 DEFAULT_KITCHEN_PROFILE 兜底）。
+   */
+  async getKitchenProfile(userId: string): Promise<KitchenProfile | null> {
+    try {
+      const profile = await this.prisma.user_profiles.findUnique({
+        where: { user_id: userId },
+        select: { kitchen_profile: true },
+      });
+
+      if (!profile?.kitchen_profile) return null;
+
+      const raw = profile.kitchen_profile as Record<string, unknown>;
+      // 验证必要字段存在，兜底填充默认值
+      return {
+        hasOven:
+          typeof raw.hasOven === 'boolean'
+            ? raw.hasOven
+            : DEFAULT_KITCHEN_PROFILE.hasOven,
+        hasMicrowave:
+          typeof raw.hasMicrowave === 'boolean'
+            ? raw.hasMicrowave
+            : DEFAULT_KITCHEN_PROFILE.hasMicrowave,
+        hasAirFryer:
+          typeof raw.hasAirFryer === 'boolean'
+            ? raw.hasAirFryer
+            : DEFAULT_KITCHEN_PROFILE.hasAirFryer,
+        hasSteamer:
+          typeof raw.hasSteamer === 'boolean'
+            ? raw.hasSteamer
+            : DEFAULT_KITCHEN_PROFILE.hasSteamer,
+        hasRiceCooker:
+          typeof raw.hasRiceCooker === 'boolean'
+            ? raw.hasRiceCooker
+            : DEFAULT_KITCHEN_PROFILE.hasRiceCooker,
+        primaryStove:
+          typeof raw.primaryStove === 'string'
+            ? (raw.primaryStove as KitchenProfile['primaryStove'])
+            : DEFAULT_KITCHEN_PROFILE.primaryStove,
+      };
+    } catch {
+      return null;
+    }
   }
 }

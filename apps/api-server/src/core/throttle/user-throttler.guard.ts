@@ -10,6 +10,8 @@
  *    - 'default': 全局宽松限制（100 req/60s）
  *    - 'user-api': 用户级 API 限制（30 req/60s per user）
  *    - 'ai-heavy': AI 重计算接口限制（5 req/60s per user）
+ * 4. **Admin 豁免**: /admin/* 路由全部跳过限流
+ *    管理后台操作频率不可预测（如轮询队列状态），不应被限流约束
  *
  * 使用方式（Controller / Route 级别）：
  * ```
@@ -26,6 +28,20 @@ import { Request } from 'express';
 
 @Injectable()
 export class UserThrottlerGuard extends ThrottlerGuard {
+  /**
+   * 覆盖 canActivate：对 /admin/* 路由直接放行，跳过所有限流检查。
+   * Admin 后台由 JwtAuthGuard + RolesGuard 双重保护，无需额外限流。
+   */
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const req = context.switchToHttp().getRequest<Request>();
+    // 兼容全局 prefix（如 /api/admin/...）和无前缀（/admin/...）两种情况
+    const path = req.path ?? '';
+    if (path.startsWith('/admin') || path.includes('/admin/')) {
+      return true;
+    }
+    return super.canActivate(context);
+  }
+
   /**
    * 重写 getTracker: 认证用户用 userId，未认证用 IP
    *

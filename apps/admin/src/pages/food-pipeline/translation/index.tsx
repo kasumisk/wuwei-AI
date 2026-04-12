@@ -20,6 +20,7 @@ import {
 } from 'antd';
 import { TranslationOutlined, GlobalOutlined } from '@ant-design/icons';
 import { useBatchAiTranslate, useQualityReport } from '@/services/foodPipelineService';
+import { LOCALE_OPTIONS } from '@/pages/food-library/constants';
 
 export const routeConfig = {
   name: 'translation',
@@ -29,14 +30,6 @@ export const routeConfig = {
   requireAuth: true,
   hideInMenu: false,
 };
-
-const LOCALE_OPTIONS = [
-  { label: '英语 (en-US)', value: 'en-US' },
-  { label: '简体中文 (zh-CN)', value: 'zh-CN' },
-  { label: '繁体中文 (zh-TW)', value: 'zh-TW' },
-  { label: '日语 (ja-JP)', value: 'ja-JP' },
-  { label: '韩语 (ko-KR)', value: 'ko-KR' },
-];
 
 const TranslationPage: React.FC = () => {
   const [form] = Form.useForm();

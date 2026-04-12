@@ -117,6 +117,9 @@ const FOOD_POOL_SELECTABLE_COLUMNS: string[] = [
   'available_channels',
   // V6.5: 大众化评分
   'commonality_score',
+  // V7.3 Phase 1-A: 食物大众化扩展
+  'food_form',
+  'dish_priority',
 ];
 
 // ==================== Raw row → FoodLibrary 映射 ====================
@@ -268,6 +271,12 @@ function mapRowToFoodLibrary(row: Record<string, unknown>): FoodLibrary {
     ]),
     // V6.5: 大众化评分
     commonalityScore: n(row.commonality_score) || 50,
+    // V7.3 Phase 1-A: 食物大众化扩展
+    foodForm:
+      row.food_form != null
+        ? (String(row.food_form) as FoodLibrary['foodForm'])
+        : undefined,
+    dishPriority: nOpt(row.dish_priority) as number | undefined,
   };
 }
 

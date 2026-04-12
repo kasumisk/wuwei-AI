@@ -267,17 +267,22 @@ export class ContextualProfileService {
       }
     }
 
-    // 第二步: 根据短期画像微调场景（如用户周末总是很晚才吃第一餐 → brunch）
-    scene = this.refineWithBehavior(
-      scene,
-      shortTermProfile,
-      dayType,
-      localHour,
-    );
+    // 第二步: 根据短期画像微调场景 + 权重修正
+    const { scene: refinedScene, modifiers: behaviorModifiers } =
+      this.refineWithBehavior(scene, shortTermProfile, dayType, localHour);
+    scene = refinedScene;
 
     // 第三步: 构建权重修正和约束提示
     const sceneWeightModifiers = { ...SCENE_WEIGHT_MODIFIERS[scene] };
     const constraintHints = { ...SCENE_CONSTRAINT_HINTS[scene] };
+
+    // V6.8 Phase 1-E: 将行为信号产生的权重修正叠加到场景修正上
+    if (behaviorModifiers) {
+      for (const [dim, val] of Object.entries(behaviorModifiers)) {
+        const key = dim as ScoreDimension;
+        sceneWeightModifiers[key] = (sceneWeightModifiers[key] ?? 1.0) * val;
+      }
+    }
 
     // 第四步: 计算置信度（有短期画像数据时置信度更高）
     const confidence = this.calculateConfidence(shortTermProfile);
@@ -371,40 +376,150 @@ export class ContextualProfileService {
   }
 
   /**
-   * 根据短期画像行为模式微调场景
+   * V6.8 Phase 1-E: 根据短期画像行为信号微调场景 + 权重修正
    *
-   * 例：用户周末活跃时段显示很少在早餐时间记录 → 说明经常跳过早餐，
-   * 如果当前是周末且正在推荐"午餐"但时间较早（<12:00），可能是 brunch
+   * 消费 4 种行为信号：
+   * 1. 依从性趋势 — dailyIntakes 热量趋势下降 → 增加饱腹感和可执行性
+   * 2. 热量模式 — 持续超标时收紧热量权重
+   * 3. 品类偏好 — 如果用户强烈偏好某品类，微调 preferTags
+   * 4. 跳餐检测 — 今日记录数为 0 时增加当前餐热量分配
+   *
+   * @returns 微调后的场景 + 额外权重修正（乘法叠加到场景修正之上）
    */
   private refineWithBehavior(
     scene: MealScene,
     shortTermProfile: ShortTermProfile | null | undefined,
     dayType: DayType,
     localHour: number,
-  ): MealScene {
-    if (!shortTermProfile) return scene;
+  ): {
+    scene: MealScene;
+    modifiers: Partial<Record<ScoreDimension, number>> | null;
+  } {
+    if (!shortTermProfile) return { scene, modifiers: null };
+
+    const modifiers: Partial<Record<ScoreDimension, number>> = {};
+    let sceneChanged = false;
+
+    // ── 场景微调（保留原有逻辑） ──
 
     const timeSlots = shortTermProfile.activeTimeSlots;
 
-    // 行为模式 1: 周末很少记录早餐 → 倾向于 brunch
+    // 周末很少记录早餐 → 保持 brunch 判断
     if (dayType === 'weekend' && scene === 'weekend_brunch') {
       const breakfastActivity = timeSlots?.['breakfast'];
-      // 如果早餐活动记录很少（<2 次），说明用户周末不太吃早餐
-      // 保持 brunch 判断即可
       if (!breakfastActivity || breakfastActivity.count < 2) {
-        return 'weekend_brunch';
+        // 用户周末不太吃早餐，保持 brunch
       }
     }
 
-    // 行为模式 2: 用户经常在深夜记录进食 → 深夜场景检测
-    // 如果晚餐时段（19-21h）的活动特别多，可能用户习惯晚吃
-    // 但不影响场景判断——保留原场景
+    // 深夜场景不微调，始终保持严格约束
     if (scene === 'late_night') {
-      // 深夜场景不微调，始终保持严格约束
-      return 'late_night';
+      return { scene: 'late_night', modifiers: null };
     }
 
-    return scene;
+    // ── V6.8: 行为信号消费 ──
+
+    const intakes = shortTermProfile.dailyIntakes;
+
+    // 1. 依从性趋势: 通过 dailyIntakes 热量序列计算简单趋势
+    //    如果热量呈下降趋势（用户在努力控制），增加饱腹感和可执行性支持
+    if (intakes && intakes.length >= 3) {
+      const trend = this.calcCalorieTrend(intakes);
+      if (trend < -0.15) {
+        // 热量在下降 → 用户在努力，增加饱腹感和可执行性权重帮助坚持
+        modifiers.satiety = 1.15;
+        modifiers.executability = 1.1;
+      }
+    }
+
+    // 2. 热量模式: 近期平均热量持续超标时收紧热量权重
+    if (intakes && intakes.length > 0) {
+      const avgCal =
+        intakes.reduce((sum, d) => sum + d.calories, 0) / intakes.length;
+      // 用 2000 作为 baseline 估算（实际应从 context 获取，但此处无 target 信息）
+      const baselineCal = 2000;
+      if (avgCal > 0) {
+        const ratio = avgCal / baselineCal;
+        if (ratio > 1.15) {
+          // 超标幅度越大，热量权重提升越多（最高 ×1.3）
+          const boost = Math.min(1.3, 1 + (ratio - 1) * 0.3);
+          modifiers.calories = (modifiers.calories ?? 1.0) * boost;
+        }
+      }
+    }
+
+    // 3. 品类偏好: 用户近期高频消费的品类 → 可在 constraintHints 中使用
+    //    这里将 top 品类的 acceptanceRate 映射到品质权重微调
+    if (shortTermProfile.categoryPreferences) {
+      const prefs = shortTermProfile.categoryPreferences;
+      const topCategories = Object.entries(prefs)
+        .filter(
+          ([, pref]) => pref.accepted + pref.rejected + pref.replaced >= 3,
+        )
+        .sort(
+          ([, a], [, b]) =>
+            b.accepted +
+            b.rejected +
+            b.replaced -
+            (a.accepted + a.rejected + a.replaced),
+        )
+        .slice(0, 3);
+
+      // 如果用户近期大量消费低品质品类（snack/beverage），提升品质权重
+      const lowQualityCats = ['snack', 'beverage'];
+      const hasHighLowQualityConsumption = topCategories.some(([cat]) =>
+        lowQualityCats.includes(cat),
+      );
+      if (hasHighLowQualityConsumption) {
+        modifiers.quality = (modifiers.quality ?? 1.0) * 1.1;
+        modifiers.nutrientDensity = (modifiers.nutrientDensity ?? 1.0) * 1.1;
+      }
+    }
+
+    // 4. 跳餐检测: 今日无记录 → 可能跳餐，稍微放宽当前餐热量
+    if (intakes && intakes.length > 0) {
+      const today = new Date().toISOString().slice(0, 10);
+      const todayIntake = intakes.find((d) => d.date === today);
+      if (todayIntake && todayIntake.mealCount === 0) {
+        // 用户今天还没吃东西，稍放宽热量限制
+        modifiers.calories = (modifiers.calories ?? 1.0) * 0.9; // 降低热量权重 = 放宽限制
+      }
+    }
+
+    const hasModifiers = Object.keys(modifiers).length > 0;
+    return { scene, modifiers: hasModifiers ? modifiers : null };
+  }
+
+  /**
+   * V6.8: 计算近期热量趋势（简单线性回归斜率归一化）
+   *
+   * 返回值 < 0 表示下降趋势，> 0 表示上升趋势
+   * 归一化到 [-1, 1] 范围
+   */
+  private calcCalorieTrend(intakes: { calories: number }[]): number {
+    const n = intakes.length;
+    if (n < 2) return 0;
+
+    // 简单线性回归: y = calories, x = 0,1,2,...
+    let sumX = 0,
+      sumY = 0,
+      sumXY = 0,
+      sumX2 = 0;
+    for (let i = 0; i < n; i++) {
+      sumX += i;
+      sumY += intakes[i].calories;
+      sumXY += i * intakes[i].calories;
+      sumX2 += i * i;
+    }
+    const meanY = sumY / n;
+    if (meanY === 0) return 0;
+
+    const denom = n * sumX2 - sumX * sumX;
+    if (denom === 0) return 0;
+
+    const slope = (n * sumXY - sumX * sumY) / denom;
+    // 归一化斜率: slope / meanY 表示每天变化占均值的比例
+    return Math.max(-1, Math.min(1, slope / meanY));
   }
 
   /**

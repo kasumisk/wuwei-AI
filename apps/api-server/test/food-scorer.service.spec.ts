@@ -157,25 +157,41 @@ describe('FoodScorerService', () => {
   describe('NOVA penalty', () => {
     it('NOVA 1 (unprocessed) → multiplier 1.0', () => {
       const food = createMockFood({ processingLevel: 1 });
-      const result = service.scoreFoodDetailed(food, 'health', defaultTarget);
+      const result = service.scoreFoodDetailed({
+        food,
+        goalType: 'health',
+        target: defaultTarget,
+      });
       expect(result.explanation.novaPenalty).toBe(1.0);
     });
 
     it('NOVA 2 (processed culinary ingredients) → multiplier 1.0', () => {
       const food = createMockFood({ processingLevel: 2 });
-      const result = service.scoreFoodDetailed(food, 'health', defaultTarget);
+      const result = service.scoreFoodDetailed({
+        food,
+        goalType: 'health',
+        target: defaultTarget,
+      });
       expect(result.explanation.novaPenalty).toBe(1.0);
     });
 
     it('NOVA 3 (processed foods) → multiplier 0.85', () => {
       const food = createMockFood({ processingLevel: 3 });
-      const result = service.scoreFoodDetailed(food, 'health', defaultTarget);
+      const result = service.scoreFoodDetailed({
+        food,
+        goalType: 'health',
+        target: defaultTarget,
+      });
       expect(result.explanation.novaPenalty).toBe(0.85);
     });
 
     it('NOVA 4 (ultra-processed) → multiplier 0.55', () => {
       const food = createMockFood({ processingLevel: 4 });
-      const result = service.scoreFoodDetailed(food, 'health', defaultTarget);
+      const result = service.scoreFoodDetailed({
+        food,
+        goalType: 'health',
+        target: defaultTarget,
+      });
       expect(result.explanation.novaPenalty).toBe(0.55);
     });
 
@@ -197,13 +213,21 @@ describe('FoodScorerService', () => {
   describe('confidence factor', () => {
     it('confidence=1.0 → factor=1.0', () => {
       const food = createMockFood({ confidence: 1.0 });
-      const result = service.scoreFoodDetailed(food, 'health', defaultTarget);
+      const result = service.scoreFoodDetailed({
+        food,
+        goalType: 'health',
+        target: defaultTarget,
+      });
       expect(result.explanation.confidenceFactor).toBeCloseTo(1.0, 5);
     });
 
     it('confidence=0.5 → factor=0.85', () => {
       const food = createMockFood({ confidence: 0.5 });
-      const result = service.scoreFoodDetailed(food, 'health', defaultTarget);
+      const result = service.scoreFoodDetailed({
+        food,
+        goalType: 'health',
+        target: defaultTarget,
+      });
       expect(result.explanation.confidenceFactor).toBeCloseTo(0.85, 5);
     });
 
@@ -211,13 +235,21 @@ describe('FoodScorerService', () => {
       // Note: the service uses `Number(food.confidence) || 0.5`,
       // so confidence=0 is falsy and falls back to 0.5 → factor = 0.7 + 0.3*0.5 = 0.85
       const food = createMockFood({ confidence: 0 });
-      const result = service.scoreFoodDetailed(food, 'health', defaultTarget);
+      const result = service.scoreFoodDetailed({
+        food,
+        goalType: 'health',
+        target: defaultTarget,
+      });
       expect(result.explanation.confidenceFactor).toBeCloseTo(0.85, 5);
     });
 
     it('very low confidence (0.1) → factor=0.73', () => {
       const food = createMockFood({ confidence: 0.1 });
-      const result = service.scoreFoodDetailed(food, 'health', defaultTarget);
+      const result = service.scoreFoodDetailed({
+        food,
+        goalType: 'health',
+        target: defaultTarget,
+      });
       expect(result.explanation.confidenceFactor).toBeCloseTo(
         0.7 + 0.3 * 0.1,
         5,
@@ -263,7 +295,11 @@ describe('FoodScorerService', () => {
       });
 
       const food = createMockFood();
-      const result = service.scoreFoodDetailed(food, 'health', defaultTarget);
+      const result = service.scoreFoodDetailed({
+        food,
+        goalType: 'health',
+        target: defaultTarget,
+      });
 
       expect(result.score).toBe(0);
       expect(result.explanation.penaltyResult.vetoed).toBe(true);
@@ -491,7 +527,11 @@ describe('FoodScorerService', () => {
   describe('scoreFoodDetailed — explanation structure', () => {
     it('should include all 10 dimensions', () => {
       const food = createMockFood();
-      const result = service.scoreFoodDetailed(food, 'health', defaultTarget);
+      const result = service.scoreFoodDetailed({
+        food,
+        goalType: 'health',
+        target: defaultTarget,
+      });
 
       const dims = result.explanation.dimensions;
       const expectedDimensions = [
@@ -518,7 +558,11 @@ describe('FoodScorerService', () => {
 
     it('should populate novaPenalty, penaltyResult, confidenceFactor', () => {
       const food = createMockFood({ processingLevel: 3, confidence: 0.8 });
-      const result = service.scoreFoodDetailed(food, 'health', defaultTarget);
+      const result = service.scoreFoodDetailed({
+        food,
+        goalType: 'health',
+        target: defaultTarget,
+      });
 
       expect(result.explanation.novaPenalty).toBe(0.85);
       expect(result.explanation.confidenceFactor).toBeCloseTo(
@@ -534,7 +578,11 @@ describe('FoodScorerService', () => {
 
     it('should have default boost/penalty values', () => {
       const food = createMockFood();
-      const result = service.scoreFoodDetailed(food, 'health', defaultTarget);
+      const result = service.scoreFoodDetailed({
+        food,
+        goalType: 'health',
+        target: defaultTarget,
+      });
 
       expect(result.explanation.preferenceBoost).toBe(1.0);
       expect(result.explanation.profileBoost).toBe(1.0);
@@ -546,7 +594,11 @@ describe('FoodScorerService', () => {
 
     it('finalScore in explanation should match returned score', () => {
       const food = createMockFood();
-      const result = service.scoreFoodDetailed(food, 'health', defaultTarget);
+      const result = service.scoreFoodDetailed({
+        food,
+        goalType: 'health',
+        target: defaultTarget,
+      });
 
       expect(result.explanation.finalScore).toBe(result.score);
     });
@@ -578,7 +630,11 @@ describe('FoodScorerService', () => {
         carbs: 50,
       };
 
-      const result = service.scoreFoodDetailed(food, 'health', target);
+      const result = service.scoreFoodDetailed({
+        food,
+        goalType: 'health',
+        target,
+      });
 
       // The calories dimension raw score should be ~1.0 (Gaussian peak)
       expect(result.explanation.dimensions.calories.raw).toBeCloseTo(1.0, 2);
@@ -601,7 +657,11 @@ describe('FoodScorerService', () => {
         carbs: 50,
       };
 
-      const result = service.scoreFoodDetailed(food, 'health', target);
+      const result = service.scoreFoodDetailed({
+        food,
+        goalType: 'health',
+        target,
+      });
 
       expect(result.explanation.dimensions.calories.raw).toBeLessThan(0.5);
     });
@@ -613,7 +673,7 @@ describe('FoodScorerService', () => {
         // servingCal = 267*150/100 = 400.5 ≈ 400
       });
 
-      const result = service.scoreFoodDetailed(food, 'health');
+      const result = service.scoreFoodDetailed({ food, goalType: 'health' });
 
       // Should be close to peak with default target of 400
       expect(result.explanation.dimensions.calories.raw).toBeGreaterThan(0.9);
@@ -628,7 +688,11 @@ describe('FoodScorerService', () => {
     it('should return the same value as scoreFoodDetailed.score', () => {
       const food = createMockFood();
       const score = service.scoreFood(food, 'health', defaultTarget);
-      const detailed = service.scoreFoodDetailed(food, 'health', defaultTarget);
+      const detailed = service.scoreFoodDetailed({
+        food,
+        goalType: 'health',
+        target: defaultTarget,
+      });
 
       expect(score).toBe(detailed.score);
     });
@@ -696,11 +760,15 @@ describe('FoodScorerService', () => {
         // ratio = 30*4/400 = 0.30 → in [0.25, 0.35]
       });
 
-      const result = service.scoreFoodDetailed(food, 'fat_loss', {
-        calories: 400,
-        protein: 30,
-        fat: 15,
-        carbs: 50,
+      const result = service.scoreFoodDetailed({
+        food,
+        goalType: 'fat_loss',
+        target: {
+          calories: 400,
+          protein: 30,
+          fat: 15,
+          carbs: 50,
+        },
       });
 
       expect(result.explanation.dimensions.protein.raw).toBeCloseTo(1.0, 2);
@@ -718,7 +786,11 @@ describe('FoodScorerService', () => {
         // ratio = 2*4/300 = 0.027 → well below 0.25
       });
 
-      const result = service.scoreFoodDetailed(food, 'fat_loss', defaultTarget);
+      const result = service.scoreFoodDetailed({
+        food,
+        goalType: 'fat_loss',
+        target: defaultTarget,
+      });
       expect(result.explanation.dimensions.protein.raw).toBeLessThan(0.5);
     });
   });
@@ -734,7 +806,11 @@ describe('FoodScorerService', () => {
         glycemicLoad: 0,
       });
 
-      const result = service.scoreFoodDetailed(food, 'health', defaultTarget);
+      const result = service.scoreFoodDetailed({
+        food,
+        goalType: 'health',
+        target: defaultTarget,
+      });
 
       // GI=0 → returns 0.75
       expect(result.explanation.dimensions.glycemic.raw).toBeCloseTo(0.75, 2);
@@ -752,16 +828,16 @@ describe('FoodScorerService', () => {
         carbs: 40,
       });
 
-      const resultLow = service.scoreFoodDetailed(
-        lowGL,
-        'health',
-        defaultTarget,
-      );
-      const resultHigh = service.scoreFoodDetailed(
-        highGL,
-        'health',
-        defaultTarget,
-      );
+      const resultLow = service.scoreFoodDetailed({
+        food: lowGL,
+        goalType: 'health',
+        target: defaultTarget,
+      });
+      const resultHigh = service.scoreFoodDetailed({
+        food: highGL,
+        goalType: 'health',
+        target: defaultTarget,
+      });
 
       expect(resultLow.explanation.dimensions.glycemic.raw).toBeGreaterThan(
         resultHigh.explanation.dimensions.glycemic.raw,
@@ -776,7 +852,11 @@ describe('FoodScorerService', () => {
   describe('quality and satiety — log scale', () => {
     it('should use qualityScore from food when available', () => {
       const food = createMockFood({ qualityScore: 10, satietyScore: 10 });
-      const result = service.scoreFoodDetailed(food, 'health', defaultTarget);
+      const result = service.scoreFoodDetailed({
+        food,
+        goalType: 'health',
+        target: defaultTarget,
+      });
 
       // logScale(10) = log(11)/log(11) = 1.0
       expect(result.explanation.dimensions.quality.raw).toBeCloseTo(1.0, 5);
@@ -791,7 +871,11 @@ describe('FoodScorerService', () => {
         // CATEGORY_QUALITY.veggie = 8, CATEGORY_SATIETY.veggie = 5
       });
 
-      const result = service.scoreFoodDetailed(food, 'health', defaultTarget);
+      const result = service.scoreFoodDetailed({
+        food,
+        goalType: 'health',
+        target: defaultTarget,
+      });
 
       const expectedQuality = Math.log(1 + 8) / Math.log(11);
       const expectedSatiety = Math.log(1 + 5) / Math.log(11);
@@ -809,16 +893,16 @@ describe('FoodScorerService', () => {
       const foodLow = createMockFood({ qualityScore: 1 });
       const foodMid = createMockFood({ qualityScore: 5 });
 
-      const resultLow = service.scoreFoodDetailed(
-        foodLow,
-        'health',
-        defaultTarget,
-      );
-      const resultMid = service.scoreFoodDetailed(
-        foodMid,
-        'health',
-        defaultTarget,
-      );
+      const resultLow = service.scoreFoodDetailed({
+        food: foodLow,
+        goalType: 'health',
+        target: defaultTarget,
+      });
+      const resultMid = service.scoreFoodDetailed({
+        food: foodMid,
+        goalType: 'health',
+        target: defaultTarget,
+      });
 
       expect(resultLow.explanation.dimensions.quality.raw).toBeGreaterThan(0);
       expect(resultLow.explanation.dimensions.quality.raw).toBeLessThan(
@@ -844,16 +928,16 @@ describe('FoodScorerService', () => {
         fiber: 0,
       });
 
-      const resultAnti = service.scoreFoodDetailed(
-        antiInflam,
-        'health',
-        defaultTarget,
-      );
-      const resultPro = service.scoreFoodDetailed(
-        proInflam,
-        'health',
-        defaultTarget,
-      );
+      const resultAnti = service.scoreFoodDetailed({
+        food: antiInflam,
+        goalType: 'health',
+        target: defaultTarget,
+      });
+      const resultPro = service.scoreFoodDetailed({
+        food: proInflam,
+        goalType: 'health',
+        target: defaultTarget,
+      });
 
       expect(
         resultAnti.explanation.dimensions.inflammation.raw,
@@ -876,20 +960,18 @@ describe('FoodScorerService', () => {
         standardServingG: 150,
       });
 
-      const resultHigh = service.scoreFoodDetailed(
-        highFiber,
-        'health',
-        defaultTarget,
-        undefined,
-        'lunch',
-      );
-      const resultNone = service.scoreFoodDetailed(
-        noFiber,
-        'health',
-        defaultTarget,
-        undefined,
-        'lunch',
-      );
+      const resultHigh = service.scoreFoodDetailed({
+        food: highFiber,
+        goalType: 'health',
+        target: defaultTarget,
+        mealType: 'lunch',
+      });
+      const resultNone = service.scoreFoodDetailed({
+        food: noFiber,
+        goalType: 'health',
+        target: defaultTarget,
+        mealType: 'lunch',
+      });
 
       expect(resultHigh.explanation.dimensions.fiber.raw).toBeGreaterThan(
         resultNone.explanation.dimensions.fiber.raw,
@@ -904,13 +986,12 @@ describe('FoodScorerService', () => {
         // 实际纤维 = 30 * 200 / 100 = 60g，远超任何餐次目标
       });
 
-      const result = service.scoreFoodDetailed(
-        veryHighFiber,
-        'health',
-        defaultTarget,
-        undefined,
-        'lunch',
-      );
+      const result = service.scoreFoodDetailed({
+        food: veryHighFiber,
+        goalType: 'health',
+        target: defaultTarget,
+        mealType: 'lunch',
+      });
 
       expect(result.explanation.dimensions.fiber.raw).toBe(1.0);
     });
@@ -918,13 +999,12 @@ describe('FoodScorerService', () => {
     it('should return 0 for food with no fiber', () => {
       const noFiber = createMockFood({ fiber: 0 });
 
-      const result = service.scoreFoodDetailed(
-        noFiber,
-        'health',
-        defaultTarget,
-        undefined,
-        'lunch',
-      );
+      const result = service.scoreFoodDetailed({
+        food: noFiber,
+        goalType: 'health',
+        target: defaultTarget,
+        mealType: 'lunch',
+      });
 
       expect(result.explanation.dimensions.fiber.raw).toBe(0);
     });
@@ -937,22 +1017,20 @@ describe('FoodScorerService', () => {
       });
 
       // snack 比例较小（0.1），目标纤维 ≈ 2.75g → 3/2.75 > 1 → cap 1.0
-      const snackResult = service.scoreFoodDetailed(
+      const snackResult = service.scoreFoodDetailed({
         food,
-        'health',
-        defaultTarget,
-        undefined,
-        'snack',
-      );
+        goalType: 'health',
+        target: defaultTarget,
+        mealType: 'snack',
+      });
 
       // lunch 比例较大（0.35），目标纤维 ≈ 9.625g → 3/9.625 ≈ 0.31
-      const lunchResult = service.scoreFoodDetailed(
+      const lunchResult = service.scoreFoodDetailed({
         food,
-        'health',
-        defaultTarget,
-        undefined,
-        'lunch',
-      );
+        goalType: 'health',
+        target: defaultTarget,
+        mealType: 'lunch',
+      });
 
       // snack 目标更低，同样的纤维量得分更高
       expect(snackResult.explanation.dimensions.fiber.raw).toBeGreaterThan(
@@ -963,13 +1041,12 @@ describe('FoodScorerService', () => {
     it('should handle undefined fiber as 0', () => {
       const food = createMockFood({ fiber: undefined as any });
 
-      const result = service.scoreFoodDetailed(
+      const result = service.scoreFoodDetailed({
         food,
-        'health',
-        defaultTarget,
-        undefined,
-        'lunch',
-      );
+        goalType: 'health',
+        target: defaultTarget,
+        mealType: 'lunch',
+      });
 
       expect(result.explanation.dimensions.fiber.raw).toBe(0);
     });
@@ -1010,16 +1087,16 @@ describe('FoodScorerService', () => {
         sodium: 1500,
       });
 
-      const resultDense = service.scoreFoodDetailed(
-        dense,
-        'health',
-        defaultTarget,
-      );
-      const resultSparse = service.scoreFoodDetailed(
-        sparse,
-        'health',
-        defaultTarget,
-      );
+      const resultDense = service.scoreFoodDetailed({
+        food: dense,
+        goalType: 'health',
+        target: defaultTarget,
+      });
+      const resultSparse = service.scoreFoodDetailed({
+        food: sparse,
+        goalType: 'health',
+        target: defaultTarget,
+      });
 
       expect(
         resultDense.explanation.dimensions.nutrientDensity.raw,
@@ -1051,11 +1128,11 @@ describe('FoodScorerService', () => {
 
       // 无插补：所有微量营养素为 0
       service.setCategoryMicroDefaults(null);
-      const resultNoImpute = service.scoreFoodDetailed(
+      const resultNoImpute = service.scoreFoodDetailed({
         food,
-        'health',
-        defaultTarget,
-      );
+        goalType: 'health',
+        target: defaultTarget,
+      });
 
       // 有插补：使用品类均值
       const defaults = new Map<string, MicroNutrientDefaults>();
@@ -1070,11 +1147,11 @@ describe('FoodScorerService', () => {
         fiber: 3,
       });
       service.setCategoryMicroDefaults(defaults);
-      const resultImputed = service.scoreFoodDetailed(
+      const resultImputed = service.scoreFoodDetailed({
         food,
-        'health',
-        defaultTarget,
-      );
+        goalType: 'health',
+        target: defaultTarget,
+      });
 
       // 插补后营养密度分应该更高
       expect(
@@ -1117,19 +1194,19 @@ describe('FoodScorerService', () => {
 
       // 先无插补
       service.setCategoryMicroDefaults(null);
-      const resultBefore = service.scoreFoodDetailed(
+      const resultBefore = service.scoreFoodDetailed({
         food,
-        'health',
-        defaultTarget,
-      );
+        goalType: 'health',
+        target: defaultTarget,
+      });
 
       // 再有插补（但食物所有字段都有值，不应被覆盖）
       service.setCategoryMicroDefaults(defaults);
-      const resultAfter = service.scoreFoodDetailed(
+      const resultAfter = service.scoreFoodDetailed({
         food,
-        'health',
-        defaultTarget,
-      );
+        goalType: 'health',
+        target: defaultTarget,
+      });
 
       // 所有字段都有值，插补不应产生任何影响
       expect(resultBefore.explanation.dimensions.nutrientDensity.raw).toBe(
@@ -1319,7 +1396,11 @@ describe('FoodScorerService', () => {
 
     it('should handle undefined processingLevel by defaulting to NOVA 1', () => {
       const food = createMockFood({ processingLevel: undefined as any });
-      const result = service.scoreFoodDetailed(food, 'health', defaultTarget);
+      const result = service.scoreFoodDetailed({
+        food,
+        goalType: 'health',
+        target: defaultTarget,
+      });
 
       // processingLevel ?? 1 → defaults to 1 → novaPenalty = 1.0
       expect(result.explanation.novaPenalty).toBe(1.0);
@@ -1358,7 +1439,11 @@ describe('FoodScorerService', () => {
   describe('weighted dimension values', () => {
     it('weighted = raw × weight for each dimension', () => {
       const food = createMockFood();
-      const result = service.scoreFoodDetailed(food, 'health', defaultTarget);
+      const result = service.scoreFoodDetailed({
+        food,
+        goalType: 'health',
+        target: defaultTarget,
+      });
       const dims = result.explanation.dimensions;
 
       // Each weighted should approximately equal raw * its weight

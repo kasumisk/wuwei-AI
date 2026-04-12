@@ -23,6 +23,8 @@ import { DataQualityService } from './app/data-quality.service';
 import { AnalysisIngestionService } from './app/analysis-ingestion.service';
 // V6.1 Phase 3.3: 候选食物聚合服务
 import { CandidateAggregationService } from './app/candidate-aggregation.service';
+// V6.9 Phase 3-C: 渠道标注迁移服务
+import { ChannelMigrationService } from './app/channel-migration.service';
 // Admin 端
 import { FoodLibraryManagementController } from './admin/food-library-management.controller';
 import { FoodLibraryManagementService } from './admin/food-library-management.service';
@@ -63,6 +65,8 @@ import { UserModule } from '../user/user.module';
     // V6 Phase 1.4: 注册 AI 分析队列 Worker
     FoodAnalysisProcessor,
     // V6.2 3.8: CandidatePromotedListener 已移至 DietModule
+    // V6.9 Phase 3-C: 渠道标注迁移
+    ChannelMigrationService,
   ],
   exports: [
     FoodLibraryService,
@@ -73,6 +77,8 @@ import { UserModule } from '../user/user.module';
     DataQualityService,
     AnalysisIngestionService,
     CandidateAggregationService,
+    // V6.9 Phase 3-C: 渠道标注迁移（可被其他模块/CLI调用）
+    ChannelMigrationService,
   ],
 })
 export class FoodModule {}

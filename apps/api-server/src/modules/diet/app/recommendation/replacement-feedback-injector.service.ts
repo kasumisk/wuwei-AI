@@ -41,13 +41,20 @@ export class ReplacementFeedbackInjectorService {
   /**
    * 获取用户的替换模式权重 Map
    *
-   * @param userId  用户 ID
+   * V6.7 Phase 2-E: 新增 mealType 参数，实现餐次感知替换反馈。
+   * 当 pattern 有 meal_type 且与当前餐次不匹配时，权重打折 0.6x。
+   *
+   * @param userId    用户 ID
+   * @param mealType  V6.7: 可选餐次上下文（breakfast/lunch/dinner/snack）
    * @returns Map<foodId, multiplier>
    *   - multiplier < 1.0 → 该食物曾被替换（降权）
    *   - multiplier > 1.0 → 该食物曾是替换目标（增权）
    *   - 食物不在 Map 中 → 乘数为 1.0（不做调整）
    */
-  async getWeightMap(userId: string): Promise<Map<string, number>> {
+  async getWeightMap(
+    userId: string,
+    mealType?: string,
+  ): Promise<Map<string, number>> {
     const weightMap = new Map<string, number>();
     try {
       const cutoff = new Date(
@@ -65,6 +72,7 @@ export class ReplacementFeedbackInjectorService {
           to_food_id: true,
           frequency: true,
           last_occurred: true,
+          meal_type: true, // V6.7 Phase 2-E
         },
       });
 
@@ -83,6 +91,13 @@ export class ReplacementFeedbackInjectorService {
                     60,
               );
 
+        // V6.7 Phase 2-E: 餐次匹配因子
+        // 如果 pattern 有 meal_type 且与当前餐次不匹配，权重打折 0.6x
+        // 无 mealType 传入 或 pattern 无 meal_type → 视为匹配（全权重）
+        const mealTypeMatch =
+          !mealType || !p.meal_type || p.meal_type === mealType;
+        const mealTypeFactor = mealTypeMatch ? 1.0 : 0.6;
+
         // 被替换食物降权（叠加，下界 0.65）
         const fromCurrent = weightMap.get(p.from_food_id) ?? 1.0;
         weightMap.set(
@@ -91,7 +106,8 @@ export class ReplacementFeedbackInjectorService {
             ReplacementFeedbackInjectorService.MIN_FROM,
             fromCurrent *
               ReplacementFeedbackInjectorService.REPLACED_FROM_MULTIPLIER *
-              decayFactor,
+              decayFactor *
+              mealTypeFactor,
           ),
         );
 
@@ -103,7 +119,8 @@ export class ReplacementFeedbackInjectorService {
             ReplacementFeedbackInjectorService.MAX_TO,
             toCurrent *
               ReplacementFeedbackInjectorService.REPLACED_TO_MULTIPLIER *
-              decayFactor,
+              decayFactor *
+              mealTypeFactor,
           ),
         );
       }

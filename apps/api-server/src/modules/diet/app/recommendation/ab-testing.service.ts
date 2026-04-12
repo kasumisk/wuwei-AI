@@ -10,6 +10,7 @@ import {
   StrategyScoreDimension,
   SCORE_DIMENSION_NAMES,
 } from '../../../strategy/strategy.types';
+import { t } from './i18n-messages';
 
 /**
  * 用户的实验分组结果
@@ -345,7 +346,7 @@ export class ABTestingService {
         comparisons: [],
         winner: null,
         canConclude: false,
-        conclusion: '数据不足：需要至少 2 个分组的反馈数据才能进行分析',
+        conclusion: t('ab.analysis.insufficientGroups'),
       };
     }
 
@@ -362,7 +363,7 @@ export class ABTestingService {
         comparisons: [],
         winner: null,
         canConclude: false,
-        conclusion: '无法分析：未找到 control 组（组名需包含 "control"）',
+        conclusion: t('ab.analysis.noControl'),
       };
     }
 
@@ -410,7 +411,9 @@ export class ABTestingService {
     let conclusion: string;
 
     if (!allGroupsHaveEnoughData) {
-      conclusion = `样本量不足：部分组用户数 < ${minSamplePerGroup}，建议继续收集数据`;
+      conclusion = t('ab.analysis.insufficientSample', {
+        minSample: String(minSamplePerGroup),
+      });
     } else if (significantWinners.length === 0) {
       // 检查是否所有比较都不显著
       const anySignificant = comparisons.some(
@@ -420,17 +423,21 @@ export class ABTestingService {
         // control 显著胜出
         winner = controlMetrics.groupId;
         canConclude = true;
-        conclusion = `Control 组 "${controlMetrics.groupId}" 表现更优，建议保持现有策略`;
+        conclusion = t('ab.analysis.controlWins', {
+          controlGroup: controlMetrics.groupId,
+        });
       } else {
         canConclude = true;
-        conclusion =
-          '各组之间无统计显著差异，建议保持 control 策略或调整实验参数';
+        conclusion = t('ab.analysis.noSignificantDiff');
       }
     } else if (significantWinners.length === 1) {
       winner = significantWinners[0].treatmentGroup;
       canConclude = true;
       const lift = significantWinners[0].acceptanceRateLift;
-      conclusion = `实验组 "${winner}" 显著优于 control，接受率提升 ${lift}%，建议采用`;
+      conclusion = t('ab.analysis.singleWinner', {
+        winner,
+        lift: String(lift),
+      });
     } else {
       // 多个 variant 都显著优于 control，选接受率最高的
       const best = significantWinners.reduce((a, b) =>
@@ -438,7 +445,10 @@ export class ABTestingService {
       );
       winner = best.treatmentGroup;
       canConclude = true;
-      conclusion = `多个实验组优于 control，"${winner}" 提升最大 (${best.acceptanceRateLift}%)，建议采用`;
+      conclusion = t('ab.analysis.multipleWinners', {
+        winner: best.treatmentGroup,
+        lift: String(best.acceptanceRateLift),
+      });
     }
 
     return {

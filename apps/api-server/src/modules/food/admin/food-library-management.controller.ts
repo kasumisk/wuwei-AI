@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   HttpStatus,
+  Request,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/admin/jwt-auth.guard';
@@ -106,15 +107,21 @@ export class FoodLibraryManagementController {
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateFoodLibraryDto,
+    @Request() req: any,
   ): Promise<ApiResponse> {
-    const data = await this.foodLibraryService.update(id, dto);
+    const operator: string = req.user?.username ?? 'admin';
+    const data = await this.foodLibraryService.update(id, dto, operator);
     return { success: true, code: HttpStatus.OK, message: '更新成功', data };
   }
 
   @Post(':id/toggle-verified')
   @ApiOperation({ summary: '切换食物验证状态' })
-  async toggleVerified(@Param('id') id: string): Promise<ApiResponse> {
-    const data = await this.foodLibraryService.toggleVerified(id);
+  async toggleVerified(
+    @Param('id') id: string,
+    @Request() req: any,
+  ): Promise<ApiResponse> {
+    const operator: string = req.user?.username ?? 'admin';
+    const data = await this.foodLibraryService.toggleVerified(id, operator);
     return { success: true, code: HttpStatus.OK, message: '状态已更新', data };
   }
 
@@ -123,8 +130,14 @@ export class FoodLibraryManagementController {
   async updateStatus(
     @Param('id') id: string,
     @Body('status') status: string,
+    @Request() req: any,
   ): Promise<ApiResponse> {
-    const data = await this.foodLibraryService.updateStatus(id, status);
+    const operator: string = req.user?.username ?? 'admin';
+    const data = await this.foodLibraryService.updateStatus(
+      id,
+      status,
+      operator,
+    );
     return { success: true, code: HttpStatus.OK, message: '状态已更新', data };
   }
 
@@ -218,8 +231,16 @@ export class FoodLibraryManagementController {
 
   @Get(':id/change-logs')
   @ApiOperation({ summary: '获取食物变更日志' })
-  async getChangeLogs(@Param('id') id: string): Promise<ApiResponse> {
-    const data = await this.foodLibraryService.getChangeLogs(id);
+  async getChangeLogs(
+    @Param('id') id: string,
+    @Query('page') page?: number,
+    @Query('pageSize') pageSize?: number,
+  ): Promise<ApiResponse> {
+    const data = await this.foodLibraryService.getChangeLogs(
+      id,
+      page ? Number(page) : 1,
+      pageSize ? Number(pageSize) : 20,
+    );
     return { success: true, code: HttpStatus.OK, message: '获取成功', data };
   }
 
@@ -230,8 +251,14 @@ export class FoodLibraryManagementController {
   async resolveConflict(
     @Param('conflictId') conflictId: string,
     @Body() dto: ResolveFoodConflictDto,
+    @Request() req: any,
   ): Promise<ApiResponse> {
-    const data = await this.foodLibraryService.resolveConflict(conflictId, dto);
+    const operator: string = req.user?.username ?? 'admin';
+    const data = await this.foodLibraryService.resolveConflict(
+      conflictId,
+      dto,
+      operator,
+    );
     return { success: true, code: HttpStatus.OK, message: '冲突已解决', data };
   }
 }

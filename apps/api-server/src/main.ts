@@ -74,7 +74,7 @@ async function bootstrap() {
       origin: true,
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+      allowedHeaders: ['*'],
     });
   } else {
     // 生产环境：严格白名单
@@ -88,7 +88,17 @@ async function bootstrap() {
         origin: origins,
         credentials: true,
         methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-        allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+        allowedHeaders: [
+          'Content-Type',
+          'Authorization',
+          'X-Requested-With',
+          'Accept',
+          'Accept-Language',
+          'X-Request-ID',
+          'X-Request-Id',
+          'Cache-Control',
+          'Pragma',
+        ],
       });
     } else {
       Logger.warn(

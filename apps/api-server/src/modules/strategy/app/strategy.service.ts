@@ -198,6 +198,32 @@ export class StrategyService {
     return this.getActiveStrategy(StrategyScope.GLOBAL);
   }
 
+  /**
+   * V7.0: 获取所有活跃的上下文策略（scope=CONTEXT）
+   *
+   * 返回所有 CONTEXT scope 的 active 策略，由 StrategyResolver 进行匹配。
+   * 带缓存（30s TTL）。
+   */
+  async getContextStrategies(): Promise<any[]> {
+    const cacheKey = `${CACHE_PREFIX}active:context:_all`;
+
+    const result = await this.redis.getOrSet<any[]>(
+      cacheKey,
+      STRATEGY_CACHE_TTL * 1000,
+      async () => {
+        return this.prisma.strategy.findMany({
+          where: {
+            scope: StrategyScope.CONTEXT,
+            status: StrategyStatus.ACTIVE,
+          },
+          orderBy: { priority: 'desc' },
+        });
+      },
+    );
+
+    return result ?? [];
+  }
+
   // ─── 策略分配 ───
 
   /** 为用户分配策略 */

@@ -8,30 +8,51 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+/// A/B 实验配置表 — 管理推荐引擎、UI 等各类 A/B 测试实验
 model ab_experiments {
+  /// 主键 UUID
   id          String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 实验名称（如 "推荐算法 v2 vs v1"）
   name        String                     @db.VarChar(100)
+  /// 实验描述
   description String?
+  /// 实验目标类型（"*" 表示通用；也可指定特定目标如 "fat_loss"）
   goal_type   String                     @default("*") @db.VarChar(30)
+  /// 实验状态：draft=草稿, running=运行中, paused=暂停, completed=已完成
   status      ab_experiments_status_enum @default(draft)
+  /// 实验分组配置（JSON 数组，每组含 id/name/weight/config 等）
   groups      Json                       @default("[]")
+  /// 实验开始时间
   start_date  DateTime?                  @db.Timestamptz(6)
+  /// 实验结束时间
   end_date    DateTime?                  @db.Timestamptz(6)
+  /// 创建时间
   created_at  DateTime                   @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
   updated_at  DateTime                   @default(now()) @db.Timestamptz(6)
 
   @@index([status], map: "IDX_ab_experiments_status")
 }
 
+/// 成就/徽章定义表 — 存储可解锁的成就配置（连续打卡、营养达标等）
 model achievements {
+  /// 主键 UUID
   id           String  @id(map: "PK_1bc19c37c6249f70186f318d71d") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 成就唯一编码（如 "STREAK_7"、"CALORIE_100"）
   code         String  @unique(map: "UQ_cd74882f69ff37d7330e89c63d5") @db.VarChar(50)
+  /// 成就展示名称
   name         String  @db.VarChar(100)
+  /// 成就描述
   description  String?
+  /// 成就图标（emoji 或图标代码，最多 10 字符）
   icon         String? @db.VarChar(10)
+  /// 成就分类（如 streak/nutrition/weight/social）
   category     String? @db.VarChar(30)
+  /// 达成门槛值（如连续打卡 7 天则为 7）
   threshold    Int
+  /// 奖励类型（如 points/badge/feature_unlock）
   reward_type  String? @db.VarChar(30)
+  /// 奖励数值（如积分数量，默认 0）
   reward_value Int     @default(0)
 }
 
@@ -462,6 +483,7 @@ model food_regional_info {
   regulatory_info   Json?
   created_at        DateTime @default(now()) @db.Timestamptz(6)
   foods             foods    @relation(fields: [food_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_999e5485019b3efa2aae0a557f5")
+  month_weights     Json?    @db.JsonB /// V7.0: 食物级月份权重（12 元素数组 0-1），替代品类级峰值月份
 
   @@unique([food_id, region], map: "UQ_41a17bad128becea48895910fa6")
   @@index([food_id], map: "IDX_food_regional_info_food_id")
@@ -505,90 +527,207 @@ model food_translations {
   @@index([locale], map: "IDX_eafdca1bd9632ceabd94d182f2")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// 全球化食物库主表 — 存储食物的营养、属性、来源及推荐引擎所需的全部字段
+/// 字段分组：基本信息 → 宏量营养素 → 微量营养素 → 健康评估 → 标签与决策 →
+///           份量 → 烹饪与风味 → 媒体 → 数据溯源 → 向量检索
 model foods {
+  // ─── 基本信息 ───────────────────────────────────────────────────────────
+  /// 主键 UUID
   id                    String                 @id(map: "PK_0cc83421325632f61fa27a52b59") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// 食物编码，全局唯一（如 CN_RICE_WHITE_COOKED）
   code                  String                 @unique(map: "IDX_94114b6498bb8a8c102e194b8c") @db.VarChar(50)
+  /// 食物标准中文名，全局唯一
   name                  String                 @unique(map: "UQ_c3cf46642750fce8fea692ad946") @db.VarChar(100)
+  /// 别名/俗称，逗号分隔（如"米饭,白饭,蒸米"），用于模糊搜索
   aliases               String?                @db.VarChar(300)
+  /// 商品条形码（EAN-13 / UPC）
   barcode               String?                @db.VarChar(50)
+  /// 生命周期状态：draft=草稿, active=上线, archived=归档, merged=已合并
   status                String                 @default("draft") @db.VarChar(20)
+  /// 一级分类（grain/vegetable/fruit/meat/seafood/dairy/egg/legume/nut/fat/beverage/condiment/snack/other）
   category              String                 @db.VarChar(30)
+  /// 二级分类（如 grain → white_rice/brown_rice）
   sub_category          String?                @db.VarChar(50)
+  /// 食物组（如 USDA 食物组分类）
   food_group            String?                @db.VarChar(30)
+  /// 食物形态：ingredient=原材料, dish=成品菜, semi_prepared=半成品（V7.3）
+  food_form             String?                @default("ingredient") @db.VarChar(20)
+  /// 成品菜推荐优先级 0-100，值越高越优先推荐；仅 dish/semi_prepared 有值（V7.3）
+  dish_priority         Int?
+
+  // ─── 宏量营养素（per 100g 可食部分）────────────────────────────────────
+  /// 热量，单位 kcal
   calories              Decimal                @db.Decimal(7, 1)
+  /// 蛋白质，单位 g
   protein               Decimal?               @db.Decimal(6, 1)
+  /// 脂肪总量，单位 g
   fat                   Decimal?               @db.Decimal(6, 1)
+  /// 碳水化合物，单位 g
   carbs                 Decimal?               @db.Decimal(6, 1)
+  /// 膳食纤维，单位 g
   fiber                 Decimal?               @db.Decimal(5, 1)
+  /// 总糖（添加糖 + 天然糖），单位 g
   sugar                 Decimal?               @db.Decimal(5, 1)
-  saturated_fat         Decimal?               @db.Decimal(5, 1)
-  trans_fat             Decimal?               @db.Decimal(5, 2)
-  cholesterol           Decimal?               @db.Decimal(6, 1)
-  sodium                Decimal?               @db.Decimal(7, 1)
-  potassium             Decimal?               @db.Decimal(7, 1)
-  calcium               Decimal?               @db.Decimal(7, 1)
-  iron                  Decimal?               @db.Decimal(5, 2)
-  vitamin_a             Decimal?               @db.Decimal(7, 1)
-  vitamin_c             Decimal?               @db.Decimal(6, 1)
-  vitamin_d             Decimal?               @db.Decimal(5, 2)
-  vitamin_e             Decimal?               @db.Decimal(5, 2)
-  vitamin_b12           Decimal?               @db.Decimal(5, 2)
-  folate                Decimal?               @db.Decimal(6, 1)
-  zinc                  Decimal?               @db.Decimal(5, 2)
-  magnesium             Decimal?               @db.Decimal(6, 1)
-  glycemic_index        Int?
-  glycemic_load         Decimal?               @db.Decimal(5, 1)
-  is_processed          Boolean                @default(false)
-  is_fried              Boolean                @default(false)
-  processing_level      Int                    @default(1)
-  allergens             Json                   @default("[]")
-  quality_score         Decimal?               @db.Decimal(3, 1)
-  satiety_score         Decimal?               @db.Decimal(3, 1)
-  nutrient_density      Decimal?               @db.Decimal(5, 1)
-  meal_types            Json                   @default("[]")
-  tags                  Json                   @default("[]")
-  main_ingredient       String?                @db.VarChar(50)
-  compatibility         Json                   @default("{}")
-  standard_serving_g    Int                    @default(100)
-  standard_serving_desc String?                @db.VarChar(100)
-  common_portions       Json                   @default("[]")
-  image_url             String?                @db.VarChar(500)
-  thumbnail_url         String?                @db.VarChar(500)
-  primary_source        String                 @default("manual") @db.VarChar(50)
-  primary_source_id     String?                @db.VarChar(100)
-  data_version          Int                    @default(1)
-  confidence            Decimal                @default(1) @db.Decimal(3, 2)
-  is_verified           Boolean                @default(false)
-  verified_by           String?                @db.VarChar(100)
-  verified_at           DateTime?              @db.Timestamptz(6)
-  search_weight         Int                    @default(100)
-  popularity            Int                    @default(0)
-  created_at            DateTime               @default(now()) @db.Timestamptz(6)
-  updated_at            DateTime               @default(now()) @db.Timestamptz(6)
-  source                String?                @default("official") @db.VarChar(20)
-  fiber_per_100g        Decimal?               @db.Decimal(5, 1) /// @deprecated V6.5: 使用 fiber 字段，此字段将在后续版本删除
-  sugar_per_100g        Decimal?               @db.Decimal(5, 1) /// @deprecated V6.5: 使用 sugar 字段，此字段将在后续版本删除
-  sodium_per_100g       Decimal?               @db.Decimal(6, 1) /// @deprecated V6.5: 使用 sodium 字段，此字段将在后续版本删除
+  /// 添加糖，单位 g
   added_sugar           Decimal?               @db.Decimal(5, 1)
+  /// 天然糖，单位 g
   natural_sugar         Decimal?               @db.Decimal(5, 1)
-  purine                Decimal?               @db.Decimal(7, 1)
+  /// 饱和脂肪，单位 g
+  saturated_fat         Decimal?               @db.Decimal(5, 1)
+  /// 反式脂肪，单位 g
+  trans_fat             Decimal?               @db.Decimal(5, 2)
+  /// 胆固醇，单位 mg
+  cholesterol           Decimal?               @db.Decimal(6, 1)
+
+  // ─── 微量营养素（per 100g）──────────────────────────────────────────────
+  /// 钠，单位 mg
+  sodium                Decimal?               @db.Decimal(7, 1)
+  /// 钾，单位 mg
+  potassium             Decimal?               @db.Decimal(7, 1)
+  /// 钙，单位 mg
+  calcium               Decimal?               @db.Decimal(7, 1)
+  /// 铁，单位 mg
+  iron                  Decimal?               @db.Decimal(5, 2)
+  /// 维生素 A，单位 μg RAE
+  vitamin_a             Decimal?               @db.Decimal(7, 1)
+  /// 维生素 C，单位 mg
+  vitamin_c             Decimal?               @db.Decimal(6, 1)
+  /// 维生素 D，单位 μg
+  vitamin_d             Decimal?               @db.Decimal(5, 2)
+  /// 维生素 E，单位 mg α-TE
+  vitamin_e             Decimal?               @db.Decimal(5, 2)
+  /// 维生素 B12，单位 μg
+  vitamin_b12           Decimal?               @db.Decimal(5, 2)
+  /// 叶酸，单位 μg DFE
+  folate                Decimal?               @db.Decimal(6, 1)
+  /// 锌，单位 mg
+  zinc                  Decimal?               @db.Decimal(5, 2)
+  /// 镁，单位 mg
+  magnesium             Decimal?               @db.Decimal(6, 1)
+  /// 磷，单位 mg
   phosphorus            Decimal?               @db.Decimal(7, 1)
-  embedding             Float[]                @db.Real
-  embedding_updated_at  DateTime?              @db.Timestamptz(6)
-  cuisine               String?                @db.VarChar(30)
-  flavor_profile        Json?
-  cooking_method        String?                @db.VarChar(20)
-  prep_time_minutes     Int?
-  cook_time_minutes     Int?
-  skill_required        String?                @db.VarChar(10)
-  estimated_cost_level  Int?
-  shelf_life_days       Int?
+  /// 嘌呤，单位 mg（痛风饮食管理关键字段）
+  purine                Decimal?               @db.Decimal(7, 1)
+
+  // ─── 健康评估 ──────────────────────────────────────────────────────────
+  /// 血糖生成指数 GI（0-100，>70 为高 GI）
+  glycemic_index        Int?
+  /// 血糖负荷 GL = GI × 碳水/100
+  glycemic_load         Decimal?               @db.Decimal(5, 1)
+  /// 是否为加工食品
+  is_processed          Boolean                @default(false)
+  /// 是否为油炸食品
+  is_fried              Boolean                @default(false)
+  /// 加工程度 1-4（1=未加工, 2=轻加工, 3=中度加工, 4=深度加工/超加工）
+  processing_level      Int                    @default(1)
+  /// FODMAP 含量等级：low/medium/high（肠易激综合征饮食管理）
   fodmap_level          String?                @db.VarChar(10)
+  /// 草酸含量等级：low/medium/high（肾结石防控）
   oxalate_level         String?                @db.VarChar(10)
-  available_channels    Json                   @default("[\"home_cook\",\"restaurant\",\"delivery\",\"convenience\"]") /// 可获取渠道: home_cook/restaurant/delivery/convenience
-  commonality_score     Int                    @default(50) /// 大众化评分 0-100: 0=极罕见, 50=一般, 100=日常必备
+  /// 过敏原列表（JSON 数组，如 ["gluten","dairy","nuts"]）
+  allergens             Json                   @default("[]")
+  /// 综合品质分 1-10（营养密度 × 加工程度 × 食材天然性的综合评估）
+  quality_score         Decimal?               @db.Decimal(3, 1)
+  /// 饱腹感评分 1-10（基于蛋白质、纤维、体积密度估算）
+  satiety_score         Decimal?               @db.Decimal(3, 1)
+  /// 营养密度评分（基于微量营养素丰富度，单位热量中营养价值的综合评分）
+  nutrient_density      Decimal?               @db.Decimal(5, 1)
+
+  // ─── 标签与推荐决策 ────────────────────────────────────────────────────
+  /// 适用餐次（JSON 数组，如 ["breakfast","lunch","dinner","snack"]）
+  meal_types            Json                   @default("[]")
+  /// 自由标签（JSON 数组，如 ["低卡","高蛋白","减脂友好"]）
+  tags                  Json                   @default("[]")
+  /// 主要食材（单个，如"猪肉"）；多食材请使用 ingredient_list
+  /// @deprecated 请优先使用 ingredient_list（V7.1 起支持多食材）
+  main_ingredient       String?                @db.VarChar(50)
+  /// 完整食材清单（字符串数组，V7.1 取代单一 main_ingredient）
+  ingredient_list       String[]               @default([])
+  /// 食材兼容性映射（JSON，如 {"avoid":["红酒"],"pair_well":["豆腐"]}）
+  compatibility         Json                   @default("{}")
+  /// 可获取渠道（JSON 数组）：home_cook=家庭自制, restaurant=餐厅, delivery=外卖, convenience=便利店/超市
+  available_channels    Json                   @default("[\"home_cook\",\"restaurant\",\"delivery\",\"convenience\"]")
+  /// 大众化评分 0-100（0=极罕见食材, 50=一般常见, 100=日常必备）；影响推荐权重
+  commonality_score     Int                    @default(50)
+
+  // ─── 份量信息 ──────────────────────────────────────────────────────────
+  /// 标准份量，单位 g（默认 100g）
+  standard_serving_g    Int                    @default(100)
+  /// 标准份量文字描述（如"1碗(200g)"）
+  standard_serving_desc String?                @db.VarChar(100)
+  /// 常见份量预设（JSON 数组，如 [{"name":"1碗","grams":200},{"name":"半碗","grams":100}]）
+  common_portions       Json                   @default("[]")
+
+  // ─── 烹饪与风味 ────────────────────────────────────────────────────────
+  /// 所属菜系（如 chinese/japanese/western/korean/indian）
+  cuisine               String?                @db.VarChar(30)
+  /// 风味画像（JSON，如 {"salty":4,"sweet":1,"spicy":0,"umami":3}，0-5 分制）
+  flavor_profile        Json?
+  /// 主要烹饪方式（单个，如 steam/boil/fry）；多方式请使用 cooking_methods
+  /// @deprecated 请优先使用 cooking_methods（V7.1 起支持多烹饪方式）
+  cooking_method        String?                @db.VarChar(20)
+  /// 可行烹饪方式列表（字符串数组，如 ["steam","boil","stir_fry"]，V7.1 取代单一 cooking_method）
+  cooking_methods       String[]               @default([])
+  /// 所需厨房设备（字符串数组，如 ["oven","wok"]；none=无需特殊设备）
+  required_equipment    String[]               @default([])
+  /// 建议食用温度：hot=热食, warm=温食, cold=冷食, room_temp=常温
+  serving_temperature   String?                @db.VarChar(20)
+  /// 口感标签（字符串数组，如 ["crispy","chewy"]：crispy/creamy/chewy/soft/crunchy）
+  texture_tags          String[]               @default([])
+  /// 成品类型：dish=菜肴, soup=汤, drink=饮品, dessert=甜点, snack=零食, staple=主食
+  dish_type             String?                @db.VarChar(20)
+  /// 备料时间，单位分钟
+  prep_time_minutes     Int?
+  /// 烹饪时间，单位分钟
+  cook_time_minutes     Int?
+  /// 烹饪难度：easy/medium/hard
+  skill_required        String?                @db.VarChar(10)
+  /// 成本等级 1-5（1=极低/食堂价, 3=中等/家常价, 5=高端/餐厅价）
+  estimated_cost_level  Int?
+  /// 保质期，单位天（0 表示当日食用）
+  shelf_life_days       Int?
+
+  // ─── 媒体资源 ──────────────────────────────────────────────────────────
+  /// 食物完整图片 URL
+  image_url             String?                @db.VarChar(500)
+  /// 食物缩略图 URL（列表展示用）
+  thumbnail_url         String?                @db.VarChar(500)
+
+  // ─── 数据溯源与质控 ────────────────────────────────────────────────────
+  /// 主要数据来源标识（manual=人工录入, usda=USDA, cfsb=中国食物成分表, ai=AI生成, import=批量导入）
+  primary_source        String                 @default("manual") @db.VarChar(50)
+  /// 主要数据来源的原始 ID（如 USDA FDC ID）
+  primary_source_id     String?                @db.VarChar(100)
+  /// @deprecated 与 primary_source 重叠，旧版残留字段，后续迁移中将移除
+  source                String?                @default("official") @db.VarChar(20)
+  /// 数据版本号，每次更新递增
+  data_version          Int                    @default(1)
+  /// AI/算法对该条数据的置信度 0.00-1.00
+  confidence            Decimal                @default(1) @db.Decimal(3, 2)
+  /// 是否已经过人工或专业机构核验
+  is_verified           Boolean                @default(false)
+  /// 核验人（用户名或机构名）
+  verified_by           String?                @db.VarChar(100)
+  /// 核验时间
+  verified_at           DateTime?              @db.Timestamptz(6)
+  /// 搜索权重（影响列表排序，默认 100；可人工调高热门食物）
+  search_weight         Int                    @default(100)
+  /// 用户点击/使用次数（由行为事件自动累积）
+  popularity            Int                    @default(0)
+  /// 创建时间
+  created_at            DateTime               @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
+  updated_at            DateTime               @default(now()) @db.Timestamptz(6)
+
+  // ─── 向量检索（AI 语义搜索）────────────────────────────────────────────
+  /// 语义向量（float32 数组，用于余弦相似度搜索；v4 模型）
+  embedding             Float[]                @db.Real
+  /// v4 向量最后更新时间
+  embedding_updated_at  DateTime?              @db.Timestamptz(6)
+  /// 语义向量（pgvector 原生类型，v5 模型；支持 <=> 余弦距离操作符）
   embedding_v5          Unsupported("vector")?
+
+  // ─── 关联关系（反向引用，不存储于本表）───────────────────────────────────
   analysis_food_link    analysis_food_link[]
   daily_plan_items      daily_plan_items[]
   food_change_logs      food_change_logs[]
@@ -613,6 +752,7 @@ model foods {
   @@index([is_verified, category], map: "idx_foods_verified_category")
   @@index([aliases(ops: raw("gin_trgm_ops"))], map: "idx_foods_aliases_trgm", type: Gin)
   @@index([commonality_score], map: "idx_foods_commonality")
+  @@index([food_form], map: "idx_foods_food_form")
 }
 
 model migrations {
@@ -746,6 +886,8 @@ model precomputed_recommendations {
   user_id          String   @db.Uuid
   date             String   @db.VarChar(10)
   meal_type        String   @db.VarChar(20)
+  /// V6.9 Phase 3-B: 渠道维度（切换渠道时不命中旧缓存）
+  channel          String   @default("unknown") @db.VarChar(30)
   result           Json
   scenario_results Json?
   strategy_version String   @db.VarChar(50)
@@ -753,7 +895,7 @@ model precomputed_recommendations {
   expires_at       DateTime @db.Timestamptz(6)
   is_used          Boolean  @default(false)
 
-  @@unique([user_id, date, meal_type], map: "uq_precomputed_user_date_meal")
+  @@unique([user_id, date, meal_type, channel], map: "uq_precomputed_user_date_meal_channel")
   @@index([expires_at], map: "idx_precomputed_expires")
 }
 
@@ -870,6 +1012,7 @@ model strategy {
   priority     Int      @default(0)
   created_at   DateTime @default(now()) @db.Timestamptz(6)
   updated_at   DateTime @default(now()) @db.Timestamptz(6)
+  context_condition Json? @db.JsonB /// V7.0: 上下文策略匹配条件（scope=context 时使用）{ timeOfDay?, dayType?, season?, userLifecycle?, goalPhaseType? }
   /// V6.5 Phase 2I: FK 补齐 — 反向关联
   strategy_assignments strategy_assignment[]
 
@@ -1101,6 +1244,10 @@ model user_profiles {
   hydration_goal         Int?                                       /// V6.6 Phase 2-C: 每日目标饮水量 (ml)
   supplements_used       Json                              @default("[]") /// V6.6 Phase 2-C: 正在服用的补剂列表
   meal_timing_preference String?                           @db.Text /// V6.6 Phase 2-C: 用餐时间偏好 early_bird|standard|late_eater
+  exercise_intensity     String?                           @db.VarChar(20) /// V6.8 Phase 3-B: 运动强度 none|light|moderate|high
+  alcohol_frequency      String?                           @db.VarChar(20) /// V6.8 Phase 3-B: 饮酒频率 never|occasional|frequent
+  compound_goal          Json?                             @db.JsonB       /// V7.0: 复合目标 { primary, secondary?, secondaryWeight?, phases?, currentPhaseIndex?, startDate? }
+  kitchen_profile        Json?                             @db.JsonB       /// V7.1: 厨房设备画像 { hasOven, hasMicrowave, hasAirFryer, hasRiceCooker, hasSteamer, primaryStove }
   app_users            app_users                         @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_6ca9503d77ae39b4b5a6cc3ba88")
 }
 
@@ -1581,12 +1728,32 @@ model replacement_patterns {
   to_food_name   String   @db.VarChar(200)
   frequency      Int      @default(1)
   last_occurred  DateTime @default(now()) @db.Timestamptz(6)
+  /// V6.7 Phase 2-E: 替换发生的餐次类型（breakfast/lunch/dinner/snack）
+  meal_type      String?  @db.Text
   created_at     DateTime @default(now()) @db.Timestamptz(6)
   updated_at     DateTime @updatedAt @db.Timestamptz(6)
 
   @@unique([user_id, from_food_id, to_food_id], map: "uq_replacement_pattern")
   @@index([user_id], map: "idx_rp_user")
   @@index([from_food_id], map: "idx_rp_from_food")
+  @@index([meal_type], map: "idx_rp_meal_type")
+}
+
+/// V6.9 Phase 2-C: 推荐执行记录 — 追踪推荐→实际执行的闭环，计算执行率
+model recommendation_executions {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id           String    @db.Uuid
+  recommendation_id String?   @db.VarChar(255)
+  meal_type         String    @db.VarChar(20)
+  recommended_foods Json      /// 推荐的食物 ID 列表
+  executed_foods    Json?     /// 实际执行的食物 ID 列表（分析结果回填）
+  execution_rate    Float?    /// 执行率 0-1（匹配的食物数/推荐的食物数）
+  deviation_notes   Json?     /// 偏差记录（替换/增加/减少了什么）
+  created_at        DateTime  @default(now()) @db.Timestamptz(6)
+  executed_at       DateTime? @db.Timestamptz(6)
+
+  @@index([user_id, created_at], map: "idx_rec_exec_user_created")
+  @@index([user_id, meal_type], map: "idx_rec_exec_user_meal")
 }
 
 /// V6.5 Phase 3J: 暴食干预效果追踪 — 记录每次暴食干预事件及后续行为变化
@@ -1611,4 +1778,24 @@ model binge_intervention_logs {
 
   @@index([user_id, created_at], map: "idx_bil_user_created")
   @@index([effective], map: "idx_bil_effective")
+}
+
+/// V7.0: 目标阶段表 — 存储 CompoundGoal 中的各个阶段
+model goal_phases {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id            String    @db.Uuid
+  goal_type          String    @db.VarChar(50) /// GoalType: fat_loss/muscle_gain/health/habit
+  name               String    @db.VarChar(100) /// 阶段名称（用户可见）
+  duration_weeks     Int                        /// 阶段持续周数
+  calorie_multiplier Float     @default(1.0)    /// 相对 TDEE 的热量调整比例
+  macro_ratio_override Json?   @db.JsonB        /// { carb: [min, max], fat: [min, max] }
+  phase_order        Int                        /// 阶段顺序（0-based）
+  is_active          Boolean   @default(false)  /// 当前是否激活
+  started_at         DateTime? @db.Timestamptz(6) /// 阶段开始时间
+  completed_at       DateTime? @db.Timestamptz(6) /// 阶段完成时间
+  created_at         DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@index([user_id, is_active], map: "idx_goal_phases_user_active")
+  @@index([user_id, phase_order], map: "idx_goal_phases_user_order")
 }

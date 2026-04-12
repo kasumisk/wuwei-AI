@@ -17,6 +17,7 @@ import { StrategyResolver } from './app/strategy-resolver.service';
 import { StrategySelectorService } from './app/strategy-selector.service';
 import { StrategySeedService } from './app/strategy-seed.service';
 import { StrategyAutoTuner } from './app/strategy-auto-tuner.service';
+import { SegmentDiscoveryService } from './app/segment-discovery.service';
 import { StrategyManagementController } from './admin/strategy-management.controller';
 import { StrategyManagementService } from './admin/strategy-management.service';
 
@@ -30,12 +31,14 @@ import { StrategyManagementService } from './admin/strategy-management.service';
     StrategySeedService,
     StrategyManagementService,
     StrategyAutoTuner,
+    SegmentDiscoveryService, // V6.9 Phase 3-A: 用户群体自动聚类发现
   ],
   exports: [
     StrategyService,
     StrategyResolver,
     StrategySelectorService,
     StrategyAutoTuner,
+    SegmentDiscoveryService, // V6.9 Phase 3-A: 供管理端/定时任务使用
   ],
 })
 export class StrategyModule {}

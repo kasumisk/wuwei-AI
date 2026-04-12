@@ -32,10 +32,24 @@ export class GetFoodLibraryQueryDto {
   @Max(100)
   pageSize?: number = 20;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: '关键词搜索（模糊匹配 name/aliases/code）',
+  })
   @IsOptional()
   @IsString()
   keyword?: string;
+
+  @ApiPropertyOptional({
+    description: '按名称模糊搜索（与 keyword 等效，兼容 ProTable 列搜索）',
+  })
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @ApiPropertyOptional({ description: '按食物编码模糊搜索' })
+  @IsOptional()
+  @IsString()
+  code?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -62,194 +76,257 @@ export class GetFoodLibraryQueryDto {
 // ==================== 食物 CRUD DTO ====================
 
 export class CreateFoodLibraryDto {
-  @ApiProperty()
+  // ─── 基本信息 ──────────────────────────────────────────────────────────
+
+  @ApiProperty({ description: '食物编码，全局唯一（如 CN_RICE_WHITE_COOKED）' })
   @IsString()
   code: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: '食物标准中文名，全局唯一' })
   @IsString()
   name: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: '别名/俗称，逗号分隔（如"米饭,白饭,蒸米"）',
+  })
   @IsOptional()
   @IsString()
   aliases?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '商品条形码（EAN-13 / UPC）' })
   @IsOptional()
   @IsString()
   barcode?: string;
 
-  @ApiPropertyOptional({ enum: ['draft', 'active', 'archived', 'merged'] })
+  @ApiPropertyOptional({
+    description: '生命周期状态',
+    enum: ['draft', 'active', 'archived', 'merged'],
+    default: 'draft',
+  })
   @IsOptional()
   @IsString()
   status?: string;
 
-  @ApiProperty()
+  @ApiProperty({
+    description: '一级分类',
+    example: 'grain',
+  })
   @IsString()
   category: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '二级分类（如 grain → white_rice）' })
   @IsOptional()
   @IsString()
   subCategory?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '食物组（如 USDA 食物组分类）' })
   @IsOptional()
   @IsString()
   foodGroup?: string;
 
-  // 宏量营养素
-  @ApiProperty()
+  @ApiPropertyOptional({
+    description:
+      '食物形态：ingredient=原材料, dish=成品菜, semi_prepared=半成品',
+    enum: ['ingredient', 'dish', 'semi_prepared'],
+    default: 'ingredient',
+  })
+  @IsOptional()
+  @IsString()
+  foodForm?: string;
+
+  @ApiPropertyOptional({
+    description: '成品菜推荐优先级 0-100，仅 dish/semi_prepared 有值',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  dishPriority?: number;
+
+  // ─── 宏量营养素（per 100g 可食部分）──────────────────────────────────
+
+  @ApiProperty({ description: '热量，单位 kcal' })
   @Type(() => Number)
   @IsNumber()
   calories: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '蛋白质，单位 g' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   protein?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '脂肪总量，单位 g' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   fat?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '碳水化合物，单位 g' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   carbs?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '膳食纤维，单位 g' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   fiber?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '总糖（添加糖 + 天然糖），单位 g' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   sugar?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '添加糖，单位 g' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  addedSugar?: number;
+
+  @ApiPropertyOptional({ description: '天然糖，单位 g' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  naturalSugar?: number;
+
+  @ApiPropertyOptional({ description: '饱和脂肪，单位 g' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   saturatedFat?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '反式脂肪，单位 g' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   transFat?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '胆固醇，单位 mg' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   cholesterol?: number;
 
-  // 微量营养素
-  @ApiPropertyOptional()
+  // ─── 微量营养素（per 100g）────────────────────────────────────────────
+
+  @ApiPropertyOptional({ description: '钠，单位 mg' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   sodium?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '钾，单位 mg' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   potassium?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '钙，单位 mg' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   calcium?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '铁，单位 mg' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   iron?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '维生素 A，单位 μg RAE' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   vitaminA?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '维生素 C，单位 mg' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   vitaminC?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '维生素 D，单位 μg' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   vitaminD?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '维生素 E，单位 mg α-TE' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   vitaminE?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '维生素 B12，单位 μg' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   vitaminB12?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '叶酸，单位 μg DFE' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   folate?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '锌，单位 mg' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   zinc?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '镁，单位 mg' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   magnesium?: number;
 
-  // 健康评估
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '磷，单位 mg' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  phosphorus?: number;
+
+  @ApiPropertyOptional({ description: '嘌呤，单位 mg（痛风饮食管理关键字段）' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  purine?: number;
+
+  // ─── 健康评估 ────────────────────────────────────────────────────────
+
+  @ApiPropertyOptional({ description: '血糖生成指数 GI（0-100，>70 为高 GI）' })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   glycemicIndex?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '血糖负荷 GL = GI × 碳水 / 100' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   glycemicLoad?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '是否为加工食品' })
   @IsOptional()
   @IsBoolean()
   isProcessed?: boolean;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '是否为油炸食品' })
   @IsOptional()
   @IsBoolean()
   isFried?: boolean;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description:
+      '加工程度 1-4（1=未加工, 2=轻加工, 3=中度加工, 4=深度加工/超加工）',
+    minimum: 1,
+    maximum: 4,
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -257,14 +334,39 @@ export class CreateFoodLibraryDto {
   @Max(4)
   processingLevel?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: 'FODMAP 含量等级：low/medium/high',
+    enum: ['low', 'medium', 'high'],
+  })
+  @IsOptional()
+  @IsString()
+  fodmapLevel?: string;
+
+  @ApiPropertyOptional({
+    description: '草酸含量等级：low/medium/high',
+    enum: ['low', 'medium', 'high'],
+  })
+  @IsOptional()
+  @IsString()
+  oxalateLevel?: string;
+
+  @ApiPropertyOptional({
+    description: '过敏原列表（如 ["gluten","dairy","nuts"]）',
+    type: [String],
+  })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   allergens?: string[];
 
-  // 决策引擎
-  @ApiPropertyOptional()
+  // ─── 标签与推荐决策 ──────────────────────────────────────────────────
+
+  @ApiPropertyOptional({
+    description:
+      '综合品质分 1-10（营养密度 × 加工程度 × 食材天然性的综合评估）',
+    minimum: 1,
+    maximum: 10,
+  })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
@@ -272,7 +374,11 @@ export class CreateFoodLibraryDto {
   @Max(10)
   qualityScore?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: '饱腹感评分 1-10',
+    minimum: 1,
+    maximum: 10,
+  })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
@@ -280,85 +386,258 @@ export class CreateFoodLibraryDto {
   @Max(10)
   satietyScore?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: '营养密度评分（单位热量中营养价值的综合评分）',
+  })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   nutrientDensity?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: '适用餐次（如 ["breakfast","lunch","dinner","snack"]）',
+    type: [String],
+  })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   mealTypes?: string[];
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: '自由标签（如 ["低卡","高蛋白","减脂友好"]）',
+    type: [String],
+  })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   tags?: string[];
 
-  @ApiPropertyOptional()
+  /** @deprecated 请优先使用 ingredientList（V7.1 起支持多食材） */
+  @ApiPropertyOptional({
+    description: '主要食材（单个，如"猪肉"）；多食材请使用 ingredientList',
+    deprecated: true,
+  })
   @IsOptional()
   @IsString()
   mainIngredient?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: '完整食材清单（V7.1，如 ["猪肉","大葱","生姜"]）',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  ingredientList?: string[];
+
+  @ApiPropertyOptional({
+    description: '食材兼容性映射（如 {"avoid":["红酒"],"pair_well":["豆腐"]}）',
+  })
   @IsOptional()
   @IsObject()
   compatibility?: Record<string, string[]>;
 
-  // 份量
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: '可获取渠道（home_cook/restaurant/delivery/convenience）',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  availableChannels?: string[];
+
+  @ApiPropertyOptional({
+    description: '大众化评分 0-100（0=极罕见, 50=一般, 100=日常必备）',
+    minimum: 0,
+    maximum: 100,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  commonalityScore?: number;
+
+  // ─── 份量信息 ────────────────────────────────────────────────────────
+
+  @ApiPropertyOptional({
+    description: '标准份量，单位 g（默认 100g）',
+    default: 100,
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   standardServingG?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '标准份量文字描述（如"1碗(200g)"）' })
   @IsOptional()
   @IsString()
   standardServingDesc?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: '常见份量预设（如 [{"name":"1碗","grams":200}]）',
+  })
   @IsOptional()
   @IsArray()
   commonPortions?: Array<{ name: string; grams: number }>;
 
-  // 媒体
-  @ApiPropertyOptional()
+  // ─── 烹饪与风味 ──────────────────────────────────────────────────────
+
+  @ApiPropertyOptional({
+    description: '所属菜系（如 chinese/japanese/western）',
+  })
+  @IsOptional()
+  @IsString()
+  cuisine?: string;
+
+  @ApiPropertyOptional({
+    description:
+      '风味画像（如 {"salty":4,"sweet":1,"spicy":0,"umami":3}，0-5 分制）',
+  })
+  @IsOptional()
+  @IsObject()
+  flavorProfile?: Record<string, number>;
+
+  /** @deprecated 请优先使用 cookingMethods（V7.1 起支持多方式） */
+  @ApiPropertyOptional({
+    description:
+      '主要烹饪方式（单个，如 steam/boil/fry）；多方式请使用 cookingMethods',
+    deprecated: true,
+  })
+  @IsOptional()
+  @IsString()
+  cookingMethod?: string;
+
+  @ApiPropertyOptional({
+    description: '可行烹饪方式列表（V7.1，如 ["steam","boil","stir_fry"]）',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  cookingMethods?: string[];
+
+  @ApiPropertyOptional({
+    description: '所需厨房设备（如 ["oven","wok"]；none=无需特殊设备）',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  requiredEquipment?: string[];
+
+  @ApiPropertyOptional({
+    description: '建议食用温度：hot/warm/cold/room_temp',
+    enum: ['hot', 'warm', 'cold', 'room_temp'],
+  })
+  @IsOptional()
+  @IsString()
+  servingTemperature?: string;
+
+  @ApiPropertyOptional({
+    description: '口感标签（如 ["crispy","chewy"]）',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  textureTags?: string[];
+
+  @ApiPropertyOptional({
+    description: '成品类型：dish/soup/drink/dessert/snack/staple',
+    enum: ['dish', 'soup', 'drink', 'dessert', 'snack', 'staple'],
+  })
+  @IsOptional()
+  @IsString()
+  dishType?: string;
+
+  @ApiPropertyOptional({ description: '备料时间，单位分钟' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  prepTimeMinutes?: number;
+
+  @ApiPropertyOptional({ description: '烹饪时间，单位分钟' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  cookTimeMinutes?: number;
+
+  @ApiPropertyOptional({
+    description: '烹饪难度：easy/medium/hard',
+    enum: ['easy', 'medium', 'hard'],
+  })
+  @IsOptional()
+  @IsString()
+  skillRequired?: string;
+
+  @ApiPropertyOptional({
+    description: '成本等级 1-5（1=极低/食堂价, 3=中等/家常价, 5=高端/餐厅价）',
+    minimum: 1,
+    maximum: 5,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  estimatedCostLevel?: number;
+
+  @ApiPropertyOptional({ description: '保质期，单位天（0 表示当日食用）' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  shelfLifeDays?: number;
+
+  // ─── 媒体资源 ────────────────────────────────────────────────────────
+
+  @ApiPropertyOptional({ description: '食物完整图片 URL' })
   @IsOptional()
   @IsString()
   imageUrl?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '食物缩略图 URL（列表展示用）' })
   @IsOptional()
   @IsString()
   thumbnailUrl?: string;
 
-  // 数据溯源
-  @ApiPropertyOptional()
+  // ─── 数据溯源与质控 ──────────────────────────────────────────────────
+
+  @ApiPropertyOptional({
+    description: '主要数据来源标识（manual/usda/cfsb/ai/import）',
+    enum: ['manual', 'usda', 'cfsb', 'ai', 'import'],
+    default: 'manual',
+  })
   @IsOptional()
   @IsString()
   primarySource?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: '主要数据来源的原始 ID（如 USDA FDC ID）',
+  })
   @IsOptional()
   @IsString()
   primarySourceId?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: 'AI/算法对该条数据的置信度 0.00-1.00',
+    minimum: 0,
+    maximum: 1,
+  })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   confidence?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '是否已经过人工或专业机构核验' })
   @IsOptional()
   @IsBoolean()
   isVerified?: boolean;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: '搜索权重（影响列表排序，默认 100）',
+    default: 100,
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()

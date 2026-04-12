@@ -1,14 +1,17 @@
 /**
- * V6.6 Phase 2-E: ExplanationABTrackerService
+ * V6.6 Phase 2-E → V6.7 Phase 3-B: ExplanationABTrackerService
  *
  * 追踪解释风格（concise / coaching）与用户行为（接受/替换/跳过）的关联，
  * 每周 Cron 分析各用户分群的最优解释风格，并将结果写入 strategy.config.explain。
+ *
+ * V6.7 升级：将简单 10% 差异阈值替换为 2×2 列联表卡方检验（α=0.05, df=1），
+ * 避免在小样本下因随机波动而误判风格差异。
  *
  * 数据流：
  * 1. trackExplanationOutcome() — 由推荐引擎在生成 trace 时调用，
  *    将解释风格写入 recommendation_traces.pipeline_snapshot.explanationStyle
  * 2. analyzeExplanationEffectiveness() — 每周一 05:00 分析各分群最优风格，
- *    差异 > 10% 且样本 > 50 时自动更新全局策略的 explain.preferredStyle
+ *    卡方检验显著且样本 >= 50 时自动更新全局策略的 explain.preferredStyle
  */
 
 import { Injectable, Logger } from '@nestjs/common';
@@ -26,6 +29,52 @@ export class ExplanationABTrackerService {
   private readonly logger = new Logger(ExplanationABTrackerService.name);
 
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * V6.7: 2x2 列联表卡方检验，替代简单 10% 阈值
+   *
+   * | Style   | Accepted | Not Accepted | Row Total |
+   * |---------|----------|--------------|-----------|
+   * | A       | a        | b            | a+b       |
+   * | B       | c        | d            | c+d       |
+   * | Col Tot | a+c      | b+d          | n         |
+   *
+   * @returns true 当差异在 alpha 水平上统计显著（df=1）
+   */
+  private isStatisticallySignificant(
+    acceptedA: number,
+    totalA: number,
+    acceptedB: number,
+    totalB: number,
+    alpha: number = 0.05,
+  ): boolean {
+    const a = acceptedA; // style A accepted
+    const b = totalA - acceptedA; // style A not accepted
+    const c = acceptedB; // style B accepted
+    const d = totalB - acceptedB; // style B not accepted
+    const n = a + b + c + d;
+
+    if (n < 30) return false; // 样本不足
+
+    const expected_a = ((a + b) * (a + c)) / n;
+    const expected_b = ((a + b) * (b + d)) / n;
+    const expected_c = ((c + d) * (a + c)) / n;
+    const expected_d = ((c + d) * (b + d)) / n;
+
+    // 期望频数 < 5 时卡方近似不可靠
+    if ([expected_a, expected_b, expected_c, expected_d].some((e) => e < 5))
+      return false;
+
+    const chi2 =
+      Math.pow(a - expected_a, 2) / expected_a +
+      Math.pow(b - expected_b, 2) / expected_b +
+      Math.pow(c - expected_c, 2) / expected_c +
+      Math.pow(d - expected_d, 2) / expected_d;
+
+    // alpha=0.05, df=1 → 临界值 3.841
+    const criticalValue = alpha === 0.05 ? 3.841 : 3.841; // df=1 only
+    return chi2 > criticalValue;
+  }
 
   /**
    * 记录解释风格与后续行为的关联。
@@ -139,14 +188,21 @@ export class ExplanationABTrackerService {
 
         const conciseRate = concise.accepted / concise.total;
         const coachingRate = coaching.accepted / coaching.total;
-        const diff = Math.abs(conciseRate - coachingRate);
 
-        if (diff > 0.1) {
+        // V6.7: 使用卡方检验替代简单 10% 阈值
+        const significant = this.isStatisticallySignificant(
+          concise.accepted,
+          concise.total,
+          coaching.accepted,
+          coaching.total,
+        );
+
+        if (significant) {
           updates[segment] =
             conciseRate > coachingRate ? 'concise' : 'coaching';
           this.logger.log(
             `Segment [${segment}]: preferredStyle → ${updates[segment]} ` +
-              `(concise=${(conciseRate * 100).toFixed(1)}%, coaching=${(coachingRate * 100).toFixed(1)}%)`,
+              `(concise=${(conciseRate * 100).toFixed(1)}%, coaching=${(coachingRate * 100).toFixed(1)}%, χ² significant)`,
           );
         }
       }

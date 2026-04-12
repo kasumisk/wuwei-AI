@@ -72,6 +72,7 @@ import { QueueResilienceService } from './queue-resilience.service';
       { name: QUEUE_NAMES.EXPORT },
       { name: QUEUE_NAMES.RECIPE_GENERATION },
       { name: QUEUE_NAMES.EMBEDDING_GENERATION },
+      { name: QUEUE_NAMES.FOOD_ENRICHMENT },
     ),
   ],
   providers: [

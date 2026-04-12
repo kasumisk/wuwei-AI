@@ -33,6 +33,7 @@ export const SCORE_DIMENSION_NAMES = [
   'fiber',
   'seasonality',
   'executability',
+  'popularity', // V7.0: 同步 V6.9 新增的大众化评分维度
 ] as const;
 
 export type StrategyScoreDimension = (typeof SCORE_DIMENSION_NAMES)[number];
@@ -326,6 +327,48 @@ export enum StrategyScope {
   EXPERIMENT = 'experiment',
   /** 用户个性化策略（管理后台指定） */
   USER = 'user',
+  /** V7.0: 上下文感知策略（时段/工作日/季节/生命周期匹配） */
+  CONTEXT = 'context',
+}
+
+// ─── V7.0: 上下文策略匹配条件 ───
+
+/**
+ * V7.0: 上下文策略匹配条件
+ *
+ * 当 scope = CONTEXT 时，策略需要满足以下条件才生效。
+ * 所有字段可选 — 缺失字段视为"不限制"（通配）。
+ * 存储在 strategy.context_condition (JSONB) 字段中。
+ */
+export interface ContextStrategyCondition {
+  /** 时段: morning/afternoon/evening/night */
+  timeOfDay?: string[];
+  /** 工作日/周末 */
+  dayType?: ('weekday' | 'weekend')[];
+  /** 季节 */
+  season?: ('spring' | 'summer' | 'autumn' | 'winter')[];
+  /** 用户生命周期阶段 */
+  userLifecycle?: ('new' | 'active' | 'mature' | 'churning')[];
+  /** 目标阶段（如果用户有复合目标） */
+  goalPhaseType?: GoalType[];
+}
+
+/**
+ * V7.0: 上下文策略匹配输入
+ *
+ * 由 StrategyResolver 在解析时构建，传递给 matchContextStrategy()。
+ */
+export interface StrategyContextInput {
+  /** 当前时段 */
+  timeOfDay: string;
+  /** 工作日/周末 */
+  dayType: 'weekday' | 'weekend';
+  /** 当前季节 */
+  season: 'spring' | 'summer' | 'autumn' | 'winter';
+  /** 用户生命周期 */
+  lifecycle: 'new' | 'active' | 'mature' | 'churning';
+  /** 当前目标阶段类型（如有复合目标） */
+  goalPhaseType?: GoalType;
 }
 
 // ─── 策略解析结果 ───

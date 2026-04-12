@@ -465,4 +465,14 @@ export class UpdateRecommendationPreferencesDto {
   @IsOptional()
   @IsEnum(BudgetSensitivity)
   budgetSensitivity?: BudgetSensitivity;
+
+  /** V7.2: 现实性级别偏好（覆盖场景默认值） */
+  @ApiPropertyOptional({
+    enum: ['strict', 'normal', 'relaxed', 'off'],
+    description:
+      '现实性级别：strict=严格过滤, normal=标准, relaxed=宽松, off=关闭所有过滤',
+  })
+  @IsOptional()
+  @IsIn(['strict', 'normal', 'relaxed', 'off'])
+  realismLevel?: 'strict' | 'normal' | 'relaxed' | 'off';
 }

@@ -3,7 +3,7 @@ export const routeConfig = {
   name: 'food-pipeline',
   title: '食物数据管道',
   icon: 'ThunderboltOutlined',
-  order: 15,
+  order: 11,
   requireAuth: true,
   requireAdmin: true,
   roles: ['admin', 'super_admin'],

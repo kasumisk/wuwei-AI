@@ -27,7 +27,7 @@ export const routeConfig = {
   name: 'conflicts',
   title: '冲突审核',
   icon: 'WarningOutlined',
-  order: 5,
+  order: 6,
   requireAuth: true,
   hideInMenu: false,
 };
@@ -111,7 +111,10 @@ const ConflictsPage: React.FC = () => {
       valueEnum: {
         pending: { text: '待处理', status: 'Warning' },
         auto_resolved: { text: '自动解决', status: 'Processing' },
-        manual_resolved: { text: '人工解决', status: 'Success' },
+        manual: { text: '人工指定', status: 'Success' },
+        priority: { text: '高优先级', status: 'Success' },
+        average: { text: '取均值', status: 'Success' },
+        ignore: { text: '已忽略', status: 'Default' },
         needs_review: { text: '需人工', status: 'Error' },
       },
     },
@@ -245,10 +248,10 @@ const ConflictsPage: React.FC = () => {
               <Form.Item name="resolution" label="解决方式" rules={[{ required: true }]}>
                 <Select
                   options={[
-                    { label: '选择最高优先级来源', value: 'highest_priority' },
-                    { label: '取加权平均值', value: 'weighted_average' },
                     { label: '手动指定值', value: 'manual' },
-                    { label: '忽略冲突', value: 'ignored' },
+                    { label: '采用高优先级来源', value: 'priority' },
+                    { label: '取均值', value: 'average' },
+                    { label: '忽略此冲突', value: 'ignore' },
                   ]}
                 />
               </Form.Item>

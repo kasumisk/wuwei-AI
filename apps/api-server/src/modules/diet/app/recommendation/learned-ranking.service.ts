@@ -37,11 +37,20 @@ const LEARNING_RATE = 0.001;
 const MAX_ITERATIONS = 1000;
 const CONVERGENCE_THRESHOLD = 1e-6;
 
+/** V6.7 Phase 3-A: L2 正则化系数 */
+const L2_LAMBDA = 0.01;
+
+/** V6.7 Phase 3-A: 验证集无改善容忍次数（early stopping） */
+const EARLY_STOPPING_PATIENCE = 50;
+
 /** 权重维度数量（与 SCORE_DIMENSIONS 对齐） */
 const DIM_COUNT = SCORE_DIMENSIONS.length; // 12
 
-/** 已知的用户分群列表 */
-const USER_SEGMENTS = [
+/**
+ * V6.7 Phase 3-A: 已知分群保留为 fallback
+ * 当动态查询失败时回退到此列表
+ */
+const FALLBACK_SEGMENTS = [
   'new_user',
   'returning_user',
   'disciplined_loser',
@@ -82,6 +91,8 @@ export class LearnedRankingService implements OnModuleInit {
   /**
    * 周一 06:00：遍历各分群，收集样本并优化权重
    * 晚于 StrategyAutoTuner（04:00），确保 segment→strategy 映射已更新
+   *
+   * V6.7 Phase 3-A: 分群列表从 DB 动态获取（替代硬编码）
    */
   @Cron('0 6 * * 1')
   async recomputeWeights(): Promise<void> {
@@ -93,9 +104,12 @@ export class LearnedRankingService implements OnModuleInit {
     }
 
     this.logger.log('Starting weekly learned ranking weight recomputation...');
+
+    // V6.7 Phase 3-A: 动态获取分群列表
+    const segments = await this.getActiveSegments();
     let updatedSegments = 0;
 
-    for (const segment of USER_SEGMENTS) {
+    for (const segment of segments) {
       try {
         const samples = await this.collectSamples(segment);
         if (samples.length < MIN_SAMPLES) {
@@ -113,15 +127,45 @@ export class LearnedRankingService implements OnModuleInit {
         );
       } catch (err) {
         this.logger.error(
-          `Failed to compute learned weights for segment [${segment}]: ${err.message}`,
-          err.stack,
+          `Failed to compute learned weights for segment [${segment}]: ${(err as Error).message}`,
+          (err as Error).stack,
         );
       }
     }
 
     this.logger.log(
-      `Learned ranking recomputation completed: ${updatedSegments}/${USER_SEGMENTS.length} segments updated`,
+      `Learned ranking recomputation completed: ${updatedSegments}/${segments.length} segments updated`,
     );
+  }
+
+  /**
+   * V6.7 Phase 3-A: 从 DB 动态获取活跃分群列表，替代硬编码 USER_SEGMENTS
+   * 查询 user_inferred_profiles 中所有不为 null 的 distinct user_segment
+   * 失败时回退到 FALLBACK_SEGMENTS
+   */
+  private async getActiveSegments(): Promise<string[]> {
+    try {
+      const segments = await this.prisma.user_inferred_profiles.findMany({
+        select: { user_segment: true },
+        distinct: ['user_segment'],
+        where: { user_segment: { not: null } },
+      });
+      const dynamicSegments = segments
+        .map((s) => s.user_segment!)
+        .filter(Boolean);
+
+      if (dynamicSegments.length > 0) {
+        this.logger.debug(
+          `Dynamic segments loaded: ${dynamicSegments.join(', ')}`,
+        );
+        return dynamicSegments;
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Failed to load dynamic segments, falling back: ${(err as Error).message}`,
+      );
+    }
+    return [...FALLBACK_SEGMENTS];
   }
 
   /**
@@ -178,9 +222,13 @@ export class LearnedRankingService implements OnModuleInit {
   }
 
   /**
-   * 简单梯度下降：最小化 L2 损失
-   * predicted = dot(weights, dimScores)，target = accepted (0 or 1)
-   * 约束：所有权重 >= 0，权重和 = 1（投影梯度下降）
+   * V6.7 Phase 3-A: Logistic loss + L2 正则化 + 验证集 early stopping
+   *
+   * 替换原有 L2 loss 线性回归:
+   * - 损失函数: binary cross-entropy (logistic loss) — 适合 0/1 标签
+   * - L2 正则化: λ * ||w||² 防止权重过拟合
+   * - 训练/验证分割 (80/20): 用验证集 loss 做 early stopping
+   * - 投影约束: 非负 + 归一化（projectToSimplex）
    *
    * @param samples 训练样本
    * @returns 归一化后的 12 维最优权重向量
@@ -188,53 +236,88 @@ export class LearnedRankingService implements OnModuleInit {
   private fitWeights(samples: RankingSample[]): number[] {
     // 初始化均匀权重
     let weights = Array(DIM_COUNT).fill(1 / DIM_COUNT);
-    let prevLoss = Infinity;
+
+    // V6.7: 训练/验证集分割 (80/20)
+    const splitIdx = Math.floor(samples.length * 0.8);
+    const trainSamples = samples.slice(0, splitIdx);
+    const valSamples = samples.slice(splitIdx);
+
+    // 训练集不足时直接返回均匀权重
+    if (trainSamples.length < 10) {
+      return weights;
+    }
+
+    let bestValLoss = Infinity;
+    let bestWeights = [...weights];
+    let noImproveCount = 0;
 
     for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
-      const gradients = Array(DIM_COUNT).fill(0);
-      let totalLoss = 0;
+      // Forward: logistic loss on train set
+      const gradient = Array(DIM_COUNT).fill(0);
 
-      for (const sample of samples) {
+      for (const sample of trainSamples) {
         const predicted = this.dotProduct(weights, sample.dimScores);
-        const error = predicted - sample.accepted;
-        totalLoss += error * error;
+        const sigmoid = 1 / (1 + Math.exp(-predicted));
+        const error = sigmoid - sample.accepted; // accepted: 0 or 1
 
-        // 梯度 = 2 * error * dimScore[i]
-        for (let i = 0; i < DIM_COUNT; i++) {
-          gradients[i] += 2 * error * sample.dimScores[i];
+        for (let d = 0; d < DIM_COUNT; d++) {
+          gradient[d] += (error * sample.dimScores[d]) / trainSamples.length;
+          gradient[d] += L2_LAMBDA * weights[d]; // L2 正则化梯度
         }
       }
 
-      totalLoss /= samples.length;
-
-      // 收敛检查
-      if (Math.abs(prevLoss - totalLoss) < CONVERGENCE_THRESHOLD) {
-        this.logger.debug(
-          `Gradient descent converged at iteration ${iter}, loss=${totalLoss.toFixed(6)}`,
-        );
-        break;
-      }
-      prevLoss = totalLoss;
-
-      // 梯度下降步
-      for (let i = 0; i < DIM_COUNT; i++) {
-        weights[i] -= (LEARNING_RATE * gradients[i]) / samples.length;
+      // Gradient descent step
+      for (let d = 0; d < DIM_COUNT; d++) {
+        weights[d] -= LEARNING_RATE * gradient[d];
       }
 
-      // 投影约束：所有权重 >= 0
-      weights = weights.map((w) => Math.max(0, w));
+      // 投影约束：非负 + 归一化
+      weights = this.projectToSimplex(weights);
 
-      // 归一化：权重和 = 1
-      const sum = weights.reduce((s, w) => s + w, 0);
-      if (sum > 0) {
-        weights = weights.map((w) => w / sum);
-      } else {
-        // 退化：回退到均匀权重
-        weights = Array(DIM_COUNT).fill(1 / DIM_COUNT);
+      // 验证集 logistic loss
+      if (valSamples.length > 0) {
+        let valLoss = 0;
+        for (const sample of valSamples) {
+          const predicted = this.dotProduct(weights, sample.dimScores);
+          const sigmoid = 1 / (1 + Math.exp(-predicted));
+          valLoss +=
+            -sample.accepted * Math.log(sigmoid + 1e-8) -
+            (1 - sample.accepted) * Math.log(1 - sigmoid + 1e-8);
+        }
+        valLoss /= valSamples.length;
+
+        // Early stopping based on validation loss
+        if (valLoss < bestValLoss - CONVERGENCE_THRESHOLD) {
+          bestValLoss = valLoss;
+          bestWeights = [...weights];
+          noImproveCount = 0;
+        } else {
+          noImproveCount++;
+          if (noImproveCount >= EARLY_STOPPING_PATIENCE) {
+            this.logger.debug(
+              `LearnedRanking: early stopped at iter ${iter}, valLoss=${bestValLoss.toFixed(6)}`,
+            );
+            break;
+          }
+        }
       }
     }
 
-    return weights;
+    return valSamples.length > 0 ? bestWeights : weights;
+  }
+
+  /**
+   * V6.7 Phase 3-A: 非负投影 + 归一化到概率单纯形
+   * 确保所有权重 >= 0 且和为 1
+   */
+  private projectToSimplex(w: number[]): number[] {
+    // 非负投影
+    const clamped = w.map((v) => Math.max(0, v));
+    // 归一化
+    const sum = clamped.reduce((s, v) => s + v, 0);
+    return sum > 0
+      ? clamped.map((v) => v / sum)
+      : Array(w.length).fill(1 / w.length);
   }
 
   /**

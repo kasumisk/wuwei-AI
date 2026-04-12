@@ -8,6 +8,7 @@ import {
 import { matchAllergens } from './allergen-filter.util';
 import { RedisCacheService } from '../../../../core/redis/redis-cache.service';
 import { MetricsService } from '../../../../core/metrics/metrics.service';
+import { t } from './i18n-messages';
 
 // ==================== 类型 ====================
 
@@ -302,7 +303,9 @@ export class HealthModifierEngineService {
     if (context?.allergens?.length) {
       const matched = matchAllergens(food, context.allergens);
       if (matched.length > 0) {
-        const reason = `过敏原匹配: ${matched.join(', ')}`;
+        const reason = t('health.veto.allergen', {
+          matched: matched.join(', '),
+        });
         return {
           finalMultiplier: 0,
           modifiers: [{ multiplier: 0, reason, type: 'penalty' }],
@@ -314,7 +317,7 @@ export class HealthModifierEngineService {
     // 反式脂肪超标 → 否决（每100g超过2g反式脂肪属于严重健康风险）
     const transFat = Number(food.transFat) || 0;
     if (transFat > 2) {
-      const reason = `反式脂肪严重超标: ${transFat}g/100g`;
+      const reason = t('health.veto.transFat', { amount: String(transFat) });
       return {
         finalMultiplier: 0,
         modifiers: [{ multiplier: 0, reason, type: 'penalty' }],
@@ -327,7 +330,11 @@ export class HealthModifierEngineService {
     // 油炸食品
     if (food.isFried) {
       multiplier *= 0.92;
-      modifiers.push({ multiplier: 0.92, reason: '油炸食品', type: 'penalty' });
+      modifiers.push({
+        multiplier: 0.92,
+        reason: t('health.penalty.fried'),
+        type: 'penalty',
+      });
     }
 
     // 高钠 (>600mg/100g)
@@ -338,14 +345,16 @@ export class HealthModifierEngineService {
         multiplier *= 0.88;
         modifiers.push({
           multiplier: 0.88,
-          reason: `高钠: ${sodium}mg/100g (严重超标)`,
+          reason: t('health.penalty.highSodiumSevere', {
+            amount: String(sodium),
+          }),
           type: 'penalty',
         });
       } else {
         multiplier *= 0.94;
         modifiers.push({
           multiplier: 0.94,
-          reason: `高钠: ${sodium}mg/100g`,
+          reason: t('health.penalty.highSodium', { amount: String(sodium) }),
           type: 'penalty',
         });
       }
@@ -429,7 +438,7 @@ export class HealthModifierEngineService {
       if (sugar > 15) {
         mods.push({
           multiplier: 0.9,
-          reason: `减脂目标: 高糖 ${sugar}g/100g`,
+          reason: t('health.goal.fatLossHighSugar', { amount: String(sugar) }),
           type: 'penalty',
         });
       }
@@ -442,7 +451,7 @@ export class HealthModifierEngineService {
       if (calories > 100 && (protein * 4) / calories < 0.05) {
         mods.push({
           multiplier: 0.9,
-          reason: '增肌目标: 蛋白含量极低',
+          reason: t('health.goal.muscleGainLowProtein'),
           type: 'penalty',
         });
       }
@@ -483,13 +492,13 @@ export class HealthModifierEngineService {
       if (gi > 70) {
         mods.push({
           multiplier: this.applySeverity(0.8, severity),
-          reason: `糖尿病: 高GI食物 (${gi})`,
+          reason: t('health.condition.diabetesHighGI', { value: String(gi) }),
           type: 'penalty',
         });
       } else if (gi > 55) {
         mods.push({
           multiplier: this.applySeverity(0.9, severity),
-          reason: `糖尿病: 中GI食物 (${gi})`,
+          reason: t('health.condition.diabetesMidGI', { value: String(gi) }),
           type: 'penalty',
         });
       }
@@ -503,7 +512,9 @@ export class HealthModifierEngineService {
       if (sodium > 400) {
         mods.push({
           multiplier: this.applySeverity(0.85, severity),
-          reason: `高血压: 钠含量偏高 (${sodium}mg)`,
+          reason: t('health.condition.hypertensionSodium', {
+            amount: String(sodium),
+          }),
           type: 'penalty',
         });
       }
@@ -518,14 +529,18 @@ export class HealthModifierEngineService {
       if (satFat > 5) {
         mods.push({
           multiplier: this.applySeverity(0.9, severity),
-          reason: `高血脂: 高饱和脂肪 (${satFat}g)`,
+          reason: t('health.condition.hyperlipidemiaHighSatFat', {
+            amount: String(satFat),
+          }),
           type: 'penalty',
         });
       }
       if (cholesterol > 100) {
         mods.push({
           multiplier: this.applySeverity(0.9, severity),
-          reason: `高血脂: 高胆固醇 (${cholesterol}mg)`,
+          reason: t('health.condition.hyperlipidemiaHighChol', {
+            amount: String(cholesterol),
+          }),
           type: 'penalty',
         });
       }
@@ -544,20 +559,26 @@ export class HealthModifierEngineService {
         // 一票否决不受严重度影响
         mods.push({
           multiplier: 0,
-          reason: `痛风: 极高嘌呤 (${purine}mg/100g) — 禁用`,
+          reason: t('health.veto.goutExtremePurine', {
+            amount: String(purine),
+          }),
           type: 'penalty',
         });
         return { modifiers: mods, vetoed: true };
       } else if (purine > 150) {
         mods.push({
           multiplier: this.applySeverity(0.7, severity),
-          reason: `痛风: 高嘌呤 (${purine}mg/100g)`,
+          reason: t('health.condition.goutHighPurine', {
+            amount: String(purine),
+          }),
           type: 'penalty',
         });
       } else if (purine > 50) {
         mods.push({
           multiplier: this.applySeverity(0.9, severity),
-          reason: `痛风: 中嘌呤 (${purine}mg/100g)`,
+          reason: t('health.condition.goutMidPurine', {
+            amount: String(purine),
+          }),
           type: 'penalty',
         });
       }
@@ -577,13 +598,17 @@ export class HealthModifierEngineService {
       if (phosphorus > 250) {
         mods.push({
           multiplier: this.applySeverity(0.75, severity),
-          reason: `肾病: 高磷 (${phosphorus}mg/100g)`,
+          reason: t('health.condition.kidneyHighPhos', {
+            amount: String(phosphorus),
+          }),
           type: 'penalty',
         });
       } else if (phosphorus > 150) {
         mods.push({
           multiplier: this.applySeverity(0.9, severity),
-          reason: `肾病: 中磷 (${phosphorus}mg/100g)`,
+          reason: t('health.condition.kidneyMidPhos', {
+            amount: String(phosphorus),
+          }),
           type: 'penalty',
         });
       }
@@ -591,7 +616,9 @@ export class HealthModifierEngineService {
       if (potassium > 400) {
         mods.push({
           multiplier: this.applySeverity(0.8, severity),
-          reason: `肾病: 高钾 (${potassium}mg/100g)`,
+          reason: t('health.condition.kidneyHighK', {
+            amount: String(potassium),
+          }),
           type: 'penalty',
         });
       }
@@ -610,14 +637,18 @@ export class HealthModifierEngineService {
       if (satFat > 5) {
         mods.push({
           multiplier: this.applySeverity(0.85, severity),
-          reason: `脂肪肝: 高饱和脂肪 (${satFat}g/100g)`,
+          reason: t('health.condition.fattyLiverHighSatFat', {
+            amount: String(satFat),
+          }),
           type: 'penalty',
         });
       }
       if (sugar > 10) {
         mods.push({
           multiplier: this.applySeverity(0.88, severity),
-          reason: `脂肪肝: 高糖 (${sugar}g/100g)`,
+          reason: t('health.condition.fattyLiverHighSugar', {
+            amount: String(sugar),
+          }),
           type: 'penalty',
         });
       }
@@ -635,7 +666,7 @@ export class HealthModifierEngineService {
       ) {
         mods.push({
           multiplier: 0,
-          reason: '乳糜泻: 含麸质 — 禁用',
+          reason: t('health.veto.celiacGluten'),
           type: 'penalty',
         });
         return { modifiers: mods, vetoed: true };
@@ -650,7 +681,7 @@ export class HealthModifierEngineService {
       if (tags.includes('high_fodmap') || tags.includes('fodmap_high')) {
         mods.push({
           multiplier: this.applySeverity(0.75, severity),
-          reason: 'IBS: 高FODMAP食物',
+          reason: t('health.condition.ibsHighFODMAP'),
           type: 'penalty',
         });
       }
@@ -670,7 +701,7 @@ export class HealthModifierEngineService {
       ) {
         mods.push({
           multiplier: this.applySeverity(0.85, severity),
-          reason: '贫血: 茶/咖啡抑制铁吸收',
+          reason: t('health.condition.anemiaTeaCoffee'),
           type: 'penalty',
         });
       }
@@ -718,7 +749,7 @@ export class HealthModifierEngineService {
       if (isOmega3Rich) {
         mods.push({
           multiplier: this.applyBonusSeverity(1.15, severity),
-          reason: '高血脂: Omega-3丰富，有益血脂',
+          reason: t('health.bonus.hyperlipidemiaOmega3'),
           type: 'bonus',
         });
       }
@@ -732,7 +763,7 @@ export class HealthModifierEngineService {
       if (gi > 0 && gi < 40) {
         mods.push({
           multiplier: this.applyBonusSeverity(1.1, severity),
-          reason: `糖尿病: 低GI食物 (${gi})，有益血糖控制`,
+          reason: t('health.bonus.diabetesLowGI', { value: String(gi) }),
           type: 'bonus',
         });
       }
@@ -747,7 +778,10 @@ export class HealthModifierEngineService {
       if (potassium > 300 && sodium < 200) {
         mods.push({
           multiplier: this.applyBonusSeverity(1.12, severity),
-          reason: `高血压: 高钾(${potassium}mg)+低钠(${sodium}mg)，有益血压`,
+          reason: t('health.bonus.hypertensionHighKLowNa', {
+            potassium: String(potassium),
+            sodium: String(sodium),
+          }),
           type: 'bonus',
         });
       }
@@ -761,7 +795,7 @@ export class HealthModifierEngineService {
       if (iron > 3) {
         mods.push({
           multiplier: this.applyBonusSeverity(1.1, severity),
-          reason: `贫血: 高铁食物 (${iron}mg/100g)，有益补铁`,
+          reason: t('health.bonus.anemiaHighIron', { amount: String(iron) }),
           type: 'bonus',
         });
       }
@@ -775,7 +809,9 @@ export class HealthModifierEngineService {
       if (calcium > 100) {
         mods.push({
           multiplier: this.applyBonusSeverity(1.1, severity),
-          reason: `骨质疏松: 高钙食物 (${calcium}mg/100g)，有益骨骼`,
+          reason: t('health.bonus.osteoHighCalcium', {
+            amount: String(calcium),
+          }),
           type: 'bonus',
         });
       }

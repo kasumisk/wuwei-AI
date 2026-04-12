@@ -109,7 +109,7 @@ const AnalysisRecordList: React.FC = () => {
               {record.user?.nickname || <span style={{ color: '#bbb' }}>匿名</span>}
             </div>
             <div style={{ fontSize: 11, color: '#999' }}>
-              <Tooltip title={record.userId}>{record.userId.slice(0, 8)}...</Tooltip>
+              <Tooltip title={record.userId}>{record.userId?.slice(0, 8)}...</Tooltip>
             </div>
           </div>
         </Space>
@@ -127,7 +127,7 @@ const AnalysisRecordList: React.FC = () => {
       render: (_: unknown, record: AnalysisRecordDto) => {
         const cfg = inputTypeConfig[record.inputType];
         return (
-          <Tag color={cfg.color} icon={cfg.icon}>
+          <Tag color={cfg?.color} icon={cfg?.icon}>
             {cfg.text}
           </Tag>
         );

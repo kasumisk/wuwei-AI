@@ -3,21 +3,17 @@ import { PrismaService } from '../../../../core/prisma/prisma.service';
 import { RedisCacheService } from '../../../../core/redis/redis-cache.service';
 
 /**
- * V6.4 Phase 3.4: 时令感知服务
+ * V6.4 Phase 3.4 / V7.0 Phase 2-E: 时令感知服务
  *
- * 基于 food_regional_info.availability 字段和当前月份，
- * 为食物计算时令性分数 (0~1)，用于推荐评分的第 11 维。
+ * V6.4: 基于 food_regional_info.availability 字段和当前月份计算时令性分数。
+ * V7.0: 新增食物级月份权重 — 优先使用 food_regional_info.month_weights（12元素数组）。
  *
- * 数据来源:
- * - food_regional_info.availability: 'common' | 'seasonal' | 'rare' | null
- * - 当前月份（用于判断时令食物是否当季）
- *
- * 评分逻辑:
- * - common  → 0.7 (常年可用，稍低于当季食物)
- * - seasonal + 当季 → 1.0 (完全当季，最高分)
- * - seasonal + 非当季 → 0.3 (反季，低分)
- * - rare → 0.4 (稀有食物，轻微惩罚)
- * - 无数据 → 0.5 (中性，不影响评分)
+ * 评分优先级:
+ * 1. month_weights 存在 → 平滑曲线插值（V7.0）
+ * 2. availability='seasonal' → 二值判断（当季1.0 / 非当季0.3）
+ * 3. availability='common' → 0.7
+ * 4. availability='rare' → 0.4
+ * 5. 无数据 → 0.5（中性）
  *
  * 缓存策略:
  * - 按区域批量预加载 food_regional_info，缓存到 Redis（TTL 4h）
@@ -30,6 +26,8 @@ export interface SeasonalityInfo {
   availability: string | null;
   /** 地区人气 */
   localPopularity: number;
+  /** V7.0: 食物级月份权重（12元素数组 0-1），null 时回退品类级逻辑 */
+  monthWeights: number[] | null;
 }
 
 /** 品类 → 典型旺季月份映射（基于中国饮食文化） */
@@ -106,6 +104,7 @@ export class SeasonalityService {
           food_id: true,
           availability: true,
           local_popularity: true,
+          month_weights: true, // V7.0: 食物级月份权重
         },
       });
 
@@ -114,6 +113,7 @@ export class SeasonalityService {
         const info: SeasonalityInfo = {
           availability: row.availability,
           localPopularity: row.local_popularity,
+          monthWeights: this.parseMonthWeights(row.month_weights),
         };
         map[row.food_id] = info;
         this.regionalCache.set(row.food_id, info);
@@ -150,6 +150,10 @@ export class SeasonalityService {
   /**
    * 计算食物的时令性分数
    *
+   * V7.0 优先级:
+   * 1. month_weights 存在 → 用平滑插值（相邻月加权）
+   * 2. availability + 品类峰值月份（V6.4 原有逻辑）
+   *
    * @param foodId 食物 ID
    * @param category 食物品类（用于判断当季月份）
    * @param month 当前月份 (1-12)，默认取系统当前月份
@@ -164,17 +168,25 @@ export class SeasonalityService {
     const info = this.regionalCache.get(foodId);
 
     // 无区域数据 → 中性分
-    if (!info || !info.availability) {
+    if (!info) {
+      return 0.5;
+    }
+
+    // V7.0: 食物级月份权重优先
+    if (info.monthWeights?.length === 12) {
+      return this.interpolateMonthWeight(info.monthWeights, currentMonth);
+    }
+
+    // V6.4 原有逻辑: 基于 availability
+    if (!info.availability) {
       return 0.5;
     }
 
     switch (info.availability) {
       case 'common':
-        // 常年可用食物 — 稳定但不如当季食物加分
         return 0.7;
 
       case 'seasonal': {
-        // 时令食物 — 判断是否当季
         const peakMonths =
           CATEGORY_PEAK_MONTHS[category] ?? DEFAULT_PEAK_MONTHS;
         const isInSeason = peakMonths.includes(currentMonth);
@@ -182,7 +194,6 @@ export class SeasonalityService {
       }
 
       case 'rare':
-        // 稀有食物 — 轻微惩罚（不完全排除，用户可能确实想要）
         return 0.4;
 
       default:
@@ -209,5 +220,48 @@ export class SeasonalityService {
       );
     }
     return result;
+  }
+
+  // ─── V7.0: 食物级月份权重辅助方法 ───
+
+  /**
+   * V7.0: 平滑插值月份权重
+   *
+   * 使用当前月 + 相邻月加权平均，避免月份边界跳变。
+   * 权重分配: 当前月 0.6, 前一月 0.2, 后一月 0.2
+   *
+   * @param weights 12 元素数组 (index 0 = 1月)
+   * @param month 当前月份 (1-12)
+   * @returns 0-1 的平滑分数
+   */
+  private interpolateMonthWeight(weights: number[], month: number): number {
+    const idx = month - 1; // 0-based
+    const prevIdx = (idx + 11) % 12; // 循环到 12 月
+    const nextIdx = (idx + 1) % 12; // 循环到 1 月
+
+    const score =
+      weights[idx] * 0.6 + weights[prevIdx] * 0.2 + weights[nextIdx] * 0.2;
+
+    // clamp 到 [0, 1]
+    return Math.max(0, Math.min(1, score));
+  }
+
+  /**
+   * V7.0: 解析 month_weights JSON 字段
+   *
+   * 验证是否为有效的 12 元素数组，无效时返回 null（回退品类级逻辑）。
+   */
+  private parseMonthWeights(raw: unknown): number[] | null {
+    if (!raw || !Array.isArray(raw) || raw.length !== 12) {
+      return null;
+    }
+
+    // 验证所有元素都是有效数字
+    const weights = raw.map(Number);
+    if (weights.some((w) => isNaN(w) || w < 0 || w > 1)) {
+      return null;
+    }
+
+    return weights;
   }
 }

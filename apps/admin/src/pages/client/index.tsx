@@ -5,7 +5,7 @@ export const routeConfig = {
   name: 'ClientManagement',
   title: '客户端管理',
   icon: <TeamOutlined />,
-  order: 2,
+  order: 99,
   hideInMenu: false,
   requireAuth: true,
   requireAdmin: true,

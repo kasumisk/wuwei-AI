@@ -33,8 +33,8 @@ export const CLS_KEYS = {
   LOCALE: 'locale',
 } as const;
 
-/** V6.6 Phase 3-B: 支持的语言列表 */
-export const SUPPORTED_LOCALES = ['zh', 'en', 'ja'] as const;
+/** V6.6 Phase 3-B: 支持的语言列表 — V6.8: 升级为 BCP-47 格式，与 i18n-messages.ts 一致 */
+export const SUPPORTED_LOCALES = ['zh-CN', 'en-US', 'ja-JP'] as const;
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 
 @Injectable()
@@ -63,9 +63,9 @@ export class RequestContextService {
     return Date.now() - this.startTime;
   }
 
-  /** V6.6 Phase 3-B: 获取当前请求语言（默认 'zh'） */
+  /** V6.6 Phase 3-B: 获取当前请求语言 — V6.8: 默认 'zh-CN'（BCP-47 格式） */
   get locale(): string {
-    return this.cls.get(CLS_KEYS.LOCALE) || 'zh';
+    return this.cls.get(CLS_KEYS.LOCALE) || 'zh-CN';
   }
 
   // ─── 写入器（仅供中间件/Guard 调用） ───

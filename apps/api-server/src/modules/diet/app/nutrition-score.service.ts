@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { t } from './recommendation/i18n-messages';
 
 // ==================== 类型 ====================
 
@@ -294,22 +295,64 @@ export class NutritionScoreService {
   ): string[] {
     const hl: string[] = [];
 
-    if (input.calories > input.targetCalories * 1.3) hl.push('⚠️ 热量严重超标');
-    else if (scores.energy < 60) hl.push('⚠️ 热量偏离目标');
+    if (input.calories > input.targetCalories * 1.3)
+      hl.push(
+        t('nutrition.highlight.caloriesOver', {
+          percent: String(
+            Math.round((input.calories / input.targetCalories - 1) * 100),
+          ),
+        }),
+      );
+    else if (scores.energy < 60)
+      hl.push(
+        t('nutrition.highlight.caloriesUnder', {
+          percent: String(100 - scores.energy),
+        }),
+      );
 
-    if (scores.proteinRatio < 50) hl.push('⚠️ 蛋白质严重不足');
-    else if (scores.proteinRatio < 70) hl.push('⚠️ 蛋白质偏低');
+    if (scores.proteinRatio < 50)
+      hl.push(
+        t('nutrition.highlight.proteinLow', {
+          percent: String(100 - scores.proteinRatio),
+        }),
+      );
+    else if (scores.proteinRatio < 70)
+      hl.push(
+        t('nutrition.highlight.proteinLow', {
+          percent: String(100 - scores.proteinRatio),
+        }),
+      );
 
-    if (scores.macroBalance < 50) hl.push('⚠️ 碳水/脂肪比例失衡');
-    if (scores.foodQuality < 40) hl.push('⚠️ 加工食品偏多');
-    if (scores.satiety < 40) hl.push('⚠️ 饱腹感不足，容易饿');
+    if (scores.macroBalance < 50)
+      hl.push(
+        t('nutrition.highlight.carbsHigh', {
+          percent: String(100 - scores.macroBalance),
+        }),
+      );
+    if (scores.foodQuality < 40)
+      hl.push(
+        t('nutrition.highlight.fatHigh', {
+          percent: String(100 - scores.foodQuality),
+        }),
+      );
+    if (scores.satiety < 40)
+      hl.push(
+        t('nutrition.highlight.fiberLow', {
+          percent: String(100 - scores.satiety),
+        }),
+      );
     if (scores.glycemicImpact < 40)
-      hl.push('⚠️ 血糖负荷较高，注意搭配低GI食物');
+      hl.push(
+        t('nutrition.highlight.sodiumHigh', {
+          percent: String(100 - scores.glycemicImpact),
+        }),
+      );
 
-    if (scores.energy >= 85) hl.push('✅ 热量控制良好');
-    if (scores.proteinRatio >= 85) hl.push('✅ 蛋白质摄入充足');
-    if (scores.macroBalance >= 85) hl.push('✅ 营养结构均衡');
-    if (scores.foodQuality >= 80) hl.push('✅ 食物品质优秀');
+    if (scores.energy >= 85) hl.push(t('nutrition.highlight.caloriesGood'));
+    if (scores.proteinRatio >= 85)
+      hl.push(t('nutrition.highlight.proteinGood'));
+    if (scores.macroBalance >= 85) hl.push(t('nutrition.highlight.carbsGood'));
+    if (scores.foodQuality >= 80) hl.push(t('nutrition.highlight.fatGood'));
 
     return hl.slice(0, 3);
   }
@@ -431,18 +474,27 @@ export class NutritionScoreService {
 
   generateFeedback(highlights: string[], goal: string): string {
     const warns = highlights.filter((h) => h.startsWith('⚠️'));
-    if (warns.length === 0) return '今日饮食各项达标，继续保持！';
+    if (warns.length === 0) return t('nutrition.feedback.allGood');
 
     const GOAL_TIPS: Record<string, string> = {
-      fat_loss: '；减脂期优先保证蛋白质',
-      muscle_gain: '；增肌期关注蛋白和热量是否足够',
-      health: '；多吃天然食物保持均衡',
-      habit: '；坚持记录就是最大进步',
+      fat_loss:
+        t('nutrition.feedback.separator') +
+        t('nutrition.feedback.caloriesTip', { direction: '' }),
+      muscle_gain:
+        t('nutrition.feedback.separator') +
+        t('nutrition.feedback.proteinTip', { direction: '' }),
+      health:
+        t('nutrition.feedback.separator') +
+        t('nutrition.feedback.fatTip', { direction: '' }),
+      habit:
+        t('nutrition.feedback.separator') +
+        t('nutrition.feedback.carbsTip', { direction: '' }),
     };
 
     return (
-      warns.map((w) => w.replace('⚠️ ', '')).join('；') +
-      (GOAL_TIPS[goal] || '')
+      warns
+        .map((w) => w.replace('⚠️ ', ''))
+        .join(t('nutrition.feedback.separator')) + (GOAL_TIPS[goal] || '')
     );
   }
 }

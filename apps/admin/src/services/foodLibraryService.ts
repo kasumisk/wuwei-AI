@@ -140,6 +140,10 @@ export interface GetFoodLibraryQuery {
   page?: number;
   pageSize?: number;
   keyword?: string;
+  /** ProTable 列搜索直接传 name，后端单独模糊匹配 */
+  name?: string;
+  /** 编码独立模糊搜索 */
+  code?: string;
   category?: string;
   status?: string;
   isVerified?: boolean;
@@ -253,8 +257,11 @@ export const foodLibraryApi = {
     request.delete(`${PATH.ADMIN.FOOD_LIBRARY}/sources/${sourceId}`),
 
   // 变更日志
-  getChangeLogs: (foodId: string): Promise<FoodChangeLogDto[]> =>
-    request.get(`${PATH.ADMIN.FOOD_LIBRARY}/${foodId}/change-logs`),
+  getChangeLogs: (
+    foodId: string,
+    params?: { page?: number; pageSize?: number }
+  ): Promise<{ list: FoodChangeLogDto[]; total: number; page: number; pageSize: number }> =>
+    request.get(`${PATH.ADMIN.FOOD_LIBRARY}/${foodId}/change-logs`, params),
 
   // 冲突
   getConflicts: (params?: {
@@ -312,10 +319,14 @@ export const useFoodSources = (foodId: string, enabled = true) =>
     enabled,
   });
 
-export const useFoodChangeLogs = (foodId: string, enabled = true) =>
+export const useFoodChangeLogs = (
+  foodId: string,
+  params?: { page?: number; pageSize?: number },
+  enabled = true
+) =>
   useQuery({
-    queryKey: foodLibraryQueryKeys.changeLogs(foodId),
-    queryFn: () => foodLibraryApi.getChangeLogs(foodId),
+    queryKey: [...foodLibraryQueryKeys.changeLogs(foodId), params],
+    queryFn: () => foodLibraryApi.getChangeLogs(foodId, params),
     enabled,
   });
 

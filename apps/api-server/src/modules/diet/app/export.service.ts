@@ -16,6 +16,7 @@
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../core/prisma/prisma.service';
+import { t } from './recommendation/i18n-messages';
 
 /** 导出任务数据结构 — 由控制器入队时构造 */
 export interface ExportJobData {
@@ -70,7 +71,7 @@ export class ExportService {
     if (dataTypes.includes('food_records')) {
       const { csv, count } = await this.exportFoodRecords(userId, start, end);
       if (count > 0) {
-        sections.push(`# 饮食记录 (Food Records)\n${csv}`);
+        sections.push(`${t('export.section.foodRecords')}${csv}`);
         totalRecords += count;
       }
     }
@@ -83,13 +84,17 @@ export class ExportService {
         end,
       );
       if (count > 0) {
-        sections.push(`# 每日营养汇总 (Daily Summaries)\n${csv}`);
+        sections.push(`${t('export.section.dailySummaries')}${csv}`);
         totalRecords += count;
       }
     }
 
     const content =
-      sections.length > 0 ? sections.join('\n\n') : '# 无数据 (No Data)\n';
+      sections.length > 0
+        ? sections.join(
+            t('export.section.separator') + t('export.section.separator'),
+          )
+        : `# ${t('export.fallback.unknown')}\n`;
 
     this.logger.log(`导出完成: exportId=${exportId}, records=${totalRecords}`);
 
@@ -123,18 +128,18 @@ export class ExportService {
     }
 
     const headers = [
-      '日期',
-      '餐次',
-      '食物',
-      '总热量(kcal)',
-      '蛋白质(g)',
-      '脂肪(g)',
-      '碳水(g)',
-      '质量评分',
-      '饱腹评分',
-      '营养评分',
-      '决策',
-      '来源',
+      t('export.record_header.date'),
+      t('export.record_header.mealType'),
+      t('export.record_header.food'),
+      t('export.record_header.totalCalories'),
+      t('export.record_header.protein'),
+      t('export.record_header.fat'),
+      t('export.record_header.carbs'),
+      t('export.record_header.fiber'),
+      t('export.record_header.sodium'),
+      t('export.record_header.quantity'),
+      t('export.record_header.unit'),
+      t('export.record_header.source'),
     ];
 
     const rows = records.map((r) => {
@@ -180,19 +185,19 @@ export class ExportService {
     }
 
     const headers = [
-      '日期',
-      '总热量(kcal)',
-      '热量目标(kcal)',
-      '餐次数',
-      '蛋白质(g)',
-      '蛋白质目标(g)',
-      '脂肪(g)',
-      '脂肪目标(g)',
-      '碳水(g)',
-      '碳水目标(g)',
-      '平均质量',
-      '平均饱腹',
-      '营养评分',
+      t('export.summary_header.date'),
+      t('export.summary_header.totalCalories'),
+      t('export.summary_header.caloriesTarget'),
+      t('export.summary_header.caloriesPercent'),
+      t('export.summary_header.protein'),
+      t('export.summary_header.proteinTarget'),
+      t('export.summary_header.fat'),
+      t('export.summary_header.fatTarget'),
+      t('export.summary_header.carbs'),
+      t('export.summary_header.carbsTarget'),
+      t('export.summary_header.fiber'),
+      t('export.summary_header.sodium'),
+      t('export.summary_header.score'),
     ];
 
     const rows = summaries.map((s) =>
@@ -225,7 +230,7 @@ export class ExportService {
   private formatFoods(foods: unknown): string {
     if (!foods || !Array.isArray(foods)) return '';
     return (foods as Array<{ name?: string; food_name?: string }>)
-      .map((f) => f.name || f.food_name || '未知')
+      .map((f) => f.name || f.food_name || t('export.fallback.unknown'))
       .join('; ');
   }
 

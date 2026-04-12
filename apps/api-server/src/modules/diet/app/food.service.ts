@@ -27,6 +27,7 @@ import {
   RecommendationGeneratedEvent,
 } from '../../../core/events/domain-events';
 import { PrecomputeService } from './precompute.service';
+import { t } from './recommendation/i18n-messages';
 
 @Injectable()
 export class FoodService {
@@ -181,9 +182,9 @@ export class FoodService {
         mealType: nextMeal,
         remainingCalories: 0,
         suggestion: {
-          foods: '今日热量已达标',
+          foods: t('food.suggestion.caloriesReached'),
           calories: 0,
-          tip: '建议不再进食，喝水或零卡饮品',
+          tip: t('food.suggestion.noMoreFood'),
         },
       };
     }
@@ -213,9 +214,9 @@ export class FoodService {
       const scenarios = scenarioResults
         ? Object.entries(scenarioResults).map(([key, rec]) => {
             const scenarioLabels: Record<string, string> = {
-              takeout: '外卖',
-              convenience: '便利店',
-              homeCook: '在家做',
+              takeout: t('scenario.takeout'),
+              convenience: t('scenario.convenience'),
+              homeCook: t('scenario.homeCook'),
             };
             const r = rec as {
               displayText?: string;
@@ -321,9 +322,9 @@ export class FoodService {
 
     const scenarios = Object.entries(scenarioRecs).map(([key, rec]) => {
       const scenarioLabels: Record<string, string> = {
-        takeout: '外卖',
-        convenience: '便利店',
-        homeCook: '在家做',
+        takeout: t('scenario.takeout'),
+        convenience: t('scenario.convenience'),
+        homeCook: t('scenario.homeCook'),
       };
       return {
         scenario: scenarioLabels[key] || key,

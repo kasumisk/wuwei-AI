@@ -26,7 +26,7 @@ export const routeConfig = {
   name: 'food-list',
   title: '食物列表',
   icon: 'UnorderedListOutlined',
-  order: 11,
+  order: 1,
   requireAuth: true,
   hideInMenu: false,
 };
@@ -259,10 +259,14 @@ const FoodLibraryList: React.FC = () => {
         columns={columns}
         actionRef={actionRef}
         request={async (params) => {
-          const { current, pageSize, ...rest } = params;
+          const { current, pageSize, isVerified, ...rest } = params;
           const res = await foodLibraryApi.getList({
             page: current,
             pageSize,
+            // isVerified 从 ProTable 传来是字符串 "true"/"false"，需转为布尔
+            ...(isVerified !== undefined && isVerified !== ''
+              ? { isVerified: isVerified === 'true' || isVerified === true }
+              : {}),
             ...rest,
           });
           return { data: res.list, total: res.total, success: true };

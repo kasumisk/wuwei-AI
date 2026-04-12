@@ -62,12 +62,14 @@ export class PrecomputeService {
   /**
    * 查询预计算推荐结果
    *
+   * V6.9 Phase 3-B: 新增 channel 参数，切换渠道时不命中旧缓存。
    * 返回 null 表示未命中，调用方应回退到实时计算。
    */
   async getPrecomputed(
     userId: string,
     date: string,
     mealType: string,
+    channel?: string,
   ): Promise<{
     result: MealRecommendation;
     scenarioResults: Record<string, unknown> | null;
@@ -77,6 +79,7 @@ export class PrecomputeService {
         user_id: userId,
         date,
         meal_type: mealType,
+        channel: channel ?? 'unknown',
         strategy_version: CURRENT_STRATEGY_VERSION,
         expires_at: { gt: new Date() },
       },
@@ -106,6 +109,8 @@ export class PrecomputeService {
 
   /**
    * 存储预计算结果
+   *
+   * V6.9 Phase 3-B: 新增 channel 参数，与渠道维度关联存储。
    */
   async savePrecomputed(
     userId: string,
@@ -113,16 +118,19 @@ export class PrecomputeService {
     mealType: string,
     result: MealRecommendation,
     scenarioResults?: Record<string, unknown>,
+    channel?: string,
   ): Promise<void> {
     // 计算过期时间: date 当天 23:59:59
     const expiresAt = new Date(`${date}T23:59:59`);
+    const ch = channel ?? 'unknown';
 
     await this.prisma.precomputed_recommendations.upsert({
       where: {
-        user_id_date_meal_type: {
+        user_id_date_meal_type_channel: {
           user_id: userId,
           date,
           meal_type: mealType,
+          channel: ch,
         },
       },
       update: {
@@ -136,6 +144,7 @@ export class PrecomputeService {
         user_id: userId,
         date,
         meal_type: mealType,
+        channel: ch,
         result: result as any,
         scenario_results: (scenarioResults || null) as any,
         strategy_version: CURRENT_STRATEGY_VERSION,

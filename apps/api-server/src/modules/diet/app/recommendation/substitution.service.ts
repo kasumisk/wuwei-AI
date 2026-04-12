@@ -2,7 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
 import { FoodScorerService } from './food-scorer.service';
 import { MealAssemblerService } from './meal-assembler.service';
+import { ScoringConfigService } from './scoring-config.service';
 import {
+  ScoringConfigSnapshot,
   UserProfileConstraints,
   UserPreferenceProfile,
 } from './recommendation.types';
@@ -78,6 +80,7 @@ export class SubstitutionService {
     private readonly prisma: PrismaService,
     private readonly foodScorer: FoodScorerService,
     private readonly mealAssembler: MealAssemblerService,
+    private readonly scoringConfigService: ScoringConfigService,
   ) {}
 
   /**
@@ -174,11 +177,10 @@ export class SubstitutionService {
       originalFood.name,
     );
 
-    // 4. 计算每个候选的综合替代评分
-    const origServing = this.foodScorer.calcServingNutrition(
-      originalFood as any,
-    );
+    // 4. V6.8: 获取评分配置（含 substitutionWeights）
+    const cfg = await this.scoringConfigService.getConfig();
 
+    // 计算每个候选的综合替代评分
     const scored: SubstituteCandidate[] = candidates.map((candidate) => {
       const serving = this.foodScorer.calcServingNutrition(candidate as any);
       const isCrossCategory = !sameCategoryCandidateIds.has(candidate.id);
@@ -189,21 +191,11 @@ export class SubstitutionService {
         candidate as any,
       );
 
-      // 4b. 营养接近度 — 基于热量和蛋白质的相对距离
-      const calDiff =
-        origServing.servingCalories > 0
-          ? Math.abs(serving.servingCalories - origServing.servingCalories) /
-            origServing.servingCalories
-          : 0;
-      const protDiff =
-        origServing.servingProtein > 0
-          ? Math.abs(serving.servingProtein - origServing.servingProtein) /
-            Math.max(origServing.servingProtein, 1)
-          : 0;
-      // 距离越小越好: 1 - clamp(avgDiff, 0, 1)
-      const nutritionProximity = Math.max(
-        0,
-        1 - (calDiff * 0.6 + protDiff * 0.4),
+      // 4b. V6.8: 6 维营养接近度（per 100g 归一化，消除 serving size 偏差）
+      const nutritionProximity = this.calculateNutritionProximity(
+        originalFood as any,
+        candidate as any,
+        cfg,
       );
 
       // 4c. 历史替换加分 — 有历史替换记录则高分
@@ -266,6 +258,101 @@ export class SubstitutionService {
     // 5. 排序返回 Top-K
     scored.sort((a, b) => b.substituteScore - a.substituteScore);
     return scored.slice(0, topK);
+  }
+
+  /**
+   * V6.8: 6 维营养接近度 — per 100g 归一化
+   *
+   * 维度: calories + protein + fat + carbs + GI + micronutrients
+   * 权重从 ScoringConfigSnapshot.substitutionWeights 读取
+   */
+  private calculateNutritionProximity(
+    original: any,
+    candidate: any,
+    cfg: ScoringConfigSnapshot,
+  ): number {
+    const w = cfg.substitutionWeights ?? {
+      calories: 0.25,
+      protein: 0.2,
+      fat: 0.15,
+      carbs: 0.15,
+      gi: 0.15,
+      micronutrients: 0.1,
+    };
+
+    // 宏量营养素接近度（per 100g，绝对差值归一化）
+    const origCal = Number(original.calories ?? 0);
+    const candCal = Number(candidate.calories ?? 0);
+    const calScore = Math.max(0, 1 - Math.abs(origCal - candCal) / 200);
+
+    const origProt = Number(original.protein ?? 0);
+    const candProt = Number(candidate.protein ?? 0);
+    const protScore = Math.max(0, 1 - Math.abs(origProt - candProt) / 20);
+
+    const origFat = Number(original.fat ?? 0);
+    const candFat = Number(candidate.fat ?? 0);
+    const fatScore = Math.max(0, 1 - Math.abs(origFat - candFat) / 15);
+
+    const origCarbs = Number(original.carbs ?? 0);
+    const candCarbs = Number(candidate.carbs ?? 0);
+    const carbScore = Math.max(0, 1 - Math.abs(origCarbs - candCarbs) / 30);
+
+    // GI 接近度
+    const origGi =
+      original.glycemic_index ??
+      cfg.categoryGiMap?.[original.category as string] ??
+      cfg.giFallback ??
+      55;
+    const candGi =
+      candidate.glycemic_index ??
+      cfg.categoryGiMap?.[candidate.category as string] ??
+      cfg.giFallback ??
+      55;
+    const giScore = Math.max(0, 1 - Math.abs(origGi - candGi) / 40);
+
+    // 微量营养素余弦相似度
+    const microScore = this.micronutrientSimilarity(original, candidate);
+
+    return (
+      w.calories * calScore +
+      w.protein * protScore +
+      w.fat * fatScore +
+      w.carbs * carbScore +
+      w.gi * giScore +
+      w.micronutrients * microScore
+    );
+  }
+
+  /**
+   * V6.8: 微量营养素向量余弦相似度
+   *
+   * 使用 fiber, iron, calcium, vitamin_c, vitamin_a, potassium 6 个维度
+   * 无数据时返回 0.5（中性分）
+   */
+  private micronutrientSimilarity(a: any, b: any): number {
+    const keys = [
+      'fiber',
+      'iron',
+      'calcium',
+      'vitamin_c',
+      'vitamin_a',
+      'potassium',
+    ] as const;
+
+    let dotProduct = 0;
+    let normA = 0;
+    let normB = 0;
+
+    for (const k of keys) {
+      const va = Number(a[k] ?? 0);
+      const vb = Number(b[k] ?? 0);
+      dotProduct += va * vb;
+      normA += va * va;
+      normB += vb * vb;
+    }
+
+    if (normA === 0 || normB === 0) return 0.5; // 无数据时中性分
+    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
   }
 
   /**
