@@ -28,6 +28,10 @@
  * ── V8.0 增强 ──
  * POST enqueue / enqueue-staged 新增 maxCompleteness 参数（按完整度上限筛选入队）
  * POST staged/:id/approve 新增 selectedFields 参数（字段级选择性入库）
+ *
+ * ── V8.3 新增/增强 ──
+ * POST /admin/food-pipeline/enrichment/retry-failed       — 增强：支持 source 参数（queue/database/both）
+ * POST /admin/food-pipeline/enrichment/recalculate-completeness — 批量重算全库完整度和状态
  */
 
 import {
@@ -115,30 +119,14 @@ export class FoodEnrichmentController {
     let foods: { id: string; name: string; missingFields: EnrichableField[] }[];
 
     if (target === 'translations' || target === 'regional') {
-      // 查询没有对应翻译/地区信息的食物
-      const sql =
-        target === 'translations'
-          ? `SELECT id, name FROM foods WHERE NOT EXISTS (
-               SELECT 1 FROM food_translations ft WHERE ft.food_id = foods.id
-               ${body.locale ? `AND ft.locale = '${body.locale}'` : ''}
-             ) ORDER BY created_at DESC LIMIT $1 OFFSET $2`
-          : `SELECT id, name FROM foods WHERE NOT EXISTS (
-               SELECT 1 FROM food_regional_info fri WHERE fri.food_id = foods.id
-               ${body.region ? `AND fri.region = '${body.region}'` : ''}
-             ) ORDER BY created_at DESC LIMIT $1 OFFSET $2`;
-
-      const rows = (await (
-        this.enrichmentService as any
-      ).prisma.$queryRawUnsafe(sql, limit, offset)) as {
-        id: string;
-        name: string;
-      }[];
-
-      foods = rows.map((r: any) => ({
-        id: r.id,
-        name: r.name,
-        missingFields: [],
-      }));
+      // V8.1: 修复 SQL 注入 — 移除字符串插值，使用 service 层参数化查询
+      foods = await this.enrichmentService.getFoodsNeedingRelatedEnrichment(
+        target,
+        limit,
+        offset,
+        body.locale,
+        body.region,
+      );
     } else {
       foods = await this.enrichmentService.getFoodsNeedingEnrichment(
         fields,
@@ -245,23 +233,28 @@ export class FoodEnrichmentController {
     return { success: true, code: HttpStatus.OK, message: '获取成功', data };
   }
 
-  // ==================== 队列统计 ====================
+  // ==================== 队列统计（V8.2: 增加历史统计） ====================
 
   @Get('stats')
-  @ApiOperation({ summary: '补全队列统计概览' })
+  @ApiOperation({ summary: '补全队列统计概览（V8.2: 含历史统计）' })
   async getStats(): Promise<ApiResponse> {
-    const [waiting, active, completed, failed, delayed] = await Promise.all([
-      this.enrichmentQueue.getWaitingCount(),
-      this.enrichmentQueue.getActiveCount(),
-      this.enrichmentQueue.getCompletedCount(),
-      this.enrichmentQueue.getFailedCount(),
-      this.enrichmentQueue.getDelayedCount(),
-    ]);
+    const [waiting, active, completed, failed, delayed, historical] =
+      await Promise.all([
+        this.enrichmentQueue.getWaitingCount(),
+        this.enrichmentQueue.getActiveCount(),
+        this.enrichmentQueue.getCompletedCount(),
+        this.enrichmentQueue.getFailedCount(),
+        this.enrichmentQueue.getDelayedCount(),
+        this.enrichmentService.getEnrichmentHistoricalStats(),
+      ]);
     return {
       success: true,
       code: HttpStatus.OK,
       message: '获取成功',
-      data: { waiting, active, completed, failed, delayed },
+      data: {
+        queue: { waiting, active, completed, failed, delayed },
+        historical,
+      },
     };
   }
 
@@ -421,6 +414,28 @@ export class FoodEnrichmentController {
     };
   }
 
+  // ==================== V8.2: 批量审核拒绝 ====================
+
+  @Post('staged/batch-reject')
+  @ApiOperation({ summary: 'V8.2 批量审核拒绝' })
+  async batchReject(
+    @Body() body: { ids: string[]; reason: string },
+    @Request() req: any,
+  ): Promise<ApiResponse> {
+    const operator: string = req.user?.username ?? 'admin';
+    const data = await this.enrichmentService.batchRejectStaged(
+      body.ids,
+      body.reason || '批量拒绝',
+      operator,
+    );
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: `批量拒绝完成：${data.success} 拒绝，${data.failed} 失败`,
+      data,
+    };
+  }
+
   // ==================== V8.0: 回退补全（重置已补全字段，可重新补全）====================
   // 注意：batch 路由必须在 :id 路由之前声明，否则 NestJS 会把 "batch" 当作 :id 参数匹配
 
@@ -498,7 +513,7 @@ export class FoodEnrichmentController {
   // ==================== V7.9: 分阶段批量入队 ====================
 
   @Post('enqueue-staged')
-  @ApiOperation({ summary: 'V7.9 分阶段批量入队补全任务' })
+  @ApiOperation({ summary: 'V8.1 分阶段批量入队补全任务（增强筛选）' })
   async enqueueStagedEnrichment(
     @Body()
     body: {
@@ -511,6 +526,12 @@ export class FoodEnrichmentController {
       staged?: boolean;
       /** V8.0: 仅入队完整度 <= 此值的食物（0-100） */
       maxCompleteness?: number;
+      /** V8.1: 按食物分类筛选（如 meat/vegetable/grain） */
+      category?: string;
+      /** V8.1: 按数据来源筛选（如 usda/ai_enrichment/manual） */
+      primarySource?: string;
+      /** V8.1: 仅入队缺失指定字段的食物（逗号分隔或数组，如 "protein,fat" 或 ["protein","fat"]） */
+      missingFields?: string | string[];
     },
   ): Promise<ApiResponse> {
     const stages = body.stages ?? ENRICHMENT_STAGES.map((s) => s.stage);
@@ -531,15 +552,36 @@ export class FoodEnrichmentController {
     }
 
     // 收集所有目标阶段涉及的字段，查询缺失这些字段的食物
-    const targetFields = ENRICHMENT_STAGES.filter((s) =>
+    let targetFields = ENRICHMENT_STAGES.filter((s) =>
       validStages.includes(s.stage),
     ).flatMap((s) => s.fields);
+
+    // V8.1: 如果传了 missingFields 参数，取交集（仅筛选用户指定的字段）
+    if (body.missingFields) {
+      const requestedFields = Array.isArray(body.missingFields)
+        ? body.missingFields
+        : body.missingFields.split(',').map((f) => f.trim());
+      const validRequested = requestedFields.filter((f) =>
+        (ENRICHABLE_FIELDS as readonly string[]).includes(f),
+      );
+      if (validRequested.length > 0) {
+        targetFields = targetFields.filter((f) =>
+          validRequested.includes(f),
+        ) as typeof targetFields;
+        // 如果交集为空，使用用户指定的有效字段
+        if (targetFields.length === 0) {
+          targetFields = validRequested as typeof targetFields;
+        }
+      }
+    }
 
     const foods = await this.enrichmentService.getFoodsNeedingEnrichment(
       targetFields as unknown as EnrichableField[],
       limit,
       offset,
       body.maxCompleteness,
+      body.category,
+      body.primarySource,
     );
 
     if (foods.length === 0) {
@@ -607,39 +649,110 @@ export class FoodEnrichmentController {
   // ==================== V7.9: 批量重试失败任务 ====================
 
   @Post('retry-failed')
-  @ApiOperation({ summary: 'V7.9 批量重试失败的补全任务' })
-  async retryFailed(@Body() body: { limit?: number }): Promise<ApiResponse> {
+  @ApiOperation({
+    summary: 'V8.3 批量重试失败的补全任务（支持队列重试和数据库重入队）',
+  })
+  async retryFailed(
+    @Body()
+    body: {
+      limit?: number;
+      /** V8.1: 仅重试指定食物的失败任务 */
+      foodId?: string;
+      /** V8.1: 仅重试包含指定字段的失败任务（逗号分隔或数组） */
+      fields?: string | string[];
+      /** V8.3: 从数据库 enrichment_status='failed'/'rejected' 的食物重新入队 */
+      source?: 'queue' | 'database' | 'both';
+    },
+  ): Promise<ApiResponse> {
     const limit = body.limit ?? 50;
-
-    const failedJobs = await this.enrichmentQueue.getFailed(0, limit - 1);
-
-    if (failedJobs.length === 0) {
-      return {
-        success: true,
-        code: HttpStatus.OK,
-        message: '没有失败任务需要重试',
-        data: { retried: 0 },
-      };
-    }
-
-    let retried = 0;
+    const source = body.source ?? 'both';
+    let retriedFromQueue = 0;
+    let enqueuedFromDb = 0;
     const errors: string[] = [];
 
-    for (const job of failedJobs) {
-      try {
-        await job.retry();
-        retried++;
-      } catch (e) {
-        errors.push(`jobId=${job.id}: ${(e as Error).message}`);
+    // 1. 从队列重试（原有逻辑）
+    if (source === 'queue' || source === 'both') {
+      const failedJobs = await this.enrichmentQueue.getFailed(0, limit - 1);
+
+      let targetJobs = failedJobs;
+      if (body.foodId) {
+        targetJobs = targetJobs.filter(
+          (job) => job.data?.foodId === body.foodId,
+        );
+      }
+      if (body.fields) {
+        const requestedFields = Array.isArray(body.fields)
+          ? body.fields
+          : body.fields.split(',').map((f) => f.trim());
+        if (requestedFields.length > 0) {
+          targetJobs = targetJobs.filter((job) => {
+            const jobFields: string[] = job.data?.fields ?? [];
+            return requestedFields.some((f) => jobFields.includes(f));
+          });
+        }
+      }
+
+      for (const job of targetJobs) {
+        try {
+          await job.retry();
+          retriedFromQueue++;
+        } catch (e) {
+          errors.push(`queue:jobId=${job.id}: ${(e as Error).message}`);
+        }
       }
     }
 
+    // 2. V8.3: 从数据库中查找 enrichment_status = 'failed' 或 'rejected' 的食物重新入队
+    if (source === 'database' || source === 'both') {
+      const dbLimit =
+        source === 'both' ? Math.max(1, limit - retriedFromQueue) : limit;
+
+      const failedFoods = await this.enrichmentService.getFailedFoods(
+        dbLimit,
+        body.foodId,
+      );
+
+      const queueOpts = QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_ENRICHMENT];
+      for (const food of failedFoods) {
+        try {
+          await this.enrichmentQueue.add(
+            'enrichment',
+            {
+              foodId: food.id,
+              target: 'foods' as EnrichmentTarget,
+              staged: false,
+            },
+            {
+              attempts: queueOpts.maxRetries + 1,
+              backoff: {
+                type: queueOpts.backoffType,
+                delay: queueOpts.backoffDelay,
+              },
+              removeOnComplete: 200,
+              removeOnFail: 100,
+            },
+          );
+          // 重置状态为 pending
+          await this.enrichmentService.resetEnrichmentStatus(food.id);
+          enqueuedFromDb++;
+        } catch (e) {
+          errors.push(`db:${food.name}(${food.id}): ${(e as Error).message}`);
+        }
+      }
+    }
+
+    const totalRetried = retriedFromQueue + enqueuedFromDb;
     return {
       success: true,
       code: HttpStatus.OK,
-      message: `已重试 ${retried} 个失败任务${errors.length > 0 ? `，${errors.length} 个重试失败` : ''}`,
+      message:
+        totalRetried > 0
+          ? `已重试 ${totalRetried} 个任务（队列${retriedFromQueue}，数据库${enqueuedFromDb}）${errors.length > 0 ? `，${errors.length} 个失败` : ''}`
+          : '没有需要重试的失败任务',
       data: {
-        retried,
+        retriedFromQueue,
+        enqueuedFromDb,
+        totalRetried,
         failedToRetry: errors.length,
         errors: errors.slice(0, 10),
       },
@@ -649,13 +762,11 @@ export class FoodEnrichmentController {
   // ==================== V7.9: 单食物完整度评分 ====================
 
   @Get('completeness/:id')
-  @ApiOperation({ summary: 'V7.9 查询单个食物的数据完整度评分' })
+  @ApiOperation({ summary: 'V8.1 查询单个食物的数据完整度评分' })
   async getCompleteness(@Param('id') id: string): Promise<ApiResponse> {
-    const food = await (this.enrichmentService as any).prisma.foods.findUnique({
-      where: { id },
-    });
-
-    if (!food) {
+    // V8.1: 修复封装泄漏 — 通过 service 方法获取而非直接访问 prisma
+    const result = await this.enrichmentService.getCompletenessById(id);
+    if (!result) {
       return {
         success: false,
         code: HttpStatus.NOT_FOUND,
@@ -664,16 +775,11 @@ export class FoodEnrichmentController {
       };
     }
 
-    const score = this.enrichmentService.computeCompletenessScore(food);
     return {
       success: true,
       code: HttpStatus.OK,
       message: '获取成功',
-      data: {
-        foodId: id,
-        foodName: food.name,
-        ...score,
-      },
+      data: result,
     };
   }
 
@@ -695,6 +801,27 @@ export class FoodEnrichmentController {
     };
   }
 
+  // ==================== V8.3: 批量重算完整度 ====================
+
+  @Post('recalculate-completeness')
+  @ApiOperation({
+    summary:
+      'V8.3 批量重算全库 data_completeness 和 enrichment_status（修复历史数据不一致）',
+  })
+  async recalculateCompleteness(
+    @Body() body: { batchSize?: number },
+  ): Promise<ApiResponse> {
+    const batchSize = body?.batchSize ?? 200;
+    const data =
+      await this.enrichmentService.recalculateCompleteness(batchSize);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: `重算完成：共 ${data.total} 条，更新 ${data.updated} 条${data.errors > 0 ? `，${data.errors} 条出错` : ''}`,
+      data,
+    };
+  }
+
   // ==================== V8.0: 运维统计（补全成功率/通过率/按日趋势）====================
 
   @Get('operations-stats')
@@ -703,6 +830,23 @@ export class FoodEnrichmentController {
   })
   async getOperationsStats(): Promise<ApiResponse> {
     const data = await this.enrichmentService.getEnrichmentStatistics();
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '获取成功',
+      data,
+    };
+  }
+
+  // ==================== V8.1: 全局任务总览 ====================
+
+  @Get('task-overview')
+  @ApiOperation({
+    summary:
+      'V8.1 全局补全任务总览（待审核数/完整度分布/状态分布/失败字段Top10/近7天趋势）',
+  })
+  async getTaskOverview(): Promise<ApiResponse> {
+    const data = await this.enrichmentService.getTaskOverview();
     return {
       success: true,
       code: HttpStatus.OK,

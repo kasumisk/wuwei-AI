@@ -1,15 +1,17 @@
 /**
- * V7.9 Food Enrichment Processor（BullMQ Worker）
+ * V8.2 Food Enrichment Processor（BullMQ Worker）
  *
  * 消费 food-enrichment 队列任务：
- *  - target=foods:        补全主表字段（支持 V7.9 分阶段模式）
+ *  - target=foods:        补全主表字段（5阶段分阶段模式）
  *  - target=translations: 补全翻译关联表
  *  - target=regional:     补全地区信息关联表
  *
  * V7.9 新增：
  *  - stages 参数：指定 1-5 阶段编号，走分阶段补全流程（enrichFoodByStage）
  *  - 分阶段结果各阶段独立入库/staging，前阶段结果作为后阶段上下文
- *  - 无 stages 参数时走原有整体补全流程（向后兼容）
+ *
+ * V8.2 变更：
+ *  - 无 stages 参数时默认走全部5阶段补全（不再使用旧版整体补全）
  *
  * staged=true 时 AI 结果先写入 change_logs 待人工审核（action=ai_enrichment_staged），
  * staged=false 或 confidence >= 0.7 时直接入库。
@@ -144,39 +146,11 @@ export class FoodEnrichmentProcessor extends WorkerHost {
     );
   }
 
-  // ─── 主表补全（原有整体模式，向后兼容）──────────────────────────────────
+  // ─── 主表补全（无 stages 参数时默认走全部5阶段）─────────────────────
 
   private async processFoods(foodId: string, staged: boolean): Promise<void> {
-    const result = await this.enrichmentService.enrichFood(foodId);
-    if (!result) {
-      this.logger.warn(`无补全结果（无缺失字段或 AI 失败）: foodId=${foodId}`);
-      return;
-    }
-
-    const shouldStage = this.enrichmentService.shouldStage(result, staged);
-
-    if (shouldStage) {
-      const logId = await this.enrichmentService.stageEnrichment(
-        foodId,
-        result,
-        'foods',
-        undefined,
-        undefined,
-        'ai_enrichment_worker',
-      );
-      this.logger.log(
-        `Staged（foods）foodId=${foodId}, logId=${logId}, confidence=${result.confidence}`,
-      );
-    } else {
-      const { updated, skipped } = await this.enrichmentService.applyEnrichment(
-        foodId,
-        result,
-        'ai_enrichment_worker',
-      );
-      this.logger.log(
-        `直接入库（foods）foodId=${foodId}, updated=[${updated.join(',')}], skipped=[${skipped.join(',')}]`,
-      );
-    }
+    // V8.2: 旧版 enrichFood() 已移除，统一走分阶段补全流程
+    await this.processFoodsByStage(foodId, [1, 2, 3, 4, 5], staged);
   }
 
   // ─── 翻译补全 ──────────────────────────────────────────────────────────
@@ -285,6 +259,18 @@ export class FoodEnrichmentProcessor extends WorkerHost {
         error.message,
         job.attemptsMade,
       );
+
+      // V8.3: 最终失败时更新 foods.enrichment_status 为 'failed'
+      try {
+        await this.enrichmentService.markEnrichmentFailed(
+          job.data.foodId,
+          error.message,
+        );
+      } catch (e) {
+        this.logger.error(
+          `标记食物补全失败状态异常: foodId=${job.data.foodId}, ${(e as Error).message}`,
+        );
+      }
     }
   }
 }

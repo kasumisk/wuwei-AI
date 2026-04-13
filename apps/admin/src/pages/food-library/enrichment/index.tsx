@@ -79,6 +79,7 @@ import {
   type EnrichmentJob,
   type EnrichableField,
   type StagedEnrichment,
+  type EnrichmentStatsResponse,
 } from '@/services/foodPipelineService';
 import { LOCALE_OPTIONS } from '@/pages/food-library/constants';
 
@@ -231,7 +232,9 @@ const EnrichmentPage: React.FC = () => {
   const [historySelectedRowKeys, setHistorySelectedRowKeys] = useState<React.Key[]>([]);
 
   // Hooks
-  const { data: queueStats, refetch: refetchStats } = useEnrichmentStats();
+  const { data: statsResponse, refetch: refetchStats } = useEnrichmentStats();
+  const queueStats = (statsResponse as EnrichmentStatsResponse | undefined)?.queue;
+  const historicalStats = (statsResponse as EnrichmentStatsResponse | undefined)?.historical;
   const { data: jobs, refetch: refetchJobs } = useEnrichmentJobs(jobStatusFilter, 30);
   const { data: staged, refetch: refetchStaged } = useStagedEnrichments({
     page: stagedPage,
@@ -610,12 +613,19 @@ const EnrichmentPage: React.FC = () => {
       width: 140,
       render: (_, r) => (
         <Space direction="vertical" size={0}>
-          <Text strong style={{ fontSize: 13 }}>
-            {r.foodName ?? '-'}
-          </Text>
-          <Text type="secondary" style={{ fontSize: 10 }}>
-            {r.foodId.slice(0, 8)}
-          </Text>
+          <Button
+            type="link"
+            size="small"
+            icon={<EyeOutlined />}
+            onClick={() => navigate(`/food-library/detail/${r.foodId}`)}
+          >
+            <Text strong style={{ fontSize: 13 }}>
+              {r.foodName ?? '-'}
+            </Text>
+            <Text type="secondary" style={{ fontSize: 10 }}>
+              {r.foodId.slice(0, 8)}
+            </Text>
+          </Button>
         </Space>
       ),
     },
@@ -703,6 +713,18 @@ const EnrichmentPage: React.FC = () => {
             </Card>
           </Col>
         ))}
+        {historicalStats && (
+          <Col xs={12} sm={8} md={4}>
+            <Card size="small">
+              <Statistic
+                title="平均完整度"
+                value={historicalStats.avgCompleteness}
+                suffix="%"
+                valueStyle={{ color: historicalStats.avgCompleteness >= 60 ? '#52c41a' : '#faad14', fontSize: 22 }}
+              />
+            </Card>
+          </Col>
+        )}
         <Col xs={12} sm={8} md={4}>
           <Card size="small" style={{ height: '100%', display: 'flex', alignItems: 'center' }}>
             <Button
@@ -728,35 +750,62 @@ const EnrichmentPage: React.FC = () => {
           title="全库补全进度"
           style={{ marginBottom: 16 }}
           extra={
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              按字段维度统计填充率
-            </Text>
+            <Space>
+              <Tag color="blue">平均完整度: {enrichmentProgress.avgCompleteness}%</Tag>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                共 {enrichmentProgress.totalFoods} 条食物
+              </Text>
+            </Space>
           }
         >
+          {/* 汇总数字 */}
+          <Row gutter={[16, 8]} style={{ marginBottom: 16 }}>
+            <Col xs={8} sm={6} md={4}>
+              <Statistic
+                title="完整度 ≥80%"
+                value={enrichmentProgress.fullyEnriched}
+                valueStyle={{ color: '#52c41a', fontSize: 20 }}
+              />
+            </Col>
+            <Col xs={8} sm={6} md={4}>
+              <Statistic
+                title="40%~80%"
+                value={enrichmentProgress.partiallyEnriched}
+                valueStyle={{ color: '#fa8c16', fontSize: 20 }}
+              />
+            </Col>
+            <Col xs={8} sm={6} md={4}>
+              <Statistic
+                title="未补全 <40%"
+                value={enrichmentProgress.notEnriched}
+                valueStyle={{ color: '#ff4d4f', fontSize: 20 }}
+              />
+            </Col>
+          </Row>
+          {/* 各阶段覆盖率 */}
           <Row gutter={[16, 8]}>
-            {(Array.isArray(enrichmentProgress) ? enrichmentProgress : []).map(
-              (item: { field: string; filled: number; total: number; percentage: number }) => {
-                const label = FIELD_LABEL_MAP[item.field as EnrichableField] || item.field;
-                const pct = Math.round(item.percentage);
-                return (
-                  <Col xs={12} sm={8} md={6} key={item.field}>
-                    <div style={{ marginBottom: 4 }}>
-                      <Row justify="space-between">
-                        <Text style={{ fontSize: 12 }}>{label}</Text>
-                        <Text type="secondary" style={{ fontSize: 11 }}>
-                          {item.filled}/{item.total}
-                        </Text>
-                      </Row>
-                      <Progress
-                        percent={pct}
-                        size="small"
-                        strokeColor={pct >= 80 ? '#52c41a' : pct >= 50 ? '#fa8c16' : '#ff4d4f'}
-                      />
-                    </div>
-                  </Col>
-                );
-              }
-            )}
+            {enrichmentProgress.stagesCoverage.map((stage) => {
+              const pct = stage.coverageRate;
+              return (
+                <Col xs={24} sm={12} md={8} key={stage.stage}>
+                  <div style={{ marginBottom: 4 }}>
+                    <Row justify="space-between">
+                      <Text style={{ fontSize: 12 }}>
+                        阶段{stage.stage}：{stage.name}
+                      </Text>
+                      <Text type="secondary" style={{ fontSize: 11 }}>
+                        {pct}%
+                      </Text>
+                    </Row>
+                    <Progress
+                      percent={pct}
+                      size="small"
+                      strokeColor={pct >= 80 ? '#52c41a' : pct >= 50 ? '#fa8c16' : '#ff4d4f'}
+                    />
+                  </div>
+                </Col>
+              );
+            })}
           </Row>
         </Card>
       )}

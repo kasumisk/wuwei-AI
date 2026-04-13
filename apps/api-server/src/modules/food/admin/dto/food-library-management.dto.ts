@@ -94,6 +94,59 @@ export class GetFoodLibraryQueryDto {
   @IsOptional()
   @IsString()
   enrichmentStatus?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'V8.1: 按指定字段为空筛选（如 missingField=protein，只返回蛋白质字段为空的食物）',
+    example: 'protein',
+  })
+  @IsOptional()
+  @IsString()
+  missingField?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'V8.1: 多字段缺失组合筛选，逗号分隔（如 missingFields=protein,fat,carbs，返回同时缺少这些字段的食物）',
+    example: 'protein,fat,carbs',
+  })
+  @IsOptional()
+  @IsString()
+  missingFields?: string;
+
+  @ApiPropertyOptional({
+    description: 'V8.1: 食物整体审核状态筛选（pending/approved/rejected）',
+    enum: ['pending', 'approved', 'rejected'],
+  })
+  @IsOptional()
+  @IsString()
+  reviewStatus?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'V8.1: 按补全失败字段筛选（如 failedField=protein，只返回蛋白质字段补全失败的食物）',
+    example: 'protein',
+  })
+  @IsOptional()
+  @IsString()
+  failedField?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'V8.1: 排序字段（data_completeness/confidence/created_at/updated_at/search_weight）',
+    example: 'data_completeness',
+  })
+  @IsOptional()
+  @IsString()
+  sortBy?: string;
+
+  @ApiPropertyOptional({
+    description: 'V8.1: 排序方向（asc/desc），默认 desc',
+    enum: ['asc', 'desc'],
+    default: 'desc',
+  })
+  @IsOptional()
+  @IsString()
+  sortOrder?: string;
 }
 
 // ==================== 食物 CRUD DTO ====================
@@ -812,4 +865,29 @@ export class ResolveFoodConflictDto {
   @ApiProperty()
   @IsString()
   resolvedValue: string;
+}
+
+// ==================== V8.1: 批量更新 review_status DTO ====================
+
+export class BatchReviewStatusDto {
+  @ApiProperty({
+    description: '食物 ID 数组',
+    type: [String],
+  })
+  @IsArray()
+  @IsString({ each: true })
+  ids: string[];
+
+  @ApiProperty({
+    description: '目标审核状态',
+    enum: ['pending', 'approved', 'rejected'],
+  })
+  @IsString()
+  @IsEnum(['pending', 'approved', 'rejected'])
+  reviewStatus: 'pending' | 'approved' | 'rejected';
+
+  @ApiPropertyOptional({ description: '操作原因（可选）' })
+  @IsOptional()
+  @IsString()
+  reason?: string;
 }

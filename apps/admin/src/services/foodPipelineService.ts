@@ -369,6 +369,20 @@ export interface EnrichmentQueueStats {
   delayed: number;
 }
 
+/** V8.2: /stats 接口实际返回结构（含历史统计） */
+export interface EnrichmentStatsResponse {
+  queue: EnrichmentQueueStats;
+  historical: {
+    total: number;
+    enriched: number;
+    pending: number;
+    failed: number;
+    staged: number;
+    rejected: number;
+    avgCompleteness: number;
+  };
+}
+
 export interface EnrichmentJob {
   id: string;
   foodId: string;
@@ -453,12 +467,19 @@ export interface BatchPreviewResult {
   };
 }
 
-/** 补全进度统计 */
+/** 补全进度统计（V8.2: 与后端 getEnrichmentProgress 匹配） */
 export interface EnrichmentProgress {
-  total: number;
-  enriched: number;
-  percentage: number;
-  byField: Record<string, { filled: number; total: number; percentage: number }>;
+  totalFoods: number;
+  fullyEnriched: number;
+  partiallyEnriched: number;
+  notEnriched: number;
+  avgCompleteness: number;
+  stagesCoverage: Array<{
+    stage: number;
+    name: string;
+    coverageRate: number;
+  }>;
+  byStatus?: Record<string, number>;
 }
 
 /** 补全完整度评分 */
@@ -559,7 +580,7 @@ export const enrichmentApi = {
     maxCompleteness?: number;
   }): Promise<EnrichEnqueueResult> => request.post(`${ENRICHMENT_BASE}/enqueue`, data),
 
-  getStats: (): Promise<EnrichmentQueueStats> => request.get(`${ENRICHMENT_BASE}/stats`),
+  getStats: (): Promise<EnrichmentStatsResponse> => request.get(`${ENRICHMENT_BASE}/stats`),
 
   getJobs: (params?: {
     status?: 'waiting' | 'active' | 'completed' | 'failed' | 'delayed';
@@ -649,7 +670,13 @@ export const enrichmentApi = {
   enrichNow: (
     foodId: string,
     data?: { stages?: number[]; fields?: string[]; staged?: boolean }
-  ): Promise<any> => request.post(`${ENRICHMENT_BASE}/${foodId}/enrich-now`, data ?? {}),
+  ): Promise<any> =>
+    // AI 分阶段补全需要 60-120s，搭载全局 10s 超时限制
+    // silentError: 由调用方自行处理超时提示，避免全局 toast 与组件 toast 重叠
+    request.post(`${ENRICHMENT_BASE}/${foodId}/enrich-now`, data ?? {}, {
+      timeout: 180_000,
+      silentError: true,
+    }),
 };
 
 // ==================== Enrichment Query Keys ====================
@@ -677,8 +704,9 @@ export const useEnrichmentStats = () =>
     queryKey: enrichmentQueryKeys.stats,
     queryFn: () => enrichmentApi.getStats(),
     refetchInterval: (query) => {
-      const data = query.state.data as EnrichmentQueueStats | undefined;
-      return data && (data.waiting > 0 || data.active > 0) ? 10000 : 30000;
+      const data = query.state.data as EnrichmentStatsResponse | undefined;
+      const q = data?.queue;
+      return q && (q.waiting > 0 || q.active > 0) ? 10000 : 30000;
     },
     refetchIntervalInBackground: false,
   });

@@ -503,6 +503,9 @@ export const ENRICHMENT_FIELD_LABELS: Record<string, string> = {
   acquisition_difficulty: '可获得性难度',
   compatibility: '搭配关系',
   available_channels: '可获取渠道',
+  // V8.2: 新增字段标签
+  food_form: '食物形态',
+  required_equipment: '所需设备',
 };
 
 /**

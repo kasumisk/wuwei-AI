@@ -100,12 +100,15 @@ const FoodDetailPage: React.FC = () => {
       );
     }
     // 字段级来源标记
-    const sourceLabel =
-      source === 'ai_enrichment' ? 'AI补全' : source === 'manual' ? '手动编辑' : source || '未知';
+    const sourceLabel = source?.startsWith('ai_enrichment')
+      ? 'AI补全'
+      : source === 'manual'
+        ? '手动编辑'
+        : source || '未知';
     const confidenceLabel =
       confidence !== undefined ? ` | 置信度 ${(confidence * 100).toFixed(0)}%` : '';
 
-    if (source === 'ai_enrichment') {
+    if (source?.startsWith('ai_enrichment')) {
       return (
         <Tooltip title={`${sourceLabel}${confidenceLabel}`}>
           <ThunderboltOutlined
@@ -234,55 +237,90 @@ const FoodDetailPage: React.FC = () => {
         </Row>
       </Card>
 
-      {/* V8.0: 数据完整度进度条 */}
-      {completeness && (
+      {/* V8.1: 数据完整度进度条 — 优先使用 enrichmentMeta，降级到独立 completeness API */}
+      {(food?.enrichmentMeta || completeness) && (
         <Card size="small" style={{ marginBottom: 16 }}>
           <Row gutter={16} align="middle">
             <Col flex="none">
               <Typography.Text strong>数据完整度</Typography.Text>
             </Col>
             <Col flex="auto">
-              <Progress
-                percent={Number(completeness?.score.toFixed(1))}
-                strokeColor={
-                  completeness?.score >= 80
-                    ? '#52c41a'
-                    : completeness?.score >= 50
-                      ? '#faad14'
-                      : '#ff4d4f'
-                }
-                format={(pct) => `${pct}%`}
-              />
+              {(() => {
+                const score = food?.enrichmentMeta?.completeness?.score ?? completeness?.score ?? 0;
+                return (
+                  <Progress
+                    percent={Number(score.toFixed(1))}
+                    strokeColor={score >= 80 ? '#52c41a' : score >= 50 ? '#faad14' : '#ff4d4f'}
+                    format={(pct) => `${pct}%`}
+                  />
+                );
+              })()}
             </Col>
             <Col flex="none">
               <Space size={4}>
                 <Tooltip title="已填写字段">
                   <Tag color="green" icon={<CheckCircleOutlined />}>
-                    {completeness.filledFields?.length} 已填
+                    {food?.enrichmentMeta
+                      ? food.enrichmentMeta.fieldDetails.filter((d) => d.filled).length
+                      : completeness?.filledFields?.length}{' '}
+                    已填
                   </Tag>
                 </Tooltip>
                 <Tooltip
-                  title={
-                    completeness.missingFields?.length > 0
-                      ? `缺失: ${completeness.missingFields?.slice(0, 10).join(', ')}${completeness.missingFields.length > 10 ? '...' : ''}`
-                      : '无缺失'
-                  }
+                  title={(() => {
+                    const missing = food?.enrichmentMeta?.missingFields ?? completeness?.missingFields;
+                    if (!missing?.length) return '无缺失';
+                    return `缺失: ${missing.slice(0, 10).join(', ')}${missing.length > 10 ? '...' : ''}`;
+                  })()}
                 >
                   <Tag
-                    color={completeness.missingFields?.length > 0 ? 'red' : 'default'}
+                    color={
+                      (food?.enrichmentMeta?.missingFields?.length ?? completeness?.missingFields?.length ?? 0) > 0
+                        ? 'red'
+                        : 'default'
+                    }
                     icon={
-                      completeness.missingFields?.length > 0 ? (
+                      (food?.enrichmentMeta?.missingFields?.length ?? completeness?.missingFields?.length ?? 0) > 0 ? (
                         <ExclamationCircleOutlined />
                       ) : undefined
                     }
                   >
-                    {completeness.missingFields?.length} 缺失
+                    {food?.enrichmentMeta?.missingFields?.length ?? completeness?.missingFields?.length ?? 0} 缺失
                   </Tag>
                 </Tooltip>
-                <Tag>{completeness.totalFields} 总字段</Tag>
+                <Tag>{food?.enrichmentMeta?.fieldDetails?.length ?? completeness?.totalFields} 总字段</Tag>
               </Space>
             </Col>
           </Row>
+          {/* 分组完整度 */}
+          {food?.enrichmentMeta?.completeness?.groups && (
+            <Row gutter={8} style={{ marginTop: 8 }}>
+              {(
+                [
+                  { key: 'core', label: '核心' },
+                  { key: 'micro', label: '微量' },
+                  { key: 'health', label: '健康' },
+                  { key: 'usage', label: '使用' },
+                  { key: 'extended', label: '扩展' },
+                ] as const
+              ).map(({ key, label }) => {
+                const pct = food.enrichmentMeta!.completeness.groups[key];
+                return (
+                  <Col key={key} flex="1" style={{ minWidth: 80 }}>
+                    <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                      {label}
+                    </Typography.Text>
+                    <Progress
+                      size="small"
+                      percent={pct}
+                      strokeColor={pct >= 80 ? '#52c41a' : pct >= 40 ? '#faad14' : '#ff4d4f'}
+                      format={(p) => `${p}%`}
+                    />
+                  </Col>
+                );
+              })}
+            </Row>
+          )}
         </Card>
       )}
 
@@ -446,6 +484,79 @@ const FoodDetailPage: React.FC = () => {
                   </Descriptions>
 
                   <Typography.Title level={5} style={{ marginTop: 24 }}>
+                    烹饪 & 属性
+                  </Typography.Title>
+                  <Descriptions bordered column={3} size="small">
+                    <Descriptions.Item label="菜系">
+                      {fieldValue(food.cuisine, '', 'cuisine')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="食物形态">
+                      {fieldValue(food.foodForm, '', 'food_form')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="菜品类型">
+                      {fieldValue(food.dishType, '', 'dish_type')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="烹饪方式(单)">
+                      {fieldValue(food.cookingMethod, '', 'cooking_method')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="制作技能要求">
+                      {fieldValue(food.skillRequired, '', 'skill_required')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="预估成本等级">
+                      {fieldValue(food.estimatedCostLevel, '', 'estimated_cost_level')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="保质期(天)">
+                      {fieldValue(food.shelfLifeDays, '天', 'shelf_life_days')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="建议温度">
+                      {fieldValue(food.servingTemperature, '', 'serving_temperature')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="预估菜品优先级">
+                      {fieldValue(food.dishPriority, '', 'dish_priority')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="制备时间">
+                      {fieldValue(food.prepTimeMinutes, 'min', 'prep_time_minutes')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="烹饪时间">
+                      {fieldValue(food.cookTimeMinutes, 'min', 'cook_time_minutes')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="获取难度">
+                      {fieldValue(food.acquisitionDifficulty, '', 'acquisition_difficulty')}
+                    </Descriptions.Item>
+                  </Descriptions>
+
+                  <Typography.Title level={5} style={{ marginTop: 24 }}>
+                    原料 & 渠道
+                  </Typography.Title>
+                  <Descriptions bordered column={1} size="small">
+                    <Descriptions.Item label="原料列表">
+                      {food.ingredientList && food.ingredientList.length > 0
+                        ? food.ingredientList.map((i) => <Tag key={i}>{i}</Tag>)
+                        : <span>-{fieldStatus(null, 'ingredient_list')}</span>}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="烹饪方式(多)">
+                      {food.cookingMethods && food.cookingMethods.length > 0
+                        ? food.cookingMethods.map((c) => <Tag key={c} color="cyan">{c}</Tag>)
+                        : <span>-{fieldStatus(null, 'cooking_methods')}</span>}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="口感标签">
+                      {food.textureTags && food.textureTags.length > 0
+                        ? food.textureTags.map((t) => <Tag key={t} color="purple">{t}</Tag>)
+                        : <span>-{fieldStatus(null, 'texture_tags')}</span>}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="可购渠道">
+                      {food.availableChannels && food.availableChannels.length > 0
+                        ? food.availableChannels.map((c) => <Tag key={c} color="volcano">{c}</Tag>)
+                        : <span>-{fieldStatus(null, 'available_channels')}</span>}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="所需设备">
+                      {food.requiredEquipment && food.requiredEquipment.length > 0
+                        ? food.requiredEquipment.map((e) => <Tag key={e}>{e}</Tag>)
+                        : <span>-{fieldStatus(null, 'required_equipment')}</span>}
+                    </Descriptions.Item>
+                  </Descriptions>
+
+                  <Typography.Title level={5} style={{ marginTop: 24 }}>
                     数据溯源
                   </Typography.Title>
                   <Descriptions bordered column={3} size="small">
@@ -463,16 +574,15 @@ const FoodDetailPage: React.FC = () => {
                       {food.isVerified ? <Tag color="success">是</Tag> : <Tag>否</Tag>}
                     </Descriptions.Item>
                     <Descriptions.Item label="审核人">{food.verifiedBy || '-'}</Descriptions.Item>
-                    {/* V8.0: 补全元数据 */}
                     <Descriptions.Item label="数据完整度">
                       {food.dataCompleteness != null ? (
                         <Progress
-                          percent={Number((food.dataCompleteness * 100).toFixed(1))}
+                          percent={Number(Number(food.dataCompleteness).toFixed(1))}
                           size="small"
                           strokeColor={
-                            food.dataCompleteness >= 0.8
+                            food.dataCompleteness >= 80
                               ? '#52c41a'
-                              : food.dataCompleteness >= 0.5
+                              : food.dataCompleteness >= 50
                                 ? '#faad14'
                                 : '#ff4d4f'
                           }
@@ -483,19 +593,29 @@ const FoodDetailPage: React.FC = () => {
                       )}
                     </Descriptions.Item>
                     <Descriptions.Item label="补全状态">
-                      {food.enrichmentStatus ? (
-                        <Tag
-                          color={ENRICHMENT_STATUS_MAP[food.enrichmentStatus]?.color || 'default'}
-                        >
-                          {ENRICHMENT_STATUS_MAP[food.enrichmentStatus]?.text ||
-                            food.enrichmentStatus}
-                        </Tag>
-                      ) : (
-                        '-'
-                      )}
+                      {(() => {
+                        const status =
+                          food.enrichmentMeta?.enrichmentHistory?.enrichmentStatus ??
+                          food.enrichmentStatus;
+                        return status ? (
+                          <Tag color={ENRICHMENT_STATUS_MAP[status]?.color || 'default'}>
+                            {ENRICHMENT_STATUS_MAP[status]?.text || status}
+                          </Tag>
+                        ) : (
+                          '-'
+                        );
+                      })()}
                     </Descriptions.Item>
                     <Descriptions.Item label="最后补全时间">
-                      {food.lastEnrichedAt || '-'}
+                      {food.enrichmentMeta?.enrichmentHistory?.lastEnrichedAt ??
+                        food.lastEnrichedAt ??
+                        '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="审核状态">
+                      {food.enrichmentMeta?.enrichmentHistory?.reviewStatus ?? '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="数据版本">
+                      v{food.enrichmentMeta?.enrichmentHistory?.dataVersion ?? food.dataVersion}
                     </Descriptions.Item>
                     <Descriptions.Item label="创建时间">{food.createdAt}</Descriptions.Item>
                     <Descriptions.Item label="更新时间">{food.updatedAt}</Descriptions.Item>
@@ -694,6 +814,138 @@ const FoodDetailPage: React.FC = () => {
                     { title: '时间', dataIndex: 'createdAt', width: 160 },
                   ]}
                 />
+              ),
+            },
+            {
+              key: 'enrichment',
+              label: (
+                <>
+                  <ThunderboltOutlined /> 补全详情
+                </>
+              ),
+              children: (
+                <div>
+                  {food.enrichmentMeta ? (
+                    <>
+                      {/* 来源分布 */}
+                      {food.enrichmentMeta.sourceDistribution &&
+                        Object.keys(food.enrichmentMeta.sourceDistribution).length > 0 && (
+                          <Card size="small" title="来源分布" style={{ marginBottom: 12 }}>
+                            <Space wrap>
+                              {Object.entries(food.enrichmentMeta.sourceDistribution).map(
+                                ([src, cnt]) => (
+                                  <Tag
+                                    key={src}
+                                    color={src.startsWith('ai_enrichment') ? 'blue' : 'default'}
+                                  >
+                                    {src === 'ai_enrichment_now'
+                                      ? 'AI补全'
+                                      : src === 'manual'
+                                        ? '手动编辑'
+                                        : src}
+                                    : {cnt}
+                                  </Tag>
+                                ),
+                              )}
+                            </Space>
+                          </Card>
+                        )}
+                      {/* 字段详情表 */}
+                      <Table
+                        dataSource={food.enrichmentMeta.fieldDetails}
+                        rowKey="field"
+                        size="small"
+                        pagination={{ pageSize: 20 }}
+                        columns={[
+                          {
+                            title: '字段',
+                            dataIndex: 'field',
+                            width: 160,
+                            render: (v: string, row) => (
+                              <span>
+                                <Typography.Text code style={{ fontSize: 11 }}>
+                                  {v}
+                                </Typography.Text>
+                                <br />
+                                <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                                  {row.label}
+                                </Typography.Text>
+                              </span>
+                            ),
+                          },
+                          {
+                            title: '状态',
+                            dataIndex: 'filled',
+                            width: 70,
+                            render: (v: boolean) =>
+                              v ? (
+                                <Tag color="green">已填</Tag>
+                              ) : (
+                                <Tag color="red">缺失</Tag>
+                              ),
+                          },
+                          {
+                            title: '值',
+                            dataIndex: 'value',
+                            width: 140,
+                            render: (v: any, row) =>
+                              v != null
+                                ? `${Array.isArray(v) || typeof v === 'object' ? JSON.stringify(v) : v}${row.unit ? ' ' + row.unit : ''}`
+                                : '-',
+                          },
+                          {
+                            title: '来源',
+                            dataIndex: 'source',
+                            width: 120,
+                            render: (v: string | null) =>
+                              v ? (
+                                <Tag
+                                  color={
+                                    v.startsWith('ai_enrichment')
+                                      ? 'blue'
+                                      : v === 'manual'
+                                        ? 'green'
+                                        : 'default'
+                                  }
+                                >
+                                  {v === 'ai_enrichment_now'
+                                    ? 'AI补全'
+                                    : v === 'ai_enrichment_failed'
+                                      ? 'AI失败'
+                                      : v === 'manual'
+                                        ? '手动'
+                                        : v}
+                                </Tag>
+                              ) : (
+                                '-'
+                              ),
+                          },
+                          {
+                            title: '置信度',
+                            dataIndex: 'confidence',
+                            width: 80,
+                            render: (v: number | null) =>
+                              v != null ? `${(v * 100).toFixed(0)}%` : '-',
+                          },
+                          {
+                            title: '失败信息',
+                            dataIndex: 'failed',
+                            render: (v: any) =>
+                              v ? (
+                                <Typography.Text type="danger" style={{ fontSize: 11 }}>
+                                  {typeof v === 'object' ? JSON.stringify(v) : String(v)}
+                                </Typography.Text>
+                              ) : (
+                                '-'
+                              ),
+                          },
+                        ]}
+                      />
+                    </>
+                  ) : (
+                    <Typography.Text type="secondary">暂无补全元数据</Typography.Text>
+                  )}
+                </div>
               ),
             },
             {

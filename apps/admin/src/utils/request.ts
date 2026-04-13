@@ -4,6 +4,12 @@ import { globalMessage } from '@/utils/message';
 import { useUserStore } from '@/store/userStore';
 import type { ApiResponse } from '@ai-platform/shared';
 
+/** 扩展 AxiosRequestConfig，支持屏蔽全局超时错误弹窗 */
+export interface ExtendedRequestConfig extends AxiosRequestConfig {
+  /** 设为 true 时不显示全局超时/错误 Toast，由调用方自行处理 */
+  silentError?: boolean;
+}
+
 // 获取 token 的辅助函数
 const getToken = (): string | null => {
   return useUserStore.getState().token;
@@ -92,33 +98,35 @@ const createAxiosInstance = (): AxiosInstance => {
     },
     (error) => {
       // 处理 HTTP 错误
-      const { response, code, message: errorMessage } = error;
+      const { response, code, message: errorMessage, config: errConfig } = error;
+      const silent = (errConfig as ExtendedRequestConfig)?.silentError;
 
       if (code === 'ECONNABORTED') {
-        globalMessage.error('请求超时，请重试');
+        if (!silent) globalMessage.error('请求超时，请重试');
       } else if (response) {
-        const { status, data } = response;
-
-        switch (status) {
-          case 401:
-            globalMessage.error('登录已过期，请重新登录');
-            clearUserInfo();
-            window.location.href = '/login';
-            break;
-          case 403:
-            globalMessage.error('没有权限访问该资源');
-            break;
-          case 404:
-            globalMessage.error('请求的资源不存在');
-            break;
-          case 500:
-            globalMessage.error('服务器内部错误');
-            break;
-          default:
-            globalMessage.error(data?.message || `请求失败: ${status}`);
+        if (!silent) {
+          const { status, data } = response;
+          switch (status) {
+            case 401:
+              globalMessage.error('登录已过期，请重新登录');
+              clearUserInfo();
+              window.location.href = '/login';
+              break;
+            case 403:
+              globalMessage.error('没有权限访问该资源');
+              break;
+            case 404:
+              globalMessage.error('请求的资源不存在');
+              break;
+            case 500:
+              globalMessage.error('服务器内部错误');
+              break;
+            default:
+              globalMessage.error(data?.message || `请求失败: ${status}`);
+          }
         }
       } else {
-        globalMessage.error(errorMessage || '网络错误，请检查网络连接');
+        if (!silent) globalMessage.error(errorMessage || '网络错误，请检查网络连接');
       }
 
       return Promise.reject(error);
@@ -138,19 +146,19 @@ export const request = {
     httpClient.get(url, { params, ...config }),
 
   // POST 请求
-  post: <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> =>
+  post: <T = unknown>(url: string, data?: unknown, config?: ExtendedRequestConfig): Promise<T> =>
     httpClient.post(url, data, config),
 
   // PUT 请求
-  put: <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> =>
+  put: <T = unknown>(url: string, data?: unknown, config?: ExtendedRequestConfig): Promise<T> =>
     httpClient.put(url, data, config),
 
   // DELETE 请求
-  delete: <T = unknown>(url: string, params?: unknown, config?: AxiosRequestConfig): Promise<T> =>
+  delete: <T = unknown>(url: string, params?: unknown, config?: ExtendedRequestConfig): Promise<T> =>
     httpClient.delete(url, { params, ...config }),
 
   // PATCH 请求
-  patch: <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> =>
+  patch: <T = unknown>(url: string, data?: unknown, config?: ExtendedRequestConfig): Promise<T> =>
     httpClient.patch(url, data, config),
 
   // 文件上传

@@ -11,6 +11,7 @@ import {
   JSON_OBJECT_FIELDS,
   ENRICHMENT_STAGES,
 } from '../../../food-pipeline/services/food-enrichment.service';
+import { ENRICHMENT_FIELD_LABELS, ENRICHMENT_FIELD_UNITS } from '../food.types';
 import {
   GetFoodLibraryQueryDto,
   CreateFoodLibraryDto,
@@ -170,6 +171,19 @@ export class FoodLibraryManagementService {
     return mapped;
   }
 
+  /**
+   * DB 行（snake_case）→ 前端 DTO（camelCase）浅层转换。
+   * 仅转换顶层键，JSONB 对象内部结构保持不变（field_sources/flavor_profile 等的内部 key 不变）。
+   */
+  private static mapFoodToDto(food: Record<string, any>): Record<string, any> {
+    const result: Record<string, any> = {};
+    for (const [key, value] of Object.entries(food)) {
+      const camel = key.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
+      result[camel] = value;
+    }
+    return result;
+  }
+
   // ==================== 食物 CRUD ====================
 
   async findAll(query: GetFoodLibraryQueryDto) {
@@ -186,6 +200,12 @@ export class FoodLibraryManagementService {
       minCompleteness,
       maxCompleteness,
       enrichmentStatus,
+      missingField,
+      missingFields,
+      reviewStatus,
+      failedField,
+      sortBy,
+      sortOrder = 'desc',
     } = query;
 
     // Build dynamic WHERE clauses for ILIKE support
@@ -257,9 +277,52 @@ export class FoodLibraryManagementService {
       params.push(enrichmentStatus);
       paramIdx++;
     }
+    // V8.1: 整体审核状态筛选
+    if (reviewStatus) {
+      conditions.push(`f.review_status = $${paramIdx}`);
+      params.push(reviewStatus);
+      paramIdx++;
+    }
+    // V8.1: 按指定字段为空筛选（仅允许字母/数字/下划线，防止 SQL 注入）
+    if (missingField && /^[a-z_][a-z0-9_]*$/.test(missingField)) {
+      conditions.push(`f.${missingField} IS NULL`);
+    }
+    // V8.1: 多字段缺失组合筛选（逗号分隔，所有字段均为空才匹配）
+    if (missingFields) {
+      const fields = missingFields
+        .split(',')
+        .map((f) => f.trim())
+        .filter((f) => /^[a-z_][a-z0-9_]*$/.test(f));
+      if (fields.length > 0) {
+        const nullConds = fields.map((f) => `f.${f} IS NULL`).join(' AND ');
+        conditions.push(`(${nullConds})`);
+      }
+    }
+    // V8.1: 按补全失败字段筛选（field_sources 中含 'ai_failed' 的字段）
+    if (failedField && /^[a-z_][a-z0-9_]*$/.test(failedField)) {
+      conditions.push(`f.failed_fields ? $${paramIdx}`);
+      params.push(failedField);
+      paramIdx++;
+    }
 
     const whereClause = conditions.join(' AND ');
     const offset = (page - 1) * pageSize;
+
+    // V8.1: 动态排序字段（白名单校验防止 SQL 注入）
+    const SORTABLE_FIELDS: Record<string, string> = {
+      data_completeness: 'f.data_completeness',
+      confidence: 'f.confidence',
+      created_at: 'f.created_at',
+      updated_at: 'f.updated_at',
+      search_weight: 'f.search_weight',
+      name: 'f.name',
+      calories: 'f.calories',
+    };
+    const direction = sortOrder === 'asc' ? 'ASC' : 'DESC';
+    let orderClause = 'f.search_weight DESC, f.created_at DESC';
+    if (sortBy && SORTABLE_FIELDS[sortBy]) {
+      orderClause = `${SORTABLE_FIELDS[sortBy]} ${direction} NULLS LAST, f.created_at DESC`;
+    }
 
     const totalResult = await this.prisma.$queryRawUnsafe<[{ count: string }]>(
       `SELECT COUNT(*)::text AS count FROM foods f WHERE ${whereClause}`,
@@ -318,10 +381,15 @@ export class FoodLibraryManagementService {
          f.acquisition_difficulty,
          -- 补全元数据
          f.data_completeness, f.enrichment_status, f.last_enriched_at,
-         f.field_sources, f.field_confidence
+         f.field_sources, f.field_confidence,
+         -- V8.1: 整体审核状态 + 审核元数据
+         f.review_status,
+         f.reviewed_by,
+         f.reviewed_at,
+         f.failed_fields
        FROM foods f
        WHERE ${whereClause}
-       ORDER BY f.search_weight DESC, f.created_at DESC
+       ORDER BY ${orderClause}
        LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
       ...params,
       pageSize,
@@ -329,7 +397,7 @@ export class FoodLibraryManagementService {
     );
 
     return {
-      list,
+      list: list.map(FoodLibraryManagementService.mapFoodToDto),
       total,
       page,
       pageSize,
@@ -338,17 +406,132 @@ export class FoodLibraryManagementService {
   }
 
   async findOne(id: string) {
-    const food = await this.prisma.foods.findUnique({ where: { id } });
-    if (!food) {
-      throw new NotFoundException('食物不存在');
-    }
+    const food = await this.findOneSimple(id);
     // Load relations separately
     const [translations, sources, conflicts] = await Promise.all([
       this.prisma.food_translations.findMany({ where: { food_id: id } }),
       this.prisma.food_sources.findMany({ where: { food_id: id } }),
       this.prisma.food_conflicts.findMany({ where: { food_id: id } }),
     ]);
-    return { ...food, translations, sources, conflicts };
+
+    // V8.1: 构建 enrichmentMeta — 字段级完整度详情
+    const enrichmentMeta = this.buildEnrichmentMeta(food);
+
+    return { ...FoodLibraryManagementService.mapFoodToDto(food), translations, sources, conflicts, enrichmentMeta };
+  }
+
+  /**
+   * V8.3: 轻量查询 — 仅检查食物存在性并返回食物记录
+   * 供 update/toggleVerified/updateStatus/remove 等方法使用，
+   * 避免加载 translations/sources/conflicts/enrichmentMeta（4个额外查询）
+   */
+  private async findOneSimple(id: string) {
+    const food = await this.prisma.foods.findUnique({ where: { id } });
+    if (!food) {
+      throw new NotFoundException('食物不存在');
+    }
+    return food;
+  }
+
+  /**
+   * V8.1: 构建食物字段级补全元数据
+   * 提供每个可补全字段的填充状态、数据来源、置信度等信息
+   */
+  private buildEnrichmentMeta(food: any) {
+    const fieldSources = (food.field_sources as Record<string, string>) || {};
+    const fieldConfidence =
+      (food.field_confidence as Record<string, number>) || {};
+    const failedFields = (food.failed_fields as Record<string, any>) || {};
+
+    const isFieldFilled = (field: string): boolean => {
+      const value = food[field];
+      if (value === null || value === undefined) return false;
+      if ((JSON_ARRAY_FIELDS as readonly string[]).includes(field))
+        return Array.isArray(value) && value.length > 0;
+      if ((JSON_OBJECT_FIELDS as readonly string[]).includes(field))
+        return typeof value === 'object' && Object.keys(value).length > 0;
+      return true;
+    };
+
+    // 字段级详情
+    const fieldDetails = (ENRICHABLE_FIELDS as readonly string[]).map(
+      (field) => {
+        const filled = isFieldFilled(field);
+        const label =
+          ENRICHMENT_FIELD_LABELS[
+            field as keyof typeof ENRICHMENT_FIELD_LABELS
+          ] ?? field;
+        const unit =
+          ENRICHMENT_FIELD_UNITS[
+            field as keyof typeof ENRICHMENT_FIELD_UNITS
+          ] ?? '';
+        return {
+          field,
+          label,
+          unit,
+          filled,
+          value: filled ? food[field] : null,
+          source: fieldSources[field] ?? null,
+          confidence: fieldConfidence[field] ?? null,
+          failed: failedFields[field] ?? null,
+        };
+      },
+    );
+
+    // 缺失字段列表
+    const missingFields = fieldDetails
+      .filter((d) => !d.filled)
+      .map((d) => d.field);
+
+    // 分组完整度
+    const computeGroupScore = (fields: readonly string[]): number => {
+      if (fields.length === 0) return 0;
+      const filled = fields.filter((f) => isFieldFilled(f)).length;
+      return Math.round((filled / fields.length) * 100);
+    };
+
+    const groups = {
+      core: computeGroupScore(
+        ENRICHMENT_STAGES[0].fields as unknown as string[],
+      ),
+      micro: computeGroupScore(
+        ENRICHMENT_STAGES[1].fields as unknown as string[],
+      ),
+      health: computeGroupScore(
+        ENRICHMENT_STAGES[2].fields as unknown as string[],
+      ),
+      usage: computeGroupScore(
+        ENRICHMENT_STAGES[3].fields as unknown as string[],
+      ),
+      extended: computeGroupScore(
+        ENRICHMENT_STAGES[4].fields as unknown as string[],
+      ),
+    };
+
+    // 来源分布
+    const sourceDistribution: Record<string, number> = {};
+    for (const src of Object.values(fieldSources)) {
+      sourceDistribution[src] = (sourceDistribution[src] || 0) + 1;
+    }
+
+    return {
+      completeness: {
+        score: food.data_completeness ?? this.computeSimpleCompleteness(food),
+        groups,
+      },
+      fieldDetails,
+      missingFields,
+      failedFieldCount: Object.keys(failedFields).length,
+      sourceDistribution,
+      enrichmentHistory: {
+        lastEnrichedAt: food.last_enriched_at,
+        enrichmentStatus: food.enrichment_status,
+        reviewStatus: food.review_status,
+        reviewedBy: food.reviewed_by,
+        reviewedAt: food.reviewed_at,
+        dataVersion: food.data_version,
+      },
+    };
   }
 
   async create(dto: CreateFoodLibraryDto) {
@@ -381,7 +564,8 @@ export class FoodLibraryManagementService {
   }
 
   async update(id: string, dto: UpdateFoodLibraryDto, operator = 'admin') {
-    const food = await this.findOne(id);
+    // V8.3: 使用 findOneSimple 避免加载 translations/sources/conflicts/enrichmentMeta
+    const food = await this.findOneSimple(id);
     if (dto.name && dto.name !== food.name) {
       const existing = await this.prisma.foods.findFirst({
         where: { name: dto.name },
@@ -420,18 +604,10 @@ export class FoodLibraryManagementService {
       }
     }
 
-    const saved = await this.prisma.foods.update({
-      where: { id },
-      data: {
-        ...mappedData,
-        data_version: newVersion,
-        field_sources: newSources,
-        field_confidence: newConfidence,
-      },
-    });
-
-    // V8.0: 更新完整度评分
-    const completeness = this.computeSimpleCompleteness(saved);
+    // V8.3: 预计算完整度，合并到单次 UPDATE 中（避免双重 UPDATE）
+    // 需要先合并 mappedData 到 food 上以计算更新后的完整度
+    const mergedForCompleteness = { ...food, ...mappedData };
+    const completeness = this.computeSimpleCompleteness(mergedForCompleteness);
     const enrichmentStatus =
       completeness >= 80
         ? 'completed'
@@ -439,9 +615,13 @@ export class FoodLibraryManagementService {
           ? 'partial'
           : 'pending';
 
-    await this.prisma.foods.update({
+    const saved = await this.prisma.foods.update({
       where: { id },
       data: {
+        ...mappedData,
+        data_version: newVersion,
+        field_sources: newSources,
+        field_confidence: newConfidence,
         data_completeness: completeness,
         enrichment_status: enrichmentStatus,
       },
@@ -492,7 +672,8 @@ export class FoodLibraryManagementService {
   }
 
   async remove(id: string): Promise<{ message: string }> {
-    const food = await this.findOne(id);
+    // V8.3: 使用 findOneSimple 避免不必要的关联查询
+    const food = await this.findOneSimple(id);
     await this.prisma.foods.delete({ where: { id } });
     return { message: `食物 "${food.name}" 已删除` };
   }
@@ -534,7 +715,8 @@ export class FoodLibraryManagementService {
   }
 
   async toggleVerified(id: string, operator = 'admin') {
-    const food = await this.findOne(id);
+    // V8.3: 使用 findOneSimple 避免不必要的关联查询
+    const food = await this.findOneSimple(id);
     const newIsVerified = !food.is_verified;
     const newVersion = (food.data_version || 1) + 1;
     const saved = await this.prisma.foods.update({
@@ -561,7 +743,8 @@ export class FoodLibraryManagementService {
   }
 
   async updateStatus(id: string, newStatus: string, operator = 'admin') {
-    const food = await this.findOne(id);
+    // V8.3: 使用 findOneSimple 避免不必要的关联查询
+    const food = await this.findOneSimple(id);
     const oldStatus = food.status;
     const newVersion = (food.data_version || 1) + 1;
     const saved = await this.prisma.foods.update({
@@ -610,8 +793,9 @@ export class FoodLibraryManagementService {
       { status: string; count: string }[]
     >(`SELECT status, COUNT(*)::text AS count FROM foods GROUP BY status`);
 
+    // V8.3: 统一冲突计数口径 — 使用 resolved_at IS NULL（与 getStatisticsV81 一致）
     const conflictCount = await this.prisma.food_conflicts.count({
-      where: { resolution: 'pending' },
+      where: { resolved_at: null },
     });
 
     return {
@@ -787,5 +971,148 @@ export class FoodLibraryManagementService {
         resolved_at: new Date(),
       },
     });
+  }
+
+  // ─── V8.1: 批量更新 review_status ─────────────────────────────────────
+
+  async batchUpdateReviewStatus(
+    ids: string[],
+    reviewStatus: 'pending' | 'approved' | 'rejected',
+    reason?: string,
+    operator = 'admin',
+  ): Promise<{ updated: number }> {
+    if (ids.length === 0) return { updated: 0 };
+
+    // 批量更新 review_status 字段 + V8.1 审核元数据
+    const updateData: Record<string, any> = { review_status: reviewStatus };
+    if (reviewStatus === 'approved' || reviewStatus === 'rejected') {
+      updateData.reviewed_by = operator;
+      updateData.reviewed_at = new Date();
+    } else {
+      // pending（重置）时清空审核者
+      updateData.reviewed_by = null;
+      updateData.reviewed_at = null;
+    }
+    const result = await this.prisma.foods.updateMany({
+      where: { id: { in: ids } },
+      data: updateData as any,
+    });
+
+    // 写入变更日志（批量，每条食物一条日志）
+    const actionMap: Record<string, string> = {
+      approved: 'review_approved',
+      rejected: 'review_rejected',
+      pending: 'review_reset',
+    };
+    const action = actionMap[reviewStatus] ?? 'review_reset';
+    const foods = await this.prisma.foods.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, data_version: true },
+    });
+
+    await this.prisma.food_change_logs.createMany({
+      data: foods.map((f) => ({
+        food_id: f.id,
+        version: f.data_version ?? 1,
+        action,
+        changes: { reviewStatus, previousStatus: null },
+        reason: reason ?? `批量设置审核状态为 ${reviewStatus}`,
+        operator,
+      })),
+    });
+
+    this.logger.log(
+      `batchUpdateReviewStatus: ${result.count} 条食物 → ${reviewStatus}`,
+    );
+    return { updated: result.count };
+  }
+
+  // ─── V8.1: 统计信息增强（含完整度分布和 reviewStatus 计数）────────────
+
+  async getStatisticsV81() {
+    // 原有统计（沿用 V8.0 logic，此处重建 SELECT）
+    const [
+      totalResult,
+      verifiedResult,
+      pendingConflictsResult,
+      byCategoryResult,
+      bySourceResult,
+      completenessDistResult,
+      reviewStatusResult,
+    ] = await Promise.all([
+      this.prisma.$queryRaw<[{ count: string }]>`
+        SELECT COUNT(*)::text AS count FROM foods WHERE status = 'active'`,
+      this.prisma.$queryRaw<[{ count: string }]>`
+        SELECT COUNT(*)::text AS count FROM foods WHERE is_verified = TRUE AND status = 'active'`,
+      this.prisma.$queryRaw<[{ count: string }]>`
+        SELECT COUNT(*)::text AS count FROM food_conflicts WHERE resolved_at IS NULL`,
+      this.prisma.$queryRaw<Array<{ category: string; count: string }>>`
+        SELECT category, COUNT(*)::text AS count FROM foods WHERE status = 'active' GROUP BY category ORDER BY COUNT(*) DESC`,
+      this.prisma.$queryRaw<Array<{ source: string; count: string }>>`
+        SELECT primary_source AS source, COUNT(*)::text AS count FROM foods WHERE status = 'active' GROUP BY primary_source ORDER BY COUNT(*) DESC`,
+      // 完整度分布：<30 / 30-79 / >=80
+      this.prisma.$queryRaw<Array<{ bucket: string; count: string }>>`
+        SELECT
+          CASE
+            WHEN data_completeness < 30 THEN 'low'
+            WHEN data_completeness < 80 THEN 'mid'
+            ELSE 'high'
+          END AS bucket,
+          COUNT(*)::text AS count
+        FROM foods WHERE status = 'active'
+        GROUP BY 1`,
+      // review_status 分布
+      this.prisma.$queryRaw<Array<{ review_status: string; count: string }>>`
+        SELECT review_status, COUNT(*)::text AS count
+        FROM foods WHERE status = 'active'
+        GROUP BY review_status`,
+    ]);
+
+    const total = parseInt((totalResult as any)[0]?.count ?? '0', 10);
+    const verified = parseInt((verifiedResult as any)[0]?.count ?? '0', 10);
+    const pendingConflicts = parseInt(
+      (pendingConflictsResult as any)[0]?.count ?? '0',
+      10,
+    );
+    const byCategory = (byCategoryResult as any[]).map((r) => ({
+      category: r.category,
+      count: parseInt(r.count, 10),
+    }));
+    const bySource = (bySourceResult as any[]).map((r) => ({
+      source: r.source,
+      count: parseInt(r.count, 10),
+    }));
+
+    // 完整度分布
+    const completenessMap: Record<string, number> = {};
+    for (const row of completenessDistResult as any[]) {
+      completenessMap[row.bucket] = parseInt(row.count, 10);
+    }
+    const completenessDistribution = {
+      low: completenessMap['low'] ?? 0,
+      mid: completenessMap['mid'] ?? 0,
+      high: completenessMap['high'] ?? 0,
+    };
+
+    // review_status 分布
+    const reviewMap: Record<string, number> = {};
+    for (const row of reviewStatusResult as any[]) {
+      reviewMap[row.review_status] = parseInt(row.count, 10);
+    }
+    const reviewStatusCounts = {
+      pending: reviewMap['pending'] ?? 0,
+      approved: reviewMap['approved'] ?? 0,
+      rejected: reviewMap['rejected'] ?? 0,
+    };
+
+    return {
+      total,
+      verified,
+      pendingConflicts,
+      byCategory,
+      bySource,
+      completenessDistribution,
+      reviewStatusCounts,
+    };
   }
 }

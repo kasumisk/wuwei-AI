@@ -1,4 +1,5 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Card,
   Button,
@@ -11,6 +12,10 @@ import {
   Statistic,
   Tooltip,
   Progress,
+  Modal,
+  Descriptions,
+  Typography,
+  Alert,
 } from 'antd';
 import {
   PlusOutlined,
@@ -22,6 +27,8 @@ import {
   EyeOutlined,
   ExportOutlined,
   ThunderboltOutlined,
+  CheckOutlined,
+  CloseOutlined,
 } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
@@ -33,6 +40,7 @@ import {
   useFoodLibraryStatistics,
   type FoodLibraryDto,
 } from '@/services/foodLibraryService';
+import { useEnrichNow } from '@/services/foodPipelineService';
 import {
   FOOD_CATEGORIES,
   STATUS_MAP,
@@ -50,9 +58,61 @@ export const routeConfig = {
   hideInMenu: false,
 };
 
+interface EnrichResult {
+  totalEnriched: number;
+  totalFailed: number;
+  completeness?: { score: number };
+  stageResults?: Array<{
+    stage: number;
+    stageName: string;
+    enrichedFields: string[];
+    failedFields: string[];
+  }>;
+}
+
 const FoodLibraryList: React.FC = () => {
   const actionRef = useRef<ActionType>(null);
   const navigate = useNavigate();
+
+  // AI补全 — 结果弹窗状态
+  const [enrichModal, setEnrichModal] = useState<{
+    open: boolean;
+    foodName: string;
+    result?: EnrichResult;
+  }>({ open: false, foodName: '' });
+  const [enrichingId, setEnrichingId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  const enrichNowMutation = useEnrichNow({
+    onSuccess: (res) => {
+      setEnrichingId(null);
+      if (res) {
+        setEnrichModal((prev) => ({ ...prev, open: true, result: res }));
+      } else {
+        message.success('补全完成');
+      }
+      actionRef.current?.reload();
+    },
+    onError: (e: any) => {
+      setEnrichingId(null);
+      const isTimeout = e?.code === 'ECONNABORTED' || e?.message?.includes('timeout');
+      if (isTimeout) {
+        // request.ts 拦截器已弹出通用超时 toast，这里用 info 提示替代，避免重叠
+        // 服务端在客户端超时后仍会继续补全并入库，刷新列表以显示最新状态
+        message.info('AI补全正在后台运行，请稍后刷新查看结果', 5);
+        queryClient.invalidateQueries({ queryKey: ['foodLibrary'] });
+        actionRef.current?.reload();
+      } else {
+        message.error(`AI补全失败: ${e.message}`);
+      }
+    },
+  });
+
+  const handleEnrichNow = (record: FoodLibraryDto) => {
+    setEnrichingId(record.id);
+    setEnrichModal({ open: false, foodName: record.name });
+    enrichNowMutation.mutate({ foodId: record.id });
+  };
 
   const deleteMutation = useDeleteFood({
     onSuccess: () => {
@@ -235,7 +295,7 @@ const FoodLibraryList: React.FC = () => {
     },
     {
       title: '操作',
-      width: 180,
+      width: 240,
       fixed: 'right',
       search: false,
       render: (_, record) => (
@@ -256,6 +316,17 @@ const FoodLibraryList: React.FC = () => {
           >
             编辑
           </Button>
+          <Tooltip title="立即用AI补全该食物缺失字段">
+            <Button
+              type="link"
+              size="small"
+              icon={<ThunderboltOutlined />}
+              loading={enrichNowMutation.isPending && enrichingId === record.id}
+              onClick={() => handleEnrichNow(record)}
+            >
+              AI补全
+            </Button>
+          </Tooltip>
           <Popconfirm title="确认删除？" onConfirm={() => deleteMutation.mutate(record.id)}>
             <Button type="link" size="small" danger icon={<DeleteOutlined />}>
               删除
@@ -365,6 +436,86 @@ const FoodLibraryList: React.FC = () => {
           </Button>,
         ]}
       />
+
+      {/* AI 补全结果弹窗 */}
+      <Modal
+        title={
+          <Space>
+            <ThunderboltOutlined style={{ color: '#faad14' }} />
+            AI补全结果 — {enrichModal.foodName}
+          </Space>
+        }
+        open={enrichModal.open}
+        footer={<Button type="primary" onClick={() => setEnrichModal((s) => ({ ...s, open: false }))}>关闭</Button>}
+        onCancel={() => setEnrichModal((s) => ({ ...s, open: false }))}
+        width={600}
+      >
+        {enrichModal.result && (
+          <>
+            {enrichModal.result.totalEnriched === 0 && enrichModal.result.totalFailed === 0 ? (
+              <Alert message="所有字段已有值，无需补全" type="info" showIcon />
+            ) : (
+              <>
+                <Descriptions size="small" column={3} style={{ marginBottom: 16 }}>
+                  <Descriptions.Item label="补全字段">
+                    <Typography.Text type="success">
+                      <CheckOutlined /> {enrichModal.result.totalEnriched}
+                    </Typography.Text>
+                  </Descriptions.Item>
+                  <Descriptions.Item label="失败字段">
+                    <Typography.Text type={enrichModal.result.totalFailed > 0 ? 'danger' : 'secondary'}>
+                      <CloseOutlined /> {enrichModal.result.totalFailed}
+                    </Typography.Text>
+                  </Descriptions.Item>
+                  {enrichModal.result.completeness?.score != null && (
+                    <Descriptions.Item label="完整度">
+                      {enrichModal.result.completeness.score}%
+                    </Descriptions.Item>
+                  )}
+                </Descriptions>
+                {enrichModal.result.stageResults?.map((stage) => (
+                  <Card
+                    key={stage.stage}
+                    size="small"
+                    title={`阶段 ${stage.stage}：${stage.stageName}`}
+                    style={{ marginBottom: 8 }}
+                  >
+                    {stage.enrichedFields.length > 0 && (
+                      <div style={{ marginBottom: 4 }}>
+                        <Typography.Text type="success" style={{ fontSize: 12 }}>
+                          已补全：
+                        </Typography.Text>
+                        <Space wrap size={[4, 4]}>
+                          {stage.enrichedFields.map((f) => (
+                            <Tag key={f} color="success" style={{ fontSize: 11 }}>{f}</Tag>
+                          ))}
+                        </Space>
+                      </div>
+                    )}
+                    {stage.failedFields.length > 0 && (
+                      <div>
+                        <Typography.Text type="danger" style={{ fontSize: 12 }}>
+                          失败：
+                        </Typography.Text>
+                        <Space wrap size={[4, 4]}>
+                          {stage.failedFields.map((f) => (
+                            <Tag key={f} color="error" style={{ fontSize: 11 }}>{f}</Tag>
+                          ))}
+                        </Space>
+                      </div>
+                    )}
+                    {stage.enrichedFields.length === 0 && stage.failedFields.length === 0 && (
+                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                        该阶段无需处理
+                      </Typography.Text>
+                    )}
+                  </Card>
+                ))}
+              </>
+            )}
+          </>
+        )}
+      </Modal>
     </>
   );
 };

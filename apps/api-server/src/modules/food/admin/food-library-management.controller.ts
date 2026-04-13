@@ -25,6 +25,7 @@ import {
   UpdateFoodTranslationDto,
   CreateFoodSourceDto,
   ResolveFoodConflictDto,
+  BatchReviewStatusDto,
 } from './dto/food-library-management.dto';
 import { ApiResponse } from '../../../common/types/response.type';
 
@@ -73,6 +74,17 @@ export class FoodLibraryManagementController {
     },
   ): Promise<ApiResponse> {
     const data = await this.foodLibraryService.getConflicts(query);
+    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+  }
+
+  // ==================== V8.1: 增强统计（V8.2: 移到 :id 之前，修复路由不可达） ====================
+
+  @Get('statistics-v81')
+  @ApiOperation({
+    summary: 'V8.1: 获取增强版统计信息（含完整度分布和审核状态计数）',
+  })
+  async getStatisticsV81(): Promise<ApiResponse> {
+    const data = await this.foodLibraryService.getStatisticsV81();
     return { success: true, code: HttpStatus.OK, message: '获取成功', data };
   }
 
@@ -260,5 +272,28 @@ export class FoodLibraryManagementController {
       operator,
     );
     return { success: true, code: HttpStatus.OK, message: '冲突已解决', data };
+  }
+
+  // ==================== V8.1: 批量审核 ====================
+
+  @Post('batch-review')
+  @ApiOperation({ summary: 'V8.1: 批量更新食物审核状态' })
+  async batchReview(
+    @Body() dto: BatchReviewStatusDto,
+    @Request() req: any,
+  ): Promise<ApiResponse> {
+    const operator: string = req.user?.username ?? 'admin';
+    const data = await this.foodLibraryService.batchUpdateReviewStatus(
+      dto.ids,
+      dto.reviewStatus,
+      dto.reason,
+      operator,
+    );
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: `批量审核完成，更新 ${data.updated} 条`,
+      data,
+    };
   }
 }

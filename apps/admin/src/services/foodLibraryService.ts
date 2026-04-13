@@ -63,11 +63,32 @@ export interface FoodLibraryDto {
   qualityScore?: number;
   satietyScore?: number;
   nutrientDensity?: number;
+  commonalityScore?: number;
   mealTypes: string[];
   tags: string[];
   mainIngredient?: string;
   compatibility: Record<string, string[]>;
   acquisitionDifficulty?: number;
+  // 烹饪 & 风味
+  cuisine?: string;
+  cookingMethod?: string;
+  cookingMethods?: string[];
+  flavrorProfile?: Record<string, any>;
+  textureTags?: string[];
+  dishType?: string;
+  servingTemperature?: string;
+  prepTimeMinutes?: number;
+  cookTimeMinutes?: number;
+  skillRequired?: string;
+  estimatedCostLevel?: number;
+  shelfLifeDays?: number;
+  requiredEquipment?: string[];
+  // 原料 & 渠道
+  ingredientList?: string[];
+  availableChannels?: string[];
+  dishPriority?: number;
+  // 形态
+  foodForm?: string;
   // 份量
   standardServingG: number;
   standardServingDesc?: string;
@@ -95,6 +116,34 @@ export interface FoodLibraryDto {
   lastEnrichedAt?: string;
   fieldSources?: Record<string, string>;
   fieldConfidence?: Record<string, number>;
+  // V8.1 enrichmentMeta (内嵌，仅 findOne 时返回)
+  enrichmentMeta?: {
+    completeness: {
+      score: number;
+      groups: { core: number; micro: number; health: number; usage: number; extended: number };
+    };
+    fieldDetails: Array<{
+      field: string;
+      label: string;
+      unit: string;
+      filled: boolean;
+      value: any;
+      source: string | null;
+      confidence: number | null;
+      failed: any;
+    }>;
+    missingFields: string[];
+    failedFieldCount: number;
+    sourceDistribution: Record<string, number>;
+    enrichmentHistory: {
+      lastEnrichedAt: string | null;
+      enrichmentStatus: string | null;
+      reviewStatus: string | null;
+      reviewedBy: string | null;
+      reviewedAt: string | null;
+      dataVersion: number;
+    };
+  };
   // 关联
   translations?: FoodTranslationDto[];
   sources?: FoodSourceDto[];

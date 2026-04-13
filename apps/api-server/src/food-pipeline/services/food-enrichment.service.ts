@@ -110,6 +110,9 @@ export const ENRICHABLE_FIELDS = [
   'acquisition_difficulty',
   'compatibility',
   'available_channels',
+  // V8.2: 新增可补全字段
+  'food_form',
+  'required_equipment',
 ] as const;
 
 export type EnrichableField = (typeof ENRICHABLE_FIELDS)[number];
@@ -120,7 +123,7 @@ export type EnrichmentTarget = 'foods' | 'translations' | 'regional';
 // ─── V7.9: 分阶段补全定义 ─────────────────────────────────────────────────
 
 /**
- * 4 阶段补全分组：每阶段独立 Prompt、独立验证、独立入库
+ * 5 阶段补全分组：每阶段独立 Prompt、独立验证、独立入库
  * 前阶段补全结果作为后阶段的输入上下文，逐步提高数据精度
  */
 export interface EnrichmentStage {
@@ -173,7 +176,7 @@ export const ENRICHMENT_STAGES: EnrichmentStage[] = [
       'insoluble_fiber',
       'water_content_percent',
     ],
-    maxTokens: 800,
+    maxTokens: 1600,
     supportsFallback: true,
   },
   {
@@ -230,8 +233,11 @@ export const ENRICHMENT_STAGES: EnrichmentStage[] = [
       'acquisition_difficulty',
       'compatibility',
       'available_channels',
+      // V8.2: 新增
+      'food_form',
+      'required_equipment',
     ],
-    maxTokens: 800,
+    maxTokens: 1000,
     supportsFallback: false,
   },
 ];
@@ -303,6 +309,8 @@ export interface EnrichmentProgress {
     /** 该阶段所有字段均非 NULL 的食物占比 */
     coverageRate: number;
   }>;
+  /** V8.3: 按 enrichment_status 分布 */
+  byStatus?: Record<string, number>;
 }
 
 // ─── 营养素合理范围（per 100g）────────────────────────────────────────────
@@ -317,6 +325,8 @@ export const JSON_ARRAY_FIELDS = [
   'cooking_methods',
   'texture_tags',
   'available_channels',
+  // V8.2: 新增
+  'required_equipment',
 ] as const;
 
 export const JSON_OBJECT_FIELDS = ['flavor_profile', 'compatibility'] as const;
@@ -333,6 +343,8 @@ export const ENRICHABLE_STRING_FIELDS = [
   'dish_type',
   'skill_required',
   'serving_temperature',
+  // V8.2: 新增
+  'food_form',
 ] as const;
 
 export const NUTRIENT_RANGES: Record<string, { min: number; max: number }> = {
@@ -387,85 +399,98 @@ export const NUTRIENT_RANGES: Record<string, { min: number; max: number }> = {
 // ─── 字段描述映射（用于 Prompt 构造）─────────────────────────────────────
 
 export const FIELD_DESC: Record<string, string> = {
-  protein: 'protein (g/100g, 0-100)',
-  fat: 'fat (g/100g, 0-100)',
-  carbs: 'carbs (g/100g, 0-100)',
-  fiber: 'fiber (g/100g, 0-80)',
-  sugar: 'sugar (g/100g, 0-100)',
-  added_sugar: 'added_sugar (g/100g, 0-100)',
-  natural_sugar: 'natural_sugar (g/100g, 0-100)',
-  sodium: 'sodium (mg/100g, 0-50000)',
-  calcium: 'calcium (mg/100g, 0-2000)',
-  iron: 'iron (mg/100g, 0-100)',
-  potassium: 'potassium (mg/100g, 0-10000)',
-  cholesterol: 'cholesterol (mg/100g, 0-2000)',
-  vitamin_a: 'vitamin_a (μg RAE/100g, 0-50000)',
-  vitamin_c: 'vitamin_c (mg/100g, 0-2000)',
-  vitamin_d: 'vitamin_d (μg/100g, 0-1000)',
-  vitamin_e: 'vitamin_e (mg/100g, 0-500)',
-  vitamin_b12: 'vitamin_b12 (μg/100g, 0-100)',
-  folate: 'folate (μg DFE/100g, 0-5000)',
-  zinc: 'zinc (mg/100g, 0-100)',
-  magnesium: 'magnesium (mg/100g, 0-1000)',
-  saturated_fat: 'saturated_fat (g/100g, 0-100)',
-  trans_fat: 'trans_fat (g/100g, 0-10)',
-  purine: 'purine (mg/100g, 0-2000)',
-  phosphorus: 'phosphorus (mg/100g, 0-2000)',
-  // V8.0: V7.9 新增营养素描述
-  vitamin_b6: 'vitamin_b6 (mg/100g, 0-50)',
-  omega3: 'omega3 Omega-3脂肪酸 (mg/100g, 0-30000, EPA+DHA+ALA总量)',
-  omega6: 'omega6 Omega-6脂肪酸 (mg/100g, 0-50000, 亚油酸为主)',
-  soluble_fiber: 'soluble_fiber 可溶性膳食纤维 (g/100g, 0-40)',
-  insoluble_fiber: 'insoluble_fiber 不可溶性膳食纤维 (g/100g, 0-60)',
-  water_content_percent: 'water_content_percent 水分含量百分比 (0-100)',
-  // 属性
-  glycemic_index: 'glycemic_index 整数 0-100',
-  glycemic_load: 'glycemic_load 0-50',
-  fodmap_level: 'fodmap_level: low/medium/high',
-  oxalate_level: 'oxalate_level: low/medium/high',
-  processing_level: 'processing_level 整数 1-4 (1=自然,4=超加工)',
-  sub_category: 'sub_category 英文编码如 lean_meat/whole_grain/leafy_green',
-  food_group: 'food_group 英文编码如 meat/fish/grain/vegetable/fruit',
-  cuisine: 'cuisine 英文编码如 chinese/western/japanese/korean',
+  // ─── Stage 1: 核心营养素 (number) ───────────────────────────────────
+  protein: '[number] protein (g/100g, 0-100)',
+  fat: '[number] fat (g/100g, 0-100)',
+  carbs: '[number] carbs (g/100g, 0-100)',
+  fiber: '[number] fiber (g/100g, 0-80)',
+  sugar: '[number] sugar (g/100g, 0-100)',
+  added_sugar: '[number] added_sugar (g/100g, 0-100)',
+  natural_sugar: '[number] natural_sugar (g/100g, 0-100)',
+  sodium: '[number] sodium (mg/100g, 0-50000)',
+  // ─── Stage 2: 微量营养素 (number) ───────────────────────────────────
+  calcium: '[number] calcium (mg/100g, 0-2000)',
+  iron: '[number] iron (mg/100g, 0-100)',
+  potassium: '[number] potassium (mg/100g, 0-10000)',
+  cholesterol: '[number] cholesterol (mg/100g, 0-2000)',
+  vitamin_a: '[number] vitamin_a (μg RAE/100g, 0-50000)',
+  vitamin_c: '[number] vitamin_c (mg/100g, 0-2000)',
+  vitamin_d: '[number] vitamin_d (μg/100g, 0-1000)',
+  vitamin_e: '[number] vitamin_e (mg/100g, 0-500)',
+  vitamin_b12: '[number] vitamin_b12 (μg/100g, 0-100)',
+  folate: '[number] folate (μg DFE/100g, 0-5000)',
+  zinc: '[number] zinc (mg/100g, 0-100)',
+  magnesium: '[number] magnesium (mg/100g, 0-1000)',
+  saturated_fat: '[number] saturated_fat (g/100g, 0-100)',
+  trans_fat: '[number] trans_fat (g/100g, 0-10)',
+  purine: '[number] purine (mg/100g, 0-2000)',
+  phosphorus: '[number] phosphorus (mg/100g, 0-2000)',
+  vitamin_b6: '[number] vitamin_b6 (mg/100g, 0-50)',
+  omega3: '[number] omega3 Omega-3脂肪酸 (mg/100g, 0-30000, EPA+DHA+ALA总量)',
+  omega6: '[number] omega6 Omega-6脂肪酸 (mg/100g, 0-50000, 亚油酸为主)',
+  soluble_fiber: '[number] soluble_fiber 可溶性膳食纤维 (g/100g, 0-40)',
+  insoluble_fiber: '[number] insoluble_fiber 不可溶性膳食纤维 (g/100g, 0-60)',
+  water_content_percent:
+    '[number] water_content_percent 水分含量百分比 (0-100)',
+  // ─── Stage 3: 健康属性 ──────────────────────────────────────────────
+  glycemic_index: '[number] glycemic_index 整数 0-100',
+  glycemic_load: '[number] glycemic_load 0-50',
+  fodmap_level: '[string] fodmap_level: low/medium/high',
+  oxalate_level: '[string] oxalate_level: low/medium/high',
+  processing_level: '[number] processing_level 整数 1-4 (1=自然,4=超加工)',
+  // ─── Stage 4: 使用属性 ──────────────────────────────────────────────
+  sub_category:
+    '[string] sub_category 英文编码如 lean_meat/whole_grain/leafy_green',
+  food_group: '[string] food_group 英文编码如 meat/fish/grain/vegetable/fruit',
+  cuisine: '[string] cuisine 英文编码如 chinese/western/japanese/korean',
   cooking_method:
-    'cooking_method: raw/boiled/steamed/fried/roasted/grilled/stewed',
-  meal_types: 'meal_types 数组，选自 breakfast/lunch/dinner/snack',
+    '[string] cooking_method: raw/boiled/steamed/fried/roasted/grilled/stewed',
+  meal_types: '[string[]] meal_types 数组，选自 breakfast/lunch/dinner/snack',
   allergens:
-    'allergens 数组，选自 gluten/dairy/nuts/soy/egg/shellfish/fish/wheat',
-  tags: 'tags 数组，选自 high_protein/low_fat/low_carb/high_fiber/low_calorie/low_sodium/vegan/vegetarian/gluten_free',
-  common_portions: 'common_portions JSON数组，如 [{"name":"1碗","grams":200}]',
-  quality_score: 'quality_score 0-10综合品质',
-  satiety_score: 'satiety_score 0-10饱腹感',
-  nutrient_density: 'nutrient_density 0-100营养密度',
-  commonality_score: 'commonality_score 0-100大众化程度',
-  standard_serving_desc: 'standard_serving_desc 标准份量描述如"1碗(200g)"',
-  main_ingredient: 'main_ingredient 主要原料如 rice/chicken',
+    '[string[]] allergens 数组，选自 gluten/dairy/nuts/soy/egg/shellfish/fish/wheat',
+  tags: '[string[]] tags 数组，选自 high_protein/low_fat/low_carb/high_fiber/low_calorie/low_sodium/vegan/vegetarian/gluten_free',
+  common_portions:
+    '[object[]] common_portions JSON数组，如 [{"name":"1碗","grams":200}]',
+  quality_score: '[number] quality_score 0-10综合品质',
+  satiety_score: '[number] satiety_score 0-10饱腹感',
+  nutrient_density: '[number] nutrient_density 0-100营养密度',
+  commonality_score: '[number] commonality_score 0-100大众化程度',
+  standard_serving_desc:
+    '[string] standard_serving_desc 标准份量描述如"1碗(200g)"',
+  main_ingredient: '[string] main_ingredient 主要原料如 rice/chicken',
   flavor_profile:
-    'flavor_profile JSON如 {"sweet":3,"salty":5,"sour":1,"spicy":0,"bitter":1}',
-  // V8.0: V7.1/7.3/7.4 扩展属性描述
+    '[object] flavor_profile JSON如 {"sweet":3,"salty":5,"sour":1,"spicy":0,"bitter":1}',
+  // ─── Stage 5: 扩展属性 ──────────────────────────────────────────────
   ingredient_list:
-    'ingredient_list 完整食材清单数组，如 ["chicken","peanut","chili"]',
+    '[string[]] ingredient_list 完整食材清单数组，如 ["chicken","peanut","chili"]',
   cooking_methods:
-    'cooking_methods 多种烹饪方式数组，如 ["stir_fry","deep_fry"]',
-  texture_tags: 'texture_tags 口感标签数组，如 ["crispy","tender","juicy"]',
+    '[string[]] cooking_methods 多种烹饪方式数组，如 ["stir_fry","deep_fry"]',
+  texture_tags:
+    '[string[]] texture_tags 口感标签数组，如 ["crispy","tender","juicy"]',
   dish_type:
-    'dish_type 成品类型: dish/soup/drink/dessert/snack/staple/salad/sauce',
-  prep_time_minutes: 'prep_time_minutes 备料时间(分钟, 0-480)',
-  cook_time_minutes: 'cook_time_minutes 烹饪时间(分钟, 0-720)',
+    '[string] dish_type 成品类型: dish/soup/drink/dessert/snack/staple/salad/sauce',
+  prep_time_minutes: '[number] prep_time_minutes 备料时间(分钟, 0-480)',
+  cook_time_minutes: '[number] cook_time_minutes 烹饪时间(分钟, 0-720)',
   skill_required:
-    'skill_required 烹饪技能要求: beginner/intermediate/advanced/professional',
-  estimated_cost_level: 'estimated_cost_level 预估成本 1-5 (1=极低,5=极高)',
-  shelf_life_days: 'shelf_life_days 保质期天数(0-3650)',
+    '[string] skill_required 烹饪技能要求: beginner/medium/advanced/expert (最长10字符)',
+  estimated_cost_level:
+    '[number] estimated_cost_level 预估成本 1-5 (1=极低,5=极高)',
+  shelf_life_days: '[number] shelf_life_days 保质期天数(0-3650)',
   serving_temperature:
-    'serving_temperature 建议食用温度: hot/warm/cold/room_temp',
+    '[string] serving_temperature 建议食用温度: hot/warm/cold/room_temp',
   dish_priority:
-    'dish_priority 成品菜推荐优先级 0-100 (仅dish/semi_prepared有值)',
+    '[number] dish_priority 成品菜推荐优先级 0-100 (仅dish/semi_prepared有值)',
   acquisition_difficulty:
-    'acquisition_difficulty 可获得性难度 1-5 (1=随处可得,5=稀有)',
+    '[number] acquisition_difficulty 可获得性难度 1-5 (1=随处可得,5=稀有)',
   compatibility:
-    'compatibility JSON对象，描述搭配关系如 {"good":["rice","soup"],"avoid":["milk"]}',
+    '[object] compatibility JSON对象，描述搭配关系如 {"good":["rice","soup"],"avoid":["milk"]}',
   available_channels:
-    'available_channels 可获取渠道数组，如 ["supermarket","wet_market","online"]',
+    '[string[]] available_channels 可获取渠道数组，如 ["supermarket","wet_market","online"]',
+  // V8.2: 新增字段描述
+  food_form:
+    '[string] food_form 食物形态: ingredient/dish/semi_prepared (ingredient=原材料,dish=成品菜,semi_prepared=半成品)',
+  required_equipment:
+    '[string[]] required_equipment 所需设备数组，如 ["oven","wok","microwave","steamer","air_fryer","none"]',
 };
 
 // ─── 低置信度阈值：低于此值强制进入 staging ───────────────────────────────
@@ -519,6 +544,8 @@ export interface StagedEnrichment {
   operator: string | null;
   version: number;
   createdAt: Date;
+  /** V8.3: 食物当前值（仅 proposedValues 涉及的字段），方便前端 diff */
+  currentValues?: Record<string, any>;
 }
 
 @Injectable()
@@ -546,13 +573,15 @@ export class FoodEnrichmentService {
   // ─── V7.9: 分阶段补全（核心新增）────────────────────────────────────────
 
   /**
-   * 分阶段补全单个食物：依次执行 4 个阶段
+   * 分阶段补全单个食物：依次执行 5 个阶段
    * 每阶段独立 Prompt → 独立验证 → 独立入库
    * 前阶段补全结果作为后阶段上下文
    */
   async enrichFoodByStage(
     foodId: string,
     targetStages?: number[],
+    /** V8.1: 仅补全这些字段（可选，与阶段字段取交集） */
+    fieldFilter?: EnrichableField[],
   ): Promise<MultiStageEnrichmentResult | null> {
     if (!this.apiKey) {
       this.logger.warn('DEEPSEEK_API_KEY 未配置');
@@ -579,7 +608,12 @@ export class FoodEnrichmentService {
 
     for (const stage of stages) {
       // 过滤出该阶段实际缺失的字段
-      const missingFields = stage.fields.filter((field) => {
+      // V8.1: 如果指定了 fieldFilter，仅保留 fieldFilter 中的字段
+      const candidateFields = fieldFilter
+        ? stage.fields.filter((f) => (fieldFilter as string[]).includes(f))
+        : stage.fields;
+
+      const missingFields = candidateFields.filter((field) => {
         // 先检查累积数据中是否已有
         if (
           accumulatedData[field] !== undefined &&
@@ -588,12 +622,31 @@ export class FoodEnrichmentService {
           return false;
         const value = (food as any)[field];
         if (value === null || value === undefined) return true;
+        // V8.0: 空数组视为缺失
         if (
           (JSON_ARRAY_FIELDS as readonly string[]).includes(field) &&
           Array.isArray(value) &&
           value.length === 0
         )
           return true;
+        // V8.2: 空对象视为缺失（如 compatibility: {}）
+        if (
+          (JSON_OBJECT_FIELDS as readonly string[]).includes(field) &&
+          typeof value === 'object' &&
+          !Array.isArray(value) &&
+          Object.keys(value).length === 0
+        )
+          return true;
+        // V8.2: 默认值字段 — 检查 field_sources 判断是否被真正补全过
+        if (field === 'processing_level' || field === 'commonality_score') {
+          const sources = (food.field_sources as Record<string, string>) || {};
+          if (!sources[field]) return true; // 无来源记录 → 还是默认值，视为缺失
+        }
+        // V8.2: available_channels — 检查是否是 schema 默认值（未被定制）
+        if (field === 'available_channels') {
+          const sources = (food.field_sources as Record<string, string>) || {};
+          if (!sources[field]) return true;
+        }
         return false;
       });
 
@@ -664,6 +717,52 @@ export class FoodEnrichmentService {
           }
         }
 
+        // V8.2: null 字段智能重试 — 对 AI 返回 null 的字段进行一次定向重试
+        if (
+          failedFields.length > 0 &&
+          failedFields.length <= missingFields.length * 0.7
+        ) {
+          // 仅在部分字段失败时重试（全部失败说明AI确实无法估算，不重试）
+          this.logger.log(
+            `[阶段${stage.stage}] ${failedFields.length} 个字段为null，尝试定向重试: ${failedFields.join(', ')}`,
+          );
+          const retryPrompt = this.buildStagePrompt(
+            food,
+            failedFields as EnrichableField[],
+            stage,
+            { ...accumulatedData }, // 传递包含本阶段已成功字段的上下文
+          );
+          const retryResult = await this.callAIForStage(
+            food.name,
+            retryPrompt,
+            failedFields,
+            stage,
+          );
+          if (retryResult) {
+            const retriedFields: string[] = [];
+            for (const field of [...failedFields]) {
+              if (
+                retryResult[field] !== null &&
+                retryResult[field] !== undefined
+              ) {
+                accumulatedData[field] = retryResult[field];
+                // 将重试成功的字段从 failedFields 移到 enrichedFields
+                const idx = failedFields.indexOf(field);
+                if (idx !== -1) failedFields.splice(idx, 1);
+                enrichedFields.push(field);
+                // 合并到原始 result 中
+                result[field] = retryResult[field];
+                retriedFields.push(field);
+              }
+            }
+            if (retriedFields.length > 0) {
+              this.logger.log(
+                `[阶段${stage.stage}] 重试成功恢复 ${retriedFields.length} 个字段: ${retriedFields.join(', ')}`,
+              );
+            }
+          }
+        }
+
         confidenceSum += result.confidence;
         confidenceCount++;
         totalEnriched += enrichedFields.length;
@@ -697,7 +796,7 @@ export class FoodEnrichmentService {
     };
   }
 
-  // ─── V7.9: 分阶段 Prompt 构造器 ───────────────────────────────────────
+  // ─── V7.9/V8.2: 分阶段 Prompt 构造器 ─────────────────────────────────
 
   private buildStagePrompt(
     food: any,
@@ -718,41 +817,97 @@ export class FoodEnrichmentService {
         : null,
     ];
 
-    // 添加营养素上下文（原始+累积）
-    const nutrientContext: [string, string, string][] = [
-      ['calories', '热量', 'kcal/100g'],
-      ['protein', '蛋白质', 'g/100g'],
-      ['fat', '脂肪', 'g/100g'],
-      ['carbs', '碳水化合物', 'g/100g'],
-      ['fiber', '膳食纤维', 'g/100g'],
-      ['sugar', '糖', 'g/100g'],
-      ['sodium', '钠', 'mg/100g'],
-      ['calcium', '钙', 'mg/100g'],
-      ['iron', '铁', 'mg/100g'],
-      ['potassium', '钾', 'mg/100g'],
-    ];
+    // V8.2: 动态传递前序阶段所有已补全数据（不再仅限硬编码10个营养素字段）
+    // 按阶段顺序遍历，将所有已累积的数据作为上下文传递
+    const CONTEXT_LABELS: Record<string, [string, string?]> = {
+      // Stage 1 核心营养素
+      calories: ['热量', 'kcal/100g'],
+      protein: ['蛋白质', 'g/100g'],
+      fat: ['脂肪', 'g/100g'],
+      carbs: ['碳水化合物', 'g/100g'],
+      fiber: ['膳食纤维', 'g/100g'],
+      sugar: ['糖', 'g/100g'],
+      sodium: ['钠', 'mg/100g'],
+      // Stage 2 微量营养素
+      calcium: ['钙', 'mg/100g'],
+      iron: ['铁', 'mg/100g'],
+      potassium: ['钾', 'mg/100g'],
+      cholesterol: ['胆固醇', 'mg/100g'],
+      vitamin_a: ['维生素A', 'μg/100g'],
+      vitamin_c: ['维生素C', 'mg/100g'],
+      vitamin_d: ['维生素D', 'μg/100g'],
+      vitamin_e: ['维生素E', 'mg/100g'],
+      vitamin_b12: ['维生素B12', 'μg/100g'],
+      vitamin_b6: ['维生素B6', 'mg/100g'],
+      folate: ['叶酸', 'μg/100g'],
+      zinc: ['锌', 'mg/100g'],
+      magnesium: ['镁', 'mg/100g'],
+      saturated_fat: ['饱和脂肪', 'g/100g'],
+      trans_fat: ['反式脂肪', 'g/100g'],
+      purine: ['嘌呤', 'mg/100g'],
+      phosphorus: ['磷', 'mg/100g'],
+      added_sugar: ['添加糖', 'g/100g'],
+      natural_sugar: ['天然糖', 'g/100g'],
+      omega3: ['Omega-3', 'mg/100g'],
+      omega6: ['Omega-6', 'mg/100g'],
+      soluble_fiber: ['可溶性纤维', 'g/100g'],
+      insoluble_fiber: ['不可溶性纤维', 'g/100g'],
+      water_content_percent: ['水分', '%'],
+      // Stage 3 健康属性
+      glycemic_index: ['血糖指数'],
+      glycemic_load: ['血糖负荷'],
+      fodmap_level: ['FODMAP等级'],
+      oxalate_level: ['草酸等级'],
+      processing_level: ['加工程度'],
+      // Stage 3 补全后可作为 Stage 4/5 上下文
+      allergens: ['过敏原'],
+      tags: ['饮食标签'],
+      // Stage 4 使用属性
+      cuisine: ['菜系'],
+      cooking_method: ['烹饪方式'],
+      meal_types: ['适合餐次'],
+      dish_type: ['菜品类型'],
+      main_ingredient: ['主要原料'],
+      food_form: ['食物形态'],
+      // Stage 4 补全后可作为 Stage 5 上下文
+      quality_score: ['综合品质分'],
+      satiety_score: ['饱腹感'],
+      nutrient_density: ['营养密度'],
+      commonality_score: ['大众化程度'],
+      standard_serving_desc: ['标准份量描述'],
+      flavor_profile: ['风味特征'],
+      // V8.2 新增（Stage 5）
+      required_equipment: ['所需设备'],
+    };
 
-    for (const [field, label, unit] of nutrientContext) {
+    // 遍历所有前序阶段累积的数据
+    for (const [field, labelInfo] of Object.entries(CONTEXT_LABELS)) {
+      // 跳过已在 knownParts 初始化中处理的字段
+      if (['sub_category', 'food_group'].includes(field)) continue;
+
       const value = accumulatedData[field] ?? (food as any)[field];
       if (value != null) {
-        knownParts.push(`${label}: ${value} ${unit}`);
+        const [label, unit] = labelInfo;
+        const displayValue = Array.isArray(value)
+          ? value.join(', ')
+          : value !== null && typeof value === 'object'
+            ? JSON.stringify(value)
+            : String(value);
+        knownParts.push(
+          unit
+            ? `${label}: ${displayValue} ${unit}`
+            : `${label}: ${displayValue}`,
+        );
       }
     }
 
-    // 其他已知属性
-    if (food.cuisine || accumulatedData.cuisine)
-      knownParts.push(`菜系: ${food.cuisine || accumulatedData.cuisine}`);
-    if (food.cooking_method || accumulatedData.cooking_method)
-      knownParts.push(
-        `烹饪方式: ${food.cooking_method || accumulatedData.cooking_method}`,
-      );
+    // 其他原始食物属性（非累积）
     if (food.is_processed != null)
       knownParts.push(`是否加工食品: ${food.is_processed}`);
-    if (food.food_form) knownParts.push(`食物形态: ${food.food_form}`);
 
     const ctx = knownParts.filter(Boolean).join('\n');
 
-    // 构造字段描述（阶段专用，更精简）
+    // 构造字段描述（阶段专用）
     const fieldsList = missingFields
       .map((f) => `- ${FIELD_DESC[f] || f}`)
       .join('\n');
@@ -768,6 +923,8 @@ ${fieldsList}
 2. 无法确定的字段返回 null
 3. 只返回请求的字段，不要多余字段
 4. 对每个字段单独评估置信度，在 "field_confidence" 中返回（0.0-1.0）
+5. confidence 为整体置信度（0.0-1.0），若低于0.5请在 reasoning 中逐一标注不确定的字段及原因
+6. reasoning 请说明数据来源依据，例如：参考《中国食物成分表》、USDA数据库、类似食物推算、烹饪经验推测等；若为推测值请明确标注
 
 返回JSON：
 {
@@ -776,7 +933,7 @@ ${fieldsList}
   "field_confidence": {
     ${missingFields.map((f) => `"${f}": <0.0-1.0>`).join(',\n    ')}
   },
-  "reasoning": "<简短说明本次估算依据>"
+  "reasoning": "<说明数据来源依据（如参考标准、类似食物推算等），低置信度字段需逐一标注>"
 }`;
   }
 
@@ -1034,7 +1191,13 @@ ${fieldsList}
     if (!targetStages || targetStages.length === 0) {
       // 自动检测：找出有缺失字段的阶段
       targetStages = ENRICHMENT_STAGES.filter((stage) => {
-        return stage.fields.some((field) => {
+        // V8.1: 如果指定了 fields，只关注包含这些字段的阶段
+        const stageFields = options.fields
+          ? stage.fields.filter((f) => (options.fields as string[]).includes(f))
+          : stage.fields;
+        if (stageFields.length === 0) return false;
+
+        return stageFields.some((field) => {
           const value = (food as any)[field];
           if (value === null || value === undefined) return true;
           if (
@@ -1064,7 +1227,11 @@ ${fieldsList}
     }
 
     // 执行分阶段补全
-    const multiResult = await this.enrichFoodByStage(foodId, targetStages);
+    const multiResult = await this.enrichFoodByStage(
+      foodId,
+      targetStages,
+      options.fields, // V8.1: 传递字段级过滤
+    );
     if (!multiResult) {
       const completeness = this.computeCompletenessScore(food);
       return {
@@ -1121,23 +1288,46 @@ ${fieldsList}
       where: { id: foodId },
     });
     const completeness = this.computeCompletenessScore(updatedFood || food);
-    const enrichmentStatus =
-      completeness.score >= 80
-        ? 'completed'
-        : completeness.score >= 30
-          ? 'partial'
-          : 'pending';
 
-    // 更新状态（如果是暂存模式 applyEnrichment 不会被调用，需要手动更新状态）
-    if (staged) {
+    // V8.3: enrichment_status 判定增加 'failed' 分支
+    let enrichmentStatus: string;
+    if (totalEnriched === 0 && totalFailed > 0) {
+      // 全部阶段均失败
+      enrichmentStatus = 'failed';
+    } else if (staged) {
+      // staged 模式下不按 completeness 判定，使用 'staged'
+      enrichmentStatus = 'staged';
+    } else {
+      enrichmentStatus =
+        completeness.score >= 80
+          ? 'completed'
+          : completeness.score >= 30
+            ? 'partial'
+            : 'pending';
+    }
+
+    // 更新状态
+    // V8.2: staged 模式下数据未真正入库，仅标记 enrichment_status 为 staged，
+    // 不更新 data_completeness（需审核通过后才更新）
+    // V8.3: 全部失败时写入 'failed'，非staged非失败时由 applyEnrichment 已更新
+    if (staged || (totalEnriched === 0 && totalFailed > 0)) {
       await this.prisma.foods.update({
         where: { id: foodId },
         data: {
           enrichment_status: enrichmentStatus,
-          data_completeness: completeness.score,
           last_enriched_at: new Date(),
         },
       });
+    }
+
+    // V8.1: 持久化失败字段到 failed_fields + 更新 field_sources
+    const allFailedFields = multiResult.stages.flatMap((sr) => sr.failedFields);
+    if (allFailedFields.length > 0) {
+      await this.persistFailedFields(
+        foodId,
+        allFailedFields,
+        multiResult.stages,
+      );
     }
 
     this.logger.log(
@@ -1156,6 +1346,245 @@ ${fieldsList}
     };
   }
 
+  // ─── V8.3: 标记食物补全失败 ─────────────────────────────────────────────
+
+  /**
+   * 将食物的 enrichment_status 标记为 'failed'
+   * 由 Processor onFailed 在最终失败时调用
+   */
+  async markEnrichmentFailed(foodId: string, errorMsg?: string): Promise<void> {
+    await this.prisma.foods.update({
+      where: { id: foodId },
+      data: {
+        enrichment_status: 'failed',
+        last_enriched_at: new Date(),
+      },
+    });
+    this.logger.warn(
+      `[markEnrichmentFailed] foodId=${foodId}, error=${errorMsg ?? 'unknown'}`,
+    );
+  }
+
+  // ─── V8.3: 查询失败/被拒绝的食物列表 ─────────────────────────────────
+
+  /**
+   * 获取 enrichment_status 为 failed 或 rejected 的食物列表
+   * 供 retry-failed 端点从数据库重新入队
+   */
+  async getFailedFoods(
+    limit: number,
+    foodId?: string,
+  ): Promise<Array<{ id: string; name: string }>> {
+    const where: any = {
+      enrichment_status: { in: ['failed', 'rejected'] },
+    };
+    if (foodId) where.id = foodId;
+
+    return this.prisma.foods.findMany({
+      where,
+      select: { id: true, name: true },
+      take: limit,
+    });
+  }
+
+  /**
+   * 重置食物的 enrichment_status 为 pending（用于重新入队前）
+   */
+  async resetEnrichmentStatus(foodId: string): Promise<void> {
+    await this.prisma.foods.update({
+      where: { id: foodId },
+      data: { enrichment_status: 'pending' },
+    });
+  }
+
+  // ─── V8.3: 批量重算完整度 ──────────────────────────────────────────────
+
+  /**
+   * 批量重新计算所有食物的 data_completeness 和 enrichment_status
+   * 用于修复历史数据不一致（如食物已有字段但 data_completeness 仍为0或NULL）
+   *
+   * 分批处理（每批200条）避免内存溢出，返回处理统计
+   */
+  async recalculateCompleteness(batchSize = 200): Promise<{
+    total: number;
+    updated: number;
+    errors: number;
+    statusChanges: Record<string, number>;
+  }> {
+    const total = await this.prisma.foods.count();
+    let updated = 0;
+    let errors = 0;
+    const statusChanges: Record<string, number> = {};
+    let cursor: string | undefined;
+
+    this.logger.log(
+      `[recalculateCompleteness] 开始批量重算，共 ${total} 条食物`,
+    );
+
+    while (true) {
+      const foods = await this.prisma.foods.findMany({
+        take: batchSize,
+        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+        orderBy: { id: 'asc' },
+      });
+
+      if (foods.length === 0) break;
+      cursor = foods[foods.length - 1].id;
+
+      for (const food of foods) {
+        try {
+          const completeness = this.computeCompletenessScore(food);
+          const oldStatus = (food.enrichment_status as string) || 'pending';
+
+          // 仅对非 staged/rejected/failed 的食物重新判定状态
+          // staged/rejected/failed 是由审核流程或失败逻辑设置的，不应被覆盖
+          let newStatus = oldStatus;
+          if (!['staged', 'rejected', 'failed'].includes(oldStatus)) {
+            newStatus =
+              completeness.score >= 80
+                ? 'completed'
+                : completeness.score >= 30
+                  ? 'partial'
+                  : 'pending';
+          }
+
+          const oldCompleteness = (food.data_completeness as number) ?? 0;
+
+          // 仅在值有变化时才更新，减少写入
+          if (
+            oldCompleteness !== completeness.score ||
+            oldStatus !== newStatus
+          ) {
+            await this.prisma.foods.update({
+              where: { id: food.id },
+              data: {
+                data_completeness: completeness.score,
+                enrichment_status: newStatus,
+              },
+            });
+            updated++;
+
+            if (oldStatus !== newStatus) {
+              const changeKey = `${oldStatus}→${newStatus}`;
+              statusChanges[changeKey] = (statusChanges[changeKey] || 0) + 1;
+            }
+          }
+        } catch (e) {
+          errors++;
+          this.logger.error(
+            `[recalculateCompleteness] foodId=${food.id}: ${(e as Error).message}`,
+          );
+        }
+      }
+    }
+
+    this.logger.log(
+      `[recalculateCompleteness] 完成：total=${total}, updated=${updated}, errors=${errors}`,
+    );
+
+    return { total, updated, errors, statusChanges };
+  }
+
+  // ─── V8.1: 单食物完整度查询（封装正确性修复）───────────────────────────
+
+  /**
+   * 查询单个食物的完整度评分
+   * 修复原 controller 中直接访问 prisma 的封装泄漏问题
+   */
+  async getCompletenessById(foodId: string): Promise<
+    | ({
+        foodId: string;
+        foodName: string;
+      } & CompletenessScore)
+    | null
+  > {
+    const food = await this.prisma.foods.findUnique({
+      where: { id: foodId },
+    });
+    if (!food) return null;
+
+    const score = this.computeCompletenessScore(food);
+    return {
+      foodId: food.id,
+      foodName: food.name,
+      ...score,
+    };
+  }
+
+  // ─── V8.1: 失败字段持久化 ──────────────────────────────────────────────
+
+  /**
+   * 将补全失败的字段记录到 foods.failed_fields（JSONB）和 field_sources
+   * failed_fields 格式: { "field_name": { "lastAttempt": "ISO date", "attempts": N, "reason": "..." }, ... }
+   * field_sources 中失败字段标记为 "ai_enrichment_failed"
+   */
+  private async persistFailedFields(
+    foodId: string,
+    failedFields: string[],
+    stageResults: StageEnrichmentResult[],
+  ): Promise<void> {
+    if (failedFields.length === 0) return;
+
+    const food = await this.prisma.foods.findUnique({ where: { id: foodId } });
+    if (!food) return;
+
+    const existingFailed = (food.failed_fields as Record<string, any>) || {};
+    const existingSources =
+      (food.field_sources as Record<string, string>) || {};
+
+    const updatedFailed = { ...existingFailed };
+    const updatedSources = { ...existingSources };
+
+    for (const field of failedFields) {
+      const prev = updatedFailed[field];
+      const attempts = (prev?.attempts ?? 0) + 1;
+      // V8.2: 更精细的失败原因分类
+      const stageResult = stageResults.find((sr) =>
+        sr.failedFields.includes(field),
+      );
+
+      let reason: string;
+      let reasonCode: string;
+      if (!stageResult?.result && !stageResult?.usedFallback) {
+        reason = 'AI调用失败（网络/解析错误）';
+        reasonCode = 'ai_call_failed';
+      } else if (!stageResult?.result && stageResult?.usedFallback) {
+        reason = 'AI和Fallback均失败';
+        reasonCode = 'all_sources_failed';
+      } else if (stageResult?.result) {
+        // AI 成功返回了结果，但该字段为 null（含重试后仍为null）
+        reason = 'AI无法估算（返回null）';
+        reasonCode = 'ai_returned_null';
+      } else {
+        reason = '未知原因';
+        reasonCode = 'unknown';
+      }
+
+      updatedFailed[field] = {
+        lastAttempt: new Date().toISOString(),
+        firstAttempt: prev?.firstAttempt ?? new Date().toISOString(),
+        attempts,
+        reason,
+        reasonCode,
+        stage: stageResult?.stage ?? null,
+        stageName: stageResult?.stageName ?? null,
+      };
+      updatedSources[field] = 'ai_enrichment_failed';
+    }
+
+    await this.prisma.foods.update({
+      where: { id: foodId },
+      data: {
+        failed_fields: updatedFailed,
+        field_sources: updatedSources,
+      },
+    });
+
+    this.logger.log(
+      `Persisted ${failedFields.length} failed fields for food ${foodId}: [${failedFields.join(', ')}]`,
+    );
+  }
+
   // ─── V7.9: 数据完整度评分 ─────────────────────────────────────────────
 
   /**
@@ -1163,6 +1592,10 @@ ${fieldsList}
    * 加权计算：核心营养素(0.35) + 微量营养素(0.25) + 健康属性(0.15) + 使用属性(0.15) + 扩展属性(0.10)
    */
   computeCompletenessScore(food: any): CompletenessScore {
+    // V8.2: field_sources 用于判断默认值字段是否被真正补全
+    const fieldSources: Record<string, string> =
+      (food.field_sources as Record<string, string>) || {};
+
     const isFieldFilled = (field: string): boolean => {
       const value = food[field];
       if (value === null || value === undefined) return false;
@@ -1170,6 +1603,13 @@ ${fieldsList}
         return Array.isArray(value) && value.length > 0;
       if ((JSON_OBJECT_FIELDS as readonly string[]).includes(field))
         return typeof value === 'object' && Object.keys(value).length > 0;
+      // V8.2: 默认值字段 — 无 field_sources 记录则视为未真正填充
+      if (field === 'processing_level' || field === 'commonality_score') {
+        return !!fieldSources[field];
+      }
+      if (field === 'available_channels') {
+        return !!fieldSources[field];
+      }
       return true;
     };
 
@@ -1224,10 +1664,66 @@ ${fieldsList}
     };
   }
 
-  // ─── V7.9: 补全进度统计 ───────────────────────────────────────────────
+  // ─── V8.2: 历史统计（基于数据库，不受队列裁剪影响）──────────────────────
+
+  /**
+   * 从 foods 表聚合历史补全统计，不依赖 BullMQ 队列快照
+   * 解决 removeOnComplete/removeOnFail 导致的计数不准确问题
+   */
+  async getEnrichmentHistoricalStats(): Promise<{
+    total: number;
+    enriched: number;
+    pending: number;
+    failed: number;
+    staged: number;
+    rejected: number;
+    avgCompleteness: number;
+  }> {
+    const rows = await this.prisma.$queryRaw<
+      Array<{ status: string; cnt: string }>
+    >(
+      Prisma.sql`SELECT COALESCE(enrichment_status, 'pending') AS status, COUNT(*)::text AS cnt FROM foods GROUP BY 1`,
+    );
+
+    const statusMap: Record<string, number> = {};
+    for (const r of rows) {
+      statusMap[r.status] = parseInt(r.cnt, 10);
+    }
+
+    const total = Object.values(statusMap).reduce((a, b) => a + b, 0);
+    // V8.3: 修复状态键 — 使用 foods.enrichment_status 实际值
+    // 实际值: 'pending' | 'staged' | 'completed' | 'partial' | 'failed' | 'rejected'
+    const enriched =
+      (statusMap['completed'] ?? 0) + (statusMap['partial'] ?? 0);
+    const pending = statusMap['pending'] ?? 0;
+    const failed = statusMap['failed'] ?? 0;
+    const staged = statusMap['staged'] ?? 0;
+    const rejected = statusMap['rejected'] ?? 0;
+
+    const avgRow = await this.prisma.$queryRaw<[{ avg: string }]>(
+      Prisma.sql`SELECT COALESCE(AVG(COALESCE(data_completeness, 0)), 0)::text AS avg FROM foods`,
+    );
+    const avgCompleteness = parseFloat(
+      parseFloat(avgRow[0]?.avg ?? '0').toFixed(1),
+    );
+
+    return {
+      total,
+      enriched,
+      pending,
+      failed,
+      staged,
+      rejected,
+      avgCompleteness,
+    };
+  }
+
+  // ─── V7.9: 补全进度统计（V8.2: 修复完整度计算口径）───────────────────────
 
   /**
    * 获取全库补全进度统计
+   * V8.2: 修复 — fullyEnriched/partiallyEnriched/notEnriched 改用 data_completeness 列
+   *        修复 — avgCompleteness 改用 AVG(data_completeness) 而非阶段覆盖率均值
    */
   async getEnrichmentProgress(): Promise<EnrichmentProgress> {
     const totalFoods = await this.prisma.foods.count();
@@ -1266,20 +1762,14 @@ ${fieldsList}
       });
     }
 
-    // V8.0: 计算整体完整度分布（字段名来自常量白名单）
-    const coreFields = ENRICHMENT_STAGES[0].fields;
-    const coreConditions = coreFields
-      .map((f) => `CASE WHEN "${f}" IS NOT NULL THEN 1 ELSE 0 END`)
-      .join(' + ');
-    const coreTotal = coreFields.length;
-
+    // V8.2: 使用 data_completeness 列计算完整度分布（与 getTaskOverview/getCompletenessDistribution 统一口径）
     const distResult = await this.prisma.$queryRaw<
       Array<{ completeness: string; count: string }>
     >(
       Prisma.sql`SELECT
         CASE
-          WHEN (${Prisma.raw(coreConditions)})::float / ${coreTotal} >= 0.8 THEN 'full'
-          WHEN (${Prisma.raw(coreConditions)})::float / ${coreTotal} >= 0.4 THEN 'partial'
+          WHEN COALESCE(data_completeness, 0) >= 80 THEN 'full'
+          WHEN COALESCE(data_completeness, 0) >= 40 THEN 'partial'
           ELSE 'none'
         END AS completeness,
         COUNT(*)::text AS count
@@ -1296,19 +1786,31 @@ ${fieldsList}
       else notEnriched = c;
     }
 
+    // V8.2: avgCompleteness 使用 AVG(data_completeness) 而非阶段覆盖率均值
+    const avgRow = await this.prisma.$queryRaw<[{ avg: string }]>(
+      Prisma.sql`SELECT COALESCE(AVG(COALESCE(data_completeness, 0)), 0)::text AS avg FROM foods`,
+    );
+    const avgCompleteness = Math.round(parseFloat(avgRow[0]?.avg ?? '0'));
+
+    // V8.3: 按 enrichment_status 分布（与 getEnrichmentHistoricalStats 一致）
+    const statusRows = await this.prisma.$queryRaw<
+      Array<{ status: string; cnt: string }>
+    >(
+      Prisma.sql`SELECT COALESCE(enrichment_status, 'pending') AS status, COUNT(*)::text AS cnt FROM foods GROUP BY 1`,
+    );
+    const byStatus: Record<string, number> = {};
+    for (const r of statusRows) {
+      byStatus[r.status] = parseInt(r.cnt, 10);
+    }
+
     return {
       totalFoods,
       fullyEnriched,
       partiallyEnriched,
       notEnriched,
-      avgCompleteness:
-        stagesCoverage.length > 0
-          ? Math.round(
-              stagesCoverage.reduce((s, c) => s + c.coverageRate, 0) /
-                stagesCoverage.length,
-            )
-          : 0,
+      avgCompleteness,
       stagesCoverage,
+      byStatus,
     };
   }
 
@@ -1441,6 +1943,10 @@ ${fieldsList}
     offset = 0,
     /** V8.0: 仅选取完整度 <= maxCompleteness 的食物 */
     maxCompleteness?: number,
+    /** V8.1: 按分类筛选 */
+    category?: string,
+    /** V8.1: 按数据来源筛选 */
+    primarySource?: string,
   ): Promise<{ id: string; name: string; missingFields: EnrichableField[] }[]> {
     if (fields.length === 0) return [];
 
@@ -1459,51 +1965,81 @@ ${fieldsList}
         ? ` AND (data_completeness IS NULL OR data_completeness <= ${Number(maxCompleteness)})`
         : '';
 
-    const rows = await this.prisma.$queryRaw<{ id: string; name: string }[]>(
-      Prisma.sql`SELECT id, name FROM foods WHERE (${Prisma.raw(nullConditions)})${Prisma.raw(completenessCondition)} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`,
+    // V8.2: 同时选取请求字段的实际值，用于计算 per-food 真正缺失字段
+    const fieldSelectParts = fields.map((f) => `"${f}"`).join(', ');
+
+    const rows = await this.prisma.$queryRaw<Record<string, any>[]>(
+      Prisma.sql`SELECT id, name, ${Prisma.raw(fieldSelectParts)} FROM foods WHERE (${Prisma.raw(nullConditions)})${Prisma.raw(completenessCondition)}${category ? Prisma.sql` AND category = ${category}` : Prisma.empty}${primarySource ? Prisma.sql` AND primary_source = ${primarySource}` : Prisma.empty} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`,
     );
 
+    // V8.2: 计算每个食物实际缺失的字段（而非返回全部请求字段）
     return rows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      missingFields: fields,
+      id: row.id as string,
+      name: row.name as string,
+      missingFields: fields.filter((f) => {
+        const value = row[f];
+        if (value === null || value === undefined) return true;
+        if (
+          (JSON_ARRAY_FIELDS as readonly string[]).includes(f) &&
+          Array.isArray(value) &&
+          value.length === 0
+        )
+          return true;
+        return false;
+      }),
     }));
   }
 
-  // ─── 核心：AI 补全单个食物（主表字段）────────────────────────────────
+  // ─── V8.1: 查询需要关联表补全的食物（参数化查询，修复SQL注入）──────────
 
-  async enrichFood(foodId: string): Promise<EnrichmentResult | null> {
-    if (!this.apiKey) {
-      this.logger.warn('DEEPSEEK_API_KEY not configured');
-      return null;
+  /**
+   * 查询缺少翻译或地区信息的食物列表
+   * 使用 Prisma 参数化查询，消除原 controller 中的 SQL 注入风险
+   */
+  async getFoodsNeedingRelatedEnrichment(
+    target: 'translations' | 'regional',
+    limit: number,
+    offset: number,
+    locale?: string,
+    region?: string,
+  ): Promise<{ id: string; name: string; missingFields: EnrichableField[] }[]> {
+    let rows: { id: string; name: string }[];
+
+    if (target === 'translations') {
+      if (locale) {
+        rows = await this.prisma.$queryRaw<{ id: string; name: string }[]>(
+          Prisma.sql`SELECT id, name FROM foods WHERE NOT EXISTS (
+            SELECT 1 FROM food_translations ft WHERE ft.food_id = foods.id AND ft.locale = ${locale}
+          ) ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`,
+        );
+      } else {
+        rows = await this.prisma.$queryRaw<{ id: string; name: string }[]>(
+          Prisma.sql`SELECT id, name FROM foods WHERE NOT EXISTS (
+            SELECT 1 FROM food_translations ft WHERE ft.food_id = foods.id
+          ) ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`,
+        );
+      }
+    } else {
+      if (region) {
+        rows = await this.prisma.$queryRaw<{ id: string; name: string }[]>(
+          Prisma.sql`SELECT id, name FROM foods WHERE NOT EXISTS (
+            SELECT 1 FROM food_regional_info fri WHERE fri.food_id = foods.id AND fri.region = ${region}
+          ) ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`,
+        );
+      } else {
+        rows = await this.prisma.$queryRaw<{ id: string; name: string }[]>(
+          Prisma.sql`SELECT id, name FROM foods WHERE NOT EXISTS (
+            SELECT 1 FROM food_regional_info fri WHERE fri.food_id = foods.id
+          ) ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`,
+        );
+      }
     }
 
-    const food = await this.prisma.foods.findUnique({ where: { id: foodId } });
-    if (!food) {
-      this.logger.warn(`Food ${foodId} not found`);
-      return null;
-    }
-
-    const missingFields = ENRICHABLE_FIELDS.filter((field) => {
-      const value = (food as any)[field];
-      if (value === null || value === undefined) return true;
-      if (
-        (JSON_ARRAY_FIELDS as readonly string[]).includes(field) &&
-        Array.isArray(value) &&
-        value.length === 0
-      )
-        return true;
-      return false;
-    });
-
-    if (missingFields.length === 0) return null;
-
-    this.logger.log(
-      `Enriching "${food.name}": missing ${missingFields.join(', ')}`,
-    );
-
-    const prompt = this.buildEnrichmentPrompt(food, missingFields);
-    return this.callAI(food.name, prompt, missingFields, 'foods');
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      missingFields: [],
+    }));
   }
 
   // ─── 翻译补全（food_translations 表）─────────────────────────────────
@@ -1935,17 +2471,49 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
       this.prisma.food_change_logs.count({ where }),
     ]);
 
-    const list: StagedEnrichment[] = rawList.map((log) => ({
-      id: log.id,
-      foodId: log.food_id,
-      foodName: (log as any).foods?.name ?? undefined,
-      action: log.action,
-      changes: log.changes as Record<string, any>,
-      reason: log.reason,
-      operator: log.operator,
-      version: log.version,
-      createdAt: log.created_at,
-    }));
+    // V8.3: 批量获取关联食物的当前值，用于 diff 对比
+    const foodIds = [...new Set(rawList.map((log) => log.food_id))];
+    const foods =
+      foodIds.length > 0
+        ? await this.prisma.foods.findMany({
+            where: { id: { in: foodIds } },
+          })
+        : [];
+    const foodMap = new Map(foods.map((f) => [f.id, f]));
+
+    const list: StagedEnrichment[] = rawList.map((log) => {
+      const changes = log.changes as Record<string, any>;
+      const proposed = changes?.proposedValues ?? {};
+      const food = foodMap.get(log.food_id);
+
+      // 提取 proposedValues 中的字段对应的食物当前值
+      let currentValues: Record<string, any> | undefined;
+      if (food && typeof proposed === 'object') {
+        currentValues = {};
+        for (const key of Object.keys(proposed)) {
+          if (
+            key === 'confidence' ||
+            key === 'reasoning' ||
+            key === 'field_confidence'
+          )
+            continue;
+          currentValues[key] = (food as any)[key] ?? null;
+        }
+      }
+
+      return {
+        id: log.id,
+        foodId: log.food_id,
+        foodName: (log as any).foods?.name ?? undefined,
+        action: log.action,
+        changes,
+        reason: log.reason,
+        operator: log.operator,
+        version: log.version,
+        createdAt: log.created_at,
+        currentValues,
+      };
+    });
 
     return { list, total, page, pageSize };
   }
@@ -1992,8 +2560,18 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
 
     const food = await this.prisma.foods.findUnique({
       where: { id: log.food_id },
+      include: {
+        food_translations: {
+          where: { locale: 'zh-CN' },
+          take: 1,
+          select: { name: true },
+        },
+      },
     });
     if (!food) throw new Error(`Food ${log.food_id} not found`);
+
+    // V8.1: 修复 name_zh 取值 — 应取 food_translations 的中文翻译名，而非 food.name
+    const nameZh = (food as any).food_translations?.[0]?.name ?? null;
 
     const changes = log.changes as Record<string, any>;
     const proposedValues = changes.proposedValues ?? {};
@@ -2008,11 +2586,35 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
       suggestedValue: any;
       unit: string;
       validRange: { min: number; max: number } | null;
+      /** V8.1: 该字段是新增（当前值为null）还是修改（当前值有值） */
+      isNew: boolean;
+      /** V8.1: 当前值与建议值是否不同（对于非null当前值） */
+      isModified: boolean;
+      /** V8.1: 该字段的AI置信度级别 */
+      confidenceLevel: 'high' | 'medium' | 'low';
+      /** V8.1: 该字段的AI原始置信度分数 */
+      fieldConfidence: number;
     }> = [];
 
+    // V8.1: 提取字段级置信度
+    const fieldConfidenceMap: Record<string, number> =
+      proposedValues.field_confidence ?? {};
+    const overallConfidence: number = changes.confidence ?? 0;
+
     for (const [field, suggestedValue] of Object.entries(proposedValues)) {
-      if (field === 'confidence' || field === 'reasoning') continue;
+      if (
+        field === 'confidence' ||
+        field === 'reasoning' ||
+        field === 'field_confidence'
+      )
+        continue;
       const currentValue = (food as any)[field] ?? null;
+      const isNew = currentValue === null || currentValue === undefined;
+      const isModified = !isNew && currentValue !== suggestedValue;
+      const fc = fieldConfidenceMap[field] ?? overallConfidence;
+      const confidenceLevel: 'high' | 'medium' | 'low' =
+        fc >= 0.8 ? 'high' : fc >= 0.5 ? 'medium' : 'low';
+
       diff.push({
         field,
         label: ENRICHMENT_FIELD_LABELS[field] ?? field,
@@ -2020,6 +2622,10 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
         suggestedValue,
         unit: ENRICHMENT_FIELD_UNITS[field] ?? '',
         validRange: NUTRIENT_RANGES[field] ?? null,
+        isNew,
+        isModified,
+        confidenceLevel,
+        fieldConfidence: Math.round(fc * 100) / 100,
       });
     }
 
@@ -2040,7 +2646,7 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
       food: {
         id: food.id,
         name: food.name,
-        name_zh: food.name ?? null,
+        name_zh: nameZh,
         category: food.category ?? null,
         sub_category: food.sub_category ?? null,
       },
@@ -2194,6 +2800,32 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
       },
     });
 
+    // V8.1: 更新 foods 表的审核者追踪字段
+    // V8.2: 审核通过后重新计算并更新 data_completeness 和 enrichment_status
+    if (target === 'foods') {
+      const updatedFood = await this.prisma.foods.findUnique({
+        where: { id: log.food_id },
+      });
+      if (updatedFood) {
+        const completeness = this.computeCompletenessScore(updatedFood);
+        const enrichmentStatus =
+          completeness.score >= 80
+            ? 'completed'
+            : completeness.score >= 30
+              ? 'partial'
+              : 'pending';
+        await this.prisma.foods.update({
+          where: { id: log.food_id },
+          data: {
+            reviewed_by: operator,
+            reviewed_at: new Date(),
+            data_completeness: completeness.score,
+            enrichment_status: enrichmentStatus,
+          },
+        });
+      }
+    }
+
     return { applied: true, detail };
   }
 
@@ -2220,6 +2852,13 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
         operator,
       },
     });
+
+    // V8.3: 更新 foods.enrichment_status 为 'rejected'
+    // 修复：拒绝前状态为 'staged'，拒绝后应标记为 'rejected' 以便统计和重新补全
+    await this.prisma.foods.update({
+      where: { id: log.food_id },
+      data: { enrichment_status: 'rejected' },
+    });
   }
 
   // ─── 批量审核通过 ─────────────────────────────────────────────────────
@@ -2235,6 +2874,30 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
     for (const logId of logIds) {
       try {
         await this.approveStaged(logId, operator);
+        success++;
+      } catch (e) {
+        failed++;
+        errors.push(`${logId}: ${(e as Error).message}`);
+      }
+    }
+
+    return { success, failed, errors };
+  }
+
+  // ─── V8.2: 批量审核拒绝 ───────────────────────────────────────────────
+
+  async batchRejectStaged(
+    logIds: string[],
+    reason: string,
+    operator = 'admin',
+  ): Promise<{ success: number; failed: number; errors: string[] }> {
+    let success = 0;
+    let failed = 0;
+    const errors: string[] = [];
+
+    for (const logId of logIds) {
+      try {
+        await this.rejectStaged(logId, reason, operator);
         success++;
       } catch (e) {
         failed++;
@@ -2505,46 +3168,6 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
     return null;
   }
 
-  // ─── 构造主表 Prompt ──────────────────────────────────────────────────
-
-  private buildEnrichmentPrompt(
-    food: any,
-    missingFields: EnrichableField[],
-  ): string {
-    const ctx = [
-      `名称: ${food.name}`,
-      food.aliases ? `别名: ${food.aliases}` : null,
-      `分类: ${food.category}`,
-      food.sub_category ? `二级分类: ${food.sub_category}` : null,
-      food.food_group ? `食物组: ${food.food_group}` : null,
-      food.calories != null ? `热量: ${food.calories} kcal/100g` : null,
-      food.protein != null ? `蛋白质: ${food.protein} g/100g` : null,
-      food.fat != null ? `脂肪: ${food.fat} g/100g` : null,
-      food.carbs != null ? `碳水: ${food.carbs} g/100g` : null,
-      food.fiber != null ? `膳食纤维: ${food.fiber} g/100g` : null,
-      food.sodium != null ? `钠: ${food.sodium} mg/100g` : null,
-      food.cuisine ? `菜系: ${food.cuisine}` : null,
-      food.cooking_method ? `烹饪方式: ${food.cooking_method}` : null,
-      food.is_processed ? `是否加工食品: ${food.is_processed}` : null,
-    ]
-      .filter(Boolean)
-      .join('\n');
-
-    const fieldsList = missingFields
-      .map((f) => `- ${FIELD_DESC[f] || f}`)
-      .join('\n');
-
-    return `已知食物数据：\n${ctx}\n\n请估算以下缺失字段：\n${fieldsList}\n\n对每个字段单独评估置信度，在 "field_confidence" 中返回。\n\n返回JSON（只含请求字段，无法确定返回null）：
-{
-  ${missingFields.map((f) => `"${f}": <value or null>`).join(',\n  ')},
-  "confidence": <0.0-1.0 整体置信度>,
-  "field_confidence": {
-    ${missingFields.map((f) => `"${f}": <0.0-1.0>`).join(',\n    ')}
-  },
-  "reasoning": "<简短说明>"
-}`;
-  }
-
   // ─── 验证和清理 AI 结果 ───────────────────────────────────────────────
 
   private validateAndClean(
@@ -2799,6 +3422,13 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
       count: number;
       action: string;
     }>;
+    /** V8.1: 按阶段的填充覆盖率统计 */
+    stageStats: Array<{
+      stage: number;
+      stageName: string;
+      totalFields: number;
+      avgSuccessRate: number;
+    }>;
   }> {
     const actions = [
       'ai_enrichment',
@@ -2880,6 +3510,189 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
       approvalRate,
       avgConfidence,
       dailyStats,
+      // V8.1: 阶段级补全统计（从已完成的 enrichFoodNow change_logs 中提取）
+      stageStats: await this.getStageStats(),
+    };
+  }
+
+  /**
+   * V8.1: 获取按阶段的补全成功率统计
+   * 基于全库食物数据，统计每个阶段字段的填充覆盖率
+   */
+  private async getStageStats(): Promise<
+    Array<{
+      stage: number;
+      stageName: string;
+      totalFields: number;
+      avgSuccessRate: number;
+    }>
+  > {
+    const totalFoods = await this.prisma.foods.count();
+    if (totalFoods === 0) {
+      return ENRICHMENT_STAGES.map((stage) => ({
+        stage: stage.stage,
+        stageName: stage.name,
+        totalFields: stage.fields.length,
+        avgSuccessRate: 0,
+      }));
+    }
+
+    const result: Array<{
+      stage: number;
+      stageName: string;
+      totalFields: number;
+      avgSuccessRate: number;
+    }> = [];
+
+    for (const stage of ENRICHMENT_STAGES) {
+      // 计算该阶段每个字段的非 NULL 比例，取平均
+      const conditions = stage.fields.map((f) =>
+        (JSON_ARRAY_FIELDS as readonly string[]).includes(f)
+          ? `AVG(CASE WHEN "${f}" IS NOT NULL AND "${f}"::text != '[]' THEN 1.0 ELSE 0.0 END)`
+          : `AVG(CASE WHEN "${f}" IS NOT NULL THEN 1.0 ELSE 0.0 END)`,
+      );
+      const avgExpr = `(${conditions.join(' + ')}) / ${stage.fields.length}`;
+
+      const row = await this.prisma.$queryRaw<[{ rate: string }]>(
+        Prisma.sql`SELECT (${Prisma.raw(avgExpr)})::text AS rate FROM foods`,
+      );
+
+      const avgSuccessRate = row[0]?.rate
+        ? Math.round(parseFloat(row[0].rate) * 10000) / 100
+        : 0;
+
+      result.push({
+        stage: stage.stage,
+        stageName: stage.name,
+        totalFields: stage.fields.length,
+        avgSuccessRate,
+      });
+    }
+
+    return result;
+  }
+
+  // ─── V8.1: 全局任务总览 ──────────────────────────────────────────────
+
+  /**
+   * 获取全局补全任务视图：队列状态 + 暂存审核状态 + 完整度概览 + 失败字段 Top10
+   * 用于后台 Dashboard 一屏掌握全局数据补全态势
+   */
+  async getTaskOverview(): Promise<{
+    /** 暂存审核待处理数 */
+    pendingReview: number;
+    /** 全库食物总数 */
+    totalFoods: number;
+    /** 完整度分布 */
+    completenessDistribution: {
+      high: number; // >=80
+      medium: number; // 40-79
+      low: number; // <40
+    };
+    /** 补全状态分布 */
+    enrichmentStatusDistribution: Record<string, number>;
+    /** 失败字段 Top10（按 failed_fields 中出现频次降序） */
+    topFailedFields: Array<{ field: string; count: number }>;
+    /** 最近 7 天补全趋势 */
+    recentTrend: Array<{ date: string; enriched: number; failed: number }>;
+  }> {
+    // 1. 暂存审核待处理数
+    const pendingReview = await this.prisma.food_change_logs.count({
+      where: { action: 'ai_enrichment_staged' },
+    });
+
+    // 2. 全库食物总数
+    const totalFoods = await this.prisma.foods.count();
+
+    // 3. 完整度分布
+    const compDist = await this.prisma.$queryRaw<
+      Array<{ bucket: string; cnt: string }>
+    >(
+      Prisma.sql`SELECT
+        CASE
+          WHEN COALESCE(data_completeness, 0) >= 80 THEN 'high'
+          WHEN COALESCE(data_completeness, 0) >= 40 THEN 'medium'
+          ELSE 'low'
+        END AS bucket,
+        COUNT(*)::text AS cnt
+      FROM foods GROUP BY 1`,
+    );
+
+    const completenessDistribution = { high: 0, medium: 0, low: 0 };
+    for (const row of compDist) {
+      const c = parseInt(row.cnt, 10);
+      if (row.bucket === 'high') completenessDistribution.high = c;
+      else if (row.bucket === 'medium') completenessDistribution.medium = c;
+      else completenessDistribution.low = c;
+    }
+
+    // 4. 补全状态分布
+    const statusDist = await this.prisma.$queryRaw<
+      Array<{ status: string; cnt: string }>
+    >(
+      Prisma.sql`SELECT COALESCE(enrichment_status, 'none') AS status, COUNT(*)::text AS cnt
+       FROM foods GROUP BY 1`,
+    );
+
+    const enrichmentStatusDistribution: Record<string, number> = {};
+    for (const row of statusDist) {
+      enrichmentStatusDistribution[row.status] = parseInt(row.cnt, 10);
+    }
+
+    // 5. 失败字段 Top10（从 failed_fields JSONB 中提取 key 并计数）
+    const topFailedResult = await this.prisma.$queryRaw<
+      Array<{ field: string; cnt: string }>
+    >(
+      Prisma.sql`SELECT key AS field, COUNT(*)::text AS cnt
+       FROM foods, jsonb_object_keys(COALESCE(failed_fields, '{}'::jsonb)) AS key
+       GROUP BY key
+       ORDER BY COUNT(*) DESC
+       LIMIT 10`,
+    );
+
+    const topFailedFields = topFailedResult.map((row) => ({
+      field: row.field,
+      count: parseInt(row.cnt, 10),
+    }));
+
+    // 6. 最近 7 天补全趋势
+    const trendResult = await this.prisma.$queryRaw<
+      Array<{ date: string; action: string; cnt: string }>
+    >(
+      Prisma.sql`SELECT
+        TO_CHAR(created_at, 'YYYY-MM-DD') AS date,
+        CASE
+          WHEN action IN ('ai_enrichment', 'ai_enrichment_approved', 'ai_enrichment_now') THEN 'enriched'
+          ELSE 'failed'
+        END AS action,
+        COUNT(*)::text AS cnt
+       FROM food_change_logs
+       WHERE action IN ('ai_enrichment', 'ai_enrichment_approved', 'ai_enrichment_now', 'ai_enrichment_rejected')
+         AND created_at >= NOW() - INTERVAL '7 days'
+       GROUP BY 1, 2
+       ORDER BY 1 DESC`,
+    );
+
+    const trendMap: Record<string, { enriched: number; failed: number }> = {};
+    for (const row of trendResult) {
+      if (!trendMap[row.date]) trendMap[row.date] = { enriched: 0, failed: 0 };
+      const c = parseInt(row.cnt, 10);
+      if (row.action === 'enriched') trendMap[row.date].enriched = c;
+      else trendMap[row.date].failed = c;
+    }
+
+    const recentTrend = Object.entries(trendMap).map(([date, v]) => ({
+      date,
+      ...v,
+    }));
+
+    return {
+      pendingReview,
+      totalFoods,
+      completenessDistribution,
+      enrichmentStatusDistribution,
+      topFailedFields,
+      recentTrend,
     };
   }
 
