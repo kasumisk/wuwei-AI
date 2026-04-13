@@ -36,21 +36,21 @@ export class CollectionTriggerService {
    */
   async checkCollectionTriggers(userId: string): Promise<CollectionReminder[]> {
     const [profile, behavior] = await Promise.all([
-      this.prisma.user_profiles.findUnique({ where: { user_id: userId } }),
-      this.prisma.user_behavior_profiles.findUnique({
-        where: { user_id: userId },
+      this.prisma.userProfiles.findUnique({ where: { userId: userId } }),
+      this.prisma.userBehaviorProfiles.findUnique({
+        where: { userId: userId },
       }),
     ]);
 
     if (!profile) return [];
 
     const reminders: CollectionReminder[] = [];
-    const completeness = Number(profile.data_completeness || 0);
+    const completeness = Number(profile.dataCompleteness || 0);
     // V4 修复 B7: 使用日历天数替代 totalRecords
     const createdAt =
-      profile.created_at instanceof Date
-        ? profile.created_at
-        : new Date(profile.created_at);
+      profile.createdAt instanceof Date
+        ? profile.createdAt
+        : new Date(profile.createdAt);
     const usageDays = Math.max(
       0,
       Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24)),
@@ -71,8 +71,8 @@ export class CollectionTriggerService {
       }
 
       if (
-        !profile.dietary_restrictions ||
-        (profile.dietary_restrictions as any[]).length === 0
+        !profile.dietaryRestrictions ||
+        (profile.dietaryRestrictions as any[]).length === 0
       ) {
         reminders.push({
           type: 'popup',
@@ -88,7 +88,7 @@ export class CollectionTriggerService {
 
     // ── 规则 2: 使用 14 天 → 烹饪水平和预算 ──
     if (usageDays >= 14) {
-      if (!profile.cooking_skill_level) {
+      if (!profile.cookingSkillLevel) {
         reminders.push({
           type: 'settings_guide',
           field: 'cookingSkillLevel',
@@ -100,7 +100,7 @@ export class CollectionTriggerService {
         });
       }
 
-      if (!profile.budget_level) {
+      if (!profile.budgetLevel) {
         reminders.push({
           type: 'settings_guide',
           field: 'budgetLevel',
@@ -115,7 +115,7 @@ export class CollectionTriggerService {
 
     // ── 规则 3: 使用 30 天 → 运动习惯 ──
     if (usageDays >= 30) {
-      const exerciseProfile = profile.exercise_profile as Record<
+      const exerciseProfile = profile.exerciseProfile as Record<
         string,
         any
       > | null;
@@ -136,8 +136,8 @@ export class CollectionTriggerService {
     // ── 规则 4: 健康状况未填 + 完整度低 ──
     if (
       usageDays >= 7 &&
-      (!profile.health_conditions ||
-        (profile.health_conditions as any[]).length === 0) &&
+      (!profile.healthConditions ||
+        (profile.healthConditions as any[]).length === 0) &&
       completeness < 0.6
     ) {
       reminders.push({
@@ -225,20 +225,20 @@ export class CollectionTriggerService {
    * 否则插入新记录。基于 UNIQUE(user_id, reminder_type) 约束。
    */
   async dismissReminder(userId: string, reminderType: string): Promise<void> {
-    await this.prisma.reminder_dismissals.upsert({
+    await this.prisma.reminderDismissals.upsert({
       where: {
-        user_id_reminder_type: {
-          user_id: userId,
-          reminder_type: reminderType,
+        userId_reminderType: {
+          userId: userId,
+          reminderType: reminderType,
         },
       },
       update: {
-        dismissed_at: new Date(),
+        dismissedAt: new Date(),
       },
       create: {
-        user_id: userId,
-        reminder_type: reminderType,
-        dismissed_at: new Date(),
+        userId: userId,
+        reminderType: reminderType,
+        dismissedAt: new Date(),
       },
     });
     this.logger.debug(`用户 ${userId} 关闭了提醒: ${reminderType}`);
@@ -260,8 +260,8 @@ export class CollectionTriggerService {
   ): Promise<CollectionReminder[]> {
     if (reminders.length === 0) return reminders;
 
-    const dismissals = await this.prisma.reminder_dismissals.findMany({
-      where: { user_id: userId },
+    const dismissals = await this.prisma.reminderDismissals.findMany({
+      where: { userId: userId },
     });
 
     if (dismissals.length === 0) return reminders;
@@ -269,7 +269,7 @@ export class CollectionTriggerService {
     // 构建 reminderType → dismissedAt 映射
     const dismissalMap = new Map<string, Date>();
     for (const d of dismissals) {
-      dismissalMap.set(d.reminder_type, new Date(d.dismissed_at));
+      dismissalMap.set(d.reminderType, new Date(d.dismissedAt));
     }
 
     const now = Date.now();
@@ -301,9 +301,9 @@ export class CollectionTriggerService {
   ): Promise<string | null> {
     // 获取最近 10 条替换反馈
     const recentReplacements =
-      await this.prisma.recommendation_feedbacks.findMany({
-        where: { user_id: userId, action: 'replaced' },
-        orderBy: { created_at: 'desc' },
+      await this.prisma.recommendationFeedbacks.findMany({
+        where: { userId: userId, action: 'replaced' },
+        orderBy: { createdAt: 'desc' },
         take: 10,
       });
 
@@ -311,7 +311,7 @@ export class CollectionTriggerService {
 
     // 获取替换目标食物的品类信息
     const replacementNames = recentReplacements
-      .map((r) => r.replacement_food)
+      .map((r) => r.replacementFood)
       .filter((name): name is string => !!name);
 
     if (replacementNames.length < 3) return null;
@@ -332,8 +332,8 @@ export class CollectionTriggerService {
     let currentCategory: string | null = null;
 
     for (const replacement of recentReplacements) {
-      if (!replacement.replacement_food) continue;
-      const category = nameToCategory.get(replacement.replacement_food);
+      if (!replacement.replacementFood) continue;
+      const category = nameToCategory.get(replacement.replacementFood);
       if (!category) continue;
 
       if (currentCategory === null) {
@@ -360,10 +360,10 @@ export class CollectionTriggerService {
   private async detectGoalAdjustmentNeed(
     userId: string,
   ): Promise<CollectionReminder | null> {
-    const inferred = await this.prisma.user_inferred_profiles.findUnique({
-      where: { user_id: userId },
+    const inferred = await this.prisma.userInferredProfiles.findUnique({
+      where: { userId: userId },
     });
-    const goalProgress = inferred?.goal_progress as any;
+    const goalProgress = inferred?.goalProgress as any;
     if (!goalProgress) return null;
 
     const { progressPercent, trend } = goalProgress;
@@ -406,7 +406,7 @@ export class CollectionTriggerService {
     profile: any,
   ): Promise<CollectionReminder | null> {
     // 检查 tasteIntensity 是否已有有效值
-    const tasteIntensity = (profile.taste_intensity ??
+    const tasteIntensity = (profile.tasteIntensity ??
       profile.tasteIntensity) as Record<string, number>;
     if (tasteIntensity && Object.keys(tasteIntensity).length > 0) {
       // 检查是否所有值都是默认值（0）
@@ -415,8 +415,8 @@ export class CollectionTriggerService {
     }
 
     // 统计用户的饮食记录总数
-    const recordCount = await this.prisma.food_records.count({
-      where: { user_id: userId },
+    const recordCount = await this.prisma.foodRecords.count({
+      where: { userId: userId },
     });
 
     if (recordCount < 50) return null;

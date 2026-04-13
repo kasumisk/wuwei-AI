@@ -30,7 +30,7 @@ async function initSystem() {
         code: 'SUPER_ADMIN',
         name: '超级管理员',
         description: '系统超级管理员，拥有所有权限',
-        is_system: true,
+        isSystem: true,
         status: RoleStatus.ACTIVE as unknown as 'active',
         sort: 0,
       },
@@ -38,7 +38,7 @@ async function initSystem() {
         code: 'ADMIN',
         name: '管理员',
         description: '系统管理员',
-        is_system: true,
+        isSystem: true,
         status: RoleStatus.ACTIVE as unknown as 'active',
         sort: 1,
       },
@@ -266,7 +266,7 @@ async function initSystem() {
 
     const savedPermissions: Map<
       string,
-      { id: string; code: string; parent_id: string | null }
+      { id: string; code: string; parentId: string | null }
     > = new Map();
 
     for (const permData of permissions) {
@@ -277,7 +277,7 @@ async function initSystem() {
         perm = await prisma.permissions.create({
           data: {
             ...permData,
-            is_system: true,
+            isSystem: true,
             status: PermissionStatus.ACTIVE as unknown as 'active',
           },
         });
@@ -306,12 +306,12 @@ async function initSystem() {
       const menuPerm = savedPermissions.get(menuCode);
       if (menuPerm) {
         for (const [code, perm] of savedPermissions) {
-          if (code.startsWith(`${menuCode}:`) && !perm.parent_id) {
+          if (code.startsWith(`${menuCode}:`) && !perm.parentId) {
             await prisma.permissions.update({
               where: { id: perm.id },
-              data: { parent_id: menuPerm.id },
+              data: { parentId: menuPerm.id },
             });
-            perm.parent_id = menuPerm.id;
+            perm.parentId = menuPerm.id;
           }
         }
         console.log(`  ✅ 设置 ${menuCode} 子权限`);
@@ -323,19 +323,19 @@ async function initSystem() {
 
     const adminRole = savedRoles.get('ADMIN');
     if (adminRole) {
-      const existingPerms = await prisma.role_permissions.findMany({
-        where: { role_id: adminRole.id },
+      const existingPerms = await prisma.rolePermissions.findMany({
+        where: { roleId: adminRole.id },
       });
 
       if (existingPerms.length === 0) {
         const rolePermsData = Array.from(savedPermissions.values()).map(
           (p) => ({
-            role_id: adminRole.id,
-            permission_id: p.id,
+            roleId: adminRole.id,
+            permissionId: p.id,
           }),
         );
         for (const rp of rolePermsData) {
-          await prisma.role_permissions.create({ data: rp });
+          await prisma.rolePermissions.create({ data: rp });
         }
         console.log(`  ✅ ADMIN 角色分配了 ${rolePermsData.length} 个权限`);
       } else {
@@ -349,13 +349,13 @@ async function initSystem() {
     const adminUsername = 'admin';
     const adminPassword = 'admin123';
 
-    let admin = await prisma.admin_users.findFirst({
+    let admin = await prisma.adminUsers.findFirst({
       where: { username: adminUsername },
     });
 
     if (!admin) {
       const hashedPassword = await bcrypt.hash(adminPassword, 10);
-      admin = await prisma.admin_users.create({
+      admin = await prisma.adminUsers.create({
         data: {
           username: adminUsername,
           email: 'admin@example.com',
@@ -378,15 +378,15 @@ async function initSystem() {
 
     const superAdminRole = savedRoles.get('SUPER_ADMIN');
     if (superAdminRole && admin) {
-      const existingUserRole = await prisma.user_roles.findFirst({
-        where: { user_id: admin.id, role_id: superAdminRole.id },
+      const existingUserRole = await prisma.userRoles.findFirst({
+        where: { userId: admin.id, roleId: superAdminRole.id },
       });
 
       if (!existingUserRole) {
-        await prisma.user_roles.create({
+        await prisma.userRoles.create({
           data: {
-            user_id: admin.id,
-            role_id: superAdminRole.id,
+            userId: admin.id,
+            roleId: superAdminRole.id,
           },
         });
         console.log(`  ✅ 为管理员分配 SUPER_ADMIN 角色`);

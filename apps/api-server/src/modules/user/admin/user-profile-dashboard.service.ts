@@ -84,7 +84,7 @@ export class UserProfileDashboardService {
     });
 
     // 总计
-    const totalUsers = await this.prisma.app_users.count();
+    const totalUsers = await this.prisma.appUsers.count();
     const periodNewUsers = trend.reduce(
       (sum: number, row: any) => sum + Number(row.count),
       0,
@@ -153,9 +153,9 @@ export class UserProfileDashboardService {
     );
 
     // 5. onboarding 完成率
-    const totalProfiles = await this.prisma.user_profiles.count();
-    const completedOnboarding = await this.prisma.user_profiles.count({
-      where: { onboarding_completed: true },
+    const totalProfiles = await this.prisma.userProfiles.count();
+    const completedOnboarding = await this.prisma.userProfiles.count({
+      where: { onboardingCompleted: true },
     });
 
     // 6. 行为画像统计（依从率分布、平均连续天数）
@@ -318,9 +318,9 @@ export class UserProfileDashboardService {
 
     // 总用户 & 状态分布
     const [totalUsers, activeUsers, bannedUsers] = await Promise.all([
-      this.prisma.app_users.count(),
-      this.prisma.app_users.count({ where: { status: 'active' as any } }),
-      this.prisma.app_users.count({ where: { status: 'banned' as any } }),
+      this.prisma.appUsers.count(),
+      this.prisma.appUsers.count({ where: { status: 'active' as any } }),
+      this.prisma.appUsers.count({ where: { status: 'banned' as any } }),
     ]);
 
     // 日活趋势（过去 N 天，每天有多少用户登录）

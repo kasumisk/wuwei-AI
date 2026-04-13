@@ -115,12 +115,12 @@ export class ExportService {
     start: Date,
     end: Date,
   ): Promise<{ csv: string; count: number }> {
-    const records = await this.prisma.food_records.findMany({
+    const records = await this.prisma.foodRecords.findMany({
       where: {
-        user_id: userId,
-        recorded_at: { gte: start, lte: end },
+        userId: userId,
+        recordedAt: { gte: start, lte: end },
       },
-      orderBy: { recorded_at: 'asc' },
+      orderBy: { recordedAt: 'asc' },
     });
 
     if (records.length === 0) {
@@ -145,16 +145,16 @@ export class ExportService {
     const rows = records.map((r) => {
       const foodsStr = this.formatFoods(r.foods);
       return [
-        this.formatDate(r.recorded_at),
-        r.meal_type,
+        this.formatDate(r.recordedAt),
+        r.mealType,
         this.escapeCsv(foodsStr),
-        r.total_calories,
-        Number(r.total_protein) || 0,
-        Number(r.total_fat) || 0,
-        Number(r.total_carbs) || 0,
-        Number(r.avg_quality) || 0,
-        Number(r.avg_satiety) || 0,
-        r.nutrition_score,
+        r.totalCalories,
+        Number(r.totalProtein) || 0,
+        Number(r.totalFat) || 0,
+        Number(r.totalCarbs) || 0,
+        Number(r.avgQuality) || 0,
+        Number(r.avgSatiety) || 0,
+        r.nutritionScore,
         r.decision,
         r.source,
       ].join(',');
@@ -172,9 +172,9 @@ export class ExportService {
     start: Date,
     end: Date,
   ): Promise<{ csv: string; count: number }> {
-    const summaries = await this.prisma.daily_summaries.findMany({
+    const summaries = await this.prisma.dailySummaries.findMany({
       where: {
-        user_id: userId,
+        userId: userId,
         date: { gte: start, lte: end },
       },
       orderBy: { date: 'asc' },
@@ -203,18 +203,18 @@ export class ExportService {
     const rows = summaries.map((s) =>
       [
         this.formatDate(s.date),
-        s.total_calories,
-        s.calorie_goal ?? '',
-        s.meal_count,
-        Number(s.total_protein) || 0,
-        Number(s.protein_goal) || 0,
-        Number(s.total_fat) || 0,
-        Number(s.fat_goal) || 0,
-        Number(s.total_carbs) || 0,
-        Number(s.carbs_goal) || 0,
-        Number(s.avg_quality) || 0,
-        Number(s.avg_satiety) || 0,
-        s.nutrition_score,
+        s.totalCalories,
+        s.calorieGoal ?? '',
+        s.mealCount,
+        Number(s.totalProtein) || 0,
+        Number(s.proteinGoal) || 0,
+        Number(s.totalFat) || 0,
+        Number(s.fatGoal) || 0,
+        Number(s.totalCarbs) || 0,
+        Number(s.carbsGoal) || 0,
+        Number(s.avgQuality) || 0,
+        Number(s.avgSatiety) || 0,
+        s.nutritionScore,
       ].join(','),
     );
 
@@ -229,8 +229,8 @@ export class ExportService {
    */
   private formatFoods(foods: unknown): string {
     if (!foods || !Array.isArray(foods)) return '';
-    return (foods as Array<{ name?: string; food_name?: string }>)
-      .map((f) => f.name || f.food_name || t('export.fallback.unknown'))
+    return (foods as Array<{ name?: string; foodName?: string }>)
+      .map((f) => f.name || f.foodName || t('export.fallback.unknown'))
       .join('; ');
   }
 

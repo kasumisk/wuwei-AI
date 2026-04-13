@@ -168,7 +168,7 @@ export class EmbeddingGenerationService {
         where: { id: foodId },
         data: {
           embedding: vec,
-          embedding_updated_at: new Date(),
+          embeddingUpdatedAt: new Date(),
         },
       });
 

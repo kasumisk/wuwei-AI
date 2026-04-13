@@ -67,13 +67,13 @@ export interface SendNotificationParams {
 
 interface NotificationPreferenceData {
   id?: string;
-  user_id: string;
-  push_enabled: boolean;
-  enabled_types: string[];
-  quiet_start: string | null;
-  quiet_end: string | null;
-  created_at?: Date;
-  updated_at?: Date;
+  userId: string;
+  pushEnabled: boolean;
+  enabledTypes: string[];
+  quietStart: string | null;
+  quietEnd: string | null;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 @Injectable()
@@ -110,7 +110,7 @@ export class NotificationService {
     // 创建站内信
     const saved = await this.prisma.notification.create({
       data: {
-        user_id: userId,
+        userId: userId,
         type,
         title,
         body,
@@ -119,7 +119,7 @@ export class NotificationService {
     });
 
     // 投递推送任务
-    if (push && preference.push_enabled) {
+    if (push && preference.pushEnabled) {
       const jobData: NotificationJobData = {
         notificationId: saved.id,
         userId,
@@ -149,13 +149,13 @@ export class NotificationService {
   ): Promise<{ items: any[]; total: number }> {
     const [items, total] = await Promise.all([
       this.prisma.notification.findMany({
-        where: { user_id: userId },
-        orderBy: { created_at: 'desc' },
+        where: { userId: userId },
+        orderBy: { createdAt: 'desc' },
         skip: (page - 1) * limit,
         take: limit,
       }),
       this.prisma.notification.count({
-        where: { user_id: userId },
+        where: { userId: userId },
       }),
     ]);
     return { items, total };
@@ -166,7 +166,7 @@ export class NotificationService {
    */
   async getUnreadCount(userId: string): Promise<number> {
     return this.prisma.notification.count({
-      where: { user_id: userId, is_read: false },
+      where: { userId: userId, isRead: false },
     });
   }
 
@@ -175,8 +175,8 @@ export class NotificationService {
    */
   async markAsRead(userId: string, notificationId: string): Promise<void> {
     await this.prisma.notification.updateMany({
-      where: { id: notificationId, user_id: userId },
-      data: { is_read: true, read_at: new Date() },
+      where: { id: notificationId, userId: userId },
+      data: { isRead: true, readAt: new Date() },
     });
   }
 
@@ -185,8 +185,8 @@ export class NotificationService {
    */
   async markAllAsRead(userId: string): Promise<number> {
     const result = await this.prisma.notification.updateMany({
-      where: { user_id: userId, is_read: false },
-      data: { is_read: true, read_at: new Date() },
+      where: { userId: userId, isRead: false },
+      data: { isRead: true, readAt: new Date() },
     });
     return result.count;
   }
@@ -197,18 +197,18 @@ export class NotificationService {
    * 获取用户通知偏好（不存在则返回默认值）
    */
   async getPreference(userId: string): Promise<NotificationPreferenceData> {
-    const pref = await this.prisma.notification_preference.findFirst({
-      where: { user_id: userId },
+    const pref = await this.prisma.notificationPreference.findFirst({
+      where: { userId: userId },
     });
     if (pref) return pref as unknown as NotificationPreferenceData;
 
     // 返回默认偏好（不持久化，用户主动修改时才存储）
     return {
-      user_id: userId,
-      push_enabled: true,
-      enabled_types: [],
-      quiet_start: null,
-      quiet_end: null,
+      userId: userId,
+      pushEnabled: true,
+      enabledTypes: [],
+      quietStart: null,
+      quietEnd: null,
     };
   }
 
@@ -218,16 +218,16 @@ export class NotificationService {
   async updatePreference(
     userId: string,
     updates: Partial<{
-      push_enabled: boolean;
-      enabled_types: string[];
-      quiet_start: string | null;
-      quiet_end: string | null;
+      pushEnabled: boolean;
+      enabledTypes: string[];
+      quietStart: string | null;
+      quietEnd: string | null;
     }>,
   ): Promise<NotificationPreferenceData> {
-    const result = await this.prisma.notification_preference.upsert({
-      where: { user_id: userId },
+    const result = await this.prisma.notificationPreference.upsert({
+      where: { userId: userId },
       create: {
-        user_id: userId,
+        userId: userId,
         ...updates,
       },
       update: {
@@ -250,26 +250,26 @@ export class NotificationService {
     deviceId: string,
     platform: DevicePlatform,
   ) {
-    const existing = await this.prisma.device_token.findFirst({
-      where: { user_id: userId, device_id: deviceId },
+    const existing = await this.prisma.deviceToken.findFirst({
+      where: { userId: userId, deviceId: deviceId },
     });
     if (existing) {
-      return this.prisma.device_token.update({
+      return this.prisma.deviceToken.update({
         where: { id: existing.id },
         data: {
           token,
           platform,
-          is_active: true,
+          isActive: true,
         },
       });
     }
-    return this.prisma.device_token.create({
+    return this.prisma.deviceToken.create({
       data: {
-        user_id: userId,
+        userId: userId,
         token,
-        device_id: deviceId,
+        deviceId: deviceId,
         platform,
-        is_active: true,
+        isActive: true,
       },
     });
   }
@@ -278,9 +278,9 @@ export class NotificationService {
    * 注销设备令牌（登出时调用）
    */
   async deactivateDeviceToken(userId: string, deviceId: string): Promise<void> {
-    await this.prisma.device_token.updateMany({
-      where: { user_id: userId, device_id: deviceId },
-      data: { is_active: false },
+    await this.prisma.deviceToken.updateMany({
+      where: { userId: userId, deviceId: deviceId },
+      data: { isActive: false },
     });
   }
 
@@ -288,8 +288,8 @@ export class NotificationService {
    * 获取用户所有活跃设备令牌
    */
   async getActiveDeviceTokens(userId: string) {
-    return this.prisma.device_token.findMany({
-      where: { user_id: userId, is_active: true },
+    return this.prisma.deviceToken.findMany({
+      where: { userId: userId, isActive: true },
     });
   }
 
@@ -297,9 +297,9 @@ export class NotificationService {
    * 标记令牌为失效（FCM 返回 invalid token 时调用）
    */
   async invalidateToken(tokenValue: string): Promise<void> {
-    await this.prisma.device_token.updateMany({
+    await this.prisma.deviceToken.updateMany({
       where: { token: tokenValue },
-      data: { is_active: false },
+      data: { isActive: false },
     });
   }
 
@@ -309,7 +309,7 @@ export class NotificationService {
   async markAsPushed(notificationId: string): Promise<void> {
     await this.prisma.notification.update({
       where: { id: notificationId },
-      data: { is_pushed: true },
+      data: { isPushed: true },
     });
   }
 
@@ -391,9 +391,9 @@ export class NotificationService {
     preference: NotificationPreferenceData,
     type: NotificationType,
   ): boolean {
-    if (!preference.enabled_types || preference.enabled_types.length === 0) {
+    if (!preference.enabledTypes || preference.enabledTypes.length === 0) {
       return true; // 空列表 = 全部接收
     }
-    return preference.enabled_types.includes(type);
+    return preference.enabledTypes.includes(type);
   }
 }

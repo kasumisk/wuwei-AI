@@ -46,13 +46,13 @@ export class AdminUserService {
     const skip = (page - 1) * pageSize;
 
     const [list, total] = await Promise.all([
-      this.prisma.admin_users.findMany({
+      this.prisma.adminUsers.findMany({
         where,
-        orderBy: { created_at: 'desc' },
+        orderBy: { createdAt: 'desc' },
         skip,
         take: pageSize,
       }),
-      this.prisma.admin_users.count({ where }),
+      this.prisma.adminUsers.count({ where }),
     ]);
 
     // 获取所有用户的 RBAC 角色
@@ -60,8 +60,8 @@ export class AdminUserService {
 
     const userRoles =
       userIds.length > 0
-        ? await this.prisma.user_roles.findMany({
-            where: { user_id: { in: userIds } },
+        ? await this.prisma.userRoles.findMany({
+            where: { userId: { in: userIds } },
             include: { roles: true },
           })
         : [];
@@ -70,13 +70,13 @@ export class AdminUserService {
     const userRolesMap = new Map<string, any[]>();
     userRoles.forEach((ur) => {
       if (ur.roles) {
-        const existing = userRolesMap.get(ur.user_id) || [];
+        const existing = userRolesMap.get(ur.userId) || [];
         existing.push({
           id: ur.roles.id,
           code: ur.roles.code,
           name: ur.roles.name,
         });
-        userRolesMap.set(ur.user_id, existing);
+        userRolesMap.set(ur.userId, existing);
       }
     });
 
@@ -103,7 +103,7 @@ export class AdminUserService {
    * 获取管理员用户详情
    */
   async findOne(id: string) {
-    const user = await this.prisma.admin_users.findUnique({ where: { id } });
+    const user = await this.prisma.adminUsers.findUnique({ where: { id } });
 
     if (!user) {
       throw new NotFoundException(`用户 #${id} 不存在`);
@@ -119,7 +119,7 @@ export class AdminUserService {
    */
   async create(createUserDto: CreateUserDto) {
     // 检查用户名是否已存在
-    const existingByUsername = await this.prisma.admin_users.findUnique({
+    const existingByUsername = await this.prisma.adminUsers.findUnique({
       where: { username: createUserDto.username },
     });
     if (existingByUsername) {
@@ -127,7 +127,7 @@ export class AdminUserService {
     }
 
     if (createUserDto.email) {
-      const existingByEmail = await this.prisma.admin_users.findUnique({
+      const existingByEmail = await this.prisma.adminUsers.findUnique({
         where: { email: createUserDto.email },
       });
       if (existingByEmail) {
@@ -138,7 +138,7 @@ export class AdminUserService {
     // 加密密码
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
 
-    const savedUser = await this.prisma.admin_users.create({
+    const savedUser = await this.prisma.adminUsers.create({
       data: {
         username: createUserDto.username,
         email: createUserDto.email,
@@ -160,7 +160,7 @@ export class AdminUserService {
    * 更新管理员用户
    */
   async update(id: string, updateUserDto: UpdateUserDto) {
-    const user = await this.prisma.admin_users.findUnique({ where: { id } });
+    const user = await this.prisma.adminUsers.findUnique({ where: { id } });
 
     if (!user) {
       throw new NotFoundException(`用户 #${id} 不存在`);
@@ -168,7 +168,7 @@ export class AdminUserService {
 
     // 检查邮箱是否被其他用户使用
     if (updateUserDto.email && updateUserDto.email !== user.email) {
-      const existingUser = await this.prisma.admin_users.findUnique({
+      const existingUser = await this.prisma.adminUsers.findUnique({
         where: { email: updateUserDto.email },
       });
       if (existingUser) {
@@ -176,7 +176,7 @@ export class AdminUserService {
       }
     }
 
-    const updatedUser = await this.prisma.admin_users.update({
+    const updatedUser = await this.prisma.adminUsers.update({
       where: { id },
       data: updateUserDto as any,
     });
@@ -189,7 +189,7 @@ export class AdminUserService {
    * 删除管理员用户
    */
   async remove(id: string) {
-    const user = await this.prisma.admin_users.findUnique({ where: { id } });
+    const user = await this.prisma.adminUsers.findUnique({ where: { id } });
 
     if (!user) {
       throw new NotFoundException(`用户 #${id} 不存在`);
@@ -200,7 +200,7 @@ export class AdminUserService {
       throw new BadRequestException('不能删除超级管理员账户');
     }
 
-    await this.prisma.admin_users.delete({ where: { id } });
+    await this.prisma.adminUsers.delete({ where: { id } });
 
     return { message: '用户删除成功' };
   }
@@ -211,7 +211,7 @@ export class AdminUserService {
   async resetPassword(id: string, resetPasswordDto: AdminResetPasswordDto) {
     // Prisma always returns all fields (no select:false concept like TypeORM),
     // so we can just findUnique — password is included by default in Prisma
-    const user = await this.prisma.admin_users.findUnique({ where: { id } });
+    const user = await this.prisma.adminUsers.findUnique({ where: { id } });
 
     if (!user) {
       throw new NotFoundException(`用户 #${id} 不存在`);
@@ -220,7 +220,7 @@ export class AdminUserService {
     // 加密新密码
     const hashedPassword = await bcrypt.hash(resetPasswordDto.newPassword, 10);
 
-    await this.prisma.admin_users.update({
+    await this.prisma.adminUsers.update({
       where: { id },
       data: { password: hashedPassword },
     });
@@ -232,7 +232,7 @@ export class AdminUserService {
    * 获取管理员用户的角色列表
    */
   async getUserRoles(userId: string) {
-    const user = await this.prisma.admin_users.findUnique({
+    const user = await this.prisma.adminUsers.findUnique({
       where: { id: userId },
     });
 
@@ -240,8 +240,8 @@ export class AdminUserService {
       throw new NotFoundException(`用户 #${userId} 不存在`);
     }
 
-    const userRoles = await this.prisma.user_roles.findMany({
-      where: { user_id: userId },
+    const userRoles = await this.prisma.userRoles.findMany({
+      where: { userId: userId },
       include: { roles: true },
     });
 
@@ -261,7 +261,7 @@ export class AdminUserService {
    * 为管理员用户分配角色
    */
   async assignRoles(userId: string, roleIds: string[]) {
-    const user = await this.prisma.admin_users.findUnique({
+    const user = await this.prisma.adminUsers.findUnique({
       where: { id: userId },
     });
 
@@ -280,14 +280,14 @@ export class AdminUserService {
     }
 
     // 删除现有的用户角色关联
-    await this.prisma.user_roles.deleteMany({ where: { user_id: userId } });
+    await this.prisma.userRoles.deleteMany({ where: { userId: userId } });
 
     // 创建新的用户角色关联
     if (roleIds.length > 0) {
-      await this.prisma.user_roles.createMany({
+      await this.prisma.userRoles.createMany({
         data: roleIds.map((roleId) => ({
-          user_id: userId,
-          role_id: roleId,
+          userId: userId,
+          roleId: roleId,
         })),
       });
     }

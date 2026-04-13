@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
-import { NutritionScoreService } from './nutrition-score.service';
+import {
+  DailyGoalProfile,
+  NutritionScoreService,
+} from './nutrition-score.service';
 import { UserProfileService } from '../../../user/app/services/profile/user-profile.service';
 import { FoodRecordService } from './food-record.service';
 import {
@@ -39,15 +42,15 @@ export class DailySummaryService {
   }> {
     const tz = await this.userProfileService.getTimezone(userId);
     const today = getUserLocalDate(tz);
-    const summary = await this.prisma.daily_summaries.findFirst({
-      where: { user_id: userId, date: new Date(today) },
+    const summary = await this.prisma.dailySummaries.findFirst({
+      where: { userId: userId, date: new Date(today) },
     });
 
     if (!summary) {
       // 实时计算
       const records = await this.foodRecordService.getTodayRecords(userId, tz);
       const totalCalories = records.reduce(
-        (sum, r) => sum + r.total_calories,
+        (sum, r) => sum + r.totalCalories,
         0,
       );
       return {
@@ -56,12 +59,12 @@ export class DailySummaryService {
         mealCount: records.length,
         remaining: 0,
         totalProtein: records.reduce(
-          (s, r) => s + (Number(r.total_protein) || 0),
+          (s, r) => s + (Number(r.totalProtein) || 0),
           0,
         ),
-        totalFat: records.reduce((s, r) => s + (Number(r.total_fat) || 0), 0),
+        totalFat: records.reduce((s, r) => s + (Number(r.totalFat) || 0), 0),
         totalCarbs: records.reduce(
-          (s, r) => s + (Number(r.total_carbs) || 0),
+          (s, r) => s + (Number(r.totalCarbs) || 0),
           0,
         ),
         avgQuality: 0,
@@ -74,21 +77,21 @@ export class DailySummaryService {
     }
 
     return {
-      totalCalories: summary.total_calories,
-      calorieGoal: summary.calorie_goal ?? null,
-      mealCount: summary.meal_count,
-      remaining: summary.calorie_goal
-        ? Math.max(0, summary.calorie_goal - summary.total_calories)
+      totalCalories: summary.totalCalories,
+      calorieGoal: summary.calorieGoal ?? null,
+      mealCount: summary.mealCount,
+      remaining: summary.calorieGoal
+        ? Math.max(0, summary.calorieGoal - summary.totalCalories)
         : 0,
-      totalProtein: Number(summary.total_protein) || 0,
-      totalFat: Number(summary.total_fat) || 0,
-      totalCarbs: Number(summary.total_carbs) || 0,
-      avgQuality: Number(summary.avg_quality) || 0,
-      avgSatiety: Number(summary.avg_satiety) || 0,
-      nutritionScore: Number(summary.nutrition_score) || 0,
-      proteinGoal: Number(summary.protein_goal) || 0,
-      fatGoal: Number(summary.fat_goal) || 0,
-      carbsGoal: Number(summary.carbs_goal) || 0,
+      totalProtein: Number(summary.totalProtein) || 0,
+      totalFat: Number(summary.totalFat) || 0,
+      totalCarbs: Number(summary.totalCarbs) || 0,
+      avgQuality: Number(summary.avgQuality) || 0,
+      avgSatiety: Number(summary.avgSatiety) || 0,
+      nutritionScore: Number(summary.nutritionScore) || 0,
+      proteinGoal: Number(summary.proteinGoal) || 0,
+      fatGoal: Number(summary.fatGoal) || 0,
+      carbsGoal: Number(summary.carbsGoal) || 0,
     };
   }
 
@@ -101,9 +104,9 @@ export class DailySummaryService {
     since.setDate(since.getDate() - days);
     const sinceDate = getUserLocalDate(tz, since);
 
-    return this.prisma.daily_summaries.findMany({
+    return this.prisma.dailySummaries.findMany({
       where: {
-        user_id: userId,
+        userId: userId,
         date: { gte: new Date(sinceDate) },
       },
       orderBy: { date: 'asc' },
@@ -124,19 +127,19 @@ export class DailySummaryService {
       endOfDay,
     );
 
-    const totalCalories = records.reduce((sum, r) => sum + r.total_calories, 0);
+    const totalCalories = records.reduce((sum, r) => sum + r.totalCalories, 0);
 
     // V6: 多维汇总
     const totalProtein = records.reduce(
-      (s, r) => s + (Number(r.total_protein) || 0),
+      (s, r) => s + (Number(r.totalProtein) || 0),
       0,
     );
     const totalFat = records.reduce(
-      (s, r) => s + (Number(r.total_fat) || 0),
+      (s, r) => s + (Number(r.totalFat) || 0),
       0,
     );
     const totalCarbs = records.reduce(
-      (s, r) => s + (Number(r.total_carbs) || 0),
+      (s, r) => s + (Number(r.totalCarbs) || 0),
       0,
     );
 
@@ -144,21 +147,17 @@ export class DailySummaryService {
     const totalCal = totalCalories || 1;
     const avgQuality =
       records.reduce(
-        (s, r) => s + (Number(r.avg_quality) || 0) * r.total_calories,
+        (s, r) => s + (Number(r.avgQuality) || 0) * r.totalCalories,
         0,
       ) / totalCal;
     const avgSatiety =
       records.reduce(
-        (s, r) => s + (Number(r.avg_satiety) || 0) * r.total_calories,
+        (s, r) => s + (Number(r.avgSatiety) || 0) * r.totalCalories,
         0,
       ) / totalCal;
 
     // 营养目标（从用户档案计算）
-    let profile: {
-      goal?: string;
-      weightKg?: number | null;
-      dailyCalorieGoal?: number | null;
-    } | null = null;
+    let profile: DailyGoalProfile | null = null;
     let goals = {
       calories: 2000,
       protein: 0,
@@ -189,34 +188,34 @@ export class DailySummaryService {
       goalType,
     );
 
-    let summary = await this.prisma.daily_summaries.findFirst({
-      where: { user_id: userId, date: new Date(date) },
+    let summary = await this.prisma.dailySummaries.findFirst({
+      where: { userId: userId, date: new Date(date) },
     });
 
     const summaryData = {
-      total_calories: totalCalories,
-      meal_count: records.length,
-      total_protein: totalProtein,
-      total_fat: totalFat,
-      total_carbs: totalCarbs,
-      avg_quality: Math.round(avgQuality * 10) / 10,
-      avg_satiety: Math.round(avgSatiety * 10) / 10,
-      nutrition_score: scoreResult.score,
-      protein_goal: goals.protein,
-      fat_goal: goals.fat,
-      carbs_goal: goals.carbs,
-      calorie_goal: goals.calories,
+      totalCalories: totalCalories,
+      mealCount: records.length,
+      totalProtein: totalProtein,
+      totalFat: totalFat,
+      totalCarbs: totalCarbs,
+      avgQuality: Math.round(avgQuality * 10) / 10,
+      avgSatiety: Math.round(avgSatiety * 10) / 10,
+      nutritionScore: scoreResult.score,
+      proteinGoal: goals.protein,
+      fatGoal: goals.fat,
+      carbsGoal: goals.carbs,
+      calorieGoal: goals.calories,
     };
 
     if (summary) {
-      await this.prisma.daily_summaries.update({
+      await this.prisma.dailySummaries.update({
         where: { id: summary.id },
         data: summaryData,
       });
     } else {
-      await this.prisma.daily_summaries.create({
+      await this.prisma.dailySummaries.create({
         data: {
-          user_id: userId,
+          userId: userId,
           date: new Date(date),
           ...summaryData,
         },

@@ -15,11 +15,11 @@ const prisma = new PrismaClient();
 
 /** 判断某天是否达标: 有记录 && 热量在目标的 80%-110% */
 function isCompliantDay(summary: {
-  calorie_goal: number | null;
-  total_calories: number;
+  calorieGoal: number | null;
+  totalCalories: number;
 }): boolean {
-  const goal = summary.calorie_goal || 2000;
-  const actual = summary.total_calories || 0;
+  const goal = summary.calorieGoal || 2000;
+  const actual = summary.totalCalories || 0;
   return actual > 0 && actual >= goal * 0.8 && actual <= goal * 1.1;
 }
 
@@ -27,30 +27,30 @@ async function recalc() {
   try {
     console.log('Database connected');
 
-    const profiles = await prisma.user_behavior_profiles.findMany();
+    const profiles = await prisma.userBehaviorProfiles.findMany();
     console.log(`Found ${profiles.length} behavior profiles to recalculate`);
 
     let updatedCount = 0;
 
     for (const profile of profiles) {
-      const userId = profile.user_id;
+      const userId = profile.userId;
 
       // 获取该用户所有 DailySummary，按日期升序
-      const summaries = await prisma.daily_summaries.findMany({
-        where: { user_id: userId },
+      const summaries = await prisma.dailySummaries.findMany({
+        where: { userId: userId },
         orderBy: { date: 'asc' },
       });
 
       if (summaries.length === 0) {
         // 无记录，全部归零
-        await prisma.user_behavior_profiles.update({
+        await prisma.userBehaviorProfiles.update({
           where: { id: profile.id },
           data: {
-            streak_days: 0,
-            longest_streak: 0,
-            healthy_records: 0,
-            avg_compliance_rate: 0,
-            last_streak_date: null,
+            streakDays: 0,
+            longestStreak: 0,
+            healthyRecords: 0,
+            avgComplianceRate: 0,
+            lastStreakDate: null,
           },
         });
         updatedCount++;
@@ -103,14 +103,14 @@ async function recalc() {
         .toISOString()
         .slice(0, 10);
 
-      await prisma.user_behavior_profiles.update({
+      await prisma.userBehaviorProfiles.update({
         where: { id: profile.id },
         data: {
-          streak_days: currentStreak,
-          longest_streak: longestStreak,
-          healthy_records: healthyDays,
-          avg_compliance_rate: avgComplianceRate,
-          last_streak_date: lastStreakDate,
+          streakDays: currentStreak,
+          longestStreak: longestStreak,
+          healthyRecords: healthyDays,
+          avgComplianceRate: avgComplianceRate,
+          lastStreakDate: lastStreakDate,
         },
       });
       updatedCount++;

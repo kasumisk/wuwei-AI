@@ -60,8 +60,8 @@ export class AnalysisTrackingListener {
   private async updateBehaviorProfile(
     event: AnalysisSubmittedEvent,
   ): Promise<void> {
-    const profile = await this.prisma.user_behavior_profiles.findUnique({
-      where: { user_id: event.userId },
+    const profile = await this.prisma.userBehaviorProfiles.findUnique({
+      where: { userId: event.userId },
     });
 
     if (!profile) {
@@ -72,7 +72,7 @@ export class AnalysisTrackingListener {
     // 读取现有 engagement_metrics（存储在 replacement_patterns JSON 的 _engagement 子键中）
     // 注意：V6.2 暂借用 replacement_patterns JSON 字段，未来迁移后移至独立列
     const replacementData =
-      (profile.replacement_patterns as Record<string, unknown>) ?? {};
+      (profile.replacementPatterns as Record<string, unknown>) ?? {};
     const metrics =
       (replacementData._engagement as Record<string, unknown>) ?? {};
     const analysisCount = ((metrics.analysisCount as number) ?? 0) + 1;
@@ -82,10 +82,10 @@ export class AnalysisTrackingListener {
       (typeDistribution[event.inputType] ?? 0) + 1;
 
     // 更新
-    await this.prisma.user_behavior_profiles.update({
-      where: { user_id: event.userId },
+    await this.prisma.userBehaviorProfiles.update({
+      where: { userId: event.userId },
       data: {
-        replacement_patterns: {
+        replacementPatterns: {
           ...(replacementData as object),
           _engagement: {
             analysisCount,

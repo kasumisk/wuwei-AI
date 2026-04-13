@@ -18,7 +18,7 @@ import {
   ProfileUpdatedEvent,
 } from '../../../../../core/events/domain-events';
 import { ProfileChangeType, ProfileChangeSource } from '../../../user.types';
-import { profile_change_log as ProfileChangeLog } from '@prisma/client';
+import { ProfileChangeLog } from '@prisma/client';
 import { PrismaService } from '../../../../../core/prisma/prisma.service';
 
 // ─── 查询 DTO ───
@@ -84,13 +84,13 @@ export class ProfileChangeLogService {
       }
 
       await this.createLog({
-        user_id: event.userId,
-        change_type: event.updateType as ProfileChangeType,
+        userId: event.userId,
+        changeType: event.updateType as ProfileChangeType,
         source: (event.source as ProfileChangeSource) || 'event',
-        changed_fields: event.changedFields as any,
-        before_values: (event.beforeValues || {}) as any,
-        after_values: (event.afterValues || {}) as any,
-        trigger_event: event.eventName,
+        changedFields: event.changedFields as any,
+        beforeValues: (event.beforeValues || {}) as any,
+        afterValues: (event.afterValues || {}) as any,
+        triggerEvent: event.eventName,
         reason: event.reason || null,
         metadata: null,
       });
@@ -114,20 +114,20 @@ export class ProfileChangeLogService {
    * 自动计算下一个版本号（用户级隔离）。
    */
   async createLog(
-    params: Omit<ProfileChangeLog, 'id' | 'version' | 'created_at'>,
+    params: Omit<ProfileChangeLog, 'id' | 'version' | 'createdAt'>,
   ): Promise<ProfileChangeLog> {
-    const nextVersion = await this.getNextVersion(params.user_id);
+    const nextVersion = await this.getNextVersion(params.userId);
 
-    const log = await this.prisma.profile_change_log.create({
+    const log = await this.prisma.profileChangeLog.create({
       data: {
-        user_id: params.user_id,
+        userId: params.userId,
         version: nextVersion,
-        change_type: params.change_type,
+        changeType: params.changeType,
         source: params.source,
-        changed_fields: params.changed_fields as any,
-        before_values: params.before_values as any,
-        after_values: params.after_values as any,
-        trigger_event: params.trigger_event,
+        changedFields: params.changedFields as any,
+        beforeValues: params.beforeValues as any,
+        afterValues: params.afterValues as any,
+        triggerEvent: params.triggerEvent,
         reason: params.reason,
         metadata: params.metadata as any,
       },
@@ -152,27 +152,27 @@ export class ProfileChangeLogService {
     const skip = (page - 1) * limit;
 
     // 构建查询条件
-    const where: any = { user_id: query.userId };
+    const where: any = { userId: query.userId };
 
     if (query.changeType) {
-      where.change_type = query.changeType;
+      where.changeType = query.changeType;
     }
 
     if (query.startDate && query.endDate) {
-      where.created_at = {
+      where.createdAt = {
         gte: new Date(query.startDate),
         lte: new Date(query.endDate),
       };
     }
 
     const [items, total] = await Promise.all([
-      this.prisma.profile_change_log.findMany({
+      this.prisma.profileChangeLog.findMany({
         where,
         orderBy: { version: 'desc' },
         skip,
         take: limit,
       }),
-      this.prisma.profile_change_log.count({ where }),
+      this.prisma.profileChangeLog.count({ where }),
     ]);
 
     const latestVersion = await this.getLatestVersion(query.userId);
@@ -195,8 +195,8 @@ export class ProfileChangeLogService {
     userId: string,
     version: number,
   ): Promise<ProfileChangeLog | null> {
-    const log = await this.prisma.profile_change_log.findFirst({
-      where: { user_id: userId, version },
+    const log = await this.prisma.profileChangeLog.findFirst({
+      where: { userId: userId, version },
     });
     return log as any;
   }
@@ -210,9 +210,9 @@ export class ProfileChangeLogService {
     userId: string,
     version: number,
   ): Promise<ProfileChangeLog[]> {
-    const logs = await this.prisma.profile_change_log.findMany({
+    const logs = await this.prisma.profileChangeLog.findMany({
       where: {
-        user_id: userId,
+        userId: userId,
         version: { lte: version },
       },
       orderBy: { version: 'asc' },
@@ -224,8 +224,8 @@ export class ProfileChangeLogService {
    * 获取用户最新版本号
    */
   async getLatestVersion(userId: string): Promise<number> {
-    const result = await this.prisma.profile_change_log.aggregate({
-      where: { user_id: userId },
+    const result = await this.prisma.profileChangeLog.aggregate({
+      where: { userId: userId },
       _max: { version: true },
     });
 
@@ -243,36 +243,36 @@ export class ProfileChangeLogService {
     changesByType: Record<string, number>;
     lastChangeAt: Date | null;
   }> {
-    const totalChanges = await this.prisma.profile_change_log.count({
-      where: { user_id: userId },
+    const totalChanges = await this.prisma.profileChangeLog.count({
+      where: { userId: userId },
     });
 
     const latestVersion = await this.getLatestVersion(userId);
 
     // 按类型统计变更次数
-    const typeStats = await this.prisma.profile_change_log.groupBy({
-      by: ['change_type'],
-      where: { user_id: userId },
+    const typeStats = await this.prisma.profileChangeLog.groupBy({
+      by: ['changeType'],
+      where: { userId: userId },
       _count: { _all: true },
     });
 
     const changesByType: Record<string, number> = {};
     for (const stat of typeStats) {
-      changesByType[stat.change_type] = stat._count._all;
+      changesByType[stat.changeType] = stat._count._all;
     }
 
     // 最后一次变更时间
-    const lastLog = await this.prisma.profile_change_log.findFirst({
-      where: { user_id: userId },
-      orderBy: { created_at: 'desc' },
-      select: { created_at: true },
+    const lastLog = await this.prisma.profileChangeLog.findFirst({
+      where: { userId: userId },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
     });
 
     return {
       totalChanges,
       latestVersion,
       changesByType,
-      lastChangeAt: lastLog?.created_at || null,
+      lastChangeAt: lastLog?.createdAt || null,
     };
   }
 

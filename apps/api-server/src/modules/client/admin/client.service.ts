@@ -40,7 +40,7 @@ export class ClientService {
   async findAll(query: GetClientsQueryDto) {
     const { page = 1, pageSize = 10, keyword, status } = query;
 
-    const where: Prisma.clientsWhereInput = {};
+    const where: Prisma.ClientsWhereInput = {};
 
     // 搜索条件
     if (keyword) {
@@ -62,17 +62,17 @@ export class ClientService {
         where,
         skip,
         take: pageSize,
-        orderBy: { created_at: 'desc' },
+        orderBy: { createdAt: 'desc' },
       }),
       this.prisma.clients.count({ where }),
     ]);
 
     // 隐藏 API Secret
     const sanitizedList = list.map((client) => {
-      const { api_secret, ...rest } = client;
+      const { apiSecret, ...rest } = client;
       return {
         ...rest,
-        api_secret: '********', // 隐藏敏感信息
+        apiSecret: '********', // 隐藏敏感信息
       };
     });
 
@@ -91,17 +91,17 @@ export class ClientService {
   async findOne(id: string) {
     const client = await this.prisma.clients.findUnique({
       where: { id },
-      include: { client_capability_permissions: true },
+      include: { clientCapabilityPermissions: true },
     });
 
     if (!client) {
       throw new NotFoundException(`客户端 #${id} 不存在`);
     }
 
-    const { api_secret, ...rest } = client;
+    const { apiSecret, ...rest } = client;
     return {
       ...rest,
-      api_secret: '********',
+      apiSecret: '********',
     };
   }
 
@@ -114,12 +114,14 @@ export class ClientService {
     const apiSecret = this.generateApiSecret();
     const hashedSecret = await bcrypt.hash(apiSecret, 10);
 
+    const { metadata, quotaConfig, ...restDto } = createClientDto;
     const savedClient = await this.prisma.clients.create({
       data: {
-        ...createClientDto,
-        metadata: createClientDto.metadata as any,
-        api_key: apiKey,
-        api_secret: hashedSecret,
+        ...restDto,
+        metadata: metadata as any,
+        quotaConfig: quotaConfig as any,
+        apiKey: apiKey,
+        apiSecret: hashedSecret,
         status: 'active',
       },
     });
@@ -127,7 +129,7 @@ export class ClientService {
     return {
       client: {
         ...savedClient,
-        api_secret: '********',
+        apiSecret: '********',
       },
       apiKey,
       apiSecret, // 仅在创建时返回明文 Secret
@@ -144,18 +146,20 @@ export class ClientService {
       throw new NotFoundException(`客户端 #${id} 不存在`);
     }
 
+    const { metadata, quotaConfig, ...restDto } = updateClientDto;
     const updatedClient = await this.prisma.clients.update({
       where: { id },
       data: {
-        ...updateClientDto,
-        metadata: updateClientDto.metadata as any,
+        ...restDto,
+        metadata: metadata as any,
+        quotaConfig: quotaConfig as any,
       },
     });
 
-    const { api_secret, ...rest } = updatedClient;
+    const { apiSecret, ...rest } = updatedClient;
     return {
       ...rest,
-      api_secret: '********',
+      apiSecret: '********',
     };
   }
 
@@ -189,11 +193,11 @@ export class ClientService {
 
     await this.prisma.clients.update({
       where: { id },
-      data: { api_secret: hashedSecret },
+      data: { apiSecret: hashedSecret },
     });
 
     return {
-      apiKey: client.api_key,
+      apiKey: client.apiKey,
       apiSecret: newApiSecret, // 返回新的明文 Secret
       message: 'API Secret 已重新生成，请妥善保存',
     };
@@ -203,17 +207,17 @@ export class ClientService {
    * 根据 API Key 查找客户端
    */
   async findByApiKey(apiKey: string) {
-    return this.prisma.clients.findFirst({ where: { api_key: apiKey } });
+    return this.prisma.clients.findFirst({ where: { apiKey: apiKey } });
   }
 
   /**
    * 验证 API Secret
    */
   async validateApiSecret(
-    client: { api_secret: string },
+    client: { apiSecret: string },
     apiSecret: string,
   ): Promise<boolean> {
-    return bcrypt.compare(apiSecret, client.api_secret);
+    return bcrypt.compare(apiSecret, client.apiSecret);
   }
 
   /**
@@ -232,17 +236,17 @@ export class ClientService {
     const { startDate, endDate } = query;
 
     // 总请求数
-    const totalRequests = await this.prisma.usage_records.count({
+    const totalRequests = await this.prisma.usageRecords.count({
       where: {
-        client_id: clientId,
+        clientId: clientId,
         timestamp: { gte: new Date(startDate), lte: new Date(endDate) },
       },
     });
 
     // 成功请求数
-    const successRequests = await this.prisma.usage_records.count({
+    const successRequests = await this.prisma.usageRecords.count({
       where: {
-        client_id: clientId,
+        clientId: clientId,
         timestamp: { gte: new Date(startDate), lte: new Date(endDate) },
         status: 'success',
       },

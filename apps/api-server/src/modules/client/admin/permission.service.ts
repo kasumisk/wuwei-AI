@@ -30,9 +30,9 @@ export class PermissionService {
     }
 
     const permissions =
-      await this.prisma.client_capability_permissions.findMany({
-        where: { client_id: clientId },
-        orderBy: { created_at: 'desc' },
+      await this.prisma.clientCapabilityPermissions.findMany({
+        where: { clientId: clientId },
+        orderBy: { createdAt: 'desc' },
       });
 
     return permissions;
@@ -43,7 +43,7 @@ export class PermissionService {
    */
   async findOne(permissionId: string) {
     const permission =
-      await this.prisma.client_capability_permissions.findUnique({
+      await this.prisma.clientCapabilityPermissions.findUnique({
         where: { id: permissionId },
       });
 
@@ -70,10 +70,10 @@ export class PermissionService {
     }
 
     // 检查是否已存在相同的权限
-    const existing = await this.prisma.client_capability_permissions.findFirst({
+    const existing = await this.prisma.clientCapabilityPermissions.findFirst({
       where: {
-        client_id: createPermissionDto.clientId,
-        capability_type: createPermissionDto.capabilityType,
+        clientId: createPermissionDto.clientId,
+        capabilityType: createPermissionDto.capabilityType,
       },
     });
 
@@ -83,17 +83,17 @@ export class PermissionService {
       );
     }
 
-    return await this.prisma.client_capability_permissions.create({
+    return await this.prisma.clientCapabilityPermissions.create({
       data: {
-        client_id: createPermissionDto.clientId,
-        capability_type: createPermissionDto.capabilityType,
+        clientId: createPermissionDto.clientId,
+        capabilityType: createPermissionDto.capabilityType,
         enabled: createPermissionDto.enabled,
-        rate_limit: createPermissionDto.rateLimit,
-        quota_limit: createPermissionDto.quotaLimit,
-        preferred_provider: createPermissionDto.preferredProvider,
-        allowed_providers:
+        rateLimit: createPermissionDto.rateLimit,
+        quotaLimit: createPermissionDto.quotaLimit,
+        preferredProvider: createPermissionDto.preferredProvider,
+        allowedProviders:
           createPermissionDto.allowedProviders?.join(',') ?? null,
-        allowed_models: createPermissionDto.allowedModels?.join(',') ?? null,
+        allowedModels: createPermissionDto.allowedModels?.join(',') ?? null,
         config: createPermissionDto.config,
       },
     });
@@ -104,7 +104,7 @@ export class PermissionService {
    */
   async update(permissionId: string, updatePermissionDto: UpdatePermissionDto) {
     const permission =
-      await this.prisma.client_capability_permissions.findUnique({
+      await this.prisma.clientCapabilityPermissions.findUnique({
         where: { id: permissionId },
       });
 
@@ -127,24 +127,24 @@ export class PermissionService {
       updateData.enabled = updatePermissionDto.enabled;
     }
     if (updatePermissionDto.rateLimit !== undefined) {
-      updateData.rate_limit = updatePermissionDto.rateLimit;
+      updateData.rateLimit = updatePermissionDto.rateLimit;
     }
     if (updatePermissionDto.quotaLimit !== undefined) {
-      updateData.quota_limit = updatePermissionDto.quotaLimit;
+      updateData.quotaLimit = updatePermissionDto.quotaLimit;
     }
     if (updatePermissionDto.preferredProvider !== undefined) {
-      updateData.preferred_provider = updatePermissionDto.preferredProvider;
+      updateData.preferredProvider = updatePermissionDto.preferredProvider;
     }
     if (updatePermissionDto.allowedProviders !== undefined) {
-      updateData.allowed_providers =
+      updateData.allowedProviders =
         updatePermissionDto.allowedProviders?.join(',') ?? null;
     }
     if (updatePermissionDto.allowedModels !== undefined) {
-      updateData.allowed_models =
+      updateData.allowedModels =
         updatePermissionDto.allowedModels?.join(',') ?? null;
     }
 
-    return await this.prisma.client_capability_permissions.update({
+    return await this.prisma.clientCapabilityPermissions.update({
       where: { id: permissionId },
       data: updateData,
     });
@@ -155,7 +155,7 @@ export class PermissionService {
    */
   async remove(permissionId: string) {
     const permission =
-      await this.prisma.client_capability_permissions.findUnique({
+      await this.prisma.clientCapabilityPermissions.findUnique({
         where: { id: permissionId },
       });
 
@@ -163,7 +163,7 @@ export class PermissionService {
       throw new NotFoundException(`权限 #${permissionId} 不存在`);
     }
 
-    await this.prisma.client_capability_permissions.delete({
+    await this.prisma.clientCapabilityPermissions.delete({
       where: { id: permissionId },
     });
 
@@ -194,10 +194,10 @@ export class PermissionService {
       try {
         // 查找现有权限
         const permission =
-          await this.prisma.client_capability_permissions.findFirst({
+          await this.prisma.clientCapabilityPermissions.findFirst({
             where: {
-              client_id: clientId,
-              capability_type: item.capabilityType,
+              clientId: clientId,
+              capabilityType: item.capabilityType,
             },
           });
 
@@ -205,12 +205,12 @@ export class PermissionService {
           // 更新现有权限
           const updateData: any = { enabled: item.enabled };
           if (item.rateLimit !== undefined) {
-            updateData.rate_limit = item.rateLimit;
+            updateData.rateLimit = item.rateLimit;
           }
           if (item.quotaLimit !== undefined) {
-            updateData.quota_limit = item.quotaLimit;
+            updateData.quotaLimit = item.quotaLimit;
           }
-          await this.prisma.client_capability_permissions.update({
+          await this.prisma.clientCapabilityPermissions.update({
             where: { id: permission.id },
             data: updateData,
           });
@@ -221,13 +221,13 @@ export class PermissionService {
           });
         } else {
           // 创建新权限
-          await this.prisma.client_capability_permissions.create({
+          await this.prisma.clientCapabilityPermissions.create({
             data: {
-              client_id: clientId,
-              capability_type: item.capabilityType,
+              clientId: clientId,
+              capabilityType: item.capabilityType,
               enabled: item.enabled,
-              rate_limit: item.rateLimit || 60,
-              quota_limit: item.quotaLimit,
+              rateLimit: item.rateLimit || 60,
+              quotaLimit: item.quotaLimit,
             },
           });
           results.push({
@@ -262,10 +262,10 @@ export class PermissionService {
     capabilityType: string,
   ): Promise<boolean> {
     const permission =
-      await this.prisma.client_capability_permissions.findFirst({
+      await this.prisma.clientCapabilityPermissions.findFirst({
         where: {
-          client_id: clientId,
-          capability_type: capabilityType,
+          clientId: clientId,
+          capabilityType: capabilityType,
           enabled: true,
         },
       });
@@ -278,10 +278,10 @@ export class PermissionService {
    */
   async getPermissionConfig(clientId: string, capabilityType: string) {
     const permission =
-      await this.prisma.client_capability_permissions.findFirst({
+      await this.prisma.clientCapabilityPermissions.findFirst({
         where: {
-          client_id: clientId,
-          capability_type: capabilityType,
+          clientId: clientId,
+          capabilityType: capabilityType,
         },
       });
 

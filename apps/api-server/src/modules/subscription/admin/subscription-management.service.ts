@@ -5,12 +5,12 @@ import {
 } from '@nestjs/common';
 import {
   Prisma,
-  subscription_plan as SubscriptionPlan,
-  subscription as Subscription,
-  payment_records as PaymentRecord,
-  usage_quota as UsageQuota,
-  subscription_trigger_logs as SubscriptionTriggerLog,
-  app_users as AppUser,
+  SubscriptionPlan,
+  Subscription,
+  PaymentRecords as PaymentRecord,
+  UsageQuota,
+  SubscriptionTriggerLogs as SubscriptionTriggerLog,
+  AppUsers as AppUser,
 } from '@prisma/client';
 import {
   SubscriptionStatus,
@@ -47,19 +47,19 @@ export class SubscriptionManagementService {
       where.tier = tier;
     }
     if (isActive !== undefined) {
-      where.is_active = isActive;
+      where.isActive = isActive;
     }
 
     const skip = (page - 1) * pageSize;
 
     const [list, total] = await Promise.all([
-      this.prisma.subscription_plan.findMany({
+      this.prisma.subscriptionPlan.findMany({
         where,
-        orderBy: [{ sort_order: 'asc' }, { created_at: 'desc' }],
+        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
         skip,
         take: pageSize,
       }),
-      this.prisma.subscription_plan.count({ where }),
+      this.prisma.subscriptionPlan.count({ where }),
     ]);
 
     return {
@@ -75,18 +75,18 @@ export class SubscriptionManagementService {
    * 创建订阅计划
    */
   async createPlan(dto: CreateSubscriptionPlanDto) {
-    return this.prisma.subscription_plan.create({
+    return this.prisma.subscriptionPlan.create({
       data: {
         name: dto.name,
         description: dto.description ?? null,
         tier: dto.tier,
-        billing_cycle: dto.billingCycle,
-        price_cents: dto.priceCents,
+        billingCycle: dto.billingCycle,
+        priceCents: dto.priceCents,
         currency: dto.currency ?? 'CNY',
         entitlements: dto.entitlements as any,
-        apple_product_id: dto.appleProductId ?? null,
-        wechat_product_id: dto.wechatProductId ?? null,
-        sort_order: dto.sortOrder ?? 0,
+        appleProductId: dto.appleProductId ?? null,
+        wechatProductId: dto.wechatProductId ?? null,
+        sortOrder: dto.sortOrder ?? 0,
       },
     });
   }
@@ -95,7 +95,7 @@ export class SubscriptionManagementService {
    * 更新订阅计划
    */
   async updatePlan(id: string, dto: UpdateSubscriptionPlanDto) {
-    const plan = await this.prisma.subscription_plan.findUnique({
+    const plan = await this.prisma.subscriptionPlan.findUnique({
       where: { id },
     });
 
@@ -109,19 +109,19 @@ export class SubscriptionManagementService {
     if (dto.description !== undefined) updateData.description = dto.description;
     if (dto.tier !== undefined) updateData.tier = dto.tier;
     if (dto.billingCycle !== undefined)
-      updateData.billing_cycle = dto.billingCycle;
-    if (dto.priceCents !== undefined) updateData.price_cents = dto.priceCents;
+      updateData.billingCycle = dto.billingCycle;
+    if (dto.priceCents !== undefined) updateData.priceCents = dto.priceCents;
     if (dto.currency !== undefined) updateData.currency = dto.currency;
     if (dto.entitlements !== undefined)
       updateData.entitlements = dto.entitlements;
     if (dto.appleProductId !== undefined)
-      updateData.apple_product_id = dto.appleProductId;
+      updateData.appleProductId = dto.appleProductId;
     if (dto.wechatProductId !== undefined)
-      updateData.wechat_product_id = dto.wechatProductId;
-    if (dto.sortOrder !== undefined) updateData.sort_order = dto.sortOrder;
-    if (dto.isActive !== undefined) updateData.is_active = dto.isActive;
+      updateData.wechatProductId = dto.wechatProductId;
+    if (dto.sortOrder !== undefined) updateData.sortOrder = dto.sortOrder;
+    if (dto.isActive !== undefined) updateData.isActive = dto.isActive;
 
-    return this.prisma.subscription_plan.update({
+    return this.prisma.subscriptionPlan.update({
       where: { id },
       data: updateData,
     });
@@ -146,21 +146,21 @@ export class SubscriptionManagementService {
 
     const where: any = {};
     if (userId) {
-      where.user_id = userId;
+      where.userId = userId;
     }
     if (status) {
       where.status = status;
     }
     if (paymentChannel) {
-      where.payment_channel = paymentChannel;
+      where.paymentChannel = paymentChannel;
     }
     if (planId) {
-      where.plan_id = planId;
+      where.planId = planId;
     }
     if (startDate || endDate) {
-      where.created_at = {};
-      if (startDate) where.created_at.gte = startDate;
-      if (endDate) where.created_at.lte = endDate;
+      where.createdAt = {};
+      if (startDate) where.createdAt.gte = startDate;
+      if (endDate) where.createdAt.lte = endDate;
     }
 
     const skip = (page - 1) * pageSize;
@@ -168,8 +168,8 @@ export class SubscriptionManagementService {
     const [rawList, total] = await Promise.all([
       this.prisma.subscription.findMany({
         where,
-        include: { subscription_plan: true },
-        orderBy: { created_at: 'desc' },
+        include: { subscriptionPlan: true },
+        orderBy: { createdAt: 'desc' },
         skip,
         take: pageSize,
       }),
@@ -177,10 +177,10 @@ export class SubscriptionManagementService {
     ]);
 
     // 批量查询用户信息
-    const userIds = [...new Set(rawList.map((s) => s.user_id))];
+    const userIds = [...new Set(rawList.map((s) => s.userId))];
     const users =
       userIds.length > 0
-        ? await this.prisma.app_users.findMany({
+        ? await this.prisma.appUsers.findMany({
             where: { id: { in: userIds } },
             select: { id: true, nickname: true, avatar: true, email: true },
           })
@@ -190,8 +190,8 @@ export class SubscriptionManagementService {
 
     const list = rawList.map((sub) => ({
       ...sub,
-      plan: sub.subscription_plan,
-      user: userMap.get(sub.user_id) ?? null,
+      plan: sub.subscriptionPlan,
+      user: userMap.get(sub.userId) ?? null,
     }));
 
     return {
@@ -209,7 +209,7 @@ export class SubscriptionManagementService {
   async getSubscriptionDetail(id: string) {
     const subscription = await this.prisma.subscription.findUnique({
       where: { id },
-      include: { subscription_plan: true },
+      include: { subscriptionPlan: true },
     });
 
     if (!subscription) {
@@ -217,26 +217,26 @@ export class SubscriptionManagementService {
     }
 
     // 查询用户信息
-    const user = await this.prisma.app_users.findUnique({
-      where: { id: subscription.user_id },
+    const user = await this.prisma.appUsers.findUnique({
+      where: { id: subscription.userId },
       select: { id: true, nickname: true, avatar: true, email: true },
     });
 
     // 查询关联支付记录
-    const paymentRecords = await this.prisma.payment_records.findMany({
-      where: { subscription_id: id },
-      orderBy: { created_at: 'desc' },
+    const paymentRecords = await this.prisma.paymentRecords.findMany({
+      where: { subscriptionId: id },
+      orderBy: { createdAt: 'desc' },
     });
 
     // 查询用户用量配额
-    const usageQuotas = await this.prisma.usage_quota.findMany({
-      where: { user_id: subscription.user_id },
+    const usageQuotas = await this.prisma.usageQuota.findMany({
+      where: { userId: subscription.userId },
       orderBy: { feature: 'asc' },
     });
 
     return {
       ...subscription,
-      plan: subscription.subscription_plan,
+      plan: subscription.subscriptionPlan,
       user,
       paymentRecords,
       usageQuotas,
@@ -256,15 +256,15 @@ export class SubscriptionManagementService {
     }
 
     const baseDate =
-      subscription.expires_at > new Date()
-        ? subscription.expires_at
+      subscription.expiresAt > new Date()
+        ? subscription.expiresAt
         : new Date();
 
     const newExpiresAt = new Date(baseDate);
     newExpiresAt.setDate(newExpiresAt.getDate() + dto.extendDays);
 
     const updateData: any = {
-      expires_at: newExpiresAt,
+      expiresAt: newExpiresAt,
     };
 
     // 如果订阅已过期，自动恢复为活跃状态
@@ -290,7 +290,7 @@ export class SubscriptionManagementService {
       throw new NotFoundException(`订阅记录 #${id} 不存在`);
     }
 
-    const newPlan = await this.prisma.subscription_plan.findUnique({
+    const newPlan = await this.prisma.subscriptionPlan.findUnique({
       where: { id: dto.newPlanId },
     });
 
@@ -300,7 +300,7 @@ export class SubscriptionManagementService {
 
     return this.prisma.subscription.update({
       where: { id },
-      data: { plan_id: dto.newPlanId },
+      data: { planId: dto.newPlanId },
     });
   }
 
@@ -323,7 +323,7 @@ export class SubscriptionManagementService {
 
     const where: any = {};
     if (userId) {
-      where.user_id = userId;
+      where.userId = userId;
     }
     if (status) {
       where.status = status;
@@ -332,31 +332,31 @@ export class SubscriptionManagementService {
       where.channel = channel;
     }
     if (startDate || endDate) {
-      where.created_at = {};
-      if (startDate) where.created_at.gte = startDate;
-      if (endDate) where.created_at.lte = endDate;
+      where.createdAt = {};
+      if (startDate) where.createdAt.gte = startDate;
+      if (endDate) where.createdAt.lte = endDate;
     }
     if (orderNo) {
-      where.order_no = { contains: orderNo };
+      where.orderNo = { contains: orderNo };
     }
 
     const skip = (page - 1) * pageSize;
 
     const [rawList, total] = await Promise.all([
-      this.prisma.payment_records.findMany({
+      this.prisma.paymentRecords.findMany({
         where,
-        orderBy: { created_at: 'desc' },
+        orderBy: { createdAt: 'desc' },
         skip,
         take: pageSize,
       }),
-      this.prisma.payment_records.count({ where }),
+      this.prisma.paymentRecords.count({ where }),
     ]);
 
     // 批量查询用户信息
-    const userIds = [...new Set(rawList.map((r) => r.user_id))];
+    const userIds = [...new Set(rawList.map((r) => r.userId))];
     const users =
       userIds.length > 0
-        ? await this.prisma.app_users.findMany({
+        ? await this.prisma.appUsers.findMany({
             where: { id: { in: userIds } },
             select: { id: true, nickname: true, avatar: true, email: true },
           })
@@ -366,7 +366,7 @@ export class SubscriptionManagementService {
 
     const list = rawList.map((record) => ({
       ...record,
-      user: userMap.get(record.user_id) ?? null,
+      user: userMap.get(record.userId) ?? null,
     }));
 
     return {
@@ -386,12 +386,12 @@ export class SubscriptionManagementService {
   async getUserUsageQuotas(query: GetUsageQuotasQueryDto) {
     const { userId, feature } = query;
 
-    const where: any = { user_id: userId };
+    const where: any = { userId: userId };
     if (feature) {
       where.feature = feature;
     }
 
-    const list = await this.prisma.usage_quota.findMany({
+    const list = await this.prisma.usageQuota.findMany({
       where,
       orderBy: { feature: 'asc' },
     });
@@ -403,7 +403,7 @@ export class SubscriptionManagementService {
    * 重置用量配额（将 used 归零）
    */
   async resetUsageQuota(quotaId: string) {
-    const quota = await this.prisma.usage_quota.findUnique({
+    const quota = await this.prisma.usageQuota.findUnique({
       where: { id: quotaId },
     });
 
@@ -411,7 +411,7 @@ export class SubscriptionManagementService {
       throw new NotFoundException(`用量配额记录 #${quotaId} 不存在`);
     }
 
-    return this.prisma.usage_quota.update({
+    return this.prisma.usageQuota.update({
       where: { id: quotaId },
       data: { used: 0 },
     });
@@ -463,7 +463,7 @@ export class SubscriptionManagementService {
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
     const recentNewSubscribers = await this.prisma.subscription.count({
-      where: { created_at: { gte: sevenDaysAgo } },
+      where: { createdAt: { gte: sevenDaysAgo } },
     });
 
     // 各状态订阅统计

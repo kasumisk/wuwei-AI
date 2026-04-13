@@ -140,14 +140,14 @@ export class CacheWarmupService implements OnApplicationBootstrap {
       since.setDate(since.getDate() - ACTIVE_WINDOW_DAYS);
 
       // 查询最近活跃用户（有食物记录的用户，去重取 top N）
-      const activeUsers = await this.prisma.food_records.findMany({
+      const activeUsers = await this.prisma.foodRecords.findMany({
         where: {
-          recorded_at: { gte: since },
+          recordedAt: { gte: since },
         },
-        select: { user_id: true },
-        distinct: ['user_id'],
+        select: { userId: true },
+        distinct: ['userId'],
         take: MAX_WARMUP_USERS,
-        orderBy: { recorded_at: 'desc' },
+        orderBy: { recordedAt: 'desc' },
       });
 
       const queryElapsed = Date.now() - startTime;
@@ -164,7 +164,7 @@ export class CacheWarmupService implements OnApplicationBootstrap {
       }
 
       let warmedUp = 0;
-      const userIds = activeUsers.map((u) => u.user_id);
+      const userIds = activeUsers.map((u) => u.userId);
 
       // 分批并发预热，避免启动时 DB 压力过大
       for (let i = 0; i < userIds.length; i += WARMUP_CONCURRENCY) {

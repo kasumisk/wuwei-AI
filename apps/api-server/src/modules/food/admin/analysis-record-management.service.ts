@@ -91,10 +91,10 @@ export class AnalysisRecordManagementService {
     );
 
     // 批量获取用户信息
-    const userIds = [...new Set(list.map((r) => r.user_id))];
+    const userIds = [...new Set(list.map((r) => r.userId))];
     const users =
       userIds.length > 0
-        ? await this.prisma.app_users.findMany({
+        ? await this.prisma.appUsers.findMany({
             where: { id: { in: userIds } },
             select: { id: true, nickname: true, avatar: true, email: true },
           })
@@ -103,7 +103,7 @@ export class AnalysisRecordManagementService {
 
     const listWithUser = list.map((r) => ({
       ...r,
-      user: userMap.get(r.user_id) || null,
+      user: userMap.get(r.userId) || null,
     }));
 
     return {
@@ -119,14 +119,14 @@ export class AnalysisRecordManagementService {
    * 获取分析记录详情
    */
   async getAnalysisRecordDetail(id: string) {
-    const record = await this.prisma.food_analysis_records.findUnique({
+    const record = await this.prisma.foodAnalysisRecords.findUnique({
       where: { id },
     });
     if (!record) throw new NotFoundException('分析记录不存在');
 
     // 获取用户信息
-    const user = await this.prisma.app_users.findUnique({
-      where: { id: record.user_id },
+    const user = await this.prisma.appUsers.findUnique({
+      where: { id: record.userId },
       select: {
         id: true,
         nickname: true,
@@ -147,18 +147,18 @@ export class AnalysisRecordManagementService {
     dto: ReviewAnalysisRecordDto,
     adminUserId: string,
   ) {
-    const record = await this.prisma.food_analysis_records.findUnique({
+    const record = await this.prisma.foodAnalysisRecords.findUnique({
       where: { id },
     });
     if (!record) throw new NotFoundException('分析记录不存在');
 
-    const updated = await this.prisma.food_analysis_records.update({
+    const updated = await this.prisma.foodAnalysisRecords.update({
       where: { id },
       data: {
-        review_status: dto.reviewStatus,
-        reviewed_by: adminUserId,
-        reviewed_at: new Date(),
-        review_note: dto.reviewNote || null,
+        reviewStatus: dto.reviewStatus,
+        reviewedBy: adminUserId,
+        reviewedAt: new Date(),
+        reviewNote: dto.reviewNote || null,
       } as any,
     });
     return updated;
@@ -170,20 +170,20 @@ export class AnalysisRecordManagementService {
   async getAnalysisStatistics() {
     // 总量统计
     const [totalCount, textCount, imageCount] = await Promise.all([
-      this.prisma.food_analysis_records.count(),
-      this.prisma.food_analysis_records.count({
-        where: { input_type: 'text' },
+      this.prisma.foodAnalysisRecords.count(),
+      this.prisma.foodAnalysisRecords.count({
+        where: { inputType: 'text' },
       }),
-      this.prisma.food_analysis_records.count({
-        where: { input_type: 'image' },
+      this.prisma.foodAnalysisRecords.count({
+        where: { inputType: 'image' },
       }),
     ]);
 
     // 今日统计
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const todayCount = await this.prisma.food_analysis_records.count({
-      where: { created_at: { gte: today } },
+    const todayCount = await this.prisma.foodAnalysisRecords.count({
+      where: { createdAt: { gte: today } },
     });
 
     // 状态分布
@@ -220,11 +220,11 @@ export class AnalysisRecordManagementService {
 
     // 准确率（已审核的记录中准确的占比）
     const [reviewedCount, accurateCount] = await Promise.all([
-      this.prisma.food_analysis_records.count({
-        where: { review_status: { not: 'pending' } } as any,
+      this.prisma.foodAnalysisRecords.count({
+        where: { reviewStatus: { not: 'pending' } } as any,
       }),
-      this.prisma.food_analysis_records.count({
-        where: { review_status: 'accurate' } as any,
+      this.prisma.foodAnalysisRecords.count({
+        where: { reviewStatus: 'accurate' } as any,
       }),
     ]);
     const accuracyRate =

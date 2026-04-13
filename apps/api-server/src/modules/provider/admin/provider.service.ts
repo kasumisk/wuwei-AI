@@ -151,7 +151,7 @@ export class ProviderService {
   async remove(id: string) {
     const provider = await this.prisma.providers.findUnique({
       where: { id },
-      include: { model_configs: true },
+      include: { modelConfigs: true },
     });
 
     if (!provider) {
@@ -159,9 +159,9 @@ export class ProviderService {
     }
 
     // 检查是否有关联的模型
-    if (provider.model_configs && provider.model_configs.length > 0) {
+    if (provider.modelConfigs && provider.modelConfigs.length > 0) {
       throw new BadRequestException(
-        `无法删除提供商，存在 ${provider.model_configs.length} 个关联的模型配置`,
+        `无法删除提供商，存在 ${provider.modelConfigs.length} 个关联的模型配置`,
       );
     }
 

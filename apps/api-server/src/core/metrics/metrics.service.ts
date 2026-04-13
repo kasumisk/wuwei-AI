@@ -57,7 +57,7 @@ export class MetricsService implements OnModuleInit {
   readonly recommendationTotal = new Counter({
     name: 'recommendation_requests_total',
     help: '推荐请求总数',
-    labelNames: ['meal_type'] as const,
+    labelNames: ['mealType'] as const,
   });
 
   // ─── 缓存指标 ───

@@ -29,8 +29,8 @@ import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { SubscriptionService } from '../services/subscription.service';
 import {
-  subscription_plan as SubscriptionPlan,
-  payment_records as PaymentRecord,
+  SubscriptionPlan,
+  PaymentRecords as PaymentRecord,
 } from '@prisma/client';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
 import { PaymentChannel, PaymentStatus } from '../../subscription.types';
@@ -101,8 +101,8 @@ export class WechatPayService {
     planId: string,
   ): Promise<WechatPayAppParams> {
     // 1. 查找计划
-    const plan = await this.prisma.subscription_plan.findFirst({
-      where: { id: planId, is_active: true },
+    const plan = await this.prisma.subscriptionPlan.findFirst({
+      where: { id: planId, isActive: true },
     });
     if (!plan) {
       throw new BadRequestException('订阅计划不存在或已下架');
@@ -116,13 +116,13 @@ export class WechatPayService {
       userId,
       orderNo,
       channel: PaymentChannel.WECHAT_PAY,
-      amountCents: plan.price_cents,
+      amountCents: plan.priceCents,
       currency: plan.currency,
     });
     // 立即将 planId 写入 callback_payload，供回调时直接使用
-    await this.prisma.payment_records.update({
-      where: { order_no: orderNo },
-      data: { callback_payload: { plan_id: planId } },
+    await this.prisma.paymentRecords.update({
+      where: { orderNo: orderNo },
+      data: { callbackPayload: { planId: planId } },
     });
 
     // 4. 调用微信支付 APP 下单 API
@@ -133,7 +133,7 @@ export class WechatPayService {
       out_trade_no: orderNo,
       notify_url: this.notifyUrl,
       amount: {
-        total: plan.price_cents,
+        total: plan.priceCents,
         currency: plan.currency === 'CNY' ? 'CNY' : 'CNY',
       },
     });
@@ -232,8 +232,8 @@ export class WechatPayService {
     const orderNo = transaction.out_trade_no;
 
     // 查找支付记录
-    const payment = await this.prisma.payment_records.findUnique({
-      where: { order_no: orderNo },
+    const payment = await this.prisma.paymentRecords.findUnique({
+      where: { orderNo: orderNo },
     });
     if (!payment) {
       this.logger.warn(`支付记录不存在: orderNo=${orderNo}`);
@@ -259,7 +259,7 @@ export class WechatPayService {
     const plan = await this.findPlanByPayment(payment as any);
     if (!plan) {
       this.logger.error(
-        `无法匹配订阅计划: orderNo=${orderNo}, amount=${payment.amount_cents}`,
+        `无法匹配订阅计划: orderNo=${orderNo}, amount=${payment.amountCents}`,
       );
       return;
     }
@@ -269,7 +269,7 @@ export class WechatPayService {
 
     // 创建订阅
     await this.subscriptionService.createSubscription({
-      userId: payment.user_id,
+      userId: payment.userId,
       planId: plan.id,
       paymentChannel: PaymentChannel.WECHAT_PAY,
       platformSubscriptionId: transaction.transaction_id,
@@ -277,7 +277,7 @@ export class WechatPayService {
     });
 
     this.logger.log(
-      `微信支付成功，订阅已激活: userId=${payment.user_id}, plan=${plan.name}, expiresAt=${expiresAt.toISOString()}`,
+      `微信支付成功，订阅已激活: userId=${payment.userId}, plan=${plan.name}, expiresAt=${expiresAt.toISOString()}`,
     );
   }
 
@@ -295,13 +295,13 @@ export class WechatPayService {
     );
 
     // 查找并取消用户订阅
-    const payment = await this.prisma.payment_records.findUnique({
-      where: { order_no: orderNo },
+    const payment = await this.prisma.paymentRecords.findUnique({
+      where: { orderNo: orderNo },
     });
     if (payment) {
-      await this.subscriptionService.cancelSubscription(payment.user_id);
+      await this.subscriptionService.cancelSubscription(payment.userId);
       this.logger.log(
-        `微信退款已处理: userId=${payment.user_id}, orderNo=${orderNo}`,
+        `微信退款已处理: userId=${payment.userId}, orderNo=${orderNo}`,
       );
     }
   }
@@ -532,14 +532,14 @@ export class WechatPayService {
    */
   private async findPlanByPayment(payment: any): Promise<any> {
     // 优先: 从 callback_payload 取 plan_id（V6.2 创建的订单）
-    const callbackPayload = payment.callback_payload as Record<
+    const callbackPayload = payment.callbackPayload as Record<
       string,
       unknown
     > | null;
-    const planId = callbackPayload?.plan_id as string | undefined;
+    const planId = callbackPayload?.planId as string | undefined;
     if (planId) {
-      const plan = await this.prisma.subscription_plan.findFirst({
-        where: { id: planId, is_active: true },
+      const plan = await this.prisma.subscriptionPlan.findFirst({
+        where: { id: planId, isActive: true },
       });
       if (plan) return plan;
       this.logger.warn(
@@ -548,13 +548,13 @@ export class WechatPayService {
     }
 
     // 回退: 通过金额 + 货币匹配（兼容旧订单）
-    return this.prisma.subscription_plan.findFirst({
+    return this.prisma.subscriptionPlan.findFirst({
       where: {
-        price_cents: payment.amount_cents,
+        priceCents: payment.amountCents,
         currency: payment.currency,
-        is_active: true,
+        isActive: true,
       },
-      orderBy: { sort_order: 'asc' },
+      orderBy: { sortOrder: 'asc' },
     });
   }
 
@@ -563,7 +563,7 @@ export class WechatPayService {
    */
   private calcExpiresDate(plan: any): Date {
     const now = new Date();
-    switch (plan.billing_cycle) {
+    switch (plan.billingCycle) {
       case 'monthly':
         return new Date(now.setMonth(now.getMonth() + 1));
       case 'quarterly':

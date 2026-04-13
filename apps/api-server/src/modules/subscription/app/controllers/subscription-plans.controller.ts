@@ -26,20 +26,19 @@ export class SubscriptionPlansController {
   async getActivePlans(): Promise<ApiResponse> {
     const plans = await this.subscriptionService.getActivePlans();
 
-    // 转换 snake_case → camelCase 供前端消费
     const list = plans.map((p: any) => ({
       id: p.id,
       name: p.name,
       description: p.description,
       tier: p.tier,
-      billingCycle: p.billing_cycle ?? p.billingCycle,
-      priceCents: p.price_cents ?? p.priceCents,
+      billingCycle: p.billingCycle,
+      priceCents: p.priceCents,
       currency: p.currency,
       entitlements: p.entitlements,
-      appleProductId: p.apple_product_id ?? p.appleProductId,
-      wechatProductId: p.wechat_product_id ?? p.wechatProductId,
-      sortOrder: p.sort_order ?? p.sortOrder,
-      isActive: p.is_active ?? p.isActive,
+      appleProductId: p.appleProductId,
+      wechatProductId: p.wechatProductId,
+      sortOrder: p.sortOrder,
+      isActive: p.isActive,
     }));
 
     return {

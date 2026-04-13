@@ -38,9 +38,9 @@ export class RecipeService {
     const limit = Math.min(dto.limit ?? 20, 50);
     const offset = dto.offset ?? 0;
 
-    const where: Prisma.recipesWhereInput = {
-      is_active: true,
-      review_status: 'approved',
+    const where: Prisma.RecipesWhereInput = {
+      isActive: true,
+      reviewStatus: 'approved',
     };
 
     if (dto.cuisine) {
@@ -50,7 +50,7 @@ export class RecipeService {
       where.difficulty = dto.difficulty;
     }
     if (dto.maxCookTime) {
-      where.cook_time_minutes = { lte: dto.maxCookTime };
+      where.cookTimeMinutes = { lte: dto.maxCookTime };
     }
     if (dto.tags) {
       const tagList = dto.tags.split(',').map((t) => t.trim());
@@ -63,12 +63,12 @@ export class RecipeService {
     const [items, total] = await Promise.all([
       this.prisma.recipes.findMany({
         where,
-        orderBy: [{ quality_score: 'desc' }, { usage_count: 'desc' }],
+        orderBy: [{ qualityScore: 'desc' }, { usageCount: 'desc' }],
         skip: offset,
         take: limit,
         // V6.5 Phase 2M: 携带评分统计
         include: {
-          _count: { select: { recipe_ratings: true } },
+          _count: { select: { recipeRatings: true } },
         },
       }),
       this.prisma.recipes.count({ where }),
@@ -91,9 +91,9 @@ export class RecipeService {
     const recipe = await this.prisma.recipes.findUnique({
       where: { id },
       include: {
-        recipe_ingredients: { orderBy: { sort_order: 'asc' } },
+        recipeIngredients: { orderBy: { sortOrder: 'asc' } },
         // V6.5 Phase 2M: 携带评分统计
-        _count: { select: { recipe_ratings: true } },
+        _count: { select: { recipeRatings: true } },
       },
     });
 
@@ -116,9 +116,9 @@ export class RecipeService {
     tags?: string[];
     limit?: number;
   }): Promise<RecipeDetail[]> {
-    const where: Prisma.recipesWhereInput = {
-      is_active: true,
-      review_status: 'approved',
+    const where: Prisma.RecipesWhereInput = {
+      isActive: true,
+      reviewStatus: 'approved',
     };
 
     if (filters.cuisine) {
@@ -128,7 +128,7 @@ export class RecipeService {
       where.difficulty = { lte: filters.maxDifficulty };
     }
     if (filters.maxCookTime) {
-      where.cook_time_minutes = { lte: filters.maxCookTime };
+      where.cookTimeMinutes = { lte: filters.maxCookTime };
     }
     if (filters.tags && filters.tags.length > 0) {
       where.tags = { hasSome: filters.tags };
@@ -136,8 +136,8 @@ export class RecipeService {
 
     const recipes = await this.prisma.recipes.findMany({
       where,
-      include: { recipe_ingredients: { orderBy: { sort_order: 'asc' } } },
-      orderBy: { quality_score: 'desc' },
+      include: { recipeIngredients: { orderBy: { sortOrder: 'asc' } } },
+      orderBy: { qualityScore: 'desc' },
       take: filters.limit ?? 50,
     });
 
@@ -161,36 +161,36 @@ export class RecipeService {
         description: recipeData.description,
         cuisine: recipeData.cuisine,
         difficulty: recipeData.difficulty ?? 1,
-        prep_time_minutes: recipeData.prepTimeMinutes,
-        cook_time_minutes: recipeData.cookTimeMinutes,
+        prepTimeMinutes: recipeData.prepTimeMinutes,
+        cookTimeMinutes: recipeData.cookTimeMinutes,
         servings: recipeData.servings ?? 1,
         tags: recipeData.tags ?? [],
         instructions: recipeData.instructions ?? Prisma.JsonNull,
-        image_url: recipeData.imageUrl,
+        imageUrl: recipeData.imageUrl,
         source: 'user',
-        review_status: 'pending',
-        submitted_by: userId,
-        is_active: false,
-        calories_per_serving: recipeData.caloriesPerServing,
-        protein_per_serving: recipeData.proteinPerServing,
-        fat_per_serving: recipeData.fatPerServing,
-        carbs_per_serving: recipeData.carbsPerServing,
-        fiber_per_serving: recipeData.fiberPerServing,
-        quality_score: 0,
-        recipe_ingredients: ingredients?.length
+        reviewStatus: 'pending',
+        submittedBy: userId,
+        isActive: false,
+        caloriesPerServing: recipeData.caloriesPerServing,
+        proteinPerServing: recipeData.proteinPerServing,
+        fatPerServing: recipeData.fatPerServing,
+        carbsPerServing: recipeData.carbsPerServing,
+        fiberPerServing: recipeData.fiberPerServing,
+        qualityScore: 0,
+        recipeIngredients: ingredients?.length
           ? {
               create: ingredients.map((ing, idx) => ({
-                food_id: ing.foodId,
-                ingredient_name: ing.ingredientName,
+                foodId: ing.foodId,
+                ingredientName: ing.ingredientName,
                 amount: ing.amount,
                 unit: ing.unit,
-                is_optional: ing.isOptional ?? false,
-                sort_order: ing.sortOrder ?? idx,
+                isOptional: ing.isOptional ?? false,
+                sortOrder: ing.sortOrder ?? idx,
               })),
             }
           : undefined,
       },
-      include: { recipe_ingredients: { orderBy: { sort_order: 'asc' } } },
+      include: { recipeIngredients: { orderBy: { sortOrder: 'asc' } } },
     });
 
     this.logger.log(
@@ -205,7 +205,7 @@ export class RecipeService {
   async incrementUsageCount(recipeId: string): Promise<void> {
     await this.prisma.recipes.update({
       where: { id: recipeId },
-      data: { usage_count: { increment: 1 } },
+      data: { usageCount: { increment: 1 } },
     });
   }
 
@@ -503,16 +503,16 @@ export class RecipeService {
       throw new NotFoundException(`菜谱 ${recipeId} 不存在`);
     }
 
-    const row = await this.prisma.recipe_ratings.upsert({
+    const row = await this.prisma.recipeRatings.upsert({
       where: {
-        recipe_id_user_id: {
-          recipe_id: recipeId,
-          user_id: userId,
+        recipeId_userId: {
+          recipeId: recipeId,
+          userId: userId,
         },
       },
       create: {
-        recipe_id: recipeId,
-        user_id: userId,
+        recipeId: recipeId,
+        userId: userId,
         rating: dto.rating,
         comment: dto.comment ?? null,
       },
@@ -532,11 +532,11 @@ export class RecipeService {
     userId: string,
     recipeId: string,
   ): Promise<RecipeRating | null> {
-    const row = await this.prisma.recipe_ratings.findUnique({
+    const row = await this.prisma.recipeRatings.findUnique({
       where: {
-        recipe_id_user_id: {
-          recipe_id: recipeId,
-          user_id: userId,
+        recipeId_userId: {
+          recipeId: recipeId,
+          userId: userId,
         },
       },
     });
@@ -548,14 +548,14 @@ export class RecipeService {
    */
   async getRatingSummary(recipeId: string): Promise<RecipeRatingSummary> {
     const [agg, ratings] = await Promise.all([
-      this.prisma.recipe_ratings.aggregate({
-        where: { recipe_id: recipeId },
+      this.prisma.recipeRatings.aggregate({
+        where: { recipeId: recipeId },
         _avg: { rating: true },
         _count: { rating: true },
       }),
-      this.prisma.recipe_ratings.groupBy({
+      this.prisma.recipeRatings.groupBy({
         by: ['rating'],
-        where: { recipe_id: recipeId },
+        where: { recipeId: recipeId },
         _count: { rating: true },
       }),
     ]);
@@ -585,8 +585,8 @@ export class RecipeService {
    * 删除用户对菜谱的评分
    */
   async deleteRating(userId: string, recipeId: string): Promise<boolean> {
-    const result = await this.prisma.recipe_ratings.deleteMany({
-      where: { recipe_id: recipeId, user_id: userId },
+    const result = await this.prisma.recipeRatings.deleteMany({
+      where: { recipeId: recipeId, userId: userId },
     });
     return result.count > 0;
   }
@@ -600,15 +600,15 @@ export class RecipeService {
     recipeIds: string[],
   ): Promise<Map<string, number>> {
     if (recipeIds.length === 0) return new Map();
-    const rows = await this.prisma.recipe_ratings.groupBy({
-      by: ['recipe_id'],
-      where: { recipe_id: { in: recipeIds } },
+    const rows = await this.prisma.recipeRatings.groupBy({
+      by: ['recipeId'],
+      where: { recipeId: { in: recipeIds } },
       _avg: { rating: true },
     });
     const map = new Map<string, number>();
     for (const r of rows) {
       if (r._avg.rating != null) {
-        map.set(r.recipe_id, Math.round(r._avg.rating * 10) / 10);
+        map.set(r.recipeId, Math.round(r._avg.rating * 10) / 10);
       }
     }
     return map;
@@ -617,46 +617,46 @@ export class RecipeService {
   private toRating(row: any): RecipeRating {
     return {
       id: row.id,
-      recipeId: row.recipe_id,
-      userId: row.user_id,
+      recipeId: row.recipeId,
+      userId: row.userId,
       rating: row.rating,
       comment: row.comment,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
     };
   }
 
   // ==================== 数据转换 ====================
 
   private toSummary(row: any, avgRating?: number): RecipeSummary {
-    const ratingCount = row._count?.recipe_ratings ?? 0;
+    const ratingCount = row._count?.recipeRatings ?? 0;
     return {
       id: row.id,
       name: row.name,
       description: row.description,
       cuisine: row.cuisine,
       difficulty: row.difficulty,
-      prepTimeMinutes: row.prep_time_minutes,
-      cookTimeMinutes: row.cook_time_minutes,
+      prepTimeMinutes: row.prepTimeMinutes,
+      cookTimeMinutes: row.cookTimeMinutes,
       servings: row.servings,
       tags: row.tags ?? [],
-      imageUrl: row.image_url,
+      imageUrl: row.imageUrl,
       source: row.source,
-      caloriesPerServing: row.calories_per_serving
-        ? Number(row.calories_per_serving)
+      caloriesPerServing: row.caloriesPerServing
+        ? Number(row.caloriesPerServing)
         : null,
-      proteinPerServing: row.protein_per_serving
-        ? Number(row.protein_per_serving)
+      proteinPerServing: row.proteinPerServing
+        ? Number(row.proteinPerServing)
         : null,
-      fatPerServing: row.fat_per_serving ? Number(row.fat_per_serving) : null,
-      carbsPerServing: row.carbs_per_serving
-        ? Number(row.carbs_per_serving)
+      fatPerServing: row.fatPerServing ? Number(row.fatPerServing) : null,
+      carbsPerServing: row.carbsPerServing
+        ? Number(row.carbsPerServing)
         : null,
-      fiberPerServing: row.fiber_per_serving
-        ? Number(row.fiber_per_serving)
+      fiberPerServing: row.fiberPerServing
+        ? Number(row.fiberPerServing)
         : null,
-      qualityScore: Number(row.quality_score),
-      usageCount: row.usage_count,
+      qualityScore: Number(row.qualityScore),
+      usageCount: row.usageCount,
       averageRating: avgRating ?? null,
       ratingCount,
     };
@@ -666,19 +666,19 @@ export class RecipeService {
     return {
       ...this.toSummary(row, avgRating),
       instructions: row.instructions,
-      ingredients: (row.recipe_ingredients ?? []).map(
+      ingredients: (row.recipeIngredients ?? []).map(
         (ing: any): RecipeIngredientItem => ({
           id: ing.id,
-          foodId: ing.food_id,
-          ingredientName: ing.ingredient_name,
+          foodId: ing.foodId,
+          ingredientName: ing.ingredientName,
           amount: ing.amount ? Number(ing.amount) : null,
           unit: ing.unit,
-          isOptional: ing.is_optional,
-          sortOrder: ing.sort_order,
+          isOptional: ing.isOptional,
+          sortOrder: ing.sortOrder,
         }),
       ),
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
     };
   }
 }

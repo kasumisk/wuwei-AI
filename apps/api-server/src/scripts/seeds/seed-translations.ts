@@ -637,8 +637,8 @@ async function seedTranslations() {
       continue;
     }
 
-    const existing = await prisma.food_translations.findFirst({
-      where: { food_id: food.id, locale: 'en-US' },
+    const existing = await prisma.foodTranslations.findFirst({
+      where: { foodId: food.id, locale: 'en-US' },
     });
 
     if (existing) {
@@ -646,14 +646,14 @@ async function seedTranslations() {
       continue;
     }
 
-    await prisma.food_translations.create({
+    await prisma.foodTranslations.create({
       data: {
-        food_id: food.id,
+        foodId: food.id,
         locale: 'en-US',
         name: t.name,
         aliases: t.aliases ?? null,
         description: t.description ?? null,
-        serving_desc: t.servingDesc ?? null,
+        servingDesc: t.servingDesc ?? null,
       },
     });
     foodCreated++;
@@ -678,8 +678,8 @@ async function seedTranslations() {
       continue;
     }
 
-    const existing = await prisma.recipe_translations.findFirst({
-      where: { recipe_id: recipe.id, locale: 'en-US' },
+    const existing = await prisma.recipeTranslations.findFirst({
+      where: { recipeId: recipe.id, locale: 'en-US' },
     });
 
     if (existing) {
@@ -687,9 +687,9 @@ async function seedTranslations() {
       continue;
     }
 
-    await prisma.recipe_translations.create({
+    await prisma.recipeTranslations.create({
       data: {
-        recipe_id: recipe.id,
+        recipeId: recipe.id,
         locale: 'en-US',
         name: t.name,
         description: t.description ?? null,

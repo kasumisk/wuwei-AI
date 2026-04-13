@@ -145,7 +145,7 @@ export class VectorSearchService implements OnModuleInit {
             where: { id },
             data: {
               embedding: vec,
-              embedding_updated_at: new Date(),
+              embeddingUpdatedAt: new Date(),
             },
           }),
         ),
@@ -292,8 +292,8 @@ export class VectorSearchService implements OnModuleInit {
     categoryFilter?: string,
   ): Promise<SimilarFoodResult[]> {
     // 先获取目标食物的 embedding_v5
-    const targetRows: Array<{ embedding_v5: string }> = await this.prisma
-      .$queryRaw<Array<{ embedding_v5: string }>>`
+    const targetRows: Array<{ embeddingV5: string }> = await this.prisma
+      .$queryRaw<Array<{ embeddingV5: string }>>`
         SELECT "embedding_v5" FROM "foods" WHERE "id" = ${foodId} AND "embedding_v5" IS NOT NULL
       `;
 
@@ -555,7 +555,7 @@ export class VectorSearchService implements OnModuleInit {
     this.prisma.foods
       .update({
         where: { id: food.id },
-        data: { embedding: vec, embedding_updated_at: new Date() },
+        data: { embedding: vec, embeddingUpdatedAt: new Date() },
       })
       .catch((err) =>
         this.logger.warn(

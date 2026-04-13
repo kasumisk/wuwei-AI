@@ -33,7 +33,7 @@ export class CheckUpdateDto {
   @Matches(/^\d+\.\d+\.\d+$/, {
     message: '版本号格式必须为 x.y.z',
   })
-  current_version: string;
+  currentVersion: string;
 
   @ApiPropertyOptional({
     description: '分发渠道',
@@ -49,7 +49,7 @@ export class CheckUpdateDto {
   })
   @IsOptional()
   @IsString()
-  device_id?: string;
+  deviceId?: string;
 
   @ApiPropertyOptional({
     description: '客户端语言',

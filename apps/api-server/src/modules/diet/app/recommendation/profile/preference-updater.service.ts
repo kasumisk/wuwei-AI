@@ -161,8 +161,8 @@ export class PreferenceUpdaterService {
       let food: {
         id: string;
         category: string | null;
-        main_ingredient: string | null;
-        food_group: string | null;
+        mainIngredient: string | null;
+        foodGroup: string | null;
       } | null = null;
 
       // 优先按 ID 查找
@@ -172,8 +172,8 @@ export class PreferenceUpdaterService {
           select: {
             id: true,
             category: true,
-            main_ingredient: true,
-            food_group: true,
+            mainIngredient: true,
+            foodGroup: true,
           },
         });
       }
@@ -185,8 +185,8 @@ export class PreferenceUpdaterService {
           select: {
             id: true,
             category: true,
-            main_ingredient: true,
-            food_group: true,
+            mainIngredient: true,
+            foodGroup: true,
           },
         });
       }
@@ -200,8 +200,8 @@ export class PreferenceUpdaterService {
 
       return {
         category: food.category || undefined,
-        mainIngredient: food.main_ingredient || undefined,
-        foodGroup: food.food_group || undefined,
+        mainIngredient: food.mainIngredient || undefined,
+        foodGroup: food.foodGroup || undefined,
       };
     } catch (err) {
       this.logger.warn(`查找食物维度失败: ${err}`);

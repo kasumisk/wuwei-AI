@@ -435,9 +435,9 @@ export interface EnrichmentPreview {
   food: {
     id: string;
     name: string;
-    name_zh: string | null;
+    nameZh: string | null;
     category: string | null;
-    sub_category: string | null;
+    subCategory: string | null;
   };
   staged: {
     logId: string;
@@ -530,6 +530,49 @@ export interface OperationsStats {
     date: string;
     count: number;
     action: string;
+  }>;
+}
+
+/** V8.4: 审核细粒度报表 */
+export interface ReviewStats {
+  /** 当前待审核（staged）数量 */
+  pendingReview: number;
+  /** 历史已通过数 */
+  approved: number;
+  /** 历史已拒绝数 */
+  rejected: number;
+  /** 已审核总数 */
+  reviewed: number;
+  /** 通过率 % */
+  approvalRate: number;
+  /** 拒绝率 % */
+  rejectionRate: number;
+  /** 所有已审核记录的整体平均置信度 */
+  avgConfidenceAll: number;
+  /** 已通过记录的平均置信度 */
+  avgConfidenceApproved: number;
+  /** 已拒绝记录的平均置信度 */
+  avgConfidenceRejected: number;
+  /** 置信度区间分布（5个桶） */
+  confidenceBuckets: Array<{
+    bucket: string;
+    approved: number;
+    rejected: number;
+  }>;
+  /** 最近 30 天按日趋势 */
+  dailyTrend: Array<{
+    date: string;
+    approved: number;
+    rejected: number;
+  }>;
+  /** 积压概要：最近入队但仍待审核的 staged 记录（最多 20 条） */
+  pendingList: Array<{
+    logId: string;
+    foodId: string;
+    foodName: string;
+    enrichedFields: string[];
+    confidence: number | null;
+    createdAt: string;
   }>;
 }
 
@@ -656,6 +699,9 @@ export const enrichmentApi = {
   getOperationsStats: (): Promise<OperationsStats> =>
     request.get(`${ENRICHMENT_BASE}/operations-stats`),
 
+  /** V8.4: 审核细粒度报表（通过率/拒绝率/置信度分布/按日趋势/积压列表） */
+  getReviewStats: (): Promise<ReviewStats> => request.get(`${ENRICHMENT_BASE}/review-stats`),
+
   /** V8.0: 回退单条补全记录（清除已补全字段，使食物可重新补全） */
   rollbackEnrichment: (id: string): Promise<{ rolledBack: boolean; detail: string }> =>
     request.post(`${ENRICHMENT_BASE}/rollback/${id}`),
@@ -695,6 +741,7 @@ export const enrichmentQueryKeys = {
   batchPreview: (ids: string[]) => ['enrichment', 'batchPreview', ids] as const,
   completenessDistribution: ['enrichment', 'completenessDistribution'] as const,
   operationsStats: ['enrichment', 'operationsStats'] as const,
+  reviewStats: ['enrichment', 'reviewStats'] as const,
 };
 
 // ==================== Enrichment Hooks ====================
@@ -982,3 +1029,11 @@ export const useBatchRollbackEnrichment = (
     ...options,
   });
 };
+
+/** V8.4: 审核细粒度报表（通过率/拒绝率/置信度分布/按日趋势/积压列表） */
+export const useReviewStats = () =>
+  useQuery({
+    queryKey: enrichmentQueryKeys.reviewStats,
+    queryFn: () => enrichmentApi.getReviewStats(),
+    staleTime: 60 * 1000,
+  });

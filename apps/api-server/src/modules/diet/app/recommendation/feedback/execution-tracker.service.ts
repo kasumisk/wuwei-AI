@@ -94,12 +94,12 @@ export class ExecutionTrackerService {
     recommendationId?: string,
   ): Promise<string> {
     try {
-      const record = await this.prisma.recommendation_executions.create({
+      const record = await this.prisma.recommendationExecutions.create({
         data: {
-          user_id: userId,
-          meal_type: mealType,
-          recommended_foods: recommendedFoods,
-          recommendation_id: recommendationId ?? null,
+          userId: userId,
+          mealType: mealType,
+          recommendedFoods: recommendedFoods,
+          recommendationId: recommendationId ?? null,
         },
       });
       return record.id;
@@ -126,14 +126,14 @@ export class ExecutionTrackerService {
     executionId: string,
     executedFoods: string[],
   ): Promise<{ executionRate: number }> {
-    const record = await this.prisma.recommendation_executions.findUnique({
+    const record = await this.prisma.recommendationExecutions.findUnique({
       where: { id: executionId },
     });
     if (!record) {
       throw new Error(`Execution record not found: ${executionId}`);
     }
 
-    const recommended = (record.recommended_foods as string[]) || [];
+    const recommended = (record.recommendedFoods as string[]) || [];
 
     // V7.1 P2-A: 语义匹配替代精确 ID 匹配
     const matchResults = await this.matchExecutionSemantic(
@@ -162,18 +162,18 @@ export class ExecutionTrackerService {
       matchDetails: matchResults,
     };
 
-    await this.prisma.recommendation_executions.update({
+    await this.prisma.recommendationExecutions.update({
       where: { id: executionId },
       data: {
-        executed_foods: executedFoods,
-        execution_rate: executionRate,
-        executed_at: new Date(),
-        deviation_notes: deviationNotes as object,
+        executedFoods: executedFoods,
+        executionRate: executionRate,
+        executedAt: new Date(),
+        deviationNotes: deviationNotes as object,
       },
     });
 
     // 清除缓存，下次查询重新计算
-    await this.invalidateUserExecutionRate(record.user_id);
+    await this.invalidateUserExecutionRate(record.userId);
 
     this.logger.debug(
       `Execution recorded: ${executionId}, rate=${executionRate.toFixed(2)} ` +
@@ -211,9 +211,9 @@ export class ExecutionTrackerService {
       where: { id: { in: allIds } },
       select: {
         id: true,
-        main_ingredient: true,
+        mainIngredient: true,
         category: true,
-        food_group: true,
+        foodGroup: true,
       },
     });
 
@@ -243,9 +243,9 @@ export class ExecutionTrackerService {
         if (recId === execId) {
           level = 'exact';
         } else if (
-          recFood?.main_ingredient &&
-          execFood?.main_ingredient &&
-          recFood.main_ingredient === execFood.main_ingredient
+          recFood?.mainIngredient &&
+          execFood?.mainIngredient &&
+          recFood.mainIngredient === execFood.mainIngredient
         ) {
           level = 'same_ingredient';
         } else if (
@@ -255,9 +255,9 @@ export class ExecutionTrackerService {
         ) {
           level = 'same_category';
         } else if (
-          recFood?.food_group &&
-          execFood?.food_group &&
-          recFood.food_group === execFood.food_group
+          recFood?.foodGroup &&
+          execFood?.foodGroup &&
+          recFood.foodGroup === execFood.foodGroup
         ) {
           level = 'same_food_group';
         }
@@ -318,27 +318,27 @@ export class ExecutionTrackerService {
     if (cached) return cached;
 
     try {
-      const patterns = await this.prisma.replacement_patterns.findMany({
+      const patterns = await this.prisma.replacementPatterns.findMany({
         where: {
-          user_id: userId,
+          userId: userId,
           frequency: { gte: SUBSTITUTION_MIN_FREQUENCY },
         },
         orderBy: { frequency: 'desc' },
         take: SUBSTITUTION_MAX_RESULTS,
         select: {
-          from_food_id: true,
-          from_food_name: true,
-          to_food_id: true,
-          to_food_name: true,
+          fromFoodId: true,
+          fromFoodName: true,
+          toFoodId: true,
+          toFoodName: true,
           frequency: true,
         },
       });
 
       const result: SubstitutionPattern[] = patterns.map((p) => ({
-        fromFoodId: p.from_food_id,
-        fromFoodName: p.from_food_name,
-        toFoodId: p.to_food_id,
-        toFoodName: p.to_food_name,
+        fromFoodId: p.fromFoodId,
+        fromFoodName: p.fromFoodName,
+        toFoodId: p.toFoodId,
+        toFoodName: p.toFoodName,
         frequency: p.frequency,
       }));
 
@@ -376,16 +376,16 @@ export class ExecutionTrackerService {
     try {
       const since = new Date(Date.now() - EXEC_RATE_WINDOW_DAYS * 86400000);
 
-      const result = await this.prisma.recommendation_executions.aggregate({
+      const result = await this.prisma.recommendationExecutions.aggregate({
         where: {
-          user_id: userId,
-          execution_rate: { not: null },
-          created_at: { gte: since },
+          userId: userId,
+          executionRate: { not: null },
+          createdAt: { gte: since },
         },
-        _avg: { execution_rate: true },
+        _avg: { executionRate: true },
       });
 
-      const rate = result._avg.execution_rate ?? DEFAULT_EXEC_RATE;
+      const rate = result._avg.executionRate ?? DEFAULT_EXEC_RATE;
       await this.redis.set(key, rate, EXEC_RATE_TTL_MS);
       return rate;
     } catch (err) {

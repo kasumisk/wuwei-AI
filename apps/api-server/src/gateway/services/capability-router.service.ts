@@ -27,18 +27,18 @@ export class CapabilityRouter {
   ): Promise<RouteResult> {
     // 获取客户端权限配置
     const permission =
-      await this.prisma.client_capability_permissions.findFirst({
+      await this.prisma.clientCapabilityPermissions.findFirst({
         where: {
-          client_id: clientId,
-          capability_type: capabilityType,
+          clientId: clientId,
+          capabilityType: capabilityType,
           enabled: true,
         },
       });
 
     // ✅ 增强：如果请求指定了模型，验证是否在允许列表中
     if (requestedModel) {
-      const allowedModelsList = permission?.allowed_models
-        ? permission.allowed_models.split(',')
+      const allowedModelsList = permission?.allowedModels
+        ? permission.allowedModels.split(',')
         : [];
       if (
         allowedModelsList.length > 0 &&
@@ -56,8 +56,8 @@ export class CapabilityRouter {
     };
 
     // ✅ 新增：检查允许的模型列表
-    const allowedModels = permission?.allowed_models
-      ? permission.allowed_models.split(',')
+    const allowedModels = permission?.allowedModels
+      ? permission.allowedModels.split(',')
       : [];
     if (allowedModels.length > 0) {
       modelWhere.modelName = { in: allowedModels };
@@ -68,15 +68,15 @@ export class CapabilityRouter {
       modelWhere.modelName = requestedModel;
     }
 
-    let models = await this.prisma.model_configs.findMany({
+    let models = await this.prisma.modelConfigs.findMany({
       where: modelWhere,
       include: { providers: true },
       orderBy: { priority: 'asc' },
     });
 
     // ✅ 新增：检查允许的提供商列表（case-insensitive filtering in JS）
-    const allowedProviders = permission?.allowed_providers
-      ? permission.allowed_providers.split(',')
+    const allowedProviders = permission?.allowedProviders
+      ? permission.allowedProviders.split(',')
       : [];
     if (allowedProviders.length > 0) {
       const lowerProviders = allowedProviders.map((p) => p.toLowerCase());
@@ -88,8 +88,8 @@ export class CapabilityRouter {
     }
 
     // 如果客户端指定了首选提供商，提升其优先级（排序）
-    if (permission?.preferred_provider) {
-      const preferred = (permission.preferred_provider as string).toLowerCase();
+    if (permission?.preferredProvider) {
+      const preferred = (permission.preferredProvider as string).toLowerCase();
       models.sort((a, b) => {
         const aPriority =
           a.providers && a.providers.name.toLowerCase() === preferred ? 0 : 1;
@@ -103,9 +103,9 @@ export class CapabilityRouter {
     if (!models || models.length === 0) {
       const hint = requestedModel
         ? `（请求的模型: ${requestedModel}）`
-        : permission?.allowed_models &&
-            permission.allowed_models.split(',').length
-          ? `（允许的模型: ${JSON.stringify(permission.allowed_models.split(','))}）`
+        : permission?.allowedModels &&
+            permission.allowedModels.split(',').length
+          ? `（允许的模型: ${JSON.stringify(permission.allowedModels.split(','))}）`
           : '';
       throw new NotFoundException(
         `未找到可用的 ${capabilityType} 模型配置${hint}`,
@@ -154,7 +154,7 @@ export class CapabilityRouter {
       modelWhere.providerId = { notIn: excludeProviderIds };
     }
 
-    const models = await this.prisma.model_configs.findMany({
+    const models = await this.prisma.modelConfigs.findMany({
       where: modelWhere,
       include: { providers: true },
       orderBy: { priority: 'asc' },

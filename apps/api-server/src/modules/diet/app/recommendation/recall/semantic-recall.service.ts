@@ -240,14 +240,14 @@ export class SemanticRecallService {
     );
 
     // 查询全部反馈记录（正 + 负）
-    const feedbacks = await this.prisma.recommendation_feedbacks.findMany({
+    const feedbacks = await this.prisma.recommendationFeedbacks.findMany({
       where: {
-        user_id: userId,
+        userId: userId,
         action: { in: ['accepted', 'loved', 'skipped', 'replaced'] },
-        created_at: { gte: windowStart },
+        createdAt: { gte: windowStart },
       },
-      select: { food_id: true, action: true, created_at: true },
-      orderBy: { created_at: 'desc' },
+      select: { foodId: true, action: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
       take: SemanticRecallService.MAX_FEEDBACKS,
     });
 
@@ -267,7 +267,7 @@ export class SemanticRecallService {
 
     // 获取所有涉及食物的 embedding
     const allFoodIds = feedbacks
-      .map((f) => f.food_id)
+      .map((f) => f.foodId)
       .filter((id): id is string => id != null);
     const uniqueFoodIds = [...new Set(allFoodIds)];
 
@@ -291,11 +291,11 @@ export class SemanticRecallService {
     // 构建正向向量集合（含权重）
     const positiveEmbeddings: { embedding: number[]; weight: number }[] = [];
     for (const fb of positiveFeedbacks) {
-      if (!fb.food_id) continue;
-      const emb = foodEmbeddingMap.get(fb.food_id);
+      if (!fb.foodId) continue;
+      const emb = foodEmbeddingMap.get(fb.foodId);
       if (!emb) continue;
 
-      const daysAgo = (Date.now() - fb.created_at.getTime()) / 86400_000;
+      const daysAgo = (Date.now() - fb.createdAt.getTime()) / 86400_000;
       const timeWeight = Math.exp(-0.03 * daysAgo);
       const actionWeight = fb.action === 'loved' ? 1.5 : 1.0;
       positiveEmbeddings.push({
@@ -339,11 +339,11 @@ export class SemanticRecallService {
     ) {
       const negativeEmbeddings: { embedding: number[]; weight: number }[] = [];
       for (const fb of negativeFeedbacks) {
-        if (!fb.food_id) continue;
-        const emb = foodEmbeddingMap.get(fb.food_id);
+        if (!fb.foodId) continue;
+        const emb = foodEmbeddingMap.get(fb.foodId);
         if (!emb) continue;
 
-        const daysAgo = (Date.now() - fb.created_at.getTime()) / 86400_000;
+        const daysAgo = (Date.now() - fb.createdAt.getTime()) / 86400_000;
         const timeWeight = Math.exp(-0.03 * daysAgo);
         const actionWeight = fb.action === 'replaced' ? 0.8 : 0.5; // replaced 权重更高
         negativeEmbeddings.push({

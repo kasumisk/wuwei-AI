@@ -64,14 +64,14 @@ export class AppVersionService {
     const skip = (page - 1) * pageSize;
 
     const [list, total] = await Promise.all([
-      this.prisma.app_versions.findMany({
+      this.prisma.appVersions.findMany({
         where,
-        include: { app_version_packages: true },
+        include: { appVersionPackages: true },
         orderBy: { versionCode: 'desc' },
         skip,
         take: pageSize,
       }),
-      this.prisma.app_versions.count({ where }),
+      this.prisma.appVersions.count({ where }),
     ]);
 
     return { list, total, page, pageSize };
@@ -81,9 +81,9 @@ export class AppVersionService {
    * 获取版本详情（含渠道包）
    */
   async findOne(id: string) {
-    const version = await this.prisma.app_versions.findUnique({
+    const version = await this.prisma.appVersions.findUnique({
       where: { id },
-      include: { app_version_packages: true },
+      include: { appVersionPackages: true },
     });
 
     if (!version) {
@@ -104,7 +104,7 @@ export class AppVersionService {
     } else {
       where.platform = null;
     }
-    const existing = await this.prisma.app_versions.findFirst({ where });
+    const existing = await this.prisma.appVersions.findFirst({ where });
 
     if (existing) {
       const platLabel = createDto.platform || '全平台';
@@ -118,7 +118,7 @@ export class AppVersionService {
       ? this.parseVersionCode(createDto.minSupportVersion)
       : undefined;
 
-    const appVersion = await this.prisma.app_versions.create({
+    const appVersion = await this.prisma.appVersions.create({
       data: {
         ...createDto,
         versionCode,
@@ -139,7 +139,7 @@ export class AppVersionService {
    * 更新版本
    */
   async update(id: string, updateDto: UpdateAppVersionDto) {
-    const version = await this.prisma.app_versions.findUnique({
+    const version = await this.prisma.appVersions.findUnique({
       where: { id },
     });
 
@@ -180,7 +180,7 @@ export class AppVersionService {
       data.releaseDate = new Date(updateDto.releaseDate);
     }
 
-    return await this.prisma.app_versions.update({
+    return await this.prisma.appVersions.update({
       where: { id },
       data,
     });
@@ -190,7 +190,7 @@ export class AppVersionService {
    * 删除版本
    */
   async remove(id: string) {
-    const version = await this.prisma.app_versions.findUnique({
+    const version = await this.prisma.appVersions.findUnique({
       where: { id },
     });
 
@@ -202,7 +202,7 @@ export class AppVersionService {
       throw new BadRequestException('已发布的版本不能直接删除，请先归档');
     }
 
-    await this.prisma.app_versions.delete({ where: { id } });
+    await this.prisma.appVersions.delete({ where: { id } });
 
     return { message: '版本删除成功' };
   }
@@ -211,7 +211,7 @@ export class AppVersionService {
    * 发布版本
    */
   async publish(id: string, publishDto?: PublishAppVersionDto) {
-    const version = await this.prisma.app_versions.findUnique({
+    const version = await this.prisma.appVersions.findUnique({
       where: { id },
     });
 
@@ -227,7 +227,7 @@ export class AppVersionService {
       throw new BadRequestException('已归档版本不能发布');
     }
 
-    return await this.prisma.app_versions.update({
+    return await this.prisma.appVersions.update({
       where: { id },
       data: {
         status: AppVersionStatus.PUBLISHED,
@@ -242,7 +242,7 @@ export class AppVersionService {
    * 归档版本
    */
   async archive(id: string) {
-    const version = await this.prisma.app_versions.findUnique({
+    const version = await this.prisma.appVersions.findUnique({
       where: { id },
     });
 
@@ -254,7 +254,7 @@ export class AppVersionService {
       throw new BadRequestException('版本已经归档');
     }
 
-    return await this.prisma.app_versions.update({
+    return await this.prisma.appVersions.update({
       where: { id },
       data: { status: AppVersionStatus.ARCHIVED },
     });
@@ -266,16 +266,16 @@ export class AppVersionService {
   async checkUpdate(checkDto: CheckUpdateDto) {
     const {
       platform,
-      current_version,
+      currentVersion,
       channel = 'official',
-      device_id,
+      deviceId,
       language,
     } = checkDto;
 
-    const currentVersionCode = this.parseVersionCode(current_version);
+    const currentVersionCode = this.parseVersionCode(currentVersion);
 
     // 查找最新的已发布版本（匹配平台或全平台通用），同时加载渠道包
-    const latestVersion = await this.prisma.app_versions.findFirst({
+    const latestVersion = await this.prisma.appVersions.findFirst({
       where: {
         status: AppVersionStatus.PUBLISHED,
         ...(platform
@@ -285,7 +285,7 @@ export class AppVersionService {
           : {}),
       },
       include: {
-        app_version_packages: {
+        appVersionPackages: {
           where: { enabled: true },
         },
       },
@@ -294,21 +294,21 @@ export class AppVersionService {
 
     // 无最新版本或当前已是最新
     if (!latestVersion || latestVersion.versionCode <= currentVersionCode) {
-      return { need_update: false };
+      return { needUpdate: false };
     }
 
     // 取匹配渠道的包，优先匹配指定渠道，否则取第一个可用包
     const pkg =
-      latestVersion.app_version_packages?.find((p) => p.channel === channel) ||
-      latestVersion.app_version_packages?.[0];
+      latestVersion.appVersionPackages?.find((p) => p.channel === channel) ||
+      latestVersion.appVersionPackages?.[0];
 
     // 灰度发布检查
     if (latestVersion.grayRelease && latestVersion.grayPercent < 100) {
-      if (device_id) {
-        const hash = this.hashDeviceId(device_id);
+      if (deviceId) {
+        const hash = this.hashDeviceId(deviceId);
         if (hash > latestVersion.grayPercent) {
           // 不在灰度范围，查找上一个全量发布版本
-          const fallbackVersion = await this.prisma.app_versions.findFirst({
+          const fallbackVersion = await this.prisma.appVersions.findFirst({
             where: {
               status: AppVersionStatus.PUBLISHED,
               versionCode: { gt: currentVersionCode },
@@ -324,7 +324,7 @@ export class AppVersionService {
                 : {}),
             },
             include: {
-              app_version_packages: {
+              appVersionPackages: {
                 where: { enabled: true },
               },
             },
@@ -332,13 +332,13 @@ export class AppVersionService {
           });
 
           if (!fallbackVersion) {
-            return { need_update: false };
+            return { needUpdate: false };
           }
 
           const fallbackPkg =
-            fallbackVersion.app_version_packages?.find(
+            fallbackVersion.appVersionPackages?.find(
               (p) => p.channel === channel,
-            ) || fallbackVersion.app_version_packages?.[0];
+            ) || fallbackVersion.appVersionPackages?.[0];
           return this.buildUpdateResponse(
             fallbackVersion,
             fallbackPkg,
@@ -386,12 +386,12 @@ export class AppVersionService {
     }
 
     return {
-      need_update: true,
-      latest_version: version.version,
-      update_type: updateType,
+      needUpdate: true,
+      latestVersion: version.version,
+      updateType,
       description,
-      download_url: pkg?.downloadUrl || '',
-      file_size: pkg ? Number(pkg.fileSize) : 0,
+      downloadUrl: pkg?.downloadUrl || '',
+      fileSize: pkg ? Number(pkg.fileSize) : 0,
       checksum: pkg?.checksum || undefined,
     };
   }
@@ -414,14 +414,14 @@ export class AppVersionService {
    */
   async getStats() {
     const [total, published, draft, platformStats] = await Promise.all([
-      this.prisma.app_versions.count(),
-      this.prisma.app_versions.count({
+      this.prisma.appVersions.count(),
+      this.prisma.appVersions.count({
         where: { status: AppVersionStatus.PUBLISHED },
       }),
-      this.prisma.app_versions.count({
+      this.prisma.appVersions.count({
         where: { status: AppVersionStatus.DRAFT },
       }),
-      this.prisma.app_versions.groupBy({
+      this.prisma.appVersions.groupBy({
         by: ['platform'],
         _count: { _all: true },
       }),

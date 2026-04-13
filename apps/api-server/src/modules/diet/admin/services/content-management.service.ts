@@ -219,7 +219,7 @@ export class ContentManagementService {
     if (!challenge) throw new NotFoundException('挑战不存在');
     return this.prisma.challenges.update({
       where: { id },
-      data: { is_active: !challenge.is_active },
+      data: { isActive: !challenge.isActive },
     });
   }
 

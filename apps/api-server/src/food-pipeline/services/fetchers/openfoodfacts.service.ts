@@ -14,7 +14,7 @@ interface OffProduct {
   nutriscore_grade?: string;
   nutriments?: Record<string, number>;
   allergens_tags?: string[];
-  image_url?: string;
+  imageUrl?: string;
   image_small_url?: string;
 }
 

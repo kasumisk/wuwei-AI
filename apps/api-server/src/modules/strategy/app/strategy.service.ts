@@ -47,7 +47,7 @@ export class StrategyService {
         name: data.name,
         description: data.description || null,
         scope: data.scope,
-        scope_target: data.scopeTarget || null,
+        scopeTarget: data.scopeTarget || null,
         config: data.config as any,
         status: StrategyStatus.DRAFT,
         priority: data.priority || 0,
@@ -101,7 +101,7 @@ export class StrategyService {
     await this.prisma.strategy.updateMany({
       where: {
         scope: strategy.scope,
-        scope_target: strategy.scope_target ?? null,
+        scopeTarget: strategy.scopeTarget ?? null,
         status: StrategyStatus.ACTIVE,
         id: { not: id },
       },
@@ -155,7 +155,7 @@ export class StrategyService {
     const [data, total] = await Promise.all([
       this.prisma.strategy.findMany({
         where,
-        orderBy: [{ priority: 'desc' }, { updated_at: 'desc' }],
+        orderBy: [{ priority: 'desc' }, { updatedAt: 'desc' }],
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
@@ -183,7 +183,7 @@ export class StrategyService {
           where: {
             scope,
             status: StrategyStatus.ACTIVE,
-            scope_target: scopeTarget || null,
+            scopeTarget: scopeTarget || null,
           },
           orderBy: { priority: 'desc' },
         });
@@ -235,15 +235,15 @@ export class StrategyService {
     activeFrom?: Date;
     activeUntil?: Date;
   }): Promise<any> {
-    const saved = await this.prisma.strategy_assignment.create({
+    const saved = await this.prisma.strategyAssignment.create({
       data: {
-        user_id: data.userId,
-        strategy_id: data.strategyId,
-        assignment_type: data.assignmentType,
+        userId: data.userId,
+        strategyId: data.strategyId,
+        assignmentType: data.assignmentType,
         source: data.source || null,
-        is_active: true,
-        active_from: data.activeFrom || null,
-        active_until: data.activeUntil || null,
+        isActive: true,
+        activeFrom: data.activeFrom || null,
+        activeUntil: data.activeUntil || null,
       },
     });
 
@@ -287,9 +287,9 @@ export class StrategyService {
     userId: string,
     assignmentId: string,
   ): Promise<void> {
-    await this.prisma.strategy_assignment.update({
+    await this.prisma.strategyAssignment.update({
       where: { id: assignmentId },
-      data: { is_active: false },
+      data: { isActive: false },
     });
     await this.redis.del(`${CACHE_PREFIX}user:${userId}`);
     this.logger.log(

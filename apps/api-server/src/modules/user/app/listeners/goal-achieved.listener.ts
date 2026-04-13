@@ -30,12 +30,12 @@ export class GoalAchievedListener {
       );
 
       // 更新推断画像中的成就记录
-      const inferred = await this.prisma.user_inferred_profiles.findUnique({
-        where: { user_id: event.userId },
+      const inferred = await this.prisma.userInferredProfiles.findUnique({
+        where: { userId: event.userId },
       });
 
       if (inferred) {
-        const achievements = ((inferred.confidence_scores as any)
+        const achievements = ((inferred.confidenceScores as any)
           ?._achievements || []) as Array<{
           goalType: string;
           description: string;
@@ -51,15 +51,15 @@ export class GoalAchievedListener {
         // 只保留最近 50 条成就记录
         const recentAchievements = achievements.slice(-50);
 
-        await this.prisma.user_inferred_profiles.update({
-          where: { user_id: event.userId },
+        await this.prisma.userInferredProfiles.update({
+          where: { userId: event.userId },
           data: {
-            confidence_scores: {
-              ...((inferred.confidence_scores as any) || {}),
+            confidenceScores: {
+              ...((inferred.confidenceScores as any) || {}),
               _achievements: recentAchievements,
               _lastGoalAchievedAt: event.timestamp.toISOString(),
             },
-            last_computed_at: new Date(),
+            lastComputedAt: new Date(),
           },
         });
       }

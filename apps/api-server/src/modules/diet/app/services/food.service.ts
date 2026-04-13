@@ -85,7 +85,7 @@ export class FoodService {
 
     // 异步更新每日汇总
     this.dailySummaryService
-      .updateDailySummary(userId, saved.recorded_at)
+      .updateDailySummary(userId, saved.recordedAt)
       .catch((err) => this.logger.error(`更新每日汇总失败: ${err.message}`));
 
     // V6 Phase 1.2: 发布饮食记录事件
@@ -143,7 +143,7 @@ export class FoodService {
 
     // 异步更新每日汇总
     this.dailySummaryService
-      .updateDailySummary(userId, record.recorded_at)
+      .updateDailySummary(userId, record.recordedAt)
       .catch((err) => this.logger.error(`更新每日汇总失败: ${err.message}`));
 
     return record;
@@ -156,7 +156,7 @@ export class FoodService {
   async deleteRecord(userId: string, recordId: string): Promise<void> {
     const deleted = await this.foodRecordService.deleteRecord(userId, recordId);
     // 异步更新当日汇总，不阻塞删除响应
-    const recordDate = (deleted.recorded_at ?? deleted.created_at) as Date;
+    const recordDate = (deleted.recordedAt ?? deleted.createdAt) as Date;
     this.dailySummaryService
       .updateDailySummary(userId, recordDate)
       .catch((err) => {
@@ -338,16 +338,16 @@ export class FoodService {
     // S4 fix: 构建 userConstraints 传入推荐引擎，确保过敏原/忌口/健康状况被过滤
     const userConstraints: UserProfileConstraints | undefined = profile
       ? {
-          dietaryRestrictions: (profile.dietary_restrictions as string[]) || [],
+          dietaryRestrictions: (profile.dietaryRestrictions as string[]) || [],
           allergens: (profile.allergens as string[]) || [],
-          healthConditions: (profile.health_conditions as string[]) || [],
-          regionCode: (profile.region_code as string) || 'CN',
+          healthConditions: (profile.healthConditions as string[]) || [],
+          regionCode: (profile.regionCode as string) || 'CN',
           timezone: profile.timezone,
           // V6.2 3.4: 声明画像新字段接入推荐
-          cookingSkillLevel: profile.cooking_skill_level as string | undefined,
-          budgetLevel: profile.budget_level as string | undefined,
+          cookingSkillLevel: profile.cookingSkillLevel as string | undefined,
+          budgetLevel: profile.budgetLevel as string | undefined,
           cuisinePreferences:
-            (profile.cuisine_preferences as string[]) || undefined,
+            (profile.cuisinePreferences as string[]) || undefined,
         }
       : undefined;
 
@@ -647,10 +647,10 @@ export class FoodService {
 
     const userConstraints: UserProfileConstraints | undefined = profile
       ? {
-          dietaryRestrictions: (profile.dietary_restrictions as string[]) || [],
+          dietaryRestrictions: (profile.dietaryRestrictions as string[]) || [],
           allergens: (profile.allergens as string[]) || [],
-          healthConditions: (profile.health_conditions as string[]) || [],
-          regionCode: (profile.region_code as string) || 'CN',
+          healthConditions: (profile.healthConditions as string[]) || [],
+          regionCode: (profile.regionCode as string) || 'CN',
           timezone: profile.timezone,
         }
       : undefined;

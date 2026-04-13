@@ -46,9 +46,9 @@ export class ChannelMigrationService {
         select: {
           id: true,
           category: true,
-          processing_level: true,
-          commonality_score: true,
-          available_channels: true,
+          processingLevel: true,
+          commonalityScore: true,
+          availableChannels: true,
         },
         take: BATCH_SIZE,
         ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
@@ -61,7 +61,7 @@ export class ChannelMigrationService {
         stats.total++;
         try {
           const newChannels = this.inferChannels(food);
-          const oldChannels = this.parseChannels(food.available_channels);
+          const oldChannels = this.parseChannels(food.availableChannels);
 
           // 只在渠道列表发生变化时更新
           if (this.channelsEqual(oldChannels, newChannels)) {
@@ -71,7 +71,7 @@ export class ChannelMigrationService {
 
           await this.prisma.foods.update({
             where: { id: food.id },
-            data: { available_channels: newChannels },
+            data: { availableChannels: newChannels },
           });
           stats.updated++;
         } catch (err) {
@@ -100,12 +100,12 @@ export class ChannelMigrationService {
    */
   inferChannels(food: {
     category: string;
-    processing_level: number;
-    commonality_score: number;
+    processingLevel: number;
+    commonalityScore: number;
   }): string[] {
     const channels: string[] = [];
     const cat = food.category;
-    const nova = food.processing_level ?? 0;
+    const nova = food.processingLevel ?? 0;
 
     // 生鲜食材: 家庭烹饪；低加工追加餐厅
     if (['veggie', 'fruit', 'protein', 'dairy', 'grain'].includes(cat)) {
@@ -139,7 +139,7 @@ export class ChannelMigrationService {
     }
 
     // 高大众化食物: 追加食堂和外卖
-    if ((food.commonality_score ?? 50) >= 80) {
+    if ((food.commonalityScore ?? 50) >= 80) {
       if (!channels.includes('canteen')) channels.push('canteen');
       if (!channels.includes('delivery')) channels.push('delivery');
     }

@@ -26,7 +26,7 @@ export class GamificationService {
   }> {
     const [all, unlocked] = await Promise.all([
       this.prisma.achievements.findMany(),
-      this.prisma.user_achievements.findMany({ where: { user_id: userId } }),
+      this.prisma.userAchievements.findMany({ where: { userId: userId } }),
     ]);
     return { all, unlocked };
   }
@@ -35,16 +35,16 @@ export class GamificationService {
    * 检查并解锁成就
    */
   async checkAchievements(userId: string): Promise<any[]> {
-    const profile = await this.prisma.user_behavior_profiles.findFirst({
-      where: { user_id: userId },
+    const profile = await this.prisma.userBehaviorProfiles.findFirst({
+      where: { userId: userId },
     });
     if (!profile) return [];
 
     const all = await this.prisma.achievements.findMany();
-    const unlocked = await this.prisma.user_achievements.findMany({
-      where: { user_id: userId },
+    const unlocked = await this.prisma.userAchievements.findMany({
+      where: { userId: userId },
     });
-    const unlockedIds = new Set(unlocked.map((u) => u.achievement_id));
+    const unlockedIds = new Set(unlocked.map((u) => u.achievementId));
 
     const newlyUnlocked: any[] = [];
 
@@ -55,30 +55,30 @@ export class GamificationService {
 
       switch (achievement.category) {
         case 'streak':
-          qualified = profile.streak_days >= achievement.threshold;
+          qualified = profile.streakDays >= achievement.threshold;
           break;
         case 'record':
-          qualified = profile.total_records >= achievement.threshold;
+          qualified = profile.totalRecords >= achievement.threshold;
           break;
         case 'milestone':
           if (achievement.code === 'healthy_rate_80') {
             qualified =
-              profile.total_records >= 10 &&
-              Number(profile.avg_compliance_rate) * 100 >=
+              profile.totalRecords >= 10 &&
+              Number(profile.avgComplianceRate) * 100 >=
                 achievement.threshold;
           } else if (achievement.code === 'first_analyze') {
-            qualified = profile.total_records >= 1;
+            qualified = profile.totalRecords >= 1;
           } else if (achievement.code === 'first_plan') {
-            qualified = profile.total_records >= 1; // simplified check
+            qualified = profile.totalRecords >= 1; // simplified check
           }
           break;
       }
 
       if (qualified) {
-        const saved = await this.prisma.user_achievements.create({
+        const saved = await this.prisma.userAchievements.create({
           data: {
-            user_id: userId,
-            achievement_id: achievement.id,
+            userId: userId,
+            achievementId: achievement.id,
           },
         });
         newlyUnlocked.push(saved);
@@ -97,9 +97,9 @@ export class GamificationService {
     active: any[];
   }> {
     const [available, active] = await Promise.all([
-      this.prisma.challenges.findMany({ where: { is_active: true } }),
-      this.prisma.user_challenges.findMany({
-        where: { user_id: userId, status: 'active' },
+      this.prisma.challenges.findMany({ where: { isActive: true } }),
+      this.prisma.userChallenges.findMany({
+        where: { userId: userId, status: 'active' },
       }),
     ]);
     return { available, active };
@@ -115,17 +115,17 @@ export class GamificationService {
     if (!challenge) throw new NotFoundException('挑战不存在');
 
     // 检查是否已参加
-    const existing = await this.prisma.user_challenges.findFirst({
-      where: { user_id: userId, challenge_id: challengeId, status: 'active' },
+    const existing = await this.prisma.userChallenges.findFirst({
+      where: { userId: userId, challengeId: challengeId, status: 'active' },
     });
     if (existing) return existing;
 
-    return this.prisma.user_challenges.create({
+    return this.prisma.userChallenges.create({
       data: {
-        user_id: userId,
-        challenge_id: challengeId,
-        max_progress: challenge.duration_days,
-        current_progress: 0,
+        userId: userId,
+        challengeId: challengeId,
+        maxProgress: challenge.durationDays,
+        currentProgress: 0,
         status: 'active',
       },
     });
@@ -135,8 +135,8 @@ export class GamificationService {
    * 获取连胜状态
    */
   async getStreakStatus(userId: string): Promise<StreakStatus> {
-    const profile = await this.prisma.user_behavior_profiles.findFirst({
-      where: { user_id: userId },
+    const profile = await this.prisma.userBehaviorProfiles.findFirst({
+      where: { userId: userId },
     });
     const summary = await this.foodService.getTodaySummary(userId);
     const goal = summary.calorieGoal || 2000;
@@ -149,8 +149,8 @@ export class GamificationService {
     }
 
     return {
-      current: profile?.streak_days || 0,
-      longest: profile?.longest_streak || 0,
+      current: profile?.streakDays || 0,
+      longest: profile?.longestStreak || 0,
       todayStatus,
     };
   }
@@ -161,18 +161,18 @@ export class GamificationService {
   async updateStreak(userId: string): Promise<void> {
     const summary = await this.foodService.getTodaySummary(userId);
     const goal = summary.calorieGoal || 2000;
-    let profile = await this.prisma.user_behavior_profiles.findFirst({
-      where: { user_id: userId },
+    let profile = await this.prisma.userBehaviorProfiles.findFirst({
+      where: { userId: userId },
     });
 
     if (!profile) {
-      profile = await this.prisma.user_behavior_profiles.create({
-        data: { user_id: userId },
+      profile = await this.prisma.userBehaviorProfiles.create({
+        data: { userId: userId },
       });
     }
 
-    let streakDays = profile.streak_days;
-    let longestStreak = profile.longest_streak;
+    let streakDays = profile.streakDays;
+    let longestStreak = profile.longestStreak;
 
     if (summary.totalCalories > 0 && summary.totalCalories <= goal) {
       streakDays += 1;
@@ -184,11 +184,11 @@ export class GamificationService {
       streakDays = Math.max(0, Math.floor(streakDays * 0.5));
     }
 
-    await this.prisma.user_behavior_profiles.update({
+    await this.prisma.userBehaviorProfiles.update({
       where: { id: profile.id },
       data: {
-        streak_days: streakDays,
-        longest_streak: longestStreak,
+        streakDays: streakDays,
+        longestStreak: longestStreak,
       },
     });
 
@@ -202,25 +202,25 @@ export class GamificationService {
    * 更新挑战进度
    */
   async updateChallengeProgress(userId: string): Promise<void> {
-    const activeChallenges = await this.prisma.user_challenges.findMany({
-      where: { user_id: userId, status: 'active' },
+    const activeChallenges = await this.prisma.userChallenges.findMany({
+      where: { userId: userId, status: 'active' },
     });
 
     for (const uc of activeChallenges) {
-      const newProgress = uc.current_progress + 1;
-      const completed = newProgress >= uc.max_progress;
+      const newProgress = uc.currentProgress + 1;
+      const completed = newProgress >= uc.maxProgress;
 
-      await this.prisma.user_challenges.update({
+      await this.prisma.userChallenges.update({
         where: { id: uc.id },
         data: {
-          current_progress: newProgress,
+          currentProgress: newProgress,
           status: completed ? 'completed' : 'active',
-          completed_at: completed ? new Date() : undefined,
+          completedAt: completed ? new Date() : undefined,
         },
       });
 
       if (completed) {
-        this.logger.log(`用户 ${userId} 完成挑战 ${uc.challenge_id}`);
+        this.logger.log(`用户 ${userId} 完成挑战 ${uc.challengeId}`);
       }
     }
   }

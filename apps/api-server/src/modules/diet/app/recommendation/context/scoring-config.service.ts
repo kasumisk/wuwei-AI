@@ -223,13 +223,13 @@ export class ScoringConfigService implements OnModuleInit {
 
     // 2. 从 feature_flag 表读取配置（V6.8: 先读 v68，fallback 读 v67）
     try {
-      let flag = await this.prisma.feature_flag.findUnique({
+      let flag = await this.prisma.featureFlag.findUnique({
         where: { key: 'scoring_config_v68' },
       });
 
       // V6.8: fallback 到 v67 配置
       if (!flag?.config) {
-        flag = await this.prisma.feature_flag.findUnique({
+        flag = await this.prisma.featureFlag.findUnique({
           where: { key: 'scoring_config_v67' },
         });
       }
@@ -264,11 +264,11 @@ export class ScoringConfigService implements OnModuleInit {
   ): Promise<ScoringConfigSnapshot> {
     const merged = this.mergeWithDefaults(partial);
 
-    await this.prisma.feature_flag.upsert({
+    await this.prisma.featureFlag.upsert({
       where: { key: 'scoring_config_v68' },
       update: {
         config: merged as any,
-        updated_at: new Date(),
+        updatedAt: new Date(),
       },
       create: {
         key: 'scoring_config_v68',
@@ -318,7 +318,7 @@ export class ScoringConfigService implements OnModuleInit {
       }
 
       try {
-        const flag = await this.prisma.feature_flag.findUnique({
+        const flag = await this.prisma.featureFlag.findUnique({
           where: { key: `scoring_config_shard_${key}` },
         });
 

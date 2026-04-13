@@ -74,7 +74,7 @@ export class RAGService implements OnModuleInit {
 
     const retriever = this.vectorStore.asRetriever({
       k: 4,
-      filter: { client_id: clientId },
+      filter: { clientId: clientId },
     });
 
     const ragChain = await createRetrievalChain({
@@ -99,7 +99,7 @@ export class RAGService implements OnModuleInit {
     });
 
     const docs = await splitter.createDocuments(texts, [
-      { client_id: clientId },
+      { clientId: clientId },
     ]);
 
     await this.vectorStore.addDocuments(docs);

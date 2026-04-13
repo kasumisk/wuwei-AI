@@ -29,7 +29,7 @@ export class ABExperimentManagementService {
   async findExperiments(query: GetExperimentsQueryDto) {
     const { page = 1, pageSize = 20, keyword, status, goalType } = query;
 
-    const where: Prisma.ab_experimentsWhereInput = {};
+    const where: Prisma.AbExperimentsWhereInput = {};
 
     if (keyword) {
       where.OR = [
@@ -41,17 +41,17 @@ export class ABExperimentManagementService {
       where.status = status;
     }
     if (goalType) {
-      where.goal_type = goalType;
+      where.goalType = goalType;
     }
 
     const [list, total] = await Promise.all([
-      this.prisma.ab_experiments.findMany({
+      this.prisma.abExperiments.findMany({
         where,
-        orderBy: { created_at: 'desc' },
+        orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
-      this.prisma.ab_experiments.count({ where }),
+      this.prisma.abExperiments.count({ where }),
     ]);
 
     return {
@@ -75,7 +75,7 @@ export class ABExperimentManagementService {
       statusMap[row.status] = Number(row.count);
     }
 
-    const total = await this.prisma.ab_experiments.count();
+    const total = await this.prisma.abExperiments.count();
 
     return {
       total,
@@ -89,7 +89,7 @@ export class ABExperimentManagementService {
   // ==================== 详情 ====================
 
   async getExperimentDetail(id: string) {
-    const experiment = await this.prisma.ab_experiments.findFirst({
+    const experiment = await this.prisma.abExperiments.findFirst({
       where: { id },
     });
     if (!experiment) {
@@ -130,10 +130,10 @@ export class ABExperimentManagementService {
     const experiment = await this.abTestingService.createExperiment({
       name: dto.name,
       description: dto.description,
-      goal_type: dto.goalType || '*',
+      goalType: dto.goalType || '*',
       groups: dto.groups as any,
-      start_date: dto.startDate ? new Date(dto.startDate) : undefined,
-      end_date: dto.endDate ? new Date(dto.endDate) : undefined,
+      startDate: dto.startDate ? new Date(dto.startDate) : undefined,
+      endDate: dto.endDate ? new Date(dto.endDate) : undefined,
     });
 
     this.logger.log(`A/B 实验已创建: ${experiment.id} - ${experiment.name}`);
@@ -143,7 +143,7 @@ export class ABExperimentManagementService {
   // ==================== 更新 ====================
 
   async updateExperiment(id: string, dto: UpdateExperimentDto) {
-    const experiment = await this.prisma.ab_experiments.findFirst({
+    const experiment = await this.prisma.abExperiments.findFirst({
       where: { id },
     });
     if (!experiment) {
@@ -179,12 +179,12 @@ export class ABExperimentManagementService {
     const data: any = {};
     if (dto.name !== undefined) data.name = dto.name;
     if (dto.description !== undefined) data.description = dto.description;
-    if (dto.goalType !== undefined) data.goal_type = dto.goalType;
+    if (dto.goalType !== undefined) data.goalType = dto.goalType;
     if (dto.groups !== undefined) data.groups = dto.groups;
-    if (dto.startDate !== undefined) data.start_date = new Date(dto.startDate);
-    if (dto.endDate !== undefined) data.end_date = new Date(dto.endDate);
+    if (dto.startDate !== undefined) data.startDate = new Date(dto.startDate);
+    if (dto.endDate !== undefined) data.endDate = new Date(dto.endDate);
 
-    const saved = await this.prisma.ab_experiments.update({
+    const saved = await this.prisma.abExperiments.update({
       where: { id },
       data,
     });
@@ -218,7 +218,7 @@ export class ABExperimentManagementService {
 
   async getExperimentMetrics(id: string) {
     // 先验证实验存在
-    const experiment = await this.prisma.ab_experiments.findFirst({
+    const experiment = await this.prisma.abExperiments.findFirst({
       where: { id },
     });
     if (!experiment) {
@@ -240,7 +240,7 @@ export class ABExperimentManagementService {
 
   async getExperimentAnalysis(id: string) {
     // 先验证实验存在
-    const experiment = await this.prisma.ab_experiments.findFirst({
+    const experiment = await this.prisma.abExperiments.findFirst({
       where: { id },
     });
     if (!experiment) {

@@ -114,24 +114,24 @@ export class RecommendationTraceService {
       const topFoodsSnapshot = this.buildTopFoodsSnapshot(input.topFoods);
       const scoreStats = this.calcScoreStats(input.topFoods);
 
-      const trace = await this.prisma.recommendation_traces.create({
+      const trace = await this.prisma.recommendationTraces.create({
         data: {
-          user_id: input.userId,
-          meal_type: input.mealType,
-          goal_type: input.goalType,
+          userId: input.userId,
+          mealType: input.mealType,
+          goalType: input.goalType,
           channel: input.channel || 'unknown',
-          strategy_id: input.strategyId ?? null,
-          strategy_version: input.strategyVersion ?? null,
-          experiment_id: input.experimentId ?? null,
-          group_id: input.groupId ?? null,
-          pipeline_snapshot: pipelineSnapshot as any,
-          top_foods: topFoodsSnapshot as any,
-          score_stats: scoreStats as any,
-          food_pool_size: input.foodPoolSize,
-          filters_applied: input.filtersApplied
+          strategyId: input.strategyId ?? null,
+          strategyVersion: input.strategyVersion ?? null,
+          experimentId: input.experimentId ?? null,
+          groupId: input.groupId ?? null,
+          pipelineSnapshot: pipelineSnapshot as any,
+          topFoods: topFoodsSnapshot as any,
+          scoreStats: scoreStats as any,
+          foodPoolSize: input.foodPoolSize,
+          filtersApplied: input.filtersApplied
             ? (input.filtersApplied as any)
             : null,
-          duration_ms: input.durationMs,
+          durationMs: input.durationMs,
         },
       });
 
@@ -157,9 +157,9 @@ export class RecommendationTraceService {
     traceId: string,
   ): Promise<void> {
     try {
-      await this.prisma.recommendation_feedbacks.update({
+      await this.prisma.recommendationFeedbacks.update({
         where: { id: feedbackId },
-        data: { trace_id: traceId },
+        data: { traceId: traceId },
       });
     } catch (err) {
       this.logger.warn(
@@ -180,14 +180,14 @@ export class RecommendationTraceService {
   ): Promise<number> {
     try {
       const since = new Date(Date.now() - windowMinutes * 60 * 1000);
-      const result = await this.prisma.recommendation_feedbacks.updateMany({
+      const result = await this.prisma.recommendationFeedbacks.updateMany({
         where: {
-          user_id: userId,
-          meal_type: mealType,
-          trace_id: null,
-          created_at: { gte: since },
+          userId: userId,
+          mealType: mealType,
+          traceId: null,
+          createdAt: { gte: since },
         },
-        data: { trace_id: traceId },
+        data: { traceId: traceId },
       });
       return result.count;
     } catch (err) {
@@ -216,32 +216,32 @@ export class RecommendationTraceService {
       topFoodsCount: number;
     }>
   > {
-    const traces = await this.prisma.recommendation_traces.findMany({
-      where: { user_id: userId },
-      orderBy: { created_at: 'desc' },
+    const traces = await this.prisma.recommendationTraces.findMany({
+      where: { userId: userId },
+      orderBy: { createdAt: 'desc' },
       take: limit,
       select: {
         id: true,
-        meal_type: true,
-        goal_type: true,
+        mealType: true,
+        goalType: true,
         channel: true,
-        food_pool_size: true,
-        duration_ms: true,
-        created_at: true,
-        top_foods: true,
+        foodPoolSize: true,
+        durationMs: true,
+        createdAt: true,
+        topFoods: true,
       },
     });
 
     return traces.map((t) => ({
       id: t.id,
-      mealType: t.meal_type,
-      goalType: t.goal_type,
+      mealType: t.mealType,
+      goalType: t.goalType,
       channel: t.channel,
-      foodPoolSize: t.food_pool_size,
-      durationMs: t.duration_ms,
-      createdAt: t.created_at,
-      topFoodsCount: Array.isArray(t.top_foods)
-        ? (t.top_foods as unknown[]).length
+      foodPoolSize: t.foodPoolSize,
+      durationMs: t.durationMs,
+      createdAt: t.createdAt,
+      topFoodsCount: Array.isArray(t.topFoods)
+        ? (t.topFoods as unknown[]).length
         : 0,
     }));
   }

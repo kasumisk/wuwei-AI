@@ -78,7 +78,7 @@ export class FoodImageRecognitionService {
               },
               {
                 type: 'image_url',
-                image_url: { url: `data:image/jpeg;base64,${imageBase64}` },
+                imageUrl: { url: `data:image/jpeg;base64,${imageBase64}` },
               },
             ],
           },
@@ -138,7 +138,7 @@ export class FoodImageRecognitionService {
               },
               {
                 type: 'image_url',
-                image_url: { url: imageUrl },
+                imageUrl: { url: imageUrl },
               },
             ],
           },

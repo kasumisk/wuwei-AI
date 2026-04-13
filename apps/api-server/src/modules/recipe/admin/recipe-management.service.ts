@@ -29,13 +29,13 @@ export class RecipeManagementService {
     const pageSize = query.pageSize ?? 20;
     const skip = (page - 1) * pageSize;
 
-    const where: Prisma.recipesWhereInput = {};
+    const where: Prisma.RecipesWhereInput = {};
 
     if (query.cuisine) where.cuisine = query.cuisine;
     if (query.difficulty) where.difficulty = query.difficulty;
     if (query.source) where.source = query.source;
-    if (query.reviewStatus) where.review_status = query.reviewStatus;
-    if (query.isActive !== undefined) where.is_active = query.isActive;
+    if (query.reviewStatus) where.reviewStatus = query.reviewStatus;
+    if (query.isActive !== undefined) where.isActive = query.isActive;
     if (query.keyword) {
       where.name = { contains: query.keyword, mode: 'insensitive' };
     }
@@ -44,9 +44,9 @@ export class RecipeManagementService {
       this.prisma.recipes.findMany({
         where,
         include: {
-          recipe_ingredients: { orderBy: { sort_order: 'asc' } },
+          recipeIngredients: { orderBy: { sortOrder: 'asc' } },
         },
-        orderBy: { created_at: 'desc' },
+        orderBy: { createdAt: 'desc' },
         skip,
         take: pageSize,
       }),
@@ -69,8 +69,8 @@ export class RecipeManagementService {
     const recipe = await this.prisma.recipes.findUnique({
       where: { id },
       include: {
-        recipe_ingredients: {
-          orderBy: { sort_order: 'asc' },
+        recipeIngredients: {
+          orderBy: { sortOrder: 'asc' },
           include: {
             food: { select: { id: true, name: true, category: true } },
           },
@@ -102,35 +102,35 @@ export class RecipeManagementService {
         description: recipeData.description,
         cuisine: recipeData.cuisine,
         difficulty: recipeData.difficulty ?? 1,
-        prep_time_minutes: recipeData.prepTimeMinutes,
-        cook_time_minutes: recipeData.cookTimeMinutes,
+        prepTimeMinutes: recipeData.prepTimeMinutes,
+        cookTimeMinutes: recipeData.cookTimeMinutes,
         servings: recipeData.servings ?? 1,
         tags: recipeData.tags ?? [],
         instructions: recipeData.instructions ?? Prisma.JsonNull,
-        image_url: recipeData.imageUrl,
+        imageUrl: recipeData.imageUrl,
         source: recipeSource,
-        review_status: reviewStatus,
-        is_active: isActive,
-        calories_per_serving: recipeData.caloriesPerServing,
-        protein_per_serving: recipeData.proteinPerServing,
-        fat_per_serving: recipeData.fatPerServing,
-        carbs_per_serving: recipeData.carbsPerServing,
-        fiber_per_serving: recipeData.fiberPerServing,
-        quality_score: qualityScore,
-        recipe_ingredients: ingredients?.length
+        reviewStatus: reviewStatus,
+        isActive: isActive,
+        caloriesPerServing: recipeData.caloriesPerServing,
+        proteinPerServing: recipeData.proteinPerServing,
+        fatPerServing: recipeData.fatPerServing,
+        carbsPerServing: recipeData.carbsPerServing,
+        fiberPerServing: recipeData.fiberPerServing,
+        qualityScore: qualityScore,
+        recipeIngredients: ingredients?.length
           ? {
               create: ingredients.map((ing, idx) => ({
-                food_id: ing.foodId,
-                ingredient_name: ing.ingredientName,
+                foodId: ing.foodId,
+                ingredientName: ing.ingredientName,
                 amount: ing.amount,
                 unit: ing.unit,
-                is_optional: ing.isOptional ?? false,
-                sort_order: ing.sortOrder ?? idx,
+                isOptional: ing.isOptional ?? false,
+                sortOrder: ing.sortOrder ?? idx,
               })),
             }
           : undefined,
       },
-      include: { recipe_ingredients: { orderBy: { sort_order: 'asc' } } },
+      include: { recipeIngredients: { orderBy: { sortOrder: 'asc' } } },
     });
 
     this.logger.log(`菜谱已创建: ${recipe.name} (${recipe.id})`);
@@ -209,28 +209,28 @@ export class RecipeManagementService {
       ...updateData,
       caloriesPerServing:
         updateData.caloriesPerServing ??
-        (existing.calories_per_serving
-          ? Number(existing.calories_per_serving)
+        (existing.caloriesPerServing
+          ? Number(existing.caloriesPerServing)
           : undefined),
       proteinPerServing:
         updateData.proteinPerServing ??
-        (existing.protein_per_serving
-          ? Number(existing.protein_per_serving)
+        (existing.proteinPerServing
+          ? Number(existing.proteinPerServing)
           : undefined),
       fatPerServing:
         updateData.fatPerServing ??
-        (existing.fat_per_serving
-          ? Number(existing.fat_per_serving)
+        (existing.fatPerServing
+          ? Number(existing.fatPerServing)
           : undefined),
       carbsPerServing:
         updateData.carbsPerServing ??
-        (existing.carbs_per_serving
-          ? Number(existing.carbs_per_serving)
+        (existing.carbsPerServing
+          ? Number(existing.carbsPerServing)
           : undefined),
       fiberPerServing:
         updateData.fiberPerServing ??
-        (existing.fiber_per_serving
-          ? Number(existing.fiber_per_serving)
+        (existing.fiberPerServing
+          ? Number(existing.fiberPerServing)
           : undefined),
     };
     const qualityScore = this.calculateQualityScore(mergedForScore as any);
@@ -238,17 +238,17 @@ export class RecipeManagementService {
     const recipe = await this.prisma.$transaction(async (tx) => {
       // 如果有食材更新，先删后建
       if (ingredients) {
-        await tx.recipe_ingredients.deleteMany({ where: { recipe_id: id } });
+        await tx.recipeIngredients.deleteMany({ where: { recipeId: id } });
         if (ingredients.length > 0) {
-          await tx.recipe_ingredients.createMany({
+          await tx.recipeIngredients.createMany({
             data: ingredients.map((ing, idx) => ({
-              recipe_id: id,
-              food_id: ing.foodId,
-              ingredient_name: ing.ingredientName,
+              recipeId: id,
+              foodId: ing.foodId,
+              ingredientName: ing.ingredientName,
               amount: ing.amount,
               unit: ing.unit,
-              is_optional: ing.isOptional ?? false,
-              sort_order: ing.sortOrder ?? idx,
+              isOptional: ing.isOptional ?? false,
+              sortOrder: ing.sortOrder ?? idx,
             })),
           });
         }
@@ -268,10 +268,10 @@ export class RecipeManagementService {
             difficulty: updateData.difficulty,
           }),
           ...(updateData.prepTimeMinutes !== undefined && {
-            prep_time_minutes: updateData.prepTimeMinutes,
+            prepTimeMinutes: updateData.prepTimeMinutes,
           }),
           ...(updateData.cookTimeMinutes !== undefined && {
-            cook_time_minutes: updateData.cookTimeMinutes,
+            cookTimeMinutes: updateData.cookTimeMinutes,
           }),
           ...(updateData.servings !== undefined && {
             servings: updateData.servings,
@@ -281,30 +281,30 @@ export class RecipeManagementService {
             instructions: updateData.instructions ?? Prisma.JsonNull,
           }),
           ...(updateData.imageUrl !== undefined && {
-            image_url: updateData.imageUrl,
+            imageUrl: updateData.imageUrl,
           }),
           ...(updateData.isActive !== undefined && {
-            is_active: updateData.isActive,
+            isActive: updateData.isActive,
           }),
           ...(updateData.caloriesPerServing !== undefined && {
-            calories_per_serving: updateData.caloriesPerServing,
+            caloriesPerServing: updateData.caloriesPerServing,
           }),
           ...(updateData.proteinPerServing !== undefined && {
-            protein_per_serving: updateData.proteinPerServing,
+            proteinPerServing: updateData.proteinPerServing,
           }),
           ...(updateData.fatPerServing !== undefined && {
-            fat_per_serving: updateData.fatPerServing,
+            fatPerServing: updateData.fatPerServing,
           }),
           ...(updateData.carbsPerServing !== undefined && {
-            carbs_per_serving: updateData.carbsPerServing,
+            carbsPerServing: updateData.carbsPerServing,
           }),
           ...(updateData.fiberPerServing !== undefined && {
-            fiber_per_serving: updateData.fiberPerServing,
+            fiberPerServing: updateData.fiberPerServing,
           }),
-          quality_score: qualityScore,
-          updated_at: new Date(),
+          qualityScore: qualityScore,
+          updatedAt: new Date(),
         },
-        include: { recipe_ingredients: { orderBy: { sort_order: 'asc' } } },
+        include: { recipeIngredients: { orderBy: { sortOrder: 'asc' } } },
       });
     });
 
@@ -323,7 +323,7 @@ export class RecipeManagementService {
 
     await this.prisma.recipes.update({
       where: { id },
-      data: { is_active: false, updated_at: new Date() },
+      data: { isActive: false, updatedAt: new Date() },
     });
 
     this.logger.log(`菜谱已禁用: ${existing.name} (${id})`);
@@ -340,10 +340,10 @@ export class RecipeManagementService {
       adminUserId?: string;
     },
   ) {
-    // V6.4: include recipe_ingredients 以支持审核通过时重算 quality_score
+    // V6.4: include recipeIngredients 以支持审核通过时重算 quality_score
     const existing = await this.prisma.recipes.findUnique({
       where: { id },
-      include: { recipe_ingredients: true },
+      include: { recipeIngredients: true },
     });
     if (!existing) {
       throw new NotFoundException(`菜谱 ${id} 不存在`);
@@ -354,21 +354,21 @@ export class RecipeManagementService {
     // V6.4: 审核通过时重新计算 quality_score
     // UGC 菜谱在提交时 quality_score=0，审核通过后可能已有更多信息（如 admin 补充了食材关联）
     const qualityScoreUpdate = approved
-      ? { quality_score: this.calculateQualityScore(existing) }
+      ? { qualityScore: this.calculateQualityScore(existing) }
       : {};
 
     const updated = await this.prisma.recipes.update({
       where: { id },
       data: {
-        review_status: params.action,
-        review_note: params.note,
-        reviewed_by: params.adminUserId,
-        reviewed_at: new Date(),
-        is_active: approved,
-        updated_at: new Date(),
+        reviewStatus: params.action,
+        reviewNote: params.note,
+        reviewedBy: params.adminUserId,
+        reviewedAt: new Date(),
+        isActive: approved,
+        updatedAt: new Date(),
         ...qualityScoreUpdate,
       },
-      include: { recipe_ingredients: { orderBy: { sort_order: 'asc' } } },
+      include: { recipeIngredients: { orderBy: { sortOrder: 'asc' } } },
     });
 
     this.logger.log(
@@ -392,41 +392,41 @@ export class RecipeManagementService {
       allRecipes,
     ] = await Promise.all([
       this.prisma.recipes.count(),
-      this.prisma.recipes.count({ where: { is_active: true } }),
+      this.prisma.recipes.count({ where: { isActive: true } }),
       this.prisma.recipes.groupBy({
         by: ['source'],
         _count: { id: true },
       }),
       this.prisma.recipes.groupBy({
         by: ['cuisine'],
-        where: { is_active: true },
+        where: { isActive: true },
         _count: { id: true },
         orderBy: { _count: { id: 'desc' } },
         take: 10,
       }),
       this.prisma.recipes.aggregate({
-        where: { is_active: true },
-        _avg: { quality_score: true },
+        where: { isActive: true },
+        _avg: { qualityScore: true },
       }),
-      this.prisma.recipes.count({ where: { review_status: 'pending' } }),
-      this.prisma.recipes.count({ where: { quality_score: { lt: 60 } } }),
+      this.prisma.recipes.count({ where: { reviewStatus: 'pending' } }),
+      this.prisma.recipes.count({ where: { qualityScore: { lt: 60 } } }),
       this.prisma.recipes.findMany({
         select: {
           id: true,
           name: true,
           source: true,
-          review_status: true,
-          quality_score: true,
+          reviewStatus: true,
+          qualityScore: true,
           description: true,
-          image_url: true,
-          calories_per_serving: true,
-          protein_per_serving: true,
-          fat_per_serving: true,
-          carbs_per_serving: true,
-          fiber_per_serving: true,
+          imageUrl: true,
+          caloriesPerServing: true,
+          proteinPerServing: true,
+          fatPerServing: true,
+          carbsPerServing: true,
+          fiberPerServing: true,
           instructions: true,
         },
-        orderBy: [{ quality_score: 'asc' }, { created_at: 'desc' }],
+        orderBy: [{ qualityScore: 'asc' }, { createdAt: 'desc' }],
         take: 100,
       }),
     ]);
@@ -445,20 +445,20 @@ export class RecipeManagementService {
     };
 
     for (const recipe of allRecipes) {
-      const score = Number(recipe.quality_score) || 0;
+      const score = Number(recipe.qualityScore) || 0;
       if (score >= 85) qualityBuckets.excellent++;
       else if (score >= 70) qualityBuckets.good++;
       else if (score >= 60) qualityBuckets.fair++;
       else qualityBuckets.poor++;
 
       if (!recipe.description) missingFieldStats.missingDescription++;
-      if (!recipe.image_url) missingFieldStats.missingImage++;
+      if (!recipe.imageUrl) missingFieldStats.missingImage++;
       if (!recipe.instructions) missingFieldStats.missingInstructions++;
       if (
-        !recipe.calories_per_serving ||
-        !recipe.protein_per_serving ||
-        !recipe.fat_per_serving ||
-        !recipe.carbs_per_serving
+        !recipe.caloriesPerServing ||
+        !recipe.proteinPerServing ||
+        !recipe.fatPerServing ||
+        !recipe.carbsPerServing
       ) {
         missingFieldStats.missingNutrition++;
       }
@@ -467,19 +467,19 @@ export class RecipeManagementService {
     const sampleIssues = allRecipes.slice(0, 10).map((recipe) => {
       const issues: string[] = [];
       if (!recipe.description) issues.push('缺少描述');
-      if (!recipe.image_url) issues.push('缺少图片');
+      if (!recipe.imageUrl) issues.push('缺少图片');
       if (!recipe.instructions) issues.push('缺少步骤');
-      if (!recipe.calories_per_serving || !recipe.protein_per_serving) {
+      if (!recipe.caloriesPerServing || !recipe.proteinPerServing) {
         issues.push('营养信息不完整');
       }
-      if ((Number(recipe.quality_score) || 0) < 60) issues.push('质量分偏低');
+      if ((Number(recipe.qualityScore) || 0) < 60) issues.push('质量分偏低');
 
       return {
         id: recipe.id,
         name: recipe.name,
         source: recipe.source,
-        reviewStatus: recipe.review_status,
-        qualityScore: Number(recipe.quality_score) || 0,
+        reviewStatus: recipe.reviewStatus,
+        qualityScore: Number(recipe.qualityScore) || 0,
         issues,
       };
     });
@@ -496,8 +496,8 @@ export class RecipeManagementService {
         cuisine: c.cuisine ?? '未分类',
         count: c._count.id,
       })),
-      avgQualityScore: avgQuality._avg.quality_score
-        ? Number(avgQuality._avg.quality_score)
+      avgQualityScore: avgQuality._avg.qualityScore
+        ? Number(avgQuality._avg.qualityScore)
         : 0,
       qualityMonitoring: {
         pendingReview,
@@ -532,8 +532,8 @@ export class RecipeManagementService {
   }> {
     const { onlyZero = false, batchSize = 100 } = options;
 
-    const where: Prisma.recipesWhereInput = onlyZero
-      ? { quality_score: { equals: 0 } }
+    const where: Prisma.RecipesWhereInput = onlyZero
+      ? { qualityScore: { equals: 0 } }
       : {};
 
     const total = await this.prisma.recipes.count({ where });
@@ -549,7 +549,7 @@ export class RecipeManagementService {
     while (true) {
       const batch = await this.prisma.recipes.findMany({
         where,
-        include: { recipe_ingredients: true },
+        include: { recipeIngredients: true },
         orderBy: { id: 'asc' },
         take: batchSize,
         ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
@@ -560,12 +560,12 @@ export class RecipeManagementService {
       for (const recipe of batch) {
         try {
           const newScore = this.calculateQualityScore(recipe);
-          const oldScore = Number(recipe.quality_score) || 0;
+          const oldScore = Number(recipe.qualityScore) || 0;
 
           if (newScore !== oldScore) {
             await this.prisma.recipes.update({
               where: { id: recipe.id },
-              data: { quality_score: newScore, updated_at: new Date() },
+              data: { qualityScore: newScore, updatedAt: new Date() },
             });
             updated++;
           } else {
@@ -638,14 +638,14 @@ export class RecipeManagementService {
     }
 
     // 图片 (10分)
-    if (dto.imageUrl || dto.image_url) score += 10;
+    if (dto.imageUrl || dto.imageUrl) score += 10;
 
     // 食材关联 (15分)
-    const ingredients = dto.ingredients ?? dto.recipe_ingredients ?? [];
+    const ingredients = dto.ingredients ?? dto.recipeIngredients ?? [];
     if (ingredients.length > 0) {
       score += 5; // 有食材
       const linkedCount = ingredients.filter(
-        (i: any) => i.foodId || i.food_id,
+        (i: any) => i.foodId || i.foodId,
       ).length;
       if (linkedCount > 0) {
         score += Math.min(
@@ -658,8 +658,8 @@ export class RecipeManagementService {
     // 元数据 (15分)
     if (dto.cuisine) score += 4;
     if (dto.difficulty && dto.difficulty > 1) score += 3;
-    if (dto.prepTimeMinutes || dto.prep_time_minutes) score += 3;
-    if (dto.cookTimeMinutes || dto.cook_time_minutes) score += 3;
+    if (dto.prepTimeMinutes || dto.prepTimeMinutes) score += 3;
+    if (dto.cookTimeMinutes || dto.cookTimeMinutes) score += 3;
     if ((dto.servings ?? 1) > 0) score += 2;
 
     return Math.min(100, score);
@@ -681,8 +681,8 @@ export class RecipeManagementService {
       updatedAt: Date;
     }>
   > {
-    const rows = await this.prisma.recipe_translations.findMany({
-      where: { recipe_id: recipeId },
+    const rows = await this.prisma.recipeTranslations.findMany({
+      where: { recipeId: recipeId },
       orderBy: { locale: 'asc' },
     });
 
@@ -692,8 +692,8 @@ export class RecipeManagementService {
       name: r.name,
       description: r.description,
       instructions: r.instructions,
-      createdAt: r.created_at,
-      updatedAt: r.updated_at,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
     }));
   }
 
@@ -716,15 +716,15 @@ export class RecipeManagementService {
       throw new NotFoundException(`菜谱 ${params.recipeId} 不存在`);
     }
 
-    const existing = await this.prisma.recipe_translations.findFirst({
+    const existing = await this.prisma.recipeTranslations.findFirst({
       where: {
-        recipe_id: params.recipeId,
+        recipeId: params.recipeId,
         locale: params.locale,
       },
     });
 
     if (existing) {
-      const updated = await this.prisma.recipe_translations.update({
+      const updated = await this.prisma.recipeTranslations.update({
         where: { id: existing.id },
         data: {
           name: params.name,
@@ -732,15 +732,15 @@ export class RecipeManagementService {
           instructions: params.instructions
             ? (params.instructions as Prisma.InputJsonValue)
             : undefined,
-          updated_at: new Date(),
+          updatedAt: new Date(),
         },
       });
       return { id: updated.id, locale: updated.locale, name: updated.name };
     }
 
-    const created = await this.prisma.recipe_translations.create({
+    const created = await this.prisma.recipeTranslations.create({
       data: {
-        recipe_id: params.recipeId,
+        recipeId: params.recipeId,
         locale: params.locale,
         name: params.name,
         description: params.description ?? null,
@@ -756,12 +756,12 @@ export class RecipeManagementService {
    * 删除菜谱翻译
    */
   async deleteTranslation(recipeId: string, locale: string): Promise<boolean> {
-    const existing = await this.prisma.recipe_translations.findFirst({
-      where: { recipe_id: recipeId, locale },
+    const existing = await this.prisma.recipeTranslations.findFirst({
+      where: { recipeId: recipeId, locale },
     });
     if (!existing) return false;
 
-    await this.prisma.recipe_translations.delete({
+    await this.prisma.recipeTranslations.delete({
       where: { id: existing.id },
     });
     return true;

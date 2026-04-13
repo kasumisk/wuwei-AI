@@ -27,10 +27,10 @@ export type LifestyleNutrientAdjustment = Record<string, number>;
 
 /** 补剂 → 对应营养素映射（服用补剂时下调该营养素的推荐优先级，避免重叠推高） */
 const SUPPLEMENT_NUTRIENT_MAP: Record<string, string> = {
-  vitamin_c: 'vitaminC',
-  vitamin_d: 'vitaminD',
-  vitamin_b12: 'vitaminB12',
-  vitamin_b6: 'vitaminB6',
+  vitaminC: 'vitaminC',
+  vitaminD: 'vitaminD',
+  vitaminB12: 'vitaminB12',
+  vitaminB6: 'vitaminB6',
   magnesium: 'magnesium',
   calcium: 'calcium',
   iron: 'iron',

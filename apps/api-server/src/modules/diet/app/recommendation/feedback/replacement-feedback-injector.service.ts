@@ -61,23 +61,23 @@ export class ReplacementFeedbackInjectorService {
         Date.now() -
           ReplacementFeedbackInjectorService.LOOKBACK_DAYS * 86400_000,
       );
-      const patterns = await this.prisma.replacement_patterns.findMany({
+      const patterns = await this.prisma.replacementPatterns.findMany({
         where: {
-          user_id: userId,
-          last_occurred: { gte: cutoff },
+          userId: userId,
+          lastOccurred: { gte: cutoff },
           frequency: { gte: ReplacementFeedbackInjectorService.MIN_FREQUENCY },
         },
         select: {
-          from_food_id: true,
-          to_food_id: true,
+          fromFoodId: true,
+          toFoodId: true,
           frequency: true,
-          last_occurred: true,
-          meal_type: true, // V6.7 Phase 2-E
+          lastOccurred: true,
+          mealType: true, // V6.7 Phase 2-E
         },
       });
 
       for (const p of patterns) {
-        const daysSince = (Date.now() - p.last_occurred.getTime()) / 86400_000;
+        const daysSince = (Date.now() - p.lastOccurred.getTime()) / 86400_000;
 
         // 时间衰减因子：30天内=1.0，30~90天线性衰减到0.6
         const decayFactor =
@@ -95,13 +95,13 @@ export class ReplacementFeedbackInjectorService {
         // 如果 pattern 有 meal_type 且与当前餐次不匹配，权重打折 0.6x
         // 无 mealType 传入 或 pattern 无 meal_type → 视为匹配（全权重）
         const mealTypeMatch =
-          !mealType || !p.meal_type || p.meal_type === mealType;
+          !mealType || !p.mealType || p.mealType === mealType;
         const mealTypeFactor = mealTypeMatch ? 1.0 : 0.6;
 
         // 被替换食物降权（叠加，下界 0.65）
-        const fromCurrent = weightMap.get(p.from_food_id) ?? 1.0;
+        const fromCurrent = weightMap.get(p.fromFoodId) ?? 1.0;
         weightMap.set(
-          p.from_food_id,
+          p.fromFoodId,
           Math.max(
             ReplacementFeedbackInjectorService.MIN_FROM,
             fromCurrent *
@@ -112,9 +112,9 @@ export class ReplacementFeedbackInjectorService {
         );
 
         // 替换目标增权（叠加，上界 1.25）
-        const toCurrent = weightMap.get(p.to_food_id) ?? 1.0;
+        const toCurrent = weightMap.get(p.toFoodId) ?? 1.0;
         weightMap.set(
-          p.to_food_id,
+          p.toFoodId,
           Math.min(
             ReplacementFeedbackInjectorService.MAX_TO,
             toCurrent *

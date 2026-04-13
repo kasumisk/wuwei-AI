@@ -51,7 +51,7 @@ export class StrategyManagementService {
     const [list, total] = await Promise.all([
       this.prisma.strategy.findMany({
         where,
-        orderBy: [{ priority: 'desc' }, { updated_at: 'desc' }],
+        orderBy: [{ priority: 'desc' }, { updatedAt: 'desc' }],
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
@@ -76,8 +76,8 @@ export class StrategyManagementService {
     }
 
     // 同时查询该策略的活跃分配数
-    const activeAssignmentCount = await this.prisma.strategy_assignment.count({
-      where: { strategy_id: id, is_active: true },
+    const activeAssignmentCount = await this.prisma.strategyAssignment.count({
+      where: { strategyId: id, isActive: true },
     });
 
     return {
@@ -138,13 +138,13 @@ export class StrategyManagementService {
     }
 
     // 先取消该用户该策略的现有分配（避免重复）
-    await this.prisma.strategy_assignment.updateMany({
+    await this.prisma.strategyAssignment.updateMany({
       where: {
-        strategy_id: strategyId,
-        user_id: dto.userId,
-        is_active: true,
+        strategyId: strategyId,
+        userId: dto.userId,
+        isActive: true,
       },
-      data: { is_active: false },
+      data: { isActive: false },
     });
 
     return this.strategyService.assignToUser({
@@ -161,19 +161,19 @@ export class StrategyManagementService {
     const { page = 1, pageSize = 20, isActive, assignmentType } = query;
 
     const where = {
-      strategy_id: strategyId,
-      ...(isActive !== undefined && { is_active: isActive }),
-      ...(assignmentType && { assignment_type: assignmentType }),
+      strategyId: strategyId,
+      ...(isActive !== undefined && { isActive: isActive }),
+      ...(assignmentType && { assignmentType: assignmentType }),
     };
 
     const [list, total] = await Promise.all([
-      this.prisma.strategy_assignment.findMany({
+      this.prisma.strategyAssignment.findMany({
         where,
-        orderBy: { created_at: 'desc' },
+        orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
-      this.prisma.strategy_assignment.count({ where }),
+      this.prisma.strategyAssignment.count({ where }),
     ]);
 
     return {
@@ -190,8 +190,8 @@ export class StrategyManagementService {
     assignmentId: string,
     dto: RemoveAssignmentDto,
   ) {
-    const assignment = await this.prisma.strategy_assignment.findFirst({
-      where: { id: assignmentId, strategy_id: strategyId },
+    const assignment = await this.prisma.strategyAssignment.findFirst({
+      where: { id: assignmentId, strategyId: strategyId },
     });
     if (!assignment) {
       throw new NotFoundException(`分配记录 ${assignmentId} 不存在`);
@@ -223,8 +223,8 @@ export class StrategyManagementService {
       this.prisma.strategy.count({
         where: { status: StrategyStatus.ARCHIVED },
       }),
-      this.prisma.strategy_assignment.count({
-        where: { is_active: true },
+      this.prisma.strategyAssignment.count({
+        where: { isActive: true },
       }),
       this.prisma.strategy.groupBy({
         by: ['scope'],
@@ -264,7 +264,7 @@ export class StrategyManagementService {
         id: true,
         name: true,
         scope: true,
-        scope_target: true,
+        scopeTarget: true,
         config: true,
       },
     });
@@ -279,7 +279,7 @@ export class StrategyManagementService {
           strategyId: s.id,
           strategyName: s.name,
           scope: s.scope,
-          scopeTarget: s.scope_target,
+          scopeTarget: s.scopeTarget,
           realism,
           isCustom: realism !== null,
         };
@@ -382,7 +382,7 @@ export class StrategyManagementService {
       where: {
         status: StrategyStatus.ACTIVE,
         OR: [
-          { scope: 'goal_type', scope_target: dto.segment },
+          { scope: 'goal_type', scopeTarget: dto.segment },
           { name: { contains: dto.segment, mode: 'insensitive' } },
         ],
       },

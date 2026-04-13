@@ -40,9 +40,9 @@ import {
   TieredCacheNamespace,
 } from '../../../../core/cache/tiered-cache-manager';
 import {
-  subscription_plan as SubscriptionPlan,
-  subscription as Subscription,
-  payment_records as PaymentRecord,
+  SubscriptionPlan,
+  Subscription,
+  PaymentRecords as PaymentRecord,
 } from '@prisma/client';
 import { PaymentChannel, PaymentStatus } from '../../subscription.types';
 import {
@@ -160,10 +160,10 @@ export class AppleIapService implements OnModuleInit {
       }
 
       // 4. 查找对应的订阅计划
-      const plan = await this.prisma.subscription_plan.findFirst({
+      const plan = await this.prisma.subscriptionPlan.findFirst({
         where: {
-          apple_product_id: transaction.productId,
-          is_active: true,
+          appleProductId: transaction.productId,
+          isActive: true,
         },
       });
       if (!plan) {
@@ -174,8 +174,8 @@ export class AppleIapService implements OnModuleInit {
       }
 
       // 5. 检查是否已处理过（防重复）
-      const existingPayment = await this.prisma.payment_records.findUnique({
-        where: { order_no: `apple_${transaction.transactionId}` },
+      const existingPayment = await this.prisma.paymentRecords.findUnique({
+        where: { orderNo: `apple_${transaction.transactionId}` },
       });
       if (existingPayment) {
         this.logger.log(
@@ -189,7 +189,7 @@ export class AppleIapService implements OnModuleInit {
         userId,
         orderNo: `apple_${transaction.transactionId}`,
         channel: PaymentChannel.APPLE_IAP,
-        amountCents: transaction.price ?? plan.price_cents,
+        amountCents: transaction.price ?? plan.priceCents,
         currency: transaction.currency ?? plan.currency,
       });
 
@@ -438,12 +438,12 @@ export class AppleIapService implements OnModuleInit {
     if (!subscription) return;
 
     // 更新支付记录为已退款
-    const paymentRecord = await this.prisma.payment_records.findUnique({
-      where: { order_no: `apple_${txn.transactionId}` },
+    const paymentRecord = await this.prisma.paymentRecords.findUnique({
+      where: { orderNo: `apple_${txn.transactionId}` },
     });
     if (paymentRecord) {
       await this.subscriptionService.updatePaymentStatus(
-        paymentRecord.order_no,
+        paymentRecord.orderNo,
         PaymentStatus.REFUNDED,
       );
     }
@@ -564,8 +564,8 @@ export class AppleIapService implements OnModuleInit {
   } | null> {
     // 通过 platformSubscriptionId 查找
     const sub = await this.prisma.subscription.findFirst({
-      where: { platform_subscription_id: originalTransactionId },
-      orderBy: { created_at: 'desc' },
+      where: { platformSubscriptionId: originalTransactionId },
+      orderBy: { createdAt: 'desc' },
     });
 
     if (!sub) {
@@ -575,7 +575,7 @@ export class AppleIapService implements OnModuleInit {
       return null;
     }
 
-    return { id: sub.id, userId: sub.user_id, expiresAt: sub.expires_at };
+    return { id: sub.id, userId: sub.userId, expiresAt: sub.expiresAt };
   }
 
   /**
@@ -770,7 +770,7 @@ export class AppleIapService implements OnModuleInit {
    */
   private calcExpiresDate(plan: any): Date {
     const now = new Date();
-    switch (plan.billing_cycle) {
+    switch (plan.billingCycle) {
       case 'monthly':
         return new Date(now.setMonth(now.getMonth() + 1));
       case 'quarterly':

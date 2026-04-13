@@ -192,7 +192,7 @@ export class StrategyResolver {
 
     for (const strategy of strategies) {
       const condition =
-        strategy.context_condition as ContextStrategyCondition | null;
+        strategy.contextCondition as ContextStrategyCondition | null;
       if (!condition) continue;
 
       const { matches, score } = this.evaluateCondition(condition, input);

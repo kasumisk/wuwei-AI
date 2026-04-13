@@ -96,22 +96,22 @@ export class StrategyEffectivenessService {
 
     // 1. 查询 traces
     const traceWhere: Record<string, unknown> = {
-      created_at: { gte: since },
+      createdAt: { gte: since },
     };
     if (strategyId) {
-      traceWhere.strategy_id = strategyId;
+      traceWhere.strategyId = strategyId;
     }
 
-    const traces = await this.prisma.recommendation_traces.findMany({
+    const traces = await this.prisma.recommendationTraces.findMany({
       where: traceWhere,
       select: {
         id: true,
         channel: true,
-        goal_type: true,
-        food_pool_size: true,
-        duration_ms: true,
-        strategy_id: true,
-        strategy_version: true,
+        goalType: true,
+        foodPoolSize: true,
+        durationMs: true,
+        strategyId: true,
+        strategyVersion: true,
       },
     });
 
@@ -121,13 +121,13 @@ export class StrategyEffectivenessService {
     // 2. 查询关联的反馈
     const feedbacks =
       traceIds.length > 0
-        ? await this.prisma.recommendation_feedbacks.findMany({
+        ? await this.prisma.recommendationFeedbacks.findMany({
             where: {
-              trace_id: { in: traceIds },
+              traceId: { in: traceIds },
             },
             select: {
               action: true,
-              trace_id: true,
+              traceId: true,
             },
           })
         : [];
@@ -147,23 +147,23 @@ export class StrategyEffectivenessService {
 
     for (const trace of traces) {
       channelDist[trace.channel] = (channelDist[trace.channel] || 0) + 1;
-      goalDist[trace.goal_type] = (goalDist[trace.goal_type] || 0) + 1;
-      if (trace.food_pool_size != null) {
-        totalPoolSize += trace.food_pool_size;
+      goalDist[trace.goalType] = (goalDist[trace.goalType] || 0) + 1;
+      if (trace.foodPoolSize != null) {
+        totalPoolSize += trace.foodPoolSize;
         poolCount++;
       }
-      if (trace.duration_ms != null) {
-        totalDuration += trace.duration_ms;
+      if (trace.durationMs != null) {
+        totalDuration += trace.durationMs;
         durationCount++;
       }
     }
 
     // 获取策略版本（取第一个非 null 的）
-    const firstTrace = traces.find((t) => t.strategy_version);
+    const firstTrace = traces.find((t) => t.strategyVersion);
 
     return {
       strategyId: strategyId ?? null,
-      strategyVersion: firstTrace?.strategy_version ?? null,
+      strategyVersion: firstTrace?.strategyVersion ?? null,
       period: { from: since, to: now },
       totalRecommendations,
       totalFeedbacks,
@@ -201,15 +201,15 @@ export class StrategyEffectivenessService {
     since.setDate(since.getDate() - days);
 
     // 查询该实验的所有 traces
-    const traces = await this.prisma.recommendation_traces.findMany({
+    const traces = await this.prisma.recommendationTraces.findMany({
       where: {
-        experiment_id: experimentId,
-        created_at: { gte: since },
+        experimentId: experimentId,
+        createdAt: { gte: since },
       },
       select: {
         id: true,
-        group_id: true,
-        duration_ms: true,
+        groupId: true,
+        durationMs: true,
       },
     });
 
@@ -218,11 +218,11 @@ export class StrategyEffectivenessService {
     // 查询关联反馈
     const feedbacks =
       traceIds.length > 0
-        ? await this.prisma.recommendation_feedbacks.findMany({
-            where: { trace_id: { in: traceIds } },
+        ? await this.prisma.recommendationFeedbacks.findMany({
+            where: { traceId: { in: traceIds } },
             select: {
               action: true,
-              trace_id: true,
+              traceId: true,
             },
           })
         : [];
@@ -231,11 +231,11 @@ export class StrategyEffectivenessService {
     const traceGroupMap = new Map<string, string>();
     const groupDurations = new Map<string, number[]>();
     for (const trace of traces) {
-      const gid = trace.group_id ?? 'control';
+      const gid = trace.groupId ?? 'control';
       traceGroupMap.set(trace.id, gid);
       if (!groupDurations.has(gid)) groupDurations.set(gid, []);
-      if (trace.duration_ms != null) {
-        groupDurations.get(gid)!.push(trace.duration_ms);
+      if (trace.durationMs != null) {
+        groupDurations.get(gid)!.push(trace.durationMs);
       }
     }
 
@@ -246,8 +246,8 @@ export class StrategyEffectivenessService {
     >();
 
     for (const fb of feedbacks) {
-      const gid = fb.trace_id
-        ? (traceGroupMap.get(fb.trace_id) ?? 'unknown')
+      const gid = fb.traceId
+        ? (traceGroupMap.get(fb.traceId) ?? 'unknown')
         : 'unknown';
       if (!groupStats.has(gid)) {
         groupStats.set(gid, {
@@ -315,13 +315,13 @@ export class StrategyEffectivenessService {
     const since = new Date();
     since.setDate(since.getDate() - days);
 
-    const traces = await this.prisma.recommendation_traces.findMany({
-      where: { created_at: { gte: since } },
+    const traces = await this.prisma.recommendationTraces.findMany({
+      where: { createdAt: { gte: since } },
       select: {
         id: true,
         channel: true,
-        food_pool_size: true,
-        duration_ms: true,
+        foodPoolSize: true,
+        durationMs: true,
       },
     });
 
@@ -329,9 +329,9 @@ export class StrategyEffectivenessService {
 
     const feedbacks =
       traceIds.length > 0
-        ? await this.prisma.recommendation_feedbacks.findMany({
-            where: { trace_id: { in: traceIds } },
-            select: { action: true, trace_id: true },
+        ? await this.prisma.recommendationFeedbacks.findMany({
+            where: { traceId: { in: traceIds } },
+            select: { action: true, traceId: true },
           })
         : [];
 
@@ -363,14 +363,14 @@ export class StrategyEffectivenessService {
       }
       const data = channelData.get(trace.channel)!;
       data.totalRecs++;
-      if (trace.food_pool_size != null)
-        data.poolSizes.push(trace.food_pool_size);
-      if (trace.duration_ms != null) data.durations.push(trace.duration_ms);
+      if (trace.foodPoolSize != null)
+        data.poolSizes.push(trace.foodPoolSize);
+      if (trace.durationMs != null) data.durations.push(trace.durationMs);
     }
 
     for (const fb of feedbacks) {
-      const ch = fb.trace_id
-        ? (traceChannelMap.get(fb.trace_id) ?? 'unknown')
+      const ch = fb.traceId
+        ? (traceChannelMap.get(fb.traceId) ?? 'unknown')
         : 'unknown';
       if (!channelData.has(ch)) continue;
       const data = channelData.get(ch)!;

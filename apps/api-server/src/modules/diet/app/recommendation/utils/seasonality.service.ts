@@ -98,13 +98,13 @@ export class SeasonalityService {
 
     // 查 DB
     try {
-      const rows = await this.prisma.food_regional_info.findMany({
+      const rows = await this.prisma.foodRegionalInfo.findMany({
         where: { region: regionCode },
         select: {
-          food_id: true,
+          foodId: true,
           availability: true,
-          local_popularity: true,
-          month_weights: true, // V7.0: 食物级月份权重
+          localPopularity: true,
+          monthWeights: true, // V7.0: 食物级月份权重
         },
       });
 
@@ -112,11 +112,11 @@ export class SeasonalityService {
       for (const row of rows) {
         const info: SeasonalityInfo = {
           availability: row.availability,
-          localPopularity: row.local_popularity,
-          monthWeights: this.parseMonthWeights(row.month_weights),
+          localPopularity: row.localPopularity,
+          monthWeights: this.parseMonthWeights(row.monthWeights),
         };
-        map[row.food_id] = info;
-        this.regionalCache.set(row.food_id, info);
+        map[row.foodId] = info;
+        this.regionalCache.set(row.foodId, info);
       }
 
       // 写回 Redis

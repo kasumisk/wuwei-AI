@@ -15,7 +15,7 @@ export class GatewayService {
    */
   async validateClient(apiKey: string, apiSecret: string) {
     const client = await this.prisma.clients.findFirst({
-      where: { api_key: apiKey },
+      where: { apiKey: apiKey },
     });
 
     if (!client) {
@@ -28,7 +28,7 @@ export class GatewayService {
     }
 
     // 验证 API Secret
-    const isValid = await bcrypt.compare(apiSecret, client.api_secret);
+    const isValid = await bcrypt.compare(apiSecret, client.apiSecret);
     if (!isValid) {
       return null;
     }
@@ -55,17 +55,17 @@ export class GatewayService {
     responseTime: number;
     metadata?: any;
   }) {
-    return await this.prisma.usage_records.create({
+    return await this.prisma.usageRecords.create({
       data: {
-        client_id: data.clientId,
-        request_id: data.requestId,
-        capability_type: data.capabilityType,
+        clientId: data.clientId,
+        requestId: data.requestId,
+        capabilityType: data.capabilityType,
         provider: data.provider,
         model: data.model,
         status: data.status,
         usage: data.usage || {},
         cost: data.cost,
-        response_time: data.responseTime,
+        responseTime: data.responseTime,
         metadata: data.metadata,
         timestamp: new Date(),
       },

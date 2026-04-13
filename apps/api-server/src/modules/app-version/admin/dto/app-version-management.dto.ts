@@ -277,7 +277,7 @@ export class CheckUpdateDto {
   @Matches(/^\d+\.\d+\.\d+$/, {
     message: '版本号格式必须为 x.y.z',
   })
-  current_version: string;
+  currentVersion: string;
 
   @ApiPropertyOptional({
     description: '分发渠道',
@@ -293,7 +293,7 @@ export class CheckUpdateDto {
   })
   @IsOptional()
   @IsString()
-  device_id?: string;
+  deviceId?: string;
 
   @ApiPropertyOptional({
     description: '客户端语言',
@@ -384,25 +384,25 @@ export class AppVersionsListResponseDto {
  */
 export class CheckUpdateResponseDto {
   @ApiProperty({ description: '是否需要更新' })
-  need_update: boolean;
+  needUpdate: boolean;
 
   @ApiPropertyOptional({ description: '最新版本号' })
-  latest_version?: string;
+  latestVersion?: string;
 
   @ApiPropertyOptional({
     enum: UpdateType,
     description: '更新类型: optional / force',
   })
-  update_type?: UpdateType;
+  updateType?: UpdateType;
 
   @ApiPropertyOptional({ description: '更新描述' })
   description?: string;
 
   @ApiPropertyOptional({ description: '下载链接' })
-  download_url?: string;
+  downloadUrl?: string;
 
   @ApiPropertyOptional({ description: '文件大小（字节）' })
-  file_size?: number;
+  fileSize?: number;
 
   @ApiPropertyOptional({ description: '文件校验值' })
   checksum?: string;

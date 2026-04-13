@@ -105,23 +105,23 @@ export class RecipeAssemblerService {
     // 查询包含至少一个匹配食材的菜谱
     const recipes = await this.prisma.recipes.findMany({
       where: {
-        is_active: true,
-        recipe_ingredients: {
+        isActive: true,
+        recipeIngredients: {
           some: {
-            ingredient_name: { in: ingredientNames },
+            ingredientName: { in: ingredientNames },
           },
         },
       },
-      include: { recipe_ingredients: true },
+      include: { recipeIngredients: true },
       take: RecipeAssemblerService.DB_QUERY_LIMIT,
-      orderBy: { quality_score: 'desc' },
+      orderBy: { qualityScore: 'desc' },
     });
 
     const results: AssembledRecipe[] = [];
 
     for (const recipe of recipes) {
-      const recipeIngredients = recipe.recipe_ingredients.map(
-        (i) => i.ingredient_name,
+      const recipeIngredients = recipe.recipeIngredients.map(
+        (i) => i.ingredientName,
       );
       const matchedCount = ingredientNames.filter((name) =>
         recipeIngredients.includes(name),
@@ -136,14 +136,14 @@ export class RecipeAssemblerService {
 
       // 烹饪时间约束检查
       const maxCook = scene.sceneConstraints.maxCookTime;
-      if (maxCook != null && (recipe.cook_time_minutes ?? 0) > maxCook) {
+      if (maxCook != null && (recipe.cookTimeMinutes ?? 0) > maxCook) {
         continue;
       }
 
       // 渠道兼容检查
       if (
         scene.channel !== AcquisitionChannel.UNKNOWN &&
-        !this.isChannelCompatible(recipe.available_channels, scene.channel)
+        !this.isChannelCompatible(recipe.availableChannels, scene.channel)
       ) {
         continue;
       }
@@ -154,7 +154,7 @@ export class RecipeAssemblerService {
       );
 
       const availableChannels = this.parseAvailableChannels(
-        recipe.available_channels,
+        recipe.availableChannels,
       );
 
       results.push({
@@ -163,7 +163,7 @@ export class RecipeAssemblerService {
         ingredients: matchedFoods,
         totalCalories: matchedFoods.reduce((s, f) => s + f.servingCalories, 0),
         totalProtein: matchedFoods.reduce((s, f) => s + f.servingProtein, 0),
-        estimatedCookTime: recipe.cook_time_minutes ?? 0,
+        estimatedCookTime: recipe.cookTimeMinutes ?? 0,
         skillLevel: this.difficultyToSkill(recipe.difficulty),
         suitableChannels: availableChannels,
         recipeScore: matchRate,

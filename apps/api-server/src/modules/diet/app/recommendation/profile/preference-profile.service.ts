@@ -93,10 +93,10 @@ export class PreferenceProfileService {
     const rows: Array<{
       action: string;
       category: string;
-      main_ingredient: string;
-      food_group: string;
-      food_name: string;
-      created_at: Date | string;
+      mainIngredient: string;
+      foodGroup: string;
+      foodName: string;
+      createdAt: Date | string;
     }> = await this.prisma.$queryRawUnsafe(
       `SELECT rf.action, rf.food_name, rf.created_at,
               fl.category, fl.main_ingredient, fl.food_group
@@ -143,16 +143,16 @@ export class PreferenceProfileService {
     > = {};
 
     for (const row of rows) {
-      const name = row.food_name;
+      const name = row.foodName;
       if (!name) continue;
       if (!nameStats[name])
         nameStats[name] = { weightedAccepted: 0, weightedTotal: 0 };
 
       // 计算反馈距今天数，应用指数衰减 e^(-0.05 × days)
       const createdAt =
-        row.created_at instanceof Date
-          ? row.created_at
-          : new Date(row.created_at);
+        row.createdAt instanceof Date
+          ? row.createdAt
+          : new Date(row.createdAt);
       const daysSince = Math.floor(
         (now - createdAt.getTime()) / (1000 * 60 * 60 * 24),
       );
@@ -173,8 +173,8 @@ export class PreferenceProfileService {
 
     return {
       categoryWeights: aggregate((r) => r.category),
-      ingredientWeights: aggregate((r) => r.main_ingredient),
-      foodGroupWeights: aggregate((r) => r.food_group),
+      ingredientWeights: aggregate((r) => r.mainIngredient),
+      foodGroupWeights: aggregate((r) => r.foodGroup),
       foodNameWeights,
     };
   }
@@ -200,7 +200,7 @@ export class PreferenceProfileService {
       async () => {
         const boostMap: Record<string, number> = {};
         try {
-          const infos = await this.prisma.food_regional_info.findMany({
+          const infos = await this.prisma.foodRegionalInfo.findMany({
             where: { region },
           });
 
@@ -209,7 +209,7 @@ export class PreferenceProfileService {
             switch (info.availability) {
               case 'common':
                 // 高流行度的常见食物额外加分（范围扩大: 1.08→1.20, 1.02→1.05）
-                boost = (info.local_popularity ?? 0) > 50 ? 1.2 : 1.05;
+                boost = (info.localPopularity ?? 0) > 50 ? 1.2 : 1.05;
                 break;
               case 'seasonal':
                 boost = 0.9;
@@ -220,7 +220,7 @@ export class PreferenceProfileService {
                 break;
             }
             if (boost !== 1.0) {
-              boostMap[info.food_id] = boost;
+              boostMap[info.foodId] = boost;
             }
           }
         } catch (err) {

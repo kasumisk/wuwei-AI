@@ -24,7 +24,7 @@ import {
   TieredCacheNamespace,
 } from '../../core/cache/tiered-cache-manager';
 import { PrismaService } from '../../core/prisma/prisma.service';
-import { feature_flag } from '@prisma/client';
+import { FeatureFlag as feature_flag } from '@prisma/client';
 
 /** 功能开关类型 */
 export enum FeatureFlagType {
@@ -153,8 +153,8 @@ export class FeatureFlagService implements OnModuleInit {
    */
   async getAllFlags(): Promise<feature_flag[]> {
     return this.cache.getOrSet(ALL_FLAGS_KEY, async () => {
-      return this.prisma.feature_flag.findMany({
-        orderBy: { created_at: 'desc' },
+      return this.prisma.featureFlag.findMany({
+        orderBy: { createdAt: 'desc' },
       });
     });
   }
@@ -165,13 +165,13 @@ export class FeatureFlagService implements OnModuleInit {
   async upsertFlag(
     data: Partial<feature_flag> & { key: string },
   ): Promise<feature_flag> {
-    let flag = await this.prisma.feature_flag.findUnique({
+    let flag = await this.prisma.featureFlag.findUnique({
       where: { key: data.key },
     });
 
     if (flag) {
       // 更新
-      flag = await this.prisma.feature_flag.update({
+      flag = await this.prisma.featureFlag.update({
         where: { id: flag.id },
         data: {
           ...(data.name !== undefined && { name: data.name }),
@@ -186,7 +186,7 @@ export class FeatureFlagService implements OnModuleInit {
       this.logger.log(`功能开关已更新: ${data.key}`);
     } else {
       // 创建
-      flag = await this.prisma.feature_flag.create({
+      flag = await this.prisma.featureFlag.create({
         data: {
           key: data.key,
           name: data.name!,
@@ -209,7 +209,7 @@ export class FeatureFlagService implements OnModuleInit {
    * 删除功能开关
    */
   async deleteFlag(key: string): Promise<void> {
-    await this.prisma.feature_flag.delete({ where: { key } });
+    await this.prisma.featureFlag.delete({ where: { key } });
     await this.invalidateCache(key);
     this.logger.log(`功能开关已删除: ${key}`);
   }
@@ -226,7 +226,7 @@ export class FeatureFlagService implements OnModuleInit {
     const cached = await this.cache.get(key);
     if (cached) return cached as feature_flag;
 
-    const flag = await this.prisma.feature_flag.findUnique({ where: { key } });
+    const flag = await this.prisma.featureFlag.findUnique({ where: { key } });
     if (!flag) return null;
 
     await this.cache.set(key, flag);

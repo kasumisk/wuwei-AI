@@ -130,10 +130,10 @@ export class CollaborativeFilteringService {
    * 用于目标感知 CF：同目标用户相似度全权重，跨目标用户打折
    */
   private async loadUserGoals(): Promise<void> {
-    const profiles = await this.prisma.user_profiles.findMany({
-      select: { user_id: true, goal: true },
+    const profiles = await this.prisma.userProfiles.findMany({
+      select: { userId: true, goal: true },
     });
-    this.userGoals = new Map(profiles.map((p) => [p.user_id, p.goal]));
+    this.userGoals = new Map(profiles.map((p) => [p.userId, p.goal]));
     this.logger.log(`已加载 ${this.userGoals.size} 个用户目标`);
   }
 

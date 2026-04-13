@@ -24,14 +24,14 @@ export class AnalyticsService {
     const end = new Date(endDate);
 
     // 总请求数
-    const totalRequests = await this.prisma.usage_records.count({
+    const totalRequests = await this.prisma.usageRecords.count({
       where: {
         timestamp: { gte: start, lte: end },
       },
     });
 
     // 成功请求数
-    const successRequests = await this.prisma.usage_records.count({
+    const successRequests = await this.prisma.usageRecords.count({
       where: {
         timestamp: { gte: start, lte: end },
         status: 'success',
@@ -321,7 +321,7 @@ export class AnalyticsService {
     `);
 
     // 总错误数
-    const totalErrors = await this.prisma.usage_records.count({
+    const totalErrors = await this.prisma.usageRecords.count({
       where: {
         timestamp: { gte: start, lte: end },
         status: 'failed',

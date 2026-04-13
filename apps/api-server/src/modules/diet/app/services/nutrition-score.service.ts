@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { t } from '../recommendation/utils/i18n-messages';
 
 // ==================== 类型 ====================
@@ -8,9 +9,11 @@ export type GoalType = 'fat_loss' | 'muscle_gain' | 'health' | 'habit';
 /**
  * V4: 用于 calculateDailyGoals 的用户画像字段子集
  * 替代 `profile: any` (修复 D1)
+ *
+ * weightKg 接受 Prisma.Decimal 以兼容 UserProfiles 模型直接传入
  */
 export interface DailyGoalProfile {
-  weightKg?: number | null;
+  weightKg?: number | Prisma.Decimal | null;
   dailyCalorieGoal?: number | null;
   goal?: string | null;
 }

@@ -130,7 +130,7 @@ export class GoalTrackerService {
       // 计算当前阶段已经过去的天数
       const activeGoalPhase = await this.getActiveGoalPhase(userId);
       const elapsedDays = activeGoalPhase
-        ? this.daysSince(activeGoalPhase.started_at ?? new Date())
+        ? this.daysSince(activeGoalPhase.startedAt ?? new Date())
         : 0;
       const phaseDurationDays = currentPhase.durationWeeks * 7;
 
@@ -202,7 +202,7 @@ export class GoalTrackerService {
       calorieCompliance,
       proteinCompliance,
       executionRate,
-      streakDays: behaviorProfile?.streak_days ?? 0,
+      streakDays: behaviorProfile?.streakDays ?? 0,
     };
 
     if (phaseInfo) {
@@ -225,16 +225,16 @@ export class GoalTrackerService {
     const since = new Date(Date.now() - COMPLIANCE_WINDOW_DAYS * 86400000);
 
     try {
-      const summaries = await this.prisma.daily_summaries.findMany({
+      const summaries = await this.prisma.dailySummaries.findMany({
         where: {
-          user_id: userId,
+          userId: userId,
           date: { gte: since },
         },
         select: {
-          total_calories: true,
-          calorie_goal: true,
-          total_protein: true,
-          protein_goal: true,
+          totalCalories: true,
+          calorieGoal: true,
+          totalProtein: true,
+          proteinGoal: true,
         },
         orderBy: { date: 'desc' },
       });
@@ -250,16 +250,16 @@ export class GoalTrackerService {
 
       for (const s of summaries) {
         // 热量达成率
-        if (s.calorie_goal && s.calorie_goal > 0) {
-          const ratio = s.total_calories / s.calorie_goal;
+        if (s.calorieGoal && s.calorieGoal > 0) {
+          const ratio = s.totalCalories / s.calorieGoal;
           // cap 到 [0, 2] 防止极端值污染均值
           calorieSum += Math.min(ratio, 2.0);
           calorieDays++;
         }
 
         // 蛋白质达成率
-        const proteinGoal = Number(s.protein_goal);
-        const totalProtein = Number(s.total_protein);
+        const proteinGoal = Number(s.proteinGoal);
+        const totalProtein = Number(s.totalProtein);
         if (proteinGoal > 0) {
           const ratio = totalProtein / proteinGoal;
           proteinSum += Math.min(ratio, 2.0);
@@ -289,16 +289,16 @@ export class GoalTrackerService {
     const since = new Date(Date.now() - COMPLIANCE_WINDOW_DAYS * 86400000);
 
     try {
-      const result = await this.prisma.recommendation_executions.aggregate({
+      const result = await this.prisma.recommendationExecutions.aggregate({
         where: {
-          user_id: userId,
-          execution_rate: { not: null },
-          created_at: { gte: since },
+          userId: userId,
+          executionRate: { not: null },
+          createdAt: { gte: since },
         },
-        _avg: { execution_rate: true },
+        _avg: { executionRate: true },
       });
 
-      return result._avg.execution_rate ?? 0;
+      return result._avg.executionRate ?? 0;
     } catch (err) {
       this.logger.warn(
         `computeExecutionRate failed for user ${userId}: ${(err as Error).message}`,
@@ -312,12 +312,12 @@ export class GoalTrackerService {
    */
   private async getBehaviorProfile(userId: string) {
     try {
-      return await this.prisma.user_behavior_profiles.findUnique({
-        where: { user_id: userId },
+      return await this.prisma.userBehaviorProfiles.findUnique({
+        where: { userId: userId },
         select: {
-          streak_days: true,
-          longest_streak: true,
-          avg_compliance_rate: true,
+          streakDays: true,
+          longestStreak: true,
+          avgComplianceRate: true,
         },
       });
     } catch (err) {
@@ -335,7 +335,7 @@ export class GoalTrackerService {
     userId: string,
   ): Promise<{ remainingDays: number; progress: number } | null> {
     const activePhase = await this.getActiveGoalPhase(userId);
-    if (!activePhase?.started_at) {
+    if (!activePhase?.startedAt) {
       return null;
     }
 
@@ -352,7 +352,7 @@ export class GoalTrackerService {
     }
 
     const phaseDurationDays = currentPhase.durationWeeks * 7;
-    const elapsedDays = this.daysSince(activePhase.started_at);
+    const elapsedDays = this.daysSince(activePhase.startedAt);
     const remainingDays = Math.max(phaseDurationDays - elapsedDays, 0);
     const progress =
       phaseDurationDays > 0
@@ -367,12 +367,12 @@ export class GoalTrackerService {
    */
   private async getActiveGoalPhase(userId: string) {
     try {
-      return await this.prisma.goal_phases.findFirst({
+      return await this.prisma.goalPhases.findFirst({
         where: {
-          user_id: userId,
-          is_active: true,
+          userId: userId,
+          isActive: true,
         },
-        orderBy: { phase_order: 'asc' },
+        orderBy: { phaseOrder: 'asc' },
       });
     } catch (err) {
       this.logger.warn(
@@ -389,17 +389,17 @@ export class GoalTrackerService {
     userId: string,
   ): Promise<CompoundGoal | null> {
     try {
-      const profile = await this.prisma.user_profiles.findUnique({
-        where: { user_id: userId },
-        select: { compound_goal: true },
+      const profile = await this.prisma.userProfiles.findUnique({
+        where: { userId: userId },
+        select: { compoundGoal: true },
       });
 
-      if (!profile?.compound_goal) {
+      if (!profile?.compoundGoal) {
         return null;
       }
 
       // compound_goal 是 Json 类型，需要类型断言
-      return profile.compound_goal as unknown as CompoundGoal;
+      return profile.compoundGoal as unknown as CompoundGoal;
     } catch (err) {
       this.logger.warn(
         `getUserCompoundGoal failed for user ${userId}: ${(err as Error).message}`,

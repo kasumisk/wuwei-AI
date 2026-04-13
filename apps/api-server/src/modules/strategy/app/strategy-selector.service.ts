@@ -74,9 +74,8 @@ export class StrategySelectorService {
     // 检查当前是否已有 segment 类型的分配
     const existing = await this.strategyService.getUserAssignment(userId);
     if (existing) {
-      // raw SQL 返回 snake_case 字段
-      const existingStrategyId = existing.strategy_id ?? existing.strategyId;
-      const existingType = existing.assignment_type ?? existing.assignmentType;
+      const existingStrategyId = existing.strategyId;
+      const existingType = existing.assignmentType;
       if (
         existingStrategyId === strategyId &&
         existingType === AssignmentType.SEGMENT

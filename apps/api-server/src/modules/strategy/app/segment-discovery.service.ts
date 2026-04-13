@@ -318,7 +318,7 @@ export class SegmentDiscoveryService {
       // 使用原始 SQL 一次性提取所有用户的聚合特征
       const rows = await this.prisma.$queryRaw<
         Array<{
-          user_id: string;
+          userId: string;
           avg_calories: number | null;
           target_calories: number | null;
           compliant_days: bigint | null;
@@ -434,7 +434,7 @@ export class SegmentDiscoveryService {
           recommendedCount > 0 ? executedCount / recommendedCount : 0.5;
 
         return {
-          userId: r.user_id,
+          userId: r.userId,
           vector: [
             calorieRatio,
             complianceRate,

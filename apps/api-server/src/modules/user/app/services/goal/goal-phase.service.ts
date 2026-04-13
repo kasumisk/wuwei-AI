@@ -152,46 +152,46 @@ export class GoalPhaseService {
 
     await this.prisma.$transaction(async (tx) => {
       // 1. 更新 user_profiles.compound_goal
-      await tx.user_profiles.update({
-        where: { user_id: userId },
+      await tx.userProfiles.update({
+        where: { userId: userId },
         data: {
-          compound_goal: normalized as object,
+          compoundGoal: normalized as object,
           goal: normalized.primary, // 同步更新简单目标字段（保持向后兼容）
-          updated_at: new Date(),
+          updatedAt: new Date(),
         },
       });
 
       // 2. 将旧的活跃阶段标记为完成
-      await tx.goal_phases.updateMany({
-        where: { user_id: userId, is_active: true },
+      await tx.goalPhases.updateMany({
+        where: { userId: userId, isActive: true },
         data: {
-          is_active: false,
-          completed_at: new Date(),
-          updated_at: new Date(),
+          isActive: false,
+          completedAt: new Date(),
+          updatedAt: new Date(),
         },
       });
 
       // 3. 写入新阶段（如有）
       if (normalized.phases?.length) {
         // 先删除该用户旧的阶段定义
-        await tx.goal_phases.deleteMany({
-          where: { user_id: userId },
+        await tx.goalPhases.deleteMany({
+          where: { userId: userId },
         });
 
         // 批量创建新阶段
-        await tx.goal_phases.createMany({
+        await tx.goalPhases.createMany({
           data: normalized.phases.map((phase, index) => ({
-            user_id: userId,
-            goal_type: phase.goalType,
+            userId: userId,
+            goalType: phase.goalType,
             name: phase.name,
-            duration_weeks: phase.durationWeeks,
-            calorie_multiplier: phase.calorieMultiplier,
-            macro_ratio_override: phase.macroRatioOverride
+            durationWeeks: phase.durationWeeks,
+            calorieMultiplier: phase.calorieMultiplier,
+            macroRatioOverride: phase.macroRatioOverride
               ? (phase.macroRatioOverride as unknown as Prisma.InputJsonValue)
               : Prisma.JsonNull,
-            phase_order: phase.order,
-            is_active: index === (normalized.currentPhaseIndex ?? 0),
-            started_at:
+            phaseOrder: phase.order,
+            isActive: index === (normalized.currentPhaseIndex ?? 0),
+            startedAt:
               index === (normalized.currentPhaseIndex ?? 0) ? new Date() : null,
           })),
         });
@@ -222,17 +222,17 @@ export class GoalPhaseService {
    * @returns 新激活的阶段，或 null（已是最后一个阶段）
    */
   async advancePhase(userId: string): Promise<GoalPhase | null> {
-    const profile = await this.prisma.user_profiles.findUnique({
-      where: { user_id: userId },
-      select: { compound_goal: true },
+    const profile = await this.prisma.userProfiles.findUnique({
+      where: { userId: userId },
+      select: { compoundGoal: true },
     });
 
-    if (!profile?.compound_goal) {
+    if (!profile?.compoundGoal) {
       this.logger.warn(`advancePhase: user ${userId} has no compound goal`);
       return null;
     }
 
-    const compound = profile.compound_goal as unknown as CompoundGoal;
+    const compound = profile.compoundGoal as unknown as CompoundGoal;
     if (!compound.phases?.length) {
       this.logger.warn(`advancePhase: user ${userId} has no phases`);
       return null;
@@ -253,28 +253,28 @@ export class GoalPhaseService {
 
     await this.prisma.$transaction(async (tx) => {
       // 1. 完成当前阶段
-      await tx.goal_phases.updateMany({
+      await tx.goalPhases.updateMany({
         where: {
-          user_id: userId,
-          is_active: true,
+          userId: userId,
+          isActive: true,
         },
         data: {
-          is_active: false,
-          completed_at: now,
-          updated_at: now,
+          isActive: false,
+          completedAt: now,
+          updatedAt: now,
         },
       });
 
       // 2. 激活下一阶段
-      await tx.goal_phases.updateMany({
+      await tx.goalPhases.updateMany({
         where: {
-          user_id: userId,
-          phase_order: nextPhase.order,
+          userId: userId,
+          phaseOrder: nextPhase.order,
         },
         data: {
-          is_active: true,
-          started_at: now,
-          updated_at: now,
+          isActive: true,
+          startedAt: now,
+          updatedAt: now,
         },
       });
 
@@ -283,12 +283,12 @@ export class GoalPhaseService {
         ...compound,
         currentPhaseIndex: nextIndex,
       };
-      await tx.user_profiles.update({
-        where: { user_id: userId },
+      await tx.userProfiles.update({
+        where: { userId: userId },
         data: {
-          compound_goal: updatedCompound as object,
+          compoundGoal: updatedCompound as object,
           goal: nextPhase.goalType, // 同步简单目标字段
-          updated_at: now,
+          updatedAt: now,
         },
       });
     });
@@ -309,11 +309,11 @@ export class GoalPhaseService {
    * 解析有效目标
    */
   private async resolveEffectiveGoal(userId: string): Promise<EffectiveGoal> {
-    const profile = await this.prisma.user_profiles.findUnique({
-      where: { user_id: userId },
+    const profile = await this.prisma.userProfiles.findUnique({
+      where: { userId: userId },
       select: {
         goal: true,
-        compound_goal: true,
+        compoundGoal: true,
       },
     });
 
@@ -321,8 +321,8 @@ export class GoalPhaseService {
       return { goalType: GoalType.HEALTH }; // 默认回退
     }
 
-    const compound = profile.compound_goal
-      ? (profile.compound_goal as unknown as CompoundGoal)
+    const compound = profile.compoundGoal
+      ? (profile.compoundGoal as unknown as CompoundGoal)
       : null;
 
     // 无复合目标 → 使用简单目标

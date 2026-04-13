@@ -66,12 +66,12 @@ export interface LearnedWeights {
  */
 interface FeedbackWithScores {
   id: string;
-  user_id: string;
-  food_id: string | null;
+  userId: string;
+  foodId: string | null;
   action: string;
-  goal_type: string;
-  meal_type: string;
-  created_at: Date;
+  goalType: string;
+  mealType: string;
+  createdAt: Date;
   /** 来自 recommendation_traces.top_foods 中匹配食物的 dimensionScores */
   dimension_scores: Record<string, number> | null;
 }
@@ -230,9 +230,9 @@ export class WeightLearnerService {
     // ── 全局学习（按 goalType 分组）──
     const globalGrouped = new Map<string, FeedbackWithScores[]>();
     for (const fb of feedbacks) {
-      const group = globalGrouped.get(fb.goal_type) || [];
+      const group = globalGrouped.get(fb.goalType) || [];
       group.push(fb);
-      globalGrouped.set(fb.goal_type, group);
+      globalGrouped.set(fb.goalType, group);
     }
 
     const results: Record<
@@ -323,12 +323,12 @@ export class WeightLearnerService {
       const rows = await this.prisma.$queryRaw<
         Array<{
           id: string;
-          user_id: string;
-          food_id: string | null;
+          userId: string;
+          foodId: string | null;
           action: string;
-          goal_type: string;
-          meal_type: string;
-          created_at: Date;
+          goalType: string;
+          mealType: string;
+          createdAt: Date;
           dimension_scores: Record<string, number> | null;
         }>
       >`
@@ -375,30 +375,30 @@ export class WeightLearnerService {
     const since = new Date();
     since.setDate(since.getDate() - FEEDBACK_WINDOW_DAYS);
 
-    const rows = await this.prisma.recommendation_feedbacks.findMany({
+    const rows = await this.prisma.recommendationFeedbacks.findMany({
       where: {
-        created_at: { gte: since },
-        goal_type: { not: null },
+        createdAt: { gte: since },
+        goalType: { not: null },
       },
       select: {
         id: true,
-        user_id: true,
-        food_id: true,
+        userId: true,
+        foodId: true,
         action: true,
-        goal_type: true,
-        meal_type: true,
-        created_at: true,
+        goalType: true,
+        mealType: true,
+        createdAt: true,
       },
     });
 
     return rows.map((r) => ({
       id: r.id,
-      user_id: r.user_id,
-      food_id: r.food_id,
+      userId: r.userId,
+      foodId: r.foodId,
       action: r.action,
-      goal_type: r.goal_type!,
-      meal_type: r.meal_type,
-      created_at: r.created_at,
+      goalType: r.goalType!,
+      mealType: r.mealType,
+      createdAt: r.createdAt,
       dimension_scores: null,
     }));
   }
@@ -420,7 +420,7 @@ export class WeightLearnerService {
     for (const fb of feedbacks) {
       // V6.8: 时间衰减
       const daysAgo =
-        (Date.now() - new Date(fb.created_at).getTime()) / 86400000;
+        (Date.now() - new Date(fb.createdAt).getTime()) / 86400000;
       const decay = Math.exp(-daysAgo / DECAY_HALF_LIFE_DAYS);
 
       let gradient: number[];
@@ -539,14 +539,14 @@ export class WeightLearnerService {
     const userMealGrouped = new Map<string, FeedbackWithScores[]>();
 
     for (const fb of feedbacks) {
-      const userKey = `${fb.user_id}:${fb.goal_type}`;
+      const userKey = `${fb.userId}:${fb.goalType}`;
       const userGroup = userGrouped.get(userKey) || [];
       userGroup.push(fb);
       userGrouped.set(userKey, userGroup);
 
       // Phase 3-E: 餐次级分组（仅有 mealType 的反馈参与）
-      if (fb.meal_type) {
-        const mealKey = `${fb.user_id}:${fb.goal_type}:${fb.meal_type}`;
+      if (fb.mealType) {
+        const mealKey = `${fb.userId}:${fb.goalType}:${fb.mealType}`;
         const mealGroup = userMealGrouped.get(mealKey) || [];
         mealGroup.push(fb);
         userMealGrouped.set(mealKey, mealGroup);
@@ -559,8 +559,8 @@ export class WeightLearnerService {
     for (const [, group] of userGrouped) {
       if (group.length < MIN_USER_FEEDBACK_COUNT) continue;
 
-      const goalType = group[0].goal_type;
-      const userId = group[0].user_id;
+      const goalType = group[0].goalType;
+      const userId = group[0].userId;
       const baseline = SCORE_WEIGHTS[goalType as GoalType];
       if (!baseline) continue;
 
@@ -581,9 +581,9 @@ export class WeightLearnerService {
     for (const [, group] of userMealGrouped) {
       if (group.length < MIN_USER_FEEDBACK_COUNT) continue;
 
-      const goalType = group[0].goal_type;
-      const userId = group[0].user_id;
-      const mealType = group[0].meal_type;
+      const goalType = group[0].goalType;
+      const userId = group[0].userId;
+      const mealType = group[0].mealType;
       const baseline = SCORE_WEIGHTS[goalType as GoalType];
       if (!baseline) continue;
 

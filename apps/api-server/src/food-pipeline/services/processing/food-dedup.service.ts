@@ -40,8 +40,8 @@ export class FoodDedupService {
     if (food.primarySource && food.primarySourceId) {
       const sourceMatch = await this.prisma.foods.findFirst({
         where: {
-          primary_source: food.primarySource,
-          primary_source_id: food.primarySourceId,
+          primarySource: food.primarySource,
+          primarySourceId: food.primarySourceId,
         },
       });
       if (sourceMatch) {
@@ -120,45 +120,44 @@ export class FoodDedupService {
     const merged: Record<string, any> = {};
 
     // 补充缺失字段（不覆盖已有数据，除非来源优先级更高）
-    // Note: existing uses snake_case (Prisma), incoming uses camelCase
-    const fieldMappings: Array<{ incoming: string; existing: string }> = [
-      { incoming: 'aliases', existing: 'aliases' },
-      { incoming: 'barcode', existing: 'barcode' },
-      { incoming: 'category', existing: 'category' },
-      { incoming: 'subCategory', existing: 'sub_category' },
-      { incoming: 'foodGroup', existing: 'food_group' },
-      { incoming: 'fiber', existing: 'fiber' },
-      { incoming: 'sugar', existing: 'sugar' },
-      { incoming: 'saturatedFat', existing: 'saturated_fat' },
-      { incoming: 'transFat', existing: 'trans_fat' },
-      { incoming: 'cholesterol', existing: 'cholesterol' },
-      { incoming: 'sodium', existing: 'sodium' },
-      { incoming: 'potassium', existing: 'potassium' },
-      { incoming: 'calcium', existing: 'calcium' },
-      { incoming: 'iron', existing: 'iron' },
-      { incoming: 'vitaminA', existing: 'vitamin_a' },
-      { incoming: 'vitaminC', existing: 'vitamin_c' },
-      { incoming: 'vitaminD', existing: 'vitamin_d' },
-      { incoming: 'vitaminE', existing: 'vitamin_e' },
-      { incoming: 'vitaminB12', existing: 'vitamin_b12' },
-      { incoming: 'folate', existing: 'folate' },
-      { incoming: 'zinc', existing: 'zinc' },
-      { incoming: 'magnesium', existing: 'magnesium' },
-      { incoming: 'phosphorus', existing: 'phosphorus' },
-      { incoming: 'glycemicIndex', existing: 'glycemic_index' },
-      { incoming: 'glycemicLoad', existing: 'glycemic_load' },
-      { incoming: 'processingLevel', existing: 'processing_level' },
-      { incoming: 'mainIngredient', existing: 'main_ingredient' },
-      { incoming: 'standardServingDesc', existing: 'standard_serving_desc' },
-      { incoming: 'imageUrl', existing: 'image_url' },
-      { incoming: 'thumbnailUrl', existing: 'thumbnail_url' },
+    const mergeFields = [
+      'aliases',
+      'barcode',
+      'category',
+      'subCategory',
+      'foodGroup',
+      'fiber',
+      'sugar',
+      'saturatedFat',
+      'transFat',
+      'cholesterol',
+      'sodium',
+      'potassium',
+      'calcium',
+      'iron',
+      'vitaminA',
+      'vitaminC',
+      'vitaminD',
+      'vitaminE',
+      'vitaminB12',
+      'folate',
+      'zinc',
+      'magnesium',
+      'phosphorus',
+      'glycemicIndex',
+      'glycemicLoad',
+      'processingLevel',
+      'mainIngredient',
+      'standardServingDesc',
+      'imageUrl',
+      'thumbnailUrl',
     ];
 
-    for (const mapping of fieldMappings) {
-      const existingVal = existing[mapping.existing];
-      const incomingVal = (incoming as any)[mapping.incoming];
+    for (const field of mergeFields) {
+      const existingVal = existing[field];
+      const incomingVal = (incoming as any)[field];
       if (existingVal == null && incomingVal != null) {
-        merged[mapping.existing] = incomingVal;
+        merged[field] = incomingVal;
       }
     }
 
@@ -168,12 +167,12 @@ export class FoodDedupService {
     }
     if (
       incoming.subCategory &&
-      existing.sub_category !== incoming.subCategory
+      existing.subCategory !== incoming.subCategory
     ) {
-      merged.sub_category = incoming.subCategory;
+      merged.subCategory = incoming.subCategory;
     }
-    if (incoming.foodGroup && existing.food_group !== incoming.foodGroup) {
-      merged.food_group = incoming.foodGroup;
+    if (incoming.foodGroup && existing.foodGroup !== incoming.foodGroup) {
+      merged.foodGroup = incoming.foodGroup;
     }
 
     // 合并数组字段（去重取并集）
@@ -191,9 +190,9 @@ export class FoodDedupService {
     merged.tags = [...new Set([...existingTags, ...incomingTags])];
 
     if (incoming.mealTypes?.length) {
-      merged.meal_types = [
+      merged.mealTypes = [
         ...new Set([
-          ...((existing.meal_types as any[]) || []),
+          ...((existing.mealTypes as any[]) || []),
           ...incoming.mealTypes,
         ]),
       ];
@@ -243,7 +242,7 @@ export class FoodDedupService {
     a: Partial<any>,
     b: Partial<any>,
   ): number {
-    // a is CleanedFoodData (camelCase), b is Prisma result (snake_case)
+    // a is CleanedFoodData, b is Prisma result (both use camelCase)
     const fieldsA = ['calories', 'protein', 'fat', 'carbs'] as const;
     let matchCount = 0;
     let totalCount = 0;

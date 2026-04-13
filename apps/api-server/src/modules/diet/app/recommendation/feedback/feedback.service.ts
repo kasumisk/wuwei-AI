@@ -83,19 +83,19 @@ export class RecommendationFeedbackService {
   }): Promise<void> {
     try {
       // 1. 保存主反馈记录（与之前一致）
-      const feedback = await this.prisma.recommendation_feedbacks.create({
+      const feedback = await this.prisma.recommendationFeedbacks.create({
         data: {
-          user_id: params.userId,
-          meal_type: params.mealType,
-          food_name: params.foodName,
-          food_id: params.foodId ?? null,
+          userId: params.userId,
+          mealType: params.mealType,
+          foodName: params.foodName,
+          foodId: params.foodId ?? null,
           action: params.action,
-          replacement_food: params.replacementFood ?? null,
-          recommendation_score: params.recommendationScore ?? null,
-          goal_type: params.goalType ?? null,
-          experiment_id: params.experimentId ?? null,
-          group_id: params.groupId ?? null,
-          trace_id: params.traceId ?? null, // V6.4 Phase 3.5: 归因追踪
+          replacementFood: params.replacementFood ?? null,
+          recommendationScore: params.recommendationScore ?? null,
+          goalType: params.goalType ?? null,
+          experimentId: params.experimentId ?? null,
+          groupId: params.groupId ?? null,
+          traceId: params.traceId ?? null, // V6.4 Phase 3.5: 归因追踪
         },
       });
 
@@ -105,19 +105,19 @@ export class RecommendationFeedbackService {
         params.implicitSignals && this.hasAnySignal(params.implicitSignals);
 
       if (hasRatings || hasSignals) {
-        await this.prisma.feedback_details.create({
+        await this.prisma.feedbackDetails.create({
           data: {
-            feedback_id: feedback.id,
-            user_id: params.userId,
-            food_name: params.foodName,
-            meal_type: params.mealType,
-            taste_rating: params.ratings?.taste ?? null,
-            portion_rating: params.ratings?.portion ?? null,
-            price_rating: params.ratings?.price ?? null,
-            timing_rating: params.ratings?.timing ?? null,
+            feedbackId: feedback.id,
+            userId: params.userId,
+            foodName: params.foodName,
+            mealType: params.mealType,
+            tasteRating: params.ratings?.taste ?? null,
+            portionRating: params.ratings?.portion ?? null,
+            priceRating: params.ratings?.price ?? null,
+            timingRating: params.ratings?.timing ?? null,
             comment: params.ratings?.comment ?? null,
-            dwell_time_ms: params.implicitSignals?.dwellTimeMs ?? null,
-            detail_expanded: params.implicitSignals?.detailExpanded ?? null,
+            dwellTimeMs: params.implicitSignals?.dwellTimeMs ?? null,
+            detailExpanded: params.implicitSignals?.detailExpanded ?? null,
           },
         });
         this.logger.debug(
@@ -369,12 +369,12 @@ export class RecommendationFeedbackService {
     action: 'accepted' | 'replaced' | 'skipped';
   }): Promise<void> {
     // 1. 读取当前增量权重
-    let inferredProfile = await this.prisma.user_inferred_profiles.findFirst({
-      where: { user_id: params.userId },
+    let inferredProfile = await this.prisma.userInferredProfiles.findFirst({
+      where: { userId: params.userId },
     });
 
     const currentWeights =
-      (inferredProfile?.preference_weights as IncrementalPreferenceWeights | null) ??
+      (inferredProfile?.preferenceWeights as IncrementalPreferenceWeights | null) ??
       null;
 
     // 2. 增量更新
@@ -385,18 +385,18 @@ export class RecommendationFeedbackService {
 
     // 3. 写回
     if (inferredProfile) {
-      await this.prisma.user_inferred_profiles.update({
+      await this.prisma.userInferredProfiles.update({
         where: { id: inferredProfile.id },
         data: {
-          preference_weights: updatedWeights as any,
+          preferenceWeights: updatedWeights as any,
         },
       });
     } else {
       // 如果没有推断画像，创建一个最小的（仅包含偏好权重）
-      await this.prisma.user_inferred_profiles.create({
+      await this.prisma.userInferredProfiles.create({
         data: {
-          user_id: params.userId,
-          preference_weights: updatedWeights as any,
+          userId: params.userId,
+          preferenceWeights: updatedWeights as any,
         },
       });
     }

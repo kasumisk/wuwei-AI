@@ -82,9 +82,9 @@ export class WeeklyPlanService {
     const { monday, sunday, dates } = this.getCurrentWeekDates(tz);
 
     // 查询本周已有的计划
-    const existingPlans = (await this.prisma.daily_plans.findMany({
+    const existingPlans = (await this.prisma.dailyPlans.findMany({
       where: {
-        user_id: userId,
+        userId: userId,
         date: { gte: new Date(monday), lte: new Date(sunday) },
       },
     })) as any[];
@@ -108,7 +108,7 @@ export class WeeklyPlanService {
     // V5 2.5: 一次性预加载所有共享数据，避免 N天×5 次重复查询
     // 先获取 profile（用于确定 regionCode），再并行加载其余数据
     const profile = await this.userProfileService.getProfile(userId);
-    const regionCode = profile?.region_code || 'CN';
+    const regionCode = profile?.regionCode || 'CN';
 
     const [
       allFoods,
@@ -236,10 +236,10 @@ export class WeeklyPlanService {
    */
   private extractFoodNames(plan: any, target: Set<string>): void {
     const meals = [
-      plan.morning_plan ?? plan.morningPlan,
-      plan.lunch_plan ?? plan.lunchPlan,
-      plan.dinner_plan ?? plan.dinnerPlan,
-      plan.snack_plan ?? plan.snackPlan,
+      plan.morningPlan ?? plan.morningPlan,
+      plan.lunchPlan ?? plan.lunchPlan,
+      plan.dinnerPlan ?? plan.dinnerPlan,
+      plan.snackPlan ?? plan.snackPlan,
     ];
     for (const meal of meals) {
       if (!meal?.foodItems) continue;
@@ -254,10 +254,10 @@ export class WeeklyPlanService {
    */
   private toPlanSummary(plan: any, isNew: boolean): DailyPlanSummary {
     const meals = {
-      morning: plan.morning_plan ?? plan.morningPlan,
-      lunch: plan.lunch_plan ?? plan.lunchPlan,
-      dinner: plan.dinner_plan ?? plan.dinnerPlan,
-      snack: plan.snack_plan ?? plan.snackPlan,
+      morning: plan.morningPlan ?? plan.morningPlan,
+      lunch: plan.lunchPlan ?? plan.lunchPlan,
+      dinner: plan.dinnerPlan ?? plan.dinnerPlan,
+      snack: plan.snackPlan ?? plan.snackPlan,
     };
 
     const totalCalories =

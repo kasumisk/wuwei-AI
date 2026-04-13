@@ -28,10 +28,10 @@ export class CapabilityPermissionGuard implements CanActivate {
 
     // 检查客户端是否有该能力的权限
     const permission =
-      await this.prisma.client_capability_permissions.findFirst({
+      await this.prisma.clientCapabilityPermissions.findFirst({
         where: {
-          client_id: client.id,
-          capability_type: capabilityType,
+          clientId: client.id,
+          capabilityType: capabilityType,
           enabled: true,
         },
       });

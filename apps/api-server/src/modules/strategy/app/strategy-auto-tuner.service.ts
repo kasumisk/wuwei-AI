@@ -467,10 +467,10 @@ export class StrategyAutoTuner implements OnModuleInit, OnModuleDestroy {
    */
   private async restoreFromDb(): Promise<void> {
     try {
-      const allApplied = await this.prisma.strategy_tuning_log.findMany({
-        where: { auto_applied: true },
-        orderBy: { created_at: 'desc' },
-        select: { segment_name: true, new_strategy: true, created_at: true },
+      const allApplied = await this.prisma.strategyTuningLog.findMany({
+        where: { autoApplied: true },
+        orderBy: { createdAt: 'desc' },
+        select: { segmentName: true, newStrategy: true, createdAt: true },
       });
 
       // 先加载默认映射
@@ -479,14 +479,14 @@ export class StrategyAutoTuner implements OnModuleInit, OnModuleDestroy {
       // 每个 segment 只取最新一条
       const recovered = new Set<string>();
       for (const log of allApplied) {
-        if (!recovered.has(log.segment_name)) {
+        if (!recovered.has(log.segmentName)) {
           const mapping: SegmentMapping = {
-            strategyKey: log.new_strategy,
-            appliedAt: log.created_at.toISOString(),
+            strategyKey: log.newStrategy,
+            appliedAt: log.createdAt.toISOString(),
             source: 'db_restore',
           };
-          this.localCache.set(log.segment_name, mapping);
-          recovered.add(log.segment_name);
+          this.localCache.set(log.segmentName, mapping);
+          recovered.add(log.segmentName);
         }
       }
 
@@ -565,8 +565,8 @@ export class StrategyAutoTuner implements OnModuleInit, OnModuleDestroy {
   ): Promise<SegmentStrategyStats[]> {
     const rows = await this.prisma.$queryRaw<
       Array<{
-        segment_name: string;
-        strategy_id: string;
+        segmentName: string;
+        strategyId: string;
         strategy_name: string;
         total_feedbacks: bigint;
         accepted_count: bigint;
@@ -595,8 +595,8 @@ export class StrategyAutoTuner implements OnModuleInit, OnModuleDestroy {
       const total = Number(r.total_feedbacks);
       const accepted = Number(r.accepted_count);
       return {
-        segmentName: r.segment_name,
-        strategyId: r.strategy_id,
+        segmentName: r.segmentName,
+        strategyId: r.strategyId,
         strategyName: r.strategy_name,
         totalFeedbacks: total,
         acceptedCount: accepted,
@@ -627,15 +627,15 @@ export class StrategyAutoTuner implements OnModuleInit, OnModuleDestroy {
     autoApplied: boolean,
   ): Promise<void> {
     try {
-      await this.prisma.strategy_tuning_log.create({
+      await this.prisma.strategyTuningLog.create({
         data: {
-          segment_name: suggestion.segment,
-          previous_strategy: suggestion.currentStrategy,
-          new_strategy: suggestion.suggestedStrategy,
-          previous_rate: suggestion.currentRate,
-          new_rate: suggestion.suggestedRate,
+          segmentName: suggestion.segment,
+          previousStrategy: suggestion.currentStrategy,
+          newStrategy: suggestion.suggestedStrategy,
+          previousRate: suggestion.currentRate,
+          newRate: suggestion.suggestedRate,
           improvement: suggestion.improvement,
-          auto_applied: autoApplied,
+          autoApplied: autoApplied,
         },
       });
     } catch (err) {

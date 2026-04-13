@@ -13,10 +13,10 @@ import {
   DEFAULT_KITCHEN_PROFILE,
 } from '../../../user.types';
 import {
-  user_profiles as UserProfile,
-  user_inferred_profiles as UserInferredProfile,
-  user_behavior_profiles as UserBehaviorProfile,
-  profile_snapshots as ProfileSnapshot,
+  UserProfiles as UserProfile,
+  UserInferredProfiles as UserInferredProfile,
+  UserBehaviorProfiles as UserBehaviorProfile,
+  ProfileSnapshots as ProfileSnapshot,
 } from '@prisma/client';
 import { ProfileCacheService } from './profile-cache.service';
 import {
@@ -83,8 +83,8 @@ export class UserProfileService {
    * 获取用户档案
    */
   async getProfile(userId: string): Promise<UserProfile | null> {
-    return this.prisma.user_profiles.findUnique({
-      where: { user_id: userId },
+    return this.prisma.userProfiles.findUnique({
+      where: { userId: userId },
     }) as any;
   }
 
@@ -92,8 +92,8 @@ export class UserProfileService {
    * 获取用户时区（IANA 格式），无档案时返回默认值 Asia/Shanghai
    */
   async getTimezone(userId: string): Promise<string> {
-    const profile = await this.prisma.user_profiles.findUnique({
-      where: { user_id: userId },
+    const profile = await this.prisma.userProfiles.findUnique({
+      where: { userId: userId },
       select: { timezone: true },
     });
     return profile?.timezone || 'Asia/Shanghai';
@@ -106,36 +106,32 @@ export class UserProfileService {
     userId: string,
     dto: SaveUserProfileDto,
   ): Promise<UserProfile> {
-    let profile = await this.prisma.user_profiles.findUnique({
-      where: { user_id: userId },
+    let profile = await this.prisma.userProfiles.findUnique({
+      where: { userId: userId },
     });
     const oldProfile = profile ? { ...profile } : null;
 
-    // Map DTO camelCase fields to snake_case DB fields
-    const mappedData = this.mapDtoToDbFields(dto);
-
     if (profile) {
-      // Merge mapped data
-      profile = { ...profile, ...mappedData } as any;
+      profile = { ...profile, ...dto } as any;
     } else {
-      profile = { user_id: userId, ...mappedData } as any;
+      profile = { userId: userId, ...dto } as any;
     }
 
     // 如果未手动设置热量目标且有足够信息，自动计算
     if (
       !dto.dailyCalorieGoal &&
       profile!.gender &&
-      profile!.birth_year &&
-      profile!.height_cm &&
-      profile!.weight_kg
+      profile!.birthYear &&
+      profile!.heightCm &&
+      profile!.weightKg
     ) {
-      (profile as any).daily_calorie_goal = this.calculateDailyGoal(
+      (profile as any).dailyCalorieGoal = this.calculateDailyGoal(
         profile as any,
       );
     }
 
     // 更新完整度
-    (profile as any).data_completeness = this.calculateCompleteness(
+    (profile as any).dataCompleteness = this.calculateCompleteness(
       profile as any,
     );
 
@@ -146,7 +142,7 @@ export class UserProfileService {
         this.extractWritableFields(profile) as any,
       );
     } else {
-      saved = await this.prisma.user_profiles.create({
+      saved = await this.prisma.userProfiles.create({
         data: this.extractWritableFields(profile) as any,
       });
     }
@@ -154,7 +150,7 @@ export class UserProfileService {
     // V5 3.1: 体重变化时记录历史
     if (
       dto.weightKg &&
-      (!oldProfile || Number(oldProfile.weight_kg) !== Number(dto.weightKg))
+      (!oldProfile || Number(oldProfile.weightKg) !== Number(dto.weightKg))
     ) {
       const source = oldProfile ? 'manual' : 'onboarding';
       await this.recordWeightHistory(
@@ -181,9 +177,8 @@ export class UserProfileService {
     const beforeVals: Record<string, unknown> = {};
     const afterVals: Record<string, unknown> = {};
     for (const k of dtoKeys) {
-      const dbKey = this.camelToSnake(k);
-      beforeVals[k] = oldProfile ? (oldProfile as any)[dbKey] : null;
-      afterVals[k] = (saved as any)[dbKey];
+      beforeVals[k] = oldProfile ? (oldProfile as any)[k] : null;
+      afterVals[k] = (saved as any)[k];
     }
     this.eventEmitter.emit(
       DomainEvents.PROFILE_UPDATED,
@@ -220,47 +215,45 @@ export class UserProfileService {
     nextStep: number | null;
     completeness: number;
   }> {
-    let profile = await this.prisma.user_profiles.findUnique({
-      where: { user_id: userId },
+    let profile = await this.prisma.userProfiles.findUnique({
+      where: { userId: userId },
     });
 
-    const mappedData = this.mapDtoToDbFields(dto);
-
     if (!profile) {
-      profile = { user_id: userId, ...mappedData } as any;
+      profile = { userId: userId, ...dto } as any;
     } else {
-      profile = { ...profile, ...mappedData } as any;
+      profile = { ...profile, ...dto } as any;
     }
 
     // 合并步骤数据
-    (profile as any).onboarding_step = step;
+    (profile as any).onboardingStep = step;
 
     // Step 2 完成后即可计算 BMR
     if (
       step >= 2 &&
       profile!.gender &&
-      profile!.birth_year &&
-      profile!.height_cm &&
-      profile!.weight_kg &&
-      !profile!.daily_calorie_goal
+      profile!.birthYear &&
+      profile!.heightCm &&
+      profile!.weightKg &&
+      !profile!.dailyCalorieGoal
     ) {
-      (profile as any).daily_calorie_goal = this.calculateDailyGoal(
+      (profile as any).dailyCalorieGoal = this.calculateDailyGoal(
         profile as any,
       );
     }
 
     // Step 4 完成 → 标记引导完成
     if (step >= 4) {
-      (profile as any).onboarding_completed = true;
+      (profile as any).onboardingCompleted = true;
     }
 
-    (profile as any).data_completeness = this.calculateCompleteness(
+    (profile as any).dataCompleteness = this.calculateCompleteness(
       profile as any,
     );
 
     let saved: any;
-    const existing = await this.prisma.user_profiles.findUnique({
-      where: { user_id: userId },
+    const existing = await this.prisma.userProfiles.findUnique({
+      where: { userId: userId },
     });
     if (existing) {
       saved = await this.updateProfileWithVersion(
@@ -268,7 +261,7 @@ export class UserProfileService {
         this.extractWritableFields(profile) as any,
       );
     } else {
-      saved = await this.prisma.user_profiles.create({
+      saved = await this.prisma.userProfiles.create({
         data: this.extractWritableFields(profile) as any,
       });
     }
@@ -300,8 +293,7 @@ export class UserProfileService {
     const onboardingFields = Object.keys(dto);
     const onboardingAfter: Record<string, unknown> = {};
     for (const k of onboardingFields) {
-      const dbKey = this.camelToSnake(k);
-      onboardingAfter[k] = (saved as any)[dbKey];
+      onboardingAfter[k] = (saved as any)[k];
     }
     this.eventEmitter.emit(
       DomainEvents.PROFILE_UPDATED,
@@ -319,12 +311,12 @@ export class UserProfileService {
     return {
       profile: saved as any,
       computed: {
-        bmr: computed?.estimated_bmr ?? undefined,
-        tdee: computed?.estimated_tdee ?? undefined,
-        recommendedCalories: computed?.recommended_calories ?? undefined,
+        bmr: computed?.estimatedBmr ?? undefined,
+        tdee: computed?.estimatedTdee ?? undefined,
+        recommendedCalories: computed?.recommendedCalories ?? undefined,
       },
       nextStep: step < 4 ? step + 1 : null,
-      completeness: Number(saved.data_completeness),
+      completeness: Number(saved.dataCompleteness),
     };
   }
 
@@ -335,29 +327,29 @@ export class UserProfileService {
     userId: string,
     step: number,
   ): Promise<{ nextStep: number | null; completeness: number }> {
-    let profile = await this.prisma.user_profiles.findUnique({
-      where: { user_id: userId },
+    let profile = await this.prisma.userProfiles.findUnique({
+      where: { userId: userId },
     });
 
     const updateData: any = {
-      onboarding_step: step,
+      onboardingStep: step,
     };
 
     if (step >= 4) {
-      updateData.onboarding_completed = true;
+      updateData.onboardingCompleted = true;
     }
 
     if (profile) {
       // Compute completeness with merged data
       const merged = { ...profile, ...updateData };
-      updateData.data_completeness = this.calculateCompleteness(merged as any);
+      updateData.dataCompleteness = this.calculateCompleteness(merged as any);
       profile = await this.updateProfileWithVersion(userId, updateData);
     } else {
-      updateData.user_id = userId;
-      updateData.data_completeness = this.calculateCompleteness(
+      updateData.userId = userId;
+      updateData.dataCompleteness = this.calculateCompleteness(
         updateData as any,
       );
-      profile = await this.prisma.user_profiles.create({
+      profile = await this.prisma.userProfiles.create({
         data: updateData,
       });
     }
@@ -380,9 +372,9 @@ export class UserProfileService {
           userId,
           'declared',
           'manual',
-          ['onboarding_completed'],
+          ['onboardingCompleted'],
           {},
-          { onboarding_completed: true },
+          { onboardingCompleted: true },
           `引导步骤 ${step} 跳过完成`,
         ),
       );
@@ -390,7 +382,7 @@ export class UserProfileService {
 
     return {
       nextStep: step < 4 ? step + 1 : null,
-      completeness: Number(profile!.data_completeness),
+      completeness: Number(profile!.dataCompleteness),
     };
   }
 
@@ -410,12 +402,12 @@ export class UserProfileService {
     };
   }> {
     const [declared, observed, inferred] = await Promise.all([
-      this.prisma.user_profiles.findUnique({ where: { user_id: userId } }),
-      this.prisma.user_behavior_profiles.findUnique({
-        where: { user_id: userId },
+      this.prisma.userProfiles.findUnique({ where: { userId: userId } }),
+      this.prisma.userBehaviorProfiles.findUnique({
+        where: { userId: userId },
       }),
-      this.prisma.user_inferred_profiles.findUnique({
-        where: { user_id: userId },
+      this.prisma.userInferredProfiles.findUnique({
+        where: { userId: userId },
       }),
     ]);
 
@@ -424,9 +416,9 @@ export class UserProfileService {
       observed: observed as any,
       inferred: inferred as any,
       meta: {
-        completeness: Number(declared?.data_completeness ?? 0),
-        onboardingStep: declared?.onboarding_step ?? 0,
-        profileVersion: declared?.profile_version ?? 1,
+        completeness: Number(declared?.dataCompleteness ?? 0),
+        onboardingStep: declared?.onboardingStep ?? 0,
+        profileVersion: declared?.profileVersion ?? 1,
       },
     };
   }
@@ -438,40 +430,38 @@ export class UserProfileService {
     userId: string,
     dto: UpdateDeclaredProfileDto,
   ): Promise<UserProfile> {
-    let profile = await this.prisma.user_profiles.findUnique({
-      where: { user_id: userId },
+    let profile = await this.prisma.userProfiles.findUnique({
+      where: { userId: userId },
     });
 
-    const mappedData = this.mapDtoToDbFields(dto);
-
     if (!profile) {
-      profile = { user_id: userId } as any;
+      profile = { userId: userId } as any;
     }
 
     const oldProfile = { ...profile };
-    const merged = { ...profile, ...mappedData };
+    const merged = { ...profile, ...dto };
 
     // 重算热量（如果体重/身高/目标等变化且用户未手动设定）
     if (
       (dto.weightKg || dto.heightCm || dto.goal || dto.activityLevel) &&
       !dto.dailyCalorieGoal &&
       merged.gender &&
-      merged.birth_year &&
-      merged.height_cm &&
-      merged.weight_kg
+      merged.birthYear &&
+      merged.heightCm &&
+      merged.weightKg
     ) {
-      (merged as any).daily_calorie_goal = this.calculateDailyGoal(
+      (merged as any).dailyCalorieGoal = this.calculateDailyGoal(
         merged as any,
       );
     }
 
-    (merged as any).data_completeness = this.calculateCompleteness(
+    (merged as any).dataCompleteness = this.calculateCompleteness(
       merged as any,
     );
 
     let saved: any;
-    const existing = await this.prisma.user_profiles.findUnique({
-      where: { user_id: userId },
+    const existing = await this.prisma.userProfiles.findUnique({
+      where: { userId: userId },
     });
     if (existing) {
       saved = await this.updateProfileWithVersion(
@@ -479,20 +469,20 @@ export class UserProfileService {
         this.extractWritableFields(merged) as any,
       );
     } else {
-      saved = await this.prisma.user_profiles.create({
+      saved = await this.prisma.userProfiles.create({
         data: this.extractWritableFields(merged) as any,
       });
     }
 
     // V5 3.1: 体重变化时记录历史
-    if (dto.weightKg && Number(oldProfile.weight_kg) !== Number(dto.weightKg)) {
+    if (dto.weightKg && Number(oldProfile.weightKg) !== Number(dto.weightKg)) {
       await this.recordWeightHistory(
         userId,
         Number(dto.weightKg),
         dto.bodyFatPercent != null
           ? Number(dto.bodyFatPercent)
-          : saved.body_fat_percent != null
-            ? Number(saved.body_fat_percent)
+          : saved.bodyFatPercent != null
+            ? Number(saved.bodyFatPercent)
             : null,
         'manual',
       );
@@ -506,19 +496,17 @@ export class UserProfileService {
 
     // V6 Phase 1.2: 发布画像更新事件（含变更字段信息）
     const changedFields = Object.keys(dto).filter((k) => {
-      const dbKey = this.camelToSnake(k);
       return (
-        JSON.stringify((oldProfile as any)[dbKey]) !==
-        JSON.stringify((saved as any)[dbKey])
+        JSON.stringify((oldProfile as any)[k]) !==
+        JSON.stringify((saved as any)[k])
       );
     });
     // V6 2.17: 构建变更前后值
     const declaredBefore: Record<string, unknown> = {};
     const declaredAfter: Record<string, unknown> = {};
     for (const k of changedFields) {
-      const dbKey = this.camelToSnake(k);
-      declaredBefore[k] = (oldProfile as any)[dbKey];
-      declaredAfter[k] = (saved as any)[dbKey];
+      declaredBefore[k] = (oldProfile as any)[k];
+      declaredAfter[k] = (saved as any)[k];
     }
     this.eventEmitter.emit(
       DomainEvents.PROFILE_UPDATED,
@@ -548,8 +536,8 @@ export class UserProfileService {
     }>;
     currentCompleteness: number;
   }> {
-    const profile = await this.prisma.user_profiles.findUnique({
-      where: { user_id: userId },
+    const profile = await this.prisma.userProfiles.findUnique({
+      where: { userId: userId },
     });
     if (!profile) {
       return { suggestions: [], currentCompleteness: 0 };
@@ -646,7 +634,7 @@ export class UserProfileService {
 
     return {
       suggestions,
-      currentCompleteness: Number(profile.data_completeness),
+      currentCompleteness: Number(profile.dataCompleteness),
     };
   }
 
@@ -655,7 +643,7 @@ export class UserProfileService {
    */
   async getDailyCalorieGoal(userId: string): Promise<number> {
     const profile = await this.getProfile(userId);
-    if (profile?.daily_calorie_goal) return profile.daily_calorie_goal;
+    if (profile?.dailyCalorieGoal) return profile.dailyCalorieGoal;
 
     // 无档案时返回默认值
     return 2000;
@@ -673,14 +661,14 @@ export class UserProfileService {
     const bmr = this.calculateBMR(profile);
     const tdee = this.calculateTDEE(
       bmr,
-      profile.activity_level ?? profile.activityLevel,
-      profile.exercise_profile ?? profile.exerciseProfile,
-      Number(profile.weight_kg ?? profile.weightKg) || undefined,
+      profile.activityLevel,
+      profile.exerciseProfile,
+      Number(profile.weightKg) || undefined,
     );
     return this.calculateRecommendedCalories(
       tdee,
       profile.goal,
-      profile.goal_speed ?? profile.goalSpeed,
+      profile.goalSpeed,
       profile.gender,
     );
   }
@@ -690,50 +678,41 @@ export class UserProfileService {
    */
   buildUserContext(profile: any): string {
     const lines: string[] = [];
-    const g = (camel: string, snake: string) =>
-      profile[snake] ?? profile[camel];
-    if (g('gender', 'gender'))
-      lines.push(`性别: ${g('gender', 'gender') === 'male' ? '男' : '女'}`);
-    if (g('birthYear', 'birth_year'))
+    if (profile.gender)
+      lines.push(`性别: ${profile.gender === 'male' ? '男' : '女'}`);
+    if (profile.birthYear)
       lines.push(
-        `年龄: ${new Date().getFullYear() - g('birthYear', 'birth_year')}岁`,
+        `年龄: ${new Date().getFullYear() - profile.birthYear}岁`,
       );
-    if (g('heightCm', 'height_cm'))
-      lines.push(`身高: ${g('heightCm', 'height_cm')}cm`);
-    if (g('weightKg', 'weight_kg'))
-      lines.push(`体重: ${g('weightKg', 'weight_kg')}kg`);
-    if (g('targetWeightKg', 'target_weight_kg'))
-      lines.push(`目标体重: ${g('targetWeightKg', 'target_weight_kg')}kg`);
-    if (g('bodyFatPercent', 'body_fat_percent'))
-      lines.push(`体脂率: ${g('bodyFatPercent', 'body_fat_percent')}%`);
-    if (g('goal', 'goal')) lines.push(`目标: ${g('goal', 'goal')}`);
-    if (g('goalSpeed', 'goal_speed'))
-      lines.push(`目标节奏: ${g('goalSpeed', 'goal_speed')}`);
-    if (g('dailyCalorieGoal', 'daily_calorie_goal'))
+    if (profile.heightCm)
+      lines.push(`身高: ${profile.heightCm}cm`);
+    if (profile.weightKg)
+      lines.push(`体重: ${profile.weightKg}kg`);
+    if (profile.targetWeightKg)
+      lines.push(`目标体重: ${profile.targetWeightKg}kg`);
+    if (profile.bodyFatPercent)
+      lines.push(`体脂率: ${profile.bodyFatPercent}%`);
+    if (profile.goal) lines.push(`目标: ${profile.goal}`);
+    if (profile.goalSpeed)
+      lines.push(`目标节奏: ${profile.goalSpeed}`);
+    if (profile.dailyCalorieGoal)
       lines.push(
-        `每日热量目标: ${g('dailyCalorieGoal', 'daily_calorie_goal')}kcal`,
+        `每日热量目标: ${profile.dailyCalorieGoal}kcal`,
       );
-    if (g('mealsPerDay', 'meals_per_day'))
-      lines.push(`每日餐次: ${g('mealsPerDay', 'meals_per_day')}`);
-    if (g('takeoutFrequency', 'takeout_frequency'))
-      lines.push(`外卖频率: ${g('takeoutFrequency', 'takeout_frequency')}`);
-    const canCook = g('canCook', 'can_cook');
-    if (canCook !== undefined) lines.push(`会做饭: ${canCook ? '是' : '否'}`);
-    const foodPrefs = g('foodPreferences', 'food_preferences');
-    if (foodPrefs?.length) lines.push(`饮食偏好: ${foodPrefs.join(', ')}`);
-    const dietRestrictions = g('dietaryRestrictions', 'dietary_restrictions');
-    if (dietRestrictions?.length)
-      lines.push(`忌口: ${dietRestrictions.join(', ')}`);
-    const allergens = g('allergens', 'allergens');
-    if (allergens?.length) lines.push(`⚠️过敏原: ${allergens.join(', ')}`);
-    const healthConds = g('healthConditions', 'health_conditions');
-    if (healthConds?.length) lines.push(`健康状况: ${healthConds.join(', ')}`);
-    const weakSlots = g('weakTimeSlots', 'weak_time_slots');
-    if (weakSlots?.length) lines.push(`容易乱吃时段: ${weakSlots.join(', ')}`);
-    const triggers = g('bingeTriggers', 'binge_triggers');
-    if (triggers?.length) lines.push(`暴食触发: ${triggers.join(', ')}`);
-    if (g('discipline', 'discipline'))
-      lines.push(`自律程度: ${g('discipline', 'discipline')}`);
+    if (profile.mealsPerDay)
+      lines.push(`每日餐次: ${profile.mealsPerDay}`);
+    if (profile.takeoutFrequency)
+      lines.push(`外卖频率: ${profile.takeoutFrequency}`);
+    if (profile.canCook !== undefined) lines.push(`会做饭: ${profile.canCook ? '是' : '否'}`);
+    if (profile.foodPreferences?.length) lines.push(`饮食偏好: ${profile.foodPreferences.join(', ')}`);
+    if (profile.dietaryRestrictions?.length)
+      lines.push(`忌口: ${profile.dietaryRestrictions.join(', ')}`);
+    if (profile.allergens?.length) lines.push(`⚠️过敏原: ${profile.allergens.join(', ')}`);
+    if (profile.healthConditions?.length) lines.push(`健康状况: ${profile.healthConditions.join(', ')}`);
+    if (profile.weakTimeSlots?.length) lines.push(`容易乱吃时段: ${profile.weakTimeSlots.join(', ')}`);
+    if (profile.bingeTriggers?.length) lines.push(`暴食触发: ${profile.bingeTriggers.join(', ')}`);
+    if (profile.discipline)
+      lines.push(`自律程度: ${profile.discipline}`);
     return lines.join('\n');
   }
 
@@ -750,11 +729,11 @@ export class UserProfileService {
     source: 'manual' | 'device' | 'onboarding',
   ): Promise<void> {
     try {
-      await this.prisma.weight_history.create({
+      await this.prisma.weightHistory.create({
         data: {
-          user_id: userId,
-          weight_kg: weightKg,
-          body_fat_percent: bodyFatPercent ?? null,
+          userId: userId,
+          weightKg: weightKg,
+          bodyFatPercent: bodyFatPercent ?? null,
           source,
         },
       });
@@ -776,35 +755,8 @@ export class UserProfileService {
     const totalWeight = Object.values(FIELD_WEIGHTS).reduce((a, b) => a + b, 0);
     let filledWeight = 0;
 
-    // Map camelCase field names to snake_case for Prisma records
-    const fieldMapping: Record<string, string> = {
-      gender: 'gender',
-      birthYear: 'birth_year',
-      heightCm: 'height_cm',
-      weightKg: 'weight_kg',
-      goal: 'goal',
-      activityLevel: 'activity_level',
-      targetWeightKg: 'target_weight_kg',
-      mealsPerDay: 'meals_per_day',
-      dietaryRestrictions: 'dietary_restrictions',
-      allergens: 'allergens',
-      foodPreferences: 'food_preferences',
-      takeoutFrequency: 'takeout_frequency',
-      discipline: 'discipline',
-      weakTimeSlots: 'weak_time_slots',
-      bingeTriggers: 'binge_triggers',
-      canCook: 'can_cook',
-      exerciseProfile: 'exercise_profile',
-      cookingSkillLevel: 'cooking_skill_level',
-      healthConditions: 'health_conditions',
-      budgetLevel: 'budget_level',
-      tasteIntensity: 'taste_intensity',
-    };
-
     for (const [field, weight] of Object.entries(FIELD_WEIGHTS)) {
-      const snakeField = fieldMapping[field] || field;
-      // Support both camelCase and snake_case
-      const value = profile[snakeField] ?? profile[field];
+      const value = profile[field];
       if (value === null || value === undefined) continue;
       if (Array.isArray(value) && value.length === 0) continue;
       if (
@@ -827,20 +779,9 @@ export class UserProfileService {
     oldProfile: any,
     newProfile: any,
   ): Promise<void> {
-    // Map camelCase critical fields to snake_case
-    const criticalFieldMapping: Record<string, string> = {
-      goal: 'goal',
-      goalSpeed: 'goal_speed',
-      weightKg: 'weight_kg',
-      allergens: 'allergens',
-      dietaryRestrictions: 'dietary_restrictions',
-      healthConditions: 'health_conditions',
-    };
-
     const changed = CRITICAL_FIELDS.filter((f) => {
-      const dbField = criticalFieldMapping[f] || f;
-      const oldVal = oldProfile[dbField];
-      const newVal = newProfile[dbField];
+      const oldVal = oldProfile[f];
+      const newVal = newProfile[f];
       return JSON.stringify(oldVal) !== JSON.stringify(newVal);
     });
 
@@ -855,12 +796,12 @@ export class UserProfileService {
           ? 'restriction_change'
           : 'field_update';
 
-    await this.prisma.profile_snapshots.create({
+    await this.prisma.profileSnapshots.create({
       data: {
-        user_id: userId,
+        userId: userId,
         snapshot: oldProfile as any,
-        trigger_type: triggerType,
-        changed_fields: changed,
+        triggerType: triggerType,
+        changedFields: changed,
       },
     });
 
@@ -874,25 +815,25 @@ export class UserProfileService {
    */
   private async syncInferredProfile(profile: any): Promise<any | null> {
     const gender = profile.gender;
-    const birthYear = profile.birth_year ?? profile.birthYear;
-    const heightCm = profile.height_cm ?? profile.heightCm;
-    const weightKg = profile.weight_kg ?? profile.weightKg;
-    const userId = profile.user_id ?? profile.userId;
+    const birthYear = profile.birthYear;
+    const heightCm = profile.heightCm;
+    const weightKg = profile.weightKg;
+    const userId = profile.userId;
 
     if (!gender || !birthYear || !heightCm || !weightKg) {
       return null;
     }
 
-    const inferred = await this.prisma.user_inferred_profiles.findUnique({
-      where: { user_id: userId },
+    const inferred = await this.prisma.userInferredProfiles.findUnique({
+      where: { userId: userId },
     });
 
     const bmr = this.calculateBMR(profile);
-    const activityLevel = profile.activity_level ?? profile.activityLevel;
-    const exerciseProfile = profile.exercise_profile ?? profile.exerciseProfile;
+    const activityLevel = profile.activityLevel;
+    const exerciseProfile = profile.exerciseProfile;
     const goal = profile.goal;
-    const goalSpeed = profile.goal_speed ?? profile.goalSpeed;
-    const bodyFatPercent = profile.body_fat_percent ?? profile.bodyFatPercent;
+    const goalSpeed = profile.goalSpeed;
+    const bodyFatPercent = profile.bodyFatPercent;
 
     const tdee = this.calculateTDEE(
       bmr,
@@ -916,7 +857,7 @@ export class UserProfileService {
       exerciseProfile.frequencyPerWeek &&
       exerciseProfile.avgDurationMinutes;
     const confidenceScores = {
-      ...((inferred?.confidence_scores as any) || {}),
+      ...((inferred?.confidenceScores as any) || {}),
       // V4: bodyFatPercent 现在直接影响 BMR 公式选择 (Katch-McArdle vs Harris-Benedict)
       estimatedBMR: bodyFatPercent ? 0.95 : 0.85,
       estimatedTDEE: hasExerciseDetail ? 0.9 : 0.8,
@@ -925,23 +866,23 @@ export class UserProfileService {
     };
 
     const data = {
-      estimated_bmr: Math.round(bmr),
-      estimated_tdee: Math.round(tdee),
-      recommended_calories: recommendedCalories,
-      macro_targets: macroTargets as any,
-      last_computed_at: new Date(),
-      confidence_scores: confidenceScores as any,
+      estimatedBmr: Math.round(bmr),
+      estimatedTdee: Math.round(tdee),
+      recommendedCalories: recommendedCalories,
+      macroTargets: macroTargets as any,
+      lastComputedAt: new Date(),
+      confidenceScores: confidenceScores as any,
     };
 
     if (inferred) {
-      return this.prisma.user_inferred_profiles.update({
-        where: { user_id: userId },
+      return this.prisma.userInferredProfiles.update({
+        where: { userId: userId },
         data,
       });
     } else {
-      return this.prisma.user_inferred_profiles.create({
+      return this.prisma.userInferredProfiles.create({
         data: {
-          user_id: userId,
+          userId: userId,
           ...data,
         },
       });
@@ -953,12 +894,12 @@ export class UserProfileService {
    * 使用 findUnique + create 模式避免重复创建
    */
   private async ensureBehaviorProfile(userId: string): Promise<void> {
-    const existing = await this.prisma.user_behavior_profiles.findUnique({
-      where: { user_id: userId },
+    const existing = await this.prisma.userBehaviorProfiles.findUnique({
+      where: { userId: userId },
     });
     if (!existing) {
-      await this.prisma.user_behavior_profiles.create({
-        data: { user_id: userId },
+      await this.prisma.userBehaviorProfiles.create({
+        data: { userId: userId },
       });
       this.logger.log(
         `Created behavior profile for user ${userId} on onboarding completion`,
@@ -976,8 +917,8 @@ export class UserProfileService {
    * 回退: 无体脂数据时使用 Harris-Benedict 公式（原逻辑）
    */
   private calculateBMR(profile: any): number {
-    const weight = Number(profile.weight_kg ?? profile.weightKg) || 65;
-    const bodyFatPercent = profile.body_fat_percent ?? profile.bodyFatPercent;
+    const weight = Number(profile.weightKg) || 65;
+    const bodyFatPercent = profile.bodyFatPercent;
 
     // Katch-McArdle: 当体脂率可用且在合理范围 (3%~60%)
     if (bodyFatPercent != null && bodyFatPercent >= 3 && bodyFatPercent <= 60) {
@@ -986,9 +927,9 @@ export class UserProfileService {
     }
 
     // Harris-Benedict fallback
-    const birthYear = profile.birth_year ?? profile.birthYear ?? 1990;
+    const birthYear = profile.birthYear ?? 1990;
     const age = new Date().getFullYear() - birthYear;
-    const height = Number(profile.height_cm ?? profile.heightCm) || 170;
+    const height = Number(profile.heightCm) || 170;
 
     return profile.gender === 'male'
       ? 88.362 + 13.397 * weight + 4.799 * height - 5.677 * age
@@ -1118,25 +1059,10 @@ export class UserProfileService {
 
   // ==================== Prisma 辅助方法 ====================
 
-  /** camelCase → snake_case */
-  private camelToSnake(str: string): string {
-    return str.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
-  }
-
-  /** Map DTO (camelCase) fields to DB (snake_case) fields */
-  private mapDtoToDbFields(dto: Record<string, any>): Record<string, any> {
-    const mapped: Record<string, any> = {};
-    for (const [key, value] of Object.entries(dto)) {
-      if (value === undefined) continue;
-      mapped[this.camelToSnake(key)] = value;
-    }
-    return mapped;
-  }
-
   /** Extract writable fields for Prisma create/update (excludes id) */
   private extractWritableFields(profile: any): Record<string, any> {
     const data: Record<string, any> = {};
-    const skipFields = ['id', 'created_at', 'updated_at', 'profile_version'];
+    const skipFields = ['id', 'createdAt', 'updatedAt', 'profileVersion'];
     for (const [key, value] of Object.entries(profile)) {
       if (skipFields.includes(key)) continue;
       if (value === undefined) continue;
@@ -1156,11 +1082,11 @@ export class UserProfileService {
     userId: string,
     data: Record<string, any>,
   ): Promise<any> {
-    return this.prisma.user_profiles.update({
-      where: { user_id: userId },
+    return this.prisma.userProfiles.update({
+      where: { userId: userId },
       data: {
         ...data,
-        profile_version: { increment: 1 },
+        profileVersion: { increment: 1 },
       },
     });
   }
@@ -1187,9 +1113,9 @@ export class UserProfileService {
     // V7.2 P3-B: 复制现实性级别偏好
     if (dto.realismLevel) prefs.realismLevel = dto.realismLevel;
 
-    await this.prisma.user_profiles.update({
-      where: { user_id: userId },
-      data: { recommendation_preferences: prefs as any },
+    await this.prisma.userProfiles.update({
+      where: { userId: userId },
+      data: { recommendationPreferences: prefs as any },
     });
 
     this.logger.log(
@@ -1208,13 +1134,13 @@ export class UserProfileService {
   async getRecommendationPreferences(
     userId: string,
   ): Promise<RecommendationPreferences> {
-    const profile = await this.prisma.user_profiles.findUnique({
-      where: { user_id: userId },
-      select: { recommendation_preferences: true },
+    const profile = await this.prisma.userProfiles.findUnique({
+      where: { userId: userId },
+      select: { recommendationPreferences: true },
     });
 
     return (
-      (profile?.recommendation_preferences as RecommendationPreferences) ?? {}
+      (profile?.recommendationPreferences as RecommendationPreferences) ?? {}
     );
   }
 
@@ -1324,14 +1250,14 @@ export class UserProfileService {
    */
   async getKitchenProfile(userId: string): Promise<KitchenProfile | null> {
     try {
-      const profile = await this.prisma.user_profiles.findUnique({
-        where: { user_id: userId },
-        select: { kitchen_profile: true },
+      const profile = await this.prisma.userProfiles.findUnique({
+        where: { userId: userId },
+        select: { kitchenProfile: true },
       });
 
-      if (!profile?.kitchen_profile) return null;
+      if (!profile?.kitchenProfile) return null;
 
-      const raw = profile.kitchen_profile as Record<string, unknown>;
+      const raw = profile.kitchenProfile as Record<string, unknown>;
       // 验证必要字段存在，兜底填充默认值
       return {
         hasOven:

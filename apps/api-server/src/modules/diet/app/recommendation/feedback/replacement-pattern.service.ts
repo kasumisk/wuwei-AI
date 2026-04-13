@@ -49,22 +49,22 @@ export class ReplacementPatternService {
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - LOOKBACK_DAYS);
 
-      const patterns = await this.prisma.replacement_patterns.findMany({
+      const patterns = await this.prisma.replacementPatterns.findMany({
         where: {
-          user_id: userId,
-          last_occurred: { gte: cutoffDate },
+          userId: userId,
+          lastOccurred: { gte: cutoffDate },
           frequency: { gte: WEAK_SIGNAL_THRESHOLD },
         },
         select: {
-          from_food_name: true,
-          to_food_name: true,
+          fromFoodName: true,
+          toFoodName: true,
           frequency: true,
         },
       });
 
       for (const pattern of patterns) {
         // 被替换的食物（from）降权
-        const fromName = pattern.from_food_name;
+        const fromName = pattern.fromFoodName;
         const currentFrom = adjustments.get(fromName) ?? 1.0;
         if (pattern.frequency >= STRONG_SIGNAL_THRESHOLD) {
           adjustments.set(fromName, currentFrom * STRONG_DOWNWEIGHT);
@@ -73,7 +73,7 @@ export class ReplacementPatternService {
         }
 
         // 替换目标食物（to）增权
-        const toName = pattern.to_food_name;
+        const toName = pattern.toFoodName;
         const currentTo = adjustments.get(toName) ?? 1.0;
         adjustments.set(toName, currentTo * UPWEIGHT);
       }
@@ -107,27 +107,27 @@ export class ReplacementPatternService {
     toName: string,
   ): Promise<void> {
     try {
-      await this.prisma.replacement_patterns.upsert({
+      await this.prisma.replacementPatterns.upsert({
         where: {
-          user_id_from_food_id_to_food_id: {
-            user_id: userId,
-            from_food_id: fromFoodId,
-            to_food_id: toFoodId,
+          userId_fromFoodId_toFoodId: {
+            userId: userId,
+            fromFoodId: fromFoodId,
+            toFoodId: toFoodId,
           },
         },
         create: {
-          user_id: userId,
-          from_food_id: fromFoodId,
-          from_food_name: fromName,
-          to_food_id: toFoodId,
-          to_food_name: toName,
+          userId: userId,
+          fromFoodId: fromFoodId,
+          fromFoodName: fromName,
+          toFoodId: toFoodId,
+          toFoodName: toName,
           frequency: 1,
         },
         update: {
           frequency: { increment: 1 },
-          last_occurred: new Date(),
-          from_food_name: fromName, // 名称可能更新
-          to_food_name: toName,
+          lastOccurred: new Date(),
+          fromFoodName: fromName, // 名称可能更新
+          toFoodName: toName,
         },
       });
     } catch (err) {

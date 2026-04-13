@@ -7,7 +7,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { AdminRole, AdminUserStatus } from '../../user/user.types';
-import { admin_users as AdminUser } from '@prisma/client';
+import { AdminUsers as AdminUser } from '@prisma/client';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import {
   LoginDto,
@@ -39,7 +39,7 @@ export class AdminService {
     const { username, password } = loginDto;
 
     // 查找管理员用户 (支持用户名、邮箱登录)
-    const user = await this.prisma.admin_users.findFirst({
+    const user = await this.prisma.adminUsers.findFirst({
       where: {
         OR: [{ username }, { email: username }],
       },
@@ -61,9 +61,9 @@ export class AdminService {
     }
 
     // 更新最后登录时间
-    await this.prisma.admin_users.update({
+    await this.prisma.adminUsers.update({
       where: { id: user.id },
-      data: { last_login_at: new Date() },
+      data: { lastLoginAt: new Date() },
     });
 
     // 生成 JWT
@@ -89,16 +89,16 @@ export class AdminService {
     }
 
     // 查找管理员用户
-    const user = await this.prisma.admin_users.findFirst({ where: { phone } });
+    const user = await this.prisma.adminUsers.findFirst({ where: { phone } });
 
     if (!user) {
       throw new UnauthorizedException('该手机号未注册管理员账号');
     }
 
     // 更新最后登录时间
-    await this.prisma.admin_users.update({
+    await this.prisma.adminUsers.update({
       where: { id: user.id },
-      data: { last_login_at: new Date() },
+      data: { lastLoginAt: new Date() },
     });
 
     // 生成 JWT
@@ -139,7 +139,7 @@ export class AdminService {
     const { username, email, phone, password } = registerDto;
 
     // 检查用户名是否已存在
-    const existingUser = await this.prisma.admin_users.findFirst({
+    const existingUser = await this.prisma.adminUsers.findFirst({
       where: {
         OR: [{ username }, ...(email ? [{ email }] : [])],
       },
@@ -158,7 +158,7 @@ export class AdminService {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // 创建管理员用户
-    const user = await this.prisma.admin_users.create({
+    const user = await this.prisma.adminUsers.create({
       data: {
         username,
         email,
@@ -201,7 +201,7 @@ export class AdminService {
    * 获取用户信息
    */
   async getUserInfo(userId: string): Promise<UserDto> {
-    const user = await this.prisma.admin_users.findUnique({
+    const user = await this.prisma.adminUsers.findUnique({
       where: { id: userId },
     });
 
@@ -225,7 +225,7 @@ export class AdminService {
       throw new BadRequestException('用户不存在');
     }
 
-    await this.prisma.admin_users.update({
+    await this.prisma.adminUsers.update({
       where: { id: userId },
       data: updateProfileDto as any,
     });
@@ -241,7 +241,7 @@ export class AdminService {
    * 根据ID查找管理员用户
    */
   async findById(id: string): Promise<AdminUser | null> {
-    const user = await this.prisma.admin_users.findUnique({ where: { id } });
+    const user = await this.prisma.adminUsers.findUnique({ where: { id } });
     return user as AdminUser | null;
   }
 

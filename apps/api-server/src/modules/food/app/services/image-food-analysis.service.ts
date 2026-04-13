@@ -345,7 +345,7 @@ export class ImageFoodAnalysisService {
                 },
                 {
                   type: 'image_url',
-                  image_url: { url: imageUrl, detail: 'low' },
+                  imageUrl: { url: imageUrl, detail: 'low' },
                 },
               ],
             },
@@ -515,12 +515,12 @@ ${gc.focus}
       if (profile) {
         if (profile.gender)
           ctx += `\n- 性别：${profile.gender === 'male' ? '男' : '女'}`;
-        if (profile.activity_level)
-          ctx += `\n- 活动等级：${profile.activity_level}`;
-        if ((profile.food_preferences as string[])?.length)
-          ctx += `\n- 饮食偏好：${(profile.food_preferences as string[]).join('、')}`;
-        if ((profile.dietary_restrictions as string[])?.length)
-          ctx += `\n- 忌口：${(profile.dietary_restrictions as string[]).join('、')}`;
+        if (profile.activityLevel)
+          ctx += `\n- 活动等级：${profile.activityLevel}`;
+        if ((profile.foodPreferences as string[])?.length)
+          ctx += `\n- 饮食偏好：${(profile.foodPreferences as string[]).join('、')}`;
+        if ((profile.dietaryRestrictions as string[])?.length)
+          ctx += `\n- 忌口：${(profile.dietaryRestrictions as string[]).join('、')}`;
       }
 
       return { context: ctx, goalType, profile };
@@ -851,30 +851,30 @@ ${gc.focus}
     legacyResult: AnalysisResult,
     v61Result: FoodAnalysisResultV61,
   ): Promise<void> {
-    await this.prisma.food_analysis_records.create({
+    await this.prisma.foodAnalysisRecords.create({
       data: {
         id: analysisId,
-        user_id: userId,
-        input_type: 'image',
-        raw_text: null,
-        image_url: imageUrl,
-        meal_type: mealType || null,
+        userId: userId,
+        inputType: 'image',
+        rawText: null,
+        imageUrl: imageUrl,
+        mealType: mealType || null,
         status: AnalysisRecordStatus.COMPLETED,
-        recognized_payload: { foods: v61Result.foods } as any,
-        normalized_payload: null as any,
-        nutrition_payload: {
+        recognizedPayload: { foods: v61Result.foods } as any,
+        normalizedPayload: null as any,
+        nutritionPayload: {
           totals: v61Result.totals,
           score: v61Result.score,
         } as any,
-        decision_payload: {
+        decisionPayload: {
           decision: v61Result.decision,
           alternatives: v61Result.alternatives,
           explanation: v61Result.explanation,
         } as any,
-        confidence_score: v61Result.score.confidenceScore,
-        quality_score: null,
-        matched_food_count: 0,
-        candidate_food_count: 0,
+        confidenceScore: v61Result.score.confidenceScore,
+        qualityScore: null,
+        matchedFoodCount: 0,
+        candidateFoodCount: 0,
       },
     });
     this.logger.debug(`图片分析记录已保存: analysisId=${analysisId}`);

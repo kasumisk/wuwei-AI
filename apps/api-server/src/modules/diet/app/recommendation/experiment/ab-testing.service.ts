@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../../../core/prisma/prisma.service';
-import { ab_experiments as ABExperiment } from '@prisma/client';
+import { AbExperiments as ABExperiment } from '@prisma/client';
 import { ExperimentGroup, ExperimentStatus } from '../../../diet.types';
 import { GoalType } from '../../services/nutrition-score.service';
 import { SCORE_WEIGHTS } from '../types/recommendation.types';
@@ -246,16 +246,16 @@ export class ABTestingService {
     if (Date.now() < this.cacheExpiry) return;
 
     try {
-      const running = await this.prisma.ab_experiments.findMany({
+      const running = await this.prisma.abExperiments.findMany({
         where: { status: ExperimentStatus.RUNNING },
       });
 
       const newCache = new Map<string, ABExperiment>();
       for (const exp of running) {
         // 检查时间窗口
-        if (exp.start_date && new Date(exp.start_date) > new Date()) continue;
-        if (exp.end_date && new Date(exp.end_date) < new Date()) continue;
-        newCache.set(exp.goal_type, exp as unknown as ABExperiment);
+        if (exp.startDate && new Date(exp.startDate) > new Date()) continue;
+        if (exp.endDate && new Date(exp.endDate) < new Date()) continue;
+        newCache.set(exp.goalType, exp as unknown as ABExperiment);
       }
 
       this.experimentCache = newCache;
@@ -331,7 +331,7 @@ export class ABTestingService {
    */
   async analyzeExperiment(experimentId: string): Promise<ExperimentAnalysis> {
     // 1. 加载实验
-    const experiment = await this.prisma.ab_experiments.findUniqueOrThrow({
+    const experiment = await this.prisma.abExperiments.findUniqueOrThrow({
       where: { id: experimentId },
     });
 
@@ -652,8 +652,8 @@ export class ABTestingService {
    * 列出所有实验
    */
   async listExperiments(): Promise<ABExperiment[]> {
-    const results = await this.prisma.ab_experiments.findMany({
-      orderBy: { created_at: 'desc' },
+    const results = await this.prisma.abExperiments.findMany({
+      orderBy: { createdAt: 'desc' },
     });
     return results as unknown as ABExperiment[];
   }
@@ -673,14 +673,14 @@ export class ABTestingService {
       }
     }
 
-    const result = await this.prisma.ab_experiments.create({
+    const result = await this.prisma.abExperiments.create({
       data: {
         name: data.name!,
-        goal_type: data.goal_type ?? '*',
+        goalType: data.goalType ?? '*',
         status: data.status ?? ExperimentStatus.DRAFT,
         groups: (data.groups as any) ?? [],
-        start_date: data.start_date ?? null,
-        end_date: data.end_date ?? null,
+        startDate: data.startDate ?? null,
+        endDate: data.endDate ?? null,
       },
     });
     return result as unknown as ABExperiment;
@@ -693,31 +693,31 @@ export class ABTestingService {
     id: string,
     status: ExperimentStatus,
   ): Promise<ABExperiment> {
-    const experiment = await this.prisma.ab_experiments.findUniqueOrThrow({
+    const experiment = await this.prisma.abExperiments.findUniqueOrThrow({
       where: { id },
     });
 
     // 防止同一 goalType 多个 running 实验
     if (status === ExperimentStatus.RUNNING) {
-      const existing = await this.prisma.ab_experiments.findFirst({
+      const existing = await this.prisma.abExperiments.findFirst({
         where: {
-          goal_type: experiment.goal_type,
+          goalType: experiment.goalType,
           status: ExperimentStatus.RUNNING,
         },
       });
       if (existing && existing.id !== id) {
         throw new Error(
-          `Another experiment (${existing.name}) is already running for goalType=${experiment.goal_type}`,
+          `Another experiment (${existing.name}) is already running for goalType=${experiment.goalType}`,
         );
       }
     }
 
     const updateData: Record<string, any> = { status };
-    if (status === ExperimentStatus.RUNNING && !experiment.start_date) {
-      updateData.start_date = new Date();
+    if (status === ExperimentStatus.RUNNING && !experiment.startDate) {
+      updateData.startDate = new Date();
     }
 
-    const saved = await this.prisma.ab_experiments.update({
+    const saved = await this.prisma.abExperiments.update({
       where: { id },
       data: updateData,
     });

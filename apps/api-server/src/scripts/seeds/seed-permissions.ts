@@ -18,7 +18,7 @@ const roles = [
     code: 'SUPER_ADMIN',
     name: '超级管理员',
     description: '系统超级管理员，拥有所有权限',
-    is_system: true,
+    isSystem: true,
     status: RoleStatus.ACTIVE,
     sort: 0,
   },
@@ -26,7 +26,7 @@ const roles = [
     code: 'ADMIN',
     name: '管理员',
     description: '系统管理员',
-    is_system: true,
+    isSystem: true,
     status: RoleStatus.ACTIVE,
     sort: 1,
   },
@@ -34,7 +34,7 @@ const roles = [
     code: 'OPERATOR',
     name: '运营人员',
     description: '负责日常运营管理',
-    is_system: false,
+    isSystem: false,
     status: RoleStatus.ACTIVE,
     sort: 2,
   },
@@ -48,7 +48,7 @@ const permissions = [
     name: '仪表盘',
     type: PermissionType.MENU,
     icon: 'DashboardOutlined',
-    is_system: true,
+    isSystem: true,
     sort: 0,
   },
 
@@ -58,7 +58,7 @@ const permissions = [
     name: '用户管理',
     type: PermissionType.MENU,
     icon: 'UserOutlined',
-    is_system: true,
+    isSystem: true,
     sort: 10,
   },
   {
@@ -67,7 +67,7 @@ const permissions = [
     type: PermissionType.OPERATION,
     action: HttpMethod.GET,
     resource: '/admin/users',
-    is_system: true,
+    isSystem: true,
     sort: 0,
   },
   {
@@ -76,7 +76,7 @@ const permissions = [
     type: PermissionType.OPERATION,
     action: HttpMethod.GET,
     resource: '/admin/users/:id',
-    is_system: true,
+    isSystem: true,
     sort: 1,
   },
   {
@@ -85,7 +85,7 @@ const permissions = [
     type: PermissionType.OPERATION,
     action: HttpMethod.POST,
     resource: '/admin/users',
-    is_system: true,
+    isSystem: true,
     sort: 2,
   },
   {
@@ -94,7 +94,7 @@ const permissions = [
     type: PermissionType.OPERATION,
     action: HttpMethod.PUT,
     resource: '/admin/users/:id',
-    is_system: true,
+    isSystem: true,
     sort: 3,
   },
   {
@@ -103,7 +103,7 @@ const permissions = [
     type: PermissionType.OPERATION,
     action: HttpMethod.DELETE,
     resource: '/admin/users/:id',
-    is_system: true,
+    isSystem: true,
     sort: 4,
   },
 
@@ -113,7 +113,7 @@ const permissions = [
     name: '角色管理',
     type: PermissionType.MENU,
     icon: 'TeamOutlined',
-    is_system: true,
+    isSystem: true,
     sort: 20,
   },
   {
@@ -122,7 +122,7 @@ const permissions = [
     type: PermissionType.OPERATION,
     action: HttpMethod.GET,
     resource: '/admin/roles',
-    is_system: true,
+    isSystem: true,
     sort: 0,
   },
   {
@@ -131,7 +131,7 @@ const permissions = [
     type: PermissionType.OPERATION,
     action: HttpMethod.GET,
     resource: '/admin/roles/:id',
-    is_system: true,
+    isSystem: true,
     sort: 1,
   },
   {
@@ -140,7 +140,7 @@ const permissions = [
     type: PermissionType.OPERATION,
     action: HttpMethod.POST,
     resource: '/admin/roles',
-    is_system: true,
+    isSystem: true,
     sort: 2,
   },
   {
@@ -149,7 +149,7 @@ const permissions = [
     type: PermissionType.OPERATION,
     action: HttpMethod.PUT,
     resource: '/admin/roles/:id',
-    is_system: true,
+    isSystem: true,
     sort: 3,
   },
   {
@@ -158,7 +158,7 @@ const permissions = [
     type: PermissionType.OPERATION,
     action: HttpMethod.DELETE,
     resource: '/admin/roles/:id',
-    is_system: true,
+    isSystem: true,
     sort: 4,
   },
   {
@@ -167,7 +167,7 @@ const permissions = [
     type: PermissionType.OPERATION,
     action: HttpMethod.POST,
     resource: '/admin/roles/:id/permissions',
-    is_system: true,
+    isSystem: true,
     sort: 5,
   },
 
@@ -177,7 +177,7 @@ const permissions = [
     name: '权限管理',
     type: PermissionType.MENU,
     icon: 'SafetyOutlined',
-    is_system: true,
+    isSystem: true,
     sort: 30,
   },
   {
@@ -186,7 +186,7 @@ const permissions = [
     type: PermissionType.OPERATION,
     action: HttpMethod.GET,
     resource: '/admin/rbac-permissions',
-    is_system: true,
+    isSystem: true,
     sort: 0,
   },
   {
@@ -195,7 +195,7 @@ const permissions = [
     type: PermissionType.OPERATION,
     action: HttpMethod.POST,
     resource: '/admin/rbac-permissions',
-    is_system: true,
+    isSystem: true,
     sort: 1,
   },
   {
@@ -204,7 +204,7 @@ const permissions = [
     type: PermissionType.OPERATION,
     action: HttpMethod.PUT,
     resource: '/admin/rbac-permissions/:id',
-    is_system: true,
+    isSystem: true,
     sort: 2,
   },
   {
@@ -213,7 +213,7 @@ const permissions = [
     type: PermissionType.OPERATION,
     action: HttpMethod.DELETE,
     resource: '/admin/rbac-permissions/:id',
-    is_system: true,
+    isSystem: true,
     sort: 3,
   },
 
@@ -223,7 +223,7 @@ const permissions = [
     name: '客户端管理',
     type: PermissionType.MENU,
     icon: 'ApiOutlined',
-    is_system: true,
+    isSystem: true,
     sort: 40,
   },
   {
@@ -232,7 +232,7 @@ const permissions = [
     type: PermissionType.OPERATION,
     action: HttpMethod.GET,
     resource: '/admin/clients',
-    is_system: true,
+    isSystem: true,
     sort: 0,
   },
   {
@@ -241,7 +241,7 @@ const permissions = [
     type: PermissionType.OPERATION,
     action: HttpMethod.POST,
     resource: '/admin/clients',
-    is_system: true,
+    isSystem: true,
     sort: 1,
   },
   {
@@ -250,7 +250,7 @@ const permissions = [
     type: PermissionType.OPERATION,
     action: HttpMethod.PUT,
     resource: '/admin/clients/:id',
-    is_system: true,
+    isSystem: true,
     sort: 2,
   },
   {
@@ -259,7 +259,7 @@ const permissions = [
     type: PermissionType.OPERATION,
     action: HttpMethod.DELETE,
     resource: '/admin/clients/:id',
-    is_system: true,
+    isSystem: true,
     sort: 3,
   },
 
@@ -269,7 +269,7 @@ const permissions = [
     name: '模型管理',
     type: PermissionType.MENU,
     icon: 'RobotOutlined',
-    is_system: true,
+    isSystem: true,
     sort: 50,
   },
   {
@@ -278,7 +278,7 @@ const permissions = [
     type: PermissionType.OPERATION,
     action: HttpMethod.GET,
     resource: '/admin/models',
-    is_system: true,
+    isSystem: true,
     sort: 0,
   },
   {
@@ -287,7 +287,7 @@ const permissions = [
     type: PermissionType.OPERATION,
     action: HttpMethod.POST,
     resource: '/admin/models',
-    is_system: true,
+    isSystem: true,
     sort: 1,
   },
   {
@@ -296,7 +296,7 @@ const permissions = [
     type: PermissionType.OPERATION,
     action: HttpMethod.PUT,
     resource: '/admin/models/:id',
-    is_system: true,
+    isSystem: true,
     sort: 2,
   },
   {
@@ -305,7 +305,7 @@ const permissions = [
     type: PermissionType.OPERATION,
     action: HttpMethod.DELETE,
     resource: '/admin/models/:id',
-    is_system: true,
+    isSystem: true,
     sort: 3,
   },
 
@@ -315,7 +315,7 @@ const permissions = [
     name: '供应商管理',
     type: PermissionType.MENU,
     icon: 'CloudServerOutlined',
-    is_system: true,
+    isSystem: true,
     sort: 60,
   },
   {
@@ -324,7 +324,7 @@ const permissions = [
     type: PermissionType.OPERATION,
     action: HttpMethod.GET,
     resource: '/admin/providers',
-    is_system: true,
+    isSystem: true,
     sort: 0,
   },
   {
@@ -333,7 +333,7 @@ const permissions = [
     type: PermissionType.OPERATION,
     action: HttpMethod.POST,
     resource: '/admin/providers',
-    is_system: true,
+    isSystem: true,
     sort: 1,
   },
   {
@@ -342,7 +342,7 @@ const permissions = [
     type: PermissionType.OPERATION,
     action: HttpMethod.PUT,
     resource: '/admin/providers/:id',
-    is_system: true,
+    isSystem: true,
     sort: 2,
   },
 
@@ -352,7 +352,7 @@ const permissions = [
     name: '统计分析',
     type: PermissionType.MENU,
     icon: 'AreaChartOutlined',
-    is_system: true,
+    isSystem: true,
     sort: 70,
   },
   {
@@ -361,7 +361,7 @@ const permissions = [
     type: PermissionType.OPERATION,
     action: HttpMethod.GET,
     resource: '/admin/analytics',
-    is_system: true,
+    isSystem: true,
     sort: 0,
   },
 ];
@@ -372,23 +372,23 @@ const templates = [
     code: 'READONLY',
     name: '只读权限',
     description: '仅允许查看数据，不能修改',
-    permission_patterns: '*:list,*:detail',
-    is_system: true,
+    permissionPatterns: '*:list,*:detail',
+    isSystem: true,
   },
   {
     code: 'CRUD',
     name: '增删改查',
     description: '完整的增删改查权限',
-    permission_patterns: '*:list,*:detail,*:create,*:update,*:delete',
-    is_system: true,
+    permissionPatterns: '*:list,*:detail,*:create,*:update,*:delete',
+    isSystem: true,
   },
   {
     code: 'OPERATOR',
     name: '运营权限',
     description: '运营人员默认权限',
-    permission_patterns:
+    permissionPatterns:
       'dashboard,user:list,user:detail,client:list,client:detail,analytics:view',
-    is_system: true,
+    isSystem: true,
   },
 ];
 
@@ -397,7 +397,7 @@ async function seed() {
 
   // 创建角色
   console.log('📦 创建角色...');
-  const savedRoles: { id: string; code: string; parent_id: string | null }[] =
+  const savedRoles: { id: string; code: string; parentId: string | null }[] =
     [];
   for (const roleData of roles) {
     const existing = await prisma.roles.findFirst({
@@ -409,7 +409,7 @@ async function seed() {
           code: roleData.code,
           name: roleData.name,
           description: roleData.description,
-          is_system: roleData.is_system,
+          isSystem: roleData.isSystem,
           status: roleData.status,
           sort: roleData.sort,
         },
@@ -425,12 +425,12 @@ async function seed() {
   // 设置 OPERATOR 继承 ADMIN
   const adminRole = savedRoles.find((r) => r.code === 'ADMIN');
   const operatorRole = savedRoles.find((r) => r.code === 'OPERATOR');
-  if (adminRole && operatorRole && !operatorRole.parent_id) {
+  if (adminRole && operatorRole && !operatorRole.parentId) {
     await prisma.roles.update({
       where: { id: operatorRole.id },
-      data: { parent_id: adminRole.id },
+      data: { parentId: adminRole.id },
     });
-    operatorRole.parent_id = adminRole.id;
+    operatorRole.parentId = adminRole.id;
     console.log('  🔗 设置 OPERATOR 继承 ADMIN');
   }
 
@@ -438,7 +438,7 @@ async function seed() {
   console.log('📦 创建权限...');
   const savedPermissions: Map<
     string,
-    { id: string; code: string; parent_id: string | null }
+    { id: string; code: string; parentId: string | null }
   > = new Map();
   for (const permData of permissions) {
     const existing = await prisma.permissions.findFirst({
@@ -453,7 +453,7 @@ async function seed() {
           action: (permData as any).action,
           resource: (permData as any).resource,
           icon: (permData as any).icon,
-          is_system: permData.is_system,
+          isSystem: permData.isSystem,
           sort: permData.sort,
           status: PermissionStatus.ACTIVE,
         },
@@ -482,12 +482,12 @@ async function seed() {
     if (menuPerm) {
       // 找到所有以 menuCode: 开头的权限
       for (const [code, perm] of savedPermissions) {
-        if (code.startsWith(`${menuCode}:`) && !perm.parent_id) {
+        if (code.startsWith(`${menuCode}:`) && !perm.parentId) {
           await prisma.permissions.update({
             where: { id: perm.id },
-            data: { parent_id: menuPerm.id },
+            data: { parentId: menuPerm.id },
           });
-          perm.parent_id = menuPerm.id;
+          perm.parentId = menuPerm.id;
         }
       }
     }
@@ -496,17 +496,17 @@ async function seed() {
   // 创建权限模板
   console.log('📦 创建权限模板...');
   for (const templateData of templates) {
-    const existing = await prisma.permission_templates.findFirst({
+    const existing = await prisma.permissionTemplates.findFirst({
       where: { code: templateData.code },
     });
     if (!existing) {
-      await prisma.permission_templates.create({
+      await prisma.permissionTemplates.create({
         data: {
           code: templateData.code,
           name: templateData.name,
           description: templateData.description,
-          permission_patterns: templateData.permission_patterns,
-          is_system: templateData.is_system,
+          permissionPatterns: templateData.permissionPatterns,
+          isSystem: templateData.isSystem,
         },
       });
       console.log(`  ✅ 创建模板: ${templateData.name} (${templateData.code})`);
@@ -520,16 +520,16 @@ async function seed() {
   // 为 ADMIN 角色分配所有权限
   console.log('📦 为 ADMIN 角色分配权限...');
   if (adminRole) {
-    const existingRolePerms = await prisma.role_permissions.findMany({
-      where: { role_id: adminRole.id },
+    const existingRolePerms = await prisma.rolePermissions.findMany({
+      where: { roleId: adminRole.id },
     });
     if (existingRolePerms.length === 0) {
       const permValues = Array.from(savedPermissions.values());
       for (const p of permValues) {
-        await prisma.role_permissions.create({
+        await prisma.rolePermissions.create({
           data: {
-            role_id: adminRole.id,
-            permission_id: p.id,
+            roleId: adminRole.id,
+            permissionId: p.id,
           },
         });
       }

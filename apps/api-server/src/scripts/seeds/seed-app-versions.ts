@@ -238,7 +238,7 @@ async function seed() {
   for (const seed of versionSeeds) {
     const { version: versionData, packages: pkgDataList } = seed;
 
-    let versionEntity = await prisma.app_versions.findFirst({
+    let versionEntity = await prisma.appVersions.findFirst({
       where: {
         platform: versionData.platform,
         version: versionData.version,
@@ -250,7 +250,7 @@ async function seed() {
         `  ⏭️  版本已存在: ${versionData.platform} v${versionData.version}`,
       );
     } else {
-      versionEntity = await prisma.app_versions.create({
+      versionEntity = await prisma.appVersions.create({
         data: {
           platform: versionData.platform,
           version: versionData.version,
@@ -273,14 +273,14 @@ async function seed() {
     }
 
     for (const pkgData of pkgDataList) {
-      const existingPkg = await prisma.app_version_packages.findFirst({
+      const existingPkg = await prisma.appVersionPackages.findFirst({
         where: {
           versionId: versionEntity.id,
           channel: pkgData.channel as string,
         },
       });
       if (!existingPkg) {
-        await prisma.app_version_packages.create({
+        await prisma.appVersionPackages.create({
           data: {
             versionId: versionEntity.id,
             platform: pkgData.platform,

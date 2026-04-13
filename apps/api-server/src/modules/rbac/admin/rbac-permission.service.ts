@@ -64,7 +64,7 @@ export class RbacPermissionService {
     const [list, total] = await Promise.all([
       this.prisma.permissions.findMany({
         where,
-        orderBy: [{ sort: 'asc' }, { created_at: 'desc' }],
+        orderBy: [{ sort: 'asc' }, { createdAt: 'desc' }],
         skip,
         take: pageSize,
       }),
@@ -87,8 +87,8 @@ export class RbacPermissionService {
    */
   async getTree() {
     const permissions = await this.prisma.permissions.findMany({
-      where: { parent_id: null, status: PermissionStatus.ACTIVE },
-      include: { other_permissions: true },
+      where: { parentId: null, status: PermissionStatus.ACTIVE },
+      include: { otherPermissions: true },
       orderBy: { sort: 'asc' },
     });
 
@@ -141,12 +141,12 @@ export class RbacPermissionService {
         type: createDto.type as PermissionType,
         action: createDto.action as unknown as permissions_action_enum,
         resource: createDto.resource,
-        parent_id: createDto.parentId || null,
+        parentId: createDto.parentId || null,
         icon: createDto.icon,
         description: createDto.description,
         sort: createDto.sort || 0,
         status: PermissionStatus.ACTIVE,
-        is_system: false,
+        isSystem: false,
       },
     });
 
@@ -166,7 +166,7 @@ export class RbacPermissionService {
     }
 
     // 系统权限不允许修改编码和类型
-    if (permission.is_system) {
+    if (permission.isSystem) {
       if (updateDto.type !== undefined) {
         throw new BadRequestException('系统权限不允许修改类型');
       }
@@ -181,15 +181,6 @@ export class RbacPermissionService {
     }
 
     const data: any = { ...updateDto };
-    // Map camelCase DTO fields to snake_case DB columns
-    if ('parentId' in data) {
-      data.parent_id = data.parentId;
-      delete data.parentId;
-    }
-    if ('isSystem' in data) {
-      data.is_system = data.isSystem;
-      delete data.isSystem;
-    }
 
     const updatedPermission = await this.prisma.permissions.update({
       where: { id },
@@ -205,28 +196,28 @@ export class RbacPermissionService {
   async remove(id: string) {
     const permission = await this.prisma.permissions.findUnique({
       where: { id },
-      include: { other_permissions: true },
+      include: { otherPermissions: true },
     });
 
     if (!permission) {
       throw new NotFoundException(`权限 #${id} 不存在`);
     }
 
-    if (permission.is_system) {
+    if (permission.isSystem) {
       throw new BadRequestException('系统权限不允许删除');
     }
 
     // 检查是否有子权限
     if (
-      permission.other_permissions &&
-      permission.other_permissions.length > 0
+      permission.otherPermissions &&
+      permission.otherPermissions.length > 0
     ) {
       throw new BadRequestException('请先删除子权限');
     }
 
     // 删除角色权限关联
-    await this.prisma.role_permissions.deleteMany({
-      where: { permission_id: id },
+    await this.prisma.rolePermissions.deleteMany({
+      where: { permissionId: id },
     });
     // 删除权限
     await this.prisma.permissions.delete({ where: { id } });
@@ -239,8 +230,8 @@ export class RbacPermissionService {
    */
   async getUserPermissions(userId: string) {
     // 获取用户的角色
-    const userRoles = await this.prisma.user_roles.findMany({
-      where: { user_id: userId },
+    const userRoles = await this.prisma.userRoles.findMany({
+      where: { userId: userId },
       include: { roles: true },
     });
 
@@ -269,8 +260,8 @@ export class RbacPermissionService {
       menus = await this.buildMenuTree();
     } else if (allRoleIds.size > 0) {
       // 获取角色的权限
-      const rolePermissions = await this.prisma.role_permissions.findMany({
-        where: { role_id: { in: [...allRoleIds] } },
+      const rolePermissions = await this.prisma.rolePermissions.findMany({
+        where: { roleId: { in: [...allRoleIds] } },
         include: { permissions: true },
       });
 
@@ -320,8 +311,8 @@ export class RbacPermissionService {
    * 检查用户是否是超级管理员
    */
   async isSuperAdmin(userId: string): Promise<boolean> {
-    const userRoles = await this.prisma.user_roles.findMany({
-      where: { user_id: userId },
+    const userRoles = await this.prisma.userRoles.findMany({
+      where: { userId: userId },
       include: { roles: true },
     });
 
@@ -387,9 +378,9 @@ export class RbacPermissionService {
       const permission = await this.prisma.permissions.findUnique({
         where: { id: currentId },
       });
-      if (!permission || !permission.parent_id) break;
-      if (permission.parent_id === id) return true;
-      currentId = permission.parent_id;
+      if (!permission || !permission.parentId) break;
+      if (permission.parentId === id) return true;
+      currentId = permission.parentId;
     }
 
     return false;
@@ -403,9 +394,9 @@ export class RbacPermissionService {
       where: {
         type: PermissionType.MENU,
         status: PermissionStatus.ACTIVE,
-        parent_id: null,
+        parentId: null,
       },
-      include: { other_permissions: true },
+      include: { otherPermissions: true },
       orderBy: { sort: 'asc' },
     });
 
@@ -428,10 +419,10 @@ export class RbacPermissionService {
       where: {
         type: PermissionType.MENU,
         status: PermissionStatus.ACTIVE,
-        parent_id: null,
+        parentId: null,
         code: { in: [...menuCodes] },
       },
-      include: { other_permissions: true },
+      include: { otherPermissions: true },
       orderBy: { sort: 'asc' },
     });
 
@@ -452,9 +443,9 @@ export class RbacPermissionService {
         name: p.name,
         icon: p.icon || undefined,
         permissionCode: p.code,
-        children: p.other_permissions
+        children: p.otherPermissions
           ? this.buildMenuItems(
-              p.other_permissions.filter(
+              p.otherPermissions.filter(
                 (c: any) => c.type === PermissionType.MENU,
               ),
               allowedCodes,
@@ -469,7 +460,7 @@ export class RbacPermissionService {
   private buildTree(permissions: any[]): RbacPermissionInfoDto[] {
     return permissions.map((p) => ({
       ...this.formatPermissionInfo(p),
-      children: p.other_permissions ? this.buildTree(p.other_permissions) : [],
+      children: p.otherPermissions ? this.buildTree(p.otherPermissions) : [],
     }));
   }
 
@@ -484,14 +475,14 @@ export class RbacPermissionService {
       type: permission.type,
       action: permission.action as unknown as RbacHttpMethod | null,
       resource: permission.resource,
-      parentId: permission.parent_id,
+      parentId: permission.parentId,
       icon: permission.icon,
       description: permission.description,
       status: permission.status,
-      isSystem: permission.is_system,
+      isSystem: permission.isSystem,
       sort: permission.sort,
-      createdAt: permission.created_at,
-      updatedAt: permission.updated_at,
+      createdAt: permission.createdAt,
+      updatedAt: permission.updatedAt,
     };
   }
 }

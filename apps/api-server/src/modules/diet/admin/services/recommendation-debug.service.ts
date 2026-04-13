@@ -54,7 +54,7 @@ export class RecommendationDebugService {
     }
 
     const goalType = dto.goalType || profile.goal || 'health';
-    const dailyCalorieGoal = profile.daily_calorie_goal || 2000;
+    const dailyCalorieGoal = profile.dailyCalorieGoal || 2000;
     // 蛋白质目标: ~25% 热量来自蛋白质 (1g = 4kcal)
     const dailyProteinGoal = Math.round((dailyCalorieGoal * 0.25) / 4);
     // 脂肪目标: ~25% 热量来自脂肪 (1g = 9kcal)
@@ -91,15 +91,15 @@ export class RecommendationDebugService {
     // 3. 构建 userProfile 约束
     const userProfileConstraints: UserProfileConstraints = {
       allergens: (profile.allergens as string[]) || [],
-      dietaryRestrictions: (profile.dietary_restrictions as string[]) || [],
-      healthConditions: (profile.health_conditions as string[]) || [],
-      regionCode: profile.region_code || 'CN',
+      dietaryRestrictions: (profile.dietaryRestrictions as string[]) || [],
+      healthConditions: (profile.healthConditions as string[]) || [],
+      regionCode: profile.regionCode || 'CN',
       timezone: profile.timezone || 'Asia/Shanghai',
       // V6.2 3.4: 声明画像新字段
-      cookingSkillLevel: profile.cooking_skill_level as string | undefined,
-      budgetLevel: profile.budget_level as string | undefined,
+      cookingSkillLevel: profile.cookingSkillLevel as string | undefined,
+      budgetLevel: profile.budgetLevel as string | undefined,
       cuisinePreferences:
-        (profile.cuisine_preferences as string[]) || undefined,
+        (profile.cuisinePreferences as string[]) || undefined,
     };
 
     // 4. 调用推荐引擎
@@ -150,7 +150,7 @@ export class RecommendationDebugService {
     }
 
     const goalType = dto.goalType || profile.goal || 'health';
-    const dailyCalorieGoal = profile.daily_calorie_goal || 2000;
+    const dailyCalorieGoal = profile.dailyCalorieGoal || 2000;
     const dailyProteinGoal = Math.round((dailyCalorieGoal * 0.25) / 4);
     const dailyFatGoal = Math.round((dailyCalorieGoal * 0.25) / 9);
     const dailyCarbsGoal = Math.round((dailyCalorieGoal * 0.5) / 4);
@@ -179,15 +179,15 @@ export class RecommendationDebugService {
 
     const userProfileConstraints: UserProfileConstraints = {
       allergens: (profile.allergens as string[]) || [],
-      dietaryRestrictions: (profile.dietary_restrictions as string[]) || [],
-      healthConditions: (profile.health_conditions as string[]) || [],
-      regionCode: profile.region_code || 'CN',
+      dietaryRestrictions: (profile.dietaryRestrictions as string[]) || [],
+      healthConditions: (profile.healthConditions as string[]) || [],
+      regionCode: profile.regionCode || 'CN',
       timezone: profile.timezone || 'Asia/Shanghai',
       // V6.2 3.4: 声明画像新字段
-      cookingSkillLevel: profile.cooking_skill_level as string | undefined,
-      budgetLevel: profile.budget_level as string | undefined,
+      cookingSkillLevel: profile.cookingSkillLevel as string | undefined,
+      budgetLevel: profile.budgetLevel as string | undefined,
       cuisinePreferences:
-        (profile.cuisine_preferences as string[]) || undefined,
+        (profile.cuisinePreferences as string[]) || undefined,
     };
 
     // 2. 调用反向解释

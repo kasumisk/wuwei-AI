@@ -39,15 +39,15 @@ function toDailyPlanResponse(plan: any) {
   return {
     id: plan.id,
     date: plan.date,
-    morningPlan: plan.morning_plan ?? null,
-    lunchPlan: plan.lunch_plan ?? null,
-    dinnerPlan: plan.dinner_plan ?? null,
-    snackPlan: plan.snack_plan ?? null,
+    morningPlan: plan.morningPlan ?? null,
+    lunchPlan: plan.lunchPlan ?? null,
+    dinnerPlan: plan.dinnerPlan ?? null,
+    snackPlan: plan.snackPlan ?? null,
     adjustments: plan.adjustments ?? [],
     strategy: plan.strategy ?? null,
-    totalBudget: plan.total_budget ?? null,
-    createdAt: plan.created_at,
-    updatedAt: plan.updated_at,
+    totalBudget: plan.totalBudget ?? null,
+    createdAt: plan.createdAt,
+    updatedAt: plan.updatedAt,
   };
 }
 
@@ -196,10 +196,10 @@ export class FoodPlanController {
     const profile = await this.userProfileService.getProfile(user.id);
     const userConstraints: UserProfileConstraints | undefined = profile
       ? {
-          dietaryRestrictions: (profile.dietary_restrictions as string[]) || [],
+          dietaryRestrictions: (profile.dietaryRestrictions as string[]) || [],
           allergens: (profile.allergens as string[]) || [],
-          healthConditions: (profile.health_conditions as string[]) || [],
-          regionCode: (profile.region_code as string) || 'CN',
+          healthConditions: (profile.healthConditions as string[]) || [],
+          regionCode: (profile.regionCode as string) || 'CN',
           timezone: profile.timezone,
         }
       : undefined;

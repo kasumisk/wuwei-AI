@@ -56,14 +56,14 @@ export class ModelService {
     const skip = (page - 1) * pageSize;
 
     const [list, total] = await Promise.all([
-      this.prisma.model_configs.findMany({
+      this.prisma.modelConfigs.findMany({
         where,
         include: { providers: true },
         orderBy: [{ priority: 'asc' }, { createdAt: 'desc' }],
         skip,
         take: pageSize,
       }),
-      this.prisma.model_configs.count({ where }),
+      this.prisma.modelConfigs.count({ where }),
     ]);
 
     // 转换数据格式
@@ -122,7 +122,7 @@ export class ModelService {
    * 获取模型详情
    */
   async findOne(id: string) {
-    const model = await this.prisma.model_configs.findUnique({
+    const model = await this.prisma.modelConfigs.findUnique({
       where: { id },
       include: { providers: true },
     });
@@ -191,7 +191,7 @@ export class ModelService {
     }
 
     // 检查是否已存在相同的模型配置
-    const existing = await this.prisma.model_configs.findFirst({
+    const existing = await this.prisma.modelConfigs.findFirst({
       where: {
         providerId: createModelDto.providerId,
         modelName: createModelDto.modelName,
@@ -206,7 +206,7 @@ export class ModelService {
     }
 
     // 创建模型实体
-    const savedModel = await this.prisma.model_configs.create({
+    const savedModel = await this.prisma.modelConfigs.create({
       data: {
         providerId: createModelDto.providerId,
         modelName: createModelDto.modelName,
@@ -245,7 +245,7 @@ export class ModelService {
    * 更新模型
    */
   async update(id: string, updateModelDto: UpdateModelDto) {
-    const model = await this.prisma.model_configs.findUnique({
+    const model = await this.prisma.modelConfigs.findUnique({
       where: { id },
     });
 
@@ -337,7 +337,7 @@ export class ModelService {
       };
     }
 
-    await this.prisma.model_configs.update({
+    await this.prisma.modelConfigs.update({
       where: { id },
       data,
     });
@@ -349,7 +349,7 @@ export class ModelService {
    * 删除模型
    */
   async remove(id: string) {
-    const model = await this.prisma.model_configs.findUnique({
+    const model = await this.prisma.modelConfigs.findUnique({
       where: { id },
     });
 
@@ -359,7 +359,7 @@ export class ModelService {
 
     // TODO: 检查是否有关联的使用记录或权限配置
 
-    await this.prisma.model_configs.delete({ where: { id } });
+    await this.prisma.modelConfigs.delete({ where: { id } });
 
     return { message: '模型删除成功' };
   }
@@ -368,7 +368,7 @@ export class ModelService {
    * 测试模型
    */
   async test(testDto: TestModelDto) {
-    const model = await this.prisma.model_configs.findUnique({
+    const model = await this.prisma.modelConfigs.findUnique({
       where: { id: testDto.modelId },
       include: { providers: true },
     });
@@ -431,7 +431,7 @@ export class ModelService {
    * 按提供商获取模型
    */
   async findByProvider(providerId: string) {
-    const models = await this.prisma.model_configs.findMany({
+    const models = await this.prisma.modelConfigs.findMany({
       where: { providerId },
       orderBy: [{ priority: 'asc' }, { createdAt: 'desc' }],
     });
@@ -443,7 +443,7 @@ export class ModelService {
    * 按能力类型获取可用模型
    */
   async findByCapabilityType(capabilityType: string) {
-    const models = await this.prisma.model_configs.findMany({
+    const models = await this.prisma.modelConfigs.findMany({
       where: {
         capabilityType: capabilityType as any,
         enabled: true,

@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { GoalType, GoalSpeed } from '../../../user.types';
 import {
-  user_inferred_profiles as UserInferredProfile,
-  user_behavior_profiles as UserBehaviorProfile,
+  UserInferredProfiles as UserInferredProfile,
+  UserBehaviorProfiles as UserBehaviorProfile,
 } from '@prisma/client';
 import { inferUserSegment } from '../segmentation.util';
 import { PrismaService } from '../../../../../core/prisma/prisma.service';
@@ -25,8 +25,8 @@ export class ProfileInferenceService {
    * 获取推断数据
    */
   async getInferred(userId: string): Promise<UserInferredProfile | null> {
-    return this.prisma.user_inferred_profiles.findUnique({
-      where: { user_id: userId },
+    return this.prisma.userInferredProfiles.findUnique({
+      where: { userId: userId },
     }) as any;
   }
 
@@ -34,16 +34,16 @@ export class ProfileInferenceService {
    * 刷新推断数据（手动触发）
    */
   async refreshInference(userId: string): Promise<UserInferredProfile | null> {
-    const profile = await this.prisma.user_profiles.findUnique({
-      where: { user_id: userId },
+    const profile = await this.prisma.userProfiles.findUnique({
+      where: { userId: userId },
     });
     if (!profile) return null;
 
-    const behavior = await this.prisma.user_behavior_profiles.findUnique({
-      where: { user_id: userId },
+    const behavior = await this.prisma.userBehaviorProfiles.findUnique({
+      where: { userId: userId },
     });
-    let inferred = await this.prisma.user_inferred_profiles.findUnique({
-      where: { user_id: userId },
+    let inferred = await this.prisma.userInferredProfiles.findUnique({
+      where: { userId: userId },
     });
 
     // 用户分段 — 统一使用 segmentation.util (V4 A4, V5 3.4 升级)
@@ -52,10 +52,10 @@ export class ProfileInferenceService {
       | null = behavior
       ? {
           avgComplianceRate:
-            behavior.avg_compliance_rate != null
-              ? Number(behavior.avg_compliance_rate)
+            behavior.avgComplianceRate != null
+              ? Number(behavior.avgComplianceRate)
               : undefined,
-          totalRecords: behavior.total_records ?? 0,
+          totalRecords: behavior.totalRecords ?? 0,
           // refreshInference 为手动触发，无法精确算 daysSinceLastRecord/usageDays
           // 此处留空，cron 会在批量更新时填充精确值
         }
@@ -63,21 +63,21 @@ export class ProfileInferenceService {
     const segResult = inferUserSegment(profile.goal as GoalType, segBehavior);
 
     const confidenceScores = {
-      ...((inferred?.confidence_scores as any) || {}),
+      ...((inferred?.confidenceScores as any) || {}),
       userSegment: segResult.confidence,
     };
 
     // 最优餐次推断（基于行为数据）
-    let optimalMealCount = inferred?.optimal_meal_count ?? null;
-    if (behavior?.meal_timing_patterns) {
+    let optimalMealCount = inferred?.optimalMealCount ?? null;
+    if (behavior?.mealTimingPatterns) {
       const timingCount = Object.keys(
-        behavior.meal_timing_patterns as any,
-      ).filter((k) => (behavior.meal_timing_patterns as any)[k]).length;
+        behavior.mealTimingPatterns as any,
+      ).filter((k) => (behavior.mealTimingPatterns as any)[k]).length;
       if (timingCount > 0) {
         optimalMealCount = timingCount;
         confidenceScores.optimalMealCount = Math.min(
           0.9,
-          0.5 + (behavior.total_records ?? 0) * 0.01,
+          0.5 + (behavior.totalRecords ?? 0) * 0.01,
         );
       }
     }
@@ -85,12 +85,12 @@ export class ProfileInferenceService {
     // 目标进展
     // V5 3.1: goalProgress 现在主要由 profile-cron.service 基于 weight_history 计算
     // 此处仅做简易回退：当 cron 尚未计算（无 weight_history 数据）时，基于 profile 体重粗略估算
-    let goalProgress = (inferred?.goal_progress as any) || null;
-    if (profile.target_weight_kg && profile.weight_kg) {
+    let goalProgress = (inferred?.goalProgress as any) || null;
+    if (profile.targetWeightKg && profile.weightKg) {
       const startWeight =
-        goalProgress?.startWeight || Number(profile.weight_kg);
-      const currentWeight = Number(profile.weight_kg);
-      const targetWeight = Number(profile.target_weight_kg);
+        goalProgress?.startWeight || Number(profile.weightKg);
+      const currentWeight = Number(profile.weightKg);
+      const targetWeight = Number(profile.targetWeightKg);
       const totalDelta = startWeight - targetWeight;
       const progressPercent =
         Math.abs(totalDelta) > 0.1
@@ -127,26 +127,26 @@ export class ProfileInferenceService {
     const now = new Date();
 
     if (inferred) {
-      const updated = await this.prisma.user_inferred_profiles.update({
-        where: { user_id: userId },
+      const updated = await this.prisma.userInferredProfiles.update({
+        where: { userId: userId },
         data: {
-          user_segment: segResult.segment,
-          confidence_scores: confidenceScores,
-          optimal_meal_count: optimalMealCount,
-          goal_progress: goalProgress,
-          last_computed_at: now,
+          userSegment: segResult.segment,
+          confidenceScores: confidenceScores,
+          optimalMealCount: optimalMealCount,
+          goalProgress: goalProgress,
+          lastComputedAt: now,
         },
       });
       return updated as any;
     } else {
-      const created = await this.prisma.user_inferred_profiles.create({
+      const created = await this.prisma.userInferredProfiles.create({
         data: {
-          user_id: userId,
-          user_segment: segResult.segment,
-          confidence_scores: confidenceScores,
-          optimal_meal_count: optimalMealCount,
-          goal_progress: goalProgress,
-          last_computed_at: now,
+          userId: userId,
+          userSegment: segResult.segment,
+          confidenceScores: confidenceScores,
+          optimalMealCount: optimalMealCount,
+          goalProgress: goalProgress,
+          lastComputedAt: now,
         },
       });
       return created as any;
@@ -159,30 +159,30 @@ export class ProfileInferenceService {
   async getGoalTransitionSuggestion(
     userId: string,
   ): Promise<GoalTransitionSuggestion | null> {
-    const profile = await this.prisma.user_profiles.findUnique({
-      where: { user_id: userId },
+    const profile = await this.prisma.userProfiles.findUnique({
+      where: { userId: userId },
     });
     if (!profile) return null;
 
-    const inferred = await this.prisma.user_inferred_profiles.findUnique({
-      where: { user_id: userId },
+    const inferred = await this.prisma.userInferredProfiles.findUnique({
+      where: { userId: userId },
     });
 
     // fat_loss 达成
     if (
       profile.goal === GoalType.FAT_LOSS &&
-      profile.target_weight_kg &&
-      Number(profile.weight_kg) <= Number(profile.target_weight_kg)
+      profile.targetWeightKg &&
+      Number(profile.weightKg) <= Number(profile.targetWeightKg)
     ) {
       return {
         currentGoal: GoalType.FAT_LOSS,
         suggestedGoal: GoalType.HEALTH,
         reason: '恭喜！你已达到目标体重，建议切换到"保持健康"模式',
-        suggestedCalories: inferred?.estimated_tdee ?? undefined,
+        suggestedCalories: inferred?.estimatedTdee ?? undefined,
       };
     }
 
-    const goalProgress = inferred?.goal_progress as any;
+    const goalProgress = inferred?.goalProgress as any;
 
     // 长期停滞（进展缓慢）— V5: 'behind' 映射为 plateau 或 fluctuating
     if (
@@ -202,14 +202,14 @@ export class ProfileInferenceService {
     // muscle_gain 达成
     if (
       profile.goal === GoalType.MUSCLE_GAIN &&
-      profile.target_weight_kg &&
-      Number(profile.weight_kg) >= Number(profile.target_weight_kg)
+      profile.targetWeightKg &&
+      Number(profile.weightKg) >= Number(profile.targetWeightKg)
     ) {
       return {
         currentGoal: GoalType.MUSCLE_GAIN,
         suggestedGoal: GoalType.HEALTH,
         reason: '你已达到目标体重，建议切换到"保持健康"模式来巩固成果',
-        suggestedCalories: inferred?.estimated_tdee ?? undefined,
+        suggestedCalories: inferred?.estimatedTdee ?? undefined,
       };
     }
 

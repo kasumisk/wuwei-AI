@@ -175,8 +175,8 @@ function mapRowToFoodLibrary(row: Record<string, unknown>): FoodLibrary {
     status: String(row.status ?? 'draft'),
     category: String(row.category ?? ''),
     subCategory:
-      row.sub_category != null ? String(row.sub_category) : undefined,
-    foodGroup: row.food_group != null ? String(row.food_group) : undefined,
+      row.subCategory != null ? String(row.subCategory) : undefined,
+    foodGroup: row.foodGroup != null ? String(row.foodGroup) : undefined,
 
     // 核心营养素 — Decimal → number
     calories: n(row.calories),
@@ -185,21 +185,21 @@ function mapRowToFoodLibrary(row: Record<string, unknown>): FoodLibrary {
     carbs: nOpt(row.carbs),
     fiber: nOpt(row.fiber),
     sugar: nOpt(row.sugar),
-    addedSugar: nOpt(row.added_sugar),
-    naturalSugar: nOpt(row.natural_sugar),
-    saturatedFat: nOpt(row.saturated_fat),
-    transFat: nOpt(row.trans_fat),
+    addedSugar: nOpt(row.addedSugar),
+    naturalSugar: nOpt(row.naturalSugar),
+    saturatedFat: nOpt(row.saturatedFat),
+    transFat: nOpt(row.transFat),
     cholesterol: nOpt(row.cholesterol),
     sodium: nOpt(row.sodium),
     potassium: nOpt(row.potassium),
     calcium: nOpt(row.calcium),
     iron: nOpt(row.iron),
-    vitaminA: nOpt(row.vitamin_a),
-    vitaminC: nOpt(row.vitamin_c),
-    vitaminD: nOpt(row.vitamin_d),
-    vitaminE: nOpt(row.vitamin_e),
-    vitaminB12: nOpt(row.vitamin_b12),
-    vitaminB6: nOpt(row.vitamin_b6),
+    vitaminA: nOpt(row.vitaminA),
+    vitaminC: nOpt(row.vitaminC),
+    vitaminD: nOpt(row.vitaminD),
+    vitaminE: nOpt(row.vitaminE),
+    vitaminB12: nOpt(row.vitaminB12),
+    vitaminB6: nOpt(row.vitaminB6),
     folate: nOpt(row.folate),
     zinc: nOpt(row.zinc),
     magnesium: nOpt(row.magnesium),
@@ -208,94 +208,94 @@ function mapRowToFoodLibrary(row: Record<string, unknown>): FoodLibrary {
     // V7.4 Phase 3-A: 精细化营养字段
     omega3: nOpt(row.omega3),
     omega6: nOpt(row.omega6),
-    solubleFiber: nOpt(row.soluble_fiber),
-    insolubleFiber: nOpt(row.insoluble_fiber),
+    solubleFiber: nOpt(row.solubleFiber),
+    insolubleFiber: nOpt(row.insolubleFiber),
 
     // 烹饪/风味扩展
     cuisine: row.cuisine != null ? String(row.cuisine) : undefined,
-    flavorProfile: jsonParse(row.flavor_profile, undefined),
+    flavorProfile: jsonParse(row.flavorProfile, undefined),
     cookingMethod:
-      row.cooking_method != null ? String(row.cooking_method) : undefined,
-    prepTimeMinutes: nOpt(row.prep_time_minutes) as number | undefined,
-    cookTimeMinutes: nOpt(row.cook_time_minutes) as number | undefined,
+      row.cookingMethod != null ? String(row.cookingMethod) : undefined,
+    prepTimeMinutes: nOpt(row.prepTimeMinutes) as number | undefined,
+    cookTimeMinutes: nOpt(row.cookTimeMinutes) as number | undefined,
     skillRequired:
-      row.skill_required != null ? String(row.skill_required) : undefined,
-    estimatedCostLevel: nOpt(row.estimated_cost_level) as number | undefined,
-    shelfLifeDays: nOpt(row.shelf_life_days) as number | undefined,
-    waterContentPercent: nOpt(row.water_content_percent),
+      row.skillRequired != null ? String(row.skillRequired) : undefined,
+    estimatedCostLevel: nOpt(row.estimatedCostLevel) as number | undefined,
+    shelfLifeDays: nOpt(row.shelfLifeDays) as number | undefined,
+    waterContentPercent: nOpt(row.waterContentPercent),
     fodmapLevel:
-      row.fodmap_level != null ? String(row.fodmap_level) : undefined,
+      row.fodmapLevel != null ? String(row.fodmapLevel) : undefined,
     oxalateLevel:
-      row.oxalate_level != null ? String(row.oxalate_level) : undefined,
+      row.oxalateLevel != null ? String(row.oxalateLevel) : undefined,
 
     // 评分/指数
-    glycemicIndex: nOpt(row.glycemic_index) as number | undefined,
-    glycemicLoad: nOpt(row.glycemic_load),
-    isProcessed: Boolean(row.is_processed),
-    isFried: Boolean(row.is_fried),
-    processingLevel: n(row.processing_level) || 1,
+    glycemicIndex: nOpt(row.glycemicIndex) as number | undefined,
+    glycemicLoad: nOpt(row.glycemicLoad),
+    isProcessed: Boolean(row.isProcessed),
+    isFried: Boolean(row.isFried),
+    processingLevel: n(row.processingLevel) || 1,
     allergens: jsonParse<string[]>(row.allergens, []),
-    qualityScore: nOpt(row.quality_score),
-    satietyScore: nOpt(row.satiety_score),
-    nutrientDensity: nOpt(row.nutrient_density),
-    mealTypes: jsonParse<string[]>(row.meal_types, []),
+    qualityScore: nOpt(row.qualityScore),
+    satietyScore: nOpt(row.satietyScore),
+    nutrientDensity: nOpt(row.nutrientDensity),
+    mealTypes: jsonParse<string[]>(row.mealTypes, []),
     tags: jsonParse<string[]>(row.tags, []),
     mainIngredient:
-      row.main_ingredient != null ? String(row.main_ingredient) : undefined,
+      row.mainIngredient != null ? String(row.mainIngredient) : undefined,
     compatibility: jsonParse<Record<string, string[]>>(row.compatibility, {}),
 
     // 份量
-    standardServingG: n(row.standard_serving_g) || 100,
+    standardServingG: n(row.standardServingG) || 100,
     standardServingDesc:
-      row.standard_serving_desc != null
-        ? String(row.standard_serving_desc)
+      row.standardServingDesc != null
+        ? String(row.standardServingDesc)
         : undefined,
     commonPortions: jsonParse<Array<{ name: string; grams: number }>>(
-      row.common_portions,
+      row.commonPortions,
       [],
     ),
 
     // 媒体
-    imageUrl: row.image_url != null ? String(row.image_url) : undefined,
+    imageUrl: row.imageUrl != null ? String(row.imageUrl) : undefined,
     thumbnailUrl:
-      row.thumbnail_url != null ? String(row.thumbnail_url) : undefined,
+      row.thumbnailUrl != null ? String(row.thumbnailUrl) : undefined,
 
     // 来源/版本
-    primarySource: String(row.primary_source ?? 'manual'),
+    primarySource: String(row.primarySource ?? 'manual'),
     primarySourceId:
-      row.primary_source_id != null ? String(row.primary_source_id) : undefined,
-    dataVersion: n(row.data_version) || 1,
+      row.primarySourceId != null ? String(row.primarySourceId) : undefined,
+    dataVersion: n(row.dataVersion) || 1,
     confidence: n(row.confidence) || 1,
-    isVerified: Boolean(row.is_verified),
-    verifiedBy: row.verified_by != null ? String(row.verified_by) : undefined,
+    isVerified: Boolean(row.isVerified),
+    verifiedBy: row.verifiedBy != null ? String(row.verifiedBy) : undefined,
     verifiedAt:
-      row.verified_at != null ? new Date(row.verified_at as string) : undefined,
-    searchWeight: n(row.search_weight) || 100,
+      row.verifiedAt != null ? new Date(row.verifiedAt as string) : undefined,
+    searchWeight: n(row.searchWeight) || 100,
     popularity: n(row.popularity),
     embedding: row.embedding != null ? (row.embedding as number[]) : undefined,
     embeddingUpdatedAt:
-      row.embedding_updated_at != null
-        ? new Date(row.embedding_updated_at as string)
+      row.embeddingUpdatedAt != null
+        ? new Date(row.embeddingUpdatedAt as string)
         : undefined,
-    createdAt: new Date((row.created_at as string) || Date.now()),
-    updatedAt: new Date((row.updated_at as string) || Date.now()),
+    createdAt: new Date((row.createdAt as string) || Date.now()),
+    updatedAt: new Date((row.updatedAt as string) || Date.now()),
     // V6.4 Phase 3.3: 可获取渠道
-    availableChannels: jsonParse<string[]>(row.available_channels, [
+    availableChannels: jsonParse<string[]>(row.availableChannels, [
       'home_cook',
       'restaurant',
       'delivery',
       'convenience',
     ]),
     // V6.5: 大众化评分
-    commonalityScore: n(row.commonality_score) || 50,
+    commonalityScore: n(row.commonalityScore) || 50,
     // V7.3 Phase 1-A: 食物大众化扩展
     foodForm:
-      row.food_form != null
-        ? (String(row.food_form) as FoodLibrary['foodForm'])
+      row.foodForm != null
+        ? (String(row.foodForm) as FoodLibrary['foodForm'])
         : undefined,
-    dishPriority: nOpt(row.dish_priority) as number | undefined,
+    dishPriority: nOpt(row.dishPriority) as number | undefined,
     // V7.4 Phase 1-B: 食物可获得性
-    acquisitionDifficulty: nOpt(row.acquisition_difficulty) as
+    acquisitionDifficulty: nOpt(row.acquisitionDifficulty) as
       | number
       | undefined,
   };

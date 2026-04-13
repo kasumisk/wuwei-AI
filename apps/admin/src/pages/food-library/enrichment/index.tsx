@@ -3,7 +3,6 @@ import {
   Card,
   Button,
   Space,
-  message,
   Form,
   Select,
   InputNumber,
@@ -75,6 +74,7 @@ import {
   useOperationsStats,
   useRollbackEnrichment,
   useBatchRollbackEnrichment,
+  useReviewStats,
   type MissingFieldStats,
   type EnrichmentJob,
   type EnrichableField,
@@ -82,6 +82,7 @@ import {
   type EnrichmentStatsResponse,
 } from '@/services/foodPipelineService';
 import { LOCALE_OPTIONS } from '@/pages/food-library/constants';
+import { globalMessage as message } from '@/utils/message';
 
 export const routeConfig = {
   name: 'enrichment',
@@ -310,6 +311,9 @@ const EnrichmentPage: React.FC = () => {
 
   // V8.0: 运维统计
   const { data: operationsStats } = useOperationsStats();
+
+  // V8.4: 审核细粒度报表
+  const { data: reviewStats } = useReviewStats();
 
   // V8.0: 重试失败任务
   const retryMutation = useRetryFailedEnrichment({
@@ -720,7 +724,10 @@ const EnrichmentPage: React.FC = () => {
                 title="平均完整度"
                 value={historicalStats.avgCompleteness}
                 suffix="%"
-                valueStyle={{ color: historicalStats.avgCompleteness >= 60 ? '#52c41a' : '#faad14', fontSize: 22 }}
+                valueStyle={{
+                  color: historicalStats.avgCompleteness >= 60 ? '#52c41a' : '#faad14',
+                  fontSize: 22,
+                }}
               />
             </Card>
           </Col>
@@ -1536,6 +1543,203 @@ const EnrichmentPage: React.FC = () => {
                     </LineChart>
                   </ResponsiveContainer>
                 </Card>
+
+                {/* ── V8.4 审核统计报表 ── */}
+                {reviewStats && (
+                  <>
+                    <Divider orientation="left" style={{ marginTop: 8 }}>
+                      审核统计报表
+                    </Divider>
+
+                    {/* 审核概览数字卡 */}
+                    <Row gutter={[12, 12]}>
+                      {[
+                        { label: '待审核积压', value: reviewStats.pendingReview, color: '#fa8c16' },
+                        { label: '历史已通过', value: reviewStats.approved, color: '#52c41a' },
+                        { label: '历史已拒绝', value: reviewStats.rejected, color: '#ff4d4f' },
+                        {
+                          label: '审核通过率',
+                          value: reviewStats.approvalRate,
+                          suffix: '%',
+                          color: '#722ed1',
+                        },
+                        {
+                          label: '审核拒绝率',
+                          value: reviewStats.rejectionRate,
+                          suffix: '%',
+                          color: '#f5222d',
+                        },
+                        {
+                          label: '综合平均置信度',
+                          value: Math.round(reviewStats.avgConfidenceAll * 100),
+                          suffix: '%',
+                          color: '#13c2c2',
+                        },
+                        {
+                          label: '通过记录置信度',
+                          value: Math.round(reviewStats.avgConfidenceApproved * 100),
+                          suffix: '%',
+                          color: '#389e0d',
+                        },
+                        {
+                          label: '拒绝记录置信度',
+                          value: Math.round(reviewStats.avgConfidenceRejected * 100),
+                          suffix: '%',
+                          color: '#d4380d',
+                        },
+                      ].map(({ label, value, color, suffix }) => (
+                        <Col xs={12} sm={8} md={6} lg={3} key={label}>
+                          <Card size="small">
+                            <Statistic
+                              title={label}
+                              value={value}
+                              suffix={suffix}
+                              valueStyle={{ color, fontSize: 18 }}
+                            />
+                          </Card>
+                        </Col>
+                      ))}
+                    </Row>
+
+                    {/* 置信度区间分布柱状图 + 近30天通过/拒绝趋势 */}
+                    <Row gutter={[12, 12]}>
+                      <Col xs={24} md={12}>
+                        <Card size="small" title="置信度区间分布（已审核记录）">
+                          <ResponsiveContainer width="100%" height={220}>
+                            <BarChart
+                              data={reviewStats.confidenceBuckets}
+                              margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
+                            >
+                              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                              <XAxis dataKey="bucket" tick={{ fontSize: 11 }} />
+                              <YAxis tick={{ fontSize: 11 }} />
+                              <RechartsTooltip />
+                              <Legend />
+                              <Bar
+                                dataKey="approved"
+                                name="已通过"
+                                fill="#52c41a"
+                                radius={[3, 3, 0, 0]}
+                              />
+                              <Bar
+                                dataKey="rejected"
+                                name="已拒绝"
+                                fill="#ff4d4f"
+                                radius={[3, 3, 0, 0]}
+                              />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </Card>
+                      </Col>
+                      <Col xs={24} md={12}>
+                        <Card size="small" title="近 30 天审核趋势">
+                          <ResponsiveContainer width="100%" height={220}>
+                            <LineChart
+                              data={[...reviewStats.dailyTrend]
+                                .sort((a, b) => a.date.localeCompare(b.date))
+                                .map((d) => ({ ...d, date: d.date.slice(5) }))}
+                              margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
+                            >
+                              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                              <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                              <YAxis tick={{ fontSize: 11 }} />
+                              <RechartsTooltip />
+                              <Legend />
+                              <Line
+                                type="monotone"
+                                dataKey="approved"
+                                name="已通过"
+                                stroke="#52c41a"
+                                strokeWidth={2}
+                                dot={{ r: 2 }}
+                              />
+                              <Line
+                                type="monotone"
+                                dataKey="rejected"
+                                name="已拒绝"
+                                stroke="#ff4d4f"
+                                strokeWidth={2}
+                                dot={{ r: 2 }}
+                              />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </Card>
+                      </Col>
+                    </Row>
+
+                    {/* 待审核积压列表 */}
+                    {reviewStats.pendingList.length > 0 && (
+                      <Card
+                        size="small"
+                        title={
+                          <Space>
+                            <span>待审核积压（最近 20 条）</span>
+                            <Tag color="orange">{reviewStats.pendingReview} 条待审核</Tag>
+                          </Space>
+                        }
+                      >
+                        <Table
+                          size="small"
+                          rowKey="logId"
+                          pagination={false}
+                          dataSource={reviewStats.pendingList}
+                          columns={[
+                            {
+                              title: '食物',
+                              dataIndex: 'foodName',
+                              width: 160,
+                              ellipsis: true,
+                            },
+                            {
+                              title: '补全字段数',
+                              dataIndex: 'enrichedFields',
+                              width: 90,
+                              align: 'center',
+                              render: (fields: string[]) => (
+                                <Tag color="blue">{fields.length} 个字段</Tag>
+                              ),
+                            },
+                            {
+                              title: '置信度',
+                              dataIndex: 'confidence',
+                              width: 90,
+                              align: 'center',
+                              render: (v: number | null) =>
+                                v != null ? (
+                                  <Tag color={v >= 0.7 ? 'green' : v >= 0.5 ? 'orange' : 'red'}>
+                                    {Math.round(v * 100)}%
+                                  </Tag>
+                                ) : (
+                                  <Text type="secondary">—</Text>
+                                ),
+                            },
+                            {
+                              title: '入队时间',
+                              dataIndex: 'createdAt',
+                              width: 150,
+                              render: (v: string) => new Date(v).toLocaleString('zh-CN'),
+                            },
+                            {
+                              title: '操作',
+                              width: 80,
+                              render: (_: any, record: { logId: string }) => (
+                                <Button
+                                  size="small"
+                                  type="link"
+                                  onClick={() =>
+                                    navigate(`/food-library/enrichment/preview/${record.logId}`)
+                                  }
+                                >
+                                  预览
+                                </Button>
+                              ),
+                            },
+                          ]}
+                        />
+                      </Card>
+                    )}
+                  </>
+                )}
               </Space>
             ) : (
               <Card>

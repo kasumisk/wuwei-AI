@@ -19,7 +19,7 @@
  */
 import { Injectable, Logger, ForbiddenException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { usage_quota as UsageQuota } from '@prisma/client';
+import { UsageQuota } from '@prisma/client';
 import { GatedFeature, QuotaCycle, UNLIMITED } from '../../subscription.types';
 import { SubscriptionService } from './subscription.service';
 import { PlanEntitlementResolver } from './plan-entitlement-resolver.service';
@@ -59,15 +59,15 @@ export class QuotaService {
     if (!quota) return true; // 无记录 → 该功能不受配额限制
 
     // 无限制直接放行
-    if (quota.quota_limit === UNLIMITED) return true;
+    if (quota.quotaLimit === UNLIMITED) return true;
 
     // 检查是否需要先重置（resetAt 已过）
-    if (quota.reset_at && quota.reset_at <= new Date()) {
+    if (quota.resetAt && quota.resetAt <= new Date()) {
       await this.resetSingleQuota(quota);
       return true; // 刚重置，used=0
     }
 
-    return quota.used < quota.quota_limit;
+    return quota.used < quota.quotaLimit;
   }
 
   /**
@@ -90,8 +90,8 @@ export class QuotaService {
     }
 
     // 无限制直接放行
-    if (quota.quota_limit === UNLIMITED) {
-      await this.prisma.usage_quota.update({
+    if (quota.quotaLimit === UNLIMITED) {
+      await this.prisma.usageQuota.update({
         where: { id: quota.id },
         data: { used: quota.used + 1 },
       });
@@ -100,24 +100,24 @@ export class QuotaService {
     }
 
     // 检查是否需要先重置
-    if (quota.reset_at && quota.reset_at <= new Date()) {
+    if (quota.resetAt && quota.resetAt <= new Date()) {
       await this.resetSingleQuota(quota);
     }
 
     // 配额检查
-    if (quota.used >= quota.quota_limit) {
+    if (quota.used >= quota.quotaLimit) {
       throw new ForbiddenException({
         code: 'QUOTA_EXCEEDED',
         message: `${feature} 今日配额已用完`,
         feature,
         used: quota.used,
-        limit: quota.quota_limit,
-        resetAt: quota.reset_at,
+        limit: quota.quotaLimit,
+        resetAt: quota.resetAt,
       });
     }
 
     // 消耗一次
-    await this.prisma.usage_quota.update({
+    await this.prisma.usageQuota.update({
       where: { id: quota.id },
       data: { used: quota.used + 1 },
     });
@@ -146,7 +146,7 @@ export class QuotaService {
     }
 
     // 检查是否需要先重置
-    if (quota.reset_at && quota.reset_at <= new Date()) {
+    if (quota.resetAt && quota.resetAt <= new Date()) {
       await this.resetSingleQuota(quota);
     }
 
@@ -161,8 +161,8 @@ export class QuotaService {
    * 此处仅标记是否已过期供前端展示，不修改数据库。
    */
   async getAllQuotaStatus(userId: string): Promise<QuotaStatus[]> {
-    const quotas = await this.prisma.usage_quota.findMany({
-      where: { user_id: userId },
+    const quotas = await this.prisma.usageQuota.findMany({
+      where: { userId: userId },
     });
 
     return quotas.map((quota) => this.toStatus(quota));
@@ -191,14 +191,14 @@ export class QuotaService {
 
     for (const cycle of cycles) {
       const nextResetAt = this.calcNextReset(now, cycle);
-      const result = await this.prisma.usage_quota.updateMany({
+      const result = await this.prisma.usageQuota.updateMany({
         where: {
-          reset_at: { lte: now },
+          resetAt: { lte: now },
           cycle,
         },
         data: {
           used: 0,
-          reset_at: nextResetAt,
+          resetAt: nextResetAt,
         },
       });
       totalReset += result.count;
@@ -225,8 +225,8 @@ export class QuotaService {
     feature: GatedFeature,
   ): Promise<any | null> {
     // 先查已有记录
-    const existing = await this.prisma.usage_quota.findUnique({
-      where: { user_id_feature: { user_id: userId, feature } },
+    const existing = await this.prisma.usageQuota.findUnique({
+      where: { userId_feature: { userId: userId, feature } },
     });
     if (existing) return existing;
 
@@ -246,14 +246,14 @@ export class QuotaService {
     // 自动创建配额记录
     const now = new Date();
     const resetAt = this.calcNextReset(now, QuotaCycle.DAILY);
-    return this.prisma.usage_quota.create({
+    return this.prisma.usageQuota.create({
       data: {
-        user_id: userId,
+        userId: userId,
         feature,
         used: 0,
-        quota_limit: limit,
+        quotaLimit: limit,
         cycle: QuotaCycle.DAILY,
-        reset_at: resetAt,
+        resetAt: resetAt,
       },
     });
   }
@@ -272,12 +272,12 @@ export class QuotaService {
    */
   private async resetSingleQuota(quota: any): Promise<void> {
     const newResetAt = this.calcNextReset(new Date(), quota.cycle);
-    await this.prisma.usage_quota.update({
+    await this.prisma.usageQuota.update({
       where: { id: quota.id },
-      data: { used: 0, reset_at: newResetAt },
+      data: { used: 0, resetAt: newResetAt },
     });
     quota.used = 0;
-    quota.reset_at = newResetAt;
+    quota.resetAt = newResetAt;
   }
 
   /**
@@ -306,16 +306,16 @@ export class QuotaService {
    * 将 UsageQuota entity 转换为 QuotaStatus DTO
    */
   private toStatus(quota: any): QuotaStatus {
-    const unlimited = quota.quota_limit === UNLIMITED;
+    const unlimited = quota.quotaLimit === UNLIMITED;
     return {
       feature: quota.feature as GatedFeature,
       used: quota.used,
-      limit: quota.quota_limit,
+      limit: quota.quotaLimit,
       remaining: unlimited
         ? UNLIMITED
-        : Math.max(0, quota.quota_limit - quota.used),
+        : Math.max(0, quota.quotaLimit - quota.used),
       unlimited,
-      resetAt: quota.reset_at,
+      resetAt: quota.resetAt,
     };
   }
 }

@@ -156,7 +156,7 @@ export class NotificationController {
     );
     return {
       id: token.id,
-      deviceId: token.device_id,
+      deviceId: token.deviceId,
       platform: token.platform,
     };
   }
@@ -178,10 +178,10 @@ export class NotificationController {
   async getPreference(@CurrentAppUser() user: AppUserPayload) {
     const pref = await this.notificationService.getPreference(user.id);
     return {
-      pushEnabled: pref.push_enabled,
-      enabledTypes: pref.enabled_types,
-      quietStart: pref.quiet_start,
-      quietEnd: pref.quiet_end,
+      pushEnabled: pref.pushEnabled,
+      enabledTypes: pref.enabledTypes,
+      quietStart: pref.quietStart,
+      quietEnd: pref.quietEnd,
     };
   }
 
@@ -192,26 +192,26 @@ export class NotificationController {
     @Body() dto: UpdatePreferenceDto,
   ) {
     const updates: Partial<{
-      push_enabled: boolean;
-      enabled_types: string[];
-      quiet_start: string | null;
-      quiet_end: string | null;
+      pushEnabled: boolean;
+      enabledTypes: string[];
+      quietStart: string | null;
+      quietEnd: string | null;
     }> = {};
-    if (dto.pushEnabled !== undefined) updates.push_enabled = dto.pushEnabled;
+    if (dto.pushEnabled !== undefined) updates.pushEnabled = dto.pushEnabled;
     if (dto.enabledTypes !== undefined)
-      updates.enabled_types = dto.enabledTypes;
-    if (dto.quietStart !== undefined) updates.quiet_start = dto.quietStart;
-    if (dto.quietEnd !== undefined) updates.quiet_end = dto.quietEnd;
+      updates.enabledTypes = dto.enabledTypes;
+    if (dto.quietStart !== undefined) updates.quietStart = dto.quietStart;
+    if (dto.quietEnd !== undefined) updates.quietEnd = dto.quietEnd;
 
     const pref = await this.notificationService.updatePreference(
       user.id,
       updates,
     );
     return {
-      pushEnabled: pref.push_enabled,
-      enabledTypes: pref.enabled_types,
-      quietStart: pref.quiet_start,
-      quietEnd: pref.quiet_end,
+      pushEnabled: pref.pushEnabled,
+      enabledTypes: pref.enabledTypes,
+      quietStart: pref.quietStart,
+      quietEnd: pref.quietEnd,
     };
   }
 }

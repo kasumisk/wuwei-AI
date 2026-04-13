@@ -261,7 +261,7 @@ async function seed() {
     ];
 
     for (const modelData of models) {
-      const existing = await prisma.model_configs.findFirst({
+      const existing = await prisma.modelConfigs.findFirst({
         where: {
           providerId: modelData.providerId,
           modelName: modelData.modelName,
@@ -274,7 +274,7 @@ async function seed() {
           `  ⏭️  Model "${modelData.modelName}" already exists, skipping`,
         );
       } else {
-        await prisma.model_configs.create({ data: modelData as any });
+        await prisma.modelConfigs.create({ data: modelData as any });
         console.log(`  ✅ Created model: ${modelData.displayName}`);
       }
     }

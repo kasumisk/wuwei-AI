@@ -2,7 +2,7 @@ import { Injectable, UnauthorizedException, Logger } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PrismaService } from '../../../core/prisma/prisma.service';
-import { app_users as AppUser } from '@prisma/client';
+import { AppUsers as AppUser } from '@prisma/client';
 
 export interface AppJwtPayload {
   sub: string;
@@ -49,7 +49,7 @@ export class AppJwtStrategy extends PassportStrategy(Strategy, 'app-jwt') {
       throw new UnauthorizedException('非 App 用户令牌');
     }
 
-    const user = await this.prisma.app_users.findUnique({
+    const user = await this.prisma.appUsers.findUnique({
       where: { id: payload.sub },
     });
 
@@ -63,7 +63,7 @@ export class AppJwtStrategy extends PassportStrategy(Strategy, 'app-jwt') {
 
     return {
       id: user.id,
-      authType: user.auth_type,
+      authType: user.authType,
       email: user.email,
       nickname: user.nickname,
       type: 'app',

@@ -14,7 +14,7 @@ export interface FeatureFlag {
   type: FeatureFlagType;
   enabled: boolean;
   config: Record<string, unknown>;
-  created_at: string;
+  createdAt: string;
 }
 
 export interface UpsertFeatureFlagDto {

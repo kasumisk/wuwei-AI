@@ -533,7 +533,7 @@ export class TextFoodAnalysisService {
    */
   private resolveServingGrams(quantity: string | undefined, food: any): number {
     if (!quantity) {
-      return food.standard_serving_g || DEFAULT_SERVING_GRAMS;
+      return food.standardServingG || DEFAULT_SERVING_GRAMS;
     }
 
     // 数字单位（200g、100ml）
@@ -548,14 +548,14 @@ export class TextFoodAnalysisService {
     if (mapped) return mapped;
 
     // 食物库自带的常用份量匹配
-    if (food.common_portions && (food.common_portions as any[]).length > 0) {
-      const portion = (food.common_portions as any[]).find((p: any) =>
+    if (food.commonPortions && (food.commonPortions as any[]).length > 0) {
+      const portion = (food.commonPortions as any[]).find((p: any) =>
         quantity!.includes(p.name),
       );
       if (portion) return portion.grams;
     }
 
-    return food.standard_serving_g || DEFAULT_SERVING_GRAMS;
+    return food.standardServingG || DEFAULT_SERVING_GRAMS;
   }
 
   /**
@@ -977,14 +977,14 @@ export class TextFoodAnalysisService {
           foods.reduce(
             (s, f) =>
               s +
-              (f.libraryMatch ? Number(f.libraryMatch.quality_score) || 5 : 5),
+              (f.libraryMatch ? Number(f.libraryMatch.qualityScore) || 5 : 5),
             0,
           ) / Math.max(1, foods.length);
         const avgSatiety =
           foods.reduce(
             (s, f) =>
               s +
-              (f.libraryMatch ? Number(f.libraryMatch.satiety_score) || 5 : 5),
+              (f.libraryMatch ? Number(f.libraryMatch.satietyScore) || 5 : 5),
             0,
           ) / Math.max(1, foods.length);
 
@@ -1079,38 +1079,38 @@ export class TextFoodAnalysisService {
     const matchedCount = parsedFoods.filter((f) => f.libraryMatch).length;
     const candidateCount = parsedFoods.length - matchedCount;
 
-    await this.prisma.food_analysis_records.create({
+    await this.prisma.foodAnalysisRecords.create({
       data: {
         id: analysisId,
-        user_id: userId,
-        input_type: 'text',
-        raw_text: rawText,
-        meal_type: mealType || null,
+        userId: userId,
+        inputType: 'text',
+        rawText: rawText,
+        mealType: mealType || null,
         status: AnalysisRecordStatus.COMPLETED,
-        recognized_payload: {
+        recognizedPayload: {
           terms: parsedFoods.map((f) => ({
             name: f.name,
             quantity: f.quantity,
             fromLibrary: !!f.libraryMatch,
           })),
         } as any,
-        normalized_payload: {
+        normalizedPayload: {
           foods: result.foods,
         } as any,
-        nutrition_payload: {
+        nutritionPayload: {
           totals: result.totals,
           score: result.score,
         } as any,
-        decision_payload: {
+        decisionPayload: {
           decision: result.decision,
           alternatives: result.alternatives,
           explanation: result.explanation,
         } as any,
-        confidence_score: result.score.confidenceScore,
-        quality_score: result.score.healthScore,
-        matched_food_count: matchedCount,
-        candidate_food_count: candidateCount,
-        persist_status: PersistStatus.PENDING,
+        confidenceScore: result.score.confidenceScore,
+        qualityScore: result.score.healthScore,
+        matchedFoodCount: matchedCount,
+        candidateFoodCount: candidateCount,
+        persistStatus: PersistStatus.PENDING,
       },
     });
     this.logger.debug(`分析记录已保存: ${analysisId}`);

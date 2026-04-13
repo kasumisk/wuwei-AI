@@ -130,12 +130,12 @@ export interface UpdatePlanDto {
 
 export interface UsageQuotaItem {
   id: string;
-  user_id: string;
+  userId: string;
   feature: string;
   used: number;
-  quota_limit: number;
+  quotaLimit: number;
   cycle: 'daily' | 'weekly' | 'monthly';
-  reset_at: string | null;
+  resetAt: string | null;
 }
 
 export interface UsageQuotasResponse {

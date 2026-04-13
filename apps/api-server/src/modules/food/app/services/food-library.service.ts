@@ -73,14 +73,14 @@ export class FoodLibraryService {
   async getPopular(category?: string, limit: number = 20) {
     const safeLimit = Math.min(Math.max(limit, 1), 50);
 
-    const where: any = { is_verified: true };
+    const where: any = { isVerified: true };
     if (category) {
       where.category = category;
     }
 
     return this.prisma.foods.findMany({
       where,
-      orderBy: { search_weight: 'desc' },
+      orderBy: { searchWeight: 'desc' },
       take: safeLimit,
     });
   }
@@ -136,7 +136,7 @@ export class FoodLibraryService {
         category: food.category,
         name: { not: name },
       },
-      orderBy: { search_weight: 'desc' },
+      orderBy: { searchWeight: 'desc' },
       take: limit,
     });
   }
@@ -148,7 +148,7 @@ export class FoodLibraryService {
     const take = Math.min(limit, 1000);
     const [items, total] = await Promise.all([
       this.prisma.foods.findMany({
-        orderBy: { search_weight: 'desc' },
+        orderBy: { searchWeight: 'desc' },
         take,
       }),
       this.prisma.foods.count(),
@@ -306,22 +306,22 @@ export class FoodLibraryService {
     for (const food of foods) {
       const changes: Record<string, any> = {};
 
-      if (!food.quality_score) {
-        changes.quality_score = categoryQuality[food.category] || 5;
+      if (!food.qualityScore) {
+        changes.qualityScore = categoryQuality[food.category] || 5;
       }
-      if (!food.satiety_score) {
-        changes.satiety_score = categorySatiety[food.category] || 4;
+      if (!food.satietyScore) {
+        changes.satietyScore = categorySatiety[food.category] || 4;
       }
-      if (!food.meal_types || (food.meal_types as string[]).length === 0) {
-        changes.meal_types = mealTypeMap[food.category] || ['lunch', 'dinner'];
+      if (!food.mealTypes || (food.mealTypes as string[]).length === 0) {
+        changes.mealTypes = mealTypeMap[food.category] || ['lunch', 'dinner'];
       }
-      if (food.is_processed === undefined || food.is_processed === null) {
-        changes.is_processed =
+      if (food.isProcessed === undefined || food.isProcessed === null) {
+        changes.isProcessed =
           ['snack', 'composite'].includes(food.category) ||
           /加工|方便|速食|罐头|腌/.test(food.name);
       }
-      if (food.is_fried === undefined || food.is_fried === null) {
-        changes.is_fried = /炸|煎饺|油条|锅贴|油炸|煎饼/.test(food.name);
+      if (food.isFried === undefined || food.isFried === null) {
+        changes.isFried = /炸|煎饺|油条|锅贴|油炸|煎饼/.test(food.name);
       }
 
       if (Object.keys(changes).length > 0) {

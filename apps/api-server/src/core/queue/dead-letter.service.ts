@@ -95,15 +95,15 @@ export class DeadLetterService {
     attemptsMade: number,
   ): Promise<void> {
     try {
-      await this.prisma.dead_letter_jobs.create({
+      await this.prisma.deadLetterJobs.create({
         data: {
-          queue_name: queueName,
-          job_id: jobId,
-          job_data: jobData ?? {},
-          error_message: error,
-          attempts_made: attemptsMade,
+          queueName: queueName,
+          jobId: jobId,
+          jobData: jobData ?? {},
+          errorMessage: error,
+          attemptsMade: attemptsMade,
           status: 'pending',
-          failed_at: new Date(),
+          failedAt: new Date(),
         },
       });
 
@@ -127,34 +127,34 @@ export class DeadLetterService {
     total: number;
   }> {
     const where: any = {};
-    if (filter.queueName) where.queue_name = filter.queueName;
+    if (filter.queueName) where.queueName = filter.queueName;
     if (filter.status) where.status = filter.status;
 
     const limit = Math.min(filter.limit ?? 20, 100);
     const offset = filter.offset ?? 0;
 
     const [items, total] = await Promise.all([
-      this.prisma.dead_letter_jobs.findMany({
+      this.prisma.deadLetterJobs.findMany({
         where,
-        orderBy: { failed_at: 'desc' },
+        orderBy: { failedAt: 'desc' },
         take: limit,
         skip: offset,
       }),
-      this.prisma.dead_letter_jobs.count({ where }),
+      this.prisma.deadLetterJobs.count({ where }),
     ]);
 
     return {
       items: items.map((row) => ({
         id: row.id,
-        queueName: row.queue_name,
-        jobId: row.job_id,
-        jobData: row.job_data,
-        errorMessage: row.error_message,
-        attemptsMade: row.attempts_made,
+        queueName: row.queueName,
+        jobId: row.jobId,
+        jobData: row.jobData,
+        errorMessage: row.errorMessage,
+        attemptsMade: row.attemptsMade,
         status: row.status,
-        failedAt: row.failed_at,
-        retriedAt: row.retried_at,
-        createdAt: row.created_at,
+        failedAt: row.failedAt,
+        retriedAt: row.retriedAt,
+        createdAt: row.createdAt,
       })),
       total,
     };
@@ -167,7 +167,7 @@ export class DeadLetterService {
    * @throws 如果条目不存在、已处理或队列不存在
    */
   async replayJob(dlqId: string): Promise<{ mode: 'queued'; jobId?: string }> {
-    const dlqJob = await this.prisma.dead_letter_jobs.findUnique({
+    const dlqJob = await this.prisma.deadLetterJobs.findUnique({
       where: { id: dlqId },
     });
 
@@ -178,20 +178,20 @@ export class DeadLetterService {
       throw new Error(`DLQ 条目已处理: ${dlqId}, status=${dlqJob.status}`);
     }
 
-    const queue = this.queueMap.get(dlqJob.queue_name);
+    const queue = this.queueMap.get(dlqJob.queueName);
     if (!queue) {
-      throw new Error(`未知队列: ${dlqJob.queue_name}`);
+      throw new Error(`未知队列: ${dlqJob.queueName}`);
     }
 
-    const job = await queue.add('dlq-replay', dlqJob.job_data as any);
+    const job = await queue.add('dlq-replay', dlqJob.jobData as any);
 
-    await this.prisma.dead_letter_jobs.update({
+    await this.prisma.deadLetterJobs.update({
       where: { id: dlqId },
-      data: { status: 'retried', retried_at: new Date() },
+      data: { status: 'retried', retriedAt: new Date() },
     });
 
     this.logger.log(
-      `DLQ 重放成功: dlqId=${dlqId}, queue=${dlqJob.queue_name}, newJobId=${job.id}`,
+      `DLQ 重放成功: dlqId=${dlqId}, queue=${dlqJob.queueName}, newJobId=${job.id}`,
     );
 
     return { mode: 'queued', jobId: job.id ?? undefined };
@@ -201,7 +201,7 @@ export class DeadLetterService {
    * 标记 DLQ 条目为已丢弃（不再重试）
    */
   async discardJob(dlqId: string): Promise<void> {
-    await this.prisma.dead_letter_jobs.update({
+    await this.prisma.deadLetterJobs.update({
       where: { id: dlqId },
       data: { status: 'discarded' },
     });
@@ -216,7 +216,7 @@ export class DeadLetterService {
     { queueName: string; pendingCount: number; totalCount: number }[]
   > {
     const results = await this.prisma.$queryRaw<
-      { queue_name: string; status: string; count: bigint }[]
+      { queueName: string; status: string; count: bigint }[]
     >`
       SELECT queue_name, status, COUNT(*) as count
       FROM dead_letter_jobs
@@ -227,11 +227,11 @@ export class DeadLetterService {
     // 按队列聚合
     const map = new Map<string, { pending: number; total: number }>();
     for (const row of results) {
-      const entry = map.get(row.queue_name) ?? { pending: 0, total: 0 };
+      const entry = map.get(row.queueName) ?? { pending: 0, total: 0 };
       const count = Number(row.count);
       entry.total += count;
       if (row.status === 'pending') entry.pending += count;
-      map.set(row.queue_name, entry);
+      map.set(row.queueName, entry);
     }
 
     return Array.from(map.entries()).map(([queueName, stats]) => ({

@@ -25,15 +25,15 @@ export class AppUpdateService {
   async checkUpdate(checkDto: CheckUpdateDto) {
     const {
       platform,
-      current_version,
+      currentVersion,
       channel = 'official',
-      device_id,
+      deviceId,
       language,
     } = checkDto;
 
-    const currentVersionCode = this.parseVersionCode(current_version);
+    const currentVersionCode = this.parseVersionCode(currentVersion);
 
-    const latestVersion = await this.prisma.app_versions.findFirst({
+    const latestVersion = await this.prisma.appVersions.findFirst({
       where: {
         status: AppVersionStatus.PUBLISHED,
         ...(platform
@@ -43,7 +43,7 @@ export class AppUpdateService {
           : {}),
       },
       include: {
-        app_version_packages: {
+        appVersionPackages: {
           where: { enabled: true },
         },
       },
@@ -51,20 +51,20 @@ export class AppUpdateService {
     });
 
     if (!latestVersion || latestVersion.versionCode <= currentVersionCode) {
-      return { need_update: false };
+      return { needUpdate: false };
     }
 
     // 优先匹配指定渠道的包，否则取第一个可用包
     const pkg =
-      latestVersion.app_version_packages?.find((p) => p.channel === channel) ||
-      latestVersion.app_version_packages?.[0];
+      latestVersion.appVersionPackages?.find((p) => p.channel === channel) ||
+      latestVersion.appVersionPackages?.[0];
 
     // 灰度发布检查
     if (latestVersion.grayRelease && latestVersion.grayPercent < 100) {
-      if (device_id) {
-        const hash = this.hashDeviceId(device_id);
+      if (deviceId) {
+        const hash = this.hashDeviceId(deviceId);
         if (hash > latestVersion.grayPercent) {
-          const fallbackVersion = await this.prisma.app_versions.findFirst({
+          const fallbackVersion = await this.prisma.appVersions.findFirst({
             where: {
               status: AppVersionStatus.PUBLISHED,
               versionCode: { gt: currentVersionCode },
@@ -80,7 +80,7 @@ export class AppUpdateService {
                 : {}),
             },
             include: {
-              app_version_packages: {
+              appVersionPackages: {
                 where: { enabled: true },
               },
             },
@@ -88,14 +88,14 @@ export class AppUpdateService {
           });
 
           if (!fallbackVersion) {
-            return { need_update: false };
+            return { needUpdate: false };
           }
 
           return this.buildUpdateResponse(
             fallbackVersion,
-            fallbackVersion.app_version_packages?.find(
+            fallbackVersion.appVersionPackages?.find(
               (p) => p.channel === channel,
-            ) || fallbackVersion.app_version_packages?.[0],
+            ) || fallbackVersion.appVersionPackages?.[0],
             currentVersionCode,
             language,
           );
@@ -117,7 +117,7 @@ export class AppUpdateService {
   async getLatestVersion(query: GetLatestVersionQueryDto) {
     const { platform, channel: _channel = 'official', language } = query;
 
-    const latestVersion = await this.prisma.app_versions.findFirst({
+    const latestVersion = await this.prisma.appVersions.findFirst({
       where: {
         status: AppVersionStatus.PUBLISHED,
         ...(platform
@@ -127,7 +127,7 @@ export class AppUpdateService {
           : {}),
       },
       include: {
-        app_version_packages: {
+        appVersionPackages: {
           where: { enabled: true },
         },
       },
@@ -149,7 +149,7 @@ export class AppUpdateService {
       ];
     }
 
-    const packages = (latestVersion.app_version_packages || []).map((pkg) => ({
+    const packages = (latestVersion.appVersionPackages || []).map((pkg) => ({
       id: pkg.id,
       platform: pkg.platform,
       channel: pkg.channel,
@@ -191,13 +191,13 @@ export class AppUpdateService {
     const skip = (page - 1) * pageSize;
 
     const [versions, total] = await Promise.all([
-      this.prisma.app_versions.findMany({
+      this.prisma.appVersions.findMany({
         where,
         orderBy: { versionCode: 'desc' },
         skip,
         take: pageSize,
       }),
-      this.prisma.app_versions.count({ where }),
+      this.prisma.appVersions.count({ where }),
     ]);
 
     const list = versions.map((v) => {
@@ -251,15 +251,15 @@ export class AppUpdateService {
     }
 
     return {
-      need_update: true,
-      latest_version: version.version,
-      update_type: updateType,
+      needUpdate: true,
+      latestVersion: version.version,
+      updateType,
       title: version.title,
       description,
-      download_url: pkg?.downloadUrl || '',
-      file_size: pkg ? Number(pkg.fileSize) : 0,
+      downloadUrl: pkg?.downloadUrl || '',
+      fileSize: pkg ? Number(pkg.fileSize) : 0,
       checksum: pkg?.checksum || undefined,
-      min_support_version: version.minSupportVersion,
+      minSupportVersion: version.minSupportVersion,
     };
   }
 

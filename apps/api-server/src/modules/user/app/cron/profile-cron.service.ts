@@ -69,28 +69,28 @@ export class ProfileCronService {
           if (gpChanged) goalProgressUpdated++;
 
           // optimalMealCount: 基于对应 behavior 的 mealTimingPatterns
-          const behavior = await this.prisma.user_behavior_profiles.findUnique({
-            where: { user_id: inf.user_id },
+          const behavior = await this.prisma.userBehaviorProfiles.findUnique({
+            where: { userId: inf.userId },
           });
-          if (behavior?.meal_timing_patterns) {
+          if (behavior?.mealTimingPatterns) {
             const stableSlots = (
               ['breakfast', 'lunch', 'dinner', 'snack'] as const
-            ).filter((k) => (behavior.meal_timing_patterns as any)[k]).length;
+            ).filter((k) => (behavior.mealTimingPatterns as any)[k]).length;
             if (stableSlots > 0) {
               const newCount = Math.max(3, stableSlots);
-              if (inf.optimal_meal_count !== newCount) {
-                await this.prisma.user_inferred_profiles.update({
-                  where: { user_id: inf.user_id },
+              if (inf.optimalMealCount !== newCount) {
+                await this.prisma.userInferredProfiles.update({
+                  where: { userId: inf.userId },
                   data: {
-                    optimal_meal_count: newCount,
-                    confidence_scores: {
-                      ...((inf.confidence_scores as any) || {}),
+                    optimalMealCount: newCount,
+                    confidenceScores: {
+                      ...((inf.confidenceScores as any) || {}),
                       optimalMealCount: Math.min(
                         0.9,
-                        0.5 + (behavior.total_records || 0) * 0.01,
+                        0.5 + (behavior.totalRecords || 0) * 0.01,
                       ),
                     },
-                    last_computed_at: new Date(),
+                    lastComputedAt: new Date(),
                   },
                 });
                 optimalMealCountUpdated++;
@@ -122,33 +122,33 @@ export class ProfileCronService {
    * 更新单个用户的行为数据（30 天滑动窗口）
    */
   private async updateDailyBehavior(behavior: any): Promise<void> {
-    const userId = behavior.user_id;
+    const userId = behavior.userId;
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     // 30 天窗口内的食物记录
-    const records = await this.prisma.food_records.findMany({
+    const records = await this.prisma.foodRecords.findMany({
       where: {
-        user_id: userId,
-        created_at: { gte: thirtyDaysAgo },
+        userId: userId,
+        createdAt: { gte: thirtyDaysAgo },
       },
     });
 
     if (records.length === 0) return;
 
     // 更新执行率（30 天窗口）
-    const profile = await this.prisma.user_profiles.findUnique({
-      where: { user_id: userId },
+    const profile = await this.prisma.userProfiles.findUnique({
+      where: { userId: userId },
     });
-    const dailyGoal = profile?.daily_calorie_goal || 2000;
+    const dailyGoal = profile?.dailyCalorieGoal || 2000;
     const tz = profile?.timezone || DEFAULT_TIMEZONE;
 
     // 按用户本地日期聚合（避免 UTC 日期跨时区偏移）
     const dailyCalories: Record<string, number> = {};
     for (const record of records) {
-      const day = getUserLocalDate(tz, record.created_at as Date);
+      const day = getUserLocalDate(tz, record.createdAt as Date);
       dailyCalories[day] =
-        (dailyCalories[day] || 0) + (Number(record.total_calories) || 0);
+        (dailyCalories[day] || 0) + (Number(record.totalCalories) || 0);
     }
 
     const totalDays = Object.keys(dailyCalories).length;
@@ -166,7 +166,7 @@ export class ProfileCronService {
       snack: [],
     };
     for (const record of records) {
-      const hour = getUserLocalHour(tz, record.created_at as Date);
+      const hour = getUserLocalHour(tz, record.createdAt as Date);
       if (hour >= 5 && hour < 10) mealTimes.breakfast.push(hour);
       else if (hour >= 10 && hour < 14) mealTimes.lunch.push(hour);
       else if (hour >= 16 && hour < 21) mealTimes.dinner.push(hour);
@@ -194,9 +194,9 @@ export class ProfileCronService {
     // 按小时桶统计卡路里
     const hourlyCalories: Record<number, number[]> = {};
     for (const record of records) {
-      const hour = getUserLocalHour(tz, record.created_at as Date);
+      const hour = getUserLocalHour(tz, record.createdAt as Date);
       if (!hourlyCalories[hour]) hourlyCalories[hour] = [];
-      hourlyCalories[hour].push(Number(record.total_calories) || 0);
+      hourlyCalories[hour].push(Number(record.totalCalories) || 0);
     }
     // 日均小时桶均值 = dailyAvgCal / 活跃餐次数（以3为默认）
     const activeMealSlots = Math.max(3, Object.keys(hourlyCalories).length);
@@ -213,12 +213,12 @@ export class ProfileCronService {
     }
 
     // V5 3.2: 填充 portionTendency — 实际每餐卡路里 vs 计划每餐卡路里
-    const mealsPerDay = profile?.meals_per_day || 3;
+    const mealsPerDay = profile?.mealsPerDay || 3;
     const plannedPerMeal = dailyGoal / mealsPerDay;
-    let portionTendency = behavior.portion_tendency;
+    let portionTendency = behavior.portionTendency;
     if (plannedPerMeal > 0 && records.length >= 5) {
       const avgActualPerMeal =
-        records.reduce((sum, r) => sum + (Number(r.total_calories) || 0), 0) /
+        records.reduce((sum, r) => sum + (Number(r.totalCalories) || 0), 0) /
         records.length;
       const ratio = avgActualPerMeal / plannedPerMeal;
       if (ratio > 1.15) {
@@ -230,13 +230,13 @@ export class ProfileCronService {
       }
     }
 
-    await this.prisma.user_behavior_profiles.update({
-      where: { user_id: userId },
+    await this.prisma.userBehaviorProfiles.update({
+      where: { userId: userId },
       data: {
-        avg_compliance_rate: avgComplianceRate,
-        meal_timing_patterns: mealTimingPatterns as any,
-        binge_risk_hours: bingeRiskHours.sort((a, b) => a - b),
-        portion_tendency: portionTendency,
+        avgComplianceRate: avgComplianceRate,
+        mealTimingPatterns: mealTimingPatterns as any,
+        bingeRiskHours: bingeRiskHours.sort((a, b) => a - b),
+        portionTendency: portionTendency,
       },
     });
   }
@@ -282,17 +282,17 @@ export class ProfileCronService {
   }
 
   private async updateWeeklySegmentation(inferred: any): Promise<void> {
-    const userId = inferred.user_id;
+    const userId = inferred.userId;
     const [profile, behavior] = await Promise.all([
-      this.prisma.user_profiles.findUnique({ where: { user_id: userId } }),
-      this.prisma.user_behavior_profiles.findUnique({
-        where: { user_id: userId },
+      this.prisma.userProfiles.findUnique({ where: { userId: userId } }),
+      this.prisma.userBehaviorProfiles.findUnique({
+        where: { userId: userId },
       }),
     ]);
 
     if (!profile) return;
 
-    const complianceRate = Number(behavior?.avg_compliance_rate ?? 0);
+    const complianceRate = Number(behavior?.avgComplianceRate ?? 0);
 
     // V5 3.4: 计算 daysSinceLastRecord 和 usageDays 供分段使用
     const lastRecordDate = await this.getLastRecordDate(userId);
@@ -303,13 +303,13 @@ export class ProfileCronService {
       : 999;
 
     // usageDays: 首条记录到现在的天数
-    const firstRecord = await this.prisma.food_records.findFirst({
-      where: { user_id: userId },
-      orderBy: { created_at: 'asc' },
+    const firstRecord = await this.prisma.foodRecords.findFirst({
+      where: { userId: userId },
+      orderBy: { createdAt: 'asc' },
     });
     const usageDays = firstRecord
       ? Math.floor(
-          (Date.now() - (firstRecord.created_at as Date).getTime()) /
+          (Date.now() - (firstRecord.createdAt as Date).getTime()) /
             (1000 * 60 * 60 * 24),
         )
       : 0;
@@ -317,10 +317,10 @@ export class ProfileCronService {
     // 用户分段 — V5 3.4: 升级版 segmentation (含 new_user/returning_user/交叉分类)
     const segmentResult = inferUserSegment(profile.goal as any, {
       avgComplianceRate:
-        behavior?.avg_compliance_rate != null
-          ? Number(behavior.avg_compliance_rate)
+        behavior?.avgComplianceRate != null
+          ? Number(behavior.avgComplianceRate)
           : undefined,
-      totalRecords: behavior?.total_records ?? undefined,
+      totalRecords: behavior?.totalRecords ?? undefined,
       daysSinceLastRecord,
       usageDays,
     });
@@ -330,8 +330,8 @@ export class ProfileCronService {
       userId,
       daysSinceLastRecord,
       complianceRate,
-      behavior?.streak_days ?? 0,
-      behavior?.total_records ?? 0,
+      behavior?.streakDays ?? 0,
+      behavior?.totalRecords ?? 0,
     );
     const churnRisk = churnResult.churnRisk;
 
@@ -339,28 +339,28 @@ export class ProfileCronService {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    const weeklyRecords = await this.prisma.food_records.findMany({
+    const weeklyRecords = await this.prisma.foodRecords.findMany({
       where: {
-        user_id: userId,
-        created_at: { gte: sevenDaysAgo },
+        userId: userId,
+        createdAt: { gte: sevenDaysAgo },
       },
     });
 
-    let nutritionGaps = inferred.nutrition_gaps as any;
+    let nutritionGaps = inferred.nutritionGaps as any;
     if (weeklyRecords.length >= 5) {
       const gaps: string[] = [];
       const avgProtein =
-        weeklyRecords.reduce((s, r) => s + (Number(r.total_protein) || 0), 0) /
+        weeklyRecords.reduce((s, r) => s + (Number(r.totalProtein) || 0), 0) /
         weeklyRecords.length;
       const avgCalories =
-        weeklyRecords.reduce((s, r) => s + (Number(r.total_calories) || 0), 0) /
+        weeklyRecords.reduce((s, r) => s + (Number(r.totalCalories) || 0), 0) /
         weeklyRecords.length;
 
-      const macroTargets = (inferred.macro_targets as any) || {};
+      const macroTargets = (inferred.macroTargets as any) || {};
       if (macroTargets.proteinG && avgProtein < macroTargets.proteinG * 0.6) {
         gaps.push('protein');
       }
-      const dailyGoal = Number(profile?.daily_calorie_goal) || 2000;
+      const dailyGoal = Number(profile?.dailyCalorieGoal) || 2000;
       if (avgCalories < dailyGoal * 0.5) gaps.push('calories_deficit');
 
       nutritionGaps = gaps;
@@ -368,21 +368,21 @@ export class ProfileCronService {
 
     // 置信度 — V5 3.4: 使用 segmentResult 的 confidence; V6.5 Phase 3L: churn 置信度来自预测模型
     const confidenceScores = {
-      ...((inferred.confidence_scores as any) || {}),
+      ...((inferred.confidenceScores as any) || {}),
       userSegment: segmentResult.confidence,
       segmentSecondaryFlags: segmentResult.secondaryFlags.length,
       churnRisk: churnResult.confidence,
       nutritionGaps: weeklyRecords.length >= 10 ? 0.7 : 0.4,
     };
 
-    await this.prisma.user_inferred_profiles.update({
-      where: { user_id: userId },
+    await this.prisma.userInferredProfiles.update({
+      where: { userId: userId },
       data: {
-        user_segment: segmentResult.segment,
-        churn_risk: Number(churnRisk.toFixed(2)),
-        nutrition_gaps: nutritionGaps,
-        confidence_scores: confidenceScores as any,
-        last_computed_at: new Date(),
+        userSegment: segmentResult.segment,
+        churnRisk: Number(churnRisk.toFixed(2)),
+        nutritionGaps: nutritionGaps,
+        confidenceScores: confidenceScores as any,
+        lastComputedAt: new Date(),
       },
     });
 
@@ -435,9 +435,9 @@ export class ProfileCronService {
       const result = await this.processCursorPaged(
         'user_inferred_profiles',
         async (inf: any) => {
-          if (!inf.preference_weights) return;
+          if (!inf.preferenceWeights) return;
 
-          const weights = inf.preference_weights as Record<
+          const weights = inf.preferenceWeights as Record<
             string,
             Record<string, number> | string | number
           >;
@@ -468,10 +468,10 @@ export class ProfileCronService {
           }
 
           if (changed) {
-            await this.prisma.user_inferred_profiles.update({
-              where: { user_id: inf.user_id },
+            await this.prisma.userInferredProfiles.update({
+              where: { userId: inf.userId },
               data: {
-                preference_weights: weights as any,
+                preferenceWeights: weights as any,
               },
             });
           }
@@ -512,27 +512,27 @@ export class ProfileCronService {
    * @returns 是否有实质更新
    */
   private async updateGoalProgress(inferred: any): Promise<boolean> {
-    const userId = inferred.user_id;
+    const userId = inferred.userId;
 
     // 获取用户档案（需要 targetWeightKg）
-    const profile = await this.prisma.user_profiles.findUnique({
-      where: { user_id: userId },
+    const profile = await this.prisma.userProfiles.findUnique({
+      where: { userId: userId },
     });
-    if (!profile?.target_weight_kg) return false;
+    if (!profile?.targetWeightKg) return false;
 
     // 查询体重历史（按时间升序）
-    const weightRecords = await this.prisma.weight_history.findMany({
-      where: { user_id: userId },
-      orderBy: { recorded_at: 'asc' },
+    const weightRecords = await this.prisma.weightHistory.findMany({
+      where: { userId: userId },
+      orderBy: { recordedAt: 'asc' },
     });
 
     if (weightRecords.length === 0) return false;
 
-    const startWeight = Number(weightRecords[0].weight_kg);
+    const startWeight = Number(weightRecords[0].weightKg);
     const currentWeight = Number(
-      weightRecords[weightRecords.length - 1].weight_kg,
+      weightRecords[weightRecords.length - 1].weightKg,
     );
-    const targetWeight = Number(profile.target_weight_kg);
+    const targetWeight = Number(profile.targetWeightKg);
 
     // 进度百分比: 避免除零
     const totalDelta = startWeight - targetWeight;
@@ -549,7 +549,7 @@ export class ProfileCronService {
     fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
     // NOTE: weightRecords come from Prisma (weight_history table) — uses snake_case fields
     const recentRecords = weightRecords.filter(
-      (r) => (r.recorded_at as Date).getTime() >= fourWeeksAgo.getTime(),
+      (r) => (r.recordedAt as Date).getTime() >= fourWeeksAgo.getTime(),
     );
 
     let trend: 'losing' | 'gaining' | 'plateau' | 'fluctuating' = 'plateau';
@@ -561,11 +561,11 @@ export class ProfileCronService {
       const last = recentRecords[recentRecords.length - 1];
       const daySpan = Math.max(
         1,
-        ((last.recorded_at as Date).getTime() -
-          (first.recorded_at as Date).getTime()) /
+        ((last.recordedAt as Date).getTime() -
+          (first.recordedAt as Date).getTime()) /
           (1000 * 60 * 60 * 24),
       );
-      const totalChange = Number(last.weight_kg) - Number(first.weight_kg);
+      const totalChange = Number(last.weightKg) - Number(first.weightKg);
       weeklyRateKg = Number(((totalChange / daySpan) * 7).toFixed(2));
 
       // 趋势判断
@@ -574,11 +574,11 @@ export class ProfileCronService {
         let directionChanges = 0;
         for (let i = 2; i < recentRecords.length; i++) {
           const prev =
-            Number(recentRecords[i - 1].weight_kg) -
-            Number(recentRecords[i - 2].weight_kg);
+            Number(recentRecords[i - 1].weightKg) -
+            Number(recentRecords[i - 2].weightKg);
           const curr =
-            Number(recentRecords[i].weight_kg) -
-            Number(recentRecords[i - 1].weight_kg);
+            Number(recentRecords[i].weightKg) -
+            Number(recentRecords[i - 1].weightKg);
           if ((prev > 0 && curr < 0) || (prev < 0 && curr > 0)) {
             directionChanges++;
           }
@@ -629,27 +629,27 @@ export class ProfileCronService {
 
     // 更新置信度: 数据越多越可信
     const confidenceScores = {
-      ...((inferred.confidence_scores as any) || {}),
+      ...((inferred.confidenceScores as any) || {}),
       goalProgress: Math.min(0.95, 0.3 + weightRecords.length * 0.05),
     };
 
-    await this.prisma.user_inferred_profiles.update({
-      where: { user_id: userId },
+    await this.prisma.userInferredProfiles.update({
+      where: { userId: userId },
       data: {
-        goal_progress: goalProgress as any,
-        confidence_scores: confidenceScores as any,
-        last_computed_at: new Date(),
+        goalProgress: goalProgress as any,
+        confidenceScores: confidenceScores as any,
+        lastComputedAt: new Date(),
       },
     });
     return true;
   }
 
   private async getLastRecordDate(userId: string): Promise<Date | null> {
-    const record = await this.prisma.food_records.findFirst({
-      where: { user_id: userId },
-      orderBy: { created_at: 'desc' },
+    const record = await this.prisma.foodRecords.findFirst({
+      where: { userId: userId },
+      orderBy: { createdAt: 'desc' },
     });
-    return record ? (record.created_at as Date) : null;
+    return record ? (record.createdAt as Date) : null;
   }
 
   /**
@@ -663,7 +663,7 @@ export class ProfileCronService {
    * @param label 日志标识
    * @returns { succeeded, failed } 统计
    */
-  private async processBatched<T extends { user_id?: string }>(
+  private async processBatched<T extends { userId?: string }>(
     items: T[],
     processor: (item: T) => Promise<void>,
     label: string,
@@ -714,7 +714,7 @@ export class ProfileCronService {
    * @param label 日志标签
    * @param pageSize 每页大小（默认 100）
    */
-  async processCursorPaged<T extends { user_id: string }>(
+  async processCursorPaged<T extends { userId: string }>(
     model: 'user_behavior_profiles' | 'user_inferred_profiles',
     processor: (item: T) => Promise<void>,
     label: string,
@@ -730,14 +730,14 @@ export class ProfileCronService {
     while (true) {
       const page = (await (this.prisma[model] as any).findMany({
         take: pageSize,
-        ...(cursor ? { skip: 1, cursor: { user_id: cursor } } : {}),
-        orderBy: { user_id: 'asc' },
+        ...(cursor ? { skip: 1, cursor: { userId: cursor } } : {}),
+        orderBy: { userId: 'asc' },
       })) as T[];
 
       if (page.length === 0) break;
 
       total += page.length;
-      cursor = page[page.length - 1].user_id;
+      cursor = page[page.length - 1].userId;
 
       // 并发限制处理
       for (let i = 0; i < page.length; i += CONCURRENCY) {

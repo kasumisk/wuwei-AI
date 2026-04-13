@@ -26,7 +26,7 @@ async function seedAdmin() {
           code: 'SUPER_ADMIN',
           name: '超级管理员',
           description: '系统超级管理员，拥有所有权限',
-          is_system: true,
+          isSystem: true,
           status: RoleStatus.ACTIVE,
           sort: 0,
         },
@@ -43,7 +43,7 @@ async function seedAdmin() {
     const adminPassword = 'admin123';
 
     // 检查管理员是否已存在
-    let existingAdmin = await prisma.admin_users.findFirst({
+    let existingAdmin = await prisma.adminUsers.findFirst({
       where: { username: adminUsername },
     });
 
@@ -54,7 +54,7 @@ async function seedAdmin() {
       const hashedPassword = await bcrypt.hash(adminPassword, 10);
 
       // 创建管理员
-      existingAdmin = await prisma.admin_users.create({
+      existingAdmin = await prisma.adminUsers.create({
         data: {
           username: adminUsername,
           email: 'admin@example.com',
@@ -75,18 +75,18 @@ async function seedAdmin() {
 
     // 3. 分配 SUPER_ADMIN 角色给管理员
     console.log('\n🔗 分配角色到管理员...');
-    const existingUserRole = await prisma.user_roles.findFirst({
+    const existingUserRole = await prisma.userRoles.findFirst({
       where: {
-        user_id: existingAdmin.id,
-        role_id: superAdminRole.id,
+        userId: existingAdmin.id,
+        roleId: superAdminRole.id,
       },
     });
 
     if (!existingUserRole) {
-      await prisma.user_roles.create({
+      await prisma.userRoles.create({
         data: {
-          user_id: existingAdmin.id,
-          role_id: superAdminRole.id,
+          userId: existingAdmin.id,
+          roleId: superAdminRole.id,
         },
       });
       console.log('  ✓ SUPER_ADMIN 角色已分配给管理员');
@@ -108,14 +108,14 @@ async function seedAdmin() {
     ];
 
     for (const userData of testUsers) {
-      const existingUser = await prisma.admin_users.findFirst({
+      const existingUser = await prisma.adminUsers.findFirst({
         where: { username: userData.username },
       });
 
       if (!existingUser) {
         const hashedPassword = await bcrypt.hash(userData.password, 10);
         const { password: _pwd, ...userDataWithoutPassword } = userData;
-        await prisma.admin_users.create({
+        await prisma.adminUsers.create({
           data: {
             ...userDataWithoutPassword,
             password: hashedPassword,

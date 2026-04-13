@@ -13,14 +13,14 @@ async function seedTestClient() {
     const hashedSecret = await bcrypt.hash(apiSecret, 10);
 
     // 1. Create or Update Client
-    let client = await prisma.clients.findFirst({ where: { api_key: apiKey } });
+    let client = await prisma.clients.findFirst({ where: { apiKey: apiKey } });
 
     if (client) {
       console.log('ℹ️  Client already exists, updating secret...');
       client = await prisma.clients.update({
         where: { id: client.id },
         data: {
-          api_secret: hashedSecret,
+          apiSecret: hashedSecret,
           status: 'active',
         },
       });
@@ -30,10 +30,10 @@ async function seedTestClient() {
       client = await prisma.clients.create({
         data: {
           name: 'Test Client',
-          api_key: apiKey,
-          api_secret: hashedSecret,
+          apiKey: apiKey,
+          apiSecret: hashedSecret,
           status: 'active',
-          quota_config: {
+          quotaConfig: {
             dailyQuota: 100,
             monthlyQuota: 1000,
           },
@@ -44,10 +44,10 @@ async function seedTestClient() {
 
     // 2. Grant Permissions
     const capabilityType = 'text.generation';
-    let permission = await prisma.client_capability_permissions.findFirst({
+    let permission = await prisma.clientCapabilityPermissions.findFirst({
       where: {
-        client_id: client.id,
-        capability_type: capabilityType,
+        clientId: client.id,
+        capabilityType: capabilityType,
       },
     });
 
@@ -55,16 +55,16 @@ async function seedTestClient() {
       console.log(
         `ℹ️  Permission for ${capabilityType} already exists, updating...`,
       );
-      await prisma.client_capability_permissions.update({
+      await prisma.clientCapabilityPermissions.update({
         where: { id: permission.id },
         data: {
           enabled: true,
-          allowed_providers: JSON.stringify([
+          allowedProviders: JSON.stringify([
             'openai',
             'deepseek',
             'anthropic',
           ]),
-          allowed_models: JSON.stringify([
+          allowedModels: JSON.stringify([
             'gpt-3.5-turbo',
             'deepseek-chat',
             'gpt-4o',
@@ -75,18 +75,18 @@ async function seedTestClient() {
       console.log(`✅ Permission updated`);
     } else {
       console.log(`📝 Creating permission for ${capabilityType}...`);
-      await prisma.client_capability_permissions.create({
+      await prisma.clientCapabilityPermissions.create({
         data: {
-          client_id: client.id,
-          capability_type: capabilityType,
+          clientId: client.id,
+          capabilityType: capabilityType,
           enabled: true,
-          rate_limit: 100,
-          allowed_providers: JSON.stringify([
+          rateLimit: 100,
+          allowedProviders: JSON.stringify([
             'openai',
             'deepseek',
             'anthropic',
           ]),
-          allowed_models: JSON.stringify([
+          allowedModels: JSON.stringify([
             'gpt-3.5-turbo',
             'deepseek-chat',
             'gpt-4o',

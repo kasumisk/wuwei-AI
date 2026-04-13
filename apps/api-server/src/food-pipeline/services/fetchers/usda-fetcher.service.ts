@@ -187,7 +187,7 @@ export class UsdaFetcherService {
     const { data } = await firstValueFrom(
       this.httpService.get<UsdaSearchResponse>(url, {
         params: {
-          api_key: this.apiKey,
+          apiKey: this.apiKey,
           query,
           pageSize,
           pageNumber,
@@ -210,7 +210,7 @@ export class UsdaFetcherService {
       const url = `${this.baseUrl}/food/${fdcId}`;
       const { data } = await firstValueFrom(
         this.httpService.get<UsdaRawFood>(url, {
-          params: { api_key: this.apiKey },
+          params: { apiKey: this.apiKey },
         }),
       );
       return this.normalize(data);
@@ -230,7 +230,7 @@ export class UsdaFetcherService {
         url,
         { fdcIds },
         {
-          params: { api_key: this.apiKey },
+          params: { apiKey: this.apiKey },
         },
       ),
     );

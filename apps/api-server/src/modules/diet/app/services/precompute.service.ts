@@ -91,23 +91,23 @@ export class PrecomputeService {
     result: MealRecommendation;
     scenarioResults: Record<string, unknown> | null;
   } | null> {
-    const record = await this.prisma.precomputed_recommendations.findFirst({
+    const record = await this.prisma.precomputedRecommendations.findFirst({
       where: {
-        user_id: userId,
+        userId: userId,
         date,
-        meal_type: mealType,
+        mealType: mealType,
         channel: channel ?? 'unknown',
-        strategy_version: this.strategyVersion,
-        expires_at: { gt: new Date() },
+        strategyVersion: this.strategyVersion,
+        expiresAt: { gt: new Date() },
       },
     });
 
     if (!record) return null;
 
     // 标记为已使用（异步，不阻塞返回）
-    if (!record.is_used) {
-      this.prisma.precomputed_recommendations
-        .update({ where: { id: record.id }, data: { is_used: true } })
+    if (!record.isUsed) {
+      this.prisma.precomputedRecommendations
+        .update({ where: { id: record.id }, data: { isUsed: true } })
         .catch(() => {
           /* non-critical */
         });
@@ -115,7 +115,7 @@ export class PrecomputeService {
 
     return {
       result: record.result as unknown as MealRecommendation,
-      scenarioResults: record.scenario_results as Record<
+      scenarioResults: record.scenarioResults as Record<
         string,
         unknown
       > | null,
@@ -141,32 +141,32 @@ export class PrecomputeService {
     const expiresAt = new Date(`${date}T23:59:59`);
     const ch = channel ?? 'unknown';
 
-    await this.prisma.precomputed_recommendations.upsert({
+    await this.prisma.precomputedRecommendations.upsert({
       where: {
-        user_id_date_meal_type_channel: {
-          user_id: userId,
+        userId_date_mealType_channel: {
+          userId: userId,
           date,
-          meal_type: mealType,
+          mealType: mealType,
           channel: ch,
         },
       },
       update: {
         result: result as any,
-        scenario_results: (scenarioResults || null) as any,
-        strategy_version: this.strategyVersion,
-        expires_at: expiresAt,
-        is_used: false,
+        scenarioResults: (scenarioResults || null) as any,
+        strategyVersion: this.strategyVersion,
+        expiresAt: expiresAt,
+        isUsed: false,
       },
       create: {
-        user_id: userId,
+        userId: userId,
         date,
-        meal_type: mealType,
+        mealType: mealType,
         channel: ch,
         result: result as any,
-        scenario_results: (scenarioResults || null) as any,
-        strategy_version: this.strategyVersion,
-        expires_at: expiresAt,
-        is_used: false,
+        scenarioResults: (scenarioResults || null) as any,
+        strategyVersion: this.strategyVersion,
+        expiresAt: expiresAt,
+        isUsed: false,
       },
     });
 
@@ -236,9 +236,9 @@ export class PrecomputeService {
       const tomorrowStr = tomorrow.toISOString().slice(0, 10);
 
       const deleteResult =
-        await this.prisma.precomputed_recommendations.deleteMany({
+        await this.prisma.precomputedRecommendations.deleteMany({
           where: {
-            user_id: event.userId,
+            userId: event.userId,
             date: { in: [today, tomorrowStr] },
           },
         });
@@ -354,8 +354,8 @@ export class PrecomputeService {
    */
   @Cron('15 4 * * *', { name: 'cleanup-precomputed' })
   async cleanupExpired(): Promise<void> {
-    const result = await this.prisma.precomputed_recommendations.deleteMany({
-      where: { expires_at: { lt: new Date() } },
+    const result = await this.prisma.precomputedRecommendations.deleteMany({
+      where: { expiresAt: { lt: new Date() } },
     });
     if (result.count > 0) {
       this.logger.log(`清理过期预计算: ${result.count} 条`);
@@ -381,7 +381,7 @@ export class PrecomputeService {
     // eslint-disable-next-line no-constant-condition
     while (true) {
       const page = await this.prisma.$queryRawUnsafe<
-        Array<{ user_id: string }>
+        Array<{ userId: string }>
       >(
         `SELECT DISTINCT user_id FROM food_records
          WHERE created_at > $1
@@ -393,7 +393,7 @@ export class PrecomputeService {
       );
 
       if (page.length === 0) break;
-      userIds.push(...page.map((r) => r.user_id));
+      userIds.push(...page.map((r) => r.userId));
       if (page.length < PAGE_SIZE) break;
       offset += PAGE_SIZE;
     }

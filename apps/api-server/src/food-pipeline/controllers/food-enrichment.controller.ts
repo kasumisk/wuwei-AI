@@ -32,6 +32,12 @@
  * ── V8.3 新增/增强 ──
  * POST /admin/food-pipeline/enrichment/retry-failed       — 增强：支持 source 参数（queue/database/both）
  * POST /admin/food-pipeline/enrichment/recalculate-completeness — 批量重算全库完整度和状态
+ *
+ * ── V8.4 新增 ──
+ * GET  /admin/food-pipeline/enrichment/dashboard-poll     — 聚合轮询（queue+historical+recentLogs+byStatus，前端单接口轮询）
+ * GET  /admin/food-pipeline/enrichment/history/:logId/diff — 历史 change_log 字段级对比（ai_enrichment 类型）
+ * GET  /admin/food-pipeline/enrichment/batch-status       — 批量入队后进度快照（队列计数+DB分布汇总）
+ * GET  /admin/food-pipeline/enrichment/review-stats       — 审核细粒度报表（通过率/拒绝率/置信度分布/按日趋势/积压列表）
  */
 
 import {
@@ -156,6 +162,10 @@ export class FoodEnrichmentController {
         region: body.region,
       },
       opts: {
+        // V8.4: jobId 幂等去重 — 同一 foodId 在队列中只保留一个 job
+        // BullMQ 若 jobId 已存在且仍在 waiting/active 状态，则忽略本次 add
+        // 注意：BullMQ jobId 不允许含 ":"，使用 "_" 作分隔符
+        jobId: `enrich_${food.id}`,
         attempts:
           QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_ENRICHMENT].maxRetries + 1,
         backoff: {
@@ -236,15 +246,28 @@ export class FoodEnrichmentController {
   // ==================== 队列统计（V8.2: 增加历史统计） ====================
 
   @Get('stats')
-  @ApiOperation({ summary: '补全队列统计概览（V8.2: 含历史统计）' })
+  @ApiOperation({
+    summary: '补全队列统计概览（V8.4: Redis 不可用时降级返回 0）',
+  })
   async getStats(): Promise<ApiResponse> {
+    // V8.4: BullMQ 队列统计独立捕获，Redis 不可用时降级为 0，不影响 DB 侧历史统计
+    const safeQueueStat = async (
+      fn: () => Promise<number>,
+    ): Promise<number> => {
+      try {
+        return await fn();
+      } catch {
+        return 0;
+      }
+    };
+
     const [waiting, active, completed, failed, delayed, historical] =
       await Promise.all([
-        this.enrichmentQueue.getWaitingCount(),
-        this.enrichmentQueue.getActiveCount(),
-        this.enrichmentQueue.getCompletedCount(),
-        this.enrichmentQueue.getFailedCount(),
-        this.enrichmentQueue.getDelayedCount(),
+        safeQueueStat(() => this.enrichmentQueue.getWaitingCount()),
+        safeQueueStat(() => this.enrichmentQueue.getActiveCount()),
+        safeQueueStat(() => this.enrichmentQueue.getCompletedCount()),
+        safeQueueStat(() => this.enrichmentQueue.getFailedCount()),
+        safeQueueStat(() => this.enrichmentQueue.getDelayedCount()),
         this.enrichmentService.getEnrichmentHistoricalStats(),
       ]);
     return {
@@ -602,6 +625,8 @@ export class FoodEnrichmentController {
         stages: validStages,
       },
       opts: {
+        // V8.4: jobId 幂等去重 — 同一 foodId 在队列中只保留一个分阶段补全 job
+        jobId: `enrich_staged_${food.id}`,
         attempts:
           QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_ENRICHMENT].maxRetries + 1,
         backoff: {
@@ -715,6 +740,8 @@ export class FoodEnrichmentController {
       const queueOpts = QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_ENRICHMENT];
       for (const food of failedFoods) {
         try {
+          // V8.4: 先重置状态（防止 add 成功但 reset 失败导致下次重复入队）
+          await this.enrichmentService.resetEnrichmentStatus(food.id);
           await this.enrichmentQueue.add(
             'enrichment',
             {
@@ -723,6 +750,8 @@ export class FoodEnrichmentController {
               staged: false,
             },
             {
+              // V8.4: jobId 幂等去重
+              jobId: `enrich_${food.id}`,
               attempts: queueOpts.maxRetries + 1,
               backoff: {
                 type: queueOpts.backoffType,
@@ -732,8 +761,6 @@ export class FoodEnrichmentController {
               removeOnFail: 100,
             },
           );
-          // 重置状态为 pending
-          await this.enrichmentService.resetEnrichmentStatus(food.id);
           enqueuedFromDb++;
         } catch (e) {
           errors.push(`db:${food.name}(${food.id}): ${(e as Error).message}`);
@@ -838,6 +865,23 @@ export class FoodEnrichmentController {
     };
   }
 
+  // ==================== V8.4: 审核统计报表 ====================
+
+  @Get('review-stats')
+  @ApiOperation({
+    summary:
+      'V8.4 审核统计细粒度报表（待审核数/通过率/拒绝率/平均置信度/置信度分布/按日趋势/积压列表）',
+  })
+  async getReviewStats(): Promise<ApiResponse> {
+    const data = await this.enrichmentService.getReviewStats();
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '获取成功',
+      data,
+    };
+  }
+
   // ==================== V8.1: 全局任务总览 ====================
 
   @Get('task-overview')
@@ -897,5 +941,117 @@ export class FoodEnrichmentController {
         data: null,
       };
     }
+  }
+
+  // ==================== V8.4: 聚合轮询端点 ====================
+
+  @Get('dashboard-poll')
+  @ApiOperation({
+    summary:
+      'V8.4 聚合轮询（一次返回队列状态+历史统计+最近日志+状态分布，前端单接口轮询即可）',
+  })
+  async getDashboardPoll(): Promise<ApiResponse> {
+    const safeQueueStat = async (
+      fn: () => Promise<number>,
+    ): Promise<number> => {
+      try {
+        return await fn();
+      } catch {
+        return 0;
+      }
+    };
+
+    const [waiting, active, completed, failed, delayed] = await Promise.all([
+      safeQueueStat(() => this.enrichmentQueue.getWaitingCount()),
+      safeQueueStat(() => this.enrichmentQueue.getActiveCount()),
+      safeQueueStat(() => this.enrichmentQueue.getCompletedCount()),
+      safeQueueStat(() => this.enrichmentQueue.getFailedCount()),
+      safeQueueStat(() => this.enrichmentQueue.getDelayedCount()),
+    ]);
+
+    const data = await this.enrichmentService.getDashboardPoll({
+      waiting,
+      active,
+      completed,
+      failed,
+      delayed,
+    });
+    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+  }
+
+  // ==================== V8.4: 历史日志字段级对比 ====================
+
+  @Get('history/:logId/diff')
+  @ApiOperation({
+    summary:
+      'V8.4 历史 change_log 字段级对比（仅支持 ai_enrichment / ai_enrichment_approved 类型）',
+  })
+  async getHistoryLogDiff(@Param('logId') logId: string): Promise<ApiResponse> {
+    try {
+      const data = await this.enrichmentService.getHistoryLogDiff(logId);
+      return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    } catch (error) {
+      return {
+        success: false,
+        code: HttpStatus.BAD_REQUEST,
+        message: error instanceof Error ? error.message : '获取失败',
+        data: null,
+      };
+    }
+  }
+
+  // ==================== V8.4: 批量任务进度快照 ====================
+
+  @Get('batch-status')
+  @ApiOperation({
+    summary:
+      'V8.4 批量补全进度快照（队列实时计数 + DB 补全状态分布，入队后轮询此接口追踪进度）',
+  })
+  async getBatchStatus(): Promise<ApiResponse> {
+    const safeQueueStat = async (
+      fn: () => Promise<number>,
+    ): Promise<number> => {
+      try {
+        return await fn();
+      } catch {
+        return 0;
+      }
+    };
+
+    const [waiting, active, completed, failed, delayed, historical] =
+      await Promise.all([
+        safeQueueStat(() => this.enrichmentQueue.getWaitingCount()),
+        safeQueueStat(() => this.enrichmentQueue.getActiveCount()),
+        safeQueueStat(() => this.enrichmentQueue.getCompletedCount()),
+        safeQueueStat(() => this.enrichmentQueue.getFailedCount()),
+        safeQueueStat(() => this.enrichmentQueue.getDelayedCount()),
+        this.enrichmentService.getEnrichmentHistoricalStats(),
+      ]);
+
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '获取成功',
+      data: {
+        /** 队列实时状态（Redis，不可用时降级为 0）*/
+        queue: { waiting, active, completed, failed, delayed },
+        /** 已处理统计（来自 DB foods 表，始终准确）*/
+        processed: {
+          total: historical.total,
+          enriched: historical.enriched,
+          pending: historical.pending,
+          failed: historical.failed,
+          staged: historical.staged,
+          avgCompleteness: historical.avgCompleteness,
+        },
+        /** 估算剩余：等待中 + 活跃中 = 队列中尚未处理 */
+        remaining: waiting + active,
+        /** 估算完成率（基于 DB 数据）*/
+        completionRate:
+          historical.total > 0
+            ? Math.round((historical.enriched / historical.total) * 100)
+            : 0,
+      },
+    };
   }
 }

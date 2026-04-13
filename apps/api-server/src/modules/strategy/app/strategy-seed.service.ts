@@ -516,7 +516,7 @@ export class StrategySeedService implements OnModuleInit {
           scope: preset.isDefault
             ? StrategyScope.GLOBAL
             : StrategyScope.GOAL_TYPE,
-          scope_target: preset.isDefault ? null : preset.name,
+          scopeTarget: preset.isDefault ? null : preset.name,
           config: preset.config as any,
           status: StrategyStatus.ACTIVE,
           priority: preset.priority,

@@ -36,18 +36,18 @@ export class AppDataQueryService {
     const where: any = {};
 
     if (userId) {
-      where.user_id = userId;
+      where.userId = userId;
     }
     if (mealType) {
-      where.meal_type = mealType;
+      where.mealType = mealType;
     }
     if (startDate || endDate) {
-      where.recorded_at = {};
+      where.recordedAt = {};
       if (startDate) {
-        where.recorded_at.gte = new Date(startDate);
+        where.recordedAt.gte = new Date(startDate);
       }
       if (endDate) {
-        where.recorded_at.lte = new Date(`${endDate} 23:59:59`);
+        where.recordedAt.lte = new Date(`${endDate} 23:59:59`);
       }
     }
 
@@ -73,7 +73,7 @@ export class AppDataQueryService {
             ${startDate ? Prisma.sql`AND recorded_at >= ${new Date(startDate)}` : Prisma.empty}
             ${endDate ? Prisma.sql`AND recorded_at <= ${new Date(`${endDate} 23:59:59`)}` : Prisma.empty}
           `.then((rows) => Number(rows[0]?.count ?? 0))
-        : this.prisma.food_records.count({
+        : this.prisma.foodRecords.count({
             where: (() => {
               const w = { ...where };
               delete w.AND;
@@ -93,14 +93,14 @@ export class AppDataQueryService {
             OFFSET ${(page - 1) * pageSize}
             LIMIT ${pageSize}
           `
-        : this.prisma.food_records.findMany({
+        : this.prisma.foodRecords.findMany({
             where: (() => {
               const w = { ...where };
               delete w.AND;
               return w;
             })(),
-            include: { app_users: true },
-            orderBy: { recorded_at: 'desc' },
+            include: { appUsers: true },
+            orderBy: { recordedAt: 'desc' },
             skip: (page - 1) * pageSize,
             take: pageSize,
           }),
@@ -116,9 +116,9 @@ export class AppDataQueryService {
   }
 
   async getFoodRecordDetail(id: string) {
-    const record = await this.prisma.food_records.findFirst({
+    const record = await this.prisma.foodRecords.findFirst({
       where: { id },
-      include: { app_users: true },
+      include: { appUsers: true },
     });
     if (!record) throw new NotFoundException('饮食记录不存在');
     return record;
@@ -126,12 +126,12 @@ export class AppDataQueryService {
 
   async deleteFoodRecord(id: string) {
     await this.getFoodRecordDetail(id);
-    await this.prisma.food_records.delete({ where: { id } });
+    await this.prisma.foodRecords.delete({ where: { id } });
     return { message: '饮食记录已删除' };
   }
 
   async getFoodRecordStatistics() {
-    const total = await this.prisma.food_records.count();
+    const total = await this.prisma.foodRecords.count();
     const today = new Date().toISOString().split('T')[0];
 
     const todayCountResult = await this.prisma.$queryRaw<
@@ -161,7 +161,7 @@ export class AppDataQueryService {
     const where: any = {};
 
     if (userId) {
-      where.user_id = userId;
+      where.userId = userId;
     }
     if (startDate || endDate) {
       where.date = {};
@@ -174,10 +174,10 @@ export class AppDataQueryService {
     }
 
     const [total, list] = await Promise.all([
-      this.prisma.daily_plans.count({ where }),
-      this.prisma.daily_plans.findMany({
+      this.prisma.dailyPlans.count({ where }),
+      this.prisma.dailyPlans.findMany({
         where,
-        orderBy: [{ date: 'desc' }, { created_at: 'desc' }],
+        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
@@ -193,7 +193,7 @@ export class AppDataQueryService {
   }
 
   async getDailyPlanDetail(id: string) {
-    const plan = await this.prisma.daily_plans.findFirst({ where: { id } });
+    const plan = await this.prisma.dailyPlans.findFirst({ where: { id } });
     if (!plan) throw new NotFoundException('每日计划不存在');
     return plan;
   }
@@ -206,18 +206,18 @@ export class AppDataQueryService {
     const where: any = {};
 
     if (userId) {
-      where.user_id = userId;
+      where.userId = userId;
     }
     if (keyword) {
       where.title = { contains: keyword, mode: 'insensitive' };
     }
 
     const [total, list] = await Promise.all([
-      this.prisma.coach_conversations.count({ where }),
-      this.prisma.coach_conversations.findMany({
+      this.prisma.coachConversations.count({ where }),
+      this.prisma.coachConversations.findMany({
         where,
-        include: { app_users: true },
-        orderBy: { updated_at: 'desc' },
+        include: { appUsers: true },
+        orderBy: { updatedAt: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
@@ -233,12 +233,12 @@ export class AppDataQueryService {
   }
 
   async getConversationDetail(id: string) {
-    const conversation = await this.prisma.coach_conversations.findFirst({
+    const conversation = await this.prisma.coachConversations.findFirst({
       where: { id },
       include: {
-        app_users: true,
-        coach_messages: {
-          orderBy: { created_at: 'asc' },
+        appUsers: true,
+        coachMessages: {
+          orderBy: { createdAt: 'asc' },
         },
       },
     });
@@ -248,17 +248,17 @@ export class AppDataQueryService {
   }
 
   async deleteConversation(id: string) {
-    const conversation = await this.prisma.coach_conversations.findFirst({
+    const conversation = await this.prisma.coachConversations.findFirst({
       where: { id },
     });
     if (!conversation) throw new NotFoundException('对话不存在');
-    await this.prisma.coach_conversations.delete({ where: { id } });
+    await this.prisma.coachConversations.delete({ where: { id } });
     return { message: '对话已删除' };
   }
 
   async getConversationStatistics() {
-    const total = await this.prisma.coach_conversations.count();
-    const totalMessages = await this.prisma.coach_messages.count();
+    const total = await this.prisma.coachConversations.count();
+    const totalMessages = await this.prisma.coachMessages.count();
 
     const totalTokens = await this.prisma.$queryRaw<
       [{ total: bigint | null }]
@@ -279,20 +279,20 @@ export class AppDataQueryService {
     const where: any = {};
 
     if (userId) {
-      where.user_id = userId;
+      where.userId = userId;
     }
     if (action) {
       where.action = action;
     }
     if (mealType) {
-      where.meal_type = mealType;
+      where.mealType = mealType;
     }
 
     const [total, list] = await Promise.all([
-      this.prisma.recommendation_feedbacks.count({ where }),
-      this.prisma.recommendation_feedbacks.findMany({
+      this.prisma.recommendationFeedbacks.count({ where }),
+      this.prisma.recommendationFeedbacks.findMany({
         where,
-        orderBy: { created_at: 'desc' },
+        orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
@@ -308,7 +308,7 @@ export class AppDataQueryService {
   }
 
   async getFeedbackStatistics() {
-    const total = await this.prisma.recommendation_feedbacks.count();
+    const total = await this.prisma.recommendationFeedbacks.count();
 
     const byAction = await this.prisma.$queryRaw<
       Array<{ action: string; count: bigint }>
@@ -336,20 +336,20 @@ export class AppDataQueryService {
     const where: any = {};
 
     if (userId) {
-      where.user_id = userId;
+      where.userId = userId;
     }
     if (decision) {
       where.decision = decision;
     }
     if (riskLevel) {
-      where.risk_level = riskLevel;
+      where.riskLevel = riskLevel;
     }
 
     const [total, list] = await Promise.all([
-      this.prisma.ai_decision_logs.count({ where }),
-      this.prisma.ai_decision_logs.findMany({
+      this.prisma.aiDecisionLogs.count({ where }),
+      this.prisma.aiDecisionLogs.findMany({
         where,
-        orderBy: { created_at: 'desc' },
+        orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
@@ -365,7 +365,7 @@ export class AppDataQueryService {
   }
 
   async getAiLogStatistics() {
-    const total = await this.prisma.ai_decision_logs.count();
+    const total = await this.prisma.aiDecisionLogs.count();
 
     const byDecision = await this.prisma.$queryRaw<
       Array<{ decision: string; count: bigint }>

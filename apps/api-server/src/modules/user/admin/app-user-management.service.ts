@@ -30,7 +30,7 @@ export class AppUserManagementService {
     }
 
     if (authType) {
-      where.auth_type = authType;
+      where.authType = authType;
     }
 
     if (status) {
@@ -40,13 +40,13 @@ export class AppUserManagementService {
     const skip = (page - 1) * pageSize;
 
     const [list, total] = await Promise.all([
-      this.prisma.app_users.findMany({
+      this.prisma.appUsers.findMany({
         where,
-        orderBy: { created_at: 'desc' },
+        orderBy: { createdAt: 'desc' },
         skip,
         take: pageSize,
       }),
-      this.prisma.app_users.count({ where }),
+      this.prisma.appUsers.count({ where }),
     ]);
 
     return {
@@ -62,7 +62,7 @@ export class AppUserManagementService {
    * 获取 App 用户详情
    */
   async findOne(id: string) {
-    const user = await this.prisma.app_users.findUnique({ where: { id } });
+    const user = await this.prisma.appUsers.findUnique({ where: { id } });
 
     if (!user) {
       throw new NotFoundException(`App 用户 #${id} 不存在`);
@@ -75,7 +75,7 @@ export class AppUserManagementService {
    * 更新 App 用户信息（管理员操作）
    */
   async update(id: string, dto: UpdateAppUserByAdminDto) {
-    const user = await this.prisma.app_users.findUnique({ where: { id } });
+    const user = await this.prisma.appUsers.findUnique({ where: { id } });
 
     if (!user) {
       throw new NotFoundException(`App 用户 #${id} 不存在`);
@@ -87,7 +87,7 @@ export class AppUserManagementService {
     if (dto.avatar !== undefined) data.avatar = dto.avatar;
     if (dto.email !== undefined) data.email = dto.email;
 
-    const updated = await this.prisma.app_users.update({
+    const updated = await this.prisma.appUsers.update({
       where: { id },
       data,
     });
@@ -98,13 +98,13 @@ export class AppUserManagementService {
    * 封禁 App 用户
    */
   async ban(id: string) {
-    const user = await this.prisma.app_users.findUnique({ where: { id } });
+    const user = await this.prisma.appUsers.findUnique({ where: { id } });
 
     if (!user) {
       throw new NotFoundException(`App 用户 #${id} 不存在`);
     }
 
-    await this.prisma.app_users.update({
+    await this.prisma.appUsers.update({
       where: { id },
       data: { status: AppUserStatus.BANNED as any },
     });
@@ -116,7 +116,7 @@ export class AppUserManagementService {
    * 解封 App 用户
    */
   async unban(id: string) {
-    const user = await this.prisma.app_users.findUnique({ where: { id } });
+    const user = await this.prisma.appUsers.findUnique({ where: { id } });
 
     if (!user) {
       throw new NotFoundException(`App 用户 #${id} 不存在`);
@@ -126,7 +126,7 @@ export class AppUserManagementService {
       throw new BadRequestException('用户未被封禁');
     }
 
-    await this.prisma.app_users.update({
+    await this.prisma.appUsers.update({
       where: { id },
       data: { status: AppUserStatus.ACTIVE as any },
     });
@@ -138,13 +138,13 @@ export class AppUserManagementService {
    * 删除 App 用户
    */
   async remove(id: string) {
-    const user = await this.prisma.app_users.findUnique({ where: { id } });
+    const user = await this.prisma.appUsers.findUnique({ where: { id } });
 
     if (!user) {
       throw new NotFoundException(`App 用户 #${id} 不存在`);
     }
 
-    await this.prisma.app_users.delete({ where: { id } });
+    await this.prisma.appUsers.delete({ where: { id } });
 
     return { message: '用户已删除' };
   }
@@ -155,14 +155,14 @@ export class AppUserManagementService {
   async getStatistics() {
     const [total, anonymous, google, email, active, banned] = await Promise.all(
       [
-        this.prisma.app_users.count(),
-        this.prisma.app_users.count({
-          where: { auth_type: 'anonymous' as any },
+        this.prisma.appUsers.count(),
+        this.prisma.appUsers.count({
+          where: { authType: 'anonymous' as any },
         }),
-        this.prisma.app_users.count({ where: { auth_type: 'google' as any } }),
-        this.prisma.app_users.count({ where: { auth_type: 'email' as any } }),
-        this.prisma.app_users.count({ where: { status: 'active' as any } }),
-        this.prisma.app_users.count({ where: { status: 'banned' as any } }),
+        this.prisma.appUsers.count({ where: { authType: 'google' as any } }),
+        this.prisma.appUsers.count({ where: { authType: 'email' as any } }),
+        this.prisma.appUsers.count({ where: { status: 'active' as any } }),
+        this.prisma.appUsers.count({ where: { status: 'banned' as any } }),
       ],
     );
 
@@ -179,7 +179,7 @@ export class AppUserManagementService {
    */
   async getBehaviorProfile(userId: string) {
     // 验证用户存在
-    const user = await this.prisma.app_users.findUnique({
+    const user = await this.prisma.appUsers.findUnique({
       where: { id: userId },
     });
     if (!user) {
@@ -189,13 +189,13 @@ export class AppUserManagementService {
     // 并行查询行为画像、声明档案、近期变更日志
     const [behaviorProfile, declaredProfile, recentChangeLogs] =
       await Promise.all([
-        this.prisma.user_behavior_profiles.findUnique({
-          where: { user_id: userId },
+        this.prisma.userBehaviorProfiles.findUnique({
+          where: { userId: userId },
         }),
-        this.prisma.user_profiles.findUnique({ where: { user_id: userId } }),
-        this.prisma.profile_change_log.findMany({
-          where: { user_id: userId, change_type: 'behavior' as any },
-          orderBy: { created_at: 'desc' },
+        this.prisma.userProfiles.findUnique({ where: { userId: userId } }),
+        this.prisma.profileChangeLog.findMany({
+          where: { userId: userId, changeType: 'behavior' as any },
+          orderBy: { createdAt: 'desc' },
           take: 20,
         }),
       ]);
@@ -204,35 +204,35 @@ export class AppUserManagementService {
       user: {
         id: user.id,
         nickname: user.nickname,
-        authType: user.auth_type,
+        authType: user.authType,
         status: user.status,
-        createdAt: user.created_at,
+        createdAt: user.createdAt,
       },
       behaviorProfile: behaviorProfile || null,
       declaredProfile: declaredProfile
         ? {
             goal: declaredProfile.goal,
-            goalSpeed: declaredProfile.goal_speed,
+            goalSpeed: declaredProfile.goalSpeed,
             gender: declaredProfile.gender,
-            birthYear: declaredProfile.birth_year,
-            heightCm: declaredProfile.height_cm,
-            weightKg: declaredProfile.weight_kg,
-            targetWeightKg: declaredProfile.target_weight_kg,
-            activityLevel: declaredProfile.activity_level,
-            dailyCalorieGoal: declaredProfile.daily_calorie_goal,
+            birthYear: declaredProfile.birthYear,
+            heightCm: declaredProfile.heightCm,
+            weightKg: declaredProfile.weightKg,
+            targetWeightKg: declaredProfile.targetWeightKg,
+            activityLevel: declaredProfile.activityLevel,
+            dailyCalorieGoal: declaredProfile.dailyCalorieGoal,
             discipline: declaredProfile.discipline,
-            mealsPerDay: declaredProfile.meals_per_day,
-            takeoutFrequency: declaredProfile.takeout_frequency,
-            canCook: declaredProfile.can_cook,
-            foodPreferences: declaredProfile.food_preferences,
-            dietaryRestrictions: declaredProfile.dietary_restrictions,
+            mealsPerDay: declaredProfile.mealsPerDay,
+            takeoutFrequency: declaredProfile.takeoutFrequency,
+            canCook: declaredProfile.canCook,
+            foodPreferences: declaredProfile.foodPreferences,
+            dietaryRestrictions: declaredProfile.dietaryRestrictions,
             allergens: declaredProfile.allergens,
-            healthConditions: declaredProfile.health_conditions,
-            cuisinePreferences: declaredProfile.cuisine_preferences,
-            weakTimeSlots: declaredProfile.weak_time_slots,
-            bingeTriggers: declaredProfile.binge_triggers,
-            dataCompleteness: declaredProfile.data_completeness,
-            onboardingCompleted: declaredProfile.onboarding_completed,
+            healthConditions: declaredProfile.healthConditions,
+            cuisinePreferences: declaredProfile.cuisinePreferences,
+            weakTimeSlots: declaredProfile.weakTimeSlots,
+            bingeTriggers: declaredProfile.bingeTriggers,
+            dataCompleteness: declaredProfile.dataCompleteness,
+            onboardingCompleted: declaredProfile.onboardingCompleted,
           }
         : null,
       recentChangeLogs,
@@ -245,7 +245,7 @@ export class AppUserManagementService {
    */
   async getInferredProfile(userId: string) {
     // 验证用户存在
-    const user = await this.prisma.app_users.findUnique({
+    const user = await this.prisma.appUsers.findUnique({
       where: { id: userId },
     });
     if (!user) {
@@ -254,12 +254,12 @@ export class AppUserManagementService {
 
     // 并行查询推断画像、近期变更日志
     const [inferredProfile, recentChangeLogs] = await Promise.all([
-      this.prisma.user_inferred_profiles.findUnique({
-        where: { user_id: userId },
+      this.prisma.userInferredProfiles.findUnique({
+        where: { userId: userId },
       }),
-      this.prisma.profile_change_log.findMany({
-        where: { user_id: userId, change_type: 'inferred' as any },
-        orderBy: { created_at: 'desc' },
+      this.prisma.profileChangeLog.findMany({
+        where: { userId: userId, changeType: 'inferred' as any },
+        orderBy: { createdAt: 'desc' },
         take: 20,
       }),
     ]);
@@ -268,9 +268,9 @@ export class AppUserManagementService {
       user: {
         id: user.id,
         nickname: user.nickname,
-        authType: user.auth_type,
+        authType: user.authType,
         status: user.status,
-        createdAt: user.created_at,
+        createdAt: user.createdAt,
       },
       inferredProfile: inferredProfile || null,
       recentChangeLogs,

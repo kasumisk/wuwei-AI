@@ -22,7 +22,7 @@ export class AppVersionPackageService {
   /** 获取某版本的所有渠道包 */
   async findByVersion(versionId: string) {
     await this.assertVersionExists(versionId);
-    return this.prisma.app_version_packages.findMany({
+    return this.prisma.appVersionPackages.findMany({
       where: { versionId },
       orderBy: { channel: 'asc' },
     });
@@ -32,7 +32,7 @@ export class AppVersionPackageService {
   async create(versionId: string, dto: CreateAppVersionPackageDto) {
     await this.assertVersionExists(versionId);
 
-    const existing = await this.prisma.app_version_packages.findFirst({
+    const existing = await this.prisma.appVersionPackages.findFirst({
       where: { versionId, channel: dto.channel, platform: dto.platform },
     });
     if (existing) {
@@ -51,7 +51,7 @@ export class AppVersionPackageService {
       throw new BadRequestException('下载链接不能为空');
     }
 
-    return this.prisma.app_version_packages.create({
+    return this.prisma.appVersionPackages.create({
       data: {
         versionId,
         platform: dto.platform,
@@ -72,7 +72,7 @@ export class AppVersionPackageService {
   ) {
     const pkg = await this.findOne(versionId, packageId);
 
-    return this.prisma.app_version_packages.update({
+    return this.prisma.appVersionPackages.update({
       where: { id: pkg.id },
       data: dto,
     });
@@ -84,7 +84,7 @@ export class AppVersionPackageService {
     packageId: string,
   ): Promise<{ message: string }> {
     const pkg = await this.findOne(versionId, packageId);
-    await this.prisma.app_version_packages.delete({ where: { id: pkg.id } });
+    await this.prisma.appVersionPackages.delete({ where: { id: pkg.id } });
     return { message: '渠道包删除成功' };
   }
 
@@ -92,14 +92,14 @@ export class AppVersionPackageService {
   async toggleEnabled(versionId: string, packageId: string) {
     const pkg = await this.findOne(versionId, packageId);
 
-    return this.prisma.app_version_packages.update({
+    return this.prisma.appVersionPackages.update({
       where: { id: pkg.id },
       data: { enabled: !pkg.enabled },
     });
   }
 
   private async findOne(versionId: string, packageId: string) {
-    const pkg = await this.prisma.app_version_packages.findFirst({
+    const pkg = await this.prisma.appVersionPackages.findFirst({
       where: { id: packageId, versionId },
     });
     if (!pkg) {
@@ -109,7 +109,7 @@ export class AppVersionPackageService {
   }
 
   private async assertVersionExists(versionId: string): Promise<void> {
-    const count = await this.prisma.app_versions.count({
+    const count = await this.prisma.appVersions.count({
       where: { id: versionId },
     });
     if (!count) {

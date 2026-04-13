@@ -68,10 +68,10 @@ export async function seedSubscriptionPlans(
   console.log('📦 初始化默认订阅计划...\n');
 
   for (const planSeed of DEFAULT_SUBSCRIPTION_PLAN_SEEDS) {
-    const existing = await prisma.subscription_plan.findFirst({
+    const existing = await prisma.subscriptionPlan.findFirst({
       where: {
         tier: planSeed.tier,
-        billing_cycle: planSeed.billingCycle,
+        billingCycle: planSeed.billingCycle,
       },
     });
 
@@ -79,18 +79,18 @@ export async function seedSubscriptionPlans(
       name: planSeed.name,
       description: planSeed.description,
       tier: planSeed.tier,
-      billing_cycle: planSeed.billingCycle,
-      price_cents: planSeed.priceCents,
+      billingCycle: planSeed.billingCycle,
+      priceCents: planSeed.priceCents,
       currency: planSeed.currency,
-      apple_product_id: planSeed.appleProductId,
-      wechat_product_id: planSeed.wechatProductId,
-      sort_order: planSeed.sortOrder,
-      is_active: planSeed.isActive,
+      appleProductId: planSeed.appleProductId,
+      wechatProductId: planSeed.wechatProductId,
+      sortOrder: planSeed.sortOrder,
+      isActive: planSeed.isActive,
       entitlements: { ...TIER_ENTITLEMENTS[planSeed.tier] },
     };
 
     if (existing) {
-      await prisma.subscription_plan.update({
+      await prisma.subscriptionPlan.update({
         where: { id: existing.id },
         data: payload,
       });
@@ -100,7 +100,7 @@ export async function seedSubscriptionPlans(
       continue;
     }
 
-    await prisma.subscription_plan.create({
+    await prisma.subscriptionPlan.create({
       data: payload,
     });
     console.log(

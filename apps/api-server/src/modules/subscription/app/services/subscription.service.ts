@@ -9,7 +9,7 @@
  *
  * V6.1 变更:
  * - 使用 PlanEntitlementResolver 解析权益，DB 中的 entitlements 与默认值合并
- * - 支持运行时通过修改 subscription_plan.entitlements 调整权益
+ * - 支持运行时通过修改 subscriptionPlan.entitlements 调整权益
  *
  * 设计原则:
  * - 订阅状态变更通过 EventEmitter2 发布 subscription.changed 事件
@@ -24,10 +24,10 @@ import {
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
-  subscription_plan as SubscriptionPlan,
-  subscription as Subscription,
-  payment_records as PaymentRecord,
-  usage_quota as UsageQuota,
+  SubscriptionPlan,
+  Subscription,
+  PaymentRecords as PaymentRecord,
+  UsageQuota,
 } from '@prisma/client';
 import {
   SubscriptionTier,
@@ -97,11 +97,11 @@ export class SubscriptionService implements OnModuleInit {
 
   /** 创建订阅计划 */
   async createPlan(data: Partial<SubscriptionPlan>): Promise<SubscriptionPlan> {
-    const saved = await this.prisma.subscription_plan.create({
+    const saved = await this.prisma.subscriptionPlan.create({
       data: data as any,
     });
     this.logger.log(
-      `订阅计划已创建: ${saved.name} (${saved.tier}/${saved.billing_cycle})`,
+      `订阅计划已创建: ${saved.name} (${saved.tier}/${saved.billingCycle})`,
     );
     return saved as unknown as SubscriptionPlan;
   }
@@ -111,11 +111,11 @@ export class SubscriptionService implements OnModuleInit {
     planId: string,
     data: Partial<SubscriptionPlan>,
   ): Promise<SubscriptionPlan> {
-    const plan = await this.prisma.subscription_plan.findUnique({
+    const plan = await this.prisma.subscriptionPlan.findUnique({
       where: { id: planId },
     });
     if (!plan) throw new NotFoundException('订阅计划不存在');
-    const updated = await this.prisma.subscription_plan.update({
+    const updated = await this.prisma.subscriptionPlan.update({
       where: { id: planId },
       data: data as any,
     });
@@ -124,24 +124,24 @@ export class SubscriptionService implements OnModuleInit {
 
   /** 获取所有上架计划（前端展示用） */
   async getActivePlans(): Promise<SubscriptionPlan[]> {
-    const plans = await this.prisma.subscription_plan.findMany({
-      where: { is_active: true },
-      orderBy: [{ sort_order: 'asc' }, { price_cents: 'asc' }],
+    const plans = await this.prisma.subscriptionPlan.findMany({
+      where: { isActive: true },
+      orderBy: [{ sortOrder: 'asc' }, { priceCents: 'asc' }],
     });
     return plans as unknown as SubscriptionPlan[];
   }
 
   /** 获取所有计划（管理后台） */
   async getAllPlans(): Promise<SubscriptionPlan[]> {
-    const plans = await this.prisma.subscription_plan.findMany({
-      orderBy: [{ tier: 'asc' }, { sort_order: 'asc' }],
+    const plans = await this.prisma.subscriptionPlan.findMany({
+      orderBy: [{ tier: 'asc' }, { sortOrder: 'asc' }],
     });
     return plans as unknown as SubscriptionPlan[];
   }
 
   /** 根据 ID 获取计划 */
   async getPlanById(planId: string): Promise<SubscriptionPlan | null> {
-    const plan = await this.prisma.subscription_plan.findUnique({
+    const plan = await this.prisma.subscriptionPlan.findUnique({
       where: { id: planId },
     });
     return plan as unknown as SubscriptionPlan | null;
@@ -166,7 +166,7 @@ export class SubscriptionService implements OnModuleInit {
     startsAt?: Date;
     expiresAt: Date;
   }): Promise<Subscription> {
-    const plan = await this.prisma.subscription_plan.findUnique({
+    const plan = await this.prisma.subscriptionPlan.findUnique({
       where: { id: params.planId },
     });
     if (!plan) throw new NotFoundException('订阅计划不存在');
@@ -174,7 +174,7 @@ export class SubscriptionService implements OnModuleInit {
     // 1. 失效旧订阅
     await this.prisma.subscription.updateMany({
       where: {
-        user_id: params.userId,
+        userId: params.userId,
         status: {
           in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.GRACE_PERIOD],
         },
@@ -185,14 +185,14 @@ export class SubscriptionService implements OnModuleInit {
     // 2. 创建新订阅
     const saved = await this.prisma.subscription.create({
       data: {
-        user_id: params.userId,
-        plan_id: params.planId,
-        payment_channel: params.paymentChannel,
-        platform_subscription_id: params.platformSubscriptionId ?? null,
-        starts_at: params.startsAt ?? new Date(),
-        expires_at: params.expiresAt,
+        userId: params.userId,
+        planId: params.planId,
+        paymentChannel: params.paymentChannel,
+        platformSubscriptionId: params.platformSubscriptionId ?? null,
+        startsAt: params.startsAt ?? new Date(),
+        expiresAt: params.expiresAt,
         status: SubscriptionStatus.ACTIVE,
-        auto_renew: true,
+        autoRenew: true,
       },
     });
 
@@ -228,8 +228,8 @@ export class SubscriptionService implements OnModuleInit {
       where: { id: sub.id },
       data: {
         status: SubscriptionStatus.CANCELLED,
-        cancelled_at: new Date(),
-        auto_renew: false,
+        cancelledAt: new Date(),
+        autoRenew: false,
       },
     });
 
@@ -238,14 +238,14 @@ export class SubscriptionService implements OnModuleInit {
       DomainEvents.SUBSCRIPTION_CHANGED,
       new SubscriptionChangedEvent(
         userId,
-        sub.subscription_plan.tier as string,
-        sub.subscription_plan.tier as string,
+        sub.subscriptionPlan.tier as string,
+        sub.subscriptionPlan.tier as string,
         'cancel',
       ),
     );
 
     this.logger.log(
-      `用户 ${userId} 已取消订阅，将于 ${sub.expires_at.toISOString()} 失效`,
+      `用户 ${userId} 已取消订阅，将于 ${sub.expiresAt.toISOString()} 失效`,
     );
     return saved as unknown as Subscription;
   }
@@ -259,7 +259,7 @@ export class SubscriptionService implements OnModuleInit {
   ): Promise<Subscription | null> {
     const sub = await this.prisma.subscription.findFirst({
       where: {
-        user_id: userId,
+        userId: userId,
         status: {
           in: [
             SubscriptionStatus.ACTIVE,
@@ -268,8 +268,8 @@ export class SubscriptionService implements OnModuleInit {
           ],
         },
       },
-      include: { subscription_plan: true },
-      orderBy: { expires_at: 'desc' },
+      include: { subscriptionPlan: true },
+      orderBy: { expiresAt: 'desc' },
     });
     if (!sub) return null;
 
@@ -277,9 +277,9 @@ export class SubscriptionService implements OnModuleInit {
       where: { id: sub.id },
       data: {
         status: SubscriptionStatus.ACTIVE,
-        expires_at: newExpiresAt,
-        cancelled_at: null,
-        auto_renew: true,
+        expiresAt: newExpiresAt,
+        cancelledAt: null,
+        autoRenew: true,
       },
     });
 
@@ -288,8 +288,8 @@ export class SubscriptionService implements OnModuleInit {
       DomainEvents.SUBSCRIPTION_CHANGED,
       new SubscriptionChangedEvent(
         userId,
-        sub.subscription_plan.tier as string,
-        sub.subscription_plan.tier as string,
+        sub.subscriptionPlan.tier as string,
+        sub.subscriptionPlan.tier as string,
         'upgrade',
       ),
     );
@@ -309,17 +309,17 @@ export class SubscriptionService implements OnModuleInit {
     const sub = await this.prisma.subscription.findFirst({
       where: {
         OR: [
-          { user_id: userId, status: SubscriptionStatus.ACTIVE },
-          { user_id: userId, status: SubscriptionStatus.GRACE_PERIOD },
+          { userId: userId, status: SubscriptionStatus.ACTIVE },
+          { userId: userId, status: SubscriptionStatus.GRACE_PERIOD },
           {
-            user_id: userId,
+            userId: userId,
             status: SubscriptionStatus.CANCELLED,
             // S3 fix: gte = 未过期（expires_at >= now），而非 lte（已过期）
-            expires_at: { gte: new Date() },
+            expiresAt: { gte: new Date() },
           },
         ],
       },
-      orderBy: { expires_at: 'desc' },
+      orderBy: { expiresAt: 'desc' },
     });
     return sub as unknown as Subscription | null;
   }
@@ -361,13 +361,13 @@ export class SubscriptionService implements OnModuleInit {
     amountCents: number;
     currency?: string;
   }): Promise<PaymentRecord> {
-    const record = await this.prisma.payment_records.create({
+    const record = await this.prisma.paymentRecords.create({
       data: {
-        user_id: data.userId,
-        subscription_id: data.subscriptionId,
-        order_no: data.orderNo,
+        userId: data.userId,
+        subscriptionId: data.subscriptionId,
+        orderNo: data.orderNo,
         channel: data.channel,
-        amount_cents: data.amountCents,
+        amountCents: data.amountCents,
         currency: data.currency,
         status: PaymentStatus.PENDING,
       },
@@ -382,26 +382,26 @@ export class SubscriptionService implements OnModuleInit {
     platformTransactionId?: string,
     callbackPayload?: Record<string, unknown>,
   ): Promise<PaymentRecord | null> {
-    const record = await this.prisma.payment_records.findFirst({
-      where: { order_no: orderNo },
+    const record = await this.prisma.paymentRecords.findFirst({
+      where: { orderNo: orderNo },
     });
     if (!record) return null;
 
     const updateData: Record<string, unknown> = { status };
     if (platformTransactionId) {
-      updateData.platform_transaction_id = platformTransactionId;
+      updateData.platformTransactionId = platformTransactionId;
     }
     if (callbackPayload) {
-      updateData.callback_payload = callbackPayload;
+      updateData.callbackPayload = callbackPayload;
     }
     if (status === PaymentStatus.SUCCESS) {
-      updateData.paid_at = new Date();
+      updateData.paidAt = new Date();
     }
     if (status === PaymentStatus.REFUNDED) {
-      updateData.refunded_at = new Date();
+      updateData.refundedAt = new Date();
     }
 
-    const updated = await this.prisma.payment_records.update({
+    const updated = await this.prisma.paymentRecords.update({
       where: { id: record.id },
       data: updateData,
     });
@@ -410,9 +410,9 @@ export class SubscriptionService implements OnModuleInit {
 
   /** 获取用户支付历史 */
   async getUserPayments(userId: string, limit = 20): Promise<PaymentRecord[]> {
-    const records = await this.prisma.payment_records.findMany({
-      where: { user_id: userId },
-      orderBy: { created_at: 'desc' },
+    const records = await this.prisma.paymentRecords.findMany({
+      where: { userId: userId },
+      orderBy: { createdAt: 'desc' },
       take: limit,
     });
     return records as unknown as PaymentRecord[];
@@ -437,24 +437,24 @@ export class SubscriptionService implements OnModuleInit {
     const expired = await this.prisma.subscription.findMany({
       where: {
         status: SubscriptionStatus.ACTIVE,
-        expires_at: { lt: now },
+        expiresAt: { lt: now },
       },
-      include: { subscription_plan: true },
+      include: { subscriptionPlan: true },
     });
 
     let count = 0;
 
     if (expired.length > 0) {
       // V6.3 P1-6: 按 auto_renew 分组，批量 UPDATE 替代逐条更新
-      const autoRenewIds = expired.filter((s) => s.auto_renew).map((s) => s.id);
-      const manualIds = expired.filter((s) => !s.auto_renew).map((s) => s.id);
+      const autoRenewIds = expired.filter((s) => s.autoRenew).map((s) => s.id);
+      const manualIds = expired.filter((s) => !s.autoRenew).map((s) => s.id);
 
       if (autoRenewIds.length > 0) {
         await this.prisma.subscription.updateMany({
           where: { id: { in: autoRenewIds } },
           data: {
             status: SubscriptionStatus.GRACE_PERIOD,
-            grace_period_ends_at: gracePeriodEndsAt,
+            gracePeriodEndsAt: gracePeriodEndsAt,
           },
         });
       }
@@ -468,16 +468,16 @@ export class SubscriptionService implements OnModuleInit {
 
       // 事件和缓存失效仍需逐条（每条包含不同 userId/tier）
       for (const sub of expired) {
-        await this.invalidateUserCache(sub.user_id);
+        await this.invalidateUserCache(sub.userId);
         this.eventEmitter.emit(
           DomainEvents.SUBSCRIPTION_CHANGED,
           new SubscriptionChangedEvent(
-            sub.user_id,
-            sub.subscription_plan.tier as string,
-            sub.auto_renew
-              ? (sub.subscription_plan.tier as string)
+            sub.userId,
+            sub.subscriptionPlan.tier as string,
+            sub.autoRenew
+              ? (sub.subscriptionPlan.tier as string)
               : SubscriptionTier.FREE,
-            sub.auto_renew ? 'downgrade' : 'expire',
+            sub.autoRenew ? 'downgrade' : 'expire',
           ),
         );
         count++;
@@ -488,9 +488,9 @@ export class SubscriptionService implements OnModuleInit {
     const graceExpired = await this.prisma.subscription.findMany({
       where: {
         status: SubscriptionStatus.GRACE_PERIOD,
-        grace_period_ends_at: { lt: now },
+        gracePeriodEndsAt: { lt: now },
       },
-      include: { subscription_plan: true },
+      include: { subscriptionPlan: true },
     });
 
     if (graceExpired.length > 0) {
@@ -503,24 +503,24 @@ export class SubscriptionService implements OnModuleInit {
       });
 
       for (const sub of graceExpired) {
-        await this.invalidateUserCache(sub.user_id);
+        await this.invalidateUserCache(sub.userId);
 
         // 重置为免费配额
-        const freePlan = await this.prisma.subscription_plan.findFirst({
+        const freePlan = await this.prisma.subscriptionPlan.findFirst({
           where: {
             tier: SubscriptionTier.FREE,
-            is_active: true,
+            isActive: true,
           },
         });
         if (freePlan) {
-          await this.initQuotas(sub.user_id, freePlan);
+          await this.initQuotas(sub.userId, freePlan);
         }
 
         this.eventEmitter.emit(
           DomainEvents.SUBSCRIPTION_CHANGED,
           new SubscriptionChangedEvent(
-            sub.user_id,
-            sub.subscription_plan.tier as string,
+            sub.userId,
+            sub.subscriptionPlan.tier as string,
             SubscriptionTier.FREE,
             'expire',
           ),
@@ -544,18 +544,18 @@ export class SubscriptionService implements OnModuleInit {
     return this.prisma.subscription.findFirst({
       where: {
         OR: [
-          { user_id: userId, status: SubscriptionStatus.ACTIVE },
-          { user_id: userId, status: SubscriptionStatus.GRACE_PERIOD },
+          { userId: userId, status: SubscriptionStatus.ACTIVE },
+          { userId: userId, status: SubscriptionStatus.GRACE_PERIOD },
           {
-            user_id: userId,
+            userId: userId,
             status: SubscriptionStatus.CANCELLED,
             // S3 fix: gte = 未过期（expires_at >= now），而非 lte（已过期）
-            expires_at: { gte: new Date() },
+            expiresAt: { gte: new Date() },
           },
         ],
       },
-      include: { subscription_plan: true },
-      orderBy: { expires_at: 'desc' },
+      include: { subscriptionPlan: true },
+      orderBy: { expiresAt: 'desc' },
     });
   }
 
@@ -573,12 +573,12 @@ export class SubscriptionService implements OnModuleInit {
     const sub = await this.prisma.subscription.findFirst({
       where: {
         OR: [
-          { user_id: userId, status: SubscriptionStatus.ACTIVE },
-          { user_id: userId, status: SubscriptionStatus.GRACE_PERIOD },
+          { userId: userId, status: SubscriptionStatus.ACTIVE },
+          { userId: userId, status: SubscriptionStatus.GRACE_PERIOD },
         ],
       },
-      include: { subscription_plan: true },
-      orderBy: { expires_at: 'desc' },
+      include: { subscriptionPlan: true },
+      orderBy: { expiresAt: 'desc' },
     });
 
     // 额外检查: CANCELLED 但尚未过期的订阅仍然有效
@@ -586,19 +586,19 @@ export class SubscriptionService implements OnModuleInit {
       ? null
       : await this.prisma.subscription.findFirst({
           where: {
-            user_id: userId,
+            userId: userId,
             status: SubscriptionStatus.CANCELLED,
           },
-          include: { subscription_plan: true },
-          orderBy: { expires_at: 'desc' },
+          include: { subscriptionPlan: true },
+          orderBy: { expiresAt: 'desc' },
         });
 
     const activeSub =
-      cancelledButValid && cancelledButValid.expires_at > now
+      cancelledButValid && cancelledButValid.expiresAt > now
         ? cancelledButValid
         : sub;
 
-    if (!activeSub || !activeSub.subscription_plan) {
+    if (!activeSub || !activeSub.subscriptionPlan) {
       // 免费用户: 使用 resolver 解析默认权益
       return {
         tier: SubscriptionTier.FREE,
@@ -612,14 +612,14 @@ export class SubscriptionService implements OnModuleInit {
 
     // 付费用户: 使用 resolver 合并 DB 中的权益与默认值
     return {
-      tier: activeSub.subscription_plan.tier as SubscriptionTier,
+      tier: activeSub.subscriptionPlan.tier as SubscriptionTier,
       subscriptionId: activeSub.id,
-      planName: activeSub.subscription_plan.name,
-      expiresAt: activeSub.expires_at,
-      autoRenew: activeSub.auto_renew,
+      planName: activeSub.subscriptionPlan.name,
+      expiresAt: activeSub.expiresAt,
+      autoRenew: activeSub.autoRenew,
       entitlements: this.entitlementResolver.resolve(
-        activeSub.subscription_plan.tier as SubscriptionTier,
-        activeSub.subscription_plan.entitlements as any,
+        activeSub.subscriptionPlan.tier as SubscriptionTier,
+        activeSub.subscriptionPlan.entitlements as any,
       ),
     };
   }
@@ -648,31 +648,31 @@ export class SubscriptionService implements OnModuleInit {
       this.entitlementResolver.listCountableFeatures(entitlements);
 
     for (const { feature, limit } of countableFeatures) {
-      const existing = await this.prisma.usage_quota.findUnique({
+      const existing = await this.prisma.usageQuota.findUnique({
         where: {
-          user_id_feature: { user_id: userId, feature },
+          userId_feature: { userId: userId, feature },
         },
       });
       const resetAt = this.calcNextReset(now, QuotaCycle.DAILY);
 
       if (existing) {
-        await this.prisma.usage_quota.update({
+        await this.prisma.usageQuota.update({
           where: { id: existing.id },
           data: {
-            quota_limit: limit,
+            quotaLimit: limit,
             cycle: QuotaCycle.DAILY,
             // 升级时不重置 used，等自然重置
           },
         });
       } else {
-        await this.prisma.usage_quota.create({
+        await this.prisma.usageQuota.create({
           data: {
-            user_id: userId,
+            userId: userId,
             feature,
             used: 0,
-            quota_limit: limit,
+            quotaLimit: limit,
             cycle: QuotaCycle.DAILY,
-            reset_at: resetAt,
+            resetAt: resetAt,
           },
         });
       }

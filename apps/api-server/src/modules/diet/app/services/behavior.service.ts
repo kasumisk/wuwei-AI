@@ -33,12 +33,12 @@ export class BehaviorService {
    * 获取或创建用户行为画像
    */
   async getProfile(userId: string): Promise<any> {
-    let profile = await this.prisma.user_behavior_profiles.findUnique({
-      where: { user_id: userId },
+    let profile = await this.prisma.userBehaviorProfiles.findUnique({
+      where: { userId: userId },
     });
     if (!profile) {
-      profile = await this.prisma.user_behavior_profiles.create({
-        data: { user_id: userId },
+      profile = await this.prisma.userBehaviorProfiles.create({
+        data: { userId: userId },
       });
     }
     return profile;
@@ -49,9 +49,9 @@ export class BehaviorService {
    */
   async updateCoachStyle(userId: string, style: string): Promise<any> {
     await this.getProfile(userId);
-    return this.prisma.user_behavior_profiles.update({
-      where: { user_id: userId },
-      data: { coach_style: style },
+    return this.prisma.userBehaviorProfiles.update({
+      where: { userId: userId },
+      data: { coachStyle: style },
     });
   }
 
@@ -67,15 +67,15 @@ export class BehaviorService {
     riskLevel?: string;
     fullResponse?: Record<string, any>;
   }): Promise<any> {
-    return this.prisma.ai_decision_logs.create({
+    return this.prisma.aiDecisionLogs.create({
       data: {
-        user_id: data.userId,
-        record_id: data.recordId || null,
-        input_context: data.inputContext || Prisma.JsonNull,
-        input_image_url: data.inputImageUrl || null,
+        userId: data.userId,
+        recordId: data.recordId || null,
+        inputContext: data.inputContext || Prisma.JsonNull,
+        inputImageUrl: data.inputImageUrl || null,
         decision: data.decision || null,
-        risk_level: data.riskLevel || null,
-        full_response: data.fullResponse || Prisma.JsonNull,
+        riskLevel: data.riskLevel || null,
+        fullResponse: data.fullResponse || Prisma.JsonNull,
       },
     }) as any;
   }
@@ -88,13 +88,13 @@ export class BehaviorService {
     followed: boolean,
     feedback: string,
   ): Promise<void> {
-    const log = await this.prisma.ai_decision_logs.findFirst({
-      where: { record_id: recordId },
+    const log = await this.prisma.aiDecisionLogs.findFirst({
+      where: { recordId: recordId },
     });
     if (log) {
-      await this.prisma.ai_decision_logs.update({
+      await this.prisma.aiDecisionLogs.update({
         where: { id: log.id },
-        data: { user_followed: followed, user_feedback: feedback },
+        data: { userFollowed: followed, userFeedback: feedback },
       });
     }
   }
@@ -113,17 +113,17 @@ export class BehaviorService {
     const today = getUserLocalDate(tz);
 
     // 递增总记录数（仍按记录计数，用于其他用途如 collection-trigger）
-    let totalRecords = (profile.total_records || 0) + 1;
-    let streakDays = profile.streak_days || 0;
-    let longestStreak = profile.longest_streak || 0;
-    let avgComplianceRate = profile.avg_compliance_rate || 0;
-    let healthyRecords = profile.healthy_records || 0;
+    let totalRecords = (profile.totalRecords || 0) + 1;
+    let streakDays = profile.streakDays || 0;
+    let longestStreak = profile.longestStreak || 0;
+    let avgComplianceRate = profile.avgComplianceRate || 0;
+    let healthyRecords = profile.healthyRecords || 0;
 
     // 防止同一天重复评估 streak（修复 B1）
-    if (profile.last_streak_date === today) {
-      await this.prisma.user_behavior_profiles.update({
-        where: { user_id: userId },
-        data: { total_records: totalRecords },
+    if (profile.lastStreakDate === today) {
+      await this.prisma.userBehaviorProfiles.update({
+        where: { userId: userId },
+        data: { totalRecords: totalRecords },
       });
       return;
     }
@@ -133,13 +133,13 @@ export class BehaviorService {
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayStr = getUserLocalDate(tz, yesterday);
 
-    const yesterdaySummary = await this.prisma.daily_summaries.findFirst({
-      where: { user_id: userId, date: yesterdayStr },
+    const yesterdaySummary = await this.prisma.dailySummaries.findFirst({
+      where: { userId: userId, date: yesterdayStr },
     });
 
     if (yesterdaySummary) {
-      const goal = yesterdaySummary.calorie_goal || 2000;
-      const actual = yesterdaySummary.total_calories || 0;
+      const goal = yesterdaySummary.calorieGoal || 2000;
+      const actual = yesterdaySummary.totalCalories || 0;
       // 达标条件：有进食记录 && 热量在目标的 80%~110% 之间
       const isCompliant =
         actual > 0 && actual >= goal * 0.8 && actual <= goal * 1.1;
@@ -182,15 +182,15 @@ export class BehaviorService {
       totalDays > 0 ? Number((healthyDays / totalDays).toFixed(2)) : 0;
     healthyRecords = healthyDays; // 现在表示健康天数
 
-    await this.prisma.user_behavior_profiles.update({
-      where: { user_id: userId },
+    await this.prisma.userBehaviorProfiles.update({
+      where: { userId: userId },
       data: {
-        total_records: totalRecords,
-        streak_days: streakDays,
-        longest_streak: longestStreak,
-        avg_compliance_rate: avgComplianceRate,
-        healthy_records: healthyRecords,
-        last_streak_date: today,
+        totalRecords: totalRecords,
+        streakDays: streakDays,
+        longestStreak: longestStreak,
+        avgComplianceRate: avgComplianceRate,
+        healthyRecords: healthyRecords,
+        lastStreakDate: today,
       },
     });
   }
@@ -199,29 +199,29 @@ export class BehaviorService {
    * 获取行为上下文（注入 AI prompt）
    */
   async getBehaviorContext(userId: string): Promise<string> {
-    const profile = await this.prisma.user_behavior_profiles.findUnique({
-      where: { user_id: userId },
+    const profile = await this.prisma.userBehaviorProfiles.findUnique({
+      where: { userId: userId },
     });
     if (!profile) return '';
 
     const parts: string[] = [t('behavior.prompt.sectionHeader')];
-    const foodPreferences = profile.food_preferences as any;
+    const foodPreferences = profile.foodPreferences as any;
     if (foodPreferences?.loves?.length) {
       parts.push(
         `${t('behavior.prompt.preferredFoods')}${foodPreferences.loves.join(t('behavior.prompt.separator'))}`,
       );
     }
-    const bingeRiskHours = profile.binge_risk_hours as any;
+    const bingeRiskHours = profile.bingeRiskHours as any;
     if (bingeRiskHours?.length) {
       parts.push(
         `${t('behavior.prompt.bingePeriods')}${bingeRiskHours.map((h: number) => h + ':00').join(t('behavior.prompt.separator'))}`,
       );
     }
     parts.push(
-      `${t('behavior.prompt.suggestionRate')}${Math.round((Number(profile.avg_compliance_rate) || 0) * 100)}%`,
+      `${t('behavior.prompt.suggestionRate')}${Math.round((Number(profile.avgComplianceRate) || 0) * 100)}%`,
     );
     parts.push(
-      `${t('behavior.prompt.streakDays')}${profile.streak_days}${t('behavior.prompt.streakUnit')}`,
+      `${t('behavior.prompt.streakDays')}${profile.streakDays}${t('behavior.prompt.streakUnit')}`,
     );
 
     return parts.join('\n');
@@ -233,13 +233,13 @@ export class BehaviorService {
   async proactiveCheck(userId: string): Promise<ProactiveReminder | null> {
     const tz = await this.userProfileService.getTimezone(userId);
     const hour = getUserLocalHour(tz);
-    const profile = await this.prisma.user_behavior_profiles.findUnique({
-      where: { user_id: userId },
+    const profile = await this.prisma.userBehaviorProfiles.findUnique({
+      where: { userId: userId },
     });
     const summary = await this.foodService.getTodaySummary(userId);
 
     // 场景1：高风险暴食时段
-    const bingeRiskHours = profile?.binge_risk_hours as any;
+    const bingeRiskHours = profile?.bingeRiskHours as any;
     if (bingeRiskHours?.includes(hour)) {
       const reminder: ProactiveReminder = {
         type: 'binge_risk',
@@ -282,13 +282,13 @@ export class BehaviorService {
     }
 
     // 场景4：连胜即将断签
-    if (profile && (profile.streak_days || 0) >= 3 && hour >= 20) {
+    if (profile && (profile.streakDays || 0) >= 3 && hour >= 20) {
       const caloriePercent = summary.totalCalories / goal;
       if (caloriePercent > 0.9 && caloriePercent <= 1.0) {
         return {
           type: 'streak_warning',
           message: t('behavior.notification.streakWarning', {
-            streakDays: String(profile.streak_days),
+            streakDays: String(profile.streakDays),
           }),
           urgency: 'high',
         };
@@ -302,9 +302,9 @@ export class BehaviorService {
    * 分析用户行为模式（可由定时任务触发）
    */
   async analyzeUserBehavior(userId: string): Promise<void> {
-    const logs = await this.prisma.ai_decision_logs.findMany({
-      where: { user_id: userId },
-      orderBy: { created_at: 'desc' },
+    const logs = await this.prisma.aiDecisionLogs.findMany({
+      where: { userId: userId },
+      orderBy: { createdAt: 'desc' },
       take: 100,
     });
 
@@ -316,7 +316,7 @@ export class BehaviorService {
     // 识别常用食物
     const foodCounts: Record<string, number> = {};
     for (const log of logs) {
-      const foods = (log.full_response as any)?.foods;
+      const foods = (log.fullResponse as any)?.foods;
       if (Array.isArray(foods)) {
         for (const f of foods) {
           foodCounts[f.name] = (foodCounts[f.name] || 0) + 1;
@@ -332,7 +332,7 @@ export class BehaviorService {
     const hourCounts: Record<number, number> = {};
     for (const log of logs) {
       if (log.decision === 'AVOID' || log.decision === 'LIMIT') {
-        const h = getUserLocalHour(tz, new Date(log.created_at as any));
+        const h = getUserLocalHour(tz, new Date(log.createdAt as any));
         hourCounts[h] = (hourCounts[h] || 0) + 1;
       }
     }
@@ -341,7 +341,7 @@ export class BehaviorService {
       .sort((a, b) => b[1] - a[1])
       .map(([h]) => parseInt(h, 10));
 
-    const existingPrefs = (profile.food_preferences as any) || {};
+    const existingPrefs = (profile.foodPreferences as any) || {};
     const foodPreferences = {
       ...existingPrefs,
       frequentFoods,
@@ -360,16 +360,16 @@ export class BehaviorService {
     // ── 替换模式分析 ──
     const replacementPatterns = await this.analyzeReplacementPatterns(userId);
 
-    await this.prisma.user_behavior_profiles.update({
-      where: { user_id: userId },
+    await this.prisma.userBehaviorProfiles.update({
+      where: { userId: userId },
       data: {
-        food_preferences: updatedPrefs || foodPreferences,
-        binge_risk_hours: bingeRiskHours,
+        foodPreferences: updatedPrefs || foodPreferences,
+        bingeRiskHours: bingeRiskHours,
         ...(mealTimingPatterns !== undefined
-          ? { meal_timing_patterns: mealTimingPatterns }
+          ? { mealTimingPatterns: mealTimingPatterns }
           : {}),
         ...(replacementPatterns !== undefined
-          ? { replacement_patterns: replacementPatterns }
+          ? { replacementPatterns: replacementPatterns }
           : {}),
       },
     });
@@ -390,10 +390,10 @@ export class BehaviorService {
     const sixtyDaysAgo = new Date();
     sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
 
-    const feedbacks = await this.prisma.recommendation_feedbacks.findMany({
+    const feedbacks = await this.prisma.recommendationFeedbacks.findMany({
       where: {
-        user_id: userId,
-        created_at: { gte: sixtyDaysAgo },
+        userId: userId,
+        createdAt: { gte: sixtyDaysAgo },
       },
     });
 
@@ -404,7 +404,7 @@ export class BehaviorService {
 
     for (const fb of feedbacks) {
       const daysSince = Math.floor(
-        (now - new Date(fb.created_at as any).getTime()) /
+        (now - new Date(fb.createdAt as any).getTime()) /
           (1000 * 60 * 60 * 24),
       );
       const decayWeight = Math.exp(-0.05 * daysSince);
@@ -424,7 +424,7 @@ export class BehaviorService {
           score = 0;
       }
 
-      const foodName = (fb as any).food_name;
+      const foodName = (fb as any).foodName;
       foodScores[foodName] = (foodScores[foodName] || 0) + score * decayWeight;
     }
 
@@ -456,10 +456,10 @@ export class BehaviorService {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const records = await this.prisma.food_records.findMany({
+    const records = await this.prisma.foodRecords.findMany({
       where: {
-        user_id: userId,
-        created_at: { gte: thirtyDaysAgo },
+        userId: userId,
+        createdAt: { gte: thirtyDaysAgo },
       },
     });
 
@@ -475,7 +475,7 @@ export class BehaviorService {
     for (const record of records) {
       const hour = getUserLocalHour(
         timezone,
-        new Date(record.created_at as any),
+        new Date(record.createdAt as any),
       );
       if (hour >= 5 && hour < 10) mealTimes.breakfast.push(hour);
       else if (hour >= 10 && hour < 14) mealTimes.lunch.push(hour);
@@ -506,12 +506,12 @@ export class BehaviorService {
     const sixtyDaysAgo = new Date();
     sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
 
-    const replacements = await this.prisma.recommendation_feedbacks.findMany({
+    const replacements = await this.prisma.recommendationFeedbacks.findMany({
       where: {
-        user_id: userId,
+        userId: userId,
         action: 'replaced',
-        replacement_food: { not: null },
-        created_at: { gte: sixtyDaysAgo },
+        replacementFood: { not: null },
+        createdAt: { gte: sixtyDaysAgo },
       },
     });
 
@@ -519,7 +519,7 @@ export class BehaviorService {
 
     const patterns: Record<string, number> = {};
     for (const fb of replacements) {
-      const key = `${(fb as any).food_name}→${(fb as any).replacement_food}`;
+      const key = `${(fb as any).foodName}→${(fb as any).replacementFood}`;
       patterns[key] = (patterns[key] || 0) + 1;
     }
 

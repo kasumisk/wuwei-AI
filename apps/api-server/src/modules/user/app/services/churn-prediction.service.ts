@@ -160,13 +160,13 @@ export class ChurnPredictionService {
    * Admin: 获取全局流失风险分布
    */
   async getDistribution(topN = 20): Promise<ChurnDistribution> {
-    const profiles = await this.prisma.user_inferred_profiles.findMany({
+    const profiles = await this.prisma.userInferredProfiles.findMany({
       where: {
-        churn_risk: { not: null },
+        churnRisk: { not: null },
       },
       select: {
-        user_id: true,
-        churn_risk: true,
+        userId: true,
+        churnRisk: true,
       },
     });
 
@@ -174,7 +174,7 @@ export class ChurnPredictionService {
     let totalRisk = 0;
 
     for (const p of profiles) {
-      const risk = Number(p.churn_risk ?? 0);
+      const risk = Number(p.churnRisk ?? 0);
       totalRisk += risk;
 
       if (risk < 0.3) distribution.low++;
@@ -188,24 +188,24 @@ export class ChurnPredictionService {
 
     // 高风险用户（按 churn_risk 降序）
     const highRiskProfiles = profiles
-      .filter((p) => Number(p.churn_risk ?? 0) >= 0.6)
-      .sort((a, b) => Number(b.churn_risk ?? 0) - Number(a.churn_risk ?? 0))
+      .filter((p) => Number(p.churnRisk ?? 0) >= 0.6)
+      .sort((a, b) => Number(b.churnRisk ?? 0) - Number(a.churnRisk ?? 0))
       .slice(0, topN);
 
     // 为高风险用户补充风险因素（从缓存或快速计算）
     const highRiskUsers = await Promise.all(
       highRiskProfiles.map(async (p) => {
         try {
-          const prediction = await this.predict(p.user_id);
+          const prediction = await this.predict(p.userId);
           return {
-            userId: p.user_id,
+            userId: p.userId,
             churnRisk: prediction.churnRisk,
             topRiskFactors: prediction.topRiskFactors,
           };
         } catch {
           return {
-            userId: p.user_id,
-            churnRisk: Number(p.churn_risk ?? 0),
+            userId: p.userId,
+            churnRisk: Number(p.churnRisk ?? 0),
             topRiskFactors: [],
           };
         }
@@ -237,34 +237,34 @@ export class ChurnPredictionService {
     const [recentRecordCount, weekAgoRecordCount, feedbackStats, recentFoods] =
       await Promise.all([
         // 最近 14 天记录数
-        this.prisma.food_records.count({
+        this.prisma.foodRecords.count({
           where: {
-            user_id: userId,
-            created_at: { gte: fourteenDaysAgo },
+            userId: userId,
+            createdAt: { gte: fourteenDaysAgo },
           },
         }),
         // 7-14 天前的记录数（用于趋势对比）
-        this.prisma.food_records.count({
+        this.prisma.foodRecords.count({
           where: {
-            user_id: userId,
-            created_at: { gte: fourteenDaysAgo, lt: sevenDaysAgo },
+            userId: userId,
+            createdAt: { gte: fourteenDaysAgo, lt: sevenDaysAgo },
           },
         }),
         // 最近推荐反馈
-        this.prisma.recommendation_feedbacks.findMany({
+        this.prisma.recommendationFeedbacks.findMany({
           where: {
-            user_id: userId,
-            created_at: { gte: fourteenDaysAgo },
+            userId: userId,
+            createdAt: { gte: fourteenDaysAgo },
           },
           select: { action: true },
         }),
         // 最近 14 天食物种类
-        this.prisma.food_records.findMany({
+        this.prisma.foodRecords.findMany({
           where: {
-            user_id: userId,
-            created_at: { gte: fourteenDaysAgo },
+            userId: userId,
+            createdAt: { gte: fourteenDaysAgo },
           },
-          select: { foods: true, created_at: true },
+          select: { foods: true, createdAt: true },
         }),
       ]);
 
@@ -314,9 +314,9 @@ export class ChurnPredictionService {
     for (const r of recentFoods) {
       const foods = r.foods as any[];
       if (!Array.isArray(foods)) continue;
-      const isThisWeek = r.created_at >= sevenDaysAgo;
+      const isThisWeek = r.createdAt >= sevenDaysAgo;
       for (const f of foods) {
-        const name = f?.name || f?.food_name;
+        const name = f?.name || f?.foodName;
         if (name) {
           (isThisWeek ? thisWeekFoods : lastWeekFoods).add(name);
         }
@@ -411,27 +411,27 @@ export class ChurnPredictionService {
   private async computePrediction(userId: string): Promise<ChurnPrediction> {
     // 获取基础数据
     const [behavior, lastRecord] = await Promise.all([
-      this.prisma.user_behavior_profiles.findUnique({
-        where: { user_id: userId },
+      this.prisma.userBehaviorProfiles.findUnique({
+        where: { userId: userId },
         select: {
-          avg_compliance_rate: true,
-          streak_days: true,
-          total_records: true,
+          avgComplianceRate: true,
+          streakDays: true,
+          totalRecords: true,
         },
       }),
-      this.prisma.food_records.findFirst({
-        where: { user_id: userId },
-        orderBy: { created_at: 'desc' },
-        select: { created_at: true },
+      this.prisma.foodRecords.findFirst({
+        where: { userId: userId },
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true },
       }),
     ]);
 
-    const complianceRate = Number(behavior?.avg_compliance_rate ?? 0);
-    const streakDays = behavior?.streak_days ?? 0;
-    const totalRecords = behavior?.total_records ?? 0;
-    const daysSinceLastRecord = lastRecord?.created_at
+    const complianceRate = Number(behavior?.avgComplianceRate ?? 0);
+    const streakDays = behavior?.streakDays ?? 0;
+    const totalRecords = behavior?.totalRecords ?? 0;
+    const daysSinceLastRecord = lastRecord?.createdAt
       ? Math.floor(
-          (Date.now() - lastRecord.created_at.getTime()) /
+          (Date.now() - lastRecord.createdAt.getTime()) /
             (1000 * 60 * 60 * 24),
         )
       : 999;

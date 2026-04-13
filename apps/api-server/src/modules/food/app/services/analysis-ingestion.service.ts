@@ -115,7 +115,7 @@ export class AnalysisIngestionService {
    */
   async ingest(analysisId: string, userId: string): Promise<void> {
     // 1. 加载分析记录
-    const record = await this.prisma.food_analysis_records.findUnique({
+    const record = await this.prisma.foodAnalysisRecords.findUnique({
       where: { id: analysisId },
     });
     if (!record) {
@@ -124,9 +124,9 @@ export class AnalysisIngestionService {
     }
 
     // 2. 跳过已处理的记录（幂等保护）
-    if (record.persist_status !== PersistStatus.PENDING) {
+    if (record.persistStatus !== PersistStatus.PENDING) {
       this.logger.debug(
-        `分析记录已处理: ${analysisId}, status=${record.persist_status}`,
+        `分析记录已处理: ${analysisId}, status=${record.persistStatus}`,
       );
       return;
     }
@@ -190,13 +190,13 @@ export class AnalysisIngestionService {
       persistStatus = PersistStatus.IGNORED;
     }
 
-    await this.prisma.food_analysis_records.update({
+    await this.prisma.foodAnalysisRecords.update({
       where: { id: record.id },
       data: {
-        matched_food_count: matchedCount,
-        candidate_food_count: candidateCount,
-        persist_status: persistStatus,
-        quality_score: qualityResult.totalScore,
+        matchedFoodCount: matchedCount,
+        candidateFoodCount: candidateCount,
+        persistStatus: persistStatus,
+        qualityScore: qualityResult.totalScore,
       },
     });
 
@@ -215,12 +215,12 @@ export class AnalysisIngestionService {
    * 分析记录存储的是分段的 payload，需要组装回统一结构
    */
   private reconstructResult(record: any): FoodAnalysisResultV61 | null {
-    const nutrition = record.nutrition_payload as Record<
+    const nutrition = record.nutritionPayload as Record<
       string,
       unknown
     > | null;
-    const decision = record.decision_payload as Record<string, unknown> | null;
-    const recognized = record.recognized_payload as Record<
+    const decision = record.decisionPayload as Record<string, unknown> | null;
+    const recognized = record.recognizedPayload as Record<
       string,
       unknown
     > | null;
@@ -234,11 +234,11 @@ export class AnalysisIngestionService {
 
     return {
       analysisId: record.id,
-      inputType: record.input_type,
+      inputType: record.inputType,
       inputSnapshot: {
-        rawText: record.raw_text ?? undefined,
-        imageUrl: record.image_url ?? undefined,
-        mealType: record.meal_type as
+        rawText: record.rawText ?? undefined,
+        imageUrl: record.imageUrl ?? undefined,
+        mealType: record.mealType as
           | 'breakfast'
           | 'lunch'
           | 'dinner'
@@ -255,7 +255,7 @@ export class AnalysisIngestionService {
       score: (nutrition['score'] ?? {
         healthScore: 0,
         nutritionScore: 0,
-        confidenceScore: record.confidence_score ?? 0,
+        confidenceScore: record.confidenceScore ?? 0,
       }) as FoodAnalysisResultV61['score'],
       decision: (decision ?? {
         recommendation: 'caution',
@@ -493,30 +493,30 @@ export class AnalysisIngestionService {
     const canonicalName = (food.normalizedName ?? food.name).trim();
 
     // 1. 查找已有候选（精确名匹配）
-    const existing = await this.prisma.food_candidate.findFirst({
-      where: { canonical_name: canonicalName },
+    const existing = await this.prisma.foodCandidate.findFirst({
+      where: { canonicalName: canonicalName },
     });
 
     if (existing) {
       // 命中已有候选 → 递增命中计数、更新平均置信度
-      const newSourceCount = (existing.source_count ?? 0) + 1;
+      const newSourceCount = (existing.sourceCount ?? 0) + 1;
       const newAvgConfidence = this.updateAvgConfidence(
-        Number(existing.avg_confidence),
+        Number(existing.avgConfidence),
         newSourceCount,
         (food.confidence ?? 0) * 100,
       );
       const newQualityScore =
-        qualityScore > Number(existing.quality_score)
+        qualityScore > Number(existing.qualityScore)
           ? qualityScore
-          : Number(existing.quality_score);
+          : Number(existing.qualityScore);
 
-      await this.prisma.food_candidate.update({
+      await this.prisma.foodCandidate.update({
         where: { id: existing.id },
         data: {
-          source_count: newSourceCount,
-          avg_confidence: newAvgConfidence,
-          last_seen_at: new Date(),
-          quality_score: newQualityScore,
+          sourceCount: newSourceCount,
+          avgConfidence: newAvgConfidence,
+          lastSeenAt: new Date(),
+          qualityScore: newQualityScore,
         },
       });
 
@@ -534,15 +534,15 @@ export class AnalysisIngestionService {
     }
 
     // 2. 创建新候选
-    const saved = await this.prisma.food_candidate.create({
+    const saved = await this.prisma.foodCandidate.create({
       data: {
-        canonical_name: canonicalName,
+        canonicalName: canonicalName,
         aliases:
           food.normalizedName && food.normalizedName !== food.name
             ? [food.name]
             : [],
         category: food.category ?? null,
-        estimated_nutrition: {
+        estimatedNutrition: {
           caloriesPer100g: food.estimatedWeightGrams
             ? Math.round((food.calories / food.estimatedWeightGrams) * 100)
             : undefined,
@@ -576,13 +576,13 @@ export class AnalysisIngestionService {
                 ) / 10
               : undefined,
         },
-        source_type:
+        sourceType:
           inputType === 'image'
             ? CandidateSourceType.IMAGE_ANALYSIS
             : CandidateSourceType.TEXT_ANALYSIS,
-        source_count: 1,
-        avg_confidence: (food.confidence ?? 0) * 100,
-        quality_score: qualityScore,
+        sourceCount: 1,
+        avgConfidence: (food.confidence ?? 0) * 100,
+        qualityScore: qualityScore,
       },
     });
 
@@ -612,13 +612,13 @@ export class AnalysisIngestionService {
     matchType: MatchType,
     confidence: number,
   ): Promise<void> {
-    await this.prisma.analysis_food_link.create({
+    await this.prisma.analysisFoodLink.create({
       data: {
-        analysis_id: analysisId,
-        food_name: food.name,
-        food_library_id: foodLibraryId,
-        food_candidate_id: foodCandidateId,
-        match_type: matchType,
+        analysisId: analysisId,
+        foodName: food.name,
+        foodLibraryId: foodLibraryId,
+        foodCandidateId: foodCandidateId,
+        matchType: matchType,
         confidence,
       },
     });
@@ -632,11 +632,11 @@ export class AnalysisIngestionService {
     status: string,
     qualityScore: number | null,
   ): Promise<void> {
-    const data: any = { persist_status: status };
+    const data: any = { persistStatus: status };
     if (qualityScore !== null) {
-      data.quality_score = qualityScore;
+      data.qualityScore = qualityScore;
     }
-    await this.prisma.food_analysis_records.update({
+    await this.prisma.foodAnalysisRecords.update({
       where: { id: recordId },
       data,
     });

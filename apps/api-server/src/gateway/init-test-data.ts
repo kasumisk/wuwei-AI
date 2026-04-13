@@ -59,7 +59,7 @@ async function initTestData() {
 
     const capabilityConfigs = [
       {
-        capability_type: 'text.generation',
+        capabilityType: 'text.generation',
         provider: 'openai',
         model: 'gpt-3.5-turbo',
         config: {
@@ -67,10 +67,10 @@ async function initTestData() {
           maxTokens: 2000,
           temperature: 0.7,
         },
-        is_active: true,
+        isActive: true,
       },
       {
-        capability_type: 'text.generation',
+        capabilityType: 'text.generation',
         provider: 'openai',
         model: 'gpt-4o-mini',
         config: {
@@ -78,10 +78,10 @@ async function initTestData() {
           maxTokens: 4000,
           temperature: 0.7,
         },
-        is_active: true,
+        isActive: true,
       },
       {
-        capability_type: 'text.generation',
+        capabilityType: 'text.generation',
         provider: 'deepseek',
         model: 'deepseek-chat',
         config: {
@@ -89,10 +89,10 @@ async function initTestData() {
           maxTokens: 4000,
           temperature: 0.7,
         },
-        is_active: true,
+        isActive: true,
       },
       {
-        capability_type: 'text.generation',
+        capabilityType: 'text.generation',
         provider: 'deepseek',
         model: 'deepseek-reasoner',
         config: {
@@ -100,7 +100,7 @@ async function initTestData() {
           maxTokens: 32000,
           temperature: 0.7,
         },
-        is_active: true,
+        isActive: true,
       },
     ];
 
@@ -108,14 +108,14 @@ async function initTestData() {
 
     for (const capConfig of capabilityConfigs) {
       const existing = await prisma.$queryRaw<{ id: string }[]>`
-        SELECT id FROM capability_configs WHERE capability_type = ${capConfig.capability_type} AND provider = ${capConfig.provider} AND model = ${capConfig.model}
+        SELECT id FROM capability_configs WHERE capability_type = ${capConfig.capabilityType} AND provider = ${capConfig.provider} AND model = ${capConfig.model}
       `;
 
       if (existing.length > 0) {
         const configId = existing[0].id;
         const configJson = JSON.stringify(capConfig.config);
         await prisma.$queryRaw`
-          UPDATE capability_configs SET config = ${configJson}::jsonb, is_active = ${capConfig.is_active}, updated_at = NOW() WHERE id = ${configId}::uuid
+          UPDATE capability_configs SET config = ${configJson}::jsonb, is_active = ${capConfig.isActive}, updated_at = NOW() WHERE id = ${configId}::uuid
         `;
         console.log(
           `  ℹ️  更新配置: ${capConfig.provider} ${capConfig.model} (ID: ${configId})`,
@@ -130,7 +130,7 @@ async function initTestData() {
             model,
             config,
             is_active
-          ) VALUES (${capConfig.capability_type}, ${capConfig.provider}, ${capConfig.model}, ${configJson}::jsonb, ${capConfig.is_active}) RETURNING id
+          ) VALUES (${capConfig.capabilityType}, ${capConfig.provider}, ${capConfig.model}, ${configJson}::jsonb, ${capConfig.isActive}) RETURNING id
         `;
         const configId = result[0].id;
         console.log(
@@ -183,7 +183,7 @@ async function initTestData() {
             enabled,
             priority,
             max_requests_per_minute
-          ) VALUES (${clientId}::uuid, ${capConfig.capability_type}, ${configId}::uuid, ${true}, ${priority}, ${100})
+          ) VALUES (${clientId}::uuid, ${capConfig.capabilityType}, ${configId}::uuid, ${true}, ${priority}, ${100})
         `;
         console.log(
           `  ✅ 创建权限: ${capConfig.provider} ${capConfig.model} (优先级: ${priority})`,

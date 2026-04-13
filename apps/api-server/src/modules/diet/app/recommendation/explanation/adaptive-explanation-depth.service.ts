@@ -107,28 +107,28 @@ export class AdaptiveExplanationDepthService {
     // 并行查询行为数据
     const [behaviorProfile, recentRecordCount, lastRecordDate] =
       await Promise.all([
-        this.prisma.user_behavior_profiles.findUnique({
-          where: { user_id: userId },
+        this.prisma.userBehaviorProfiles.findUnique({
+          where: { userId: userId },
           select: {
-            avg_compliance_rate: true,
-            streak_days: true,
-            total_records: true,
+            avgComplianceRate: true,
+            streakDays: true,
+            totalRecords: true,
           },
         }),
         // 最近 7 天的记录数
-        this.prisma.food_records.count({
+        this.prisma.foodRecords.count({
           where: {
-            user_id: userId,
-            created_at: {
+            userId: userId,
+            createdAt: {
               gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
             },
           },
         }),
         // 最近一条记录的时间
-        this.prisma.food_records.findFirst({
-          where: { user_id: userId },
-          orderBy: { created_at: 'desc' },
-          select: { created_at: true },
+        this.prisma.foodRecords.findFirst({
+          where: { userId: userId },
+          orderBy: { createdAt: 'desc' },
+          select: { createdAt: true },
         }),
       ]);
 
@@ -137,17 +137,17 @@ export class AdaptiveExplanationDepthService {
     const recordFrequency = Math.min(1, avgDailyRecords / 2);
 
     // 2. 连胜天数评分 (0-1): 7天以上 = 满分
-    const streakDays = behaviorProfile?.streak_days ?? 0;
+    const streakDays = behaviorProfile?.streakDays ?? 0;
     const streakScore = Math.min(1, streakDays / 7);
 
     // 3. 合规率评分 (0-1): 直接使用
-    const complianceScore = Number(behaviorProfile?.avg_compliance_rate ?? 0);
+    const complianceScore = Number(behaviorProfile?.avgComplianceRate ?? 0);
 
     // 4. 最近活跃度评分 (0-1): 今天记录过 = 1, 7天前 = 0
     let recencyScore = 0;
-    if (lastRecordDate?.created_at) {
+    if (lastRecordDate?.createdAt) {
       const daysSinceLastRecord =
-        (Date.now() - lastRecordDate.created_at.getTime()) /
+        (Date.now() - lastRecordDate.createdAt.getTime()) /
         (24 * 60 * 60 * 1000);
       recencyScore = Math.max(0, 1 - daysSinceLastRecord / 7);
     }

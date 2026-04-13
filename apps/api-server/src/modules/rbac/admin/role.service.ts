@@ -43,7 +43,7 @@ export class RoleService {
     const [list, total] = await Promise.all([
       this.prisma.roles.findMany({
         where,
-        orderBy: [{ sort: 'asc' }, { created_at: 'desc' }],
+        orderBy: [{ sort: 'asc' }, { createdAt: 'desc' }],
         skip,
         take: pageSize,
       }),
@@ -66,8 +66,8 @@ export class RoleService {
    */
   async getTree() {
     const roles = await this.prisma.roles.findMany({
-      where: { parent_id: null },
-      include: { other_roles: true },
+      where: { parentId: null },
+      include: { otherRoles: true },
       orderBy: { sort: 'asc' },
     });
 
@@ -123,11 +123,11 @@ export class RoleService {
       data: {
         code: createRoleDto.code,
         name: createRoleDto.name,
-        parent_id: createRoleDto.parentId || null,
+        parentId: createRoleDto.parentId || null,
         description: createRoleDto.description,
         status: createRoleDto.status || RoleStatus.ACTIVE,
         sort: createRoleDto.sort || 0,
-        is_system: false,
+        isSystem: false,
       },
     });
 
@@ -145,7 +145,7 @@ export class RoleService {
     }
 
     // 系统角色不允许修改关键字段
-    if (role.is_system && updateRoleDto.parentId !== undefined) {
+    if (role.isSystem && updateRoleDto.parentId !== undefined) {
       throw new BadRequestException('系统角色不允许修改继承关系');
     }
 
@@ -172,7 +172,7 @@ export class RoleService {
     const data: any = {};
     if (updateRoleDto.name !== undefined) data.name = updateRoleDto.name;
     if (updateRoleDto.parentId !== undefined)
-      data.parent_id = updateRoleDto.parentId;
+      data.parentId = updateRoleDto.parentId;
     if (updateRoleDto.description !== undefined)
       data.description = updateRoleDto.description;
     if (updateRoleDto.status !== undefined) data.status = updateRoleDto.status;
@@ -191,25 +191,25 @@ export class RoleService {
   async remove(id: string) {
     const role = await this.prisma.roles.findUnique({
       where: { id },
-      include: { other_roles: true },
+      include: { otherRoles: true },
     });
 
     if (!role) {
       throw new NotFoundException(`角色 #${id} 不存在`);
     }
 
-    if (role.is_system) {
+    if (role.isSystem) {
       throw new BadRequestException('系统角色不允许删除');
     }
 
     // 检查是否有子角色
-    if (role.other_roles && role.other_roles.length > 0) {
+    if (role.otherRoles && role.otherRoles.length > 0) {
       throw new BadRequestException('请先删除子角色');
     }
 
     // 检查是否有用户使用该角色
-    const userRoleCount = await this.prisma.user_roles.count({
-      where: { role_id: id },
+    const userRoleCount = await this.prisma.userRoles.count({
+      where: { roleId: id },
     });
 
     if (userRoleCount > 0) {
@@ -219,7 +219,7 @@ export class RoleService {
     }
 
     // 删除角色权限关联
-    await this.prisma.role_permissions.deleteMany({ where: { role_id: id } });
+    await this.prisma.rolePermissions.deleteMany({ where: { roleId: id } });
     // 删除角色
     await this.prisma.roles.delete({ where: { id } });
 
@@ -237,11 +237,11 @@ export class RoleService {
     }
 
     // 获取角色自身的权限
-    const ownPermissions = await this.prisma.role_permissions.findMany({
-      where: { role_id: id },
+    const ownPermissions = await this.prisma.rolePermissions.findMany({
+      where: { roleId: id },
       include: { permissions: true },
     });
-    const ownPermissionIds = ownPermissions.map((rp) => rp.permission_id);
+    const ownPermissionIds = ownPermissions.map((rp) => rp.permissionId);
 
     // 获取继承的权限
     const ancestors = await this.getRoleAncestors(id);
@@ -249,11 +249,11 @@ export class RoleService {
 
     let inheritedPermissionIds: string[] = [];
     if (ancestorIds.length > 0) {
-      const inheritedPermissions = await this.prisma.role_permissions.findMany({
-        where: { role_id: { in: ancestorIds } },
+      const inheritedPermissions = await this.prisma.rolePermissions.findMany({
+        where: { roleId: { in: ancestorIds } },
       });
       inheritedPermissionIds = [
-        ...new Set(inheritedPermissions.map((rp) => rp.permission_id)),
+        ...new Set(inheritedPermissions.map((rp) => rp.permissionId)),
       ];
     }
 
@@ -290,14 +290,14 @@ export class RoleService {
     }
 
     // 删除现有权限
-    await this.prisma.role_permissions.deleteMany({ where: { role_id: id } });
+    await this.prisma.rolePermissions.deleteMany({ where: { roleId: id } });
 
     // 分配新权限
     if (dto.permissionIds.length > 0) {
-      await this.prisma.role_permissions.createMany({
+      await this.prisma.rolePermissions.createMany({
         data: dto.permissionIds.map((permissionId) => ({
-          role_id: id,
-          permission_id: permissionId,
+          roleId: id,
+          permissionId: permissionId,
         })),
       });
     }
@@ -357,7 +357,7 @@ export class RoleService {
   private buildTree(roles: any[]): RoleInfoDto[] {
     return roles.map((role) => ({
       ...this.formatRoleInfo(role),
-      children: role.other_roles ? this.buildTree(role.other_roles) : [],
+      children: role.otherRoles ? this.buildTree(role.otherRoles) : [],
     }));
   }
 
@@ -369,14 +369,14 @@ export class RoleService {
       id: role.id,
       code: role.code,
       name: role.name,
-      parentId: role.parent_id,
+      parentId: role.parentId,
       parentCode: role.roles?.code || null,
       description: role.description,
       status: role.status,
-      isSystem: role.is_system,
+      isSystem: role.isSystem,
       sort: role.sort,
-      createdAt: role.created_at,
-      updatedAt: role.updated_at,
+      createdAt: role.createdAt,
+      updatedAt: role.updatedAt,
     };
   }
 }

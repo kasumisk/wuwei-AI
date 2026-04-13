@@ -19,9 +19,9 @@
  */
 import { Injectable, Logger } from '@nestjs/common';
 import {
-  user_profiles as UserProfile,
-  user_behavior_profiles as UserBehaviorProfile,
-  user_inferred_profiles as UserInferredProfile,
+  UserProfiles as UserProfile,
+  UserBehaviorProfiles as UserBehaviorProfile,
+  UserInferredProfiles as UserInferredProfile,
 } from '@prisma/client';
 import { ProfileCacheService } from './profile-cache.service';
 import { RealtimeProfileService } from './realtime-profile.service';
@@ -83,7 +83,7 @@ export class ProfileResolverService {
       const timezone = declared?.timezone || 'Asia/Shanghai';
       // V6.3 P2-9: 读取 exerciseSchedule 用于 post_exercise 场景检测
       const exerciseSchedule =
-        (declared?.exercise_schedule as Record<
+        (declared?.exerciseSchedule as Record<
           string,
           { startHour: number; durationHours: number }
         >) || null;
@@ -159,73 +159,73 @@ export class ProfileResolverService {
   ): EnrichedProfileContext {
     const context: EnrichedProfileContext = {
       // ── 基础约束字段（向后兼容 UserProfileConstraints） ──
-      dietaryRestrictions: (declared?.dietary_restrictions as string[]) || [],
-      weakTimeSlots: (declared?.weak_time_slots as string[]) || [],
+      dietaryRestrictions: (declared?.dietaryRestrictions as string[]) || [],
+      weakTimeSlots: (declared?.weakTimeSlots as string[]) || [],
       discipline: declared?.discipline || 'medium',
       allergens: (declared?.allergens as string[]) || [],
-      healthConditions: (declared?.health_conditions as string[]) || [],
-      regionCode: declared?.region_code || 'CN',
+      healthConditions: (declared?.healthConditions as string[]) || [],
+      regionCode: declared?.regionCode || 'CN',
       timezone: declared?.timezone || 'Asia/Shanghai',
 
       // ── 声明画像 ──
       declared: declared
         ? {
             gender: declared.gender ?? undefined,
-            birthYear: declared.birth_year ?? undefined,
-            heightCm: declared.height_cm
-              ? Number(declared.height_cm)
+            birthYear: declared.birthYear ?? undefined,
+            heightCm: declared.heightCm
+              ? Number(declared.heightCm)
               : undefined,
-            weightKg: declared.weight_kg
-              ? Number(declared.weight_kg)
+            weightKg: declared.weightKg
+              ? Number(declared.weightKg)
               : undefined,
-            targetWeightKg: declared.target_weight_kg
-              ? Number(declared.target_weight_kg)
+            targetWeightKg: declared.targetWeightKg
+              ? Number(declared.targetWeightKg)
               : undefined,
-            activityLevel: declared.activity_level ?? undefined,
+            activityLevel: declared.activityLevel ?? undefined,
             goal: declared.goal ?? undefined,
-            goalSpeed: declared.goal_speed ?? undefined,
-            dailyCalorieGoal: declared.daily_calorie_goal ?? undefined,
-            mealsPerDay: declared.meals_per_day ?? undefined,
-            takeoutFrequency: declared.takeout_frequency ?? undefined,
-            canCook: declared.can_cook ?? undefined,
-            cookingSkillLevel: declared.cooking_skill_level ?? undefined,
-            budgetLevel: declared.budget_level ?? undefined,
-            familySize: declared.family_size ?? undefined,
+            goalSpeed: declared.goalSpeed ?? undefined,
+            dailyCalorieGoal: declared.dailyCalorieGoal ?? undefined,
+            mealsPerDay: declared.mealsPerDay ?? undefined,
+            takeoutFrequency: declared.takeoutFrequency ?? undefined,
+            canCook: declared.canCook ?? undefined,
+            cookingSkillLevel: declared.cookingSkillLevel ?? undefined,
+            budgetLevel: declared.budgetLevel ?? undefined,
+            familySize: declared.familySize ?? undefined,
             cuisinePreferences:
-              (declared.cuisine_preferences as string[]) ?? undefined,
+              (declared.cuisinePreferences as string[]) ?? undefined,
             foodPreferences:
-              (declared.food_preferences as string[]) ?? undefined,
+              (declared.foodPreferences as string[]) ?? undefined,
             dietaryRestrictions:
-              (declared.dietary_restrictions as string[]) ?? undefined,
+              (declared.dietaryRestrictions as string[]) ?? undefined,
             allergens: (declared.allergens as string[]) ?? undefined,
             healthConditions:
-              (declared.health_conditions as string[]) ?? undefined,
-            weakTimeSlots: (declared.weak_time_slots as string[]) ?? undefined,
-            bingeTriggers: (declared.binge_triggers as string[]) ?? undefined,
+              (declared.healthConditions as string[]) ?? undefined,
+            weakTimeSlots: (declared.weakTimeSlots as string[]) ?? undefined,
+            bingeTriggers: (declared.bingeTriggers as string[]) ?? undefined,
             discipline: declared.discipline ?? undefined,
-            regionCode: declared.region_code ?? undefined,
+            regionCode: declared.regionCode ?? undefined,
             timezone: declared.timezone ?? undefined,
             exerciseSchedule:
-              (declared.exercise_schedule as Record<
+              (declared.exerciseSchedule as Record<
                 string,
                 { startHour: number; durationHours: number }
               >) ?? undefined,
             // V6.6 Phase 2-C: 生活方式画像字段
-            sleepQuality: declared.sleep_quality ?? undefined,
-            stressLevel: declared.stress_level ?? undefined,
-            hydrationGoal: declared.hydration_goal
-              ? Number(declared.hydration_goal)
+            sleepQuality: declared.sleepQuality ?? undefined,
+            stressLevel: declared.stressLevel ?? undefined,
+            hydrationGoal: declared.hydrationGoal
+              ? Number(declared.hydrationGoal)
               : undefined,
             supplementsUsed:
-              (declared.supplements_used as string[]) ?? undefined,
-            mealTimingPreference: declared.meal_timing_preference ?? undefined,
+              (declared.supplementsUsed as string[]) ?? undefined,
+            mealTimingPreference: declared.mealTimingPreference ?? undefined,
             // V7.8: exerciseIntensity 从 exercise_profile.intensity 读取（原 exercise_intensity 字段已删除）
             exerciseIntensity:
-              (declared.exercise_profile as any)?.intensity ?? undefined,
-            alcoholFrequency: declared.alcohol_frequency ?? undefined,
+              (declared.exerciseProfile as any)?.intensity ?? undefined,
+            alcoholFrequency: declared.alcoholFrequency ?? undefined,
             // V6.8 Phase 3-C: age 从 birth_year 动态计算
-            age: declared.birth_year
-              ? new Date().getFullYear() - declared.birth_year
+            age: declared.birthYear
+              ? new Date().getFullYear() - declared.birthYear
               : undefined,
           }
         : null,
@@ -233,18 +233,18 @@ export class ProfileResolverService {
       // ── 推断画像 ──
       inferred: inferred
         ? {
-            estimatedBmr: inferred.estimated_bmr ?? undefined,
-            estimatedTdee: inferred.estimated_tdee ?? undefined,
-            recommendedCalories: inferred.recommended_calories ?? undefined,
-            macroTargets: (inferred.macro_targets as any) ?? undefined,
-            userSegment: inferred.user_segment ?? undefined,
-            churnRisk: inferred.churn_risk
-              ? Number(inferred.churn_risk)
+            estimatedBmr: inferred.estimatedBmr ?? undefined,
+            estimatedTdee: inferred.estimatedTdee ?? undefined,
+            recommendedCalories: inferred.recommendedCalories ?? undefined,
+            macroTargets: (inferred.macroTargets as any) ?? undefined,
+            userSegment: inferred.userSegment ?? undefined,
+            churnRisk: inferred.churnRisk
+              ? Number(inferred.churnRisk)
               : undefined,
-            optimalMealCount: inferred.optimal_meal_count ?? undefined,
-            nutritionGaps: (inferred.nutrition_gaps as string[]) ?? undefined,
+            optimalMealCount: inferred.optimalMealCount ?? undefined,
+            nutritionGaps: (inferred.nutritionGaps as string[]) ?? undefined,
             preferenceWeights:
-              (inferred.preference_weights as Record<string, number>) ??
+              (inferred.preferenceWeights as Record<string, number>) ??
               undefined,
           }
         : null,
@@ -252,18 +252,18 @@ export class ProfileResolverService {
       // ── 行为画像 ──
       observed: observed
         ? {
-            avgComplianceRate: observed.avg_compliance_rate
-              ? Number(observed.avg_compliance_rate)
+            avgComplianceRate: observed.avgComplianceRate
+              ? Number(observed.avgComplianceRate)
               : undefined,
-            totalRecords: observed.total_records ?? undefined,
-            streakDays: observed.streak_days ?? undefined,
+            totalRecords: observed.totalRecords ?? undefined,
+            streakDays: observed.streakDays ?? undefined,
             mealTimingPatterns:
-              (observed.meal_timing_patterns as Record<string, any>) ??
+              (observed.mealTimingPatterns as Record<string, any>) ??
               undefined,
-            portionTendency: observed.portion_tendency ?? undefined,
+            portionTendency: observed.portionTendency ?? undefined,
             // V6.3 P1-3: 暴食风险时段
             bingeRiskHours:
-              (observed.binge_risk_hours as number[]) ?? undefined,
+              (observed.bingeRiskHours as number[]) ?? undefined,
           }
         : null,
 
@@ -277,39 +277,39 @@ export class ProfileResolverService {
       lifestyle: declared
         ? {
             tasteIntensity:
-              (declared.taste_intensity as Record<string, number>) || null,
+              (declared.tasteIntensity as Record<string, number>) || null,
             cuisinePreferences:
-              (declared.cuisine_preferences as string[]) || [],
+              (declared.cuisinePreferences as string[]) || [],
             budgetLevel:
-              (declared.budget_level as 'low' | 'medium' | 'high') || null,
-            cookingSkillLevel: declared.cooking_skill_level ?? null,
-            familySize: declared.family_size ?? 1,
-            mealPrepWilling: declared.meal_prep_willing ?? false,
+              (declared.budgetLevel as 'low' | 'medium' | 'high') || null,
+            cookingSkillLevel: declared.cookingSkillLevel ?? null,
+            familySize: declared.familySize ?? 1,
+            mealPrepWilling: declared.mealPrepWilling ?? false,
             // V6.6 Phase 2-C: 新增生活方式字段
-            sleepQuality: declared.sleep_quality ?? null,
-            stressLevel: declared.stress_level ?? null,
-            hydrationGoal: declared.hydration_goal
-              ? Number(declared.hydration_goal)
+            sleepQuality: declared.sleepQuality ?? null,
+            stressLevel: declared.stressLevel ?? null,
+            hydrationGoal: declared.hydrationGoal
+              ? Number(declared.hydrationGoal)
               : null,
-            supplementsUsed: (declared.supplements_used as string[]) ?? null,
-            mealTimingPreference: declared.meal_timing_preference ?? null,
+            supplementsUsed: (declared.supplementsUsed as string[]) ?? null,
+            mealTimingPreference: declared.mealTimingPreference ?? null,
             // V7.8: exerciseIntensity 从 exercise_profile.intensity 读取（原 exercise_intensity 字段已删除）
             exerciseIntensity:
-              ((declared.exercise_profile as any)?.intensity as
+              ((declared.exerciseProfile as any)?.intensity as
                 | 'none'
                 | 'light'
                 | 'moderate'
                 | 'high'
                 | null) ?? null,
             alcoholFrequency:
-              (declared.alcohol_frequency as
+              (declared.alcoholFrequency as
                 | 'never'
                 | 'occasional'
                 | 'frequent'
                 | null) ?? null,
             // V6.8 Phase 3-C: age 从 birth_year 动态计算
-            age: declared.birth_year
-              ? new Date().getFullYear() - declared.birth_year
+            age: declared.birthYear
+              ? new Date().getFullYear() - declared.birthYear
               : null,
           }
         : null,
@@ -358,8 +358,8 @@ export class ProfileResolverService {
 
     // ── 1. 新鲜度计算 ──
     // declared.updated_at 距今天数 → 半年（180天）线性衰减到 0
-    const daysSinceUpdate = declared?.updated_at
-      ? (Date.now() - new Date(declared.updated_at).getTime()) / 86400000
+    const daysSinceUpdate = declared?.updatedAt
+      ? (Date.now() - new Date(declared.updatedAt).getTime()) / 86400000
       : 365;
     context.profileFreshness = Math.max(0, 1 - daysSinceUpdate / 180);
 
@@ -383,7 +383,7 @@ export class ProfileResolverService {
           declaredValue: 'fat_loss',
           observedValue: `avg ${Math.round(recentAvgCal)} kcal (target ${targetCal})`,
           resolution: context.profileFreshness > 0.5 ? 'use_declared' : 'blend',
-          confidence: Math.min(1, (observed?.total_records ?? 0) / 30),
+          confidence: Math.min(1, (observed?.totalRecords ?? 0) / 30),
           reason: 'declared_goal_conflicts_with_observed_intake',
         });
       }
@@ -403,7 +403,7 @@ export class ProfileResolverService {
         declaredValue: context.declared.activityLevel,
         observedValue: `compliance ${Math.round((context.observed.avgComplianceRate ?? 0) * 100)}%`,
         resolution: context.profileFreshness > 0.7 ? 'use_declared' : 'blend',
-        confidence: Math.min(1, (observed?.total_records ?? 0) / 20),
+        confidence: Math.min(1, (observed?.totalRecords ?? 0) / 20),
         reason: 'high_declared_activity_but_low_compliance',
       });
     }

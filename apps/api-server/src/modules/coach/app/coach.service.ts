@@ -87,10 +87,10 @@ export class CoachService {
               : '现在是夜间，提醒用户注意宵夜热量';
 
     const bmi =
-      profile && profile.height_cm && profile.weight_kg
+      profile && profile.heightCm && profile.weightKg
         ? (
-            Number(profile.weight_kg) /
-            (Number(profile.height_cm) / 100) ** 2
+            Number(profile.weightKg) /
+            (Number(profile.heightCm) / 100) ** 2
           ).toFixed(1)
         : null;
 
@@ -116,9 +116,9 @@ export class CoachService {
 ${
   profile
     ? `- 性别：${profile.gender === 'male' ? '男' : '女'}
-- 年龄：${new Date().getFullYear() - (profile.birth_year || 1990)} 岁
-- BMI：${bmi}（身高 ${profile.height_cm}cm，体重 ${profile.weight_kg}kg）
-- 活动等级：${profile.activity_level}
+- 年龄：${new Date().getFullYear() - (profile.birthYear || 1990)} 岁
+- BMI：${bmi}（身高 ${profile.heightCm}cm，体重 ${profile.weightKg}kg）
+- 活动等级：${profile.activityLevel}
 - 每日热量目标：${todaySummary.calorieGoal || 2000} kcal`
     : '用户尚未填写健康档案，可引导他去填写以获得更精准建议。'
 }
@@ -158,32 +158,32 @@ ${behaviorContext ? behaviorContext + '\n' : ''}${PERSONA_PROMPTS[behaviorProfil
 
     // 新建会话
     if (!convId) {
-      const saved = await this.prisma.coach_conversations.create({
+      const saved = await this.prisma.coachConversations.create({
         data: {
-          user_id: userId,
+          userId: userId,
           title: message.substring(0, 100),
         },
       });
       convId = saved.id;
     } else {
       // 验证对话归属
-      const conv = await this.prisma.coach_conversations.findFirst({
-        where: { id: convId, user_id: userId },
+      const conv = await this.prisma.coachConversations.findFirst({
+        where: { id: convId, userId: userId },
       });
       if (!conv) {
         throw new NotFoundException('对话不存在');
       }
       // 更新时间戳
-      await this.prisma.coach_conversations.update({
+      await this.prisma.coachConversations.update({
         where: { id: convId },
-        data: { updated_at: new Date() },
+        data: { updatedAt: new Date() },
       });
     }
 
     // 加载最近 10 条历史消息
-    const history = await this.prisma.coach_messages.findMany({
-      where: { conversation_id: convId },
-      orderBy: { created_at: 'desc' },
+    const history = await this.prisma.coachMessages.findMany({
+      where: { conversationId: convId },
+      orderBy: { createdAt: 'desc' },
       take: 10,
     });
     history.reverse();
@@ -243,35 +243,35 @@ ${behaviorContext ? behaviorContext + '\n' : ''}${PERSONA_PROMPTS[behaviorProfil
     tokensUsed?: number,
   ): Promise<void> {
     // 保存用户消息
-    await this.prisma.coach_messages.create({
+    await this.prisma.coachMessages.create({
       data: {
-        conversation_id: conversationId,
+        conversationId: conversationId,
         role: 'user',
         content: userMessage,
-        tokens_used: 0,
+        tokensUsed: 0,
       },
     });
 
     // 保存助手回复
-    await this.prisma.coach_messages.create({
+    await this.prisma.coachMessages.create({
       data: {
-        conversation_id: conversationId,
+        conversationId: conversationId,
         role: 'assistant',
         content: assistantMessage,
-        tokens_used: tokensUsed || 0,
+        tokensUsed: tokensUsed || 0,
       },
     });
 
     // 更新会话标题（如果还没有标题或是第一条消息）
-    const conv = await this.prisma.coach_conversations.findFirst({
+    const conv = await this.prisma.coachConversations.findFirst({
       where: { id: conversationId },
     });
     if (conv && (!conv.title || conv.title === userMessage.substring(0, 100))) {
-      await this.prisma.coach_conversations.update({
+      await this.prisma.coachConversations.update({
         where: { id: conversationId },
         data: {
           title: userMessage.substring(0, 100),
-          updated_at: new Date(),
+          updatedAt: new Date(),
         },
       });
     }
@@ -281,9 +281,9 @@ ${behaviorContext ? behaviorContext + '\n' : ''}${PERSONA_PROMPTS[behaviorProfil
    * 获取对话列表
    */
   async getConversations(userId: string): Promise<any[]> {
-    return this.prisma.coach_conversations.findMany({
-      where: { user_id: userId },
-      orderBy: { updated_at: 'desc' },
+    return this.prisma.coachConversations.findMany({
+      where: { userId: userId },
+      orderBy: { updatedAt: 'desc' },
       take: 50,
     });
   }
@@ -298,8 +298,8 @@ ${behaviorContext ? behaviorContext + '\n' : ''}${PERSONA_PROMPTS[behaviorProfil
     limit: number = 50,
   ): Promise<{ items: any[]; total: number }> {
     // 验证对话归属
-    const conv = await this.prisma.coach_conversations.findFirst({
-      where: { id: conversationId, user_id: userId },
+    const conv = await this.prisma.coachConversations.findFirst({
+      where: { id: conversationId, userId: userId },
     });
     if (!conv) {
       throw new NotFoundException('对话不存在');
@@ -308,14 +308,14 @@ ${behaviorContext ? behaviorContext + '\n' : ''}${PERSONA_PROMPTS[behaviorProfil
     const skip = (page - 1) * limit;
 
     const [items, total] = await Promise.all([
-      this.prisma.coach_messages.findMany({
-        where: { conversation_id: conversationId },
-        orderBy: { created_at: 'asc' },
+      this.prisma.coachMessages.findMany({
+        where: { conversationId: conversationId },
+        orderBy: { createdAt: 'asc' },
         skip,
         take: limit,
       }),
-      this.prisma.coach_messages.count({
-        where: { conversation_id: conversationId },
+      this.prisma.coachMessages.count({
+        where: { conversationId: conversationId },
       }),
     ]);
 
@@ -329,13 +329,13 @@ ${behaviorContext ? behaviorContext + '\n' : ''}${PERSONA_PROMPTS[behaviorProfil
     conversationId: string,
     userId: string,
   ): Promise<void> {
-    const conv = await this.prisma.coach_conversations.findFirst({
-      where: { id: conversationId, user_id: userId },
+    const conv = await this.prisma.coachConversations.findFirst({
+      where: { id: conversationId, userId: userId },
     });
     if (!conv) {
       throw new NotFoundException('对话不存在');
     }
-    await this.prisma.coach_conversations.delete({
+    await this.prisma.coachConversations.delete({
       where: { id: conversationId },
     });
   }

@@ -83,12 +83,12 @@ export class BingeInterventionService {
     // 计算干预前 2h 的卡路里（从 food_records 查询）
     const preCalories = await this.getRecentCalories(userId, 2);
 
-    const record = await this.prisma.binge_intervention_logs.create({
+    const record = await this.prisma.bingeInterventionLogs.create({
       data: {
-        user_id: userId,
-        trigger_hour: triggerHour,
+        userId: userId,
+        triggerHour: triggerHour,
         message,
-        pre_calories: preCalories,
+        preCalories: preCalories,
       },
     });
 
@@ -112,10 +112,10 @@ export class BingeInterventionService {
     const threeHoursAgo = new Date();
     threeHoursAgo.setHours(threeHoursAgo.getHours() - 3);
 
-    const pendingRecords = await this.prisma.binge_intervention_logs.findMany({
+    const pendingRecords = await this.prisma.bingeInterventionLogs.findMany({
       where: {
-        evaluated_at: null,
-        created_at: { lte: threeHoursAgo },
+        evaluatedAt: null,
+        createdAt: { lte: threeHoursAgo },
       },
       take: 100, // 批量限制
     });
@@ -124,29 +124,29 @@ export class BingeInterventionService {
 
     for (const record of pendingRecords) {
       try {
-        const postStart = record.created_at;
+        const postStart = record.createdAt;
         const postEnd = new Date(
-          record.created_at.getTime() + 3 * 60 * 60 * 1000,
+          record.createdAt.getTime() + 3 * 60 * 60 * 1000,
         );
 
         // 查询干预后 3h 内的 food_records 卡路里
-        const postRecords = await this.prisma.food_records.findMany({
+        const postRecords = await this.prisma.foodRecords.findMany({
           where: {
-            user_id: record.user_id,
-            created_at: { gte: postStart, lte: postEnd },
+            userId: record.userId,
+            createdAt: { gte: postStart, lte: postEnd },
           },
-          select: { total_calories: true },
+          select: { totalCalories: true },
         });
 
         const postCalories = postRecords.reduce(
-          (sum, r) => sum + (Number(r.total_calories) || 0),
+          (sum, r) => sum + (Number(r.totalCalories) || 0),
           0,
         );
         const hadPostRecord = postRecords.length > 0;
 
         // 有效判定：干预后 3h 摄入 <= 干预前 2h 摄入 * 1.1
         // 若无干预前数据，仅看干预后是否有记录
-        const preCalories = Number(record.pre_calories) || 0;
+        const preCalories = Number(record.preCalories) || 0;
         let effective: boolean;
         if (preCalories > 0) {
           effective = postCalories <= preCalories * 1.1;
@@ -155,13 +155,13 @@ export class BingeInterventionService {
           effective = postCalories < 300;
         }
 
-        await this.prisma.binge_intervention_logs.update({
+        await this.prisma.bingeInterventionLogs.update({
           where: { id: record.id },
           data: {
-            post_calories: postCalories,
+            postCalories: postCalories,
             effective,
-            had_post_record: hadPostRecord,
-            evaluated_at: new Date(),
+            hadPostRecord: hadPostRecord,
+            evaluatedAt: new Date(),
           },
         });
 
@@ -193,21 +193,21 @@ export class BingeInterventionService {
     const since = new Date();
     since.setDate(since.getDate() - days);
 
-    const allRecords = await this.prisma.binge_intervention_logs.findMany({
-      where: { created_at: { gte: since } },
+    const allRecords = await this.prisma.bingeInterventionLogs.findMany({
+      where: { createdAt: { gte: since } },
       select: {
-        user_id: true,
-        trigger_hour: true,
-        pre_calories: true,
-        post_calories: true,
+        userId: true,
+        triggerHour: true,
+        preCalories: true,
+        postCalories: true,
         effective: true,
-        had_post_record: true,
-        evaluated_at: true,
+        hadPostRecord: true,
+        evaluatedAt: true,
       },
     });
 
     const totalInterventions = allRecords.length;
-    const evaluated = allRecords.filter((r) => r.evaluated_at !== null);
+    const evaluated = allRecords.filter((r) => r.evaluatedAt !== null);
     const evaluatedCount = evaluated.length;
     const effectiveRecords = evaluated.filter((r) => r.effective === true);
     const effectiveCount = effectiveRecords.length;
@@ -215,15 +215,15 @@ export class BingeInterventionService {
       evaluatedCount > 0 ? effectiveCount / evaluatedCount : 0;
 
     const withPostRecord = evaluated.filter(
-      (r) => r.had_post_record === true,
+      (r) => r.hadPostRecord === true,
     ).length;
     const postRecordRate =
       evaluatedCount > 0 ? withPostRecord / evaluatedCount : 0;
 
     // 平均卡路里削减
     const reductionValues = effectiveRecords
-      .filter((r) => r.pre_calories != null && r.post_calories != null)
-      .map((r) => Number(r.pre_calories) - Number(r.post_calories));
+      .filter((r) => r.preCalories != null && r.postCalories != null)
+      .map((r) => Number(r.preCalories) - Number(r.postCalories));
     const avgCalorieReduction =
       reductionValues.length > 0
         ? reductionValues.reduce((a, b) => a + b, 0) / reductionValues.length
@@ -235,13 +235,13 @@ export class BingeInterventionService {
       { count: number; effectiveCount: number }
     >();
     for (const r of allRecords) {
-      const stat = hourMap.get(r.trigger_hour) || {
+      const stat = hourMap.get(r.triggerHour) || {
         count: 0,
         effectiveCount: 0,
       };
       stat.count++;
       if (r.effective === true) stat.effectiveCount++;
-      hourMap.set(r.trigger_hour, stat);
+      hourMap.set(r.triggerHour, stat);
     }
 
     const hourlyBreakdown: HourlyInterventionStat[] = Array.from(
@@ -257,7 +257,7 @@ export class BingeInterventionService {
       .sort((a, b) => a.hour - b.hour);
 
     // 活跃用户数
-    const activeUserCount = new Set(allRecords.map((r) => r.user_id)).size;
+    const activeUserCount = new Set(allRecords.map((r) => r.userId)).size;
 
     return {
       windowDays: days,
@@ -283,16 +283,16 @@ export class BingeInterventionService {
     const since = new Date();
     since.setDate(since.getDate() - days);
 
-    const records = await this.prisma.binge_intervention_logs.findMany({
+    const records = await this.prisma.bingeInterventionLogs.findMany({
       where: {
-        user_id: userId,
-        created_at: { gte: since },
+        userId: userId,
+        createdAt: { gte: since },
       },
-      orderBy: { created_at: 'desc' },
+      orderBy: { createdAt: 'desc' },
       take: 50,
     });
 
-    const evaluated = records.filter((r) => r.evaluated_at !== null);
+    const evaluated = records.filter((r) => r.evaluatedAt !== null);
     const effectiveCount = evaluated.filter((r) => r.effective === true).length;
     const effectiveRate =
       evaluated.length > 0 ? effectiveCount / evaluated.length : 0;
@@ -304,15 +304,15 @@ export class BingeInterventionService {
       effectiveRate: round4(effectiveRate),
       recentInterventions: records.map((r) => ({
         id: r.id,
-        userId: r.user_id,
-        triggerHour: r.trigger_hour,
+        userId: r.userId,
+        triggerHour: r.triggerHour,
         message: r.message,
-        preCalories: r.pre_calories != null ? Number(r.pre_calories) : null,
-        postCalories: r.post_calories != null ? Number(r.post_calories) : null,
+        preCalories: r.preCalories != null ? Number(r.preCalories) : null,
+        postCalories: r.postCalories != null ? Number(r.postCalories) : null,
         effective: r.effective,
-        hadPostRecord: r.had_post_record,
-        evaluatedAt: r.evaluated_at?.toISOString() ?? null,
-        createdAt: r.created_at.toISOString(),
+        hadPostRecord: r.hadPostRecord,
+        evaluatedAt: r.evaluatedAt?.toISOString() ?? null,
+        createdAt: r.createdAt.toISOString(),
       })),
     };
   }
@@ -329,15 +329,15 @@ export class BingeInterventionService {
     const since = new Date();
     since.setHours(since.getHours() - hours);
 
-    const records = await this.prisma.food_records.findMany({
+    const records = await this.prisma.foodRecords.findMany({
       where: {
-        user_id: userId,
-        created_at: { gte: since },
+        userId: userId,
+        createdAt: { gte: since },
       },
-      select: { total_calories: true },
+      select: { totalCalories: true },
     });
 
-    return records.reduce((sum, r) => sum + (Number(r.total_calories) || 0), 0);
+    return records.reduce((sum, r) => sum + (Number(r.totalCalories) || 0), 0);
   }
 }
 

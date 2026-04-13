@@ -29,157 +29,15 @@ export class FoodLibraryManagementService {
   constructor(private readonly prisma: PrismaService) {}
 
   // ==================== DTO → DB 字段映射 ====================
-  // Prisma 使用 snake_case，DTO 新增字段使用 camelCase，需要手动映射。
-  // 其他字段（code/name/aliases 等）Prisma 已通过 @map 自动映射，无需重复处理。
-  private mapDtoToDb(dto: Record<string, any>): Record<string, any> {
-    const {
-      subCategory,
-      foodGroup,
-      foodForm,
-      dishPriority,
-      addedSugar,
-      naturalSugar,
-      saturatedFat,
-      transFat,
-      vitaminA,
-      vitaminC,
-      vitaminD,
-      vitaminE,
-      vitaminB12,
-      // V7.9 新增微量营养素
-      vitaminB6,
-      omega3,
-      omega6,
-      solubleFiber,
-      insolubleFiber,
-      waterContentPercent,
-      glycemicIndex,
-      glycemicLoad,
-      isProcessed,
-      isFried,
-      processingLevel,
-      fodmapLevel,
-      oxalateLevel,
-      qualityScore,
-      satietyScore,
-      nutrientDensity,
-      mealTypes,
-      mainIngredient,
-      ingredientList,
-      availableChannels,
-      commonalityScore,
-      standardServingG,
-      standardServingDesc,
-      commonPortions,
-      flavorProfile,
-      cookingMethod,
-      cookingMethods,
-      requiredEquipment,
-      servingTemperature,
-      textureTags,
-      dishType,
-      prepTimeMinutes,
-      cookTimeMinutes,
-      skillRequired,
-      estimatedCostLevel,
-      shelfLifeDays,
-      // V7.9 获取难度
-      acquisitionDifficulty,
-      imageUrl,
-      thumbnailUrl,
-      primarySource,
-      primarySourceId,
-      isVerified,
-      searchWeight,
-      ...rest
-    } = dto;
-
-    const mapped: Record<string, any> = { ...rest };
-
-    if (subCategory !== undefined) mapped.sub_category = subCategory;
-    if (foodGroup !== undefined) mapped.food_group = foodGroup;
-    if (foodForm !== undefined) mapped.food_form = foodForm;
-    if (dishPriority !== undefined) mapped.dish_priority = dishPriority;
-    if (addedSugar !== undefined) mapped.added_sugar = addedSugar;
-    if (naturalSugar !== undefined) mapped.natural_sugar = naturalSugar;
-    if (saturatedFat !== undefined) mapped.saturated_fat = saturatedFat;
-    if (transFat !== undefined) mapped.trans_fat = transFat;
-    if (vitaminA !== undefined) mapped.vitamin_a = vitaminA;
-    if (vitaminC !== undefined) mapped.vitamin_c = vitaminC;
-    if (vitaminD !== undefined) mapped.vitamin_d = vitaminD;
-    if (vitaminE !== undefined) mapped.vitamin_e = vitaminE;
-    if (vitaminB12 !== undefined) mapped.vitamin_b12 = vitaminB12;
-    // V7.9 新增微量营养素（DB字段名与DTO一致，无需snake_case映射，但为统一风格仍显式列出）
-    if (vitaminB6 !== undefined) mapped.vitamin_b6 = vitaminB6;
-    if (omega3 !== undefined) mapped.omega3 = omega3;
-    if (omega6 !== undefined) mapped.omega6 = omega6;
-    if (solubleFiber !== undefined) mapped.soluble_fiber = solubleFiber;
-    if (insolubleFiber !== undefined) mapped.insoluble_fiber = insolubleFiber;
-    if (waterContentPercent !== undefined)
-      mapped.water_content_percent = waterContentPercent;
-    if (glycemicIndex !== undefined) mapped.glycemic_index = glycemicIndex;
-    if (glycemicLoad !== undefined) mapped.glycemic_load = glycemicLoad;
-    if (isProcessed !== undefined) mapped.is_processed = isProcessed;
-    if (isFried !== undefined) mapped.is_fried = isFried;
-    if (processingLevel !== undefined)
-      mapped.processing_level = processingLevel;
-    if (fodmapLevel !== undefined) mapped.fodmap_level = fodmapLevel;
-    if (oxalateLevel !== undefined) mapped.oxalate_level = oxalateLevel;
-    if (qualityScore !== undefined) mapped.quality_score = qualityScore;
-    if (satietyScore !== undefined) mapped.satiety_score = satietyScore;
-    if (nutrientDensity !== undefined)
-      mapped.nutrient_density = nutrientDensity;
-    if (mealTypes !== undefined) mapped.meal_types = mealTypes;
-    if (mainIngredient !== undefined) mapped.main_ingredient = mainIngredient;
-    if (ingredientList !== undefined) mapped.ingredient_list = ingredientList;
-    if (availableChannels !== undefined)
-      mapped.available_channels = availableChannels;
-    if (commonalityScore !== undefined)
-      mapped.commonality_score = commonalityScore;
-    if (standardServingG !== undefined)
-      mapped.standard_serving_g = standardServingG;
-    if (standardServingDesc !== undefined)
-      mapped.standard_serving_desc = standardServingDesc;
-    if (commonPortions !== undefined) mapped.common_portions = commonPortions;
-    if (flavorProfile !== undefined) mapped.flavor_profile = flavorProfile;
-    if (cookingMethod !== undefined) mapped.cooking_method = cookingMethod;
-    if (cookingMethods !== undefined) mapped.cooking_methods = cookingMethods;
-    if (requiredEquipment !== undefined)
-      mapped.required_equipment = requiredEquipment;
-    if (servingTemperature !== undefined)
-      mapped.serving_temperature = servingTemperature;
-    if (textureTags !== undefined) mapped.texture_tags = textureTags;
-    if (dishType !== undefined) mapped.dish_type = dishType;
-    if (prepTimeMinutes !== undefined)
-      mapped.prep_time_minutes = prepTimeMinutes;
-    if (cookTimeMinutes !== undefined)
-      mapped.cook_time_minutes = cookTimeMinutes;
-    if (skillRequired !== undefined) mapped.skill_required = skillRequired;
-    if (estimatedCostLevel !== undefined)
-      mapped.estimated_cost_level = estimatedCostLevel;
-    if (shelfLifeDays !== undefined) mapped.shelf_life_days = shelfLifeDays;
-    if (acquisitionDifficulty !== undefined)
-      mapped.acquisition_difficulty = acquisitionDifficulty;
-    if (imageUrl !== undefined) mapped.image_url = imageUrl;
-    if (thumbnailUrl !== undefined) mapped.thumbnail_url = thumbnailUrl;
-    if (primarySource !== undefined) mapped.primary_source = primarySource;
-    if (primarySourceId !== undefined)
-      mapped.primary_source_id = primarySourceId;
-    if (isVerified !== undefined) mapped.is_verified = isVerified;
-    if (searchWeight !== undefined) mapped.search_weight = searchWeight;
-
-    return mapped;
-  }
-
-  /**
-   * DB 行（snake_case）→ 前端 DTO（camelCase）浅层转换。
-   * 仅转换顶层键，JSONB 对象内部结构保持不变（field_sources/flavor_profile 等的内部 key 不变）。
-   */
-  private static mapFoodToDto(food: Record<string, any>): Record<string, any> {
+  // After Prisma schema migration to camelCase field names, the DTO keys
+  // match Prisma field names directly. We only need to strip undefined values
+  // to avoid accidentally nullifying existing data during partial updates.
+  private stripUndefined(dto: Record<string, any>): Record<string, any> {
     const result: Record<string, any> = {};
-    for (const [key, value] of Object.entries(food)) {
-      const camel = key.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
-      result[camel] = value;
+    for (const [key, value] of Object.entries(dto)) {
+      if (value !== undefined) {
+        result[key] = value;
+      }
     }
     return result;
   }
@@ -310,11 +168,11 @@ export class FoodLibraryManagementService {
 
     // V8.1: 动态排序字段（白名单校验防止 SQL 注入）
     const SORTABLE_FIELDS: Record<string, string> = {
-      data_completeness: 'f.data_completeness',
+      dataCompleteness: 'f.data_completeness',
       confidence: 'f.confidence',
-      created_at: 'f.created_at',
-      updated_at: 'f.updated_at',
-      search_weight: 'f.search_weight',
+      createdAt: 'f.created_at',
+      updatedAt: 'f.updated_at',
+      searchWeight: 'f.search_weight',
       name: 'f.name',
       calories: 'f.calories',
     };
@@ -396,8 +254,18 @@ export class FoodLibraryManagementService {
       offset,
     );
 
+    // Raw SQL returns snake_case column names; convert to camelCase for API response
+    const toCamelCase = (row: Record<string, any>): Record<string, any> => {
+      const result: Record<string, any> = {};
+      for (const [key, value] of Object.entries(row)) {
+        const camel = key.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
+        result[camel] = value;
+      }
+      return result;
+    };
+
     return {
-      list: list.map(FoodLibraryManagementService.mapFoodToDto),
+      list: list.map(toCamelCase),
       total,
       page,
       pageSize,
@@ -409,15 +277,15 @@ export class FoodLibraryManagementService {
     const food = await this.findOneSimple(id);
     // Load relations separately
     const [translations, sources, conflicts] = await Promise.all([
-      this.prisma.food_translations.findMany({ where: { food_id: id } }),
-      this.prisma.food_sources.findMany({ where: { food_id: id } }),
-      this.prisma.food_conflicts.findMany({ where: { food_id: id } }),
+      this.prisma.foodTranslations.findMany({ where: { foodId: id } }),
+      this.prisma.foodSources.findMany({ where: { foodId: id } }),
+      this.prisma.foodConflicts.findMany({ where: { foodId: id } }),
     ]);
 
     // V8.1: 构建 enrichmentMeta — 字段级完整度详情
     const enrichmentMeta = this.buildEnrichmentMeta(food);
 
-    return { ...FoodLibraryManagementService.mapFoodToDto(food), translations, sources, conflicts, enrichmentMeta };
+    return { ...food, translations, sources, conflicts, enrichmentMeta };
   }
 
   /**
@@ -438,10 +306,10 @@ export class FoodLibraryManagementService {
    * 提供每个可补全字段的填充状态、数据来源、置信度等信息
    */
   private buildEnrichmentMeta(food: any) {
-    const fieldSources = (food.field_sources as Record<string, string>) || {};
+    const fieldSources = (food.fieldSources as Record<string, string>) || {};
     const fieldConfidence =
-      (food.field_confidence as Record<string, number>) || {};
-    const failedFields = (food.failed_fields as Record<string, any>) || {};
+      (food.fieldConfidence as Record<string, number>) || {};
+    const failedFields = (food.failedFields as Record<string, any>) || {};
 
     const isFieldFilled = (field: string): boolean => {
       const value = food[field];
@@ -516,7 +384,7 @@ export class FoodLibraryManagementService {
 
     return {
       completeness: {
-        score: food.data_completeness ?? this.computeSimpleCompleteness(food),
+        score: food.dataCompleteness ?? this.computeSimpleCompleteness(food),
         groups,
       },
       fieldDetails,
@@ -524,12 +392,12 @@ export class FoodLibraryManagementService {
       failedFieldCount: Object.keys(failedFields).length,
       sourceDistribution,
       enrichmentHistory: {
-        lastEnrichedAt: food.last_enriched_at,
-        enrichmentStatus: food.enrichment_status,
-        reviewStatus: food.review_status,
-        reviewedBy: food.reviewed_by,
-        reviewedAt: food.reviewed_at,
-        dataVersion: food.data_version,
+        lastEnrichedAt: food.lastEnrichedAt,
+        enrichmentStatus: food.enrichmentStatus,
+        reviewStatus: food.reviewStatus,
+        reviewedBy: food.reviewedBy,
+        reviewedAt: food.reviewedAt,
+        dataVersion: food.dataVersion,
       },
     };
   }
@@ -548,7 +416,7 @@ export class FoodLibraryManagementService {
       throw new ConflictException(`编码 "${dto.code}" 已存在`);
     }
     const saved = await this.prisma.foods.create({
-      data: this.mapDtoToDb(dto) as any,
+      data: this.stripUndefined(dto) as any,
     });
 
     // 写变更日志
@@ -583,14 +451,14 @@ export class FoodLibraryManagementService {
       }
     }
 
-    const mappedData = this.mapDtoToDb(dto);
-    const newVersion = (food.data_version || 1) + 1;
+    const mappedData = this.stripUndefined(dto);
+    const newVersion = (food.dataVersion || 1) + 1;
 
     // V8.0: 更新 field_sources — 手动编辑的字段标记为 'manual'
     const existingSources =
-      (food.field_sources as Record<string, string>) || {};
+      (food.fieldSources as Record<string, string>) || {};
     const existingConfidence =
-      (food.field_confidence as Record<string, number>) || {};
+      (food.fieldConfidence as Record<string, number>) || {};
     const newSources = { ...existingSources };
     const newConfidence = { ...existingConfidence };
     const enrichableSet = new Set<string>(
@@ -619,18 +487,18 @@ export class FoodLibraryManagementService {
       where: { id },
       data: {
         ...mappedData,
-        data_version: newVersion,
-        field_sources: newSources,
-        field_confidence: newConfidence,
-        data_completeness: completeness,
-        enrichment_status: enrichmentStatus,
+        dataVersion: newVersion,
+        fieldSources: newSources,
+        fieldConfidence: newConfidence,
+        dataCompleteness: completeness,
+        enrichmentStatus: enrichmentStatus,
       },
     });
 
     if (Object.keys(changes).length > 0) {
       await this.createChangeLog(
         id,
-        saved.data_version,
+        saved.dataVersion,
         'update',
         changes,
         undefined,
@@ -695,7 +563,7 @@ export class FoodLibraryManagementService {
           continue;
         }
         const saved = await this.prisma.foods.create({
-          data: this.mapDtoToDb(dto) as any,
+          data: this.stripUndefined(dto) as any,
         });
         await this.createChangeLog(
           saved.id,
@@ -717,21 +585,21 @@ export class FoodLibraryManagementService {
   async toggleVerified(id: string, operator = 'admin') {
     // V8.3: 使用 findOneSimple 避免不必要的关联查询
     const food = await this.findOneSimple(id);
-    const newIsVerified = !food.is_verified;
-    const newVersion = (food.data_version || 1) + 1;
+    const newIsVerified = !food.isVerified;
+    const newVersion = (food.dataVersion || 1) + 1;
     const saved = await this.prisma.foods.update({
       where: { id },
       data: {
-        is_verified: newIsVerified,
-        verified_by: newIsVerified ? operator : null,
-        verified_at: newIsVerified ? new Date() : null,
-        data_version: newVersion,
+        isVerified: newIsVerified,
+        verifiedBy: newIsVerified ? operator : null,
+        verifiedAt: newIsVerified ? new Date() : null,
+        dataVersion: newVersion,
       },
     });
 
     await this.createChangeLog(
       id,
-      saved.data_version,
+      saved.dataVersion,
       'verify',
       {
         isVerified: { old: !newIsVerified, new: newIsVerified },
@@ -746,18 +614,18 @@ export class FoodLibraryManagementService {
     // V8.3: 使用 findOneSimple 避免不必要的关联查询
     const food = await this.findOneSimple(id);
     const oldStatus = food.status;
-    const newVersion = (food.data_version || 1) + 1;
+    const newVersion = (food.dataVersion || 1) + 1;
     const saved = await this.prisma.foods.update({
       where: { id },
       data: {
         status: newStatus,
-        data_version: newVersion,
+        dataVersion: newVersion,
       },
     });
 
     await this.createChangeLog(
       id,
-      saved.data_version,
+      saved.dataVersion,
       newStatus === 'archived' ? 'archive' : 'update',
       {
         status: { old: oldStatus, new: newStatus },
@@ -773,7 +641,7 @@ export class FoodLibraryManagementService {
   async getStatistics() {
     const [total, verified] = await Promise.all([
       this.prisma.foods.count(),
-      this.prisma.foods.count({ where: { is_verified: true } }),
+      this.prisma.foods.count({ where: { isVerified: true } }),
     ]);
     const unverified = total - verified;
 
@@ -794,8 +662,8 @@ export class FoodLibraryManagementService {
     >(`SELECT status, COUNT(*)::text AS count FROM foods GROUP BY status`);
 
     // V8.3: 统一冲突计数口径 — 使用 resolved_at IS NULL（与 getStatisticsV81 一致）
-    const conflictCount = await this.prisma.food_conflicts.count({
-      where: { resolved_at: null },
+    const conflictCount = await this.prisma.foodConflicts.count({
+      where: { resolvedAt: null },
     });
 
     return {
@@ -819,22 +687,22 @@ export class FoodLibraryManagementService {
   // ==================== 翻译管理 ====================
 
   async getTranslations(foodId: string) {
-    return this.prisma.food_translations.findMany({
-      where: { food_id: foodId },
+    return this.prisma.foodTranslations.findMany({
+      where: { foodId: foodId },
       orderBy: { locale: 'asc' },
     });
   }
 
   async createTranslation(foodId: string, dto: CreateFoodTranslationDto) {
     await this.findOne(foodId); // validate food exists
-    const existing = await this.prisma.food_translations.findFirst({
-      where: { food_id: foodId, locale: (dto as any).locale },
+    const existing = await this.prisma.foodTranslations.findFirst({
+      where: { foodId: foodId, locale: (dto as any).locale },
     });
     if (existing) {
       throw new ConflictException(`该食物的 ${(dto as any).locale} 翻译已存在`);
     }
-    return this.prisma.food_translations.create({
-      data: { ...(dto as any), food_id: foodId },
+    return this.prisma.foodTranslations.create({
+      data: { ...(dto as any), foodId: foodId },
     });
   }
 
@@ -842,22 +710,22 @@ export class FoodLibraryManagementService {
     translationId: string,
     dto: UpdateFoodTranslationDto,
   ) {
-    const translation = await this.prisma.food_translations.findUnique({
+    const translation = await this.prisma.foodTranslations.findUnique({
       where: { id: translationId },
     });
     if (!translation) throw new NotFoundException('翻译记录不存在');
-    return this.prisma.food_translations.update({
+    return this.prisma.foodTranslations.update({
       where: { id: translationId },
       data: dto as any,
     });
   }
 
   async deleteTranslation(translationId: string) {
-    const translation = await this.prisma.food_translations.findUnique({
+    const translation = await this.prisma.foodTranslations.findUnique({
       where: { id: translationId },
     });
     if (!translation) throw new NotFoundException('翻译记录不存在');
-    await this.prisma.food_translations.delete({
+    await this.prisma.foodTranslations.delete({
       where: { id: translationId },
     });
     return { message: '翻译已删除' };
@@ -866,25 +734,25 @@ export class FoodLibraryManagementService {
   // ==================== 数据来源管理 ====================
 
   async getSources(foodId: string) {
-    return this.prisma.food_sources.findMany({
-      where: { food_id: foodId },
+    return this.prisma.foodSources.findMany({
+      where: { foodId: foodId },
       orderBy: { priority: 'desc' },
     });
   }
 
   async createSource(foodId: string, dto: CreateFoodSourceDto) {
     await this.findOne(foodId);
-    return this.prisma.food_sources.create({
-      data: { ...(dto as any), food_id: foodId },
+    return this.prisma.foodSources.create({
+      data: { ...(dto as any), foodId: foodId },
     });
   }
 
   async deleteSource(sourceId: string) {
-    const source = await this.prisma.food_sources.findUnique({
+    const source = await this.prisma.foodSources.findUnique({
       where: { id: sourceId },
     });
     if (!source) throw new NotFoundException('来源记录不存在');
-    await this.prisma.food_sources.delete({ where: { id: sourceId } });
+    await this.prisma.foodSources.delete({ where: { id: sourceId } });
     return { message: '来源已删除' };
   }
 
@@ -893,13 +761,13 @@ export class FoodLibraryManagementService {
   async getChangeLogs(foodId: string, page = 1, pageSize = 20) {
     const skip = (page - 1) * pageSize;
     const [list, total] = await Promise.all([
-      this.prisma.food_change_logs.findMany({
-        where: { food_id: foodId },
+      this.prisma.foodChangeLogs.findMany({
+        where: { foodId: foodId },
         orderBy: { version: 'desc' },
         skip,
         take: pageSize,
       }),
-      this.prisma.food_change_logs.count({ where: { food_id: foodId } }),
+      this.prisma.foodChangeLogs.count({ where: { foodId: foodId } }),
     ]);
     return { list, total, page, pageSize };
   }
@@ -912,9 +780,9 @@ export class FoodLibraryManagementService {
     reason?: string,
     operator?: string,
   ) {
-    return this.prisma.food_change_logs.create({
+    return this.prisma.foodChangeLogs.create({
       data: {
-        food_id: foodId,
+        foodId: foodId,
         version,
         action,
         changes,
@@ -935,18 +803,18 @@ export class FoodLibraryManagementService {
     const { foodId, resolution, page = 1, pageSize = 20 } = query;
 
     const where: any = {};
-    if (foodId) where.food_id = foodId;
+    if (foodId) where.foodId = foodId;
     if (resolution) where.resolution = resolution;
 
     const [list, total] = await Promise.all([
-      this.prisma.food_conflicts.findMany({
+      this.prisma.foodConflicts.findMany({
         where,
         include: { foods: true },
-        orderBy: { created_at: 'desc' },
+        orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
-      this.prisma.food_conflicts.count({ where }),
+      this.prisma.foodConflicts.count({ where }),
     ]);
 
     return { list, total, page, pageSize };
@@ -957,18 +825,18 @@ export class FoodLibraryManagementService {
     dto: ResolveFoodConflictDto,
     operator = 'admin',
   ) {
-    const conflict = await this.prisma.food_conflicts.findUnique({
+    const conflict = await this.prisma.foodConflicts.findUnique({
       where: { id: conflictId },
     });
     if (!conflict) throw new NotFoundException('冲突记录不存在');
 
-    return this.prisma.food_conflicts.update({
+    return this.prisma.foodConflicts.update({
       where: { id: conflictId },
       data: {
         resolution: (dto as any).resolution,
-        resolved_value: (dto as any).resolvedValue,
-        resolved_by: operator,
-        resolved_at: new Date(),
+        resolvedValue: (dto as any).resolvedValue,
+        resolvedBy: operator,
+        resolvedAt: new Date(),
       },
     });
   }
@@ -984,14 +852,14 @@ export class FoodLibraryManagementService {
     if (ids.length === 0) return { updated: 0 };
 
     // 批量更新 review_status 字段 + V8.1 审核元数据
-    const updateData: Record<string, any> = { review_status: reviewStatus };
+    const updateData: Record<string, any> = { reviewStatus: reviewStatus };
     if (reviewStatus === 'approved' || reviewStatus === 'rejected') {
-      updateData.reviewed_by = operator;
-      updateData.reviewed_at = new Date();
+      updateData.reviewedBy = operator;
+      updateData.reviewedAt = new Date();
     } else {
       // pending（重置）时清空审核者
-      updateData.reviewed_by = null;
-      updateData.reviewed_at = null;
+      updateData.reviewedBy = null;
+      updateData.reviewedAt = null;
     }
     const result = await this.prisma.foods.updateMany({
       where: { id: { in: ids } },
@@ -1007,13 +875,13 @@ export class FoodLibraryManagementService {
     const action = actionMap[reviewStatus] ?? 'review_reset';
     const foods = await this.prisma.foods.findMany({
       where: { id: { in: ids } },
-      select: { id: true, data_version: true },
+      select: { id: true, dataVersion: true },
     });
 
-    await this.prisma.food_change_logs.createMany({
+    await this.prisma.foodChangeLogs.createMany({
       data: foods.map((f) => ({
-        food_id: f.id,
-        version: f.data_version ?? 1,
+        foodId: f.id,
+        version: f.dataVersion ?? 1,
         action,
         changes: { reviewStatus, previousStatus: null },
         reason: reason ?? `批量设置审核状态为 ${reviewStatus}`,
@@ -1062,7 +930,7 @@ export class FoodLibraryManagementService {
         FROM foods WHERE status = 'active'
         GROUP BY 1`,
       // review_status 分布
-      this.prisma.$queryRaw<Array<{ review_status: string; count: string }>>`
+      this.prisma.$queryRaw<Array<{ reviewStatus: string; count: string }>>`
         SELECT review_status, COUNT(*)::text AS count
         FROM foods WHERE status = 'active'
         GROUP BY review_status`,
@@ -1097,7 +965,7 @@ export class FoodLibraryManagementService {
     // review_status 分布
     const reviewMap: Record<string, number> = {};
     for (const row of reviewStatusResult as any[]) {
-      reviewMap[row.review_status] = parseInt(row.count, 10);
+      reviewMap[row.reviewStatus] = parseInt(row.count, 10);
     }
     const reviewStatusCounts = {
       pending: reviewMap['pending'] ?? 0,

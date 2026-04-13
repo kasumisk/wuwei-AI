@@ -239,7 +239,7 @@ const EnrichmentPreviewPage: React.FC = () => {
                 AI补全预览
               </Title>
               <Tag color="blue">{food.name}</Tag>
-              {food.name_zh && <Tag>{food.name_zh}</Tag>}
+              {food.nameZh && <Tag>{food.nameZh}</Tag>}
             </Space>
           </Col>
           <Col>
@@ -282,9 +282,9 @@ const EnrichmentPreviewPage: React.FC = () => {
                 </Text>
               </Descriptions.Item>
               <Descriptions.Item label="名称">{food.name}</Descriptions.Item>
-              <Descriptions.Item label="中文名">{food.name_zh ?? '-'}</Descriptions.Item>
+              <Descriptions.Item label="中文名">{food.nameZh ?? '-'}</Descriptions.Item>
               <Descriptions.Item label="分类">{food.category ?? '-'}</Descriptions.Item>
-              <Descriptions.Item label="二级分类">{food.sub_category ?? '-'}</Descriptions.Item>
+              <Descriptions.Item label="二级分类">{food.subCategory ?? '-'}</Descriptions.Item>
             </Descriptions>
           </Card>
         </Col>

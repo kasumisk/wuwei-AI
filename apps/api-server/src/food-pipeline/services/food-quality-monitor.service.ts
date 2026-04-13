@@ -217,8 +217,8 @@ export class FoodQualityMonitorService {
 
   private async getQuality() {
     const [verified, unverified] = await Promise.all([
-      this.prisma.foods.count({ where: { is_verified: true } }),
-      this.prisma.foods.count({ where: { is_verified: false } }),
+      this.prisma.foods.count({ where: { isVerified: true } }),
+      this.prisma.foods.count({ where: { isVerified: false } }),
     ]);
 
     const avgConf = await this.prisma.$queryRaw<[{ avg: number | null }]>(
@@ -245,12 +245,12 @@ export class FoodQualityMonitorService {
 
   private async getConflicts() {
     const [total, pending, resolved, needsReview] = await Promise.all([
-      this.prisma.food_conflicts.count(),
-      this.prisma.food_conflicts.count({ where: { resolution: null } }),
-      this.prisma.food_conflicts.count({
+      this.prisma.foodConflicts.count(),
+      this.prisma.foodConflicts.count({ where: { resolution: null } }),
+      this.prisma.foodConflicts.count({
         where: { resolution: { not: null } },
       }),
-      this.prisma.food_conflicts.count({
+      this.prisma.foodConflicts.count({
         where: { resolution: 'needs_review' },
       }),
     ]);
@@ -258,7 +258,7 @@ export class FoodQualityMonitorService {
   }
 
   private async getTranslations() {
-    const total = await this.prisma.food_translations.count();
+    const total = await this.prisma.foodTranslations.count();
 
     const locales = await this.prisma.$queryRaw<
       Array<{ locale: string; count: number }>
@@ -284,9 +284,9 @@ export class FoodQualityMonitorService {
   private async getRecentChanges() {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    return this.prisma.food_change_logs.count({
+    return this.prisma.foodChangeLogs.count({
       where: {
-        created_at: { gte: sevenDaysAgo },
+        createdAt: { gte: sevenDaysAgo },
       },
     });
   }

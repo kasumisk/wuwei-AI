@@ -1,9 +1,9 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import {
-  user_profiles as UserProfile,
-  user_behavior_profiles as UserBehaviorProfile,
-  user_inferred_profiles as UserInferredProfile,
+  UserProfiles as UserProfile,
+  UserBehaviorProfiles as UserBehaviorProfile,
+  UserInferredProfiles as UserInferredProfile,
 } from '@prisma/client';
 import { RedisCacheService } from '../../../../../core/redis/redis-cache.service';
 import {
@@ -71,12 +71,12 @@ export class ProfileCacheService implements OnModuleInit {
    */
   private async loadFromDB(userId: string): Promise<FullUserProfile> {
     const [declared, observed, inferred] = await Promise.all([
-      this.prisma.user_profiles.findUnique({ where: { user_id: userId } }),
-      this.prisma.user_behavior_profiles.findUnique({
-        where: { user_id: userId },
+      this.prisma.userProfiles.findUnique({ where: { userId: userId } }),
+      this.prisma.userBehaviorProfiles.findUnique({
+        where: { userId: userId },
       }),
-      this.prisma.user_inferred_profiles.findUnique({
-        where: { user_id: userId },
+      this.prisma.userInferredProfiles.findUnique({
+        where: { userId: userId },
       }),
     ]);
     return {
@@ -105,13 +105,13 @@ export class ProfileCacheService implements OnModuleInit {
     if (!declared) return undefined;
 
     return {
-      dietaryRestrictions: (declared.dietary_restrictions as string[]) || [],
-      weakTimeSlots: (declared.weak_time_slots as string[]) || [],
+      dietaryRestrictions: (declared.dietaryRestrictions as string[]) || [],
+      weakTimeSlots: (declared.weakTimeSlots as string[]) || [],
       discipline: declared.discipline || 'medium',
       allergens: (declared.allergens as string[]) || [],
-      healthConditions: (declared.health_conditions as string[]) || [],
-      regionCode: declared.region_code || 'CN', // V4 修复 A7
-      portionTendency: observed?.portion_tendency || undefined, // V6.2 Phase 2.14
+      healthConditions: (declared.healthConditions as string[]) || [],
+      regionCode: declared.regionCode || 'CN', // V4 修复 A7
+      portionTendency: observed?.portionTendency || undefined, // V6.2 Phase 2.14
     };
   }
 

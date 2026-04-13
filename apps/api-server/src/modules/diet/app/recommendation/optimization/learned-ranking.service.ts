@@ -145,13 +145,13 @@ export class LearnedRankingService implements OnModuleInit {
    */
   private async getActiveSegments(): Promise<string[]> {
     try {
-      const segments = await this.prisma.user_inferred_profiles.findMany({
-        select: { user_segment: true },
-        distinct: ['user_segment'],
-        where: { user_segment: { not: null } },
+      const segments = await this.prisma.userInferredProfiles.findMany({
+        select: { userSegment: true },
+        distinct: ['userSegment'],
+        where: { userSegment: { not: null } },
       });
       const dynamicSegments = segments
-        .map((s) => s.user_segment!)
+        .map((s) => s.userSegment!)
         .filter(Boolean);
 
       if (dynamicSegments.length > 0) {
@@ -175,9 +175,9 @@ export class LearnedRankingService implements OnModuleInit {
   private async collectSamples(segment: string): Promise<RankingSample[]> {
     const rows = await this.prisma.$queryRaw<
       {
-        top_foods: any;
+        topFoods: any;
         action: string;
-        food_name: string;
+        foodName: string;
       }[]
     >`
       SELECT
@@ -198,13 +198,13 @@ export class LearnedRankingService implements OnModuleInit {
     const samples: RankingSample[] = [];
 
     for (const row of rows) {
-      const topFoods = row.top_foods as Array<{
+      const topFoods = row.topFoods as Array<{
         foodName: string;
         dimScores?: Record<string, number>;
       }>;
       if (!Array.isArray(topFoods)) continue;
 
-      const matchedFood = topFoods.find((f) => f.foodName === row.food_name);
+      const matchedFood = topFoods.find((f) => f.foodName === row.foodName);
       if (!matchedFood?.dimScores) continue;
 
       // 将 dimScores Record 转换为有序数组（与 SCORE_DIMENSIONS 对齐）

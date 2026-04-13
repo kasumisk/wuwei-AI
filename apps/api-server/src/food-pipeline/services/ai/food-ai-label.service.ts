@@ -228,14 +228,13 @@ ${foodList}
   private validateResult(result: any): AiLabelResult | null {
     if (!result || typeof result !== 'object') return null;
 
-    // 标准化 snake_case → camelCase
     const r: any = {};
-    r.category = result.category || result.sub_category;
-    r.subCategory = result.sub_category || result.subCategory || '';
-    r.foodGroup = result.food_group || result.foodGroup || '';
-    r.mainIngredient = result.main_ingredient || result.mainIngredient || '';
-    r.processingLevel = result.processing_level || result.processingLevel || 1;
-    r.mealTypes = result.meal_types || result.mealTypes || [];
+    r.category = result.category || result.subCategory;
+    r.subCategory = result.subCategory || '';
+    r.foodGroup = result.foodGroup || '';
+    r.mainIngredient = result.mainIngredient || '';
+    r.processingLevel = result.processingLevel || 1;
+    r.mealTypes = result.mealTypes || [];
     r.allergens = result.allergens || [];
     r.compatibility = result.compatibility || { goodWith: [], badWith: [] };
     r.tags = result.tags || [];

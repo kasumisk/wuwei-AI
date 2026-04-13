@@ -46,19 +46,19 @@ export class FoodI18nService {
     }
 
     try {
-      const rows = await this.prisma.food_translations.findMany({
+      const rows = await this.prisma.foodTranslations.findMany({
         where: {
-          food_id: { in: foodIds },
+          foodId: { in: foodIds },
           locale,
         },
         select: {
-          food_id: true,
+          foodId: true,
           name: true,
         },
       });
 
       for (const row of rows) {
-        map.set(row.food_id, row.name);
+        map.set(row.foodId, row.name);
       }
 
       this.logger.debug(

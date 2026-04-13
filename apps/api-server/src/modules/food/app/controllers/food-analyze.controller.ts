@@ -220,7 +220,7 @@ export class FoodAnalyzeController {
     @CurrentAppUser() user: AppUserPayload,
   ): Promise<ApiResponse> {
     // 1. 查找分析记录
-    const analysisRecord = await this.prisma.food_analysis_records.findUnique({
+    const analysisRecord = await this.prisma.foodAnalysisRecords.findUnique({
       where: { id: dto.analysisId },
     });
 
@@ -229,7 +229,7 @@ export class FoodAnalyzeController {
     }
 
     // 2. 验证归属
-    if (analysisRecord.user_id !== user.id) {
+    if (analysisRecord.userId !== user.id) {
       throw new ForbiddenException('无权操作该分析记录');
     }
 
@@ -241,9 +241,9 @@ export class FoodAnalyzeController {
     // 4. 从分析记录中提取数据构建 SaveFoodRecordDto
     const result = this.reconstructAnalysisResult(analysisRecord);
     const mealType =
-      dto.mealType || (analysisRecord.meal_type as MealType) || MealType.LUNCH;
+      dto.mealType || (analysisRecord.mealType as MealType) || MealType.LUNCH;
     const source =
-      analysisRecord.input_type === 'text'
+      analysisRecord.inputType === 'text'
         ? RecordSource.TEXT_ANALYSIS
         : RecordSource.IMAGE_ANALYSIS;
 
@@ -290,7 +290,7 @@ export class FoodAnalyzeController {
         user.id,
         dto.analysisId,
         record.id,
-        analysisRecord.input_type as 'text' | 'image',
+        analysisRecord.inputType as 'text' | 'image',
         mealType,
         result.foods?.map((f) => f.name) ?? [],
         result.totals?.calories ?? 0,
@@ -313,12 +313,12 @@ export class FoodAnalyzeController {
   private reconstructAnalysisResult(
     record: any,
   ): Partial<FoodAnalysisResultV61> {
-    const nutrition = record.nutrition_payload as Record<
+    const nutrition = record.nutritionPayload as Record<
       string,
       unknown
     > | null;
-    const decision = record.decision_payload as Record<string, unknown> | null;
-    const recognized = record.recognized_payload as Record<
+    const decision = record.decisionPayload as Record<string, unknown> | null;
+    const recognized = record.recognizedPayload as Record<
       string,
       unknown
     > | null;
@@ -445,11 +445,11 @@ export class FoodAnalyzeController {
 
     // 4. 构建查询条件
     const where: any = {
-      user_id: user.id,
+      userId: user.id,
       status: AnalysisRecordStatus.COMPLETED,
     };
     if (inputType) {
-      where.input_type = inputType;
+      where.inputType = inputType;
     }
 
     // 5. 应用分级限制
@@ -458,34 +458,34 @@ export class FoodAnalyzeController {
 
     if (!isUnlimited) {
       // Free 用户只能看最近 N 条
-      items = await this.prisma.food_analysis_records.findMany({
+      items = await this.prisma.foodAnalysisRecords.findMany({
         where,
-        orderBy: { created_at: 'desc' },
+        orderBy: { createdAt: 'desc' },
         take: historyLimit,
       });
       total = historyLimit;
     } else {
       [items, total] = await Promise.all([
-        this.prisma.food_analysis_records.findMany({
+        this.prisma.foodAnalysisRecords.findMany({
           where,
-          orderBy: { created_at: 'desc' },
+          orderBy: { createdAt: 'desc' },
           skip,
           take: size,
         }),
-        this.prisma.food_analysis_records.count({ where }),
+        this.prisma.foodAnalysisRecords.count({ where }),
       ]);
     }
 
     // 6. 映射为前端友好的列表结构
     const list = items.map((r) => ({
       analysisId: r.id,
-      inputType: r.input_type,
-      mealType: r.meal_type,
+      inputType: r.inputType,
+      mealType: r.mealType,
       status: r.status,
-      confidenceScore: r.confidence_score,
-      qualityScore: r.quality_score,
-      persistStatus: r.persist_status,
-      createdAt: r.created_at,
+      confidenceScore: r.confidenceScore,
+      qualityScore: r.qualityScore,
+      persistStatus: r.persistStatus,
+      createdAt: r.createdAt,
       // 摘要信息（从 payload 中提取关键字段）
       summary: this.extractHistorySummary(r),
     }));
@@ -524,7 +524,7 @@ export class FoodAnalyzeController {
     @CurrentAppUser() user: AppUserPayload,
   ): Promise<ApiResponse> {
     // 1. 查找分析记录
-    const record = await this.prisma.food_analysis_records.findUnique({
+    const record = await this.prisma.foodAnalysisRecords.findUnique({
       where: { id: analysisId },
     });
 
@@ -533,7 +533,7 @@ export class FoodAnalyzeController {
     }
 
     // 2. 验证归属
-    if (record.user_id !== user.id) {
+    if (record.userId !== user.id) {
       throw new ForbiddenException('无权查看该分析记录');
     }
 
@@ -546,11 +546,11 @@ export class FoodAnalyzeController {
     // 5. 构建完整的 V61 结构用于裁剪
     const v61: FoodAnalysisResultV61 = {
       analysisId: record.id,
-      inputType: record.input_type as 'text' | 'image',
+      inputType: record.inputType as 'text' | 'image',
       inputSnapshot: {
-        rawText: record.raw_text ?? undefined,
-        imageUrl: record.image_url ?? undefined,
-        mealType: record.meal_type as
+        rawText: record.rawText ?? undefined,
+        imageUrl: record.imageUrl ?? undefined,
+        mealType: record.mealType as
           | 'breakfast'
           | 'lunch'
           | 'dinner'
@@ -567,8 +567,8 @@ export class FoodAnalyzeController {
       score: fullResult.score ?? {
         healthScore: 0,
         nutritionScore: 0,
-        confidenceScore: record.confidence_score
-          ? Number(record.confidence_score)
+        confidenceScore: record.confidenceScore
+          ? Number(record.confidenceScore)
           : 0,
       },
       decision: fullResult.decision ?? {
@@ -597,11 +597,11 @@ export class FoodAnalyzeController {
       ...trimmedResult,
       // 元信息
       meta: {
-        qualityScore: record.quality_score,
-        persistStatus: record.persist_status,
-        matchedFoodCount: record.matched_food_count,
-        candidateFoodCount: record.candidate_food_count,
-        createdAt: record.created_at,
+        qualityScore: record.qualityScore,
+        persistStatus: record.persistStatus,
+        matchedFoodCount: record.matchedFoodCount,
+        candidateFoodCount: record.candidateFoodCount,
+        createdAt: record.createdAt,
       },
     };
 
@@ -616,15 +616,15 @@ export class FoodAnalyzeController {
     totalCalories: number;
     recommendation?: string;
   } {
-    const recognized = record.recognized_payload as Record<
+    const recognized = record.recognizedPayload as Record<
       string,
       unknown
     > | null;
-    const nutrition = record.nutrition_payload as Record<
+    const nutrition = record.nutritionPayload as Record<
       string,
       unknown
     > | null;
-    const decision = record.decision_payload as Record<string, unknown> | null;
+    const decision = record.decisionPayload as Record<string, unknown> | null;
 
     // 提取食物名称
     const foods = (recognized?.foods ?? nutrition?.foods ?? []) as Array<{
@@ -917,8 +917,8 @@ export class FoodAnalyzeController {
     const confidence = Number(food.confidence) || 50;
 
     // 基于数据计算简单的健康评分
-    const qualityScore = Number(food.quality_score) || 50;
-    const nutrientDensity = Number(food.nutrient_density) || 50;
+    const qualityScore = Number(food.qualityScore) || 50;
+    const nutrientDensity = Number(food.nutrientDensity) || 50;
     const healthScore = Math.round((qualityScore + nutrientDensity) / 2);
 
     // 简化决策：基于 quality_score
@@ -934,7 +934,7 @@ export class FoodAnalyzeController {
 
     const analysisId = `quick-${foodId}`;
     const servingDesc =
-      food.standard_serving_desc || `${food.standard_serving_g || 100}g`;
+      food.standardServingDesc || `${food.standardServingG || 100}g`;
 
     const v61: FoodAnalysisResultV61 = {
       analysisId,
@@ -945,7 +945,7 @@ export class FoodAnalyzeController {
           name: food.name,
           foodLibraryId: food.id,
           quantity: servingDesc,
-          estimatedWeightGrams: Number(food.standard_serving_g) || 100,
+          estimatedWeightGrams: Number(food.standardServingG) || 100,
           category: food.category || undefined,
           confidence: confidence / 100,
           calories,
@@ -1000,15 +1000,15 @@ export class FoodAnalyzeController {
   private buildQuickAnalysisReason(food: any): string {
     const parts: string[] = [];
 
-    const qualityScore = Number(food.quality_score) || 0;
+    const qualityScore = Number(food.qualityScore) || 0;
     if (qualityScore >= 70) {
       parts.push('数据质量良好');
     }
 
-    if (food.is_fried) {
+    if (food.isFried) {
       parts.push('油炸食品，建议控量');
     }
-    if (Number(food.processing_level) >= 3) {
+    if (Number(food.processingLevel) >= 3) {
       parts.push('加工程度较高');
     }
 

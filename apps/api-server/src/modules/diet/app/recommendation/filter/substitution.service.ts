@@ -114,7 +114,7 @@ export class SubstitutionService {
 
     // 2. 加载候选池 — 同 category 优先，V4 E7: 不足时扩展到相关品类
     let candidates = await this.prisma.foods.findMany({
-      where: { is_verified: true, category: originalFood.category },
+      where: { isVerified: true, category: originalFood.category },
     });
 
     // 排除自身
@@ -130,7 +130,7 @@ export class SubstitutionService {
       if (relatedCategories.length > 0) {
         const crossCandidates = await this.prisma.foods.findMany({
           where: {
-            is_verified: true,
+            isVerified: true,
             category: { in: relatedCategories },
             id: { not: originalFood.id },
           },
@@ -148,7 +148,7 @@ export class SubstitutionService {
     // mealType 过滤
     if (mealType) {
       const mtFiltered = candidates.filter((f) => {
-        const mt: string[] = (f as any).meal_types || [];
+        const mt: string[] = (f as any).mealTypes || [];
         return mt.length === 0 || mt.includes(mealType);
       });
       // 兜底：如果过滤后太少，保留未过滤集
@@ -214,9 +214,9 @@ export class SubstitutionService {
           sum += (catW - 0.3) / 1.0;
           factors++;
         }
-        if (candidate.main_ingredient) {
+        if (candidate.mainIngredient) {
           const ingW =
-            preferenceProfile.ingredientWeights[candidate.main_ingredient];
+            preferenceProfile.ingredientWeights[candidate.mainIngredient];
           if (ingW !== undefined) {
             sum += (ingW - 0.3) / 1.0;
             factors++;
@@ -299,12 +299,12 @@ export class SubstitutionService {
 
     // GI 接近度
     const origGi =
-      original.glycemic_index ??
+      original.glycemicIndex ??
       cfg.categoryGiMap?.[original.category as string] ??
       cfg.giFallback ??
       55;
     const candGi =
-      candidate.glycemic_index ??
+      candidate.glycemicIndex ??
       cfg.categoryGiMap?.[candidate.category as string] ??
       cfg.giFallback ??
       55;
@@ -368,19 +368,19 @@ export class SubstitutionService {
       const since = new Date();
       since.setDate(since.getDate() - 90); // 90天窗口
 
-      const feedbacks = await this.prisma.recommendation_feedbacks.findMany({
+      const feedbacks = await this.prisma.recommendationFeedbacks.findMany({
         where: {
-          user_id: userId,
+          userId: userId,
           action: 'replaced',
-          food_name: originalFoodName,
-          replacement_food: { not: null },
-          created_at: { gte: since },
+          foodName: originalFoodName,
+          replacementFood: { not: null },
+          createdAt: { gte: since },
         },
       });
 
       for (const fb of feedbacks) {
-        if (fb.replacement_food) {
-          map[fb.replacement_food] = (map[fb.replacement_food] || 0) + 1;
+        if (fb.replacementFood) {
+          map[fb.replacementFood] = (map[fb.replacementFood] || 0) + 1;
         }
       }
     } catch (err) {

@@ -35,7 +35,7 @@ export class AppUpdateController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: data.need_update ? '发现新版本' : '已是最新版本',
+      message: data.needUpdate ? '发现新版本' : '已是最新版本',
       data,
     };
   }

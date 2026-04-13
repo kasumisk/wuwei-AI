@@ -19,7 +19,7 @@
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { subscription_trigger_logs as SubscriptionTriggerLog } from '@prisma/client';
+import { SubscriptionTriggerLogs as SubscriptionTriggerLog } from '@prisma/client';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
 import {
   AccessDecision,
@@ -171,14 +171,14 @@ export class PaywallTriggerService {
    */
   async recordTrigger(input: PaywallTriggerInput): Promise<string | undefined> {
     try {
-      const saved = await this.prisma.subscription_trigger_logs.create({
+      const saved = await this.prisma.subscriptionTriggerLogs.create({
         data: {
-          user_id: input.userId,
-          trigger_scene: input.triggerScene,
+          userId: input.userId,
+          triggerScene: input.triggerScene,
           feature: input.feature,
-          current_tier: input.currentTier,
-          recommended_plan: input.recommendedPlan,
-          ab_bucket: input.abBucket || null,
+          currentTier: input.currentTier,
+          recommendedPlan: input.recommendedPlan,
+          abBucket: input.abBucket || null,
           converted: false,
         },
       });
@@ -217,12 +217,12 @@ export class PaywallTriggerService {
     // 标记最近 7 天内未转化的触发日志
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-    const result = await this.prisma.subscription_trigger_logs.updateMany({
+    const result = await this.prisma.subscriptionTriggerLogs.updateMany({
       where: {
-        user_id: userId,
+        userId: userId,
         converted: false,
-        recommended_plan: convertedTier,
-        created_at: { gte: sevenDaysAgo },
+        recommendedPlan: convertedTier,
+        createdAt: { gte: sevenDaysAgo },
       },
       data: { converted: true },
     });
@@ -244,10 +244,10 @@ export class PaywallTriggerService {
     hoursBack: number = 24,
   ): Promise<number> {
     const since = new Date(Date.now() - hoursBack * 60 * 60 * 1000);
-    return this.prisma.subscription_trigger_logs.count({
+    return this.prisma.subscriptionTriggerLogs.count({
       where: {
-        user_id: userId,
-        created_at: { gte: since },
+        userId: userId,
+        createdAt: { gte: since },
       },
     });
   }

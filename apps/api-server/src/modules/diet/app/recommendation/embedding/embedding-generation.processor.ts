@@ -64,7 +64,7 @@ export class EmbeddingGenerationProcessor extends WorkerHost {
           where: { id },
           data: {
             embedding: vec,
-            embedding_updated_at: new Date(),
+            embeddingUpdatedAt: new Date(),
           },
         }),
       ),

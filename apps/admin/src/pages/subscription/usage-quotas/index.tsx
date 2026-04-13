@@ -84,10 +84,10 @@ const UserQuotaPanel: React.FC = () => {
       title: '使用进度',
       width: 200,
       render: (_, r) => {
-        if (r.quota_limit === -1) {
+        if (r.quotaLimit === -1) {
           return <Tag color="green">无限制</Tag>;
         }
-        const pct = Math.round((r.used / r.quota_limit) * 100);
+        const pct = Math.round((r.used / r.quotaLimit) * 100);
         return (
           <Space direction="vertical" size={0} style={{ width: '100%' }}>
             <Progress
@@ -97,7 +97,7 @@ const UserQuotaPanel: React.FC = () => {
               style={{ width: 160 }}
             />
             <Text type="secondary" style={{ fontSize: 11 }}>
-              {r.used} / {r.quota_limit}
+              {r.used} / {r.quotaLimit}
             </Text>
           </Space>
         );
@@ -105,7 +105,7 @@ const UserQuotaPanel: React.FC = () => {
     },
     {
       title: '重置时间',
-      dataIndex: 'reset_at',
+      dataIndex: 'resetAt',
       render: (v) => (v ? new Date(v).toLocaleString('zh-CN', { hour12: false }) : '—'),
     },
     {

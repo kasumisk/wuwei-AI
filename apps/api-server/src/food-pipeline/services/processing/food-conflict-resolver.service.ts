@@ -60,20 +60,20 @@ export class FoodConflictResolverService {
       const diff = oldVal > 0 ? Math.abs(oldVal - newVal) / oldVal : 1;
       if (diff < 0.05) continue; // 差异小于5%忽略
 
-      const existing = await this.prisma.food_conflicts.findFirst({
-        where: { food_id: foodId, field, resolution: null },
+      const existing = await this.prisma.foodConflicts.findFirst({
+        where: { foodId: foodId, field, resolution: null },
       });
       if (existing) continue; // 已有未解决的冲突
 
-      const conflict = await this.prisma.food_conflicts.create({
+      const conflict = await this.prisma.foodConflicts.create({
         data: {
-          food_id: foodId,
+          foodId: foodId,
           field,
           sources: [
             {
               source:
                 existingValues.primarySource ||
-                existingValues.primary_source ||
+                existingValues.primarySource ||
                 'existing',
               value: oldVal,
             },
@@ -90,19 +90,19 @@ export class FoodConflictResolverService {
       incomingValues.category &&
       existingValues.category !== incomingValues.category
     ) {
-      const existing = await this.prisma.food_conflicts.findFirst({
-        where: { food_id: foodId, field: 'category', resolution: null },
+      const existing = await this.prisma.foodConflicts.findFirst({
+        where: { foodId: foodId, field: 'category', resolution: null },
       });
       if (!existing) {
-        const conflict = await this.prisma.food_conflicts.create({
+        const conflict = await this.prisma.foodConflicts.create({
           data: {
-            food_id: foodId,
+            foodId: foodId,
             field: 'category',
             sources: [
               {
                 source:
                   existingValues.primarySource ||
-                  existingValues.primary_source ||
+                  existingValues.primarySource ||
                   'existing',
                 value: existingValues.category,
               },
@@ -124,7 +124,7 @@ export class FoodConflictResolverService {
     resolved: number;
     needsReview: number;
   }> {
-    const pendingConflicts = await this.prisma.food_conflicts.findMany({
+    const pendingConflicts = await this.prisma.foodConflicts.findMany({
       where: { resolution: null },
       include: { foods: true },
     });
@@ -135,13 +135,13 @@ export class FoodConflictResolverService {
     for (const conflict of pendingConflicts) {
       const result = this.autoResolve(conflict);
       if (result) {
-        await this.prisma.food_conflicts.update({
+        await this.prisma.foodConflicts.update({
           where: { id: conflict.id },
           data: {
             resolution: result.resolution,
-            resolved_value: result.resolvedValue,
-            resolved_by: 'auto_pipeline',
-            resolved_at: new Date(),
+            resolvedValue: result.resolvedValue,
+            resolvedBy: 'auto_pipeline',
+            resolvedAt: new Date(),
           },
         });
 
@@ -152,7 +152,7 @@ export class FoodConflictResolverService {
           await this.prisma.$executeRawUnsafe(
             `UPDATE foods SET "${snakeField}" = $1 WHERE id = $2::uuid`,
             result.resolvedValue,
-            conflict.food_id,
+            conflict.foodId,
           );
           resolved++;
         } else {

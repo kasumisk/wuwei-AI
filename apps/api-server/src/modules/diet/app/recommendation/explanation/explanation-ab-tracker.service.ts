@@ -134,7 +134,7 @@ export class ExplanationABTrackerService {
       // 查询最近 30 天各分群 × 解释风格的接受率
       const rows = await this.prisma.$queryRaw<
         {
-          user_segment: string;
+          userSegment: string;
           explanation_style: string;
           total: bigint;
           accepted: bigint;
@@ -170,10 +170,10 @@ export class ExplanationABTrackerService {
         Record<string, { total: number; accepted: number }>
       >();
       for (const row of rows) {
-        if (!segmentMap.has(row.user_segment)) {
-          segmentMap.set(row.user_segment, {});
+        if (!segmentMap.has(row.userSegment)) {
+          segmentMap.set(row.userSegment, {});
         }
-        const seg = segmentMap.get(row.user_segment)!;
+        const seg = segmentMap.get(row.userSegment)!;
         seg[row.explanation_style] = {
           total: Number(row.total),
           accepted: Number(row.accepted),

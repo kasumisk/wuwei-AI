@@ -89,7 +89,7 @@ export class CandidateAggregationService {
    * @returns 合并结果
    */
   async checkAndMerge(candidateId: string): Promise<CandidateMergeResult> {
-    const candidate = await this.prisma.food_candidate.findUnique({
+    const candidate = await this.prisma.foodCandidate.findUnique({
       where: { id: candidateId },
     });
     if (!candidate) {
@@ -105,29 +105,29 @@ export class CandidateAggregationService {
 
     // 选择最佳合并目标: 命中次数最多的那个
     const bestTarget = duplicates.sort(
-      (a: any, b: any) => b.source_count - a.source_count,
+      (a: any, b: any) => b.sourceCount - a.sourceCount,
     )[0];
 
     // 如果目标比当前候选命中次数多，把当前合并到目标
     // 否则把目标合并到当前
     const [winner, loser] =
-      (bestTarget.source_count ?? 0) >= (candidate.source_count ?? 0)
+      (bestTarget.sourceCount ?? 0) >= (candidate.sourceCount ?? 0)
         ? [bestTarget, candidate]
         : [candidate, bestTarget];
 
     await this.mergeCandidates(winner, loser);
 
     this.logger.log(
-      `候选合并: winner=${winner.canonical_name}(${winner.id}), ` +
-        `loser=${loser.canonical_name}(${loser.id}), ` +
-        `newCount=${winner.source_count}`,
+      `候选合并: winner=${winner.canonicalName}(${winner.id}), ` +
+        `loser=${loser.canonicalName}(${loser.id}), ` +
+        `newCount=${winner.sourceCount}`,
     );
 
     return {
       merged: true,
       targetCandidateId: winner.id,
       removedCandidateId: loser.id,
-      reason: `名称相似且营养接近: ${loser.canonical_name} → ${winner.canonical_name}`,
+      reason: `名称相似且营养接近: ${loser.canonicalName} → ${winner.canonicalName}`,
     };
   }
 
@@ -147,7 +147,7 @@ export class CandidateAggregationService {
   async checkReviewEligibility(
     candidateId: string,
   ): Promise<ReviewCheckResult> {
-    const candidate = await this.prisma.food_candidate.findUnique({
+    const candidate = await this.prisma.foodCandidate.findUnique({
       where: { id: candidateId },
     });
     if (!candidate) {
@@ -155,11 +155,11 @@ export class CandidateAggregationService {
     }
 
     // 已在审核流程中的跳过
-    if (candidate.review_status !== 'pending') {
+    if (candidate.reviewStatus !== 'pending') {
       return {
         shouldReview: false,
         candidateId,
-        reason: `已在审核流程: ${candidate.review_status}`,
+        reason: `已在审核流程: ${candidate.reviewStatus}`,
       };
     }
 
@@ -168,21 +168,21 @@ export class CandidateAggregationService {
     windowStart.setDate(windowStart.getDate() - REVIEW_WINDOW_DAYS);
 
     // 通过 link 表统计窗口期内的命中次数
-    const recentHitCount = await this.prisma.analysis_food_link.count({
+    const recentHitCount = await this.prisma.analysisFoodLink.count({
       where: {
-        food_candidate_id: candidateId,
-        created_at: { gte: windowStart },
+        foodCandidateId: candidateId,
+        createdAt: { gte: windowStart },
       },
     });
 
-    const avgConfidence = Number(candidate.avg_confidence);
+    const avgConfidence = Number(candidate.avgConfidence);
 
     const meetsHitCount = recentHitCount >= REVIEW_MIN_HIT_COUNT;
     const meetsConfidence = avgConfidence >= REVIEW_MIN_AVG_CONFIDENCE;
 
     if (meetsHitCount && meetsConfidence) {
       this.logger.log(
-        `候选达到审核条件: ${candidate.canonical_name}(${candidateId}), ` +
+        `候选达到审核条件: ${candidate.canonicalName}(${candidateId}), ` +
           `recentHits=${recentHitCount}, avgConf=${avgConfidence}`,
       );
 
@@ -212,10 +212,10 @@ export class CandidateAggregationService {
     const windowStart = new Date();
     windowStart.setDate(windowStart.getDate() - REVIEW_WINDOW_DAYS);
 
-    const activeCandidates = await this.prisma.food_candidate.findMany({
+    const activeCandidates = await this.prisma.foodCandidate.findMany({
       where: {
-        review_status: 'pending',
-        last_seen_at: { gte: windowStart },
+        reviewStatus: 'pending',
+        lastSeenAt: { gte: windowStart },
       },
       select: { id: true },
     });
@@ -256,8 +256,8 @@ export class CandidateAggregationService {
          AND (LOWER(canonical_name) = $3 OR aliases @> $4::jsonb)`,
       candidate.id,
       'pending',
-      candidate.canonical_name.toLowerCase(),
-      JSON.stringify([candidate.canonical_name]),
+      candidate.canonicalName.toLowerCase(),
+      JSON.stringify([candidate.canonicalName]),
     );
 
     if (nameMatches.length > 0) {
@@ -268,10 +268,10 @@ export class CandidateAggregationService {
     // 只对同分类的候选做模糊名称比较
     if (!candidate.category) return [];
 
-    const sameCategoryCandidates = await this.prisma.food_candidate.findMany({
+    const sameCategoryCandidates = await this.prisma.foodCandidate.findMany({
       where: {
         category: candidate.category,
-        review_status: 'pending',
+        reviewStatus: 'pending',
       },
     });
 
@@ -282,8 +282,8 @@ export class CandidateAggregationService {
 
       // 名称相似度检查
       const similarity = this.calculateNameSimilarity(
-        candidate.canonical_name,
-        other.canonical_name,
+        candidate.canonicalName,
+        other.canonicalName,
       );
       if (similarity < NAME_SIMILARITY_THRESHOLD) continue;
 
@@ -308,57 +308,57 @@ export class CandidateAggregationService {
    */
   private async mergeCandidates(winner: any, loser: any): Promise<void> {
     // 1. 累加命中次数
-    const totalCount = winner.source_count + loser.source_count;
+    const totalCount = winner.sourceCount + loser.sourceCount;
 
     // 2. 加权平均置信度
-    const winnerAvg = Number(winner.avg_confidence);
-    const loserAvg = Number(loser.avg_confidence);
+    const winnerAvg = Number(winner.avgConfidence);
+    const loserAvg = Number(loser.avgConfidence);
     const newAvg =
-      (winnerAvg * winner.source_count + loserAvg * loser.source_count) /
+      (winnerAvg * winner.sourceCount + loserAvg * loser.sourceCount) /
       totalCount;
 
     // 3. 合并别名（去重）
     const allAliases = new Set<string>([
       ...(winner.aliases || []),
       ...(loser.aliases || []),
-      loser.canonical_name, // loser 的规范名作为 winner 的别名
+      loser.canonicalName, // loser 的规范名作为 winner 的别名
     ]);
     // 移除与 winner 规范名重复的
-    allAliases.delete(winner.canonical_name);
+    allAliases.delete(winner.canonicalName);
 
     // 4. 取更高质量分
     const qualityScore =
-      Number(loser.quality_score) > Number(winner.quality_score)
-        ? loser.quality_score
-        : winner.quality_score;
+      Number(loser.qualityScore) > Number(winner.qualityScore)
+        ? loser.qualityScore
+        : winner.qualityScore;
 
     // 5. 更新 lastSeenAt
     const lastSeenAt =
-      loser.last_seen_at > winner.last_seen_at
-        ? loser.last_seen_at
-        : winner.last_seen_at;
+      loser.lastSeenAt > winner.lastSeenAt
+        ? loser.lastSeenAt
+        : winner.lastSeenAt;
 
-    await this.prisma.food_candidate.update({
+    await this.prisma.foodCandidate.update({
       where: { id: winner.id },
       data: {
-        source_count: totalCount,
-        avg_confidence: Math.round(newAvg * 100) / 100,
+        sourceCount: totalCount,
+        avgConfidence: Math.round(newAvg * 100) / 100,
         aliases: Array.from(allAliases),
-        quality_score: qualityScore,
-        last_seen_at: lastSeenAt,
+        qualityScore: qualityScore,
+        lastSeenAt: lastSeenAt,
       },
     });
 
     // 6. 将 loser 的 link 记录重定向到 winner
-    await this.prisma.analysis_food_link.updateMany({
-      where: { food_candidate_id: loser.id },
-      data: { food_candidate_id: winner.id },
+    await this.prisma.analysisFoodLink.updateMany({
+      where: { foodCandidateId: loser.id },
+      data: { foodCandidateId: winner.id },
     });
 
     // 7. 标记 loser 为 REJECTED（已被合并）
-    await this.prisma.food_candidate.update({
+    await this.prisma.foodCandidate.update({
       where: { id: loser.id },
-      data: { review_status: 'rejected' },
+      data: { reviewStatus: 'rejected' },
     });
   }
 
@@ -419,8 +419,8 @@ export class CandidateAggregationService {
     // 分类必须一致
     if (a.category !== b.category) return false;
 
-    const nutA = a.estimated_nutrition as any;
-    const nutB = b.estimated_nutrition as any;
+    const nutA = a.estimatedNutrition as any;
+    const nutB = b.estimatedNutrition as any;
 
     // 如果任一没有营养数据，只要分类一致+名称相似就算接近
     if (!nutA || !nutB) return true;
