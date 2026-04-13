@@ -14,7 +14,6 @@ import {
   Row,
   Col,
   Statistic,
-  Progress,
   Typography,
   Tooltip,
 } from 'antd';
@@ -24,29 +23,19 @@ import {
   DeleteOutlined,
   ReloadOutlined,
   TrophyOutlined,
-  StarOutlined,
   CopyOutlined,
   UserOutlined,
   CrownOutlined,
 } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as RechartsTooltip,
-  ResponsiveContainer,
-} from 'recharts';
+import { BarChart, Bar, ResponsiveContainer } from 'recharts';
 import {
   gamificationApi,
   useCreateAchievement,
   useUpdateAchievement,
   useDeleteAchievement,
   type AchievementDto,
-  type CreateAchievementDto,
 } from '@/services/gamificationService';
 
 const { Text } = Typography;

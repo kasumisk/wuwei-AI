@@ -83,9 +83,9 @@ export class SaveFoodRecordDto {
   @IsString()
   requestId?: string;
 
-  /** V6.1: 关联的分析记录 ID（food_analysis_record.id） */
+  /** V6.1: 关联的分析记录 ID（food_analysis_records.id） */
   @ApiPropertyOptional({
-    description: 'V6.1: 关联的分析记录 ID（food_analysis_record.id）',
+    description: 'V6.1: 关联的分析记录 ID（food_analysis_records.id）',
   })
   @IsOptional()
   @IsUUID()

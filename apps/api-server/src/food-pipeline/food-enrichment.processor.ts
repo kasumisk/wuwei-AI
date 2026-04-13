@@ -7,7 +7,7 @@
  *  - target=regional:     补全地区信息关联表
  *
  * V7.9 新增：
- *  - stages 参数：指定 1-4 阶段编号，走分阶段补全流程（enrichFoodByStage）
+ *  - stages 参数：指定 1-5 阶段编号，走分阶段补全流程（enrichFoodByStage）
  *  - 分阶段结果各阶段独立入库/staging，前阶段结果作为后阶段上下文
  *  - 无 stages 参数时走原有整体补全流程（向后兼容）
  *

@@ -841,7 +841,7 @@ ${gc.focus}
   }
 
   /**
-   * 异步保存图片分析记录到 food_analysis_record
+   * 异步保存图片分析记录到 food_analysis_records
    */
   private async saveAnalysisRecord(
     analysisId: string,
@@ -851,7 +851,7 @@ ${gc.focus}
     legacyResult: AnalysisResult,
     v61Result: FoodAnalysisResultV61,
   ): Promise<void> {
-    await this.prisma.food_analysis_record.create({
+    await this.prisma.food_analysis_records.create({
       data: {
         id: analysisId,
         user_id: userId,

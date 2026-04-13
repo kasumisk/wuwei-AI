@@ -216,7 +216,7 @@ export class AnalyzeService {
       createdAt: Date.now(),
     });
 
-    // V6.1 Phase 2.4: 有登录用户时，异步保存分析记录到 food_analysis_record
+    // V6.1 Phase 2.4: 有登录用户时，异步保存分析记录到 food_analysis_records
     if (userId) {
       this.imageFoodAnalysisService
         .persistAnalysisRecord(result, userId, imageUrl, mealType)

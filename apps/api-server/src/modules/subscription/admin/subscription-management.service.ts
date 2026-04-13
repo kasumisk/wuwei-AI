@@ -7,9 +7,9 @@ import {
   Prisma,
   subscription_plan as SubscriptionPlan,
   subscription as Subscription,
-  payment_record as PaymentRecord,
+  payment_records as PaymentRecord,
   usage_quota as UsageQuota,
-  subscription_trigger_log as SubscriptionTriggerLog,
+  subscription_trigger_logs as SubscriptionTriggerLog,
   app_users as AppUser,
 } from '@prisma/client';
 import {
@@ -223,7 +223,7 @@ export class SubscriptionManagementService {
     });
 
     // 查询关联支付记录
-    const paymentRecords = await this.prisma.payment_record.findMany({
+    const paymentRecords = await this.prisma.payment_records.findMany({
       where: { subscription_id: id },
       orderBy: { created_at: 'desc' },
     });
@@ -343,13 +343,13 @@ export class SubscriptionManagementService {
     const skip = (page - 1) * pageSize;
 
     const [rawList, total] = await Promise.all([
-      this.prisma.payment_record.findMany({
+      this.prisma.payment_records.findMany({
         where,
         orderBy: { created_at: 'desc' },
         skip,
         take: pageSize,
       }),
-      this.prisma.payment_record.count({ where }),
+      this.prisma.payment_records.count({ where }),
     ]);
 
     // 批量查询用户信息
@@ -481,7 +481,7 @@ export class SubscriptionManagementService {
       Array<{ total: number | null }>
     >`
       SELECT COALESCE(SUM(amount_cents), 0)::int as total
-      FROM payment_record
+      FROM payment_records
       WHERE status = ${PaymentStatus.SUCCESS}
       AND paid_at >= ${monthStart}`;
 
@@ -514,7 +514,7 @@ export class SubscriptionManagementService {
     >`
       SELECT feature, COUNT(id)::int as "totalTriggers",
         SUM(CASE WHEN converted = true THEN 1 ELSE 0 END)::int as conversions
-      FROM subscription_trigger_log
+      FROM subscription_trigger_logs
       WHERE created_at >= ${sinceDate}
       ${feature ? Prisma.sql`AND feature = ${feature}` : Prisma.empty}
       ${triggerScene ? Prisma.sql`AND trigger_scene = ${triggerScene}` : Prisma.empty}
@@ -530,7 +530,7 @@ export class SubscriptionManagementService {
     >`
       SELECT trigger_scene as "triggerScene", COUNT(id)::int as "totalTriggers",
         SUM(CASE WHEN converted = true THEN 1 ELSE 0 END)::int as conversions
-      FROM subscription_trigger_log
+      FROM subscription_trigger_logs
       WHERE created_at >= ${sinceDate}
       ${feature ? Prisma.sql`AND feature = ${feature}` : Prisma.empty}
       ${triggerScene ? Prisma.sql`AND trigger_scene = ${triggerScene}` : Prisma.empty}
@@ -562,7 +562,7 @@ export class SubscriptionManagementService {
     >`
       SELECT current_tier as "currentTier", COUNT(id)::int as "totalTriggers",
         SUM(CASE WHEN converted = true THEN 1 ELSE 0 END)::int as conversions
-      FROM subscription_trigger_log
+      FROM subscription_trigger_logs
       WHERE created_at >= ${sinceDate}
       ${feature ? Prisma.sql`AND feature = ${feature}` : Prisma.empty}
       ${triggerScene ? Prisma.sql`AND trigger_scene = ${triggerScene}` : Prisma.empty}

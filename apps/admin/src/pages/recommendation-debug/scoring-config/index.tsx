@@ -148,10 +148,12 @@ const SigmoidPreview: React.FC<{
             tick={{ fontSize: 10 }}
           />
           <RechartsTooltip
-            formatter={(val: number, name: string) => [
-              val.toFixed(3),
-              name === 'current' ? '当前' : '默认',
-            ]}
+            formatter={
+              ((val: number, name: string) => [
+                val.toFixed(3),
+                name === 'current' ? '当前' : '默认',
+              ]) as any
+            }
           />
           <Legend formatter={(v) => (v === 'current' ? '当前' : '默认')} />
           <ReferenceLine x={center} stroke="#1677ff" strokeDasharray="5 5" label="中心" />
@@ -303,12 +305,11 @@ const ScoringConfigPage: React.FC = () => {
   const { mutateAsync: updateConfig, isPending: isSaving } = useUpdateScoringConfig();
   const [isDirty, setIsDirty] = useState(false);
   const [formValues, setFormValues] = useState<Record<string, unknown>>({});
-  const [showDiff, setShowDiff] = useState(false);
 
   // 从后端加载默认值填入表单
   useEffect(() => {
     if (data?.config) {
-      form.setFieldsValue(data.config);
+      form.setFieldsValue(data.config as any);
       setFormValues(data.config as Record<string, unknown>);
       setIsDirty(false);
     }
@@ -378,7 +379,7 @@ const ScoringConfigPage: React.FC = () => {
 
   const handleResetToDefaults = () => {
     if (data?.defaults) {
-      form.setFieldsValue(data.defaults);
+      form.setFieldsValue(data.defaults as any);
       setFormValues(data.defaults as Record<string, unknown>);
       setIsDirty(true);
       message.info('已恢复默认值，请点击保存生效');

@@ -16,48 +16,47 @@ export class UserProfileDashboardService {
     const days = query.days || 30;
     const granularity = query.granularity || 'day';
 
-    let dateTrunc: string;
-    switch (granularity) {
-      case 'week':
-        dateTrunc = 'week';
-        break;
-      case 'month':
-        dateTrunc = 'month';
-        break;
-      default:
-        dateTrunc = 'day';
-    }
+    // 白名单校验，防止 SQL 注入（dateTrunc 只能是这三个值之一）
+    const allowedGranularity = ['day', 'week', 'month'];
+    const dateTrunc = allowedGranularity.includes(granularity)
+      ? granularity
+      : 'day';
 
     // 注册趋势（按时间粒度分组）
-    const trend = await this.prisma.$queryRaw<
+    // 注意：date_trunc 的第一个参数（时间粒度）不能用 Prisma 参数占位符传入，
+    // 否则 PostgreSQL 会将其视为字符串值而非函数关键字，导致 GROUP BY 报错。
+    // 已通过白名单校验确保 dateTrunc 安全，直接使用模板字面量拼接。
+    const trend = await this.prisma.$queryRawUnsafe<
       Array<{ date: Date; count: number; cumulative: number }>
     >(
-      Prisma.sql`
+      `
         SELECT
-          date_trunc(${dateTrunc}, created_at)::date AS date,
+          date_trunc('${dateTrunc}', created_at)::date AS date,
           COUNT(*)::int AS count,
-          SUM(COUNT(*)) OVER (ORDER BY date_trunc(${dateTrunc}, created_at))::int AS cumulative
+          SUM(COUNT(*)) OVER (ORDER BY date_trunc('${dateTrunc}', created_at))::int AS cumulative
         FROM app_users
-        WHERE created_at >= NOW() - CAST(${days + ' days'} AS INTERVAL)
-        GROUP BY date_trunc(${dateTrunc}, created_at)
-        ORDER BY date_trunc(${dateTrunc}, created_at) ASC
+        WHERE created_at >= NOW() - CAST($1 AS INTERVAL)
+        GROUP BY date_trunc('${dateTrunc}', created_at)
+        ORDER BY date_trunc('${dateTrunc}', created_at) ASC
       `,
+      `${days} days`,
     );
 
     // 按 authType 的注册趋势
-    const byAuthType = await this.prisma.$queryRaw<
+    const byAuthType = await this.prisma.$queryRawUnsafe<
       Array<{ date: Date; authType: string; count: number }>
     >(
-      Prisma.sql`
+      `
         SELECT
-          date_trunc(${dateTrunc}, created_at)::date AS date,
+          date_trunc('${dateTrunc}', created_at)::date AS date,
           auth_type AS "authType",
           COUNT(*)::int AS count
         FROM app_users
-        WHERE created_at >= NOW() - CAST(${days + ' days'} AS INTERVAL)
-        GROUP BY date_trunc(${dateTrunc}, created_at), auth_type
-        ORDER BY date_trunc(${dateTrunc}, created_at) ASC
+        WHERE created_at >= NOW() - CAST($1 AS INTERVAL)
+        GROUP BY date_trunc('${dateTrunc}', created_at), auth_type
+        ORDER BY date_trunc('${dateTrunc}', created_at) ASC
       `,
+      `${days} days`,
     );
 
     // 转换 byAuthType 为 per-date 格式

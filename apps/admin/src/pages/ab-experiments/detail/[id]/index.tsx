@@ -17,13 +17,14 @@ import {
   Form,
   Input,
   Select,
-  DatePicker,
   message,
   Popconfirm,
   Result,
   Progress,
   Tooltip,
   Divider,
+  Slider,
+  InputNumber,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -39,6 +40,8 @@ import {
   CopyOutlined,
   TeamOutlined,
   SendOutlined,
+  PlusOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
@@ -66,7 +69,6 @@ import {
   useExperimentAnalysis,
   useUpdateExperiment,
   useUpdateExperimentStatus,
-  useCreateExperiment,
   type ExperimentDto,
   type ExperimentStatus,
   type ExperimentMetric,
@@ -119,7 +121,7 @@ const TrafficPieChart: React.FC<{ groups: ExperimentDto['groups'] }> = ({ groups
             <Cell key={i} fill={COLORS[i % COLORS.length]} />
           ))}
         </Pie>
-        <RTooltip formatter={(value: number) => `${value}%`} />
+        <RTooltip formatter={((value: number) => `${value}%`) as any} />
       </PieChart>
     </ResponsiveContainer>
   );
@@ -149,7 +151,7 @@ const MetricsCompareChart: React.FC<{ metrics: ExperimentMetric[] }> = ({ metric
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis dataKey="group" />
         <YAxis unit="%" />
-        <RTooltip formatter={(value: number) => `${value}%`} />
+        <RTooltip formatter={((value: number) => `${value}%`) as any} />
         <Legend />
         <ReferenceLine y={50} stroke="#52c41a" strokeDasharray="5 5" label="目标线" />
         <Bar dataKey="接受率" fill="#52c41a" />
@@ -350,6 +352,9 @@ const ABExperimentDetail: React.FC = () => {
   const navigate = useNavigate();
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editForm] = Form.useForm();
+  const [editGroups, setEditGroups] = useState<
+    { name: string; trafficRatio: number; scoreWeightOverrides?: any; mealWeightOverrides?: any }[]
+  >([]);
 
   const { data: experiment, isLoading } = useExperimentDetail(id!, !!id);
   const { data: metricsData, isLoading: metricsLoading } = useExperimentMetrics(
@@ -451,26 +456,46 @@ const ABExperimentDetail: React.FC = () => {
       name: experiment.name,
       description: experiment.description,
       goalType: experiment.goalType,
-      groups: JSON.stringify(experiment.groups, null, 2),
     });
+    setEditGroups(
+      (experiment.groups || []).map((g: any) => ({
+        name: g.name || '',
+        trafficRatio: g.trafficRatio ?? 0.5,
+        scoreWeightOverrides: g.scoreWeightOverrides,
+        mealWeightOverrides: g.mealWeightOverrides,
+      }))
+    );
     setEditModalVisible(true);
   };
 
   const handleEdit = async () => {
     try {
       const values = await editForm.validateFields();
+      // 校验 trafficRatio 之和
+      const totalRatio = editGroups.reduce((s, g) => s + g.trafficRatio, 0);
+      if (Math.abs(totalRatio - 1.0) > 0.01) {
+        message.error(`流量分配之和必须为 1.0（当前: ${totalRatio.toFixed(2)}）`);
+        return;
+      }
+      if (editGroups.some((g) => !g.name.trim())) {
+        message.error('分组名称不能为空');
+        return;
+      }
       const dto: UpdateExperimentDto = {
         name: values.name,
         description: values.description,
         goalType: values.goalType,
+        groups: editGroups.map((g) => ({
+          name: g.name,
+          trafficRatio: g.trafficRatio,
+          ...(g.scoreWeightOverrides ? { scoreWeightOverrides: g.scoreWeightOverrides } : {}),
+          ...(g.mealWeightOverrides ? { mealWeightOverrides: g.mealWeightOverrides } : {}),
+        })),
       };
-      if (values.groups) {
-        dto.groups = JSON.parse(values.groups);
-      }
       updateMutation.mutate({ id: id!, data: dto });
     } catch (err: any) {
       if (err?.errorFields) return;
-      message.error('JSON 解析失败');
+      message.error('表单校验失败');
     }
   };
 
@@ -944,7 +969,7 @@ const ABExperimentDetail: React.FC = () => {
         onCancel={() => setEditModalVisible(false)}
         onOk={handleEdit}
         confirmLoading={updateMutation.isPending}
-        width={640}
+        width={720}
       >
         <Form form={editForm} layout="vertical">
           <Form.Item
@@ -968,32 +993,117 @@ const ABExperimentDetail: React.FC = () => {
               ]}
             />
           </Form.Item>
-          <Form.Item
-            name="groups"
-            label="分组配置 (JSON 数组)"
-            rules={[
-              {
-                validator: (_, value) => {
-                  if (!value) return Promise.resolve();
-                  try {
-                    const parsed = JSON.parse(value);
-                    if (!Array.isArray(parsed)) return Promise.reject('必须是数组');
-                    const total = parsed.reduce(
-                      (s: number, g: any) => s + (g.trafficRatio || 0),
-                      0
-                    );
-                    if (Math.abs(total - 1.0) > 0.01)
-                      return Promise.reject(`trafficRatio 之和必须为 1.0`);
-                    return Promise.resolve();
-                  } catch {
-                    return Promise.reject('请输入有效的 JSON 数组');
+          <Divider>分组配置</Divider>
+          <div style={{ marginBottom: 8 }}>
+            <Row justify="space-between" align="middle">
+              <Text type="secondary">
+                流量分配总和:{' '}
+                <Text
+                  strong
+                  type={
+                    Math.abs(editGroups.reduce((s, g) => s + g.trafficRatio, 0) - 1.0) <= 0.01
+                      ? 'success'
+                      : 'danger'
                   }
-                },
-              },
-            ]}
-          >
-            <Input.TextArea rows={8} style={{ fontFamily: 'monospace' }} />
-          </Form.Item>
+                >
+                  {editGroups.reduce((s, g) => s + g.trafficRatio, 0).toFixed(2)}
+                </Text>{' '}
+                / 1.00
+              </Text>
+              <Button
+                type="dashed"
+                size="small"
+                icon={<PlusOutlined />}
+                onClick={() =>
+                  setEditGroups([
+                    ...editGroups,
+                    {
+                      name: `variant_${String.fromCharCode(97 + editGroups.length)}`,
+                      trafficRatio: 0,
+                    },
+                  ])
+                }
+              >
+                添加分组
+              </Button>
+            </Row>
+          </div>
+          {editGroups.map((group, index) => (
+            <Card
+              key={index}
+              size="small"
+              style={{ marginBottom: 8 }}
+              title={
+                <Space>
+                  <Tag color={index === 0 ? 'blue' : 'green'}>
+                    {index === 0 ? '对照组' : `实验组 ${index}`}
+                  </Tag>
+                  <Input
+                    size="small"
+                    value={group.name}
+                    onChange={(e) => {
+                      const newGroups = [...editGroups];
+                      newGroups[index] = { ...newGroups[index], name: e.target.value };
+                      setEditGroups(newGroups);
+                    }}
+                    style={{ width: 150 }}
+                    placeholder="分组名称"
+                  />
+                </Space>
+              }
+              extra={
+                editGroups.length > 2 ? (
+                  <Button
+                    type="link"
+                    danger
+                    size="small"
+                    icon={<DeleteOutlined />}
+                    onClick={() => {
+                      const newGroups = editGroups.filter((_, i) => i !== index);
+                      setEditGroups(newGroups);
+                    }}
+                  />
+                ) : null
+              }
+            >
+              <Row gutter={16} align="middle">
+                <Col span={4}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    流量比例
+                  </Text>
+                </Col>
+                <Col span={14}>
+                  <Slider
+                    min={0}
+                    max={100}
+                    value={Math.round(group.trafficRatio * 100)}
+                    onChange={(v) => {
+                      const newGroups = [...editGroups];
+                      newGroups[index] = { ...newGroups[index], trafficRatio: v / 100 };
+                      setEditGroups(newGroups);
+                    }}
+                    marks={{ 0: '0%', 25: '25%', 50: '50%', 75: '75%', 100: '100%' }}
+                  />
+                </Col>
+                <Col span={6}>
+                  <InputNumber
+                    size="small"
+                    min={0}
+                    max={100}
+                    value={Math.round(group.trafficRatio * 100)}
+                    onChange={(v) => {
+                      const newGroups = [...editGroups];
+                      newGroups[index] = { ...newGroups[index], trafficRatio: (v ?? 0) / 100 };
+                      setEditGroups(newGroups);
+                    }}
+                    formatter={(v) => `${v}%`}
+                    parser={(v) => Number(v?.replace('%', '') || 0) as any}
+                    style={{ width: '100%' }}
+                  />
+                </Col>
+              </Row>
+            </Card>
+          ))}
         </Form>
       </Modal>
     </Space>

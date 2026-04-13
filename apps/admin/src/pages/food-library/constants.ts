@@ -68,3 +68,11 @@ export const LOCALE_OPTIONS = [
   { label: '日语', value: 'ja-JP' },
   { label: '韩语', value: 'ko-KR' },
 ];
+
+// V8.0 补全状态
+export const ENRICHMENT_STATUS_MAP: Record<string, { text: string; color: string }> = {
+  pending: { text: '待补全', color: 'default' },
+  partial: { text: '部分补全', color: 'processing' },
+  completed: { text: '已完成', color: 'success' },
+  failed: { text: '补全失败', color: 'error' },
+};

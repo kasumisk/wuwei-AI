@@ -24,6 +24,7 @@ import {
   Tabs,
   Descriptions,
   Popconfirm,
+  Checkbox,
 } from 'antd';
 import {
   ThunderboltOutlined,
@@ -37,8 +38,25 @@ import {
   ExclamationCircleOutlined,
   GlobalOutlined,
   EnvironmentOutlined,
+  EyeOutlined,
+  BarChartOutlined,
+  DashboardOutlined,
 } from '@ant-design/icons';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+  Cell,
+  LineChart,
+  Line,
+  Legend,
+} from 'recharts';
 import type { ColumnsType } from 'antd/es/table';
+import { useNavigate } from 'react-router-dom';
 import {
   useScanEnrichment,
   useEnqueueEnrichment,
@@ -50,10 +68,16 @@ import {
   useApproveStaged,
   useRejectStaged,
   useBatchApproveStaged,
+  useEnrichmentProgress,
+  useRetryFailedEnrichment,
+  useEnqueueStagedBatch,
+  useCompletenessDistribution,
+  useOperationsStats,
+  useRollbackEnrichment,
+  useBatchRollbackEnrichment,
   type MissingFieldStats,
   type EnrichmentJob,
   type EnrichableField,
-  type EnrichmentTarget,
   type StagedEnrichment,
 } from '@/services/foodPipelineService';
 import { LOCALE_OPTIONS } from '@/pages/food-library/constants';
@@ -97,6 +121,13 @@ const ALL_FIELDS: { value: EnrichableField; label: string; group: string }[] = [
   { value: 'trans_fat', label: '反式脂肪', group: '营养素' },
   { value: 'purine', label: '嘌呤', group: '营养素' },
   { value: 'phosphorus', label: '磷', group: '营养素' },
+  // V8.0: V7.9 新增营养素
+  { value: 'vitamin_b6', label: '维生素B6', group: '营养素' },
+  { value: 'omega3', label: 'Omega-3', group: '营养素' },
+  { value: 'omega6', label: 'Omega-6', group: '营养素' },
+  { value: 'soluble_fiber', label: '可溶性纤维', group: '营养素' },
+  { value: 'insoluble_fiber', label: '不溶性纤维', group: '营养素' },
+  { value: 'water_content_percent', label: '含水率', group: '营养素' },
   // 属性
   { value: 'sub_category', label: '二级分类', group: '属性' },
   { value: 'food_group', label: '食物组', group: '属性' },
@@ -119,6 +150,21 @@ const ALL_FIELDS: { value: EnrichableField; label: string; group: string }[] = [
   { value: 'nutrient_density', label: '营养密度', group: '标签评分' },
   { value: 'commonality_score', label: '大众化评分', group: '标签评分' },
   { value: 'flavor_profile', label: '风味档案', group: '标签评分' },
+  // V8.0: 扩展属性（Stage 5）
+  { value: 'food_form', label: '食物形态', group: '扩展属性' },
+  { value: 'dish_priority', label: '菜品优先级', group: '扩展属性' },
+  { value: 'popularity_score', label: '大众化评分', group: '扩展属性' },
+  { value: 'acquisition_difficulty', label: '获取难度', group: '扩展属性' },
+  { value: 'texture', label: '口感质地', group: '扩展属性' },
+  { value: 'taste_profile', label: '味道档案', group: '扩展属性' },
+  { value: 'suitable_diet_types', label: '适合饮食类型', group: '扩展属性' },
+  { value: 'health_benefits', label: '健康益处', group: '扩展属性' },
+  { value: 'health_risks', label: '健康风险', group: '扩展属性' },
+  { value: 'seasonal_availability', label: '季节性', group: '扩展属性' },
+  { value: 'storage_method', label: '储存方式', group: '扩展属性' },
+  { value: 'shelf_life_days', label: '保质期天数', group: '扩展属性' },
+  { value: 'best_cooking_temp', label: '最佳烹饪温度', group: '扩展属性' },
+  { value: 'pairing_foods', label: '搭配食物', group: '扩展属性' },
 ];
 
 const FIELD_LABEL_MAP = Object.fromEntries(ALL_FIELDS.map((f) => [f.value, f.label]));
@@ -144,11 +190,14 @@ const ACTION_CONFIG: Record<string, { color: string; text: string }> = {
   ai_enrichment_staged: { color: 'warning', text: '待审核' },
   ai_enrichment_approved: { color: 'success', text: '已通过' },
   ai_enrichment_rejected: { color: 'error', text: '已拒绝' },
+  ai_enrichment_rollback: { color: 'processing', text: '已回退' },
+  ai_enrichment_rolled_back: { color: 'default', text: '原记录已回退' },
 };
 
 // ─── 组件 ─────────────────────────────────────────────────────────────────
 
 const EnrichmentPage: React.FC = () => {
+  const navigate = useNavigate();
   const [enqueueForm] = Form.useForm();
   const [rejectForm] = Form.useForm();
   const [scanResult, setScanResult] = useState<MissingFieldStats | null>(null);
@@ -168,7 +217,18 @@ const EnrichmentPage: React.FC = () => {
     open: false,
     record: null,
   });
+  // V8.0: 详情弹窗中的字段级选择
+  const [detailSelectedFields, setDetailSelectedFields] = useState<string[]>([]);
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+  // V8.0: 分阶段入队参数
+  const [stagedBatchStages, setStagedBatchStages] = useState<number[]>([]);
+  const [stagedBatchLimit, setStagedBatchLimit] = useState(50);
+  const [stagedBatchStaged, setStagedBatchStaged] = useState(false);
+  const [stagedBatchMaxCompleteness, setStagedBatchMaxCompleteness] = useState<number | undefined>(
+    undefined
+  );
+  // V8.0: 历史 Tab 行选择（用于批量回退）
+  const [historySelectedRowKeys, setHistorySelectedRowKeys] = useState<React.Key[]>([]);
 
   // Hooks
   const { data: queueStats, refetch: refetchStats } = useEnrichmentStats();
@@ -237,6 +297,61 @@ const EnrichmentPage: React.FC = () => {
       setSelectedRowKeys([]);
     },
     onError: (e) => message.error(`批量操作失败: ${e.message}`),
+  });
+
+  // V8.0: 全库补全进度
+  const { data: enrichmentProgress } = useEnrichmentProgress();
+
+  // V8.0: 完整度分布统计
+  const { data: completenessDistribution } = useCompletenessDistribution();
+
+  // V8.0: 运维统计
+  const { data: operationsStats } = useOperationsStats();
+
+  // V8.0: 重试失败任务
+  const retryMutation = useRetryFailedEnrichment({
+    onSuccess: (data) => {
+      message.success(
+        `已重试 ${data.retried} 个任务${data.failedToRetry > 0 ? `，${data.failedToRetry} 个重试失败` : ''}`
+      );
+      refetchStats();
+      refetchJobs();
+    },
+    onError: (e) => message.error(`重试失败: ${e.message}`),
+  });
+
+  // V8.0: 分阶段批量入队
+  const stagedBatchMutation = useEnqueueStagedBatch({
+    onSuccess: (data) => {
+      message.success(
+        `已入队 ${data.enqueued} 个任务（阶段: ${data.stageNames.join(', ')}）${data.staged ? '（Staging 模式）' : ''}`
+      );
+      refetchStats();
+      refetchJobs();
+    },
+    onError: (e) => message.error(`分阶段入队失败: ${e.message}`),
+  });
+
+  // V8.0: 回退单条补全
+  const rollbackMutation = useRollbackEnrichment({
+    onSuccess: (data) => {
+      message.success(data.rolledBack ? `回退成功: ${data.detail}` : data.detail);
+      refetchHistory();
+      refetchStats();
+      setHistorySelectedRowKeys([]);
+    },
+    onError: (e) => message.error(`回退失败: ${e.message}`),
+  });
+
+  // V8.0: 批量回退补全
+  const batchRollbackMutation = useBatchRollbackEnrichment({
+    onSuccess: (data) => {
+      message.success(`批量回退: ${data.success} 成功，${data.failed} 失败`);
+      refetchHistory();
+      refetchStats();
+      setHistorySelectedRowKeys([]);
+    },
+    onError: (e) => message.error(`批量回退失败: ${e.message}`),
   });
 
   // 缺失字段排行（前12条）
@@ -442,9 +557,17 @@ const EnrichmentPage: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 160,
+      width: 200,
       render: (_, r) => (
         <Space>
+          <Button
+            type="link"
+            size="small"
+            icon={<EyeOutlined />}
+            onClick={() => navigate(`/food-library/enrichment/preview/${r.id}`)}
+          >
+            预览
+          </Button>
           <Button
             type="link"
             size="small"
@@ -452,7 +575,10 @@ const EnrichmentPage: React.FC = () => {
           >
             详情
           </Button>
-          <Popconfirm title="确认通过此补全并入库？" onConfirm={() => approveMutation.mutate(r.id)}>
+          <Popconfirm
+            title="确认通过此补全并入库？"
+            onConfirm={() => approveMutation.mutate({ id: r.id })}
+          >
             <Button
               type="link"
               size="small"
@@ -496,7 +622,7 @@ const EnrichmentPage: React.FC = () => {
     {
       title: '操作类型',
       dataIndex: 'action',
-      width: 100,
+      width: 120,
       render: (a: string) => {
         const cfg = ACTION_CONFIG[a] ?? { color: 'default', text: a };
         return <Badge status={cfg.color as any} text={cfg.text} />;
@@ -530,6 +656,27 @@ const EnrichmentPage: React.FC = () => {
       dataIndex: 'createdAt',
       width: 150,
       render: (v: string) => new Date(v).toLocaleString('zh-CN'),
+    },
+    {
+      title: '操作',
+      key: 'action_ops',
+      width: 100,
+      render: (_, r) => {
+        // 仅"已入库"和"已审核通过"的记录可回退
+        const canRollback = r.action === 'ai_enrichment' || r.action === 'ai_enrichment_approved';
+        if (!canRollback) return '-';
+        return (
+          <Popconfirm
+            title="确认回退此补全？"
+            description="将清除该次补全写入的字段值，使食物可重新进行 AI 补全。"
+            onConfirm={() => rollbackMutation.mutate(r.id)}
+          >
+            <Button type="link" danger size="small" loading={rollbackMutation.isPending}>
+              回退
+            </Button>
+          </Popconfirm>
+        );
+      },
     },
   ];
 
@@ -573,6 +720,101 @@ const EnrichmentPage: React.FC = () => {
           </Card>
         </Col>
       </Row>
+
+      {/* V8.0: 全库补全进度 */}
+      {enrichmentProgress && (
+        <Card
+          size="small"
+          title="全库补全进度"
+          style={{ marginBottom: 16 }}
+          extra={
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              按字段维度统计填充率
+            </Text>
+          }
+        >
+          <Row gutter={[16, 8]}>
+            {(Array.isArray(enrichmentProgress) ? enrichmentProgress : []).map(
+              (item: { field: string; filled: number; total: number; percentage: number }) => {
+                const label = FIELD_LABEL_MAP[item.field as EnrichableField] || item.field;
+                const pct = Math.round(item.percentage);
+                return (
+                  <Col xs={12} sm={8} md={6} key={item.field}>
+                    <div style={{ marginBottom: 4 }}>
+                      <Row justify="space-between">
+                        <Text style={{ fontSize: 12 }}>{label}</Text>
+                        <Text type="secondary" style={{ fontSize: 11 }}>
+                          {item.filled}/{item.total}
+                        </Text>
+                      </Row>
+                      <Progress
+                        percent={pct}
+                        size="small"
+                        strokeColor={pct >= 80 ? '#52c41a' : pct >= 50 ? '#fa8c16' : '#ff4d4f'}
+                      />
+                    </div>
+                  </Col>
+                );
+              }
+            )}
+          </Row>
+        </Card>
+      )}
+
+      {/* V8.0: 完整度分布统计 */}
+      {completenessDistribution && (
+        <Card
+          size="small"
+          title={
+            <Space>
+              <BarChartOutlined />
+              全库完整度分布
+            </Space>
+          }
+          style={{ marginBottom: 16 }}
+          extra={
+            <Space>
+              <Tag color="blue">
+                平均完整度: {Math.round(completenessDistribution.avgCompleteness)}%
+              </Tag>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                共 {completenessDistribution.total} 条食物
+              </Text>
+            </Space>
+          }
+        >
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart
+              data={completenessDistribution.distribution.map((d) => ({
+                name: d.range,
+                count: d.count,
+                percentage:
+                  completenessDistribution.total > 0
+                    ? Math.round((d.count / completenessDistribution.total) * 100)
+                    : 0,
+              }))}
+              margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} />
+              <RechartsTooltip
+                formatter={
+                  ((value: number, _name: string, props: { payload?: { percentage?: number } }) =>
+                    [`${value} 条 (${props.payload?.percentage ?? 0}%)`, '食物数量'] as any) as any
+                }
+              />
+              <Bar dataKey="count" radius={[4, 4, 0, 0]} maxBarSize={60}>
+                {completenessDistribution.distribution.map((_entry, index) => {
+                  // 完整度越高颜色越绿，越低越红
+                  const colors = ['#ff4d4f', '#fa8c16', '#faad14', '#52c41a', '#389e0d'];
+                  return <Cell key={`cell-${index}`} fill={colors[index] ?? '#1677ff'} />;
+                })}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </Card>
+      )}
 
       <Tabs
         defaultActiveKey="enqueue"
@@ -742,14 +984,28 @@ const EnrichmentPage: React.FC = () => {
                       </Col>
                       <Col xs={24} sm={8}>
                         <Row gutter={8}>
-                          <Col span={12}>
+                          <Col span={8}>
                             <Form.Item name="limit" label="数量">
                               <InputNumber min={1} max={500} style={{ width: '100%' }} />
                             </Form.Item>
                           </Col>
-                          <Col span={12}>
+                          <Col span={8}>
                             <Form.Item name="offset" label="偏移">
                               <InputNumber min={0} style={{ width: '100%' }} />
+                            </Form.Item>
+                          </Col>
+                          <Col span={8}>
+                            <Form.Item
+                              name="maxCompleteness"
+                              label="最高完整度"
+                              tooltip="仅入队完整度 <= 此值的食物（0-100），留空不限"
+                            >
+                              <InputNumber
+                                min={0}
+                                max={100}
+                                placeholder="不限"
+                                style={{ width: '100%' }}
+                              />
                             </Form.Item>
                           </Col>
                         </Row>
@@ -775,6 +1031,115 @@ const EnrichmentPage: React.FC = () => {
                       </Col>
                     </Row>
                   </Form>
+                </Card>
+
+                {/* V8.0: 分阶段批量入队 */}
+                <Card
+                  title={
+                    <Space>
+                      <ThunderboltOutlined />
+                      分阶段智能入队
+                    </Space>
+                  }
+                >
+                  <Alert
+                    message="分阶段补全策略"
+                    description={
+                      <ul style={{ margin: 0, paddingLeft: 16 }}>
+                        <li>
+                          <strong>阶段 1</strong>：核心宏量营养素（蛋白质、脂肪、碳水、热量）
+                        </li>
+                        <li>
+                          <strong>阶段 2</strong>：微量营养素（维生素、矿物质）
+                        </li>
+                        <li>
+                          <strong>阶段 3</strong>：健康属性（GI、GL、FODMAP、加工程度等）
+                        </li>
+                        <li>
+                          <strong>阶段 4</strong>：标签与评分（餐次、过敏原、饱腹感等）
+                        </li>
+                        <li>建议按顺序逐阶段补全，确保数据质量</li>
+                      </ul>
+                    }
+                    type="info"
+                    showIcon
+                    style={{ marginBottom: 16 }}
+                  />
+                  <Row gutter={16} align="bottom">
+                    <Col xs={24} sm={8}>
+                      <Form.Item label="选择阶段" style={{ marginBottom: 8 }}>
+                        <Select
+                          mode="multiple"
+                          placeholder="不选则按顺序自动选择"
+                          value={stagedBatchStages}
+                          onChange={setStagedBatchStages}
+                          options={[
+                            { label: '阶段 1: 核心营养素', value: 1 },
+                            { label: '阶段 2: 微量营养素', value: 2 },
+                            { label: '阶段 3: 健康属性', value: 3 },
+                            { label: '阶段 4: 标签评分', value: 4 },
+                            { label: '阶段 5: 扩展属性', value: 5 },
+                          ]}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col xs={12} sm={4}>
+                      <Form.Item label="数量" style={{ marginBottom: 8 }}>
+                        <InputNumber
+                          min={1}
+                          max={500}
+                          value={stagedBatchLimit}
+                          onChange={(v) => setStagedBatchLimit(v ?? 50)}
+                          style={{ width: '100%' }}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col xs={12} sm={4}>
+                      <Form.Item
+                        label="最高完整度"
+                        tooltip="仅入队完整度 <= 此值的食物（0-100），留空不限"
+                        style={{ marginBottom: 8 }}
+                      >
+                        <InputNumber
+                          min={0}
+                          max={100}
+                          placeholder="不限"
+                          value={stagedBatchMaxCompleteness}
+                          onChange={(v) => setStagedBatchMaxCompleteness(v ?? undefined)}
+                          style={{ width: '100%' }}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col xs={12} sm={4}>
+                      <Form.Item label="Staging 模式" style={{ marginBottom: 8 }}>
+                        <Switch
+                          checked={stagedBatchStaged}
+                          onChange={setStagedBatchStaged}
+                          checkedChildren="暂存审核"
+                          unCheckedChildren="直接入库"
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col xs={24} sm={8}>
+                      <Form.Item label=" " style={{ marginBottom: 8 }}>
+                        <Button
+                          type="primary"
+                          icon={<ThunderboltOutlined />}
+                          loading={stagedBatchMutation.isPending}
+                          onClick={() =>
+                            stagedBatchMutation.mutate({
+                              stages: stagedBatchStages.length > 0 ? stagedBatchStages : undefined,
+                              limit: stagedBatchLimit,
+                              staged: stagedBatchStaged,
+                              maxCompleteness: stagedBatchMaxCompleteness,
+                            })
+                          }
+                        >
+                          分阶段入队
+                        </Button>
+                      </Form.Item>
+                    </Col>
+                  </Row>
                 </Card>
               </Space>
             ),
@@ -821,6 +1186,19 @@ const EnrichmentPage: React.FC = () => {
                     >
                       清理失败
                     </Button>
+                    <Popconfirm
+                      title="重试失败任务"
+                      description="将自动重新入队所有失败的补全任务"
+                      onConfirm={() => retryMutation.mutate({ limit: 100 })}
+                    >
+                      <Button
+                        icon={<ReloadOutlined />}
+                        loading={retryMutation.isPending}
+                        disabled={!queueStats || (queueStats as any).failed === 0}
+                      >
+                        重试失败
+                      </Button>
+                    </Popconfirm>
                   </Space>
                 }
               >
@@ -868,7 +1246,7 @@ const EnrichmentPage: React.FC = () => {
                         批量通过 {selectedRowKeys.length > 0 ? `(${selectedRowKeys.length})` : ''}
                       </Button>
                     </Popconfirm>
-                    <Button icon={<ReloadOutlined />} onClick={refetchStaged}>
+                    <Button icon={<ReloadOutlined />} onClick={() => refetchStaged()}>
                       刷新
                     </Button>
                   </Space>
@@ -915,16 +1293,55 @@ const EnrichmentPage: React.FC = () => {
             children: (
               <Card
                 extra={
-                  <Button icon={<ReloadOutlined />} onClick={refetchHistory}>
-                    刷新
-                  </Button>
+                  <Space>
+                    <Popconfirm
+                      title={`确认批量回退选中的 ${historySelectedRowKeys.length} 条记录？`}
+                      description="将清除这些补全写入的字段值，使对应食物可重新进行 AI 补全。"
+                      disabled={historySelectedRowKeys.length === 0}
+                      onConfirm={() =>
+                        batchRollbackMutation.mutate(historySelectedRowKeys as string[])
+                      }
+                    >
+                      <Button
+                        danger
+                        icon={<CloseCircleOutlined />}
+                        disabled={historySelectedRowKeys.length === 0}
+                        loading={batchRollbackMutation.isPending}
+                      >
+                        批量回退{' '}
+                        {historySelectedRowKeys.length > 0
+                          ? `(${historySelectedRowKeys.length})`
+                          : ''}
+                      </Button>
+                    </Popconfirm>
+                    <Button icon={<ReloadOutlined />} onClick={() => refetchHistory()}>
+                      刷新
+                    </Button>
+                  </Space>
                 }
               >
+                <Alert
+                  message="回退说明"
+                  description="选择已入库或已审核通过的补全记录，点击回退后将清除该次补全写入的字段值，使食物回到待补全状态。回退操作会写入审计日志。"
+                  type="warning"
+                  showIcon
+                  style={{ marginBottom: 16 }}
+                />
                 <Table<StagedEnrichment>
                   dataSource={history?.list ?? []}
                   columns={historyColumns}
                   rowKey="id"
                   size="small"
+                  rowSelection={{
+                    selectedRowKeys: historySelectedRowKeys,
+                    onChange: setHistorySelectedRowKeys,
+                    getCheckboxProps: (record) => ({
+                      // 仅"已入库"和"已审核通过"的可选中
+                      disabled:
+                        record.action !== 'ai_enrichment' &&
+                        record.action !== 'ai_enrichment_approved',
+                    }),
+                  }}
                   pagination={{
                     current: historyPage,
                     pageSize: 20,
@@ -932,8 +1349,148 @@ const EnrichmentPage: React.FC = () => {
                     onChange: setHistoryPage,
                     showTotal: (t) => `共 ${t} 条`,
                   }}
-                  scroll={{ x: 800 }}
+                  scroll={{ x: 1000 }}
                 />
+              </Card>
+            ),
+          },
+
+          // ─── Tab 5: 运维统计 ──────────────────────────────────────────
+          {
+            key: 'ops',
+            label: (
+              <Space>
+                <DashboardOutlined />
+                运维统计
+              </Space>
+            ),
+            children: operationsStats ? (
+              <Space direction="vertical" style={{ width: '100%' }} size={16}>
+                {/* 概览卡片 */}
+                <Row gutter={[12, 12]}>
+                  {[
+                    {
+                      label: '总补全次数',
+                      value: operationsStats.total,
+                      color: '#1677ff',
+                    },
+                    {
+                      label: '直接入库',
+                      value: operationsStats.directApplied,
+                      color: '#52c41a',
+                    },
+                    {
+                      label: '暂存待审',
+                      value: operationsStats.staged,
+                      color: '#fa8c16',
+                    },
+                    {
+                      label: '审核通过',
+                      value: operationsStats.approved,
+                      color: '#389e0d',
+                    },
+                    {
+                      label: '审核拒绝',
+                      value: operationsStats.rejected,
+                      color: '#ff4d4f',
+                    },
+                    {
+                      label: '审核通过率',
+                      value: operationsStats.approvalRate,
+                      suffix: '%',
+                      color: '#722ed1',
+                    },
+                    {
+                      label: '平均置信度',
+                      value: Math.round(operationsStats.avgConfidence * 100),
+                      suffix: '%',
+                      color: '#13c2c2',
+                    },
+                  ].map(({ label, value, color, suffix }) => (
+                    <Col xs={12} sm={8} md={6} lg={4} key={label}>
+                      <Card size="small">
+                        <Statistic
+                          title={label}
+                          value={value}
+                          suffix={suffix}
+                          valueStyle={{ color, fontSize: 20 }}
+                        />
+                      </Card>
+                    </Col>
+                  ))}
+                </Row>
+
+                {/* 近30天趋势折线图 */}
+                <Card
+                  size="small"
+                  title="近 30 天补全趋势"
+                  extra={
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      按操作类型分组统计
+                    </Text>
+                  }
+                >
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart
+                      data={(() => {
+                        // 将 dailyStats 按日期聚合为折线图数据
+                        const byDate: Record<string, Record<string, number>> = {};
+                        for (const item of operationsStats.dailyStats) {
+                          if (!byDate[item.date]) byDate[item.date] = {};
+                          byDate[item.date][item.action] = item.count;
+                        }
+                        return Object.entries(byDate)
+                          .sort(([a], [b]) => a.localeCompare(b))
+                          .map(([date, actions]) => ({
+                            date: date.slice(5), // MM-DD
+                            已入库: actions['ai_enrichment'] ?? 0,
+                            待审核: actions['ai_enrichment_staged'] ?? 0,
+                            已通过: actions['ai_enrichment_approved'] ?? 0,
+                            已拒绝: actions['ai_enrichment_rejected'] ?? 0,
+                          }));
+                      })()}
+                      margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                      <YAxis tick={{ fontSize: 11 }} />
+                      <RechartsTooltip />
+                      <Legend />
+                      <Line
+                        type="monotone"
+                        dataKey="已入库"
+                        stroke="#52c41a"
+                        strokeWidth={2}
+                        dot={{ r: 2 }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="待审核"
+                        stroke="#fa8c16"
+                        strokeWidth={2}
+                        dot={{ r: 2 }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="已通过"
+                        stroke="#389e0d"
+                        strokeWidth={2}
+                        dot={{ r: 2 }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="已拒绝"
+                        stroke="#ff4d4f"
+                        strokeWidth={2}
+                        dot={{ r: 2 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </Card>
+              </Space>
+            ) : (
+              <Card>
+                <Alert message="加载中..." type="info" showIcon />
               </Card>
             ),
           },
@@ -967,23 +1524,43 @@ const EnrichmentPage: React.FC = () => {
       <Modal
         title="AI 补全详情"
         open={detailModal.open}
-        onCancel={() => setDetailModal({ open: false, record: null })}
+        onCancel={() => {
+          setDetailModal({ open: false, record: null });
+          setDetailSelectedFields([]);
+        }}
         footer={[
-          <Button key="close" onClick={() => setDetailModal({ open: false, record: null })}>
+          <Button
+            key="close"
+            onClick={() => {
+              setDetailModal({ open: false, record: null });
+              setDetailSelectedFields([]);
+            }}
+          >
             关闭
           </Button>,
           <Popconfirm
             key="approve"
-            title="确认通过此补全并入库？"
+            title={
+              detailSelectedFields.length > 0
+                ? `确认将选中的 ${detailSelectedFields.length} 个字段入库？`
+                : '确认通过全部字段并入库？'
+            }
             onConfirm={() => {
               if (detailModal.record) {
-                approveMutation.mutate(detailModal.record.id);
+                approveMutation.mutate({
+                  id: detailModal.record.id,
+                  selectedFields:
+                    detailSelectedFields.length > 0 ? detailSelectedFields : undefined,
+                });
                 setDetailModal({ open: false, record: null });
+                setDetailSelectedFields([]);
               }
             }}
           >
             <Button type="primary" icon={<CheckCircleOutlined />}>
-              通过入库
+              {detailSelectedFields.length > 0
+                ? `选择性入库 (${detailSelectedFields.length})`
+                : '全部通过'}
             </Button>
           </Popconfirm>,
           <Button
@@ -993,6 +1570,7 @@ const EnrichmentPage: React.FC = () => {
             onClick={() => {
               if (detailModal.record) {
                 setDetailModal({ open: false, record: null });
+                setDetailSelectedFields([]);
                 setRejectModal({ open: true, id: detailModal.record.id });
               }
             }}
@@ -1007,6 +1585,8 @@ const EnrichmentPage: React.FC = () => {
             const r = detailModal.record;
             const proposed = r.changes?.proposedValues ?? {};
             const { confidence, reasoning, ...fields } = proposed;
+            const fieldEntries = Object.entries(fields).filter(([, v]) => v != null);
+            const allFieldKeys = fieldEntries.map(([k]) => k);
             return (
               <>
                 <Descriptions column={2} size="small" style={{ marginBottom: 16 }}>
@@ -1041,25 +1621,57 @@ const EnrichmentPage: React.FC = () => {
                     style={{ marginBottom: 12 }}
                   />
                 )}
-                <Divider>拟写入值（只含非空字段）</Divider>
-                <div style={{ maxHeight: 300, overflowY: 'auto' }}>
-                  {Object.entries(fields)
-                    .filter(([, v]) => v != null)
-                    .map(([k, v]) => (
-                      <Row key={k} gutter={8} style={{ marginBottom: 6 }}>
+                <Divider>拟写入值（勾选字段选择性入库，不勾选则全部入库）</Divider>
+                <div style={{ marginBottom: 8 }}>
+                  <Space>
+                    <Button size="small" onClick={() => setDetailSelectedFields(allFieldKeys)}>
+                      全选
+                    </Button>
+                    <Button size="small" onClick={() => setDetailSelectedFields([])}>
+                      全不选
+                    </Button>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      {detailSelectedFields.length > 0
+                        ? `已选 ${detailSelectedFields.length} / ${allFieldKeys.length} 个字段`
+                        : '未选择（将入库全部字段）'}
+                    </Text>
+                  </Space>
+                </div>
+                <Checkbox.Group
+                  value={detailSelectedFields}
+                  onChange={(vals) => setDetailSelectedFields(vals as string[])}
+                  style={{ width: '100%' }}
+                >
+                  <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+                    {fieldEntries.map(([k, v]) => (
+                      <Row
+                        key={k}
+                        gutter={8}
+                        style={{
+                          marginBottom: 6,
+                          padding: '4px 8px',
+                          borderRadius: 4,
+                          background: detailSelectedFields.includes(k) ? '#f0f5ff' : 'transparent',
+                        }}
+                        align="middle"
+                      >
+                        <Col span={2}>
+                          <Checkbox value={k} />
+                        </Col>
                         <Col span={8}>
                           <Text type="secondary" style={{ fontSize: 12 }}>
                             {FIELD_LABEL_MAP[k as EnrichableField] || k}
                           </Text>
                         </Col>
-                        <Col span={16}>
+                        <Col span={14}>
                           <Tag color="blue" style={{ fontSize: 12 }}>
                             {typeof v === 'object' ? JSON.stringify(v) : String(v)}
                           </Tag>
                         </Col>
                       </Row>
                     ))}
-                </div>
+                  </div>
+                </Checkbox.Group>
               </>
             );
           })()}

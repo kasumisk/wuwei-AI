@@ -10,7 +10,6 @@ import {
   Input,
   Select,
   Typography,
-  Alert,
   Descriptions,
   Row,
   Col,
@@ -33,14 +32,6 @@ export const routeConfig = {
 };
 
 const { Text } = Typography;
-
-const RESOLUTION_OPTIONS = [
-  { label: '全部', value: '' },
-  { label: '待处理', value: 'pending' },
-  { label: '自动解决', value: 'auto_resolved' },
-  { label: '人工解决', value: 'manual_resolved' },
-  { label: '需人工审核', value: 'needs_review' },
-];
 
 const ConflictsPage: React.FC = () => {
   const actionRef = useRef<ActionType>(null);

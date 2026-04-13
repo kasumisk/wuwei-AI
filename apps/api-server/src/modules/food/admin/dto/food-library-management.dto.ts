@@ -71,6 +71,29 @@ export class GetFoodLibraryQueryDto {
   @IsOptional()
   @IsString()
   primarySource?: string;
+
+  @ApiPropertyOptional({ description: 'V8.0: 最小数据完整度（0-100）' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  minCompleteness?: number;
+
+  @ApiPropertyOptional({ description: 'V8.0: 最大数据完整度（0-100）' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  maxCompleteness?: number;
+
+  @ApiPropertyOptional({
+    description: 'V8.0: 补全状态筛选（pending/partial/completed/failed）',
+  })
+  @IsOptional()
+  @IsString()
+  enrichmentStatus?: string;
 }
 
 // ==================== 食物 CRUD DTO ====================
@@ -296,6 +319,46 @@ export class CreateFoodLibraryDto {
   @Type(() => Number)
   @IsNumber()
   purine?: number;
+
+  // ─── V7.9 新增微量营养素 ─────────────────────────────────────────────
+
+  @ApiPropertyOptional({ description: '维生素 B6，单位 mg' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  vitaminB6?: number;
+
+  @ApiPropertyOptional({ description: 'Omega-3 脂肪酸，单位 mg' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  omega3?: number;
+
+  @ApiPropertyOptional({ description: 'Omega-6 脂肪酸，单位 mg' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  omega6?: number;
+
+  @ApiPropertyOptional({ description: '可溶性膳食纤维，单位 g' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  solubleFiber?: number;
+
+  @ApiPropertyOptional({ description: '不溶性膳食纤维，单位 g' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  insolubleFiber?: number;
+
+  @ApiPropertyOptional({ description: '含水率百分比（0-100）' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  waterContentPercent?: number;
 
   // ─── 健康评估 ────────────────────────────────────────────────────────
 
@@ -588,6 +651,18 @@ export class CreateFoodLibraryDto {
   @Type(() => Number)
   @IsInt()
   shelfLifeDays?: number;
+
+  @ApiPropertyOptional({
+    description: '获取难度 1-5（1=超市随时可得, 3=需专门采购, 5=极难获取）',
+    minimum: 1,
+    maximum: 5,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  acquisitionDifficulty?: number;
 
   // ─── 媒体资源 ────────────────────────────────────────────────────────
 

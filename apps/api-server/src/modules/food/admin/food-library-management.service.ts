@@ -6,6 +6,12 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import {
+  ENRICHABLE_FIELDS,
+  JSON_ARRAY_FIELDS,
+  JSON_OBJECT_FIELDS,
+  ENRICHMENT_STAGES,
+} from '../../../food-pipeline/services/food-enrichment.service';
+import {
   GetFoodLibraryQueryDto,
   CreateFoodLibraryDto,
   UpdateFoodLibraryDto,
@@ -39,6 +45,13 @@ export class FoodLibraryManagementService {
       vitaminD,
       vitaminE,
       vitaminB12,
+      // V7.9 新增微量营养素
+      vitaminB6,
+      omega3,
+      omega6,
+      solubleFiber,
+      insolubleFiber,
+      waterContentPercent,
       glycemicIndex,
       glycemicLoad,
       isProcessed,
@@ -69,6 +82,8 @@ export class FoodLibraryManagementService {
       skillRequired,
       estimatedCostLevel,
       shelfLifeDays,
+      // V7.9 获取难度
+      acquisitionDifficulty,
       imageUrl,
       thumbnailUrl,
       primarySource,
@@ -93,6 +108,14 @@ export class FoodLibraryManagementService {
     if (vitaminD !== undefined) mapped.vitamin_d = vitaminD;
     if (vitaminE !== undefined) mapped.vitamin_e = vitaminE;
     if (vitaminB12 !== undefined) mapped.vitamin_b12 = vitaminB12;
+    // V7.9 新增微量营养素（DB字段名与DTO一致，无需snake_case映射，但为统一风格仍显式列出）
+    if (vitaminB6 !== undefined) mapped.vitamin_b6 = vitaminB6;
+    if (omega3 !== undefined) mapped.omega3 = omega3;
+    if (omega6 !== undefined) mapped.omega6 = omega6;
+    if (solubleFiber !== undefined) mapped.soluble_fiber = solubleFiber;
+    if (insolubleFiber !== undefined) mapped.insoluble_fiber = insolubleFiber;
+    if (waterContentPercent !== undefined)
+      mapped.water_content_percent = waterContentPercent;
     if (glycemicIndex !== undefined) mapped.glycemic_index = glycemicIndex;
     if (glycemicLoad !== undefined) mapped.glycemic_load = glycemicLoad;
     if (isProcessed !== undefined) mapped.is_processed = isProcessed;
@@ -134,6 +157,8 @@ export class FoodLibraryManagementService {
     if (estimatedCostLevel !== undefined)
       mapped.estimated_cost_level = estimatedCostLevel;
     if (shelfLifeDays !== undefined) mapped.shelf_life_days = shelfLifeDays;
+    if (acquisitionDifficulty !== undefined)
+      mapped.acquisition_difficulty = acquisitionDifficulty;
     if (imageUrl !== undefined) mapped.image_url = imageUrl;
     if (thumbnailUrl !== undefined) mapped.thumbnail_url = thumbnailUrl;
     if (primarySource !== undefined) mapped.primary_source = primarySource;
@@ -158,6 +183,9 @@ export class FoodLibraryManagementService {
       isVerified,
       primarySource,
       status,
+      minCompleteness,
+      maxCompleteness,
+      enrichmentStatus,
     } = query;
 
     // Build dynamic WHERE clauses for ILIKE support
@@ -210,6 +238,23 @@ export class FoodLibraryManagementService {
     if (primarySource) {
       conditions.push(`f.primary_source = $${paramIdx}`);
       params.push(primarySource);
+      paramIdx++;
+    }
+    // 完整度范围筛选
+    if (minCompleteness !== undefined) {
+      conditions.push(`f.data_completeness >= $${paramIdx}`);
+      params.push(minCompleteness);
+      paramIdx++;
+    }
+    if (maxCompleteness !== undefined) {
+      conditions.push(`f.data_completeness <= $${paramIdx}`);
+      params.push(maxCompleteness);
+      paramIdx++;
+    }
+    // 补全状态筛选
+    if (enrichmentStatus) {
+      conditions.push(`f.enrichment_status = $${paramIdx}`);
+      params.push(enrichmentStatus);
       paramIdx++;
     }
 
@@ -266,7 +311,14 @@ export class FoodLibraryManagementService {
          f.data_version, f.confidence, f.is_verified,
          f.verified_by, f.verified_at,
          f.search_weight, f.popularity,
-         f.created_at, f.updated_at
+         f.created_at, f.updated_at,
+         -- V7.9 营养素字段
+         f.vitamin_b6, f.omega3, f.omega6,
+         f.soluble_fiber, f.insoluble_fiber, f.water_content_percent,
+         f.acquisition_difficulty,
+         -- 补全元数据
+         f.data_completeness, f.enrichment_status, f.last_enriched_at,
+         f.field_sources, f.field_confidence
        FROM foods f
        WHERE ${whereClause}
        ORDER BY f.search_weight DESC, f.created_at DESC
@@ -347,10 +399,52 @@ export class FoodLibraryManagementService {
       }
     }
 
+    const mappedData = this.mapDtoToDb(dto);
     const newVersion = (food.data_version || 1) + 1;
+
+    // V8.0: 更新 field_sources — 手动编辑的字段标记为 'manual'
+    const existingSources =
+      (food.field_sources as Record<string, string>) || {};
+    const existingConfidence =
+      (food.field_confidence as Record<string, number>) || {};
+    const newSources = { ...existingSources };
+    const newConfidence = { ...existingConfidence };
+    const enrichableSet = new Set<string>(
+      ENRICHABLE_FIELDS as unknown as string[],
+    );
+
+    for (const [dbKey] of Object.entries(mappedData)) {
+      if (enrichableSet.has(dbKey)) {
+        newSources[dbKey] = 'manual';
+        newConfidence[dbKey] = 1.0; // 手动编辑置信度为 1.0
+      }
+    }
+
     const saved = await this.prisma.foods.update({
       where: { id },
-      data: { ...this.mapDtoToDb(dto), data_version: newVersion },
+      data: {
+        ...mappedData,
+        data_version: newVersion,
+        field_sources: newSources,
+        field_confidence: newConfidence,
+      },
+    });
+
+    // V8.0: 更新完整度评分
+    const completeness = this.computeSimpleCompleteness(saved);
+    const enrichmentStatus =
+      completeness >= 80
+        ? 'completed'
+        : completeness >= 30
+          ? 'partial'
+          : 'pending';
+
+    await this.prisma.foods.update({
+      where: { id },
+      data: {
+        data_completeness: completeness,
+        enrichment_status: enrichmentStatus,
+      },
     });
 
     if (Object.keys(changes).length > 0) {
@@ -364,6 +458,37 @@ export class FoodLibraryManagementService {
       );
     }
     return saved;
+  }
+
+  /**
+   * V8.0: 简化版完整度计算（复用 ENRICHMENT_STAGES 权重逻辑）
+   * 避免循环依赖：不引入 FoodEnrichmentService，直接使用常量计算
+   */
+  private computeSimpleCompleteness(food: any): number {
+    const isFieldFilled = (field: string): boolean => {
+      const value = food[field];
+      if (value === null || value === undefined) return false;
+      if ((JSON_ARRAY_FIELDS as readonly string[]).includes(field))
+        return Array.isArray(value) && value.length > 0;
+      if ((JSON_OBJECT_FIELDS as readonly string[]).includes(field))
+        return typeof value === 'object' && Object.keys(value).length > 0;
+      return true;
+    };
+
+    const computeGroupScore = (fields: readonly string[]): number => {
+      if (fields.length === 0) return 0;
+      const filled = fields.filter((f) => isFieldFilled(f)).length;
+      return filled / fields.length;
+    };
+
+    const weights = [0.35, 0.25, 0.15, 0.15, 0.1];
+    let score = 0;
+    for (let i = 0; i < ENRICHMENT_STAGES.length && i < weights.length; i++) {
+      score +=
+        computeGroupScore(ENRICHMENT_STAGES[i].fields as unknown as string[]) *
+        weights[i];
+    }
+    return Math.round(score * 100);
   }
 
   async remove(id: string): Promise<{ message: string }> {

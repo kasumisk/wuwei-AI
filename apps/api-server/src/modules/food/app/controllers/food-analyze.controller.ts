@@ -220,7 +220,7 @@ export class FoodAnalyzeController {
     @CurrentAppUser() user: AppUserPayload,
   ): Promise<ApiResponse> {
     // 1. 查找分析记录
-    const analysisRecord = await this.prisma.food_analysis_record.findUnique({
+    const analysisRecord = await this.prisma.food_analysis_records.findUnique({
       where: { id: dto.analysisId },
     });
 
@@ -458,7 +458,7 @@ export class FoodAnalyzeController {
 
     if (!isUnlimited) {
       // Free 用户只能看最近 N 条
-      items = await this.prisma.food_analysis_record.findMany({
+      items = await this.prisma.food_analysis_records.findMany({
         where,
         orderBy: { created_at: 'desc' },
         take: historyLimit,
@@ -466,13 +466,13 @@ export class FoodAnalyzeController {
       total = historyLimit;
     } else {
       [items, total] = await Promise.all([
-        this.prisma.food_analysis_record.findMany({
+        this.prisma.food_analysis_records.findMany({
           where,
           orderBy: { created_at: 'desc' },
           skip,
           take: size,
         }),
-        this.prisma.food_analysis_record.count({ where }),
+        this.prisma.food_analysis_records.count({ where }),
       ]);
     }
 
@@ -524,7 +524,7 @@ export class FoodAnalyzeController {
     @CurrentAppUser() user: AppUserPayload,
   ): Promise<ApiResponse> {
     // 1. 查找分析记录
-    const record = await this.prisma.food_analysis_record.findUnique({
+    const record = await this.prisma.food_analysis_records.findUnique({
       where: { id: analysisId },
     });
 

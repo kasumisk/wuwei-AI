@@ -28,7 +28,6 @@ import {
   ReloadOutlined,
   AndroidOutlined,
   AppleOutlined,
-  BarChartOutlined,
   UploadOutlined,
   AppstoreOutlined,
   GoogleOutlined,

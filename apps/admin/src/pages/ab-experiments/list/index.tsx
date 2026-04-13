@@ -11,7 +11,9 @@ import {
   Modal,
   Form,
   Input,
+  InputNumber,
   Select,
+  Slider,
   DatePicker,
   Popconfirm,
   Tooltip,
@@ -19,6 +21,7 @@ import {
 } from 'antd';
 import {
   PlusOutlined,
+  DeleteOutlined,
   EyeOutlined,
   PlayCircleOutlined,
   PauseCircleOutlined,
@@ -40,7 +43,6 @@ import {
   useUpdateExperimentStatus,
   type ExperimentDto,
   type ExperimentStatus,
-  type ExperimentGroup,
   type CreateExperimentDto,
 } from '@/services/abExperimentService';
 
@@ -69,6 +71,11 @@ const ABExperimentList: React.FC = () => {
   const actionRef = useRef<ActionType>(null);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [createForm] = Form.useForm();
+  // 结构化分组数据
+  const [createGroups, setCreateGroups] = useState<{ name: string; trafficRatio: number }[]>([
+    { name: 'control', trafficRatio: 0.5 },
+    { name: 'variant_a', trafficRatio: 0.5 },
+  ]);
 
   // 始终加载概览数据
   const { data: overview, isLoading: overviewLoading } = useExperimentOverview();
@@ -93,11 +100,22 @@ const ABExperimentList: React.FC = () => {
 
   // 复制实验：预填表单
   const handleClone = (record: ExperimentDto) => {
+    const groups = (record.groups || []).map((g) => ({
+      name: g.name,
+      trafficRatio: g.trafficRatio,
+    }));
+    setCreateGroups(
+      groups.length >= 2
+        ? groups
+        : [
+            { name: 'control', trafficRatio: 0.5 },
+            { name: 'variant_a', trafficRatio: 0.5 },
+          ]
+    );
     createForm.setFieldsValue({
       name: `${record.name} (副本)`,
       description: record.description || '',
       goalType: record.goalType || '*',
-      groups: JSON.stringify(record.groups || [], null, 2),
     });
     setCreateModalVisible(true);
   };
@@ -317,17 +335,40 @@ const ABExperimentList: React.FC = () => {
     },
   ];
 
+  // ==================== 分组操作 ====================
+
+  const trafficSum = createGroups.reduce((s, g) => s + g.trafficRatio, 0);
+
+  const addGroup = () => {
+    setCreateGroups((prev) => [
+      ...prev,
+      { name: `variant_${String.fromCharCode(97 + prev.length - 1)}`, trafficRatio: 0 },
+    ]);
+  };
+
+  const removeGroup = (idx: number) => {
+    if (createGroups.length <= 2) return;
+    setCreateGroups((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const updateGroup = (idx: number, field: 'name' | 'trafficRatio', value: string | number) => {
+    setCreateGroups((prev) => prev.map((g, i) => (i === idx ? { ...g, [field]: value } : g)));
+  };
+
   // ==================== 创建弹窗提交 ====================
 
   const handleCreate = async () => {
     try {
       const values = await createForm.validateFields();
-      let groups: ExperimentGroup[];
-      try {
-        groups = JSON.parse(values.groups);
-        if (!Array.isArray(groups)) throw new Error('分组配置必须是数组');
-      } catch (e: any) {
-        message.error(`分组 JSON 格式错误: ${e.message}`);
+
+      // 校验分组流量总和
+      if (Math.abs(trafficSum - 1.0) > 0.01) {
+        message.error(`流量分配总和必须为 100%，当前为 ${(trafficSum * 100).toFixed(0)}%`);
+        return;
+      }
+      // 校验分组名称非空
+      if (createGroups.some((g) => !g.name.trim())) {
+        message.error('分组名称不能为空');
         return;
       }
 
@@ -335,7 +376,7 @@ const ABExperimentList: React.FC = () => {
         name: values.name,
         description: values.description,
         goalType: values.goalType || '*',
-        groups,
+        groups: createGroups,
         startDate: values.startDate?.toISOString(),
         endDate: values.endDate?.toISOString(),
       };
@@ -403,17 +444,11 @@ const ABExperimentList: React.FC = () => {
             icon={<PlusOutlined />}
             onClick={() => {
               createForm.resetFields();
-              createForm.setFieldsValue({
-                goalType: '*',
-                groups: JSON.stringify(
-                  [
-                    { name: 'control', trafficRatio: 0.5 },
-                    { name: 'variant_a', trafficRatio: 0.5 },
-                  ],
-                  null,
-                  2
-                ),
-              });
+              createForm.setFieldsValue({ goalType: '*' });
+              setCreateGroups([
+                { name: 'control', trafficRatio: 0.5 },
+                { name: 'variant_a', trafficRatio: 0.5 },
+              ]);
               setCreateModalVisible(true);
             }}
           >
@@ -431,6 +466,10 @@ const ABExperimentList: React.FC = () => {
         onCancel={() => {
           setCreateModalVisible(false);
           createForm.resetFields();
+          setCreateGroups([
+            { name: 'control', trafficRatio: 0.5 },
+            { name: 'variant_a', trafficRatio: 0.5 },
+          ]);
         }}
         onOk={handleCreate}
         confirmLoading={createMutation.isPending}
@@ -470,37 +509,87 @@ const ABExperimentList: React.FC = () => {
               </Form.Item>
             </Col>
           </Row>
-          <Form.Item
-            name="groups"
-            label="分组配置 (JSON 数组)"
-            rules={[
-              { required: true, message: '请输入分组配置' },
-              {
-                validator: (_, value) => {
-                  if (!value) return Promise.resolve();
-                  try {
-                    const parsed = JSON.parse(value);
-                    if (!Array.isArray(parsed)) return Promise.reject('必须是数组');
-                    const total = parsed.reduce(
-                      (s: number, g: any) => s + (g.trafficRatio || 0),
-                      0
-                    );
-                    if (Math.abs(total - 1.0) > 0.01)
-                      return Promise.reject(`trafficRatio 之和必须为 1.0，当前为 ${total}`);
-                    return Promise.resolve();
-                  } catch {
-                    return Promise.reject('请输入有效的 JSON 数组');
-                  }
-                },
-              },
-            ]}
-          >
-            <Input.TextArea
-              rows={8}
-              style={{ fontFamily: 'monospace' }}
-              placeholder='[{"name": "control", "trafficRatio": 0.5}, {"name": "variant_a", "trafficRatio": 0.5}]'
-            />
-          </Form.Item>
+          {/* 结构化分组编辑器 */}
+          <div style={{ marginBottom: 16 }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 12,
+              }}
+            >
+              <span style={{ fontWeight: 500 }}>
+                分组配置{' '}
+                <span
+                  style={{
+                    fontSize: 12,
+                    color: Math.abs(trafficSum - 1.0) <= 0.01 ? '#52c41a' : '#ff4d4f',
+                    marginLeft: 8,
+                  }}
+                >
+                  流量总和: {(trafficSum * 100).toFixed(0)}%
+                </span>
+              </span>
+              <Button size="small" icon={<PlusOutlined />} onClick={addGroup}>
+                添加分组
+              </Button>
+            </div>
+            {createGroups.map((g, idx) => (
+              <Card
+                key={idx}
+                size="small"
+                style={{ marginBottom: 8 }}
+                extra={
+                  createGroups.length > 2 ? (
+                    <Button
+                      type="text"
+                      danger
+                      size="small"
+                      icon={<DeleteOutlined />}
+                      onClick={() => removeGroup(idx)}
+                    />
+                  ) : null
+                }
+                title={
+                  <Tag color={idx === 0 ? 'blue' : 'green'}>
+                    {idx === 0 ? '对照组' : `实验组 ${idx}`}
+                  </Tag>
+                }
+              >
+                <Row gutter={12} align="middle">
+                  <Col span={8}>
+                    <Input
+                      size="small"
+                      value={g.name}
+                      onChange={(e) => updateGroup(idx, 'name', e.target.value)}
+                      placeholder="分组名称"
+                    />
+                  </Col>
+                  <Col span={12}>
+                    <Slider
+                      min={0}
+                      max={100}
+                      value={Math.round(g.trafficRatio * 100)}
+                      onChange={(v) => updateGroup(idx, 'trafficRatio', v / 100)}
+                    />
+                  </Col>
+                  <Col span={4}>
+                    <InputNumber
+                      size="small"
+                      min={0}
+                      max={100}
+                      value={Math.round(g.trafficRatio * 100)}
+                      onChange={(v) => updateGroup(idx, 'trafficRatio', (v || 0) / 100)}
+                      formatter={(v) => `${v}%`}
+                      parser={(v) => Number(v?.replace('%', '') || 0) as 0}
+                      style={{ width: '100%' }}
+                    />
+                  </Col>
+                </Row>
+              </Card>
+            ))}
+          </div>
         </Form>
       </Modal>
     </Space>

@@ -10,12 +10,10 @@ import {
   Alert,
   Tag,
   Table,
-  Divider,
   Row,
   Col,
 } from 'antd';
 import { PictureOutlined, UploadOutlined, LinkOutlined, CameraOutlined } from '@ant-design/icons';
-import type { UploadFile } from 'antd';
 import {
   useRecognizeImage,
   useRecognizeImageByUrl,
@@ -31,7 +29,7 @@ export const routeConfig = {
   hideInMenu: false,
 };
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 const ImageRecognitionPage: React.FC = () => {
   const [imageUrl, setImageUrl] = useState('');

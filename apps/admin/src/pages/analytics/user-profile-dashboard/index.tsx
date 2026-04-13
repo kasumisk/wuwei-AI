@@ -12,7 +12,6 @@ import {
   Progress,
   Alert,
   Typography,
-  Tooltip as AntTooltip,
   Table,
 } from 'antd';
 import {
@@ -25,8 +24,6 @@ import {
   DashboardOutlined,
   FireOutlined,
   WarningOutlined,
-  CheckCircleOutlined,
-  ThunderboltOutlined,
   SafetyCertificateOutlined,
 } from '@ant-design/icons';
 import {
@@ -127,7 +124,7 @@ const UserProfileDashboardPage: React.FC = () => {
     if (!activeData || !distData) return null;
 
     const { dauWauRatio, wauMauRatio, bannedUsers, totalUsers } = activeData;
-    const { onboarding, behaviorStats, inferredStats, distributions } = distData;
+    const { onboarding, behaviorStats, distributions } = distData;
 
     // 粘性评分 (0-25)
     const stickinessScore = Math.min(25, (dauWauRatio / 50) * 12.5 + (wauMauRatio / 60) * 12.5);
@@ -182,7 +179,7 @@ const UserProfileDashboardPage: React.FC = () => {
     if (!distData || !activeData) return [];
     const insights: Array<{ type: 'success' | 'warning' | 'error' | 'info'; message: string }> = [];
 
-    const { distributions, onboarding, behaviorStats, inferredStats } = distData;
+    const { distributions, onboarding, behaviorStats, inferredStats: _inferredStats } = distData;
 
     // Onboarding 完成率检查
     if (onboarding.completionRate < 50) {
@@ -493,7 +490,7 @@ const UserProfileDashboardPage: React.FC = () => {
                   fill="#1677ff"
                   fillOpacity={0.25}
                 />
-                <Tooltip formatter={(val: number) => `${val.toFixed(0)}%`} />
+                <Tooltip formatter={((val: number) => `${val.toFixed(0)}%`) as any} />
               </RadarChart>
             </ResponsiveContainer>
           </Card>
@@ -815,7 +812,7 @@ const UserProfileDashboardPage: React.FC = () => {
                     cx="50%"
                     cy="50%"
                     outerRadius={80}
-                    label={({ authType, count }) => `${authType}: ${count}`}
+                    label={({ authType, count }: any) => `${authType}: ${count}`}
                   >
                     {distributions.authType.map((_, i) => (
                       <Cell key={i} fill={COLORS[i % COLORS.length]} />
@@ -837,7 +834,7 @@ const UserProfileDashboardPage: React.FC = () => {
                     cx="50%"
                     cy="50%"
                     outerRadius={80}
-                    label={({ gender, count }) => `${gender}: ${count}`}
+                    label={({ gender, count }: any) => `${gender}: ${count}`}
                   >
                     {distributions.gender.map((_, i) => (
                       <Cell key={i} fill={COLORS[i % COLORS.length]} />
@@ -866,7 +863,7 @@ const UserProfileDashboardPage: React.FC = () => {
                     cx="50%"
                     cy="50%"
                     outerRadius={80}
-                    label={({ label, count }) => `${label}: ${count}`}
+                    label={({ label, count }: any) => `${label}: ${count}`}
                   >
                     {distributions.churnRisk.map((d, i) => (
                       <Cell key={i} fill={churnRiskColors[d.segment] || COLORS[i]} />
@@ -892,7 +889,7 @@ const UserProfileDashboardPage: React.FC = () => {
                     cx="50%"
                     cy="50%"
                     outerRadius={80}
-                    label={({ label, count }) => `${label}: ${count}`}
+                    label={({ label, count }: any) => `${label}: ${count}`}
                   >
                     {distributions.compliance.map((d, i) => (
                       <Cell key={i} fill={complianceColors[d.segment] || COLORS[i]} />

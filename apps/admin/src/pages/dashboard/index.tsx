@@ -9,7 +9,6 @@ import {
   Tag,
   Segmented,
   Tooltip,
-  Badge,
   Typography,
   Divider,
   Progress,
@@ -32,6 +31,7 @@ import {
   CheckCircleOutlined,
   SwapOutlined,
   StopOutlined,
+  DatabaseOutlined,
 } from '@ant-design/icons';
 import {
   AreaChart,
@@ -45,6 +45,8 @@ import {
   BarChart,
   Bar,
   Cell,
+  LineChart,
+  Line,
 } from 'recharts';
 import dayjs from 'dayjs';
 import {
@@ -56,6 +58,7 @@ import {
   useDashboardRecommendQuality,
   useDashboardConversionSummary,
 } from '@/services/dashboardService';
+import { useQualityReport } from '@/services/foodPipelineService';
 
 const { Text } = Typography;
 
@@ -102,7 +105,7 @@ function fmt30DayRange() {
 
 function fmtMrr(cents: number, currency: string) {
   const amount = (cents / 100).toLocaleString('en-US', { minimumFractionDigits: 0 });
-  return `${currency.toUpperCase()} ${amount}`;
+  return `${currency?.toUpperCase()} ${amount}`;
 }
 
 // ==================== 主页面组件 ====================
@@ -129,6 +132,7 @@ const Dashboard: React.FC = () => {
     convStartDate,
     convEndDate
   );
+  const { data: qualityReport, isLoading: _qualityLoading } = useQualityReport();
 
   const isLoading = activeLoading || growthLoading || subLoading || analyticsLoading;
 
@@ -252,7 +256,7 @@ const Dashboard: React.FC = () => {
           <Card size="small" hoverable>
             <Statistic
               title="AI 成本（7日）"
-              value={analyticsData.totalCostUsd.toFixed(2)}
+              value={analyticsData.totalCostUsd?.toFixed(2)}
               prefix="$"
               valueStyle={{ fontSize: 20 }}
             />
@@ -450,8 +454,8 @@ const Dashboard: React.FC = () => {
         }
         size="small"
         extra={
-          <Tag color={byReviewStatus.pending > 10 ? 'red' : 'default'}>
-            待审核 {byReviewStatus.pending}
+          <Tag color={byReviewStatus?.pending > 10 ? 'red' : 'default'}>
+            待审核 {byReviewStatus?.pending}
           </Tag>
         }
       >
@@ -466,9 +470,9 @@ const Dashboard: React.FC = () => {
                   <Space>
                     <CameraOutlined style={{ color: '#1677ff' }} />
                     <Text>图片</Text>
-                    <Text strong>{byInputType.image}</Text>
+                    <Text strong>{byInputType?.image}</Text>
                     <Text type="secondary">
-                      ({((byInputType.image / total) * 100).toFixed(0)}%)
+                      ({((byInputType?.image / total) * 100).toFixed(0)}%)
                     </Text>
                   </Space>
                 </div>
@@ -476,8 +480,8 @@ const Dashboard: React.FC = () => {
                   <Space>
                     <FileTextOutlined style={{ color: '#52c41a' }} />
                     <Text>文本</Text>
-                    <Text strong>{byInputType.text}</Text>
-                    <Text type="secondary">({((byInputType.text / total) * 100).toFixed(0)}%)</Text>
+                    <Text strong>{byInputType?.text}</Text>
+                    <Text type="secondary">({((byInputType?.text / total) * 100).toFixed(0)}%)</Text>
                   </Space>
                 </div>
               </Space>
@@ -493,21 +497,21 @@ const Dashboard: React.FC = () => {
                   <Space>
                     <CheckCircleOutlined style={{ color: '#52c41a' }} />
                     <Text>已通过</Text>
-                    <Text strong>{byReviewStatus.approved}</Text>
+                    <Text strong>{byReviewStatus?.approved}</Text>
                   </Space>
                 </div>
                 <div>
                   <Space>
                     <ClockCircleOutlined style={{ color: '#faad14' }} />
                     <Text>待审核</Text>
-                    <Text strong>{byReviewStatus.pending}</Text>
+                    <Text strong>{byReviewStatus?.pending}</Text>
                   </Space>
                 </div>
                 <div>
                   <Space>
                     <StopOutlined style={{ color: '#ff4d4f' }} />
                     <Text>已拒绝</Text>
-                    <Text strong>{byReviewStatus.rejected}</Text>
+                    <Text strong>{byReviewStatus?.rejected}</Text>
                   </Space>
                 </div>
               </Space>
@@ -556,7 +560,7 @@ const Dashboard: React.FC = () => {
             />
             <YAxis tick={{ fontSize: 11 }} />
             <ReTooltip
-              formatter={(val: number) => [val, '活跃用户']}
+              formatter={((val: number) => [val, '活跃用户']) as any}
               labelFormatter={(label) => dayjs(label).format('YYYY-MM-DD')}
             />
             <Area
@@ -667,16 +671,16 @@ const Dashboard: React.FC = () => {
     if (!subOverview) return null;
     const { byTier, byChannel } = subOverview;
 
-    const tierData = Object.entries(byTier).map(([tier, count]) => ({
+    const tierData = byTier ? Object.entries(byTier).map(([tier, count]) => ({
       tier,
       label: TIER_LABELS[tier] ?? tier,
       count,
-    }));
+    })) : [];
 
-    const channelData = Object.entries(byChannel).map(([channel, count]) => ({
+    const channelData = byChannel ? Object.entries(byChannel).map(([channel, count]) => ({
       channel,
       count,
-    }));
+    })) : [];
 
     return (
       <Row gutter={[16, 16]}>
@@ -687,7 +691,7 @@ const Dashboard: React.FC = () => {
                 <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.4} />
                 <XAxis type="number" tick={{ fontSize: 11 }} />
                 <YAxis dataKey="label" type="category" width={70} tick={{ fontSize: 11 }} />
-                <ReTooltip formatter={(val: number) => [val, '用户数']} />
+                <ReTooltip formatter={((val: number) => [val, '用户数']) as any} />
                 <Bar dataKey="count" name="用户数" radius={[0, 4, 4, 0]}>
                   {tierData.map((entry) => (
                     <Cell key={entry.tier} fill={TIER_COLORS[entry.tier] ?? '#1677ff'} />
@@ -704,7 +708,7 @@ const Dashboard: React.FC = () => {
                 <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.4} />
                 <XAxis type="number" tick={{ fontSize: 11 }} />
                 <YAxis dataKey="channel" type="category" width={90} tick={{ fontSize: 11 }} />
-                <ReTooltip formatter={(val: number) => [val, '用户数']} />
+                <ReTooltip formatter={((val: number) => [val, '用户数']) as any} />
                 <Bar dataKey="count" name="用户数" radius={[0, 4, 4, 0]}>
                   {channelData.map((entry, i) => (
                     <Cell key={entry.channel} fill={CHANNEL_COLORS[i % CHANNEL_COLORS.length]} />
@@ -715,6 +719,222 @@ const Dashboard: React.FC = () => {
           </Card>
         </Col>
       </Row>
+    );
+  };
+
+  // ==================== 食物库数据质量卡片（V8.0 新增） ====================
+
+  const renderFoodQualityCard = () => {
+    if (!qualityReport) return null;
+
+    const { completeness, summary, enrichment, fieldCompleteness } = qualityReport;
+    const total = summary?.totalFoods || 1;
+
+    // 核心完整度指标
+    const coreMetrics = [
+      { label: '宏量营养素', value: completeness.hasMacros, color: '#1677ff' },
+      { label: '微量营养素', value: completeness.hasMicros, color: '#52c41a' },
+      { label: '过敏原', value: completeness.hasAllergens, color: '#faad14' },
+      { label: '餐型标签', value: completeness.hasMealTypes, color: '#13c2c2' },
+      { label: '图片', value: completeness.hasImage, color: '#722ed1' },
+      { label: '条形码', value: completeness.hasBarcode, color: '#eb2f96' },
+    ];
+
+    // 挑选 fieldCompleteness 中最低的5个字段展示
+    const worstFields = fieldCompleteness
+      ? [...fieldCompleteness].sort((a, b) => a.percentage - b.percentage).slice(0, 5)
+      : [];
+
+    return (
+      <Card
+        title={
+          <Space>
+            <DatabaseOutlined />
+            <span>食物库数据质量</span>
+            <Tag color="blue">{summary?.totalFoods} 条</Tag>
+          </Space>
+        }
+        size="small"
+        extra={
+          enrichment && (
+            <Space size={4}>
+              <Tooltip title="核心营养素覆盖率">
+                <Tag color="green">核心 {enrichment.coreCoverage?.toFixed(1)}%</Tag>
+              </Tooltip>
+              <Tooltip title="微量营养素覆盖率">
+                <Tag color="blue">微量 {enrichment.microCoverage?.toFixed(1)}%</Tag>
+              </Tooltip>
+            </Space>
+          )
+        }
+      >
+        <Row gutter={[16, 12]}>
+          {/* 左侧：核心维度完整度进度条 */}
+          <Col xs={24} md={12}>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              核心维度覆盖率
+            </Text>
+            <div style={{ marginTop: 8 }}>
+              {coreMetrics.map((m) => (
+                <div key={m.label} style={{ marginBottom: 6 }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      marginBottom: 2,
+                    }}
+                  >
+                    <Text style={{ fontSize: 12 }}>{m.label}</Text>
+                    <Text style={{ fontSize: 12, color: m.color }}>
+                      {m.value}/{total} ({((m.value / total) * 100).toFixed(0)}%)
+                    </Text>
+                  </div>
+                  <Progress
+                    percent={Number(((m.value / total) * 100).toFixed(1))}
+                    size="small"
+                    strokeColor={m.color}
+                    showInfo={false}
+                  />
+                </div>
+              ))}
+            </div>
+          </Col>
+
+          {/* 右侧：最薄弱的5个字段 + AI补全统计 */}
+          <Col xs={24} md={12}>
+            {worstFields.length > 0 && (
+              <>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  最薄弱字段 TOP5
+                </Text>
+                <div style={{ marginTop: 8 }}>
+                  {worstFields.map((f) => (
+                    <div key={f.field} style={{ marginBottom: 6 }}>
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          marginBottom: 2,
+                        }}
+                      >
+                        <Text style={{ fontSize: 12 }}>{f.field}</Text>
+                        <Text type="danger" style={{ fontSize: 12 }}>
+                          {f.filledCount}/{f.totalCount} ({f.percentage.toFixed(1)}%)
+                        </Text>
+                      </div>
+                      <Progress
+                        percent={Number(f.percentage.toFixed(1))}
+                        size="small"
+                        strokeColor={f.percentage < 30 ? '#ff4d4f' : '#faad14'}
+                        showInfo={false}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {enrichment && (
+              <div style={{ marginTop: worstFields.length > 0 ? 12 : 0 }}>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  AI补全统计
+                </Text>
+                <Row gutter={8} style={{ marginTop: 4 }}>
+                  <Col span={6}>
+                    <Statistic
+                      title={<span style={{ fontSize: 11 }}>直接入库</span>}
+                      value={enrichment.directApplied}
+                      valueStyle={{ fontSize: 16 }}
+                    />
+                  </Col>
+                  <Col span={6}>
+                    <Statistic
+                      title={<span style={{ fontSize: 11 }}>待审核</span>}
+                      value={enrichment.staged}
+                      valueStyle={{ fontSize: 16, color: '#faad14' }}
+                    />
+                  </Col>
+                  <Col span={6}>
+                    <Statistic
+                      title={<span style={{ fontSize: 11 }}>已通过</span>}
+                      value={enrichment.approved}
+                      valueStyle={{ fontSize: 16, color: '#52c41a' }}
+                    />
+                  </Col>
+                  <Col span={6}>
+                    <Statistic
+                      title={<span style={{ fontSize: 11 }}>已拒绝</span>}
+                      value={enrichment.rejected}
+                      valueStyle={{ fontSize: 16, color: '#ff4d4f' }}
+                    />
+                  </Col>
+                </Row>
+              </div>
+            )}
+          </Col>
+        </Row>
+      </Card>
+    );
+  };
+
+  // ==================== 补全趋势图（V8.0 新增） ====================
+
+  const renderEnrichmentTrendChart = () => {
+    const trend = qualityReport?.enrichmentTrend;
+    if (!trend?.length) return null;
+
+    return (
+      <Card
+        title={
+          <Space>
+            <RiseOutlined />
+            <span>AI补全趋势（近30天）</span>
+          </Space>
+        }
+        size="small"
+      >
+        <ResponsiveContainer width="100%" height={220}>
+          <LineChart data={trend}>
+            <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.4} />
+            <XAxis
+              dataKey="date"
+              tick={{ fontSize: 11 }}
+              tickFormatter={(v) => dayjs(v).format('MM/DD')}
+            />
+            <YAxis tick={{ fontSize: 11 }} />
+            <ReTooltip labelFormatter={(label) => dayjs(label).format('YYYY-MM-DD')} />
+            <Legend iconSize={10} wrapperStyle={{ fontSize: 12 }} />
+            <Line
+              type="monotone"
+              dataKey="enrichedCount"
+              name="补全数"
+              stroke="#1677ff"
+              strokeWidth={2}
+              dot={false}
+              activeDot={{ r: 4 }}
+            />
+            <Line
+              type="monotone"
+              dataKey="approvedCount"
+              name="审核通过"
+              stroke="#52c41a"
+              strokeWidth={2}
+              dot={false}
+              activeDot={{ r: 4 }}
+            />
+            <Line
+              type="monotone"
+              dataKey="rejectedCount"
+              name="审核拒绝"
+              stroke="#ff4d4f"
+              strokeWidth={1.5}
+              dot={false}
+              strokeDasharray="4 3"
+              activeDot={{ r: 3 }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </Card>
     );
   };
 
@@ -730,6 +950,7 @@ const Dashboard: React.FC = () => {
           { label: 'A/B 实验', href: '/ab-experiments/list', color: 'orange' },
           { label: '策略管理', href: '/strategy/list', color: 'geekblue' },
           { label: '推荐调试', href: '/recommendation-debug', color: 'volcano' },
+          { label: 'AI补全管理', href: '/food-library/enrichment', color: 'cyan' },
         ].map(({ label, href, color }) => (
           <Col key={href}>
             <Tag
@@ -806,6 +1027,23 @@ const Dashboard: React.FC = () => {
               订阅概览
             </Divider>
             {renderSubscriptionCharts()}
+          </div>
+        )}
+
+        {/* V8.0: 食物库数据质量 + 补全趋势 */}
+        {qualityReport && (
+          <div>
+            <Divider orientation="left" plain style={{ fontSize: 13, color: '#8c8c8c' }}>
+              食物库数据质量
+            </Divider>
+            <Row gutter={[16, 16]}>
+              <Col xs={24} lg={14}>
+                {renderFoodQualityCard()}
+              </Col>
+              <Col xs={24} lg={10}>
+                {renderEnrichmentTrendChart()}
+              </Col>
+            </Row>
           </div>
         )}
 

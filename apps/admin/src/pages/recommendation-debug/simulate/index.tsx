@@ -190,7 +190,7 @@ const BoostFactors: React.FC<{ explanation: Record<string, unknown> }> = ({ expl
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis type="number" />
           <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={60} />
-          <RechartsTooltip formatter={(v: number) => `${v.toFixed(1)}%`} />
+          <RechartsTooltip formatter={((v: number) => `${v.toFixed(1)}%`) as any} />
           <Bar dataKey="value" name="因子值(%)" fill="#1677ff" radius={[0, 4, 4, 0]} />
         </BarChart>
       </ResponsiveContainer>

@@ -28,7 +28,6 @@ import {
   FireOutlined,
   SafetyCertificateOutlined,
   TeamOutlined,
-  ArrowRightOutlined,
   MedicineBoxOutlined,
 } from '@ant-design/icons';
 import {
@@ -48,7 +47,6 @@ import {
   PolarAngleAxis,
   PolarRadiusAxis,
   Legend,
-  ReferenceLine,
 } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import type { ColumnsType } from 'antd/es/table';
@@ -56,7 +54,6 @@ import {
   useChurnDistribution,
   useChurnPrediction,
   type ChurnRiskLevel,
-  type ChurnPrediction,
 } from '@/services/churnPredictionService';
 
 const { Text } = Typography;
@@ -263,7 +260,7 @@ const UserPredictionPanel: React.FC = () => {
                       fill={RISK_COLORS[data.riskLevel]}
                       fillOpacity={0.25}
                     />
-                    <RTooltip formatter={(val: number) => [`${val}%`, '风险分']} />
+                    <RTooltip formatter={((val: number) => [`${val}%`, '风险分']) as any} />
                   </RadarChart>
                 </ResponsiveContainer>
               </Card>
@@ -693,11 +690,12 @@ const ChurnPredictionPage: React.FC = () => {
                     <XAxis type="number" tick={{ fontSize: 11 }} />
                     <YAxis dataKey="label" type="category" width={80} tick={{ fontSize: 11 }} />
                     <RTooltip
-                      formatter={(
-                        value: number,
-                        _: string,
-                        props: { payload: { percent: number } }
-                      ) => [`${value} 人 (${props.payload.percent}%)`, '出现次数']}
+                      formatter={
+                        ((value: number, _: string, props: { payload: { percent: number } }) => [
+                          `${value} 人 (${props.payload.percent}%)`,
+                          '出现次数',
+                        ]) as any
+                      }
                     />
                     <Bar dataKey="count" name="出现次数" fill="#ff7a00" radius={[0, 4, 4, 0]}>
                       {riskFactorStats.map((_, i) => (

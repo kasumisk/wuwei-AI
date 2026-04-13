@@ -273,7 +273,7 @@ export class FoodPipelineController {
   async batchEnrichByStage(
     @Body()
     body: {
-      /** 指定阶段编号 1-4 */
+      /** 指定阶段编号 1-5 */
       stages?: number[];
       /** 处理上限，默认 10 */
       limit?: number;

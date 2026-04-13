@@ -18,6 +18,8 @@ import {
   Spin,
   Row,
   Col,
+  Progress,
+  Tooltip,
 } from 'antd';
 import {
   EditOutlined,
@@ -28,6 +30,9 @@ import {
   WarningOutlined,
   PlusOutlined,
   CheckCircleOutlined,
+  ExclamationCircleOutlined,
+  MinusCircleOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
@@ -42,6 +47,7 @@ import {
   type FoodChangeLogDto,
   foodLibraryQueryKeys,
 } from '@/services/foodLibraryService';
+import { useFoodCompleteness } from '@/services/foodPipelineService';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   STATUS_MAP,
@@ -49,6 +55,7 @@ import {
   CATEGORY_MAP,
   ACTION_COLORS,
   LOCALE_OPTIONS,
+  ENRICHMENT_STATUS_MAP,
 } from '../../constants';
 
 export const routeConfig = {
@@ -68,10 +75,66 @@ const FoodDetailPage: React.FC = () => {
   const { data: food, isLoading } = useFoodDetail(id!, !!id);
   const { data: translations } = useFoodTranslations(id!, !!id);
   const { data: sources } = useFoodSources(id!, !!id);
-  const { data: changeLogs } = useFoodChangeLogs(id!, !!id);
+  const { data: changeLogs } = useFoodChangeLogs(id!);
+  const { data: completeness } = useFoodCompleteness(id!, !!id);
 
   const [translationModalOpen, setTranslationModalOpen] = useState(false);
   const [translationForm] = Form.useForm();
+
+  /** 渲染字段状态标签（已填/缺失 + 来源 + 置信度） */
+  const fieldStatus = (value: any, fieldName?: string) => {
+    const isFilled = value !== null && value !== undefined && value !== '' && value !== '-';
+    // V8.0: 使用字段级来源和置信度
+    const source = fieldName
+      ? (food?.fieldSources as Record<string, string>)?.[fieldName]
+      : undefined;
+    const confidence = fieldName
+      ? (food?.fieldConfidence as Record<string, number>)?.[fieldName]
+      : undefined;
+
+    if (!isFilled) {
+      return (
+        <Tooltip title="字段缺失，可通过AI补全">
+          <MinusCircleOutlined style={{ color: '#ff4d4f', marginLeft: 4, fontSize: 12 }} />
+        </Tooltip>
+      );
+    }
+    // 字段级来源标记
+    const sourceLabel =
+      source === 'ai_enrichment' ? 'AI补全' : source === 'manual' ? '手动编辑' : source || '未知';
+    const confidenceLabel =
+      confidence !== undefined ? ` | 置信度 ${(confidence * 100).toFixed(0)}%` : '';
+
+    if (source === 'ai_enrichment') {
+      return (
+        <Tooltip title={`${sourceLabel}${confidenceLabel}`}>
+          <ThunderboltOutlined
+            style={{
+              color: confidence !== undefined && confidence < 0.7 ? '#faad14' : '#1677ff',
+              marginLeft: 4,
+              fontSize: 12,
+            }}
+          />
+        </Tooltip>
+      );
+    }
+    if (source === 'manual') {
+      return (
+        <Tooltip title={`${sourceLabel}${confidenceLabel}`}>
+          <CheckCircleOutlined style={{ color: '#52c41a', marginLeft: 4, fontSize: 12 }} />
+        </Tooltip>
+      );
+    }
+    return <CheckCircleOutlined style={{ color: '#52c41a', marginLeft: 4, fontSize: 12 }} />;
+  };
+
+  /** 带状态标记的 Descriptions.Item 值渲染 */
+  const fieldValue = (value: any, unit: string, fieldName: string) => (
+    <span>
+      {value ?? '-'} {value != null ? unit : ''}
+      {fieldStatus(value, fieldName)}
+    </span>
+  );
 
   const toggleVerifiedMutation = useToggleFoodVerified({
     onSuccess: () => {
@@ -171,6 +234,58 @@ const FoodDetailPage: React.FC = () => {
         </Row>
       </Card>
 
+      {/* V8.0: 数据完整度进度条 */}
+      {completeness && (
+        <Card size="small" style={{ marginBottom: 16 }}>
+          <Row gutter={16} align="middle">
+            <Col flex="none">
+              <Typography.Text strong>数据完整度</Typography.Text>
+            </Col>
+            <Col flex="auto">
+              <Progress
+                percent={Number(completeness?.score.toFixed(1))}
+                strokeColor={
+                  completeness?.score >= 80
+                    ? '#52c41a'
+                    : completeness?.score >= 50
+                      ? '#faad14'
+                      : '#ff4d4f'
+                }
+                format={(pct) => `${pct}%`}
+              />
+            </Col>
+            <Col flex="none">
+              <Space size={4}>
+                <Tooltip title="已填写字段">
+                  <Tag color="green" icon={<CheckCircleOutlined />}>
+                    {completeness.filledFields?.length} 已填
+                  </Tag>
+                </Tooltip>
+                <Tooltip
+                  title={
+                    completeness.missingFields?.length > 0
+                      ? `缺失: ${completeness.missingFields?.slice(0, 10).join(', ')}${completeness.missingFields.length > 10 ? '...' : ''}`
+                      : '无缺失'
+                  }
+                >
+                  <Tag
+                    color={completeness.missingFields?.length > 0 ? 'red' : 'default'}
+                    icon={
+                      completeness.missingFields?.length > 0 ? (
+                        <ExclamationCircleOutlined />
+                      ) : undefined
+                    }
+                  >
+                    {completeness.missingFields?.length} 缺失
+                  </Tag>
+                </Tooltip>
+                <Tag>{completeness.totalFields} 总字段</Tag>
+              </Space>
+            </Col>
+          </Row>
+        </Card>
+      )}
+
       <Card>
         <Tabs
           defaultActiveKey="info"
@@ -215,17 +330,29 @@ const FoodDetailPage: React.FC = () => {
                   </Typography.Title>
                   <Descriptions bordered column={4} size="small">
                     <Descriptions.Item label="热量">{food.calories} kcal</Descriptions.Item>
-                    <Descriptions.Item label="蛋白质">{food.protein ?? '-'} g</Descriptions.Item>
-                    <Descriptions.Item label="脂肪">{food.fat ?? '-'} g</Descriptions.Item>
-                    <Descriptions.Item label="碳水">{food.carbs ?? '-'} g</Descriptions.Item>
-                    <Descriptions.Item label="膳食纤维">{food.fiber ?? '-'} g</Descriptions.Item>
-                    <Descriptions.Item label="糖">{food.sugar ?? '-'} g</Descriptions.Item>
-                    <Descriptions.Item label="饱和脂肪">
-                      {food.saturatedFat ?? '-'} g
+                    <Descriptions.Item label="蛋白质">
+                      {fieldValue(food.protein, 'g', 'protein')}
                     </Descriptions.Item>
-                    <Descriptions.Item label="反式脂肪">{food.transFat ?? '-'} g</Descriptions.Item>
+                    <Descriptions.Item label="脂肪">
+                      {fieldValue(food.fat, 'g', 'fat')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="碳水">
+                      {fieldValue(food.carbs, 'g', 'carbs')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="膳食纤维">
+                      {fieldValue(food.fiber, 'g', 'fiber')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="糖">
+                      {fieldValue(food.sugar, 'g', 'sugar')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="饱和脂肪">
+                      {fieldValue(food.saturatedFat, 'g', 'saturated_fat')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="反式脂肪">
+                      {fieldValue(food.transFat, 'g', 'trans_fat')}
+                    </Descriptions.Item>
                     <Descriptions.Item label="胆固醇">
-                      {food.cholesterol ?? '-'} mg
+                      {fieldValue(food.cholesterol, 'mg', 'cholesterol')}
                     </Descriptions.Item>
                   </Descriptions>
 
@@ -233,34 +360,86 @@ const FoodDetailPage: React.FC = () => {
                     微量营养素 (per 100g)
                   </Typography.Title>
                   <Descriptions bordered column={4} size="small">
-                    <Descriptions.Item label="钠">{food.sodium ?? '-'} mg</Descriptions.Item>
-                    <Descriptions.Item label="钾">{food.potassium ?? '-'} mg</Descriptions.Item>
-                    <Descriptions.Item label="钙">{food.calcium ?? '-'} mg</Descriptions.Item>
-                    <Descriptions.Item label="铁">{food.iron ?? '-'} mg</Descriptions.Item>
-                    <Descriptions.Item label="锌">{food.zinc ?? '-'} mg</Descriptions.Item>
-                    <Descriptions.Item label="镁">{food.magnesium ?? '-'} mg</Descriptions.Item>
-                    <Descriptions.Item label="维生素A">{food.vitaminA ?? '-'} μg</Descriptions.Item>
-                    <Descriptions.Item label="维生素C">{food.vitaminC ?? '-'} mg</Descriptions.Item>
-                    <Descriptions.Item label="维生素D">{food.vitaminD ?? '-'} μg</Descriptions.Item>
-                    <Descriptions.Item label="维生素E">{food.vitaminE ?? '-'} mg</Descriptions.Item>
-                    <Descriptions.Item label="维生素B12">
-                      {food.vitaminB12 ?? '-'} μg
+                    <Descriptions.Item label="钠">
+                      {fieldValue(food.sodium, 'mg', 'sodium')}
                     </Descriptions.Item>
-                    <Descriptions.Item label="叶酸">{food.folate ?? '-'} μg</Descriptions.Item>
+                    <Descriptions.Item label="钾">
+                      {fieldValue(food.potassium, 'mg', 'potassium')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="钙">
+                      {fieldValue(food.calcium, 'mg', 'calcium')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="铁">
+                      {fieldValue(food.iron, 'mg', 'iron')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="锌">
+                      {fieldValue(food.zinc, 'mg', 'zinc')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="镁">
+                      {fieldValue(food.magnesium, 'mg', 'magnesium')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="维生素A">
+                      {fieldValue(food.vitaminA, 'μg', 'vitamin_a')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="维生素C">
+                      {fieldValue(food.vitaminC, 'mg', 'vitamin_c')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="维生素D">
+                      {fieldValue(food.vitaminD, 'μg', 'vitamin_d')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="维生素E">
+                      {fieldValue(food.vitaminE, 'mg', 'vitamin_e')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="维生素B12">
+                      {fieldValue(food.vitaminB12, 'μg', 'vitamin_b12')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="叶酸">
+                      {fieldValue(food.folate, 'μg', 'folate')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="磷">
+                      {fieldValue(food.phosphorus, 'mg', 'phosphorus')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="嘌呤">
+                      {fieldValue(food.purine, 'mg', 'purine')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="维生素B6">
+                      {fieldValue(food.vitaminB6, 'mg', 'vitamin_b6')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Omega-3">
+                      {fieldValue(food.omega3, 'mg', 'omega3')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Omega-6">
+                      {fieldValue(food.omega6, 'mg', 'omega6')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="可溶性纤维">
+                      {fieldValue(food.solubleFiber, 'g', 'soluble_fiber')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="不溶性纤维">
+                      {fieldValue(food.insolubleFiber, 'g', 'insoluble_fiber')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="含水率">
+                      {fieldValue(food.waterContentPercent, '%', 'water_content_percent')}
+                    </Descriptions.Item>
                   </Descriptions>
 
                   <Typography.Title level={5} style={{ marginTop: 24 }}>
                     健康评估 & 决策引擎
                   </Typography.Title>
                   <Descriptions bordered column={4} size="small">
-                    <Descriptions.Item label="GI值">{food.glycemicIndex ?? '-'}</Descriptions.Item>
-                    <Descriptions.Item label="GL值">{food.glycemicLoad ?? '-'}</Descriptions.Item>
-                    <Descriptions.Item label="品质评分">
-                      {food.qualityScore ?? '-'}
+                    <Descriptions.Item label="GI值">
+                      {fieldValue(food.glycemicIndex, '', 'glycemic_index')}
                     </Descriptions.Item>
-                    <Descriptions.Item label="饱腹感">{food.satietyScore ?? '-'}</Descriptions.Item>
+                    <Descriptions.Item label="GL值">
+                      {fieldValue(food.glycemicLoad, '', 'glycemic_load')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="品质评分">
+                      {fieldValue(food.qualityScore, '', 'quality_score')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="饱腹感">
+                      {fieldValue(food.satietyScore, '', 'satiety_score')}
+                    </Descriptions.Item>
                     <Descriptions.Item label="营养密度">
-                      {food.nutrientDensity ?? '-'}
+                      {fieldValue(food.nutrientDensity, '', 'nutrient_density')}
                     </Descriptions.Item>
                     <Descriptions.Item label="搜索权重">{food.searchWeight}</Descriptions.Item>
                     <Descriptions.Item label="热门度">{food.popularity}</Descriptions.Item>
@@ -284,6 +463,40 @@ const FoodDetailPage: React.FC = () => {
                       {food.isVerified ? <Tag color="success">是</Tag> : <Tag>否</Tag>}
                     </Descriptions.Item>
                     <Descriptions.Item label="审核人">{food.verifiedBy || '-'}</Descriptions.Item>
+                    {/* V8.0: 补全元数据 */}
+                    <Descriptions.Item label="数据完整度">
+                      {food.dataCompleteness != null ? (
+                        <Progress
+                          percent={Number((food.dataCompleteness * 100).toFixed(1))}
+                          size="small"
+                          strokeColor={
+                            food.dataCompleteness >= 0.8
+                              ? '#52c41a'
+                              : food.dataCompleteness >= 0.5
+                                ? '#faad14'
+                                : '#ff4d4f'
+                          }
+                          style={{ width: 120, display: 'inline-flex' }}
+                        />
+                      ) : (
+                        '-'
+                      )}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="补全状态">
+                      {food.enrichmentStatus ? (
+                        <Tag
+                          color={ENRICHMENT_STATUS_MAP[food.enrichmentStatus]?.color || 'default'}
+                        >
+                          {ENRICHMENT_STATUS_MAP[food.enrichmentStatus]?.text ||
+                            food.enrichmentStatus}
+                        </Tag>
+                      ) : (
+                        '-'
+                      )}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="最后补全时间">
+                      {food.lastEnrichedAt || '-'}
+                    </Descriptions.Item>
                     <Descriptions.Item label="创建时间">{food.createdAt}</Descriptions.Item>
                     <Descriptions.Item label="更新时间">{food.updatedAt}</Descriptions.Item>
                   </Descriptions>
@@ -448,12 +661,12 @@ const FoodDetailPage: React.FC = () => {
               key: 'changeLogs',
               label: (
                 <>
-                  <HistoryOutlined /> 变更日志 ({changeLogs?.length || 0})
+                  <HistoryOutlined /> 变更日志 ({changeLogs?.total || 0})
                 </>
               ),
               children: (
                 <Table<FoodChangeLogDto>
-                  dataSource={changeLogs || []}
+                  dataSource={changeLogs?.list || []}
                   rowKey="id"
                   size="small"
                   pagination={{ pageSize: 10 }}

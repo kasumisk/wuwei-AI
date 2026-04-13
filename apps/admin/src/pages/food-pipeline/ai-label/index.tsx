@@ -8,7 +8,6 @@ import {
   Select,
   InputNumber,
   Switch,
-  Typography,
   Alert,
   Descriptions,
   Tag,
@@ -37,8 +36,6 @@ export const routeConfig = {
   requireAuth: true,
   hideInMenu: false,
 };
-
-const { Title, Text } = Typography;
 
 const CATEGORY_OPTIONS = [
   { label: '全部分类', value: '' },

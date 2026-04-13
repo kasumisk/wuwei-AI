@@ -45,7 +45,6 @@ import {
   useAssignStrategy,
   useRemoveAssignment,
   strategyApi,
-  type StrategyDto,
   type StrategyScope,
   type StrategyStatus,
   type StrategyAssignmentDto,

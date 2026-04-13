@@ -74,14 +74,14 @@ export class AnalysisRecordManagementService {
     const whereClause = conditions.join(' AND ');
 
     const totalResult = await this.prisma.$queryRawUnsafe<[{ count: string }]>(
-      `SELECT COUNT(*)::text AS count FROM food_analysis_record ar WHERE ${whereClause}`,
+      `SELECT COUNT(*)::text AS count FROM food_analysis_records ar WHERE ${whereClause}`,
       ...params,
     );
     const total = parseInt(totalResult[0]?.count ?? '0', 10);
 
     const offset = (page - 1) * pageSize;
     const list = await this.prisma.$queryRawUnsafe<any[]>(
-      `SELECT * FROM food_analysis_record ar
+      `SELECT * FROM food_analysis_records ar
        WHERE ${whereClause}
        ORDER BY ar.created_at DESC
        LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
@@ -119,7 +119,7 @@ export class AnalysisRecordManagementService {
    * 获取分析记录详情
    */
   async getAnalysisRecordDetail(id: string) {
-    const record = await this.prisma.food_analysis_record.findUnique({
+    const record = await this.prisma.food_analysis_records.findUnique({
       where: { id },
     });
     if (!record) throw new NotFoundException('分析记录不存在');
@@ -147,12 +147,12 @@ export class AnalysisRecordManagementService {
     dto: ReviewAnalysisRecordDto,
     adminUserId: string,
   ) {
-    const record = await this.prisma.food_analysis_record.findUnique({
+    const record = await this.prisma.food_analysis_records.findUnique({
       where: { id },
     });
     if (!record) throw new NotFoundException('分析记录不存在');
 
-    const updated = await this.prisma.food_analysis_record.update({
+    const updated = await this.prisma.food_analysis_records.update({
       where: { id },
       data: {
         review_status: dto.reviewStatus,
@@ -170,11 +170,11 @@ export class AnalysisRecordManagementService {
   async getAnalysisStatistics() {
     // 总量统计
     const [totalCount, textCount, imageCount] = await Promise.all([
-      this.prisma.food_analysis_record.count(),
-      this.prisma.food_analysis_record.count({
+      this.prisma.food_analysis_records.count(),
+      this.prisma.food_analysis_records.count({
         where: { input_type: 'text' },
       }),
-      this.prisma.food_analysis_record.count({
+      this.prisma.food_analysis_records.count({
         where: { input_type: 'image' },
       }),
     ]);
@@ -182,7 +182,7 @@ export class AnalysisRecordManagementService {
     // 今日统计
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const todayCount = await this.prisma.food_analysis_record.count({
+    const todayCount = await this.prisma.food_analysis_records.count({
       where: { created_at: { gte: today } },
     });
 
@@ -190,14 +190,14 @@ export class AnalysisRecordManagementService {
     const statusDist = await this.prisma.$queryRawUnsafe<
       { status: string; count: string }[]
     >(
-      `SELECT status, COUNT(*)::text AS count FROM food_analysis_record GROUP BY status`,
+      `SELECT status, COUNT(*)::text AS count FROM food_analysis_records GROUP BY status`,
     );
 
     // 审核状态分布
     const reviewDist = await this.prisma.$queryRawUnsafe<
       { reviewStatus: string; count: string }[]
     >(
-      `SELECT review_status AS "reviewStatus", COUNT(*)::text AS count FROM food_analysis_record GROUP BY review_status`,
+      `SELECT review_status AS "reviewStatus", COUNT(*)::text AS count FROM food_analysis_records GROUP BY review_status`,
     );
 
     // 置信度分布 (0-20, 20-40, 40-60, 60-80, 80-100)
@@ -213,17 +213,17 @@ export class AnalysisRecordManagementService {
           ELSE '80-100'
         END AS range,
         COUNT(*)::text AS count
-       FROM food_analysis_record
+       FROM food_analysis_records
        WHERE confidence_score IS NOT NULL
        GROUP BY range`,
     );
 
     // 准确率（已审核的记录中准确的占比）
     const [reviewedCount, accurateCount] = await Promise.all([
-      this.prisma.food_analysis_record.count({
+      this.prisma.food_analysis_records.count({
         where: { review_status: { not: 'pending' } } as any,
       }),
-      this.prisma.food_analysis_record.count({
+      this.prisma.food_analysis_records.count({
         where: { review_status: 'accurate' } as any,
       }),
     ]);
@@ -256,7 +256,7 @@ export class AnalysisRecordManagementService {
       { rawText: string; count: string }[]
     >(
       `SELECT raw_text AS "rawText", COUNT(*)::text AS count
-       FROM food_analysis_record
+       FROM food_analysis_records
        WHERE input_type = 'text'
          AND status = 'completed'
          AND raw_text IS NOT NULL

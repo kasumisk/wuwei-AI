@@ -22,6 +22,12 @@
  * ── V8.0 新增端点 ──
  * GET  /admin/food-pipeline/enrichment/staged/:id/preview — 暂存预览（对比当前值与建议值）
  * POST /admin/food-pipeline/enrichment/staged/batch-preview — 批量暂存预览（最多50条）
+ * POST /admin/food-pipeline/enrichment/:foodId/enrich-now — 单条食物立即补全（同步执行）
+ * GET  /admin/food-pipeline/enrichment/completeness-distribution — 全库完整度分布统计
+ *
+ * ── V8.0 增强 ──
+ * POST enqueue / enqueue-staged 新增 maxCompleteness 参数（按完整度上限筛选入队）
+ * POST staged/:id/approve 新增 selectedFields 参数（字段级选择性入库）
  */
 
 import {
@@ -34,6 +40,7 @@ import {
   UseGuards,
   HttpStatus,
   Request,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -95,6 +102,8 @@ export class FoodEnrichmentController {
       region?: string;
       /** 是否 staging 模式（先暂存，不直接落库） */
       staged?: boolean;
+      /** V8.0: 仅入队完整度 <= 此值的食物（0-100） */
+      maxCompleteness?: number;
     },
   ): Promise<ApiResponse> {
     const fields =
@@ -135,6 +144,7 @@ export class FoodEnrichmentController {
         fields,
         limit,
         offset,
+        body.maxCompleteness,
       );
     }
 
@@ -346,13 +356,19 @@ export class FoodEnrichmentController {
   // ==================== 审核通过 ====================
 
   @Post('staged/:id/approve')
-  @ApiOperation({ summary: '审核通过：将暂存结果入库' })
+  @ApiOperation({ summary: '审核通过：将暂存结果入库（支持字段级选择）' })
   async approveStaged(
     @Param('id') id: string,
+    @Body()
+    body: { /** V8.0: 可选，只入库指定的字段 */ selectedFields?: string[] },
     @Request() req: any,
   ): Promise<ApiResponse> {
     const operator: string = req.user?.username ?? 'admin';
-    const data = await this.enrichmentService.approveStaged(id, operator);
+    const data = await this.enrichmentService.approveStaged(
+      id,
+      operator,
+      body?.selectedFields,
+    );
     return {
       success: true,
       code: HttpStatus.OK,
@@ -405,6 +421,61 @@ export class FoodEnrichmentController {
     };
   }
 
+  // ==================== V8.0: 回退补全（重置已补全字段，可重新补全）====================
+  // 注意：batch 路由必须在 :id 路由之前声明，否则 NestJS 会把 "batch" 当作 :id 参数匹配
+
+  @Post('rollback/batch')
+  @ApiOperation({
+    summary: 'V8.0 批量回退补全记录',
+  })
+  async batchRollbackEnrichment(
+    @Body() body: { ids: string[] },
+    @Request() req: any,
+  ): Promise<ApiResponse> {
+    const operator: string = req.user?.username ?? 'admin';
+    const data = await this.enrichmentService.batchRollbackEnrichment(
+      body.ids,
+      operator,
+    );
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: `批量回退完成：${data.success} 成功，${data.failed} 失败`,
+      data,
+    };
+  }
+
+  @Post('rollback/:id')
+  @ApiOperation({
+    summary:
+      'V8.0 回退单条补全记录（清除已补全字段，使食物可重新进入补全队列）',
+  })
+  async rollbackEnrichment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: any,
+  ): Promise<ApiResponse> {
+    try {
+      const operator: string = req.user?.username ?? 'admin';
+      const data = await this.enrichmentService.rollbackEnrichment(
+        id,
+        operator,
+      );
+      return {
+        success: true,
+        code: HttpStatus.OK,
+        message: data.rolledBack ? `回退成功：${data.detail}` : data.detail,
+        data,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        code: HttpStatus.BAD_REQUEST,
+        message: error instanceof Error ? error.message : '回退失败',
+        data: null,
+      };
+    }
+  }
+
   // ==================== 补全历史（审计日志）====================
 
   @Get('history')
@@ -431,13 +502,15 @@ export class FoodEnrichmentController {
   async enqueueStagedEnrichment(
     @Body()
     body: {
-      /** 指定阶段编号 1-4，默认全部阶段 */
+      /** 指定阶段编号 1-5，默认全部阶段 */
       stages?: number[];
       /** 限制入队食物数 */
       limit?: number;
       offset?: number;
       /** 是否 staging 模式 */
       staged?: boolean;
+      /** V8.0: 仅入队完整度 <= 此值的食物（0-100） */
+      maxCompleteness?: number;
     },
   ): Promise<ApiResponse> {
     const stages = body.stages ?? ENRICHMENT_STAGES.map((s) => s.stage);
@@ -466,6 +539,7 @@ export class FoodEnrichmentController {
       targetFields as unknown as EnrichableField[],
       limit,
       offset,
+      body.maxCompleteness,
     );
 
     if (foods.length === 0) {
@@ -601,5 +675,83 @@ export class FoodEnrichmentController {
         ...score,
       },
     };
+  }
+
+  // ==================== V8.0: 单条立即补全 ====================
+
+  // ==================== V8.0: 全库完整度分布统计 ====================
+
+  @Get('completeness-distribution')
+  @ApiOperation({
+    summary: 'V8.0 全库完整度分布统计（按0-20/20-40/40-60/60-80/80-100区间）',
+  })
+  async getCompletenessDistribution(): Promise<ApiResponse> {
+    const data = await this.enrichmentService.getCompletenessDistribution();
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '获取成功',
+      data,
+    };
+  }
+
+  // ==================== V8.0: 运维统计（补全成功率/通过率/按日趋势）====================
+
+  @Get('operations-stats')
+  @ApiOperation({
+    summary: 'V8.0 补全运维统计（成功/暂存/审核通过率/平均置信度/按日趋势）',
+  })
+  async getOperationsStats(): Promise<ApiResponse> {
+    const data = await this.enrichmentService.getEnrichmentStatistics();
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '获取成功',
+      data,
+    };
+  }
+
+  // ==================== V8.0: 单条立即补全（端点）====================
+
+  @Post(':foodId/enrich-now')
+  @ApiOperation({
+    summary: 'V8.0 单条食物立即补全（同步执行，不走队列）',
+  })
+  async enrichNow(
+    @Param('foodId') foodId: string,
+    @Body()
+    body: {
+      /** 指定阶段编号 1-5，默认自动检测需要补全的阶段 */
+      stages?: number[];
+      /** 指定要补全的字段（可选） */
+      fields?: string[];
+      /** 是否暂存模式，默认 false */
+      staged?: boolean;
+    },
+  ): Promise<ApiResponse> {
+    try {
+      const result = await this.enrichmentService.enrichFoodNow(foodId, {
+        stages: body.stages,
+        fields: body.fields as any,
+        staged: body.staged,
+      });
+
+      return {
+        success: true,
+        code: HttpStatus.OK,
+        message:
+          result.totalEnriched > 0
+            ? `成功补全 ${result.totalEnriched} 个字段${result.totalFailed > 0 ? `，${result.totalFailed} 个失败` : ''}`
+            : '无需补全（所有字段已有值）',
+        data: result,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        code: HttpStatus.INTERNAL_SERVER_ERROR,
+        message: error instanceof Error ? error.message : '补全失败',
+        data: null,
+      };
+    }
   }
 }

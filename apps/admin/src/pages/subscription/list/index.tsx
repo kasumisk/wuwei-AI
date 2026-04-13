@@ -356,7 +356,7 @@ const SubscriptionList: React.FC = () => {
             />
           </Card>
         </Col>
-        {/* <Col xs={12} sm={8} lg={4}>
+        <Col xs={12} sm={8} lg={4}>
           <Card size="small" hoverable loading={overviewLoading}>
             <Tooltip title="按支付渠道统计">
               <Statistic
@@ -366,12 +366,12 @@ const SubscriptionList: React.FC = () => {
               />
             </Tooltip>
           </Card>
-        </Col> */}
+        </Col>
       </Row>
 
       {/* 渠道分布标签 */}
-      {/* {overview && (
-        <Card size="small" title="支付渠道分布">
+      {overview && Object.keys(overview.byChannel).length > 0 && (
+        <Card size="small" title="支付渠道分布" style={{ marginBottom: 16 }}>
           <Space wrap>
             {Object.entries(overview.byChannel).map(([channel, count]) => (
               <Tag key={channel} style={{ padding: '4px 12px', fontSize: 13 }}>
@@ -381,7 +381,7 @@ const SubscriptionList: React.FC = () => {
             ))}
           </Space>
         </Card>
-      )} */}
+      )}
 
       {/* 表格 */}
       <Card>

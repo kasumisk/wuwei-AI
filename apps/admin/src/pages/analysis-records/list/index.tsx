@@ -14,7 +14,6 @@ import {
   Tooltip,
   Avatar,
   Progress,
-  Divider,
   Typography,
 } from 'antd';
 import {
@@ -73,7 +72,7 @@ const AnalysisRecordList: React.FC = () => {
 
   // 始终加载统计和热门食物（不再放在弹窗中）
   const { data: stats, isLoading: statsLoading } = useAnalysisStatistics();
-  const { data: popularFoods, isLoading: popularLoading } = usePopularFoods({
+  const { data: popularFoods, isLoading: _popularLoading } = usePopularFoods({
     limit: 10,
     days: 7,
   });
@@ -342,7 +341,7 @@ const AnalysisRecordList: React.FC = () => {
           headerTitle="AI 分析记录"
           columns={columns}
           scroll={{ x: 1000 }}
-          request={async (params, sort) => {
+          request={async (params, _sort) => {
             try {
               const { list, total } = await analysisRecordApi.getRecords({
                 page: params.current,

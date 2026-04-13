@@ -6,7 +6,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { MealType } from '../../../diet/diet.types';
 
 export class SaveAnalysisToRecordDto {
-  /** 分析记录 ID（food_analysis_record.id） */
+  /** 分析记录 ID（food_analysis_records.id） */
   @ApiProperty({ description: '分析记录 ID' })
   @IsUUID()
   analysisId: string;

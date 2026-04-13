@@ -18,16 +18,7 @@ import {
   Divider,
 } from 'antd';
 import { ReloadOutlined, SearchOutlined, AlertOutlined, RiseOutlined } from '@ant-design/icons';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-} from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import type { ColumnsType } from 'antd/es/table';
 import {
   useUsageQuotas,
@@ -58,8 +49,6 @@ const CYCLE_LABELS: Record<string, string> = {
   weekly: '每周',
   monthly: '每月',
 };
-
-const COLORS = ['#1677ff', '#52c41a', '#faad14', '#722ed1', '#13c2c2', '#fa541c', '#eb2f96'];
 
 // ==================== 用量配额面板 ====================
 

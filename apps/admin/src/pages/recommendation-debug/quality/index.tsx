@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import {
   Card,
   Row,
@@ -12,10 +12,8 @@ import {
   Segmented,
   Alert,
   Typography,
-  Tooltip,
 } from 'antd';
 import {
-  DashboardOutlined,
   LikeOutlined,
   SwapOutlined,
   StopOutlined,
@@ -27,13 +25,11 @@ import {
   ArrowDownOutlined,
 } from '@ant-design/icons';
 import {
-  AreaChart,
   Area,
   BarChart,
   Bar,
-  LineChart,
-  Line,
   ComposedChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -253,7 +249,7 @@ const AcceptanceChart: React.FC<{
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="displayName" />
           <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
-          <RechartsTooltip formatter={(value: number) => `${value.toFixed(1)}%`} />
+          <RechartsTooltip formatter={((value: number) => `${value.toFixed(1)}%`) as any} />
           <ReferenceLine
             y={ACCEPTANCE_WARN_THRESHOLD}
             stroke="#faad14"
@@ -432,8 +428,6 @@ const CrossTabHeatmap: React.FC<{
 }> = ({ byGoal, byMeal }) => {
   // Build a synthetic heatmap from available data
   // Since the API gives us separate dimensions, we show them side-by-side as a pseudo-heatmap
-  const goals = byGoal.map((g) => g.dimension);
-  const meals = byMeal.map((m) => m.dimension);
 
   // Create comparison data
   const allDimensions = [
@@ -508,7 +502,7 @@ const CrossTabHeatmap: React.FC<{
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
               <YAxis type="category" dataKey="dimension" tick={{ fontSize: 11 }} width={80} />
-              <RechartsTooltip formatter={(v: number) => `${v.toFixed(1)}%`} />
+              <RechartsTooltip formatter={((v: number) => `${v.toFixed(1)}%`) as any} />
               <ReferenceLine x={ACCEPTANCE_WARN_THRESHOLD} stroke="#faad14" strokeDasharray="5 5" />
               <Bar dataKey="rate" name="接受率" radius={[0, 4, 4, 0]}>
                 {allDimensions.map((entry, index) => (

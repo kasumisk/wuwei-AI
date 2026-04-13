@@ -3,7 +3,7 @@
  *
  * 职责:
  * - 统一管理付费墙触发逻辑（何时、何种方式展示升级提示）
- * - 记录触发事件到 subscription_trigger_log 表（转化漏斗分析）
+ * - 记录触发事件到 subscription_trigger_logs 表（转化漏斗分析）
  * - 提供前端展示数据（触发原因、推荐等级、文案）
  *
  * 设计原则:
@@ -19,7 +19,7 @@
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { subscription_trigger_log as SubscriptionTriggerLog } from '@prisma/client';
+import { subscription_trigger_logs as SubscriptionTriggerLog } from '@prisma/client';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
 import {
   AccessDecision,
@@ -171,7 +171,7 @@ export class PaywallTriggerService {
    */
   async recordTrigger(input: PaywallTriggerInput): Promise<string | undefined> {
     try {
-      const saved = await this.prisma.subscription_trigger_log.create({
+      const saved = await this.prisma.subscription_trigger_logs.create({
         data: {
           user_id: input.userId,
           trigger_scene: input.triggerScene,
@@ -217,7 +217,7 @@ export class PaywallTriggerService {
     // 标记最近 7 天内未转化的触发日志
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-    const result = await this.prisma.subscription_trigger_log.updateMany({
+    const result = await this.prisma.subscription_trigger_logs.updateMany({
       where: {
         user_id: userId,
         converted: false,
@@ -244,7 +244,7 @@ export class PaywallTriggerService {
     hoursBack: number = 24,
   ): Promise<number> {
     const since = new Date(Date.now() - hoursBack * 60 * 60 * 1000);
-    return this.prisma.subscription_trigger_log.count({
+    return this.prisma.subscription_trigger_logs.count({
       where: {
         user_id: userId,
         created_at: { gte: since },

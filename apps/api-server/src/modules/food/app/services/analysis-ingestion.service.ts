@@ -14,7 +14,7 @@
  *       4. 命中已有标准食物 → 建立 analysis_food_link
  *       5. 未命中但质量高 → 创建 food_candidate
  *       6. 未命中且质量低 → 只保留分析记录，不入食物候选
- *       7. 更新 food_analysis_record 的质量分和入库状态
+ *       7. 更新 food_analysis_records 的质量分和入库状态
  *
  * 架构决策:
  * - 异步监听 ANALYSIS_COMPLETED，不阻塞分析主流程
@@ -115,7 +115,7 @@ export class AnalysisIngestionService {
    */
   async ingest(analysisId: string, userId: string): Promise<void> {
     // 1. 加载分析记录
-    const record = await this.prisma.food_analysis_record.findUnique({
+    const record = await this.prisma.food_analysis_records.findUnique({
       where: { id: analysisId },
     });
     if (!record) {
@@ -190,7 +190,7 @@ export class AnalysisIngestionService {
       persistStatus = PersistStatus.IGNORED;
     }
 
-    await this.prisma.food_analysis_record.update({
+    await this.prisma.food_analysis_records.update({
       where: { id: record.id },
       data: {
         matched_food_count: matchedCount,
@@ -636,7 +636,7 @@ export class AnalysisIngestionService {
     if (qualityScore !== null) {
       data.quality_score = qualityScore;
     }
-    await this.prisma.food_analysis_record.update({
+    await this.prisma.food_analysis_records.update({
       where: { id: recordId },
       data,
     });

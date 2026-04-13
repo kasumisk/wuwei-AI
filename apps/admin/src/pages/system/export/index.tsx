@@ -15,7 +15,6 @@ import {
   Divider,
   message,
   Tooltip,
-  Spin,
 } from 'antd';
 import {
   DownloadOutlined,
@@ -34,7 +33,7 @@ import {
 import dayjs, { type Dayjs } from 'dayjs';
 import { downloadReport } from '@/services/analyticsService';
 
-const { Title, Text, Paragraph } = Typography;
+const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
 
 // ==================== 路由配置 ====================
@@ -79,50 +78,39 @@ interface ExportParams {
 
 // ==================== 前端 CSV 生成工具 ====================
 
-const generateCsvDownload = (data: Record<string, any>[], filename: string) => {
-  if (!data.length) {
-    message.warning('没有可导出的数据');
-    return;
-  }
-  const headers = Object.keys(data[0]);
-  const csvContent = [
-    headers.join(','),
-    ...data.map((row) =>
-      headers
-        .map((h) => {
-          const val = row[h];
-          if (val === null || val === undefined) return '';
-          const str = String(val);
-          return str.includes(',') || str.includes('"') || str.includes('\n')
-            ? `"${str.replace(/"/g, '""')}"`
-            : str;
-        })
-        .join(',')
-    ),
-  ].join('\n');
+// const _generateCsvDownload = (data: Record<string, any>[], filename: string) => {
+//   if (!data.length) {
+//     message.warning('没有可导出的数据');
+//     return;
+//   }
+//   const headers = Object.keys(data[0]);
+//   const csvContent = [
+//     headers.join(','),
+//     ...data.map((row) =>
+//       headers
+//         .map((h) => {
+//           const val = row[h];
+//           if (val === null || val === undefined) return '';
+//           const str = String(val);
+//           return str.includes(',') || str.includes('"') || str.includes('\n')
+//             ? `"${str.replace(/"/g, '""')}"`
+//             : str;
+//         })
+//         .join(',')
+//     ),
+//   ].join('\n');
 
-  const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  window.URL.revokeObjectURL(url);
-  document.body.removeChild(a);
-};
+//   const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+//   const url = window.URL.createObjectURL(blob);
+//   const a = document.createElement('a');
+//   a.href = url;
+//   a.download = filename;
+//   document.body.appendChild(a);
+//   a.click();
+//   window.URL.revokeObjectURL(url);
+//   document.body.removeChild(a);
+// };
 
-const generateJsonDownload = (data: any, filename: string) => {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  window.URL.revokeObjectURL(url);
-  document.body.removeChild(a);
-};
 
 // ==================== 导出模板定义 ====================
 

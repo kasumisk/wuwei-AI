@@ -683,8 +683,8 @@ const StrategyEffectivenessPage: React.FC = () => {
                           paddingAngle={2}
                           dataKey="count"
                           nameKey="channel"
-                          label={({ channel, percent }) =>
-                            `${channel} ${(percent * 100).toFixed(0)}%`
+                          label={({ channel, percent }: any) =>
+                            `${channel} ${((percent ?? 0) * 100).toFixed(0)}%`
                           }
                         >
                           {channelPieData.map((_, i) => (

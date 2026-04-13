@@ -43,6 +43,15 @@ export interface FoodLibraryDto {
   folate?: number;
   zinc?: number;
   magnesium?: number;
+  phosphorus?: number;
+  purine?: number;
+  // V7.9 新增微量营养素
+  vitaminB6?: number;
+  omega3?: number;
+  omega6?: number;
+  solubleFiber?: number;
+  insolubleFiber?: number;
+  waterContentPercent?: number;
   // 健康评估
   glycemicIndex?: number;
   glycemicLoad?: number;
@@ -58,6 +67,7 @@ export interface FoodLibraryDto {
   tags: string[];
   mainIngredient?: string;
   compatibility: Record<string, string[]>;
+  acquisitionDifficulty?: number;
   // 份量
   standardServingG: number;
   standardServingDesc?: string;
@@ -79,6 +89,12 @@ export interface FoodLibraryDto {
   // 时间戳
   createdAt: string;
   updatedAt: string;
+  // V8.0 补全元数据
+  dataCompleteness?: number;
+  enrichmentStatus?: string;
+  lastEnrichedAt?: string;
+  fieldSources?: Record<string, string>;
+  fieldConfidence?: Record<string, number>;
   // 关联
   translations?: FoodTranslationDto[];
   sources?: FoodSourceDto[];
@@ -148,6 +164,12 @@ export interface GetFoodLibraryQuery {
   status?: string;
   isVerified?: boolean;
   primarySource?: string;
+  /** V8.0: 最小数据完整度（0-100） */
+  minCompleteness?: number;
+  /** V8.0: 最大数据完整度（0-100） */
+  maxCompleteness?: number;
+  /** V8.0: 补全状态筛选 */
+  enrichmentStatus?: string;
 }
 
 export interface FoodLibraryListResponse {

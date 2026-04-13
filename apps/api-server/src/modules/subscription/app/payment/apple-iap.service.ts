@@ -42,7 +42,7 @@ import {
 import {
   subscription_plan as SubscriptionPlan,
   subscription as Subscription,
-  payment_record as PaymentRecord,
+  payment_records as PaymentRecord,
 } from '@prisma/client';
 import { PaymentChannel, PaymentStatus } from '../../subscription.types';
 import {
@@ -174,7 +174,7 @@ export class AppleIapService implements OnModuleInit {
       }
 
       // 5. 检查是否已处理过（防重复）
-      const existingPayment = await this.prisma.payment_record.findUnique({
+      const existingPayment = await this.prisma.payment_records.findUnique({
         where: { order_no: `apple_${transaction.transactionId}` },
       });
       if (existingPayment) {
@@ -438,7 +438,7 @@ export class AppleIapService implements OnModuleInit {
     if (!subscription) return;
 
     // 更新支付记录为已退款
-    const paymentRecord = await this.prisma.payment_record.findUnique({
+    const paymentRecord = await this.prisma.payment_records.findUnique({
       where: { order_no: `apple_${txn.transactionId}` },
     });
     if (paymentRecord) {

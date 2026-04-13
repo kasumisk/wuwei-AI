@@ -121,7 +121,7 @@ export const analyticsApi = {
  * 获取总览数据
  */
 export const useOverview = (params: GetOverviewQueryDto, options?: any) => {
-  return useQuery({
+  return useQuery<OverviewStatsDto, Error>({
     queryKey: analyticsQueryKeys.overview(params),
     queryFn: () => analyticsApi.getOverview(params),
     staleTime: 1 * 60 * 1000, // 1分钟
@@ -133,7 +133,7 @@ export const useOverview = (params: GetOverviewQueryDto, options?: any) => {
  * 获取客户端排行
  */
 export const useTopClients = (params: GetTopClientsQueryDto, options?: any) => {
-  return useQuery({
+  return useQuery<TopClientsResponseDto, Error>({
     queryKey: analyticsQueryKeys.topClients(params),
     queryFn: () => analyticsApi.getTopClients(params),
     staleTime: 2 * 60 * 1000, // 2分钟
@@ -145,7 +145,7 @@ export const useTopClients = (params: GetTopClientsQueryDto, options?: any) => {
  * 获取能力使用统计
  */
 export const useCapabilityUsage = (params: GetCapabilityUsageQueryDto, options?: any) => {
-  return useQuery({
+  return useQuery<CapabilityUsageResponseDto, Error>({
     queryKey: analyticsQueryKeys.capabilityUsage(params),
     queryFn: () => analyticsApi.getCapabilityUsage(params),
     staleTime: 2 * 60 * 1000, // 2分钟
@@ -157,7 +157,7 @@ export const useCapabilityUsage = (params: GetCapabilityUsageQueryDto, options?:
  * 获取时间序列数据
  */
 export const useTimeSeries = (params: GetTimeSeriesQueryDto, options?: any) => {
-  return useQuery({
+  return useQuery<TimeSeriesResponseDto, Error>({
     queryKey: analyticsQueryKeys.timeSeries(params),
     queryFn: () => analyticsApi.getTimeSeries(params),
     staleTime: 2 * 60 * 1000, // 2分钟
@@ -169,7 +169,7 @@ export const useTimeSeries = (params: GetTimeSeriesQueryDto, options?: any) => {
  * 获取成本分析
  */
 export const useCostAnalysis = (params: GetCostAnalysisQueryDto, options?: any) => {
-  return useQuery({
+  return useQuery<CostAnalysisResponseDto, Error>({
     queryKey: analyticsQueryKeys.costAnalysis(params),
     queryFn: () => analyticsApi.getCostAnalysis(params),
     staleTime: 5 * 60 * 1000, // 5分钟
@@ -181,7 +181,7 @@ export const useCostAnalysis = (params: GetCostAnalysisQueryDto, options?: any) 
  * 获取错误分析
  */
 export const useErrorAnalysis = (params: GetErrorAnalysisQueryDto, options?: any) => {
-  return useQuery({
+  return useQuery<ErrorAnalysisResponseDto, Error>({
     queryKey: analyticsQueryKeys.errorAnalysis(params),
     queryFn: () => analyticsApi.getErrorAnalysis(params),
     staleTime: 2 * 60 * 1000, // 2分钟
@@ -193,7 +193,7 @@ export const useErrorAnalysis = (params: GetErrorAnalysisQueryDto, options?: any
  * 获取仪表盘聚合数据
  */
 export const useDashboard = (params: GetOverviewQueryDto, options?: any) => {
-  return useQuery({
+  return useQuery<DashboardStatsDto, Error>({
     queryKey: analyticsQueryKeys.dashboard(params),
     queryFn: () => analyticsApi.getDashboard(params),
     staleTime: 1 * 60 * 1000, // 1分钟

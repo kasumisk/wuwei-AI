@@ -282,6 +282,51 @@ const FoodCreatePage: React.FC = () => {
               </Form.Item>
             </Col>
           </Row>
+          {/* V7.9 新增微量营养素 */}
+          <Row gutter={16}>
+            <Col span={6}>
+              <Form.Item name="vitaminB6" label="维生素B6(mg)">
+                <InputNumber min={0} step={0.01} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="phosphorus" label="磷(mg)">
+                <InputNumber min={0} step={0.1} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="purine" label="嘌呤(mg)">
+                <InputNumber min={0} step={0.1} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="omega3" label="Omega-3(mg)">
+                <InputNumber min={0} step={0.1} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={6}>
+              <Form.Item name="omega6" label="Omega-6(mg)">
+                <InputNumber min={0} step={0.1} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="solubleFiber" label="可溶性纤维(g)">
+                <InputNumber min={0} step={0.01} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="insolubleFiber" label="不溶性纤维(g)">
+                <InputNumber min={0} step={0.01} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="waterContentPercent" label="含水率(%)">
+                <InputNumber min={0} max={100} step={0.1} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+          </Row>
 
           <Divider />
 
@@ -327,6 +372,35 @@ const FoodCreatePage: React.FC = () => {
             <Col span={6}>
               <Form.Item name="searchWeight" label="搜索权重">
                 <InputNumber min={0} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={6}>
+              <Form.Item name="acquisitionDifficulty" label="获取难度(1-5)">
+                <InputNumber min={1} max={5} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="foodForm" label="食物形态">
+                <Select
+                  allowClear
+                  options={[
+                    { label: '原材料', value: 'ingredient' },
+                    { label: '成品菜', value: 'dish' },
+                    { label: '半成品', value: 'semi_prepared' },
+                  ]}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="dishPriority" label="菜品优先级(0-100)">
+                <InputNumber min={0} max={100} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="commonalityScore" label="大众化(0-100)">
+                <InputNumber min={0} max={100} style={{ width: '100%' }} />
               </Form.Item>
             </Col>
           </Row>

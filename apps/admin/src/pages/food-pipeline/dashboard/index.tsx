@@ -18,7 +18,6 @@ import {
   Modal,
   Form,
   Alert,
-  Divider,
 } from 'antd';
 import {
   CloudDownloadOutlined,
@@ -30,7 +29,6 @@ import {
   CheckCircleOutlined,
   DatabaseOutlined,
   BarcodeOutlined,
-  PictureOutlined,
 } from '@ant-design/icons';
 import {
   useQualityReport,
@@ -51,7 +49,7 @@ export const routeConfig = {
   hideInMenu: false,
 };
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 const PipelineDashboard: React.FC = () => {
   const { data: report, isLoading, refetch } = useQualityReport();

@@ -257,7 +257,7 @@ export class ConversionFunnelService {
        FROM app_users
        WHERE created_at BETWEEN $1 AND $2
        GROUP BY date_trunc('${dateTruncInterval}', created_at)
-       ORDER BY "period" ASC`,
+       ORDER BY date_trunc('${dateTruncInterval}', created_at) ASC`,
       start,
       end,
     );
@@ -268,7 +268,7 @@ export class ConversionFunnelService {
        FROM subscription_trigger_logs
        WHERE created_at BETWEEN $1 AND $2
        GROUP BY date_trunc('${dateTruncInterval}', created_at)
-       ORDER BY "period" ASC`,
+       ORDER BY date_trunc('${dateTruncInterval}', created_at) ASC`,
       start,
       end,
     );
@@ -280,7 +280,7 @@ export class ConversionFunnelService {
        WHERE created_at BETWEEN $1 AND $2
          AND status = 'success'
        GROUP BY date_trunc('${dateTruncInterval}', created_at)
-       ORDER BY "period" ASC`,
+       ORDER BY date_trunc('${dateTruncInterval}', created_at) ASC`,
       start,
       end,
     );

@@ -14,7 +14,6 @@ import {
   Descriptions,
 } from 'antd';
 import {
-  DashboardOutlined,
   CheckCircleOutlined,
   BarChartOutlined,
   SyncOutlined,
@@ -33,7 +32,7 @@ export const routeConfig = {
   hideInMenu: false,
 };
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 const CATEGORY_LABELS: Record<string, string> = {
   protein: '蛋白质类',

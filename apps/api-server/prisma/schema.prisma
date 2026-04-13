@@ -133,7 +133,7 @@ model analysis_food_link {
   confidence           Decimal?             @default(0) @db.Decimal(5, 2)
   /// 创建时间
   created_at           DateTime?            @default(now()) @db.Timestamptz(6)
-  food_analysis_record food_analysis_record @relation(fields: [analysis_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_afl_analysis")
+  food_analysis_records food_analysis_records @relation(fields: [analysis_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_afl_analysis")
   food_candidate       food_candidate?      @relation(fields: [food_candidate_id], references: [id], onUpdate: NoAction, map: "fk_afl_food_candidate")
   foods                foods?               @relation(fields: [food_library_id], references: [id], onUpdate: NoAction, map: "fk_afl_food_library")
 
@@ -551,7 +551,7 @@ model feedback_details {
 }
 
 /// 食物识别分析记录表 — 存储每次 AI 识别请求的输入、中间结果和最终决策快照
-model food_analysis_record {
+model food_analysis_records {
   /// 主键 UUID
   id                   String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   /// 关联的用户 ID
@@ -588,9 +588,18 @@ model food_analysis_record {
   source_request_id    String?              @db.VarChar(64)
   /// 创建时间
   created_at           DateTime?            @default(now()) @db.Timestamptz(6)
-  analysis_food_link   analysis_food_link[]
+  /// V7.9: 人工审核状态：pending=待审核, accurate=准确, inaccurate=不准确, partial=部分准确
+  review_status        String?              @db.VarChar(20)
+  /// V7.9: 审核人管理员 ID
+  reviewed_by          String?              @db.Uuid
+  /// V7.9: 审核时间
+  reviewed_at          DateTime?            @db.Timestamptz(6)
+  /// V7.9: 审核备注
+  review_note          String?
+  analysis_food_links  analysis_food_link[]
 
   @@index([input_type], map: "idx_food_analysis_record_input_type")
+  @@index([review_status], map: "idx_food_analysis_record_review_status")
   @@index([source_request_id], map: "idx_food_analysis_record_source_request")
   @@index([status], map: "idx_food_analysis_record_status")
   @@index([user_id, created_at(sort: Desc)], map: "idx_food_analysis_record_user_created")
@@ -644,8 +653,8 @@ model food_change_logs {
   food_id    String   @db.Uuid
   /// 变更版本号（单调递增，与 foods.data_version 对应）
   version    Int
-  /// 变更操作：create=新建, update=更新, archive=归档, merge=合并
-  action     String   @db.VarChar(20)
+  /// 变更操作：create / update / archive / merge / ai_enrichment / ai_enrichment_staged / ai_enrichment_approved / ai_enrichment_rejected / ai_enrichment_rollback / ai_enrichment_rolled_back
+  action     String   @db.VarChar(50)
   /// 变更内容（JSON，记录 before/after 差异）
   changes    Json
   /// 变更原因说明
@@ -1047,6 +1056,18 @@ model foods {
   /// 最后更新时间
   updated_at            DateTime               @default(now()) @db.Timestamptz(6)
 
+  // ─── V8.0: 补全元数据（AI 补全辅助字段）──────────────────────────────────
+  /// V8.0: 数据完整度评分 0-100（加权计算，定期更新）
+  data_completeness     Int                    @default(0)
+  /// V8.0: 补全状态 pending/partial/completed/failed
+  enrichment_status     String                 @default("pending") @db.VarChar(20)
+  /// V8.0: 最后一次 AI 补全时间
+  last_enriched_at      DateTime?              @db.Timestamptz(6)
+  /// V8.0: 字段级数据来源，如 {"protein":"ai_enrichment","fat":"manual","carbs":"usda"}
+  field_sources         Json                   @default("{}")
+  /// V8.0: 字段级置信度，如 {"protein":0.85,"fat":0.92}
+  field_confidence      Json                   @default("{}")
+
   // ─── 向量检索（AI 语义搜索）────────────────────────────────────────────
   /// 语义向量（float32 数组，用于余弦相似度搜索；v4 模型）
   embedding             Float[]                @db.Real
@@ -1081,6 +1102,9 @@ model foods {
   @@index([aliases(ops: raw("gin_trgm_ops"))], map: "idx_foods_aliases_trgm", type: Gin)
   @@index([commonality_score], map: "idx_foods_commonality")
   @@index([food_form], map: "idx_foods_food_form")
+  @@index([enrichment_status], map: "idx_foods_enrichment_status")
+  @@index([data_completeness], map: "idx_foods_data_completeness")
+  @@index([last_enriched_at], map: "idx_foods_last_enriched_at")
 }
 
 /// 数据库迁移记录表 — 由 TypeORM 自动维护，记录已执行的迁移文件（勿手动修改）
@@ -1209,7 +1233,7 @@ model notification_preference {
 }
 
 /// 支付记录表 — 存储每笔充值/订阅支付的流水信息
-model payment_record {
+model payment_records {
   /// 主键 UUID
   id                      String    @id(map: "PK_payment_record") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   /// 关联的用户 ID
@@ -1633,7 +1657,7 @@ model subscription_plan {
 }
 
 /// 订阅触发日志表 — 记录用户触发付费引导的场景，用于转化率分析
-model subscription_trigger_log {
+model subscription_trigger_logs {
   /// 主键 UUID
   id               String   @id(map: "PK_5130854651b572f030f3ed0ac96") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   /// 关联的用户 ID

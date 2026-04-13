@@ -79,6 +79,29 @@ export interface QualityReport {
     date: string;
     count: number;
   }>;
+  /** V7.9: AI 补全统计 */
+  enrichment?: {
+    directApplied: number;
+    staged: number;
+    approved: number;
+    rejected: number;
+    coreCoverage: number;
+    microCoverage: number;
+  };
+  /** V8.0: 字段级完整度统计 */
+  fieldCompleteness?: Array<{
+    field: string;
+    filledCount: number;
+    totalCount: number;
+    percentage: number;
+  }>;
+  /** V8.0: 补全覆盖率趋势（近30天，按天聚合） */
+  enrichmentTrend?: Array<{
+    date: string;
+    enrichedCount: number;
+    approvedCount: number;
+    rejectedCount: number;
+  }>;
 }
 
 export interface ImageRecognitionResult {
@@ -279,6 +302,13 @@ export type EnrichableField =
   | 'trans_fat'
   | 'purine'
   | 'phosphorus'
+  // V8.0: V7.9 新增营养素字段
+  | 'vitamin_b6'
+  | 'omega3'
+  | 'omega6'
+  | 'soluble_fiber'
+  | 'insoluble_fiber'
+  | 'water_content_percent'
   | 'sub_category'
   | 'food_group'
   | 'cuisine'
@@ -298,7 +328,22 @@ export type EnrichableField =
   | 'commonality_score'
   | 'standard_serving_desc'
   | 'main_ingredient'
-  | 'flavor_profile';
+  | 'flavor_profile'
+  // V8.0: 扩展属性字段（Stage 5）
+  | 'food_form'
+  | 'dish_priority'
+  | 'popularity_score'
+  | 'acquisition_difficulty'
+  | 'texture'
+  | 'taste_profile'
+  | 'suitable_diet_types'
+  | 'health_benefits'
+  | 'health_risks'
+  | 'seasonal_availability'
+  | 'storage_method'
+  | 'shelf_life_days'
+  | 'best_cooking_temp'
+  | 'pairing_foods';
 
 export type EnrichmentTarget = 'foods' | 'translations' | 'regional';
 
@@ -359,6 +404,142 @@ export interface StagedEnrichmentPage {
   pageSize: number;
 }
 
+// ==================== V8.0: 补全预览类型 ====================
+
+/** 单条补全预览的字段差异 */
+export interface EnrichmentFieldDiff {
+  field: string;
+  label: string;
+  currentValue: any;
+  suggestedValue: any;
+  unit: string;
+  validRange: { min: number; max: number } | null;
+}
+
+/** 单条补全预览数据 */
+export interface EnrichmentPreview {
+  food: {
+    id: string;
+    name: string;
+    name_zh: string | null;
+    category: string | null;
+    sub_category: string | null;
+  };
+  staged: {
+    logId: string;
+    changes: Record<string, any>;
+    confidence: number;
+    target: string;
+    stage: number | null;
+    createdAt: string;
+  };
+  diff: EnrichmentFieldDiff[];
+  categoryAverage: Record<string, number> | null;
+}
+
+/** 批量预览结果 */
+export interface BatchPreviewResult {
+  results: Array<{
+    logId: string;
+    success: boolean;
+    data?: EnrichmentPreview;
+    error?: string;
+  }>;
+  summary: {
+    total: number;
+    success: number;
+    failed: number;
+    avgConfidence: number;
+  };
+}
+
+/** 补全进度统计 */
+export interface EnrichmentProgress {
+  total: number;
+  enriched: number;
+  percentage: number;
+  byField: Record<string, { filled: number; total: number; percentage: number }>;
+}
+
+/** 补全完整度评分 */
+export interface FoodCompleteness {
+  foodId: string;
+  foodName: string;
+  score: number;
+  filledFields: string[];
+  missingFields: string[];
+  totalFields: number;
+}
+
+/** 补全统计（全局） */
+export interface EnrichmentStatistics {
+  directApplied: number;
+  staged: number;
+  approved: number;
+  rejected: number;
+  coreCoverage: number;
+  microCoverage: number;
+}
+
+/** V8.0: 完整度分布统计 */
+export interface CompletenessDistribution {
+  total: number;
+  distribution: Array<{
+    range: string;
+    min: number;
+    max: number;
+    count: number;
+  }>;
+  avgCompleteness: number;
+}
+
+/** V8.0: 运维统计 */
+export interface OperationsStats {
+  total: number;
+  directApplied: number;
+  staged: number;
+  approved: number;
+  rejected: number;
+  /** 审核通过率（百分比） */
+  approvalRate: number;
+  /** 已入库补全的平均置信度 (0-1) */
+  avgConfidence: number;
+  /** 按日统计（最近 30 天） */
+  dailyStats: Array<{
+    date: string;
+    count: number;
+    action: string;
+  }>;
+}
+
+// ==================== V7.9/V8.0: 分阶段入队相关类型 ====================
+
+/** 分阶段入队参数 */
+export interface EnqueueStagedBatchParams {
+  stages?: number[];
+  limit?: number;
+  offset?: number;
+  staged?: boolean;
+  /** V8.0: 仅入队完整度 <= 此值的食物（0-100） */
+  maxCompleteness?: number;
+}
+
+/** 分阶段入队结果 */
+export interface EnqueueStagedBatchResult {
+  enqueued: number;
+  stages: number[];
+  stageNames: string[];
+  staged: boolean;
+  foodNames: string[];
+}
+
+/** 重试失败任务结果 */
+export interface RetryFailedResult {
+  retried: number;
+  failedToRetry: number;
+  errors: string[];
+}
+
 // ==================== Enrichment API ====================
 
 const ENRICHMENT_BASE = `${PATH.ADMIN.FOOD_PIPELINE}/enrichment`;
@@ -374,6 +555,8 @@ export const enrichmentApi = {
     locale?: string;
     region?: string;
     staged?: boolean;
+    /** V8.0: 仅入队完整度 <= 此值的食物（0-100） */
+    maxCompleteness?: number;
   }): Promise<EnrichEnqueueResult> => request.post(`${ENRICHMENT_BASE}/enqueue`, data),
 
   getStats: (): Promise<EnrichmentQueueStats> => request.get(`${ENRICHMENT_BASE}/stats`),
@@ -395,8 +578,13 @@ export const enrichmentApi = {
     target?: EnrichmentTarget;
   }): Promise<StagedEnrichmentPage> => request.get(`${ENRICHMENT_BASE}/staged`, params),
 
-  approveStaged: (id: string): Promise<{ applied: boolean; detail: string }> =>
-    request.post(`${ENRICHMENT_BASE}/staged/${id}/approve`, {}),
+  approveStaged: (
+    id: string,
+    selectedFields?: string[]
+  ): Promise<{ applied: boolean; detail: string }> =>
+    request.post(`${ENRICHMENT_BASE}/staged/${id}/approve`, {
+      ...(selectedFields ? { selectedFields } : {}),
+    }),
 
   rejectStaged: (id: string, reason: string): Promise<void> =>
     request.post(`${ENRICHMENT_BASE}/staged/${id}/reject`, { reason }),
@@ -411,6 +599,57 @@ export const enrichmentApi = {
     foodId?: string;
     action?: string;
   }): Promise<StagedEnrichmentPage> => request.get(`${ENRICHMENT_BASE}/history`, params),
+
+  // ---- V7.9 新增 ----
+
+  /** 分阶段批量入队补全任务（支持按阶段1-4分批处理） */
+  enqueueStagedBatch: (data: EnqueueStagedBatchParams): Promise<EnqueueStagedBatchResult> =>
+    request.post(`${ENRICHMENT_BASE}/enqueue-staged`, data),
+
+  /** 全库补全进度统计（按字段维度） */
+  getProgress: (): Promise<EnrichmentProgress> => request.get(`${ENRICHMENT_BASE}/progress`),
+
+  /** 批量重试失败的补全任务 */
+  retryFailed: (data?: { limit?: number }): Promise<RetryFailedResult> =>
+    request.post(`${ENRICHMENT_BASE}/retry-failed`, data ?? {}),
+
+  /** 查询单个食物的数据完整度评分 */
+  getCompleteness: (foodId: string): Promise<FoodCompleteness> =>
+    request.get(`${ENRICHMENT_BASE}/completeness/${foodId}`),
+
+  // ---- V8.0 新增 ----
+
+  /** 预览暂存AI补全数据（对比当前值与建议值 + 同类均值） */
+  getPreview: (logId: string): Promise<EnrichmentPreview> =>
+    request.get(`${ENRICHMENT_BASE}/staged/${logId}/preview`),
+
+  /** 批量预览暂存数据（最多50条，用于批量审核前对比） */
+  getBatchPreview: (ids: string[]): Promise<BatchPreviewResult> =>
+    request.post(`${ENRICHMENT_BASE}/staged/batch-preview`, { ids }),
+
+  /** V8.0: 全库完整度分布统计（按0-20/20-40/40-60/60-80/80-100区间） */
+  getCompletenessDistribution: (): Promise<CompletenessDistribution> =>
+    request.get(`${ENRICHMENT_BASE}/completeness-distribution`),
+
+  /** V8.0: 运维统计（补全成功率/通过率/平均置信度/按日趋势） */
+  getOperationsStats: (): Promise<OperationsStats> =>
+    request.get(`${ENRICHMENT_BASE}/operations-stats`),
+
+  /** V8.0: 回退单条补全记录（清除已补全字段，使食物可重新补全） */
+  rollbackEnrichment: (id: string): Promise<{ rolledBack: boolean; detail: string }> =>
+    request.post(`${ENRICHMENT_BASE}/rollback/${id}`),
+
+  /** V8.0: 批量回退补全记录 */
+  batchRollbackEnrichment: (
+    ids: string[]
+  ): Promise<{ success: number; failed: number; errors: string[] }> =>
+    request.post(`${ENRICHMENT_BASE}/rollback/batch`, { ids }),
+
+  /** V8.0: 单条食物立即补全（同步执行，不走队列） */
+  enrichNow: (
+    foodId: string,
+    data?: { stages?: number[]; fields?: string[]; staged?: boolean }
+  ): Promise<any> => request.post(`${ENRICHMENT_BASE}/${foodId}/enrich-now`, data ?? {}),
 };
 
 // ==================== Enrichment Query Keys ====================
@@ -421,6 +660,14 @@ export const enrichmentQueryKeys = {
   jobs: (status?: string) => ['enrichment', 'jobs', status] as const,
   staged: (params?: object) => ['enrichment', 'staged', params] as const,
   history: (params?: object) => ['enrichment', 'history', params] as const,
+  // V7.9
+  progress: ['enrichment', 'progress'] as const,
+  completeness: (foodId: string) => ['enrichment', 'completeness', foodId] as const,
+  // V8.0
+  preview: (logId: string) => ['enrichment', 'preview', logId] as const,
+  batchPreview: (ids: string[]) => ['enrichment', 'batchPreview', ids] as const,
+  completenessDistribution: ['enrichment', 'completenessDistribution'] as const,
+  operationsStats: ['enrichment', 'operationsStats'] as const,
 };
 
 // ==================== Enrichment Hooks ====================
@@ -507,11 +754,15 @@ export const useEnqueueEnrichment = (
 };
 
 export const useApproveStaged = (
-  options?: UseMutationOptions<{ applied: boolean; detail: string }, Error, string>
+  options?: UseMutationOptions<
+    { applied: boolean; detail: string },
+    Error,
+    { id: string; selectedFields?: string[] }
+  >
 ) => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id) => enrichmentApi.approveStaged(id),
+    mutationFn: ({ id, selectedFields }) => enrichmentApi.approveStaged(id, selectedFields),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.staged() });
       queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.history() });
@@ -563,6 +814,142 @@ export const useCleanEnrichmentJobs = (
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.stats });
       queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.jobs() });
+    },
+    ...options,
+  });
+};
+
+// ==================== V7.9/V8.0 Enrichment Hooks ====================
+
+/** 全库补全进度（按字段维度统计填充率） */
+export const useEnrichmentProgress = () =>
+  useQuery({
+    queryKey: enrichmentQueryKeys.progress,
+    queryFn: () => enrichmentApi.getProgress(),
+    staleTime: 60 * 1000,
+  });
+
+/** 单食物完整度评分（详情页用） */
+export const useFoodCompleteness = (foodId: string, enabled = true) =>
+  useQuery({
+    queryKey: enrichmentQueryKeys.completeness(foodId),
+    queryFn: () => enrichmentApi.getCompleteness(foodId),
+    enabled: !!foodId && enabled,
+    staleTime: 30 * 1000,
+  });
+
+/** 暂存预览 — 查看当前值 vs AI建议值 vs 同类均值 */
+export const useEnrichmentPreview = (logId: string, enabled = true) =>
+  useQuery({
+    queryKey: enrichmentQueryKeys.preview(logId),
+    queryFn: () => enrichmentApi.getPreview(logId),
+    enabled: !!logId && enabled,
+    staleTime: 60 * 1000,
+  });
+
+/** 分阶段批量入队 */
+export const useEnqueueStagedBatch = (
+  options?: UseMutationOptions<EnqueueStagedBatchResult, Error, EnqueueStagedBatchParams>
+) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data) => enrichmentApi.enqueueStagedBatch(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.stats });
+      queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.jobs() });
+    },
+    ...options,
+  });
+};
+
+/** 批量重试失败任务 */
+export const useRetryFailedEnrichment = (
+  options?: UseMutationOptions<RetryFailedResult, Error, { limit?: number } | undefined>
+) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data) => enrichmentApi.retryFailed(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.stats });
+      queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.jobs() });
+    },
+    ...options,
+  });
+};
+
+/** 批量预览暂存数据（批量审核前对比用） */
+export const useBatchPreviewStaged = (
+  options?: UseMutationOptions<BatchPreviewResult, Error, string[]>
+) =>
+  useMutation({
+    mutationFn: (ids) => enrichmentApi.getBatchPreview(ids),
+    ...options,
+  });
+
+/** V8.0: 全库完整度分布统计 */
+export const useCompletenessDistribution = () =>
+  useQuery({
+    queryKey: enrichmentQueryKeys.completenessDistribution,
+    queryFn: () => enrichmentApi.getCompletenessDistribution(),
+    staleTime: 60 * 1000,
+  });
+
+/** V8.0: 运维统计（补全成功率/通过率/按日趋势） */
+export const useOperationsStats = () =>
+  useQuery({
+    queryKey: enrichmentQueryKeys.operationsStats,
+    queryFn: () => enrichmentApi.getOperationsStats(),
+    staleTime: 60 * 1000,
+  });
+
+/** V8.0: 单条食物立即补全（同步执行） */
+export const useEnrichNow = (
+  options?: UseMutationOptions<
+    any,
+    Error,
+    { foodId: string; stages?: number[]; fields?: string[]; staged?: boolean }
+  >
+) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ foodId, ...rest }) => enrichmentApi.enrichNow(foodId, rest),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['foodLibrary'] });
+      queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.stats });
+    },
+    ...options,
+  });
+};
+
+/** V8.0: 回退单条补全记录 */
+export const useRollbackEnrichment = (
+  options?: UseMutationOptions<{ rolledBack: boolean; detail: string }, Error, string>
+) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id) => enrichmentApi.rollbackEnrichment(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.all });
+      queryClient.invalidateQueries({ queryKey: ['foodLibrary'] });
+    },
+    ...options,
+  });
+};
+
+/** V8.0: 批量回退补全记录 */
+export const useBatchRollbackEnrichment = (
+  options?: UseMutationOptions<
+    { success: number; failed: number; errors: string[] },
+    Error,
+    string[]
+  >
+) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (ids) => enrichmentApi.batchRollbackEnrichment(ids),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.all });
+      queryClient.invalidateQueries({ queryKey: ['foodLibrary'] });
     },
     ...options,
   });

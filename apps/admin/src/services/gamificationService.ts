@@ -1,12 +1,6 @@
 import request from '@/utils/request';
 import { PATH } from './path';
-import {
-  useQuery,
-  useQueryClient,
-  useMutation,
-  type UseQueryOptions,
-  type UseMutationOptions,
-} from '@tanstack/react-query';
+import { useQueryClient, useMutation, type UseMutationOptions } from '@tanstack/react-query';
 
 // ==================== 成就类型 ====================
 

@@ -16,7 +16,7 @@
  * 5. NutritionEstimationService: 优先标准库营养，次选估算
  * 6. FoodDecisionService: 结合目标/禁忌/当前摄入给出建议
  * 7. AnalysisResultAssembler: 组装统一 FoodAnalysisResultV61
- * 8. 异步保存 food_analysis_record
+ * 8. 异步保存 food_analysis_records
  */
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -1064,7 +1064,7 @@ export class TextFoodAnalysisService {
   }
 
   /**
-   * 异步保存分析记录到 food_analysis_record 表
+   * 异步保存分析记录到 food_analysis_records 表
    */
   private async saveAnalysisRecord(
     analysisId: string,
@@ -1079,7 +1079,7 @@ export class TextFoodAnalysisService {
     const matchedCount = parsedFoods.filter((f) => f.libraryMatch).length;
     const candidateCount = parsedFoods.length - matchedCount;
 
-    await this.prisma.food_analysis_record.create({
+    await this.prisma.food_analysis_records.create({
       data: {
         id: analysisId,
         user_id: userId,

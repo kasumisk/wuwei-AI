@@ -28,11 +28,9 @@ import {
   CheckCircleOutlined,
   ThunderboltOutlined,
   WarningOutlined,
-  PercentageOutlined,
   FallOutlined,
 } from '@ant-design/icons';
 import {
-  AreaChart,
   Area,
   XAxis,
   YAxis,
@@ -71,7 +69,6 @@ export const routeConfig = {
 
 // ==================== 常量 ====================
 
-const STEP_COLORS = ['#1677ff', '#52c41a', '#faad14', '#eb2f96', '#722ed1'];
 const DROPOFF_WARN = 60; // 流失率 > 60% 告警
 const CONVERSION_WARN = 3; // 整体转化率 < 3% 告警
 

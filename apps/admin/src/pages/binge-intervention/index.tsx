@@ -15,7 +15,6 @@ import {
   Spin,
   Progress,
   Tooltip,
-  Timeline,
   Empty,
   message,
 } from 'antd';
@@ -29,35 +28,31 @@ import {
   ClockCircleOutlined,
   FireOutlined,
   PlayCircleOutlined,
-  WarningOutlined,
   RiseOutlined,
   FallOutlined,
 } from '@ant-design/icons';
 import {
-  BarChart,
   Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip as RechartsTooltip,
   ResponsiveContainer,
-  LineChart,
   Line,
   ComposedChart,
-  Area,
   ReferenceLine,
-  Cell,
 } from 'recharts';
 import {
   useEffectiveness,
   useUserEffectiveness,
   useTriggerEvaluation,
   type InterventionRecord,
-  type HourlyInterventionStat,
+  type InterventionEffectivenessStats,
+  type UserInterventionOverview,
 } from '@/services/bingeInterventionService';
 import dayjs from 'dayjs';
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
 // ==================== 路由配置 ====================
 
@@ -77,12 +72,14 @@ const BingeInterventionPage: React.FC = () => {
   const [userId, setUserId] = useState('');
   const [searchUserId, setSearchUserId] = useState('');
 
-  const { data: stats, isLoading, refetch } = useEffectiveness({ days });
+  const { data: statsRaw, isLoading, refetch } = useEffectiveness({ days });
+  const stats = statsRaw as InterventionEffectivenessStats | undefined;
   const {
-    data: userStats,
+    data: userStatsRaw,
     isLoading: userLoading,
     isError: userError,
   } = useUserEffectiveness(searchUserId, { days }, { enabled: !!searchUserId });
+  const userStats = userStatsRaw as UserInterventionOverview | undefined;
   const triggerEval = useTriggerEvaluation();
 
   // 告警系统

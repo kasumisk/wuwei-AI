@@ -310,7 +310,7 @@ const FeatureFlagsPage: React.FC = () => {
       ellipsis: true,
       render: (cfg: Record<string, unknown>) => {
         if (!cfg || Object.keys(cfg).length === 0) return <Text type="secondary">—</Text>;
-        if (cfg.percentage !== undefined) return <Tag>{cfg.percentage}%</Tag>;
+        if (cfg.percentage !== undefined) return <Tag>{cfg.percentage as React.ReactNode}%</Tag>;
         if (Array.isArray(cfg.whitelist)) return <Tag>{cfg.whitelist.length} 白名单</Tag>;
         if (Array.isArray(cfg.segments)) return <Tag>{cfg.segments.join(', ')}</Tag>;
         return (

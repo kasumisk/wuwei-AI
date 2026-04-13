@@ -1,5 +1,17 @@
 import React, { useRef } from 'react';
-import { Card, Button, Space, Tag, Popconfirm, message, Row, Col, Statistic, Tooltip } from 'antd';
+import {
+  Card,
+  Button,
+  Space,
+  Tag,
+  Popconfirm,
+  message,
+  Row,
+  Col,
+  Statistic,
+  Tooltip,
+  Progress,
+} from 'antd';
 import {
   PlusOutlined,
   EditOutlined,
@@ -9,6 +21,7 @@ import {
   ReloadOutlined,
   EyeOutlined,
   ExportOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
@@ -20,7 +33,13 @@ import {
   useFoodLibraryStatistics,
   type FoodLibraryDto,
 } from '@/services/foodLibraryService';
-import { FOOD_CATEGORIES, STATUS_MAP, SOURCE_MAP, CATEGORY_MAP } from '../constants';
+import {
+  FOOD_CATEGORIES,
+  STATUS_MAP,
+  SOURCE_MAP,
+  CATEGORY_MAP,
+  ENRICHMENT_STATUS_MAP,
+} from '../constants';
 
 export const routeConfig = {
   name: 'food-list',
@@ -178,6 +197,43 @@ const FoodLibraryList: React.FC = () => {
       ),
     },
     {
+      title: '完整度',
+      dataIndex: 'dataCompleteness',
+      width: 110,
+      search: false,
+      sorter: true,
+      render: (_, record) => {
+        const val = record.dataCompleteness ?? 0;
+        const color = val >= 80 ? '#52c41a' : val >= 50 ? '#faad14' : '#ff4d4f';
+        return (
+          <Tooltip title={`${val}%`}>
+            <Progress
+              percent={val}
+              size="small"
+              strokeColor={color}
+              format={(p) => `${p}%`}
+              style={{ width: 80 }}
+            />
+          </Tooltip>
+        );
+      },
+    },
+    {
+      title: '补全状态',
+      dataIndex: 'enrichmentStatus',
+      width: 100,
+      valueEnum: Object.fromEntries(
+        Object.entries(ENRICHMENT_STATUS_MAP).map(([k, v]) => [k, { text: v.text }])
+      ),
+      render: (_, r) => {
+        const s = ENRICHMENT_STATUS_MAP[r.enrichmentStatus || 'pending'] || {
+          text: r.enrichmentStatus || '待补全',
+          color: 'default',
+        };
+        return <Tag color={s.color}>{s.text}</Tag>;
+      },
+    },
+    {
       title: '操作',
       width: 180,
       fixed: 'right',
@@ -259,7 +315,7 @@ const FoodLibraryList: React.FC = () => {
         columns={columns}
         actionRef={actionRef}
         request={async (params) => {
-          const { current, pageSize, isVerified, ...rest } = params;
+          const { current, pageSize, isVerified, enrichmentStatus, ...rest } = params;
           const res = await foodLibraryApi.getList({
             page: current,
             pageSize,
@@ -267,12 +323,13 @@ const FoodLibraryList: React.FC = () => {
             ...(isVerified !== undefined && isVerified !== ''
               ? { isVerified: isVerified === 'true' || isVerified === true }
               : {}),
+            ...(enrichmentStatus ? { enrichmentStatus } : {}),
             ...rest,
           });
           return { data: res.list, total: res.total, success: true };
         }}
         rowKey="id"
-        scroll={{ x: 1600 }}
+        scroll={{ x: 1900 }}
         search={{ labelWidth: 'auto', defaultCollapsed: false }}
         pagination={{ defaultPageSize: 20, showSizeChanger: true }}
         headerTitle="全球化食物库"
@@ -284,6 +341,13 @@ const FoodLibraryList: React.FC = () => {
             onClick={() => navigate('/food-library/create')}
           >
             新增食物
+          </Button>,
+          <Button
+            key="enrichment"
+            icon={<ThunderboltOutlined />}
+            onClick={() => navigate('/food-library/enrichment')}
+          >
+            AI补全
           </Button>,
           <Button
             key="conflicts"

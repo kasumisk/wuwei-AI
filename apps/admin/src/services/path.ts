@@ -65,6 +65,8 @@ const PATH = {
     THOMPSON_SAMPLING: '/admin/thompson-sampling',
     // 暴食干预效果
     BINGE_INTERVENTION: '/admin/binge-intervention',
+    // 食谱管理
+    RECIPES: '/admin/recipes',
   },
 };
 

@@ -11,7 +11,7 @@ import {
   Progress,
   Empty,
 } from 'antd';
-import { ArrowLeftOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAnalysisRecordDetail } from '@/services/analysisRecordService';
 import type { ReviewStatus, AnalysisInputType } from '@/services/analysisRecordService';

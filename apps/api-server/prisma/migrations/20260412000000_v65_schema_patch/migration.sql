@@ -306,9 +306,14 @@ BEGIN
             WHERE tablename = 'foods'
               AND indexname = 'idx_foods_embedding_v5_hnsw'
         ) THEN
-            EXECUTE 'CREATE INDEX idx_foods_embedding_v5_hnsw
-                     ON foods USING hnsw (embedding_v5 vector_cosine_ops)
-                     WITH (m = 16, ef_construction = 64)';
+            BEGIN
+                EXECUTE 'CREATE INDEX idx_foods_embedding_v5_hnsw
+                         ON foods USING hnsw (embedding_v5 vector_cosine_ops)
+                         WITH (m = 16, ef_construction = 64)';
+            EXCEPTION WHEN OTHERS THEN
+                -- Skip if column has no dimensions (shadow DB scenario)
+                NULL;
+            END;
         END IF;
     END IF;
 END

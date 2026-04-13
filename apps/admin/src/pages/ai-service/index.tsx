@@ -7,7 +7,6 @@ import {
   Tag,
   Button,
   Space,
-  Table,
   Typography,
   Tabs,
   Popconfirm,
@@ -20,9 +19,6 @@ import {
   Switch,
   Badge,
   Alert,
-  Tooltip,
-  Spin,
-  Descriptions,
 } from 'antd';
 import {
   ApiOutlined,
@@ -34,9 +30,7 @@ import {
   ThunderboltOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
-  ExclamationCircleOutlined,
   HeartOutlined,
-  CopyOutlined,
   RobotOutlined,
 } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
@@ -59,7 +53,7 @@ import {
   type ModelInfoDto,
 } from '@/services/modelService';
 
-const { Text, Paragraph } = Typography;
+const { Text } = Typography;
 
 // ==================== 路由配置 ====================
 
@@ -80,12 +74,6 @@ const PROVIDER_TYPE_CONFIG: Record<string, { label: string; color: string }> = {
   anthropic: { label: 'Anthropic', color: 'purple' },
   google: { label: 'Google', color: 'cyan' },
   custom: { label: '自定义', color: 'default' },
-};
-
-const MODEL_STATUS_CONFIG: Record<string, { label: string; color: string }> = {
-  active: { label: '活跃', color: 'success' },
-  inactive: { label: '未激活', color: 'default' },
-  deprecated: { label: '已弃用', color: 'warning' },
 };
 
 // ==================== Provider Tab ====================
@@ -253,7 +241,7 @@ const ProviderTab: React.FC = () => {
             type="link"
             size="small"
             icon={<ThunderboltOutlined />}
-            onClick={() => testMutation.mutate({ providerId: record.id })}
+            onClick={() => testMutation.mutate({ providerId: record.id } as any)}
             loading={testMutation.isPending}
           >
             测试
@@ -268,7 +256,7 @@ const ProviderTab: React.FC = () => {
           </Button>
           <Popconfirm
             title="确认删除？删除后关联的模型将不可用"
-            onConfirm={() => deleteMutation.mutate(record.id)}
+            onConfirm={() => deleteMutation.mutate(record.id as any)}
           >
             <Button type="link" size="small" danger icon={<DeleteOutlined />} />
           </Popconfirm>
@@ -578,7 +566,9 @@ const ModelTab: React.FC = () => {
             type="link"
             size="small"
             icon={<ThunderboltOutlined />}
-            onClick={() => testMutation.mutate({ modelId: record.id, input: { prompt: 'Hi' } })}
+            onClick={() =>
+              testMutation.mutate({ modelId: record.id, input: { prompt: 'Hi' } } as any)
+            }
             loading={testMutation.isPending}
           >
             测试
@@ -591,7 +581,10 @@ const ModelTab: React.FC = () => {
           >
             编辑
           </Button>
-          <Popconfirm title="确认删除此模型？" onConfirm={() => deleteMutation.mutate(record.id)}>
+          <Popconfirm
+            title="确认删除此模型？"
+            onConfirm={() => deleteMutation.mutate(record.id as any)}
+          >
             <Button type="link" size="small" danger icon={<DeleteOutlined />} />
           </Popconfirm>
         </Space>

@@ -26,7 +26,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   subscription_plan as SubscriptionPlan,
   subscription as Subscription,
-  payment_record as PaymentRecord,
+  payment_records as PaymentRecord,
   usage_quota as UsageQuota,
 } from '@prisma/client';
 import {
@@ -361,7 +361,7 @@ export class SubscriptionService implements OnModuleInit {
     amountCents: number;
     currency?: string;
   }): Promise<PaymentRecord> {
-    const record = await this.prisma.payment_record.create({
+    const record = await this.prisma.payment_records.create({
       data: {
         user_id: data.userId,
         subscription_id: data.subscriptionId,
@@ -382,7 +382,7 @@ export class SubscriptionService implements OnModuleInit {
     platformTransactionId?: string,
     callbackPayload?: Record<string, unknown>,
   ): Promise<PaymentRecord | null> {
-    const record = await this.prisma.payment_record.findFirst({
+    const record = await this.prisma.payment_records.findFirst({
       where: { order_no: orderNo },
     });
     if (!record) return null;
@@ -401,7 +401,7 @@ export class SubscriptionService implements OnModuleInit {
       updateData.refunded_at = new Date();
     }
 
-    const updated = await this.prisma.payment_record.update({
+    const updated = await this.prisma.payment_records.update({
       where: { id: record.id },
       data: updateData,
     });
@@ -410,7 +410,7 @@ export class SubscriptionService implements OnModuleInit {
 
   /** 获取用户支付历史 */
   async getUserPayments(userId: string, limit = 20): Promise<PaymentRecord[]> {
-    const records = await this.prisma.payment_record.findMany({
+    const records = await this.prisma.payment_records.findMany({
       where: { user_id: userId },
       orderBy: { created_at: 'desc' },
       take: limit,

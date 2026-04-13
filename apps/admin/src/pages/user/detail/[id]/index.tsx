@@ -15,8 +15,6 @@ import {
   Col,
   Statistic,
   Avatar,
-  Tooltip,
-  Timeline,
   Badge,
 } from 'antd';
 import {
@@ -31,7 +29,6 @@ import {
   CoffeeOutlined,
   LikeOutlined,
   ThunderboltOutlined,
-  DollarOutlined,
   SwapOutlined,
   StopOutlined,
   CheckCircleOutlined,
@@ -45,18 +42,13 @@ import {
   type InferredProfileDto,
   type ProfileChangeLogDto,
 } from '@/services/appUserManagementService';
-import {
-  contentApi,
-  type FoodRecordDto,
-  type RecommendationFeedbackDto,
-} from '@/services/contentManagementService';
+import { contentApi, type FoodRecordDto } from '@/services/contentManagementService';
 import {
   useSubscriptions,
   usePaymentRecords,
-  type SubscriptionDto,
   type PaymentRecordDto,
 } from '@/services/subscriptionManagementService';
-import { useUserStrategy, type UserStrategyResult } from '@/services/recommendDebugService';
+import { useUserStrategy } from '@/services/recommendDebugService';
 import { useQuery } from '@tanstack/react-query';
 
 // ==================== 常量映射 ====================
@@ -590,7 +582,7 @@ const TIER_LABELS_SUB: Record<string, string> = {
 };
 
 const SubscriptionTab: React.FC<{ userId: string }> = ({ userId }) => {
-  const { data: subData, isLoading: subLoading } = useSubscriptions({ userId, pageSize: 5 });
+  const { data: subData, isLoading: subLoading } = useSubscriptions({ pageSize: 5 });
   const { data: payData, isLoading: payLoading } = usePaymentRecords({ userId, pageSize: 10 });
 
   if (subLoading || payLoading) return <Spin />;
@@ -923,13 +915,6 @@ const RecommendFeedbackTab: React.FC<{ userId: string }> = ({ userId }) => {
 };
 
 // ==================== 子组件: 策略信息（新增） ====================
-
-const SCOPE_LABELS: Record<string, string> = {
-  global: '全局',
-  goal_type: '目标类型',
-  experiment: '实验',
-  user: '用户专属',
-};
 
 const StrategyTab: React.FC<{ userId: string }> = ({ userId }) => {
   const { data, isLoading } = useUserStrategy(userId);

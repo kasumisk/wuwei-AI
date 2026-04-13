@@ -1,3 +1,12 @@
+-- Enable uuid-ossp extension for uuid_generate_v4() support in shadow database
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- Enable pgvector extension for vector type support
+CREATE EXTENSION IF NOT EXISTS "vector";
+
+-- Enable pg_trgm extension for GIN trigram index support
+CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+
 -- CreateEnum
 CREATE TYPE "ab_experiments_status_enum" AS ENUM ('draft', 'running', 'paused', 'completed');
 

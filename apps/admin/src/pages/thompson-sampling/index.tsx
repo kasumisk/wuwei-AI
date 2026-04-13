@@ -15,7 +15,6 @@ import {
   Spin,
   Progress,
   Tooltip,
-  Descriptions,
   Empty,
 } from 'antd';
 import {
@@ -23,11 +22,8 @@ import {
   SearchOutlined,
   ReloadOutlined,
   UserOutlined,
-  RiseOutlined,
-  FallOutlined,
   TrophyOutlined,
   WarningOutlined,
-  InfoCircleOutlined,
 } from '@ant-design/icons';
 import {
   PieChart,
@@ -40,12 +36,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip as RechartsTooltip,
-  Legend,
-  RadarChart,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-  Radar,
   ScatterChart,
   Scatter,
   ZAxis,
@@ -54,9 +44,11 @@ import {
   useConvergence,
   useUserConvergence,
   type FoodBetaDistribution,
+  type GlobalConvergenceStats,
+  type UserConvergenceOverview,
 } from '@/services/thompsonSamplingService';
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
 // ==================== 路由配置 ====================
 
@@ -94,10 +86,13 @@ const ThompsonSamplingPage: React.FC = () => {
     isError: userError,
   } = useUserConvergence(searchUserId, { days }, { enabled: !!searchUserId });
 
+  const globalData = globalStats as GlobalConvergenceStats | undefined;
+  const userData = userStats as UserConvergenceOverview | undefined;
+
   // 告警系统
   const alerts: { type: 'error' | 'warning' | 'info'; message: string }[] = [];
-  if (globalStats) {
-    const { phaseDistribution, avgConvergence, activeUserCount } = globalStats;
+  if (globalData) {
+    const { phaseDistribution, avgConvergence, activeUserCount } = globalData;
     const total =
       phaseDistribution.exploring + phaseDistribution.converging + phaseDistribution.converged;
     if (total > 0) {
@@ -117,16 +112,16 @@ const ThompsonSamplingPage: React.FC = () => {
   }
 
   // 阶段分布饼图数据
-  const phaseData = globalStats
+  const phaseData = globalData
     ? [
-        { name: '探索期', value: globalStats.phaseDistribution.exploring },
-        { name: '收敛中', value: globalStats.phaseDistribution.converging },
-        { name: '已收敛', value: globalStats.phaseDistribution.converged },
+        { name: '探索期', value: globalData.phaseDistribution.exploring },
+        { name: '收敛中', value: globalData.phaseDistribution.converging },
+        { name: '已收敛', value: globalData.phaseDistribution.converged },
       ]
     : [];
 
   // 收敛排行柱状图
-  const convergenceBarData = (foods: FoodBetaDistribution[], label: string) =>
+  const convergenceBarData = (foods: FoodBetaDistribution[]) =>
     foods.map((f) => ({
       name: f.foodName.length > 8 ? f.foodName.slice(0, 8) + '…' : f.foodName,
       fullName: f.foodName,
@@ -196,7 +191,7 @@ const ThompsonSamplingPage: React.FC = () => {
             <Card size="small" variant="borderless" style={{ background: '#fafafa' }}>
               <Statistic
                 title="活跃用户数"
-                value={globalStats?.activeUserCount ?? '-'}
+                value={globalData?.activeUserCount ?? '-'}
                 prefix={<UserOutlined />}
               />
             </Card>
@@ -205,13 +200,13 @@ const ThompsonSamplingPage: React.FC = () => {
             <Card size="small" variant="borderless" style={{ background: '#fafafa' }}>
               <Statistic
                 title="平均收敛度"
-                value={globalStats ? (globalStats.avgConvergence * 100).toFixed(1) : '-'}
+                value={globalData ? (globalData.avgConvergence * 100).toFixed(1) : '-'}
                 suffix="%"
                 valueStyle={{
-                  color: globalStats
-                    ? globalStats.avgConvergence >= 0.7
+                  color: globalData
+                    ? globalData.avgConvergence >= 0.7
                       ? '#52c41a'
-                      : globalStats.avgConvergence >= 0.3
+                      : globalData.avgConvergence >= 0.3
                         ? '#1890ff'
                         : '#faad14'
                     : undefined,
@@ -223,7 +218,7 @@ const ThompsonSamplingPage: React.FC = () => {
             <Card size="small" variant="borderless" style={{ background: '#fafafa' }}>
               <Statistic
                 title="探索期用户"
-                value={globalStats?.phaseDistribution.exploring ?? '-'}
+                value={globalData?.phaseDistribution.exploring ?? '-'}
                 valueStyle={{ color: '#faad14' }}
               />
             </Card>
@@ -232,7 +227,7 @@ const ThompsonSamplingPage: React.FC = () => {
             <Card size="small" variant="borderless" style={{ background: '#fafafa' }}>
               <Statistic
                 title="收敛中用户"
-                value={globalStats?.phaseDistribution.converging ?? '-'}
+                value={globalData?.phaseDistribution.converging ?? '-'}
                 valueStyle={{ color: '#1890ff' }}
               />
             </Card>
@@ -241,7 +236,7 @@ const ThompsonSamplingPage: React.FC = () => {
             <Card size="small" variant="borderless" style={{ background: '#fafafa' }}>
               <Statistic
                 title="已收敛用户"
-                value={globalStats?.phaseDistribution.converged ?? '-'}
+                value={globalData?.phaseDistribution.converged ?? '-'}
                 valueStyle={{ color: '#52c41a' }}
               />
             </Card>
@@ -267,7 +262,7 @@ const ThompsonSamplingPage: React.FC = () => {
                       innerRadius={50}
                       outerRadius={90}
                       dataKey="value"
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
                     >
                       {phaseData.map((_entry, index) => (
                         <Cell key={index} fill={PHASE_COLORS[index]} />
@@ -304,10 +299,10 @@ const ThompsonSamplingPage: React.FC = () => {
               size="small"
               style={{ height: '100%' }}
             >
-              {globalStats?.mostConverged.length ? (
+              {globalData?.mostConverged.length ? (
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart
-                    data={convergenceBarData(globalStats.mostConverged, '收敛度')}
+                    data={convergenceBarData(globalData.mostConverged)}
                     layout="vertical"
                     margin={{ left: 10, right: 20 }}
                   >
@@ -315,10 +310,12 @@ const ThompsonSamplingPage: React.FC = () => {
                     <XAxis type="number" domain={[0, 100]} unit="%" />
                     <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 11 }} />
                     <RechartsTooltip
-                      formatter={(value: number, name: string) => [
-                        `${value}%`,
-                        name === 'convergence' ? '收敛度' : '接受率',
-                      ]}
+                      formatter={
+                        ((value: number, name: string) => [
+                          `${value}%`,
+                          name === 'convergence' ? '收敛度' : '接受率',
+                        ]) as any
+                      }
                     />
                     <Bar dataKey="convergence" fill="#52c41a" name="convergence" barSize={14} />
                   </BarChart>
@@ -339,10 +336,10 @@ const ThompsonSamplingPage: React.FC = () => {
               size="small"
               style={{ height: '100%' }}
             >
-              {globalStats?.leastConverged.length ? (
+              {globalData?.leastConverged.length ? (
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart
-                    data={convergenceBarData(globalStats.leastConverged, '收敛度')}
+                    data={convergenceBarData(globalData.leastConverged)}
                     layout="vertical"
                     margin={{ left: 10, right: 20 }}
                   >
@@ -350,10 +347,12 @@ const ThompsonSamplingPage: React.FC = () => {
                     <XAxis type="number" domain={[0, 100]} unit="%" />
                     <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 11 }} />
                     <RechartsTooltip
-                      formatter={(value: number, name: string) => [
-                        `${value}%`,
-                        name === 'convergence' ? '收敛度' : '方差',
-                      ]}
+                      formatter={
+                        ((value: number, name: string) => [
+                          `${value}%`,
+                          name === 'convergence' ? '收敛度' : '方差',
+                        ]) as any
+                      }
                     />
                     <Bar dataKey="convergence" fill="#faad14" name="convergence" barSize={14} />
                   </BarChart>
@@ -369,8 +368,8 @@ const ThompsonSamplingPage: React.FC = () => {
         <Card title="食物收敛明细" size="small" style={{ marginBottom: 16 }}>
           <Table
             dataSource={[
-              ...(globalStats?.mostConverged ?? []),
-              ...(globalStats?.leastConverged ?? []),
+              ...(globalData?.mostConverged ?? []),
+              ...(globalData?.leastConverged ?? []),
             ]}
             rowKey={(r) => r.foodName}
             size="small"
@@ -494,36 +493,41 @@ const ThompsonSamplingPage: React.FC = () => {
           <Spin spinning={userLoading}>
             {userError ? (
               <Alert type="error" message="查询失败，请检查用户 ID 是否存在" showIcon />
-            ) : userStats ? (
+            ) : userData ? (
               <>
                 {/* 用户概览 */}
                 <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
                   <Col span={6}>
                     <Card size="small" variant="borderless" style={{ background: '#fafafa' }}>
-                      <Statistic title="食物数量" value={userStats.foodCount} />
+                      <Statistic title="食物数量" value={userData.foodCount} />
                     </Card>
                   </Col>
                   <Col span={6}>
                     <Card size="small" variant="borderless" style={{ background: '#fafafa' }}>
                       <Statistic
                         title="平均收敛度"
-                        value={(userStats.avgConvergence * 100).toFixed(1)}
+                        value={(userData.avgConvergence * 100).toFixed(1)}
                         suffix="%"
                       />
                     </Card>
                   </Col>
                   <Col span={6}>
                     <Card size="small" variant="borderless" style={{ background: '#fafafa' }}>
-                      <Statistic title="总交互次数" value={userStats.totalInteractions} />
+                      <Statistic title="总交互次数" value={userData.totalInteractions} />
                     </Card>
                   </Col>
                   <Col span={6}>
                     <Card size="small" variant="borderless" style={{ background: '#fafafa' }}>
                       <Statistic
                         title="当前阶段"
-                        value={PHASE_CONFIG[userStats.phase]?.label ?? userStats.phase}
+                        value={
+                          PHASE_CONFIG[userData.phase as keyof typeof PHASE_CONFIG]?.label ??
+                          userData.phase
+                        }
                         valueStyle={{
-                          color: PHASE_CONFIG[userStats.phase]?.color ?? '#666',
+                          color:
+                            PHASE_CONFIG[userData.phase as keyof typeof PHASE_CONFIG]?.color ??
+                            '#666',
                         }}
                       />
                     </Card>
@@ -531,7 +535,7 @@ const ThompsonSamplingPage: React.FC = () => {
                 </Row>
 
                 {/* 用户食物 Beta 分布散点图 */}
-                {userStats.distributions.length > 0 && (
+                {userData.distributions.length > 0 && (
                   <Row gutter={16} style={{ marginBottom: 16 }}>
                     <Col span={24}>
                       <Card title="食物偏好分布（接受率 vs 收敛度）" size="small">
@@ -578,7 +582,7 @@ const ThompsonSamplingPage: React.FC = () => {
                               }}
                             />
                             <Scatter
-                              data={userStats.distributions}
+                              data={userData.distributions}
                               fill="#1890ff"
                               fillOpacity={0.7}
                             />
@@ -591,7 +595,7 @@ const ThompsonSamplingPage: React.FC = () => {
 
                 {/* 用户食物收敛明细表 */}
                 <Table
-                  dataSource={userStats.distributions}
+                  dataSource={userData.distributions}
                   rowKey={(r) => r.foodName}
                   size="small"
                   pagination={{ pageSize: 10 }}

@@ -30,7 +30,7 @@ import * as crypto from 'crypto';
 import { SubscriptionService } from '../services/subscription.service';
 import {
   subscription_plan as SubscriptionPlan,
-  payment_record as PaymentRecord,
+  payment_records as PaymentRecord,
 } from '@prisma/client';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
 import { PaymentChannel, PaymentStatus } from '../../subscription.types';
@@ -120,7 +120,7 @@ export class WechatPayService {
       currency: plan.currency,
     });
     // 立即将 planId 写入 callback_payload，供回调时直接使用
-    await this.prisma.payment_record.update({
+    await this.prisma.payment_records.update({
       where: { order_no: orderNo },
       data: { callback_payload: { plan_id: planId } },
     });
@@ -232,7 +232,7 @@ export class WechatPayService {
     const orderNo = transaction.out_trade_no;
 
     // 查找支付记录
-    const payment = await this.prisma.payment_record.findUnique({
+    const payment = await this.prisma.payment_records.findUnique({
       where: { order_no: orderNo },
     });
     if (!payment) {
@@ -295,7 +295,7 @@ export class WechatPayService {
     );
 
     // 查找并取消用户订阅
-    const payment = await this.prisma.payment_record.findUnique({
+    const payment = await this.prisma.payment_records.findUnique({
       where: { order_no: orderNo },
     });
     if (payment) {

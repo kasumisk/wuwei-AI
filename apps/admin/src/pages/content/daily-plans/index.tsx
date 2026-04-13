@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Card, Tag, Button, Modal, Descriptions, Row, Col, Statistic } from 'antd';
+import { Card, Button, Modal, Descriptions, Row, Col, Statistic } from 'antd';
 import { EyeOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';

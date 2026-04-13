@@ -14,7 +14,6 @@ import {
   InputNumber,
   Select,
   message,
-  Timeline,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -293,7 +292,7 @@ const SubscriptionDetail: React.FC = () => {
             rules={[{ required: true, message: '请选择套餐' }]}
           >
             <Select placeholder="选择新套餐">
-              {plans?.map((plan) => (
+              {plans?.list?.map((plan) => (
                 <Select.Option key={plan.id} value={plan.id}>
                   {tierConfig[plan.tier]?.text || plan.tier} - ${(plan.priceCents / 100).toFixed(2)}
                   /

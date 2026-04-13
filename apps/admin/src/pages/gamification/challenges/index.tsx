@@ -11,7 +11,6 @@ import {
   Input,
   InputNumber,
   Select,
-  Switch,
   Row,
   Col,
   Statistic,
@@ -41,7 +40,6 @@ import {
   useDeleteChallenge,
   useToggleChallengeActive,
   type ChallengeDto,
-  type CreateChallengeDto,
 } from '@/services/gamificationService';
 
 const { Text } = Typography;
