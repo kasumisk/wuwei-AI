@@ -10,7 +10,7 @@
  * 在 Phase 3 集成时，PipelineBuilder 将这些数据放入 PipelineContext 的扩展字段中。
  */
 import type { FoodLibrary } from '../../../../../food/food.types';
-import type { PipelineContext } from '../../recommendation.types';
+import type { PipelineContext } from '../../types/recommendation.types';
 import type {
   ScoringAdjustment,
   ScoringFactor,

@@ -10,11 +10,11 @@
  *        并将 factorStrengthOverrides 作为链式调整返回。
  */
 import type { FoodLibrary } from '../../../../../food/food.types';
-import type { PipelineContext } from '../../recommendation.types';
+import type { PipelineContext } from '../../types/recommendation.types';
 import {
   findSceneScoringProfile,
   type SceneScoringProfile,
-} from '../../scene-scoring.types';
+} from '../../types/scene-scoring.types';
 import type {
   ScoringAdjustment,
   ScoringFactor,

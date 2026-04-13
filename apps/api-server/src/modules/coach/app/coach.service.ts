@@ -7,9 +7,9 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../../core/prisma/prisma.service';
-import { FoodService } from '../../diet/app/food.service';
-import { UserProfileService } from '../../user/app/user-profile.service';
-import { BehaviorService } from '../../diet/app/behavior.service';
+import { FoodService } from '../../diet/app/services/food.service';
+import { UserProfileService } from '../../user/app/services/profile/user-profile.service';
+import { BehaviorService } from '../../diet/app/services/behavior.service';
 import {
   getUserLocalHour,
   DEFAULT_TIMEZONE,

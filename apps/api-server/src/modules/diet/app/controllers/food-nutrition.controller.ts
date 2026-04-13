@@ -7,14 +7,14 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { AppJwtAuthGuard } from '../../auth/app/app-jwt-auth.guard';
-import { CurrentAppUser } from '../../auth/app/current-app-user.decorator';
-import { AppUserPayload } from '../../auth/app/app-user-payload.type';
-import { ApiResponse } from '../../../common/types/response.type';
-import { FoodService } from './food.service';
-import { UserProfileService } from '../../user/app/user-profile.service';
-import { NutritionScoreService } from './nutrition-score.service';
-import { SaveUserProfileDto } from './food.dto';
+import { AppJwtAuthGuard } from '../../../auth/app/app-jwt-auth.guard';
+import { CurrentAppUser } from '../../../auth/app/current-app-user.decorator';
+import { AppUserPayload } from '../../../auth/app/app-user-payload.type';
+import { ApiResponse } from '../../../../common/types/response.type';
+import { FoodService } from '../services/food.service';
+import { UserProfileService } from '../../../user/app/services/profile/user-profile.service';
+import { NutritionScoreService } from '../services/nutrition-score.service';
+import { SaveUserProfileDto } from '../dto/food.dto';
 
 /**
  * 将 Prisma user_profiles 行（snake_case）转换为前端期望的 camelCase 格式

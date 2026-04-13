@@ -41,7 +41,7 @@ export const THROTTLE_CONFIG = [
   {
     name: THROTTLE_TIERS.USER_API,
     ttl: 60000,
-    limit: 30,
+    limit: 60,
   },
   {
     name: THROTTLE_TIERS.AI_HEAVY,

@@ -5,7 +5,7 @@
  * 冷启动用户的 popularity 加权（交互多时衰减为 0）。
  */
 import type { FoodLibrary } from '../../../../../food/food.types';
-import type { PipelineContext } from '../../recommendation.types';
+import type { PipelineContext } from '../../types/recommendation.types';
 import type {
   ScoringAdjustment,
   ScoringFactor,

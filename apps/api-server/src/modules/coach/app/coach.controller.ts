@@ -21,7 +21,7 @@ import { AppUserPayload } from '../../auth/app/app-user-payload.type';
 import { IgnoreResponseInterceptor } from '../../../core/decorators/ignore-response-interceptor.decorator';
 import { ApiResponse } from '../../../common/types/response.type';
 import { CoachService } from './coach.service';
-import { BehaviorService } from '../../diet/app/behavior.service';
+import { BehaviorService } from '../../diet/app/services/behavior.service';
 import { CoachChatDto, CoachMessagesQueryDto } from './dto/coach.dto';
 
 @ApiTags('App AI 教练')

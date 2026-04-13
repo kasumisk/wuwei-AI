@@ -21,7 +21,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { StrategyService } from './strategy.service';
 import { AssignmentType, StrategyStatus } from '../strategy.types';
-import type { UserSegment } from '../../user/app/segmentation.util';
+import type { UserSegment } from '../../user/app/services/segmentation.util';
 
 /** 分群 → 策略名映射表 */
 const SEGMENT_STRATEGY_MAP: Record<UserSegment, string> = {

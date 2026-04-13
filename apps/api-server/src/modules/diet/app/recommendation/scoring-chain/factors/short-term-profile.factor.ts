@@ -5,8 +5,8 @@
  * 基于近 7 天行为（接受率 + 拒绝惩罚）调整。
  */
 import type { FoodLibrary } from '../../../../../food/food.types';
-import type { PipelineContext } from '../../recommendation.types';
-import type { ShortTermProfile } from '../../../../../user/app/realtime-profile.service';
+import type { PipelineContext } from '../../types/recommendation.types';
+import type { ShortTermProfile } from '../../../../../user/app/services/profile/realtime-profile.service';
 import type {
   ScoringAdjustment,
   ScoringFactor,

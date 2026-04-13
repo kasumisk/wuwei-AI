@@ -8,28 +8,28 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { UserApiThrottle, AiHeavyThrottle } from '../../../core/throttle';
+import { UserApiThrottle, AiHeavyThrottle } from '../../../../core/throttle';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { AppJwtAuthGuard } from '../../auth/app/app-jwt-auth.guard';
-import { CurrentAppUser } from '../../auth/app/current-app-user.decorator';
-import { AppUserPayload } from '../../auth/app/app-user-payload.type';
-import { ApiResponse } from '../../../common/types/response.type';
-import { FoodService } from './food.service';
-import { DailyPlanService } from './daily-plan.service';
-import { WeeklyPlanService } from './weekly-plan.service';
-import { RecommendationEngineService } from './recommendation-engine.service';
-import { RecommendationFeedbackService } from './recommendation/feedback.service';
-import { PreferenceProfileService } from './recommendation/preference-profile.service';
-import { SubstitutionService } from './recommendation/substitution.service';
-import { UserProfileService } from '../../user/app/user-profile.service';
+import { AppJwtAuthGuard } from '../../../auth/app/app-jwt-auth.guard';
+import { CurrentAppUser } from '../../../auth/app/current-app-user.decorator';
+import { AppUserPayload } from '../../../auth/app/app-user-payload.type';
+import { ApiResponse } from '../../../../common/types/response.type';
+import { FoodService } from '../services/food.service';
+import { DailyPlanService } from '../services/daily-plan.service';
+import { WeeklyPlanService } from '../services/weekly-plan.service';
+import { RecommendationEngineService } from '../services/recommendation-engine.service';
+import { RecommendationFeedbackService } from '../recommendation/feedback/feedback.service';
+import { PreferenceProfileService } from '../recommendation/profile/preference-profile.service';
+import { SubstitutionService } from '../recommendation/filter/substitution.service';
+import { UserProfileService } from '../../../user/app/services/profile/user-profile.service';
 import {
   AdjustPlanDto,
   RegeneratePlanDto,
   SubstitutesQueryDto,
   RecommendationFeedbackDto,
   ExplainWhyNotDto,
-} from './food.dto';
-import { UserProfileConstraints } from './recommendation/recommendation.types';
+} from '../dto/food.dto';
+import { UserProfileConstraints } from '../recommendation/types/recommendation.types';
 
 /**
  * 将 Prisma daily_plans 行（snake_case）转换为前端期望的 camelCase 格式

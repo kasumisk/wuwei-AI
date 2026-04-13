@@ -386,3 +386,139 @@ export function extractMeta(food: FoodLibrary): FoodMetaView {
     popularity: food.popularity,
   };
 }
+
+// ─── V8.0: AI 补全预览类型定义 ──────────────────────────────────────────
+
+/**
+ * 单字段差异对比
+ */
+export interface EnrichmentFieldDiff {
+  /** 字段名（数据库列名） */
+  field: string;
+  /** 中文标签 */
+  label: string;
+  /** 当前值（null 表示缺失） */
+  currentValue: any;
+  /** AI 建议值 */
+  suggestedValue: any;
+  /** 单位（如 g/100g, mg/100g） */
+  unit: string;
+  /** 合法范围（仅数值型字段） */
+  validRange: { min: number; max: number } | null;
+}
+
+/**
+ * 补全预览完整响应
+ */
+export interface EnrichmentPreview {
+  /** 当前食物基本信息 */
+  food: {
+    id: string;
+    name: string;
+    name_zh: string | null;
+    category: string | null;
+    sub_category: string | null;
+  };
+  /** AI 暂存记录信息 */
+  staged: {
+    logId: string;
+    changes: Record<string, any>;
+    confidence: number;
+    target: string;
+    stage: number | null;
+    createdAt: Date;
+  };
+  /** 逐字段差异对比 */
+  diff: EnrichmentFieldDiff[];
+  /** 同类食物平均值参考（仅数值型字段） */
+  categoryAverage: Record<string, number> | null;
+}
+
+/**
+ * 补全字段中文标签映射
+ */
+export const ENRICHMENT_FIELD_LABELS: Record<string, string> = {
+  protein: '蛋白质',
+  fat: '脂肪',
+  carbs: '碳水化合物',
+  fiber: '膳食纤维',
+  sugar: '糖',
+  added_sugar: '添加糖',
+  natural_sugar: '天然糖',
+  sodium: '钠',
+  calcium: '钙',
+  iron: '铁',
+  potassium: '钾',
+  cholesterol: '胆固醇',
+  vitamin_a: '维生素A',
+  vitamin_c: '维生素C',
+  vitamin_d: '维生素D',
+  vitamin_e: '维生素E',
+  vitamin_b12: '维生素B12',
+  folate: '叶酸',
+  zinc: '锌',
+  magnesium: '镁',
+  saturated_fat: '饱和脂肪',
+  trans_fat: '反式脂肪',
+  purine: '嘌呤',
+  phosphorus: '磷',
+  glycemic_index: '血糖指数(GI)',
+  glycemic_load: '血糖负荷(GL)',
+  fodmap_level: 'FODMAP等级',
+  oxalate_level: '草酸等级',
+  processing_level: '加工程度',
+  sub_category: '子分类',
+  food_group: '食物组',
+  cuisine: '菜系',
+  cooking_method: '烹饪方式',
+  meal_types: '适合餐次',
+  allergens: '过敏原',
+  tags: '标签',
+  common_portions: '常见份量',
+  quality_score: '品质评分',
+  satiety_score: '饱腹感评分',
+  nutrient_density: '营养密度',
+  commonality_score: '大众化程度',
+  standard_serving_desc: '标准份量描述',
+  main_ingredient: '主要原料',
+  flavor_profile: '风味画像',
+};
+
+/**
+ * 补全字段单位映射
+ */
+export const ENRICHMENT_FIELD_UNITS: Record<string, string> = {
+  protein: 'g/100g',
+  fat: 'g/100g',
+  carbs: 'g/100g',
+  fiber: 'g/100g',
+  sugar: 'g/100g',
+  added_sugar: 'g/100g',
+  natural_sugar: 'g/100g',
+  sodium: 'mg/100g',
+  calcium: 'mg/100g',
+  iron: 'mg/100g',
+  potassium: 'mg/100g',
+  cholesterol: 'mg/100g',
+  vitamin_a: 'μg/100g',
+  vitamin_c: 'mg/100g',
+  vitamin_d: 'μg/100g',
+  vitamin_e: 'mg/100g',
+  vitamin_b12: 'μg/100g',
+  folate: 'μg/100g',
+  zinc: 'mg/100g',
+  magnesium: 'mg/100g',
+  saturated_fat: 'g/100g',
+  trans_fat: 'g/100g',
+  purine: 'mg/100g',
+  phosphorus: 'mg/100g',
+  glycemic_index: '',
+  glycemic_load: '',
+  fodmap_level: '',
+  oxalate_level: '',
+  processing_level: '级(1-4)',
+  quality_score: '分(0-10)',
+  satiety_score: '分(0-10)',
+  nutrient_density: '分(0-100)',
+  commonality_score: '分(0-100)',
+};

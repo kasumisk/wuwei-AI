@@ -5,17 +5,21 @@ import {
   UsdaFetcherService,
   NormalizedFoodData,
   ImportMetadata,
-} from './usda-fetcher.service';
-import { OpenFoodFactsService } from './openfoodfacts.service';
+} from './fetchers/usda-fetcher.service';
+import { OpenFoodFactsService } from './fetchers/openfoodfacts.service';
 import {
   FoodDataCleanerService,
   CleanedFoodData,
-} from './food-data-cleaner.service';
-import { FoodRuleEngineService } from './food-rule-engine.service';
-import { FoodAiLabelService } from './food-ai-label.service';
-import { FoodAiTranslateService } from './food-ai-translate.service';
-import { FoodDedupService } from './food-dedup.service';
-import { FoodConflictResolverService } from './food-conflict-resolver.service';
+} from './processing/food-data-cleaner.service';
+import { FoodRuleEngineService } from './processing/food-rule-engine.service';
+import { FoodAiLabelService } from './ai/food-ai-label.service';
+import { FoodAiTranslateService } from './ai/food-ai-translate.service';
+import { FoodDedupService } from './processing/food-dedup.service';
+import { FoodConflictResolverService } from './processing/food-conflict-resolver.service';
+import {
+  FoodEnrichmentService,
+  ENRICHMENT_STAGES,
+} from './food-enrichment.service';
 
 export interface ImportResult {
   total: number;
@@ -44,6 +48,7 @@ export class FoodPipelineOrchestratorService {
     private readonly aiTranslate: FoodAiTranslateService,
     private readonly dedup: FoodDedupService,
     private readonly conflictResolver: FoodConflictResolverService,
+    private readonly enrichmentService: FoodEnrichmentService,
   ) {}
 
   // ==================== USDA 批量导入 ====================
@@ -729,5 +734,307 @@ export class FoodPipelineOrchestratorService {
       `批量回填完成: 总计=${total}, 更新=${updated}, 错误=${errors}`,
     );
     return { total, updated, errors };
+  }
+
+  // ==================== V7.9 Phase 2: 候选食品晋升流程 ====================
+
+  /**
+   * 将 food_candidates 表中满足条件的候选食品晋升为正式 foods 记录
+   *
+   * 晋升条件：
+   * 1. status = 'approved' 或 confidence >= minConfidence
+   * 2. 必须有 name 和 category
+   * 3. 去重检查通过（不与现有 foods 重复）
+   *
+   * @param minConfidence 最低置信度阈值，默认 0.7
+   * @param limit 单次晋升上限
+   */
+  async promoteCandidates(
+    minConfidence = 0.7,
+    limit = 50,
+  ): Promise<{
+    total: number;
+    promoted: number;
+    skipped: number;
+    duplicates: number;
+    errors: number;
+    details: string[];
+  }> {
+    this.logger.log(
+      `开始候选食品晋升: minConfidence=${minConfidence}, limit=${limit}`,
+    );
+
+    const result = {
+      total: 0,
+      promoted: 0,
+      skipped: 0,
+      duplicates: 0,
+      errors: 0,
+      details: [] as string[],
+    };
+
+    // 查询满足晋升条件的候选食品
+    const candidates = await this.prisma.$queryRawUnsafe<
+      Array<{
+        id: string;
+        name: string;
+        category: string;
+        data: any;
+        confidence: number;
+        status: string;
+        source: string;
+      }>
+    >(
+      `SELECT id, name, category, data, confidence, status, source
+       FROM food_candidates
+       WHERE (status = 'approved' OR confidence >= $1)
+         AND name IS NOT NULL
+         AND category IS NOT NULL
+         AND promoted_at IS NULL
+       ORDER BY confidence DESC
+       LIMIT $2`,
+      minConfidence,
+      limit,
+    );
+
+    result.total = candidates.length;
+
+    if (candidates.length === 0) {
+      this.logger.log('没有满足晋升条件的候选食品');
+      return result;
+    }
+
+    for (const candidate of candidates) {
+      try {
+        // 去重检查：按名称精确匹配
+        const existing = await this.prisma.foods.findFirst({
+          where: {
+            OR: [
+              { name: candidate.name },
+              { aliases: { contains: candidate.name } },
+            ],
+          },
+        });
+
+        if (existing) {
+          result.duplicates++;
+          result.details.push(
+            `重复跳过: "${candidate.name}" 与 foods.id=${existing.id} 重复`,
+          );
+          // 标记候选为已跳过
+          await this.prisma.$executeRawUnsafe(
+            `UPDATE food_candidates SET status = 'duplicate', updated_at = NOW() WHERE id = $1`,
+            candidate.id,
+          );
+          continue;
+        }
+
+        // 解析候选数据并入库
+        const candidateData =
+          typeof candidate.data === 'string'
+            ? JSON.parse(candidate.data)
+            : candidate.data || {};
+
+        const code = await this.generateCode();
+        const scores = this.ruleEngine.applyAllRules({
+          name: candidate.name,
+          category: candidate.category,
+          ...candidateData,
+        });
+
+        const candidateFields = this.extractCandidateFields(candidateData);
+
+        await this.prisma.foods.create({
+          data: {
+            code,
+            name: candidate.name,
+            category: candidate.category as any,
+            calories: (candidateFields.calories as number) ?? 0,
+            status: 'draft' as any,
+            primary_source: candidate.source || 'candidate',
+            confidence: candidate.confidence,
+            data_version: 1,
+            is_verified: false,
+            quality_score: scores.qualityScore,
+            satiety_score: scores.satietyScore,
+            nutrient_density: scores.nutrientDensity,
+            tags: scores.tags || [],
+            ...candidateFields,
+          },
+        });
+
+        // 标记候选为已晋升
+        await this.prisma.$executeRawUnsafe(
+          `UPDATE food_candidates SET status = 'promoted', promoted_at = NOW(), updated_at = NOW() WHERE id = $1`,
+          candidate.id,
+        );
+
+        result.promoted++;
+        result.details.push(`晋升成功: "${candidate.name}"`);
+      } catch (e) {
+        result.errors++;
+        result.details.push(
+          `晋升失败: "${candidate.name}" - ${(e as Error).message}`,
+        );
+      }
+    }
+
+    this.logger.log(
+      `候选食品晋升完成: 总计=${result.total}, 晋升=${result.promoted}, ` +
+        `重复=${result.duplicates}, 跳过=${result.skipped}, 错误=${result.errors}`,
+    );
+
+    return result;
+  }
+
+  /**
+   * 从候选数据中提取可入库的字段（仅提取非空的有效字段）
+   */
+  private extractCandidateFields(
+    data: Record<string, any>,
+  ): Record<string, any> {
+    const allowedFields = [
+      'protein',
+      'fat',
+      'carbs',
+      'fiber',
+      'sugar',
+      'sodium',
+      'calories',
+      'calcium',
+      'iron',
+      'potassium',
+      'cholesterol',
+      'vitamin_a',
+      'vitamin_c',
+      'vitamin_d',
+      'vitamin_e',
+      'vitamin_b12',
+      'folate',
+      'zinc',
+      'magnesium',
+      'saturated_fat',
+      'trans_fat',
+      'glycemic_index',
+      'glycemic_load',
+      'allergens',
+      'meal_types',
+      'tags',
+      'common_portions',
+      'sub_category',
+      'food_group',
+      'main_ingredient',
+      'standard_serving_g',
+      'standard_serving_desc',
+      'barcode',
+    ];
+
+    const result: Record<string, any> = {};
+    for (const field of allowedFields) {
+      if (data[field] !== null && data[field] !== undefined) {
+        result[field] = data[field];
+      }
+    }
+    return result;
+  }
+
+  // ==================== V7.9 Phase 2: 批量分阶段补全 ====================
+
+  /**
+   * 对指定食物列表执行分阶段补全（直接调用，不走队列）
+   * 适用于小批量即时补全场景
+   */
+  async batchEnrichByStage(
+    options: {
+      stages?: number[];
+      limit?: number;
+      category?: string;
+    } = {},
+  ): Promise<{
+    processed: number;
+    totalEnriched: number;
+    totalFailed: number;
+    details: Array<{
+      foodId: string;
+      foodName: string;
+      enriched: number;
+      failed: number;
+    }>;
+  }> {
+    const stages = options.stages ?? ENRICHMENT_STAGES.map((s) => s.stage);
+    const limit = options.limit ?? 10;
+
+    const where: Prisma.foodsWhereInput = {};
+    if (options.category) {
+      where.category = options.category as any;
+    }
+
+    // 查找有缺失字段的食物
+    const targetFields = ENRICHMENT_STAGES.filter((s) =>
+      stages.includes(s.stage),
+    ).flatMap((s) => s.fields);
+
+    const foods = await this.enrichmentService.getFoodsNeedingEnrichment(
+      targetFields as any,
+      limit,
+      0,
+    );
+
+    let processed = 0;
+    let totalEnriched = 0;
+    let totalFailed = 0;
+    const details: Array<{
+      foodId: string;
+      foodName: string;
+      enriched: number;
+      failed: number;
+    }> = [];
+
+    for (const food of foods) {
+      const result = await this.enrichmentService.enrichFoodByStage(
+        food.id,
+        stages,
+      );
+      if (!result) continue;
+
+      // 逐阶段入库
+      for (const stageResult of result.stages) {
+        if (!stageResult.result || stageResult.enrichedFields.length === 0)
+          continue;
+
+        const shouldStage = this.enrichmentService.shouldStage(
+          stageResult.result,
+          false,
+        );
+        if (shouldStage) {
+          await this.enrichmentService.stageEnrichment(
+            food.id,
+            stageResult.result,
+            'foods',
+            undefined,
+            undefined,
+            `batch_stage${stageResult.stage}`,
+          );
+        } else {
+          await this.enrichmentService.applyEnrichment(
+            food.id,
+            stageResult.result,
+            `batch_stage${stageResult.stage}`,
+          );
+        }
+      }
+
+      processed++;
+      totalEnriched += result.totalEnriched;
+      totalFailed += result.totalFailed;
+      details.push({
+        foodId: food.id,
+        foodName: result.foodName,
+        enriched: result.totalEnriched,
+        failed: result.totalFailed,
+      });
+    }
+
+    return { processed, totalEnriched, totalFailed, details };
   }
 }

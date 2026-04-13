@@ -9,13 +9,13 @@
  */
 import { Module, forwardRef } from '@nestjs/common';
 import { RecommendationModule } from './recommendation.module';
-import { ExplanationGeneratorService } from './app/recommendation/explanation-generator.service';
-import { InsightGeneratorService } from './app/recommendation/insight-generator.service';
-import { ExplanationTierService } from './app/recommendation/explanation-tier.service';
-import { AdaptiveExplanationDepthService } from './app/recommendation/adaptive-explanation-depth.service';
-import { ExplanationABTrackerService } from './app/recommendation/explanation-ab-tracker.service';
+import { ExplanationGeneratorService } from './app/recommendation/explanation/explanation-generator.service';
+import { InsightGeneratorService } from './app/recommendation/explanation/insight-generator.service';
+import { ExplanationTierService } from './app/recommendation/explanation/explanation-tier.service';
+import { AdaptiveExplanationDepthService } from './app/recommendation/explanation/adaptive-explanation-depth.service';
+import { ExplanationABTrackerService } from './app/recommendation/explanation/explanation-ab-tracker.service';
 // V7.3
-import { NaturalLanguageExplainerService } from './app/recommendation/natural-language-explainer.service';
+import { NaturalLanguageExplainerService } from './app/recommendation/explanation/natural-language-explainer.service';
 
 /** 解释生成 providers */
 const EXPLANATION_PROVIDERS = [

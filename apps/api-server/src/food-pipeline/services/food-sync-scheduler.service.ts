@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { FoodPipelineOrchestratorService } from './food-pipeline-orchestrator.service';
-import { FoodConflictResolverService } from './food-conflict-resolver.service';
+import { FoodConflictResolverService } from './processing/food-conflict-resolver.service';
 import { FoodQualityMonitorService } from './food-quality-monitor.service';
 import { PrismaService } from '../../core/prisma/prisma.service';
 

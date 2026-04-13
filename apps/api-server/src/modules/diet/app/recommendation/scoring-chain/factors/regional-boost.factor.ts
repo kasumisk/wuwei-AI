@@ -5,7 +5,7 @@
  * 从 ctx.regionalBoostMap 读取食物 ID → 乘数映射。
  */
 import type { FoodLibrary } from '../../../../../food/food.types';
-import type { PipelineContext } from '../../recommendation.types';
+import type { PipelineContext } from '../../types/recommendation.types';
 import type {
   ScoringAdjustment,
   ScoringFactor,

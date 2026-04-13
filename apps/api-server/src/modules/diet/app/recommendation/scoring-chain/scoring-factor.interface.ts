@@ -13,8 +13,11 @@
  */
 
 import type { FoodLibrary } from '../../../../food/food.types';
-import type { PipelineContext, ScoredFood } from '../recommendation.types';
-import type { ScoringExplanation } from '../scoring-explanation.interface';
+import type {
+  PipelineContext,
+  ScoredFood,
+} from '../types/recommendation.types';
+import type { ScoringExplanation } from '../types/scoring-explanation.interface';
 
 // ─── ScoringAdjustment：单次因子调整记录 ───
 

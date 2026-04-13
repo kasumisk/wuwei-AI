@@ -16,7 +16,7 @@ import {
 import { JwtAuthGuard } from '../../auth/admin/jwt-auth.guard';
 import { RolesGuard } from '../../rbac/admin/roles.guard';
 import { Roles } from '../../rbac/admin/roles.decorator';
-import { ChurnPredictionService } from '../app/churn-prediction.service';
+import { ChurnPredictionService } from '../app/services/churn-prediction.service';
 import { ResponseWrapper } from '../../../common/types/response.type';
 
 @ApiTags('管理后台 - 用户流失预测')

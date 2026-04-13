@@ -16,63 +16,63 @@ import { Module } from '@nestjs/common';
 import { TrackingModule } from './tracking.module';
 import { UserModule } from '../user/user.module';
 import { RecipeModule } from '../recipe/recipe.module';
-import { RecommendationEngineService } from './app/recommendation-engine.service';
-import { PipelineBuilderService } from './app/recommendation/pipeline-builder.service';
-import { FoodScorerService } from './app/recommendation/food-scorer.service';
-import { FoodFilterService } from './app/recommendation/food-filter.service';
-import { MealAssemblerService } from './app/recommendation/meal-assembler.service';
-import { ConstraintGeneratorService } from './app/recommendation/constraint-generator.service';
-import { HealthModifierEngineService } from './app/recommendation/health-modifier-engine.service';
-import { FoodPoolCacheService } from './app/recommendation/food-pool-cache.service';
-import { SubstitutionService } from './app/recommendation/substitution.service';
-import { ABTestingService } from './app/recommendation/ab-testing.service';
-import { CollaborativeFilteringService } from './app/recommendation/collaborative-filtering.service';
-import { VectorSearchService } from './app/recommendation/vector-search.service';
-import { NutritionTargetService } from './app/recommendation/nutrition-target.service';
-import { SeasonalityService } from './app/recommendation/seasonality.service';
-import { RecommendationTraceService } from './app/recommendation/recommendation-trace.service';
-import { RealisticFilterService } from './app/recommendation/realistic-filter.service';
-import { ReplacementPatternService } from './app/recommendation/replacement-pattern.service';
-import { MealCompositionScorer } from './app/recommendation/meal-composition-scorer.service';
-import { SemanticRecallService } from './app/recommendation/semantic-recall.service';
-import { RecallMergerService } from './app/recommendation/recall-merger.service';
-import { ReplacementFeedbackInjectorService } from './app/recommendation/replacement-feedback-injector.service';
-import { LifestyleScoringAdapter } from './app/recommendation/lifestyle-scoring-adapter.service';
-import { LearnedRankingService } from './app/recommendation/learned-ranking.service';
-import { EmbeddingGenerationService } from './app/recommendation/embedding-generation.service';
-import { EmbeddingGenerationProcessor } from './app/recommendation/embedding-generation.processor';
-import { ScoringConfigService } from './app/recommendation/scoring-config.service';
-import { CFRecallService } from './app/recommendation/cf-recall.service';
-import { SceneResolverService } from './app/recommendation/scene-resolver.service';
-import { RecipeAssemblerService } from './app/recommendation/recipe-assembler.service';
-import { AvailabilityScorerService } from './app/recommendation/availability-scorer.service';
-import { DailyPlanContextService } from './app/recommendation/daily-plan-context.service';
-import { RecommendationConfigService } from './app/recommendation/recommendation.config';
+import { RecommendationEngineService } from './app/services/recommendation-engine.service';
+import { PipelineBuilderService } from './app/recommendation/pipeline/pipeline-builder.service';
+import { FoodScorerService } from './app/recommendation/pipeline/food-scorer.service';
+import { FoodFilterService } from './app/recommendation/pipeline/food-filter.service';
+import { MealAssemblerService } from './app/recommendation/meal/meal-assembler.service';
+import { ConstraintGeneratorService } from './app/recommendation/pipeline/constraint-generator.service';
+import { HealthModifierEngineService } from './app/recommendation/modifier/health-modifier-engine.service';
+import { FoodPoolCacheService } from './app/recommendation/pipeline/food-pool-cache.service';
+import { SubstitutionService } from './app/recommendation/filter/substitution.service';
+import { ABTestingService } from './app/recommendation/experiment/ab-testing.service';
+import { CollaborativeFilteringService } from './app/recommendation/recall/collaborative-filtering.service';
+import { VectorSearchService } from './app/recommendation/recall/vector-search.service';
+import { NutritionTargetService } from './app/recommendation/pipeline/nutrition-target.service';
+import { SeasonalityService } from './app/recommendation/utils/seasonality.service';
+import { RecommendationTraceService } from './app/recommendation/tracing/recommendation-trace.service';
+import { RealisticFilterService } from './app/recommendation/filter/realistic-filter.service';
+import { ReplacementPatternService } from './app/recommendation/feedback/replacement-pattern.service';
+import { MealCompositionScorer } from './app/recommendation/meal/meal-composition-scorer.service';
+import { SemanticRecallService } from './app/recommendation/recall/semantic-recall.service';
+import { RecallMergerService } from './app/recommendation/recall/recall-merger.service';
+import { ReplacementFeedbackInjectorService } from './app/recommendation/feedback/replacement-feedback-injector.service';
+import { LifestyleScoringAdapter } from './app/recommendation/modifier/lifestyle-scoring-adapter.service';
+import { LearnedRankingService } from './app/recommendation/optimization/learned-ranking.service';
+import { EmbeddingGenerationService } from './app/recommendation/embedding/embedding-generation.service';
+import { EmbeddingGenerationProcessor } from './app/recommendation/embedding/embedding-generation.processor';
+import { ScoringConfigService } from './app/recommendation/context/scoring-config.service';
+import { CFRecallService } from './app/recommendation/recall/cf-recall.service';
+import { SceneResolverService } from './app/recommendation/context/scene-resolver.service';
+import { RecipeAssemblerService } from './app/recommendation/meal/recipe-assembler.service';
+import { AvailabilityScorerService } from './app/recommendation/utils/availability-scorer.service';
+import { DailyPlanContextService } from './app/recommendation/context/daily-plan-context.service';
+import { RecommendationConfigService } from './app/recommendation/pipeline/recommendation.config';
 // V7.2
 import { ScoringChainService } from './app/recommendation/scoring-chain/scoring-chain.service';
 // V7.3
-import { MealTemplateService } from './app/recommendation/meal-template.service';
-import { FactorLearnerService } from './app/recommendation/factor-learner.service';
+import { MealTemplateService } from './app/recommendation/meal/meal-template.service';
+import { FactorLearnerService } from './app/recommendation/optimization/factor-learner.service';
 // V7.4
-import { RecommendationStrategyResolverService } from './app/recommendation/recommendation-strategy-resolver.service';
-import { ProfileEventBusService } from './app/recommendation/profile-event-bus.service';
-import { ProfileEventListenerService } from './app/recommendation/profile-event-listener.service';
+import { RecommendationStrategyResolverService } from './app/recommendation/pipeline/recommendation-strategy-resolver.service';
+import { ProfileEventBusService } from './app/recommendation/profile/profile-event-bus.service';
+import { ProfileEventListenerService } from './app/recommendation/profile/profile-event-listener.service';
 // Shared diet services needed by recommendation pipeline
-import { FoodI18nService } from './app/food-i18n.service';
+import { FoodI18nService } from './app/services/food-i18n.service';
 // V7.5 P3-C: 原 ExplanationModule providers（合并回本模块，消除循环依赖）
-import { ExplanationGeneratorService } from './app/recommendation/explanation-generator.service';
-import { InsightGeneratorService } from './app/recommendation/insight-generator.service';
-import { ExplanationTierService } from './app/recommendation/explanation-tier.service';
-import { AdaptiveExplanationDepthService } from './app/recommendation/adaptive-explanation-depth.service';
-import { ExplanationABTrackerService } from './app/recommendation/explanation-ab-tracker.service';
-import { NaturalLanguageExplainerService } from './app/recommendation/natural-language-explainer.service';
+import { ExplanationGeneratorService } from './app/recommendation/explanation/explanation-generator.service';
+import { InsightGeneratorService } from './app/recommendation/explanation/insight-generator.service';
+import { ExplanationTierService } from './app/recommendation/explanation/explanation-tier.service';
+import { AdaptiveExplanationDepthService } from './app/recommendation/explanation/adaptive-explanation-depth.service';
+import { ExplanationABTrackerService } from './app/recommendation/explanation/explanation-ab-tracker.service';
+import { NaturalLanguageExplainerService } from './app/recommendation/explanation/natural-language-explainer.service';
 // V7.6 P1-B: 画像聚合 Facade
-import { ProfileAggregatorService } from './app/recommendation/profile-aggregator.service';
+import { ProfileAggregatorService } from './app/recommendation/profile/profile-aggregator.service';
 // V7.6 P1-C: 策略解析 Facade
-import { StrategyResolverFacade } from './app/recommendation/strategy-resolver-facade.service';
+import { StrategyResolverFacade } from './app/recommendation/pipeline/strategy-resolver-facade.service';
 // V7.6 P2-B/C: 解释拆分子服务
-import { MealExplanationService } from './app/recommendation/meal-explanation.service';
-import { ComparisonExplanationService } from './app/recommendation/comparison-explanation.service';
+import { MealExplanationService } from './app/recommendation/explanation/meal-explanation.service';
+import { ComparisonExplanationService } from './app/recommendation/explanation/comparison-explanation.service';
 
 /** 推荐管道核心 providers */
 const RECOMMENDATION_PROVIDERS = [

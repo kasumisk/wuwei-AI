@@ -13,8 +13,8 @@
  */
 import { Injectable, Logger } from '@nestjs/common';
 import type { FoodLibrary } from '../../../../food/food.types';
-import type { PipelineContext } from '../recommendation.types';
-import type { ScoringExplanation } from '../scoring-explanation.interface';
+import type { PipelineContext } from '../types/recommendation.types';
+import type { ScoringExplanation } from '../types/scoring-explanation.interface';
 import {
   DEFAULT_SCORING_CHAIN_CONFIG,
   type ScoringAdjustment,

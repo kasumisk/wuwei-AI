@@ -5,7 +5,7 @@
  * 基于近期分析品类兴趣加成 + 风险食物惩罚。
  */
 import type { FoodLibrary } from '../../../../../food/food.types';
-import type { PipelineContext } from '../../recommendation.types';
+import type { PipelineContext } from '../../types/recommendation.types';
 import type {
   ScoringAdjustment,
   ScoringFactor,

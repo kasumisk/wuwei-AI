@@ -1,17 +1,17 @@
 import { Module } from '@nestjs/common';
 // App 端
-import { UserProfileController } from './app/user-profile.controller';
-import { UserProfileService } from './app/user-profile.service';
-import { ProfileInferenceService } from './app/profile-inference.service';
-import { ProfileCacheService } from './app/profile-cache.service';
-import { ProfileCronService } from './app/profile-cron.service';
-import { CollectionTriggerService } from './app/collection-trigger.service';
-import { RealtimeProfileService } from './app/realtime-profile.service';
-import { ProfileChangeLogService } from './app/profile-change-log.service';
-import { ContextualProfileService } from './app/contextual-profile.service';
-import { ProfileResolverService } from './app/profile-resolver.service';
+import { UserProfileController } from './app/controllers/user-profile.controller';
+import { UserProfileService } from './app/services/profile/user-profile.service';
+import { ProfileInferenceService } from './app/services/profile/profile-inference.service';
+import { ProfileCacheService } from './app/services/profile/profile-cache.service';
+import { ProfileCronService } from './app/cron/profile-cron.service';
+import { CollectionTriggerService } from './app/services/profile/collection-trigger.service';
+import { RealtimeProfileService } from './app/services/profile/realtime-profile.service';
+import { ProfileChangeLogService } from './app/services/profile/profile-change-log.service';
+import { ContextualProfileService } from './app/services/profile/contextual-profile.service';
+import { ProfileResolverService } from './app/services/profile/profile-resolver.service';
 // V6.2 3.8: 目标达成事件监听器
-import { GoalAchievedListener } from './app/goal-achieved.listener';
+import { GoalAchievedListener } from './app/listeners/goal-achieved.listener';
 // Admin 端
 import { AdminUserController } from './admin/admin-user.controller';
 import { AppUserManagementController } from './admin/app-user-management.controller';
@@ -19,9 +19,9 @@ import { UserProfileDashboardController } from './admin/user-profile-dashboard.c
 import { AdminUserService } from './admin/admin-user.service';
 import { AppUserManagementService } from './admin/app-user-management.service';
 import { UserProfileDashboardService } from './admin/user-profile-dashboard.service';
-import { ChurnPredictionService } from './app/churn-prediction.service';
-import { GoalTrackerService } from './app/goal-tracker.service';
-import { GoalPhaseService } from './app/goal-phase.service';
+import { ChurnPredictionService } from './app/services/churn-prediction.service';
+import { GoalTrackerService } from './app/services/goal/goal-tracker.service';
+import { GoalPhaseService } from './app/services/goal/goal-phase.service';
 import { ChurnPredictionController } from './admin/churn-prediction.controller';
 
 @Module({

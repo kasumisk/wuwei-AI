@@ -1,6 +1,6 @@
 // Enums and types extracted from entity files for use after TypeORM removal
 
-import type { ExplanationV2 } from './app/recommendation/scoring-explanation.interface';
+import type { ExplanationV2 } from './app/recommendation/types/scoring-explanation.interface';
 
 /**
  * 实验状态

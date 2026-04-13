@@ -5,11 +5,11 @@
  * 包含 ExecutionTracker, WeightLearner, FeedbackService, PreferenceProfile 等。
  */
 import { Module } from '@nestjs/common';
-import { ExecutionTrackerService } from './app/recommendation/execution-tracker.service';
-import { WeightLearnerService } from './app/recommendation/weight-learner.service';
-import { RecommendationFeedbackService } from './app/recommendation/feedback.service';
-import { PreferenceProfileService } from './app/recommendation/preference-profile.service';
-import { PreferenceUpdaterService } from './app/recommendation/preference-updater.service';
+import { ExecutionTrackerService } from './app/recommendation/feedback/execution-tracker.service';
+import { WeightLearnerService } from './app/recommendation/optimization/weight-learner.service';
+import { RecommendationFeedbackService } from './app/recommendation/feedback/feedback.service';
+import { PreferenceProfileService } from './app/recommendation/profile/preference-profile.service';
+import { PreferenceUpdaterService } from './app/recommendation/profile/preference-updater.service';
 
 /** 追踪反馈 providers */
 const TRACKING_PROVIDERS = [

@@ -5,7 +5,7 @@
  * 从 ctx.cfScores 读取食物 ID → 协同过滤分数。
  */
 import type { FoodLibrary } from '../../../../../food/food.types';
-import type { PipelineContext } from '../../recommendation.types';
+import type { PipelineContext } from '../../types/recommendation.types';
 import type {
   ScoringAdjustment,
   ScoringFactor,

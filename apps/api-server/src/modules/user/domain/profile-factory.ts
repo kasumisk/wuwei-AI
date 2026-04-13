@@ -20,7 +20,7 @@ import {
   DEFAULT_PREFERENCES_PROFILE,
   validatePreferencesProfile,
 } from './preferences-profile';
-import type { EnrichedProfileContext } from '../../diet/app/recommendation/recommendation.types';
+import type { EnrichedProfileContext } from '../../diet/app/recommendation/types/recommendation.types';
 
 // ─── 域画像聚合体 ───
 

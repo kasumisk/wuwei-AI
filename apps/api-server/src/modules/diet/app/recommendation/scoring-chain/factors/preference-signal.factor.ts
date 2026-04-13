@@ -12,7 +12,7 @@ import type { FoodLibrary } from '../../../../../food/food.types';
 import type {
   EnrichedProfileContext,
   PipelineContext,
-} from '../../recommendation.types';
+} from '../../types/recommendation.types';
 import type {
   ScoringAdjustment,
   ScoringFactor,

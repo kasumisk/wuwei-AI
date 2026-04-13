@@ -1,12 +1,12 @@
 import { Controller, Get, Query, UseGuards, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { AppJwtAuthGuard } from '../../auth/app/app-jwt-auth.guard';
-import { CurrentAppUser } from '../../auth/app/current-app-user.decorator';
-import { AppUserPayload } from '../../auth/app/app-user-payload.type';
-import { ApiResponse } from '../../../common/types/response.type';
-import { FoodService } from './food.service';
-import { UserProfileService } from '../../user/app/user-profile.service';
-import { RecentSummaryQueryDto } from './food.dto';
+import { AppJwtAuthGuard } from '../../../auth/app/app-jwt-auth.guard';
+import { CurrentAppUser } from '../../../auth/app/current-app-user.decorator';
+import { AppUserPayload } from '../../../auth/app/app-user-payload.type';
+import { ApiResponse } from '../../../../common/types/response.type';
+import { FoodService } from '../services/food.service';
+import { UserProfileService } from '../../../user/app/services/profile/user-profile.service';
+import { RecentSummaryQueryDto } from '../dto/food.dto';
 
 @ApiTags('App 饮食汇总')
 @Controller('app/food')

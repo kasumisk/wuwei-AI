@@ -14,7 +14,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/admin/jwt-auth.guard';
 import { RolesGuard } from '../../rbac/admin/roles.guard';
 import { Roles } from '../../rbac/admin/roles.decorator';
-import { ContentManagementService } from '../../diet/admin/content-management.service';
+import { ContentManagementService } from '../../diet/admin/services/content-management.service';
 import {
   GetAchievementsQueryDto,
   CreateAchievementDto,

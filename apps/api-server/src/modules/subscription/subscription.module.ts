@@ -23,27 +23,27 @@
  * - PaywallTriggerService: 付费墙触发策略 + 转化漏斗记录
  */
 import { Global, Module } from '@nestjs/common';
-import { SubscriptionService } from './app/subscription.service';
-import { SubscriptionGuard } from './app/subscription.guard';
-import { QuotaService } from './app/quota.service';
-import { PlanEntitlementResolver } from './app/plan-entitlement-resolver.service';
-import { QuotaGateService } from './app/quota-gate.service';
-import { ResultEntitlementService } from './app/result-entitlement.service';
+import { SubscriptionService } from './app/services/subscription.service';
+import { SubscriptionGuard } from './app/guards/subscription.guard';
+import { QuotaService } from './app/services/quota.service';
+import { PlanEntitlementResolver } from './app/services/plan-entitlement-resolver.service';
+import { QuotaGateService } from './app/services/quota-gate.service';
+import { ResultEntitlementService } from './app/services/result-entitlement.service';
 // V6.1: 付费墙触发策略
-import { PaywallTriggerService } from './app/paywall-trigger.service';
-import { AppleIapService } from './app/apple-iap.service';
-import { AppleIapController } from './app/apple-iap.controller';
-import { WechatPayService } from './app/wechat-pay.service';
-import { WechatPayController } from './app/wechat-pay.controller';
+import { PaywallTriggerService } from './app/services/paywall-trigger.service';
+import { AppleIapService } from './app/payment/apple-iap.service';
+import { AppleIapController } from './app/controllers/apple-iap.controller';
+import { WechatPayService } from './app/payment/wechat-pay.service';
+import { WechatPayController } from './app/controllers/wechat-pay.controller';
 // Phase 1: 订阅管理后台
 import { SubscriptionManagementController } from './admin/subscription-management.controller';
 import { SubscriptionManagementService } from './admin/subscription-management.service';
 // App 端订阅计划查询
-import { SubscriptionPlansController } from './app/subscription-plans.controller';
+import { SubscriptionPlansController } from './app/controllers/subscription-plans.controller';
 // V6.2: 订阅变更事件监听器
-import { SubscriptionEventListener } from './app/subscription-event.listener';
+import { SubscriptionEventListener } from './app/listeners/subscription-event.listener';
 // V6.2: 付费墙分析事件监听器
-import { PaywallAnalyticsListener } from './app/paywall-analytics.listener';
+import { PaywallAnalyticsListener } from './app/listeners/paywall-analytics.listener';
 
 @Global()
 @Module({

@@ -7,7 +7,7 @@ import {
   RoleStatus,
 } from '../modules/rbac/rbac.types';
 import * as bcrypt from 'bcrypt';
-import { seedSubscriptionPlans } from './seed-subscription-plans.shared';
+import { seedSubscriptionPlans } from './seeds/seed-subscription-plans.shared';
 
 const prisma = new PrismaClient();
 

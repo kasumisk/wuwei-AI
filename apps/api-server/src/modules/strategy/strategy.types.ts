@@ -16,7 +16,7 @@
  * 存储: strategy 表 + strategy_assignment 表（PostgreSQL JSONB）
  * 缓存: Redis 30s TTL
  */
-import { GoalType } from '../diet/app/nutrition-score.service';
+import { GoalType } from '../diet/app/services/nutrition-score.service';
 
 // ─── 评分维度（与 recommendation.types.ts 保持一致） ───
 
@@ -351,6 +351,8 @@ export interface ContextStrategyCondition {
   userLifecycle?: ('new' | 'active' | 'mature' | 'churning')[];
   /** 目标阶段（如果用户有复合目标） */
   goalPhaseType?: GoalType[];
+  /** V7.8: 地区编码（ISO 3166-1 alpha-2），用于国际化策略匹配 */
+  regionCode?: string[];
 }
 
 /**

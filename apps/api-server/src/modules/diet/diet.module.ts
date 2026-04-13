@@ -27,38 +27,38 @@ import { FoodPlanController } from './app/controllers/food-plan.controller';
 import { FoodBehaviorController } from './app/controllers/food-behavior.controller';
 import { FoodNutritionController } from './app/controllers/food-nutrition.controller';
 // 领域服务（不属于推荐/解释/追踪子模块）
-import { FoodService } from './app/food.service';
-import { FoodRecordService } from './app/food-record.service';
-import { DailySummaryService } from './app/daily-summary.service';
-import { DailyPlanService } from './app/daily-plan.service';
-import { NutritionScoreService } from './app/nutrition-score.service';
-import { BehaviorService } from './app/behavior.service';
-import { WeeklyPlanService } from './app/weekly-plan.service';
-import { PrecomputeService } from './app/precompute.service';
-import { PrecomputeProcessor } from './app/precompute.processor';
+import { FoodService } from './app/services/food.service';
+import { FoodRecordService } from './app/services/food-record.service';
+import { DailySummaryService } from './app/services/daily-summary.service';
+import { DailyPlanService } from './app/services/daily-plan.service';
+import { NutritionScoreService } from './app/services/nutrition-score.service';
+import { BehaviorService } from './app/services/behavior.service';
+import { WeeklyPlanService } from './app/services/weekly-plan.service';
+import { PrecomputeService } from './app/services/precompute.service';
+import { PrecomputeProcessor } from './app/processors/precompute.processor';
 // V6.2: 事件监听器
-import { RecommendationEventListener } from './app/recommendation-event.listener';
+import { RecommendationEventListener } from './app/listeners/recommendation-event.listener';
 // V6.2 3.8: 候选食物晋升事件监听器
-import { CandidatePromotedListener } from '../food/app/candidate-promoted.listener';
+import { CandidatePromotedListener } from '../food/app/listeners/candidate-promoted.listener';
 // V6.2 3.10: 数据导出
-import { ExportService } from './app/export.service';
-import { ExportProcessor } from './app/export.processor';
+import { ExportService } from './app/services/export.service';
+import { ExportProcessor } from './app/processors/export.processor';
 // Admin 端
-import { ContentManagementController } from './admin/content-management.controller';
-import { ContentManagementService } from './admin/content-management.service';
-import { RecommendationQualityService } from './admin/recommendation-quality.service';
-import { AppDataQueryService } from './admin/app-data-query.service';
-import { ABExperimentManagementController } from './admin/ab-experiment-management.controller';
-import { ABExperimentManagementService } from './admin/ab-experiment-management.service';
-import { RecommendationDebugController } from './admin/recommendation-debug.controller';
-import { RecommendationDebugService } from './admin/recommendation-debug.service';
-import { StrategyEffectivenessController } from './admin/strategy-effectiveness.controller';
-import { StrategyEffectivenessService } from './admin/strategy-effectiveness.service';
-import { ThompsonSamplingController } from './admin/thompson-sampling.controller';
-import { ThompsonSamplingService } from './admin/thompson-sampling.service';
-import { BingeInterventionController } from './admin/binge-intervention.controller';
-import { ScoringConfigController } from './admin/scoring-config.controller';
-import { BingeInterventionService } from './admin/binge-intervention.service';
+import { ContentManagementController } from './admin/controllers/content-management.controller';
+import { ContentManagementService } from './admin/services/content-management.service';
+import { RecommendationQualityService } from './admin/services/recommendation-quality.service';
+import { AppDataQueryService } from './admin/services/app-data-query.service';
+import { ABExperimentManagementController } from './admin/controllers/ab-experiment-management.controller';
+import { ABExperimentManagementService } from './admin/services/ab-experiment-management.service';
+import { RecommendationDebugController } from './admin/controllers/recommendation-debug.controller';
+import { RecommendationDebugService } from './admin/services/recommendation-debug.service';
+import { StrategyEffectivenessController } from './admin/controllers/strategy-effectiveness.controller';
+import { StrategyEffectivenessService } from './admin/services/strategy-effectiveness.service';
+import { ThompsonSamplingController } from './admin/controllers/thompson-sampling.controller';
+import { ThompsonSamplingService } from './admin/services/thompson-sampling.service';
+import { BingeInterventionController } from './admin/controllers/binge-intervention.controller';
+import { ScoringConfigController } from './admin/controllers/scoring-config.controller';
+import { BingeInterventionService } from './admin/services/binge-intervention.service';
 
 @Module({
   imports: [

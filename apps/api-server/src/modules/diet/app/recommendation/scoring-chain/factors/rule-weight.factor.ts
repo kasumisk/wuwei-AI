@@ -5,7 +5,7 @@
  * 语义补充路召回的食物带有 __ruleWeight < 1.0 的折扣系数。
  */
 import type { FoodLibrary } from '../../../../../food/food.types';
-import type { PipelineContext } from '../../recommendation.types';
+import type { PipelineContext } from '../../types/recommendation.types';
 import type {
   ScoringAdjustment,
   ScoringFactor,

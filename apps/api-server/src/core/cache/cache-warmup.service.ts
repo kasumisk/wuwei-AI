@@ -25,9 +25,9 @@ import {
   Optional,
   forwardRef,
 } from '@nestjs/common';
-import { FoodPoolCacheService } from '../../modules/diet/app/recommendation/food-pool-cache.service';
+import { FoodPoolCacheService } from '../../modules/diet/app/recommendation/pipeline/food-pool-cache.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { ProfileResolverService } from '../../modules/user/app/profile-resolver.service';
+import { ProfileResolverService } from '../../modules/user/app/services/profile/profile-resolver.service';
 
 /** 预热活跃用户画像的最大数量 */
 const MAX_WARMUP_USERS = 100;

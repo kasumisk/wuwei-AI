@@ -1,10 +1,15 @@
 /**
- * V6.6 Food Enrichment Processor（BullMQ Worker）
+ * V7.9 Food Enrichment Processor（BullMQ Worker）
  *
  * 消费 food-enrichment 队列任务：
- *  - target=foods:        补全主表字段
+ *  - target=foods:        补全主表字段（支持 V7.9 分阶段模式）
  *  - target=translations: 补全翻译关联表
  *  - target=regional:     补全地区信息关联表
+ *
+ * V7.9 新增：
+ *  - stages 参数：指定 1-4 阶段编号，走分阶段补全流程（enrichFoodByStage）
+ *  - 分阶段结果各阶段独立入库/staging，前阶段结果作为后阶段上下文
+ *  - 无 stages 参数时走原有整体补全流程（向后兼容）
  *
  * staged=true 时 AI 结果先写入 change_logs 待人工审核（action=ai_enrichment_staged），
  * staged=false 或 confidence >= 0.7 时直接入库。
@@ -43,10 +48,13 @@ export class FoodEnrichmentProcessor extends WorkerHost {
       staged = false,
       locale,
       region,
+      stages,
     } = job.data;
 
     this.logger.log(
-      `开始补全任务: foodId=${foodId}, target=${target}, staged=${staged}, jobId=${job.id}`,
+      `开始补全任务: foodId=${foodId}, target=${target}, staged=${staged}` +
+        `${stages ? `, stages=[${stages.join(',')}]` : ''}` +
+        `, jobId=${job.id}`,
     );
 
     try {
@@ -54,6 +62,9 @@ export class FoodEnrichmentProcessor extends WorkerHost {
         await this.processTranslation(foodId, locale ?? 'en-US', staged);
       } else if (target === 'regional') {
         await this.processRegional(foodId, region ?? 'CN', staged);
+      } else if (stages && stages.length > 0) {
+        // V7.9: 分阶段补全模式
+        await this.processFoodsByStage(foodId, stages, staged);
       } else {
         await this.processFoods(foodId, staged);
       }
@@ -65,7 +76,75 @@ export class FoodEnrichmentProcessor extends WorkerHost {
     }
   }
 
-  // ─── 主表补全 ──────────────────────────────────────────────────────────
+  // ─── V7.9: 分阶段补全（核心新增）──────────────────────────────────────
+
+  private async processFoodsByStage(
+    foodId: string,
+    stages: number[],
+    staged: boolean,
+  ): Promise<void> {
+    const multiResult = await this.enrichmentService.enrichFoodByStage(
+      foodId,
+      stages,
+    );
+    if (!multiResult) {
+      this.logger.warn(
+        `分阶段补全无结果（无缺失字段或全部失败）: foodId=${foodId}`,
+      );
+      return;
+    }
+
+    // 逐阶段入库
+    for (const stageResult of multiResult.stages) {
+      if (!stageResult.result || stageResult.enrichedFields.length === 0) {
+        continue;
+      }
+
+      const shouldStage = this.enrichmentService.shouldStage(
+        stageResult.result,
+        staged,
+      );
+
+      if (shouldStage) {
+        const logId = await this.enrichmentService.stageEnrichment(
+          foodId,
+          stageResult.result,
+          'foods',
+          undefined,
+          undefined,
+          `ai_enrichment_worker_stage${stageResult.stage}`,
+        );
+        this.logger.log(
+          `Staged（阶段${stageResult.stage}/${stageResult.stageName}）` +
+            `foodId=${foodId}, logId=${logId}, ` +
+            `confidence=${stageResult.result.confidence}, ` +
+            `fallback=${stageResult.usedFallback}`,
+        );
+      } else {
+        const { updated, skipped } =
+          await this.enrichmentService.applyEnrichment(
+            foodId,
+            stageResult.result,
+            `ai_enrichment_worker_stage${stageResult.stage}`,
+          );
+        this.logger.log(
+          `直接入库（阶段${stageResult.stage}/${stageResult.stageName}）` +
+            `foodId=${foodId}, updated=[${updated.join(',')}], ` +
+            `skipped=[${skipped.join(',')}], ` +
+            `fallback=${stageResult.usedFallback}`,
+        );
+      }
+    }
+
+    this.logger.log(
+      `分阶段补全完成: foodId=${foodId}, ` +
+        `总补全=${multiResult.totalEnriched}, ` +
+        `总失败=${multiResult.totalFailed}, ` +
+        `综合置信度=${multiResult.overallConfidence}`,
+    );
+  }
+
+  // ─── 主表补全（原有整体模式，向后兼容）──────────────────────────────────
 
   private async processFoods(foodId: string, staged: boolean): Promise<void> {
     const result = await this.enrichmentService.enrichFood(foodId);

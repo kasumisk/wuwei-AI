@@ -1,30 +1,30 @@
 import { Module, forwardRef } from '@nestjs/common';
 // App 端
-import { FoodLibraryController } from './app/food-library.controller';
-import { FoodLibraryService } from './app/food-library.service';
-import { FoodAnalyzeController } from './app/food-analyze.controller';
-import { AnalyzeService } from './app/analyze.service';
+import { FoodLibraryController } from './app/controllers/food-library.controller';
+import { FoodLibraryService } from './app/services/food-library.service';
+import { FoodAnalyzeController } from './app/controllers/food-analyze.controller';
+import { AnalyzeService } from './app/services/analyze.service';
 // V6 Phase 1.4: AI 分析队列处理器
-import { FoodAnalysisProcessor } from './app/food-analysis.processor';
+import { FoodAnalysisProcessor } from './app/processors/food-analysis.processor';
 // V6.1 Phase 1.6: 文本分析服务
-import { TextFoodAnalysisService } from './app/text-food-analysis.service';
+import { TextFoodAnalysisService } from './app/services/text-food-analysis.service';
 // V6.1 Phase 2.3: 图片分析服务（从 AnalyzeService 拆分出的核心分析逻辑）
-import { ImageFoodAnalysisService } from './app/image-food-analysis.service';
+import { ImageFoodAnalysisService } from './app/services/image-food-analysis.service';
 // V6.1 Phase 2.6: 分析事件监听器（联动画像和推荐）
-import { AnalysisEventListener } from './app/analysis-event.listener';
+import { AnalysisEventListener } from './app/listeners/analysis-event.listener';
 // V6.2 Phase 2.3: 分析保存事件监听器（popularity 更新）
-import { AnalysisSaveListener } from './app/analysis-save.listener';
+import { AnalysisSaveListener } from './app/listeners/analysis-save.listener';
 // V6.2 Phase 2.5: 分析提交行为追踪监听器
-import { AnalysisTrackingListener } from './app/analysis-tracking.listener';
+import { AnalysisTrackingListener } from './app/listeners/analysis-tracking.listener';
 // V6.2 3.8: CandidatePromotedListener 已移至 DietModule（需要 FoodPoolCacheService）
 // V6.1 Phase 3.1: 数据质量评分服务
-import { DataQualityService } from './app/data-quality.service';
+import { DataQualityService } from './app/services/data-quality.service';
 // V6.1 Phase 3.2: 分析入库编排服务
-import { AnalysisIngestionService } from './app/analysis-ingestion.service';
+import { AnalysisIngestionService } from './app/services/analysis-ingestion.service';
 // V6.1 Phase 3.3: 候选食物聚合服务
-import { CandidateAggregationService } from './app/candidate-aggregation.service';
+import { CandidateAggregationService } from './app/services/candidate-aggregation.service';
 // V6.9 Phase 3-C: 渠道标注迁移服务
-import { ChannelMigrationService } from './app/channel-migration.service';
+import { ChannelMigrationService } from './app/services/channel-migration.service';
 // Admin 端
 import { FoodLibraryManagementController } from './admin/food-library-management.controller';
 import { FoodLibraryManagementService } from './admin/food-library-management.service';

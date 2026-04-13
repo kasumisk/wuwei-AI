@@ -1852,7 +1852,7 @@ model user_profiles {
   daily_calorie_goal   Int?
   /// 健康目标：fat_loss=减脂, muscle_gain=增肌, health=健康维持, weight_gain=增重
   goal                 String                            @default("health") @db.VarChar(30)
-  /// 减脂/增肌速度：slow=慢速, steady=稳健, fast=快速
+  /// 减脂/增肌速度：aggressive=快速(激进), steady=稳健(推荐), relaxed=佛系(轻松)
   goal_speed           String                            @default("steady") @db.VarChar(20)
   /// 体脂率，单位 %（小数，如 20.5 表示 20.5%）
   body_fat_percent     Decimal?                          @db.Decimal(4, 1)
@@ -1913,7 +1913,7 @@ model user_profiles {
   hydration_goal         Int?                                       /// V6.6 Phase 2-C: 每日目标饮水量 (ml)
   supplements_used       Json                              @default("[]") /// V6.6 Phase 2-C: 正在服用的补剂列表
   meal_timing_preference String?                           @db.Text /// V6.6 Phase 2-C: 用餐时间偏好 early_bird|standard|late_eater
-  exercise_intensity     String?                           @db.VarChar(20) /// V6.8 Phase 3-B: 运动强度 none|light|moderate|high
+  /// V7.8: exercise_intensity 已合并到 exercise_profile.intensity，此独立字段已删除
   alcohol_frequency      String?                           @db.VarChar(20) /// V6.8 Phase 3-B: 饮酒频率 never|occasional|frequent
   compound_goal          Json?                             @db.JsonB       /// V7.0: 复合目标 { primary, secondary?, secondaryWeight?, phases?, currentPhaseIndex?, startDate? }
   kitchen_profile        Json?                             @db.JsonB       /// V7.1: 厨房设备画像 { hasOven, hasMicrowave, hasAirFryer, hasRiceCooker, hasSteamer, primaryStove }
