@@ -5,6 +5,7 @@ import { Inter, Plus_Jakarta_Sans } from 'next/font/google';
 import { Providers } from '@/providers';
 import { Toaster } from '@/components/common/toaster';
 import { BottomNav } from '@/components/common/bottom-nav';
+import { ErrorBoundary } from '@/components/common/error-boundary';
 import { PaywallModal } from '@/features/subscription/components/paywall-modal';
 import { i18n, type Locale } from '@/lib/i18n/config';
 import { JsonLd } from '@/lib/seo/JsonLd';
@@ -51,7 +52,7 @@ export default async function LocaleLayout({
       <body className={`${inter.variable} ${plusJakartaSans.variable}`}>
         <NextIntlClientProvider messages={messages}>
           <Providers>
-            {children}
+            <ErrorBoundary>{children}</ErrorBoundary>
             <BottomNav />
             <PaywallModal />
             <Toaster />

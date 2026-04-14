@@ -19,6 +19,7 @@ import { FoodConflictResolverService } from './processing/food-conflict-resolver
 import {
   FoodEnrichmentService,
   ENRICHMENT_STAGES,
+  EnrichmentResult,
 } from './food-enrichment.service';
 
 export interface ImportResult {
@@ -948,30 +949,43 @@ export class FoodPipelineOrchestratorService {
       );
       if (!result) continue;
 
-      // 逐阶段入库
-      for (const stageResult of result.stages) {
-        if (!stageResult.result || stageResult.enrichedFields.length === 0)
-          continue;
+      // FIX: 将所有阶段结果合并后一次性写入，只产生一条 change_log
+      // 与 enrichFoodNow 的 V8.4 逻辑保持一致，避免每阶段写一条导致历史记录重复
+      const mergedFields: Record<string, any> = {};
+      const mergedFieldConfidence: Record<string, number> = {};
+      let anyStaged = false;
+      let stagesTotalFailed = 0;
 
-        const shouldStage = this.enrichmentService.shouldStage(
-          stageResult.result,
-          false,
-        );
-        if (shouldStage) {
-          await this.enrichmentService.stageEnrichment(
-            food.id,
-            stageResult.result,
-            'foods',
-            undefined,
-            undefined,
-            `batch_stage${stageResult.stage}`,
-          );
+      for (const sr of result.stages) {
+        if (!sr.result) {
+          stagesTotalFailed += sr.failedFields.length;
+          continue;
+        }
+        if (sr.result.confidence < 0.7) anyStaged = true;
+        for (const [k, v] of Object.entries(sr.result)) {
+          if (k === 'confidence' || k === 'reasoning' || k === 'fieldConfidence') continue;
+          if (v !== null && v !== undefined && !(k in mergedFields)) {
+            mergedFields[k] = v;
+          }
+        }
+        const fc = sr.result.fieldConfidence ?? {};
+        for (const [k, v] of Object.entries(fc)) {
+          if (!(k in mergedFieldConfidence)) mergedFieldConfidence[k] = v as number;
+        }
+        stagesTotalFailed += sr.failedFields.length;
+      }
+
+      if (Object.keys(mergedFields).length > 0) {
+        const mergedResult: EnrichmentResult = {
+          ...mergedFields,
+          confidence: result.overallConfidence,
+          reasoning: result.stages.map((s) => s.result?.reasoning).filter(Boolean).join(' | ') || undefined,
+          fieldConfidence: Object.keys(mergedFieldConfidence).length > 0 ? mergedFieldConfidence : undefined,
+        };
+        if (anyStaged) {
+          await this.enrichmentService.stageEnrichment(food.id, mergedResult, 'foods', undefined, undefined, 'batch_enrichment');
         } else {
-          await this.enrichmentService.applyEnrichment(
-            food.id,
-            stageResult.result,
-            `batch_stage${stageResult.stage}`,
-          );
+          await this.enrichmentService.applyEnrichment(food.id, mergedResult, 'batch_enrichment');
         }
       }
 

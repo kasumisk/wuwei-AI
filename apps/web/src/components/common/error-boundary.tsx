@@ -1,9 +1,6 @@
 'use client';
 
 import { Component, ReactNode } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
 
 interface Props {
   children: ReactNode;
@@ -32,13 +29,9 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    // 在开发环境打印错误
     if (process.env.NODE_ENV === 'development') {
       console.error('Error caught by boundary:', error, errorInfo);
     }
-
-    // 生产环境可以发送到错误监控服务
-    // logger.error('React Error Boundary', { error, errorInfo });
   }
 
   handleReset = () => {
@@ -53,33 +46,47 @@ export class ErrorBoundary extends Component<Props, State> {
       }
 
       return (
-        <div className="flex min-h-[400px] items-center justify-center p-4">
-          <Card className="max-w-md w-full">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-destructive">
-                <AlertTriangle className="h-5 w-5" />
-                {this.props.labels?.title || 'Something went wrong'}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
+        <div className="flex min-h-[300px] items-center justify-center p-6">
+          <div className="max-w-sm w-full text-center space-y-4">
+            <div className="w-14 h-14 rounded-full bg-destructive/10 flex items-center justify-center mx-auto">
+              <svg
+                className="w-7 h-7 text-destructive"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"
+                />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-foreground">
+                {this.props.labels?.title || '页面出现问题'}
+              </h3>
+              <p className="text-sm text-muted-foreground mt-1">
                 {this.state.error?.message ||
                   this.props.labels?.unknownError ||
-                  'An unknown error occurred'}
+                  '发生了未知错误，请重试'}
               </p>
+            </div>
 
-              {process.env.NODE_ENV === 'development' && this.state.error?.stack && (
-                <pre className="mt-2 text-xs bg-muted p-2 rounded overflow-auto max-h-32">
-                  {this.state.error.stack}
-                </pre>
-              )}
+            {process.env.NODE_ENV === 'development' && this.state.error?.stack && (
+              <pre className="text-xs bg-muted p-2 rounded overflow-auto max-h-32 text-left">
+                {this.state.error.stack}
+              </pre>
+            )}
 
-              <Button onClick={this.handleReset} className="w-full" variant="default">
-                <RefreshCw className="mr-2 h-4 w-4" />
-                {this.props.labels?.retry || 'Retry'}
-              </Button>
-            </CardContent>
-          </Card>
+            <button
+              onClick={this.handleReset}
+              className="w-full bg-primary text-primary-foreground font-bold py-3 rounded-full active:scale-[0.98] transition-all text-sm"
+            >
+              {this.props.labels?.retry || '重新加载'}
+            </button>
+          </div>
         </div>
       );
     }

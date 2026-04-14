@@ -81,7 +81,7 @@ const AiLabelPage: React.FC = () => {
           <Card>
             <Statistic
               title="食物总数"
-              value={report?.summary?.totalFoods || 0}
+              value={report?.totalFoods || 0}
               prefix={<TagOutlined />}
             />
           </Card>
@@ -90,7 +90,7 @@ const AiLabelPage: React.FC = () => {
           <Card>
             <Statistic
               title="已验证"
-              value={report?.quality?.verifiedCount || 0}
+              value={report?.quality?.verified || 0}
               prefix={<CheckCircleOutlined />}
               valueStyle={{ color: '#3f8600' }}
             />

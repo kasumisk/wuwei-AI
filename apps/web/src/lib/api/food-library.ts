@@ -8,10 +8,10 @@ export interface FoodLibraryItem {
   name: string;
   aliases?: string;
   category: string;
-  caloriesPer100g: number;
-  proteinPer100g?: number;
-  fatPer100g?: number;
-  carbsPer100g?: number;
+  calories: number;
+  protein?: number;
+  fat?: number;
+  carbs?: number;
   standardServingG: number;
   standardServingDesc?: string;
   searchWeight: number;

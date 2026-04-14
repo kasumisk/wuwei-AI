@@ -65,6 +65,41 @@ export interface UserProfile {
   updatedAt: string;
 }
 
+// ── 画像收集提醒 ──
+export interface CollectionReminder {
+  type: 'popup' | 'toast' | 'card' | 'settings_guide';
+  field: string;
+  title: string;
+  message: string;
+  priority: 'high' | 'medium' | 'low';
+  dismissable: boolean;
+  nextReminderDays: number | null;
+}
+
+// ── 推荐偏好 ──
+export type PopularityPreference = 'popular' | 'balanced' | 'adventurous';
+export type CookingEffort = 'quick' | 'moderate' | 'elaborate';
+export type BudgetSensitivity = 'budget' | 'moderate' | 'unlimited';
+
+export interface RecommendationPreferences {
+  popularityPreference?: PopularityPreference;
+  cookingEffort?: CookingEffort;
+  budgetSensitivity?: BudgetSensitivity;
+  cuisineWeights?: Record<string, number>;
+  diversityTolerance?: 'low' | 'medium' | 'high';
+  dietaryPhilosophy?: 'omnivore' | 'pescatarian' | 'vegetarian' | 'vegan' | 'none';
+  mealPattern?: 'frequent_small' | 'standard_three' | 'intermittent_fasting';
+  flavorOpenness?: 'conservative' | 'moderate' | 'adventurous';
+  realismLevel?: 'strict' | 'normal' | 'relaxed' | 'off';
+}
+
+export interface UpdateRecommendationPreferencesDto {
+  popularityPreference?: PopularityPreference;
+  cookingEffort?: CookingEffort;
+  budgetSensitivity?: BudgetSensitivity;
+  realismLevel?: 'strict' | 'normal' | 'relaxed' | 'off';
+}
+
 // ── 行为画像 ──
 export interface BehaviorProfile {
   id: string;

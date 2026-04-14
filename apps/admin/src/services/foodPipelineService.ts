@@ -44,41 +44,42 @@ export interface RulesApplyResult {
 }
 
 export interface QualityReport {
-  generatedAt: string;
-  summary: {
-    totalFoods: number;
-    byStatus: Record<string, number>;
-    byCategory: Record<string, number>;
-    bySource: Record<string, number>;
-  };
+  timestamp: Date;
+  /** 食物总数（顶层，无 summary 包装） */
+  totalFoods: number;
+  byStatus: Record<string, number>;
+  byCategory: Array<{ category: string; count: number }>;
+  bySource: Array<{ source: string; count: number }>;
   completeness: {
-    hasMacros: number;
-    hasMicros: number;
-    hasAllergens: number;
-    hasImage: number;
-    hasBarcode: number;
-    hasMealTypes: number;
-    hasCompatibility: number;
+    total: number;
+    withProtein: number;
+    withMicronutrients: number;
+    withGI: number;
+    withAllergens: number;
+    withCompatibility: number;
+    withTags: number;
+    withImage: number;
   };
   quality: {
-    verifiedCount: number;
+    verified: number;
+    unverified: number;
     avgConfidence: number;
-    macroConsistencyPass: number;
+    lowConfidence: number;
+    macroInconsistent: number;
   };
   conflicts: {
     total: number;
     pending: number;
     resolved: number;
+    needsReview: number;
   };
   translations: {
-    totalTranslations: number;
-    byLocale: Record<string, number>;
-    untranslatedCount: number;
+    total: number;
+    locales: Array<{ locale: string; count: number }>;
+    foodsWithTranslation: number;
+    foodsWithoutTranslation: number;
   };
-  recentChanges: Array<{
-    date: string;
-    count: number;
-  }>;
+  recentChanges: number;
   /** V7.9: AI 补全统计 */
   enrichment?: {
     directApplied: number;
@@ -328,6 +329,7 @@ export type EnrichableField =
   | 'standard_serving_desc'
   | 'main_ingredient'
   | 'flavor_profile'
+  | 'cooking_methods'
   // V8.0: 扩展属性字段（Stage 5）
   | 'food_form'
   | 'dish_priority'
@@ -437,6 +439,14 @@ export interface EnrichmentFieldDiff {
   suggestedValue: any;
   unit: string;
   validRange: { min: number; max: number } | null;
+  /** V8.1: 当前值为 null → 新增字段 */
+  isNew: boolean;
+  /** V8.1: 当前值与建议值不同（对于非 null 当前值） */
+  isModified: boolean;
+  /** V8.1: AI 置信度级别 */
+  confidenceLevel: 'high' | 'medium' | 'low';
+  /** V8.1: AI 原始置信度分数 (0-1) */
+  fieldConfidence: number;
 }
 
 /** 单条补全预览数据 */
@@ -671,6 +681,13 @@ export const enrichmentApi = {
   batchApprove: (ids: string[]): Promise<{ success: number; failed: number; errors: string[] }> =>
     request.post(`${ENRICHMENT_BASE}/staged/batch-approve`, { ids }),
 
+  /** V8.2: 批量审核拒绝 */
+  batchReject: (
+    ids: string[],
+    reason: string
+  ): Promise<{ success: number; failed: number; errors: string[] }> =>
+    request.post(`${ENRICHMENT_BASE}/staged/batch-reject`, { ids, reason }),
+
   // History
   getHistory: (params?: {
     page?: number;
@@ -858,6 +875,10 @@ export const useApproveStaged = (
       queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.staged() });
       queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.history() });
       queryClient.invalidateQueries({ queryKey: ['foodLibrary'] });
+      // FIX: 审核通过后刷新进度面板和完整度分布数据
+      queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.progress });
+      queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.completenessDistribution });
+      queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.stats });
     },
     ...options,
   });
@@ -872,6 +893,9 @@ export const useRejectStaged = (
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.staged() });
       queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.history() });
+      // FIX: 审核拒绝后刷新进度面板数据
+      queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.progress });
+      queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.stats });
     },
     ...options,
   });
@@ -891,6 +915,33 @@ export const useBatchApproveStaged = (
       queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.staged() });
       queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.history() });
       queryClient.invalidateQueries({ queryKey: ['foodLibrary'] });
+      // FIX: 批量审核通过后刷新进度面板和完整度分布数据
+      queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.progress });
+      queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.completenessDistribution });
+      queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.stats });
+    },
+    ...options,
+  });
+};
+
+/** V8.2/V8.7: 批量审核拒绝（FIX-5 新增 hook） */
+export const useBatchRejectStaged = (
+  options?: UseMutationOptions<
+    { success: number; failed: number; errors: string[] },
+    Error,
+    { ids: string[]; reason: string }
+  >
+) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ids, reason }) => enrichmentApi.batchReject(ids, reason),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.staged() });
+      queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.history() });
+      queryClient.invalidateQueries({ queryKey: ['foodLibrary'] });
+      // 批量拒绝后刷新进度面板（状态从 staged → rejected，影响计数）
+      queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.progress });
+      queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.stats });
     },
     ...options,
   });
@@ -930,12 +981,21 @@ export const useDrainEnrichmentQueue = (options?: UseMutationOptions<void, Error
 // ==================== V7.9/V8.0 Enrichment Hooks ====================
 
 /** 全库补全进度（按字段维度统计填充率） */
-export const useEnrichmentProgress = () =>
-  useQuery({
+export const useEnrichmentProgress = () => {
+  const queryClient = useQueryClient();
+  return useQuery({
     queryKey: enrichmentQueryKeys.progress,
     queryFn: () => enrichmentApi.getProgress(),
-    staleTime: 60 * 1000,
+    staleTime: 15 * 1000, // FIX: 降低缓存时间，确保进度面板数据更及时
+    // FIX: 当补全队列有活跃任务时，自动轮询进度面板
+    refetchInterval: () => {
+      const statsData = queryClient.getQueryData<EnrichmentStatsResponse>(enrichmentQueryKeys.stats);
+      const q = statsData?.queue;
+      return q && (q.waiting > 0 || q.active > 0) ? 15000 : false;
+    },
+    refetchIntervalInBackground: false,
   });
+};
 
 /** 单食物完整度评分（详情页用） */
 export const useFoodCompleteness = (foodId: string, enabled = true) =>
@@ -965,6 +1025,9 @@ export const useEnqueueStagedBatch = (
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.stats });
       queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.jobs() });
+      // OPT-3 FIX: 入队后同步刷新进度面板，确保"待补全"计数即时更新
+      queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.progress });
+      queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.completenessDistribution });
     },
     ...options,
   });
@@ -1024,6 +1087,9 @@ export const useEnrichNow = (
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['foodLibrary'] });
       queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.stats });
+      // FIX: 补全完成后刷新进度面板和完整度分布数据
+      queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.progress });
+      queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.completenessDistribution });
     },
     ...options,
   });

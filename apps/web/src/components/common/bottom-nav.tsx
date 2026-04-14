@@ -2,6 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/features/auth/hooks/use-auth';
+import { useUnreadCount } from '@/features/notification/hooks/use-notifications';
 import { LocalizedLink } from '@/components/common/localized-link';
 
 /* ─── 隐藏底部导航的路由 ─── */
@@ -123,6 +124,8 @@ const TABS: NavTab[] = [
 export function BottomNav() {
   const pathname = usePathname();
   const { isLoggedIn } = useAuth();
+  const { data: unreadData } = useUnreadCount(isLoggedIn);
+  const unreadCount = unreadData?.unreadCount ?? 0;
 
   if (shouldHideNav(pathname)) return null;
 
@@ -135,15 +138,24 @@ export function BottomNav() {
         {TABS.map((tab) => {
           const active = tab.matchPattern.test(normalizedPath);
           const href = tab.key === 'profile' && !isLoggedIn ? '/login' : tab.href;
+          // 首页 tab 显示未读角标
+          const showBadge = tab.key === 'home' && unreadCount > 0;
 
           return (
             <LocalizedLink
               key={tab.key}
               href={href}
-              className={`flex flex-col items-center justify-center min-w-[3.5rem] py-1 rounded-xl transition-all duration-200 active:scale-90
+              className={`relative flex flex-col items-center justify-center min-w-[3.5rem] py-1 rounded-xl transition-all duration-200 active:scale-90
                 ${active ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
             >
-              <tab.icon active={active} />
+              <div className="relative">
+                <tab.icon active={active} />
+                {showBadge && (
+                  <span className="absolute -top-1 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+              </div>
               <span
                 className={`text-[10px] mt-0.5 font-medium ${active ? 'font-bold text-primary' : ''}`}
               >

@@ -926,7 +926,7 @@ model Foods {
   /// 食物组（如 USDA 食物组分类）
   foodGroup             String? @map("food_group") @db.VarChar(200)
   /// 食物形态：ingredient=原材料, dish=成品菜, semi_prepared=半成品（V7.3）
-  foodForm              String? @map("food_form") @default("ingredient") @db.VarChar(20)
+  foodForm              String? @map("food_form") @db.VarChar(20)
   /// 成品菜推荐优先级 0-100，值越高越优先推荐；仅 dish/semi_prepared 有值（V7.3）
   dishPriority          Int? @map("dish_priority")
   /// 食物可获得性难度 1-5（1=随处可得, 2=常见, 3=普通, 4=较难, 5=稀有）（V7.4）

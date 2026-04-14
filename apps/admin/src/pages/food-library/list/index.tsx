@@ -510,8 +510,18 @@ const FoodLibraryList: React.FC = () => {
       <ProTable<FoodLibraryDto>
         columns={columns}
         actionRef={actionRef}
-        request={async (params) => {
+        request={async (params, sort) => {
           const { current, pageSize, isVerified, enrichmentStatus, ...rest } = params;
+          // 处理 ProTable 排序参数：{ dataCompleteness: 'ascend' | 'descend' }
+          let sortBy: string | undefined;
+          let sortOrder: 'asc' | 'desc' | undefined;
+          if (sort && typeof sort === 'object') {
+            const sortKey = Object.keys(sort)[0];
+            if (sortKey && sort[sortKey]) {
+              sortBy = sortKey;
+              sortOrder = sort[sortKey] === 'ascend' ? 'asc' : 'desc';
+            }
+          }
           const res = await foodLibraryApi.getList({
             page: current,
             pageSize,
@@ -520,6 +530,7 @@ const FoodLibraryList: React.FC = () => {
               ? { isVerified: isVerified === 'true' || isVerified === true }
               : {}),
             ...(enrichmentStatus ? { enrichmentStatus } : {}),
+            ...(sortBy ? { sortBy, sortOrder: sortOrder ?? 'desc' } : {}),
             ...rest,
           });
           return { data: res.list, total: res.total, success: true };

@@ -42,11 +42,23 @@ export class FoodLibraryService {
          primary_source, primary_source_id,
          data_version, confidence, is_verified,
          verified_by, verified_at, search_weight, popularity,
-         cuisine, flavor_profile, cooking_method,
+         cuisine, flavor_profile, cooking_methods,
+         required_equipment, serving_temperature,
+         texture_tags, dish_type, food_form, dish_priority,
+         ingredient_list,
          prep_time_minutes, cook_time_minutes, skill_required,
          estimated_cost_level, shelf_life_days,
          fodmap_level, oxalate_level,
          available_channels, commonality_score,
+         -- V7.9 营养素字段
+         vitamin_b6, omega3, omega6,
+         soluble_fiber, insoluble_fiber, water_content_percent,
+         acquisition_difficulty,
+         -- 补全元数据
+         data_completeness, enrichment_status, last_enriched_at,
+         field_sources, field_confidence,
+         -- V8.1 审核
+         review_status, reviewed_by, reviewed_at, failed_fields,
          created_at, updated_at,
          GREATEST(
            similarity(name, $1),

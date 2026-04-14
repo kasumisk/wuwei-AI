@@ -35,7 +35,10 @@ import {
   ENRICHMENT_FIELD_LABELS,
   ENRICHMENT_FIELD_UNITS,
 } from '../../modules/food/food.types';
-import { COOKING_METHODS_FIELD_DESC } from '../../modules/food/cooking-method.constants';
+import {
+  COOKING_METHODS_FIELD_DESC,
+  ALL_COOKING_METHODS,
+} from '../../modules/food/cooking-method.constants';
 
 // ─── 可补全字段定义（foods 主表）───────────────────────────────────────────
 
@@ -46,6 +49,10 @@ import { COOKING_METHODS_FIELD_DESC } from '../../modules/food/cooking-method.co
  */
 export const snakeToCamel = (s: string): string =>
   s.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
+
+/** camelCase → snake_case（用于在 accumulatedData 中查找已累积的补全数据） */
+export const camelToSnake = (s: string): string =>
+  s.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
 
 export const ENRICHABLE_FIELDS = [
   // 营养素（per 100g）
@@ -133,9 +140,9 @@ export type EnrichmentTarget = 'foods' | 'translations' | 'regional';
 // ─── V7.9: 分阶段补全定义 ─────────────────────────────────────────────────
 
 /**
- * 5 阶段补全分组：每阶段独立 Prompt、独立验证、独立入库
- * 前阶段补全结果作为后阶段的输入上下文，逐步提高数据精度
- */
+   * 5 阶段补全分组：每阶段独立 Prompt、独立验证、独立入库
+   * 前阶段补全结果作为后阶段的输入上下文，逐步提高数据精度
+   */
 export interface EnrichmentStage {
   /** 阶段编号 1-5 */
   stage: number;
@@ -163,7 +170,7 @@ export const ENRICHMENT_STAGES: EnrichmentStage[] = [
       'sodium',
       'food_form',
     ],
-    maxTokens: 450,
+    maxTokens: 600, // FIX: 从450提升至600，避免JSON截断
     supportsFallback: true,
   },
   {
@@ -195,7 +202,7 @@ export const ENRICHMENT_STAGES: EnrichmentStage[] = [
       'insoluble_fiber',
       'water_content_percent',
     ],
-    maxTokens: 1600,
+    maxTokens: 1800, // FIX: 从1600提升至1800，为24个字段提供更充足的空间
     supportsFallback: true,
   },
   {
@@ -210,7 +217,7 @@ export const ENRICHMENT_STAGES: EnrichmentStage[] = [
       'allergens',
       'tags',
     ],
-    maxTokens: 500,
+    maxTokens: 650, // FIX: 从500提升至650，tags数组可能较长
     supportsFallback: false,
   },
   {
@@ -233,7 +240,7 @@ export const ENRICHMENT_STAGES: EnrichmentStage[] = [
       // V8.4: aliases 在使用属性阶段补全，已有足够食物上下文
       'aliases',
     ],
-    maxTokens: 900,
+    maxTokens: 1000, // FIX: 从900提升至1000，common_portions和flavor_profile是JSON对象
     supportsFallback: false,
   },
   {
@@ -256,7 +263,7 @@ export const ENRICHMENT_STAGES: EnrichmentStage[] = [
       // V8.2: 新增（food_form 已移至 Stage1）
       'required_equipment',
     ],
-    maxTokens: 1000,
+    maxTokens: 1100, // FIX: 从1000提升至1100，ingredient_list和compatibility是JSON
     supportsFallback: false,
   },
 ];
@@ -362,6 +369,22 @@ export const ENRICHABLE_STRING_FIELDS = [
   'skill_required',
   'serving_temperature',
   // V8.2: 新增
+  'food_form',
+] as const;
+
+/**
+ * V8.8: AI 可纠正字段白名单
+ *
+ * 这些字段即使数据库已有值，AI 也可以覆盖。
+ * 适用于"种子/导入时写了默认值，但真实值需要 AI 判断"的字段。
+ *
+ * 当前仅包含 food_form：
+ *   - 种子脚本历史上用 `?? 'ingredient'` 写入默认值，导致大量食物
+ *     被错误标记为 ingredient，AI 补全因字段非 NULL 而跳过
+ *   - food_form 是分类字段，AI 基于食物名称/描述可以给出更准确的判断
+ *   - 不包含营养素数字字段：数字已有值通常来自权威来源，不应被 AI 覆盖
+ */
+export const AI_OVERRIDABLE_FIELDS: ReadonlyArray<string> = [
   'food_form',
 ] as const;
 
@@ -674,7 +697,8 @@ export class FoodEnrichmentService {
           accumulatedData[field] !== null
         )
           return false;
-        const value = (food as any)[field];
+        // field 是 snake_case，Prisma 对象用 camelCase
+        const value = (food as any)[snakeToCamel(field)];
         if (value === null || value === undefined) return true;
         // V8.0: 空数组视为缺失
         if (
@@ -939,7 +963,9 @@ export class FoodEnrichmentService {
       // 跳过已在 knownParts 初始化中处理的字段
       if (['sub_category', 'food_group'].includes(field)) continue;
 
-      const value = accumulatedData[field] ?? (food as any)[field];
+      // field 是 camelCase（来自 CONTEXT_LABELS），accumulatedData 用 snake_case key
+      const snakeField = camelToSnake(field);
+      const value = accumulatedData[snakeField] ?? (food as any)[field];
       if (value != null) {
         const [label, unit] = labelInfo;
         const displayValue = Array.isArray(value)
@@ -963,7 +989,7 @@ export class FoodEnrichmentService {
 
     // 构造字段描述（阶段专用）
     const fieldsList = missingFields
-      .map((f) => `- ${FIELD_DESC[f] || f}`)
+      .map((f) => `- ${FIELD_DESC[snakeToCamel(f)] || f}`)
       .join('\n');
 
     return `Known food data:
@@ -975,11 +1001,13 @@ ${fieldsList}
 Rules:
 1. All numeric values are per 100g edible portion
 2. Use USDA FoodData Central as primary reference; cross-reference FAO/INFOODS and EUROFIR where applicable
-3. When exact data is unavailable, estimate from food composition/category averages/cooking method — estimated values MUST be provided (do not return null)
-4. Return null ONLY for fields that are completely impossible to estimate
+3. ALWAYS provide an estimated value — do NOT return null unless the field is physically impossible to determine for this food type
+4. Estimation is acceptable and expected: use food category averages, composition science, cooking method inference, or similar food comparisons
 5. Assign per-field confidence in "field_confidence" (0.0-1.0): authoritative source ≥ 0.85, reasonable estimate 0.6-0.85, rough estimate 0.4-0.6, speculation < 0.4
 6. "confidence" is the overall confidence for this stage (0.0-1.0)
-7. "reasoning" should cite the data source (e.g. USDA FoodData Central, FAO/INFOODS, category average estimate); mark estimated values as "estimated"
+7. "reasoning" should cite the data source (e.g. USDA FoodData Central, FAO/INFOODS, category average estimate); mark estimated values as "[est]"
+8. For array fields, always return a non-empty array with at least one value when applicable
+9. For object fields (flavor_profile, compatibility, common_portions), always return a populated object
 
 Return JSON:
 {
@@ -1021,10 +1049,12 @@ Your task: Accurately complete food nutrition data for the [${stage.name}] stage
 
 Core principles:
 1. Prioritize USDA FoodData Central values; cross-reference with FAO/INFOODS and EUROFIR when available
-2. When exact data is unavailable, estimate based on food composition, cooking method, and category averages — always provide an estimated value (do NOT return null without strong justification)
-3. Return null ONLY for fields that are genuinely impossible to estimate (e.g. highly unique proprietary products, or fields requiring laboratory measurement of a rare ingredient)
-4. All values are per 100g edible portion
-5. Return strict JSON format, only the requested fields`,
+2. ALWAYS provide a value — estimation from food composition principles, category averages, or similar food data is expected and acceptable
+3. Return null ONLY when a field is genuinely inapplicable to this food type (e.g. cooking_methods for a raw unprocessed ingredient with no cooking required)
+4. For array fields: always return a non-empty array when any value applies; empty array [] only when truly none apply
+5. For numeric fields: estimate from food category data, macronutrient ratios, or known food science — do NOT return null for common nutrients
+6. All values are per 100g edible portion
+7. Return strict JSON format, only the requested fields`,
             },
             { role: 'user', content: prompt },
           ],
@@ -1070,7 +1100,7 @@ Core principles:
   } | null> {
     // 只对数值型字段做 fallback
     const numericFields = missingFields.filter(
-      (f) => NUTRIENT_RANGES[f] !== undefined,
+      (f) => NUTRIENT_RANGES[snakeToCamel(f)] !== undefined,
     );
     if (numericFields.length === 0) return null;
 
@@ -1269,7 +1299,7 @@ Core principles:
         if (stageFields.length === 0) return false;
 
         return stageFields.some((field) => {
-          const value = (food as any)[field];
+        const value = (food as any)[snakeToCamel(field)];
           if (value === null || value === undefined) return true;
           if (
             (JSON_ARRAY_FIELDS as readonly string[]).includes(field) &&
@@ -2070,6 +2100,11 @@ Core principles:
     if (fields.length === 0) return [];
 
     // V8.0: 字段名来自 ENRICHABLE_FIELDS/阶段字段白名单，使用 Prisma.raw 安全构建
+    // V8.8: AI_OVERRIDABLE_FIELDS 中的字段（如 food_form）除了 IS NULL 外，
+    //       还需匹配"字段来源为种子/导入默认值"的情况，即 field_sources 中标记为非 ai_enrichment 的。
+    //       但 field_sources 是 JSON 字段，查询成本高；改用更简单的策略：
+    //       overridable 字段的筛选条件放宽为 IS NULL（已有 AI 补全的会被 applyEnrichment 重新覆盖）
+    //       实际"是否需要纠正"由 applyEnrichment 的白名单逻辑决定，此处只负责"让食物进入队列"。
     const nullConditions = fields
       .map((f) =>
         (JSON_ARRAY_FIELDS as readonly string[]).includes(f)
@@ -2078,24 +2113,45 @@ Core principles:
       )
       .join(' OR ');
 
+    // V8.8: AI_OVERRIDABLE_FIELDS 字段有默认值时也应被扫描（允许 AI 纠正）
+    // 为这些字段额外生成"非 AI 补全来源"的匹配条件
+    const overridableFields = fields.filter((f) =>
+      (AI_OVERRIDABLE_FIELDS as readonly string[]).includes(f),
+    );
+    const overridableCondition =
+      overridableFields.length > 0
+        ? ' OR ' +
+          overridableFields
+            .map(
+              (f) =>
+                `("${f}" IS NOT NULL AND (field_sources IS NULL OR field_sources->>'${f}' IS NULL OR field_sources->>'${f}' NOT IN ('ai_enrichment', 'ai_enrichment_staged')))`,
+            )
+            .join(' OR ')
+        : '';
+
     // V8.0: 可选完整度上限筛选
     const completenessCondition =
       maxCompleteness !== undefined && maxCompleteness !== null
         ? ` AND (data_completeness IS NULL OR data_completeness <= ${Number(maxCompleteness)})`
         : '';
 
-    // V8.4: 排除已完整补全（enriched）和待审核（staged）的食物，避免重复入队
-    // 允许入队：enrichment_status IS NULL / 'pending' / 'partial' / 'failed' / 'rejected'
-    const statusExcludeCondition = ` AND (enrichment_status IS NULL OR enrichment_status NOT IN ('enriched', 'staged'))`;
+    // V8.7 FIX: 排除已完整补全（enriched/completed）、部分补全（partial）和待审核（staged）的食物，避免重复入队
+    // 实际写入值: applyEnrichment 写 'completed'/'partial', enrichFoodNow staged 写 'staged'
+    // 旧版部分食物可能残留 'enriched' 状态，一并排除
+    const statusExcludeCondition = ` AND (enrichment_status IS NULL OR enrichment_status NOT IN ('enriched', 'completed', 'staged'))`;
 
     // V8.2: 同时选取请求字段的实际值，用于计算 per-food 真正缺失字段
     const fieldSelectParts = fields.map((f) => `"${f}"`).join(', ');
 
+    // V8.8: 优先入队完全未补全（data_completeness IS NULL）的食物，其次按完整度升序
+    //       同完整度时按 created_at ASC（最老的优先），确保没补全过的食物最先被处理
+    //       overridableCondition 扩展了 WHERE 条件，使 food_form 有默认值的食物也能进入队列
     const rows = await this.prisma.$queryRaw<Record<string, any>[]>(
-      Prisma.sql`SELECT id, name, ${Prisma.raw(fieldSelectParts)} FROM foods WHERE (${Prisma.raw(nullConditions)})${Prisma.raw(completenessCondition)}${Prisma.raw(statusExcludeCondition)}${category ? Prisma.sql` AND category = ${category}` : Prisma.empty}${primarySource ? Prisma.sql` AND primary_source = ${primarySource}` : Prisma.empty} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`,
+      Prisma.sql`SELECT id, name, ${Prisma.raw(fieldSelectParts)} FROM foods WHERE (${Prisma.raw(nullConditions + overridableCondition)})${Prisma.raw(completenessCondition)}${Prisma.raw(statusExcludeCondition)}${category ? Prisma.sql` AND category = ${category}` : Prisma.empty}${primarySource ? Prisma.sql` AND primary_source = ${primarySource}` : Prisma.empty} ORDER BY data_completeness ASC NULLS FIRST, created_at ASC LIMIT ${limit} OFFSET ${offset}`,
     );
 
     // V8.2: 计算每个食物实际缺失的字段（而非返回全部请求字段）
+    // V8.8: AI_OVERRIDABLE_FIELDS 中的字段，即使有值也视为"需要补全"（AI 可纠正）
     return rows.map((row) => ({
       id: row.id as string,
       name: row.name as string,
@@ -2108,6 +2164,8 @@ Core principles:
           value.length === 0
         )
           return true;
+        // V8.8: overridable 字段始终加入 missingFields，确保 AI 有机会纠正默认值
+        if ((AI_OVERRIDABLE_FIELDS as readonly string[]).includes(f)) return true;
         return false;
       }),
     }));
@@ -2128,18 +2186,19 @@ Core principles:
   ): Promise<{ id: string; name: string; missingFields: EnrichableField[] }[]> {
     let rows: { id: string; name: string }[];
 
+    // V8.8: 优先未补全（data_completeness IS NULL）的食物，其次按完整度升序
     if (target === 'translations') {
       if (locale) {
         rows = await this.prisma.$queryRaw<{ id: string; name: string }[]>(
           Prisma.sql`SELECT id, name FROM foods WHERE NOT EXISTS (
             SELECT 1 FROM food_translations ft WHERE ft.food_id = foods.id AND ft.locale = ${locale}
-          ) ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`,
+          ) ORDER BY data_completeness ASC NULLS FIRST, created_at ASC LIMIT ${limit} OFFSET ${offset}`,
         );
       } else {
         rows = await this.prisma.$queryRaw<{ id: string; name: string }[]>(
           Prisma.sql`SELECT id, name FROM foods WHERE NOT EXISTS (
             SELECT 1 FROM food_translations ft WHERE ft.food_id = foods.id
-          ) ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`,
+          ) ORDER BY data_completeness ASC NULLS FIRST, created_at ASC LIMIT ${limit} OFFSET ${offset}`,
         );
       }
     } else {
@@ -2147,13 +2206,13 @@ Core principles:
         rows = await this.prisma.$queryRaw<{ id: string; name: string }[]>(
           Prisma.sql`SELECT id, name FROM foods WHERE NOT EXISTS (
             SELECT 1 FROM food_regional_info fri WHERE fri.food_id = foods.id AND fri.region = ${region}
-          ) ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`,
+          ) ORDER BY data_completeness ASC NULLS FIRST, created_at ASC LIMIT ${limit} OFFSET ${offset}`,
         );
       } else {
         rows = await this.prisma.$queryRaw<{ id: string; name: string }[]>(
           Prisma.sql`SELECT id, name FROM foods WHERE NOT EXISTS (
             SELECT 1 FROM food_regional_info fri WHERE fri.food_id = foods.id
-          ) ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`,
+          ) ORDER BY data_completeness ASC NULLS FIRST, created_at ASC LIMIT ${limit} OFFSET ${offset}`,
         );
       }
     }
@@ -2292,7 +2351,11 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
       // Prisma schema 使用 camelCase 字段名（@map 到 snake_case DB 列），需转换查找
       const existing = (food as any)[snakeToCamel(field)];
       if (existing !== null && existing !== undefined) {
-        if (
+        // V8.8: AI_OVERRIDABLE_FIELDS 白名单字段即使已有值也允许 AI 覆盖
+        // 用于修正种子/导入时写入的默认值（如 food_form 的 'ingredient' 默认值）
+        if ((AI_OVERRIDABLE_FIELDS as readonly string[]).includes(field)) {
+          // 直接落入下方赋值逻辑，不跳过
+        } else if (
           (JSON_ARRAY_FIELDS as readonly string[]).includes(field) &&
           Array.isArray(existing) &&
           existing.length > 0
@@ -2685,7 +2748,7 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
     food: {
       id: string;
       name: string;
-      name_zh: string | null;
+      nameZh: string | null;
       category: string | null;
       subCategory: string | null;
     };
@@ -2765,7 +2828,9 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
         field === 'field_confidence'
       )
         continue;
-      const currentValue = (food as any)[field] ?? null;
+      // field 是 snake_case（来自 AI 返回），转为 camelCase 查找标签/单位和 Prisma 对象
+      const camelField = snakeToCamel(field);
+      const currentValue = (food as any)[camelField] ?? null;
       const isNew = currentValue === null || currentValue === undefined;
       const isModified = !isNew && currentValue !== suggestedValue;
       const fc = fieldConfidenceMap[field] ?? overallConfidence;
@@ -2774,11 +2839,11 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
 
       diff.push({
         field,
-        label: ENRICHMENT_FIELD_LABELS[field] ?? field,
+        label: ENRICHMENT_FIELD_LABELS[camelField] ?? field,
         currentValue,
         suggestedValue,
-        unit: ENRICHMENT_FIELD_UNITS[field] ?? '',
-        validRange: NUTRIENT_RANGES[field] ?? null,
+        unit: ENRICHMENT_FIELD_UNITS[camelField] ?? '',
+        validRange: NUTRIENT_RANGES[camelField] ?? null,
         isNew,
         isModified,
         confidenceLevel,
@@ -2788,7 +2853,7 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
 
     // 获取同类均值参考
     const numericFields = diff
-      .filter((d) => NUTRIENT_RANGES[d.field])
+      .filter((d) => NUTRIENT_RANGES[snakeToCamel(d.field)])
       .map((d) => d.field);
     let categoryAverage: Record<string, number> | null = null;
     if (numericFields.length > 0 && food.category) {
@@ -2803,7 +2868,7 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
       food: {
         id: food.id,
         name: food.name,
-        name_zh: nameZh,
+        nameZh: nameZh,
         category: food.category ?? null,
         subCategory: food.subCategory ?? null,
       },
@@ -3086,8 +3151,9 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
         in: action
           ? [action]
           : [
+              // FIX: 历史记录不包含 staged（staged 在待审核 tab 展示），
+              // 每个食物只展示最终结果记录，避免一食物多条（staged+approved）重复
               'ai_enrichment',
-              'ai_enrichment_staged',
               'ai_enrichment_approved',
               'ai_enrichment_rejected',
               'ai_enrichment_rollback',
@@ -3372,7 +3438,23 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
       }
 
       if ((JSON_ARRAY_FIELDS as readonly string[]).includes(field)) {
-        result[field] = Array.isArray(value) ? value : null;
+        if (!Array.isArray(value)) {
+          result[field] = null;
+          continue;
+        }
+        // V8.5: validate cooking_methods values against the standard code set
+        if (field === 'cooking_methods') {
+          const validSet = new Set<string>(ALL_COOKING_METHODS as readonly string[]);
+          const filtered = value.filter((v: any) => typeof v === 'string' && validSet.has(v));
+          if (filtered.length === 0 && value.length > 0) {
+            this.logger.warn(
+              `"cooking_methods" AI returned non-standard values: [${value.join(', ')}], discarding`,
+            );
+          }
+          result[field] = filtered.length > 0 ? filtered : null;
+          continue;
+        }
+        result[field] = value;
         continue;
       }
 
@@ -3456,6 +3538,7 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
     if (peerCount < 5) return null; // 同类样本不足，无法做有效 IQR
 
     // 对所有数值型营养素字段执行 IQR 检测
+    // NUTRIENT_RANGES 键是 camelCase，Prisma 对象也是 camelCase，但 DB 列是 snake_case
     const numericFields = Object.keys(NUTRIENT_RANGES).filter(
       (f) => (food as any)[f] != null,
     );
@@ -3468,17 +3551,19 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
         peerCount,
       };
 
-    // 批量查询各字段的 Q1, Q3
+    // 批量查询各字段的 Q1, Q3（SQL 使用 snake_case 列名，别名保留 camelCase 以便后续查找）
     const selectParts = numericFields
       .map(
-        (f) =>
-          `PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY ${f}) AS "${f}_q1", ` +
-          `PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY ${f}) AS "${f}_q3"`,
+        (f) => {
+          const col = camelToSnake(f);
+          return `PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY "${col}") AS "${f}_q1", ` +
+            `PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY "${col}") AS "${f}_q3"`;
+        },
       )
       .join(', ');
 
     const whereClause = numericFields
-      .map((f) => `${f} IS NOT NULL`)
+      .map((f) => `"${camelToSnake(f)}" IS NOT NULL`)
       .join(' OR ');
 
     const iqrResult = await this.prisma.$queryRawUnsafe<Record<string, any>[]>(

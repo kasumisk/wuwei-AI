@@ -3,13 +3,16 @@
 import { useState } from 'react';
 import { LocalizedLink } from '@/components/common/localized-link';
 import { DECISION_CONFIG, SCORE_LABELS, getScoreColor, getScoreLabel } from '@/lib/constants/food';
+import { DecisionFeedback } from './decision-feedback';
 import type { AnalysisResult, NutritionScoreBreakdown } from '@/types/food';
 
 interface DecisionCardProps {
   result: AnalysisResult;
+  /** recordId — 保存后回传，用于启用决策反馈 */
+  recordId?: string;
 }
 
-export function DecisionCard({ result }: DecisionCardProps) {
+export function DecisionCard({ result, recordId }: DecisionCardProps) {
   const decision = result.decision || 'SAFE';
   const config = DECISION_CONFIG[decision] || DECISION_CONFIG.SAFE;
   const [showBreakdown, setShowBreakdown] = useState(false);
@@ -237,6 +240,9 @@ export function DecisionCard({ result }: DecisionCardProps) {
           ✨ {result.encouragement}
         </p>
       )}
+
+      {/* 决策反馈闭环 */}
+      <DecisionFeedback recordId={recordId} decision={decision} />
     </div>
   );
 }

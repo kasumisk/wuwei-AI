@@ -71,7 +71,9 @@ function mapToData(
     isVerified: true,
     verifiedBy: 'seed-script',
     // V7.3: 食物大众化
-    foodForm: food.foodForm ?? 'ingredient',
+    // V8.8 FIX: 不设默认值，保持 NULL 让 AI 补全判断真实形态
+    // 原 `?? 'ingredient'` 默认值会导致 applyEnrichment 因字段非 NULL 而跳过补全
+    foodForm: food.foodForm ?? undefined,
     dishPriority: food.dishPriority ?? undefined,
     // V7.4: 食物可获得性
     acquisitionDifficulty: food.acquisitionDifficulty ?? 3,

@@ -127,7 +127,8 @@ const PipelineDashboard: React.FC = () => {
     );
   }
 
-  const summary = report?.summary;
+  // 直接从 report 顶层取字段（后端不再包装 summary）
+  const totalFoods = report?.totalFoods ?? 0;
   const completeness = report?.completeness;
   const quality = report?.quality;
   const conflicts = report?.conflicts;
@@ -199,7 +200,7 @@ const PipelineDashboard: React.FC = () => {
           <Card>
             <Statistic
               title="食物总数"
-              value={summary?.totalFoods || 0}
+              value={totalFoods}
               prefix={<DatabaseOutlined />}
             />
           </Card>
@@ -208,8 +209,8 @@ const PipelineDashboard: React.FC = () => {
           <Card>
             <Statistic
               title="已验证"
-              value={quality?.verifiedCount || 0}
-              suffix={`/ ${summary?.totalFoods || 0}`}
+              value={quality?.verified || 0}
+              suffix={`/ ${totalFoods}`}
               valueStyle={{ color: '#3f8600' }}
               prefix={<CheckCircleOutlined />}
             />
@@ -240,26 +241,24 @@ const PipelineDashboard: React.FC = () => {
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={24} md={12}>
           <Card title="数据完整度">
-            {completeness && summary?.totalFoods ? (
+            {completeness && totalFoods ? (
               <Space direction="vertical" style={{ width: '100%' }} size={8}>
                 {[
-                  { label: '宏量营养素', value: completeness.hasMacros },
-                  { label: '微量营养素', value: completeness.hasMicros },
-                  { label: '过敏原', value: completeness.hasAllergens },
-                  { label: '食物图片', value: completeness.hasImage },
-                  { label: '条形码', value: completeness.hasBarcode },
-                  { label: '餐次类型', value: completeness.hasMealTypes },
-                  { label: '搭配关系', value: completeness.hasCompatibility },
+                  { label: '宏量营养素', value: completeness.withProtein },
+                  { label: '微量营养素', value: completeness.withMicronutrients },
+                  { label: '过敏原', value: completeness.withAllergens },
+                  { label: '食物图片', value: completeness.withImage },
+                  { label: '搭配关系', value: completeness.withCompatibility },
                 ].map((item) => (
                   <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <Text style={{ width: 100 }}>{item.label}</Text>
                     <Progress
-                      percent={Math.round((item.value / summary.totalFoods) * 100)}
+                      percent={Math.round((item.value / totalFoods) * 100)}
                       size="small"
                       style={{ flex: 1 }}
                     />
                     <Text type="secondary" style={{ width: 60, textAlign: 'right' }}>
-                      {item.value}/{summary.totalFoods}
+                      {item.value}/{totalFoods}
                     </Text>
                   </div>
                 ))}
@@ -275,8 +274,8 @@ const PipelineDashboard: React.FC = () => {
             <Descriptions column={1} size="small">
               <Descriptions.Item label="按状态">
                 <Space wrap>
-                  {summary?.byStatus &&
-                    Object.entries(summary.byStatus).map(([status, count]) => (
+                  {report?.byStatus &&
+                    Object.entries(report.byStatus).map(([status, count]) => (
                       <Tag key={status}>
                         {status}: {count as number}
                       </Tag>
@@ -285,10 +284,10 @@ const PipelineDashboard: React.FC = () => {
               </Descriptions.Item>
               <Descriptions.Item label="按来源">
                 <Space wrap>
-                  {summary?.bySource &&
-                    Object.entries(summary.bySource).map(([source, count]) => (
+                  {report?.bySource &&
+                    report.bySource.map(({ source, count }) => (
                       <Tag key={source} color="blue">
-                        {source}: {count as number}
+                        {source}: {count}
                       </Tag>
                     ))}
                 </Space>
@@ -302,26 +301,25 @@ const PipelineDashboard: React.FC = () => {
               </Descriptions.Item>
               <Descriptions.Item label="翻译覆盖">
                 <Space wrap>
-                  {translations?.byLocale &&
-                    Object.entries(translations.byLocale).map(([locale, count]) => (
+                  {translations?.locales &&
+                    translations.locales.map(({ locale, count }) => (
                       <Tag key={locale} color="purple">
-                        {locale}: {count as number}
+                        {locale}: {count}
                       </Tag>
                     ))}
-                  <Tag color="orange">未翻译: {translations?.untranslatedCount || 0}</Tag>
+                  <Tag color="orange">未翻译: {translations?.foodsWithoutTranslation || 0}</Tag>
                 </Space>
               </Descriptions.Item>
               <Descriptions.Item label="宏量一致性">
                 <Tag
                   color={
-                    quality?.macroConsistencyPass &&
-                    summary?.totalFoods &&
-                    quality.macroConsistencyPass / summary.totalFoods > 0.8
+                    quality && totalFoods &&
+                    (totalFoods - (quality.macroInconsistent || 0)) / totalFoods > 0.8
                       ? 'green'
                       : 'orange'
                   }
                 >
-                  通过: {quality?.macroConsistencyPass || 0}/{summary?.totalFoods || 0}
+                  通过: {totalFoods - (quality?.macroInconsistent || 0)}/{totalFoods}
                 </Tag>
               </Descriptions.Item>
             </Descriptions>

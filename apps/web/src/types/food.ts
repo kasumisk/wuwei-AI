@@ -360,9 +360,85 @@ export interface FeedbackRatings {
   comment?: string;
 }
 
-// ── 反馈统计 ──
+// ── 反馈统计（多维度） ──
+export interface FeedbackDimensionStats {
+  avgTaste: number | null;
+  avgPortion: number | null;
+  avgPrice: number | null;
+  avgTiming: number | null;
+  ratedCount: number;
+}
+
 export interface FeedbackStats {
-  perFood: Record<string, { count: number; avgScore: number }>;
-  global: { totalFeedbacks: number; avgScore: number };
+  perFood: Record<string, FeedbackDimensionStats>;
+  global: FeedbackDimensionStats;
   days: number;
+}
+
+// ── 菜谱 ──
+export interface RecipeSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  cuisine: string | null;
+  difficulty: number;
+  prepTimeMinutes: number | null;
+  cookTimeMinutes: number | null;
+  servings: number;
+  tags: string[];
+  imageUrl: string | null;
+  source: string;
+  caloriesPerServing: number | null;
+  proteinPerServing: number | null;
+  fatPerServing: number | null;
+  carbsPerServing: number | null;
+  fiberPerServing: number | null;
+  qualityScore: number;
+  usageCount: number;
+  averageRating: number | null;
+  ratingCount: number;
+}
+
+export interface RecipeIngredientItem {
+  id: string;
+  foodId: string | null;
+  ingredientName: string;
+  amount: number | null;
+  unit: string | null;
+  isOptional: boolean;
+  sortOrder: number;
+}
+
+export interface RecipeDetail extends RecipeSummary {
+  instructions: Record<string, unknown> | null;
+  ingredients: RecipeIngredientItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RecipeRating {
+  id: string;
+  recipeId: string;
+  userId: string;
+  rating: number;
+  comment: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RecipeRatingSummary {
+  recipeId: string;
+  averageRating: number;
+  ratingCount: number;
+  distribution: Record<number, number>;
+}
+
+export interface SearchRecipesParams {
+  q?: string;
+  cuisine?: string;
+  difficulty?: number;
+  tags?: string;
+  maxCookTime?: number;
+  limit?: number;
+  offset?: number;
 }

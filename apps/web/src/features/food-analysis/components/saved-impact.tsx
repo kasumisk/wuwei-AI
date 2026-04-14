@@ -3,6 +3,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { foodRecordService } from '@/lib/api/food-record';
 import { MEAL_LABELS } from '@/lib/constants/food';
+import { PostSaveRecommendation } from './post-save-recommendation';
+import { useSubscription } from '@/features/subscription/hooks/use-subscription';
+import { LocalizedLink } from '@/components/common/localized-link';
 import type { DailySummary } from '@/types/food';
 
 /* ─── 工具函数 ─── */
@@ -100,9 +103,18 @@ interface SavedImpactProps {
   onReset: () => void;
   onGoHome: () => void;
   onGoToPlan: () => void;
+  onGoToCoach?: () => void;
 }
 
-export function SavedImpact({ mealType, onReset, onGoHome, onGoToPlan }: SavedImpactProps) {
+export function SavedImpact({
+  mealType,
+  onReset,
+  onGoHome,
+  onGoToPlan,
+  onGoToCoach,
+}: SavedImpactProps) {
+  const { isFree } = useSubscription();
+
   // 保存后立即拉取最新 summary（不使用缓存）
   const { data: summary, isLoading } = useQuery({
     queryKey: ['summary', 'today', 'post-save'],
@@ -235,6 +247,65 @@ export function SavedImpact({ mealType, onReset, onGoHome, onGoToPlan }: SavedIm
             </p>
           ))}
         </div>
+      )}
+
+      {/* 下一餐 AI 推荐（消除 "保存→结束" 死胡同） */}
+      <PostSaveRecommendation />
+
+      {/* 免费用户：保存后升级引导 — 强调趋势分析&周报价值 */}
+      {isFree && (
+        <div className="bg-card border border-border rounded-2xl p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-violet-500/20 flex items-center justify-center shrink-0">
+            <svg
+              className="w-5 h-5 text-primary"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+              />
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-bold">坚持记录，升级查看趋势报告</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Pro 用户可查看周报月报、健康趋势和完整历史
+            </p>
+          </div>
+          <LocalizedLink
+            href="/pricing"
+            className="text-xs text-primary font-bold shrink-0 px-3 py-1.5 rounded-full bg-primary/10 hover:bg-primary/20 transition-colors"
+          >
+            了解更多
+          </LocalizedLink>
+        </div>
+      )}
+
+      {/* 分析→教练无缝衔接 */}
+      {onGoToCoach && (
+        <button
+          onClick={onGoToCoach}
+          className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-card border border-border text-sm font-medium text-foreground hover:bg-muted active:scale-[0.98] transition-all"
+        >
+          <svg
+            className="w-4 h-4 text-primary"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
+            />
+          </svg>
+          咨询 AI 教练：下一餐怎么搭配？
+        </button>
       )}
 
       {/* 操作按钮 */}

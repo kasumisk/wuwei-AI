@@ -156,7 +156,7 @@ const ALL_FIELDS: { value: EnrichableField; label: string; group: string }[] = [
   // V8.0: 扩展属性（Stage 5）
   { value: 'food_form', label: '食物形态', group: '扩展属性' },
   { value: 'dish_priority', label: '菜品优先级', group: '扩展属性' },
-  { value: 'popularity_score', label: '大众化评分', group: '扩展属性' },
+  { value: 'popularity_score', label: '流行度评分', group: '扩展属性' },
   { value: 'acquisition_difficulty', label: '获取难度', group: '扩展属性' },
   { value: 'texture', label: '口感质地', group: '扩展属性' },
   { value: 'taste_profile', label: '味道档案', group: '扩展属性' },
@@ -522,9 +522,10 @@ const EnrichmentPage: React.FC = () => {
       key: 'fields',
       render: (_, r) => {
         const proposed = r.changes?.proposedValues ?? {};
-        const entries = Object.entries(proposed)
-          .filter(([k, v]) => k !== 'confidence' && k !== 'reasoning' && v != null)
-          .slice(0, 5);
+        const validEntries = Object.entries(proposed)
+          .filter(([k, v]) => k !== 'confidence' && k !== 'reasoning' && v != null);
+        const entries = validEntries.slice(0, 5);
+        const overflow = validEntries.length - 5;
         return (
           <Space wrap size={2}>
             {entries.map(([k, v]) => (
@@ -537,9 +538,7 @@ const EnrichmentPage: React.FC = () => {
                 </Tag>
               </Tooltip>
             ))}
-            {Object.keys(proposed).filter(
-              (k) => k !== 'confidence' && k !== 'reasoning' && proposed[k] != null
-            ).length > 5 && <Tag>+{Object.keys(proposed).length - 7}</Tag>}
+            {overflow > 0 && <Tag>+{overflow}</Tag>}
           </Space>
         );
       },

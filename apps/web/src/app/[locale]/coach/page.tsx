@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { useToast } from '@/lib/hooks/use-toast';
 import { useQueryClient } from '@tanstack/react-query';
@@ -45,6 +45,7 @@ interface ChatMessage {
 
 export default function CoachPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { isLoggedIn } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -96,6 +97,19 @@ export default function CoachPage() {
       router.push('/login');
     }
   }, [isLoggedIn, router]);
+
+  // 从分析页跳转过来时自动发送预填问题（?q=...）
+  const autoSentRef = useRef(false);
+  useEffect(() => {
+    const q = searchParams.get('q');
+    if (q && !autoSentRef.current && !loadingGreeting && isLoggedIn) {
+      autoSentRef.current = true;
+      // 延迟一帧确保状态就绪
+      requestAnimationFrame(() => {
+        handleSend(q);
+      });
+    }
+  }, [searchParams, loadingGreeting, isLoggedIn]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 发送消息
   const handleSend = useCallback(

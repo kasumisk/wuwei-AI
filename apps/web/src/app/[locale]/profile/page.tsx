@@ -6,6 +6,9 @@ import { useAuth } from '@/features/auth/hooks/use-auth';
 import { useProfile } from '@/features/profile/hooks/use-profile';
 import { useSubscription } from '@/features/subscription/hooks/use-subscription';
 import { LocalizedLink } from '@/components/common/localized-link';
+import { ProfileCompletionBar } from '@/features/profile/components/profile-completion-bar';
+import { RecommendationPreferences } from '@/features/profile/components/recommendation-preferences';
+import { FeedbackStatsCard } from '@/features/profile/components/feedback-stats-card';
 import { GOAL_LABELS_EMOJI } from '@/lib/constants/food';
 import type { BehaviorProfile } from '@/types/user';
 
@@ -146,6 +149,9 @@ export default function ProfilePage() {
           </div>
         )}
 
+        {/* 画像完成度进度条 */}
+        <ProfileCompletionBar />
+
         {/* 饮食数据 */}
         {behaviorProfile && (
           <div className="bg-card rounded-2xl p-4 grid grid-cols-4 gap-2">
@@ -172,6 +178,12 @@ export default function ProfilePage() {
 
         {/* AI 行为洞察 */}
         <BehaviorInsightCard behaviorProfile={behaviorProfile} />
+
+        {/* 推荐偏好设置 */}
+        <RecommendationPreferences />
+
+        {/* 反馈统计 */}
+        <FeedbackStatsCard />
 
         {/* 菜单列表 */}
         <div className="bg-card rounded-2xl overflow-hidden divide-y divide-border/40">
@@ -209,6 +221,20 @@ export default function ProfilePage() {
               <div>
                 <p className="text-sm font-bold">挑战任务</p>
                 <p className="text-xs text-muted-foreground mt-0.5">完成挑战赢取成就徽章</p>
+              </div>
+            </div>
+            <ChevronRight />
+          </LocalizedLink>
+
+          <LocalizedLink
+            href="/recipes"
+            className="flex items-center justify-between px-5 py-4 hover:bg-muted/50 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-xl">🍳</span>
+              <div>
+                <p className="text-sm font-bold">菜谱库</p>
+                <p className="text-xs text-muted-foreground mt-0.5">浏览和搜索健康菜谱</p>
               </div>
             </div>
             <ChevronRight />

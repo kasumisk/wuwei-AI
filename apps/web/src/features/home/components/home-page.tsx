@@ -11,6 +11,9 @@ import { MealRecordCard } from './meal-record-card';
 import { GoalTransitionCard } from './goal-transition-card';
 import { NutritionScoreCard } from './nutrition-score-card';
 import { WeeklyTrendCard } from './weekly-trend-card';
+import { QuickActionBar } from './quick-action-bar';
+import { FrequentFoodSheet } from './frequent-food-sheet';
+import { ProfileCollectionCard } from './profile-collection-card';
 import { CompletionPrompt } from '@/features/profile/components/completion-prompt';
 import { useUnreadCount } from '@/features/notification/hooks/use-notifications';
 import { MEAL_LABELS } from '@/lib/constants/food';
@@ -66,6 +69,8 @@ export function HomePage() {
   const [dismissedReminder, setDismissedReminder] = useState(false);
   const [dismissedCompletion, setDismissedCompletion] = useState(false);
   const [dismissedGoalTransition, setDismissedGoalTransition] = useState(false);
+  const [dismissedCollectionCard, setDismissedCollectionCard] = useState(false);
+  const [frequentSheetOpen, setFrequentSheetOpen] = useState(false);
   const { data: unreadData } = useUnreadCount(isLoggedIn);
   const unreadCount = unreadData?.unreadCount ?? 0;
 
@@ -174,28 +179,24 @@ export function HomePage() {
               <CompletionPrompt onDismiss={() => setDismissedCompletion(true)} />
             )}
 
+            {/* 画像收集引导（非侵入式） */}
+            {!dismissedCollectionCard && (
+              <ProfileCollectionCard onDismiss={() => setDismissedCollectionCard(true)} />
+            )}
+
             {/* AI 目标迁移建议 */}
             {!dismissedGoalTransition && (
               <GoalTransitionCard onDismiss={() => setDismissedGoalTransition(true)} />
             )}
 
-            {/* 核心入口：双按钮 */}
-            <section className="grid grid-cols-2 gap-4 mb-6">
-              <LocalizedLink
-                href="/analyze"
-                className="bg-primary text-primary-foreground rounded-2xl p-5 flex flex-col items-center gap-3 active:scale-[0.97] transition-all shadow-lg shadow-primary/20"
-              >
-                <IconCamera className="w-8 h-8" />
-                <span className="font-bold text-sm">AI 食物分析</span>
-              </LocalizedLink>
-              <LocalizedLink
-                href="/foods"
-                className="bg-card border border-(--color-outline-variant)/20 rounded-2xl p-5 flex flex-col items-center gap-3 active:scale-[0.97] transition-all shadow-sm"
-              >
-                <IconSearch className="w-8 h-8 text-primary" />
-                <span className="font-bold text-sm">食物库搜索</span>
-              </LocalizedLink>
-            </section>
+            {/* 快速记录入口：4入口操作栏 */}
+            <QuickActionBar onFrequentClick={() => setFrequentSheetOpen(true)} />
+
+            {/* 常吃食物底部Sheet */}
+            <FrequentFoodSheet
+              open={frequentSheetOpen}
+              onClose={() => setFrequentSheetOpen(false)}
+            />
 
             {/* V3: 主动提醒 */}
             {reminder && !dismissedReminder && (
@@ -235,8 +236,8 @@ function NextMealHint({
 
   return (
     <section className="mb-6">
-      <LocalizedLink href="/plan" className="block group">
-        <div className="bg-card rounded-2xl p-4 border border-(--color-outline-variant)/10 active:scale-[0.99] transition-all">
+      <div className="bg-card rounded-2xl p-4 border border-(--color-outline-variant)/10">
+        <LocalizedLink href="/plan" className="block group">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-bold flex items-center gap-1.5">
               <span className="text-primary">AI</span> {label}建议
@@ -265,8 +266,15 @@ function NextMealHint({
               {suggestion.suggestion.tip}
             </p>
           )}
-        </div>
-      </LocalizedLink>
+        </LocalizedLink>
+        {/* 关联菜谱 */}
+        <LocalizedLink
+          href={`/recipes?q=${encodeURIComponent(suggestion.suggestion.foods.split('、')[0].split('，')[0].trim())}`}
+          className="inline-flex items-center gap-1 mt-2 text-[11px] text-primary font-medium hover:opacity-80 transition-opacity"
+        >
+          🍳 查看相关菜谱
+        </LocalizedLink>
+      </div>
     </section>
   );
 }

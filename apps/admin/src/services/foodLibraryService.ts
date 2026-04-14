@@ -72,7 +72,7 @@ export interface FoodLibraryDto {
   // 烹饪 & 风味
   cuisine?: string;
   cookingMethods?: string[];
-  flavrorProfile?: Record<string, any>;
+  flavorProfile?: Record<string, any>;
   textureTags?: string[];
   dishType?: string;
   servingTemperature?: string;

@@ -220,7 +220,7 @@ export class FoodLibraryManagementService {
          f.standard_serving_g, f.standard_serving_desc, f.common_portions,
          -- 烹饪与风味
          f.cuisine, f.flavor_profile,
-         f.cooking_method, f.cooking_methods,
+         f.cooking_methods,
          f.required_equipment, f.serving_temperature,
          f.texture_tags, f.dish_type,
          f.prep_time_minutes, f.cook_time_minutes, f.skill_required,

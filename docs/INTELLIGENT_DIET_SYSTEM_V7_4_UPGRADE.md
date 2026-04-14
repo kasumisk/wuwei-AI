@@ -1,3 +1,5 @@
+# 智能饮食推荐系统 V7.4 升级方案
+
 # Intelligent Diet Recommendation System V7.4 升级方案
 
 > 主题：**事件驱动画像 + 策略引擎 + 持久化学习 + 食物数据增强 + 精细化营养**

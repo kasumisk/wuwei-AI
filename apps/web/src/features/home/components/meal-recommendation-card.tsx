@@ -4,6 +4,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { usePlanAdjust } from '@/features/home/hooks/use-plan-adjust';
 import { foodPlanService } from '@/lib/api/food-plan';
 import { useToast } from '@/lib/hooks/use-toast';
+import { LocalizedLink } from '@/components/common/localized-link';
 import { MEAL_LABELS, GOAL_LABELS } from '@/lib/constants/food';
 import type { MealSuggestion, DailySummary } from '@/types/food';
 import type { UserProfile } from '@/types/user';
@@ -193,6 +194,14 @@ export function MealRecommendationCard({
               </span>
               <span className="text-xs text-muted-foreground">💡 {currentContent.tip}</span>
             </div>
+            {/* 关联菜谱入口 */}
+            <LocalizedLink
+              href={`/recipes?q=${encodeURIComponent(currentContent.foods.split('、')[0].split('，')[0].trim())}`}
+              className="mt-2 flex items-center gap-1 text-xs text-primary font-medium hover:opacity-80 transition-opacity"
+            >
+              <span>🍳</span>
+              <span className="underline underline-offset-2">查看相关菜谱</span>
+            </LocalizedLink>
           </>
         )}
 

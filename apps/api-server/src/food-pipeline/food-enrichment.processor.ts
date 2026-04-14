@@ -1,5 +1,5 @@
 /**
- * V8.2 Food Enrichment Processor（BullMQ Worker）
+ * V8.7 Food Enrichment Processor（BullMQ Worker）
  *
  * 消费 food-enrichment 队列任务：
  *  - target=foods:        补全主表字段（5阶段分阶段模式）
@@ -8,10 +8,15 @@
  *
  * V7.9 新增：
  *  - stages 参数：指定 1-5 阶段编号，走分阶段补全流程（enrichFoodByStage）
- *  - 分阶段结果各阶段独立入库/staging，前阶段结果作为后阶段上下文
  *
  * V8.2 变更：
  *  - 无 stages 参数时默认走全部5阶段补全（不再使用旧版整体补全）
+ *
+ * V8.7 变更（FIX）：
+ *  - processFoodsByStage 改为将所有阶段结果合并后一次性写入（一条 change_log），
+ *    彻底解决"每阶段写一条导致单食物多条历史记录"问题。
+ *    与 enrichFoodNow / batchEnrichByStage 逻辑保持一致。
+ *  - 补全完成后显式更新 enrichment_status（依据最终 data_completeness）。
  *
  * staged=true 时 AI 结果先写入 change_logs 待人工审核（action=ai_enrichment_staged），
  * staged=false 或 confidence >= 0.7 时直接入库。
@@ -78,8 +83,12 @@ export class FoodEnrichmentProcessor extends WorkerHost {
     }
   }
 
-  // ─── V7.9: 分阶段补全（核心新增）──────────────────────────────────────
+  // ─── V7.9/V8.7: 分阶段补全（V8.7: 合并后单次写入）──────────────────────
 
+  /**
+   * V8.7 FIX: 将所有阶段结果合并后一次性调用 applyEnrichment 或 stageEnrichment，
+   * 每个食物只产生一条 change_log，彻底解决"每阶段写一条"的历史记录重复问题。
+   */
   private async processFoodsByStage(
     foodId: string,
     stages: number[],
@@ -96,46 +105,76 @@ export class FoodEnrichmentProcessor extends WorkerHost {
       return;
     }
 
-    // 逐阶段入库
-    for (const stageResult of multiResult.stages) {
-      if (!stageResult.result || stageResult.enrichedFields.length === 0) {
-        continue;
-      }
+    // ── 将所有阶段结果合并为一个 merged result ──────────────────────────
+    const mergedFields: Record<string, any> = {};
+    const mergedFieldConfidence: Record<string, number> = {};
+    let anyStaged = false;
 
-      const shouldStage = this.enrichmentService.shouldStage(
-        stageResult.result,
-        staged,
+    for (const sr of multiResult.stages) {
+      if (!sr.result) continue;
+      // 若任一阶段置信度低于阈值，则整体进 staged
+      if (this.enrichmentService.shouldStage(sr.result, staged)) {
+        anyStaged = true;
+      }
+      for (const [k, v] of Object.entries(sr.result)) {
+        if (k === 'confidence' || k === 'reasoning' || k === 'fieldConfidence')
+          continue;
+        if (v !== null && v !== undefined && !(k in mergedFields)) {
+          mergedFields[k] = v;
+        }
+      }
+      const fc = sr.result.fieldConfidence ?? {};
+      for (const [k, v] of Object.entries(fc)) {
+        if (!(k in mergedFieldConfidence)) mergedFieldConfidence[k] = v as number;
+      }
+    }
+
+    if (Object.keys(mergedFields).length === 0) {
+      this.logger.log(
+        `分阶段补全无新字段: foodId=${foodId}, 总失败=${multiResult.totalFailed}`,
       );
+      return;
+    }
 
-      if (shouldStage) {
-        const logId = await this.enrichmentService.stageEnrichment(
-          foodId,
-          stageResult.result,
-          'foods',
-          undefined,
-          undefined,
-          `ai_enrichment_worker_stage${stageResult.stage}`,
-        );
-        this.logger.log(
-          `Staged（阶段${stageResult.stage}/${stageResult.stageName}）` +
-            `foodId=${foodId}, logId=${logId}, ` +
-            `confidence=${stageResult.result.confidence}, ` +
-            `fallback=${stageResult.usedFallback}`,
-        );
-      } else {
-        const { updated, skipped } =
-          await this.enrichmentService.applyEnrichment(
-            foodId,
-            stageResult.result,
-            `ai_enrichment_worker_stage${stageResult.stage}`,
-          );
-        this.logger.log(
-          `直接入库（阶段${stageResult.stage}/${stageResult.stageName}）` +
-            `foodId=${foodId}, updated=[${updated.join(',')}], ` +
-            `skipped=[${skipped.join(',')}], ` +
-            `fallback=${stageResult.usedFallback}`,
-        );
-      }
+    const mergedResult = {
+      ...mergedFields,
+      confidence: multiResult.overallConfidence,
+      reasoning:
+        multiResult.stages
+          .map((s) => s.result?.reasoning)
+          .filter(Boolean)
+          .join(' | ') || undefined,
+      fieldConfidence:
+        Object.keys(mergedFieldConfidence).length > 0
+          ? mergedFieldConfidence
+          : undefined,
+    };
+
+    // ── 一次性写入（一条 change_log）────────────────────────────────────
+    if (anyStaged) {
+      const logId = await this.enrichmentService.stageEnrichment(
+        foodId,
+        mergedResult,
+        'foods',
+        undefined,
+        undefined,
+        'ai_enrichment_worker',
+      );
+      this.logger.log(
+        `Staged（合并全阶段）foodId=${foodId}, logId=${logId}, ` +
+          `confidence=${multiResult.overallConfidence}, ` +
+          `mergedFields=${Object.keys(mergedFields).length}`,
+      );
+    } else {
+      const { updated, skipped } = await this.enrichmentService.applyEnrichment(
+        foodId,
+        mergedResult,
+        'ai_enrichment_worker',
+      );
+      this.logger.log(
+        `直接入库（合并全阶段）foodId=${foodId}, ` +
+          `updated=[${updated.join(',')}], skipped=[${skipped.join(',')}]`,
+      );
     }
 
     this.logger.log(

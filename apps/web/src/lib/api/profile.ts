@@ -7,7 +7,13 @@
 
 import { clientGet, clientPut, clientPost } from './client-api';
 import type { ApiResponse } from './http-client';
-import type { UserProfile, BehaviorProfile } from '@/types/user';
+import type {
+  UserProfile,
+  BehaviorProfile,
+  CollectionReminder,
+  RecommendationPreferences,
+  UpdateRecommendationPreferencesDto,
+} from '@/types/user';
 
 async function unwrap<T>(promise: Promise<ApiResponse<T>>): Promise<T> {
   const res = await promise;
@@ -77,5 +83,26 @@ export const profileService = {
     impact: string;
   } | null> => {
     return unwrap(clientGet('/app/user-profile/goal-transition'));
+  },
+
+  /** 获取画像收集提醒（打开首页时调用） */
+  getCollectionTriggers: async (): Promise<CollectionReminder[]> => {
+    return unwrap(clientGet<CollectionReminder[]>('/app/user-profile/collection-triggers'));
+  },
+
+  /** 获取推荐偏好设置 */
+  getRecommendationPreferences: async (): Promise<RecommendationPreferences> => {
+    return unwrap(
+      clientGet<RecommendationPreferences>('/app/user-profile/recommendation-preferences')
+    );
+  },
+
+  /** 更新推荐偏好设置 */
+  updateRecommendationPreferences: async (
+    data: UpdateRecommendationPreferencesDto
+  ): Promise<RecommendationPreferences> => {
+    return unwrap(
+      clientPut<RecommendationPreferences>('/app/user-profile/recommendation-preferences', data)
+    );
   },
 };

@@ -1,19 +1,23 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { useFoodAnalysis } from '@/features/food-analysis/hooks/use-food-analysis';
 import { useToast } from '@/lib/hooks/use-toast';
 import { useSubscription } from '@/features/subscription/hooks/use-subscription';
 import { handlePaywallError } from '@/features/subscription/hooks/use-subscription';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { foodLibraryClientAPI } from '@/lib/api/food-library';
 import { DecisionCard } from './decision-card';
 import { SavedImpact } from './saved-impact';
+import { InputTabs, type InputTabType } from './input-tabs';
+import { FrequentInput } from './frequent-input';
+import { SearchInput } from './search-input';
 import { LocalizedLink } from '@/components/common/localized-link';
 import type { AnalysisResult, FoodItem } from '@/types/food';
 
 type MealTypeOption = 'breakfast' | 'lunch' | 'dinner' | 'snack';
-type InputMode = 'image' | 'text';
 type Step = 'upload' | 'analyzing' | 'result' | 'saved';
 
 const mealTypeLabels: Record<MealTypeOption, string> = {
@@ -28,6 +32,7 @@ const ANALYZE_TIMEOUT_MS = 30_000; // 30秒超时
 
 export function AnalyzePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { isLoggedIn } = useAuth();
   const {
     analyzeImage,
@@ -42,9 +47,14 @@ export function AnalyzePage() {
   const { isFree } = useSubscription();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const analyzeAbortRef = useRef(false);
+  const queryClient = useQueryClient();
 
   const [step, setStep] = useState<Step>('upload');
-  const [inputMode, setInputMode] = useState<InputMode>('image');
+  const [inputMode, setInputMode] = useState<InputTabType>(() => {
+    const tab = searchParams.get('tab');
+    if (tab === 'image' || tab === 'text' || tab === 'frequent' || tab === 'search') return tab;
+    return 'image';
+  });
   const [mealType, setMealType] = useState<MealTypeOption>('lunch');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -169,6 +179,48 @@ export function AnalyzePage() {
     }
   }, [textInput, mealType, analyzeText, toast]);
 
+  // ── 从食物库/常吃直接添加记录 ──
+  const addFromLibraryMutation = useMutation({
+    mutationFn: ({
+      foodId,
+      servingGrams,
+    }: {
+      foodId: string;
+      name: string;
+      servingGrams: number;
+    }) => foodLibraryClientAPI.addFromLibrary(foodId, servingGrams, mealType),
+    onSuccess: (_data, variables) => {
+      // Invalidate relevant queries
+      queryClient.invalidateQueries({ queryKey: ['records'] });
+      queryClient.invalidateQueries({ queryKey: ['summary'] });
+      queryClient.invalidateQueries({ queryKey: ['nutrition-score'] });
+      queryClient.invalidateQueries({ queryKey: ['meal-suggestion'] });
+      queryClient.invalidateQueries({ queryKey: ['daily-plan'] });
+      toast({ title: `已将「${variables.name}」记录到${mealTypeLabels[mealType]}` });
+    },
+    onError: (err) => {
+      // 检查是否是 paywall 错误
+      if (
+        err &&
+        typeof err === 'object' &&
+        handlePaywallError(err as unknown as Record<string, unknown>)
+      ) {
+        return;
+      }
+      toast({
+        title: err instanceof Error ? err.message : '添加失败',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const handleAddFromLibrary = useCallback(
+    (foodId: string, name: string, servingGrams: number) => {
+      addFromLibraryMutation.mutate({ foodId, name, servingGrams });
+    },
+    [addFromLibraryMutation]
+  );
+
   // ── 保存（优先使用 saveAnalysis 简化接口） ──
   const handleSave = useCallback(async () => {
     if (!result) return;
@@ -233,16 +285,17 @@ export function AnalyzePage() {
 
   // ── Tab 切换 ──
   const handleSwitchMode = useCallback(
-    (mode: InputMode) => {
+    (mode: InputTabType) => {
       if (step !== 'upload') return; // 分析中/结果中不允许切换
       setInputMode(mode);
-      // 清除另一个模式的状态
-      if (mode === 'text') {
+      // 清除之前模式的状态
+      if (mode !== 'image') {
         if (previewUrl) URL.revokeObjectURL(previewUrl);
         setPreviewUrl(null);
         setSelectedFile(null);
         if (fileInputRef.current) fileInputRef.current.value = '';
-      } else {
+      }
+      if (mode !== 'text') {
         setTextInput('');
       }
     },
@@ -290,38 +343,11 @@ export function AnalyzePage() {
       </nav>
 
       <main className="px-6 py-6 max-w-lg mx-auto pb-32">
-        {/* Step 1: Upload / Text Input */}
+        {/* Step 1: Upload / Text / Frequent / Search Input */}
         {step === 'upload' && (
           <div className="space-y-5">
-            {/* Input Mode Tabs */}
-            <div className="flex bg-muted rounded-xl p-1">
-              <button
-                onClick={() => handleSwitchMode('image')}
-                className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-1.5 ${
-                  inputMode === 'image'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground'
-                }`}
-              >
-                <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
-                  <path d="M3 4V1h2v3h3v2H5v3H3V6H0V4h3zm3 6V7h3V4h7l1.83 2H21c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H5c-1.1 0-2-.9-2-2V10h3zm7 9c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-3.2-5c0 1.77 1.43 3.2 3.2 3.2s3.2-1.43 3.2-3.2-1.43-3.2-3.2-3.2-3.2 1.43-3.2 3.2z" />
-                </svg>
-                拍照/上传
-              </button>
-              <button
-                onClick={() => handleSwitchMode('text')}
-                className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-1.5 ${
-                  inputMode === 'text'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground'
-                }`}
-              >
-                <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
-                  <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 0 0 0-1.41l-2.34-2.34a.996.996 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
-                </svg>
-                文字描述
-              </button>
-            </div>
+            {/* Input Mode Tabs — 4 tabs */}
+            <InputTabs activeTab={inputMode} onTabChange={handleSwitchMode} />
 
             {/* Meal type selector */}
             <div className="flex gap-2">
@@ -342,22 +368,29 @@ export function AnalyzePage() {
               )}
             </div>
 
-            {/* 免费用户提示 */}
-            {isFree && (
-              <div className="bg-primary/5 border border-primary/10 rounded-xl px-4 py-2.5 flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">
-                  免费版：图片分析 3次/天，文字分析 20次/天
-                </span>
-                <LocalizedLink
-                  href="/pricing"
-                  className="text-xs text-primary font-bold shrink-0 ml-2"
-                >
-                  升级
-                </LocalizedLink>
+            {/* 免费用户提示 — 仅在 AI 模式(image/text)下显示 */}
+            {isFree && (inputMode === 'image' || inputMode === 'text') && (
+              <div className="bg-gradient-to-r from-primary/5 to-primary/10 border border-primary/15 rounded-xl px-4 py-3 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-foreground">
+                    {inputMode === 'image' ? '📸 图片分析' : '✏️ 文字分析'}
+                  </span>
+                  <LocalizedLink
+                    href="/pricing"
+                    className="text-xs text-primary font-bold shrink-0 px-3 py-1 rounded-full bg-primary/10 hover:bg-primary/20 transition-colors"
+                  >
+                    升级解锁更多
+                  </LocalizedLink>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  {inputMode === 'image'
+                    ? '免费版每天 3 次图片分析 · 升级 Pro 可达 20 次/天'
+                    : '免费版每天 20 次文字分析 · 升级 Pro 无限制'}
+                </p>
               </div>
             )}
 
-            {/* Image Upload Mode */}
+            {/* ═══ Image Upload Mode ═══ */}
             {inputMode === 'image' && (
               <>
                 <div
@@ -429,7 +462,7 @@ export function AnalyzePage() {
               </>
             )}
 
-            {/* Text Input Mode */}
+            {/* ═══ Text Input Mode ═══ */}
             {inputMode === 'text' && (
               <>
                 <div className="bg-card rounded-2xl p-4 space-y-3">
@@ -490,6 +523,24 @@ export function AnalyzePage() {
                   )}
                 </button>
               </>
+            )}
+
+            {/* ═══ Frequent Foods Mode ═══ */}
+            {inputMode === 'frequent' && (
+              <FrequentInput
+                mealType={mealType}
+                onAddFromLibrary={handleAddFromLibrary}
+                isAdding={addFromLibraryMutation.isPending}
+              />
+            )}
+
+            {/* ═══ Food Library Search Mode ═══ */}
+            {inputMode === 'search' && (
+              <SearchInput
+                mealType={mealType}
+                onAddFromLibrary={handleAddFromLibrary}
+                isAdding={addFromLibraryMutation.isPending}
+              />
             )}
           </div>
         )}
@@ -559,6 +610,76 @@ export function AnalyzePage() {
 
             <DecisionCard result={result} />
 
+            {/* 免费用户：结果页 contextual CTA — 提示升级可获得更精准分析 */}
+            {isFree && (
+              <div className="bg-gradient-to-br from-primary/5 via-primary/8 to-violet-500/5 border border-primary/15 rounded-2xl p-4 space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                    <svg
+                      className="w-5 h-5 text-primary"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+                      />
+                    </svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-foreground">解锁完整分析</p>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                      升级可获得深度营养评分、个性化替代方案和更精准的宏量素分析
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <svg className="w-3 h-3 text-primary" fill="currentColor" viewBox="0 0 20 20">
+                      <path
+                        fillRule="evenodd"
+                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                    深度营养评分
+                  </span>
+                  <span className="text-border">·</span>
+                  <span className="flex items-center gap-1">
+                    <svg className="w-3 h-3 text-primary" fill="currentColor" viewBox="0 0 20 20">
+                      <path
+                        fillRule="evenodd"
+                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                    替代方案
+                  </span>
+                  <span className="text-border">·</span>
+                  <span className="flex items-center gap-1">
+                    <svg className="w-3 h-3 text-primary" fill="currentColor" viewBox="0 0 20 20">
+                      <path
+                        fillRule="evenodd"
+                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                    数据导出
+                  </span>
+                </div>
+                <LocalizedLink
+                  href="/pricing"
+                  className="block w-full text-center bg-primary text-primary-foreground text-sm font-bold py-2.5 rounded-xl active:scale-[0.98] transition-all shadow-sm"
+                  asButton
+                >
+                  查看升级方案 · Pro ¥19.9/月起
+                </LocalizedLink>
+              </div>
+            )}
+
             <div className="space-y-3">
               <h3 className="font-bold text-sm px-1">识别的食物（点击 x 可删除）</h3>
               {editedFoods.map((food, i) => (
@@ -600,6 +721,33 @@ export function AnalyzePage() {
                 {saving ? '保存中...' : '确认保存'}
               </button>
             </div>
+
+            {/* 分析→教练无缝衔接 */}
+            <button
+              onClick={() => {
+                const foodNames = editedFoods.map((f) => f.name).join('、');
+                const coachQuery = encodeURIComponent(
+                  `我刚分析了一餐${mealTypeLabels[mealType]}，包含${foodNames}，共${editedTotal}kcal。${result.decision ? `AI判定为「${result.decision}」。` : ''}请给我针对性的饮食建议。`
+                );
+                router.push(`/coach?q=${coachQuery}`);
+              }}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-card border border-border text-sm font-medium text-foreground hover:bg-muted active:scale-[0.98] transition-all"
+            >
+              <svg
+                className="w-4 h-4 text-primary"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
+                />
+              </svg>
+              问 AI 教练：这餐怎么吃更好？
+            </button>
           </div>
         )}
 
@@ -610,6 +758,12 @@ export function AnalyzePage() {
             onReset={handleReset}
             onGoHome={() => router.push('/')}
             onGoToPlan={() => router.push('/plan')}
+            onGoToCoach={() => {
+              const coachQuery = encodeURIComponent(
+                `我刚记录了${mealTypeLabels[mealType]}，请根据我今天的饮食数据，给我下一餐的搭配建议。`
+              );
+              router.push(`/coach?q=${coachQuery}`);
+            }}
           />
         )}
       </main>

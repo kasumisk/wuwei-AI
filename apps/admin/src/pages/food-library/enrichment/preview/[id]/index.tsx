@@ -12,7 +12,6 @@ import {
   Table,
   Tooltip,
   Badge,
-  message,
   Popconfirm,
 } from 'antd';
 import {
@@ -31,6 +30,7 @@ import {
   useRejectStaged,
   type EnrichmentFieldDiff,
 } from '@/services/foodPipelineService';
+import globalMessage from '@/utils/message';
 
 const { Text, Title } = Typography;
 
@@ -74,24 +74,26 @@ const EnrichmentPreviewPage: React.FC = () => {
 
   const approveMutation = useApproveStaged({
     onSuccess: () => {
-      message.success('审核通过，数据已入库');
+      globalMessage.success('审核通过，数据已入库');
       navigate('/food-library/enrichment');
     },
-    onError: (e) => message.error(e.message),
+    onError: (e) => globalMessage.error(e.message),
   });
 
   const rejectMutation = useRejectStaged({
     onSuccess: () => {
-      message.success('已拒绝');
+      globalMessage.success('已拒绝');
       navigate('/food-library/enrichment');
     },
-    onError: (e) => message.error(e.message),
+    onError: (e) => globalMessage.error(e.message),
   });
 
   if (isLoading) {
     return (
       <div style={{ textAlign: 'center', padding: 80 }}>
-        <Spin size="large" tip="加载预览数据..." />
+        <Spin size="large" tip="加载预览数据...">
+          <div style={{ padding: 50 }} />
+        </Spin>
       </div>
     );
   }

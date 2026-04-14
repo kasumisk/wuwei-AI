@@ -114,11 +114,30 @@ export function HistoryPage() {
           ))}
         </div>
 
-        {/* Loading State */}
+        {/* Loading State — Skeleton */}
         {isLoading && (
-          <div className="flex flex-col items-center justify-center py-20 gap-4">
-            <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-            <p className="text-sm text-muted-foreground">加载中...</p>
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="bg-card rounded-xl p-4 space-y-3 animate-pulse">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-12 h-5 bg-muted rounded-full" />
+                    <div className="w-8 h-4 bg-muted rounded" />
+                  </div>
+                  <div className="w-16 h-4 bg-muted rounded" />
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 bg-muted rounded w-3/4" />
+                    <div className="flex gap-2">
+                      <div className="w-16 h-4 bg-muted rounded" />
+                      <div className="w-12 h-4 bg-muted rounded" />
+                    </div>
+                  </div>
+                  <div className="w-14 h-7 bg-muted rounded-lg" />
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
@@ -146,39 +165,119 @@ export function HistoryPage() {
                     : '去分析页拍照或输入文字，记录你的饮食'}
               </p>
             </div>
+            <LocalizedLink
+              href="/analyze"
+              className="mt-2 px-6 py-2.5 bg-primary text-primary-foreground text-sm font-bold rounded-full active:scale-[0.97] transition-all shadow-lg shadow-primary/20"
+              asButton
+            >
+              开始记录
+            </LocalizedLink>
           </div>
         )}
 
         {/* History List */}
         {!isLoading && items.length > 0 && (
           <div className="space-y-3">
-            {items.map((item) => (
-              <HistoryItem key={item.id} item={item} />
+            {items.map((item, index) => (
+              <div key={item.id}>
+                <HistoryItem item={item} />
+                {/* 免费用户：第3条后插入 inline CTA */}
+                {isFree && index === 2 && items.length > 3 && (
+                  <div className="mt-3 bg-gradient-to-r from-primary/5 to-violet-500/5 border border-primary/10 rounded-xl p-3.5 flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                      <svg
+                        className="w-4 h-4 text-primary"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+                        />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold">升级查看全部记录和趋势分析</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        跟踪你的饮食进步，发现改善机会
+                      </p>
+                    </div>
+                    <LocalizedLink
+                      href="/pricing"
+                      className="text-xs text-primary font-bold shrink-0 px-3 py-1.5 rounded-full bg-primary/10"
+                    >
+                      升级
+                    </LocalizedLink>
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         )}
 
         {/* 免费用户历史受限提示 */}
         {!isLoading && isFree && total > 0 && (
-          <div className="mt-4 bg-gradient-to-r from-primary/5 to-primary/10 border border-primary/15 rounded-2xl p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-              <svg className="w-5 h-5 text-primary" fill="currentColor" viewBox="0 0 20 20">
-                <path
-                  fillRule="evenodd"
-                  d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z"
-                  clipRule="evenodd"
-                />
-              </svg>
+          <div className="mt-4 bg-gradient-to-r from-primary/5 to-primary/10 border border-primary/15 rounded-2xl p-4 space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-primary" fill="currentColor" viewBox="0 0 20 20">
+                  <path
+                    fillRule="evenodd"
+                    d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold">免费版仅显示最近 3 条记录</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  升级后可查看全部历史、周报月报和饮食趋势
+                </p>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold">免费版仅显示最近 3 条</p>
-              <p className="text-xs text-muted-foreground mt-0.5">升级 Pro 查看全部历史记录</p>
+            <div className="flex items-center gap-2 text-[11px] text-muted-foreground pl-[52px]">
+              <span className="flex items-center gap-1">
+                <svg className="w-3 h-3 text-primary" fill="currentColor" viewBox="0 0 20 20">
+                  <path
+                    fillRule="evenodd"
+                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                完整历史
+              </span>
+              <span className="text-border">·</span>
+              <span className="flex items-center gap-1">
+                <svg className="w-3 h-3 text-primary" fill="currentColor" viewBox="0 0 20 20">
+                  <path
+                    fillRule="evenodd"
+                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                趋势分析
+              </span>
+              <span className="text-border">·</span>
+              <span className="flex items-center gap-1">
+                <svg className="w-3 h-3 text-primary" fill="currentColor" viewBox="0 0 20 20">
+                  <path
+                    fillRule="evenodd"
+                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                数据导出
+              </span>
             </div>
             <LocalizedLink
               href="/pricing"
-              className="px-4 py-2 bg-primary text-primary-foreground text-xs font-bold rounded-full shrink-0 active:scale-[0.97] transition-all"
+              className="block w-full text-center bg-primary text-primary-foreground text-sm font-bold py-2.5 rounded-xl active:scale-[0.97] transition-all"
+              asButton
             >
-              升级
+              升级 Pro · ¥19.9/月
             </LocalizedLink>
           </div>
         )}
