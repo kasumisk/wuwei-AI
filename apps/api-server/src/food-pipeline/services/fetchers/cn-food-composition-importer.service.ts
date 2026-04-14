@@ -408,10 +408,6 @@ export class CnFoodCompositionImporterService {
         sql: `ALTER TABLE "foods" ADD COLUMN IF NOT EXISTS "flavor_profile" JSONB`,
       },
       {
-        name: 'cooking_method',
-        sql: `ALTER TABLE "foods" ADD COLUMN IF NOT EXISTS "cooking_method" VARCHAR(20)`,
-      },
-      {
         name: 'prep_time_minutes',
         sql: `ALTER TABLE "foods" ADD COLUMN IF NOT EXISTS "prep_time_minutes" INT`,
       },

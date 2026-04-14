@@ -77,17 +77,6 @@ export class FoodLibraryManagementController {
     return { success: true, code: HttpStatus.OK, message: '获取成功', data };
   }
 
-  // ==================== V8.1: 增强统计（V8.2: 移到 :id 之前，修复路由不可达） ====================
-
-  @Get('statistics-v81')
-  @ApiOperation({
-    summary: 'V8.1: 获取增强版统计信息（含完整度分布和审核状态计数）',
-  })
-  async getStatisticsV81(): Promise<ApiResponse> {
-    const data = await this.foodLibraryService.getStatisticsV81();
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
-  }
-
   @Get(':id')
   @ApiOperation({ summary: '获取食物详情（含翻译/来源/冲突）' })
   async findOne(@Param('id') id: string): Promise<ApiResponse> {

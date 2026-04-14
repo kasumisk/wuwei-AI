@@ -2,6 +2,16 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../../../core/prisma/prisma.service';
 import { FoodLibrary } from '../../../../food/food.types';
 import {
+  STIR_FRY_GROUP,
+  STEW_GROUP,
+  STEAM_GROUP,
+  ROAST_GROUP,
+  FRY_GROUP,
+  VEGGIE_PREFIX_METHODS,
+  CookingMethodValue,
+} from '../../../../food/cooking-method.constants';
+import { t } from '../utils/i18n-messages';
+import {
   AcquisitionChannel,
   AssembledRecipe,
   RecipeNutrition,
@@ -506,29 +516,32 @@ export class RecipeAssemblerService {
       return protein.food.name;
     }
 
-    const method = protein.food.cookingMethod ?? '';
+    const method = protein.food.cookingMethods?.[0] ?? '';
+    const methodLabel = method
+      ? t(`cooking_method.${method}`, {})
+      : '';
     const proteinName = protein.food.name;
     const veggieName = veggie.food.name;
 
-    // 炒/爆/熘/溜 → "蔬菜 + 方法 + 蛋白"
-    if (['炒', '爆', '熘', '溜'].includes(method)) {
-      return `${veggieName}${method}${proteinName}`;
+    // 翻炒类 → "蔬菜 + 方法 + 蛋白"
+    if (STIR_FRY_GROUP.includes(method as CookingMethodValue)) {
+      return `${veggieName}${methodLabel}${proteinName}`;
     }
-    // 炖/煮/焖/烩 → "蛋白 + 方法 + 蔬菜"
-    if (['炖', '煮', '焖', '烩'].includes(method)) {
-      return `${proteinName}${method}${veggieName}`;
+    // 炖煮类 → "蛋白 + 方法 + 蔬菜"
+    if (STEW_GROUP.includes(method as CookingMethodValue)) {
+      return `${proteinName}${methodLabel}${veggieName}`;
     }
-    // 蒸/清蒸 → "清蒸蛋白配蔬菜"
-    if (['蒸', '清蒸'].includes(method)) {
-      return `清蒸${proteinName}配${veggieName}`;
+    // 蒸类 → "清蒸蛋白配蔬菜"
+    if (STEAM_GROUP.includes(method as CookingMethodValue)) {
+      return `${t('cooking_method.steam', {})}${proteinName}配${veggieName}`;
     }
-    // 烤/烧/焗 → "烤蛋白配蔬菜"
-    if (['烤', '烧', '焗'].includes(method)) {
-      return `${method}${proteinName}配${veggieName}`;
+    // 烤/烧/焗类 → "烤蛋白配蔬菜"
+    if (ROAST_GROUP.includes(method as CookingMethodValue)) {
+      return `${methodLabel}${proteinName}配${veggieName}`;
     }
-    // 煎/炸 → "煎蛋白配蔬菜"
-    if (['煎', '炸'].includes(method)) {
-      return `${method}${proteinName}配${veggieName}`;
+    // 煎/炸类 → "煎蛋白配蔬菜"
+    if (FRY_GROUP.includes(method as CookingMethodValue)) {
+      return `${methodLabel}${proteinName}配${veggieName}`;
     }
     // 通用兜底: "蛋白配蔬菜"
     return `${proteinName}配${veggieName}`;
@@ -545,9 +558,9 @@ export class RecipeAssemblerService {
    * V6.9 Phase 3-D: 生成素菜菜名
    */
   private generateVeggieDishName(veggie: ScoredFood): string {
-    const method = veggie.food.cookingMethod;
-    if (method && ['炒', '拌', '蒸', '烤', '煮'].includes(method)) {
-      return `${method}${veggie.food.name}`;
+    const method = veggie.food.cookingMethods?.[0];
+    if (method && VEGGIE_PREFIX_METHODS.includes(method as CookingMethodValue)) {
+      return `${t(`cooking_method.${method}`, {})}${veggie.food.name}`;
     }
     return veggie.food.name;
   }

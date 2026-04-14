@@ -144,7 +144,6 @@ export interface FoodLibrary {
     umami?: number;
     bitter?: number;
   };
-  cookingMethod?: string;
   prepTimeMinutes?: number;
   cookTimeMinutes?: number;
   skillRequired?: string;
@@ -193,7 +192,7 @@ export interface FoodLibrary {
 
   // ─── V7.1 Phase 1-B: 食物模型现实化扩展 ───
 
-  /** V7.1: 多种可行烹饪方式（扩展单一 cookingMethod，为空时回退到 cookingMethod） */
+  /** V7.1: 多种可行烹饪方式（首元素为主要烹饪方式） */
   cookingMethods?: string[];
   /** V7.1: 所需设备列表（oven, microwave, air_fryer, steamer, wok, none） */
   requiredEquipment?: string[];
@@ -270,7 +269,7 @@ export interface FoodNutritionView {
  * 用于 RealisticFilter、SceneResolver 等需要评估食物可执行性的场景。
  */
 export interface FoodCookingView {
-  cookingMethod: string;
+  cookingMethods: string[];
   prepTimeMinutes: number;
   cookTimeMinutes: number;
   skillRequired: string;
@@ -279,7 +278,6 @@ export interface FoodCookingView {
   isFried: boolean;
   processingLevel: number;
   // V7.1 Phase 1-B: 烹饪视图扩展
-  cookingMethods: string[];
   requiredEquipment: string[];
   servingTemperature: string;
   dishType: string;
@@ -350,7 +348,7 @@ export function extractNutrition(food: FoodLibrary): FoodNutritionView {
  */
 export function extractCooking(food: FoodLibrary): FoodCookingView {
   return {
-    cookingMethod: food.cookingMethod || '',
+    cookingMethods: food.cookingMethods ?? [],
     prepTimeMinutes: Number(food.prepTimeMinutes) || 0,
     cookTimeMinutes: Number(food.cookTimeMinutes) || 0,
     skillRequired: food.skillRequired || 'beginner',
@@ -359,11 +357,6 @@ export function extractCooking(food: FoodLibrary): FoodCookingView {
     isFried: food.isFried,
     processingLevel: food.processingLevel,
     // V7.1: 扩展字段（为空时提供合理默认）
-    cookingMethods: food.cookingMethods?.length
-      ? food.cookingMethods
-      : food.cookingMethod
-        ? [food.cookingMethod]
-        : [],
     requiredEquipment: food.requiredEquipment ?? [],
     servingTemperature: food.servingTemperature ?? 'hot',
     dishType: food.dishType ?? 'dish',
@@ -476,7 +469,7 @@ export const ENRICHMENT_FIELD_LABELS: Record<string, string> = {
   subCategory: '子分类',
   foodGroup: '食物组',
   cuisine: '菜系',
-  cookingMethod: '烹饪方式',
+  cookingMethods: '烹饪方式',
   mealTypes: '适合餐次',
   allergens: '过敏原',
   tags: '标签',
@@ -490,7 +483,6 @@ export const ENRICHMENT_FIELD_LABELS: Record<string, string> = {
   flavorProfile: '风味画像',
   // V8.0: 扩展属性标签
   ingredientList: '食材清单',
-  cookingMethods: '烹饪方式(多选)',
   textureTags: '口感标签',
   dishType: '成品类型',
   prepTimeMinutes: '备料时间',

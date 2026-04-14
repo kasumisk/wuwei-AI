@@ -62,6 +62,7 @@ import {
   useEnrichmentStats,
   useEnrichmentJobs,
   useCleanEnrichmentJobs,
+  useDrainEnrichmentQueue,
   useStagedEnrichments,
   useEnrichmentHistory,
   useApproveStaged,
@@ -134,7 +135,7 @@ const ALL_FIELDS: { value: EnrichableField; label: string; group: string }[] = [
   { value: 'sub_category', label: '二级分类', group: '属性' },
   { value: 'food_group', label: '食物组', group: '属性' },
   { value: 'cuisine', label: '菜系', group: '属性' },
-  { value: 'cooking_method', label: '烹饪方式', group: '属性' },
+  { value: 'cooking_methods', label: '烹饪方式', group: '属性' },
   { value: 'glycemic_index', label: '血糖指数(GI)', group: '属性' },
   { value: 'glycemic_load', label: '血糖负荷(GL)', group: '属性' },
   { value: 'fodmap_level', label: 'FODMAP等级', group: '属性' },
@@ -272,6 +273,15 @@ const EnrichmentPage: React.FC = () => {
       refetchJobs();
     },
     onError: (e) => message.error(`清理失败: ${e.message}`),
+  });
+
+  const drainMutation = useDrainEnrichmentQueue({
+    onSuccess: () => {
+      message.success('已清空 waiting 队列');
+      refetchStats();
+      refetchJobs();
+    },
+    onError: (e) => message.error(`清空失败: ${e.message}`),
   });
 
   const approveMutation = useApproveStaged({
@@ -1255,15 +1265,46 @@ const EnrichmentPage: React.FC = () => {
                         重试失败
                       </Button>
                     </Popconfirm>
+                    <Popconfirm
+                      title="清空 waiting 队列"
+                      description={`将移除所有等待中的任务（当前 ${queueStats?.waiting ?? 0} 个），正在执行的任务不受影响。`}
+                      onConfirm={() => drainMutation.mutate()}
+                      okText="确认清空"
+                      okButtonProps={{ danger: true }}
+                    >
+                      <Button
+                        danger
+                        icon={<DeleteOutlined />}
+                        loading={drainMutation.isPending}
+                        disabled={!queueStats || (queueStats as any).waiting === 0}
+                      >
+                        清空 waiting
+                      </Button>
+                    </Popconfirm>
+                    <Popconfirm
+                      title="清理全部已结束任务"
+                      description="一次性清理所有 completed 和 failed 状态的任务记录。"
+                      onConfirm={() => cleanMutation.mutate({ type: 'all', limit: 9999 } as any)}
+                      okText="确认清理"
+                      okButtonProps={{ danger: true }}
+                    >
+                      <Button danger icon={<DeleteOutlined />} loading={cleanMutation.isPending}>
+                        清理全部
+                      </Button>
+                    </Popconfirm>
                   </Space>
                 }
               >
                 <Table
-                  dataSource={jobs ?? []}
+                  dataSource={jobs?.list ?? []}
                   columns={jobColumns}
                   rowKey="id"
                   size="small"
-                  pagination={{ pageSize: 20, showTotal: (t) => `共 ${t} 条` }}
+                  pagination={{
+                    pageSize: 20,
+                    total: jobs?.total,
+                    showTotal: (t) => `共 ${t} 条`,
+                  }}
                   scroll={{ x: 900 }}
                 />
               </Card>

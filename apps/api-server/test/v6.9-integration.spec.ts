@@ -57,7 +57,7 @@ function createMockFoodLibrary(overrides?: Partial<FoodLibrary>): FoodLibrary {
     popularity: 80,
     commonalityScore: 70,
     availableChannels: ['home_cook', 'restaurant'],
-    cookingMethod: '炒',
+    cookingMethods: ['stir_fry'],
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
@@ -261,7 +261,7 @@ describe('RecipeAssemblerService', () => {
           id: 'p1',
           name: '鸡胸肉',
           category: 'protein',
-          cookingMethod: '炒',
+          cookingMethods: ['stir_fry'],
         }),
       );
       const veggie = createMockScoredFood(
@@ -269,7 +269,7 @@ describe('RecipeAssemblerService', () => {
           id: 'v1',
           name: '西兰花',
           category: 'veggie',
-          cookingMethod: '炒',
+          cookingMethods: ['stir_fry'],
         }),
       );
 
@@ -365,7 +365,7 @@ describe('RecipeAssemblerService', () => {
           id: 'p1',
           name: '牛肉',
           category: 'protein',
-          cookingMethod: '炖',
+          cookingMethods: ['stew'],
         }),
       );
       const veggie = createMockScoredFood(
@@ -425,7 +425,7 @@ describe('RecipeAssemblerService', () => {
             id: 'p1',
             name: '鸡胸肉',
             category: 'protein',
-            cookingMethod: '炒',
+            cookingMethods: ['stir_fry'],
           }),
         ),
         createMockScoredFood(
@@ -433,7 +433,7 @@ describe('RecipeAssemblerService', () => {
             id: 'p2',
             name: '豆腐',
             category: 'protein',
-            cookingMethod: '煮',
+            cookingMethods: ['boil'],
           }),
         ),
       ];
@@ -648,7 +648,7 @@ describe('DailyPlanContextService', () => {
             id: 'f1',
             name: '鸡胸肉',
             category: 'protein',
-            cookingMethod: '炒',
+            cookingMethods: ['stir_fry'],
             mainIngredient: 'chicken',
           }),
         ),
@@ -678,7 +678,7 @@ describe('DailyPlanContextService', () => {
         createMockScoredFood(
           createMockFoodLibrary({
             id: 'f1',
-            cookingMethod: '炒',
+            cookingMethods: ['stir_fry'],
           }),
         ),
       ];
@@ -686,7 +686,7 @@ describe('DailyPlanContextService', () => {
 
       service.updateAfterMeal(state, meal);
 
-      expect(state.cookingMethodCounts['炒']).toBe(1);
+      expect(state.cookingMethodCounts['stir_fry']).toBe(1);
     });
   });
 
@@ -985,7 +985,7 @@ describe('Performance validation', () => {
               id: `m${meal}-f${i}`,
               name: `食物${meal * 5 + i}`,
               category: ['protein', 'grain', 'veggie'][i % 3],
-              cookingMethod: ['炒', '蒸', '煮'][i % 3],
+              cookingMethods: [['stir_fry', 'steam', 'boil'][i % 3]],
               mainIngredient: `ingredient-${i}`,
             }),
           ),

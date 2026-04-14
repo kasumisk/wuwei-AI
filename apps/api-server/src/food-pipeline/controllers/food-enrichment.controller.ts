@@ -173,8 +173,8 @@ export class FoodEnrichmentController {
           delay:
             QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_ENRICHMENT].backoffDelay,
         },
-        removeOnComplete: 200,
-        removeOnFail: 100,
+        removeOnComplete: 1000,
+        removeOnFail: 500,
       },
     }));
 
@@ -196,30 +196,57 @@ export class FoodEnrichmentController {
   // ==================== 队列任务列表 ====================
 
   @Get('jobs')
-  @ApiOperation({ summary: '查看补全队列任务列表' })
+  @ApiOperation({
+    summary: '查看补全队列任务列表（支持分页，返回 total）',
+    description:
+      'limit 默认 20，最大 500。注意：completed/failed 状态受 removeOnComplete/removeOnFail 配置影响，Redis 中仅保留最新的 1000 条；waiting 队列无此限制。',
+  })
   async getJobs(
     @Query('status')
     status?: 'waiting' | 'active' | 'completed' | 'failed' | 'delayed',
     @Query('limit') limit?: number,
     @Query('offset') offset?: number,
   ): Promise<ApiResponse> {
-    const take = Number(limit) || 20;
+    const take = Math.min(Number(limit) || 20, 500);
     const skip = Number(offset) || 0;
 
     let jobs: any[] = [];
-    if (!status || status === 'waiting') {
-      jobs = await this.enrichmentQueue.getWaiting(skip, skip + take - 1);
-    } else if (status === 'active') {
-      jobs = await this.enrichmentQueue.getActive(skip, skip + take - 1);
-    } else if (status === 'completed') {
-      jobs = await this.enrichmentQueue.getCompleted(skip, skip + take - 1);
-    } else if (status === 'failed') {
-      jobs = await this.enrichmentQueue.getFailed(skip, skip + take - 1);
-    } else if (status === 'delayed') {
-      jobs = await this.enrichmentQueue.getDelayed(skip, skip + take - 1);
+    let total = 0;
+
+    try {
+      if (!status || status === 'waiting') {
+        [jobs, total] = await Promise.all([
+          this.enrichmentQueue.getWaiting(skip, skip + take - 1),
+          this.enrichmentQueue.getWaitingCount(),
+        ]);
+      } else if (status === 'active') {
+        [jobs, total] = await Promise.all([
+          this.enrichmentQueue.getActive(skip, skip + take - 1),
+          this.enrichmentQueue.getActiveCount(),
+        ]);
+      } else if (status === 'completed') {
+        [jobs, total] = await Promise.all([
+          this.enrichmentQueue.getCompleted(skip, skip + take - 1),
+          this.enrichmentQueue.getCompletedCount(),
+        ]);
+      } else if (status === 'failed') {
+        [jobs, total] = await Promise.all([
+          this.enrichmentQueue.getFailed(skip, skip + take - 1),
+          this.enrichmentQueue.getFailedCount(),
+        ]);
+      } else if (status === 'delayed') {
+        [jobs, total] = await Promise.all([
+          this.enrichmentQueue.getDelayed(skip, skip + take - 1),
+          this.enrichmentQueue.getDelayedCount(),
+        ]);
+      }
+    } catch {
+      // Redis 不可用时降级返回空列表
+      jobs = [];
+      total = 0;
     }
 
-    const data = jobs.map((job) => ({
+    const list = jobs.map((job) => ({
       id: job.id,
       foodId: job.data?.foodId,
       fields: job.data?.fields,
@@ -240,7 +267,19 @@ export class FoodEnrichmentController {
       finishedOn: job.finishedOn ?? null,
     }));
 
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '获取成功',
+      data: {
+        list,
+        total,
+        page: Math.floor(skip / take) + 1,
+        pageSize: take,
+        offset: skip,
+        hasMore: skip + list.length < total,
+      },
+    };
   }
 
   // ==================== 队列统计（V8.2: 增加历史统计） ====================
@@ -284,18 +323,57 @@ export class FoodEnrichmentController {
   // ==================== 清理队列 ====================
 
   @Post('clean')
-  @ApiOperation({ summary: '清理已完成/失败的队列任务' })
+  @ApiOperation({
+    summary: '清理队列任务（V8.4: 支持 type=all 一次性清理全部状态）',
+    description:
+      'type: completed | failed | all（默认 completed）。grace: 毫秒，只清理超过此年龄的任务（默认 0）。limit: 单次最多清理数量（默认 1000）。',
+  })
   async clean(
-    @Body() body: { grace?: number; type?: 'completed' | 'failed' },
+    @Body()
+    body: {
+      grace?: number;
+      type?: 'completed' | 'failed' | 'all';
+      limit?: number;
+    },
   ): Promise<ApiResponse> {
     const grace = body.grace ?? 0;
+    const limit = body.limit ?? 1000;
     const type = body.type ?? 'completed';
-    const cleaned = await this.enrichmentQueue.clean(grace, 100, type);
+
+    let totalCleaned = 0;
+
+    if (type === 'all') {
+      const [completedIds, failedIds] = await Promise.all([
+        this.enrichmentQueue.clean(grace, limit, 'completed'),
+        this.enrichmentQueue.clean(grace, limit, 'failed'),
+      ]);
+      totalCleaned = completedIds.length + failedIds.length;
+    } else {
+      const ids = await this.enrichmentQueue.clean(grace, limit, type);
+      totalCleaned = ids.length;
+    }
+
     return {
       success: true,
       code: HttpStatus.OK,
-      message: `已清理 ${cleaned.length} 个任务`,
-      data: { cleaned: cleaned.length },
+      message: `已清理 ${totalCleaned} 个任务`,
+      data: { cleaned: totalCleaned, type },
+    };
+  }
+
+  @Post('drain')
+  @ApiOperation({
+    summary: '清空 waiting 队列（V8.4 新增）',
+    description:
+      '将所有 waiting 状态的任务从队列中移除（drain）。不影响 active/completed/failed 任务。',
+  })
+  async drain(): Promise<ApiResponse> {
+    await this.enrichmentQueue.drain();
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '已清空 waiting 队列',
+      data: {},
     };
   }
 
@@ -634,8 +712,8 @@ export class FoodEnrichmentController {
           delay:
             QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_ENRICHMENT].backoffDelay,
         },
-        removeOnComplete: 200,
-        removeOnFail: 100,
+        removeOnComplete: 1000,
+        removeOnFail: 500,
       },
     }));
 
@@ -757,8 +835,8 @@ export class FoodEnrichmentController {
                 type: queueOpts.backoffType,
                 delay: queueOpts.backoffDelay,
               },
-              removeOnComplete: 200,
-              removeOnFail: 100,
+              removeOnComplete: 1000,
+              removeOnFail: 500,
             },
           );
           enqueuedFromDb++;

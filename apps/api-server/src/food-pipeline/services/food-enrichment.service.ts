@@ -35,6 +35,7 @@ import {
   ENRICHMENT_FIELD_LABELS,
   ENRICHMENT_FIELD_UNITS,
 } from '../../modules/food/food.types';
+import { COOKING_METHODS_FIELD_DESC } from '../../modules/food/cooking-method.constants';
 
 // ─── 可补全字段定义（foods 主表）───────────────────────────────────────────
 
@@ -83,7 +84,6 @@ export const ENRICHABLE_FIELDS = [
   'sub_category',
   'food_group',
   'cuisine',
-  'cooking_method',
   'glycemic_index',
   'glycemic_load',
   'fodmap_level',
@@ -103,6 +103,8 @@ export const ENRICHABLE_FIELDS = [
   'standard_serving_desc',
   'main_ingredient',
   'flavor_profile',
+  // V8.4: aliases 加入可补全字段（已扩大 DB 列 VARCHAR 至 1000）
+  'aliases',
   // V8.0: V7.1/7.3/7.4 新增属性字段
   'ingredient_list',
   'cooking_methods',
@@ -151,8 +153,17 @@ export const ENRICHMENT_STAGES: EnrichmentStage[] = [
   {
     stage: 1,
     name: '核心营养素',
-    fields: ['protein', 'fat', 'carbs', 'fiber', 'sugar', 'sodium'],
-    maxTokens: 400,
+    // V8.4: food_form 移至 Stage1 — 食物形态是基础属性，应在第一阶段确定
+    fields: [
+      'protein',
+      'fat',
+      'carbs',
+      'fiber',
+      'sugar',
+      'sodium',
+      'food_form',
+    ],
+    maxTokens: 450,
     supportsFallback: true,
   },
   {
@@ -210,7 +221,7 @@ export const ENRICHMENT_STAGES: EnrichmentStage[] = [
       'common_portions',
       'flavor_profile',
       'cuisine',
-      'cooking_method',
+      'cooking_methods',
       'sub_category',
       'food_group',
       'main_ingredient',
@@ -219,8 +230,10 @@ export const ENRICHMENT_STAGES: EnrichmentStage[] = [
       'satiety_score',
       'nutrient_density',
       'commonality_score',
+      // V8.4: aliases 在使用属性阶段补全，已有足够食物上下文
+      'aliases',
     ],
-    maxTokens: 800,
+    maxTokens: 900,
     supportsFallback: false,
   },
   {
@@ -228,7 +241,6 @@ export const ENRICHMENT_STAGES: EnrichmentStage[] = [
     name: '扩展属性',
     fields: [
       'ingredient_list',
-      'cooking_methods',
       'texture_tags',
       'dish_type',
       'prep_time_minutes',
@@ -241,8 +253,7 @@ export const ENRICHMENT_STAGES: EnrichmentStage[] = [
       'acquisition_difficulty',
       'compatibility',
       'available_channels',
-      // V8.2: 新增
-      'food_form',
+      // V8.2: 新增（food_form 已移至 Stage1）
       'required_equipment',
     ],
     maxTokens: 1000,
@@ -343,7 +354,6 @@ export const ENRICHABLE_STRING_FIELDS = [
   'sub_category',
   'food_group',
   'cuisine',
-  'cooking_method',
   'fodmap_level',
   'oxalate_level',
   'standard_serving_desc',
@@ -407,97 +417,134 @@ export const NUTRIENT_RANGES: Record<string, { min: number; max: number }> = {
 // ─── 字段描述映射（用于 Prompt 构造）─────────────────────────────────────
 
 export const FIELD_DESC: Record<string, string> = {
-  // ─── Stage 1: 核心营养素 (number) ───────────────────────────────────
-  protein: '[number] protein (g/100g, 0-100)',
-  fat: '[number] fat (g/100g, 0-100)',
-  carbs: '[number] carbs (g/100g, 0-100)',
-  fiber: '[number] fiber (g/100g, 0-80)',
-  sugar: '[number] sugar (g/100g, 0-100)',
-  addedSugar: '[number] added_sugar (g/100g, 0-100)',
-  naturalSugar: '[number] natural_sugar (g/100g, 0-100)',
-  sodium: '[number] sodium (mg/100g, 0-50000)',
-  // ─── Stage 2: 微量营养素 (number) ───────────────────────────────────
-  calcium: '[number] calcium (mg/100g, 0-2000)',
-  iron: '[number] iron (mg/100g, 0-100)',
-  potassium: '[number] potassium (mg/100g, 0-10000)',
-  cholesterol: '[number] cholesterol (mg/100g, 0-2000)',
-  vitaminA: '[number] vitamin_a (μg RAE/100g, 0-50000)',
-  vitaminC: '[number] vitamin_c (mg/100g, 0-2000)',
-  vitaminD: '[number] vitamin_d (μg/100g, 0-1000)',
-  vitaminE: '[number] vitamin_e (mg/100g, 0-500)',
-  vitaminB12: '[number] vitamin_b12 (μg/100g, 0-100)',
-  folate: '[number] folate (μg DFE/100g, 0-5000)',
-  zinc: '[number] zinc (mg/100g, 0-100)',
-  magnesium: '[number] magnesium (mg/100g, 0-1000)',
-  saturatedFat: '[number] saturated_fat (g/100g, 0-100)',
-  transFat: '[number] trans_fat (g/100g, 0-10)',
-  purine: '[number] purine (mg/100g, 0-2000)',
-  phosphorus: '[number] phosphorus (mg/100g, 0-2000)',
-  vitaminB6: '[number] vitamin_b6 (mg/100g, 0-50)',
-  omega3: '[number] omega3 Omega-3脂肪酸 (mg/100g, 0-30000, EPA+DHA+ALA总量)',
-  omega6: '[number] omega6 Omega-6脂肪酸 (mg/100g, 0-50000, 亚油酸为主)',
-  solubleFiber: '[number] soluble_fiber 可溶性膳食纤维 (g/100g, 0-40)',
-  insolubleFiber: '[number] insoluble_fiber 不可溶性膳食纤维 (g/100g, 0-60)',
-  waterContentPercent: '[number] water_content_percent 水分含量百分比 (0-100)',
+  // ─── Stage 1: 核心营养素 (number, per 100g edible portion) ──────────
+  protein: '[number] protein g/100g (0-100). Per 100g edible portion.',
+  fat: '[number] fat g/100g (0-100). Total lipids per 100g edible portion.',
+  carbs: '[number] carbs g/100g (0-100). Total carbohydrates per 100g.',
+  fiber: '[number] fiber g/100g (0-80). Total dietary fiber per 100g.',
+  sugar:
+    '[number] sugar g/100g (0-100). Total sugars (natural + added) per 100g.',
+  addedSugar:
+    '[number] added_sugar g/100g (0-100). Sugars added during processing/preparation.',
+  naturalSugar:
+    '[number] natural_sugar g/100g (0-100). Naturally occurring sugars.',
+  sodium:
+    '[number] sodium mg/100g (0-50000). Includes sodium from all sources (salt, additives).',
+  // ─── Stage 1: 食物形态 ───────────────────────────────────────────────
+  // V8.4: food_form 移至 Stage1，是基础属性，决定后续阶段上下文
+  foodForm:
+    '[string] food_form: "ingredient" | "dish" | "semi_prepared". ' +
+    '"ingredient" = raw/minimally processed single ingredient (e.g. chicken breast, brown rice, apple). ' +
+    '"dish" = ready-to-eat prepared meal or recipe (e.g. fried rice, beef stew, Caesar salad). ' +
+    '"semi_prepared" = partially processed, requires further cooking (e.g. dumpling wrappers, marinated meat, par-cooked pasta). ' +
+    'Base value on the food as it is commonly sold/served, not its raw ingredient state.',
+  // ─── Stage 2: 微量营养素 (number, per 100g) ─────────────────────────
+  calcium:
+    '[number] calcium mg/100g (0-2000). Reference: USDA FoodData Central.',
+  iron: '[number] iron mg/100g (0-100). Total iron (heme + non-heme).',
+  potassium: '[number] potassium mg/100g (0-10000).',
+  cholesterol: '[number] cholesterol mg/100g (0-2000). Dietary cholesterol.',
+  vitaminA:
+    '[number] vitamin_a μg RAE/100g (0-50000). Retinol Activity Equivalents.',
+  vitaminC: '[number] vitamin_c mg/100g (0-2000). Ascorbic acid.',
+  vitaminD: '[number] vitamin_d μg/100g (0-1000). D2+D3 combined.',
+  vitaminE: '[number] vitamin_e mg/100g (0-500). Alpha-tocopherol equivalents.',
+  vitaminB12: '[number] vitamin_b12 μg/100g (0-100). Cobalamin.',
+  folate: '[number] folate μg DFE/100g (0-5000). Dietary Folate Equivalents.',
+  zinc: '[number] zinc mg/100g (0-100).',
+  magnesium: '[number] magnesium mg/100g (0-1000).',
+  saturatedFat: '[number] saturated_fat g/100g (0-100). Saturated fatty acids.',
+  transFat:
+    '[number] trans_fat g/100g (0-10). Industrial + ruminant trans fats.',
+  purine:
+    '[number] purine mg/100g (0-2000). Total purines (uric acid precursors).',
+  phosphorus: '[number] phosphorus mg/100g (0-2000).',
+  vitaminB6: '[number] vitamin_b6 mg/100g (0-50). Pyridoxine.',
+  omega3:
+    '[number] omega3 mg/100g (0-30000). Total Omega-3 fatty acids (ALA+EPA+DHA).',
+  omega6:
+    '[number] omega6 mg/100g (0-50000). Total Omega-6 fatty acids (primarily linoleic acid).',
+  solubleFiber: '[number] soluble_fiber g/100g (0-40). Soluble dietary fiber.',
+  insolubleFiber:
+    '[number] insoluble_fiber g/100g (0-60). Insoluble dietary fiber.',
+  waterContentPercent:
+    '[number] water_content_percent % (0-100). Moisture content.',
   // ─── Stage 3: 健康属性 ──────────────────────────────────────────────
-  glycemicIndex: '[number] glycemic_index 整数 0-100',
-  glycemicLoad: '[number] glycemic_load 0-50',
-  fodmapLevel: '[string] fodmap_level: low/medium/high',
-  oxalateLevel: '[string] oxalate_level: low/medium/high',
-  processingLevel: '[number] processing_level 整数 1-4 (1=自然,4=超加工)',
+  glycemicIndex:
+    '[number] glycemic_index integer 0-100 (glucose=100 reference). Use international GI database values where available.',
+  glycemicLoad:
+    '[number] glycemic_load 0-50. GL = (GI × available carbs per serving) / 100.',
+  fodmapLevel:
+    '[string] fodmap_level: "low" | "medium" | "high". Based on Monash University FODMAP guidelines.',
+  oxalateLevel:
+    '[string] oxalate_level: "low" | "medium" | "high". <10mg/100g=low, 10-50mg=medium, >50mg=high.',
+  processingLevel:
+    '[number] processing_level integer 1-4. NOVA classification: 1=unprocessed/minimally processed, 2=processed culinary ingredient, 3=processed food, 4=ultra-processed.',
   // ─── Stage 4: 使用属性 ──────────────────────────────────────────────
   subCategory:
-    '[string] sub_category 英文编码如 lean_meat/whole_grain/leafy_green',
-  foodGroup: '[string] food_group 英文编码如 meat/fish/grain/vegetable/fruit',
-  cuisine: '[string] cuisine 英文编码如 chinese/western/japanese/korean',
-  cookingMethod:
-    '[string] cooking_method: raw/boiled/steamed/fried/roasted/grilled/stewed',
-  mealTypes: '[string[]] meal_types 数组，选自 breakfast/lunch/dinner/snack',
+    '[string] sub_category English code, e.g. lean_meat/whole_grain/leafy_green/root_vegetable/citrus_fruit/legume/dairy_product',
+  foodGroup:
+    '[string] food_group English code: meat/poultry/fish/seafood/egg/dairy/grain/legume/vegetable/fruit/nut/seed/fat/oil/sweetener/beverage/herb/spice/condiment',
+  cuisine:
+    '[string] cuisine English code: chinese/japanese/korean/indian/thai/vietnamese/italian/french/mediterranean/american/mexican/middle_eastern/international',
+  mealTypes:
+    '[string[]] meal_types array, values from: breakfast/lunch/dinner/snack/brunch/dessert',
   allergens:
-    '[string[]] allergens 数组，选自 gluten/dairy/nuts/soy/egg/shellfish/fish/wheat',
-  tags: '[string[]] tags 数组，选自 high_protein/low_fat/low_carb/high_fiber/low_calorie/low_sodium/vegan/vegetarian/gluten_free',
+    '[string[]] allergens array. Use international "Big-9" allergens: gluten/dairy/egg/fish/shellfish/tree_nuts/peanuts/soy/sesame. Empty array [] if none.',
+  tags: '[string[]] tags array from: high_protein/low_fat/low_carb/high_fiber/low_calorie/low_sodium/low_sugar/vegan/vegetarian/gluten_free/dairy_free/keto/paleo/whole_food',
   commonPortions:
-    '[object[]] common_portions JSON数组，如 [{"name":"1碗","grams":200}]',
-  qualityScore: '[number] quality_score 0-10综合品质',
-  satietyScore: '[number] satiety_score 0-10饱腹感',
-  nutrientDensity: '[number] nutrient_density 0-100营养密度',
-  commonalityScore: '[number] commonality_score 0-100大众化程度',
+    '[object[]] common_portions JSON array of typical serving sizes, e.g. [{"name":"1 cup","grams":240},{"name":"1 tbsp","grams":15}]. Use standard international measurements.',
+  qualityScore:
+    '[number] quality_score 0-10. Overall nutritional quality considering nutrient density, processing level, and food group guidelines.',
+  satietyScore:
+    '[number] satiety_score 0-10. Satiety index based on protein/fiber content, food volume, and texture. High protein/fiber foods score higher.',
+  nutrientDensity:
+    '[number] nutrient_density 0-100. Ratio of micronutrients to calories. Based on ANDI or similar scoring.',
+  commonalityScore:
+    '[number] commonality_score 0-100. How widely available and commonly consumed this food is globally (100=staple food).',
   standardServingDesc:
-    '[string] standard_serving_desc 标准份量描述如"1碗(200g)"',
-  mainIngredient: '[string] main_ingredient 主要原料如 rice/chicken',
+    '[string] standard_serving_desc Standard serving description, e.g. "1 cup (240g)" or "1 slice (28g)". Use internationally recognized units.',
+  mainIngredient:
+    '[string] main_ingredient Primary ingredient in English, e.g. "chicken", "rice", "tomato", "wheat".',
   flavorProfile:
-    '[object] flavor_profile JSON如 {"sweet":3,"salty":5,"sour":1,"spicy":0,"bitter":1}',
+    '[object] flavor_profile JSON intensity scores 0-5 each, e.g. {"sweet":2,"salty":4,"sour":1,"spicy":0,"bitter":1,"umami":3}.',
+  // ─── Stage 4: aliases ───────────────────────────────────────────────
+  aliases:
+    '[string] aliases Comma-separated list of alternative names, regional names, and common synonyms for this food. ' +
+    'Include: (1) English synonyms/variants, (2) local/regional names in their native script if widely recognized, (3) brand-generic names. ' +
+    'Example for "白米饭": "steamed rice, cooked white rice, plain rice, 米飯". ' +
+    'Example for "Greek yogurt": "strained yogurt, labneh, 希腊酸奶". ' +
+    'Keep under 500 characters total.',
   // ─── Stage 5: 扩展属性 ──────────────────────────────────────────────
   ingredientList:
-    '[string[]] ingredient_list 完整食材清单数组，如 ["chicken","peanut","chili"]',
-  cookingMethods:
-    '[string[]] cooking_methods 多种烹饪方式数组，如 ["stir_fry","deep_fry"]',
+    '[string[]] ingredient_list Complete ingredient list in English, e.g. ["chicken","garlic","olive oil","salt","pepper"]. Order by predominance (largest first).',
+  cookingMethods: COOKING_METHODS_FIELD_DESC,
   textureTags:
-    '[string[]] texture_tags 口感标签数组，如 ["crispy","tender","juicy"]',
+    '[string[]] texture_tags Texture descriptors, e.g. ["crispy","tender","creamy","chewy","crunchy","soft","juicy","flaky"].',
   dishType:
-    '[string] dish_type 成品类型: dish/soup/drink/dessert/snack/staple/salad/sauce',
-  prepTimeMinutes: '[number] prep_time_minutes 备料时间(分钟, 0-480)',
-  cookTimeMinutes: '[number] cook_time_minutes 烹饪时间(分钟, 0-720)',
+    '[string] dish_type: "dish" | "soup" | "drink" | "dessert" | "snack" | "staple" | "salad" | "sauce" | "bread" | "pastry"',
+  prepTimeMinutes:
+    '[number] prep_time_minutes Preparation time in minutes (0-480). Time before cooking begins.',
+  cookTimeMinutes:
+    '[number] cook_time_minutes Active cooking time in minutes (0-720).',
   skillRequired:
-    '[string] skill_required 烹饪技能要求: beginner/medium/advanced/expert (最长10字符)',
+    '[string] skill_required: "beginner" | "intermediate" | "advanced" | "expert"',
   estimatedCostLevel:
-    '[number] estimated_cost_level 预估成本 1-5 (1=极低,5=极高)',
-  shelfLifeDays: '[number] shelf_life_days 保质期天数(0-3650)',
+    '[number] estimated_cost_level 1-5 relative cost (1=very cheap staple, 3=average, 5=premium/luxury ingredient).',
+  shelfLifeDays:
+    '[number] shelf_life_days Typical shelf life in days under recommended storage (0-3650). Fresh produce: 1-14; canned: 365-1825.',
   servingTemperature:
-    '[string] serving_temperature 建议食用温度: hot/warm/cold/room_temp',
+    '[string] serving_temperature: "hot" | "warm" | "room_temp" | "cold" | "frozen"',
   dishPriority:
-    '[number] dish_priority 成品菜推荐优先级 0-100 (仅dish/semi_prepared有值)',
+    '[number] dish_priority 0-100. Recommendation priority for prepared dishes/meals (0 for raw ingredients).',
   acquisitionDifficulty:
-    '[number] acquisition_difficulty 可获得性难度 1-5 (1=随处可得,5=稀有)',
+    '[number] acquisition_difficulty 1-5 (1=available everywhere/staple, 3=specialty store, 5=rare/seasonal/imported).',
   compatibility:
-    '[object] compatibility JSON对象，描述搭配关系如 {"good":["rice","soup"],"avoid":["milk"]}',
+    '[object] compatibility JSON describing food pairing, e.g. {"good":["rice","vegetables","lemon"],"avoid":["strong_flavors","high_fat"]}.',
   availableChannels:
-    '[string[]] available_channels 可获取渠道数组，如 ["supermarket","wet_market","online"]',
-  // V8.2: 新增字段描述
-  foodForm:
-    '[string] food_form 食物形态: ingredient/dish/semi_prepared (ingredient=原材料,dish=成品菜,semi_prepared=半成品)',
+    '[string[]] available_channels Where this food can be purchased: ["supermarket","convenience_store","wet_market","farmers_market","online","specialty_store","restaurant"].',
   requiredEquipment:
-    '[string[]] required_equipment 所需设备数组，如 ["oven","wok","microwave","steamer","air_fryer","none"]',
+    '[string[]] required_equipment Kitchen equipment needed: ["oven","wok","steamer","blender","food_processor","microwave","grill","air_fryer","pressure_cooker","none"].',
 };
 
 // ─── 低置信度阈值：低于此值强制进入 staging ───────────────────────────────
@@ -813,14 +860,14 @@ export class FoodEnrichmentService {
   ): string {
     // 构造已知数据上下文（原始数据 + 前阶段已补全数据）
     const knownParts = [
-      `名称: ${food.name}`,
-      food.aliases ? `别名: ${food.aliases}` : null,
-      `分类: ${food.category}`,
+      `Name: ${food.name}`,
+      food.aliases ? `Aliases: ${food.aliases}` : null,
+      `Category: ${food.category}`,
       food.subCategory || accumulatedData.subCategory
-        ? `二级分类: ${food.subCategory || accumulatedData.subCategory}`
+        ? `Sub-category: ${food.subCategory || accumulatedData.subCategory}`
         : null,
       food.foodGroup || accumulatedData.foodGroup
-        ? `食物组: ${food.foodGroup || accumulatedData.foodGroup}`
+        ? `Food group: ${food.foodGroup || accumulatedData.foodGroup}`
         : null,
     ];
 
@@ -828,63 +875,63 @@ export class FoodEnrichmentService {
     // 按阶段顺序遍历，将所有已累积的数据作为上下文传递
     const CONTEXT_LABELS: Record<string, [string, string?]> = {
       // Stage 1 核心营养素
-      calories: ['热量', 'kcal/100g'],
-      protein: ['蛋白质', 'g/100g'],
-      fat: ['脂肪', 'g/100g'],
-      carbs: ['碳水化合物', 'g/100g'],
-      fiber: ['膳食纤维', 'g/100g'],
-      sugar: ['糖', 'g/100g'],
-      sodium: ['钠', 'mg/100g'],
+      calories: ['Calories', 'kcal/100g'],
+      protein: ['Protein', 'g/100g'],
+      fat: ['Fat', 'g/100g'],
+      carbs: ['Carbs', 'g/100g'],
+      fiber: ['Fiber', 'g/100g'],
+      sugar: ['Sugar', 'g/100g'],
+      sodium: ['Sodium', 'mg/100g'],
       // Stage 2 微量营养素
-      calcium: ['钙', 'mg/100g'],
-      iron: ['铁', 'mg/100g'],
-      potassium: ['钾', 'mg/100g'],
-      cholesterol: ['胆固醇', 'mg/100g'],
-      vitaminA: ['维生素A', 'μg/100g'],
-      vitaminC: ['维生素C', 'mg/100g'],
-      vitaminD: ['维生素D', 'μg/100g'],
-      vitaminE: ['维生素E', 'mg/100g'],
-      vitaminB12: ['维生素B12', 'μg/100g'],
-      vitaminB6: ['维生素B6', 'mg/100g'],
-      folate: ['叶酸', 'μg/100g'],
-      zinc: ['锌', 'mg/100g'],
-      magnesium: ['镁', 'mg/100g'],
-      saturatedFat: ['饱和脂肪', 'g/100g'],
-      transFat: ['反式脂肪', 'g/100g'],
-      purine: ['嘌呤', 'mg/100g'],
-      phosphorus: ['磷', 'mg/100g'],
-      addedSugar: ['添加糖', 'g/100g'],
-      naturalSugar: ['天然糖', 'g/100g'],
+      calcium: ['Calcium', 'mg/100g'],
+      iron: ['Iron', 'mg/100g'],
+      potassium: ['Potassium', 'mg/100g'],
+      cholesterol: ['Cholesterol', 'mg/100g'],
+      vitaminA: ['Vitamin A', 'μg RAE/100g'],
+      vitaminC: ['Vitamin C', 'mg/100g'],
+      vitaminD: ['Vitamin D', 'μg/100g'],
+      vitaminE: ['Vitamin E', 'mg/100g'],
+      vitaminB12: ['Vitamin B12', 'μg/100g'],
+      vitaminB6: ['Vitamin B6', 'mg/100g'],
+      folate: ['Folate', 'μg DFE/100g'],
+      zinc: ['Zinc', 'mg/100g'],
+      magnesium: ['Magnesium', 'mg/100g'],
+      saturatedFat: ['Saturated fat', 'g/100g'],
+      transFat: ['Trans fat', 'g/100g'],
+      purine: ['Purine', 'mg/100g'],
+      phosphorus: ['Phosphorus', 'mg/100g'],
+      addedSugar: ['Added sugar', 'g/100g'],
+      naturalSugar: ['Natural sugar', 'g/100g'],
       omega3: ['Omega-3', 'mg/100g'],
       omega6: ['Omega-6', 'mg/100g'],
-      solubleFiber: ['可溶性纤维', 'g/100g'],
-      insolubleFiber: ['不可溶性纤维', 'g/100g'],
-      waterContentPercent: ['水分', '%'],
+      solubleFiber: ['Soluble fiber', 'g/100g'],
+      insolubleFiber: ['Insoluble fiber', 'g/100g'],
+      waterContentPercent: ['Moisture', '%'],
       // Stage 3 健康属性
-      glycemicIndex: ['血糖指数'],
-      glycemicLoad: ['血糖负荷'],
-      fodmapLevel: ['FODMAP等级'],
-      oxalateLevel: ['草酸等级'],
-      processingLevel: ['加工程度'],
+      glycemicIndex: ['Glycemic index'],
+      glycemicLoad: ['Glycemic load'],
+      fodmapLevel: ['FODMAP level'],
+      oxalateLevel: ['Oxalate level'],
+      processingLevel: ['NOVA processing level'],
       // Stage 3 补全后可作为 Stage 4/5 上下文
-      allergens: ['过敏原'],
-      tags: ['饮食标签'],
+      allergens: ['Allergens'],
+      tags: ['Diet tags'],
       // Stage 4 使用属性
-      cuisine: ['菜系'],
-      cookingMethod: ['烹饪方式'],
-      mealTypes: ['适合餐次'],
-      dishType: ['菜品类型'],
-      mainIngredient: ['主要原料'],
-      foodForm: ['食物形态'],
+      cuisine: ['Cuisine'],
+      cookingMethods: ['Cooking methods'],
+      mealTypes: ['Meal types'],
+      dishType: ['Dish type'],
+      mainIngredient: ['Main ingredient'],
+      foodForm: ['Food form'],
       // Stage 4 补全后可作为 Stage 5 上下文
-      qualityScore: ['综合品质分'],
-      satietyScore: ['饱腹感'],
-      nutrientDensity: ['营养密度'],
-      commonalityScore: ['大众化程度'],
-      standardServingDesc: ['标准份量描述'],
-      flavorProfile: ['风味特征'],
+      qualityScore: ['Quality score'],
+      satietyScore: ['Satiety score'],
+      nutrientDensity: ['Nutrient density'],
+      commonalityScore: ['Commonality score'],
+      standardServingDesc: ['Standard serving'],
+      flavorProfile: ['Flavor profile'],
       // V8.2 新增（Stage 5）
-      requiredEquipment: ['所需设备'],
+      requiredEquipment: ['Required equipment'],
     };
 
     // 遍历所有前序阶段累积的数据
@@ -910,7 +957,7 @@ export class FoodEnrichmentService {
 
     // 其他原始食物属性（非累积）
     if (food.isProcessed != null)
-      knownParts.push(`是否加工食品: ${food.isProcessed}`);
+      knownParts.push(`Processed food: ${food.isProcessed}`);
 
     const ctx = knownParts.filter(Boolean).join('\n');
 
@@ -919,28 +966,29 @@ export class FoodEnrichmentService {
       .map((f) => `- ${FIELD_DESC[f] || f}`)
       .join('\n');
 
-    return `已知食物数据：
+    return `Known food data:
 ${ctx}
 
-本次需要估算【${stage.name}】相关的 ${missingFields.length} 个字段：
+Fields to estimate for [${stage.name}] stage (${missingFields.length} fields):
 ${fieldsList}
 
-填写规则：
-1. 数值基于每100g可食部分计算
-2. 有权威数据优先引用；无精确数据时，基于食物成分/同类均值/烹饪方式做推算，推算值也必须给出（不能返回 null）
-3. 仅对完全无法评估的字段（如非常罕见的特殊食物、强依赖实验室检测的微量成分）才返回 null
-4. 每个字段单独评估置信度，在 "field_confidence" 中返回（0.0-1.0）：有权威来源≥0.85，合理推算0.6-0.85，粗略估计0.4-0.6，基本猜测<0.4
-5. confidence 为整体置信度（0.0-1.0）
-6. reasoning 说明数据来源（如《中国食物成分表》、USDA、同类食物推算）；推算值须注明"推算"或"估计"
+Rules:
+1. All numeric values are per 100g edible portion
+2. Use USDA FoodData Central as primary reference; cross-reference FAO/INFOODS and EUROFIR where applicable
+3. When exact data is unavailable, estimate from food composition/category averages/cooking method — estimated values MUST be provided (do not return null)
+4. Return null ONLY for fields that are completely impossible to estimate
+5. Assign per-field confidence in "field_confidence" (0.0-1.0): authoritative source ≥ 0.85, reasonable estimate 0.6-0.85, rough estimate 0.4-0.6, speculation < 0.4
+6. "confidence" is the overall confidence for this stage (0.0-1.0)
+7. "reasoning" should cite the data source (e.g. USDA FoodData Central, FAO/INFOODS, category average estimate); mark estimated values as "estimated"
 
-返回JSON：
+Return JSON:
 {
   ${missingFields.map((f) => `"${f}": <value or null>`).join(',\n  ')},
-  "confidence": <0.0-1.0 整体置信度>,
+  "confidence": <0.0-1.0 overall>,
   "field_confidence": {
     ${missingFields.map((f) => `"${f}": <0.0-1.0>`).join(',\n    ')}
   },
-  "reasoning": "<数据来源说明，推算字段须注明推算依据>"
+  "reasoning": "<data source and estimation notes>"
 }`;
   }
 
@@ -960,21 +1008,23 @@ ${fieldsList}
           messages: [
             {
               role: 'system',
-              content: `你是专业食品营养数据库专家，拥有以下权威数据来源的深度知识：
-- 中国食物成分表（第6版）
-- USDA FoodData Central
-- 中国居民膳食营养素参考摄入量（DRIs）
-- 日本食品成分数据库（MEXT）
-- 欧洲食品成分数据库（EuroFIR）
+              content: `You are an expert food scientist and nutritionist with deep knowledge of international food composition databases:
+- USDA FoodData Central (primary reference)
+- FAO/INFOODS International Food Composition Tables
+- EUROFIR (European Food Information Resource)
+- Codex Alimentarius international food standards
+- Monash University FODMAP database
+- International GI database (University of Sydney)
+- NOVA food classification system
 
-你的任务：为【${stage.name}】阶段精准补全食物营养数据。
+Your task: Accurately complete food nutrition data for the [${stage.name}] stage.
 
-核心原则：
-1. 优先使用权威文献数据；无精确数据时，基于食物成分、烹饪方式、同类食物均值做合理推算
-2. 推算值也必须给出（不得随意返回 null），在 reasoning 中标注"推算"或"估计"
-3. 仅对完全无法评估的罕见食物/字段返回 null
-4. 数值基于每100g可食部分计算
-5. 严格按 JSON 格式返回，只返回请求的字段`,
+Core principles:
+1. Prioritize USDA FoodData Central values; cross-reference with FAO/INFOODS and EUROFIR when available
+2. When exact data is unavailable, estimate based on food composition, cooking method, and category averages — always provide an estimated value (do NOT return null without strong justification)
+3. Return null ONLY for fields that are genuinely impossible to estimate (e.g. highly unique proprietary products, or fields requiring laboratory measurement of a rare ingredient)
+4. All values are per 100g edible portion
+5. Return strict JSON format, only the requested fields`,
             },
             { role: 'user', content: prompt },
           ],
@@ -1766,7 +1816,9 @@ ${fieldsList}
     const rejected = statusMap['rejected'] ?? 0;
 
     const avgRow = await this.prisma.$queryRaw<[{ avg: string }]>(
-      Prisma.sql`SELECT COALESCE(AVG(COALESCE(data_completeness, 0)), 0)::text AS avg FROM foods`,
+      // V8.4 修复：只计算已补全（data_completeness > 0）的食物均值，
+      // 排除 pending（completeness=0）食物拉低平均分
+      Prisma.sql`SELECT COALESCE(AVG(data_completeness), 0)::text AS avg FROM foods WHERE data_completeness IS NOT NULL AND data_completeness > 0`,
     );
     const avgCompleteness = parseFloat(
       parseFloat(avgRow[0]?.avg ?? '0').toFixed(1),
@@ -1852,8 +1904,9 @@ ${fieldsList}
     }
 
     // V8.2: avgCompleteness 使用 AVG(data_completeness) 而非阶段覆盖率均值
+    // V8.4 修复：只计算已补全（data_completeness > 0）的食物均值
     const avgRow = await this.prisma.$queryRaw<[{ avg: string }]>(
-      Prisma.sql`SELECT COALESCE(AVG(COALESCE(data_completeness, 0)), 0)::text AS avg FROM foods`,
+      Prisma.sql`SELECT COALESCE(AVG(data_completeness), 0)::text AS avg FROM foods WHERE data_completeness IS NOT NULL AND data_completeness > 0`,
     );
     const avgCompleteness = Math.round(parseFloat(avgRow[0]?.avg ?? '0'));
 
@@ -1923,7 +1976,8 @@ ${fieldsList}
     );
 
     const avgRow = await this.prisma.$queryRaw<[{ avg: string }]>(
-      Prisma.sql`SELECT COALESCE(AVG(COALESCE(data_completeness, 0)), 0)::text AS avg FROM foods`,
+      // V8.4 修复：只计算已补全（data_completeness > 0）的食物均值
+      Prisma.sql`SELECT COALESCE(AVG(data_completeness), 0)::text AS avg FROM foods WHERE data_completeness IS NOT NULL AND data_completeness > 0`,
     );
 
     const bucketMap: Record<string, number> = {};

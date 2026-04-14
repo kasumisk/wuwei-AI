@@ -7,6 +7,11 @@ import {
   SceneType,
 } from '../types/recommendation.types';
 import type { KitchenProfile } from '../../../../user/user.types';
+import {
+  CookingMethod,
+  EQUIPMENT_COOKING_MAP,
+  STOVE_REQUIRED_METHODS,
+} from '../../../../food/cooking-method.constants';
 
 /**
  * V6.9 Phase 1-A: 场景解析器
@@ -37,14 +42,8 @@ const DECAY_HALF_LIFE_DAYS = 14;
 /** V7.1 P2-D: 衰减系数 λ = ln(2) / halfLife */
 const DECAY_LAMBDA = Math.LN2 / DECAY_HALF_LIFE_DAYS;
 
-/** V7.1 P2-E: 设备→烹饪方式映射 */
-const EQUIPMENT_COOKING_MAP: Record<string, string[]> = {
-  oven: ['bake', 'roast'],
-  microwave: ['microwave'],
-  air_fryer: ['air_fry'],
-  steamer: ['steam'],
-  rice_cooker: ['rice_cook'],
-};
+/** V7.1 P2-E: 设备→烹饪方式映射 — 引用自 cooking-method.constants */
+const EQUIPMENT_MAP = EQUIPMENT_COOKING_MAP;
 
 /** V7.1 P2-E: KitchenProfile 字段→设备 key 映射 */
 const KITCHEN_EQUIPMENT_KEYS: {
@@ -574,7 +573,7 @@ export class SceneResolverService {
         return {
           maxPrepTime: 30,
           maxCookTime: 60,
-          preferredCookingMethods: ['stir_fry', 'steam', 'boil', 'braise'],
+          preferredCookingMethods: [CookingMethod.STIR_FRY, CookingMethod.STEAM, CookingMethod.BOIL, CookingMethod.BRAISE],
         };
       case 'eating_out':
         return {
@@ -612,7 +611,7 @@ export class SceneResolverService {
           maxPrepTime: null,
           maxCookTime: null,
           servingCount: 3,
-          preferredCookingMethods: ['stir_fry', 'steam', 'braise', 'soup'],
+          preferredCookingMethods: [CookingMethod.STIR_FRY, CookingMethod.STEAM, CookingMethod.BRAISE, CookingMethod.STEW],
         };
       case 'meal_prep':
         return {
@@ -686,14 +685,14 @@ export class SceneResolverService {
 
     for (const { field, equipment } of KITCHEN_EQUIPMENT_KEYS) {
       if (!kitchenProfile[field]) {
-        const methods = EQUIPMENT_COOKING_MAP[equipment];
+        const methods = EQUIPMENT_MAP[equipment];
         if (methods) unavailable.push(...methods);
       }
     }
 
     // 无灶具 → 排除需要炒锅/明火的烹饪方式
     if (kitchenProfile.primaryStove === 'none') {
-      unavailable.push('stir_fry', 'pan_fry', 'deep_fry', 'wok');
+      unavailable.push(...STOVE_REQUIRED_METHODS);
     }
 
     return [...new Set(unavailable)];

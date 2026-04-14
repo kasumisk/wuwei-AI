@@ -340,46 +340,171 @@ const FoodLibraryList: React.FC = () => {
   return (
     <>
       {stats && (
-        <Row gutter={16} style={{ marginBottom: 16 }}>
-          <Col span={4}>
-            <Card size="small">
-              <Statistic title="食物总数" value={stats.total} />
-            </Card>
-          </Col>
-          <Col span={4}>
-            <Card size="small">
-              <Statistic title="已验证" value={stats.verified} valueStyle={{ color: '#3f8600' }} />
-            </Card>
-          </Col>
-          <Col span={4}>
-            <Card size="small">
-              <Statistic
-                title="未验证"
-                value={stats.total - stats.verified}
-                valueStyle={stats.total - stats.verified > 0 ? { color: '#cf1322' } : undefined}
-              />
-            </Card>
-          </Col>
-          <Col span={4}>
-            <Card size="small">
-              <Statistic title="分类数" value={stats.byCategory?.length || 0} />
-            </Card>
-          </Col>
-          <Col span={4}>
-            <Card size="small">
-              <Statistic title="数据来源" value={stats.bySource?.length || 0} />
-            </Card>
-          </Col>
-          <Col span={4}>
-            <Card size="small">
-              <Statistic
-                title="待处理冲突"
-                value={stats.pendingConflicts || 0}
-                valueStyle={stats.pendingConflicts ? { color: '#cf1322' } : undefined}
-              />
-            </Card>
-          </Col>
-        </Row>
+        <>
+          {/* 第一行：基础数量卡片 */}
+          <Row gutter={[12, 12]} style={{ marginBottom: 12 }}>
+            <Col span={4}>
+              <Card size="small">
+                <Statistic title="食物总数" value={stats.total} />
+              </Card>
+            </Col>
+            <Col span={4}>
+              <Card size="small">
+                <Statistic
+                  title="已验证"
+                  value={stats.verified}
+                  valueStyle={{ color: '#3f8600' }}
+                />
+              </Card>
+            </Col>
+            <Col span={4}>
+              <Card size="small">
+                <Statistic
+                  title="未验证"
+                  value={stats.unverified}
+                  valueStyle={stats.unverified > 0 ? { color: '#cf1322' } : undefined}
+                />
+              </Card>
+            </Col>
+            <Col span={4}>
+              <Card size="small">
+                <Statistic title="分类数" value={stats.byCategory?.length || 0} />
+              </Card>
+            </Col>
+            <Col span={4}>
+              <Card size="small">
+                <Statistic title="数据来源" value={stats.bySource?.length || 0} />
+              </Card>
+            </Col>
+            <Col span={4}>
+              <Card size="small">
+                <Statistic
+                  title="待处理冲突"
+                  value={stats.pendingConflicts || 0}
+                  valueStyle={stats.pendingConflicts ? { color: '#cf1322' } : undefined}
+                />
+              </Card>
+            </Col>
+          </Row>
+
+          {/* 第二行：补全状态 + 完整度分布 + 审核状态 */}
+          <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
+            {/* 补全状态分布 */}
+            {stats.enrichmentStatus && (
+              <Col span={10}>
+                <Card size="small" title="AI 补全状态">
+                  <Row gutter={[8, 8]}>
+                    {[
+                      { key: 'completed', label: '已完成', color: '#52c41a' },
+                      { key: 'partial', label: '部分补全', color: '#1677ff' },
+                      { key: 'pending', label: '待补全', color: '#8c8c8c' },
+                      { key: 'failed', label: '失败', color: '#ff4d4f' },
+                      { key: 'staged', label: '待审核', color: '#fa8c16' },
+                      { key: 'rejected', label: '已拒绝', color: '#cf1322' },
+                    ].map(({ key, label, color }) => {
+                      const val =
+                        stats.enrichmentStatus[key as keyof typeof stats.enrichmentStatus] ?? 0;
+                      const pct = stats.total > 0 ? Math.round((val / stats.total) * 100) : 0;
+                      return (
+                        <Col span={8} key={key}>
+                          <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: 20, fontWeight: 600, color }}>{val}</div>
+                            <div style={{ fontSize: 11, color: '#8c8c8c' }}>{label}</div>
+                            <Progress
+                              percent={pct}
+                              size="small"
+                              showInfo={false}
+                              strokeColor={color}
+                              style={{ marginTop: 2 }}
+                            />
+                          </div>
+                        </Col>
+                      );
+                    })}
+                  </Row>
+                </Card>
+              </Col>
+            )}
+
+            {/* 完整度分布 */}
+            {stats.completenessDistribution && (
+              <Col span={7}>
+                <Card
+                  size="small"
+                  title={
+                    <span>
+                      数据完整度
+                      {stats.avgCompleteness != null && (
+                        <span
+                          style={{ marginLeft: 8, fontSize: 12, color: '#1677ff', fontWeight: 400 }}
+                        >
+                          均值 {stats.avgCompleteness}%
+                        </span>
+                      )}
+                    </span>
+                  }
+                >
+                  {[
+                    { key: 'high', label: '高质量 ≥80%', color: '#52c41a' },
+                    { key: 'mid', label: '中等 30-79%', color: '#fa8c16' },
+                    { key: 'low', label: '低质量 <30%', color: '#ff4d4f' },
+                  ].map(({ key, label, color }) => {
+                    const val =
+                      stats.completenessDistribution[
+                        key as keyof typeof stats.completenessDistribution
+                      ] ?? 0;
+                    const pct = stats.total > 0 ? Math.round((val / stats.total) * 100) : 0;
+                    return (
+                      <div key={key} style={{ marginBottom: 6 }}>
+                        <div
+                          style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}
+                        >
+                          <span style={{ color: '#595959' }}>{label}</span>
+                          <span style={{ color, fontWeight: 600 }}>
+                            {val}{' '}
+                            <span style={{ color: '#8c8c8c', fontWeight: 400 }}>({pct}%)</span>
+                          </span>
+                        </div>
+                        <Progress percent={pct} size="small" showInfo={false} strokeColor={color} />
+                      </div>
+                    );
+                  })}
+                </Card>
+              </Col>
+            )}
+
+            {/* 审核状态分布 */}
+            {stats.reviewStatusCounts && (
+              <Col span={7}>
+                <Card size="small" title="审核状态">
+                  {[
+                    { key: 'pending', label: '待审核', color: '#fa8c16' },
+                    { key: 'approved', label: '已通过', color: '#52c41a' },
+                    { key: 'rejected', label: '已拒绝', color: '#ff4d4f' },
+                  ].map(({ key, label, color }) => {
+                    const val =
+                      stats.reviewStatusCounts[key as keyof typeof stats.reviewStatusCounts] ?? 0;
+                    const pct = stats.total > 0 ? Math.round((val / stats.total) * 100) : 0;
+                    return (
+                      <div key={key} style={{ marginBottom: 6 }}>
+                        <div
+                          style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}
+                        >
+                          <span style={{ color: '#595959' }}>{label}</span>
+                          <span style={{ color, fontWeight: 600 }}>
+                            {val}{' '}
+                            <span style={{ color: '#8c8c8c', fontWeight: 400 }}>({pct}%)</span>
+                          </span>
+                        </div>
+                        <Progress percent={pct} size="small" showInfo={false} strokeColor={color} />
+                      </div>
+                    );
+                  })}
+                </Card>
+              </Col>
+            )}
+          </Row>
+        </>
       )}
 
       <ProTable<FoodLibraryDto>
@@ -446,7 +571,11 @@ const FoodLibraryList: React.FC = () => {
           </Space>
         }
         open={enrichModal.open}
-        footer={<Button type="primary" onClick={() => setEnrichModal((s) => ({ ...s, open: false }))}>关闭</Button>}
+        footer={
+          <Button type="primary" onClick={() => setEnrichModal((s) => ({ ...s, open: false }))}>
+            关闭
+          </Button>
+        }
         onCancel={() => setEnrichModal((s) => ({ ...s, open: false }))}
         width={600}
       >
@@ -463,7 +592,9 @@ const FoodLibraryList: React.FC = () => {
                     </Typography.Text>
                   </Descriptions.Item>
                   <Descriptions.Item label="失败字段">
-                    <Typography.Text type={enrichModal.result.totalFailed > 0 ? 'danger' : 'secondary'}>
+                    <Typography.Text
+                      type={enrichModal.result.totalFailed > 0 ? 'danger' : 'secondary'}
+                    >
                       <CloseOutlined /> {enrichModal.result.totalFailed}
                     </Typography.Text>
                   </Descriptions.Item>
@@ -487,7 +618,9 @@ const FoodLibraryList: React.FC = () => {
                         </Typography.Text>
                         <Space wrap size={[4, 4]}>
                           {stage.enrichedFields.map((f) => (
-                            <Tag key={f} color="success" style={{ fontSize: 11 }}>{f}</Tag>
+                            <Tag key={f} color="success" style={{ fontSize: 11 }}>
+                              {f}
+                            </Tag>
                           ))}
                         </Space>
                       </div>
@@ -499,7 +632,9 @@ const FoodLibraryList: React.FC = () => {
                         </Typography.Text>
                         <Space wrap size={[4, 4]}>
                           {stage.failedFields.map((f) => (
-                            <Tag key={f} color="error" style={{ fontSize: 11 }}>{f}</Tag>
+                            <Tag key={f} color="error" style={{ fontSize: 11 }}>
+                              {f}
+                            </Tag>
                           ))}
                         </Space>
                       </div>

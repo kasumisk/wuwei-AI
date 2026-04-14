@@ -71,7 +71,6 @@ export interface FoodLibraryDto {
   acquisitionDifficulty?: number;
   // 烹饪 & 风味
   cuisine?: string;
-  cookingMethod?: string;
   cookingMethods?: string[];
   flavrorProfile?: Record<string, any>;
   textureTags?: string[];
@@ -245,6 +244,29 @@ export interface FoodLibraryStatistics {
   bySource: Array<{ source: string; count: number }>;
   byStatus: Array<{ status: string; count: number }>;
   pendingConflicts: number;
+  /** V8.5: 全库平均完整度（仅含已补全食物，0-100） */
+  avgCompleteness: number;
+  /** V8.4: 补全状态分布 */
+  enrichmentStatus: {
+    pending: number;
+    completed: number;
+    partial: number;
+    failed: number;
+    staged: number;
+    rejected: number;
+  };
+  /** V8.4: 完整度分布（low <30 / mid 30-79 / high >=80） */
+  completenessDistribution: {
+    low: number;
+    mid: number;
+    high: number;
+  };
+  /** V8.4: 审核状态分布 */
+  reviewStatusCounts: {
+    pending: number;
+    approved: number;
+    rejected: number;
+  };
 }
 
 // ==================== Query Keys ====================

@@ -312,7 +312,6 @@ export type EnrichableField =
   | 'sub_category'
   | 'food_group'
   | 'cuisine'
-  | 'cooking_method'
   | 'glycemic_index'
   | 'glycemic_load'
   | 'fodmap_level'
@@ -397,6 +396,16 @@ export interface EnrichmentJob {
   timestamp: number;
   processedOn: number | null;
   finishedOn: number | null;
+}
+
+/** V8.4: getJobs 接口改为分页结构 */
+export interface EnrichmentJobsResponse {
+  list: EnrichmentJob[];
+  total: number;
+  page: number;
+  pageSize: number;
+  offset: number;
+  hasMore: boolean;
 }
 
 export interface StagedEnrichment {
@@ -629,10 +638,16 @@ export const enrichmentApi = {
     status?: 'waiting' | 'active' | 'completed' | 'failed' | 'delayed';
     limit?: number;
     offset?: number;
-  }): Promise<EnrichmentJob[]> => request.get(`${ENRICHMENT_BASE}/jobs`, params),
+  }): Promise<EnrichmentJobsResponse> => request.get(`${ENRICHMENT_BASE}/jobs`, params),
 
-  clean: (data?: { grace?: number; type?: 'completed' | 'failed' }): Promise<{ cleaned: number }> =>
+  clean: (data?: {
+    grace?: number;
+    type?: 'completed' | 'failed' | 'all';
+    limit?: number;
+  }): Promise<{ cleaned: number; type: string }> =>
     request.post(`${ENRICHMENT_BASE}/clean`, data ?? {}),
+
+  drain: (): Promise<void> => request.post(`${ENRICHMENT_BASE}/drain`, {}),
 
   // Staging
   getStaged: (params?: {
@@ -766,8 +781,9 @@ export const useEnrichmentJobs = (
     queryKey: enrichmentQueryKeys.jobs(status),
     queryFn: () => enrichmentApi.getJobs({ status, limit }),
     refetchInterval: (query) => {
-      const d = query.state.data as EnrichmentJob[] | undefined;
-      return d?.some((j) => j.status === 'pending') ? 10000 : 15000;
+      // V8.4: getJobs 返回分页结构 { list, total, ... }，不再是数组
+      const d = query.state.data as EnrichmentJobsResponse | undefined;
+      return d?.list?.some((j) => j.status === 'pending') ? 10000 : 15000;
     },
     refetchIntervalInBackground: false,
   });
@@ -881,11 +897,28 @@ export const useBatchApproveStaged = (
 };
 
 export const useCleanEnrichmentJobs = (
-  options?: UseMutationOptions<{ cleaned: number }, Error, { type?: 'completed' | 'failed' }>
+  options?: UseMutationOptions<
+    { cleaned: number },
+    Error,
+    { type?: 'completed' | 'failed' | 'all' }
+  >
 ) => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data) => enrichmentApi.clean(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.stats });
+      queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.jobs() });
+    },
+    ...options,
+  });
+};
+
+/** 清空 waiting 队列（drain） */
+export const useDrainEnrichmentQueue = (options?: UseMutationOptions<void, Error, void>) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => enrichmentApi.drain(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.stats });
       queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.jobs() });

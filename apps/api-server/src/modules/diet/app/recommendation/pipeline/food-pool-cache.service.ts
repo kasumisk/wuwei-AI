@@ -106,7 +106,6 @@ const FOOD_POOL_SELECTABLE_COLUMNS: string[] = [
   // V5 4.6: 嵌入扩展字段（用于 96 维嵌入生成 + 可解释性）
   'cuisine',
   'flavor_profile',
-  'cooking_method',
   'prep_time_minutes',
   'cook_time_minutes',
   'skill_required',
@@ -214,8 +213,7 @@ function mapRowToFoodLibrary(row: Record<string, unknown>): FoodLibrary {
     // 烹饪/风味扩展
     cuisine: row.cuisine != null ? String(row.cuisine) : undefined,
     flavorProfile: jsonParse(row.flavorProfile, undefined),
-    cookingMethod:
-      row.cookingMethod != null ? String(row.cookingMethod) : undefined,
+    cookingMethods: Array.isArray(row.cookingMethods) ? row.cookingMethods.map(String) : [],
     prepTimeMinutes: nOpt(row.prepTimeMinutes) as number | undefined,
     cookTimeMinutes: nOpt(row.cookTimeMinutes) as number | undefined,
     skillRequired:

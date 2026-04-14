@@ -71,10 +71,7 @@ export class FoodConflictResolverService {
           field,
           sources: [
             {
-              source:
-                existingValues.primarySource ||
-                existingValues.primarySource ||
-                'existing',
+              source: existingValues.primarySource || 'existing',
               value: oldVal,
             },
             { source: incomingSource, value: newVal },
@@ -100,10 +97,7 @@ export class FoodConflictResolverService {
             field: 'category',
             sources: [
               {
-                source:
-                  existingValues.primarySource ||
-                  existingValues.primarySource ||
-                  'existing',
+                source: existingValues.primarySource || 'existing',
                 value: existingValues.category,
               },
               { source: incomingSource, value: incomingValues.category },

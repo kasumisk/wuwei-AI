@@ -496,9 +496,6 @@ const FoodDetailPage: React.FC = () => {
                     <Descriptions.Item label="菜品类型">
                       {fieldValue(food.dishType, '', 'dish_type')}
                     </Descriptions.Item>
-                    <Descriptions.Item label="烹饪方式(单)">
-                      {fieldValue(food.cookingMethod, '', 'cooking_method')}
-                    </Descriptions.Item>
                     <Descriptions.Item label="制作技能要求">
                       {fieldValue(food.skillRequired, '', 'skill_required')}
                     </Descriptions.Item>
@@ -534,7 +531,7 @@ const FoodDetailPage: React.FC = () => {
                         ? food.ingredientList.map((i) => <Tag key={i}>{i}</Tag>)
                         : <span>-{fieldStatus(null, 'ingredient_list')}</span>}
                     </Descriptions.Item>
-                    <Descriptions.Item label="烹饪方式(多)">
+                    <Descriptions.Item label="烹饪方式">
                       {food.cookingMethods && food.cookingMethods.length > 0
                         ? food.cookingMethods.map((c) => <Tag key={c} color="cyan">{c}</Tag>)
                         : <span>-{fieldStatus(null, 'cooking_methods')}</span>}

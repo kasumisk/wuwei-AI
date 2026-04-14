@@ -7,7 +7,7 @@
  * - 单食物不产生互补对
  * - 宏量营养素分布计算（4:4:9 热量拆分）
  * - targetMatch 匹配度（接近 / 远离目标）
- * - 多样性建议（ingredientDiversity / cookingMethod / flavor / texture / nutritionComplementarity）
+ * - 多样性建议（ingredientDiversity / cookingMethods / flavor / texture / nutritionComplementarity）
  * - healthConditions 摘要
  * - 空 picks 数组
  */
@@ -122,7 +122,7 @@ describe('MealExplanationService', () => {
           name: '鸡胸肉',
           category: '肉类',
           iron: 2,
-          cookingMethod: '煎',
+          cookingMethods: ['pan_fry'],
         }),
         servingProtein: 25,
         servingCalories: 165,
@@ -137,7 +137,7 @@ describe('MealExplanationService', () => {
           name: '西兰花',
           category: '蔬菜',
           vitaminC: 89,
-          cookingMethod: '蒸',
+          cookingMethods: ['steam'],
         }),
         servingProtein: 2.8,
         servingCalories: 55,
@@ -151,7 +151,7 @@ describe('MealExplanationService', () => {
           id: 'f3',
           name: '糙米饭',
           category: '谷物',
-          cookingMethod: '煮',
+          cookingMethods: ['boil'],
         }),
         servingProtein: 2.6,
         servingCalories: 123,
@@ -352,10 +352,10 @@ describe('MealExplanationService', () => {
 
     const picks: ScoredFood[] = [
       createScoredFood({
-        food: createFood({ id: 'cm1', cookingMethod: '炒' }),
+        food: createFood({ id: 'cm1', cookingMethods: ['stir_fry'] }),
       }),
       createScoredFood({
-        food: createFood({ id: 'cm2', cookingMethod: '炒' }),
+        food: createFood({ id: 'cm2', cookingMethods: ['stir_fry'] }),
       }),
     ];
 

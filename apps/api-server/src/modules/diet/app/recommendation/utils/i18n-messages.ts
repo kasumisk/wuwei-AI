@@ -287,12 +287,28 @@ const zhCN: Record<string, string> = {
   'channel_label.convenience': '便利店',
   'channel_label.canteen': '食堂',
 
-  // ── cooking_method: 烹饪方式标签（5 个） ──
+  // ── cooking_method: 烹饪方式标签 ──
   'cooking_method.stir_fry': '炒',
+  'cooking_method.deep_fry': '炸',
+  'cooking_method.shallow_fry': '浅炸',
+  'cooking_method.pan_fry': '煎',
   'cooking_method.steam': '蒸',
   'cooking_method.boil': '煮',
-  'cooking_method.bake': '烤',
+  'cooking_method.simmer': '焖',
+  'cooking_method.stew': '炖',
+  'cooking_method.braise': '红烧',
+  'cooking_method.pressure_cook': '高压锅',
+  'cooking_method.roast': '烤',
+  'cooking_method.bake': '烘焙',
+  'cooking_method.grill': '烧烤',
+  'cooking_method.barbecue': '炭烤',
+  'cooking_method.smoke': '烟熏',
+  'cooking_method.pickle': '腌制',
+  'cooking_method.ferment': '发酵',
   'cooking_method.raw': '生食/凉拌',
+  'cooking_method.air_fry': '空气炸',
+  'cooking_method.microwave': '微波',
+  'cooking_method.rice_cook': '电饭锅',
 
   // ── meal_narrative: 餐食叙事模板（10 个） ──
   'meal_narrative.balanced': '这顿搭配营养均衡，蛋白质、碳水和脂肪比例适宜',
@@ -1049,10 +1065,26 @@ const enUS: Record<string, string> = {
 
   // ── cooking_method ──
   'cooking_method.stir_fry': 'Stir-fry',
+  'cooking_method.deep_fry': 'Deep-fry',
+  'cooking_method.shallow_fry': 'Shallow-fry',
+  'cooking_method.pan_fry': 'Pan-fry',
   'cooking_method.steam': 'Steam',
   'cooking_method.boil': 'Boil',
+  'cooking_method.simmer': 'Simmer',
+  'cooking_method.stew': 'Stew',
+  'cooking_method.braise': 'Braise',
+  'cooking_method.pressure_cook': 'Pressure cook',
+  'cooking_method.roast': 'Roast',
   'cooking_method.bake': 'Bake',
+  'cooking_method.grill': 'Grill',
+  'cooking_method.barbecue': 'Barbecue',
+  'cooking_method.smoke': 'Smoke',
+  'cooking_method.pickle': 'Pickle',
+  'cooking_method.ferment': 'Ferment',
   'cooking_method.raw': 'Raw/Salad',
+  'cooking_method.air_fry': 'Air-fry',
+  'cooking_method.microwave': 'Microwave',
+  'cooking_method.rice_cook': 'Rice cooker',
 
   // ── meal_narrative ──
   'meal_narrative.balanced':
@@ -1773,10 +1805,26 @@ const jaJP: Record<string, string> = {
 
   // ── cooking_method ──
   'cooking_method.stir_fry': '炒め',
+  'cooking_method.deep_fry': '揚げ',
+  'cooking_method.shallow_fry': '浅揚げ',
+  'cooking_method.pan_fry': 'ソテー',
   'cooking_method.steam': '蒸し',
   'cooking_method.boil': '煮',
-  'cooking_method.bake': '焼き',
+  'cooking_method.simmer': '煮込み',
+  'cooking_method.stew': 'シチュー',
+  'cooking_method.braise': '蒸し煮',
+  'cooking_method.pressure_cook': '圧力鍋',
+  'cooking_method.roast': 'ロースト',
+  'cooking_method.bake': 'ベーキング',
+  'cooking_method.grill': 'グリル',
+  'cooking_method.barbecue': 'バーベキュー',
+  'cooking_method.smoke': '燻製',
+  'cooking_method.pickle': '漬物',
+  'cooking_method.ferment': '発酵',
   'cooking_method.raw': '生食・サラダ',
+  'cooking_method.air_fry': 'エアフライ',
+  'cooking_method.microwave': '電子レンジ',
+  'cooking_method.rice_cook': '炊飯器',
 
   // ════════════════════════════════════════════════════════
   // V6.8 Phase 2-D: explanation-generator + health-modifier i18n (日本語)

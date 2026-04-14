@@ -53,7 +53,7 @@ export function createMockFoodLibrary(
     popularity: 80,
     commonalityScore: 70,
     availableChannels: ['home_cook', 'restaurant'],
-    cookingMethod: '炒',
+    cookingMethods: ['stir_fry'],
     cuisine: '中餐',
     createdAt: new Date(),
     updatedAt: new Date(),

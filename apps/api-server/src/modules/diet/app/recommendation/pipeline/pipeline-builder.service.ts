@@ -768,7 +768,7 @@ export class PipelineBuilderService implements OnModuleInit {
   ): void {
     const methodCount = new Map<string, number>();
     for (const p of picks) {
-      const method = p.food.cookingMethod?.toLowerCase();
+      const method = p.food.cookingMethods?.[0]?.toLowerCase();
       if (method) methodCount.set(method, (methodCount.get(method) ?? 0) + 1);
     }
 
@@ -776,7 +776,7 @@ export class PipelineBuilderService implements OnModuleInit {
       if (count <= 1) continue;
 
       const duplicates = picks
-        .filter((p) => p.food.cookingMethod?.toLowerCase() === method)
+        .filter((p) => p.food.cookingMethods?.[0]?.toLowerCase() === method)
         .sort((a, b) => a.score - b.score);
       const weakest = duplicates[0];
       const weakIdx = picks.indexOf(weakest);
@@ -784,20 +784,20 @@ export class PipelineBuilderService implements OnModuleInit {
 
       const usedMethods = new Set(
         picks
-          .map((p) => p.food.cookingMethod?.toLowerCase())
+          .map((p) => p.food.cookingMethods?.[0]?.toLowerCase())
           .filter(Boolean) as string[],
       );
       const replacement = candidates.find(
         (c) =>
           c.food.category === weakest.food.category &&
-          c.food.cookingMethod &&
-          !usedMethods.has(c.food.cookingMethod.toLowerCase()) &&
+          c.food.cookingMethods?.length &&
+          !usedMethods.has(c.food.cookingMethods[0].toLowerCase()) &&
           !usedNames.has(c.food.name),
       );
 
       if (replacement) {
         this.logger.debug(
-          `整餐 Rerank: 替换重复烹饪方式 "${weakest.food.name}"(${method}) → "${replacement.food.name}"(${replacement.food.cookingMethod})`,
+          `整餐 Rerank: 替换重复烹饪方式 "${weakest.food.name}"(${method}) → "${replacement.food.name}"(${replacement.food.cookingMethods?.[0]})`,
         );
         picks[weakIdx] = replacement;
         usedNames.add(replacement.food.name);

@@ -914,7 +914,7 @@ model Foods {
   /// 食物标准中文名，全局唯一
   name                  String                 @unique(map: "UQ_c3cf46642750fce8fea692ad946") @db.VarChar(100)
   /// 别名/俗称，逗号分隔（如"米饭,白饭,蒸米"），用于模糊搜索
-  aliases               String?                @db.VarChar(300)
+  aliases               String?                @db.VarChar(1000)
   /// 商品条形码（EAN-13 / UPC）
   barcode               String?                @db.VarChar(50)
   /// 生命周期状态：draft=草稿, active=上线, archived=归档, merged=已合并
@@ -922,9 +922,9 @@ model Foods {
   /// 一级分类（grain/vegetable/fruit/meat/seafood/dairy/egg/legume/nut/fat/beverage/condiment/snack/other）
   category              String                 @db.VarChar(30)
   /// 二级分类（如 grain → white_rice/brown_rice）
-  subCategory           String? @map("sub_category") @db.VarChar(50)
+  subCategory           String? @map("sub_category") @db.VarChar(200)
   /// 食物组（如 USDA 食物组分类）
-  foodGroup             String? @map("food_group") @db.VarChar(30)
+  foodGroup             String? @map("food_group") @db.VarChar(200)
   /// 食物形态：ingredient=原材料, dish=成品菜, semi_prepared=半成品（V7.3）
   foodForm              String? @map("food_form") @default("ingredient") @db.VarChar(20)
   /// 成品菜推荐优先级 0-100，值越高越优先推荐；仅 dish/semi_prepared 有值（V7.3）
@@ -1029,7 +1029,7 @@ model Foods {
   tags                  Json                   @default("[]")
   /// 主要食材（单个，如"猪肉"）；多食材请使用 ingredient_list
   /// @deprecated 请优先使用 ingredient_list（V7.1 起支持多食材）
-  mainIngredient        String? @map("main_ingredient") @db.VarChar(50)
+  mainIngredient        String? @map("main_ingredient") @db.VarChar(200)
   /// 完整食材清单（字符串数组，V7.1 取代单一 main_ingredient）
   ingredientList        String[] @map("ingredient_list") @default([])
   /// 食材兼容性映射（JSON，如 {"avoid":["红酒"],"pair_well":["豆腐"]}）
@@ -1043,34 +1043,32 @@ model Foods {
   /// 标准份量，单位 g（默认 100g）
   standardServingG      Int @map("standard_serving_g") @default(100)
   /// 标准份量文字描述（如"1碗(200g)"）
-  standardServingDesc String? @map("standard_serving_desc") @db.VarChar(100)
+  standardServingDesc String? @map("standard_serving_desc") @db.VarChar(1000)
   /// 常见份量预设（JSON 数组，如 [{"name":"1碗","grams":200},{"name":"半碗","grams":100}]）
   commonPortions        Json @map("common_portions") @default("[]")
 
   // ─── 烹饪与风味 ────────────────────────────────────────────────────────
   /// 所属菜系（如 chinese/japanese/western/korean/indian）
-  cuisine               String?                @db.VarChar(30)
+  cuisine               String?                @db.VarChar(100)
   /// 风味画像（JSON，如 {"salty":4,"sweet":1,"spicy":0,"umami":3}，0-5 分制）
   flavorProfile         Json? @map("flavor_profile")
-  /// 主要烹饪方式（单个，如 steam/boil/fry）；多方式请使用 cooking_methods
-  /// @deprecated 请优先使用 cooking_methods（V7.1 起支持多烹饪方式）
-  cookingMethod         String? @map("cooking_method") @db.VarChar(20)
-  /// 可行烹饪方式列表（字符串数组，如 ["steam","boil","stir_fry"]，V7.1 取代单一 cooking_method）
+  /// 可行烹饪方式列表（字符串数组，如 ["steam","boil","stir_fry"]）
+  /// 首元素视为主要烹饪方式（替代原 cooking_method 单值字段）
   cookingMethods        String[] @map("cooking_methods") @default([])
   /// 所需厨房设备（字符串数组，如 ["oven","wok"]；none=无需特殊设备）
   requiredEquipment     String[] @map("required_equipment") @default([])
   /// 建议食用温度：hot=热食, warm=温食, cold=冷食, room_temp=常温
-  servingTemperature    String? @map("serving_temperature") @db.VarChar(20)
+  servingTemperature    String? @map("serving_temperature") @db.VarChar(30)
   /// 口感标签（字符串数组，如 ["crispy","chewy"]：crispy/creamy/chewy/soft/crunchy）
   textureTags           String[] @map("texture_tags") @default([])
   /// 成品类型：dish=菜肴, soup=汤, drink=饮品, dessert=甜点, snack=零食, staple=主食
-  dishType              String? @map("dish_type") @db.VarChar(20)
+  dishType              String? @map("dish_type") @db.VarChar(30)
   /// 备料时间，单位分钟
   prepTimeMinutes       Int? @map("prep_time_minutes")
   /// 烹饪时间，单位分钟
   cookTimeMinutes       Int? @map("cook_time_minutes")
   /// 烹饪难度：easy/medium/hard
-  skillRequired         String? @map("skill_required") @db.VarChar(10)
+  skillRequired         String? @map("skill_required") @db.VarChar(20)
   /// 成本等级 1-5（1=极低/食堂价, 3=中等/家常价, 5=高端/餐厅价）
   estimatedCostLevel    Int? @map("estimated_cost_level")
   /// 保质期，单位天（0 表示当日食用）
@@ -1155,7 +1153,7 @@ model Foods {
   @@index([primarySource], map: "IDX_foods_primary_source")
   @@index([status], map: "IDX_foods_status")
   @@index([tags], map: "IDX_foods_tags_gin", type: Gin)
-  @@index([cookingMethod], map: "idx_food_library_cooking_method")
+  @@index([cookingMethods], map: "idx_food_library_cooking_methods", type: Gin)
   @@index([cuisine], map: "idx_food_library_cuisine")
   @@index([category], map: "idx_foods_category")
   @@index([name(ops: raw("gin_trgm_ops"))], map: "idx_foods_name_trgm", type: Gin)

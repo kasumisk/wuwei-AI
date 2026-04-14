@@ -1,4 +1,5 @@
 import { FoodLibrary } from '../../../../food/food.types';
+import { COOKING_METHOD_EMBEDDING_INDEX } from '../../../../food/cooking-method.constants';
 
 /**
  * 食物嵌入服务 (V4 Phase 4.1 → V5 Phase 2.11: 64→96 维扩展)
@@ -92,15 +93,8 @@ const CUISINE_INDEX: Record<string, number> = {
   latin_american: 7,
 };
 
-/** V5 2.11: 烹饪方式索引映射 */
-const COOKING_METHOD_INDEX: Record<string, number> = {
-  steam: 0,
-  boil: 1,
-  stir_fry: 2,
-  roast: 3,
-  fry: 4,
-  raw: 5,
-};
+/** V5 2.11: 烹饪方式索引映射 — 引用自 cooking-method.constants */
+const COOKING_METHOD_INDEX = COOKING_METHOD_EMBEDDING_INDEX;
 
 /** V5 2.11: 技能需求映射 → 归一化值 */
 const SKILL_VALUE: Record<string, number> = {
@@ -278,8 +272,9 @@ export function computeFoodEmbedding(food: FoodLibrary): number[] {
   }
 
   // ── [78-83] 烹饪方式 one-hot (6 维) ──
-  if (food.cookingMethod) {
-    const cmIdx = COOKING_METHOD_INDEX[food.cookingMethod];
+  const primaryMethod = food.cookingMethods?.[0];
+  if (primaryMethod) {
+    const cmIdx = COOKING_METHOD_INDEX[primaryMethod];
     if (cmIdx !== undefined) {
       vec[78 + cmIdx] = 1;
     }

@@ -41,6 +41,10 @@ import {
   DEFAULT_REALISM,
 } from '../../../../strategy/strategy.types';
 import type { KitchenProfile } from '../../../../user/user.types';
+import {
+  EQUIPMENT_COOKING_MAP,
+  STOVE_REQUIRED_METHODS,
+} from '../../../../food/cooking-method.constants';
 
 /** 过滤后至少保留的候选数量 */
 const MIN_CANDIDATES = 5;
@@ -62,14 +66,8 @@ const BUDGET_COST_CAP: Record<string, number> = {
   high: 5,
 };
 
-/** V7.1 P2-E: 设备→烹饪方式映射（与 SceneResolverService 保持一致） */
-const EQUIPMENT_TO_METHODS: Record<string, string[]> = {
-  oven: ['bake', 'roast'],
-  microwave: ['microwave'],
-  air_fryer: ['air_fry'],
-  steamer: ['steam'],
-  rice_cooker: ['rice_cook'],
-};
+/** V7.1 P2-E: 设备→烹饪方式映射 — 引用自 cooking-method.constants */
+const EQUIPMENT_TO_METHODS = EQUIPMENT_COOKING_MAP;
 
 /** V7.1 P2-E: KitchenProfile 字段→设备 key */
 const KITCHEN_FIELDS: { field: keyof KitchenProfile; equipment: string }[] = [
@@ -374,7 +372,7 @@ export class RealisticFilterService {
   /**
    * V7.1 P2-E: 根据 KitchenProfile 过滤需要用户没有的设备的食物
    *
-   * 检查食物的 cookingMethod / cookingMethods / requiredEquipment：
+    * 检查食物的 cookingMethods / requiredEquipment：
    * - 如果食物的所有可行烹饪方式都需要用户没有的设备 → 过滤
    * - 如果食物有至少一种不需要特殊设备的烹饪方式 → 保留
    *
@@ -395,9 +393,7 @@ export class RealisticFilterService {
       }
     }
     if (kitchenProfile.primaryStove === 'none') {
-      ['stir_fry', 'pan_fry', 'deep_fry', 'wok'].forEach((m) =>
-        unavailableMethods.add(m),
-      );
+      STOVE_REQUIRED_METHODS.forEach((m) => unavailableMethods.add(m));
     }
 
     if (unavailableMethods.size === 0) return candidates;
@@ -426,12 +422,8 @@ export class RealisticFilterService {
         return true;
       }
 
-      // 检查 cookingMethods（V7.1）或 cookingMethod（legacy）
-      const methods = food.cookingMethods?.length
-        ? food.cookingMethods
-        : food.cookingMethod
-          ? [food.cookingMethod]
-          : [];
+      // 检查 cookingMethods
+      const methods = food.cookingMethods ?? [];
 
       if (methods.length === 0) return true; // 无烹饪方式信息 → 保留
 

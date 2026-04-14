@@ -258,7 +258,9 @@ export class FoodLibraryManagementService {
     const toCamelCase = (row: Record<string, any>): Record<string, any> => {
       const result: Record<string, any> = {};
       for (const [key, value] of Object.entries(row)) {
-        const camel = key.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
+        const camel = key.replace(/_([a-z])/g, (_, c: string) =>
+          c.toUpperCase(),
+        );
         result[camel] = value;
       }
       return result;
@@ -455,8 +457,7 @@ export class FoodLibraryManagementService {
     const newVersion = (food.dataVersion || 1) + 1;
 
     // V8.0: 更新 field_sources — 手动编辑的字段标记为 'manual'
-    const existingSources =
-      (food.fieldSources as Record<string, string>) || {};
+    const existingSources = (food.fieldSources as Record<string, string>) || {};
     const existingConfidence =
       (food.fieldConfidence as Record<string, number>) || {};
     const newSources = { ...existingSources };
@@ -639,32 +640,115 @@ export class FoodLibraryManagementService {
   // ==================== 统计 ====================
 
   async getStatistics() {
-    const [total, verified] = await Promise.all([
-      this.prisma.foods.count(),
-      this.prisma.foods.count({ where: { isVerified: true } }),
+    // V8.5: 合并 getStatisticsV81 能力，统一返回完整统计（包含 enrichmentStatus、completenessDistribution、reviewStatusCounts、avgCompleteness）
+    const [
+      totalResult,
+      verifiedResult,
+      pendingConflictsResult,
+      byCategoryResult,
+      bySourceResult,
+      byStatusResult,
+      enrichmentStatusResult,
+      completenessDistResult,
+      reviewStatusResult,
+      avgCompletenessResult,
+    ] = await Promise.all([
+      this.prisma.$queryRaw<[{ count: string }]>`
+        SELECT COUNT(*)::text AS count FROM foods`,
+      this.prisma.$queryRaw<[{ count: string }]>`
+        SELECT COUNT(*)::text AS count FROM foods WHERE is_verified = TRUE`,
+      this.prisma.$queryRaw<[{ count: string }]>`
+        SELECT COUNT(*)::text AS count FROM food_conflicts WHERE resolved_at IS NULL`,
+      this.prisma.$queryRaw<Array<{ category: string; count: string }>>`
+        SELECT category, COUNT(*)::text AS count FROM foods GROUP BY category ORDER BY COUNT(*) DESC`,
+      this.prisma.$queryRaw<Array<{ source: string; count: string }>>`
+        SELECT primary_source AS source, COUNT(*)::text AS count FROM foods GROUP BY primary_source ORDER BY COUNT(*) DESC`,
+      this.prisma.$queryRaw<Array<{ status: string; count: string }>>`
+        SELECT status, COUNT(*)::text AS count FROM foods GROUP BY status`,
+      // enrichment_status 分布
+      this.prisma.$queryRaw<Array<{ status: string; count: string }>>`
+        SELECT COALESCE(enrichment_status, 'pending') AS status, COUNT(*)::text AS count
+        FROM foods GROUP BY 1`,
+      // 完整度分布：low(<30) / mid(30-79) / high(>=80)
+      this.prisma.$queryRaw<Array<{ bucket: string; count: string }>>`
+        SELECT
+          CASE
+            WHEN COALESCE(data_completeness, 0) < 30 THEN 'low'
+            WHEN COALESCE(data_completeness, 0) < 80 THEN 'mid'
+            ELSE 'high'
+          END AS bucket,
+          COUNT(*)::text AS count
+        FROM foods GROUP BY 1`,
+      // review_status 分布
+      this.prisma.$queryRaw<Array<{ review_status: string; count: string }>>`
+        SELECT review_status, COUNT(*)::text AS count
+        FROM foods GROUP BY review_status`,
+      // V8.5: 全库平均完整度（仅计算已补全 > 0 的食物，排除 pending 拉低均值）
+      this.prisma.$queryRaw<[{ avg: string }]>`
+        SELECT COALESCE(AVG(data_completeness), 0)::text AS avg
+        FROM foods WHERE data_completeness IS NOT NULL AND data_completeness > 0`,
     ]);
+
+    const total = parseInt((totalResult as any)[0]?.count ?? '0', 10);
+    const verified = parseInt((verifiedResult as any)[0]?.count ?? '0', 10);
     const unverified = total - verified;
-
-    const byCategory = await this.prisma.$queryRawUnsafe<
-      { category: string; count: string }[]
-    >(
-      `SELECT category, COUNT(*)::text AS count FROM foods GROUP BY category ORDER BY COUNT(*) DESC`,
+    const pendingConflicts = parseInt(
+      (pendingConflictsResult as any)[0]?.count ?? '0',
+      10,
     );
+    const byCategory = (byCategoryResult as any[]).map((r) => ({
+      category: r.category,
+      count: parseInt(r.count, 10),
+    }));
+    const bySource = (bySourceResult as any[]).map((r) => ({
+      source: r.source,
+      count: parseInt(r.count, 10),
+    }));
+    const byStatus = (byStatusResult as any[]).map((r) => ({
+      status: r.status,
+      count: parseInt(r.count, 10),
+    }));
 
-    const bySource = await this.prisma.$queryRawUnsafe<
-      { source: string; count: string }[]
-    >(
-      `SELECT primary_source AS source, COUNT(*)::text AS count FROM foods GROUP BY primary_source`,
+    // enrichmentStatus 分布
+    const enrichMap: Record<string, number> = {};
+    for (const row of enrichmentStatusResult as any[]) {
+      enrichMap[row.status] = parseInt(row.count, 10);
+    }
+    const enrichmentStatus = {
+      pending: enrichMap['pending'] ?? 0,
+      completed: enrichMap['completed'] ?? 0,
+      partial: enrichMap['partial'] ?? 0,
+      failed: enrichMap['failed'] ?? 0,
+      staged: enrichMap['staged'] ?? 0,
+      rejected: enrichMap['rejected'] ?? 0,
+    };
+
+    // 完整度分布
+    const completenessMap: Record<string, number> = {};
+    for (const row of completenessDistResult as any[]) {
+      completenessMap[row.bucket] = parseInt(row.count, 10);
+    }
+    const completenessDistribution = {
+      low: completenessMap['low'] ?? 0,
+      mid: completenessMap['mid'] ?? 0,
+      high: completenessMap['high'] ?? 0,
+    };
+
+    // review_status 分布
+    const reviewMap: Record<string, number> = {};
+    for (const row of reviewStatusResult as any[]) {
+      reviewMap[row.review_status] = parseInt(row.count, 10);
+    }
+    const reviewStatusCounts = {
+      pending: reviewMap['pending'] ?? 0,
+      approved: reviewMap['approved'] ?? 0,
+      rejected: reviewMap['rejected'] ?? 0,
+    };
+
+    // V8.5: 全库平均完整度
+    const avgCompleteness = parseFloat(
+      parseFloat((avgCompletenessResult as any)[0]?.avg ?? '0').toFixed(1),
     );
-
-    const byStatus = await this.prisma.$queryRawUnsafe<
-      { status: string; count: string }[]
-    >(`SELECT status, COUNT(*)::text AS count FROM foods GROUP BY status`);
-
-    // V8.3: 统一冲突计数口径 — 使用 resolved_at IS NULL（与 getStatisticsV81 一致）
-    const conflictCount = await this.prisma.foodConflicts.count({
-      where: { resolvedAt: null },
-    });
 
     return {
       total,
@@ -673,7 +757,11 @@ export class FoodLibraryManagementService {
       byCategory,
       bySource,
       byStatus,
-      pendingConflicts: conflictCount,
+      pendingConflicts,
+      enrichmentStatus,
+      completenessDistribution,
+      reviewStatusCounts,
+      avgCompleteness,
     };
   }
 
@@ -896,91 +984,4 @@ export class FoodLibraryManagementService {
   }
 
   // ─── V8.1: 统计信息增强（含完整度分布和 reviewStatus 计数）────────────
-
-  async getStatisticsV81() {
-    // 原有统计（沿用 V8.0 logic，此处重建 SELECT）
-    const [
-      totalResult,
-      verifiedResult,
-      pendingConflictsResult,
-      byCategoryResult,
-      bySourceResult,
-      completenessDistResult,
-      reviewStatusResult,
-    ] = await Promise.all([
-      this.prisma.$queryRaw<[{ count: string }]>`
-        SELECT COUNT(*)::text AS count FROM foods WHERE status = 'active'`,
-      this.prisma.$queryRaw<[{ count: string }]>`
-        SELECT COUNT(*)::text AS count FROM foods WHERE is_verified = TRUE AND status = 'active'`,
-      this.prisma.$queryRaw<[{ count: string }]>`
-        SELECT COUNT(*)::text AS count FROM food_conflicts WHERE resolved_at IS NULL`,
-      this.prisma.$queryRaw<Array<{ category: string; count: string }>>`
-        SELECT category, COUNT(*)::text AS count FROM foods WHERE status = 'active' GROUP BY category ORDER BY COUNT(*) DESC`,
-      this.prisma.$queryRaw<Array<{ source: string; count: string }>>`
-        SELECT primary_source AS source, COUNT(*)::text AS count FROM foods WHERE status = 'active' GROUP BY primary_source ORDER BY COUNT(*) DESC`,
-      // 完整度分布：<30 / 30-79 / >=80
-      this.prisma.$queryRaw<Array<{ bucket: string; count: string }>>`
-        SELECT
-          CASE
-            WHEN data_completeness < 30 THEN 'low'
-            WHEN data_completeness < 80 THEN 'mid'
-            ELSE 'high'
-          END AS bucket,
-          COUNT(*)::text AS count
-        FROM foods WHERE status = 'active'
-        GROUP BY 1`,
-      // review_status 分布
-      this.prisma.$queryRaw<Array<{ reviewStatus: string; count: string }>>`
-        SELECT review_status, COUNT(*)::text AS count
-        FROM foods WHERE status = 'active'
-        GROUP BY review_status`,
-    ]);
-
-    const total = parseInt((totalResult as any)[0]?.count ?? '0', 10);
-    const verified = parseInt((verifiedResult as any)[0]?.count ?? '0', 10);
-    const pendingConflicts = parseInt(
-      (pendingConflictsResult as any)[0]?.count ?? '0',
-      10,
-    );
-    const byCategory = (byCategoryResult as any[]).map((r) => ({
-      category: r.category,
-      count: parseInt(r.count, 10),
-    }));
-    const bySource = (bySourceResult as any[]).map((r) => ({
-      source: r.source,
-      count: parseInt(r.count, 10),
-    }));
-
-    // 完整度分布
-    const completenessMap: Record<string, number> = {};
-    for (const row of completenessDistResult as any[]) {
-      completenessMap[row.bucket] = parseInt(row.count, 10);
-    }
-    const completenessDistribution = {
-      low: completenessMap['low'] ?? 0,
-      mid: completenessMap['mid'] ?? 0,
-      high: completenessMap['high'] ?? 0,
-    };
-
-    // review_status 分布
-    const reviewMap: Record<string, number> = {};
-    for (const row of reviewStatusResult as any[]) {
-      reviewMap[row.reviewStatus] = parseInt(row.count, 10);
-    }
-    const reviewStatusCounts = {
-      pending: reviewMap['pending'] ?? 0,
-      approved: reviewMap['approved'] ?? 0,
-      rejected: reviewMap['rejected'] ?? 0,
-    };
-
-    return {
-      total,
-      verified,
-      pendingConflicts,
-      byCategory,
-      bySource,
-      completenessDistribution,
-      reviewStatusCounts,
-    };
-  }
 }

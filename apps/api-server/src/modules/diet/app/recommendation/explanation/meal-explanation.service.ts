@@ -20,6 +20,7 @@ import {
 } from '../types/recommendation.types';
 import type { ScoringExplanation } from '../types/scoring-explanation.interface';
 import { t, Locale } from '../utils/i18n-messages';
+import { CookingMethod } from '../../../../food/cooking-method.constants';
 import {
   MealCompositionScorer,
   MealCompositionScore,
@@ -225,7 +226,7 @@ export class MealExplanationService {
     if (compositionScore.cookingMethodDiversity < 50) {
       // 找到最常见的烹饪方式
       const methods = picks
-        .map((p) => p.food.cookingMethod)
+        .flatMap((p) => p.food.cookingMethods ?? [])
         .filter(Boolean) as string[];
       const methodCount = new Map<string, number>();
       for (const m of methods) {
@@ -236,9 +237,9 @@ export class MealExplanationService {
       )[0];
       if (dominant && dominant[1] > 1) {
         const altKey =
-          dominant[0] === '炒'
+          dominant[0] === CookingMethod.STIR_FRY
             ? 'explain.diversity.cookAlt.stir_fry'
-            : dominant[0] === '炸'
+            : dominant[0] === CookingMethod.DEEP_FRY
               ? 'explain.diversity.cookAlt.deep_fry'
               : 'explain.diversity.cookAlt.default';
         tips.push(

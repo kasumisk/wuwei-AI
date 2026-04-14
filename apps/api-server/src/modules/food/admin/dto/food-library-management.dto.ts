@@ -614,18 +614,8 @@ export class CreateFoodLibraryDto {
   @IsObject()
   flavorProfile?: Record<string, number>;
 
-  /** @deprecated 请优先使用 cookingMethods（V7.1 起支持多方式） */
   @ApiPropertyOptional({
-    description:
-      '主要烹饪方式（单个，如 steam/boil/fry）；多方式请使用 cookingMethods',
-    deprecated: true,
-  })
-  @IsOptional()
-  @IsString()
-  cookingMethod?: string;
-
-  @ApiPropertyOptional({
-    description: '可行烹饪方式列表（V7.1，如 ["steam","boil","stir_fry"]）',
+    description: '可行烹饪方式列表（如 ["steam","boil","stir_fry"]，首元素为主要方式）',
     type: [String],
   })
   @IsOptional()

@@ -248,9 +248,10 @@ export class FoodEnrichmentProcessor extends WorkerHost {
 
   @OnWorkerEvent('failed')
   async onFailed(job: Job<EnrichmentJobData>, error: Error): Promise<void> {
-    const maxAttempts =
-      job.opts?.attempts ??
-      QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_ENRICHMENT].maxRetries + 1;
+    // V8.4 修复：job.opts?.attempts 在手动重入队或旧任务中可能为 undefined。
+    // BullMQ 默认 attempts=1；若显式设置则使用设置值。
+    // 当 attemptsMade >= 该值时说明不会再重试，标记最终失败。
+    const maxAttempts = job.opts?.attempts ?? 1;
     if (job.attemptsMade >= maxAttempts) {
       await this.deadLetterService.storeFailedJob(
         QUEUE_NAMES.FOOD_ENRICHMENT,

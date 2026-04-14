@@ -127,10 +127,12 @@ export class DailyPlanContextService {
       state.categoryCounts[sf.food.category] =
         (state.categoryCounts[sf.food.category] ?? 0) + 1;
 
-      // 烹饪方式计数
-      if (sf.food.cookingMethod) {
-        state.cookingMethodCounts[sf.food.cookingMethod] =
-          (state.cookingMethodCounts[sf.food.cookingMethod] ?? 0) + 1;
+      // 烹饪方式计数（统计所有方式）
+      if (sf.food.cookingMethods?.length) {
+        for (const method of sf.food.cookingMethods) {
+          state.cookingMethodCounts[method] =
+            (state.cookingMethodCounts[method] ?? 0) + 1;
+        }
       }
 
       // 主食材
@@ -229,9 +231,10 @@ export class DailyPlanContextService {
         penalties.categoryOveruse ?? DEFAULT_PENALTIES.categoryOveruse;
     }
 
-    // 规则4: 同烹饪方式已出现 ≥ threshold 次
-    if (food.cookingMethod) {
-      const methodCount = state.cookingMethodCounts[food.cookingMethod] ?? 0;
+    // 规则4: 同烹饪方式已出现 ≥ threshold 次（使用主要烹饪方式）
+    const primaryMethod = food.cookingMethods?.[0];
+    if (primaryMethod) {
+      const methodCount = state.cookingMethodCounts[primaryMethod] ?? 0;
       const methodThreshold =
         penalties.cookingMethodThreshold ??
         DEFAULT_PENALTIES.cookingMethodThreshold;
@@ -276,8 +279,10 @@ export class DailyPlanContextService {
 
       // 奖励2: 引入新烹饪方式
       if (
-        food.cookingMethod &&
-        (state.cookingMethodCounts[food.cookingMethod] ?? 0) === 0
+        food.cookingMethods?.length &&
+        food.cookingMethods.some(
+          (m) => (state.cookingMethodCounts[m] ?? 0) === 0,
+        )
       ) {
         adjustment += DIVERSITY_REWARDS.newCookingMethod;
       }

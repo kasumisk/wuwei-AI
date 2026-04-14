@@ -80,18 +80,23 @@ export class AnalysisRecordManagementService {
     const total = parseInt(totalResult[0]?.count ?? '0', 10);
 
     const offset = (page - 1) * pageSize;
+    // R2 修复：LIMIT/OFFSET 占位符必须在模板字符串外分两步生成，
+    // 避免同一表达式内 paramIdx++ 被求值两次产生相同索引
+    const limitIdx = paramIdx++;
+    const offsetIdx = paramIdx++;
     const list = await this.prisma.$queryRawUnsafe<any[]>(
       `SELECT * FROM food_analysis_records ar
        WHERE ${whereClause}
        ORDER BY ar.created_at DESC
-       LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
+       LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
       ...params,
       pageSize,
       offset,
     );
 
+    // R3 修复：$queryRawUnsafe 返回 snake_case 列名，用 r.user_id 访问
+    const userIds = [...new Set(list.map((r) => r.user_id).filter(Boolean))];
     // 批量获取用户信息
-    const userIds = [...new Set(list.map((r) => r.userId))];
     const users =
       userIds.length > 0
         ? await this.prisma.appUsers.findMany({
@@ -103,7 +108,7 @@ export class AnalysisRecordManagementService {
 
     const listWithUser = list.map((r) => ({
       ...r,
-      user: userMap.get(r.userId) || null,
+      user: userMap.get(r.user_id) || null,
     }));
 
     return {

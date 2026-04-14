@@ -17,6 +17,7 @@
 import { t } from '../utils/i18n-messages';
 import { Injectable } from '@nestjs/common';
 import { FoodLibrary } from '../../../../food/food.types';
+import { COOKING_TEXTURE_MAP } from '../../../../food/cooking-method.constants';
 import {
   ScoredFood,
   ScoringConfigSnapshot,
@@ -114,22 +115,10 @@ const ANTAGONISTIC_PAIRS: ReadonlyArray<{
 ];
 
 /**
- * V6.7 Phase 2-C: 质感映射
- * 基于 cookingMethod 推断食物质感
+ * V6.7 Phase 2-C: 质感映射 — 引用自 cooking-method.constants
+ * 基于 cookingMethods 推断食物质感
  */
-const TEXTURE_MAP: Record<string, string> = {
-  stir_fry: 'crispy',
-  deep_fry: 'crispy',
-  fry: 'crispy',
-  steam: 'soft',
-  boil: 'soft',
-  stew: 'tender',
-  bake: 'crispy',
-  roast: 'crispy',
-  raw: 'crunchy',
-  grill: 'chewy',
-  braise: 'tender',
-};
+const TEXTURE_MAP = COOKING_TEXTURE_MAP;
 
 /** 口味六轴 */
 const FLAVOR_AXES = [
@@ -261,7 +250,7 @@ export class MealCompositionScorer {
    */
   private calcCookingMethodDiversity(foods: ScoredFood[]): number {
     const methods = foods
-      .map((f) => f.food.cookingMethod?.toLowerCase())
+      .flatMap((f) => f.food.cookingMethods?.map((m) => m.toLowerCase()) ?? [])
       .filter(Boolean) as string[];
 
     if (methods.length <= 1) return 100;
@@ -385,7 +374,7 @@ export class MealCompositionScorer {
   /**
    * V6.7 Phase 2-C: 质感多样性
    *
-   * 基于 cookingMethod 和 tags 推断每道菜的质感（crispy/soft/tender/crunchy/chewy/liquid），
+   * 基于 cookingMethods 和 tags 推断每道菜的质感（crispy/soft/tender/crunchy/chewy/liquid），
    * 质感种类越多 → 分越高（用餐体验更丰富）
    *
    * 评分：1 种 = 30, 2 种 = 60, 3 种 = 85, 4+ 种 = 100
@@ -395,10 +384,12 @@ export class MealCompositionScorer {
     const textures = new Set<string>();
 
     for (const { food } of foods) {
-      const method = food.cookingMethod?.toLowerCase() ?? '';
-      const texture = TEXTURE_MAP[method];
-      if (texture) {
-        textures.add(texture);
+      // 从 cookingMethods 推断质感（所有方式都参与）
+      for (const m of food.cookingMethods ?? []) {
+        const texture = TEXTURE_MAP[m.toLowerCase()];
+        if (texture) {
+          textures.add(texture);
+        }
       }
 
       // 额外：特定 tags 覆写质感
@@ -414,6 +405,6 @@ export class MealCompositionScorer {
     if (textures.size === 3) return 85;
     if (textures.size === 2) return 60;
     if (textures.size === 1) return 30; // 全部同一质感
-    return 50; // unknown — 无 cookingMethod 数据
+    return 50; // unknown — 无 cookingMethods 数据
   }
 }
