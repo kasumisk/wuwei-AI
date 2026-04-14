@@ -930,7 +930,7 @@ model Foods {
   /// 成品菜推荐优先级 0-100，值越高越优先推荐；仅 dish/semi_prepared 有值（V7.3）
   dishPriority          Int? @map("dish_priority")
   /// 食物可获得性难度 1-5（1=随处可得, 2=常见, 3=普通, 4=较难, 5=稀有）（V7.4）
-  acquisitionDifficulty Int? @map("acquisition_difficulty") @default(3)
+  acquisitionDifficulty Int? @map("acquisition_difficulty")
 
   // ─── 宏量营养素（per 100g 可食部分）────────────────────────────────────
   /// 热量，单位 kcal
@@ -1004,11 +1004,11 @@ model Foods {
   /// 血糖负荷 GL = GI × 碳水/100
   glycemicLoad          Decimal? @map("glycemic_load") @db.Decimal(5, 1)
   /// 是否为加工食品
-  isProcessed           Boolean @map("is_processed") @default(false)
+  isProcessed           Boolean? @map("is_processed")
   /// 是否为油炸食品
-  isFried               Boolean @map("is_fried") @default(false)
+  isFried               Boolean? @map("is_fried")
   /// 加工程度 1-4（1=未加工, 2=轻加工, 3=中度加工, 4=深度加工/超加工）
-  processingLevel       Int @map("processing_level") @default(1)
+  processingLevel       Int? @map("processing_level")
   /// FODMAP 含量等级：low/medium/high（肠易激综合征饮食管理）
   fodmapLevel           String? @map("fodmap_level") @db.VarChar(10)
   /// 草酸含量等级：low/medium/high（肾结石防控）
@@ -1037,7 +1037,7 @@ model Foods {
   /// 可获取渠道（JSON 数组）：home_cook=家庭自制, restaurant=餐厅, delivery=外卖, convenience=便利店/超市
   availableChannels     Json @map("available_channels") @default("[\"home_cook\",\"restaurant\",\"delivery\",\"convenience\"]")
   /// 大众化评分 0-100（0=极罕见食材, 50=一般常见, 100=日常必备）；影响推荐权重
-  commonalityScore      Int @map("commonality_score") @default(50)
+  commonalityScore      Int @map("commonality_score")
 
   // ─── 份量信息 ──────────────────────────────────────────────────────────
   /// 标准份量，单位 g（默认 100g）

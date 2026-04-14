@@ -386,6 +386,12 @@ export const ENRICHABLE_STRING_FIELDS = [
  */
 export const AI_OVERRIDABLE_FIELDS: ReadonlyArray<string> = [
   'food_form',
+  'is_processed',
+  'isFried',
+  'acquisition_difficulty',
+  'availableChannels',
+  'standardServingG',
+  'commonalityScore',
 ] as const;
 
 export const NUTRIENT_RANGES: Record<string, { min: number; max: number }> = {

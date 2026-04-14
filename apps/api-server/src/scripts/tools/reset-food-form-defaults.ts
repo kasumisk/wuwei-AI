@@ -42,8 +42,8 @@ type FoodForm = 'ingredient' | 'dish' | 'semi_prepared';
 /** 直接食用型分类（不需要烹饪，直接吃就是成品） */
 const READY_TO_EAT_CATEGORIES = new Set(['水果', 'fruit', '饮品', 'beverage', '乳制品', 'dairy', '调味料', 'condiment', '零食', 'snack']);
 
-/** 明确是成品餐食的分类 */
-const DISH_CATEGORIES = new Set(['汤类', 'composite_soup', '快餐', 'composite', 'fast_food']);
+/** 明确是成品餐食的分类（注意：composite 是混合/杂项分类，包含坚果/药食材等原料，不在此列） */
+const DISH_CATEGORIES = new Set(['汤类', 'composite_soup', '快餐', 'fast_food']);
 
 /** 烹饪动词正则：包含这些词的食物名称通常是成品 */
 const COOKING_VERB_RE = /炒|烤|蒸|煮|炸|拌|烧|炖|煎|卤|烩|熏|酱|焖|涮|爆|扒|溜|氽|汆/;
@@ -236,15 +236,25 @@ async function main() {
 
   for (const r of changed) {
     try {
-      // 更新 food_form，同时在 field_sources 中标记来源为 'rule_inferred'
-      await prisma.$executeRaw`
-        UPDATE foods
-        SET
-          food_form = ${r.newForm},
-          field_sources = COALESCE(field_sources, '{}'::jsonb) || jsonb_build_object('food_form', 'rule_inferred'),
-          updated_at = NOW()
-        WHERE id = ${r.id}
-      `;
+      // 先用 Prisma ORM 更新 food_form（自动处理 uuid 类型）
+      const current = await prisma.foods.findUnique({
+        where: { id: r.id },
+        select: { fieldSources: true },
+      });
+      const updatedSources = {
+        ...(typeof current?.fieldSources === 'object' && current.fieldSources !== null
+          ? (current.fieldSources as Record<string, unknown>)
+          : {}),
+        food_form: 'rule_inferred',
+      };
+      await prisma.foods.update({
+        where: { id: r.id },
+        data: {
+          foodForm: r.newForm,
+          fieldSources: updatedSources,
+          updatedAt: new Date(),
+        },
+      });
       fixed++;
     } catch (e: any) {
       console.error(`  ❌ [${r.id}] ${r.name}: ${e.message}`);
