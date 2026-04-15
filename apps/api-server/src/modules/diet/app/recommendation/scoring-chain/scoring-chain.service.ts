@@ -115,6 +115,9 @@ export class ScoringChainService {
       const explanation: Partial<ScoringExplanation> = {};
 
       for (const factor of activeFactors) {
+        // V7.9 P3-02: 短路 — 分数已低于地板值时跳过剩余因子
+        if (currentScore <= resolvedConfig.scoreFloor) break;
+
         const adjustment = factor.computeAdjustment(food, currentScore, ctx);
         if (!adjustment) continue;
 
@@ -174,6 +177,27 @@ export class ScoringChainService {
         adjustments,
         explanation,
       });
+    }
+
+    // V7.9: 记录链式评分因子追踪信息
+    if (ctx.trace) {
+      const factorNames = activeFactors.map((f) => f.name);
+      // 统计每个因子的总调整次数
+      const factorHitCounts: Record<string, number> = {};
+      for (const f of activeFactors) factorHitCounts[f.name] = 0;
+      for (const r of results) {
+        for (const adj of r.adjustments) {
+          if (adj.factorName && factorHitCounts[adj.factorName] !== undefined) {
+            factorHitCounts[adj.factorName]++;
+          }
+        }
+      }
+      (ctx.trace as any)._lastScoringChainDetails = {
+        activeFactors: factorNames,
+        disabledFactors: resolvedConfig.disabledFactors,
+        candidateCount: candidates.length,
+        factorHitCounts,
+      };
     }
 
     return results;

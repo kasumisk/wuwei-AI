@@ -140,9 +140,9 @@ export type EnrichmentTarget = 'foods' | 'translations' | 'regional';
 // ─── V7.9: 分阶段补全定义 ─────────────────────────────────────────────────
 
 /**
-   * 5 阶段补全分组：每阶段独立 Prompt、独立验证、独立入库
-   * 前阶段补全结果作为后阶段的输入上下文，逐步提高数据精度
-   */
+ * 5 阶段补全分组：每阶段独立 Prompt、独立验证、独立入库
+ * 前阶段补全结果作为后阶段的输入上下文，逐步提高数据精度
+ */
 export interface EnrichmentStage {
   /** 阶段编号 1-5 */
   stage: number;
@@ -392,6 +392,10 @@ export const AI_OVERRIDABLE_FIELDS: ReadonlyArray<string> = [
   'availableChannels',
   'standardServingG',
   'commonalityScore',
+  'commonPortions',
+  'processingLevel',
+  'aliases',
+  'ingredientList',
 ] as const;
 
 export const NUTRIENT_RANGES: Record<string, { min: number; max: number }> = {
@@ -447,133 +451,296 @@ export const NUTRIENT_RANGES: Record<string, { min: number; max: number }> = {
 
 export const FIELD_DESC: Record<string, string> = {
   // ─── Stage 1: 核心营养素 (number, per 100g edible portion) ──────────
-  protein: '[number] protein g/100g (0-100). Per 100g edible portion.',
-  fat: '[number] fat g/100g (0-100). Total lipids per 100g edible portion.',
-  carbs: '[number] carbs g/100g (0-100). Total carbohydrates per 100g.',
-  fiber: '[number] fiber g/100g (0-80). Total dietary fiber per 100g.',
+  // 数据来源优先级：USDA FoodData Central SR Legacy → Foundation Foods → FAO/INFOODS → EUROFIR
+  protein:
+    '[number] protein g/100g (0-100). Total nitrogen × conversion factor (6.25 general, 5.7 wheat, 6.38 dairy). ' +
+    'Per 100g edible portion. USDA range ref: beef ~26g, chicken breast ~31g, cooked rice ~2.7g, apple ~0.3g.',
+  fat:
+    '[number] fat g/100g (0-100). Total lipids (ether extract method). Per 100g edible portion. ' +
+    'USDA range ref: butter ~81g, salmon ~13g, whole milk ~3.7g, banana ~0.3g.',
+  carbs:
+    '[number] carbs g/100g (0-100). Total available carbohydrates by difference (100 - protein - fat - fiber - moisture - ash). ' +
+    'Per 100g edible portion. USDA range ref: white rice cooked ~28g, bread ~49g, orange ~12g.',
+  fiber:
+    '[number] fiber g/100g (0-80). Total dietary fiber (AOAC method). Per 100g edible portion. ' +
+    'USDA range ref: oat bran ~15g, lentils cooked ~8g, apple ~2.4g, white rice cooked ~0.4g.',
   sugar:
-    '[number] sugar g/100g (0-100). Total sugars (natural + added) per 100g.',
+    '[number] sugar g/100g (0-100). Total sugars (sum of free mono- and disaccharides, natural + added). Per 100g. ' +
+    'USDA range ref: honey ~82g, dates ~63g, apple ~10g, plain yogurt ~5g.',
   addedSugar:
-    '[number] added_sugar g/100g (0-100). Sugars added during processing/preparation.',
+    '[number] added_sugar g/100g (0-100). Sugars added during processing or preparation (sucrose, HFCS, etc.). ' +
+    '0 for whole unprocessed foods. Relevant for packaged/processed foods.',
   naturalSugar:
-    '[number] natural_sugar g/100g (0-100). Naturally occurring sugars.',
+    '[number] natural_sugar g/100g (0-100). Inherent sugars present in unprocessed food (fructose in fruit, lactose in dairy). ' +
+    'For whole foods, natural_sugar ≈ total sugar. For processed foods, natural_sugar = total_sugar − added_sugar.',
   sodium:
-    '[number] sodium mg/100g (0-50000). Includes sodium from all sources (salt, additives).',
+    '[number] sodium mg/100g (0-50000). Total sodium from all sources (intrinsic + added salt/additives). ' +
+    'USDA range ref: table salt ~38758mg, soy sauce ~5493mg, canned soup ~430mg, fresh chicken ~74mg, fresh apple ~1mg.',
   // ─── Stage 1: 食物形态 ───────────────────────────────────────────────
   // V8.4: food_form 移至 Stage1，是基础属性，决定后续阶段上下文
   foodForm:
     '[string] food_form: "ingredient" | "dish" | "semi_prepared". ' +
-    '"ingredient" = raw/minimally processed single ingredient (e.g. chicken breast, brown rice, apple). ' +
-    '"dish" = ready-to-eat prepared meal or recipe (e.g. fried rice, beef stew, Caesar salad). ' +
-    '"semi_prepared" = partially processed, requires further cooking (e.g. dumpling wrappers, marinated meat, par-cooked pasta). ' +
-    'Base value on the food as it is commonly sold/served, not its raw ingredient state.',
+    '"ingredient" = raw or minimally processed single-ingredient food, sold/used as a culinary building block ' +
+    '(e.g. chicken breast, brown rice, apple, olive oil, cheddar cheese, dried lentils). ' +
+    '"dish" = ready-to-eat or ready-to-serve composed meal or recipe, typically multi-ingredient ' +
+    '(e.g. fried rice, beef stew, Caesar salad, pizza, ramen, scrambled eggs). ' +
+    '"semi_prepared" = partially processed, requires further cooking/assembly before eating ' +
+    '(e.g. dumpling wrappers, marinated raw meat, par-cooked pasta, instant noodle block, bread dough). ' +
+    'Decision rule: classify as the food is COMMONLY SOLD/SERVED to consumers, not the theoretical raw state.',
   // ─── Stage 2: 微量营养素 (number, per 100g) ─────────────────────────
+  // 数据来源：USDA FoodData Central → EUROFIR → FAO/INFOODS 区域表（亚洲/拉丁/非洲食物）
   calcium:
-    '[number] calcium mg/100g (0-2000). Reference: USDA FoodData Central.',
-  iron: '[number] iron mg/100g (0-100). Total iron (heme + non-heme).',
-  potassium: '[number] potassium mg/100g (0-10000).',
-  cholesterol: '[number] cholesterol mg/100g (0-2000). Dietary cholesterol.',
+    '[number] calcium mg/100g (0-2000). Total calcium. ' +
+    'USDA ref: parmesan ~1184mg, plain yogurt ~110mg, spinach cooked ~136mg, whole milk ~113mg, cooked chicken ~11mg.',
+  iron:
+    '[number] iron mg/100g (0-100). Total iron (heme + non-heme). ' +
+    'USDA ref: chicken liver ~9mg, lentils cooked ~3.3mg, beef ~2.6mg, spinach raw ~2.7mg, white rice cooked ~0.2mg.',
+  potassium:
+    '[number] potassium mg/100g (0-10000). Total potassium. ' +
+    'USDA ref: dried apricot ~1160mg, banana ~358mg, potato baked ~535mg, whole milk ~132mg.',
+  cholesterol:
+    '[number] cholesterol mg/100g (0-2000). Dietary cholesterol. ' +
+    '0 for all plant foods. USDA ref: egg yolk ~1085mg, whole egg ~373mg, shrimp ~189mg, chicken breast ~85mg.',
   vitaminA:
-    '[number] vitamin_a μg RAE/100g (0-50000). Retinol Activity Equivalents.',
-  vitaminC: '[number] vitamin_c mg/100g (0-2000). Ascorbic acid.',
-  vitaminD: '[number] vitamin_d μg/100g (0-1000). D2+D3 combined.',
-  vitaminE: '[number] vitamin_e mg/100g (0-500). Alpha-tocopherol equivalents.',
-  vitaminB12: '[number] vitamin_b12 μg/100g (0-100). Cobalamin.',
-  folate: '[number] folate μg DFE/100g (0-5000). Dietary Folate Equivalents.',
-  zinc: '[number] zinc mg/100g (0-100).',
-  magnesium: '[number] magnesium mg/100g (0-1000).',
-  saturatedFat: '[number] saturated_fat g/100g (0-100). Saturated fatty acids.',
+    '[number] vitamin_a μg RAE/100g (0-50000). Retinol Activity Equivalents. ' +
+    'RAE: retinol 1:1; β-carotene dietary 12:1; other provitamin-A 24:1. ' +
+    'USDA ref: beef liver ~9442μg RAE, carrot raw ~835μg RAE, sweet potato baked ~961μg RAE, whole milk ~46μg RAE.',
+  vitaminC:
+    '[number] vitamin_c mg/100g (0-2000). Ascorbic acid (L-ascorbic acid). ' +
+    'USDA ref: red bell pepper ~128mg, kiwi ~93mg, orange ~53mg, broccoli ~89mg, potato ~20mg. 0 for meat/fish.',
+  vitaminD:
+    '[number] vitamin_d μg/100g (0-1000). Total vitamin D (D2 ergocalciferol + D3 cholecalciferol). ' +
+    'USDA ref: salmon ~11μg, canned tuna ~4.5μg, egg yolk ~2.2μg, fortified milk ~1μg. Near 0 for plant foods unless fortified.',
+  vitaminE:
+    '[number] vitamin_e mg/100g (0-500). Alpha-tocopherol equivalents (α-TE). ' +
+    'USDA ref: wheat germ oil ~149mg, sunflower seeds ~35mg, almonds ~26mg, olive oil ~14mg, spinach ~2mg.',
+  vitaminB12:
+    '[number] vitamin_b12 μg/100g (0-100). Cobalamin (all forms). ' +
+    '0 for all plant foods (unless fortified). USDA ref: clams ~98μg, beef liver ~83μg, salmon ~3.2μg, whole milk ~0.45μg.',
+  folate:
+    '[number] folate μg DFE/100g (0-5000). Dietary Folate Equivalents. ' +
+    'DFE: food folate 1:1; synthetic folic acid ×1.7. ' +
+    'USDA ref: chicken liver ~578μg DFE, lentils cooked ~181μg DFE, spinach raw ~194μg DFE, orange ~30μg DFE.',
+  zinc:
+    '[number] zinc mg/100g (0-100). Total zinc. ' +
+    'USDA ref: oysters ~39mg, beef ~4.8mg, pumpkin seeds ~7.8mg, chickpeas cooked ~1.5mg, white rice cooked ~0.5mg.',
+  magnesium:
+    '[number] magnesium mg/100g (0-1000). Total magnesium. ' +
+    'USDA ref: pumpkin seeds ~592mg, dark chocolate ~228mg, almonds ~270mg, spinach cooked ~87mg, banana ~27mg.',
+  saturatedFat:
+    '[number] saturated_fat g/100g (0-100). Total saturated fatty acids. ' +
+    'USDA ref: butter ~51g, coconut oil ~87g, cheddar ~21g, beef ~7g, chicken breast ~0.9g, olive oil ~14g.',
   transFat:
-    '[number] trans_fat g/100g (0-10). Industrial + ruminant trans fats.',
+    '[number] trans_fat g/100g (0-10). Total trans-fatty acids (industrial + ruminant). ' +
+    'Industrial trans fat ≈0 in whole/unprocessed foods. Ruminant sources (butter ~3g, beef ~1g) have small amounts. ' +
+    'Near 0 for plant foods. Partially hydrogenated oils may be 2-10g.',
   purine:
-    '[number] purine mg/100g (0-2000). Total purines (uric acid precursors).',
-  phosphorus: '[number] phosphorus mg/100g (0-2000).',
-  vitaminB6: '[number] vitamin_b6 mg/100g (0-50). Pyridoxine.',
+    '[number] purine mg/100g (0-2000). Total purines expressed as uric acid precursors. ' +
+    'Ref: Kaneko et al. (2014) or ADA purine guidelines. ' +
+    'High: organ meats >300mg, sardines ~345mg; Moderate: beef/pork ~100-200mg; Low: dairy/eggs/vegetables <50mg.',
+  phosphorus:
+    '[number] phosphorus mg/100g (0-2000). Total phosphorus. ' +
+    'USDA ref: pumpkin seeds ~1174mg, parmesan ~694mg, salmon ~371mg, whole milk ~84mg, apple ~11mg.',
+  vitaminB6:
+    '[number] vitamin_b6 mg/100g (0-50). Pyridoxine and related forms. ' +
+    'USDA ref: pistachio ~1.7mg, tuna ~0.9mg, potato baked ~0.6mg, banana ~0.37mg, whole milk ~0.04mg.',
   omega3:
-    '[number] omega3 mg/100g (0-30000). Total Omega-3 fatty acids (ALA+EPA+DHA).',
+    '[number] omega3 mg/100g (0-30000). Total Omega-3 fatty acids: ALA (α-linolenic) + EPA + DHA. ' +
+    'Plant foods: ALA dominates (flaxseed ~22800mg, walnut ~9080mg). ' +
+    'Fatty fish: EPA+DHA dominate (salmon ~2260mg, mackerel ~5134mg). Near 0 for most plant foods/grains.',
   omega6:
-    '[number] omega6 mg/100g (0-50000). Total Omega-6 fatty acids (primarily linoleic acid).',
-  solubleFiber: '[number] soluble_fiber g/100g (0-40). Soluble dietary fiber.',
+    '[number] omega6 mg/100g (0-50000). Total Omega-6 fatty acids (primarily linoleic acid LA). ' +
+    'USDA ref: safflower oil ~74500mg, sunflower oil ~65700mg, corn oil ~53500mg, chicken ~1690mg, olive oil ~9763mg.',
+  solubleFiber:
+    '[number] soluble_fiber g/100g (0-40). Soluble dietary fiber (pectin, beta-glucan, inulin, psyllium). ' +
+    'USDA ref: psyllium ~71g, oat bran ~6.5g, apple ~0.9g, lentils cooked ~1g. Typically 25-50% of total fiber.',
   insolubleFiber:
-    '[number] insoluble_fiber g/100g (0-60). Insoluble dietary fiber.',
+    '[number] insoluble_fiber g/100g (0-60). Insoluble dietary fiber (cellulose, hemicellulose, lignin). ' +
+    'Typically 50-75% of total fiber. Wheat bran ~42g, kidney beans cooked ~5.5g, carrot raw ~1.6g.',
   waterContentPercent:
-    '[number] water_content_percent % (0-100). Moisture content.',
+    '[number] water_content_percent % (0-100). Moisture content (weight loss on drying). ' +
+    'USDA ref: cucumber ~95%, apple ~86%, cooked rice ~68%, bread ~37%, cheddar ~37%, dried pasta ~10%, crackers ~4%.',
   // ─── Stage 3: 健康属性 ──────────────────────────────────────────────
+  // GI/GL: University of Sydney International GI Database (glycemicindex.com)
+  // FODMAP: Monash University Low FODMAP App (monashfodmap.com)
+  // NOVA: Monteiro et al., Public Health Nutrition (2019)
   glycemicIndex:
-    '[number] glycemic_index integer 0-100 (glucose=100 reference). Use international GI database values where available.',
+    '[number] glycemic_index integer 0-100. Reference food = glucose (GI=100) or white bread (GI=70). ' +
+    'Authoritative source: International GI Database, University of Sydney. ' +
+    'Low GI <55: most non-starchy vegetables, legumes, most fruits; Medium GI 55-69: oats, sweet potato; ' +
+    'High GI ≥70: white bread ~75, white rice ~73, watermelon ~76. ' +
+    'GI applies only to carbohydrate-containing foods; for pure protein/fat foods (meat, eggs, oils), use 0.',
   glycemicLoad:
-    '[number] glycemic_load 0-50. GL = (GI × available carbs per serving) / 100.',
+    '[number] glycemic_load 0-50. GL = (GI × available carbohydrate g per 100g serving) / 100. ' +
+    'Report per 100g basis. Low GL <10, Medium 10-19, High ≥20. ' +
+    'Example: white rice GI=73, carbs=28g → GL = 73×28/100 = 20.4.',
   fodmapLevel:
-    '[string] fodmap_level: "low" | "medium" | "high". Based on Monash University FODMAP guidelines.',
+    '[string] fodmap_level: "low" | "medium" | "high". ' +
+    'Authority: Monash University Low FODMAP Diet App and published research. ' +
+    'Low: most proteins, hard cheeses, blueberries, carrots, rice, oats (standard serve). ' +
+    'Medium: avocado, sweet potato, canned legumes (rinsed). ' +
+    'High: wheat, onion, garlic, apples, cow milk (lactose), legumes (unrinsed), stone fruit.',
   oxalateLevel:
-    '[string] oxalate_level: "low" | "medium" | "high". <10mg/100g=low, 10-50mg=medium, >50mg=high.',
+    '[string] oxalate_level: "low" | "medium" | "high". ' +
+    'Thresholds per 100g: low <10mg, medium 10-50mg, high >50mg. ' +
+    'Reference: Harvard/MGH oxalate food lists. ' +
+    'High: spinach ~750mg, rhubarb ~860mg, beets ~152mg. Medium: sweet potato ~28mg. Low: eggs, meat, dairy.',
   processingLevel:
-    '[number] processing_level integer 1-4. NOVA classification: 1=unprocessed/minimally processed, 2=processed culinary ingredient, 3=processed food, 4=ultra-processed.',
+    '[number] processing_level integer 1-4. NOVA classification (Monteiro et al., 2019): ' +
+    '1=unprocessed or minimally processed (whole fruits, vegetables, fresh meat, eggs, plain milk, dried legumes). ' +
+    '2=processed culinary ingredient (vegetable oils, butter, flour, salt, sugar, honey — used to prepare dishes). ' +
+    '3=processed food (canned vegetables/fish, salted nuts, smoked meats, artisan cheese, freshly baked bread). ' +
+    '4=ultra-processed (soft drinks, packaged snacks, instant noodles, reconstituted meat products, flavored yogurt).',
+  // ─── Stage 3: allergens & tags (also in Stage 3) ────────────────────
+  allergens:
+    '[string[]] allergens array. Use FDA "Big-9" international standard allergens only: ' +
+    'gluten/dairy/egg/fish/shellfish/tree_nuts/peanuts/soy/sesame. ' +
+    'Empty array [] if food contains none. Do NOT add non-standard allergens. ' +
+    'Cross-contamination risk does NOT qualify — only allergens present as ingredients.',
+  tags:
+    '[string[]] tags Applicable diet/nutrition tags. Choose ONLY from: ' +
+    'high_protein(>20g/100g)/low_fat(<3g/100g)/low_carb(<10g/100g)/high_fiber(>5g/100g)/' +
+    'low_calorie(<120kcal/100g)/low_sodium(<120mg/100g)/low_sugar(<5g/100g)/' +
+    'vegan/vegetarian/gluten_free/dairy_free/keto/paleo/whole_food. ' +
+    "Apply only tags that are objectively supported by the food's nutritional data.",
   // ─── Stage 4: 使用属性 ──────────────────────────────────────────────
   subCategory:
-    '[string] sub_category English code, e.g. lean_meat/whole_grain/leafy_green/root_vegetable/citrus_fruit/legume/dairy_product',
+    '[string] sub_category Lowercase English code describing the specific food sub-type. ' +
+    'Examples: lean_meat/fatty_meat/organ_meat/whole_grain/refined_grain/leafy_green/cruciferous/' +
+    'root_vegetable/allium/citrus_fruit/tropical_fruit/berry/stone_fruit/legume/' +
+    'dairy_product/hard_cheese/soft_cheese/nut/seed/cold_pressed_oil/refined_oil/' +
+    'fermented_food/processed_meat/baked_good/sweet_snack/savory_snack.',
   foodGroup:
-    '[string] food_group English code: meat/poultry/fish/seafood/egg/dairy/grain/legume/vegetable/fruit/nut/seed/fat/oil/sweetener/beverage/herb/spice/condiment',
+    '[string] food_group Lowercase English code for the primary food group. ' +
+    'Values: meat/poultry/fish/seafood/egg/dairy/grain/legume/vegetable/fruit/nut/seed/fat/oil/' +
+    'sweetener/beverage/herb/spice/condiment/processed.',
   cuisine:
-    '[string] cuisine English code: chinese/japanese/korean/indian/thai/vietnamese/italian/french/mediterranean/american/mexican/middle_eastern/international',
+    '[string] cuisine Primary cultural cuisine of origin. Lowercase English code. ' +
+    'Values: chinese/japanese/korean/indian/thai/vietnamese/malay/filipino/middle_eastern/' +
+    'italian/french/spanish/greek/mediterranean/american/mexican/latin_american/' +
+    'british/german/eastern_european/african/international. ' +
+    'Use "international" for globally ubiquitous staple foods (rice, bread, eggs, apple).',
   mealTypes:
-    '[string[]] meal_types array, values from: breakfast/lunch/dinner/snack/brunch/dessert',
-  allergens:
-    '[string[]] allergens array. Use international "Big-9" allergens: gluten/dairy/egg/fish/shellfish/tree_nuts/peanuts/soy/sesame. Empty array [] if none.',
-  tags: '[string[]] tags array from: high_protein/low_fat/low_carb/high_fiber/low_calorie/low_sodium/low_sugar/vegan/vegetarian/gluten_free/dairy_free/keto/paleo/whole_food',
+    '[string[]] meal_types Applicable meal occasions. Values: breakfast/lunch/dinner/snack/brunch/dessert/appetizer. ' +
+    'Most main dishes apply to lunch+dinner. Breakfast foods include cereals, eggs, toast. Return 1-4 values.',
   commonPortions:
-    '[object[]] common_portions JSON array of typical serving sizes, e.g. [{"name":"1 cup","grams":240},{"name":"1 tbsp","grams":15}]. Use standard international measurements.',
+    '[object[]] common_portions JSON array of 2-4 typical serving sizes. Format: [{"name":"<description>","grams":<number>}]. ' +
+    'Use standard international measurements (e.g. "1 cup", "1 tbsp", "1 slice", "1 medium piece"). ' +
+    'Reference USDA FNDDS standard portion sizes where available. ' +
+    'Example: [{"name":"1 cup cooked","grams":186},{"name":"1/2 cup cooked","grams":93}].',
   qualityScore:
-    '[number] quality_score 0-10. Overall nutritional quality considering nutrient density, processing level, and food group guidelines.',
+    '[number] quality_score 0-10. Overall nutritional quality score. ' +
+    'Consider: nutrient density (vitamins/minerals per calorie), NOVA processing level (lower = better), ' +
+    'fiber content, presence of harmful components (trans fat, excess sodium), alignment with WHO dietary guidelines. ' +
+    'Ref: whole vegetables/fruits/legumes ≈8-10; lean meats ≈6-8; processed snacks ≈1-3.',
   satietyScore:
-    '[number] satiety_score 0-10. Satiety index based on protein/fiber content, food volume, and texture. High protein/fiber foods score higher.',
+    '[number] satiety_score 0-10. Satiety/fullness score. ' +
+    'Based on Holt et al. (1995) satiety index research. Key drivers: protein content, fiber content, food volume/water content, texture. ' +
+    'High: potatoes ~8, lean meat ~7, legumes ~7; Medium: whole grain bread ~5, cheese ~5; Low: croissant ~2, candy ~1.',
   nutrientDensity:
-    '[number] nutrient_density 0-100. Ratio of micronutrients to calories. Based on ANDI or similar scoring.',
+    '[number] nutrient_density 0-100. Micronutrient density relative to calorie content. ' +
+    'Based on ANDI (Aggregate Nutrient Density Index) or similar methodology. ' +
+    'High: leafy greens ~900-1000 normalized to 0-100; Low: refined sugar/oils ≈1-5.',
   commonalityScore:
-    '[number] commonality_score 0-100. How widely available and commonly consumed this food is globally (100=staple food).',
+    '[number] commonality_score 0-100. Global availability and consumption frequency. ' +
+    '100=universally consumed daily staple (rice, bread, salt). 80=very common in most cultures (chicken, tomato, apple). ' +
+    '50=regionally common. 20=specialty ingredient. 5=rare/niche food.',
   standardServingDesc:
-    '[string] standard_serving_desc Standard serving description, e.g. "1 cup (240g)" or "1 slice (28g)". Use internationally recognized units.',
+    '[string] standard_serving_desc Human-readable standard serving size. ' +
+    'Format: "<quantity> <unit> (<grams>g)". Use USDA FNDDS or national dietary guideline serving sizes. ' +
+    'Examples: "1 cup cooked (186g)", "1 medium apple (182g)", "3 oz cooked (85g)", "1 slice (28g)".',
   mainIngredient:
-    '[string] main_ingredient Primary ingredient in English, e.g. "chicken", "rice", "tomato", "wheat".',
+    '[string] main_ingredient Single primary ingredient in lowercase English. ' +
+    'For single-ingredient foods, use the food itself (e.g. "chicken", "rice", "apple"). ' +
+    'For composed dishes, use the predominant protein or starch (e.g. "beef" for beef stew, "pasta" for spaghetti).',
   flavorProfile:
-    '[object] flavor_profile JSON intensity scores 0-5 each, e.g. {"sweet":2,"salty":4,"sour":1,"spicy":0,"bitter":1,"umami":3}.',
+    '[object] flavor_profile Flavor intensity scores 0-5 for each dimension. ' +
+    'Format: {"sweet":<0-5>,"salty":<0-5>,"sour":<0-5>,"spicy":<0-5>,"bitter":<0-5>,"umami":<0-5>}. ' +
+    'All 6 keys are required. 0=absent, 1=very mild, 2=mild, 3=moderate, 4=strong, 5=dominant. ' +
+    'Example for soy sauce: {"sweet":1,"salty":5,"sour":0,"spicy":0,"bitter":1,"umami":4}.',
   // ─── Stage 4: aliases ───────────────────────────────────────────────
   aliases:
-    '[string] aliases Comma-separated list of alternative names, regional names, and common synonyms for this food. ' +
-    'Include: (1) English synonyms/variants, (2) local/regional names in their native script if widely recognized, (3) brand-generic names. ' +
-    'Example for "白米饭": "steamed rice, cooked white rice, plain rice, 米飯". ' +
-    'Example for "Greek yogurt": "strained yogurt, labneh, 希腊酸奶". ' +
-    'Keep under 500 characters total.',
+    '[string] aliases Comma-separated alternative names for this food. Critical for search discoverability. ' +
+    'Include ALL of the following where applicable: ' +
+    '(1) English synonyms and spelling variants (e.g. "aubergine" for "eggplant"). ' +
+    '(2) Regional/local names in their native script for widely recognized foods (e.g. "茄子" for eggplant, "なす"). ' +
+    '(3) Common brand-generic names and abbreviated forms. ' +
+    '(4) Scientific or formal names if commonly known (e.g. "Solanum melongena"). ' +
+    '(5) Common cooking/menu names (e.g. "melanzane" for eggplant in Italian cuisine). ' +
+    'Target 3-8 aliases. Keep total under 500 characters. ' +
+    'Example for "白米饭": "steamed white rice, cooked rice, plain rice, boiled rice, 米飯, ご飯, 쌀밥". ' +
+    'Example for "Greek yogurt": "strained yogurt, labneh, 希腊酸奶, 水切りヨーグルト, skyr (Icelandic variant)".',
   // ─── Stage 5: 扩展属性 ──────────────────────────────────────────────
   ingredientList:
-    '[string[]] ingredient_list Complete ingredient list in English, e.g. ["chicken","garlic","olive oil","salt","pepper"]. Order by predominance (largest first).',
+    '[string[]] ingredient_list Complete list of ingredients in English, ordered by weight (largest first). ' +
+    'Use standard food ingredient names (e.g. "chicken breast", "garlic", "extra virgin olive oil", "sea salt"). ' +
+    'For single-ingredient whole foods, return array with one element: ["apple"] or ["chicken breast"]. ' +
+    'For composed dishes, list all recognizable ingredients. Do not list sub-ingredients of processed components.',
   cookingMethods: COOKING_METHODS_FIELD_DESC,
   textureTags:
-    '[string[]] texture_tags Texture descriptors, e.g. ["crispy","tender","creamy","chewy","crunchy","soft","juicy","flaky"].',
+    '[string[]] texture_tags Applicable texture descriptors. Return 1-5 most relevant. ' +
+    'Values: crispy/crunchy/tender/soft/chewy/creamy/smooth/fluffy/dense/flaky/gelatinous/fibrous/juicy/dry/sticky. ' +
+    "Select based on the food's most common preparation state (cooked unless inherently raw).",
   dishType:
-    '[string] dish_type: "dish" | "soup" | "drink" | "dessert" | "snack" | "staple" | "salad" | "sauce" | "bread" | "pastry"',
+    '[string] dish_type Primary dish category for composed dishes. ' +
+    'Values: "dish" | "soup" | "drink" | "dessert" | "snack" | "staple" | "salad" | "sauce" | "bread" | "pastry". ' +
+    'For raw ingredients or single-ingredient foods, use the most appropriate category if consumed directly, or null if not applicable.',
   prepTimeMinutes:
-    '[number] prep_time_minutes Preparation time in minutes (0-480). Time before cooking begins.',
+    '[number] prep_time_minutes Active preparation time in minutes (0-480) before cooking begins. ' +
+    'Includes: washing, cutting, marinating, measuring. Excludes: passive marinating/soaking time, cooking time. ' +
+    'Ref: simple salads ~5min, whole roast chicken ~15min, complex pastry ~60min. For raw single ingredients: 0-5.',
   cookTimeMinutes:
-    '[number] cook_time_minutes Active cooking time in minutes (0-720).',
+    '[number] cook_time_minutes Active cooking time in minutes (0-720). ' +
+    'Time from heat-on to food ready. Stir-fry ~5min, steamed fish ~10min, roast chicken ~90min, beef stew ~120min. ' +
+    'For raw uncooked foods (salad, sashimi): 0.',
   skillRequired:
-    '[string] skill_required: "beginner" | "intermediate" | "advanced" | "expert"',
+    '[string] skill_required Culinary skill level required. ' +
+    '"beginner" = no technique required (boiling pasta, scrambled eggs, simple salad). ' +
+    '"intermediate" = basic technique (stir-fry, simple baking, pan-seared protein). ' +
+    '"advanced" = multiple techniques, timing (French sauces, dim sum, soufflé). ' +
+    '"expert" = professional-level precision (croissant lamination, molecular gastronomy, multi-day fermentation).',
   estimatedCostLevel:
-    '[number] estimated_cost_level 1-5 relative cost (1=very cheap staple, 3=average, 5=premium/luxury ingredient).',
+    '[number] estimated_cost_level 1-5 relative cost index based on global average market price per 100g. ' +
+    '1=very cheap staple (rice, flour, salt, lentils, cabbage). 2=affordable common food (eggs, chicken, pasta, banana). ' +
+    '3=average cost (beef, cheese, berries, specialty vegetables). 4=premium (salmon, nuts, aged cheese, exotic fruit). ' +
+    '5=luxury/rare (truffles, saffron, premium seafood, wagyu beef).',
   shelfLifeDays:
-    '[number] shelf_life_days Typical shelf life in days under recommended storage (0-3650). Fresh produce: 1-14; canned: 365-1825.',
+    '[number] shelf_life_days Typical shelf life in days under recommended storage conditions. ' +
+    'Reference: FDA food safety guidelines / USDA storage recommendations. ' +
+    'Fresh leafy greens: 3-7; fresh meat/fish: 1-3; whole fruit: 5-14; cooked leftovers: 3-5; ' +
+    'whole grains/pasta: 730-1825; canned goods: 730-1825; honey: indefinite (use 3650).',
   servingTemperature:
-    '[string] serving_temperature: "hot" | "warm" | "room_temp" | "cold" | "frozen"',
+    '[string] serving_temperature Typical serving temperature. ' +
+    '"hot" = served >60°C (soups, stews, hot entrées). "warm" = 40-60°C (some sandwiches, warm salads). ' +
+    '"room_temp" = 15-25°C (bread, fresh fruit, most raw foods). "cold" = 4-15°C (salads, chilled desserts, cold cuts). ' +
+    '"frozen" = served/consumed frozen (ice cream, frozen desserts).',
   dishPriority:
-    '[number] dish_priority 0-100. Recommendation priority for prepared dishes/meals (0 for raw ingredients).',
+    '[number] dish_priority 0-100. Priority weight for meal recommendation algorithms. ' +
+    '0 for raw single ingredients (they are components, not recommended as standalone meals). ' +
+    'Common dishes: 50-70. Popular/versatile dishes: 70-85. Signature/highly popular dishes: 85-100.',
   acquisitionDifficulty:
-    '[number] acquisition_difficulty 1-5 (1=available everywhere/staple, 3=specialty store, 5=rare/seasonal/imported).',
+    '[number] acquisition_difficulty 1-5. Ease of obtaining this food globally. ' +
+    '1=available in any supermarket worldwide (rice, chicken, apple, salt). ' +
+    '2=available in most supermarkets in developed countries. ' +
+    '3=requires specialty/ethnic grocery store. ' +
+    '4=seasonal or limited regional availability. ' +
+    '5=rare, highly imported, or requires special sourcing.',
   compatibility:
-    '[object] compatibility JSON describing food pairing, e.g. {"good":["rice","vegetables","lemon"],"avoid":["strong_flavors","high_fat"]}.',
+    '[object] compatibility Food pairing guide. ' +
+    'Format: {"good":["<food1>","<food2>",...],"avoid":["<food3>",..."]}. ' +
+    'Both arrays required (can be empty). "good": foods that enhance flavor, nutrition, or texture when paired. ' +
+    '"avoid": foods that clash in flavor, create unhealthy nutritional combinations, or are culturally inappropriate pairings. ' +
+    'Provide 2-5 items per array based on culinary tradition and food science.',
   availableChannels:
-    '[string[]] available_channels Where this food can be purchased: ["supermarket","convenience_store","wet_market","farmers_market","online","specialty_store","restaurant"].',
+    '[string[]] available_channels Purchase/acquisition channels for this food. ' +
+    'Values: supermarket/convenience_store/wet_market/farmers_market/online/specialty_store/restaurant/bakery/pharmacy. ' +
+    'Return all applicable channels. Most common foods: ["supermarket","wet_market"]. ' +
+    'Specialty items: ["specialty_store","online"]. Restaurant dishes: ["restaurant"].',
   requiredEquipment:
-    '[string[]] required_equipment Kitchen equipment needed: ["oven","wok","steamer","blender","food_processor","microwave","grill","air_fryer","pressure_cooker","none"].',
+    '[string[]] required_equipment Kitchen equipment needed to prepare this food from its typical sold state. ' +
+    'Values: oven/wok/steamer/blender/food_processor/microwave/grill/air_fryer/pressure_cooker/rice_cooker/knife/none. ' +
+    'For raw ready-to-eat foods (fruit, raw vegetables): ["none"]. ' +
+    'Include all equipment required for the primary preparation method.',
 };
 
 // ─── 低置信度阈值：低于此值强制进入 staging ───────────────────────────────
@@ -998,6 +1165,12 @@ export class FoodEnrichmentService {
       .map((f) => `- ${FIELD_DESC[snakeToCamel(f)] || f}`)
       .join('\n');
 
+    // 阶段专属附加规则（在通用 Rules 之后注入，提升精度）
+    const stageSpecificRules = this.buildStageSpecificRules(
+      stage,
+      missingFields,
+    );
+
     return `Known food data:
 ${ctx}
 
@@ -1006,15 +1179,15 @@ ${fieldsList}
 
 Rules:
 1. All numeric values are per 100g edible portion
-2. Use USDA FoodData Central as primary reference; cross-reference FAO/INFOODS and EUROFIR where applicable
-3. ALWAYS provide an estimated value — do NOT return null unless the field is physically impossible to determine for this food type
-4. Estimation is acceptable and expected: use food category averages, composition science, cooking method inference, or similar food comparisons
-5. Assign per-field confidence in "field_confidence" (0.0-1.0): authoritative source ≥ 0.85, reasonable estimate 0.6-0.85, rough estimate 0.4-0.6, speculation < 0.4
-6. "confidence" is the overall confidence for this stage (0.0-1.0)
-7. "reasoning" should cite the data source (e.g. USDA FoodData Central, FAO/INFOODS, category average estimate); mark estimated values as "[est]"
-8. For array fields, always return a non-empty array with at least one value when applicable
-9. For object fields (flavor_profile, compatibility, common_portions), always return a populated object
-
+2. Primary reference: USDA FoodData Central; cross-reference FAO/INFOODS and EUROFIR where applicable
+3. ALWAYS provide an estimated value — return null ONLY if a field is physically impossible or genuinely inapplicable for this specific food type
+4. Estimation is expected: use food category averages, macronutrient composition science, or similar food comparisons
+5. Per-field confidence in "field_confidence" (0.0-1.0): authoritative DB match ≥0.85, reasonable estimate 0.6-0.85, rough estimate 0.4-0.6
+6. "confidence" is the overall stage confidence (0.0-1.0)
+7. "reasoning" must cite the data source (e.g. "USDA SR Legacy #01234", "FAO/INFOODS ASIAFOODS", "category average [est]")
+8. For array fields: return a non-empty array when any value applies; [] only when truly none apply
+9. For object fields (flavor_profile, compatibility, common_portions): return a fully populated object with all expected keys
+${stageSpecificRules}
 Return JSON:
 {
   ${missingFields.map((f) => `"${f}": <value or null>`).join(',\n  ')},
@@ -1024,6 +1197,160 @@ Return JSON:
   },
   "reasoning": "<data source and estimation notes>"
 }`;
+  }
+
+  // ─── 阶段专属追加规则（注入到用户 Prompt 的 Rules 末尾）────────────────
+
+  private buildStageSpecificRules(
+    stage: EnrichmentStage,
+    missingFields: EnrichableField[],
+  ): string {
+    const fields = new Set(missingFields);
+    switch (stage.stage) {
+      case 1:
+        return `10. Macronutrient closure: protein + fat + carbs + fiber + moisture ≈ 100g (±5g tolerance for ash/minor components); adjust estimates accordingly
+11. food_form decision: classify as the food is COMMONLY SOLD TO CONSUMERS — not raw ingredient state
+12. sodium: 0 for fresh whole plant foods; estimate from salt content for processed/seasoned foods
+`;
+      case 2:
+        return `10. Vitamin A must be reported as RAE (μg), not IU; β-carotene/12 = RAE contribution
+11. Folate must be DFE (μg); for fortified foods apply folic acid ×1.7 conversion
+12. Vitamin D ≈ 0 for all plant foods unless explicitly fortified; estimate from UV exposure for mushrooms
+13. Omega-3 in plant foods = ALA only; in fatty fish = ALA+EPA+DHA sum; in lean fish/chicken ≈ 50-200mg
+14. Trans fat = 0 for unprocessed plant foods; dairy/beef have small ruminant trans fat (~0.5-3g); partially hydrogenated oils 2-10g
+15. water_content_percent cross-check: should be consistent with macronutrient sum (protein+fat+carbs+fiber+moisture ≈ 100g)
+`;
+      case 3: {
+        const rules: string[] = [];
+        if (fields.has('glycemic_index') || fields.has('glycemic_load')) {
+          rules.push(
+            '10. GI applies only to carbohydrate-containing foods; for pure protein/fat foods (meat, eggs, oils, most cheeses) set GI=0 and GL=0',
+          );
+          rules.push(
+            '11. GL = (GI × carbs_per_100g) / 100; verify this calculation is internally consistent',
+          );
+        }
+        if (fields.has('processing_level')) {
+          rules.push(
+            `${rules.length + 10}. NOVA level 1 must be a whole/unprocessed food; level 2 is a culinary ingredient (salt, oil, flour); level 3 uses preservation techniques; level 4 has ≥5 industrial additives or is heavily reformulated`,
+          );
+        }
+        if (fields.has('allergens')) {
+          rules.push(
+            `${rules.length + 10}. allergens: only list allergens present AS INGREDIENTS — do not include cross-contamination risks`,
+          );
+        }
+        return rules.map((r) => r + '\n').join('');
+      }
+      case 4: {
+        const rules: string[] = [];
+        if (fields.has('aliases')) {
+          rules.push(
+            '10. aliases: MUST include at least 3 entries; for non-English food names always include the original native-script name AND common English transliteration/translation',
+          );
+          rules.push(
+            '11. aliases format: plain comma-separated string, NO JSON, NO brackets — just "name1, name2, name3"',
+          );
+        }
+        if (fields.has('common_portions')) {
+          rules.push(
+            `${rules.length + 10}. common_portions: provide exactly 2-4 objects; first should be the most common serving; always include a gram-based option`,
+          );
+        }
+        if (fields.has('flavor_profile')) {
+          rules.push(
+            `${rules.length + 10}. flavor_profile: ALL 6 keys required (sweet/salty/sour/spicy/bitter/umami); use 0 for absent dimensions, do not omit any key`,
+          );
+        }
+        return rules.map((r) => r + '\n').join('');
+      }
+      case 5:
+        return `10. ingredient_list: for single-ingredient whole foods, return single-element array; for dishes order by weight (largest first)
+11. cooking_methods: first element = primary/recommended method; include ALL applicable methods; raw/uncooked foods must include "raw" if applicable
+12. compatibility.good and compatibility.avoid: both keys required (can be empty arrays []); prefer specific food names over vague categories
+13. shelf_life_days: use refrigerated shelf life for perishables; room temperature for shelf-stable; for cooked leftovers use 3-5 days
+`;
+      default:
+        return '';
+    }
+  }
+
+  // ─── 分阶段专属 System Prompt 构造器 ─────────────────────────────────
+
+  private buildStageSystemPrompt(stage: EnrichmentStage): string {
+    const BASE = `You are an expert food scientist and nutritionist with deep knowledge of international food composition databases:
+- USDA FoodData Central (primary reference, https://fdc.nal.usda.gov)
+- FAO/INFOODS International Food Composition Tables (global secondary reference)
+- EUROFIR — European Food Information Resource (EU foods supplement)
+- Codex Alimentarius international food standards (FAO/WHO)
+- Monash University Low FODMAP Diet App (FODMAP classification authority)
+- International Glycemic Index Database — University of Sydney (GI/GL authority)
+- NOVA food processing classification system (Monteiro et al., Public Health Nutrition)`;
+
+    const CORE_RULES = `
+Core principles (apply to ALL stages):
+1. ALWAYS provide an estimated value — do NOT return null unless the field is physically impossible or genuinely inapplicable for this specific food type
+2. Estimation from food composition science, macronutrient ratios, category averages, or similar food comparisons is expected and acceptable
+3. For numeric fields: derive from USDA category data, Atwater factors, or known food science — null is a last resort only
+4. For array fields: return a non-empty array whenever any value applies; empty array [] only if truly none apply
+5. For object fields: return a fully populated object with all expected keys
+6. All numeric values are per 100g edible portion (unless field explicitly states otherwise)
+7. Return strict JSON — only the requested fields plus confidence/field_confidence/reasoning`;
+
+    const stageGuides: Record<number, string> = {
+      1: `
+Stage 1 focus — Core Macronutrients & Food Form:
+- Primary source: USDA FoodData Central SR Legacy or Foundation Foods entries
+- Cross-reference: FAO/INFOODS LATINFOODS / ASIAFOODS for Asian foods
+- Macronutrient closure check: protein + fat + carbs + fiber + moisture ≈ 100g (allow ±5g tolerance for ash/other)
+- food_form is a classification decision: base it on the food AS COMMONLY SOLD/SERVED, not its raw ingredient state
+- For processed/prepared foods, infer macros from standard recipe composition if direct data is unavailable`,
+
+      2: `
+Stage 2 focus — Micronutrients & Minor Components:
+- Primary source: USDA FoodData Central (prefer SR Legacy > Foundation Foods > Survey FNDDS)
+- Cross-reference: EUROFIR for European foods; FAO/INFOODS regional tables for Asian/African/Latin foods
+- Vitamin A: report as Retinol Activity Equivalents (RAE, μg); β-carotene contribution = β-carotene(μg)/12
+- Folate: report as Dietary Folate Equivalents (DFE, μg); synthetic folic acid × 1.7 = DFE
+- Omega-3: sum ALA + EPA + DHA (mg); for plant foods ALA dominates; for fatty fish EPA+DHA dominate
+- Trans fat: industrial trans fat near 0 for whole/unprocessed foods; ruminant sources (dairy, beef) have small amounts
+- Purine: report total purine mg/100g; use available food-specific tables (Kaneko et al., or ADA guidelines)
+- water_content_percent: cross-check moisture with macronutrient sum`,
+
+      3: `
+Stage 3 focus — Health Classification Attributes:
+- Glycemic Index: use University of Sydney International GI Database (glycemicindex.com) as primary; estimate from food structure/processing if not listed; reference food = glucose (GI=100) or white bread (GI=70)
+- Glycemic Load: GL = (GI × available carbohydrate g per 100g) / 100; report per 100g basis
+- FODMAP: use Monash University Low FODMAP App data as authority; consider serving size context but report food's inherent FODMAP level
+- Oxalate: <10mg/100g = low; 10–50mg/100g = medium; >50mg/100g = high; reference Harvard/MGH oxalate lists
+- NOVA processing level: 1=unprocessed/minimally processed, 2=processed culinary ingredient, 3=processed food, 4=ultra-processed; cite specific NOVA criteria
+- Allergens: use "Big-9" (US FDA) standard: gluten/dairy/egg/fish/shellfish/tree_nuts/peanuts/soy/sesame; add others only if widely recognized
+- Tags: apply only clearly supported diet tags; do not over-tag`,
+
+      4: `
+Stage 4 focus — Usage, Classification & Identity Attributes:
+- cuisine: assign based on the food's most prominent cultural origin; use "international" for globally ubiquitous foods
+- aliases: this is a critical discoverability field — include English synonyms, regional variants, and native-script names for widely recognized non-English foods; target 3-8 aliases
+- sub_category / food_group: use USDA food group taxonomy or FAO/INFOODS food group codes as reference
+- common_portions: use standard international measurements (cups, tablespoons, ounces) AND metric equivalents; prefer USDA FNDDS standard portion sizes
+- quality_score: base on nutrient density, processing level, and WHO/dietary guideline alignment
+- satiety_score: use satiety index research (Holt et al. 1995) as reference; protein and fiber are primary drivers
+- standard_serving_desc: use serving sizes consistent with USDA FNDDS or national dietary guidelines`,
+
+      5: `
+Stage 5 focus — Extended Culinary & Practical Attributes:
+- ingredient_list: order by weight predominance (largest first); use standard food ingredient names; for whole/unprocessed foods list as single ingredient
+- cooking_methods: list ALL applicable methods, not just the primary; first element should be the most common/recommended method
+- compatibility: good pairings should reflect culinary tradition and nutritional complementarity; avoid pairings are foods that clash in flavor, texture, or create unhealthy combinations
+- prep_time / cook_time: use realistic times for home cooking; reference standard recipe databases (e.g. Allrecipes, BBC Good Food averages)
+- shelf_life_days: use FDA food safety guidelines / USDA storage recommendations as reference
+- estimated_cost_level: consider global average market pricing (1=staple grain/common vegetable, 5=premium/specialty/imported)
+- acquisition_difficulty: 1=available in any supermarket globally, 5=rare/highly seasonal/requires specialty import`,
+    };
+
+    return `${BASE}
+${stageGuides[stage.stage] || ''}
+${CORE_RULES}`;
   }
 
   // ─── V7.9: 分阶段 AI 调用（使用阶段专属 max_tokens）─────────────────
@@ -1036,31 +1363,14 @@ Return JSON:
   ): Promise<EnrichmentResult | null> {
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
+        const stageSystemPrompt = this.buildStageSystemPrompt(stage);
         const response = await this.client.post('/chat/completions', {
           model: 'deepseek-chat',
           response_format: { type: 'json_object' },
           messages: [
             {
               role: 'system',
-              content: `You are an expert food scientist and nutritionist with deep knowledge of international food composition databases:
-- USDA FoodData Central (primary reference)
-- FAO/INFOODS International Food Composition Tables
-- EUROFIR (European Food Information Resource)
-- Codex Alimentarius international food standards
-- Monash University FODMAP database
-- International GI database (University of Sydney)
-- NOVA food classification system
-
-Your task: Accurately complete food nutrition data for the [${stage.name}] stage.
-
-Core principles:
-1. Prioritize USDA FoodData Central values; cross-reference with FAO/INFOODS and EUROFIR when available
-2. ALWAYS provide a value — estimation from food composition principles, category averages, or similar food data is expected and acceptable
-3. Return null ONLY when a field is genuinely inapplicable to this food type (e.g. cooking_methods for a raw unprocessed ingredient with no cooking required)
-4. For array fields: always return a non-empty array when any value applies; empty array [] only when truly none apply
-5. For numeric fields: estimate from food category data, macronutrient ratios, or known food science — do NOT return null for common nutrients
-6. All values are per 100g edible portion
-7. Return strict JSON format, only the requested fields`,
+              content: stageSystemPrompt,
             },
             { role: 'user', content: prompt },
           ],
@@ -1305,7 +1615,7 @@ Core principles:
         if (stageFields.length === 0) return false;
 
         return stageFields.some((field) => {
-        const value = (food as any)[snakeToCamel(field)];
+          const value = (food as any)[snakeToCamel(field)];
           if (value === null || value === undefined) return true;
           if (
             (JSON_ARRAY_FIELDS as readonly string[]).includes(field) &&
@@ -1545,6 +1855,98 @@ Core principles:
       where: { id: foodId },
       data: { enrichmentStatus: 'pending' },
     });
+  }
+
+  // ─── V8.9: 强制按指定字段重新入队 ─────────────────────────────────────────
+
+  /**
+   * 强制将指定字段入队重新补全（忽略字段是否为 NULL，全库或按分类筛选）
+   *
+   * 与 getFoodsNeedingEnrichment 不同：
+   *   - 本方法不检查字段是否为 NULL，只要食物存在就入队
+   *   - 支持 clearFields=true：入队前先将指定字段清空（允许 AI 重新补全）
+   *   - 支持 category / primarySource 筛选缩小范围
+   *
+   * @param fields       必填：要重新补全的字段列表
+   * @param options.limit          每次最多处理的食物数（默认全部，传 0 表示全部）
+   * @param options.category       按食物分类筛选
+   * @param options.primarySource  按数据来源筛选
+   * @param options.clearFields    是否在入队前将指定字段清空（默认 false）
+   * @param options.staged         是否使用 staging 模式
+   */
+  async getALLFoodsForReEnqueue(
+    fields: EnrichableField[],
+    options: {
+      limit?: number;
+      category?: string;
+      primarySource?: string;
+    } = {},
+  ): Promise<{ id: string; name: string }[]> {
+    const { limit, category, primarySource } = options;
+
+    const where: any = {};
+    if (category) where.category = category;
+    if (primarySource) where.primarySource = primarySource;
+
+    return this.prisma.foods.findMany({
+      where,
+      select: { id: true, name: true },
+      ...(limit && limit > 0 ? { take: limit } : {}),
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  /**
+   * 批量清空指定字段（入队前调用，让 AI 可以重新补全）
+   * 使用分批处理（每批 200 条）避免超时
+   */
+  async clearFieldsForFoods(
+    foodIds: string[],
+    fields: EnrichableField[],
+  ): Promise<{ cleared: number }> {
+    const validFields = (ENRICHABLE_FIELDS as readonly string[]).filter((f) =>
+      (fields as string[]).includes(f),
+    ) as EnrichableField[];
+
+    if (validFields.length === 0) return { cleared: 0 };
+
+    // 构建清空数据对象：将所有指定字段设为 null
+    const clearData: Record<string, null | []> = {};
+    for (const f of validFields) {
+      const camelKey = f.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+      // JSON 数组字段清空为 null（Prisma 会自动处理）
+      clearData[camelKey] = null;
+    }
+    // 重置状态为 pending，允许重新入队
+    clearData['enrichmentStatus' as any] = null;
+
+    const BATCH = 200;
+    let cleared = 0;
+    for (let i = 0; i < foodIds.length; i += BATCH) {
+      const batch = foodIds.slice(i, i + BATCH);
+      await this.prisma.foods.updateMany({
+        where: { id: { in: batch } },
+        data: { ...clearData, enrichmentStatus: 'pending' },
+      });
+      cleared += batch.length;
+    }
+
+    // 同步清理 field_sources 中对应字段的来源标记（使其可被 AI 重新写入）
+    // 逐字段删除 JSONB key，PostgreSQL `#-` 操作符不支持数组批量删除，只能循环处理
+    for (let i = 0; i < foodIds.length; i += BATCH) {
+      const batch = foodIds.slice(i, i + BATCH);
+      for (const field of fields) {
+        await this.prisma.$executeRaw`
+          UPDATE foods
+          SET field_sources = field_sources - ${field}
+          WHERE id = ANY(${batch}::uuid[])
+            AND field_sources IS NOT NULL
+            AND field_sources ? ${field}
+        `;
+      }
+    }
+
+    return { cleared };
   }
 
   // ─── V8.3: 批量重算完整度 ──────────────────────────────────────────────
@@ -2171,7 +2573,8 @@ Core principles:
         )
           return true;
         // V8.8: overridable 字段始终加入 missingFields，确保 AI 有机会纠正默认值
-        if ((AI_OVERRIDABLE_FIELDS as readonly string[]).includes(f)) return true;
+        if ((AI_OVERRIDABLE_FIELDS as readonly string[]).includes(f))
+          return true;
         return false;
       }),
     }));
@@ -3450,8 +3853,12 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
         }
         // V8.5: validate cooking_methods values against the standard code set
         if (field === 'cooking_methods') {
-          const validSet = new Set<string>(ALL_COOKING_METHODS as readonly string[]);
-          const filtered = value.filter((v: any) => typeof v === 'string' && validSet.has(v));
+          const validSet = new Set<string>(
+            ALL_COOKING_METHODS as readonly string[],
+          );
+          const filtered = value.filter(
+            (v: any) => typeof v === 'string' && validSet.has(v),
+          );
           if (filtered.length === 0 && value.length > 0) {
             this.logger.warn(
               `"cooking_methods" AI returned non-standard values: [${value.join(', ')}], discarding`,
@@ -3559,13 +3966,13 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
 
     // 批量查询各字段的 Q1, Q3（SQL 使用 snake_case 列名，别名保留 camelCase 以便后续查找）
     const selectParts = numericFields
-      .map(
-        (f) => {
-          const col = camelToSnake(f);
-          return `PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY "${col}") AS "${f}_q1", ` +
-            `PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY "${col}") AS "${f}_q3"`;
-        },
-      )
+      .map((f) => {
+        const col = camelToSnake(f);
+        return (
+          `PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY "${col}") AS "${f}_q1", ` +
+          `PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY "${col}") AS "${f}_q3"`
+        );
+      })
       .join(', ');
 
     const whereClause = numericFields

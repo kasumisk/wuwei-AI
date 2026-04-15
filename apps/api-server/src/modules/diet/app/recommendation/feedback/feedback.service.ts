@@ -3,10 +3,6 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../../../../core/prisma/prisma.service';
 import { FoodFeedbackStats } from '../types/recommendation.types';
 import {
-  PreferenceUpdaterService,
-  IncrementalPreferenceWeights,
-} from '../profile/preference-updater.service';
-import {
   DomainEvents,
   FeedbackSubmittedEvent,
   FeedbackRatings,
@@ -51,7 +47,6 @@ export class RecommendationFeedbackService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly preferenceUpdater: PreferenceUpdaterService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -165,14 +160,8 @@ export class RecommendationFeedbackService {
         ),
       );
 
-      // 4. V4 Phase 3.1: 异步触发偏好权重增量更新（不阻塞反馈响应）
-      // TODO(V6): 后续迁移到 @OnEvent 监听器中，进一步解耦
-      this.triggerPreferenceUpdate({
-        userId: params.userId,
-        foodName: params.foodName,
-        foodId: params.foodId,
-        action: params.action,
-      }).catch((err) => this.logger.warn(`偏好增量更新失败 (非阻塞): ${err}`));
+      // 4. V7.9: 偏好权重增量更新已迁移到 PreferenceUpdaterService @OnEvent 监听器
+      //    通过上方 FEEDBACK_SUBMITTED 事件自动触发，无需直接调用
 
       // 5. 清除该用户的反馈统计缓存（新反馈已写入）
       this.feedbackStatsCache.delete(params.userId);
@@ -354,57 +343,6 @@ export class RecommendationFeedbackService {
         ratedCount: 0,
       };
     }
-  }
-
-  // ─── V4 Phase 3.1: 偏好增量更新 ───
-
-  /**
-   * 反馈后即时更新偏好权重
-   * 读取 → 增量更新 → 写回 user_inferred_profiles.preferenceWeights
-   */
-  private async triggerPreferenceUpdate(params: {
-    userId: string;
-    foodName: string;
-    foodId?: string;
-    action: 'accepted' | 'replaced' | 'skipped';
-  }): Promise<void> {
-    // 1. 读取当前增量权重
-    let inferredProfile = await this.prisma.userInferredProfiles.findFirst({
-      where: { userId: params.userId },
-    });
-
-    const currentWeights =
-      (inferredProfile?.preferenceWeights as IncrementalPreferenceWeights | null) ??
-      null;
-
-    // 2. 增量更新
-    const updatedWeights = await this.preferenceUpdater.updateFromFeedback(
-      params,
-      currentWeights,
-    );
-
-    // 3. 写回
-    if (inferredProfile) {
-      await this.prisma.userInferredProfiles.update({
-        where: { id: inferredProfile.id },
-        data: {
-          preferenceWeights: updatedWeights as any,
-        },
-      });
-    } else {
-      // 如果没有推断画像，创建一个最小的（仅包含偏好权重）
-      await this.prisma.userInferredProfiles.create({
-        data: {
-          userId: params.userId,
-          preferenceWeights: updatedWeights as any,
-        },
-      });
-    }
-
-    this.logger.debug(
-      `偏好权重增量更新: userId=${params.userId}, action=${params.action}, ` +
-        `food=${params.foodName}, updateCount=${updatedWeights.updateCount}`,
-    );
   }
 
   // ─── 私有工具方法 ───

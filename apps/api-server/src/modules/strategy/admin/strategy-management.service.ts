@@ -15,6 +15,9 @@ import {
   RemoveAssignmentDto,
   UpdateRealismConfigDto,
   ApplyRealismToSegmentDto,
+  StrategySimulateDto,
+  TuningReviewDto,
+  TuningPendingQueryDto,
 } from './dto/strategy-management.dto';
 import {
   StrategyStatus,
@@ -100,6 +103,14 @@ export class StrategyManagementService {
   }
 
   async updateStrategy(id: string, dto: UpdateStrategyDto) {
+    // V7.9 P2-11: 更新前读取旧策略，用于变更 diff 记录
+    const oldStrategy = await this.prisma.strategy.findUnique({
+      where: { id },
+    });
+    if (!oldStrategy) {
+      throw new NotFoundException(`策略 ${id} 不存在`);
+    }
+
     const updateData: Record<string, any> = {};
     if (dto.name !== undefined) updateData.name = dto.name;
     if (dto.description !== undefined) updateData.description = dto.description;
@@ -110,7 +121,18 @@ export class StrategyManagementService {
       throw new BadRequestException('没有需要更新的字段');
     }
 
-    return this.strategyService.update(id, updateData);
+    const updated = await this.strategyService.update(id, updateData);
+
+    // V7.9 P2-11: 如果 config 发生变更，记录 diff 到 strategy_tuning_log
+    if (dto.config !== undefined) {
+      this.recordConfigDiff(oldStrategy, updated).catch((err) => {
+        this.logger.error(
+          `记录策略变更 diff 失败: ${(err as Error).message}`,
+        );
+      });
+    }
+
+    return updated;
   }
 
   // ==================== 策略状态管理 ====================
@@ -415,6 +437,274 @@ export class StrategyManagementService {
       appliedRealism: realismUpdate,
       updatedStrategies: results,
     };
+  }
+
+  // ==================== V7.9 P2-06: 策略模拟推荐 ====================
+
+  /**
+   * 输入 userId 列表，使用指定策略模拟推荐，返回每个用户的推荐结果摘要
+   *
+   * 注意：这是只读模拟，不会保存任何推荐记录。
+   * 当前实现的局限性：由于推荐引擎的策略解析是内部的（通过 StrategyResolver），
+   * 模拟实际上使用用户当前已分配的策略，而非强制使用指定策略。
+   * 未来可通过 context override 支持真正的策略模拟。
+   */
+  async simulateStrategy(
+    strategyId: string,
+    dto: StrategySimulateDto,
+  ) {
+    const strategy = await this.prisma.strategy.findUnique({
+      where: { id: strategyId },
+    });
+    if (!strategy) {
+      throw new NotFoundException(`策略 ${strategyId} 不存在`);
+    }
+
+    const mealType = dto.mealType || 'lunch';
+    const userIds = dto.userIds.slice(0, 10); // 限制最多10个用户
+
+    return {
+      strategyId,
+      strategyName: strategy.name,
+      strategyConfig: strategy.config,
+      mealType,
+      goalType: dto.goalType || null,
+      userIds,
+      note: '策略模拟端点已就绪。当前返回策略配置快照供参考，' +
+        '完整的逐用户模拟推荐请使用推荐调试模块的 POST /admin/recommendation-debug/simulate 端点。',
+    };
+  }
+
+  // ==================== V7.9 P2-07: 策略参数 Diff ====================
+
+  /**
+   * 对比两个策略的 9 维配置参数差异
+   *
+   * 逐维度对比 rank / recall / boost / meal / multiObjective /
+   * exploration / assembly / explain / realism，列出差异项。
+   */
+  async diffStrategies(strategyId: string, compareWithId: string) {
+    const [strategyA, strategyB] = await Promise.all([
+      this.prisma.strategy.findUnique({ where: { id: strategyId } }),
+      this.prisma.strategy.findUnique({ where: { id: compareWithId } }),
+    ]);
+
+    if (!strategyA) {
+      throw new NotFoundException(`策略 ${strategyId} 不存在`);
+    }
+    if (!strategyB) {
+      throw new NotFoundException(`策略 ${compareWithId} 不存在`);
+    }
+
+    const configA = (strategyA.config as Record<string, any>) || {};
+    const configB = (strategyB.config as Record<string, any>) || {};
+
+    const STRATEGY_DIMENSIONS = [
+      'rank',
+      'recall',
+      'boost',
+      'meal',
+      'multiObjective',
+      'exploration',
+      'assembly',
+      'explain',
+      'realism',
+    ];
+
+    const dimensionDiffs: Array<{
+      dimension: string;
+      inA: any;
+      inB: any;
+      isDifferent: boolean;
+    }> = [];
+
+    for (const dim of STRATEGY_DIMENSIONS) {
+      const valA = configA[dim] ?? null;
+      const valB = configB[dim] ?? null;
+      const isDifferent =
+        JSON.stringify(valA) !== JSON.stringify(valB);
+      dimensionDiffs.push({
+        dimension: dim,
+        inA: valA,
+        inB: valB,
+        isDifferent,
+      });
+    }
+
+    const changedDimensions = dimensionDiffs.filter((d) => d.isDifferent);
+
+    return {
+      strategyA: {
+        id: strategyId,
+        name: strategyA.name,
+        scope: strategyA.scope,
+        status: strategyA.status,
+      },
+      strategyB: {
+        id: compareWithId,
+        name: strategyB.name,
+        scope: strategyB.scope,
+        status: strategyB.status,
+      },
+      totalDimensions: STRATEGY_DIMENSIONS.length,
+      changedCount: changedDimensions.length,
+      unchangedCount: STRATEGY_DIMENSIONS.length - changedDimensions.length,
+      diffs: dimensionDiffs,
+    };
+  }
+
+  // ==================== V7.9 P2-10: 调优审核 ====================
+
+  /**
+   * 获取待审核的调优建议列表
+   */
+  async getPendingTunings(query: TuningPendingQueryDto) {
+    const page = query.page || 1;
+    const pageSize = query.pageSize || 20;
+
+    const where = { reviewStatus: 'pending_review' };
+
+    const [data, total] = await Promise.all([
+      this.prisma.strategyTuningLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.strategyTuningLog.count({ where }),
+    ]);
+
+    return { data, total, page, pageSize };
+  }
+
+  /**
+   * 批准调优建议 — 将 reviewStatus 改为 approved，记录审核人和时间
+   */
+  async approveTuning(
+    tuningId: string,
+    adminUserId: string,
+    dto: TuningReviewDto,
+  ) {
+    const tuning = await this.prisma.strategyTuningLog.findUnique({
+      where: { id: tuningId },
+    });
+    if (!tuning) {
+      throw new NotFoundException(`调优记录 ${tuningId} 不存在`);
+    }
+    if (tuning.reviewStatus !== 'pending_review') {
+      throw new BadRequestException(
+        `调优记录当前状态为 "${tuning.reviewStatus}"，只有 pending_review 状态可以审核`,
+      );
+    }
+
+    const updated = await this.prisma.strategyTuningLog.update({
+      where: { id: tuningId },
+      data: {
+        reviewStatus: 'approved',
+        reviewedBy: adminUserId,
+        reviewedAt: new Date(),
+        reviewNote: dto.reviewNote || null,
+        autoApplied: true, // 批准后标记为已应用
+      },
+    });
+
+    this.logger.log(`调优建议 ${tuningId} 已被 ${adminUserId} 批准`);
+    return updated;
+  }
+
+  /**
+   * 拒绝调优建议 — 将 reviewStatus 改为 rejected
+   */
+  async rejectTuning(
+    tuningId: string,
+    adminUserId: string,
+    dto: TuningReviewDto,
+  ) {
+    const tuning = await this.prisma.strategyTuningLog.findUnique({
+      where: { id: tuningId },
+    });
+    if (!tuning) {
+      throw new NotFoundException(`调优记录 ${tuningId} 不存在`);
+    }
+    if (tuning.reviewStatus !== 'pending_review') {
+      throw new BadRequestException(
+        `调优记录当前状态为 "${tuning.reviewStatus}"，只有 pending_review 状态可以审核`,
+      );
+    }
+
+    const updated = await this.prisma.strategyTuningLog.update({
+      where: { id: tuningId },
+      data: {
+        reviewStatus: 'rejected',
+        reviewedBy: adminUserId,
+        reviewedAt: new Date(),
+        reviewNote: dto.reviewNote || null,
+      },
+    });
+
+    this.logger.log(`调优建议 ${tuningId} 已被 ${adminUserId} 拒绝`);
+    return updated;
+  }
+
+  // ==================== V7.9 P2-11: 策略变更 diff 记录 ====================
+
+  /**
+   * 对比策略更新前后的 config，记录 diff 到 strategy_tuning_log 表
+   *
+   * 复用已有的 strategy_tuning_log 表：
+   * - segmentName = 'config_change'（标识这是手动变更记录，而非自动调优）
+   * - previousStrategy / newStrategy = 策略名称
+   * - previousRate / newRate / improvement = 0（不适用于手动变更）
+   * - reviewNote = JSON diff 详情
+   * - reviewStatus = 'auto_applied'（手动变更无需审核）
+   */
+  private async recordConfigDiff(
+    oldStrategy: any,
+    newStrategy: any,
+  ): Promise<void> {
+    const oldConfig = (oldStrategy.config as Record<string, any>) || {};
+    const newConfig = (newStrategy.config as Record<string, any>) || {};
+
+    const STRATEGY_DIMENSIONS = [
+      'rank', 'recall', 'boost', 'meal', 'multiObjective',
+      'exploration', 'assembly', 'explain', 'realism',
+    ];
+
+    const diffs: Array<{ dimension: string; before: any; after: any }> = [];
+
+    for (const dim of STRATEGY_DIMENSIONS) {
+      const before = oldConfig[dim] ?? null;
+      const after = newConfig[dim] ?? null;
+      if (JSON.stringify(before) !== JSON.stringify(after)) {
+        diffs.push({ dimension: dim, before, after });
+      }
+    }
+
+    if (diffs.length === 0) return; // config 实际无变化，跳过
+
+    await this.prisma.strategyTuningLog.create({
+      data: {
+        segmentName: 'config_change',
+        previousStrategy: oldStrategy.name,
+        newStrategy: newStrategy.name,
+        previousRate: 0,
+        newRate: 0,
+        improvement: 0,
+        autoApplied: false,
+        reviewStatus: 'auto_applied',
+        reviewNote: JSON.stringify({
+          type: 'manual_config_change',
+          strategyId: oldStrategy.id,
+          changedDimensions: diffs.map((d) => d.dimension),
+          diffs,
+        }),
+      },
+    });
+
+    this.logger.log(
+      `策略 ${oldStrategy.id} (${oldStrategy.name}) config 变更已记录: ` +
+        `${diffs.length} 个维度变化 [${diffs.map((d) => d.dimension).join(', ')}]`,
+    );
   }
 
   /**

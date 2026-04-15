@@ -15,7 +15,8 @@ interface TabState {
 
   // Actions
   addTab: (tab: TabItem) => void;
-  removeTab: (key: string) => void;
+  /** 移除 tab，返回关闭后应激活的路径（调用方负责 navigate） */
+  removeTab: (key: string) => string;
   removeAllTabs: () => void;
   removeOtherTabs: (keepKey: string) => void;
   setActiveTab: (key: string) => void;
@@ -58,6 +59,9 @@ export const useTabStore = create<TabState>()((set, get) => ({
       tabs: newTabs,
       activeKey: newActiveKey,
     });
+
+    // 返回新激活路径，让调用方 navigate
+    return newActiveKey;
   },
 
   removeAllTabs: () => {

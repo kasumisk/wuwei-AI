@@ -95,6 +95,7 @@ export interface NormalizedFoodData {
   barcode?: string;
   searchWeight?: number;
   importMetadata?: ImportMetadata;
+  commonalityScore?: number;
 }
 
 /**

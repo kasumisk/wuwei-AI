@@ -45,12 +45,52 @@ export class FoodScorerService {
   private categoryMicroDefaults: Map<string, MicroNutrientDefaults> | null =
     null;
 
+  /**
+   * V7.9 P3-01: computeWeights 结果缓存
+   * 在同一批评分中，computeWeights 的参数组合通常只有 1 个，
+   * 缓存避免对每个候选食物重复计算权重。
+   * key = 参数指纹, value = weights 数组
+   */
+  private weightsCache = new Map<string, number[]>();
+
   constructor(
     private readonly penaltyEngine: HealthModifierEngineService,
     private readonly recommendationConfig: RecommendationConfigService,
     private readonly nutritionTargetService: NutritionTargetService,
     private readonly seasonalityService: SeasonalityService,
   ) {}
+
+  /**
+   * V7.9 P3-01: 构建 computeWeights 缓存 key
+   * 参数组合在同一批评分中通常只有 1 个，使用 JSON 序列化生成指纹。
+   */
+  private buildWeightsCacheKey(
+    goalType: string,
+    mealType?: string,
+    statusFlags?: string[],
+    weightOverrides?: number[] | null,
+    mealWeightOverrides?: Record<string, Record<string, number>> | null,
+    rankPolicy?: RankPolicyConfig | null,
+    runtimeBaseWeights?: number[] | null,
+  ): string {
+    return JSON.stringify([
+      goalType,
+      mealType ?? null,
+      statusFlags ?? null,
+      weightOverrides ?? null,
+      mealWeightOverrides ?? null,
+      rankPolicy ?? null,
+      runtimeBaseWeights ?? null,
+    ]);
+  }
+
+  /**
+   * V7.9 P3-01: 清除 computeWeights 缓存
+   * 上游在每轮评分开始前调用，避免跨请求缓存污染。
+   */
+  clearWeightsCache(): void {
+    this.weightsCache.clear();
+  }
 
   /**
    * V5 2.7: 设置品类微量营养素均值表
@@ -243,15 +283,30 @@ export class FoodScorerService {
     // V7.4 Phase 3-C: 食物可获得性评分 — 基于 acquisitionDifficulty（1-5 → 0-1 反转）
     const acquisitionScore = this.calcAcquisitionScore(food, scoringConfig);
 
-    const weights = computeWeights(
-      goalType as GoalType,
-      mealType,
-      statusFlags,
-      weightOverrides,
-      mealWeightOverrides, // V5 4.8: A/B 实验组覆盖的餐次权重修正
-      rankPolicy, // V6 2.2: 策略引擎排序策略配置（优先级最高）
-      this.recommendationConfig.getBaseWeights(goalType), // V6.2 3.2: 运行时可配置权重
+    // V7.9 P3-01: computeWeights 缓存 — 同一批评分中参数组合通常相同
+    const runtimeBaseWeights = this.recommendationConfig.getBaseWeights(goalType);
+    const weightsCacheKey = this.buildWeightsCacheKey(
+      goalType, mealType, statusFlags,
+      weightOverrides, mealWeightOverrides, rankPolicy, runtimeBaseWeights,
     );
+    let weights: number[];
+    const cachedWeights = this.weightsCache.get(weightsCacheKey);
+    if (cachedWeights) {
+      // 缓存命中 — 必须 slice() 复制，因为后续 effectiveGoal 会 in-place 修改数组
+      weights = cachedWeights.slice();
+    } else {
+      weights = computeWeights(
+        goalType as GoalType,
+        mealType,
+        statusFlags,
+        weightOverrides,
+        mealWeightOverrides, // V5 4.8: A/B 实验组覆盖的餐次权重修正
+        rankPolicy, // V6 2.2: 策略引擎排序策略配置（优先级最高）
+        runtimeBaseWeights, // V6.2 3.2: 运行时可配置权重
+      );
+      // 缓存原始结果（未被 effectiveGoal 修改）
+      this.weightsCache.set(weightsCacheKey, weights.slice());
+    }
 
     // V7.0 Phase 3-C: 叠加 EffectiveGoal 阶段权重调整
     // weightAdjustment 是 Partial<Record<ScoreDimension, number>>，值为乘数（如 1.3 = 增强30%）

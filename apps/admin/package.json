@@ -27,6 +27,8 @@
     "antd": "^5.27.4",
     "axios": "^1.12.2",
     "dayjs": "^1.11.18",
+    "keepalive-for-react": "^5.0.8",
+    "keepalive-for-react-router": "^5.0.7",
     "react": "^19.1.1",
     "react-device-detect": "^2.2.3",
     "react-dom": "^19.1.1",

@@ -505,6 +505,7 @@ export class FoodPipelineOrchestratorService {
           qualityScore: scores.qualityScore,
           satietyScore: scores.satietyScore,
           nutrientDensity: scores.nutrientDensity,
+          commonalityScore: (food as any).commonalityScore ?? 50,
           tags,
         },
       });
@@ -810,6 +811,7 @@ export class FoodPipelineOrchestratorService {
             qualityScore: scores.qualityScore,
             satietyScore: scores.satietyScore,
             nutrientDensity: scores.nutrientDensity,
+            commonalityScore: (candidateFields as any).commonalityScore ?? 50,
             tags: scores.tags || [],
             ...candidateFields,
           },

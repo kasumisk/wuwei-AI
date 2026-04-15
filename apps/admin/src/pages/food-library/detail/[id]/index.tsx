@@ -35,6 +35,7 @@ import {
   ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useCloseTab } from '@/hooks/useCloseTab';
 import {
   foodLibraryApi,
   useFoodDetail,
@@ -70,6 +71,7 @@ export const routeConfig = {
 const FoodDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const closeTabAndGo = useCloseTab();
   const queryClient = useQueryClient();
 
   const { data: food, isLoading } = useFoodDetail(id!, !!id);
@@ -191,7 +193,7 @@ const FoodDetailPage: React.FC = () => {
     return (
       <Card>
         <Typography.Text type="danger">未找到食物数据</Typography.Text>
-        <Button type="link" onClick={() => navigate('/food-library/list')}>
+        <Button type="link" onClick={() => closeTabAndGo('/food-library/list')}>
           返回列表
         </Button>
       </Card>
@@ -204,7 +206,7 @@ const FoodDetailPage: React.FC = () => {
         <Row justify="space-between" align="middle">
           <Col>
             <Space>
-              <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/food-library/list')}>
+              <Button icon={<ArrowLeftOutlined />} onClick={() => closeTabAndGo('/food-library/list')}>
                 返回列表
               </Button>
               <Typography.Title level={4} style={{ margin: 0 }}>
@@ -339,6 +341,12 @@ const FoodDetailPage: React.FC = () => {
                     <Descriptions.Item label="名称">{food.name}</Descriptions.Item>
                     <Descriptions.Item label="别名">{food.aliases || '-'}</Descriptions.Item>
                     <Descriptions.Item label="条形码">{food.barcode || '-'}</Descriptions.Item>
+                    <Descriptions.Item label="状态">
+                      <Badge
+                        status={food.status === 'active' ? 'success' : food.status === 'draft' ? 'warning' : 'default'}
+                        text={STATUS_MAP[food.status]?.text || food.status}
+                      />
+                    </Descriptions.Item>
                     <Descriptions.Item label="分类">
                       {CATEGORY_MAP[food.category] || food.category}
                     </Descriptions.Item>
@@ -349,7 +357,7 @@ const FoodDetailPage: React.FC = () => {
                       {food.foodGroup || '-'}
                     </Descriptions.Item>
                     <Descriptions.Item label="主要食材">
-                      {food.mainIngredient || '-'}
+                      {fieldValue(food.mainIngredient, '', 'main_ingredient')}
                     </Descriptions.Item>
                     <Descriptions.Item label="加工食品">
                       {food.isProcessed ? '是' : '否'}
@@ -358,8 +366,17 @@ const FoodDetailPage: React.FC = () => {
                       {food.isFried ? '是' : '否'}
                     </Descriptions.Item>
                     <Descriptions.Item label="NOVA分级">{food.processingLevel}</Descriptions.Item>
-                    <Descriptions.Item label="份量">
-                      {food.standardServingG}g — {food.standardServingDesc || '-'}
+                    <Descriptions.Item label="标准份量">
+                      {food.standardServingG}g{food.standardServingDesc ? ` — ${food.standardServingDesc}` : ''}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="常用份量" span={2}>
+                      {food.commonPortions && food.commonPortions.length > 0
+                        ? food.commonPortions.map((p) => (
+                            <Tag key={p.name} color="geekblue" style={{ marginBottom: 2 }}>
+                              {p.name} = {p.grams}g
+                            </Tag>
+                          ))
+                        : <span>-{fieldStatus(null, 'common_portions')}</span>}
                     </Descriptions.Item>
                   </Descriptions>
 
@@ -380,8 +397,14 @@ const FoodDetailPage: React.FC = () => {
                     <Descriptions.Item label="膳食纤维">
                       {fieldValue(food.fiber, 'g', 'fiber')}
                     </Descriptions.Item>
-                    <Descriptions.Item label="糖">
+                    <Descriptions.Item label="糖（总）">
                       {fieldValue(food.sugar, 'g', 'sugar')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="添加糖">
+                      {fieldValue(food.addedSugar, 'g', 'added_sugar')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="天然糖">
+                      {fieldValue(food.naturalSugar, 'g', 'natural_sugar')}
                     </Descriptions.Item>
                     <Descriptions.Item label="饱和脂肪">
                       {fieldValue(food.saturatedFat, 'g', 'saturated_fat')}
@@ -470,6 +493,12 @@ const FoodDetailPage: React.FC = () => {
                     <Descriptions.Item label="GL值">
                       {fieldValue(food.glycemicLoad, '', 'glycemic_load')}
                     </Descriptions.Item>
+                    <Descriptions.Item label="FODMAP等级">
+                      {fieldValue(food.fodmapLevel, '', 'fodmap_level')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="草酸等级">
+                      {fieldValue(food.oxalateLevel, '', 'oxalate_level')}
+                    </Descriptions.Item>
                     <Descriptions.Item label="品质评分">
                       {fieldValue(food.qualityScore, '', 'quality_score')}
                     </Descriptions.Item>
@@ -478,6 +507,9 @@ const FoodDetailPage: React.FC = () => {
                     </Descriptions.Item>
                     <Descriptions.Item label="营养密度">
                       {fieldValue(food.nutrientDensity, '', 'nutrient_density')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="大众化评分">
+                      {fieldValue(food.commonalityScore, '', 'commonality_score')}
                     </Descriptions.Item>
                     <Descriptions.Item label="搜索权重">{food.searchWeight}</Descriptions.Item>
                     <Descriptions.Item label="热门度">{food.popularity}</Descriptions.Item>
@@ -508,7 +540,7 @@ const FoodDetailPage: React.FC = () => {
                     <Descriptions.Item label="建议温度">
                       {fieldValue(food.servingTemperature, '', 'serving_temperature')}
                     </Descriptions.Item>
-                    <Descriptions.Item label="预估菜品优先级">
+                    <Descriptions.Item label="菜品优先级">
                       {fieldValue(food.dishPriority, '', 'dish_priority')}
                     </Descriptions.Item>
                     <Descriptions.Item label="制备时间">
@@ -519,6 +551,19 @@ const FoodDetailPage: React.FC = () => {
                     </Descriptions.Item>
                     <Descriptions.Item label="获取难度">
                       {fieldValue(food.acquisitionDifficulty, '', 'acquisition_difficulty')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="风味档案" span={2}>
+                      {food.flavorProfile && Object.keys(food.flavorProfile).length > 0 ? (
+                        <Space wrap size={4}>
+                          {Object.entries(food.flavorProfile).map(([k, v]) => (
+                            <Tag key={k} color="orange">
+                              {k}: {String(v)}
+                            </Tag>
+                          ))}
+                        </Space>
+                      ) : (
+                        <span>-{fieldStatus(null, 'flavor_profile')}</span>
+                      )}
                     </Descriptions.Item>
                   </Descriptions>
 
@@ -623,18 +668,22 @@ const FoodDetailPage: React.FC = () => {
                   </Typography.Title>
                   <Descriptions bordered column={1} size="small">
                     <Descriptions.Item label="标签">
-                      {food.tags?.map((t) => (
-                        <Tag key={t} color="blue">
-                          {t}
-                        </Tag>
-                      )) || '-'}
+                      {food.tags?.length > 0
+                        ? food.tags.map((t) => (
+                            <Tag key={t} color="blue">
+                              {t}
+                            </Tag>
+                          ))
+                        : '-'}
                     </Descriptions.Item>
                     <Descriptions.Item label="适合餐次">
-                      {food.mealTypes?.map((m) => (
-                        <Tag key={m} color="green">
-                          {m}
-                        </Tag>
-                      )) || '-'}
+                      {food.mealTypes?.length > 0
+                        ? food.mealTypes.map((m) => (
+                            <Tag key={m} color="green">
+                              {m}
+                            </Tag>
+                          ))
+                        : '-'}
                     </Descriptions.Item>
                     <Descriptions.Item label="过敏原">
                       {food.allergens?.length > 0
@@ -644,6 +693,28 @@ const FoodDetailPage: React.FC = () => {
                             </Tag>
                           ))
                         : '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="搭配兼容性">
+                      {food.compatibility && Object.keys(food.compatibility).length > 0 ? (
+                        <Space direction="vertical" size={4}>
+                          {Object.entries(food.compatibility).map(([group, items]) => (
+                            <div key={group}>
+                              <Typography.Text type="secondary" style={{ fontSize: 12, marginRight: 8 }}>
+                                {group}:
+                              </Typography.Text>
+                              <Space wrap size={2}>
+                                {items.map((item) => (
+                                  <Tag key={item} color="cyan" style={{ fontSize: 11 }}>
+                                    {item}
+                                  </Tag>
+                                ))}
+                              </Space>
+                            </div>
+                          ))}
+                        </Space>
+                      ) : (
+                        '-'
+                      )}
                     </Descriptions.Item>
                   </Descriptions>
                 </div>

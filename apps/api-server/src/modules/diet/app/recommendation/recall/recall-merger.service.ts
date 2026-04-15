@@ -32,7 +32,10 @@ export interface SemanticRecallItem {
  *   - 语义+CF（无规则路）→ min(1.0, 语义权重 + 0.1)
  */
 export interface MergedCandidate {
-  food: FoodLibrary;
+  /** 食物对象。CF-only 候选为 null，需由 toFoodListWithAllFoods() 还原 */
+  food: FoodLibrary | null;
+  /** CF-only 候选的食物 ID（food 为 null 时使用） */
+  foodId?: string;
   source: 'rule' | 'semantic' | 'cf' | 'both';
   semanticScore: number;
   cfScore: number;
@@ -169,12 +172,10 @@ export class RecallMergerService {
           existing.source = 'both';
         }
       } else {
-        // CF-only 候选 — 注意：这里缺少 food 对象，需要调用方提供 allFoods 查找
-        // 在 mergeThreeWay 中标记为 null food，由 toFoodList 阶段过滤
-        // 或者：CF 召回的食物必须在 allFoods 中存在才能加入
-        // 设计决策：CF-only 候选标记 food=null，由 toFoodListWithAllFoods() 还原
+        // CF-only 候选 — food 为 null，由 toFoodListWithAllFoods() 通过 foodId 还原
         candidateMap.set(cf.foodId, {
-          food: null as unknown as FoodLibrary, // 需要由 allFoods 还原
+          food: null,
+          foodId: cf.foodId,
           source: 'cf',
           semanticScore: 0,
           cfScore: cf.cfScore,
@@ -201,24 +202,6 @@ export class RecallMergerService {
   }
 
   /**
-   * V6.6 兼容：双路合并（保留旧签名供渐进式迁移）
-   *
-   * @deprecated 使用 mergeThreeWay 替代
-   */
-  merge(
-    ruleCandidates: FoodLibrary[],
-    semanticItems: SemanticRecallItem[],
-  ): MergedCandidate[] {
-    const { merged } = this.mergeThreeWay(
-      ruleCandidates,
-      semanticItems,
-      [],
-      null,
-    );
-    return merged;
-  }
-
-  /**
    * V6.7 Phase 2-B: 从 MergedCandidate 列表还原 FoodLibrary 列表
    *
    * 使用 allFoods 补全 CF-only 候选缺失的 food 对象，
@@ -238,10 +221,7 @@ export class RecallMergerService {
         // 还原 CF-only 候选的 food 对象
         let food = c.food;
         if (!food || !food.id) {
-          const resolved = allFoodsMap.get(
-            // 从 metadata 中找 foodId
-            (c as any).foodId ?? '',
-          );
+          const resolved = allFoodsMap.get(c.foodId ?? '');
           if (!resolved) return null; // 食物不在库中，跳过
           food = resolved;
         }
@@ -268,7 +248,7 @@ export class RecallMergerService {
    */
   toFoodList(merged: MergedCandidate[]): FoodLibrary[] {
     return merged
-      .filter((c) => c.food && c.food.id) // 过滤掉无 food 的 CF-only 候选
+      .filter((c): c is MergedCandidate & { food: FoodLibrary } => c.food !== null && !!c.food?.id)
       .map((c) => {
         const food = c.food as FoodLibrary & {
           __recallSource?: string;

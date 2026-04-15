@@ -139,14 +139,18 @@ const RECOMMENDATION_PROVIDERS = [
   imports: [TrackingModule, UserModule, RecipeModule],
   providers: RECOMMENDATION_PROVIDERS,
   exports: [
-    // V7.5 P3-C: 只导出被外部模块实际注入的 7 个 service（原 38 个全部导出）
+    // V7.5 P3-C: 只导出被外部模块实际注入的 service（原 38 个全部导出）
     RecommendationEngineService, // → DailyPlanService, FoodPlanController, WeeklyPlanService, FoodService, PrecomputeProcessor, RecommendationDebugService
     SubstitutionService, // → FoodPlanController
     ABTestingService, // → RecommendationDebugService, ABExperimentManagementService
     FoodPoolCacheService, // → CandidatePromotedListener
-    ScoringConfigService, // → ScoringConfigController
+    ScoringConfigService, // → ScoringConfigController, RecommendationDebugService
     ExplanationGeneratorService, // → DailyPlanService
     AdaptiveExplanationDepthService, // → DailyPlanService
+    // V7.9 P2-03: RecommendationDebugService 得分分解需要
+    FoodScorerService,
+    ScoringChainService,
+    HealthModifierEngineService,
   ],
 })
 export class RecommendationModule {}

@@ -16,9 +16,10 @@ import {
   Divider,
 } from 'antd';
 import { ArrowLeftOutlined, SaveOutlined } from '@ant-design/icons';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { useFoodDetail, useCreateFood, useUpdateFood } from '@/services/foodLibraryService';
 import { FOOD_CATEGORIES, STATUS_MAP, SOURCE_MAP, MEAL_TYPE_OPTIONS } from '../../constants';
+import { useCloseTab } from '@/hooks/useCloseTab';
 
 export const routeConfig = {
   name: 'food-edit',
@@ -32,7 +33,7 @@ export const routeConfig = {
 const FoodEditPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const isEditing = !!id;
-  const navigate = useNavigate();
+  const closeTabAndGo = useCloseTab();
   const [form] = Form.useForm();
 
   const { data: food, isLoading } = useFoodDetail(id!, isEditing);
@@ -40,7 +41,7 @@ const FoodEditPage: React.FC = () => {
   const createMutation = useCreateFood({
     onSuccess: (data) => {
       message.success('创建成功');
-      navigate(`/food-library/detail/${data.id}`);
+      closeTabAndGo(`/food-library/detail/${data.id}`);
     },
     onError: (e: any) => message.error(`创建失败: ${e.message}`),
   });
@@ -48,7 +49,7 @@ const FoodEditPage: React.FC = () => {
   const updateMutation = useUpdateFood({
     onSuccess: () => {
       message.success('更新成功');
-      navigate(`/food-library/detail/${id}`);
+      closeTabAndGo(`/food-library/detail/${id}`);
     },
     onError: (e: any) => message.error(`更新失败: ${e.message}`),
   });
@@ -86,8 +87,8 @@ const FoodEditPage: React.FC = () => {
                 icon={<ArrowLeftOutlined />}
                 onClick={() =>
                   isEditing
-                    ? navigate(`/food-library/detail/${id}`)
-                    : navigate('/food-library/list')
+                    ? closeTabAndGo(`/food-library/detail/${id}`)
+                    : closeTabAndGo('/food-library/list')
                 }
               >
                 返回

@@ -8,18 +8,8 @@
 // ─── 队列名称 ───
 
 export const QUEUE_NAMES = {
-  /**
-   * @deprecated V6.2: 已移除注册 — 画像更新通过 EventEmitter2 事件驱动 + Cron 实现
-   */
-  PROFILE_UPDATE: 'profile-update',
-
   /** 每日推荐预计算 — 凌晨批量为活跃用户生成次日推荐 */
   RECOMMENDATION_PRECOMPUTE: 'recommendation-precompute',
-
-  /**
-   * @deprecated V6.2: 已移除注册 — 反馈处理在 feedback.service.ts 中同步完成
-   */
-  FEEDBACK_PROCESS: 'feedback-process',
 
   /** AI 图片分析 — 长耗时异步任务 */
   FOOD_ANALYSIS: 'food-analysis',
@@ -53,23 +43,11 @@ export const QUEUE_DEFAULT_OPTIONS: Record<
     backoffDelay: number;
   }
 > = {
-  [QUEUE_NAMES.PROFILE_UPDATE]: {
-    concurrency: 5,
-    maxRetries: 3,
-    backoffType: 'exponential',
-    backoffDelay: 1000,
-  },
   [QUEUE_NAMES.RECOMMENDATION_PRECOMPUTE]: {
     concurrency: 3,
     maxRetries: 2,
     backoffType: 'exponential',
     backoffDelay: 5000,
-  },
-  [QUEUE_NAMES.FEEDBACK_PROCESS]: {
-    concurrency: 10,
-    maxRetries: 3,
-    backoffType: 'exponential',
-    backoffDelay: 1000,
   },
   [QUEUE_NAMES.FOOD_ANALYSIS]: {
     concurrency: 3,

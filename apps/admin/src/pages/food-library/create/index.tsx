@@ -15,9 +15,9 @@ import {
   Divider,
 } from 'antd';
 import { ArrowLeftOutlined, SaveOutlined } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
 import { useCreateFood } from '@/services/foodLibraryService';
 import { FOOD_CATEGORIES, STATUS_MAP, SOURCE_MAP, MEAL_TYPE_OPTIONS } from '../constants';
+import { useCloseTab } from '@/hooks/useCloseTab';
 
 export const routeConfig = {
   name: 'food-create',
@@ -29,13 +29,13 @@ export const routeConfig = {
 };
 
 const FoodCreatePage: React.FC = () => {
-  const navigate = useNavigate();
+  const closeTabAndGo = useCloseTab();
   const [form] = Form.useForm();
 
   const createMutation = useCreateFood({
     onSuccess: (data) => {
       message.success('创建成功');
-      navigate(`/food-library/detail/${data.id}`);
+      closeTabAndGo(`/food-library/detail/${data.id}`);
     },
     onError: (e: any) => message.error(`创建失败: ${e.message}`),
   });
@@ -51,7 +51,7 @@ const FoodCreatePage: React.FC = () => {
         <Row justify="space-between" align="middle">
           <Col>
             <Space>
-              <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/food-library/list')}>
+              <Button icon={<ArrowLeftOutlined />} onClick={() => closeTabAndGo('/food-library/list')}>
                 返回列表
               </Button>
               <Typography.Title level={4} style={{ margin: 0 }}>

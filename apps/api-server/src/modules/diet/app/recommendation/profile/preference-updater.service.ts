@@ -1,5 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../../../../../core/prisma/prisma.service';
+import {
+  DomainEvents,
+  FeedbackSubmittedEvent,
+} from '../../../../../core/events/domain-events';
 
 /**
  * 偏好自动更新服务 (V4 Phase 3.1)
@@ -214,5 +219,59 @@ export class PreferenceUpdaterService {
    */
   private clampWeight(value: number, min: number, max: number): number {
     return Math.max(min, Math.min(max, value));
+  }
+
+  // ─── V7.9: @OnEvent 监听器 — 反馈提交后异步增量更新偏好权重 ───
+
+  /**
+   * 监听 FEEDBACK_SUBMITTED 事件，异步触发偏好权重增量更新。
+   * 从 feedback.service.ts 的直接调用解耦为事件驱动。
+   */
+  @OnEvent(DomainEvents.FEEDBACK_SUBMITTED, { async: true })
+  async handleFeedbackSubmitted(event: FeedbackSubmittedEvent): Promise<void> {
+    try {
+      // 1. 读取当前增量权重
+      const inferredProfile =
+        await this.prisma.userInferredProfiles.findFirst({
+          where: { userId: event.userId },
+        });
+
+      const currentWeights =
+        (inferredProfile?.preferenceWeights as IncrementalPreferenceWeights | null) ??
+        null;
+
+      // 2. 增量更新
+      const updatedWeights = await this.updateFromFeedback(
+        {
+          userId: event.userId,
+          foodName: event.foodName,
+          foodId: event.foodId,
+          action: event.action,
+        },
+        currentWeights,
+      );
+
+      // 3. 写回
+      if (inferredProfile) {
+        await this.prisma.userInferredProfiles.update({
+          where: { id: inferredProfile.id },
+          data: { preferenceWeights: updatedWeights as any },
+        });
+      } else {
+        await this.prisma.userInferredProfiles.create({
+          data: {
+            userId: event.userId,
+            preferenceWeights: updatedWeights as any,
+          },
+        });
+      }
+
+      this.logger.debug(
+        `偏好权重增量更新(事件驱动): userId=${event.userId}, action=${event.action}, ` +
+          `food=${event.foodName}, updateCount=${updatedWeights.updateCount}`,
+      );
+    } catch (err) {
+      this.logger.warn(`偏好增量更新失败 (事件驱动, 非阻塞): ${err}`);
+    }
   }
 }

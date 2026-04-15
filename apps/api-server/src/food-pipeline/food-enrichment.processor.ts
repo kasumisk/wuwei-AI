@@ -56,6 +56,7 @@ export class FoodEnrichmentProcessor extends WorkerHost {
       locale,
       region,
       stages,
+      fields,
     } = job.data;
 
     this.logger.log(
@@ -70,10 +71,10 @@ export class FoodEnrichmentProcessor extends WorkerHost {
       } else if (target === 'regional') {
         await this.processRegional(foodId, region ?? 'CN', staged);
       } else if (stages && stages.length > 0) {
-        // V7.9: 分阶段补全模式
-        await this.processFoodsByStage(foodId, stages, staged);
+        // V7.9: 分阶段补全模式，透传 fields 作为 fieldFilter
+        await this.processFoodsByStage(foodId, stages, staged, fields);
       } else {
-        await this.processFoods(foodId, staged);
+        await this.processFoods(foodId, staged, fields);
       }
     } catch (err) {
       this.logger.error(
@@ -88,15 +89,18 @@ export class FoodEnrichmentProcessor extends WorkerHost {
   /**
    * V8.7 FIX: 将所有阶段结果合并后一次性调用 applyEnrichment 或 stageEnrichment，
    * 每个食物只产生一条 change_log，彻底解决"每阶段写一条"的历史记录重复问题。
+   * FIX: 接收 fieldFilter 并透传到 enrichFoodByStage，使 /enqueue 的 fields 参数生效。
    */
   private async processFoodsByStage(
     foodId: string,
     stages: number[],
     staged: boolean,
+    fieldFilter?: EnrichmentJobData['fields'],
   ): Promise<void> {
     const multiResult = await this.enrichmentService.enrichFoodByStage(
       foodId,
       stages,
+      fieldFilter,
     );
     if (!multiResult) {
       this.logger.warn(
@@ -125,7 +129,8 @@ export class FoodEnrichmentProcessor extends WorkerHost {
       }
       const fc = sr.result.fieldConfidence ?? {};
       for (const [k, v] of Object.entries(fc)) {
-        if (!(k in mergedFieldConfidence)) mergedFieldConfidence[k] = v as number;
+        if (!(k in mergedFieldConfidence))
+          mergedFieldConfidence[k] = v as number;
       }
     }
 
@@ -187,9 +192,18 @@ export class FoodEnrichmentProcessor extends WorkerHost {
 
   // ─── 主表补全（无 stages 参数时默认走全部5阶段）─────────────────────
 
-  private async processFoods(foodId: string, staged: boolean): Promise<void> {
+  private async processFoods(
+    foodId: string,
+    staged: boolean,
+    fieldFilter?: EnrichmentJobData['fields'],
+  ): Promise<void> {
     // V8.2: 旧版 enrichFood() 已移除，统一走分阶段补全流程
-    await this.processFoodsByStage(foodId, [1, 2, 3, 4, 5], staged);
+    await this.processFoodsByStage(
+      foodId,
+      [1, 2, 3, 4, 5],
+      staged,
+      fieldFilter,
+    );
   }
 
   // ─── 翻译补全 ──────────────────────────────────────────────────────────

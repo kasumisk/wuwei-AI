@@ -344,6 +344,22 @@ export type EnrichableField =
   | 'storage_method'
   | 'shelf_life_days'
   | 'best_cooking_temp'
+  | 'isProcessed'
+  | 'isFried'
+  | 'aliases'
+  | 'standard_serving_g'
+  | 'ingredient_list'
+  | 'texture_tags'
+  | 'dish_type'
+  | 'prep_time_minutes'
+  | 'cook_time_minutes'
+  | 'skill_required'
+  | 'estimated_cost_level'
+  | 'serving_temperature'
+  | 'compatibility'
+  | 'available_channels'
+  | 'required_equipment'
+  | 'availableChannels'
   | 'pairing_foods';
 
 export type EnrichmentTarget = 'foods' | 'translations' | 'regional';
@@ -755,6 +771,10 @@ export const enrichmentApi = {
       timeout: 180_000,
       silentError: true,
     }),
+
+  /** V8.9: 强制按指定字段重新入队（忽略字段是否已有值，支持全库或按条件筛选） */
+  reEnqueue: (data: ReEnqueueParams): Promise<ReEnqueueResult> =>
+    request.post(`${ENRICHMENT_BASE}/re-enqueue`, data),
 };
 
 // ==================== Enrichment Query Keys ====================
@@ -1136,3 +1156,43 @@ export const useReviewStats = () =>
     queryFn: () => enrichmentApi.getReviewStats(),
     staleTime: 60 * 1000,
   });
+
+// ==================== V8.9: 强制重新补全类型 & Hook ====================
+
+export interface ReEnqueueParams {
+  /** 要重新补全的字段列表（必填） */
+  fields: EnrichableField[];
+  /** 最多入队食物数（0 或不传 = 全部） */
+  limit?: number;
+  /** 按食物分类筛选 */
+  category?: string;
+  /** 按数据来源筛选 */
+  primarySource?: string;
+  /** 入队前先清空指定字段（默认 false，设为 true 则强制让 AI 重新生成） */
+  clearFields?: boolean;
+  /** 是否 staging 模式（默认 false） */
+  staged?: boolean;
+}
+
+export interface ReEnqueueResult {
+  enqueued: number;
+  fields: string[];
+  cleared: number;
+  staged: boolean;
+  foodNames: string[];
+}
+
+/** V8.9: 强制按指定字段重新入队 */
+export const useReEnqueueEnrichment = (
+  options?: UseMutationOptions<ReEnqueueResult, Error, ReEnqueueParams>
+) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data) => enrichmentApi.reEnqueue(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.stats });
+      queryClient.invalidateQueries({ queryKey: enrichmentQueryKeys.jobs() });
+    },
+    ...options,
+  });
+};

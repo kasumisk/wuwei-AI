@@ -30,6 +30,9 @@ import {
   RemoveAssignmentDto,
   UpdateRealismConfigDto,
   ApplyRealismToSegmentDto,
+  StrategySimulateDto,
+  TuningReviewDto,
+  TuningPendingQueryDto,
 } from './dto/strategy-management.dto';
 import { ApiResponse } from '../../../common/types/response.type';
 
@@ -68,6 +71,77 @@ export class StrategyManagementController {
       data,
     };
   }
+
+  // ==================== V7.9 P2-10: 调优审核（静态路由，必须在 :id 之前） ====================
+
+  @Get('auto-tune/pending')
+  @ApiOperation({
+    summary: '获取待审核的自动调优建议列表',
+    description: '列出所有 reviewStatus 为 pending_review 的调优记录，支持分页',
+  })
+  async getPendingTunings(
+    @Query() query: TuningPendingQueryDto,
+  ): Promise<ApiResponse> {
+    const data =
+      await this.strategyManagementService.getPendingTunings(query);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '获取待审核调优列表成功',
+      data,
+    };
+  }
+
+  @Post('auto-tune/:tuningId/approve')
+  @ApiOperation({
+    summary: '批准自动调优建议',
+    description:
+      '将指定调优记录标记为 approved，记录审核人和审核时间，并标记为已应用',
+  })
+  async approveTuning(
+    @Param('tuningId') tuningId: string,
+    @Body() dto: TuningReviewDto,
+  ): Promise<ApiResponse> {
+    // TODO: 从 JWT token 中获取真实 adminUserId，当前使用占位值
+    const adminUserId = 'admin';
+    const data = await this.strategyManagementService.approveTuning(
+      tuningId,
+      adminUserId,
+      dto,
+    );
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '调优建议已批准',
+      data,
+    };
+  }
+
+  @Post('auto-tune/:tuningId/reject')
+  @ApiOperation({
+    summary: '拒绝自动调优建议',
+    description: '将指定调优记录标记为 rejected，记录审核人和审核时间',
+  })
+  async rejectTuning(
+    @Param('tuningId') tuningId: string,
+    @Body() dto: TuningReviewDto,
+  ): Promise<ApiResponse> {
+    // TODO: 从 JWT token 中获取真实 adminUserId，当前使用占位值
+    const adminUserId = 'admin';
+    const data = await this.strategyManagementService.rejectTuning(
+      tuningId,
+      adminUserId,
+      dto,
+    );
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '调优建议已拒绝',
+      data,
+    };
+  }
+
+  // ==================== 策略详情（参数路由） ====================
 
   @Get(':id')
   @ApiOperation({ summary: '获取策略详情' })
@@ -264,6 +338,56 @@ export class StrategyManagementController {
       success: true,
       code: HttpStatus.OK,
       message: `Realism 配置已应用到分群 "${dto.segment}"`,
+      data,
+    };
+  }
+
+  // ==================== V7.9 P2-06: 策略模拟推荐 ====================
+
+  @Post(':id/simulate')
+  @ApiOperation({
+    summary: '模拟指定策略的推荐效果',
+    description:
+      '输入 userId 列表，使用指定策略模拟推荐，返回策略配置快照和用户列表。只读操作，不保存推荐记录。',
+  })
+  async simulateStrategy(
+    @Param('id') id: string,
+    @Body() dto: StrategySimulateDto,
+  ): Promise<ApiResponse> {
+    const data = await this.strategyManagementService.simulateStrategy(id, dto);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '策略模拟完成',
+      data,
+    };
+  }
+
+  // ==================== V7.9 P2-07: 策略参数 Diff ====================
+
+  @Get(':id/diff')
+  @ApiOperation({
+    summary: '对比两个策略的 9 维配置差异',
+    description:
+      '逐维度对比 rank/recall/boost/meal/multiObjective/exploration/assembly/explain/realism，列出差异项',
+  })
+  @ApiQuery({
+    name: 'compareWith',
+    required: true,
+    description: '要对比的另一个策略 ID',
+  })
+  async diffStrategies(
+    @Param('id') id: string,
+    @Query('compareWith') compareWith: string,
+  ): Promise<ApiResponse> {
+    const data = await this.strategyManagementService.diffStrategies(
+      id,
+      compareWith,
+    );
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '策略对比完成',
       data,
     };
   }

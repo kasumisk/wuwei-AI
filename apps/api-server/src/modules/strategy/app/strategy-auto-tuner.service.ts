@@ -27,6 +27,7 @@ import {
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { RedisCacheService } from '../../../core/redis/redis-cache.service';
+import { FeatureFlagService } from '../../feature-flag/feature-flag.service';
 
 // ==================== 类型 ====================
 
@@ -56,6 +57,8 @@ export interface AutoTuneResult {
   suggestions: TuningSuggestion[];
   appliedCount: number;
   skippedCount: number;
+  /** V7.9: 写入待审核的建议数 */
+  pendingCount: number;
 }
 
 /** V6.8: segment→strategy 映射条目 */
@@ -102,6 +105,7 @@ export class StrategyAutoTuner implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisCacheService,
+    private readonly featureFlagService: FeatureFlagService,
   ) {}
 
   // ==================== 启动与销毁 ====================
@@ -249,6 +253,7 @@ export class StrategyAutoTuner implements OnModuleInit, OnModuleDestroy {
         suggestions: [],
         appliedCount: 0,
         skippedCount: 0,
+        pendingCount: 0,
       };
     }
 
@@ -314,19 +319,24 @@ export class StrategyAutoTuner implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    // 4. 自动应用高置信度调整
+    // 4. V7.9: 根据 feature flag 决定自动应用还是待审核
+    //    flag 开启 = 保留旧行为（高置信度自动应用）
+    //    flag 关闭 = 所有建议均写入 pending_review，需 Admin 手动审核
     let appliedCount = 0;
     let skippedCount = 0;
+    let pendingCount = 0;
+
+    const autoApplyEnabled = await this.featureFlagService
+      .isEnabled('strategy_auto_apply')
+      .catch(() => false);
 
     for (const suggestion of suggestions) {
       const isHighConfidence =
         suggestion.improvement > 0.5 * (suggestion.currentRate || 0.01);
 
-      // 记录调优日志到 DB
-      await this.logTuningDecision(suggestion, isHighConfidence);
-
-      if (isHighConfidence) {
-        // V6.8: 写入 Redis（替代内存修改）
+      if (autoApplyEnabled && isHighConfidence) {
+        // 旧行为：高置信度自动应用
+        await this.logTuningDecision(suggestion, true, 'auto_applied');
         await this.setMapping(suggestion.segment, suggestion.suggestedStrategy);
         appliedCount++;
         this.logger.log(
@@ -334,10 +344,21 @@ export class StrategyAutoTuner implements OnModuleInit, OnModuleDestroy {
             `${suggestion.currentStrategy} → ${suggestion.suggestedStrategy} ` +
             `(${(suggestion.currentRate * 100).toFixed(1)}% → ${(suggestion.suggestedRate * 100).toFixed(1)}%)`,
         );
-      } else {
+      } else if (autoApplyEnabled && !isHighConfidence) {
+        // 旧行为：低置信度跳过
+        await this.logTuningDecision(suggestion, false, 'auto_applied');
         skippedCount++;
         this.logger.log(
-          `策略调优建议（未自动应用）: ${JSON.stringify(suggestion)}`,
+          `策略调优建议（未自动应用，置信度不足）: ${JSON.stringify(suggestion)}`,
+        );
+      } else {
+        // V7.9 新行为：所有建议写入 pending_review
+        await this.logTuningDecision(suggestion, false, 'pending_review');
+        pendingCount++;
+        this.logger.log(
+          `策略调优建议（待审核）: ${suggestion.segment} ` +
+            `${suggestion.currentStrategy} → ${suggestion.suggestedStrategy} ` +
+            `(${(suggestion.currentRate * 100).toFixed(1)}% → ${(suggestion.suggestedRate * 100).toFixed(1)}%)`,
         );
       }
     }
@@ -347,12 +368,14 @@ export class StrategyAutoTuner implements OnModuleInit, OnModuleDestroy {
       suggestions,
       appliedCount,
       skippedCount,
+      pendingCount,
     };
 
     this.logger.log(
       `策略自动调优完成: 分析 ${result.analyzedSegments} 个分群, ` +
         `${result.suggestions.length} 条建议, ` +
-        `${result.appliedCount} 条自动应用, ${result.skippedCount} 条跳过`,
+        `${result.appliedCount} 条自动应用, ${result.skippedCount} 条跳过, ` +
+        `${result.pendingCount} 条待审核`,
     );
 
     return result;
@@ -621,10 +644,13 @@ export class StrategyAutoTuner implements OnModuleInit, OnModuleDestroy {
 
   /**
    * 记录调优决策到 strategy_tuning_log 表
+   *
+   * V7.9: 新增 reviewStatus 参数，支持 'auto_applied' | 'pending_review'
    */
   private async logTuningDecision(
     suggestion: TuningSuggestion,
     autoApplied: boolean,
+    reviewStatus: string = 'auto_applied',
   ): Promise<void> {
     try {
       await this.prisma.strategyTuningLog.create({
@@ -636,6 +662,7 @@ export class StrategyAutoTuner implements OnModuleInit, OnModuleDestroy {
           newRate: suggestion.suggestedRate,
           improvement: suggestion.improvement,
           autoApplied: autoApplied,
+          reviewStatus: reviewStatus,
         },
       });
     } catch (err) {

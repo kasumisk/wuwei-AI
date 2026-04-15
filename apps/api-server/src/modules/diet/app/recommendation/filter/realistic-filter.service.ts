@@ -106,24 +106,43 @@ export class RealisticFilterService {
     const before = candidates.length;
     let filtered = candidates;
 
+    // V7.9: 各过滤器淘汰计数（仅在 trace 开启时收集）
+    const traceEnabled = !!context.trace;
+    let filteredByCommonality = 0;
+    let filteredByFoodForm = 0;
+    let filteredByBudget = 0;
+    let filteredByCookTime = 0;
+    let filteredByCanteen = 0;
+    let filteredBySkill = 0;
+    let filteredByEquipment = 0;
+    let fallbackTriggered = false;
+
     // 1. 大众化过滤：commonalityScore 低于阈值的食物被过滤
     if (config.commonalityThreshold > 0) {
+      const prevCount = filtered.length;
       filtered = filtered.filter(
         (f) => (f.commonalityScore ?? 50) >= config.commonalityThreshold,
       );
+      if (traceEnabled) filteredByCommonality = prevCount - filtered.length;
     }
 
     // 1.5 V7.8 P2-A: food_form 感知过滤 — ingredient 有同类 dish 时过滤 ingredient
-    filtered = this.preferDishOverIngredient(filtered);
+    {
+      const prevCount = filtered.length;
+      filtered = this.preferDishOverIngredient(filtered);
+      if (traceEnabled) filteredByFoodForm = prevCount - filtered.length;
+    }
 
     // 2. 预算过滤：根据用户声明的预算等级限制高价食物
     if (config.budgetFilterEnabled) {
       const budgetLevel = context.userProfile?.budgetLevel;
       if (budgetLevel) {
         const maxCost = BUDGET_COST_CAP[budgetLevel] ?? 5;
+        const prevCount = filtered.length;
         filtered = filtered.filter(
           (f) => (f.estimatedCostLevel ?? 2) <= maxCost,
         );
+        if (traceEnabled) filteredByBudget = prevCount - filtered.length;
       }
     }
 
@@ -137,9 +156,11 @@ export class RealisticFilterService {
         ? config.weekdayCookTimeCap
         : config.weekendCookTimeCap;
 
+      const prevCount = filtered.length;
       filtered = filtered.filter(
         (f) => !f.cookTimeMinutes || f.cookTimeMinutes <= cap,
       );
+      if (traceEnabled) filteredByCookTime = prevCount - filtered.length;
     }
 
     // 4. V6.6 Phase 2-D: 食堂模式 — 提高大众化阈值到 60，优先常见菜品
@@ -150,6 +171,7 @@ export class RealisticFilterService {
       );
       // 兜底：食堂模式过滤不能让候选池低于 MIN_CANDIDATES
       if (canteenFiltered.length >= MIN_CANDIDATES) {
+        if (traceEnabled) filteredByCanteen = filtered.length - canteenFiltered.length;
         filtered = canteenFiltered;
       }
     }
@@ -165,6 +187,7 @@ export class RealisticFilterService {
         });
         // 技能过滤也尊重 MIN_CANDIDATES 兜底
         if (skillFiltered.length >= MIN_CANDIDATES) {
+          if (traceEnabled) filteredBySkill = filtered.length - skillFiltered.length;
           filtered = skillFiltered;
         }
       }
@@ -177,6 +200,7 @@ export class RealisticFilterService {
         kitchenProfile,
       );
       if (equipmentFiltered.length >= MIN_CANDIDATES) {
+        if (traceEnabled) filteredByEquipment = filtered.length - equipmentFiltered.length;
         filtered = equipmentFiltered;
       }
     }
@@ -187,6 +211,22 @@ export class RealisticFilterService {
       this.logger.warn(
         `Realism filter too aggressive: ${before} → ${filtered.length} candidates (below ${MIN_CANDIDATES}), falling back to top ${MIN_CANDIDATES} by commonality`,
       );
+      fallbackTriggered = true;
+
+      // V7.9: 暂存过滤器追踪详情，供 executeRolePipeline 写入 stage trace
+      if (context.trace) {
+        (context.trace as any)._lastRealisticFilterDetails = {
+          filteredByCommonality,
+          filteredByFoodForm,
+          filteredByBudget,
+          filteredByCookTime,
+          filteredByCanteen,
+          filteredBySkill,
+          filteredByEquipment,
+          fallbackTriggered,
+        };
+      }
+
       return candidates
         .slice()
         .sort((a, b) => (b.commonalityScore ?? 50) - (a.commonalityScore ?? 50))
@@ -197,6 +237,20 @@ export class RealisticFilterService {
       this.logger.debug(
         `Realism filter: ${before} → ${filtered.length} candidates`,
       );
+    }
+
+    // V7.9: 暂存过滤器追踪详情，供 executeRolePipeline 写入 stage trace
+    if (context.trace) {
+      (context.trace as any)._lastRealisticFilterDetails = {
+        filteredByCommonality,
+        filteredByFoodForm,
+        filteredByBudget,
+        filteredByCookTime,
+        filteredByCanteen,
+        filteredBySkill,
+        filteredByEquipment,
+        fallbackTriggered,
+      };
     }
 
     return filtered;

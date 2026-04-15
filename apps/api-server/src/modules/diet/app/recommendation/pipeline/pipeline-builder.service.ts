@@ -58,6 +58,7 @@ import { StrategyAutoTuner } from '../../../../strategy/app/strategy-auto-tuner.
 import { PreferenceProfileService } from '../profile/preference-profile.service';
 import { ScoringChainService } from '../scoring-chain/scoring-chain.service';
 import type { RecommendationStrategy } from '../types/recommendation-strategy.types';
+import type { PipelineStageTrace } from '../types/pipeline.types';
 import {
   PreferenceSignalFactor,
   RegionalBoostFactor,
@@ -199,6 +200,49 @@ export class PipelineBuilderService implements OnModuleInit {
       candidates = filterByAllergens(candidates, ctx.userProfile.allergens);
     }
 
+    // V7.9 P3-03: 召回阶段 commonality/budget 快速预过滤
+    // 将 RealisticFilter 中代价最低的两项基础过滤上移到召回阶段，
+    // 在三路合并和后续评分之前就减少候选数量，避免对不可能通过现实性过滤的食物做无用评分。
+    // 注意：这里使用策略配置的阈值，与后续 RealisticFilter 保持一致。
+    {
+      const realismConfig = ctx.resolvedStrategy?.config?.realism;
+      const commonalityThreshold = realismConfig?.commonalityThreshold ?? 20;
+      if (commonalityThreshold > 0 && realismConfig?.enabled !== false) {
+        const beforeCount = candidates.length;
+        candidates = candidates.filter(
+          (f) => (f.commonalityScore ?? 50) >= commonalityThreshold,
+        );
+        // 兜底：预过滤不能清空候选池
+        if (candidates.length < 3 && beforeCount >= 3) {
+          candidates = ctx.allFoods
+            .filter(
+              (f) =>
+                roleCategories.includes(f.category) &&
+                !ctx.usedNames.has(f.name),
+            )
+            .sort(
+              (a, b) =>
+                (b.commonalityScore ?? 50) - (a.commonalityScore ?? 50),
+            )
+            .slice(0, 10);
+        }
+      }
+      if (realismConfig?.budgetFilterEnabled && realismConfig?.enabled !== false) {
+        const budgetLevel = ctx.userProfile?.budgetLevel;
+        if (budgetLevel) {
+          const BUDGET_CAP: Record<string, number> = {
+            low: 3,
+            medium: 4,
+            high: 5,
+          };
+          const maxCost = BUDGET_CAP[budgetLevel] ?? 5;
+          candidates = candidates.filter(
+            (f) => (f.estimatedCostLevel ?? 2) <= maxCost,
+          );
+        }
+      }
+    }
+
     // V6.2 3.4: 烹饪技能过滤 — beginner 用户排除 advanced 菜品
     if (ctx.userProfile?.cookingSkillLevel === 'beginner') {
       const beforeCount = candidates.length;
@@ -321,6 +365,7 @@ export class PipelineBuilderService implements OnModuleInit {
         const scoringConfig = await this.scoringConfigService.getConfig();
 
         // 5. 三路合并
+        const ruleCandidateCount = candidates.length;
         const { merged } = this.recallMerger.mergeThreeWay(
           candidates,
           semanticItems,
@@ -331,6 +376,16 @@ export class PipelineBuilderService implements OnModuleInit {
           merged,
           ctx.allFoods,
         );
+
+        // V7.9: 记录各路召回数到 trace
+        if (ctx.trace) {
+          (ctx.trace as any)._lastRecallMergeDetails = {
+            ruleCandidates: ruleCandidateCount,
+            semanticCandidates: semanticItems.length,
+            cfCandidates: cfCandidates.length,
+            mergedTotal: candidates.length,
+          };
+        }
       } catch (err) {
         // 语义/CF召回失败不影响主流程，降级为纯规则路
         this.logger.debug(`三路召回降级: ${(err as Error).message}`);
@@ -475,6 +530,22 @@ export class PipelineBuilderService implements OnModuleInit {
       preloadedIds,
       penaltyCtx,
     );
+
+    // V7.9: 从 healthModifierCache 提取否决列表，写入 trace
+    if (ctx.trace) {
+      const vetoedFoods: string[] = [];
+      for (const [foodId, result] of healthModifierCache.entries()) {
+        if (result.isVetoed) {
+          const food = candidates.find((f) => f.id === foodId);
+          vetoedFoods.push(food?.name ?? foodId);
+        }
+      }
+      (ctx.trace as any)._lastHealthModifierDetails = {
+        totalEvaluated: healthModifierCache.size,
+        vetoedCount: vetoedFoods.length,
+        vetoedFoods,
+      };
+    }
 
     return scored;
   }
@@ -826,10 +897,12 @@ export class PipelineBuilderService implements OnModuleInit {
     const usedNames = ctx.usedNames;
     const allCandidates: ScoredFood[] = [];
     const degradations: PipelineDegradation[] = [];
+    const trace = ctx.trace; // V7.9: 管道追踪（可选）
 
     for (const role of roles) {
       // Stage 1: Recall
       let recalled: FoodLibrary[];
+      const recallStart = trace ? Date.now() : 0;
       try {
         recalled = await this.recallCandidates(ctx, role);
       } catch (e) {
@@ -844,9 +917,26 @@ export class PipelineBuilderService implements OnModuleInit {
         // Fallback: 使用全量食物池（仅做基本的过敏原/已选排除）
         recalled = ctx.allFoods.filter((f) => !usedNames.has(f.name));
       }
+      if (trace) {
+        // V7.9: 合并 RecallMergerService 写入的各路召回数
+        const recallMergeDetails =
+          (trace as any)._lastRecallMergeDetails ?? {};
+        delete (trace as any)._lastRecallMergeDetails;
+
+        const stageTrace: PipelineStageTrace = {
+          stage: 'recall',
+          durationMs: Date.now() - recallStart,
+          inputCount: ctx.allFoods.length,
+          outputCount: recalled.length,
+          details: { role, ...recallMergeDetails },
+        };
+        trace.stages.push(stageTrace);
+      }
 
       // V6.5 Phase 3G: 现实性过滤
       let realistic: FoodLibrary[];
+      const filterStart = trace ? Date.now() : 0;
+      const recalledCount = recalled.length;
       try {
         realistic = this.realisticFilterService.filterByRealism(
           recalled,
@@ -885,9 +975,25 @@ export class PipelineBuilderService implements OnModuleInit {
           }
         }
       }
+      if (trace) {
+        // V7.9: 合并 RealisticFilterService 写入的过滤器详情
+        const filterDetails =
+          (trace as any)._lastRealisticFilterDetails ?? {};
+        delete (trace as any)._lastRealisticFilterDetails;
+
+        const stageTrace: PipelineStageTrace = {
+          stage: 'realistic_filter',
+          durationMs: Date.now() - filterStart,
+          inputCount: recalledCount,
+          outputCount: realistic.length,
+          details: { role, ...filterDetails },
+        };
+        trace.stages.push(stageTrace);
+      }
 
       // Stage 2: Rank
       let ranked: ScoredFood[];
+      const rankStart = trace ? Date.now() : 0;
       try {
         ranked = await this.rankCandidates(ctx, realistic);
       } catch (e) {
@@ -922,6 +1028,30 @@ export class PipelineBuilderService implements OnModuleInit {
               Math.abs((b.food.calories ?? 0) - targetCal),
           );
       }
+      if (trace) {
+        // V7.9: 合并 ScoringChainService 写入的因子详情
+        const chainDetails =
+          (trace as any)._lastScoringChainDetails ?? {};
+        delete (trace as any)._lastScoringChainDetails;
+
+        // V7.9: 合并 HealthModifierEngine 写入的否决详情
+        const healthDetails =
+          (trace as any)._lastHealthModifierDetails ?? {};
+        delete (trace as any)._lastHealthModifierDetails;
+
+        const stageTrace: PipelineStageTrace = {
+          stage: 'rank',
+          durationMs: Date.now() - rankStart,
+          inputCount: realistic.length,
+          outputCount: ranked.length,
+          details: {
+            role,
+            scoringChain: chainDetails,
+            healthModifier: healthDetails,
+          },
+        };
+        trace.stages.push(stageTrace);
+      }
 
       // V6 2.5: 多目标优化（可选）
       let finalRanked: ScoredFood[];
@@ -952,6 +1082,7 @@ export class PipelineBuilderService implements OnModuleInit {
 
       // Stage 3: Rerank → Top-1
       let selected: ScoredFood | null;
+      const rerankStart = trace ? Date.now() : 0;
       try {
         selected = this.rerankAndSelect(ctx, finalRanked);
       } catch (e) {
@@ -965,6 +1096,20 @@ export class PipelineBuilderService implements OnModuleInit {
         });
         selected = finalRanked.length > 0 ? finalRanked[0] : null;
       }
+      if (trace) {
+        const stageTrace: PipelineStageTrace = {
+          stage: 'rerank',
+          durationMs: Date.now() - rerankStart,
+          inputCount: finalRanked.length,
+          outputCount: selected ? 1 : 0,
+          details: {
+            role,
+            selectedFood: selected?.food.name ?? null,
+            selectedScore: selected?.score ?? null,
+          },
+        };
+        trace.stages.push(stageTrace);
+      }
 
       if (selected) {
         picks.push(selected);
@@ -973,6 +1118,7 @@ export class PipelineBuilderService implements OnModuleInit {
     }
 
     // V6.8 Phase 2-F: 多轮冲突解决（最多 3 轮，无冲突时提前退出）
+    const assembleStart = trace ? Date.now() : 0;
     if (picks.length >= 2) {
       try {
         this.resolveCompositionConflicts(picks, allCandidates, usedNames);
@@ -1003,11 +1149,59 @@ export class PipelineBuilderService implements OnModuleInit {
         this.logger.debug(`maxSameCategory enforcement failed, skipping: ${e}`);
       }
     }
+    if (trace) {
+      trace.stages.push({
+        stage: 'assemble',
+        durationMs: Date.now() - assembleStart,
+        inputCount: picks.length,
+        outputCount: picks.length,
+        details: {
+          conflictResolutionApplied: picks.length >= 2,
+          maxSameCategoryApplied: !!(recStrategyFinal && picks.length >= 2),
+        },
+      });
+    }
 
     if (degradations.length > 0) {
       this.logger.warn(
         `Pipeline completed with ${degradations.length} degradation(s): ${degradations.map((d) => d.stage).join(', ')}`,
       );
+    }
+
+    // V7.9: 填充 trace summary
+    if (trace) {
+      trace.completedAt = Date.now();
+
+      // 构建候选数流转路径 — 从各阶段的 inputCount→outputCount 中提取
+      const recallStages = trace.stages.filter((s) => s.stage === 'recall');
+      const filterStages = trace.stages.filter(
+        (s) => s.stage === 'realistic_filter',
+      );
+      const rankStages = trace.stages.filter((s) => s.stage === 'rank');
+      const flowParts: number[] = [];
+      if (recallStages.length > 0)
+        flowParts.push(recallStages[0].inputCount, recallStages[0].outputCount);
+      if (filterStages.length > 0) flowParts.push(filterStages[0].outputCount);
+      if (rankStages.length > 0) flowParts.push(rankStages[0].outputCount);
+      flowParts.push(picks.length);
+
+      // 去除连续重复值
+      const deduped = flowParts.filter(
+        (v, i) => i === 0 || v !== flowParts[i - 1],
+      );
+
+      trace.summary = {
+        totalDurationMs: trace.completedAt - trace.startedAt,
+        candidateFlowPath: deduped.join('→'),
+        strategyName:
+          ctx.resolvedStrategy?.strategyName ??
+          ctx.recommendationStrategy?.strategy?.name ??
+          '',
+        sceneName: ctx.sceneContext?.sceneType ?? '',
+        realismLevel: String(sceneAdjustedRealism?.level ?? ''),
+        degradations: degradations.map((d) => d.stage),
+        cacheHit: false, // 由上游调用方覆盖
+      };
     }
 
     return { picks, allCandidates, degradations };

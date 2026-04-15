@@ -68,6 +68,16 @@ export interface HealthConditionWithSeverity {
   severity: HealthSeverity;
 }
 
+/**
+ * V7.9 P3-04: 健康条件预计算结果
+ * 将 parseConditions + normalizeHealthConditions + severityMap 构建
+ * 提取为一次性预计算，避免对每个候选食物重复执行。
+ */
+interface PrecomputedConditions {
+  conditionNames: string[];
+  severityMap: Map<string, HealthSeverity>;
+}
+
 // ==================== Service ====================
 
 /** L2 缓存 TTL（2 小时），食物营养数据变化低频，缓存窗口可以较长 */
@@ -170,6 +180,7 @@ export class HealthModifierEngineService {
     food: FoodLibrary,
     context?: HealthModifierContext,
     cache?: Map<string, HealthModifierResult>,
+    precomputed?: PrecomputedConditions,
   ): HealthModifierResult {
     const foodId = food.id;
 
@@ -192,7 +203,7 @@ export class HealthModifierEngineService {
     }
 
     // ── 计算 ──
-    const result = this.evaluateInternal(food, context);
+    const result = this.evaluateInternal(food, context, precomputed);
 
     // ── 写入 L1 ──
     if (cache && foodId) {
@@ -289,10 +300,12 @@ export class HealthModifierEngineService {
 
   /**
    * 内部评估逻辑（从 evaluate 分离以支持缓存）
+   * V7.9 P3-04: 接受可选的预计算健康条件，避免每个候选食物重复解析
    */
   private evaluateInternal(
     food: FoodLibrary,
     context?: HealthModifierContext,
+    precomputed?: PrecomputedConditions,
   ): HealthModifierResult {
     const modifiers: HealthModifier[] = [];
     let multiplier = 1.0;
@@ -373,9 +386,13 @@ export class HealthModifierEngineService {
     // ── 第四层: 健康状况相关惩罚 + 正向增益 ──
 
     if (context?.healthConditions?.length) {
+      // V7.9 P3-04: 复用预计算结果，避免每个食物重复解析
+      const pc = precomputed ?? this.precomputeConditions(context.healthConditions);
+
       const healthResult = this.applyHealthPenalties(
         food,
         context.healthConditions,
+        pc,
       );
       // V4 Phase 4.6: 健康状况惩罚支持一票否决（如极高嘌呤+痛风、麸质+乳糜泻）
       if (healthResult.vetoed) {
@@ -392,7 +409,7 @@ export class HealthModifierEngineService {
       modifiers.push(...healthResult.modifiers);
 
       // V5 2.8: 正向健康增益（第五层）
-      const bonusMods = this.applyHealthBonuses(food, context.healthConditions);
+      const bonusMods = this.applyHealthBonuses(food, context.healthConditions, pc);
       for (const m of bonusMods) {
         multiplier *= m.multiplier;
       }
@@ -412,6 +429,8 @@ export class HealthModifierEngineService {
    * V6.4: 支持 L2 缓存预热 + 回写。
    * 如需 L2 缓存，调用方应在调用前先执行 preloadL2Cache，调用后执行 flushToL2。
    *
+   * V7.9 P3-04: 在批量入口预计算一次健康条件，传入各食物评估复用。
+   *
    * @param cache V6.3 P1-8: 请求级缓存（L1）
    */
   evaluateBatch(
@@ -419,8 +438,13 @@ export class HealthModifierEngineService {
     context?: HealthModifierContext,
     cache?: Map<string, HealthModifierResult>,
   ): Array<{ food: FoodLibrary; penalty: HealthModifierResult }> {
+    // V7.9 P3-04: 预计算健康条件（仅一次）
+    const precomputed = context?.healthConditions?.length
+      ? this.precomputeConditions(context.healthConditions)
+      : undefined;
+
     return foods
-      .map((food) => ({ food, penalty: this.evaluate(food, context, cache) }))
+      .map((food) => ({ food, penalty: this.evaluate(food, context, cache, precomputed) }))
       .filter(({ penalty }) => !penalty.isVetoed);
   }
 
@@ -465,24 +489,12 @@ export class HealthModifierEngineService {
   private applyHealthPenalties(
     food: FoodLibrary,
     conditions: Array<string | HealthConditionWithSeverity>,
+    precomputed?: PrecomputedConditions,
   ): { modifiers: HealthModifier[]; vetoed: boolean } {
     const mods: HealthModifier[] = [];
 
-    // V5 2.8: 解析条件和严重度
-    const parsed = this.parseConditions(conditions);
-    // V4: 标准化健康状况命名，兼容旧值 (修复 B5)
-    const conditionNames = normalizeHealthConditions(
-      parsed.map((p) => p.condition),
-    );
-    // 构建条件→严重度映射
-    const severityMap = new Map<string, HealthSeverity>();
-    for (const p of parsed) {
-      // 标准化后查找对应条件
-      const normalized = normalizeHealthConditions([p.condition]);
-      if (normalized.length > 0) {
-        severityMap.set(normalized[0], p.severity);
-      }
-    }
+    // V7.9 P3-04: 复用预计算结果
+    const { conditionNames, severityMap } = precomputed ?? this.precomputeConditions(conditions);
 
     // 糖尿病: 高GI食物惩罚
     if (conditionNames.includes(HealthCondition.DIABETES_TYPE2)) {
@@ -720,20 +732,12 @@ export class HealthModifierEngineService {
   private applyHealthBonuses(
     food: FoodLibrary,
     conditions: Array<string | HealthConditionWithSeverity>,
+    precomputed?: PrecomputedConditions,
   ): HealthModifier[] {
     const mods: HealthModifier[] = [];
 
-    const parsed = this.parseConditions(conditions);
-    const conditionNames = normalizeHealthConditions(
-      parsed.map((p) => p.condition),
-    );
-    const severityMap = new Map<string, HealthSeverity>();
-    for (const p of parsed) {
-      const normalized = normalizeHealthConditions([p.condition]);
-      if (normalized.length > 0) {
-        severityMap.set(normalized[0], p.severity);
-      }
-    }
+    // V7.9 P3-04: 复用预计算结果
+    const { conditionNames, severityMap } = precomputed ?? this.precomputeConditions(conditions);
 
     // 高血脂 + Omega-3 丰富: 1.15x bonus
     // 判断标准: tags 包含 omega3_rich / high_omega3，或 category=protein 且 tags 包含 seafood/fish
@@ -835,6 +839,27 @@ export class HealthModifierEngineService {
       }
       return { condition: c.condition, severity: c.severity };
     });
+  }
+
+  /**
+   * V7.9 P3-04: 预计算健康条件 — 将 parseConditions + normalizeHealthConditions + severityMap 构建
+   * 合并为一次调用，在批量评估入口执行一次，传入各评估方法复用。
+   */
+  private precomputeConditions(
+    conditions: Array<string | HealthConditionWithSeverity>,
+  ): PrecomputedConditions {
+    const parsed = this.parseConditions(conditions);
+    const conditionNames = normalizeHealthConditions(
+      parsed.map((p) => p.condition),
+    );
+    const severityMap = new Map<string, HealthSeverity>();
+    for (const p of parsed) {
+      const normalized = normalizeHealthConditions([p.condition]);
+      if (normalized.length > 0) {
+        severityMap.set(normalized[0], p.severity);
+      }
+    }
+    return { conditionNames, severityMap };
   }
 
   /**

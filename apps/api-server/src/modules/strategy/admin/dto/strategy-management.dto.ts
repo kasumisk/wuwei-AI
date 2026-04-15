@@ -8,6 +8,7 @@ import {
   IsDateString,
   IsBoolean,
   IsNumber,
+  IsArray,
   Min,
   Max,
   ValidateNested,
@@ -267,4 +268,51 @@ export class ApplyRealismToSegmentDto {
   @ValidateNested()
   @Type(() => UpdateRealismConfigDto)
   realism: UpdateRealismConfigDto;
+}
+
+// ==================== V7.9 P2-06: 策略模拟 DTO ====================
+
+export class StrategySimulateDto {
+  @ApiProperty({ description: '用户 ID 列表（1-10 个）', type: [String] })
+  @IsArray()
+  @IsString({ each: true })
+  userIds: string[];
+
+  @ApiPropertyOptional({ description: '餐次类型（默认 lunch）' })
+  @IsOptional()
+  @IsString()
+  mealType?: string;
+
+  @ApiPropertyOptional({ description: '目标类型覆盖' })
+  @IsOptional()
+  @IsString()
+  goalType?: string;
+}
+
+// ==================== V7.9 P2-10: 调优审核 DTO ====================
+
+export class TuningReviewDto {
+  @ApiPropertyOptional({ description: '审核备注' })
+  @IsOptional()
+  @IsString()
+  reviewNote?: string;
+}
+
+// ==================== V7.9 P2-10: 调优待审列表查询 DTO ====================
+
+export class TuningPendingQueryDto {
+  @ApiPropertyOptional({ description: '页码', default: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @ApiPropertyOptional({ description: '每页条数', default: 20 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  pageSize?: number;
 }

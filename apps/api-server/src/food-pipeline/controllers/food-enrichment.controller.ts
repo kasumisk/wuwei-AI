@@ -178,6 +178,26 @@ export class FoodEnrichmentController {
       },
     }));
 
+    // FIX: 入队前清除 failed/stalled 的旧 job，防止 jobId 幂等机制阻塞重新入队
+    // BullMQ 对 failed/completed 的 job 仍保留 jobId 记录（受 removeOnFail/removeOnComplete 上限控制）
+    // 若旧 job 仍在 Redis 中，addBulk 会静默跳过，导致实际 waiting 数为 0
+    await Promise.all(
+      jobs.map(async (job) => {
+        const existing = await this.enrichmentQueue.getJob(job.opts.jobId!);
+        if (existing) {
+          const state = await existing.getState();
+          // 只移除终态（failed/completed）或卡住的 job，不移除 waiting/active
+          if (
+            state === 'failed' ||
+            state === 'completed' ||
+            state === 'unknown'
+          ) {
+            await existing.remove();
+          }
+        }
+      }),
+    );
+
     await this.enrichmentQueue.addBulk(jobs);
 
     return {
@@ -717,6 +737,23 @@ export class FoodEnrichmentController {
       },
     }));
 
+    // FIX: 入队前清除 failed/stalled 的旧 job，防止 jobId 幂等机制阻塞重新入队
+    await Promise.all(
+      jobs.map(async (job) => {
+        const existing = await this.enrichmentQueue.getJob(job.opts.jobId!);
+        if (existing) {
+          const state = await existing.getState();
+          if (
+            state === 'failed' ||
+            state === 'completed' ||
+            state === 'unknown'
+          ) {
+            await existing.remove();
+          }
+        }
+      }),
+    );
+
     await this.enrichmentQueue.addBulk(jobs);
 
     return {
@@ -729,6 +766,127 @@ export class FoodEnrichmentController {
         stageNames: ENRICHMENT_STAGES.filter((s) =>
           validStages.includes(s.stage),
         ).map((s) => s.name),
+        staged: body.staged ?? false,
+        foodNames: foods.slice(0, 10).map((f) => f.name),
+      },
+    };
+  }
+
+  // ==================== V8.9: 强制重新补全（按指定字段） ====================
+
+  @Post('re-enqueue')
+  @ApiOperation({
+    summary:
+      'V8.9 强制按指定字段重新入队（全库或筛选范围，忽略字段是否已有值）',
+    description: `
+      与 /enqueue 的区别：
+        - /enqueue 只入队"字段为 NULL"的食物
+        - /re-enqueue 不论字段是否已有值，强制将全部（或筛选后的）食物重新入队
+      支持 clearFields=true：入队前先把指定字段清空，允许 AI 重新补全
+      fields 必填，且必须是 ENRICHABLE_FIELDS 中的有效字段名
+    `,
+  })
+  async reEnqueue(
+    @Body()
+    body: {
+      /** 必填：要重新补全的字段列表 */
+      fields: EnrichableField[];
+      /** 最多入队食物数（0 或不传 = 全部） */
+      limit?: number;
+      /** 按食物分类筛选（如 protein/veggie/grain） */
+      category?: string;
+      /** 按数据来源筛选 */
+      primarySource?: string;
+      /** 入队前先将指定字段清空（默认 false，设为 true 则强制让 AI 重新生成） */
+      clearFields?: boolean;
+      /** 是否 staging 模式（默认 false） */
+      staged?: boolean;
+    },
+  ): Promise<ApiResponse> {
+    // 1. 校验 fields
+    if (!body.fields || body.fields.length === 0) {
+      return {
+        success: false,
+        code: HttpStatus.BAD_REQUEST,
+        message: 'fields 不能为空，请至少指定一个要重新补全的字段',
+        data: null,
+      };
+    }
+    const validFields = body.fields.filter((f) =>
+      (ENRICHABLE_FIELDS as readonly string[]).includes(f),
+    );
+    if (validFields.length === 0) {
+      return {
+        success: false,
+        code: HttpStatus.BAD_REQUEST,
+        message: `无效的字段名，有效字段请参考 ENRICHABLE_FIELDS`,
+        data: null,
+      };
+    }
+
+    // 2. 查询目标食物（不过滤字段是否为 NULL）
+    const foods = await this.enrichmentService.getALLFoodsForReEnqueue(
+      validFields as EnrichableField[],
+      {
+        limit: body.limit,
+        category: body.category,
+        primarySource: body.primarySource,
+      },
+    );
+
+    if (foods.length === 0) {
+      return {
+        success: true,
+        code: HttpStatus.OK,
+        message: '没有符合条件的食物',
+        data: { enqueued: 0 },
+      };
+    }
+
+    // 3. 可选：先清空指定字段
+    let cleared = 0;
+    if (body.clearFields) {
+      const result = await this.enrichmentService.clearFieldsForFoods(
+        foods.map((f) => f.id),
+        validFields as EnrichableField[],
+      );
+      cleared = result.cleared;
+    }
+
+    // 4. 构建队列任务（每条食物独立 job，jobId 幂等去重）
+    const jobs = foods.map((food) => ({
+      name: 'enrich',
+      data: {
+        foodId: food.id,
+        fields: validFields as EnrichableField[],
+        target: 'foods' as const,
+        staged: body.staged ?? false,
+      },
+      opts: {
+        // 强制重入队：jobId 加上时间戳后缀，绕过幂等去重（允许重复入队）
+        jobId: `re_enrich_${food.id}_${Date.now()}`,
+        attempts:
+          QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_ENRICHMENT].maxRetries + 1,
+        backoff: {
+          type: QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_ENRICHMENT].backoffType,
+          delay:
+            QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_ENRICHMENT].backoffDelay,
+        },
+        removeOnComplete: 1000,
+        removeOnFail: 500,
+      },
+    }));
+
+    await this.enrichmentQueue.addBulk(jobs);
+
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: `已强制入队 ${foods.length} 个食物补全任务（字段：${validFields.join(', ')}）${body.clearFields ? `，已清空 ${cleared} 条记录的指定字段` : ''}${body.staged ? '（Staging 模式）' : ''}`,
+      data: {
+        enqueued: foods.length,
+        fields: validFields,
+        cleared,
         staged: body.staged ?? false,
         foodNames: foods.slice(0, 10).map((f) => f.name),
       },
@@ -820,16 +978,28 @@ export class FoodEnrichmentController {
         try {
           // V8.4: 先重置状态（防止 add 成功但 reset 失败导致下次重复入队）
           await this.enrichmentService.resetEnrichmentStatus(food.id);
+          // FIX: 入队前清除旧 job，防止 jobId 幂等机制静默跳过（与 /enqueue 路径保持一致）
+          const retryJobId = `enrich_${food.id}`;
+          const existingJob = await this.enrichmentQueue.getJob(retryJobId);
+          if (existingJob) {
+            const state = await existingJob.getState();
+            if (
+              state === 'failed' ||
+              state === 'completed' ||
+              state === 'unknown'
+            ) {
+              await existingJob.remove();
+            }
+          }
           await this.enrichmentQueue.add(
-            'enrichment',
+            'enrich',
             {
               foodId: food.id,
               target: 'foods' as EnrichmentTarget,
               staged: false,
             },
             {
-              // V8.4: jobId 幂等去重
-              jobId: `enrich_${food.id}`,
+              jobId: retryJobId,
               attempts: queueOpts.maxRetries + 1,
               backoff: {
                 type: queueOpts.backoffType,

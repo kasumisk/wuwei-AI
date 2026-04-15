@@ -2494,6 +2494,22 @@ model RecommendationTraces {
   foodPoolSize      Int? @map("food_pool_size") /// 候选池大小
   filtersApplied    Json? @map("filters_applied") /// 应用的过滤器及过滤数量
   durationMs        Int? @map("duration_ms") /// 推荐计算耗时（毫秒）
+  /// V7.9: 管道全链路追踪数据（PipelineTrace JSON）
+  traceData         Json?    @map("trace_data")
+  /// V7.9: 策略名称（冗余存储，便于查询）
+  strategyName      String?  @map("strategy_name") @db.VarChar(60)
+  /// V7.9: 场景名称（如 eating_out/home_cook 等）
+  sceneName         String?  @map("scene_name") @db.VarChar(40)
+  /// V7.9: 现实性级别（off/relaxed/normal/strict）
+  realismLevel      String?  @map("realism_level") @db.VarChar(20)
+  /// V7.9: 候选数流转路径（如 "384→152→30→5"）
+  candidateFlow     String?  @map("candidate_flow") @db.VarChar(100)
+  /// V7.9: 管道总耗时（毫秒）
+  totalDurationMs   Int?     @map("total_duration_ms")
+  /// V7.9: 是否命中缓存
+  cacheHit          Boolean? @map("cache_hit")
+  /// V7.9: 降级列表（JSON array of stage names）
+  degradations      Json?    @map("degradations")
   /// 推荐请求时间
   createdAt         DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
 
@@ -2502,6 +2518,7 @@ model RecommendationTraces {
   @@index([experimentId], map: "idx_rec_traces_experiment")
   @@index([channel], map: "idx_rec_traces_channel")
   @@index([createdAt], map: "idx_rec_traces_created")
+  @@index([sceneName], map: "idx_rec_traces_scene")
 
   @@map("recommendation_traces")
 }
@@ -2645,11 +2662,20 @@ model StrategyTuningLog {
   improvement       Float
   /// 是否由系统自动应用（true=自动，false=人工触发）
   autoApplied       Boolean @map("auto_applied") @default(false)
+  /// V7.9: 审核状态 — auto_applied | pending_review | approved | rejected
+  reviewStatus      String @map("review_status") @default("auto_applied") @db.VarChar(20)
+  /// V7.9: 审核人（Admin 用户 ID）
+  reviewedBy        String? @map("reviewed_by") @db.VarChar(100)
+  /// V7.9: 审核时间
+  reviewedAt        DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  /// V7.9: 审核备注
+  reviewNote        String? @map("review_note") @db.Text
   /// 记录创建时间
   createdAt         DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
 
   @@index([segmentName], map: "idx_stl_segment")
   @@index([createdAt], map: "idx_stl_created")
+  @@index([reviewStatus], map: "idx_stl_review_status")
 
   @@map("strategy_tuning_log")
 }

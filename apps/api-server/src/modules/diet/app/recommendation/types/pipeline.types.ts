@@ -105,6 +105,8 @@ export interface PipelineContext {
   recommendationStrategy?: import('./recommendation-strategy.types').ResolvedRecommendationStrategy;
   /** V7.5 P3-A: 推荐调参配置（从 ScoringConfigService.getTuning() 注入） */
   tuning?: Required<RecommendationTuningConfig>;
+  /** V7.9: 管道全链路追踪（各阶段写入，最终汇总） */
+  trace?: PipelineTrace;
 }
 
 // ==================== 用户画像类型 ====================
@@ -370,4 +372,99 @@ export interface MealFromPoolRequest {
     toFoodName: string;
     frequency: number;
   }>;
+}
+
+// ==================== V7.9: Pipeline Trace ====================
+
+/**
+ * V7.9: 推荐管道全链路结构化追踪
+ *
+ * 由 PipelineBuilderService 在管道执行过程中逐阶段填充，
+ * 最终写入 recommendation_traces 表或直接返回给 admin debug API。
+ */
+export interface PipelineTrace {
+  /** 追踪 ID，UUID，关联一次推荐请求 */
+  traceId: string;
+  userId: string;
+  mealType: string;
+  /** 管道开始时间戳 (ms) */
+  startedAt: number;
+  /** 管道结束时间戳 (ms) */
+  completedAt?: number;
+  /** 各阶段追踪数据 */
+  stages: PipelineStageTrace[];
+  /** 管道汇总信息 */
+  summary?: PipelineTraceSummary;
+}
+
+/** 单个管道阶段的追踪记录 */
+export interface PipelineStageTrace {
+  stage:
+    | 'recall'
+    | 'realistic_filter'
+    | 'rank'
+    | 'health_modifier'
+    | 'scoring_chain'
+    | 'rerank'
+    | 'assemble';
+  durationMs: number;
+  inputCount: number;
+  outputCount: number;
+  /** 阶段特定详情，按 stage 类型区分 */
+  details?: Record<string, unknown>;
+}
+
+/** Recall 阶段追踪详情 */
+export interface RecallTraceDetails {
+  ruleCandidates: number;
+  semanticCandidates: number;
+  cfCandidates: number;
+  mergedTotal: number;
+  filteredByAllergen: number;
+  filteredByRestriction: number;
+  filteredByShortTermReject: number;
+}
+
+/** RealisticFilter 阶段追踪详情 */
+export interface RealisticFilterTraceDetails {
+  realismLevel: string;
+  filteredByCommonality: number;
+  filteredByBudget: number;
+  filteredByCookTime: number;
+  filteredBySkill: number;
+  filteredByEquipment: number;
+  filteredByFoodForm: number;
+  fallbackTriggered: boolean;
+}
+
+/** Rank 阶段追踪详情 */
+export interface RankTraceDetails {
+  scoringFactorsApplied: string[];
+  healthModifierVetoed: string[];
+  topCandidates: Array<{
+    foodName: string;
+    baseScore: number;
+    chainAdjustment: number;
+    healthModifier: number;
+    finalScore: number;
+  }>;
+}
+
+/** Rerank 阶段追踪详情 */
+export interface RerankTraceDetails {
+  explorationRate: number;
+  foodFormPromotions: number;
+  diversityPenalties: number;
+}
+
+/** 管道执行汇总 */
+export interface PipelineTraceSummary {
+  totalDurationMs: number;
+  /** 候选数流转路径，e.g. "384→152→30→5" */
+  candidateFlowPath: string;
+  strategyName: string;
+  sceneName: string;
+  realismLevel: string;
+  degradations: string[];
+  cacheHit: boolean;
 }

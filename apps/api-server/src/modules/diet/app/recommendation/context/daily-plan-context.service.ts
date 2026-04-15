@@ -311,20 +311,6 @@ export class DailyPlanContextService {
   }
 
   /**
-   * V6.9 原接口保留（向后兼容，内部委托到 calcDiversityAdjustment）
-   *
-   * @deprecated 使用 calcDiversityAdjustment() 替代
-   */
-  calcDiversityPenalty(
-    food: FoodLibrary,
-    state: DailyPlanState,
-    config?: ScoringConfigSnapshot | null,
-  ): number {
-    // 兼容：旧调用方只期望 <= 0 的值，clamp 到 [-0.5, 0]
-    return Math.min(0, this.calcDiversityAdjustment(food, state, config));
-  }
-
-  /**
    * V7.1 P2-C: 跨餐场景联动 — 计算营养补偿调整
    *
    * 基于前序餐次的营养累计，对后续餐次的推荐目标和权重进行补偿。

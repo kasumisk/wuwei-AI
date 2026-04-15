@@ -1,11 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../../../core/prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import {
   PipelineContext,
   ScoredFood,
   AcquisitionChannel,
 } from '../types/recommendation.types';
 import { ScoringExplanation } from '../types/scoring-explanation.interface';
+import type { PipelineTrace } from '../types/pipeline.types';
 
 /**
  * V6.4 Phase 3.5: 推荐归因追踪服务
@@ -50,6 +52,36 @@ export interface TraceInput {
   filtersApplied?: Record<string, number>;
   /** 计算耗时（毫秒） */
   durationMs: number;
+}
+
+/**
+ * V7.9 P1-14: 扩展 TraceInput，包含管道追踪新增字段
+ *
+ * 在原有 TraceInput 基础上增加：
+ * - traceData: PipelineTrace 结构化追踪数据（完整各阶段 trace）
+ * - strategyName / sceneName / realismLevel: 策略与场景元信息
+ * - candidateFlow: 候选数流转路径（如 "384→152→30→5"）
+ * - totalDurationMs: 管道总耗时
+ * - cacheHit: 是否命中食物池缓存
+ * - degradations: 降级记录列表
+ */
+export interface TraceV79Input extends Omit<TraceInput, 'filtersApplied'> {
+  /** V7.9: 结构化追踪数据（各阶段明细） */
+  traceData: PipelineTrace;
+  /** V7.9: 策略名称 */
+  strategyName: string;
+  /** V7.9: 场景名称 */
+  sceneName: string;
+  /** V7.9: 现实性级别 */
+  realismLevel: string;
+  /** V7.9: 候选数流转路径（如 "384→152→30→5"） */
+  candidateFlow: string;
+  /** V7.9: 管道总耗时（毫秒） */
+  totalDurationMs: number;
+  /** V7.9: 是否命中食物池缓存 */
+  cacheHit: boolean;
+  /** V7.9: 降级记录 */
+  degradations: string[];
 }
 
 /** 管道快照 — 只保留可序列化的关键参数 */
@@ -144,6 +176,65 @@ export class RecommendationTraceService {
       return trace.id;
     } catch (err) {
       this.logger.error(`Failed to record trace: ${err}`);
+      return null;
+    }
+  }
+
+  /**
+   * V7.9 P1-14: 记录推荐 Trace（含管道追踪数据）
+   *
+   * 在原有 recordTrace 基础上写入 V7.9 新增的 8 个字段：
+   * traceData, strategyName, sceneName, realismLevel,
+   * candidateFlow, totalDurationMs, cacheHit, degradations
+   *
+   * @returns trace_id（UUID）
+   */
+  async recordTraceV79(input: TraceV79Input): Promise<string | null> {
+    try {
+      const pipelineSnapshot = this.buildPipelineSnapshot(
+        input.pipelineContext,
+      );
+      const topFoodsSnapshot = this.buildTopFoodsSnapshot(input.topFoods);
+      const scoreStats = this.calcScoreStats(input.topFoods);
+
+      const trace = await this.prisma.recommendationTraces.create({
+        data: {
+          userId: input.userId,
+          mealType: input.mealType,
+          goalType: input.goalType,
+          channel: input.channel || 'unknown',
+          strategyId: input.strategyId ?? null,
+          strategyVersion: input.strategyVersion ?? null,
+          experimentId: input.experimentId ?? null,
+          groupId: input.groupId ?? null,
+          pipelineSnapshot: pipelineSnapshot as any,
+          topFoods: topFoodsSnapshot as any,
+          scoreStats: scoreStats as any,
+          foodPoolSize: input.foodPoolSize,
+          filtersApplied: Prisma.JsonNull,
+          durationMs: input.durationMs,
+          // V7.9 新增字段
+          traceData: input.traceData as any,
+          strategyName: input.strategyName,
+          sceneName: input.sceneName,
+          realismLevel: input.realismLevel,
+          candidateFlow: input.candidateFlow,
+          totalDurationMs: input.totalDurationMs,
+          cacheHit: input.cacheHit,
+          degradations: input.degradations,
+        },
+      });
+
+      this.logger.debug(
+        `Trace V7.9 recorded: id=${trace.id}, user=${input.userId}, ` +
+          `meal=${input.mealType}, strategy=${input.strategyName}, ` +
+          `scene=${input.sceneName}, flow=${input.candidateFlow}, ` +
+          `duration=${input.totalDurationMs}ms`,
+      );
+
+      return trace.id;
+    } catch (err) {
+      this.logger.error(`Failed to record V7.9 trace: ${err}`);
       return null;
     }
   }

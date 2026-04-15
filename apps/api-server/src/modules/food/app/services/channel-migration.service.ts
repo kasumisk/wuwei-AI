@@ -100,7 +100,7 @@ export class ChannelMigrationService {
    */
   inferChannels(food: {
     category: string;
-    processingLevel: number;
+    processingLevel: number | null;
     commonalityScore: number;
   }): string[] {
     const channels: string[] = [];

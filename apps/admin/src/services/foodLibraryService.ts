@@ -27,6 +27,8 @@ export interface FoodLibraryDto {
   carbs?: number;
   fiber?: number;
   sugar?: number;
+  addedSugar?: number;
+  naturalSugar?: number;
   saturatedFat?: number;
   transFat?: number;
   cholesterol?: number;
@@ -55,6 +57,8 @@ export interface FoodLibraryDto {
   // 健康评估
   glycemicIndex?: number;
   glycemicLoad?: number;
+  fodmapLevel?: string;
+  oxalateLevel?: string;
   isProcessed: boolean;
   isFried: boolean;
   processingLevel: number;

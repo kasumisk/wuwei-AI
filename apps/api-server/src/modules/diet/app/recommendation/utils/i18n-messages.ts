@@ -6,11 +6,11 @@
  * - 所有用户可见的 tip / strategy / label 集中管理
  * - V6 扩展: 支持 zh-CN / en-US / ja-JP 三种语言
  * - 模板字符串使用 {{var}} 占位符，由 t() 函数替换
- * - t() 支持可选的 locale 参数，优先级: 参数 > currentLocale > fallback(zh-CN)
+ * - t() 支持可选的 locale 参数，优先级: 参数 > fallback(zh-CN)
  *
  * 用法:
- *   import { t, setLocale } from './i18n-messages';
- *   const tip = t('tip.caloriesOver');                    // 使用当前 locale
+ *   import { t } from './i18n-messages';
+ *   const tip = t('tip.caloriesOver');                    // 使用默认 locale (zh-CN)
  *   const tip = t('tip.caloriesOver', {}, 'en-US');       // 指定 locale
  *   const note = t('adjust.lunchDinner', { lunchBudget: 800 });
  *
@@ -2421,26 +2421,7 @@ const messages: Record<Locale, Record<string, string>> = {
   'ja-JP': jaJP,
 };
 
-/** V6.8: 移除全局可变 locale（线程不安全），t() 改为纯参数驱动 */
-/** @deprecated V6.8: 使用 RequestContextService.locale 获取当前 locale 并传给 t() */
-let currentLocale: Locale = 'zh-CN';
 
-/**
- * @deprecated V6.8: 全局 setLocale 是线程不安全的。
- * 请改用 RequestContextService.setLocale() 设置请求级 locale，
- * 然后通过 t(key, vars, locale) 的第三参数传入。
- */
-export function setLocale(locale: Locale): void {
-  currentLocale = locale;
-}
-
-/**
- * @deprecated V6.8: 全局 getLocale 是线程不安全的。
- * 请改用 RequestContextService.locale 获取当前请求的 locale。
- */
-export function getLocale(): Locale {
-  return currentLocale;
-}
 
 /**
  * 获取所有支持的语言列表
@@ -2460,8 +2441,8 @@ export function isLocaleSupported(locale: string): locale is Locale {
  * 翻译函数 — 获取指定 key 的文案，支持模板变量替换
  *
  * V6 2.10 升级:
- * - 新增第三参数 locale: 指定语言覆盖（不影响全局 currentLocale）
- * - 回退策略: 指定 locale → currentLocale → fallback(zh-CN) → key 本身
+ * - 新增第三参数 locale: 指定语言覆盖
+ * - 回退策略: 指定 locale → fallback(zh-CN) → key 本身
  *
  * @param key    文案 key，如 'tip.caloriesOver'
  * @param vars   模板变量，如 { lunchBudget: 800 }
@@ -2473,8 +2454,8 @@ export function t(
   vars?: Record<string, string | number>,
   locale?: Locale,
 ): string {
-  // 回退链: 指定 locale → 当前 locale → zh-CN fallback
-  const resolvedLocale = locale || currentLocale;
+  // 回退链: 指定 locale → zh-CN fallback
+  const resolvedLocale = locale || FALLBACK_LOCALE;
   const dict = messages[resolvedLocale];
   let text = dict?.[key];
 

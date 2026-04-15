@@ -30,6 +30,7 @@ import { ScoredRecipe } from '../../../recipe/recipe.types';
 import {
   EnrichedProfileContext,
   inferAcquisitionChannel,
+  AcquisitionChannel,
   SceneContext,
 } from '../recommendation/types/recommendation.types';
 import { MealCompositionScorer } from '../recommendation/meal/meal-composition-scorer.service';
@@ -53,6 +54,10 @@ import { FactorLearnerService } from '../recommendation/optimization/factor-lear
 import { ProfileAggregatorService } from '../recommendation/profile/profile-aggregator.service';
 // V7.6 P1-C: 策略解析 Facade
 import { StrategyResolverFacade } from '../recommendation/pipeline/strategy-resolver-facade.service';
+// V7.9 P1-14: Trace 持久化
+import { RecommendationTraceService } from '../recommendation/tracing/recommendation-trace.service';
+import { FeatureFlagService } from '../../../feature-flag/feature-flag.service';
+import { v4 as uuidv4 } from 'uuid';
 
 /** V6 2.8: 反向解释 API 返回结构 */
 export interface WhyNotResult {
@@ -122,6 +127,10 @@ export class RecommendationEngineService implements OnModuleInit {
     private readonly profileAggregator: ProfileAggregatorService,
     /** V7.6 P1-C: 策略解析 Facade — 替代 strategyResolver + abTestingService */
     private readonly strategyFacade: StrategyResolverFacade,
+    /** V7.9 P1-14: 推荐 Trace 持久化服务 */
+    private readonly traceService: RecommendationTraceService,
+    /** V7.9 P1-14: Feature Flag 服务（控制 trace 开关） */
+    private readonly featureFlagService: FeatureFlagService,
   ) {}
 
   onModuleInit(): void {
@@ -835,6 +844,20 @@ export class RecommendationEngineService implements OnModuleInit {
       tuning: this.scoringConfigService.getTuning(), // V7.5 P3-A: 调参配置
     };
 
+    // V7.9 P1-14: 初始化管道追踪（受 feature flag 控制）
+    const traceEnabled = userId
+      ? await this.featureFlagService.isEnabled('pipeline_trace_enabled', userId)
+      : await this.featureFlagService.isEnabled('pipeline_trace_enabled');
+    if (traceEnabled) {
+      ctx.trace = {
+        traceId: uuidv4(),
+        userId: userId ?? 'anonymous',
+        mealType,
+        startedAt: Date.now(),
+        stages: [],
+      };
+    }
+
     // V7.3 P3-D: 模板匹配 — 如果场景和餐次有对应模板，设置到上下文中
     const sceneType = sceneContext?.sceneType ?? 'general';
     const matchedTemplate = this.mealTemplateService.matchTemplate(
@@ -900,6 +923,58 @@ export class RecommendationEngineService implements OnModuleInit {
         `Pipeline degradations for user ${userId ?? 'anonymous'}, meal ${mealType}: ` +
           degradations.map((d) => `${d.stage}(${d.fallbackUsed})`).join(', '),
       );
+    }
+
+    // V7.9 P1-14: 持久化管道追踪数据（异步，不阻塞推荐响应）
+    if (ctx.trace) {
+      ctx.trace.completedAt = Date.now();
+      const pipelineStartedAt = ctx.trace.startedAt;
+      const totalDurationMs = ctx.trace.completedAt - pipelineStartedAt;
+
+      // 构建 candidateFlow 路径 — 从 trace stages 提取 inputCount→outputCount
+      const flowParts: number[] = [];
+      for (const stage of ctx.trace.stages) {
+        if (flowParts.length === 0) {
+          flowParts.push(stage.inputCount);
+        }
+        flowParts.push(stage.outputCount);
+      }
+      const candidateFlow = flowParts.join('→') || 'N/A';
+
+      // fire-and-forget：异步写入，失败不影响推荐返回
+      this.traceService
+        .recordTraceV79({
+          userId: userId ?? 'anonymous',
+          mealType,
+          goalType,
+          channel: channel ?? AcquisitionChannel.UNKNOWN,
+          strategyId: resolvedStrategy?.strategyId ?? undefined,
+          strategyVersion: resolvedStrategy?.resolvedAt?.toString() ?? undefined,
+          pipelineContext: ctx,
+          topFoods: finalPicks,
+          foodPoolSize: allFoods.length,
+          durationMs: totalDurationMs,
+          // V7.9 新增字段
+          traceData: ctx.trace,
+          strategyName: resolvedStrategy?.strategyName ?? 'default',
+          sceneName: sceneContext?.sceneType ?? 'general',
+          realismLevel: sceneAdjustedRealism?.enabled === false
+            ? 'disabled'
+            : sceneAdjustedRealism?.canteenMode
+              ? 'canteen'
+              : `threshold_${sceneAdjustedRealism?.commonalityThreshold ?? 20}`,
+          candidateFlow,
+          totalDurationMs,
+          cacheHit: ctx.trace.summary?.cacheHit ?? false,
+          degradations: degradations.map(
+            (d) => `${d.stage}(${d.fallbackUsed})`,
+          ),
+        })
+        .catch((err) => {
+          this.logger.warn(
+            `Trace persistence failed for user ${userId ?? 'anonymous'}: ${(err as Error).message}`,
+          );
+        });
     }
 
     // V7.3 P3-D: 模板填充 — 如果匹配到模板且有足够候选，尝试用模板重新组织推荐结果

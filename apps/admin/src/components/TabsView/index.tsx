@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useContext } from 'react';
 import { Tabs, theme, Dropdown, Modal } from 'antd';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
@@ -9,6 +9,7 @@ import {
 } from '@ant-design/icons';
 import { useTabStore } from '@/store';
 import { autoRoutes } from '@/router';
+import { KeepAliveRefContext } from '@/layouts/BasicLayout';
 import type { TabsProps, MenuProps } from 'antd';
 
 interface TabItem {
@@ -24,6 +25,7 @@ const TabsView: React.FC = () => {
     useTabStore();
   const { token } = theme.useToken();
   const [showCloseAllModal, setShowCloseAllModal] = useState(false);
+  const aliveRef = useContext(KeepAliveRefContext);
 
   // 从路径中提取参数的辅助函数
   const extractParamsFromPath = useCallback(
@@ -133,7 +135,13 @@ const TabsView: React.FC = () => {
   // 处理标签页删除
   const handleTabEdit: TabsProps['onEdit'] = (targetKey, action) => {
     if (action === 'remove') {
-      removeTab(targetKey as string);
+      const key = targetKey as string;
+      const nextKey = removeTab(key);
+      // 销毁关闭标签的 KeepAlive 缓存
+      aliveRef?.current?.destroy(key);
+      if (nextKey && nextKey !== location.pathname) {
+        navigate(nextKey);
+      }
     }
   };
 
@@ -152,11 +160,13 @@ const TabsView: React.FC = () => {
         label: '刷新页面',
         onClick: () => {
           if (isCurrentTab) {
-            window.location.reload();
+            // 销毁当前缓存并刷新
+            aliveRef?.current?.refresh(tabKey);
           } else {
             setActiveTab(tabKey);
             navigate(tabKey);
-            setTimeout(() => window.location.reload(), 100);
+            // 等导航完成后刷新目标页面缓存
+            setTimeout(() => aliveRef?.current?.refresh(tabKey), 100);
           }
         },
       },
@@ -170,7 +180,12 @@ const TabsView: React.FC = () => {
         disabled: !canClose,
         onClick: () => {
           if (canClose) {
-            removeTab(tabKey);
+            const nextKey = removeTab(tabKey);
+            // 销毁关闭标签的 KeepAlive 缓存
+            aliveRef?.current?.destroy(tabKey);
+            if (nextKey && nextKey !== location.pathname) {
+              navigate(nextKey);
+            }
           }
         },
       },
@@ -181,6 +196,8 @@ const TabsView: React.FC = () => {
         disabled: !hasOtherTabs || !hasClosableTabs,
         onClick: () => {
           if (hasOtherTabs) {
+            // 销毁除当前标签外的所有 KeepAlive 缓存
+            aliveRef?.current?.destroyOther(tabKey);
             removeOtherTabs(tabKey);
             setActiveTab(tabKey);
             navigate(tabKey);
@@ -203,9 +220,11 @@ const TabsView: React.FC = () => {
 
   // 处理关闭全部标签的确认
   const handleCloseAllConfirm = () => {
+    // 销毁所有 KeepAlive 缓存
+    aliveRef?.current?.destroyAll();
     removeAllTabs();
     setShowCloseAllModal(false);
-    navigate('/dashboard'); // 关闭所有标签后跳转到首页
+    navigate('/dashboard');
   };
 
   // 处理取消关闭全部标签
@@ -233,9 +252,6 @@ const TabsView: React.FC = () => {
     margin: 0,
     backgroundColor: token.colorBgContainer,
     marginTop: 10,
-    // borderBottom: `1px solid ${token.colorBorderSecondary}`,
-    // paddingLeft: 16,
-    // paddingRight: 16,
   };
 
   return (

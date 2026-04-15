@@ -1,6 +1,6 @@
-import React, { useMemo, useEffect, useRef, useState, useCallback } from 'react';
+import React, { useMemo, useEffect, useRef, useState, useCallback, createContext } from 'react';
 import { ProLayout } from '@ant-design/pro-layout';
-import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ConfigProvider, theme, App, Spin } from 'antd';
 import * as Icons from '@ant-design/icons';
 import { useThemeStore, useUserStore } from '@/store';
@@ -12,6 +12,13 @@ import { setGlobalMessage } from '@/utils/message';
 import { setGlobalModal } from '@/utils/modal';
 import authApi from '@/services/authService';
 import { isMobile } from 'react-device-detect';
+import KeepAliveRouteOutlet from 'keepalive-for-react-router';
+import { useKeepAliveRef, type KeepAliveRef } from 'keepalive-for-react';
+
+// ─── KeepAlive Ref Context ──────────────────────────────────────────────────
+// 将 aliveRef 通过 context 暴露给 TabsView / useCloseTab 等组件，
+// 使其可以在关闭标签时调用 destroy(cacheKey) 清理缓存。
+export const KeepAliveRefContext = createContext<React.RefObject<KeepAliveRef | null> | null>(null);
 
 // MessageProvider 提取到组件外部，避免每次 Layout 渲染时重新创建组件定义
 const MessageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -25,16 +32,8 @@ const MessageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) 
   return <>{children}</>;
 };
 
-// 内容区域独立组件 — 只有这个组件会因 location 变化而重渲染
-const ContentArea: React.FC = () => {
-  return (
-    <div style={{ marginTop: 20, minHeight: 'calc(100vh - 112px)' }}>
-      <Outlet />
-    </div>
-  );
-};
-
 const Layout: React.FC = () => {
+  const aliveRef = useKeepAliveRef();
   const navigate = useNavigate();
   const location = useLocation();
   const { mode, primaryColor } = useThemeStore();
@@ -175,43 +174,50 @@ const Layout: React.FC = () => {
       <App>
         <MessageProvider>
           <ProtectedRoute>
-            <div style={{ height: '100vh' }}>
-              <ProLayout
-                route={routeData}
-                location={{
-                  pathname: location.pathname,
-                }}
-                title="运营管理"
-                logo="https://gw.alipayobjects.com/zos/antfincdn/PmY%24TNNDBI/logo.svg"
-                menuHeaderRender={(logo, title) => (
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      cursor: 'pointer',
-                    }}
-                    className="h-8 gap-2"
-                    onClick={handleLogoClick}
-                  >
-                    <div className="h-8 w-8">{logo}</div>
-                    {title}
+            <KeepAliveRefContext.Provider value={aliveRef}>
+              <div style={{ height: '100vh' }}>
+                <ProLayout
+                  route={routeData}
+                  location={{
+                    pathname: location.pathname,
+                  }}
+                  title="运营管理"
+                  logo="https://gw.alipayobjects.com/zos/antfincdn/PmY%24TNNDBI/logo.svg"
+                  menuHeaderRender={(logo, title) => (
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        cursor: 'pointer',
+                      }}
+                      className="h-8 gap-2"
+                      onClick={handleLogoClick}
+                    >
+                      <div className="h-8 w-8">{logo}</div>
+                      {title}
+                    </div>
+                  )}
+                  menuFooterRender={() => <UserFooter />}
+                  menuItemRender={(item: any, dom: React.ReactNode) => (
+                    <div onClick={() => handleMenuClick(item)}>{dom}</div>
+                  )}
+                  layout="side"
+                  siderWidth={208}
+                  contentStyle={{
+                    paddingTop: 0,
+                    paddingInline: isMobile ? 8 : 24,
+                  }}
+                >
+                  <TabsView />
+                  <div style={{ marginTop: 20, minHeight: 'calc(100vh - 112px)' }}>
+                    <KeepAliveRouteOutlet
+                      aliveRef={aliveRef}
+                      max={20}
+                    />
                   </div>
-                )}
-                menuFooterRender={() => <UserFooter />}
-                menuItemRender={(item: any, dom: React.ReactNode) => (
-                  <div onClick={() => handleMenuClick(item)}>{dom}</div>
-                )}
-                layout="side"
-                siderWidth={208}
-                contentStyle={{
-                  paddingTop: 0,
-                  paddingInline: isMobile ? 8 : 24,
-                }}
-              >
-                <TabsView />
-                <ContentArea />
-              </ProLayout>
-            </div>
+                </ProLayout>
+              </div>
+            </KeepAliveRefContext.Provider>
           </ProtectedRoute>
         </MessageProvider>
       </App>

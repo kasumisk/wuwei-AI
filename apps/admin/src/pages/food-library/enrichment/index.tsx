@@ -76,11 +76,13 @@ import {
   useRollbackEnrichment,
   useBatchRollbackEnrichment,
   useReviewStats,
+  useReEnqueueEnrichment,
   type MissingFieldStats,
   type EnrichmentJob,
   type EnrichableField,
   type StagedEnrichment,
   type EnrichmentStatsResponse,
+  type ReEnqueueParams,
 } from '@/services/foodPipelineService';
 import { LOCALE_OPTIONS } from '@/pages/food-library/constants';
 import { globalMessage as message } from '@/utils/message';
@@ -99,12 +101,13 @@ const { Text } = Typography;
 // ─── 字段元数据 ────────────────────────────────────────────────────────────
 
 const ALL_FIELDS: { value: EnrichableField; label: string; group: string }[] = [
-  // 营养素
+  // 营养素（Stage 1: 核心）
   { value: 'protein', label: '蛋白质', group: '营养素' },
   { value: 'fat', label: '脂肪', group: '营养素' },
   { value: 'carbs', label: '碳水化合物', group: '营养素' },
   { value: 'fiber', label: '膳食纤维', group: '营养素' },
   { value: 'sugar', label: '糖', group: '营养素' },
+  // 营养素（Stage 2: 微量）
   { value: 'added_sugar', label: '添加糖', group: '营养素' },
   { value: 'natural_sugar', label: '天然糖', group: '营养素' },
   { value: 'sodium', label: '钠', group: '营养素' },
@@ -117,6 +120,7 @@ const ALL_FIELDS: { value: EnrichableField; label: string; group: string }[] = [
   { value: 'vitamin_d', label: '维生素D', group: '营养素' },
   { value: 'vitamin_e', label: '维生素E', group: '营养素' },
   { value: 'vitamin_b12', label: '维生素B12', group: '营养素' },
+  { value: 'vitamin_b6', label: '维生素B6', group: '营养素' },
   { value: 'folate', label: '叶酸', group: '营养素' },
   { value: 'zinc', label: '锌', group: '营养素' },
   { value: 'magnesium', label: '镁', group: '营养素' },
@@ -124,14 +128,12 @@ const ALL_FIELDS: { value: EnrichableField; label: string; group: string }[] = [
   { value: 'trans_fat', label: '反式脂肪', group: '营养素' },
   { value: 'purine', label: '嘌呤', group: '营养素' },
   { value: 'phosphorus', label: '磷', group: '营养素' },
-  // V8.0: V7.9 新增营养素
-  { value: 'vitamin_b6', label: '维生素B6', group: '营养素' },
   { value: 'omega3', label: 'Omega-3', group: '营养素' },
   { value: 'omega6', label: 'Omega-6', group: '营养素' },
   { value: 'soluble_fiber', label: '可溶性纤维', group: '营养素' },
   { value: 'insoluble_fiber', label: '不溶性纤维', group: '营养素' },
   { value: 'water_content_percent', label: '含水率', group: '营养素' },
-  // 属性
+  // 属性（Stage 3: 健康属性 + Stage 4: 使用属性）
   { value: 'sub_category', label: '二级分类', group: '属性' },
   { value: 'food_group', label: '食物组', group: '属性' },
   { value: 'cuisine', label: '菜系', group: '属性' },
@@ -142,8 +144,14 @@ const ALL_FIELDS: { value: EnrichableField; label: string; group: string }[] = [
   { value: 'oxalate_level', label: '草酸等级', group: '属性' },
   { value: 'processing_level', label: '加工程度', group: '属性' },
   { value: 'main_ingredient', label: '主原料', group: '属性' },
+  { value: 'aliases', label: '别名', group: '属性' },
+  { value: 'is_processed', label: '是否加工', group: '属性' },
+  { value: 'is_fried', label: '是否油炸', group: '属性' },
+  { value: 'standard_serving_g', label: '标准份量', group: '属性' },
   { value: 'standard_serving_desc', label: '标准份量描述', group: '属性' },
-  // 标签评分
+
+  
+  // 标签评分（Stage 3-4）
   { value: 'meal_types', label: '餐次类型', group: '标签评分' },
   { value: 'allergens', label: '过敏原', group: '标签评分' },
   { value: 'tags', label: '营养标签', group: '标签评分' },
@@ -153,21 +161,25 @@ const ALL_FIELDS: { value: EnrichableField; label: string; group: string }[] = [
   { value: 'nutrient_density', label: '营养密度', group: '标签评分' },
   { value: 'commonality_score', label: '大众化评分', group: '标签评分' },
   { value: 'flavor_profile', label: '风味档案', group: '标签评分' },
-  // V8.0: 扩展属性（Stage 5）
+  // 扩展属性（Stage 1: food_form；Stage 5: 其余）
   { value: 'food_form', label: '食物形态', group: '扩展属性' },
-  { value: 'dish_priority', label: '菜品优先级', group: '扩展属性' },
-  { value: 'popularity_score', label: '流行度评分', group: '扩展属性' },
-  { value: 'acquisition_difficulty', label: '获取难度', group: '扩展属性' },
-  { value: 'texture', label: '口感质地', group: '扩展属性' },
-  { value: 'taste_profile', label: '味道档案', group: '扩展属性' },
-  { value: 'suitable_diet_types', label: '适合饮食类型', group: '扩展属性' },
-  { value: 'health_benefits', label: '健康益处', group: '扩展属性' },
-  { value: 'health_risks', label: '健康风险', group: '扩展属性' },
-  { value: 'seasonal_availability', label: '季节性', group: '扩展属性' },
-  { value: 'storage_method', label: '储存方式', group: '扩展属性' },
+  { value: 'ingredient_list', label: '原料列表', group: '扩展属性' },
+  { value: 'texture_tags', label: '口感标签', group: '扩展属性' },
+  { value: 'dish_type', label: '菜品类型', group: '扩展属性' },
+  { value: 'prep_time_minutes', label: '制备时间(min)', group: '扩展属性' },
+  { value: 'cook_time_minutes', label: '烹饪时间(min)', group: '扩展属性' },
+  { value: 'skill_required', label: '制作技能要求', group: '扩展属性' },
+  { value: 'estimated_cost_level', label: '预估成本等级', group: '扩展属性' },
   { value: 'shelf_life_days', label: '保质期天数', group: '扩展属性' },
-  { value: 'best_cooking_temp', label: '最佳烹饪温度', group: '扩展属性' },
-  { value: 'pairing_foods', label: '搭配食物', group: '扩展属性' },
+  { value: 'serving_temperature', label: '建议温度', group: '扩展属性' },
+  { value: 'dish_priority', label: '菜品优先级', group: '扩展属性' },
+  { value: 'acquisition_difficulty', label: '获取难度', group: '扩展属性' },
+  { value: 'compatibility', label: '搭配兼容性', group: '扩展属性' },
+  { value: 'available_channels', label: '可购渠道', group: '扩展属性' },
+  { value: 'required_equipment', label: '所需设备', group: '扩展属性' },
+  { value: 'availableChannels', label: '获取渠道', group: '扩展属性' },
+  
+  
 ];
 
 const FIELD_LABEL_MAP = Object.fromEntries(ALL_FIELDS.map((f) => [f.value, f.label]));
@@ -232,6 +244,12 @@ const EnrichmentPage: React.FC = () => {
   );
   // V8.0: 历史 Tab 行选择（用于批量回退）
   const [historySelectedRowKeys, setHistorySelectedRowKeys] = useState<React.Key[]>([]);
+  // V8.9: 强制重新补全参数
+  const [reEnqueueFields, setReEnqueueFields] = useState<EnrichableField[]>([]);
+  const [reEnqueueLimit, setReEnqueueLimit] = useState<number | undefined>(undefined);
+  const [reEnqueueCategory, setReEnqueueCategory] = useState<string | undefined>(undefined);
+  const [reEnqueueClearFields, setReEnqueueClearFields] = useState(true);
+  const [reEnqueueStaged, setReEnqueueStaged] = useState(false);
 
   // Hooks
   const { data: statsResponse, refetch: refetchStats } = useEnrichmentStats();
@@ -347,6 +365,19 @@ const EnrichmentPage: React.FC = () => {
       refetchJobs();
     },
     onError: (e) => message.error(`分阶段入队失败: ${e.message}`),
+  });
+
+  // V8.9: 强制重新补全
+  const reEnqueueMutation = useReEnqueueEnrichment({
+    onSuccess: (data) => {
+      const cleared = data.cleared > 0 ? `，已清空 ${data.cleared} 条字段` : '';
+      message.success(
+        `已强制入队 ${data.enqueued} 个任务${cleared}${data.staged ? '（Staging 模式）' : ''}`
+      );
+      refetchStats();
+      refetchJobs();
+    },
+    onError: (e) => message.error(`强制入队失败: ${e.message}`),
   });
 
   // V8.0: 回退单条补全
@@ -1112,16 +1143,19 @@ const EnrichmentPage: React.FC = () => {
                     description={
                       <ul style={{ margin: 0, paddingLeft: 16 }}>
                         <li>
-                          <strong>阶段 1</strong>：核心宏量营养素（蛋白质、脂肪、碳水、热量）
+                          <strong>阶段 1（核心营养素）</strong>：蛋白质、脂肪、碳水、膳食纤维、糖、钠 + 食物形态
                         </li>
                         <li>
-                          <strong>阶段 2</strong>：微量营养素（维生素、矿物质）
+                          <strong>阶段 2（微量营养素）</strong>：维生素（A/C/D/E/B6/B12/叶酸）、矿物质（钙/铁/钾/锌/镁/磷）、添加糖、天然糖、Omega-3/6、可/不溶性纤维、含水率等 24 个字段
                         </li>
                         <li>
-                          <strong>阶段 3</strong>：健康属性（GI、GL、FODMAP、加工程度等）
+                          <strong>阶段 3（健康属性）</strong>：GI、GL、FODMAP等级、草酸等级、加工程度、过敏原、营养标签
                         </li>
                         <li>
-                          <strong>阶段 4</strong>：标签与评分（餐次、过敏原、饱腹感等）
+                          <strong>阶段 4（使用属性）</strong>：餐次类型、常用份量、风味档案、菜系、烹饪方式、二级分类、食物组、主原料、标准份量描述、品质/饱腹感/营养密度/大众化评分、别名
+                        </li>
+                        <li>
+                          <strong>阶段 5（扩展属性）</strong>：原料列表、口感标签、菜品类型、制备/烹饪时间、技能要求、成本等级、保质期、建议温度、菜品优先级、获取难度、搭配兼容性、可购渠道、所需设备
                         </li>
                         <li>建议按顺序逐阶段补全，确保数据质量</li>
                       </ul>
@@ -1205,6 +1239,242 @@ const EnrichmentPage: React.FC = () => {
                       </Form.Item>
                     </Col>
                   </Row>
+                </Card>
+
+                {/* V8.9: 强制重新补全 */}
+                <Card
+                  title={
+                    <Space>
+                      <ReloadOutlined />
+                      强制重新补全（覆盖已有数据）
+                    </Space>
+                  }
+                >
+                  <Alert
+                    message="强制模式说明"
+                    description={
+                      <ul style={{ margin: 0, paddingLeft: 16 }}>
+                        <li>
+                          <strong>忽略字段是否有值</strong>，将全部（或筛选后的）食物重新入队
+                        </li>
+                        <li>
+                          勾选「清空字段」时，会先将所选字段置为 null，再让 AI 重新生成
+                        </li>
+                        <li>不勾选「清空字段」时，AI 补全时仍会覆盖已有值（取决于处理器逻辑）</li>
+                        <li>每个任务使用独立 jobId，不会被幂等去重，允许重复入队</li>
+                      </ul>
+                    }
+                    type="error"
+                    showIcon
+                    style={{ marginBottom: 16 }}
+                  />
+
+                  {/* 字段分组选择 */}
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ marginBottom: 8, fontWeight: 500 }}>
+                      选择要重新补全的字段（必选）
+                      <Button
+                        size="small"
+                        type="link"
+                        onClick={() => setReEnqueueFields(ALL_FIELDS.map((f) => f.value))}
+                      >
+                        全选
+                      </Button>
+                      <Button
+                        size="small"
+                        type="link"
+                        onClick={() => setReEnqueueFields([])}
+                      >
+                        清空
+                      </Button>
+                    </div>
+                    {/* 按 group 分组展示 */}
+                    {Array.from(new Set(ALL_FIELDS.map((f) => f.group))).map((group) => {
+                      const groupFields = ALL_FIELDS.filter((f) => f.group === group);
+                      const groupValues = groupFields.map((f) => f.value);
+                      const checkedCount = groupValues.filter((v) =>
+                        reEnqueueFields.includes(v)
+                      ).length;
+                      const allChecked = checkedCount === groupValues.length;
+                      const indeterminate = checkedCount > 0 && !allChecked;
+                      return (
+                        <div key={group} style={{ marginBottom: 8 }}>
+                          <Checkbox
+                            indeterminate={indeterminate}
+                            checked={allChecked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setReEnqueueFields((prev) => [
+                                  ...prev.filter((v) => !groupValues.includes(v as EnrichableField)),
+                                  ...groupValues,
+                                ]);
+                              } else {
+                                setReEnqueueFields((prev) =>
+                                  prev.filter((v) => !groupValues.includes(v as EnrichableField))
+                                );
+                              }
+                            }}
+                            style={{ fontWeight: 500, marginRight: 8 }}
+                          >
+                            {group}
+                          </Checkbox>
+                          <span style={{ color: '#999', fontSize: 12 }}>
+                            ({checkedCount}/{groupValues.length})
+                          </span>
+                          <div style={{ marginLeft: 24, marginTop: 4 }}>
+                            <Checkbox.Group
+                              value={reEnqueueFields}
+                              onChange={(vals) => {
+                                setReEnqueueFields((prev) => [
+                                  ...prev.filter(
+                                    (v) => !groupValues.includes(v as EnrichableField)
+                                  ),
+                                  ...(vals as EnrichableField[]),
+                                ]);
+                              }}
+                              options={groupFields.map((f) => ({
+                                label: `${f.label}`,
+                                value: f.value,
+                              }))}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {reEnqueueFields.length > 0 && (
+                      <div style={{ marginTop: 8 }}>
+                        <Text type="secondary">已选 {reEnqueueFields.length} 个字段：</Text>
+                        <Space wrap size={4} style={{ marginTop: 4 }}>
+                          {reEnqueueFields.map((f) => (
+                            <Tag
+                              key={f}
+                              closable
+                              onClose={() =>
+                                setReEnqueueFields((prev) => prev.filter((v) => v !== f))
+                              }
+                              style={{ fontSize: 11 }}
+                            >
+                              {FIELD_LABEL_MAP[f] || f}
+                            </Tag>
+                          ))}
+                        </Space>
+                      </div>
+                    )}
+                  </div>
+
+                  <Divider style={{ margin: '12px 0' }} />
+
+                  {/* 筛选与选项 */}
+                  <Row gutter={16} align="bottom">
+                    <Col xs={24} sm={6}>
+                      <Form.Item label="数量限制" style={{ marginBottom: 8 }}>
+                        <InputNumber
+                          min={1}
+                          max={5000}
+                          placeholder="不限（全部）"
+                          value={reEnqueueLimit}
+                          onChange={(v) => setReEnqueueLimit(v ?? undefined)}
+                          style={{ width: '100%' }}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col xs={24} sm={6}>
+                      <Form.Item label="分类筛选" style={{ marginBottom: 8 }}>
+                        <Input
+                          placeholder="如：蔬菜（留空不限）"
+                          value={reEnqueueCategory}
+                          onChange={(e) => setReEnqueueCategory(e.target.value || undefined)}
+                          allowClear
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col xs={12} sm={4}>
+                      <Form.Item label="清空字段" style={{ marginBottom: 8 }}>
+                        <Switch
+                          checked={reEnqueueClearFields}
+                          onChange={setReEnqueueClearFields}
+                          checkedChildren="清空后补全"
+                          unCheckedChildren="保留原值"
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col xs={12} sm={4}>
+                      <Form.Item label="Staging 模式" style={{ marginBottom: 8 }}>
+                        <Switch
+                          checked={reEnqueueStaged}
+                          onChange={setReEnqueueStaged}
+                          checkedChildren="暂存审核"
+                          unCheckedChildren="直接入库"
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col xs={24} sm={4}>
+                      <Form.Item label=" " style={{ marginBottom: 8 }}>
+                        <Popconfirm
+                          title="确认强制重新入队？"
+                          description={
+                            <div>
+                              <div>将对全部（或筛选后的）食物强制入队。</div>
+                              {reEnqueueClearFields && (
+                                <div style={{ color: '#ff4d4f', marginTop: 4 }}>
+                                  警告：已选字段将被清空后重新生成！
+                                </div>
+                              )}
+                            </div>
+                          }
+                          okText="确认入队"
+                          cancelText="取消"
+                          okButtonProps={{ danger: reEnqueueClearFields }}
+                          onConfirm={() => {
+                            if (reEnqueueFields.length === 0) {
+                              message.warning('请至少选择一个字段');
+                              return;
+                            }
+                            reEnqueueMutation.mutate({
+                              fields: reEnqueueFields,
+                              limit: reEnqueueLimit,
+                              category: reEnqueueCategory,
+                              clearFields: reEnqueueClearFields,
+                              staged: reEnqueueStaged,
+                            });
+                          }}
+                        >
+                          <Button
+                            danger
+                            icon={<ReloadOutlined />}
+                            loading={reEnqueueMutation.isPending}
+                            disabled={reEnqueueFields.length === 0}
+                          >
+                            强制入队
+                          </Button>
+                        </Popconfirm>
+                      </Form.Item>
+                    </Col>
+                  </Row>
+
+                  {/* 执行结果 */}
+                  {reEnqueueMutation.data && (
+                    <Alert
+                      type="success"
+                      showIcon
+                      message={`入队成功：${reEnqueueMutation.data.enqueued} 个任务${reEnqueueMutation.data.cleared > 0 ? `，已清空 ${reEnqueueMutation.data.cleared} 条字段` : ''}`}
+                      description={
+                        reEnqueueMutation.data.foodNames?.length > 0 ? (
+                          <div>
+                            <Text type="secondary">样本食物：</Text>
+                            <Space wrap size={4} style={{ marginTop: 4 }}>
+                              {reEnqueueMutation.data.foodNames.map((name) => (
+                                <Tag key={name} style={{ fontSize: 11 }}>
+                                  {name}
+                                </Tag>
+                              ))}
+                            </Space>
+                          </div>
+                        ) : undefined
+                      }
+                      style={{ marginTop: 12 }}
+                    />
+                  )}
                 </Card>
               </Space>
             ),

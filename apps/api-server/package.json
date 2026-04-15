@@ -75,6 +75,7 @@
     "https-proxy-agent": "^7.0.6",
     "ioredis": "^5.10.1",
     "langchain": "^0.3.36",
+    "minimatch": "^10.1.1",
     "nest-winston": "^1.10.2",
     "nestjs-cls": "^6.2.0",
     "nestjs-throttler-storage-redis": "^0.5.1",
