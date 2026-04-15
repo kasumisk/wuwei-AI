@@ -20,9 +20,9 @@ import {
   useTestModel,
   modelApi,
   type ModelInfoDto,
-} from '../../../services/modelService';
+} from '@/services/modelService';
 import { ModelStatus } from '@ai-platform/shared';
-import { useProviders } from '../../../services/providerService';
+import { useProviders } from '@/services/providerService';
 
 const ModelManagement: React.FC = () => {
   const [currentRecord, setCurrentRecord] = useState<ModelInfoDto | null>(null);
@@ -629,7 +629,7 @@ export const routeConfig = {
   name: 'model',
   title: '模型配置',
   icon: 'DatabaseOutlined',
-  order: 41,
+  order: 17,
   requireAuth: true,
   requireAdmin: true,
 };

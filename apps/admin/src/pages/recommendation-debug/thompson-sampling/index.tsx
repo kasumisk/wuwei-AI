@@ -56,7 +56,7 @@ export const routeConfig = {
   name: 'thompson-sampling',
   title: 'Thompson Sampling',
   icon: 'ExperimentOutlined',
-  order: 18,
+  order: 10,
   requireAuth: true,
   requireAdmin: true,
 };

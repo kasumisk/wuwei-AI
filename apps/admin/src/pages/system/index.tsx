@@ -3,7 +3,7 @@ export const routeConfig = {
   name: 'dashboard',
   title: '系统管理',
   icon: 'SettingOutlined',
-  order: 998,
+  order: 90,
   requireAuth: false,
   requireAdmin: false, // 不需要管理员权限
   roles: [], // 允许的角色，空数组表示不限制

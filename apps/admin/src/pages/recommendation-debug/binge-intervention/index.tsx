@@ -60,7 +60,7 @@ export const routeConfig = {
   name: 'binge-intervention',
   title: '暴食干预',
   icon: 'ThunderboltOutlined',
-  order: 19,
+  order: 11,
   requireAuth: true,
   requireAdmin: true,
 };

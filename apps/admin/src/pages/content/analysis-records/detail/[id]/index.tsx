@@ -49,6 +49,17 @@ const JsonBlock: React.FC<{ data: unknown; title?: string }> = ({ data, title })
   );
 };
 
+// ==================== 路由配置 ====================
+
+export const routeConfig = {
+  name: 'analysis-record-detail',
+  title: '分析记录详情',
+  icon: 'EyeOutlined',
+  order: 2,
+  requireAuth: true,
+  hideInMenu: true,
+};
+
 // ==================== 主组件 ====================
 
 const AnalysisRecordDetail: React.FC = () => {
@@ -70,7 +81,7 @@ const AnalysisRecordDetail: React.FC = () => {
       <Card>
         <Typography.Text type="danger">未找到分析记录</Typography.Text>
         <br />
-        <Button onClick={() => navigate('/analysis-records/list')} style={{ marginTop: 16 }}>
+        <Button onClick={() => navigate('/content/analysis-records')} style={{ marginTop: 16 }}>
           返回列表
         </Button>
       </Card>
@@ -87,7 +98,7 @@ const AnalysisRecordDetail: React.FC = () => {
       {/* 头部 */}
       <Card style={{ marginBottom: 16 }}>
         <Space>
-          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/analysis-records/list')}>
+          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/content/analysis-records')}>
             返回列表
           </Button>
           <Typography.Title level={4} style={{ margin: 0 }}>
@@ -174,12 +185,3 @@ const AnalysisRecordDetail: React.FC = () => {
 };
 
 export default AnalysisRecordDetail;
-
-export const routeConfig = {
-  name: 'analysis-record-detail',
-  title: '分析记录详情',
-  icon: 'EyeOutlined',
-  order: 2,
-  requireAuth: true,
-  hideInMenu: true,
-};

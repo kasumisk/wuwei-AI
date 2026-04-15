@@ -60,6 +60,17 @@ const reviewStatusConfig: Record<ReviewStatus, { color: string; text: string }> 
   rejected: { color: 'error', text: '已拒绝' },
 };
 
+// ==================== 路由配置 ====================
+
+export const routeConfig = {
+  name: 'analysis-records',
+  title: 'AI分析记录',
+  icon: 'ExperimentOutlined',
+  order: 6,
+  requireAuth: true,
+  requireAdmin: true,
+};
+
 // ==================== 主组件 ====================
 
 const AnalysisRecordList: React.FC = () => {
@@ -202,7 +213,7 @@ const AnalysisRecordList: React.FC = () => {
             type="link"
             size="small"
             icon={<EyeOutlined />}
-            onClick={() => navigate(`/analysis-records/detail/${record.id}`)}
+            onClick={() => navigate(`/content/analysis-records/detail/${record.id}`)}
           >
             详情
           </Button>
@@ -412,12 +423,3 @@ const AnalysisRecordList: React.FC = () => {
 };
 
 export default AnalysisRecordList;
-
-export const routeConfig = {
-  name: 'analysis-records-list',
-  title: '分析记录列表',
-  icon: 'UnorderedListOutlined',
-  order: 1,
-  requireAuth: true,
-  requireAdmin: true,
-};

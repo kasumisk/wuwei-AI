@@ -27,7 +27,7 @@ export const routeConfig = {
   name: 'PermissionManagement',
   title: '权限配置',
   icon: <SafetyOutlined />,
-  order: 4,
+  order: 19,
   hideInMenu: false,
   requireAuth: true,
   requireAdmin: true,

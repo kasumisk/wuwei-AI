@@ -21,7 +21,7 @@ import {
   useTestProvider,
   providerApi,
   type ProviderInfoDto,
-} from '../../../services/providerService';
+} from '@/services/providerService';
 
 const ProviderManagement: React.FC = () => {
   const [currentRecord, setCurrentRecord] = useState<ProviderInfoDto | null>(null);
@@ -397,7 +397,7 @@ export const routeConfig = {
   name: 'provider',
   title: '提供商管理',
   icon: 'ApiOutlined',
-  order: 40,
+  order: 16,
   requireAuth: true,
   requireAdmin: true,
 };
