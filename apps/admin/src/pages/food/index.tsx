@@ -1,9 +1,9 @@
 // 路由配置
 export const routeConfig = {
   name: 'food',
-  title: '用户列表',
+  title: '食物数据',
   icon: 'CoffeeOutlined',
-  order: 1,
+  order: 10,
   requireAuth: true,
   requireAdmin: false,
   roles: [],
@@ -11,8 +11,8 @@ export const routeConfig = {
 };
 
 // 父级路由占位
-const UserLayout: React.FC = () => {
+const FoodLayout: React.FC = () => {
   return null;
 };
 
-export default UserLayout;
+export default FoodLayout;
