@@ -13,6 +13,8 @@ import {
   StrategyStatus,
   StrategyScope,
   AssignmentType,
+  StrategyEntity,
+  StrategyAssignmentEntity,
 } from '../strategy.types';
 import { RedisCacheService } from '../../../core/redis/redis-cache.service';
 import { PrismaService } from '../../../core/prisma/prisma.service';
@@ -41,7 +43,7 @@ export class StrategyService {
     scopeTarget?: string;
     config: StrategyConfig;
     priority?: number;
-  }): Promise<any> {
+  }): Promise<StrategyEntity> {
     const saved = await this.prisma.strategy.create({
       data: {
         name: data.name,
@@ -55,7 +57,7 @@ export class StrategyService {
       },
     });
     this.logger.log(`策略已创建: ${saved.name} (${saved.id})`);
-    return saved;
+    return saved as unknown as StrategyEntity;
   }
 
   /** 更新策略配置 */
@@ -67,7 +69,7 @@ export class StrategyService {
       config: StrategyConfig;
       priority: number;
     }>,
-  ): Promise<any> {
+  ): Promise<StrategyEntity> {
     const strategy = await this.prisma.strategy.findUnique({ where: { id } });
     if (!strategy) throw new NotFoundException(`策略 ${id} 不存在`);
     if (strategy.status === StrategyStatus.ARCHIVED) {
@@ -85,15 +87,15 @@ export class StrategyService {
 
     // 如果是 active 策略，失效缓存
     if (saved.status === StrategyStatus.ACTIVE) {
-      await this.invalidateStrategyCache(saved);
+      await this.invalidateStrategyCache(saved as unknown as StrategyEntity);
     }
 
     this.logger.log(`策略已更新: ${saved.name} v${saved.version}`);
-    return saved;
+    return saved as unknown as StrategyEntity;
   }
 
   /** 激活策略（同 scope+scopeTarget 只允许一个 active） */
-  async activate(id: string): Promise<any> {
+  async activate(id: string): Promise<StrategyEntity> {
     const strategy = await this.prisma.strategy.findUnique({ where: { id } });
     if (!strategy) throw new NotFoundException(`策略 ${id} 不存在`);
 
@@ -114,13 +116,13 @@ export class StrategyService {
     });
 
     // 失效相关缓存
-    await this.invalidateStrategyCache(saved);
+    await this.invalidateStrategyCache(saved as unknown as StrategyEntity);
     this.logger.log(`策略已激活: ${saved.name} (scope=${saved.scope})`);
-    return saved;
+    return saved as unknown as StrategyEntity;
   }
 
   /** 归档策略 */
-  async archive(id: string): Promise<any> {
+  async archive(id: string): Promise<StrategyEntity> {
     const strategy = await this.prisma.strategy.findUnique({ where: { id } });
     if (!strategy) throw new NotFoundException(`策略 ${id} 不存在`);
 
@@ -128,14 +130,15 @@ export class StrategyService {
       where: { id },
       data: { status: StrategyStatus.ARCHIVED },
     });
-    await this.invalidateStrategyCache(saved);
+    await this.invalidateStrategyCache(saved as unknown as StrategyEntity);
     this.logger.log(`策略已归档: ${saved.name}`);
-    return saved;
+    return saved as unknown as StrategyEntity;
   }
 
   /** 获取策略详情 */
-  async findById(id: string): Promise<any | null> {
-    return this.prisma.strategy.findUnique({ where: { id } });
+  async findById(id: string): Promise<StrategyEntity | null> {
+    const result = await this.prisma.strategy.findUnique({ where: { id } });
+    return result as unknown as StrategyEntity | null;
   }
 
   /** 列表查询 */
@@ -144,11 +147,11 @@ export class StrategyService {
     status?: StrategyStatus;
     page?: number;
     pageSize?: number;
-  }): Promise<{ data: any[]; total: number }> {
+  }): Promise<{ data: StrategyEntity[]; total: number }> {
     const page = filters?.page || 1;
     const pageSize = filters?.pageSize || 20;
 
-    const where: any = {};
+    const where: Record<string, unknown> = {};
     if (filters?.scope) where.scope = filters.scope;
     if (filters?.status) where.status = filters.status;
 
@@ -161,7 +164,7 @@ export class StrategyService {
       }),
       this.prisma.strategy.count({ where }),
     ]);
-    return { data, total };
+    return { data: data as unknown as StrategyEntity[], total };
   }
 
   // ─── 策略查找（推荐引擎使用） ───
@@ -172,14 +175,14 @@ export class StrategyService {
   async getActiveStrategy(
     scope: StrategyScope,
     scopeTarget?: string,
-  ): Promise<any | null> {
+  ): Promise<StrategyEntity | null> {
     const cacheKey = `${CACHE_PREFIX}active:${scope}:${scopeTarget || '_'}`;
 
-    return this.redis.getOrSet(
+    return this.redis.getOrSet<StrategyEntity | null>(
       cacheKey,
       STRATEGY_CACHE_TTL * 1000,
       async () => {
-        return this.prisma.strategy.findFirst({
+        const result = await this.prisma.strategy.findFirst({
           where: {
             scope,
             status: StrategyStatus.ACTIVE,
@@ -187,6 +190,7 @@ export class StrategyService {
           },
           orderBy: { priority: 'desc' },
         });
+        return result as unknown as StrategyEntity | null;
       },
     );
   }
@@ -194,7 +198,7 @@ export class StrategyService {
   /**
    * 获取全局默认策略（scope=GLOBAL, status=ACTIVE）
    */
-  async getGlobalStrategy(): Promise<any | null> {
+  async getGlobalStrategy(): Promise<StrategyEntity | null> {
     return this.getActiveStrategy(StrategyScope.GLOBAL);
   }
 
@@ -204,20 +208,21 @@ export class StrategyService {
    * 返回所有 CONTEXT scope 的 active 策略，由 StrategyResolver 进行匹配。
    * 带缓存（30s TTL）。
    */
-  async getContextStrategies(): Promise<any[]> {
+  async getContextStrategies(): Promise<StrategyEntity[]> {
     const cacheKey = `${CACHE_PREFIX}active:context:_all`;
 
-    const result = await this.redis.getOrSet<any[]>(
+    const result = await this.redis.getOrSet<StrategyEntity[]>(
       cacheKey,
       STRATEGY_CACHE_TTL * 1000,
       async () => {
-        return this.prisma.strategy.findMany({
+        const rows = await this.prisma.strategy.findMany({
           where: {
             scope: StrategyScope.CONTEXT,
             status: StrategyStatus.ACTIVE,
           },
           orderBy: { priority: 'desc' },
         });
+        return rows as unknown as StrategyEntity[];
       },
     );
 
@@ -234,7 +239,7 @@ export class StrategyService {
     source?: string;
     activeFrom?: Date;
     activeUntil?: Date;
-  }): Promise<any> {
+  }): Promise<StrategyAssignmentEntity> {
     const saved = await this.prisma.strategyAssignment.create({
       data: {
         userId: data.userId,
@@ -252,14 +257,14 @@ export class StrategyService {
     this.logger.log(
       `策略分配: user=${data.userId} → strategy=${data.strategyId}`,
     );
-    return saved;
+    return saved as unknown as StrategyAssignmentEntity;
   }
 
   /** 获取用户的活跃策略分配 */
-  async getUserAssignment(userId: string): Promise<any | null> {
+  async getUserAssignment(userId: string): Promise<StrategyAssignmentEntity | null> {
     const cacheKey = `${CACHE_PREFIX}user:${userId}`;
 
-    return this.redis.getOrSet(
+    return this.redis.getOrSet<StrategyAssignmentEntity | null>(
       cacheKey,
       STRATEGY_CACHE_TTL * 1000,
       async () => {
@@ -277,7 +282,7 @@ export class StrategyService {
             ELSE 4
           END ASC
           LIMIT 1
-        `.then((rows: any[]) => rows[0] || null);
+        `.then((rows: StrategyAssignmentEntity[]) => rows[0] || null);
       },
     );
   }
@@ -299,7 +304,7 @@ export class StrategyService {
 
   // ─── 缓存管理 ───
 
-  private async invalidateStrategyCache(strategy: any): Promise<void> {
+  private async invalidateStrategyCache(_strategy: StrategyEntity): Promise<void> {
     try {
       await this.redis.delByPrefix(`${CACHE_PREFIX}active:`);
       // 也可以更精确地只失效相关的 key，但 prefix 删除足够简单

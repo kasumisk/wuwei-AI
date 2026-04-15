@@ -1,7 +1,7 @@
 /**
- * V6.7 Phase 3-D: PipelineBuilderService
+ * PipelineBuilderService
  *
- * 从 RecommendationEngineService (2299行 God Class) 中提取的推荐管道核心。
+ * 从 RecommendationEngineService 中提取的推荐管道核心。
  * 封装三阶段推荐管道: Recall → Rank → Rerank
  *
  * 职责：
@@ -21,7 +21,6 @@ import { FoodLibrary } from '../../../../food/food.types';
 import { GoalType } from '../../services/nutrition-score.service';
 import { FoodScorerService } from './food-scorer.service';
 import { MealAssemblerService } from '../meal/meal-assembler.service';
-import { ConstraintGeneratorService } from './constraint-generator.service';
 import {
   ScoredFood,
   PipelineContext,
@@ -59,6 +58,7 @@ import { PreferenceProfileService } from '../profile/preference-profile.service'
 import { ScoringChainService } from '../scoring-chain/scoring-chain.service';
 import type { RecommendationStrategy } from '../types/recommendation-strategy.types';
 import type { PipelineStageTrace } from '../types/pipeline.types';
+import { writeStageBuffer, consumeStageBuffer } from '../types/pipeline.types';
 import {
   PreferenceSignalFactor,
   RegionalBoostFactor,
@@ -72,6 +72,39 @@ import {
   RuleWeightFactor,
 } from '../scoring-chain/factors';
 
+/**
+ * 统一兜底逻辑 — 过滤后候选不足时回退到角色类别全集 Top-N
+ *
+ * @param filtered  过滤后的候选列表
+ * @param beforeCount  过滤前的候选数量
+ * @param ctx  管道上下文（allFoods + usedNames）
+ * @param roleCategories  当前角色对应的食物类别
+ * @param opts  可选配置：minCount（最小候选数，默认3）、fallbackLimit（兜底取前N个，默认10）、
+ *              sortFn（兜底列表排序函数，默认无排序）
+ * @returns  满足最小候选数的列表（原始列表或兜底列表）
+ */
+function ensureMinCandidates(
+  filtered: FoodLibrary[],
+  beforeCount: number,
+  ctx: Pick<PipelineContext, 'allFoods' | 'usedNames'>,
+  roleCategories: string[],
+  opts?: {
+    minCount?: number;
+    fallbackLimit?: number;
+    sortFn?: (a: FoodLibrary, b: FoodLibrary) => number;
+  },
+): FoodLibrary[] {
+  const min = opts?.minCount ?? 3;
+  const limit = opts?.fallbackLimit ?? 10;
+  if (filtered.length >= min || beforeCount < min) return filtered;
+
+  let fallback = ctx.allFoods.filter(
+    (f) => roleCategories.includes(f.category) && !ctx.usedNames.has(f.name),
+  );
+  if (opts?.sortFn) fallback = fallback.sort(opts.sortFn);
+  return fallback.slice(0, limit);
+}
+
 @Injectable()
 export class PipelineBuilderService implements OnModuleInit {
   private readonly logger = new Logger(PipelineBuilderService.name);
@@ -79,7 +112,6 @@ export class PipelineBuilderService implements OnModuleInit {
   constructor(
     private readonly foodScorer: FoodScorerService,
     private readonly mealAssembler: MealAssemblerService,
-    private readonly constraintGenerator: ConstraintGeneratorService,
     private readonly healthModifierEngine: HealthModifierEngineService,
     private readonly nutritionTargetService: NutritionTargetService,
     private readonly semanticRecallService: SemanticRecallService,
@@ -90,19 +122,18 @@ export class PipelineBuilderService implements OnModuleInit {
     private readonly cfRecallService: CFRecallService,
     private readonly mealCompositionScorer: MealCompositionScorer,
     private readonly strategyAutoTuner: StrategyAutoTuner,
-    /** V7.1 P3-C: 偏好信号计算服务（统一 PreferenceSignal） */
+    /** 偏好信号计算服务（统一 PreferenceSignal） */
     private readonly preferenceProfileService: PreferenceProfileService,
-    /** V7.2 P3-A: 链式评分管道服务 */
+    /** 链式评分管道服务 */
     private readonly scoringChainService: ScoringChainService,
   ) {}
 
-  // ─── V7.4 P1-E: 模块初始化时注册 10 个评分因子 ───
+  // ─── 模块初始化时注册 10 个评分因子 ───
 
   /**
    * 在 NestJS 模块初始化时注册所有 ScoringFactor 到 ScoringChainService。
    *
-   * V7.4: 将 V7.2 创建的 10 个 ScoringFactor 实现正式注册到链式评分管道，
-   * 取代 rankCandidatesLegacy 中的 14 个内联 boost 块。
+   * 将 10 个 ScoringFactor 实现注册到链式评分管道。
    * LifestyleBoostFactor 需要两个 lambda 来桥接 DI 服务：
    * - getLifestyleFactors: 从 PipelineContext 提取 lifestyle → mapLifestyleToScoringFactors
    * - getLifestyleAdjustment: 从 PipelineContext 提取 declared → lifestyleScoringAdapter.adapt()
@@ -166,14 +197,14 @@ export class PipelineBuilderService implements OnModuleInit {
    * 4. 排除标签 (excludeTags)
    * 5. 过敏原过滤 (allergens)
    * 6. 短期画像拒绝过滤 (rejectedFoods)
-   * 7. V6.1: 分析画像风险食物过滤 (recentRiskFoods)
+   * 7. 分析画像风险食物过滤 (recentRiskFoods)
    * 8. 兜底: 如果过滤后为空，回退到全集
    */
   async recallCandidates(
     ctx: PipelineContext,
     role: string,
   ): Promise<FoodLibrary[]> {
-    // V6 2.3: MealPolicy 覆盖角色→品类映射
+    // MealPolicy 覆盖角色→品类映射
     const mealPolicy = ctx.resolvedStrategy?.config?.meal;
     const roleCategories =
       mealPolicy?.roleCategories?.[role] ?? ROLE_CATEGORIES[role] ?? [];
@@ -200,10 +231,9 @@ export class PipelineBuilderService implements OnModuleInit {
       candidates = filterByAllergens(candidates, ctx.userProfile.allergens);
     }
 
-    // V7.9 P3-03: 召回阶段 commonality/budget 快速预过滤
+    // 召回阶段 commonality/budget 快速预过滤
     // 将 RealisticFilter 中代价最低的两项基础过滤上移到召回阶段，
     // 在三路合并和后续评分之前就减少候选数量，避免对不可能通过现实性过滤的食物做无用评分。
-    // 注意：这里使用策略配置的阈值，与后续 RealisticFilter 保持一致。
     {
       const realismConfig = ctx.resolvedStrategy?.config?.realism;
       const commonalityThreshold = realismConfig?.commonalityThreshold ?? 20;
@@ -212,20 +242,9 @@ export class PipelineBuilderService implements OnModuleInit {
         candidates = candidates.filter(
           (f) => (f.commonalityScore ?? 50) >= commonalityThreshold,
         );
-        // 兜底：预过滤不能清空候选池
-        if (candidates.length < 3 && beforeCount >= 3) {
-          candidates = ctx.allFoods
-            .filter(
-              (f) =>
-                roleCategories.includes(f.category) &&
-                !ctx.usedNames.has(f.name),
-            )
-            .sort(
-              (a, b) =>
-                (b.commonalityScore ?? 50) - (a.commonalityScore ?? 50),
-            )
-            .slice(0, 10);
-        }
+        candidates = ensureMinCandidates(candidates, beforeCount, ctx, roleCategories, {
+          sortFn: (a, b) => (b.commonalityScore ?? 50) - (a.commonalityScore ?? 50),
+        });
       }
       if (realismConfig?.budgetFilterEnabled && realismConfig?.enabled !== false) {
         const budgetLevel = ctx.userProfile?.budgetLevel;
@@ -243,23 +262,15 @@ export class PipelineBuilderService implements OnModuleInit {
       }
     }
 
-    // V6.2 3.4: 烹饪技能过滤 — beginner 用户排除 advanced 菜品
+    // 烹饪技能过滤 — beginner 用户排除 advanced 菜品
     if (ctx.userProfile?.cookingSkillLevel === 'beginner') {
       const beforeCount = candidates.length;
       candidates = candidates.filter((f) => f.skillRequired !== 'advanced');
-      // 安全兜底：不能因技能过滤清空候选
-      if (candidates.length < 3 && beforeCount >= 3) {
-        candidates = ctx.allFoods
-          .filter(
-            (f) =>
-              roleCategories.includes(f.category) && !ctx.usedNames.has(f.name),
-          )
-          .slice(0, 10);
-      }
+      candidates = ensureMinCandidates(candidates, beforeCount, ctx, roleCategories);
     }
 
-    // V6 1.9: 短期画像 — 过滤近 7 天频繁拒绝的食物
-    // V6 2.3: 拒绝阈值可通过 RecallPolicy 配置（默认 2 次）
+    // 短期画像 — 过滤近 7 天频繁拒绝的食物
+    // 拒绝阈值可通过 RecallPolicy 配置（默认 2 次）
     if (ctx.shortTermProfile?.rejectedFoods) {
       const recallConfig = ctx.resolvedStrategy?.config?.recall;
       const rejectThreshold = recallConfig?.shortTermRejectThreshold ?? 2;
@@ -271,36 +282,19 @@ export class PipelineBuilderService implements OnModuleInit {
       if (frequentlyRejected.size > 0) {
         const beforeCount = candidates.length;
         candidates = candidates.filter((f) => !frequentlyRejected.has(f.name));
-        // 确保不会过滤掉所有候选（至少保留 3 个）
-        if (candidates.length < 3 && beforeCount >= 3) {
-          candidates = ctx.allFoods
-            .filter(
-              (f) =>
-                roleCategories.includes(f.category) &&
-                !ctx.usedNames.has(f.name),
-            )
-            .slice(0, 10);
-        }
+        candidates = ensureMinCandidates(candidates, beforeCount, ctx, roleCategories);
       }
     }
 
-    // V6.1 Phase 3.5: 分析画像 — 过滤近期被标记为 caution/avoid 的风险食物
+    // 分析画像 — 过滤近期被标记为 caution/avoid 的风险食物
     if (ctx.analysisProfile?.recentRiskFoods?.length) {
       const riskFoodSet = new Set(ctx.analysisProfile.recentRiskFoods);
       const beforeCount = candidates.length;
       candidates = candidates.filter((f) => !riskFoodSet.has(f.name));
-      // 安全兜底：不能因风险过滤把所有候选清空（至少保留 3 个）
-      if (candidates.length < 3 && beforeCount >= 3) {
-        candidates = ctx.allFoods
-          .filter(
-            (f) =>
-              roleCategories.includes(f.category) && !ctx.usedNames.has(f.name),
-          )
-          .slice(0, 10);
-      }
+      candidates = ensureMinCandidates(candidates, beforeCount, ctx, roleCategories);
     }
 
-    // V6.4 Phase 3.3: 获取渠道过滤 — 按 available_channels 字段过滤
+    // 获取渠道过滤 — 按 available_channels 字段过滤
     // channel=unknown 时跳过过滤（保留全量候选）
     if (ctx.channel && ctx.channel !== 'unknown') {
       const beforeCount = candidates.length;
@@ -310,18 +304,10 @@ export class PipelineBuilderService implements OnModuleInit {
         if (!channels || channels.length === 0) return true;
         return channels.includes(ctx.channel!);
       });
-      // 安全兜底：不能因渠道过滤清空候选（至少保留 3 个）
-      if (candidates.length < 3 && beforeCount >= 3) {
-        candidates = ctx.allFoods
-          .filter(
-            (f) =>
-              roleCategories.includes(f.category) && !ctx.usedNames.has(f.name),
-          )
-          .slice(0, 10);
-      }
+      candidates = ensureMinCandidates(candidates, beforeCount, ctx, roleCategories);
     }
 
-    // V6.7 Phase 2-B: 三路召回合并 — 语义路 + CF 路补充候选 + RecallMergerService 去重
+    // 三路召回合并 — 语义路 + CF 路补充候选 + RecallMergerService 去重
     const vectorConfig = ctx.resolvedStrategy?.config?.recall?.sources?.vector;
     if (
       vectorConfig?.enabled &&
@@ -352,7 +338,7 @@ export class PipelineBuilderService implements OnModuleInit {
           )
           .map((f) => ({ food: f, semanticScore: 0.5 }));
 
-        // 3. V6.7 Phase 2-B: CF 召回第三路
+        // 3. CF 召回第三路
         const cfCandidates = ctx.userId
           ? await this.cfRecallService.recall(
               ctx.userId,
@@ -377,14 +363,14 @@ export class PipelineBuilderService implements OnModuleInit {
           ctx.allFoods,
         );
 
-        // V7.9: 记录各路召回数到 trace
+        // 类型安全的 stageBuffer 替代
         if (ctx.trace) {
-          (ctx.trace as any)._lastRecallMergeDetails = {
+          writeStageBuffer(ctx.trace, 'recallMerge', {
             ruleCandidates: ruleCandidateCount,
             semanticCandidates: semanticItems.length,
             cfCandidates: cfCandidates.length,
             mergedTotal: candidates.length,
-          };
+          });
         }
       } catch (err) {
         // 语义/CF召回失败不影响主流程，降级为纯规则路
@@ -404,11 +390,6 @@ export class PipelineBuilderService implements OnModuleInit {
 
   /**
    * 精排阶段 — 多维评分 + 偏好加权
-   *
-   * V6.4: 改为 async 以支持 L2 缓存预热 + 回写
-   * V7.2 P3-A: 链式评分管道替代 14 个内联 boost 块
-   * V7.4 P1-E: 移除 legacy fallback 分支，ScoringFactor 在 onModuleInit 中注册，
-   *            直接走 rankCandidatesViaChain 路径。
    */
   async rankCandidates(
     ctx: PipelineContext,
@@ -418,7 +399,7 @@ export class PipelineBuilderService implements OnModuleInit {
   }
 
   /**
-   * V7.2 P3-A: 链式评分管道实现
+   * 链式评分管道实现
    *
    * 将原 rankCandidates 中 14 个内联 boost 块替换为 ScoringChainService.executeChain()。
    * 保留：
@@ -497,7 +478,7 @@ export class PipelineBuilderService implements OnModuleInit {
     const baseExplanations = baseResults.map((r) => r.explanation);
 
     // Phase B: 链式评分管道
-    // V7.4 P2-C: 合并推荐策略的 factorStrengthOverrides 到 factorAdjustments
+    // 合并推荐策略的 factorStrengthOverrides 到 factorAdjustments
     const mergedCtx = this.mergeStrategyFactorOverrides(ctx);
     const chainResults = this.scoringChainService.executeChain(
       baseFoods,
@@ -531,7 +512,7 @@ export class PipelineBuilderService implements OnModuleInit {
       penaltyCtx,
     );
 
-    // V7.9: 从 healthModifierCache 提取否决列表，写入 trace
+    // 从 healthModifierCache 提取否决列表，写入 trace stageBuffer
     if (ctx.trace) {
       const vetoedFoods: string[] = [];
       for (const [foodId, result] of healthModifierCache.entries()) {
@@ -540,18 +521,18 @@ export class PipelineBuilderService implements OnModuleInit {
           vetoedFoods.push(food?.name ?? foodId);
         }
       }
-      (ctx.trace as any)._lastHealthModifierDetails = {
+      writeStageBuffer(ctx.trace, 'healthModifier', {
         totalEvaluated: healthModifierCache.size,
         vetoedCount: vetoedFoods.length,
         vetoedFoods,
-      };
+      });
     }
 
     return scored;
   }
 
   /**
-   * V6.3 P2-12: 统一构建个性化营养目标
+   * 统一构建个性化营养目标
    */
   buildNutritionTargets(enrichedCtx?: EnrichedProfileContext) {
     return this.nutritionTargetService.calculate(
@@ -570,10 +551,10 @@ export class PipelineBuilderService implements OnModuleInit {
   }
 
   /**
-   * V7.4 P2-C: 合并推荐策略的 factorStrengthOverrides 到 PipelineContext.factorAdjustments
+   * 合并推荐策略的 factorStrengthOverrides 到 PipelineContext.factorAdjustments
    *
    * 合并规则：
-   * - 如果 V7.3 FactorLearner 已有学习强度，与 V7.4 策略强度相乘
+   * - 如果 FactorLearner 已有学习强度，与策略强度相乘
    *   （例如 FactorLearner=1.2, 策略=0.8 → 最终=0.96）
    * - 如果 FactorLearner 无数据，直接使用策略强度
    *
@@ -596,7 +577,7 @@ export class PipelineBuilderService implements OnModuleInit {
   }
 
   /**
-   * V7.4 P2-C: 获取当前推荐策略（如果已设置）
+   * 获取当前推荐策略（如果已设置）
    *
    * 供 recall/rerank 阶段使用。
    */
@@ -617,7 +598,7 @@ export class PipelineBuilderService implements OnModuleInit {
   ): ScoredFood | null {
     if (ranked.length === 0) return null;
 
-    // V6 2.2: 从策略配置读取相似度惩罚系数
+    // 从策略配置读取相似度惩罚系数
     const assemblyConfig = ctx.resolvedStrategy?.config?.assembly;
     const baseSimilarityCoeff =
       ctx.resolvedStrategy?.config?.boost?.similarityPenaltyCoeff ?? 0.3;
@@ -636,7 +617,7 @@ export class PipelineBuilderService implements OnModuleInit {
       preExploreScores.set(sf.food.id, sf.score);
     }
 
-    // V6 2.6: 自适应探索率
+    // 自适应探索率
     const explorationConfig = ctx.resolvedStrategy?.config?.exploration;
     const baseMin = explorationConfig?.baseMin ?? 0.3;
     const baseMax = explorationConfig?.baseMax ?? 1.7;
@@ -652,7 +633,7 @@ export class PipelineBuilderService implements OnModuleInit {
 
     const maturity = Math.min(1, totalInteractions / matureThreshold);
 
-    // V6.5 Phase 2G: 自适应探索率
+    // 自适应探索率（收敛度 + StrategyAutoTuner）
     const tsConvergence = this.calcTsConvergence(ctx.feedbackStats);
     const adaptiveRate = this.strategyAutoTuner.calcAdaptiveExplorationRate(
       totalInteractions,
@@ -897,7 +878,7 @@ export class PipelineBuilderService implements OnModuleInit {
     const usedNames = ctx.usedNames;
     const allCandidates: ScoredFood[] = [];
     const degradations: PipelineDegradation[] = [];
-    const trace = ctx.trace; // V7.9: 管道追踪（可选）
+    const trace = ctx.trace; // 管道追踪（可选）
 
     for (const role of roles) {
       // Stage 1: Recall
@@ -918,10 +899,9 @@ export class PipelineBuilderService implements OnModuleInit {
         recalled = ctx.allFoods.filter((f) => !usedNames.has(f.name));
       }
       if (trace) {
-        // V7.9: 合并 RecallMergerService 写入的各路召回数
+        // 从 stageBuffer 读取并清除三路召回详情
         const recallMergeDetails =
-          (trace as any)._lastRecallMergeDetails ?? {};
-        delete (trace as any)._lastRecallMergeDetails;
+          consumeStageBuffer(trace, 'recallMerge') ?? {};
 
         const stageTrace: PipelineStageTrace = {
           stage: 'recall',
@@ -933,7 +913,7 @@ export class PipelineBuilderService implements OnModuleInit {
         trace.stages.push(stageTrace);
       }
 
-      // V6.5 Phase 3G: 现实性过滤
+      // 现实性过滤
       let realistic: FoodLibrary[];
       const filterStart = trace ? Date.now() : 0;
       const recalledCount = recalled.length;
@@ -942,7 +922,7 @@ export class PipelineBuilderService implements OnModuleInit {
           recalled,
           ctx,
           sceneAdjustedRealism,
-          ctx.kitchenProfile, // V7.1 P3-B: 传递厨房设备画像
+          ctx.kitchenProfile,
         );
       } catch (e) {
         this.logger.error(
@@ -956,7 +936,7 @@ export class PipelineBuilderService implements OnModuleInit {
         realistic = recalled;
       }
 
-      // V7.4 P2-C: 推荐策略 — acquisitionDifficulty 过滤
+      // 推荐策略 — acquisitionDifficulty 过滤
       // 如果策略设定了 acquisitionDifficultyMax，过滤掉获取难度超标的食物
       const recStrategy = this.getRecommendationStrategy(ctx);
       if (recStrategy) {
@@ -976,10 +956,9 @@ export class PipelineBuilderService implements OnModuleInit {
         }
       }
       if (trace) {
-        // V7.9: 合并 RealisticFilterService 写入的过滤器详情
+        // 从 stageBuffer 读取并清除现实性过滤详情
         const filterDetails =
-          (trace as any)._lastRealisticFilterDetails ?? {};
-        delete (trace as any)._lastRealisticFilterDetails;
+          consumeStageBuffer(trace, 'realisticFilter') ?? {};
 
         const stageTrace: PipelineStageTrace = {
           stage: 'realistic_filter',
@@ -1029,15 +1008,12 @@ export class PipelineBuilderService implements OnModuleInit {
           );
       }
       if (trace) {
-        // V7.9: 合并 ScoringChainService 写入的因子详情
+        // 从 stageBuffer 读取并清除评分链和健康修正详情
         const chainDetails =
-          (trace as any)._lastScoringChainDetails ?? {};
-        delete (trace as any)._lastScoringChainDetails;
+          consumeStageBuffer(trace, 'scoringChain') ?? {};
 
-        // V7.9: 合并 HealthModifierEngine 写入的否决详情
         const healthDetails =
-          (trace as any)._lastHealthModifierDetails ?? {};
-        delete (trace as any)._lastHealthModifierDetails;
+          consumeStageBuffer(trace, 'healthModifier') ?? {};
 
         const stageTrace: PipelineStageTrace = {
           stage: 'rank',
@@ -1053,7 +1029,7 @@ export class PipelineBuilderService implements OnModuleInit {
         trace.stages.push(stageTrace);
       }
 
-      // V6 2.5: 多目标优化（可选）
+      // 多目标优化（可选）
       let finalRanked: ScoredFood[];
       try {
         const moConfig = ctx.resolvedStrategy?.config?.multiObjective;
@@ -1076,7 +1052,7 @@ export class PipelineBuilderService implements OnModuleInit {
         finalRanked = ranked;
       }
 
-      // V5 2.1: 收集候选
+      // 收集候选
       const optimizerLimit = ctx.tuning?.optimizerCandidateLimit ?? 8;
       allCandidates.push(...finalRanked.slice(0, optimizerLimit));
 
@@ -1117,7 +1093,7 @@ export class PipelineBuilderService implements OnModuleInit {
       }
     }
 
-    // V6.8 Phase 2-F: 多轮冲突解决（最多 3 轮，无冲突时提前退出）
+    // 多轮冲突解决（最多 3 轮，无冲突时提前退出）
     const assembleStart = trace ? Date.now() : 0;
     if (picks.length >= 2) {
       try {
@@ -1134,7 +1110,7 @@ export class PipelineBuilderService implements OnModuleInit {
       }
     }
 
-    // V7.4 P2-C: 推荐策略 — maxSameCategory 同品类限制
+    // 推荐策略 — maxSameCategory 同品类限制
     // 如果策略设定了最大同品类食物数量，超出时替换最低分的重复品类食物
     const recStrategyFinal = this.getRecommendationStrategy(ctx);
     if (recStrategyFinal && picks.length >= 2) {
@@ -1168,7 +1144,7 @@ export class PipelineBuilderService implements OnModuleInit {
       );
     }
 
-    // V7.9: 填充 trace summary
+    // 填充 trace summary
     if (trace) {
       trace.completedAt = Date.now();
 
@@ -1208,7 +1184,7 @@ export class PipelineBuilderService implements OnModuleInit {
   }
 
   /**
-   * V7.4 P2-C: 同品类数量限制
+   * 同品类数量限制
    *
    * 检查 picks 中每个品类的食物数量是否超过 maxSameCategory，
    * 如果超过则用候选中不同品类的食物替换最低分的重复品类食物。
@@ -1260,7 +1236,7 @@ export class PipelineBuilderService implements OnModuleInit {
   }
 
   /**
-   * V6.8 Phase 3-F: 多轮冲突解决（从 executeRolePipeline 提取）
+   * 多轮冲突解决（从 executeRolePipeline 提取）
    */
   private resolveCompositionConflicts(
     picks: ScoredFood[],
@@ -1306,7 +1282,7 @@ export class PipelineBuilderService implements OnModuleInit {
     }
   }
 
-  // ─── V6.5 Phase 2G: TS 收敛度计算 ───
+  // ─── TS 收敛度计算 ───
 
   /**
    * 计算 Thompson Sampling 收敛度 (0-1)

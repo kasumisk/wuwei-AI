@@ -38,7 +38,7 @@ export interface ScorerDetailedResult {
 @Injectable()
 export class FoodScorerService {
   /**
-   * V5 2.7: 品类微量营养素均值表
+   * 品类微量营养素均值表
    * 用于在 NRF 11.4 评分中插补缺失的微量营养素数据
    * 由 RecommendationEngineService 在食物池加载后设置
    */
@@ -46,7 +46,7 @@ export class FoodScorerService {
     null;
 
   /**
-   * V7.9 P3-01: computeWeights 结果缓存
+   * computeWeights 结果缓存
    * 在同一批评分中，computeWeights 的参数组合通常只有 1 个，
    * 缓存避免对每个候选食物重复计算权重。
    * key = 参数指纹, value = weights 数组
@@ -61,7 +61,7 @@ export class FoodScorerService {
   ) {}
 
   /**
-   * V7.9 P3-01: 构建 computeWeights 缓存 key
+   * 构建 computeWeights 缓存 key
    * 参数组合在同一批评分中通常只有 1 个，使用 JSON 序列化生成指纹。
    */
   private buildWeightsCacheKey(
@@ -85,7 +85,7 @@ export class FoodScorerService {
   }
 
   /**
-   * V7.9 P3-01: 清除 computeWeights 缓存
+   * 清除 computeWeights 缓存
    * 上游在每轮评分开始前调用，避免跨请求缓存污染。
    */
   clearWeightsCache(): void {
@@ -93,7 +93,7 @@ export class FoodScorerService {
   }
 
   /**
-   * V5 2.7: 设置品类微量营养素均值表
+   * 设置品类微量营养素均值表
    * 在食物池加载后调用，用于后续评分中插补缺失值
    */
   setCategoryMicroDefaults(
@@ -111,11 +111,11 @@ export class FoodScorerService {
     statusFlags?: string[],
     weightOverrides?: number[] | null,
     mealWeightOverrides?: Record<string, Record<string, number>> | null,
-    /** V6 2.2: 策略引擎排序策略配置 */
+    /** 策略引擎排序策略配置 */
     rankPolicy?: RankPolicyConfig | null,
-    /** V6.3 P1-2: 用户营养缺口列表 */
+    /** 用户营养缺口列表 */
     nutritionGaps?: string[] | null,
-    /** V6.3 P1-10: 个性化营养目标（替代硬编码 DV） */
+    /** 个性化营养目标（替代硬编码 DV） */
     nutritionTargets?: NutritionTargets | null,
   ): number {
     const ctx: ScoringContext = {
@@ -135,15 +135,15 @@ export class FoodScorerService {
   }
 
   /**
-   * V6.7 Phase 1-A: 评分并返回详细分解 — ScoringContext 统一入参
+   * 评分并返回详细分解 — ScoringContext 统一入参
    *
    * 返回最终分数 + ScoringExplanation 骨架。
    * 上游（recommendation-engine）负责填充 preferenceBoost / profileBoost /
    * regionalBoost / explorationMultiplier / similarityPenalty / finalScore。
    *
    * 变更历史:
-   * - V4 Phase 2.3 (D8): 初始引入，位置参数
-   * - V6.7 Phase 1-A: 12 位置参数 → ScoringContext 统一入参
+   * - 初始引入，位置参数
+   * - 12 位置参数 → ScoringContext 统一入参
    */
   scoreFoodDetailed(ctx: ScoringContext): ScorerDetailedResult {
     const {
@@ -191,7 +191,7 @@ export class FoodScorerService {
     );
 
     // 蛋白质评分：分段函数
-    // V6.8: 传递 scoringConfig 以读取外部化参数
+    // 传递 scoringConfig 以读取外部化参数
     const proteinScore = this.calcProteinScore(
       servingProtein,
       servingCal,
@@ -201,7 +201,7 @@ export class FoodScorerService {
 
     // 碳水/脂肪：V4 目标自适应区间评分 (修复 E2)
     const macroRange = MACRO_RANGES[goalType] || MACRO_RANGES.health;
-    // V6.8: 从配置读取碳水/脂肪默认分和区间惩罚陡度
+    // 从配置读取碳水/脂肪默认分和区间惩罚陡度
     const defaultCarbFatScore = scoringConfig?.defaultCarbFatScore ?? 0.5;
     const rangeOutSteepness = scoringConfig?.rangeOutPenaltySteepness ?? 2;
     const carbsScore =
@@ -234,9 +234,9 @@ export class FoodScorerService {
     );
 
     // 微量营养密度评分：NRF 11.4 (V7.3 升级自 NRF 9.3)
-    // V6.3 P1-2: 传入用户营养缺口，对缺乏营养素的食物额外加分
-    // V6.3 P1-10: 传入个性化营养目标，替代硬编码 DV
-    // V6.7 Phase 1-B: Sigmoid 参数从 scoringConfig 读取
+    // 传入用户营养缺口，对缺乏营养素的食物额外加分
+    // 传入个性化营养目标，替代硬编码 DV
+    // Sigmoid 参数从 scoringConfig 读取
     let nutrientDensityScore = this.calcNutrientDensityScore(
       food,
       nutritionGaps,
@@ -246,11 +246,11 @@ export class FoodScorerService {
       scoringConfig,
     );
 
-    // V6.8 Phase 1-B: lifestyleAdjustment 不再在 food-scorer 中直接消费。
+    // lifestyleAdjustment 不再在 food-scorer 中直接消费。
     // 所有 lifestyle 影响统一通过 pipeline-builder 的 lifestyleNutrientBoost 路径。
 
     // 炎症指数评分：基于反式脂肪+饱和脂肪+纤维
-    // V6.7 Phase 1-B: Sigmoid 参数从 scoringConfig 读取
+    // Sigmoid 参数从 scoringConfig 读取
     const inflammationScore = this.calcInflammationScore(
       food,
       scoringConfig?.inflammationCenter,
@@ -258,8 +258,8 @@ export class FoodScorerService {
       scoringConfig,
     );
 
-    // V5 2.6: 膳食纤维评分 — 按份量纤维 vs 餐次目标
-    // V6.3 P1-10: 使用个性化纤维目标替代硬编码 27.5g
+    // 膳食纤维评分 — 按份量纤维 vs 餐次目标
+    // 使用个性化纤维目标替代硬编码 27.5g
     const fiberScore = this.calcFiberScore(
       food,
       goalType,
@@ -267,23 +267,23 @@ export class FoodScorerService {
       nutritionTargets,
     );
 
-    // V6.4 Phase 3.4: 时令感知评分 — 基于区域时令数据
+    // 时令感知评分 — 基于区域时令数据
     const seasonalityScore = this.seasonalityService.getSeasonalityScore(
       food.id,
       food.category,
     );
 
-    // V6.5: 可执行性评分 — 综合大众化程度、价格合理性、获取便利性
-    // V6.7 Phase 1-B: 子权重从 scoringConfig 读取
+    // 可执行性评分 — 综合大众化程度、价格合理性、获取便利性
+    // 子权重从 scoringConfig 读取
     const executabilityScore = this.calcExecutabilityScore(food, scoringConfig);
 
-    // V6.9 Phase 1-D: 大众化/常见度评分 — 基于 commonalityScore + 渠道加分
+    // 大众化/常见度评分 — 基于 commonalityScore + 渠道加分
     const popularityScore = this.scorePopularity(food, channel, scoringConfig);
 
-    // V7.4 Phase 3-C: 食物可获得性评分 — 基于 acquisitionDifficulty（1-5 → 0-1 反转）
+    // 食物可获得性评分 — 基于 acquisitionDifficulty（1-5 → 0-1 反转）
     const acquisitionScore = this.calcAcquisitionScore(food, scoringConfig);
 
-    // V7.9 P3-01: computeWeights 缓存 — 同一批评分中参数组合通常相同
+    // computeWeights 缓存 — 同一批评分中参数组合通常相同
     const runtimeBaseWeights = this.recommendationConfig.getBaseWeights(goalType);
     const weightsCacheKey = this.buildWeightsCacheKey(
       goalType, mealType, statusFlags,
@@ -300,15 +300,15 @@ export class FoodScorerService {
         mealType,
         statusFlags,
         weightOverrides,
-        mealWeightOverrides, // V5 4.8: A/B 实验组覆盖的餐次权重修正
-        rankPolicy, // V6 2.2: 策略引擎排序策略配置（优先级最高）
-        runtimeBaseWeights, // V6.2 3.2: 运行时可配置权重
+        mealWeightOverrides, // A/B 实验组覆盖的餐次权重修正
+        rankPolicy, // 策略引擎排序策略配置（优先级最高）
+        runtimeBaseWeights, // 运行时可配置权重
       );
       // 缓存原始结果（未被 effectiveGoal 修改）
       this.weightsCache.set(weightsCacheKey, weights.slice());
     }
 
-    // V7.0 Phase 3-C: 叠加 EffectiveGoal 阶段权重调整
+    // 叠加 EffectiveGoal 阶段权重调整
     // weightAdjustment 是 Partial<Record<ScoreDimension, number>>，值为乘数（如 1.3 = 增强30%）
     // 在 computeWeights 结果之上叠加，保持 computeWeights 函数纯粹性
     if (effectiveGoal?.weightAdjustment) {
@@ -337,14 +337,14 @@ export class FoodScorerService {
       glycemicScore,
       nutrientDensityScore,
       inflammationScore,
-      fiberScore, // V5 2.6: 第 10 维
-      seasonalityScore, // V6.4 Phase 3.4: 第 11 维
-      executabilityScore, // V6.5: 第 12 维
-      popularityScore, // V6.9 Phase 1-D: 第 13 维
-      acquisitionScore, // V7.4 Phase 3-C: 第 14 维
+      fiberScore, // 第 10 维
+      seasonalityScore, // 第 11 维
+      executabilityScore, // 第 12 维
+      popularityScore, // 第 13 维
+      acquisitionScore, // 第 14 维
     ];
 
-    // V6.8: 默认置信度从配置读取
+    // 默认置信度从配置读取
     const confidence =
       Number(food.confidence) || (scoringConfig?.defaultConfidence ?? 0.5);
     const floor = scoringConfig?.confidenceFloor ?? 0.7;
@@ -397,14 +397,14 @@ export class FoodScorerService {
     }
     rawScore *= penalty.finalMultiplier;
 
-    // V7.0 Phase 3-C → V7.1 P3-C: 菜系偏好 + 替换 boost
-    // V7.1: 当 PreferenceSignal 存在时，使用统一信号的 cuisineBoost + substitutionBoost
+    // 菜系偏好 + 替换 boost
+    // 当 PreferenceSignal 存在时，使用统一信号的 cuisineBoost + substitutionBoost
     // 替代原有的 inline 菜系计算。其余信号（exploration, category, ingredient）
     // 在 PipelineBuilder.rankCandidates() 中独立应用，避免双重计算。
     let cuisineBoost = 0;
     let substitutionBoost = 0;
     if (ctx.preferenceSignal) {
-      // V7.1 P3-C: 从统一偏好信号读取
+      // 从统一偏好信号读取
       cuisineBoost = ctx.preferenceSignal.cuisineBoost;
       substitutionBoost = ctx.preferenceSignal.substitutionBoost;
       rawScore *= 1 + cuisineBoost + substitutionBoost;
@@ -461,20 +461,20 @@ export class FoodScorerService {
         glycemic: { raw: scores[6], weighted: scores[6] * weights[6] },
         nutrientDensity: { raw: scores[7], weighted: scores[7] * weights[7] },
         inflammation: { raw: scores[8], weighted: scores[8] * weights[8] },
-        fiber: { raw: scores[9], weighted: scores[9] * weights[9] }, // V5 2.6
-        seasonality: { raw: scores[10], weighted: scores[10] * weights[10] }, // V6.4 Phase 3.4
+        fiber: { raw: scores[9], weighted: scores[9] * weights[9] },
+        seasonality: { raw: scores[10], weighted: scores[10] * weights[10] },
         executability: {
           raw: scores[11],
           weighted: scores[11] * (weights[11] ?? 0),
-        }, // V6.5
+        }, // executability
         popularity: {
           raw: scores[12] ?? 0,
           weighted: (scores[12] ?? 0) * (weights[12] ?? 0),
-        }, // V6.9 Phase 1-D
+        }, // popularity
         acquisition: {
           raw: scores[13] ?? 0,
           weighted: (scores[13] ?? 0) * (weights[13] ?? 0),
-        }, // V7.4 Phase 3-C
+        }, // acquisition
       },
       novaPenalty,
       addedSugarPenalty,
@@ -491,13 +491,13 @@ export class FoodScorerService {
       similarityPenalty: 0,
       compatibilityBonus: 0,
       cfBoost: 0,
-      shortTermBoost: 0, // V6 1.9: 短期画像偏好（由推荐引擎注入）
-      sceneBoost: 1.0, // V6 2.18: 上下文场景加权（由推荐引擎注入）
-      analysisBoost: 1.0, // V6.1 Phase 3.5: 分析画像加权（由推荐引擎注入）
-      lifestyleBoost: 1.0, // V6.5 Phase 1E: 生活方式画像乘数（由推荐引擎注入）
-      foodPrefBoost: 1.0, // V6.3 P2-4: 声明偏好加成（由推荐引擎注入）
-      popularityBoost: 1.0, // V6.3 P2-4: 热门食物加成（由推荐引擎注入）
-      replacementBoost: 1.0, // V6.6 Phase 2-B: 替换反馈乘数（由推荐引擎注入）
+      shortTermBoost: 0, // 短期画像偏好（由推荐引擎注入）
+      sceneBoost: 1.0, // 上下文场景加权（由推荐引擎注入）
+      analysisBoost: 1.0, // 分析画像加权（由推荐引擎注入）
+      lifestyleBoost: 1.0, // 生活方式画像乘数（由推荐引擎注入）
+      foodPrefBoost: 1.0, // 声明偏好加成（由推荐引擎注入）
+      popularityBoost: 1.0, // 热门食物加成（由推荐引擎注入）
+      replacementBoost: 1.0, // 替换反馈乘数（由推荐引擎注入）
       finalScore,
     };
   }
@@ -511,9 +511,9 @@ export class FoodScorerService {
     statusFlags?: string[],
     weightOverrides?: number[] | null,
     mealWeightOverrides?: Record<string, Record<string, number>> | null,
-    /** V6 2.2: 策略引擎排序策略配置 */
+    /** 策略引擎排序策略配置 */
     rankPolicy?: RankPolicyConfig | null,
-    /** V6.3 P2-12: NRF 9.3 个性化营养目标 */
+    /** NRF 9.3 个性化营养目标 */
     nutritionTargets?: NutritionTargets | null,
   ): ScoredFood[] {
     return candidates
@@ -560,11 +560,11 @@ export class FoodScorerService {
       servingCarbs: Math.round(
         ((food.carbs || 0) * food.standardServingG) / 100,
       ),
-      // V5 2.2: 膳食纤维按份量换算
+      // 膳食纤维按份量换算
       servingFiber: Math.round(
         ((food.fiber || 0) * food.standardServingG) / 100,
       ),
-      // V5 2.2: 血糖负荷直接使用食物级别值（GL 不按重量线性缩放）
+      // GL 不按重量线性缩放，直接使用食物级别值
       servingGL: Number(food.glycemicLoad) || 0,
     };
   }
@@ -577,7 +577,6 @@ export class FoodScorerService {
     configSigmaRatios?: Record<string, number> | null,
     cfg?: ScoringConfigSnapshot | null,
   ): number {
-    // V6.8: 从配置读取默认分
     if (target <= 0) return cfg?.energyDefaultScore ?? 0.8;
     const defaultSigmaRatios: Record<string, number> = {
       fat_loss: 0.12,
@@ -590,7 +589,6 @@ export class FoodScorerService {
     const diff = actual - target;
     let score = Math.exp(-(diff * diff) / (2 * sigma * sigma));
 
-    // V6.8: 从配置读取不对称惩罚系数
     if (goalType === 'fat_loss' && diff > 0)
       score *= cfg?.energyFatLossPenalty ?? 0.85;
     if (goalType === 'muscle_gain' && diff < 0)
@@ -605,11 +603,9 @@ export class FoodScorerService {
     goalType: string,
     cfg?: ScoringConfigSnapshot | null,
   ): number {
-    // V6.8: 从配置读取默认分和蛋白质范围
     if (calories <= 0) return cfg?.proteinDefaultScore ?? 0.8;
     const ratio = (protein * 4) / calories;
 
-    // V6.8: 从配置读取每目标蛋白质理想范围
     const configRanges = cfg?.proteinRangeByGoal;
     const defaultRanges: Record<string, [number, number]> = {
       fat_loss: [0.25, 0.35],
@@ -620,7 +616,6 @@ export class FoodScorerService {
     const ranges = configRanges ?? defaultRanges;
     const [min, max] = ranges[goalType] ?? [0.15, 0.25];
 
-    // V6.8: 从配置读取曲线参数
     const belowCoeff = cfg?.proteinBelowRangeCoeff ?? 0.3;
     const belowBase = cfg?.proteinBelowRangeBase ?? 0.7;
     const aboveDecay = cfg?.proteinAboveRangeDecay ?? 0.5;
@@ -640,7 +635,6 @@ export class FoodScorerService {
   ): number {
     if (value >= min && value <= max) return 1.0;
     const diff = value < min ? min - value : value - max;
-    // V6.8: steepness 从配置读取
     return Math.max(0, 1.0 - diff * (steepness ?? 2));
   }
 
@@ -684,7 +678,7 @@ export class FoodScorerService {
     /** V6.8: 评分参数快照 */
     cfg?: ScoringConfigSnapshot | null,
   ): number {
-    // V5 2.7: 获取品类默认值用于插补
+    // 获取品类默认值用于插补缺失微量营养素
     const catDefaults = this.categoryMicroDefaults?.get(
       food.category || 'unknown',
     );
@@ -699,7 +693,7 @@ export class FoodScorerService {
       return catDefaults?.[field] ?? 0;
     };
 
-    // V6.3 P1-10: 每日推荐值 — 优先使用个性化目标，回退到 FDA 标准 DV
+    // 每日推荐值 — 优先使用个性化目标，回退到 FDA 标准 DV
     const DV = {
       protein: nutritionTargets?.protein ?? 50, // g
       fiber: nutritionTargets?.fiber ?? 28, // g
@@ -710,7 +704,6 @@ export class FoodScorerService {
       calcium: nutritionTargets?.calcium ?? 1300, // mg
       iron: nutritionTargets?.iron ?? 18, // mg
       potassium: nutritionTargets?.potassium ?? 4700, // mg
-      // V7.3 NRF11.4 新增
       zinc: nutritionTargets?.zinc ?? 11, // mg, FDA DV
       magnesium: nutritionTargets?.magnesium ?? 420, // mg, FDA DV
     };
@@ -719,7 +712,6 @@ export class FoodScorerService {
       saturatedFat: nutritionTargets?.saturatedFatLimit ?? 20, // g
       addedSugar: nutritionTargets?.addedSugarLimit ?? 50, // g
       sodium: nutritionTargets?.sodiumLimit ?? 2300, // mg
-      // V7.3 NRF11.4 新增
       transFat: nutritionTargets?.transFatLimit ?? 2.2, // g, WHO <1% 总能量
     };
 
@@ -738,11 +730,10 @@ export class FoodScorerService {
         (impute(food.potassium, 'potassium') / DV.potassium) * 100,
         100,
       ) +
-      // V7.3 NRF11.4 新增鼓励项
       Math.min((impute(food.zinc, 'zinc') / DV.zinc) * 100, 100) +
       Math.min((impute(food.magnesium, 'magnesium') / DV.magnesium) * 100, 100);
 
-    // V4 Phase 4.7: 优先使用 addedSugar，回退到 sugar（向后兼容）
+    // 优先使用 addedSugar，回退到 sugar（向后兼容）
     // 当 addedSugar 字段有值时，仅惩罚添加糖
     // 当 addedSugar 为 null/undefined 时，使用总糖作为保守估计
     const sugarForPenalty =
@@ -755,7 +746,6 @@ export class FoodScorerService {
       Math.min(((food.saturatedFat || 0) / LIMIT_DV.saturatedFat) * 100, 100) +
       Math.min((sugarForPenalty / LIMIT_DV.addedSugar) * 100, 100) +
       Math.min(((food.sodium || 0) / LIMIT_DV.sodium) * 100, 100) +
-      // V7.3 NRF11.4 新增限制项
       // transFatLimit=0 时跳过（已通过炎症评分强惩罚，避免除零）
       (LIMIT_DV.transFat > 0
         ? Math.min(
@@ -770,9 +760,7 @@ export class FoodScorerService {
     // 理论范围: -400 ~ 1100, 实际大部分食物在 -50 ~ 500
     const raw = encourage - discourage;
 
-    // V6.3 P1-2: 营养缺口加权 — 如果用户缺乏特定营养素，
-    // 且该食物富含该营养素（>= threshold% DV），额外加分
-    // V6.8: 阈值、单项最大 bonus、总上限从配置读取
+    // 营养缺口加权：用户缺乏特定营养素时，对富含该营养素（>= threshold% DV）的食物额外加分
     const gapThreshold = cfg?.nrfGapThreshold ?? 15;
     const gapMaxBonus = cfg?.nrfGapMaxBonus ?? 20;
     const gapTotalCap = cfg?.nrfGapTotalCap ?? 80;
@@ -807,7 +795,6 @@ export class FoodScorerService {
           (impute(food.potassium, 'potassium') / DV.potassium) * 100,
           100,
         ),
-        // V7.3 NRF11.4 新增
         zinc: Math.min((impute(food.zinc, 'zinc') / DV.zinc) * 100, 100),
         magnesium: Math.min(
           (impute(food.magnesium, 'magnesium') / DV.magnesium) * 100,
@@ -818,7 +805,7 @@ export class FoodScorerService {
       for (const gap of nutritionGaps) {
         const dvPct = nutrientDvPercent[gap];
         if (dvPct !== undefined && dvPct >= gapThreshold) {
-          // V6.8 Phase 1-C: 连续函数 — bonus 随 %DV 线性增长
+          // 连续函数：bonus 随 %DV 线性增长
           // nrfGapContinuous=true(默认): bonus = maxBonus × min(1, (dvPct - threshold) / (100 - threshold))
           // nrfGapContinuous=false: V6.7 二值逻辑，达标即满分
           const useContinuous = cfg?.nrfGapContinuous ?? true;
@@ -837,7 +824,7 @@ export class FoodScorerService {
     }
 
     // 归一化到 0-1: 使用 Sigmoid 平滑映射
-    // V6.7 Phase 1-B: 中心点/斜率从 scoringConfig 读取，默认 150/0.01
+    // 中心点/斜率从 scoringConfig 读取，默认 150/0.01
     const center = sigmoidCenter ?? 150;
     const slope = sigmoidSlope ?? 0.01;
     return 1 / (1 + Math.exp(-slope * (raw + gapBonus - center)));
@@ -859,7 +846,7 @@ export class FoodScorerService {
     const saturatedFat = Number(food.saturatedFat) || 0;
     const fiber = Number(food.fiber) || 0;
 
-    // V6.8: 炎症公式参数从配置读取
+
     const transDiv = cfg?.inflammTransFatDiv ?? 2;
     const transMax = cfg?.inflammTransFatMax ?? 50;
     const satDiv = cfg?.inflammSatFatDiv ?? 10;
@@ -900,7 +887,7 @@ export class FoodScorerService {
     mealType?: string,
     nutritionTargets?: NutritionTargets | null,
   ): number {
-    // V6.3 P1-10: 优先使用个性化纤维目标，回退到中国膳食指南中值 27.5g
+    // 优先使用个性化纤维目标，回退到中国膳食指南中值 27.5g
     const dailyFiberTarget = nutritionTargets?.fiber ?? 27.5;
     const fiber = ((food.fiber || 0) * food.standardServingG) / 100; // 按份量换算
 
@@ -933,14 +920,14 @@ export class FoodScorerService {
     scoringConfig?: ScoringConfigSnapshot | null,
   ): number {
     const processingLevel = food.processingLevel ?? 1;
-    // V6.7 Phase 1-B: NOVA 基准从 scoringConfig 读取
+
     const NOVA_BASE = scoringConfig?.novaBase ?? [1.0, 1.0, 1.0, 0.85, 0.55];
     const level = Math.max(0, Math.min(4, processingLevel));
     let penalty = NOVA_BASE[level];
 
     // 单品微调仅对 NOVA 3/4 生效（NOVA 1/2 不惩罚，无需微调）
     if (level >= 3) {
-      // V6.8: 微调阈值和缓解量从配置读取
+
       const highFiberThreshold = scoringConfig?.novaHighFiberThreshold ?? 3;
       const highFiberRelief = scoringConfig?.novaHighFiberRelief ?? 0.05;
       const lowSugarThreshold = scoringConfig?.novaLowSugarThreshold ?? 5;
@@ -971,7 +958,7 @@ export class FoodScorerService {
         penalty -= highSodiumPenalty;
       }
 
-      // V6.8: clamp 范围从配置读取
+
       const clampMin = scoringConfig?.novaClampMin ?? [0.75, 0.45];
       const clampMax = scoringConfig?.novaClampMax ?? [0.95, 0.7];
       const minPenalty = level === 3 ? clampMin[0] : clampMin[1];
@@ -1000,14 +987,14 @@ export class FoodScorerService {
     const gi = food.glycemicIndex
       ? food.glycemicIndex
       : this.estimateGI(food, cfg);
-    // V6.8: 无法估算时默认分从配置读取
+
     if (gi <= 0) return cfg?.giDefaultScore ?? 0.75;
     // 优先使用食物库的 glycemicLoad，否则根据份量碳水计算
     const gl =
       food.glycemicLoad != null && food.glycemicLoad > 0
         ? Number(food.glycemicLoad)
         : (gi * servingCarbs) / 100;
-    // V6.8: Sigmoid 斜率和中心点从配置读取
+
     const slope = cfg?.glSigmoidSlope ?? 0.3;
     const center = cfg?.glSigmoidCenter ?? 15;
     return 1 / (1 + Math.exp(slope * (gl - center)));
@@ -1027,7 +1014,7 @@ export class FoodScorerService {
     food: FoodLibrary,
     cfg?: ScoringConfigSnapshot | null,
   ): number {
-    // V6.8: 品类基准 GI map 从配置读取
+
     const DEFAULT_CATEGORY_GI_MAP: Record<string, number> = {
       grain: 70, // 谷物类：白米 73，面包 75，燕麦 55 → 中位 70
       veggie: 35, // 蔬菜类：多数 < 40
@@ -1045,12 +1032,12 @@ export class FoodScorerService {
 
     const categoryGI = categoryGiMap[food.category] ?? fallbackGI;
 
-    // V6.8: 加工程度修正步长从配置读取
+
     const processingStep = cfg?.giProcessingStep ?? 5;
     const processingLevel = food.processingLevel ?? 1;
     const processingAdj = Math.max(0, (processingLevel - 1) * processingStep);
 
-    // V6.8: 纤维减量和上限从配置读取
+
     const fiberReduction = cfg?.giFiberReduction ?? 2;
     const fiberReductionCap = cfg?.giFiberReductionCap ?? 15;
     const fiberPer100g = Number(food.fiber) || 0;
@@ -1077,7 +1064,7 @@ export class FoodScorerService {
     food: FoodLibrary,
     scoringConfig?: ScoringConfigSnapshot | null,
   ): number {
-    // V6.7 Phase 1-B: 子权重从配置读取，默认 0.35/0.25/0.25/0.15
+    // 子权重从配置读取，默认 0.35/0.25/0.25/0.15
     const subW = scoringConfig?.executabilitySubWeights ?? {
       commonality: 0.35,
       cost: 0.25,
@@ -1097,7 +1084,7 @@ export class FoodScorerService {
     score += costScore * subW.cost;
 
     // 3. 烹饪便利性
-    // V6.8: 阈值和分数从配置读取
+
     const quickTime = scoringConfig?.cookTimeQuick ?? 15;
     const quickScore = scoringConfig?.cookTimeQuickScore ?? 1.0;
     const mediumTime = scoringConfig?.cookTimeMedium ?? 30;
@@ -1173,7 +1160,7 @@ export class FoodScorerService {
     food: FoodLibrary,
     cfg?: ScoringConfigSnapshot | null,
   ): number {
-    // V6.8: 品类含水量 map 从配置读取
+
     const DEFAULT_CATEGORY_WATER_MAP: Record<string, number> = {
       veggie: 90, // 蔬菜类：绝大多数 > 85%
       fruit: 85, // 水果类：多数 80-92%

@@ -23,9 +23,36 @@ export interface ConfigShardKey {
 /**
  * V6.7 Phase 1-B / V6.8 Phase 1-A / V7.0 Phase 2-D: 评分参数中心化管理
  *
- * V6.7: 集中管理 10 个 service 中分散的 42+ 硬编码常量
- * V6.8: 扩展到 90+ 参数，全量外部化 food-scorer.service.ts 中的 60+ 硬编码常量
- * V7.0: 上下文分片 — 按 goalType/season/dayType 加载不同配置覆盖
+ * ═══════════════════════════════════════════════════════════
+ *  评分参数三层优先级体系（高 → 低）
+ * ═══════════════════════════════════════════════════════════
+ *
+ *  Layer 1: StrategyConfig.rank（策略层）
+ *    - 来源: strategy 表 config JSONB → rank 字段
+ *    - 职责: 按策略/用户群/上下文覆盖的评分权重（baseWeights、mealModifiers、statusModifiers）
+ *    - 粒度: 可按 GoalType 独立配置 14 维权重数组
+ *    - 生效: 当用户匹配到某策略时，策略层权重整体替换系统默认权重
+ *    - 管理: Admin API → StrategyManagementService
+ *
+ *  Layer 2: ScoringConfigSnapshot（本服务管理的运行时配置）
+ *    - 来源: feature_flag 表 scoring_config_v68 记录（JSONB），含 tuning 子对象
+ *    - 职责: 42+ 评分相关参数（各因子系数、阈值、归一化参数等）
+ *    - 含义: 不涉及权重分配，而是控制各评分维度内部的计算行为
+ *    - 实时修改: Admin API → updateConfig()，写入 DB + Redis + 内存
+ *    - 分片: 支持按 goalType/season/dayType 加载覆盖分片
+ *
+ *  Layer 3: 硬编码默认值（代码中的常量）
+ *    - 来源: scoring.types.ts 中的 SCORE_WEIGHTS、MACRO_RANGES、MEAL_RATIOS 等
+ *    - 职责: Layer 1/2 均未配置时的终极兜底
+ *    - 修改方式: 仅通过代码变更
+ *
+ *  合并规则:
+ *  - computeWeights(goalType, rankPolicy, ...) 中，若 rankPolicy.baseWeights 存在则
+ *    整体替换该 GoalType 的默认权重数组（Layer 1 > Layer 3）
+ *  - ScoringConfigSnapshot 中的参数独立于权重数组，由各 Factor/Scorer 直接读取
+ *  - Layer 2 的 tuning 子对象 = 原 RecommendationTuningConfig 的运行时版本
+ *
+ * ═══════════════════════════════════════════════════════════
  *
  * 数据流：
  * 1. onModuleInit → 从 Redis 缓存 / feature_flag 表加载配置
@@ -33,9 +60,6 @@ export interface ConfigShardKey {
  *    - 无 shard → 返回全局配置
  *    - 有 shard → 全局配置 + shard 覆盖（深度合并）
  * 3. updateConfig() → Admin API 调用，写入 DB + 刷新 Redis + 更新内存
- *
- * V6.8 配置 key 升级: scoring_config_v68（fallback 读 scoring_config_v67）
- * V7.0 分片 key 格式: scoring_config_shard:{shardKey}
  *
  * 降级策略：
  * - Redis 不可用 → 直接读 DB

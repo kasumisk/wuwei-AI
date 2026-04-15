@@ -34,6 +34,7 @@ import {
   RealismConfig,
   ContextStrategyCondition,
   StrategyContextInput,
+  StrategyEntity,
 } from '../strategy.types';
 import { RedisCacheService } from '../../../core/redis/redis-cache.service';
 
@@ -143,7 +144,7 @@ export class StrategyResolver {
 
     // 4. 用户级分配策略（最高优先级）
     const assignment = await this.strategyService.getUserAssignment(userId);
-    if (assignment) {
+    if (assignment && assignment.strategyId) {
       const userStrategy = await this.strategyService.findById(
         assignment.strategyId,
       );
@@ -181,18 +182,17 @@ export class StrategyResolver {
    */
   private async matchContextStrategy(
     input: StrategyContextInput,
-  ): Promise<any | null> {
+  ): Promise<StrategyEntity | null> {
     const strategies = await this.strategyService.getContextStrategies();
     if (!strategies.length) {
       return null;
     }
 
-    let bestMatch: any = null;
+    let bestMatch: StrategyEntity | null = null;
     let bestScore = 0;
 
     for (const strategy of strategies) {
-      const condition =
-        strategy.contextCondition as ContextStrategyCondition | null;
+      const condition = strategy.contextCondition;
       if (!condition) continue;
 
       const { matches, score } = this.evaluateCondition(condition, input);

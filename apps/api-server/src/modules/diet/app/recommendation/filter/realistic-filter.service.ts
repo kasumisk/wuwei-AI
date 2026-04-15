@@ -36,6 +36,7 @@ import {
   type RealismPreset,
   SCENE_DEFAULT_REALISM,
 } from '../types/recommendation.types';
+import { writeStageBuffer } from '../types/pipeline.types';
 import {
   RealismConfig,
   DEFAULT_REALISM,
@@ -213,9 +214,9 @@ export class RealisticFilterService {
       );
       fallbackTriggered = true;
 
-      // V7.9: 暂存过滤器追踪详情，供 executeRolePipeline 写入 stage trace
+      // V8.0 P1-04: 类型安全的 stageBuffer 替代 (context.trace as any)._lastRealisticFilterDetails
       if (context.trace) {
-        (context.trace as any)._lastRealisticFilterDetails = {
+        writeStageBuffer(context.trace, 'realisticFilter', {
           filteredByCommonality,
           filteredByFoodForm,
           filteredByBudget,
@@ -224,7 +225,7 @@ export class RealisticFilterService {
           filteredBySkill,
           filteredByEquipment,
           fallbackTriggered,
-        };
+        });
       }
 
       return candidates
@@ -239,9 +240,9 @@ export class RealisticFilterService {
       );
     }
 
-    // V7.9: 暂存过滤器追踪详情，供 executeRolePipeline 写入 stage trace
+    // V8.0 P1-04: 类型安全的 stageBuffer 替代 (context.trace as any)._lastRealisticFilterDetails
     if (context.trace) {
-      (context.trace as any)._lastRealisticFilterDetails = {
+      writeStageBuffer(context.trace, 'realisticFilter', {
         filteredByCommonality,
         filteredByFoodForm,
         filteredByBudget,
@@ -250,7 +251,7 @@ export class RealisticFilterService {
         filteredBySkill,
         filteredByEquipment,
         fallbackTriggered,
-      };
+      });
     }
 
     return filtered;

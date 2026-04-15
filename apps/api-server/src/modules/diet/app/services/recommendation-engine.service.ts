@@ -14,12 +14,8 @@ import {
 } from '../recommendation/types/recommendation.types';
 import { HealthModifierContext } from '../recommendation/modifier/health-modifier-engine.service';
 import { FoodPoolCacheService } from '../recommendation/pipeline/food-pool-cache.service';
-import {
-  hasAllergenConflict,
-  matchAllergens,
-} from '../recommendation/filter/allergen-filter.util';
+import { matchAllergens } from '../recommendation/filter/allergen-filter.util';
 import { ExplanationGeneratorService } from '../recommendation/explanation/explanation-generator.service';
-import { t } from '../recommendation/utils/i18n-messages';
 import {
   TieredCacheManager,
   TieredCacheNamespace,
@@ -32,8 +28,9 @@ import {
   inferAcquisitionChannel,
   AcquisitionChannel,
   SceneContext,
+  type SceneType,
 } from '../recommendation/types/recommendation.types';
-import { MealCompositionScorer } from '../recommendation/meal/meal-composition-scorer.service';
+
 import { ReplacementFeedbackInjectorService } from '../recommendation/feedback/replacement-feedback-injector.service';
 import { RealisticFilterService } from '../recommendation/filter/realistic-filter.service';
 import { FoodI18nService } from './food-i18n.service';
@@ -41,25 +38,21 @@ import { RequestContextService } from '../../../../core/context/request-context.
 import { ScoringConfigService } from '../recommendation/context/scoring-config.service';
 import { PipelineBuilderService } from '../recommendation/pipeline/pipeline-builder.service';
 import { SceneResolverService } from '../recommendation/context/scene-resolver.service';
-import { RecipeAssemblerService } from '../recommendation/meal/recipe-assembler.service';
+
 import type { EnrichedProfileWithDomain } from '../../../user/app/services/profile/profile-resolver.service';
 import { DailyPlanContextService } from '../recommendation/context/daily-plan-context.service';
-import { InsightGeneratorService } from '../recommendation/explanation/insight-generator.service';
-import type { InsightContext } from '../recommendation/types/insight.types';
-// V7.3 P3-D: 模板集成
+
 import { MealTemplateService } from '../recommendation/meal/meal-template.service';
-// V7.3 P3-E: Factor学习集成
 import { FactorLearnerService } from '../recommendation/optimization/factor-learner.service';
-// V7.6 P1-B: 画像聚合 Facade
 import { ProfileAggregatorService } from '../recommendation/profile/profile-aggregator.service';
-// V7.6 P1-C: 策略解析 Facade
 import { StrategyResolverFacade } from '../recommendation/pipeline/strategy-resolver-facade.service';
-// V7.9 P1-14: Trace 持久化
 import { RecommendationTraceService } from '../recommendation/tracing/recommendation-trace.service';
 import { FeatureFlagService } from '../../../feature-flag/feature-flag.service';
 import { v4 as uuidv4 } from 'uuid';
+import { PipelineContextFactory } from '../recommendation/context/pipeline-context-factory.service';
+import { RecommendationResultProcessor } from './recommendation-result-processor.service';
 
-/** V6 2.8: 反向解释 API 返回结构 */
+/** 反向解释 API 返回结构 */
 export interface WhyNotResult {
   /** 食物名 */
   foodName: string;
@@ -84,7 +77,7 @@ export interface WhyNotResult {
 export class RecommendationEngineService implements OnModuleInit {
   private readonly logger = new Logger(RecommendationEngineService.name);
 
-  /** V6.2 3.9: 分析画像 TieredCache namespace（与 AnalysisEventListener 共享 key 空间） */
+  /** 分析画像 TieredCache namespace（与 AnalysisEventListener 共享 key 空间） */
   private analysisProfileCache!: TieredCacheNamespace<AnalysisShortTermProfile>;
 
   constructor(
@@ -92,45 +85,43 @@ export class RecommendationEngineService implements OnModuleInit {
     private readonly foodScorer: FoodScorerService,
     private readonly mealAssembler: MealAssemblerService,
     private readonly foodPoolCache: FoodPoolCacheService,
-    /** V6 2.8: 推荐解释生成器（反向解释 API） */
+    /** 推荐解释生成器（反向解释 API） */
     private readonly explanationGenerator: ExplanationGeneratorService,
-    /** V6.2 3.9: TieredCacheManager — 创建分析画像共享 namespace，替代直接 Redis 读取 */
+    /** TieredCacheManager — 创建分析画像共享 namespace */
     private readonly cacheManager: TieredCacheManager,
-    /** V6.3 P2-8: 菜谱服务 — 用于菜谱模式组装 */
+    /** 菜谱服务 — 用于菜谱模式组装 */
     private readonly recipeService: RecipeService,
-    /** V6.5 Phase 2C/2D: 整餐组合评分器 */
-    private readonly mealCompositionScorer: MealCompositionScorer,
-    /** V6.5 Phase 3G: 现实性过滤服务（场景动态 realism + 候选过滤） */
+    /** 现实性过滤服务（场景动态 realism + 候选过滤） */
     private readonly realisticFilterService: RealisticFilterService,
-    /** V6.6 Phase 2-B: 替换反馈权重注入服务 */
+    /** 替换反馈权重注入服务 */
     private readonly replacementFeedbackInjector: ReplacementFeedbackInjectorService,
-    /** V6.6 Phase 3-B: 推荐结果多语言服务 */
+    /** 推荐结果多语言服务 */
     private readonly foodI18nService: FoodI18nService,
-    /** V6.6 Phase 3-B: 请求上下文（读取 locale） */
+    /** 请求上下文（读取 locale） */
     private readonly requestCtx: RequestContextService,
     private readonly scoringConfigService: ScoringConfigService,
-    /** V6.7 Phase 3-D: 推荐管道核心（Recall → Rank → Rerank） */
+    /** 推荐管道核心（Recall → Rank → Rerank） */
     private readonly pipelineBuilder: PipelineBuilderService,
-    /** V6.9 Phase 1-E: 场景解析器（替代 inferAcquisitionChannel） */
+    /** 场景解析器 */
     private readonly sceneResolver: SceneResolverService,
-    /** V6.9 Phase 1-E: 菜谱组装器（管道后组装菜谱方案） */
-    private readonly recipeAssembler: RecipeAssemblerService,
-    /** V7.1 P3-A: 日计划上下文服务（跨餐补偿计算） */
+    /** 日计划上下文服务（跨餐补偿计算） */
     private readonly dailyPlanContextService: DailyPlanContextService,
-    /** V7.2 P3-C: 结构化洞察生成器（替代 ExplanationGenerator.generateStructuredInsights 的 9 参数调用） */
-    private readonly insightGenerator: InsightGeneratorService,
-    /** V7.3 P3-D: 餐食模板服务（场景模板匹配 + 槽位填充） */
+    /** 餐食模板服务（场景模板匹配 + 槽位填充） */
     private readonly mealTemplateService: MealTemplateService,
-    /** V7.3 P3-E: Factor 权重学习服务（用户反馈驱动的因子强度调整） */
+    /** Factor 权重学习服务（用户反馈驱动的因子强度调整） */
     private readonly factorLearnerService: FactorLearnerService,
-    /** V7.6 P1-B: 画像聚合 Facade — 替代 9 个画像相关 DI */
+    /** 画像聚合 Facade */
     private readonly profileAggregator: ProfileAggregatorService,
-    /** V7.6 P1-C: 策略解析 Facade — 替代 strategyResolver + abTestingService */
+    /** 策略解析 Facade */
     private readonly strategyFacade: StrategyResolverFacade,
-    /** V7.9 P1-14: 推荐 Trace 持久化服务 */
+    /** 推荐 Trace 持久化服务 */
     private readonly traceService: RecommendationTraceService,
-    /** V7.9 P1-14: Feature Flag 服务（控制 trace 开关） */
+    /** Feature Flag 服务（控制 trace 开关） */
     private readonly featureFlagService: FeatureFlagService,
+    /** PipelineContext 工厂（统一构建 PipelineContext） */
+    private readonly contextFactory: PipelineContextFactory,
+    /** 推荐结果后处理器（模板填充 + 份量调整 + 聚合 + 菜谱 + 洞察） */
+    private readonly resultProcessor: RecommendationResultProcessor,
   ) {}
 
   onModuleInit(): void {
@@ -156,7 +147,7 @@ export class RecommendationEngineService implements OnModuleInit {
     dailyTarget: { calories: number; protein: number },
     userProfile?: UserProfileConstraints,
   ): Promise<MealRecommendation> {
-    // V7.6 P1-B: 通过 ProfileAggregatorService 聚合全部画像数据
+    // 通过 ProfileAggregatorService 聚合全部画像数据
     const [allFoods, profileData, resolvedStrategy, analysisProfile] =
       await Promise.all([
         this.getAllFoods(),
@@ -178,17 +169,17 @@ export class RecommendationEngineService implements OnModuleInit {
       regionalBoostMap,
     } = profileData;
 
-    // V6.3 P1-1: shortTerm 和 contextual 直接从 enrichedProfile 中获取
+    // shortTerm 和 contextual 直接从 enrichedProfile 中获取
     const shortTermProfile = enrichedProfile.shortTerm;
     const contextualProfile = enrichedProfile.contextual;
 
-    // V6.3 P1-1: 使用 EnrichedProfileContext 作为 userProfile（向后兼容，因为 extends UserProfileConstraints）
+    // 使用 EnrichedProfileContext 作为 userProfile（向后兼容，因为 extends UserProfileConstraints）
     // 如果调用方传入了 userProfile，将其非空字段合并到 enrichedProfile 上（调用方覆盖优先）
     const mergedProfile: EnrichedProfileContext = userProfile
       ? { ...enrichedProfile, ...this.pickDefinedFields(userProfile) }
       : enrichedProfile;
 
-    // V6.3 P2-8: 菜谱优先模式 — 当策略配置 assembly.preferRecipe=true 时
+    // 菜谱优先模式 — 当策略配置 assembly.preferRecipe=true 时
     // 提前异步获取评分菜谱候选
     let scoredRecipes: ScoredRecipe[] | null = null;
     const assemblyPolicy = resolvedStrategy?.config?.assembly;
@@ -212,7 +203,7 @@ export class RecommendationEngineService implements OnModuleInit {
               foodPreferences:
                 enrichedProfile.declared?.foodPreferences ?? undefined,
               cookingSkillLevel: mergedProfile.cookingSkillLevel,
-              // V6.5 Phase 1K: 传入日期类型，支持烹饪时间维度评分
+              // 传入日期类型，支持烹饪时间维度评分
               dayType:
                 (contextualProfile?.dayType as 'weekday' | 'weekend') ??
                 undefined,
@@ -227,7 +218,7 @@ export class RecommendationEngineService implements OnModuleInit {
       }
     }
 
-    // V6.9 Phase 1-E: 场景解析 — 替代 inferAcquisitionChannel，提供完整场景上下文
+    // 场景解析 — 提供完整场景上下文
     let sceneContext: SceneContext;
     try {
       sceneContext = await this.sceneResolver.resolve(
@@ -248,7 +239,7 @@ export class RecommendationEngineService implements OnModuleInit {
               primaryEatingLocation: null, // 当前 declared 画像中暂无此字段
             }
           : null,
-        // V7.1 P3-B: 厨房设备画像（HOME_COOK 场景下注入设备约束）
+        // 厨房设备画像（HOME_COOK 场景下注入设备约束）
         kitchenProfile ?? null,
       );
     } catch (err) {
@@ -298,21 +289,20 @@ export class RecommendationEngineService implements OnModuleInit {
       resolvedStrategy,
       contextualProfile,
       analysisProfile,
-      scoredRecipes, // V6.3 P2-8: 菜谱候选
-      // V6.9 Phase 1-E: 使用 SceneResolver 解析的渠道
+      scoredRecipes,
       channel: sceneContext.channel,
-      userId, // V6.5 Phase 3D
-      weightOverrides: learnedWeightOverrides, // V6.6 Phase 3-A: per-segment 学习权重
-      sceneContext, // V6.9 Phase 1-E: 完整场景上下文
-      effectiveGoal, // V7.0 Phase 3-A: 有效目标
-      goalProgress, // V7.0 Phase 3-A: 目标进度
+      userId,
+      weightOverrides: learnedWeightOverrides,
+      sceneContext,
+      effectiveGoal,
+      goalProgress,
       domainProfiles: (enrichedProfile as EnrichedProfileWithDomain)
-        .domainProfiles, // V7.0 Phase 3-A: 领域画像
-      kitchenProfile: kitchenProfile ?? null, // V7.1 P3-B: 厨房设备画像
-      substitutions, // V7.1 P3-D: 高频替换模式
+        .domainProfiles,
+      kitchenProfile: kitchenProfile ?? null,
+      substitutions,
     });
 
-    // V6.9 Phase 2-E: 推荐成功后回写渠道使用行为（fire-and-forget，不阻塞返回）
+    // 推荐成功后回写渠道使用行为（fire-and-forget，不阻塞返回）
     if (userId && sceneContext.channel) {
       this.sceneResolver
         .recordChannelUsage(userId, mealType, sceneContext.channel)
@@ -323,13 +313,13 @@ export class RecommendationEngineService implements OnModuleInit {
         );
     }
 
-    // V6.6 Phase 3-B: 多语言食物名覆盖（非 zh 时从 food_translations 读取）
+    // 多语言食物名覆盖（非 zh 时从 food_translations 读取）
     const locale = this.requestCtx.locale;
     return this.foodI18nService.applyToMealRecommendation(result, locale);
   }
 
   /**
-   * V6.3 P1-1: 从 UserProfileConstraints 中提取已定义（非 undefined）的字段
+   * 从 UserProfileConstraints 中提取已定义（非 undefined）的字段
    * 用于调用方传入的 userProfile 覆盖 enrichedProfile 的基础约束字段
    */
   private pickDefinedFields(
@@ -345,7 +335,7 @@ export class RecommendationEngineService implements OnModuleInit {
   }
 
   /**
-   * V6.3 P2-8: 烹饪技能等级 → 最大菜谱难度
+   * 烹饪技能等级 → 最大菜谱难度
    */
   private cookingSkillToMaxDifficulty(skill?: string): number {
     const map: Record<string, number> = {
@@ -363,12 +353,16 @@ export class RecommendationEngineService implements OnModuleInit {
   /**
    * 场景推荐 — 外卖 / 便利店 / 在家做
    *
-   * V4 修复: 改用结构化过滤（category + processingLevel + isProcessed）
-   * 替代之前的 tag 过滤，因为 takeout/fast_food 等标签在食物库中不存在，
-   * 导致三个场景全部回退到无过滤池，返回相同结果。
+   * V8.0 P2-01: 改为通过标准管道（PipelineBuilder.executeRolePipeline）执行，
+   * 每个场景构建独立的 PipelineContext（设置对应的 channel + sceneContext），
+   * 依次调用管道后由 RecommendationResultProcessor 后处理结果。
+   * 三个场景并行执行以保持性能，跨场景去重通过累积 usedNames 实现。
    *
-   * 每个场景使用独立的 `ScenarioFilter` 对食物做硬过滤，
-   * 然后叠加场景特定的评分偏移，最后用 stochastic top-K 保证差异性。
+   * 这样场景推荐自动享受全部管道能力：
+   * - Factor 链评分（10 因子）
+   * - 现实性过滤（RealisticFilter）
+   * - Pipeline Trace 追踪
+   * - 洞察生成（InsightGenerator）
    */
   async recommendByScenario(
     userId: string,
@@ -383,277 +377,173 @@ export class RecommendationEngineService implements OnModuleInit {
     convenience: MealRecommendation;
     homeCook: MealRecommendation;
   }> {
-    // V7.6 P1-B: 通过 ProfileAggregatorService 聚合场景画像数据
-    const [allFoods, scenarioData] = await Promise.all([
-      this.getAllFoods(),
-      this.profileAggregator.aggregateForScenario(userId, mealType),
-    ]);
+    // 聚合画像数据（与 recommendMeal 一致）
+    const [allFoods, scenarioData, resolvedStrategy, analysisProfile] =
+      await Promise.all([
+        this.getAllFoods(),
+        this.profileAggregator.aggregateForScenario(userId, mealType),
+        this.strategyFacade.resolveStrategyForUser(userId, goalType),
+        this.getAnalysisProfile(userId),
+      ]);
     const { recentFoodNames, enrichedProfile } = scenarioData;
 
-    // V6.3 P1-1: 合并调用方传入的 userProfile 覆盖
+    // 合并调用方传入的 userProfile 覆盖
     const mergedProfile: EnrichedProfileContext = userProfile
       ? { ...enrichedProfile, ...this.pickDefinedFields(userProfile) }
       : enrichedProfile;
 
-    const baseConstraints = this.constraintGenerator.generateConstraints(
-      goalType,
-      consumed,
-      target,
-      dailyTarget,
-      mealType,
-      mergedProfile,
-      mergedProfile.timezone,
-      // V6.3 P1-3: 暴食风险时段
-      mergedProfile.observed?.bingeRiskHours,
-    );
+    const shortTermProfile = enrichedProfile.shortTerm;
+    const contextualProfile = enrichedProfile.contextual;
 
-    // V6.3 P1-1: 使用合并后的画像获取过敏原
-    const userAllergens = mergedProfile.allergens;
+    // 跨场景去重：外卖 → 便利店 → 在家做，累积已用食物名
+    const usedAcrossScenarios = new Set<string>(recentFoodNames);
 
-    /**
-     * 场景过滤器：基于食物的结构化字段而非标签
-     * 每个场景返回一个 predicate 函数 + 评分偏移策略
-     */
-    type ScenarioFilter = {
-      /** 硬过滤: 该场景下食物是否可用 */
-      filter: (food: FoodLibrary) => boolean;
-      /** 软偏移: 场景内评分乘数 (0.5~1.5) */
-      scoreBoost: (food: FoodLibrary) => number;
-    };
-
-    const SCENARIO_FILTERS: Record<string, ScenarioFilter> = {
-      /**
-       * 外卖场景 — 偏好加工/复合类食物，适合外卖点餐
-       * 筛选: composite 类 OR processingLevel >= 2 OR 含 meal_prep_friendly 标签
-       * 偏移: composite +20%, 高加工 +10%
-       */
-      takeout: {
-        filter: (f) => {
-          if (f.category === 'composite') return true;
-          if (f.processingLevel >= 2) return true;
-          if (
-            (f.tags || []).some((t) =>
-              ['meal_prep_friendly', 'quick_prep'].includes(t),
-            )
-          )
-            return true;
-          // 蛋白 + 主食类也常见于外卖
-          if (
-            ['protein', 'grain'].includes(f.category) &&
-            f.processingLevel >= 1
-          )
-            return true;
-          return false;
-        },
-        scoreBoost: (f) => {
-          let boost = 1.0;
-          if (f.category === 'composite') boost *= 1.2;
-          if (f.processingLevel >= 2) boost *= 1.1;
-          return boost;
-        },
+    // 场景配置：channel + sceneType + realismLevel
+    const SCENARIO_CONFIGS: Array<{
+      key: 'takeout' | 'convenience' | 'homeCook';
+      channel: AcquisitionChannel;
+      sceneType: SceneType;
+      realismLevel: 'relaxed' | 'strict' | 'normal';
+    }> = [
+      {
+        key: 'takeout',
+        channel: AcquisitionChannel.DELIVERY,
+        sceneType: 'eating_out',
+        realismLevel: 'relaxed',
       },
-      /**
-       * 便利店场景 — 即食/预包装/低加工小份量
-       * 筛选: snack/beverage/fruit/dairy 类，或 standardServingG <= 200
-       * 偏移: 小份量 +15%, fruit/dairy +10%
-       */
-      convenience: {
-        filter: (f) => {
-          if (['snack', 'beverage', 'fruit', 'dairy'].includes(f.category))
-            return true;
-          if (f.standardServingG <= 200 && f.processingLevel >= 1) return true;
-          // 蛋白小包装（如即食鸡胸肉、茶叶蛋）
-          if (f.category === 'protein' && f.standardServingG <= 150)
-            return true;
-          return false;
-        },
-        scoreBoost: (f) => {
-          let boost = 1.0;
-          if (['fruit', 'dairy'].includes(f.category)) boost *= 1.1;
-          if (f.standardServingG <= 150) boost *= 1.15;
-          if ((f.tags || []).includes('low_calorie')) boost *= 1.1;
-          return boost;
-        },
+      {
+        key: 'convenience',
+        channel: AcquisitionChannel.CONVENIENCE,
+        sceneType: 'convenience_meal',
+        realismLevel: 'strict',
       },
-      /**
-       * 在家做场景 — 天然/低加工/可烹饪的原材料
-       * 筛选: processingLevel <= 2 AND !isProcessed，或天然食材类
-       * 偏移: 天然蔬菜/蛋白 +15%, processingLevel=1 +10%
-       */
-      homeCook: {
-        filter: (f) => {
-          if (!f.isProcessed && f.processingLevel <= 2) return true;
-          if (
-            ['veggie', 'protein', 'grain', 'fruit'].includes(f.category) &&
-            f.processingLevel <= 2
-          )
-            return true;
-          return false;
-        },
-        scoreBoost: (f) => {
-          let boost = 1.0;
-          if (['veggie', 'protein'].includes(f.category)) boost *= 1.15;
-          if (f.processingLevel === 1) boost *= 1.1;
-          if ((f.tags || []).includes('natural')) boost *= 1.05;
-          return boost;
-        },
+      {
+        key: 'homeCook',
+        channel: AcquisitionChannel.HOME_COOK,
+        sceneType: 'home_cooking',
+        realismLevel: 'normal',
       },
-    };
+    ];
 
-    const scenarioLabels: Record<string, string> = {
-      takeout: t('scenario.takeout'),
-      convenience: t('scenario.convenience'),
-      homeCook: t('scenario.homeCook'),
-    };
+    // 串行执行三个场景，保证 usedAcrossScenarios 跨场景去重有效
+    const results: Record<string, MealRecommendation> = {};
 
-    // 使用不同的 excludeNames 种子确保三个场景有差异性
-    const usedAcrossScenarios = new Set<string>();
+    for (const scenarioConfig of SCENARIO_CONFIGS) {
+      const sceneContext: SceneContext = {
+        channel: scenarioConfig.channel,
+        sceneType: scenarioConfig.sceneType,
+        realismLevel: scenarioConfig.realismLevel,
+        confidence: 1.0,
+        source: 'rule_inferred',
+        sceneConstraints: {},
+      };
 
-    const buildForScenario = (scenarioKey: string): MealRecommendation => {
-      const scenario = SCENARIO_FILTERS[scenarioKey];
-      const scenarioName = scenarioLabels[scenarioKey];
+      const picks: ScoredFood[] = [];
+      const usedNames = new Set<string>(usedAcrossScenarios);
 
-      // Step 1: 结构化场景过滤
-      let candidates = allFoods.filter((f) => {
-        // 基础过滤: mealType + 过敏原 + excludeTags
-        const foodMealTypes: string[] = f.mealTypes || [];
-        if (foodMealTypes.length > 0 && !foodMealTypes.includes(mealType))
-          return false;
-        if (userAllergens?.length && hasAllergenConflict(f, userAllergens))
-          return false;
-        if (baseConstraints.excludeTags.length > 0) {
-          const tags = f.tags || [];
-          if (baseConstraints.excludeTags.some((et) => tags.includes(et)))
-            return false;
-        }
-        // 热量上限
-        const servingCal = (f.calories * f.standardServingG) / 100;
-        if (servingCal > baseConstraints.maxCalories) return false;
-        // 场景硬过滤
-        return scenario.filter(f);
-      });
-
-      // V5 2.12: 渐进放宽 — 从 3→2→1 逐步降低最低候选数
-      // 而非直接回退到全池，保持场景特色
-      if (candidates.length < 3) {
-        // 放宽 Level 1: 保留场景过滤，放宽 excludeTags + 热量上限
-        candidates = allFoods.filter((f) => {
-          const foodMealTypes: string[] = f.mealTypes || [];
-          if (foodMealTypes.length > 0 && !foodMealTypes.includes(mealType))
-            return false;
-          if (userAllergens?.length && hasAllergenConflict(f, userAllergens))
-            return false;
-          return scenario.filter(f);
-        });
-      }
-
-      if (candidates.length < 2) {
-        // 放宽 Level 2: 去掉场景过滤，仅保留 mealType + 过敏原
-        candidates = allFoods.filter((f) => {
-          const foodMealTypes: string[] = f.mealTypes || [];
-          if (foodMealTypes.length > 0 && !foodMealTypes.includes(mealType))
-            return false;
-          if (userAllergens?.length && hasAllergenConflict(f, userAllergens))
-            return false;
-          return true;
-        });
-      }
-
-      if (candidates.length < 1) {
-        // 放宽 Level 3: 仅保留过敏原过滤（终极兜底）
-        candidates = allFoods.filter(
-          (f) =>
-            !userAllergens?.length || !hasAllergenConflict(f, userAllergens),
-        );
-      }
-
-      // Step 2: 评分 — 基础 9 维评分 × 场景偏移
-      const nutritionTargets = this.pipelineBuilder.buildNutritionTargets(
-        userProfile as EnrichedProfileContext | undefined,
+      const constraints = this.constraintGenerator.generateConstraints(
+        goalType,
+        consumed,
+        target,
+        dailyTarget,
+        mealType,
+        mergedProfile,
+        mergedProfile.timezone,
+        mergedProfile.observed?.bingeRiskHours,
       );
-      const scored = this.foodScorer
-        .scoreFoodsWithServing(
-          candidates,
-          goalType,
-          target,
-          { allergens: userAllergens, goalType },
+
+      const ctx = this.contextFactory.build(
+        {
+          allFoods,
           mealType,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          nutritionTargets,
-        )
-        .map((sf) => ({
-          ...sf,
-          score: sf.score * scenario.scoreBoost(sf.food),
-        }));
+          goalType,
+          consumed,
+          target,
+          dailyTarget,
+          excludeNames: Array.from(usedAcrossScenarios),
+          userProfile: mergedProfile,
+          shortTermProfile,
+          contextualProfile,
+          analysisProfile,
+          resolvedStrategy,
+          channel: scenarioConfig.channel,
+          sceneContext,
+          userId,
+        } as MealFromPoolRequest,
+        { constraints, picks, usedNames },
+      );
 
-      // Step 3: 去重 — 排除最近食物 + 其他场景已选食物
-      const excludeNames = [...recentFoodNames, ...usedAcrossScenarios];
-      const picks = this.mealAssembler.diversify(scored, excludeNames, 2);
+      const sceneAdjustedRealism = this.realisticFilterService.adjustForScene(
+        resolvedStrategy?.config?.realism,
+        mealType,
+        contextualProfile?.dayType as string | undefined,
+      );
 
-      // 记录本场景选出的食物，让下一个场景避开
-      for (const p of picks) {
+      const mealPolicy = resolvedStrategy?.config?.meal;
+      const roles =
+        mealPolicy?.mealRoles?.[mealType] ??
+        MEAL_ROLES[mealType] ?? ['carb', 'protein', 'veggie'];
+
+      const { picks: finalPicks, allCandidates, degradations } =
+        await this.pipelineBuilder.executeRolePipeline(
+          ctx,
+          roles,
+          sceneAdjustedRealism,
+        );
+
+      // 累积本场景选出的食物，让后续场景避开
+      for (const p of finalPicks) {
         usedAcrossScenarios.add(p.food.name);
       }
 
-      return this.mealAssembler.aggregateMealResult(
-        picks,
-        t('scenario.tip', {
-          scenarioName,
-          calories: picks.reduce((s, p) => s + p.servingCalories, 0),
-        }),
+      const result = await this.resultProcessor.process({
+        finalPicks,
+        allCandidates,
+        degradations,
+        mealType,
         goalType,
-        userProfile,
-      );
-    };
+        target,
+        userProfile: mergedProfile,
+        sceneContext,
+        userId,
+      });
+
+      results[scenarioConfig.key] = result;
+    }
 
     return {
-      takeout: buildForScenario('takeout'),
-      convenience: buildForScenario('convenience'),
-      homeCook: buildForScenario('homeCook'),
+      takeout: results['takeout'],
+      convenience: results['convenience'],
+      homeCook: results['homeCook'],
     };
   }
 
   // ─── 从食物池推荐（三阶段 Pipeline: Recall → Rank → Rerank） ───
 
   /**
-   * V6.2 Phase 3.1: 参数对象化 — 单一 MealFromPoolRequest 替代 19 个位置参数
-   * V6.4: 改为 async 以支持 L2 缓存预热
+   * 参数对象化 — 单一 MealFromPoolRequest 替代 19 个位置参数
    */
   async recommendMealFromPool(
     req: MealFromPoolRequest,
   ): Promise<MealRecommendation> {
     const {
-      allFoods,
       mealType,
       goalType,
       consumed,
       target,
       dailyTarget,
       excludeNames,
-      userPreferences,
-      feedbackStats,
       userProfile,
-      preferenceProfile,
-      regionalBoostMap,
-      cfScores,
-      weightOverrides,
-      mealWeightOverrides,
-      shortTermProfile,
       resolvedStrategy,
       contextualProfile,
-      analysisProfile,
-      channel, // V6.4 Phase 3.3
-      userId, // V6.5 Phase 3D
-      sceneContext, // V6.9 Phase 1-E
-      effectiveGoal, // V7.0 Phase 3-A
-      goalProgress, // V7.0 Phase 3-A
-      domainProfiles, // V7.0 Phase 3-A
-      crossMealAdjustment: reqCrossMealAdjustment, // V7.1 P3-A
-      kitchenProfile, // V7.1 P3-B
-      substitutions, // V7.1 P3-D
+      channel,
+      userId,
+      sceneContext,
+      effectiveGoal,
+      goalProgress,
+      crossMealAdjustment: reqCrossMealAdjustment,
+      kitchenProfile,
+      substitutions,
     } = req;
     const scoredRecipes = req.scoredRecipes;
     const constraints = this.constraintGenerator.generateConstraints(
@@ -664,19 +554,19 @@ export class RecommendationEngineService implements OnModuleInit {
       mealType,
       userProfile,
       userProfile?.timezone,
-      // V6.3 P1-3: 从 EnrichedProfileContext 提取暴食风险时段
+      // 从 EnrichedProfileContext 提取暴食风险时段
       (userProfile as EnrichedProfileContext | undefined)?.observed
         ?.bingeRiskHours,
     );
 
-    // V6 2.3: MealPolicy 覆盖餐次角色模板
+    // MealPolicy 覆盖餐次角色模板
     const mealPolicy = resolvedStrategy?.config?.meal;
     const roles = mealPolicy?.mealRoles?.[mealType] ??
       MEAL_ROLES[mealType] ?? ['carb', 'protein', 'veggie'];
     const picks: ScoredFood[] = [];
     const usedNames = new Set(excludeNames);
 
-    // V7.1 P3-A: 跨餐营养补偿 — 如果上游未传入 crossMealAdjustment，
+    // 跨餐营养补偿 — 如果上游未传入 crossMealAdjustment，
     // 且有 dailyPlanState（日计划上下文），则实时计算
     let crossMealAdjustment = reqCrossMealAdjustment;
     if (!crossMealAdjustment && req.dailyPlanState) {
@@ -696,7 +586,7 @@ export class RecommendationEngineService implements OnModuleInit {
       }
     }
 
-    // ─── V6.3 P2-8: 菜谱优先组装模式 ───
+    // ─── 菜谱优先组装模式 ───
     // 当策略配置 assembly.preferRecipe=true 且有评分菜谱候选时，
     // 先尝试菜谱组装路径。成功则直接返回，失败则降级到原有食物组合模式。
     const assemblyPolicy = resolvedStrategy?.config?.assembly;
@@ -706,40 +596,13 @@ export class RecommendationEngineService implements OnModuleInit {
       scoredRecipes.length > 0
     ) {
       // 先完成一轮角色召回+评分，获取食物候选池（用于菜谱缺口补充）
-      const ctx: PipelineContext = {
-        allFoods,
-        mealType,
-        goalType,
-        target,
+      const ctx: PipelineContext = this.contextFactory.build(req, {
         constraints,
-        usedNames,
         picks: [],
-        userId, // V6.5 Phase 3D
-        userPreferences,
-        feedbackStats,
-        userProfile,
-        preferenceProfile,
-        regionalBoostMap,
-        cfScores,
-        weightOverrides,
-        mealWeightOverrides,
-        shortTermProfile,
-        resolvedStrategy,
-        contextualProfile,
-        analysisProfile,
-        channel, // V6.4 Phase 3.3
-        sceneContext, // V6.9 Phase 1-E
-        effectiveGoal, // V7.0 Phase 3-A: 有效目标
-        goalProgress, // V7.0 Phase 3-A: 目标进度
-        domainProfiles, // V7.0 Phase 3-A: 领域画像
-        crossMealAdjustment, // V7.1 P3-A: 跨餐营养补偿
-        kitchenProfile, // V7.1 P3-B: 厨房设备画像
-        substitutions, // V7.1 P3-D: 高频替换模式
-        realismOverride: req.realismOverride, // V7.2 P3-B: 用户端现实策略覆盖
-        tuning: this.scoringConfigService.getTuning(), // V7.5 P3-A: 调参配置
-      };
+        usedNames,
+      });
 
-      // V6.5 Phase 3G: 菜谱模式也应用场景动态 realism
+      // 菜谱模式也应用场景动态 realism
       const recipeDayType = contextualProfile?.dayType as string | undefined;
       const recipeRealism = this.realisticFilterService.adjustForScene(
         resolvedStrategy?.config?.realism,
@@ -755,8 +618,7 @@ export class RecommendationEngineService implements OnModuleInit {
             ctx,
             role,
           );
-          // V6.5 Phase 3G: 现实性过滤
-          // V7.1 P3-B: 传入 kitchenProfile 用于设备约束过滤
+          // 现实性过滤 + 设备约束过滤
           const realistic = this.realisticFilterService.filterByRealism(
             recalled,
             ctx,
@@ -769,7 +631,7 @@ export class RecommendationEngineService implements OnModuleInit {
           );
           supplementCandidates.push(...ranked.slice(0, 5));
         } catch (e) {
-          // V6.8 Phase 3-F: 菜谱补充召回失败，跳过该角色
+          // 菜谱补充召回失败，跳过该角色
           this.logger.warn(
             `Recipe supplement recall/rank failed for role "${role}", skipping: ${e}`,
           );
@@ -804,47 +666,20 @@ export class RecommendationEngineService implements OnModuleInit {
     }
 
     // 构建 Pipeline 共享上下文
-    // V6.6 Phase 2-B: 预取替换反馈权重 Map（一次 DB 查询，在角色循环外执行）
-    // V6.7 Phase 2-E: 传入 mealType 实现餐次感知替换反馈
+    // 预取替换反馈权重 Map（一次 DB 查询，在角色循环外执行）
     const replacementWeightMap = userId
       ? await this.replacementFeedbackInjector.getWeightMap(userId, mealType)
       : null;
 
-    const ctx: PipelineContext = {
-      allFoods,
-      mealType,
-      goalType,
-      target,
+    const ctx: PipelineContext = this.contextFactory.build(req, {
       constraints,
-      usedNames,
       picks,
-      userId, // V6.5 Phase 3D
-      replacementWeightMap, // V6.6 Phase 2-B: 替换反馈权重
-      userPreferences,
-      feedbackStats,
-      userProfile,
-      preferenceProfile,
-      regionalBoostMap,
-      cfScores,
-      weightOverrides, // V5 4.7: 在线学习权重
-      mealWeightOverrides, // V5 4.8: A/B 实验组餐次权重覆盖
-      shortTermProfile, // V6 1.9: 短期画像上下文
-      resolvedStrategy, // V6 2.2: 策略引擎解析结果
-      contextualProfile, // V6 2.18: 上下文画像（场景检测）
-      analysisProfile, // V6.1 Phase 3.5: 分析画像
-      channel, // V6.4 Phase 3.3: 获取渠道
-      sceneContext, // V6.9 Phase 1-E: 场景上下文
-      effectiveGoal, // V7.0 Phase 3-A: 有效目标（含阶段 + 权重调整）
-      goalProgress, // V7.0 Phase 3-A: 目标进度（合规率 + 执行率）
-      domainProfiles, // V7.0 Phase 3-A: 领域画像
-      crossMealAdjustment, // V7.1 P3-A: 跨餐营养补偿
-      kitchenProfile, // V7.1 P3-B: 厨房设备画像
-      substitutions, // V7.1 P3-D: 高频替换模式
-      realismOverride: req.realismOverride, // V7.2 P3-B: 用户端现实策略覆盖
-      tuning: this.scoringConfigService.getTuning(), // V7.5 P3-A: 调参配置
-    };
+      usedNames,
+      replacementWeightMap,
+      crossMealAdjustment,
+    });
 
-    // V7.9 P1-14: 初始化管道追踪（受 feature flag 控制）
+    // 初始化管道追踪（受 feature flag 控制）
     const traceEnabled = userId
       ? await this.featureFlagService.isEnabled('pipeline_trace_enabled', userId)
       : await this.featureFlagService.isEnabled('pipeline_trace_enabled');
@@ -858,7 +693,7 @@ export class RecommendationEngineService implements OnModuleInit {
       };
     }
 
-    // V7.3 P3-D: 模板匹配 — 如果场景和餐次有对应模板，设置到上下文中
+    // 模板匹配 — 如果场景和餐次有对应模板，设置到上下文中
     const sceneType = sceneContext?.sceneType ?? 'general';
     const matchedTemplate = this.mealTemplateService.matchTemplate(
       sceneType,
@@ -871,7 +706,7 @@ export class RecommendationEngineService implements OnModuleInit {
       );
     }
 
-    // V7.3 P3-E: 加载用户 Factor 强度调整（冷启动用户返回空 Map，不影响评分）
+    // 加载用户 Factor 强度调整（冷启动用户返回空 Map，不影响评分）
     if (userId && goalType) {
       try {
         const factorAdjustments =
@@ -897,8 +732,8 @@ export class RecommendationEngineService implements OnModuleInit {
       }
     }
 
-    // V6.5 Phase 3G: 场景动态 realism 调整
-    // 在策略已合并用户偏好（Phase 3F）后，根据当前场景（工作日/周末 × 餐次）进一步收紧
+    // 场景动态 realism 调整
+    // 在策略合并用户偏好后，根据当前场景（工作日/周末 × 餐次）进一步收紧
     const dayType = contextualProfile?.dayType as string | undefined;
     const sceneAdjustedRealism = this.realisticFilterService.adjustForScene(
       resolvedStrategy?.config?.realism,
@@ -906,7 +741,7 @@ export class RecommendationEngineService implements OnModuleInit {
       dayType,
     );
 
-    // V6.7 Phase 3-D: 委托 PipelineBuilder 执行角色循环管道
+    // 委托 PipelineBuilder 执行角色循环管道
     const {
       picks: finalPicks,
       allCandidates,
@@ -917,7 +752,7 @@ export class RecommendationEngineService implements OnModuleInit {
       sceneAdjustedRealism,
     );
 
-    // V6.8 Phase 3-F: 记录降级信息（如有）
+    // 记录降级信息（如有）
     if (degradations.length > 0) {
       this.logger.warn(
         `Pipeline degradations for user ${userId ?? 'anonymous'}, meal ${mealType}: ` +
@@ -925,7 +760,7 @@ export class RecommendationEngineService implements OnModuleInit {
       );
     }
 
-    // V7.9 P1-14: 持久化管道追踪数据（异步，不阻塞推荐响应）
+    // 持久化管道追踪数据（异步，不阻塞推荐响应）
     if (ctx.trace) {
       ctx.trace.completedAt = Date.now();
       const pipelineStartedAt = ctx.trace.startedAt;
@@ -952,9 +787,9 @@ export class RecommendationEngineService implements OnModuleInit {
           strategyVersion: resolvedStrategy?.resolvedAt?.toString() ?? undefined,
           pipelineContext: ctx,
           topFoods: finalPicks,
-          foodPoolSize: allFoods.length,
+          foodPoolSize: req.allFoods.length,
           durationMs: totalDurationMs,
-          // V7.9 新增字段
+          // 新增字段
           traceData: ctx.trace,
           strategyName: resolvedStrategy?.strategyName ?? 'default',
           sceneName: sceneContext?.sceneType ?? 'general',
@@ -977,123 +812,27 @@ export class RecommendationEngineService implements OnModuleInit {
         });
     }
 
-    // V7.3 P3-D: 模板填充 — 如果匹配到模板且有足够候选，尝试用模板重新组织推荐结果
-    let templateFilledPicks = finalPicks;
-    let templateId: string | undefined;
-    if (matchedTemplate && allCandidates.length > 0) {
-      try {
-        const templateResult = this.mealTemplateService.fillTemplate(
-          matchedTemplate,
-          allCandidates,
-          target.calories,
-        );
-        // 使用模板填充结果替代角色管道的 picks（如果覆盖度 >= 0.5）
-        if (
-          templateResult.coverageScore >= 0.5 &&
-          templateResult.filledSlots.length > 0
-        ) {
-          templateFilledPicks = templateResult.filledSlots.map(
-            (slot) => slot.food,
-          );
-          templateId = templateResult.templateId;
-          this.logger.debug(
-            `Template ${templateResult.templateId} applied: ${templateResult.filledSlots.length} slots, ` +
-              `coverage=${templateResult.coverageScore.toFixed(2)}, match=${templateResult.templateMatchScore.toFixed(2)}`,
-          );
-        }
-      } catch (err) {
-        this.logger.debug(
-          `Template filling failed for ${matchedTemplate.id}, falling back to role pipeline: ${(err as Error).message}`,
-        );
-        // 模板填充失败，静默降级到角色管道结果
-      }
-    }
-
-    const adjustedPicks = this.mealAssembler.adjustPortions(
-      templateFilledPicks,
-      target.calories,
-      userProfile?.portionTendency, // V6.2 Phase 2.14: 份量倾向
-    );
-    const tip = this.mealAssembler.buildTip(
+    // 委托 ResultProcessor 执行后处理
+    return this.resultProcessor.process({
+      finalPicks,
+      allCandidates,
+      degradations,
       mealType,
       goalType,
       target,
-      adjustedPicks.reduce((s, p) => s + p.servingCalories, 0),
-    );
-    const result = this.mealAssembler.aggregateMealResult(
-      adjustedPicks,
-      tip,
-      goalType,
       userProfile,
-    );
-    // V5 2.1: 附带候选池供全局优化器使用
-    result.candidates = allCandidates;
-
-    // V6.5 Phase 2D: 附带整餐组合评分（Rerank 后的最终评分）
-    if (adjustedPicks.length >= 2) {
-      result.compositionScore =
-        this.mealCompositionScorer.scoreMealComposition(adjustedPicks);
-    }
-
-    // V6.8 Phase 3-F: 附带降级记录
-    if (degradations.length > 0) {
-      result.degradations = degradations;
-    }
-
-    // V7.3 P3-D: 附带模板 ID
-    if (templateId) {
-      result.templateId = templateId;
-    }
-
-    // V6.9 Phase 1-E: 菜谱组装 — 将推荐食物组装为可执行菜谱方案
-    if (sceneContext) {
-      try {
-        const { recipes, planTheme, executionDifficulty } =
-          await this.recipeAssembler.assembleRecipes(
-            adjustedPicks,
-            sceneContext,
-            mealType,
-          );
-        if (recipes.length > 0) {
-          result.recipes = recipes;
-          result.planTheme = planTheme;
-          result.executionDifficulty = executionDifficulty;
-        }
-      } catch (err) {
-        this.logger.warn(
-          `RecipeAssembler failed for user ${userId ?? 'anonymous'}, meal ${mealType}: ${(err as Error).message}`,
-        );
-        // 菜谱组装失败不影响推荐结果，静默降级
-      }
-    }
-
-    // V6.9 Phase 2-B / V7.2 P3-C: 结构化洞察 — 使用 InsightGeneratorService + InsightContext 参数对象
-    try {
-      const insightCtx: InsightContext = {
-        foods: adjustedPicks,
-        target,
-        sceneContext: sceneContext ?? null,
-        dailyPlan: req.dailyPlanState ?? null,
-        effectiveGoal,
-        goalProgress: goalProgress ?? null,
-        crossMealAdjustment,
-        substitutions: substitutions ?? null,
-      };
-      const insights = this.insightGenerator.generate(insightCtx);
-      if (insights.length > 0) {
-        result.insights = insights;
-      }
-    } catch (err) {
-      this.logger.debug(
-        `InsightGenerator.generate failed for user ${userId ?? 'anonymous'}: ${(err as Error).message}`,
-      );
-      // 洞察生成失败不影响推荐结果
-    }
-
-    return result;
+      matchedTemplate,
+      sceneContext,
+      userId,
+      effectiveGoal,
+      goalProgress,
+      crossMealAdjustment,
+      substitutions,
+      dailyPlanState: req.dailyPlanState,
+    });
   }
 
-  // ─── V6 2.8: 反向解释 API — "为什么不推荐 X？" ───
+  // ─── 反向解释 API — "为什么不推荐 X？" ───
 
   /**
    * 对指定食物名进行评分 + 过滤分析，生成反向解释
@@ -1250,7 +989,7 @@ export class RecommendationEngineService implements OnModuleInit {
       userProfile as EnrichedProfileContext | undefined,
     );
 
-    // V6.7 Phase 1-B: 加载中心化评分参数
+    // 加载中心化评分参数
     const scoringConfig = await this.scoringConfigService.getConfig();
 
     const detailed = this.foodScorer.scoreFoodDetailed({
@@ -1266,7 +1005,7 @@ export class RecommendationEngineService implements OnModuleInit {
       nutritionGaps: undefined,
       healthModifierCache: undefined,
       nutritionTargets,
-      scoringConfig, // V6.7 Phase 1-B
+      scoringConfig,
     });
 
     const scored: ScoredFood = {
@@ -1321,7 +1060,7 @@ export class RecommendationEngineService implements OnModuleInit {
 
   async getAllFoods(): Promise<FoodLibrary[]> {
     const foods = await this.foodPoolCache.getVerifiedFoods();
-    // V5 2.7: 同步品类微量营养素均值到评分服务（用于缺失值插补）
+    // 同步品类微量营养素均值到评分服务（用于缺失值插补）
     this.foodScorer.setCategoryMicroDefaults(
       this.foodPoolCache.getCategoryMicroAverages(),
     );
@@ -1329,7 +1068,7 @@ export class RecommendationEngineService implements OnModuleInit {
   }
 
   /**
-   * V6.1 Phase 3.5 → V6.2 3.9: 通过 TieredCache 共享 namespace 读取分析画像
+   * 通过 TieredCache 共享 namespace 读取分析画像
    *
    * 设计决策：不注入 AnalysisEventListener（food 模块），避免 DietModule ↔ FoodModule 循环依赖。
    * 通过 TieredCacheManager.createNamespace 的幂等性，两边共享同一个 namespace 实例。

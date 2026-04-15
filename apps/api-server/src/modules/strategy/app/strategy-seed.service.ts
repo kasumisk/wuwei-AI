@@ -78,6 +78,16 @@ const PRESET_STRATEGIES: PresetStrategy[] = [
         detailLevel: 'simple',
         showNutritionRadar: false,
       },
+      // V8.0 P1-05: 14维 baseWeights — 新用户温启动侧重热门度与可获得性
+      rank: {
+        baseWeights: {
+          //         [cal,  prot, carbs, fat,  qual, sat,  glyc, nDens, inflam, fiber, season, exec, popul, acqui]
+          fat_loss:     [0.10, 0.10, 0.06, 0.04, 0.05, 0.05, 0.07, 0.06, 0.04, 0.03, 0.04, 0.08, 0.14, 0.14],
+          muscle_gain:  [0.10, 0.13, 0.07, 0.04, 0.05, 0.04, 0.05, 0.05, 0.03, 0.03, 0.04, 0.08, 0.15, 0.14],
+          health:       [0.05, 0.04, 0.04, 0.03, 0.10, 0.05, 0.06, 0.10, 0.06, 0.05, 0.05, 0.08, 0.14, 0.15],
+          habit:        [0.06, 0.05, 0.04, 0.04, 0.08, 0.07, 0.05, 0.05, 0.04, 0.03, 0.04, 0.10, 0.17, 0.18],
+        },
+      },
     },
     isDefault: false,
     priority: 10,
@@ -113,6 +123,16 @@ const PRESET_STRATEGIES: PresetStrategy[] = [
       explain: {
         detailLevel: 'standard',
         showNutritionRadar: true,
+      },
+      // V8.0 P1-05: 14维 baseWeights — 回归用户侧重历史偏好，popularity/acquisition 适度提升
+      rank: {
+        baseWeights: {
+          //         [cal,  prot, carbs, fat,  qual, sat,  glyc, nDens, inflam, fiber, season, exec, popul, acqui]
+          fat_loss:     [0.13, 0.12, 0.07, 0.05, 0.05, 0.06, 0.08, 0.07, 0.05, 0.04, 0.03, 0.07, 0.09, 0.09],
+          muscle_gain:  [0.12, 0.16, 0.08, 0.05, 0.05, 0.04, 0.06, 0.06, 0.04, 0.03, 0.03, 0.08, 0.10, 0.10],
+          health:       [0.06, 0.05, 0.04, 0.04, 0.11, 0.06, 0.07, 0.12, 0.08, 0.06, 0.05, 0.07, 0.09, 0.10],
+          habit:        [0.07, 0.06, 0.05, 0.04, 0.09, 0.08, 0.06, 0.06, 0.05, 0.04, 0.04, 0.10, 0.13, 0.13],
+        },
       },
     },
     isDefault: false,
@@ -154,6 +174,16 @@ const PRESET_STRATEGIES: PresetStrategy[] = [
         detailLevel: 'detailed',
         showNutritionRadar: true,
       },
+      // V8.0 P1-05: 14维 baseWeights — 精准营养侧重宏量营养素匹配，降低 popularity
+      rank: {
+        baseWeights: {
+          //         [cal,  prot, carbs, fat,  qual, sat,  glyc, nDens, inflam, fiber, season, exec, popul, acqui]
+          fat_loss:     [0.16, 0.15, 0.08, 0.06, 0.06, 0.07, 0.10, 0.09, 0.07, 0.05, 0.02, 0.04, 0.03, 0.02],
+          muscle_gain:  [0.14, 0.20, 0.10, 0.06, 0.05, 0.04, 0.07, 0.08, 0.04, 0.03, 0.02, 0.06, 0.06, 0.05],
+          health:       [0.07, 0.06, 0.05, 0.04, 0.14, 0.06, 0.09, 0.16, 0.11, 0.08, 0.04, 0.04, 0.03, 0.03],
+          habit:        [0.09, 0.07, 0.06, 0.05, 0.11, 0.10, 0.07, 0.07, 0.06, 0.05, 0.04, 0.09, 0.08, 0.06],
+        },
+      },
     },
     isDefault: false,
     priority: 10,
@@ -193,6 +223,16 @@ const PRESET_STRATEGIES: PresetStrategy[] = [
       explain: {
         detailLevel: 'standard',
         showNutritionRadar: false,
+      },
+      // V8.0 P1-05: 14维 baseWeights — 探索发现策略均衡分布，seasonality/quality 略高
+      rank: {
+        baseWeights: {
+          //         [cal,  prot, carbs, fat,  qual, sat,  glyc, nDens, inflam, fiber, season, exec, popul, acqui]
+          fat_loss:     [0.12, 0.11, 0.06, 0.05, 0.06, 0.06, 0.08, 0.07, 0.05, 0.04, 0.06, 0.07, 0.09, 0.08],
+          muscle_gain:  [0.11, 0.14, 0.08, 0.05, 0.06, 0.04, 0.06, 0.06, 0.04, 0.03, 0.05, 0.08, 0.10, 0.10],
+          health:       [0.05, 0.05, 0.04, 0.04, 0.12, 0.06, 0.07, 0.12, 0.08, 0.06, 0.06, 0.07, 0.09, 0.09],
+          habit:        [0.07, 0.05, 0.05, 0.04, 0.09, 0.08, 0.05, 0.06, 0.05, 0.04, 0.06, 0.10, 0.13, 0.13],
+        },
       },
     },
     isDefault: true,
@@ -243,6 +283,16 @@ const PRESET_STRATEGIES: PresetStrategy[] = [
         detailLevel: 'standard',
         showNutritionRadar: false,
       },
+      // V8.0 P1-05: 14维 baseWeights — 外卖用户侧重可获得性和热门度，降低 executability
+      rank: {
+        baseWeights: {
+          //         [cal,  prot, carbs, fat,  qual, sat,  glyc, nDens, inflam, fiber, season, exec, popul, acqui]
+          fat_loss:     [0.11, 0.10, 0.06, 0.04, 0.04, 0.05, 0.07, 0.06, 0.04, 0.03, 0.03, 0.03, 0.15, 0.19],
+          muscle_gain:  [0.10, 0.14, 0.07, 0.04, 0.04, 0.04, 0.05, 0.05, 0.03, 0.03, 0.03, 0.03, 0.16, 0.19],
+          health:       [0.05, 0.04, 0.04, 0.03, 0.09, 0.05, 0.06, 0.09, 0.06, 0.05, 0.04, 0.03, 0.16, 0.21],
+          habit:        [0.06, 0.04, 0.04, 0.04, 0.07, 0.07, 0.05, 0.05, 0.04, 0.03, 0.03, 0.04, 0.19, 0.25],
+        },
+      },
     },
     isDefault: false,
     priority: 10,
@@ -290,6 +340,16 @@ const PRESET_STRATEGIES: PresetStrategy[] = [
         detailLevel: 'simple',
         showNutritionRadar: false,
       },
+      // V8.0 P1-05: 14维 baseWeights — 食堂侧重 popularity 和 acquisition，executability 最低
+      rank: {
+        baseWeights: {
+          //         [cal,  prot, carbs, fat,  qual, sat,  glyc, nDens, inflam, fiber, season, exec, popul, acqui]
+          fat_loss:     [0.10, 0.09, 0.05, 0.04, 0.04, 0.05, 0.06, 0.05, 0.04, 0.03, 0.04, 0.02, 0.20, 0.19],
+          muscle_gain:  [0.09, 0.13, 0.07, 0.04, 0.04, 0.04, 0.05, 0.04, 0.03, 0.02, 0.04, 0.02, 0.20, 0.19],
+          health:       [0.05, 0.04, 0.04, 0.03, 0.08, 0.05, 0.05, 0.08, 0.05, 0.04, 0.05, 0.02, 0.21, 0.21],
+          habit:        [0.05, 0.04, 0.04, 0.03, 0.06, 0.06, 0.04, 0.04, 0.04, 0.03, 0.04, 0.03, 0.25, 0.25],
+        },
+      },
     },
     isDefault: false,
     priority: 10,
@@ -333,6 +393,16 @@ const PRESET_STRATEGIES: PresetStrategy[] = [
       explain: {
         detailLevel: 'detailed',
         showNutritionRadar: true,
+      },
+      // V8.0 P1-05: 14维 baseWeights — 糖尿病侧重 glycemic/carbs/fiber，精准碳水控制
+      rank: {
+        baseWeights: {
+          //         [cal,  prot, carbs, fat,  qual, sat,  glyc, nDens, inflam, fiber, season, exec, popul, acqui]
+          fat_loss:     [0.10, 0.10, 0.10, 0.05, 0.05, 0.05, 0.16, 0.08, 0.06, 0.08, 0.02, 0.05, 0.05, 0.05],
+          muscle_gain:  [0.09, 0.14, 0.09, 0.04, 0.05, 0.04, 0.14, 0.07, 0.04, 0.07, 0.02, 0.06, 0.07, 0.08],
+          health:       [0.05, 0.05, 0.06, 0.03, 0.10, 0.05, 0.18, 0.12, 0.08, 0.09, 0.03, 0.05, 0.05, 0.06],
+          habit:        [0.06, 0.05, 0.06, 0.04, 0.08, 0.07, 0.15, 0.07, 0.05, 0.07, 0.03, 0.08, 0.09, 0.10],
+        },
       },
     },
     isDefault: false,
@@ -378,6 +448,16 @@ const PRESET_STRATEGIES: PresetStrategy[] = [
         detailLevel: 'detailed',
         showNutritionRadar: true,
       },
+      // V8.0 P1-05: 14维 baseWeights — 痛风侧重 inflammation/quality/nutrientDensity
+      rank: {
+        baseWeights: {
+          //         [cal,  prot, carbs, fat,  qual, sat,  glyc, nDens, inflam, fiber, season, exec, popul, acqui]
+          fat_loss:     [0.10, 0.08, 0.06, 0.05, 0.08, 0.05, 0.07, 0.08, 0.15, 0.06, 0.02, 0.06, 0.07, 0.07],
+          muscle_gain:  [0.09, 0.12, 0.07, 0.05, 0.07, 0.04, 0.06, 0.07, 0.14, 0.05, 0.02, 0.07, 0.07, 0.08],
+          health:       [0.05, 0.05, 0.04, 0.03, 0.12, 0.05, 0.06, 0.12, 0.18, 0.07, 0.03, 0.05, 0.07, 0.08],
+          habit:        [0.06, 0.05, 0.05, 0.04, 0.10, 0.07, 0.05, 0.07, 0.16, 0.05, 0.03, 0.08, 0.09, 0.10],
+        },
+      },
     },
     isDefault: false,
     priority: 10,
@@ -421,6 +501,16 @@ const PRESET_STRATEGIES: PresetStrategy[] = [
       explain: {
         detailLevel: 'standard',
         showNutritionRadar: true,
+      },
+      // V8.0 P1-05: 14维 baseWeights — 素食侧重 quality/nutrientDensity/fiber，补充营养
+      rank: {
+        baseWeights: {
+          //         [cal,  prot, carbs, fat,  qual, sat,  glyc, nDens, inflam, fiber, season, exec, popul, acqui]
+          fat_loss:     [0.11, 0.11, 0.06, 0.05, 0.08, 0.05, 0.07, 0.10, 0.06, 0.08, 0.04, 0.06, 0.06, 0.07],
+          muscle_gain:  [0.10, 0.15, 0.08, 0.05, 0.07, 0.04, 0.05, 0.09, 0.04, 0.07, 0.04, 0.07, 0.07, 0.08],
+          health:       [0.05, 0.05, 0.04, 0.03, 0.13, 0.05, 0.06, 0.15, 0.09, 0.10, 0.05, 0.05, 0.07, 0.08],
+          habit:        [0.06, 0.05, 0.05, 0.04, 0.10, 0.07, 0.05, 0.08, 0.06, 0.08, 0.05, 0.08, 0.11, 0.12],
+        },
       },
     },
     isDefault: false,
@@ -469,6 +559,16 @@ const PRESET_STRATEGIES: PresetStrategy[] = [
       explain: {
         detailLevel: 'simple',
         showNutritionRadar: false,
+      },
+      // V8.0 P1-05: 14维 baseWeights — 预算敏感侧重 acquisition/popularity/executability
+      rank: {
+        baseWeights: {
+          //         [cal,  prot, carbs, fat,  qual, sat,  glyc, nDens, inflam, fiber, season, exec, popul, acqui]
+          fat_loss:     [0.10, 0.09, 0.06, 0.04, 0.04, 0.05, 0.06, 0.05, 0.04, 0.03, 0.03, 0.10, 0.13, 0.18],
+          muscle_gain:  [0.09, 0.13, 0.07, 0.04, 0.04, 0.04, 0.05, 0.04, 0.03, 0.03, 0.03, 0.10, 0.13, 0.18],
+          health:       [0.05, 0.04, 0.04, 0.03, 0.08, 0.05, 0.05, 0.08, 0.05, 0.04, 0.04, 0.09, 0.16, 0.20],
+          habit:        [0.05, 0.04, 0.04, 0.03, 0.06, 0.06, 0.04, 0.04, 0.04, 0.03, 0.03, 0.11, 0.18, 0.25],
+        },
       },
     },
     isDefault: false,

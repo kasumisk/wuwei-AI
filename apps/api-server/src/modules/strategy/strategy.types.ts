@@ -33,7 +33,8 @@ export const SCORE_DIMENSION_NAMES = [
   'fiber',
   'seasonality',
   'executability',
-  'popularity', // V7.0: 同步 V6.9 新增的大众化评分维度
+  'popularity', // V6.9: 大众化评分维度
+  'acquisition', // V8.0 P1-06: 食物可获得性评分维度（与 SCORE_DIMENSIONS 同步）
 ] as const;
 
 export type StrategyScoreDimension = (typeof SCORE_DIMENSION_NAMES)[number];
@@ -46,7 +47,7 @@ export type StrategyScoreDimension = (typeof SCORE_DIMENSION_NAMES)[number];
  * 所有字段均为可选: 缺失字段使用系统默认值（recommendation.types.ts 中的硬编码常量）
  */
 export interface RankPolicyConfig {
-  /** 基础评分权重覆盖（按目标类型，12 维数组） */
+  /** 基础评分权重覆盖（按目标类型，14 维数组，顺序: calories/protein/carbs/fat/quality/satiety/glycemic/nutrientDensity/inflammation/fiber/seasonality/executability/popularity/acquisition） */
   baseWeights?: Partial<Record<GoalType, number[]>>;
   /** 餐次权重修正系数覆盖 */
   mealModifiers?: Record<
@@ -392,6 +393,43 @@ export interface ResolvedStrategy {
   config: StrategyConfig;
   /** 解析时间戳 */
   resolvedAt: number;
+}
+
+// ─── 策略实体类型（对应 Prisma Strategy 表） ───
+
+/**
+ * 策略实体 — 对应 strategy 表的 TypeScript 类型
+ *
+ * 替代 Prisma 自动生成的类型，在非 Prisma 层提供类型安全。
+ * 所有 StrategyService 的返回值使用此类型，消除 `Promise<any>`。
+ */
+export interface StrategyEntity {
+  id: string;
+  name: string;
+  description: string | null;
+  scope: string;
+  scopeTarget: string | null;
+  config: StrategyConfig;
+  status: string;
+  version: number;
+  priority: number;
+  createdAt: Date;
+  updatedAt: Date;
+  contextCondition: ContextStrategyCondition | null;
+}
+
+/**
+ * 策略分配实体 — 对应 strategy_assignment 表的 TypeScript 类型
+ */
+export interface StrategyAssignmentEntity {
+  id: string;
+  userId: string;
+  strategyId: string | null;
+  assignmentType: string;
+  source: string | null;
+  isActive: boolean;
+  activeFrom: Date | null;
+  activeUntil: Date | null;
 }
 
 // ─── 策略分配记录 ───

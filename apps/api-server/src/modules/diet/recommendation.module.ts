@@ -73,6 +73,10 @@ import { StrategyResolverFacade } from './app/recommendation/pipeline/strategy-r
 // V7.6 P2-B/C: 解释拆分子服务
 import { MealExplanationService } from './app/recommendation/explanation/meal-explanation.service';
 import { ComparisonExplanationService } from './app/recommendation/explanation/comparison-explanation.service';
+// V8.0 P1-01: PipelineContext 工厂
+import { PipelineContextFactory } from './app/recommendation/context/pipeline-context-factory.service';
+// V8.0 P1-02: 推荐结果后处理器
+import { RecommendationResultProcessor } from './app/services/recommendation-result-processor.service';
 
 /** 推荐管道核心 providers */
 const RECOMMENDATION_PROVIDERS = [
@@ -133,6 +137,10 @@ const RECOMMENDATION_PROVIDERS = [
   // V7.6 P2-B/C: 解释拆分子服务
   MealExplanationService,
   ComparisonExplanationService,
+  // V8.0 P1-01: PipelineContext 工厂
+  PipelineContextFactory,
+  // V8.0 P1-02: 推荐结果后处理器
+  RecommendationResultProcessor,
 ];
 
 @Module({

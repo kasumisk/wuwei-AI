@@ -15,6 +15,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import type { FoodLibrary } from '../../../../food/food.types';
 import type { PipelineContext } from '../types/recommendation.types';
 import type { ScoringExplanation } from '../types/scoring-explanation.interface';
+import { writeStageBuffer } from '../types/pipeline.types';
 import {
   DEFAULT_SCORING_CHAIN_CONFIG,
   type ScoringAdjustment,
@@ -179,10 +180,9 @@ export class ScoringChainService {
       });
     }
 
-    // V7.9: 记录链式评分因子追踪信息
+    // V8.0 P1-04: 类型安全的 stageBuffer 替代 (ctx.trace as any)._lastScoringChainDetails
     if (ctx.trace) {
       const factorNames = activeFactors.map((f) => f.name);
-      // 统计每个因子的总调整次数
       const factorHitCounts: Record<string, number> = {};
       for (const f of activeFactors) factorHitCounts[f.name] = 0;
       for (const r of results) {
@@ -192,12 +192,12 @@ export class ScoringChainService {
           }
         }
       }
-      (ctx.trace as any)._lastScoringChainDetails = {
+      writeStageBuffer(ctx.trace, 'scoringChain', {
         activeFactors: factorNames,
         disabledFactors: resolvedConfig.disabledFactors,
         candidateCount: candidates.length,
         factorHitCounts,
-      };
+      });
     }
 
     return results;

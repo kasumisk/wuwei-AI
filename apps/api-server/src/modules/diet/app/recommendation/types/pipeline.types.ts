@@ -395,6 +395,62 @@ export interface PipelineTrace {
   stages: PipelineStageTrace[];
   /** 管道汇总信息 */
   summary?: PipelineTraceSummary;
+  /**
+   * V8.0 P1-04: 阶段间临时数据缓冲区
+   *
+   * 替代原 `(ctx.trace as any)._lastXxxDetails` 模式，
+   * 由下游服务在执行阶段写入，由 executeRolePipeline 在阶段结束时读取并清除。
+   * 使用类型安全的 key → 具体 detail interface 映射。
+   */
+  stageBuffer?: Partial<StageBufferMap>;
+}
+
+/**
+ * V8.0 P1-04: stageBuffer 的类型安全 key → value 映射
+ *
+ * 每个 key 对应一个下游服务在执行阶段写入的详情对象。
+ * executeRolePipeline 在阶段结束时读取对应 key 的值，合并到 PipelineStageTrace.details 中。
+ */
+export interface StageBufferMap {
+  recallMerge: RecallMergeBufferDetails;
+  realisticFilter: RealisticFilterBufferDetails;
+  scoringChain: ScoringChainBufferDetails;
+  healthModifier: HealthModifierBufferDetails;
+}
+
+/** recallCandidates 三路合并后写入的各路召回计数 */
+export interface RecallMergeBufferDetails {
+  ruleCandidates: number;
+  semanticCandidates: number;
+  cfCandidates: number;
+  mergedTotal: number;
+}
+
+/** RealisticFilterService 写入的各阶段过滤计数 */
+export interface RealisticFilterBufferDetails {
+  filteredByCommonality: number;
+  filteredByFoodForm: number;
+  filteredByBudget: number;
+  filteredByCookTime: number;
+  filteredByCanteen: number;
+  filteredBySkill: number;
+  filteredByEquipment: number;
+  fallbackTriggered: boolean;
+}
+
+/** ScoringChainService 写入的因子执行详情 */
+export interface ScoringChainBufferDetails {
+  activeFactors: string[];
+  disabledFactors: string[];
+  candidateCount: number;
+  factorHitCounts: Record<string, number>;
+}
+
+/** HealthModifierEngine 写入的否决详情 */
+export interface HealthModifierBufferDetails {
+  totalEvaluated: number;
+  vetoedCount: number;
+  vetoedFoods: string[];
 }
 
 /** 单个管道阶段的追踪记录 */
@@ -467,4 +523,32 @@ export interface PipelineTraceSummary {
   realismLevel: string;
   degradations: string[];
   cacheHit: boolean;
+}
+
+// ─── V8.0 P1-04: stageBuffer 辅助函数 ───
+
+/**
+ * 类型安全地向 trace.stageBuffer 写入阶段详情
+ */
+export function writeStageBuffer<K extends keyof StageBufferMap>(
+  trace: PipelineTrace | undefined,
+  key: K,
+  value: StageBufferMap[K],
+): void {
+  if (!trace) return;
+  if (!trace.stageBuffer) trace.stageBuffer = {};
+  trace.stageBuffer[key] = value;
+}
+
+/**
+ * 类型安全地从 trace.stageBuffer 读取并清除阶段详情
+ */
+export function consumeStageBuffer<K extends keyof StageBufferMap>(
+  trace: PipelineTrace | undefined,
+  key: K,
+): StageBufferMap[K] | undefined {
+  if (!trace?.stageBuffer) return undefined;
+  const value = trace.stageBuffer[key];
+  delete trace.stageBuffer[key];
+  return value as StageBufferMap[K] | undefined;
 }
