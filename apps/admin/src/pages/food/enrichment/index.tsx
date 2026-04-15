@@ -176,9 +176,8 @@ const ALL_FIELDS: { value: EnrichableField; label: string; group: string }[] = [
   { value: 'dish_priority', label: '菜品优先级', group: '扩展属性' },
   { value: 'acquisition_difficulty', label: '获取难度', group: '扩展属性' },
   { value: 'compatibility', label: '搭配兼容性', group: '扩展属性' },
-  { value: 'available_channels', label: '可购渠道', group: '扩展属性' },
+  { value: 'available_channels', label: '获取渠道', group: '扩展属性' },
   { value: 'required_equipment', label: '所需设备', group: '扩展属性' },
-  { value: 'availableChannels', label: '获取渠道', group: '扩展属性' },
   
   
 ];

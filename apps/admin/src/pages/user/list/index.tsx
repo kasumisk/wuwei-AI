@@ -456,7 +456,7 @@ export const routeConfig = {
   name: 'user',
   title: '用户管理',
   icon: 'UserOutlined',
-  order: 5,
+  order: 1,
   requireAuth: true,
   requireAdmin: true,
 };

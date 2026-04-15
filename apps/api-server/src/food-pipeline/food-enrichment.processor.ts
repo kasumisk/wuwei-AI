@@ -57,11 +57,13 @@ export class FoodEnrichmentProcessor extends WorkerHost {
       region,
       stages,
       fields,
+      mode,
     } = job.data;
 
     this.logger.log(
       `开始补全任务: foodId=${foodId}, target=${target}, staged=${staged}` +
         `${stages ? `, stages=[${stages.join(',')}]` : ''}` +
+        `${mode ? `, mode=${mode}` : ''}` +
         `, jobId=${job.id}`,
     );
 
@@ -70,6 +72,9 @@ export class FoodEnrichmentProcessor extends WorkerHost {
         await this.processTranslation(foodId, locale ?? 'en-US', staged);
       } else if (target === 'regional') {
         await this.processRegional(foodId, region ?? 'CN', staged);
+      } else if (mode === 'direct_fields') {
+        // V2.1: direct_fields 模式 — 跳过阶段路由，直接对指定 fields 发起一次性补全
+        await this.processDirectFields(foodId, fields, staged);
       } else if (stages && stages.length > 0) {
         // V7.9: 分阶段补全模式，透传 fields 作为 fieldFilter
         await this.processFoodsByStage(foodId, stages, staged, fields);
@@ -82,6 +87,43 @@ export class FoodEnrichmentProcessor extends WorkerHost {
       );
       throw err;
     }
+  }
+
+  // ─── V2.1: 直接字段补全（跳过阶段路由）──────────────────────────────
+
+  /**
+   * V2.1: 直接对指定 fields 发起一次性 AI 补全，不走 5 阶段流程。
+   * 用于 re-enqueue 场景（字段已明确指定）。
+   */
+  private async processDirectFields(
+    foodId: string,
+    fields: EnrichmentJobData['fields'],
+    staged: boolean,
+  ): Promise<void> {
+    if (!fields || fields.length === 0) {
+      this.logger.warn(
+        `processDirectFields: fields 为空，跳过 foodId=${foodId}`,
+      );
+      return;
+    }
+
+    const result = await this.enrichmentService.enrichFieldsDirect(
+      foodId,
+      fields,
+      staged,
+      'ai_enrichment_worker',
+    );
+
+    if (!result) {
+      this.logger.warn(
+        `processDirectFields: 补全无结果 foodId=${foodId}, fields=[${fields.join(',')}]`,
+      );
+      return;
+    }
+
+    this.logger.log(
+      `processDirectFields 完成: foodId=${foodId}, updated=[${result.updated.join(',')}], skipped=[${result.skipped.join(',')}]`,
+    );
   }
 
   // ─── V7.9/V8.7: 分阶段补全（V8.7: 合并后单次写入）──────────────────────

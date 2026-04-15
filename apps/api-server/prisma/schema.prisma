@@ -1102,7 +1102,7 @@ model Foods {
   /// 搜索权重（影响列表排序，默认 100；可人工调高热门食物）
   searchWeight          Int @map("search_weight") @default(100)
   /// 用户点击/使用次数（由行为事件自动累积）
-  popularity            Int                    @default(0)
+  popularity            Int?                    @default(0)
   /// 创建时间
   createdAt             DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
   /// 最后更新时间

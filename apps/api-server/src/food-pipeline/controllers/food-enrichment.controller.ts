@@ -861,6 +861,8 @@ export class FoodEnrichmentController {
         fields: validFields as EnrichableField[],
         target: 'foods' as const,
         staged: body.staged ?? false,
+        // V2.1: re-enqueue 使用 direct_fields 模式，跳过5阶段流程直接补全指定字段
+        mode: 'direct_fields' as const,
       },
       opts: {
         // 强制重入队：jobId 加上时间戳后缀，绕过幂等去重（允许重复入队）
