@@ -14,13 +14,106 @@ export type StrategyScope = 'global' | 'goal_type' | 'experiment' | 'user';
 export type StrategyStatus = 'draft' | 'active' | 'archived';
 export type AssignmentType = 'experiment' | 'manual' | 'segment';
 
+export type GoalType = 'fat_loss' | 'muscle_gain' | 'health' | 'habit';
+
+export const SCORE_DIMENSION_NAMES = [
+  'calories', 'protein', 'carbs', 'fat', 'quality', 'satiety',
+  'glycemic', 'nutrientDensity', 'inflammation', 'fiber',
+  'seasonality', 'executability', 'popularity', 'acquisition',
+] as const;
+export type StrategyScoreDimension = (typeof SCORE_DIMENSION_NAMES)[number];
+
+export interface RankPolicyConfig {
+  baseWeights?: Partial<Record<GoalType, number[]>>;
+  mealModifiers?: Record<string, Partial<Record<StrategyScoreDimension, number>>>;
+  statusModifiers?: Record<string, Partial<Record<StrategyScoreDimension, number>>>;
+}
+
+export interface RecallPolicyConfig {
+  sources?: {
+    rule?: { enabled?: boolean };
+    vector?: { enabled?: boolean; weight?: number };
+    cf?: { enabled?: boolean; weight?: number };
+    popular?: { enabled?: boolean; weight?: number };
+  };
+  shortTermRejectThreshold?: number;
+}
+
+export interface BoostPolicyConfig {
+  preference?: {
+    lovesMultiplier?: number;
+    avoidsMultiplier?: number;
+  };
+  cfBoostCap?: number;
+  shortTerm?: {
+    boostRange?: [number, number];
+    singleRejectPenalty?: number;
+  };
+  similarityPenaltyCoeff?: number;
+}
+
+export interface ExplorationPolicyConfig {
+  baseMin?: number;
+  baseMax?: number;
+  maturityShrink?: number;
+  matureThreshold?: number;
+}
+
+export interface MealPolicyConfig {
+  mealRoles?: Record<string, string[]>;
+  roleCategories?: Record<string, string[]>;
+  mealRatios?: Partial<Record<GoalType, Record<string, number>>>;
+  macroRanges?: Partial<Record<GoalType, { carb: [number, number]; fat: [number, number] }>>;
+}
+
+export type MultiObjectiveDimension = 'health' | 'taste' | 'cost' | 'convenience';
+
+export interface MultiObjectiveConfig {
+  enabled?: boolean;
+  preferences?: Partial<Record<MultiObjectiveDimension, number>>;
+  paretoFrontLimit?: number;
+  tastePreference?: {
+    spicy?: number;
+    sweet?: number;
+    salty?: number;
+    sour?: number;
+    umami?: number;
+    bitter?: number;
+  };
+  costSensitivity?: number;
+}
+
+export interface AssemblyPolicyConfig {
+  preferRecipe?: boolean;
+  diversityLevel?: 'low' | 'medium' | 'high';
+}
+
+export interface ExplainPolicyConfig {
+  detailLevel?: 'simple' | 'standard' | 'detailed';
+  showNutritionRadar?: boolean;
+}
+
+export interface RealismConfig {
+  enabled?: boolean;
+  commonalityThreshold?: number;
+  budgetFilterEnabled?: boolean;
+  cookTimeCapEnabled?: boolean;
+  weekdayCookTimeCap?: number;
+  weekendCookTimeCap?: number;
+  executabilityWeightMultiplier?: number;
+  canteenMode?: boolean;
+}
+
 export interface StrategyConfig {
-  rank?: Record<string, unknown>;
-  recall?: Record<string, unknown>;
-  boost?: Record<string, unknown>;
-  meal?: Record<string, unknown>;
-  multiObjective?: Record<string, unknown>;
-  exploration?: Record<string, unknown>;
+  rank?: RankPolicyConfig;
+  recall?: RecallPolicyConfig;
+  boost?: BoostPolicyConfig;
+  meal?: MealPolicyConfig;
+  multiObjective?: MultiObjectiveConfig;
+  exploration?: ExplorationPolicyConfig;
+  assembly?: AssemblyPolicyConfig;
+  explain?: ExplainPolicyConfig;
+  realism?: RealismConfig;
 }
 
 export interface StrategyDto {

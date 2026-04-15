@@ -2,7 +2,7 @@ export const routeConfig = {
   name: 'subscription',
   title: '订阅与付费',
   icon: 'CrownOutlined',
-  order: 20,
+  order: 22,
   requireAuth: true,
   requireAdmin: true,
 };

@@ -15,7 +15,7 @@ export const routeConfig = {
   name: 'food-records',
   title: '饮食记录',
   icon: 'ProfileOutlined',
-  order: 21,
+  order: 1,
   requireAuth: true,
 };
 

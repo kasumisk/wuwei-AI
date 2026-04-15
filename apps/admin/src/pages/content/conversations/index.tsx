@@ -34,7 +34,7 @@ export const routeConfig = {
   name: 'conversations',
   title: 'AI对话',
   icon: 'CommentOutlined',
-  order: 23,
+  order: 3,
   requireAuth: true,
 };
 

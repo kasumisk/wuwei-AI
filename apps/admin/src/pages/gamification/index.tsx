@@ -3,7 +3,7 @@ export const routeConfig = {
   name: 'gamification',
   title: '游戏化管理',
   icon: 'TrophyOutlined',
-  order: 30,
+  order: 25,
   requireAuth: true,
   requireAdmin: false,
   roles: [],

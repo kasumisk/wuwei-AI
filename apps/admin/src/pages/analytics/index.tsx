@@ -1034,7 +1034,7 @@ export const routeConfig = {
   name: 'analytics',
   title: '数据分析中心',
   icon: 'LineChartOutlined',
-  order: 42,
+  order: 30,
   requireAuth: true,
   requireAdmin: true,
 };

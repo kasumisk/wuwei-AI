@@ -161,6 +161,7 @@ const ALL_FIELDS: { value: EnrichableField; label: string; group: string }[] = [
   { value: 'nutrient_density', label: '营养密度', group: '标签评分' },
   { value: 'commonality_score', label: '大众化评分', group: '标签评分' },
   { value: 'flavor_profile', label: '风味档案', group: '标签评分' },
+  { value: 'popularity', label: '热门度', group: '标签评分' },
   // 扩展属性（Stage 1: food_form；Stage 5: 其余）
   { value: 'food_form', label: '食物形态', group: '扩展属性' },
   { value: 'ingredient_list', label: '原料列表', group: '扩展属性' },

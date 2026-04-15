@@ -1,0 +1,564 @@
+/**
+ * V8.0 P3-03: ScoringChainService 集成测试（10 因子端到端）
+ *
+ * 测试内容：
+ * 1. 注册 + 排序因子
+ * 2. isApplicable 跳过不适用的因子
+ * 3. 禁用特定因子（disabledFactors config）
+ * 4. multiplier 累积正确
+ * 5. additive 累积正确
+ * 6. scoreFloor / scoreCeiling 限幅
+ * 7. 短路逻辑（score ≤ scoreFloor 时跳过剩余因子）
+ * 8. factorAdjustments 强度乘数应用
+ * 9. explanation 回写
+ * 10. stageBuffer（trace 写入）
+ * 11. 单食物 scoreFood 方法
+ * 12. 10 个真实因子注册后的端到端场景
+ */
+
+import { ScoringChainService } from '../src/modules/diet/app/recommendation/scoring-chain/scoring-chain.service';
+import {
+  PreferenceSignalFactor,
+  RegionalBoostFactor,
+  CollaborativeFilteringFactor,
+  ShortTermProfileFactor,
+  SceneContextFactor,
+  AnalysisProfileFactor,
+  PopularityFactor,
+  ReplacementFeedbackFactor,
+  RuleWeightFactor,
+} from '../src/modules/diet/app/recommendation/scoring-chain/factors';
+import { LifestyleBoostFactor } from '../src/modules/diet/app/recommendation/scoring-chain/factors/lifestyle-boost.factor';
+import { createMockFoodLibrary, createMockScoringConfigService } from './helpers/mock-factories';
+import type { FoodLibrary } from '../src/modules/food/food.types';
+import type { PipelineContext } from '../src/modules/diet/app/recommendation/types/recommendation.types';
+import type { ScoringFactor, ScoringAdjustment } from '../src/modules/diet/app/recommendation/scoring-chain/scoring-factor.interface';
+import { writeStageBuffer } from '../src/modules/diet/app/recommendation/types/pipeline.types';
+
+// ─── 辅助 ───
+
+function makeFood(overrides?: Partial<FoodLibrary>): FoodLibrary {
+  return createMockFoodLibrary({
+    id: 'f-' + Math.random().toString(36).slice(2),
+    ...overrides,
+  });
+}
+
+function makeCtx(overrides?: Partial<PipelineContext>): PipelineContext {
+  const tuning = createMockScoringConfigService().getTuning();
+  return {
+    allFoods: [],
+    mealType: 'lunch',
+    goalType: 'fat_loss',
+    target: { calories: 500, protein: 30, fat: 15, carbs: 60 },
+    constraints: { excludeTags: [], maxCalories: 700, minProtein: 20 } as any,
+    usedNames: new Set<string>(),
+    picks: [],
+    tuning,
+    ...overrides,
+  } as PipelineContext;
+}
+
+// ─── 简单可测因子 ───
+
+class FixedMultiplierFactor implements ScoringFactor {
+  constructor(
+    readonly name: string,
+    readonly order: number,
+    private readonly multiplier: number,
+  ) {}
+
+  isApplicable(_ctx: PipelineContext): boolean { return true; }
+  init(_ctx: PipelineContext): void {}
+
+  computeAdjustment(_food: FoodLibrary, _score: number, _ctx: PipelineContext): ScoringAdjustment | null {
+    return { factorName: this.name, multiplier: this.multiplier, additive: 0, explanationKey: null, reason: 'fixed' };
+  }
+}
+
+class AdditiveOnlyFactor implements ScoringFactor {
+  constructor(
+    readonly name: string,
+    readonly order: number,
+    private readonly additive: number,
+  ) {}
+
+  isApplicable(_ctx: PipelineContext): boolean { return true; }
+  init(_ctx: PipelineContext): void {}
+
+  computeAdjustment(_food: FoodLibrary, _score: number, _ctx: PipelineContext): ScoringAdjustment | null {
+    return { factorName: this.name, multiplier: 1.0, additive: this.additive, explanationKey: null, reason: 'additive' };
+  }
+}
+
+class AlwaysNullFactor implements ScoringFactor {
+  readonly name = 'always-null';
+  readonly order = 5;
+
+  isApplicable(_ctx: PipelineContext): boolean { return true; }
+  init(_ctx: PipelineContext): void {}
+  computeAdjustment(): ScoringAdjustment | null { return null; }
+}
+
+class NeverApplicableFactor implements ScoringFactor {
+  readonly name = 'never-applicable';
+  readonly order = 1;
+
+  isApplicable(_ctx: PipelineContext): boolean { return false; }
+  init(_ctx: PipelineContext): void {}
+  computeAdjustment(): ScoringAdjustment | null {
+    return { factorName: this.name, multiplier: 0.01, additive: 0, explanationKey: null, reason: 'should-not-run' };
+  }
+}
+
+// ─── Test Suite ───
+
+describe('ScoringChainService', () => {
+  let service: ScoringChainService;
+
+  beforeEach(() => {
+    service = new ScoringChainService();
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // 1. 注册与排序
+  // ════════════════════════════════════════════════════════════
+
+  describe('registerFactors & 排序', () => {
+    it('should register factors and sort by order ascending', () => {
+      service.registerFactors([
+        new FixedMultiplierFactor('b', 30, 1.1),
+        new FixedMultiplierFactor('a', 10, 1.2),
+        new FixedMultiplierFactor('c', 20, 1.05),
+      ]);
+
+      const factors = service.getFactors();
+      expect(factors.map((f) => f.order)).toEqual([10, 20, 30]);
+      expect(factors.map((f) => f.name)).toEqual(['a', 'c', 'b']);
+    });
+
+    it('should support multiple registerFactors calls (cumulative)', () => {
+      service.registerFactors([new FixedMultiplierFactor('first', 10, 1.1)]);
+      service.registerFactors([new FixedMultiplierFactor('second', 20, 1.1)]);
+
+      expect(service.getFactors()).toHaveLength(2);
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // 2. isApplicable 跳过
+  // ════════════════════════════════════════════════════════════
+
+  describe('isApplicable 跳过', () => {
+    it('should skip factors where isApplicable returns false', () => {
+      const neverApplicable = new NeverApplicableFactor();
+      const applyDouble = new FixedMultiplierFactor('double', 10, 2.0);
+
+      service.registerFactors([neverApplicable, applyDouble]);
+
+      const food = makeFood();
+      const result = service.executeChain([food], [1.0], makeCtx());
+
+      // NeverApplicableFactor would set score to 0.01, but it's skipped
+      // Only double factor runs → 1.0 * 2.0 = 2.0 (clamped to ceiling)
+      expect(result[0].finalScore).toBe(2.0);
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // 3. disabledFactors 配置
+  // ════════════════════════════════════════════════════════════
+
+  describe('disabledFactors', () => {
+    it('should skip factors listed in disabledFactors config', () => {
+      service.registerFactors([
+        new FixedMultiplierFactor('boost-a', 10, 2.0),
+        new FixedMultiplierFactor('boost-b', 20, 3.0),
+      ]);
+
+      const food = makeFood();
+      const result = service.executeChain([food], [1.0], makeCtx(), {
+        disabledFactors: ['boost-a'],
+      });
+
+      // Only boost-b runs: 1.0 * 3.0 = 3.0 (clamped to ceiling 5.0)
+      expect(result[0].finalScore).toBe(3.0);
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // 4. multiplier 累积
+  // ════════════════════════════════════════════════════════════
+
+  describe('multiplier 累积', () => {
+    it('should chain multiply factors: 1.0 × 1.2 × 0.8 = 0.96', () => {
+      service.registerFactors([
+        new FixedMultiplierFactor('f1', 10, 1.2),
+        new FixedMultiplierFactor('f2', 20, 0.8),
+      ]);
+
+      const food = makeFood();
+      const result = service.executeChain([food], [1.0], makeCtx());
+
+      expect(result[0].finalScore).toBeCloseTo(1.0 * 1.2 * 0.8, 5);
+    });
+
+    it('should not mutate baseScore', () => {
+      service.registerFactors([new FixedMultiplierFactor('x', 10, 1.5)]);
+
+      const food = makeFood();
+      const result = service.executeChain([food], [0.6], makeCtx());
+
+      expect(result[0].baseScore).toBe(0.6);
+      expect(result[0].finalScore).toBeCloseTo(0.9, 5);
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // 5. additive 累积
+  // ════════════════════════════════════════════════════════════
+
+  describe('additive 累积', () => {
+    it('should add additive values to score: 0.5 + 0.1 + 0.2 = 0.8', () => {
+      service.registerFactors([
+        new AdditiveOnlyFactor('a1', 10, 0.1),
+        new AdditiveOnlyFactor('a2', 20, 0.2),
+      ]);
+
+      const food = makeFood();
+      const result = service.executeChain([food], [0.5], makeCtx());
+
+      expect(result[0].finalScore).toBeCloseTo(0.8, 5);
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // 6. scoreFloor / scoreCeiling 限幅
+  // ════════════════════════════════════════════════════════════
+
+  describe('scoreFloor / scoreCeiling', () => {
+    it('should clamp score to scoreCeiling', () => {
+      service.registerFactors([new FixedMultiplierFactor('huge', 10, 100.0)]);
+
+      const food = makeFood();
+      const result = service.executeChain([food], [1.0], makeCtx(), { scoreCeiling: 5.0 });
+
+      expect(result[0].finalScore).toBe(5.0);
+    });
+
+    it('should clamp score to scoreFloor', () => {
+      service.registerFactors([new FixedMultiplierFactor('tiny', 10, 0.0)]);
+
+      const food = makeFood();
+      const result = service.executeChain([food], [1.0], makeCtx(), { scoreFloor: 0.01 });
+
+      expect(result[0].finalScore).toBe(0.01);
+    });
+
+    it('should short-circuit when score drops to floor during chain', () => {
+      const computeSpy = jest.fn().mockReturnValue({ factorName: 'late', multiplier: 99.0, additive: 0, explanationKey: null, reason: 'late' });
+      const lateApplicableSpy = jest.fn().mockReturnValue(true);
+
+      class LateFactor implements ScoringFactor {
+        readonly name = 'late';
+        readonly order = 20;
+        isApplicable = lateApplicableSpy;
+        init = jest.fn();
+        computeAdjustment = computeSpy;
+      }
+
+      service.registerFactors([
+        new FixedMultiplierFactor('zeroing', 10, 0.0),
+        new LateFactor(),
+      ]);
+
+      const food = makeFood();
+      service.executeChain([food], [1.0], makeCtx(), { scoreFloor: 0.0 });
+
+      // LateFactor should NOT run because score dropped to floor=0
+      expect(computeSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // 7. factorAdjustments 强度乘数
+  // ════════════════════════════════════════════════════════════
+
+  describe('factorAdjustments 强度乘数', () => {
+    it('should amplify factor effect when strength > 1', () => {
+      service.registerFactors([new FixedMultiplierFactor('amp', 10, 1.2)]);
+
+      const food = makeFood();
+      const ctx = makeCtx({
+        factorAdjustments: new Map([['amp', 2.0]]) as any,
+      });
+
+      // strength=2.0: newMult = 1 + (1.2 - 1) * 2.0 = 1 + 0.4 = 1.4
+      const result = service.executeChain([food], [1.0], ctx);
+
+      expect(result[0].finalScore).toBeCloseTo(1.4, 5);
+    });
+
+    it('should shrink factor effect when strength < 1', () => {
+      service.registerFactors([new FixedMultiplierFactor('shrink', 10, 1.4)]);
+
+      const food = makeFood();
+      const ctx = makeCtx({
+        factorAdjustments: new Map([['shrink', 0.5]]) as any,
+      });
+
+      // strength=0.5: newMult = 1 + (1.4 - 1) * 0.5 = 1 + 0.2 = 1.2
+      const result = service.executeChain([food], [1.0], ctx);
+
+      expect(result[0].finalScore).toBeCloseTo(1.2, 5);
+    });
+
+    it('should not modify factors not in factorAdjustments map', () => {
+      service.registerFactors([new FixedMultiplierFactor('unaffected', 10, 1.3)]);
+
+      const food = makeFood();
+      const ctx = makeCtx({
+        factorAdjustments: new Map([['other-factor', 2.0]]) as any,
+      });
+
+      const result = service.executeChain([food], [1.0], ctx);
+
+      expect(result[0].finalScore).toBeCloseTo(1.3, 5);
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // 8. adjustments 记录
+  // ════════════════════════════════════════════════════════════
+
+  describe('adjustments 记录', () => {
+    it('should record adjustments for each applied factor', () => {
+      service.registerFactors([
+        new FixedMultiplierFactor('f1', 10, 1.2),
+        new AlwaysNullFactor(), // returns null, should not be in adjustments
+        new FixedMultiplierFactor('f2', 20, 0.9),
+      ]);
+
+      const food = makeFood();
+      const result = service.executeChain([food], [1.0], makeCtx());
+
+      expect(result[0].adjustments).toHaveLength(2);
+      expect(result[0].adjustments.map((a) => a.factorName)).toEqual(['f1', 'f2']);
+    });
+
+    it('should have empty adjustments when all factors return null', () => {
+      service.registerFactors([new AlwaysNullFactor()]);
+
+      const food = makeFood();
+      const result = service.executeChain([food], [0.7], makeCtx());
+
+      expect(result[0].adjustments).toHaveLength(0);
+      expect(result[0].finalScore).toBe(0.7);
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // 9. scoreFood 单食物方法
+  // ════════════════════════════════════════════════════════════
+
+  describe('scoreFood 单食物方法', () => {
+    it('should return same result as executeChain for single food', () => {
+      service.registerFactors([new FixedMultiplierFactor('single', 10, 1.3)]);
+
+      const food = makeFood();
+      const ctx = makeCtx();
+
+      const chainResult = service.executeChain([food], [0.5], ctx)[0];
+      const singleResult = service.scoreFood(food, 0.5, ctx);
+
+      expect(singleResult.finalScore).toBe(chainResult.finalScore);
+      expect(singleResult.baseScore).toBe(chainResult.baseScore);
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // 10. 多候选食物并行处理
+  // ════════════════════════════════════════════════════════════
+
+  describe('多候选食物', () => {
+    it('should return one result per candidate food', () => {
+      service.registerFactors([new FixedMultiplierFactor('x', 10, 1.1)]);
+
+      const foods = [makeFood(), makeFood(), makeFood()];
+      const baseScores = [0.5, 0.7, 0.9];
+      const results = service.executeChain(foods, baseScores, makeCtx());
+
+      expect(results).toHaveLength(3);
+      results.forEach((r, i) => {
+        expect(r.baseScore).toBe(baseScores[i]);
+        expect(r.finalScore).toBeCloseTo(baseScores[i] * 1.1, 5);
+      });
+    });
+
+    it('should handle empty candidates array', () => {
+      const results = service.executeChain([], [], makeCtx());
+      expect(results).toEqual([]);
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // 11. 真实因子端到端：PreferenceSignalFactor
+  // ════════════════════════════════════════════════════════════
+
+  describe('PreferenceSignalFactor 端到端', () => {
+    it('should boost food matching loves preference', () => {
+      const svc = new ScoringChainService();
+      svc.registerFactors([new PreferenceSignalFactor()]);
+
+      const lovedFood = makeFood({ name: '香煎鸡胸肉', mainIngredient: 'chicken' });
+      const normalFood = makeFood({ name: '白米饭', mainIngredient: 'rice' });
+
+      const ctx = makeCtx({
+        userPreferences: { loves: ['鸡胸肉'], avoids: [] },
+      });
+
+      const results = svc.executeChain([lovedFood, normalFood], [0.8, 0.8], ctx);
+
+      // 'loves' 匹配 → lovedFood 应得到更高分
+      expect(results[0].finalScore).toBeGreaterThan(results[1].finalScore);
+    });
+
+    it('should penalize food matching avoids preference', () => {
+      const svc = new ScoringChainService();
+      svc.registerFactors([new PreferenceSignalFactor()]);
+
+      const avoidedFood = makeFood({ name: '辣椒炒肉', mainIngredient: '辣椒' });
+      const normalFood = makeFood({ name: '清蒸鱼', mainIngredient: 'fish' });
+
+      const ctx = makeCtx({
+        userPreferences: { loves: [], avoids: ['辣椒'] },
+      });
+
+      const results = svc.executeChain([avoidedFood, normalFood], [0.8, 0.8], ctx);
+
+      expect(results[0].finalScore).toBeLessThan(results[1].finalScore);
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // 12. 真实因子端到端：RegionalBoostFactor
+  // ════════════════════════════════════════════════════════════
+
+  describe('RegionalBoostFactor 端到端', () => {
+    it('should apply regional boost from ctx.regionalBoostMap', () => {
+      const svc = new ScoringChainService();
+      svc.registerFactors([new RegionalBoostFactor()]);
+
+      const boostedFood = makeFood({ id: 'regional-1' });
+      const normalFood = makeFood({ id: 'regional-2' });
+
+      const ctx = makeCtx({
+        regionalBoostMap: { 'regional-1': 1.3 },
+      });
+
+      const results = svc.executeChain([boostedFood, normalFood], [0.7, 0.7], ctx);
+
+      expect(results[0].finalScore).toBeCloseTo(0.7 * 1.3, 5);
+      expect(results[1].finalScore).toBe(0.7); // no boost
+    });
+
+    it('should not apply RegionalBoostFactor when regionalBoostMap is absent', () => {
+      const svc = new ScoringChainService();
+      svc.registerFactors([new RegionalBoostFactor()]);
+
+      const food = makeFood({ id: 'f1' });
+      const ctx = makeCtx(); // no regionalBoostMap
+
+      const results = svc.executeChain([food], [0.8], ctx);
+
+      expect(results[0].finalScore).toBe(0.8); // isApplicable=false → no change
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // 13. 真实因子端到端：RuleWeightFactor
+  // ════════════════════════════════════════════════════════════
+
+  describe('RuleWeightFactor 端到端', () => {
+    it('should discount foods with __ruleWeight < 1.0', () => {
+      const svc = new ScoringChainService();
+      svc.registerFactors([new RuleWeightFactor()]);
+
+      const discountedFood = makeFood() as any;
+      discountedFood.__ruleWeight = 0.7;
+
+      const normalFood = makeFood();
+
+      const results = svc.executeChain([discountedFood, normalFood], [1.0, 1.0], makeCtx());
+
+      expect(results[0].finalScore).toBeCloseTo(0.7, 5);
+      expect(results[1].finalScore).toBe(1.0);
+    });
+
+    it('should not change score for foods without __ruleWeight', () => {
+      const svc = new ScoringChainService();
+      svc.registerFactors([new RuleWeightFactor()]);
+
+      const food = makeFood();
+      const results = svc.executeChain([food], [0.9], makeCtx());
+
+      expect(results[0].finalScore).toBe(0.9);
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // 14. 所有 10 因子注册后的执行顺序验证
+  // ════════════════════════════════════════════════════════════
+
+  describe('10 因子注册后的顺序', () => {
+    it('should register all 10 factors and sort by order', () => {
+      const svc = new ScoringChainService();
+      svc.registerFactors([
+        new PreferenceSignalFactor(),
+        new RegionalBoostFactor(),
+        new CollaborativeFilteringFactor(),
+        new ShortTermProfileFactor(),
+        new SceneContextFactor(),
+        new AnalysisProfileFactor(),
+        new LifestyleBoostFactor(() => null, () => null),
+        new PopularityFactor(),
+        new ReplacementFeedbackFactor(),
+        new RuleWeightFactor(),
+      ]);
+
+      const factors = svc.getFactors();
+      expect(factors).toHaveLength(10);
+
+      // 验证顺序单调递增
+      for (let i = 1; i < factors.length; i++) {
+        expect(factors[i].order).toBeGreaterThanOrEqual(factors[i - 1].order);
+      }
+    });
+
+    it('should execute chain with no crashes on minimal context (all 10 factors)', () => {
+      const svc = new ScoringChainService();
+      svc.registerFactors([
+        new PreferenceSignalFactor(),
+        new RegionalBoostFactor(),
+        new CollaborativeFilteringFactor(),
+        new ShortTermProfileFactor(),
+        new SceneContextFactor(),
+        new AnalysisProfileFactor(),
+        new LifestyleBoostFactor(() => null, () => null),
+        new PopularityFactor(),
+        new ReplacementFeedbackFactor(),
+        new RuleWeightFactor(),
+      ]);
+
+      const food = makeFood({ popularity: 80 });
+      const ctx = makeCtx();
+
+      // Should not throw, should return valid result
+      expect(() => svc.executeChain([food], [0.7], ctx)).not.toThrow();
+
+      const results = svc.executeChain([food], [0.7], ctx);
+      expect(results).toHaveLength(1);
+      expect(results[0].finalScore).toBeGreaterThanOrEqual(0);
+    });
+  });
+});

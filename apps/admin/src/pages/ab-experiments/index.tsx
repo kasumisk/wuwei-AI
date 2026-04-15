@@ -2,7 +2,7 @@ export const routeConfig = {
   name: 'ab-experiments',
   title: 'A/B 实验',
   icon: 'ExperimentOutlined',
-  order: 19,
+  order: 16,
   requireAuth: true,
   requireAdmin: true,
 };

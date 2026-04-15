@@ -61,7 +61,7 @@ export const routeConfig = {
   name: 'ai-service',
   title: 'AI 服务管理',
   icon: 'RobotOutlined',
-  order: 50,
+  order: 40,
   requireAuth: true,
   requireAdmin: true,
 };

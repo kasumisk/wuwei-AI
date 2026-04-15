@@ -44,7 +44,7 @@ export const routeConfig = {
   name: 'achievements',
   title: '成就管理',
   icon: 'StarOutlined',
-  order: 31,
+  order: 1,
   requireAuth: true,
 };
 

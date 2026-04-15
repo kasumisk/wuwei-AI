@@ -14,7 +14,7 @@ export const routeConfig = {
   name: 'ai-decision-logs',
   title: 'AI决策日志',
   icon: 'AuditOutlined',
-  order: 25,
+  order: 5,
   requireAuth: true,
 };
 

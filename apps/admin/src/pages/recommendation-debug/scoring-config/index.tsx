@@ -889,6 +889,1333 @@ const ScoringConfigPage: React.FC = () => {
                 </Card>
               ),
             },
+
+            // ==================== Tab 7: NOVA & 能量 ====================
+            {
+              key: 'nova-energy',
+              label: 'NOVA & 能量',
+              children: (
+                <Card size="small">
+                  <Row gutter={[24, 0]}>
+                    <Col xs={24} md={12}>
+                      <Divider orientation="left" plain style={{ fontSize: 12 }}>
+                        NOVA 基础分（按等级 1-4）
+                      </Divider>
+                      <Alert
+                        message="NOVA 分级基础分，索引 0~3 对应 NOVA 等级 1~4。等级越高加工度越大，分数越低。"
+                        type="info"
+                        showIcon
+                        style={{ marginBottom: 12, fontSize: 12 }}
+                      />
+                      <FieldWithTooltip
+                        label="NOVA 1 (未加工)"
+                        tip="NOVA 等级 1 的基础品质分（最高）"
+                        name={['novaBase', 0]}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={(defaults.novaBase as number[])?.[0]}
+                      />
+                      <FieldWithTooltip
+                        label="NOVA 2 (加工食材)"
+                        tip="NOVA 等级 2 的基础品质分"
+                        name={['novaBase', 1]}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={(defaults.novaBase as number[])?.[1]}
+                      />
+                      <FieldWithTooltip
+                        label="NOVA 3 (加工食品)"
+                        tip="NOVA 等级 3 的基础品质分"
+                        name={['novaBase', 2]}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={(defaults.novaBase as number[])?.[2]}
+                      />
+                      <FieldWithTooltip
+                        label="NOVA 4 (超加工)"
+                        tip="NOVA 等级 4 的基础品质分（最低）"
+                        name={['novaBase', 3]}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={(defaults.novaBase as number[])?.[3]}
+                      />
+                    </Col>
+                    <Col xs={24} md={12}>
+                      <Divider orientation="left" plain style={{ fontSize: 12 }}>
+                        NOVA 微调参数
+                      </Divider>
+                      <FieldWithTooltip
+                        label="高纤维减免阈值 (g)"
+                        tip="高纤维食物可减轻 NOVA 惩罚，纤维含量需高于此阈值"
+                        name="novaHighFiberThreshold"
+                        min={0}
+                        max={20}
+                        step={0.5}
+                        precision={1}
+                        defaultValue={defaults.novaHighFiberThreshold as number}
+                      />
+                      <FieldWithTooltip
+                        label="高纤维减免量"
+                        tip="满足高纤维阈值后，NOVA 分数加回的量"
+                        name="novaHighFiberRelief"
+                        min={0}
+                        max={0.3}
+                        step={0.01}
+                        precision={2}
+                        defaultValue={defaults.novaHighFiberRelief as number}
+                      />
+                      <FieldWithTooltip
+                        label="低糖减免阈值 (g)"
+                        tip="低添加糖食物的减免阈值"
+                        name="novaLowSugarThreshold"
+                        min={0}
+                        max={20}
+                        step={0.5}
+                        precision={1}
+                        defaultValue={defaults.novaLowSugarThreshold as number}
+                      />
+                      <FieldWithTooltip
+                        label="低糖减免量"
+                        tip="满足低糖阈值后分数加回量"
+                        name="novaLowSugarRelief"
+                        min={0}
+                        max={0.3}
+                        step={0.01}
+                        precision={2}
+                        defaultValue={defaults.novaLowSugarRelief as number}
+                      />
+                      <FieldWithTooltip
+                        label="低饱和脂肪减免阈值 (g)"
+                        tip="低饱和脂肪食物的减免阈值"
+                        name="novaLowSatFatThreshold"
+                        min={0}
+                        max={10}
+                        step={0.5}
+                        precision={1}
+                        defaultValue={defaults.novaLowSatFatThreshold as number}
+                      />
+                      <FieldWithTooltip
+                        label="低饱和脂肪减免量"
+                        tip="满足低饱和脂肪阈值后分数加回量"
+                        name="novaLowSatFatRelief"
+                        min={0}
+                        max={0.3}
+                        step={0.01}
+                        precision={2}
+                        defaultValue={defaults.novaLowSatFatRelief as number}
+                      />
+                      <FieldWithTooltip
+                        label="高钠惩罚阈值 (mg)"
+                        tip="钠含量高于此阈值时额外惩罚"
+                        name="novaHighSodiumThreshold"
+                        min={0}
+                        max={2000}
+                        step={50}
+                        precision={0}
+                        defaultValue={defaults.novaHighSodiumThreshold as number}
+                      />
+                      <FieldWithTooltip
+                        label="高钠惩罚量"
+                        tip="超过高钠阈值时扣减的分数"
+                        name="novaHighSodiumPenalty"
+                        min={0}
+                        max={0.3}
+                        step={0.01}
+                        precision={2}
+                        defaultValue={defaults.novaHighSodiumPenalty as number}
+                      />
+                      <FieldWithTooltip
+                        label="NOVA 分数下限"
+                        tip="NOVA 品质分的最小值（Clamp）"
+                        name="novaClampMin"
+                        min={0}
+                        max={0.5}
+                        step={0.01}
+                        precision={2}
+                        defaultValue={defaults.novaClampMin as number}
+                      />
+                      <FieldWithTooltip
+                        label="NOVA 分数上限"
+                        tip="NOVA 品质分的最大值（Clamp）"
+                        name="novaClampMax"
+                        min={0.5}
+                        max={1}
+                        step={0.01}
+                        precision={2}
+                        defaultValue={defaults.novaClampMax as number}
+                      />
+                    </Col>
+                  </Row>
+
+                  <Divider />
+
+                  <Row gutter={[24, 0]}>
+                    <Col xs={24} md={12}>
+                      <Divider orientation="left" plain style={{ fontSize: 12 }}>
+                        能量 Sigma 比率（按目标类型）
+                      </Divider>
+                      <Alert
+                        message="控制不同目标类型下能量偏差的敏感度。值越大，偏离目标热量时惩罚越重。"
+                        type="info"
+                        showIcon
+                        style={{ marginBottom: 12, fontSize: 12 }}
+                      />
+                      <FieldWithTooltip
+                        label="减脂 Sigma 比率"
+                        tip="减脂目标的能量偏差 sigma 比率"
+                        name={['energySigmaRatios', 'fat_loss']}
+                        min={0.01}
+                        max={1}
+                        step={0.01}
+                        precision={3}
+                        defaultValue={(defaults.energySigmaRatios as Record<string, number>)?.fat_loss}
+                      />
+                      <FieldWithTooltip
+                        label="增肌 Sigma 比率"
+                        tip="增肌目标的能量偏差 sigma 比率"
+                        name={['energySigmaRatios', 'muscle_gain']}
+                        min={0.01}
+                        max={1}
+                        step={0.01}
+                        precision={3}
+                        defaultValue={(defaults.energySigmaRatios as Record<string, number>)?.muscle_gain}
+                      />
+                      <FieldWithTooltip
+                        label="健康 Sigma 比率"
+                        tip="健康目标的能量偏差 sigma 比率"
+                        name={['energySigmaRatios', 'health']}
+                        min={0.01}
+                        max={1}
+                        step={0.01}
+                        precision={3}
+                        defaultValue={(defaults.energySigmaRatios as Record<string, number>)?.health}
+                      />
+                      <FieldWithTooltip
+                        label="习惯 Sigma 比率"
+                        tip="习惯养成目标的能量偏差 sigma 比率"
+                        name={['energySigmaRatios', 'habit']}
+                        min={0.01}
+                        max={1}
+                        step={0.01}
+                        precision={3}
+                        defaultValue={(defaults.energySigmaRatios as Record<string, number>)?.habit}
+                      />
+                    </Col>
+                    <Col xs={24} md={12}>
+                      <Divider orientation="left" plain style={{ fontSize: 12 }}>
+                        能量评分参数
+                      </Divider>
+                      <FieldWithTooltip
+                        label="减脂能量惩罚系数"
+                        tip="减脂目标下超出热量时的额外惩罚倍数"
+                        name="energyFatLossPenalty"
+                        min={1}
+                        max={5}
+                        step={0.1}
+                        precision={1}
+                        defaultValue={defaults.energyFatLossPenalty as number}
+                      />
+                      <FieldWithTooltip
+                        label="增肌能量惩罚系数"
+                        tip="增肌目标下热量不足时的额外惩罚倍数"
+                        name="energyMuscleGainPenalty"
+                        min={1}
+                        max={5}
+                        step={0.1}
+                        precision={1}
+                        defaultValue={defaults.energyMuscleGainPenalty as number}
+                      />
+                      <FieldWithTooltip
+                        label="能量默认分"
+                        tip="无法计算能量匹配时的默认得分"
+                        name="energyDefaultScore"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={defaults.energyDefaultScore as number}
+                      />
+                    </Col>
+                  </Row>
+                </Card>
+              ),
+            },
+
+            // ==================== Tab 8: 蛋白质 & GI/GL ====================
+            {
+              key: 'protein-gi',
+              label: '蛋白质 & GI/GL',
+              children: (
+                <Card size="small">
+                  <Row gutter={[24, 0]}>
+                    <Col xs={24} md={12}>
+                      <Divider orientation="left" plain style={{ fontSize: 12 }}>
+                        蛋白质评分参数
+                      </Divider>
+                      <FieldWithTooltip
+                        label="蛋白质默认分"
+                        tip="无法计算蛋白质匹配时的默认得分"
+                        name="proteinDefaultScore"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={defaults.proteinDefaultScore as number}
+                      />
+                      <FieldWithTooltip
+                        label="蛋白质不足衰减系数"
+                        tip="蛋白质低于目标范围时的衰减系数"
+                        name="proteinBelowRangeCoeff"
+                        min={0}
+                        max={5}
+                        step={0.1}
+                        precision={2}
+                        defaultValue={defaults.proteinBelowRangeCoeff as number}
+                      />
+                      <FieldWithTooltip
+                        label="蛋白质不足基础分"
+                        tip="蛋白质不足时的基础保底分"
+                        name="proteinBelowRangeBase"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={defaults.proteinBelowRangeBase as number}
+                      />
+                      <FieldWithTooltip
+                        label="蛋白质过量衰减速率"
+                        tip="蛋白质超过目标范围后分数衰减的速率"
+                        name="proteinAboveRangeDecay"
+                        min={0}
+                        max={5}
+                        step={0.1}
+                        precision={2}
+                        defaultValue={defaults.proteinAboveRangeDecay as number}
+                      />
+                      <FieldWithTooltip
+                        label="蛋白质过量衰减除数"
+                        tip="过量蛋白质按此除数归一化后进行衰减"
+                        name="proteinAboveRangeDiv"
+                        min={1}
+                        max={100}
+                        step={1}
+                        precision={0}
+                        defaultValue={defaults.proteinAboveRangeDiv as number}
+                      />
+                    </Col>
+                    <Col xs={24} md={12}>
+                      <Divider orientation="left" plain style={{ fontSize: 12 }}>
+                        GI/GL 评分参数
+                      </Divider>
+                      <FieldWithTooltip
+                        label="GI 默认分"
+                        tip="无 GI 数据时的默认血糖指数得分"
+                        name="giDefaultScore"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={defaults.giDefaultScore as number}
+                      />
+                      <FieldWithTooltip
+                        label="GL Sigmoid 斜率"
+                        tip="GL 评分 sigmoid 函数的斜率"
+                        name="glSigmoidSlope"
+                        min={0.01}
+                        max={1}
+                        step={0.01}
+                        precision={3}
+                        defaultValue={defaults.glSigmoidSlope as number}
+                      />
+                      <FieldWithTooltip
+                        label="GL Sigmoid 中心值"
+                        tip="GL 评分 sigmoid 函数的中心值"
+                        name="glSigmoidCenter"
+                        min={1}
+                        max={50}
+                        step={1}
+                        precision={0}
+                        defaultValue={defaults.glSigmoidCenter as number}
+                      />
+                      <FieldWithTooltip
+                        label="GI 回退值"
+                        tip="无 GI 数据时使用的回退 GI 值"
+                        name="giFallback"
+                        min={0}
+                        max={100}
+                        step={5}
+                        precision={0}
+                        defaultValue={defaults.giFallback as number}
+                      />
+                      <FieldWithTooltip
+                        label="GI 加工步骤加成"
+                        tip="每个加工步骤增加的 GI 值"
+                        name="giProcessingStep"
+                        min={0}
+                        max={20}
+                        step={1}
+                        precision={0}
+                        defaultValue={defaults.giProcessingStep as number}
+                      />
+                      <FieldWithTooltip
+                        label="纤维 GI 减低量"
+                        tip="每克纤维减低的 GI 值"
+                        name="giFiberReduction"
+                        min={0}
+                        max={5}
+                        step={0.1}
+                        precision={1}
+                        defaultValue={defaults.giFiberReduction as number}
+                      />
+                      <FieldWithTooltip
+                        label="纤维 GI 减低上限"
+                        tip="纤维最多能减低的 GI 总量上限"
+                        name="giFiberReductionCap"
+                        min={0}
+                        max={30}
+                        step={1}
+                        precision={0}
+                        defaultValue={defaults.giFiberReductionCap as number}
+                      />
+                    </Col>
+                  </Row>
+                </Card>
+              ),
+            },
+
+            // ==================== Tab 9: NRF Gap & 炎症公式 ====================
+            {
+              key: 'nrf-inflammation',
+              label: 'NRF Gap & 炎症',
+              children: (
+                <Card size="small">
+                  <Row gutter={[24, 0]}>
+                    <Col xs={24} md={12}>
+                      <Divider orientation="left" plain style={{ fontSize: 12 }}>
+                        NRF 9.3 缺口奖励
+                      </Divider>
+                      <Alert
+                        message="当用户某营养素缺口明显时，富含该营养素的食物可获得额外加分"
+                        type="info"
+                        showIcon
+                        style={{ marginBottom: 12, fontSize: 12 }}
+                      />
+                      <FieldWithTooltip
+                        label="缺口阈值"
+                        tip="营养素缺口比例高于此阈值时触发奖励"
+                        name="nrfGapThreshold"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={defaults.nrfGapThreshold as number}
+                      />
+                      <FieldWithTooltip
+                        label="单项最大奖励"
+                        tip="单个营养素缺口奖励的最大值"
+                        name="nrfGapMaxBonus"
+                        min={0}
+                        max={0.5}
+                        step={0.01}
+                        precision={3}
+                        defaultValue={defaults.nrfGapMaxBonus as number}
+                      />
+                      <FieldWithTooltip
+                        label="总奖励上限"
+                        tip="所有营养素缺口奖励的加总上限"
+                        name="nrfGapTotalCap"
+                        min={0}
+                        max={0.5}
+                        step={0.01}
+                        precision={3}
+                        defaultValue={defaults.nrfGapTotalCap as number}
+                      />
+                    </Col>
+                    <Col xs={24} md={12}>
+                      <Divider orientation="left" plain style={{ fontSize: 12 }}>
+                        炎症公式参数
+                      </Divider>
+                      <FieldWithTooltip
+                        label="反式脂肪除数"
+                        tip="反式脂肪对炎症指数的贡献除数"
+                        name="inflammTransFatDiv"
+                        min={0.1}
+                        max={10}
+                        step={0.1}
+                        precision={1}
+                        defaultValue={defaults.inflammTransFatDiv as number}
+                      />
+                      <FieldWithTooltip
+                        label="反式脂肪最大贡献"
+                        tip="反式脂肪对炎症的最大贡献值"
+                        name="inflammTransFatMax"
+                        min={0}
+                        max={100}
+                        step={5}
+                        precision={0}
+                        defaultValue={defaults.inflammTransFatMax as number}
+                      />
+                      <FieldWithTooltip
+                        label="饱和脂肪除数"
+                        tip="饱和脂肪对炎症指数的贡献除数"
+                        name="inflammSatFatDiv"
+                        min={0.1}
+                        max={50}
+                        step={1}
+                        precision={1}
+                        defaultValue={defaults.inflammSatFatDiv as number}
+                      />
+                      <FieldWithTooltip
+                        label="饱和脂肪最大贡献"
+                        tip="饱和脂肪对炎症的最大贡献值"
+                        name="inflammSatFatMax"
+                        min={0}
+                        max={100}
+                        step={5}
+                        precision={0}
+                        defaultValue={defaults.inflammSatFatMax as number}
+                      />
+                      <FieldWithTooltip
+                        label="纤维除数"
+                        tip="纤维对炎症的减缓除数"
+                        name="inflammFiberDiv"
+                        min={0.1}
+                        max={50}
+                        step={1}
+                        precision={1}
+                        defaultValue={defaults.inflammFiberDiv as number}
+                      />
+                      <FieldWithTooltip
+                        label="纤维最大减缓"
+                        tip="纤维对炎症的最大减缓值"
+                        name="inflammFiberMax"
+                        min={0}
+                        max={100}
+                        step={5}
+                        precision={0}
+                        defaultValue={defaults.inflammFiberMax as number}
+                      />
+                    </Col>
+                  </Row>
+                </Card>
+              ),
+            },
+
+            // ==================== Tab 10: 烹饪时间 & 默认值 ====================
+            {
+              key: 'cook-time-defaults',
+              label: '烹饪 & 默认值',
+              children: (
+                <Card size="small">
+                  <Row gutter={[24, 0]}>
+                    <Col xs={24} md={12}>
+                      <Divider orientation="left" plain style={{ fontSize: 12 }}>
+                        烹饪时间阈值与评分
+                      </Divider>
+                      <FieldWithTooltip
+                        label="快速烹饪阈值 (分钟)"
+                        tip="烹饪时间低于此阈值视为快速烹饪"
+                        name="cookTimeQuick"
+                        min={1}
+                        max={30}
+                        step={1}
+                        precision={0}
+                        defaultValue={defaults.cookTimeQuick as number}
+                      />
+                      <FieldWithTooltip
+                        label="快速烹饪得分"
+                        tip="快速烹饪食物的基础得分"
+                        name="cookTimeQuickScore"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={defaults.cookTimeQuickScore as number}
+                      />
+                      <FieldWithTooltip
+                        label="中等烹饪阈值 (分钟)"
+                        tip="烹饪时间低于此阈值视为中等"
+                        name="cookTimeMedium"
+                        min={10}
+                        max={60}
+                        step={5}
+                        precision={0}
+                        defaultValue={defaults.cookTimeMedium as number}
+                      />
+                      <FieldWithTooltip
+                        label="中等烹饪得分"
+                        tip="中等烹饪时间食物的得分"
+                        name="cookTimeMediumScore"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={defaults.cookTimeMediumScore as number}
+                      />
+                      <FieldWithTooltip
+                        label="长时间烹饪阈值 (分钟)"
+                        tip="烹饪时间低于此阈值视为长时间烹饪"
+                        name="cookTimeLong"
+                        min={30}
+                        max={180}
+                        step={10}
+                        precision={0}
+                        defaultValue={defaults.cookTimeLong as number}
+                      />
+                      <FieldWithTooltip
+                        label="长时间烹饪得分"
+                        tip="长时间烹饪食物的得分"
+                        name="cookTimeLongScore"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={defaults.cookTimeLongScore as number}
+                      />
+                      <FieldWithTooltip
+                        label="免烹饪得分"
+                        tip="无需烹饪的食物得分"
+                        name="cookTimeZeroScore"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={defaults.cookTimeZeroScore as number}
+                      />
+                    </Col>
+                    <Col xs={24} md={12}>
+                      <Divider orientation="left" plain style={{ fontSize: 12 }}>
+                        杂项默认值
+                      </Divider>
+                      <FieldWithTooltip
+                        label="默认品质分"
+                        tip="无品质数据时的默认品质得分"
+                        name="defaultQualityScore"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={defaults.defaultQualityScore as number}
+                      />
+                      <FieldWithTooltip
+                        label="默认饱腹感分"
+                        tip="无饱腹感数据时的默认得分"
+                        name="defaultSatietyScore"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={defaults.defaultSatietyScore as number}
+                      />
+                      <FieldWithTooltip
+                        label="默认碳脂分"
+                        tip="碳水/脂肪匹配的默认得分"
+                        name="defaultCarbFatScore"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={defaults.defaultCarbFatScore as number}
+                      />
+                      <FieldWithTooltip
+                        label="默认置信度"
+                        tip="无用户行为数据时的默认置信度"
+                        name="defaultConfidence"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={defaults.defaultConfidence as number}
+                      />
+                      <FieldWithTooltip
+                        label="默认餐次热量目标 (kcal)"
+                        tip="无用户数据时的默认单餐热量目标"
+                        name="defaultMealCalorieTarget"
+                        min={100}
+                        max={2000}
+                        step={50}
+                        precision={0}
+                        defaultValue={defaults.defaultMealCalorieTarget as number}
+                      />
+                      <FieldWithTooltip
+                        label="添加糖最大惩罚"
+                        tip="添加糖惩罚的最大值上限"
+                        name="maxAddedSugarPenalty"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={defaults.maxAddedSugarPenalty as number}
+                      />
+                      <FieldWithTooltip
+                        label="范围外惩罚陡度"
+                        tip="宏量营养素超出范围时惩罚曲线的陡度"
+                        name="rangeOutPenaltySteepness"
+                        min={0.1}
+                        max={10}
+                        step={0.1}
+                        precision={1}
+                        defaultValue={defaults.rangeOutPenaltySteepness as number}
+                      />
+                    </Col>
+                  </Row>
+                </Card>
+              ),
+            },
+
+            // ==================== Tab 11: 跨餐多样性 & 替代权重 ====================
+            {
+              key: 'diversity-substitution',
+              label: '多样性 & 替代',
+              children: (
+                <Card size="small">
+                  <Row gutter={[24, 0]}>
+                    <Col xs={24} md={12}>
+                      <Divider orientation="left" plain style={{ fontSize: 12 }}>
+                        跨餐多样性惩罚
+                      </Divider>
+                      <Alert
+                        message="同一天内跨餐次推荐重复食物时的惩罚参数"
+                        type="info"
+                        showIcon
+                        style={{ marginBottom: 12, fontSize: 12 }}
+                      />
+                      <FieldWithTooltip
+                        label="完全相同食物惩罚"
+                        tip="同一食物在当天已推荐时的分数乘数"
+                        name={['crossMealDiversityPenalties', 'sameFoodPenalty']}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={(defaults.crossMealDiversityPenalties as any)?.sameFoodPenalty}
+                      />
+                      <FieldWithTooltip
+                        label="同类别惩罚"
+                        tip="同食物类别在当天已推荐时的分数乘数"
+                        name={['crossMealDiversityPenalties', 'sameCategoryPenalty']}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={(defaults.crossMealDiversityPenalties as any)?.sameCategoryPenalty}
+                      />
+                      <FieldWithTooltip
+                        label="同烹饪方式惩罚"
+                        tip="同烹饪方式在当天已推荐时的分数乘数"
+                        name={['crossMealDiversityPenalties', 'sameCookingMethodPenalty']}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={(defaults.crossMealDiversityPenalties as any)?.sameCookingMethodPenalty}
+                      />
+                      <FieldWithTooltip
+                        label="同口感惩罚"
+                        tip="同口感类型在当天已推荐时的分数乘数"
+                        name={['crossMealDiversityPenalties', 'sameTexturePenalty']}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={(defaults.crossMealDiversityPenalties as any)?.sameTexturePenalty}
+                      />
+                      <FieldWithTooltip
+                        label="同风味惩罚"
+                        tip="同风味在当天已推荐时的分数乘数"
+                        name={['crossMealDiversityPenalties', 'sameFlavorPenalty']}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={(defaults.crossMealDiversityPenalties as any)?.sameFlavorPenalty}
+                      />
+                      <FieldWithTooltip
+                        label="连续天数惩罚"
+                        tip="连续多天推荐同食物时的累计惩罚乘数"
+                        name={['crossMealDiversityPenalties', 'consecutiveDayPenalty']}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={(defaults.crossMealDiversityPenalties as any)?.consecutiveDayPenalty}
+                      />
+                      <FieldWithTooltip
+                        label="最大惩罚天数"
+                        tip="惩罚累计的最大天数范围"
+                        name={['crossMealDiversityPenalties', 'maxPenaltyDays']}
+                        min={1}
+                        max={14}
+                        step={1}
+                        precision={0}
+                        defaultValue={(defaults.crossMealDiversityPenalties as any)?.maxPenaltyDays}
+                      />
+                    </Col>
+                    <Col xs={24} md={12}>
+                      <Divider orientation="left" plain style={{ fontSize: 12 }}>
+                        食物替代权重
+                      </Divider>
+                      <Alert
+                        message="计算食物替代相似度时各维度的权重分配"
+                        type="info"
+                        showIcon
+                        style={{ marginBottom: 12, fontSize: 12 }}
+                      />
+                      <FieldWithTooltip
+                        label="营养相似权重"
+                        tip="营养成分相似度在替代计算中的权重"
+                        name={['substitutionWeights', 'nutrition']}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={(defaults.substitutionWeights as any)?.nutrition}
+                      />
+                      <FieldWithTooltip
+                        label="类别相似权重"
+                        tip="食物类别匹配在替代计算中的权重"
+                        name={['substitutionWeights', 'category']}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={(defaults.substitutionWeights as any)?.category}
+                      />
+                      <FieldWithTooltip
+                        label="口感相似权重"
+                        tip="口感相似度在替代计算中的权重"
+                        name={['substitutionWeights', 'texture']}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={(defaults.substitutionWeights as any)?.texture}
+                      />
+                      <FieldWithTooltip
+                        label="烹饪方式相似权重"
+                        tip="烹饪方式匹配在替代计算中的权重"
+                        name={['substitutionWeights', 'cookingMethod']}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={(defaults.substitutionWeights as any)?.cookingMethod}
+                      />
+                      <FieldWithTooltip
+                        label="风味相似权重"
+                        tip="风味匹配在替代计算中的权重"
+                        name={['substitutionWeights', 'flavor']}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={(defaults.substitutionWeights as any)?.flavor}
+                      />
+                      <FieldWithTooltip
+                        label="价格相似权重"
+                        tip="价格相似度在替代计算中的权重"
+                        name={['substitutionWeights', 'price']}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={(defaults.substitutionWeights as any)?.price}
+                      />
+                    </Col>
+                  </Row>
+                </Card>
+              ),
+            },
+
+            // ==================== Tab 12: Tuning - Pipeline ====================
+            {
+              key: 'tuning-pipeline',
+              label: 'Tuning: Pipeline',
+              children: (
+                <Card size="small">
+                  <Alert
+                    message="v7.5 推荐管线微调参数，影响套餐组装、候选排序、多样性控制等核心行为"
+                    type="warning"
+                    showIcon
+                    style={{ marginBottom: 16 }}
+                  />
+                  <Row gutter={[24, 0]}>
+                    <Col xs={24} md={12}>
+                      <Divider orientation="left" plain style={{ fontSize: 12 }}>
+                        套餐组装 - 相似度权重
+                      </Divider>
+                      <FieldWithTooltip
+                        label="类别相似权重"
+                        tip="食物类别相似度在组装去重中的权重"
+                        name={['tuning', 'similarityWeights', 'category']}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={(defaults.tuning as any)?.similarityWeights?.category}
+                      />
+                      <FieldWithTooltip
+                        label="烹饪方式权重"
+                        tip="烹饪方式相似度在组装去重中的权重"
+                        name={['tuning', 'similarityWeights', 'cookingMethod']}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={(defaults.tuning as any)?.similarityWeights?.cookingMethod}
+                      />
+                      <FieldWithTooltip
+                        label="口感权重"
+                        tip="口感相似度在组装去重中的权重"
+                        name={['tuning', 'similarityWeights', 'texture']}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={(defaults.tuning as any)?.similarityWeights?.texture}
+                      />
+                      <FieldWithTooltip
+                        label="风味权重"
+                        tip="风味相似度在组装去重中的权重"
+                        name={['tuning', 'similarityWeights', 'flavor']}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={(defaults.tuning as any)?.similarityWeights?.flavor}
+                      />
+                    </Col>
+                    <Col xs={24} md={12}>
+                      <Divider orientation="left" plain style={{ fontSize: 12 }}>
+                        套餐组装 - 多样性 & 兼容性
+                      </Divider>
+                      <FieldWithTooltip
+                        label="多样性相似惩罚"
+                        tip="组装时过于相似的食物对的惩罚值"
+                        name={['tuning', 'diversitySimilarityPenalty']}
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        precision={3}
+                        defaultValue={(defaults.tuning as any)?.diversitySimilarityPenalty}
+                      />
+                      <FieldWithTooltip
+                        label="兼容性好加分"
+                        tip="搭配兼容性好的食物对加分"
+                        name={['tuning', 'compatibilityGoodBonus']}
+                        min={0}
+                        max={0.5}
+                        step={0.01}
+                        precision={3}
+                        defaultValue={(defaults.tuning as any)?.compatibilityGoodBonus}
+                      />
+                      <FieldWithTooltip
+                        label="兼容性差扣分"
+                        tip="搭配不兼容的食物对扣分"
+                        name={['tuning', 'compatibilityBadPenalty']}
+                        min={0}
+                        max={0.5}
+                        step={0.01}
+                        precision={3}
+                        defaultValue={(defaults.tuning as any)?.compatibilityBadPenalty}
+                      />
+                      <FieldWithTooltip
+                        label="兼容性 Clamp 下限"
+                        tip="兼容性乘数的下限"
+                        name={['tuning', 'compatibilityClampMin']}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={(defaults.tuning as any)?.compatibilityClampMin}
+                      />
+                      <FieldWithTooltip
+                        label="兼容性 Clamp 上限"
+                        tip="兼容性乘数的上限"
+                        name={['tuning', 'compatibilityClampMax']}
+                        min={1}
+                        max={3}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={(defaults.tuning as any)?.compatibilityClampMax}
+                      />
+                    </Col>
+                  </Row>
+
+                  <Divider />
+
+                  <Row gutter={[24, 0]}>
+                    <Col xs={24} md={12}>
+                      <Divider orientation="left" plain style={{ fontSize: 12 }}>
+                        Pipeline 构建参数
+                      </Divider>
+                      <FieldWithTooltip
+                        label="优化器候选上限"
+                        tip="优化器一次处理的最大候选数"
+                        name={['tuning', 'optimizerCandidateLimit']}
+                        min={10}
+                        max={200}
+                        step={10}
+                        precision={0}
+                        defaultValue={(defaults.tuning as any)?.optimizerCandidateLimit}
+                      />
+                      <FieldWithTooltip
+                        label="多样性高乘数"
+                        tip="高多样性策略下的分数乘数"
+                        name={['tuning', 'diversityHighMultiplier']}
+                        min={0.5}
+                        max={2}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={(defaults.tuning as any)?.diversityHighMultiplier}
+                      />
+                      <FieldWithTooltip
+                        label="多样性低乘数"
+                        tip="低多样性策略下的分数乘数"
+                        name={['tuning', 'diversityLowMultiplier']}
+                        min={0.5}
+                        max={2}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={(defaults.tuning as any)?.diversityLowMultiplier}
+                      />
+                      <FieldWithTooltip
+                        label="基础探索率"
+                        tip="Thompson Sampling 的基础探索概率"
+                        name={['tuning', 'baseExplorationRate']}
+                        min={0}
+                        max={0.5}
+                        step={0.01}
+                        precision={3}
+                        defaultValue={(defaults.tuning as any)?.baseExplorationRate}
+                      />
+                    </Col>
+                    <Col xs={24} md={12}>
+                      <Divider orientation="left" plain style={{ fontSize: 12 }}>
+                        菜品优先级 & 多样性阈值
+                      </Divider>
+                      <FieldWithTooltip
+                        label="菜品优先级除数(场景)"
+                        tip="场景模式下菜品优先级的除数"
+                        name={['tuning', 'dishPriorityDivisorScene']}
+                        min={1}
+                        max={20}
+                        step={1}
+                        precision={0}
+                        defaultValue={(defaults.tuning as any)?.dishPriorityDivisorScene}
+                      />
+                      <FieldWithTooltip
+                        label="菜品优先级除数(普通)"
+                        tip="普通模式下菜品优先级的除数"
+                        name={['tuning', 'dishPriorityDivisorNormal']}
+                        min={1}
+                        max={20}
+                        step={1}
+                        precision={0}
+                        defaultValue={(defaults.tuning as any)?.dishPriorityDivisorNormal}
+                      />
+                      <FieldWithTooltip
+                        label="半成品乘数(场景)"
+                        tip="场景模式下半成品食物的分数乘数"
+                        name={['tuning', 'semiPreparedMultiplierScene']}
+                        min={0}
+                        max={2}
+                        step={0.1}
+                        precision={1}
+                        defaultValue={(defaults.tuning as any)?.semiPreparedMultiplierScene}
+                      />
+                      <FieldWithTooltip
+                        label="半成品乘数(普通)"
+                        tip="普通模式下半成品食物的分数乘数"
+                        name={['tuning', 'semiPreparedMultiplierNormal']}
+                        min={0}
+                        max={2}
+                        step={0.1}
+                        precision={1}
+                        defaultValue={(defaults.tuning as any)?.semiPreparedMultiplierNormal}
+                      />
+                      <FieldWithTooltip
+                        label="食材多样性阈值"
+                        tip="食材多样性高于此值视为多样性充足"
+                        name={['tuning', 'ingredientDiversityThreshold']}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={(defaults.tuning as any)?.ingredientDiversityThreshold}
+                      />
+                      <FieldWithTooltip
+                        label="烹饪方式多样性阈值"
+                        tip="烹饪方式多样性高于此值视为多样性充足"
+                        name={['tuning', 'cookingMethodDiversityThreshold']}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={(defaults.tuning as any)?.cookingMethodDiversityThreshold}
+                      />
+                    </Col>
+                  </Row>
+                </Card>
+              ),
+            },
+
+            // ==================== Tab 13: Tuning - 因子 ====================
+            {
+              key: 'tuning-factors',
+              label: 'Tuning: 因子',
+              children: (
+                <Card size="small">
+                  <Row gutter={[24, 0]}>
+                    <Col xs={24} md={12}>
+                      <Divider orientation="left" plain style={{ fontSize: 12 }}>
+                        约束生成器
+                      </Divider>
+                      <FieldWithTooltip
+                        label="蛋白质缺口阈值"
+                        tip="蛋白质占比低于此阈值时触发强约束"
+                        name={['tuning', 'proteinGapThreshold']}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={(defaults.tuning as any)?.proteinGapThreshold}
+                      />
+                      <FieldWithTooltip
+                        label="热量缺口阈值"
+                        tip="热量占比低于此阈值时触发强约束"
+                        name={['tuning', 'calorieGapThreshold']}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={(defaults.tuning as any)?.calorieGapThreshold}
+                      />
+                      <FieldWithTooltip
+                        label="热量上限乘数"
+                        tip="热量软上限 = 目标热量 × 此乘数"
+                        name={['tuning', 'calorieCeilingMultiplier']}
+                        min={1}
+                        max={2}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={(defaults.tuning as any)?.calorieCeilingMultiplier}
+                      />
+                      <FieldWithTooltip
+                        label="暴食风险热量乘数"
+                        tip="暴食风险用户的热量上限额外乘数"
+                        name={['tuning', 'bingeRiskCalorieMultiplier']}
+                        min={0.5}
+                        max={1.5}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={(defaults.tuning as any)?.bingeRiskCalorieMultiplier}
+                      />
+                      <FieldWithTooltip
+                        label="最低蛋白质比例"
+                        tip="蛋白质最低占比约束"
+                        name={['tuning', 'minProteinRatio']}
+                        min={0}
+                        max={0.5}
+                        step={0.01}
+                        precision={2}
+                        defaultValue={(defaults.tuning as any)?.minProteinRatio}
+                      />
+                    </Col>
+                    <Col xs={24} md={12}>
+                      <Divider orientation="left" plain style={{ fontSize: 12 }}>
+                        场景上下文因子
+                      </Divider>
+                      <FieldWithTooltip
+                        label="场景加分 Clamp 下限"
+                        tip="场景上下文加分的最小值"
+                        name={['tuning', 'sceneBoostClampMin']}
+                        min={-0.5}
+                        max={0}
+                        step={0.01}
+                        precision={2}
+                        defaultValue={(defaults.tuning as any)?.sceneBoostClampMin}
+                      />
+                      <FieldWithTooltip
+                        label="场景加分 Clamp 上限"
+                        tip="场景上下文加分的最大值"
+                        name={['tuning', 'sceneBoostClampMax']}
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        precision={2}
+                        defaultValue={(defaults.tuning as any)?.sceneBoostClampMax}
+                      />
+
+                      <Divider orientation="left" plain style={{ fontSize: 12 }}>
+                        分析画像因子
+                      </Divider>
+                      <FieldWithTooltip
+                        label="类别兴趣增量(每次)"
+                        tip="每次交互增加的类别兴趣值"
+                        name={['tuning', 'categoryInterestPerCount']}
+                        min={0}
+                        max={0.1}
+                        step={0.005}
+                        precision={3}
+                        defaultValue={(defaults.tuning as any)?.categoryInterestPerCount}
+                      />
+                      <FieldWithTooltip
+                        label="类别兴趣上限"
+                        tip="类别兴趣的最大值"
+                        name={['tuning', 'categoryInterestCap']}
+                        min={0}
+                        max={0.5}
+                        step={0.01}
+                        precision={2}
+                        defaultValue={(defaults.tuning as any)?.categoryInterestCap}
+                      />
+                      <FieldWithTooltip
+                        label="风险食物惩罚"
+                        tip="被标记为风险的食物的惩罚值"
+                        name={['tuning', 'riskFoodPenalty']}
+                        min={-0.5}
+                        max={0}
+                        step={0.01}
+                        precision={2}
+                        defaultValue={(defaults.tuning as any)?.riskFoodPenalty}
+                      />
+                    </Col>
+                  </Row>
+
+                  <Divider />
+
+                  <Row gutter={[24, 0]}>
+                    <Col xs={24} md={12}>
+                      <Divider orientation="left" plain style={{ fontSize: 12 }}>
+                        偏好信号因子
+                      </Divider>
+                      <FieldWithTooltip
+                        label="声明偏好匹配加分"
+                        tip="每个匹配的声明偏好增加的分数"
+                        name={['tuning', 'declaredPrefPerMatch']}
+                        min={0}
+                        max={0.2}
+                        step={0.005}
+                        precision={3}
+                        defaultValue={(defaults.tuning as any)?.declaredPrefPerMatch}
+                      />
+                      <FieldWithTooltip
+                        label="声明偏好加分上限"
+                        tip="声明偏好加分的上限"
+                        name={['tuning', 'declaredPrefCap']}
+                        min={0}
+                        max={0.5}
+                        step={0.01}
+                        precision={2}
+                        defaultValue={(defaults.tuning as any)?.declaredPrefCap}
+                      />
+
+                      <Divider orientation="left" plain style={{ fontSize: 12 }}>
+                        生活方式加分因子
+                      </Divider>
+                      <FieldWithTooltip
+                        label="高水分阈值"
+                        tip="水分含量高于此阈值的食物可获得加分"
+                        name={['tuning', 'factorWaterHighThreshold']}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        precision={2}
+                        defaultValue={(defaults.tuning as any)?.factorWaterHighThreshold}
+                      />
+                      <FieldWithTooltip
+                        label="营养素加分 Clamp 下限"
+                        tip="营养素加分的下限"
+                        name={['tuning', 'nutrientBoostClampMin']}
+                        min={-0.5}
+                        max={0}
+                        step={0.01}
+                        precision={2}
+                        defaultValue={(defaults.tuning as any)?.nutrientBoostClampMin}
+                      />
+                      <FieldWithTooltip
+                        label="营养素加分 Clamp 上限"
+                        tip="营养素加分的上限"
+                        name={['tuning', 'nutrientBoostClampMax']}
+                        min={0}
+                        max={0.5}
+                        step={0.01}
+                        precision={2}
+                        defaultValue={(defaults.tuning as any)?.nutrientBoostClampMax}
+                      />
+                      <FieldWithTooltip
+                        label="营养素加分 Delta 乘数"
+                        tip="营养素差值转换为加分的乘数"
+                        name={['tuning', 'nutrientBoostDeltaMultiplier']}
+                        min={0}
+                        max={5}
+                        step={0.1}
+                        precision={1}
+                        defaultValue={(defaults.tuning as any)?.nutrientBoostDeltaMultiplier}
+                      />
+                    </Col>
+                    <Col xs={24} md={12}>
+                      <Divider orientation="left" plain style={{ fontSize: 12 }}>
+                        短期行为 & 热门度
+                      </Divider>
+                      <FieldWithTooltip
+                        label="短期最少交互次数"
+                        tip="短期画像生效所需的最少交互次数"
+                        name={['tuning', 'shortTermMinInteractions']}
+                        min={1}
+                        max={20}
+                        step={1}
+                        precision={0}
+                        defaultValue={(defaults.tuning as any)?.shortTermMinInteractions}
+                      />
+                      <FieldWithTooltip
+                        label="热门度归一化除数"
+                        tip="热门度分数的归一化除数"
+                        name={['tuning', 'popularityNormalizationDivisor']}
+                        min={1}
+                        max={1000}
+                        step={10}
+                        precision={0}
+                        defaultValue={(defaults.tuning as any)?.popularityNormalizationDivisor}
+                      />
+
+                      <Divider orientation="left" plain style={{ fontSize: 12 }}>
+                        FoodScorer 补充
+                      </Divider>
+                      <FieldWithTooltip
+                        label="菜系权重提升系数"
+                        tip="用户偏好菜系的食物权重提升系数"
+                        name={['tuning', 'cuisineWeightBoostCoeff']}
+                        min={0}
+                        max={0.5}
+                        step={0.01}
+                        precision={3}
+                        defaultValue={(defaults.tuning as any)?.cuisineWeightBoostCoeff}
+                      />
+                      <FieldWithTooltip
+                        label="渠道匹配加分"
+                        tip="食物渠道与用户渠道匹配时的额外加分"
+                        name={['tuning', 'channelMatchBonus']}
+                        min={0}
+                        max={0.3}
+                        step={0.01}
+                        precision={3}
+                        defaultValue={(defaults.tuning as any)?.channelMatchBonus}
+                      />
+                    </Col>
+                  </Row>
+                </Card>
+              ),
+            },
           ]}
         />
 

@@ -13,7 +13,7 @@ import type {
   ScoredFood,
   MealTarget,
   MealRecommendation,
-} from '../../src/modules/diet/app/recommendation/recommendation.types';
+} from '../../src/modules/diet/app/recommendation/types/recommendation.types';
 
 // ─── FoodLibrary ───
 

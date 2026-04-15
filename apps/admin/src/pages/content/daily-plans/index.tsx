@@ -9,7 +9,7 @@ export const routeConfig = {
   name: 'daily-plans',
   title: '每日计划',
   icon: 'CalendarOutlined',
-  order: 22,
+  order: 2,
   requireAuth: true,
 };
 

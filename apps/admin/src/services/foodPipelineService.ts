@@ -330,6 +330,7 @@ export type EnrichableField =
   | 'main_ingredient'
   | 'flavor_profile'
   | 'cooking_methods'
+  | 'popularity'
   // V8.0: 扩展属性字段（Stage 5）
   | 'food_form'
   | 'dish_priority'
@@ -344,8 +345,8 @@ export type EnrichableField =
   | 'storage_method'
   | 'shelf_life_days'
   | 'best_cooking_temp'
-  | 'isProcessed'
-  | 'isFried'
+  | 'is_processed'
+  | 'is_fried'
   | 'aliases'
   | 'standard_serving_g'
   | 'ingredient_list'

@@ -2,7 +2,7 @@ export const routeConfig = {
   name: 'recommendation-debug',
   title: '推荐调试',
   icon: 'BugOutlined',
-  order: 18,
+  order: 15,
   requireAuth: true,
   requireAdmin: true,
 };

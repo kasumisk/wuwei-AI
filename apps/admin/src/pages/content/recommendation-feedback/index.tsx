@@ -14,7 +14,7 @@ export const routeConfig = {
   name: 'recommendation-feedback',
   title: '推荐反馈',
   icon: 'LikeOutlined',
-  order: 24,
+  order: 4,
   requireAuth: true,
 };
 

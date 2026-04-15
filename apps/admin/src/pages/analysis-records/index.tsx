@@ -2,7 +2,7 @@ export const routeConfig = {
   name: 'analysis-records',
   title: 'AI分析记录',
   icon: 'ExperimentOutlined',
-  order: 15,
+  order: 17,
   requireAuth: true,
   requireAdmin: true,
 };

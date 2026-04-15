@@ -396,6 +396,7 @@ export const AI_OVERRIDABLE_FIELDS: ReadonlyArray<string> = [
   'processingLevel',
   'aliases',
   'ingredientList',
+  'popularity',
 ] as const;
 
 export const NUTRIENT_RANGES: Record<string, { min: number; max: number }> = {
@@ -1910,12 +1911,36 @@ ${CORE_RULES}`;
 
     if (validFields.length === 0) return { cleared: 0 };
 
-    // 构建清空数据对象：将所有指定字段设为 null
-    const clearData: Record<string, null | []> = {};
+    // String[] 类型字段（schema 中 @default([])，不可为 null）
+    // 清空时必须使用 [] 而非 null，否则 Prisma 抛 "must not be null"
+    const ARRAY_FIELDS_CAMEL = new Set([
+      'tags',
+      'ingredientList',
+      'cookingMethods',
+      'textureTags',
+      'requiredEquipment',
+    ]);
+
+    // Json 非空字段（schema 无 `?`，不可设为 null，清空时用空 JSON 默认值）
+    const JSON_NON_NULLABLE: Record<string, unknown> = {
+      mealTypes: [],
+      compatibility: {},
+      availableChannels: ['home_cook', 'restaurant', 'delivery', 'convenience'],
+      commonPortions: [],
+      flavorProfile: null, // flavorProfile 是 Json?（可空），null 合法
+    };
+
+    // 构建清空数据对象：String[] 字段用 []，非空 Json 字段用空默认值，其余用 null
+    const clearData: Record<string, unknown> = {};
     for (const f of validFields) {
       const camelKey = f.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
-      // JSON 数组字段清空为 null（Prisma 会自动处理）
-      clearData[camelKey] = null;
+      if (ARRAY_FIELDS_CAMEL.has(camelKey)) {
+        clearData[camelKey] = [];
+      } else if (camelKey in JSON_NON_NULLABLE) {
+        clearData[camelKey] = JSON_NON_NULLABLE[camelKey];
+      } else {
+        clearData[camelKey] = null;
+      }
     }
     // 重置状态为 pending，允许重新入队
     clearData['enrichmentStatus' as any] = null;

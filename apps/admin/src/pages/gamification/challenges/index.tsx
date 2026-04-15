@@ -48,7 +48,7 @@ export const routeConfig = {
   name: 'challenges',
   title: '挑战管理',
   icon: 'FlagOutlined',
-  order: 32,
+  order: 2,
   requireAuth: true,
 };
 
