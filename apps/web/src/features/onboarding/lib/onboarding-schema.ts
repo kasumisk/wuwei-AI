@@ -19,6 +19,8 @@ export const step3Schema = z.object({
   allergens: z.array(z.string()).optional(),
   foodPreferences: z.array(z.string()).optional(),
   takeoutFrequency: z.enum(['never', 'sometimes', 'often']).optional(),
+  cuisinePreferences: z.array(z.string()).optional(),
+  cookingSkillLevel: z.enum(['beginner', 'basic', 'intermediate', 'advanced']).optional(),
 });
 
 export const step4Schema = z.object({
@@ -26,6 +28,7 @@ export const step4Schema = z.object({
   weakTimeSlots: z.array(z.string()).optional(),
   bingeTriggers: z.array(z.string()).optional(),
   canCook: z.boolean().optional(),
+  healthConditions: z.array(z.string()).optional(),
 });
 
 export const schemas = [step1Schema, step2Schema, step3Schema, step4Schema] as const;

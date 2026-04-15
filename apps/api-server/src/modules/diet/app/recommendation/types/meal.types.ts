@@ -41,6 +41,8 @@ export interface Constraint {
   channel?: string;
   /** V6.8 Phase 3-A: 用户烹饪技能等级（1-5） */
   skillLevel?: number;
+  /** #fix Bug7: 饮食限制（vegetarian/vegan/pescatarian 等，用于多字段硬过滤） */
+  dietaryRestrictions?: string[];
 }
 
 export interface ScoredFood {

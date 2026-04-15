@@ -89,6 +89,44 @@ export const BINGE_TRIGGER_OPTIONS = [
   { key: 'fatigue', label: '疲劳' },
 ] as const;
 
+// ── 健康状况选项 ──
+export const HEALTH_CONDITION_OPTIONS = [
+  { key: 'diabetes', label: '糖尿病', icon: '🩸' },
+  { key: 'hypertension', label: '高血压', icon: '❤️' },
+  { key: 'hyperlipidemia', label: '高血脂', icon: '🫀' },
+  { key: 'gout', label: '痛风', icon: '🦴' },
+  { key: 'kidney_disease', label: '肾脏疾病', icon: '🫘' },
+  { key: 'celiac', label: '乳糜泻', icon: '🌾' },
+  { key: 'ibs', label: '肠易激综合征', icon: '🫃' },
+  { key: 'fatty_liver', label: '脂肪肝', icon: '🫁' },
+  { key: 'thyroid', label: '甲状腺问题', icon: '🦋' },
+  { key: 'anemia', label: '贫血', icon: '💉' },
+  { key: 'osteoporosis', label: '骨质疏松', icon: '🦷' },
+  { key: 'cardiovascular', label: '心血管疾病', icon: '💓' },
+] as const;
+
+// ── 菜系偏好选项 ──
+export const CUISINE_OPTIONS = [
+  { key: 'chinese', label: '中餐', icon: '🥢' },
+  { key: 'sichuan', label: '川菜', icon: '🌶️' },
+  { key: 'cantonese', label: '粤菜', icon: '🍜' },
+  { key: 'japanese', label: '日料', icon: '🍱' },
+  { key: 'korean', label: '韩餐', icon: '🥘' },
+  { key: 'western', label: '西餐', icon: '🥩' },
+  { key: 'thai', label: '泰国菜', icon: '🍛' },
+  { key: 'indian', label: '印度菜', icon: '🫔' },
+  { key: 'mediterranean', label: '地中海', icon: '🫒' },
+  { key: 'fast_food', label: '快餐', icon: '🍔' },
+] as const;
+
+// ── 烹饪技能选项 ──
+export const COOKING_SKILL_OPTIONS = [
+  { key: 'beginner', label: '新手', desc: '只会煮方便面和炒蛋' },
+  { key: 'basic', label: '基础', desc: '能做简单家常菜' },
+  { key: 'intermediate', label: '中级', desc: '掌握多种烹饪技法' },
+  { key: 'advanced', label: '高级', desc: '能制作复杂料理' },
+] as const;
+
 // ── 步骤配置 ──
 export const STEP_CONFIG = [
   { step: 1 as const, title: '快速启动', subtitle: '让我们用 3 秒认识你', skippable: false },
@@ -104,6 +142,8 @@ export const STEP3_DEFAULTS = {
   allergens: [] as string[],
   foodPreferences: [] as string[],
   takeoutFrequency: 'sometimes' as const,
+  cuisinePreferences: [] as string[],
+  cookingSkillLevel: undefined as string | undefined,
 };
 
 export const STEP4_DEFAULTS = {
@@ -111,4 +151,5 @@ export const STEP4_DEFAULTS = {
   weakTimeSlots: [] as string[],
   bingeTriggers: [] as string[],
   canCook: true,
+  healthConditions: [] as string[],
 };

@@ -370,6 +370,8 @@ export interface RecommendationTuningConfig {
   semiPreparedMultiplierNormal?: number;
   /** 原材料在外出场景的乘数（默认 0.9） */
   ingredientMultiplierScene?: number;
+  /** 原材料在非外出场景的乘数（默认 0.85） — Bug5-fix */
+  ingredientMultiplierNormal?: number;
   /** 冲突解决最大轮数（默认 3） */
   conflictMaxRounds?: number;
   /** 食材多样性冲突阈值（默认 60） */

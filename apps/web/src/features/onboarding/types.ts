@@ -21,6 +21,8 @@ export interface StepDietHabitsData {
   allergens?: string[];
   foodPreferences?: string[];
   takeoutFrequency?: TakeoutFrequency;
+  cuisinePreferences?: string[];
+  cookingSkillLevel?: string;
 }
 
 export interface StepBehaviorData {
@@ -28,6 +30,7 @@ export interface StepBehaviorData {
   weakTimeSlots?: string[];
   bingeTriggers?: string[];
   canCook?: boolean;
+  healthConditions?: string[];
 }
 
 // ── Onboarding State ──

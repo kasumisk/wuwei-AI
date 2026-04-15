@@ -378,6 +378,11 @@ export class RealisticFilterService {
    * @returns 过滤后的候选列表
    */
   private preferDishOverIngredient(candidates: FoodLibrary[]): FoodLibrary[] {
+    // Bug5-fix v2: 分三级过滤 ingredient
+    // Level 1: 有同 mainIngredient 的 dish 版本 → 过滤 ingredient
+    // Level 2: 候选池有足够 dish(≥MIN_CANDIDATES) → 过滤所有 ingredient
+    // Level 3: dish 不足时保留 ingredient 作为兜底
+
     // 收集所有有 dish/semi_prepared 形态的 mainIngredient
     const ingredientsWithDish = new Set<string>();
     for (const f of candidates) {
@@ -389,15 +394,25 @@ export class RealisticFilterService {
       }
     }
 
-    if (ingredientsWithDish.size === 0) return candidates;
+    // 候选池中 dish/semi_prepared 数量（用于兜底判断）
+    const dishCandidates = candidates.filter(
+      (f) => f.foodForm === 'dish' || f.foodForm === 'semi_prepared',
+    );
 
+    // Level 2: 如果 dish/semi_prepared 候选足够，直接排除所有 ingredient
+    if (dishCandidates.length >= MIN_CANDIDATES) {
+      this.logger.debug(
+        `food_form filter: ${candidates.length} → ${dishCandidates.length} (enough dishes, removed all ingredients)`,
+      );
+      return dishCandidates;
+    }
+
+    // Level 1+3: dish 不够时，仅过滤有 dish 对应版本的 ingredient
     const filtered = candidates.filter((f) => {
       // 保留所有 dish / semi_prepared
       if (f.foodForm === 'dish' || f.foodForm === 'semi_prepared') return true;
-      // 保留没有 mainIngredient 的食物（无法判断归属）
-      if (!f.mainIngredient) return true;
-      // ingredient 形态：如果同 mainIngredient 有 dish 版本 → 过滤
-      if (ingredientsWithDish.has(f.mainIngredient)) {
+      // ingredient 且同 mainIngredient 有 dish → 过滤
+      if (f.mainIngredient && ingredientsWithDish.has(f.mainIngredient)) {
         return false;
       }
       return true;

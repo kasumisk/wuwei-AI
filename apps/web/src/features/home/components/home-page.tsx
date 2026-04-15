@@ -8,6 +8,7 @@ import { LocalizedLink } from '@/components/common/localized-link';
 import { ProactiveReminderCard } from './proactive-reminder';
 import { TodayStatus } from './today-status';
 import { MealRecordCard } from './meal-record-card';
+import { MealRecommendationCard } from './meal-recommendation-card';
 import { GoalTransitionCard } from './goal-transition-card';
 import { NutritionScoreCard } from './nutrition-score-card';
 import { WeeklyTrendCard } from './weekly-trend-card';
@@ -16,9 +17,8 @@ import { FrequentFoodSheet } from './frequent-food-sheet';
 import { ProfileCollectionCard } from './profile-collection-card';
 import { CompletionPrompt } from '@/features/profile/components/completion-prompt';
 import { useUnreadCount } from '@/features/notification/hooks/use-notifications';
-import { MEAL_LABELS } from '@/lib/constants/food';
 import Image from 'next/image';
-import type { FoodRecord, MealSuggestion, DailySummary } from '@/types/food';
+import type { FoodRecord } from '@/types/food';
 
 /* ─── SVG Icon Components ─── */
 function IconCamera({ className = '' }: { className?: string }) {
@@ -208,9 +208,13 @@ export function HomePage() {
               </section>
             )}
 
-            {/* 下一餐建议（精简版，详细计划跳转 /plan） */}
-            {mealSuggestion && mealSuggestion.suggestion && (
-              <NextMealHint suggestion={mealSuggestion} summary={summary} />
+            {/* 下一餐建议（完整版：场景切换 + 反馈 + 推荐原因） */}
+            {mealSuggestion && mealSuggestion.suggestion && summary && (
+              <MealRecommendationCard
+                suggestion={mealSuggestion}
+                summary={summary}
+                profile={profile ?? null}
+              />
             )}
 
             {/* 今日记录 */}
@@ -223,61 +227,6 @@ export function HomePage() {
 }
 
 /* ─── Sub-components ─── */
-
-/** 精简版下一餐建议 — 只显示核心信息 + 跳转 /plan */
-function NextMealHint({
-  suggestion,
-  summary,
-}: {
-  suggestion: MealSuggestion;
-  summary: DailySummary;
-}) {
-  const label = MEAL_LABELS[suggestion.mealType] || '下一餐';
-
-  return (
-    <section className="mb-6">
-      <div className="bg-card rounded-2xl p-4 border border-(--color-outline-variant)/10">
-        <LocalizedLink href="/plan" className="block group">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-bold flex items-center gap-1.5">
-              <span className="text-primary">AI</span> {label}建议
-            </h3>
-            <span className="text-xs text-primary font-medium flex items-center gap-0.5 group-hover:gap-1 transition-all">
-              查看完整计划
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 5l7 7-7 7"
-                />
-              </svg>
-            </span>
-          </div>
-          <p className="text-sm text-foreground/80 line-clamp-2">{suggestion.suggestion.foods}</p>
-          <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-            <span>{suggestion.suggestion.calories} kcal</span>
-            {suggestion.remainingCalories > 0 && (
-              <span>剩余预算 {suggestion.remainingCalories} kcal</span>
-            )}
-          </div>
-          {suggestion.suggestion.tip && (
-            <p className="text-xs text-muted-foreground mt-1.5 italic">
-              {suggestion.suggestion.tip}
-            </p>
-          )}
-        </LocalizedLink>
-        {/* 关联菜谱 */}
-        <LocalizedLink
-          href={`/recipes?q=${encodeURIComponent(suggestion.suggestion.foods.split('、')[0].split('，')[0].trim())}`}
-          className="inline-flex items-center gap-1 mt-2 text-[11px] text-primary font-medium hover:opacity-80 transition-opacity"
-        >
-          🍳 查看相关菜谱
-        </LocalizedLink>
-      </div>
-    </section>
-  );
-}
 
 function MealList({ meals }: { meals: FoodRecord[] }) {
   return (

@@ -129,9 +129,27 @@ const FOOD_POOL_SELECTABLE_COLUMNS: string[] = [
   'omega6',
   'soluble_fiber',
   'insoluble_fiber',
+  // #fix Bug9: 痛风嘌呤惩罚需要 purine 数据
+  'purine',
 ];
 
 // ==================== Raw row → FoodLibrary 映射 ====================
+
+/**
+ * #fix: 将 PostgreSQL 返回的 snake_case 行键统一转为 camelCase。
+ * $queryRawUnsafe 原样返回列名（snake_case），
+ * 而 mapRowToFoodLibrary 以 camelCase 读取属性。
+ */
+function normalizeRow(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(row)) {
+    const camel = key.replace(/_([a-z0-9])/g, (_, c: string) =>
+      c.toUpperCase(),
+    );
+    out[camel] = row[key];
+  }
+  return out;
+}
 
 /** 安全转 number：Prisma Decimal / string / null → number */
 function n(v: unknown): number {
@@ -159,6 +177,38 @@ function jsonParse<T>(v: unknown, fallback: T): T {
     }
   }
   return fallback;
+}
+
+/**
+ * #fix: 标准化 commonPortions — 数据库中存在两种格式:
+ *   1. 对象数组: [{"name":"1份≈200g","grams":200}]  ← 期望格式
+ *   2. 字符串数组: ["1 teaspoon (2g)","1/4 cup (28g)"]  ← 需转换
+ * 将字符串格式转为对象格式，从括号中提取 grams 数值。
+ */
+function normalizePortions(
+  raw: unknown[],
+): Array<{ name: string; grams: number }> {
+  if (!Array.isArray(raw) || raw.length === 0) return [];
+  return raw
+    .map((item) => {
+      if (typeof item === 'object' && item !== null) {
+        const obj = item as Record<string, unknown>;
+        if (typeof obj.grams === 'number' && obj.grams > 0) {
+          return { name: String(obj.name ?? ''), grams: obj.grams };
+        }
+        return null;
+      }
+      if (typeof item === 'string') {
+        // 从 "1 teaspoon (2g)" 或 "100g serving" 中提取 grams
+        const match = item.match(/\((\d+(?:\.\d+)?)g\)/);
+        if (match) {
+          return { name: item, grams: Number(match[1]) };
+        }
+        return null;
+      }
+      return null;
+    })
+    .filter((p): p is { name: string; grams: number } => p !== null);
 }
 
 /**
@@ -248,9 +298,8 @@ function mapRowToFoodLibrary(row: Record<string, unknown>): FoodLibrary {
       row.standardServingDesc != null
         ? String(row.standardServingDesc)
         : undefined,
-    commonPortions: jsonParse<Array<{ name: string; grams: number }>>(
-      row.commonPortions,
-      [],
+    commonPortions: normalizePortions(
+      jsonParse<unknown[]>(row.commonPortions, []),
     ),
 
     // 媒体
@@ -420,7 +469,7 @@ export class FoodPoolCacheService implements OnModuleInit {
     // 品类数据变化时清除均值缓存以便下次重算
     this.categoryMicroAverages = null;
 
-    return rows.map(mapRowToFoodLibrary);
+    return rows.map((row) => mapRowToFoodLibrary(normalizeRow(row)));
   }
 
   private async getSelectableColumns(): Promise<string[]> {

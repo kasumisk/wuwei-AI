@@ -28,6 +28,16 @@ export interface AppLoginResponse {
   token: string;
 }
 
+// ── 厨房画像 ──
+export interface KitchenProfile {
+  hasOven: boolean;
+  hasMicrowave: boolean;
+  hasAirFryer: boolean;
+  hasRiceCooker: boolean;
+  hasSteamer: boolean;
+  primaryStove: 'gas' | 'induction' | 'none';
+}
+
 // ── 用户档案 ──
 export interface UserProfile {
   id: string;
@@ -53,6 +63,16 @@ export interface UserProfile {
   dietaryRestrictions?: string[];
   allergens?: string[];
   healthConditions?: string[];
+  cuisinePreferences?: string[];
+  cookingSkillLevel?: 'beginner' | 'basic' | 'intermediate' | 'advanced';
+  // 生活方式
+  sleepQuality?: 'poor' | 'fair' | 'good';
+  stressLevel?: 'low' | 'medium' | 'high';
+  hydrationGoal?: number;
+  supplementsUsed?: string[];
+  mealTimingPreference?: 'early_bird' | 'standard' | 'late_eater';
+  // 厨房画像
+  kitchenProfile?: KitchenProfile;
   // 行为习惯
   weakTimeSlots?: string[];
   bingeTriggers?: string[];
@@ -98,6 +118,11 @@ export interface UpdateRecommendationPreferencesDto {
   cookingEffort?: CookingEffort;
   budgetSensitivity?: BudgetSensitivity;
   realismLevel?: 'strict' | 'normal' | 'relaxed' | 'off';
+  diversityTolerance?: 'low' | 'medium' | 'high';
+  dietaryPhilosophy?: 'omnivore' | 'pescatarian' | 'vegetarian' | 'vegan' | 'none';
+  mealPattern?: 'frequent_small' | 'standard_three' | 'intermittent_fasting';
+  flavorOpenness?: 'conservative' | 'moderate' | 'adventurous';
+  cuisineWeights?: Record<string, number>;
 }
 
 // ── 行为画像 ──

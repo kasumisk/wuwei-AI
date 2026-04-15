@@ -36,23 +36,23 @@ export const THROTTLE_CONFIG = [
   {
     name: THROTTLE_TIERS.DEFAULT,
     ttl: 60000, // 60 秒
-    limit: 100, // 100 次
+    limit: 10000, // 暂时放开，后续按接口细化
   },
   {
     name: THROTTLE_TIERS.USER_API,
     ttl: 60000,
-    limit: 60,
+    limit: 10000,
   },
   {
     name: THROTTLE_TIERS.AI_HEAVY,
     ttl: 60000,
-    limit: 5,
+    limit: 10000,
   },
   {
     // V6.4: 新增独立 tier，避免与 AI_HEAVY 共享计数器
     name: THROTTLE_TIERS.STRICT,
     ttl: 60000,
-    limit: 3,
+    limit: 10000,
   },
 ];
 

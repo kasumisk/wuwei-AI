@@ -143,6 +143,8 @@ export class ConstraintGeneratorService {
       excludeTags: [...new Set(excludeTags)],
       maxCalories,
       minProtein: target.protein * tuning.minProteinRatio,
+      // #fix Bug7: 传递饮食限制给 FoodFilter 做多字段硬过滤
+      dietaryRestrictions: userProfile?.dietaryRestrictions ?? [],
     };
   }
 }

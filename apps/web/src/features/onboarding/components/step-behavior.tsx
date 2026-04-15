@@ -5,6 +5,7 @@ import {
   DISCIPLINE_OPTIONS,
   WEAK_SLOT_OPTIONS,
   BINGE_TRIGGER_OPTIONS,
+  HEALTH_CONDITION_OPTIONS,
 } from '../lib/onboarding-constants';
 import { TagCloud } from './shared/tag-cloud';
 
@@ -17,7 +18,7 @@ export function StepBehavior({ data, onChange }: StepBehaviorProps) {
   return (
     <div className="space-y-8">
       <div className="text-center">
-        <h2 className="text-2xl font-extrabold font-headline">行为与心理</h2>
+        <h2 className="text-2xl font-extrabold font-headline">行为与健康</h2>
         <p className="text-sm text-muted-foreground mt-2">帮我们制定更适合你的方案</p>
       </div>
 
@@ -85,6 +86,43 @@ export function StepBehavior({ data, onChange }: StepBehaviorProps) {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* 健康状况 */}
+        <div>
+          <p className="text-sm font-bold text-foreground mb-1">是否有以下健康状况？</p>
+          <p className="text-xs text-muted-foreground mb-3">
+            如实填写可让 AI 规避风险食物，保障你的安全（可跳过）
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            {HEALTH_CONDITION_OPTIONS.map(({ key, label, icon }) => {
+              const selected = (data.healthConditions ?? []).includes(key);
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => {
+                    const prev = data.healthConditions ?? [];
+                    const next = selected ? prev.filter((k) => k !== key) : [...prev, key];
+                    onChange({ healthConditions: next });
+                  }}
+                  className={`flex flex-col items-center gap-1 py-3 px-2 rounded-2xl text-xs font-medium transition-all active:scale-95 ${
+                    selected
+                      ? 'bg-amber-500 text-white shadow-sm shadow-amber-500/30'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  }`}
+                >
+                  <span className="text-base">{icon}</span>
+                  <span className="leading-tight text-center">{label}</span>
+                </button>
+              );
+            })}
+          </div>
+          {(data.healthConditions ?? []).length > 0 && (
+            <p className="text-xs text-amber-600 mt-2 font-medium">
+              已选 {data.healthConditions!.length} 项，AI 将据此调整推荐策略
+            </p>
+          )}
         </div>
       </div>
     </div>

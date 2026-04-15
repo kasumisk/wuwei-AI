@@ -35,24 +35,24 @@ function MacroBar({ protein, fat, carbs }: { protein: number; fat: number; carbs
   const cPct = 100 - pPct - fPct;
 
   return (
-    <div className="mt-2">
-      <div className="flex h-1.5 rounded-full overflow-hidden">
+    <div className="mt-3">
+      <div className="flex h-2 rounded-full overflow-hidden">
         <div className="bg-blue-400" style={{ width: `${pPct}%` }} />
         <div className="bg-yellow-400" style={{ width: `${fPct}%` }} />
         <div className="bg-green-400" style={{ width: `${cPct}%` }} />
       </div>
-      <div className="flex justify-between mt-1">
-        <span className="text-[9px] text-blue-600">蛋白{protein}g</span>
-        <span className="text-[9px] text-yellow-600">脂肪{fat}g</span>
-        <span className="text-[9px] text-green-600">碳水{carbs}g</span>
+      <div className="flex justify-between mt-1.5">
+        <span className="text-[10px] text-blue-600">蛋白 {protein}g</span>
+        <span className="text-[10px] text-yellow-600">脂肪 {fat}g</span>
+        <span className="text-[10px] text-green-600">碳水 {carbs}g</span>
       </div>
     </div>
   );
 }
 
-/* ─── 单餐卡片 ─── */
+/* ─── 单餐详情面板 ─── */
 
-function MealSlotCard({
+function MealPanel({
   label,
   emoji,
   plan,
@@ -69,48 +69,51 @@ function MealSlotCard({
   onLog: () => void;
   isLogging: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [showMacro, setShowMacro] = useState(false);
+  const hasMacro = plan.protein > 0 || plan.fat > 0 || plan.carbs > 0;
 
   return (
-    <div className="bg-card rounded-xl p-3">
-      <div className="flex items-start justify-between">
-        <div className="flex-1 min-w-0">
-          <span className="text-xs font-bold text-muted-foreground">
-            {emoji} {label}
-          </span>
-          <p className="text-xs mt-1 line-clamp-2">{plan.foods}</p>
-          <span className="text-[10px] text-primary font-bold">{plan.calories} kcal</span>
-        </div>
+    <div className="bg-card rounded-xl p-4">
+      {/* 餐次标题行 */}
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-sm font-bold">
+          {emoji} {label}
+        </span>
+        <span className="text-sm font-bold text-primary">{plan.calories} kcal</span>
       </div>
 
+      {/* 食物列表 */}
+      <p className="text-sm leading-relaxed">{plan.foods}</p>
+
+      {/* 小贴士 */}
       {plan.tip && (
-        <p className="text-[10px] text-muted-foreground mt-1 line-clamp-1">💡 {plan.tip}</p>
+        <p className="text-xs text-muted-foreground mt-2">💡 {plan.tip}</p>
       )}
 
       {/* 宏量素（点击展开） */}
-      {(plan.protein > 0 || plan.fat > 0 || plan.carbs > 0) && (
+      {hasMacro && (
         <>
           <button
-            onClick={() => setExpanded((v) => !v)}
-            className="text-[10px] text-muted-foreground mt-1 underline underline-offset-2 hover:text-foreground transition-colors"
+            onClick={() => setShowMacro((v) => !v)}
+            className="text-xs text-muted-foreground mt-2 underline underline-offset-2 hover:text-foreground transition-colors"
           >
-            {expanded ? '收起营养' : '查看营养'}
+            {showMacro ? '收起营养' : '查看营养'}
           </button>
-          {expanded && <MacroBar protein={plan.protein} fat={plan.fat} carbs={plan.carbs} />}
+          {showMacro && <MacroBar protein={plan.protein} fat={plan.fat} carbs={plan.carbs} />}
         </>
       )}
 
       {/* 操作按钮行 */}
-      <div className="flex gap-1.5 mt-2">
+      <div className="flex gap-2 mt-4">
         <button
           onClick={(e) => {
             e.stopPropagation();
             onLog();
           }}
           disabled={isLogging}
-          className="flex-1 px-2 py-1 rounded-lg bg-primary/10 text-[10px] font-bold text-primary hover:bg-primary/20 transition-all active:scale-[0.95] disabled:opacity-50"
+          className="flex-1 px-3 py-1.5 rounded-lg bg-primary/10 text-xs font-bold text-primary hover:bg-primary/20 transition-all active:scale-[0.98] disabled:opacity-50"
         >
-          {isLogging ? '...' : '记为已吃'}
+          {isLogging ? '记录中…' : '记为已吃'}
         </button>
         <button
           onClick={(e) => {
@@ -118,9 +121,9 @@ function MealSlotCard({
             onSwap();
           }}
           disabled={isSwapping}
-          className="px-2 py-1 rounded-lg bg-muted text-[10px] font-bold text-muted-foreground hover:bg-muted/80 transition-all active:scale-[0.95] disabled:opacity-50 flex-shrink-0"
+          className="px-4 py-1.5 rounded-lg bg-muted text-xs font-bold text-muted-foreground hover:bg-muted/80 transition-all active:scale-[0.98] disabled:opacity-50"
         >
-          {isSwapping ? '...' : '换'}
+          {isSwapping ? '换餐中…' : '换一换'}
         </button>
       </div>
     </div>
@@ -141,6 +144,10 @@ export function DailyPlanCard({ dailyPlan }: DailyPlanCardProps) {
   const [swappingSlot, setSwappingSlot] = useState<string | null>(null);
   const [loggingSlot, setLoggingSlot] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+
+  // 默认选中第一个有数据的餐次
+  const firstAvailable = MEAL_SLOTS.find(({ key }) => dailyPlan[key] != null)?.key ?? 'morningPlan';
+  const [activeTab, setActiveTab] = useState<(typeof MEAL_SLOTS)[number]['key']>(firstAvailable);
 
   // 一键记录 mutation
   const logMutation = useMutation({
@@ -177,14 +184,11 @@ export function DailyPlanCard({ dailyPlan }: DailyPlanCardProps) {
     [adjustPlan, toast]
   );
 
-  /** 一键记录计划餐为已吃 */
   const handleLogMeal = useCallback(
     async (slotKey: string, slotLabel: string, plan: MealPlan) => {
       setLoggingSlot(slotLabel);
       try {
         const mealType = MEAL_TYPE_MAP[slotKey] || 'lunch';
-        // 将计划的 foods 字符串拆分为简单 FoodItem 列表
-        // 计划中 foods 是逗号分隔的食物名
         const foodNames = plan.foods
           .split(/[、，,]+/)
           .map((s) => s.trim())
@@ -221,12 +225,14 @@ export function DailyPlanCard({ dailyPlan }: DailyPlanCardProps) {
   );
 
   const adjustments = dailyPlan.adjustments || [];
+  const activePlan = dailyPlan[activeTab];
 
   return (
     <section className="mb-6">
       <div className="bg-surface-container-low rounded-2xl p-5">
-        {/* 标题 */}
-        <div className="flex items-center justify-between mb-2">
+
+        {/* 标题行 */}
+        <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <span className="text-lg">📅</span>
             <h3 className="font-bold text-sm">今日饮食计划</h3>
@@ -243,24 +249,56 @@ export function DailyPlanCard({ dailyPlan }: DailyPlanCardProps) {
           <p className="text-xs text-muted-foreground mb-3">💡 {dailyPlan.strategy}</p>
         )}
 
-        {/* 四餐卡片 */}
-        <div className="grid grid-cols-2 gap-2">
-          {MEAL_SLOTS.map(
-            ({ key, label, emoji }) =>
-              dailyPlan[key] && (
-                <MealSlotCard
-                  key={key}
-                  label={label}
-                  emoji={emoji}
-                  plan={dailyPlan[key]!}
-                  onSwap={() => handleSwapMeal(label, dailyPlan[key]!.foods)}
-                  isSwapping={isAdjusting && swappingSlot === label}
-                  onLog={() => handleLogMeal(key, label, dailyPlan[key]!)}
-                  isLogging={logMutation.isPending && loggingSlot === label}
-                />
-              )
-          )}
+        {/* Tab 栏 */}
+        <div className="flex gap-1 mb-3 bg-muted/50 rounded-xl p-1">
+          {MEAL_SLOTS.map(({ key, label, emoji }) => {
+            const plan = dailyPlan[key];
+            const isActive = activeTab === key;
+            return (
+              <button
+                key={key}
+                onClick={() => setActiveTab(key)}
+                disabled={!plan}
+                className={[
+                  'flex-1 flex flex-col items-center py-1.5 rounded-lg text-[10px] font-medium transition-all',
+                  isActive
+                    ? 'bg-background shadow-sm text-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                  !plan ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer',
+                ].join(' ')}
+              >
+                <span className="text-sm leading-none mb-0.5">{emoji}</span>
+                <span>{label}</span>
+                {plan && (
+                  <span className={isActive ? 'text-primary font-bold' : ''}>
+                    {plan.calories}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
+
+        {/* 当前餐次面板 */}
+        {activePlan ? (
+          (() => {
+            const slot = MEAL_SLOTS.find((s) => s.key === activeTab)!;
+            return (
+              <MealPanel
+                key={activeTab}
+                label={slot.label}
+                emoji={slot.emoji}
+                plan={activePlan}
+                onSwap={() => handleSwapMeal(slot.label, activePlan.foods)}
+                isSwapping={isAdjusting && swappingSlot === slot.label}
+                onLog={() => handleLogMeal(activeTab, slot.label, activePlan)}
+                isLogging={logMutation.isPending && loggingSlot === slot.label}
+              />
+            );
+          })()
+        ) : (
+          <p className="text-xs text-muted-foreground text-center py-6">暂无该餐次计划</p>
+        )}
 
         {/* 调整历史 */}
         {adjustments.length > 0 && (

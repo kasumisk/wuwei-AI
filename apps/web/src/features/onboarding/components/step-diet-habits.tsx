@@ -6,6 +6,8 @@ import {
   TAKEOUT_OPTIONS,
   DIETARY_RESTRICTION_OPTIONS,
   FOOD_PREFERENCE_OPTIONS,
+  CUISINE_OPTIONS,
+  COOKING_SKILL_OPTIONS,
 } from '../lib/onboarding-constants';
 import { TagCloud } from './shared/tag-cloud';
 import { AllergenSelector } from './shared/allergen-selector';
@@ -92,6 +94,64 @@ export function StepDietHabits({ data, onChange }: StepDietHabitsProps) {
             selected={data.foodPreferences ?? []}
             onChange={(foodPreferences) => onChange({ foodPreferences })}
           />
+        </div>
+
+        {/* 菜系偏好 */}
+        <div>
+          <p className="text-sm font-bold text-foreground mb-3">偏爱哪些菜系？（可多选）</p>
+          <div className="grid grid-cols-4 gap-2">
+            {CUISINE_OPTIONS.map(({ key, label, icon }) => {
+              const selected = (data.cuisinePreferences ?? []).includes(key);
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => {
+                    const prev = data.cuisinePreferences ?? [];
+                    const next = selected ? prev.filter((k) => k !== key) : [...prev, key];
+                    onChange({ cuisinePreferences: next });
+                  }}
+                  className={`flex flex-col items-center gap-1 py-3 rounded-2xl text-xs font-medium transition-all active:scale-95 ${
+                    selected
+                      ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/20'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  }`}
+                >
+                  <span className="text-lg">{icon}</span>
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 烹饪水平 */}
+        <div>
+          <p className="text-sm font-bold text-foreground mb-3">你的烹饪水平</p>
+          <div className="grid grid-cols-2 gap-2">
+            {COOKING_SKILL_OPTIONS.map(({ key, label, desc }) => {
+              const selected = data.cookingSkillLevel === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => onChange({ cookingSkillLevel: key })}
+                  className={`flex flex-col items-start gap-0.5 px-4 py-3 rounded-2xl text-left transition-all active:scale-[0.98] ${
+                    selected
+                      ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/20'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  }`}
+                >
+                  <span className="text-sm font-bold">{label}</span>
+                  <span
+                    className={`text-[11px] ${selected ? 'text-primary-foreground/80' : 'text-muted-foreground/70'}`}
+                  >
+                    {desc}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>

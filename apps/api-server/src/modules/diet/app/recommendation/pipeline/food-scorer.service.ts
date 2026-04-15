@@ -549,20 +549,21 @@ export class FoodScorerService {
     | 'servingFiber'
     | 'servingGL'
   > {
+    const serving = Number(food.standardServingG) || 100;
     return {
       servingCalories: Math.round(
-        (food.calories * food.standardServingG) / 100,
+        ((Number(food.calories) || 0) * serving) / 100,
       ),
       servingProtein: Math.round(
-        ((food.protein || 0) * food.standardServingG) / 100,
+        ((Number(food.protein) || 0) * serving) / 100,
       ),
-      servingFat: Math.round(((food.fat || 0) * food.standardServingG) / 100),
+      servingFat: Math.round(((Number(food.fat) || 0) * serving) / 100),
       servingCarbs: Math.round(
-        ((food.carbs || 0) * food.standardServingG) / 100,
+        ((Number(food.carbs) || 0) * serving) / 100,
       ),
       // 膳食纤维按份量换算
       servingFiber: Math.round(
-        ((food.fiber || 0) * food.standardServingG) / 100,
+        ((Number(food.fiber) || 0) * serving) / 100,
       ),
       // GL 不按重量线性缩放，直接使用食物级别值
       servingGL: Number(food.glycemicLoad) || 0,

@@ -5,7 +5,7 @@
  * 从 food.ts 拆分，负责用户档案的 CRUD 和引导流
  */
 
-import { clientGet, clientPut, clientPost } from './client-api';
+import { clientGet, clientPut, clientPost, clientPatch } from './client-api';
 import type { ApiResponse } from './http-client';
 import type {
   UserProfile,
@@ -24,14 +24,33 @@ async function unwrap<T>(promise: Promise<ApiResponse<T>>): Promise<T> {
 }
 
 export const profileService = {
-  /** 获取用户健康档案 */
-  getProfile: async (): Promise<UserProfile | null> => {
-    return unwrap(clientGet<UserProfile | null>('/app/food/profile'));
+  /**
+   * 获取用户完整档案（declared + observed + inferred + meta）
+   * 替代旧的 GET /app/food/profile，包含所有新字段
+   */
+  getFullProfile: async (): Promise<{
+    declared: UserProfile | null;
+    observed: unknown;
+    inferred: unknown;
+    meta: { completeness: number; onboardingStep: number; profileVersion: number };
+  }> => {
+    return unwrap(clientGet('/app/user-profile/full'));
   },
 
-  /** 保存用户健康档案（旧接口兼容） */
+  /** 获取用户健康档案（旧接口，缺少新字段，仅用于兼容老代码） */
+  getProfile: async (): Promise<UserProfile | null> => {
+    try {
+      const full = await profileService.getFullProfile();
+      return full.declared;
+    } catch {
+      // fallback to old endpoint
+      return unwrap(clientGet<UserProfile | null>('/app/food/profile'));
+    }
+  },
+
+  /** 保存用户健康档案（旧接口兼容，内部改为新端点） */
   saveProfile: async (data: Partial<UserProfile>): Promise<UserProfile> => {
-    return unwrap(clientPut<UserProfile>('/app/food/profile', data));
+    return profileService.updateDeclaredProfile(data);
   },
 
   /** 获取行为画像 */
@@ -104,5 +123,10 @@ export const profileService = {
     return unwrap(
       clientPut<RecommendationPreferences>('/app/user-profile/recommendation-preferences', data)
     );
+  },
+
+  /** 更新声明数据（部分更新，支持 kitchenProfile / 生活方式等扩展字段） */
+  updateDeclaredProfile: async (data: Partial<UserProfile>): Promise<UserProfile> => {
+    return unwrap(clientPatch<UserProfile>('/app/user-profile/declared', data));
   },
 };

@@ -1105,27 +1105,45 @@ export class UserProfileService {
     userId: string,
     dto: UpdateRecommendationPreferencesDto,
   ): Promise<RecommendationPreferences> {
-    const prefs: RecommendationPreferences = {};
-    if (dto.popularityPreference)
-      prefs.popularityPreference = dto.popularityPreference;
-    if (dto.cookingEffort) prefs.cookingEffort = dto.cookingEffort;
-    if (dto.budgetSensitivity) prefs.budgetSensitivity = dto.budgetSensitivity;
-    // V7.2 P3-B: 复制现实性级别偏好
-    if (dto.realismLevel) prefs.realismLevel = dto.realismLevel;
+    // FIX: read existing prefs first so a single-field update doesn't wipe all other saved fields
+    const existing = await this.getRecommendationPreferences(userId);
 
-    await this.prisma.userProfiles.update({
+    // Build patch — use !== undefined so falsy valid values (e.g. 'off', 'low') are not silently skipped
+    const patch: Partial<RecommendationPreferences> = {};
+    if (dto.popularityPreference !== undefined)
+      patch.popularityPreference = dto.popularityPreference;
+    if (dto.cookingEffort !== undefined) patch.cookingEffort = dto.cookingEffort;
+    if (dto.budgetSensitivity !== undefined)
+      patch.budgetSensitivity = dto.budgetSensitivity;
+    if (dto.realismLevel !== undefined) patch.realismLevel = dto.realismLevel;
+    if (dto.diversityTolerance !== undefined)
+      patch.diversityTolerance = dto.diversityTolerance as any;
+    if (dto.dietaryPhilosophy !== undefined)
+      patch.dietaryPhilosophy = dto.dietaryPhilosophy as any;
+    if (dto.mealPattern !== undefined) patch.mealPattern = dto.mealPattern as any;
+    if (dto.flavorOpenness !== undefined)
+      patch.flavorOpenness = dto.flavorOpenness as any;
+
+    // Merge with existing
+    const merged: RecommendationPreferences = { ...existing, ...patch };
+
+    await this.prisma.userProfiles.upsert({
       where: { userId: userId },
-      data: { recommendationPreferences: prefs as any },
+      update: { recommendationPreferences: merged as any },
+      create: {
+        userId: userId,
+        recommendationPreferences: merged as any,
+      },
     });
 
     this.logger.log(
-      `用户推荐偏好已更新 userId=${userId}: ${JSON.stringify(prefs)}`,
+      `用户推荐偏好已更新 userId=${userId}: ${JSON.stringify(merged)}`,
     );
 
     // 清除画像缓存以便下次推荐使用最新偏好
     this.profileCacheService.invalidate(userId);
 
-    return prefs;
+    return merged;
   }
 
   /**

@@ -45,6 +45,16 @@ export class FoodFilterService {
         if (hasExcluded) return false;
       }
 
+      // 3b. #fix Bug7: 饮食限制多字段硬过滤
+      // 仅靠 tags 中的 "meat" 标签无法覆盖所有肉/鱼类食物，
+      // 需要额外检查 foodGroup / category / mainIngredient。
+      if (
+        constraint.dietaryRestrictions?.length &&
+        this.violatesDietaryRestriction(food, constraint.dietaryRestrictions)
+      ) {
+        return false;
+      }
+
       // 4. 渠道可达性（硬约束）
       if (
         constraint.channel &&
@@ -148,4 +158,176 @@ export class FoodFilterService {
     if (difficulty <= 2) return true;
     return skillLevel >= difficulty;
   }
+
+  // ─── #fix Bug7: 饮食限制多字段硬过滤 ───
+
+  /**
+   * 非肉类 foodGroup 白名单。
+   * vegetarian: 排除所有肉/鱼/海鲜类 foodGroup。
+   * vegan: 在 vegetarian 基础上额外排除 dairy/egg。
+   * pescatarian: 允许鱼/海鲜，排除其他肉类。
+   */
+  private static readonly NON_MEAT_FOOD_GROUPS = new Set([
+    'vegetable',
+    'fruit',
+    'grain',
+    'legume',
+    'tuber',
+    'nut',
+    'seed',
+    'mushroom',
+    'oil',
+    'seasoning',
+    'spice',
+    'herb',
+    'cereal',
+    'dairy', // vegetarian 允许乳制品
+    'egg', // vegetarian 允许蛋
+    'beverage',
+    'tea',
+    'coffee',
+    'juice',
+    'water',
+    'soy',
+    'tofu',
+  ]);
+
+  private static readonly MEAT_FOOD_GROUPS = new Set([
+    'pork',
+    'beef',
+    'chicken',
+    'poultry',
+    'lamb',
+    'duck',
+    'goose',
+    'game',
+    'organ',
+    'meat',
+    'processed_meat',
+  ]);
+
+  private static readonly SEAFOOD_FOOD_GROUPS = new Set([
+    'seafood',
+    'fish',
+    'shellfish',
+    'shrimp',
+    'crab',
+  ]);
+
+  private static readonly MEAT_MAIN_INGREDIENTS = new Set([
+    'pork',
+    'beef',
+    'chicken',
+    'lamb',
+    'duck',
+    'goose',
+    'turkey',
+    'organ meat',
+    'bacon',
+    'sausage',
+    'ham',
+  ]);
+
+  private static readonly SEAFOOD_MAIN_INGREDIENTS = new Set([
+    'fish',
+    'shrimp',
+    'crab',
+    'lobster',
+    'squid',
+    'octopus',
+    'clam',
+    'mussel',
+    'oyster',
+    'scallop',
+    'abalone',
+    'sea cucumber',
+  ]);
+
+  private violatesDietaryRestriction(
+    food: FoodLibrary,
+    restrictions: string[],
+  ): boolean {
+    const fg = (food.foodGroup || '').toLowerCase();
+    const cat = (food.category || '').toLowerCase();
+    const mi = (food.mainIngredient || '').toLowerCase();
+
+    for (const r of restrictions) {
+      if (r === 'vegetarian') {
+        // 排除肉类和海鲜
+        if (FoodFilterService.MEAT_FOOD_GROUPS.has(fg)) return true;
+        if (FoodFilterService.SEAFOOD_FOOD_GROUPS.has(fg)) return true;
+        if (FoodFilterService.MEAT_MAIN_INGREDIENTS.has(mi)) return true;
+        if (FoodFilterService.SEAFOOD_MAIN_INGREDIENTS.has(mi)) return true;
+        if (cat === 'protein' && !FoodFilterService.NON_MEAT_FOOD_GROUPS.has(fg)) {
+          // protein 类别中，只允许白名单内的 foodGroup（如 legume/dairy/egg/tofu）
+          return true;
+        }
+      } else if (r === 'vegan') {
+        // 排除所有动物性食物
+        if (FoodFilterService.MEAT_FOOD_GROUPS.has(fg)) return true;
+        if (FoodFilterService.SEAFOOD_FOOD_GROUPS.has(fg)) return true;
+        if (FoodFilterService.MEAT_MAIN_INGREDIENTS.has(mi)) return true;
+        if (FoodFilterService.SEAFOOD_MAIN_INGREDIENTS.has(mi)) return true;
+        if (fg === 'dairy' || fg === 'egg') return true;
+        if (mi === 'milk' || mi === 'egg' || mi === 'cheese' || mi === 'yogurt') return true;
+      } else if (r === 'pescatarian') {
+        // 允许鱼/海鲜，排除其他肉类
+        if (FoodFilterService.MEAT_FOOD_GROUPS.has(fg)) return true;
+        if (FoodFilterService.MEAT_MAIN_INGREDIENTS.has(mi)) return true;
+      }
+    }
+    return false;
+  }
+}
+
+// ==================== 独立导出：供 pipeline-builder 召回阶段复用 ====================
+
+const MEAT_FG = new Set([
+  'pork', 'beef', 'chicken', 'poultry', 'lamb', 'duck', 'goose',
+  'game', 'organ', 'meat', 'processed_meat',
+]);
+const SEAFOOD_FG = new Set(['seafood', 'fish', 'shellfish', 'shrimp', 'crab']);
+const MEAT_MI = new Set([
+  'pork', 'beef', 'chicken', 'lamb', 'duck', 'goose', 'turkey',
+  'organ meat', 'bacon', 'sausage', 'ham',
+]);
+const SEAFOOD_MI = new Set([
+  'fish', 'shrimp', 'crab', 'lobster', 'squid', 'octopus',
+  'clam', 'mussel', 'oyster', 'scallop', 'abalone', 'sea cucumber',
+]);
+const NON_MEAT_FG = new Set([
+  'vegetable', 'fruit', 'grain', 'legume', 'nut', 'seed', 'tuber',
+  'mushroom', 'oil', 'condiment', 'seasoning', 'spice', 'herb',
+  'cereal', 'dairy', 'egg', 'beverage', 'tea', 'coffee', 'juice',
+  'water', 'soy', 'tofu',
+]);
+
+/**
+ * #fix Bug7: 独立导出的饮食限制判断函数。
+ * 供 pipeline-builder 召回阶段直接使用，无需依赖 FoodFilterService 实例。
+ */
+export function foodViolatesDietaryRestriction(
+  food: FoodLibrary,
+  restrictions: string[],
+): boolean {
+  if (!restrictions?.length) return false;
+  const fg = (food.foodGroup || '').toLowerCase();
+  const cat = (food.category || '').toLowerCase();
+  const mi = (food.mainIngredient || '').toLowerCase();
+
+  for (const r of restrictions) {
+    if (r === 'vegetarian') {
+      if (MEAT_FG.has(fg) || SEAFOOD_FG.has(fg)) return true;
+      if (MEAT_MI.has(mi) || SEAFOOD_MI.has(mi)) return true;
+      if (cat === 'protein' && !NON_MEAT_FG.has(fg)) return true;
+    } else if (r === 'vegan') {
+      if (MEAT_FG.has(fg) || SEAFOOD_FG.has(fg)) return true;
+      if (MEAT_MI.has(mi) || SEAFOOD_MI.has(mi)) return true;
+      if (fg === 'dairy' || fg === 'egg') return true;
+      if (mi === 'milk' || mi === 'egg' || mi === 'cheese' || mi === 'yogurt') return true;
+    } else if (r === 'pescatarian') {
+      if (MEAT_FG.has(fg) || MEAT_MI.has(mi)) return true;
+    }
+  }
+  return false;
 }

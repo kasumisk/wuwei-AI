@@ -182,8 +182,8 @@ export class MealAssemblerService {
     budget: number,
     portionTendency?: string | null,
   ): ScoredFood[] {
-    const totalCal = picks.reduce((s, p) => s + p.servingCalories, 0);
-    if (totalCal <= 0) return picks;
+    const totalCal = picks.reduce((s, p) => s + (p.servingCalories || 0), 0);
+    if (totalCal <= 0 || !Number.isFinite(totalCal)) return picks;
 
     let globalRatio = budget / totalCal;
 
@@ -204,11 +204,16 @@ export class MealAssemblerService {
 
       if (portions.length > 0) {
         const standardG = p.food.standardServingG || 100;
-        const portionGrams = portions.map((pt) => pt.grams);
-        const minG = Math.min(...portionGrams);
-        const maxG = Math.max(...portionGrams);
-        minRatio = Math.max(0.5, minG / standardG);
-        maxRatio = Math.min(2.0, maxG / standardG);
+        // #fix: 过滤无效 grams（字符串格式的 portions 可能没有 grams 字段）
+        const portionGrams = portions
+          .map((pt) => Number(pt.grams))
+          .filter((g) => Number.isFinite(g) && g > 0);
+        if (portionGrams.length > 0) {
+          const minG = Math.min(...portionGrams);
+          const maxG = Math.max(...portionGrams);
+          minRatio = Math.max(0.5, minG / standardG);
+          maxRatio = Math.min(2.0, maxG / standardG);
+        }
       }
 
       // 裁剪到边界范围
@@ -220,15 +225,15 @@ export class MealAssemblerService {
 
       return {
         ...p,
-        servingCalories: Math.round(p.servingCalories * finalRatio),
-        servingProtein: Math.round(p.servingProtein * finalRatio),
-        servingFat: Math.round(p.servingFat * finalRatio),
-        servingCarbs: Math.round(p.servingCarbs * finalRatio),
+        servingCalories: Math.round((p.servingCalories || 0) * finalRatio),
+        servingProtein: Math.round((p.servingProtein || 0) * finalRatio),
+        servingFat: Math.round((p.servingFat || 0) * finalRatio),
+        servingCarbs: Math.round((p.servingCarbs || 0) * finalRatio),
       };
     });
 
     // 第二轮: 如果总热量偏差 >15%，找余量最大的食物微调
-    const adjustedTotal = adjusted.reduce((s, p) => s + p.servingCalories, 0);
+    const adjustedTotal = adjusted.reduce((s, p) => s + (p.servingCalories || 0), 0);
     const deviation = (adjustedTotal - budget) / budget;
 
     if (Math.abs(deviation) > 0.15 && adjusted.length > 1) {
@@ -237,17 +242,22 @@ export class MealAssemblerService {
       let bestSlack = 0;
 
       for (let i = 0; i < adjusted.length; i++) {
-        const original = picks[i].servingCalories;
-        const current = adjusted[i].servingCalories;
+        const original = picks[i].servingCalories || 0;
+        const current = adjusted[i].servingCalories || 0;
         const portions = picks[i].food.commonPortions || [];
         const standardG = picks[i].food.standardServingG || 100;
 
         let maxR = 2.0;
         let minR = 0.5;
         if (portions.length > 0) {
-          const portionGrams = portions.map((pt) => pt.grams);
-          minR = Math.max(0.5, Math.min(...portionGrams) / standardG);
-          maxR = Math.min(2.0, Math.max(...portionGrams) / standardG);
+          // #fix: 过滤无效 grams 值
+          const portionGrams = portions
+            .map((pt) => Number(pt.grams))
+            .filter((g) => Number.isFinite(g) && g > 0);
+          if (portionGrams.length > 0) {
+            minR = Math.max(0.5, Math.min(...portionGrams) / standardG);
+            maxR = Math.min(2.0, Math.max(...portionGrams) / standardG);
+          }
         }
 
         const slack =
@@ -296,10 +306,10 @@ export class MealAssemblerService {
       | import('../types/recommendation.types').UserProfileConstraints
       | null,
   ): MealRecommendation {
-    const totalCalories = picks.reduce((s, p) => s + p.servingCalories, 0);
-    const totalProtein = picks.reduce((s, p) => s + p.servingProtein, 0);
-    const totalFat = picks.reduce((s, p) => s + p.servingFat, 0);
-    const totalCarbs = picks.reduce((s, p) => s + p.servingCarbs, 0);
+    const totalCalories = picks.reduce((s, p) => s + (p.servingCalories || 0), 0);
+    const totalProtein = picks.reduce((s, p) => s + (p.servingProtein || 0), 0);
+    const totalFat = picks.reduce((s, p) => s + (p.servingFat || 0), 0);
+    const totalCarbs = picks.reduce((s, p) => s + (p.servingCarbs || 0), 0);
     const mealExplanation = this.explanationGenerator.explainMealComposition(
       picks,
       userProfile,
@@ -355,8 +365,8 @@ export class MealAssemblerService {
     for (const pick of picks) {
       // 热量占比作为权重
       const weight = Math.max(pick.servingCalories, 1);
-      // confidence 原始值 0-100，归一化到 0-1
-      const confidence = Math.min((pick.food.confidence ?? 50) / 100, 1);
+      // #fix: confidence 已经是 0-1 范围（DB 存储值），不需要再除以 100
+      const confidence = Math.min(pick.food.confidence ?? 0.5, 1);
       weightedSum += confidence * weight;
       totalWeight += weight;
     }

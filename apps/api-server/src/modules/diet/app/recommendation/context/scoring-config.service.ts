@@ -179,6 +179,7 @@ export class ScoringConfigService implements OnModuleInit {
       semiPreparedMultiplierScene: 1.08,
       semiPreparedMultiplierNormal: 1.03,
       ingredientMultiplierScene: 0.9,
+      ingredientMultiplierNormal: 0.85,
       conflictMaxRounds: 3,
       ingredientDiversityThreshold: 60,
       cookingMethodDiversityThreshold: 50,

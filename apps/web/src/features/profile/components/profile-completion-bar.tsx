@@ -51,6 +51,29 @@ export function ProfileCompletionBar() {
     low: '可选',
   };
 
+  // 根据字段名决定跳转路径
+  const FIELD_TAB: Record<string, string> = {
+    heightCm: 'basic',
+    weightKg: 'basic',
+    goal: 'basic',
+    birthYear: 'basic',
+    gender: 'basic',
+    activityLevel: 'basic',
+    allergens: 'diet',
+    dietaryRestrictions: 'diet',
+    cookingSkillLevel: 'diet',
+    cuisinePreferences: 'diet',
+    discipline: 'behavior',
+    bingeTriggers: 'behavior',
+    healthConditions: 'health',
+    exerciseProfile: 'health',
+  };
+
+  function getSuggestionHref(field: string): string {
+    const tab = FIELD_TAB[field];
+    return tab ? `/profile/edit?tab=${tab}` : '/profile/edit';
+  }
+
   return (
     <div className="bg-card rounded-2xl p-4 space-y-3">
       {/* 进度条头部 */}
@@ -86,7 +109,7 @@ export function ProfileCompletionBar() {
               {topSuggestions.map((s) => (
                 <button
                   key={s.field}
-                  onClick={() => router.push('/profile/edit')}
+                  onClick={() => router.push(getSuggestionHref(s.field))}
                   className="w-full flex items-center gap-3 p-2.5 rounded-xl bg-background hover:bg-muted/50 transition-colors active:scale-[0.99] text-left"
                 >
                   <span

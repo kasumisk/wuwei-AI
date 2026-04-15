@@ -19,6 +19,26 @@ const DISLIKE_REASONS = [
 
 /* ─── 推荐原因计算（纯前端，基于已有数据） ─── */
 
+const CUISINE_LABELS: Record<string, string> = {
+  chinese: '中餐',
+  sichuan: '川菜',
+  cantonese: '粤菜',
+  japanese: '日料',
+  korean: '韩餐',
+  western: '西餐',
+  thai: '泰国菜',
+  indian: '印度菜',
+  mediterranean: '地中海菜',
+  fast_food: '快餐',
+};
+
+const COOKING_SKILL_LABELS: Record<string, string> = {
+  beginner: '新手',
+  basic: '基础',
+  intermediate: '中级',
+  advanced: '高级',
+};
+
 function buildRecommendationReason(summary: DailySummary, profile: UserProfile | null): string[] {
   const reasons: string[] = [];
   const goal = profile?.goal || 'health';
@@ -44,7 +64,34 @@ function buildRecommendationReason(summary: DailySummary, profile: UserProfile |
     }
   }
 
-  // 3. 生活方式
+  // 3. 菜系偏好
+  const cuisines = (profile as any)?.cuisinePreferences as string[] | undefined;
+  if (cuisines && cuisines.length > 0) {
+    const labels = cuisines
+      .slice(0, 2)
+      .map((k) => CUISINE_LABELS[k] || k)
+      .join('、');
+    reasons.push(`符合你偏好的 ${labels} 风格`);
+  }
+
+  // 4. 烹饪水平
+  const skill = (profile as any)?.cookingSkillLevel as string | undefined;
+  if (skill && skill !== 'basic') {
+    const skillLabel = COOKING_SKILL_LABELS[skill] || skill;
+    if (skill === 'beginner') {
+      reasons.push(`根据你的${skillLabel}水平，优先推荐易操作食谱`);
+    } else if (skill === 'intermediate' || skill === 'advanced') {
+      reasons.push(`匹配你的${skillLabel}烹饪水平`);
+    }
+  }
+
+  // 5. 健康状况限制
+  const healthConditions = (profile as any)?.healthConditions as string[] | undefined;
+  if (healthConditions && healthConditions.length > 0) {
+    reasons.push(`已规避对你健康状况有影响的食材`);
+  }
+
+  // 6. 生活方式
   if (profile?.canCook === false) {
     reasons.push('优先推荐外卖/便利店可获取的选项');
   }

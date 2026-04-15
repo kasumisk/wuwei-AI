@@ -144,6 +144,23 @@ export class OnboardingStep3Dto {
   @IsOptional()
   @IsIn(['never', 'sometimes', 'often'])
   takeoutFrequency?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: '菜系偏好 chinese/sichuan/cantonese/japanese/korean/western/thai/indian/mediterranean/fast_food',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  cuisinePreferences?: string[];
+
+  @ApiPropertyOptional({
+    enum: ['beginner', 'basic', 'intermediate', 'advanced'],
+    description: '烹饪技能等级',
+  })
+  @IsOptional()
+  @IsIn(['beginner', 'basic', 'intermediate', 'advanced'])
+  cookingSkillLevel?: string;
 }
 
 /**
@@ -178,6 +195,15 @@ export class OnboardingStep4Dto {
   @IsOptional()
   @IsBoolean()
   canCook?: boolean;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: '健康状况 diabetes/hypertension/hyperlipidemia/gout/kidney_disease/celiac/ibs/fatty_liver/thyroid/anemia/osteoporosis/cardiovascular',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  healthConditions?: string[];
 }
 
 // ========== Full Profile Update DTO ==========
@@ -421,6 +447,15 @@ export class UpdateDeclaredProfileDto {
   @IsOptional()
   @IsIn(['early_bird', 'standard', 'late_eater'])
   mealTimingPreference?: string;
+
+  // ─── V7.2: 厨房装备画像字段 ───
+
+  @ApiPropertyOptional({
+    description: '厨房装备描述（JSON），包含 hasOven/hasMicrowave/hasAirFryer/hasRiceCooker/hasSteamer/primaryStove',
+  })
+  @IsOptional()
+  @IsObject()
+  kitchenProfile?: Record<string, unknown>;
 }
 
 // ========== V6.5 Phase 3F: 用户推荐偏好 DTO ==========
@@ -475,4 +510,28 @@ export class UpdateRecommendationPreferencesDto {
   @IsOptional()
   @IsIn(['strict', 'normal', 'relaxed', 'off'])
   realismLevel?: 'strict' | 'normal' | 'relaxed' | 'off';
+
+  /** V7.0: 菜单多样性容忍度 */
+  @ApiPropertyOptional({ enum: ['low', 'medium', 'high'] })
+  @IsOptional()
+  @IsIn(['low', 'medium', 'high'])
+  diversityTolerance?: 'low' | 'medium' | 'high';
+
+  /** V7.0: 饮食哲学 */
+  @ApiPropertyOptional({ enum: ['omnivore', 'pescatarian', 'vegetarian', 'vegan', 'none'] })
+  @IsOptional()
+  @IsIn(['omnivore', 'pescatarian', 'vegetarian', 'vegan', 'none'])
+  dietaryPhilosophy?: 'omnivore' | 'pescatarian' | 'vegetarian' | 'vegan' | 'none';
+
+  /** V7.0: 用餐模式 */
+  @ApiPropertyOptional({ enum: ['frequent_small', 'standard_three', 'intermittent_fasting'] })
+  @IsOptional()
+  @IsIn(['frequent_small', 'standard_three', 'intermittent_fasting'])
+  mealPattern?: 'frequent_small' | 'standard_three' | 'intermittent_fasting';
+
+  /** V7.0: 口味探索度 */
+  @ApiPropertyOptional({ enum: ['conservative', 'moderate', 'adventurous'] })
+  @IsOptional()
+  @IsIn(['conservative', 'moderate', 'adventurous'])
+  flavorOpenness?: 'conservative' | 'moderate' | 'adventurous';
 }

@@ -7,7 +7,6 @@ import { useProfile } from '@/features/profile/hooks/use-profile';
 import { useSubscription } from '@/features/subscription/hooks/use-subscription';
 import { LocalizedLink } from '@/components/common/localized-link';
 import { ProfileCompletionBar } from '@/features/profile/components/profile-completion-bar';
-import { RecommendationPreferences } from '@/features/profile/components/recommendation-preferences';
 import { FeedbackStatsCard } from '@/features/profile/components/feedback-stats-card';
 import { GOAL_LABELS_EMOJI } from '@/lib/constants/food';
 import type { BehaviorProfile } from '@/types/user';
@@ -179,9 +178,6 @@ export default function ProfilePage() {
         {/* AI 行为洞察 */}
         <BehaviorInsightCard behaviorProfile={behaviorProfile} />
 
-        {/* 推荐偏好设置 */}
-        <RecommendationPreferences />
-
         {/* 反馈统计 */}
         <FeedbackStatsCard />
 
@@ -210,6 +206,20 @@ export default function ProfilePage() {
               )}
               <ChevronRight />
             </div>
+          </LocalizedLink>
+
+          <LocalizedLink
+            href="/profile/preferences"
+            className="flex items-center justify-between px-5 py-4 hover:bg-muted/50 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-xl">⚙️</span>
+              <div>
+                <p className="text-sm font-bold">偏好设置</p>
+                <p className="text-xs text-muted-foreground mt-0.5">推荐偏好 / 厨房装备 / 生活方式</p>
+              </div>
+            </div>
+            <ChevronRight />
           </LocalizedLink>
 
           <LocalizedLink

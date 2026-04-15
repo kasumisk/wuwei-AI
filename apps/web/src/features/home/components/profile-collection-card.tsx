@@ -40,19 +40,28 @@ export function ProfileCollectionCard({ onDismiss }: { onDismiss?: () => void })
 
   const handleAction = useCallback(
     (trigger: CollectionReminder) => {
-      // 根据 field 类型跳转到对应的编辑页
+      // 根据 field 类型跳转到对应的编辑页（带 Tab 参数）
       const fieldToRouteMap: Record<string, string> = {
-        allergens: '/profile/edit',
-        dietaryRestrictions: '/profile/edit',
-        healthConditions: '/profile/edit',
-        exerciseProfile: '/profile/edit',
-        cookingSkillLevel: '/profile/edit',
-        budgetLevel: '/profile/edit',
-        general: '/profile/edit',
-        goal: '/profile/edit',
-        goalSpeed: '/profile/edit',
-        tasteIntensity: '/profile/edit',
-        preferenceConfirmation: '/profile/edit',
+        // 基本体征 Tab
+        goal: '/profile/edit?tab=basic',
+        goalSpeed: '/profile/edit?tab=basic',
+        // 饮食习惯 Tab
+        allergens: '/profile/edit?tab=diet',
+        dietaryRestrictions: '/profile/edit?tab=diet',
+        cookingSkillLevel: '/profile/edit?tab=diet',
+        cuisinePreferences: '/profile/edit?tab=diet',
+        tasteIntensity: '/profile/edit?tab=diet',
+        // 行为偏好 Tab
+        general: '/profile/edit?tab=behavior',
+        preferenceConfirmation: '/profile/edit?tab=behavior',
+        // 健康状况 Tab
+        healthConditions: '/profile/edit?tab=health',
+        exerciseProfile: '/profile/edit?tab=health',
+        // 偏好设置页
+        budgetLevel: '/profile/preferences',
+        kitchenProfile: '/profile/preferences',
+        sleepQuality: '/profile/preferences',
+        stressLevel: '/profile/preferences',
       };
       const route = fieldToRouteMap[trigger.field] || '/profile/edit';
       router.push(route);
