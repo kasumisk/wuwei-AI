@@ -18,9 +18,10 @@ async function unwrap<T>(promise: Promise<ApiResponse<T>>): Promise<T> {
 }
 
 export const recommendationService = {
-  /** 获取下一餐推荐 */
-  getMealSuggestion: async (): Promise<MealSuggestion> => {
-    return unwrap(clientGet<MealSuggestion>('/app/food/meal-suggestion'));
+  /** 获取下一餐推荐。forceRefresh=true 时跳过服务端粘性缓存 */
+  getMealSuggestion: async (forceRefresh = false): Promise<MealSuggestion> => {
+    const qs = forceRefresh ? '?refresh=1' : '';
+    return unwrap(clientGet<MealSuggestion>(`/app/food/meal-suggestion${qs}`));
   },
 
   /** 获取今日饮食计划 */

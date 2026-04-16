@@ -196,11 +196,15 @@ export class MealAssemblerService {
 
     if (Math.abs(globalRatio - 1) < 0.05) return picks;
 
+    // #fix Bug17: 当总热量严重不足（<70% 预算）时放宽缩放上限至 2.5x
+    // 常见于多过敏用户候选池极小、选中食物热量密度低的场景
+    const scaleCap = globalRatio > 1.4 ? 2.5 : 2.0;
+
     // 第一轮: 逐个食物计算最佳缩放比，受边界约束
     const adjusted = picks.map((p) => {
       const portions = p.food.commonPortions || [];
       let minRatio = 0.5;
-      let maxRatio = 2.0;
+      let maxRatio = scaleCap;
 
       if (portions.length > 0) {
         const standardG = p.food.standardServingG || 100;
@@ -212,7 +216,7 @@ export class MealAssemblerService {
           const minG = Math.min(...portionGrams);
           const maxG = Math.max(...portionGrams);
           minRatio = Math.max(0.5, minG / standardG);
-          maxRatio = Math.min(2.0, maxG / standardG);
+          maxRatio = Math.min(scaleCap, maxG / standardG);
         }
       }
 
@@ -229,6 +233,7 @@ export class MealAssemblerService {
         servingProtein: Math.round((p.servingProtein || 0) * finalRatio),
         servingFat: Math.round((p.servingFat || 0) * finalRatio),
         servingCarbs: Math.round((p.servingCarbs || 0) * finalRatio),
+        servingFiber: Math.round((p.servingFiber || 0) * finalRatio),
       };
     });
 
@@ -247,7 +252,7 @@ export class MealAssemblerService {
         const portions = picks[i].food.commonPortions || [];
         const standardG = picks[i].food.standardServingG || 100;
 
-        let maxR = 2.0;
+        let maxR = scaleCap;
         let minR = 0.5;
         if (portions.length > 0) {
           // #fix: 过滤无效 grams 值
@@ -256,7 +261,7 @@ export class MealAssemblerService {
             .filter((g) => Number.isFinite(g) && g > 0);
           if (portionGrams.length > 0) {
             minR = Math.max(0.5, Math.min(...portionGrams) / standardG);
-            maxR = Math.min(2.0, Math.max(...portionGrams) / standardG);
+            maxR = Math.min(scaleCap, Math.max(...portionGrams) / standardG);
           }
         }
 

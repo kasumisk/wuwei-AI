@@ -185,8 +185,12 @@ export class FoodService {
    *
    * V7.9 Phase 3-1: 粘性缓存 — 同一用户+餐次在5分钟内返回相同推荐
    * V7.9 Phase 3-5: 决策价值标签 — 返回结构化的营养合规/达标提示
+   * FIX: 支持 forceRefresh=true 强制跳过粘性缓存（对应前端 ?refresh=1）
    */
-  async getMealSuggestion(userId: string): Promise<{
+  async getMealSuggestion(
+    userId: string,
+    forceRefresh = false,
+  ): Promise<{
     mealType: string;
     remainingCalories: number;
     suggestion: { foods: string; calories: number; tip: string };
@@ -229,13 +233,19 @@ export class FoodService {
 
     // ─── V7.9 Phase 3-1: 粘性缓存检查 ───
     const cacheKey = this.buildStickinessCacheKey(userId, nextMeal);
-    const cached = this.getFromStickinessCache(
-      cacheKey,
-      summary.totalCalories || 0,
-    );
-    if (cached) {
-      this.logger.debug(`粘性缓存命中: userId=${userId}, meal=${nextMeal}`);
-      return cached;
+    if (!forceRefresh) {
+      const cached = this.getFromStickinessCache(
+        cacheKey,
+        summary.totalCalories || 0,
+      );
+      if (cached) {
+        this.logger.debug(`粘性缓存命中: userId=${userId}, meal=${nextMeal}`);
+        return cached;
+      }
+    } else {
+      // 强制刷新时删除旧缓存条目
+      this.stickinessCache.delete(cacheKey);
+      this.logger.debug(`粘性缓存强制失效: userId=${userId}, meal=${nextMeal}`);
     }
 
     // V6 Phase 1.10: 优先查询预计算结果（延迟 < 200ms）
@@ -318,9 +328,13 @@ export class FoodService {
     // 预计算未命中 → 回退到实时计算（现有逻辑不变）
 
     // V5 1.10: 使用统一的 MEAL_RATIOS 替代硬编码比例
+    // FIX: 用全天目标热量 × 餐次比例计算单餐预算，而非剩余热量 × 比例（后者在已摄入多时会严重低估预算）
     const mealRatios = MEAL_RATIOS[goalType] || MEAL_RATIOS.health;
     const ratio = mealRatios[nextMeal] || 0.25;
-    const calBudget = Math.round(remaining * ratio);
+    const calBudget = Math.min(
+      Math.round(goals.calories * ratio),
+      remaining, // 预算不超过剩余量（防止热量超标）
+    );
     const proteinRem = Math.max(0, goals.protein - (summary.totalProtein || 0));
 
     const consumed = {
@@ -580,13 +594,14 @@ export class FoodService {
     }
 
     // 4. 目标特定标签
-    if (goalType === 'lose_weight' && mealCalories < remainingCalories * 0.8) {
+    // FIX: 使用正确的 GoalType 枚举值（'fat_loss' 和 'muscle_gain'，非旧值 'lose_weight'/'gain_muscle'）
+    if (goalType === 'fat_loss' && mealCalories < remainingCalories * 0.8) {
       tags.push({
         type: 'bonus',
         label: '有利于减脂目标',
         dimension: 'goal',
       });
-    } else if (goalType === 'gain_muscle' && mealProtein >= 25) {
+    } else if (goalType === 'muscle_gain' && mealProtein >= 25) {
       tags.push({
         type: 'achievement',
         label: '高蛋白餐，助力增肌',
@@ -630,7 +645,11 @@ export class FoodService {
       0,
       (summary.calorieGoal || goals.calories) - summary.totalCalories,
     );
-    const calBudget = Math.round(remaining * ratio);
+    // FIX: 用全天目标热量 × 餐次比例，不超过剩余量
+    const calBudget = Math.min(
+      Math.round(goals.calories * ratio),
+      remaining,
+    );
     const proteinRem = Math.max(0, goals.protein - (summary.totalProtein || 0));
 
     const consumed = {

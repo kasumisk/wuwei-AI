@@ -37,24 +37,32 @@ export const profileService = {
     return unwrap(clientGet('/app/user-profile/full'));
   },
 
-  /** 获取用户健康档案（旧接口，缺少新字段，仅用于兼容老代码） */
+  /**
+   * 获取用户健康档案（取 full 接口的 declared 层）
+   * 旧的 /app/food/profile fallback 已移除，所有字段以新接口为准
+   */
   getProfile: async (): Promise<UserProfile | null> => {
-    try {
-      const full = await profileService.getFullProfile();
-      return full.declared;
-    } catch {
-      // fallback to old endpoint
-      return unwrap(clientGet<UserProfile | null>('/app/food/profile'));
-    }
+    const full = await profileService.getFullProfile();
+    return full.declared;
   },
 
-  /** 保存用户健康档案（旧接口兼容，内部改为新端点） */
+  /** 保存用户健康档案（兼容老代码调用，内部用新端点） */
   saveProfile: async (data: Partial<UserProfile>): Promise<UserProfile> => {
     return profileService.updateDeclaredProfile(data);
   },
 
-  /** 获取行为画像 */
+  /**
+   * 获取行为画像
+   * 优先从 /app/user-profile/full 的 observed 层取（减少请求）
+   * 若 full 接口失败则 fallback 到旧接口
+   */
   getBehaviorProfile: async (): Promise<BehaviorProfile> => {
+    try {
+      const full = await profileService.getFullProfile();
+      if (full.observed) return full.observed as BehaviorProfile;
+    } catch {
+      // fallback
+    }
     return unwrap(clientGet<BehaviorProfile>('/app/food/behavior-profile'));
   },
 

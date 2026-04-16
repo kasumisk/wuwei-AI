@@ -147,6 +147,7 @@ export interface DailyPlanData {
   adjustments: Array<{ time: string; reason: string; newPlan: Record<string, MealPlan> }>;
   strategy: string;
   totalBudget: number;
+  adjustmentNote?: string;
 }
 
 // ── 主动提醒 ──

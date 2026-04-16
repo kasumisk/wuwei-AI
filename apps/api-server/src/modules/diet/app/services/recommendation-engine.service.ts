@@ -10,6 +10,7 @@ import {
   UserProfileConstraints,
   PipelineContext,
   MEAL_ROLES,
+  MUSCLE_GAIN_MEAL_ROLES,
   MealFromPoolRequest,
 } from '../recommendation/types/recommendation.types';
 import { HealthModifierContext } from '../recommendation/modifier/health-modifier-engine.service';
@@ -146,6 +147,7 @@ export class RecommendationEngineService implements OnModuleInit {
     target: MealTarget,
     dailyTarget: { calories: number; protein: number },
     userProfile?: UserProfileConstraints,
+    additionalExcludeNames?: string[],
   ): Promise<MealRecommendation> {
     // 通过 ProfileAggregatorService 聚合全部画像数据
     const [allFoods, profileData, resolvedStrategy, analysisProfile] =
@@ -280,7 +282,11 @@ export class RecommendationEngineService implements OnModuleInit {
       consumed,
       target,
       dailyTarget,
-      excludeNames: recentFoodNames,
+      // #fix Bug21-22: 合并近期食物名与额外排除名（跨餐去重）
+      excludeNames: [
+        ...recentFoodNames,
+        ...(additionalExcludeNames ?? []),
+      ],
       feedbackStats,
       userProfile: mergedProfile,
       preferenceProfile,
@@ -480,9 +486,12 @@ export class RecommendationEngineService implements OnModuleInit {
       );
 
       const mealPolicy = resolvedStrategy?.config?.meal;
+      const defaultRoles = goalType === 'muscle_gain'
+        ? (MUSCLE_GAIN_MEAL_ROLES[mealType] ?? MEAL_ROLES[mealType])
+        : MEAL_ROLES[mealType];
       const roles =
         mealPolicy?.mealRoles?.[mealType] ??
-        MEAL_ROLES[mealType] ?? ['carb', 'protein', 'veggie'];
+        defaultRoles ?? ['carb', 'protein', 'veggie'];
 
       const { picks: finalPicks, allCandidates, degradations } =
         await this.pipelineBuilder.executeRolePipeline(
@@ -561,8 +570,11 @@ export class RecommendationEngineService implements OnModuleInit {
 
     // MealPolicy 覆盖餐次角色模板
     const mealPolicy = resolvedStrategy?.config?.meal;
+    const defaultRolesLegacy = goalType === 'muscle_gain'
+      ? (MUSCLE_GAIN_MEAL_ROLES[mealType] ?? MEAL_ROLES[mealType])
+      : MEAL_ROLES[mealType];
     const roles = mealPolicy?.mealRoles?.[mealType] ??
-      MEAL_ROLES[mealType] ?? ['carb', 'protein', 'veggie'];
+      defaultRolesLegacy ?? ['carb', 'protein', 'veggie'];
     const picks: ScoredFood[] = [];
     const usedNames = new Set(excludeNames);
 

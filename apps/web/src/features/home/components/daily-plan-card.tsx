@@ -249,6 +249,15 @@ export function DailyPlanCard({ dailyPlan }: DailyPlanCardProps) {
           <p className="text-xs text-muted-foreground mb-3">💡 {dailyPlan.strategy}</p>
         )}
 
+        {/* 最近调整说明 */}
+        {dailyPlan.adjustmentNote && (
+          <div className="mb-3 px-3 py-2 rounded-xl bg-blue-500/10 border border-blue-500/20">
+            <p className="text-xs text-blue-600 dark:text-blue-400">
+              🔄 {dailyPlan.adjustmentNote}
+            </p>
+          </div>
+        )}
+
         {/* Tab 栏 */}
         <div className="flex gap-1 mb-3 bg-muted/50 rounded-xl p-1">
           {MEAL_SLOTS.map(({ key, label, emoji }) => {

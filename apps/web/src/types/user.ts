@@ -71,6 +71,16 @@ export interface UserProfile {
   hydrationGoal?: number;
   supplementsUsed?: string[];
   mealTimingPreference?: 'early_bird' | 'standard' | 'late_eater';
+  // 运动概况
+  exerciseProfile?: {
+    type?: 'none' | 'cardio' | 'strength' | 'mixed';
+    frequencyPerWeek?: number;
+    avgDurationMinutes?: number;
+  };
+  // 饮食生活
+  budgetLevel?: 'low' | 'medium' | 'high';
+  familySize?: number;
+  mealPrepWilling?: boolean;
   // 厨房画像
   kitchenProfile?: KitchenProfile;
   // 行为习惯

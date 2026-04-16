@@ -127,6 +127,53 @@ export const COOKING_SKILL_OPTIONS = [
   { key: 'advanced', label: '高级', desc: '能制作复杂料理' },
 ] as const;
 
+// ── 运动类型选项 ──
+export const EXERCISE_TYPE_OPTIONS = [
+  { key: 'none', label: '不运动', icon: '🛋️' },
+  { key: 'cardio', label: '有氧为主', icon: '🏃' },
+  { key: 'strength', label: '力量为主', icon: '🏋️' },
+  { key: 'mixed', label: '混合训练', icon: '⚡' },
+] as const;
+
+// ── 运动频率选项 ──
+export const EXERCISE_FREQUENCY_OPTIONS = [
+  { value: 1, label: '每周 1 次' },
+  { value: 2, label: '每周 2 次' },
+  { value: 3, label: '每周 3 次' },
+  { value: 4, label: '每周 4 次' },
+  { value: 5, label: '每周 5 次' },
+  { value: 6, label: '每周 6 次' },
+  { value: 7, label: '每天' },
+] as const;
+
+// ── 预算水平选项 ──
+export const BUDGET_LEVEL_OPTIONS = [
+  { key: 'low', label: '经济实惠', desc: '尽量省钱，家常菜为主' },
+  { key: 'medium', label: '适中', desc: '偶尔好一点，灵活选择' },
+  { key: 'high', label: '不限预算', desc: '品质优先，不考虑价格' },
+] as const;
+
+// ── 睡眠质量选项 ──
+export const SLEEP_QUALITY_OPTIONS = [
+  { key: 'poor', label: '差', icon: '😴', desc: '经常失眠或睡眠不足' },
+  { key: 'fair', label: '一般', icon: '😐', desc: '偶尔睡不好' },
+  { key: 'good', label: '好', icon: '😊', desc: '睡眠规律，精力充沛' },
+] as const;
+
+// ── 压力水平选项 ──
+export const STRESS_LEVEL_OPTIONS = [
+  { key: 'low', label: '低', icon: '😌', desc: '生活节奏轻松' },
+  { key: 'medium', label: '中', icon: '🤔', desc: '有一定工作/生活压力' },
+  { key: 'high', label: '高', icon: '😰', desc: '压力较大，经常紧张' },
+] as const;
+
+// ── 用餐时间偏好选项 ──
+export const MEAL_TIMING_OPTIONS = [
+  { key: 'early_bird', label: '早起早食', icon: '🌅', desc: '早饭早，晚饭也早' },
+  { key: 'standard', label: '标准时间', icon: '🕐', desc: '按常规时间用餐' },
+  { key: 'late_eater', label: '晚睡晚食', icon: '🌙', desc: '作息偏晚，用餐也晚' },
+] as const;
+
 // ── 步骤配置 ──
 export const STEP_CONFIG = [
   { step: 1 as const, title: '快速启动', subtitle: '让我们用 3 秒认识你', skippable: false },

@@ -42,6 +42,13 @@ export class SimulateRecommendDto {
   @IsNumber()
   @Min(0)
   consumedProtein?: number;
+
+  @ApiPropertyOptional({
+    description: '排除食物名称列表（用于跨餐去重，传入前面餐次已推荐的食物名）',
+  })
+  @IsOptional()
+  @IsString({ each: true })
+  excludeNames?: string[];
 }
 
 // ==================== 反向解释 ====================

@@ -487,14 +487,28 @@ export class SceneResolverService {
    * 构建默认场景
    */
   private buildDefaultScene(mealType: string): SceneContext {
+    const sceneType = this.mealTypeToDefaultScene(mealType) || 'general';
     return {
       channel: AcquisitionChannel.UNKNOWN,
-      sceneType: 'general',
+      sceneType,
       realismLevel: 'normal',
       confidence: 0,
       source: 'default',
-      sceneConstraints: this.getDefaultConstraints('general'),
+      sceneConstraints: this.getDefaultConstraints(sceneType),
     };
+  }
+
+  /**
+   * 餐次 → 默认 SceneType（无渠道信息时使用）
+   */
+  private mealTypeToDefaultScene(mealType: string): SceneType | undefined {
+    const map: Record<string, SceneType> = {
+      breakfast: 'quick_breakfast',
+      lunch: 'home_cooking',
+      dinner: 'home_cooking',
+      snack: 'convenience_meal',
+    };
+    return map[mealType];
   }
 
   /**

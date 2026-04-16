@@ -18,6 +18,11 @@ import {
   HEALTH_CONDITION_OPTIONS,
   CUISINE_OPTIONS,
   COOKING_SKILL_OPTIONS,
+  EXERCISE_TYPE_OPTIONS,
+  BUDGET_LEVEL_OPTIONS,
+  SLEEP_QUALITY_OPTIONS,
+  STRESS_LEVEL_OPTIONS,
+  MEAL_TIMING_OPTIONS,
 } from '@/features/onboarding/lib/onboarding-constants';
 import { TagCloud } from '@/features/onboarding/components/shared/tag-cloud';
 import { AllergenSelector } from '@/features/onboarding/components/shared/allergen-selector';
@@ -59,6 +64,11 @@ export function ProfileEditForm() {
     dailyCalorieGoal: '',
     goal: 'health' as string,
     goalSpeed: 'steady' as string,
+    familySize: '' as string,
+    // 运动概况
+    exerciseType: 'none' as string,
+    exerciseFrequency: 3,
+    exerciseDuration: 45,
     // 饮食习惯
     mealsPerDay: 3,
     takeoutFrequency: 'sometimes' as string,
@@ -68,12 +78,17 @@ export function ProfileEditForm() {
     cuisinePreferences: [] as string[],
     dietaryRestrictions: [] as string[],
     allergens: [] as string[],
+    budgetLevel: 'medium' as string,
+    mealPrepWilling: false,
     // 行为偏好
     weakTimeSlots: [] as string[],
     bingeTriggers: [] as string[],
     discipline: 'medium' as string,
+    mealTimingPreference: 'standard' as string,
     // 健康状况
     healthConditions: [] as string[],
+    sleepQuality: 'fair' as string,
+    stressLevel: 'medium' as string,
   });
 
   useEffect(() => {
@@ -92,6 +107,10 @@ export function ProfileEditForm() {
         dailyCalorieGoal: profile.dailyCalorieGoal ? String(profile.dailyCalorieGoal) : '',
         goal: profile.goal || 'health',
         goalSpeed: profile.goalSpeed || 'steady',
+        familySize: profile.familySize ? String(profile.familySize) : '',
+        exerciseType: profile.exerciseProfile?.type || 'none',
+        exerciseFrequency: profile.exerciseProfile?.frequencyPerWeek || 3,
+        exerciseDuration: profile.exerciseProfile?.avgDurationMinutes || 45,
         mealsPerDay: profile.mealsPerDay || 3,
         takeoutFrequency: profile.takeoutFrequency || 'sometimes',
         canCook: profile.canCook !== undefined ? profile.canCook : true,
@@ -100,10 +119,15 @@ export function ProfileEditForm() {
         cuisinePreferences: profile.cuisinePreferences || [],
         dietaryRestrictions: profile.dietaryRestrictions || [],
         allergens: profile.allergens || [],
+        budgetLevel: profile.budgetLevel || 'medium',
+        mealPrepWilling: profile.mealPrepWilling ?? false,
         weakTimeSlots: profile.weakTimeSlots || [],
         bingeTriggers: profile.bingeTriggers || [],
         discipline: profile.discipline || 'medium',
+        mealTimingPreference: profile.mealTimingPreference || 'standard',
         healthConditions: profile.healthConditions || [],
+        sleepQuality: profile.sleepQuality || 'fair',
+        stressLevel: profile.stressLevel || 'medium',
       });
     }
   }, [isLoggedIn, profile, router]);
@@ -136,12 +160,25 @@ export function ProfileEditForm() {
         bingeTriggers: form.bingeTriggers,
         discipline: form.discipline as UserProfile['discipline'],
         healthConditions: form.healthConditions,
+        budgetLevel: form.budgetLevel as UserProfile['budgetLevel'],
+        mealPrepWilling: form.mealPrepWilling,
+        mealTimingPreference: form.mealTimingPreference as UserProfile['mealTimingPreference'],
+        sleepQuality: form.sleepQuality as UserProfile['sleepQuality'],
+        stressLevel: form.stressLevel as UserProfile['stressLevel'],
+        exerciseProfile: {
+          type: form.exerciseType as 'none' | 'cardio' | 'strength' | 'mixed',
+          ...(form.exerciseType !== 'none' && {
+            frequencyPerWeek: form.exerciseFrequency,
+            avgDurationMinutes: form.exerciseDuration,
+          }),
+        },
       };
       if (form.birthYear) data.birthYear = parseInt(form.birthYear);
       if (form.heightCm) data.heightCm = parseFloat(form.heightCm);
       if (form.weightKg) data.weightKg = parseFloat(form.weightKg);
       if (form.targetWeightKg) data.targetWeightKg = parseFloat(form.targetWeightKg);
       if (form.dailyCalorieGoal) data.dailyCalorieGoal = parseInt(form.dailyCalorieGoal);
+      if (form.familySize) data.familySize = parseInt(form.familySize);
 
       await updateProfile(data);
       toast({ title: '保存成功' });
@@ -321,6 +358,101 @@ export function ProfileEditForm() {
           className="w-full px-4 py-2.5 rounded-xl bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
         />
       </div>
+
+      <div className="mt-4">
+        <SubLabel>家庭人口数（影响份量推荐）</SubLabel>
+        <div className="flex gap-2 flex-wrap">
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => up('familySize', String(n))}
+              className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                form.familySize === String(n)
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground'
+              }`}
+            >
+              {n} 人
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => up('familySize', '6')}
+            className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${
+              parseInt(form.familySize) >= 6
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted text-muted-foreground'
+            }`}
+          >
+            6+
+          </button>
+        </div>
+      </div>
+
+      <Divider />
+
+      <SubLabel>运动类型</SubLabel>
+      <div className="grid grid-cols-2 gap-2">
+        {EXERCISE_TYPE_OPTIONS.map(({ key, label, icon }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => up('exerciseType', key)}
+            className={`flex items-center gap-2 px-3 py-3 rounded-xl text-sm font-medium transition-all text-left ${
+              form.exerciseType === key
+                ? 'bg-primary text-primary-foreground font-bold'
+                : 'bg-muted text-muted-foreground'
+            }`}
+          >
+            <span className="text-base">{icon}</span>
+            <span>{label}</span>
+          </button>
+        ))}
+      </div>
+
+      {form.exerciseType !== 'none' && (
+        <>
+          <div className="mt-4">
+            <SubLabel>每周运动次数</SubLabel>
+            <div className="flex gap-2 flex-wrap">
+              {[1, 2, 3, 4, 5, 6, 7].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => up('exerciseFrequency', n)}
+                  className={`w-10 h-10 rounded-xl text-sm font-bold transition-all ${
+                    form.exerciseFrequency === n
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-muted-foreground'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="mt-4">
+            <SubLabel>每次运动时长（分钟）</SubLabel>
+            <div className="flex gap-2 flex-wrap">
+              {[20, 30, 45, 60, 90, 120].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => up('exerciseDuration', n)}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                    form.exerciseDuration === n
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-muted-foreground'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
     </>
   );
 
@@ -391,6 +523,43 @@ export function ProfileEditForm() {
           </div>
         </div>
       )}
+
+      <div className="mt-4">
+        <SubLabel>饮食预算</SubLabel>
+        <div className="space-y-2">
+          {BUDGET_LEVEL_OPTIONS.map(({ key, label, desc }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => up('budgetLevel', key)}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-left text-sm font-medium transition-all ${
+                form.budgetLevel === key
+                  ? 'bg-primary text-primary-foreground font-bold'
+                  : 'bg-muted text-muted-foreground'
+              }`}
+            >
+              <span className="font-bold">{label}</span>
+              <span
+                className={`text-[11px] ${form.budgetLevel === key ? 'text-primary-foreground/80' : 'text-muted-foreground/70'}`}
+              >
+                {desc}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <SubLabel>是否愿意提前备餐</SubLabel>
+        <BtnGroup
+          options={[
+            { key: 'yes', label: '愿意备餐' },
+            { key: 'no', label: '不愿意' },
+          ]}
+          value={form.mealPrepWilling ? 'yes' : 'no'}
+          onChange={(k) => up('mealPrepWilling', k === 'yes')}
+        />
+      </div>
 
       <Divider />
 
@@ -464,6 +633,34 @@ export function ProfileEditForm() {
       </div>
 
       <div className="mt-4">
+        <SubLabel>用餐时间习惯</SubLabel>
+        <div className="space-y-2">
+          {MEAL_TIMING_OPTIONS.map(({ key, label, icon, desc }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => up('mealTimingPreference', key)}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left text-sm font-medium transition-all ${
+                form.mealTimingPreference === key
+                  ? 'bg-primary text-primary-foreground font-bold'
+                  : 'bg-muted text-muted-foreground'
+              }`}
+            >
+              <span className="text-xl">{icon}</span>
+              <div>
+                <span className="font-bold">{label}</span>
+                <p
+                  className={`text-[11px] ${form.mealTimingPreference === key ? 'text-primary-foreground/80' : 'text-muted-foreground/70'}`}
+                >
+                  {desc}
+                </p>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-4">
         <SubLabel>容易乱吃时段（可多选）</SubLabel>
         <TagCloud
           options={WEAK_SLOT_OPTIONS}
@@ -518,6 +715,58 @@ export function ProfileEditForm() {
           <p className="text-xs text-muted-foreground">未选择任何健康状况 — 视为无特殊限制</p>
         </div>
       )}
+
+      <Divider />
+
+      <SubLabel>睡眠质量</SubLabel>
+      <div className="flex gap-2">
+        {SLEEP_QUALITY_OPTIONS.map(({ key, label, icon, desc }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => up('sleepQuality', key)}
+            className={`flex-1 flex flex-col items-center py-3 rounded-xl text-xs font-bold transition-all gap-1 ${
+              form.sleepQuality === key
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted text-muted-foreground'
+            }`}
+          >
+            <span className="text-xl">{icon}</span>
+            <span>{label}</span>
+            <span
+              className={`text-[10px] font-normal text-center px-1 ${form.sleepQuality === key ? 'text-primary-foreground/80' : 'text-muted-foreground/60'}`}
+            >
+              {desc}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-4">
+        <SubLabel>日常压力水平</SubLabel>
+        <div className="flex gap-2">
+          {STRESS_LEVEL_OPTIONS.map(({ key, label, icon, desc }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => up('stressLevel', key)}
+              className={`flex-1 flex flex-col items-center py-3 rounded-xl text-xs font-bold transition-all gap-1 ${
+                form.stressLevel === key
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground'
+              }`}
+            >
+              <span className="text-xl">{icon}</span>
+              <span>{label}</span>
+              <span
+                className={`text-[10px] font-normal text-center px-1 ${form.stressLevel === key ? 'text-primary-foreground/80' : 'text-muted-foreground/60'}`}
+              >
+                {desc}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
     </>
   );
 

@@ -149,10 +149,14 @@ export class ProfileAggregatorService {
       );
     }
 
-    const regionalBoostMap =
-      await this.preferenceProfileService.getRegionalBoostMap(
-        enrichedProfile.regionCode || 'CN',
+    const regionCode = enrichedProfile.regionCode || 'CN';
+    if (!enrichedProfile.regionCode) {
+      this.logger.warn(
+        `No regionCode for user=${userId}, falling back to 'CN'`,
       );
+    }
+    const regionalBoostMap =
+      await this.preferenceProfileService.getRegionalBoostMap(regionCode);
 
     return {
       recentFoodNames,

@@ -45,23 +45,27 @@ export function ProfileCollectionCard({ onDismiss }: { onDismiss?: () => void })
         // 基本体征 Tab
         goal: '/profile/edit?tab=basic',
         goalSpeed: '/profile/edit?tab=basic',
+        familySize: '/profile/edit?tab=basic',
+        exerciseProfile: '/profile/edit?tab=basic',
         // 饮食习惯 Tab
         allergens: '/profile/edit?tab=diet',
         dietaryRestrictions: '/profile/edit?tab=diet',
         cookingSkillLevel: '/profile/edit?tab=diet',
         cuisinePreferences: '/profile/edit?tab=diet',
         tasteIntensity: '/profile/edit?tab=diet',
+        budgetLevel: '/profile/edit?tab=diet',
+        mealPrepWilling: '/profile/edit?tab=diet',
         // 行为偏好 Tab
         general: '/profile/edit?tab=behavior',
         preferenceConfirmation: '/profile/edit?tab=behavior',
+        mealTimingPreference: '/profile/edit?tab=behavior',
+        discipline: '/profile/edit?tab=behavior',
         // 健康状况 Tab
         healthConditions: '/profile/edit?tab=health',
-        exerciseProfile: '/profile/edit?tab=health',
+        sleepQuality: '/profile/edit?tab=health',
+        stressLevel: '/profile/edit?tab=health',
         // 偏好设置页
-        budgetLevel: '/profile/preferences',
         kitchenProfile: '/profile/preferences',
-        sleepQuality: '/profile/preferences',
-        stressLevel: '/profile/preferences',
       };
       const route = fieldToRouteMap[trigger.field] || '/profile/edit';
       router.push(route);

@@ -72,6 +72,7 @@ export {
   MEAL_RATIOS,
   MEAL_PREFERENCES,
   MEAL_ROLES,
+  MUSCLE_GAIN_MEAL_ROLES,
   ROLE_CATEGORIES,
   type MicroNutrientDefaults,
   buildCategoryMicroAverages,

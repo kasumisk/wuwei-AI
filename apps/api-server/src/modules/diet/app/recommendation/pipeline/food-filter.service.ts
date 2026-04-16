@@ -55,6 +55,26 @@ export class FoodFilterService {
         return false;
       }
 
+      // 3c. #fix Bug11: 油炸食物硬过滤（fat_loss 目标）
+      if (constraint.excludeIsFried && food.isFried) {
+        return false;
+      }
+
+      // 3d. #fix Bug18: 钠含量硬过滤（low_sodium / hypertension）
+      if (constraint.maxSodium != null && (Number(food.sodium) || 0) > constraint.maxSodium) {
+        return false;
+      }
+
+      // 3e. #fix Bug19: 嘌呤硬过滤（gout）
+      if (constraint.maxPurine != null && (Number(food.purine) || 0) > constraint.maxPurine) {
+        return false;
+      }
+
+      // 3f. #fix Bug31: 脂肪硬过滤（low_fat 饮食限制）
+      if (constraint.maxFat != null && (Number(food.fat) || 0) > constraint.maxFat) {
+        return false;
+      }
+
       // 4. 渠道可达性（硬约束）
       if (
         constraint.channel &&
@@ -182,7 +202,8 @@ export class FoodFilterService {
     'herb',
     'cereal',
     'dairy', // vegetarian 允许乳制品
-    'egg', // vegetarian 允许蛋
+    // #fix Bug15: 中国市场素食（vegetarian）不含蛋，移除 'egg'
+    // 如需蛋奶素请使用 'lacto_ovo_vegetarian'
     'beverage',
     'tea',
     'coffee',
@@ -258,8 +279,11 @@ export class FoodFilterService {
         if (FoodFilterService.SEAFOOD_FOOD_GROUPS.has(fg)) return true;
         if (FoodFilterService.MEAT_MAIN_INGREDIENTS.has(mi)) return true;
         if (FoodFilterService.SEAFOOD_MAIN_INGREDIENTS.has(mi)) return true;
+        // #fix Bug15: 中国市场素食排除蛋类
+        if (fg === 'egg') return true;
+        if (mi === 'egg' || mi === 'chicken egg' || mi === 'duck egg') return true;
         if (cat === 'protein' && !FoodFilterService.NON_MEAT_FOOD_GROUPS.has(fg)) {
-          // protein 类别中，只允许白名单内的 foodGroup（如 legume/dairy/egg/tofu）
+          // protein 类别中，只允许白名单内的 foodGroup（如 legume/dairy/tofu）
           return true;
         }
       } else if (r === 'vegan') {
@@ -298,7 +322,8 @@ const SEAFOOD_MI = new Set([
 const NON_MEAT_FG = new Set([
   'vegetable', 'fruit', 'grain', 'legume', 'nut', 'seed', 'tuber',
   'mushroom', 'oil', 'condiment', 'seasoning', 'spice', 'herb',
-  'cereal', 'dairy', 'egg', 'beverage', 'tea', 'coffee', 'juice',
+  'cereal', 'dairy', 'beverage', 'tea', 'coffee', 'juice',
+  // #fix Bug15: 中国市场素食（vegetarian）不含蛋，移除 'egg'
   'water', 'soy', 'tofu',
 ]);
 
@@ -319,6 +344,9 @@ export function foodViolatesDietaryRestriction(
     if (r === 'vegetarian') {
       if (MEAT_FG.has(fg) || SEAFOOD_FG.has(fg)) return true;
       if (MEAT_MI.has(mi) || SEAFOOD_MI.has(mi)) return true;
+      // #fix Bug15: 中国市场素食排除蛋类
+      if (fg === 'egg') return true;
+      if (mi === 'egg' || mi === 'chicken egg' || mi === 'duck egg') return true;
       if (cat === 'protein' && !NON_MEAT_FG.has(fg)) return true;
     } else if (r === 'vegan') {
       if (MEAT_FG.has(fg) || SEAFOOD_FG.has(fg)) return true;

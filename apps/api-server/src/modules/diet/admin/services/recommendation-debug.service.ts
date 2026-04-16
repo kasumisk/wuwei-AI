@@ -130,6 +130,7 @@ export class RecommendationDebugService {
       target,
       dailyTarget,
       userProfileConstraints,
+      dto.excludeNames,  // #fix Bug21-22: 跨餐去重 — 传入前面餐次已推荐的食物名
     );
     const elapsedMs = Date.now() - startTime;
 

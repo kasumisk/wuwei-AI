@@ -165,7 +165,7 @@ export class FoodScorerService {
       preferencesProfile,
     } = ctx;
 
-    const servingCal = (food.calories * food.standardServingG) / 100;
+    const servingCal = (Number(food.calories) * food.standardServingG) / 100;
     const servingProtein = ((food.protein || 0) * food.standardServingG) / 100;
     const servingCarbs = ((food.carbs || 0) * food.standardServingG) / 100;
     const servingFat = ((food.fat || 0) * food.standardServingG) / 100;

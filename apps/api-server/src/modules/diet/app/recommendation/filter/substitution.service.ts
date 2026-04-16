@@ -334,8 +334,8 @@ export class SubstitutionService {
       'fiber',
       'iron',
       'calcium',
-      'vitamin_c',
-      'vitamin_a',
+      'vitaminC',
+      'vitaminA',
       'potassium',
     ] as const;
 

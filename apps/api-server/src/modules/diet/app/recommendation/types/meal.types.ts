@@ -43,6 +43,14 @@ export interface Constraint {
   skillLevel?: number;
   /** #fix Bug7: 饮食限制（vegetarian/vegan/pescatarian 等，用于多字段硬过滤） */
   dietaryRestrictions?: string[];
+  /** #fix Bug11: 排除油炸食物（isFried=true），用于 fat_loss + high discipline */
+  excludeIsFried?: boolean;
+  /** #fix Bug18: 钠含量上限 (mg/100g)，用于 low_sodium / hypertension 硬过滤 */
+  maxSodium?: number;
+  /** #fix Bug19: 嘌呤上限 (mg/100g)，用于 gout 硬过滤 */
+  maxPurine?: number;
+  /** #fix Bug31: 脂肪上限 (g/100g)，用于 low_fat 饮食限制硬过滤 */
+  maxFat?: number;
 }
 
 export interface ScoredFood {

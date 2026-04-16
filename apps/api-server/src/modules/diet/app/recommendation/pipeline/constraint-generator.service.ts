@@ -31,6 +31,10 @@ export class ConstraintGeneratorService {
   ): Constraint {
     const includeTags: string[] = [];
     const excludeTags: string[] = [];
+    let excludeIsFried = false;
+    let maxSodium: number | undefined;
+    let maxPurine: number | undefined;
+    let maxFat: number | undefined;
 
     // 目标驱动
     if (goalType === 'fat_loss') {
@@ -74,18 +78,27 @@ export class ConstraintGeneratorService {
       // 健康状况 → 动态约束注入 (V4: 使用标准枚举，兼容旧命名)
       if (userProfile.healthConditions?.length) {
         for (const rawCondition of userProfile.healthConditions) {
+          // 支持对象格式 {condition: "hypertension", severity: "moderate"} 和纯字符串
+          const rawStr =
+            typeof rawCondition === 'string'
+              ? rawCondition
+              : (rawCondition as { condition?: string }).condition ?? '';
           const condition =
-            normalizeHealthCondition(rawCondition) ?? rawCondition;
+            normalizeHealthCondition(rawStr) ?? rawStr;
           if (condition === HealthCondition.DIABETES_TYPE2) {
             excludeTags.push('high_sugar', 'high_gi');
             includeTags.push('low_gi');
           } else if (condition === HealthCondition.HYPERTENSION) {
             excludeTags.push('high_sodium');
             includeTags.push('low_sodium');
+            // #fix Bug18+Bug27: 高血压硬过滤钠含量 >=380mg/100g（从400降至380，排除边界值如蒜苗炒肉Na=400）
+            maxSodium = maxSodium == null ? 380 : Math.min(maxSodium, 380);
           } else if (condition === HealthCondition.HYPERLIPIDEMIA) {
             excludeTags.push('high_cholesterol');
           } else if (condition === HealthCondition.GOUT) {
             excludeTags.push('high_purine');
+            // #fix Bug19: 痛风硬过滤嘌呤 >150mg/100g（高嘌呤），中嘌呤50-150保留但由health-modifier打分惩罚
+            maxPurine = maxPurine == null ? 150 : Math.min(maxPurine, 150);
           } else if (condition === HealthCondition.KIDNEY_DISEASE) {
             excludeTags.push('high_potassium', 'high_phosphorus');
           } else if (condition === HealthCondition.FATTY_LIVER) {
@@ -100,8 +113,17 @@ export class ConstraintGeneratorService {
           if (restriction === 'vegetarian') excludeTags.push('meat');
           else if (restriction === 'no_spicy') excludeTags.push('heavy_flavor');
           else if (restriction === 'no_fried') excludeTags.push('fried');
-          else if (restriction === 'low_sodium')
+          else if (restriction === 'low_sodium') {
             excludeTags.push('high_sodium');
+            // #fix Bug18+Bug27: low_sodium 饮食限制硬过滤钠含量 >=380mg/100g
+            maxSodium = maxSodium == null ? 380 : Math.min(maxSodium, 380);
+          }
+          // #fix Bug31: low_fat 饮食限制 — 排除高脂食物（非低脂食物），
+          // 并添加 maxFat 硬过滤（每 100g 脂肪 ≤ 15g）
+          else if (restriction === 'low_fat') {
+            excludeTags.push('high_fat');
+            maxFat = maxFat == null ? 15 : Math.min(maxFat, 15);
+          }
           else excludeTags.push(restriction);
         }
       }
@@ -126,6 +148,11 @@ export class ConstraintGeneratorService {
       } else if (userProfile.discipline === 'high') {
         if (goalType === 'fat_loss') excludeTags.push('processed');
       }
+
+      // #fix Bug11: fat_loss 目标排除油炸食物（通过 isFried 字段而非 tags）
+      if (goalType === 'fat_loss') {
+        excludeIsFried = true;
+      }
     }
 
     // V6.3 P1-3: 暴食风险时段紧缩 — 当前小时处于用户的暴食高风险时段时，
@@ -145,6 +172,14 @@ export class ConstraintGeneratorService {
       minProtein: target.protein * tuning.minProteinRatio,
       // #fix Bug7: 传递饮食限制给 FoodFilter 做多字段硬过滤
       dietaryRestrictions: userProfile?.dietaryRestrictions ?? [],
+      // #fix Bug11: fat_loss 排除油炸食物
+      excludeIsFried,
+      // #fix Bug18: 钠含量硬过滤上限
+      maxSodium,
+      // #fix Bug19: 嘌呤硬过滤上限
+      maxPurine,
+      // #fix Bug31: 脂肪硬过滤上限
+      maxFat,
     };
   }
 }

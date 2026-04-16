@@ -128,9 +128,12 @@ export class RecommendationResultProcessor {
           allCandidates,
           target.calories,
         );
+        // #fix Bug30: 模板填充只有在产出 ≥ pipeline picks 数量时才应用，
+        // 否则会丢弃 pipeline 选出的食物，导致热量严重不足。
         if (
           templateResult.coverageScore >= 0.5 &&
-          templateResult.filledSlots.length > 0
+          templateResult.filledSlots.length > 0 &&
+          templateResult.filledSlots.length >= finalPicks.length
         ) {
           templateFilledPicks = templateResult.filledSlots.map(
             (slot) => slot.food,
@@ -139,6 +142,13 @@ export class RecommendationResultProcessor {
           this.logger.debug(
             `Template ${templateResult.templateId} applied: ${templateResult.filledSlots.length} slots, ` +
               `coverage=${templateResult.coverageScore.toFixed(2)}, match=${templateResult.templateMatchScore.toFixed(2)}`,
+          );
+        } else if (
+          templateResult.filledSlots.length > 0 &&
+          templateResult.filledSlots.length < finalPicks.length
+        ) {
+          this.logger.debug(
+            `Template ${templateResult.templateId} skipped: template slots (${templateResult.filledSlots.length}) < pipeline picks (${finalPicks.length})`,
           );
         }
       } catch (err) {
