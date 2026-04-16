@@ -1772,7 +1772,7 @@ const StrategyDetail: React.FC = () => {
               ),
               children: (
                 <div style={{ padding: '8px 0' }}>
-                  {'form' in tab.EditComponent.prototype || true ? (
+                  {tab.EditComponent ? (
                     <tab.EditComponent form={editForm} prefix={[tab.configKey]} />
                   ) : null}
                 </div>

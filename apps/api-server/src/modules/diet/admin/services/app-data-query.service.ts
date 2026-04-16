@@ -132,11 +132,10 @@ export class AppDataQueryService {
 
   async getFoodRecordStatistics() {
     const total = await this.prisma.foodRecords.count();
-    const today = new Date().toISOString().split('T')[0];
 
     const todayCountResult = await this.prisma.$queryRaw<
       [{ count: bigint }]
-    >`SELECT COUNT(*) as count FROM food_records WHERE DATE(recorded_at) = ${today}`;
+    >`SELECT COUNT(*) as count FROM food_records WHERE DATE(recorded_at) = CURRENT_DATE`;
     const todayCount = Number(todayCountResult[0]?.count ?? 0);
 
     const byMealType = await this.prisma.$queryRaw<

@@ -11,6 +11,84 @@ export class AnalysisRecordManagementService {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  private mapStoredReviewStatusToApi(
+    reviewStatus?: string | null,
+  ): 'pending' | 'approved' | 'rejected' {
+    switch (reviewStatus) {
+      case 'accurate':
+      case 'approved':
+        return 'approved';
+      case 'inaccurate':
+      case 'rejected':
+        return 'rejected';
+      default:
+        return 'pending';
+    }
+  }
+
+  private mapApiReviewStatusToStored(
+    reviewStatus: 'pending' | 'approved' | 'rejected',
+  ): 'pending' | 'accurate' | 'inaccurate' {
+    switch (reviewStatus) {
+      case 'approved':
+        return 'accurate';
+      case 'rejected':
+        return 'inaccurate';
+      default:
+        return 'pending';
+    }
+  }
+
+  private normalizeConfidence(value: unknown): number {
+    const numeric = Number(value ?? 0);
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+      return 0;
+    }
+    return numeric > 1 ? numeric / 100 : numeric;
+  }
+
+  private serializeAnalysisRecord(record: any, user?: any) {
+    const resolvedUser = user ?? record.user ?? null;
+
+    return {
+      id: record.id,
+      userId: record.userId ?? record.user_id,
+      user: resolvedUser,
+      inputType: record.inputType ?? record.input_type,
+      rawInput: record.rawInput ?? record.rawText ?? record.raw_text ?? null,
+      imageUrl: record.imageUrl ?? record.image_url ?? null,
+      mealType: record.mealType ?? record.meal_type ?? null,
+      status: record.status,
+      recognizedPayload:
+        record.recognizedPayload ?? record.recognized_payload ?? null,
+      normalizedPayload:
+        record.normalizedPayload ?? record.normalized_payload ?? null,
+      nutritionPayload:
+        record.nutritionPayload ?? record.nutrition_payload ?? null,
+      decisionPayload: record.decisionPayload ?? record.decision_payload ?? null,
+      confidenceScore: this.normalizeConfidence(
+        record.confidenceScore ?? record.confidence_score,
+      ),
+      qualityScore: this.normalizeConfidence(
+        record.qualityScore ?? record.quality_score,
+      ),
+      matchedFoodCount:
+        Number(record.matchedFoodCount ?? record.matched_food_count ?? 0) || 0,
+      candidateFoodCount:
+        Number(record.candidateFoodCount ?? record.candidate_food_count ?? 0) || 0,
+      persistStatus: record.persistStatus ?? record.persist_status ?? null,
+      sourceRequestId: record.sourceRequestId ?? record.source_request_id ?? null,
+      reviewStatus: this.mapStoredReviewStatusToApi(
+        record.reviewStatus ?? record.review_status,
+      ),
+      reviewedBy: record.reviewedBy ?? record.reviewed_by ?? null,
+      reviewedAt: record.reviewedAt ?? record.reviewed_at ?? null,
+      reviewNote: record.reviewNote ?? record.review_note ?? null,
+      createdAt: record.createdAt ?? record.created_at,
+      updatedAt: record.updatedAt ?? record.created_at ?? null,
+    };
+  }
+
   /**
    * 获取分析记录列表（分页 + 筛选）
    */
@@ -47,8 +125,13 @@ export class AnalysisRecordManagementService {
       params.push(status);
     }
     if (reviewStatus) {
-      conditions.push(`ar.review_status = $${paramIdx++}`);
-      params.push(reviewStatus);
+      if (reviewStatus === 'pending') {
+        conditions.push(`COALESCE(ar.review_status, 'pending') = $${paramIdx++}`);
+        params.push('pending');
+      } else {
+        conditions.push(`ar.review_status = $${paramIdx++}`);
+        params.push(this.mapApiReviewStatusToStored(reviewStatus as any));
+      }
     }
     if (minConfidence !== undefined) {
       conditions.push(`ar.confidence_score >= $${paramIdx++}`);
@@ -106,10 +189,9 @@ export class AnalysisRecordManagementService {
         : [];
     const userMap = new Map(users.map((u) => [u.id, u]));
 
-    const listWithUser = list.map((r) => ({
-      ...r,
-      user: userMap.get(r.user_id) || null,
-    }));
+    const listWithUser = list.map((r) =>
+      this.serializeAnalysisRecord(r, userMap.get(r.user_id) || null),
+    );
 
     return {
       list: listWithUser,
@@ -141,7 +223,7 @@ export class AnalysisRecordManagementService {
       },
     });
 
-    return { ...record, user };
+    return this.serializeAnalysisRecord(record, user);
   }
 
   /**
@@ -160,13 +242,13 @@ export class AnalysisRecordManagementService {
     const updated = await this.prisma.foodAnalysisRecords.update({
       where: { id },
       data: {
-        reviewStatus: dto.reviewStatus,
+        reviewStatus: this.mapApiReviewStatusToStored(dto.reviewStatus),
         reviewedBy: adminUserId,
         reviewedAt: new Date(),
         reviewNote: dto.reviewNote || null,
       } as any,
     });
-    return updated;
+    return this.serializeAnalysisRecord(updated);
   }
 
   /**
@@ -174,7 +256,7 @@ export class AnalysisRecordManagementService {
    */
   async getAnalysisStatistics() {
     // 总量统计
-    const [totalCount, textCount, imageCount] = await Promise.all([
+    const [totalCount, textCount, imageCount, avgConfidenceRow] = await Promise.all([
       this.prisma.foodAnalysisRecords.count(),
       this.prisma.foodAnalysisRecords.count({
         where: { inputType: 'text' },
@@ -182,6 +264,9 @@ export class AnalysisRecordManagementService {
       this.prisma.foodAnalysisRecords.count({
         where: { inputType: 'image' },
       }),
+      this.prisma.$queryRawUnsafe<[{ avg: string | null }]>(
+        `SELECT AVG(confidence_score)::text AS avg FROM food_analysis_records WHERE confidence_score IS NOT NULL`,
+      ),
     ]);
 
     // 今日统计
@@ -192,85 +277,59 @@ export class AnalysisRecordManagementService {
     });
 
     // 状态分布
-    const statusDist = await this.prisma.$queryRawUnsafe<
-      { status: string; count: string }[]
-    >(
-      `SELECT status, COUNT(*)::text AS count FROM food_analysis_records GROUP BY status`,
-    );
-
-    // 审核状态分布
     const reviewDist = await this.prisma.$queryRawUnsafe<
       { reviewStatus: string; count: string }[]
     >(
       `SELECT review_status AS "reviewStatus", COUNT(*)::text AS count FROM food_analysis_records GROUP BY review_status`,
     );
 
-    // 置信度分布 (0-20, 20-40, 40-60, 60-80, 80-100)
-    const confidenceDist = await this.prisma.$queryRawUnsafe<
-      { range: string; count: string }[]
-    >(
-      `SELECT
-        CASE
-          WHEN confidence_score < 20 THEN '0-20'
-          WHEN confidence_score < 40 THEN '20-40'
-          WHEN confidence_score < 60 THEN '40-60'
-          WHEN confidence_score < 80 THEN '60-80'
-          ELSE '80-100'
-        END AS range,
-        COUNT(*)::text AS count
-       FROM food_analysis_records
-       WHERE confidence_score IS NOT NULL
-       GROUP BY range`,
-    );
-
-    // 准确率（已审核的记录中准确的占比）
-    const [reviewedCount, accurateCount] = await Promise.all([
-      this.prisma.foodAnalysisRecords.count({
-        where: { reviewStatus: { not: 'pending' } } as any,
-      }),
-      this.prisma.foodAnalysisRecords.count({
-        where: { reviewStatus: 'accurate' } as any,
-      }),
-    ]);
-    const accuracyRate =
-      reviewedCount > 0 ? (accurateCount / reviewedCount) * 100 : 0;
+    const reviewMap = reviewDist.reduce<Record<string, number>>((acc, item) => {
+      const key = this.mapStoredReviewStatusToApi(item.reviewStatus);
+      acc[key] = (acc[key] ?? 0) + Number(item.count || 0);
+      return acc;
+    }, {});
 
     return {
       total: totalCount,
       todayCount,
-      textCount,
-      imageCount,
-      textRatio:
-        totalCount > 0 ? ((textCount / totalCount) * 100).toFixed(1) : '0',
-      imageRatio:
-        totalCount > 0 ? ((imageCount / totalCount) * 100).toFixed(1) : '0',
-      statusDistribution: statusDist,
-      reviewDistribution: reviewDist,
-      confidenceDistribution: confidenceDist,
-      accuracyRate: accuracyRate.toFixed(1),
-      reviewedCount,
+      avgConfidence: this.normalizeConfidence(avgConfidenceRow[0]?.avg),
+      byInputType: {
+        text: textCount,
+        image: imageCount,
+      },
+      byReviewStatus: {
+        pending: reviewMap.pending ?? 0,
+        approved: reviewMap.approved ?? 0,
+        rejected: reviewMap.rejected ?? 0,
+      },
     };
   }
 
   /**
    * 热门分析食物排名
    */
-  async getPopularAnalyzedFoods(limit: number = 20) {
+  async getPopularAnalyzedFoods(limit: number = 20, days: number = 7) {
     // 从 raw_text 中提取食物名称并聚合
     const results = await this.prisma.$queryRawUnsafe<
-      { rawText: string; count: string }[]
+      { foodName: string; count: string; avgConfidence: string | null }[]
     >(
-      `SELECT raw_text AS "rawText", COUNT(*)::text AS count
+      `SELECT raw_text AS "foodName", COUNT(*)::text AS count, AVG(confidence_score)::text AS "avgConfidence"
        FROM food_analysis_records
        WHERE input_type = 'text'
          AND status = 'completed'
          AND raw_text IS NOT NULL
+         AND created_at >= NOW() - ($2::int * INTERVAL '1 day')
        GROUP BY raw_text
        ORDER BY COUNT(*) DESC
        LIMIT $1`,
       limit,
+      Math.max(days, 1),
     );
 
-    return results;
+    return results.map((item) => ({
+      foodName: item.foodName,
+      count: Number(item.count || 0),
+      avgConfidence: this.normalizeConfidence(item.avgConfidence),
+    }));
   }
 }

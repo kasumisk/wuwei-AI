@@ -150,7 +150,7 @@ const AnalysisRecordList: React.FC = () => {
         const cfg = inputTypeConfig[record.inputType];
         return (
           <Tag color={cfg?.color} icon={cfg?.icon}>
-            {cfg.text}
+            {cfg?.text}
           </Tag>
         );
       },
@@ -190,7 +190,7 @@ const AnalysisRecordList: React.FC = () => {
       },
       render: (_: unknown, record: AnalysisRecordDto) => {
         const cfg = reviewStatusConfig[record.reviewStatus];
-        return <Tag color={cfg.color}>{cfg.text}</Tag>;
+        return <Tag color={cfg?.color}>{cfg.text}</Tag>;
       },
     },
     {
@@ -277,7 +277,7 @@ const AnalysisRecordList: React.FC = () => {
           <Card size="small" hoverable loading={statsLoading}>
             <Statistic
               title="图片识别"
-              value={stats?.byInputType.image ?? '-'}
+              value={stats?.byInputType?.image ?? '-'}
               prefix={<PictureOutlined style={{ color: '#52c41a' }} />}
               valueStyle={{ fontSize: 22 }}
             />
@@ -287,7 +287,7 @@ const AnalysisRecordList: React.FC = () => {
           <Card size="small" hoverable loading={statsLoading}>
             <Statistic
               title="文本识别"
-              value={stats?.byInputType.text ?? '-'}
+              value={stats?.byInputType?.text ?? '-'}
               prefix={<FileTextOutlined style={{ color: '#1677ff' }} />}
               valueStyle={{ fontSize: 22 }}
             />
@@ -298,10 +298,10 @@ const AnalysisRecordList: React.FC = () => {
             <Tooltip title="待审核记录数，点击可筛选">
               <Statistic
                 title="待审核"
-                value={stats?.byReviewStatus.pending ?? '-'}
+                value={stats?.byReviewStatus?.pending ?? '-'}
                 prefix={<ClockCircleOutlined style={{ color: '#faad14' }} />}
                 valueStyle={{
-                  color: stats && stats.byReviewStatus.pending > 10 ? '#ff4d4f' : '#faad14',
+                  color: stats && stats.byReviewStatus?.pending > 10 ? '#ff4d4f' : '#faad14',
                   fontSize: 22,
                 }}
               />

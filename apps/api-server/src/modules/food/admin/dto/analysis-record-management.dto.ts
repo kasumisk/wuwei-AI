@@ -45,11 +45,11 @@ export class GetAnalysisRecordsQueryDto {
   status?: string;
 
   @ApiPropertyOptional({
-    description: '审核状态: pending / accurate / inaccurate',
+    description: '审核状态: pending / approved / rejected',
   })
   @IsOptional()
   @IsString()
-  @IsIn(['pending', 'accurate', 'inaccurate'])
+  @IsIn(['pending', 'approved', 'rejected'])
   reviewStatus?: string;
 
   @ApiPropertyOptional({ description: '最低置信度' })
@@ -85,10 +85,10 @@ export class GetAnalysisRecordsQueryDto {
 }
 
 export class ReviewAnalysisRecordDto {
-  @ApiProperty({ description: '审核结果', enum: ['accurate', 'inaccurate'] })
+  @ApiProperty({ description: '审核结果', enum: ['approved', 'rejected'] })
   @IsString()
-  @IsIn(['accurate', 'inaccurate'])
-  reviewStatus: 'accurate' | 'inaccurate';
+  @IsIn(['approved', 'rejected'])
+  reviewStatus: 'approved' | 'rejected';
 
   @ApiPropertyOptional({ description: '审核备注' })
   @IsOptional()

@@ -48,9 +48,13 @@ export class AnalysisRecordManagementController {
 
   @Get('popular-foods')
   @ApiOperation({ summary: '热门分析食物排名' })
-  async getPopularFoods(@Query('limit') limit?: string): Promise<ApiResponse> {
+  async getPopularFoods(
+    @Query('limit') limit?: string,
+    @Query('days') days?: string,
+  ): Promise<ApiResponse> {
     const data = await this.analysisService.getPopularAnalyzedFoods(
       limit ? parseInt(limit, 10) : 20,
+      days ? parseInt(days, 10) : 7,
     );
     return { success: true, code: HttpStatus.OK, message: '获取成功', data };
   }

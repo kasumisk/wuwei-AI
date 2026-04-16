@@ -2,7 +2,7 @@
 export const routeConfig = {
   name: 'food',
   title: '用户列表',
-  icon: 'CoffeeOutlined',
+  icon: 'UserOutlined',
   order: 1,
   requireAuth: true,
   requireAdmin: false,
