@@ -12,13 +12,10 @@
  * - 不修改原始决策对象，返回修正建议供调用方合并
  */
 import { Injectable, Logger } from '@nestjs/common';
-import { BehaviorService } from '../../../../modules/diet/app/services/behavior.service';
-import { FoodService } from '../../../../modules/diet/app/services/food.service';
+import { BehaviorService } from '../../diet/app/services/behavior.service';
+import { FoodService } from '../../diet/app/services/food.service';
 import { DietIssue } from '../types/analysis-result.types';
-import {
-  t,
-  Locale,
-} from '../../../../modules/diet/app/recommendation/utils/i18n-messages';
+import { t, Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 import {
   MODIFIER_PARAMS,
   TIME_BOUNDARIES,

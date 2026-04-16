@@ -10,7 +10,7 @@
  * - 前端友好: decision 段给出明确的三档建议（recommend/caution/avoid）
  */
 
-import { SubscriptionTier } from '../../../subscription/subscription.types';
+import { SubscriptionTier } from '../../subscription/subscription.types';
 
 // ==================== V2.0: 统一用户上下文 ====================
 

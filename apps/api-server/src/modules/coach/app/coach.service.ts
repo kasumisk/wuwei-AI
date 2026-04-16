@@ -17,7 +17,7 @@ import {
   CoachPromptBuilderService,
   AnalysisContextInput,
 } from './prompt/coach-prompt-builder.service';
-import { FoodAnalysisResultV61 } from '../../food/app/types/analysis-result.types';
+import { FoodAnalysisResultV61 } from '../../decision/types/analysis-result.types';
 
 // V1.9: COACH_LABELS, cl(), PERSONA_PROMPTS 已提取到 CoachPromptBuilderService 和 coach-tone.config.ts
 

@@ -58,7 +58,7 @@ import {
   DomainEvents,
   AnalysisSavedToRecordEvent,
 } from '../../../../core/events/domain-events';
-import { FoodAnalysisResultV61 } from '../types/analysis-result.types';
+import { FoodAnalysisResultV61 } from '../../../decision/types/analysis-result.types';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
 
 // ─── V7.9 Phase 3-4: 文本分析缓存配置 ───

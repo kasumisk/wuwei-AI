@@ -15,7 +15,7 @@ import {
   SODIUM_LIMITS,
   ADDED_SUGAR_LIMITS,
   TIME_BOUNDARIES,
-} from '../config/decision-thresholds';
+} from './decision-thresholds';
 
 // ==================== 输出类型 ====================
 

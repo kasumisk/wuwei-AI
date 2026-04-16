@@ -21,7 +21,7 @@ import {
   t,
   Locale,
 } from '../../../diet/app/recommendation/utils/i18n-messages';
-import { COACH_LABELS, cl } from '../../../food/app/i18n/food-labels';
+import { COACH_LABELS, cl } from '../../../decision/i18n/decision-labels';
 import {
   buildTonePrompt,
   getConfidenceModifier,
@@ -30,7 +30,7 @@ import {
   BreakdownExplanation,
   DecisionChainStep,
   DecisionSummary,
-} from '../../../food/app/types/analysis-result.types';
+} from '../../../decision/types/analysis-result.types';
 
 // ==================== 分析上下文类型 ====================
 

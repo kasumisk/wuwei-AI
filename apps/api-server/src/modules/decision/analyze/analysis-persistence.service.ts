@@ -9,12 +9,12 @@
  * - 不阻塞主分析流程
  */
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../../../../core/prisma/prisma.service';
+import { PrismaService } from '../../../core/prisma/prisma.service';
 import {
   FoodAnalysisResultV61,
   AnalyzedFoodItem,
 } from '../types/analysis-result.types';
-import { AnalysisRecordStatus, PersistStatus } from '../../food.types';
+import { AnalysisRecordStatus, PersistStatus } from '../../food/food.types';
 
 // ==================== 输入类型 ====================
 

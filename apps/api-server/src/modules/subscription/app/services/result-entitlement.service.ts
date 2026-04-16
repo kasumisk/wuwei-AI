@@ -25,7 +25,7 @@ import {
   FREE_TIER_HIDDEN_FIELDS,
   PRO_TIER_HIDDEN_FIELDS,
   PREMIUM_TIER_HIDDEN_FIELDS,
-} from '../../../food/app/types/analysis-result.types';
+} from '../../../decision/types/analysis-result.types';
 
 @Injectable()
 export class ResultEntitlementService {

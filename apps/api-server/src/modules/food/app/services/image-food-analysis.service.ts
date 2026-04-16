@@ -16,17 +16,17 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { BehaviorService } from '../../../diet/app/services/behavior.service';
-import { UserContextBuilderService } from '../decision/user-context-builder.service';
+import { UserContextBuilderService } from '../../../decision/decision/user-context-builder.service';
 import {
   FoodAnalysisResultV61,
   AnalyzedFoodItem,
-} from '../types/analysis-result.types';
+} from '../../../decision/types/analysis-result.types';
 import { AnalysisResult } from './analyze.service';
 import { Locale } from '../../../diet/app/recommendation/utils/i18n-messages';
-import { FoodScoringService } from '../scoring/food-scoring.service';
+import { FoodScoringService } from '../../../decision/score/food-scoring.service';
 import { buildTonePrompt } from '../../../coach/app/config/coach-tone.config';
-import { AnalysisPipelineService } from '../pipeline/analysis-pipeline.service';
-import { AnalysisPersistenceService } from '../pipeline/analysis-persistence.service';
+import { AnalysisPipelineService } from '../../../decision/analyze/analysis-pipeline.service';
+import { AnalysisPersistenceService } from '../../../decision/analyze/analysis-persistence.service';
 
 // ==================== Prompt 常量（从 analyze.service.ts 迁移） ====================
 

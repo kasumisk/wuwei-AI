@@ -12,10 +12,7 @@ import {
   NutritionTotals,
   UnifiedUserContext,
 } from '../types/analysis-result.types';
-import {
-  t,
-  Locale,
-} from '../../../../modules/diet/app/recommendation/utils/i18n-messages';
+import { t, Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 import { OptimalPortion, NextMealAdvice } from './food-decision.service';
 import { UserThresholds } from '../config/dynamic-thresholds.service';
 import {

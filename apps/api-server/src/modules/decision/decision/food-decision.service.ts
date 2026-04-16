@@ -25,15 +25,15 @@ import {
   MacroProgress,
   UnifiedUserContext,
 } from '../types/analysis-result.types';
-import { NutritionScoreBreakdown } from '../../../../modules/diet/app/services/nutrition-score.service';
-import { BehaviorService } from '../../../../modules/diet/app/services/behavior.service';
-import { Locale } from '../../../../modules/diet/app/recommendation/utils/i18n-messages';
+import { NutritionScoreBreakdown } from '../../diet/app/services/nutrition-score.service';
+import { BehaviorService } from '../../diet/app/services/behavior.service';
+import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 import { AlternativeSuggestionService } from './alternative-suggestion.service';
 import { DecisionExplainerService } from './decision-explainer.service';
 import {
   FoodScoringService,
   BreakdownExplanation,
-} from '../scoring/food-scoring.service';
+} from '../score/food-scoring.service';
 import { ContextualDecisionModifierService } from './contextual-modifier.service';
 import { DecisionEngineService } from './decision-engine.service';
 import { PortionAdvisorService } from './portion-advisor.service';
@@ -41,7 +41,7 @@ import { IssueDetectorService } from './issue-detector.service';
 import {
   estimateQuality as _estimateQuality,
   estimateSatiety as _estimateSatiety,
-} from '../config/nutrition-estimator';
+} from '../../food/app/config/nutrition-estimator';
 
 // ==================== 公共类型 ====================
 

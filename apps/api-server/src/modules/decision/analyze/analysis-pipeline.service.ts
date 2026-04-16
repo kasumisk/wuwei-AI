@@ -17,7 +17,7 @@ import * as crypto from 'crypto';
 import {
   DomainEvents,
   AnalysisCompletedEvent,
-} from '../../../../core/events/domain-events';
+} from '../../../core/events/domain-events';
 import {
   FoodAnalysisResultV61,
   AnalyzedFoodItem,
@@ -39,13 +39,13 @@ import { UserContextBuilderService } from '../decision/user-context-builder.serv
 import {
   FoodScoringService,
   ScoringFoodItem,
-} from '../scoring/food-scoring.service';
+} from '../score/food-scoring.service';
 import {
   FoodDecisionService,
   DecisionOutput,
 } from '../decision/food-decision.service';
 import { DecisionSummaryService } from '../decision/decision-summary.service';
-import { Locale } from '../../../diet/app/recommendation/utils/i18n-messages';
+import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 
 // ==================== 管道输入类型 ====================
 

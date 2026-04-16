@@ -14,11 +14,8 @@ import {
   MacroProgress,
   UnifiedUserContext,
 } from '../types/analysis-result.types';
-import { NutritionScoreBreakdown } from '../../../../modules/diet/app/services/nutrition-score.service';
-import {
-  t,
-  Locale,
-} from '../../../../modules/diet/app/recommendation/utils/i18n-messages';
+import { NutritionScoreBreakdown } from '../../diet/app/services/nutrition-score.service';
+import { t, Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 import { DIMENSION_LABELS } from '../config/scoring-dimensions';
 import {
   checkCalorieOverrun,

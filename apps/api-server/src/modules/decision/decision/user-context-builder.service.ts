@@ -9,17 +9,14 @@
  * - formatAsPromptString(): 将结构化上下文格式化为 prompt 字符串（供图片链路使用）
  */
 import { Injectable, Logger } from '@nestjs/common';
-import { FoodService } from '../../../../modules/diet/app/services/food.service';
-import { NutritionScoreService } from '../../../../modules/diet/app/services/nutrition-score.service';
-import { UserProfileService } from '../../../user/app/services/profile/user-profile.service';
+import { FoodService } from '../../diet/app/services/food.service';
+import { NutritionScoreService } from '../../diet/app/services/nutrition-score.service';
+import { UserProfileService } from '../../user/app/services/profile/user-profile.service';
 import {
   getUserLocalHour,
   DEFAULT_TIMEZONE,
-} from '../../../../common/utils/timezone.util';
-import {
-  t,
-  Locale,
-} from '../../../../modules/diet/app/recommendation/utils/i18n-messages';
+} from '../../../common/utils/timezone.util';
+import { t, Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 import { UnifiedUserContext } from '../types/analysis-result.types';
 
 // ==================== 输出类型 ====================

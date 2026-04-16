@@ -22,7 +22,7 @@ import { PrismaService } from '../../../../core/prisma/prisma.service';
 import {
   FoodAnalysisResultV61,
   AnalyzedFoodItem,
-} from '../types/analysis-result.types';
+} from '../../../decision/types/analysis-result.types';
 
 // ==================== 质量等级 ====================
 

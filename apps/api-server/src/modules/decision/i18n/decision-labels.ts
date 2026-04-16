@@ -7,7 +7,7 @@
  *    不移动原始数据（最小改动）。
  */
 
-import type { Locale } from '../../../diet/app/recommendation/utils/i18n-messages';
+import type { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 
 // ==================== Coach 上下文标签国际化 ====================
 

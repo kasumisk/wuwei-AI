@@ -18,11 +18,11 @@ import { AnalysisSaveListener } from './app/listeners/analysis-save.listener';
 import { AnalysisTrackingListener } from './app/listeners/analysis-tracking.listener';
 // V6.2 3.8: CandidatePromotedListener 已移至 DietModule（需要 FoodPoolCacheService）
 // V6.1 Phase 3.1: 数据质量评分服务
-import { DataQualityService } from './app/services/data-quality.service';
+import { DataQualityService } from './app/ingestion/data-quality.service';
 // V6.1 Phase 3.2: 分析入库编排服务
-import { AnalysisIngestionService } from './app/services/analysis-ingestion.service';
+import { AnalysisIngestionService } from './app/ingestion/analysis-ingestion.service';
 // V6.1 Phase 3.3: 候选食物聚合服务
-import { CandidateAggregationService } from './app/services/candidate-aggregation.service';
+import { CandidateAggregationService } from './app/ingestion/candidate-aggregation.service';
 // V6.9 Phase 3-C: 渠道标注迁移服务
 import { ChannelMigrationService } from './app/services/channel-migration.service';
 // Admin 端
@@ -30,35 +30,16 @@ import { FoodLibraryManagementController } from './admin/food-library-management
 import { FoodLibraryManagementService } from './admin/food-library-management.service';
 import { AnalysisRecordManagementController } from './admin/analysis-record-management.controller';
 import { AnalysisRecordManagementService } from './admin/analysis-record-management.service';
-// V1.3→V1.6: 饮食决策服务（迁移至 decision/）
-import { FoodDecisionService } from './app/decision/food-decision.service';
-// V1.6 Phase 2: 替代建议服务
-import { AlternativeSuggestionService } from './app/decision/alternative-suggestion.service';
-// V1.6 Phase 2: 决策解释服务
-import { DecisionExplainerService } from './app/decision/decision-explainer.service';
-// V1.6 Phase 1: 评分门面服务
-import { FoodScoringService } from './app/scoring/food-scoring.service';
-// V1.9 Phase 1.5: 统一用户上下文构建
-import { UserContextBuilderService } from './app/decision/user-context-builder.service';
-// V1.9 Phase 2.1: 上下文决策修正器
-import { ContextualDecisionModifierService } from './app/decision/contextual-modifier.service';
-// V2.1 Phase 1: 决策子服务（从 FoodDecisionService 拆分）
-import { DecisionEngineService } from './app/decision/decision-engine.service';
-import { PortionAdvisorService } from './app/decision/portion-advisor.service';
-import { IssueDetectorService } from './app/decision/issue-detector.service';
-// V2.2 Phase 1: 动态阈值计算服务
-import { DynamicThresholdsService } from './app/config/dynamic-thresholds.service';
-// V2.2 Phase 2: 决策结构化摘要服务
-import { DecisionSummaryService } from './app/decision/decision-summary.service';
-// V2.1 Phase 2: 统一分析管道
-import { AnalysisPipelineService } from './app/pipeline/analysis-pipeline.service';
-import { ResultAssemblerService } from './app/pipeline/result-assembler.service';
-import { AnalysisPersistenceService } from './app/pipeline/analysis-persistence.service';
 import { DietModule } from '../diet/diet.module';
 import { UserModule } from '../user/user.module';
+import { DecisionModule } from '../decision/decision.module';
 
 @Module({
-  imports: [forwardRef(() => DietModule), UserModule],
+  imports: [
+    forwardRef(() => DietModule),
+    UserModule,
+    forwardRef(() => DecisionModule),
+  ],
   controllers: [
     FoodLibraryController,
     FoodAnalyzeController,
@@ -91,30 +72,6 @@ import { UserModule } from '../user/user.module';
     // V6.2 3.8: CandidatePromotedListener 已移至 DietModule
     // V6.9 Phase 3-C: 渠道标注迁移
     ChannelMigrationService,
-    // V1.3→V1.6: 饮食决策服务
-    FoodDecisionService,
-    // V1.6 Phase 2: 替代建议服务
-    AlternativeSuggestionService,
-    // V1.6 Phase 2: 决策解释服务
-    DecisionExplainerService,
-    // V1.6 Phase 1: 评分门面服务
-    FoodScoringService,
-    // V1.9 Phase 1.5: 统一用户上下文构建
-    UserContextBuilderService,
-    // V1.9 Phase 2.1: 上下文决策修正器
-    ContextualDecisionModifierService,
-    // V2.1 Phase 1: 决策子服务
-    DecisionEngineService,
-    PortionAdvisorService,
-    IssueDetectorService,
-    // V2.2 Phase 1: 动态阈值计算服务
-    DynamicThresholdsService,
-    // V2.2 Phase 2: 决策结构化摘要服务
-    DecisionSummaryService,
-    // V2.1 Phase 2: 统一分析管道
-    AnalysisPipelineService,
-    ResultAssemblerService,
-    AnalysisPersistenceService,
   ],
   exports: [
     FoodLibraryService,
@@ -127,16 +84,6 @@ import { UserModule } from '../user/user.module';
     CandidateAggregationService,
     // V6.9 Phase 3-C: 渠道标注迁移（可被其他模块/CLI调用）
     ChannelMigrationService,
-    // V1.3→V1.6: 饮食决策服务
-    FoodDecisionService,
-    // V1.6 Phase 2: 替代建议服务
-    AlternativeSuggestionService,
-    // V1.6 Phase 2: 决策解释服务
-    DecisionExplainerService,
-    // V1.6 Phase 1: 评分门面服务
-    FoodScoringService,
-    // V1.9 Phase 1.5: 统一用户上下文构建
-    UserContextBuilderService,
   ],
 })
 export class FoodModule {}

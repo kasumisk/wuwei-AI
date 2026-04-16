@@ -18,23 +18,20 @@ import {
   NutritionTotals,
   DietIssue,
 } from '../types/analysis-result.types';
-import { NutritionScoreBreakdown } from '../../../../modules/diet/app/services/nutrition-score.service';
+import { NutritionScoreBreakdown } from '../../diet/app/services/nutrition-score.service';
 import {
   AlternativeRule,
   CATEGORY_ALTERNATIVE_RULES,
   GOAL_ALTERNATIVE_RULES,
   resolveAlternatives,
 } from '../config/alternative-food-rules';
-import { SubstitutionService } from '../../../../modules/diet/app/recommendation/filter/substitution.service';
+import { SubstitutionService } from '../../diet/app/recommendation/filter/substitution.service';
 import type {
   UserProfileConstraints,
   UserPreferenceProfile,
-} from '../../../../modules/diet/app/recommendation/types/recommendation.types';
-import { FoodLibraryService } from '../services/food-library.service';
-import {
-  t,
-  Locale,
-} from '../../../../modules/diet/app/recommendation/utils/i18n-messages';
+} from '../../diet/app/recommendation/types/recommendation.types';
+import { FoodLibraryService } from '../../food/app/services/food-library.service';
+import { t, Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 import { DecisionFoodItem, UserContext } from './food-decision.service';
 
 // ==================== 输入类型 ====================

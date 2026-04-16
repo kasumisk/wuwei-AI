@@ -2,7 +2,6 @@
  * V1.9 — 食物评分门面服务
  *
  * 职责:
- * - 集中评分逻辑，从 TextFoodAnalysisService 和 ImageFoodAnalysisService 提取
  * - calculateScore: 计算综合评分（健康分/营养分/置信度/7维breakdown）
  * - explainBreakdown: 为每个维度生成人类可读解释
  * - estimateQuality / estimateSatiety: 使用 nutrition-estimator 纯函数（V1.9 打破循环依赖）
@@ -17,18 +16,15 @@ import {
   NutritionScoreService,
   NutritionScoreBreakdown,
   NutritionScoreResult,
-} from '../../../diet/app/services/nutrition-score.service';
-import { BehaviorService } from '../../../diet/app/services/behavior.service';
-import { FoodService } from '../../../diet/app/services/food.service';
+} from '../../diet/app/services/nutrition-score.service';
+import { BehaviorService } from '../../diet/app/services/behavior.service';
+import { FoodService } from '../../diet/app/services/food.service';
 import { AnalysisScore } from '../types/analysis-result.types';
-import {
-  t,
-  Locale,
-} from '../../../diet/app/recommendation/utils/i18n-messages';
+import { t, Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 import {
   estimateQuality as _estimateQuality,
   estimateSatiety as _estimateSatiety,
-} from '../config/nutrition-estimator';
+} from '../../food/app/config/nutrition-estimator';
 import { aggregateWithConfidence } from './confidence-weighting';
 import {
   DIMENSION_LABELS,

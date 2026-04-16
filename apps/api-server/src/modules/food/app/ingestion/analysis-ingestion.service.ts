@@ -42,7 +42,7 @@ import { CandidateAggregationService } from './candidate-aggregation.service';
 import {
   FoodAnalysisResultV61,
   AnalyzedFoodItem,
-} from '../types/analysis-result.types';
+} from '../../../decision/types/analysis-result.types';
 import { SubscriptionTier } from '../../../subscription/subscription.types';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
 
@@ -215,10 +215,7 @@ export class AnalysisIngestionService {
    * 分析记录存储的是分段的 payload，需要组装回统一结构
    */
   private reconstructResult(record: any): FoodAnalysisResultV61 | null {
-    const nutrition = record.nutritionPayload as Record<
-      string,
-      unknown
-    > | null;
+    const nutrition = record.nutritionPayload as Record<string, unknown> | null;
     const decision = record.decisionPayload as Record<string, unknown> | null;
     const recognized = record.recognizedPayload as Record<
       string,

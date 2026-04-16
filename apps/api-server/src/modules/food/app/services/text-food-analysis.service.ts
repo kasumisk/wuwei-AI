@@ -24,7 +24,7 @@ import { FoodLibraryService } from './food-library.service';
 import {
   FoodAnalysisResultV61,
   AnalyzedFoodItem,
-} from '../types/analysis-result.types';
+} from '../../../decision/types/analysis-result.types';
 import {
   getUserLocalHour,
   DEFAULT_TIMEZONE,
@@ -33,8 +33,8 @@ import {
   t,
   Locale,
 } from '../../../diet/app/recommendation/utils/i18n-messages';
-import { ScoringFoodItem } from '../scoring/food-scoring.service';
-import { AnalysisPipelineService } from '../pipeline/analysis-pipeline.service';
+import { ScoringFoodItem } from '../../../decision/score/food-scoring.service';
+import { AnalysisPipelineService } from '../../../decision/analyze/analysis-pipeline.service';
 
 // ==================== 常量 ====================
 
