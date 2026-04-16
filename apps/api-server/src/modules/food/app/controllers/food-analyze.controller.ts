@@ -175,6 +175,7 @@ export class FoodAnalyzeController {
       dto.text,
       dto.mealType,
       user.id,
+      (dto.locale as any) || undefined,
     );
 
     // V7.9 P3-4: 写入缓存（使用完整结果，裁剪在读取时按当前订阅等级执行）
@@ -313,10 +314,7 @@ export class FoodAnalyzeController {
   private reconstructAnalysisResult(
     record: any,
   ): Partial<FoodAnalysisResultV61> {
-    const nutrition = record.nutritionPayload as Record<
-      string,
-      unknown
-    > | null;
+    const nutrition = record.nutritionPayload as Record<string, unknown> | null;
     const decision = record.decisionPayload as Record<string, unknown> | null;
     const recognized = record.recognizedPayload as Record<
       string,
@@ -620,10 +618,7 @@ export class FoodAnalyzeController {
       string,
       unknown
     > | null;
-    const nutrition = record.nutritionPayload as Record<
-      string,
-      unknown
-    > | null;
+    const nutrition = record.nutritionPayload as Record<string, unknown> | null;
     const decision = record.decisionPayload as Record<string, unknown> | null;
 
     // 提取食物名称

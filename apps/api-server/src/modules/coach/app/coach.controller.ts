@@ -60,10 +60,13 @@ export class CoachController {
 
     try {
       // 1. 准备对话上下文
+      const locale = (dto.locale as any) || undefined;
       const context = await this.coachService.prepareContext(
         user.id,
         dto.conversationId,
         dto.message,
+        dto.analysisContext,
+        locale,
       );
       conversationId = context.conversationId;
 
@@ -219,8 +222,12 @@ export class CoachController {
   @ApiOperation({ summary: '获取每日教练问候' })
   async getDailyGreeting(
     @CurrentAppUser() user: AppUserPayload,
+    @Query('locale') locale?: string,
   ): Promise<ApiResponse> {
-    const data = await this.coachService.getDailyGreeting(user.id);
+    const data = await this.coachService.getDailyGreeting(
+      user.id,
+      (locale as any) || undefined,
+    );
     return {
       success: true,
       code: HttpStatus.OK,

@@ -12,6 +12,43 @@
 
 import { SubscriptionTier } from '../../../subscription/subscription.types';
 
+// ==================== V2.0: 统一用户上下文 ====================
+
+/**
+ * V2.0: 统一用户上下文接口
+ *
+ * 合并 user-context-builder.service.ts 和 food-decision.service.ts 中
+ * 各自定义的 UserContext，作为全系统唯一的用户上下文类型。
+ */
+export interface UnifiedUserContext {
+  goalType: string;
+  goalLabel: string;
+  todayCalories: number;
+  todayProtein: number;
+  todayFat: number;
+  todayCarbs: number;
+  goalCalories: number;
+  goalProtein: number;
+  goalFat: number;
+  goalCarbs: number;
+  remainingCalories: number;
+  remainingProtein: number;
+  remainingFat: number;
+  remainingCarbs: number;
+  mealCount: number;
+  /** 餐次类型（breakfast/lunch/dinner/snack） */
+  mealType?: string;
+  profile: any;
+  /** 当前本地小时 (0-23) */
+  localHour: number;
+  /** 用户过敏原列表 */
+  allergens: string[];
+  /** 用户饮食限制 */
+  dietaryRestrictions: string[];
+  /** 用户健康状况 */
+  healthConditions: string[];
+}
+
 // ==================== 统一分析结果 ====================
 
 /**
@@ -52,6 +89,9 @@ export interface FoodAnalysisResultV61 {
 
   /** 权益裁剪信息（告知前端哪些字段因订阅等级被隐藏） */
   entitlement: EntitlementInfo;
+
+  /** V2.2: 决策结构化摘要（教练 prompt 优先消费此字段） */
+  summary?: DecisionSummary;
 }
 
 // ==================== 子结构定义 ====================
@@ -128,6 +168,10 @@ export interface NutritionTotals {
   fiber?: number;
   /** 总钠（毫克，深度营养拆解字段） */
   sodium?: number;
+  /** V1.2: 总饱和脂肪（克） */
+  saturatedFat?: number;
+  /** V1.2: 总添加糖（克） */
+  addedSugar?: number;
 }
 
 /** 综合评分 */
@@ -138,6 +182,16 @@ export interface AnalysisScore {
   nutritionScore: number;
   /** 置信度评分（0-100，综合识别和估算的可信度） */
   confidenceScore: number;
+  /** V1.3: 7维评分分解（energy/proteinRatio/macroBalance/foodQuality/satiety/stability/glycemicImpact） */
+  breakdown?: {
+    energy: number;
+    proteinRatio: number;
+    macroBalance: number;
+    foodQuality: number;
+    satiety: number;
+    stability: number;
+    glycemicImpact: number;
+  };
 }
 
 /**
@@ -157,6 +211,120 @@ export interface FoodDecision {
   reason: string;
   /** 风险等级 */
   riskLevel: 'low' | 'medium' | 'high';
+  /** P1-3: 具体行动建议（如"减少份量到半份"、"搭配蔬菜沙拉"） */
+  advice?: string;
+  /** V1.3: 结构化决策因子 */
+  decisionFactors?: Array<{
+    dimension: string;
+    score: number;
+    impact: 'critical' | 'warning' | 'positive';
+    message: string;
+  }>;
+  /** V1.3: 最优份量建议 */
+  optimalPortion?: {
+    recommendedPercent: number;
+    recommendedCalories: number;
+  };
+  /** V1.3: 下一餐建议 */
+  nextMealAdvice?: {
+    targetCalories: number;
+    targetProtein: number;
+    targetFat: number;
+    targetCarbs: number;
+    emphasis: string;
+    suggestion: string;
+  };
+  /** V1.6: 决策推理链（从评分到建议的步骤记录） */
+  decisionChain?: DecisionChainStep[];
+  /** V1.6: 7维评分解释 */
+  breakdownExplanations?: BreakdownExplanation[];
+  /** V1.7: 结构化问题识别 */
+  issues?: DietIssue[];
+}
+
+/** V1.6: 评分维度解释 */
+export interface BreakdownExplanation {
+  /** 维度键 */
+  dimension: string;
+  /** 本地化标签 */
+  label: string;
+  /** 维度分数 0-100 */
+  score: number;
+  /** 影响等级 */
+  impact: 'positive' | 'warning' | 'critical';
+  /** 人类可读解释 */
+  message: string;
+  /** V1.7: 实际值 */
+  actualValue?: number;
+  /** V1.7: 目标/推荐值 */
+  targetValue?: number;
+  /** V1.7: 单位 */
+  unit?: string;
+  /** V1.9: 改善建议（当 impact 为 warning/critical 时） */
+  suggestion?: string;
+}
+
+/** V1.6: 决策推理链步骤 */
+export interface DecisionChainStep {
+  /** 步骤名称 */
+  step: string;
+  /** 输入摘要 */
+  input: string;
+  /** 输出摘要 */
+  output: string;
+  /** V1.9: 步骤置信度 (0-1) */
+  confidence?: number;
+}
+
+/** V1.7: 替代方案定量对比 */
+export interface AlternativeComparison {
+  /** 热量差（替代 - 原始，负值表示更低） */
+  caloriesDiff: number;
+  /** 蛋白质差（替代 - 原始，正值表示更高） */
+  proteinDiff: number;
+  /** 评分差（替代 - 原始） */
+  scoreDiff?: number;
+}
+
+/** V1.7: 饮食问题识别 */
+export interface DietIssue {
+  /** 问题分类 */
+  category:
+    | 'calorie_excess'
+    | 'protein_deficit'
+    | 'fat_excess'
+    | 'carb_excess'
+    | 'late_night'
+    | 'allergen'
+    | 'restriction'
+    | 'health_risk'
+    | 'low_quality'
+    | 'meal_balance'
+    | 'binge_risk'
+    | 'cumulative_excess'
+    | 'multi_day_excess';
+  /** 严重程度 */
+  severity: 'info' | 'warning' | 'critical';
+  /** 人类可读描述 */
+  message: string;
+  /** V1.9: 可执行的改善建议 */
+  actionable?: string;
+  /** 附加数据 */
+  data?: Record<string, number | string>;
+}
+
+/** V1.7: 宏量营养素进度 */
+export interface MacroProgressItem {
+  consumed: number;
+  target: number;
+  percent: number;
+}
+
+export interface MacroProgress {
+  calories: MacroProgressItem;
+  protein: MacroProgressItem;
+  fat: MacroProgressItem;
+  carbs: MacroProgressItem;
 }
 
 /** 替代食物建议 */
@@ -165,6 +333,14 @@ export interface FoodAlternative {
   name: string;
   /** 推荐替代的原因 */
   reason: string;
+  /** V1.1: 标准食物库 ID（来自推荐引擎时） */
+  foodLibraryId?: string;
+  /** V1.1: 推荐引擎打分 0-1 */
+  score?: number;
+  /** V1.7: 定量对比（替代 vs 原始食物） */
+  comparison?: AlternativeComparison;
+  /** V2.1: 来源标记（推荐引擎 or 静态规则） */
+  source?: 'engine' | 'static';
 }
 
 /**
@@ -207,6 +383,24 @@ export interface EntitlementInfo {
   tier: SubscriptionTier;
   /** 被隐藏的字段路径列表（如 ['alternatives', 'explanation.userContextImpact']） */
   fieldsHidden: string[];
+}
+
+/** V2.2: 决策结构化摘要 */
+export interface DecisionSummary {
+  /** 一句话摘要（如"这顿红烧肉饭热量偏高(850kcal)，建议减量到60%"） */
+  headline: string;
+  /** 决策判定 */
+  verdict: 'recommend' | 'caution' | 'avoid';
+  /** 最严重的问题（最多 3 个，按严重度排序） */
+  topIssues: string[];
+  /** 正面因素（最多 2 个） */
+  topStrengths: string[];
+  /** 可执行建议（最多 3 个） */
+  actionItems: string[];
+  /** 量化亮点（如"蛋白质 12g/目标120g(10%), 严重不足"） */
+  quantitativeHighlight: string;
+  /** 替代方案摘要 */
+  alternativeSummary?: string;
 }
 
 // ==================== 裁剪相关常量 ====================

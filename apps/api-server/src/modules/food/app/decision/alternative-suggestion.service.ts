@@ -1,0 +1,485 @@
+/**
+ * V1.6 Phase 2 — 替代食物建议服务
+ *
+ * 从 FoodDecisionService 提取的替代食物生成逻辑。
+ *
+ * 职责:
+ * - generateAlternatives: 推荐引擎优先 + 静态 fallback
+ * - explainAlternative: 人类可读的对比说明
+ *
+ * 设计原则:
+ * - 只读引用推荐系统（SubstitutionService）
+ * - 与 FoodDecisionService 解耦，可独立测试
+ */
+import { Injectable, Logger } from '@nestjs/common';
+import {
+  FoodAlternative,
+  AlternativeComparison,
+  NutritionTotals,
+  DietIssue,
+} from '../types/analysis-result.types';
+import { NutritionScoreBreakdown } from '../../../../modules/diet/app/services/nutrition-score.service';
+import {
+  AlternativeRule,
+  CATEGORY_ALTERNATIVE_RULES,
+  GOAL_ALTERNATIVE_RULES,
+  resolveAlternatives,
+} from '../config/alternative-food-rules';
+import { SubstitutionService } from '../../../../modules/diet/app/recommendation/filter/substitution.service';
+import type {
+  UserProfileConstraints,
+  UserPreferenceProfile,
+} from '../../../../modules/diet/app/recommendation/types/recommendation.types';
+import { FoodLibraryService } from '../services/food-library.service';
+import {
+  t,
+  Locale,
+} from '../../../../modules/diet/app/recommendation/utils/i18n-messages';
+import { DecisionFoodItem, UserContext } from './food-decision.service';
+
+// ==================== 输入类型 ====================
+
+/** V2.2: 替代方案约束（从问题维度提取） */
+export interface AlternativeConstraints {
+  preferHighProtein?: boolean;
+  preferLowFat?: boolean;
+  preferLowCarb?: boolean;
+  preferLowCalorie?: boolean;
+  maxCalories?: number;
+  excludeAllergens?: string[];
+  excludeCategories?: string[];
+}
+
+export interface AlternativeInput {
+  foods: DecisionFoodItem[];
+  totals: NutritionTotals;
+  userContext: UserContext;
+  scoreBreakdown?: NutritionScoreBreakdown;
+  locale?: Locale;
+  userId?: string;
+  replacementPatterns?: Record<string, number>;
+  /** V1.9: 用户安全约束（过敏原/饮食限制等） */
+  userConstraints?: UserProfileConstraints;
+  /** V1.9: 用户偏好画像（loves/avoids/频率权重等） */
+  preferenceProfile?: UserPreferenceProfile;
+  /** V2.2: 结构化问题列表（用于提取替代方案约束） */
+  issues?: DietIssue[];
+}
+
+@Injectable()
+export class AlternativeSuggestionService {
+  private readonly logger = new Logger(AlternativeSuggestionService.name);
+
+  constructor(
+    private readonly substitutionService: SubstitutionService,
+    private readonly foodLibraryService: FoodLibraryService,
+  ) {}
+
+  // ==================== 主入口 ====================
+
+  async generateAlternatives(
+    input: AlternativeInput,
+  ): Promise<FoodAlternative[]> {
+    const {
+      foods,
+      userContext: ctx,
+      userId,
+      locale,
+      replacementPatterns,
+      userConstraints,
+      preferenceProfile,
+      issues,
+    } = input;
+
+    // V2.2: 从问题列表提取替代方案约束
+    const constraints = this.extractConstraintsFromIssues(issues, ctx);
+
+    let results: FoodAlternative[] = [];
+
+    // 1. 推荐引擎优先
+    if (userId) {
+      try {
+        const engineAlternatives = await this.getEngineAlternatives(
+          foods,
+          userId,
+          ctx,
+          userConstraints,
+          preferenceProfile,
+          constraints,
+        );
+        if (engineAlternatives.length > 0) {
+          results = engineAlternatives.slice(0, 5);
+        }
+      } catch (err) {
+        this.logger.warn(
+          `推荐引擎替代方案获取失败，降级静态规则: ${(err as Error).message}`,
+        );
+      }
+    }
+
+    // 2. 静态规则 fallback
+    if (results.length === 0) {
+      results = this.generateStaticAlternatives(foods, ctx, locale);
+    }
+
+    // 3. 添加 comparison 字段（定量对比）
+    const avgCalories =
+      foods.length > 0
+        ? foods.reduce((s, f) => s + f.calories, 0) / foods.length
+        : 0;
+    const avgProtein =
+      foods.length > 0
+        ? foods.reduce((s, f) => s + f.protein, 0) / foods.length
+        : 0;
+    for (const alt of results) {
+      if (!alt.comparison) {
+        alt.comparison = this.buildComparison(alt, avgCalories, avgProtein);
+      }
+    }
+
+    // 4. replacementPatterns 驱动排序提升
+    if (replacementPatterns && Object.keys(replacementPatterns).length > 0) {
+      const foodNames = foods.map((f) => f.name);
+      for (const alt of results) {
+        for (const foodName of foodNames) {
+          const key = `${foodName}→${alt.name}`;
+          const count = replacementPatterns[key];
+          if (count && count > 0) {
+            alt.score = (alt.score || 0) + count * 0.1;
+          }
+        }
+      }
+      results.sort((a, b) => (b.score || 0) - (a.score || 0));
+    }
+
+    return results.slice(0, 5);
+  }
+
+  // ==================== 定量对比构建 ====================
+
+  /**
+   * 构建替代方案与原始食物的定量对比
+   * 当缺少替代食物的营养数据时返回 undefined
+   */
+  private buildComparison(
+    _alt: FoodAlternative,
+    _avgCalories: number,
+    _avgProtein: number,
+  ): AlternativeComparison | undefined {
+    // 静态规则生成的替代方案没有真实营养数据，无法计算定量对比
+    return undefined;
+  }
+
+  // ==================== 推荐引擎替代 ====================
+
+  private async getEngineAlternatives(
+    foods: DecisionFoodItem[],
+    userId: string,
+    ctx: UserContext,
+    userConstraints?: UserProfileConstraints,
+    preferenceProfile?: UserPreferenceProfile,
+    constraints?: AlternativeConstraints,
+  ): Promise<FoodAlternative[]> {
+    const alternatives: FoodAlternative[] = [];
+    const seenNames = new Set<string>();
+    const startTime = Date.now();
+
+    for (const food of foods) {
+      let foodId = food.libraryMatch?.id;
+
+      if (!foodId && food.name) {
+        try {
+          const fuzzyResults = (await this.foodLibraryService.search(
+            food.name,
+            1,
+          )) as any[];
+          if (
+            fuzzyResults &&
+            fuzzyResults.length > 0 &&
+            fuzzyResults[0]?.sim_score > 0.3
+          ) {
+            foodId = fuzzyResults[0].id;
+          }
+        } catch {
+          // 搜索失败跳过
+        }
+      }
+
+      if (!foodId) continue;
+
+      const candidates = await this.substitutionService.findSubstitutes(
+        foodId,
+        userId,
+        undefined,
+        3,
+        [], // excludeNames
+        // V1.9: 传递用户安全约束和偏好画像
+        userConstraints || {
+          allergens: ctx.allergens,
+          dietaryRestrictions: ctx.dietaryRestrictions,
+          healthConditions: ctx.healthConditions,
+        },
+        preferenceProfile,
+      );
+
+      for (const c of candidates) {
+        const name = c.food?.name || c.food?.nameZh;
+        if (!name || seenNames.has(name)) continue;
+        seenNames.add(name);
+
+        let reason: string;
+        if (
+          constraints?.preferLowCalorie &&
+          c.servingCalories < food.calories * 0.8
+        ) {
+          reason = t('decision.alt.lowerCal', {
+            newCal: String(Math.round(c.servingCalories)),
+            oldCal: String(Math.round(food.calories)),
+          });
+        } else if (
+          constraints?.preferHighProtein &&
+          c.servingProtein > food.protein * 1.1
+        ) {
+          reason = t('decision.alt.higherProtein', {
+            newPro: String(Math.round(c.servingProtein)),
+            oldPro: String(Math.round(food.protein)),
+          });
+        } else if (
+          ctx.goalType === 'fat_loss' &&
+          c.servingCalories < food.calories * 0.7
+        ) {
+          reason = t('decision.alt.lowerCal', {
+            newCal: String(Math.round(c.servingCalories)),
+            oldCal: String(Math.round(food.calories)),
+          });
+        } else if (
+          ctx.goalType === 'muscle_gain' &&
+          c.servingProtein > food.protein * 1.2
+        ) {
+          reason = t('decision.alt.higherProtein', {
+            newPro: String(Math.round(c.servingProtein)),
+            oldPro: String(Math.round(food.protein)),
+          });
+        } else if (c.substituteScore > 0.7) {
+          reason = t('decision.alt.balanced', {
+            score: String(Math.round(c.substituteScore * 100)),
+          });
+        } else {
+          reason = t('decision.alt.similar');
+        }
+
+        alternatives.push({
+          name,
+          reason,
+          foodLibraryId: c.food?.id,
+          score: c.substituteScore,
+          source: 'engine',
+          comparison: {
+            caloriesDiff: Math.round(c.servingCalories - food.calories),
+            proteinDiff: Math.round(c.servingProtein - food.protein),
+            scoreDiff: undefined,
+          },
+        });
+      }
+
+      if (alternatives.length >= 5) break;
+    }
+
+    // V2.1: 推荐引擎调用指标日志
+    const latencyMs = Date.now() - startTime;
+    this.logger.debug(
+      `推荐引擎替代方案: count=${alternatives.length}, latency=${latencyMs}ms, userId=${userId}`,
+    );
+
+    return alternatives;
+  }
+
+  // ==================== V2.2: 问题约束提取 ====================
+
+  /**
+   * 从结构化问题列表中提取替代方案约束维度
+   *
+   * 映射关系：
+   * - calorie_excess / cumulative_excess / multi_day_excess → preferLowCalorie + maxCalories
+   * - protein_deficit → preferHighProtein
+   * - fat_excess → preferLowFat
+   * - carb_excess → preferLowCarb
+   * - allergen → excludeAllergens
+   * - restriction → excludeCategories
+   */
+  private extractConstraintsFromIssues(
+    issues?: DietIssue[],
+    ctx?: UserContext,
+  ): AlternativeConstraints {
+    const constraints: AlternativeConstraints = {};
+
+    if (!issues || issues.length === 0) return constraints;
+
+    for (const issue of issues) {
+      switch (issue.category) {
+        case 'calorie_excess':
+        case 'cumulative_excess':
+        case 'multi_day_excess':
+          constraints.preferLowCalorie = true;
+          if (ctx && ctx.remainingCalories > 0 && !constraints.maxCalories) {
+            constraints.maxCalories = ctx.remainingCalories;
+          }
+          break;
+        case 'protein_deficit':
+          constraints.preferHighProtein = true;
+          break;
+        case 'fat_excess':
+          constraints.preferLowFat = true;
+          break;
+        case 'carb_excess':
+          constraints.preferLowCarb = true;
+          break;
+        case 'allergen':
+          if (ctx?.allergens && ctx.allergens.length > 0) {
+            constraints.excludeAllergens = [...ctx.allergens];
+          }
+          break;
+        case 'restriction':
+          if (ctx?.dietaryRestrictions && ctx.dietaryRestrictions.length > 0) {
+            constraints.excludeCategories = [...ctx.dietaryRestrictions];
+          }
+          break;
+      }
+    }
+
+    return constraints;
+  }
+
+  // ==================== 静态规则替代 ====================
+
+  private generateStaticAlternatives(
+    foods: DecisionFoodItem[],
+    ctx: UserContext,
+    locale?: Locale,
+  ): FoodAlternative[] {
+    const totalProtein = foods.reduce((s, f) => s + f.protein, 0);
+    const totalCalories = foods.reduce((s, f) => s + f.calories, 0);
+    const totalCarbs = foods.reduce((s, f) => s + f.carbs, 0);
+    const totalFat = foods.reduce((s, f) => s + f.fat, 0);
+
+    const matched: FoodAlternative[] = [];
+    const seenNames = new Set<string>();
+
+    const addAlternatives = (alts: FoodAlternative[]) => {
+      for (const alt of alts) {
+        if (!seenNames.has(alt.name)) {
+          seenNames.add(alt.name);
+          matched.push({ ...alt, source: alt.source || 'static' });
+        }
+      }
+    };
+
+    // V1.9: resolve i18n alternatives by locale
+    const categoryRules = resolveAlternatives(
+      CATEGORY_ALTERNATIVE_RULES,
+      locale,
+    );
+    const goalRules = resolveAlternatives(GOAL_ALTERNATIVE_RULES, locale);
+
+    for (const food of foods) {
+      for (const rule of categoryRules) {
+        if (
+          this.matchesAlternativeRule(
+            rule,
+            food,
+            ctx,
+            totalCalories,
+            totalProtein,
+            totalCarbs,
+            totalFat,
+          )
+        ) {
+          addAlternatives(rule.alternatives);
+        }
+      }
+    }
+
+    for (const rule of goalRules) {
+      if (
+        this.matchesGoalRule(
+          rule,
+          ctx,
+          totalCalories,
+          totalProtein,
+          totalCarbs,
+          totalFat,
+        )
+      ) {
+        addAlternatives(rule.alternatives);
+      }
+    }
+
+    const remaining = ctx.remainingCalories - totalCalories;
+    if (remaining < 0 && matched.length > 0) {
+      matched[0] = {
+        ...matched[0],
+        reason: `${matched[0].reason}${t('decision.alt.saveBudget', { amount: String(Math.abs(Math.round(remaining))) })}`,
+      };
+    }
+
+    const hour = ctx.localHour;
+    if (hour >= 21 && totalCalories > 200) {
+      addAlternatives([
+        {
+          name: t('decision.alt.lateNightMilkName', {}, locale) || '温牛奶',
+          reason: t('decision.alt.lateNightMilk', {}, locale),
+        },
+        {
+          name: t('decision.alt.lateNightFruitName', {}, locale) || '小份水果',
+          reason: t('decision.alt.lateNightFruit', {}, locale),
+        },
+      ]);
+    }
+
+    return matched.slice(0, 5);
+  }
+
+  private matchesAlternativeRule(
+    rule: AlternativeRule,
+    food: DecisionFoodItem,
+    ctx: UserContext,
+    _totalCalories: number,
+    _totalProtein: number,
+    _totalCarbs: number,
+    _totalFat: number,
+  ): boolean {
+    const trigger = rule.trigger;
+    if (
+      trigger.categories?.length &&
+      !trigger.categories.includes(food.category || '')
+    )
+      return false;
+    if (trigger.goals?.length && !trigger.goals.includes(ctx.goalType))
+      return false;
+    if (trigger.minCalories != null && food.calories < trigger.minCalories)
+      return false;
+    if (trigger.minCarbs != null && food.carbs < trigger.minCarbs) return false;
+    if (trigger.minFat != null && food.fat < trigger.minFat) return false;
+    return true;
+  }
+
+  private matchesGoalRule(
+    rule: AlternativeRule,
+    ctx: UserContext,
+    totalCalories: number,
+    totalProtein: number,
+    totalCarbs: number,
+    totalFat: number,
+  ): boolean {
+    const trigger = rule.trigger;
+    if (trigger.goals?.length && !trigger.goals.includes(ctx.goalType))
+      return false;
+    if (trigger.minCalories != null && totalCalories < trigger.minCalories)
+      return false;
+    if (trigger.maxProtein != null && totalProtein > trigger.maxProtein)
+      return false;
+    if (trigger.minCarbs != null && totalCarbs < trigger.minCarbs) return false;
+    if (trigger.minFat != null && totalFat < trigger.minFat) return false;
+    return true;
+  }
+}

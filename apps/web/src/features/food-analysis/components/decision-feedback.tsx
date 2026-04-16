@@ -64,8 +64,35 @@ export function DecisionFeedback({ recordId, decision }: DecisionFeedbackProps) 
   // 不显示对 SAFE 决策的反馈（太正面了不需要反馈）
   if (decision === 'SAFE') return null;
 
-  // 没有 recordId 时不显示（分析还没保存）
-  if (!recordId) return null;
+  // P1-4: 无 recordId 时显示简化反馈（仅本地状态，不调接口）
+  if (!recordId) {
+    if (step === 'done') {
+      return (
+        <div className="bg-white/60 rounded-xl p-3 text-center">
+          <p className="text-sm font-medium text-primary">感谢反馈！</p>
+        </div>
+      );
+    }
+    return (
+      <div className="bg-white/60 rounded-xl p-3 space-y-2">
+        <p className="text-xs font-bold text-muted-foreground">这个建议有帮助吗？</p>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setStep('done')}
+            className="flex-1 py-2 rounded-lg text-xs font-bold bg-green-500/10 text-green-700 hover:bg-green-500/20 active:scale-[0.97] transition-all flex items-center justify-center gap-1"
+          >
+            <span className="text-base">👍</span> 有帮助
+          </button>
+          <button
+            onClick={() => setStep('done')}
+            className="flex-1 py-2 rounded-lg text-xs font-bold bg-red-500/10 text-red-700 hover:bg-red-500/20 active:scale-[0.97] transition-all flex items-center justify-center gap-1"
+          >
+            <span className="text-base">👎</span> 不准确
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (step === 'done') {
     return (

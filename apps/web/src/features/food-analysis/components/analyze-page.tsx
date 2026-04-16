@@ -608,7 +608,13 @@ export function AnalyzePage() {
               </div>
             )}
 
-            <DecisionCard result={result} />
+            <DecisionCard
+              result={result}
+              onAnalyzeAlternative={(foodName) => {
+                setTextInput(foodName);
+                setStep('upload');
+              }}
+            />
 
             {/* 免费用户：结果页 contextual CTA — 提示升级可获得更精准分析 */}
             {isFree && (
@@ -722,13 +728,35 @@ export function AnalyzePage() {
               </button>
             </div>
 
-            {/* 分析→教练无缝衔接 */}
+            {/* P1-6: 分析→教练无缝衔接（结构化摘要） */}
             <button
               onClick={() => {
                 const foodNames = editedFoods.map((f) => f.name).join('、');
+                const scoreInfo =
+                  result.nutritionScore != null ? `营养评分${result.nutritionScore}/100，` : '';
+                const riskInfo = result.riskLevel ? `风险等级${result.riskLevel}，` : '';
+                const adviceInfo = result.advice ? `AI建议：${result.advice}。` : '';
                 const coachQuery = encodeURIComponent(
-                  `我刚分析了一餐${mealTypeLabels[mealType]}，包含${foodNames}，共${editedTotal}kcal。${result.decision ? `AI判定为「${result.decision}」。` : ''}请给我针对性的饮食建议。`
+                  `我刚分析了一餐${mealTypeLabels[mealType]}，包含${foodNames}，共${editedTotal}kcal。${scoreInfo}${riskInfo}AI判定为「${result.decision || 'SAFE'}」。${adviceInfo}请给我针对性的饮食建议。`
                 );
+                // P2-5: 通过 sessionStorage 传递结构化上下文
+                try {
+                  sessionStorage.setItem(
+                    'coach_analysis_context',
+                    JSON.stringify({
+                      foods: editedFoods.map((f) => ({ name: f.name, calories: f.calories })),
+                      totalCalories: editedTotal,
+                      decision: result.decision,
+                      riskLevel: result.riskLevel,
+                      nutritionScore: result.nutritionScore,
+                      advice: result.advice,
+                      mealType,
+                      timestamp: new Date().toISOString(),
+                    })
+                  );
+                } catch {
+                  /* ignore */
+                }
                 router.push(`/coach?q=${coachQuery}`);
               }}
               className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-card border border-border text-sm font-medium text-foreground hover:bg-muted active:scale-[0.98] transition-all"

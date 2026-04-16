@@ -4,18 +4,30 @@ import { useState } from 'react';
 import { LocalizedLink } from '@/components/common/localized-link';
 import { DECISION_CONFIG, SCORE_LABELS, getScoreColor, getScoreLabel } from '@/lib/constants/food';
 import { DecisionFeedback } from './decision-feedback';
+import { foodPlanService } from '@/lib/api/food-plan';
 import type { AnalysisResult, NutritionScoreBreakdown } from '@/types/food';
+
+/** P1-3: 风险等级标签配置 */
+const RISK_LEVEL_CONFIG: Record<string, { label: string; className: string }> = {
+  low: { label: '低风险', className: 'bg-green-100 text-green-700' },
+  medium: { label: '中风险', className: 'bg-amber-100 text-amber-700' },
+  high: { label: '高风险', className: 'bg-red-100 text-red-700' },
+};
 
 interface DecisionCardProps {
   result: AnalysisResult;
   /** recordId — 保存后回传，用于启用决策反馈 */
   recordId?: string;
+  /** P2-4: 点击替代方案时触发新分析 */
+  onAnalyzeAlternative?: (foodName: string) => void;
 }
 
-export function DecisionCard({ result, recordId }: DecisionCardProps) {
+export function DecisionCard({ result, recordId, onAnalyzeAlternative }: DecisionCardProps) {
   const decision = result.decision || 'SAFE';
   const config = DECISION_CONFIG[decision] || DECISION_CONFIG.SAFE;
   const [showBreakdown, setShowBreakdown] = useState(false);
+  const [explainLoading, setExplainLoading] = useState<string | null>(null);
+  const [explainResult, setExplainResult] = useState<string | null>(null);
 
   const hasNutritionScore = result.nutritionScore != null;
   const hasBreakdown = result.scoreBreakdown != null;
@@ -26,6 +38,19 @@ export function DecisionCard({ result, recordId }: DecisionCardProps) {
   const carbs = result.totalCarbs ?? 0;
   const macroTotal = protein + fat + carbs;
 
+  /** P1-5: 查询"为什么不推荐" */
+  const handleExplainWhyNot = async (foodName: string) => {
+    try {
+      setExplainLoading(foodName);
+      const res = await foodPlanService.explainWhyNot(foodName, result.mealType || 'lunch');
+      setExplainResult(res.explanation || res.reasons?.join('；') || '暂无详细解释');
+    } catch {
+      setExplainResult('暂时无法获取解释');
+    } finally {
+      setExplainLoading(null);
+    }
+  };
+
   return (
     <div className={`rounded-2xl border p-5 space-y-4 ${config.bgClass}`}>
       {/* 决策头部 */}
@@ -33,6 +58,14 @@ export function DecisionCard({ result, recordId }: DecisionCardProps) {
         <div className="flex items-center gap-2">
           <span className="text-2xl">{config.emoji}</span>
           <span className={`text-lg font-bold ${config.textClass}`}>{config.label}</span>
+          {/* P1-3: 风险等级标签 */}
+          {result.riskLevel && RISK_LEVEL_CONFIG[result.riskLevel] && (
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${RISK_LEVEL_CONFIG[result.riskLevel].className}`}
+            >
+              {RISK_LEVEL_CONFIG[result.riskLevel].label}
+            </span>
+          )}
         </div>
         <span className={`px-3 py-1 rounded-full text-xs font-bold ${config.badgeClass}`}>
           {result.totalCalories} kcal
@@ -43,6 +76,36 @@ export function DecisionCard({ result, recordId }: DecisionCardProps) {
       {result.reason && (
         <p className={`text-sm font-medium ${config.textClass}`}>{result.reason}</p>
       )}
+
+      {/* P1-3: 行动建议 */}
+      {result.advice && (
+        <div className="bg-white/70 rounded-xl p-3 border border-current/5">
+          <p className="text-xs font-bold text-muted-foreground mb-1">🎯 行动建议</p>
+          <p className="text-sm font-medium">{result.advice}</p>
+        </div>
+      )}
+
+      {/* P1-5: caution/avoid 时显示"为什么不推荐"按钮 */}
+      {(decision === 'LIMIT' || decision === 'AVOID') &&
+        result.foods &&
+        result.foods.length > 0 && (
+          <div className="space-y-2">
+            {!explainResult ? (
+              <button
+                onClick={() => handleExplainWhyNot(result.foods[0]?.name || '')}
+                disabled={explainLoading !== null}
+                className="w-full py-2 rounded-lg text-xs font-bold bg-white/60 border border-current/10 hover:bg-white/80 active:scale-[0.98] transition-all disabled:opacity-50"
+              >
+                {explainLoading ? '分析中...' : `🤔 为什么不推荐「${result.foods[0]?.name}」？`}
+              </button>
+            ) : (
+              <div className="bg-white/60 rounded-xl p-3">
+                <p className="text-xs font-bold text-muted-foreground mb-1">🔍 详细解释</p>
+                <p className="text-sm">{explainResult}</p>
+              </div>
+            )}
+          </div>
+        )}
 
       {/* V6: 营养评分总分 */}
       {hasNutritionScore && (
@@ -168,32 +231,56 @@ export function DecisionCard({ result, recordId }: DecisionCardProps) {
         </div>
       )}
 
-      {/* 替代方案（可点击跳转食物库） */}
+      {/* P2-4: 替代方案（卡片式，可点击触发新分析） */}
       {result.insteadOptions && result.insteadOptions.length > 0 && (
         <div className="bg-white/60 rounded-xl p-3">
           <p className="text-xs font-bold text-muted-foreground mb-2">🔄 替代方案</p>
-          <div className="flex flex-wrap gap-2">
+          <div className="grid gap-2">
             {result.insteadOptions.map((option, i) => (
-              <LocalizedLink
+              <div
                 key={i}
-                href={`/foods/${encodeURIComponent(option)}`}
-                className={`px-3 py-1 rounded-full text-xs font-medium border ${config.bgClass} hover:opacity-80 active:scale-[0.97] transition-all inline-flex items-center gap-1`}
+                className={`flex items-center justify-between p-2.5 rounded-xl border ${config.bgClass} hover:opacity-80 transition-all`}
               >
-                {option}
-                <svg
-                  className="w-3 h-3 opacity-50"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 5l7 7-7 7"
-                  />
-                </svg>
-              </LocalizedLink>
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-lg">🍽️</span>
+                  <span className="text-sm font-medium truncate">
+                    {typeof option === 'string' ? option : (option as any).name || option}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {onAnalyzeAlternative && (
+                    <button
+                      onClick={() =>
+                        onAnalyzeAlternative(
+                          typeof option === 'string' ? option : (option as any).name || option
+                        )
+                      }
+                      className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-primary/10 text-primary hover:bg-primary/20 active:scale-[0.95] transition-all"
+                    >
+                      分析这个
+                    </button>
+                  )}
+                  <LocalizedLink
+                    href={`/foods/${encodeURIComponent(typeof option === 'string' ? option : (option as any).name || option)}`}
+                    className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-white/60 border border-current/10 hover:bg-white/80 transition-all inline-flex items-center gap-0.5"
+                  >
+                    详情
+                    <svg
+                      className="w-3 h-3 opacity-50"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 5l7 7-7 7"
+                      />
+                    </svg>
+                  </LocalizedLink>
+                </div>
+              </div>
             ))}
           </div>
         </div>

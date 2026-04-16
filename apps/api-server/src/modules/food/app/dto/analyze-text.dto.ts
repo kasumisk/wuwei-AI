@@ -31,4 +31,14 @@ export class AnalyzeTextDto {
   @IsOptional()
   @IsEnum(MealType)
   mealType?: MealType;
+
+  /** V1.1: 语言区域（可选，默认 zh-CN） */
+  @ApiPropertyOptional({
+    description: '语言区域',
+    example: 'zh-CN',
+    enum: ['zh-CN', 'en-US', 'ja-JP'],
+  })
+  @IsOptional()
+  @IsString()
+  locale?: string;
 }

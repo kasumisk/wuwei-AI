@@ -6,21 +6,20 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { FoodService } from '../../diet/app/services/food.service';
 import { UserProfileService } from '../../user/app/services/profile/user-profile.service';
 import { BehaviorService } from '../../diet/app/services/behavior.service';
+import { getUserLocalHour } from '../../../common/utils/timezone.util';
+import { t, Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 import {
-  getUserLocalHour,
-  DEFAULT_TIMEZONE,
-} from '../../../common/utils/timezone.util';
+  CoachPromptBuilderService,
+  AnalysisContextInput,
+} from './prompt/coach-prompt-builder.service';
+import { FoodAnalysisResultV61 } from '../../food/app/types/analysis-result.types';
 
-// V5: AI 人格 Prompt
-const PERSONA_PROMPTS: Record<string, string> = {
-  strict: `你的风格是严格教练：直接了当，不拐弯抹角。重点强调目标和纪律。语气坚定但不攻击。`,
-  friendly: `你的风格是暖心朋友：温和鼓励，理解失败很正常。避免强烈否定，多给替代方案。`,
-  data: `你的风格是数据分析师：客观冷静，用数字说话。减少情感表达，强调数据对比。`,
-};
+// V1.9: COACH_LABELS, cl(), PERSONA_PROMPTS 已提取到 CoachPromptBuilderService 和 coach-tone.config.ts
 
 export interface DailyGreeting {
   greeting: string;
@@ -34,12 +33,21 @@ export class CoachService {
   private readonly baseUrl: string;
   private readonly chatModel: string;
 
+  /** V2.0: 最新分析结果缓存（userId → { result, timestamp }） */
+  private readonly latestAnalysisCache = new Map<
+    string,
+    { result: FoodAnalysisResultV61; timestamp: number }
+  >();
+  /** 缓存有效期：5分钟 */
+  private static readonly ANALYSIS_CACHE_TTL = 5 * 60 * 1000;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly foodService: FoodService,
     private readonly userProfileService: UserProfileService,
     private readonly behaviorService: BehaviorService,
     private readonly configService: ConfigService,
+    private readonly promptBuilder: CoachPromptBuilderService,
   ) {
     this.apiKey = this.configService.get<string>('OPENROUTER_API_KEY') || '';
     this.baseUrl =
@@ -56,87 +64,43 @@ export class CoachService {
     }
   }
 
+  // ==================== V2.0: 分析事件自动桥接 ====================
+
   /**
-   * 构建系统 Prompt（注入用户数据上下文）
+   * 监听食物分析完成事件，缓存最新结果供教练对话使用
    */
-  async buildSystemPrompt(userId: string): Promise<string> {
-    const [
-      profile,
-      todaySummary,
-      recentSummaries,
-      behaviorProfile,
-      behaviorContext,
-    ] = await Promise.all([
-      this.userProfileService.getProfile(userId),
-      this.foodService.getTodaySummary(userId),
-      this.foodService.getRecentSummaries(userId, 7),
-      this.behaviorService.getProfile(userId).catch(() => null),
-      this.behaviorService.getBehaviorContext(userId).catch(() => ''),
-    ]);
+  @OnEvent('food.analysis.completed')
+  handleAnalysisCompleted(payload: {
+    userId: string;
+    result: FoodAnalysisResultV61;
+  }) {
+    this.latestAnalysisCache.set(payload.userId, {
+      result: payload.result,
+      timestamp: Date.now(),
+    });
+    this.logger.debug(
+      `Cached analysis result for user ${payload.userId} (${payload.result.inputType})`,
+    );
+  }
 
-    const hour = getUserLocalHour(profile?.timezone || DEFAULT_TIMEZONE);
-    const timeHint =
-      hour < 10
-        ? '现在是早晨，用户可能还没吃早餐'
-        : hour < 14
-          ? '现在是午餐时间'
-          : hour < 18
-            ? '现在是下午'
-            : hour < 21
-              ? '现在是晚餐时间'
-              : '现在是夜间，提醒用户注意宵夜热量';
+  /**
+   * 获取用户最新分析结果（5分钟内有效）
+   */
+  private getCachedAnalysis(userId: string): FoodAnalysisResultV61 | null {
+    const cached = this.latestAnalysisCache.get(userId);
+    if (!cached) return null;
+    if (Date.now() - cached.timestamp > CoachService.ANALYSIS_CACHE_TTL) {
+      this.latestAnalysisCache.delete(userId);
+      return null;
+    }
+    return cached.result;
+  }
 
-    const bmi =
-      profile && profile.heightCm && profile.weightKg
-        ? (
-            Number(profile.weightKg) /
-            (Number(profile.heightCm) / 100) ** 2
-          ).toFixed(1)
-        : null;
-
-    const avgCalories =
-      recentSummaries.length > 0
-        ? Math.round(
-            recentSummaries.reduce((s, d) => s + d.totalCalories, 0) /
-              recentSummaries.length,
-          )
-        : 0;
-
-    const onTargetDays =
-      recentSummaries.length > 0
-        ? recentSummaries.filter(
-            (d) => d.totalCalories <= (todaySummary.calorieGoal || 2000),
-          ).length
-        : 0;
-
-    return `你是无畏健康的 AI 营养教练，风格亲切、专业、简洁。
-用中文回复，每条消息不超过 150 字，不要使用 Markdown 格式。
-
-【用户档案】
-${
-  profile
-    ? `- 性别：${profile.gender === 'male' ? '男' : '女'}
-- 年龄：${new Date().getFullYear() - (profile.birthYear || 1990)} 岁
-- BMI：${bmi}（身高 ${profile.heightCm}cm，体重 ${profile.weightKg}kg）
-- 活动等级：${profile.activityLevel}
-- 每日热量目标：${todaySummary.calorieGoal || 2000} kcal`
-    : '用户尚未填写健康档案，可引导他去填写以获得更精准建议。'
-}
-
-【今日饮食】
-- 已摄入：${todaySummary.totalCalories} kcal / 目标 ${todaySummary.calorieGoal || 2000} kcal
-- 剩余：${todaySummary.remaining} kcal
-- 今日记录餐数：${todaySummary.mealCount} 餐
-
-【最近 7 天平均】
-- 日均摄入：${avgCalories} kcal
-- 达标天数：${onTargetDays} / ${recentSummaries.length} 天
-
-【时间信息】${timeHint}
-
-根据以上信息，给出个性化、有温度的饮食建议。如果用户问某食物热量，直接给出估算值，不要说"建议咨询医生"。
-
-${behaviorContext ? behaviorContext + '\n' : ''}${PERSONA_PROMPTS[behaviorProfile?.coachStyle || 'friendly'] || ''}`;
+  /**
+   * 构建系统 Prompt — V1.9: 委托给 CoachPromptBuilderService
+   */
+  async buildSystemPrompt(userId: string, locale?: Locale): Promise<string> {
+    return this.promptBuilder.buildSystemPrompt(userId, locale);
   }
 
   /**
@@ -146,6 +110,8 @@ ${behaviorContext ? behaviorContext + '\n' : ''}${PERSONA_PROMPTS[behaviorProfil
     userId: string,
     conversationId: string | undefined,
     message: string,
+    analysisContext?: AnalysisContextInput,
+    locale?: Locale,
   ): Promise<{
     messages: Array<{ role: string; content: string }>;
     conversationId: string;
@@ -189,10 +155,51 @@ ${behaviorContext ? behaviorContext + '\n' : ''}${PERSONA_PROMPTS[behaviorProfil
     history.reverse();
 
     // 构建系统 prompt
-    const systemPrompt = await this.buildSystemPrompt(userId);
+    const systemPrompt = await this.buildSystemPrompt(userId, locale);
+
+    // V1.9: 委托 CoachPromptBuilderService 格式化分析上下文
+    // V2.0: 如果未显式传入 analysisContext，自动从缓存获取
+    let contextEnhancedPrompt = systemPrompt;
+    let effectiveAnalysisContext = analysisContext;
+    if (!effectiveAnalysisContext) {
+      const cached = this.getCachedAnalysis(userId);
+      if (cached) {
+        effectiveAnalysisContext = {
+          foods: cached.foods.map((f) => ({
+            name: f.name,
+            calories: f.calories,
+            protein: f.protein,
+            fat: f.fat,
+            carbs: f.carbs,
+          })),
+          totalCalories: cached.totals.calories,
+          totalProtein: cached.totals.protein,
+          totalFat: cached.totals.fat,
+          totalCarbs: cached.totals.carbs,
+          decision: cached.decision.recommendation,
+          riskLevel: cached.decision.riskLevel,
+          nutritionScore: cached.score?.nutritionScore,
+          advice: cached.decision.advice,
+          mealType: cached.inputSnapshot?.mealType,
+          decisionFactors: cached.decision.decisionFactors,
+          breakdownExplanations: cached.decision.breakdownExplanations,
+          decisionChain: cached.decision.decisionChain,
+          issues: cached.decision.issues,
+        };
+        this.logger.debug(
+          `Auto-injected cached analysis context for user ${userId}`,
+        );
+      }
+    }
+    if (effectiveAnalysisContext) {
+      contextEnhancedPrompt += this.promptBuilder.formatAnalysisContext(
+        effectiveAnalysisContext,
+        locale,
+      );
+    }
 
     const messages: Array<{ role: string; content: string }> = [
-      { role: 'system', content: systemPrompt },
+      { role: 'system', content: contextEnhancedPrompt },
       ...history.map((m) => ({ role: m.role, content: m.content })),
       { role: 'user', content: message },
     ];
@@ -341,12 +348,21 @@ ${behaviorContext ? behaviorContext + '\n' : ''}${PERSONA_PROMPTS[behaviorProfil
   }
 
   /**
-   * 获取每日开场问候
+   * P3-2: 获取每日开场问候（增加7天饮食模式分析+个性化建议）
    */
-  async getDailyGreeting(userId: string): Promise<DailyGreeting> {
+  async getDailyGreeting(
+    userId: string,
+    locale?: Locale,
+  ): Promise<DailyGreeting> {
     const tz = await this.userProfileService.getTimezone(userId);
     const hour = getUserLocalHour(tz);
-    const summary = await this.foodService.getTodaySummary(userId);
+    const [summary, recentSummaries, behaviorProfile] = await Promise.all([
+      this.foodService.getTodaySummary(userId),
+      this.foodService
+        .getRecentSummaries(userId, 7)
+        .catch(() => [] as Array<{ totalCalories: number }>),
+      this.behaviorService.getProfile(userId).catch(() => null),
+    ]);
 
     // 补充热量目标
     if (!summary.calorieGoal) {
@@ -358,60 +374,188 @@ ${behaviorContext ? behaviorContext + '\n' : ''}${PERSONA_PROMPTS[behaviorProfil
       );
     }
 
+    // P3-2: 7天模式分析
+    let patternHint = '';
+    if (recentSummaries.length >= 3) {
+      const avgCal = Math.round(
+        recentSummaries.map((d) => d.totalCalories).reduce((a, b) => a + b, 0) /
+          recentSummaries.length,
+      );
+      const overDays = recentSummaries.filter(
+        (d) => d.totalCalories > (summary.calorieGoal || 2000),
+      ).length;
+      const goalCal = summary.calorieGoal || 2000;
+
+      if (overDays >= 4) {
+        patternHint = t(
+          'coach.pattern.overMany',
+          {
+            days: String(recentSummaries.length),
+            overDays: String(overDays),
+            avg: String(avgCal),
+          },
+          locale,
+        );
+      } else if (overDays === 0) {
+        patternHint = t(
+          'coach.pattern.allOnTarget',
+          {
+            days: String(recentSummaries.length),
+            avg: String(avgCal),
+          },
+          locale,
+        );
+      } else {
+        const ratio = Math.round((avgCal / goalCal) * 100);
+        patternHint = t(
+          'coach.pattern.average',
+          {
+            avg: String(avgCal),
+            ratio: String(ratio),
+          },
+          locale,
+        );
+      }
+    }
+
     // 根据时段+状态生成问候语
     let greeting: string;
     if (hour < 10) {
       greeting =
         summary.mealCount === 0
-          ? '早上好！新的一天开始了，早餐是最重要的一餐哦～'
-          : `早上好！你已经记录了今天的第一餐，继续保持！`;
+          ? t('coach.greeting.morning.noMeal', {}, locale)
+          : t('coach.greeting.morning.hasMeal', {}, locale);
     } else if (hour < 14) {
       greeting =
         summary.mealCount === 0
-          ? '中午好！今天还没有记录饮食，该吃午餐啦～'
-          : `中午好！你今天已摄入 ${summary.totalCalories} 卡，午餐注意搭配哦。`;
+          ? t('coach.greeting.noon.noMeal', {}, locale)
+          : t(
+              'coach.greeting.noon.hasMeal',
+              { calories: String(summary.totalCalories) },
+              locale,
+            );
     } else if (hour < 18) {
       const pct = summary.calorieGoal
         ? Math.round((summary.totalCalories / summary.calorieGoal) * 100)
         : 0;
-      greeting = `下午好！今日热量已达目标的 ${pct}%，${pct > 80 ? '晚餐注意控制' : '还有空间享用健康晚餐'}。`;
+      const hint =
+        pct > 80
+          ? t('coach.greeting.afternoon.over80', {}, locale)
+          : t('coach.greeting.afternoon.under80', {}, locale);
+      greeting = t(
+        'coach.greeting.afternoon',
+        { percent: String(pct), hint },
+        locale,
+      );
     } else if (hour < 21) {
-      greeting = `晚上好！今天还剩 ${summary.remaining} 卡的额度，选一顿清淡的晚餐吧。`;
+      greeting = t(
+        'coach.greeting.evening',
+        { remaining: String(summary.remaining) },
+        locale,
+      );
     } else {
       greeting =
         summary.totalCalories > (summary.calorieGoal || 2000)
-          ? '夜深了，今天热量已超标，建议不要再进食了哦～'
-          : '夜深了，如果饿了可以选择低热量零食，注意控制。';
+          ? t('coach.greeting.night.over', {}, locale)
+          : t('coach.greeting.night.under', {}, locale);
     }
 
-    const suggestions = this.getStaticSuggestions(hour, summary);
+    // 追加模式提示
+    if (patternHint) {
+      greeting += ` ${patternHint}`;
+    }
+
+    // P3-2: 个性化快捷建议（结合行为画像）
+    const suggestions = this.getPersonalizedSuggestions(
+      hour,
+      summary,
+      recentSummaries,
+      behaviorProfile,
+      locale,
+    );
 
     return { greeting, suggestions };
   }
 
   /**
-   * 根据时段生成快捷建议
+   * P3-2: 个性化快捷建议（结合时段、饮食数据、行为画像）
    */
-  private getStaticSuggestions(
+  private getPersonalizedSuggestions(
     hour: number,
     summary: {
       totalCalories: number;
       calorieGoal: number | null;
       mealCount: number;
     },
+    recentSummaries: Array<{ totalCalories: number }>,
+    behaviorProfile: any,
+    locale?: Locale,
   ): string[] {
+    const suggestions: string[] = [];
+    const goalCal = summary.calorieGoal || 2000;
+    const pct = Math.round((summary.totalCalories / goalCal) * 100);
+
+    // 时段基础建议
     if (hour < 10) {
-      return ['帮我规划今日饮食', '早餐吃什么好', '今天的热量目标是多少'];
+      suggestions.push(t('coach.suggest.planToday', {}, locale));
+      if (summary.mealCount === 0)
+        suggestions.push(t('coach.suggest.highProteinBreakfast', {}, locale));
+    } else if (hour < 14) {
+      suggestions.push(
+        pct > 50
+          ? t('coach.suggest.lowCalLunch', {}, locale)
+          : t('coach.suggest.bestLunch', {}, locale),
+      );
+    } else if (hour < 18) {
+      suggestions.push(
+        t(
+          'coach.suggest.caloriesLeft',
+          { calories: String(Math.max(0, goalCal - summary.totalCalories)) },
+          locale,
+        ),
+      );
+      suggestions.push(t('coach.suggest.healthySnack', {}, locale));
+    } else if (hour < 21) {
+      suggestions.push(
+        pct > 80
+          ? t('coach.suggest.lowCalDinner', {}, locale)
+          : t('coach.suggest.lightDinner', {}, locale),
+      );
+    } else {
+      suggestions.push(t('coach.suggest.todaySummary', {}, locale));
     }
-    if (hour < 14) {
-      return ['午餐怎么吃不超标', '帮我分析这顿午餐', '推荐低卡午餐'];
+
+    // 行为画像驱动建议
+    if (behaviorProfile) {
+      if (behaviorProfile.weakMealType === 'dinner') {
+        suggestions.push(t('coach.suggest.improveDinner', {}, locale));
+      }
+      if (behaviorProfile.topExcessCategory) {
+        suggestions.push(
+          t(
+            'coach.suggest.reduceCategory',
+            { category: behaviorProfile.topExcessCategory },
+            locale,
+          ),
+        );
+      }
     }
-    if (hour < 18) {
-      return ['今天还能吃多少', '推荐健康下午茶', '今天的饮食评分'];
+
+    // 7天趋势建议
+    if (recentSummaries.length >= 3) {
+      const overDays = recentSummaries.filter(
+        (d) => d.totalCalories > goalCal,
+      ).length;
+      if (overDays >= 3) {
+        suggestions.push(t('coach.suggest.analyzeRecent', {}, locale));
+      }
     }
-    if (hour < 21) {
-      return ['推荐清淡晚餐', '今天总结怎么样', '晚餐吃什么好'];
+
+    // 通用补充
+    if (suggestions.length < 3) {
+      suggestions.push(t('coach.suggest.tomorrowPlan', {}, locale));
     }
-    return ['今天饮食总结', '明天该怎么吃', '有什么低卡零食推荐'];
+
+    return suggestions.slice(0, 3);
   }
 }

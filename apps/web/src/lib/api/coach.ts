@@ -68,6 +68,19 @@ export async function sendCoachMessage(
 
   const apiUrl = typeof window !== 'undefined' ? process.env.NEXT_PUBLIC_API_URL || '' : '';
 
+  // P2-5: 读取 sessionStorage 中的分析上下文
+  let analysisContext: Record<string, unknown> | undefined;
+  try {
+    const raw =
+      typeof window !== 'undefined' ? sessionStorage.getItem('coach_analysis_context') : null;
+    if (raw) {
+      analysisContext = JSON.parse(raw);
+      sessionStorage.removeItem('coach_analysis_context'); // 用后即删
+    }
+  } catch {
+    /* ignore */
+  }
+
   const res = await fetch(`${apiUrl}/app/coach/chat`, {
     method: 'POST',
     headers: {
@@ -77,6 +90,7 @@ export async function sendCoachMessage(
     body: JSON.stringify({
       message,
       ...(conversationId ? { conversationId } : {}),
+      ...(analysisContext ? { analysisContext } : {}),
     }),
     signal,
   });

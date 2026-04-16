@@ -14,39 +14,23 @@
  */
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { FoodService } from '../../../diet/app/services/food.service';
-import { UserProfileService } from '../../../user/app/services/profile/user-profile.service';
+import * as crypto from 'crypto';
 import { BehaviorService } from '../../../diet/app/services/behavior.service';
-import {
-  NutritionScoreService,
-  NutritionScoreBreakdown,
-} from '../../../diet/app/services/nutrition-score.service';
-import {
-  getUserLocalHour,
-  DEFAULT_TIMEZONE,
-} from '../../../../common/utils/timezone.util';
-import { AnalysisRecordStatus } from '../../food.types';
+import { UserContextBuilderService } from '../decision/user-context-builder.service';
 import {
   FoodAnalysisResultV61,
   AnalyzedFoodItem,
-  NutritionTotals,
-  FoodDecision,
-  AnalysisExplanation,
-  FoodAlternative,
-  AnalysisScore,
-  IngestionDecision,
 } from '../types/analysis-result.types';
 import { AnalysisResult } from './analyze.service';
-import { PrismaService } from '../../../../core/prisma/prisma.service';
+import { Locale } from '../../../diet/app/recommendation/utils/i18n-messages';
+import { FoodScoringService } from '../scoring/food-scoring.service';
+import { buildTonePrompt } from '../../../coach/app/config/coach-tone.config';
+import { AnalysisPipelineService } from '../pipeline/analysis-pipeline.service';
+import { AnalysisPersistenceService } from '../pipeline/analysis-persistence.service';
 
 // ==================== Prompt 常量（从 analyze.service.ts 迁移） ====================
 
-/** V5: AI 人格 Prompt */
-const PERSONA_PROMPTS: Record<string, string> = {
-  strict: `你的风格是严格教练：直接了当，不拐弯抹角。重点强调目标和纪律。语气：坚定但不攻击。用语示例："不建议""应该""必须控制"`,
-  friendly: `你的风格是暖心朋友：温和鼓励，理解失败很正常。避免强烈否定，多给替代方案。语气：像朋友聊天。用语示例："可以少吃一点""没关系""慢慢来"`,
-  data: `你的风格是数据分析师：客观冷静，用数字说话。减少情感表达，强调数据对比。语气：专业理性。用语示例："数据显示""建议控制在 X% 以内""根据你的记录"`,
-};
+// V2.0: PERSONA_PROMPTS 已移除，统一使用 coach-tone.config.ts 的 buildTonePrompt()
 
 const BASE_PROMPT = `你是专业饮食教练，风格：朋友式、简洁、可执行。
 你的目标不是提供营养知识，而是帮助用户做"吃或不吃"的决策。
@@ -265,11 +249,15 @@ export class ImageFoodAnalysisService {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly foodService: FoodService,
-    private readonly userProfileService: UserProfileService,
     private readonly behaviorService: BehaviorService,
-    private readonly nutritionScoreService: NutritionScoreService,
-    private readonly prisma: PrismaService,
+    // V1.6: 评分门面服务
+    private readonly foodScoringService: FoodScoringService,
+    // V1.9: 统一用户上下文构建
+    private readonly userContextBuilder: UserContextBuilderService,
+    // V2.1: 统一分析管道（替代手工编排 Steps 2-8）
+    private readonly analysisPipeline: AnalysisPipelineService,
+    // V2.1: 持久化服务（供 persistAnalysisRecord 使用）
+    private readonly persistence: AnalysisPersistenceService,
   ) {
     this.apiKey =
       this.configService.get<string>('OPENROUTER_API_KEY') ||
@@ -308,14 +296,14 @@ export class ImageFoodAnalysisService {
         .catch(() => '');
     }
 
-    // AI 人格
+    // AI 人格 (V2.0: 使用统一的 coach-tone.config)
     let personaPrompt = '';
     if (userId) {
       const behaviorProfile = await this.behaviorService
         .getProfile(userId)
         .catch(() => null);
       const style = behaviorProfile?.coachStyle || 'friendly';
-      personaPrompt = PERSONA_PROMPTS[style] || PERSONA_PROMPTS.friendly;
+      personaPrompt = buildTonePrompt(style, goalType);
     }
 
     const fullContext = [personaPrompt, userContext, behaviorContext]
@@ -398,30 +386,35 @@ export class ImageFoodAnalysisService {
     // 1. 执行 AI 分析（复用已有逻辑）
     const legacyResult = await this.executeAnalysis(imageUrl, mealType, userId);
 
-    // 2. 生成分析记录 ID
-    const analysisId = crypto.randomUUID();
+    // 2. 转换为统一 AnalyzedFoodItem[]
+    const foods = this.legacyFoodsToAnalyzed(legacyResult);
 
-    // 3. 转换为统一结构
-    const v61Result = this.convertToV61(
-      legacyResult,
-      analysisId,
+    // 3. V2.1: 委托统一管道（评分 → 决策 → 组装 → 持久化 → 事件）
+    return this.analysisPipeline.execute({
+      inputType: 'image',
       imageUrl,
       mealType,
-    );
-
-    // 4. 异步保存分析记录（不阻塞返回）
-    this.saveAnalysisRecord(
-      analysisId,
       userId,
-      imageUrl,
-      mealType,
-      legacyResult,
-      v61Result,
-    ).catch((err) =>
-      this.logger.warn(`保存图片分析记录失败: ${(err as Error).message}`),
-    );
-
-    return v61Result;
+      foods,
+      precomputedScore: legacyResult.nutritionScore
+        ? {
+            healthScore: legacyResult.nutritionScore,
+            nutritionScore: legacyResult.nutritionScore,
+            confidenceScore: Math.round(
+              (foods.reduce((s, f) => s + f.confidence, 0) /
+                Math.max(1, foods.length)) *
+                100,
+            ),
+            breakdown: legacyResult.scoreBreakdown,
+          }
+        : undefined,
+      precomputedTotals: {
+        calories: legacyResult.totalCalories,
+        protein: legacyResult.totalProtein,
+        fat: legacyResult.totalFat,
+        carbs: legacyResult.totalCarbs,
+      },
+    });
   }
 
   // ==================== 私有方法 ====================
@@ -441,24 +434,55 @@ export class ImageFoodAnalysisService {
     mealType?: string,
   ): Promise<string> {
     const analysisId = crypto.randomUUID();
-    const v61Result = this.convertToV61(
-      legacyResult,
+    const foods = this.legacyFoodsToAnalyzed(legacyResult);
+    const avgConfidence =
+      foods.length > 0
+        ? foods.reduce((s, f) => s + f.confidence, 0) / foods.length
+        : 0.5;
+
+    const result: FoodAnalysisResultV61 = {
       analysisId,
-      imageUrl,
-      mealType,
-    );
+      inputType: 'image',
+      inputSnapshot: { imageUrl, mealType: mealType as any },
+      foods,
+      totals: {
+        calories: legacyResult.totalCalories,
+        protein: legacyResult.totalProtein,
+        fat: legacyResult.totalFat,
+        carbs: legacyResult.totalCarbs,
+      },
+      score: {
+        healthScore: legacyResult.nutritionScore || 50,
+        nutritionScore: legacyResult.nutritionScore || 50,
+        confidenceScore: Math.round(avgConfidence * 100),
+      },
+      decision: {
+        recommendation: mapToRecommendation(legacyResult.decision),
+        shouldEat: legacyResult.decision !== 'AVOID',
+        reason: legacyResult.reason || legacyResult.advice,
+        riskLevel: mapRiskLevel(legacyResult.riskLevel),
+      },
+      alternatives: (legacyResult.insteadOptions || []).map((name) => ({
+        name,
+        reason: '更适合当前目标',
+      })),
+      explanation: {
+        summary: legacyResult.advice || legacyResult.contextComment || '',
+      },
+      ingestion: {
+        matchedExistingFoods: false,
+        shouldPersistCandidate: avgConfidence >= 0.5 && foods.length > 0,
+        reviewRequired: avgConfidence < 0.7,
+      },
+      entitlement: { tier: 'free' as any, fieldsHidden: [] },
+    };
 
     // 异步保存（不阻塞返回）
-    this.saveAnalysisRecord(
-      analysisId,
-      userId,
-      imageUrl,
-      mealType,
-      legacyResult,
-      v61Result,
-    ).catch((err) =>
-      this.logger.warn(`异步保存图片分析记录失败: ${(err as Error).message}`),
-    );
+    this.persistence
+      .saveImageRecord({ analysisId, userId, imageUrl, mealType, result })
+      .catch((err) =>
+        this.logger.warn(`异步保存图片分析记录失败: ${(err as Error).message}`),
+      );
 
     return analysisId;
   }
@@ -466,68 +490,47 @@ export class ImageFoodAnalysisService {
   // ==================== 以下为内部私有方法 ====================
 
   /**
+   * 将 legacy AnalysisResult.foods 转换为 AnalyzedFoodItem[]
+   *
+   * analyzeToV61 和 persistAnalysisRecord 共用
+   */
+  private legacyFoodsToAnalyzed(legacy: AnalysisResult): AnalyzedFoodItem[] {
+    return legacy.foods.map((f: any) => ({
+      name: f.name,
+      quantity: f.quantity,
+      category: f.category,
+      confidence: typeof f.confidence === 'number' ? f.confidence : 0.6,
+      calories: f.calories || 0,
+      protein: f.protein || 0,
+      fat: f.fat || 0,
+      carbs: f.carbs || 0,
+      fiber: f.fiber,
+      sodium: f.sodium,
+      saturatedFat: f.saturatedFat,
+      addedSugar: f.addedSugar,
+      vitaminA: f.vitaminA,
+      vitaminC: f.vitaminC,
+      calcium: f.calcium,
+      iron: f.iron,
+      estimated: f.estimated,
+    }));
+  }
+
+  /**
    * 构建用户上下文（与 AnalyzeService 中逻辑一致）
+   */
+  /**
+   * V1.9: 委托给 UserContextBuilderService
    */
   private async buildUserContext(
     userId?: string,
   ): Promise<{ context: string; goalType: string; profile: any }> {
-    if (!userId) return { context: '', goalType: 'health', profile: null };
-
-    try {
-      const [summary, profile] = await Promise.all([
-        this.foodService.getTodaySummary(userId),
-        this.userProfileService.getProfile(userId),
-      ]);
-
-      const goalType = profile?.goal || 'health';
-      const goals = this.nutritionScoreService.calculateDailyGoals(profile);
-
-      const todayTotals = {
-        calories: summary.totalCalories,
-        protein: Number(summary.totalProtein) || 0,
-        fat: Number(summary.totalFat) || 0,
-        carbs: Number(summary.totalCarbs) || 0,
-      };
-
-      const remaining = {
-        calories: goals.calories - todayTotals.calories,
-        protein: goals.protein - todayTotals.protein,
-        fat: goals.fat - todayTotals.fat,
-        carbs: goals.carbs - todayTotals.carbs,
-      };
-
-      const gc = GOAL_CONTEXT[goalType] || GOAL_CONTEXT.health;
-      const hour = getUserLocalHour(profile?.timezone || DEFAULT_TIMEZONE);
-      const mealHint =
-        hour < 10 ? '早餐' : hour < 14 ? '午餐' : hour < 18 ? '下午茶' : '晚餐';
-
-      let ctx = `【用户饮食目标】${gc.label}
-${gc.focus}
-
-【今日营养预算剩余】
-- 热量：剩余 ${remaining.calories} kcal（总目标 ${goals.calories}，已摄入 ${todayTotals.calories}）
-- 蛋白质：剩余 ${remaining.protein}g（总目标 ${goals.protein}g，已摄入 ${todayTotals.protein}g）
-- 脂肪：剩余 ${remaining.fat}g（总目标 ${goals.fat}g，已摄入 ${todayTotals.fat}g）
-- 碳水：剩余 ${remaining.carbs}g（总目标 ${goals.carbs}g，已摄入 ${todayTotals.carbs}g）
-- 已记录餐数：${summary.mealCount} 餐
-- 当前时段：${mealHint}`;
-
-      if (profile) {
-        if (profile.gender)
-          ctx += `\n- 性别：${profile.gender === 'male' ? '男' : '女'}`;
-        if (profile.activityLevel)
-          ctx += `\n- 活动等级：${profile.activityLevel}`;
-        if ((profile.foodPreferences as string[])?.length)
-          ctx += `\n- 饮食偏好：${(profile.foodPreferences as string[]).join('、')}`;
-        if ((profile.dietaryRestrictions as string[])?.length)
-          ctx += `\n- 忌口：${(profile.dietaryRestrictions as string[]).join('、')}`;
-      }
-
-      return { context: ctx, goalType, profile };
-    } catch (err) {
-      this.logger.warn(`构建用户上下文失败: ${(err as Error).message}`);
-      return { context: '', goalType: 'health', profile: null };
-    }
+    const ctx = await this.userContextBuilder.build(userId);
+    return {
+      context: this.userContextBuilder.formatAsPromptString(ctx),
+      goalType: ctx.goalType,
+      profile: ctx.profile,
+    };
   }
 
   /**
@@ -538,43 +541,11 @@ ${gc.focus}
     userId: string,
     goalType: string,
     profile: any,
+    locale: Locale = 'zh-CN',
   ): Promise<void> {
     try {
-      const goals = this.nutritionScoreService.calculateDailyGoals(profile);
-      const summary = await this.foodService.getTodaySummary(userId);
-      const todayTotals = {
-        calories: summary.totalCalories,
-        protein: Number(summary.totalProtein) || 0,
-        fat: Number(summary.totalFat) || 0,
-        carbs: Number(summary.totalCarbs) || 0,
-      };
-
-      // 获取稳定性数据
-      let stabilityData:
-        | {
-            streakDays: number;
-            avgMealsPerDay: number;
-            targetMeals: number;
-          }
-        | undefined;
-      try {
-        const behaviorProfile = await this.behaviorService.getProfile(userId);
-        if (behaviorProfile) {
-          stabilityData = {
-            streakDays: behaviorProfile.streakDays || 0,
-            avgMealsPerDay:
-              behaviorProfile.totalRecords > 0
-                ? behaviorProfile.totalRecords /
-                  Math.max(1, behaviorProfile.streakDays || 1)
-                : 3,
-            targetMeals: profile.mealsPerDay || 3,
-          };
-        }
-      } catch {
-        /* 忽略 */
-      }
-
-      const scoreResult = this.nutritionScoreService.calculateMealScore(
+      // V1.6: 委托给 FoodScoringService
+      const scoreResult = await this.foodScoringService.calculateImageScore(
         {
           calories: result.totalCalories,
           protein: result.totalProtein,
@@ -583,10 +554,10 @@ ${gc.focus}
           avgQuality: result.avgQuality,
           avgSatiety: result.avgSatiety,
         },
-        todayTotals,
-        goals,
+        userId,
         goalType,
-        stabilityData,
+        profile,
+        locale,
       );
 
       result.nutritionScore = scoreResult.score;
@@ -732,151 +703,5 @@ ${gc.focus}
         nutritionScore: 0,
       };
     }
-  }
-
-  /**
-   * 将旧格式 AnalysisResult 转换为 V6.1 统一结构
-   */
-  private convertToV61(
-    legacy: AnalysisResult,
-    analysisId: string,
-    imageUrl: string,
-    mealType?: string,
-  ): FoodAnalysisResultV61 {
-    // 转换食物列表（增加置信度）
-    const foods: AnalyzedFoodItem[] = legacy.foods.map((f) => ({
-      name: f.name,
-      quantity: f.quantity,
-      category: f.category,
-      confidence:
-        typeof (f as any).confidence === 'number' ? (f as any).confidence : 0.6,
-      calories: f.calories,
-      protein: f.protein,
-      fat: f.fat,
-      carbs: f.carbs,
-      // V6.3 P1-11: 扩展营养维度
-      fiber: f.fiber,
-      sodium: f.sodium,
-      saturatedFat: f.saturatedFat,
-      addedSugar: f.addedSugar,
-      vitaminA: f.vitaminA,
-      vitaminC: f.vitaminC,
-      calcium: f.calcium,
-      iron: f.iron,
-      estimated: f.estimated,
-    }));
-
-    // 营养汇总
-    const totals: NutritionTotals = {
-      calories: legacy.totalCalories,
-      protein: legacy.totalProtein,
-      fat: legacy.totalFat,
-      carbs: legacy.totalCarbs,
-    };
-
-    // 计算综合置信度
-    const avgConfidence =
-      foods.length > 0
-        ? foods.reduce((sum, f) => sum + f.confidence, 0) / foods.length
-        : 0.5;
-
-    // 评分
-    const score: AnalysisScore = {
-      healthScore: legacy.nutritionScore || 50,
-      nutritionScore: legacy.nutritionScore || 50,
-      confidenceScore: Math.round(avgConfidence * 100),
-    };
-
-    // 决策
-    const decision: FoodDecision = {
-      recommendation: mapToRecommendation(legacy.decision),
-      shouldEat: legacy.decision !== 'AVOID',
-      reason: legacy.reason || legacy.advice,
-      riskLevel: mapRiskLevel(legacy.riskLevel),
-    };
-
-    // 替代建议
-    const alternatives: FoodAlternative[] = (legacy.insteadOptions || []).map(
-      (name) => ({
-        name,
-        reason: '更适合当前目标',
-      }),
-    );
-
-    // 解释
-    const explanation: AnalysisExplanation = {
-      summary: legacy.advice || legacy.contextComment || '',
-      primaryReason: legacy.reason,
-      userContextImpact: legacy.contextComment
-        ? [legacy.contextComment]
-        : undefined,
-    };
-
-    // 入库决策（图片链路默认创建候选）
-    const ingestion: IngestionDecision = {
-      matchedExistingFoods: false,
-      shouldPersistCandidate: avgConfidence >= 0.5 && foods.length > 0,
-      reviewRequired: avgConfidence < 0.7,
-    };
-
-    return {
-      analysisId,
-      inputType: 'image',
-      inputSnapshot: {
-        imageUrl,
-        mealType: mealType as any,
-      },
-      foods,
-      totals,
-      score,
-      decision,
-      alternatives,
-      explanation,
-      ingestion,
-      entitlement: {
-        tier: 'free' as any,
-        fieldsHidden: [],
-      },
-    };
-  }
-
-  /**
-   * 异步保存图片分析记录到 food_analysis_records
-   */
-  private async saveAnalysisRecord(
-    analysisId: string,
-    userId: string,
-    imageUrl: string,
-    mealType: string | undefined,
-    legacyResult: AnalysisResult,
-    v61Result: FoodAnalysisResultV61,
-  ): Promise<void> {
-    await this.prisma.foodAnalysisRecords.create({
-      data: {
-        id: analysisId,
-        userId: userId,
-        inputType: 'image',
-        rawText: null,
-        imageUrl: imageUrl,
-        mealType: mealType || null,
-        status: AnalysisRecordStatus.COMPLETED,
-        recognizedPayload: { foods: v61Result.foods } as any,
-        normalizedPayload: null as any,
-        nutritionPayload: {
-          totals: v61Result.totals,
-          score: v61Result.score,
-        } as any,
-        decisionPayload: {
-          decision: v61Result.decision,
-          alternatives: v61Result.alternatives,
-          explanation: v61Result.explanation,
-        } as any,
-        confidenceScore: v61Result.score.confidenceScore,
-        qualityScore: null,
-        matchedFoodCount: 0,
-        candidateFoodCount: 0,
-      },
-    });
-    this.logger.debug(`图片分析记录已保存: analysisId=${analysisId}`);
   }
 }

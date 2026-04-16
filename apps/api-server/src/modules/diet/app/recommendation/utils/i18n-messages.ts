@@ -753,6 +753,131 @@ const zhCN: Record<string, string> = {
   'substitute.impacts.minor': '营养影响较小',
   'substitute.suggestion':
     '「{{subName}}」是「{{origName}}」{{quality}}替代。{{categoryNote}}{{impactText}}。',
+
+  // ── decision: 饮食决策系统 (V1.1) ──
+  'decision.goal.fat_loss': '减脂',
+  'decision.goal.muscle_gain': '增肌',
+  'decision.goal.health': '均衡健康',
+  'decision.goal.habit': '改善饮食习惯',
+  'decision.focus.fat_loss': '优先关注：热量不超标 + 蛋白质充足',
+  'decision.focus.muscle_gain': '优先关注：蛋白质是否充足 + 热量不能太低',
+  'decision.focus.health': '优先关注：食物质量和营养均衡',
+  'decision.focus.habit': '优先关注：食物质量和饱腹感，鼓励坚持记录',
+  'decision.score.excellent': '综合评分优秀，适合当前饮食目标',
+  'decision.score.good': '综合评分良好，可以适量食用',
+  'decision.score.low': '综合评分偏低，建议控制份量或选择替代食物',
+  'decision.score.veryLow': '综合评分较低，不建议当前食用',
+  'decision.context.lateNightHighCal': '宵夜时段，高热量食物影响睡眠和代谢',
+  'decision.context.eveningHighCarb': '晚间碳水偏高，减脂期建议晚餐低碳',
+  'decision.context.overBudget': '热量超出今日预算 {{amount}} kcal',
+  'decision.context.nearLimit': '接近今日热量上限，建议减少份量',
+  'decision.context.lowProtein': '蛋白质偏低，建议搭配高蛋白食物',
+  'decision.context.goodProtein': '蛋白质充足，适合增肌目标',
+  'decision.context.lowProteinMuscle': '蛋白质不足，建议搭配蛋白质食物',
+  'decision.context.highCalMeal': '这一餐热量偏高，注意控制其他餐次',
+  // V1.2: 新增决策检测 i18n keys
+  'decision.context.highFat':
+    '脂肪 {{fat}}g 偏高，今日脂肪已达目标 {{percent}}%',
+  'decision.context.highCarbs':
+    '今日碳水已达目标 {{percent}}%，建议控制碳水摄入',
+  'decision.context.lowProteinGeneral': '蛋白质偏低，建议搭配高蛋白食物',
+  'decision.context.allergen': '⚠️ 含过敏原「{{allergen}}」，不建议食用',
+  'decision.context.restrictionConflict': '⚠️ 与饮食限制冲突，不建议食用',
+  'decision.context.healthHighSodium':
+    '⚠️ 钠含量 {{sodium}}mg 偏高，高血压患者需注意',
+  'decision.context.healthHighSugar':
+    '⚠️ 添加糖 {{sugar}}g 偏高，糖尿病患者需注意',
+  'decision.alt.lateNightMilk': '低卡安神，适合夜间',
+  'decision.alt.lateNightFruit': '天然糖+纤维，宵夜更健康',
+  'decision.alt.lateNightMilkName': '温牛奶',
+  'decision.alt.lateNightFruitName': '小份水果',
+  'decision.advice.goodProtein': '蛋白质充足，继续保持这样的饮食搭配',
+  'decision.advice.balanced': '营养搭配合理，放心享用',
+  'decision.advice.reducePortion':
+    '建议选择热量更低的替代食物，或将份量减少到 {{percent}}%',
+  'decision.advice.switch': '建议换一个更适合当前目标的食物',
+  'decision.advice.addProtein': '搭配高蛋白食物补充蛋白质',
+  'decision.advice.halfPortion': '减少份量到半份',
+  'decision.advice.controlOther': '适量食用，注意控制其他餐次',
+  'decision.advice.reduceFat': '减少高脂食物，选择清蒸/水煮烹饪方式',
+  'decision.advice.reduceCarbs': '减少主食份量，增加蔬菜和蛋白质',
+  'decision.explain.summary': '{{foods}}共约 {{calories}} 千卡，{{verdict}}',
+  'decision.explain.suitable': '适合食用',
+  'decision.explain.adjust': '建议调整',
+  'decision.explain.goal': '当前目标: {{goal}}',
+  'decision.explain.remaining':
+    '今日剩余热量 {{remaining}} kcal，此餐 {{meal}} kcal',
+  'decision.explain.proteinRatio': '蛋白质供能比 {{percent}}%',
+  'decision.explain.fatProgress': '本餐后脂肪达日目标 {{percent}}%',
+  'decision.explain.carbsProgress': '本餐后碳水达日目标 {{percent}}%',
+  'decision.error.invalidInput': '请输入有效的食物描述',
+  'decision.error.noFood': '无法识别输入中的食物，请尝试输入具体的食物名称',
+  'decision.alt.lowerCal': '热量更低（{{newCal}}kcal vs {{oldCal}}kcal）',
+  'decision.alt.higherProtein': '蛋白质更高（{{newPro}}g vs {{oldPro}}g）',
+  'decision.alt.balanced': '营养更均衡，综合匹配度 {{score}}%',
+  'decision.alt.similar': '相似口感，营养更优',
+  'decision.alt.saveBudget': '（还需省下 {{amount}} kcal）',
+
+  // ── V1.3: 决策因子 + 下一餐建议 ──
+  'decision.nextMeal.emphasisProtein': '优先补充蛋白质',
+  'decision.nextMeal.emphasisBalanced': '均衡搭配',
+  'decision.nextMeal.budgetLow':
+    '今日热量预算紧张，下一餐建议控制在 {{calories}} kcal 以内',
+  'decision.nextMeal.suggestion':
+    '下一餐建议摄入约 {{calories}} kcal、{{protein}}g 蛋白质，{{emphasis}}',
+  'decision.nextMeal.emphasis.protein': '重点补充蛋白质',
+  'decision.nextMeal.emphasis.carbs': '适当补充碳水',
+  'decision.nextMeal.emphasis.fat': '注意脂肪摄入',
+  'decision.explain.weakDimensions': '薄弱维度：{{dimensions}}',
+
+  // ── V1.4: 餐次感知决策 ──
+  'decision.context.breakfastLowProtein': '早餐蛋白质偏低，建议加个鸡蛋或牛奶',
+  'decision.context.dinnerHighCarb': '晚餐碳水偏高，减脂期建议控制主食量',
+  'decision.context.snackHighCal': '加餐热量偏高，建议控制在200kcal以内',
+
+  // ── V1.5: 下一餐具体食物推荐 ──
+  'decision.nextMeal.foodRecommendation': '，推荐试试：{{foods}}',
+
+  // ── coach: AI教练 (V1.1) ──
+  'coach.time.morning': '现在是早晨，用户可能还没吃早餐',
+  'coach.time.lunch': '现在是午餐时间',
+  'coach.time.afternoon': '现在是下午',
+  'coach.time.dinner': '现在是晚餐时间',
+  'coach.time.night': '现在是夜间，提醒用户注意宵夜热量',
+  'coach.greeting.morning.noMeal':
+    '早上好！新的一天开始了，早餐是最重要的一餐哦～',
+  'coach.greeting.morning.hasMeal':
+    '早上好！你已经记录了今天的第一餐，继续保持！',
+  'coach.greeting.noon.noMeal': '中午好！今天还没有记录饮食，该吃午餐啦～',
+  'coach.greeting.noon.hasMeal':
+    '中午好！你今天已摄入 {{calories}} 卡，午餐注意搭配哦。',
+  'coach.greeting.afternoon':
+    '下午好！今日热量已达目标的 {{percent}}%，{{hint}}。',
+  'coach.greeting.afternoon.over80': '晚餐注意控制',
+  'coach.greeting.afternoon.under80': '还有空间享用健康晚餐',
+  'coach.greeting.evening':
+    '晚上好！今天还剩 {{remaining}} 卡的额度，选一顿清淡的晚餐吧。',
+  'coach.greeting.night.over': '夜深了，今天热量已超标，建议不要再进食了哦～',
+  'coach.greeting.night.under':
+    '夜深了，如果饿了可以选择低热量零食，注意控制。',
+  'coach.pattern.overMany':
+    '最近{{days}}天有{{overDays}}天超标（均值{{avg}}kcal），需要加强控制。',
+  'coach.pattern.allOnTarget':
+    '最近{{days}}天全部达标（均值{{avg}}kcal），表现非常棒！',
+  'coach.pattern.average': '最近日均{{avg}}kcal，目标完成{{ratio}}%。',
+  'coach.suggest.planToday': '帮我规划今日饮食',
+  'coach.suggest.highProteinBreakfast': '推荐高蛋白早餐',
+  'coach.suggest.lowCalLunch': '推荐低卡午餐',
+  'coach.suggest.bestLunch': '午餐怎么搭配最好',
+  'coach.suggest.caloriesLeft': '今天还能吃 {{calories}} 卡',
+  'coach.suggest.healthySnack': '推荐健康下午茶',
+  'coach.suggest.lowCalDinner': '推荐200卡以内晚餐',
+  'coach.suggest.lightDinner': '推荐清淡晚餐',
+  'coach.suggest.todaySummary': '今天饮食总结',
+  'coach.suggest.improveDinner': '帮我改善晚餐习惯',
+  'coach.suggest.reduceCategory': '怎么减少{{category}}摄入',
+  'coach.suggest.analyzeRecent': '分析我最近的饮食问题',
+  'coach.suggest.tomorrowPlan': '明天该怎么吃',
 };
 
 // ==================== en-US 英文 ====================
@@ -1594,6 +1719,158 @@ const enUS: Record<string, string> = {
   'substitute.impacts.minor': '',
   'substitute.suggestion':
     '{{subName}} is {{quality}} substitute for {{origName}}.{{impactText}}',
+
+  // ── decision: Diet Decision System (V1.1) ──
+  'decision.goal.fat_loss': 'Fat Loss',
+  'decision.goal.muscle_gain': 'Muscle Gain',
+  'decision.goal.health': 'Balanced Health',
+  'decision.goal.habit': 'Improve Eating Habits',
+  'decision.focus.fat_loss': 'Focus: Keep calories in check + adequate protein',
+  'decision.focus.muscle_gain':
+    'Focus: Ensure adequate protein + sufficient calories',
+  'decision.focus.health': 'Focus: Food quality and nutritional balance',
+  'decision.focus.habit': 'Focus: Food quality and satiety, keep tracking',
+  'decision.score.excellent':
+    'Excellent score, well-suited for your dietary goal',
+  'decision.score.good': 'Good score, suitable in moderate portions',
+  'decision.score.low':
+    'Low score, consider reducing portion or choosing alternatives',
+  'decision.score.veryLow': 'Very low score, not recommended at this time',
+  'decision.context.lateNightHighCal':
+    'Late-night high-calorie food may affect sleep and metabolism',
+  'decision.context.eveningHighCarb':
+    'High carbs in the evening; consider low-carb dinner for fat loss',
+  'decision.context.overBudget':
+    "Exceeds today's calorie budget by {{amount}} kcal",
+  'decision.context.nearLimit':
+    "Near today's calorie limit, consider smaller portions",
+  'decision.context.lowProtein': 'Low protein, pair with high-protein foods',
+  'decision.context.goodProtein': 'Good protein intake, ideal for muscle gain',
+  'decision.context.lowProteinMuscle':
+    'Protein insufficient, add protein-rich foods',
+  'decision.context.highCalMeal':
+    'This meal is calorie-heavy, balance with lighter meals',
+  // V1.2: new decision detection i18n keys
+  'decision.context.highFat':
+    'Fat {{fat}}g is high, daily fat at {{percent}}% of target',
+  'decision.context.highCarbs':
+    'Daily carbs at {{percent}}% of target, reduce carb intake',
+  'decision.context.lowProteinGeneral':
+    'Low protein, pair with high-protein foods',
+  'decision.context.allergen':
+    '⚠️ Contains allergen "{{allergen}}", not recommended',
+  'decision.context.restrictionConflict':
+    '⚠️ Conflicts with dietary restrictions, not recommended',
+  'decision.context.healthHighSodium':
+    '⚠️ Sodium {{sodium}}mg is high, caution for hypertension',
+  'decision.context.healthHighSugar':
+    '⚠️ Added sugar {{sugar}}g is high, caution for diabetes',
+  'decision.alt.lateNightMilk': 'Low-cal, soothing, ideal for late night',
+  'decision.alt.lateNightFruit': 'Natural sugar + fiber, healthier snack',
+  'decision.alt.lateNightMilkName': 'Warm milk',
+  'decision.alt.lateNightFruitName': 'Small fruit portion',
+  'decision.advice.goodProtein':
+    'Great protein intake, keep up this eating pattern',
+  'decision.advice.balanced': 'Well-balanced nutrition, enjoy your meal',
+  'decision.advice.reducePortion':
+    'Choose a lower-calorie alternative, or reduce to {{percent}}% portion',
+  'decision.advice.switch':
+    'Consider switching to a food better suited to your goal',
+  'decision.advice.addProtein':
+    'Pair with high-protein foods to boost protein intake',
+  'decision.advice.halfPortion': 'Reduce to half portion',
+  'decision.advice.controlOther': 'Eat in moderation, balance with other meals',
+  'decision.advice.reduceFat':
+    'Reduce high-fat foods, choose steaming or boiling',
+  'decision.advice.reduceCarbs':
+    'Reduce carb portions, add vegetables and protein',
+  'decision.explain.summary':
+    '{{foods}} totals ~{{calories}} kcal, {{verdict}}',
+  'decision.explain.suitable': 'suitable to eat',
+  'decision.explain.adjust': 'adjustment recommended',
+  'decision.explain.goal': 'Current goal: {{goal}}',
+  'decision.explain.remaining':
+    'Remaining today {{remaining}} kcal, this meal {{meal}} kcal',
+  'decision.explain.proteinRatio': 'Protein energy ratio {{percent}}%',
+  'decision.explain.fatProgress':
+    'Fat at {{percent}}% of daily target after this meal',
+  'decision.explain.carbsProgress':
+    'Carbs at {{percent}}% of daily target after this meal',
+  'decision.error.invalidInput': 'Please enter a valid food description',
+  'decision.error.noFood':
+    'Could not identify any food, please enter specific food names',
+  'decision.alt.lowerCal': 'Lower calories ({{newCal}}kcal vs {{oldCal}}kcal)',
+  'decision.alt.higherProtein': 'Higher protein ({{newPro}}g vs {{oldPro}}g)',
+  'decision.alt.balanced': 'Better balanced, {{score}}% match',
+  'decision.alt.similar': 'Similar taste, better nutrition',
+  'decision.alt.saveBudget': ' (need to save {{amount}} kcal)',
+
+  // ── V1.3: Decision factors + next meal advice ──
+  'decision.nextMeal.emphasisProtein': 'Prioritize protein intake',
+  'decision.nextMeal.emphasisBalanced': 'Balanced combination',
+  'decision.nextMeal.budgetLow':
+    'Calorie budget is tight today, keep next meal under {{calories}} kcal',
+  'decision.nextMeal.suggestion':
+    'Next meal: aim for ~{{calories}} kcal, {{protein}}g protein, {{emphasis}}',
+  'decision.nextMeal.emphasis.protein': 'focus on protein',
+  'decision.nextMeal.emphasis.carbs': 'add some carbs',
+  'decision.nextMeal.emphasis.fat': 'watch fat intake',
+  'decision.explain.weakDimensions': 'Weak dimensions: {{dimensions}}',
+
+  // ── V1.4: Meal-type aware decisions ──
+  'decision.context.breakfastLowProtein':
+    'Breakfast is low in protein — consider adding an egg or milk',
+  'decision.context.dinnerHighCarb':
+    'Dinner is high in carbs — reduce staple food for fat loss',
+  'decision.context.snackHighCal':
+    'Snack is over 200 kcal — try to keep it lighter',
+
+  // ── V1.5: Next meal food recommendation ──
+  'decision.nextMeal.foodRecommendation': '. Try: {{foods}}',
+
+  // ── coach: AI Coach (V1.1) ──
+  'coach.time.morning': "It's morning, user may not have had breakfast yet",
+  'coach.time.lunch': "It's lunchtime",
+  'coach.time.afternoon': "It's afternoon",
+  'coach.time.dinner': "It's dinnertime",
+  'coach.time.night': "It's late, remind about late-night snacking",
+  'coach.greeting.morning.noMeal':
+    'Good morning! A new day begins — breakfast is the most important meal!',
+  'coach.greeting.morning.hasMeal':
+    "Good morning! You've already logged your first meal today, keep it up!",
+  'coach.greeting.noon.noMeal':
+    "Good afternoon! You haven't logged any meals yet — time for lunch!",
+  'coach.greeting.noon.hasMeal':
+    "Good afternoon! You've consumed {{calories}} cal so far, mind your lunch balance.",
+  'coach.greeting.afternoon':
+    "Good afternoon! You've reached {{percent}}% of your daily target, {{hint}}.",
+  'coach.greeting.afternoon.over80': 'watch your dinner intake',
+  'coach.greeting.afternoon.under80': 'still room for a healthy dinner',
+  'coach.greeting.evening':
+    'Good evening! You have {{remaining}} cal left — go for a light dinner.',
+  'coach.greeting.night.over':
+    "It's late and you've exceeded today's target — best to stop eating now.",
+  'coach.greeting.night.under':
+    "It's late — if hungry, go for low-calorie snacks.",
+  'coach.pattern.overMany':
+    'In the past {{days}} days, {{overDays}} exceeded target (avg {{avg}}kcal). Need tighter control.',
+  'coach.pattern.allOnTarget':
+    'All {{days}} recent days on target (avg {{avg}}kcal). Great job!',
+  'coach.pattern.average':
+    'Recent daily avg {{avg}}kcal, {{ratio}}% of target.',
+  'coach.suggest.planToday': "Help me plan today's meals",
+  'coach.suggest.highProteinBreakfast': 'Recommend high-protein breakfast',
+  'coach.suggest.lowCalLunch': 'Recommend low-cal lunch',
+  'coach.suggest.bestLunch': 'Best lunch combo?',
+  'coach.suggest.caloriesLeft': '{{calories}} cal left today',
+  'coach.suggest.healthySnack': 'Recommend healthy snack',
+  'coach.suggest.lowCalDinner': 'Recommend dinner under 200 cal',
+  'coach.suggest.lightDinner': 'Recommend light dinner',
+  'coach.suggest.todaySummary': "Today's diet summary",
+  'coach.suggest.improveDinner': 'Help improve dinner habits',
+  'coach.suggest.reduceCategory': 'How to reduce {{category}} intake',
+  'coach.suggest.analyzeRecent': 'Analyze my recent diet issues',
+  'coach.suggest.tomorrowPlan': 'What should I eat tomorrow',
 };
 
 const jaJP: Record<string, string> = {
@@ -2411,6 +2688,146 @@ const jaJP: Record<string, string> = {
   'substitute.impacts.minor': '栄養への影響は軽微',
   'substitute.suggestion':
     '「{{subName}}」は「{{origName}}」の{{quality}}代替です。{{categoryNote}}{{impactText}}。',
+
+  // ── decision: 食事判定システム (V1.1) ──
+  'decision.goal.fat_loss': '減脂',
+  'decision.goal.muscle_gain': '筋肉増量',
+  'decision.goal.health': 'バランス重視',
+  'decision.goal.habit': '食習慣改善',
+  'decision.focus.fat_loss': '重点：カロリー管理＋タンパク質確保',
+  'decision.focus.muscle_gain': '重点：タンパク質確保＋カロリー不足回避',
+  'decision.focus.health': '重点：食事の質と栄養バランス',
+  'decision.focus.habit': '重点：食事の質と満腹感、記録を続けよう',
+  'decision.score.excellent': '総合スコア優秀、目標に最適です',
+  'decision.score.good': '総合スコア良好、適量でお楽しみください',
+  'decision.score.low': '総合スコアやや低め、量を減らすか代替を検討',
+  'decision.score.veryLow': '総合スコア低い、現在の摂取は非推奨',
+  'decision.context.lateNightHighCal': '深夜の高カロリー食は睡眠と代謝に影響',
+  'decision.context.eveningHighCarb':
+    '夜の炭水化物が多め、減脂期は低炭水化物の夕食を',
+  'decision.context.overBudget': '本日のカロリー予算を {{amount}} kcal 超過',
+  'decision.context.nearLimit':
+    '本日のカロリー上限に近づいています、量を控えて',
+  'decision.context.lowProtein': 'タンパク質不足、高タンパク食品と組み合わせて',
+  'decision.context.goodProtein': 'タンパク質十分、筋肉増量に最適',
+  'decision.context.lowProteinMuscle':
+    'タンパク質不足、タンパク質食品を追加して',
+  'decision.context.highCalMeal': 'この食事はカロリーが高め、他の食事で調整を',
+  // V1.2: 新しい決定検出 i18n キー
+  'decision.context.highFat':
+    '脂質 {{fat}}g が高め、本日の脂質が目標の {{percent}}%',
+  'decision.context.highCarbs':
+    '本日の炭水化物が目標の {{percent}}%、炭水化物を控えて',
+  'decision.context.lowProteinGeneral':
+    'タンパク質不足、高タンパク食品と組み合わせて',
+  'decision.context.allergen':
+    '⚠️ アレルゲン「{{allergen}}」を含む、摂取非推奨',
+  'decision.context.restrictionConflict': '⚠️ 食事制限と矛盾、摂取非推奨',
+  'decision.context.healthHighSodium':
+    '⚠️ ナトリウム {{sodium}}mg が高め、高血圧の方はご注意',
+  'decision.context.healthHighSugar':
+    '⚠️ 添加糖 {{sugar}}g が高め、糖尿病の方はご注意',
+  'decision.alt.lateNightMilk': '低カロリーで安眠効果、夜に最適',
+  'decision.alt.lateNightFruit': '天然糖+食物繊維、ヘルシーな夜食',
+  'decision.alt.lateNightMilkName': 'ホットミルク',
+  'decision.alt.lateNightFruitName': '少量のフルーツ',
+  'decision.advice.goodProtein':
+    'タンパク質十分、この食事パターンを維持しましょう',
+  'decision.advice.balanced': '栄養バランス良好、安心してお召し上がりください',
+  'decision.advice.reducePortion':
+    '低カロリーの代替を選ぶか、量を {{percent}}% に減らしましょう',
+  'decision.advice.switch': '目標に合った食品に変更することをお勧めします',
+  'decision.advice.addProtein': '高タンパク食品を組み合わせてタンパク質を補給',
+  'decision.advice.halfPortion': '半量に減らしましょう',
+  'decision.advice.controlOther': '適量を心がけ、他の食事で調整を',
+  'decision.advice.reduceFat': '高脂肪食を控え、蒸し・茹で調理に',
+  'decision.advice.reduceCarbs': '主食を減らし、野菜とタンパク質を増やして',
+  'decision.explain.summary':
+    '{{foods}}は合計約 {{calories}} kcal、{{verdict}}',
+  'decision.explain.suitable': '摂取に適しています',
+  'decision.explain.adjust': '調整をお勧めします',
+  'decision.explain.goal': '現在の目標: {{goal}}',
+  'decision.explain.remaining':
+    '本日の残りカロリー {{remaining}} kcal、この食事 {{meal}} kcal',
+  'decision.explain.proteinRatio': 'タンパク質エネルギー比 {{percent}}%',
+  'decision.explain.fatProgress': 'この食事後、脂質が日目標の {{percent}}%',
+  'decision.explain.carbsProgress':
+    'この食事後、炭水化物が日目標の {{percent}}%',
+  'decision.error.invalidInput': '有効な食品の説明を入力してください',
+  'decision.error.noFood':
+    '食品を認識できません。具体的な食品名を入力してください',
+  'decision.alt.lowerCal': 'カロリーが低い（{{newCal}}kcal vs {{oldCal}}kcal）',
+  'decision.alt.higherProtein':
+    'タンパク質が多い（{{newPro}}g vs {{oldPro}}g）',
+  'decision.alt.balanced': 'よりバランス良い、適合度 {{score}}%',
+  'decision.alt.similar': '似た味わい、栄養が優れている',
+  'decision.alt.saveBudget': '（あと {{amount}} kcal 節約が必要）',
+
+  // ── V1.3: 決定要因 + 次の食事アドバイス ──
+  'decision.nextMeal.emphasisProtein': 'タンパク質を優先的に補充',
+  'decision.nextMeal.emphasisBalanced': 'バランスの良い組み合わせ',
+  'decision.nextMeal.budgetLow':
+    '今日のカロリー予算が厳しいため、次の食事は {{calories}} kcal 以内に',
+  'decision.nextMeal.suggestion':
+    '次の食事は約 {{calories}} kcal、{{protein}}g タンパク質を目安に、{{emphasis}}',
+  'decision.nextMeal.emphasis.protein': 'タンパク質を重点的に補充',
+  'decision.nextMeal.emphasis.carbs': '炭水化物を適度に補充',
+  'decision.nextMeal.emphasis.fat': '脂質の摂取に注意',
+  'decision.explain.weakDimensions': '弱い項目：{{dimensions}}',
+
+  // ── V1.4: 食事タイプ認識決定 ──
+  'decision.context.breakfastLowProtein':
+    '朝食のタンパク質が不足 — 卵や牛乳の追加を推奨',
+  'decision.context.dinnerHighCarb':
+    '夕食の炭水化物が多い — 減量中は主食を控えめに',
+  'decision.context.snackHighCal':
+    '間食のカロリーが200kcalを超過 — 軽めに抑えましょう',
+
+  // ── V1.5: 次の食事の食品推薦 ──
+  'decision.nextMeal.foodRecommendation': '。おすすめ：{{foods}}',
+
+  // ── coach: AIコーチ (V1.1) ──
+  'coach.time.morning': '朝です、ユーザーはまだ朝食を食べていないかも',
+  'coach.time.lunch': 'ランチタイムです',
+  'coach.time.afternoon': '午後です',
+  'coach.time.dinner': '夕食の時間です',
+  'coach.time.night': '夜遅いです、夜食のカロリーに注意',
+  'coach.greeting.morning.noMeal':
+    'おはようございます！新しい一日の始まりです。朝食は大切ですよ～',
+  'coach.greeting.morning.hasMeal':
+    'おはようございます！今日の最初の食事を記録済み、この調子で！',
+  'coach.greeting.noon.noMeal':
+    'こんにちは！まだ食事を記録していませんね。ランチの時間ですよ～',
+  'coach.greeting.noon.hasMeal':
+    'こんにちは！今日は {{calories}} カロリー摂取済み、ランチのバランスに注意。',
+  'coach.greeting.afternoon':
+    'こんにちは！目標の {{percent}}% に到達、{{hint}}。',
+  'coach.greeting.afternoon.over80': '夕食は控えめに',
+  'coach.greeting.afternoon.under80': 'まだ健康的な夕食の余裕あり',
+  'coach.greeting.evening':
+    'こんばんは！残り {{remaining}} カロリー、軽めの夕食にしましょう。',
+  'coach.greeting.night.over':
+    '夜遅いです。今日はカロリー超過なので、もう食べないほうがいいですよ～',
+  'coach.greeting.night.under':
+    '夜遅いです。お腹が空いたら低カロリーのおやつを。',
+  'coach.pattern.overMany':
+    '最近{{days}}日間で{{overDays}}日超過（平均{{avg}}kcal）、管理を強化しましょう。',
+  'coach.pattern.allOnTarget':
+    '最近{{days}}日間すべて達成（平均{{avg}}kcal）、素晴らしい！',
+  'coach.pattern.average': '最近の日平均{{avg}}kcal、目標達成率{{ratio}}%。',
+  'coach.suggest.planToday': '今日の食事プランを立てて',
+  'coach.suggest.highProteinBreakfast': '高タンパク朝食をおすすめ',
+  'coach.suggest.lowCalLunch': '低カロリーランチをおすすめ',
+  'coach.suggest.bestLunch': 'ランチの最適な組み合わせは？',
+  'coach.suggest.caloriesLeft': '今日あと {{calories}} カロリー',
+  'coach.suggest.healthySnack': 'ヘルシーなおやつをおすすめ',
+  'coach.suggest.lowCalDinner': '200カロリー以下の夕食をおすすめ',
+  'coach.suggest.lightDinner': '軽めの夕食をおすすめ',
+  'coach.suggest.todaySummary': '今日の食事まとめ',
+  'coach.suggest.improveDinner': '夕食の習慣を改善して',
+  'coach.suggest.reduceCategory': '{{category}}の摂取を減らすには',
+  'coach.suggest.analyzeRecent': '最近の食事の問題を分析して',
+  'coach.suggest.tomorrowPlan': '明日は何を食べるべき？',
 };
 
 // ==================== 消息注册表 ====================
@@ -2420,8 +2837,6 @@ const messages: Record<Locale, Record<string, string>> = {
   'en-US': enUS,
   'ja-JP': jaJP,
 };
-
-
 
 /**
  * 获取所有支持的语言列表
