@@ -34,6 +34,7 @@ import type {
 } from '../../diet/app/recommendation/types/recommendation.types';
 import { FoodLibraryService } from '../../food/app/services/food-library.service';
 import { t, Locale } from '../../diet/app/recommendation/utils/i18n-messages';
+import { cl } from '../i18n/decision-labels';
 import { DecisionFoodItem, UserContext } from './food-decision.service';
 import { RecommendationEngineService } from '../../diet/app/services/recommendation-engine.service';
 import { MealRecommendation } from '../../diet/app/recommendation/types/recommendation.types';
@@ -124,6 +125,7 @@ export class AlternativeSuggestionService {
           preferenceProfile,
           constraints,
           contextualAnalysis,
+          locale,
         );
         if (engineAlternatives.length > 0) {
           results = engineAlternatives.slice(0, 5);
@@ -145,6 +147,7 @@ export class AlternativeSuggestionService {
           userConstraints,
           preferenceProfile,
           constraints,
+          locale,
         );
         if (substitutionAlternatives.length > 0) {
           results = substitutionAlternatives.slice(0, 5);
@@ -219,6 +222,7 @@ export class AlternativeSuggestionService {
     _preferenceProfile?: UserPreferenceProfile,
     constraints?: AlternativeConstraints,
     contextualAnalysis?: ContextualAnalysis,
+    locale?: Locale,
   ): Promise<FoodAlternative[]> {
     const currentMealCalories = foods.reduce(
       (sum, food) => sum + food.calories,
@@ -313,6 +317,7 @@ export class AlternativeSuggestionService {
             currentMealProtein,
             constraints,
             scenarioType,
+            locale,
           ),
           comparison: {
             caloriesDiff: Math.round(
@@ -331,7 +336,7 @@ export class AlternativeSuggestionService {
       }
     }
 
-    return this.attachRankScores(alternatives.slice(0, 5), ctx);
+    return this.attachRankScores(alternatives.slice(0, 5), ctx, locale);
   }
 
   private explainEngineCandidate(
@@ -340,6 +345,7 @@ export class AlternativeSuggestionService {
     currentMealProtein: number,
     constraints?: AlternativeConstraints,
     scenarioType?: 'takeout' | 'convenience' | 'homeCook',
+    locale?: Locale,
   ): string {
     if (
       constraints?.preferLowCalorie &&
@@ -359,7 +365,11 @@ export class AlternativeSuggestionService {
       return (
         t('decision.alt.lowGlycemic', {
           carbs: String(Math.round(candidate.servingCarbs)),
-        }) || `低升糖选择（碳水 ${Math.round(candidate.servingCarbs)}g）`
+        }) ||
+        cl('alt.lowGlycemicFallback', locale).replace(
+          '{carbs}',
+          String(Math.round(candidate.servingCarbs)),
+        )
       );
     }
 
@@ -389,11 +399,11 @@ export class AlternativeSuggestionService {
     userConstraints?: UserProfileConstraints,
     preferenceProfile?: UserPreferenceProfile,
     constraints?: AlternativeConstraints,
+    locale?: Locale,
   ): Promise<FoodAlternative[]> {
     const alternatives: FoodAlternative[] = [];
     const seenNames = new Set<string>();
     const startTime = Date.now();
-
     for (const food of foods) {
       let foodId = food.libraryMatch?.id;
 
@@ -501,7 +511,7 @@ export class AlternativeSuggestionService {
       `推荐引擎替代方案: count=${alternatives.length}, latency=${latencyMs}ms, userId=${userId}`,
     );
 
-    return this.attachRankScores(alternatives, ctx);
+    return this.attachRankScores(alternatives, ctx, locale);
   }
 
   // ==================== V2.2: 问题约束提取 ====================
@@ -724,11 +734,15 @@ export class AlternativeSuggestionService {
     if (hour >= 21 && totalCalories > 200) {
       addAlternatives([
         {
-          name: t('decision.alt.lateNightMilkName', {}, locale) || '温牛奶',
+          name:
+            t('decision.alt.lateNightMilkName', {}, locale) ||
+            cl('alt.lateNightMilk', locale),
           reason: t('decision.alt.lateNightMilk', {}, locale),
         },
         {
-          name: t('decision.alt.lateNightFruitName', {}, locale) || '小份水果',
+          name:
+            t('decision.alt.lateNightFruitName', {}, locale) ||
+            cl('alt.lateNightFruit', locale),
           reason: t('decision.alt.lateNightFruit', {}, locale),
         },
       ]);
@@ -799,6 +813,7 @@ export class AlternativeSuggestionService {
   private attachRankScores(
     alternatives: FoodAlternative[],
     ctx: UnifiedUserContext,
+    locale?: Locale,
   ): FoodAlternative[] {
     if (!alternatives.length) return alternatives;
 
@@ -816,19 +831,37 @@ export class AlternativeSuggestionService {
         const calScore = Math.max(-1, Math.min(1, -calDiff / 200)); // -200kcal diff = +1
         const calWeight = ctx.goalType === 'fat_loss' ? 0.35 : 0.15;
         score += calScore * calWeight;
-        if (calDiff < -50) reasons.push(`热量少 ${Math.abs(calDiff)}kcal`);
-        else if (calDiff > 50) reasons.push(`热量多 ${calDiff}kcal`);
+        if (calDiff < -50)
+          reasons.push(
+            cl('alt.calLess', locale).replace(
+              '{amount}',
+              String(Math.abs(calDiff)),
+            ),
+          );
+        else if (calDiff > 50)
+          reasons.push(
+            cl('alt.calMore', locale).replace('{amount}', String(calDiff)),
+          );
 
         // 蛋白质维度（最高 25%）
         const prosScore = Math.max(-1, Math.min(1, prosDiff / 20)); // +20g = +1
         const prosWeight = ctx.goalType === 'muscle_gain' ? 0.25 : 0.1;
         score += prosScore * prosWeight;
-        if (prosDiff > 5) reasons.push(`蛋白质+${prosDiff}g`);
-        else if (prosDiff < -5) reasons.push(`蛋白质-${Math.abs(prosDiff)}g`);
+        if (prosDiff > 5)
+          reasons.push(
+            cl('alt.proteinMore', locale).replace('{amount}', String(prosDiff)),
+          );
+        else if (prosDiff < -5)
+          reasons.push(
+            cl('alt.proteinLess', locale).replace(
+              '{amount}',
+              String(Math.abs(prosDiff)),
+            ),
+          );
 
         // 归一化到 [0, 1]
         const finalScore = Math.max(0, Math.min(1, score));
-        if (reasons.length === 0) reasons.push('综合均衡');
+        if (reasons.length === 0) reasons.push(cl('alt.balanced', locale));
 
         return {
           ...alt,

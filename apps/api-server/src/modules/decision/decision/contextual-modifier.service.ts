@@ -16,6 +16,7 @@ import { BehaviorService } from '../../diet/app/services/behavior.service';
 import { FoodService } from '../../diet/app/services/food.service';
 import { DietIssue } from '../types/analysis-result.types';
 import { t, Locale } from '../../diet/app/recommendation/utils/i18n-messages';
+import { ci, toCoachLocale } from '../coach/coach-i18n';
 import {
   MODIFIER_PARAMS,
   TIME_BOUNDARIES,
@@ -91,7 +92,10 @@ export class ContextualDecisionModifierService {
           'decision.modifier.cumulativeSaturation',
           { percent: String(excessPct) },
           locale,
-        ) || `今日总摄入已超标${excessPct}%`,
+        ) ||
+          ci('modifier.cumulativeSaturation', toCoachLocale(locale), {
+            percent: String(excessPct),
+          }),
       );
     }
 
@@ -112,7 +116,8 @@ export class ContextualDecisionModifierService {
           severity: 'warning',
           message:
             (t('decision.modifier.lateNightRisk', {}, locale) ||
-              '深夜进食可能影响睡眠和代谢') + lateCalSuffix,
+              ci('modifier.lateNightRisk', toCoachLocale(locale))) +
+            lateCalSuffix,
         });
       }
     }
@@ -150,7 +155,10 @@ export class ContextualDecisionModifierService {
                 'decision.modifier.multiDayExcess',
                 { days: String(consecutiveExcess) },
                 locale,
-              ) || `连续${consecutiveExcess}天超标`,
+              ) ||
+              ci('modifier.multiDayExcess', toCoachLocale(locale), {
+                days: String(consecutiveExcess),
+              }),
           });
         }
 
@@ -166,7 +174,10 @@ export class ContextualDecisionModifierService {
               'decision.modifier.healthyStreak',
               { days: String(healthyDays) },
               locale,
-            ) || `连续${healthyDays}天健康饮食，适度放宽`,
+            ) ||
+              ci('modifier.healthyStreak', toCoachLocale(locale), {
+                days: String(healthyDays),
+              }),
           );
         }
 
@@ -183,14 +194,20 @@ export class ContextualDecisionModifierService {
                 'decision.modifier.bingeRisk',
                 { count: String(mealCount) },
                 locale,
-              ) || `今日已记录${mealCount}餐，注意暴食风险`,
+              ) ||
+              ci('modifier.bingeRisk', toCoachLocale(locale), {
+                count: String(mealCount),
+              }),
           });
           result.additionalReasons.push(
             t(
               'decision.modifier.bingeRisk',
               { count: String(mealCount) },
               locale,
-            ) || `今日已记录${mealCount}餐，请关注进食节奏`,
+            ) ||
+              ci('modifier.bingeRiskReason', toCoachLocale(locale), {
+                count: String(mealCount),
+              }),
           );
         }
       }

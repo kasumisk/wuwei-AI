@@ -156,7 +156,7 @@ export class FoodService {
   async deleteRecord(userId: string, recordId: string): Promise<void> {
     const deleted = await this.foodRecordService.deleteRecord(userId, recordId);
     // 异步更新当日汇总，不阻塞删除响应
-    const recordDate = (deleted.recordedAt ?? deleted.createdAt) as Date;
+    const recordDate = deleted.recordedAt ?? deleted.createdAt;
     this.dailySummaryService
       .updateDailySummary(userId, recordDate)
       .catch((err) => {
@@ -514,6 +514,23 @@ export class FoodService {
     });
   }
 
+  /**
+   * 手动失效下一餐推荐粘性缓存
+   * - 指定 mealType 时仅删除该餐
+   * - 未指定时删除今日全部餐次缓存
+   */
+  invalidateMealSuggestionCache(userId: string, mealType?: string): void {
+    const dateStr = new Date().toISOString().slice(0, 10);
+    if (mealType) {
+      this.stickinessCache.delete(`${userId}:${mealType}:${dateStr}`);
+      return;
+    }
+
+    for (const mt of ['breakfast', 'lunch', 'snack', 'dinner']) {
+      this.stickinessCache.delete(`${userId}:${mt}:${dateStr}`);
+    }
+  }
+
   // ─── V7.9 Phase 3-5: 决策价值标签生成 ───
 
   /**
@@ -646,10 +663,7 @@ export class FoodService {
       (summary.calorieGoal || goals.calories) - summary.totalCalories,
     );
     // FIX: 用全天目标热量 × 餐次比例，不超过剩余量
-    const calBudget = Math.min(
-      Math.round(goals.calories * ratio),
-      remaining,
-    );
+    const calBudget = Math.min(Math.round(goals.calories * ratio), remaining);
     const proteinRem = Math.max(0, goals.protein - (summary.totalProtein || 0));
 
     const consumed = {

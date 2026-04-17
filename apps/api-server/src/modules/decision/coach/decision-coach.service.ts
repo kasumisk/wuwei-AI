@@ -5,6 +5,7 @@ import {
   StructuredDecision,
 } from '../types/analysis-result.types';
 import { ci, toCoachLocale, CoachLocale } from './coach-i18n';
+import { cl } from '../i18n/decision-labels';
 
 /**
  * V3.3 Phase 3 — DecisionCoachService（迁移自 analyze/decision-coach.service.ts）
@@ -158,25 +159,10 @@ export class DecisionCoachService {
       timeliness: 'timeliness',
     };
 
-    const FACTOR_LABELS: Record<CoachLocale, Record<string, string>> = {
-      zh: {
-        nutritionAlignment: '营养目标匹配度',
-        macroBalance: '宏量均衡',
-        healthConstraint: '健康约束',
-        timeliness: '时机合理性',
-      },
-      en: {
-        nutritionAlignment: 'Nutrition Alignment',
-        macroBalance: 'Macro Balance',
-        healthConstraint: 'Health Constraint',
-        timeliness: 'Timeliness',
-      },
-      ja: {
-        nutritionAlignment: '栄養目標一致度',
-        macroBalance: 'マクロバランス',
-        healthConstraint: '健康制約',
-        timeliness: '食事タイミング',
-      },
+    const LOCALE_MAP: Record<CoachLocale, string> = {
+      zh: 'zh-CN',
+      en: 'en-US',
+      ja: 'ja-JP',
     };
 
     const existingTypes = new Set(base.map((b) => b.type));
@@ -186,7 +172,7 @@ export class DecisionCoachService {
         const syntheticType = FACTOR_TO_TYPE[key] || key;
         if (!existingTypes.has(syntheticType)) {
           existingTypes.add(syntheticType);
-          const label = FACTOR_LABELS[lang]?.[key] || key;
+          const label = cl(`factorLabel.${key}`, LOCALE_MAP[lang] as any);
           base.push({
             type: syntheticType,
             severity: factor.score < 30 ? 'high' : 'medium',

@@ -14,11 +14,22 @@ import {
   AnalysisExplanation,
   DecisionChainStep,
   FoodDecision,
+  UnifiedUserContext,
+  DetailedRationale,
 } from '../types/analysis-result.types';
 import { NutritionScoreBreakdown } from '../../diet/app/services/nutrition-score.service';
 import { t, Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 import { DecisionFoodItem, UserContext } from './food-decision.service';
 import { DIMENSION_LABELS } from '../config/scoring-dimensions';
+import { cl as dlCl } from '../i18n/decision-labels';
+import {
+  checkAllergenConflict,
+  checkRestrictionConflict,
+} from './decision-checks';
+import {
+  DynamicThresholdsService,
+  UserThresholds,
+} from '../config/dynamic-thresholds.service';
 
 // ==================== 输入类型 ====================
 
@@ -152,6 +163,156 @@ function cl(
 
 @Injectable()
 export class DecisionExplainerService {
+  constructor(private readonly dynamicThresholds: DynamicThresholdsService) {}
+
+  // ==================== V3.7 P2.1: 从 DecisionEngineService 提取的文案生成 ====================
+
+  /**
+   * 生成行动建议文案（原 DecisionEngineService.generateDecisionAdvice）
+   */
+  generateDecisionAdvice(
+    decision: FoodDecision,
+    ctx: UnifiedUserContext,
+    totalCalories: number,
+    totalProtein: number,
+    locale?: Locale,
+    totalFat?: number,
+    totalCarbs?: number,
+    th?: UserThresholds,
+  ): string {
+    const lowProtein = th?.lowProteinMeal ?? 15;
+    const significantCal = th?.significantMealCal ?? 300;
+    const highFat = th?.highFatMeal ?? 30;
+    const highProtein = th?.highProteinMeal ?? 25;
+
+    if (decision.recommendation === 'recommend') {
+      if (ctx.goalType === 'muscle_gain' && totalProtein >= highProtein) {
+        return t('decision.advice.goodProtein', {}, locale);
+      }
+      return t('decision.advice.balanced', {}, locale);
+    }
+
+    if (decision.recommendation === 'avoid') {
+      if (decision.reason?.includes('⚠️')) {
+        return t('decision.advice.switch', {}, locale);
+      }
+      const remaining = ctx.remainingCalories - totalCalories;
+      if (remaining < -(th?.overBudgetMargin ?? 100)) {
+        const excessCal = Math.abs(Math.round(remaining));
+        const excessSuffix = dlCl('suffix.excessCal', locale).replace(
+          '{amount}',
+          String(excessCal),
+        );
+        return (
+          t(
+            'decision.advice.reducePortion',
+            {
+              percent: String(
+                Math.max(
+                  30,
+                  Math.round((ctx.remainingCalories / totalCalories) * 100),
+                ),
+              ),
+            },
+            locale,
+          ) + excessSuffix
+        );
+      }
+      return t('decision.advice.switch', {}, locale);
+    }
+
+    // caution
+    const tips: string[] = [];
+    if (
+      ctx.goalType === 'fat_loss' &&
+      totalProtein < lowProtein &&
+      totalCalories > significantCal
+    ) {
+      const proteinQuantSuffix = dlCl('suffix.currentProtein', locale).replace(
+        '{amount}',
+        String(Math.round(totalProtein)),
+      );
+      tips.push(
+        t('decision.advice.addProtein', {}, locale) + proteinQuantSuffix,
+      );
+    }
+    if (ctx.remainingCalories - totalCalories < 0) {
+      tips.push(t('decision.advice.halfPortion', {}, locale));
+    }
+    if (
+      totalFat != null &&
+      totalFat > highFat &&
+      ctx.goalFat > 0 &&
+      (ctx.todayFat + totalFat) / ctx.goalFat > (th?.fatExcessRatio ?? 1)
+    ) {
+      tips.push(t('decision.advice.reduceFat', {}, locale));
+    }
+    if (
+      totalCarbs != null &&
+      ctx.goalCarbs > 0 &&
+      (ctx.todayCarbs + totalCarbs) / ctx.goalCarbs >
+        (th?.carbExcessRatio ?? 1.1) &&
+      ctx.goalType === 'fat_loss'
+    ) {
+      tips.push(t('decision.advice.reduceCarbs', {}, locale));
+    }
+    if (tips.length === 0) {
+      tips.push(t('decision.advice.controlOther', {}, locale));
+    }
+    return tips.join('，');
+  }
+
+  /**
+   * 构建多维决策原因（原 DecisionEngineService.buildDetailedRationale）
+   */
+  buildDetailedRationale(
+    decision: FoodDecision,
+    ctx: UnifiedUserContext,
+    nutritionScore: number,
+    hour: number,
+    foods: DecisionFoodItem[],
+    locale?: Locale,
+  ): DetailedRationale {
+    const baseline = decision.reason || '';
+
+    const calorieProgress =
+      ctx.goalCalories > 0
+        ? Math.round((ctx.todayCalories / ctx.goalCalories) * 100)
+        : 0;
+    const contextual = dlCl('rationale.contextual', locale).replace(
+      '{percent}',
+      String(calorieProgress),
+    );
+
+    const goalLabel = ctx.goalLabel || ctx.goalType;
+    const goalAlignment = dlCl('rationale.goalAlignment', locale).replace(
+      '{goalLabel}',
+      goalLabel,
+    );
+
+    const allergenCheck = checkAllergenConflict(foods, ctx, locale);
+    const restrictionCheck = checkRestrictionConflict(foods, ctx, locale);
+    const healthRisk = allergenCheck?.triggered
+      ? allergenCheck.reason || null
+      : restrictionCheck?.triggered
+        ? restrictionCheck.reason || null
+        : null;
+
+    let timelinessNote: string | null = null;
+    const dynamicTh = this.dynamicThresholds.compute(ctx);
+    if (hour >= dynamicTh.lateNightStart || hour < dynamicTh.lateNightEnd) {
+      timelinessNote = dlCl('rationale.timelinessLateNight', locale);
+    }
+
+    return {
+      baseline,
+      contextual,
+      goalAlignment,
+      healthRisk,
+      timelinessNote,
+    };
+  }
+
   // ==================== 决策推理链 ====================
 
   generateDecisionChain(

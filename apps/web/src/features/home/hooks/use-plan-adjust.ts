@@ -11,7 +11,13 @@ export function usePlanAdjust() {
   const queryClient = useQueryClient();
 
   const adjustMutation = useMutation({
-    mutationFn: (reason: string) => recommendationService.adjustDailyPlan(reason),
+    mutationFn: ({
+      reason,
+      mealType,
+    }: {
+      reason: string;
+      mealType?: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+    }) => recommendationService.adjustDailyPlan(reason, mealType),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['daily-plan'] });
       queryClient.invalidateQueries({ queryKey: ['meal-suggestion'] });

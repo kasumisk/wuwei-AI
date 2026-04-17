@@ -78,9 +78,10 @@ export class FoodPlanController {
   async getMealSuggestion(
     @CurrentAppUser() user: AppUserPayload,
     @Query('refresh') refresh?: string,
+    @Query('_t') timestamp?: string,
   ): Promise<ApiResponse> {
     // FIX: 支持 ?refresh=1 或 ?_t=<timestamp> 强制跳过粘性缓存
-    const forceRefresh = !!refresh || false;
+    const forceRefresh = !!refresh || !!timestamp;
     const suggestion = await this.foodService.getMealSuggestion(
       user.id,
       forceRefresh,
@@ -145,7 +146,11 @@ export class FoodPlanController {
     @CurrentAppUser() user: AppUserPayload,
     @Body() dto: AdjustPlanDto,
   ): Promise<ApiResponse> {
-    const result = await this.dailyPlanService.adjustPlan(user.id, dto.reason);
+    const result = await this.dailyPlanService.adjustPlan(
+      user.id,
+      dto.reason,
+      dto.mealType,
+    );
     // FIX: adjustPlan 返回 { updatedPlan, adjustmentNote }，需解构后分别传入
     return {
       success: true,

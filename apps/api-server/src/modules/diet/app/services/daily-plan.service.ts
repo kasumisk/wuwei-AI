@@ -5,6 +5,7 @@ import {
   MealFoodItem,
   MealFoodExplanation,
   PlanAdjustment,
+  MealType,
 } from '../../diet.types';
 import { UserProfiles as UserProfile } from '@prisma/client';
 import { FoodLibrary } from '../../../food/food.types';
@@ -261,12 +262,12 @@ export class DailyPlanService {
     // 餐次 → plan 字段 & 比例 key 的映射
     const MEAL_TO_PLAN_KEY: Record<
       string,
-      'morning_plan' | 'lunch_plan' | 'dinner_plan' | 'snack_plan'
+      'morningPlan' | 'lunchPlan' | 'dinnerPlan' | 'snackPlan'
     > = {
-      breakfast: 'morning_plan',
-      lunch: 'lunch_plan',
-      dinner: 'dinner_plan',
-      snack: 'snack_plan',
+      breakfast: 'morningPlan',
+      lunch: 'lunchPlan',
+      dinner: 'dinnerPlan',
+      snack: 'snackPlan',
     };
 
     const planKey = MEAL_TO_PLAN_KEY[mealType];
@@ -291,7 +292,7 @@ export class DailyPlanService {
 
     const excludeNames: string[] = [];
     for (const pk of otherPlanKeys) {
-      const otherMeal = (plan as any)[pk] as MealPlan | null;
+      const otherMeal = plan[pk] as MealPlan | null;
       if (otherMeal?.foodItems) {
         for (const item of otherMeal.foodItems) {
           excludeNames.push(item.name);
@@ -718,154 +719,31 @@ export class DailyPlanService {
   async adjustPlan(
     userId: string,
     reason: string,
+    mealType?: MealType,
   ): Promise<{ updatedPlan: any; adjustmentNote: string }> {
-    const [summary, profile] = await Promise.all([
-      this.foodService.getTodaySummary(userId),
-      this.userProfileService.getProfile(userId),
-    ]);
+    const profile = await this.userProfileService.getProfile(userId);
     const tz = profile?.timezone || DEFAULT_TIMEZONE;
-    const today = getUserLocalDate(tz);
-    let plan: any = await this.prisma.dailyPlans.findFirst({
-      where: { userId: userId, date: new Date(today) },
-    });
-    if (!plan) {
-      plan = await this.generatePlan(userId, today);
-    }
-
-    const goals = this.nutritionScoreService.calculateDailyGoals(profile);
-    const goalType = profile?.goal || 'health';
-    const goal = plan.totalBudget || goals.calories;
-    const remaining = Math.max(0, goal - summary.totalCalories);
     const hour = getUserLocalHour(tz);
+    const targetMeal = (mealType || this.resolveMealTypeByHour(hour)) as
+      | 'breakfast'
+      | 'lunch'
+      | 'dinner'
+      | 'snack';
 
-    // 提取用户档案约束
-    const userProfileConstraints: UserProfileConstraints | undefined = profile
-      ? {
-          dietaryRestrictions: (profile.dietaryRestrictions as string[]) || [],
-          weakTimeSlots: (profile.weakTimeSlots as string[]) || [],
-          discipline: profile.discipline as string | undefined,
-          allergens: (profile.allergens as string[]) || [],
-          healthConditions: (profile.healthConditions as string[]) || [],
-          regionCode: (profile.regionCode as string) || 'CN',
-          timezone: profile.timezone,
-        }
-      : undefined;
+    // 直接复用单餐重生能力，确保“对应餐次”被替换
+    const regeneratedPlan = await this.regenerateMeal(userId, targetMeal);
 
-    const consumed = {
-      calories: summary.totalCalories || 0,
-      protein: summary.totalProtein || 0,
-    };
-    const dailyTarget = { calories: goals.calories, protein: goals.protein };
-
-    // 根据剩余时段重新分配
     const adjustedMeals: Partial<
       Record<'morning' | 'lunch' | 'dinner' | 'snack', MealPlan>
     > = {};
-    // V6.5 Phase 2L: 跟踪调整过程中生成的 MealRecommendation（用于写入 daily_plan_items）
-    const adjustedRecs: Record<string, MealRecommendation> = {};
-    let adjustmentNote = '';
-
-    if (remaining <= 0) {
-      adjustmentNote = t('adjust.caloriesReached');
-      if (hour < 18) {
-        adjustedMeals.dinner = {
-          foods: t('adjust.fallbackDinnerFoods'),
-          calories: 150,
-          protein: 5,
-          fat: 3,
-          carbs: 15,
-          tip: t('adjust.fallbackDinnerTip'),
-        };
-        plan.dinnerPlan = adjustedMeals.dinner as any;
-      }
-    } else if (hour < 12) {
-      // 午餐+晚餐重新分配
-      const lunchBudget = Math.round(remaining * 0.55);
-      const dinnerBudget = Math.round(remaining * 0.45);
-      const proteinRem = Math.max(
-        0,
-        goals.protein - (summary.totalProtein || 0),
-      );
-      const [allFoods, recentNames] = await Promise.all([
-        this.recommendationEngine.getAllFoods(),
-        this.preferenceProfileService.getRecentFoodNames(userId, 3),
-      ]);
-      const excludeNames = [...recentNames];
-
-      const lunchRec = await this.recommendationEngine.recommendMealFromPool({
-        allFoods,
-        mealType: 'lunch',
-        goalType,
-        consumed,
-        target: {
-          calories: lunchBudget,
-          protein: Math.round(proteinRem * 0.55),
-          fat: Math.round(goals.fat * 0.35),
-          carbs: Math.round(goals.carbs * 0.35),
-        },
-        dailyTarget,
-        excludeNames,
-        userProfile: userProfileConstraints,
-        userId, // V6.5 Phase 3D
-      });
-      excludeNames.push(...lunchRec.foods.map((f) => f.food.name));
-
-      const dinnerRec = await this.recommendationEngine.recommendMealFromPool({
-        allFoods,
-        mealType: 'dinner',
-        goalType,
-        consumed,
-        target: {
-          calories: dinnerBudget,
-          protein: Math.round(proteinRem * 0.45),
-          fat: Math.round(goals.fat * 0.3),
-          carbs: Math.round(goals.carbs * 0.3),
-        },
-        dailyTarget,
-        excludeNames,
-        userProfile: userProfileConstraints,
-        userId, // V6.5 Phase 3D
-      });
-
-      adjustedMeals.lunch = toMealPlan(lunchRec);
-      adjustedMeals.dinner = toMealPlan(dinnerRec);
-      adjustedRecs['lunch'] = lunchRec;
-      adjustedRecs['dinner'] = dinnerRec;
-      plan.lunchPlan = adjustedMeals.lunch as any;
-      plan.dinnerPlan = adjustedMeals.dinner as any;
-      adjustmentNote = t('adjust.lunchDinner', { lunchBudget, dinnerBudget });
-    } else if (hour < 18) {
-      // 只调整晚餐
-      const proteinRem = Math.max(
-        0,
-        goals.protein - (summary.totalProtein || 0),
-      );
-      const [allFoods, recentNames] = await Promise.all([
-        this.recommendationEngine.getAllFoods(),
-        this.preferenceProfileService.getRecentFoodNames(userId, 3),
-      ]);
-      const dinnerRec = await this.recommendationEngine.recommendMealFromPool({
-        allFoods,
-        mealType: 'dinner',
-        goalType,
-        consumed,
-        target: {
-          calories: remaining,
-          protein: proteinRem,
-          fat: Math.round(goals.fat * 0.3),
-          carbs: Math.round(goals.carbs * 0.3),
-        },
-        dailyTarget,
-        excludeNames: recentNames,
-        userProfile: userProfileConstraints,
-        userId, // V6.5 Phase 3D
-      });
-      adjustedMeals.dinner = toMealPlan(dinnerRec);
-      adjustedRecs['dinner'] = dinnerRec;
-      plan.dinnerPlan = adjustedMeals.dinner as any;
-      adjustmentNote = t('adjust.dinnerBudget', { remaining });
+    if (targetMeal === 'breakfast') {
+      adjustedMeals.morning = regeneratedPlan.morningPlan as MealPlan;
+    } else if (targetMeal === 'lunch') {
+      adjustedMeals.lunch = regeneratedPlan.lunchPlan as MealPlan;
+    } else if (targetMeal === 'dinner') {
+      adjustedMeals.dinner = regeneratedPlan.dinnerPlan as MealPlan;
     } else {
-      adjustmentNote = t('adjust.nightSnack', { remaining });
+      adjustedMeals.snack = regeneratedPlan.snackPlan as MealPlan;
     }
 
     const adjustment: PlanAdjustment = {
@@ -873,27 +751,37 @@ export class DailyPlanService {
       reason,
       newPlan: adjustedMeals,
     };
-    const existingAdjustments = (plan.adjustments as any[]) || [];
+    const existingAdjustments = (regeneratedPlan.adjustments as any[]) || [];
 
     const updatedPlan = await this.prisma.dailyPlans.update({
-      where: { id: plan.id },
+      where: { id: regeneratedPlan.id },
       data: {
-        morningPlan: plan.morningPlan ?? undefined,
-        lunchPlan: plan.lunchPlan ?? undefined,
-        dinnerPlan: plan.dinnerPlan ?? undefined,
-        snackPlan: plan.snackPlan ?? undefined,
         adjustments: [...existingAdjustments, adjustment],
       },
     });
 
-    // V6.5 Phase 2L: 同步更新 daily_plan_items（仅调整了推荐的餐次）
-    const adjustedMealTypes = Object.keys(adjustedRecs);
-    if (adjustedMealTypes.length > 0) {
-      await this.deletePlanItems(plan.id, adjustedMealTypes);
-      await this.writePlanItems(plan.id, adjustedRecs);
-    }
+    // 替换后主动失效推荐粘性缓存，确保下一次 meal-suggestion 返回新结果
+    this.foodService.invalidateMealSuggestionCache(userId, targetMeal);
+
+    const mealLabelMap: Record<string, string> = {
+      breakfast: '早餐',
+      lunch: '午餐',
+      dinner: '晚餐',
+      snack: '加餐',
+    };
+    const adjustmentNote = `已为你更换${mealLabelMap[targetMeal] || targetMeal}推荐`;
 
     return { updatedPlan: updatedPlan as any, adjustmentNote };
+  }
+
+  /**
+   * 按时间推断当前应调整的餐次（与 getMealSuggestion 保持一致）
+   */
+  private resolveMealTypeByHour(hour: number): MealType {
+    if (hour < 9) return MealType.BREAKFAST;
+    if (hour < 14) return MealType.LUNCH;
+    if (hour < 17) return MealType.SNACK;
+    return MealType.DINNER;
   }
 
   /**

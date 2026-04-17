@@ -12,6 +12,7 @@
 import { Injectable } from '@nestjs/common';
 import { I18nManagementService } from '../../../../config/i18n-management.service';
 import { CoachFormatOptions, FormattedCoachOutput } from './coach-format.types';
+import { ci, toCoachLocale } from '../../../decision/coach/coach-i18n';
 
 @Injectable()
 export class CoachFormatService {
@@ -184,6 +185,7 @@ export class CoachFormatService {
     // V2.7: 最低分评分洞察
     const scoreInsight = this.resolveScoreInsight(
       options.breakdownExplanations,
+      options.language,
     );
 
     return {
@@ -206,10 +208,16 @@ export class CoachFormatService {
     proteinText?: string,
   ): string[] {
     if (action === 'should_avoid') {
-      return [`当前这份食物会进一步推高摄入负担`, calorieText];
+      return [
+        ci('format.reason.pushOverload', toCoachLocale(options.language)),
+        calorieText,
+      ];
     }
     if (action === 'can_skip') {
-      return [`当前没有必须补充的信号`, calorieText];
+      return [
+        ci('format.reason.noSignal', toCoachLocale(options.language)),
+        calorieText,
+      ];
     }
 
     return [
@@ -228,24 +236,34 @@ export class CoachFormatService {
     nutrition: any,
   ): string[] {
     if (action === 'should_avoid') {
-      return ['优先换更轻的搭配', '如果一定要吃，先减量再吃'];
+      const lang = toCoachLocale(options.language);
+      return [
+        ci('format.suggestion.switchLighter', lang),
+        ci('format.suggestion.reduceFirst', lang),
+      ];
     }
     if (action === 'can_skip') {
-      return ['可以先观察饥饿感', '下一餐优先补蛋白和蔬菜'];
+      const lang = toCoachLocale(options.language);
+      return [
+        ci('format.suggestion.observeHunger', lang),
+        ci('format.suggestion.nextMealProtein', lang),
+      ];
     }
 
-    const suggestions = ['按当前节奏食用'];
+    const lang = toCoachLocale(options.language);
+    const suggestions = [ci('format.suggestion.keepPace', lang)];
     if (typeof nutrition.protein === 'number' && nutrition.protein < 20) {
-      suggestions.push('可额外搭配一份高蛋白食物');
+      suggestions.push(ci('format.suggestion.addProtein', lang));
     }
     return suggestions;
   }
 
   private resolveEncouragement(options: CoachFormatOptions): string {
+    const lang = toCoachLocale(options.language);
     const toneMap: Record<CoachFormatOptions['persona'], string> = {
-      strict: '保持边界感，先做最稳妥的选择',
-      friendly: '一步一步调整，比一次做满更重要',
-      data: '把这次当作一次可量化的小优化',
+      strict: ci('format.encouragement.strict', lang),
+      friendly: ci('format.encouragement.friendly', lang),
+      data: ci('format.encouragement.data', lang),
     };
 
     return toneMap[options.persona];
@@ -264,6 +282,7 @@ export class CoachFormatService {
   /** V2.7: 从 breakdownExplanations 提取最低分 critical/warning 维度洞察 */
   private resolveScoreInsight(
     breakdownExplanations?: CoachFormatOptions['breakdownExplanations'],
+    language?: string,
   ): string | undefined {
     if (!breakdownExplanations || breakdownExplanations.length === 0)
       return undefined;
@@ -274,7 +293,11 @@ export class CoachFormatService {
     const worst = candidates.reduce((a, b) => (a.score <= b.score ? a : b));
     const label = worst.label || worst.dimension;
     return worst.message
-      ? `${label}(${worst.score}分): ${worst.message}`
+      ? ci('format.scoreInsight', toCoachLocale(language), {
+          label,
+          score: String(worst.score),
+          message: worst.message,
+        })
       : undefined;
   }
 

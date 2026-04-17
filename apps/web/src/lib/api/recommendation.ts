@@ -20,7 +20,7 @@ async function unwrap<T>(promise: Promise<ApiResponse<T>>): Promise<T> {
 export const recommendationService = {
   /** 获取下一餐推荐。forceRefresh=true 时跳过服务端粘性缓存 */
   getMealSuggestion: async (forceRefresh = false): Promise<MealSuggestion> => {
-    const qs = forceRefresh ? '?refresh=1' : '';
+    const qs = forceRefresh ? `?_t=${Date.now()}` : '';
     return unwrap(clientGet<MealSuggestion>(`/app/food/meal-suggestion${qs}`));
   },
 
@@ -31,12 +31,13 @@ export const recommendationService = {
 
   /** 触发计划调整 */
   adjustDailyPlan: async (
-    reason: string
-  ): Promise<{ updatedPlan: DailyPlanData; adjustmentNote: string }> => {
+    reason: string,
+    mealType?: 'breakfast' | 'lunch' | 'dinner' | 'snack'
+  ): Promise<DailyPlanData & { adjustmentNote?: string }> => {
     return unwrap(
-      clientPost<{ updatedPlan: DailyPlanData; adjustmentNote: string }>(
+      clientPost<DailyPlanData & { adjustmentNote?: string }>(
         '/app/food/daily-plan/adjust',
-        { reason }
+        { reason, mealType }
       )
     );
   },

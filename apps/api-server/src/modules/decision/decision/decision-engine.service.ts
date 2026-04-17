@@ -14,6 +14,7 @@ import {
 } from '../types/analysis-result.types';
 import { NutritionScoreBreakdown } from '../../diet/app/services/nutrition-score.service';
 import { t, Locale } from '../../diet/app/recommendation/utils/i18n-messages';
+import { cl } from '../i18n/decision-labels';
 import { DIMENSION_LABELS } from '../config/scoring-dimensions';
 import {
   GOAL_DECISION_THRESHOLDS,
@@ -29,10 +30,14 @@ import {
   DynamicThresholdsService,
   UserThresholds,
 } from '../config/dynamic-thresholds.service';
+import { DecisionExplainerService } from './decision-explainer.service';
 
 @Injectable()
 export class DecisionEngineService {
-  constructor(private readonly dynamicThresholds: DynamicThresholdsService) {}
+  constructor(
+    private readonly dynamicThresholds: DynamicThresholdsService,
+    private readonly explainer: DecisionExplainerService,
+  ) {}
 
   // ==================== 核心决策 ====================
 
@@ -233,7 +238,7 @@ export class DecisionEngineService {
         ? contextReasons.join('；')
         : scoreDecision.reason;
 
-    const advice = this.generateDecisionAdvice(
+    const advice = this.explainer.generateDecisionAdvice(
       scoreDecision,
       ctx,
       totalCalories,
@@ -352,106 +357,6 @@ export class DecisionEngineService {
     return factors;
   }
 
-  // ==================== 行动建议 ====================
-
-  generateDecisionAdvice(
-    decision: FoodDecision,
-    ctx: UnifiedUserContext,
-    totalCalories: number,
-    totalProtein: number,
-    locale?: Locale,
-    totalFat?: number,
-    totalCarbs?: number,
-    th?: UserThresholds,
-  ): string {
-    const lowProtein = th?.lowProteinMeal ?? 15;
-    const significantCal = th?.significantMealCal ?? 300;
-    const highFat = th?.highFatMeal ?? 30;
-    const highProtein = th?.highProteinMeal ?? 25;
-
-    if (decision.recommendation === 'recommend') {
-      if (ctx.goalType === 'muscle_gain' && totalProtein >= highProtein) {
-        return t('decision.advice.goodProtein', {}, locale);
-      }
-      return t('decision.advice.balanced', {}, locale);
-    }
-
-    if (decision.recommendation === 'avoid') {
-      if (decision.reason?.includes('⚠️')) {
-        return t('decision.advice.switch', {}, locale);
-      }
-      const remaining = ctx.remainingCalories - totalCalories;
-      if (remaining < -(th?.overBudgetMargin ?? 100)) {
-        const excessCal = Math.abs(Math.round(remaining));
-        // 量化：附带超出热量，如 "建议减少份量至70%（超出230kcal）"
-        const excessSuffix =
-          locale === 'en-US'
-            ? ` (over by ${excessCal}kcal)`
-            : locale === 'ja-JP'
-              ? `（${excessCal}kcal超過）`
-              : `（超出 ${excessCal}kcal）`;
-        return (
-          t(
-            'decision.advice.reducePortion',
-            {
-              percent: String(
-                Math.max(
-                  30,
-                  Math.round((ctx.remainingCalories / totalCalories) * 100),
-                ),
-              ),
-            },
-            locale,
-          ) + excessSuffix
-        );
-      }
-      return t('decision.advice.switch', {}, locale);
-    }
-
-    // caution
-    const tips: string[] = [];
-    if (
-      ctx.goalType === 'fat_loss' &&
-      totalProtein < lowProtein &&
-      totalCalories > significantCal
-    ) {
-      // 量化：附带当前蛋白质克数，如 "建议补充蛋白质（当前 8g）"
-      const proteinQuantSuffix =
-        locale === 'en-US'
-          ? ` (current: ${Math.round(totalProtein)}g)`
-          : locale === 'ja-JP'
-            ? `（現在 ${Math.round(totalProtein)}g）`
-            : `（当前 ${Math.round(totalProtein)}g）`;
-      tips.push(
-        t('decision.advice.addProtein', {}, locale) + proteinQuantSuffix,
-      );
-    }
-    if (ctx.remainingCalories - totalCalories < 0) {
-      tips.push(t('decision.advice.halfPortion', {}, locale));
-    }
-    if (
-      totalFat != null &&
-      totalFat > highFat &&
-      ctx.goalFat > 0 &&
-      (ctx.todayFat + totalFat) / ctx.goalFat > (th?.fatExcessRatio ?? 1)
-    ) {
-      tips.push(t('decision.advice.reduceFat', {}, locale));
-    }
-    if (
-      totalCarbs != null &&
-      ctx.goalCarbs > 0 &&
-      (ctx.todayCarbs + totalCarbs) / ctx.goalCarbs >
-        (th?.carbExcessRatio ?? 1.1) &&
-      ctx.goalType === 'fat_loss'
-    ) {
-      tips.push(t('decision.advice.reduceCarbs', {}, locale));
-    }
-    if (tips.length === 0) {
-      tips.push(t('decision.advice.controlOther', {}, locale));
-    }
-    return tips.join('，');
-  }
-
   // ==================== V3.3: 结构化决策 ====================
 
   /**
@@ -518,7 +423,7 @@ export class DecisionEngineService {
     );
 
     // 多维原因
-    const rationale = this.buildDetailedRationale(
+    const rationale = this.explainer.buildDetailedRationale(
       baseDecision,
       ctx,
       nutritionScore,
@@ -574,12 +479,17 @@ export class DecisionEngineService {
     score = Math.max(0, Math.min(100, Math.round(score)));
     const rationale =
       remainingAfter >= 0
-        ? t('decision.factor.nutritionOk', {}, locale) || '营养摄入在目标范围内'
+        ? t('decision.factor.nutritionOk', {}, locale) ||
+          cl('factor.nutritionOk', locale)
         : t(
             'decision.factor.nutritionOver',
             { amount: String(Math.abs(Math.round(remainingAfter))) },
             locale,
-          ) || `超出热量预算 ${Math.abs(Math.round(remainingAfter))}kcal`;
+          ) ||
+          cl('factor.nutritionOver', locale).replace(
+            '{amount}',
+            String(Math.abs(Math.round(remainingAfter))),
+          );
 
     return { score, rationale };
   }
@@ -595,7 +505,8 @@ export class DecisionEngineService {
       return {
         score: 60,
         rationale:
-          t('decision.factor.noBreakdown', {}, locale) || '暂无详细评分数据',
+          t('decision.factor.noBreakdown', {}, locale) ||
+          cl('factor.noBreakdown', locale),
       };
     }
 
@@ -605,12 +516,13 @@ export class DecisionEngineService {
     );
     const rationale =
       score >= 70
-        ? t('decision.factor.macroBalanced', {}, locale) || '宏量配比较为均衡'
+        ? t('decision.factor.macroBalanced', {}, locale) ||
+          cl('factor.macroBalanced', locale)
         : score >= 40
           ? t('decision.factor.macroImbalanced', {}, locale) ||
-            '宏量配比有偏差，建议调整'
+            cl('factor.macroImbalanced', locale)
           : t('decision.factor.macroSeverelyImbalanced', {}, locale) ||
-            '宏量严重失衡';
+            cl('factor.macroSeverelyImbalanced', locale);
 
     return { score, rationale };
   }
@@ -630,14 +542,22 @@ export class DecisionEngineService {
     const allergenCheck = checkAllergenConflict(foods, ctx, locale);
     if (allergenCheck?.triggered) {
       score = 0;
-      issues.push(allergenCheck.reason || '含过敏原');
+      issues.push(
+        allergenCheck.reason ||
+          t('decision.factor.allergenDetected', {}, locale) ||
+          'Allergen detected',
+      );
     }
 
     // 饮食限制检查
     const restrictionCheck = checkRestrictionConflict(foods, ctx, locale);
     if (restrictionCheck?.triggered) {
       score = Math.min(score, 10);
-      issues.push(restrictionCheck.reason || '违反饮食限制');
+      issues.push(
+        restrictionCheck.reason ||
+          t('decision.factor.restrictionViolated', {}, locale) ||
+          'Dietary restriction violated',
+      );
     }
 
     // 健康状况检查
@@ -653,7 +573,8 @@ export class DecisionEngineService {
     const rationale =
       issues.length > 0
         ? issues[0]
-        : t('decision.factor.noHealthIssue', {}, locale) || '未检测到健康风险';
+        : t('decision.factor.noHealthIssue', {}, locale) ||
+          cl('factor.noHealthIssue', locale);
 
     return { score, rationale };
   }
@@ -671,7 +592,8 @@ export class DecisionEngineService {
   ): DecisionFactorDetail {
     let score = 90;
     let rationale =
-      t('decision.factor.goodTiming', {}, locale) || '进食时间合理';
+      t('decision.factor.goodTiming', {}, locale) ||
+      cl('factor.goodTiming', locale);
 
     // 深夜
     if (hour >= th.lateNightStart || hour < th.lateNightEnd) {
@@ -679,12 +601,12 @@ export class DecisionEngineService {
         score = 30;
         rationale =
           t('decision.factor.lateNight', {}, locale) ||
-          '深夜大量进食不利于代谢';
+          cl('factor.lateNight', locale);
       } else {
         score = 60;
         rationale =
           t('decision.factor.lateNightLight', {}, locale) ||
-          '深夜进食，建议少量';
+          cl('factor.lateNightLight', locale);
       }
     }
     // 晚间高碳水
@@ -693,75 +615,10 @@ export class DecisionEngineService {
         score = 50;
         rationale =
           t('decision.factor.eveningHighCarb', {}, locale) ||
-          '晚间高碳水不利于减脂';
+          cl('factor.eveningHighCarb', locale);
       }
     }
 
     return { score, rationale };
-  }
-
-  /**
-   * 构建多维决策原因
-   */
-  private buildDetailedRationale(
-    decision: FoodDecision,
-    ctx: UnifiedUserContext,
-    nutritionScore: number,
-    hour: number,
-    foods: DecisionFoodItem[],
-    locale?: Locale,
-  ): DetailedRationale {
-    // baseline: 基于 nutrition score
-    const baseline = decision.reason || '';
-
-    // contextual: 基于当日摄入进度
-    const calorieProgress =
-      ctx.goalCalories > 0
-        ? Math.round((ctx.todayCalories / ctx.goalCalories) * 100)
-        : 0;
-    const contextual =
-      locale === 'en-US'
-        ? `Today's calorie progress: ${calorieProgress}% of target`
-        : locale === 'ja-JP'
-          ? `本日のカロリー進捗: 目標の${calorieProgress}%`
-          : `今日热量进度: 目标的${calorieProgress}%`;
-
-    // goalAlignment: 基于用户目标
-    const goalLabel = ctx.goalLabel || ctx.goalType;
-    const goalAlignment =
-      locale === 'en-US'
-        ? `Based on your "${goalLabel}" goal`
-        : locale === 'ja-JP'
-          ? `「${goalLabel}」目標に基づく判断`
-          : `基于「${goalLabel}」目标的判断`;
-
-    // healthRisk: 健康风险
-    const allergenCheck = checkAllergenConflict(foods, ctx, locale);
-    const restrictionCheck = checkRestrictionConflict(foods, ctx, locale);
-    const healthRisk = allergenCheck?.triggered
-      ? allergenCheck.reason || null
-      : restrictionCheck?.triggered
-        ? restrictionCheck.reason || null
-        : null;
-
-    // timelinessNote: 时机
-    let timelinessNote: string | null = null;
-    const th = this.dynamicThresholds.compute(ctx);
-    if (hour >= th.lateNightStart || hour < th.lateNightEnd) {
-      timelinessNote =
-        locale === 'en-US'
-          ? 'Late-night eating may affect sleep and metabolism'
-          : locale === 'ja-JP'
-            ? '深夜の食事は睡眠と代謝に影響する可能性があります'
-            : '深夜进食可能影响睡眠和代谢';
-    }
-
-    return {
-      baseline,
-      contextual,
-      goalAlignment,
-      healthRisk,
-      timelinessNote,
-    };
   }
 }

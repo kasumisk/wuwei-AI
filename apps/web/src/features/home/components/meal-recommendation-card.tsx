@@ -149,7 +149,7 @@ export function MealRecommendationCard({
           foods,
           totalCalories: currentContent.calories,
           mealType: suggestion.mealType,
-          source: 'recommendation',
+          source: 'manual',
           advice: currentContent.tip,
           contextComment,
         }),
@@ -206,7 +206,10 @@ export function MealRecommendationCard({
   const handleSwap = useCallback(
     async (reason?: string) => {
       try {
-        await adjustPlan(reason || '用户不想吃当前推荐，请换一个');
+        await adjustPlan({
+          reason: reason || '用户不想吃当前推荐，请换一个',
+          mealType: suggestion.mealType as 'breakfast' | 'lunch' | 'dinner' | 'snack',
+        });
         setFeedbackGiven(null);
         setShowDislikeOptions(false);
         setEatenScenarios(new Set());
@@ -215,7 +218,7 @@ export function MealRecommendationCard({
         toast({ title: '换一个失败，请稍后再试', variant: 'destructive' });
       }
     },
-    [adjustPlan, toast]
+    [adjustPlan, toast, suggestion.mealType]
   );
 
   // 👎 不想吃

@@ -292,7 +292,7 @@ export const foodRecordService = {
     avgQuality?: number;
     avgSatiety?: number;
     nutritionScore?: number;
-    source?: string;
+    source?: 'screenshot' | 'camera' | 'manual' | 'text_analysis' | 'image_analysis';
   }): Promise<FoodRecord> => {
     return unwrap(clientPost<FoodRecord>('/app/food/records', data));
   },

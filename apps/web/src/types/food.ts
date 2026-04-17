@@ -53,7 +53,7 @@ export interface FoodRecord {
   id: string;
   userId: string;
   imageUrl?: string;
-  source: 'screenshot' | 'camera' | 'manual';
+  source: 'screenshot' | 'camera' | 'manual' | 'text_analysis' | 'image_analysis';
   recognizedText?: string;
   foods: FoodItem[];
   totalCalories: number;

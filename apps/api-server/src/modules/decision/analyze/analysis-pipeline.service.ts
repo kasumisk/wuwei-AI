@@ -373,6 +373,41 @@ export class AnalysisPipelineService {
       );
     }
 
+    // V3.7 P2.2: 准确度→决策联动 — 低准确度时自动降级 verdict
+    if (foodAnalysisPackage?.accuracyLevel === 'low') {
+      // avoid → caution + disclaimer
+      if (structuredDecision && structuredDecision.verdict === 'avoid') {
+        structuredDecision = {
+          ...structuredDecision,
+          verdict: 'caution',
+        };
+        this.logger.log('P2.2: accuracy=low, downgraded verdict avoid→caution');
+      }
+      if (decisionOutput.decision.recommendation === 'avoid') {
+        decisionOutput = {
+          ...decisionOutput,
+          decision: {
+            ...decisionOutput.decision,
+            recommendation: 'caution',
+          },
+        };
+      }
+      // Enrich summary with accuracy disclaimer
+      if (summary) {
+        const disclaimers: Record<string, string> = {
+          'zh-CN':
+            '⚠️ 分析准确度较低，本次决策已自动降级为谨慎建议，请结合实际情况判断。',
+          'en-US':
+            '⚠️ Analysis accuracy is low. The decision has been automatically downgraded to caution. Please use your own judgment.',
+          'ja-JP':
+            '⚠️ 分析精度が低いため、判定は自動的に注意レベルに引き下げられました。ご自身の判断も併せてください。',
+        };
+        const loc = input.locale || 'zh-CN';
+        const disclaimer = disclaimers[loc] || disclaimers['zh-CN'];
+        summary.analysisQualityNote = disclaimer;
+      }
+    }
+
     const avgConfidence = computeAvgConfidence(input.foods);
     const ingestion =
       input.inputType === 'text'

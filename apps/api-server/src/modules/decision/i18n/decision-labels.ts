@@ -93,6 +93,39 @@ export const COACH_LABELS: Record<string, Record<string, string>> = {
     actionStepsLabel: '行动建议',
     cautionNoteLabel: '注意事项',
     macroSummaryLabel: '每日宏量摘要',
+    // V3.7: 决策引擎因素文案
+    'factor.nutritionOk': '营养摄入在目标范围内',
+    'factor.nutritionOver': '超出热量预算 {amount}kcal',
+    'factor.noBreakdown': '暂无详细评分数据',
+    'factor.macroBalanced': '宏量配比较为均衡',
+    'factor.macroImbalanced': '宏量配比有偏差，建议调整',
+    'factor.macroSeverelyImbalanced': '宏量严重失衡',
+    'factor.noHealthIssue': '未检测到健康风险',
+    'factor.goodTiming': '进食时间合理',
+    'factor.lateNight': '深夜大量进食不利于代谢',
+    'factor.lateNightLight': '深夜进食，建议少量',
+    'factor.eveningHighCarb': '晚间高碳水不利于减脂',
+    // V3.7: 决策引擎多维原因模板
+    'rationale.contextual': '今日热量进度: 目标的{percent}%',
+    'rationale.goalAlignment': '基于「{goalLabel}」目标的判断',
+    'rationale.timelinessLateNight': '深夜进食可能影响睡眠和代谢',
+    // V3.7: 量化后缀模板
+    'suffix.excessCal': '（超出 {amount}kcal）',
+    'suffix.currentProtein': '（当前 {amount}g）',
+    // V3.7: 决策因素标签（来自 decision-coach FACTOR_LABELS）
+    'factorLabel.nutritionAlignment': '营养目标匹配度',
+    'factorLabel.macroBalance': '宏量均衡性',
+    'factorLabel.healthConstraint': '健康约束',
+    'factorLabel.timeliness': '时机合理性',
+    // V3.7: 替代方案比较文案
+    'alt.calLess': '热量少 {amount}kcal',
+    'alt.calMore': '热量多 {amount}kcal',
+    'alt.proteinMore': '蛋白质+{amount}g',
+    'alt.proteinLess': '蛋白质-{amount}g',
+    'alt.balanced': '综合均衡',
+    'alt.lowGlycemicFallback': '低升糖选择（碳水 {carbs}g）',
+    'alt.lateNightMilk': '温牛奶',
+    'alt.lateNightFruit': '小份水果',
   },
   'en-US': {
     analyzedFood: 'Analyzed Food',
@@ -175,6 +208,40 @@ export const COACH_LABELS: Record<string, Record<string, string>> = {
     actionStepsLabel: 'Action Steps',
     cautionNoteLabel: 'Caution Note',
     macroSummaryLabel: 'Daily Macro Summary',
+    // V3.7: Decision engine factor texts
+    'factor.nutritionOk': 'Nutrition intake is within target range',
+    'factor.nutritionOver': 'Over calorie budget by {amount}kcal',
+    'factor.noBreakdown': 'No detailed score data available',
+    'factor.macroBalanced': 'Macro ratio is well balanced',
+    'factor.macroImbalanced': 'Macro ratio is off, consider adjusting',
+    'factor.macroSeverelyImbalanced': 'Macro ratio is severely imbalanced',
+    'factor.noHealthIssue': 'No health risks detected',
+    'factor.goodTiming': 'Good timing for this meal',
+    'factor.lateNight': 'Late-night heavy eating harms metabolism',
+    'factor.lateNightLight': 'Late-night eating, keep it light',
+    'factor.eveningHighCarb': 'Evening high carbs may hinder fat loss',
+    // V3.7: Decision engine rationale templates
+    'rationale.contextual': "Today's calorie progress: {percent}% of target",
+    'rationale.goalAlignment': 'Based on your "{goalLabel}" goal',
+    'rationale.timelinessLateNight':
+      'Late-night eating may affect sleep and metabolism',
+    // V3.7: Quantitative suffix templates
+    'suffix.excessCal': ' (over by {amount}kcal)',
+    'suffix.currentProtein': ' (current: {amount}g)',
+    // V3.7: Decision factor labels
+    'factorLabel.nutritionAlignment': 'Nutrition Alignment',
+    'factorLabel.macroBalance': 'Macro Balance',
+    'factorLabel.healthConstraint': 'Health Constraint',
+    'factorLabel.timeliness': 'Timeliness',
+    // V3.7: Alternative comparison texts
+    'alt.calLess': '{amount}kcal fewer',
+    'alt.calMore': '{amount}kcal more',
+    'alt.proteinMore': '+{amount}g protein',
+    'alt.proteinLess': '-{amount}g protein',
+    'alt.balanced': 'Balanced overall',
+    'alt.lowGlycemicFallback': 'Low-glycemic option ({carbs}g carbs)',
+    'alt.lateNightMilk': 'Warm milk',
+    'alt.lateNightFruit': 'Small fruit serving',
   },
   'ja-JP': {
     analyzedFood: '分析した食品',
@@ -246,7 +313,7 @@ export const COACH_LABELS: Record<string, Record<string, string>> = {
     alternativeRankLabel: '代替案ランク',
     rankReasonsLabel: 'ランク理由',
     dominantDeficitLabel: '主要不足',
-    dominantExcessLabel: '主要超過',    // V3.1
+    dominantExcessLabel: '主要超過', // V3.1
     promptDepthLabel: 'プロンプト深度',
     dynamicWeightLabel: 'ダイナミック信号重み',
     structuredOutputLabel: '構造化出力',
@@ -256,6 +323,40 @@ export const COACH_LABELS: Record<string, Record<string, string>> = {
     cautionNoteLabel: '注意事項',
     macroSummaryLabel: '本日マクロ摘要',
     toneEncouraging: '励まし型',
+    // V3.7: 決定エンジンファクターテキスト
+    'factor.nutritionOk': '栄養摂取は目標範囲内です',
+    'factor.nutritionOver': 'カロリー予算を{amount}kcal超過',
+    'factor.noBreakdown': '詳細なスコアデータがありません',
+    'factor.macroBalanced': 'マクロバランスが良好です',
+    'factor.macroImbalanced': 'マクロバランスに偏りがあります',
+    'factor.macroSeverelyImbalanced': 'マクロバランスが著しく偏っています',
+    'factor.noHealthIssue': '健康リスクは検出されませんでした',
+    'factor.goodTiming': '食事のタイミングは適切です',
+    'factor.lateNight': '深夜の大量摂食は代謝に悪影響です',
+    'factor.lateNightLight': '深夜の食事は少量にしましょう',
+    'factor.eveningHighCarb': '夕方の高炭水化物は減脂に不向きです',
+    // V3.7: 決定エンジン理由テンプレート
+    'rationale.contextual': '本日のカロリー進捗: 目標の{percent}%',
+    'rationale.goalAlignment': '「{goalLabel}」目標に基づく判断',
+    'rationale.timelinessLateNight':
+      '深夜の食事は睡眠と代謝に影響する可能性があります',
+    // V3.7: 定量サフィックス
+    'suffix.excessCal': '（{amount}kcal超過）',
+    'suffix.currentProtein': '（現在 {amount}g）',
+    // V3.7: 決定因素ラベル
+    'factorLabel.nutritionAlignment': '栄養目標適合度',
+    'factorLabel.macroBalance': 'マクロバランス',
+    'factorLabel.healthConstraint': '健康制約',
+    'factorLabel.timeliness': 'タイミング',
+    // V3.7: 代替案比較テキスト
+    'alt.calLess': 'カロリー{amount}kcal少ない',
+    'alt.calMore': 'カロリー{amount}kcal多い',
+    'alt.proteinMore': 'タンパク質+{amount}g',
+    'alt.proteinLess': 'タンパク質-{amount}g',
+    'alt.balanced': '総合的にバランス良好',
+    'alt.lowGlycemicFallback': '低GI選択肢（炭水化物{carbs}g）',
+    'alt.lateNightMilk': 'ホットミルク',
+    'alt.lateNightFruit': '少量のフルーツ',
   },
 };
 

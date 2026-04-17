@@ -66,6 +66,27 @@ export interface CoachI18nStrings {
   'edu.balanced.topic': string;
   'edu.balanced.why': string;
   'edu.balanced.fix': string;
+  // V3.7: CoachFormat 文案
+  'format.reason.pushOverload': string;
+  'format.reason.noSignal': string;
+  'format.suggestion.switchLighter': string;
+  'format.suggestion.reduceFirst': string;
+  'format.suggestion.observeHunger': string;
+  'format.suggestion.nextMealProtein': string;
+  'format.suggestion.keepPace': string;
+  'format.suggestion.addProtein': string;
+  'format.encouragement.strict': string;
+  'format.encouragement.friendly': string;
+  'format.encouragement.data': string;
+  'format.scoreInsight': string;
+  // V3.7: ContextualModifier 文案
+  'modifier.cumulativeSaturation': string;
+  'modifier.lateNightRisk': string;
+  'modifier.multiDayExcess': string;
+  'modifier.healthyStreak': string;
+  'modifier.bingeRisk': string;
+  'modifier.bingeRiskReason': string;
+  'modifier.lowConfidence': string;
 }
 
 const ZH: CoachI18nStrings = {
@@ -130,6 +151,27 @@ const ZH: CoachI18nStrings = {
   'edu.balanced.why':
     '均衡的宏量摄入支持持续供能、肌肉维持和整体健康，每种宏量各有独特作用。',
   'edu.balanced.fix': '继续追踪摄入，保持适合自己生活方式的稳定餐次节律。',
+  // V3.7: CoachFormat 文案
+  'format.reason.pushOverload': '当前这份食物会进一步推高摄入负担',
+  'format.reason.noSignal': '当前没有必须补充的信号',
+  'format.suggestion.switchLighter': '优先换更轻的搭配',
+  'format.suggestion.reduceFirst': '如果一定要吃，先减量再吃',
+  'format.suggestion.observeHunger': '可以先观察饥饿感',
+  'format.suggestion.nextMealProtein': '下一餐优先补蛋白和蔬菜',
+  'format.suggestion.keepPace': '按当前节奏食用',
+  'format.suggestion.addProtein': '可额外搭配一份高蛋白食物',
+  'format.encouragement.strict': '保持边界感，先做最稳妥的选择',
+  'format.encouragement.friendly': '一步一步调整，比一次做满更重要',
+  'format.encouragement.data': '把这次当作一次可量化的小优化',
+  'format.scoreInsight': '{label}({score}分): {message}',
+  // V3.7: ContextualModifier 文案
+  'modifier.cumulativeSaturation': '今日总摄入已超标{percent}%',
+  'modifier.lateNightRisk': '深夜进食可能影响睡眠和代谢',
+  'modifier.multiDayExcess': '连续{days}天超标',
+  'modifier.healthyStreak': '连续{days}天健康饮食，适度放宽',
+  'modifier.bingeRisk': '今日已记录{count}餐，注意暴食风险',
+  'modifier.bingeRiskReason': '今日已记录{count}餐，请关注进食节奏',
+  'modifier.lowConfidence': '当前结论偏保守，建议结合更清晰输入复核',
 };
 
 const EN: CoachI18nStrings = {
@@ -203,6 +245,34 @@ const EN: CoachI18nStrings = {
     'Balanced macronutrients support sustained energy, muscle maintenance, and overall health. Each macronutrient plays a unique role.',
   'edu.balanced.fix':
     'Continue monitoring your intake and maintaining consistent meal patterns that work for your lifestyle.',
+  // V3.7: CoachFormat texts
+  'format.reason.pushOverload':
+    'This food will further increase your intake burden',
+  'format.reason.noSignal': 'No urgent replenishment signal detected',
+  'format.suggestion.switchLighter': 'Switch to a lighter pairing first',
+  'format.suggestion.reduceFirst': 'If you must eat, reduce the portion first',
+  'format.suggestion.observeHunger': 'Observe your hunger level first',
+  'format.suggestion.nextMealProtein':
+    'Prioritize protein and vegetables next meal',
+  'format.suggestion.keepPace': 'Continue eating at current pace',
+  'format.suggestion.addProtein': 'Consider adding a high-protein side',
+  'format.encouragement.strict':
+    'Stay disciplined, make the safest choice first',
+  'format.encouragement.friendly': 'Small steps matter more than perfection',
+  'format.encouragement.data':
+    'Treat this as a small, quantifiable optimization',
+  'format.scoreInsight': '{label}({score}pts): {message}',
+  // V3.7: ContextualModifier texts
+  'modifier.cumulativeSaturation':
+    "Today's intake already {percent}% over budget",
+  'modifier.lateNightRisk': 'Late-night eating may affect sleep and metabolism',
+  'modifier.multiDayExcess': '{days} consecutive days over budget',
+  'modifier.healthyStreak': '{days} days of healthy eating, relaxing slightly',
+  'modifier.bingeRisk': '{count} meals logged today, watch for binge risk',
+  'modifier.bingeRiskReason':
+    '{count} meals logged today, mind your eating pace',
+  'modifier.lowConfidence':
+    'Current conclusion is conservative, consider providing clearer input for review',
 };
 
 const JA: CoachI18nStrings = {
@@ -274,6 +344,29 @@ const JA: CoachI18nStrings = {
     'バランスの取れた栄養素は持続的なエネルギー、筋肉維持、全体的な健康をサポートします。各栄養素は独自の役割を担っています。',
   'edu.balanced.fix':
     '摂取量の追跡を続け、自分のライフスタイルに合った安定した食事パターンを維持してください。',
+  // V3.7: CoachFormat テキスト
+  'format.reason.pushOverload': 'この食事は摂取負担をさらに増やします',
+  'format.reason.noSignal': '緊急の補充シグナルはありません',
+  'format.suggestion.switchLighter': 'まず軽めの組み合わせに切り替えましょう',
+  'format.suggestion.reduceFirst':
+    'どうしても食べるなら、まず量を減らしましょう',
+  'format.suggestion.observeHunger': 'まず空腹感を確認してください',
+  'format.suggestion.nextMealProtein': '次の食事ではタンパク質と野菜を優先',
+  'format.suggestion.keepPace': '現在のペースで食事を続けてください',
+  'format.suggestion.addProtein': '高タンパクのサイドメニューの追加を検討',
+  'format.encouragement.strict': '規律を保ち、最も安全な選択をしましょう',
+  'format.encouragement.friendly': '少しずつの調整が完璧を目指すより大切です',
+  'format.encouragement.data': 'これを定量的な小さな最適化として捉えましょう',
+  'format.scoreInsight': '{label}({score}点): {message}',
+  // V3.7: ContextualModifier テキスト
+  'modifier.cumulativeSaturation': '本日の摂取量が予算を{percent}%超過',
+  'modifier.lateNightRisk': '深夜の食事は睡眠と代謝に影響する可能性があります',
+  'modifier.multiDayExcess': '{days}日連続で超過',
+  'modifier.healthyStreak': '{days}日間健康的な食事、少し余裕を',
+  'modifier.bingeRisk': '本日{count}食記録、過食リスクに注意',
+  'modifier.bingeRiskReason': '本日{count}食記録、食事ペースにご注意',
+  'modifier.lowConfidence':
+    '現在の結論は控えめです。より明確な入力で再確認をお勧めします',
 };
 
 export const COACH_I18N: Record<CoachLocale, CoachI18nStrings> = {

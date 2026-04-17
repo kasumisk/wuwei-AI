@@ -170,10 +170,17 @@ export function DailyPlanCard({ dailyPlan }: DailyPlanCardProps) {
   });
 
   const handleSwapMeal = useCallback(
-    async (slotLabel: string, foods: string) => {
+    async (slotKey: string, slotLabel: string, foods: string) => {
       setSwappingSlot(slotLabel);
       try {
-        await adjustPlan(`${slotLabel}不想吃"${foods}"，请推荐替代方案`);
+        await adjustPlan({
+          reason: `${slotLabel}不想吃"${foods}"，请推荐替代方案`,
+          mealType: (MEAL_TYPE_MAP[slotKey] || 'lunch') as
+            | 'breakfast'
+            | 'lunch'
+            | 'dinner'
+            | 'snack',
+        });
         toast({ title: `${slotLabel}已更新` });
       } catch {
         toast({ title: `${slotLabel}更换失败，请稍后再试`, variant: 'destructive' });
@@ -298,7 +305,7 @@ export function DailyPlanCard({ dailyPlan }: DailyPlanCardProps) {
                 label={slot.label}
                 emoji={slot.emoji}
                 plan={activePlan}
-                onSwap={() => handleSwapMeal(slot.label, activePlan.foods)}
+                onSwap={() => handleSwapMeal(activeTab, slot.label, activePlan.foods)}
                 isSwapping={isAdjusting && swappingSlot === slot.label}
                 onLog={() => handleLogMeal(activeTab, slot.label, activePlan)}
                 isLogging={logMutation.isPending && loggingSlot === slot.label}

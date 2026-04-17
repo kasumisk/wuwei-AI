@@ -292,6 +292,12 @@ export interface ShouldEatAction {
 /** V2.3: 教练行动计划 */
 export interface CoachActionPlan {
   conclusion: string;
+  /** V3.7: 量化数据附在 conclusion 后 */
+  conclusionData?: {
+    calories?: number;
+    remainingCalories?: number;
+    score?: number;
+  };
   why: string[];
   doNow: string[];
   ifAlreadyAte?: string[];
@@ -299,6 +305,8 @@ export interface CoachActionPlan {
   tone: 'strict' | 'encouraging' | 'neutral';
   /** V2.7: 下一餐前瞻建议 */
   nextMeal?: string;
+  /** V3.7: 教育要点 — 基于决策因素的简短知识点 */
+  educationPoint?: string;
 }
 
 // ==================== 子结构定义 ====================

@@ -21,6 +21,14 @@ export class AdjustPlanDto {
   @ApiProperty({ description: '调整原因' })
   @IsString()
   reason: string;
+
+  @ApiPropertyOptional({
+    enum: MealType,
+    description: '可选：指定要替换的餐次（breakfast/lunch/dinner/snack）',
+  })
+  @IsOptional()
+  @IsEnum(MealType)
+  mealType?: MealType;
 }
 
 export class RegeneratePlanDto {
