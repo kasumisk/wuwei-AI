@@ -30,6 +30,10 @@ import { EvidencePackBuilderService } from './analyze/evidence-pack-builder.serv
 import { PostMealRecoveryService } from './decision/post-meal-recovery.service';
 import { ShouldEatActionService } from './decision/should-eat-action.service';
 
+// V2.4 scoring & decision (Phase 1)
+import { ScoringService } from './scoring/scoring.service';
+import { DecisionClassifierService } from './decision/decision-classifier.service';
+
 @Module({
   imports: [
     forwardRef(() => DietModule),
@@ -56,6 +60,9 @@ import { ShouldEatActionService } from './decision/should-eat-action.service';
     EvidencePackBuilderService,
     PostMealRecoveryService,
     ShouldEatActionService,
+    // V2.4 Phase 1
+    ScoringService,
+    DecisionClassifierService,
   ],
   exports: [
     AnalysisPipelineService,
@@ -72,6 +79,9 @@ import { ShouldEatActionService } from './decision/should-eat-action.service';
     EvidencePackBuilderService,
     PostMealRecoveryService,
     ShouldEatActionService,
+    // V2.4 Phase 1
+    ScoringService,
+    DecisionClassifierService,
   ],
 })
 export class DecisionModule {}
