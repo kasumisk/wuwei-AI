@@ -35,7 +35,7 @@ import type {
 import { FoodLibraryService } from '../../food/app/services/food-library.service';
 import { t, Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 import { cl } from '../i18n/decision-labels';
-import { DecisionFoodItem, UserContext } from './food-decision.service';
+import { DecisionFoodItem } from './food-decision.service';
 import { RecommendationEngineService } from '../../diet/app/services/recommendation-engine.service';
 import { MealRecommendation } from '../../diet/app/recommendation/types/recommendation.types';
 import { ContextualAnalysis } from '../types/analysis-result.types';
@@ -60,7 +60,7 @@ export interface AlternativeConstraints {
 export interface AlternativeInput {
   foods: DecisionFoodItem[];
   totals: NutritionTotals;
-  userContext: UserContext;
+  userContext: UnifiedUserContext;
   scoreBreakdown?: NutritionScoreBreakdown;
   locale?: Locale;
   userId?: string;
@@ -217,7 +217,7 @@ export class AlternativeSuggestionService {
   private async getEngineAlternatives(
     foods: DecisionFoodItem[],
     userId: string,
-    ctx: UserContext,
+    ctx: UnifiedUserContext,
     userConstraints?: UserProfileConstraints,
     _preferenceProfile?: UserPreferenceProfile,
     constraints?: AlternativeConstraints,
@@ -395,7 +395,7 @@ export class AlternativeSuggestionService {
   private async getSubstitutionAlternatives(
     foods: DecisionFoodItem[],
     userId: string,
-    ctx: UserContext,
+    ctx: UnifiedUserContext,
     userConstraints?: UserProfileConstraints,
     preferenceProfile?: UserPreferenceProfile,
     constraints?: AlternativeConstraints,
@@ -529,7 +529,7 @@ export class AlternativeSuggestionService {
    */
   private extractConstraintsFromIssues(
     issues?: DietIssue[],
-    ctx?: UserContext,
+    ctx?: UnifiedUserContext,
     nutritionIssues?: NutritionIssue[],
   ): AlternativeConstraints {
     const constraints: AlternativeConstraints = {};
@@ -597,7 +597,7 @@ export class AlternativeSuggestionService {
    */
   private extractConstraintsFromNutritionIssues(
     nutritionIssues: NutritionIssue[],
-    ctx?: UserContext,
+    ctx?: UnifiedUserContext,
     constraints: AlternativeConstraints = {},
   ): AlternativeConstraints {
     for (const ni of nutritionIssues) {
@@ -662,7 +662,7 @@ export class AlternativeSuggestionService {
 
   private generateStaticAlternatives(
     foods: DecisionFoodItem[],
-    ctx: UserContext,
+    ctx: UnifiedUserContext,
     locale?: Locale,
   ): FoodAlternative[] {
     const totalProtein = foods.reduce((s, f) => s + f.protein, 0);
@@ -754,7 +754,7 @@ export class AlternativeSuggestionService {
   private matchesAlternativeRule(
     rule: AlternativeRule,
     food: DecisionFoodItem,
-    ctx: UserContext,
+    ctx: UnifiedUserContext,
     _totalCalories: number,
     _totalProtein: number,
     _totalCarbs: number,
@@ -780,7 +780,7 @@ export class AlternativeSuggestionService {
 
   private matchesGoalRule(
     rule: AlternativeRule,
-    ctx: UserContext,
+    ctx: UnifiedUserContext,
     totalCalories: number,
     totalProtein: number,
     totalCarbs: number,

@@ -67,9 +67,6 @@ export interface DecisionFoodItem {
   estimated?: boolean;
 }
 
-/** 用户上下文（V2.0: 使用统一接口） */
-export type UserContext = UnifiedUserContext;
-
 /** V1.3: 结构化决策因子 */
 export interface DecisionFactor {
   dimension: string;
@@ -144,7 +141,7 @@ export class FoodDecisionService {
   computeFullDecision(
     foods: DecisionFoodItem[],
     totals: NutritionTotals,
-    ctx: UserContext,
+    ctx: UnifiedUserContext,
     nutritionScore: number,
     breakdown: NutritionScoreBreakdown | undefined,
     userId?: string,
@@ -172,7 +169,7 @@ export class FoodDecisionService {
   private async _computeFullDecision(
     foods: DecisionFoodItem[],
     totals: NutritionTotals,
-    ctx: UserContext,
+    ctx: UnifiedUserContext,
     nutritionScore: number,
     breakdown: NutritionScoreBreakdown | undefined,
     userId?: string,
@@ -390,7 +387,7 @@ export class FoodDecisionService {
 
   computeDecision(
     foods: DecisionFoodItem[],
-    ctx: UserContext,
+    ctx: UnifiedUserContext,
     nutritionScore: number,
     locale?: Locale,
   ): FoodDecision {
@@ -422,7 +419,7 @@ export class FoodDecisionService {
   }
 
   generateNextMealAdvice(
-    ctx: UserContext,
+    ctx: UnifiedUserContext,
     currentMealTotals: NutritionTotals,
     locale?: Locale,
     foodPreferences?: {

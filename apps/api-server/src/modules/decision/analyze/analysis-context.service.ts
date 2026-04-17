@@ -35,7 +35,10 @@ export class AnalysisContextService {
    * @param ctx 统一用户上下文
    * @returns 上下文分析对象
    */
-  buildContextualAnalysis(ctx: UnifiedUserContext): ContextualAnalysis {
+  buildContextualAnalysis(
+    ctx: UnifiedUserContext,
+    locale?: import('../../diet/app/recommendation/utils/i18n-messages').Locale,
+  ): ContextualAnalysis {
     // 构建宏量进度快照
     const macroProgress: MacroProgress = {
       consumed: {
@@ -67,6 +70,7 @@ export class AnalysisContextService {
       macroSlotStatus,
       macroProgress,
       ctx.healthConditions,
+      locale,
     );
 
     // 构建推荐系统条件

@@ -61,6 +61,7 @@ import { AnalysisAccuracyService } from './analysis-accuracy.service';
 import { AnalysisContextService } from './analysis-context.service';
 import { DecisionEngineService } from '../decision/decision-engine.service';
 import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
+import { cl } from '../i18n/decision-labels';
 
 // ==================== 管道输入类型 ====================
 
@@ -161,8 +162,10 @@ export class AnalysisPipelineService {
     // V3.3 Step 4.1: 构建上下文分析（当天摄入 + 用户画像 + 问题识别）
     let contextualAnalysis: ContextualAnalysis | undefined;
     try {
-      contextualAnalysis =
-        this.analysisContextService.buildContextualAnalysis(userContext);
+      contextualAnalysis = this.analysisContextService.buildContextualAnalysis(
+        userContext,
+        input.locale,
+      );
       // 将当前食物加入排除列表（去重）
       if (contextualAnalysis) {
         contextualAnalysis =
@@ -188,22 +191,7 @@ export class AnalysisPipelineService {
     let decisionOutput: DecisionOutput;
     try {
       decisionOutput = await this.foodDecisionService.computeFullDecision(
-        input.foods.map((f) => ({
-          name: f.name,
-          estimatedWeightGrams:
-            f.estimatedWeightGrams ||
-            (f.calories > 0 ? Math.round(f.calories / 1.5) : 100),
-          category: f.category,
-          confidence: f.confidence,
-          calories: f.calories || 0,
-          protein: f.protein || 0,
-          fat: f.fat || 0,
-          carbs: f.carbs || 0,
-          fiber: f.fiber,
-          sodium: f.sodium,
-          saturatedFat: f.saturatedFat,
-          addedSugar: f.addedSugar,
-        })),
+        this.toDecisionFoodItems(input.foods),
         totals,
         userContext,
         score.nutritionScore,
@@ -216,29 +204,14 @@ export class AnalysisPipelineService {
       );
     } catch (err) {
       this.logger.warn(`决策计算失败，使用默认: ${(err as Error).message}`);
-      decisionOutput = this.buildFallbackDecision();
+      decisionOutput = this.buildFallbackDecision(input.locale);
     }
 
     // V3.3 Step 5.45: 计算 StructuredDecision（在摘要之前，供摘要消费）
     let structuredDecision: StructuredDecision | undefined;
     try {
       structuredDecision = this.decisionEngineService.computeStructuredDecision(
-        input.foods.map((f) => ({
-          name: f.name,
-          estimatedWeightGrams:
-            f.estimatedWeightGrams ||
-            (f.calories > 0 ? Math.round(f.calories / 1.5) : 100),
-          category: f.category,
-          confidence: f.confidence,
-          calories: f.calories || 0,
-          protein: f.protein || 0,
-          fat: f.fat || 0,
-          carbs: f.carbs || 0,
-          fiber: f.fiber,
-          sodium: f.sodium,
-          saturatedFat: f.saturatedFat,
-          addedSugar: f.addedSugar,
-        })),
+        this.toDecisionFoodItems(input.foods),
         userContext,
         score.nutritionScore,
         score.breakdown,
@@ -263,6 +236,8 @@ export class AnalysisPipelineService {
         // V3.5 P2.3: 传入营养问题列表和决策模式
         nutritionIssues: contextualAnalysis?.identifiedIssues,
         decisionMode: mode,
+        // V3.8: locale for i18n
+        locale: input.locale,
       });
     } catch (err) {
       this.logger.warn(`摘要生成失败: ${(err as Error).message}`);
@@ -277,7 +252,12 @@ export class AnalysisPipelineService {
         summary,
       });
       if (summary && confidenceDiagnostics) {
-        this.enrichSummaryWithConfidence(summary, confidenceDiagnostics, mode);
+        this.enrichSummaryWithConfidence(
+          summary,
+          confidenceDiagnostics,
+          mode,
+          input.locale,
+        );
       }
     } catch (err) {
       this.logger.warn(`置信度诊断失败: ${(err as Error).message}`);
@@ -625,19 +605,41 @@ export class AnalysisPipelineService {
   }
 
   /**
+   * V3.8: 将 AnalyzedFoodItem[] 转换为决策所需的食物参数格式
+   */
+  private toDecisionFoodItems(foods: AnalyzedFoodItem[]) {
+    return foods.map((f) => ({
+      name: f.name,
+      estimatedWeightGrams:
+        f.estimatedWeightGrams ||
+        (f.calories > 0 ? Math.round(f.calories / 1.5) : 100),
+      category: f.category,
+      confidence: f.confidence,
+      calories: f.calories || 0,
+      protein: f.protein || 0,
+      fat: f.fat || 0,
+      carbs: f.carbs || 0,
+      fiber: f.fiber,
+      sodium: f.sodium,
+      saturatedFat: f.saturatedFat,
+      addedSugar: f.addedSugar,
+    }));
+  }
+
+  /**
    * 构建 fallback 决策输出（当决策服务失败时）
    */
-  private buildFallbackDecision(): DecisionOutput {
+  private buildFallbackDecision(locale?: Locale): DecisionOutput {
     return {
       decision: {
         recommendation: 'caution',
         shouldEat: true,
-        reason: '暂时无法完成决策分析，建议适量食用',
+        reason: cl('pipeline.fallback.reason', locale),
         riskLevel: 'medium',
       },
       alternatives: [],
       explanation: {
-        summary: '分析服务暂时不可用，请稍后重试',
+        summary: cl('pipeline.fallback.summary', locale),
       },
       decisionFactors: [],
     };
@@ -647,21 +649,21 @@ export class AnalysisPipelineService {
     summary: NonNullable<FoodAnalysisResultV61['summary']>,
     diagnostics: ConfidenceDiagnostics,
     mode?: 'pre_eat' | 'post_eat',
+    locale?: Locale,
   ): void {
     summary.analysisQualityBand = diagnostics.analysisQualityBand;
     summary.reviewLevel = diagnostics.reviewLevel;
     if (diagnostics.analysisQualityBand === 'high') {
-      summary.analysisQualityNote = '分析质量较高，可按当前建议执行。';
+      summary.analysisQualityNote = cl('pipeline.quality.high', locale);
     } else if (diagnostics.analysisQualityBand === 'medium') {
-      summary.analysisQualityNote = '分析质量中等，建议结合饥饿感与份量微调。';
+      summary.analysisQualityNote = cl('pipeline.quality.medium', locale);
     } else {
-      summary.analysisQualityNote =
-        '分析质量偏低，建议先保守执行并补充更清晰输入复核。';
+      summary.analysisQualityNote = cl('pipeline.quality.low', locale);
     }
 
     const guardrails: string[] = [];
     if (summary.analysisQualityBand === 'low') {
-      guardrails.push('当前分析质量偏低，先按保守策略执行。');
+      guardrails.push(cl('pipeline.guardrail.lowQuality', locale));
     }
     if (summary.healthConstraintNote) {
       guardrails.push(summary.healthConstraintNote);
@@ -670,11 +672,11 @@ export class AnalysisPipelineService {
       guardrails.push(summary.dynamicDecisionHint);
     }
     if (summary.verdict === 'avoid') {
-      guardrails.push('当前建议为不建议继续吃，优先执行替代或减量。');
+      guardrails.push(cl('pipeline.guardrail.avoid', locale));
     }
     // V3.5 P3.1: post_eat 模式追加恢复型 guardrail
     if (mode === 'post_eat') {
-      guardrails.push('已进食完毕，重点关注下一餐调整与适度运动消耗。');
+      guardrails.push(cl('pipeline.guardrail.postEat', locale));
     }
 
     summary.decisionGuardrails = Array.from(new Set(guardrails)).slice(0, 3);

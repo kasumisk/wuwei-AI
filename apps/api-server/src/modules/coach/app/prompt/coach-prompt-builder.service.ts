@@ -812,7 +812,7 @@ ${replyLang}，每条消息不超过 150 字，不要使用 Markdown 格式。`;
     }
     // V3.1: dailyMacroSummary 摘要文本
     if (analysisContext.evidencePack?.dailyMacroSummary) {
-      ctx += `\n\n【每日摘要】\n${analysisContext.evidencePack.dailyMacroSummary}`;
+      ctx += `\n\n【${cl('dailySummaryHeader', locale)}】\n${analysisContext.evidencePack.dailyMacroSummary}`;
     }
     // V3.0: 语气修饰
     if (analysisContext.evidencePack?.toneModifier) {
@@ -830,7 +830,7 @@ ${replyLang}，每条消息不超过 150 字，不要使用 Markdown 格式。`;
             `  ${n.step}. [${n.source}${n.weight ? '/' + n.weight : ''}] ${n.content}`,
         )
         .join('\n');
-      ctx += `\n\n【解释链路】\n${nodeLines}`;
+      ctx += `\n\n【${cl('explanationChainHeader', locale)}】\n${nodeLines}`;
     }
     // V3.1: detailed 模式追加结构化输出摘要
     if (
@@ -838,9 +838,11 @@ ${replyLang}，每条消息不超过 150 字，不要使用 Markdown 格式。`;
       analysisContext.evidencePack?.structuredOutput
     ) {
       const so = analysisContext.evidencePack.structuredOutput;
-      ctx += `\n\n【结构化建议】\n判决: ${so.verdict}\n主要原因: ${so.mainReason}`;
-      if (so.cautionNote) ctx += `\n注意: ${so.cautionNote}`;
-      if (so.confidenceNote) ctx += `\n置信度说明: ${so.confidenceNote}`;
+      ctx += `\n\n【${cl('structuredAdviceHeader', locale)}】\n${cl('verdictLabel2', locale)}: ${so.verdict}\n${cl('mainReasonLabel', locale)}: ${so.mainReason}`;
+      if (so.cautionNote)
+        ctx += `\n${cl('cautionNoteLabel', locale)}: ${so.cautionNote}`;
+      if (so.confidenceNote)
+        ctx += `\n${cl('confidenceNoteLabel', locale)}: ${so.confidenceNote}`;
     }
 
     // 宏量进度（保留，教练需要全局视角）
@@ -964,7 +966,7 @@ ${replyLang}，每条消息不超过 150 字，不要使用 Markdown 格式。`;
     }
     // V3.1: dailyMacroSummary
     if (analysisContext.evidencePack?.dailyMacroSummary) {
-      ctx += `\n\n【每日摘要】\n${analysisContext.evidencePack.dailyMacroSummary}`;
+      ctx += `\n\n【${cl('dailySummaryHeader', locale)}】\n${analysisContext.evidencePack.dailyMacroSummary}`;
     }
     // V3.0: 语气修饰
     if (analysisContext.evidencePack?.toneModifier) {

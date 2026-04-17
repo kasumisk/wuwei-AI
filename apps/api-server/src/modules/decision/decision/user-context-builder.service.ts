@@ -1,8 +1,8 @@
 /**
  * V1.9 Phase 1.5 — 统一用户上下文构建服务
  *
- * 合并 TextFoodAnalysisService.buildUserContext() 和
- * ImageFoodAnalysisService.buildUserContext() 的重复逻辑。
+ * 合并 TextFoodAnalysisService.buildUnifiedUserContext() 和
+ * ImageFoodAnalysisService.buildUnifiedUserContext() 的重复逻辑。
  *
  * 职责:
  * - build(): 构建结构化用户上下文（含目标/今日摄入/目标值/画像信息）
@@ -21,29 +21,24 @@ import {
   UnifiedUserContext,
   MacroSlotStatus,
 } from '../types/analysis-result.types';
+import { cl } from '../i18n/decision-labels';
 
 // ==================== 输出类型 ====================
 
-/**
- * @deprecated Use UnifiedUserContext from analysis-result.types.ts instead.
- * Kept as alias for backward compatibility.
- */
-export type UserContext = UnifiedUserContext;
-
 // ==================== 目标上下文（图片链路格式化用） ====================
 
-const GOAL_CONTEXT: Record<string, { label: string; focus: string }> = {
-  fat_loss: { label: '减脂', focus: '优先关注：热量不超标 + 蛋白质充足' },
-  muscle_gain: {
-    label: '增肌',
-    focus: '优先关注：蛋白质是否充足 + 热量不能太低',
-  },
-  health: { label: '均衡健康', focus: '优先关注：食物质量和营养均衡' },
-  habit: {
-    label: '改善饮食习惯',
-    focus: '优先关注：食物质量和饱腹感，鼓励坚持记录',
-  },
-};
+function getGoalContext(
+  goalType: string,
+  locale?: Locale,
+): { label: string; focus: string } {
+  const key = ['fat_loss', 'muscle_gain', 'health', 'habit'].includes(goalType)
+    ? goalType
+    : 'health';
+  return {
+    label: cl(`ctx.goal.${key}`, locale),
+    focus: cl(`ctx.focus.${key}`, locale),
+  };
+}
 
 // ==================== 服务 ====================
 
@@ -52,38 +47,31 @@ const GOAL_CONTEXT: Record<string, { label: string; focus: string }> = {
  *
  * 目的：让 Vision AI / LLM 在分析时优先关注对该用户最重要的营养维度
  */
-function buildHealthConditionGuidance(conditions: string[]): string {
+function buildHealthConditionGuidance(
+  conditions: string[],
+  locale?: Locale,
+): string {
   if (!conditions || conditions.length === 0) return '';
 
-  const lines: string[] = ['【健康条件特别注意】'];
+  const lines: string[] = [cl('ctx.health.header', locale)];
 
   if (conditions.includes('diabetes')) {
-    lines.push(
-      '- 糖尿病用户：必须关注碳水化合物总量和升糖指数。高淀粉/高糖食物（白米、白面、甜品、含糖饮料）要在 reason 中明确标注风险，decision 倾向 LIMIT/AVOID。',
-    );
+    lines.push(cl('ctx.health.diabetes', locale));
   }
   if (conditions.includes('hypertension')) {
-    lines.push(
-      '- 高血压用户：必须关注钠含量。腌制食品、酱料、外卖重口味食物要标注高钠风险，建议低钠替代，decision 倾向 LIMIT。',
-    );
+    lines.push(cl('ctx.health.hypertension', locale));
   }
   if (
     conditions.includes('heart_disease') ||
     conditions.includes('cardiovascular')
   ) {
-    lines.push(
-      '- 心脏病/心血管风险用户：必须关注饱和脂肪和总脂肪。油炸食品、肥肉、全脂乳制品要明确标注风险，decision 倾向 LIMIT/AVOID。',
-    );
+    lines.push(cl('ctx.health.heart', locale));
   }
   if (conditions.includes('gout')) {
-    lines.push(
-      '- 痛风用户：关注高嘌呤食物（海鲜、动物内脏、浓肉汤）。识别到高嘌呤食物时在 reason 中提示，建议低嘌呤替代。',
-    );
+    lines.push(cl('ctx.health.gout', locale));
   }
   if (conditions.includes('kidney_disease')) {
-    lines.push(
-      '- 肾病用户：关注蛋白质总量（不宜过高）、钾和磷含量。高蛋白食物不等于好，需在 suggestion 中提示适量。',
-    );
+    lines.push(cl('ctx.health.kidney', locale));
   }
 
   return lines.length > 1 ? lines.join('\n') : '';
@@ -102,9 +90,9 @@ export class UserContextBuilderService {
   /**
    * 构建结构化用户上下文
    */
-  async build(userId?: string, locale?: Locale): Promise<UserContext> {
+  async build(userId?: string, locale?: Locale): Promise<UnifiedUserContext> {
     const localHour = getUserLocalHour(DEFAULT_TIMEZONE);
-    const defaults: UserContext = {
+    const defaults: UnifiedUserContext = {
       goalType: 'health',
       goalLabel: t('decision.goal.health', {}, locale),
       todayCalories: 0,
@@ -228,46 +216,51 @@ export class UserContextBuilderService {
   /**
    * 将结构化上下文格式化为 prompt 字符串（图片链路使用）
    */
-  formatAsPromptString(ctx: UserContext): string {
+  formatAsPromptString(ctx: UnifiedUserContext, locale?: Locale): string {
     if (!ctx.profile) return '';
 
-    const gc = GOAL_CONTEXT[ctx.goalType] || GOAL_CONTEXT.health;
+    const gc = getGoalContext(ctx.goalType, locale);
     const mealHint =
       ctx.localHour < 10
-        ? '早餐'
+        ? cl('ctx.meal.breakfast', locale)
         : ctx.localHour < 14
-          ? '午餐'
+          ? cl('ctx.meal.lunch', locale)
           : ctx.localHour < 18
-            ? '下午茶'
-            : '晚餐';
+            ? cl('ctx.meal.afternoon', locale)
+            : cl('ctx.meal.dinner', locale);
 
-    let text = `【用户饮食目标】${gc.label}
+    let text = `${cl('ctx.prompt.goalHeader', locale)}${gc.label}
 ${gc.focus}
 
-【今日营养预算剩余】
-- 热量：剩余 ${ctx.remainingCalories} kcal（总目标 ${ctx.goalCalories}，已摄入 ${ctx.todayCalories}）
-- 蛋白质：剩余 ${ctx.remainingProtein}g（总目标 ${ctx.goalProtein}g，已摄入 ${ctx.todayProtein}g）
-- 脂肪：剩余 ${ctx.remainingFat}g（总目标 ${ctx.goalFat}g，已摄入 ${ctx.todayFat}g）
-- 碳水：剩余 ${ctx.remainingCarbs}g（总目标 ${ctx.goalCarbs}g，已摄入 ${ctx.todayCarbs}g）
-- 已记录餐数：${ctx.mealCount} 餐
-- 当前时段：${mealHint}`;
+${cl('ctx.prompt.budgetHeader', locale)}
+- ${cl('ctx.prompt.calories', locale).replace('{remaining}', String(ctx.remainingCalories)).replace('{goal}', String(ctx.goalCalories)).replace('{consumed}', String(ctx.todayCalories))}
+- ${cl('ctx.prompt.protein', locale).replace('{remaining}', String(ctx.remainingProtein)).replace('{goal}', String(ctx.goalProtein)).replace('{consumed}', String(ctx.todayProtein))}
+- ${cl('ctx.prompt.fat', locale).replace('{remaining}', String(ctx.remainingFat)).replace('{goal}', String(ctx.goalFat)).replace('{consumed}', String(ctx.todayFat))}
+- ${cl('ctx.prompt.carbs', locale).replace('{remaining}', String(ctx.remainingCarbs)).replace('{goal}', String(ctx.goalCarbs)).replace('{consumed}', String(ctx.todayCarbs))}
+- ${cl('ctx.prompt.mealCount', locale).replace('{count}', String(ctx.mealCount))}
+- ${cl('ctx.prompt.mealPeriod', locale).replace('{period}', mealHint)}`;
 
     const profile = ctx.profile;
     if (profile.gender)
-      text += `\n- 性别：${profile.gender === 'male' ? '男' : '女'}`;
-    if (profile.activityLevel) text += `\n- 活动等级：${profile.activityLevel}`;
+      text += `\n- ${cl('ctx.prompt.gender', locale).replace('{value}', profile.gender === 'male' ? cl('ctx.prompt.gender.male', locale) : cl('ctx.prompt.gender.female', locale))}`;
+    if (profile.activityLevel)
+      text += `\n- ${cl('ctx.prompt.activityLevel', locale).replace('{value}', profile.activityLevel)}`;
     if ((profile.foodPreferences as string[])?.length)
-      text += `\n- 饮食偏好：${(profile.foodPreferences as string[]).join('、')}`;
+      text += `\n- ${cl('ctx.prompt.foodPreferences', locale).replace('{value}', (profile.foodPreferences as string[]).join('、'))}`;
     if (ctx.dietaryRestrictions.length)
-      text += `\n- 忌口：${ctx.dietaryRestrictions.join('、')}`;
-    if (ctx.budgetStatus) text += `\n- 预算状态：${ctx.budgetStatus}`;
+      text += `\n- ${cl('ctx.prompt.dietaryRestrictions', locale).replace('{value}', ctx.dietaryRestrictions.join('、'))}`;
+    if (ctx.budgetStatus)
+      text += `\n- ${cl('ctx.prompt.budgetStatus', locale).replace('{value}', ctx.budgetStatus)}`;
     if (ctx.nutritionPriority?.length)
-      text += `\n- 当前优先修正：${ctx.nutritionPriority.join('、')}`;
+      text += `\n- ${cl('ctx.prompt.nutritionPriority', locale).replace('{value}', ctx.nutritionPriority.join('、'))}`;
     if (ctx.contextSignals?.length)
-      text += `\n- 决策信号：${ctx.contextSignals.join('、')}`;
+      text += `\n- ${cl('ctx.prompt.contextSignals', locale).replace('{value}', ctx.contextSignals.join('、'))}`;
 
     // V3.4 P1.1: 健康条件特异性指令
-    const healthGuidance = buildHealthConditionGuidance(ctx.healthConditions);
+    const healthGuidance = buildHealthConditionGuidance(
+      ctx.healthConditions,
+      locale,
+    );
     if (healthGuidance) {
       text += `\n\n${healthGuidance}`;
     }

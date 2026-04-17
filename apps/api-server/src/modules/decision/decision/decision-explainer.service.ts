@@ -19,7 +19,7 @@ import {
 } from '../types/analysis-result.types';
 import { NutritionScoreBreakdown } from '../../diet/app/services/nutrition-score.service';
 import { t, Locale } from '../../diet/app/recommendation/utils/i18n-messages';
-import { DecisionFoodItem, UserContext } from './food-decision.service';
+import { DecisionFoodItem } from './food-decision.service';
 import { DIMENSION_LABELS } from '../config/scoring-dimensions';
 import { cl as dlCl } from '../i18n/decision-labels';
 import {
@@ -46,7 +46,7 @@ export interface DecisionChainInput {
 export interface ExplanationInput {
   foods: DecisionFoodItem[];
   decision: FoodDecision;
-  ctx: UserContext;
+  ctx: UnifiedUserContext;
   breakdown?: NutritionScoreBreakdown;
 }
 

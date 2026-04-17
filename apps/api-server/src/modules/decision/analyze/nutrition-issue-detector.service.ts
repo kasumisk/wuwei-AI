@@ -17,6 +17,8 @@ import {
   NutritionIssue,
   IssueType,
 } from '../types/analysis-result.types';
+import { cl } from '../i18n/decision-labels';
+import type { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 
 interface MacroProgress {
   consumed: { calories: number; protein: number; fat: number; carbs: number };
@@ -33,7 +35,11 @@ interface IssueDetectionRule {
   ) => 'low' | 'medium' | 'high';
   metricCalculator: (progress: MacroProgress) => number;
   thresholdCalculator: (progress: MacroProgress) => number;
-  implicationTemplate: (metric: number, threshold: number) => string;
+  implicationTemplate: (
+    metric: number,
+    threshold: number,
+    locale?: Locale,
+  ) => string;
 }
 
 @Injectable()
@@ -51,8 +57,11 @@ export class NutritionIssueDetector {
       },
       metricCalculator: (progress) => progress.remaining.protein,
       thresholdCalculator: (progress) => progress.goals.protein * 0.1, // 10% 差值认为缺口
-      implicationTemplate: (metric, _threshold) =>
-        `蛋白质还差 ${Math.round(metric)}g，建议下餐补足`,
+      implicationTemplate: (metric, _threshold, locale) =>
+        cl('issue.proteinDeficit', locale).replace(
+          '{amount}',
+          String(Math.round(metric)),
+        ),
     },
 
     // 脂肪超标
@@ -69,8 +78,11 @@ export class NutritionIssueDetector {
       metricCalculator: (progress) =>
         progress.consumed.fat - progress.goals.fat,
       thresholdCalculator: (progress) => progress.goals.fat * 0.15,
-      implicationTemplate: (metric, _threshold) =>
-        `脂肪超标 ${Math.round(metric)}g，建议减少油炸食物`,
+      implicationTemplate: (metric, _threshold, locale) =>
+        cl('issue.fatExcess', locale).replace(
+          '{amount}',
+          String(Math.round(metric)),
+        ),
     },
 
     // 碳水超标
@@ -87,8 +99,11 @@ export class NutritionIssueDetector {
       metricCalculator: (progress) =>
         progress.consumed.carbs - progress.goals.carbs,
       thresholdCalculator: (progress) => progress.goals.carbs * 0.15,
-      implicationTemplate: (metric, _threshold) =>
-        `碳水超标 ${Math.round(metric)}g，建议减少主食`,
+      implicationTemplate: (metric, _threshold, locale) =>
+        cl('issue.carbExcess', locale).replace(
+          '{amount}',
+          String(Math.round(metric)),
+        ),
     },
 
     // 热量超标
@@ -105,8 +120,11 @@ export class NutritionIssueDetector {
       metricCalculator: (progress) =>
         progress.consumed.calories - progress.goals.calories,
       thresholdCalculator: (progress) => progress.goals.calories * 0.08,
-      implicationTemplate: (metric, _threshold) =>
-        `热量超标 ${Math.round(metric)} kcal，建议今日剩余餐控制`,
+      implicationTemplate: (metric, _threshold, locale) =>
+        cl('issue.calorieExcess', locale).replace(
+          '{amount}',
+          String(Math.round(metric)),
+        ),
     },
 
     // 热量不足
@@ -123,8 +141,11 @@ export class NutritionIssueDetector {
       metricCalculator: (progress) =>
         progress.goals.calories - progress.consumed.calories,
       thresholdCalculator: (progress) => progress.goals.calories * 0.1,
-      implicationTemplate: (metric, _threshold) =>
-        `热量不足 ${Math.round(metric)} kcal，建议适度增加摄入`,
+      implicationTemplate: (metric, _threshold, locale) =>
+        cl('issue.calorieDeficit', locale).replace(
+          '{amount}',
+          String(Math.round(metric)),
+        ),
     },
 
     // 纤维素不足（仅当 slot.carbs 不超标时才检测，作为代理信号）
@@ -142,7 +163,7 @@ export class NutritionIssueDetector {
       severityCalculator: () => 'low', // 纤维问题通常低优先级
       metricCalculator: () => 0, // 占位
       thresholdCalculator: () => 0,
-      implicationTemplate: () => '建议增加高纤维食物（蔬菜、全谷物）',
+      implicationTemplate: (_m, _t, locale) => cl('issue.fiberDeficit', locale),
     },
 
     // 糖分超标（V3.6 P1.6 新增）
@@ -159,8 +180,11 @@ export class NutritionIssueDetector {
       metricCalculator: (progress) =>
         progress.consumed.carbs - progress.goals.carbs,
       thresholdCalculator: (progress) => progress.goals.carbs * 0.15,
-      implicationTemplate: (metric) =>
-        `碳水/糖分超标 ${Math.round(metric)}g，注意控制甜食与精制主食`,
+      implicationTemplate: (metric, _t, locale) =>
+        cl('issue.sugarExcess', locale).replace(
+          '{amount}',
+          String(Math.round(metric)),
+        ),
     },
   ];
 
@@ -176,6 +200,7 @@ export class NutritionIssueDetector {
     slot: MacroSlotStatus,
     progress: MacroProgress,
     healthConditions?: string[],
+    locale?: Locale,
   ): NutritionIssue[] {
     const issues: NutritionIssue[] = [];
 
@@ -190,7 +215,7 @@ export class NutritionIssueDetector {
           severity,
           metric: Math.round(metric * 100) / 100, // 保留2位小数
           threshold: Math.round(threshold * 100) / 100,
-          implication: rule.implicationTemplate(metric, threshold),
+          implication: rule.implicationTemplate(metric, threshold, locale),
         });
       }
     }
@@ -211,7 +236,10 @@ export class NutritionIssueDetector {
             carbsExcess > progress.goals.carbs * 0.2 ? 'high' : 'medium',
           metric: Math.round(carbsExcess * 100) / 100,
           threshold: 0,
-          implication: `糖尿病用户碳水超标 ${Math.round(carbsExcess)}g，存在血糖风险，建议选择低GI食物`,
+          implication: cl('issue.glycemicRisk', locale).replace(
+            '{amount}',
+            String(Math.round(carbsExcess)),
+          ),
         });
       }
 
@@ -227,7 +255,7 @@ export class NutritionIssueDetector {
             severity: 'medium',
             metric: 0,
             threshold: 0,
-            implication: '高血压用户需注意钠摄入，避免高盐、高油加工食物',
+            implication: cl('issue.sodiumRisk', locale),
           });
         }
       }
@@ -245,7 +273,10 @@ export class NutritionIssueDetector {
           severity: fatExcess > progress.goals.fat * 0.25 ? 'high' : 'medium',
           metric: Math.round(fatExcess * 100) / 100,
           threshold: 0,
-          implication: `心血管疾病用户脂肪超标 ${Math.round(fatExcess)}g，建议减少饱和脂肪摄入`,
+          implication: cl('issue.cardiovascularRisk', locale).replace(
+            '{amount}',
+            String(Math.round(fatExcess)),
+          ),
         });
       }
 
@@ -259,7 +290,7 @@ export class NutritionIssueDetector {
           severity: 'medium',
           metric: 0,
           threshold: 0,
-          implication: '痛风用户蛋白质偏高，注意避免动物内脏、海鲜等高嘌呤食物',
+          implication: cl('issue.purineRisk', locale),
         });
       }
 
@@ -276,7 +307,10 @@ export class NutritionIssueDetector {
             proteinExcess > progress.goals.protein * 0.2 ? 'high' : 'medium',
           metric: Math.round(proteinExcess * 100) / 100,
           threshold: 0,
-          implication: `肾病用户蛋白质超标 ${Math.round(proteinExcess)}g，增加肾脏负担，建议严格控制蛋白质总量`,
+          implication: cl('issue.kidneyStress', locale).replace(
+            '{amount}',
+            String(Math.round(proteinExcess)),
+          ),
         });
       }
     }
