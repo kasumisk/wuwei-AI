@@ -345,6 +345,7 @@ export class AnalysisPipelineService {
           satiety: 50,
           stability: 50,
           glycemicImpact: 50,
+          mealQuality: 50,
         },
       };
     } catch (err) {

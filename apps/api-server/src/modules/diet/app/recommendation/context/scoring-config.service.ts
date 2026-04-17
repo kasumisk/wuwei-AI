@@ -8,6 +8,18 @@ import {
 import { GoalType } from '../../../app/services/nutrition-score.service';
 
 /**
+ * V1.5: 每日评分权重可配置化 — 存储在 feature_flag 表 daily_score_weights key
+ */
+export interface DailyScoreWeightsConfig {
+  version: string;
+  updatedAt: string;
+  /** 按目标类型的 8 维权重（覆盖 GOAL_WEIGHTS 硬编码） */
+  goalWeights: Record<string, Record<string, number>>;
+  /** 按健康条件的维度倍数（覆盖 conditionMultipliers 硬编码） */
+  healthConditionMultipliers: Record<string, Record<string, number>>;
+}
+
+/**
  * V7.0: 评分配置分片键
  *
  * 允许按目标/上下文加载不同的配置组。
@@ -398,6 +410,237 @@ export class ScoringConfigService implements OnModuleInit {
    */
   clearShardCache(): void {
     this.shardCache.clear();
+  }
+
+  // ─── V1.5: 每日评分权重配置 ───
+
+  private dailyScoreWeightsCache: DailyScoreWeightsConfig | null = null;
+  private dailyScoreWeightsCacheTime = 0;
+  private readonly DAILY_SCORE_WEIGHTS_KEY = 'daily_score_weights';
+  private readonly DAILY_SCORE_WEIGHTS_CACHE_KEY =
+    'daily_score_weights:snapshot';
+
+  /**
+   * V1.5: 获取每日评分权重配置
+   *
+   * 优先级: 内存缓存 → Redis → feature_flag DB → null (降级到硬编码)
+   * 热路径零 IO（5 分钟 TTL）
+   */
+  async getDailyScoreWeights(): Promise<DailyScoreWeightsConfig | null> {
+    // 内存缓存
+    if (
+      this.dailyScoreWeightsCache &&
+      Date.now() - this.dailyScoreWeightsCacheTime < this.CACHE_TTL_MS
+    ) {
+      return this.dailyScoreWeightsCache;
+    }
+
+    // Redis
+    try {
+      const cached = await this.redis.get<DailyScoreWeightsConfig>(
+        this.DAILY_SCORE_WEIGHTS_CACHE_KEY,
+      );
+      if (cached) {
+        this.dailyScoreWeightsCache = cached;
+        this.dailyScoreWeightsCacheTime = Date.now();
+        return cached;
+      }
+    } catch {
+      /* Redis unavailable */
+    }
+
+    // DB
+    try {
+      const flag = await this.prisma.featureFlag.findUnique({
+        where: { key: this.DAILY_SCORE_WEIGHTS_KEY },
+      });
+      if (flag?.config && typeof flag.config === 'object') {
+        const config = flag.config as unknown as DailyScoreWeightsConfig;
+        this.dailyScoreWeightsCache = config;
+        this.dailyScoreWeightsCacheTime = Date.now();
+        this.redis
+          .set(this.DAILY_SCORE_WEIGHTS_CACHE_KEY, config, this.CACHE_TTL_MS)
+          .catch(() => {});
+        return config;
+      }
+    } catch {
+      /* DB unavailable */
+    }
+
+    return null;
+  }
+
+  /**
+   * V1.5: 更新每日评分权重配置
+   * V1.6: 增加验证
+   *
+   * Admin API 调用，写入 DB + Redis + 内存
+   */
+  async updateDailyScoreWeights(
+    config: DailyScoreWeightsConfig,
+  ): Promise<DailyScoreWeightsConfig> {
+    // V1.6: 验证
+    const errors = this.validateDailyScoreWeights(config);
+    if (errors.length > 0) {
+      throw new Error(
+        `Daily score weights validation failed: ${errors.join('; ')}`,
+      );
+    }
+
+    await this.prisma.featureFlag.upsert({
+      where: { key: this.DAILY_SCORE_WEIGHTS_KEY },
+      update: {
+        config: config as any,
+        updatedAt: new Date(),
+      },
+      create: {
+        key: this.DAILY_SCORE_WEIGHTS_KEY,
+        name: 'V1.5 Daily Score Weights',
+        type: 'boolean',
+        enabled: true,
+        config: config as any,
+      },
+    });
+
+    this.dailyScoreWeightsCache = config;
+    this.dailyScoreWeightsCacheTime = Date.now();
+    await this.redis
+      .set(this.DAILY_SCORE_WEIGHTS_CACHE_KEY, config, this.CACHE_TTL_MS)
+      .catch(() => {});
+
+    this.logger.log(`Daily score weights updated: version=${config.version}`);
+    return config;
+  }
+
+  /**
+   * V1.6: 验证每日评分权重配置
+   * 返回错误消息数组（空 = 通过）
+   */
+  validateDailyScoreWeights(config: DailyScoreWeightsConfig): string[] {
+    const errors: string[] = [];
+    const REQUIRED_DIMS = [
+      'energy',
+      'proteinRatio',
+      'macroBalance',
+      'foodQuality',
+      'satiety',
+      'stability',
+      'glycemicImpact',
+      'mealQuality',
+    ];
+
+    if (!config.version || typeof config.version !== 'string') {
+      errors.push('version is required and must be a string');
+    }
+
+    if (!config.goalWeights || typeof config.goalWeights !== 'object') {
+      errors.push('goalWeights is required');
+    } else {
+      for (const [goal, weights] of Object.entries(config.goalWeights)) {
+        if (!weights || typeof weights !== 'object') {
+          errors.push(`goalWeights.${goal} must be an object`);
+          continue;
+        }
+        // 检查维度完整性
+        const missing = REQUIRED_DIMS.filter((d) => weights[d] == null);
+        if (missing.length > 0) {
+          errors.push(
+            `goalWeights.${goal} missing dimensions: ${missing.join(', ')}`,
+          );
+        }
+        // 检查权重总和
+        const sum = Object.values(weights).reduce(
+          (a, b) => a + (typeof b === 'number' ? b : 0),
+          0,
+        );
+        if (sum < 0.95 || sum > 1.05) {
+          errors.push(
+            `goalWeights.${goal} sum=${sum.toFixed(4)}, must be 0.95-1.05`,
+          );
+        }
+      }
+    }
+
+    if (
+      config.healthConditionMultipliers &&
+      typeof config.healthConditionMultipliers === 'object'
+    ) {
+      for (const [cond, mults] of Object.entries(
+        config.healthConditionMultipliers,
+      )) {
+        if (!mults || typeof mults !== 'object') continue;
+        for (const [dim, val] of Object.entries(mults)) {
+          if (typeof val !== 'number' || val < 0.1 || val > 5.0) {
+            errors.push(
+              `healthConditionMultipliers.${cond}.${dim}=${val}, must be 0.1-5.0`,
+            );
+          }
+        }
+      }
+    }
+
+    return errors;
+  }
+
+  /**
+   * V1.6: 返回硬编码的默认权重配置（供 Admin 查看）
+   */
+  getDailyScoreWeightsDefaults(): {
+    goalWeights: Record<string, Record<string, number>>;
+    healthConditionMultipliers: Record<string, Record<string, number>>;
+  } {
+    return {
+      goalWeights: {
+        fat_loss: {
+          energy: 0.25,
+          proteinRatio: 0.2,
+          macroBalance: 0.1,
+          foodQuality: 0.05,
+          satiety: 0.05,
+          stability: 0.05,
+          glycemicImpact: 0.12,
+          mealQuality: 0.18,
+        },
+        muscle_gain: {
+          proteinRatio: 0.25,
+          energy: 0.2,
+          macroBalance: 0.15,
+          foodQuality: 0.07,
+          satiety: 0.03,
+          stability: 0.08,
+          glycemicImpact: 0.05,
+          mealQuality: 0.17,
+        },
+        health: {
+          foodQuality: 0.2,
+          mealQuality: 0.2,
+          macroBalance: 0.15,
+          energy: 0.1,
+          satiety: 0.1,
+          proteinRatio: 0.08,
+          stability: 0.07,
+          glycemicImpact: 0.1,
+        },
+        habit: {
+          foodQuality: 0.18,
+          mealQuality: 0.18,
+          satiety: 0.15,
+          energy: 0.15,
+          proteinRatio: 0.1,
+          macroBalance: 0.08,
+          stability: 0.08,
+          glycemicImpact: 0.08,
+        },
+      },
+      healthConditionMultipliers: {
+        diabetes: { glycemicImpact: 1.5, energy: 1.2 },
+        blood_sugar: { glycemicImpact: 1.5, energy: 1.2 },
+        hypertension: { macroBalance: 1.2 },
+        kidney: { proteinRatio: 1.3, macroBalance: 0.9 },
+        cholesterol: { macroBalance: 1.3 },
+        cardiovascular: { macroBalance: 1.3, foodQuality: 1.1 },
+      },
+    };
   }
 
   /**

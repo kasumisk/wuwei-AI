@@ -397,7 +397,7 @@ export interface AnalysisScore {
   nutritionScore: number;
   /** 置信度评分（0-100，综合识别和估算的可信度） */
   confidenceScore: number;
-  /** V1.3: 7维评分分解（energy/proteinRatio/macroBalance/foodQuality/satiety/stability/glycemicImpact） */
+  /** V1.3: 8维评分分解（energy/proteinRatio/macroBalance/foodQuality/satiety/stability/glycemicImpact/mealQuality） */
   breakdown?: {
     energy: number;
     proteinRatio: number;
@@ -406,6 +406,8 @@ export interface AnalysisScore {
     satiety: number;
     stability: number;
     glycemicImpact: number;
+    /** V1.4: 每餐决策质量综合分 */
+    mealQuality?: number;
   };
 }
 

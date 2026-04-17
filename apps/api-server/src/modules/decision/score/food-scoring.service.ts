@@ -370,13 +370,13 @@ export class FoodScoringService {
     ];
 
     return dimensions.map((dim) => {
-      const score = breakdown[dim];
+      const score = breakdown[dim] ?? 75;
       const impact = this.scoreToImpact(score);
 
       const result: BreakdownExplanation = {
         dimension: dim,
         label: labels[dim] || dim,
-        score,
+        score: score as number,
         impact,
         message: explanations[dim]?.[impact] || '',
       };

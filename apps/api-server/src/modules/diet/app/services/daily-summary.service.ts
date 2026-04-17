@@ -10,6 +10,7 @@ import { BehaviorService } from './behavior.service';
 import {
   getUserLocalDate,
   getUserLocalDayBounds,
+  getUserLocalHour,
 } from '../../../../common/utils/timezone.util';
 
 @Injectable()
@@ -197,6 +198,13 @@ export class DailySummaryService {
     }
 
     // P1.2: 修复 fallback — 有记录时用真实值，无记录不虚高
+    // V1.3: 注入 localHour 实现时间感知评分
+    const localHour = getUserLocalHour(tz);
+    // V1.4: 聚合每餐决策信号
+    const mealSignals = this.nutritionScoreService.aggregateMealSignals(
+      records,
+      Number((profile as any)?.mealsPerDay) || 3,
+    );
     const scoreResult = this.nutritionScoreService.calculateScore(
       {
         calories: totalCalories,
@@ -210,6 +218,8 @@ export class DailySummaryService {
       goalType,
       stabilityData,
       (profile as any)?.healthConditions || undefined,
+      localHour,
+      mealSignals,
     );
 
     let summary = await this.prisma.dailySummaries.findFirst({

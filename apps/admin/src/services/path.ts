@@ -59,6 +59,9 @@ const PATH = {
     FEATURE_FLAGS: '/admin/feature-flags',
     // 评分参数配置
     SCORING_CONFIG: '/admin/scoring-config',
+    // V1.7: 每日评分权重配置
+    DAILY_SCORE_WEIGHTS: '/admin/scoring-config/daily-score-weights',
+    DAILY_SCORE_WEIGHTS_DEFAULTS: '/admin/scoring-config/daily-score-weights/defaults',
     // 策略效果分析
     STRATEGY_EFFECTIVENESS: '/admin/strategy-effectiveness',
     // Thompson Sampling 收敛

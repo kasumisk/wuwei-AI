@@ -12,10 +12,12 @@ import { CurrentAppUser } from '../../../auth/app/current-app-user.decorator';
 import { AppUserPayload } from '../../../auth/app/app-user-payload.type';
 import { ApiResponse } from '../../../../common/types/response.type';
 import { FoodService } from '../services/food.service';
+import { FoodRecordService } from '../services/food-record.service';
 import { UserProfileService } from '../../../user/app/services/profile/user-profile.service';
 import { NutritionScoreService } from '../services/nutrition-score.service';
 import { BehaviorService } from '../services/behavior.service';
 import { SaveUserProfileDto } from '../dto/food.dto';
+import { getUserLocalHour } from '../../../../common/utils/timezone.util';
 
 /** P3.1: 评分等级标签（与前端 4 档一致） */
 function getStatusLabel(score: number): string {
@@ -71,6 +73,7 @@ function toProfileResponse(p: any) {
 export class FoodNutritionController {
   constructor(
     private readonly foodService: FoodService,
+    private readonly foodRecordService: FoodRecordService,
     private readonly userProfileService: UserProfileService,
     private readonly nutritionScoreService: NutritionScoreService,
     private readonly behaviorService: BehaviorService,
@@ -91,7 +94,24 @@ export class FoodNutritionController {
       this.behaviorService.getProfile(user.id),
     ]);
 
+    // V1.5: 预加载配置权重（使 computePersonalizedWeights 可同步读取）
+    await this.nutritionScoreService.preloadWeightsConfig();
+
     const goals = this.nutritionScoreService.calculateDailyGoals(profile);
+
+    // V1.3: 获取用户本地小时数
+    const tz = (profile as any)?.timezone || 'Asia/Shanghai';
+    const localHour = getUserLocalHour(tz);
+
+    // V1.4: 获取今日原始记录，聚合每餐决策信号
+    const todayRecords = await this.foodRecordService.getTodayRecords(
+      user.id,
+      tz,
+    );
+    const mealSignals = this.nutritionScoreService.aggregateMealSignals(
+      todayRecords,
+      Number(profile?.mealsPerDay) || 3,
+    );
 
     // P1.3: 注入真实 stabilityData
     const stabilityData = {
@@ -108,13 +128,26 @@ export class FoodNutritionController {
         protein: summary.totalProtein || 0,
         fat: summary.totalFat || 0,
         carbs: summary.totalCarbs || 0,
-        // P1.2: 有记录时用真实值，无记录不虚高
-        foodQuality: summary.mealCount > 0 ? summary.avgQuality || 3 : 0,
-        satiety: summary.mealCount > 0 ? summary.avgSatiety || 3 : 0,
+        // Phase 1.2: 有记录时用真实值(若缺失用合理中性值3)，无记录时返回0
+        // 这样权重分摊逻辑会自动处理零值维度
+        foodQuality:
+          summary.mealCount > 0
+            ? summary.avgQuality > 0
+              ? summary.avgQuality
+              : 3
+            : 0,
+        satiety:
+          summary.mealCount > 0
+            ? summary.avgSatiety > 0
+              ? summary.avgSatiety
+              : 3
+            : 0,
       },
       profile?.goal || 'health',
       stabilityData,
       profile?.healthConditions as string[] | undefined,
+      localHour,
+      mealSignals,
     );
 
     const feedback = this.nutritionScoreService.generateFeedback(
@@ -122,7 +155,78 @@ export class FoodNutritionController {
       profile?.goal || 'health',
     );
 
-    // P3.1: 增强 response — 状态标签、行为加分、最强/最弱维度、合规对比
+    // V1.2: 宏量槽位状态检测
+    const intake = {
+      calories: summary.totalCalories,
+      protein: summary.totalProtein || 0,
+      fat: summary.totalFat || 0,
+      carbs: summary.totalCarbs || 0,
+    };
+    const macroSlotStatus = this.nutritionScoreService.computeMacroSlotStatus(
+      intake,
+      {
+        calories: goals.calories,
+        protein: goals.protein,
+        fat: goals.fat,
+        carbs: goals.carbs,
+      },
+      localHour,
+    );
+
+    // V1.2: 结构化问题识别
+    const locale: 'zh' | 'en' | 'ja' = (() => {
+      const region = (profile as any)?.regionCode || 'CN';
+      if (region === 'JP') return 'ja';
+      if (region === 'CN' || region === 'TW' || region === 'HK') return 'zh';
+      return 'en';
+    })();
+
+    const issueHighlights = this.nutritionScoreService.detectIssueHighlights(
+      intake,
+      {
+        calories: goals.calories,
+        protein: goals.protein,
+        fat: goals.fat,
+        carbs: goals.carbs,
+      },
+      score.breakdown,
+      summary.mealCount,
+      locale,
+      localHour,
+    );
+
+    // Phase 1.4: 生成自然语言状态解释（V1.2: 增加 macroSlotStatus 融合 + i18n locale）
+    const statusExplanation = this.nutritionScoreService.buildStatusExplanation(
+      score.breakdown,
+      goals,
+      {
+        calories: summary.totalCalories,
+        targetCalories: goals.calories,
+        protein: summary.totalProtein || 0,
+        fat: summary.totalFat || 0,
+        carbs: summary.totalCarbs || 0,
+        foodQuality:
+          summary.mealCount > 0
+            ? summary.avgQuality > 0
+              ? summary.avgQuality
+              : 3
+            : 0,
+        satiety:
+          summary.mealCount > 0
+            ? summary.avgSatiety > 0
+              ? summary.avgSatiety
+              : 3
+            : 0,
+      },
+      stabilityData,
+      score.decision,
+      locale,
+      macroSlotStatus,
+      localHour,
+      mealSignals,
+    );
+
+    // Phase 1.5: 增强 response — 状态标签、行为加分、最强/最弱维度、合规对比、状态解释
     const statusLabel = getStatusLabel(score.score);
     const breakdownEntries = Object.entries(score.breakdown) as Array<
       [string, number]
@@ -155,10 +259,12 @@ export class FoodNutritionController {
           fat: summary.totalFat || 0,
           carbs: summary.totalCarbs || 0,
         },
-        // P3 新增字段（向后兼容，前端可选消费）
+        // Phase 1.5: 增强字段 - 状态标签和解释
         statusLabel,
+        statusExplanation,
         topStrength,
         topWeakness,
+        // 行为加分数据
         behaviorBonus: {
           streakDays: stabilityData.streakDays,
           complianceRate: stabilityData.complianceRate,
@@ -167,6 +273,7 @@ export class FoodNutritionController {
               ? Math.min(5, Math.floor(stabilityData.streakDays / 7) * 1.5)
               : 0,
         },
+        // 各宏量合规性对比
         complianceInsight: {
           calorieAdherence:
             goals.calories > 0
@@ -184,6 +291,43 @@ export class FoodNutritionController {
             goals.carbs > 0
               ? Math.round(((summary.totalCarbs || 0) / goals.carbs) * 100)
               : 0,
+        },
+        // V1.2: 宏量槽位状态
+        macroSlotStatus,
+        // V1.2: 结构化问题列表
+        issueHighlights,
+        // V1.4: 每餐决策信号聚合 + 建议符合度
+        mealSignals,
+        decisionAlignment: this.nutritionScoreService.buildDecisionAlignment(
+          mealSignals,
+          locale,
+          intake,
+          {
+            calories: goals.calories,
+            protein: goals.protein,
+            fat: goals.fat,
+            carbs: goals.carbs,
+          },
+        ),
+        // V1.5: 当前评分使用的维度权重及来源
+        weights: score.weights,
+        weightsSource: score.weightsSource,
+        // V1.3: 每日进度（分离质量评分与完成度追踪）
+        dailyProgress: {
+          localHour,
+          expectedProgress:
+            Math.round(
+              this.nutritionScoreService.getExpectedProgress(localHour) * 100,
+            ) / 100,
+          actualProgress:
+            goals.calories > 0
+              ? Math.round((summary.totalCalories / goals.calories) * 100) / 100
+              : 0,
+          isOnTrack:
+            goals.calories > 0
+              ? summary.totalCalories / goals.calories >=
+                this.nutritionScoreService.getExpectedProgress(localHour) * 0.7
+              : true,
         },
       },
     };
