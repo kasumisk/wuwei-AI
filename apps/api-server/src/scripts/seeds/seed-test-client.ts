@@ -59,11 +59,7 @@ async function seedTestClient() {
         where: { id: permission.id },
         data: {
           enabled: true,
-          allowedProviders: JSON.stringify([
-            'openai',
-            'deepseek',
-            'anthropic',
-          ]),
+          allowedProviders: JSON.stringify(['openai', 'deepseek', 'anthropic']),
           allowedModels: JSON.stringify([
             'gpt-3.5-turbo',
             'deepseek-chat',
@@ -81,11 +77,7 @@ async function seedTestClient() {
           capabilityType: capabilityType,
           enabled: true,
           rateLimit: 100,
-          allowedProviders: JSON.stringify([
-            'openai',
-            'deepseek',
-            'anthropic',
-          ]),
+          allowedProviders: JSON.stringify(['openai', 'deepseek', 'anthropic']),
           allowedModels: JSON.stringify([
             'gpt-3.5-turbo',
             'deepseek-chat',

@@ -1,18 +1,22 @@
 /**
  * V2.4 AnalysisQualityFeedbackService
- * 
+ *
  * 职责：聚合分析审核、用户接受度、推荐反馈，生成改进建议
  */
 
 import { Injectable } from '@nestjs/common';
-import { UserDecisionFeedback, AnalysisQualityMetrics, PolicySuggestion } from './feedback.types';
+import {
+  UserDecisionFeedback,
+  AnalysisQualityMetrics,
+  PolicySuggestion,
+} from './feedback.types';
 
 @Injectable()
 export class AnalysisQualityFeedbackService {
   // 内存中存储反馈 (实际应持久化到数据库)
   private feedbackStore: Map<string, UserDecisionFeedback> = new Map();
   private metricsCache: AnalysisQualityMetrics | null = null;
-  
+
   /**
    * 记录用户对决策的反馈
    */
@@ -26,46 +30,60 @@ export class AnalysisQualityFeedbackService {
   /**
    * 获取质量指标
    */
-  getQualityMetrics(dateRange?: { start: Date; end: Date }): AnalysisQualityMetrics {
-    const start = dateRange?.start || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  getQualityMetrics(dateRange?: {
+    start: Date;
+    end: Date;
+  }): AnalysisQualityMetrics {
+    const start =
+      dateRange?.start || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const end = dateRange?.end || new Date();
 
     // 从存储中获取指定范围内的反馈
     const feedbackList = Array.from(this.feedbackStore.values()).filter(
-      f => f.timestamp >= start && f.timestamp <= end,
+      (f) => f.timestamp >= start && f.timestamp <= end,
     );
 
     const totalAnalyses = feedbackList.length;
-    const acceptedCount = feedbackList.filter(f => f.decision === 'accepted').length;
-    const rejectedCount = feedbackList.filter(f => f.decision === 'rejected').length;
-    const acceptanceRate = totalAnalyses > 0 ? (acceptedCount / totalAnalyses) * 100 : 0;
+    const acceptedCount = feedbackList.filter(
+      (f) => f.decision === 'accepted',
+    ).length;
+    const rejectedCount = feedbackList.filter(
+      (f) => f.decision === 'rejected',
+    ).length;
+    const acceptanceRate =
+      totalAnalyses > 0 ? (acceptedCount / totalAnalyses) * 100 : 0;
 
-    const issueBreakdown = feedbackList.reduce<Record<string, number>>((acc, feedback) => {
-      for (const issueKey of feedback.issueKeys || []) {
-        acc[issueKey] = (acc[issueKey] || 0) + 1;
-      }
-      return acc;
-    }, {});
-
-    const alternativePairs = feedbackList.reduce<Record<string, { original: string; replacement: string; frequency: number }>>(
+    const issueBreakdown = feedbackList.reduce<Record<string, number>>(
       (acc, feedback) => {
-        if (!feedback.originalFoodName || !feedback.selectedAlternative) {
-          return acc;
+        for (const issueKey of feedback.issueKeys || []) {
+          acc[issueKey] = (acc[issueKey] || 0) + 1;
         }
-
-        const pairKey = `${feedback.originalFoodName}=>${feedback.selectedAlternative}`;
-        if (!acc[pairKey]) {
-          acc[pairKey] = {
-            original: feedback.originalFoodName,
-            replacement: feedback.selectedAlternative,
-            frequency: 0,
-          };
-        }
-        acc[pairKey].frequency += 1;
         return acc;
       },
       {},
     );
+
+    const alternativePairs = feedbackList.reduce<
+      Record<
+        string,
+        { original: string; replacement: string; frequency: number }
+      >
+    >((acc, feedback) => {
+      if (!feedback.originalFoodName || !feedback.selectedAlternative) {
+        return acc;
+      }
+
+      const pairKey = `${feedback.originalFoodName}=>${feedback.selectedAlternative}`;
+      if (!acc[pairKey]) {
+        acc[pairKey] = {
+          original: feedback.originalFoodName,
+          replacement: feedback.selectedAlternative,
+          frequency: 0,
+        };
+      }
+      acc[pairKey].frequency += 1;
+      return acc;
+    }, {});
 
     const commonAlternatives = Object.values(alternativePairs)
       .sort((a, b) => b.frequency - a.frequency)
@@ -127,9 +145,9 @@ export class AnalysisQualityFeedbackService {
   } {
     const allFeedback = Array.from(this.feedbackStore.values());
     return {
-      accepted: allFeedback.filter(f => f.decision === 'accepted').length,
-      rejected: allFeedback.filter(f => f.decision === 'rejected').length,
-      modified: allFeedback.filter(f => f.decision === 'modified').length,
+      accepted: allFeedback.filter((f) => f.decision === 'accepted').length,
+      rejected: allFeedback.filter((f) => f.decision === 'rejected').length,
+      modified: allFeedback.filter((f) => f.decision === 'modified').length,
     };
   }
 }

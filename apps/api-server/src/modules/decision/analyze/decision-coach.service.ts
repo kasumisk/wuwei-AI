@@ -1,9 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import { ContextualAnalysis, NutritionIssue } from '../types/analysis-result.types';
+import {
+  ContextualAnalysis,
+  NutritionIssue,
+} from '../types/analysis-result.types';
 
 /**
  * V3.2 Phase 2 - DecisionCoachService
- * 
+ *
  * Consumes ContextualAnalysis from Phase 1 and generates personalized coaching
  * explanations, education content, and decision guidance
  */
@@ -13,7 +16,7 @@ export class DecisionCoachService {
 
   /**
    * Generate comprehensive coaching explanation for a decision
-   * 
+   *
    * @param analysis - Complete analysis output from Phase 1
    * @param userId - User ID for personalization
    * @param locale - User's language preference
@@ -41,7 +44,7 @@ export class DecisionCoachService {
 
   private generateHeadline(analysis: ContextualAnalysis): string {
     if (!analysis.identifiedIssues || analysis.identifiedIssues.length === 0) {
-      return 'You\'re maintaining a balanced macronutrient intake!';
+      return "You're maintaining a balanced macronutrient intake!";
     }
 
     const highSeverityIssues = analysis.identifiedIssues.filter(
@@ -60,10 +63,12 @@ export class DecisionCoachService {
       fiber_deficit: 'Add more fiber-rich foods to your diet.',
       sugar_excess: 'Time to reduce added sugars.',
       fat_excess: 'Consider lower-fat options.',
-      calorie_excess: 'You\'re nearing your daily calorie target.',
+      calorie_excess: "You're nearing your daily calorie target.",
     };
 
-    return headlines[mainIssue.type] || 'Make adjustments to your nutrition plan.';
+    return (
+      headlines[mainIssue.type] || 'Make adjustments to your nutrition plan.'
+    );
   }
 
   private generateSummary(analysis: ContextualAnalysis): string {
@@ -111,10 +116,7 @@ export class DecisionCoachService {
       calorie_excess: `You are approaching or exceeding your daily calorie limit. Excess: ${issue.metric}kcal.`,
     };
 
-    return (
-      explanations[issue.type] ||
-      `${issue.type}: ${issue.implication}`
-    );
+    return explanations[issue.type] || `${issue.type}: ${issue.implication}`;
   }
 
   private generateAction(issue: NutritionIssue): string {
@@ -129,7 +131,8 @@ export class DecisionCoachService {
     };
 
     return (
-      actions[issue.type] || `Address ${issue.type} by making dietary adjustments.`
+      actions[issue.type] ||
+      `Address ${issue.type} by making dietary adjustments.`
     );
   }
 
@@ -140,7 +143,10 @@ export class DecisionCoachService {
     const slots = analysis?.macroSlotStatus;
 
     if (!slots) {
-      return guidance + 'Track your intake and adjust portions based on how you feel.';
+      return (
+        guidance +
+        'Track your intake and adjust portions based on how you feel.'
+      );
     }
 
     if (slots.protein === 'deficit') {
@@ -155,8 +161,7 @@ export class DecisionCoachService {
       guidance += 'Choose healthier fats and reduce saturated fats. ';
     }
 
-    guidance +=
-      'Track your intake and adjust portions based on how you feel.';
+    guidance += 'Track your intake and adjust portions based on how you feel.';
 
     return guidance;
   }
@@ -166,9 +171,7 @@ export class DecisionCoachService {
   ): EducationPoint[] {
     const points: EducationPoint[] = [];
 
-    if (
-      analysis.identifiedIssues?.some((i) => i.type === 'protein_deficit')
-    ) {
+    if (analysis.identifiedIssues?.some((i) => i.type === 'protein_deficit')) {
       points.push({
         topic: 'Protein Importance',
         why: 'Protein is essential for muscle repair, strength, and satiety. Adequate intake prevents muscle breakdown and supports recovery.',

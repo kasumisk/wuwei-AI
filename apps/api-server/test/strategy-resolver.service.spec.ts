@@ -12,16 +12,27 @@
  */
 
 import { StrategyResolver } from '../src/modules/strategy/app/strategy-resolver.service';
-import type { StrategyConfig, ResolvedStrategy } from '../src/modules/strategy/strategy.types';
+import type {
+  StrategyConfig,
+  ResolvedStrategy,
+} from '../src/modules/strategy/strategy.types';
 import { StrategyScope } from '../src/modules/strategy/strategy.types';
 
 // ─── Mock 工厂 ───
 
 function makeStrategyEntity(id: string, config: StrategyConfig, extra?: any) {
-  return { id, name: `strategy-${id}`, config, contextCondition: null, ...extra };
+  return {
+    id,
+    name: `strategy-${id}`,
+    config,
+    contextCondition: null,
+    ...extra,
+  };
 }
 
-function makeResolvedStrategy(overrides?: Partial<ResolvedStrategy>): ResolvedStrategy {
+function makeResolvedStrategy(
+  overrides?: Partial<ResolvedStrategy>,
+): ResolvedStrategy {
   return {
     strategyId: 'default',
     strategyName: '系统默认策略',
@@ -40,26 +51,33 @@ function createMockStrategyService(opts?: {
   userStrategy?: any;
 }) {
   return {
-    getGlobalStrategy: jest.fn().mockResolvedValue(opts?.globalStrategy ?? null),
+    getGlobalStrategy: jest
+      .fn()
+      .mockResolvedValue(opts?.globalStrategy ?? null),
     getActiveStrategy: jest.fn().mockResolvedValue(opts?.goalStrategy ?? null),
-    getContextStrategies: jest.fn().mockResolvedValue(opts?.contextStrategies ?? []),
-    getUserAssignment: jest.fn().mockResolvedValue(opts?.userAssignment ?? null),
+    getContextStrategies: jest
+      .fn()
+      .mockResolvedValue(opts?.contextStrategies ?? []),
+    getUserAssignment: jest
+      .fn()
+      .mockResolvedValue(opts?.userAssignment ?? null),
     findById: jest.fn().mockResolvedValue(opts?.userStrategy ?? null),
   };
 }
 
 function createMockRedis() {
   return {
-    getOrSet: jest.fn().mockImplementation(
-      (_key: string, _ttl: number, factory: () => Promise<any>) => factory(),
-    ),
+    getOrSet: jest
+      .fn()
+      .mockImplementation(
+        (_key: string, _ttl: number, factory: () => Promise<any>) => factory(),
+      ),
   };
 }
 
 // ─── Test Suite ───
 
 describe('StrategyResolver', () => {
-
   // ════════════════════════════════════════════════════════════
   // 1. 4 层合并优先级
   // ════════════════════════════════════════════════════════════
@@ -77,7 +95,9 @@ describe('StrategyResolver', () => {
     });
 
     it('should include global strategy in sources', async () => {
-      const globalConfig: StrategyConfig = { rank: { mealModifiers: { lunch: {} } } };
+      const globalConfig: StrategyConfig = {
+        rank: { mealModifiers: { lunch: {} } },
+      };
       const service = createMockStrategyService({
         globalStrategy: makeStrategyEntity('global-1', globalConfig),
       });
@@ -91,8 +111,12 @@ describe('StrategyResolver', () => {
     });
 
     it('should apply goal strategy on top of global', async () => {
-      const globalConfig: StrategyConfig = { rank: { mealModifiers: { lunch: { protein: 1.1 } } } };
-      const goalConfig: StrategyConfig = { rank: { mealModifiers: { dinner: { carbs: 0.9 } } } };
+      const globalConfig: StrategyConfig = {
+        rank: { mealModifiers: { lunch: { protein: 1.1 } } },
+      };
+      const goalConfig: StrategyConfig = {
+        rank: { mealModifiers: { dinner: { carbs: 0.9 } } },
+      };
 
       const service = createMockStrategyService({
         globalStrategy: makeStrategyEntity('g1', globalConfig),
@@ -111,12 +135,20 @@ describe('StrategyResolver', () => {
     });
 
     it('should apply user strategy as highest priority', async () => {
-      const globalConfig: StrategyConfig = { rank: { mealModifiers: { lunch: { protein: 1.0 } } } };
-      const userConfig: StrategyConfig = { rank: { mealModifiers: { lunch: { protein: 1.5 } } } };
+      const globalConfig: StrategyConfig = {
+        rank: { mealModifiers: { lunch: { protein: 1.0 } } },
+      };
+      const userConfig: StrategyConfig = {
+        rank: { mealModifiers: { lunch: { protein: 1.5 } } },
+      };
 
       const service = createMockStrategyService({
         globalStrategy: makeStrategyEntity('g1', globalConfig),
-        userAssignment: { userId: 'user-1', strategyId: 'user-strat-1', assignmentType: 'MANUAL' },
+        userAssignment: {
+          userId: 'user-1',
+          strategyId: 'user-strat-1',
+          assignmentType: 'MANUAL',
+        },
         userStrategy: makeStrategyEntity('user-strat-1', userConfig),
       });
       const redis = createMockRedis();
@@ -124,7 +156,9 @@ describe('StrategyResolver', () => {
 
       const result = await resolver.resolve('user-1', 'fat_loss');
 
-      expect(result.sources.some((s) => s.includes('MANUAL:user-strat-1'))).toBe(true);
+      expect(
+        result.sources.some((s) => s.includes('MANUAL:user-strat-1')),
+      ).toBe(true);
       // user config overrides global: protein modifier should be 1.5
       expect(result.config.rank?.mealModifiers?.lunch?.protein).toBe(1.5);
     });
@@ -150,7 +184,11 @@ describe('StrategyResolver', () => {
   describe('assignment.strategyId null 守卫', () => {
     it('should skip user strategy when assignment.strategyId is null', async () => {
       const service = createMockStrategyService({
-        userAssignment: { userId: 'user-1', strategyId: null, assignmentType: 'MANUAL' },
+        userAssignment: {
+          userId: 'user-1',
+          strategyId: null,
+          assignmentType: 'MANUAL',
+        },
       });
       const redis = createMockRedis();
       const resolver = new StrategyResolver(service as any, redis as any);
@@ -190,7 +228,11 @@ describe('StrategyResolver', () => {
       });
 
       const override: StrategyConfig = { exploration: { baseMin: 0.1 } };
-      const merged = resolver.mergeConfigOverride(resolved, override, 'experiment:exp-1/treatment');
+      const merged = resolver.mergeConfigOverride(
+        resolved,
+        override,
+        'experiment:exp-1/treatment',
+      );
 
       expect(merged.strategyId).toBe('s1+experiment:exp-1/treatment');
       expect(merged.sources).toContain('global:g1');
@@ -211,7 +253,11 @@ describe('StrategyResolver', () => {
       const originalSources = [...resolved.sources];
       const originalConfig = { ...resolved.config };
 
-      resolver.mergeConfigOverride(resolved, { exploration: { baseMin: 0.2 } }, 'exp:1');
+      resolver.mergeConfigOverride(
+        resolved,
+        { exploration: { baseMin: 0.2 } },
+        'exp:1',
+      );
 
       expect(resolved.sources).toEqual(originalSources);
       expect(resolved.config.exploration?.baseMin).toBe(0.05);
@@ -224,9 +270,18 @@ describe('StrategyResolver', () => {
 
   describe('deepMergeStrategy 规则', () => {
     it('should merge nested recall.sources by key (later wins)', async () => {
-      const base: StrategyConfig = { recall: { sources: { rule: { enabled: true } } } };
+      const base: StrategyConfig = {
+        recall: { sources: { rule: { enabled: true } } },
+      };
       // Use 'as any' to allow extra fields (weight, semantic) for merge-logic testing
-      const override: StrategyConfig = { recall: { sources: { rule: { enabled: false }, vector: { enabled: true, weight: 0.7 } } } };
+      const override: StrategyConfig = {
+        recall: {
+          sources: {
+            rule: { enabled: false },
+            vector: { enabled: true, weight: 0.7 },
+          },
+        },
+      };
 
       const service = createMockStrategyService({
         globalStrategy: makeStrategyEntity('g1', base),
@@ -244,8 +299,12 @@ describe('StrategyResolver', () => {
     });
 
     it('should replace baseWeights array entirely (not per-element)', async () => {
-      const base: StrategyConfig = { rank: { baseWeights: { fat_loss: [0.1, 0.2, 0.3] } as any } };
-      const override: StrategyConfig = { rank: { baseWeights: { fat_loss: [0.4, 0.5] } as any } };
+      const base: StrategyConfig = {
+        rank: { baseWeights: { fat_loss: [0.1, 0.2, 0.3] } as any },
+      };
+      const override: StrategyConfig = {
+        rank: { baseWeights: { fat_loss: [0.4, 0.5] } as any },
+      };
 
       const service = createMockStrategyService({
         globalStrategy: makeStrategyEntity('g1', base),
@@ -257,7 +316,9 @@ describe('StrategyResolver', () => {
       const result = await resolver.resolve('user-1', 'fat_loss');
 
       // Array should be replaced entirely by the override
-      expect((result.config.rank?.baseWeights as any)?.fat_loss).toEqual([0.4, 0.5]);
+      expect((result.config.rank?.baseWeights as any)?.fat_loss).toEqual([
+        0.4, 0.5,
+      ]);
     });
 
     it('should handle empty config objects gracefully', async () => {
@@ -300,14 +361,20 @@ describe('StrategyResolver', () => {
         lifecycle: 'active',
       });
 
-      expect(result.sources.some((s) => s.includes('context:ctx-morning'))).toBe(true);
+      expect(
+        result.sources.some((s) => s.includes('context:ctx-morning')),
+      ).toBe(true);
       expect(result.config.exploration?.baseMin).toBe(0.25);
     });
 
     it('should NOT match context strategy when timeOfDay does not match', async () => {
-      const contextStrategy = makeStrategyEntity('ctx-morning', {}, {
-        contextCondition: { timeOfDay: ['morning'] },
-      });
+      const contextStrategy = makeStrategyEntity(
+        'ctx-morning',
+        {},
+        {
+          contextCondition: { timeOfDay: ['morning'] },
+        },
+      );
 
       const service = createMockStrategyService({
         contextStrategies: [contextStrategy],
@@ -328,12 +395,20 @@ describe('StrategyResolver', () => {
     it('should select the most specific matching context strategy', async () => {
       // strategy A matches only timeOfDay (score=1)
       // strategy B matches timeOfDay + dayType (score=2) → should win
-      const stratA = makeStrategyEntity('ctx-a', { exploration: { baseMin: 0.1 } }, {
-        contextCondition: { timeOfDay: ['morning'] },
-      });
-      const stratB = makeStrategyEntity('ctx-b', { exploration: { baseMin: 0.3 } }, {
-        contextCondition: { timeOfDay: ['morning'], dayType: ['weekday'] },
-      });
+      const stratA = makeStrategyEntity(
+        'ctx-a',
+        { exploration: { baseMin: 0.1 } },
+        {
+          contextCondition: { timeOfDay: ['morning'] },
+        },
+      );
+      const stratB = makeStrategyEntity(
+        'ctx-b',
+        { exploration: { baseMin: 0.3 } },
+        {
+          contextCondition: { timeOfDay: ['morning'], dayType: ['weekday'] },
+        },
+      );
 
       const service = createMockStrategyService({
         contextStrategies: [stratA, stratB],
@@ -348,14 +423,20 @@ describe('StrategyResolver', () => {
         lifecycle: 'active',
       });
 
-      expect(result.sources.some((s) => s.includes('context:ctx-b'))).toBe(true);
+      expect(result.sources.some((s) => s.includes('context:ctx-b'))).toBe(
+        true,
+      );
       expect(result.config.exploration?.baseMin).toBe(0.3);
     });
 
     it('should skip context strategies with empty conditions', async () => {
-      const emptyCondStrategy = makeStrategyEntity('ctx-empty', { exploration: { baseMin: 0.5 } }, {
-        contextCondition: {}, // 空条件 → 不匹配
-      });
+      const emptyCondStrategy = makeStrategyEntity(
+        'ctx-empty',
+        { exploration: { baseMin: 0.5 } },
+        {
+          contextCondition: {}, // 空条件 → 不匹配
+        },
+      );
 
       const service = createMockStrategyService({
         contextStrategies: [emptyCondStrategy],
@@ -374,9 +455,13 @@ describe('StrategyResolver', () => {
     });
 
     it('should skip context layer when contextInput is not provided', async () => {
-      const contextStrategy = makeStrategyEntity('ctx-1', {}, {
-        contextCondition: { timeOfDay: ['morning'] },
-      });
+      const contextStrategy = makeStrategyEntity(
+        'ctx-1',
+        {},
+        {
+          contextCondition: { timeOfDay: ['morning'] },
+        },
+      );
 
       const service = createMockStrategyService({
         contextStrategies: [contextStrategy],

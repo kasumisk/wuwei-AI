@@ -219,9 +219,7 @@ export class RecipeManagementService {
           : undefined),
       fatPerServing:
         updateData.fatPerServing ??
-        (existing.fatPerServing
-          ? Number(existing.fatPerServing)
-          : undefined),
+        (existing.fatPerServing ? Number(existing.fatPerServing) : undefined),
       carbsPerServing:
         updateData.carbsPerServing ??
         (existing.carbsPerServing

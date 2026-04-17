@@ -504,7 +504,10 @@ const ABExperimentDetail: React.FC = () => {
       {/* 头部操作 */}
       <Card>
         <Space style={{ marginBottom: 16 }} wrap>
-          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/recommendation/experiments/list')}>
+          <Button
+            icon={<ArrowLeftOutlined />}
+            onClick={() => navigate('/recommendation/experiments/list')}
+          >
             返回列表
           </Button>
           {(experiment.status === 'draft' || experiment.status === 'paused') && (

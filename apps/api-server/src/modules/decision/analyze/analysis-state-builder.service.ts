@@ -58,7 +58,10 @@ export class AnalysisStateBuilderService {
       projectedAfterMeal: {
         todayTotalsAfterMeal: afterTotals,
         completionRatio: {
-          calories: this.toPercent(afterTotals.calories, userContext.goalCalories),
+          calories: this.toPercent(
+            afterTotals.calories,
+            userContext.goalCalories,
+          ),
           protein: this.toPercent(afterTotals.protein, userContext.goalProtein),
           fat: this.toPercent(afterTotals.fat, userContext.goalFat),
           carbs: this.toPercent(afterTotals.carbs, userContext.goalCarbs),

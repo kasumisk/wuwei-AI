@@ -105,10 +105,12 @@ Coach 格式化输出新增稳定结构：
 ### 5.1 用户上下文增强
 
 文件：
+
 - apps/api-server/src/modules/decision/decision/user-context-builder.service.ts
 - apps/api-server/src/modules/decision/types/analysis-result.types.ts
 
 新增能力：
+
 - budgetStatus
 - nutritionPriority
 - contextSignals
@@ -116,10 +118,12 @@ Coach 格式化输出新增稳定结构：
 ### 5.2 决策摘要增强
 
 文件：
+
 - apps/api-server/src/modules/decision/decision/decision-summary.service.ts
 - apps/api-server/src/modules/decision/types/analysis-result.types.ts
 
 新增能力：
+
 - contextSignals
 - coachFocus
 - headline 对 near_limit / over_limit 更敏感
@@ -127,21 +131,25 @@ Coach 格式化输出新增稳定结构：
 ### 5.3 行动决策增强
 
 文件：
+
 - apps/api-server/src/modules/decision/decision/should-eat-action.service.ts
 - apps/api-server/src/modules/coach/app/coaching/coach-action-plan.service.ts
 
 新增能力：
+
 - followUpActions
 - 教练行动计划优先吸收 follow-up actions
 
 ### 5.4 教练上下文与格式化增强
 
 文件：
+
 - apps/api-server/src/modules/coach/app/prompt/coach-prompt-builder.service.ts
 - apps/api-server/src/modules/coach/app/formatting/coach-format.service.ts
 - apps/api-server/src/modules/coach/app/formatting/coach-format.types.ts
 
 新增能力：
+
 - prompt 中显式注入 contextSignals / coachFocus / followUpActions
 - 格式化输出中稳定提供 conclusion / reasons / suggestions / tone
 
@@ -163,18 +171,22 @@ Coach 格式化输出新增稳定结构：
 全部为运行时结构增强，不新增数据库字段：
 
 1. UnifiedUserContext
+
 - budgetStatus
 - nutritionPriority
 - contextSignals
 
 2. DecisionSummary
+
 - contextSignals
 - coachFocus
 
 3. ShouldEatAction
+
 - followUpActions
 
 4. FormattedCoachOutput
+
 - conclusion
 - reasons
 - suggestions
@@ -185,16 +197,19 @@ Coach 格式化输出新增稳定结构：
 ## 8. 本轮阶段划分
 
 ### Phase 1
+
 - 强化上下文建模
 - 明确预算状态与营养优先级
 - 为决策层提供更稳定的 context signals
 
 ### Phase 2
+
 - 强化 DecisionSummary
 - 让摘要能指导教练“强调什么”
 - 让 ShouldEatAction 具备 follow-up 能力
 
 ### Phase 3
+
 - 强化教练上下文注入
 - 强化格式化输出结构
 - 让 AI Coach 更像真正的可执行教练，而不是只会给结论

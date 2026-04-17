@@ -431,8 +431,7 @@ export class ChurnPredictionService {
     const totalRecords = behavior?.totalRecords ?? 0;
     const daysSinceLastRecord = lastRecord?.createdAt
       ? Math.floor(
-          (Date.now() - lastRecord.createdAt.getTime()) /
-            (1000 * 60 * 60 * 24),
+          (Date.now() - lastRecord.createdAt.getTime()) / (1000 * 60 * 60 * 24),
         )
       : 999;
 

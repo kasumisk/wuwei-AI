@@ -174,9 +174,7 @@ export class RecommendationDebugController {
     description:
       '输入 userId + 两个 strategyId，分别使用两种策略模拟推荐并对比差异',
   })
-  async getStrategyDiff(
-    @Body() dto: StrategyDiffDto,
-  ): Promise<ApiResponse> {
+  async getStrategyDiff(@Body() dto: StrategyDiffDto): Promise<ApiResponse> {
     const data = await this.debugService.getStrategyDiff(dto);
     return {
       success: true,

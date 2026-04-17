@@ -17,9 +17,20 @@ export type AssignmentType = 'experiment' | 'manual' | 'segment';
 export type GoalType = 'fat_loss' | 'muscle_gain' | 'health' | 'habit';
 
 export const SCORE_DIMENSION_NAMES = [
-  'calories', 'protein', 'carbs', 'fat', 'quality', 'satiety',
-  'glycemic', 'nutrientDensity', 'inflammation', 'fiber',
-  'seasonality', 'executability', 'popularity', 'acquisition',
+  'calories',
+  'protein',
+  'carbs',
+  'fat',
+  'quality',
+  'satiety',
+  'glycemic',
+  'nutrientDensity',
+  'inflammation',
+  'fiber',
+  'seasonality',
+  'executability',
+  'popularity',
+  'acquisition',
 ] as const;
 export type StrategyScoreDimension = (typeof SCORE_DIMENSION_NAMES)[number];
 

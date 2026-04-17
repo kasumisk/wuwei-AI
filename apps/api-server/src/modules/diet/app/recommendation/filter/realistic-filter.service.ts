@@ -172,7 +172,8 @@ export class RealisticFilterService {
       );
       // 兜底：食堂模式过滤不能让候选池低于 MIN_CANDIDATES
       if (canteenFiltered.length >= MIN_CANDIDATES) {
-        if (traceEnabled) filteredByCanteen = filtered.length - canteenFiltered.length;
+        if (traceEnabled)
+          filteredByCanteen = filtered.length - canteenFiltered.length;
         filtered = canteenFiltered;
       }
     }
@@ -188,7 +189,8 @@ export class RealisticFilterService {
         });
         // 技能过滤也尊重 MIN_CANDIDATES 兜底
         if (skillFiltered.length >= MIN_CANDIDATES) {
-          if (traceEnabled) filteredBySkill = filtered.length - skillFiltered.length;
+          if (traceEnabled)
+            filteredBySkill = filtered.length - skillFiltered.length;
           filtered = skillFiltered;
         }
       }
@@ -201,7 +203,8 @@ export class RealisticFilterService {
         kitchenProfile,
       );
       if (equipmentFiltered.length >= MIN_CANDIDATES) {
-        if (traceEnabled) filteredByEquipment = filtered.length - equipmentFiltered.length;
+        if (traceEnabled)
+          filteredByEquipment = filtered.length - equipmentFiltered.length;
         filtered = equipmentFiltered;
       }
     }
@@ -442,7 +445,7 @@ export class RealisticFilterService {
   /**
    * V7.1 P2-E: 根据 KitchenProfile 过滤需要用户没有的设备的食物
    *
-    * 检查食物的 cookingMethods / requiredEquipment：
+   * 检查食物的 cookingMethods / requiredEquipment：
    * - 如果食物的所有可行烹饪方式都需要用户没有的设备 → 过滤
    * - 如果食物有至少一种不需要特殊设备的烹饪方式 → 保留
    *

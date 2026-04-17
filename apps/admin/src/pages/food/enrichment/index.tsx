@@ -150,7 +150,6 @@ const ALL_FIELDS: { value: EnrichableField; label: string; group: string }[] = [
   { value: 'standard_serving_g', label: '标准份量', group: '属性' },
   { value: 'standard_serving_desc', label: '标准份量描述', group: '属性' },
 
-  
   // 标签评分（Stage 3-4）
   { value: 'meal_types', label: '餐次类型', group: '标签评分' },
   { value: 'allergens', label: '过敏原', group: '标签评分' },
@@ -178,8 +177,6 @@ const ALL_FIELDS: { value: EnrichableField; label: string; group: string }[] = [
   { value: 'compatibility', label: '搭配兼容性', group: '扩展属性' },
   { value: 'available_channels', label: '获取渠道', group: '扩展属性' },
   { value: 'required_equipment', label: '所需设备', group: '扩展属性' },
-  
-  
 ];
 
 const FIELD_LABEL_MAP = Object.fromEntries(ALL_FIELDS.map((f) => [f.value, f.label]));
@@ -553,8 +550,9 @@ const EnrichmentPage: React.FC = () => {
       key: 'fields',
       render: (_, r) => {
         const proposed = r.changes?.proposedValues ?? {};
-        const validEntries = Object.entries(proposed)
-          .filter(([k, v]) => k !== 'confidence' && k !== 'reasoning' && v != null);
+        const validEntries = Object.entries(proposed).filter(
+          ([k, v]) => k !== 'confidence' && k !== 'reasoning' && v != null
+        );
         const entries = validEntries.slice(0, 5);
         const overflow = validEntries.length - 5;
         return (
@@ -1143,19 +1141,25 @@ const EnrichmentPage: React.FC = () => {
                     description={
                       <ul style={{ margin: 0, paddingLeft: 16 }}>
                         <li>
-                          <strong>阶段 1（核心营养素）</strong>：蛋白质、脂肪、碳水、膳食纤维、糖、钠 + 食物形态
+                          <strong>阶段 1（核心营养素）</strong>
+                          ：蛋白质、脂肪、碳水、膳食纤维、糖、钠 + 食物形态
                         </li>
                         <li>
-                          <strong>阶段 2（微量营养素）</strong>：维生素（A/C/D/E/B6/B12/叶酸）、矿物质（钙/铁/钾/锌/镁/磷）、添加糖、天然糖、Omega-3/6、可/不溶性纤维、含水率等 24 个字段
+                          <strong>阶段 2（微量营养素）</strong>
+                          ：维生素（A/C/D/E/B6/B12/叶酸）、矿物质（钙/铁/钾/锌/镁/磷）、添加糖、天然糖、Omega-3/6、可/不溶性纤维、含水率等
+                          24 个字段
                         </li>
                         <li>
-                          <strong>阶段 3（健康属性）</strong>：GI、GL、FODMAP等级、草酸等级、加工程度、过敏原、营养标签
+                          <strong>阶段 3（健康属性）</strong>
+                          ：GI、GL、FODMAP等级、草酸等级、加工程度、过敏原、营养标签
                         </li>
                         <li>
-                          <strong>阶段 4（使用属性）</strong>：餐次类型、常用份量、风味档案、菜系、烹饪方式、二级分类、食物组、主原料、标准份量描述、品质/饱腹感/营养密度/大众化评分、别名
+                          <strong>阶段 4（使用属性）</strong>
+                          ：餐次类型、常用份量、风味档案、菜系、烹饪方式、二级分类、食物组、主原料、标准份量描述、品质/饱腹感/营养密度/大众化评分、别名
                         </li>
                         <li>
-                          <strong>阶段 5（扩展属性）</strong>：原料列表、口感标签、菜品类型、制备/烹饪时间、技能要求、成本等级、保质期、建议温度、菜品优先级、获取难度、搭配兼容性、可购渠道、所需设备
+                          <strong>阶段 5（扩展属性）</strong>
+                          ：原料列表、口感标签、菜品类型、制备/烹饪时间、技能要求、成本等级、保质期、建议温度、菜品优先级、获取难度、搭配兼容性、可购渠道、所需设备
                         </li>
                         <li>建议按顺序逐阶段补全，确保数据质量</li>
                       </ul>
@@ -1257,9 +1261,7 @@ const EnrichmentPage: React.FC = () => {
                         <li>
                           <strong>忽略字段是否有值</strong>，将全部（或筛选后的）食物重新入队
                         </li>
-                        <li>
-                          勾选「清空字段」时，会先将所选字段置为 null，再让 AI 重新生成
-                        </li>
+                        <li>勾选「清空字段」时，会先将所选字段置为 null，再让 AI 重新生成</li>
                         <li>不勾选「清空字段」时，AI 补全时仍会覆盖已有值（取决于处理器逻辑）</li>
                         <li>每个任务使用独立 jobId，不会被幂等去重，允许重复入队</li>
                       </ul>
@@ -1280,11 +1282,7 @@ const EnrichmentPage: React.FC = () => {
                       >
                         全选
                       </Button>
-                      <Button
-                        size="small"
-                        type="link"
-                        onClick={() => setReEnqueueFields([])}
-                      >
+                      <Button size="small" type="link" onClick={() => setReEnqueueFields([])}>
                         清空
                       </Button>
                     </div>
@@ -1305,7 +1303,9 @@ const EnrichmentPage: React.FC = () => {
                             onChange={(e) => {
                               if (e.target.checked) {
                                 setReEnqueueFields((prev) => [
-                                  ...prev.filter((v) => !groupValues.includes(v as EnrichableField)),
+                                  ...prev.filter(
+                                    (v) => !groupValues.includes(v as EnrichableField)
+                                  ),
                                   ...groupValues,
                                 ]);
                               } else {

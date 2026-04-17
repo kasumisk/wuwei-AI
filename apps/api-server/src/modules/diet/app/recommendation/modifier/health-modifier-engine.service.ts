@@ -387,7 +387,8 @@ export class HealthModifierEngineService {
 
     if (context?.healthConditions?.length) {
       // V7.9 P3-04: 复用预计算结果，避免每个食物重复解析
-      const pc = precomputed ?? this.precomputeConditions(context.healthConditions);
+      const pc =
+        precomputed ?? this.precomputeConditions(context.healthConditions);
 
       const healthResult = this.applyHealthPenalties(
         food,
@@ -409,7 +410,11 @@ export class HealthModifierEngineService {
       modifiers.push(...healthResult.modifiers);
 
       // V5 2.8: 正向健康增益（第五层）
-      const bonusMods = this.applyHealthBonuses(food, context.healthConditions, pc);
+      const bonusMods = this.applyHealthBonuses(
+        food,
+        context.healthConditions,
+        pc,
+      );
       for (const m of bonusMods) {
         multiplier *= m.multiplier;
       }
@@ -444,7 +449,10 @@ export class HealthModifierEngineService {
       : undefined;
 
     return foods
-      .map((food) => ({ food, penalty: this.evaluate(food, context, cache, precomputed) }))
+      .map((food) => ({
+        food,
+        penalty: this.evaluate(food, context, cache, precomputed),
+      }))
       .filter(({ penalty }) => !penalty.isVetoed);
   }
 
@@ -494,7 +502,8 @@ export class HealthModifierEngineService {
     const mods: HealthModifier[] = [];
 
     // V7.9 P3-04: 复用预计算结果
-    const { conditionNames, severityMap } = precomputed ?? this.precomputeConditions(conditions);
+    const { conditionNames, severityMap } =
+      precomputed ?? this.precomputeConditions(conditions);
 
     // 糖尿病: 高GI食物惩罚
     if (conditionNames.includes(HealthCondition.DIABETES_TYPE2)) {
@@ -737,7 +746,8 @@ export class HealthModifierEngineService {
     const mods: HealthModifier[] = [];
 
     // V7.9 P3-04: 复用预计算结果
-    const { conditionNames, severityMap } = precomputed ?? this.precomputeConditions(conditions);
+    const { conditionNames, severityMap } =
+      precomputed ?? this.precomputeConditions(conditions);
 
     // 高血脂 + Omega-3 丰富: 1.15x bonus
     // 判断标准: tags 包含 omega3_rich / high_omega3，或 category=protein 且 tags 包含 seafood/fish

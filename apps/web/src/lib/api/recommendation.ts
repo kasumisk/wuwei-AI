@@ -35,10 +35,10 @@ export const recommendationService = {
     mealType?: 'breakfast' | 'lunch' | 'dinner' | 'snack'
   ): Promise<DailyPlanData & { adjustmentNote?: string }> => {
     return unwrap(
-      clientPost<DailyPlanData & { adjustmentNote?: string }>(
-        '/app/food/daily-plan/adjust',
-        { reason, mealType }
-      )
+      clientPost<DailyPlanData & { adjustmentNote?: string }>('/app/food/daily-plan/adjust', {
+        reason,
+        mealType,
+      })
     );
   },
 

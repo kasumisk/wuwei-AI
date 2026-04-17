@@ -9,7 +9,10 @@
  */
 
 import { PipelineContextFactory } from '../src/modules/diet/app/recommendation/context/pipeline-context-factory.service';
-import { createMockFoodLibrary, createMockScoringConfigService } from './helpers/mock-factories';
+import {
+  createMockFoodLibrary,
+  createMockScoringConfigService,
+} from './helpers/mock-factories';
 
 // ─── 辅助：最小化 MealFromPoolRequest ───
 
@@ -69,29 +72,56 @@ describe('PipelineContextFactory', () => {
     });
 
     it('should map constraints from params', () => {
-      const constraints = { excludeTags: ['fried'], maxCalories: 600, minProtein: 25 } as any;
-      const ctx = factory.build(makeMinimalRequest(), makeMinimalParams({ constraints }));
+      const constraints = {
+        excludeTags: ['fried'],
+        maxCalories: 600,
+        minProtein: 25,
+      } as any;
+      const ctx = factory.build(
+        makeMinimalRequest(),
+        makeMinimalParams({ constraints }),
+      );
 
       expect(ctx.constraints).toBe(constraints);
     });
 
     it('should map picks from params', () => {
       const food = createMockFoodLibrary({ id: 'f1' });
-      const picks = [{ food, score: 0.9, servingCalories: 200, servingProtein: 25, servingFat: 8, servingCarbs: 20, servingFiber: 2, servingGL: 5 }];
-      const ctx = factory.build(makeMinimalRequest(), makeMinimalParams({ picks }));
+      const picks = [
+        {
+          food,
+          score: 0.9,
+          servingCalories: 200,
+          servingProtein: 25,
+          servingFat: 8,
+          servingCarbs: 20,
+          servingFiber: 2,
+          servingGL: 5,
+        },
+      ];
+      const ctx = factory.build(
+        makeMinimalRequest(),
+        makeMinimalParams({ picks }),
+      );
 
       expect(ctx.picks).toBe(picks);
     });
 
     it('should map usedNames from params', () => {
       const usedNames = new Set(['鸡胸肉', '白米饭']);
-      const ctx = factory.build(makeMinimalRequest(), makeMinimalParams({ usedNames }));
+      const ctx = factory.build(
+        makeMinimalRequest(),
+        makeMinimalParams({ usedNames }),
+      );
 
       expect(ctx.usedNames).toBe(usedNames);
     });
 
     it('should map userId from request', () => {
-      const ctx = factory.build(makeMinimalRequest({ userId: 'user-xyz' }), makeMinimalParams());
+      const ctx = factory.build(
+        makeMinimalRequest({ userId: 'user-xyz' }),
+        makeMinimalParams(),
+      );
 
       expect(ctx.userId).toBe('user-xyz');
     });
@@ -104,35 +134,61 @@ describe('PipelineContextFactory', () => {
   describe('偏好/画像字段映射', () => {
     it('should map userPreferences from request', () => {
       const prefs = { loves: ['鸡肉'], avoids: ['辣椒'] };
-      const ctx = factory.build(makeMinimalRequest({ userPreferences: prefs }), makeMinimalParams());
+      const ctx = factory.build(
+        makeMinimalRequest({ userPreferences: prefs }),
+        makeMinimalParams(),
+      );
 
       expect(ctx.userPreferences).toBe(prefs);
     });
 
     it('should map userProfile from request', () => {
       const profile = { allergens: ['dairy'], budgetLevel: 'medium' };
-      const ctx = factory.build(makeMinimalRequest({ userProfile: profile }), makeMinimalParams());
+      const ctx = factory.build(
+        makeMinimalRequest({ userProfile: profile }),
+        makeMinimalParams(),
+      );
 
       expect(ctx.userProfile).toBe(profile);
     });
 
     it('should map preferenceProfile from request', () => {
-      const prefProfile = { categoryWeights: { protein: 1.2 }, ingredientWeights: {}, foodGroupWeights: {}, foodNameWeights: {} };
-      const ctx = factory.build(makeMinimalRequest({ preferenceProfile: prefProfile }), makeMinimalParams());
+      const prefProfile = {
+        categoryWeights: { protein: 1.2 },
+        ingredientWeights: {},
+        foodGroupWeights: {},
+        foodNameWeights: {},
+      };
+      const ctx = factory.build(
+        makeMinimalRequest({ preferenceProfile: prefProfile }),
+        makeMinimalParams(),
+      );
 
       expect(ctx.preferenceProfile).toBe(prefProfile);
     });
 
     it('should map regionalBoostMap from request', () => {
       const boostMap = { 上海: 1.1, 北京: 1.0 };
-      const ctx = factory.build(makeMinimalRequest({ regionalBoostMap: boostMap }), makeMinimalParams());
+      const ctx = factory.build(
+        makeMinimalRequest({ regionalBoostMap: boostMap }),
+        makeMinimalParams(),
+      );
 
       expect(ctx.regionalBoostMap).toBe(boostMap);
     });
 
     it('should map resolvedStrategy from request', () => {
-      const strategy = { strategyId: 's1', strategyName: 'Default', sources: [], config: {}, resolvedAt: Date.now() };
-      const ctx = factory.build(makeMinimalRequest({ resolvedStrategy: strategy }), makeMinimalParams());
+      const strategy = {
+        strategyId: 's1',
+        strategyName: 'Default',
+        sources: [],
+        config: {},
+        resolvedAt: Date.now(),
+      };
+      const ctx = factory.build(
+        makeMinimalRequest({ resolvedStrategy: strategy }),
+        makeMinimalParams(),
+      );
 
       expect(ctx.resolvedStrategy).toBe(strategy);
     });
@@ -185,7 +241,10 @@ describe('PipelineContextFactory', () => {
     });
 
     it('should assign tuning result to context', () => {
-      const fakeTuning = { baseExplorationRate: 0.2, optimizerCandidateLimit: 10 } as any;
+      const fakeTuning = {
+        baseExplorationRate: 0.2,
+        optimizerCandidateLimit: 10,
+      } as any;
       mockScoringConfig.getTuning.mockReturnValue(fakeTuning);
 
       const ctx = factory.build(makeMinimalRequest(), makeMinimalParams());
@@ -201,13 +260,19 @@ describe('PipelineContextFactory', () => {
   describe('replacementWeightMap 映射', () => {
     it('should map replacementWeightMap from params', () => {
       const map = new Map([['food-001', 1.2]]);
-      const ctx = factory.build(makeMinimalRequest(), makeMinimalParams({ replacementWeightMap: map }));
+      const ctx = factory.build(
+        makeMinimalRequest(),
+        makeMinimalParams({ replacementWeightMap: map }),
+      );
 
       expect(ctx.replacementWeightMap).toBe(map);
     });
 
     it('should accept null replacementWeightMap', () => {
-      const ctx = factory.build(makeMinimalRequest(), makeMinimalParams({ replacementWeightMap: null }));
+      const ctx = factory.build(
+        makeMinimalRequest(),
+        makeMinimalParams({ replacementWeightMap: null }),
+      );
 
       expect(ctx.replacementWeightMap).toBeNull();
     });
@@ -220,9 +285,19 @@ describe('PipelineContextFactory', () => {
   describe('场景/渠道字段映射', () => {
     it('should map channel and sceneContext from request', () => {
       const channel = 'delivery' as any;
-      const sceneContext = { channel, sceneType: 'eating_out', realismLevel: 'relaxed', confidence: 1.0, source: 'rule_inferred', sceneConstraints: {} } as any;
+      const sceneContext = {
+        channel,
+        sceneType: 'eating_out',
+        realismLevel: 'relaxed',
+        confidence: 1.0,
+        source: 'rule_inferred',
+        sceneConstraints: {},
+      } as any;
 
-      const ctx = factory.build(makeMinimalRequest({ channel, sceneContext }), makeMinimalParams());
+      const ctx = factory.build(
+        makeMinimalRequest({ channel, sceneContext }),
+        makeMinimalParams(),
+      );
 
       expect(ctx.channel).toBe(channel);
       expect(ctx.sceneContext).toBe(sceneContext);
@@ -230,7 +305,10 @@ describe('PipelineContextFactory', () => {
 
     it('should map shortTermProfile and contextualProfile from request', () => {
       const shortTermProfile = { rejectedFoods: { 炸鸡: 3 } } as any;
-      const contextualProfile = { dayType: 'weekday', timeOfDay: 'morning' } as any;
+      const contextualProfile = {
+        dayType: 'weekday',
+        timeOfDay: 'morning',
+      } as any;
 
       const ctx = factory.build(
         makeMinimalRequest({ shortTermProfile, contextualProfile }),

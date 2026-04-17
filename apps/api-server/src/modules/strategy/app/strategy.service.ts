@@ -261,7 +261,9 @@ export class StrategyService {
   }
 
   /** 获取用户的活跃策略分配 */
-  async getUserAssignment(userId: string): Promise<StrategyAssignmentEntity | null> {
+  async getUserAssignment(
+    userId: string,
+  ): Promise<StrategyAssignmentEntity | null> {
     const cacheKey = `${CACHE_PREFIX}user:${userId}`;
 
     return this.redis.getOrSet<StrategyAssignmentEntity | null>(
@@ -304,7 +306,9 @@ export class StrategyService {
 
   // ─── 缓存管理 ───
 
-  private async invalidateStrategyCache(_strategy: StrategyEntity): Promise<void> {
+  private async invalidateStrategyCache(
+    _strategy: StrategyEntity,
+  ): Promise<void> {
     try {
       await this.redis.delByPrefix(`${CACHE_PREFIX}active:`);
       // 也可以更精确地只失效相关的 key，但 prefix 删除足够简单

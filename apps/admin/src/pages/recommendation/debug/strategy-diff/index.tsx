@@ -96,7 +96,15 @@ const FoodComparisonTable: React.FC<{
 }> = ({ title, foods, color, icon }) => {
   if (!foods || foods.length === 0) {
     return (
-      <Card size="small" title={<Space>{icon}<span>{title} (0)</span></Space>}>
+      <Card
+        size="small"
+        title={
+          <Space>
+            {icon}
+            <span>{title} (0)</span>
+          </Space>
+        }
+      >
         <Empty description="无食物" />
       </Card>
     );
@@ -144,17 +152,13 @@ const FoodComparisonTable: React.FC<{
       title={
         <Space>
           {icon}
-          <span>{title} ({foods.length})</span>
+          <span>
+            {title} ({foods.length})
+          </span>
         </Space>
       }
     >
-      <Table
-        dataSource={foods}
-        columns={columns}
-        rowKey="name"
-        size="small"
-        pagination={false}
-      />
+      <Table dataSource={foods} columns={columns} rowKey="name" size="small" pagination={false} />
     </Card>
   );
 };
@@ -271,11 +275,7 @@ const DiffResultDisplay: React.FC<{ result: StrategyDiffResult }> = ({ result })
                 />
               </Col>
               <Col span={8}>
-                <Statistic
-                  title="平均热量"
-                  value={Math.round(avgCalA)}
-                  suffix="kcal"
-                />
+                <Statistic title="平均热量" value={Math.round(avgCalA)} suffix="kcal" />
               </Col>
             </Row>
           </Card>
@@ -308,11 +308,7 @@ const DiffResultDisplay: React.FC<{ result: StrategyDiffResult }> = ({ result })
                 />
               </Col>
               <Col span={8}>
-                <Statistic
-                  title="平均热量"
-                  value={Math.round(avgCalB)}
-                  suffix="kcal"
-                />
+                <Statistic title="平均热量" value={Math.round(avgCalB)} suffix="kcal" />
               </Col>
             </Row>
           </Card>
@@ -355,8 +351,8 @@ const DiffResultDisplay: React.FC<{ result: StrategyDiffResult }> = ({ result })
               value={
                 comparison.totalFoodsA + comparison.totalFoodsB > 0
                   ? (
-                      (comparison.commonCount * 2) /
-                      (comparison.totalFoodsA + comparison.totalFoodsB) *
+                      ((comparison.commonCount * 2) /
+                        (comparison.totalFoodsA + comparison.totalFoodsB)) *
                       100
                     ).toFixed(1)
                   : 0
@@ -413,7 +409,12 @@ const DiffResultDisplay: React.FC<{ result: StrategyDiffResult }> = ({ result })
         <Col xs={24} md={12}>
           <Card
             size="small"
-            title={<Space><Badge color="#1677ff" /><span>策略 A 配置</span></Space>}
+            title={
+              <Space>
+                <Badge color="#1677ff" />
+                <span>策略 A 配置</span>
+              </Space>
+            }
           >
             <pre
               style={{
@@ -432,7 +433,12 @@ const DiffResultDisplay: React.FC<{ result: StrategyDiffResult }> = ({ result })
         <Col xs={24} md={12}>
           <Card
             size="small"
-            title={<Space><Badge color="#fa541c" /><span>策略 B 配置</span></Space>}
+            title={
+              <Space>
+                <Badge color="#fa541c" />
+                <span>策略 B 配置</span>
+              </Space>
+            }
           >
             <pre
               style={{

@@ -256,9 +256,7 @@ export class SubscriptionManagementService {
     }
 
     const baseDate =
-      subscription.expiresAt > new Date()
-        ? subscription.expiresAt
-        : new Date();
+      subscription.expiresAt > new Date() ? subscription.expiresAt : new Date();
 
     const newExpiresAt = new Date(baseDate);
     newExpiresAt.setDate(newExpiresAt.getDate() + dto.extendDays);

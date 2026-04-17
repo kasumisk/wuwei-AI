@@ -9,13 +9,16 @@
 ## Step 1：用户画像与档案评估
 
 本轮不新增画像字段，继续复用现有画像体系：
+
 - goal / activityLevel
 - allergens / dietaryRestrictions / healthConditions
 
 新增用户输入引导（行为层）：
+
 - 低完整度时，优先引导补充“份量 + 做法”后重分析
 
 API 是否改动：
+
 - 本轮不改 API。
 - 通过前端复盘 prompt 模板和上下文透传完成闭环。
 
@@ -39,10 +42,12 @@ API 是否改动：
 ## Step 3：页面结构设计（可落地）
 
 涉及页面：
+
 - `/analyze`（新增低完整度分流动作）
 - `/coach`（复用自动首问机制）
 
 页面功能与 API 映射：
+
 - analyze
   - 功能: 一键重分析、分项复盘跳转
   - API: `POST /app/food/analyze/text|image`
@@ -56,12 +61,14 @@ API 是否改动：
 ## Step 4：交互优化（关键）
 
 核心不是 UI，而是“结果后的决策分流”：
+
 - 以前：用户看到低完整度结果，不知道下一步
 - 现在：面板直接给出两条明确路径
   - 重分析补数据
   - 教练复盘先决策
 
 交互收益：
+
 - 降低低质量结果带来的流失
 - 提高分析链路的闭环率
 - 提高教练入口质量（更聚焦“缺口”）
@@ -71,6 +78,7 @@ API 是否改动：
 ## Step 5：UI 结构设计（组件级）
 
 在 `AnalyzePage` 新增：
+
 - `buildEnhancedTextInput()`
   - 自动补齐“份量提示 + 做法提示”
 
@@ -87,6 +95,7 @@ API 是否改动：
   - 分项复盘直连教练入口
 
 状态来源：
+
 - 本地状态: textInput/result/editedFoods/resultQuality
 - 会话状态: coach_analysis_context + coach_auto_prompt
 
@@ -95,6 +104,7 @@ API 是否改动：
 ## Step 6：API 缺口识别
 
 当前可用，但建议后续补齐：
+
 - 缺口 1: 后端未返回“缺口类型”
   - 建议补 `missingSignals[]`（missing_portion/missing_cooking_method/macro_coverage_low）
 
@@ -109,14 +119,17 @@ API 是否改动：
 ## Step 7：分阶段迭代
 
 Phase 1（已完成）
+
 - 输入质量引导
 - 完整度面板展示
 
 Phase 2（本轮完成）
+
 - 低完整度一键重分析
 - 分项复盘直连教练
 
 Phase 3（下一轮建议）
+
 - 低完整度结果默认高亮动作按钮（行为优先）
 - 复盘后自动回填“重分析建议清单”到 analyze 输入区
 

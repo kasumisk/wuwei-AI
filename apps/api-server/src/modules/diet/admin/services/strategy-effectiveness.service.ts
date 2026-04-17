@@ -363,8 +363,7 @@ export class StrategyEffectivenessService {
       }
       const data = channelData.get(trace.channel)!;
       data.totalRecs++;
-      if (trace.foodPoolSize != null)
-        data.poolSizes.push(trace.foodPoolSize);
+      if (trace.foodPoolSize != null) data.poolSizes.push(trace.foodPoolSize);
       if (trace.durationMs != null) data.durations.push(trace.durationMs);
     }
 

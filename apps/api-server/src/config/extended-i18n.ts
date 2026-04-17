@@ -1,6 +1,6 @@
 /**
  * V2.4 Extended I18n Configuration
- * 
+ *
  * Complete i18n coverage: all decision strings, UI labels, time formats, nutrition units
  * Supports: Chinese (zh), English (en), Japanese (ja), Korean (ko)
  */

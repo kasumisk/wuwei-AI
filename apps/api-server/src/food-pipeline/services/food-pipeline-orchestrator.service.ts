@@ -498,9 +498,7 @@ export class FoodPipelineOrchestratorService {
           confidence: food.confidence,
           dataVersion: 1,
           isVerified: directives.isVerified,
-          verifiedBy: directives.isVerified
-            ? directives.verifiedBy
-            : undefined,
+          verifiedBy: directives.isVerified ? directives.verifiedBy : undefined,
           verifiedAt: directives.isVerified ? new Date() : undefined,
           qualityScore: scores.qualityScore,
           satietyScore: scores.satietyScore,
@@ -965,14 +963,20 @@ export class FoodPipelineOrchestratorService {
         }
         if (sr.result.confidence < 0.7) anyStaged = true;
         for (const [k, v] of Object.entries(sr.result)) {
-          if (k === 'confidence' || k === 'reasoning' || k === 'fieldConfidence') continue;
+          if (
+            k === 'confidence' ||
+            k === 'reasoning' ||
+            k === 'fieldConfidence'
+          )
+            continue;
           if (v !== null && v !== undefined && !(k in mergedFields)) {
             mergedFields[k] = v;
           }
         }
         const fc = sr.result.fieldConfidence ?? {};
         for (const [k, v] of Object.entries(fc)) {
-          if (!(k in mergedFieldConfidence)) mergedFieldConfidence[k] = v as number;
+          if (!(k in mergedFieldConfidence))
+            mergedFieldConfidence[k] = v as number;
         }
         stagesTotalFailed += sr.failedFields.length;
       }
@@ -981,13 +985,31 @@ export class FoodPipelineOrchestratorService {
         const mergedResult: EnrichmentResult = {
           ...mergedFields,
           confidence: result.overallConfidence,
-          reasoning: result.stages.map((s) => s.result?.reasoning).filter(Boolean).join(' | ') || undefined,
-          fieldConfidence: Object.keys(mergedFieldConfidence).length > 0 ? mergedFieldConfidence : undefined,
+          reasoning:
+            result.stages
+              .map((s) => s.result?.reasoning)
+              .filter(Boolean)
+              .join(' | ') || undefined,
+          fieldConfidence:
+            Object.keys(mergedFieldConfidence).length > 0
+              ? mergedFieldConfidence
+              : undefined,
         };
         if (anyStaged) {
-          await this.enrichmentService.stageEnrichment(food.id, mergedResult, 'foods', undefined, undefined, 'batch_enrichment');
+          await this.enrichmentService.stageEnrichment(
+            food.id,
+            mergedResult,
+            'foods',
+            undefined,
+            undefined,
+            'batch_enrichment',
+          );
         } else {
-          await this.enrichmentService.applyEnrichment(food.id, mergedResult, 'batch_enrichment');
+          await this.enrichmentService.applyEnrichment(
+            food.id,
+            mergedResult,
+            'batch_enrichment',
+          );
         }
       }
 

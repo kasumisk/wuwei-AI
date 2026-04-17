@@ -12,17 +12,17 @@
 
 ### 修复成果总览
 
-| 指标 | 修复前 (v0) | 修复后 (v5) | 改善 |
-|------|-------------|-------------|------|
-| servingCalories = NULL/NaN | 频繁出现 | **0 个** | 完全消除 |
-| dataConfidence | 0.01（错误除100） | **0.73-0.77** | 正常范围 |
-| dish 占比（lunch/dinner） | 16%（被 ingredient 碾压） | **100%** | 完全修复 |
-| mealType 泄漏 | breakfast食物出现在lunch | **0 个** | 完全修复 |
-| fat_loss 脂肪供能比 | 58% | **35%** | -23pp |
-| fat_loss 蛋白质供能比 | 16.5% | **36%** | +19.5pp |
-| 素食限制（vegetarian） | 完全失效 | **100% 生效** | 完全修复 |
-| 痛风嘌呤惩罚 | 完全失效 | **正确触发** | 完全修复 |
-| 糖尿病 GI 惩罚 | 完全失效 | **正确触发** | 完全修复 |
+| 指标                       | 修复前 (v0)               | 修复后 (v5)   | 改善     |
+| -------------------------- | ------------------------- | ------------- | -------- |
+| servingCalories = NULL/NaN | 频繁出现                  | **0 个**      | 完全消除 |
+| dataConfidence             | 0.01（错误除100）         | **0.73-0.77** | 正常范围 |
+| dish 占比（lunch/dinner）  | 16%（被 ingredient 碾压） | **100%**      | 完全修复 |
+| mealType 泄漏              | breakfast食物出现在lunch  | **0 个**      | 完全修复 |
+| fat_loss 脂肪供能比        | 58%                       | **35%**       | -23pp    |
+| fat_loss 蛋白质供能比      | 16.5%                     | **36%**       | +19.5pp  |
+| 素食限制（vegetarian）     | 完全失效                  | **100% 生效** | 完全修复 |
+| 痛风嘌呤惩罚               | 完全失效                  | **正确触发**  | 完全修复 |
+| 糖尿病 GI 惩罚             | 完全失效                  | **正确触发**  | 完全修复 |
 
 ---
 
@@ -113,7 +113,7 @@
 - **根因**: 双重原因
   1. `purine` 列未包含在 `FOOD_SELECT_COLUMNS` 数组中，导致食物池加载时 purine 全部为 `undefined`（`Number(undefined) || 0 = 0`），gout 嘌呤梯度惩罚全部跳过
   2. 修复 SELECT 列后，Redis L2 缓存（`health_mod:*`）仍命中旧结果（purine=0 时计算的），直接返回跳过重新评估
-- **修复**: 
+- **修复**:
   1. 将 `'purine'` 加入 `FOOD_SELECT_COLUMNS` 数组（一行代码）
   2. 清除 375 条 `health_mod:*` Redis L2 缓存
 - **验证**: S8 慢性病用户推荐中，小笼包(purine=80) → `痛风: 中嘌呤 (80mg/100g)` multiplier=0.81；水煮虾(purine=150) → `痛风: 中嘌呤 (150mg/100g)` multiplier=0.9；虎皮青椒(purine=20) → 无嘌呤惩罚 + `糖尿病: 低GI食物，有益血糖控制` multiplier=1.1
@@ -130,121 +130,121 @@
 
 ### 3.1 测试用户画像
 
-| # | 场景 | userId | goal | 关键画像 |
-|---|------|--------|------|----------|
-| S1 | 减肥 | `b847a2db-...` | fat_loss | 25岁女性, 72→55kg, sedentary, 1500cal |
-| S2 | 保持健康 | `726ef734-...` | health | 40岁男性, 72kg, moderate, 2200cal, 轻度高血压 |
-| S3 | 改善习惯 | `bd34e70f-...` | habit | 22岁大学生, 65kg, 甲壳类过敏, beginner厨艺 |
-| S4 | 健身增肌 | `938322ba-...` | muscle_gain | 28岁男性, 75→82kg, active, 2800cal |
-| S5 | 数据稀疏 | `46970f6a-...` | health | 女性, 仅有性别+目标+1800cal |
-| S6 | 素食老年人 | `a1b2c3d4-...` | health | 65岁女性, vegetarian, osteoporosis |
-| S7 | 日料偏好 | `b2c3d4e5-...` | health | 28岁男性, 纯日料偏好 |
-| S8 | 慢性病 | `c3d4e5f6-...` | fat_loss | 55岁男性, diabetes_type2+gout, low_sodium |
+| #   | 场景       | userId         | goal        | 关键画像                                      |
+| --- | ---------- | -------------- | ----------- | --------------------------------------------- |
+| S1  | 减肥       | `b847a2db-...` | fat_loss    | 25岁女性, 72→55kg, sedentary, 1500cal         |
+| S2  | 保持健康   | `726ef734-...` | health      | 40岁男性, 72kg, moderate, 2200cal, 轻度高血压 |
+| S3  | 改善习惯   | `bd34e70f-...` | habit       | 22岁大学生, 65kg, 甲壳类过敏, beginner厨艺    |
+| S4  | 健身增肌   | `938322ba-...` | muscle_gain | 28岁男性, 75→82kg, active, 2800cal            |
+| S5  | 数据稀疏   | `46970f6a-...` | health      | 女性, 仅有性别+目标+1800cal                   |
+| S6  | 素食老年人 | `a1b2c3d4-...` | health      | 65岁女性, vegetarian, osteoporosis            |
+| S7  | 日料偏好   | `b2c3d4e5-...` | health      | 28岁男性, 纯日料偏好                          |
+| S8  | 慢性病     | `c3d4e5f6-...` | fat_loss    | 55岁男性, diabetes_type2+gout, low_sodium     |
 
 ### 3.2 修复后 Lunch 推荐结果 (v5)
 
 #### S1 减肥 (fat_loss) — 目标 1500cal/day, lunch ~525cal
 
-| 食物 | 类型 | 热量 | P | F | C |
-|------|------|------|---|---|---|
-| 煎饺 | dish | 252 | 8g | 13g | 26g |
-| 清蒸鱼 | dish | 132 | 23g | 4g | 0g |
-| 虎皮青椒 | dish | 98 | 2g | 6g | 10g |
-| **合计** | | **449** | **33g** | **23g** | **36g** |
+| 食物     | 类型 | 热量    | P       | F       | C       |
+| -------- | ---- | ------- | ------- | ------- | ------- |
+| 煎饺     | dish | 252     | 8g      | 13g     | 26g     |
+| 清蒸鱼   | dish | 132     | 23g     | 4g      | 0g      |
+| 虎皮青椒 | dish | 98      | 2g      | 6g      | 10g     |
+| **合计** |      | **449** | **33g** | **23g** | **36g** |
 
 评价: 全部 dish，零 NaN。蛋白质充足。
 
 #### S2 保持健康 (health) — 目标 2200cal/day
 
-| 食物 | 类型 | 热量 | P | F | C |
-|------|------|------|---|---|---|
-| 红薯（蒸） | dish | 172 | 3g | 0g | 40g |
-| 烤鸡腿 | dish | 285 | 30g | 17g | 2g |
-| 炒青菜 | dish | 90 | 3g | 5g | 7g |
-| **合计** | | **547** | **36g** | **22g** | **49g** |
+| 食物       | 类型 | 热量    | P       | F       | C       |
+| ---------- | ---- | ------- | ------- | ------- | ------- |
+| 红薯（蒸） | dish | 172     | 3g      | 0g      | 40g     |
+| 烤鸡腿     | dish | 285     | 30g     | 17g     | 2g      |
+| 炒青菜     | dish | 90      | 3g      | 5g      | 7g      |
+| **合计**   |      | **547** | **36g** | **22g** | **49g** |
 
 评价: 全部 dish，高血压用户的健康修正正确应用。
 
 #### S3 改善习惯 (habit) — 目标 2100cal/day
 
-| 食物 | 类型 | 热量 | P | F | C |
-|------|------|------|---|---|---|
-| 红薯（蒸） | dish | 172 | 3g | 0g | 40g |
-| 烤鸡腿 | dish | 285 | 30g | 17g | 2g |
-| 蒜蒸茄子 | dish | 124 | 2g | 8g | 11g |
-| **合计** | | **581** | **35g** | **25g** | **53g** |
+| 食物       | 类型 | 热量    | P       | F       | C       |
+| ---------- | ---- | ------- | ------- | ------- | ------- |
+| 红薯（蒸） | dish | 172     | 3g      | 0g      | 40g     |
+| 烤鸡腿     | dish | 285     | 30g     | 17g     | 2g      |
+| 蒜蒸茄子   | dish | 124     | 2g      | 8g      | 11g     |
+| **合计**   |      | **581** | **35g** | **25g** | **53g** |
 
 评价: 全部 dish，甲壳类过敏过滤生效（无虾蟹）。
 
 #### S4 健身增肌 (muscle_gain) — 目标 2800cal/day
 
-| 食物 | 类型 | 热量 | P | F | C |
-|------|------|------|---|---|---|
-| 煎饺 | dish | 504 | 16g | 25g | 52g |
-| 烤鸡腿 | dish | 285 | 30g | 17g | 2g |
-| 西红柿炒鸡蛋 | dish | 172 | 10g | 10g | 12g |
-| **合计** | | **961** | **56g** | **52g** | **66g** |
+| 食物         | 类型 | 热量    | P       | F       | C       |
+| ------------ | ---- | ------- | ------- | ------- | ------- |
+| 煎饺         | dish | 504     | 16g     | 25g     | 52g     |
+| 烤鸡腿       | dish | 285     | 30g     | 17g     | 2g      |
+| 西红柿炒鸡蛋 | dish | 172     | 10g     | 10g     | 12g     |
+| **合计**     |      | **961** | **56g** | **52g** | **66g** |
 
 评价: 全部 dish。热量充足适合增肌。
 
 #### S5 数据稀疏 (health) — 目标 1800cal/day
 
-| 食物 | 类型 | 热量 | P | F | C |
-|------|------|------|---|---|---|
-| 螺蛳粉 | dish | 378 | 12g | 11g | 60g |
-| 清蒸鱼 | dish | 197 | 34g | 6g | 0g |
-| 虎皮青椒 | dish | 98 | 2g | 6g | 10g |
-| **合计** | | **673** | **48g** | **23g** | **70g** |
+| 食物     | 类型 | 热量    | P       | F       | C       |
+| -------- | ---- | ------- | ------- | ------- | ------- |
+| 螺蛳粉   | dish | 378     | 12g     | 11g     | 60g     |
+| 清蒸鱼   | dish | 197     | 34g     | 6g      | 0g      |
+| 虎皮青椒 | dish | 98      | 2g      | 6g      | 10g     |
+| **合计** |      | **673** | **48g** | **23g** | **70g** |
 
 评价: 降级表现良好。全部 dish，极稀疏数据下仍输出合理推荐。
 
 #### S6 素食老年人 (health + vegetarian + osteoporosis)
 
-| 食物 | 类型 | 热量 | foodGroup | mainIngredient |
-|------|------|------|-----------|----------------|
-| 黑大麦 | grain | 327 | grain | black barley |
-| 豆腐丝 | protein | 38 | legume | soybean |
-| 炒青菜 | veggie | 68 | vegetable | leafy greens |
-| **合计** | | **433** | | |
+| 食物     | 类型    | 热量    | foodGroup | mainIngredient |
+| -------- | ------- | ------- | --------- | -------------- |
+| 黑大麦   | grain   | 327     | grain     | black barley   |
+| 豆腐丝   | protein | 38      | legume    | soybean        |
+| 炒青菜   | veggie  | 68      | vegetable | leafy greens   |
+| **合计** |         | **433** |           |                |
 
 评价: **零肉类泄漏**。全部植物性食物。3次运行稳定通过。
 
 #### S7 日料偏好 (health + japanese cuisine preference)
 
-| 食物 | 类型 | 热量 | cuisine |
-|------|------|------|---------|
-| 红薯（蒸） | dish | 172 | international |
-| 水煮虾 | dish | 140 | chinese |
-| 西红柿炒鸡蛋 | dish | 172 | chinese |
-| **合计** | | **484** | |
+| 食物         | 类型 | 热量    | cuisine       |
+| ------------ | ---- | ------- | ------------- |
+| 红薯（蒸）   | dish | 172     | international |
+| 水煮虾       | dish | 140     | chinese       |
+| 西红柿炒鸡蛋 | dish | 172     | chinese       |
+| **合计**     |      | **484** |               |
 
 评价: 全部 dish，但日料 dish 未出现（数据库仅 2 个 japanese dish）。这是数据限制而非代码问题。
 
 #### S8 慢性病 (fat_loss + diabetes_type2 + gout + low_sodium)
 
-| 食物 | 类型 | 热量 | purine | GI | 健康惩罚 |
-|------|------|------|--------|-----|----------|
-| 小笼包 | dish | 264 | 80 | 68 | 糖尿病中GI + 痛风中嘌呤 (mult=0.81) |
-| 水煮虾 | dish | 140 | 150 | 0 | 痛风中嘌呤 (mult=0.9) |
-| 虎皮青椒 | dish | 98 | 20 | 15 | 糖尿病低GI增益 (mult=1.1) |
-| **合计** | | **502** | | | |
+| 食物     | 类型 | 热量    | purine | GI  | 健康惩罚                            |
+| -------- | ---- | ------- | ------ | --- | ----------------------------------- |
+| 小笼包   | dish | 264     | 80     | 68  | 糖尿病中GI + 痛风中嘌呤 (mult=0.81) |
+| 水煮虾   | dish | 140     | 150    | 0   | 痛风中嘌呤 (mult=0.9)               |
+| 虎皮青椒 | dish | 98      | 20     | 15  | 糖尿病低GI增益 (mult=1.1)           |
+| **合计** |      | **502** |        |     |                                     |
 
 评价: 全部 dish。**痛风嘌呤惩罚和糖尿病 GI 惩罚均正确触发**。虎皮青椒低GI获得正向增益。
 
 ### 3.3 全餐次覆盖测试
 
-| 场景 | breakfast | lunch | dinner | snack |
-|------|-----------|-------|--------|-------|
-| S1 减肥 | ✅ | ✅ | ✅ | ✅ |
-| S2 保持健康 | ✅ | ✅ | ✅ | ✅ |
-| S3 改善习惯 | ✅ | ✅ | ✅ | ✅ |
-| S4 健身增肌 | ✅ | ✅ | ✅ | ✅ |
-| S5 数据稀疏 | ✅ | ✅ | ✅ | ✅ |
-| S6 素食老年人 | ✅ | ✅ | ✅* | ✅* |
-| S7 日料偏好 | ✅* | ✅ | ✅ | ✅* |
-| S8 慢性病 | ✅* | ✅ | ✅ | ✅* |
+| 场景          | breakfast | lunch | dinner | snack |
+| ------------- | --------- | ----- | ------ | ----- |
+| S1 减肥       | ✅        | ✅    | ✅     | ✅    |
+| S2 保持健康   | ✅        | ✅    | ✅     | ✅    |
+| S3 改善习惯   | ✅        | ✅    | ✅     | ✅    |
+| S4 健身增肌   | ✅        | ✅    | ✅     | ✅    |
+| S5 数据稀疏   | ✅        | ✅    | ✅     | ✅    |
+| S6 素食老年人 | ✅        | ✅    | ✅\*   | ✅\*  |
+| S7 日料偏好   | ✅\*      | ✅    | ✅     | ✅\*  |
+| S8 慢性病     | ✅\*      | ✅    | ✅     | ✅\*  |
 
-> *: snack/breakfast 中水果（猕猴桃、苹果等）和豆类（黄豆、豆奶粉）为 `foodForm=ingredient`，这是**数据层面的标注问题**（水果本身就是 ingredient 形态），不是推荐逻辑 bug。lunch/dinner 中零 ingredient 泄漏。
+> \*: snack/breakfast 中水果（猕猴桃、苹果等）和豆类（黄豆、豆奶粉）为 `foodForm=ingredient`，这是**数据层面的标注问题**（水果本身就是 ingredient 形态），不是推荐逻辑 bug。lunch/dinner 中零 ingredient 泄漏。
 
 **总计 32 个测试点，全部通过核心检查（零 NaN、零 mealType 泄漏、素食限制 100% 生效、健康惩罚正确触发）。**
 
@@ -257,6 +257,7 @@
 ### 4.1 宏量素比例仍有偏差（MEDIUM）
 
 脂肪供能比在部分场景仍偏高。根因是：
+
 1. 餐级组装仅强制热量预算，不检查宏量素比例
 2. `MealTarget.fat` 和 `MealTarget.carbs` 已计算但未在评分/选品中使用
 3. 食物库中低脂高蛋白 dish 选项有限
@@ -297,19 +298,19 @@
 
 ## 五、修改文件清单
 
-| 文件 | Bug | 修改内容 |
-|------|-----|----------|
-| `pipeline/food-pool-cache.service.ts` | #1, #3, #9 | `normalizeRow()`, `normalizePortions()`, purine 加入 SELECT |
-| `meal/meal-assembler.service.ts` | #2, #3 | 移除 `/100`, NaN 防御 |
-| `pipeline/food-scorer.service.ts` | #3 | `Number() \|\| 0` 防御 |
-| `pipeline/pipeline-builder.service.ts` | #4, #5, #7 | mealType 门控, ingredient 降权, 饮食限制过滤（recall+兜底+fallback+冲突解决+品类限制） |
-| `filter/realistic-filter.service.ts` | #5 | `preferDishOverIngredient()` 三级策略 |
-| `types/scoring.types.ts` | #6 | `SCORE_WEIGHTS` 宏量素权重提升 |
-| `types/config.types.ts` | #5 | `ingredientMultiplierNormal` 配置 |
-| `context/scoring-config.service.ts` | #5 | `ingredientMultiplierNormal` 默认值 |
-| `types/meal.types.ts` | #7 | `Constraint` 接口新增 `dietaryRestrictions` |
-| `pipeline/constraint-generator.service.ts` | #7 | 传递 `dietaryRestrictions` |
-| `pipeline/food-filter.service.ts` | #7 | `foodViolatesDietaryRestriction()` 函数 |
+| 文件                                       | Bug        | 修改内容                                                                               |
+| ------------------------------------------ | ---------- | -------------------------------------------------------------------------------------- |
+| `pipeline/food-pool-cache.service.ts`      | #1, #3, #9 | `normalizeRow()`, `normalizePortions()`, purine 加入 SELECT                            |
+| `meal/meal-assembler.service.ts`           | #2, #3     | 移除 `/100`, NaN 防御                                                                  |
+| `pipeline/food-scorer.service.ts`          | #3         | `Number() \|\| 0` 防御                                                                 |
+| `pipeline/pipeline-builder.service.ts`     | #4, #5, #7 | mealType 门控, ingredient 降权, 饮食限制过滤（recall+兜底+fallback+冲突解决+品类限制） |
+| `filter/realistic-filter.service.ts`       | #5         | `preferDishOverIngredient()` 三级策略                                                  |
+| `types/scoring.types.ts`                   | #6         | `SCORE_WEIGHTS` 宏量素权重提升                                                         |
+| `types/config.types.ts`                    | #5         | `ingredientMultiplierNormal` 配置                                                      |
+| `context/scoring-config.service.ts`        | #5         | `ingredientMultiplierNormal` 默认值                                                    |
+| `types/meal.types.ts`                      | #7         | `Constraint` 接口新增 `dietaryRestrictions`                                            |
+| `pipeline/constraint-generator.service.ts` | #7         | 传递 `dietaryRestrictions`                                                             |
+| `pipeline/food-filter.service.ts`          | #7         | `foodViolatesDietaryRestriction()` 函数                                                |
 
 所有修改均为最小化修复，未涉及架构重构或新功能添加。
 
@@ -329,6 +330,7 @@ Step 6: 循环 → 发现新问题则回到 Step 2
 ```
 
 共执行 5 轮完整循环（v1→v2→v3→v4→v5）：
+
 - v1-v3: 修复 Bug 1-6（场景 S1-S5）
 - v4: 修复 Bug 7 第一阶段 + Bug 9（场景 S6-S8）
 - v5: 修复 Bug 7 泄漏路径 + 清除 Redis 缓存 + 全场景回归验证

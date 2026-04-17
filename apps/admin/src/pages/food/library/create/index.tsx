@@ -51,7 +51,10 @@ const FoodCreatePage: React.FC = () => {
         <Row justify="space-between" align="middle">
           <Col>
             <Space>
-              <Button icon={<ArrowLeftOutlined />} onClick={() => closeTabAndGo('/food/library/list')}>
+              <Button
+                icon={<ArrowLeftOutlined />}
+                onClick={() => closeTabAndGo('/food/library/list')}
+              >
                 返回列表
               </Button>
               <Typography.Title level={4} style={{ margin: 0 }}>

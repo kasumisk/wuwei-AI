@@ -216,7 +216,9 @@ export default function ProfilePage() {
               <span className="text-xl">⚙️</span>
               <div>
                 <p className="text-sm font-bold">偏好设置</p>
-                <p className="text-xs text-muted-foreground mt-0.5">推荐偏好 / 厨房装备 / 生活方式</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  推荐偏好 / 厨房装备 / 生活方式
+                </p>
               </div>
             </div>
             <ChevronRight />

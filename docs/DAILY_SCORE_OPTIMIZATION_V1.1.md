@@ -4,6 +4,7 @@
 > 基于真实饮食记录，融合用户画像、偏好、AI 教练能力的综合评分系统
 
 **版本变更**：V1.1 vs V1 的核心升级
+
 - ✅ 明确"行为优先级"数据架构（数据源 → 权重等级 → 融合逻辑）
 - ✅ 细化个性化维度的影响机制（公式化、参数化）
 - ✅ 完整化状态解释路径（从分解值到自然语言）
@@ -15,26 +16,26 @@
 
 ### 1.1 现有能力盘点
 
-| 系统 | 能力 | 数据类型 | 当前用途 | 状态 |
-|------|------|---------|---------|------|
-| **Analyze** | 食物识别、营养解析 | 每餐食物、宏微量 | 单餐决策 | ✅ 上线 |
-| **Explain** | 7维评分生成、breakdown | 单餐/日汇总、维度分解 | 评分解释 | ✅ 上线 |
-| **Decide** | Should Eat 判断、风险评估 | 单餐营养 vs 目标 | 参考建议 | ✅ 上线 |
-| **BehaviorService** | 连胜、合规率、进度 | 历史行为、用户心理 | 孤立存储 | ⚠️ 未融合 |
-| **PreferenceService** | 口味、饮食习惯、禁忌 | 用户偏好 | 推荐场景 | ⚠️ 未融合 |
-| **ProfileService** | 目标、身体情况、约束 | 用户画像 | 部分融合 | ⚠️ 不完整 |
+| 系统                  | 能力                      | 数据类型              | 当前用途 | 状态      |
+| --------------------- | ------------------------- | --------------------- | -------- | --------- |
+| **Analyze**           | 食物识别、营养解析        | 每餐食物、宏微量      | 单餐决策 | ✅ 上线   |
+| **Explain**           | 7维评分生成、breakdown    | 单餐/日汇总、维度分解 | 评分解释 | ✅ 上线   |
+| **Decide**            | Should Eat 判断、风险评估 | 单餐营养 vs 目标      | 参考建议 | ✅ 上线   |
+| **BehaviorService**   | 连胜、合规率、进度        | 历史行为、用户心理    | 孤立存储 | ⚠️ 未融合 |
+| **PreferenceService** | 口味、饮食习惯、禁忌      | 用户偏好              | 推荐场景 | ⚠️ 未融合 |
+| **ProfileService**    | 目标、身体情况、约束      | 用户画像              | 部分融合 | ⚠️ 不完整 |
 
 ### 1.2 关键问题（V1 已识别）
 
-| Problem | 影响 | 根因 |
-|---------|------|------|
-| `stability=80`（默认）| 稳定性维度失真 | BehaviorService 数据未注入 |
-| `glycemicImpact=75`（默认）| 血糖维度失真 | 缺 glycemic index 数据融合 |
-| `foodQuality/satiety` fallback=3 | 无记录时评分虚高 | 控制流逻辑错误 |
-| 无 `healthScore` 聚合 | 缺完整维度 | daily-summary 无 healthScore 计算 |
-| **未考虑 healthConditions** | 个性化缺失 | 健康条件未作为评分参数 |
-| **7 维 breakdown 无解释** | 用户困惑 | 仅返回数值，无自然语言 |
-| **Decide 结果未融合** | 决策孤立 | 仅用于参考，不参与评分 |
+| Problem                          | 影响             | 根因                              |
+| -------------------------------- | ---------------- | --------------------------------- |
+| `stability=80`（默认）           | 稳定性维度失真   | BehaviorService 数据未注入        |
+| `glycemicImpact=75`（默认）      | 血糖维度失真     | 缺 glycemic index 数据融合        |
+| `foodQuality/satiety` fallback=3 | 无记录时评分虚高 | 控制流逻辑错误                    |
+| 无 `healthScore` 聚合            | 缺完整维度       | daily-summary 无 healthScore 计算 |
+| **未考虑 healthConditions**      | 个性化缺失       | 健康条件未作为评分参数            |
+| **7 维 breakdown 无解释**        | 用户困惑         | 仅返回数值，无自然语言            |
+| **Decide 结果未融合**            | 决策孤立         | 仅用于参考，不参与评分            |
 
 ---
 
@@ -69,25 +70,30 @@
 ### 2.2 核心设计原则（必须遵守）
 
 **P1: 行为数据真实性优先**
+
 - 评分必须直接来自 `food_records` 的聚合（不假设、不填充）
 - 数值缺失 → 使用合理中性值（如 satiety 缺失 → 3），而非假设最优值
 - 无记录 → 该维度评分为 0，不纳入最终分
 
 **P2: 个性化是权重调整，不是值修改**
+
 - 不能因为"用户想减肥"就把热量摄入数据改小
 - 只能调整"热量超标有多严重"（权重调整）
 - 健康条件：糖控用户糖指数权重 ×1.5，但糖指数值必须来自真实食物
 
 **P3: 决策系统只提供信号，不主导评分**
+
 - Should Eat 的"不建议吃"只能在特定维度做 -2~3% 调整
 - 不能用"决策说高风险"来砍评分
 - 反例：决策评出 AVOID，不能因此把该餐评分从 72 改到 52
 
 **P4: 无新增数据库字段**
+
 - 所有融合数据实时计算（内存 + Redis）
 - 评分算法、权重值、阈值为配置常量，支持 A/B 测试
 
 **P5: 最大化现有能力复用**
+
 - Analyze 输出 → 食物数据源
 - Explain 输出 → 维度分解逻辑
 - CoachInsight → 状态文案生成
@@ -243,8 +249,8 @@ function computePersonalizedWeights(
 ): Record<string, number> {
   // Step 1: 基础权重（按目标）
   let weights = { ...GOAL_WEIGHTS[goalType] };
-  // goalType="减肥" ⇒ 
-  //   energy: 30, macroBalance: 25, satiety: 25, quality: 10, 
+  // goalType="减肥" ⇒
+  //   energy: 30, macroBalance: 25, satiety: 25, quality: 10,
   //   glycemiImpact: 5, stability: 3, adherence: 2
 
   // Step 2: 健康条件调整
@@ -276,6 +282,7 @@ function computePersonalizedWeights(
 ```
 
 **示例**：
+
 - 用户A: 减肥 + 无健康条件 → 标准权重 (energy 30%, satiety 25%, ...)
 - 用户B: 减肥 + 糖尿病 → energy 30×1.2=36%, glycemicImpact 5×1.5=7.5%, ... → 归一化后维持总和100%
 
@@ -291,21 +298,21 @@ function calcEnergyScore(
   goalType: GoalType
 ): number {
   const ratio = actualCalories / targetCalories;
-  
+
   // 目标特定的容忍度
   const toleranceRange = {
-    weight_loss: [0.85, 1.0],   // 允许 -15% ~ 0%
-    muscle_gain: [0.95, 1.1],   // 允许 -5% ~ +10%
-    maintenance: [0.9, 1.1],    // 允许 -10% ~ +10%
+    weight_loss: [0.85, 1.0], // 允许 -15% ~ 0%
+    muscle_gain: [0.95, 1.1], // 允许 -5% ~ +10%
+    maintenance: [0.9, 1.1], // 允许 -10% ~ +10%
   };
 
   const [lower, upper] = toleranceRange[goalType];
   let score = 100;
 
   if (ratio < lower) {
-    score = 50 + (ratio / lower) * 50;  // 低于容忍范围：50~100
+    score = 50 + (ratio / lower) * 50; // 低于容忍范围：50~100
   } else if (ratio > upper) {
-    score = 100 - Math.min(50, (ratio - upper) / 0.1 * 50); // 超范围惩罚
+    score = 100 - Math.min(50, ((ratio - upper) / 0.1) * 50); // 超范围惩罚
   }
   // 在容忍范围内...score = 100
 
@@ -347,17 +354,15 @@ function calcMacroScore(
 
   // 加权偏差（特定目标权重不同）
   const weights = { protein: 0.4, fat: 0.3, carbs: 0.3 };
-  if (goalType === "muscle_gain") weights.protein = 0.5;
-  if (goalType === "weight_loss") weights.fat = 0.4;
+  if (goalType === 'muscle_gain') weights.protein = 0.5;
+  if (goalType === 'weight_loss') weights.fat = 0.4;
 
-  const totalDeviation = 
-    pDeviation * weights.protein +
-    fDeviation * weights.fat +
-    cDeviation * weights.carbs;
+  const totalDeviation =
+    pDeviation * weights.protein + fDeviation * weights.fat + cDeviation * weights.carbs;
 
   // 总偏差 <0.05 ⇒ 满分，>0.15 ⇒ 最低分
   const score = Math.max(0, 100 - totalDeviation * 500);
-  
+
   return Math.round(score);
 }
 ```
@@ -366,7 +371,7 @@ function calcMacroScore(
 
 ```typescript
 function calcSatietyScore(
-  avgSatiety: number,  // 1-10 scale, default=3 if missing
+  avgSatiety: number, // 1-10 scale, default=3 if missing
   mealCount: number
 ): number {
   if (mealCount === 0) return 0;
@@ -376,7 +381,7 @@ function calcSatietyScore(
   if (avgSatiety >= 6) {
     return 90 + (avgSatiety - 6) * 2; // 6~10 ⇒ 90~100
   } else {
-    return avgSatiety * 13.33;  // 0~6 → 0~80
+    return avgSatiety * 13.33; // 0~6 → 0~80
   }
 }
 ```
@@ -384,10 +389,7 @@ function calcSatietyScore(
 **维度 4: Quality (食物质量)**
 
 ```typescript
-function calcQualityScore(
-  avgQuality: number,
-  mealCount: number
-): number {
+function calcQualityScore(avgQuality: number, mealCount: number): number {
   if (mealCount === 0) return 0;
   if (avgQuality === 0) return 20; // 数据缺失
 
@@ -461,7 +463,7 @@ function calcStabilityScore(
 
 ```typescript
 function calcAdherenceScore(
-  goalAchievementRate: number  // 0-1 range
+  goalAchievementRate: number // 0-1 range
 ): number {
   if (goalAchievementRate >= 0.9) {
     return 90 + Math.min(10, (goalAchievementRate - 0.9) * 100);
@@ -487,7 +489,7 @@ function calculateDailyScore(
   // 层1 + 层2：加权求和
   let totalScore = 0;
   for (const [dimension, score] of Object.entries(breakdownScores)) {
-    totalScore += (score * personalizedWeights[dimension]) || 0;
+    totalScore += score * personalizedWeights[dimension] || 0;
   }
   totalScore /= 100; // 归一化
 
@@ -521,10 +523,10 @@ function calculateDailyScore(
 type StatusBand = 'excellent' | 'good' | 'fair' | 'needsImprovement';
 
 const STATUS_THRESHOLDS = {
-  excellent: 80,          // ≥80
-  good: 65,               // 65-79
-  fair: 50,               // 50-64
-  needsImprovement: 0,    // <50
+  excellent: 80, // ≥80
+  good: 65, // 65-79
+  fair: 50, // 50-64
+  needsImprovement: 0, // <50
 };
 
 const STATUS_I18N: Record<StatusBand, Record<string, string>> = {
@@ -560,17 +562,24 @@ function getStatusBand(score: number): StatusBand {
 
 ```typescript
 async function buildStatusExplanation(
-  breakdown: Record<string, number>,     // 7维评分
-  goals: UserGoals,                      // 用户目标
-  actualIntake: NutrientIntake,         // 实际摄入
+  breakdown: Record<string, number>, // 7维评分
+  goals: UserGoals, // 用户目标
+  actualIntake: NutrientIntake, // 实际摄入
   streakDays: number,
   avgComplianceRate: number,
   decision: 'SAFE' | 'OK' | 'LIMIT' | 'AVOID' | null,
   locale: 'zh' | 'en'
 ): Promise<string> {
   // 步骤 1: 识别强点和弱点
-  const dimensions = ['energy', 'macroBalance', 'satiety', 'quality', 
-                      'glycemicImpact', 'stability', 'adherence'];
+  const dimensions = [
+    'energy',
+    'macroBalance',
+    'satiety',
+    'quality',
+    'glycemicImpact',
+    'stability',
+    'adherence',
+  ];
   const sorted = dimensions.sort((a, b) => breakdown[b] - breakdown[a]);
   const topStrength = sorted[0];
   const topWeakness = sorted[dimensions.length - 1];
@@ -579,47 +588,48 @@ async function buildStatusExplanation(
   let explanation = '';
 
   if (breakdown['energy'] >= 80) {
-    explanation += locale === 'zh' 
-      ? '热量摄入适度，符合目标。\n'
-      : 'Calorie intake is on target. ';
+    explanation += locale === 'zh' ? '热量摄入适度，符合目标。\n' : 'Calorie intake is on target. ';
   } else if (breakdown['energy'] < 30) {
-    explanation += locale === 'zh'
-      ? '⚠️ 今日热量摄入不足，建议加餐。\n'
-      : '⚠️ Calorie intake is too low. Consider adding a meal. ';
+    explanation +=
+      locale === 'zh'
+        ? '⚠️ 今日热量摄入不足，建议加餐。\n'
+        : '⚠️ Calorie intake is too low. Consider adding a meal. ';
   }
 
   if (breakdown['satiety'] >= 75) {
-    explanation += locale === 'zh'
-      ? '饱腹感充分，选择恰当。\n'
-      : 'Good satiety. Choices were satisfying. ';
+    explanation +=
+      locale === 'zh' ? '饱腹感充分，选择恰当。\n' : 'Good satiety. Choices were satisfying. ';
   } else if (breakdown['satiety'] < 40) {
-    explanation += locale === 'zh'
-      ? '⚠️ 饱腹感不足，可增加纤维/蛋白质。\n'
-      : '⚠️ Low satiety. Consider adding fiber or protein. ';
+    explanation +=
+      locale === 'zh'
+        ? '⚠️ 饱腹感不足，可增加纤维/蛋白质。\n'
+        : '⚠️ Low satiety. Consider adding fiber or protein. ';
   }
 
   // 步骤 3: 融合行为信号
   if (streakDays >= 14) {
-    explanation += locale === 'zh'
-      ? `连胜 ${streakDays} 天 🔥，坚持很棒！\n`
-      : `${streakDays} days streak 🔥 Keep it up! `;
+    explanation +=
+      locale === 'zh'
+        ? `连胜 ${streakDays} 天 🔥，坚持很棒！\n`
+        : `${streakDays} days streak 🔥 Keep it up! `;
   }
 
   if (avgComplianceRate >= 0.9) {
-    explanation += locale === 'zh'
-      ? `目标达成率 ${Math.round(avgComplianceRate * 100)}%，接近完美！\n`
-      : `${Math.round(avgComplianceRate * 100)}% goal achievement. Nearly perfect! `;
+    explanation +=
+      locale === 'zh'
+        ? `目标达成率 ${Math.round(avgComplianceRate * 100)}%，接近完美！\n`
+        : `${Math.round(avgComplianceRate * 100)}% goal achievement. Nearly perfect! `;
   }
 
   // 步骤 4: 融合决策信号
   if (decision === 'AVOID' && breakdown[topWeakness] < 50) {
-    explanation += locale === 'zh'
-      ? `💡 今日餐食与建议有偏离，${topWeakness} 维度是主要原因。\n`
-      : `💡 Today's meals deviate from recommendations. "${topWeakness}" is the main concern. `;
+    explanation +=
+      locale === 'zh'
+        ? `💡 今日餐食与建议有偏离，${topWeakness} 维度是主要原因。\n`
+        : `💡 Today's meals deviate from recommendations. "${topWeakness}" is the main concern. `;
   } else if (decision === 'SAFE') {
-    explanation += locale === 'zh'
-      ? '✅ 符合营养建议。\n'
-      : '✅ Aligned with nutrition recommendations. ';
+    explanation +=
+      locale === 'zh' ? '✅ 符合营养建议。\n' : '✅ Aligned with nutrition recommendations. ';
   }
 
   // 步骤 5: 针对最弱维度给建议
@@ -651,7 +661,7 @@ async function buildStatusExplanation(
 ```typescript
 interface NutritionScoreResponse {
   // 基础分数
-  score: number;                    // 0-100
+  score: number; // 0-100
   breakdown: {
     energy: number;
     macroBalance: number;
@@ -667,7 +677,7 @@ interface NutritionScoreResponse {
     zh: string;
     en: string;
   };
-  statusExplanation: string;        // 本地化多行文案
+  statusExplanation: string; // 本地化多行文案
 
   // 强弱点分析
   topStrength: {
@@ -690,11 +700,11 @@ interface NutritionScoreResponse {
 
   // 合规性对比（行为 vs 建议）
   complianceInsights: {
-    calorieAdherence: number;         // 实际 / 目标 × 100%
+    calorieAdherence: number; // 实际 / 目标 × 100%
     proteinAdherence: number;
     fatAdherence: number;
     carbsAdherence: number;
-    trend: 'up' | 'down' | 'stable';  // vs 昨日
+    trend: 'up' | 'down' | 'stable'; // vs 昨日
   };
 
   // 决策系统信号
@@ -730,14 +740,15 @@ interface NutritionScoreResponse {
 
 **目标**：消除虚假评分，让 Layer 1 数据真实可信
 
-| 改动 | 文件 | 优先级 |
-|------|------|--------|
-| 注入 BehaviorService，获取真实 stability | daily-summary.service.ts | P0 |
-| 修复 foodQuality/satiety fallback 逻辑 | nutrition-score.service.ts | P0 |
-| 在 controller 层处理"无记录"case | food-nutrition.controller.ts | P0 |
-| 新增 healthScore 维度计算 | nutrition-score.service.ts | P0 |
+| 改动                                     | 文件                         | 优先级 |
+| ---------------------------------------- | ---------------------------- | ------ |
+| 注入 BehaviorService，获取真实 stability | daily-summary.service.ts     | P0     |
+| 修复 foodQuality/satiety fallback 逻辑   | nutrition-score.service.ts   | P0     |
+| 在 controller 层处理"无记录"case         | food-nutrition.controller.ts | P0     |
+| 新增 healthScore 维度计算                | nutrition-score.service.ts   | P0     |
 
 **检验**：
+
 - 测试用户无记录 → score=0（不是 50）
 - 测试用户有记录但 quality=0 → 维度权重分摊，不虚高
 - 测试稳定性维度 ≠80（用真实数据）
@@ -746,14 +757,15 @@ interface NutritionScoreResponse {
 
 **目标**：根据 healthConditions 调整权重，纳入行为加成
 
-| 改动 | 文件 | 优先级 |
-|------|------|--------|
-| 实现 computePersonalizedWeights() | nutrition-score.service.ts | P1 |
-| 糖尿病 / 高血压 / 肾病条件处理 | nutrition-score.service.ts | P1 |
-| 融入连胜加分和合规率指标 | nutrition-score.service.ts | P1 |
-| 在 daily-summary 自动流调用 | daily-summary.service.ts | P1 |
+| 改动                              | 文件                       | 优先级 |
+| --------------------------------- | -------------------------- | ------ |
+| 实现 computePersonalizedWeights() | nutrition-score.service.ts | P1     |
+| 糖尿病 / 高血压 / 肾病条件处理    | nutrition-score.service.ts | P1     |
+| 融入连胜加分和合规率指标          | nutrition-score.service.ts | P1     |
+| 在 daily-summary 自动流调用       | daily-summary.service.ts   | P1     |
 
 **检验**：
+
 - 对糖尿病用户，glycemicImpact 权重应 ×1.5
 - 连胜 14 天应有 +3pt 加成
 - 权重总和恒为 100%
@@ -762,14 +774,15 @@ interface NutritionScoreResponse {
 
 **目标**：生成自然语言状态解释，支持多语言
 
-| 改动 | 文件 | 优先级 |
-|------|------|--------|
-| 实现 buildStatusExplanation() | nutrition-score.service.ts (或分出 service) | P2 |
-| 识别 topStrength / topWeakness | nutrition-score.service.ts | P2 |
-| 增强 API response | food-nutrition.controller.ts | P2 |
-| 前端适配新字段 | web/pages/nutrition-score | P2 |
+| 改动                           | 文件                                        | 优先级 |
+| ------------------------------ | ------------------------------------------- | ------ |
+| 实现 buildStatusExplanation()  | nutrition-score.service.ts (或分出 service) | P2     |
+| 识别 topStrength / topWeakness | nutrition-score.service.ts                  | P2     |
+| 增强 API response              | food-nutrition.controller.ts                | P2     |
+| 前端适配新字段                 | web/pages/nutrition-score                   | P2     |
 
 **检验**：
+
 - 分数 85 以上 → statusLabel 应为"优秀"
 - 饱腹感最低 → topWeakness + suggestion
 - 文案应当包含具体建议
@@ -778,13 +791,14 @@ interface NutritionScoreResponse {
 
 **目标**：将 FoodDecisionService 结果作为轻微调整信号
 
-| 改动 | 文件 | 优先级 |
-|------|------|--------|
-| 在 controller 层注入 FoodDecisionService | food-nutrition.controller.ts | P3 |
-| 将决策结果附加到 response | food-nutrition.controller.ts | P3 |
-| 可选：±2% 分数调整 | nutrition-score.service.ts | P3 |
+| 改动                                     | 文件                         | 优先级 |
+| ---------------------------------------- | ---------------------------- | ------ |
+| 在 controller 层注入 FoodDecisionService | food-nutrition.controller.ts | P3     |
+| 将决策结果附加到 response                | food-nutrition.controller.ts | P3     |
+| 可选：±2% 分数调整                       | nutrition-score.service.ts   | P3     |
 
 **检验**：
+
 - Decide 结果为 AVOID 时，score 不应大幅下降（最多 ±2%）
 - Decide 结果必须作为"信号"，不是"结论"
 
@@ -826,6 +840,7 @@ private calcBehaviorBonus(streak, compliance): number
 ### 7.2 daily-summary.service.ts
 
 **改动**：
+
 - 新增 BehaviorService 依赖注入
 - 在 `updateDailySummary` 中调用 `behaviorService.getProfile(userId)` 获取 stabilityData
 - 将 stabilityData 传给 `nutritionScoreService.calculateScore(..., stabilityData, healthConditions)`
@@ -834,6 +849,7 @@ private calcBehaviorBonus(streak, compliance): number
 ### 7.3 food-nutrition.controller.ts
 
 **改动**：
+
 - 新增 BehaviorService 依赖注入
 - `getNutritionScore` 法中：
   1. 获取 dailySummary
@@ -984,15 +1000,15 @@ describe('GET /nutrition-score', () => {
 
 ## 13. 快速参考：关键参数
 
-| 参数 | 默认值 | 调节方式 |
-|------|--------|---------|
-| 饱腹感阈值 | 6 | `SATIETY_TARGET` 常量 |
-| 热量容忍度 | [0.85, 1.0] (减肥) | `TOLERANCE_RANGE` by goalType |
-| 健康条件权重倍数 | 1.5 (glycemic) | `CONDITION_MULTIPLIERS` map |
-| 连胜加分周期 | 7天 | `STREAK_PERIOD` 常量 |
-| 合规率加分阈值 | 0.85 | `COMPLIANCE_BONUS_THRESHOLD` 常量 |
-| 决策系统影响范围 | ±2% | `DECISION_ADJUSTMENT_RANGE` 常量 |
-| 状态分阶 | [50, 65, 80] | `STATUS_THRESHOLDS` map |
+| 参数             | 默认值             | 调节方式                          |
+| ---------------- | ------------------ | --------------------------------- |
+| 饱腹感阈值       | 6                  | `SATIETY_TARGET` 常量             |
+| 热量容忍度       | [0.85, 1.0] (减肥) | `TOLERANCE_RANGE` by goalType     |
+| 健康条件权重倍数 | 1.5 (glycemic)     | `CONDITION_MULTIPLIERS` map       |
+| 连胜加分周期     | 7天                | `STREAK_PERIOD` 常量              |
+| 合规率加分阈值   | 0.85               | `COMPLIANCE_BONUS_THRESHOLD` 常量 |
+| 决策系统影响范围 | ±2%                | `DECISION_ADJUSTMENT_RANGE` 常量  |
+| 状态分阶         | [50, 65, 80]       | `STATUS_THRESHOLDS` map           |
 
 所有参数均为配置常量，支持 A/B 测试和动态调参。
 
@@ -1016,5 +1032,6 @@ describe('GET /nutrition-score', () => {
 ---
 
 **文档版本历史**：
+
 - V1.0 (2024-Q1): 初版设计方案
 - V1.1 (2026-04-17): 强化数据融合架构、公式细化、状态解释完善

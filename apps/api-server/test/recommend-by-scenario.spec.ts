@@ -12,13 +12,19 @@
  */
 
 import { RecommendationEngineService } from '../src/modules/diet/app/services/recommendation-engine.service';
-import { createMockFoodLibrary, createMockScoredFood, createMockMealTarget } from './helpers/mock-factories';
+import {
+  createMockFoodLibrary,
+  createMockScoredFood,
+  createMockMealTarget,
+} from './helpers/mock-factories';
 import type { FoodLibrary } from '../src/modules/food/food.types';
 import type { MealRecommendation } from '../src/modules/diet/app/recommendation/types/recommendation.types';
 
 // ─── Mock 工厂 ───
 
-function makeMealRecommendation(overrides?: Partial<MealRecommendation>): MealRecommendation {
+function makeMealRecommendation(
+  overrides?: Partial<MealRecommendation>,
+): MealRecommendation {
   return {
     foods: [],
     totalCalories: 450,
@@ -61,7 +67,9 @@ function createEngine() {
 
   const mockExplanationGenerator = {
     generate: jest.fn().mockReturnValue({ displayText: 'mock', tip: 'mock' }),
-    generateV2: jest.fn().mockReturnValue({ text: 'mock', structuredInsights: [] }),
+    generateV2: jest
+      .fn()
+      .mockReturnValue({ text: 'mock', structuredInsights: [] }),
     explainWhyNot: jest.fn().mockReturnValue([]),
   };
 
@@ -77,7 +85,9 @@ function createEngine() {
   };
 
   const mockRealisticFilterService = {
-    filter: jest.fn().mockImplementation((candidates: FoodLibrary[]) => candidates),
+    filter: jest
+      .fn()
+      .mockImplementation((candidates: FoodLibrary[]) => candidates),
     adjustForScene: jest.fn().mockReturnValue(null),
   };
 
@@ -251,7 +261,6 @@ function createEngine() {
 // ─── Test Suite ───
 
 describe('RecommendationEngineService.recommendByScenario (V8.0 P2-01 验证)', () => {
-
   // ════════════════════════════════════════════════════════════
   // 1. 返回三个场景键
   // ════════════════════════════════════════════════════════════
@@ -382,8 +391,12 @@ describe('RecommendationEngineService.recommendByScenario (V8.0 P2-01 验证)', 
       { calories: 2000, protein: 120 },
     );
 
-    expect(mocks.mockProfileAggregator.aggregateForScenario).toHaveBeenCalledTimes(1);
-    expect(mocks.mockProfileAggregator.aggregateForScenario).toHaveBeenCalledWith('user-1', 'lunch');
+    expect(
+      mocks.mockProfileAggregator.aggregateForScenario,
+    ).toHaveBeenCalledTimes(1);
+    expect(
+      mocks.mockProfileAggregator.aggregateForScenario,
+    ).toHaveBeenCalledWith('user-1', 'lunch');
   });
 
   // ════════════════════════════════════════════════════════════
@@ -403,7 +416,11 @@ describe('RecommendationEngineService.recommendByScenario (V8.0 P2-01 验证)', 
       { calories: 2000, protein: 120 },
     );
 
-    expect(mocks.mockStrategyFacade.resolveStrategyForUser).toHaveBeenCalledTimes(1);
-    expect(mocks.mockStrategyFacade.resolveStrategyForUser).toHaveBeenCalledWith('user-1', 'fat_loss');
+    expect(
+      mocks.mockStrategyFacade.resolveStrategyForUser,
+    ).toHaveBeenCalledTimes(1);
+    expect(
+      mocks.mockStrategyFacade.resolveStrategyForUser,
+    ).toHaveBeenCalledWith('user-1', 'fat_loss');
   });
 });

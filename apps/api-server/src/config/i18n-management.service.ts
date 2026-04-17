@@ -1,6 +1,6 @@
 /**
  * V2.4 I18n Management Service
- * 
+ *
  * 提供complete i18n支持，包含extended translations和fallback机制
  */
 
@@ -80,7 +80,7 @@ export class I18nManagementService {
     language: string = this.defaultLanguage,
   ): Record<string, string> {
     const result: Record<string, string> = {};
-    keys.forEach(key => {
+    keys.forEach((key) => {
       result[key] = this.translate(key, language);
     });
     return result;

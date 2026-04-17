@@ -204,11 +204,14 @@ export class MealCompositionScorer {
     if (dailyPlanState) {
       let totalPenalty = 0;
       for (const sf of selectedFoods) {
-        const penalty = Math.min(0, this.dailyPlanContext.calcDiversityAdjustment(
-          sf.food,
-          dailyPlanState,
-          config,
-        ));
+        const penalty = Math.min(
+          0,
+          this.dailyPlanContext.calcDiversityAdjustment(
+            sf.food,
+            dailyPlanState,
+            config,
+          ),
+        );
         if (penalty < 0) {
           totalPenalty += penalty * 100; // 折算到 0-100 分数空间
         }

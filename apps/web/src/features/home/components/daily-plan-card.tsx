@@ -86,9 +86,7 @@ function MealPanel({
       <p className="text-sm leading-relaxed">{plan.foods}</p>
 
       {/* 小贴士 */}
-      {plan.tip && (
-        <p className="text-xs text-muted-foreground mt-2">💡 {plan.tip}</p>
-      )}
+      {plan.tip && <p className="text-xs text-muted-foreground mt-2">💡 {plan.tip}</p>}
 
       {/* 宏量素（点击展开） */}
       {hasMacro && (
@@ -237,7 +235,6 @@ export function DailyPlanCard({ dailyPlan }: DailyPlanCardProps) {
   return (
     <section className="mb-6">
       <div className="bg-surface-container-low rounded-2xl p-5">
-
         {/* 标题行 */}
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
@@ -286,9 +283,7 @@ export function DailyPlanCard({ dailyPlan }: DailyPlanCardProps) {
                 <span className="text-sm leading-none mb-0.5">{emoji}</span>
                 <span>{label}</span>
                 {plan && (
-                  <span className={isActive ? 'text-primary font-bold' : ''}>
-                    {plan.calories}
-                  </span>
+                  <span className={isActive ? 'text-primary font-bold' : ''}>{plan.calories}</span>
                 )}
               </button>
             );

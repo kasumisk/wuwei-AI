@@ -45,8 +45,8 @@ export const SCORE_WEIGHTS: Record<GoalType, number[]> = {
   // #fix Bug34: fat_loss 脂肪权重从 0.10→0.14，使高脂食物受到更强惩罚
   // 从 season(0.02→0.01), popul(0.03→0.02), acqui(0.02→0.01) 中回收 0.04
   fat_loss: [
-    0.14, 0.16, 0.10, 0.14, 0.05, 0.06, 0.09, 0.08, 0.06, 0.04, 0.01, 0.05,
-    0.02, 0.00,
+    0.14, 0.16, 0.1, 0.14, 0.05, 0.06, 0.09, 0.08, 0.06, 0.04, 0.01, 0.05, 0.02,
+    0.0,
   ],
   muscle_gain: [
     0.12, 0.18, 0.12, 0.08, 0.05, 0.04, 0.06, 0.06, 0.04, 0.03, 0.02, 0.07,
@@ -308,11 +308,11 @@ export const MUSCLE_GAIN_MEAL_ROLES: Record<string, string[]> = {
 export const ROLE_CATEGORIES: Record<string, string[]> = {
   carb: ['grain', 'composite'],
   protein: ['protein', 'dairy'],
-  protein2: ['protein', 'dairy'],  // #fix Bug13: 第二蛋白质槽位，使用相同品类
+  protein2: ['protein', 'dairy'], // #fix Bug13: 第二蛋白质槽位，使用相同品类
   veggie: ['veggie'],
   side: ['veggie', 'dairy', 'beverage', 'fruit'],
   snack1: ['fruit', 'snack', 'dairy'],
-  snack_protein: ['protein', 'dairy', 'snack'],  // muscle_gain snack: protein-first
+  snack_protein: ['protein', 'dairy', 'snack'], // muscle_gain snack: protein-first
   snack2: ['beverage', 'snack', 'fruit'],
 };
 

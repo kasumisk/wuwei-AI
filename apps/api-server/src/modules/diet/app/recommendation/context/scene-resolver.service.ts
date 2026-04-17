@@ -587,7 +587,12 @@ export class SceneResolverService {
         return {
           maxPrepTime: 30,
           maxCookTime: 60,
-          preferredCookingMethods: [CookingMethod.STIR_FRY, CookingMethod.STEAM, CookingMethod.BOIL, CookingMethod.BRAISE],
+          preferredCookingMethods: [
+            CookingMethod.STIR_FRY,
+            CookingMethod.STEAM,
+            CookingMethod.BOIL,
+            CookingMethod.BRAISE,
+          ],
         };
       case 'eating_out':
         return {
@@ -625,7 +630,12 @@ export class SceneResolverService {
           maxPrepTime: null,
           maxCookTime: null,
           servingCount: 3,
-          preferredCookingMethods: [CookingMethod.STIR_FRY, CookingMethod.STEAM, CookingMethod.BRAISE, CookingMethod.STEW],
+          preferredCookingMethods: [
+            CookingMethod.STIR_FRY,
+            CookingMethod.STEAM,
+            CookingMethod.BRAISE,
+            CookingMethod.STEW,
+          ],
         };
       case 'meal_prep':
         return {

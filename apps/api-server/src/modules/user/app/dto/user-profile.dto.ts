@@ -147,7 +147,8 @@ export class OnboardingStep3Dto {
 
   @ApiPropertyOptional({
     type: [String],
-    description: '菜系偏好 chinese/sichuan/cantonese/japanese/korean/western/thai/indian/mediterranean/fast_food',
+    description:
+      '菜系偏好 chinese/sichuan/cantonese/japanese/korean/western/thai/indian/mediterranean/fast_food',
   })
   @IsOptional()
   @IsArray()
@@ -198,7 +199,8 @@ export class OnboardingStep4Dto {
 
   @ApiPropertyOptional({
     type: [String],
-    description: '健康状况 diabetes/hypertension/hyperlipidemia/gout/kidney_disease/celiac/ibs/fatty_liver/thyroid/anemia/osteoporosis/cardiovascular',
+    description:
+      '健康状况 diabetes/hypertension/hyperlipidemia/gout/kidney_disease/celiac/ibs/fatty_liver/thyroid/anemia/osteoporosis/cardiovascular',
   })
   @IsOptional()
   @IsArray()
@@ -451,7 +453,8 @@ export class UpdateDeclaredProfileDto {
   // ─── V7.2: 厨房装备画像字段 ───
 
   @ApiPropertyOptional({
-    description: '厨房装备描述（JSON），包含 hasOven/hasMicrowave/hasAirFryer/hasRiceCooker/hasSteamer/primaryStove',
+    description:
+      '厨房装备描述（JSON），包含 hasOven/hasMicrowave/hasAirFryer/hasRiceCooker/hasSteamer/primaryStove',
   })
   @IsOptional()
   @IsObject()
@@ -518,13 +521,22 @@ export class UpdateRecommendationPreferencesDto {
   diversityTolerance?: 'low' | 'medium' | 'high';
 
   /** V7.0: 饮食哲学 */
-  @ApiPropertyOptional({ enum: ['omnivore', 'pescatarian', 'vegetarian', 'vegan', 'none'] })
+  @ApiPropertyOptional({
+    enum: ['omnivore', 'pescatarian', 'vegetarian', 'vegan', 'none'],
+  })
   @IsOptional()
   @IsIn(['omnivore', 'pescatarian', 'vegetarian', 'vegan', 'none'])
-  dietaryPhilosophy?: 'omnivore' | 'pescatarian' | 'vegetarian' | 'vegan' | 'none';
+  dietaryPhilosophy?:
+    | 'omnivore'
+    | 'pescatarian'
+    | 'vegetarian'
+    | 'vegan'
+    | 'none';
 
   /** V7.0: 用餐模式 */
-  @ApiPropertyOptional({ enum: ['frequent_small', 'standard_three', 'intermittent_fasting'] })
+  @ApiPropertyOptional({
+    enum: ['frequent_small', 'standard_three', 'intermittent_fasting'],
+  })
   @IsOptional()
   @IsIn(['frequent_small', 'standard_three', 'intermittent_fasting'])
   mealPattern?: 'frequent_small' | 'standard_three' | 'intermittent_fasting';

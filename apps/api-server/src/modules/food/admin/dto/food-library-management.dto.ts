@@ -615,7 +615,8 @@ export class CreateFoodLibraryDto {
   flavorProfile?: Record<string, number>;
 
   @ApiPropertyOptional({
-    description: '可行烹饪方式列表（如 ["steam","boil","stir_fry"]，首元素为主要方式）',
+    description:
+      '可行烹饪方式列表（如 ["steam","boil","stir_fry"]，首元素为主要方式）',
     type: [String],
   })
   @IsOptional()

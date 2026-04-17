@@ -82,8 +82,22 @@ describe('AI饮食分析+决策+AI教练 全链路自动化调试', () => {
       },
       record: {
         foods: [
-          { name: '炸鸡腿', calories: 520, quantity: '1份', protein: 28, fat: 32, carbs: 38 },
-          { name: '米饭', calories: 280, quantity: '1碗', protein: 5, fat: 1, carbs: 62 },
+          {
+            name: '炸鸡腿',
+            calories: 520,
+            quantity: '1份',
+            protein: 28,
+            fat: 32,
+            carbs: 38,
+          },
+          {
+            name: '米饭',
+            calories: 280,
+            quantity: '1碗',
+            protein: 5,
+            fat: 1,
+            carbs: 62,
+          },
         ],
         totalCalories: 800,
         mealType: 'dinner',
@@ -142,8 +156,22 @@ describe('AI饮食分析+决策+AI教练 全链路自动化调试', () => {
       },
       record: {
         foods: [
-          { name: '鸡胸肉', calories: 220, quantity: '200g', protein: 42, fat: 4, carbs: 0 },
-          { name: '燕麦', calories: 180, quantity: '1碗', protein: 6, fat: 3, carbs: 32 },
+          {
+            name: '鸡胸肉',
+            calories: 220,
+            quantity: '200g',
+            protein: 42,
+            fat: 4,
+            carbs: 0,
+          },
+          {
+            name: '燕麦',
+            calories: 180,
+            quantity: '1碗',
+            protein: 6,
+            fat: 3,
+            carbs: 32,
+          },
         ],
         totalCalories: 400,
         mealType: 'breakfast',
@@ -201,8 +229,22 @@ describe('AI饮食分析+决策+AI教练 全链路自动化调试', () => {
       },
       record: {
         foods: [
-          { name: '咸鱼', calories: 200, quantity: '100g', protein: 30, fat: 8, carbs: 0 },
-          { name: '泡菜', calories: 30, quantity: '1份', protein: 2, fat: 1, carbs: 5 },
+          {
+            name: '咸鱼',
+            calories: 200,
+            quantity: '100g',
+            protein: 30,
+            fat: 8,
+            carbs: 0,
+          },
+          {
+            name: '泡菜',
+            calories: 30,
+            quantity: '1份',
+            protein: 2,
+            fat: 1,
+            carbs: 5,
+          },
         ],
         totalCalories: 230,
         mealType: 'lunch',
@@ -260,8 +302,22 @@ describe('AI饮食分析+决策+AI教练 全链路自动化调试', () => {
       },
       record: {
         foods: [
-          { name: '奶茶', calories: 380, quantity: '1杯', protein: 3, fat: 12, carbs: 62 },
-          { name: '炸鸡', calories: 500, quantity: '1份', protein: 26, fat: 30, carbs: 35 },
+          {
+            name: '奶茶',
+            calories: 380,
+            quantity: '1杯',
+            protein: 3,
+            fat: 12,
+            carbs: 62,
+          },
+          {
+            name: '炸鸡',
+            calories: 500,
+            quantity: '1份',
+            protein: 26,
+            fat: 30,
+            carbs: 35,
+          },
         ],
         totalCalories: 880,
         mealType: 'snack',
@@ -385,7 +441,10 @@ describe('AI饮食分析+决策+AI教练 全链路自动化调试', () => {
       // Step 2. Decide 层校验
       const decision = analysisData?.decision;
       const recommendation = decision?.recommendation as string | undefined;
-      if (!recommendation || !['recommend', 'caution', 'avoid'].includes(recommendation)) {
+      if (
+        !recommendation ||
+        !['recommend', 'caution', 'avoid'].includes(recommendation)
+      ) {
         issues.push({
           scenario: scenario.name,
           type: '决策错误',

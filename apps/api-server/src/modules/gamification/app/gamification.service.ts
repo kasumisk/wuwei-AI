@@ -64,8 +64,7 @@ export class GamificationService {
           if (achievement.code === 'healthy_rate_80') {
             qualified =
               profile.totalRecords >= 10 &&
-              Number(profile.avgComplianceRate) * 100 >=
-                achievement.threshold;
+              Number(profile.avgComplianceRate) * 100 >= achievement.threshold;
           } else if (achievement.code === 'first_analyze') {
             qualified = profile.totalRecords >= 1;
           } else if (achievement.code === 'first_plan') {

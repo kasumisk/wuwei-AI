@@ -1,8 +1,8 @@
 /**
  * V2.4 ScoringService
- * 
+ *
  * 职责：接收 AnalysisState + UserProfile，输出单一的 NutritionScore，对标用户目标并识别问题。
- * 
+ *
  * 关键方法：
  * - scoreNutrition(state, userProfile) → NutritionScore
  * - detectIssues(score, state) → Issue[]
@@ -203,13 +203,16 @@ export class ScoringService {
    */
   getActionDirection(score: NutritionScore, foodNutrition: any): string {
     // 如果热量已满或超标，应该避免
-    if (score.status === 'over' || score.remaining.calories < foodNutrition.calories) {
+    if (
+      score.status === 'over' ||
+      score.remaining.calories < foodNutrition.calories
+    ) {
       return 'should_avoid';
     }
 
     // 如果热量充足但有特定宏量缺陷，根据食物是否能补充来决定
     if (score.issues && score.issues.length > 0) {
-      score.issues.forEach(issue => {
+      score.issues.forEach((issue) => {
         if (issue.status === 'deficit' && issue.severity === 'high') {
           const nutrientMap = {
             protein: foodNutrition.protein,

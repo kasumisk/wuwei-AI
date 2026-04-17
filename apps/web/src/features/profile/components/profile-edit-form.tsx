@@ -48,9 +48,9 @@ export function ProfileEditForm() {
   const { toast } = useToast();
 
   const VALID_TABS: TabKey[] = ['basic', 'diet', 'behavior', 'health'];
-  const initialTab = (searchParams.get('tab') as TabKey | null);
+  const initialTab = searchParams.get('tab') as TabKey | null;
   const [activeTab, setActiveTab] = useState<TabKey>(
-    initialTab && VALID_TABS.includes(initialTab) ? initialTab : 'basic',
+    initialTab && VALID_TABS.includes(initialTab) ? initialTab : 'basic'
   );
 
   const [form, setForm] = useState({

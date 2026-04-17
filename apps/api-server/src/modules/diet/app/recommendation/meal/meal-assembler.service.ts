@@ -238,7 +238,10 @@ export class MealAssemblerService {
     });
 
     // 第二轮: 如果总热量偏差 >15%，找余量最大的食物微调
-    const adjustedTotal = adjusted.reduce((s, p) => s + (p.servingCalories || 0), 0);
+    const adjustedTotal = adjusted.reduce(
+      (s, p) => s + (p.servingCalories || 0),
+      0,
+    );
     const deviation = (adjustedTotal - budget) / budget;
 
     if (Math.abs(deviation) > 0.15 && adjusted.length > 1) {
@@ -302,6 +305,86 @@ export class MealAssemblerService {
     return adjusted;
   }
 
+  /**
+   * 当本餐热量低于最小覆盖率时，尝试从候选池补位 1-2 个食物。
+   *
+   * 说明：
+   * - 只在 totalCalories < target * minCoverage 时触发
+   * - 优先选择热量能填补缺口且不明显超标的候选
+   * - 默认将总热量控制在 target * maxCoverage 以内
+   */
+  ensureMinimumCalorieCoverage(
+    picks: ScoredFood[],
+    candidates: ScoredFood[],
+    targetCalories: number,
+    minCoverage: number = 0.7,
+    maxCoverage: number = 1.1,
+  ): ScoredFood[] {
+    if (targetCalories <= 0 || picks.length === 0 || candidates.length === 0) {
+      return picks;
+    }
+
+    const minCalories = targetCalories * minCoverage;
+    let totalCalories = picks.reduce((s, p) => s + (p.servingCalories || 0), 0);
+    if (totalCalories >= minCalories) {
+      return picks;
+    }
+
+    const usedFoodIds = new Set(picks.map((p) => p.food.id));
+    const usedFoodNames = new Set(picks.map((p) => p.food.name));
+    const maxCalories = targetCalories * maxCoverage;
+
+    const pool = candidates
+      .filter(
+        (c) =>
+          !usedFoodIds.has(c.food.id) &&
+          !usedFoodNames.has(c.food.name) &&
+          (c.servingCalories || 0) > 0,
+      )
+      .sort((a, b) => {
+        const gap = Math.max(0, minCalories - totalCalories);
+        const aGap = Math.abs((a.servingCalories || 0) - gap);
+        const bGap = Math.abs((b.servingCalories || 0) - gap);
+        if (aGap !== bGap) return aGap - bGap;
+        return b.score - a.score;
+      });
+
+    if (pool.length === 0) return picks;
+
+    const result = [...picks];
+    let additions = 0;
+
+    for (const candidate of pool) {
+      if (totalCalories >= minCalories || additions >= 2) break;
+
+      const candidateCalories = candidate.servingCalories || 0;
+      const projected = totalCalories + candidateCalories;
+      if (projected > maxCalories) continue;
+
+      result.push(candidate);
+      usedFoodIds.add(candidate.food.id);
+      usedFoodNames.add(candidate.food.name);
+      totalCalories = projected;
+      additions += 1;
+    }
+
+    // 若仍未达到下限，允许一次温和超标补位（上限放宽到 120%）
+    if (totalCalories < minCalories && additions < 2) {
+      const fallback = pool.find((c) => {
+        if (usedFoodIds.has(c.food.id) || usedFoodNames.has(c.food.name)) {
+          return false;
+        }
+        return totalCalories + (c.servingCalories || 0) <= targetCalories * 1.2;
+      });
+
+      if (fallback) {
+        result.push(fallback);
+      }
+    }
+
+    return result;
+  }
+
   /** 聚合推荐结果 */
   aggregateMealResult(
     picks: ScoredFood[],
@@ -311,7 +394,10 @@ export class MealAssemblerService {
       | import('../types/recommendation.types').UserProfileConstraints
       | null,
   ): MealRecommendation {
-    const totalCalories = picks.reduce((s, p) => s + (p.servingCalories || 0), 0);
+    const totalCalories = picks.reduce(
+      (s, p) => s + (p.servingCalories || 0),
+      0,
+    );
     const totalProtein = picks.reduce((s, p) => s + (p.servingProtein || 0), 0);
     const totalFat = picks.reduce((s, p) => s + (p.servingFat || 0), 0);
     const totalCarbs = picks.reduce((s, p) => s + (p.servingCarbs || 0), 0);

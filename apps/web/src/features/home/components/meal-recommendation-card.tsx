@@ -22,18 +22,28 @@ const DISLIKE_REASONS = [
 /* ─── 推荐原因计算 ─── */
 
 const CUISINE_LABELS: Record<string, string> = {
-  chinese: '中餐', sichuan: '川菜', cantonese: '粤菜',
-  japanese: '日料', korean: '韩餐', western: '西餐',
-  thai: '泰国菜', indian: '印度菜', mediterranean: '地中海菜', fast_food: '快餐',
+  chinese: '中餐',
+  sichuan: '川菜',
+  cantonese: '粤菜',
+  japanese: '日料',
+  korean: '韩餐',
+  western: '西餐',
+  thai: '泰国菜',
+  indian: '印度菜',
+  mediterranean: '地中海菜',
+  fast_food: '快餐',
 };
 
 const COOKING_SKILL_LABELS: Record<string, string> = {
-  beginner: '新手', basic: '基础', intermediate: '中级', advanced: '高级',
+  beginner: '新手',
+  basic: '基础',
+  intermediate: '中级',
+  advanced: '高级',
 };
 
 function estimateMacrosFromCalories(
   calories: number,
-  goal: string | undefined,
+  goal: string | undefined
 ): { protein: number; fat: number; carbs: number } {
   const cal = Math.max(0, Number(calories) || 0);
 
@@ -65,13 +75,20 @@ function buildRecommendationReason(summary: DailySummary, profile: UserProfile |
   }
   if (summary.calorieGoal && summary.calorieGoal > 0) {
     const calPct = Math.round((summary.totalCalories / summary.calorieGoal) * 100);
-    if (goal === 'fat_loss' && calPct > 70) reasons.push(`热量已用 ${calPct}%，推荐低热量高饱腹食物`);
-    else if (goal === 'muscle_gain' && calPct < 50) reasons.push(`热量仅用 ${calPct}%，可选择热量充足的搭配`);
+    if (goal === 'fat_loss' && calPct > 70)
+      reasons.push(`热量已用 ${calPct}%，推荐低热量高饱腹食物`);
+    else if (goal === 'muscle_gain' && calPct < 50)
+      reasons.push(`热量仅用 ${calPct}%，可选择热量充足的搭配`);
   }
 
   const cuisines = (profile as any)?.cuisinePreferences as string[] | undefined;
   if (cuisines?.length) {
-    reasons.push(`符合你偏好的 ${cuisines.slice(0, 2).map((k) => CUISINE_LABELS[k] || k).join('、')} 风格`);
+    reasons.push(
+      `符合你偏好的 ${cuisines
+        .slice(0, 2)
+        .map((k) => CUISINE_LABELS[k] || k)
+        .join('、')} 风格`
+    );
   }
 
   const skill = (profile as any)?.cookingSkillLevel as string | undefined;
@@ -124,7 +141,9 @@ export function MealRecommendationCard({
   const currentContent = useMemo(() => {
     if (hasScenarios && activeScenario >= 0) {
       const s = suggestion.scenarios![activeScenario];
-      return s ? { foods: s.foods, calories: s.calories, tip: s.tip, scenarioLabel: s.scenario } : null;
+      return s
+        ? { foods: s.foods, calories: s.calories, tip: s.tip, scenarioLabel: s.scenario }
+        : null;
     }
     return { ...suggestion.suggestion, scenarioLabel: null as string | null };
   }, [suggestion, activeScenario, hasScenarios]);
@@ -165,10 +184,7 @@ export function MealRecommendationCard({
       const contextComment = currentContent.scenarioLabel
         ? `推荐场景：${currentContent.scenarioLabel}`
         : '来自推荐';
-      const macroEstimate = estimateMacrosFromCalories(
-        currentContent.calories,
-        profile?.goal,
-      );
+      const macroEstimate = estimateMacrosFromCalories(currentContent.calories, profile?.goal);
 
       // 并行：保存记录 + 提交反馈（反馈失败不阻断）
       await Promise.all([
@@ -280,7 +296,6 @@ export function MealRecommendationCard({
   return (
     <section className="mb-6">
       <div className="bg-surface-container-low rounded-2xl p-5">
-
         {/* 标题 */}
         <div className="flex items-center gap-2 mb-3">
           <span className="text-lg">🍽️</span>
@@ -361,7 +376,6 @@ export function MealRecommendationCard({
 
         {/* 操作区 */}
         <div className="mt-4 pt-3 border-t border-border/30 space-y-2">
-
           {/* 主操作：✅ 已吃（按当前场景） */}
           <button
             onClick={handleEaten}
@@ -434,7 +448,6 @@ export function MealRecommendationCard({
             ))}
           </div>
         )}
-
       </div>
     </section>
   );

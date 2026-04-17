@@ -82,8 +82,7 @@ export class StrategyManagementController {
   async getPendingTunings(
     @Query() query: TuningPendingQueryDto,
   ): Promise<ApiResponse> {
-    const data =
-      await this.strategyManagementService.getPendingTunings(query);
+    const data = await this.strategyManagementService.getPendingTunings(query);
     return {
       success: true,
       code: HttpStatus.OK,

@@ -106,7 +106,11 @@ function ensureMinCandidates(
   // Bug7-fix: 兜底也必须遵守饮食限制，防止过滤后的肉类食物被重新引入
   if (ctx.constraints?.dietaryRestrictions?.length) {
     fallback = fallback.filter(
-      (f) => !foodViolatesDietaryRestriction(f, ctx.constraints.dietaryRestrictions!),
+      (f) =>
+        !foodViolatesDietaryRestriction(
+          f,
+          ctx.constraints.dietaryRestrictions!,
+        ),
     );
   }
   // #fix Bug11/18/19: 兜底也必须遵守 isFried / sodium / purine 硬约束
@@ -256,7 +260,11 @@ export class PipelineBuilderService implements OnModuleInit {
     // 需要额外检查 foodGroup / mainIngredient / category。
     if (ctx.constraints.dietaryRestrictions?.length) {
       candidates = candidates.filter(
-        (f) => !foodViolatesDietaryRestriction(f, ctx.constraints.dietaryRestrictions!),
+        (f) =>
+          !foodViolatesDietaryRestriction(
+            f,
+            ctx.constraints.dietaryRestrictions!,
+          ),
       );
     }
 
@@ -299,11 +307,21 @@ export class PipelineBuilderService implements OnModuleInit {
         candidates = candidates.filter(
           (f) => (f.commonalityScore ?? 50) >= commonalityThreshold,
         );
-        candidates = ensureMinCandidates(candidates, beforeCount, ctx, roleCategories, {
-          sortFn: (a, b) => (b.commonalityScore ?? 50) - (a.commonalityScore ?? 50),
-        });
+        candidates = ensureMinCandidates(
+          candidates,
+          beforeCount,
+          ctx,
+          roleCategories,
+          {
+            sortFn: (a, b) =>
+              (b.commonalityScore ?? 50) - (a.commonalityScore ?? 50),
+          },
+        );
       }
-      if (realismConfig?.budgetFilterEnabled && realismConfig?.enabled !== false) {
+      if (
+        realismConfig?.budgetFilterEnabled &&
+        realismConfig?.enabled !== false
+      ) {
         const budgetLevel = ctx.userProfile?.budgetLevel;
         if (budgetLevel) {
           const BUDGET_CAP: Record<string, number> = {
@@ -323,7 +341,12 @@ export class PipelineBuilderService implements OnModuleInit {
     if (ctx.userProfile?.cookingSkillLevel === 'beginner') {
       const beforeCount = candidates.length;
       candidates = candidates.filter((f) => f.skillRequired !== 'advanced');
-      candidates = ensureMinCandidates(candidates, beforeCount, ctx, roleCategories);
+      candidates = ensureMinCandidates(
+        candidates,
+        beforeCount,
+        ctx,
+        roleCategories,
+      );
     }
 
     // 短期画像 — 过滤近 7 天频繁拒绝的食物
@@ -339,7 +362,12 @@ export class PipelineBuilderService implements OnModuleInit {
       if (frequentlyRejected.size > 0) {
         const beforeCount = candidates.length;
         candidates = candidates.filter((f) => !frequentlyRejected.has(f.name));
-        candidates = ensureMinCandidates(candidates, beforeCount, ctx, roleCategories);
+        candidates = ensureMinCandidates(
+          candidates,
+          beforeCount,
+          ctx,
+          roleCategories,
+        );
       }
     }
 
@@ -348,7 +376,12 @@ export class PipelineBuilderService implements OnModuleInit {
       const riskFoodSet = new Set(ctx.analysisProfile.recentRiskFoods);
       const beforeCount = candidates.length;
       candidates = candidates.filter((f) => !riskFoodSet.has(f.name));
-      candidates = ensureMinCandidates(candidates, beforeCount, ctx, roleCategories);
+      candidates = ensureMinCandidates(
+        candidates,
+        beforeCount,
+        ctx,
+        roleCategories,
+      );
     }
 
     // 获取渠道过滤 — 按 available_channels 字段过滤
@@ -360,10 +393,34 @@ export class PipelineBuilderService implements OnModuleInit {
     if (ctx.channel && ctx.channel !== 'unknown') {
       // 消费场景 → 对应的购买渠道（如果食物可从这些渠道获得，则视为该场景可用）
       const CHANNEL_TO_SOURCES: Record<string, string[]> = {
-        home_cook: ['supermarket', 'wet_market', 'farmers_market', 'online', 'specialty_store', 'butcher', 'butcher_shop', 'bakery', 'pharmacy', 'traditional_chinese_medicine_store', 'chinese_medicine_store'],
-        delivery: ['restaurant', 'takeout', 'fast_food', 'delivery', 'convenience_store', 'bakery'],
+        home_cook: [
+          'supermarket',
+          'wet_market',
+          'farmers_market',
+          'online',
+          'specialty_store',
+          'butcher',
+          'butcher_shop',
+          'bakery',
+          'pharmacy',
+          'traditional_chinese_medicine_store',
+          'chinese_medicine_store',
+        ],
+        delivery: [
+          'restaurant',
+          'takeout',
+          'fast_food',
+          'delivery',
+          'convenience_store',
+          'bakery',
+        ],
         restaurant: ['restaurant'],
-        convenience: ['convenience_store', 'convenience', 'supermarket', 'bakery'],
+        convenience: [
+          'convenience_store',
+          'convenience',
+          'supermarket',
+          'bakery',
+        ],
         canteen: ['restaurant', 'canteen'],
       };
       const acceptableSources = CHANNEL_TO_SOURCES[ctx.channel] ?? [];
@@ -385,7 +442,12 @@ export class PipelineBuilderService implements OnModuleInit {
           return channels.includes(ctx.channel!);
         });
       }
-      candidates = ensureMinCandidates(candidates, beforeCount, ctx, roleCategories);
+      candidates = ensureMinCandidates(
+        candidates,
+        beforeCount,
+        ctx,
+        roleCategories,
+      );
     }
 
     // 三路召回合并 — 语义路 + CF 路补充候选 + RecallMergerService 去重
@@ -473,10 +535,14 @@ export class PipelineBuilderService implements OnModuleInit {
       candidates = ctx.allFoods.filter((f) => {
         if (ctx.usedNames.has(f.name)) return false;
         const foodMealTypes: string[] = f.mealTypes || [];
-        if (foodMealTypes.length > 0 && !foodMealTypes.includes(ctx.mealType)) return false;
+        if (foodMealTypes.length > 0 && !foodMealTypes.includes(ctx.mealType))
+          return false;
         // Bug7: 兜底也必须遵守饮食限制
-        if (ctx.constraints.dietaryRestrictions?.length &&
-          foodViolatesDietaryRestriction(f, ctx.constraints.dietaryRestrictions)) return false;
+        if (
+          ctx.constraints.dietaryRestrictions?.length &&
+          foodViolatesDietaryRestriction(f, ctx.constraints.dietaryRestrictions)
+        )
+          return false;
         return true;
       });
     }
@@ -900,12 +966,24 @@ export class PipelineBuilderService implements OnModuleInit {
           c.food.mainIngredient?.toLowerCase() !== ingredient &&
           !usedNames.has(c.food.name) &&
           // Bug7-fix: 替换时必须遵守饮食限制
-          !(dietaryRestrictions?.length && foodViolatesDietaryRestriction(c.food, dietaryRestrictions)) &&
+          !(
+            dietaryRestrictions?.length &&
+            foodViolatesDietaryRestriction(c.food, dietaryRestrictions)
+          ) &&
           // Bug11/18/19-fix: 替换时遵守硬约束
           !(constraints?.excludeIsFried && c.food.isFried) &&
-          !(constraints?.maxSodium && (c.food.sodium ?? 0) > constraints.maxSodium) &&
-          !(constraints?.maxPurine && (Number(c.food.purine) || 0) > constraints.maxPurine) &&
-          !(constraints?.maxFat && (Number(c.food.fat) || 0) > constraints.maxFat),
+          !(
+            constraints?.maxSodium &&
+            (c.food.sodium ?? 0) > constraints.maxSodium
+          ) &&
+          !(
+            constraints?.maxPurine &&
+            (Number(c.food.purine) || 0) > constraints.maxPurine
+          ) &&
+          !(
+            constraints?.maxFat &&
+            (Number(c.food.fat) || 0) > constraints.maxFat
+          ),
       );
 
       if (replacement) {
@@ -956,12 +1034,24 @@ export class PipelineBuilderService implements OnModuleInit {
           !usedMethods.has(c.food.cookingMethods[0].toLowerCase()) &&
           !usedNames.has(c.food.name) &&
           // Bug7-fix: 替换时必须遵守饮食限制
-          !(dietaryRestrictions?.length && foodViolatesDietaryRestriction(c.food, dietaryRestrictions)) &&
+          !(
+            dietaryRestrictions?.length &&
+            foodViolatesDietaryRestriction(c.food, dietaryRestrictions)
+          ) &&
           // Bug11/18/19-fix: 替换时遵守硬约束
           !(constraints?.excludeIsFried && c.food.isFried) &&
-          !(constraints?.maxSodium && (c.food.sodium ?? 0) > constraints.maxSodium) &&
-          !(constraints?.maxPurine && (Number(c.food.purine) || 0) > constraints.maxPurine) &&
-          !(constraints?.maxFat && (Number(c.food.fat) || 0) > constraints.maxFat),
+          !(
+            constraints?.maxSodium &&
+            (c.food.sodium ?? 0) > constraints.maxSodium
+          ) &&
+          !(
+            constraints?.maxPurine &&
+            (Number(c.food.purine) || 0) > constraints.maxPurine
+          ) &&
+          !(
+            constraints?.maxFat &&
+            (Number(c.food.fat) || 0) > constraints.maxFat
+          ),
       );
 
       if (replacement) {
@@ -1015,8 +1105,14 @@ export class PipelineBuilderService implements OnModuleInit {
         // Fallback: 使用全量食物池（仅做基本的过敏原/已选排除 + 饮食限制）
         recalled = ctx.allFoods.filter((f) => {
           if (usedNames.has(f.name)) return false;
-          if (ctx.constraints.dietaryRestrictions?.length &&
-            foodViolatesDietaryRestriction(f, ctx.constraints.dietaryRestrictions)) return false;
+          if (
+            ctx.constraints.dietaryRestrictions?.length &&
+            foodViolatesDietaryRestriction(
+              f,
+              ctx.constraints.dietaryRestrictions,
+            )
+          )
+            return false;
           return true;
         });
       }
@@ -1131,11 +1227,9 @@ export class PipelineBuilderService implements OnModuleInit {
       }
       if (trace) {
         // 从 stageBuffer 读取并清除评分链和健康修正详情
-        const chainDetails =
-          consumeStageBuffer(trace, 'scoringChain') ?? {};
+        const chainDetails = consumeStageBuffer(trace, 'scoringChain') ?? {};
 
-        const healthDetails =
-          consumeStageBuffer(trace, 'healthModifier') ?? {};
+        const healthDetails = consumeStageBuffer(trace, 'healthModifier') ?? {};
 
         const stageTrace: PipelineStageTrace = {
           stage: 'rank',
@@ -1219,7 +1313,13 @@ export class PipelineBuilderService implements OnModuleInit {
     const assembleStart = trace ? Date.now() : 0;
     if (picks.length >= 2) {
       try {
-        this.resolveCompositionConflicts(picks, allCandidates, usedNames, ctx.constraints.dietaryRestrictions, ctx.constraints);
+        this.resolveCompositionConflicts(
+          picks,
+          allCandidates,
+          usedNames,
+          ctx.constraints.dietaryRestrictions,
+          ctx.constraints,
+        );
       } catch (e) {
         this.logger.error(
           `Composition conflict resolution failed, skipping: ${e}`,
@@ -1350,12 +1450,24 @@ export class PipelineBuilderService implements OnModuleInit {
             c.food.category !== category &&
             !usedNames.has(c.food.name) &&
             // Bug7-fix: 替换时必须遵守饮食限制
-            !(dietaryRestrictions?.length && foodViolatesDietaryRestriction(c.food, dietaryRestrictions)) &&
+            !(
+              dietaryRestrictions?.length &&
+              foodViolatesDietaryRestriction(c.food, dietaryRestrictions)
+            ) &&
             // Bug11/18/19-fix: 替换时遵守硬约束
             !(constraints?.excludeIsFried && c.food.isFried) &&
-            !(constraints?.maxSodium && (c.food.sodium ?? 0) > constraints.maxSodium) &&
-            !(constraints?.maxPurine && (Number(c.food.purine) || 0) > constraints.maxPurine) &&
-            !(constraints?.maxFat && (Number(c.food.fat) || 0) > constraints.maxFat),
+            !(
+              constraints?.maxSodium &&
+              (c.food.sodium ?? 0) > constraints.maxSodium
+            ) &&
+            !(
+              constraints?.maxPurine &&
+              (Number(c.food.purine) || 0) > constraints.maxPurine
+            ) &&
+            !(
+              constraints?.maxFat &&
+              (Number(c.food.fat) || 0) > constraints.maxFat
+            ),
         );
 
         if (replacement) {
@@ -1405,10 +1517,22 @@ export class PipelineBuilderService implements OnModuleInit {
       const picksBefore = picks.map((p) => p.food.name).join(',');
 
       if (hasIngredientConflict) {
-        this.resolveIngredientConflicts(picks, allCandidates, usedNames, dietaryRestrictions, constraints);
+        this.resolveIngredientConflicts(
+          picks,
+          allCandidates,
+          usedNames,
+          dietaryRestrictions,
+          constraints,
+        );
       }
       if (hasCookingConflict) {
-        this.resolveCookingMethodConflicts(picks, allCandidates, usedNames, dietaryRestrictions, constraints);
+        this.resolveCookingMethodConflicts(
+          picks,
+          allCandidates,
+          usedNames,
+          dietaryRestrictions,
+          constraints,
+        );
       }
 
       const picksAfter = picks.map((p) => p.food.name).join(',');

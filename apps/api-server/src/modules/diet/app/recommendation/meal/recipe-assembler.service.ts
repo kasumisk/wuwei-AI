@@ -517,9 +517,7 @@ export class RecipeAssemblerService {
     }
 
     const method = protein.food.cookingMethods?.[0] ?? '';
-    const methodLabel = method
-      ? t(`cooking_method.${method}`, {})
-      : '';
+    const methodLabel = method ? t(`cooking_method.${method}`, {}) : '';
     const proteinName = protein.food.name;
     const veggieName = veggie.food.name;
 
@@ -559,7 +557,10 @@ export class RecipeAssemblerService {
    */
   private generateVeggieDishName(veggie: ScoredFood): string {
     const method = veggie.food.cookingMethods?.[0];
-    if (method && VEGGIE_PREFIX_METHODS.includes(method as CookingMethodValue)) {
+    if (
+      method &&
+      VEGGIE_PREFIX_METHODS.includes(method as CookingMethodValue)
+    ) {
       return `${t(`cooking_method.${method}`, {})}${veggie.food.name}`;
     }
     return veggie.food.name;

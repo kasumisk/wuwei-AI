@@ -1,6 +1,6 @@
 /**
  * V2.4 Coach Format Service Types
- * 
+ *
  * 教练文本格式化的配置与类型：
  */
 

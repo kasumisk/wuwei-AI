@@ -1,4 +1,10 @@
-import { Injectable, Logger, Optional, Inject, forwardRef } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  Optional,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { FoodService } from './food.service';
 import { UserProfileService } from '../../../user/app/services/profile/user-profile.service';
@@ -405,8 +411,7 @@ export class BehaviorService {
 
     for (const fb of feedbacks) {
       const daysSince = Math.floor(
-        (now - new Date(fb.createdAt as any).getTime()) /
-          (1000 * 60 * 60 * 24),
+        (now - new Date(fb.createdAt as any).getTime()) / (1000 * 60 * 60 * 24),
       );
       const decayWeight = Math.exp(-0.05 * daysSince);
 

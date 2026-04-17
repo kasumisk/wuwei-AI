@@ -206,7 +206,10 @@ const FoodDetailPage: React.FC = () => {
         <Row justify="space-between" align="middle">
           <Col>
             <Space>
-              <Button icon={<ArrowLeftOutlined />} onClick={() => closeTabAndGo('/food/library/list')}>
+              <Button
+                icon={<ArrowLeftOutlined />}
+                onClick={() => closeTabAndGo('/food/library/list')}
+              >
                 返回列表
               </Button>
               <Typography.Title level={4} style={{ margin: 0 }}>
@@ -270,27 +273,37 @@ const FoodDetailPage: React.FC = () => {
                 </Tooltip>
                 <Tooltip
                   title={(() => {
-                    const missing = food?.enrichmentMeta?.missingFields ?? completeness?.missingFields;
+                    const missing =
+                      food?.enrichmentMeta?.missingFields ?? completeness?.missingFields;
                     if (!missing?.length) return '无缺失';
                     return `缺失: ${missing.slice(0, 10).join(', ')}${missing.length > 10 ? '...' : ''}`;
                   })()}
                 >
                   <Tag
                     color={
-                      (food?.enrichmentMeta?.missingFields?.length ?? completeness?.missingFields?.length ?? 0) > 0
+                      (food?.enrichmentMeta?.missingFields?.length ??
+                        completeness?.missingFields?.length ??
+                        0) > 0
                         ? 'red'
                         : 'default'
                     }
                     icon={
-                      (food?.enrichmentMeta?.missingFields?.length ?? completeness?.missingFields?.length ?? 0) > 0 ? (
+                      (food?.enrichmentMeta?.missingFields?.length ??
+                        completeness?.missingFields?.length ??
+                        0) > 0 ? (
                         <ExclamationCircleOutlined />
                       ) : undefined
                     }
                   >
-                    {food?.enrichmentMeta?.missingFields?.length ?? completeness?.missingFields?.length ?? 0} 缺失
+                    {food?.enrichmentMeta?.missingFields?.length ??
+                      completeness?.missingFields?.length ??
+                      0}{' '}
+                    缺失
                   </Tag>
                 </Tooltip>
-                <Tag>{food?.enrichmentMeta?.fieldDetails?.length ?? completeness?.totalFields} 总字段</Tag>
+                <Tag>
+                  {food?.enrichmentMeta?.fieldDetails?.length ?? completeness?.totalFields} 总字段
+                </Tag>
               </Space>
             </Col>
           </Row>
@@ -343,7 +356,13 @@ const FoodDetailPage: React.FC = () => {
                     <Descriptions.Item label="条形码">{food.barcode || '-'}</Descriptions.Item>
                     <Descriptions.Item label="状态">
                       <Badge
-                        status={food.status === 'active' ? 'success' : food.status === 'draft' ? 'warning' : 'default'}
+                        status={
+                          food.status === 'active'
+                            ? 'success'
+                            : food.status === 'draft'
+                              ? 'warning'
+                              : 'default'
+                        }
                         text={STATUS_MAP[food.status]?.text || food.status}
                       />
                     </Descriptions.Item>
@@ -367,16 +386,19 @@ const FoodDetailPage: React.FC = () => {
                     </Descriptions.Item>
                     <Descriptions.Item label="NOVA分级">{food.processingLevel}</Descriptions.Item>
                     <Descriptions.Item label="标准份量">
-                      {food.standardServingG}g{food.standardServingDesc ? ` — ${food.standardServingDesc}` : ''}
+                      {food.standardServingG}g
+                      {food.standardServingDesc ? ` — ${food.standardServingDesc}` : ''}
                     </Descriptions.Item>
                     <Descriptions.Item label="常用份量" span={2}>
-                      {food.commonPortions && food.commonPortions.length > 0
-                        ? food.commonPortions.map((p) => (
-                            <Tag key={p.name} color="geekblue" style={{ marginBottom: 2 }}>
-                              {p.name} = {p.grams}g
-                            </Tag>
-                          ))
-                        : <span>-{fieldStatus(null, 'common_portions')}</span>}
+                      {food.commonPortions && food.commonPortions.length > 0 ? (
+                        food.commonPortions.map((p) => (
+                          <Tag key={p.name} color="geekblue" style={{ marginBottom: 2 }}>
+                            {p.name} = {p.grams}g
+                          </Tag>
+                        ))
+                      ) : (
+                        <span>-{fieldStatus(null, 'common_portions')}</span>
+                      )}
                     </Descriptions.Item>
                   </Descriptions>
 
@@ -572,29 +594,51 @@ const FoodDetailPage: React.FC = () => {
                   </Typography.Title>
                   <Descriptions bordered column={1} size="small">
                     <Descriptions.Item label="原料列表">
-                      {food.ingredientList && food.ingredientList.length > 0
-                        ? food.ingredientList.map((i) => <Tag key={i}>{i}</Tag>)
-                        : <span>-{fieldStatus(null, 'ingredient_list')}</span>}
+                      {food.ingredientList && food.ingredientList.length > 0 ? (
+                        food.ingredientList.map((i) => <Tag key={i}>{i}</Tag>)
+                      ) : (
+                        <span>-{fieldStatus(null, 'ingredient_list')}</span>
+                      )}
                     </Descriptions.Item>
                     <Descriptions.Item label="烹饪方式">
-                      {food.cookingMethods && food.cookingMethods.length > 0
-                        ? food.cookingMethods.map((c) => <Tag key={c} color="cyan">{c}</Tag>)
-                        : <span>-{fieldStatus(null, 'cooking_methods')}</span>}
+                      {food.cookingMethods && food.cookingMethods.length > 0 ? (
+                        food.cookingMethods.map((c) => (
+                          <Tag key={c} color="cyan">
+                            {c}
+                          </Tag>
+                        ))
+                      ) : (
+                        <span>-{fieldStatus(null, 'cooking_methods')}</span>
+                      )}
                     </Descriptions.Item>
                     <Descriptions.Item label="口感标签">
-                      {food.textureTags && food.textureTags.length > 0
-                        ? food.textureTags.map((t) => <Tag key={t} color="purple">{t}</Tag>)
-                        : <span>-{fieldStatus(null, 'texture_tags')}</span>}
+                      {food.textureTags && food.textureTags.length > 0 ? (
+                        food.textureTags.map((t) => (
+                          <Tag key={t} color="purple">
+                            {t}
+                          </Tag>
+                        ))
+                      ) : (
+                        <span>-{fieldStatus(null, 'texture_tags')}</span>
+                      )}
                     </Descriptions.Item>
                     <Descriptions.Item label="可购渠道">
-                      {food.availableChannels && food.availableChannels.length > 0
-                        ? food.availableChannels.map((c) => <Tag key={c} color="volcano">{c}</Tag>)
-                        : <span>-{fieldStatus(null, 'available_channels')}</span>}
+                      {food.availableChannels && food.availableChannels.length > 0 ? (
+                        food.availableChannels.map((c) => (
+                          <Tag key={c} color="volcano">
+                            {c}
+                          </Tag>
+                        ))
+                      ) : (
+                        <span>-{fieldStatus(null, 'available_channels')}</span>
+                      )}
                     </Descriptions.Item>
                     <Descriptions.Item label="所需设备">
-                      {food.requiredEquipment && food.requiredEquipment.length > 0
-                        ? food.requiredEquipment.map((e) => <Tag key={e}>{e}</Tag>)
-                        : <span>-{fieldStatus(null, 'required_equipment')}</span>}
+                      {food.requiredEquipment && food.requiredEquipment.length > 0 ? (
+                        food.requiredEquipment.map((e) => <Tag key={e}>{e}</Tag>)
+                      ) : (
+                        <span>-{fieldStatus(null, 'required_equipment')}</span>
+                      )}
                     </Descriptions.Item>
                   </Descriptions>
 
@@ -699,7 +743,10 @@ const FoodDetailPage: React.FC = () => {
                         <Space direction="vertical" size={4}>
                           {Object.entries(food.compatibility).map(([group, items]) => (
                             <div key={group}>
-                              <Typography.Text type="secondary" style={{ fontSize: 12, marginRight: 8 }}>
+                              <Typography.Text
+                                type="secondary"
+                                style={{ fontSize: 12, marginRight: 8 }}
+                              >
                                 {group}:
                               </Typography.Text>
                               <Space wrap size={2}>
@@ -913,7 +960,7 @@ const FoodDetailPage: React.FC = () => {
                                         : src}
                                     : {cnt}
                                   </Tag>
-                                ),
+                                )
                               )}
                             </Space>
                           </Card>
@@ -946,11 +993,7 @@ const FoodDetailPage: React.FC = () => {
                             dataIndex: 'filled',
                             width: 70,
                             render: (v: boolean) =>
-                              v ? (
-                                <Tag color="green">已填</Tag>
-                              ) : (
-                                <Tag color="red">缺失</Tag>
-                              ),
+                              v ? <Tag color="green">已填</Tag> : <Tag color="red">缺失</Tag>,
                           },
                           {
                             title: '值',

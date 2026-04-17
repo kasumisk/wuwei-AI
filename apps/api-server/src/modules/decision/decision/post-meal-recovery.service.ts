@@ -12,7 +12,7 @@ export class PostMealRecoveryService {
     mode: 'pre_eat' | 'post_eat';
     macroProgress?: MacroProgress;
     userContext: UnifiedUserContext;
-    signalTrace?: SignalTraceItem[];  // V3.1: 联动信号追踪
+    signalTrace?: SignalTraceItem[]; // V3.1: 联动信号追踪
   }): RecoveryAction | undefined {
     const { mode, macroProgress, userContext, signalTrace } = input;
     if (!macroProgress) return undefined;
@@ -44,7 +44,8 @@ export class PostMealRecoveryService {
     } else if (dominantSignal === 'carb_excess') {
       nextMealDirection = '下一餐减少主食量，优先高蛋白和高纤维食物';
     } else if (dominantSignal === 'over_limit') {
-      nextMealDirection = '今日热量已超标，建议下一餐以低热量、高饱腹感食物为主';
+      nextMealDirection =
+        '今日热量已超标，建议下一餐以低热量、高饱腹感食物为主';
     } else if (lowProtein) {
       nextMealDirection = '下一餐补足蛋白质，优先鸡蛋、鸡胸肉、豆腐等';
     } else if (highFat) {
@@ -52,7 +53,8 @@ export class PostMealRecoveryService {
     } else if (highCarbs) {
       nextMealDirection = '下一餐减少主食量，优先高蛋白和高纤维食物';
     } else if (overBudget) {
-      nextMealDirection = '今日热量已超标，建议下一餐以低热量、高饱腹感食物为主';
+      nextMealDirection =
+        '今日热量已超标，建议下一餐以低热量、高饱腹感食物为主';
     }
 
     const todayAdjustment = overBudget

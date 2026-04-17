@@ -1,6 +1,6 @@
 /**
  * V2.4 Integration Test Suite
- * 
+ *
  * Verifies all 3 phases work together end-to-end
  */
 

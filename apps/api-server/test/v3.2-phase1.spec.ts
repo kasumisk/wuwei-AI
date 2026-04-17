@@ -18,7 +18,10 @@ import { I18nManagementService } from '../src/config/i18n-management.service';
 import { AnalysisAccuracyService } from '../src/modules/decision/analyze/analysis-accuracy.service';
 import { NutritionIssueDetector } from '../src/modules/decision/analyze/nutrition-issue-detector.service';
 import { AnalysisContextService } from '../src/modules/decision/analyze/analysis-context.service';
-import { MacroSlotStatus, UnifiedUserContext } from '../src/modules/decision/types/analysis-result.types';
+import {
+  MacroSlotStatus,
+  UnifiedUserContext,
+} from '../src/modules/decision/types/analysis-result.types';
 
 describe('V3.2 Phase 1 - Analysis Data Pipeline', () => {
   let module: TestingModule;
@@ -47,7 +50,9 @@ describe('V3.2 Phase 1 - Analysis Data Pipeline', () => {
       ],
     }).compile();
 
-    accuracyService = module.get<AnalysisAccuracyService>(AnalysisAccuracyService);
+    accuracyService = module.get<AnalysisAccuracyService>(
+      AnalysisAccuracyService,
+    );
     issueDetector = module.get<NutritionIssueDetector>(NutritionIssueDetector);
     contextService = module.get<AnalysisContextService>(AnalysisContextService);
     i18nService = module.get<I18nService>(I18nService);
@@ -307,7 +312,10 @@ describe('V3.2 Phase 1 - Analysis Data Pipeline', () => {
 
       expect(analysis.recommendationContext.excludeFoods).toEqual([]);
 
-      analysis = contextService.excludeFoodsFromRecommendation(analysis, ['apple', 'banana']);
+      analysis = contextService.excludeFoodsFromRecommendation(analysis, [
+        'apple',
+        'banana',
+      ]);
 
       expect(analysis.recommendationContext.excludeFoods).toContain('apple');
       expect(analysis.recommendationContext.excludeFoods).toContain('banana');

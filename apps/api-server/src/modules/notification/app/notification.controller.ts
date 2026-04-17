@@ -198,8 +198,7 @@ export class NotificationController {
       quietEnd: string | null;
     }> = {};
     if (dto.pushEnabled !== undefined) updates.pushEnabled = dto.pushEnabled;
-    if (dto.enabledTypes !== undefined)
-      updates.enabledTypes = dto.enabledTypes;
+    if (dto.enabledTypes !== undefined) updates.enabledTypes = dto.enabledTypes;
     if (dto.quietStart !== undefined) updates.quietStart = dto.quietStart;
     if (dto.quietEnd !== undefined) updates.quietEnd = dto.quietEnd;
 

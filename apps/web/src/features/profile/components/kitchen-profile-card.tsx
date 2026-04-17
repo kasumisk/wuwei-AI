@@ -17,7 +17,11 @@ const DEFAULT_KITCHEN: KitchenProfile = {
   primaryStove: 'gas',
 };
 
-const APPLIANCES: { key: keyof Omit<KitchenProfile, 'primaryStove'>; label: string; icon: string }[] = [
+const APPLIANCES: {
+  key: keyof Omit<KitchenProfile, 'primaryStove'>;
+  label: string;
+  icon: string;
+}[] = [
   { key: 'hasMicrowave', label: '微波炉', icon: '📡' },
   { key: 'hasRiceCooker', label: '电饭煲', icon: '🍚' },
   { key: 'hasSteamer', label: '蒸锅', icon: '🫧' },

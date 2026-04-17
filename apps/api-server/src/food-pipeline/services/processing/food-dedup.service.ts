@@ -165,10 +165,7 @@ export class FoodDedupService {
     if (incoming.category && existing.category !== incoming.category) {
       merged.category = incoming.category;
     }
-    if (
-      incoming.subCategory &&
-      existing.subCategory !== incoming.subCategory
-    ) {
+    if (incoming.subCategory && existing.subCategory !== incoming.subCategory) {
       merged.subCategory = incoming.subCategory;
     }
     if (incoming.foodGroup && existing.foodGroup !== incoming.foodGroup) {

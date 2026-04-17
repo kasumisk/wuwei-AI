@@ -71,11 +71,20 @@ describe('V2.6 Integration Tests', () => {
       goalCarbs: number;
     }): string[] {
       const priorities: string[] = [];
-      if (input.goalProtein > 0 && input.remainingProtein / input.goalProtein > 0.35)
+      if (
+        input.goalProtein > 0 &&
+        input.remainingProtein / input.goalProtein > 0.35
+      )
         priorities.push('protein_gap');
-      if (input.goalFat > 0 && input.remainingFat < -Math.max(8, input.goalFat * 0.12))
+      if (
+        input.goalFat > 0 &&
+        input.remainingFat < -Math.max(8, input.goalFat * 0.12)
+      )
         priorities.push('fat_excess');
-      if (input.goalCarbs > 0 && input.remainingCarbs < -Math.max(15, input.goalCarbs * 0.12))
+      if (
+        input.goalCarbs > 0 &&
+        input.remainingCarbs < -Math.max(15, input.goalCarbs * 0.12)
+      )
         priorities.push('carb_excess');
       if (priorities.length === 0) priorities.push('maintain_balance');
       return priorities;
@@ -149,8 +158,10 @@ describe('V2.6 Integration Tests', () => {
       if (input.remainingProtein > 20) signals.push('protein_gap');
       if (input.remainingFat < -10) signals.push('fat_excess');
       if (input.remainingCarbs < -20) signals.push('carb_excess');
-      if (input.localHour >= 21 || input.localHour < 5) signals.push('late_night_window');
-      if (input.mealCount <= 1 && input.localHour >= 13) signals.push('meal_count_low');
+      if (input.localHour >= 21 || input.localHour < 5)
+        signals.push('late_night_window');
+      if (input.mealCount <= 1 && input.localHour >= 13)
+        signals.push('meal_count_low');
       return Array.from(new Set(signals));
     }
 
@@ -307,7 +318,11 @@ describe('V2.6 Integration Tests', () => {
 
     it('should prioritize protein when protein_gap exists (non fat_loss goal)', () => {
       const focus = resolveCoachFocus(
-        { goalType: 'muscle_gain', budgetStatus: 'under_target', nutritionPriority: ['protein_gap'] },
+        {
+          goalType: 'muscle_gain',
+          budgetStatus: 'under_target',
+          nutritionPriority: ['protein_gap'],
+        },
         [],
         'recommend',
       );
@@ -316,7 +331,11 @@ describe('V2.6 Integration Tests', () => {
 
     it('should explain avoid when recommendation is avoid', () => {
       const focus = resolveCoachFocus(
-        { goalType: 'health', budgetStatus: 'under_target', nutritionPriority: ['maintain_balance'] },
+        {
+          goalType: 'health',
+          budgetStatus: 'under_target',
+          nutritionPriority: ['maintain_balance'],
+        },
         [],
         'avoid',
       );
@@ -325,7 +344,11 @@ describe('V2.6 Integration Tests', () => {
 
     it('should use top issue label when topIssues are present', () => {
       const focus = resolveCoachFocus(
-        { goalType: 'health', budgetStatus: 'under_target', nutritionPriority: [] },
+        {
+          goalType: 'health',
+          budgetStatus: 'under_target',
+          nutritionPriority: [],
+        },
         ['高糖风险'],
         'caution',
       );
@@ -334,7 +357,11 @@ describe('V2.6 Integration Tests', () => {
 
     it('should fall back to default actionable advice', () => {
       const focus = resolveCoachFocus(
-        { goalType: 'health', budgetStatus: 'under_target', nutritionPriority: [] },
+        {
+          goalType: 'health',
+          budgetStatus: 'under_target',
+          nutritionPriority: [],
+        },
         [],
         'recommend',
       );
@@ -508,7 +535,10 @@ describe('V2.6 Integration Tests', () => {
     });
 
     it('followUpActions from ShouldEatAction should be injected into prompt context', () => {
-      const followUpActions = ['优先按 70% 份量控制，本次约 350 kcal', '今日晚餐减少200kcal'];
+      const followUpActions = [
+        '优先按 70% 份量控制，本次约 350 kcal',
+        '今日晚餐减少200kcal',
+      ];
       let ctx = '【行动计划】...';
       ctx += `\n- 后续动作：${followUpActions.join('；')}`;
 
@@ -519,7 +549,10 @@ describe('V2.6 Integration Tests', () => {
     it('CoachActionPlan why array should absorb contextSignals', () => {
       const contextSignals = ['over_limit', 'late_night_window'];
       const whyBase = ['热量已超标'];
-      const why = [...whyBase, ...contextSignals.map((s) => `信号: ${s}`)].slice(0, 4);
+      const why = [
+        ...whyBase,
+        ...contextSignals.map((s) => `信号: ${s}`),
+      ].slice(0, 4);
 
       expect(why.length).toBeLessThanOrEqual(4);
       expect(why.some((w) => w.includes('over_limit'))).toBe(true);
@@ -551,7 +584,9 @@ describe('V2.6 Integration Tests', () => {
         contextSignals: ['near_limit', 'protein_gap'],
       };
 
-      expect(['under_target', 'near_limit', 'over_limit']).toContain(ctx.budgetStatus);
+      expect(['under_target', 'near_limit', 'over_limit']).toContain(
+        ctx.budgetStatus,
+      );
       expect(ctx.nutritionPriority).toBeInstanceOf(Array);
       expect(ctx.contextSignals).toBeInstanceOf(Array);
     });

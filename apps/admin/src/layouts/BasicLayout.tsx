@@ -210,10 +210,7 @@ const Layout: React.FC = () => {
                 >
                   <TabsView />
                   <div style={{ marginTop: 20, minHeight: 'calc(100vh - 112px)' }}>
-                    <KeepAliveRouteOutlet
-                      aliveRef={aliveRef}
-                      max={20}
-                    />
+                    <KeepAliveRouteOutlet aliveRef={aliveRef} max={20} />
                   </div>
                 </ProLayout>
               </div>

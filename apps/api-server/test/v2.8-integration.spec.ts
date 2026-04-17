@@ -177,9 +177,9 @@ describe('V2.8 Integration Tests', () => {
     });
 
     it('health_constraint should outrank over_limit in fat_loss matrix', () => {
-      expect(getSignalPriority('health_constraint', 'fat_loss')).toBeGreaterThan(
-        getSignalPriority('over_limit', 'fat_loss'),
-      );
+      expect(
+        getSignalPriority('health_constraint', 'fat_loss'),
+      ).toBeGreaterThan(getSignalPriority('over_limit', 'fat_loss'));
     });
 
     it('health_constraint should outrank over_limit in health matrix', () => {

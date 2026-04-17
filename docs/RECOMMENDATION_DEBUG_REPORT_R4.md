@@ -7,12 +7,12 @@
 
 ## 一、测试覆盖
 
-| 场景 | 用户数 | 覆盖维度 |
-|------|--------|----------|
-| fat_loss | 5 | 普通/初级/海鲜+素食/糖尿病+痛风/多过敏+纯素+清真 |
-| muscle_gain | 5 | 普通/中级/高预算/大豆鱼过敏+纯素+犹太/多过敏 |
-| health | 5 | 轻度高血压/高血压+糖尿病(对象格式)/痛风+高胆固醇(对象格式)/素食+骨质疏松/日式偏好 |
-| habit | 2 | 甲壳类过敏+高外卖频率/多过敏(蛋奶大豆麸质) |
+| 场景        | 用户数 | 覆盖维度                                                                          |
+| ----------- | ------ | --------------------------------------------------------------------------------- |
+| fat_loss    | 5      | 普通/初级/海鲜+素食/糖尿病+痛风/多过敏+纯素+清真                                  |
+| muscle_gain | 5      | 普通/中级/高预算/大豆鱼过敏+纯素+犹太/多过敏                                      |
+| health      | 5      | 轻度高血压/高血压+糖尿病(对象格式)/痛风+高胆固醇(对象格式)/素食+骨质疏松/日式偏好 |
+| habit       | 2      | 甲壳类过敏+高外卖频率/多过敏(蛋奶大豆麸质)                                        |
 
 **每个用户测试 breakfast/lunch/dinner/snack 四个餐次。**
 
@@ -27,11 +27,13 @@
 **问题**: `ALLERGEN_ALIAS_MAP` 中没有 `seafood`、`lactose`、`shrimp` 等 key。用户画像中的 `seafood` 过敏原无法匹配食物标签中的 `shellfish`/`shrimp`，导致含虾食物（如面条虾蓉面）被推荐给海鲜过敏用户。
 
 **数据证据**:
+
 - 用户画像过敏原: `seafood`, `lactose`, `egg`, `fish`, `soy`, 等
 - 食物标签过敏原: `shellfish`, `shrimp`, `dairy`, `nuts`, 等
 - FL3 (seafood+lactose 过敏) 被推荐了含 `["shellfish","shrimp"]` 的面条(虾蓉面)
 
 **修复**:
+
 ```typescript
 // 新增映射
 seafood: ['shellfish', 'shrimp', 'fish', 'seafood'],
@@ -56,11 +58,12 @@ shellfish: ['shellfish', 'shrimp'],
 **注意**: `health-modifier-engine` 已正确处理对象格式（通过 `parseConditions` 方法），所以软评分惩罚仍然有效。但硬约束（如钠≥380mg的食物直接排除）缺失。
 
 **修复**:
+
 ```typescript
 const rawStr =
   typeof rawCondition === 'string'
     ? rawCondition
-    : (rawCondition as { condition?: string }).condition ?? '';
+    : ((rawCondition as { condition?: string }).condition ?? '');
 const condition = normalizeHealthCondition(rawStr) ?? rawStr;
 ```
 
@@ -104,13 +107,13 @@ const condition = normalizeHealthCondition(rawStr) ?? rawStr;
 
 ## 三、代码质量修复（由子任务发现）
 
-| # | 文件 | 问题 | 修复 |
-|---|------|------|------|
-| 1 | `substitution.service.ts:333-338` | `vitamin_c`/`vitamin_a` key 不匹配 camelCase 字段 → 微量营养素相似度始终返回 0.5 | 改为 `vitaminC`/`vitaminA` |
-| 2 | `food-scorer.service.ts:168` | `food.calories` 未用 `Number()` 包裹，可能产生 NaN | 添加 `Number()` |
-| 3 | `meal-assembler.service.ts:230-236` | `adjustPortions` 缩放了 cal/protein/fat/carbs 但遗漏 fiber | 添加 fiber 缩放 |
-| 4 | `scene-resolver.service.ts:489` | `buildDefaultScene` 忽略 `mealType` 参数，始终返回 `'general'` | 添加 mealType→scene 映射 |
-| 5 | `profile-aggregator.service.ts:153` | 静默回退到 `'CN'` region 无日志 | 添加 warning log |
+| #   | 文件                                | 问题                                                                             | 修复                       |
+| --- | ----------------------------------- | -------------------------------------------------------------------------------- | -------------------------- |
+| 1   | `substitution.service.ts:333-338`   | `vitamin_c`/`vitamin_a` key 不匹配 camelCase 字段 → 微量营养素相似度始终返回 0.5 | 改为 `vitaminC`/`vitaminA` |
+| 2   | `food-scorer.service.ts:168`        | `food.calories` 未用 `Number()` 包裹，可能产生 NaN                               | 添加 `Number()`            |
+| 3   | `meal-assembler.service.ts:230-236` | `adjustPortions` 缩放了 cal/protein/fat/carbs 但遗漏 fiber                       | 添加 fiber 缩放            |
+| 4   | `scene-resolver.service.ts:489`     | `buildDefaultScene` 忽略 `mealType` 参数，始终返回 `'general'`                   | 添加 mealType→scene 映射   |
+| 5   | `profile-aggregator.service.ts:153` | 静默回退到 `'CN'` region 无日志                                                  | 添加 warning log           |
 
 ---
 
@@ -121,6 +124,7 @@ const condition = normalizeHealthCondition(rawStr) ?? rawStr;
 **表现**: FL5 (vegan+halal) 零食仅达目标 32-50%，H3 (gout+cholesterol+low_fat) 蛋白质仅 27-37%
 
 **原因**: 食物池中符合多重约束的高热量/高蛋白选项有限。例如：
+
 - 纯素+清真 → 排除所有动物蛋白，剩余主要是豆类/谷物
 - 痛风+低脂 → 排除高嘌呤蛋白（内脏、海鲜）和高脂食物，可选蛋白质源极少
 
@@ -138,16 +142,16 @@ const condition = normalizeHealthCondition(rawStr) ?? rawStr;
 
 ## 五、修改文件清单
 
-| 文件 | 修改类型 |
-|------|----------|
-| `apps/api-server/src/modules/diet/app/recommendation/filter/allergen-filter.util.ts` | Bug fix: 过敏原映射 |
+| 文件                                                                                           | 修改类型                  |
+| ---------------------------------------------------------------------------------------------- | ------------------------- |
+| `apps/api-server/src/modules/diet/app/recommendation/filter/allergen-filter.util.ts`           | Bug fix: 过敏原映射       |
 | `apps/api-server/src/modules/diet/app/recommendation/pipeline/constraint-generator.service.ts` | Bug fix: 健康状况对象格式 |
-| `apps/api-server/src/modules/diet/app/recommendation/types/scoring.types.ts` | Bug fix: 零食角色和品类 |
-| `apps/api-server/src/modules/diet/app/recommendation/filter/substitution.service.ts` | Code fix: 微量营养素 key |
-| `apps/api-server/src/modules/diet/app/recommendation/pipeline/food-scorer.service.ts` | Code fix: Number() 安全 |
-| `apps/api-server/src/modules/diet/app/recommendation/meal/meal-assembler.service.ts` | Code fix: fiber 缩放 |
-| `apps/api-server/src/modules/diet/app/recommendation/context/scene-resolver.service.ts` | Code fix: 默认场景映射 |
-| `apps/api-server/src/modules/diet/app/recommendation/profile/profile-aggregator.service.ts` | Code fix: 日志补充 |
+| `apps/api-server/src/modules/diet/app/recommendation/types/scoring.types.ts`                   | Bug fix: 零食角色和品类   |
+| `apps/api-server/src/modules/diet/app/recommendation/filter/substitution.service.ts`           | Code fix: 微量营养素 key  |
+| `apps/api-server/src/modules/diet/app/recommendation/pipeline/food-scorer.service.ts`          | Code fix: Number() 安全   |
+| `apps/api-server/src/modules/diet/app/recommendation/meal/meal-assembler.service.ts`           | Code fix: fiber 缩放      |
+| `apps/api-server/src/modules/diet/app/recommendation/context/scene-resolver.service.ts`        | Code fix: 默认场景映射    |
+| `apps/api-server/src/modules/diet/app/recommendation/profile/profile-aggregator.service.ts`    | Code fix: 日志补充        |
 
 ---
 

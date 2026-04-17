@@ -25,8 +25,7 @@ export function useAuth() {
     clearAuth,
     setLoading,
     setInitialized,
-  } =
-    useAuthStore();
+  } = useAuthStore();
 
   const isLoggedIn = !!token && !!user;
   const isAnonymous = isLoggedIn && user?.authType === 'anonymous';

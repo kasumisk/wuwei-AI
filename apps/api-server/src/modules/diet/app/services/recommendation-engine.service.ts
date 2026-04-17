@@ -283,10 +283,7 @@ export class RecommendationEngineService implements OnModuleInit {
       target,
       dailyTarget,
       // #fix Bug21-22: 合并近期食物名与额外排除名（跨餐去重）
-      excludeNames: [
-        ...recentFoodNames,
-        ...(additionalExcludeNames ?? []),
-      ],
+      excludeNames: [...recentFoodNames, ...(additionalExcludeNames ?? [])],
       feedbackStats,
       userProfile: mergedProfile,
       preferenceProfile,
@@ -486,19 +483,22 @@ export class RecommendationEngineService implements OnModuleInit {
       );
 
       const mealPolicy = resolvedStrategy?.config?.meal;
-      const defaultRoles = goalType === 'muscle_gain'
-        ? (MUSCLE_GAIN_MEAL_ROLES[mealType] ?? MEAL_ROLES[mealType])
-        : MEAL_ROLES[mealType];
-      const roles =
-        mealPolicy?.mealRoles?.[mealType] ??
+      const defaultRoles =
+        goalType === 'muscle_gain'
+          ? (MUSCLE_GAIN_MEAL_ROLES[mealType] ?? MEAL_ROLES[mealType])
+          : MEAL_ROLES[mealType];
+      const roles = mealPolicy?.mealRoles?.[mealType] ??
         defaultRoles ?? ['carb', 'protein', 'veggie'];
 
-      const { picks: finalPicks, allCandidates, degradations } =
-        await this.pipelineBuilder.executeRolePipeline(
-          ctx,
-          roles,
-          sceneAdjustedRealism,
-        );
+      const {
+        picks: finalPicks,
+        allCandidates,
+        degradations,
+      } = await this.pipelineBuilder.executeRolePipeline(
+        ctx,
+        roles,
+        sceneAdjustedRealism,
+      );
 
       // 累积本场景选出的食物，让后续场景避开
       for (const p of finalPicks) {
@@ -570,9 +570,10 @@ export class RecommendationEngineService implements OnModuleInit {
 
     // MealPolicy 覆盖餐次角色模板
     const mealPolicy = resolvedStrategy?.config?.meal;
-    const defaultRolesLegacy = goalType === 'muscle_gain'
-      ? (MUSCLE_GAIN_MEAL_ROLES[mealType] ?? MEAL_ROLES[mealType])
-      : MEAL_ROLES[mealType];
+    const defaultRolesLegacy =
+      goalType === 'muscle_gain'
+        ? (MUSCLE_GAIN_MEAL_ROLES[mealType] ?? MEAL_ROLES[mealType])
+        : MEAL_ROLES[mealType];
     const roles = mealPolicy?.mealRoles?.[mealType] ??
       defaultRolesLegacy ?? ['carb', 'protein', 'veggie'];
     const picks: ScoredFood[] = [];
@@ -659,14 +660,32 @@ export class RecommendationEngineService implements OnModuleInit {
       );
 
       if (recipePicks && recipePicks.length > 0) {
+        const toppedUpRecipePicks =
+          this.mealAssembler.ensureMinimumCalorieCoverage(
+            recipePicks,
+            supplementCandidates,
+            target.calories,
+            0.7,
+            1.1,
+          );
+
+        const finalizedRecipePicks =
+          toppedUpRecipePicks.length === recipePicks.length
+            ? recipePicks
+            : this.mealAssembler.adjustPortions(
+                toppedUpRecipePicks,
+                target.calories,
+                userProfile?.portionTendency,
+              );
+
         const tip = this.mealAssembler.buildTip(
           mealType,
           goalType,
           target,
-          recipePicks.reduce((s, p) => s + p.servingCalories, 0),
+          finalizedRecipePicks.reduce((s, p) => s + p.servingCalories, 0),
         );
         const result = this.mealAssembler.aggregateMealResult(
-          recipePicks,
+          finalizedRecipePicks,
           tip,
           goalType,
           userProfile,
@@ -693,7 +712,10 @@ export class RecommendationEngineService implements OnModuleInit {
 
     // 初始化管道追踪（受 feature flag 控制）
     const traceEnabled = userId
-      ? await this.featureFlagService.isEnabled('pipeline_trace_enabled', userId)
+      ? await this.featureFlagService.isEnabled(
+          'pipeline_trace_enabled',
+          userId,
+        )
       : await this.featureFlagService.isEnabled('pipeline_trace_enabled');
     if (traceEnabled) {
       ctx.trace = {
@@ -796,7 +818,8 @@ export class RecommendationEngineService implements OnModuleInit {
           goalType,
           channel: channel ?? AcquisitionChannel.UNKNOWN,
           strategyId: resolvedStrategy?.strategyId ?? undefined,
-          strategyVersion: resolvedStrategy?.resolvedAt?.toString() ?? undefined,
+          strategyVersion:
+            resolvedStrategy?.resolvedAt?.toString() ?? undefined,
           pipelineContext: ctx,
           topFoods: finalPicks,
           foodPoolSize: req.allFoods.length,
@@ -805,11 +828,12 @@ export class RecommendationEngineService implements OnModuleInit {
           traceData: ctx.trace,
           strategyName: resolvedStrategy?.strategyName ?? 'default',
           sceneName: sceneContext?.sceneType ?? 'general',
-          realismLevel: sceneAdjustedRealism?.enabled === false
-            ? 'disabled'
-            : sceneAdjustedRealism?.canteenMode
-              ? 'canteen'
-              : `threshold_${sceneAdjustedRealism?.commonalityThreshold ?? 20}`,
+          realismLevel:
+            sceneAdjustedRealism?.enabled === false
+              ? 'disabled'
+              : sceneAdjustedRealism?.canteenMode
+                ? 'canteen'
+                : `threshold_${sceneAdjustedRealism?.commonalityThreshold ?? 20}`,
           candidateFlow,
           totalDurationMs,
           cacheHit: ctx.trace.summary?.cacheHit ?? false,

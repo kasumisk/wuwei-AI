@@ -1010,7 +1010,9 @@ export const useEnrichmentProgress = () => {
     staleTime: 15 * 1000, // FIX: 降低缓存时间，确保进度面板数据更及时
     // FIX: 当补全队列有活跃任务时，自动轮询进度面板
     refetchInterval: () => {
-      const statsData = queryClient.getQueryData<EnrichmentStatsResponse>(enrichmentQueryKeys.stats);
+      const statsData = queryClient.getQueryData<EnrichmentStatsResponse>(
+        enrichmentQueryKeys.stats
+      );
       const q = statsData?.queue;
       return q && (q.waiting > 0 || q.active > 0) ? 15000 : false;
     },

@@ -116,7 +116,9 @@ describe('V2.9 Integration Tests', () => {
         verdict: 'avoid',
       });
       expect(guardrails).toContain('当前分析质量偏低，先按保守策略执行。');
-      expect(guardrails).toContain('当前建议为不建议继续吃，优先执行替代或减量。');
+      expect(guardrails).toContain(
+        '当前建议为不建议继续吃，优先执行替代或减量。',
+      );
     });
 
     it('should merge guardrails into followUpActions', () => {
@@ -161,7 +163,9 @@ describe('V2.9 Integration Tests', () => {
     });
 
     it('cl should resolve ja decisionGuardrailsLabel', () => {
-      expect(cl('decisionGuardrailsLabel', 'ja-JP')).toBe('意思決定ガードレール');
+      expect(cl('decisionGuardrailsLabel', 'ja-JP')).toBe(
+        '意思決定ガードレール',
+      );
     });
   });
 });

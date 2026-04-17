@@ -174,12 +174,7 @@ const StagePerformanceChart: React.FC<{
             }}
           />
           <Legend />
-          <Bar
-            yAxisId="left"
-            dataKey="avgDurationMs"
-            name="平均耗时(ms)"
-            radius={[4, 4, 0, 0]}
-          >
+          <Bar yAxisId="left" dataKey="avgDurationMs" name="平均耗时(ms)" radius={[4, 4, 0, 0]}>
             {barData.map((entry, index) => (
               <Cell key={`cell-${index}`} fill={entry.color} />
             ))}
@@ -293,8 +288,7 @@ const StageDetailTable: React.FC<{
       key: 'durationPct',
       width: 150,
       render: (_, record) => {
-        const pct =
-          totalAvgDuration > 0 ? (record.avgDurationMs / totalAvgDuration) * 100 : 0;
+        const pct = totalAvgDuration > 0 ? (record.avgDurationMs / totalAvgDuration) * 100 : 0;
         return (
           <Progress
             percent={Math.round(pct)}
@@ -455,12 +449,7 @@ const PipelineStatsPage: React.FC = () => {
 
       {/* 数据为空或消息提示 */}
       {data?.message && (
-        <Alert
-          type="warning"
-          showIcon
-          message={data.message}
-          style={{ marginBottom: 16 }}
-        />
+        <Alert type="warning" showIcon message={data.message} style={{ marginBottom: 16 }} />
       )}
 
       {data && !data.message && (
@@ -492,9 +481,7 @@ const PipelineStatsPage: React.FC = () => {
               <Card size="small">
                 <Statistic
                   title="缓存命中率"
-                  value={
-                    data.cacheHitRate != null ? (data.cacheHitRate * 100).toFixed(1) : '-'
-                  }
+                  value={data.cacheHitRate != null ? (data.cacheHitRate * 100).toFixed(1) : '-'}
                   suffix="%"
                   valueStyle={{
                     color: rateColor((data.cacheHitRate ?? 0) * 100),
@@ -508,9 +495,7 @@ const PipelineStatsPage: React.FC = () => {
                 <Statistic
                   title="降级率"
                   value={
-                    data.degradationRate != null
-                      ? (data.degradationRate * 100).toFixed(1)
-                      : '-'
+                    data.degradationRate != null ? (data.degradationRate * 100).toFixed(1) : '-'
                   }
                   suffix="%"
                   valueStyle={{

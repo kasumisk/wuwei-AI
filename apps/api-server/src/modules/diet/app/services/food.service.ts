@@ -591,7 +591,12 @@ export class FoodService {
     mealCarbs: number,
     remainingCalories: number,
     goals: { calories: number; protein: number; fat: number; carbs: number },
-    summary: { totalCalories?: number; totalProtein?: number },
+    summary: {
+      totalCalories?: number;
+      totalProtein?: number;
+      totalFat?: number;
+      totalCarbs?: number;
+    },
     goalType: string,
   ): DecisionValueTag[] {
     const tags: DecisionValueTag[] = [];
@@ -629,7 +634,61 @@ export class FoodService {
       });
     }
 
-    // 3. 今日整体合规率
+    // 3. 脂肪/碳水累计进度（与每日评分口径对齐）
+    const consumedFat = summary.totalFat || 0;
+    const consumedCarbs = summary.totalCarbs || 0;
+
+    if (goals.fat > 0) {
+      const fatRatio = (consumedFat + mealFat) / goals.fat;
+      if (fatRatio > 1.15) {
+        tags.push({
+          type: 'warning',
+          label: '脂肪累计偏高',
+          dimension: 'fat',
+          value: Math.round(fatRatio * 100),
+          target: 100,
+        });
+      } else {
+        tags.push({
+          type: 'compliance',
+          label: '脂肪累计进度正常',
+          dimension: 'fat',
+          value: Math.round(fatRatio * 100),
+          target: 100,
+        });
+      }
+    }
+
+    if (goals.carbs > 0) {
+      const carbsRatio = (consumedCarbs + mealCarbs) / goals.carbs;
+      if (carbsRatio > 1.2) {
+        tags.push({
+          type: 'warning',
+          label: '碳水累计偏高',
+          dimension: 'carbs',
+          value: Math.round(carbsRatio * 100),
+          target: 100,
+        });
+      } else if (carbsRatio < 0.6) {
+        tags.push({
+          type: 'warning',
+          label: '碳水累计偏低',
+          dimension: 'carbs',
+          value: Math.round(carbsRatio * 100),
+          target: 100,
+        });
+      } else {
+        tags.push({
+          type: 'compliance',
+          label: '碳水累计进度正常',
+          dimension: 'carbs',
+          value: Math.round(carbsRatio * 100),
+          target: 100,
+        });
+      }
+    }
+
+    // 4. 今日整体合规率
     const consumedCalories = summary.totalCalories || 0;
     const caloriesAfterMeal = consumedCalories + mealCalories;
     const dailyComplianceRate = Math.min(caloriesAfterMeal / goals.calories, 1);
@@ -643,7 +702,7 @@ export class FoodService {
       });
     }
 
-    // 4. 目标特定标签
+    // 5. 目标特定标签
     // FIX: 使用正确的 GoalType 枚举值（'fat_loss' 和 'muscle_gain'，非旧值 'lose_weight'/'gain_muscle'）
     if (goalType === 'fat_loss' && mealCalories < remainingCalories * 0.8) {
       tags.push({

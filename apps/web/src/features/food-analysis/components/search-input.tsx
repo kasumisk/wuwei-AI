@@ -55,11 +55,11 @@ export function SearchInput({ mealType, onAddFromLibrary, isAdding }: SearchInpu
   );
 
   // Reset addingId when isAdding goes false
- useEffect(() => {
-  if (!isAdding) {
-    setTimeout(() => setAddingId(null), 0);
-  }
-}, [isAdding]);
+  useEffect(() => {
+    if (!isAdding) {
+      setTimeout(() => setAddingId(null), 0);
+    }
+  }, [isAdding]);
 
   const mealLabel =
     mealType === 'breakfast'

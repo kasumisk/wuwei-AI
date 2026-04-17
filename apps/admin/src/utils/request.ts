@@ -154,8 +154,11 @@ export const request = {
     httpClient.put(url, data, config),
 
   // DELETE 请求
-  delete: <T = unknown>(url: string, params?: unknown, config?: ExtendedRequestConfig): Promise<T> =>
-    httpClient.delete(url, { params, ...config }),
+  delete: <T = unknown>(
+    url: string,
+    params?: unknown,
+    config?: ExtendedRequestConfig
+  ): Promise<T> => httpClient.delete(url, { params, ...config }),
 
   // PATCH 请求
   patch: <T = unknown>(url: string, data?: unknown, config?: ExtendedRequestConfig): Promise<T> =>

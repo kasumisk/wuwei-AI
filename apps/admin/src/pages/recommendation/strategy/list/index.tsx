@@ -371,7 +371,7 @@ const StrategyList: React.FC = () => {
         columns={columns}
         scroll={{ x: 1200 }}
         request={async (params) => {
-          const { current, pageSize, keyword, scope, status, } = params;
+          const { current, pageSize, keyword, scope, status } = params;
           const res = await strategyApi.getStrategies({
             page: current,
             pageSize,

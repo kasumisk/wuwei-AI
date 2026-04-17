@@ -450,9 +450,7 @@ export class UserProfileService {
       merged.heightCm &&
       merged.weightKg
     ) {
-      (merged as any).dailyCalorieGoal = this.calculateDailyGoal(
-        merged as any,
-      );
+      (merged as any).dailyCalorieGoal = this.calculateDailyGoal(merged as any);
     }
 
     (merged as any).dataCompleteness = this.calculateCompleteness(
@@ -681,38 +679,35 @@ export class UserProfileService {
     if (profile.gender)
       lines.push(`性别: ${profile.gender === 'male' ? '男' : '女'}`);
     if (profile.birthYear)
-      lines.push(
-        `年龄: ${new Date().getFullYear() - profile.birthYear}岁`,
-      );
-    if (profile.heightCm)
-      lines.push(`身高: ${profile.heightCm}cm`);
-    if (profile.weightKg)
-      lines.push(`体重: ${profile.weightKg}kg`);
+      lines.push(`年龄: ${new Date().getFullYear() - profile.birthYear}岁`);
+    if (profile.heightCm) lines.push(`身高: ${profile.heightCm}cm`);
+    if (profile.weightKg) lines.push(`体重: ${profile.weightKg}kg`);
     if (profile.targetWeightKg)
       lines.push(`目标体重: ${profile.targetWeightKg}kg`);
     if (profile.bodyFatPercent)
       lines.push(`体脂率: ${profile.bodyFatPercent}%`);
     if (profile.goal) lines.push(`目标: ${profile.goal}`);
-    if (profile.goalSpeed)
-      lines.push(`目标节奏: ${profile.goalSpeed}`);
+    if (profile.goalSpeed) lines.push(`目标节奏: ${profile.goalSpeed}`);
     if (profile.dailyCalorieGoal)
-      lines.push(
-        `每日热量目标: ${profile.dailyCalorieGoal}kcal`,
-      );
-    if (profile.mealsPerDay)
-      lines.push(`每日餐次: ${profile.mealsPerDay}`);
+      lines.push(`每日热量目标: ${profile.dailyCalorieGoal}kcal`);
+    if (profile.mealsPerDay) lines.push(`每日餐次: ${profile.mealsPerDay}`);
     if (profile.takeoutFrequency)
       lines.push(`外卖频率: ${profile.takeoutFrequency}`);
-    if (profile.canCook !== undefined) lines.push(`会做饭: ${profile.canCook ? '是' : '否'}`);
-    if (profile.foodPreferences?.length) lines.push(`饮食偏好: ${profile.foodPreferences.join(', ')}`);
+    if (profile.canCook !== undefined)
+      lines.push(`会做饭: ${profile.canCook ? '是' : '否'}`);
+    if (profile.foodPreferences?.length)
+      lines.push(`饮食偏好: ${profile.foodPreferences.join(', ')}`);
     if (profile.dietaryRestrictions?.length)
       lines.push(`忌口: ${profile.dietaryRestrictions.join(', ')}`);
-    if (profile.allergens?.length) lines.push(`⚠️过敏原: ${profile.allergens.join(', ')}`);
-    if (profile.healthConditions?.length) lines.push(`健康状况: ${profile.healthConditions.join(', ')}`);
-    if (profile.weakTimeSlots?.length) lines.push(`容易乱吃时段: ${profile.weakTimeSlots.join(', ')}`);
-    if (profile.bingeTriggers?.length) lines.push(`暴食触发: ${profile.bingeTriggers.join(', ')}`);
-    if (profile.discipline)
-      lines.push(`自律程度: ${profile.discipline}`);
+    if (profile.allergens?.length)
+      lines.push(`⚠️过敏原: ${profile.allergens.join(', ')}`);
+    if (profile.healthConditions?.length)
+      lines.push(`健康状况: ${profile.healthConditions.join(', ')}`);
+    if (profile.weakTimeSlots?.length)
+      lines.push(`容易乱吃时段: ${profile.weakTimeSlots.join(', ')}`);
+    if (profile.bingeTriggers?.length)
+      lines.push(`暴食触发: ${profile.bingeTriggers.join(', ')}`);
+    if (profile.discipline) lines.push(`自律程度: ${profile.discipline}`);
     return lines.join('\n');
   }
 
@@ -1112,7 +1107,8 @@ export class UserProfileService {
     const patch: Partial<RecommendationPreferences> = {};
     if (dto.popularityPreference !== undefined)
       patch.popularityPreference = dto.popularityPreference;
-    if (dto.cookingEffort !== undefined) patch.cookingEffort = dto.cookingEffort;
+    if (dto.cookingEffort !== undefined)
+      patch.cookingEffort = dto.cookingEffort;
     if (dto.budgetSensitivity !== undefined)
       patch.budgetSensitivity = dto.budgetSensitivity;
     if (dto.realismLevel !== undefined) patch.realismLevel = dto.realismLevel;
@@ -1120,7 +1116,8 @@ export class UserProfileService {
       patch.diversityTolerance = dto.diversityTolerance as any;
     if (dto.dietaryPhilosophy !== undefined)
       patch.dietaryPhilosophy = dto.dietaryPhilosophy as any;
-    if (dto.mealPattern !== undefined) patch.mealPattern = dto.mealPattern as any;
+    if (dto.mealPattern !== undefined)
+      patch.mealPattern = dto.mealPattern as any;
     if (dto.flavorOpenness !== undefined)
       patch.flavorOpenness = dto.flavorOpenness as any;
 

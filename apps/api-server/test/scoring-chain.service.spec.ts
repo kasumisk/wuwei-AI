@@ -29,10 +29,16 @@ import {
   RuleWeightFactor,
 } from '../src/modules/diet/app/recommendation/scoring-chain/factors';
 import { LifestyleBoostFactor } from '../src/modules/diet/app/recommendation/scoring-chain/factors/lifestyle-boost.factor';
-import { createMockFoodLibrary, createMockScoringConfigService } from './helpers/mock-factories';
+import {
+  createMockFoodLibrary,
+  createMockScoringConfigService,
+} from './helpers/mock-factories';
 import type { FoodLibrary } from '../src/modules/food/food.types';
 import type { PipelineContext } from '../src/modules/diet/app/recommendation/types/recommendation.types';
-import type { ScoringFactor, ScoringAdjustment } from '../src/modules/diet/app/recommendation/scoring-chain/scoring-factor.interface';
+import type {
+  ScoringFactor,
+  ScoringAdjustment,
+} from '../src/modules/diet/app/recommendation/scoring-chain/scoring-factor.interface';
 import { writeStageBuffer } from '../src/modules/diet/app/recommendation/types/pipeline.types';
 
 // ─── 辅助 ───
@@ -68,11 +74,23 @@ class FixedMultiplierFactor implements ScoringFactor {
     private readonly multiplier: number,
   ) {}
 
-  isApplicable(_ctx: PipelineContext): boolean { return true; }
+  isApplicable(_ctx: PipelineContext): boolean {
+    return true;
+  }
   init(_ctx: PipelineContext): void {}
 
-  computeAdjustment(_food: FoodLibrary, _score: number, _ctx: PipelineContext): ScoringAdjustment | null {
-    return { factorName: this.name, multiplier: this.multiplier, additive: 0, explanationKey: null, reason: 'fixed' };
+  computeAdjustment(
+    _food: FoodLibrary,
+    _score: number,
+    _ctx: PipelineContext,
+  ): ScoringAdjustment | null {
+    return {
+      factorName: this.name,
+      multiplier: this.multiplier,
+      additive: 0,
+      explanationKey: null,
+      reason: 'fixed',
+    };
   }
 }
 
@@ -83,11 +101,23 @@ class AdditiveOnlyFactor implements ScoringFactor {
     private readonly additive: number,
   ) {}
 
-  isApplicable(_ctx: PipelineContext): boolean { return true; }
+  isApplicable(_ctx: PipelineContext): boolean {
+    return true;
+  }
   init(_ctx: PipelineContext): void {}
 
-  computeAdjustment(_food: FoodLibrary, _score: number, _ctx: PipelineContext): ScoringAdjustment | null {
-    return { factorName: this.name, multiplier: 1.0, additive: this.additive, explanationKey: null, reason: 'additive' };
+  computeAdjustment(
+    _food: FoodLibrary,
+    _score: number,
+    _ctx: PipelineContext,
+  ): ScoringAdjustment | null {
+    return {
+      factorName: this.name,
+      multiplier: 1.0,
+      additive: this.additive,
+      explanationKey: null,
+      reason: 'additive',
+    };
   }
 }
 
@@ -95,19 +125,31 @@ class AlwaysNullFactor implements ScoringFactor {
   readonly name = 'always-null';
   readonly order = 5;
 
-  isApplicable(_ctx: PipelineContext): boolean { return true; }
+  isApplicable(_ctx: PipelineContext): boolean {
+    return true;
+  }
   init(_ctx: PipelineContext): void {}
-  computeAdjustment(): ScoringAdjustment | null { return null; }
+  computeAdjustment(): ScoringAdjustment | null {
+    return null;
+  }
 }
 
 class NeverApplicableFactor implements ScoringFactor {
   readonly name = 'never-applicable';
   readonly order = 1;
 
-  isApplicable(_ctx: PipelineContext): boolean { return false; }
+  isApplicable(_ctx: PipelineContext): boolean {
+    return false;
+  }
   init(_ctx: PipelineContext): void {}
   computeAdjustment(): ScoringAdjustment | null {
-    return { factorName: this.name, multiplier: 0.01, additive: 0, explanationKey: null, reason: 'should-not-run' };
+    return {
+      factorName: this.name,
+      multiplier: 0.01,
+      additive: 0,
+      explanationKey: null,
+      reason: 'should-not-run',
+    };
   }
 }
 
@@ -241,7 +283,9 @@ describe('ScoringChainService', () => {
       service.registerFactors([new FixedMultiplierFactor('huge', 10, 100.0)]);
 
       const food = makeFood();
-      const result = service.executeChain([food], [1.0], makeCtx(), { scoreCeiling: 5.0 });
+      const result = service.executeChain([food], [1.0], makeCtx(), {
+        scoreCeiling: 5.0,
+      });
 
       expect(result[0].finalScore).toBe(5.0);
     });
@@ -250,13 +294,23 @@ describe('ScoringChainService', () => {
       service.registerFactors([new FixedMultiplierFactor('tiny', 10, 0.0)]);
 
       const food = makeFood();
-      const result = service.executeChain([food], [1.0], makeCtx(), { scoreFloor: 0.01 });
+      const result = service.executeChain([food], [1.0], makeCtx(), {
+        scoreFloor: 0.01,
+      });
 
       expect(result[0].finalScore).toBe(0.01);
     });
 
     it('should short-circuit when score drops to floor during chain', () => {
-      const computeSpy = jest.fn().mockReturnValue({ factorName: 'late', multiplier: 99.0, additive: 0, explanationKey: null, reason: 'late' });
+      const computeSpy = jest
+        .fn()
+        .mockReturnValue({
+          factorName: 'late',
+          multiplier: 99.0,
+          additive: 0,
+          explanationKey: null,
+          reason: 'late',
+        });
       const lateApplicableSpy = jest.fn().mockReturnValue(true);
 
       class LateFactor implements ScoringFactor {
@@ -314,7 +368,9 @@ describe('ScoringChainService', () => {
     });
 
     it('should not modify factors not in factorAdjustments map', () => {
-      service.registerFactors([new FixedMultiplierFactor('unaffected', 10, 1.3)]);
+      service.registerFactors([
+        new FixedMultiplierFactor('unaffected', 10, 1.3),
+      ]);
 
       const food = makeFood();
       const ctx = makeCtx({
@@ -343,7 +399,10 @@ describe('ScoringChainService', () => {
       const result = service.executeChain([food], [1.0], makeCtx());
 
       expect(result[0].adjustments).toHaveLength(2);
-      expect(result[0].adjustments.map((a) => a.factorName)).toEqual(['f1', 'f2']);
+      expect(result[0].adjustments.map((a) => a.factorName)).toEqual([
+        'f1',
+        'f2',
+      ]);
     });
 
     it('should have empty adjustments when all factors return null', () => {
@@ -410,14 +469,21 @@ describe('ScoringChainService', () => {
       const svc = new ScoringChainService();
       svc.registerFactors([new PreferenceSignalFactor()]);
 
-      const lovedFood = makeFood({ name: '香煎鸡胸肉', mainIngredient: 'chicken' });
+      const lovedFood = makeFood({
+        name: '香煎鸡胸肉',
+        mainIngredient: 'chicken',
+      });
       const normalFood = makeFood({ name: '白米饭', mainIngredient: 'rice' });
 
       const ctx = makeCtx({
         userPreferences: { loves: ['鸡胸肉'], avoids: [] },
       });
 
-      const results = svc.executeChain([lovedFood, normalFood], [0.8, 0.8], ctx);
+      const results = svc.executeChain(
+        [lovedFood, normalFood],
+        [0.8, 0.8],
+        ctx,
+      );
 
       // 'loves' 匹配 → lovedFood 应得到更高分
       expect(results[0].finalScore).toBeGreaterThan(results[1].finalScore);
@@ -427,14 +493,21 @@ describe('ScoringChainService', () => {
       const svc = new ScoringChainService();
       svc.registerFactors([new PreferenceSignalFactor()]);
 
-      const avoidedFood = makeFood({ name: '辣椒炒肉', mainIngredient: '辣椒' });
+      const avoidedFood = makeFood({
+        name: '辣椒炒肉',
+        mainIngredient: '辣椒',
+      });
       const normalFood = makeFood({ name: '清蒸鱼', mainIngredient: 'fish' });
 
       const ctx = makeCtx({
         userPreferences: { loves: [], avoids: ['辣椒'] },
       });
 
-      const results = svc.executeChain([avoidedFood, normalFood], [0.8, 0.8], ctx);
+      const results = svc.executeChain(
+        [avoidedFood, normalFood],
+        [0.8, 0.8],
+        ctx,
+      );
 
       expect(results[0].finalScore).toBeLessThan(results[1].finalScore);
     });
@@ -456,7 +529,11 @@ describe('ScoringChainService', () => {
         regionalBoostMap: { 'regional-1': 1.3 },
       });
 
-      const results = svc.executeChain([boostedFood, normalFood], [0.7, 0.7], ctx);
+      const results = svc.executeChain(
+        [boostedFood, normalFood],
+        [0.7, 0.7],
+        ctx,
+      );
 
       expect(results[0].finalScore).toBeCloseTo(0.7 * 1.3, 5);
       expect(results[1].finalScore).toBe(0.7); // no boost
@@ -489,7 +566,11 @@ describe('ScoringChainService', () => {
 
       const normalFood = makeFood();
 
-      const results = svc.executeChain([discountedFood, normalFood], [1.0, 1.0], makeCtx());
+      const results = svc.executeChain(
+        [discountedFood, normalFood],
+        [1.0, 1.0],
+        makeCtx(),
+      );
 
       expect(results[0].finalScore).toBeCloseTo(0.7, 5);
       expect(results[1].finalScore).toBe(1.0);
@@ -520,7 +601,10 @@ describe('ScoringChainService', () => {
         new ShortTermProfileFactor(),
         new SceneContextFactor(),
         new AnalysisProfileFactor(),
-        new LifestyleBoostFactor(() => null, () => null),
+        new LifestyleBoostFactor(
+          () => null,
+          () => null,
+        ),
         new PopularityFactor(),
         new ReplacementFeedbackFactor(),
         new RuleWeightFactor(),
@@ -544,7 +628,10 @@ describe('ScoringChainService', () => {
         new ShortTermProfileFactor(),
         new SceneContextFactor(),
         new AnalysisProfileFactor(),
-        new LifestyleBoostFactor(() => null, () => null),
+        new LifestyleBoostFactor(
+          () => null,
+          () => null,
+        ),
         new PopularityFactor(),
         new ReplacementFeedbackFactor(),
         new RuleWeightFactor(),

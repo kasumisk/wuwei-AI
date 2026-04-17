@@ -38,9 +38,11 @@ export class ConfidenceDiagnosticsService {
         food.fat != null &&
         food.carbs != null,
     ).length;
-    const estimationBase = foods.length > 0 ? macroCompleteFoods / foods.length : 1;
+    const estimationBase =
+      foods.length > 0 ? macroCompleteFoods / foods.length : 1;
     const nutritionEstimationConfidence = this.clamp(
-      estimationBase - (foods.length > 0 ? estimatedFoods / foods.length : 0) * 0.25,
+      estimationBase -
+        (foods.length > 0 ? estimatedFoods / foods.length : 0) * 0.25,
     );
 
     const auditConfidence = await this.getAuditFeedbackConfidence(userId);
@@ -51,8 +53,11 @@ export class ConfidenceDiagnosticsService {
       auditConfidence,
     ]);
 
-    const decisionConfidence = this.clamp(overallConfidence * 0.8 + auditConfidence * 0.2);
-    const analysisQualityBand = this.resolveAnalysisQualityBand(decisionConfidence);
+    const decisionConfidence = this.clamp(
+      overallConfidence * 0.8 + auditConfidence * 0.2,
+    );
+    const analysisQualityBand =
+      this.resolveAnalysisQualityBand(decisionConfidence);
     const analysisCompletenessScore = this.clamp(
       normalizationConfidence * 0.5 + nutritionEstimationConfidence * 0.5,
     );
@@ -149,7 +154,9 @@ export class ConfidenceDiagnosticsService {
       return 0.75;
     }
 
-    const accurate = rows.filter((row) => row.reviewStatus === 'accurate').length;
+    const accurate = rows.filter(
+      (row) => row.reviewStatus === 'accurate',
+    ).length;
     const ratio = accurate / rows.length;
     return this.clamp(0.55 + ratio * 0.45);
   }

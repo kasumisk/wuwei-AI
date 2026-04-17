@@ -172,12 +172,8 @@ export class ProfileResolverService {
         ? {
             gender: declared.gender ?? undefined,
             birthYear: declared.birthYear ?? undefined,
-            heightCm: declared.heightCm
-              ? Number(declared.heightCm)
-              : undefined,
-            weightKg: declared.weightKg
-              ? Number(declared.weightKg)
-              : undefined,
+            heightCm: declared.heightCm ? Number(declared.heightCm) : undefined,
+            weightKg: declared.weightKg ? Number(declared.weightKg) : undefined,
             targetWeightKg: declared.targetWeightKg
               ? Number(declared.targetWeightKg)
               : undefined,
@@ -258,12 +254,10 @@ export class ProfileResolverService {
             totalRecords: observed.totalRecords ?? undefined,
             streakDays: observed.streakDays ?? undefined,
             mealTimingPatterns:
-              (observed.mealTimingPatterns as Record<string, any>) ??
-              undefined,
+              (observed.mealTimingPatterns as Record<string, any>) ?? undefined,
             portionTendency: observed.portionTendency ?? undefined,
             // V6.3 P1-3: 暴食风险时段
-            bingeRiskHours:
-              (observed.bingeRiskHours as number[]) ?? undefined,
+            bingeRiskHours: (observed.bingeRiskHours as number[]) ?? undefined,
           }
         : null,
 
@@ -278,8 +272,7 @@ export class ProfileResolverService {
         ? {
             tasteIntensity:
               (declared.tasteIntensity as Record<string, number>) || null,
-            cuisinePreferences:
-              (declared.cuisinePreferences as string[]) || [],
+            cuisinePreferences: (declared.cuisinePreferences as string[]) || [],
             budgetLevel:
               (declared.budgetLevel as 'low' | 'medium' | 'high') || null,
             cookingSkillLevel: declared.cookingSkillLevel ?? null,

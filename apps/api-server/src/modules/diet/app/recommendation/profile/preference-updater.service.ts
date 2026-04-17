@@ -231,10 +231,9 @@ export class PreferenceUpdaterService {
   async handleFeedbackSubmitted(event: FeedbackSubmittedEvent): Promise<void> {
     try {
       // 1. 读取当前增量权重
-      const inferredProfile =
-        await this.prisma.userInferredProfiles.findFirst({
-          where: { userId: event.userId },
-        });
+      const inferredProfile = await this.prisma.userInferredProfiles.findFirst({
+        where: { userId: event.userId },
+      });
 
       const currentWeights =
         (inferredProfile?.preferenceWeights as IncrementalPreferenceWeights | null) ??

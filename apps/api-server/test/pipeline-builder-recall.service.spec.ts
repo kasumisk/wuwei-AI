@@ -14,21 +14,40 @@
  */
 
 import { PipelineBuilderService } from '../src/modules/diet/app/recommendation/pipeline/pipeline-builder.service';
-import { createMockFoodLibrary, createMockScoringConfigService } from './helpers/mock-factories';
+import {
+  createMockFoodLibrary,
+  createMockScoringConfigService,
+} from './helpers/mock-factories';
 import type { FoodLibrary } from '../src/modules/food/food.types';
 import type { PipelineContext } from '../src/modules/diet/app/recommendation/types/recommendation.types';
 
 // ─── 构造 PipelineBuilderService（注入全 mock 依赖） ───
 
 function createService(): PipelineBuilderService {
-  const mockFoodScorer = { scoreFood: jest.fn().mockReturnValue(0.8), scoreFoodDetailed: jest.fn(), scoreFoodsWithServing: jest.fn().mockReturnValue([]) };
+  const mockFoodScorer = {
+    scoreFood: jest.fn().mockReturnValue(0.8),
+    scoreFoodDetailed: jest.fn(),
+    scoreFoodsWithServing: jest.fn().mockReturnValue([]),
+  };
   const mockMealAssembler = { assemble: jest.fn().mockReturnValue([]) };
-  const mockHealthModifier = { evaluate: jest.fn().mockReturnValue({ finalMultiplier: 1.0, modifiers: [], isVetoed: false }), hashContext: jest.fn(), preloadL1: jest.fn() };
+  const mockHealthModifier = {
+    evaluate: jest
+      .fn()
+      .mockReturnValue({
+        finalMultiplier: 1.0,
+        modifiers: [],
+        isVetoed: false,
+      }),
+    hashContext: jest.fn(),
+    preloadL1: jest.fn(),
+  };
   const mockNutritionTarget = { calculate: jest.fn().mockReturnValue({}) };
   const mockSemanticRecall = { recall: jest.fn().mockResolvedValue([]) };
   const mockRecallMerger = { merge: jest.fn().mockReturnValue([]) };
   const mockRealisticFilter = {
-    filter: jest.fn().mockImplementation((candidates: FoodLibrary[]) => candidates),
+    filter: jest
+      .fn()
+      .mockImplementation((candidates: FoodLibrary[]) => candidates),
     adjustForScene: jest.fn().mockReturnValue(null),
     scoreFood: jest.fn(),
   };
@@ -37,12 +56,17 @@ function createService(): PipelineBuilderService {
   const mockCfRecall = { recall: jest.fn().mockResolvedValue([]) };
   const mockMealCompositionScorer = { score: jest.fn().mockReturnValue(0) };
   const mockStrategyAutoTuner = { tune: jest.fn() };
-  const mockPreferenceProfile = { sampleBeta: jest.fn().mockReturnValue(0.5), getSignal: jest.fn().mockReturnValue(null) };
+  const mockPreferenceProfile = {
+    sampleBeta: jest.fn().mockReturnValue(0.5),
+    getSignal: jest.fn().mockReturnValue(null),
+  };
   const mockScoringChain = {
     registerFactors: jest.fn(),
     getFactors: jest.fn().mockReturnValue([]),
     executeChain: jest.fn().mockReturnValue([]),
-    scoreFood: jest.fn().mockReturnValue({ finalScore: 0.8, adjustments: [], baseScore: 0.8 }),
+    scoreFood: jest
+      .fn()
+      .mockReturnValue({ finalScore: 0.8, adjustments: [], baseScore: 0.8 }),
   };
 
   return new PipelineBuilderService(
@@ -124,7 +148,9 @@ describe('PipelineBuilderService.recallCandidates', () => {
       const compositeFood = makeFood({ category: 'composite' });
       const proteinFood = makeFood({ category: 'protein' });
 
-      const ctx = makeCtx({ allFoods: [grainFood, compositeFood, proteinFood] });
+      const ctx = makeCtx({
+        allFoods: [grainFood, compositeFood, proteinFood],
+      });
       const result = await service.recallCandidates(ctx, 'carb');
 
       const ids = result.map((f) => f.id);
@@ -207,11 +233,20 @@ describe('PipelineBuilderService.recallCandidates', () => {
 
   describe('mealType 过滤', () => {
     it('should exclude foods not suitable for current meal type', async () => {
-      const breakfastOnly = makeFood({ category: 'protein', mealTypes: ['breakfast'] });
-      const allMeals = makeFood({ category: 'protein', mealTypes: ['breakfast', 'lunch', 'dinner'] });
+      const breakfastOnly = makeFood({
+        category: 'protein',
+        mealTypes: ['breakfast'],
+      });
+      const allMeals = makeFood({
+        category: 'protein',
+        mealTypes: ['breakfast', 'lunch', 'dinner'],
+      });
       const anyMeal = makeFood({ category: 'protein', mealTypes: [] }); // 空 = 不限
 
-      const ctx = makeCtx({ allFoods: [breakfastOnly, allMeals, anyMeal], mealType: 'lunch' });
+      const ctx = makeCtx({
+        allFoods: [breakfastOnly, allMeals, anyMeal],
+        mealType: 'lunch',
+      });
       const result = await service.recallCandidates(ctx, 'protein');
 
       const ids = result.map((f) => f.id);
@@ -235,12 +270,19 @@ describe('PipelineBuilderService.recallCandidates', () => {
 
   describe('excludeTags 过滤', () => {
     it('should exclude foods tagged with excludeTags', async () => {
-      const friedFood = makeFood({ category: 'protein', tags: ['fried', 'high_fat'] });
+      const friedFood = makeFood({
+        category: 'protein',
+        tags: ['fried', 'high_fat'],
+      });
       const cleanFood = makeFood({ category: 'protein', tags: ['grilled'] });
 
       const ctx = makeCtx({
         allFoods: [friedFood, cleanFood],
-        constraints: { excludeTags: ['fried'], maxCalories: 700, minProtein: 20 } as any,
+        constraints: {
+          excludeTags: ['fried'],
+          maxCalories: 700,
+          minProtein: 20,
+        } as any,
       });
       const result = await service.recallCandidates(ctx, 'protein');
 
@@ -252,7 +294,11 @@ describe('PipelineBuilderService.recallCandidates', () => {
       const food = makeFood({ category: 'protein', tags: ['fried'] });
       const ctx = makeCtx({
         allFoods: [food],
-        constraints: { excludeTags: [], maxCalories: 700, minProtein: 20 } as any,
+        constraints: {
+          excludeTags: [],
+          maxCalories: 700,
+          minProtein: 20,
+        } as any,
       });
       const result = await service.recallCandidates(ctx, 'protein');
 
@@ -281,7 +327,10 @@ describe('PipelineBuilderService.recallCandidates', () => {
 
     it('should not filter when user has no allergens', async () => {
       const dairyFood = makeFood({ category: 'protein', allergens: ['dairy'] });
-      const ctx = makeCtx({ allFoods: [dairyFood], userProfile: { allergens: [] } });
+      const ctx = makeCtx({
+        allFoods: [dairyFood],
+        userProfile: { allergens: [] },
+      });
       const result = await service.recallCandidates(ctx, 'protein');
 
       expect(result).toHaveLength(1);
@@ -327,7 +376,10 @@ describe('PipelineBuilderService.recallCandidates', () => {
         allFoods: [food],
         shortTermProfile: { rejectedFoods: { 炸鸡: 2 } } as any,
         resolvedStrategy: {
-          strategyId: 's1', strategyName: 't', sources: [], resolvedAt: Date.now(),
+          strategyId: 's1',
+          strategyName: 't',
+          sources: [],
+          resolvedAt: Date.now(),
           config: { recall: { shortTermRejectThreshold: 3 } },
         },
       });
@@ -376,11 +428,31 @@ describe('PipelineBuilderService.recallCandidates', () => {
     it('should fall back to role category pool when filtered result is below minCount', async () => {
       // 3 个 protein 食物，其中 2 个被过敏原过滤掉，只剩 1 个 < 3(min)
       // 兜底应从 allFoods 中取回 protein 类别的食物
-      const food1 = makeFood({ name: '牛奶', category: 'protein', allergens: ['dairy'] });
-      const food2 = makeFood({ name: '奶酪', category: 'protein', allergens: ['dairy'] });
-      const food3 = makeFood({ name: '鸡胸肉', category: 'protein', allergens: [] });
-      const food4 = makeFood({ name: '三文鱼', category: 'protein', allergens: [] });
-      const food5 = makeFood({ name: '豆腐', category: 'protein', allergens: [] });
+      const food1 = makeFood({
+        name: '牛奶',
+        category: 'protein',
+        allergens: ['dairy'],
+      });
+      const food2 = makeFood({
+        name: '奶酪',
+        category: 'protein',
+        allergens: ['dairy'],
+      });
+      const food3 = makeFood({
+        name: '鸡胸肉',
+        category: 'protein',
+        allergens: [],
+      });
+      const food4 = makeFood({
+        name: '三文鱼',
+        category: 'protein',
+        allergens: [],
+      });
+      const food5 = makeFood({
+        name: '豆腐',
+        category: 'protein',
+        allergens: [],
+      });
 
       const ctx = makeCtx({
         allFoods: [food1, food2, food3, food4, food5],

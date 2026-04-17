@@ -231,10 +231,7 @@ const EnrichmentPreviewPage: React.FC = () => {
         <Row justify="space-between" align="middle">
           <Col>
             <Space>
-              <Button
-                icon={<ArrowLeftOutlined />}
-                onClick={() => navigate('/food/enrichment')}
-              >
+              <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/food/enrichment')}>
                 返回补全管理
               </Button>
               <Title level={4} style={{ margin: 0 }}>

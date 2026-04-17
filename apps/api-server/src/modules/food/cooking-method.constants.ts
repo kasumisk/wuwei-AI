@@ -70,9 +70,7 @@ export const STEW_GROUP: readonly CookingMethodValue[] = [
 ];
 
 /** 蒸类：菜名模板 "清蒸蛋白配蔬菜" */
-export const STEAM_GROUP: readonly CookingMethodValue[] = [
-  CookingMethod.STEAM,
-];
+export const STEAM_GROUP: readonly CookingMethodValue[] = [CookingMethod.STEAM];
 
 /** 烤/烧/焗类：菜名模板 "烤蛋白配蔬菜" */
 export const ROAST_GROUP: readonly CookingMethodValue[] = [

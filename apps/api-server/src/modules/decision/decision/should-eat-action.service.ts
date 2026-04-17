@@ -21,7 +21,15 @@ export class ShouldEatActionService {
     confidenceDiagnostics: ConfidenceDiagnostics;
     recoveryAction?: RecoveryAction;
   }): ShouldEatAction {
-    const { mode, decisionOutput, summary, evidencePack, userContext, confidenceDiagnostics, recoveryAction } = input;
+    const {
+      mode,
+      decisionOutput,
+      summary,
+      evidencePack,
+      userContext,
+      confidenceDiagnostics,
+      recoveryAction,
+    } = input;
     const { decision, alternatives } = decisionOutput;
 
     const immediateAction = this.resolveImmediateAction(
@@ -83,9 +91,9 @@ export class ShouldEatActionService {
     }
 
     const hasHealthConstraint =
-      ((userContext?.allergens?.length || 0) > 0) ||
-      ((userContext?.dietaryRestrictions?.length || 0) > 0) ||
-      ((userContext?.healthConditions?.length || 0) > 0);
+      (userContext?.allergens?.length || 0) > 0 ||
+      (userContext?.dietaryRestrictions?.length || 0) > 0 ||
+      (userContext?.healthConditions?.length || 0) > 0;
     if (hasHealthConstraint) {
       return '先满足过敏/忌口/健康约束，再决定是否食用与食用份量';
     }

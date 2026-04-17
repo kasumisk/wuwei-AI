@@ -248,7 +248,10 @@ export class RecallMergerService {
    */
   toFoodList(merged: MergedCandidate[]): FoodLibrary[] {
     return merged
-      .filter((c): c is MergedCandidate & { food: FoodLibrary } => c.food !== null && !!c.food?.id)
+      .filter(
+        (c): c is MergedCandidate & { food: FoodLibrary } =>
+          c.food !== null && !!c.food?.id,
+      )
       .map((c) => {
         const food = c.food as FoodLibrary & {
           __recallSource?: string;

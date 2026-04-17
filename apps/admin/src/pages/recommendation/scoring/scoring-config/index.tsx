@@ -1076,7 +1076,9 @@ const ScoringConfigPage: React.FC = () => {
                         max={1}
                         step={0.01}
                         precision={3}
-                        defaultValue={(defaults.energySigmaRatios as Record<string, number>)?.fat_loss}
+                        defaultValue={
+                          (defaults.energySigmaRatios as Record<string, number>)?.fat_loss
+                        }
                       />
                       <FieldWithTooltip
                         label="增肌 Sigma 比率"
@@ -1086,7 +1088,9 @@ const ScoringConfigPage: React.FC = () => {
                         max={1}
                         step={0.01}
                         precision={3}
-                        defaultValue={(defaults.energySigmaRatios as Record<string, number>)?.muscle_gain}
+                        defaultValue={
+                          (defaults.energySigmaRatios as Record<string, number>)?.muscle_gain
+                        }
                       />
                       <FieldWithTooltip
                         label="健康 Sigma 比率"
@@ -1096,7 +1100,9 @@ const ScoringConfigPage: React.FC = () => {
                         max={1}
                         step={0.01}
                         precision={3}
-                        defaultValue={(defaults.energySigmaRatios as Record<string, number>)?.health}
+                        defaultValue={
+                          (defaults.energySigmaRatios as Record<string, number>)?.health
+                        }
                       />
                       <FieldWithTooltip
                         label="习惯 Sigma 比率"
@@ -1596,7 +1602,9 @@ const ScoringConfigPage: React.FC = () => {
                         max={1}
                         step={0.05}
                         precision={2}
-                        defaultValue={(defaults.crossMealDiversityPenalties as any)?.sameFoodPenalty}
+                        defaultValue={
+                          (defaults.crossMealDiversityPenalties as any)?.sameFoodPenalty
+                        }
                       />
                       <FieldWithTooltip
                         label="同类别惩罚"
@@ -1606,7 +1614,9 @@ const ScoringConfigPage: React.FC = () => {
                         max={1}
                         step={0.05}
                         precision={2}
-                        defaultValue={(defaults.crossMealDiversityPenalties as any)?.sameCategoryPenalty}
+                        defaultValue={
+                          (defaults.crossMealDiversityPenalties as any)?.sameCategoryPenalty
+                        }
                       />
                       <FieldWithTooltip
                         label="同烹饪方式惩罚"
@@ -1616,7 +1626,9 @@ const ScoringConfigPage: React.FC = () => {
                         max={1}
                         step={0.05}
                         precision={2}
-                        defaultValue={(defaults.crossMealDiversityPenalties as any)?.sameCookingMethodPenalty}
+                        defaultValue={
+                          (defaults.crossMealDiversityPenalties as any)?.sameCookingMethodPenalty
+                        }
                       />
                       <FieldWithTooltip
                         label="同口感惩罚"
@@ -1626,7 +1638,9 @@ const ScoringConfigPage: React.FC = () => {
                         max={1}
                         step={0.05}
                         precision={2}
-                        defaultValue={(defaults.crossMealDiversityPenalties as any)?.sameTexturePenalty}
+                        defaultValue={
+                          (defaults.crossMealDiversityPenalties as any)?.sameTexturePenalty
+                        }
                       />
                       <FieldWithTooltip
                         label="同风味惩罚"
@@ -1636,7 +1650,9 @@ const ScoringConfigPage: React.FC = () => {
                         max={1}
                         step={0.05}
                         precision={2}
-                        defaultValue={(defaults.crossMealDiversityPenalties as any)?.sameFlavorPenalty}
+                        defaultValue={
+                          (defaults.crossMealDiversityPenalties as any)?.sameFlavorPenalty
+                        }
                       />
                       <FieldWithTooltip
                         label="连续天数惩罚"
@@ -1646,7 +1662,9 @@ const ScoringConfigPage: React.FC = () => {
                         max={1}
                         step={0.05}
                         precision={2}
-                        defaultValue={(defaults.crossMealDiversityPenalties as any)?.consecutiveDayPenalty}
+                        defaultValue={
+                          (defaults.crossMealDiversityPenalties as any)?.consecutiveDayPenalty
+                        }
                       />
                       <FieldWithTooltip
                         label="最大惩罚天数"

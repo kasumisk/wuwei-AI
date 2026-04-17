@@ -523,11 +523,7 @@ function HistoryItem({ item }: { item: AnalysisHistoryItem }) {
               }}
               className="w-full px-4 py-2.5 text-left text-sm hover:bg-primary/5 transition-colors flex items-center gap-2"
             >
-              <svg
-                className="w-4 h-4 text-primary"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
+              <svg className="w-4 h-4 text-primary" fill="currentColor" viewBox="0 0 20 20">
                 <path
                   fillRule="evenodd"
                   d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.205-3.138A6.954 6.954 0 012 10c0-3.866 3.582-7 8-7s8 3.134 8 7zm-8-4a1 1 0 100 2 1 1 0 000-2zm-1 4a1 1 0 000 2h1a1 1 0 100-2H9z"

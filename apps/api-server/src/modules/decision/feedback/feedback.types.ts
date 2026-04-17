@@ -1,6 +1,6 @@
 /**
  * V2.4 Quality Feedback Types
- * 
+ *
  * 反馈系统的数据类型定义
  */
 
@@ -22,12 +22,12 @@ export interface AnalysisQualityMetrics {
   acceptedCount: number;
   rejectedCount: number;
   acceptanceRate: number; // percentage
-  
+
   // 问题分布
   issueBreakdown: {
     [issueType: string]: number;
   };
-  
+
   // 常见替代选择
   commonAlternatives?: {
     original: string;

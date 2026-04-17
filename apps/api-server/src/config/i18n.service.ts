@@ -1,6 +1,6 @@
 /**
  * V2.4 I18n Service
- * 
+ *
  * 职责：统一管理多语言翻译、i18n key 映射
  */
 
@@ -52,10 +52,13 @@ export class I18nService {
     en: {
       // 决策理由
       'decision.reason.protein_deficit': 'You need more protein',
-      'decision.reason.protein_deficit_high': 'You lack protein (more than 20g)',
+      'decision.reason.protein_deficit_high':
+        'You lack protein (more than 20g)',
       'decision.reason.carbs_needed': 'You can still consume carbs and energy',
-      'decision.reason.calorie_limit': 'Approaching calorie goal, better to skip',
-      'decision.reason.calorie_limit_reached': 'Calorie goal reached, skip for now',
+      'decision.reason.calorie_limit':
+        'Approaching calorie goal, better to skip',
+      'decision.reason.calorie_limit_reached':
+        'Calorie goal reached, skip for now',
       'decision.reason.fat_excess': 'Fat intake is too high',
       'decision.reason.no_deficit': 'No special nutrition needs',
       'decision.reason.user_preference': 'You like this food',
@@ -134,8 +137,14 @@ export class I18nService {
   /**
    * 获取翻译字符串
    */
-  translate(key: string, language: string = 'zh', variables?: Record<string, any>): string {
-    const lang = this.translations[this.normalizeLanguage(language)] || this.translations.zh;
+  translate(
+    key: string,
+    language: string = 'zh',
+    variables?: Record<string, any>,
+  ): string {
+    const lang =
+      this.translations[this.normalizeLanguage(language)] ||
+      this.translations.zh;
     let text = lang[key] || key;
 
     // 替换变量占位符
@@ -151,9 +160,12 @@ export class I18nService {
   /**
    * 批量翻译
    */
-  translateBatch(keys: string[], language: string = 'zh'): { [key: string]: string } {
+  translateBatch(
+    keys: string[],
+    language: string = 'zh',
+  ): { [key: string]: string } {
     const result: { [key: string]: string } = {};
-    keys.forEach(key => {
+    keys.forEach((key) => {
       result[key] = this.translate(key, language);
     });
     return result;

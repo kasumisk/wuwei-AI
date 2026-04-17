@@ -281,9 +281,7 @@ const RecallConfigView: React.FC<{ config?: RecallPolicyConfig }> = ({ config })
       <Descriptions.Item label="协同过滤召回">
         <Space>
           <ConfigValue value={config.sources?.cf?.enabled} fallback="默认" />
-          {config.sources?.cf?.weight !== undefined && (
-            <Tag>权重: {config.sources.cf.weight}</Tag>
-          )}
+          {config.sources?.cf?.weight !== undefined && <Tag>权重: {config.sources.cf.weight}</Tag>}
         </Space>
       </Descriptions.Item>
       <Descriptions.Item label="热门召回">
@@ -426,9 +424,14 @@ const MultiObjectiveConfigView: React.FC<{ config?: MultiObjectiveConfig }> = ({
               <Col span={4} key={t}>
                 <Statistic
                   title={
-                    { spicy: '辣', sweet: '甜', salty: '咸', sour: '酸', umami: '鲜', bitter: '苦' }[
-                      t
-                    ]
+                    {
+                      spicy: '辣',
+                      sweet: '甜',
+                      salty: '咸',
+                      sour: '酸',
+                      umami: '鲜',
+                      bitter: '苦',
+                    }[t]
                   }
                   value={config.tastePreference?.[t] ?? '-'}
                   valueStyle={{ fontSize: 14 }}
@@ -575,12 +578,14 @@ const RecallEditForm: React.FC<{ prefix: string[] }> = ({ prefix }) => (
       subtitle="控制候选食物的来源通道及其权重"
     />
     <Row gutter={[16, 12]}>
-      {([
-        { key: 'rule', label: '规则召回', hasWeight: false },
-        { key: 'vector', label: '向量召回', hasWeight: true },
-        { key: 'cf', label: '协同过滤', hasWeight: true },
-        { key: 'popular', label: '热门召回', hasWeight: true },
-      ] as const).map((source) => (
+      {(
+        [
+          { key: 'rule', label: '规则召回', hasWeight: false },
+          { key: 'vector', label: '向量召回', hasWeight: true },
+          { key: 'cf', label: '协同过滤', hasWeight: true },
+          { key: 'popular', label: '热门召回', hasWeight: true },
+        ] as const
+      ).map((source) => (
         <Col span={12} key={source.key}>
           <Card size="small" title={source.label}>
             <Form.Item
@@ -597,7 +602,13 @@ const RecallEditForm: React.FC<{ prefix: string[] }> = ({ prefix }) => (
                 label="权重"
                 style={{ marginBottom: 0 }}
               >
-                <InputNumber min={0} max={1} step={0.05} style={{ width: '100%' }} placeholder="默认" />
+                <InputNumber
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  style={{ width: '100%' }}
+                  placeholder="默认"
+                />
               </Form.Item>
             )}
           </Card>
@@ -607,7 +618,9 @@ const RecallEditForm: React.FC<{ prefix: string[] }> = ({ prefix }) => (
     <Divider />
     <Form.Item
       name={[...prefix, 'shortTermRejectThreshold']}
-      label={<FieldLabel label="短期拒绝阈值" tooltip="用户近期拒绝次数达到此值后过滤该食物，默认 2" />}
+      label={
+        <FieldLabel label="短期拒绝阈值" tooltip="用户近期拒绝次数达到此值后过滤该食物，默认 2" />
+      }
     >
       <InputNumber min={1} max={10} style={{ width: 200 }} placeholder="默认 2" />
     </Form.Item>
@@ -629,14 +642,26 @@ const BoostEditForm: React.FC<{ prefix: string[] }> = ({ prefix }) => (
             label={<FieldLabel label="喜爱加成倍数" tooltip="喜爱食物的评分乘数，默认 1.12" />}
             style={{ marginBottom: 8 }}
           >
-            <InputNumber min={1} max={2} step={0.01} style={{ width: '100%' }} placeholder="默认 1.12" />
+            <InputNumber
+              min={1}
+              max={2}
+              step={0.01}
+              style={{ width: '100%' }}
+              placeholder="默认 1.12"
+            />
           </Form.Item>
           <Form.Item
             name={[...prefix, 'preference', 'avoidsMultiplier']}
             label={<FieldLabel label="回避惩罚倍数" tooltip="回避食物的评分乘数，默认 0.3" />}
             style={{ marginBottom: 0 }}
           >
-            <InputNumber min={0} max={1} step={0.05} style={{ width: '100%' }} placeholder="默认 0.3" />
+            <InputNumber
+              min={0}
+              max={1}
+              step={0.05}
+              style={{ width: '100%' }}
+              placeholder="默认 0.3"
+            />
           </Form.Item>
         </Card>
       </Col>
@@ -647,21 +672,39 @@ const BoostEditForm: React.FC<{ prefix: string[] }> = ({ prefix }) => (
             label={<FieldLabel label="增幅下限" tooltip="短期接受率增幅范围下限，默认 0.9" />}
             style={{ marginBottom: 8 }}
           >
-            <InputNumber min={0.5} max={1} step={0.05} style={{ width: '100%' }} placeholder="默认 0.9" />
+            <InputNumber
+              min={0.5}
+              max={1}
+              step={0.05}
+              style={{ width: '100%' }}
+              placeholder="默认 0.9"
+            />
           </Form.Item>
           <Form.Item
             name={[...prefix, 'shortTerm', 'boostRange', 1]}
             label={<FieldLabel label="增幅上限" tooltip="短期接受率增幅范围上限，默认 1.1" />}
             style={{ marginBottom: 8 }}
           >
-            <InputNumber min={1} max={1.5} step={0.05} style={{ width: '100%' }} placeholder="默认 1.1" />
+            <InputNumber
+              min={1}
+              max={1.5}
+              step={0.05}
+              style={{ width: '100%' }}
+              placeholder="默认 1.1"
+            />
           </Form.Item>
           <Form.Item
             name={[...prefix, 'shortTerm', 'singleRejectPenalty']}
             label={<FieldLabel label="单次拒绝惩罚" tooltip="单次拒绝后评分乘数，默认 0.85" />}
             style={{ marginBottom: 0 }}
           >
-            <InputNumber min={0.5} max={1} step={0.05} style={{ width: '100%' }} placeholder="默认 0.85" />
+            <InputNumber
+              min={0.5}
+              max={1}
+              step={0.05}
+              style={{ width: '100%' }}
+              placeholder="默认 0.85"
+            />
           </Form.Item>
         </Card>
       </Col>
@@ -670,17 +713,33 @@ const BoostEditForm: React.FC<{ prefix: string[] }> = ({ prefix }) => (
       <Col span={12}>
         <Form.Item
           name={[...prefix, 'cfBoostCap']}
-          label={<FieldLabel label="协同过滤加成上限" tooltip="CF 推荐评分加成的上限值，默认 0.15" />}
+          label={
+            <FieldLabel label="协同过滤加成上限" tooltip="CF 推荐评分加成的上限值，默认 0.15" />
+          }
         >
-          <InputNumber min={0} max={0.5} step={0.01} style={{ width: '100%' }} placeholder="默认 0.15" />
+          <InputNumber
+            min={0}
+            max={0.5}
+            step={0.01}
+            style={{ width: '100%' }}
+            placeholder="默认 0.15"
+          />
         </Form.Item>
       </Col>
       <Col span={12}>
         <Form.Item
           name={[...prefix, 'similarityPenaltyCoeff']}
-          label={<FieldLabel label="相似度惩罚系数" tooltip="候选池内相似食物的评分衰减系数，默认 0.3" />}
+          label={
+            <FieldLabel label="相似度惩罚系数" tooltip="候选池内相似食物的评分衰减系数，默认 0.3" />
+          }
         >
-          <InputNumber min={0} max={1} step={0.05} style={{ width: '100%' }} placeholder="默认 0.3" />
+          <InputNumber
+            min={0}
+            max={1}
+            step={0.05}
+            style={{ width: '100%' }}
+            placeholder="默认 0.3"
+          />
         </Form.Item>
       </Col>
     </Row>
@@ -700,7 +759,13 @@ const ExplorationEditForm: React.FC<{ prefix: string[] }> = ({ prefix }) => (
           name={[...prefix, 'baseMin']}
           label={<FieldLabel label="基础最小值" tooltip="新用户探索系数下界，默认 0.3" />}
         >
-          <InputNumber min={0} max={1} step={0.1} style={{ width: '100%' }} placeholder="默认 0.3" />
+          <InputNumber
+            min={0}
+            max={1}
+            step={0.1}
+            style={{ width: '100%' }}
+            placeholder="默认 0.3"
+          />
         </Form.Item>
       </Col>
       <Col span={12}>
@@ -708,7 +773,13 @@ const ExplorationEditForm: React.FC<{ prefix: string[] }> = ({ prefix }) => (
           name={[...prefix, 'baseMax']}
           label={<FieldLabel label="基础最大值" tooltip="新用户探索系数上界，默认 1.7" />}
         >
-          <InputNumber min={1} max={3} step={0.1} style={{ width: '100%' }} placeholder="默认 1.7" />
+          <InputNumber
+            min={1}
+            max={3}
+            step={0.1}
+            style={{ width: '100%' }}
+            placeholder="默认 1.7"
+          />
         </Form.Item>
       </Col>
     </Row>
@@ -718,15 +789,29 @@ const ExplorationEditForm: React.FC<{ prefix: string[] }> = ({ prefix }) => (
           name={[...prefix, 'maturityShrink']}
           label={<FieldLabel label="成熟收缩量" tooltip="成熟用户的探索范围收缩值，默认 0.4" />}
         >
-          <InputNumber min={0} max={1} step={0.05} style={{ width: '100%' }} placeholder="默认 0.4" />
+          <InputNumber
+            min={0}
+            max={1}
+            step={0.05}
+            style={{ width: '100%' }}
+            placeholder="默认 0.4"
+          />
         </Form.Item>
       </Col>
       <Col span={12}>
         <Form.Item
           name={[...prefix, 'matureThreshold']}
-          label={<FieldLabel label="成熟阈值 (交互次数)" tooltip="达到此交互次数视为完全成熟，默认 50" />}
+          label={
+            <FieldLabel label="成熟阈值 (交互次数)" tooltip="达到此交互次数视为完全成熟，默认 50" />
+          }
         >
-          <InputNumber min={10} max={200} step={10} style={{ width: '100%' }} placeholder="默认 50" />
+          <InputNumber
+            min={10}
+            max={200}
+            step={10}
+            style={{ width: '100%' }}
+            placeholder="默认 50"
+          />
         </Form.Item>
       </Col>
     </Row>
@@ -784,11 +869,7 @@ const MultiObjectiveEditForm: React.FC<{ prefix: string[] }> = ({ prefix }) => (
     />
     <Row gutter={16}>
       <Col span={8}>
-        <Form.Item
-          name={[...prefix, 'enabled']}
-          label="启用多目标优化"
-          valuePropName="checked"
-        >
+        <Form.Item name={[...prefix, 'enabled']} label="启用多目标优化" valuePropName="checked">
           <Switch />
         </Form.Item>
       </Col>
@@ -811,17 +892,16 @@ const MultiObjectiveEditForm: React.FC<{ prefix: string[] }> = ({ prefix }) => (
     </Row>
     <Divider orientation="left">维度偏好权重</Divider>
     <Row gutter={16}>
-      {([
-        { key: 'health', label: '健康' },
-        { key: 'taste', label: '口味' },
-        { key: 'cost', label: '成本' },
-        { key: 'convenience', label: '便捷' },
-      ] as const).map((dim) => (
+      {(
+        [
+          { key: 'health', label: '健康' },
+          { key: 'taste', label: '口味' },
+          { key: 'cost', label: '成本' },
+          { key: 'convenience', label: '便捷' },
+        ] as const
+      ).map((dim) => (
         <Col span={6} key={dim.key}>
-          <Form.Item
-            name={[...prefix, 'preferences', dim.key]}
-            label={dim.label}
-          >
+          <Form.Item name={[...prefix, 'preferences', dim.key]} label={dim.label}>
             <InputNumber min={0} max={1} step={0.05} style={{ width: '100%' }} placeholder="0~1" />
           </Form.Item>
         </Col>
@@ -829,14 +909,16 @@ const MultiObjectiveEditForm: React.FC<{ prefix: string[] }> = ({ prefix }) => (
     </Row>
     <Divider orientation="left">口味偏好向量</Divider>
     <Row gutter={16}>
-      {([
-        { key: 'spicy', label: '辣' },
-        { key: 'sweet', label: '甜' },
-        { key: 'salty', label: '咸' },
-        { key: 'sour', label: '酸' },
-        { key: 'umami', label: '鲜' },
-        { key: 'bitter', label: '苦' },
-      ] as const).map((t) => (
+      {(
+        [
+          { key: 'spicy', label: '辣' },
+          { key: 'sweet', label: '甜' },
+          { key: 'salty', label: '咸' },
+          { key: 'sour', label: '酸' },
+          { key: 'umami', label: '鲜' },
+          { key: 'bitter', label: '苦' },
+        ] as const
+      ).map((t) => (
         <Col span={4} key={t.key}>
           <Form.Item name={[...prefix, 'tastePreference', t.key]} label={t.label}>
             <InputNumber min={0} max={1} step={0.1} style={{ width: '100%' }} placeholder="0~1" />
@@ -867,7 +949,9 @@ const AssemblyEditForm: React.FC<{ prefix: string[] }> = ({ prefix }) => (
       <Col span={12}>
         <Form.Item
           name={[...prefix, 'diversityLevel']}
-          label={<FieldLabel label="多样性等级" tooltip="低=严格营养匹配 中=平衡 高=最大化多样性" />}
+          label={
+            <FieldLabel label="多样性等级" tooltip="低=严格营养匹配 中=平衡 高=最大化多样性" />
+          }
         >
           <Select
             allowClear
@@ -895,7 +979,12 @@ const ExplainEditForm: React.FC<{ prefix: string[] }> = ({ prefix }) => (
       <Col span={12}>
         <Form.Item
           name={[...prefix, 'detailLevel']}
-          label={<FieldLabel label="解释详细程度" tooltip="simple=一句话 standard=营养概览+理由 detailed=完整数据" />}
+          label={
+            <FieldLabel
+              label="解释详细程度"
+              tooltip="simple=一句话 standard=营养概览+理由 detailed=完整数据"
+            />
+          }
         >
           <Select
             allowClear
@@ -930,11 +1019,7 @@ const RealismEditForm: React.FC<{ prefix: string[] }> = ({ prefix }) => (
     />
     <Row gutter={16}>
       <Col span={8}>
-        <Form.Item
-          name={[...prefix, 'enabled']}
-          label="启用现实性过滤"
-          valuePropName="checked"
-        >
+        <Form.Item name={[...prefix, 'enabled']} label="启用现实性过滤" valuePropName="checked">
           <Switch />
         </Form.Item>
       </Col>
@@ -972,7 +1057,13 @@ const RealismEditForm: React.FC<{ prefix: string[] }> = ({ prefix }) => (
           name={[...prefix, 'executabilityWeightMultiplier']}
           label={<FieldLabel label="可执行性权重倍数" tooltip="默认 1.0，2.0=双倍权重" />}
         >
-          <InputNumber min={0.1} max={5} step={0.1} style={{ width: '100%' }} placeholder="默认 1.0" />
+          <InputNumber
+            min={0.1}
+            max={5}
+            step={0.1}
+            style={{ width: '100%' }}
+            placeholder="默认 1.0"
+          />
         </Form.Item>
       </Col>
     </Row>
@@ -1015,8 +1106,15 @@ function configToFormValues(config: StrategyConfig): Record<string, unknown> {
 
   // 直接设置每个维度——Form 的嵌套 name path 会处理
   const dimensions = [
-    'rank', 'recall', 'boost', 'exploration', 'meal',
-    'multiObjective', 'assembly', 'explain', 'realism',
+    'rank',
+    'recall',
+    'boost',
+    'exploration',
+    'meal',
+    'multiObjective',
+    'assembly',
+    'explain',
+    'realism',
   ] as const;
 
   for (const dim of dimensions) {
@@ -1031,9 +1129,7 @@ function configToFormValues(config: StrategyConfig): Record<string, unknown> {
     values.rank.baseWeights = {};
     for (const [goal, weights] of Object.entries(config.rank.baseWeights)) {
       if (Array.isArray(weights)) {
-        values.rank.baseWeights[goal] = Object.fromEntries(
-          weights.map((w, i) => [i, w])
-        );
+        values.rank.baseWeights[goal] = Object.fromEntries(weights.map((w, i) => [i, w]));
       }
     }
   }
@@ -1075,8 +1171,14 @@ function formValuesToConfig(values: Record<string, any>): StrategyConfig {
 
   // 简单维度：直接复制非空值
   const simpleDims = [
-    'recall', 'boost', 'exploration', 'meal',
-    'multiObjective', 'assembly', 'explain', 'realism',
+    'recall',
+    'boost',
+    'exploration',
+    'meal',
+    'multiObjective',
+    'assembly',
+    'explain',
+    'realism',
   ] as const;
 
   for (const dim of simpleDims) {
@@ -1259,9 +1361,7 @@ const StrategyDetail: React.FC = () => {
   // 统计已配置的维度数
   const configuredDimCount = useMemo(() => {
     if (!strategy?.config) return 0;
-    return CONFIG_TABS.filter(
-      (tab) => (strategy.config as any)[tab.configKey] != null
-    ).length;
+    return CONFIG_TABS.filter((tab) => (strategy.config as any)[tab.configKey] != null).length;
   }, [strategy?.config]);
 
   // ==================== 加载分配列表 ====================
@@ -1638,9 +1738,7 @@ const StrategyDetail: React.FC = () => {
                         </Space>
                       ),
                       children: (
-                        <tab.ViewComponent
-                          config={(strategy.config as any)?.[tab.configKey]}
-                        />
+                        <tab.ViewComponent config={(strategy.config as any)?.[tab.configKey]} />
                       ),
                     }))}
                   />

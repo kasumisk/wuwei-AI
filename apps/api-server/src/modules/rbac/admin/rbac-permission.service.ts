@@ -208,10 +208,7 @@ export class RbacPermissionService {
     }
 
     // 检查是否有子权限
-    if (
-      permission.otherPermissions &&
-      permission.otherPermissions.length > 0
-    ) {
+    if (permission.otherPermissions && permission.otherPermissions.length > 0) {
       throw new BadRequestException('请先删除子权限');
     }
 

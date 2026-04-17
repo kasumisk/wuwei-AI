@@ -217,11 +217,9 @@ export class PermissionTemplateService {
     }
 
     // 获取角色现有权限
-    const existingRolePermissions = await this.prisma.rolePermissions.findMany(
-      {
-        where: { roleId: roleId },
-      },
-    );
+    const existingRolePermissions = await this.prisma.rolePermissions.findMany({
+      where: { roleId: roleId },
+    });
     const existingPermissionIds = new Set(
       existingRolePermissions.map((rp) => rp.permissionId),
     );

@@ -221,9 +221,7 @@ const DimensionDetailTable: React.FC<{
             style={{ width: 80 }}
             format={() => ''}
           />
-          <Text style={{ color: scoreColor(raw), fontSize: 12 }}>
-            {(raw * 100).toFixed(1)}
-          </Text>
+          <Text style={{ color: scoreColor(raw), fontSize: 12 }}>{(raw * 100).toFixed(1)}</Text>
         </Space>
       ),
     },
@@ -234,9 +232,7 @@ const DimensionDetailTable: React.FC<{
       width: 80,
       sorter: (a, b) => a.weight - b.weight,
       render: (weight: number) => (
-        <Tag color={weight >= 0.1 ? 'blue' : 'default'}>
-          {(weight * 100).toFixed(1)}%
-        </Tag>
+        <Tag color={weight >= 0.1 ? 'blue' : 'default'}>{(weight * 100).toFixed(1)}%</Tag>
       ),
     },
     {
@@ -278,8 +274,7 @@ const DimensionDetailTable: React.FC<{
       size="small"
       pagination={false}
       summary={(data) => {
-        const totalRaw =
-          data.reduce((s, d) => s + d.raw, 0) / (data.length || 1);
+        const totalRaw = data.reduce((s, d) => s + d.raw, 0) / (data.length || 1);
         const totalWeighted = data.reduce((s, d) => s + d.weighted, 0);
         return (
           <Table.Summary.Row>
@@ -326,9 +321,7 @@ const ScoreChainVisualization: React.FC<{
     rawAdditive: adj.additive,
   }));
 
-  const activeAdjustments = adjustments.filter(
-    (a) => a.multiplier !== 1 || a.additive !== 0
-  );
+  const activeAdjustments = adjustments.filter((a) => a.multiplier !== 1 || a.additive !== 0);
 
   return (
     <div>
@@ -343,15 +336,10 @@ const ScoreChainVisualization: React.FC<{
             />
           </Card>
         </Col>
-        <Col
-          span={8}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-        >
+        <Col span={8} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Space>
             <ArrowRightOutlined style={{ fontSize: 20, color: '#999' }} />
-            <Tag color="processing">
-              {activeAdjustments.length} 个因子调整
-            </Tag>
+            <Tag color="processing">{activeAdjustments.length} 个因子调整</Tag>
             <ArrowRightOutlined style={{ fontSize: 20, color: '#999' }} />
           </Space>
         </Col>
@@ -394,7 +382,10 @@ const ScoreChainVisualization: React.FC<{
                     >
                       <div style={{ fontWeight: 600 }}>{d.name}</div>
                       <div>乘数: ×{d.rawMultiplier.toFixed(3)}</div>
-                      <div>加数: {d.rawAdditive >= 0 ? '+' : ''}{d.rawAdditive.toFixed(4)}</div>
+                      <div>
+                        加数: {d.rawAdditive >= 0 ? '+' : ''}
+                        {d.rawAdditive.toFixed(4)}
+                      </div>
                       <div style={{ color: '#666', marginTop: 4 }}>{d.reason}</div>
                     </div>
                   );
@@ -436,7 +427,8 @@ const ScoreChainVisualization: React.FC<{
               const color = m > 1 ? '#52c41a' : '#ff4d4f';
               return (
                 <Text style={{ color }}>
-                  ×{m.toFixed(3)} ({m > 1 ? '+' : ''}{((m - 1) * 100).toFixed(1)}%)
+                  ×{m.toFixed(3)} ({m > 1 ? '+' : ''}
+                  {((m - 1) * 100).toFixed(1)}%)
                 </Text>
               );
             },
@@ -451,7 +443,8 @@ const ScoreChainVisualization: React.FC<{
               const color = a > 0 ? '#52c41a' : '#ff4d4f';
               return (
                 <Text style={{ color }}>
-                  {a >= 0 ? '+' : ''}{a.toFixed(4)}
+                  {a >= 0 ? '+' : ''}
+                  {a.toFixed(4)}
                 </Text>
               );
             },
@@ -507,8 +500,8 @@ const HealthModifierCard: React.FC<{
                   healthModifier.finalMultiplier >= 1
                     ? '#52c41a'
                     : healthModifier.finalMultiplier >= 0.5
-                    ? '#faad14'
-                    : '#ff4d4f',
+                      ? '#faad14'
+                      : '#ff4d4f',
               }}
               prefix={<SafetyCertificateOutlined />}
             />
@@ -522,9 +515,7 @@ const HealthModifierCard: React.FC<{
               valueStyle={{
                 color: healthModifier.isVetoed ? '#ff4d4f' : '#52c41a',
               }}
-              prefix={
-                healthModifier.isVetoed ? <CloseCircleOutlined /> : <CheckCircleOutlined />
-              }
+              prefix={healthModifier.isVetoed ? <CloseCircleOutlined /> : <CheckCircleOutlined />}
             />
           </Card>
         </Col>
@@ -571,9 +562,7 @@ const HealthModifierCard: React.FC<{
                 const m = record.multiplier ?? record.factor;
                 if (m == null) return '-';
                 return (
-                  <Text style={{ color: m >= 1 ? '#52c41a' : '#ff4d4f' }}>
-                    ×{m.toFixed(3)}
-                  </Text>
+                  <Text style={{ color: m >= 1 ? '#52c41a' : '#ff4d4f' }}>×{m.toFixed(3)}</Text>
                 );
               },
             },
@@ -583,11 +572,7 @@ const HealthModifierCard: React.FC<{
               width: 70,
               render: (_, record: any) => {
                 const v = record.vetoed ?? record.isVetoed;
-                return v ? (
-                  <Tag color="error">是</Tag>
-                ) : (
-                  <Tag color="success">否</Tag>
-                );
+                return v ? <Tag color="error">是</Tag> : <Tag color="success">否</Tag>;
               },
             },
             {
@@ -615,11 +600,7 @@ const BreakdownResultDisplay: React.FC<{ result: ScoreBreakdownResult }> = ({ re
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={12} sm={6}>
           <Card size="small">
-            <Statistic
-              title="食物"
-              value={result.foodName}
-              valueStyle={{ fontSize: 16 }}
-            />
+            <Statistic title="食物" value={result.foodName} valueStyle={{ fontSize: 16 }} />
           </Card>
         </Col>
         <Col xs={12} sm={6}>
@@ -644,7 +625,9 @@ const BreakdownResultDisplay: React.FC<{ result: ScoreBreakdownResult }> = ({ re
         <Col xs={12} sm={6}>
           <Card size="small">
             <Space direction="vertical" size={0}>
-              <Text type="secondary" style={{ fontSize: 12 }}>目标 / 餐次 / 策略</Text>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                目标 / 餐次 / 策略
+              </Text>
               <Space size={4} wrap>
                 <Tag color="green">{result.goalType}</Tag>
                 <Tag color="blue">{result.mealType}</Tag>
@@ -688,9 +671,7 @@ const BreakdownResultDisplay: React.FC<{ result: ScoreBreakdownResult }> = ({ re
           <Space>
             <ThunderboltOutlined />
             <span>评分因子链</span>
-            <Tag color="processing">
-              {result.chainResult?.adjustments?.length || 0} 个因子
-            </Tag>
+            <Tag color="processing">{result.chainResult?.adjustments?.length || 0} 个因子</Tag>
           </Space>
         }
         style={{ marginBottom: 16 }}
@@ -740,7 +721,9 @@ const BreakdownResultDisplay: React.FC<{ result: ScoreBreakdownResult }> = ({ re
           }}
         >
           <Card size="small" style={{ minWidth: 100, textAlign: 'center' }}>
-            <Text type="secondary" style={{ fontSize: 11 }}>14维基础分</Text>
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              14维基础分
+            </Text>
             <div>
               <Text strong style={{ fontSize: 18, color: scoreColor(result.baseScore) }}>
                 {(result.baseScore * 100).toFixed(1)}
@@ -751,9 +734,14 @@ const BreakdownResultDisplay: React.FC<{ result: ScoreBreakdownResult }> = ({ re
           <ArrowRightOutlined style={{ fontSize: 18, color: '#ccc' }} />
 
           <Card size="small" style={{ minWidth: 100, textAlign: 'center' }}>
-            <Text type="secondary" style={{ fontSize: 11 }}>因子链</Text>
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              因子链
+            </Text>
             <div>
-              <Text strong style={{ fontSize: 18, color: scoreColor(result.chainResult?.finalScore ?? 0) }}>
+              <Text
+                strong
+                style={{ fontSize: 18, color: scoreColor(result.chainResult?.finalScore ?? 0) }}
+              >
                 {((result.chainResult?.finalScore ?? 0) * 100).toFixed(1)}
               </Text>
             </div>
@@ -762,7 +750,9 @@ const BreakdownResultDisplay: React.FC<{ result: ScoreBreakdownResult }> = ({ re
           <ArrowRightOutlined style={{ fontSize: 18, color: '#ccc' }} />
 
           <Card size="small" style={{ minWidth: 100, textAlign: 'center' }}>
-            <Text type="secondary" style={{ fontSize: 11 }}>健康修正</Text>
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              健康修正
+            </Text>
             <div>
               <Text
                 strong
@@ -787,12 +777,11 @@ const BreakdownResultDisplay: React.FC<{ result: ScoreBreakdownResult }> = ({ re
               borderColor: scoreColor(result.finalScore),
             }}
           >
-            <Text type="secondary" style={{ fontSize: 11 }}>最终得分</Text>
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              最终得分
+            </Text>
             <div>
-              <Text
-                strong
-                style={{ fontSize: 22, color: scoreColor(result.finalScore) }}
-              >
+              <Text strong style={{ fontSize: 22, color: scoreColor(result.finalScore) }}>
                 {(result.finalScore * 100).toFixed(1)}
               </Text>
             </div>

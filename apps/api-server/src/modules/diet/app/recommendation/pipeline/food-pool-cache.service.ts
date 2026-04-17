@@ -223,8 +223,7 @@ function mapRowToFoodLibrary(row: Record<string, unknown>): FoodLibrary {
     barcode: row.barcode != null ? String(row.barcode) : undefined,
     status: String(row.status ?? 'draft'),
     category: String(row.category ?? ''),
-    subCategory:
-      row.subCategory != null ? String(row.subCategory) : undefined,
+    subCategory: row.subCategory != null ? String(row.subCategory) : undefined,
     foodGroup: row.foodGroup != null ? String(row.foodGroup) : undefined,
 
     // 核心营养素 — Decimal → number
@@ -263,7 +262,9 @@ function mapRowToFoodLibrary(row: Record<string, unknown>): FoodLibrary {
     // 烹饪/风味扩展
     cuisine: row.cuisine != null ? String(row.cuisine) : undefined,
     flavorProfile: jsonParse(row.flavorProfile, undefined),
-    cookingMethods: Array.isArray(row.cookingMethods) ? row.cookingMethods.map(String) : [],
+    cookingMethods: Array.isArray(row.cookingMethods)
+      ? row.cookingMethods.map(String)
+      : [],
     prepTimeMinutes: nOpt(row.prepTimeMinutes) as number | undefined,
     cookTimeMinutes: nOpt(row.cookTimeMinutes) as number | undefined,
     skillRequired:
@@ -271,8 +272,7 @@ function mapRowToFoodLibrary(row: Record<string, unknown>): FoodLibrary {
     estimatedCostLevel: nOpt(row.estimatedCostLevel) as number | undefined,
     shelfLifeDays: nOpt(row.shelfLifeDays) as number | undefined,
     waterContentPercent: nOpt(row.waterContentPercent),
-    fodmapLevel:
-      row.fodmapLevel != null ? String(row.fodmapLevel) : undefined,
+    fodmapLevel: row.fodmapLevel != null ? String(row.fodmapLevel) : undefined,
     oxalateLevel:
       row.oxalateLevel != null ? String(row.oxalateLevel) : undefined,
 

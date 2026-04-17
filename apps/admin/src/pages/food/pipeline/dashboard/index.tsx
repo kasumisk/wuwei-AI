@@ -198,11 +198,7 @@ const PipelineDashboard: React.FC = () => {
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={12} sm={6}>
           <Card>
-            <Statistic
-              title="食物总数"
-              value={totalFoods}
-              prefix={<DatabaseOutlined />}
-            />
+            <Statistic title="食物总数" value={totalFoods} prefix={<DatabaseOutlined />} />
           </Card>
         </Col>
         <Col xs={12} sm={6}>
@@ -313,7 +309,8 @@ const PipelineDashboard: React.FC = () => {
               <Descriptions.Item label="宏量一致性">
                 <Tag
                   color={
-                    quality && totalFoods &&
+                    quality &&
+                    totalFoods &&
                     (totalFoods - (quality.macroInconsistent || 0)) / totalFoods > 0.8
                       ? 'green'
                       : 'orange'

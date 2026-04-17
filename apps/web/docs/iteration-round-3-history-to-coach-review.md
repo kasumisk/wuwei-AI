@@ -11,12 +11,14 @@
 本轮主要目标是复盘链路，不新增画像必填字段。
 
 仍然依赖的关键画像字段：
+
 - `goal`
 - `activityLevel`
 - `weightKg/heightCm`
 - `dietaryRestrictions/allergens/healthConditions`
 
 API 是否需改动：
+
 - 本轮不新增决策 API。
 - 复用已有 `POST /app/coach/chat` 的 `analysisContext` 承载结构化上下文。
 
@@ -40,6 +42,7 @@ API 是否需改动：
 ## Step 3：页面结构（可落地）
 
 ### 页面与功能
+
 - 历史详情页 `/history/[id]`
   - 新增“复盘到 AI 教练”行动卡
   - 负责组装该次分析上下文并跳转
@@ -49,10 +52,12 @@ API 是否需改动：
   - 接收历史详情注入的上下文并发起会话
 
 ### 对应 API
+
 - `GET /app/food/analysis/:analysisId`（已有）
 - `POST /app/coach/chat`（已有，支持 `analysisContext`）
 
 ### 用户操作
+
 - 历史详情页点击 1 个按钮即可触发复盘
 
 ---
@@ -60,10 +65,12 @@ API 是否需改动：
 ## Step 4：交互优化（行为路径）
 
 本轮优化点：
+
 - 过去：历史详情只能看，无法导向后续行动
 - 现在：历史详情可直接进入“可执行建议”链路
 
 具体行为优化：
+
 - 缩短路径：`历史详情 -> 教练输入 -> 发送` 变为 `历史详情 -> 一键复盘`
 - 增强上下文：不仅发文本问题，还携带结构化字段（foods、宏量、评分分解、决策因子）
 
@@ -72,12 +79,14 @@ API 是否需改动：
 ## Step 5：组件级结构
 
 新增/调整组件职责：
+
 - `HistoryDetailPage`
   - 新增 `buildCoachReviewPrompt(result)`
   - 新增 `handleCoachReview()`
   - 新增“复盘到 AI 教练”行动区
 
 状态来源：
+
 - 分析详情数据：`useAnalysisDetail(analysisId)`
 - 会话上下文：`sessionStorage`（一次性）
 
@@ -86,6 +95,7 @@ API 是否需改动：
 ## Step 6：API 缺口识别
 
 当前可用，但仍存在改进空间：
+
 - 缺口 1：缺少统一“复盘摘要”接口
   - 建议新增 `GET /app/food/analysis/:analysisId/review-brief`
   - 由后端统一输出复盘提示词与关键因子，减少前端拼装逻辑
@@ -98,15 +108,18 @@ API 是否需改动：
 ## Step 7：分阶段迭代
 
 Phase 1（本轮已完成）
+
 - 历史详情页一键复盘入口
 - 上下文结构化透传
 - 自动首问触发
 
 Phase 2（体验增强）
+
 - 在历史列表卡片增加“快速复盘”次级入口
 - 教练回答增加复盘结构模板（问题/补救/下一餐）
 
 Phase 3（引导提升）
+
 - 历史维度“高风险复盘提醒”
 - 复盘后自动生成次日行动清单（可订阅）
 

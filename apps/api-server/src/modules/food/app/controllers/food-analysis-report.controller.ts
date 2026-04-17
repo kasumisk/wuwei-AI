@@ -4,7 +4,15 @@
  * 端点：用户提交食物分析反馈，系统记录并生成质量指标
  */
 
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AppJwtAuthGuard } from '../../../auth/app/app-jwt-auth.guard';
 import { CurrentAppUser } from '../../../auth/app/current-app-user.decorator';
@@ -17,7 +25,9 @@ import { UserDecisionFeedback } from '../../../decision/feedback/feedback.types'
 @UseGuards(AppJwtAuthGuard)
 @ApiBearerAuth()
 export class FoodAnalysisReportController {
-  constructor(private readonly feedbackService: AnalysisQualityFeedbackService) {}
+  constructor(
+    private readonly feedbackService: AnalysisQualityFeedbackService,
+  ) {}
 
   /**
    * POST /food-analyze/:id/feedback

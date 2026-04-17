@@ -154,7 +154,15 @@ function Seg<T extends string>({
   );
 }
 
-function SectionCard({ title, icon, children }: { title: string; icon: string; children: React.ReactNode }) {
+function SectionCard({
+  title,
+  icon,
+  children,
+}: {
+  title: string;
+  icon: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="bg-card rounded-2xl p-5 space-y-5">
       <div className="flex items-center gap-2 pb-1 border-b border-border/30">
@@ -244,7 +252,12 @@ export default function PreferencesPage() {
     stressLevel: UserProfile['stressLevel'];
     hydrationGoal: number | undefined;
     mealTimingPreference: UserProfile['mealTimingPreference'];
-  }>({ sleepQuality: undefined, stressLevel: undefined, hydrationGoal: undefined, mealTimingPreference: undefined });
+  }>({
+    sleepQuality: undefined,
+    stressLevel: undefined,
+    hydrationGoal: undefined,
+    mealTimingPreference: undefined,
+  });
   const [profileInit, setProfileInit] = useState(false);
   const [hydrationInput, setHydrationInput] = useState('');
 
@@ -437,9 +450,7 @@ export default function PreferencesPage() {
                 onClick={() => saveKitchen({ ...kitchen, [key]: !has })}
                 disabled={isSaving}
                 className={`flex flex-col items-center py-4 rounded-xl text-xs font-bold gap-1.5 transition-all ${
-                  has
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground/50'
+                  has ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground/50'
                 } disabled:opacity-30`}
               >
                 <span className="text-2xl">{icon}</span>

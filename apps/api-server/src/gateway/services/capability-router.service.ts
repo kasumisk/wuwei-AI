@@ -26,14 +26,13 @@ export class CapabilityRouter {
     requestedModel?: string,
   ): Promise<RouteResult> {
     // 获取客户端权限配置
-    const permission =
-      await this.prisma.clientCapabilityPermissions.findFirst({
-        where: {
-          clientId: clientId,
-          capabilityType: capabilityType,
-          enabled: true,
-        },
-      });
+    const permission = await this.prisma.clientCapabilityPermissions.findFirst({
+      where: {
+        clientId: clientId,
+        capabilityType: capabilityType,
+        enabled: true,
+      },
+    });
 
     // ✅ 增强：如果请求指定了模型，验证是否在允许列表中
     if (requestedModel) {

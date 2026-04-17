@@ -9,14 +9,17 @@
 ## Step 1：用户画像与档案评估
 
 本轮不新增画像字段；仍依赖：
+
 - goal / activityLevel
 - dietaryRestrictions / allergens / healthConditions
 
 用户需要提供什么（本轮新增引导）：
+
 - 文字分析时尽量提供 **份量**（如 100g/半碗/2个）
 - 尽量提供 **做法**（如油炸/清蒸/红烧）
 
 API 是否要改：
+
 - 当前无需改 API。
 - 输入质量提升通过前端引导完成。
 
@@ -42,9 +45,11 @@ API 是否要改：
 ## Step 3：页面结构设计（可落地）
 
 涉及页面：
+
 - `/analyze`
 
 页面功能新增：
+
 - 输入阶段
   - 图片模式：拍摄质量提示卡
   - 文字模式：输入完善建议卡（份量/做法检测 + 一键补提示）
@@ -53,6 +58,7 @@ API 是否要改：
   - 分析完整度面板（完整度分数、宏量覆盖率、分维度评分状态、补强建议）
 
 API 对应：
+
 - `POST /app/food/analyze/text`
 - `POST /app/food/analyze/image`
 - `POST /app/food/records` / `POST /app/food/analysis/save`
@@ -62,10 +68,12 @@ API 对应：
 ## Step 4：交互优化（关键）
 
 不是改 UI，而是优化行为路径：
+
 - 把“分析质量问题”前置到输入阶段（减少无效分析）
 - 把“结果怎么补强”显性化到结果阶段（避免用户只看结论）
 
 行为收益：
+
 - 减少低质量输入导致的误差
 - 提升用户理解和纠偏能力
 - 提升“结果 -> 行动”的转化效率
@@ -75,16 +83,19 @@ API 对应：
 ## Step 5：UI 结构设计（组件级）
 
 本轮新增逻辑（在 `AnalyzePage` 内）：
+
 - `hasQuantityHint(text)`：检测文本是否包含份量
 - `hasCookingHint(text)`：检测文本是否包含做法
 - `computeResultQuality(result, foods)`：计算结果完整度
 
 新增区块：
+
 - 输入完善建议卡（upload/text）
 - 图片准确度提示卡（upload/image）
 - 分析完整度面板（result）
 
 状态来源：
+
 - API 状态：`analyzeImage` / `analyzeText` 结果
 - 本地状态：`textInput`、`editedFoods`、`result`
 
@@ -93,6 +104,7 @@ API 对应：
 ## Step 6：API 缺口识别
 
 当前可运行，但还有后续空间：
+
 - 缺口 1: 后端未直接返回“分析完整度/可信度等级”，前端只能估算
   - 建议新增字段：`analysisQualityBand`、`analysisCompletenessScore`
 
@@ -104,14 +116,17 @@ API 对应：
 ## Step 7：分阶段迭代
 
 Phase 1（已完成）
+
 - 输入前置引导（份量/做法）
 - 结果完整度面板（分数+补强建议）
 
 Phase 2（下一轮）
+
 - 增加“低完整度一键重分析”引导流程
 - 结果面板接入教练分项复盘按钮模板
 
 Phase 3（后续）
+
 - 与后端统一完整度标准（后端输出 + 前端展示一致）
 - 形成“分析质量追踪”周趋势（用户可见）
 

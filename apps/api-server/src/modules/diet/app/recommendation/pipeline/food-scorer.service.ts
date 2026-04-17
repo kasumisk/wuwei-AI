@@ -284,10 +284,16 @@ export class FoodScorerService {
     const acquisitionScore = this.calcAcquisitionScore(food, scoringConfig);
 
     // computeWeights 缓存 — 同一批评分中参数组合通常相同
-    const runtimeBaseWeights = this.recommendationConfig.getBaseWeights(goalType);
+    const runtimeBaseWeights =
+      this.recommendationConfig.getBaseWeights(goalType);
     const weightsCacheKey = this.buildWeightsCacheKey(
-      goalType, mealType, statusFlags,
-      weightOverrides, mealWeightOverrides, rankPolicy, runtimeBaseWeights,
+      goalType,
+      mealType,
+      statusFlags,
+      weightOverrides,
+      mealWeightOverrides,
+      rankPolicy,
+      runtimeBaseWeights,
     );
     let weights: number[];
     const cachedWeights = this.weightsCache.get(weightsCacheKey);
@@ -554,17 +560,11 @@ export class FoodScorerService {
       servingCalories: Math.round(
         ((Number(food.calories) || 0) * serving) / 100,
       ),
-      servingProtein: Math.round(
-        ((Number(food.protein) || 0) * serving) / 100,
-      ),
+      servingProtein: Math.round(((Number(food.protein) || 0) * serving) / 100),
       servingFat: Math.round(((Number(food.fat) || 0) * serving) / 100),
-      servingCarbs: Math.round(
-        ((Number(food.carbs) || 0) * serving) / 100,
-      ),
+      servingCarbs: Math.round(((Number(food.carbs) || 0) * serving) / 100),
       // 膳食纤维按份量换算
-      servingFiber: Math.round(
-        ((Number(food.fiber) || 0) * serving) / 100,
-      ),
+      servingFiber: Math.round(((Number(food.fiber) || 0) * serving) / 100),
       // GL 不按重量线性缩放，直接使用食物级别值
       servingGL: Number(food.glycemicLoad) || 0,
     };
@@ -847,7 +847,6 @@ export class FoodScorerService {
     const saturatedFat = Number(food.saturatedFat) || 0;
     const fiber = Number(food.fiber) || 0;
 
-
     const transDiv = cfg?.inflammTransFatDiv ?? 2;
     const transMax = cfg?.inflammTransFatMax ?? 50;
     const satDiv = cfg?.inflammSatFatDiv ?? 10;
@@ -928,7 +927,6 @@ export class FoodScorerService {
 
     // 单品微调仅对 NOVA 3/4 生效（NOVA 1/2 不惩罚，无需微调）
     if (level >= 3) {
-
       const highFiberThreshold = scoringConfig?.novaHighFiberThreshold ?? 3;
       const highFiberRelief = scoringConfig?.novaHighFiberRelief ?? 0.05;
       const lowSugarThreshold = scoringConfig?.novaLowSugarThreshold ?? 5;
@@ -958,7 +956,6 @@ export class FoodScorerService {
       if ((Number(food.sodium) || 0) > highSodiumThreshold) {
         penalty -= highSodiumPenalty;
       }
-
 
       const clampMin = scoringConfig?.novaClampMin ?? [0.75, 0.45];
       const clampMax = scoringConfig?.novaClampMax ?? [0.95, 0.7];
@@ -1015,7 +1012,6 @@ export class FoodScorerService {
     food: FoodLibrary,
     cfg?: ScoringConfigSnapshot | null,
   ): number {
-
     const DEFAULT_CATEGORY_GI_MAP: Record<string, number> = {
       grain: 70, // 谷物类：白米 73，面包 75，燕麦 55 → 中位 70
       veggie: 35, // 蔬菜类：多数 < 40
@@ -1033,11 +1029,9 @@ export class FoodScorerService {
 
     const categoryGI = categoryGiMap[food.category] ?? fallbackGI;
 
-
     const processingStep = cfg?.giProcessingStep ?? 5;
     const processingLevel = food.processingLevel ?? 1;
     const processingAdj = Math.max(0, (processingLevel - 1) * processingStep);
-
 
     const fiberReduction = cfg?.giFiberReduction ?? 2;
     const fiberReductionCap = cfg?.giFiberReductionCap ?? 15;
@@ -1161,7 +1155,6 @@ export class FoodScorerService {
     food: FoodLibrary,
     cfg?: ScoringConfigSnapshot | null,
   ): number {
-
     const DEFAULT_CATEGORY_WATER_MAP: Record<string, number> = {
       veggie: 90, // 蔬菜类：绝大多数 > 85%
       fruit: 85, // 水果类：多数 80-92%

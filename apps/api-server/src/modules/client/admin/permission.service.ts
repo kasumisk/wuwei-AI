@@ -29,11 +29,10 @@ export class PermissionService {
       throw new NotFoundException(`客户端 #${clientId} 不存在`);
     }
 
-    const permissions =
-      await this.prisma.clientCapabilityPermissions.findMany({
-        where: { clientId: clientId },
-        orderBy: { createdAt: 'desc' },
-      });
+    const permissions = await this.prisma.clientCapabilityPermissions.findMany({
+      where: { clientId: clientId },
+      orderBy: { createdAt: 'desc' },
+    });
 
     return permissions;
   }
@@ -42,10 +41,11 @@ export class PermissionService {
    * 获取权限详情
    */
   async findOne(permissionId: string) {
-    const permission =
-      await this.prisma.clientCapabilityPermissions.findUnique({
+    const permission = await this.prisma.clientCapabilityPermissions.findUnique(
+      {
         where: { id: permissionId },
-      });
+      },
+    );
 
     if (!permission) {
       throw new NotFoundException(`权限 #${permissionId} 不存在`);
@@ -103,10 +103,11 @@ export class PermissionService {
    * 更新权限
    */
   async update(permissionId: string, updatePermissionDto: UpdatePermissionDto) {
-    const permission =
-      await this.prisma.clientCapabilityPermissions.findUnique({
+    const permission = await this.prisma.clientCapabilityPermissions.findUnique(
+      {
         where: { id: permissionId },
-      });
+      },
+    );
 
     if (!permission) {
       throw new NotFoundException(`权限 #${permissionId} 不存在`);
@@ -154,10 +155,11 @@ export class PermissionService {
    * 删除权限
    */
   async remove(permissionId: string) {
-    const permission =
-      await this.prisma.clientCapabilityPermissions.findUnique({
+    const permission = await this.prisma.clientCapabilityPermissions.findUnique(
+      {
         where: { id: permissionId },
-      });
+      },
+    );
 
     if (!permission) {
       throw new NotFoundException(`权限 #${permissionId} 不存在`);
@@ -261,14 +263,13 @@ export class PermissionService {
     clientId: string,
     capabilityType: string,
   ): Promise<boolean> {
-    const permission =
-      await this.prisma.clientCapabilityPermissions.findFirst({
-        where: {
-          clientId: clientId,
-          capabilityType: capabilityType,
-          enabled: true,
-        },
-      });
+    const permission = await this.prisma.clientCapabilityPermissions.findFirst({
+      where: {
+        clientId: clientId,
+        capabilityType: capabilityType,
+        enabled: true,
+      },
+    });
 
     return !!permission;
   }
@@ -277,13 +278,12 @@ export class PermissionService {
    * 获取客户端的权限配置
    */
   async getPermissionConfig(clientId: string, capabilityType: string) {
-    const permission =
-      await this.prisma.clientCapabilityPermissions.findFirst({
-        where: {
-          clientId: clientId,
-          capabilityType: capabilityType,
-        },
-      });
+    const permission = await this.prisma.clientCapabilityPermissions.findFirst({
+      where: {
+        clientId: clientId,
+        capabilityType: capabilityType,
+      },
+    });
 
     return permission || null;
   }

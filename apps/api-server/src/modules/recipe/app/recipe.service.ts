@@ -649,12 +649,8 @@ export class RecipeService {
         ? Number(row.proteinPerServing)
         : null,
       fatPerServing: row.fatPerServing ? Number(row.fatPerServing) : null,
-      carbsPerServing: row.carbsPerServing
-        ? Number(row.carbsPerServing)
-        : null,
-      fiberPerServing: row.fiberPerServing
-        ? Number(row.fiberPerServing)
-        : null,
+      carbsPerServing: row.carbsPerServing ? Number(row.carbsPerServing) : null,
+      fiberPerServing: row.fiberPerServing ? Number(row.fiberPerServing) : null,
       qualityScore: Number(row.qualityScore),
       usageCount: row.usageCount,
       averageRating: avgRating ?? null,

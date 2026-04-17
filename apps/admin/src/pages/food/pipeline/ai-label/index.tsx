@@ -79,11 +79,7 @@ const AiLabelPage: React.FC = () => {
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={24} md={12}>
           <Card>
-            <Statistic
-              title="食物总数"
-              value={report?.totalFoods || 0}
-              prefix={<TagOutlined />}
-            />
+            <Statistic title="食物总数" value={report?.totalFoods || 0} prefix={<TagOutlined />} />
           </Card>
         </Col>
         <Col xs={24} md={12}>

@@ -87,8 +87,7 @@ export class ProfileInferenceService {
     // 此处仅做简易回退：当 cron 尚未计算（无 weight_history 数据）时，基于 profile 体重粗略估算
     let goalProgress = (inferred?.goalProgress as any) || null;
     if (profile.targetWeightKg && profile.weightKg) {
-      const startWeight =
-        goalProgress?.startWeight || Number(profile.weightKg);
+      const startWeight = goalProgress?.startWeight || Number(profile.weightKg);
       const currentWeight = Number(profile.weightKg);
       const targetWeight = Number(profile.targetWeightKg);
       const totalDelta = startWeight - targetWeight;

@@ -1,6 +1,6 @@
 /**
  * V2.4 Admin Quality Metrics Controller
- * 
+ *
  * 端点：管理员查看分析质量仪表板、决策规则改进建议、反馈分析
  */
 
@@ -17,11 +17,13 @@ import { AnalysisQualityFeedbackService } from '../../decision/feedback/quality-
 @Roles('admin', 'super_admin')
 @ApiBearerAuth()
 export class AdminQualityMetricsController {
-  constructor(private readonly feedbackService: AnalysisQualityFeedbackService) {}
+  constructor(
+    private readonly feedbackService: AnalysisQualityFeedbackService,
+  ) {}
 
   /**
    * GET /admin/analysis/quality-metrics
-   * 
+   *
    * 获取分析质量指标总览
    */
   @Get('quality-metrics')
@@ -30,10 +32,13 @@ export class AdminQualityMetricsController {
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
-    const dateRange = startDate && endDate ? {
-      start: new Date(startDate),
-      end: new Date(endDate),
-    } : undefined;
+    const dateRange =
+      startDate && endDate
+        ? {
+            start: new Date(startDate),
+            end: new Date(endDate),
+          }
+        : undefined;
 
     const metrics = this.feedbackService.getQualityMetrics(dateRange);
 
@@ -49,7 +54,9 @@ export class AdminQualityMetricsController {
         dateRange: metrics.dateRange,
 
         // 问题分布
-        topIssues: (Object.entries(metrics.issueBreakdown) as Array<[string, number]>)
+        topIssues: (
+          Object.entries(metrics.issueBreakdown) as Array<[string, number]>
+        )
           .sort((a, b) => b[1] - a[1])
           .slice(0, 5)
           .map(([issue, count]) => ({
@@ -66,7 +73,7 @@ export class AdminQualityMetricsController {
 
   /**
    * GET /admin/analysis/policy-suggestions
-   * 
+   *
    * 获取决策规则改进建议
    */
   @Get('policy-suggestions')
@@ -79,9 +86,9 @@ export class AdminQualityMetricsController {
       timestamp: new Date(),
       data: {
         totalSuggestions: suggestions.length,
-        highImpact: suggestions.filter(s => s.impact === 'high'),
-        mediumImpact: suggestions.filter(s => s.impact === 'medium'),
-        lowImpact: suggestions.filter(s => s.impact === 'low'),
+        highImpact: suggestions.filter((s) => s.impact === 'high'),
+        mediumImpact: suggestions.filter((s) => s.impact === 'medium'),
+        lowImpact: suggestions.filter((s) => s.impact === 'low'),
         suggestions,
       },
     };
@@ -89,14 +96,15 @@ export class AdminQualityMetricsController {
 
   /**
    * GET /admin/analysis/feedback-distribution
-   * 
+   *
    * 获取用户反馈分布
    */
   @Get('feedback-distribution')
   @ApiOperation({ summary: '获取反馈分布' })
   getFeedbackDistribution() {
     const distribution = this.feedbackService.getFeedbackDistribution();
-    const total = distribution.accepted + distribution.rejected + distribution.modified;
+    const total =
+      distribution.accepted + distribution.rejected + distribution.modified;
     const safePercent = (count: number) =>
       total > 0 ? `${((count / total) * 100).toFixed(1)}%` : '0.0%';
 
@@ -125,7 +133,7 @@ export class AdminQualityMetricsController {
 
   /**
    * GET /admin/analysis/health-check
-   * 
+   *
    * 系统健康检查：验证决策质量是否在预期范围内
    */
   @Get('health-check')
@@ -144,11 +152,15 @@ export class AdminQualityMetricsController {
     };
 
     if (metrics.acceptanceRate < 70) {
-      healthStatus.recommendations.push('Acceptance rate below threshold, review decision rules');
+      healthStatus.recommendations.push(
+        'Acceptance rate below threshold, review decision rules',
+      );
     }
 
     if (suggestions.length > 0) {
-      healthStatus.recommendations.push(`${suggestions.length} policy improvements suggested`);
+      healthStatus.recommendations.push(
+        `${suggestions.length} policy improvements suggested`,
+      );
     }
 
     return {

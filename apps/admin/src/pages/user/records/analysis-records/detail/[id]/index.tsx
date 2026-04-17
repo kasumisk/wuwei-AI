@@ -81,7 +81,10 @@ const AnalysisRecordDetail: React.FC = () => {
       <Card>
         <Typography.Text type="danger">未找到分析记录</Typography.Text>
         <br />
-        <Button onClick={() => navigate('/user/records/analysis-records')} style={{ marginTop: 16 }}>
+        <Button
+          onClick={() => navigate('/user/records/analysis-records')}
+          style={{ marginTop: 16 }}
+        >
           返回列表
         </Button>
       </Card>
@@ -98,7 +101,10 @@ const AnalysisRecordDetail: React.FC = () => {
       {/* 头部 */}
       <Card style={{ marginBottom: 16 }}>
         <Space>
-          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/user/records/analysis-records')}>
+          <Button
+            icon={<ArrowLeftOutlined />}
+            onClick={() => navigate('/user/records/analysis-records')}
+          >
             返回列表
           </Button>
           <Typography.Title level={4} style={{ margin: 0 }}>

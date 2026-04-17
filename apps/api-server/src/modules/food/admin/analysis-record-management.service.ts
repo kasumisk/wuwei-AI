@@ -65,7 +65,8 @@ export class AnalysisRecordManagementService {
         record.normalizedPayload ?? record.normalized_payload ?? null,
       nutritionPayload:
         record.nutritionPayload ?? record.nutrition_payload ?? null,
-      decisionPayload: record.decisionPayload ?? record.decision_payload ?? null,
+      decisionPayload:
+        record.decisionPayload ?? record.decision_payload ?? null,
       confidenceScore: this.normalizeConfidence(
         record.confidenceScore ?? record.confidence_score,
       ),
@@ -75,9 +76,11 @@ export class AnalysisRecordManagementService {
       matchedFoodCount:
         Number(record.matchedFoodCount ?? record.matched_food_count ?? 0) || 0,
       candidateFoodCount:
-        Number(record.candidateFoodCount ?? record.candidate_food_count ?? 0) || 0,
+        Number(record.candidateFoodCount ?? record.candidate_food_count ?? 0) ||
+        0,
       persistStatus: record.persistStatus ?? record.persist_status ?? null,
-      sourceRequestId: record.sourceRequestId ?? record.source_request_id ?? null,
+      sourceRequestId:
+        record.sourceRequestId ?? record.source_request_id ?? null,
       reviewStatus: this.mapStoredReviewStatusToApi(
         record.reviewStatus ?? record.review_status,
       ),
@@ -126,7 +129,9 @@ export class AnalysisRecordManagementService {
     }
     if (reviewStatus) {
       if (reviewStatus === 'pending') {
-        conditions.push(`COALESCE(ar.review_status, 'pending') = $${paramIdx++}`);
+        conditions.push(
+          `COALESCE(ar.review_status, 'pending') = $${paramIdx++}`,
+        );
         params.push('pending');
       } else {
         conditions.push(`ar.review_status = $${paramIdx++}`);
@@ -256,18 +261,19 @@ export class AnalysisRecordManagementService {
    */
   async getAnalysisStatistics() {
     // 总量统计
-    const [totalCount, textCount, imageCount, avgConfidenceRow] = await Promise.all([
-      this.prisma.foodAnalysisRecords.count(),
-      this.prisma.foodAnalysisRecords.count({
-        where: { inputType: 'text' },
-      }),
-      this.prisma.foodAnalysisRecords.count({
-        where: { inputType: 'image' },
-      }),
-      this.prisma.$queryRawUnsafe<[{ avg: string | null }]>(
-        `SELECT AVG(confidence_score)::text AS avg FROM food_analysis_records WHERE confidence_score IS NOT NULL`,
-      ),
-    ]);
+    const [totalCount, textCount, imageCount, avgConfidenceRow] =
+      await Promise.all([
+        this.prisma.foodAnalysisRecords.count(),
+        this.prisma.foodAnalysisRecords.count({
+          where: { inputType: 'text' },
+        }),
+        this.prisma.foodAnalysisRecords.count({
+          where: { inputType: 'image' },
+        }),
+        this.prisma.$queryRawUnsafe<[{ avg: string | null }]>(
+          `SELECT AVG(confidence_score)::text AS avg FROM food_analysis_records WHERE confidence_score IS NOT NULL`,
+        ),
+      ]);
 
     // 今日统计
     const today = new Date();

@@ -115,10 +115,7 @@ export class PrecomputeService {
 
     return {
       result: record.result as unknown as MealRecommendation,
-      scenarioResults: record.scenarioResults as Record<
-        string,
-        unknown
-      > | null,
+      scenarioResults: record.scenarioResults as Record<string, unknown> | null,
     };
   }
 
@@ -380,9 +377,7 @@ export class PrecomputeService {
 
     // eslint-disable-next-line no-constant-condition
     while (true) {
-      const page = await this.prisma.$queryRawUnsafe<
-        Array<{ userId: string }>
-      >(
+      const page = await this.prisma.$queryRawUnsafe<Array<{ userId: string }>>(
         `SELECT DISTINCT user_id FROM food_records
          WHERE created_at > $1
          ORDER BY user_id

@@ -38,8 +38,16 @@ describe('V3.2 Phase 2 - Recommendation & Coaching', () => {
   it('should handle empty recommendations gracefully', () => {
     const recommendations = recommendationEngine.generateRecommendations(
       {
-        macroSlotStatus: { calories: 'ok', protein: 'ok', fat: 'ok', carbs: 'ok' },
-        macroProgress: { consumed: { calories: 1800, protein: 100, fat: 60, carbs: 200 }, remaining: { calories: 200, protein: 20, fat: 25, carbs: 50 } },
+        macroSlotStatus: {
+          calories: 'ok',
+          protein: 'ok',
+          fat: 'ok',
+          carbs: 'ok',
+        },
+        macroProgress: {
+          consumed: { calories: 1800, protein: 100, fat: 60, carbs: 200 },
+          remaining: { calories: 200, protein: 20, fat: 25, carbs: 50 },
+        },
         identifiedIssues: [],
         recommendationContext: {
           remainingCalories: 200,
@@ -57,8 +65,16 @@ describe('V3.2 Phase 2 - Recommendation & Coaching', () => {
   it('should generate coaching explanation', () => {
     const explanation = decisionCoach.generateCoachingExplanation(
       {
-        macroSlotStatus: { calories: 'ok', protein: 'ok', fat: 'ok', carbs: 'ok' },
-        macroProgress: { consumed: { calories: 1800, protein: 100, fat: 60, carbs: 200 }, remaining: { calories: 200, protein: 20, fat: 25, carbs: 50 } },
+        macroSlotStatus: {
+          calories: 'ok',
+          protein: 'ok',
+          fat: 'ok',
+          carbs: 'ok',
+        },
+        macroProgress: {
+          consumed: { calories: 1800, protein: 100, fat: 60, carbs: 200 },
+          remaining: { calories: 200, protein: 20, fat: 25, carbs: 50 },
+        },
         identifiedIssues: [],
         recommendationContext: {
           remainingCalories: 200,

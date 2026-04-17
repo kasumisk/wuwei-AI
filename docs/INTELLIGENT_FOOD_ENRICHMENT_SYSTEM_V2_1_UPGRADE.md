@@ -16,6 +16,7 @@ V2.1 专注于两个模块的 **可维护性、数据流健壮性、字段覆盖
 ### 食物管理（Food Management）
 
 **已有能力**
+
 - 完整 CRUD（创建/更新/删除/批量导入）
 - 14 维度筛选（名称/类别/状态/完整度/审核状态…）
 - `enrichmentMeta` 聚合字段（completeness / fieldSources / fieldConfidence / failedFields）
@@ -34,6 +35,7 @@ V2.1 专注于两个模块的 **可维护性、数据流健壮性、字段覆盖
 ### AI 补全（AI Enrichment）
 
 **已有能力**
+
 - 5 阶段分批补全（Stage 1–5，合计 64 个 ENRICHABLE_FIELDS）
 - 分阶段入库（staged review）或直接入库
 - 单条立即补全 `enrich-now`
@@ -104,6 +106,7 @@ V2.1 专注于两个模块的 **可维护性、数据流健壮性、字段覆盖
 ### 现有问题
 
 `POST /enrichment/re-enqueue` 当前：
+
 1. 找出符合条件的食物
 2. （可选）清空字段
 3. 入队 job，job 数据仅有 `fields` 列表和 `staged` 标志
@@ -114,6 +117,7 @@ V2.1 专注于两个模块的 **可维护性、数据流健壮性、字段覆盖
 ### 目标行为
 
 强制入队应：
+
 1. **直接**针对用户指定的字段构建一次性 prompt（不分阶段）
 2. **跳过** staged 模式判断，直接写入 DB
 3. 仅清空并重写指定字段，不触碰其余字段
@@ -131,7 +135,7 @@ interface EnrichmentJobData {
   locale?: string;
   region?: string;
   stages?: number[];
-  mode?: 'staged_flow' | 'direct_fields';  // NEW
+  mode?: 'staged_flow' | 'direct_fields'; // NEW
 }
 ```
 
@@ -179,16 +183,16 @@ interface EnrichmentJobData {
 
 经核查，以下字段存在于 `foods` schema 但当前 `ENRICHABLE_FIELDS` 未覆盖：
 
-| 字段（camelCase） | DB 类型 | 补全价值 | 建议 |
-|---|---|---|---|
-| `flavorProfile` | `Json?` | 高——影响推荐口味匹配 | 已在 Stage 5（`flavor_profile`）✓ |
-| `isFried` | `Boolean @default(false)` | 中 | 已在 `AI_OVERRIDABLE_FIELDS` 但 camelCase 失效，修复后生效 |
-| `isProcessed` | `Boolean?` | 中 | 同上 |
-| `dishPriority` | `Int?` | 低——推荐排序辅助 | 已在 `dish_priority` ✓ |
-| `popularity` | `Int @default(0)` | 低——种子数据默认 0 | 不适合 AI 补全，移出 AI_OVERRIDABLE_FIELDS |
-| `searchWeight` | `Int @default(100)` | 无 | 系统字段，不补全 |
-| `commonalityScore` | `Int` | 中 | 在 `AI_OVERRIDABLE_FIELDS`（fix 后生效） |
-| `standardServingG` | `Int @default(100)` | 中 | 在 `AI_OVERRIDABLE_FIELDS`（fix 后生效） |
+| 字段（camelCase）  | DB 类型                   | 补全价值             | 建议                                                       |
+| ------------------ | ------------------------- | -------------------- | ---------------------------------------------------------- |
+| `flavorProfile`    | `Json?`                   | 高——影响推荐口味匹配 | 已在 Stage 5（`flavor_profile`）✓                          |
+| `isFried`          | `Boolean @default(false)` | 中                   | 已在 `AI_OVERRIDABLE_FIELDS` 但 camelCase 失效，修复后生效 |
+| `isProcessed`      | `Boolean?`                | 中                   | 同上                                                       |
+| `dishPriority`     | `Int?`                    | 低——推荐排序辅助     | 已在 `dish_priority` ✓                                     |
+| `popularity`       | `Int @default(0)`         | 低——种子数据默认 0   | 不适合 AI 补全，移出 AI_OVERRIDABLE_FIELDS                 |
+| `searchWeight`     | `Int @default(100)`       | 无                   | 系统字段，不补全                                           |
+| `commonalityScore` | `Int`                     | 中                   | 在 `AI_OVERRIDABLE_FIELDS`（fix 后生效）                   |
+| `standardServingG` | `Int @default(100)`       | 中                   | 在 `AI_OVERRIDABLE_FIELDS`（fix 后生效）                   |
 
 结论：核心营养/属性字段均已覆盖，BUG-01 修复后 `isFried`、`isProcessed`、`commonalityScore`、`standardServingG` 将自动生效。
 
@@ -198,24 +202,24 @@ interface EnrichmentJobData {
 
 ### 复用现有 API（无需修改路径）
 
-| 能力 | 现有 API | 备注 |
-|---|---|---|
-| 食物 CRUD | `/admin/food-library` 全套 | 已完备 |
-| 按完整度/状态筛选 | `GET /admin/food-library?minCompleteness&enrichmentStatus` | 已有 |
-| 字段级来源/置信度查看 | `GET /admin/food-library/:id`（enrichmentMeta） | 已有 |
-| 单条立即补全 | `POST /enrichment/:foodId/enrich-now` | 已有 |
-| 批量入队 | `POST /enrichment/enqueue` | 已有 |
-| staged 审核 | `/enrichment/staged/*` 全套 | 已有 |
-| 历史记录 | `GET /enrichment/history` | 已有 |
-| 完整度进度 | `GET /enrichment/progress` | 已有 |
+| 能力                  | 现有 API                                                   | 备注   |
+| --------------------- | ---------------------------------------------------------- | ------ |
+| 食物 CRUD             | `/admin/food-library` 全套                                 | 已完备 |
+| 按完整度/状态筛选     | `GET /admin/food-library?minCompleteness&enrichmentStatus` | 已有   |
+| 字段级来源/置信度查看 | `GET /admin/food-library/:id`（enrichmentMeta）            | 已有   |
+| 单条立即补全          | `POST /enrichment/:foodId/enrich-now`                      | 已有   |
+| 批量入队              | `POST /enrichment/enqueue`                                 | 已有   |
+| staged 审核           | `/enrichment/staged/*` 全套                                | 已有   |
+| 历史记录              | `GET /enrichment/history`                                  | 已有   |
+| 完整度进度            | `GET /enrichment/progress`                                 | 已有   |
 
 ### 修改现有 API
 
-| API | 修改内容 |
-|---|---|
-| `POST /enrichment/re-enqueue` | 增加 `mode: 'direct_fields'` 到 job data，跳过 staged 流程 |
-| `GET /enrichment/staged` | 修复 `currentValues` snake_case → camelCase 转换 |
-| `POST /enrichment/rollback/:id` | 改为标记 `ai_enrichment_rolled_back` 而非删除记录 |
+| API                             | 修改内容                                                   |
+| ------------------------------- | ---------------------------------------------------------- |
+| `POST /enrichment/re-enqueue`   | 增加 `mode: 'direct_fields'` 到 job data，跳过 staged 流程 |
+| `GET /enrichment/staged`        | 修复 `currentValues` snake_case → camelCase 转换           |
+| `POST /enrichment/rollback/:id` | 改为标记 `ai_enrichment_rolled_back` 而非删除记录          |
 
 ### 新增 API（最小必要）
 
@@ -227,14 +231,14 @@ interface EnrichmentJobData {
 
 ### Phase 1（本次 V2.1）— Bug 修复 + 强制入队重构
 
-| 任务 | 文件 | 状态 |
-|---|---|---|
-| BUG-01：统一 `AI_OVERRIDABLE_FIELDS` 为 snake_case | `food-enrichment.service.ts` | 本次实施 |
-| BUG-02：修复 staged 列表 `currentValues` 读取 | `food-enrichment.service.ts` | 本次实施 |
-| BUG-03：rollback 保留审计日志 | `food-enrichment.service.ts` | 本次实施 |
-| BUG-04：统一 completeness 门槛常量 | `food-enrichment.service.ts` | 本次实施 |
-| BUG-05：删除死代码 `clearData['enrichmentStatus'] = null` | `food-enrichment.service.ts` | 本次实施 |
-| FEAT：`re-enqueue` 走 `direct_fields` 模式 | `food-enrichment.service.ts` + `food-enrichment.processor.ts` | 本次实施 |
+| 任务                                                      | 文件                                                          | 状态     |
+| --------------------------------------------------------- | ------------------------------------------------------------- | -------- |
+| BUG-01：统一 `AI_OVERRIDABLE_FIELDS` 为 snake_case        | `food-enrichment.service.ts`                                  | 本次实施 |
+| BUG-02：修复 staged 列表 `currentValues` 读取             | `food-enrichment.service.ts`                                  | 本次实施 |
+| BUG-03：rollback 保留审计日志                             | `food-enrichment.service.ts`                                  | 本次实施 |
+| BUG-04：统一 completeness 门槛常量                        | `food-enrichment.service.ts`                                  | 本次实施 |
+| BUG-05：删除死代码 `clearData['enrichmentStatus'] = null` | `food-enrichment.service.ts`                                  | 本次实施 |
+| FEAT：`re-enqueue` 走 `direct_fields` 模式                | `food-enrichment.service.ts` + `food-enrichment.processor.ts` | 本次实施 |
 
 ### Phase 2（后续迭代）
 
@@ -356,9 +360,10 @@ interface EnrichmentJobData {
 本次变更仅修改 `food-pipeline` 模块，不影响推荐系统测试套件（P3 测试全部通过）。
 
 建议在 `test/` 下补充：
+
 - `food-enrichment-direct.service.spec.ts`：验证 `enrichFieldsDirect` 字段写入行为
 - `food-enrichment-rollback.service.spec.ts`：验证 rollback 后 change_log 保留
 
 ---
 
-*文档版本：V2.1 | 生成时间：2026-04-15*
+_文档版本：V2.1 | 生成时间：2026-04-15_

@@ -150,9 +150,7 @@ export class PreferenceProfileService {
 
       // 计算反馈距今天数，应用指数衰减 e^(-0.05 × days)
       const createdAt =
-        row.createdAt instanceof Date
-          ? row.createdAt
-          : new Date(row.createdAt);
+        row.createdAt instanceof Date ? row.createdAt : new Date(row.createdAt);
       const daysSince = Math.floor(
         (now - createdAt.getTime()) / (1000 * 60 * 60 * 24),
       );

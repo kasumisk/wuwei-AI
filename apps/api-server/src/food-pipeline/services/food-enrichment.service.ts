@@ -1784,9 +1784,9 @@ ${CORE_RULES}`;
     } else {
       enrichmentStatus =
         completeness.score >= COMPLETENESS_COMPLETE_THRESHOLD
-           ? 'completed'
-           : completeness.score >= COMPLETENESS_PARTIAL_THRESHOLD
-             ? 'partial'
+          ? 'completed'
+          : completeness.score >= COMPLETENESS_PARTIAL_THRESHOLD
+            ? 'partial'
             : 'pending';
     }
 
@@ -2254,10 +2254,7 @@ ${jsonSchema}`;
     ]);
 
     // Int 非空字段（schema 无 `?`，不可设为 null，重置时用 0）
-    const INT_NON_NULLABLE = new Set([
-      'commonalityScore',
-      'popularity',
-    ]);
+    const INT_NON_NULLABLE = new Set(['commonalityScore', 'popularity']);
 
     // Json 非空字段（schema 无 `?`，不可设为 null，清空时用空 JSON 默认值）
     const JSON_NON_NULLABLE: Record<string, unknown> = {

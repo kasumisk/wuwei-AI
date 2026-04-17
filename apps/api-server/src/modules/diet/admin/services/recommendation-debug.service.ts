@@ -116,8 +116,7 @@ export class RecommendationDebugService {
       // V6.2 3.4: 声明画像新字段
       cookingSkillLevel: profile.cookingSkillLevel as string | undefined,
       budgetLevel: profile.budgetLevel as string | undefined,
-      cuisinePreferences:
-        (profile.cuisinePreferences as string[]) || undefined,
+      cuisinePreferences: (profile.cuisinePreferences as string[]) || undefined,
     };
 
     // 4. 调用推荐引擎
@@ -130,7 +129,7 @@ export class RecommendationDebugService {
       target,
       dailyTarget,
       userProfileConstraints,
-      dto.excludeNames,  // #fix Bug21-22: 跨餐去重 — 传入前面餐次已推荐的食物名
+      dto.excludeNames, // #fix Bug21-22: 跨餐去重 — 传入前面餐次已推荐的食物名
     );
     const elapsedMs = Date.now() - startTime;
 
@@ -205,8 +204,7 @@ export class RecommendationDebugService {
       // V6.2 3.4: 声明画像新字段
       cookingSkillLevel: profile.cookingSkillLevel as string | undefined,
       budgetLevel: profile.budgetLevel as string | undefined,
-      cuisinePreferences:
-        (profile.cuisinePreferences as string[]) || undefined,
+      cuisinePreferences: (profile.cuisinePreferences as string[]) || undefined,
     };
 
     // 2. 调用反向解释
@@ -534,8 +532,7 @@ export class RecommendationDebugService {
       timezone: profile.timezone || 'Asia/Shanghai',
       cookingSkillLevel: profile.cookingSkillLevel as string | undefined,
       budgetLevel: profile.budgetLevel as string | undefined,
-      cuisinePreferences:
-        (profile.cuisinePreferences as string[]) || undefined,
+      cuisinePreferences: (profile.cuisinePreferences as string[]) || undefined,
     };
 
     const consumed = { calories: 0, protein: 0 };
@@ -680,8 +677,7 @@ export class RecommendationDebugService {
 
       // 场景分布
       if (trace.sceneName) {
-        sceneCounts[trace.sceneName] =
-          (sceneCounts[trace.sceneName] || 0) + 1;
+        sceneCounts[trace.sceneName] = (sceneCounts[trace.sceneName] || 0) + 1;
       }
 
       // 餐次分布
@@ -715,9 +711,8 @@ export class RecommendationDebugService {
             (durations.reduce((a, b) => a + b, 0) / durations.length) * 10,
           ) / 10,
         avgOutputCount:
-          Math.round(
-            (counts.reduce((a, b) => a + b, 0) / counts.length) * 10,
-          ) / 10,
+          Math.round((counts.reduce((a, b) => a + b, 0) / counts.length) * 10) /
+          10,
         sampleCount: durations.length,
       };
     }
@@ -725,10 +720,8 @@ export class RecommendationDebugService {
     return {
       days,
       traceCount: traces.length,
-      avgTotalDurationMs:
-        Math.round((totalDuration / traces.length) * 10) / 10,
-      cacheHitRate:
-        Math.round((cacheHitCount / traces.length) * 1000) / 1000,
+      avgTotalDurationMs: Math.round((totalDuration / traces.length) * 10) / 10,
+      cacheHitRate: Math.round((cacheHitCount / traces.length) * 1000) / 1000,
       degradationRate:
         Math.round((degradationCount / traces.length) * 1000) / 1000,
       stageStats,

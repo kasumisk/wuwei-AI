@@ -348,8 +348,7 @@ export const recommendDebugQueryKeys = {
   qualityDashboard: (days?: number) => [..._all, 'quality-dashboard', days] as const,
   traces: (query?: TraceListQueryDto) => [..._all, 'traces', query] as const,
   traceDetail: (traceId: string) => [..._all, 'trace', traceId] as const,
-  pipelineStats: (query?: PipelineStatsQueryDto) =>
-    [..._all, 'pipeline-stats', query] as const,
+  pipelineStats: (query?: PipelineStatsQueryDto) => [..._all, 'pipeline-stats', query] as const,
 };
 
 // ==================== API ====================

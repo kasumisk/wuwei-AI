@@ -50,8 +50,7 @@ function buildCoachPromptFromAnalysis(params: {
   riskLevel?: string;
   advice?: string;
 }): string {
-  const scorePart =
-    params.nutritionScore != null ? `营养评分 ${params.nutritionScore}/100。` : '';
+  const scorePart = params.nutritionScore != null ? `营养评分 ${params.nutritionScore}/100。` : '';
   const riskPart = params.riskLevel ? `风险等级 ${params.riskLevel}。` : '';
   const advicePart = params.advice ? `系统建议：${params.advice}。` : '';
 
@@ -80,7 +79,8 @@ function computeResultQuality(result: AnalysisResult, foods: FoodItem[]): Result
   const macroCoveredCount = foods.filter(
     (f) => f.protein != null && f.fat != null && f.carbs != null
   ).length;
-  const macroCoveragePercent = foodCount > 0 ? Math.round((macroCoveredCount / foodCount) * 100) : 0;
+  const macroCoveragePercent =
+    foodCount > 0 ? Math.round((macroCoveredCount / foodCount) * 100) : 0;
   const hasBreakdown = !!result.scoreBreakdown;
   const hasAlternatives = (result.insteadOptions || []).length > 0;
 
@@ -113,7 +113,14 @@ function computeResultQuality(result: AnalysisResult, foods: FoodItem[]): Result
     tips.push('可让 AI 教练基于本餐给出替代搭配，提升下一餐可执行性。');
   }
 
-  return { score, level, macroCoveragePercent, hasBreakdown, hasAlternatives, tips: tips.slice(0, 3) };
+  return {
+    score,
+    level,
+    macroCoveragePercent,
+    hasBreakdown,
+    hasAlternatives,
+    tips: tips.slice(0, 3),
+  };
 }
 
 function buildEnhancedTextInput(text: string): string {
@@ -683,7 +690,9 @@ export function AnalyzePage() {
                   <>
                     <div className="bg-card border border-border rounded-xl p-3 space-y-1.5">
                       <p className="text-xs font-bold">提升图片分析准确度</p>
-                      <p className="text-[11px] text-muted-foreground">1) 尽量一次拍全餐食 2) 保证光线清晰 3) 酱料和饮料尽量入镜</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        1) 尽量一次拍全餐食 2) 保证光线清晰 3) 酱料和饮料尽量入镜
+                      </p>
                     </div>
                     <button
                       onClick={handleAnalyzeImage}
@@ -731,15 +740,23 @@ export function AnalyzePage() {
                   <p className="text-xs font-bold">输入完善建议</p>
                   <div className="text-[11px] text-muted-foreground space-y-1">
                     <p className={hasQuantityHint(textInput) ? 'text-emerald-600' : ''}>
-                      {hasQuantityHint(textInput) ? '已包含份量信息' : '建议补充份量（如 100g / 半碗 / 2个）'}
+                      {hasQuantityHint(textInput)
+                        ? '已包含份量信息'
+                        : '建议补充份量（如 100g / 半碗 / 2个）'}
                     </p>
                     <p className={hasCookingHint(textInput) ? 'text-emerald-600' : ''}>
-                      {hasCookingHint(textInput) ? '已包含做法信息' : '建议补充做法（如油炸/清蒸/红烧）'}
+                      {hasCookingHint(textInput)
+                        ? '已包含做法信息'
+                        : '建议补充做法（如油炸/清蒸/红烧）'}
                     </p>
                   </div>
                   {!hasQuantityHint(textInput) && (
                     <button
-                      onClick={() => setTextInput((prev) => `${prev}${prev.trim() ? '，' : ''}每种食物请按常见份量估算`) }
+                      onClick={() =>
+                        setTextInput(
+                          (prev) => `${prev}${prev.trim() ? '，' : ''}每种食物请按常见份量估算`
+                        )
+                      }
                       className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-primary/10 text-primary hover:bg-primary/15 transition-colors"
                     >
                       一键补充“份量提示”

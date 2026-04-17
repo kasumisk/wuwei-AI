@@ -303,9 +303,39 @@ export function checkLateNight(
 /** 过敏原中英文关键字映射表（Fix B1: 英文allergen name无法匹配中文食物名）*/
 const ALLERGEN_ZH_MAP: Record<string, string[]> = {
   peanut: ['花生', '落花生'],
-  tree_nut: ['核桃', '腰果', '杏仁', '榛子', '开心果', '松子', '夏威夷果', '碧根果'],
-  shellfish: ['虾', '蟹', '龙虾', '贝', '蛤', '扇贝', '牡蛎', '蚌', '鱿鱼', '蛏'],
-  fish: ['鱼', '三文鱼', '金枪鱼', '鲑鱼', '鳕鱼', '草鱼', '鲫鱼', '带鱼', '黄鱼'],
+  tree_nut: [
+    '核桃',
+    '腰果',
+    '杏仁',
+    '榛子',
+    '开心果',
+    '松子',
+    '夏威夷果',
+    '碧根果',
+  ],
+  shellfish: [
+    '虾',
+    '蟹',
+    '龙虾',
+    '贝',
+    '蛤',
+    '扇贝',
+    '牡蛎',
+    '蚌',
+    '鱿鱼',
+    '蛏',
+  ],
+  fish: [
+    '鱼',
+    '三文鱼',
+    '金枪鱼',
+    '鲑鱼',
+    '鳕鱼',
+    '草鱼',
+    '鲫鱼',
+    '带鱼',
+    '黄鱼',
+  ],
   milk: ['牛奶', '奶', '乳', '黄油', '奶酪', '酸奶', '芝士', '奶油'],
   egg: ['鸡蛋', '蛋', '蛋清', '蛋黄', '鸭蛋', '鹌鹑蛋'],
   wheat: ['小麦', '面粉', '面条', '面包', '饺子', '馒头', '包子', '馄饨'],
@@ -327,7 +357,9 @@ export function checkAllergenConflict(
     const zhKeywords = ALLERGEN_ZH_MAP[key];
     if (zhKeywords) {
       return foods.some((f) =>
-        zhKeywords.some((kw) => f.name.includes(kw) || (f.category ?? '').includes(kw)),
+        zhKeywords.some(
+          (kw) => f.name.includes(kw) || (f.category ?? '').includes(kw),
+        ),
       );
     }
     return false;
@@ -366,7 +398,8 @@ export function checkRestrictionConflict(
   ctx: Pick<UnifiedUserContext, 'dietaryRestrictions'>,
   locale?: Locale,
 ): CheckResult | null {
-  if (!ctx.dietaryRestrictions || ctx.dietaryRestrictions.length === 0) return null;
+  if (!ctx.dietaryRestrictions || ctx.dietaryRestrictions.length === 0)
+    return null;
 
   const foodTexts = buildFoodTexts(foods);
   const meatKeywords = [
@@ -451,8 +484,8 @@ export function checkHealthConditionRisk(
     ['高血压', 'hypertension', '高血圧'].includes(c.toLowerCase()),
   );
   // Fix B3: 使用子串匹配，兼容 'diabetes_type2' / 'diabetes_type1' 等变体
-  const hasDiabetes = (ctx.healthConditions ?? []).some((c) =>
-    c.toLowerCase() === '糖尿病' || c.toLowerCase().includes('diabetes'),
+  const hasDiabetes = (ctx.healthConditions ?? []).some(
+    (c) => c.toLowerCase() === '糖尿病' || c.toLowerCase().includes('diabetes'),
   );
 
   const sodiumLimit = thresholds?.sodiumLimit ?? (hasHypertension ? 800 : 2000);

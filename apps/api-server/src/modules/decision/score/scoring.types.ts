@@ -1,6 +1,6 @@
 /**
  * V2.4 Scoring Module Types
- * 
+ *
  * 评分系统的核心类型定义：
  * - NutritionScore: 用户当前摄入与目标的对标评分
  * - Issue: 识别出的营养问题

@@ -165,15 +165,32 @@ export class RecommendationResultProcessor {
       userProfile?.portionTendency,
     );
 
+    const toppedUpPicks = this.mealAssembler.ensureMinimumCalorieCoverage(
+      adjustedPicks,
+      allCandidates,
+      target.calories,
+      0.7,
+      1.1,
+    );
+
+    const finalizedPicks =
+      toppedUpPicks.length === adjustedPicks.length
+        ? adjustedPicks
+        : this.mealAssembler.adjustPortions(
+            toppedUpPicks,
+            target.calories,
+            userProfile?.portionTendency,
+          );
+
     // ── Step 3: 结果聚合 ──
     const tip = this.mealAssembler.buildTip(
       mealType,
       goalType,
       target,
-      adjustedPicks.reduce((s, p) => s + p.servingCalories, 0),
+      finalizedPicks.reduce((s, p) => s + p.servingCalories, 0),
     );
     const result = this.mealAssembler.aggregateMealResult(
-      adjustedPicks,
+      finalizedPicks,
       tip,
       goalType,
       userProfile,
@@ -182,9 +199,9 @@ export class RecommendationResultProcessor {
     // ── Step 4: 附加元数据 ──
     result.candidates = allCandidates;
 
-    if (adjustedPicks.length >= 2) {
+    if (finalizedPicks.length >= 2) {
       result.compositionScore =
-        this.mealCompositionScorer.scoreMealComposition(adjustedPicks);
+        this.mealCompositionScorer.scoreMealComposition(finalizedPicks);
     }
 
     if (degradations.length > 0) {
@@ -200,7 +217,7 @@ export class RecommendationResultProcessor {
       try {
         const { recipes, planTheme, executionDifficulty } =
           await this.recipeAssembler.assembleRecipes(
-            adjustedPicks,
+            finalizedPicks,
             sceneContext,
             mealType,
           );
@@ -219,7 +236,7 @@ export class RecommendationResultProcessor {
     // ── Step 6: 结构化洞察 ──
     try {
       const insightCtx: InsightContext = {
-        foods: adjustedPicks,
+        foods: finalizedPicks,
         target,
         sceneContext: sceneContext ?? null,
         dailyPlan: dailyPlanState ?? null,

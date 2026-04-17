@@ -162,8 +162,9 @@ const PipelineWaterfall: React.FC<{ stages: PipelineStageTrace[] }> = ({ stages 
           <Statistic
             title="最慢阶段"
             value={
-              stageLabels[sortedStages.reduce((a, b) => (a.durationMs > b.durationMs ? a : b)).stage]
-                ?.label || '-'
+              stageLabels[
+                sortedStages.reduce((a, b) => (a.durationMs > b.durationMs ? a : b)).stage
+              ]?.label || '-'
             }
           />
         </Col>
@@ -207,9 +208,7 @@ const PipelineWaterfall: React.FC<{ stages: PipelineStageTrace[] }> = ({ stages 
                   <div>输出: {d.output} 个</div>
                   <div>
                     淘汰率:{' '}
-                    {d.input > 0
-                      ? `${(((d.input - d.output) / d.input) * 100).toFixed(1)}%`
-                      : '-'}
+                    {d.input > 0 ? `${(((d.input - d.output) / d.input) * 100).toFixed(1)}%` : '-'}
                   </div>
                 </div>
               );
@@ -228,11 +227,7 @@ const PipelineWaterfall: React.FC<{ stages: PipelineStageTrace[] }> = ({ stages 
       <Steps
         size="small"
         items={sortedStages.map((s) => ({
-          title: (
-            <span style={{ fontSize: 12 }}>
-              {stageLabels[s.stage]?.label || s.stage}
-            </span>
-          ),
+          title: <span style={{ fontSize: 12 }}>{stageLabels[s.stage]?.label || s.stage}</span>,
           description: (
             <span style={{ fontSize: 11 }}>
               {s.inputCount} → {s.outputCount}{' '}
@@ -535,7 +530,11 @@ const TraceDetailContent: React.FC<{ detail: TraceDetail }> = ({ detail }) => {
 
       {/* Top 食物 */}
       {detail.topFoods && detail.topFoods.length > 0 && (
-        <Card size="small" title={`Top 食物 (${detail.topFoods.length})`} style={{ marginBottom: 16 }}>
+        <Card
+          size="small"
+          title={`Top 食物 (${detail.topFoods.length})`}
+          style={{ marginBottom: 16 }}
+        >
           <Table
             dataSource={detail.topFoods}
             rowKey={(_, i) => `food-${i}`}
@@ -575,7 +574,12 @@ const TraceDetailContent: React.FC<{ detail: TraceDetail }> = ({ detail }) => {
                 defaultSortOrder: 'descend',
                 render: (score: number) =>
                   score != null ? (
-                    <Text strong style={{ color: durationColor(1 - score) === '#52c41a' ? '#52c41a' : '#1677ff' }}>
+                    <Text
+                      strong
+                      style={{
+                        color: durationColor(1 - score) === '#52c41a' ? '#52c41a' : '#1677ff',
+                      }}
+                    >
                       {(score * 100).toFixed(1)}
                     </Text>
                   ) : (
@@ -595,8 +599,7 @@ const TraceDetailContent: React.FC<{ detail: TraceDetail }> = ({ detail }) => {
                 dataIndex: 'protein',
                 key: 'protein',
                 width: 80,
-                render: (p: number) =>
-                  p != null ? <Tag color="blue">{p.toFixed(1)}g</Tag> : '-',
+                render: (p: number) => (p != null ? <Tag color="blue">{p.toFixed(1)}g</Tag> : '-'),
               },
             ]}
           />
@@ -811,12 +814,9 @@ const TracesPage: React.FC = () => {
       dataIndex: 'createdAt',
       key: 'createdAt',
       width: 150,
-      sorter: (a, b) =>
-        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      sorter: (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
       defaultSortOrder: 'descend',
-      render: (date: string) => (
-        <Text style={{ fontSize: 12 }}>{formatDate(date)}</Text>
-      ),
+      render: (date: string) => <Text style={{ fontSize: 12 }}>{formatDate(date)}</Text>,
     },
     {
       title: '操作',
@@ -911,20 +911,12 @@ const TracesPage: React.FC = () => {
         <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
           <Col xs={12} sm={6}>
             <Card size="small">
-              <Statistic
-                title="总追踪数"
-                value={summary.total}
-                prefix={<ExperimentOutlined />}
-              />
+              <Statistic title="总追踪数" value={summary.total} prefix={<ExperimentOutlined />} />
             </Card>
           </Col>
           <Col xs={12} sm={6}>
             <Card size="small">
-              <Statistic
-                title="当页数量"
-                value={summary.pageCount}
-                prefix={<DatabaseOutlined />}
-              />
+              <Statistic title="当页数量" value={summary.pageCount} prefix={<DatabaseOutlined />} />
             </Card>
           </Col>
           <Col xs={12} sm={6}>

@@ -51,7 +51,12 @@ describe('V2.7 Integration Tests', () => {
     it('should return undefined when all impacts are positive', () => {
       expect(
         resolveBreakdownInsight([
-          { dimension: 'protein', score: 85, impact: 'positive', message: '优质' },
+          {
+            dimension: 'protein',
+            score: 85,
+            impact: 'positive',
+            message: '优质',
+          },
         ]),
       ).toBeUndefined();
     });
@@ -59,15 +64,30 @@ describe('V2.7 Integration Tests', () => {
     it('should pick the lowest-score critical dimension message', () => {
       const result = resolveBreakdownInsight([
         { dimension: 'fat', score: 40, impact: 'warning', message: '脂肪偏高' },
-        { dimension: 'calories', score: 20, impact: 'critical', message: '热量严重超标' },
-        { dimension: 'protein', score: 90, impact: 'positive', message: '蛋白质充足' },
+        {
+          dimension: 'calories',
+          score: 20,
+          impact: 'critical',
+          message: '热量严重超标',
+        },
+        {
+          dimension: 'protein',
+          score: 90,
+          impact: 'positive',
+          message: '蛋白质充足',
+        },
       ]);
       expect(result).toBe('热量严重超标');
     });
 
     it('should pick lowest-score warning if no critical', () => {
       const result = resolveBreakdownInsight([
-        { dimension: 'carbs', score: 35, impact: 'warning', message: '碳水略高' },
+        {
+          dimension: 'carbs',
+          score: 35,
+          impact: 'warning',
+          message: '碳水略高',
+        },
         { dimension: 'fat', score: 55, impact: 'warning', message: '脂肪偏高' },
       ]);
       expect(result).toBe('碳水略高');
@@ -139,7 +159,9 @@ describe('V2.7 Integration Tests', () => {
     if (candidates.length === 0) return undefined;
     const worst = candidates.reduce((a, b) => (a.score <= b.score ? a : b));
     const label = worst.label || worst.dimension;
-    return worst.message ? `${label}(${worst.score}分): ${worst.message}` : undefined;
+    return worst.message
+      ? `${label}(${worst.score}分): ${worst.message}`
+      : undefined;
   }
 
   describe('Phase 1 — scoreInsight 派生', () => {
@@ -182,31 +204,56 @@ describe('V2.7 Integration Tests', () => {
   // 内联 getSignalPriority 以避免 DI 依赖
   const SIGNAL_PRIORITY_MATRIX: Record<string, Record<string, number>> = {
     fat_loss: {
-      over_limit: 100, near_limit: 90, fat_excess: 80,
-      carb_excess: 75, late_night_window: 65, protein_gap: 55,
-      meal_count_low: 40, under_target: 30,
+      over_limit: 100,
+      near_limit: 90,
+      fat_excess: 80,
+      carb_excess: 75,
+      late_night_window: 65,
+      protein_gap: 55,
+      meal_count_low: 40,
+      under_target: 30,
     },
     muscle_gain: {
-      protein_gap: 100, meal_count_low: 90, under_target: 80,
-      over_limit: 65, fat_excess: 50, late_night_window: 40,
-      near_limit: 35, carb_excess: 30,
+      protein_gap: 100,
+      meal_count_low: 90,
+      under_target: 80,
+      over_limit: 65,
+      fat_excess: 50,
+      late_night_window: 40,
+      near_limit: 35,
+      carb_excess: 30,
     },
     health: {
-      over_limit: 90, fat_excess: 80, late_night_window: 75,
-      protein_gap: 65, near_limit: 55, carb_excess: 50,
-      meal_count_low: 40, under_target: 30,
+      over_limit: 90,
+      fat_excess: 80,
+      late_night_window: 75,
+      protein_gap: 65,
+      near_limit: 55,
+      carb_excess: 50,
+      meal_count_low: 40,
+      under_target: 30,
     },
     maintenance: {
-      over_limit: 85, near_limit: 70, fat_excess: 60,
-      protein_gap: 55, carb_excess: 50, late_night_window: 45,
-      meal_count_low: 35, under_target: 30,
+      over_limit: 85,
+      near_limit: 70,
+      fat_excess: 60,
+      protein_gap: 55,
+      carb_excess: 50,
+      late_night_window: 45,
+      meal_count_low: 35,
+      under_target: 30,
     },
   };
 
   const DEFAULT_SIGNAL_PRIORITY: Record<string, number> = {
-    over_limit: 85, near_limit: 70, fat_excess: 65,
-    carb_excess: 60, protein_gap: 55, late_night_window: 50,
-    meal_count_low: 40, under_target: 30,
+    over_limit: 85,
+    near_limit: 70,
+    fat_excess: 65,
+    carb_excess: 60,
+    protein_gap: 55,
+    late_night_window: 50,
+    meal_count_low: 40,
+    under_target: 30,
   };
 
   function getSignalPriority(signal: string, goalType?: string): number {
@@ -246,7 +293,8 @@ describe('V2.7 Integration Tests', () => {
     it('should pick highest-priority signal across multiple', () => {
       const signals = ['protein_gap', 'over_limit', 'late_night_window'];
       const topSignal = signals.sort(
-        (a, b) => getSignalPriority(b, 'fat_loss') - getSignalPriority(a, 'fat_loss'),
+        (a, b) =>
+          getSignalPriority(b, 'fat_loss') - getSignalPriority(a, 'fat_loss'),
       )[0];
       expect(topSignal).toBe('over_limit');
     });
@@ -254,7 +302,9 @@ describe('V2.7 Integration Tests', () => {
     it('muscle_gain conflict: pick protein_gap over over_limit', () => {
       const signals = ['over_limit', 'protein_gap'];
       const topSignal = signals.sort(
-        (a, b) => getSignalPriority(b, 'muscle_gain') - getSignalPriority(a, 'muscle_gain'),
+        (a, b) =>
+          getSignalPriority(b, 'muscle_gain') -
+          getSignalPriority(a, 'muscle_gain'),
       )[0];
       expect(topSignal).toBe('protein_gap');
     });
@@ -299,14 +349,31 @@ describe('V2.7 Integration Tests', () => {
   describe('Phase 3 — COACH_LABELS V2.7 新增标签', () => {
     // 直接引入，不走 DI
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { COACH_LABELS, cl } = require('../modules/decision/i18n/decision-labels');
+    const {
+      COACH_LABELS,
+      cl,
+    } = require('../modules/decision/i18n/decision-labels');
 
     const V27_KEYS = [
-      'summaryTitle', 'verdictLabel', 'topIssuesLabel', 'strengthsLabel',
-      'dataLabel', 'actionItemsLabel', 'contextSignalLabel', 'coachFocusLabel',
-      'alternativeLabel', 'coachPlanTitle', 'conclusionLabel', 'reasonLabel',
-      'doNowLabel', 'followUpLabel', 'ifAlreadyAteLabel', 'nextMealLabel',
-      'alternativesLabel', 'uncertaintyLabel', 'macroInlineLabel',
+      'summaryTitle',
+      'verdictLabel',
+      'topIssuesLabel',
+      'strengthsLabel',
+      'dataLabel',
+      'actionItemsLabel',
+      'contextSignalLabel',
+      'coachFocusLabel',
+      'alternativeLabel',
+      'coachPlanTitle',
+      'conclusionLabel',
+      'reasonLabel',
+      'doNowLabel',
+      'followUpLabel',
+      'ifAlreadyAteLabel',
+      'nextMealLabel',
+      'alternativesLabel',
+      'uncertaintyLabel',
+      'macroInlineLabel',
     ];
 
     for (const key of V27_KEYS) {

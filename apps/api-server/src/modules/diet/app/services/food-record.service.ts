@@ -129,8 +129,7 @@ export class FoodRecordService {
 
     const data: any = {};
     if (dto.foods !== undefined) data.foods = dto.foods;
-    if (dto.totalCalories !== undefined)
-      data.totalCalories = dto.totalCalories;
+    if (dto.totalCalories !== undefined) data.totalCalories = dto.totalCalories;
     if (dto.mealType !== undefined) data.mealType = dto.mealType as any;
     if (dto.advice !== undefined) data.advice = dto.advice;
     if (dto.isHealthy !== undefined) data.isHealthy = dto.isHealthy;

@@ -37,6 +37,16 @@
       "@scripts/*": ["./src/scripts/*"]
     }
   },
-  "include": ["src/**/*", "test/v2.4-integration.spec.ts", "test/v2.4-integration.test.ts", "test/v2.6-integration.spec.ts", "test/v2.7-integration.spec.ts", "test/v2.8-integration.spec.ts", "test/v2.9-integration.spec.ts", "test/v3.0-integration.spec.ts", "test/v3.2-phase1.spec.ts"],
+  "include": [
+    "src/**/*",
+    "test/v2.4-integration.spec.ts",
+    "test/v2.4-integration.test.ts",
+    "test/v2.6-integration.spec.ts",
+    "test/v2.7-integration.spec.ts",
+    "test/v2.8-integration.spec.ts",
+    "test/v2.9-integration.spec.ts",
+    "test/v3.0-integration.spec.ts",
+    "test/v3.2-phase1.spec.ts"
+  ],
   "exclude": ["node_modules", "dist", "test", "**/*spec.ts"]
 }

@@ -40,16 +40,34 @@ const DRY_RUN = process.env.DRY_RUN !== 'false';
 type FoodForm = 'ingredient' | 'dish' | 'semi_prepared';
 
 /** 直接食用型分类（不需要烹饪，直接吃就是成品） */
-const READY_TO_EAT_CATEGORIES = new Set(['水果', 'fruit', '饮品', 'beverage', '乳制品', 'dairy', '调味料', 'condiment', '零食', 'snack']);
+const READY_TO_EAT_CATEGORIES = new Set([
+  '水果',
+  'fruit',
+  '饮品',
+  'beverage',
+  '乳制品',
+  'dairy',
+  '调味料',
+  'condiment',
+  '零食',
+  'snack',
+]);
 
 /** 明确是成品餐食的分类（注意：composite 是混合/杂项分类，包含坚果/药食材等原料，不在此列） */
-const DISH_CATEGORIES = new Set(['汤类', 'composite_soup', '快餐', 'fast_food']);
+const DISH_CATEGORIES = new Set([
+  '汤类',
+  'composite_soup',
+  '快餐',
+  'fast_food',
+]);
 
 /** 烹饪动词正则：包含这些词的食物名称通常是成品 */
-const COOKING_VERB_RE = /炒|烤|蒸|煮|炸|拌|烧|炖|煎|卤|烩|熏|酱|焖|涮|爆|扒|溜|氽|汆/;
+const COOKING_VERB_RE =
+  /炒|烤|蒸|煮|炸|拌|烧|炖|煎|卤|烩|熏|酱|焖|涮|爆|扒|溜|氽|汆/;
 
 /** 主食成品词：主食中含这些词的是半成品（已烹饪但作为主食搭配） */
-const STAPLE_COOKED_RE = /饭|粥|面|饼|包|卷|糕|粉|线|条|馒|花卷|烧卖|粽|包子|馄饨|饺|煎饼|油条|烧饼|馕|贝果/;
+const STAPLE_COOKED_RE =
+  /饭|粥|面|饼|包|卷|糕|粉|线|条|馒|花卷|烧卖|粽|包子|馄饨|饺|煎饼|油条|烧饼|馕|贝果/;
 
 /**
  * 根据食物现有字段推断 food_form
@@ -88,7 +106,10 @@ function inferFoodForm(food: {
 
   // R5: 加工程度 >= 3（加工食品/超加工）
   if (food.processingLevel != null && food.processingLevel >= 3) {
-    return { form: 'dish', rule: 'R5:processingLevel>=' + food.processingLevel };
+    return {
+      form: 'dish',
+      rule: 'R5:processingLevel>=' + food.processingLevel,
+    };
   }
 
   // R6: isProcessed 标记
@@ -115,11 +136,15 @@ function inferFoodForm(food: {
 
 async function main() {
   console.log('\n=== V8.8 food_form 规则推断修复脚本 ===');
-  console.log(`模式: ${DRY_RUN ? '试运行（DRY RUN，不修改数据）' : '实际修改'}`);
+  console.log(
+    `模式: ${DRY_RUN ? '试运行（DRY RUN，不修改数据）' : '实际修改'}`,
+  );
   console.log(`开始时间: ${new Date().toISOString()}\n`);
 
   // 1. 全库 food_form 当前分布
-  const before = await prisma.$queryRaw<{ food_form: string | null; cnt: bigint }[]>(
+  const before = await prisma.$queryRaw<
+    { food_form: string | null; cnt: bigint }[]
+  >(
     Prisma.sql`SELECT food_form, COUNT(*) AS cnt FROM foods GROUP BY food_form ORDER BY cnt DESC`,
   );
   console.log('修复前 food_form 分布：');
@@ -129,18 +154,20 @@ async function main() {
 
   // 2. 查询需要修复的食物
   //    条件：food_form 非 manual/ai_enrichment 来源（即未被人工或 AI 正确设置过）
-  const candidates = await prisma.$queryRaw<{
-    id: string;
-    name: string;
-    category: string;
-    food_form: string | null;
-    dish_type: string | null;
-    cooking_methods: string[];
-    processing_level: number;
-    is_processed: boolean;
-    field_sources: any;
-    enrichment_status: string | null;
-  }[]>(
+  const candidates = await prisma.$queryRaw<
+    {
+      id: string;
+      name: string;
+      category: string;
+      food_form: string | null;
+      dish_type: string | null;
+      cooking_methods: string[];
+      processing_level: number;
+      is_processed: boolean;
+      field_sources: any;
+      enrichment_status: string | null;
+    }[]
+  >(
     Prisma.sql`
       SELECT
         id, name, category, food_form, dish_type,
@@ -211,13 +238,17 @@ async function main() {
     console.log(`  ${form}: ${cnt}`);
   }
   console.log(`\n命中规则分布：`);
-  for (const [rule, cnt] of Object.entries(ruleStats).sort((a, b) => b[1] - a[1])) {
+  for (const [rule, cnt] of Object.entries(ruleStats).sort(
+    (a, b) => b[1] - a[1],
+  )) {
     console.log(`  ${rule}: ${cnt}`);
   }
 
   console.log(`\n变更样本（前 30 条）：`);
   for (const r of changed.slice(0, 30)) {
-    console.log(`  [${r.category}] ${r.name}: ${r.oldForm ?? 'NULL'} → ${r.newForm}  (${r.rule})`);
+    console.log(
+      `  [${r.category}] ${r.name}: ${r.oldForm ?? 'NULL'} → ${r.newForm}  (${r.rule})`,
+    );
   }
   if (changed.length > 30) {
     console.log(`  ... 以及另外 ${changed.length - 30} 条`);
@@ -242,7 +273,8 @@ async function main() {
         select: { fieldSources: true },
       });
       const updatedSources = {
-        ...(typeof current?.fieldSources === 'object' && current.fieldSources !== null
+        ...(typeof current?.fieldSources === 'object' &&
+        current.fieldSources !== null
           ? (current.fieldSources as Record<string, unknown>)
           : {}),
         food_form: 'rule_inferred',
@@ -265,7 +297,9 @@ async function main() {
   console.log(`\n✅ 写入完成：${fixed} 条成功，${errors} 条失败`);
 
   // 6. 修复后统计
-  const after = await prisma.$queryRaw<{ food_form: string | null; cnt: bigint }[]>(
+  const after = await prisma.$queryRaw<
+    { food_form: string | null; cnt: bigint }[]
+  >(
     Prisma.sql`SELECT food_form, COUNT(*) AS cnt FROM foods GROUP BY food_form ORDER BY cnt DESC`,
   );
   console.log('\n修复后 food_form 分布（全库）：');
@@ -274,7 +308,9 @@ async function main() {
   }
 
   console.log(`\n结束时间: ${new Date().toISOString()}`);
-  console.log('数据已修复，field_sources->food_form 标记为 "rule_inferred"，后续 AI 补全不会覆盖此来源。');
+  console.log(
+    '数据已修复，field_sources->food_form 标记为 "rule_inferred"，后续 AI 补全不会覆盖此来源。',
+  );
 }
 
 main()

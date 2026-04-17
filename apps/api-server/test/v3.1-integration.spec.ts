@@ -60,7 +60,9 @@ describe('V3.1 Phase 1 — PromptDepthLevel 类型推导', () => {
 // ─── 2. DynamicSignalWeightService ───────────────────────────────────────────
 
 describe('V3.1 Phase 1 — DynamicSignalWeightService', () => {
-  const { DynamicSignalWeightService } = require('../src/modules/decision/config/dynamic-signal-weight.service');
+  const {
+    DynamicSignalWeightService,
+  } = require('../src/modules/decision/config/dynamic-signal-weight.service');
   const svc = new DynamicSignalWeightService();
 
   const baseWeights = {
@@ -72,18 +74,30 @@ describe('V3.1 Phase 1 — DynamicSignalWeightService', () => {
   };
 
   it('should boost protein_gap × 1.4 when protein deficit', () => {
-    const result = svc.adjustWeights(baseWeights, { protein: 'deficit' }, 'health');
+    const result = svc.adjustWeights(
+      baseWeights,
+      { protein: 'deficit' },
+      'health',
+    );
     expect(result.protein_gap).toBeCloseTo(14, 1);
   });
 
   it('should stack protein_gap boost × 1.68 for muscle_gain + protein deficit', () => {
-    const result = svc.adjustWeights(baseWeights, { protein: 'deficit' }, 'muscle_gain');
+    const result = svc.adjustWeights(
+      baseWeights,
+      { protein: 'deficit' },
+      'muscle_gain',
+    );
     // 10 * 1.4 * 1.2 = 16.8, rounded = 17
     expect(result.protein_gap).toBe(17);
   });
 
   it('should boost over_limit × 1.3 when calorie excess', () => {
-    const result = svc.adjustWeights(baseWeights, { calories: 'excess' }, 'health');
+    const result = svc.adjustWeights(
+      baseWeights,
+      { calories: 'excess' },
+      'health',
+    );
     expect(result.over_limit).toBeCloseTo(13, 1);
   });
 
@@ -93,18 +107,30 @@ describe('V3.1 Phase 1 — DynamicSignalWeightService', () => {
   });
 
   it('should boost carb_excess × 1.15 when carb excess', () => {
-    const result = svc.adjustWeights(baseWeights, { carbs: 'excess' }, 'health');
+    const result = svc.adjustWeights(
+      baseWeights,
+      { carbs: 'excess' },
+      'health',
+    );
     // 10 * 1.15 = 11.5, rounded = 12
     expect(result.carb_excess).toBe(12);
   });
 
   it('should boost under_target × 1.2 for muscle_gain when calorie deficit', () => {
-    const result = svc.adjustWeights(baseWeights, { calories: 'deficit' }, 'muscle_gain');
+    const result = svc.adjustWeights(
+      baseWeights,
+      { calories: 'deficit' },
+      'muscle_gain',
+    );
     expect(result.under_target).toBeCloseTo(12, 1);
   });
 
   it('should not apply under_target boost for weight_loss goal', () => {
-    const result = svc.adjustWeights(baseWeights, { calories: 'deficit' }, 'weight_loss');
+    const result = svc.adjustWeights(
+      baseWeights,
+      { calories: 'deficit' },
+      'weight_loss',
+    );
     expect(result.under_target).toBeCloseTo(10, 1);
   });
 
@@ -115,11 +141,15 @@ describe('V3.1 Phase 1 — DynamicSignalWeightService', () => {
   });
 
   it('should apply multiple boosts simultaneously', () => {
-    const result = svc.adjustWeights(baseWeights, {
-      protein: 'deficit',
-      calories: 'excess',
-      fat: 'excess',
-    }, 'health');
+    const result = svc.adjustWeights(
+      baseWeights,
+      {
+        protein: 'deficit',
+        calories: 'excess',
+        fat: 'excess',
+      },
+      'health',
+    );
     expect(result.protein_gap).toBeCloseTo(14, 1);
     expect(result.over_limit).toBeCloseTo(13, 1);
     expect(result.fat_excess).toBeCloseTo(12, 1);
@@ -129,7 +159,9 @@ describe('V3.1 Phase 1 — DynamicSignalWeightService', () => {
 // ─── 3. DailyMacroSummaryService ─────────────────────────────────────────────
 
 describe('V3.1 Phase 2 — DailyMacroSummaryService', () => {
-  const { DailyMacroSummaryService } = require('../src/modules/decision/decision/daily-macro-summary.service');
+  const {
+    DailyMacroSummaryService,
+  } = require('../src/modules/decision/decision/daily-macro-summary.service');
   const svc = new DailyMacroSummaryService();
 
   const baseCtx = {
@@ -191,7 +223,9 @@ describe('V3.1 Phase 2 — DailyMacroSummaryService', () => {
 // ─── 4. PostMealRecoveryService signalTrace 联动 ──────────────────────────────
 
 describe('V3.1 Phase 3 — PostMealRecovery signalTrace 联动', () => {
-  const { PostMealRecoveryService } = require('../src/modules/decision/decision/post-meal-recovery.service');
+  const {
+    PostMealRecoveryService,
+  } = require('../src/modules/decision/decision/post-meal-recovery.service');
   const svc = new PostMealRecoveryService();
 
   const macroProgress = {
@@ -208,7 +242,14 @@ describe('V3.1 Phase 3 — PostMealRecovery signalTrace 联动', () => {
       mode: 'post_eat',
       macroProgress,
       userContext,
-      signalTrace: [{ signal: 'protein_gap', priority: 9, source: 'macro_slot', description: '蛋白缺口' }],
+      signalTrace: [
+        {
+          signal: 'protein_gap',
+          priority: 9,
+          source: 'macro_slot',
+          description: '蛋白缺口',
+        },
+      ],
     });
     expect(result?.nextMealDirection).toContain('蛋白质');
   });
@@ -216,9 +257,19 @@ describe('V3.1 Phase 3 — PostMealRecovery signalTrace 联动', () => {
   it('should use fat_excess signal for next meal direction', () => {
     const result = svc.build({
       mode: 'post_eat',
-      macroProgress: { ...macroProgress, fat: { consumed: 70, target: 60, percent: 117 } },
+      macroProgress: {
+        ...macroProgress,
+        fat: { consumed: 70, target: 60, percent: 117 },
+      },
       userContext,
-      signalTrace: [{ signal: 'fat_excess', priority: 8, source: 'macro_slot', description: '脂肪超标' }],
+      signalTrace: [
+        {
+          signal: 'fat_excess',
+          priority: 8,
+          source: 'macro_slot',
+          description: '脂肪超标',
+        },
+      ],
     });
     expect(result?.nextMealDirection).toContain('油脂');
   });
@@ -226,9 +277,19 @@ describe('V3.1 Phase 3 — PostMealRecovery signalTrace 联动', () => {
   it('should use carb_excess signal for next meal direction', () => {
     const result = svc.build({
       mode: 'post_eat',
-      macroProgress: { ...macroProgress, carbs: { consumed: 250, target: 200, percent: 125 } },
+      macroProgress: {
+        ...macroProgress,
+        carbs: { consumed: 250, target: 200, percent: 125 },
+      },
       userContext,
-      signalTrace: [{ signal: 'carb_excess', priority: 7, source: 'macro_slot', description: '碳水超标' }],
+      signalTrace: [
+        {
+          signal: 'carb_excess',
+          priority: 7,
+          source: 'macro_slot',
+          description: '碳水超标',
+        },
+      ],
     });
     expect(result?.nextMealDirection).toContain('主食');
   });

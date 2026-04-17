@@ -481,7 +481,9 @@ const Dashboard: React.FC = () => {
                     <FileTextOutlined style={{ color: '#52c41a' }} />
                     <Text>文本</Text>
                     <Text strong>{byInputType?.text}</Text>
-                    <Text type="secondary">({((byInputType?.text / total) * 100).toFixed(0)}%)</Text>
+                    <Text type="secondary">
+                      ({((byInputType?.text / total) * 100).toFixed(0)}%)
+                    </Text>
                   </Space>
                 </div>
               </Space>
@@ -671,16 +673,20 @@ const Dashboard: React.FC = () => {
     if (!subOverview) return null;
     const { byTier, byChannel } = subOverview;
 
-    const tierData = byTier ? Object.entries(byTier).map(([tier, count]) => ({
-      tier,
-      label: TIER_LABELS[tier] ?? tier,
-      count,
-    })) : [];
+    const tierData = byTier
+      ? Object.entries(byTier).map(([tier, count]) => ({
+          tier,
+          label: TIER_LABELS[tier] ?? tier,
+          count,
+        }))
+      : [];
 
-    const channelData = byChannel ? Object.entries(byChannel).map(([channel, count]) => ({
-      channel,
-      count,
-    })) : [];
+    const channelData = byChannel
+      ? Object.entries(byChannel).map(([channel, count]) => ({
+          channel,
+          count,
+        }))
+      : [];
 
     return (
       <Row gutter={[16, 16]}>

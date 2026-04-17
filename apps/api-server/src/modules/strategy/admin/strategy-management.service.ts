@@ -126,9 +126,7 @@ export class StrategyManagementService {
     // V7.9 P2-11: 如果 config 发生变更，记录 diff 到 strategy_tuning_log
     if (dto.config !== undefined) {
       this.recordConfigDiff(oldStrategy, updated).catch((err) => {
-        this.logger.error(
-          `记录策略变更 diff 失败: ${(err as Error).message}`,
-        );
+        this.logger.error(`记录策略变更 diff 失败: ${(err as Error).message}`);
       });
     }
 
@@ -449,10 +447,7 @@ export class StrategyManagementService {
    * 模拟实际上使用用户当前已分配的策略，而非强制使用指定策略。
    * 未来可通过 context override 支持真正的策略模拟。
    */
-  async simulateStrategy(
-    strategyId: string,
-    dto: StrategySimulateDto,
-  ) {
+  async simulateStrategy(strategyId: string, dto: StrategySimulateDto) {
     const strategy = await this.prisma.strategy.findUnique({
       where: { id: strategyId },
     });
@@ -470,7 +465,8 @@ export class StrategyManagementService {
       mealType,
       goalType: dto.goalType || null,
       userIds,
-      note: '策略模拟端点已就绪。当前返回策略配置快照供参考，' +
+      note:
+        '策略模拟端点已就绪。当前返回策略配置快照供参考，' +
         '完整的逐用户模拟推荐请使用推荐调试模块的 POST /admin/recommendation-debug/simulate 端点。',
     };
   }
@@ -521,8 +517,7 @@ export class StrategyManagementService {
     for (const dim of STRATEGY_DIMENSIONS) {
       const valA = configA[dim] ?? null;
       const valB = configB[dim] ?? null;
-      const isDifferent =
-        JSON.stringify(valA) !== JSON.stringify(valB);
+      const isDifferent = JSON.stringify(valA) !== JSON.stringify(valB);
       dimensionDiffs.push({
         dimension: dim,
         inA: valA,
@@ -666,8 +661,15 @@ export class StrategyManagementService {
     const newConfig = (newStrategy.config as Record<string, any>) || {};
 
     const STRATEGY_DIMENSIONS = [
-      'rank', 'recall', 'boost', 'meal', 'multiObjective',
-      'exploration', 'assembly', 'explain', 'realism',
+      'rank',
+      'recall',
+      'boost',
+      'meal',
+      'multiObjective',
+      'exploration',
+      'assembly',
+      'explain',
+      'realism',
     ];
 
     const diffs: Array<{ dimension: string; before: any; after: any }> = [];

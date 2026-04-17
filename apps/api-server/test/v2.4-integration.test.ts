@@ -1,6 +1,6 @@
 /**
  * V2.4 Complete Integration Test
- * 
+ *
  * Demonstrates all 3 phases working together end-to-end:
  * Phase 1 (Scoring) → Phase 2 (Feedback) → Phase 3 (I18n & Admin)
  */
@@ -70,17 +70,17 @@ describe('V2.4 Complete System Integration', () => {
 
     // Phase 2: I18n Service
     i18nService = {
-        translate: (key: string, language: string) => `[${language}] ${key}`,
-        translateBatch: (keys: string[], language: string) => {
-          const result: Record<string, string> = {};
-        keys.forEach(k => (result[k] = `[${language}] ${k}`));
+      translate: (key: string, language: string) => `[${language}] ${key}`,
+      translateBatch: (keys: string[], language: string) => {
+        const result: Record<string, string> = {};
+        keys.forEach((k) => (result[k] = `[${language}] ${k}`));
         return result;
       },
     };
 
     // Phase 3: Extended I18n Management
     i18nManagementService = {
-        translate: (key: string, language: string, variables?: any) => {
+      translate: (key: string, language: string, variables?: any) => {
         let text = `[${language}] ${key}`;
         if (variables) {
           Object.entries(variables).forEach(([k, v]) => {
@@ -186,7 +186,7 @@ describe('V2.4 Complete System Integration', () => {
     it('should provide admin quality dashboard data', () => {
       const metrics = feedbackService.getQualityMetrics();
       const suggestions = feedbackService.suggestPolicyChanges();
-      
+
       // Simulate admin dashboard aggregation
       const dashboard = {
         acceptanceRate: metrics.acceptanceRate,
@@ -254,7 +254,11 @@ describe('V2.4 Complete System Integration', () => {
 
     it('should handle multilingual workflow', () => {
       const languages = ['zh', 'en', 'ja', 'ko'];
-      const results: Array<{ language: string; text: string; decision: string }> = [];
+      const results: Array<{
+        language: string;
+        text: string;
+        decision: string;
+      }> = [];
 
       languages.forEach((lang) => {
         const score = scoringService.scoreNutrition(
