@@ -1,6 +1,7 @@
 'use client';
 
 import type { DailySummary } from '@/types/food';
+import type { NutritionScoreResult } from '@/types/food';
 import type { UserProfile } from '@/types/user';
 
 function getScoreLabel(score: number) {
@@ -134,14 +135,20 @@ function buildMetrics(summary: DailySummary, goal: string) {
 interface TodayStatusProps {
   summary: DailySummary;
   profile: UserProfile | null;
+  scoreData?: NutritionScoreResult | null;
 }
 
-export function TodayStatus({ summary, profile }: TodayStatusProps) {
+export function TodayStatus({ summary, profile, scoreData }: TodayStatusProps) {
   const calorieGoal = summary.calorieGoal || 2000;
   const remaining = calorieGoal - summary.totalCalories;
-  const caloriePercent = Math.min(100, Math.round((summary.totalCalories / calorieGoal) * 100));
+  const caloriePercentRaw = Math.round((summary.totalCalories / calorieGoal) * 100);
+  const caloriePercent = Math.min(100, Math.max(0, caloriePercentRaw));
   const goalType = profile?.goal || 'health';
-  const score = summary.nutritionScore || 0;
+  // 首页分数统一以 nutrition-score 接口为准，避免 summary 的异步汇总滞后。
+  const score =
+    scoreData?.totalScore != null
+      ? Number(scoreData.totalScore)
+      : Number(summary.nutritionScore || 0);
   const scoreInfo = getScoreLabel(score);
   const metrics = buildMetrics(summary, goalType);
   const goalTitleMap: Record<string, string> = {
@@ -177,12 +184,13 @@ export function TodayStatus({ summary, profile }: TodayStatusProps) {
             / {calorieGoal.toLocaleString()} kcal
           </span>
         </div>
+        <p className="mt-1 text-[11px] font-medium text-muted-foreground">剩余热量预算</p>
         <div className="mt-4 h-2.5 w-full bg-muted rounded-full overflow-hidden">
           <div
             className={`h-full rounded-full transition-all duration-500 ${
-              caloriePercent > 100
+              caloriePercentRaw > 100
                 ? 'bg-red-500'
-                : caloriePercent > 80
+                : caloriePercentRaw > 80
                   ? 'bg-orange-500'
                   : 'bg-primary'
             }`}

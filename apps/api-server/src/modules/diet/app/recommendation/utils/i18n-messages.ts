@@ -537,6 +537,9 @@ const zhCN: Record<string, string> = {
   'nutrition.highlight.fiberGood': '✅ 膳食纤维达标',
   'nutrition.highlight.sodiumHigh': '⚠️ 钠超标 {{percent}}%',
   'nutrition.highlight.sodiumGood': '✅ 钠达标',
+  'nutrition.highlight.noIntake': '📝 今日尚未记录饮食',
+  'nutrition.highlight.qualityLow': '⚠️ 食物质量偏低 {{percent}}%',
+  'nutrition.highlight.satietyLow': '⚠️ 饱腹感不足 {{percent}}%',
 
   // ── nutrition.feedback: 营养评分反馈 ──
   'nutrition.feedback.allGood': '今日饮食各项达标，继续保持！',
@@ -1492,7 +1495,9 @@ const enUS: Record<string, string> = {
   'nutrition.highlight.fiberGood': '✅ Fiber on target',
   'nutrition.highlight.sodiumHigh': '⚠️ Sodium over by {{percent}}%',
   'nutrition.highlight.sodiumGood': '✅ Sodium on target',
-
+  'nutrition.highlight.noIntake': '📝 No meals recorded today',
+  'nutrition.highlight.qualityLow': '⚠️ Food quality low by {{percent}}%',
+  'nutrition.highlight.satietyLow': '⚠️ Satiety low by {{percent}}%',
   // ── nutrition.feedback ──
   'nutrition.feedback.allGood': 'All nutrition targets met today, keep it up!',
   'nutrition.feedback.caloriesTip':
@@ -2257,6 +2262,9 @@ const jaJP: Record<string, string> = {
   'nutrition.highlight.fiberGood': '✅ 食物繊維達成',
   'nutrition.highlight.sodiumHigh': '⚠️ ナトリウム {{percent}}% 超過',
   'nutrition.highlight.sodiumGood': '✅ ナトリウム達成',
+  'nutrition.highlight.noIntake': '📝 本日の食事記録なし',
+  'nutrition.highlight.qualityLow': '⚠️ 食事の質が低い {{percent}}%',
+  'nutrition.highlight.satietyLow': '⚠️ 満腹感不足 {{percent}}%',
 
   // ── nutrition.feedback ──
   'nutrition.feedback.allGood': '本日の食事は全項目達成、この調子で！',

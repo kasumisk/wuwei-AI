@@ -282,11 +282,29 @@ export class FoodService {
               totalCalories?: number;
               tip?: string;
             };
+            const scenarioCalories = r.totalCalories || 0;
+            // #fix R3-04: 场景推荐热量低于单餐推荐热量50%时追加热量偏低提示
+            // 预计算路径下 budget 变量不可用，从 mainRec.totalCalories 估算单餐基准
+            // 注意：meal-assembler 可能已在 r.tip 中添加了 caloriesUnder，避免重复追加
+            const scenarioMealBudget = mainRec.totalCalories || 0;
+            let scenarioTip = r.tip || '';
+            if (
+              scenarioMealBudget > 0 &&
+              scenarioCalories > 0 &&
+              scenarioCalories < scenarioMealBudget * 0.5
+            ) {
+              const underTip = t('tip.caloriesUnder');
+              if (!scenarioTip.includes(underTip)) {
+                scenarioTip = scenarioTip
+                  ? `${scenarioTip}；${underTip}`
+                  : underTip;
+              }
+            }
             return {
               scenario: scenarioLabels[key] || key,
               foods: r.displayText || '',
-              calories: r.totalCalories || 0,
-              tip: r.tip || '',
+              calories: scenarioCalories,
+              tip: scenarioTip,
             };
           })
         : undefined;
@@ -407,11 +425,26 @@ export class FoodService {
         convenience: t('scenario.convenience'),
         homeCook: t('scenario.homeCook'),
       };
+      const scenarioCalories = rec.totalCalories || 0;
+      // #fix R3-04: 场景推荐热量低于单餐预算50%时追加热量偏低提示
+      // 用 budget.calories 作为本餐预算基准
+      // 注意：meal-assembler 可能已在 rec.tip 中添加了 caloriesUnder，避免重复追加
+      let scenarioTip = rec.tip || '';
+      if (
+        budget.calories > 0 &&
+        scenarioCalories > 0 &&
+        scenarioCalories < budget.calories * 0.5
+      ) {
+        const underTip = t('tip.caloriesUnder');
+        if (!scenarioTip.includes(underTip)) {
+          scenarioTip = scenarioTip ? `${scenarioTip}；${underTip}` : underTip;
+        }
+      }
       return {
         scenario: scenarioLabels[key] || key,
         foods: rec.displayText,
-        calories: rec.totalCalories,
-        tip: rec.tip,
+        calories: scenarioCalories,
+        tip: scenarioTip,
       };
     });
 

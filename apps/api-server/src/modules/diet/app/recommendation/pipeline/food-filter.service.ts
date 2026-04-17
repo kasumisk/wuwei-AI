@@ -61,17 +61,26 @@ export class FoodFilterService {
       }
 
       // 3d. #fix Bug18: 钠含量硬过滤（low_sodium / hypertension）
-      if (constraint.maxSodium != null && (Number(food.sodium) || 0) > constraint.maxSodium) {
+      if (
+        constraint.maxSodium != null &&
+        (Number(food.sodium) || 0) > constraint.maxSodium
+      ) {
         return false;
       }
 
       // 3e. #fix Bug19: 嘌呤硬过滤（gout）
-      if (constraint.maxPurine != null && (Number(food.purine) || 0) > constraint.maxPurine) {
+      if (
+        constraint.maxPurine != null &&
+        (Number(food.purine) || 0) > constraint.maxPurine
+      ) {
         return false;
       }
 
       // 3f. #fix Bug31: 脂肪硬过滤（low_fat 饮食限制）
-      if (constraint.maxFat != null && (Number(food.fat) || 0) > constraint.maxFat) {
+      if (
+        constraint.maxFat != null &&
+        (Number(food.fat) || 0) > constraint.maxFat
+      ) {
         return false;
       }
 
@@ -281,8 +290,12 @@ export class FoodFilterService {
         if (FoodFilterService.SEAFOOD_MAIN_INGREDIENTS.has(mi)) return true;
         // #fix Bug15: 中国市场素食排除蛋类
         if (fg === 'egg') return true;
-        if (mi === 'egg' || mi === 'chicken egg' || mi === 'duck egg') return true;
-        if (cat === 'protein' && !FoodFilterService.NON_MEAT_FOOD_GROUPS.has(fg)) {
+        if (mi === 'egg' || mi === 'chicken egg' || mi === 'duck egg')
+          return true;
+        if (
+          cat === 'protein' &&
+          !FoodFilterService.NON_MEAT_FOOD_GROUPS.has(fg)
+        ) {
           // protein 类别中，只允许白名单内的 foodGroup（如 legume/dairy/tofu）
           return true;
         }
@@ -293,11 +306,29 @@ export class FoodFilterService {
         if (FoodFilterService.MEAT_MAIN_INGREDIENTS.has(mi)) return true;
         if (FoodFilterService.SEAFOOD_MAIN_INGREDIENTS.has(mi)) return true;
         if (fg === 'dairy' || fg === 'egg') return true;
-        if (mi === 'milk' || mi === 'egg' || mi === 'cheese' || mi === 'yogurt') return true;
+        if (mi === 'milk' || mi === 'egg' || mi === 'cheese' || mi === 'yogurt')
+          return true;
       } else if (r === 'pescatarian') {
         // 允许鱼/海鲜，排除其他肉类
         if (FoodFilterService.MEAT_FOOD_GROUPS.has(fg)) return true;
         if (FoodFilterService.MEAT_MAIN_INGREDIENTS.has(mi)) return true;
+      } else if (r === 'lactose_free') {
+        // #fix Bug32: 乳糖不耐受 — 排除含乳制品食物（通过 allergens 字段）
+        const foodAllergens: string[] = (food as any).allergens || [];
+        if (
+          foodAllergens.some(
+            (a: string) => a === 'dairy' || a === 'milk' || a === 'lactose',
+          )
+        )
+          return true;
+        if (fg === 'dairy') return true;
+        if (
+          mi === 'milk' ||
+          mi === 'cheese' ||
+          mi === 'yogurt' ||
+          mi === 'cream'
+        )
+          return true;
       }
     }
     return false;
@@ -307,24 +338,70 @@ export class FoodFilterService {
 // ==================== 独立导出：供 pipeline-builder 召回阶段复用 ====================
 
 const MEAT_FG = new Set([
-  'pork', 'beef', 'chicken', 'poultry', 'lamb', 'duck', 'goose',
-  'game', 'organ', 'meat', 'processed_meat',
+  'pork',
+  'beef',
+  'chicken',
+  'poultry',
+  'lamb',
+  'duck',
+  'goose',
+  'game',
+  'organ',
+  'meat',
+  'processed_meat',
 ]);
 const SEAFOOD_FG = new Set(['seafood', 'fish', 'shellfish', 'shrimp', 'crab']);
 const MEAT_MI = new Set([
-  'pork', 'beef', 'chicken', 'lamb', 'duck', 'goose', 'turkey',
-  'organ meat', 'bacon', 'sausage', 'ham',
+  'pork',
+  'beef',
+  'chicken',
+  'lamb',
+  'duck',
+  'goose',
+  'turkey',
+  'organ meat',
+  'bacon',
+  'sausage',
+  'ham',
 ]);
 const SEAFOOD_MI = new Set([
-  'fish', 'shrimp', 'crab', 'lobster', 'squid', 'octopus',
-  'clam', 'mussel', 'oyster', 'scallop', 'abalone', 'sea cucumber',
+  'fish',
+  'shrimp',
+  'crab',
+  'lobster',
+  'squid',
+  'octopus',
+  'clam',
+  'mussel',
+  'oyster',
+  'scallop',
+  'abalone',
+  'sea cucumber',
 ]);
 const NON_MEAT_FG = new Set([
-  'vegetable', 'fruit', 'grain', 'legume', 'nut', 'seed', 'tuber',
-  'mushroom', 'oil', 'condiment', 'seasoning', 'spice', 'herb',
-  'cereal', 'dairy', 'beverage', 'tea', 'coffee', 'juice',
+  'vegetable',
+  'fruit',
+  'grain',
+  'legume',
+  'nut',
+  'seed',
+  'tuber',
+  'mushroom',
+  'oil',
+  'condiment',
+  'seasoning',
+  'spice',
+  'herb',
+  'cereal',
+  'dairy',
+  'beverage',
+  'tea',
+  'coffee',
+  'juice',
   // #fix Bug15: 中国市场素食（vegetarian）不含蛋，移除 'egg'
-  'water', 'soy', 'tofu',
+  'water',
+  'soy',
+  'tofu',
 ]);
 
 /**
@@ -346,15 +423,29 @@ export function foodViolatesDietaryRestriction(
       if (MEAT_MI.has(mi) || SEAFOOD_MI.has(mi)) return true;
       // #fix Bug15: 中国市场素食排除蛋类
       if (fg === 'egg') return true;
-      if (mi === 'egg' || mi === 'chicken egg' || mi === 'duck egg') return true;
+      if (mi === 'egg' || mi === 'chicken egg' || mi === 'duck egg')
+        return true;
       if (cat === 'protein' && !NON_MEAT_FG.has(fg)) return true;
     } else if (r === 'vegan') {
       if (MEAT_FG.has(fg) || SEAFOOD_FG.has(fg)) return true;
       if (MEAT_MI.has(mi) || SEAFOOD_MI.has(mi)) return true;
       if (fg === 'dairy' || fg === 'egg') return true;
-      if (mi === 'milk' || mi === 'egg' || mi === 'cheese' || mi === 'yogurt') return true;
+      if (mi === 'milk' || mi === 'egg' || mi === 'cheese' || mi === 'yogurt')
+        return true;
     } else if (r === 'pescatarian') {
       if (MEAT_FG.has(fg) || MEAT_MI.has(mi)) return true;
+    } else if (r === 'lactose_free') {
+      // #fix Bug32: 乳糖不耐受 — 排除含乳制品食物
+      const foodAllergens: string[] = food.allergens || [];
+      if (
+        foodAllergens.some(
+          (a) => a === 'dairy' || a === 'milk' || a === 'lactose',
+        )
+      )
+        return true;
+      if (fg === 'dairy') return true;
+      if (mi === 'milk' || mi === 'cheese' || mi === 'yogurt' || mi === 'cream')
+        return true;
     }
   }
   return false;

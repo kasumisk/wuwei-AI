@@ -298,7 +298,12 @@ export class NutritionScoreService {
     const mealTypeSet = new Set<string>();
 
     for (const r of records) {
-      if (r.isHealthy === true) healthyCount++;
+      // isHealthy 可能为 null（旧数据未回填），用 decision=SAFE 推断
+      if (
+        r.isHealthy === true ||
+        (r.isHealthy == null && (r.decision || '').toUpperCase() === 'SAFE')
+      )
+        healthyCount++;
       if (r.nutritionScore != null && r.nutritionScore > 0) {
         scoreSum += r.nutritionScore;
         scoreCount++;
@@ -618,13 +623,32 @@ export class NutritionScoreService {
     const sigma = effectiveTarget * (sigmaRatio[goal || 'health'] || 0.15);
     // V1.3: sigma 最小值保护，避免 effectiveTarget 过小时 sigma→0 导致极端评分
     const safeSigma = Math.max(sigma, target * 0.05);
+
+    // V1.4 FIX: 时间感知"超前进食"区间修正
+    // 当 actual > effectiveTarget 但 actual ≤ target（全天目标）时，
+    // 用户只是吃得比"当前时刻预期"多，全天仍在预算内 —— 不应被 Gaussian 惩罚。
+    if (localHour != null && actual > effectiveTarget && actual <= target) {
+      // 给一个合理的中等偏好分；减脂用户稍谨慎（控制热量节奏）
+      return this.clamp(goal === 'fat_loss' ? 72 : 80);
+    }
+
+    // actual > target（超出全天预算）：以全天目标为中心做 Gaussian 惩罚
+    if (actual > target) {
+      const overSigma = Math.max(
+        target * (sigmaRatio[goal || 'health'] || 0.15),
+        target * 0.05,
+      );
+      const diffOver = actual - target;
+      let s =
+        100 * Math.exp(-(diffOver * diffOver) / (2 * overSigma * overSigma));
+      if (goal === 'fat_loss') s *= 0.85; // 减脂超标额外惩罚
+      return this.clamp(s);
+    }
+
     const diff = actual - effectiveTarget;
     let score = 100 * Math.exp(-(diff * diff) / (2 * safeSigma * safeSigma));
 
-    // 非对称惩罚
-    if (goal === 'fat_loss' && diff > 0) {
-      score *= 0.85;
-    }
+    // 非对称惩罚（actual < effectiveTarget 时）
     if (goal === 'muscle_gain' && diff < 0) {
       score *= 0.9;
     }
@@ -640,7 +664,8 @@ export class NutritionScoreService {
     calories: number,
     goal: string,
   ): number {
-    if (calories <= 0) return 80;
+    // 零摄入时返回 0（无数据 = 无法评估，而非"良好"）
+    if (calories <= 0) return 0;
     const ratio = (protein * 4) / calories;
     const [min, max] = PROTEIN_RATIO_RANGES[goal] || [0.15, 0.25];
 
@@ -651,7 +676,8 @@ export class NutritionScoreService {
   }
 
   private calcMacroScore(carbs: number, fat: number, calories: number): number {
-    if (calories <= 0) return 80;
+    // 零摄入时返回 0（无数据 = 无法评估，而非"良好"）
+    if (calories <= 0) return 0;
     const carbRatio = (carbs * 4) / calories;
     const fatRatio = (fat * 9) / calories;
     return (
@@ -733,7 +759,9 @@ export class NutritionScoreService {
     }
 
     // 惩罚
-    if (input.calories > effectiveTarget * 1.3) {
+    // V1.4 FIX: 超标惩罚使用全天目标（不使用时间调整目标），
+    // 避免用户吃了合理早餐但超出"当前时刻预期热量"就被惩罚
+    if (input.calories > input.targetCalories * 1.3) {
       adjusted *= 0.7;
     }
     if (input.calories > 0 && (input.protein * 4) / input.calories < 0.1) {
@@ -756,57 +784,69 @@ export class NutritionScoreService {
     input: NutritionInput,
   ): string[] {
     const hl: string[] = [];
+    const pct = (value: number): string => String(Math.round(value));
+
+    // 零摄入时：不生成具体维度 highlights，只提示尚未记录
+    if (input.calories <= 0 && input.protein <= 0) {
+      hl.push(t('nutrition.highlight.noIntake') || '📝 今日尚未记录饮食');
+      return hl;
+    }
 
     if (input.calories > input.targetCalories * 1.3)
       hl.push(
         t('nutrition.highlight.caloriesOver', {
-          percent: String(
-            Math.round((input.calories / input.targetCalories - 1) * 100),
-          ),
+          percent: pct((input.calories / input.targetCalories - 1) * 100),
         }),
       );
     else if (scores.energy < 60)
       hl.push(
         t('nutrition.highlight.caloriesUnder', {
-          percent: String(100 - scores.energy),
+          // R4-03 FIX: 使用实际热量缺口百分比，而非 energy 分数倒推
+          percent: pct(
+            input.targetCalories > 0
+              ? Math.max(0, (1 - input.calories / input.targetCalories) * 100)
+              : Math.max(0, 100 - scores.energy),
+          ),
         }),
       );
 
     if (scores.proteinRatio < 50)
       hl.push(
         t('nutrition.highlight.proteinLow', {
-          percent: String(100 - scores.proteinRatio),
+          percent: pct(100 - scores.proteinRatio),
         }),
       );
     else if (scores.proteinRatio < 70)
       hl.push(
         t('nutrition.highlight.proteinLow', {
-          percent: String(100 - scores.proteinRatio),
+          percent: pct(100 - scores.proteinRatio),
         }),
       );
 
     if (scores.macroBalance < 50)
       hl.push(
         t('nutrition.highlight.carbsHigh', {
-          percent: String(100 - scores.macroBalance),
+          percent: pct(100 - scores.macroBalance),
         }),
       );
-    if (scores.foodQuality < 40)
+    // foodQuality → 应对应"食物质量"而非"脂肪超标"
+    if (scores.foodQuality < 40 && input.foodQuality > 0)
       hl.push(
-        t('nutrition.highlight.fatHigh', {
-          percent: String(100 - scores.foodQuality),
-        }),
+        t('nutrition.highlight.qualityLow', {
+          percent: pct(100 - scores.foodQuality),
+        }) || `⚠️ 食物质量偏低 ${pct(100 - scores.foodQuality)}%`,
       );
-    if (scores.satiety < 40)
+    // satiety → 应对应"饱腹感"而非"膳食纤维"
+    if (scores.satiety < 40 && input.satiety > 0)
       hl.push(
-        t('nutrition.highlight.fiberLow', {
-          percent: String(100 - scores.satiety),
-        }),
+        t('nutrition.highlight.satietyLow', {
+          percent: pct(100 - scores.satiety),
+        }) || `⚠️ 饱腹感不足 ${pct(100 - scores.satiety)}%`,
       );
     if (scores.glycemicImpact < 40)
       hl.push(
         t('nutrition.highlight.sodiumHigh', {
-          percent: String(100 - scores.glycemicImpact),
+          percent: pct(100 - scores.glycemicImpact),
         }),
       );
 
@@ -882,6 +922,12 @@ export class NutritionScoreService {
 
     // V1.3: 时间感知 — 早上不说"热量不足"
     const isEarlyDay = localHour != null && localHour < 14;
+    // 判断热量是超标还是不足（能量分低不代表热量不足，可能是超标）
+    const isCalorieExcess =
+      input.calories > 0 &&
+      input.targetCalories > 0 &&
+      input.calories > input.targetCalories * 1.1;
+    const hasNoIntake = input.calories <= 0;
 
     // 基础状态文案（三语）— V1.6: 改为结构化 segments
     if (locale === 'zh') {
@@ -890,6 +936,14 @@ export class NutritionScoreService {
           type: 'energy',
           text: '热量摄入适度，符合目标。',
           sentiment: 'positive',
+        });
+      else if (hasNoIntake && isEarlyDay) {
+        // 零摄入 + 早上：不生成能量段（还没开始吃）
+      } else if (isCalorieExcess)
+        segments.push({
+          type: 'energy',
+          text: `⚠️ 今日热量超标，已达目标的${Math.round((input.calories / input.targetCalories) * 100)}%，注意控制。`,
+          sentiment: 'warning',
         });
       else if (breakdown.energy < 40 && !isEarlyDay)
         segments.push({
@@ -909,7 +963,7 @@ export class NutritionScoreService {
           text: '饱腹感充分，选择恰当。',
           sentiment: 'positive',
         });
-      else if (breakdown.satiety < 40)
+      else if (breakdown.satiety < 40 && !hasNoIntake)
         segments.push({
           type: 'satiety',
           text: '⚠️ 饱腹感不足，可增加纤维和蛋白质。',
@@ -921,6 +975,14 @@ export class NutritionScoreService {
           type: 'energy',
           text: 'カロリー摂取は目標通りです。',
           sentiment: 'positive',
+        });
+      else if (hasNoIntake && isEarlyDay) {
+        // 零摄入 + 早上：不生成能量段
+      } else if (isCalorieExcess)
+        segments.push({
+          type: 'energy',
+          text: `⚠️ カロリー超過です。目標の${Math.round((input.calories / input.targetCalories) * 100)}%に達しています。`,
+          sentiment: 'warning',
         });
       else if (breakdown.energy < 40 && !isEarlyDay)
         segments.push({
@@ -940,7 +1002,7 @@ export class NutritionScoreService {
           text: '満腹感は十分です。',
           sentiment: 'positive',
         });
-      else if (breakdown.satiety < 40)
+      else if (breakdown.satiety < 40 && !hasNoIntake)
         segments.push({
           type: 'satiety',
           text: '⚠️ 満腹感が不足しています。食物繊維やタンパク質を増やしましょう。',
@@ -952,6 +1014,14 @@ export class NutritionScoreService {
           type: 'energy',
           text: 'Calorie intake is on target.',
           sentiment: 'positive',
+        });
+      else if (hasNoIntake && isEarlyDay) {
+        // no intake + early day: skip energy segment
+      } else if (isCalorieExcess)
+        segments.push({
+          type: 'energy',
+          text: `⚠️ Calorie intake is too high — ${Math.round((input.calories / input.targetCalories) * 100)}% of target. Consider cutting back.`,
+          sentiment: 'warning',
         });
       else if (breakdown.energy < 40 && !isEarlyDay)
         segments.push({
@@ -979,8 +1049,8 @@ export class NutritionScoreService {
         });
     }
 
-    // V1.2: 宏量槽位状态信号
-    if (macroSlotStatus) {
+    // V1.2: 宏量槽位状态信号（零摄入时跳过，因为全部 deficit 是显而易见的）
+    if (macroSlotStatus && !hasNoIntake) {
       const slotLabels: Record<
         'zh' | 'en' | 'ja',
         Record<string, Record<string, string>>
@@ -1070,21 +1140,26 @@ export class NutritionScoreService {
       });
     }
 
-    if (stabilityData?.complianceRate && stabilityData.complianceRate >= 0.9) {
+    // 仅在有实际摄入时才显示合规率（零摄入时 100% 合规没有意义）
+    if (
+      stabilityData?.complianceRate &&
+      stabilityData.complianceRate >= 0.9 &&
+      !hasNoIntake
+    ) {
       segments.push({
         type: 'compliance',
         text:
           locale === 'zh'
-            ? `目标达成率 ${Math.round(stabilityData.complianceRate * 100)}% ✅，接近完美！`
+            ? `饮食合规率 ${Math.round(stabilityData.complianceRate * 100)}% ✅，饮食习惯良好！`
             : locale === 'ja'
-              ? `目標達成率 ${Math.round(stabilityData.complianceRate * 100)}% ✅ ほぼ完璧！`
-              : `${Math.round(stabilityData.complianceRate * 100)}% goal achievement ✅ Nearly perfect!`,
+              ? `食事遵守率 ${Math.round(stabilityData.complianceRate * 100)}% ✅ 食習慣が良好です！`
+              : `${Math.round(stabilityData.complianceRate * 100)}% meal compliance ✅ Great eating habits!`,
         sentiment: 'positive',
       });
     }
 
-    // 融合决策信号
-    if (decision === 'AVOID' && breakdown[topWeakness] < 50) {
+    // 融合决策信号（零摄入时不显示"偏离建议"，因为还没开始吃）
+    if (decision === 'AVOID' && breakdown[topWeakness] < 50 && !hasNoIntake) {
       segments.push({
         type: 'decision',
         text:
@@ -1147,8 +1222,8 @@ export class NutritionScoreService {
       }
     }
 
-    // 针对最弱维度给出改善建议
-    if (topWeakness && breakdown[topWeakness] < 60) {
+    // 针对最弱维度给出改善建议（零摄入时跳过，因为所有维度都是0）
+    if (topWeakness && breakdown[topWeakness] < 60 && !hasNoIntake) {
       const tips: Record<string, Record<string, string>> = {
         satiety: {
           zh: '💡 建议下餐增加高纤维或高蛋白食物。',
@@ -1156,15 +1231,21 @@ export class NutritionScoreService {
           ja: '💡 次の食事では食物繊維やタンパク質を増やしましょう。',
         },
         energy: {
-          zh: isEarlyDay
-            ? '💡 继续均衡饮食，注意下一餐的搭配。'
-            : '💡 热量偏低，建议加餐或增加份量。',
-          en: isEarlyDay
-            ? '💡 Keep eating balanced. Focus on your next meal.'
-            : '💡 Calories are low. Add a snack or increase portions.',
-          ja: isEarlyDay
-            ? '💡 バランスの良い食事を続けましょう。次の食事に注目。'
-            : '💡 カロリーが低いです。間食を追加するか量を増やしましょう。',
+          zh: isCalorieExcess
+            ? '💡 热量已超标，建议下一餐选择低热量食物或减少份量。'
+            : isEarlyDay
+              ? '💡 继续均衡饮食，注意下一餐的搭配。'
+              : '💡 热量偏低，建议加餐或增加份量。',
+          en: isCalorieExcess
+            ? '💡 Calories exceeded. Choose lighter options or reduce portions next meal.'
+            : isEarlyDay
+              ? '💡 Keep eating balanced. Focus on your next meal.'
+              : '💡 Calories are low. Add a snack or increase portions.',
+          ja: isCalorieExcess
+            ? '💡 カロリー超過です。次の食事は低カロリーの選択を。'
+            : isEarlyDay
+              ? '💡 バランスの良い食事を続けましょう。次の食事に注目。'
+              : '💡 カロリーが低いです。間食を追加するか量を増やしましょう。',
         },
         glycemicImpact: {
           zh: '💡 血糖波动较大，建议选择低GI食物。',

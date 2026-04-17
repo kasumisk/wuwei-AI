@@ -13,6 +13,8 @@ interface AuthState {
   initialized: boolean;
   /** 登录中 */
   loading: boolean;
+  /** persist 是否完成 hydration */
+  hydrated: boolean;
 
   /** 设置登录态 */
   setAuth: (user: AppUserInfo, token: string) => void;
@@ -24,6 +26,8 @@ interface AuthState {
   setInitialized: () => void;
   /** 设置 loading */
   setLoading: (loading: boolean) => void;
+  /** 标记 hydration 完成 */
+  setHydrated: () => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -34,6 +38,7 @@ export const useAuthStore = create<AuthState>()(
         token: null,
         initialized: false,
         loading: false,
+        hydrated: false,
 
         setAuth: (user, token) => {
           if (typeof window !== 'undefined') {
@@ -56,6 +61,7 @@ export const useAuthStore = create<AuthState>()(
 
         setInitialized: () => set({ initialized: true }),
         setLoading: (loading) => set({ loading }),
+        setHydrated: () => set({ hydrated: true }),
       }),
       {
         name: 'app-auth-storage',
@@ -63,6 +69,9 @@ export const useAuthStore = create<AuthState>()(
           user: state.user,
           token: state.token,
         }),
+        onRehydrateStorage: () => (state) => {
+          state?.setHydrated();
+        },
       }
     )
   )

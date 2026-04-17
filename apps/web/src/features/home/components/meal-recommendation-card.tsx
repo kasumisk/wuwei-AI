@@ -31,6 +31,29 @@ const COOKING_SKILL_LABELS: Record<string, string> = {
   beginner: '新手', basic: '基础', intermediate: '中级', advanced: '高级',
 };
 
+function estimateMacrosFromCalories(
+  calories: number,
+  goal: string | undefined,
+): { protein: number; fat: number; carbs: number } {
+  const cal = Math.max(0, Number(calories) || 0);
+
+  // 当推荐接口未返回宏量营养时，按目标给一个稳定估算，避免写入 0 导致评分异常偏低。
+  const macroRatioByGoal: Record<string, { p: number; f: number; c: number }> = {
+    fat_loss: { p: 0.3, f: 0.3, c: 0.4 },
+    muscle_gain: { p: 0.28, f: 0.22, c: 0.5 },
+    health: { p: 0.2, f: 0.3, c: 0.5 },
+    habit: { p: 0.2, f: 0.3, c: 0.5 },
+  };
+
+  const ratio = macroRatioByGoal[goal || 'health'] || macroRatioByGoal.health;
+
+  return {
+    protein: Math.round((cal * ratio.p) / 4),
+    fat: Math.round((cal * ratio.f) / 9),
+    carbs: Math.round((cal * ratio.c) / 4),
+  };
+}
+
 function buildRecommendationReason(summary: DailySummary, profile: UserProfile | null): string[] {
   const reasons: string[] = [];
   const goal = profile?.goal || 'health';
@@ -142,12 +165,19 @@ export function MealRecommendationCard({
       const contextComment = currentContent.scenarioLabel
         ? `推荐场景：${currentContent.scenarioLabel}`
         : '来自推荐';
+      const macroEstimate = estimateMacrosFromCalories(
+        currentContent.calories,
+        profile?.goal,
+      );
 
       // 并行：保存记录 + 提交反馈（反馈失败不阻断）
       await Promise.all([
         foodRecordService.saveRecord({
           foods,
           totalCalories: currentContent.calories,
+          totalProtein: macroEstimate.protein,
+          totalFat: macroEstimate.fat,
+          totalCarbs: macroEstimate.carbs,
           mealType: suggestion.mealType,
           source: 'manual',
           advice: currentContent.tip,

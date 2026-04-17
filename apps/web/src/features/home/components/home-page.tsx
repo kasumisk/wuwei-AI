@@ -166,7 +166,7 @@ export function HomePage() {
         {!isLoading && (
           <>
             {/* 今日状态 */}
-            <TodayStatus summary={summary} profile={profile} />
+            <TodayStatus summary={summary} profile={profile} scoreData={nutritionScore} />
 
             {/* 今日营养评分 */}
             <NutritionScoreCard scoreData={nutritionScore} />

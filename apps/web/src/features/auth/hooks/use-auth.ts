@@ -15,7 +15,17 @@ function getDeviceId(): string {
 }
 
 export function useAuth() {
-  const { user, token, initialized, loading, setAuth, clearAuth, setLoading, setInitialized } =
+  const {
+    user,
+    token,
+    initialized,
+    hydrated,
+    loading,
+    setAuth,
+    clearAuth,
+    setLoading,
+    setInitialized,
+  } =
     useAuthStore();
 
   const isLoggedIn = !!token && !!user;
@@ -164,6 +174,8 @@ export function useAuth() {
   );
 
   const restoreAuth = useCallback(async () => {
+    // 等待 persist hydration 完成，避免刷新时 token 尚未恢复就被匿名登录覆盖。
+    if (!hydrated) return;
     if (initialized) return;
     if (!token) {
       // 无 token: 自动匿名登录，让用户零门槛体验
@@ -183,13 +195,14 @@ export function useAuth() {
       clearAuth();
     }
     setInitialized();
-  }, [initialized, token, setAuth, clearAuth, setInitialized]);
+  }, [hydrated, initialized, token, setAuth, clearAuth, setInitialized]);
 
   return {
     user,
     token,
     isLoggedIn,
     isAnonymous,
+    hydrated,
     initialized,
     loading,
     loginAnonymously,

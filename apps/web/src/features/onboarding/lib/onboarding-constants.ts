@@ -43,14 +43,14 @@ export const DIETARY_RESTRICTION_OPTIONS = [
 
 // ── 过敏原选项（安全性优先，独立区域）──
 export const ALLERGEN_OPTIONS = [
-  { key: 'peanut', label: '花生', icon: '🥜' },
-  { key: 'tree_nut', label: '坚果', icon: '🌰' },
-  { key: 'milk', label: '牛奶', icon: '🥛' },
+  { key: 'gluten', label: '麸质', icon: '🌾' },
+  { key: 'dairy', label: '乳制品', icon: '🥛' },
   { key: 'egg', label: '鸡蛋', icon: '🥚' },
-  { key: 'wheat', label: '小麦', icon: '🌾' },
-  { key: 'soy', label: '大豆', icon: '🫘' },
   { key: 'fish', label: '鱼类', icon: '🐟' },
   { key: 'shellfish', label: '贝壳类', icon: '🦐' },
+  { key: 'tree_nuts', label: '树坚果', icon: '🌰' },
+  { key: 'peanuts', label: '花生', icon: '🥜' },
+  { key: 'soy', label: '大豆', icon: '🫘' },
   { key: 'sesame', label: '芝麻', icon: '🫘' },
 ] as const;
 

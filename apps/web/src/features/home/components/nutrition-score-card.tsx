@@ -41,11 +41,12 @@ export function NutritionScoreCard({ scoreData }: NutritionScoreCardProps) {
   if (!scoreData) return null;
 
   const { totalScore, breakdown, highlights, feedback, goals, intake } = scoreData;
+  const displayTotalScore = Math.round(totalScore);
 
   // 环形进度参数
   const radius = 26;
   const circumference = 2 * Math.PI * radius;
-  const progress = (totalScore / 100) * circumference;
+  const progress = (displayTotalScore / 100) * circumference;
 
   const macros = [
     { label: '热量', intake: intake.calories, goal: goals.calories, unit: 'kcal' },
@@ -53,6 +54,18 @@ export function NutritionScoreCard({ scoreData }: NutritionScoreCardProps) {
     { label: '脂肪', intake: intake.fat, goal: goals.fat, unit: 'g' },
     { label: '碳水', intake: intake.carbs, goal: goals.carbs, unit: 'g' },
   ];
+
+  const macroChips = macros.map((m) => {
+    const pct = m.goal > 0 ? Math.round((m.intake / m.goal) * 100) : 0;
+    const status = pct < 70 ? 'low' : pct > 110 ? 'high' : 'ok';
+    if (status === 'ok') {
+      return { key: m.label, text: `${m.label}达标`, className: 'bg-green-100 text-green-700' };
+    }
+    if (status === 'low') {
+      return { key: m.label, text: `${m.label}偏低`, className: 'bg-amber-100 text-amber-700' };
+    }
+    return { key: m.label, text: `${m.label}偏高`, className: 'bg-red-100 text-red-700' };
+  });
 
   return (
     <section className="bg-card rounded-2xl p-5 shadow-sm mb-6">
@@ -62,7 +75,7 @@ export function NutritionScoreCard({ scoreData }: NutritionScoreCardProps) {
         className="w-full flex items-center gap-4 text-left"
       >
         {/* 环形分数 */}
-        <div className="relative w-16 h-16 flex-shrink-0">
+        <div className="relative w-16 h-16 shrink-0">
           <svg className="w-16 h-16 -rotate-90" viewBox="0 0 64 64">
             <circle
               cx="32"
@@ -81,11 +94,13 @@ export function NutritionScoreCard({ scoreData }: NutritionScoreCardProps) {
               strokeLinecap="round"
               strokeDasharray={circumference}
               strokeDashoffset={circumference - progress}
-              className={`${ringColor(totalScore)} transition-all duration-700`}
+              className={`${ringColor(displayTotalScore)} transition-all duration-700`}
             />
           </svg>
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className={`text-lg font-extrabold ${scoreColor(totalScore)}`}>{totalScore}</span>
+            <span className={`text-lg font-extrabold ${scoreColor(displayTotalScore)}`}>
+              {displayTotalScore}
+            </span>
           </div>
         </div>
 
@@ -111,15 +126,15 @@ export function NutritionScoreCard({ scoreData }: NutritionScoreCardProps) {
         </div>
       </button>
 
-      {/* 高亮标签 */}
-      {highlights.length > 0 && (
+      {/* 宏量达标标签（基于真实 intake/goals） */}
+      {macroChips.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mt-3">
-          {highlights.map((h, i) => (
+          {macroChips.map((chip) => (
             <span
-              key={i}
-              className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary"
+              key={chip.key}
+              className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${chip.className}`}
             >
-              {h}
+              {chip.text}
             </span>
           ))}
         </div>
@@ -135,6 +150,7 @@ export function NutritionScoreCard({ scoreData }: NutritionScoreCardProps) {
               {Object.entries(breakdown).map(([key, value]) => {
                 const dim = DIMENSION_LABELS[key];
                 if (!dim) return null;
+                const displayValue = Math.round(Number(value) || 0);
                 return (
                   <div key={key} className="flex items-center gap-2">
                     <span className="text-xs w-4 text-center">{dim.icon}</span>
@@ -143,12 +159,14 @@ export function NutritionScoreCard({ scoreData }: NutritionScoreCardProps) {
                     </span>
                     <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
                       <div
-                        className={`h-full rounded-full transition-all duration-500 ${barColor(value)}`}
-                        style={{ width: `${Math.min(value, 100)}%` }}
+                        className={`h-full rounded-full transition-all duration-500 ${barColor(displayValue)}`}
+                        style={{ width: `${Math.min(displayValue, 100)}%` }}
                       />
                     </div>
-                    <span className={`text-[11px] font-bold w-6 text-right ${scoreColor(value)}`}>
-                      {value}
+                    <span
+                      className={`text-[11px] font-bold w-8 text-right tabular-nums ${scoreColor(displayValue)}`}
+                    >
+                      {displayValue}
                     </span>
                   </div>
                 );

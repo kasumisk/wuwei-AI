@@ -61,6 +61,23 @@ function toProfileResponse(p: any) {
       p.dataCompleteness != null ? Number(p.dataCompleteness) : 0,
     regionCode: p.regionCode ?? 'CN',
     timezone: p.timezone ?? 'Asia/Shanghai',
+    // V3.8 新增字段
+    cookingSkillLevel: p.cookingSkillLevel ?? null,
+    budgetLevel: p.budgetLevel ?? null,
+    kitchenProfile: p.kitchenProfile ?? null,
+    sleepQuality: p.sleepQuality ?? null,
+    stressLevel: p.stressLevel ?? null,
+    hydrationGoal: p.hydrationGoal ?? null,
+    mealTimingPreference: p.mealTimingPreference ?? null,
+    tasteIntensity: p.tasteIntensity ?? null,
+    recommendationPreferences: p.recommendationPreferences ?? null,
+    alcoholFrequency: p.alcoholFrequency ?? null,
+    cuisinePreferences: p.cuisinePreferences ?? [],
+    familySize: p.familySize ?? null,
+    mealPrepWilling: p.mealPrepWilling ?? null,
+    exerciseIntensity: p.exerciseIntensity ?? null,
+    supplementsUsed: p.supplementsUsed ?? [],
+    compoundGoal: p.compoundGoal ?? null,
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
   };
@@ -113,6 +130,15 @@ export class FoodNutritionController {
       Number(profile?.mealsPerDay) || 3,
     );
 
+    // 凌晨批量补录历史餐次时，不应按“当前小时进度”把能量分压到接近 0。
+    // 条件：本地凌晨 + 已有多餐 + 热量已达全天较高比例 => 按全天目标评分。
+    const shouldDisableTimeAwareScoring =
+      localHour <= 1 &&
+      summary.mealCount >= 2 &&
+      goals.calories > 0 &&
+      summary.totalCalories >= goals.calories * 0.6;
+    const scoringHour = shouldDisableTimeAwareScoring ? undefined : localHour;
+
     // P1.3: 注入真实 stabilityData
     const stabilityData = {
       streakDays: behaviorProfile?.streakDays || 0,
@@ -146,14 +172,52 @@ export class FoodNutritionController {
       profile?.goal || 'health',
       stabilityData,
       profile?.healthConditions as string[] | undefined,
-      localHour,
+      scoringHour,
       mealSignals,
     );
 
-    const feedback = this.nutritionScoreService.generateFeedback(
+    const macroCompliance = {
+      calorieAdherence:
+        goals.calories > 0
+          ? Math.round((summary.totalCalories / goals.calories) * 100)
+          : 0,
+      proteinAdherence:
+        goals.protein > 0
+          ? Math.round(((summary.totalProtein || 0) / goals.protein) * 100)
+          : 0,
+      fatAdherence:
+        goals.fat > 0
+          ? Math.round(((summary.totalFat || 0) / goals.fat) * 100)
+          : 0,
+      carbsAdherence:
+        goals.carbs > 0
+          ? Math.round(((summary.totalCarbs || 0) / goals.carbs) * 100)
+          : 0,
+    };
+
+    const feedbackBase = this.nutritionScoreService.generateFeedback(
       score.highlights,
       profile?.goal || 'health',
     );
+
+    // 当宏量目标明显偏离时，避免误导性“各项达标”文案。
+    const outOfRangeMacros = Object.entries(macroCompliance)
+      .filter(([, value]) => value > 0 && (value < 70 || value > 110))
+      .map(([key]) => key.replace('Adherence', ''));
+
+    const macroNameMap: Record<string, string> = {
+      calorie: '热量',
+      protein: '蛋白质',
+      fat: '脂肪',
+      carbs: '碳水',
+    };
+
+    const feedback =
+      summary.mealCount === 0
+        ? '今日尚未记录饮食，开始记录第一餐吧。'
+        : outOfRangeMacros.length > 0
+          ? `${outOfRangeMacros.map((m) => macroNameMap[m] || m).join('、')}尚未达成平衡，建议按目标比例微调。`
+          : feedbackBase;
 
     // V1.2: 宏量槽位状态检测
     const intake = {
@@ -192,7 +256,7 @@ export class FoodNutritionController {
       score.breakdown,
       summary.mealCount,
       locale,
-      localHour,
+      scoringHour,
     );
 
     // Phase 1.4: 生成自然语言状态解释（V1.2: 增加 macroSlotStatus 融合 + i18n locale）
@@ -222,7 +286,7 @@ export class FoodNutritionController {
       score.decision,
       locale,
       macroSlotStatus,
-      localHour,
+      scoringHour,
       mealSignals,
     );
 
@@ -274,24 +338,7 @@ export class FoodNutritionController {
               : 0,
         },
         // 各宏量合规性对比
-        complianceInsight: {
-          calorieAdherence:
-            goals.calories > 0
-              ? Math.round((summary.totalCalories / goals.calories) * 100)
-              : 0,
-          proteinAdherence:
-            goals.protein > 0
-              ? Math.round(((summary.totalProtein || 0) / goals.protein) * 100)
-              : 0,
-          fatAdherence:
-            goals.fat > 0
-              ? Math.round(((summary.totalFat || 0) / goals.fat) * 100)
-              : 0,
-          carbsAdherence:
-            goals.carbs > 0
-              ? Math.round(((summary.totalCarbs || 0) / goals.carbs) * 100)
-              : 0,
-        },
+        complianceInsight: macroCompliance,
         // V1.2: 宏量槽位状态
         macroSlotStatus,
         // V1.2: 结构化问题列表
@@ -323,10 +370,12 @@ export class FoodNutritionController {
             goals.calories > 0
               ? Math.round((summary.totalCalories / goals.calories) * 100) / 100
               : 0,
+          // 既不能太少(< 70%预期)也不能太多(> 全天130%)才算 on track
           isOnTrack:
             goals.calories > 0
               ? summary.totalCalories / goals.calories >=
-                this.nutritionScoreService.getExpectedProgress(localHour) * 0.7
+                  this.nutritionScoreService.getExpectedProgress(localHour) *
+                    0.7 && summary.totalCalories / goals.calories <= 1.3
               : true,
         },
       },

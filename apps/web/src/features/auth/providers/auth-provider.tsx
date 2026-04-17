@@ -7,11 +7,12 @@ import { useAuth } from '../hooks/use-auth';
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { restoreAuth } = useAuth();
+  const { restoreAuth, hydrated } = useAuth();
 
   useEffect(() => {
+    if (!hydrated) return;
     restoreAuth();
-  }, [restoreAuth]);
+  }, [hydrated, restoreAuth]);
 
   if (GOOGLE_CLIENT_ID) {
     return <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>{children}</GoogleOAuthProvider>;

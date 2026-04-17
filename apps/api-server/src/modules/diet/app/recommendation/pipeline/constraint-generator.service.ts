@@ -82,9 +82,8 @@ export class ConstraintGeneratorService {
           const rawStr =
             typeof rawCondition === 'string'
               ? rawCondition
-              : (rawCondition as { condition?: string }).condition ?? '';
-          const condition =
-            normalizeHealthCondition(rawStr) ?? rawStr;
+              : ((rawCondition as { condition?: string }).condition ?? '');
+          const condition = normalizeHealthCondition(rawStr) ?? rawStr;
           if (condition === HealthCondition.DIABETES_TYPE2) {
             excludeTags.push('high_sugar', 'high_gi');
             includeTags.push('low_gi');
@@ -124,7 +123,10 @@ export class ConstraintGeneratorService {
             excludeTags.push('high_fat');
             maxFat = maxFat == null ? 15 : Math.min(maxFat, 15);
           }
-          else excludeTags.push(restriction);
+          // #fix Bug32: lactose_free → 排除含乳制品食物（通过 allergens 字段 dairy/milk/lactose）
+          else if (restriction === 'lactose_free') {
+            excludeTags.push('dairy');
+          } else excludeTags.push(restriction);
         }
       }
 
@@ -150,7 +152,14 @@ export class ConstraintGeneratorService {
       }
 
       // #fix Bug11: fat_loss 目标排除油炸食物（通过 isFried 字段而非 tags）
-      if (goalType === 'fat_loss') {
+      // #fix R3-02/R3-03: muscle_gain 和 habit 目标同样排除油炸食物
+      // muscle_gain 需要高质量蛋白质和碳水，油炸食物脂肪过高影响增肌效果
+      // habit 目标是培养健康饮食习惯，油炸食物与该目标相悖
+      if (
+        goalType === 'fat_loss' ||
+        goalType === 'muscle_gain' ||
+        goalType === 'habit'
+      ) {
         excludeIsFried = true;
       }
     }
