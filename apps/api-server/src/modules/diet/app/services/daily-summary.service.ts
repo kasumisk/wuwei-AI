@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
 import {
   DailyGoalProfile,
@@ -22,6 +22,7 @@ export class DailySummaryService {
     private readonly nutritionScoreService: NutritionScoreService,
     private readonly userProfileService: UserProfileService,
     private readonly foodRecordService: FoodRecordService,
+    @Inject(forwardRef(() => BehaviorService))
     private readonly behaviorService: BehaviorService,
   ) {}
 

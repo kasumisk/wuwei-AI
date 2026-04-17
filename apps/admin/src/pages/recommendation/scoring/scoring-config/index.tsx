@@ -52,7 +52,7 @@ const { Text } = Typography;
 
 export const routeConfig = {
   name: 'recommendation-debug-scoring-config',
-  title: '评分配置',
+  title: '推荐评分配置',
   icon: 'SettingOutlined',
   order: 4,
   requireAuth: true,

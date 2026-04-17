@@ -291,7 +291,7 @@ export class TextFoodAnalysisService {
     this.textModel =
       this.configService.get<string>('TEXT_ANALYSIS_MODEL') ||
       this.configService.get<string>('VISION_MODEL') ||
-      'baidu/ernie-4.5-8k';
+      'deepseek/deepseek-chat-v3';
   }
 
   // ==================== 主入口 ====================
@@ -949,6 +949,7 @@ export class TextFoodAnalysisService {
     const profile =
       CATEGORY_DEFAULT_NUTRITION[category] ||
       CATEGORY_DEFAULT_NUTRITION.composite;
+    const sodiumPer100g = this.estimateSodiumByKeywords(foodName, category);
 
     return {
       name: foodName,
@@ -961,8 +962,38 @@ export class TextFoodAnalysisService {
       protein: Math.round(profile.protein * ratio * 10) / 10,
       fat: Math.round(profile.fat * ratio * 10) / 10,
       carbs: Math.round(profile.carbs * ratio * 10) / 10,
+      sodium:
+        sodiumPer100g != null ? Math.round(sodiumPer100g * ratio) : undefined,
       estimated: true,
     };
+  }
+
+  /**
+   * 关键词估算钠含量（mg/100g），用于 LLM/食物库都未命中时的安全兜底。
+   */
+  private estimateSodiumByKeywords(
+    foodName: string,
+    category: string,
+  ): number | null {
+    const name = foodName.toLowerCase();
+
+    // 高钠词：腌制/咸制/酱菜
+    if (/(咸鱼|泡菜|榨菜|腌|腊|酱菜|咸菜|火腿|培根|午餐肉|腌制)/.test(name)) {
+      return 1800;
+    }
+
+    // 中高钠词：火锅底料/麻辣烫/卤味
+    if (/(麻辣烫|卤|火锅|汤底|方便面|拉面|调味包)/.test(name)) {
+      return 1200;
+    }
+
+    // 低钠默认值按类别给一个保守估计
+    if (category === 'protein') return 90;
+    if (category === 'veggie') return 45;
+    if (category === 'grain') return 20;
+    if (category === 'beverage') return 35;
+
+    return null;
   }
 
   /**

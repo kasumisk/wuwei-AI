@@ -7,6 +7,7 @@
 
 import { DynamicThresholdsService } from '../src/modules/decision/config/dynamic-thresholds.service';
 import { DecisionEngineService } from '../src/modules/decision/decision/decision-engine.service';
+import { DecisionExplainerService } from '../src/modules/decision/decision/decision-explainer.service';
 import {
   checkAllergenConflict,
   checkRestrictionConflict,
@@ -114,7 +115,11 @@ const F = {
 };
 
 const dynamicThresholds = new DynamicThresholdsService();
-const decisionEngine = new DecisionEngineService(dynamicThresholds);
+const decisionExplainer = new DecisionExplainerService(dynamicThresholds);
+const decisionEngine = new DecisionEngineService(
+  dynamicThresholds,
+  decisionExplainer,
+);
 const BUGS: Array<{ id: string; scenario: string; issue: string; rootCause: string }> = [];
 
 function reportBug(id: string, scenario: string, issue: string, rootCause: string) {

@@ -79,7 +79,7 @@ export class CoachService {
       timestamp: Date.now(),
     });
     this.logger.debug(
-      `Cached analysis result for user ${payload.userId} (${payload.result.inputType})`,
+      `Cached analysis result for user ${payload.userId} (${payload.result?.inputType || 'unknown'})`,
     );
   }
 
