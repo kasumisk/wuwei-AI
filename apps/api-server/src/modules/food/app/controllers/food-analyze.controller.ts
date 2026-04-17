@@ -345,6 +345,11 @@ export class FoodAnalyzeController {
       explanation: (decision?.explanation ?? {
         summary: '',
       }) as FoodAnalysisResultV61['explanation'],
+      summary: (decision?.summary ?? undefined) as FoodAnalysisResultV61['summary'],
+      evidencePack: (decision?.evidencePack ?? undefined) as FoodAnalysisResultV61['evidencePack'],
+      shouldEatAction: (decision?.shouldEatAction ?? undefined) as FoodAnalysisResultV61['shouldEatAction'],
+      analysisState: (nutrition?.analysisState ?? undefined) as FoodAnalysisResultV61['analysisState'],
+      confidenceDiagnostics: (nutrition?.confidenceDiagnostics ?? undefined) as FoodAnalysisResultV61['confidenceDiagnostics'],
     };
   }
 

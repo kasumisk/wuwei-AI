@@ -108,6 +108,8 @@ export interface DecisionOutput {
   issues?: DietIssue[];
   /** V1.7: 宏量营养素进度 */
   macroProgress?: MacroProgress;
+  /** V2.3: 决策模式 */
+  mode?: 'pre_eat' | 'post_eat';
 }
 
 // V1.9: 决策阈值已提取到 ../config/decision-thresholds.ts
@@ -145,6 +147,7 @@ export class FoodDecisionService {
     breakdown: NutritionScoreBreakdown | undefined,
     userId?: string,
     locale?: Locale,
+    mode: 'pre_eat' | 'post_eat' = 'pre_eat',
   ): Promise<DecisionOutput> {
     return this._computeFullDecision(
       foods,
@@ -154,6 +157,7 @@ export class FoodDecisionService {
       breakdown,
       userId,
       locale,
+      mode,
     );
   }
 
@@ -165,6 +169,7 @@ export class FoodDecisionService {
     breakdown: NutritionScoreBreakdown | undefined,
     userId?: string,
     locale?: Locale,
+    mode: 'pre_eat' | 'post_eat' = 'pre_eat',
   ): Promise<DecisionOutput> {
     // 1. 基础决策（委托 DecisionEngineService）
     const decision = this.decisionEngine.computeDecision(
@@ -365,6 +370,7 @@ export class FoodDecisionService {
       breakdownExplanations,
       issues: issues.length > 0 ? issues : undefined,
       macroProgress,
+      mode,
     };
   }
 

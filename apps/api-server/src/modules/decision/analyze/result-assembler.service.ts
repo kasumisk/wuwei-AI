@@ -10,6 +10,7 @@
  */
 import { Injectable } from '@nestjs/common';
 import {
+  AnalysisState,
   FoodAnalysisResultV61,
   AnalyzedFoodItem,
   NutritionTotals,
@@ -19,7 +20,10 @@ import {
   AnalysisExplanation,
   IngestionDecision,
   AnalysisInputSnapshot,
+  ConfidenceDiagnostics,
   DecisionSummary,
+  EvidencePack,
+  ShouldEatAction,
 } from '../types/analysis-result.types';
 import { DecisionOutput } from '../decision/food-decision.service';
 
@@ -36,6 +40,10 @@ export interface AssembleInput {
   ingestion: IngestionDecision;
   /** V2.2: 决策结构化摘要 */
   summary?: DecisionSummary;
+  analysisState?: AnalysisState;
+  confidenceDiagnostics?: ConfidenceDiagnostics;
+  evidencePack?: EvidencePack;
+  shouldEatAction?: ShouldEatAction;
 }
 
 @Injectable()
@@ -61,6 +69,10 @@ export class ResultAssemblerService {
       },
       // V2.2: 决策结构化摘要
       summary: input.summary,
+      analysisState: input.analysisState,
+      confidenceDiagnostics: input.confidenceDiagnostics,
+      evidencePack: input.evidencePack,
+      shouldEatAction: input.shouldEatAction,
     };
   }
 

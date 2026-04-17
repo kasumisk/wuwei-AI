@@ -24,6 +24,11 @@ import { UserContextBuilderService } from './decision/user-context-builder.servi
 import { AnalysisPipelineService } from './analyze/analysis-pipeline.service';
 import { ResultAssemblerService } from './analyze/result-assembler.service';
 import { AnalysisPersistenceService } from './analyze/analysis-persistence.service';
+import { AnalysisStateBuilderService } from './analyze/analysis-state-builder.service';
+import { ConfidenceDiagnosticsService } from './analyze/confidence-diagnostics.service';
+import { EvidencePackBuilderService } from './analyze/evidence-pack-builder.service';
+import { PostMealRecoveryService } from './decision/post-meal-recovery.service';
+import { ShouldEatActionService } from './decision/should-eat-action.service';
 
 @Module({
   imports: [
@@ -46,6 +51,11 @@ import { AnalysisPersistenceService } from './analyze/analysis-persistence.servi
     AnalysisPipelineService,
     ResultAssemblerService,
     AnalysisPersistenceService,
+    AnalysisStateBuilderService,
+    ConfidenceDiagnosticsService,
+    EvidencePackBuilderService,
+    PostMealRecoveryService,
+    ShouldEatActionService,
   ],
   exports: [
     AnalysisPipelineService,
@@ -57,6 +67,11 @@ import { AnalysisPersistenceService } from './analyze/analysis-persistence.servi
     ResultAssemblerService,
     AnalysisPersistenceService,
     DecisionSummaryService,
+    AnalysisStateBuilderService,
+    ConfidenceDiagnosticsService,
+    EvidencePackBuilderService,
+    PostMealRecoveryService,
+    ShouldEatActionService,
   ],
 })
 export class DecisionModule {}

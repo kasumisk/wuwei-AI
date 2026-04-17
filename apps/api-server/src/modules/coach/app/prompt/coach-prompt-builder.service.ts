@@ -27,10 +27,15 @@ import {
   getConfidenceModifier,
 } from '../config/coach-tone.config';
 import {
+  CoachActionPlan,
+  ConfidenceDiagnostics,
   BreakdownExplanation,
   DecisionChainStep,
   DecisionSummary,
+  EvidencePack,
+  ShouldEatAction,
 } from '../../../decision/types/analysis-result.types';
+import { CoachActionPlanService } from '../coaching/coach-action-plan.service';
 
 // ==================== 分析上下文类型 ====================
 
@@ -85,6 +90,14 @@ export interface AnalysisContextInput {
   };
   /** V2.2: 决策结构化摘要 */
   summary?: DecisionSummary;
+  /** V2.3: Should Eat 行动对象 */
+  shouldEatAction?: ShouldEatAction;
+  /** V2.3: 统一证据块 */
+  evidencePack?: EvidencePack;
+  /** V2.3: 分层置信度诊断 */
+  confidenceDiagnostics?: ConfidenceDiagnostics;
+  /** V2.3: 教练行动计划 */
+  coachActionPlan?: CoachActionPlan;
 }
 
 @Injectable()
@@ -95,6 +108,7 @@ export class CoachPromptBuilderService {
     private readonly foodService: FoodService,
     private readonly userProfileService: UserProfileService,
     private readonly behaviorService: BehaviorService,
+    private readonly coachActionPlanService: CoachActionPlanService,
   ) {}
 
   /**
@@ -324,6 +338,19 @@ ${behaviorContext ? `${behaviorContext}\n` : ''}${tonePrompt}`;
   ): string {
     if (!analysisContext.foods || analysisContext.foods.length === 0) {
       return '';
+    }
+
+    if (!analysisContext.coachActionPlan && analysisContext.shouldEatAction) {
+      analysisContext.coachActionPlan = this.coachActionPlanService.build({
+        shouldEatAction: analysisContext.shouldEatAction,
+        summary: analysisContext.summary,
+        evidencePack: analysisContext.evidencePack,
+        confidenceDiagnostics: analysisContext.confidenceDiagnostics,
+      });
+    }
+
+    if (analysisContext.coachActionPlan) {
+      return this.formatCoachActionContext(analysisContext, locale);
     }
 
     // V2.2: 如果有结构化摘要，优先使用精简上下文
@@ -581,6 +608,43 @@ ${behaviorContext ? `${behaviorContext}\n` : ''}${tonePrompt}`;
           ctx += confMod;
         }
       }
+    }
+
+    return ctx;
+  }
+
+  private formatCoachActionContext(
+    analysisContext: AnalysisContextInput,
+    locale?: Locale,
+  ): string {
+    const plan = analysisContext.coachActionPlan!;
+    let ctx = '';
+
+    const foodList = analysisContext
+      .foods!.map((f) => `${f.name}(${f.calories}kcal)`)
+      .join('、');
+
+    ctx += `\n\n【${cl('analyzedFood', locale)}】${foodList}`;
+    ctx += `\n\n【教练行动计划】`;
+    ctx += `\n- 结论：${plan.conclusion}`;
+    if (plan.why.length > 0) {
+      ctx += `\n- 原因：${plan.why.join('；')}`;
+    }
+    if (plan.doNow.length > 0) {
+      ctx += `\n- 现在怎么做：${plan.doNow.join('；')}`;
+    }
+    if (plan.ifAlreadyAte && plan.ifAlreadyAte.length > 0) {
+      ctx += `\n- 如果已经吃了：${plan.ifAlreadyAte.join('；')}`;
+    }
+    if (plan.alternatives && plan.alternatives.length > 0) {
+      ctx += `\n- 替代选择：${plan.alternatives.join('；')}`;
+    }
+    if (analysisContext.confidenceDiagnostics?.uncertaintyReasons?.length) {
+      ctx += `\n- 不确定性：${analysisContext.confidenceDiagnostics.uncertaintyReasons.join('；')}`;
+    }
+    if (analysisContext.macroProgress) {
+      const mp = analysisContext.macroProgress;
+      ctx += `\n- 宏量进度：热量${mp.calories.percent}% / 蛋白${mp.protein.percent}% / 脂肪${mp.fat.percent}% / 碳水${mp.carbs.percent}%`;
     }
 
     return ctx;

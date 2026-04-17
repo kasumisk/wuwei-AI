@@ -92,6 +92,103 @@ export interface FoodAnalysisResultV61 {
 
   /** V2.2: 决策结构化摘要（教练 prompt 优先消费此字段） */
   summary?: DecisionSummary;
+
+  /** V2.3: 分析状态对象（吃前/吃后投影） */
+  analysisState?: AnalysisState;
+
+  /** V2.3: 分层置信度诊断 */
+  confidenceDiagnostics?: ConfidenceDiagnostics;
+
+  /** V2.3: 统一证据块 */
+  evidencePack?: EvidencePack;
+
+  /** V2.3: 可执行 Should Eat 行动对象 */
+  shouldEatAction?: ShouldEatAction;
+
+  /** V2.3: 教练行动计划骨架 */
+  coachActionPlan?: CoachActionPlan;
+}
+
+/** V2.3: 分析状态对象 */
+export interface AnalysisState {
+  meal: {
+    foods: AnalyzedFoodItem[];
+    totals: NutritionTotals;
+    score: AnalysisScore;
+  };
+  preMealContext: {
+    todayTotalsBeforeMeal: NutritionTotals;
+    remainingBeforeMeal: {
+      calories: number;
+      protein: number;
+      fat: number;
+      carbs: number;
+    };
+    currentMealIndex: number;
+    mealType: string;
+  };
+  projectedAfterMeal: {
+    todayTotalsAfterMeal: NutritionTotals;
+    completionRatio: {
+      calories: number;
+      protein: number;
+      fat: number;
+      carbs: number;
+    };
+  };
+}
+
+/** V2.3: 分层置信度诊断 */
+export interface ConfidenceDiagnostics {
+  recognitionConfidence: number;
+  normalizationConfidence: number;
+  nutritionEstimationConfidence: number;
+  decisionConfidence: number;
+  overallConfidence: number;
+  uncertaintyReasons: string[];
+}
+
+/** V2.3: 统一证据块 */
+export interface EvidencePack {
+  scoreEvidence: string[];
+  contextEvidence: string[];
+  issueEvidence: string[];
+  decisionEvidence: string[];
+}
+
+/** V2.3: 吃后补偿动作 */
+export interface RecoveryAction {
+  nextMealDirection: string;
+  todayAdjustment: string;
+}
+
+/** V2.3: Should Eat 行动决策对象 */
+export interface ShouldEatAction {
+  verdict: 'recommend' | 'caution' | 'avoid';
+  shouldEat: boolean;
+  mode: 'pre_eat' | 'post_eat';
+  primaryReason: string;
+  evidence: string[];
+  immediateAction: string;
+  portionAction?: {
+    suggestedPercent: number;
+    suggestedCalories: number;
+  };
+  replacementAction?: {
+    strategy: 'replace_food' | 'reduce_portion' | 'change_pairing';
+    candidates: FoodAlternative[];
+  };
+  recoveryAction?: RecoveryAction;
+}
+
+/** V2.3: 教练行动计划 */
+export interface CoachActionPlan {
+  conclusion: string;
+  why: string[];
+  doNow: string[];
+  ifAlreadyAte?: string[];
+  alternatives?: string[];
+  tone: 'strict' | 'encouraging' | 'neutral';
 }
 
 // ==================== 子结构定义 ====================
@@ -302,7 +399,9 @@ export interface DietIssue {
     | 'meal_balance'
     | 'binge_risk'
     | 'cumulative_excess'
-    | 'multi_day_excess';
+    | 'multi_day_excess'
+    | 'pre_meal_risk'
+    | 'post_meal_consequence';
   /** 严重程度 */
   severity: 'info' | 'warning' | 'critical';
   /** 人类可读描述 */

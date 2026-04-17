@@ -185,6 +185,11 @@ export class CoachService {
           breakdownExplanations: cached.decision.breakdownExplanations,
           decisionChain: cached.decision.decisionChain,
           issues: cached.decision.issues,
+          summary: cached.summary,
+          shouldEatAction: cached.shouldEatAction,
+          evidencePack: cached.evidencePack,
+          confidenceDiagnostics: cached.confidenceDiagnostics,
+          coachActionPlan: cached.coachActionPlan,
         };
         this.logger.debug(
           `Auto-injected cached analysis context for user ${userId}`,

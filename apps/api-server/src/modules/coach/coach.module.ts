@@ -7,11 +7,12 @@ import { DietModule } from '../diet/diet.module';
 import { CoachController } from './app/coach.controller';
 import { CoachService } from './app/coach.service';
 import { CoachPromptBuilderService } from './app/prompt/coach-prompt-builder.service';
+import { CoachActionPlanService } from './app/coaching/coach-action-plan.service';
 
 @Module({
   imports: [ConfigModule, UserModule, DietModule],
   controllers: [CoachController],
-  providers: [CoachService, CoachPromptBuilderService],
+  providers: [CoachService, CoachPromptBuilderService, CoachActionPlanService],
   exports: [CoachService],
 })
 export class CoachModule {}

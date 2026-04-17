@@ -19,6 +19,9 @@ import {
   AnalysisCompletedEvent,
 } from '../../../core/events/domain-events';
 import {
+  AnalysisState,
+  ConfidenceDiagnostics,
+  EvidencePack,
   FoodAnalysisResultV61,
   AnalyzedFoodItem,
   AnalysisScore,
@@ -45,6 +48,11 @@ import {
   DecisionOutput,
 } from '../decision/food-decision.service';
 import { DecisionSummaryService } from '../decision/decision-summary.service';
+import { AnalysisStateBuilderService } from './analysis-state-builder.service';
+import { ConfidenceDiagnosticsService } from './confidence-diagnostics.service';
+import { EvidencePackBuilderService } from './evidence-pack-builder.service';
+import { PostMealRecoveryService } from '../decision/post-meal-recovery.service';
+import { ShouldEatActionService } from '../decision/should-eat-action.service';
 import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 
 // ==================== 管道输入类型 ====================
@@ -66,6 +74,7 @@ export interface TextPipelineInput {
     quantity?: string;
     fromLibrary: boolean;
   }>;
+  decisionMode?: 'pre_eat' | 'post_eat';
 }
 
 /** 图片链路管道输入 */
@@ -81,6 +90,7 @@ export interface ImagePipelineInput {
   precomputedScore?: AnalysisScore;
   /** 图片链路已有营养汇总（来自 legacy result），可选 */
   precomputedTotals?: NutritionTotals;
+  decisionMode?: 'pre_eat' | 'post_eat';
 }
 
 export type PipelineInput = TextPipelineInput | ImagePipelineInput;
@@ -97,6 +107,11 @@ export class AnalysisPipelineService {
     private readonly persistence: AnalysisPersistenceService,
     private readonly eventEmitter: EventEmitter2,
     private readonly decisionSummaryService: DecisionSummaryService,
+    private readonly analysisStateBuilder: AnalysisStateBuilderService,
+    private readonly confidenceDiagnosticsService: ConfidenceDiagnosticsService,
+    private readonly evidencePackBuilder: EvidencePackBuilderService,
+    private readonly postMealRecoveryService: PostMealRecoveryService,
+    private readonly shouldEatActionService: ShouldEatActionService,
   ) {}
 
   /**
@@ -130,6 +145,16 @@ export class AnalysisPipelineService {
 
     // Step 4: 评分
     const score = await this.computeScore(input, totals, userContext);
+    const mode = input.decisionMode || 'pre_eat';
+
+    // Step 4.5: 构建分析状态
+    const analysisState = this.analysisStateBuilder.build({
+      foods: input.foods,
+      totals,
+      score,
+      userContext,
+      mealType: input.mealType,
+    });
 
     // Step 5: 决策
     let decisionOutput: DecisionOutput;
@@ -157,6 +182,7 @@ export class AnalysisPipelineService {
         score.breakdown,
         input.userId,
         input.locale,
+        mode,
       );
     } catch (err) {
       this.logger.warn(`决策计算失败，使用默认: ${(err as Error).message}`);
@@ -176,6 +202,55 @@ export class AnalysisPipelineService {
     } catch (err) {
       this.logger.warn(`摘要生成失败: ${(err as Error).message}`);
     }
+
+    // Step 5.6: 分层置信度诊断
+    let confidenceDiagnostics: ConfidenceDiagnostics | undefined;
+    try {
+      confidenceDiagnostics = await this.confidenceDiagnosticsService.diagnose({
+        foods: input.foods,
+        userId: input.userId,
+        summary,
+      });
+    } catch (err) {
+      this.logger.warn(`置信度诊断失败: ${(err as Error).message}`);
+    }
+
+    // Step 5.7: 补偿建议 + 证据块 + 行动决策
+    const recoveryAction = this.postMealRecoveryService.build({
+      mode,
+      macroProgress: decisionOutput.macroProgress,
+      userContext,
+    });
+
+    const evidencePack: EvidencePack = this.evidencePackBuilder.build({
+      decisionOutput,
+      analysisState,
+      confidenceDiagnostics: confidenceDiagnostics || {
+        recognitionConfidence: 0.7,
+        normalizationConfidence: 0.7,
+        nutritionEstimationConfidence: 0.7,
+        decisionConfidence: 0.7,
+        overallConfidence: 0.7,
+        uncertaintyReasons: [],
+      },
+      summary,
+    });
+
+    const shouldEatAction = this.shouldEatActionService.build({
+      mode,
+      decisionOutput,
+      summary,
+      evidencePack,
+      confidenceDiagnostics: confidenceDiagnostics || {
+        recognitionConfidence: 0.7,
+        normalizationConfidence: 0.7,
+        nutritionEstimationConfidence: 0.7,
+        decisionConfidence: 0.7,
+        overallConfidence: 0.7,
+        uncertaintyReasons: [],
+      },
+      recoveryAction,
+    });
 
     const avgConfidence = computeAvgConfidence(input.foods);
     const ingestion =
@@ -201,6 +276,10 @@ export class AnalysisPipelineService {
       decisionOutput,
       ingestion,
       summary,
+      analysisState,
+      confidenceDiagnostics,
+      evidencePack,
+      shouldEatAction,
     });
 
     // Step 7: 持久化（异步，不阻塞）
