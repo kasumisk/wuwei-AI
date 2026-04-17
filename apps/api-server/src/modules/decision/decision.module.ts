@@ -34,6 +34,9 @@ import { ShouldEatActionService } from './decision/should-eat-action.service';
 import { ScoringService } from './scoring/scoring.service';
 import { DecisionClassifierService } from './decision/decision-classifier.service';
 
+// V2.4 feedback (Phase 2)
+import { AnalysisQualityFeedbackService } from './feedback/quality-feedback.service';
+
 @Module({
   imports: [
     forwardRef(() => DietModule),
@@ -63,6 +66,8 @@ import { DecisionClassifierService } from './decision/decision-classifier.servic
     // V2.4 Phase 1
     ScoringService,
     DecisionClassifierService,
+    // V2.4 Phase 2
+    AnalysisQualityFeedbackService,
   ],
   exports: [
     AnalysisPipelineService,
@@ -82,6 +87,8 @@ import { DecisionClassifierService } from './decision/decision-classifier.servic
     // V2.4 Phase 1
     ScoringService,
     DecisionClassifierService,
+    // V2.4 Phase 2
+    AnalysisQualityFeedbackService,
   ],
 })
 export class DecisionModule {}
