@@ -48,6 +48,7 @@ import {
   DecisionOutput,
 } from '../decision/food-decision.service';
 import { DecisionSummaryService } from '../decision/decision-summary.service';
+import { DecisionToneResolverService } from '../decision/decision-tone-resolver.service';
 import { AnalysisStateBuilderService } from './analysis-state-builder.service';
 import { ConfidenceDiagnosticsService } from './confidence-diagnostics.service';
 import { EvidencePackBuilderService } from './evidence-pack-builder.service';
@@ -107,6 +108,7 @@ export class AnalysisPipelineService {
     private readonly persistence: AnalysisPersistenceService,
     private readonly eventEmitter: EventEmitter2,
     private readonly decisionSummaryService: DecisionSummaryService,
+    private readonly decisionToneResolverService: DecisionToneResolverService,
     private readonly analysisStateBuilder: AnalysisStateBuilderService,
     private readonly confidenceDiagnosticsService: ConfidenceDiagnosticsService,
     private readonly evidencePackBuilder: EvidencePackBuilderService,
@@ -211,6 +213,9 @@ export class AnalysisPipelineService {
         userId: input.userId,
         summary,
       });
+      if (summary && confidenceDiagnostics) {
+        this.enrichSummaryWithConfidence(summary, confidenceDiagnostics);
+      }
     } catch (err) {
       this.logger.warn(`置信度诊断失败: ${(err as Error).message}`);
     }
@@ -231,9 +236,19 @@ export class AnalysisPipelineService {
         nutritionEstimationConfidence: 0.7,
         decisionConfidence: 0.7,
         overallConfidence: 0.7,
+        analysisQualityBand: 'medium',
+        qualitySignals: [],
+        analysisCompletenessScore: 0.7,
+        reviewLevel: 'auto_review',
         uncertaintyReasons: [],
       },
       summary,
+    });
+    // V3.0: 注入语气修饰
+    evidencePack.toneModifier = this.decisionToneResolverService.resolveModifier({
+      goalType: userContext.goalType,
+      verdict: decisionOutput.recommendation,
+      coachFocus: summary.coachFocus,
     });
 
     const shouldEatAction = this.shouldEatActionService.build({
@@ -241,12 +256,17 @@ export class AnalysisPipelineService {
       decisionOutput,
       summary,
       evidencePack,
+      userContext,
       confidenceDiagnostics: confidenceDiagnostics || {
         recognitionConfidence: 0.7,
         normalizationConfidence: 0.7,
         nutritionEstimationConfidence: 0.7,
         decisionConfidence: 0.7,
         overallConfidence: 0.7,
+        analysisQualityBand: 'medium',
+        qualitySignals: [],
+        analysisCompletenessScore: 0.7,
+        reviewLevel: 'auto_review',
         uncertaintyReasons: [],
       },
       recoveryAction,
@@ -474,5 +494,36 @@ export class AnalysisPipelineService {
       },
       decisionFactors: [],
     };
+  }
+
+  private enrichSummaryWithConfidence(
+    summary: NonNullable<FoodAnalysisResultV61['summary']>,
+    diagnostics: ConfidenceDiagnostics,
+  ): void {
+    summary.analysisQualityBand = diagnostics.analysisQualityBand;
+    summary.reviewLevel = diagnostics.reviewLevel;
+    if (diagnostics.analysisQualityBand === 'high') {
+      summary.analysisQualityNote = '分析质量较高，可按当前建议执行。';
+    } else if (diagnostics.analysisQualityBand === 'medium') {
+      summary.analysisQualityNote = '分析质量中等，建议结合饥饿感与份量微调。';
+    } else {
+      summary.analysisQualityNote = '分析质量偏低，建议先保守执行并补充更清晰输入复核。';
+    }
+
+    const guardrails: string[] = [];
+    if (summary.analysisQualityBand === 'low') {
+      guardrails.push('当前分析质量偏低，先按保守策略执行。');
+    }
+    if (summary.healthConstraintNote) {
+      guardrails.push(summary.healthConstraintNote);
+    }
+    if (summary.dynamicDecisionHint) {
+      guardrails.push(summary.dynamicDecisionHint);
+    }
+    if (summary.verdict === 'avoid') {
+      guardrails.push('当前建议为不建议继续吃，优先执行替代或减量。');
+    }
+
+    summary.decisionGuardrails = Array.from(new Set(guardrails)).slice(0, 3);
   }
 }

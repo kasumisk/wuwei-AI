@@ -17,7 +17,7 @@ import {
   DEFAULT_TIMEZONE,
 } from '../../../common/utils/timezone.util';
 import { t, Locale } from '../../diet/app/recommendation/utils/i18n-messages';
-import { UnifiedUserContext } from '../types/analysis-result.types';
+import { UnifiedUserContext, MacroSlotStatus } from '../types/analysis-result.types';
 
 // ==================== 输出类型 ====================
 
@@ -80,6 +80,9 @@ export class UserContextBuilderService {
       allergens: [],
       dietaryRestrictions: [],
       healthConditions: [],
+      budgetStatus: 'under_target',
+      nutritionPriority: ['protein_gap'],
+      contextSignals: ['fresh_day'],
     };
 
     if (!userId) return defaults;
@@ -97,6 +100,46 @@ export class UserContextBuilderService {
       const todayProtein = Number(summary.totalProtein) || 0;
       const todayFat = Number(summary.totalFat) || 0;
       const todayCarbs = Number(summary.totalCarbs) || 0;
+      const remainingCalories = goals.calories - todayCalories;
+      const remainingProtein = goals.protein - todayProtein;
+      const remainingFat = goals.fat - todayFat;
+      const remainingCarbs = goals.carbs - todayCarbs;
+      const resolvedLocalHour = profile?.timezone
+        ? getUserLocalHour(profile.timezone)
+        : localHour;
+      const mealCount = summary.mealCount || 0;
+      const budgetStatus = this.resolveBudgetStatus(remainingCalories, goals.calories);
+      const nutritionPriority = this.resolveNutritionPriority({
+        remainingProtein,
+        remainingFat,
+        remainingCarbs,
+        goalProtein: goals.protein,
+        goalFat: goals.fat,
+        goalCarbs: goals.carbs,
+      });
+      const contextSignals = this.resolveContextSignals({
+        budgetStatus,
+        remainingProtein,
+        remainingFat,
+        remainingCarbs,
+        localHour: resolvedLocalHour,
+        mealCount,
+        hasHealthConstraint:
+          ((profile?.allergens as string[] | undefined)?.length || 0) > 0 ||
+          ((profile?.dietaryRestrictions as string[] | undefined)?.length || 0) > 0 ||
+          ((profile?.healthConditions as string[] | undefined)?.length || 0) > 0,
+      });
+      // V3.0: 宏量槽位状态
+      const macroSlotStatus = this.resolveMacroSlotStatus({
+        remainingCalories,
+        remainingProtein,
+        remainingFat,
+        remainingCarbs,
+        goalCalories: goals.calories,
+        goalProtein: goals.protein,
+        goalFat: goals.fat,
+        goalCarbs: goals.carbs,
+      });
 
       return {
         goalType,
@@ -111,18 +154,20 @@ export class UserContextBuilderService {
         goalProtein: goals.protein,
         goalFat: goals.fat,
         goalCarbs: goals.carbs,
-        remainingCalories: goals.calories - todayCalories,
-        remainingProtein: goals.protein - todayProtein,
-        remainingFat: goals.fat - todayFat,
-        remainingCarbs: goals.carbs - todayCarbs,
-        mealCount: summary.mealCount || 0,
+        remainingCalories,
+        remainingProtein,
+        remainingFat,
+        remainingCarbs,
+        mealCount,
         profile,
-        localHour: profile?.timezone
-          ? getUserLocalHour(profile.timezone)
-          : localHour,
+        localHour: resolvedLocalHour,
         allergens: (profile?.allergens as string[]) || [],
         dietaryRestrictions: (profile?.dietaryRestrictions as string[]) || [],
         healthConditions: (profile?.healthConditions as string[]) || [],
+        budgetStatus,
+        nutritionPriority,
+        contextSignals,
+        macroSlotStatus,
       };
     } catch (err) {
       this.logger.warn(`构建用户上下文失败: ${(err as Error).message}`);
@@ -165,7 +210,138 @@ ${gc.focus}
       text += `\n- 饮食偏好：${(profile.foodPreferences as string[]).join('、')}`;
     if (ctx.dietaryRestrictions.length)
       text += `\n- 忌口：${ctx.dietaryRestrictions.join('、')}`;
+    if (ctx.budgetStatus)
+      text += `\n- 预算状态：${ctx.budgetStatus}`;
+    if (ctx.nutritionPriority?.length)
+      text += `\n- 当前优先修正：${ctx.nutritionPriority.join('、')}`;
+    if (ctx.contextSignals?.length)
+      text += `\n- 决策信号：${ctx.contextSignals.join('、')}`;
 
     return text;
+  }
+
+  private resolveBudgetStatus(
+    remainingCalories: number,
+    goalCalories: number,
+  ): 'under_target' | 'near_limit' | 'over_limit' {
+    if (remainingCalories < 0) {
+      return 'over_limit';
+    }
+
+    const safeGoal = goalCalories > 0 ? goalCalories : 2000;
+    if (remainingCalories / safeGoal <= 0.15) {
+      return 'near_limit';
+    }
+
+    return 'under_target';
+  }
+
+  private resolveNutritionPriority(input: {
+    remainingProtein: number;
+    remainingFat: number;
+    remainingCarbs: number;
+    goalProtein: number;
+    goalFat: number;
+    goalCarbs: number;
+  }): string[] {
+    const priorities: string[] = [];
+
+    if (input.goalProtein > 0 && input.remainingProtein / input.goalProtein > 0.35) {
+      priorities.push('protein_gap');
+    }
+    if (input.goalFat > 0 && input.remainingFat < -Math.max(8, input.goalFat * 0.12)) {
+      priorities.push('fat_excess');
+    }
+    if (input.goalCarbs > 0 && input.remainingCarbs < -Math.max(15, input.goalCarbs * 0.12)) {
+      priorities.push('carb_excess');
+    }
+    if (priorities.length === 0) {
+      priorities.push('maintain_balance');
+    }
+
+    return priorities;
+  }
+
+  private resolveContextSignals(input: {
+    budgetStatus: 'under_target' | 'near_limit' | 'over_limit';
+    remainingProtein: number;
+    remainingFat: number;
+    remainingCarbs: number;
+    localHour: number;
+    mealCount: number;
+    hasHealthConstraint: boolean;
+  }): string[] {
+    const signals: string[] = [input.budgetStatus];
+
+    if (input.hasHealthConstraint) {
+      signals.push('health_constraint');
+    }
+
+    if (input.remainingProtein > 20) {
+      signals.push('protein_gap');
+    }
+    if (input.remainingFat < -10) {
+      signals.push('fat_excess');
+    }
+    if (input.remainingCarbs < -20) {
+      signals.push('carb_excess');
+    }
+    if (input.localHour >= 21 || input.localHour < 5) {
+      signals.push('late_night_window');
+    }
+    if (input.mealCount <= 1 && input.localHour >= 13) {
+      signals.push('meal_count_low');
+    }
+
+    return Array.from(new Set(signals));
+  }
+
+  /** V3.0: 计算四维宏量槽位状态 */
+  private resolveMacroSlotStatus(input: {
+    remainingCalories: number;
+    remainingProtein: number;
+    remainingFat: number;
+    remainingCarbs: number;
+    goalCalories: number;
+    goalProtein: number;
+    goalFat: number;
+    goalCarbs: number;
+  }): MacroSlotStatus {
+    const threshold = 0.12; // 12% 阈值以内视为 ok
+
+    const toStatus = (remaining: number, goal: number): 'deficit' | 'ok' | 'excess' => {
+      if (goal <= 0) return 'ok';
+      const ratio = remaining / goal;
+      if (ratio < -threshold) return 'excess';
+      if (ratio > threshold) return 'deficit';
+      return 'ok';
+    };
+
+    const calories = toStatus(input.remainingCalories, input.goalCalories);
+    const protein = toStatus(input.remainingProtein, input.goalProtein);
+    const fat = toStatus(input.remainingFat, input.goalFat);
+    const carbs = toStatus(input.remainingCarbs, input.goalCarbs);
+
+    // 找到缺口最大的宏量
+    const deficitRatios: Array<[string, number]> = [
+      ['protein', input.goalProtein > 0 ? input.remainingProtein / input.goalProtein : 0],
+      ['carbs', input.goalCarbs > 0 ? input.remainingCarbs / input.goalCarbs : 0],
+      ['calories', input.goalCalories > 0 ? input.remainingCalories / input.goalCalories : 0],
+      ['fat', input.goalFat > 0 ? input.remainingFat / input.goalFat : 0],
+    ].filter(([, r]) => r > threshold);
+    deficitRatios.sort((a, b) => (b[1] as number) - (a[1] as number));
+    const dominantDeficit = deficitRatios[0]?.[0] as MacroSlotStatus['dominantDeficit'];
+
+    // 找到超标最大的宏量
+    const excessRatios: Array<[string, number]> = [
+      ['protein', input.goalProtein > 0 ? -input.remainingProtein / input.goalProtein : 0],
+      ['carbs', input.goalCarbs > 0 ? -input.remainingCarbs / input.goalCarbs : 0],
+      ['calories', input.goalCalories > 0 ? -input.remainingCalories / input.goalCalories : 0],
+      ['fat', input.goalFat > 0 ? -input.remainingFat / input.goalFat : 0],
+    ].filter(([, r]) => r > threshold);
+    excessRatios.sort((a, b) => (b[1] as number) - (a[1] as number));
+    const dominantExcess = excessRatios[0]?.[0] as MacroSlotStatus['dominantExcess'];
+
+    return { calories, protein, fat, carbs, dominantDeficit, dominantExcess };
   }
 }

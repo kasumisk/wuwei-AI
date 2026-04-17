@@ -346,6 +346,8 @@ ${behaviorContext ? `${behaviorContext}\n` : ''}${tonePrompt}`;
         summary: analysisContext.summary,
         evidencePack: analysisContext.evidencePack,
         confidenceDiagnostics: analysisContext.confidenceDiagnostics,
+        breakdownExplanations: analysisContext.breakdownExplanations,
+        nextMealAdvice: analysisContext.nextMealAdvice,
       });
     }
 
@@ -556,26 +558,86 @@ ${behaviorContext ? `${behaviorContext}\n` : ''}${tonePrompt}`;
       .join('、');
 
     ctx += `\n\n【${cl('analyzedFood', locale)}】${foodList}`;
-    ctx += `\n\n【分析摘要】`;
-    ctx += `\n- 判定：${summary.headline}`;
-    ctx += `\n- 建议等级：${summary.verdict}`;
+     ctx += `\n\n【${cl('summaryTitle', locale)}】`;
+     ctx += `\n- ${cl('verdictLabel', locale)}：${summary.headline}`;
+     ctx += `\n- ${cl('verdictLabel', locale)}等级：${summary.verdict}`;
 
     if (summary.topIssues.length > 0) {
-      ctx += `\n- 主要问题：${summary.topIssues.join('；')}`;
+      ctx += `\n- ${cl('topIssuesLabel', locale)}：${summary.topIssues.join('；')}`;
     }
 
     if (summary.topStrengths.length > 0) {
-      ctx += `\n- 优点：${summary.topStrengths.join('；')}`;
+      ctx += `\n- ${cl('strengthsLabel', locale)}：${summary.topStrengths.join('；')}`;
     }
 
-    ctx += `\n- 数据：${summary.quantitativeHighlight}`;
+     ctx += `\n- ${cl('dataLabel', locale)}：${summary.quantitativeHighlight}`;
 
     if (summary.actionItems.length > 0) {
-      ctx += `\n- 建议行动：${summary.actionItems.join('；')}`;
+      ctx += `\n- ${cl('actionItemsLabel', locale)}：${summary.actionItems.join('；')}`;
+    }
+
+    if (summary.contextSignals && summary.contextSignals.length > 0) {
+      ctx += `\n- ${cl('contextSignalLabel', locale)}：${summary.contextSignals.join('；')}`;
+    }
+
+    if (summary.coachFocus) {
+      ctx += `\n- ${cl('coachFocusLabel', locale)}：${summary.coachFocus}`;
     }
 
     if (summary.alternativeSummary) {
-      ctx += `\n- 替代方案：${summary.alternativeSummary}`;
+      ctx += `\n- ${cl('alternativeLabel', locale)}：${summary.alternativeSummary}`;
+    }
+    if (summary.analysisQualityNote) {
+      ctx += `\n- ${cl('analysisQualityLabel', locale)}：${summary.analysisQualityNote}`;
+    }
+    if (summary.dynamicDecisionHint) {
+      ctx += `\n- ${cl('dynamicHintLabel', locale)}：${summary.dynamicDecisionHint}`;
+    }
+    if (summary.healthConstraintNote) {
+      ctx += `\n- ${cl('healthConstraintLabel', locale)}：${summary.healthConstraintNote}`;
+    }
+    if (summary.decisionGuardrails && summary.decisionGuardrails.length > 0) {
+      ctx += `\n- ${cl('decisionGuardrailsLabel', locale)}：${summary.decisionGuardrails.join('；')}`;
+    }
+    if (summary.reviewLevel) {
+      const reviewLevelText =
+        summary.reviewLevel === 'manual_review'
+          ? cl('reviewManual', locale)
+          : cl('reviewAuto', locale);
+      ctx += `\n- ${cl('reviewLevelLabel', locale)}：${reviewLevelText}`;
+    }
+    // V3.0: 信号追踪
+    if (summary.signalTrace && summary.signalTrace.length > 0) {
+      const depth = analysisContext.evidencePack?.promptDepth ?? 'standard';
+      // V3.1: brief 模式只显示 1 条, standard 5 条, detailed 全部
+      const traceLimit = depth === 'brief' ? 1 : depth === 'detailed' ? 10 : 5;
+      const traceLines = summary.signalTrace.slice(0, traceLimit)
+        .map((t, i) => `  ${i + 1}. [${t.source}] ${t.description} (priority=${t.priority})`)
+        .join('\n');
+      ctx += `\n\n【${cl('signalTraceLabel', locale)}】\n${traceLines}`;
+    }
+    // V3.1: dailyMacroSummary 摘要文本
+    if (analysisContext.evidencePack?.dailyMacroSummary) {
+      ctx += `\n\n【每日摘要】\n${analysisContext.evidencePack.dailyMacroSummary}`;
+    }
+    // V3.0: 语气修饰
+    if (analysisContext.evidencePack?.toneModifier) {
+      ctx += `\n\n【${cl('toneModifierLabel', locale)}】\n${analysisContext.evidencePack.toneModifier}`;
+    }
+    // V3.0: 解释节点 — V3.1 brief 模式下跳过
+    const promptDepth = analysisContext.evidencePack?.promptDepth ?? 'standard';
+    if (promptDepth !== 'brief' && analysisContext.evidencePack?.explanationNodes?.length) {
+      const nodeLines = analysisContext.evidencePack.explanationNodes
+        .map((n) => `  ${n.step}. [${n.source}${n.weight ? '/' + n.weight : ''}] ${n.content}`)
+        .join('\n');
+      ctx += `\n\n【解释链路】\n${nodeLines}`;
+    }
+    // V3.1: detailed 模式追加结构化输出摘要
+    if (promptDepth === 'detailed' && analysisContext.evidencePack?.structuredOutput) {
+      const so = analysisContext.evidencePack.structuredOutput;
+      ctx += `\n\n【结构化建议】\n判决: ${so.verdict}\n主要原因: ${so.mainReason}`;
+      if (so.cautionNote) ctx += `\n注意: ${so.cautionNote}`;
+      if (so.confidenceNote) ctx += `\n置信度说明: ${so.confidenceNote}`;
     }
 
     // 宏量进度（保留，教练需要全局视角）
@@ -625,26 +687,71 @@ ${behaviorContext ? `${behaviorContext}\n` : ''}${tonePrompt}`;
       .join('、');
 
     ctx += `\n\n【${cl('analyzedFood', locale)}】${foodList}`;
-    ctx += `\n\n【教练行动计划】`;
-    ctx += `\n- 结论：${plan.conclusion}`;
+     ctx += `\n\n【${cl('coachPlanTitle', locale)}】`;
+     ctx += `\n- ${cl('conclusionLabel', locale)}：${plan.conclusion}`;
     if (plan.why.length > 0) {
-      ctx += `\n- 原因：${plan.why.join('；')}`;
+      ctx += `\n- ${cl('reasonLabel', locale)}：${plan.why.join('；')}`;
     }
     if (plan.doNow.length > 0) {
-      ctx += `\n- 现在怎么做：${plan.doNow.join('；')}`;
+      ctx += `\n- ${cl('doNowLabel', locale)}：${plan.doNow.join('；')}`;
+    }
+    if (analysisContext.shouldEatAction?.followUpActions?.length) {
+      ctx += `\n- ${cl('followUpLabel', locale)}：${analysisContext.shouldEatAction.followUpActions.join('；')}`;
     }
     if (plan.ifAlreadyAte && plan.ifAlreadyAte.length > 0) {
-      ctx += `\n- 如果已经吃了：${plan.ifAlreadyAte.join('；')}`;
+      ctx += `\n- ${cl('ifAlreadyAteLabel', locale)}：${plan.ifAlreadyAte.join('；')}`;
     }
     if (plan.alternatives && plan.alternatives.length > 0) {
-      ctx += `\n- 替代选择：${plan.alternatives.join('；')}`;
+      ctx += `\n- ${cl('alternativesLabel', locale)}：${plan.alternatives.join('；')}`;
+    }
+    if (plan.nextMeal) {
+      ctx += `\n- ${cl('nextMealLabel', locale)}：${plan.nextMeal}`;
     }
     if (analysisContext.confidenceDiagnostics?.uncertaintyReasons?.length) {
-      ctx += `\n- 不确定性：${analysisContext.confidenceDiagnostics.uncertaintyReasons.join('；')}`;
+      ctx += `\n- ${cl('uncertaintyLabel', locale)}：${analysisContext.confidenceDiagnostics.uncertaintyReasons.join('；')}`;
+    }
+    if (analysisContext.summary?.analysisQualityNote) {
+      ctx += `\n- ${cl('analysisQualityLabel', locale)}：${analysisContext.summary.analysisQualityNote}`;
+    }
+    if (analysisContext.summary?.dynamicDecisionHint) {
+      ctx += `\n- ${cl('dynamicHintLabel', locale)}：${analysisContext.summary.dynamicDecisionHint}`;
+    }
+    if (analysisContext.summary?.healthConstraintNote) {
+      ctx += `\n- ${cl('healthConstraintLabel', locale)}：${analysisContext.summary.healthConstraintNote}`;
+    }
+    if (analysisContext.summary?.decisionGuardrails?.length) {
+      ctx += `\n- ${cl('decisionGuardrailsLabel', locale)}：${analysisContext.summary.decisionGuardrails.join('；')}`;
+    }
+    if (analysisContext.summary?.reviewLevel) {
+      const reviewLevelText =
+        analysisContext.summary.reviewLevel === 'manual_review'
+          ? cl('reviewManual', locale)
+          : cl('reviewAuto', locale);
+      ctx += `\n- ${cl('reviewLevelLabel', locale)}：${reviewLevelText}`;
+    }
+    if (analysisContext.confidenceDiagnostics?.decisionConfidence != null) {
+      ctx += `\n- ${cl('decisionConfidenceLabel', locale)}：${Math.round(analysisContext.confidenceDiagnostics.decisionConfidence * 100)}%`;
+    }
+    // V3.0: 信号追踪
+    if (analysisContext.summary?.signalTrace?.length) {
+      const depth2 = analysisContext.evidencePack?.promptDepth ?? 'standard';
+      const traceLimit2 = depth2 === 'brief' ? 1 : depth2 === 'detailed' ? 10 : 5;
+      const traceLines = analysisContext.summary.signalTrace.slice(0, traceLimit2)
+        .map((t, i) => `  ${i + 1}. [${t.source}] ${t.description} (priority=${t.priority})`)
+        .join('\n');
+      ctx += `\n\n【${cl('signalTraceLabel', locale)}】\n${traceLines}`;
+    }
+    // V3.1: dailyMacroSummary
+    if (analysisContext.evidencePack?.dailyMacroSummary) {
+      ctx += `\n\n【每日摘要】\n${analysisContext.evidencePack.dailyMacroSummary}`;
+    }
+    // V3.0: 语气修饰
+    if (analysisContext.evidencePack?.toneModifier) {
+      ctx += `\n\n【${cl('toneModifierLabel', locale)}】\n${analysisContext.evidencePack.toneModifier}`;
     }
     if (analysisContext.macroProgress) {
       const mp = analysisContext.macroProgress;
-      ctx += `\n- 宏量进度：热量${mp.calories.percent}% / 蛋白${mp.protein.percent}% / 脂肪${mp.fat.percent}% / 碳水${mp.carbs.percent}%`;
+      ctx += `\n- ${cl('macroInlineLabel', locale)}：${cl('totalCalories', locale)}${mp.calories.percent}% / ${cl('protein', locale)}${mp.protein.percent}% / ${cl('fat', locale)}${mp.fat.percent}% / ${cl('carbs', locale)}${mp.carbs.percent}%`;
     }
 
     return ctx;

@@ -17,6 +17,7 @@ import {
   AlternativeComparison,
   NutritionTotals,
   DietIssue,
+  UnifiedUserContext,
 } from '../types/analysis-result.types';
 import { NutritionScoreBreakdown } from '../../diet/app/services/nutrition-score.service';
 import {
@@ -263,10 +264,8 @@ export class AlternativeSuggestionService {
       }
     }
 
-    return alternatives.slice(0, 5);
+    return this.attachRankScores(alternatives.slice(0, 5), userContext);
   }
-
-  private explainEngineCandidate(
     candidate: any,
     currentMealCalories: number,
     currentMealProtein: number,
@@ -415,7 +414,7 @@ export class AlternativeSuggestionService {
       `推荐引擎替代方案: count=${alternatives.length}, latency=${latencyMs}ms, userId=${userId}`,
     );
 
-    return alternatives;
+    return this.attachRankScores(alternatives, userContext);
   }
 
   // ==================== V2.2: 问题约束提取 ====================
@@ -605,5 +604,55 @@ export class AlternativeSuggestionService {
     if (trigger.minCarbs != null && totalCarbs < trigger.minCarbs) return false;
     if (trigger.minFat != null && totalFat < trigger.minFat) return false;
     return true;
+  }
+
+  /**
+   * V3.0: 为替代方案列表计算 rankScore 和 rankReasons
+   *
+   * rankScore 越高 → 越推荐
+   * 评分维度:
+   * - 热量差（越小/负越好，尤其 fat_loss/maintenance）
+   * - 蛋白质差（越大越好，尤其 muscle_gain）
+   * - substituteScore（来自引擎，直接加权）
+   */
+  private attachRankScores(
+    alternatives: FoodAlternative[],
+    ctx: UnifiedUserContext,
+  ): FoodAlternative[] {
+    if (!alternatives.length) return alternatives;
+
+    return alternatives.map((alt) => {
+      const comp = alt.comparison ?? {};
+      const calDiff = comp.caloriesDiff ?? 0;
+      const prosDiff = comp.proteinDiff ?? 0;
+      const rawScore = typeof alt.score === 'number' ? alt.score : 0.5;
+
+      const reasons: string[] = [];
+      let score = rawScore * 0.4; // base 40% from engine score
+
+      // 热量维度（最高 35%）
+      const calScore = Math.max(-1, Math.min(1, -calDiff / 200)); // -200kcal diff = +1
+      const calWeight = ctx.goalType === 'fat_loss' ? 0.35 : 0.15;
+      score += calScore * calWeight;
+      if (calDiff < -50) reasons.push(`热量少 ${Math.abs(calDiff)}kcal`);
+      else if (calDiff > 50) reasons.push(`热量多 ${calDiff}kcal`);
+
+      // 蛋白质维度（最高 25%）
+      const prosScore = Math.max(-1, Math.min(1, prosDiff / 20)); // +20g = +1
+      const prosWeight = ctx.goalType === 'muscle_gain' ? 0.25 : 0.10;
+      score += prosScore * prosWeight;
+      if (prosDiff > 5) reasons.push(`蛋白质+${prosDiff}g`);
+      else if (prosDiff < -5) reasons.push(`蛋白质-${Math.abs(prosDiff)}g`);
+
+      // 归一化到 [0, 1]
+      const finalScore = Math.max(0, Math.min(1, score));
+      if (reasons.length === 0) reasons.push('综合均衡');
+
+      return {
+        ...alt,
+        rankScore: Math.round(finalScore * 100) / 100,
+        rankReasons: reasons,
+      };
+    }).sort((a, b) => (b.rankScore ?? 0) - (a.rankScore ?? 0));
   }
 }

@@ -21,8 +21,9 @@ import { SubscriptionTier } from '../../subscription/subscription.types';
  * 各自定义的 UserContext，作为全系统唯一的用户上下文类型。
  */
 export interface UnifiedUserContext {
-  goalType: string;
-  goalLabel: string;
+  userId?: string;
+  goalType?: string;
+  goalLabel?: string;
   todayCalories: number;
   todayProtein: number;
   todayFat: number;
@@ -35,18 +36,64 @@ export interface UnifiedUserContext {
   remainingProtein: number;
   remainingFat: number;
   remainingCarbs: number;
-  mealCount: number;
+  mealCount?: number;
   /** 餐次类型（breakfast/lunch/dinner/snack） */
   mealType?: string;
-  profile: any;
+  profile?: any;
   /** 当前本地小时 (0-23) */
-  localHour: number;
+  localHour?: number;
   /** 用户过敏原列表 */
-  allergens: string[];
+  allergens?: string[];
   /** 用户饮食限制 */
-  dietaryRestrictions: string[];
+  dietaryRestrictions?: string[];
   /** 用户健康状况 */
-  healthConditions: string[];
+  healthConditions?: string[];
+  /** V2.6: 当前热量预算状态 */
+  budgetStatus?: 'under_target' | 'near_limit' | 'over_limit';
+  /** V2.6: 当前最值得优先修正的营养方向 */
+  nutritionPriority?: string[];
+  /** V2.6: 决策层可直接消费的上下文信号 */
+  contextSignals?: string[];
+  /** V3.0: 四维宏量槽位状态（各宏量独立的 deficit/ok/excess） */
+  macroSlotStatus?: MacroSlotStatus;
+}
+
+// ==================== V3.0 新增类型 ====================
+
+/** V3.0: 驱动决策的信号追踪条目 */
+export interface SignalTraceItem {
+  /** 信号键（如 'protein_gap'） */
+  signal: string;
+  /** 优先级分值（来自 signal-priority.config） */
+  priority: number;
+  /** 信号来源 */
+  source: 'user_context' | 'nutrition' | 'health_constraint' | 'time_window';
+  /** 人类可读描述 */
+  description: string;
+}
+
+/** V3.0: 四维宏量槽位感知 */
+export interface MacroSlotStatus {
+  calories: 'deficit' | 'ok' | 'excess';
+  protein: 'deficit' | 'ok' | 'excess';
+  fat: 'deficit' | 'ok' | 'excess';
+  carbs: 'deficit' | 'ok' | 'excess';
+  /** 缺口最大的宏量（影响决策优先级） */
+  dominantDeficit?: 'protein' | 'fat' | 'carbs' | 'calories';
+  /** 超标最大的宏量 */
+  dominantExcess?: 'protein' | 'fat' | 'carbs' | 'calories';
+}
+
+/** V3.0: 结构化解释节点（供 coach 按步骤输出逻辑清晰的解释） */
+export interface ExplanationNode {
+  /** 步骤序号（1-based） */
+  step: number;
+  /** 来源标注（如 'nutrition_analysis' | 'user_goal' | 'health_constraint'） */
+  source: string;
+  /** 节点内容 */
+  content: string;
+  /** 重要程度 */
+  weight?: 'high' | 'medium' | 'low';
 }
 
 // ==================== 统一分析结果 ====================
@@ -145,15 +192,61 @@ export interface ConfidenceDiagnostics {
   nutritionEstimationConfidence: number;
   decisionConfidence: number;
   overallConfidence: number;
+  /** V2.8: 分析质量分层（基于 decisionConfidence） */
+  analysisQualityBand?: 'high' | 'medium' | 'low';
+  /** V2.8: 低质量来源信号，供决策/教练解释使用 */
+  qualitySignals?: string[];
+  /** V2.9: 分析完整度（0-1） */
+  analysisCompletenessScore?: number;
+  /** V2.9: 复核级别 */
+  reviewLevel?: 'auto_review' | 'manual_review';
   uncertaintyReasons: string[];
 }
 
 /** V2.3: 统一证据块 */
+// ==================== V3.1 新增类型 ====================
+
+/**
+ * V3.1: Prompt 输出深度级别
+ * - brief: 置信度高、分析完整时，输出精简版（核心结论 + 1条建议）
+ * - standard: 常规输出（结论 + 原因 + 2-3条建议）
+ * - detailed: 置信度低/需要人工复核时，输出详细版（含免责 + 解释节点）
+ */
+export type PromptDepthLevel = 'brief' | 'standard' | 'detailed';
+
+/**
+ * V3.1: 结构化教练输出模板
+ * 由 EvidencePackBuilderService 组装，供 coach-prompt-builder 消费
+ */
+export interface CoachOutputSchema {
+  verdict: 'recommend' | 'caution' | 'avoid';
+  /** 1-2 句核心原因 */
+  mainReason: string;
+  /** 2-3 条可执行建议 */
+  actionSteps: string[];
+  /** 警告/免责（可选，caution/avoid 时填充） */
+  cautionNote?: string;
+  /** 置信度说明（detailed 模式专用） */
+  confidenceNote?: string;
+}
+
+// ==================== 证据包 ====================
+
 export interface EvidencePack {
   scoreEvidence: string[];
   contextEvidence: string[];
   issueEvidence: string[];
   decisionEvidence: string[];
+  /** V3.0: 结构化解释节点（有序，每节点含来源标注） */
+  explanationNodes?: ExplanationNode[];
+  /** V3.0: 解析出的语气修饰符（传递给 coach prompt） */
+  toneModifier?: string;
+  /** V3.1: prompt 输出深度驱动（由置信度和复核级别推导） */
+  promptDepth?: PromptDepthLevel;
+  /** V3.1: 结构化教练输出模板 */
+  structuredOutput?: CoachOutputSchema;
+  /** V3.1: 每日宏量摘要自然语言 */
+  dailyMacroSummary?: string;
 }
 
 /** V2.3: 吃后补偿动作 */
@@ -170,6 +263,8 @@ export interface ShouldEatAction {
   primaryReason: string;
   evidence: string[];
   immediateAction: string;
+  /** V2.6: 给前端或教练直接消费的后续动作清单 */
+  followUpActions?: string[];
   portionAction?: {
     suggestedPercent: number;
     suggestedCalories: number;
@@ -189,6 +284,8 @@ export interface CoachActionPlan {
   ifAlreadyAte?: string[];
   alternatives?: string[];
   tone: 'strict' | 'encouraging' | 'neutral';
+  /** V2.7: 下一餐前瞻建议 */
+  nextMeal?: string;
 }
 
 // ==================== 子结构定义 ====================
@@ -442,6 +539,10 @@ export interface FoodAlternative {
   source?: 'engine' | 'static';
   /** V2.5: 推荐场景标记 */
   scenarioType?: 'takeout' | 'convenience' | 'homeCook' | 'standard';
+  /** V3.0: 替代方案质量评分（0-1，越高越优先推荐） */
+  rankScore?: number;
+  /** V3.0: 质量评分理由（可读文案，如'+18%蛋白质 -25%脂肪'） */
+  rankReasons?: string[];
 }
 
 /**
@@ -500,8 +601,26 @@ export interface DecisionSummary {
   actionItems: string[];
   /** 量化亮点（如"蛋白质 12g/目标120g(10%), 严重不足"） */
   quantitativeHighlight: string;
+  /** V2.6: 供教练和前端直读的上下文信号 */
+  contextSignals?: string[];
+  /** V2.6: 当前这次判断最应该强调的教练关注点 */
+  coachFocus?: string;
   /** 替代方案摘要 */
   alternativeSummary?: string;
+  /** V2.8: 分析质量分层（高/中/低） */
+  analysisQualityBand?: 'high' | 'medium' | 'low';
+  /** V2.8: 分析质量一句话说明 */
+  analysisQualityNote?: string;
+  /** V2.8: 动态决策提示（同食物不同时段/状态结论可不同） */
+  dynamicDecisionHint?: string;
+  /** V2.8: 健康约束提示 */
+  healthConstraintNote?: string;
+  /** V2.9: 决策护栏（执行顺序建议） */
+  decisionGuardrails?: string[];
+  /** V2.9: 复核级别 */
+  reviewLevel?: 'auto_review' | 'manual_review';
+  /** V3.0: 有序信号追踪（按优先级排序，驱动决策的信号列表） */
+  signalTrace?: SignalTraceItem[];
 }
 
 // ==================== 裁剪相关常量 ====================
@@ -531,3 +650,124 @@ export const PRO_TIER_HIDDEN_FIELDS: string[] = ['ingestion'];
  * Premium 版不隐藏任何字段
  */
 export const PREMIUM_TIER_HIDDEN_FIELDS: string[] = [];
+
+// ==================== V3.2 新增类型 ====================
+
+/**
+ * V3.2 Phase 1: 分析准确度级别
+ */
+export type AccuracyLevel = 'high' | 'medium' | 'low';
+
+/**
+ * V3.2 Phase 1: 食物分析包（单次分析结果的高级摘要）
+ */
+export interface FoodAnalysisPackage {
+  // 基础营养数据
+  totalCalories: number;
+  macros: {
+    protein: number;
+    fat: number;
+    carbs: number;
+  };
+
+  // V3.2: 分析准确度层级
+  /** 准确度级别（high/medium/low） */
+  accuracyLevel: AccuracyLevel;
+  /** 准确度评分（0-100） */
+  accuracyScore: number;
+  /** 准确度影响因素 */
+  accuracyFactors: {
+    confidence: number; // 识别置信度
+    reviewLevel: 'auto_review' | 'manual_review'; // 复核级别
+    completenessScore: number; // 完整度（0-1）
+  };
+
+  // 营养评分 7 维度
+  nutritionBreakdown: NutritionScoreBreakdown;
+}
+
+/**
+ * V3.2 Phase 1: 营养问题类型
+ */
+export type IssueType =
+  | 'protein_deficit'
+  | 'fat_excess'
+  | 'carb_excess'
+  | 'fiber_deficit'
+  | 'sodium_excess'
+  | 'calorie_excess'
+  | 'calorie_deficit'
+  | 'sugar_excess';
+
+/**
+ * V3.2 Phase 1: 结构化营养问题
+ */
+export interface NutritionIssue {
+  /** 问题类型 */
+  type: IssueType;
+  /** 严重程度 */
+  severity: 'low' | 'medium' | 'high';
+  /** 偏差值（g 或 % 或 kcal） */
+  metric: number;
+  /** 阈值 */
+  threshold: number;
+  /** 中文说明 */
+  implication: string;
+}
+
+/**
+ * V3.2 Phase 1: 推荐系统上下文条件
+ */
+export interface RecommendationContext {
+  /** 剩余热量 */
+  remainingCalories: number;
+  /** 目标宏量（剩余部分） */
+  targetMacros: {
+    protein: number;
+    fat: number;
+    carbs: number;
+  };
+  /** 已吃过的食物（用于去重） */
+  excludeFoods: string[];
+  /** 用户偏好场景（takeout/便利店/homeCook 等） */
+  preferredScenarios: string[];
+}
+
+/**
+ * V3.2 Phase 1: 上下文分析（结合当日摄入、用户画像、推荐条件）
+ */
+export interface ContextualAnalysis {
+  // 宏量位置状态
+  macroSlotStatus: MacroSlotStatus;
+  // 当前进度
+  macroProgress: {
+    consumed: NutritionTotals;
+    remaining: {
+      calories: number;
+      protein: number;
+      fat: number;
+      carbs: number;
+    };
+  };
+
+  // V3.2: 结构化问题识别
+  /** 按严重程度排序的问题列表 */
+  identifiedIssues: NutritionIssue[];
+
+  // V3.2: 替代建议条件（供推荐系统使用）
+  recommendationContext: RecommendationContext;
+}
+
+/**
+ * V3.2 Phase 1: 分析准确度刷新包（从 ConfidenceDiagnostics 推导）
+ * 用于给决策系统参考
+ */
+export interface AnalysisAccuracyMetrics {
+  level: AccuracyLevel;
+  score: number;
+  factors: {
+    confidence: number;
+    reviewLevel: 'auto_review' | 'manual_review';
+    completenessScore: number;
+  };
+}

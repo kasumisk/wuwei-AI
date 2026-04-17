@@ -6,6 +6,7 @@ import {
   FoodAlternative,
   RecoveryAction,
   ShouldEatAction,
+  UnifiedUserContext,
 } from '../types/analysis-result.types';
 import { DecisionOutput } from './food-decision.service';
 
@@ -16,19 +17,35 @@ export class ShouldEatActionService {
     decisionOutput: DecisionOutput;
     summary?: DecisionSummary;
     evidencePack: EvidencePack;
+    userContext?: UnifiedUserContext;
     confidenceDiagnostics: ConfidenceDiagnostics;
     recoveryAction?: RecoveryAction;
   }): ShouldEatAction {
-    const { mode, decisionOutput, summary, evidencePack, confidenceDiagnostics, recoveryAction } = input;
+    const { mode, decisionOutput, summary, evidencePack, userContext, confidenceDiagnostics, recoveryAction } = input;
     const { decision, alternatives } = decisionOutput;
 
     const immediateAction = this.resolveImmediateAction(
       mode,
       decisionOutput,
       summary,
+      userContext,
       confidenceDiagnostics,
       recoveryAction,
     );
+
+    const replacementAction =
+      alternatives.length > 0
+        ? {
+            strategy: this.resolveReplacementStrategy(alternatives),
+            candidates: alternatives.slice(0, 3),
+          }
+        : undefined;
+    const portionAction = decision.optimalPortion
+      ? {
+          suggestedPercent: decision.optimalPortion.recommendedPercent,
+          suggestedCalories: decision.optimalPortion.recommendedCalories,
+        }
+      : undefined;
 
     return {
       verdict: decision.recommendation,
@@ -41,19 +58,14 @@ export class ShouldEatActionService {
         ...evidencePack.decisionEvidence,
       ].slice(0, 4),
       immediateAction,
-      portionAction: decision.optimalPortion
-        ? {
-            suggestedPercent: decision.optimalPortion.recommendedPercent,
-            suggestedCalories: decision.optimalPortion.recommendedCalories,
-          }
-        : undefined,
-      replacementAction:
-        alternatives.length > 0
-          ? {
-              strategy: this.resolveReplacementStrategy(alternatives),
-              candidates: alternatives.slice(0, 3),
-            }
-          : undefined,
+      followUpActions: this.buildFollowUpActions({
+        summary,
+        portionAction,
+        replacementAction,
+        recoveryAction,
+      }),
+      portionAction,
+      replacementAction,
       recoveryAction,
     };
   }
@@ -62,11 +74,20 @@ export class ShouldEatActionService {
     mode: 'pre_eat' | 'post_eat',
     decisionOutput: DecisionOutput,
     summary: DecisionSummary | undefined,
+    userContext: UnifiedUserContext | undefined,
     confidenceDiagnostics: ConfidenceDiagnostics,
     recoveryAction?: RecoveryAction,
   ): string {
     if (mode === 'post_eat' && recoveryAction) {
       return recoveryAction.todayAdjustment;
+    }
+
+    const hasHealthConstraint =
+      ((userContext?.allergens?.length || 0) > 0) ||
+      ((userContext?.dietaryRestrictions?.length || 0) > 0) ||
+      ((userContext?.healthConditions?.length || 0) > 0);
+    if (hasHealthConstraint) {
+      return '先满足过敏/忌口/健康约束，再决定是否食用与食用份量';
     }
 
     if (confidenceDiagnostics.decisionConfidence < 0.6) {
@@ -97,5 +118,39 @@ export class ShouldEatActionService {
       return 'change_pairing';
     }
     return 'replace_food';
+  }
+
+  private buildFollowUpActions(input: {
+    summary?: DecisionSummary;
+    portionAction?: {
+      suggestedPercent: number;
+      suggestedCalories: number;
+    };
+    replacementAction?: {
+      strategy: 'replace_food' | 'reduce_portion' | 'change_pairing';
+      candidates: FoodAlternative[];
+    };
+    recoveryAction?: RecoveryAction;
+  }): string[] {
+    const actions = [...(input.summary?.actionItems || [])];
+    if (input.summary?.decisionGuardrails?.length) {
+      actions.push(...input.summary.decisionGuardrails);
+    }
+
+    if (input.portionAction) {
+      actions.push(
+        `优先按 ${input.portionAction.suggestedPercent}% 份量控制，本次约 ${input.portionAction.suggestedCalories} kcal`,
+      );
+    }
+
+    if (input.replacementAction?.candidates?.[0]) {
+      actions.push(`优先改成 ${input.replacementAction.candidates[0].name}`);
+    }
+
+    if (input.recoveryAction) {
+      actions.push(input.recoveryAction.todayAdjustment);
+    }
+
+    return Array.from(new Set(actions.filter(Boolean))).slice(0, 4);
   }
 }

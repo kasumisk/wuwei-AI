@@ -52,6 +52,16 @@ export class ConfidenceDiagnosticsService {
     ]);
 
     const decisionConfidence = this.clamp(overallConfidence * 0.8 + auditConfidence * 0.2);
+    const analysisQualityBand = this.resolveAnalysisQualityBand(decisionConfidence);
+    const analysisCompletenessScore = this.clamp(
+      normalizationConfidence * 0.5 + nutritionEstimationConfidence * 0.5,
+    );
+    const qualitySignals = this.collectQualitySignals({
+      recognitionConfidence,
+      normalizationConfidence,
+      nutritionEstimationConfidence,
+      auditConfidence,
+    });
 
     const uncertaintyReasons: string[] = [];
     if (recognitionConfidence < 0.7) {
@@ -69,6 +79,11 @@ export class ConfidenceDiagnosticsService {
     if (summary?.verdict === 'avoid' && decisionConfidence < 0.6) {
       uncertaintyReasons.push('当前建议偏严格，适合配合人工复核或更清晰输入');
     }
+    const reviewLevel = this.resolveReviewLevel(
+      analysisQualityBand,
+      qualitySignals,
+      uncertaintyReasons,
+    );
 
     return {
       recognitionConfidence: this.round(recognitionConfidence),
@@ -76,8 +91,47 @@ export class ConfidenceDiagnosticsService {
       nutritionEstimationConfidence: this.round(nutritionEstimationConfidence),
       decisionConfidence: this.round(decisionConfidence),
       overallConfidence: this.round(overallConfidence),
+      analysisQualityBand,
+      qualitySignals,
+      analysisCompletenessScore: this.round(analysisCompletenessScore),
+      reviewLevel,
       uncertaintyReasons,
     };
+  }
+
+  private resolveReviewLevel(
+    band: 'high' | 'medium' | 'low',
+    qualitySignals: string[],
+    uncertaintyReasons: string[],
+  ): 'auto_review' | 'manual_review' {
+    if (band === 'low') return 'manual_review';
+    if (qualitySignals.length >= 2) return 'manual_review';
+    if (uncertaintyReasons.length >= 2) return 'manual_review';
+    return 'auto_review';
+  }
+
+  private resolveAnalysisQualityBand(
+    decisionConfidence: number,
+  ): 'high' | 'medium' | 'low' {
+    if (decisionConfidence >= 0.8) return 'high';
+    if (decisionConfidence >= 0.6) return 'medium';
+    return 'low';
+  }
+
+  private collectQualitySignals(input: {
+    recognitionConfidence: number;
+    normalizationConfidence: number;
+    nutritionEstimationConfidence: number;
+    auditConfidence: number;
+  }): string[] {
+    const signals: string[] = [];
+    if (input.recognitionConfidence < 0.7) signals.push('recognition_low');
+    if (input.normalizationConfidence < 0.7) signals.push('normalization_low');
+    if (input.nutritionEstimationConfidence < 0.7) {
+      signals.push('nutrition_estimation_low');
+    }
+    if (input.auditConfidence < 0.7) signals.push('audit_feedback_low');
+    return signals;
   }
 
   private async getAuditFeedbackConfidence(userId?: string): Promise<number> {

@@ -136,13 +136,104 @@ export class CoachFormatService {
   ): FormattedCoachOutput {
     const suggestion = this.formatSuggestion(action as any, options);
     const lang = this.resolveLanguage(options.language);
-    const actionPlan = `${suggestion}。${this.formatNutrition(nutrition.calories, 'calories', lang)}`;
+    const calorieText = this.formatNutrition(nutrition.calories, 'calories', lang);
+    const proteinText =
+      typeof nutrition.protein === 'number'
+        ? this.formatNutrition(nutrition.protein, 'protein', lang)
+        : undefined;
+
+    const reasons = this.resolveReasons(action, options, calorieText, proteinText);
+    const suggestions = this.resolveSuggestions(action, options, nutrition);
+    const actionPlan = [suggestion, ...suggestions].join('。');
+
+    // V2.7: 置信度标签
+    const confidenceLabel = this.resolveConfidenceLabel(options.decisionConfidence);
+    // V2.7: 最低分评分洞察
+    const scoreInsight = this.resolveScoreInsight(options.breakdownExplanations);
 
     return {
       suggestion,
       actionPlan,
-      encouragement: `使用${options.persona}模式`,
+      encouragement: this.resolveEncouragement(options),
+      conclusion: suggestion,
+      reasons,
+      suggestions,
+      tone: options.persona,
+      confidenceLabel,
+      scoreInsight,
     };
+  }
+
+  private resolveReasons(
+    action: string,
+    options: CoachFormatOptions,
+    calorieText: string,
+    proteinText?: string,
+  ): string[] {
+    if (action === 'should_avoid') {
+      return [`当前这份食物会进一步推高摄入负担`, calorieText];
+    }
+    if (action === 'can_skip') {
+      return [`当前没有必须补充的信号`, calorieText];
+    }
+
+    return [
+      proteinText || this.translate('coach.reason.protein_needed', options.language === 'en' ? 'en' : 'zh'),
+      calorieText,
+    ].filter(Boolean);
+  }
+
+  private resolveSuggestions(
+    action: string,
+    options: CoachFormatOptions,
+    nutrition: any,
+  ): string[] {
+    if (action === 'should_avoid') {
+      return ['优先换更轻的搭配', '如果一定要吃，先减量再吃'];
+    }
+    if (action === 'can_skip') {
+      return ['可以先观察饥饿感', '下一餐优先补蛋白和蔬菜'];
+    }
+
+    const suggestions = ['按当前节奏食用'];
+    if (typeof nutrition.protein === 'number' && nutrition.protein < 20) {
+      suggestions.push('可额外搭配一份高蛋白食物');
+    }
+    return suggestions;
+  }
+
+  private resolveEncouragement(options: CoachFormatOptions): string {
+    const toneMap: Record<CoachFormatOptions['persona'], string> = {
+      strict: '保持边界感，先做最稳妥的选择',
+      friendly: '一步一步调整，比一次做满更重要',
+      data: '把这次当作一次可量化的小优化',
+    };
+
+    return toneMap[options.persona];
+  }
+
+  /** V2.7: 将 decisionConfidence (0-1) 映射到三档置信标签 */
+  private resolveConfidenceLabel(
+    confidence?: number,
+  ): 'low' | 'medium' | 'high' | undefined {
+    if (confidence == null) return undefined;
+    if (confidence >= 0.8) return 'high';
+    if (confidence >= 0.6) return 'medium';
+    return 'low';
+  }
+
+  /** V2.7: 从 breakdownExplanations 提取最低分 critical/warning 维度洞察 */
+  private resolveScoreInsight(
+    breakdownExplanations?: CoachFormatOptions['breakdownExplanations'],
+  ): string | undefined {
+    if (!breakdownExplanations || breakdownExplanations.length === 0) return undefined;
+    const candidates = breakdownExplanations.filter(
+      (b) => b.impact === 'critical' || b.impact === 'warning',
+    );
+    if (candidates.length === 0) return undefined;
+    const worst = candidates.reduce((a, b) => (a.score <= b.score ? a : b));
+    const label = worst.label || worst.dimension;
+    return worst.message ? `${label}(${worst.score}分): ${worst.message}` : undefined;
   }
 
   /**

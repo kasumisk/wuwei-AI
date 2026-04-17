@@ -59,7 +59,7 @@ export class DecisionEngineService {
     const contextReasons: string[] = [];
 
     // 时间感知决策调整（V2.2: 动态时间边界 + 动态热量阈值）
-    const hour = ctx.localHour;
+    const hour = ctx.localHour ?? 12;
     if (hour >= th.lateNightStart || hour < th.lateNightEnd) {
       if (totalCalories > th.significantMealCal) {
         contextReasons.push(t('decision.context.lateNightHighCal', {}, locale));

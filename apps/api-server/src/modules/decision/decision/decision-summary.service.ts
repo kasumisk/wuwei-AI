@@ -19,9 +19,11 @@ import {
   NutritionTotals,
   BreakdownExplanation,
   MacroProgress,
+  SignalTraceItem,
 } from '../types/analysis-result.types';
 import { DecisionOutput } from './food-decision.service';
 import { UnifiedUserContext } from '../types/analysis-result.types';
+import { getSignalPriority } from '../config/signal-priority.config';
 
 // ==================== 摘要输入 ====================
 
@@ -66,7 +68,13 @@ export class DecisionSummaryService {
       totals,
       userContext,
     );
+    const contextSignals = this.extractContextSignals(userContext, totals, decision);
+    const coachFocus = this.resolveCoachFocus(userContext, topIssues, decision);
     const alternativeSummary = this.buildAlternativeSummary(alternatives);
+    const dynamicDecisionHint = this.buildDynamicDecisionHint(userContext, decision);
+    const healthConstraintNote = this.buildHealthConstraintNote(userContext);
+    // V3.0: 信号追踪
+    const signalTrace = this.buildSignalTrace(userContext, contextSignals);
 
     return {
       headline,
@@ -75,7 +83,12 @@ export class DecisionSummaryService {
       topStrengths,
       actionItems,
       quantitativeHighlight,
+      contextSignals,
+      coachFocus,
       alternativeSummary,
+      dynamicDecisionHint,
+      healthConstraintNote,
+      signalTrace,
     };
   }
 
@@ -98,10 +111,16 @@ export class DecisionSummaryService {
     const calText = `${Math.round(totals.calories)}kcal`;
 
     if (decision.recommendation === 'recommend') {
+      if (ctx.budgetStatus === 'near_limit') {
+        return `${foodDesc}(${calText})可以吃，但已经接近今日预算，注意控制份量`;
+      }
       return `${foodDesc}(${calText})营养搭配不错，可以放心吃`;
     }
 
     if (decision.recommendation === 'avoid') {
+      if (ctx.budgetStatus === 'over_limit') {
+        return `${foodDesc}(${calText})当前已超出今日预算，不建议继续吃`;
+      }
       return `${foodDesc}(${calText})当前不建议食用`;
     }
 
@@ -281,4 +300,165 @@ export class DecisionSummaryService {
     }
     return `建议替换为：${parts.join(', ')}`;
   }
-}
+
+  private extractContextSignals(
+    ctx: UnifiedUserContext,
+    totals: NutritionTotals,
+    decision: FoodDecision,
+  ): string[] {
+    const signals = [...(ctx.contextSignals || [])];
+
+    if (decision.recommendation === 'avoid') {
+      signals.push('high_risk_decision');
+    }
+    if (decision.optimalPortion) {
+      signals.push('portion_adjustment_needed');
+    }
+    if (totals.calories > Math.max(ctx.remainingCalories, 0) && ctx.remainingCalories > 0) {
+      signals.push('meal_over_remaining_budget');
+    }
+
+    return Array.from(new Set(signals)).slice(0, 5);
+  }
+
+  private resolveCoachFocus(
+    ctx: UnifiedUserContext,
+    topIssues: string[],
+    decision: FoodDecision,
+  ): string {
+    // V2.7: 使用信号优先级仲裁矩阵替代顺序 if-else
+    const signals = [
+      ...(ctx.contextSignals || []),
+      ...(ctx.nutritionPriority || []),
+      ...(ctx.budgetStatus ? [ctx.budgetStatus] : []),
+    ];
+
+    // 去重并查矩阵，找出最高优先级信号
+    const uniqueSignals = Array.from(new Set(signals));
+    const topSignal = uniqueSignals.sort(
+      (a, b) =>
+        getSignalPriority(b, ctx.goalType) - getSignalPriority(a, ctx.goalType),
+    )[0];
+
+    if (topSignal === 'over_limit' || topSignal === 'near_limit') {
+      return ctx.goalType === 'fat_loss'
+        ? '优先强调热量边界和份量控制'
+        : '今日已达热量目标上限，注意整体平衡';
+    }
+    if (topSignal === 'protein_gap') {
+      return '优先强调蛋白质补充和更优搭配';
+    }
+    if (topSignal === 'health_constraint') {
+      return '优先满足健康约束与过敏/忌口，再做营养优化';
+    }
+    if (topSignal === 'fat_excess') {
+      return '控制脂肪摄入，优先选择低脂替代方案';
+    }
+    if (topSignal === 'carb_excess') {
+      return '降低碳水比例，优先补充蛋白质和蔬菜';
+    }
+    if (topSignal === 'late_night_window') {
+      return '当前处于晚间餐次窗口，建议控制总量';
+    }
+    if (topSignal === 'meal_count_low') {
+      return '今日餐次不足，建议补充营养密度高的食物';
+    }
+    if (topSignal === 'under_target') {
+      return '当前摄入低于目标，可适当增加摄入';
+    }
+    if (decision.recommendation === 'avoid') {
+      return '优先解释为什么现在不适合继续吃';
+    }
+    if (topIssues.length > 0) {
+      return `优先围绕“${topIssues[0]}”给出具体行动建议`;
+    }
+    return '优先给出简单、可执行、可坚持的下一步建议';
+  }
+
+  private buildDynamicDecisionHint(
+    ctx: UnifiedUserContext,
+    decision: FoodDecision,
+  ): string {
+    const isLateWindow = ctx.localHour >= 21 || ctx.localHour <= 5;
+    if (ctx.budgetStatus === 'over_limit') {
+      return '同样食物在当前状态更容易超预算，建议优先控制份量或替代。';
+    }
+    if (ctx.budgetStatus === 'near_limit') {
+      return '同样食物在接近预算上限时需要更谨慎，建议减量或调整搭配。';
+    }
+    if (isLateWindow && decision.recommendation !== 'avoid') {
+      return '同样食物在夜间窗口更应关注总量与消化负担。';
+    }
+    return '同样食物在不同时段与摄入状态下，结论可能不同。';
+  }
+
+  private buildHealthConstraintNote(ctx: UnifiedUserContext): string | undefined {
+    const constraints = [
+      ...(ctx.allergens || []),
+      ...(ctx.dietaryRestrictions || []),
+      ...(ctx.healthConditions || []),
+    ].filter(Boolean);
+
+    if (constraints.length === 0) return undefined;
+
+    return `存在健康约束（${constraints.slice(0, 3).join('、')}），建议优先满足约束再优化营养。`;
+  }
+  /** V3.0: 从 contextSignals 构建有序信号追踪列表 */
+  private buildSignalTrace(
+    ctx: UnifiedUserContext,
+    contextSignals: string[],
+  ): SignalTraceItem[] {
+    const trace: SignalTraceItem[] = [];
+
+    const SIGNAL_SOURCE_MAP: Record<string, SignalTraceItem['source']> = {
+      health_constraint: 'health_constraint',
+      over_limit: 'user_context',
+      near_limit: 'user_context',
+      under_target: 'user_context',
+      protein_gap: 'nutrition',
+      fat_excess: 'nutrition',
+      carb_excess: 'nutrition',
+      late_night_window: 'time_window',
+      meal_count_low: 'user_context',
+      fresh_day: 'user_context',
+    };
+
+    const SIGNAL_DESC_MAP: Record<string, string> = {
+      health_constraint: `健康约束（${[...ctx.allergens, ...ctx.dietaryRestrictions, ...ctx.healthConditions].slice(0, 2).join('/')}）`,
+      over_limit: `今日热量超标（已摄入 ${Math.round(ctx.todayCalories)}/${ctx.goalCalories}kcal）`,
+      near_limit: `今日热量接近上限（剩余 ${Math.round(ctx.remainingCalories)}kcal）`,
+      under_target: `今日摄入低于目标（剩余 ${Math.round(ctx.remainingCalories)}kcal）`,
+      protein_gap: `蛋白质缺口较大（剩余 ${Math.round(ctx.remainingProtein)}g/${ctx.goalProtein}g）`,
+      fat_excess: `脂肪超标（超出 ${Math.abs(Math.round(ctx.remainingFat))}g）`,
+      carb_excess: `碳水超标（超出 ${Math.abs(Math.round(ctx.remainingCarbs))}g）`,
+      late_night_window: `当前处于晚间餐次窗口（${ctx.localHour}点）`,
+      meal_count_low: `今日餐次偏少（已记录 ${ctx.mealCount} 餐）`,
+      fresh_day: '今日摄入较少，营养余量充足',
+    };
+
+    const goalType = ctx.goalType || 'health';
+    const { getSignalPriority, SIGNAL_PRIORITY_MATRIX } = require('../config/signal-priority.config');
+    const { DynamicSignalWeightService } = require('../config/dynamic-signal-weight.service');
+    const dynamicWeightSvc = new DynamicSignalWeightService();
+    const baseWeights = SIGNAL_PRIORITY_MATRIX[goalType] ?? {};
+    const adjustedWeights = dynamicWeightSvc.adjustWeights(
+      baseWeights,
+      ctx.macroSlotStatus,
+      goalType,
+    );
+
+    for (const signal of contextSignals) {
+      const dynamicPriority = adjustedWeights[signal] ?? getSignalPriority(signal, goalType);
+      trace.push({
+        signal,
+        priority: dynamicPriority,
+        source: SIGNAL_SOURCE_MAP[signal] ?? 'user_context',
+        description: SIGNAL_DESC_MAP[signal] ?? signal,
+      });
+    }
+
+    // 按优先级降序
+    trace.sort((a, b) => b.priority - a.priority);
+
+    return trace;
+  }}

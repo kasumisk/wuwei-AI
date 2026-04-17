@@ -16,6 +16,9 @@ import { FoodDecisionService } from './decision/food-decision.service';
 import { DecisionEngineService } from './decision/decision-engine.service';
 import { DecisionExplainerService } from './decision/decision-explainer.service';
 import { DecisionSummaryService } from './decision/decision-summary.service';
+import { DecisionToneResolverService } from './decision/decision-tone-resolver.service';
+import { DynamicSignalWeightService } from './config/dynamic-signal-weight.service';
+import { DailyMacroSummaryService } from './decision/daily-macro-summary.service';
 import { AlternativeSuggestionService } from './decision/alternative-suggestion.service';
 import { ContextualDecisionModifierService } from './decision/contextual-modifier.service';
 import { IssueDetectorService } from './decision/issue-detector.service';
@@ -39,6 +42,14 @@ import { DecisionClassifierService } from './decision/decision-classifier.servic
 // V2.4 feedback (Phase 2)
 import { AnalysisQualityFeedbackService } from './feedback/quality-feedback.service';
 
+// V3.2 Phase 1 (Phase 1)
+import { AnalysisAccuracyService } from './analyze/analysis-accuracy.service';
+import { NutritionIssueDetector } from './analyze/nutrition-issue-detector.service';
+import { AnalysisContextService } from './analyze/analysis-context.service';
+
+// V3.2 Phase 2
+import { DecisionCoachService } from './analyze/decision-coach.service';
+
 @Module({
   imports: [
     forwardRef(() => DietModule),
@@ -52,6 +63,9 @@ import { AnalysisQualityFeedbackService } from './feedback/quality-feedback.serv
     DecisionEngineService,
     DecisionExplainerService,
     DecisionSummaryService,
+    DecisionToneResolverService,
+    DynamicSignalWeightService,
+    DailyMacroSummaryService,
     AlternativeSuggestionService,
     ContextualDecisionModifierService,
     IssueDetectorService,
@@ -70,6 +84,12 @@ import { AnalysisQualityFeedbackService } from './feedback/quality-feedback.serv
     DecisionClassifierService,
     // V2.4 Phase 2
     AnalysisQualityFeedbackService,
+    // V3.2 Phase 1
+    AnalysisAccuracyService,
+    NutritionIssueDetector,
+    AnalysisContextService,
+    // V3.2 Phase 2
+    DecisionCoachService,
     I18nService,
     I18nManagementService,
   ],
@@ -93,6 +113,12 @@ import { AnalysisQualityFeedbackService } from './feedback/quality-feedback.serv
     DecisionClassifierService,
     // V2.4 Phase 2
     AnalysisQualityFeedbackService,
+    // V3.2 Phase 1
+    AnalysisAccuracyService,
+    NutritionIssueDetector,
+    AnalysisContextService,
+    // V3.2 Phase 2
+    DecisionCoachService,
     I18nService,
     I18nManagementService,
   ],

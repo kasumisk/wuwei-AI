@@ -275,7 +275,7 @@ export function checkLateNight(
   const significantCal = thresholds?.significantMealCal ?? 300;
 
   if (
-    (ctx.localHour >= lateStart || ctx.localHour < lateEnd) &&
+    ((ctx.localHour ?? 12) >= lateStart || (ctx.localHour ?? 12) < lateEnd) &&
     totals.calories > significantCal
   ) {
     const calories = Math.round(totals.calories);
@@ -290,7 +290,7 @@ export function checkLateNight(
         category: 'late_night',
         severity: 'warning',
         message: msgBase + quantSuffix,
-        data: { hour: ctx.localHour, calories },
+        data: { hour: ctx.localHour ?? 12, calories },
       },
     };
   }
@@ -300,17 +300,38 @@ export function checkLateNight(
 /**
  * 过敏原检查（可能强制 avoid）
  */
+/** 过敏原中英文关键字映射表（Fix B1: 英文allergen name无法匹配中文食物名）*/
+const ALLERGEN_ZH_MAP: Record<string, string[]> = {
+  peanut: ['花生', '落花生'],
+  tree_nut: ['核桃', '腰果', '杏仁', '榛子', '开心果', '松子', '夏威夷果', '碧根果'],
+  shellfish: ['虾', '蟹', '龙虾', '贝', '蛤', '扇贝', '牡蛎', '蚌', '鱿鱼', '蛏'],
+  fish: ['鱼', '三文鱼', '金枪鱼', '鲑鱼', '鳕鱼', '草鱼', '鲫鱼', '带鱼', '黄鱼'],
+  milk: ['牛奶', '奶', '乳', '黄油', '奶酪', '酸奶', '芝士', '奶油'],
+  egg: ['鸡蛋', '蛋', '蛋清', '蛋黄', '鸭蛋', '鹌鹑蛋'],
+  wheat: ['小麦', '面粉', '面条', '面包', '饺子', '馒头', '包子', '馄饨'],
+  soy: ['大豆', '豆腐', '豆浆', '黄豆', '毛豆', '豆干', '豆皮', '豆腐脑'],
+  sesame: ['芝麻', '麻酱', '芝麻酱', '胡麻'],
+};
+
 export function checkAllergenConflict(
   foods: CheckableFoodItem[],
   ctx: Pick<UnifiedUserContext, 'allergens'>,
   locale?: Locale,
 ): CheckResult | null {
-  if (ctx.allergens.length === 0) return null;
+  if (!ctx.allergens || ctx.allergens.length === 0) return null;
 
   const foodTexts = buildFoodTexts(foods);
-  const matchedAllergen = ctx.allergens.find((a) =>
-    foodTexts.includes(a.toLowerCase()),
-  );
+  const matchedAllergen = (ctx.allergens ?? []).find((a) => {
+    const key = a.toLowerCase();
+    if (foodTexts.includes(key)) return true;
+    const zhKeywords = ALLERGEN_ZH_MAP[key];
+    if (zhKeywords) {
+      return foods.some((f) =>
+        zhKeywords.some((kw) => f.name.includes(kw) || (f.category ?? '').includes(kw)),
+      );
+    }
+    return false;
+  });
 
   if (matchedAllergen) {
     return {
@@ -345,7 +366,7 @@ export function checkRestrictionConflict(
   ctx: Pick<UnifiedUserContext, 'dietaryRestrictions'>,
   locale?: Locale,
 ): CheckResult | null {
-  if (ctx.dietaryRestrictions.length === 0) return null;
+  if (!ctx.dietaryRestrictions || ctx.dietaryRestrictions.length === 0) return null;
 
   const foodTexts = buildFoodTexts(foods);
   const meatKeywords = [
@@ -364,7 +385,7 @@ export function checkRestrictionConflict(
     'fish',
     'shrimp',
   ];
-  const isVegetarian = ctx.dietaryRestrictions.some((r) =>
+  const isVegetarian = (ctx.dietaryRestrictions ?? []).some((r) =>
     ['素食', '纯素', 'vegetarian', 'vegan'].includes(r.toLowerCase()),
   );
 
@@ -381,6 +402,29 @@ export function checkRestrictionConflict(
       },
     };
   }
+
+  // Fix B2: low_sodium 饮食限制——钠超过800mg时警告
+  const isLowSodium = (ctx.dietaryRestrictions ?? []).some((r) =>
+    ['low_sodium', '低盐', '低钠'].includes(r.toLowerCase()),
+  );
+  if (isLowSodium) {
+    const totalSodium = foods.reduce((s, f) => s + (f.sodium ?? 0), 0);
+    if (totalSodium > 800) {
+      return {
+        triggered: true,
+        severity: 'warning',
+        decisionOverride: 'caution',
+        reason: t('decision.context.restrictionConflict', {}, locale),
+        issue: {
+          category: 'restriction',
+          severity: 'warning',
+          message: t('decision.context.restrictionConflict', {}, locale),
+          data: { restriction: 'low_sodium', sodium: totalSodium },
+        },
+      };
+    }
+  }
+
   return null;
 }
 
@@ -394,7 +438,7 @@ export function checkHealthConditionRisk(
   locale?: Locale,
   thresholds?: UserThresholds,
 ): CheckResult[] {
-  if (ctx.healthConditions.length === 0) return [];
+  if (!ctx.healthConditions || ctx.healthConditions.length === 0) return [];
 
   const results: CheckResult[] = [];
   const totalSodium = foods.reduce((s, f) => s + (f.sodium || 0), 0);
@@ -403,11 +447,12 @@ export function checkHealthConditionRisk(
     0,
   );
 
-  const hasHypertension = ctx.healthConditions.some((c) =>
+  const hasHypertension = (ctx.healthConditions ?? []).some((c) =>
     ['高血压', 'hypertension', '高血圧'].includes(c.toLowerCase()),
   );
-  const hasDiabetes = ctx.healthConditions.some((c) =>
-    ['糖尿病', 'diabetes'].includes(c.toLowerCase()),
+  // Fix B3: 使用子串匹配，兼容 'diabetes_type2' / 'diabetes_type1' 等变体
+  const hasDiabetes = (ctx.healthConditions ?? []).some((c) =>
+    c.toLowerCase() === '糖尿病' || c.toLowerCase().includes('diabetes'),
   );
 
   const sodiumLimit = thresholds?.sodiumLimit ?? (hasHypertension ? 800 : 2000);
