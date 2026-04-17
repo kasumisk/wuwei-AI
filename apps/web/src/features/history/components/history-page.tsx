@@ -320,7 +320,7 @@ export function HistoryPage() {
 function HistoryItem({ item }: { item: AnalysisHistoryItem }) {
   const { push } = useLocalizedRouter();
   const { toast } = useToast();
-  const { deleteRecord, isDeleting } = useFoodAnalysis();
+  const { deleteAnalysis, isDeletingAnalysis } = useFoodAnalysis();
   const [showActions, setShowActions] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -335,7 +335,7 @@ function HistoryItem({ item }: { item: AnalysisHistoryItem }) {
 
   const handleDelete = async () => {
     try {
-      await deleteRecord(item.id);
+      await deleteAnalysis(item.id);
       toast({ title: '已删除', description: '分析记录已删除' });
     } catch {
       toast({ title: '删除失败', description: '请稍后再试', variant: 'destructive' });
@@ -496,17 +496,17 @@ function HistoryItem({ item }: { item: AnalysisHistoryItem }) {
             <div className="flex gap-3">
               <button
                 onClick={() => setShowDeleteConfirm(false)}
-                disabled={isDeleting}
+                disabled={isDeletingAnalysis}
                 className="flex-1 py-3 rounded-2xl bg-muted text-sm font-bold active:scale-[0.97] transition-all"
               >
                 取消
               </button>
               <button
                 onClick={handleDelete}
-                disabled={isDeleting}
+                disabled={isDeletingAnalysis}
                 className="flex-1 py-3 rounded-2xl bg-red-500 text-white text-sm font-bold active:scale-[0.97] transition-all disabled:opacity-60"
               >
-                {isDeleting ? '删除中...' : '确认删除'}
+                {isDeletingAnalysis ? '删除中...' : '确认删除'}
               </button>
             </div>
           </div>

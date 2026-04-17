@@ -247,7 +247,7 @@ export class AnalysisPipelineService {
     // V3.0: 注入语气修饰
     evidencePack.toneModifier = this.decisionToneResolverService.resolveModifier({
       goalType: userContext.goalType,
-      verdict: decisionOutput.recommendation,
+      verdict: decisionOutput.decision.recommendation,
       coachFocus: summary.coachFocus,
     });
 

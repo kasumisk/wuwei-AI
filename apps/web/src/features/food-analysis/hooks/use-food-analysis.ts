@@ -100,6 +100,14 @@ export function useFoodAnalysis() {
     },
   });
 
+  /** 删除分析记录（分析历史） */
+  const deleteAnalysisMutation = useMutation({
+    mutationFn: (analysisId: string) => foodRecordService.deleteAnalysis(analysisId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['analysis-history'] });
+    },
+  });
+
   return {
     analyzing,
     analyzeImage,
@@ -110,6 +118,8 @@ export function useFoodAnalysis() {
     isSavingAnalysis: saveAnalysisMutation.isPending,
     deleteRecord: deleteMutation.mutateAsync,
     isDeleting: deleteMutation.isPending,
+    deleteAnalysis: deleteAnalysisMutation.mutateAsync,
+    isDeletingAnalysis: deleteAnalysisMutation.isPending,
   };
 }
 

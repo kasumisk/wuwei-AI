@@ -91,11 +91,11 @@ export class EvidencePackBuilderService {
     const mainReason = decisionOutput.decision.reason ?? '';
 
     const actionSteps: string[] = [];
-    if (decisionOutput.decision.suggestion) {
-      actionSteps.push(decisionOutput.decision.suggestion);
+    if (decisionOutput.decision.advice) {
+      actionSteps.push(decisionOutput.decision.advice);
     }
-    if (summary?.nextSteps?.length) {
-      actionSteps.push(...summary.nextSteps.slice(0, 2));
+    if (summary?.actionItems?.length) {
+      actionSteps.push(...summary.actionItems.slice(0, 2));
     }
     if (actionSteps.length === 0) {
       actionSteps.push('保持均衡饮食，注意控制摄入量');
@@ -125,12 +125,12 @@ export class EvidencePackBuilderService {
     diag: ConfidenceDiagnostics,
   ): PromptDepthLevel {
     const score = diag.analysisCompletenessScore ?? 1;
-    const reviewLevel = diag.reviewLevel ?? 'auto';
+    const reviewLevel = diag.reviewLevel ?? 'auto_review';
 
-    if (reviewLevel === 'manual' || score < 0.5) {
+    if (reviewLevel === 'manual_review' || score < 0.5) {
       return 'detailed';
     }
-    if (score >= 0.8 && reviewLevel === 'auto') {
+    if (score >= 0.8 && reviewLevel === 'auto_review') {
       return 'brief';
     }
     return 'standard';

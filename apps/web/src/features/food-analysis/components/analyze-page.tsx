@@ -30,6 +30,32 @@ const mealTypeLabels: Record<MealTypeOption, string> = {
 const TEXT_MAX_LENGTH = 500;
 const ANALYZE_TIMEOUT_MS = 30_000; // 30秒超时
 
+function buildCoachPromptFromAnalysis(params: {
+  mealLabel: string;
+  foodNames: string;
+  totalCalories: number;
+  decision?: string;
+  nutritionScore?: number;
+  riskLevel?: string;
+  advice?: string;
+}): string {
+  const scorePart =
+    params.nutritionScore != null ? `营养评分 ${params.nutritionScore}/100。` : '';
+  const riskPart = params.riskLevel ? `风险等级 ${params.riskLevel}。` : '';
+  const advicePart = params.advice ? `系统建议：${params.advice}。` : '';
+
+  return [
+    `我刚完成${params.mealLabel}分析：${params.foodNames}，总热量约 ${params.totalCalories}kcal。`,
+    `当前判定：${params.decision || 'OK'}。`,
+    scorePart,
+    riskPart,
+    advicePart,
+    '请你按“这餐是否需要调整 -> 如何补救 -> 下一餐怎么搭配”的结构，给我一个可执行方案。',
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
 export function AnalyzePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -282,6 +308,73 @@ export function AnalyzePage() {
     setEditedFoods([]);
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, [previewUrl]);
+
+  const goToCoachWithAnalysis = useCallback(
+    (analysis: AnalysisResult, foods: FoodItem[], totalCalories: number, currentMeal: MealTypeOption) => {
+      const foodNames = foods.map((f) => f.name).join('、') || '本餐食物';
+      const prompt = buildCoachPromptFromAnalysis({
+        mealLabel: mealTypeLabels[currentMeal],
+        foodNames,
+        totalCalories,
+        decision: analysis.decision,
+        nutritionScore: analysis.nutritionScore,
+        riskLevel: analysis.riskLevel,
+        advice: analysis.advice,
+      });
+
+      try {
+        const decisionFactors = analysis.scoreBreakdown
+          ? Object.entries(analysis.scoreBreakdown).map(([dimension, score]) => ({
+              dimension,
+              score,
+              impact: score >= 70 ? 'positive' : score >= 45 ? 'neutral' : 'negative',
+              message: `${dimension} 评分 ${score}`,
+            }))
+          : undefined;
+
+        sessionStorage.setItem(
+          'coach_analysis_context',
+          JSON.stringify({
+            foods: foods.map((f) => ({
+              name: f.name,
+              calories: f.calories,
+              protein: f.protein,
+              fat: f.fat,
+              carbs: f.carbs,
+            })),
+            totalCalories,
+            totalProtein: analysis.totalProtein,
+            totalFat: analysis.totalFat,
+            totalCarbs: analysis.totalCarbs,
+            decision: analysis.decision,
+            riskLevel: analysis.riskLevel,
+            nutritionScore: analysis.nutritionScore,
+            advice: analysis.advice,
+            mealType: currentMeal,
+            breakdown: analysis.scoreBreakdown,
+            decisionFactors,
+            nextMealAdvice: analysis.compensation?.nextMeal
+              ? {
+                  targetCalories: Math.max(200, 600 - Math.round(totalCalories * 0.2)),
+                  targetProtein: Math.max(20, Math.round((analysis.totalProtein ?? 0) * 0.6)),
+                  emphasis: '控热量 + 补蛋白',
+                  suggestion: analysis.compensation.nextMeal,
+                }
+              : undefined,
+            timestamp: new Date().toISOString(),
+          })
+        );
+
+        // 教练页优先读取自动首问，避免 URL 过长并保证首问模板统一。
+        sessionStorage.setItem('coach_auto_prompt', prompt);
+      } catch {
+        /* ignore */
+      }
+
+      router.push(`/coach?q=${encodeURIComponent(prompt)}`);
+    },
+    [router]
+  );
 
   // ── Tab 切换 ──
   const handleSwitchMode = useCallback(
@@ -731,33 +824,7 @@ export function AnalyzePage() {
             {/* P1-6: 分析→教练无缝衔接（结构化摘要） */}
             <button
               onClick={() => {
-                const foodNames = editedFoods.map((f) => f.name).join('、');
-                const scoreInfo =
-                  result.nutritionScore != null ? `营养评分${result.nutritionScore}/100，` : '';
-                const riskInfo = result.riskLevel ? `风险等级${result.riskLevel}，` : '';
-                const adviceInfo = result.advice ? `AI建议：${result.advice}。` : '';
-                const coachQuery = encodeURIComponent(
-                  `我刚分析了一餐${mealTypeLabels[mealType]}，包含${foodNames}，共${editedTotal}kcal。${scoreInfo}${riskInfo}AI判定为「${result.decision || 'SAFE'}」。${adviceInfo}请给我针对性的饮食建议。`
-                );
-                // P2-5: 通过 sessionStorage 传递结构化上下文
-                try {
-                  sessionStorage.setItem(
-                    'coach_analysis_context',
-                    JSON.stringify({
-                      foods: editedFoods.map((f) => ({ name: f.name, calories: f.calories })),
-                      totalCalories: editedTotal,
-                      decision: result.decision,
-                      riskLevel: result.riskLevel,
-                      nutritionScore: result.nutritionScore,
-                      advice: result.advice,
-                      mealType,
-                      timestamp: new Date().toISOString(),
-                    })
-                  );
-                } catch {
-                  /* ignore */
-                }
-                router.push(`/coach?q=${coachQuery}`);
+                goToCoachWithAnalysis(result, editedFoods, editedTotal, mealType);
               }}
               className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-card border border-border text-sm font-medium text-foreground hover:bg-muted active:scale-[0.98] transition-all"
             >
@@ -787,10 +854,17 @@ export function AnalyzePage() {
             onGoHome={() => router.push('/')}
             onGoToPlan={() => router.push('/plan')}
             onGoToCoach={() => {
-              const coachQuery = encodeURIComponent(
-                `我刚记录了${mealTypeLabels[mealType]}，请根据我今天的饮食数据，给我下一餐的搭配建议。`
-              );
-              router.push(`/coach?q=${coachQuery}`);
+              if (result) {
+                goToCoachWithAnalysis(result, editedFoods, editedTotal, mealType);
+                return;
+              }
+              const fallbackPrompt = `我刚记录了${mealTypeLabels[mealType]}，请根据我今天的饮食数据，给我下一餐的搭配建议。`;
+              try {
+                sessionStorage.setItem('coach_auto_prompt', fallbackPrompt);
+              } catch {
+                /* ignore */
+              }
+              router.push(`/coach?q=${encodeURIComponent(fallbackPrompt)}`);
             }}
           />
         )}

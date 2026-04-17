@@ -207,7 +207,7 @@ export class AlternativeSuggestionService {
     const scenarioRecommendations = await this.recommendationEngineService.recommendByScenario(
       userId,
       ctx.mealType || 'snack',
-      ctx.goalType,
+      ctx.goalType || 'health',
       {
         calories: Math.max(0, ctx.todayCalories || 0),
         protein: Math.max(0, ctx.todayProtein || 0),
@@ -264,8 +264,10 @@ export class AlternativeSuggestionService {
       }
     }
 
-    return this.attachRankScores(alternatives.slice(0, 5), userContext);
+    return this.attachRankScores(alternatives.slice(0, 5), ctx);
   }
+
+  private explainEngineCandidate(
     candidate: any,
     currentMealCalories: number,
     currentMealProtein: number,
@@ -414,7 +416,7 @@ export class AlternativeSuggestionService {
       `推荐引擎替代方案: count=${alternatives.length}, latency=${latencyMs}ms, userId=${userId}`,
     );
 
-    return this.attachRankScores(alternatives, userContext);
+    return this.attachRankScores(alternatives, ctx);
   }
 
   // ==================== V2.2: 问题约束提取 ====================
@@ -545,7 +547,7 @@ export class AlternativeSuggestionService {
       };
     }
 
-    const hour = ctx.localHour;
+    const hour = ctx.localHour ?? 0;
     if (hour >= 21 && totalCalories > 200) {
       addAlternatives([
         {
@@ -577,7 +579,7 @@ export class AlternativeSuggestionService {
       !trigger.categories.includes(food.category || '')
     )
       return false;
-    if (trigger.goals?.length && !trigger.goals.includes(ctx.goalType))
+    if (trigger.goals?.length && !trigger.goals.includes(ctx.goalType || 'health'))
       return false;
     if (trigger.minCalories != null && food.calories < trigger.minCalories)
       return false;
@@ -595,7 +597,7 @@ export class AlternativeSuggestionService {
     totalFat: number,
   ): boolean {
     const trigger = rule.trigger;
-    if (trigger.goals?.length && !trigger.goals.includes(ctx.goalType))
+    if (trigger.goals?.length && !trigger.goals.includes(ctx.goalType || 'health'))
       return false;
     if (trigger.minCalories != null && totalCalories < trigger.minCalories)
       return false;
@@ -622,9 +624,9 @@ export class AlternativeSuggestionService {
     if (!alternatives.length) return alternatives;
 
     return alternatives.map((alt) => {
-      const comp = alt.comparison ?? {};
-      const calDiff = comp.caloriesDiff ?? 0;
-      const prosDiff = comp.proteinDiff ?? 0;
+      const comp = alt.comparison;
+      const calDiff = comp?.caloriesDiff ?? 0;
+      const prosDiff = comp?.proteinDiff ?? 0;
       const rawScore = typeof alt.score === 'number' ? alt.score : 0.5;
 
       const reasons: string[] = [];

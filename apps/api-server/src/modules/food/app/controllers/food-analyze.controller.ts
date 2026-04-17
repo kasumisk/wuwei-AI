@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Delete,
   Param,
   Body,
   Query,
@@ -609,6 +610,40 @@ export class FoodAnalyzeController {
     };
 
     return ResponseWrapper.success(detail);
+  }
+
+  /**
+   * 删除分析记录
+   * DELETE /api/app/food/analysis/:analysisId
+   *
+   * 仅删除分析历史，不删除已保存的饮食记录。
+   */
+  @Delete('analysis/:analysisId')
+  @UserApiThrottle(20, 60)
+  @ApiOperation({ summary: '删除分析记录' })
+  @ApiParam({ name: 'analysisId', description: '分析记录 ID' })
+  async deleteAnalysis(
+    @Param('analysisId') analysisId: string,
+    @CurrentAppUser() user: AppUserPayload,
+  ): Promise<ApiResponse> {
+    const record = await this.prisma.foodAnalysisRecords.findUnique({
+      where: { id: analysisId },
+      select: { id: true, userId: true },
+    });
+
+    if (!record) {
+      throw new NotFoundException('分析记录不存在');
+    }
+
+    if (record.userId !== user.id) {
+      throw new ForbiddenException('无权删除该分析记录');
+    }
+
+    await this.prisma.foodAnalysisRecords.delete({
+      where: { id: analysisId },
+    });
+
+    return ResponseWrapper.success(null, '分析记录已删除');
   }
 
   /**

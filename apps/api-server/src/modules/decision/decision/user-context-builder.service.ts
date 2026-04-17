@@ -324,22 +324,22 @@ ${gc.focus}
 
     // 找到缺口最大的宏量
     const deficitRatios: Array<[string, number]> = [
-      ['protein', input.goalProtein > 0 ? input.remainingProtein / input.goalProtein : 0],
-      ['carbs', input.goalCarbs > 0 ? input.remainingCarbs / input.goalCarbs : 0],
-      ['calories', input.goalCalories > 0 ? input.remainingCalories / input.goalCalories : 0],
-      ['fat', input.goalFat > 0 ? input.remainingFat / input.goalFat : 0],
+      ['protein', input.goalProtein > 0 ? input.remainingProtein / input.goalProtein : 0] as [string, number],
+      ['carbs', input.goalCarbs > 0 ? input.remainingCarbs / input.goalCarbs : 0] as [string, number],
+      ['calories', input.goalCalories > 0 ? input.remainingCalories / input.goalCalories : 0] as [string, number],
+      ['fat', input.goalFat > 0 ? input.remainingFat / input.goalFat : 0] as [string, number],
     ].filter(([, r]) => r > threshold);
-    deficitRatios.sort((a, b) => (b[1] as number) - (a[1] as number));
+    deficitRatios.sort((a, b) => b[1] - a[1]);
     const dominantDeficit = deficitRatios[0]?.[0] as MacroSlotStatus['dominantDeficit'];
 
     // 找到超标最大的宏量
     const excessRatios: Array<[string, number]> = [
-      ['protein', input.goalProtein > 0 ? -input.remainingProtein / input.goalProtein : 0],
-      ['carbs', input.goalCarbs > 0 ? -input.remainingCarbs / input.goalCarbs : 0],
-      ['calories', input.goalCalories > 0 ? -input.remainingCalories / input.goalCalories : 0],
-      ['fat', input.goalFat > 0 ? -input.remainingFat / input.goalFat : 0],
+      ['protein', input.goalProtein > 0 ? -input.remainingProtein / input.goalProtein : 0] as [string, number],
+      ['carbs', input.goalCarbs > 0 ? -input.remainingCarbs / input.goalCarbs : 0] as [string, number],
+      ['calories', input.goalCalories > 0 ? -input.remainingCalories / input.goalCalories : 0] as [string, number],
+      ['fat', input.goalFat > 0 ? -input.remainingFat / input.goalFat : 0] as [string, number],
     ].filter(([, r]) => r > threshold);
-    excessRatios.sort((a, b) => (b[1] as number) - (a[1] as number));
+    excessRatios.sort((a, b) => b[1] - a[1]);
     const dominantExcess = excessRatios[0]?.[0] as MacroSlotStatus['dominantExcess'];
 
     return { calories, protein, fat, carbs, dominantDeficit, dominantExcess };

@@ -43,6 +43,52 @@ interface ChatMessage {
   streaming?: boolean;
 }
 
+type PendingAnalysisContext = {
+  mealType?: string;
+  decision?: string;
+  nutritionScore?: number;
+  totalCalories?: number;
+  foods?: Array<{ name?: string }>;
+};
+
+function buildFallbackPromptFromContext(ctx: PendingAnalysisContext): string {
+  const foodNames = (ctx.foods || [])
+    .map((f) => f.name)
+    .filter((name): name is string => !!name)
+    .slice(0, 5)
+    .join('、');
+
+  const mealLabelMap: Record<string, string> = {
+    breakfast: '早餐',
+    lunch: '午餐',
+    dinner: '晚餐',
+    snack: '加餐',
+  };
+  const mealLabel = ctx.mealType ? mealLabelMap[ctx.mealType] || '这一餐' : '这一餐';
+  const scorePart = ctx.nutritionScore != null ? `营养评分约 ${ctx.nutritionScore}/100。` : '';
+  const caloriesPart = ctx.totalCalories ? `总热量约 ${ctx.totalCalories}kcal。` : '';
+
+  return [
+    `我刚完成${mealLabel}分析${foodNames ? `（${foodNames}）` : ''}。`,
+    caloriesPart,
+    `系统判定：${ctx.decision || 'OK'}。`,
+    scorePart,
+    '请你给我一个“今天剩余餐次怎么吃”的具体建议（包含热量与蛋白目标）。',
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
+function readPendingAnalysisContext(): PendingAnalysisContext | null {
+  try {
+    const raw = sessionStorage.getItem('coach_analysis_context');
+    if (!raw) return null;
+    return JSON.parse(raw) as PendingAnalysisContext;
+  } catch {
+    return null;
+  }
+}
+
 export default function CoachPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -98,18 +144,8 @@ export default function CoachPage() {
     }
   }, [isLoggedIn, router]);
 
-  // 从分析页跳转过来时自动发送预填问题（?q=...）
+  // 从分析页跳转过来时自动发送首问
   const autoSentRef = useRef(false);
-  useEffect(() => {
-    const q = searchParams.get('q');
-    if (q && !autoSentRef.current && !loadingGreeting && isLoggedIn) {
-      autoSentRef.current = true;
-      // 延迟一帧确保状态就绪
-      requestAnimationFrame(() => {
-        handleSend(q);
-      });
-    }
-  }, [searchParams, loadingGreeting, isLoggedIn]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 发送消息
   const handleSend = useCallback(
@@ -178,6 +214,42 @@ export default function CoachPage() {
     },
     [inputValue, isStreaming, conversationId]
   );
+
+  useEffect(() => {
+    if (autoSentRef.current || loadingGreeting || !isLoggedIn) return;
+
+    const q = searchParams.get('q')?.trim();
+    let prompt = q || '';
+
+    if (!prompt) {
+      try {
+        const cachedPrompt = sessionStorage.getItem('coach_auto_prompt');
+        if (cachedPrompt) {
+          prompt = cachedPrompt;
+        } else {
+          const ctx = readPendingAnalysisContext();
+          if (ctx) {
+            prompt = buildFallbackPromptFromContext(ctx);
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
+    if (!prompt) return;
+
+    autoSentRef.current = true;
+    try {
+      sessionStorage.removeItem('coach_auto_prompt');
+    } catch {
+      /* ignore */
+    }
+
+    requestAnimationFrame(() => {
+      handleSend(prompt);
+    });
+  }, [searchParams, loadingGreeting, isLoggedIn, handleSend]);
 
   // 停止生成
   const handleStop = useCallback(() => {

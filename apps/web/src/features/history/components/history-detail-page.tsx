@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useLocalizedRouter } from '@/lib/hooks/use-localized-router';
 import {
   useAnalysisDetail,
   useFoodAnalysis,
@@ -31,22 +32,103 @@ interface HistoryDetailPageProps {
   analysisId: string;
 }
 
+function buildCoachReviewPrompt(result: AnalysisResult): string {
+  const foodNames = (result.foods || [])
+    .map((f) => f.name)
+    .filter(Boolean)
+    .slice(0, 6)
+    .join('、');
+
+  const scorePart = result.nutritionScore != null ? `营养评分 ${result.nutritionScore}/100。` : '';
+  const riskPart = result.riskLevel ? `风险等级 ${result.riskLevel}。` : '';
+  const advicePart = result.advice ? `系统建议：${result.advice}。` : '';
+
+  return [
+    `这是我历史中的一餐分析：${foodNames || '该餐食物'}，总热量 ${result.totalCalories}kcal。`,
+    `当时判定：${result.decision || 'OK'}。`,
+    scorePart,
+    riskPart,
+    advicePart,
+    '请你给我复盘：这餐的关键问题是什么、今天后续怎么补救、下一餐怎么吃更稳。',
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
 export function HistoryDetailPage({ analysisId }: HistoryDetailPageProps) {
   const router = useRouter();
+  const { push } = useLocalizedRouter();
   const { toast } = useToast();
-  const { deleteRecord, isDeleting } = useFoodAnalysis();
+  const { deleteAnalysis, isDeletingAnalysis } = useFoodAnalysis();
   const { data: result, isLoading, error } = useAnalysisDetail(analysisId);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const handleDelete = async () => {
     try {
-      await deleteRecord(analysisId);
+      await deleteAnalysis(analysisId);
       toast({ title: '已删除', description: '分析记录已删除' });
       router.back();
     } catch {
       toast({ title: '删除失败', description: '请稍后再试', variant: 'destructive' });
     }
     setShowDeleteConfirm(false);
+  };
+
+  const handleCoachReview = () => {
+    if (!result) return;
+
+    const prompt = buildCoachReviewPrompt(result);
+
+    try {
+      const decisionFactors = result.scoreBreakdown
+        ? Object.entries(result.scoreBreakdown).map(([dimension, score]) => ({
+            dimension,
+            score,
+            impact: score >= 70 ? 'positive' : score >= 45 ? 'neutral' : 'negative',
+            message: `${dimension} 评分 ${score}`,
+          }))
+        : undefined;
+
+      sessionStorage.setItem(
+        'coach_analysis_context',
+        JSON.stringify({
+          foods: (result.foods || []).map((f) => ({
+            name: f.name,
+            calories: f.calories,
+            protein: f.protein,
+            fat: f.fat,
+            carbs: f.carbs,
+          })),
+          totalCalories: result.totalCalories,
+          totalProtein: result.totalProtein,
+          totalFat: result.totalFat,
+          totalCarbs: result.totalCarbs,
+          decision: result.decision,
+          riskLevel: result.riskLevel,
+          nutritionScore: result.nutritionScore,
+          advice: result.advice,
+          mealType: result.mealType,
+          breakdown: result.scoreBreakdown,
+          decisionFactors,
+          nextMealAdvice: result.compensation?.nextMeal
+            ? {
+                targetCalories: Math.max(200, 600 - Math.round(result.totalCalories * 0.2)),
+                targetProtein: Math.max(20, Math.round((result.totalProtein ?? 0) * 0.6)),
+                emphasis: '控热量 + 补蛋白',
+                suggestion: result.compensation.nextMeal,
+              }
+            : undefined,
+          source: 'history_detail',
+          analysisId,
+          timestamp: new Date().toISOString(),
+        })
+      );
+      sessionStorage.setItem('coach_auto_prompt', prompt);
+    } catch {
+      /* ignore */
+    }
+
+    push(`/coach?q=${encodeURIComponent(prompt)}`);
   };
 
   // ── Loading ──
@@ -262,11 +344,29 @@ export function HistoryDetailPage({ analysisId }: HistoryDetailPageProps) {
             <p className="text-sm leading-relaxed text-foreground/80">{result.advice}</p>
           </section>
         )}
+
+        <section className="bg-card rounded-2xl p-4 space-y-3 border border-primary/10">
+          <div className="flex items-start gap-2">
+            <span className="text-lg">🧠</span>
+            <div>
+              <p className="text-sm font-bold">复盘到 AI 教练</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                基于这条历史分析，自动带入结构化上下文，生成后续补救与下一餐建议。
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={handleCoachReview}
+            className="w-full py-3 rounded-xl bg-primary text-primary-foreground text-sm font-bold active:scale-[0.98] transition-all"
+          >
+            用这条记录问 AI 教练
+          </button>
+        </section>
       </main>
 
       {/* 删除确认弹窗 */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 z-[100] bg-black/50 flex items-end justify-center animate-in fade-in">
+        <div className="fixed inset-0 z-100 bg-black/50 flex items-end justify-center animate-in fade-in">
           <div className="w-full max-w-lg bg-card rounded-t-3xl p-6 space-y-4 animate-in slide-in-from-bottom duration-200">
             <h3 className="text-lg font-bold text-center">确认删除</h3>
             <p className="text-sm text-muted-foreground text-center">
@@ -275,17 +375,17 @@ export function HistoryDetailPage({ analysisId }: HistoryDetailPageProps) {
             <div className="flex gap-3">
               <button
                 onClick={() => setShowDeleteConfirm(false)}
-                disabled={isDeleting}
+                disabled={isDeletingAnalysis}
                 className="flex-1 py-3 rounded-2xl bg-muted text-sm font-bold active:scale-[0.97] transition-all"
               >
                 取消
               </button>
               <button
                 onClick={handleDelete}
-                disabled={isDeleting}
+                disabled={isDeletingAnalysis}
                 className="flex-1 py-3 rounded-2xl bg-red-500 text-white text-sm font-bold active:scale-[0.97] transition-all disabled:opacity-60"
               >
-                {isDeleting ? '删除中...' : '确认删除'}
+                {isDeletingAnalysis ? '删除中...' : '确认删除'}
               </button>
             </div>
           </div>

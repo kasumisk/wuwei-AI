@@ -424,7 +424,13 @@ export class DecisionSummaryService {
     };
 
     const SIGNAL_DESC_MAP: Record<string, string> = {
-      health_constraint: `健康约束（${[...ctx.allergens, ...ctx.dietaryRestrictions, ...ctx.healthConditions].slice(0, 2).join('/')}）`,
+      health_constraint: `健康约束（${[
+        ...(ctx.allergens || []),
+        ...(ctx.dietaryRestrictions || []),
+        ...(ctx.healthConditions || []),
+      ]
+        .slice(0, 2)
+        .join('/')}）`,
       over_limit: `今日热量超标（已摄入 ${Math.round(ctx.todayCalories)}/${ctx.goalCalories}kcal）`,
       near_limit: `今日热量接近上限（剩余 ${Math.round(ctx.remainingCalories)}kcal）`,
       under_target: `今日摄入低于目标（剩余 ${Math.round(ctx.remainingCalories)}kcal）`,

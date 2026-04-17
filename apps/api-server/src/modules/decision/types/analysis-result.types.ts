@@ -11,6 +11,7 @@
  */
 
 import { SubscriptionTier } from '../../subscription/subscription.types';
+import { NutritionScoreBreakdown } from '../../diet/app/services/nutrition-score.service';
 
 // ==================== V2.0: 统一用户上下文 ====================
 
@@ -22,8 +23,8 @@ import { SubscriptionTier } from '../../subscription/subscription.types';
  */
 export interface UnifiedUserContext {
   userId?: string;
-  goalType?: string;
-  goalLabel?: string;
+  goalType: string;
+  goalLabel: string;
   todayCalories: number;
   todayProtein: number;
   todayFat: number;
@@ -36,18 +37,18 @@ export interface UnifiedUserContext {
   remainingProtein: number;
   remainingFat: number;
   remainingCarbs: number;
-  mealCount?: number;
+  mealCount: number;
   /** 餐次类型（breakfast/lunch/dinner/snack） */
   mealType?: string;
   profile?: any;
   /** 当前本地小时 (0-23) */
-  localHour?: number;
+  localHour: number;
   /** 用户过敏原列表 */
-  allergens?: string[];
+  allergens: string[];
   /** 用户饮食限制 */
-  dietaryRestrictions?: string[];
+  dietaryRestrictions: string[];
   /** 用户健康状况 */
-  healthConditions?: string[];
+  healthConditions: string[];
   /** V2.6: 当前热量预算状态 */
   budgetStatus?: 'under_target' | 'near_limit' | 'over_limit';
   /** V2.6: 当前最值得优先修正的营养方向 */
