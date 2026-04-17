@@ -257,6 +257,7 @@ export class NutritionScoreService {
     streakDays: number,
     avgMealsPerDay: number,
     targetMeals: number,
+    complianceRate?: number,
   ): number {
     const streakScore = this.clamp(
       streakDays >= 30
@@ -271,23 +272,39 @@ export class NutritionScoreService {
             100 - (Math.abs(avgMealsPerDay - targetMeals) / targetMeals) * 100,
           )
         : 80;
+    // P2.3: 合规率加权（0-1 → 0-100 × 0.3）
+    if (complianceRate != null && complianceRate > 0) {
+      const complianceScore = this.clamp(complianceRate * 100);
+      return Math.round(
+        streakScore * 0.35 + mealRegularity * 0.35 + complianceScore * 0.3,
+      );
+    }
     return Math.round((streakScore + mealRegularity) / 2);
   }
 
   // ─── 惩罚机制 ───
 
-  private applyPenalties(score: number, input: NutritionInput): number {
-    let penalized = score;
+  private applyAdjustments(
+    score: number,
+    input: NutritionInput,
+    streakDays?: number,
+  ): number {
+    let adjusted = score;
+    // 惩罚
     if (input.calories > input.targetCalories * 1.3) {
-      penalized *= 0.7;
+      adjusted *= 0.7;
     }
     if (input.calories > 0 && (input.protein * 4) / input.calories < 0.1) {
-      penalized *= 0.8;
+      adjusted *= 0.8;
     }
     if (input.foodQuality > 0 && input.foodQuality < 2) {
-      penalized *= 0.85;
+      adjusted *= 0.85;
     }
-    return Math.round(penalized);
+    // P2.2: 连胜正向激励（7天+1.5, 14天+3, 21天+4.5, 最高+5）
+    if (streakDays && streakDays >= 7) {
+      adjusted += Math.min(5, Math.floor(streakDays / 7) * 1.5);
+    }
+    return Math.round(this.clamp(adjusted));
   }
 
   // ─── Highlights 生成 ───
@@ -378,7 +395,11 @@ export class NutritionScoreService {
       streakDays: number;
       avgMealsPerDay: number;
       targetMeals: number;
+      /** P2.2: 近 30 天合规率 0-1 */
+      complianceRate?: number;
     },
+    /** P2.1: 用户健康条件，用于动态调整维度权重 */
+    healthConditions?: string[],
   ): NutritionScoreResult {
     const energy = this.calcEnergyScore(
       input.calories,
@@ -402,6 +423,7 @@ export class NutritionScoreService {
           stabilityData.streakDays,
           stabilityData.avgMealsPerDay,
           stabilityData.targetMeals,
+          stabilityData.complianceRate,
         )
       : 80;
     const glycemicImpact = this.calcGlycemicImpactScore(
@@ -409,7 +431,54 @@ export class NutritionScoreService {
       input.carbsPerServing,
     );
 
-    const w = GOAL_WEIGHTS[goal] || GOAL_WEIGHTS.health;
+    // P1.2: 当 foodQuality/satiety 数据缺失（值为 0）时，将其权重分摊给其他维度
+    const w: Record<string, number> = {
+      ...(GOAL_WEIGHTS[goal] || GOAL_WEIGHTS.health),
+    };
+
+    // P2.1: 健康条件感知的权重调整
+    if (healthConditions?.length) {
+      const conditions = new Set(healthConditions);
+      if (conditions.has('diabetes') || conditions.has('blood_sugar')) {
+        w.glycemicImpact = (w.glycemicImpact || 0) * 1.5;
+        w.energy = (w.energy || 0) * 1.2;
+      }
+      if (conditions.has('kidney')) {
+        // 肾病患者蛋白质上限更严格，权重增加以放大偏差惩罚
+        w.proteinRatio = (w.proteinRatio || 0) * 1.3;
+      }
+      if (conditions.has('cholesterol') || conditions.has('cardiovascular')) {
+        w.macroBalance = (w.macroBalance || 0) * 1.3;
+      }
+      // 归一化权重
+      const total = Object.values(w).reduce((s, v) => s + v, 0);
+      if (total > 0) {
+        for (const k of Object.keys(w)) {
+          w[k] = w[k] / total;
+        }
+      }
+    }
+    const zeroDataDims: string[] = [];
+    if (input.foodQuality <= 0) zeroDataDims.push('foodQuality');
+    if (input.satiety <= 0) zeroDataDims.push('satiety');
+    if (zeroDataDims.length > 0) {
+      let redistributed = 0;
+      for (const dim of zeroDataDims) {
+        redistributed += w[dim] || 0;
+        w[dim] = 0;
+      }
+      // 按比例分摊给有数据的维度
+      const activeDims = Object.keys(w).filter(
+        (k) => w[k] > 0 && !zeroDataDims.includes(k),
+      );
+      const activeTotal = activeDims.reduce((s, k) => s + w[k], 0);
+      if (activeTotal > 0) {
+        for (const k of activeDims) {
+          w[k] += redistributed * (w[k] / activeTotal);
+        }
+      }
+    }
+
     let score =
       energy * w.energy +
       proteinRatio * w.proteinRatio +
@@ -419,7 +488,7 @@ export class NutritionScoreService {
       stability * w.stability +
       glycemicImpact * (w.glycemicImpact || 0);
 
-    score = this.applyPenalties(score, input);
+    score = this.applyAdjustments(score, input, stabilityData?.streakDays);
 
     const breakdown = {
       energy,

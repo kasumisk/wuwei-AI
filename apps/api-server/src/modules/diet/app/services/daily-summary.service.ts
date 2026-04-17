@@ -6,6 +6,7 @@ import {
 } from './nutrition-score.service';
 import { UserProfileService } from '../../../user/app/services/profile/user-profile.service';
 import { FoodRecordService } from './food-record.service';
+import { BehaviorService } from './behavior.service';
 import {
   getUserLocalDate,
   getUserLocalDayBounds,
@@ -20,6 +21,7 @@ export class DailySummaryService {
     private readonly nutritionScoreService: NutritionScoreService,
     private readonly userProfileService: UserProfileService,
     private readonly foodRecordService: FoodRecordService,
+    private readonly behaviorService: BehaviorService,
   ) {}
 
   /**
@@ -134,10 +136,7 @@ export class DailySummaryService {
       (s, r) => s + (Number(r.totalProtein) || 0),
       0,
     );
-    const totalFat = records.reduce(
-      (s, r) => s + (Number(r.totalFat) || 0),
-      0,
-    );
+    const totalFat = records.reduce((s, r) => s + (Number(r.totalFat) || 0), 0);
     const totalCarbs = records.reduce(
       (s, r) => s + (Number(r.totalCarbs) || 0),
       0,
@@ -175,6 +174,29 @@ export class DailySummaryService {
 
     // 综合评分
     const goalType = profile?.goal || 'health';
+
+    // P1.1: 注入真实 stabilityData（从 BehaviorService 获取）
+    let stabilityData:
+      | {
+          streakDays: number;
+          avgMealsPerDay: number;
+          targetMeals: number;
+          complianceRate?: number;
+        }
+      | undefined;
+    try {
+      const behaviorProfile = await this.behaviorService.getProfile(userId);
+      stabilityData = {
+        streakDays: behaviorProfile.streakDays || 0,
+        avgMealsPerDay: records.length,
+        targetMeals: Number((profile as any)?.mealsPerDay) || 3,
+        complianceRate: Number(behaviorProfile.avgComplianceRate) || 0,
+      };
+    } catch {
+      /* behavior profile unavailable — use default */
+    }
+
+    // P1.2: 修复 fallback — 有记录时用真实值，无记录不虚高
     const scoreResult = this.nutritionScoreService.calculateScore(
       {
         calories: totalCalories,
@@ -182,10 +204,12 @@ export class DailySummaryService {
         protein: totalProtein,
         fat: totalFat,
         carbs: totalCarbs,
-        foodQuality: avgQuality || 3,
-        satiety: avgSatiety || 3,
+        foodQuality: records.length > 0 ? avgQuality || 3 : 0,
+        satiety: records.length > 0 ? avgSatiety || 3 : 0,
       },
       goalType,
+      stabilityData,
+      (profile as any)?.healthConditions || undefined,
     );
 
     let summary = await this.prisma.dailySummaries.findFirst({
