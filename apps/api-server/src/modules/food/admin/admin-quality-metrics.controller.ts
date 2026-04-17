@@ -5,9 +5,17 @@
  */
 
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
-import { AnalysisQualityFeedbackService } from '../decision/feedback/quality-feedback.service';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../../auth/admin/jwt-auth.guard';
+import { RolesGuard } from '../../rbac/admin/roles.guard';
+import { Roles } from '../../rbac/admin/roles.decorator';
+import { AnalysisQualityFeedbackService } from '../../decision/feedback/quality-feedback.service';
 
+@ApiTags('管理后台 - 决策质量')
 @Controller('admin/analysis')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('admin', 'super_admin')
+@ApiBearerAuth()
 export class AdminQualityMetricsController {
   constructor(private readonly feedbackService: AnalysisQualityFeedbackService) {}
 
@@ -17,6 +25,7 @@ export class AdminQualityMetricsController {
    * 获取分析质量指标总览
    */
   @Get('quality-metrics')
+  @ApiOperation({ summary: '获取决策质量总览' })
   getQualityMetricsOverview(
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
@@ -40,7 +49,7 @@ export class AdminQualityMetricsController {
         dateRange: metrics.dateRange,
 
         // 问题分布
-        topIssues: Object.entries(metrics.issueBreakdown)
+        topIssues: (Object.entries(metrics.issueBreakdown) as Array<[string, number]>)
           .sort((a, b) => b[1] - a[1])
           .slice(0, 5)
           .map(([issue, count]) => ({
@@ -61,6 +70,7 @@ export class AdminQualityMetricsController {
    * 获取决策规则改进建议
    */
   @Get('policy-suggestions')
+  @ApiOperation({ summary: '获取策略优化建议' })
   getPolicySuggestions() {
     const suggestions = this.feedbackService.suggestPolicyChanges();
 
@@ -83,9 +93,12 @@ export class AdminQualityMetricsController {
    * 获取用户反馈分布
    */
   @Get('feedback-distribution')
+  @ApiOperation({ summary: '获取反馈分布' })
   getFeedbackDistribution() {
     const distribution = this.feedbackService.getFeedbackDistribution();
     const total = distribution.accepted + distribution.rejected + distribution.modified;
+    const safePercent = (count: number) =>
+      total > 0 ? `${((count / total) * 100).toFixed(1)}%` : '0.0%';
 
     return {
       success: true,
@@ -95,15 +108,15 @@ export class AdminQualityMetricsController {
         breakdown: {
           accepted: {
             count: distribution.accepted,
-            percentage: `${((distribution.accepted / total) * 100).toFixed(1)}%`,
+            percentage: safePercent(distribution.accepted),
           },
           rejected: {
             count: distribution.rejected,
-            percentage: `${((distribution.rejected / total) * 100).toFixed(1)}%`,
+            percentage: safePercent(distribution.rejected),
           },
           modified: {
             count: distribution.modified,
-            percentage: `${((distribution.modified / total) * 100).toFixed(1)}%`,
+            percentage: safePercent(distribution.modified),
           },
         },
       },
@@ -116,6 +129,7 @@ export class AdminQualityMetricsController {
    * 系统健康检查：验证决策质量是否在预期范围内
    */
   @Get('health-check')
+  @ApiOperation({ summary: '获取决策质量健康检查' })
   getHealthCheck() {
     const metrics = this.feedbackService.getQualityMetrics();
     const suggestions = this.feedbackService.suggestPolicyChanges();

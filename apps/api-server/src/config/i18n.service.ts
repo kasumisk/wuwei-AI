@@ -5,10 +5,11 @@
  */
 
 import { Injectable } from '@nestjs/common';
+import { EXTENDED_I18N_TRANSLATIONS } from './extended-i18n';
 
 @Injectable()
 export class I18nService {
-  private translations = {
+  private readonly translations = {
     zh: {
       // 决策理由
       'decision.reason.protein_deficit': '你需要补充蛋白质',
@@ -87,13 +88,54 @@ export class I18nService {
       'alternative.reason.lower_fat': 'Lower fat',
       'alternative.reason.higher_protein': 'Higher protein',
     },
+    ja: {},
+    ko: {},
+    'pt-BR': {},
   };
+
+  private readonly aliasMap: Record<string, keyof typeof this.translations> = {
+    zh: 'zh',
+    'zh-cn': 'zh',
+    'zh-tw': 'zh',
+    en: 'en',
+    'en-us': 'en',
+    ja: 'ja',
+    'ja-jp': 'ja',
+    ko: 'ko',
+    'ko-kr': 'ko',
+    pt: 'pt-BR',
+    'pt-br': 'pt-BR',
+  };
+
+  constructor() {
+    this.translations.zh = {
+      ...EXTENDED_I18N_TRANSLATIONS.zh,
+      ...this.translations.zh,
+    };
+    this.translations.en = {
+      ...EXTENDED_I18N_TRANSLATIONS.en,
+      ...this.translations.en,
+    };
+    this.translations.ja = {
+      ...EXTENDED_I18N_TRANSLATIONS.ja,
+      ...this.translations.ja,
+    };
+    this.translations.ko = {
+      ...EXTENDED_I18N_TRANSLATIONS.ko,
+      ...this.translations.ko,
+    };
+  }
+
+  private normalizeLanguage(language?: string): keyof typeof this.translations {
+    const normalized = (language || 'zh').toLowerCase();
+    return this.aliasMap[normalized] || 'zh';
+  }
 
   /**
    * 获取翻译字符串
    */
-  translate(key: string, language: 'en' | 'zh' = 'zh', variables?: Record<string, any>): string {
-    const lang = this.translations[language] || this.translations.zh;
+  translate(key: string, language: string = 'zh', variables?: Record<string, any>): string {
+    const lang = this.translations[this.normalizeLanguage(language)] || this.translations.zh;
     let text = lang[key] || key;
 
     // 替换变量占位符
@@ -109,7 +151,7 @@ export class I18nService {
   /**
    * 批量翻译
    */
-  translateBatch(keys: string[], language: 'en' | 'zh' = 'zh'): { [key: string]: string } {
+  translateBatch(keys: string[], language: string = 'zh'): { [key: string]: string } {
     const result: { [key: string]: string } = {};
     keys.forEach(key => {
       result[key] = this.translate(key, language);
@@ -121,6 +163,6 @@ export class I18nService {
    * 获取支持的语言列表
    */
   getSupportedLanguages(): string[] {
-    return Object.keys(this.translations);
+    return ['zh', 'en', 'ja', 'ko', 'pt-BR'];
   }
 }

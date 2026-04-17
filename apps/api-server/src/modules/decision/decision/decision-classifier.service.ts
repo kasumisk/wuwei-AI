@@ -5,24 +5,36 @@
  */
 
 import { Injectable } from '@nestjs/common';
+import { I18nManagementService } from '../../../config/i18n-management.service';
 import { ScoringService } from '../scoring/scoring.service';
 import { ShouldEatRequest, ShouldEatDecision, DecisionReason } from './decision-engine.types';
 
 @Injectable()
 export class DecisionClassifierService {
-  constructor(private readonly scoringService: ScoringService) {}
+  constructor(
+    private readonly scoringService: ScoringService,
+    private readonly i18nManagementService: I18nManagementService,
+  ) {}
 
   /**
    * 基于评分生成完整决策
    */
   async classifyDecision(request: ShouldEatRequest): Promise<ShouldEatDecision> {
     // 步骤1：获取营养评分
-    const score = request.currentScore || {
-      remaining: { calories: 500, protein: 20, fat: 15, carbs: 50 },
-      status: 'under',
-      issues: [],
-      confidence: 0.8,
-    };
+    const score = request.currentScore || this.scoringService.scoreNutrition(
+      {
+        nutritionTotals: request.userProfile?.todayNutrition || {
+          calories: 0,
+          protein: 0,
+          fat: 0,
+          carbs: 0,
+          fiber: 0,
+        },
+        confidence: request.analysisConfidence || 0.8,
+      },
+      request.userProfile,
+      request.userProfile?.nutritionGoal,
+    );
 
     // 步骤2：生成理由
     const reasons = this.generateReasonSet(score, request);
@@ -48,6 +60,8 @@ export class DecisionClassifierService {
    */
   private generateReasonSet(score: any, request?: ShouldEatRequest): DecisionReason[] {
     const reasons: DecisionReason[] = [];
+    const healthConditions = request?.userProfile?.healthConditions || [];
+    const preferences = request?.userProfile?.foodPreferences || [];
 
     // 如果还有热量剩余
     if (score.remaining.calories > 0) {
@@ -64,6 +78,10 @@ export class DecisionClassifierService {
           dimension: 'nutrition',
           reason_i18n: 'decision.reason.protein_deficit',
           weight: 0.5,
+          explanation: this.i18nManagementService.translate(
+            'decision.reason.protein_deficit',
+            request?.userProfile?.language || 'zh',
+          ),
         });
       }
       if (hasCarbDeficit) {
@@ -71,6 +89,10 @@ export class DecisionClassifierService {
           dimension: 'nutrition',
           reason_i18n: 'decision.reason.carbs_needed',
           weight: 0.3,
+          explanation: this.i18nManagementService.translate(
+            'decision.reason.carbs_needed',
+            request?.userProfile?.language || 'zh',
+          ),
         });
       }
     }
@@ -81,6 +103,34 @@ export class DecisionClassifierService {
         dimension: 'nutrition',
         reason_i18n: 'decision.reason.calorie_limit',
         weight: 0.7,
+        explanation: this.i18nManagementService.translate(
+          'decision.reason.calorie_limit',
+          request?.userProfile?.language || 'zh',
+        ),
+      });
+    }
+
+    if (healthConditions.length > 0) {
+      reasons.push({
+        dimension: 'health',
+        reason_i18n: 'reason.health',
+        weight: 0.6,
+        explanation: this.i18nManagementService.translate(
+          'reason.health',
+          request?.userProfile?.language || 'zh',
+        ),
+      });
+    }
+
+    if (preferences.length > 0) {
+      reasons.push({
+        dimension: 'preference',
+        reason_i18n: 'decision.reason.user_preference',
+        weight: 0.2,
+        explanation: this.i18nManagementService.translate(
+          'decision.reason.user_preference',
+          request?.userProfile?.language || 'zh',
+        ),
       });
     }
 
@@ -89,6 +139,10 @@ export class DecisionClassifierService {
         dimension: 'nutrition',
         reason_i18n: 'decision.reason.no_deficit',
         weight: 0.5,
+        explanation: this.i18nManagementService.translate(
+          'decision.reason.no_deficit',
+          request?.userProfile?.language || 'zh',
+        ),
       },
     ];
   }

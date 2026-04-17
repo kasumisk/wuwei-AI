@@ -12,6 +12,24 @@ export class I18nManagementService {
   private readonly translations = EXTENDED_I18N_TRANSLATIONS;
   private readonly supportedLanguages = Object.keys(this.translations);
   private readonly defaultLanguage = 'en';
+  private readonly aliases: Record<string, string> = {
+    zh: 'zh',
+    'zh-cn': 'zh',
+    'zh-tw': 'zh',
+    en: 'en',
+    'en-us': 'en',
+    ja: 'ja',
+    'ja-jp': 'ja',
+    ko: 'ko',
+    'ko-kr': 'ko',
+    pt: 'en',
+    'pt-br': 'en',
+  };
+
+  private normalizeLanguage(language?: string): string {
+    const normalized = (language || this.defaultLanguage).toLowerCase();
+    return this.aliases[normalized] || language || this.defaultLanguage;
+  }
 
   /**
    * 获取完整翻译
@@ -22,7 +40,10 @@ export class I18nManagementService {
     variables?: Record<string, any>,
   ): string {
     // 验证语言有效性，无效则使用默认语言
-    const lang = this.supportedLanguages.includes(language) ? language : this.defaultLanguage;
+    const normalizedLanguage = this.normalizeLanguage(language);
+    const lang = this.supportedLanguages.includes(normalizedLanguage)
+      ? normalizedLanguage
+      : this.defaultLanguage;
     const translations = this.translations[lang];
 
     if (!translations) {
@@ -76,7 +97,7 @@ export class I18nManagementService {
    * 检查语言是否被支持
    */
   isLanguageSupported(language: string): boolean {
-    return this.supportedLanguages.includes(language);
+    return this.supportedLanguages.includes(this.normalizeLanguage(language));
   }
 
   /**
@@ -90,7 +111,10 @@ export class I18nManagementService {
    * 获取语言的所有翻译
    */
   getAllTranslations(language: string): Record<string, string> {
-    const lang = this.supportedLanguages.includes(language) ? language : this.defaultLanguage;
+    const normalizedLanguage = this.normalizeLanguage(language);
+    const lang = this.supportedLanguages.includes(normalizedLanguage)
+      ? normalizedLanguage
+      : this.defaultLanguage;
     return this.translations[lang] || {};
   }
 }

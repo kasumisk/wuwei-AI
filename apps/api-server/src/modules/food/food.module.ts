@@ -3,6 +3,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { FoodLibraryController } from './app/controllers/food-library.controller';
 import { FoodLibraryService } from './app/services/food-library.service';
 import { FoodAnalyzeController } from './app/controllers/food-analyze.controller';
+import { FoodAnalysisReportController } from './app/controllers/food-analysis-report.controller';
 import { AnalyzeService } from './app/services/analyze.service';
 // V6 Phase 1.4: AI 分析队列处理器
 import { FoodAnalysisProcessor } from './app/processors/food-analysis.processor';
@@ -30,12 +31,17 @@ import { FoodLibraryManagementController } from './admin/food-library-management
 import { FoodLibraryManagementService } from './admin/food-library-management.service';
 import { AnalysisRecordManagementController } from './admin/analysis-record-management.controller';
 import { AnalysisRecordManagementService } from './admin/analysis-record-management.service';
+import { AdminQualityMetricsController } from './admin/admin-quality-metrics.controller';
 import { DietModule } from '../diet/diet.module';
 import { UserModule } from '../user/user.module';
 import { DecisionModule } from '../decision/decision.module';
+import { AuthModule } from '../auth/auth.module';
+import { RbacModule } from '../rbac/rbac.module';
 
 @Module({
   imports: [
+    AuthModule,
+    RbacModule,
     forwardRef(() => DietModule),
     UserModule,
     forwardRef(() => DecisionModule),
@@ -43,8 +49,10 @@ import { DecisionModule } from '../decision/decision.module';
   controllers: [
     FoodLibraryController,
     FoodAnalyzeController,
+    FoodAnalysisReportController,
     FoodLibraryManagementController,
     AnalysisRecordManagementController,
+    AdminQualityMetricsController,
   ],
   providers: [
     FoodLibraryService,

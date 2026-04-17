@@ -9,6 +9,10 @@ export interface UserDecisionFeedback {
   userId: string;
   decision: 'accepted' | 'modified' | 'rejected';
   userNote?: string;
+  issueKeys?: string[];
+  originalFoodName?: string;
+  selectedAlternative?: string;
+  locale?: string;
   timestamp: Date;
 }
 

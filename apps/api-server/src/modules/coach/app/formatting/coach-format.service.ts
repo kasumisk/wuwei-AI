@@ -10,11 +10,12 @@
  */
 
 import { Injectable } from '@nestjs/common';
+import { I18nManagementService } from '../../../../config/i18n-management.service';
 import { CoachFormatOptions, FormattedCoachOutput } from './coach-format.types';
 
 @Injectable()
 export class CoachFormatService {
-  private i18nStrings = {
+  private readonly i18nStrings = {
     zh: {
       'coach.header.should_eat': '建议现在吃',
       'coach.header.can_skip': '可以先不吃',
@@ -47,7 +48,13 @@ export class CoachFormatService {
       'coach.persona.friendly': 'Gentle advice',
       'coach.persona.data': 'Data-driven',
     },
-  };
+  } as const;
+
+  constructor(private readonly i18nManagementService: I18nManagementService) {}
+
+  private resolveLanguage(language?: string): 'zh' | 'en' {
+    return language === 'en' ? 'en' : 'zh';
+  }
 
   /**
    * 格式化建议文本
@@ -56,7 +63,22 @@ export class CoachFormatService {
     action: 'should_eat' | 'can_skip' | 'should_avoid',
     options: CoachFormatOptions,
   ): string {
-    const lang = options.language || 'zh';
+    const language = options.language || 'zh';
+    const i18nKeyMap: Record<string, string> = {
+      should_eat: 'action.should_eat',
+      can_skip: 'action.can_skip',
+      should_avoid: 'action.should_avoid',
+    };
+    const translated = this.i18nManagementService.translate(
+      i18nKeyMap[action] || action,
+      language,
+    );
+
+    if (translated !== i18nKeyMap[action]) {
+      return translated;
+    }
+
+    const lang = this.resolveLanguage(language);
     const strings = this.i18nStrings[lang] || this.i18nStrings.zh;
     const key = `coach.header.${action}`;
     return strings[key] || `Unknown action: ${action}`;
@@ -66,23 +88,39 @@ export class CoachFormatService {
    * 格式化时间范围
    */
   formatTimebound(hours: number, language: 'en' | 'zh' = 'zh'): string {
-    const strings = this.i18nStrings[language];
-    const template = strings['coach.timebound.hours'];
-    return template.replace('{{hours}}', String(hours));
+    const translated = this.i18nManagementService.translate(
+      'time.within_hours',
+      language,
+      { hours },
+    );
+    if (translated !== 'time.within_hours') {
+      return translated;
+    }
+
+    const strings = this.i18nStrings[this.resolveLanguage(language)];
+    return strings['coach.timebound.hours'].replace('{{hours}}', String(hours));
   }
 
   /**
    * 格式化营养值
    */
   formatNutrition(value: number, unit: string, language: 'en' | 'zh' = 'zh'): string {
-    const strings = this.i18nStrings[language];
-    const unitKeys = {
+    const i18nKeyMap: Record<string, string> = {
       calories: 'coach.nutrition.calories',
       protein: 'coach.nutrition.protein',
       fat: 'coach.nutrition.fat',
       carbs: 'coach.nutrition.carbs',
     };
-    const key = unitKeys[unit] || `coach.nutrition.${unit}`;
+    const key = i18nKeyMap[unit] || `coach.nutrition.${unit}`;
+    const translated = this.i18nManagementService.translate(key, language, {
+      value: value.toFixed(1),
+    });
+
+    if (translated !== key) {
+      return translated;
+    }
+
+    const strings = this.i18nStrings[this.resolveLanguage(language)];
     const template = strings[key];
     if (!template) return `${value}${unit}`;
     return template.replace('{{value}}', value.toFixed(1));
@@ -97,7 +135,7 @@ export class CoachFormatService {
     options: CoachFormatOptions,
   ): FormattedCoachOutput {
     const suggestion = this.formatSuggestion(action as any, options);
-    const lang = (options.language === 'zh' || options.language === 'en') ? options.language : 'zh';
+    const lang = this.resolveLanguage(options.language);
     const actionPlan = `${suggestion}。${this.formatNutrition(nutrition.calories, 'calories', lang)}`;
 
     return {
@@ -111,7 +149,12 @@ export class CoachFormatService {
    * 翻译 i18n key
    */
   translate(key: string, language: 'en' | 'zh' = 'zh', variables?: Record<string, any>): string {
-    const strings = this.i18nStrings[language] || this.i18nStrings.zh;
+    const translated = this.i18nManagementService.translate(key, language, variables);
+    if (translated !== key) {
+      return translated;
+    }
+
+    const strings = this.i18nStrings[this.resolveLanguage(language)] || this.i18nStrings.zh;
     let text = strings[key] || key;
 
     if (variables) {

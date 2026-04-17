@@ -33,6 +33,8 @@ import type {
 import { FoodLibraryService } from '../../food/app/services/food-library.service';
 import { t, Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 import { DecisionFoodItem, UserContext } from './food-decision.service';
+import { RecommendationEngineService } from '../../diet/app/services/recommendation-engine.service';
+import { MealRecommendation } from '../../diet/app/recommendation/types/recommendation.types';
 
 // ==================== 输入类型 ====================
 
@@ -68,6 +70,7 @@ export class AlternativeSuggestionService {
   private readonly logger = new Logger(AlternativeSuggestionService.name);
 
   constructor(
+    private readonly recommendationEngineService: RecommendationEngineService,
     private readonly substitutionService: SubstitutionService,
     private readonly foodLibraryService: FoodLibraryService,
   ) {}
@@ -93,7 +96,7 @@ export class AlternativeSuggestionService {
 
     let results: FoodAlternative[] = [];
 
-    // 1. 推荐引擎优先
+    // 1. 推荐引擎优先（V2.5：从整餐推荐候选池生成替代，不再只依赖替换规则）
     if (userId) {
       try {
         const engineAlternatives = await this.getEngineAlternatives(
@@ -109,17 +112,38 @@ export class AlternativeSuggestionService {
         }
       } catch (err) {
         this.logger.warn(
-          `推荐引擎替代方案获取失败，降级静态规则: ${(err as Error).message}`,
+          `推荐引擎替代方案获取失败，降级到二级替代路径: ${(err as Error).message}`,
         );
       }
     }
 
-    // 2. 静态规则 fallback
+    // 2. SubstitutionService 二级路径
+    if (results.length === 0 && userId) {
+      try {
+        const substitutionAlternatives = await this.getSubstitutionAlternatives(
+          foods,
+          userId,
+          ctx,
+          userConstraints,
+          preferenceProfile,
+          constraints,
+        );
+        if (substitutionAlternatives.length > 0) {
+          results = substitutionAlternatives.slice(0, 5);
+        }
+      } catch (err) {
+        this.logger.warn(
+          `SubstitutionService 替代方案获取失败，降级静态规则: ${(err as Error).message}`,
+        );
+      }
+    }
+
+    // 3. 静态规则 fallback
     if (results.length === 0) {
       results = this.generateStaticAlternatives(foods, ctx, locale);
     }
 
-    // 3. 添加 comparison 字段（定量对比）
+    // 4. 添加 comparison 字段（定量对比）
     const avgCalories =
       foods.length > 0
         ? foods.reduce((s, f) => s + f.calories, 0) / foods.length
@@ -134,7 +158,7 @@ export class AlternativeSuggestionService {
       }
     }
 
-    // 4. replacementPatterns 驱动排序提升
+    // 5. replacementPatterns 驱动排序提升
     if (replacementPatterns && Object.keys(replacementPatterns).length > 0) {
       const foodNames = foods.map((f) => f.name);
       for (const alt of results) {
@@ -170,6 +194,109 @@ export class AlternativeSuggestionService {
   // ==================== 推荐引擎替代 ====================
 
   private async getEngineAlternatives(
+    foods: DecisionFoodItem[],
+    userId: string,
+    ctx: UserContext,
+    userConstraints?: UserProfileConstraints,
+    _preferenceProfile?: UserPreferenceProfile,
+    constraints?: AlternativeConstraints,
+  ): Promise<FoodAlternative[]> {
+    const currentMealCalories = foods.reduce((sum, food) => sum + food.calories, 0);
+    const currentMealProtein = foods.reduce((sum, food) => sum + food.protein, 0);
+    const scenarioRecommendations = await this.recommendationEngineService.recommendByScenario(
+      userId,
+      ctx.mealType || 'snack',
+      ctx.goalType,
+      {
+        calories: Math.max(0, ctx.todayCalories || 0),
+        protein: Math.max(0, ctx.todayProtein || 0),
+      },
+      {
+        calories: constraints?.maxCalories || Math.max(currentMealCalories, 150),
+        protein: constraints?.preferHighProtein
+          ? Math.max(currentMealProtein + 8, 20)
+          : Math.max(currentMealProtein, 12),
+        fat: constraints?.preferLowFat ? Math.min(currentMealCalories * 0.2, 12) : Math.max(10, foods.reduce((sum, food) => sum + food.fat, 0)),
+        carbs: constraints?.preferLowCarb ? 20 : Math.max(20, foods.reduce((sum, food) => sum + food.carbs, 0)),
+      },
+      {
+        calories: Math.max(ctx.goalCalories || 0, currentMealCalories),
+        protein: Math.max(ctx.goalProtein || 0, currentMealProtein),
+      },
+      userConstraints || {
+        allergens: ctx.allergens,
+        dietaryRestrictions: ctx.dietaryRestrictions,
+        healthConditions: ctx.healthConditions,
+      },
+    );
+
+    const scenarioMap: Array<['takeout' | 'convenience' | 'homeCook', MealRecommendation]> = [
+      ['takeout', scenarioRecommendations.takeout],
+      ['convenience', scenarioRecommendations.convenience],
+      ['homeCook', scenarioRecommendations.homeCook],
+    ];
+
+    const seenNames = new Set<string>();
+    const alternatives: FoodAlternative[] = [];
+
+    for (const [scenarioType, recommendation] of scenarioMap) {
+      for (const candidate of recommendation.foods || []) {
+        const name = candidate.food?.name;
+        if (!name || seenNames.has(name)) {
+          continue;
+        }
+
+        seenNames.add(name);
+        alternatives.push({
+          name,
+          foodLibraryId: candidate.food?.id,
+          source: 'engine',
+          score: candidate.score,
+          reason: this.explainEngineCandidate(candidate, currentMealCalories, currentMealProtein, constraints, scenarioType),
+          comparison: {
+            caloriesDiff: Math.round(candidate.servingCalories - currentMealCalories),
+            proteinDiff: Math.round(candidate.servingProtein - currentMealProtein),
+            scoreDiff: typeof candidate.score === 'number' ? Math.round(candidate.score * 100) : undefined,
+          },
+          scenarioType,
+        });
+      }
+    }
+
+    return alternatives.slice(0, 5);
+  }
+
+  private explainEngineCandidate(
+    candidate: any,
+    currentMealCalories: number,
+    currentMealProtein: number,
+    constraints?: AlternativeConstraints,
+    scenarioType?: 'takeout' | 'convenience' | 'homeCook',
+  ): string {
+    if (constraints?.preferLowCalorie && candidate.servingCalories < currentMealCalories) {
+      return t('decision.alt.lowerCal', {
+        newCal: String(Math.round(candidate.servingCalories)),
+        oldCal: String(Math.round(currentMealCalories)),
+      });
+    }
+
+    if (constraints?.preferHighProtein && candidate.servingProtein > currentMealProtein) {
+      return t('decision.alt.higherProtein', {
+        newPro: String(Math.round(candidate.servingProtein)),
+        oldPro: String(Math.round(currentMealProtein)),
+      });
+    }
+
+    if (scenarioType === 'convenience') {
+      return t('decision.alt.similar');
+    }
+
+    return t('decision.alt.balanced', {
+      score: String(Math.round((candidate.score || 0) * 100)),
+    });
+  }
+
+  private async getSubstitutionAlternatives(
     foods: DecisionFoodItem[],
     userId: string,
     ctx: UserContext,

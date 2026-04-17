@@ -440,6 +440,8 @@ export interface FoodAlternative {
   comparison?: AlternativeComparison;
   /** V2.1: 来源标记（推荐引擎 or 静态规则） */
   source?: 'engine' | 'static';
+  /** V2.5: 推荐场景标记 */
+  scenarioType?: 'takeout' | 'convenience' | 'homeCook' | 'standard';
 }
 
 /**

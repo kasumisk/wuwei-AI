@@ -1,4 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
+import { I18nService } from '../../config/i18n.service';
+import { I18nManagementService } from '../../config/i18n-management.service';
 import { DietModule } from '../diet/diet.module';
 import { FoodModule } from '../food/food.module';
 import { UserModule } from '../user/user.module';
@@ -68,6 +70,8 @@ import { AnalysisQualityFeedbackService } from './feedback/quality-feedback.serv
     DecisionClassifierService,
     // V2.4 Phase 2
     AnalysisQualityFeedbackService,
+    I18nService,
+    I18nManagementService,
   ],
   exports: [
     AnalysisPipelineService,
@@ -89,6 +93,8 @@ import { AnalysisQualityFeedbackService } from './feedback/quality-feedback.serv
     DecisionClassifierService,
     // V2.4 Phase 2
     AnalysisQualityFeedbackService,
+    I18nService,
+    I18nManagementService,
   ],
 })
 export class DecisionModule {}

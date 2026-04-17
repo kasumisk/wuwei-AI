@@ -40,21 +40,36 @@ export class AnalysisQualityFeedbackService {
     const rejectedCount = feedbackList.filter(f => f.decision === 'rejected').length;
     const acceptanceRate = totalAnalyses > 0 ? (acceptedCount / totalAnalyses) * 100 : 0;
 
-    // 建立问题分布统计(placeholder)
-    const issueBreakdown = {
-      'protein_deficit': 12,
-      'calorie_excess': 8,
-      'fiber_low': 5,
-    };
+    const issueBreakdown = feedbackList.reduce<Record<string, number>>((acc, feedback) => {
+      for (const issueKey of feedback.issueKeys || []) {
+        acc[issueKey] = (acc[issueKey] || 0) + 1;
+      }
+      return acc;
+    }, {});
 
-    // 常见替代选择统计(placeholder)
-    const commonAlternatives = [
-      {
-        original: 'xxx食物',
-        replacement: 'yyy替代食物',
-        frequency: 15,
+    const alternativePairs = feedbackList.reduce<Record<string, { original: string; replacement: string; frequency: number }>>(
+      (acc, feedback) => {
+        if (!feedback.originalFoodName || !feedback.selectedAlternative) {
+          return acc;
+        }
+
+        const pairKey = `${feedback.originalFoodName}=>${feedback.selectedAlternative}`;
+        if (!acc[pairKey]) {
+          acc[pairKey] = {
+            original: feedback.originalFoodName,
+            replacement: feedback.selectedAlternative,
+            frequency: 0,
+          };
+        }
+        acc[pairKey].frequency += 1;
+        return acc;
       },
-    ];
+      {},
+    );
+
+    const commonAlternatives = Object.values(alternativePairs)
+      .sort((a, b) => b.frequency - a.frequency)
+      .slice(0, 10);
 
     const metrics: AnalysisQualityMetrics = {
       dateRange: { start, end },

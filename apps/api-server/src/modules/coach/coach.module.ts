@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { I18nManagementService } from '../../config/i18n-management.service';
 // 依赖模块
 import { UserModule } from '../user/user.module';
 import { DietModule } from '../diet/diet.module';
@@ -14,7 +15,13 @@ import { CoachFormatService } from './app/formatting/coach-format.service';
 @Module({
   imports: [ConfigModule, UserModule, DietModule],
   controllers: [CoachController],
-  providers: [CoachService, CoachPromptBuilderService, CoachActionPlanService, CoachFormatService],
+  providers: [
+    CoachService,
+    CoachPromptBuilderService,
+    CoachActionPlanService,
+    CoachFormatService,
+    I18nManagementService,
+  ],
   exports: [CoachService, CoachFormatService],
 })
 export class CoachModule {}
