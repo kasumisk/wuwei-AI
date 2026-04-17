@@ -1,5 +1,5 @@
 /**
- * V1.9 — 食物评分门面服务
+ * V3.5 — 食物评分门面服务（健康感知评分）
  *
  * 职责:
  * - calculateScore: 计算综合评分（健康分/营养分/置信度/7维breakdown）
@@ -66,6 +66,8 @@ export interface ScoringContext {
   todayCarbs: number;
   /** 目标类型 */
   goalType: string;
+  /** V3.5: 用户健康条件（用于调整 healthScore） */
+  healthConditions?: string[];
 }
 
 /** 图片链路评分输入（AI 已计算 avgQuality/avgSatiety） */
@@ -76,6 +78,8 @@ export interface ImageScoringInput {
   carbs: number;
   avgQuality: number;
   avgSatiety: number;
+  /** V3.6 P1.4: 健康条件（用于调整 healthScore） */
+  healthConditions?: string[];
 }
 
 /** Breakdown 维度解释 */
@@ -225,6 +229,24 @@ export class FoodScoringService {
         rawScoreResult = core.scoreResult;
         breakdownExplanations = core.breakdownExplanations;
         healthScore = Math.round(nutritionScore * 0.6 + avgQuality * 10 * 0.4);
+
+        // V3.5 P1.1: 健康条件分数调整（只影响 healthScore，保留客观 nutritionScore）
+        if (
+          ctx.healthConditions &&
+          ctx.healthConditions.length > 0 &&
+          breakdown
+        ) {
+          const adjustment = this.applyHealthConditionAdjustment(
+            healthScore,
+            ctx.healthConditions,
+            breakdown,
+            foods,
+            breakdownExplanations,
+            locale,
+          );
+          healthScore = adjustment.adjustedHealthScore;
+          breakdownExplanations = adjustment.explanations;
+        }
       }
     } catch {
       // 评分失败不阻断
@@ -291,9 +313,27 @@ export class FoodScoringService {
       locale,
     });
 
+    // V3.6 P1.4: 健康条件分数调整（只影响 healthScore，保留客观 nutritionScore）
+    let adjustedBreakdownExplanations = breakdownExplanations;
+    if (
+      input.healthConditions &&
+      input.healthConditions.length > 0 &&
+      scoreResult.breakdown
+    ) {
+      const adjustment = this.applyHealthConditionAdjustment(
+        scoreResult.score,
+        input.healthConditions,
+        scoreResult.breakdown,
+        [],
+        breakdownExplanations,
+        locale,
+      );
+      adjustedBreakdownExplanations = adjustment.explanations ?? [];
+    }
+
     return {
       ...scoreResult,
-      breakdownExplanations,
+      breakdownExplanations: adjustedBreakdownExplanations,
     };
   }
 
@@ -497,5 +537,123 @@ export class FoodScoringService {
   /** 分数 → 影响等级（V1.9: 委托给共享函数） */
   private scoreToImpact(score: number): 'positive' | 'warning' | 'critical' {
     return scoreToImpact(score);
+  }
+
+  /**
+   * V3.5 P1.1: 健康条件 healthScore 调整
+   *
+   * 仅调整 healthScore（个性化健康分），不修改 nutritionScore（客观营养分）。
+   * 在特定健康条件下放大对应维度的惩罚，并追加可读警告至 breakdownExplanations。
+   */
+  private applyHealthConditionAdjustment(
+    healthScore: number,
+    healthConditions: string[],
+    breakdown: import('../../diet/app/services/nutrition-score.service').NutritionScoreBreakdown,
+    foods: ScoringFoodItem[],
+    explanations: BreakdownExplanation[] | undefined,
+    locale: Locale,
+  ): {
+    adjustedHealthScore: number;
+    explanations: BreakdownExplanation[] | undefined;
+  } {
+    const condSet = new Set(healthConditions.map((c) => c.toLowerCase()));
+    let adjusted = healthScore;
+    const warnings: BreakdownExplanation[] = [];
+    const isEn = locale === 'en-US';
+    const isJa = locale === 'ja-JP';
+
+    // 糖尿病：血糖影响维度 < 60 → healthScore × 0.85
+    if (condSet.has('diabetes') || condSet.has('糖尿病')) {
+      if (breakdown.glycemicImpact < 60) {
+        adjusted = Math.round(adjusted * 0.85);
+        warnings.push({
+          dimension: 'healthCondition_diabetes',
+          label: isEn ? 'Diabetes Risk' : isJa ? '糖尿病リスク' : '糖尿病风险',
+          score: breakdown.glycemicImpact,
+          impact: 'critical',
+          message: isEn
+            ? `High glycemic impact (score ${breakdown.glycemicImpact}) — not recommended for diabetes`
+            : isJa
+              ? `血糖影響が高い（スコア ${breakdown.glycemicImpact}）— 糖尿病には不適`
+              : `血糖影响较高（评分 ${breakdown.glycemicImpact}），糖尿病用户慎食`,
+          suggestion: isEn
+            ? 'Choose low-GI alternatives'
+            : isJa
+              ? '低GI食品を選ぶ'
+              : '选择低GI替代食物',
+        });
+      }
+    }
+
+    // 心脏病/心血管：宏量均衡 < 60（脂肪偏高）→ healthScore × 0.85
+    if (
+      condSet.has('heart_disease') ||
+      condSet.has('cardiovascular') ||
+      condSet.has('心脏病')
+    ) {
+      if (breakdown.macroBalance < 60) {
+        adjusted = Math.round(adjusted * 0.85);
+        warnings.push({
+          dimension: 'healthCondition_cardiovascular',
+          label: isEn
+            ? 'Cardiovascular Risk'
+            : isJa
+              ? '心血管リスク'
+              : '心血管风险',
+          score: breakdown.macroBalance,
+          impact: 'critical',
+          message: isEn
+            ? `Macro balance concern (score ${breakdown.macroBalance}) — high fat risk for cardiovascular condition`
+            : isJa
+              ? `マクロバランスに懸念（スコア ${breakdown.macroBalance}）— 心疾患には脂質過多に注意`
+              : `宏量均衡偏差（评分 ${breakdown.macroBalance}），心血管疾病用户需控制饱和脂肪`,
+          suggestion: isEn
+            ? 'Reduce saturated fat intake'
+            : isJa
+              ? '飽和脂肪を減らす'
+              : '减少饱和脂肪摄入',
+        });
+      }
+    }
+
+    // 高血压：检查 foods 中钠含量 > 800mg → healthScore × 0.9
+    if (
+      condSet.has('hypertension') ||
+      condSet.has('高血压') ||
+      condSet.has('高血圧')
+    ) {
+      const totalSodium = foods.reduce((s, f) => s + (f.sodium || 0), 0);
+      if (totalSodium > 800) {
+        adjusted = Math.round(adjusted * 0.9);
+        warnings.push({
+          dimension: 'healthCondition_hypertension',
+          label: isEn
+            ? 'Hypertension Risk'
+            : isJa
+              ? '高血圧リスク'
+              : '高血压风险',
+          score: Math.max(0, 100 - Math.round((totalSodium - 800) / 10)),
+          impact: 'warning',
+          message: isEn
+            ? `High sodium content (${Math.round(totalSodium)}mg) — exceeds recommended limit for hypertension`
+            : isJa
+              ? `ナトリウム過多（${Math.round(totalSodium)}mg）— 高血圧には推奨上限超え`
+              : `钠含量偏高（${Math.round(totalSodium)}mg），高血压用户需控制钠摄入`,
+          suggestion: isEn
+            ? 'Limit high-sodium foods'
+            : isJa
+              ? '高塩分食品を避ける'
+              : '避免高盐食物',
+        });
+      }
+    }
+
+    return {
+      adjustedHealthScore: Math.min(100, Math.max(0, adjusted)),
+      explanations:
+        warnings.length > 0
+          ? [...(explanations || []), ...warnings]
+          : explanations,
+    };
   }
 }

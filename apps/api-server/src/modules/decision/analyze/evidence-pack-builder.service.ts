@@ -7,13 +7,17 @@ import {
   EvidencePack,
   PromptDepthLevel,
   UnifiedUserContext,
+  ContextualAnalysis,
+  StructuredDecision,
 } from '../types/analysis-result.types';
 import { DecisionOutput } from '../decision/food-decision.service';
 import { DailyMacroSummaryService } from '../decision/daily-macro-summary.service';
 
 @Injectable()
 export class EvidencePackBuilderService {
-  constructor(private readonly dailyMacroSummaryService: DailyMacroSummaryService) {}
+  constructor(
+    private readonly dailyMacroSummaryService: DailyMacroSummaryService,
+  ) {}
 
   build(input: {
     decisionOutput: DecisionOutput;
@@ -21,16 +25,28 @@ export class EvidencePackBuilderService {
     confidenceDiagnostics: ConfidenceDiagnostics;
     summary?: DecisionSummary;
     userContext?: UnifiedUserContext;
+    /** V3.3: 上下文分析 */
+    contextualAnalysis?: ContextualAnalysis;
+    /** V3.3: 结构化决策 */
+    structuredDecision?: StructuredDecision;
   }): EvidencePack {
-    const { decisionOutput, analysisState, confidenceDiagnostics, summary, userContext } = input;
+    const {
+      decisionOutput,
+      analysisState,
+      confidenceDiagnostics,
+      summary,
+      userContext,
+      contextualAnalysis,
+      structuredDecision,
+    } = input;
 
     const scoreEvidence = [
-      ...(decisionOutput.decisionFactors || []).slice(0, 3).map(
-        (factor) => `${factor.dimension}: ${factor.message}`,
-      ),
-      ...(decisionOutput.breakdownExplanations || []).slice(0, 2).map(
-        (item) => `${item.label}: ${item.message}`,
-      ),
+      ...(decisionOutput.decisionFactors || [])
+        .slice(0, 3)
+        .map((factor) => `${factor.dimension}: ${factor.message}`),
+      ...(decisionOutput.breakdownExplanations || [])
+        .slice(0, 2)
+        .map((item) => `${item.label}: ${item.message}`),
     ].slice(0, 4);
 
     const projected = analysisState.projectedAfterMeal.completionRatio;
@@ -39,20 +55,41 @@ export class EvidencePackBuilderService {
       `餐后蛋白完成度 ${projected.protein}%`,
       `餐后脂肪完成度 ${projected.fat}%`,
       `餐后碳水完成度 ${projected.carbs}%`,
+      // V3.3: 上下文分析问题
+      ...(contextualAnalysis?.identifiedIssues || [])
+        .slice(0, 3)
+        .map((issue) => `[${issue.severity}] ${issue.implication}`),
     ];
 
     const issueEvidence = [
-      ...(decisionOutput.issues || []).slice(0, 4).map((issue) => issue.message),
+      ...(decisionOutput.issues || [])
+        .slice(0, 4)
+        .map((issue) => issue.message),
     ];
 
     const decisionEvidence = [
       decisionOutput.decision.reason,
       ...(summary ? [summary.quantitativeHighlight] : []),
+      // V3.3: 结构化决策多维原因
+      ...(structuredDecision?.rationale
+        ? [
+            structuredDecision.rationale.contextual,
+            structuredDecision.rationale.goalAlignment,
+            ...(structuredDecision.rationale.healthRisk
+              ? [structuredDecision.rationale.healthRisk]
+              : []),
+            ...(structuredDecision.rationale.timelinessNote
+              ? [structuredDecision.rationale.timelinessNote]
+              : []),
+          ]
+        : []),
       ...(confidenceDiagnostics.analysisQualityBand
         ? [`分析质量: ${confidenceDiagnostics.analysisQualityBand}`]
         : []),
       ...(confidenceDiagnostics.analysisCompletenessScore != null
-        ? [`分析完整度: ${Math.round(confidenceDiagnostics.analysisCompletenessScore * 100)}%`]
+        ? [
+            `分析完整度: ${Math.round(confidenceDiagnostics.analysisCompletenessScore * 100)}%`,
+          ]
         : []),
       ...(confidenceDiagnostics.reviewLevel
         ? [`复核级别: ${confidenceDiagnostics.reviewLevel}`]
@@ -64,7 +101,12 @@ export class EvidencePackBuilderService {
     ].filter(Boolean);
 
     const promptDepth = this.resolvePromptDepth(confidenceDiagnostics);
-    const structuredOutput = this.buildStructuredOutput(decisionOutput, summary, confidenceDiagnostics, promptDepth);
+    const structuredOutput = this.buildStructuredOutput(
+      decisionOutput,
+      summary,
+      confidenceDiagnostics,
+      promptDepth,
+    );
     const dailyMacroSummary = userContext
       ? this.dailyMacroSummaryService.buildSummaryText(userContext, 'zh-CN')
       : undefined;
@@ -121,9 +163,7 @@ export class EvidencePackBuilderService {
   }
 
   /** V3.1: 根据置信度诊断推导 prompt 输出深度 */
-  private resolvePromptDepth(
-    diag: ConfidenceDiagnostics,
-  ): PromptDepthLevel {
+  private resolvePromptDepth(diag: ConfidenceDiagnostics): PromptDepthLevel {
     const score = diag.analysisCompletenessScore ?? 1;
     const reviewLevel = diag.reviewLevel ?? 'auto_review';
 

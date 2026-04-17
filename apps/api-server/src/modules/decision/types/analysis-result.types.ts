@@ -155,6 +155,18 @@ export interface FoodAnalysisResultV61 {
 
   /** V2.3: 教练行动计划骨架 */
   coachActionPlan?: CoachActionPlan;
+
+  /** V3.3: 结构化单次分析包 */
+  foodAnalysisPackage?: FoodAnalysisPackage;
+
+  /** V3.3: 结构化决策（含四维因素 + 多维原因） */
+  structuredDecision?: StructuredDecision;
+
+  /** V3.5: 上下文分析（供 CoachService 缓存后注入教练 prompt） */
+  contextualAnalysis?: ContextualAnalysis;
+
+  /** V3.5: 统一用户上下文（供 CoachService 缓存后注入教练 prompt） */
+  unifiedUserContext?: UnifiedUserContext;
 }
 
 /** V2.3: 分析状态对象 */
@@ -698,7 +710,12 @@ export type IssueType =
   | 'sodium_excess'
   | 'calorie_excess'
   | 'calorie_deficit'
-  | 'sugar_excess';
+  | 'sugar_excess'
+  | 'glycemic_risk'
+  | 'cardiovascular_risk'
+  | 'sodium_risk'
+  | 'purine_risk'
+  | 'kidney_stress';
 
 /**
  * V3.2 Phase 1: 结构化营养问题
@@ -770,5 +787,80 @@ export interface AnalysisAccuracyMetrics {
     confidence: number;
     reviewLevel: 'auto_review' | 'manual_review';
     completenessScore: number;
+  };
+}
+
+// ==================== V3.3 新增类型 ====================
+
+/**
+ * V3.3: 决策因素明细
+ * 每个决策维度的评分和理由
+ */
+export interface DecisionFactorDetail {
+  /** 维度评分 0-100 */
+  score: number;
+  /** 人类可读理由（i18n 友好） */
+  rationale: string;
+}
+
+/**
+ * V3.3: 结构化决策
+ * 从 DecisionEngineService 输出，包含四维因素明细和多维原因
+ */
+export interface StructuredDecision {
+  /** 三档判定 */
+  verdict: 'recommend' | 'caution' | 'avoid';
+  /** 四维决策因素 */
+  factors: {
+    /** 与用户营养目标的匹配度 */
+    nutritionAlignment: DecisionFactorDetail;
+    /** 宏量均衡性 */
+    macroBalance: DecisionFactorDetail;
+    /** 健康约束（过敏原、限制、疾病风险） */
+    healthConstraint: DecisionFactorDetail;
+    /** 时机合理性（早/午/晚/夜宵） */
+    timeliness: DecisionFactorDetail;
+  };
+  /** 综合加权评分 0-100 */
+  finalScore: number;
+  /** 多维原因 */
+  rationale: DetailedRationale;
+}
+
+/**
+ * V3.3: 多维决策原因
+ * 为每个维度提供独立的理由说明
+ */
+export interface DetailedRationale {
+  /** 基础原因（基于 nutrition score） */
+  baseline: string;
+  /** 上下文原因（基于当日摄入进度） */
+  contextual: string;
+  /** 目标对齐原因（基于用户目标） */
+  goalAlignment: string;
+  /** 健康风险说明（若有过敏原/限制/健康状况） */
+  healthRisk: string | null;
+  /** 时机建议（若进食时间不理想） */
+  timelinessNote: string | null;
+}
+
+/**
+ * V3.3: 推荐替代方案（结构化，融合推荐引擎）
+ */
+export interface RecommendationAlternative {
+  /** 替代类型 */
+  type: 'substitute' | 'adjust_portion' | 'combine_with';
+  /** 建议文本 */
+  suggestion: string;
+  /** 推荐系统中的食物引用 */
+  referenceFood?: {
+    foodId: string;
+    name: string;
+    reason: string;
+  };
+  /** 替代方案的预期营养 */
+  expectedNutrition: {
+    calories: number;
+    macros: { protein: number; fat: number; carbs: number };
   };
 }

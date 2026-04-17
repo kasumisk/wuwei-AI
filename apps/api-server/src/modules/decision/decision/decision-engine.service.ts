@@ -8,6 +8,9 @@ import { Injectable } from '@nestjs/common';
 import {
   FoodDecision,
   UnifiedUserContext,
+  StructuredDecision,
+  DecisionFactorDetail,
+  DetailedRationale,
 } from '../types/analysis-result.types';
 import { NutritionScoreBreakdown } from '../../diet/app/services/nutrition-score.service';
 import { t, Locale } from '../../diet/app/recommendation/utils/i18n-messages';
@@ -447,5 +450,318 @@ export class DecisionEngineService {
       tips.push(t('decision.advice.controlOther', {}, locale));
     }
     return tips.join('，');
+  }
+
+  // ==================== V3.3: 结构化决策 ====================
+
+  /**
+   * V3.3: 计算结构化决策（含四维因素明细 + 多维原因）
+   *
+   * 在原有 computeDecision 基础上，额外输出：
+   * - 四维因素评分（nutritionAlignment, macroBalance, healthConstraint, timeliness）
+   * - 多维原因（baseline, contextual, goalAlignment, healthRisk, timelinessNote）
+   */
+  computeStructuredDecision(
+    foods: DecisionFoodItem[],
+    ctx: UnifiedUserContext,
+    nutritionScore: number,
+    breakdown: NutritionScoreBreakdown | undefined,
+    locale?: Locale,
+  ): StructuredDecision {
+    // 先计算基础决策
+    const baseDecision = this.computeDecision(
+      foods,
+      ctx,
+      nutritionScore,
+      locale,
+    );
+
+    const totalCalories = foods.reduce((s, f) => s + f.calories, 0);
+    const totalProtein = foods.reduce((s, f) => s + f.protein, 0);
+    const totalFat = foods.reduce((s, f) => s + f.fat, 0);
+    const totalCarbs = foods.reduce((s, f) => s + f.carbs, 0);
+    const hour = ctx.localHour ?? 12;
+    const th = this.dynamicThresholds.compute(ctx);
+
+    // 1. nutritionAlignment: 与用户营养目标的匹配度
+    const nutritionAlignment = this.computeNutritionAlignment(
+      totalCalories,
+      totalProtein,
+      totalFat,
+      totalCarbs,
+      ctx,
+      locale,
+    );
+
+    // 2. macroBalance: 宏量均衡性
+    const macroBalance = this.computeMacroBalance(breakdown, locale);
+
+    // 3. healthConstraint: 健康约束
+    const healthConstraint = this.computeHealthConstraint(foods, ctx, locale);
+
+    // 4. timeliness: 时机合理性
+    const timeliness = this.computeTimeliness(
+      hour,
+      totalCalories,
+      totalCarbs,
+      ctx,
+      th,
+      locale,
+    );
+
+    // 加权综合评分
+    const finalScore = Math.round(
+      nutritionAlignment.score * 0.35 +
+        macroBalance.score * 0.25 +
+        healthConstraint.score * 0.25 +
+        timeliness.score * 0.15,
+    );
+
+    // 多维原因
+    const rationale = this.buildDetailedRationale(
+      baseDecision,
+      ctx,
+      nutritionScore,
+      hour,
+      foods,
+      locale,
+    );
+
+    return {
+      verdict: baseDecision.recommendation,
+      factors: {
+        nutritionAlignment,
+        macroBalance,
+        healthConstraint,
+        timeliness,
+      },
+      finalScore,
+      rationale,
+    };
+  }
+
+  /**
+   * 营养目标匹配度评分
+   */
+  private computeNutritionAlignment(
+    totalCal: number,
+    totalProtein: number,
+    totalFat: number,
+    totalCarbs: number,
+    ctx: UnifiedUserContext,
+    locale?: Locale,
+  ): DecisionFactorDetail {
+    const remainingAfter = ctx.remainingCalories - totalCal;
+    let score = 80; // 基础
+
+    // 热量匹配
+    if (remainingAfter < 0) {
+      score -= Math.min(40, Math.abs(remainingAfter) / 10);
+    } else if (remainingAfter > ctx.goalCalories * 0.5) {
+      score -= 10; // 吃得太少也不理想
+    }
+
+    // 蛋白质匹配（对增肌/减脂很重要）
+    if (ctx.goalType === 'muscle_gain' || ctx.goalType === 'fat_loss') {
+      const proteinRatio =
+        ctx.goalProtein > 0
+          ? totalProtein / (ctx.remainingProtein || ctx.goalProtein * 0.3)
+          : 0.5;
+      if (proteinRatio < 0.3) score -= 15;
+      else if (proteinRatio > 0.8) score += 10;
+    }
+
+    score = Math.max(0, Math.min(100, Math.round(score)));
+    const rationale =
+      remainingAfter >= 0
+        ? t('decision.factor.nutritionOk', {}, locale) || '营养摄入在目标范围内'
+        : t(
+            'decision.factor.nutritionOver',
+            { amount: String(Math.abs(Math.round(remainingAfter))) },
+            locale,
+          ) || `超出热量预算 ${Math.abs(Math.round(remainingAfter))}kcal`;
+
+    return { score, rationale };
+  }
+
+  /**
+   * 宏量均衡性评分
+   */
+  private computeMacroBalance(
+    breakdown: NutritionScoreBreakdown | undefined,
+    locale?: Locale,
+  ): DecisionFactorDetail {
+    if (!breakdown) {
+      return {
+        score: 60,
+        rationale:
+          t('decision.factor.noBreakdown', {}, locale) || '暂无详细评分数据',
+      };
+    }
+
+    // 使用已有的 macroBalance 维度 + proteinRatio 维度
+    const score = Math.round(
+      (breakdown.macroBalance + breakdown.proteinRatio) / 2,
+    );
+    const rationale =
+      score >= 70
+        ? t('decision.factor.macroBalanced', {}, locale) || '宏量配比较为均衡'
+        : score >= 40
+          ? t('decision.factor.macroImbalanced', {}, locale) ||
+            '宏量配比有偏差，建议调整'
+          : t('decision.factor.macroSeverelyImbalanced', {}, locale) ||
+            '宏量严重失衡';
+
+    return { score, rationale };
+  }
+
+  /**
+   * 健康约束评分
+   */
+  private computeHealthConstraint(
+    foods: DecisionFoodItem[],
+    ctx: UnifiedUserContext,
+    locale?: Locale,
+  ): DecisionFactorDetail {
+    let score = 100;
+    const issues: string[] = [];
+
+    // 过敏原检查
+    const allergenCheck = checkAllergenConflict(foods, ctx, locale);
+    if (allergenCheck?.triggered) {
+      score = 0;
+      issues.push(allergenCheck.reason || '含过敏原');
+    }
+
+    // 饮食限制检查
+    const restrictionCheck = checkRestrictionConflict(foods, ctx, locale);
+    if (restrictionCheck?.triggered) {
+      score = Math.min(score, 10);
+      issues.push(restrictionCheck.reason || '违反饮食限制');
+    }
+
+    // 健康状况检查
+    const th = this.dynamicThresholds.compute(ctx);
+    const healthChecks = checkHealthConditionRisk(foods, ctx, locale, th);
+    for (const check of healthChecks) {
+      if (check.triggered) {
+        score = Math.min(score, 30);
+        if (check.reason) issues.push(check.reason);
+      }
+    }
+
+    const rationale =
+      issues.length > 0
+        ? issues[0]
+        : t('decision.factor.noHealthIssue', {}, locale) || '未检测到健康风险';
+
+    return { score, rationale };
+  }
+
+  /**
+   * 时机合理性评分
+   */
+  private computeTimeliness(
+    hour: number,
+    totalCalories: number,
+    totalCarbs: number,
+    ctx: UnifiedUserContext,
+    th: UserThresholds,
+    locale?: Locale,
+  ): DecisionFactorDetail {
+    let score = 90;
+    let rationale =
+      t('decision.factor.goodTiming', {}, locale) || '进食时间合理';
+
+    // 深夜
+    if (hour >= th.lateNightStart || hour < th.lateNightEnd) {
+      if (totalCalories > th.significantMealCal) {
+        score = 30;
+        rationale =
+          t('decision.factor.lateNight', {}, locale) ||
+          '深夜大量进食不利于代谢';
+      } else {
+        score = 60;
+        rationale =
+          t('decision.factor.lateNightLight', {}, locale) ||
+          '深夜进食，建议少量';
+      }
+    }
+    // 晚间高碳水
+    else if (hour >= th.eveningStart && hour < th.lateNightStart) {
+      if (totalCarbs > th.highCarbMeal && ctx.goalType === 'fat_loss') {
+        score = 50;
+        rationale =
+          t('decision.factor.eveningHighCarb', {}, locale) ||
+          '晚间高碳水不利于减脂';
+      }
+    }
+
+    return { score, rationale };
+  }
+
+  /**
+   * 构建多维决策原因
+   */
+  private buildDetailedRationale(
+    decision: FoodDecision,
+    ctx: UnifiedUserContext,
+    nutritionScore: number,
+    hour: number,
+    foods: DecisionFoodItem[],
+    locale?: Locale,
+  ): DetailedRationale {
+    // baseline: 基于 nutrition score
+    const baseline = decision.reason || '';
+
+    // contextual: 基于当日摄入进度
+    const calorieProgress =
+      ctx.goalCalories > 0
+        ? Math.round((ctx.todayCalories / ctx.goalCalories) * 100)
+        : 0;
+    const contextual =
+      locale === 'en-US'
+        ? `Today's calorie progress: ${calorieProgress}% of target`
+        : locale === 'ja-JP'
+          ? `本日のカロリー進捗: 目標の${calorieProgress}%`
+          : `今日热量进度: 目标的${calorieProgress}%`;
+
+    // goalAlignment: 基于用户目标
+    const goalLabel = ctx.goalLabel || ctx.goalType;
+    const goalAlignment =
+      locale === 'en-US'
+        ? `Based on your "${goalLabel}" goal`
+        : locale === 'ja-JP'
+          ? `「${goalLabel}」目標に基づく判断`
+          : `基于「${goalLabel}」目标的判断`;
+
+    // healthRisk: 健康风险
+    const allergenCheck = checkAllergenConflict(foods, ctx, locale);
+    const restrictionCheck = checkRestrictionConflict(foods, ctx, locale);
+    const healthRisk = allergenCheck?.triggered
+      ? allergenCheck.reason || null
+      : restrictionCheck?.triggered
+        ? restrictionCheck.reason || null
+        : null;
+
+    // timelinessNote: 时机
+    let timelinessNote: string | null = null;
+    const th = this.dynamicThresholds.compute(ctx);
+    if (hour >= th.lateNightStart || hour < th.lateNightEnd) {
+      timelinessNote =
+        locale === 'en-US'
+          ? 'Late-night eating may affect sleep and metabolism'
+          : locale === 'ja-JP'
+            ? '深夜の食事は睡眠と代謝に影響する可能性があります'
+            : '深夜进食可能影响睡眠和代谢';
+    }
+
+    return {
+      baseline,
+      contextual,
+      goalAlignment,
+      healthRisk,
+      timelinessNote,
+    };
   }
 }

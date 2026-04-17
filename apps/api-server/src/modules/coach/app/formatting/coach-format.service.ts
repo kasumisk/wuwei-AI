@@ -1,8 +1,8 @@
 /**
  * V2.4 CoachFormatService
- * 
+ *
  * 职责：统一所有文本格式化、多语言翻译、时间表示
- * 
+ *
  * 关键方法：
  * - formatSuggestion(action, persona, lang) → string
  * - formatTimebound(hours, lang) → string
@@ -48,12 +48,30 @@ export class CoachFormatService {
       'coach.persona.friendly': 'Gentle advice',
       'coach.persona.data': 'Data-driven',
     },
+    ja: {
+      'coach.header.should_eat': '今食べても大丈夫です',
+      'coach.header.can_skip': '今は食べなくてもいいでしょう',
+      'coach.header.should_avoid': '今は避けた方が良いです',
+      'coach.reason.protein_needed': 'タンパク質を補充する必要があります',
+      'coach.reason.energy_needed': '炭水化物とエネルギーをまだ補充できます',
+      'coach.reason.calorie_limit': 'カロリー目標に近づいています',
+      'coach.timebound.hours': '次の {{hours}} 時間以内',
+      'coach.nutrition.calories': '{{value}} カロリー',
+      'coach.nutrition.protein': '{{value}}g タンパク質',
+      'coach.nutrition.fat': '{{value}}g 脂肪',
+      'coach.nutrition.carbs': '{{value}}g 炭水化物',
+      'coach.persona.strict': '厳格なコントロール',
+      'coach.persona.friendly': '穏やかなアドバイス',
+      'coach.persona.data': 'データ駆動',
+    },
   } as const;
 
   constructor(private readonly i18nManagementService: I18nManagementService) {}
 
-  private resolveLanguage(language?: string): 'zh' | 'en' {
-    return language === 'en' ? 'en' : 'zh';
+  private resolveLanguage(language?: string): 'zh' | 'en' | 'ja' {
+    if (language === 'en') return 'en';
+    if (language === 'ja' || language === 'ja-JP') return 'ja';
+    return 'zh';
   }
 
   /**
@@ -87,7 +105,7 @@ export class CoachFormatService {
   /**
    * 格式化时间范围
    */
-  formatTimebound(hours: number, language: 'en' | 'zh' = 'zh'): string {
+  formatTimebound(hours: number, language: 'en' | 'zh' | 'ja' = 'zh'): string {
     const translated = this.i18nManagementService.translate(
       'time.within_hours',
       language,
@@ -104,7 +122,11 @@ export class CoachFormatService {
   /**
    * 格式化营养值
    */
-  formatNutrition(value: number, unit: string, language: 'en' | 'zh' = 'zh'): string {
+  formatNutrition(
+    value: number,
+    unit: string,
+    language: 'en' | 'zh' | 'ja' = 'zh',
+  ): string {
     const i18nKeyMap: Record<string, string> = {
       calories: 'coach.nutrition.calories',
       protein: 'coach.nutrition.protein',
@@ -136,20 +158,33 @@ export class CoachFormatService {
   ): FormattedCoachOutput {
     const suggestion = this.formatSuggestion(action as any, options);
     const lang = this.resolveLanguage(options.language);
-    const calorieText = this.formatNutrition(nutrition.calories, 'calories', lang);
+    const calorieText = this.formatNutrition(
+      nutrition.calories,
+      'calories',
+      lang,
+    );
     const proteinText =
       typeof nutrition.protein === 'number'
         ? this.formatNutrition(nutrition.protein, 'protein', lang)
         : undefined;
 
-    const reasons = this.resolveReasons(action, options, calorieText, proteinText);
+    const reasons = this.resolveReasons(
+      action,
+      options,
+      calorieText,
+      proteinText,
+    );
     const suggestions = this.resolveSuggestions(action, options, nutrition);
     const actionPlan = [suggestion, ...suggestions].join('。');
 
     // V2.7: 置信度标签
-    const confidenceLabel = this.resolveConfidenceLabel(options.decisionConfidence);
+    const confidenceLabel = this.resolveConfidenceLabel(
+      options.decisionConfidence,
+    );
     // V2.7: 最低分评分洞察
-    const scoreInsight = this.resolveScoreInsight(options.breakdownExplanations);
+    const scoreInsight = this.resolveScoreInsight(
+      options.breakdownExplanations,
+    );
 
     return {
       suggestion,
@@ -178,7 +213,11 @@ export class CoachFormatService {
     }
 
     return [
-      proteinText || this.translate('coach.reason.protein_needed', options.language === 'en' ? 'en' : 'zh'),
+      proteinText ||
+        this.translate(
+          'coach.reason.protein_needed',
+          this.resolveLanguage(options.language),
+        ),
       calorieText,
     ].filter(Boolean);
   }
@@ -226,26 +265,38 @@ export class CoachFormatService {
   private resolveScoreInsight(
     breakdownExplanations?: CoachFormatOptions['breakdownExplanations'],
   ): string | undefined {
-    if (!breakdownExplanations || breakdownExplanations.length === 0) return undefined;
+    if (!breakdownExplanations || breakdownExplanations.length === 0)
+      return undefined;
     const candidates = breakdownExplanations.filter(
       (b) => b.impact === 'critical' || b.impact === 'warning',
     );
     if (candidates.length === 0) return undefined;
     const worst = candidates.reduce((a, b) => (a.score <= b.score ? a : b));
     const label = worst.label || worst.dimension;
-    return worst.message ? `${label}(${worst.score}分): ${worst.message}` : undefined;
+    return worst.message
+      ? `${label}(${worst.score}分): ${worst.message}`
+      : undefined;
   }
 
   /**
    * 翻译 i18n key
    */
-  translate(key: string, language: 'en' | 'zh' = 'zh', variables?: Record<string, any>): string {
-    const translated = this.i18nManagementService.translate(key, language, variables);
+  translate(
+    key: string,
+    language: 'en' | 'zh' | 'ja' = 'zh',
+    variables?: Record<string, any>,
+  ): string {
+    const translated = this.i18nManagementService.translate(
+      key,
+      language,
+      variables,
+    );
     if (translated !== key) {
       return translated;
     }
 
-    const strings = this.i18nStrings[this.resolveLanguage(language)] || this.i18nStrings.zh;
+    const strings =
+      this.i18nStrings[this.resolveLanguage(language)] || this.i18nStrings.zh;
     let text = strings[key] || key;
 
     if (variables) {

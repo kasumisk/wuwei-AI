@@ -30,6 +30,17 @@ const mealTypeLabels: Record<MealTypeOption, string> = {
 const TEXT_MAX_LENGTH = 500;
 const ANALYZE_TIMEOUT_MS = 30_000; // 30秒超时
 
+type QualityLevel = 'high' | 'medium' | 'low';
+
+type ResultQuality = {
+  score: number;
+  level: QualityLevel;
+  macroCoveragePercent: number;
+  hasBreakdown: boolean;
+  hasAlternatives: boolean;
+  tips: string[];
+};
+
 function buildCoachPromptFromAnalysis(params: {
   mealLabel: string;
   foodNames: string;
@@ -54,6 +65,83 @@ function buildCoachPromptFromAnalysis(params: {
   ]
     .filter(Boolean)
     .join(' ');
+}
+
+function hasQuantityHint(text: string): boolean {
+  return /(\d|半|一份|一碗|一盘|克|g|ml|个|块|勺|杯)/i.test(text);
+}
+
+function hasCookingHint(text: string): boolean {
+  return /(炸|煎|炒|蒸|煮|烤|焗|拌|红烧|清蒸|水煮|油炸)/.test(text);
+}
+
+function computeResultQuality(result: AnalysisResult, foods: FoodItem[]): ResultQuality {
+  const foodCount = foods.length;
+  const macroCoveredCount = foods.filter(
+    (f) => f.protein != null && f.fat != null && f.carbs != null
+  ).length;
+  const macroCoveragePercent = foodCount > 0 ? Math.round((macroCoveredCount / foodCount) * 100) : 0;
+  const hasBreakdown = !!result.scoreBreakdown;
+  const hasAlternatives = (result.insteadOptions || []).length > 0;
+
+  const score = Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(
+        (foodCount >= 3 ? 35 : foodCount === 2 ? 25 : foodCount === 1 ? 15 : 0) +
+          macroCoveragePercent * 0.35 +
+          (hasBreakdown ? 20 : 0) +
+          (hasAlternatives ? 10 : 0)
+      )
+    )
+  );
+
+  const level: QualityLevel = score >= 80 ? 'high' : score >= 55 ? 'medium' : 'low';
+
+  const tips: string[] = [];
+  if (foodCount <= 1) {
+    tips.push('可补充同餐其他食物（饮料/酱料/加餐），让结果更接近真实摄入。');
+  }
+  if (macroCoveragePercent < 70) {
+    tips.push('部分食物缺少宏量估算，建议在文字描述中补充做法和份量。');
+  }
+  if (!hasBreakdown) {
+    tips.push('当前缺少分维度评分，可重新分析或在教练中请求“分项复盘”。');
+  }
+  if (!hasAlternatives) {
+    tips.push('可让 AI 教练基于本餐给出替代搭配，提升下一餐可执行性。');
+  }
+
+  return { score, level, macroCoveragePercent, hasBreakdown, hasAlternatives, tips: tips.slice(0, 3) };
+}
+
+function buildEnhancedTextInput(text: string): string {
+  let next = text.trim();
+  if (!hasQuantityHint(next)) {
+    next = `${next}${next ? '，' : ''}每种食物请按常见份量估算`;
+  }
+  if (!hasCookingHint(next)) {
+    next = `${next}${next ? '，' : ''}并注明主要做法（如清蒸/红烧/油炸）`;
+  }
+  return next.slice(0, TEXT_MAX_LENGTH);
+}
+
+function buildCompletenessCoachPrompt(params: {
+  quality: ResultQuality;
+  mealLabel: string;
+  totalCalories: number;
+  foodNames: string;
+  decision?: string;
+}): string {
+  const keyGap = params.quality.macroCoveragePercent < 70 ? '宏量估算覆盖不足' : '执行动作不够明确';
+
+  return [
+    `请帮我做一次“分析完整度复盘”。这顿是${params.mealLabel}，${params.foodNames}，总热量约 ${params.totalCalories}kcal。`,
+    `系统判定：${params.decision || 'OK'}，当前完整度 ${params.quality.score} 分。`,
+    `主要缺口：${keyGap}。`,
+    '请按三段输出：1) 这份分析还缺什么 2) 我该怎么补充信息重分析 3) 不重分析时如何先做稳妥决策。',
+  ].join(' ');
 }
 
 export function AnalyzePage() {
@@ -102,10 +190,7 @@ export function AnalyzePage() {
 
   // ── 分析计时器 ──
   useEffect(() => {
-    if (step !== 'analyzing') {
-      setAnalyzeElapsed(0);
-      return;
-    }
+    if (step !== 'analyzing') return;
     const start = Date.now();
     const timer = setInterval(() => {
       setAnalyzeElapsed(Math.floor((Date.now() - start) / 1000));
@@ -136,6 +221,7 @@ export function AnalyzePage() {
   // ── 图片分析（带超时） ──
   const handleAnalyzeImage = useCallback(async () => {
     if (!selectedFile) return;
+    setAnalyzeElapsed(0);
     setStep('analyzing');
     analyzeAbortRef.current = false;
 
@@ -166,44 +252,56 @@ export function AnalyzePage() {
   }, [selectedFile, mealType, analyzeImage, toast]);
 
   // ── 文字分析（带超时） ──
+  const analyzeTextByContent = useCallback(
+    async (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed) {
+        toast({ title: '请输入食物描述', variant: 'destructive' });
+        return;
+      }
+      if (trimmed.length > TEXT_MAX_LENGTH) {
+        toast({ title: `描述不能超过 ${TEXT_MAX_LENGTH} 字`, variant: 'destructive' });
+        return;
+      }
+      setAnalyzeElapsed(0);
+      setStep('analyzing');
+      analyzeAbortRef.current = false;
+
+      try {
+        const res = await Promise.race([
+          analyzeText(trimmed, mealType),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('分析超时，请重试')), ANALYZE_TIMEOUT_MS)
+          ),
+        ]);
+        if (analyzeAbortRef.current) return;
+        setResult(res);
+        setEditedFoods(res.foods);
+        setStep('result');
+      } catch (err) {
+        if (analyzeAbortRef.current) return;
+        if (err && typeof err === 'object' && handlePaywallError(err as Record<string, unknown>)) {
+          setStep('upload');
+          return;
+        }
+        toast({
+          title: err instanceof Error ? err.message : 'AI 分析失败',
+          variant: 'destructive',
+        });
+        setStep('upload');
+      }
+    },
+    [analyzeText, mealType, toast]
+  );
+
   const handleAnalyzeText = useCallback(async () => {
     const trimmed = textInput.trim();
     if (!trimmed) {
       toast({ title: '请输入食物描述', variant: 'destructive' });
       return;
     }
-    if (trimmed.length > TEXT_MAX_LENGTH) {
-      toast({ title: `描述不能超过 ${TEXT_MAX_LENGTH} 字`, variant: 'destructive' });
-      return;
-    }
-    setStep('analyzing');
-    analyzeAbortRef.current = false;
-
-    try {
-      const res = await Promise.race([
-        analyzeText(trimmed, mealType),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('分析超时，请重试')), ANALYZE_TIMEOUT_MS)
-        ),
-      ]);
-      if (analyzeAbortRef.current) return;
-      setResult(res);
-      setEditedFoods(res.foods);
-      setStep('result');
-    } catch (err) {
-      if (analyzeAbortRef.current) return;
-      // 检查是否是 paywall 错误
-      if (err && typeof err === 'object' && handlePaywallError(err as Record<string, unknown>)) {
-        setStep('upload');
-        return;
-      }
-      toast({
-        title: err instanceof Error ? err.message : 'AI 分析失败',
-        variant: 'destructive',
-      });
-      setStep('upload');
-    }
-  }, [textInput, mealType, analyzeText, toast]);
+    await analyzeTextByContent(trimmed);
+  }, [textInput, analyzeTextByContent, toast]);
 
   // ── 从食物库/常吃直接添加记录 ──
   const addFromLibraryMutation = useMutation({
@@ -310,17 +408,25 @@ export function AnalyzePage() {
   }, [previewUrl]);
 
   const goToCoachWithAnalysis = useCallback(
-    (analysis: AnalysisResult, foods: FoodItem[], totalCalories: number, currentMeal: MealTypeOption) => {
+    (
+      analysis: AnalysisResult,
+      foods: FoodItem[],
+      totalCalories: number,
+      currentMeal: MealTypeOption,
+      customPrompt?: string
+    ) => {
       const foodNames = foods.map((f) => f.name).join('、') || '本餐食物';
-      const prompt = buildCoachPromptFromAnalysis({
-        mealLabel: mealTypeLabels[currentMeal],
-        foodNames,
-        totalCalories,
-        decision: analysis.decision,
-        nutritionScore: analysis.nutritionScore,
-        riskLevel: analysis.riskLevel,
-        advice: analysis.advice,
-      });
+      const prompt =
+        customPrompt ||
+        buildCoachPromptFromAnalysis({
+          mealLabel: mealTypeLabels[currentMeal],
+          foodNames,
+          totalCalories,
+          decision: analysis.decision,
+          nutritionScore: analysis.nutritionScore,
+          riskLevel: analysis.riskLevel,
+          advice: analysis.advice,
+        });
 
       try {
         const decisionFactors = analysis.scoreBreakdown
@@ -402,7 +508,44 @@ export function AnalyzePage() {
     toast({ title: '已取消分析' });
   }, [toast]);
 
+  const handleQuickReanalyze = useCallback(async () => {
+    if (inputMode !== 'text') {
+      toast({ title: '图片模式请补充拍摄信息后重新分析' });
+      setStep('upload');
+      return;
+    }
+
+    const enhanced = buildEnhancedTextInput(textInput);
+    if (!enhanced.trim()) {
+      toast({ title: '请先输入食物描述', variant: 'destructive' });
+      setStep('upload');
+      return;
+    }
+
+    setTextInput(enhanced);
+    await analyzeTextByContent(enhanced);
+  }, [inputMode, textInput, analyzeTextByContent, toast]);
+
+  const handleCoachCompletenessReview = useCallback(() => {
+    if (!result) return;
+
+    const currentEditedTotal = editedFoods.reduce((sum, f) => sum + f.calories, 0);
+    const currentResultQuality = computeResultQuality(result, editedFoods);
+
+    const foodNames = editedFoods.map((f) => f.name).join('、') || '本餐食物';
+    const prompt = buildCompletenessCoachPrompt({
+      quality: currentResultQuality,
+      mealLabel: mealTypeLabels[mealType],
+      totalCalories: currentEditedTotal,
+      foodNames,
+      decision: result.decision,
+    });
+
+    goToCoachWithAnalysis(result, editedFoods, currentEditedTotal, mealType, prompt);
+  }, [result, editedFoods, mealType, goToCoachWithAnalysis]);
+
   const editedTotal = editedFoods.reduce((sum, f) => sum + f.calories, 0);
+  const resultQuality = result ? computeResultQuality(result, editedFoods) : null;
   const saving = isSaving || isSavingAnalysis;
 
   return (
@@ -463,7 +606,7 @@ export function AnalyzePage() {
 
             {/* 免费用户提示 — 仅在 AI 模式(image/text)下显示 */}
             {isFree && (inputMode === 'image' || inputMode === 'text') && (
-              <div className="bg-gradient-to-r from-primary/5 to-primary/10 border border-primary/15 rounded-xl px-4 py-3 space-y-1">
+              <div className="bg-linear-to-r from-primary/5 to-primary/10 border border-primary/15 rounded-xl px-4 py-3 space-y-1">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-foreground">
                     {inputMode === 'image' ? '📸 图片分析' : '✏️ 文字分析'}
@@ -537,20 +680,26 @@ export function AnalyzePage() {
                 </div>
 
                 {selectedFile && (
-                  <button
-                    onClick={handleAnalyzeImage}
-                    disabled={analyzing}
-                    className="w-full bg-primary text-primary-foreground font-bold py-4 rounded-full flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
-                  >
-                    {analyzing ? (
-                      <>
-                        <span className="animate-spin inline-block w-5 h-5 border-2 border-current border-t-transparent rounded-full" />
-                        AI 分析中...
-                      </>
-                    ) : (
-                      '开始 AI 分析'
-                    )}
-                  </button>
+                  <>
+                    <div className="bg-card border border-border rounded-xl p-3 space-y-1.5">
+                      <p className="text-xs font-bold">提升图片分析准确度</p>
+                      <p className="text-[11px] text-muted-foreground">1) 尽量一次拍全餐食 2) 保证光线清晰 3) 酱料和饮料尽量入镜</p>
+                    </div>
+                    <button
+                      onClick={handleAnalyzeImage}
+                      disabled={analyzing}
+                      className="w-full bg-primary text-primary-foreground font-bold py-4 rounded-full flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
+                    >
+                      {analyzing ? (
+                        <>
+                          <span className="animate-spin inline-block w-5 h-5 border-2 border-current border-t-transparent rounded-full" />
+                          AI 分析中...
+                        </>
+                      ) : (
+                        '开始 AI 分析'
+                      )}
+                    </button>
+                  </>
                 )}
               </>
             )}
@@ -563,7 +712,7 @@ export function AnalyzePage() {
                     value={textInput}
                     onChange={(e) => setTextInput(e.target.value.slice(0, TEXT_MAX_LENGTH))}
                     placeholder="描述你吃了什么，例如：&#10;一碗白米饭、红烧肉三块、炒青菜一盘、紫菜蛋花汤"
-                    className="w-full min-h-[140px] bg-transparent resize-none text-sm leading-relaxed placeholder:text-muted-foreground/50 focus:outline-none"
+                    className="w-full min-h-35 bg-transparent resize-none text-sm leading-relaxed placeholder:text-muted-foreground/50 focus:outline-none"
                     autoFocus
                   />
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -576,6 +725,26 @@ export function AnalyzePage() {
                       {textInput.length}/{TEXT_MAX_LENGTH}
                     </span>
                   </div>
+                </div>
+
+                <div className="bg-card border border-border rounded-xl p-3 space-y-2">
+                  <p className="text-xs font-bold">输入完善建议</p>
+                  <div className="text-[11px] text-muted-foreground space-y-1">
+                    <p className={hasQuantityHint(textInput) ? 'text-emerald-600' : ''}>
+                      {hasQuantityHint(textInput) ? '已包含份量信息' : '建议补充份量（如 100g / 半碗 / 2个）'}
+                    </p>
+                    <p className={hasCookingHint(textInput) ? 'text-emerald-600' : ''}>
+                      {hasCookingHint(textInput) ? '已包含做法信息' : '建议补充做法（如油炸/清蒸/红烧）'}
+                    </p>
+                  </div>
+                  {!hasQuantityHint(textInput) && (
+                    <button
+                      onClick={() => setTextInput((prev) => `${prev}${prev.trim() ? '，' : ''}每种食物请按常见份量估算`) }
+                      className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-primary/10 text-primary hover:bg-primary/15 transition-colors"
+                    >
+                      一键补充“份量提示”
+                    </button>
+                  )}
                 </div>
 
                 {/* 快捷输入示例 */}
@@ -709,9 +878,74 @@ export function AnalyzePage() {
               }}
             />
 
+            {resultQuality && (
+              <section className="bg-card border border-border rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold">分析完整度</h3>
+                  <span
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                      resultQuality.level === 'high'
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : resultQuality.level === 'medium'
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-rose-100 text-rose-700'
+                    }`}
+                  >
+                    {resultQuality.level === 'high'
+                      ? '高'
+                      : resultQuality.level === 'medium'
+                        ? '中'
+                        : '低'}
+                    （{resultQuality.score}分）
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="bg-muted/60 rounded-lg px-3 py-2">
+                    <p className="text-muted-foreground">宏量覆盖率</p>
+                    <p className="font-bold mt-0.5">{resultQuality.macroCoveragePercent}%</p>
+                  </div>
+                  <div className="bg-muted/60 rounded-lg px-3 py-2">
+                    <p className="text-muted-foreground">分维度评分</p>
+                    <p className="font-bold mt-0.5">
+                      {resultQuality.hasBreakdown ? '已生成' : '未完整'}
+                    </p>
+                  </div>
+                </div>
+
+                {resultQuality.tips.length > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-bold text-muted-foreground">建议你这样补强结果</p>
+                    {resultQuality.tips.map((tip, i) => (
+                      <p key={i} className="text-[12px] leading-relaxed text-foreground/80">
+                        {i + 1}. {tip}
+                      </p>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex gap-2 pt-1">
+                  {resultQuality.level !== 'high' && (
+                    <button
+                      onClick={handleQuickReanalyze}
+                      className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-primary/10 text-primary hover:bg-primary/15 active:scale-[0.98] transition-all"
+                    >
+                      {inputMode === 'text' ? '一键补全后重分析' : '返回补充后重分析'}
+                    </button>
+                  )}
+                  <button
+                    onClick={handleCoachCompletenessReview}
+                    className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-muted text-foreground hover:bg-muted/80 active:scale-[0.98] transition-all"
+                  >
+                    让教练做分项复盘
+                  </button>
+                </div>
+              </section>
+            )}
+
             {/* 免费用户：结果页 contextual CTA — 提示升级可获得更精准分析 */}
             {isFree && (
-              <div className="bg-gradient-to-br from-primary/5 via-primary/8 to-violet-500/5 border border-primary/15 rounded-2xl p-4 space-y-3">
+              <div className="bg-linear-to-br from-primary/5 via-primary/8 to-violet-500/5 border border-primary/15 rounded-2xl p-4 space-y-3">
                 <div className="flex items-start gap-3">
                   <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
                     <svg

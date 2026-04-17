@@ -35,6 +35,26 @@ const decisionLabels: Record<string, string> = {
   AVOID: '不建议',
 };
 
+function buildQuickCoachPrompt(item: AnalysisHistoryItem): string {
+  const mealLabel = item.mealType ? MEAL_LABELS[item.mealType] || '这一餐' : '这一餐';
+  const decisionPart = item.decision ? `系统判定：${item.decision}。` : '';
+  const sourcePart =
+    item.inputType === 'text'
+      ? item.inputText
+        ? `我当时记录的是：${item.inputText.slice(0, 80)}。`
+        : ''
+      : '这是一次图片分析记录。';
+
+  return [
+    `请帮我复盘这条历史记录：${mealLabel}，总热量 ${item.totalCalories}kcal，食物数 ${item.foodCount}。`,
+    decisionPart,
+    sourcePart,
+    '请给出三件事：1) 关键问题 2) 今天剩余时段怎么补救 3) 下一餐怎么吃更稳。',
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
   const now = new Date();
@@ -183,7 +203,7 @@ export function HistoryPage() {
                 <HistoryItem item={item} />
                 {/* 免费用户：第3条后插入 inline CTA */}
                 {isFree && index === 2 && items.length > 3 && (
-                  <div className="mt-3 bg-gradient-to-r from-primary/5 to-violet-500/5 border border-primary/10 rounded-xl p-3.5 flex items-center gap-3">
+                  <div className="mt-3 bg-linear-to-r from-primary/5 to-violet-500/5 border border-primary/10 rounded-xl p-3.5 flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                       <svg
                         className="w-4 h-4 text-primary"
@@ -220,7 +240,7 @@ export function HistoryPage() {
 
         {/* 免费用户历史受限提示 */}
         {!isLoading && isFree && total > 0 && (
-          <div className="mt-4 bg-gradient-to-r from-primary/5 to-primary/10 border border-primary/15 rounded-2xl p-4 space-y-3">
+          <div className="mt-4 bg-linear-to-r from-primary/5 to-primary/10 border border-primary/15 rounded-2xl p-4 space-y-3">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                 <svg className="w-5 h-5 text-primary" fill="currentColor" viewBox="0 0 20 20">
@@ -238,7 +258,7 @@ export function HistoryPage() {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2 text-[11px] text-muted-foreground pl-[52px]">
+            <div className="flex items-center gap-2 text-[11px] text-muted-foreground pl-13">
               <span className="flex items-center gap-1">
                 <svg className="w-3 h-3 text-primary" fill="currentColor" viewBox="0 0 20 20">
                   <path
@@ -333,6 +353,36 @@ function HistoryItem({ item }: { item: AnalysisHistoryItem }) {
     push(`/history/${item.id}`);
   };
 
+  const handleQuickCoachReview = (closeMenu?: boolean) => {
+    const prompt = buildQuickCoachPrompt(item);
+
+    try {
+      sessionStorage.setItem(
+        'coach_analysis_context',
+        JSON.stringify({
+          source: 'history_list',
+          analysisId: item.id,
+          inputType: item.inputType,
+          mealType: item.mealType,
+          totalCalories: item.totalCalories,
+          decision: item.decision,
+          foodCount: item.foodCount,
+          inputText: item.inputText,
+          imageUrl: item.imageUrl,
+          timestamp: new Date().toISOString(),
+        })
+      );
+      sessionStorage.setItem('coach_auto_prompt', prompt);
+    } catch {
+      // ignore sessionStorage failures
+    }
+
+    if (closeMenu) {
+      setShowActions(false);
+    }
+    push(`/coach?q=${encodeURIComponent(prompt)}`);
+  };
+
   const handleDelete = async () => {
     try {
       await deleteAnalysis(item.id);
@@ -409,6 +459,18 @@ function HistoryItem({ item }: { item: AnalysisHistoryItem }) {
               <span className="text-sm font-bold text-primary">{item.totalCalories} kcal</span>
               <span className="text-xs text-muted-foreground">{item.foodCount} 种食物</span>
             </div>
+            <div className="mt-2">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleQuickCoachReview();
+                }}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-primary/10 text-primary hover:bg-primary/15 active:scale-[0.98] transition-all"
+              >
+                <span>🧠</span>
+                <span>快速复盘到 AI 教练</span>
+              </button>
+            </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {decisionClass && decisionLabel && (
@@ -431,7 +493,7 @@ function HistoryItem({ item }: { item: AnalysisHistoryItem }) {
         {/* 操作菜单（浮层） */}
         {showActions && (
           <div
-            className="absolute right-3 top-10 z-10 bg-card shadow-xl border border-border rounded-xl overflow-hidden min-w-[120px] animate-in fade-in slide-in-from-top-1 duration-150"
+            className="absolute right-3 top-10 z-10 bg-card shadow-xl border border-border rounded-xl overflow-hidden min-w-30 animate-in fade-in slide-in-from-top-1 duration-150"
             onClick={(e) => e.stopPropagation()}
           >
             <button
@@ -457,6 +519,25 @@ function HistoryItem({ item }: { item: AnalysisHistoryItem }) {
             </button>
             <button
               onClick={() => {
+                handleQuickCoachReview(true);
+              }}
+              className="w-full px-4 py-2.5 text-left text-sm hover:bg-primary/5 transition-colors flex items-center gap-2"
+            >
+              <svg
+                className="w-4 h-4 text-primary"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.205-3.138A6.954 6.954 0 012 10c0-3.866 3.582-7 8-7s8 3.134 8 7zm-8-4a1 1 0 100 2 1 1 0 000-2zm-1 4a1 1 0 000 2h1a1 1 0 100-2H9z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              问 AI 教练复盘
+            </button>
+            <button
+              onClick={() => {
                 setShowActions(false);
                 setShowDeleteConfirm(true);
               }}
@@ -476,12 +557,12 @@ function HistoryItem({ item }: { item: AnalysisHistoryItem }) {
       </div>
 
       {/* 点击外部关闭操作菜单 */}
-      {showActions && <div className="fixed inset-0 z-[5]" onClick={() => setShowActions(false)} />}
+      {showActions && <div className="fixed inset-0 z-5" onClick={() => setShowActions(false)} />}
 
       {/* 删除确认弹窗 */}
       {showDeleteConfirm && (
         <div
-          className="fixed inset-0 z-[100] bg-black/50 flex items-end justify-center animate-in fade-in"
+          className="fixed inset-0 z-100 bg-black/50 flex items-end justify-center animate-in fade-in"
           role="dialog"
           aria-modal="true"
           aria-labelledby="delete-confirm-title"

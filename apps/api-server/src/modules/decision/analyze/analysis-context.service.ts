@@ -1,5 +1,5 @@
 /**
- * V3.2 Phase 1 — 分析上下文构建服务
+ * V3.4 Phase 2.2 — 分析上下文构建服务（透传 healthConditions）
  *
  * 职责:
  * - buildContextualAnalysis() 组装上下文，包括宏量状态、当日进度、问题识别、推荐条件
@@ -59,10 +59,15 @@ export class AnalysisContextService {
     };
 
     // 获取宏量槽位状态（默认若不存在则推导）
-    const macroSlotStatus = ctx.macroSlotStatus || this.inferMacroSlotStatus(macroProgress);
+    const macroSlotStatus =
+      ctx.macroSlotStatus || this.inferMacroSlotStatus(macroProgress);
 
-    // 用 NutritionIssueDetector 识别问题
-    const identifiedIssues = this.issueDetector.detectIssues(macroSlotStatus, macroProgress);
+    // 用 NutritionIssueDetector 识别问题（V3.4: 透传 healthConditions）
+    const identifiedIssues = this.issueDetector.detectIssues(
+      macroSlotStatus,
+      macroProgress,
+      ctx.healthConditions,
+    );
 
     // 构建推荐系统条件
     const recommendationContext = {
@@ -91,7 +96,7 @@ export class AnalysisContextService {
    * 根据进度推导宏量槽位状态
    *
    * 如果用户上下文中未包含 macroSlotStatus，基于 consumed vs goals 推导
-   * 
+   *
    * 边界条件：
    * - < 90% → deficit
    * - >= 90% && <= 110% → ok
@@ -153,7 +158,10 @@ export class AnalysisContextService {
       ...analysis,
       recommendationContext: {
         ...analysis.recommendationContext,
-        excludeFoods: [...analysis.recommendationContext.excludeFoods, ...foodNames],
+        excludeFoods: [
+          ...analysis.recommendationContext.excludeFoods,
+          ...foodNames,
+        ],
       },
     };
   }

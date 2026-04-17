@@ -27,6 +27,7 @@ import { FoodScoringService } from '../../../decision/score/food-scoring.service
 import { buildTonePrompt } from '../../../coach/app/config/coach-tone.config';
 import { AnalysisPipelineService } from '../../../decision/analyze/analysis-pipeline.service';
 import { AnalysisPersistenceService } from '../../../decision/analyze/analysis-persistence.service';
+import { validateAndCorrectFoods } from '../../../decision/analyze/nutrition-sanity-validator';
 
 // ==================== Prompt 常量（从 analyze.service.ts 迁移） ====================
 
@@ -159,6 +160,59 @@ function buildGoalAwarePrompt(goalType: string, userContext: string): string {
   return [BASE_PROMPT, focusBlock, userContext].join('\n\n');
 }
 
+/**
+ * V3.4 P1.2: 构建决策优先级块
+ *
+ * 根据 nutritionPriority 和 healthConditions 告知 AI 本餐最重要的判断维度，
+ * 使 AI 的 decision/reason/suggestion 更贴合用户实际需求。
+ */
+function buildDecisionContextBlock(
+  nutritionPriority: string[],
+  healthConditions: string[],
+  budgetStatus: string,
+): string {
+  const lines: string[] = ['【本次分析决策优先级】'];
+
+  // 基于预算状态
+  if (budgetStatus === 'over_limit') {
+    lines.push(
+      '- ⚠️ 今日热量已超标，此餐 decision 必须严格，倾向 LIMIT 或 AVOID',
+    );
+  } else if (budgetStatus === 'near_limit') {
+    lines.push('- 热量接近上限，此餐需控制总量，优先推荐低热量替代');
+  }
+
+  // 基于营养优先级
+  if (nutritionPriority.includes('protein_gap')) {
+    lines.push('- 今日蛋白质不足，优先关注此餐蛋白质含量，高蛋白食物加分');
+  }
+  if (nutritionPriority.includes('fat_excess')) {
+    lines.push('- 今日脂肪已超标，高脂肪食物直接 LIMIT/AVOID，reason 必须提及');
+  }
+  if (nutritionPriority.includes('carb_excess')) {
+    lines.push('- 今日碳水已超标，高碳水食物需 LIMIT，建议蛋白质/蔬菜替代');
+  }
+
+  // 基于健康条件（简版，完整版在 formatAsPromptString 已注入）
+  if (healthConditions.includes('diabetes')) {
+    lines.push('- 糖尿病：此餐碳水和升糖影响是最高优先级判断维度');
+  }
+  if (healthConditions.includes('hypertension')) {
+    lines.push('- 高血压：此餐钠含量是关键判断维度，外卖/腌制食品直接 LIMIT');
+  }
+  if (
+    healthConditions.includes('heart_disease') ||
+    healthConditions.includes('cardiovascular')
+  ) {
+    lines.push(
+      '- 心脏病：此餐饱和脂肪是关键判断维度，油炸/肥肉类直接 LIMIT/AVOID',
+    );
+  }
+
+  if (lines.length === 1) return ''; // 只有标题，无内容，不注入
+  return lines.join('\n');
+}
+
 /** 评分覆盖：AI decision 仅参考，引擎为准 */
 function resolveDecision(
   aiDecision: string,
@@ -286,6 +340,9 @@ export class ImageFoodAnalysisService {
       context: userContext,
       goalType,
       profile,
+      healthConditions,
+      nutritionPriority,
+      budgetStatus,
     } = await this.buildUserContext(userId);
 
     // 行为画像上下文
@@ -306,7 +363,18 @@ export class ImageFoodAnalysisService {
       personaPrompt = buildTonePrompt(style, goalType);
     }
 
-    const fullContext = [personaPrompt, userContext, behaviorContext]
+    // V3.4 P1.2: 决策优先级块（基于实时营养状态和健康条件）
+    const decisionContextBlock = buildDecisionContextBlock(
+      nutritionPriority,
+      healthConditions,
+      budgetStatus,
+    );
+    const fullContext = [
+      personaPrompt,
+      userContext,
+      behaviorContext,
+      decisionContextBlock,
+    ]
       .filter(Boolean)
       .join('\n\n');
     const systemPrompt = buildGoalAwarePrompt(goalType, fullContext);
@@ -333,12 +401,13 @@ export class ImageFoodAnalysisService {
                 },
                 {
                   type: 'image_url',
-                  imageUrl: { url: imageUrl, detail: 'low' },
+                  // V3.4 P1.2: 'auto' 让模型根据图片自适应选择细节级别，提升多菜品识别率
+                  imageUrl: { url: imageUrl, detail: 'auto' },
                 },
               ],
             },
           ],
-          max_tokens: 1000,
+          max_tokens: 1500, // V3.4 P1.2: 1000→1500，防止多食物 JSON 被截断
           temperature: 0.3,
         }),
         signal: AbortSignal.timeout(30000),
@@ -522,14 +591,22 @@ export class ImageFoodAnalysisService {
   /**
    * V1.9: 委托给 UserContextBuilderService
    */
-  private async buildUserContext(
-    userId?: string,
-  ): Promise<{ context: string; goalType: string; profile: any }> {
+  private async buildUserContext(userId?: string): Promise<{
+    context: string;
+    goalType: string;
+    profile: any;
+    healthConditions: string[];
+    nutritionPriority: string[];
+    budgetStatus: string;
+  }> {
     const ctx = await this.userContextBuilder.build(userId);
     return {
       context: this.userContextBuilder.formatAsPromptString(ctx),
       goalType: ctx.goalType,
       profile: ctx.profile,
+      healthConditions: ctx.healthConditions || [],
+      nutritionPriority: ctx.nutritionPriority || [],
+      budgetStatus: ctx.budgetStatus || 'under_target',
     };
   }
 
@@ -652,6 +729,25 @@ export class ImageFoodAnalysisService {
         // V6.1: 确保 confidence 字段存在
         if (typeof food.confidence !== 'number') food.confidence = 0.6;
       }
+
+      // V3.6 P1.3: 校验并纠偏 AI 估算的营养数据（热力学一致性）
+      const validatedFoods = validateAndCorrectFoods(
+        foods.map((f: any) => ({
+          calories: f.calories || 0,
+          protein: f.protein || 0,
+          fat: f.fat || 0,
+          carbs: f.carbs || 0,
+          category: f.category,
+          confidence: f.confidence,
+          _ref: f,
+        })),
+      );
+      validatedFoods.forEach((v, i) => {
+        foods[i].protein = v.protein;
+        foods[i].fat = v.fat;
+        foods[i].carbs = v.carbs;
+        foods[i].confidence = v.confidence;
+      });
 
       return {
         foods,

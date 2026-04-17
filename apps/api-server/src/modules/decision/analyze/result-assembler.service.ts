@@ -24,6 +24,8 @@ import {
   DecisionSummary,
   EvidencePack,
   ShouldEatAction,
+  FoodAnalysisPackage,
+  StructuredDecision,
 } from '../types/analysis-result.types';
 import { DecisionOutput } from '../decision/food-decision.service';
 
@@ -44,6 +46,10 @@ export interface AssembleInput {
   confidenceDiagnostics?: ConfidenceDiagnostics;
   evidencePack?: EvidencePack;
   shouldEatAction?: ShouldEatAction;
+  /** V3.3: 结构化分析包 */
+  foodAnalysisPackage?: FoodAnalysisPackage;
+  /** V3.3: 结构化决策 */
+  structuredDecision?: StructuredDecision;
 }
 
 @Injectable()
@@ -73,6 +79,9 @@ export class ResultAssemblerService {
       confidenceDiagnostics: input.confidenceDiagnostics,
       evidencePack: input.evidencePack,
       shouldEatAction: input.shouldEatAction,
+      // V3.3
+      foodAnalysisPackage: input.foodAnalysisPackage,
+      structuredDecision: input.structuredDecision,
     };
   }
 

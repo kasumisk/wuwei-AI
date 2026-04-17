@@ -190,6 +190,9 @@ export class CoachService {
           evidencePack: cached.evidencePack,
           confidenceDiagnostics: cached.confidenceDiagnostics,
           coachActionPlan: cached.coachActionPlan,
+          // V3.5 P3.2: 注入上下文分析和用户上下文，激活 CoachInsight 注入点
+          contextualAnalysis: cached.contextualAnalysis,
+          unifiedUserContext: cached.unifiedUserContext,
         };
         this.logger.debug(
           `Auto-injected cached analysis context for user ${userId}`,

@@ -20,6 +20,8 @@ import {
   BreakdownExplanation,
   MacroProgress,
   SignalTraceItem,
+  StructuredDecision,
+  NutritionIssue,
 } from '../types/analysis-result.types';
 import { DecisionOutput } from './food-decision.service';
 import { UnifiedUserContext } from '../types/analysis-result.types';
@@ -32,6 +34,12 @@ export interface SummaryInput {
   totals: NutritionTotals;
   userContext: UnifiedUserContext;
   foodNames: string[];
+  /** V3.3: 结构化决策（用于增强 topIssues 和 actionItems） */
+  structuredDecision?: StructuredDecision;
+  /** V3.5: 营养问题列表（用于增强 healthConstraintNote） */
+  nutritionIssues?: NutritionIssue[];
+  /** V3.5: 决策模式（pre_eat / post_eat），影响 actionItems 建议方向 */
+  decisionMode?: 'pre_eat' | 'post_eat';
 }
 
 // ==================== 严重度权重 ====================
@@ -48,7 +56,15 @@ export class DecisionSummaryService {
    * 从决策输出中生成结构化摘要
    */
   summarize(input: SummaryInput): DecisionSummary {
-    const { decisionOutput, totals, userContext, foodNames } = input;
+    const {
+      decisionOutput,
+      totals,
+      userContext,
+      foodNames,
+      structuredDecision,
+      nutritionIssues,
+      decisionMode,
+    } = input;
     const { decision, alternatives, issues, macroProgress } = decisionOutput;
 
     const headline = this.buildHeadline(
@@ -57,22 +73,70 @@ export class DecisionSummaryService {
       foodNames,
       userContext,
     );
-    const topIssues = this.extractTopIssues(issues, 3);
+    let topIssues = this.extractTopIssues(issues, 3);
     const topStrengths = this.extractTopStrengths(
       decisionOutput.breakdownExplanations,
       2,
     );
-    const actionItems = this.extractActionItems(issues, decision, 3);
+    let actionItems = this.extractActionItems(
+      issues,
+      decision,
+      3,
+      decisionMode,
+    );
+
+    // V3.3: 用 StructuredDecision.factors 增强 topIssues 和 actionItems
+    if (structuredDecision) {
+      topIssues = this.enrichTopIssuesFromFactors(
+        topIssues,
+        structuredDecision,
+      );
+      actionItems = this.enrichActionItemsFromRationale(
+        actionItems,
+        structuredDecision,
+      );
+    }
+
+    // V3.6 P2.4: 将 nutritionIssues 的 implication（含量化数据）前插到 topIssues
+    if (nutritionIssues && nutritionIssues.length > 0) {
+      const issueImplications = nutritionIssues
+        .filter((ni) => ni.severity !== 'low' && ni.implication)
+        .slice(0, 2)
+        .map((ni) => ni.implication);
+      const existingSet = new Set(topIssues);
+      for (const impl of issueImplications.reverse()) {
+        if (!existingSet.has(impl)) {
+          topIssues.unshift(impl);
+          existingSet.add(impl);
+        }
+      }
+      topIssues = topIssues.slice(0, 4);
+    }
     const quantitativeHighlight = this.buildQuantitativeHighlight(
       macroProgress,
       totals,
       userContext,
     );
-    const contextSignals = this.extractContextSignals(userContext, totals, decision);
-    const coachFocus = this.resolveCoachFocus(userContext, topIssues, decision);
+    const contextSignals = this.extractContextSignals(
+      userContext,
+      totals,
+      decision,
+    );
+    const coachFocus = this.resolveCoachFocus(
+      userContext,
+      topIssues,
+      decision,
+      nutritionIssues,
+    );
     const alternativeSummary = this.buildAlternativeSummary(alternatives);
-    const dynamicDecisionHint = this.buildDynamicDecisionHint(userContext, decision);
-    const healthConstraintNote = this.buildHealthConstraintNote(userContext);
+    const dynamicDecisionHint = this.buildDynamicDecisionHint(
+      userContext,
+      decision,
+    );
+    const healthConstraintNote = this.buildHealthConstraintNote(
+      userContext,
+      nutritionIssues,
+    );
     // V3.0: 信号追踪
     const signalTrace = this.buildSignalTrace(userContext, contextSignals);
 
@@ -174,12 +238,14 @@ export class DecisionSummaryService {
   /**
    * 提取可执行建议
    *
-   * 优先从 issues 的 actionable 字段提取，不足时从 decision.advice 补充
+   * 优先从 issues 的 actionable 字段提取，不足时从 decision.advice 补充。
+   * V3.5: post_eat 模式追加恢复性行动提示。
    */
   private extractActionItems(
     issues: DietIssue[] | undefined,
     decision: FoodDecision,
     maxCount: number,
+    decisionMode?: 'pre_eat' | 'post_eat',
   ): string[] {
     const items: string[] = [];
 
@@ -199,6 +265,11 @@ export class DecisionSummaryService {
     // 2. 从 decision.advice 补充
     if (items.length < maxCount && decision.advice) {
       items.push(decision.advice);
+    }
+
+    // 3. V3.5: post_eat 模式追加恢复性行动提示
+    if (decisionMode === 'post_eat' && items.length < maxCount) {
+      items.push('已进食完毕，关注下一餐的热量和宏量平衡，适量运动辅助消耗。');
     }
 
     return items.slice(0, maxCount);
@@ -314,7 +385,10 @@ export class DecisionSummaryService {
     if (decision.optimalPortion) {
       signals.push('portion_adjustment_needed');
     }
-    if (totals.calories > Math.max(ctx.remainingCalories, 0) && ctx.remainingCalories > 0) {
+    if (
+      totals.calories > Math.max(ctx.remainingCalories, 0) &&
+      ctx.remainingCalories > 0
+    ) {
       signals.push('meal_over_remaining_budget');
     }
 
@@ -325,7 +399,22 @@ export class DecisionSummaryService {
     ctx: UnifiedUserContext,
     topIssues: string[],
     decision: FoodDecision,
+    nutritionIssues?: NutritionIssue[],
   ): string {
+    // V3.6 P2.3: 健康风险优先 — high severity 强制覆盖信号矩阵
+    const HEALTH_RISK_TYPES = new Set([
+      'glycemic_risk',
+      'cardiovascular_risk',
+      'sodium_risk',
+      'purine_risk',
+      'kidney_stress',
+    ]);
+    const highRisk = (nutritionIssues || []).find(
+      (ni) => HEALTH_RISK_TYPES.has(ni.type) && ni.severity === 'high',
+    );
+    if (highRisk) {
+      return `健康风险优先：${highRisk.implication || highRisk.type}，请严格控制相关摄入`;
+    }
     // V2.7: 使用信号优先级仲裁矩阵替代顺序 if-else
     const signals = [
       ...(ctx.contextSignals || []),
@@ -392,7 +481,10 @@ export class DecisionSummaryService {
     return '同样食物在不同时段与摄入状态下，结论可能不同。';
   }
 
-  private buildHealthConstraintNote(ctx: UnifiedUserContext): string | undefined {
+  private buildHealthConstraintNote(
+    ctx: UnifiedUserContext,
+    nutritionIssues?: NutritionIssue[],
+  ): string | undefined {
     const constraints = [
       ...(ctx.allergens || []),
       ...(ctx.dietaryRestrictions || []),
@@ -401,8 +493,105 @@ export class DecisionSummaryService {
 
     if (constraints.length === 0) return undefined;
 
+    // V3.5: 优先使用 nutritionIssues 中健康条件相关问题的 implication（更精准）
+    const HEALTH_CONDITION_ISSUE_TYPES = new Set([
+      'glycemic_risk',
+      'cardiovascular_risk',
+      'sodium_risk',
+      'purine_risk',
+      'kidney_stress',
+    ]);
+    const healthIssueImplications = (nutritionIssues || [])
+      .filter((ni) => HEALTH_CONDITION_ISSUE_TYPES.has(ni.type))
+      .sort((a, b) => {
+        const severityOrder: Record<string, number> = {
+          high: 3,
+          medium: 2,
+          low: 1,
+        };
+        return (
+          (severityOrder[b.severity] || 0) - (severityOrder[a.severity] || 0)
+        );
+      })
+      .slice(0, 2)
+      .map((ni) => ni.implication);
+
+    if (healthIssueImplications.length > 0) {
+      return `健康约束提示：${healthIssueImplications.join('；')}`;
+    }
+
     return `存在健康约束（${constraints.slice(0, 3).join('、')}），建议优先满足约束再优化营养。`;
   }
+  // ==================== V3.3: StructuredDecision 增强 ====================
+
+  /**
+   * 从 StructuredDecision.factors 中补充低分维度到 topIssues
+   * 只补充 score < 50 且尚未覆盖的维度
+   */
+  private enrichTopIssuesFromFactors(
+    topIssues: string[],
+    sd: StructuredDecision,
+  ): string[] {
+    if (!sd.factors) return topIssues;
+
+    const existing = new Set(topIssues);
+    const DIMENSION_LABELS: Record<string, string> = {
+      nutritionAlignment: '营养匹配',
+      macroBalance: '宏量均衡',
+      healthConstraint: '健康约束',
+      timeliness: '时机合理性',
+    };
+
+    const entries = Object.entries(sd.factors) as Array<
+      [string, { score: number; rationale: string }]
+    >;
+    const lowScoreFactors = entries
+      .filter(([, f]) => f.score < 50)
+      .sort((a, b) => a[1].score - b[1].score);
+
+    for (const [key, factor] of lowScoreFactors) {
+      if (topIssues.length >= 4) break;
+      const label = DIMENSION_LABELS[key] || key;
+      const msg = `${label}: ${factor.rationale}`;
+      if (!existing.has(msg)) {
+        topIssues.push(msg);
+        existing.add(msg);
+      }
+    }
+
+    return topIssues;
+  }
+
+  /**
+   * 从 StructuredDecision.rationale 中补充行动建议到 actionItems
+   */
+  private enrichActionItemsFromRationale(
+    actionItems: string[],
+    sd: StructuredDecision,
+  ): string[] {
+    if (!sd.rationale) return actionItems;
+
+    const existing = new Set(actionItems);
+
+    // 从各维度理由中提取可执行建议
+    const rationaleTexts = [
+      sd.rationale.contextual,
+      sd.rationale.goalAlignment,
+      sd.rationale.healthRisk,
+      sd.rationale.timelinessNote,
+    ].filter((t): t is string => !!t && t.length > 0);
+
+    for (const text of rationaleTexts) {
+      if (actionItems.length >= 4) break;
+      if (!existing.has(text)) {
+        actionItems.push(text);
+        existing.add(text);
+      }
+    }
+
+    return actionItems;
+  }
+
   /** V3.0: 从 contextSignals 构建有序信号追踪列表 */
   private buildSignalTrace(
     ctx: UnifiedUserContext,
@@ -443,8 +632,13 @@ export class DecisionSummaryService {
     };
 
     const goalType = ctx.goalType || 'health';
-    const { getSignalPriority, SIGNAL_PRIORITY_MATRIX } = require('../config/signal-priority.config');
-    const { DynamicSignalWeightService } = require('../config/dynamic-signal-weight.service');
+    const {
+      getSignalPriority,
+      SIGNAL_PRIORITY_MATRIX,
+    } = require('../config/signal-priority.config');
+    const {
+      DynamicSignalWeightService,
+    } = require('../config/dynamic-signal-weight.service');
     const dynamicWeightSvc = new DynamicSignalWeightService();
     const baseWeights = SIGNAL_PRIORITY_MATRIX[goalType] ?? {};
     const adjustedWeights = dynamicWeightSvc.adjustWeights(
@@ -454,7 +648,8 @@ export class DecisionSummaryService {
     );
 
     for (const signal of contextSignals) {
-      const dynamicPriority = adjustedWeights[signal] ?? getSignalPriority(signal, goalType);
+      const dynamicPriority =
+        adjustedWeights[signal] ?? getSignalPriority(signal, goalType);
       trace.push({
         signal,
         priority: dynamicPriority,
@@ -467,4 +662,5 @@ export class DecisionSummaryService {
     trace.sort((a, b) => b.priority - a.priority);
 
     return trace;
-  }}
+  }
+}

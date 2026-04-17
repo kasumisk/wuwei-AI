@@ -4,6 +4,7 @@ import { I18nManagementService } from '../../config/i18n-management.service';
 // 依赖模块
 import { UserModule } from '../user/user.module';
 import { DietModule } from '../diet/diet.module';
+import { DecisionModule } from '../decision/decision.module';
 // 控制器和服务
 import { CoachController } from './app/coach.controller';
 import { CoachService } from './app/coach.service';
@@ -13,7 +14,7 @@ import { CoachActionPlanService } from './app/coaching/coach-action-plan.service
 import { CoachFormatService } from './app/formatting/coach-format.service';
 
 @Module({
-  imports: [ConfigModule, UserModule, DietModule],
+  imports: [ConfigModule, UserModule, DietModule, DecisionModule],
   controllers: [CoachController],
   providers: [
     CoachService,

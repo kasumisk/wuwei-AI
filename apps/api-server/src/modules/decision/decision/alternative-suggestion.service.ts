@@ -18,6 +18,7 @@ import {
   NutritionTotals,
   DietIssue,
   UnifiedUserContext,
+  NutritionIssue,
 } from '../types/analysis-result.types';
 import { NutritionScoreBreakdown } from '../../diet/app/services/nutrition-score.service';
 import {
@@ -36,6 +37,7 @@ import { t, Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 import { DecisionFoodItem, UserContext } from './food-decision.service';
 import { RecommendationEngineService } from '../../diet/app/services/recommendation-engine.service';
 import { MealRecommendation } from '../../diet/app/recommendation/types/recommendation.types';
+import { ContextualAnalysis } from '../types/analysis-result.types';
 
 // ==================== 输入类型 ====================
 
@@ -48,6 +50,10 @@ export interface AlternativeConstraints {
   maxCalories?: number;
   excludeAllergens?: string[];
   excludeCategories?: string[];
+  /** V3.5: 低升糖指数优先（diabetes / glycemic_risk） */
+  preferLowGlycemic?: boolean;
+  /** V3.5: 低钠优先（hypertension / sodium_risk） */
+  preferLowSodium?: boolean;
 }
 
 export interface AlternativeInput {
@@ -64,6 +70,10 @@ export interface AlternativeInput {
   preferenceProfile?: UserPreferenceProfile;
   /** V2.2: 结构化问题列表（用于提取替代方案约束） */
   issues?: DietIssue[];
+  /** V3.3: 营养问题列表（来自上下文分析，更细粒度的问题识别） */
+  nutritionIssues?: NutritionIssue[];
+  /** V3.6 P2.1: 上下文分析（含 macroProgress.remaining，用于动态目标参数） */
+  contextualAnalysis?: ContextualAnalysis;
 }
 
 @Injectable()
@@ -90,10 +100,16 @@ export class AlternativeSuggestionService {
       userConstraints,
       preferenceProfile,
       issues,
+      nutritionIssues,
+      contextualAnalysis,
     } = input;
 
     // V2.2: 从问题列表提取替代方案约束
-    const constraints = this.extractConstraintsFromIssues(issues, ctx);
+    const constraints = this.extractConstraintsFromIssues(
+      issues,
+      ctx,
+      nutritionIssues,
+    );
 
     let results: FoodAlternative[] = [];
 
@@ -107,6 +123,7 @@ export class AlternativeSuggestionService {
           userConstraints,
           preferenceProfile,
           constraints,
+          contextualAnalysis,
         );
         if (engineAlternatives.length > 0) {
           results = engineAlternatives.slice(0, 5);
@@ -201,37 +218,74 @@ export class AlternativeSuggestionService {
     userConstraints?: UserProfileConstraints,
     _preferenceProfile?: UserPreferenceProfile,
     constraints?: AlternativeConstraints,
+    contextualAnalysis?: ContextualAnalysis,
   ): Promise<FoodAlternative[]> {
-    const currentMealCalories = foods.reduce((sum, food) => sum + food.calories, 0);
-    const currentMealProtein = foods.reduce((sum, food) => sum + food.protein, 0);
-    const scenarioRecommendations = await this.recommendationEngineService.recommendByScenario(
-      userId,
-      ctx.mealType || 'snack',
-      ctx.goalType || 'health',
-      {
-        calories: Math.max(0, ctx.todayCalories || 0),
-        protein: Math.max(0, ctx.todayProtein || 0),
-      },
-      {
-        calories: constraints?.maxCalories || Math.max(currentMealCalories, 150),
-        protein: constraints?.preferHighProtein
-          ? Math.max(currentMealProtein + 8, 20)
-          : Math.max(currentMealProtein, 12),
-        fat: constraints?.preferLowFat ? Math.min(currentMealCalories * 0.2, 12) : Math.max(10, foods.reduce((sum, food) => sum + food.fat, 0)),
-        carbs: constraints?.preferLowCarb ? 20 : Math.max(20, foods.reduce((sum, food) => sum + food.carbs, 0)),
-      },
-      {
-        calories: Math.max(ctx.goalCalories || 0, currentMealCalories),
-        protein: Math.max(ctx.goalProtein || 0, currentMealProtein),
-      },
-      userConstraints || {
-        allergens: ctx.allergens,
-        dietaryRestrictions: ctx.dietaryRestrictions,
-        healthConditions: ctx.healthConditions,
-      },
+    const currentMealCalories = foods.reduce(
+      (sum, food) => sum + food.calories,
+      0,
     );
+    const currentMealProtein = foods.reduce(
+      (sum, food) => sum + food.protein,
+      0,
+    );
+    const scenarioRecommendations =
+      await this.recommendationEngineService.recommendByScenario(
+        userId,
+        ctx.mealType || 'snack',
+        ctx.goalType || 'health',
+        {
+          calories: Math.max(0, ctx.todayCalories || 0),
+          protein: Math.max(0, ctx.todayProtein || 0),
+        },
+        {
+          calories:
+            constraints?.maxCalories || Math.max(currentMealCalories, 150),
+          protein: constraints?.preferHighProtein
+            ? Math.max(currentMealProtein + 8, 20)
+            : Math.max(currentMealProtein, 12),
+          fat: constraints?.preferLowFat
+            ? Math.min(currentMealCalories * 0.2, 12)
+            : Math.max(
+                10,
+                foods.reduce((sum, food) => sum + food.fat, 0),
+              ),
+          carbs: (() => {
+            // V3.6 P2.1: 用剩余碳水动态计算，替代写死的 20g/15g
+            const remainingCarbs =
+              contextualAnalysis?.macroProgress.remaining.carbs;
+            if (remainingCarbs !== undefined && remainingCarbs > 0) {
+              // 建议摄入 30% 的剩余碳水量（当前餐分配）
+              const dynamicTarget = Math.round(remainingCarbs * 0.3);
+              if (constraints?.preferLowCarb)
+                return Math.min(dynamicTarget, 20);
+              if (constraints?.preferLowGlycemic)
+                return Math.min(dynamicTarget, 25);
+              return Math.max(dynamicTarget, 10);
+            }
+            return constraints?.preferLowCarb
+              ? 20
+              : constraints?.preferLowGlycemic
+                ? 15
+                : Math.max(
+                    20,
+                    foods.reduce((sum, food) => sum + food.carbs, 0),
+                  );
+          })(),
+        },
+        {
+          calories: Math.max(ctx.goalCalories || 0, currentMealCalories),
+          protein: Math.max(ctx.goalProtein || 0, currentMealProtein),
+        },
+        userConstraints || {
+          allergens: ctx.allergens,
+          dietaryRestrictions: ctx.dietaryRestrictions,
+          healthConditions: ctx.healthConditions,
+        },
+      );
 
-    const scenarioMap: Array<['takeout' | 'convenience' | 'homeCook', MealRecommendation]> = [
+    const scenarioMap: Array<
+      ['takeout' | 'convenience' | 'homeCook', MealRecommendation]
+    > = [
       ['takeout', scenarioRecommendations.takeout],
       ['convenience', scenarioRecommendations.convenience],
       ['homeCook', scenarioRecommendations.homeCook],
@@ -253,11 +307,24 @@ export class AlternativeSuggestionService {
           foodLibraryId: candidate.food?.id,
           source: 'engine',
           score: candidate.score,
-          reason: this.explainEngineCandidate(candidate, currentMealCalories, currentMealProtein, constraints, scenarioType),
+          reason: this.explainEngineCandidate(
+            candidate,
+            currentMealCalories,
+            currentMealProtein,
+            constraints,
+            scenarioType,
+          ),
           comparison: {
-            caloriesDiff: Math.round(candidate.servingCalories - currentMealCalories),
-            proteinDiff: Math.round(candidate.servingProtein - currentMealProtein),
-            scoreDiff: typeof candidate.score === 'number' ? Math.round(candidate.score * 100) : undefined,
+            caloriesDiff: Math.round(
+              candidate.servingCalories - currentMealCalories,
+            ),
+            proteinDiff: Math.round(
+              candidate.servingProtein - currentMealProtein,
+            ),
+            scoreDiff:
+              typeof candidate.score === 'number'
+                ? Math.round(candidate.score * 100)
+                : undefined,
           },
           scenarioType,
         });
@@ -274,14 +341,32 @@ export class AlternativeSuggestionService {
     constraints?: AlternativeConstraints,
     scenarioType?: 'takeout' | 'convenience' | 'homeCook',
   ): string {
-    if (constraints?.preferLowCalorie && candidate.servingCalories < currentMealCalories) {
+    if (
+      constraints?.preferLowCalorie &&
+      candidate.servingCalories < currentMealCalories
+    ) {
       return t('decision.alt.lowerCal', {
         newCal: String(Math.round(candidate.servingCalories)),
         oldCal: String(Math.round(currentMealCalories)),
       });
     }
 
-    if (constraints?.preferHighProtein && candidate.servingProtein > currentMealProtein) {
+    if (
+      constraints?.preferLowGlycemic &&
+      candidate.servingCarbs !== undefined &&
+      candidate.servingCarbs < 15
+    ) {
+      return (
+        t('decision.alt.lowGlycemic', {
+          carbs: String(Math.round(candidate.servingCarbs)),
+        }) || `低升糖选择（碳水 ${Math.round(candidate.servingCarbs)}g）`
+      );
+    }
+
+    if (
+      constraints?.preferHighProtein &&
+      candidate.servingProtein > currentMealProtein
+    ) {
       return t('decision.alt.higherProtein', {
         newPro: String(Math.round(candidate.servingProtein)),
         oldPro: String(Math.round(currentMealProtein)),
@@ -435,10 +520,21 @@ export class AlternativeSuggestionService {
   private extractConstraintsFromIssues(
     issues?: DietIssue[],
     ctx?: UserContext,
+    nutritionIssues?: NutritionIssue[],
   ): AlternativeConstraints {
     const constraints: AlternativeConstraints = {};
 
-    if (!issues || issues.length === 0) return constraints;
+    if (!issues || issues.length === 0) {
+      // V3.3: 即使没有 DietIssue，也从 NutritionIssue 中提取约束
+      if (nutritionIssues && nutritionIssues.length > 0) {
+        return this.extractConstraintsFromNutritionIssues(
+          nutritionIssues,
+          ctx,
+          constraints,
+        );
+      }
+      return constraints;
+    }
 
     for (const issue of issues) {
       switch (issue.category) {
@@ -472,6 +568,83 @@ export class AlternativeSuggestionService {
       }
     }
 
+    // V3.3: 补充 NutritionIssue 中的约束（不覆盖已有）
+    if (nutritionIssues && nutritionIssues.length > 0) {
+      this.extractConstraintsFromNutritionIssues(
+        nutritionIssues,
+        ctx,
+        constraints,
+      );
+    }
+
+    return constraints;
+  }
+
+  /**
+   * V3.3: 从 NutritionIssue[] 中提取替代方案约束
+   * NutritionIssue.type 对应: calorie_excess, protein_deficit, fat_excess, carb_excess,
+   *   fiber_deficit, sugar_excess, sodium_excess 等
+   */
+  private extractConstraintsFromNutritionIssues(
+    nutritionIssues: NutritionIssue[],
+    ctx?: UserContext,
+    constraints: AlternativeConstraints = {},
+  ): AlternativeConstraints {
+    for (const ni of nutritionIssues) {
+      switch (ni.type) {
+        case 'calorie_excess':
+          if (!constraints.preferLowCalorie) {
+            constraints.preferLowCalorie = true;
+            if (ctx && ctx.remainingCalories > 0 && !constraints.maxCalories) {
+              constraints.maxCalories = ctx.remainingCalories;
+            }
+          }
+          break;
+        case 'protein_deficit':
+          if (!constraints.preferHighProtein) {
+            constraints.preferHighProtein = true;
+          }
+          break;
+        case 'fat_excess':
+          if (!constraints.preferLowFat) {
+            constraints.preferLowFat = true;
+          }
+          break;
+        case 'carb_excess':
+          if (!constraints.preferLowCarb) {
+            constraints.preferLowCarb = true;
+          }
+          break;
+        // V3.5: V3.4 新增健康条件类型映射
+        case 'glycemic_risk':
+          if (!constraints.preferLowGlycemic) {
+            constraints.preferLowGlycemic = true;
+            if (!constraints.preferLowCarb) {
+              constraints.preferLowCarb = true;
+            }
+          }
+          break;
+        case 'cardiovascular_risk':
+          if (!constraints.preferLowFat) {
+            constraints.preferLowFat = true;
+          }
+          break;
+        case 'sodium_risk':
+          if (!constraints.preferLowSodium) {
+            constraints.preferLowSodium = true;
+          }
+          break;
+        case 'purine_risk':
+        case 'kidney_stress':
+          // 嘌呤/肾脏应激：低蛋白 + 低脂肪方向
+          if (!constraints.preferLowFat) {
+            constraints.preferLowFat = true;
+          }
+          break;
+        // sugar_excess 和 sodium_excess 暂不映射到 AlternativeConstraints
+        // fiber_deficit 暂不映射（未来可扩展 preferHighFiber）
+      }
+    }
     return constraints;
   }
 
@@ -579,7 +752,10 @@ export class AlternativeSuggestionService {
       !trigger.categories.includes(food.category || '')
     )
       return false;
-    if (trigger.goals?.length && !trigger.goals.includes(ctx.goalType || 'health'))
+    if (
+      trigger.goals?.length &&
+      !trigger.goals.includes(ctx.goalType || 'health')
+    )
       return false;
     if (trigger.minCalories != null && food.calories < trigger.minCalories)
       return false;
@@ -597,7 +773,10 @@ export class AlternativeSuggestionService {
     totalFat: number,
   ): boolean {
     const trigger = rule.trigger;
-    if (trigger.goals?.length && !trigger.goals.includes(ctx.goalType || 'health'))
+    if (
+      trigger.goals?.length &&
+      !trigger.goals.includes(ctx.goalType || 'health')
+    )
       return false;
     if (trigger.minCalories != null && totalCalories < trigger.minCalories)
       return false;
@@ -623,38 +802,40 @@ export class AlternativeSuggestionService {
   ): FoodAlternative[] {
     if (!alternatives.length) return alternatives;
 
-    return alternatives.map((alt) => {
-      const comp = alt.comparison;
-      const calDiff = comp?.caloriesDiff ?? 0;
-      const prosDiff = comp?.proteinDiff ?? 0;
-      const rawScore = typeof alt.score === 'number' ? alt.score : 0.5;
+    return alternatives
+      .map((alt) => {
+        const comp = alt.comparison;
+        const calDiff = comp?.caloriesDiff ?? 0;
+        const prosDiff = comp?.proteinDiff ?? 0;
+        const rawScore = typeof alt.score === 'number' ? alt.score : 0.5;
 
-      const reasons: string[] = [];
-      let score = rawScore * 0.4; // base 40% from engine score
+        const reasons: string[] = [];
+        let score = rawScore * 0.4; // base 40% from engine score
 
-      // 热量维度（最高 35%）
-      const calScore = Math.max(-1, Math.min(1, -calDiff / 200)); // -200kcal diff = +1
-      const calWeight = ctx.goalType === 'fat_loss' ? 0.35 : 0.15;
-      score += calScore * calWeight;
-      if (calDiff < -50) reasons.push(`热量少 ${Math.abs(calDiff)}kcal`);
-      else if (calDiff > 50) reasons.push(`热量多 ${calDiff}kcal`);
+        // 热量维度（最高 35%）
+        const calScore = Math.max(-1, Math.min(1, -calDiff / 200)); // -200kcal diff = +1
+        const calWeight = ctx.goalType === 'fat_loss' ? 0.35 : 0.15;
+        score += calScore * calWeight;
+        if (calDiff < -50) reasons.push(`热量少 ${Math.abs(calDiff)}kcal`);
+        else if (calDiff > 50) reasons.push(`热量多 ${calDiff}kcal`);
 
-      // 蛋白质维度（最高 25%）
-      const prosScore = Math.max(-1, Math.min(1, prosDiff / 20)); // +20g = +1
-      const prosWeight = ctx.goalType === 'muscle_gain' ? 0.25 : 0.10;
-      score += prosScore * prosWeight;
-      if (prosDiff > 5) reasons.push(`蛋白质+${prosDiff}g`);
-      else if (prosDiff < -5) reasons.push(`蛋白质-${Math.abs(prosDiff)}g`);
+        // 蛋白质维度（最高 25%）
+        const prosScore = Math.max(-1, Math.min(1, prosDiff / 20)); // +20g = +1
+        const prosWeight = ctx.goalType === 'muscle_gain' ? 0.25 : 0.1;
+        score += prosScore * prosWeight;
+        if (prosDiff > 5) reasons.push(`蛋白质+${prosDiff}g`);
+        else if (prosDiff < -5) reasons.push(`蛋白质-${Math.abs(prosDiff)}g`);
 
-      // 归一化到 [0, 1]
-      const finalScore = Math.max(0, Math.min(1, score));
-      if (reasons.length === 0) reasons.push('综合均衡');
+        // 归一化到 [0, 1]
+        const finalScore = Math.max(0, Math.min(1, score));
+        if (reasons.length === 0) reasons.push('综合均衡');
 
-      return {
-        ...alt,
-        rankScore: Math.round(finalScore * 100) / 100,
-        rankReasons: reasons,
-      };
-    }).sort((a, b) => (b.rankScore ?? 0) - (a.rankScore ?? 0));
+        return {
+          ...alt,
+          rankScore: Math.round(finalScore * 100) / 100,
+          rankReasons: reasons,
+        };
+      })
+      .sort((a, b) => (b.rankScore ?? 0) - (a.rankScore ?? 0));
   }
 }

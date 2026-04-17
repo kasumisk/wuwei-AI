@@ -1,5 +1,5 @@
 /**
- * V3.2 Phase 1 — 营养问题检测服务
+ * V3.4 Phase 2.1 — 营养问题检测服务（含健康条件特异性规则）
  *
  * 职责:
  * - detectIssues() 基于 MacroSlotStatus 和 MacroProgress 识别结构化问题
@@ -12,7 +12,11 @@
  */
 
 import { Injectable } from '@nestjs/common';
-import { MacroSlotStatus, NutritionIssue, IssueType } from '../types/analysis-result.types';
+import {
+  MacroSlotStatus,
+  NutritionIssue,
+  IssueType,
+} from '../types/analysis-result.types';
 
 interface MacroProgress {
   consumed: { calories: number; protein: number; fat: number; carbs: number };
@@ -23,7 +27,10 @@ interface MacroProgress {
 interface IssueDetectionRule {
   type: IssueType;
   condition: (slot: MacroSlotStatus, progress: MacroProgress) => boolean;
-  severityCalculator: (slot: MacroSlotStatus, progress: MacroProgress) => 'low' | 'medium' | 'high';
+  severityCalculator: (
+    slot: MacroSlotStatus,
+    progress: MacroProgress,
+  ) => 'low' | 'medium' | 'high';
   metricCalculator: (progress: MacroProgress) => number;
   thresholdCalculator: (progress: MacroProgress) => number;
   implicationTemplate: (metric: number, threshold: number) => string;
@@ -59,7 +66,8 @@ export class NutritionIssueDetector {
         if (ratio > 0.15) return 'medium';
         return 'low';
       },
-      metricCalculator: (progress) => progress.consumed.fat - progress.goals.fat,
+      metricCalculator: (progress) =>
+        progress.consumed.fat - progress.goals.fat,
       thresholdCalculator: (progress) => progress.goals.fat * 0.15,
       implicationTemplate: (metric, _threshold) =>
         `脂肪超标 ${Math.round(metric)}g，建议减少油炸食物`,
@@ -76,7 +84,8 @@ export class NutritionIssueDetector {
         if (ratio > 0.15) return 'medium';
         return 'low';
       },
-      metricCalculator: (progress) => progress.consumed.carbs - progress.goals.carbs,
+      metricCalculator: (progress) =>
+        progress.consumed.carbs - progress.goals.carbs,
       thresholdCalculator: (progress) => progress.goals.carbs * 0.15,
       implicationTemplate: (metric, _threshold) =>
         `碳水超标 ${Math.round(metric)}g，建议减少主食`,
@@ -93,7 +102,8 @@ export class NutritionIssueDetector {
         if (ratio > 0.08) return 'medium';
         return 'low';
       },
-      metricCalculator: (progress) => progress.consumed.calories - progress.goals.calories,
+      metricCalculator: (progress) =>
+        progress.consumed.calories - progress.goals.calories,
       thresholdCalculator: (progress) => progress.goals.calories * 0.08,
       implicationTemplate: (metric, _threshold) =>
         `热量超标 ${Math.round(metric)} kcal，建议今日剩余餐控制`,
@@ -110,23 +120,47 @@ export class NutritionIssueDetector {
         if (ratio > 0.15) return 'medium';
         return 'low';
       },
-      metricCalculator: (progress) => progress.goals.calories - progress.consumed.calories,
+      metricCalculator: (progress) =>
+        progress.goals.calories - progress.consumed.calories,
       thresholdCalculator: (progress) => progress.goals.calories * 0.1,
       implicationTemplate: (metric, _threshold) =>
         `热量不足 ${Math.round(metric)} kcal，建议适度增加摄入`,
     },
 
-    // 纤维素不足（可选检测）
+    // 纤维素不足（仅当 slot.carbs 不超标时才检测，作为代理信号）
     {
       type: 'fiber_deficit',
-      condition: (_, progress) => {
-        // 如果没有纤维数据则不检测
-        return progress.goals.carbs > 0; // 简化条件（实际应基于是否有纤维数据）
+      condition: (slot, progress) => {
+        // V3.6 P1.6: 修复永为真的 bug —— 只在蔬菜/水果明显不足时触发
+        // 代理信号：碳水不超标（说明主食不多）且热量不低（有进食），但整体碳水偏低
+        return (
+          slot.carbs !== 'excess' &&
+          progress.consumed.calories > 0 &&
+          progress.consumed.carbs < progress.goals.carbs * 0.4
+        );
       },
       severityCalculator: () => 'low', // 纤维问题通常低优先级
       metricCalculator: () => 0, // 占位
       thresholdCalculator: () => 0,
-      implicationTemplate: () => '建议增加高纤维食物',
+      implicationTemplate: () => '建议增加高纤维食物（蔬菜、全谷物）',
+    },
+
+    // 糖分超标（V3.6 P1.6 新增）
+    {
+      type: 'sugar_excess',
+      condition: (slot) => slot.carbs === 'excess',
+      severityCalculator: (_, progress) => {
+        const excess = progress.consumed.carbs - progress.goals.carbs;
+        const ratio = excess / progress.goals.carbs;
+        if (ratio > 0.3) return 'high';
+        if (ratio > 0.15) return 'medium';
+        return 'low';
+      },
+      metricCalculator: (progress) =>
+        progress.consumed.carbs - progress.goals.carbs,
+      thresholdCalculator: (progress) => progress.goals.carbs * 0.15,
+      implicationTemplate: (metric) =>
+        `碳水/糖分超标 ${Math.round(metric)}g，注意控制甜食与精制主食`,
     },
   ];
 
@@ -135,9 +169,14 @@ export class NutritionIssueDetector {
    *
    * @param slot 宏量槽位状态
    * @param progress 当日进度
+   * @param healthConditions 用户健康条件（可选），用于生成特异性风险
    * @returns 按严重程度排序的问题列表
    */
-  detectIssues(slot: MacroSlotStatus, progress: MacroProgress): NutritionIssue[] {
+  detectIssues(
+    slot: MacroSlotStatus,
+    progress: MacroProgress,
+    healthConditions?: string[],
+  ): NutritionIssue[] {
     const issues: NutritionIssue[] = [];
 
     for (const rule of this.rules) {
@@ -156,9 +195,97 @@ export class NutritionIssueDetector {
       }
     }
 
+    // V3.4 P2.1: 健康条件特异性规则
+    if (healthConditions && healthConditions.length > 0) {
+      const condSet = new Set(healthConditions.map((c) => c.toLowerCase()));
+
+      // 糖尿病：碳水超标 → 血糖风险
+      if (
+        (condSet.has('diabetes') || condSet.has('糖尿病')) &&
+        slot.carbs === 'excess'
+      ) {
+        const carbsExcess = progress.consumed.carbs - progress.goals.carbs;
+        issues.push({
+          type: 'glycemic_risk',
+          severity:
+            carbsExcess > progress.goals.carbs * 0.2 ? 'high' : 'medium',
+          metric: Math.round(carbsExcess * 100) / 100,
+          threshold: 0,
+          implication: `糖尿病用户碳水超标 ${Math.round(carbsExcess)}g，存在血糖风险，建议选择低GI食物`,
+        });
+      }
+
+      // 高血压：钠摄入风险（当 fat_excess 或 calorie_excess 时附加提醒）
+      if (
+        condSet.has('hypertension') ||
+        condSet.has('高血压') ||
+        condSet.has('高血圧')
+      ) {
+        if (slot.fat === 'excess' || slot.calories === 'excess') {
+          issues.push({
+            type: 'sodium_risk',
+            severity: 'medium',
+            metric: 0,
+            threshold: 0,
+            implication: '高血压用户需注意钠摄入，避免高盐、高油加工食物',
+          });
+        }
+      }
+
+      // 心脏病/心血管：脂肪超标 → 心血管风险
+      if (
+        (condSet.has('heart_disease') ||
+          condSet.has('cardiovascular') ||
+          condSet.has('心脏病')) &&
+        slot.fat === 'excess'
+      ) {
+        const fatExcess = progress.consumed.fat - progress.goals.fat;
+        issues.push({
+          type: 'cardiovascular_risk',
+          severity: fatExcess > progress.goals.fat * 0.25 ? 'high' : 'medium',
+          metric: Math.round(fatExcess * 100) / 100,
+          threshold: 0,
+          implication: `心血管疾病用户脂肪超标 ${Math.round(fatExcess)}g，建议减少饱和脂肪摄入`,
+        });
+      }
+
+      // 痛风：高嘌呤风险（蛋白质超标时提示）
+      if (
+        (condSet.has('gout') || condSet.has('痛风')) &&
+        slot.protein === 'excess'
+      ) {
+        issues.push({
+          type: 'purine_risk',
+          severity: 'medium',
+          metric: 0,
+          threshold: 0,
+          implication: '痛风用户蛋白质偏高，注意避免动物内脏、海鲜等高嘌呤食物',
+        });
+      }
+
+      // 肾病：蛋白质/钾磷风险（蛋白质超标时提示）
+      if (
+        (condSet.has('kidney_disease') || condSet.has('肾病')) &&
+        slot.protein === 'excess'
+      ) {
+        const proteinExcess =
+          progress.consumed.protein - progress.goals.protein;
+        issues.push({
+          type: 'kidney_stress',
+          severity:
+            proteinExcess > progress.goals.protein * 0.2 ? 'high' : 'medium',
+          metric: Math.round(proteinExcess * 100) / 100,
+          threshold: 0,
+          implication: `肾病用户蛋白质超标 ${Math.round(proteinExcess)}g，增加肾脏负担，建议严格控制蛋白质总量`,
+        });
+      }
+    }
+
     // 按严重程度排序：high > medium > low
     const severityOrder = { high: 0, medium: 1, low: 2 };
-    issues.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
+    issues.sort(
+      (a, b) => severityOrder[a.severity] - severityOrder[b.severity],
+    );
 
     return issues;
   }
@@ -173,7 +300,10 @@ export class NutritionIssueDetector {
   /**
    * 获取指定类型的问题
    */
-  getIssueByType(issues: NutritionIssue[], type: IssueType): NutritionIssue | null {
+  getIssueByType(
+    issues: NutritionIssue[],
+    type: IssueType,
+  ): NutritionIssue | null {
     return issues.find((i) => i.type === type) || null;
   }
 }

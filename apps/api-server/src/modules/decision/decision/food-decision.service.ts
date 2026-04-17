@@ -24,6 +24,7 @@ import {
   DietIssue,
   MacroProgress,
   UnifiedUserContext,
+  NutritionIssue,
 } from '../types/analysis-result.types';
 import { NutritionScoreBreakdown } from '../../diet/app/services/nutrition-score.service';
 import { BehaviorService } from '../../diet/app/services/behavior.service';
@@ -42,6 +43,7 @@ import {
   estimateQuality as _estimateQuality,
   estimateSatiety as _estimateSatiety,
 } from '../../food/app/config/nutrition-estimator';
+import { ContextualAnalysis } from '../types/analysis-result.types';
 
 // ==================== 公共类型 ====================
 
@@ -148,6 +150,10 @@ export class FoodDecisionService {
     userId?: string,
     locale?: Locale,
     mode: 'pre_eat' | 'post_eat' = 'pre_eat',
+    /** V3.3: 上下文分析识别的营养问题 */
+    nutritionIssues?: NutritionIssue[],
+    /** V3.6 P2.1: 完整上下文分析（含 macroProgress.remaining） */
+    contextualAnalysis?: ContextualAnalysis,
   ): Promise<DecisionOutput> {
     return this._computeFullDecision(
       foods,
@@ -158,6 +164,8 @@ export class FoodDecisionService {
       userId,
       locale,
       mode,
+      nutritionIssues,
+      contextualAnalysis,
     );
   }
 
@@ -170,6 +178,8 @@ export class FoodDecisionService {
     userId?: string,
     locale?: Locale,
     mode: 'pre_eat' | 'post_eat' = 'pre_eat',
+    nutritionIssues?: NutritionIssue[],
+    contextualAnalysis?: ContextualAnalysis,
   ): Promise<DecisionOutput> {
     // 1. 基础决策（委托 DecisionEngineService）
     const decision = this.decisionEngine.computeDecision(
@@ -278,6 +288,8 @@ export class FoodDecisionService {
           dietaryRestrictions: ctx.dietaryRestrictions,
           healthConditions: ctx.healthConditions,
         },
+        nutritionIssues,
+        contextualAnalysis, // V3.6 P2.1
       });
 
     // 6. 解释（委托 DecisionExplainerService）

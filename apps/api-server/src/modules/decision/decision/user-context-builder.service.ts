@@ -17,7 +17,10 @@ import {
   DEFAULT_TIMEZONE,
 } from '../../../common/utils/timezone.util';
 import { t, Locale } from '../../diet/app/recommendation/utils/i18n-messages';
-import { UnifiedUserContext, MacroSlotStatus } from '../types/analysis-result.types';
+import {
+  UnifiedUserContext,
+  MacroSlotStatus,
+} from '../types/analysis-result.types';
 
 // ==================== 输出类型 ====================
 
@@ -43,6 +46,48 @@ const GOAL_CONTEXT: Record<string, { label: string; focus: string }> = {
 };
 
 // ==================== 服务 ====================
+
+/**
+ * V3.4 P1.1: 根据健康条件生成专用 AI 指令块
+ *
+ * 目的：让 Vision AI / LLM 在分析时优先关注对该用户最重要的营养维度
+ */
+function buildHealthConditionGuidance(conditions: string[]): string {
+  if (!conditions || conditions.length === 0) return '';
+
+  const lines: string[] = ['【健康条件特别注意】'];
+
+  if (conditions.includes('diabetes')) {
+    lines.push(
+      '- 糖尿病用户：必须关注碳水化合物总量和升糖指数。高淀粉/高糖食物（白米、白面、甜品、含糖饮料）要在 reason 中明确标注风险，decision 倾向 LIMIT/AVOID。',
+    );
+  }
+  if (conditions.includes('hypertension')) {
+    lines.push(
+      '- 高血压用户：必须关注钠含量。腌制食品、酱料、外卖重口味食物要标注高钠风险，建议低钠替代，decision 倾向 LIMIT。',
+    );
+  }
+  if (
+    conditions.includes('heart_disease') ||
+    conditions.includes('cardiovascular')
+  ) {
+    lines.push(
+      '- 心脏病/心血管风险用户：必须关注饱和脂肪和总脂肪。油炸食品、肥肉、全脂乳制品要明确标注风险，decision 倾向 LIMIT/AVOID。',
+    );
+  }
+  if (conditions.includes('gout')) {
+    lines.push(
+      '- 痛风用户：关注高嘌呤食物（海鲜、动物内脏、浓肉汤）。识别到高嘌呤食物时在 reason 中提示，建议低嘌呤替代。',
+    );
+  }
+  if (conditions.includes('kidney_disease')) {
+    lines.push(
+      '- 肾病用户：关注蛋白质总量（不宜过高）、钾和磷含量。高蛋白食物不等于好，需在 suggestion 中提示适量。',
+    );
+  }
+
+  return lines.length > 1 ? lines.join('\n') : '';
+}
 
 @Injectable()
 export class UserContextBuilderService {
@@ -108,7 +153,10 @@ export class UserContextBuilderService {
         ? getUserLocalHour(profile.timezone)
         : localHour;
       const mealCount = summary.mealCount || 0;
-      const budgetStatus = this.resolveBudgetStatus(remainingCalories, goals.calories);
+      const budgetStatus = this.resolveBudgetStatus(
+        remainingCalories,
+        goals.calories,
+      );
       const nutritionPriority = this.resolveNutritionPriority({
         remainingProtein,
         remainingFat,
@@ -126,8 +174,10 @@ export class UserContextBuilderService {
         mealCount,
         hasHealthConstraint:
           ((profile?.allergens as string[] | undefined)?.length || 0) > 0 ||
-          ((profile?.dietaryRestrictions as string[] | undefined)?.length || 0) > 0 ||
-          ((profile?.healthConditions as string[] | undefined)?.length || 0) > 0,
+          ((profile?.dietaryRestrictions as string[] | undefined)?.length ||
+            0) > 0 ||
+          ((profile?.healthConditions as string[] | undefined)?.length || 0) >
+            0,
       });
       // V3.0: 宏量槽位状态
       const macroSlotStatus = this.resolveMacroSlotStatus({
@@ -210,12 +260,17 @@ ${gc.focus}
       text += `\n- 饮食偏好：${(profile.foodPreferences as string[]).join('、')}`;
     if (ctx.dietaryRestrictions.length)
       text += `\n- 忌口：${ctx.dietaryRestrictions.join('、')}`;
-    if (ctx.budgetStatus)
-      text += `\n- 预算状态：${ctx.budgetStatus}`;
+    if (ctx.budgetStatus) text += `\n- 预算状态：${ctx.budgetStatus}`;
     if (ctx.nutritionPriority?.length)
       text += `\n- 当前优先修正：${ctx.nutritionPriority.join('、')}`;
     if (ctx.contextSignals?.length)
       text += `\n- 决策信号：${ctx.contextSignals.join('、')}`;
+
+    // V3.4 P1.1: 健康条件特异性指令
+    const healthGuidance = buildHealthConditionGuidance(ctx.healthConditions);
+    if (healthGuidance) {
+      text += `\n\n${healthGuidance}`;
+    }
 
     return text;
   }
@@ -246,13 +301,22 @@ ${gc.focus}
   }): string[] {
     const priorities: string[] = [];
 
-    if (input.goalProtein > 0 && input.remainingProtein / input.goalProtein > 0.35) {
+    if (
+      input.goalProtein > 0 &&
+      input.remainingProtein / input.goalProtein > 0.35
+    ) {
       priorities.push('protein_gap');
     }
-    if (input.goalFat > 0 && input.remainingFat < -Math.max(8, input.goalFat * 0.12)) {
+    if (
+      input.goalFat > 0 &&
+      input.remainingFat < -Math.max(8, input.goalFat * 0.12)
+    ) {
       priorities.push('fat_excess');
     }
-    if (input.goalCarbs > 0 && input.remainingCarbs < -Math.max(15, input.goalCarbs * 0.12)) {
+    if (
+      input.goalCarbs > 0 &&
+      input.remainingCarbs < -Math.max(15, input.goalCarbs * 0.12)
+    ) {
       priorities.push('carb_excess');
     }
     if (priorities.length === 0) {
@@ -309,7 +373,10 @@ ${gc.focus}
   }): MacroSlotStatus {
     const threshold = 0.12; // 12% 阈值以内视为 ok
 
-    const toStatus = (remaining: number, goal: number): 'deficit' | 'ok' | 'excess' => {
+    const toStatus = (
+      remaining: number,
+      goal: number,
+    ): 'deficit' | 'ok' | 'excess' => {
       if (goal <= 0) return 'ok';
       const ratio = remaining / goal;
       if (ratio < -threshold) return 'excess';
@@ -324,23 +391,53 @@ ${gc.focus}
 
     // 找到缺口最大的宏量
     const deficitRatios: Array<[string, number]> = [
-      ['protein', input.goalProtein > 0 ? input.remainingProtein / input.goalProtein : 0] as [string, number],
-      ['carbs', input.goalCarbs > 0 ? input.remainingCarbs / input.goalCarbs : 0] as [string, number],
-      ['calories', input.goalCalories > 0 ? input.remainingCalories / input.goalCalories : 0] as [string, number],
-      ['fat', input.goalFat > 0 ? input.remainingFat / input.goalFat : 0] as [string, number],
+      [
+        'protein',
+        input.goalProtein > 0 ? input.remainingProtein / input.goalProtein : 0,
+      ] as [string, number],
+      [
+        'carbs',
+        input.goalCarbs > 0 ? input.remainingCarbs / input.goalCarbs : 0,
+      ] as [string, number],
+      [
+        'calories',
+        input.goalCalories > 0
+          ? input.remainingCalories / input.goalCalories
+          : 0,
+      ] as [string, number],
+      ['fat', input.goalFat > 0 ? input.remainingFat / input.goalFat : 0] as [
+        string,
+        number,
+      ],
     ].filter(([, r]) => r > threshold);
     deficitRatios.sort((a, b) => b[1] - a[1]);
-    const dominantDeficit = deficitRatios[0]?.[0] as MacroSlotStatus['dominantDeficit'];
+    const dominantDeficit =
+      deficitRatios[0]?.[0] as MacroSlotStatus['dominantDeficit'];
 
     // 找到超标最大的宏量
     const excessRatios: Array<[string, number]> = [
-      ['protein', input.goalProtein > 0 ? -input.remainingProtein / input.goalProtein : 0] as [string, number],
-      ['carbs', input.goalCarbs > 0 ? -input.remainingCarbs / input.goalCarbs : 0] as [string, number],
-      ['calories', input.goalCalories > 0 ? -input.remainingCalories / input.goalCalories : 0] as [string, number],
-      ['fat', input.goalFat > 0 ? -input.remainingFat / input.goalFat : 0] as [string, number],
+      [
+        'protein',
+        input.goalProtein > 0 ? -input.remainingProtein / input.goalProtein : 0,
+      ] as [string, number],
+      [
+        'carbs',
+        input.goalCarbs > 0 ? -input.remainingCarbs / input.goalCarbs : 0,
+      ] as [string, number],
+      [
+        'calories',
+        input.goalCalories > 0
+          ? -input.remainingCalories / input.goalCalories
+          : 0,
+      ] as [string, number],
+      ['fat', input.goalFat > 0 ? -input.remainingFat / input.goalFat : 0] as [
+        string,
+        number,
+      ],
     ].filter(([, r]) => r > threshold);
     excessRatios.sort((a, b) => b[1] - a[1]);
-    const dominantExcess = excessRatios[0]?.[0] as MacroSlotStatus['dominantExcess'];
+    const dominantExcess =
+      excessRatios[0]?.[0] as MacroSlotStatus['dominantExcess'];
 
     return { calories, protein, fat, carbs, dominantDeficit, dominantExcess };
   }

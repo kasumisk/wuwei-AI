@@ -36,7 +36,7 @@ import { PostMealRecoveryService } from './decision/post-meal-recovery.service';
 import { ShouldEatActionService } from './decision/should-eat-action.service';
 
 // V2.4 scoring & decision (Phase 1)
-import { ScoringService } from './scoring/scoring.service';
+import { ScoringService } from './score/scoring.service';
 import { DecisionClassifierService } from './decision/decision-classifier.service';
 
 // V2.4 feedback (Phase 2)
@@ -49,6 +49,10 @@ import { AnalysisContextService } from './analyze/analysis-context.service';
 
 // V3.2 Phase 2
 import { DecisionCoachService } from './analyze/decision-coach.service';
+
+// V3.3 Phase 3
+import { DecisionCoachService as DecisionCoachServiceV33 } from './coach/decision-coach.service';
+import { CoachInsightService } from './coach/coach-insight.service';
 
 @Module({
   imports: [
@@ -90,6 +94,9 @@ import { DecisionCoachService } from './analyze/decision-coach.service';
     AnalysisContextService,
     // V3.2 Phase 2
     DecisionCoachService,
+    // V3.3 Phase 3
+    DecisionCoachServiceV33,
+    CoachInsightService,
     I18nService,
     I18nManagementService,
   ],
@@ -119,6 +126,9 @@ import { DecisionCoachService } from './analyze/decision-coach.service';
     AnalysisContextService,
     // V3.2 Phase 2
     DecisionCoachService,
+    // V3.3 Phase 3
+    DecisionCoachServiceV33,
+    CoachInsightService,
     I18nService,
     I18nManagementService,
   ],

@@ -136,6 +136,12 @@ export class ContextualDecisionModifierService {
             MODIFIER_PARAMS.maxStrictnessPenalty,
           );
           result.scoreMultiplier *= 1 - strictnessPenalty;
+
+          // V3.6 P2.2: 连续 3 天超标时额外收紧 ×0.95
+          if (consecutiveExcess >= 3) {
+            result.scoreMultiplier *= 0.95;
+          }
+
           result.additionalIssues.push({
             category: 'multi_day_excess',
             severity: consecutiveExcess >= 5 ? 'critical' : 'warning',

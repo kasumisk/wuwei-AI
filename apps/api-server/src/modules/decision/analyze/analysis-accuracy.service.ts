@@ -1,17 +1,19 @@
 /**
- * V3.2 Phase 1 — 分析准确度服务
+ * V3.4 Phase 1.4 — 分析准确度服务（增强版）
  *
- * 职责:
- * - assessAccuracy() 根据 confidence + reviewLevel + completenessScore 量化准确度
- * - 推导 AccuracyLevel (high/medium/low) 和 AccuracyScore (0-100)
- *
- * 设计原则:
- * - 纯函数，无 IO，可独立测试
- * - 准确度影响后续决策权重
+ * 升级点：
+ * - assessAccuracy(): 原三信号评估（不变）
+ * - assessFromFoods(): 新增，基于 AnalyzedFoodItem[] 的多信号准确度评估
+ *   新信号：营养完整率 + 食物数量置信衰减 + 品类分布
  */
 
 import { Injectable } from '@nestjs/common';
-import { AccuracyLevel, AnalysisAccuracyMetrics, MacroSlotStatus } from '../types/analysis-result.types';
+import {
+  AccuracyLevel,
+  AnalysisAccuracyMetrics,
+  MacroSlotStatus,
+  AnalyzedFoodItem,
+} from '../types/analysis-result.types';
 
 /** 准确度评估规则 */
 interface AccuracyThresholds {
@@ -66,10 +68,19 @@ export class AnalysisAccuracyService {
     };
 
     // 判定等级
-    const level = this.assessLevel(norm.confidence, norm.completeness, reviewLevel);
+    const level = this.assessLevel(
+      norm.confidence,
+      norm.completeness,
+      reviewLevel,
+    );
 
     // 计算评分 (0-100)
-    const score = this.computeScore(norm.confidence, norm.completeness, reviewLevel, level);
+    const score = this.computeScore(
+      norm.confidence,
+      norm.completeness,
+      reviewLevel,
+      level,
+    );
 
     return {
       level,
@@ -102,7 +113,10 @@ export class AnalysisAccuracyService {
     }
 
     // Low: 低置信度或低完整度
-    if (confidence < th.medium.minConfidence || completeness < th.medium.minCompleteness) {
+    if (
+      confidence < th.medium.minConfidence ||
+      completeness < th.medium.minCompleteness
+    ) {
       return 'low';
     }
 
@@ -169,7 +183,11 @@ export class AnalysisAccuracyService {
 
     // 计算总体准确度（简单平均）
     const overallAccuracy =
-      (slotScores.calories + slotScores.protein + slotScores.fat + slotScores.carbs) / 4;
+      (slotScores.calories +
+        slotScores.protein +
+        slotScores.fat +
+        slotScores.carbs) /
+      4;
 
     return {
       overallAccuracy: Math.round(overallAccuracy),
@@ -191,5 +209,90 @@ export class AnalysisAccuracyService {
       default:
         return 0;
     }
+  }
+
+  // ==================== V3.4 P1.4: 多信号增强评估 ====================
+
+  /**
+   * 基于 AnalyzedFoodItem[] 的多信号准确度评估
+   *
+   * 信号：
+   * 1. avgConfidence — 各食物置信度均值（权重 50%）
+   * 2. nutrientCompletenessRate — fiber/sodium 等扩展字段填充率（权重 25%）
+   * 3. foodCountPenalty — 食物数量越多识别难度越大（权重 15%）
+   * 4. categoryDiversityBonus — 成功识别多品类时给予准确度奖励（权重 10%）
+   */
+  assessFromFoods(
+    foods: AnalyzedFoodItem[],
+    reviewLevel: 'auto_review' | 'manual_review' = 'auto_review',
+  ): AnalysisAccuracyMetrics {
+    if (!foods || foods.length === 0) {
+      return {
+        level: 'low',
+        score: 30,
+        factors: {
+          confidence: 0,
+          reviewLevel,
+          completenessScore: 0,
+        },
+      };
+    }
+
+    // 1. 平均置信度
+    const avgConfidence =
+      foods.reduce((s, f) => s + (f.confidence ?? 0.5), 0) / foods.length;
+
+    // 2. 营养完整率（fiber, sodium, saturatedFat, addedSugar 四项）
+    const extendedFields: Array<keyof AnalyzedFoodItem> = [
+      'fiber',
+      'sodium',
+      'saturatedFat',
+      'addedSugar',
+    ];
+    const totalSlots = foods.length * extendedFields.length;
+    const filledSlots = foods.reduce((s, f) => {
+      return (
+        s +
+        extendedFields.filter(
+          (field) => f[field] !== null && f[field] !== undefined,
+        ).length
+      );
+    }, 0);
+    const nutrientCompletenessRate =
+      totalSlots > 0 ? filledSlots / totalSlots : 0;
+
+    // 3. 食物数量置信衰减（1-2个食物无惩罚，3-5个轻微，6+较高）
+    const countPenaltyFactor =
+      foods.length <= 2 ? 1.0 : foods.length <= 5 ? 0.95 : 0.88;
+
+    // 4. 品类多样性奖励（识别出2+不同品类说明分析更全面）
+    const categories = new Set(foods.map((f) => f.category).filter(Boolean));
+    const diversityBonus =
+      categories.size >= 3 ? 5 : categories.size >= 2 ? 2 : 0;
+
+    // 综合评分 (0-100)
+    const baseScore =
+      avgConfidence * 50 +
+      nutrientCompletenessRate * 25 +
+      countPenaltyFactor * 15 +
+      (reviewLevel === 'manual_review' ? 10 : 0);
+    const score = Math.min(100, Math.round(baseScore + diversityBonus));
+
+    // 等级判定（使用增强后的 completenessRate 作为 completenessScore）
+    const level = this.assessLevel(
+      avgConfidence,
+      nutrientCompletenessRate,
+      reviewLevel,
+    );
+
+    return {
+      level,
+      score,
+      factors: {
+        confidence: avgConfidence,
+        reviewLevel,
+        completenessScore: nutrientCompletenessRate,
+      },
+    };
   }
 }

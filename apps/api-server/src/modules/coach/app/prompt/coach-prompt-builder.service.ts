@@ -34,8 +34,10 @@ import {
   DecisionSummary,
   EvidencePack,
   ShouldEatAction,
+  StructuredDecision,
 } from '../../../decision/types/analysis-result.types';
 import { CoachActionPlanService } from '../coaching/coach-action-plan.service';
+import { CoachInsightService } from '../../../decision/coach/coach-insight.service';
 
 // ==================== 分析上下文类型 ====================
 
@@ -98,6 +100,12 @@ export interface AnalysisContextInput {
   confidenceDiagnostics?: ConfidenceDiagnostics;
   /** V2.3: 教练行动计划 */
   coachActionPlan?: CoachActionPlan;
+  /** V3.3: 结构化决策（四维因素 + 多维原因） */
+  structuredDecision?: StructuredDecision;
+  /** V3.4: 上下文分析（供 CoachInsightService 使用） */
+  contextualAnalysis?: import('../../../decision/types/analysis-result.types').ContextualAnalysis;
+  /** V3.4: 统一用户上下文（供 CoachInsightService 使用） */
+  unifiedUserContext?: import('../../../decision/types/analysis-result.types').UnifiedUserContext;
 }
 
 @Injectable()
@@ -109,6 +117,7 @@ export class CoachPromptBuilderService {
     private readonly userProfileService: UserProfileService,
     private readonly behaviorService: BehaviorService,
     private readonly coachActionPlanService: CoachActionPlanService,
+    private readonly coachInsightService: CoachInsightService,
   ) {}
 
   /**
@@ -272,49 +281,49 @@ ${replyLang}，每条消息不超过 150 字，不要使用 Markdown 格式。`;
     const goalType = (profile?.goal as string) || 'health';
     const tonePrompt = buildTonePrompt(coachStyle, goalType, locale);
 
-    const basePrompt = `${roleIntro}
-
-【${isEn ? 'Reply Format' : isJa ? '回答形式' : 'P3-1 回复格式指令'}】
-${structuredFormat}
-${isEn ? 'For non-diet questions, reply freely.' : isJa ? '食事以外の質問には自由に回答してOK。' : '非饮食问题可自由回复。'}
-
-${fewShotExample}
-
-【${profileLabel}】
-${
-  profile
-    ? `- ${isEn ? 'Gender' : isJa ? '性別' : '性别'}：${genderStr}
-- ${isEn ? 'Age' : isJa ? '年齢' : '年龄'}：${new Date().getFullYear() - (profile.birthYear || 1990)} ${isEn ? 'years' : isJa ? '歳' : '岁'}
-- BMI：${bmi}（${isEn ? 'Height' : isJa ? '身長' : '身高'} ${profile.heightCm}cm，${isEn ? 'Weight' : isJa ? '体重' : '体重'} ${profile.weightKg}kg）
-- ${isEn ? 'Activity Level' : isJa ? '活動レベル' : '活动等级'}：${profile.activityLevel}
-- ${isEn ? 'Daily Calorie Target' : isJa ? '1日カロリー目標' : '每日热量目标'}：${todaySummary.calorieGoal || 2000} kcal`
-    : isEn
-      ? 'User has not filled in health profile yet. Guide them to fill it in for more accurate advice.'
-      : isJa
-        ? 'ユーザーはまだ健康プロフィールを入力していません。入力を促しましょう。'
-        : '用户尚未填写健康档案，可引导他去填写以获得更精准建议。'
-}
-
-【${todayLabel}】
-- ${isEn ? 'Consumed' : isJa ? '摂取済み' : '已摄入'}：${todaySummary.totalCalories} kcal / ${isEn ? 'Target' : isJa ? '目標' : '目标'} ${todaySummary.calorieGoal || 2000} kcal
-- ${isEn ? 'Remaining' : isJa ? '残り' : '剩余'}：${todaySummary.remaining} kcal
-- ${isEn ? 'Meals logged' : isJa ? '記録した食事数' : '今日记录餐数'}：${todaySummary.mealCount} ${isEn ? 'meals' : isJa ? '食' : '餐'}
-- ${isEn ? 'Protein' : isJa ? 'タンパク質' : '蛋白质'}：${todaySummary.totalProtein || 0}g / ${isEn ? 'Target' : isJa ? '目標' : '目标'} ${todaySummary.proteinGoal || 65}g (${todaySummary.proteinGoal ? Math.round(((todaySummary.totalProtein || 0) / todaySummary.proteinGoal) * 100) : 0}%)
-- ${isEn ? 'Fat' : isJa ? '脂質' : '脂肪'}：${todaySummary.totalFat || 0}g / ${isEn ? 'Target' : isJa ? '目標' : '目标'} ${todaySummary.fatGoal || 65}g (${todaySummary.fatGoal ? Math.round(((todaySummary.totalFat || 0) / todaySummary.fatGoal) * 100) : 0}%)
-- ${isEn ? 'Carbs' : isJa ? '炭水化物' : '碳水'}：${todaySummary.totalCarbs || 0}g / ${isEn ? 'Target' : isJa ? '目標' : '目标'} ${todaySummary.carbsGoal || 275}g (${todaySummary.carbsGoal ? Math.round(((todaySummary.totalCarbs || 0) / todaySummary.carbsGoal) * 100) : 0}%)
-
-【${recentLabel}】
-- ${isEn ? 'Daily avg' : isJa ? '日平均' : '日均摄入'}：${avgCalories} kcal
-- ${isEn ? 'On-target days' : isJa ? '達成日数' : '达标天数'}：${onTargetDays} / ${recentSummaries.length} ${isEn ? 'days' : isJa ? '日' : '天'}
-
-【${timeLabel}】${timeHint}
-
-${this.buildConditionalSections(profile, behaviorProfile, isEn, isJa, locale)}
-${closingInstruction}
-
-${this.buildCapabilitiesSection(isEn, isJa)}
-${proactiveHint}
-${behaviorContext ? `${behaviorContext}\n` : ''}${tonePrompt}`;
+    const basePrompt = [
+      this.buildBasePersona(
+        roleIntro,
+        structuredFormat,
+        fewShotExample,
+        isEn,
+        isJa,
+      ),
+      this.buildUserProfileSection(
+        profile,
+        genderStr,
+        bmi,
+        todaySummary,
+        profileLabel,
+        isEn,
+        isJa,
+      ),
+      this.buildDailyContextSection(
+        todaySummary,
+        recentSummaries,
+        avgCalories,
+        onTargetDays,
+        timeHint,
+        todayLabel,
+        recentLabel,
+        timeLabel,
+        isEn,
+        isJa,
+      ),
+      this.buildConditionalSections(
+        profile,
+        behaviorProfile,
+        isEn,
+        isJa,
+        locale,
+      ),
+      closingInstruction,
+      '',
+      this.buildCapabilitiesSection(isEn, isJa),
+      proactiveHint,
+      behaviorContext ? `${behaviorContext}\n` : '',
+      tonePrompt,
+    ].join('\n');
 
     // V2.0 Phase 3.2: token 安全 — 估算并截断，防止超出模型上下文窗口
     const MAX_SYSTEM_PROMPT_TOKENS = 2800;
@@ -535,10 +544,191 @@ ${behaviorContext ? `${behaviorContext}\n` : ''}${tonePrompt}`;
       }
     }
 
+    // V3.3: 注入 StructuredDecision 四维因素 + 多维原因
+    if (analysisContext.structuredDecision) {
+      ctx += this.formatStructuredDecision(
+        analysisContext.structuredDecision,
+        locale,
+      );
+    }
+
+    // V3.4: 注入 CoachInsightPack
+    if (
+      analysisContext.contextualAnalysis &&
+      analysisContext.unifiedUserContext
+    ) {
+      ctx += this.formatCoachInsights(
+        analysisContext.contextualAnalysis,
+        analysisContext.unifiedUserContext,
+        analysisContext.structuredDecision,
+        locale,
+      );
+    }
+
     return ctx;
   }
 
   // ==================== 私有辅助方法 ====================
+
+  /**
+   * V3.3: 将 StructuredDecision 格式化为 prompt 片段
+   * 输出四维因素评分 + 多维原因，供 LLM 理解决策依据
+   */
+  private formatStructuredDecision(
+    sd: StructuredDecision,
+    locale?: Locale,
+  ): string {
+    const isEn = locale === 'en-US';
+    const isJa = locale === 'ja-JP';
+
+    const LABELS = isEn
+      ? {
+          title: 'Structured Decision Analysis',
+          verdict: 'Verdict',
+          factors: 'Decision Factors',
+          nutritionAlignment: 'Nutrition Alignment',
+          macroBalance: 'Macro Balance',
+          healthConstraint: 'Health Constraint',
+          timeliness: 'Timeliness',
+          rationale: 'Decision Rationale',
+          baseline: 'Baseline',
+          contextual: 'Contextual',
+          goalAlignment: 'Goal Alignment',
+          healthRisk: 'Health Risk',
+          timelinessNote: 'Timing Note',
+          score: 'score',
+        }
+      : isJa
+        ? {
+            title: '構造化決定分析',
+            verdict: '判定',
+            factors: '決定因子',
+            nutritionAlignment: '栄養目標一致度',
+            macroBalance: 'マクロバランス',
+            healthConstraint: '健康制約',
+            timeliness: '食事タイミング',
+            rationale: '判定根拠',
+            baseline: '基準',
+            contextual: '文脈',
+            goalAlignment: '目標一致',
+            healthRisk: '健康リスク',
+            timelinessNote: 'タイミングメモ',
+            score: '点',
+          }
+        : {
+            title: '结构化决策分析',
+            verdict: '判定',
+            factors: '决策因素',
+            nutritionAlignment: '营养目标匹配',
+            macroBalance: '宏量均衡',
+            healthConstraint: '健康约束',
+            timeliness: '时机合理性',
+            rationale: '决策原因',
+            baseline: '基础原因',
+            contextual: '上下文原因',
+            goalAlignment: '目标对齐',
+            healthRisk: '健康风险',
+            timelinessNote: '时机说明',
+            score: '分',
+          };
+
+    const f = sd.factors;
+    const r = sd.rationale;
+
+    let block = `\n\n【${LABELS.title}】`;
+    block += `\n- ${LABELS.verdict}: ${sd.verdict} (${sd.finalScore}${LABELS.score})`;
+    block += `\n- ${LABELS.factors}:`;
+    block += `\n  · ${LABELS.nutritionAlignment}: ${f.nutritionAlignment.score}${LABELS.score} — ${f.nutritionAlignment.rationale}`;
+    block += `\n  · ${LABELS.macroBalance}: ${f.macroBalance.score}${LABELS.score} — ${f.macroBalance.rationale}`;
+    block += `\n  · ${LABELS.healthConstraint}: ${f.healthConstraint.score}${LABELS.score} — ${f.healthConstraint.rationale}`;
+    block += `\n  · ${LABELS.timeliness}: ${f.timeliness.score}${LABELS.score} — ${f.timeliness.rationale}`;
+    block += `\n- ${LABELS.rationale}:`;
+    block += `\n  · ${LABELS.baseline}: ${r.baseline}`;
+    block += `\n  · ${LABELS.contextual}: ${r.contextual}`;
+    block += `\n  · ${LABELS.goalAlignment}: ${r.goalAlignment}`;
+    if (r.healthRisk) block += `\n  · ${LABELS.healthRisk}: ${r.healthRisk}`;
+    if (r.timelinessNote)
+      block += `\n  · ${LABELS.timelinessNote}: ${r.timelinessNote}`;
+
+    return block;
+  }
+
+  /**
+   * V3.4: 格式化 CoachInsightPack 为 prompt 片段
+   */
+  private formatCoachInsights(
+    contextualAnalysis: import('../../../decision/types/analysis-result.types').ContextualAnalysis,
+    userContext: import('../../../decision/types/analysis-result.types').UnifiedUserContext,
+    structuredDecision?: StructuredDecision,
+    locale?: Locale,
+  ): string {
+    try {
+      const insightPack = this.coachInsightService.generateInsights(
+        contextualAnalysis,
+        userContext,
+        structuredDecision,
+        locale,
+      );
+
+      const isEn = locale === 'en-US';
+      const isJa = locale === 'ja-JP';
+      const title = isEn
+        ? 'Coach Insights'
+        : isJa
+          ? 'コーチの洞察'
+          : '教练洞察';
+      const priorityLabel = isEn ? 'Priority' : isJa ? '優先事項' : '优先关注';
+      const trendLabel = isEn
+        ? 'Today Trend'
+        : isJa
+          ? '今日トレンド'
+          : '今日趋势';
+      const goalLabel = isEn
+        ? 'Goal Alignment'
+        : isJa
+          ? '目標対応'
+          : '目标对齐';
+      const timingLabel = isEn ? 'Timing' : isJa ? 'タイミング' : '时机建议';
+
+      let block = `\n\n【${title}】`;
+      if (insightPack.priorityInsight) {
+        block += `\n- ${priorityLabel}：${insightPack.priorityInsight}`;
+      }
+      if (insightPack.trendInsight) {
+        block += `\n- ${trendLabel}：${insightPack.trendInsight}`;
+      }
+      if (insightPack.goalInsight) {
+        block += `\n- ${goalLabel}：${insightPack.goalInsight}`;
+      }
+      if (insightPack.timingInsight) {
+        block += `\n- ${timingLabel}：${insightPack.timingInsight}`;
+      }
+
+      // V3.6 P3.3: high severity issue 时追加引导性问题，促进主动教练
+      const HEALTH_RISK_TYPES = new Set([
+        'glycemic_risk',
+        'cardiovascular_risk',
+        'sodium_risk',
+        'purine_risk',
+        'kidney_stress',
+      ]);
+      const highRiskIssue = contextualAnalysis.identifiedIssues?.find(
+        (ni) => ni.severity === 'high' && HEALTH_RISK_TYPES.has(ni.type),
+      );
+      if (highRiskIssue) {
+        const guidingQ = isEn
+          ? `\n\n[Proactive Guidance] Given the high-risk signal (${highRiskIssue.implication || highRiskIssue.type}), proactively ask: "Would you like specific advice on managing this risk in your next meal?"`
+          : isJa
+            ? `\n\n[プロアクティブ] 高リスク信号（${highRiskIssue.implication || highRiskIssue.type}）を踏まえ、積極的に聞く：「次の食事でこのリスクを管理するための具体的なアドバイスが必要ですか？」`
+            : `\n\n[主动引导] 检测到高风险信号（${highRiskIssue.implication || highRiskIssue.type}），请主动询问用户："需要我为你的下一餐提供针对这个风险的具体建议吗？"`;
+        block += guidingQ;
+      }
+
+      return block;
+    } catch {
+      return '';
+    }
+  }
 
   /**
    * V2.2: 基于结构化摘要构建精简教练上下文
@@ -558,9 +748,9 @@ ${behaviorContext ? `${behaviorContext}\n` : ''}${tonePrompt}`;
       .join('、');
 
     ctx += `\n\n【${cl('analyzedFood', locale)}】${foodList}`;
-     ctx += `\n\n【${cl('summaryTitle', locale)}】`;
-     ctx += `\n- ${cl('verdictLabel', locale)}：${summary.headline}`;
-     ctx += `\n- ${cl('verdictLabel', locale)}等级：${summary.verdict}`;
+    ctx += `\n\n【${cl('summaryTitle', locale)}】`;
+    ctx += `\n- ${cl('verdictLabel', locale)}：${summary.headline}`;
+    ctx += `\n- ${cl('verdictLabel', locale)}等级：${summary.verdict}`;
 
     if (summary.topIssues.length > 0) {
       ctx += `\n- ${cl('topIssuesLabel', locale)}：${summary.topIssues.join('；')}`;
@@ -570,7 +760,7 @@ ${behaviorContext ? `${behaviorContext}\n` : ''}${tonePrompt}`;
       ctx += `\n- ${cl('strengthsLabel', locale)}：${summary.topStrengths.join('；')}`;
     }
 
-     ctx += `\n- ${cl('dataLabel', locale)}：${summary.quantitativeHighlight}`;
+    ctx += `\n- ${cl('dataLabel', locale)}：${summary.quantitativeHighlight}`;
 
     if (summary.actionItems.length > 0) {
       ctx += `\n- ${cl('actionItemsLabel', locale)}：${summary.actionItems.join('；')}`;
@@ -611,8 +801,12 @@ ${behaviorContext ? `${behaviorContext}\n` : ''}${tonePrompt}`;
       const depth = analysisContext.evidencePack?.promptDepth ?? 'standard';
       // V3.1: brief 模式只显示 1 条, standard 5 条, detailed 全部
       const traceLimit = depth === 'brief' ? 1 : depth === 'detailed' ? 10 : 5;
-      const traceLines = summary.signalTrace.slice(0, traceLimit)
-        .map((t, i) => `  ${i + 1}. [${t.source}] ${t.description} (priority=${t.priority})`)
+      const traceLines = summary.signalTrace
+        .slice(0, traceLimit)
+        .map(
+          (t, i) =>
+            `  ${i + 1}. [${t.source}] ${t.description} (priority=${t.priority})`,
+        )
         .join('\n');
       ctx += `\n\n【${cl('signalTraceLabel', locale)}】\n${traceLines}`;
     }
@@ -626,14 +820,23 @@ ${behaviorContext ? `${behaviorContext}\n` : ''}${tonePrompt}`;
     }
     // V3.0: 解释节点 — V3.1 brief 模式下跳过
     const promptDepth = analysisContext.evidencePack?.promptDepth ?? 'standard';
-    if (promptDepth !== 'brief' && analysisContext.evidencePack?.explanationNodes?.length) {
+    if (
+      promptDepth !== 'brief' &&
+      analysisContext.evidencePack?.explanationNodes?.length
+    ) {
       const nodeLines = analysisContext.evidencePack.explanationNodes
-        .map((n) => `  ${n.step}. [${n.source}${n.weight ? '/' + n.weight : ''}] ${n.content}`)
+        .map(
+          (n) =>
+            `  ${n.step}. [${n.source}${n.weight ? '/' + n.weight : ''}] ${n.content}`,
+        )
         .join('\n');
       ctx += `\n\n【解释链路】\n${nodeLines}`;
     }
     // V3.1: detailed 模式追加结构化输出摘要
-    if (promptDepth === 'detailed' && analysisContext.evidencePack?.structuredOutput) {
+    if (
+      promptDepth === 'detailed' &&
+      analysisContext.evidencePack?.structuredOutput
+    ) {
       const so = analysisContext.evidencePack.structuredOutput;
       ctx += `\n\n【结构化建议】\n判决: ${so.verdict}\n主要原因: ${so.mainReason}`;
       if (so.cautionNote) ctx += `\n注意: ${so.cautionNote}`;
@@ -672,6 +875,19 @@ ${behaviorContext ? `${behaviorContext}\n` : ''}${tonePrompt}`;
       }
     }
 
+    // V3.4: 注入 CoachInsightPack
+    if (
+      analysisContext.contextualAnalysis &&
+      analysisContext.unifiedUserContext
+    ) {
+      ctx += this.formatCoachInsights(
+        analysisContext.contextualAnalysis,
+        analysisContext.unifiedUserContext,
+        analysisContext.structuredDecision,
+        locale,
+      );
+    }
+
     return ctx;
   }
 
@@ -687,8 +903,8 @@ ${behaviorContext ? `${behaviorContext}\n` : ''}${tonePrompt}`;
       .join('、');
 
     ctx += `\n\n【${cl('analyzedFood', locale)}】${foodList}`;
-     ctx += `\n\n【${cl('coachPlanTitle', locale)}】`;
-     ctx += `\n- ${cl('conclusionLabel', locale)}：${plan.conclusion}`;
+    ctx += `\n\n【${cl('coachPlanTitle', locale)}】`;
+    ctx += `\n- ${cl('conclusionLabel', locale)}：${plan.conclusion}`;
     if (plan.why.length > 0) {
       ctx += `\n- ${cl('reasonLabel', locale)}：${plan.why.join('；')}`;
     }
@@ -735,9 +951,14 @@ ${behaviorContext ? `${behaviorContext}\n` : ''}${tonePrompt}`;
     // V3.0: 信号追踪
     if (analysisContext.summary?.signalTrace?.length) {
       const depth2 = analysisContext.evidencePack?.promptDepth ?? 'standard';
-      const traceLimit2 = depth2 === 'brief' ? 1 : depth2 === 'detailed' ? 10 : 5;
-      const traceLines = analysisContext.summary.signalTrace.slice(0, traceLimit2)
-        .map((t, i) => `  ${i + 1}. [${t.source}] ${t.description} (priority=${t.priority})`)
+      const traceLimit2 =
+        depth2 === 'brief' ? 1 : depth2 === 'detailed' ? 10 : 5;
+      const traceLines = analysisContext.summary.signalTrace
+        .slice(0, traceLimit2)
+        .map(
+          (t, i) =>
+            `  ${i + 1}. [${t.source}] ${t.description} (priority=${t.priority})`,
+        )
         .join('\n');
       ctx += `\n\n【${cl('signalTraceLabel', locale)}】\n${traceLines}`;
     }
@@ -1003,5 +1224,82 @@ When suggesting alternative foods, provide quantitative comparisons (calorie dif
 当用户问"为什么不建议吃"时，引用决策推理链中的具体步骤。
 当建议替代食物时，提供定量对比（热量差、蛋白质差等）。`;
     return `【${v16Title}】\n${v16Instructions}`;
+  }
+
+  // ==================== V3.6 P3.1: 模块化 Prompt 构建方法 ====================
+
+  /**
+   * V3.6 P3.1: 构建基础人格 + 格式指令 + 示例
+   */
+  private buildBasePersona(
+    roleIntro: string,
+    structuredFormat: string,
+    fewShotExample: string,
+    isEn: boolean,
+    isJa: boolean,
+  ): string {
+    return `${roleIntro}
+
+【${isEn ? 'Reply Format' : isJa ? '回答形式' : 'P3-1 回复格式指令'}】
+${structuredFormat}
+${isEn ? 'For non-diet questions, reply freely.' : isJa ? '食事以外の質問には自由に回答してOK。' : '非饮食问题可自由回复。'}
+
+${fewShotExample}`;
+  }
+
+  /**
+   * V3.6 P3.1: 构建用户档案 section
+   */
+  private buildUserProfileSection(
+    profile: any,
+    genderStr: string,
+    bmi: string | null,
+    todaySummary: any,
+    profileLabel: string,
+    isEn: boolean,
+    isJa: boolean,
+  ): string {
+    const profileContent = profile
+      ? `- ${isEn ? 'Gender' : isJa ? '性別' : '性别'}：${genderStr}
+- ${isEn ? 'Age' : isJa ? '年齢' : '年龄'}：${new Date().getFullYear() - (profile.birthYear || 1990)} ${isEn ? 'years' : isJa ? '歳' : '岁'}
+- BMI：${bmi}（${isEn ? 'Height' : isJa ? '身長' : '身高'} ${profile.heightCm}cm，${isEn ? 'Weight' : isJa ? '体重' : '体重'} ${profile.weightKg}kg）
+- ${isEn ? 'Activity Level' : isJa ? '活動レベル' : '活动等级'}：${profile.activityLevel}
+- ${isEn ? 'Daily Calorie Target' : isJa ? '1日カロリー目標' : '每日热量目标'}：${todaySummary.calorieGoal || 2000} kcal`
+      : isEn
+        ? 'User has not filled in health profile yet. Guide them to fill it in for more accurate advice.'
+        : isJa
+          ? 'ユーザーはまだ健康プロフィールを入力していません。入力を促しましょう。'
+          : '用户尚未填写健康档案，可引导他去填写以获得更精准建议。';
+    return `【${profileLabel}】\n${profileContent}`;
+  }
+
+  /**
+   * V3.6 P3.1: 构建今日饮食 + 近期摘要 + 时间信息
+   */
+  private buildDailyContextSection(
+    todaySummary: any,
+    recentSummaries: any[],
+    avgCalories: number,
+    onTargetDays: number,
+    timeHint: string,
+    todayLabel: string,
+    recentLabel: string,
+    timeLabel: string,
+    isEn: boolean,
+    isJa: boolean,
+  ): string {
+    return `【${todayLabel}】
+- ${isEn ? 'Consumed' : isJa ? '摂取済み' : '已摄入'}：${todaySummary.totalCalories} kcal / ${isEn ? 'Target' : isJa ? '目標' : '目标'} ${todaySummary.calorieGoal || 2000} kcal
+- ${isEn ? 'Remaining' : isJa ? '残り' : '剩余'}：${todaySummary.remaining} kcal
+- ${isEn ? 'Meals logged' : isJa ? '記録した食事数' : '今日记录餐数'}：${todaySummary.mealCount} ${isEn ? 'meals' : isJa ? '食' : '餐'}
+- ${isEn ? 'Protein' : isJa ? 'タンパク質' : '蛋白质'}：${todaySummary.totalProtein || 0}g / ${isEn ? 'Target' : isJa ? '目標' : '目标'} ${todaySummary.proteinGoal || 65}g (${todaySummary.proteinGoal ? Math.round(((todaySummary.totalProtein || 0) / todaySummary.proteinGoal) * 100) : 0}%)
+- ${isEn ? 'Fat' : isJa ? '脂質' : '脂肪'}：${todaySummary.totalFat || 0}g / ${isEn ? 'Target' : isJa ? '目標' : '目标'} ${todaySummary.fatGoal || 65}g (${todaySummary.fatGoal ? Math.round(((todaySummary.totalFat || 0) / todaySummary.fatGoal) * 100) : 0}%)
+- ${isEn ? 'Carbs' : isJa ? '炭水化物' : '碳水'}：${todaySummary.totalCarbs || 0}g / ${isEn ? 'Target' : isJa ? '目標' : '目标'} ${todaySummary.carbsGoal || 275}g (${todaySummary.carbsGoal ? Math.round(((todaySummary.totalCarbs || 0) / todaySummary.carbsGoal) * 100) : 0}%)
+
+【${recentLabel}】
+- ${isEn ? 'Daily avg' : isJa ? '日平均' : '日均摄入'}：${avgCalories} kcal
+- ${isEn ? 'On-target days' : isJa ? '達成日数' : '达标天数'}：${onTargetDays} / ${recentSummaries.length} ${isEn ? 'days' : isJa ? '日' : '天'}
+
+【${timeLabel}】${timeHint}`;
   }
 }
