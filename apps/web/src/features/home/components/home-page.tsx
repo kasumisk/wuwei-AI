@@ -60,8 +60,8 @@ export function HomePage() {
   const setDismissedCollectionCard = useDismissStore((s) => s.setDismissedCollectionCard);
 
   const [frequentOpen, setFrequentOpen] = useState(false);
-  const { data: unreadData } = useUnreadCount(isLoggedIn);
-  const unreadCount = unreadData?.unreadCount ?? 0;
+  // const { data: unreadData } = useUnreadCount(isLoggedIn);
+  // const unreadCount = unreadData?.unreadCount ?? 0;
 
   // 安全网：登录且未完成引导时跳转分步引导
   if (isLoggedIn && profile && !profile.onboardingCompleted) {
@@ -71,54 +71,8 @@ export function HomePage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans antialiased selection:bg-(--color-primary-container) selection:text-on-primary-container">
-      {/* Top Navigation */}
-      <nav className="fixed top-0 w-full z-50 glass-morphism">
-        <div className="flex justify-between items-center px-6 py-4 w-full max-w-lg mx-auto">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-card flex items-center justify-center overflow-hidden border-2 border-(--color-primary-container)">
-              {user?.avatar ? (
-                <Image
-                  src={user.avatar}
-                  alt="avatar"
-                  width={40}
-                  height={40}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <IconPerson className="w-5 h-5 text-primary" />
-              )}
-            </div>
-            <h1 className="text-xl font-extrabold text-foreground font-headline tracking-tight">
-              无畏健康
-            </h1>
-          </div>
-          <div className="flex items-center gap-1">
-            <LocalizedLink
-              href="/notifications"
-              className="w-10 h-10 flex items-center justify-center rounded-full hover:opacity-80 transition-opacity active:scale-95 duration-200 text-primary relative"
-              aria-label={`通知${unreadCount > 0 ? `（${unreadCount > 99 ? '99+' : unreadCount}条未读）` : ''}`}
-            >
-              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
-              </svg>
-              {unreadCount > 0 && (
-                <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
-                  {unreadCount > 99 ? '99+' : unreadCount}
-                </span>
-              )}
-            </LocalizedLink>
-            <LocalizedLink
-              href="/profile"
-              className="w-10 h-10 flex items-center justify-center rounded-full hover:opacity-80 transition-opacity active:scale-95 duration-200 text-primary"
-              aria-label="设置"
-            >
-              <IconSettings className="w-6 h-6" />
-            </LocalizedLink>
-          </div>
-        </div>
-      </nav>
 
-      <main className="pt-24 pb-32 px-6 max-w-lg mx-auto">
+      <main className="relative pt-4 pb-32 px-4 max-w-lg mx-auto">
         {/* Loading skeleton */}
         {isLoading && (
           <div className="space-y-4 animate-pulse">
@@ -147,11 +101,13 @@ export function HomePage() {
         {/* Main content */}
         {!isLoading && (
           <>
-            {/* 1. Hero: calorie budget + macro progress */}
-            <HeroBudgetCard summary={summary} profile={profile} scoreData={nutritionScore} />
+            <section className="home-hero-surface mb-6 space-y-3">
+              {/* 1. Hero: calorie budget + macro progress */}
+              <HeroBudgetCard summary={summary} profile={profile} scoreData={nutritionScore} />
 
-            {/* 2. Compact nutrition score */}
-            <NutritionScoreCompact scoreData={nutritionScore} />
+              {/* 2. Compact nutrition score */}
+              <NutritionScoreCompact scoreData={nutritionScore} />
+            </section>
 
             {/* 3. Mini weekly trend */}
             <WeeklyTrendMini summaries={recentSummaries} />

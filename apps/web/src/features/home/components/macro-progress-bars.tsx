@@ -1,6 +1,6 @@
 'use client';
 
-import type { DailySummary } from '@/types/food';
+import type { DailySummary, NutritionScoreResult } from '@/types/food';
 
 interface MacroItem {
   key: string;
@@ -87,6 +87,7 @@ function barColor(pct: number, inverse: boolean): string {
 interface MacroProgressBarsProps {
   summary: DailySummary;
   goalType: string;
+  scoreData?: NutritionScoreResult | null;
   /** 是否展示权重标签 */
   showWeight?: boolean;
 }
@@ -94,9 +95,41 @@ interface MacroProgressBarsProps {
 export function MacroProgressBars({
   summary,
   goalType,
+  scoreData,
   showWeight = true,
 }: MacroProgressBarsProps) {
-  const macros = buildMacros(summary, goalType);
+  const macros = buildMacros(summary, goalType).map((macro) => {
+    if (!scoreData) return macro;
+    if (macro.key === 'cal') {
+      return {
+        ...macro,
+        val: scoreData.intake.calories ?? macro.val,
+        goal: scoreData.goals.calories ?? macro.goal,
+      };
+    }
+    if (macro.key === 'protein') {
+      return {
+        ...macro,
+        val: scoreData.intake.protein ?? macro.val,
+        goal: scoreData.goals.protein ?? macro.goal,
+      };
+    }
+    if (macro.key === 'fat') {
+      return {
+        ...macro,
+        val: scoreData.intake.fat ?? macro.val,
+        goal: scoreData.goals.fat ?? macro.goal,
+      };
+    }
+    if (macro.key === 'carbs') {
+      return {
+        ...macro,
+        val: scoreData.intake.carbs ?? macro.val,
+        goal: scoreData.goals.carbs ?? macro.goal,
+      };
+    }
+    return macro;
+  });
 
   return (
     <div className="space-y-2.5">

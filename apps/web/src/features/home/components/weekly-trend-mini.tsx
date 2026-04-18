@@ -26,7 +26,7 @@ export function WeeklyTrendMini({ summaries }: WeeklyTrendMiniProps) {
   const trend = lastAvg > firstAvg * 1.05 ? 'up' : lastAvg < firstAvg * 0.95 ? 'down' : 'stable';
 
   return (
-    <section className="bg-card rounded-2xl px-4 pt-4 pb-3 mb-5 border border-border/10 shadow-sm">
+    <section className="mb-5 rounded-[28px] border border-border/60 bg-card/90 px-4 pt-4 pb-3 shadow-sm backdrop-blur">
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs font-bold text-muted-foreground">近 {sorted.length} 天趋势</span>

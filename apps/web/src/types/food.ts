@@ -370,24 +370,95 @@ export interface NutritionScoreBreakdown {
   satiety: number;
   stability: number;
   glycemicImpact: number;
+  mealQuality?: number;
 }
 
 export interface NutritionScoreResult {
   totalScore: number;
   breakdown: NutritionScoreBreakdown;
   highlights: string[];
+  decision?: 'SAFE' | 'OK' | 'LIMIT' | 'AVOID' | string;
   feedback: string;
+  statusLabel?: 'excellent' | 'good' | 'fair' | 'needs_improvement' | string;
+  statusExplanation?: {
+    text?: string;
+    segments?: Array<{
+      label?: string;
+      value?: string | number;
+      tone?: string;
+    }>;
+  };
   goals: {
     calories: number;
     protein: number;
     fat: number;
     carbs: number;
+    quality?: number;
+    satiety?: number;
   };
   intake: {
     calories: number;
     protein: number;
     fat: number;
     carbs: number;
+  };
+  topStrength?: {
+    dimension?: keyof NutritionScoreBreakdown | string;
+    score?: number;
+  };
+  topWeakness?: {
+    dimension?: keyof NutritionScoreBreakdown | string;
+    score?: number;
+  };
+  behaviorBonus?: {
+    streakDays?: number;
+    complianceRate?: number;
+    bonusPoints?: number;
+  };
+  complianceInsight?: {
+    calorieAdherence?: number;
+    proteinAdherence?: number;
+    fatAdherence?: number;
+    carbsAdherence?: number;
+  };
+  macroSlotStatus?: {
+    calories?: 'deficit' | 'balanced' | 'excess' | string;
+    protein?: 'deficit' | 'balanced' | 'excess' | string;
+    fat?: 'deficit' | 'balanced' | 'excess' | string;
+    carbs?: 'deficit' | 'balanced' | 'excess' | string;
+    dominantDeficit?: 'calories' | 'protein' | 'fat' | 'carbs' | string;
+  };
+  issueHighlights?: {
+    message: string;
+    type: string;
+    severity: string;
+  }[];
+  mealSignals?: {
+    totalMeals?: number;
+    healthyMeals?: number;
+    healthyRatio?: number;
+    avgMealScore?: number;
+    decisionDistribution?: {
+      safe?: number;
+      warn?: number;
+      stop?: number;
+    };
+    mealTypes?: string[];
+    mealDiversity?: number;
+  };
+  decisionAlignment?: {
+    alignmentScore?: number;
+    deviationCount?: number;
+    deviationMeals?: string[];
+    summary?: string;
+  };
+  weights?: Partial<Record<keyof NutritionScoreBreakdown, number>>;
+  weightsSource?: string;
+  dailyProgress?: {
+    localHour?: number;
+    expectedProgress?: number;
+    actualProgress?: number;
+    isOnTrack?: boolean;
   };
 }
 
