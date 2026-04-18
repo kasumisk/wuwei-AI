@@ -201,6 +201,7 @@ export function AnalyzePage() {
     null
   );
 
+  console.log('result', JSON.stringify(result));
   useEffect(() => {
     if (!isLoggedIn) router.push('/login');
   }, [isLoggedIn, router]);
@@ -416,8 +417,8 @@ export function AnalyzePage() {
           totalProtein: result.totalProtein,
           totalFat: result.totalFat,
           totalCarbs: result.totalCarbs,
-          avgQuality: result.avgQuality,
-          avgSatiety: result.avgSatiety,
+          avgQuality: undefined,
+          avgSatiety: undefined,
           nutritionScore: result.nutritionScore,
         });
       }
@@ -925,6 +926,55 @@ export function AnalyzePage() {
               </div>
             )}
 
+            {/* Verdict Hero — 头条摘要 + 关键问题 */}
+            {(result.headline ||
+              (result.topIssues && result.topIssues.length > 0) ||
+              (result.topStrengths && result.topStrengths.length > 0)) && (
+              <section className="bg-card border border-border rounded-2xl p-4 space-y-3">
+                {result.headline && (
+                  <h2 className="text-sm font-bold leading-snug">{result.headline}</h2>
+                )}
+                {result.topStrengths && result.topStrengths.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-[11px] font-bold text-emerald-600 uppercase tracking-wide">
+                      优点
+                    </p>
+                    {result.topStrengths.map((s, i) => (
+                      <div key={i} className="flex items-start gap-2 text-xs">
+                        <span className="text-emerald-500 mt-0.5">✓</span>
+                        <span>{s}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {result.topIssues && result.topIssues.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-[11px] font-bold text-rose-500 uppercase tracking-wide">
+                      问题
+                    </p>
+                    {result.topIssues.map((issue, i) => (
+                      <div key={i} className="flex items-start gap-2 text-xs">
+                        <span className="text-rose-400 mt-0.5">!</span>
+                        <span>{issue}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {result.actionItems && result.actionItems.length > 0 && (
+                  <div className="space-y-1 pt-1 border-t border-border">
+                    <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide">
+                      行动建议
+                    </p>
+                    {result.actionItems.map((a, i) => (
+                      <p key={i} className="text-xs text-foreground/80">
+                        • {a}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
+
             <DecisionCard
               result={result}
               recordId={savedRecordId ?? undefined}
@@ -933,6 +983,200 @@ export function AnalyzePage() {
                 setStep('upload');
               }}
             />
+
+            {/* 宏量完成度 — completionRatio */}
+            {result.completionRatio && Object.keys(result.completionRatio).length > 0 && (
+              <section className="bg-card border border-border rounded-2xl p-4 space-y-3">
+                <h3 className="text-sm font-bold">餐后今日完成率</h3>
+                <div className="space-y-2">
+                  {Object.entries(result.completionRatio).map(([key, ratio]) => {
+                    const pct = Math.min(Math.round(Number(ratio) * 100), 100);
+                    const labels: Record<string, string> = {
+                      calories: '热量',
+                      protein: '蛋白质',
+                      fat: '脂肪',
+                      carbs: '碳水',
+                    };
+                    const colors: Record<string, string> = {
+                      calories: 'bg-orange-400',
+                      protein: 'bg-blue-400',
+                      fat: 'bg-yellow-400',
+                      carbs: 'bg-purple-400',
+                    };
+                    return (
+                      <div key={key}>
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className="text-muted-foreground">{labels[key] ?? key}</span>
+                          <span
+                            className={`font-bold ${pct >= 90 ? 'text-emerald-500' : pct >= 60 ? 'text-amber-500' : 'text-foreground'}`}
+                          >
+                            {pct}%
+                          </span>
+                        </div>
+                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${colors[key] ?? 'bg-primary'}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
+            {/* 替代品候选 */}
+            {result.replacementCandidates && result.replacementCandidates.length > 0 && (
+              <section className="bg-card border border-border rounded-2xl p-4 space-y-3">
+                <h3 className="text-sm font-bold">推荐替代方案</h3>
+                <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1 snap-x snap-mandatory">
+                  {result.replacementCandidates.map((c, i) => (
+                    <div
+                      key={i}
+                      className="shrink-0 snap-start w-44 bg-muted/60 rounded-xl p-3 space-y-1.5"
+                    >
+                      <p className="text-xs font-bold leading-tight">{c.name}</p>
+                      {c.reason && (
+                        <p className="text-[11px] text-muted-foreground leading-snug">{c.reason}</p>
+                      )}
+                      {c.comparison && (
+                        <div className="text-[11px] space-y-0.5 pt-1 border-t border-border">
+                          {c.comparison.caloriesDiff != null && (
+                            <p
+                              className={
+                                c.comparison.caloriesDiff < 0 ? 'text-emerald-600' : 'text-rose-500'
+                              }
+                            >
+                              热量 {c.comparison.caloriesDiff > 0 ? '+' : ''}
+                              {c.comparison.caloriesDiff} kcal
+                            </p>
+                          )}
+                          {c.comparison.proteinDiff != null && (
+                            <p
+                              className={
+                                c.comparison.proteinDiff > 0
+                                  ? 'text-blue-600'
+                                  : 'text-muted-foreground'
+                              }
+                            >
+                              蛋白质 {c.comparison.proteinDiff > 0 ? '+' : ''}
+                              {c.comparison.proteinDiff}g
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      <button
+                        onClick={() => {
+                          setTextInput(c.name);
+                          setStep('upload');
+                        }}
+                        className="w-full text-[11px] font-bold text-primary hover:text-primary/80 text-left mt-1"
+                      >
+                        分析此替代 →
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* 8维评分详解 */}
+            {result.breakdownExplanations && result.breakdownExplanations.length > 0 && (
+              <details className="bg-card border border-border rounded-2xl group">
+                <summary className="flex items-center justify-between p-4 cursor-pointer list-none select-none">
+                  <span className="text-sm font-bold">8维评分详解</span>
+                  <svg
+                    className="w-4 h-4 text-muted-foreground transition-transform group-open:rotate-180"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 9l-7 7-7-7"
+                    />
+                  </svg>
+                </summary>
+                <div className="px-4 pb-4 space-y-2.5">
+                  {result.breakdownExplanations.map((b, i) => (
+                    <div key={i} className="flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0 text-xs font-bold text-foreground">
+                        {b.score}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold">{b.dimension}</p>
+                        <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">
+                          {b.message || b.label}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
+
+            {/* 推理链 */}
+            {result.decisionChain && result.decisionChain.length > 0 && (
+              <details className="bg-card border border-border rounded-2xl group">
+                <summary className="flex items-center justify-between p-4 cursor-pointer list-none select-none">
+                  <span className="text-sm font-bold">决策推理链</span>
+                  <svg
+                    className="w-4 h-4 text-muted-foreground transition-transform group-open:rotate-180"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 9l-7 7-7-7"
+                    />
+                  </svg>
+                </summary>
+                <div className="px-4 pb-4 space-y-3">
+                  {result.decisionChain.map((chain, i) => (
+                    <div key={i} className="relative pl-6">
+                      <div className="absolute left-0 top-1 w-4 h-4 rounded-full bg-primary/15 flex items-center justify-center text-[10px] font-bold text-primary">
+                        {i + 1}
+                      </div>
+                      {i < result.decisionChain!.length - 1 && (
+                        <div className="absolute left-[7px] top-5 w-px h-full bg-border" />
+                      )}
+                      <p className="text-xs font-bold">{chain.step}</p>
+                      <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">
+                        {chain.input}
+                      </p>
+                      <p className="text-[11px] font-medium text-primary mt-1">→ {chain.output}</p>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
+
+            {/* 下餐补救方向 */}
+            {result.recoveryAction &&
+              (result.recoveryAction.nextMealDirection ||
+                result.recoveryAction.todayAdjustment) && (
+                <section className="bg-card border border-border rounded-2xl p-4 space-y-2">
+                  <h3 className="text-sm font-bold">下餐补救方向</h3>
+                  {result.recoveryAction.nextMealDirection && (
+                    <p className="text-xs text-foreground/80">
+                      <span className="font-medium text-muted-foreground">下一餐：</span>
+                      {result.recoveryAction.nextMealDirection}
+                    </p>
+                  )}
+                  {result.recoveryAction.todayAdjustment && (
+                    <p className="text-xs text-foreground/80">
+                      <span className="font-medium text-muted-foreground">今日调整：</span>
+                      {result.recoveryAction.todayAdjustment}
+                    </p>
+                  )}
+                </section>
+              )}
 
             {resultQuality && (
               <section className="bg-card border border-border rounded-2xl p-4 space-y-3">
@@ -1073,13 +1317,36 @@ export function AnalyzePage() {
               <h3 className="font-bold text-sm px-1">识别的食物（点击 x 可删除）</h3>
               {editedFoods.map((food, i) => (
                 <div key={i} className="bg-card rounded-xl p-4 flex items-center justify-between">
-                  <div>
-                    <h4 className="font-bold text-sm">{food.name}</h4>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-bold text-sm">{food.name}</h4>
+                      {'confidence' in food &&
+                        typeof (food as { confidence?: number }).confidence === 'number' && (
+                          <span
+                            className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                              ((food as { confidence?: number }).confidence ?? 0) >= 0.8
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : ((food as { confidence?: number }).confidence ?? 0) >= 0.5
+                                  ? 'bg-amber-100 text-amber-700'
+                                  : 'bg-rose-100 text-rose-700'
+                            }`}
+                          >
+                            {Math.round(((food as { confidence?: number }).confidence ?? 0) * 100)}%
+                          </span>
+                        )}
+                    </div>
                     <p className="text-xs text-muted-foreground">
                       {food.quantity || '1份'} • {food.category || '未分类'}
                     </p>
+                    {(food.protein != null || food.fat != null || food.carbs != null) && (
+                      <p className="text-[11px] text-muted-foreground/80 mt-0.5">
+                        {food.protein != null && `蛋白 ${food.protein}g`}
+                        {food.fat != null && ` 脂肪 ${food.fat}g`}
+                        {food.carbs != null && ` 碳水 ${food.carbs}g`}
+                      </p>
+                    )}
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 shrink-0">
                     <span className="font-bold text-primary">{food.calories} kcal</span>
                     <button
                       onClick={() => handleRemoveFood(i)}

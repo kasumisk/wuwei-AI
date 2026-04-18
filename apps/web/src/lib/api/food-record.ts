@@ -2,7 +2,7 @@
 
 /**
  * 食物记录 API 服务
- * 从 food.ts 拆分，负责食物分析、记录的 CRUD
+ * 直接对应后端 /app/food/* 接口，无 V61 封装层。
  */
 
 import { clientGet, clientPost, clientPut, clientDelete, clientUpload } from './client-api';
@@ -22,114 +22,167 @@ import type {
   NutritionScoreBreakdown,
 } from '@/types/food';
 
-type RawV61 = {
+// ─────────────────────────────────────────────
+// 原始 API 数据类型（直接对应后端 data 字段）
+// ─────────────────────────────────────────────
+type RawAnalysisData = {
   analysisId?: string;
   inputType?: 'text' | 'image';
-  inputSnapshot?: {
-    mealType?: string;
-    imageUrl?: string;
-    rawText?: string;
-  };
+  inputSnapshot?: { mealType?: string; imageUrl?: string; rawText?: string };
   foods?: Array<{
     name?: string;
+    normalizedName?: string;
+    foodLibraryId?: string;
     quantity?: string;
+    estimatedWeightGrams?: number;
     category?: string;
+    confidence?: number;
     calories?: number;
     protein?: number;
     fat?: number;
     carbs?: number;
+    saturatedFat?: number;
+    addedSugar?: number;
   }>;
   totals?: {
     calories?: number;
     protein?: number;
     fat?: number;
     carbs?: number;
+    saturatedFat?: number;
+    addedSugar?: number;
   };
   score?: {
+    healthScore?: number;
     nutritionScore?: number;
+    confidenceScore?: number;
     breakdown?: Record<string, number>;
   };
   decision?: {
     recommendation?: 'recommend' | 'caution' | 'avoid';
     shouldEat?: boolean;
-    riskLevel?: string;
     reason?: string;
+    riskLevel?: string;
+    advice?: string;
+    decisionFactors?: Array<{
+      dimension?: string;
+      score?: number;
+      impact?: string;
+      message?: string;
+    }>;
+    nextMealAdvice?: {
+      targetCalories?: number;
+      targetProtein?: number;
+      targetFat?: number;
+      targetCarbs?: number;
+      emphasis?: string;
+      suggestion?: string;
+    };
+    optimalPortion?: { recommendedPercent?: number; recommendedCalories?: number };
+    decisionChain?: Array<{ step?: string; input?: string; output?: string; confidence?: number }>;
+    breakdownExplanations?: Array<{
+      dimension?: string;
+      label?: string;
+      score?: number;
+      impact?: string;
+      message?: string;
+      suggestion?: string;
+    }>;
+    issues?: Array<{ issue?: string; severity?: string; detail?: string }>;
   };
   alternatives?: Array<{ name?: string }>;
   explanation?: {
     summary?: string;
     primaryReason?: string;
     userContextImpact?: string[];
+    upgradeTeaser?: string;
   };
   summary?: {
+    headline?: string;
+    topIssues?: string[];
+    topStrengths?: string[];
+    actionItems?: string[];
+    quantitativeHighlight?: string;
+    contextSignals?: string[];
+    coachFocus?: string;
+    alternativeSummary?: string;
+    dynamicDecisionHint?: string;
+    healthConstraintNote?: string;
+    decisionGuardrails?: string[];
     encouragement?: string;
     keyReasons?: string[];
     personalizedSummary?: string;
   };
   shouldEatAction?: {
-    compensation?: {
-      diet?: string;
-      activity?: string;
-      nextMeal?: string;
+    primaryReason?: string;
+    portionAction?: { suggestedPercent?: number; suggestedCalories?: number };
+    replacementAction?: {
+      strategy?: string;
+      candidates?: Array<{
+        name?: string;
+        foodLibraryId?: string;
+        source?: string;
+        score?: number;
+        reason?: string;
+        comparison?: { caloriesDiff?: number; proteinDiff?: number; scoreDiff?: number };
+        scenarioType?: string;
+        rankScore?: number;
+        rankReasons?: string[];
+      }>;
     };
+    recoveryAction?: { nextMealDirection?: string; todayAdjustment?: string };
+    compensation?: { diet?: string; activity?: string; nextMeal?: string };
   };
-};
-
-type RawAnalyzePollResponse = {
-  requestId?: string;
+  analysisState?: {
+    projectedAfterMeal?: { completionRatio?: Record<string, number> };
+  };
+  contextualAnalysis?: {
+    identifiedIssues?: Array<{
+      type?: string;
+      severity?: string;
+      metric?: number;
+      threshold?: number;
+      implication?: string;
+    }>;
+  };
+  confidenceDiagnostics?: {
+    overallConfidence?: number;
+    analysisQualityBand?: string;
+    analysisCompletenessScore?: number;
+  };
+  // 轮询专用
   status?: 'processing' | 'completed' | 'failed';
   error?: string;
-  v61?: RawV61;
-  foods?: FoodItem[];
-  totalCalories?: number;
-  mealType?: string;
-  advice?: string;
-  isHealthy?: boolean;
-  imageUrl?: string;
-  decision?: string;
-  riskLevel?: string;
-  reason?: string;
-  suggestion?: string;
-  insteadOptions?: string[];
-  compensation?: {
-    diet?: string;
-    activity?: string;
-    nextMeal?: string;
-  };
-  contextComment?: string;
-  encouragement?: string;
-  totalProtein?: number;
-  totalFat?: number;
-  totalCarbs?: number;
-  nutritionScore?: number;
-  scoreBreakdown?: Record<string, number>;
-  highlights?: string[];
 };
 
-function mapRecommendationToDecision(recommendation?: string): AnalysisResult['decision'] {
-  if (recommendation === 'recommend') return 'SAFE';
-  if (recommendation === 'avoid') return 'AVOID';
-  if (recommendation === 'caution') return 'LIMIT';
+// ─────────────────────────────────────────────
+// 工具函数
+// ─────────────────────────────────────────────
+function mapRecommendation(r?: string): AnalysisResult['decision'] {
+  if (r === 'recommend') return 'SAFE';
+  if (r === 'avoid') return 'AVOID';
+  if (r === 'caution') return 'LIMIT';
   return 'OK';
 }
 
-function normalizeScoreBreakdown(
-  breakdown?: Record<string, number>
-): NutritionScoreBreakdown | undefined {
-  if (!breakdown) return undefined;
+function normalizeScoreBreakdown(b?: Record<string, number>): NutritionScoreBreakdown | undefined {
+  if (!b) return undefined;
   return {
-    energy: Number(breakdown.energy ?? 0),
-    proteinRatio: Number(breakdown.proteinRatio ?? 0),
-    macroBalance: Number(breakdown.macroBalance ?? 0),
-    foodQuality: Number(breakdown.foodQuality ?? 0),
-    satiety: Number(breakdown.satiety ?? 0),
-    stability: Number(breakdown.stability ?? 0),
-    glycemicImpact: Number(breakdown.glycemicImpact ?? 0),
+    energy: Number(b.energy ?? 0),
+    proteinRatio: Number(b.proteinRatio ?? 0),
+    macroBalance: Number(b.macroBalance ?? 0),
+    foodQuality: Number(b.foodQuality ?? 0),
+    satiety: Number(b.satiety ?? 0),
+    stability: Number(b.stability ?? 0),
+    glycemicImpact: Number(b.glycemicImpact ?? 0),
   };
 }
 
-function mapV61ToAnalysisResult(v61: RawV61): AnalysisResult {
-  const foods: FoodItem[] = (v61.foods ?? []).map((f) => ({
+/**
+ * 将 API 原始数据直接映射为前端 AnalysisResult
+ */
+function mapAnalysisData(raw: RawAnalysisData, overrideRequestId?: string): AnalysisResult {
+  const foods: AnalysisResult['foods'] = (raw.foods ?? []).map((f) => ({
     name: f.name || '未识别食物',
     calories: Number(f.calories ?? 0),
     quantity: f.quantity,
@@ -137,78 +190,101 @@ function mapV61ToAnalysisResult(v61: RawV61): AnalysisResult {
     protein: f.protein,
     fat: f.fat,
     carbs: f.carbs,
+    normalizedName: f.normalizedName,
+    foodLibraryId: f.foodLibraryId,
+    estimatedWeightGrams: f.estimatedWeightGrams,
+    confidence: f.confidence,
+    saturatedFat: f.saturatedFat,
+    addedSugar: f.addedSugar,
   }));
 
   return {
-    requestId: v61.analysisId || '',
+    requestId: overrideRequestId || raw.analysisId || '',
+    inputType: raw.inputType,
+    mealType: raw.inputSnapshot?.mealType || 'lunch',
+    imageUrl: raw.inputSnapshot?.imageUrl,
+    isHealthy: raw.decision?.shouldEat ?? true,
+    shouldEat: raw.decision?.shouldEat,
+
     foods,
-    totalCalories: Number(v61.totals?.calories ?? 0),
-    mealType: v61.inputSnapshot?.mealType || 'lunch',
-    advice: v61.explanation?.summary || '',
-    isHealthy: v61.decision?.shouldEat ?? true,
-    imageUrl: v61.inputSnapshot?.imageUrl,
-    decision: mapRecommendationToDecision(v61.decision?.recommendation),
-    riskLevel: v61.decision?.riskLevel || 'medium',
-    reason: v61.decision?.reason || '',
-    suggestion: v61.explanation?.primaryReason || '',
-    insteadOptions: (v61.alternatives ?? [])
-      .map((a) => a.name)
-      .filter((name): name is string => !!name),
+
+    totalCalories: Number(raw.totals?.calories ?? 0),
+    totalProtein: raw.totals?.protein,
+    totalFat: raw.totals?.fat,
+    totalCarbs: raw.totals?.carbs,
+    totalSaturatedFat: raw.totals?.saturatedFat,
+    totalAddedSugar: raw.totals?.addedSugar,
+
+    healthScore: raw.score?.healthScore,
+    nutritionScore: raw.score?.nutritionScore,
+    confidenceScore: raw.score?.confidenceScore,
+    scoreBreakdown: normalizeScoreBreakdown(raw.score?.breakdown),
+
+    decision: mapRecommendation(raw.decision?.recommendation),
+    riskLevel: raw.decision?.riskLevel || 'medium',
+    reason: raw.decision?.reason || '',
+    decisionAdvice: raw.decision?.advice,
+    decisionFactors: raw.decision?.decisionFactors,
+    decisionChain: raw.decision?.decisionChain,
+    breakdownExplanations: raw.decision?.breakdownExplanations,
+    optimalPortion: raw.decision?.optimalPortion,
+    nextMealAdvice: raw.decision?.nextMealAdvice,
+
+    advice: raw.explanation?.summary || '',
+    headline: raw.summary?.headline,
+    topIssues: raw.summary?.topIssues,
+    topStrengths: raw.summary?.topStrengths,
+    actionItems: raw.summary?.actionItems,
+    quantitativeHighlight: raw.summary?.quantitativeHighlight,
+    contextSignals: raw.summary?.contextSignals,
+    alternativeSummary: raw.summary?.alternativeSummary,
+    dynamicDecisionHint: raw.summary?.dynamicDecisionHint,
+    healthConstraintNote: raw.summary?.healthConstraintNote,
+    decisionGuardrails: raw.summary?.decisionGuardrails,
+    coachFocus: raw.summary?.coachFocus,
+    highlights: raw.summary?.keyReasons,
+    encouragement: raw.summary?.encouragement || '',
+    contextComment: raw.summary?.personalizedSummary || '',
+
+    suggestion: raw.shouldEatAction?.primaryReason || '',
+    insteadOptions: (raw.alternatives ?? []).map((a) => a.name).filter((n): n is string => !!n),
+    replacementCandidates: (raw.shouldEatAction?.replacementAction?.candidates ?? [])
+      .filter((c) => !!c.name)
+      .map((c) => ({
+        name: c.name!,
+        foodLibraryId: c.foodLibraryId,
+        source: c.source,
+        score: c.score,
+        reason: c.reason,
+        comparison: c.comparison,
+        scenarioType: c.scenarioType,
+        rankScore: c.rankScore,
+        rankReasons: c.rankReasons,
+      })),
+    portionAction: raw.shouldEatAction?.portionAction,
+    recoveryAction: raw.shouldEatAction?.recoveryAction,
     compensation: {
-      diet: v61.shouldEatAction?.compensation?.diet,
-      activity: v61.shouldEatAction?.compensation?.activity,
-      nextMeal: v61.shouldEatAction?.compensation?.nextMeal,
+      diet: raw.shouldEatAction?.compensation?.diet,
+      activity: raw.shouldEatAction?.compensation?.activity,
+      nextMeal: raw.shouldEatAction?.compensation?.nextMeal,
     },
-    contextComment:
-      v61.summary?.personalizedSummary || v61.explanation?.userContextImpact?.[0] || '',
-    encouragement: v61.summary?.encouragement || '',
-    totalProtein: v61.totals?.protein,
-    totalFat: v61.totals?.fat,
-    totalCarbs: v61.totals?.carbs,
-    nutritionScore: v61.score?.nutritionScore,
-    scoreBreakdown: normalizeScoreBreakdown(v61.score?.breakdown),
-    highlights: v61.summary?.keyReasons,
+
+    completionRatio: raw.analysisState?.projectedAfterMeal?.completionRatio,
+    identifiedIssues: raw.contextualAnalysis?.identifiedIssues,
+
+    confidenceDiagnostics: raw.confidenceDiagnostics
+      ? {
+          overallConfidence: raw.confidenceDiagnostics.overallConfidence,
+          analysisQualityBand: raw.confidenceDiagnostics.analysisQualityBand,
+          analysisCompletenessScore: raw.confidenceDiagnostics.analysisCompletenessScore,
+        }
+      : undefined,
   };
 }
 
-function normalizeAnalysisResult(raw: unknown): AnalysisResult {
-  const data = (raw || {}) as RawAnalyzePollResponse;
-
-  if (data.v61) {
-    const mapped = mapV61ToAnalysisResult(data.v61);
-    return {
-      ...mapped,
-      requestId: data.requestId || mapped.requestId,
-      imageUrl: data.imageUrl || mapped.imageUrl,
-    };
-  }
-
-  const foods = Array.isArray(data.foods) ? data.foods : [];
-  return {
-    requestId: data.requestId || '',
-    foods,
-    totalCalories: Number(data.totalCalories ?? 0),
-    mealType: data.mealType || 'lunch',
-    advice: data.advice || '',
-    isHealthy: data.isHealthy ?? true,
-    imageUrl: data.imageUrl,
-    decision: (data.decision as AnalysisResult['decision']) || 'OK',
-    riskLevel: data.riskLevel || 'medium',
-    reason: data.reason || '',
-    suggestion: data.suggestion || '',
-    insteadOptions: data.insteadOptions || [],
-    compensation: data.compensation || {},
-    contextComment: data.contextComment || '',
-    encouragement: data.encouragement || '',
-    totalProtein: data.totalProtein,
-    totalFat: data.totalFat,
-    totalCarbs: data.totalCarbs,
-    nutritionScore: data.nutritionScore,
-    scoreBreakdown: normalizeScoreBreakdown(data.scoreBreakdown),
-    highlights: data.highlights,
-  };
-}
-
+// ─────────────────────────────────────────────
+// 轮询
+// ─────────────────────────────────────────────
 async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -216,55 +292,40 @@ async function sleep(ms: number): Promise<void> {
 async function pollAnalyzeResult(requestId: string): Promise<AnalysisResult> {
   const maxAttempts = 20;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const res = await clientGet<RawAnalyzePollResponse>(`/app/food/analyze/${requestId}`);
+    const res = await clientGet<RawAnalysisData>(`/app/food/analyze/${requestId}`);
     if (!res.success) {
-      const failData = (res.data || {}) as RawAnalyzePollResponse;
-      if (failData.status === 'failed') {
-        throw new Error(failData.error || res.message || 'AI 分析失败');
-      }
+      const d = res.data as RawAnalysisData | undefined;
+      if (d?.status === 'failed') throw new Error(d.error || res.message || 'AI 分析失败');
       throw new Error(res.message || 'AI 分析失败');
     }
-
-    const data = (res.data || {}) as RawAnalyzePollResponse;
-    if (data.status === 'completed') {
-      return normalizeAnalysisResult({ ...data, requestId });
-    }
-    if (data.status === 'failed') {
-      throw new Error(data.error || 'AI 分析失败');
-    }
-
+    const data = res.data as RawAnalysisData;
+    if (data.status === 'completed') return mapAnalysisData(data, requestId);
+    if (data.status === 'failed') throw new Error(data.error || 'AI 分析失败');
     await sleep(1500);
   }
-
   throw new Error('分析超时，请稍后在历史记录中查看结果');
 }
 
 async function unwrap<T>(promise: Promise<ApiResponse<T>>): Promise<T> {
   const res = await promise;
-  if (!res.success) {
-    throw new Error(res.message || '请求失败');
-  }
+  if (!res.success) throw new Error(res.message || '请求失败');
   return res.data;
 }
 
+// ─────────────────────────────────────────────
+// 导出服务
+// ─────────────────────────────────────────────
 export const foodRecordService = {
   /** 上传食物图片 AI 分析 */
   analyzeImage: async (file: File, mealType?: string): Promise<AnalysisResult> => {
     const formData = new FormData();
     formData.append('file', file);
     if (mealType) formData.append('mealType', mealType);
-
-    // 后端返回异步任务 requestId，前端在 API 层自动轮询并统一返回分析结果。
-    const submitRes = await clientUpload<RawAnalyzePollResponse>('/app/food/analyze', formData);
-    if (!submitRes.success) {
-      throw new Error(submitRes.message || '提交分析任务失败');
-    }
-
-    const requestId = submitRes.data?.requestId;
-    if (!requestId) {
-      throw new Error('分析任务创建失败，请重试');
-    }
-
+    const submitRes = await clientUpload<RawAnalysisData>('/app/food/analyze', formData);
+    if (!submitRes.success) throw new Error(submitRes.message || '提交分析任务失败');
+    const d = submitRes.data as RawAnalysisData & { requestId?: string };
+    const requestId = d?.requestId || d?.analysisId;
+    if (!requestId) throw new Error('分析任务创建失败，请重试');
     return pollAnalyzeResult(requestId);
   },
 
@@ -308,11 +369,11 @@ export const foodRecordService = {
     limit?: number;
     date?: string;
   }): Promise<PaginatedRecords> => {
-    const searchParams = new URLSearchParams();
-    if (params?.page) searchParams.set('page', String(params.page));
-    if (params?.limit) searchParams.set('limit', String(params.limit));
-    if (params?.date) searchParams.set('date', params.date);
-    const qs = searchParams.toString();
+    const sp = new URLSearchParams();
+    if (params?.page) sp.set('page', String(params.page));
+    if (params?.limit) sp.set('limit', String(params.limit));
+    if (params?.date) sp.set('date', params.date);
+    const qs = sp.toString();
     return unwrap(clientGet<PaginatedRecords>(`/app/food/records${qs ? `?${qs}` : ''}`));
   },
 
@@ -346,7 +407,7 @@ export const foodRecordService = {
   },
 
   /** 获取最近 N 天汇总 */
-  getRecentSummaries: async (days: number = 7): Promise<DailySummaryRecord[]> => {
+  getRecentSummaries: async (days = 7): Promise<DailySummaryRecord[]> => {
     return unwrap(clientGet<DailySummaryRecord[]>(`/app/food/summary/recent?days=${days}`));
   },
 
@@ -364,15 +425,13 @@ export const foodRecordService = {
     await unwrap(clientPost<null>('/app/food/decision-feedback', { recordId, followed, feedback }));
   },
 
-  // ── Phase 2: 文字分析 + 分析历史 ──
-
   /** 文字描述分析食物 */
   analyzeText: async (data: AnalyzeTextRequest): Promise<AnalysisResult> => {
-    const raw = await unwrap(clientPost<unknown>('/app/food/analyze-text', data));
-    return normalizeAnalysisResult(raw);
+    const raw = await unwrap(clientPost<RawAnalysisData>('/app/food/analyze-text', data));
+    return mapAnalysisData(raw);
   },
 
-  /** 将分析结果保存为饮食记录（简化版，只需 analysisId） */
+  /** 将分析结果保存为饮食记录（只需 analysisId） */
   saveAnalysis: async (data: SaveAnalysisRequest): Promise<FoodRecord> => {
     return unwrap(clientPost<FoodRecord>('/app/food/analyze-save', data));
   },
@@ -383,11 +442,11 @@ export const foodRecordService = {
     pageSize?: number;
     inputType?: 'text' | 'image';
   }): Promise<AnalysisHistoryResponse> => {
-    const searchParams = new URLSearchParams();
-    if (params?.page) searchParams.set('page', String(params.page));
-    if (params?.pageSize) searchParams.set('pageSize', String(params.pageSize));
-    if (params?.inputType) searchParams.set('inputType', params.inputType);
-    const qs = searchParams.toString();
+    const sp = new URLSearchParams();
+    if (params?.page) sp.set('page', String(params.page));
+    if (params?.pageSize) sp.set('pageSize', String(params.pageSize));
+    if (params?.inputType) sp.set('inputType', params.inputType);
+    const qs = sp.toString();
     const raw = await unwrap<{
       items: Array<{
         analysisId: string;
@@ -405,7 +464,7 @@ export const foodRecordService = {
       pageSize: number;
     }>(clientGet(`/app/food/analysis/history${qs ? `?${qs}` : ''}`));
 
-    const mappedItems: AnalysisHistoryItem[] = (raw.items || []).map((item) => ({
+    const items: AnalysisHistoryItem[] = (raw.items || []).map((item) => ({
       id: item.analysisId,
       inputType: item.inputType,
       inputText: item.summary?.foodNames?.join('、') || undefined,
@@ -413,22 +472,17 @@ export const foodRecordService = {
       mealType: item.mealType,
       totalCalories: Number(item.summary?.totalCalories ?? 0),
       foodCount: item.summary?.foodNames?.length || 0,
-      decision: mapRecommendationToDecision(item.summary?.recommendation),
+      decision: mapRecommendation(item.summary?.recommendation),
       isHealthy: item.summary?.recommendation !== 'avoid',
       createdAt: item.createdAt,
     }));
 
-    return {
-      items: mappedItems,
-      total: raw.total,
-      page: raw.page,
-      pageSize: raw.pageSize,
-    };
+    return { items, total: raw.total, page: raw.page, pageSize: raw.pageSize };
   },
 
   /** 获取单个分析详情 */
   getAnalysisDetail: async (analysisId: string): Promise<AnalysisResult> => {
-    const raw = await unwrap<unknown>(clientGet(`/app/food/analysis/${analysisId}`));
-    return normalizeAnalysisResult(raw);
+    const raw = await unwrap<RawAnalysisData>(clientGet(`/app/food/analysis/${analysisId}`));
+    return mapAnalysisData(raw);
   },
 };

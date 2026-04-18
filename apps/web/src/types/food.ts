@@ -15,37 +15,168 @@ export interface FoodItem {
   satiety?: number;
 }
 
-// ── 分析结果 ──
-export interface AnalysisResult {
-  requestId: string;
-  foods: FoodItem[];
-  totalCalories: number;
-  mealType: string;
-  advice: string;
-  isHealthy: boolean;
-  imageUrl?: string;
-  // V1: 决策字段
-  decision: 'SAFE' | 'OK' | 'LIMIT' | 'AVOID';
-  riskLevel: string;
-  reason: string;
-  suggestion: string;
-  insteadOptions: string[];
-  compensation: {
-    diet?: string;
-    activity?: string;
-    nextMeal?: string;
+// ── 分析结果中的食物项（富数据） ──
+export interface AnalysisFoodItem {
+  name: string;
+  normalizedName?: string;
+  foodLibraryId?: string;
+  quantity?: string;
+  estimatedWeightGrams?: number;
+  category?: string;
+  confidence?: number;
+  calories: number;
+  protein?: number;
+  fat?: number;
+  carbs?: number;
+  saturatedFat?: number;
+  addedSugar?: number;
+}
+
+// ── 决策推理链步骤（API 真实结构） ──
+export interface DecisionChainStep {
+  step?: string;
+  input?: string;
+  output?: string;
+  confidence?: number;
+}
+
+// ── 维度评分详解（API 真实结构） ──
+export interface ScoreBreakdownExplanation {
+  dimension?: string;
+  label?: string;
+  score?: number;
+  impact?: string;
+  message?: string;
+  suggestion?: string;
+}
+
+// ── 决策因子（API 真实结构） ──
+export interface DecisionFactor {
+  dimension?: string;
+  score?: number;
+  impact?: string;
+  message?: string;
+}
+
+// ── 识别问题条目（API 真实结构） ──
+export interface IdentifiedIssue {
+  type?: string;
+  severity?: string;
+  metric?: number;
+  threshold?: number;
+  implication?: string;
+}
+
+// ── 替代品候选（API 真实结构） ──
+export interface ReplacementCandidate {
+  name: string;
+  foodLibraryId?: string;
+  source?: string;
+  score?: number;
+  reason?: string;
+  comparison?: {
+    caloriesDiff?: number;
+    proteinDiff?: number;
+    scoreDiff?: number;
   };
-  contextComment: string;
-  encouragement: string;
-  // V6: 营养维度
+  scenarioType?: string;
+  rankScore?: number;
+  rankReasons?: string[];
+}
+
+// ── 分析结果（直接映射 API data 字段） ──
+export interface AnalysisResult {
+  // ── 基础 ──
+  requestId: string;
+  inputType?: 'text' | 'image';
+  mealType: string;
+  imageUrl?: string;
+  isHealthy: boolean;
+
+  // ── 食物列表 ──
+  foods: AnalysisFoodItem[];
+
+  // ── 合计 ──
+  totalCalories: number;
   totalProtein?: number;
   totalFat?: number;
   totalCarbs?: number;
-  avgQuality?: number;
-  avgSatiety?: number;
+  totalSaturatedFat?: number;
+  totalAddedSugar?: number;
+
+  // ── 评分 ──
+  healthScore?: number;
   nutritionScore?: number;
+  confidenceScore?: number;
   scoreBreakdown?: NutritionScoreBreakdown;
+
+  // ── 决策（映射为枚举，供旧 UI 兼容） ──
+  decision: 'SAFE' | 'OK' | 'LIMIT' | 'AVOID';
+  riskLevel: string;
+  reason: string;
+  /** decision.advice */
+  decisionAdvice?: string;
+  shouldEat?: boolean;
+
+  // ── 决策富数据 ──
+  decisionFactors?: DecisionFactor[];
+  decisionChain?: DecisionChainStep[];
+  breakdownExplanations?: ScoreBreakdownExplanation[];
+  optimalPortion?: { recommendedPercent?: number; recommendedCalories?: number };
+  nextMealAdvice?: {
+    targetCalories?: number;
+    targetProtein?: number;
+    targetFat?: number;
+    targetCarbs?: number;
+    emphasis?: string;
+    suggestion?: string;
+  };
+
+  // ── Summary 模块 ──
+  advice: string; // explanation.summary
+  headline?: string;
+  topIssues?: string[];
+  topStrengths?: string[];
+  actionItems?: string[];
+  quantitativeHighlight?: string;
+  contextSignals?: string[];
+  alternativeSummary?: string;
+  dynamicDecisionHint?: string;
+  healthConstraintNote?: string;
+  decisionGuardrails?: string[];
+  coachFocus?: string;
+
+  // ── shouldEatAction ──
+  suggestion: string; // shouldEatAction.primaryReason fallback
+  insteadOptions: string[]; // alternatives[].name
+  replacementCandidates?: ReplacementCandidate[];
+  portionAction?: { suggestedPercent?: number; suggestedCalories?: number };
+  recoveryAction?: { nextMealDirection?: string; todayAdjustment?: string };
+
+  // ── 旧格式兼容 ──
+  compensation: { diet?: string; activity?: string; nextMeal?: string };
+  contextComment: string;
+  encouragement: string;
   highlights?: string[];
+
+  // ── 上下文分析 ──
+  completionRatio?: Record<string, number>;
+  identifiedIssues?: IdentifiedIssue[];
+  issues?: AnalysisIssue[];
+
+  // ── 置信度诊断 ──
+  confidenceDiagnostics?: {
+    overallConfidence?: number;
+    analysisQualityBand?: string;
+    analysisCompletenessScore?: number;
+  };
+}
+
+// ── 旧 issue 类型（兼容旧组件） ──
+export interface AnalysisIssue {
+  issue: string;
+  severity: 'low' | 'medium' | 'high';
+  detail?: string;
 }
 
 // ── 饮食记录 ──
