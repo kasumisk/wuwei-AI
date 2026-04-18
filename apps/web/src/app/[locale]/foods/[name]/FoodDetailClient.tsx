@@ -49,10 +49,10 @@ export default function FoodDetailClient({ locale, food, relatedFoods }: FoodDet
   const computed = useMemo(() => {
     const ratio = servingGrams / 100;
     return {
-      calories: Math.round(food.caloriesPer100g * ratio),
-      protein: food.proteinPer100g != null ? +(food.proteinPer100g * ratio).toFixed(1) : null,
-      fat: food.fatPer100g != null ? +(food.fatPer100g * ratio).toFixed(1) : null,
-      carbs: food.carbsPer100g != null ? +(food.carbsPer100g * ratio).toFixed(1) : null,
+      calories: Math.round(food.calories * ratio),
+      protein: food.protein != null ? +(food.protein * ratio).toFixed(1) : null,
+      fat: food.fat != null ? +(food.fat * ratio).toFixed(1) : null,
+      carbs: food.carbs != null ? +(food.carbs * ratio).toFixed(1) : null,
     };
   }, [food, servingGrams]);
 
@@ -177,8 +177,8 @@ export default function FoodDetailClient({ locale, food, relatedFoods }: FoodDet
 
           {/* 每100g基准 */}
           <p className="text-xs text-muted-foreground text-center">
-            每100g：{food.caloriesPer100g}kcal · 蛋白质{food.proteinPer100g ?? '-'}g · 脂肪
-            {food.fatPer100g ?? '-'}g · 碳水{food.carbsPer100g ?? '-'}g
+            每100g：{food.calories}kcal · 蛋白质{food.protein ?? '-'}g · 脂肪
+            {food.fat ?? '-'}g · 碳水{food.carbs ?? '-'}g
           </p>
         </div>
 
@@ -253,9 +253,7 @@ export default function FoodDetailClient({ locale, food, relatedFoods }: FoodDet
                     <span>{categoryEmoji[rf.category] || '🍽️'}</span>
                     <span className="text-sm font-medium truncate">{rf.name}</span>
                   </div>
-                  <p className="text-xs text-primary font-semibold">
-                    {rf.caloriesPer100g} kcal/100g
-                  </p>
+                  <p className="text-xs text-primary font-semibold">{rf.calories} kcal/100g</p>
                 </Link>
               ))}
             </div>
@@ -270,10 +268,10 @@ export default function FoodDetailClient({ locale, food, relatedFoods }: FoodDet
               '@context': 'https://schema.org',
               '@type': 'NutritionInformation',
               name: food.name,
-              calories: `${food.caloriesPer100g} kcal`,
-              proteinContent: food.proteinPer100g ? `${food.proteinPer100g} g` : undefined,
-              fatContent: food.fatPer100g ? `${food.fatPer100g} g` : undefined,
-              carbohydrateContent: food.carbsPer100g ? `${food.carbsPer100g} g` : undefined,
+              calories: `${food.calories} kcal`,
+              proteinContent: food.protein ? `${food.protein} g` : undefined,
+              fatContent: food.fat ? `${food.fat} g` : undefined,
+              carbohydrateContent: food.carbs ? `${food.carbs} g` : undefined,
               servingSize: '100g',
             }),
           }}

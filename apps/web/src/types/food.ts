@@ -184,13 +184,27 @@ export interface FoodRecord {
   id: string;
   userId: string;
   imageUrl?: string;
-  source: 'screenshot' | 'camera' | 'manual' | 'text_analysis' | 'image_analysis';
+  source:
+    | 'screenshot'
+    | 'camera'
+    | 'manual'
+    | 'text_analysis'
+    | 'image_analysis'
+    | 'recommend'
+    | 'decision';
   recognizedText?: string;
   foods: FoodItem[];
   totalCalories: number;
   mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack';
   advice?: string;
   isHealthy?: boolean;
+  // V6: 宏量营养
+  totalProtein?: number;
+  totalFat?: number;
+  totalCarbs?: number;
+  avgQuality?: number;
+  avgSatiety?: number;
+  nutritionScore?: number;
   // V1: 决策字段
   decision?: string;
   riskLevel?: string;
@@ -200,6 +214,10 @@ export interface FoodRecord {
   compensation?: { diet?: string; activity?: string; nextMeal?: string };
   contextComment?: string;
   encouragement?: string;
+  // V8: 来源追溯
+  analysisId?: string;
+  recommendationTraceId?: string;
+  isExecuted?: boolean;
   recordedAt: string;
   createdAt: string;
   updatedAt: string;
@@ -245,6 +263,9 @@ export interface MealScenario {
   foods: string;
   calories: number;
   tip: string;
+  totalProtein?: number;
+  totalFat?: number;
+  totalCarbs?: number;
 }
 
 export interface MealSuggestion {
@@ -254,6 +275,9 @@ export interface MealSuggestion {
     foods: string;
     calories: number;
     tip: string;
+    totalProtein?: number;
+    totalFat?: number;
+    totalCarbs?: number;
   };
   scenarios?: MealScenario[];
 }

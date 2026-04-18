@@ -423,27 +423,17 @@ export function AnalyzePage() {
         });
       } else {
         const totalCalories = editedFoods.reduce((sum, f) => sum + f.calories, 0);
-        savedResult = await saveRecord({
-          requestId: result.requestId,
+        savedResult = await foodRecordService.createFoodLog({
           imageUrl: result.imageUrl,
           foods: editedFoods,
           totalCalories,
           mealType,
+          source: 'decision',
           advice: result.advice,
           isHealthy: result.isHealthy,
-          decision: result.decision,
-          riskLevel: result.riskLevel,
-          reason: result.reason,
-          suggestion: result.suggestion,
-          insteadOptions: result.insteadOptions,
-          compensation: result.compensation,
-          contextComment: result.contextComment,
-          encouragement: result.encouragement,
           totalProtein: result.totalProtein,
           totalFat: result.totalFat,
           totalCarbs: result.totalCarbs,
-          avgQuality: undefined,
-          avgSatiety: undefined,
           nutritionScore: result.nutritionScore,
         });
       }
@@ -459,7 +449,7 @@ export function AnalyzePage() {
         variant: 'destructive',
       });
     }
-  }, [result, editedFoods, mealType, saveAnalysis, saveRecord, toast]);
+  }, [result, editedFoods, mealType, saveAnalysis, toast]);
 
   const handleRemoveFood = useCallback((index: number) => {
     setEditedFoods((prev) => prev.filter((_, i) => i !== index));

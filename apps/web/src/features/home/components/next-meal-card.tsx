@@ -51,7 +51,16 @@ export function NextMealCard({ suggestion, summary: _summary, profile }: NextMea
   const content = useMemo(() => {
     // Prefer first scenario for the compact card; fall back to main suggestion
     const s = suggestion.scenarios?.[0];
-    return s ? { foods: s.foods, calories: s.calories, tip: s.tip } : suggestion.suggestion;
+    return s
+      ? {
+          foods: s.foods,
+          calories: s.calories,
+          tip: s.tip,
+          totalProtein: s.totalProtein,
+          totalFat: s.totalFat,
+          totalCarbs: s.totalCarbs,
+        }
+      : suggestion.suggestion;
   }, [suggestion]);
 
   const mealLabel = MEAL_LABELS[suggestion.mealType] || '下一餐';
@@ -73,16 +82,21 @@ export function NextMealCard({ suggestion, summary: _summary, profile }: NextMea
         .map((s) => s.trim())
         .filter(Boolean);
       const perCal = Math.round(content.calories / Math.max(foodNames.length, 1));
-      const macros = estimateMacros(content.calories, profile?.goal);
+      // 优先使用真实宏量，无真实值时降级估算
+      const macroFallback = estimateMacros(content.calories, profile?.goal);
+      const macros = {
+        totalProtein: content.totalProtein ?? macroFallback.protein,
+        totalFat: content.totalFat ?? macroFallback.fat,
+        totalCarbs: content.totalCarbs ?? macroFallback.carbs,
+      };
       await Promise.all([
-        foodRecordService.saveRecord({
+        foodRecordService.createFoodLog({
           foods: foodNames.map((name) => ({ name, calories: perCal })),
           totalCalories: content.calories,
           ...macros,
           mealType: suggestion.mealType,
-          source: 'manual',
           advice: content.tip,
-          contextComment: '来自推荐',
+          source: 'recommend',
         }),
         foodPlanService
           .submitFeedback({

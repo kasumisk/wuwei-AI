@@ -14,6 +14,7 @@ import {
   IsIn,
   IsObject,
 } from 'class-validator';
+// Note: IsIn kept for CreateFoodLogDto.decision field
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { MealType, RecordSource } from '../../diet.types';
@@ -74,142 +75,6 @@ export class FoodItemDto {
 }
 
 // ========== Food Records ==========
-
-export class SaveFoodRecordDto {
-  @ApiPropertyOptional({
-    description: '分析后的 requestId（用于关联暂存结果）',
-  })
-  @IsOptional()
-  @IsString()
-  requestId?: string;
-
-  /** V6.1: 关联的分析记录 ID（food_analysis_records.id） */
-  @ApiPropertyOptional({
-    description: 'V6.1: 关联的分析记录 ID（food_analysis_records.id）',
-  })
-  @IsOptional()
-  @IsUUID()
-  analysisId?: string;
-
-  /** V6.1: 记录来源 */
-  @ApiPropertyOptional({
-    enum: RecordSource,
-    description: 'V6.1: 记录来源',
-  })
-  @IsOptional()
-  @IsEnum(RecordSource)
-  source?: RecordSource;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  imageUrl?: string;
-
-  @ApiProperty({ type: [FoodItemDto] })
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => FoodItemDto)
-  foods: FoodItemDto[];
-
-  @ApiProperty()
-  @IsInt()
-  @Min(0)
-  totalCalories: number;
-
-  @ApiPropertyOptional({ enum: MealType })
-  @IsOptional()
-  @IsEnum(MealType)
-  mealType?: MealType;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  advice?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsBoolean()
-  isHealthy?: boolean;
-
-  @ApiPropertyOptional({ description: '记录时间，默认当前' })
-  @IsOptional()
-  @IsDateString()
-  recordedAt?: string;
-
-  // ─── V1: AI 决策字段 ───
-
-  @ApiPropertyOptional({ enum: ['SAFE', 'OK', 'LIMIT', 'AVOID'] })
-  @IsOptional()
-  @IsIn(['SAFE', 'OK', 'LIMIT', 'AVOID'])
-  decision?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  riskLevel?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  reason?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  suggestion?: string;
-
-  @ApiPropertyOptional({ type: [String] })
-  @IsOptional()
-  @IsArray()
-  insteadOptions?: string[];
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsObject()
-  compensation?: { diet?: string; activity?: string; nextMeal?: string };
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  contextComment?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  encouragement?: string;
-
-  // ─── V6: 多维营养字段 ───
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsNumber()
-  totalProtein?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsNumber()
-  totalFat?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsNumber()
-  totalCarbs?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsNumber()
-  avgQuality?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsNumber()
-  avgSatiety?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsNumber()
-  nutritionScore?: number;
-}
 
 export class UpdateFoodRecordDto {
   @ApiPropertyOptional({ type: [FoodItemDto] })
@@ -280,4 +145,113 @@ export class AddFromLibraryDto {
   @ApiProperty({ enum: MealType, description: '餐次' })
   @IsEnum(MealType)
   mealType: MealType;
+}
+
+// ========== Food Log（统一写入 V8） ==========
+
+/**
+ * V8: 统一 Food Log 写入 DTO
+ * 所有来源（手动/推荐/分析决策）均通过此 DTO 写入。
+ */
+export class CreateFoodLogDto {
+  @ApiProperty({ type: [FoodItemDto], description: '食物列表' })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => FoodItemDto)
+  foods: FoodItemDto[];
+
+  @ApiProperty({ description: '本餐热量 kcal' })
+  @IsInt()
+  @Min(0)
+  totalCalories: number;
+
+  @ApiProperty({ enum: MealType, description: '餐次' })
+  @IsEnum(MealType)
+  mealType: MealType;
+
+  @ApiProperty({
+    enum: RecordSource,
+    description: '来源：manual/recommend/decision/text_analysis/image_analysis',
+  })
+  @IsEnum(RecordSource)
+  source: RecordSource;
+
+  // ── 营养素（可选） ──
+  @ApiPropertyOptional() @IsOptional() @IsNumber() totalProtein?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() totalFat?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() totalCarbs?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() avgQuality?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() avgSatiety?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() nutritionScore?: number;
+
+  // ── 来源追溯（分析决策来源） ──
+  @ApiPropertyOptional({ description: '分析记录 ID（source=decision 时填写）' })
+  @IsOptional()
+  @IsUUID()
+  analysisId?: string;
+
+  // ── 来源追溯（推荐来源） ──
+  @ApiPropertyOptional({
+    description: '推荐追踪 ID（source=recommend 时填写）',
+  })
+  @IsOptional()
+  @IsString()
+  recommendationTraceId?: string;
+
+  // ── 决策快照（分析决策来源时由后端自动补充，前端也可传入） ──
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsIn(['SAFE', 'OK', 'LIMIT', 'AVOID'])
+  decision?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() riskLevel?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() reason?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() suggestion?: string;
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  insteadOptions?: string[];
+  @ApiPropertyOptional() @IsOptional() @IsObject() compensation?: Record<
+    string,
+    string
+  >;
+  @ApiPropertyOptional() @IsOptional() @IsString() contextComment?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() encouragement?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() advice?: string;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() isHealthy?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsString() imageUrl?: string;
+
+  @ApiPropertyOptional({ description: '记录时间，默认当前时间' })
+  @IsOptional()
+  @IsDateString()
+  recordedAt?: string;
+}
+
+/**
+ * V8: Food Log 查询 DTO（支持按日期+来源筛选）
+ */
+export class FoodLogQueryDto {
+  @ApiPropertyOptional({ description: '查询日期 YYYY-MM-DD，默认今日' })
+  @IsOptional()
+  @IsString()
+  date?: string;
+
+  @ApiPropertyOptional({ enum: RecordSource, description: '按来源筛选' })
+  @IsOptional()
+  @IsEnum(RecordSource)
+  source?: RecordSource;
+
+  @ApiPropertyOptional({ description: '页码，默认1' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @ApiPropertyOptional({ description: '每页条数，默认20' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
 }

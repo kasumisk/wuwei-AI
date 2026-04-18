@@ -225,10 +225,7 @@ export function FrequentFoodSheet({ open, onClose }: FrequentFoodSheetProps) {
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {food.standardServingDesc || `${food.standardServingG}g`}
                           {' · '}
-                          {Math.round(
-                            (food.caloriesPer100g * (food.standardServingG || 100)) / 100
-                          )}{' '}
-                          kcal
+                          {Math.round((food.calories * (food.standardServingG || 100)) / 100)} kcal
                         </p>
                       )}
                     </div>

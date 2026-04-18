@@ -334,54 +334,6 @@ export const foodRecordService = {
     return pollAnalyzeResult(requestId);
   },
 
-  /** 保存饮食记录 */
-  saveRecord: async (data: {
-    requestId?: string;
-    imageUrl?: string;
-    foods: FoodItem[];
-    totalCalories: number;
-    mealType?: string;
-    advice?: string;
-    isHealthy?: boolean;
-    recordedAt?: string;
-    decision?: string;
-    riskLevel?: string;
-    reason?: string;
-    suggestion?: string;
-    insteadOptions?: string[];
-    compensation?: { diet?: string; activity?: string; nextMeal?: string };
-    contextComment?: string;
-    encouragement?: string;
-    totalProtein?: number;
-    totalFat?: number;
-    totalCarbs?: number;
-    avgQuality?: number;
-    avgSatiety?: number;
-    nutritionScore?: number;
-    source?: 'screenshot' | 'camera' | 'manual' | 'text_analysis' | 'image_analysis';
-  }): Promise<FoodRecord> => {
-    return unwrap(clientPost<FoodRecord>('/app/food/records', data));
-  },
-
-  /** 获取今日记录 */
-  getTodayRecords: async (): Promise<FoodRecord[]> => {
-    return unwrap(clientGet<FoodRecord[]>('/app/food/records/today'));
-  },
-
-  /** 分页查询历史记录 */
-  getRecords: async (params?: {
-    page?: number;
-    limit?: number;
-    date?: string;
-  }): Promise<PaginatedRecords> => {
-    const sp = new URLSearchParams();
-    if (params?.page) sp.set('page', String(params.page));
-    if (params?.limit) sp.set('limit', String(params.limit));
-    if (params?.date) sp.set('date', params.date);
-    const qs = sp.toString();
-    return unwrap(clientGet<PaginatedRecords>(`/app/food/records${qs ? `?${qs}` : ''}`));
-  },
-
   /** 更新饮食记录 */
   updateRecord: async (
     id: string,
@@ -489,5 +441,58 @@ export const foodRecordService = {
   getAnalysisDetail: async (analysisId: string): Promise<AnalysisResult> => {
     const raw = await unwrap<RawAnalysisData>(clientGet(`/app/food/analysis/${analysisId}`));
     return mapAnalysisData(raw);
+  },
+
+  // ── V8: Food Log 统一接口 ──
+
+  /** V8: 统一写入 Food Log */
+  createFoodLog: async (data: {
+    foods: FoodItem[];
+    totalCalories: number;
+    mealType: string;
+    source: 'manual' | 'recommend' | 'decision' | 'text_analysis' | 'image_analysis';
+    totalProtein?: number;
+    totalFat?: number;
+    totalCarbs?: number;
+    avgQuality?: number;
+    avgSatiety?: number;
+    nutritionScore?: number;
+    analysisId?: string;
+    recommendationTraceId?: string;
+    advice?: string;
+    isHealthy?: boolean;
+    imageUrl?: string;
+    recordedAt?: string;
+  }): Promise<FoodRecord> => {
+    return unwrap(clientPost<FoodRecord>('/app/food/records', data));
+  },
+
+  /** V8: 按日期查询 Food Log */
+  getFoodLog: async (params?: {
+    date?: string;
+    source?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{
+    items: FoodRecord[];
+    total: number;
+    page: number;
+    limit: number;
+    date?: string;
+    summary?: {
+      totalCalories: number;
+      totalProtein: number;
+      totalFat: number;
+      totalCarbs: number;
+      mealCount: number;
+    };
+  }> => {
+    const sp = new URLSearchParams();
+    if (params?.date) sp.set('date', params.date);
+    if (params?.source) sp.set('source', params.source);
+    if (params?.page) sp.set('page', String(params.page));
+    if (params?.limit) sp.set('limit', String(params.limit));
+    const qs = sp.toString();
+    return unwrap(clientGet(`/app/food/records${qs ? `?${qs}` : ''}`));
   },
 };

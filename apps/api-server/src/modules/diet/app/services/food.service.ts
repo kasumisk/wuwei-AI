@@ -1,9 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
-  SaveFoodRecordDto,
   UpdateFoodRecordDto,
   FoodRecordQueryDto,
+  CreateFoodLogDto,
+  FoodLogQueryDto,
 } from '../dto/food.dto';
 import { NutritionScoreService } from './nutrition-score.service';
 import { UserProfileService } from '../../../user/app/services/profile/user-profile.service';
@@ -45,13 +46,23 @@ interface StickinessCacheEntry {
   result: {
     mealType: string;
     remainingCalories: number;
-    suggestion: { foods: string; calories: number; tip: string };
+    suggestion: {
+      foods: string;
+      calories: number;
+      tip: string;
+      totalProtein?: number;
+      totalFat?: number;
+      totalCarbs?: number;
+    };
     decisionValueTags?: DecisionValueTag[];
     scenarios?: Array<{
       scenario: string;
       foods: string;
       calories: number;
       tip: string;
+      totalProtein?: number;
+      totalFat?: number;
+      totalCarbs?: number;
     }>;
   };
   /** 写入时间戳 */
@@ -76,33 +87,6 @@ export class FoodService {
     private readonly eventEmitter: EventEmitter2,
     private readonly precomputeService: PrecomputeService,
   ) {}
-
-  /**
-   * 保存饮食记录（委托 + 异步更新汇总）
-   */
-  async saveRecord(userId: string, dto: SaveFoodRecordDto): Promise<any> {
-    const saved = await this.foodRecordService.saveRecord(userId, dto);
-
-    // 异步更新每日汇总
-    this.dailySummaryService
-      .updateDailySummary(userId, saved.recordedAt)
-      .catch((err) => this.logger.error(`更新每日汇总失败: ${err.message}`));
-
-    // V6 Phase 1.2: 发布饮食记录事件
-    this.eventEmitter.emit(
-      DomainEvents.MEAL_RECORDED,
-      new MealRecordedEvent(
-        userId,
-        dto.mealType || 'unknown',
-        dto.foods?.map((f) => f.name).filter(Boolean) || [],
-        dto.totalCalories || 0,
-        'manual',
-        saved.id,
-      ),
-    );
-
-    return saved;
-  }
 
   /**
    * 获取今日记录
@@ -193,13 +177,23 @@ export class FoodService {
   ): Promise<{
     mealType: string;
     remainingCalories: number;
-    suggestion: { foods: string; calories: number; tip: string };
+    suggestion: {
+      foods: string;
+      calories: number;
+      tip: string;
+      totalProtein?: number;
+      totalFat?: number;
+      totalCarbs?: number;
+    };
     decisionValueTags?: DecisionValueTag[];
     scenarios?: Array<{
       scenario: string;
       foods: string;
       calories: number;
       tip: string;
+      totalProtein?: number;
+      totalFat?: number;
+      totalCarbs?: number;
     }>;
   }> {
     const [summary, profile] = await Promise.all([
@@ -305,6 +299,9 @@ export class FoodService {
               foods: r.displayText || '',
               calories: scenarioCalories,
               tip: scenarioTip,
+              totalProtein: (r as { totalProtein?: number }).totalProtein,
+              totalFat: (r as { totalFat?: number }).totalFat,
+              totalCarbs: (r as { totalCarbs?: number }).totalCarbs,
             };
           })
         : undefined;
@@ -332,6 +329,9 @@ export class FoodService {
           foods: mainRec.displayText,
           calories: mainRec.totalCalories,
           tip: mainRec.tip,
+          totalProtein: mainRec.totalProtein,
+          totalFat: mainRec.totalFat,
+          totalCarbs: mainRec.totalCarbs,
         },
         decisionValueTags,
         scenarios,
@@ -445,6 +445,9 @@ export class FoodService {
         foods: rec.displayText,
         calories: scenarioCalories,
         tip: scenarioTip,
+        totalProtein: rec.totalProtein,
+        totalFat: rec.totalFat,
+        totalCarbs: rec.totalCarbs,
       };
     });
 
@@ -467,6 +470,9 @@ export class FoodService {
         foods: mainRec.displayText,
         calories: mainRec.totalCalories,
         tip: mainRec.tip,
+        totalProtein: mainRec.totalProtein,
+        totalFat: mainRec.totalFat,
+        totalCarbs: mainRec.totalCarbs,
       },
       decisionValueTags,
       scenarios,
@@ -790,5 +796,39 @@ export class FoodService {
       consumed,
       userConstraints,
     );
+  }
+
+  // ==================== V8: Food Log 统一接口 ====================
+
+  /**
+   * V8: 统一写入 Food Log，触发每日汇总更新和 MEAL_RECORDED 事件
+   */
+  async createFoodLog(userId: string, dto: CreateFoodLogDto): Promise<any> {
+    const saved = await this.foodRecordService.createFoodLog(userId, dto);
+
+    this.dailySummaryService
+      .updateDailySummary(userId, saved.recordedAt)
+      .catch((err) => this.logger.error(`更新每日汇总失败: ${err.message}`));
+
+    this.eventEmitter.emit(
+      DomainEvents.MEAL_RECORDED,
+      new MealRecordedEvent(
+        userId,
+        dto.mealType || 'unknown',
+        dto.foods?.map((f) => f.name).filter(Boolean) || [],
+        dto.totalCalories || 0,
+        dto.source || 'manual',
+        saved.id,
+      ),
+    );
+
+    return saved;
+  }
+
+  // ==================== V8: Food Log 统一接口 ====================
+
+  async getFoodLog(userId: string, query: FoodLogQueryDto): Promise<any> {
+    const tz = await this.userProfileService.getTimezone(userId);
+    return this.foodRecordService.getFoodLogByDate(userId, query, tz);
   }
 }

@@ -17,7 +17,7 @@ export async function generateMetadata({
     const { food } = await foodLibraryServerAPI.getByName(decodedName);
     return buildPageMetadata({
       title: `${food.name}的热量和营养成分`,
-      description: `${food.name}每100g含${food.caloriesPer100g}千卡热量，蛋白质${food.proteinPer100g ?? '-'}g，脂肪${food.fatPer100g ?? '-'}g，碳水${food.carbsPer100g ?? '-'}g。查看详细营养数据和份量计算。`,
+      description: `${food.name}每100g含${food.calories}千卡热量，蛋白质${food.protein ?? '-'}g，脂肪${food.fat ?? '-'}g，碳水${food.carbs ?? '-'}g。查看详细营养数据和份量计算。`,
       path: `/foods/${encodeURIComponent(food.name)}`,
       locale: locale as Locale,
       keywords: [food.name, '热量', '营养成分', '卡路里', food.category],

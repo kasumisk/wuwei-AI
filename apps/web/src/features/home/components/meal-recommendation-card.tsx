@@ -142,7 +142,15 @@ export function MealRecommendationCard({
     if (hasScenarios && activeScenario >= 0) {
       const s = suggestion.scenarios![activeScenario];
       return s
-        ? { foods: s.foods, calories: s.calories, tip: s.tip, scenarioLabel: s.scenario }
+        ? {
+            foods: s.foods,
+            calories: s.calories,
+            tip: s.tip,
+            scenarioLabel: s.scenario,
+            totalProtein: s.totalProtein,
+            totalFat: s.totalFat,
+            totalCarbs: s.totalCarbs,
+          }
         : null;
     }
     return { ...suggestion.suggestion, scenarioLabel: null as string | null };
@@ -184,20 +192,23 @@ export function MealRecommendationCard({
       const contextComment = currentContent.scenarioLabel
         ? `推荐场景：${currentContent.scenarioLabel}`
         : '来自推荐';
+      // 优先使用真实宏量，无真实值时降级估算
       const macroEstimate = estimateMacrosFromCalories(currentContent.calories, profile?.goal);
+      const protein = currentContent.totalProtein ?? macroEstimate.protein;
+      const fat = currentContent.totalFat ?? macroEstimate.fat;
+      const carbs = currentContent.totalCarbs ?? macroEstimate.carbs;
 
       // 并行：保存记录 + 提交反馈（反馈失败不阻断）
       await Promise.all([
-        foodRecordService.saveRecord({
+        foodRecordService.createFoodLog({
           foods,
           totalCalories: currentContent.calories,
-          totalProtein: macroEstimate.protein,
-          totalFat: macroEstimate.fat,
-          totalCarbs: macroEstimate.carbs,
+          totalProtein: protein,
+          totalFat: fat,
+          totalCarbs: carbs,
           mealType: suggestion.mealType,
-          source: 'manual',
           advice: currentContent.tip,
-          contextComment,
+          source: 'recommend',
         }),
         foodPlanService
           .submitFeedback({

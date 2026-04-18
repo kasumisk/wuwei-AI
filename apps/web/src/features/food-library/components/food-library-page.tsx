@@ -114,7 +114,7 @@ export function FoodLibraryPage({
           )}
         </Link>
         <div className="flex items-center gap-2 shrink-0">
-          <span className="text-sm font-semibold text-primary">{food.caloriesPer100g} kcal</span>
+          <span className="text-sm font-semibold text-primary">{food.calories} kcal</span>
           <button
             onClick={(e) => {
               e.preventDefault();
@@ -136,19 +136,19 @@ export function FoodLibraryPage({
           )}
         </p>
         <div className="flex gap-2">
-          {food.proteinPer100g != null && (
+          {food.protein != null && (
             <span className={`text-xs px-2 py-0.5 rounded-full ${getNutrientColor('蛋白质')}`}>
-              蛋白质 {food.proteinPer100g}g
+              蛋白质 {food.protein}g
             </span>
           )}
-          {food.fatPer100g != null && (
+          {food.fat != null && (
             <span className={`text-xs px-2 py-0.5 rounded-full ${getNutrientColor('脂肪')}`}>
-              脂肪 {food.fatPer100g}g
+              脂肪 {food.fat}g
             </span>
           )}
-          {food.carbsPer100g != null && (
+          {food.carbs != null && (
             <span className={`text-xs px-2 py-0.5 rounded-full ${getNutrientColor('碳水')}`}>
-              碳水 {food.carbsPer100g}g
+              碳水 {food.carbs}g
             </span>
           )}
         </div>
@@ -246,7 +246,7 @@ export function FoodLibraryPage({
                   <div className="text-left">
                     <p className="text-xs font-bold">{ff.name}</p>
                     <p className="text-[10px] text-muted-foreground">
-                      吃过{ff.count}次{ff.food ? ` · ${ff.food.caloriesPer100g}kcal/100g` : ''}
+                      吃过{ff.count}次{ff.food ? ` · ${ff.food.calories}kcal/100g` : ''}
                     </p>
                   </div>
                 </button>

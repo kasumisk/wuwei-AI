@@ -478,6 +478,10 @@ model DailySummaries {
   createdAt       DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
   /// 最后更新时间
   updatedAt       DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
+  /// 来源分布 JSON：{ manual: N, recommend: N, decision: N }（供 Daily Score 来源分析）
+  sourceBreakdown Json? @map("source_breakdown")
+  /// 推荐执行次数（source=recommend 的记录数）
+  recommendExecutionCount Int @map("recommend_execution_count") @default(0)
   appUsers        AppUsers @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_b8fe1bf443d817a306fbda45040")
 
   @@unique([userId, date], map: "UQ_2bec94b8d146beda9ec7c984e41")
@@ -800,9 +804,14 @@ model FoodRecords {
   updatedAt       DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
   /// 关联的食物识别分析记录 ID（来自 food_analysis_record）
   analysisId      String? @map("analysis_id") @db.Uuid
+  /// 关联的推荐追踪 ID（来源为 recommend 时填写）
+  recommendationTraceId String? @map("recommendation_trace_id") @db.VarChar(255)
+  /// 用户是否实际执行了该记录（默认 true，预留计划未吃场景）
+  isExecuted      Boolean @map("is_executed") @default(true)
   appUsers        AppUsers                   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_ec3b604a6a49e32b3b7261e8b16")
 
   @@index([userId, recordedAt], map: "IDX_b60a81211f912774c20ff25101")
+  @@index([userId, source, recordedAt], map: "IDX_food_records_user_source_date")
   @@index([analysisId], map: "idx_food_record_analysis_id")
   @@index([userId, recordedAt(sort: Desc)], map: "idx_food_records_user_recorded")
 
@@ -2202,6 +2211,10 @@ enum food_records_source_enum {
   manual
   text_analysis
   image_analysis
+  /// 来自推荐系统（用户点击"我吃了"后写入）
+  recommend
+  /// 来自分析决策确认（用户保存分析结果后写入）
+  decision
 }
 
 enum http_method_enum {

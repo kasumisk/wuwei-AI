@@ -192,8 +192,8 @@ export class FoodLibraryService {
         ? Math.round(((Number(food.carbs) * servingGrams) / 100) * 10) / 10
         : 0;
 
-    // 复用现有的 FoodService.saveRecord
-    return this.foodService.saveRecord(userId, {
+    // 复用 FoodService.createFoodLog（统一写入 V8）
+    return this.foodService.createFoodLog(userId, {
       foods: [
         {
           name: food.name,

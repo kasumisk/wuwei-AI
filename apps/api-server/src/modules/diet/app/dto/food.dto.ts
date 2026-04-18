@@ -1,5 +1,5 @@
 /**
- * V7.8: Barrel re-export — 保持向后兼容
+ * V8: Barrel re-export
  * 实际定义已拆分到：
  * - food-record.dto.ts  (食物记录/分析/库相关)
  * - user-profile.dto.ts (用户画像)
@@ -8,10 +8,11 @@
 export {
   AnalyzeImageDto,
   FoodItemDto,
-  SaveFoodRecordDto,
   UpdateFoodRecordDto,
   FoodRecordQueryDto,
   AddFromLibraryDto,
+  CreateFoodLogDto,
+  FoodLogQueryDto,
 } from './food-record.dto';
 
 export { SaveUserProfileDto } from './user-profile.dto';

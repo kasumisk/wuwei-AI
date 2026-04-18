@@ -14,7 +14,7 @@ export function useHomeData() {
 
   const recordsQuery = useQuery({
     queryKey: ['records', 'today'],
-    queryFn: () => foodRecordService.getTodayRecords(),
+    queryFn: () => foodRecordService.getFoodLog(),
     staleTime: 60 * 1000,
   });
 
@@ -55,7 +55,7 @@ export function useHomeData() {
       mealCount: 0,
       remaining: 2000,
     },
-    records: recordsQuery.data ?? [],
+    records: recordsQuery.data?.items ?? [],
     suggestion: suggestionQuery.data ?? null,
     reminder: reminderQuery.data?.reminder ?? null,
     profile: profileQuery.data ?? null,

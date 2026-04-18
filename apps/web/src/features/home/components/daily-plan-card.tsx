@@ -159,8 +159,7 @@ export function DailyPlanCard({ dailyPlan }: DailyPlanCardProps) {
       totalCarbs?: number;
       avgQuality?: number;
       avgSatiety?: number;
-      source?: 'screenshot' | 'camera' | 'manual' | 'text_analysis' | 'image_analysis';
-    }) => foodRecordService.saveRecord(data),
+    }) => foodRecordService.createFoodLog({ ...data, source: 'manual' }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['records'] });
       queryClient.invalidateQueries({ queryKey: ['summary'] });
@@ -251,7 +250,6 @@ export function DailyPlanCard({ dailyPlan }: DailyPlanCardProps) {
                 : undefined,
             avgQuality: 5,
             avgSatiety: 5,
-            source: 'manual',
           });
         }
 

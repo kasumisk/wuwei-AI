@@ -240,18 +240,15 @@ export class FoodAnalyzeController {
       throw new BadRequestException('该分析尚未完成，无法保存');
     }
 
-    // 4. 从分析记录中提取数据构建 SaveFoodRecordDto
+    // 4. 从分析记录中提取数据构建 CreateFoodLogDto
     const result = this.reconstructAnalysisResult(analysisRecord);
     const mealType =
       dto.mealType || (analysisRecord.mealType as MealType) || MealType.LUNCH;
-    const source =
-      analysisRecord.inputType === 'text'
-        ? RecordSource.TEXT_ANALYSIS
-        : RecordSource.IMAGE_ANALYSIS;
 
-    const saveDto = {
+    const createDto = {
       analysisId: dto.analysisId,
-      source,
+      source: RecordSource.DECISION,
+      mealType,
       foods:
         result.foods?.map((f) => ({
           name: f.name,
@@ -263,7 +260,6 @@ export class FoodAnalyzeController {
           carbs: f.carbs,
         })) ?? [],
       totalCalories: result.totals?.calories ?? 0,
-      mealType,
       advice: result.explanation?.summary,
       isHealthy: result.decision?.shouldEat ?? true,
       recordedAt: dto.recordedAt,
@@ -282,8 +278,11 @@ export class FoodAnalyzeController {
       nutritionScore: result.score?.nutritionScore ?? 0,
     };
 
-    // 5. 保存饮食记录（复用 FoodService，会触发 MEAL_RECORDED 事件和日报更新）
-    const record = await this.foodService.saveRecord(user.id, saveDto);
+    // 5. 保存饮食记录（统一 Food Log V8，会触发 MEAL_RECORDED 事件和日报更新）
+    const record = await this.foodService.createFoodLog(
+      user.id,
+      createDto as any,
+    );
 
     // 6. 发布分析保存事件
     this.eventEmitter.emit(

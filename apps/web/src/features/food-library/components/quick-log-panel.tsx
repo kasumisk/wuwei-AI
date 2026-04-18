@@ -49,10 +49,10 @@ export function QuickLogPanel({ food, onClose, onSuccess }: QuickLogPanelProps) 
   const actualGrams = useCustom ? Number(customGrams) || 0 : servings * standardG;
   const ratio = actualGrams / 100;
 
-  const calories = Math.round(food.caloriesPer100g * ratio);
-  const protein = food.proteinPer100g != null ? Math.round(food.proteinPer100g * ratio) : null;
-  const fat = food.fatPer100g != null ? Math.round(food.fatPer100g * ratio) : null;
-  const carbs = food.carbsPer100g != null ? Math.round(food.carbsPer100g * ratio) : null;
+  const calories = Math.round(food.calories * ratio);
+  const protein = food.protein != null ? Math.round(food.protein * ratio) : null;
+  const fat = food.fat != null ? Math.round(food.fat * ratio) : null;
+  const carbs = food.carbs != null ? Math.round(food.carbs * ratio) : null;
 
   const addMutation = useMutation({
     mutationFn: () => foodLibraryClientAPI.addFromLibrary(food.id, actualGrams, mealType),
@@ -100,7 +100,7 @@ export function QuickLogPanel({ food, onClose, onSuccess }: QuickLogPanelProps) 
             <div>
               <h3 className="font-bold text-lg">{food.name}</h3>
               <p className="text-xs text-muted-foreground">
-                {food.caloriesPer100g} kcal / 100g
+                {food.calories} kcal / 100g
                 {food.standardServingDesc && ` · ${food.standardServingDesc}`}
               </p>
             </div>

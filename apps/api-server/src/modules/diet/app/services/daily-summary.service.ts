@@ -51,32 +51,103 @@ export class DailySummaryService {
     });
 
     if (!summary) {
-      // 实时计算
+      // 实时计算（含真实目标和评分）
       const records = await this.foodRecordService.getTodayRecords(userId, tz);
       const totalCalories = records.reduce(
         (sum, r) => sum + r.totalCalories,
         0,
       );
+      const totalProtein = records.reduce(
+        (s, r) => s + (Number(r.totalProtein) || 0),
+        0,
+      );
+      const totalFat = records.reduce(
+        (s, r) => s + (Number(r.totalFat) || 0),
+        0,
+      );
+      const totalCarbs = records.reduce(
+        (s, r) => s + (Number(r.totalCarbs) || 0),
+        0,
+      );
+
+      // 从用户档案计算真实目标
+      let goals = {
+        calories: 2000,
+        protein: 0,
+        fat: 0,
+        carbs: 0,
+        quality: 7,
+        satiety: 6,
+      };
+      let profile: DailyGoalProfile | null = null;
+      try {
+        profile = await this.userProfileService.getProfile(userId);
+        goals = this.nutritionScoreService.calculateDailyGoals(profile);
+      } catch {
+        /* ignore */
+      }
+
+      // 加权平均质量分和饱腹分
+      const totalCal = totalCalories || 1;
+      const avgQuality =
+        records.reduce(
+          (s, r) => s + (Number(r.avgQuality) || 0) * r.totalCalories,
+          0,
+        ) / totalCal;
+      const avgSatiety =
+        records.reduce(
+          (s, r) => s + (Number(r.avgSatiety) || 0) * r.totalCalories,
+          0,
+        ) / totalCal;
+
+      // 计算真实评分（有记录时）
+      let nutritionScore = 0;
+      if (records.length > 0) {
+        try {
+          const goalType = profile?.goal || 'health';
+          const localHour = getUserLocalHour(tz);
+          const mealSignals = this.nutritionScoreService.aggregateMealSignals(
+            records,
+            Number((profile as any)?.mealsPerDay) || 3,
+          );
+          const scoreResult = this.nutritionScoreService.calculateScore(
+            {
+              calories: totalCalories,
+              targetCalories: goals.calories,
+              protein: totalProtein,
+              fat: totalFat,
+              carbs: totalCarbs,
+              foodQuality: avgQuality || 3,
+              satiety: avgSatiety || 3,
+            },
+            goalType,
+            undefined,
+            (profile as any)?.healthConditions || undefined,
+            localHour,
+            mealSignals,
+          );
+          nutritionScore = scoreResult.score;
+        } catch {
+          /* score calculation failed — keep 0 */
+        }
+      }
+
+      const remaining = Math.max(0, goals.calories - totalCalories);
+
       return {
         totalCalories,
-        calorieGoal: null,
+        calorieGoal: goals.calories,
         mealCount: records.length,
-        remaining: 0,
-        totalProtein: records.reduce(
-          (s, r) => s + (Number(r.totalProtein) || 0),
-          0,
-        ),
-        totalFat: records.reduce((s, r) => s + (Number(r.totalFat) || 0), 0),
-        totalCarbs: records.reduce(
-          (s, r) => s + (Number(r.totalCarbs) || 0),
-          0,
-        ),
-        avgQuality: 0,
-        avgSatiety: 0,
-        nutritionScore: 0,
-        proteinGoal: 0,
-        fatGoal: 0,
-        carbsGoal: 0,
+        remaining,
+        totalProtein,
+        totalFat,
+        totalCarbs,
+        avgQuality: Math.round(avgQuality * 10) / 10,
+        avgSatiety: Math.round(avgSatiety * 10) / 10,
+        nutritionScore,
+        proteinGoal: goals.protein,
+        fatGoal: goals.fat,
+        carbsGoal: goals.carbs,
       };
     }
 
@@ -240,6 +311,18 @@ export class DailySummaryService {
       fatGoal: goals.fat,
       carbsGoal: goals.carbs,
       calorieGoal: goals.calories,
+      // V8: 来源统计
+      sourceBreakdown: records.reduce(
+        (acc, r) => {
+          const src = (r as any).source || 'manual';
+          acc[src] = (acc[src] || 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>,
+      ),
+      recommendExecutionCount: records.filter(
+        (r) => (r as any).source === 'recommend',
+      ).length,
     };
 
     if (summary) {

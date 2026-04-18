@@ -60,7 +60,22 @@ export function useFoodAnalysis() {
       avgQuality?: number;
       avgSatiety?: number;
       nutritionScore?: number;
-    }) => foodRecordService.saveRecord(data),
+    }) =>
+      foodRecordService.createFoodLog({
+        foods: data.foods,
+        totalCalories: data.totalCalories,
+        mealType: data.mealType || 'lunch',
+        source: 'decision',
+        totalProtein: data.totalProtein,
+        totalFat: data.totalFat,
+        totalCarbs: data.totalCarbs,
+        avgQuality: data.avgQuality,
+        avgSatiety: data.avgSatiety,
+        nutritionScore: data.nutritionScore,
+        advice: data.advice,
+        isHealthy: data.isHealthy,
+        imageUrl: data.imageUrl,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['records'] });
       queryClient.invalidateQueries({ queryKey: ['summary'] });

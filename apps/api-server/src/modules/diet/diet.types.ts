@@ -100,4 +100,8 @@ export enum RecordSource {
   TEXT_ANALYSIS = 'text_analysis',
   /** V6.1: 图片分析后保存 */
   IMAGE_ANALYSIS = 'image_analysis',
+  /** V8: 来自推荐系统（用户点击"我吃了"） */
+  RECOMMEND = 'recommend',
+  /** V8: 来自分析决策确认（用户保存分析结果） */
+  DECISION = 'decision',
 }
