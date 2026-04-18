@@ -153,6 +153,7 @@ type RawAnalysisData = {
   // 轮询专用
   status?: 'processing' | 'completed' | 'failed';
   error?: string;
+  result?: RawAnalysisData;
 };
 
 // ─────────────────────────────────────────────
@@ -299,7 +300,11 @@ async function pollAnalyzeResult(requestId: string): Promise<AnalysisResult> {
       throw new Error(res.message || 'AI 分析失败');
     }
     const data = res.data as RawAnalysisData;
-    if (data.status === 'completed') return mapAnalysisData(data, requestId);
+    if (data.status === 'completed') {
+      // 新协议: data.result 为统一结构；兜底兼容历史混合响应
+      const payload = data.result ?? data;
+      return mapAnalysisData(payload, requestId);
+    }
     if (data.status === 'failed') throw new Error(data.error || 'AI 分析失败');
     await sleep(1500);
   }

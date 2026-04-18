@@ -271,20 +271,40 @@ export class StrategyService {
       STRATEGY_CACHE_TTL * 1000,
       async () => {
         const now = new Date();
-        return this.prisma.$queryRaw`
-          SELECT * FROM strategy_assignment
-          WHERE user_id = ${userId}
-          AND is_active = true
-          AND (active_from IS NULL OR active_from <= ${now})
-          AND (active_until IS NULL OR active_until >= ${now})
-          ORDER BY CASE assignment_type
-            WHEN 'manual' THEN 1
-            WHEN 'experiment' THEN 2
-            WHEN 'segment' THEN 3
-            ELSE 4
-          END ASC
-          LIMIT 1
-        `.then((rows: StrategyAssignmentEntity[]) => rows[0] || null);
+        const assignments = await this.prisma.strategyAssignment.findMany({
+          where: {
+            userId,
+            isActive: true,
+            AND: [
+              {
+                OR: [{ activeFrom: null }, { activeFrom: { lte: now } }],
+              },
+              {
+                OR: [{ activeUntil: null }, { activeUntil: { gte: now } }],
+              },
+            ],
+          },
+          orderBy: [{ createdAt: 'desc' }],
+        });
+
+        if (!assignments.length) return null;
+
+        const priority: Record<string, number> = {
+          manual: 1,
+          experiment: 2,
+          ab_test: 2,
+          segment: 3,
+          auto: 4,
+        };
+
+        assignments.sort((a, b) => {
+          const pa = priority[a.assignmentType] ?? 99;
+          const pb = priority[b.assignmentType] ?? 99;
+          if (pa !== pb) return pa - pb;
+          return b.createdAt.getTime() - a.createdAt.getTime();
+        });
+
+        return assignments[0] as unknown as StrategyAssignmentEntity;
       },
     );
   }

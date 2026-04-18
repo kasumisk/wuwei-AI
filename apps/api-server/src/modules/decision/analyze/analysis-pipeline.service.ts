@@ -421,9 +421,9 @@ export class AnalysisPipelineService {
       structuredDecision,
     });
 
-    // Step 7: 持久化（异步，不阻塞）
+    // Step 7: 持久化（先落库，再发事件，避免监听器读不到记录）
     if (input.userId) {
-      this.persistAsync(input, analysisId, result);
+      await this.persistRecord(input, analysisId, result);
     }
 
     // V3.5 P3.2: 附上下文分析和用户上下文到 result，供 CoachService 缓存后注入教练 prompt
@@ -531,19 +531,19 @@ export class AnalysisPipelineService {
   /**
    * Step 7: 异步持久化
    */
-  private persistAsync(
+  private async persistRecord(
     input: PipelineInput,
     analysisId: string,
     result: FoodAnalysisResultV61,
-  ): void {
+  ): Promise<void> {
     if (input.inputType === 'text') {
       const textInput = input as TextPipelineInput;
       const matchedCount = textInput.parsedFoodMeta.filter(
         (f) => f.fromLibrary,
       ).length;
 
-      this.persistence
-        .saveTextRecord({
+      try {
+        await this.persistence.saveTextRecord({
           analysisId,
           userId: textInput.userId!,
           rawText: textInput.rawText,
@@ -552,23 +552,23 @@ export class AnalysisPipelineService {
           parsedFoodMeta: textInput.parsedFoodMeta,
           matchedFoodCount: matchedCount,
           candidateFoodCount: textInput.parsedFoodMeta.length - matchedCount,
-        })
-        .catch((err) =>
-          this.logger.warn(`保存文本分析记录失败: ${(err as Error).message}`),
-        );
+        });
+      } catch (err) {
+        this.logger.warn(`保存文本分析记录失败: ${(err as Error).message}`);
+      }
     } else {
       const imageInput = input as ImagePipelineInput;
-      this.persistence
-        .saveImageRecord({
+      try {
+        await this.persistence.saveImageRecord({
           analysisId,
           userId: imageInput.userId,
           imageUrl: imageInput.imageUrl,
           mealType: imageInput.mealType,
           result,
-        })
-        .catch((err) =>
-          this.logger.warn(`保存图片分析记录失败: ${(err as Error).message}`),
-        );
+        });
+      } catch (err) {
+        this.logger.warn(`保存图片分析记录失败: ${(err as Error).message}`);
+      }
     }
   }
 

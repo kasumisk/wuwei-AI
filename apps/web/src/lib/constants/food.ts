@@ -92,6 +92,8 @@ export const SCORE_LABELS: Record<string, string> = {
   foodQuality: '食物品质',
   satiety: '饱腹感',
   stability: '稳定性',
+  glycemicImpact: '血糖影响',
+  mealQuality: '进餐质量',
 };
 
 // ── 评分工具函数 ──

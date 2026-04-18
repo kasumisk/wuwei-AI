@@ -159,7 +159,7 @@ export function DailyPlanCard({ dailyPlan }: DailyPlanCardProps) {
       totalCarbs?: number;
       avgQuality?: number;
       avgSatiety?: number;
-      source?: string;
+      source?: 'screenshot' | 'camera' | 'manual' | 'text_analysis' | 'image_analysis';
     }) => foodRecordService.saveRecord(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['records'] });

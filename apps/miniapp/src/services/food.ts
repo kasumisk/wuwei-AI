@@ -55,7 +55,22 @@ export async function analyzeImage(filePath: string, mealType: string): Promise<
       requestId: string;
       status: string;
       error?: string;
-      // completed 时返回的旧格式字段
+      // completed 时统一返回 result（兼容一次旧格式兜底）
+      result?: {
+        foods?: Array<{
+          name?: string;
+          calories?: number;
+          quantity?: string;
+          category?: string;
+          protein?: number;
+          fat?: number;
+          carbs?: number;
+        }>;
+        totals?: { calories?: number };
+        explanation?: { summary?: string };
+        decision?: { shouldEat?: boolean };
+        inputSnapshot?: { imageUrl?: string };
+      };
       foods?: AnalysisResult['foods'];
       totalCalories?: number;
       advice?: string;
@@ -64,6 +79,26 @@ export async function analyzeImage(filePath: string, mealType: string): Promise<
     }>(`/app/food/analyze/${requestId}`);
 
     if (pollResult.status === 'completed') {
+      const result = pollResult.result;
+      if (result) {
+        return {
+          foods: (result.foods || []).map((food) => ({
+            name: food.name || '未识别食物',
+            calories: Number(food.calories || 0),
+            quantity: food.quantity,
+            category: food.category,
+            protein: food.protein,
+            fat: food.fat,
+            carbs: food.carbs,
+          })),
+          totalCalories: Number(result.totals?.calories || 0),
+          advice: result.explanation?.summary,
+          isHealthy: result.decision?.shouldEat,
+          imageUrl: result.inputSnapshot?.imageUrl || imageUrl,
+        };
+      }
+
+      // 旧格式兜底
       return {
         foods: pollResult.foods || [],
         totalCalories: pollResult.totalCalories || 0,

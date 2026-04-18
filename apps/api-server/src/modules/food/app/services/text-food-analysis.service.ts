@@ -504,6 +504,14 @@ export class TextFoodAnalysisService {
       for (const item of unmatchedTerms) {
         const key = this.normalizeFoodKey(item.foodName);
         if (coveredKeys.has(key)) continue;
+        if (
+          this.isSemanticallyCoveredByResolvedFoods(
+            item.foodName,
+            results.map((r) => r.name),
+          )
+        ) {
+          continue;
+        }
 
         results.push(
           this.buildHeuristicFallbackFood(item.foodName, item.quantity),
@@ -930,6 +938,41 @@ export class TextFoodAnalysisService {
     return (name || '')
       .toLowerCase()
       .replace(/[\s()（）[\]{}.,，;；:/\\+＋|｜&＆_-]/g, '')
+      .trim();
+  }
+
+  /**
+   * 语义层去重：当未命中词条与已解析食物是同一语义（仅描述不同）时，跳过启发式保底项。
+   * 例如："外卖黄焖鸡" 与 "黄焖鸡米饭"。
+   */
+  private isSemanticallyCoveredByResolvedFoods(
+    foodName: string,
+    resolvedNames: string[],
+  ): boolean {
+    const base = this.normalizeFoodKey(this.stripFoodNameDecorators(foodName));
+    if (!base) return false;
+
+    for (const resolvedName of resolvedNames) {
+      const resolved = this.normalizeFoodKey(
+        this.stripFoodNameDecorators(resolvedName),
+      );
+      if (!resolved) continue;
+
+      if (resolved === base) return true;
+      if (resolved.includes(base) || base.includes(resolved)) return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * 去掉不改变核心食物语义的描述词，提升回退去重的鲁棒性。
+   */
+  private stripFoodNameDecorators(name: string): string {
+    return (name || '')
+      .trim()
+      .replace(/^(外卖|商家|店里|套餐|加料|加购|打包)/, '')
+      .replace(/(外卖|商家|套餐|打包)$/, '')
       .trim();
   }
 

@@ -42,6 +42,31 @@ type ResultQuality = {
   tips: string[];
 };
 
+const BREAKDOWN_DIMENSION_LABELS: Record<string, string> = {
+  energy: '热量',
+  proteinRatio: '蛋白质比例',
+  macroBalance: '三大营养素均衡',
+  foodQuality: '食物质量',
+  satiety: '饱腹感',
+  stability: '稳定性',
+  glycemicImpact: '血糖影响',
+  mealQuality: '进餐质量',
+};
+
+function normalizeToPercent(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  // 兼容 0-1 比例和 0-100 百分比两种返回格式
+  const pct = n <= 1 ? n * 100 : n;
+  return Math.max(0, Math.min(Math.round(pct), 100));
+}
+
+function normalizeScore(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(Math.round(n), 100));
+}
+
 function buildCoachPromptFromAnalysis(params: {
   mealLabel: string;
   foodNames: string;
@@ -390,7 +415,7 @@ export function AnalyzePage() {
       } catch {
         /* ignore snapshot errors */
       }
-      let savedResult: any;
+      let savedResult: { id?: string } | null = null;
       if (result.requestId) {
         savedResult = await saveAnalysis({
           analysisId: result.requestId,
@@ -423,7 +448,7 @@ export function AnalyzePage() {
         });
       }
       // 提取 recordId（用于反馈组件）
-      const recordId = savedResult?.id || savedResult?.data?.id || null;
+      const recordId = savedResult?.id || null;
       if (recordId) setSavedRecordId(recordId);
       setStep('saved');
       sessionStorage.removeItem('analyze_text_draft');
@@ -990,7 +1015,7 @@ export function AnalyzePage() {
                 <h3 className="text-sm font-bold">餐后今日完成率</h3>
                 <div className="space-y-2">
                   {Object.entries(result.completionRatio).map(([key, ratio]) => {
-                    const pct = Math.min(Math.round(Number(ratio) * 100), 100);
+                    const pct = normalizeToPercent(ratio);
                     const labels: Record<string, string> = {
                       calories: '热量',
                       protein: '蛋白质',
@@ -1104,10 +1129,12 @@ export function AnalyzePage() {
                   {result.breakdownExplanations.map((b, i) => (
                     <div key={i} className="flex items-start gap-3">
                       <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0 text-xs font-bold text-foreground">
-                        {b.score}
+                        {normalizeScore(b.score)}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold">{b.dimension}</p>
+                        <p className="text-xs font-bold">
+                          {b.label || BREAKDOWN_DIMENSION_LABELS[b.dimension || ''] || b.dimension}
+                        </p>
                         <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">
                           {b.message || b.label}
                         </p>
@@ -1144,7 +1171,7 @@ export function AnalyzePage() {
                         {i + 1}
                       </div>
                       {i < result.decisionChain!.length - 1 && (
-                        <div className="absolute left-[7px] top-5 w-px h-full bg-border" />
+                        <div className="absolute left-1.75 top-5 w-px h-full bg-border" />
                       )}
                       <p className="text-xs font-bold">{chain.step}</p>
                       <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">

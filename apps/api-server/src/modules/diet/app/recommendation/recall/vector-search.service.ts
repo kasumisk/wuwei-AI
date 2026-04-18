@@ -320,9 +320,9 @@ export class VectorSearchService implements OnModuleInit {
              f.fat,
              f.carbs,
              f.fiber,
-             1 - (f.embedding_v5 <=> (SELECT embedding_v5 FROM "foods" WHERE id = $1)) AS similarity
+             1 - (f.embedding_v5 <=> (SELECT embedding_v5 FROM "foods" WHERE id = $1::uuid)) AS similarity
       FROM "foods" f
-      WHERE f.id != $1
+      WHERE f.id != $1::uuid
         AND f.embedding_v5 IS NOT NULL
     `;
     const params: any[] = [foodId];
@@ -334,7 +334,7 @@ export class VectorSearchService implements OnModuleInit {
       paramIdx++;
     }
 
-    sql += ` ORDER BY f.embedding_v5 <=> (SELECT embedding_v5 FROM "foods" WHERE id = $1) LIMIT $${paramIdx}`;
+    sql += ` ORDER BY f.embedding_v5 <=> (SELECT embedding_v5 FROM "foods" WHERE id = $1::uuid) LIMIT $${paramIdx}`;
     params.push(fetchLimit);
 
     const rows: Array<{

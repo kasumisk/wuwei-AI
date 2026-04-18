@@ -810,8 +810,7 @@ export class FoodAnalyzeController {
       );
     }
 
-    // V6.1 Phase 2.5: completed — 将旧格式转为 V61 并按订阅裁剪
-    const imageAnalysisService = this.analyzeService.getImageAnalysisService();
+    // V6.1 Phase 2.5: completed — 将队列结果转为统一结构并按订阅裁剪
 
     // 获取用户订阅信息
     const userSummary = await this.subscriptionService.getUserSummary(user.id);
@@ -820,7 +819,7 @@ export class FoodAnalyzeController {
     const rawData = entry.data;
     if (!rawData) {
       return ResponseWrapper.success(
-        { requestId, status: 'completed' },
+        { requestId, status: 'completed', result: null },
         '分析完成',
       );
     }
@@ -907,10 +906,8 @@ export class FoodAnalyzeController {
       {
         requestId,
         status: 'completed',
-        // 保留旧格式字段以兼容现有客户端
-        ...rawData,
-        // V6.1: 附加统一结构的裁剪信息和评分
-        v61: trimmedResult,
+        // 统一返回结构，客户端只消费 result
+        result: trimmedResult,
       },
       '分析完成',
     );

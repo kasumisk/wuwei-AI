@@ -251,7 +251,7 @@ export class CandidateAggregationService {
     // Step 1: 名称层候选搜索（精确名 + 别名 ILIKE）
     const nameMatches: any[] = await this.prisma.$queryRawUnsafe(
       `SELECT * FROM food_candidate
-       WHERE id != $1
+       WHERE id != $1::uuid
          AND review_status = $2
          AND (LOWER(canonical_name) = $3 OR aliases @> $4::jsonb)`,
       candidate.id,

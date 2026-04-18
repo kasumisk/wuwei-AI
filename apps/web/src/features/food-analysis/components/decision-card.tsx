@@ -150,14 +150,14 @@ export function DecisionCard({ result, recordId, onAnalyzeAlternative }: Decisio
               />
             </div>
 
-            {/* 六维评分折叠 */}
+            {/* 多维评分折叠 */}
             {hasBreakdown && (
               <>
                 <button
                   onClick={() => setShowBreakdown((v) => !v)}
                   className="w-full flex items-center justify-between text-xs text-muted-foreground hover:text-foreground transition-colors pt-1"
                 >
-                  <span>{showBreakdown ? '收起详情' : '查看六维评分详情'}</span>
+                  <span>{showBreakdown ? '收起详情' : '查看评分详情'}</span>
                   <span
                     className={`transition-transform duration-200 ${showBreakdown ? 'rotate-90' : ''}`}
                   >
