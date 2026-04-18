@@ -38,33 +38,50 @@ const STICKINESS_CACHE_TTL_MS = 5 * 60 * 1000; // 5分钟
 /** 粘性缓存最大条目数（防止内存泄漏） */
 const STICKINESS_CACHE_MAX_SIZE = 500;
 
+interface SuggestionFoodItem {
+  foodId: string;
+  name: string;
+  servingDesc: string;
+  calories: number;
+  protein: number;
+  fat: number;
+  carbs: number;
+  category: string;
+}
+
+interface MealSuggestionScenario {
+  scenario: string;
+  foods: string;
+  foodItems?: SuggestionFoodItem[];
+  calories: number;
+  tip: string;
+  totalProtein?: number;
+  totalFat?: number;
+  totalCarbs?: number;
+}
+
+interface MealSuggestionResponse {
+  mealType: string;
+  remainingCalories: number;
+  suggestion: {
+    foods: string;
+    foodItems?: SuggestionFoodItem[];
+    calories: number;
+    tip: string;
+    totalProtein?: number;
+    totalFat?: number;
+    totalCarbs?: number;
+  };
+  decisionValueTags?: DecisionValueTag[];
+  scenarios?: MealSuggestionScenario[];
+}
+
 /** 粘性缓存条目 */
 interface StickinessCacheEntry {
   /** 缓存键 */
   key: string;
   /** 缓存结果 */
-  result: {
-    mealType: string;
-    remainingCalories: number;
-    suggestion: {
-      foods: string;
-      calories: number;
-      tip: string;
-      totalProtein?: number;
-      totalFat?: number;
-      totalCarbs?: number;
-    };
-    decisionValueTags?: DecisionValueTag[];
-    scenarios?: Array<{
-      scenario: string;
-      foods: string;
-      calories: number;
-      tip: string;
-      totalProtein?: number;
-      totalFat?: number;
-      totalCarbs?: number;
-    }>;
-  };
+  result: MealSuggestionResponse;
   /** 写入时间戳 */
   createdAt: number;
   /** 用户当时的已摄入热量（用于判断是否失效） */
@@ -174,28 +191,7 @@ export class FoodService {
   async getMealSuggestion(
     userId: string,
     forceRefresh = false,
-  ): Promise<{
-    mealType: string;
-    remainingCalories: number;
-    suggestion: {
-      foods: string;
-      calories: number;
-      tip: string;
-      totalProtein?: number;
-      totalFat?: number;
-      totalCarbs?: number;
-    };
-    decisionValueTags?: DecisionValueTag[];
-    scenarios?: Array<{
-      scenario: string;
-      foods: string;
-      calories: number;
-      tip: string;
-      totalProtein?: number;
-      totalFat?: number;
-      totalCarbs?: number;
-    }>;
-  }> {
+  ): Promise<MealSuggestionResponse> {
     const [summary, profile] = await Promise.all([
       this.getTodaySummary(userId),
       this.userProfileService.getProfile(userId),
@@ -275,11 +271,23 @@ export class FoodService {
               displayText?: string;
               totalCalories?: number;
               tip?: string;
+              totalProtein?: number;
+              totalFat?: number;
+              totalCarbs?: number;
+              foods?: Array<{
+                food?: {
+                  id?: string;
+                  name?: string;
+                  category?: string;
+                  standardServingDesc?: string;
+                };
+                servingCalories?: number;
+                servingProtein?: number;
+                servingFat?: number;
+                servingCarbs?: number;
+              }>;
             };
             const scenarioCalories = r.totalCalories || 0;
-            // #fix R3-04: 场景推荐热量低于单餐推荐热量50%时追加热量偏低提示
-            // 预计算路径下 budget 变量不可用，从 mainRec.totalCalories 估算单餐基准
-            // 注意：meal-assembler 可能已在 r.tip 中添加了 caloriesUnder，避免重复追加
             const scenarioMealBudget = mainRec.totalCalories || 0;
             let scenarioTip = r.tip || '';
             if (
@@ -297,11 +305,12 @@ export class FoodService {
             return {
               scenario: scenarioLabels[key] || key,
               foods: r.displayText || '',
+              foodItems: this.toSuggestionFoodItems(r.foods),
               calories: scenarioCalories,
               tip: scenarioTip,
-              totalProtein: (r as { totalProtein?: number }).totalProtein,
-              totalFat: (r as { totalFat?: number }).totalFat,
-              totalCarbs: (r as { totalCarbs?: number }).totalCarbs,
+              totalProtein: r.totalProtein,
+              totalFat: r.totalFat,
+              totalCarbs: r.totalCarbs,
             };
           })
         : undefined;
@@ -327,6 +336,7 @@ export class FoodService {
         remainingCalories: remaining,
         suggestion: {
           foods: mainRec.displayText,
+          foodItems: this.toSuggestionFoodItems(mainRec.foods),
           calories: mainRec.totalCalories,
           tip: mainRec.tip,
           totalProtein: mainRec.totalProtein,
@@ -443,6 +453,7 @@ export class FoodService {
       return {
         scenario: scenarioLabels[key] || key,
         foods: rec.displayText,
+        foodItems: this.toSuggestionFoodItems(rec.foods),
         calories: scenarioCalories,
         tip: scenarioTip,
         totalProtein: rec.totalProtein,
@@ -468,6 +479,7 @@ export class FoodService {
       remainingCalories: remaining,
       suggestion: {
         foods: mainRec.displayText,
+        foodItems: this.toSuggestionFoodItems(mainRec.foods),
         calories: mainRec.totalCalories,
         tip: mainRec.tip,
         totalProtein: mainRec.totalProtein,
@@ -482,6 +494,40 @@ export class FoodService {
     this.setToStickinessCache(cacheKey, result, summary.totalCalories || 0);
 
     return result;
+  }
+
+  private toSuggestionFoodItems(
+    picks?: Array<{
+      food?: {
+        id?: string;
+        name?: string;
+        category?: string;
+        standardServingDesc?: string;
+      };
+      servingCalories?: number;
+      servingProtein?: number;
+      servingFat?: number;
+      servingCarbs?: number;
+    }>,
+  ): SuggestionFoodItem[] | undefined {
+    if (!Array.isArray(picks) || picks.length === 0) {
+      return undefined;
+    }
+
+    const items = picks
+      .map((pick) => ({
+        foodId: pick.food?.id || '',
+        name: pick.food?.name || '',
+        servingDesc: pick.food?.standardServingDesc || '',
+        calories: Math.round(Number(pick.servingCalories) || 0),
+        protein: Math.round(Number(pick.servingProtein) || 0),
+        fat: Math.round(Number(pick.servingFat) || 0),
+        carbs: Math.round(Number(pick.servingCarbs) || 0),
+        category: pick.food?.category || '',
+      }))
+      .filter((item) => !!item.name);
+
+    return items.length > 0 ? items : undefined;
   }
 
   // ─── V7.9 Phase 3-1: 粘性缓存工具方法 ───

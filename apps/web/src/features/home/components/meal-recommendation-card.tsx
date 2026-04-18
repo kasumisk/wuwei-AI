@@ -144,6 +144,7 @@ export function MealRecommendationCard({
       return s
         ? {
             foods: s.foods,
+            foodItems: s.foodItems,
             calories: s.calories,
             tip: s.tip,
             scenarioLabel: s.scenario,
@@ -180,18 +181,6 @@ export function MealRecommendationCard({
     if (isLoggingEaten || isCurrentEaten || !currentContent) return;
     setIsLoggingEaten(true);
     try {
-      // 拆解食物文本为多个 FoodItem（格式：A + B + C 或 A、B、C）
-      const foodNames = currentContent.foods
-        .split(/[+，、]/)
-        .map((s) => s.trim())
-        .filter(Boolean);
-      const perCalories = Math.round(currentContent.calories / Math.max(foodNames.length, 1));
-      const foods = foodNames.map((name) => ({ name, calories: perCalories }));
-
-      // 场景上下文备注（外卖/便利店/自己做等）
-      const contextComment = currentContent.scenarioLabel
-        ? `推荐场景：${currentContent.scenarioLabel}`
-        : '来自推荐';
       // 优先使用真实宏量，无真实值时降级估算
       const macroEstimate = estimateMacrosFromCalories(currentContent.calories, profile?.goal);
       const protein = currentContent.totalProtein ?? macroEstimate.protein;
@@ -201,7 +190,7 @@ export function MealRecommendationCard({
       // 并行：保存记录 + 提交反馈（反馈失败不阻断）
       await Promise.all([
         foodRecordService.createFoodLog({
-          foods,
+          foods: currentContent.foodItems,
           totalCalories: currentContent.calories,
           totalProtein: protein,
           totalFat: fat,

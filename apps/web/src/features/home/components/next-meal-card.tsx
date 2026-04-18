@@ -54,6 +54,7 @@ export function NextMealCard({ suggestion, summary: _summary, profile }: NextMea
     return s
       ? {
           foods: s.foods,
+          foodItems: s.foodItems,
           calories: s.calories,
           tip: s.tip,
           totalProtein: s.totalProtein,
@@ -77,11 +78,7 @@ export function NextMealCard({ suggestion, summary: _summary, profile }: NextMea
     if (isLogging || eaten || !content) return;
     setIsLogging(true);
     try {
-      const foodNames = content.foods
-        .split(/[+，、]/)
-        .map((s) => s.trim())
-        .filter(Boolean);
-      const perCal = Math.round(content.calories / Math.max(foodNames.length, 1));
+     
       // 优先使用真实宏量，无真实值时降级估算
       const macroFallback = estimateMacros(content.calories, profile?.goal);
       const macros = {
@@ -91,7 +88,7 @@ export function NextMealCard({ suggestion, summary: _summary, profile }: NextMea
       };
       await Promise.all([
         foodRecordService.createFoodLog({
-          foods: foodNames.map((name) => ({ name, calories: perCal })),
+          foods: content.foodItems,
           totalCalories: content.calories,
           ...macros,
           mealType: suggestion.mealType,

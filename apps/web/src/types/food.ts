@@ -261,6 +261,7 @@ export interface DailySummaryRecord {
 export interface MealScenario {
   scenario: string;
   foods: string;
+  foodItems: FoodItem[];
   calories: number;
   tip: string;
   totalProtein?: number;
@@ -273,6 +274,7 @@ export interface MealSuggestion {
   remainingCalories: number;
   suggestion: {
     foods: string;
+    foodItems: FoodItem[];
     calories: number;
     tip: string;
     totalProtein?: number;
