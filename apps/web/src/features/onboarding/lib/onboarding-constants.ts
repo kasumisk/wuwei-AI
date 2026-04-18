@@ -200,3 +200,25 @@ export const STEP4_DEFAULTS = {
   canCook: true,
   healthConditions: [] as string[],
 };
+
+/** 3.6: 目标速度选项（仅 fat_loss / muscle_gain 时显示） */
+export const GOAL_SPEED_OPTIONS = [
+  {
+    key: 'slow' as const,
+    label: '慢速',
+    emoji: '🐢',
+    desc: '每周 ~0.25 kg，轻松可持续',
+  },
+  {
+    key: 'normal' as const,
+    label: '标准',
+    emoji: '🚶',
+    desc: '每周 ~0.5 kg，平衡推荐',
+  },
+  {
+    key: 'fast' as const,
+    label: '激进',
+    emoji: '🏃',
+    desc: '每周 ~1 kg，需严格执行',
+  },
+] as const;

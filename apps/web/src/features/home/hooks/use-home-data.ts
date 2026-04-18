@@ -65,6 +65,9 @@ export function useHomeData() {
       summaryQuery.isLoading ||
       recordsQuery.isLoading ||
       profileQuery.isLoading ||
-      nutritionScoreQuery.isLoading,
+      nutritionScoreQuery.isLoading ||
+      suggestionQuery.isLoading ||
+      reminderQuery.isLoading ||
+      recentSummariesQuery.isLoading,
   };
 }

@@ -1,7 +1,11 @@
 'use client';
 
 import type { StepBodyGoalData } from '../types';
-import { GOAL_OPTIONS, ACTIVITY_LEVEL_OPTIONS } from '../lib/onboarding-constants';
+import {
+  GOAL_OPTIONS,
+  ACTIVITY_LEVEL_OPTIONS,
+  GOAL_SPEED_OPTIONS,
+} from '../lib/onboarding-constants';
 import { SliderInput } from './shared/slider-input';
 import { GoalCards } from './shared/goal-cards';
 import { ActivityLevelPicker } from './shared/activity-level-picker';
@@ -13,6 +17,7 @@ interface StepBodyGoalProps {
 
 export function StepBodyGoal({ data, onChange }: StepBodyGoalProps) {
   const showTargetWeight = data.goal === 'fat_loss' || data.goal === 'muscle_gain';
+  const showGoalSpeed = data.goal === 'fat_loss' || data.goal === 'muscle_gain';
 
   return (
     <div className="space-y-8">
@@ -61,6 +66,38 @@ export function StepBodyGoal({ data, onChange }: StepBodyGoalProps) {
             unit="kg"
             placeholder="拖动选择目标体重"
           />
+        )}
+
+        {/* 3.6: goalSpeed 选择块 */}
+        {showGoalSpeed && (
+          <div>
+            <p className="text-sm font-bold text-foreground mb-3">⚡ 目标速度</p>
+            <div className="grid grid-cols-3 gap-2">
+              {GOAL_SPEED_OPTIONS.map(({ key, label, emoji, desc }) => {
+                const isSelected = (data.goalSpeed ?? 'normal') === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => onChange({ goalSpeed: key })}
+                    className={`flex flex-col items-center py-4 px-2 rounded-2xl text-center transition-all space-y-1 ${
+                      isSelected
+                        ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
+                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                    }`}
+                  >
+                    <span className="text-2xl leading-none">{emoji}</span>
+                    <span className="text-sm font-bold">{label}</span>
+                    <span
+                      className={`text-[10px] leading-tight ${isSelected ? 'text-primary-foreground/80' : 'opacity-60'}`}
+                    >
+                      {desc}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         )}
 
         <div>

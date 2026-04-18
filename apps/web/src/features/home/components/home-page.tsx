@@ -1,42 +1,25 @@
 'use client';
 
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { useHomeData } from '@/features/home/hooks/use-home-data';
+import { useDismissStore } from '@/store';
 import { LocalizedLink } from '@/components/common/localized-link';
-import { ProactiveReminderCard } from './proactive-reminder';
-import { TodayStatus } from './today-status';
-import { MealRecordCard } from './meal-record-card';
-import { MealRecommendationCard } from './meal-recommendation-card';
-import { GoalTransitionCard } from './goal-transition-card';
-import { NutritionScoreCard } from './nutrition-score-card';
-import { WeeklyTrendCard } from './weekly-trend-card';
-import { QuickActionBar } from './quick-action-bar';
-import { FrequentFoodSheet } from './frequent-food-sheet';
-import { ProfileCollectionCard } from './profile-collection-card';
-import { CompletionPrompt } from '@/features/profile/components/completion-prompt';
 import { useUnreadCount } from '@/features/notification/hooks/use-notifications';
 import Image from 'next/image';
-import type { FoodRecord } from '@/types/food';
 
-/* ─── SVG Icon Components ─── */
-function IconCamera({ className = '' }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
-      <path d="M3 4V1h2v3h3v2H5v3H3V6H0V4h3zm3 6V7h3V4h7l1.83 2H21c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H5c-1.1 0-2-.9-2-2V10h3zm7 9c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-3.2-5c0 1.77 1.43 3.2 3.2 3.2s3.2-1.43 3.2-3.2-1.43-3.2-3.2-3.2-3.2 1.43-3.2 3.2z" />
-    </svg>
-  );
-}
+/* ── new Phase-2 components ── */
+import { HeroBudgetCard } from './hero-budget-card';
+import { NutritionScoreCompact } from './nutrition-score-compact';
+import { WeeklyTrendMini } from './weekly-trend-mini';
+import { SmartPromptSlot } from './smart-prompt-slot';
+import { NextMealCard } from './next-meal-card';
+import { TodayMealList } from './today-meal-list';
+import { QuickActionBar } from './quick-action-bar';
+import { FrequentFoodPicker } from './frequent-food-picker';
+import { useState } from 'react';
 
-function IconSearch({ className = '' }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
-      <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
-    </svg>
-  );
-}
-
+/* ─── SVG Icons ─── */
 function IconPerson({ className = '' }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
@@ -66,11 +49,17 @@ export function HomePage() {
     nutritionScore,
     isLoading,
   } = useHomeData();
-  const [dismissedReminder, setDismissedReminder] = useState(false);
-  const [dismissedCompletion, setDismissedCompletion] = useState(false);
-  const [dismissedGoalTransition, setDismissedGoalTransition] = useState(false);
-  const [dismissedCollectionCard, setDismissedCollectionCard] = useState(false);
-  const [frequentSheetOpen, setFrequentSheetOpen] = useState(false);
+
+  const dismissedReminder = useDismissStore((s) => s.dismissedReminder);
+  const setDismissedReminder = useDismissStore((s) => s.setDismissedReminder);
+  const dismissedCompletion = useDismissStore((s) => s.dismissedCompletion);
+  const setDismissedCompletion = useDismissStore((s) => s.setDismissedCompletion);
+  const dismissedGoalTransition = useDismissStore((s) => s.dismissedGoalTransition);
+  const setDismissedGoalTransition = useDismissStore((s) => s.setDismissedGoalTransition);
+  const dismissedCollectionCard = useDismissStore((s) => s.dismissedCollectionCard);
+  const setDismissedCollectionCard = useDismissStore((s) => s.setDismissedCollectionCard);
+
+  const [frequentOpen, setFrequentOpen] = useState(false);
   const { data: unreadData } = useUnreadCount(isLoggedIn);
   const unreadCount = unreadData?.unreadCount ?? 0;
 
@@ -104,7 +93,6 @@ export function HomePage() {
             </h1>
           </div>
           <div className="flex items-center gap-1">
-            {/* 通知铃铛 */}
             <LocalizedLink
               href="/notifications"
               className="w-10 h-10 flex items-center justify-center rounded-full hover:opacity-80 transition-opacity active:scale-95 duration-200 text-primary relative"
@@ -119,7 +107,6 @@ export function HomePage() {
                 </span>
               )}
             </LocalizedLink>
-            {/* 设置/个人 */}
             <LocalizedLink
               href="/profile"
               className="w-10 h-10 flex items-center justify-center rounded-full hover:opacity-80 transition-opacity active:scale-95 duration-200 text-primary"
@@ -132,129 +119,76 @@ export function HomePage() {
       </nav>
 
       <main className="pt-24 pb-32 px-6 max-w-lg mx-auto">
-        {/* Loading 骨架屏 */}
+        {/* Loading skeleton */}
         {isLoading && (
           <div className="space-y-4 animate-pulse">
-            {/* 今日状态骨架 */}
             <div className="bg-card rounded-2xl p-5 space-y-3">
               <div className="h-4 w-24 bg-muted rounded" />
-              <div className="h-8 w-32 bg-muted rounded" />
-              <div className="flex gap-3">
-                <div className="h-3 w-16 bg-muted rounded" />
-                <div className="h-3 w-16 bg-muted rounded" />
+              <div className="h-10 w-36 bg-muted rounded" />
+              <div className="h-2 w-full bg-muted rounded-full" />
+              <div className="space-y-2 pt-2">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-3 bg-muted rounded" />
+                ))}
               </div>
             </div>
-            {/* 按钮区域骨架 */}
             <div className="grid grid-cols-2 gap-4">
               <div className="h-24 bg-muted rounded-2xl" />
               <div className="h-24 bg-muted rounded-2xl" />
             </div>
-            {/* 记录列表骨架 */}
             <div className="space-y-3">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="bg-card rounded-xl p-4 space-y-2">
-                  <div className="h-4 w-20 bg-muted rounded" />
-                  <div className="h-3 w-full bg-muted rounded" />
-                  <div className="h-3 w-2/3 bg-muted rounded" />
-                </div>
+                <div key={i} className="bg-card rounded-xl p-4 h-16 bg-muted" />
               ))}
             </div>
           </div>
         )}
 
-        {/* 正常内容 */}
+        {/* Main content */}
         {!isLoading && (
           <>
-            {/* 今日状态 */}
-            <TodayStatus summary={summary} profile={profile} scoreData={nutritionScore} />
+            {/* 1. Hero: calorie budget + macro progress */}
+            <HeroBudgetCard summary={summary} profile={profile} scoreData={nutritionScore} />
 
-            {/* 今日营养评分 */}
-            <NutritionScoreCard scoreData={nutritionScore} />
+            {/* 2. Compact nutrition score */}
+            <NutritionScoreCompact scoreData={nutritionScore} />
 
-            {/* 近7天趋势 */}
-            <WeeklyTrendCard summaries={recentSummaries} />
+            {/* 3. Mini weekly trend */}
+            <WeeklyTrendMini summaries={recentSummaries} />
 
-            {/* 档案完善提醒 */}
-            {!dismissedCompletion && (
-              <CompletionPrompt onDismiss={() => setDismissedCompletion(true)} />
-            )}
-
-            {/* 画像收集引导（非侵入式） */}
-            {!dismissedCollectionCard && (
-              <ProfileCollectionCard onDismiss={() => setDismissedCollectionCard(true)} />
-            )}
-
-            {/* AI 目标迁移建议 */}
-            {!dismissedGoalTransition && (
-              <GoalTransitionCard onDismiss={() => setDismissedGoalTransition(true)} />
-            )}
-
-            {/* 快速记录入口：4入口操作栏 */}
-            <QuickActionBar onFrequentClick={() => setFrequentSheetOpen(true)} />
-
-            {/* 常吃食物底部Sheet */}
-            <FrequentFoodSheet
-              open={frequentSheetOpen}
-              onClose={() => setFrequentSheetOpen(false)}
+            {/* 4. Single smart prompt (reminder > completion > goalTransition > collection) */}
+            <SmartPromptSlot
+              reminder={reminder}
+              showReminder={!dismissedReminder}
+              onDismissReminder={() => setDismissedReminder(true)}
+              showCompletion={!dismissedCompletion}
+              onDismissCompletion={() => setDismissedCompletion(true)}
+              showGoalTransition={!dismissedGoalTransition}
+              onDismissGoalTransition={() => setDismissedGoalTransition(true)}
+              showCollectionCard={!dismissedCollectionCard}
+              onDismissCollectionCard={() => setDismissedCollectionCard(true)}
             />
 
-            {/* V3: 主动提醒 */}
-            {reminder && !dismissedReminder && (
-              <section className="mb-6">
-                <ProactiveReminderCard
-                  reminder={reminder}
-                  onDismiss={() => setDismissedReminder(true)}
-                />
-              </section>
-            )}
+            {/* 5. Quick record bar */}
+            <QuickActionBar onFrequentClick={() => setFrequentOpen(true)} />
 
-            {/* 下一餐建议（完整版：场景切换 + 反馈 + 推荐原因） */}
-            {mealSuggestion && mealSuggestion.suggestion && summary && (
-              <MealRecommendationCard
+            {/* 6. Frequent food picker sheet */}
+            <FrequentFoodPicker open={frequentOpen} onClose={() => setFrequentOpen(false)} />
+
+            {/* 7. Next meal card (compact, no tab) */}
+            {mealSuggestion?.suggestion && (
+              <NextMealCard
                 suggestion={mealSuggestion}
                 summary={summary}
                 profile={profile ?? null}
               />
             )}
 
-            {/* 今日记录 */}
-            <MealList meals={meals} />
+            {/* 8. Today meal list */}
+            <TodayMealList meals={meals} defaultVisible={3} />
           </>
         )}
       </main>
     </div>
-  );
-}
-
-/* ─── Sub-components ─── */
-
-function MealList({ meals }: { meals: FoodRecord[] }) {
-  return (
-    <section className="mb-8">
-      <div className="flex items-center justify-between mb-4 px-1">
-        <h3 className="text-lg font-headline font-bold">今日记录</h3>
-        <LocalizedLink
-          href="/history"
-          className="text-xs text-primary font-medium flex items-center gap-0.5 hover:opacity-80"
-        >
-          全部历史
-          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-        </LocalizedLink>
-      </div>
-      <div className="space-y-3">
-        {meals.map((meal) => (
-          <MealRecordCard key={meal.id} meal={meal} />
-        ))}
-      </div>
-
-      {meals.length === 0 && (
-        <div className="text-center py-12 text-muted-foreground">
-          <p className="text-sm">还没有今日记录</p>
-          <p className="text-xs mt-1">拍照或输入文字描述开始记录吧</p>
-        </div>
-      )}
-    </section>
   );
 }

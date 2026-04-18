@@ -340,7 +340,11 @@
       },
       "error": {
         "title": "⚠️ エラーハンドリング",
-        "items": ["統一エラー型（APIError）", "詳細なエラーメッセージ", "設定可能なエラー通知"]
+        "items": [
+          "統一エラー型（APIError）",
+          "詳細なエラーメッセージ",
+          "設定可能なエラー通知"
+        ]
       },
       "types": {
         "title": "📝 型安全性",
@@ -360,7 +364,11 @@
       },
       "logging": {
         "title": "📊 ログ",
-        "items": ["リクエストログ", "エラーログ", "開発/本番環境の分離"]
+        "items": [
+          "リクエストログ",
+          "エラーログ",
+          "開発/本番環境の分離"
+        ]
       }
     },
     "docs": {
@@ -1028,5 +1036,55 @@
       "heightPlaceholder": "自動",
       "maintainRatio": "アスペクト比を維持"
     }
+  },
+  "food": {
+    "decision": {
+      "safe": "おすすめ",
+      "limit": "適量で",
+      "avoid": "避けること推奨",
+      "riskLow": "低リスク",
+      "riskMedium": "中リスク",
+      "riskHigh": "高リスク",
+      "nutritionScore": "栄養スコア",
+      "macroDistribution": "マクロ栄養素",
+      "alternatives": "代替案",
+      "analyzeThis": "分析する",
+      "details": "詳細",
+      "whyNotRecommended": "なぜ非推奨?",
+      "scrollHint": "左右にスワイプ"
+    },
+    "saved": {
+      "recorded": "記録済み",
+      "todayBudgetUpdated": "今日の予算を更新",
+      "remaining": "kcal 残り",
+      "thisMealAdded": "この食事の影響",
+      "continueLogging": "続けて記録",
+      "viewPlan": "プランを見る",
+      "goHome": "ホームへ"
+    }
+  },
+  "plan": {
+    "weeklyPlanPremium": "週間プランはPremium限定",
+    "weeklyPlanUpgrade": "アップグレードして1週間の食事プランを確認",
+    "viewPlans": "プランを見る",
+    "loggedAsEaten": "食べた記録",
+    "logging": "記録中…",
+    "swapMeal": "変更"
+  },
+  "onboarding": {
+    "goalSpeed": {
+      "label": "目標スピード",
+      "slow": "ゆっくり",
+      "slowDesc": "週~0.25 kg、無理なく",
+      "normal": "標準",
+      "normalDesc": "週~0.5 kg、バランス良く",
+      "fast": "積極的",
+      "fastDesc": "週~1 kg、厳格な管理が必要"
+    }
+  },
+  "profile": {
+    "bodyFatPercent": "体脂肪率 (%)",
+    "bodyFatPercentHint": "入力するとKatch-McArdle式でより正確なBMRを計算します",
+    "bodyFatPercentPlaceholder": "例: 20"
   }
 }

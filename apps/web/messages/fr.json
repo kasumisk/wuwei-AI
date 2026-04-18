@@ -1036,5 +1036,55 @@
       "heightPlaceholder": "Auto",
       "maintainRatio": "Conserver les proportions"
     }
+  },
+  "food": {
+    "decision": {
+      "safe": "Recommandé",
+      "limit": "À modérer",
+      "avoid": "À éviter",
+      "riskLow": "Risque faible",
+      "riskMedium": "Risque moyen",
+      "riskHigh": "Risque élevé",
+      "nutritionScore": "Score nutritionnel",
+      "macroDistribution": "Distribution macro",
+      "alternatives": "Alternatives",
+      "analyzeThis": "Analyser",
+      "details": "Détails",
+      "whyNotRecommended": "Pourquoi déconseillé?",
+      "scrollHint": "Glisser gauche/droite"
+    },
+    "saved": {
+      "recorded": "Enregistré",
+      "todayBudgetUpdated": "Budget du jour mis à jour",
+      "remaining": "kcal restant",
+      "thisMealAdded": "Impact de ce repas",
+      "continueLogging": "Continuer",
+      "viewPlan": "Voir le plan",
+      "goHome": "Accueil"
+    }
+  },
+  "plan": {
+    "weeklyPlanPremium": "Plan hebdo réservé Premium",
+    "weeklyPlanUpgrade": "Abonnez-vous pour voir votre plan alimentaire complet",
+    "viewPlans": "Voir les offres",
+    "loggedAsEaten": "Marquer mangé",
+    "logging": "Enregistrement…",
+    "swapMeal": "Changer"
+  },
+  "onboarding": {
+    "goalSpeed": {
+      "label": "Vitesse objectif",
+      "slow": "Lent",
+      "slowDesc": "~0,25 kg/sem, durable",
+      "normal": "Normal",
+      "normalDesc": "~0,5 kg/sem, équilibré",
+      "fast": "Agressif",
+      "fastDesc": "~1 kg/sem, discipline stricte"
+    }
+  },
+  "profile": {
+    "bodyFatPercent": "Taux de graisse (%)",
+    "bodyFatPercentHint": "Utilise la formule Katch-McArdle pour un BMR plus précis",
+    "bodyFatPercentPlaceholder": "ex: 20"
   }
 }

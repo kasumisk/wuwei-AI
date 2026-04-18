@@ -1,11 +1,16 @@
 'use client';
 
 import { Component, ReactNode } from 'react';
+import { QueryClient } from '@tanstack/react-query';
 
 interface Props {
   children: ReactNode;
   fallback?: ReactNode;
   onReset?: () => void;
+  /** TanStack query keys to invalidate on retry */
+  queryKeys?: unknown[][];
+  /** QueryClient instance for invalidating queries */
+  queryClient?: QueryClient;
   labels?: {
     title?: string;
     unknownError?: string;
@@ -35,6 +40,12 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   handleReset = () => {
+    // Invalidate specified queries on retry
+    if (this.props.queryClient && this.props.queryKeys?.length) {
+      for (const key of this.props.queryKeys) {
+        this.props.queryClient.invalidateQueries({ queryKey: key });
+      }
+    }
     this.setState({ hasError: false, error: undefined });
     this.props.onReset?.();
   };

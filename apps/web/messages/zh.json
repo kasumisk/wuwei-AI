@@ -324,27 +324,51 @@
       "title": "API 功能特性",
       "auth": {
         "title": "🔐 认证管理",
-        "items": ["自动添加 Authorization 令牌", "令牌过期自动处理", "支持服务端和客户端"]
+        "items": [
+          "自动添加 Authorization 令牌",
+          "令牌过期自动处理",
+          "支持服务端和客户端"
+        ]
       },
       "request": {
         "title": "🔄 请求管理",
-        "items": ["自动重试机制", "请求超时控制", "请求/响应拦截器"]
+        "items": [
+          "自动重试机制",
+          "请求超时控制",
+          "请求/响应拦截器"
+        ]
       },
       "error": {
         "title": "⚠️ 错误处理",
-        "items": ["统一错误类型 (APIError)", "详细错误信息", "可配置错误提示"]
+        "items": [
+          "统一错误类型 (APIError)",
+          "详细错误信息",
+          "可配置错误提示"
+        ]
       },
       "types": {
         "title": "📝 类型安全",
-        "items": ["完整 TypeScript 支持", "泛型响应类型", "服务层封装"]
+        "items": [
+          "完整 TypeScript 支持",
+          "泛型响应类型",
+          "服务层封装"
+        ]
       },
       "files": {
         "title": "📤 文件操作",
-        "items": ["文件上传（进度追踪）", "文件下载", "多文件批量上传"]
+        "items": [
+          "文件上传（进度追踪）",
+          "文件下载",
+          "多文件批量上传"
+        ]
       },
       "logging": {
         "title": "📊 日志记录",
-        "items": ["请求日志", "错误日志", "开发/生产环境分离"]
+        "items": [
+          "请求日志",
+          "错误日志",
+          "开发/生产环境分离"
+        ]
       }
     },
     "docs": {
@@ -1012,5 +1036,55 @@
       "heightPlaceholder": "自动",
       "maintainRatio": "保持宽高比"
     }
+  },
+  "food": {
+    "decision": {
+      "safe": "推荐食用",
+      "limit": "适量食用",
+      "avoid": "建议避免",
+      "riskLow": "低风险",
+      "riskMedium": "中风险",
+      "riskHigh": "高风险",
+      "nutritionScore": "营养评分",
+      "macroDistribution": "宏量素分布",
+      "alternatives": "替代方案",
+      "analyzeThis": "分析这个",
+      "details": "详情",
+      "whyNotRecommended": "为什么不推荐",
+      "scrollHint": "左右滑动"
+    },
+    "saved": {
+      "recorded": "已记录",
+      "todayBudgetUpdated": "今日预算更新",
+      "remaining": "kcal 剩余",
+      "thisMealAdded": "本餐变化",
+      "continueLogging": "继续记录",
+      "viewPlan": "查看计划",
+      "goHome": "返回首页"
+    }
+  },
+  "plan": {
+    "weeklyPlanPremium": "周计划为 Premium 专属",
+    "weeklyPlanUpgrade": "升级后可查看完整一周饮食规划",
+    "viewPlans": "查看方案",
+    "loggedAsEaten": "记为已吃",
+    "logging": "记录中…",
+    "swapMeal": "换一换"
+  },
+  "onboarding": {
+    "goalSpeed": {
+      "label": "目标速度",
+      "slow": "慢速",
+      "slowDesc": "每周 ~0.25 kg，轻松可持续",
+      "normal": "标准",
+      "normalDesc": "每周 ~0.5 kg，平衡推荐",
+      "fast": "激进",
+      "fastDesc": "每周 ~1 kg，需严格执行"
+    }
+  },
+  "profile": {
+    "bodyFatPercent": "体脂率 (%)",
+    "bodyFatPercentHint": "填写后将使用 Katch-McArdle 公式代替 Mifflin 公式计算基础代谢",
+    "bodyFatPercentPlaceholder": "例如 20"
   }
 }

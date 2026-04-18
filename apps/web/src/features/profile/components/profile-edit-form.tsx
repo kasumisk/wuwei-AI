@@ -60,6 +60,7 @@ export function ProfileEditForm() {
     heightCm: '',
     weightKg: '',
     targetWeightKg: '',
+    bodyFatPercent: '',
     activityLevel: 'light',
     dailyCalorieGoal: '',
     goal: 'health' as string,
@@ -103,6 +104,9 @@ export function ProfileEditForm() {
         heightCm: profile.heightCm ? String(profile.heightCm) : '',
         weightKg: profile.weightKg ? String(profile.weightKg) : '',
         targetWeightKg: profile.targetWeightKg ? String(profile.targetWeightKg) : '',
+        bodyFatPercent: (profile as any).bodyFatPercent
+          ? String((profile as any).bodyFatPercent)
+          : '',
         activityLevel: profile.activityLevel || 'light',
         dailyCalorieGoal: profile.dailyCalorieGoal ? String(profile.dailyCalorieGoal) : '',
         goal: profile.goal || 'health',
@@ -179,6 +183,8 @@ export function ProfileEditForm() {
       if (form.targetWeightKg) data.targetWeightKg = parseFloat(form.targetWeightKg);
       if (form.dailyCalorieGoal) data.dailyCalorieGoal = parseInt(form.dailyCalorieGoal);
       if (form.familySize) data.familySize = parseInt(form.familySize);
+      if ((form as any).bodyFatPercent)
+        (data as any).bodyFatPercent = parseFloat((form as any).bodyFatPercent);
 
       await updateProfile(data);
       toast({ title: '保存成功' });
@@ -278,6 +284,22 @@ export function ProfileEditForm() {
           placeholder="60"
           className="w-full px-4 py-2.5 rounded-xl bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
         />
+      </div>
+
+      <div className="mt-4">
+        <SubLabel>体脂率 (%) — 选填，用于精准 TDEE 计算</SubLabel>
+        <input
+          type="number"
+          value={(form as any).bodyFatPercent}
+          onChange={(e) => up('bodyFatPercent' as any, e.target.value)}
+          placeholder="例如 20"
+          min={3}
+          max={60}
+          className="w-full px-4 py-2.5 rounded-xl bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
+        />
+        <p className="text-[11px] text-muted-foreground mt-1">
+          填写后将使用 Katch-McArdle 公式代替 Mifflin 公式计算基础代谢
+        </p>
       </div>
 
       <Divider />

@@ -100,6 +100,8 @@ function MacroRow({
 
 interface SavedImpactProps {
   mealType: string;
+  /** 保存前的 summary 快照，用于 before/after 动画对比 */
+  beforeSummary?: DailySummary | null;
   onReset: () => void;
   onGoHome: () => void;
   onGoToPlan: () => void;
@@ -108,6 +110,7 @@ interface SavedImpactProps {
 
 export function SavedImpact({
   mealType,
+  beforeSummary,
   onReset,
   onGoHome,
   onGoToPlan,
@@ -143,6 +146,13 @@ export function SavedImpact({
   const hasProteinGoal = (summary.proteinGoal || 0) > 0;
   const hasCarbsGoal = (summary.carbsGoal || 0) > 0;
   const hasFatGoal = (summary.fatGoal || 0) > 0;
+
+  // Before/After delta
+  const addedCalories = beforeSummary ? summary.totalCalories - beforeSummary.totalCalories : null;
+  const addedProtein = beforeSummary
+    ? (summary.totalProtein || 0) - (beforeSummary.totalProtein || 0)
+    : null;
+  const beforeCalPct = beforeSummary ? pct(beforeSummary.totalCalories, calGoal) : null;
 
   return (
     <div className="space-y-5">
@@ -199,6 +209,44 @@ export function SavedImpact({
               style={{ width: `${Math.min(calPct, 100)}%` }}
             />
           </div>
+
+          {/* Before/After 进度对比动画 */}
+          {beforeCalPct !== null && addedCalories !== null && (
+            <div className="mt-3 space-y-1.5">
+              <span className="text-[10px] font-bold text-muted-foreground">📊 本餐变化</span>
+              <div className="relative h-3 bg-muted rounded-full overflow-hidden">
+                {/* Before bar */}
+                <div
+                  className="absolute left-0 top-0 h-full rounded-full bg-muted-foreground/30 transition-all duration-700"
+                  style={{ width: `${Math.min(beforeCalPct, 100)}%` }}
+                />
+                {/* After bar (animate on top) */}
+                <div
+                  className={`absolute left-0 top-0 h-full rounded-full transition-all duration-700 delay-300 ${
+                    calPct > 100
+                      ? 'bg-red-500/70'
+                      : calPct > 85
+                        ? 'bg-orange-500/70'
+                        : 'bg-primary/70'
+                  }`}
+                  style={{ width: `${Math.min(calPct, 100)}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-muted-foreground">
+                  本餐 +{addedCalories} kcal
+                </span>
+                {addedProtein !== null && addedProtein > 0 && (
+                  <span className="text-[10px] text-blue-600">
+                    +{Math.round(addedProtein)}g 蛋白质
+                  </span>
+                )}
+                <span className="text-[10px] text-muted-foreground">
+                  {beforeSummary!.totalCalories} → {summary.totalCalories} kcal
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 宏量素达标 */}

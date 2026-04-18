@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react';
 import { usePlanAdjust } from '@/features/home/hooks/use-plan-adjust';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { foodRecordService } from '@/lib/api/food-record';
+import { foodLibraryClientAPI } from '@/lib/api/food-library';
 import { useToast } from '@/lib/hooks/use-toast';
 import type { DailyPlanData, MealPlan } from '@/types/food';
 
@@ -198,27 +199,65 @@ export function DailyPlanCard({ dailyPlan }: DailyPlanCardProps) {
           .split(/[、，,]+/)
           .map((s) => s.trim())
           .filter(Boolean);
-        const perFoodCalories =
-          foodNames.length > 0 ? Math.round(plan.calories / foodNames.length) : plan.calories;
-        const foods = foodNames.map((name) => ({
-          name,
-          calories: perFoodCalories,
-          protein: plan.protein > 0 ? Math.round(plan.protein / foodNames.length) : undefined,
-          fat: plan.fat > 0 ? Math.round(plan.fat / foodNames.length) : undefined,
-          carbs: plan.carbs > 0 ? Math.round(plan.carbs / foodNames.length) : undefined,
-        }));
 
-        await logMutation.mutateAsync({
-          foods,
-          totalCalories: plan.calories,
-          mealType,
-          totalProtein: plan.protein > 0 ? plan.protein : undefined,
-          totalFat: plan.fat > 0 ? plan.fat : undefined,
-          totalCarbs: plan.carbs > 0 ? plan.carbs : undefined,
-          avgQuality: 5,
-          avgSatiety: 5,
-          source: 'manual',
-        });
+        // 尝试对每个食物名匹配食物库，命中则用 from-library API
+        let libraryLogged = 0;
+        const fallbackFoods: typeof foodNames = [];
+
+        for (const name of foodNames) {
+          try {
+            const results = await foodLibraryClientAPI.search(name, 1);
+            const match = results[0];
+            if (match && match.name === name) {
+              await foodLibraryClientAPI.addFromLibrary(match.id, match.standardServingG, mealType);
+              libraryLogged++;
+            } else {
+              fallbackFoods.push(name);
+            }
+          } catch {
+            fallbackFoods.push(name);
+          }
+        }
+
+        // fallback: 仍用 saveRecord 记录未匹配的食物
+        if (fallbackFoods.length > 0) {
+          const perFoodCalories =
+            fallbackFoods.length > 0
+              ? Math.round(plan.calories / foodNames.length) *
+                Math.ceil(fallbackFoods.length / foodNames.length)
+              : plan.calories;
+          const foods = fallbackFoods.map((name) => ({
+            name,
+            calories: Math.round(plan.calories / foodNames.length),
+            protein: plan.protein > 0 ? Math.round(plan.protein / foodNames.length) : undefined,
+            fat: plan.fat > 0 ? Math.round(plan.fat / foodNames.length) : undefined,
+            carbs: plan.carbs > 0 ? Math.round(plan.carbs / foodNames.length) : undefined,
+          }));
+          await logMutation.mutateAsync({
+            foods,
+            totalCalories: perFoodCalories,
+            mealType,
+            totalProtein:
+              plan.protein > 0
+                ? Math.round((plan.protein / foodNames.length) * fallbackFoods.length)
+                : undefined,
+            totalFat:
+              plan.fat > 0
+                ? Math.round((plan.fat / foodNames.length) * fallbackFoods.length)
+                : undefined,
+            totalCarbs:
+              plan.carbs > 0
+                ? Math.round((plan.carbs / foodNames.length) * fallbackFoods.length)
+                : undefined,
+            avgQuality: 5,
+            avgSatiety: 5,
+            source: 'manual',
+          });
+        }
+
+        queryClient.invalidateQueries({ queryKey: ['records'] });
+        queryClient.invalidateQueries({ queryKey: ['summary'] });
+        queryClient.invalidateQueries({ queryKey: ['nutrition-score'] });
         toast({ title: `${slotLabel}已记录` });
       } catch {
         toast({ title: `记录失败，请稍后再试`, variant: 'destructive' });
@@ -226,7 +265,7 @@ export function DailyPlanCard({ dailyPlan }: DailyPlanCardProps) {
         setLoggingSlot(null);
       }
     },
-    [logMutation, toast]
+    [logMutation, toast, queryClient]
   );
 
   const adjustments = dailyPlan.adjustments || [];

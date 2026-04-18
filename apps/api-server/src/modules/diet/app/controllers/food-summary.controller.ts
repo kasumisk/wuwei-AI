@@ -6,6 +6,7 @@ import { AppUserPayload } from '../../../auth/app/app-user-payload.type';
 import { ApiResponse } from '../../../../common/types/response.type';
 import { FoodService } from '../services/food.service';
 import { UserProfileService } from '../../../user/app/services/profile/user-profile.service';
+import { NutritionScoreService } from '../services/nutrition-score.service';
 import { RecentSummaryQueryDto } from '../dto/food.dto';
 
 @ApiTags('App 饮食汇总')
@@ -16,6 +17,7 @@ export class FoodSummaryController {
   constructor(
     private readonly foodService: FoodService,
     private readonly userProfileService: UserProfileService,
+    private readonly nutritionScoreService: NutritionScoreService,
   ) {}
 
   /**
@@ -29,15 +31,32 @@ export class FoodSummaryController {
   ): Promise<ApiResponse> {
     const summary = await this.foodService.getTodaySummary(user.id);
 
-    // 补充热量目标
-    if (!summary.calorieGoal) {
-      summary.calorieGoal = await this.userProfileService.getDailyCalorieGoal(
-        user.id,
-      );
-      summary.remaining = Math.max(
-        0,
-        summary.calorieGoal - summary.totalCalories,
-      );
+    // 补充热量目标和宏量素目标（实时路径返回 0 时补充）
+    if (!summary.calorieGoal || !summary.proteinGoal) {
+      try {
+        const profile = await this.userProfileService.getProfile(user.id);
+        const goals = this.nutritionScoreService.calculateDailyGoals(profile);
+        if (!summary.calorieGoal) {
+          summary.calorieGoal = goals.calories;
+          summary.remaining = Math.max(
+            0,
+            summary.calorieGoal - summary.totalCalories,
+          );
+        }
+        if (!summary.proteinGoal) summary.proteinGoal = goals.protein;
+        if (!summary.fatGoal) summary.fatGoal = goals.fat;
+        if (!summary.carbsGoal) summary.carbsGoal = goals.carbs;
+      } catch {
+        // fallback: 只补充热量目标
+        if (!summary.calorieGoal) {
+          summary.calorieGoal =
+            await this.userProfileService.getDailyCalorieGoal(user.id);
+          summary.remaining = Math.max(
+            0,
+            summary.calorieGoal - summary.totalCalories,
+          );
+        }
+      }
     }
 
     return {

@@ -13,6 +13,8 @@ export interface StepBodyGoalData {
   goal?: GoalType;
   targetWeightKg?: number;
   activityLevel?: ActivityLevel;
+  /** 目标速度：仅 fat_loss / muscle_gain 时展示 */
+  goalSpeed?: 'slow' | 'normal' | 'fast';
 }
 
 export interface StepDietHabitsData {

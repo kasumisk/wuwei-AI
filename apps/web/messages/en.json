@@ -356,11 +356,19 @@
       },
       "files": {
         "title": "📤 File Operations",
-        "items": ["File upload (progress tracking)", "File download", "Multi-file batch upload"]
+        "items": [
+          "File upload (progress tracking)",
+          "File download",
+          "Multi-file batch upload"
+        ]
       },
       "logging": {
         "title": "📊 Logging",
-        "items": ["Request logs", "Error logs", "Dev/production environment separation"]
+        "items": [
+          "Request logs",
+          "Error logs",
+          "Dev/production environment separation"
+        ]
       }
     },
     "docs": {
@@ -1028,5 +1036,55 @@
       "heightPlaceholder": "Auto",
       "maintainRatio": "Maintain aspect ratio"
     }
+  },
+  "food": {
+    "decision": {
+      "safe": "Recommended",
+      "limit": "Eat in Moderation",
+      "avoid": "Avoid",
+      "riskLow": "Low Risk",
+      "riskMedium": "Medium Risk",
+      "riskHigh": "High Risk",
+      "nutritionScore": "Nutrition Score",
+      "macroDistribution": "Macro Distribution",
+      "alternatives": "Alternatives",
+      "analyzeThis": "Analyze",
+      "details": "Details",
+      "whyNotRecommended": "Why not recommended?",
+      "scrollHint": "Scroll left/right"
+    },
+    "saved": {
+      "recorded": "Recorded",
+      "todayBudgetUpdated": "Today's Budget Updated",
+      "remaining": "kcal remaining",
+      "thisMealAdded": "This Meal Impact",
+      "continueLogging": "Log More",
+      "viewPlan": "View Plan",
+      "goHome": "Go Home"
+    }
+  },
+  "plan": {
+    "weeklyPlanPremium": "Weekly plan is Premium only",
+    "weeklyPlanUpgrade": "Upgrade to view your full weekly diet plan",
+    "viewPlans": "View Plans",
+    "loggedAsEaten": "Log as Eaten",
+    "logging": "Logging...",
+    "swapMeal": "Swap"
+  },
+  "onboarding": {
+    "goalSpeed": {
+      "label": "Goal Speed",
+      "slow": "Slow",
+      "slowDesc": "~0.25 kg/week, easy & sustainable",
+      "normal": "Normal",
+      "normalDesc": "~0.5 kg/week, balanced approach",
+      "fast": "Aggressive",
+      "fastDesc": "~1 kg/week, strict discipline required"
+    }
+  },
+  "profile": {
+    "bodyFatPercent": "Body Fat (%)",
+    "bodyFatPercentHint": "With body fat % we use Katch-McArdle formula for more accurate BMR",
+    "bodyFatPercentPlaceholder": "e.g. 20"
   }
 }

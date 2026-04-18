@@ -9,6 +9,7 @@ import { useSubscription } from '@/features/subscription/hooks/use-subscription'
 import { handlePaywallError } from '@/features/subscription/hooks/use-subscription';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { foodLibraryClientAPI } from '@/lib/api/food-library';
+import { foodRecordService } from '@/lib/api/food-record';
 import { DecisionCard } from './decision-card';
 import { SavedImpact } from './saved-impact';
 import { InputTabs, type InputTabType } from './input-tabs';
@@ -176,17 +177,42 @@ export function AnalyzePage() {
     if (tab === 'image' || tab === 'text' || tab === 'frequent' || tab === 'search') return tab;
     return 'image';
   });
-  const [mealType, setMealType] = useState<MealTypeOption>('lunch');
+  const [mealType, setMealType] = useState<MealTypeOption>(() => {
+    const hour = new Date().getHours();
+    if (hour >= 6 && hour < 10) return 'breakfast';
+    if (hour >= 10 && hour < 14) return 'lunch';
+    if (hour >= 14 && hour < 17) return 'snack';
+    if (hour >= 17 && hour < 21) return 'dinner';
+    return 'snack'; // 深夜默认加餐
+  });
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [textInput, setTextInput] = useState('');
+  const [textInput, setTextInput] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('analyze_text_draft') || '';
+    }
+    return '';
+  });
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [editedFoods, setEditedFoods] = useState<FoodItem[]>([]);
   const [analyzeElapsed, setAnalyzeElapsed] = useState(0);
+  const [savedRecordId, setSavedRecordId] = useState<string | null>(null);
+  const [preSaveSummary, setPreSaveSummary] = useState<import('@/types/food').DailySummary | null>(
+    null
+  );
 
   useEffect(() => {
     if (!isLoggedIn) router.push('/login');
   }, [isLoggedIn, router]);
+
+  // ── 文字输入暂存到 sessionStorage ──
+  useEffect(() => {
+    if (textInput) {
+      sessionStorage.setItem('analyze_text_draft', textInput);
+    } else {
+      sessionStorage.removeItem('analyze_text_draft');
+    }
+  }, [textInput]);
 
   // ── ObjectURL 清理：避免内存泄漏 ──
   useEffect(() => {
@@ -356,16 +382,22 @@ export function AnalyzePage() {
   const handleSave = useCallback(async () => {
     if (!result) return;
     try {
+      // 保存前先快照当前 summary（用于 before/after 对比动画）
+      try {
+        const snap = await foodRecordService.getTodaySummary();
+        setPreSaveSummary(snap);
+      } catch {
+        /* ignore snapshot errors */
+      }
+      let savedResult: any;
       if (result.requestId) {
-        // 优先用 saveAnalysis，后端自动关联分析结果
-        await saveAnalysis({
+        savedResult = await saveAnalysis({
           analysisId: result.requestId,
           mealType,
         });
       } else {
-        // fallback: 手动传全部字段
         const totalCalories = editedFoods.reduce((sum, f) => sum + f.calories, 0);
-        await saveRecord({
+        savedResult = await saveRecord({
           requestId: result.requestId,
           imageUrl: result.imageUrl,
           foods: editedFoods,
@@ -389,7 +421,11 @@ export function AnalyzePage() {
           nutritionScore: result.nutritionScore,
         });
       }
+      // 提取 recordId（用于反馈组件）
+      const recordId = savedResult?.id || savedResult?.data?.id || null;
+      if (recordId) setSavedRecordId(recordId);
       setStep('saved');
+      sessionStorage.removeItem('analyze_text_draft');
       toast({ title: '记录已保存！' });
     } catch (err) {
       toast({
@@ -409,8 +445,10 @@ export function AnalyzePage() {
     setPreviewUrl(null);
     setSelectedFile(null);
     setTextInput('');
+    sessionStorage.removeItem('analyze_text_draft');
     setResult(null);
     setEditedFoods([]);
+    setSavedRecordId(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, [previewUrl]);
 
@@ -889,6 +927,7 @@ export function AnalyzePage() {
 
             <DecisionCard
               result={result}
+              recordId={savedRecordId ?? undefined}
               onAnalyzeAlternative={(foodName) => {
                 setTextInput(foodName);
                 setStep('upload');
@@ -1101,6 +1140,7 @@ export function AnalyzePage() {
         {step === 'saved' && (
           <SavedImpact
             mealType={mealType}
+            beforeSummary={preSaveSummary}
             onReset={handleReset}
             onGoHome={() => router.push('/')}
             onGoToPlan={() => router.push('/plan')}

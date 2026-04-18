@@ -139,23 +139,57 @@ export function PlanPage() {
       {/* 周计划（付费用户显示，免费用户显示升级提示） */}
       {isPaid && weeklyPlan && <WeeklyPlanCard weeklyPlan={weeklyPlan} />}
 
-      {/* 免费用户：周计划锁定提示 */}
+      {/* 免费用户：周计划锁定提示（显示真实数据 + 模糊遮罩） */}
       {isFree && (
         <div className="bg-card rounded-2xl p-5 mb-6 relative overflow-hidden">
-          {/* 模糊背景（假数据占位） */}
-          <div className="blur-sm pointer-events-none opacity-40 space-y-3">
+          {/* 真实数据占位（有数据用真实的，没有用骨架） */}
+          <div className="blur-sm pointer-events-none opacity-50 space-y-3">
             <h3 className="text-base font-bold">本周计划</h3>
-            <div className="flex gap-1">
-              {['一', '二', '三', '四', '五', '六', '日'].map((d) => (
-                <div
-                  key={d}
-                  className="flex-1 bg-muted rounded-xl h-14 flex items-center justify-center text-xs text-muted-foreground"
-                >
-                  周{d}
+            {weeklyPlan ? (
+              <>
+                <div className="flex gap-1">
+                  {weeklyPlan.plans.slice(0, 7).map((day, i) => (
+                    <div
+                      key={i}
+                      className="flex-1 bg-muted rounded-xl h-14 flex flex-col items-center justify-center text-[10px] text-muted-foreground gap-0.5"
+                    >
+                      <span>
+                        {
+                          ['一', '二', '三', '四', '五', '六', '日'][
+                            new Date(day.date).getDay() === 0 ? 6 : new Date(day.date).getDay() - 1
+                          ]
+                        }
+                      </span>
+                      <span className="font-bold text-foreground/70">{day.totalCalories}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-            <div className="h-16 bg-muted rounded-xl" />
+                {weeklyPlan.weeklyNutrition && (
+                  <div className="h-10 bg-muted rounded-xl flex items-center px-3 gap-4">
+                    <span className="text-xs text-muted-foreground">
+                      周均 {Math.round(weeklyPlan.weeklyNutrition.avgCalories)} kcal
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      蛋白 {Math.round(weeklyPlan.weeklyNutrition.avgProtein)}g
+                    </span>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="flex gap-1">
+                  {['一', '二', '三', '四', '五', '六', '日'].map((d) => (
+                    <div
+                      key={d}
+                      className="flex-1 bg-muted rounded-xl h-14 flex items-center justify-center text-xs text-muted-foreground"
+                    >
+                      周{d}
+                    </div>
+                  ))}
+                </div>
+                <div className="h-16 bg-muted rounded-xl" />
+              </>
+            )}
           </div>
           {/* 锁定覆盖 */}
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-card/80 backdrop-blur-[2px]">
