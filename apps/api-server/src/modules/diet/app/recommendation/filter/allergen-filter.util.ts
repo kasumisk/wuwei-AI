@@ -10,38 +10,35 @@ import { FoodLibrary } from '../../../../food/food.types';
  *   - 先通过别名表展开用户过敏原到食物标签键
  *   - 再进行精确匹配（大小写敏感）
  *
- * 用户画像键 (frontend) → 食物标签键 (AI labeling) 映射：
- *   peanut   → nuts       (花生属坚果类)
- *   peanuts  → nuts
- *   tree_nut → nuts       (树坚果属坚果类)
- *   tree_nuts→ nuts
- *   milk     → dairy      (牛奶属乳制品)
- *   eggs     → egg        (复数→单数)
- *   soybeans → soy        (大豆→soy)
+ * ══ 标准过敏原键（与前端 ALLERGEN_OPTIONS 及数据补全字段完全一致）══
+ *   gluten / dairy / egg / fish / shellfish / tree_nuts / peanuts / soy / sesame
+ *
+ * 兼容旧键映射（历史数据向前兼容，不作为新提交标准）：
+ *   peanut   → peanuts
+ *   tree_nut → tree_nuts
+ *   milk     → dairy
+ *   eggs     → egg
+ *   soybeans → soy
+ *   wheat    → gluten
  */
 
 /** 用户画像过敏原 key → 食物标签 allergen key(s) */
 const ALLERGEN_ALIAS_MAP: Record<string, string[]> = {
-  peanut: ['nuts', 'peanut', 'peanuts'],
-  peanuts: ['nuts', 'peanut', 'peanuts'],
-  tree_nut: ['nuts', 'tree_nut', 'tree_nuts'],
-  tree_nuts: ['nuts', 'tree_nut', 'tree_nuts'],
-  milk: ['dairy', 'milk', 'lactose'],
-  eggs: ['egg', 'eggs'],
-  soybeans: ['soy', 'soybeans'],
-  // 直通键（无需映射但确保安全）
-  gluten: ['gluten'],
+  // ── 9个标准键（与前端 ALLERGEN_OPTIONS / 数据补全字段一致）──
+  gluten: ['gluten', 'wheat'],
   dairy: ['dairy', 'milk', 'lactose'],
-  nuts: ['nuts', 'peanut', 'peanuts', 'tree_nut', 'tree_nuts'],
-  soy: ['soy', 'soybeans'],
   egg: ['egg', 'eggs'],
-  shellfish: ['shellfish', 'shrimp'],
   fish: ['fish'],
+  shellfish: ['shellfish', 'shrimp'],
+  tree_nuts: ['tree_nuts', 'tree_nut', 'nuts'],
+  peanuts: ['peanuts', 'peanut', 'nuts'],
+  soy: ['soy', 'soybeans'],
+  sesame: ['sesame'],
+  // ── 食物标签侧附加键（用于食物库标签反查）──
+  nuts: ['nuts', 'peanut', 'peanuts', 'tree_nut', 'tree_nuts'],
+  lactose: ['dairy', 'milk', 'lactose'],
   seafood: ['shellfish', 'shrimp', 'fish', 'seafood'],
   shrimp: ['shrimp', 'shellfish'],
-  lactose: ['dairy', 'milk', 'lactose'],
-  wheat: ['wheat', 'gluten'],
-  sesame: ['sesame'],
   sulfites: ['sulfites'],
 };
 

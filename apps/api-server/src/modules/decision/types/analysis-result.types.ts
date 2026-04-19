@@ -367,6 +367,8 @@ export interface AnalyzedFoodItem {
   iron?: number | null;
   /** V6.3 P1-11: 是否为 AI 估算值 */
   estimated?: boolean;
+  /** 食物库结构化过敏原字段（匹配食物库 allergens[]，优先用于决策判断） */
+  allergens?: string[];
 }
 
 /** 汇总营养数据 */

@@ -624,6 +624,7 @@ export class AnalysisPipelineService {
       sodium: f.sodium,
       saturatedFat: f.saturatedFat,
       addedSugar: f.addedSugar,
+      allergens: f.allergens,
     }));
   }
 

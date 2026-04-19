@@ -65,6 +65,8 @@ export interface DecisionFoodItem {
   saturatedFat?: number | null;
   addedSugar?: number | null;
   estimated?: boolean;
+  /** 食物库过敏原字段（优先用于过敏原判断） */
+  allergens?: string[];
 }
 
 /** V1.3: 结构化决策因子 */
@@ -305,16 +307,38 @@ export class FoodDecisionService {
 
     // 8. 决策推理链（委托 DecisionExplainerService）
     const totalCalories = foods.reduce((s, f) => s + f.calories, 0);
-    const foodTexts = foods
-      .map((f) => `${f.name} ${f.category || ''}`.toLowerCase())
-      .join(' ');
 
+    // 仅使用食物库结构化 allergens 字段进行精确匹配
+    const ALLERGEN_EXPAND: Record<string, string[]> = {
+      gluten: ['gluten', 'wheat'],
+      dairy: ['dairy', 'milk', 'lactose'],
+      egg: ['egg', 'eggs'],
+      fish: ['fish'],
+      shellfish: ['shellfish', 'shrimp'],
+      tree_nuts: ['tree_nuts', 'tree_nut', 'nuts'],
+      peanuts: ['peanuts', 'peanut', 'nuts'],
+      soy: ['soy', 'soybeans'],
+      sesame: ['sesame'],
+      peanut: ['peanuts', 'peanut', 'nuts'],
+      tree_nut: ['tree_nuts', 'tree_nut', 'nuts'],
+      milk: ['dairy', 'milk', 'lactose'],
+      eggs: ['egg', 'eggs'],
+      soybeans: ['soy', 'soybeans'],
+      wheat: ['gluten', 'wheat'],
+    };
+    const matchAllergen = (a: string): boolean => {
+      const keys = ALLERGEN_EXPAND[a.toLowerCase()] ?? [a.toLowerCase()];
+      return foods.some(
+        (f) =>
+          Array.isArray(f.allergens) &&
+          (f.allergens as string[]).some((fa) =>
+            keys.includes(fa.toLowerCase()),
+          ),
+      );
+    };
     const allergenTriggered =
-      ctx.allergens.length > 0 &&
-      ctx.allergens.some((a) => foodTexts.includes(a.toLowerCase()));
-    const triggeredAllergens = ctx.allergens.filter((a) =>
-      foodTexts.includes(a.toLowerCase()),
-    );
+      ctx.allergens.length > 0 && ctx.allergens.some(matchAllergen);
+    const triggeredAllergens = ctx.allergens.filter(matchAllergen);
 
     const healthTriggered = ctx.healthConditions.length > 0;
     const isLateNight = ctx.localHour >= 21 || ctx.localHour < 5;

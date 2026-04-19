@@ -467,7 +467,8 @@ export class CreateFoodLibraryDto {
   oxalateLevel?: string;
 
   @ApiPropertyOptional({
-    description: '过敏原列表（如 ["gluten","dairy","nuts"]）',
+    description:
+      '过敏原列表（标准值：gluten/dairy/egg/fish/shellfish/tree_nuts/peanuts/soy/sesame）',
     type: [String],
   })
   @IsOptional()

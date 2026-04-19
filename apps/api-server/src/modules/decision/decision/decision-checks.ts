@@ -43,6 +43,8 @@ export interface CheckableFoodItem {
   carbs: number;
   sodium?: number;
   addedSugar?: number | null;
+  /** 食物库过敏原字段（优先用于过敏原判断，无此字段时退化到名称关键字匹配） */
+  allergens?: string[];
 }
 
 // ==================== 内部辅助 ====================
@@ -300,47 +302,28 @@ export function checkLateNight(
 /**
  * 过敏原检查（可能强制 avoid）
  */
-/** 过敏原中英文关键字映射表（Fix B1: 英文allergen name无法匹配中文食物名）*/
-const ALLERGEN_ZH_MAP: Record<string, string[]> = {
-  peanut: ['花生', '落花生'],
-  tree_nut: [
-    '核桃',
-    '腰果',
-    '杏仁',
-    '榛子',
-    '开心果',
-    '松子',
-    '夏威夷果',
-    '碧根果',
-  ],
-  shellfish: [
-    '虾',
-    '蟹',
-    '龙虾',
-    '贝',
-    '蛤',
-    '扇贝',
-    '牡蛎',
-    '蚌',
-    '鱿鱼',
-    '蛏',
-  ],
-  fish: [
-    '鱼',
-    '三文鱼',
-    '金枪鱼',
-    '鲑鱼',
-    '鳕鱼',
-    '草鱼',
-    '鲫鱼',
-    '带鱼',
-    '黄鱼',
-  ],
-  milk: ['牛奶', '奶', '乳', '黄油', '奶酪', '酸奶', '芝士', '奶油'],
-  egg: ['鸡蛋', '蛋', '蛋清', '蛋黄', '鸭蛋', '鹌鹑蛋'],
-  wheat: ['小麦', '面粉', '面条', '面包', '饺子', '馒头', '包子', '馄饨'],
-  soy: ['大豆', '豆腐', '豆浆', '黄豆', '毛豆', '豆干', '豆皮', '豆腐脑'],
-  sesame: ['芝麻', '麻酱', '芝麻酱', '胡麻'],
+
+/**
+ * 过敏原别名展开表（与 allergen-filter.util.ts 保持同步）
+ * 将用户画像标准键 → 食物库 allergens[] 中可能出现的等价键
+ */
+const ALLERGEN_EXPAND_MAP: Record<string, string[]> = {
+  gluten: ['gluten', 'wheat'],
+  dairy: ['dairy', 'milk', 'lactose'],
+  egg: ['egg', 'eggs'],
+  fish: ['fish'],
+  shellfish: ['shellfish', 'shrimp'],
+  tree_nuts: ['tree_nuts', 'tree_nut', 'nuts'],
+  peanuts: ['peanuts', 'peanut', 'nuts'],
+  soy: ['soy', 'soybeans'],
+  sesame: ['sesame'],
+  // 兼容旧键
+  peanut: ['peanuts', 'peanut', 'nuts'],
+  tree_nut: ['tree_nuts', 'tree_nut', 'nuts'],
+  milk: ['dairy', 'milk', 'lactose'],
+  eggs: ['egg', 'eggs'],
+  soybeans: ['soy', 'soybeans'],
+  wheat: ['gluten', 'wheat'],
 };
 
 export function checkAllergenConflict(
@@ -350,19 +333,16 @@ export function checkAllergenConflict(
 ): CheckResult | null {
   if (!ctx.allergens || ctx.allergens.length === 0) return null;
 
-  const foodTexts = buildFoodTexts(foods);
-  const matchedAllergen = (ctx.allergens ?? []).find((a) => {
-    const key = a.toLowerCase();
-    if (foodTexts.includes(key)) return true;
-    const zhKeywords = ALLERGEN_ZH_MAP[key];
-    if (zhKeywords) {
-      return foods.some((f) =>
-        zhKeywords.some(
-          (kw) => f.name.includes(kw) || (f.category ?? '').includes(kw),
-        ),
-      );
-    }
-    return false;
+  // 仅使用食物库结构化 allergens 字段进行精确匹配
+  const matchedAllergen = ctx.allergens.find((userAllergen) => {
+    const expandedKeys = ALLERGEN_EXPAND_MAP[userAllergen.toLowerCase()] ?? [
+      userAllergen.toLowerCase(),
+    ];
+    return foods.some(
+      (f) =>
+        Array.isArray(f.allergens) &&
+        f.allergens.some((fa) => expandedKeys.includes(fa.toLowerCase())),
+    );
   });
 
   if (matchedAllergen) {

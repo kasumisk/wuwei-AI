@@ -121,7 +121,7 @@ export class OnboardingStep3Dto {
   @ApiPropertyOptional({
     type: [String],
     description:
-      '⚠️ 过敏原 milk/eggs/fish/shellfish/tree_nuts/peanuts/wheat/soybeans/sesame/sulfites',
+      '⚠️ 过敏原 gluten/dairy/egg/fish/shellfish/tree_nuts/peanuts/soy/sesame',
   })
   @IsOptional()
   @IsArray()
@@ -312,7 +312,11 @@ export class UpdateDeclaredProfileDto {
   @IsString({ each: true })
   dietaryRestrictions?: string[];
 
-  @ApiPropertyOptional({ type: [String], description: '⚠️ 过敏原' })
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      '⚠️ 过敏原 gluten/dairy/egg/fish/shellfish/tree_nuts/peanuts/soy/sesame',
+  })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
