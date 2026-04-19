@@ -158,8 +158,6 @@ export interface RecommendationPreferences {
   cuisineWeights?: Record<string, number>;
   /** 多样性容忍度 */
   diversityTolerance?: DiversityTolerance;
-  /** 饮食哲学 */
-  dietaryPhilosophy?: DietaryPhilosophy;
   /** 用餐模式 */
   mealPattern?: MealPattern;
   /** 口味开放度 */
@@ -183,22 +181,6 @@ export enum DiversityTolerance {
   LOW = 'low',
   MEDIUM = 'medium',
   HIGH = 'high',
-}
-
-/**
- * V7.0: 饮食哲学
- * - omnivore: 杂食（默认）
- * - pescatarian: 鱼素
- * - vegetarian: 蛋奶素
- * - vegan: 纯素
- * - none: 不限（等同 omnivore）
- */
-export enum DietaryPhilosophy {
-  OMNIVORE = 'omnivore',
-  PESCATARIAN = 'pescatarian',
-  VEGETARIAN = 'vegetarian',
-  VEGAN = 'vegan',
-  NONE = 'none',
 }
 
 /**

@@ -7,6 +7,10 @@
  * - foodPrefBoost (声明偏好 tags/category 匹配)
  *
  * 最终乘数 = preferenceBoost × profileBoost × foodPrefBoost
+ *
+ * V8.x: foodPrefBoost 从简单字符串比较升级为结构化多字段映射，
+ *       全面支持 7 个声明偏好枚举：
+ *         sweet / fried / carbs / meat / spicy / light / seafood
  */
 import type { FoodLibrary } from '../../../../../food/food.types';
 import type {
@@ -17,6 +21,97 @@ import type {
   ScoringAdjustment,
   ScoringFactor,
 } from '../scoring-factor.interface';
+
+// ─── 声明偏好 → 食物库字段映射表 ───────────────────────────────────────────
+//
+// 每条规则检查食物是否"符合"该偏好，命中则计为一次匹配。
+// 命中后加分：1 + min(matchCount × perMatch, cap)
+//
+type PrefMatcher = (food: FoodLibrary) => boolean;
+
+/** 肉类 foodGroup 集合（与 food-filter.service.ts 保持一致） */
+const MEAT_FG = new Set([
+  'pork',
+  'beef',
+  'chicken',
+  'poultry',
+  'lamb',
+  'duck',
+  'goose',
+  'game',
+  'organ',
+  'meat',
+  'processed_meat',
+]);
+/** 海鲜 foodGroup 集合 */
+const SEAFOOD_FG = new Set(['seafood', 'fish', 'shellfish', 'shrimp', 'crab']);
+
+/**
+ * 声明偏好 key → 匹配函数
+ *
+ * 设计原则：
+ * - sweet:   flavorProfile.sweet >= 3 OR tags 含 sweet/dessert OR subCategory 为 dessert
+ * - fried:   isFried === true OR tags 含 fried/deep_fried
+ * - carbs:   category 为 grain OR foodGroup 为 grain/noodle/rice/bread OR tags 含 high_carb
+ * - meat:    foodGroup 在 MEAT_FG 集合中 OR category 为 meat
+ * - spicy:   flavorProfile.spicy >= 3 OR tags 含 spicy
+ * - light:   isFried === false AND fat < 10 AND tags 不含 fried/heavy（偏好清淡=不喜欢油腻）
+ * - seafood: foodGroup 在 SEAFOOD_FG 集合中 OR category 为 seafood
+ */
+const FOOD_PREF_MATCHERS: Record<string, PrefMatcher> = {
+  sweet: (food) => {
+    const fp = food.flavorProfile as Record<string, number> | undefined;
+    if (fp && (fp['sweet'] ?? 0) >= 3) return true;
+    const tags: string[] = food.tags || [];
+    if (tags.some((t) => t === 'sweet' || t === 'dessert')) return true;
+    const subCat = (food.subCategory || '').toLowerCase();
+    return subCat === 'dessert' || subCat === 'sweet';
+  },
+  fried: (food) => {
+    if (food.isFried) return true;
+    const tags: string[] = food.tags || [];
+    return tags.some(
+      (t) => t === 'fried' || t === 'deep_fried' || t === 'pan_fried',
+    );
+  },
+  carbs: (food) => {
+    const fg = (food.foodGroup || '').toLowerCase();
+    const cat = (food.category || '').toLowerCase();
+    if (cat === 'grain') return true;
+    if (['grain', 'noodle', 'rice', 'bread', 'pasta', 'cereal'].includes(fg))
+      return true;
+    const tags: string[] = food.tags || [];
+    return tags.some((t) => t === 'high_carb' || t === 'carbs');
+  },
+  meat: (food) => {
+    const fg = (food.foodGroup || '').toLowerCase();
+    const cat = (food.category || '').toLowerCase();
+    return MEAT_FG.has(fg) || cat === 'meat';
+  },
+  spicy: (food) => {
+    const fp = food.flavorProfile as Record<string, number> | undefined;
+    if (fp && (fp['spicy'] ?? 0) >= 3) return true;
+    const tags: string[] = food.tags || [];
+    return tags.some((t) => t === 'spicy' || t === 'hot');
+  },
+  light: (food) => {
+    // 清淡偏好：食物本身是非油炸、低脂、非辛辣的
+    if (food.isFried) return false;
+    const fat = Number(food.fat) || 0;
+    if (fat > 15) return false; // 每100g脂肪超15g视为不清淡
+    const fp = food.flavorProfile as Record<string, number> | undefined;
+    if (fp && (fp['spicy'] ?? 0) >= 3) return false;
+    const tags: string[] = food.tags || [];
+    if (tags.some((t) => t === 'fried' || t === 'heavy' || t === 'greasy'))
+      return false;
+    return true;
+  },
+  seafood: (food) => {
+    const fg = (food.foodGroup || '').toLowerCase();
+    const cat = (food.category || '').toLowerCase();
+    return SEAFOOD_FG.has(fg) || cat === 'seafood';
+  },
+};
 
 export class PreferenceSignalFactor implements ScoringFactor {
   readonly name = 'preference-signal';
@@ -76,7 +171,7 @@ export class PreferenceSignalFactor implements ScoringFactor {
     let multiplier = 1.0;
     const parts: string[] = [];
 
-    // 1. loves/avoids
+    // 1. loves/avoids（行为画像：具体食物名称关键字匹配）
     const name = food.name;
     const mainIng = food.mainIngredient || '';
     if (this.loves.some((l) => name.includes(l) || mainIng.includes(l))) {
@@ -88,7 +183,7 @@ export class PreferenceSignalFactor implements ScoringFactor {
       parts.push(`avoids×${this.avoidsMultiplier}`);
     }
 
-    // 2. 四维画像
+    // 2. 四维画像（协同过滤学习到的偏好权重）
     const catW = this.categoryWeights[food.category];
     if (catW !== undefined) multiplier *= catW;
     const ingW = food.mainIngredient
@@ -102,15 +197,15 @@ export class PreferenceSignalFactor implements ScoringFactor {
     const nameW = this.foodNameWeights[food.name];
     if (nameW !== undefined) multiplier *= nameW;
 
-    // 3. 声明偏好
+    // 3. 声明偏好（结构化多字段映射，支持全部 7 个枚举）
     if (this.declaredFoodPrefs.length > 0) {
-      const foodTags = food.tags || [];
-      const foodCat = food.category || '';
-      const foodSubCat = food.subCategory || '';
-      const matchCount = this.declaredFoodPrefs.filter(
-        (pref) =>
-          foodTags.includes(pref) || foodCat === pref || foodSubCat === pref,
-      ).length;
+      let matchCount = 0;
+      for (const pref of this.declaredFoodPrefs) {
+        const matcher = FOOD_PREF_MATCHERS[pref];
+        if (matcher && matcher(food)) {
+          matchCount++;
+        }
+      }
       if (matchCount > 0) {
         const fpBoost =
           1 +

@@ -127,9 +127,6 @@ export class ProfileFactory {
     // 多样性容忍度: 从行为画像推断
     const diversityTolerance = ProfileFactory.inferDiversityTolerance(ctx);
 
-    // 饮食哲学: 从 dietaryRestrictions 推断
-    const dietaryPhilosophy = ProfileFactory.inferDietaryPhilosophy(ctx);
-
     // 用餐模式: 从 declared.mealsPerDay 推断
     const mealPattern = ProfileFactory.inferMealPattern(ctx);
 
@@ -146,7 +143,6 @@ export class ProfileFactory {
       budgetSensitivity: undefined,
       cuisineWeights,
       diversityTolerance,
-      dietaryPhilosophy,
       mealPattern,
       flavorOpenness,
     });
@@ -214,22 +210,6 @@ export class ProfileFactory {
     // 当前无直接的品类多样性数据 — 返回 undefined 使用默认值
     // V7.1 可基于 recommendation_feedbacks 中的替换频率推断
     return undefined;
-  }
-
-  /**
-   * 从饮食限制推断饮食哲学
-   */
-  private static inferDietaryPhilosophy(
-    ctx: EnrichedProfileContext,
-  ): PreferencesProfile['dietaryPhilosophy'] | undefined {
-    const restrictions = ctx.dietaryRestrictions ?? [];
-    const lower = restrictions.map((r) => r.toLowerCase());
-
-    if (lower.includes('vegan')) return 'vegan';
-    if (lower.includes('vegetarian')) return 'vegetarian';
-    if (lower.includes('pescatarian')) return 'pescatarian';
-
-    return undefined; // 默认 omnivore
   }
 
   /**

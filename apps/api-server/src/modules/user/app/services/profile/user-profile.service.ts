@@ -1114,8 +1114,6 @@ export class UserProfileService {
     if (dto.realismLevel !== undefined) patch.realismLevel = dto.realismLevel;
     if (dto.diversityTolerance !== undefined)
       patch.diversityTolerance = dto.diversityTolerance as any;
-    if (dto.dietaryPhilosophy !== undefined)
-      patch.dietaryPhilosophy = dto.dietaryPhilosophy as any;
     if (dto.mealPattern !== undefined)
       patch.mealPattern = dto.mealPattern as any;
     if (dto.flavorOpenness !== undefined)

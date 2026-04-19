@@ -313,7 +313,7 @@ export class FoodFilterService {
         if (FoodFilterService.MEAT_FOOD_GROUPS.has(fg)) return true;
         if (FoodFilterService.MEAT_MAIN_INGREDIENTS.has(mi)) return true;
       } else if (r === 'lactose_free') {
-        // #fix Bug32: 乳糖不耐受 — 排除含乳制品食物（通过 allergens 字段）
+        // 乳糖不耐受 — 排除含乳制品食物
         const foodAllergens: string[] = (food as any).allergens || [];
         if (
           foodAllergens.some(
@@ -327,6 +327,43 @@ export class FoodFilterService {
           mi === 'cheese' ||
           mi === 'yogurt' ||
           mi === 'cream'
+        )
+          return true;
+      } else if (r === 'no_beef') {
+        // 不吃牛肉 — 排除牛肉相关食物
+        if (fg === 'beef') return true;
+        if (mi === 'beef' || mi === '牛肉') return true;
+        if ((food.name || '').toLowerCase().includes('beef')) return true;
+      } else if (r === 'gluten_free') {
+        // 无麸质 — 排除含麸质/小麦食物（复用 celiac 逻辑）
+        const foodAllergens: string[] = (food as any).allergens || [];
+        if (foodAllergens.some((a: string) => a === 'gluten' || a === 'wheat'))
+          return true;
+        if (fg === 'wheat' || fg === 'flour') return true;
+      } else if (r === 'halal') {
+        // 清真 — 排除猪肉、猪肉制品及含酒精食物
+        if (fg === 'pork' || fg === 'processed_meat') {
+          // processed_meat 中可能含猪肉，按保守策略排除
+          return true;
+        }
+        if (
+          mi === 'pork' ||
+          mi === 'bacon' ||
+          mi === 'ham' ||
+          mi === 'lard' ||
+          mi === '猪肉'
+        )
+          return true;
+        const tags = food.tags || [];
+        if (tags.includes('alcohol') || tags.includes('alcoholic')) return true;
+      } else if (r === 'kosher') {
+        // 犹太洁食 — 排除猪肉和贝类（最基础规则）
+        if (fg === 'pork') return true;
+        if (mi === 'pork' || mi === 'bacon' || mi === 'ham' || mi === '猪肉')
+          return true;
+        if (
+          FoodFilterService.SEAFOOD_FOOD_GROUPS.has(fg) &&
+          fg !== 'fish' // kosher 允许有鳞有鳍的鱼，排除无鳞贝类
         )
           return true;
       }
@@ -435,7 +472,7 @@ export function foodViolatesDietaryRestriction(
     } else if (r === 'pescatarian') {
       if (MEAT_FG.has(fg) || MEAT_MI.has(mi)) return true;
     } else if (r === 'lactose_free') {
-      // #fix Bug32: 乳糖不耐受 — 排除含乳制品食物
+      // 乳糖不耐受 — 排除含乳制品食物
       const foodAllergens: string[] = food.allergens || [];
       if (
         foodAllergens.some(
@@ -446,6 +483,36 @@ export function foodViolatesDietaryRestriction(
       if (fg === 'dairy') return true;
       if (mi === 'milk' || mi === 'cheese' || mi === 'yogurt' || mi === 'cream')
         return true;
+    } else if (r === 'no_beef') {
+      // 不吃牛肉 — 排除牛肉相关食物
+      if (fg === 'beef') return true;
+      if (mi === 'beef' || mi === '牛肉') return true;
+      if ((food.name || '').toLowerCase().includes('beef')) return true;
+    } else if (r === 'gluten_free') {
+      // 无麸质 — 排除含麸质/小麦食物
+      const foodAllergens: string[] = food.allergens || [];
+      if (foodAllergens.some((a) => a === 'gluten' || a === 'wheat'))
+        return true;
+      if (fg === 'wheat' || fg === 'flour') return true;
+    } else if (r === 'halal') {
+      // 清真 — 排除猪肉、猪肉制品及含酒精食物
+      if (fg === 'pork' || fg === 'processed_meat') return true;
+      if (
+        mi === 'pork' ||
+        mi === 'bacon' ||
+        mi === 'ham' ||
+        mi === 'lard' ||
+        mi === '猪肉'
+      )
+        return true;
+      const tags = food.tags || [];
+      if (tags.includes('alcohol') || tags.includes('alcoholic')) return true;
+    } else if (r === 'kosher') {
+      // 犹太洁食 — 排除猪肉和贝类（基础规则）
+      if (fg === 'pork') return true;
+      if (mi === 'pork' || mi === 'bacon' || mi === 'ham' || mi === '猪肉')
+        return true;
+      if (SEAFOOD_FG.has(fg) && fg !== 'fish') return true;
     }
   }
   return false;

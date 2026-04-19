@@ -51,23 +51,6 @@ export interface PreferencesProfile {
   diversityTolerance: 'low' | 'medium' | 'high';
 
   /**
-   * 饮食哲学
-   *
-   * 影响 Recall 阶段的硬过滤：
-   * - omnivore: 不限（默认）
-   * - pescatarian: 排除非鱼肉类
-   * - vegetarian: 排除所有肉类
-   * - vegan: 排除所有动物性食物
-   * - none: 等同 omnivore
-   */
-  dietaryPhilosophy:
-    | 'omnivore'
-    | 'pescatarian'
-    | 'vegetarian'
-    | 'vegan'
-    | 'none';
-
-  /**
    * 用餐模式
    *
    * 影响 MEAL_RATIOS 热量分配：
@@ -97,7 +80,6 @@ export const DEFAULT_PREFERENCES_PROFILE: PreferencesProfile = {
   budgetSensitivity: 'moderate',
   cuisineWeights: {},
   diversityTolerance: 'medium',
-  dietaryPhilosophy: 'omnivore',
   mealPattern: 'standard_three',
   flavorOpenness: 'moderate',
 };
@@ -146,13 +128,6 @@ export function validatePreferencesProfile(
   const validCooking = ['quick', 'moderate', 'elaborate'];
   const validBudget = ['budget', 'moderate', 'unlimited'];
   const validDiversity = ['low', 'medium', 'high'];
-  const validPhilosophy = [
-    'omnivore',
-    'pescatarian',
-    'vegetarian',
-    'vegan',
-    'none',
-  ];
   const validMealPattern = [
     'frequent_small',
     'standard_three',
@@ -182,12 +157,6 @@ export function validatePreferencesProfile(
     )
       ? (profile.diversityTolerance as PreferencesProfile['diversityTolerance'])
       : defaults.diversityTolerance,
-
-    dietaryPhilosophy: validPhilosophy.includes(
-      profile.dietaryPhilosophy as string,
-    )
-      ? (profile.dietaryPhilosophy as PreferencesProfile['dietaryPhilosophy'])
-      : defaults.dietaryPhilosophy,
 
     mealPattern: validMealPattern.includes(profile.mealPattern as string)
       ? (profile.mealPattern as PreferencesProfile['mealPattern'])

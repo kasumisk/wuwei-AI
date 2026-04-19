@@ -524,19 +524,6 @@ export class UpdateRecommendationPreferencesDto {
   @IsIn(['low', 'medium', 'high'])
   diversityTolerance?: 'low' | 'medium' | 'high';
 
-  /** V7.0: 饮食哲学 */
-  @ApiPropertyOptional({
-    enum: ['omnivore', 'pescatarian', 'vegetarian', 'vegan', 'none'],
-  })
-  @IsOptional()
-  @IsIn(['omnivore', 'pescatarian', 'vegetarian', 'vegan', 'none'])
-  dietaryPhilosophy?:
-    | 'omnivore'
-    | 'pescatarian'
-    | 'vegetarian'
-    | 'vegan'
-    | 'none';
-
   /** V7.0: 用餐模式 */
   @ApiPropertyOptional({
     enum: ['frequent_small', 'standard_three', 'intermittent_fasting'],

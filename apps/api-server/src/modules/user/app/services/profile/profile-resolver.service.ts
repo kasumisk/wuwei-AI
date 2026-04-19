@@ -137,7 +137,7 @@ export class ProfileResolverService {
     this.logger.debug(
       `Domain profiles built for user ${userId}: ` +
         `nutrition(bmr=${domainProfiles.nutrition.bmr}, tdee=${domainProfiles.nutrition.tdee}, confidence=${domainProfiles.nutrition.confidence.toFixed(2)}), ` +
-        `preferences(cuisine=${Object.keys(domainProfiles.preferences.cuisineWeights).length} entries, philosophy=${domainProfiles.preferences.dietaryPhilosophy})`,
+        `preferences(cuisine=${Object.keys(domainProfiles.preferences.cuisineWeights).length} entries)`,
     );
 
     return {

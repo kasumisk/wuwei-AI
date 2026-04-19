@@ -47,13 +47,13 @@ const DIVERSITY_OPTS = [
   { value: 'high', label: '多变', desc: '每天都不同' },
 ] as const;
 
-const PHILOSOPHY_OPTS = [
-  { value: 'omnivore', label: '杂食' },
-  { value: 'pescatarian', label: '鱼素' },
-  { value: 'vegetarian', label: '素食' },
-  { value: 'vegan', label: '纯素' },
-  { value: 'none', label: '不限' },
-] as const;
+// const PHILOSOPHY_OPTS = [
+//   { value: 'omnivore', label: '杂食' },
+//   { value: 'pescatarian', label: '鱼素' },
+//   { value: 'vegetarian', label: '素食' },
+//   { value: 'vegan', label: '纯素' },
+//   { value: 'none', label: '不限' },
+// ] as const;
 
 const MEAL_PATTERN_OPTS = [
   { value: 'frequent_small', label: '少食多餐', desc: '每天 4-6 次小份' },
@@ -342,30 +342,6 @@ export default function PreferencesPage() {
         onChange={(v) => savePrefs('budgetSensitivity', v)}
         disabled={isSaving}
       />
-
-      <div className="border-t border-border/30 pt-1" />
-      <GroupLabel>饮食哲学</GroupLabel>
-
-      <div>
-        <p className="text-sm font-bold text-foreground mb-2">饮食理念</p>
-        <div className="flex flex-wrap gap-2">
-          {PHILOSOPHY_OPTS.map(({ value, label }) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => savePrefs('dietaryPhilosophy', value)}
-              disabled={isSaving}
-              className={`px-4 py-2  text-xs font-bold transition-all ${
-                localPrefs.dietaryPhilosophy === value
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground'
-              } disabled:opacity-50`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
 
       <Seg
         label="用餐模式"

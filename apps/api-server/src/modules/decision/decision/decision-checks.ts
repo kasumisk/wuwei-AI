@@ -372,6 +372,9 @@ export function checkAllergenConflict(
 
 /**
  * 饮食限制冲突检查（可能强制 avoid）
+ *
+ * 覆盖全部 7 个枚举：
+ *   vegetarian / vegan / no_beef / lactose_free / gluten_free / halal / kosher
  */
 export function checkRestrictionConflict(
   foods: CheckableFoodItem[],
@@ -381,44 +384,89 @@ export function checkRestrictionConflict(
   if (!ctx.dietaryRestrictions || ctx.dietaryRestrictions.length === 0)
     return null;
 
-  const foodTexts = buildFoodTexts(foods);
-  const meatKeywords = [
-    '肉',
-    '鸡',
-    '猪',
-    '牛',
-    '羊',
-    '鱼',
-    '虾',
-    '蟹',
-    'meat',
-    'chicken',
-    'pork',
-    'beef',
-    'fish',
-    'shrimp',
-  ];
-  const isVegetarian = (ctx.dietaryRestrictions ?? []).some((r) =>
-    ['素食', '纯素', 'vegetarian', 'vegan'].includes(r.toLowerCase()),
-  );
+  const restrictions = ctx.dietaryRestrictions.map((r) => r.toLowerCase());
 
-  if (isVegetarian && meatKeywords.some((k) => foodTexts.includes(k))) {
-    return {
-      triggered: true,
-      severity: 'critical',
-      decisionOverride: 'avoid',
-      reason: t('decision.context.restrictionConflict', {}, locale),
-      issue: {
-        category: 'restriction',
-        severity: 'critical',
-        message: t('decision.context.restrictionConflict', {}, locale),
-      },
-    };
+  for (const food of foods) {
+    const name = (food.name || '').toLowerCase();
+    const cat = (food.category || '').toLowerCase();
+    const allergens: string[] = (food as any).allergens || [];
+
+    for (const r of restrictions) {
+      let violated = false;
+
+      if (r === 'vegetarian' || r === 'vegan') {
+        // 素食 / 纯素：名称含肉/鱼/海鲜关键字
+        const meatKeywords = [
+          '肉',
+          '鸡',
+          '猪',
+          '牛',
+          '羊',
+          '鱼',
+          '虾',
+          '蟹',
+          'meat',
+          'chicken',
+          'pork',
+          'beef',
+          'fish',
+          'shrimp',
+        ];
+        if (meatKeywords.some((k) => name.includes(k))) violated = true;
+        if (r === 'vegan') {
+          // 纯素额外排除蛋奶
+          if (allergens.some((a) => a === 'dairy' || a === 'egg'))
+            violated = true;
+          if (cat === 'dairy' || cat === 'egg') violated = true;
+        }
+      } else if (r === 'no_beef') {
+        if (name.includes('牛') || name.includes('beef')) violated = true;
+        if ((food as any).foodGroup === 'beef') violated = true;
+      } else if (r === 'lactose_free') {
+        if (
+          allergens.some(
+            (a) => a === 'dairy' || a === 'milk' || a === 'lactose',
+          )
+        )
+          violated = true;
+        if (cat === 'dairy') violated = true;
+      } else if (r === 'gluten_free') {
+        if (allergens.some((a) => a === 'gluten' || a === 'wheat'))
+          violated = true;
+      } else if (r === 'halal') {
+        if (
+          name.includes('猪') ||
+          name.includes('pork') ||
+          name.includes('bacon') ||
+          name.includes('ham')
+        )
+          violated = true;
+        if ((food as any).foodGroup === 'pork') violated = true;
+      } else if (r === 'kosher') {
+        if (name.includes('猪') || name.includes('pork')) violated = true;
+        if ((food as any).foodGroup === 'pork') violated = true;
+      }
+
+      if (violated) {
+        return {
+          triggered: true,
+          severity: 'critical',
+          decisionOverride: 'avoid',
+          reason: t('decision.context.restrictionConflict', {}, locale),
+          issue: {
+            category: 'restriction',
+            severity: 'critical',
+            message: t('decision.context.restrictionConflict', {}, locale),
+            data: { restriction: r, food: food.name },
+          },
+        };
+      }
+    }
   }
 
-  // Fix B2: low_sodium 饮食限制——钠超过800mg时警告
-  const isLowSodium = (ctx.dietaryRestrictions ?? []).some((r) =>
-    ['low_sodium', '低盐', '低钠'].includes(r.toLowerCase()),
+  // low_sodium 单独保留（钠数值判断）
+  const isLowSodium = restrictions.some((r) =>
+    ['low_sodium', '低盐', '低钠'].includes(r),
   );
   if (isLowSodium) {
     const totalSodium = foods.reduce((s, f) => s + (f.sodium ?? 0), 0);

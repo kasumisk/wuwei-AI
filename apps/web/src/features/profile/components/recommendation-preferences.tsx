@@ -18,7 +18,6 @@ import type {
  */
 
 type DiversityTolerance = 'low' | 'medium' | 'high';
-type DietaryPhilosophy = 'omnivore' | 'pescatarian' | 'vegetarian' | 'vegan' | 'none';
 type MealPattern = 'frequent_small' | 'standard_three' | 'intermittent_fasting';
 type FlavorOpenness = 'conservative' | 'moderate' | 'adventurous';
 type RealismLevel = 'strict' | 'normal' | 'relaxed' | 'off';
@@ -45,14 +44,6 @@ const DIVERSITY_OPTIONS: { value: DiversityTolerance; label: string; desc: strin
   { value: 'low', label: '稳定', desc: '每周重复同样菜品也没关系' },
   { value: 'medium', label: '适度', desc: '偶尔尝新，保持一定规律' },
   { value: 'high', label: '多变', desc: '每天都想吃不同的东西' },
-];
-
-const PHILOSOPHY_OPTIONS: { value: DietaryPhilosophy; label: string }[] = [
-  { value: 'omnivore', label: '杂食' },
-  { value: 'pescatarian', label: '鱼素' },
-  { value: 'vegetarian', label: '素食' },
-  { value: 'vegan', label: '纯素' },
-  { value: 'none', label: '不限' },
 ];
 
 const MEAL_PATTERN_OPTIONS: { value: MealPattern; label: string; desc: string }[] = [
@@ -121,7 +112,6 @@ type LocalPrefs = {
   cooking: CookingEffort | undefined;
   budget: BudgetSensitivity | undefined;
   diversity: DiversityTolerance | undefined;
-  philosophy: DietaryPhilosophy | undefined;
   mealPattern: MealPattern | undefined;
   flavor: FlavorOpenness | undefined;
   realism: RealismLevel | undefined;
@@ -134,7 +124,6 @@ function toLocalPrefs(prefs: RecommendationPreferences | undefined): Partial<Loc
     cooking: prefs.cookingEffort,
     budget: prefs.budgetSensitivity,
     diversity: prefs.diversityTolerance as DiversityTolerance | undefined,
-    philosophy: prefs.dietaryPhilosophy as DietaryPhilosophy | undefined,
     mealPattern: prefs.mealPattern as MealPattern | undefined,
     flavor: prefs.flavorOpenness as FlavorOpenness | undefined,
     realism: prefs.realismLevel as RealismLevel | undefined,
@@ -180,7 +169,6 @@ export function RecommendationPreferences() {
         cooking: 'cookingEffort',
         budget: 'budgetSensitivity',
         diversity: 'diversityTolerance',
-        philosophy: 'dietaryPhilosophy',
         mealPattern: 'mealPattern',
         flavor: 'flavorOpenness',
         realism: 'realismLevel',
@@ -213,9 +201,7 @@ export function RecommendationPreferences() {
 
       {/* ── 第一组：基础偏好 ── */}
       <div className="space-y-4">
-        <p className="text-[10px] font-bold text-muted-foreground">
-          基础设置
-        </p>
+        <p className="text-[10px] font-bold text-muted-foreground">基础设置</p>
         <SegmentPicker
           label="热度偏好"
           options={POPULARITY_OPTIONS}
@@ -241,31 +227,11 @@ export function RecommendationPreferences() {
 
       <div className="border-t border-border/40" />
 
-      {/* ── 第二组：饮食哲学 ── */}
+      {/* ── 第二组：用餐模式 ── */}
       <div className="space-y-4">
         <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-          饮食哲学
+          用餐模式
         </p>
-
-        <div>
-          <p className="text-xs font-bold text-foreground mb-2">饮食理念</p>
-          <div className="flex flex-wrap gap-2">
-            {PHILOSOPHY_OPTIONS.map(({ value, label }) => (
-              <button
-                key={value}
-                onClick={() => handleChange('philosophy', value)}
-                disabled={isPending}
-                className={`px-3 py-1.5  text-xs font-bold transition-all active:scale-[0.97] ${
-                  local.philosophy === value
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground'
-                } disabled:opacity-50`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
 
         <SegmentPicker
           label="用餐模式"

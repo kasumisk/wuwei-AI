@@ -286,7 +286,6 @@ describe('Domain Profiles (Phase 1)', () => {
       expect(profile.budgetSensitivity).toBe('moderate');
       expect(profile.cuisineWeights).toEqual({});
       expect(profile.diversityTolerance).toBe('medium');
-      expect(profile.dietaryPhilosophy).toBe('omnivore');
       expect(profile.mealPattern).toBe('standard_three');
       expect(profile.flavorOpenness).toBe('moderate');
     });
@@ -356,7 +355,6 @@ describe('Domain Profiles (Phase 1)', () => {
       expect(profile.cuisineWeights['中餐']).toBe(0.8);
       expect(profile.cuisineWeights['日料']).toBe(0.8);
       expect(profile.diversityTolerance).toBe('medium');
-      expect(profile.dietaryPhilosophy).toBe('omnivore');
       expect(profile.mealPattern).toBe('standard_three');
       expect(profile.flavorOpenness).toBe('moderate');
     });
@@ -375,22 +373,6 @@ describe('Domain Profiles (Phase 1)', () => {
       });
       const profile = ProfileFactory.createPreferencesProfile(ctx);
       expect(profile.mealPattern).toBe('frequent_small');
-    });
-
-    it('should infer vegetarian from dietaryRestrictions', () => {
-      const ctx = createMockEnrichedProfileContext({
-        dietaryRestrictions: ['vegetarian'],
-      });
-      const profile = ProfileFactory.createPreferencesProfile(ctx);
-      expect(profile.dietaryPhilosophy).toBe('vegetarian');
-    });
-
-    it('should infer vegan from dietaryRestrictions', () => {
-      const ctx = createMockEnrichedProfileContext({
-        dietaryRestrictions: ['vegan'],
-      });
-      const profile = ProfileFactory.createPreferencesProfile(ctx);
-      expect(profile.dietaryPhilosophy).toBe('vegan');
     });
   });
 

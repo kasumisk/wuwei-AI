@@ -117,7 +117,6 @@ export interface RecommendationPreferences {
   budgetSensitivity?: BudgetSensitivity;
   cuisineWeights?: Record<string, number>;
   diversityTolerance?: 'low' | 'medium' | 'high';
-  dietaryPhilosophy?: 'omnivore' | 'pescatarian' | 'vegetarian' | 'vegan' | 'none';
   mealPattern?: 'frequent_small' | 'standard_three' | 'intermittent_fasting';
   flavorOpenness?: 'conservative' | 'moderate' | 'adventurous';
   realismLevel?: 'strict' | 'normal' | 'relaxed' | 'off';
@@ -129,7 +128,6 @@ export interface UpdateRecommendationPreferencesDto {
   budgetSensitivity?: BudgetSensitivity;
   realismLevel?: 'strict' | 'normal' | 'relaxed' | 'off';
   diversityTolerance?: 'low' | 'medium' | 'high';
-  dietaryPhilosophy?: 'omnivore' | 'pescatarian' | 'vegetarian' | 'vegan' | 'none';
   mealPattern?: 'frequent_small' | 'standard_three' | 'intermittent_fasting';
   flavorOpenness?: 'conservative' | 'moderate' | 'adventurous';
   cuisineWeights?: Record<string, number>;
