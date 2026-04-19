@@ -287,6 +287,7 @@ export interface MealSuggestion {
 // ── 每日计划 ──
 export interface MealPlan {
   foods: string;
+  foodItems: MealFoodItem[];
   calories: number;
   protein: number;
   fat: number;

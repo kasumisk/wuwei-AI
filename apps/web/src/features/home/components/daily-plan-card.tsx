@@ -2,9 +2,8 @@
 
 import { useState, useCallback } from 'react';
 import { usePlanAdjust } from '@/features/home/hooks/use-plan-adjust';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { foodRecordService } from '@/lib/api/food-record';
-import { foodLibraryClientAPI } from '@/lib/api/food-library';
 import { useToast } from '@/lib/hooks/use-toast';
 import type { DailyPlanData, MealPlan } from '@/types/food';
 
@@ -37,7 +36,7 @@ function MacroBar({ protein, fat, carbs }: { protein: number; fat: number; carbs
 
   return (
     <div className="mt-3">
-      <div className="flex h-2  overflow-hidden">
+      <div className="flex h-2 overflow-hidden">
         <div className="bg-blue-400" style={{ width: `${pPct}%` }} />
         <div className="bg-yellow-400" style={{ width: `${fPct}%` }} />
         <div className="bg-green-400" style={{ width: `${cPct}%` }} />
@@ -61,6 +60,7 @@ function MealPanel({
   isSwapping,
   onLog,
   isLogging,
+  isLogged,
 }: {
   label: string;
   emoji: string;
@@ -69,12 +69,13 @@ function MealPanel({
   isSwapping: boolean;
   onLog: () => void;
   isLogging: boolean;
+  isLogged: boolean;
 }) {
   const [showMacro, setShowMacro] = useState(false);
   const hasMacro = plan.protein > 0 || plan.fat > 0 || plan.carbs > 0;
 
   return (
-    <div className="bg-card  p-4">
+    <div className="bg-card p-4">
       {/* 餐次标题行 */}
       <div className="flex items-center justify-between mb-3">
         <span className="text-sm font-bold">
@@ -107,12 +108,17 @@ function MealPanel({
         <button
           onClick={(e) => {
             e.stopPropagation();
-            onLog();
+            if (!isLogged) onLog();
           }}
-          disabled={isLogging}
-          className="flex-1 px-3 py-1.5 rounded-lg bg-primary/10 text-xs font-bold text-primary hover:bg-primary/20 transition-all active:scale-[0.98] disabled:opacity-50"
+          disabled={isLogging || isLogged}
+          className={[
+            'flex-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-[0.98] disabled:opacity-60',
+            isLogged
+              ? 'bg-green-500/15 text-green-600 cursor-default'
+              : 'bg-primary/10 text-primary hover:bg-primary/20',
+          ].join(' ')}
         >
-          {isLogging ? '记录中…' : '记为已吃'}
+          {isLogging ? '记录中…' : isLogged ? '✓ 已记录' : '记为已吃'}
         </button>
         <button
           onClick={(e) => {
@@ -142,34 +148,19 @@ export function DailyPlanCard({ dailyPlan }: DailyPlanCardProps) {
 
   const [swappingSlot, setSwappingSlot] = useState<string | null>(null);
   const [loggingSlot, setLoggingSlot] = useState<string | null>(null);
+  /** 已记录的 slot key 集合（换餐后自动清除） */
+  const [loggedSlots, setLoggedSlots] = useState<Set<string>>(new Set());
   const [showHistory, setShowHistory] = useState(false);
 
   // 默认选中第一个有数据的餐次
   const firstAvailable = MEAL_SLOTS.find(({ key }) => dailyPlan[key] != null)?.key ?? 'morningPlan';
   const [activeTab, setActiveTab] = useState<(typeof MEAL_SLOTS)[number]['key']>(firstAvailable);
 
-  // 一键记录 mutation
-  const logMutation = useMutation({
-    mutationFn: (data: {
-      foods: { name: string; calories: number; protein?: number; fat?: number; carbs?: number }[];
-      totalCalories: number;
-      mealType: string;
-      totalProtein?: number;
-      totalFat?: number;
-      totalCarbs?: number;
-      avgQuality?: number;
-      avgSatiety?: number;
-    }) => foodRecordService.createFoodLog({ ...data, source: 'manual' }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['records'] });
-      queryClient.invalidateQueries({ queryKey: ['summary'] });
-      queryClient.invalidateQueries({ queryKey: ['nutrition-score'] });
-    },
-  });
+  /* ─── 换餐 ─── */
 
   const handleSwapMeal = useCallback(
     async (slotKey: string, slotLabel: string, foods: string) => {
-      setSwappingSlot(slotLabel);
+      setSwappingSlot(slotKey);
       try {
         await adjustPlan({
           reason: `${slotLabel}不想吃"${foods}"，请推荐替代方案`,
@@ -178,6 +169,12 @@ export function DailyPlanCard({ dailyPlan }: DailyPlanCardProps) {
             | 'lunch'
             | 'dinner'
             | 'snack',
+        });
+        // 换餐后重置该 slot 的已记录状态
+        setLoggedSlots((prev) => {
+          const next = new Set(prev);
+          next.delete(slotKey);
+          return next;
         });
         toast({ title: `${slotLabel}已更新` });
       } catch {
@@ -189,81 +186,49 @@ export function DailyPlanCard({ dailyPlan }: DailyPlanCardProps) {
     [adjustPlan, toast]
   );
 
+  /* ─── 记为已吃 ───
+   *
+   * 重构要点：
+   * 1. 废弃 addFromLibrary 混合路径——该 API 每次调用独立创建一条 record，
+   *    导致同一餐被拆为多条，汇总热量重复计算。
+   * 2. 统一走单次 createFoodLog（source: 'recommend'），一餐 = 一条 record，
+   *    热量/宏量素精确按比例分配到每个食物子项。
+   * 3. totalCalories 直接取 plan.calories（不再手工估算），避免数值偏差。
+   */
+
   const handleLogMeal = useCallback(
     async (slotKey: string, slotLabel: string, plan: MealPlan) => {
-      setLoggingSlot(slotLabel);
+      setLoggingSlot(slotKey);
       try {
         const mealType = MEAL_TYPE_MAP[slotKey] || 'lunch';
-        const foodNames = plan.foods
-          .split(/[、，,]+/)
-          .map((s) => s.trim())
-          .filter(Boolean);
+      
+        await foodRecordService.createFoodLog({
+          foods: plan.foodItems,
+          totalCalories: plan.calories,
+          mealType,
+          source: 'recommend',
+          totalProtein: plan.protein > 0 ? plan.protein : undefined,
+          totalFat: plan.fat > 0 ? plan.fat : undefined,
+          totalCarbs: plan.carbs > 0 ? plan.carbs : undefined,
+          avgQuality: 5,
+          avgSatiety: 5,
+        });
 
-        // 尝试对每个食物名匹配食物库，命中则用 from-library API
-        let libraryLogged = 0;
-        const fallbackFoods: typeof foodNames = [];
-
-        for (const name of foodNames) {
-          try {
-            const results = await foodLibraryClientAPI.search(name, 1);
-            const match = results[0];
-            if (match && match.name === name) {
-              await foodLibraryClientAPI.addFromLibrary(match.id, match.standardServingG, mealType);
-              libraryLogged++;
-            } else {
-              fallbackFoods.push(name);
-            }
-          } catch {
-            fallbackFoods.push(name);
-          }
-        }
-
-        // fallback: 仍用 saveRecord 记录未匹配的食物
-        if (fallbackFoods.length > 0) {
-          const perFoodCalories =
-            fallbackFoods.length > 0
-              ? Math.round(plan.calories / foodNames.length) *
-                Math.ceil(fallbackFoods.length / foodNames.length)
-              : plan.calories;
-          const foods = fallbackFoods.map((name) => ({
-            name,
-            calories: Math.round(plan.calories / foodNames.length),
-            protein: plan.protein > 0 ? Math.round(plan.protein / foodNames.length) : undefined,
-            fat: plan.fat > 0 ? Math.round(plan.fat / foodNames.length) : undefined,
-            carbs: plan.carbs > 0 ? Math.round(plan.carbs / foodNames.length) : undefined,
-          }));
-          await logMutation.mutateAsync({
-            foods,
-            totalCalories: perFoodCalories,
-            mealType,
-            totalProtein:
-              plan.protein > 0
-                ? Math.round((plan.protein / foodNames.length) * fallbackFoods.length)
-                : undefined,
-            totalFat:
-              plan.fat > 0
-                ? Math.round((plan.fat / foodNames.length) * fallbackFoods.length)
-                : undefined,
-            totalCarbs:
-              plan.carbs > 0
-                ? Math.round((plan.carbs / foodNames.length) * fallbackFoods.length)
-                : undefined,
-            avgQuality: 5,
-            avgSatiety: 5,
-          });
-        }
-
+        // 刷新相关缓存
         queryClient.invalidateQueries({ queryKey: ['records'] });
         queryClient.invalidateQueries({ queryKey: ['summary'] });
         queryClient.invalidateQueries({ queryKey: ['nutrition-score'] });
+
+        // 标记该 slot 已记录
+        setLoggedSlots((prev) => new Set(prev).add(slotKey));
         toast({ title: `${slotLabel}已记录` });
       } catch {
-        toast({ title: `记录失败，请稍后再试`, variant: 'destructive' });
+        toast({ title: '记录失败，请稍后再试', variant: 'destructive' });
       } finally {
         setLoggingSlot(null);
       }
     },
-    [logMutation, toast, queryClient]
+    [toast, queryClient]
   );
 
   const adjustments = dailyPlan.adjustments || [];
@@ -271,7 +236,7 @@ export function DailyPlanCard({ dailyPlan }: DailyPlanCardProps) {
 
   return (
     <section className="mb-6">
-      <div className="bg-surface-container-low  p-5">
+      <div className="bg-surface-container-low p-5">
         {/* 标题行 */}
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
@@ -292,7 +257,7 @@ export function DailyPlanCard({ dailyPlan }: DailyPlanCardProps) {
 
         {/* 最近调整说明 */}
         {dailyPlan.adjustmentNote && (
-          <div className="mb-3 px-3 py-2  bg-blue-500/10 border border-blue-500/20">
+          <div className="mb-3 px-3 py-2 bg-blue-500/10 border border-blue-500/20">
             <p className="text-xs text-blue-600 dark:text-blue-400">
               🔄 {dailyPlan.adjustmentNote}
             </p>
@@ -300,10 +265,11 @@ export function DailyPlanCard({ dailyPlan }: DailyPlanCardProps) {
         )}
 
         {/* Tab 栏 */}
-        <div className="flex gap-1 mb-3 bg-muted/50  p-1">
+        <div className="flex gap-1 mb-3 bg-muted/50 p-1">
           {MEAL_SLOTS.map(({ key, label, emoji }) => {
             const plan = dailyPlan[key];
             const isActive = activeTab === key;
+            const isLogged = loggedSlots.has(key);
             return (
               <button
                 key={key}
@@ -320,7 +286,9 @@ export function DailyPlanCard({ dailyPlan }: DailyPlanCardProps) {
                 <span className="text-sm leading-none mb-0.5">{emoji}</span>
                 <span>{label}</span>
                 {plan && (
-                  <span className={isActive ? 'text-primary font-bold' : ''}>{plan.calories}</span>
+                  <span className={isActive ? 'text-primary font-bold' : ''}>
+                    {isLogged ? '✓' : plan.calories}
+                  </span>
                 )}
               </button>
             );
@@ -338,9 +306,10 @@ export function DailyPlanCard({ dailyPlan }: DailyPlanCardProps) {
                 emoji={slot.emoji}
                 plan={activePlan}
                 onSwap={() => handleSwapMeal(activeTab, slot.label, activePlan.foods)}
-                isSwapping={isAdjusting && swappingSlot === slot.label}
+                isSwapping={isAdjusting && swappingSlot === activeTab}
                 onLog={() => handleLogMeal(activeTab, slot.label, activePlan)}
-                isLogging={logMutation.isPending && loggingSlot === slot.label}
+                isLogging={loggingSlot === activeTab}
+                isLogged={loggedSlots.has(activeTab)}
               />
             );
           })()

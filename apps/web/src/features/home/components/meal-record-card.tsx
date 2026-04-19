@@ -136,7 +136,7 @@ export function MealRecordCard({ meal }: MealRecordCardProps) {
   );
 
   return (
-    <div className="bg-card  shadow-sm overflow-hidden">
+    <div className="bg-card rounded-md overflow-hidden">
       {/* 主卡片区域（点击展开） */}
       <button
         onClick={() => hasDecisionInfo && setExpanded((v) => !v)}

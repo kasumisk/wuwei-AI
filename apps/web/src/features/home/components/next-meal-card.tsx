@@ -223,8 +223,8 @@ export function NextMealCard({ suggestion, summary: _summary, profile }: NextMea
             disabled={isAdjusting || isLogging || eaten}
             className={`w-full py-2.5  text-sm font-bold transition-all active:scale-[0.97] disabled:opacity-60 ${
               eaten
-                ? 'bg-green-100 text-green-700 border border-green-300'
-                : 'bg-primary/10 text-primary border border-primary/20 hover:bg-primary/15'
+                ? 'bg-green-100 text-green-700'
+                : 'bg-primary/10 text-primary'
             }`}
           >
             {isLogging ? (
@@ -233,9 +233,9 @@ export function NextMealCard({ suggestion, summary: _summary, profile }: NextMea
                 记录中...
               </span>
             ) : eaten ? (
-              '✅ 已记录到今日摄入'
+              '已记录到今日摄入'
             ) : (
-              '✅ 我吃了 — 记录摄入'
+              '我吃了 — 记录摄入'
             )}
           </button>
 
