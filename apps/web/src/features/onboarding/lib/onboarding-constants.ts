@@ -99,7 +99,7 @@ export const HEALTH_CONDITION_OPTIONS = [
   { key: 'celiac', label: '乳糜泻', icon: '🌾' },
   { key: 'ibs', label: '肠易激综合征', icon: '🫃' },
   { key: 'fatty_liver', label: '脂肪肝', icon: '🫁' },
-  { key: 'thyroid', label: '甲状腺问题', icon: '🦋' },
+  // { key: 'thyroid', label: '甲状腺问题', icon: '🦋' },
   { key: 'anemia', label: '贫血', icon: '💉' },
   { key: 'osteoporosis', label: '骨质疏松', icon: '🦷' },
   { key: 'cardiovascular', label: '心血管疾病', icon: '💓' },

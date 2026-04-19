@@ -26,6 +26,15 @@ export enum HealthCondition {
   IRON_DEFICIENCY_ANEMIA = 'iron_deficiency_anemia',
   /** V5 2.8: 骨质疏松症 */
   OSTEOPOROSIS = 'osteoporosis',
+  /** V7.9: 心血管疾病（低钠/低饱和脂肪/高Omega-3策略） */
+  CARDIOVASCULAR = 'cardiovascular',
+  /**
+   * V7.9: 甲状腺疾病
+   * 注：完整支持需细分 thyroid_hyper（甲亢，限碘）/ thyroid_hypo（甲减，补碘）。
+   * 当前通用 `thyroid` 采用保守策略：回避高碘极端食物。
+   * 食物库暂无 iodineLevel 字段，通过 high_iodine tag 实现粗粒度匹配。
+   */
+  THYROID = 'thyroid',
 }
 
 /**
@@ -51,6 +60,17 @@ export const HEALTH_CONDITION_ALIASES: Record<string, HealthCondition> = {
   anemia: HealthCondition.IRON_DEFICIENCY_ANEMIA,
   iron_deficiency: HealthCondition.IRON_DEFICIENCY_ANEMIA,
   osteoporosis: HealthCondition.OSTEOPOROSIS,
+  // V7.9: 心血管疾病别名
+  cardiovascular: HealthCondition.CARDIOVASCULAR,
+  cardiovascular_disease: HealthCondition.CARDIOVASCULAR,
+  heart_disease: HealthCondition.CARDIOVASCULAR,
+  // V7.9: 甲状腺疾病别名
+  thyroid: HealthCondition.THYROID,
+  thyroid_disease: HealthCondition.THYROID,
+  thyroid_hyper: HealthCondition.THYROID,
+  thyroid_hypo: HealthCondition.THYROID,
+  hyperthyroidism: HealthCondition.THYROID,
+  hypothyroidism: HealthCondition.THYROID,
 };
 
 /**

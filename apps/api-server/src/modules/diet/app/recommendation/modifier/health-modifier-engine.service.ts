@@ -93,8 +93,8 @@ const L2_KEY_PREFIX = 'health_mod';
  * 1. 一票否决（过敏原/反式脂肪/麸质+乳糜泻）
  * 2. 重度惩罚（油炸/高钠）
  * 3. 目标相关惩罚（减脂高糖/增肌低蛋白）
- * 4. 健康状况惩罚（糖尿病/高血压/高血脂/痛风/肾病/脂肪肝/IBS/贫血）
- * 5. 正向健康增益（高血脂+Omega3/糖尿病+低GI/高血压+高钾低钠/贫血+高铁/骨质疏松+高钙）
+ * 4. 健康状况惩罚（糖尿病/高血压/高血脂/痛风/肾病/脂肪肝/乳糜泻/IBS+fodmapLevel/贫血/骨质疏松/心血管/甲状腺）
+ * 5. 正向健康增益（高血脂+Omega3/糖尿病+低GI/高血压+高钾低钠/贫血+高铁/骨质疏松+高钙/心血管+Omega3+高纤维）
  *
  * V6.4: 二级缓存架构
  * - L1: 请求级内存 Map（同一请求内 context 固定，key=foodId）
@@ -695,14 +695,26 @@ export class HealthModifierEngineService {
     }
 
     // V5 2.8: 肠易激综合征 — 高 FODMAP 食物惩罚
-    // 通过 tags 判断（high_fodmap / fodmap_high）
+    // V7.9: 同时检查 tags（high_fodmap/fodmap_high）和 fodmapLevel 字段（'high'/'moderate'）
     if (conditionNames.includes(HealthCondition.IBS)) {
       const severity = severityMap.get(HealthCondition.IBS) || 'moderate';
       const tags = food.tags || [];
-      if (tags.includes('high_fodmap') || tags.includes('fodmap_high')) {
+      const fodmapLevel = (food as any).fodmapLevel as string | undefined;
+      if (
+        tags.includes('high_fodmap') ||
+        tags.includes('fodmap_high') ||
+        fodmapLevel === 'high'
+      ) {
         mods.push({
           multiplier: this.applySeverity(0.75, severity),
           reason: t('health.condition.ibsHighFODMAP'),
+          type: 'penalty',
+        });
+      } else if (fodmapLevel === 'moderate') {
+        // 中等 FODMAP 轻度惩罚
+        mods.push({
+          multiplier: this.applySeverity(0.9, severity),
+          reason: t('health.condition.ibsFodmapLevel'),
           type: 'penalty',
         });
       }
@@ -723,6 +735,97 @@ export class HealthModifierEngineService {
         mods.push({
           multiplier: this.applySeverity(0.85, severity),
           reason: t('health.condition.anemiaTeaCoffee'),
+          type: 'penalty',
+        });
+      }
+    }
+
+    // V7.9: 骨质疏松 — 高草酸/高钠惩罚（新增）
+    // 高草酸食物（菠菜/苋菜/巧克力等）与钙结合，降低肠道钙吸收率
+    // 高钠加速尿钙排出，加重骨质流失
+    if (conditionNames.includes(HealthCondition.OSTEOPOROSIS)) {
+      const severity =
+        severityMap.get(HealthCondition.OSTEOPOROSIS) || 'moderate';
+      const foodSodiumOsteo = Number(food.sodium) || 0;
+      const oxalateLevel = (food as any).oxalateLevel as string | undefined;
+
+      if (oxalateLevel === 'high') {
+        mods.push({
+          multiplier: this.applySeverity(0.85, severity),
+          reason: t('health.condition.osteoHighOxalate'),
+          type: 'penalty',
+        });
+      }
+      if (foodSodiumOsteo > 400) {
+        mods.push({
+          multiplier: this.applySeverity(0.9, severity),
+          reason: t('health.condition.osteoHighSodium', {
+            amount: String(foodSodiumOsteo),
+          }),
+          type: 'penalty',
+        });
+      }
+    }
+
+    // V7.9: 心血管疾病 — 高饱和脂肪/高胆固醇/高钠/反式脂肪惩罚
+    // 参考：AHA/ACC 心血管膳食指南
+    if (conditionNames.includes(HealthCondition.CARDIOVASCULAR)) {
+      const severity =
+        severityMap.get(HealthCondition.CARDIOVASCULAR) || 'moderate';
+      const satFat = Number(food.saturatedFat) || 0;
+      const cholesterol = Number(food.cholesterol) || 0;
+      const foodSodium = Number(food.sodium) || 0;
+      const foodTransFat = Number(food.transFat) || 0;
+
+      if (satFat > 5) {
+        mods.push({
+          multiplier: this.applySeverity(0.85, severity),
+          reason: t('health.condition.cardiovascularHighSatFat', {
+            amount: String(satFat),
+          }),
+          type: 'penalty',
+        });
+      }
+      if (cholesterol > 100) {
+        mods.push({
+          multiplier: this.applySeverity(0.9, severity),
+          reason: t('health.condition.cardiovascularHighChol', {
+            amount: String(cholesterol),
+          }),
+          type: 'penalty',
+        });
+      }
+      if (foodSodium > 400) {
+        mods.push({
+          multiplier: this.applySeverity(0.85, severity),
+          reason: t('health.condition.cardiovascularSodium', {
+            amount: String(foodSodium),
+          }),
+          type: 'penalty',
+        });
+      }
+      // 含任何反式脂肪即重度惩罚（心血管患者 transFat 应趋近 0）
+      if (foodTransFat > 0) {
+        mods.push({
+          multiplier: this.applySeverity(0.7, severity),
+          reason: t('health.condition.cardiovascularTransFat', {
+            amount: String(foodTransFat),
+          }),
+          type: 'penalty',
+        });
+      }
+    }
+
+    // V7.9: 甲状腺疾病 — 高碘食物保守惩罚
+    // 注：甲亢需限碘，甲减高碘亦有争议；通用 thyroid 采用回避极端高碘策略
+    // food.tags 中的 high_iodine tag 匹配（食物库 iodineLevel 字段暂未建模）
+    if (conditionNames.includes(HealthCondition.THYROID)) {
+      const severity = severityMap.get(HealthCondition.THYROID) || 'moderate';
+      const tags = food.tags || [];
+      if (tags.includes('high_iodine') || tags.includes('iodine_rich')) {
+        mods.push({
+          multiplier: this.applySeverity(0.8, severity),
+          reason: t('health.condition.thyroidHighIodine'),
           type: 'penalty',
         });
       }
@@ -826,6 +929,35 @@ export class HealthModifierEngineService {
           reason: t('health.bonus.osteoHighCalcium', {
             amount: String(calcium),
           }),
+          type: 'bonus',
+        });
+      }
+    }
+
+    // V7.9: 心血管疾病 + Omega-3 丰富: 1.15x bonus
+    // 与高血脂 Omega-3 bonus 逻辑一致
+    if (conditionNames.includes(HealthCondition.CARDIOVASCULAR)) {
+      const severity =
+        severityMap.get(HealthCondition.CARDIOVASCULAR) || 'moderate';
+      const tags = food.tags || [];
+      const isOmega3Rich =
+        tags.includes('omega3_rich') ||
+        tags.includes('high_omega3') ||
+        (food.category === 'protein' &&
+          (tags.includes('fish') || tags.includes('seafood')));
+      if (isOmega3Rich) {
+        mods.push({
+          multiplier: this.applyBonusSeverity(1.15, severity),
+          reason: t('health.bonus.cardiovascularOmega3'),
+          type: 'bonus',
+        });
+      }
+      // 高纤维食物: 1.10x bonus（有助降低心血管风险）
+      const fiber = Number(food.fiber) || 0;
+      if (fiber > 5 || tags.includes('high_fiber')) {
+        mods.push({
+          multiplier: this.applyBonusSeverity(1.1, severity),
+          reason: t('health.bonus.cardiovascularFiber'),
           type: 'bonus',
         });
       }

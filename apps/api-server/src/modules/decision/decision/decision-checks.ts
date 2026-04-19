@@ -45,6 +45,27 @@ export interface CheckableFoodItem {
   addedSugar?: number | null;
   /** 食物库过敏原字段（优先用于过敏原判断，无此字段时退化到名称关键字匹配） */
   allergens?: string[];
+  // ── 健康状况检查所需扩展字段 ──
+  /** 饱和脂肪 (g/100g) */
+  saturatedFat?: number | null;
+  /** 嘌呤 (mg/100g) */
+  purine?: number | null;
+  /** 钾 (mg/100g) */
+  potassium?: number | null;
+  /** 磷 (mg/100g) */
+  phosphorus?: number | null;
+  /** 膳食纤维 (g/100g) */
+  fiber?: number | null;
+  /** 钙 (mg/100g) */
+  calcium?: number | null;
+  /** 铁 (mg/100g) */
+  iron?: number | null;
+  /** 血糖指数 */
+  glycemicIndex?: number | null;
+  /** FODMAP 等级: 'low' | 'moderate' | 'high' */
+  fodmapLevel?: string | null;
+  /** 食物标签数组 */
+  tags?: string[];
 }
 
 // ==================== 内部辅助 ====================
@@ -507,17 +528,71 @@ export function checkHealthConditionRisk(
     (s, f) => s + (Number(f.addedSugar) || 0),
     0,
   );
+  const totalSatFat = foods.reduce(
+    (s, f) => s + (Number(f.saturatedFat) || 0),
+    0,
+  );
+  const totalPurine = foods.reduce((s, f) => s + (Number(f.purine) || 0), 0);
+  const totalPotassium = foods.reduce(
+    (s, f) => s + (Number(f.potassium) || 0),
+    0,
+  );
+  const totalPhosphorus = foods.reduce(
+    (s, f) => s + (Number(f.phosphorus) || 0),
+    0,
+  );
+  const totalCalcium = foods.reduce((s, f) => s + (Number(f.calcium) || 0), 0);
+  const totalIron = foods.reduce((s, f) => s + (Number(f.iron) || 0), 0);
 
-  const hasHypertension = (ctx.healthConditions ?? []).some((c) =>
-    ['高血压', 'hypertension', '高血圧'].includes(c.toLowerCase()),
+  const conds = (ctx.healthConditions ?? []).map((c) => c.toLowerCase());
+
+  const hasHypertension = conds.some((c) =>
+    ['高血压', 'hypertension', '高血圧'].includes(c),
   );
   // Fix B3: 使用子串匹配，兼容 'diabetes_type2' / 'diabetes_type1' 等变体
-  const hasDiabetes = (ctx.healthConditions ?? []).some(
-    (c) => c.toLowerCase() === '糖尿病' || c.toLowerCase().includes('diabetes'),
+  const hasDiabetes = conds.some(
+    (c) => c === '糖尿病' || c.includes('diabetes'),
+  );
+  // V7.9: 心血管疾病
+  const hasCardiovascular = conds.some((c) =>
+    ['cardiovascular', 'cardiovascular_disease', 'heart_disease'].includes(c),
+  );
+  const hasGout = conds.some((c) => ['痛风', 'gout', '痛風'].includes(c));
+  const hasKidneyDisease = conds.some((c) =>
+    ['肾病', 'kidney_disease', '腎臓病', 'chronic_kidney_disease'].includes(c),
+  );
+  const hasHyperlipidemia = conds.some((c) =>
+    ['高血脂', 'hyperlipidemia', '高脂血症'].includes(c),
+  );
+  const hasFattyLiver = conds.some((c) =>
+    ['脂肪肝', 'fatty_liver', '脂肪肝疾患'].includes(c),
+  );
+  const hasCeliac = conds.some((c) =>
+    ['乳糜泻', 'celiac_disease', 'celiac', 'セリアック病'].includes(c),
+  );
+  const hasAnemia = conds.some((c) =>
+    ['缺铁性贫血', 'iron_deficiency_anemia', 'anemia', '鉄欠乏性貧血'].includes(
+      c,
+    ),
+  );
+  const hasOsteoporosis = conds.some((c) =>
+    ['骨质疏松', 'osteoporosis', '骨粗鬆症'].includes(c),
+  );
+  const hasIbs = conds.some((c) =>
+    [
+      '肠易激综合征',
+      'ibs',
+      'irritable_bowel_syndrome',
+      '過敏性腸症候群',
+    ].includes(c),
   );
 
   const sodiumLimit = thresholds?.sodiumLimit ?? (hasHypertension ? 800 : 2000);
   const sugarLimit = thresholds?.addedSugarLimit ?? (hasDiabetes ? 10 : 25);
+  // 心血管钠限：每餐 600mg（每日 1500mg ÷ 2.5 餐）
+  const cvSodiumLimit = 600;
+  // 心血管饱和脂肪限：每餐 5g（每日 13g ÷ 2.5 餐）
+  const cvSatFatLimit = 5;
 
   if (hasHypertension && totalSodium > sodiumLimit) {
     results.push({
@@ -564,6 +639,330 @@ export function checkHealthConditionRisk(
         },
       },
     });
+  }
+
+  // V7.9: 心血管疾病 — 钠和饱和脂肪双维度检查
+  if (hasCardiovascular) {
+    if (totalSodium > cvSodiumLimit) {
+      results.push({
+        triggered: true,
+        severity: 'warning',
+        reason: t(
+          'decision.context.cardiovascularHighSodium',
+          { sodium: String(Math.round(totalSodium)) },
+          locale,
+        ),
+        issue: {
+          category: 'health_risk',
+          severity: 'warning',
+          message: t(
+            'decision.context.cardiovascularHighSodium',
+            { sodium: String(Math.round(totalSodium)) },
+            locale,
+          ),
+          data: {
+            sodium: Math.round(totalSodium),
+            condition: 'cardiovascular',
+          },
+        },
+      });
+    }
+    if (totalSatFat > cvSatFatLimit) {
+      results.push({
+        triggered: true,
+        severity: 'warning',
+        reason: t(
+          'decision.context.cardiovascularHighSatFat',
+          { satFat: String(Math.round(totalSatFat * 10) / 10) },
+          locale,
+        ),
+        issue: {
+          category: 'health_risk',
+          severity: 'warning',
+          message: t(
+            'decision.context.cardiovascularHighSatFat',
+            { satFat: String(Math.round(totalSatFat * 10) / 10) },
+            locale,
+          ),
+          data: {
+            saturatedFat: Math.round(totalSatFat * 10) / 10,
+            condition: 'cardiovascular',
+          },
+        },
+      });
+    }
+  }
+
+  // ── 痛风：嘌呤超标 ──
+  // 每餐嘌呤阈值：100mg（每日 300mg ÷ 3 餐）
+  const goutPurineLimit = 100;
+  if (hasGout && totalPurine > goutPurineLimit) {
+    results.push({
+      triggered: true,
+      severity: 'warning',
+      reason: t(
+        'decision.context.goutHighPurine',
+        { purine: String(Math.round(totalPurine)) },
+        locale,
+      ),
+      issue: {
+        category: 'health_risk',
+        severity: 'warning',
+        message: t(
+          'decision.context.goutHighPurine',
+          { purine: String(Math.round(totalPurine)) },
+          locale,
+        ),
+        data: { purine: Math.round(totalPurine), condition: 'gout' },
+      },
+    });
+  }
+
+  // ── 肾病：钾/磷超标 ──
+  const kidneyPotassiumLimit = 700; // mg/餐（每日 2000mg ÷ 3）
+  const kidneyPhosphorusLimit = 250; // mg/餐（每日 800mg ÷ 3）
+  if (hasKidneyDisease) {
+    if (totalPotassium > kidneyPotassiumLimit) {
+      results.push({
+        triggered: true,
+        severity: 'warning',
+        reason: t(
+          'decision.context.kidneyHighPotassium',
+          { potassium: String(Math.round(totalPotassium)) },
+          locale,
+        ),
+        issue: {
+          category: 'health_risk',
+          severity: 'warning',
+          message: t(
+            'decision.context.kidneyHighPotassium',
+            { potassium: String(Math.round(totalPotassium)) },
+            locale,
+          ),
+          data: {
+            potassium: Math.round(totalPotassium),
+            condition: 'kidney_disease',
+          },
+        },
+      });
+    }
+    if (totalPhosphorus > kidneyPhosphorusLimit) {
+      results.push({
+        triggered: true,
+        severity: 'warning',
+        reason: t(
+          'decision.context.kidneyHighPhosphorus',
+          { phosphorus: String(Math.round(totalPhosphorus)) },
+          locale,
+        ),
+        issue: {
+          category: 'health_risk',
+          severity: 'warning',
+          message: t(
+            'decision.context.kidneyHighPhosphorus',
+            { phosphorus: String(Math.round(totalPhosphorus)) },
+            locale,
+          ),
+          data: {
+            phosphorus: Math.round(totalPhosphorus),
+            condition: 'kidney_disease',
+          },
+        },
+      });
+    }
+  }
+
+  // ── 高血脂：饱和脂肪超标 ──
+  const hyperlipidemicSatFatLimit = 5; // g/餐（每日 13g ÷ 2.5）
+  if (hasHyperlipidemia && totalSatFat > hyperlipidemicSatFatLimit) {
+    results.push({
+      triggered: true,
+      severity: 'warning',
+      reason: t(
+        'decision.context.hyperlipidemiaHighSatFat',
+        { satFat: String(Math.round(totalSatFat * 10) / 10) },
+        locale,
+      ),
+      issue: {
+        category: 'health_risk',
+        severity: 'warning',
+        message: t(
+          'decision.context.hyperlipidemiaHighSatFat',
+          { satFat: String(Math.round(totalSatFat * 10) / 10) },
+          locale,
+        ),
+        data: {
+          saturatedFat: Math.round(totalSatFat * 10) / 10,
+          condition: 'hyperlipidemia',
+        },
+      },
+    });
+  }
+
+  // ── 脂肪肝：饱和脂肪 + 添加糖超标 ──
+  const fattyLiverSatFatLimit = 6; // g/餐
+  const fattyLiverSugarLimit = 8; // g/餐
+  if (hasFattyLiver) {
+    if (totalSatFat > fattyLiverSatFatLimit) {
+      results.push({
+        triggered: true,
+        severity: 'warning',
+        reason: t(
+          'decision.context.fattyLiverHighSatFat',
+          { satFat: String(Math.round(totalSatFat * 10) / 10) },
+          locale,
+        ),
+        issue: {
+          category: 'health_risk',
+          severity: 'warning',
+          message: t(
+            'decision.context.fattyLiverHighSatFat',
+            { satFat: String(Math.round(totalSatFat * 10) / 10) },
+            locale,
+          ),
+          data: {
+            saturatedFat: Math.round(totalSatFat * 10) / 10,
+            condition: 'fatty_liver',
+          },
+        },
+      });
+    }
+    if (totalAddedSugar > fattyLiverSugarLimit) {
+      results.push({
+        triggered: true,
+        severity: 'warning',
+        reason: t(
+          'decision.context.fattyLiverHighSugar',
+          { sugar: String(Math.round(totalAddedSugar)) },
+          locale,
+        ),
+        issue: {
+          category: 'health_risk',
+          severity: 'warning',
+          message: t(
+            'decision.context.fattyLiverHighSugar',
+            { sugar: String(Math.round(totalAddedSugar)) },
+            locale,
+          ),
+          data: {
+            addedSugar: Math.round(totalAddedSugar),
+            condition: 'fatty_liver',
+          },
+        },
+      });
+    }
+  }
+
+  // ── 乳糜泻：含麸质 critical veto ──
+  if (hasCeliac) {
+    const glutenFood = foods.find(
+      (f) =>
+        f.tags?.some((tag) =>
+          ['gluten', 'contains_gluten', 'wheat'].includes(tag.toLowerCase()),
+        ) ||
+        f.allergens?.some((a) => ['gluten', 'wheat'].includes(a.toLowerCase())),
+    );
+    if (glutenFood) {
+      results.push({
+        triggered: true,
+        severity: 'critical',
+        decisionOverride: 'avoid',
+        reason: t(
+          'decision.context.celiacGluten',
+          { food: glutenFood.name },
+          locale,
+        ),
+        issue: {
+          category: 'health_risk',
+          severity: 'critical',
+          message: t(
+            'decision.context.celiacGluten',
+            { food: glutenFood.name },
+            locale,
+          ),
+          data: { food: glutenFood.name, condition: 'celiac_disease' },
+        },
+      });
+    }
+  }
+
+  // ── 缺铁性贫血：餐次铁摄入偏低（info 级，有助提醒） ──
+  // 仅在餐次热量显著（>200kcal）且铁含量极低时提示
+  const mealCalories = foods.reduce((s, f) => s + f.calories, 0);
+  const anemiaIronThreshold = 2; // mg/餐，低于此值且餐次非轻食时提示
+  if (
+    hasAnemia &&
+    mealCalories > 200 &&
+    totalIron < anemiaIronThreshold &&
+    totalIron >= 0
+  ) {
+    results.push({
+      triggered: true,
+      severity: 'info',
+      reason: t('decision.context.anemiaLowIron', {}, locale),
+      issue: {
+        category: 'health_risk',
+        severity: 'info',
+        message: t('decision.context.anemiaLowIron', {}, locale),
+        data: { iron: Math.round(totalIron * 10) / 10, condition: 'anemia' },
+      },
+    });
+  }
+
+  // ── 骨质疏松：餐次钙摄入偏低（info 级） ──
+  const osteoporosisCalciumThreshold = 100; // mg/餐，低于此值且餐次非轻食时提示
+  if (
+    hasOsteoporosis &&
+    mealCalories > 200 &&
+    totalCalcium < osteoporosisCalciumThreshold &&
+    totalCalcium >= 0
+  ) {
+    results.push({
+      triggered: true,
+      severity: 'info',
+      reason: t('decision.context.osteoporosisLowCalcium', {}, locale),
+      issue: {
+        category: 'health_risk',
+        severity: 'info',
+        message: t('decision.context.osteoporosisLowCalcium', {}, locale),
+        data: {
+          calcium: Math.round(totalCalcium),
+          condition: 'osteoporosis',
+        },
+      },
+    });
+  }
+
+  // ── IBS：含高 FODMAP 食物 warning ──
+  if (hasIbs) {
+    const highFodmapFood = foods.find(
+      (f) =>
+        f.fodmapLevel === 'high' ||
+        f.tags?.some((tag) =>
+          ['high_fodmap', 'fodmap_high'].includes(tag.toLowerCase()),
+        ),
+    );
+    if (highFodmapFood) {
+      results.push({
+        triggered: true,
+        severity: 'warning',
+        reason: t(
+          'decision.context.ibsHighFodmap',
+          { food: highFodmapFood.name },
+          locale,
+        ),
+        issue: {
+          category: 'health_risk',
+          severity: 'warning',
+          message: t(
+            'decision.context.ibsHighFodmap',
+            { food: highFodmapFood.name },
+            locale,
+          ),
+          data: { food: highFodmapFood.name, condition: 'ibs' },
+        },
+      });
+    }
   }
 
   return results;

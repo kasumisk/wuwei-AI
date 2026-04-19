@@ -482,7 +482,24 @@ const zhCN: Record<string, string> = {
     '脂肪肝: 高饱和脂肪 ({{amount}}g/100g)',
   'health.condition.fattyLiverHighSugar': '脂肪肝: 高糖 ({{amount}}g/100g)',
   'health.condition.ibsHighFODMAP': 'IBS: 高FODMAP食物',
+  'health.condition.ibsFodmapLevel': 'IBS: FODMAP等级高，可能加重肠道不适',
   'health.condition.anemiaTeaCoffee': '贫血: 茶/咖啡抑制铁吸收',
+  // V7.9: 心血管疾病惩罚
+  'health.condition.cardiovascularHighSatFat':
+    '心血管: 饱和脂肪偏高 ({{amount}}g/100g)，增加心血管风险',
+  'health.condition.cardiovascularHighChol':
+    '心血管: 胆固醇偏高 ({{amount}}mg/100g)，不利心血管',
+  'health.condition.cardiovascularSodium':
+    '心血管: 钠含量偏高 ({{amount}}mg/100g)，增加心脏负担',
+  'health.condition.cardiovascularTransFat':
+    '心血管: 含反式脂肪 ({{amount}}g/100g)，严重不利心血管',
+  // V7.9: 甲状腺惩罚
+  'health.condition.thyroidHighIodine':
+    '甲状腺: 高碘食物，建议根据亚型判断是否适合',
+  // V7.9: 骨质疏松惩罚（新增）
+  'health.condition.osteoHighOxalate': '骨质疏松: 高草酸食物影响钙吸收',
+  'health.condition.osteoHighSodium':
+    '骨质疏松: 高钠加速钙流失 ({{amount}}mg/100g)',
 
   // ── health.bonus: 正向增益 ──
   'health.bonus.hyperlipidemiaOmega3': '高血脂: Omega-3丰富，有益血脂',
@@ -492,6 +509,9 @@ const zhCN: Record<string, string> = {
   'health.bonus.anemiaHighIron': '贫血: 高铁食物 ({{amount}}mg/100g)，有益补铁',
   'health.bonus.osteoHighCalcium':
     '骨质疏松: 高钙食物 ({{amount}}mg/100g)，有益骨骼',
+  // V7.9: 心血管增益
+  'health.bonus.cardiovascularOmega3': '心血管: Omega-3丰富，有益心脏保护',
+  'health.bonus.cardiovascularFiber': '心血管: 高纤维食物，有益心血管健康',
 
   // ── error: 补充错误消息（6 个） ──
   'error.noFoodsAvailable': '当前条件下没有可推荐的食物',
@@ -790,6 +810,31 @@ const zhCN: Record<string, string> = {
     '⚠️ 钠含量 {{sodium}}mg 偏高，高血压患者需注意',
   'decision.context.healthHighSugar':
     '⚠️ 添加糖 {{sugar}}g 偏高，糖尿病患者需注意',
+  // V7.9: 心血管决策消息
+  'decision.context.cardiovascularHighSodium':
+    '⚠️ 钠含量 {{sodium}}mg 偏高，心血管患者建议每日限钠 1500mg',
+  'decision.context.cardiovascularHighSatFat':
+    '⚠️ 饱和脂肪 {{satFat}}g 偏高，心血管患者建议每日 ≤13g',
+  // V8.0: 更多健康状况决策消息
+  'decision.context.goutHighPurine':
+    '⚠️ 嘌呤总量 {{purine}}mg 偏高，痛风患者需注意控制嘌呤摄入',
+  'decision.context.kidneyHighPotassium':
+    '⚠️ 钾含量 {{potassium}}mg 偏高，肾病患者建议每日限钾 2000mg',
+  'decision.context.kidneyHighPhosphorus':
+    '⚠️ 磷含量 {{phosphorus}}mg 偏高，肾病患者需注意控制磷摄入',
+  'decision.context.hyperlipidemiaHighSatFat':
+    '⚠️ 饱和脂肪 {{satFat}}g 偏高，高血脂患者建议每日 ≤13g',
+  'decision.context.fattyLiverHighSatFat':
+    '⚠️ 饱和脂肪 {{satFat}}g 偏高，脂肪肝患者建议减少饱和脂肪摄入',
+  'decision.context.fattyLiverHighSugar':
+    '⚠️ 添加糖 {{sugar}}g 偏高，脂肪肝患者建议每日限糖 25g',
+  'decision.context.celiacGluten': '🚫 「{{food}}」含麸质，乳糜泻患者严禁食用',
+  'decision.context.anemiaLowIron':
+    'ℹ️ 本餐铁含量偏低，缺铁性贫血患者建议搭配富铁食物（红肉、豆类、深绿蔬菜）',
+  'decision.context.osteoporosisLowCalcium':
+    'ℹ️ 本餐钙含量偏低，骨质疏松患者建议搭配高钙食物（乳制品、豆腐、深绿蔬菜）',
+  'decision.context.ibsHighFodmap':
+    '⚠️ 「{{food}}」为高 FODMAP 食物，肠易激综合征患者可能引发不适',
   'decision.alt.lateNightMilk': '低卡安神，适合夜间',
   'decision.alt.lateNightFruit': '天然糖+纤维，宵夜更健康',
   'decision.alt.lateNightMilkName': '温牛奶',
@@ -1434,8 +1479,27 @@ const enUS: Record<string, string> = {
   'health.condition.fattyLiverHighSugar':
     'Fatty liver: high sugar ({{amount}}g/100g)',
   'health.condition.ibsHighFODMAP': 'IBS: high FODMAP food',
+  'health.condition.ibsFodmapLevel':
+    'IBS: FODMAP level high, may worsen gut symptoms',
   'health.condition.anemiaTeaCoffee':
     'Anemia: tea/coffee inhibits iron absorption',
+  // V7.9: cardiovascular penalties
+  'health.condition.cardiovascularHighSatFat':
+    'Cardiovascular: high saturated fat ({{amount}}g/100g), increases CV risk',
+  'health.condition.cardiovascularHighChol':
+    'Cardiovascular: high cholesterol ({{amount}}mg/100g), unfavorable for heart',
+  'health.condition.cardiovascularSodium':
+    'Cardiovascular: high sodium ({{amount}}mg/100g), increases cardiac load',
+  'health.condition.cardiovascularTransFat':
+    'Cardiovascular: contains trans fat ({{amount}}g/100g), seriously harmful',
+  // V7.9: thyroid penalty
+  'health.condition.thyroidHighIodine':
+    'Thyroid: high-iodine food — suitability depends on thyroid subtype',
+  // V7.9: osteoporosis penalties (new)
+  'health.condition.osteoHighOxalate':
+    'Osteoporosis: high-oxalate food reduces calcium absorption',
+  'health.condition.osteoHighSodium':
+    'Osteoporosis: high sodium increases calcium loss ({{amount}}mg/100g)',
 
   // ── health.bonus ──
   'health.bonus.hyperlipidemiaOmega3':
@@ -1448,6 +1512,11 @@ const enUS: Record<string, string> = {
     'Anemia: iron-rich food ({{amount}}mg/100g), beneficial for iron intake',
   'health.bonus.osteoHighCalcium':
     'Osteoporosis: calcium-rich food ({{amount}}mg/100g), beneficial for bones',
+  // V7.9: cardiovascular bonuses
+  'health.bonus.cardiovascularOmega3':
+    'Cardiovascular: rich in Omega-3, beneficial for heart protection',
+  'health.bonus.cardiovascularFiber':
+    'Cardiovascular: high-fiber food, beneficial for cardiovascular health',
 
   // ── error (additional) ──
   'error.noFoodsAvailable': 'No foods available under current conditions',
@@ -1770,6 +1839,32 @@ const enUS: Record<string, string> = {
     '⚠️ Sodium {{sodium}}mg is high, caution for hypertension',
   'decision.context.healthHighSugar':
     '⚠️ Added sugar {{sugar}}g is high, caution for diabetes',
+  // V7.9: cardiovascular decision messages
+  'decision.context.cardiovascularHighSodium':
+    '⚠️ Sodium {{sodium}}mg is high, cardiovascular patients should limit to 1500mg/day',
+  'decision.context.cardiovascularHighSatFat':
+    '⚠️ Saturated fat {{satFat}}g is high, cardiovascular patients should limit to ≤13g/day',
+  // V8.0: more health condition decision messages
+  'decision.context.goutHighPurine':
+    '⚠️ Total purine {{purine}}mg is high, gout patients should limit purine intake',
+  'decision.context.kidneyHighPotassium':
+    '⚠️ Potassium {{potassium}}mg is high, kidney disease patients should limit to 2000mg/day',
+  'decision.context.kidneyHighPhosphorus':
+    '⚠️ Phosphorus {{phosphorus}}mg is high, kidney disease patients should limit phosphorus intake',
+  'decision.context.hyperlipidemiaHighSatFat':
+    '⚠️ Saturated fat {{satFat}}g is high, hyperlipidemia patients should limit to ≤13g/day',
+  'decision.context.fattyLiverHighSatFat':
+    '⚠️ Saturated fat {{satFat}}g is high, fatty liver patients should reduce saturated fat',
+  'decision.context.fattyLiverHighSugar':
+    '⚠️ Added sugar {{sugar}}g is high, fatty liver patients should limit to 25g/day',
+  'decision.context.celiacGluten':
+    '🚫 "{{food}}" contains gluten, strictly avoid for celiac disease',
+  'decision.context.anemiaLowIron':
+    'ℹ️ This meal is low in iron; anemia patients should pair with iron-rich foods (red meat, legumes, dark greens)',
+  'decision.context.osteoporosisLowCalcium':
+    'ℹ️ This meal is low in calcium; osteoporosis patients should pair with calcium-rich foods (dairy, tofu, dark greens)',
+  'decision.context.ibsHighFodmap':
+    '⚠️ "{{food}}" is a high-FODMAP food and may trigger IBS symptoms',
   'decision.alt.lateNightMilk': 'Low-cal, soothing, ideal for late night',
   'decision.alt.lateNightFruit': 'Natural sugar + fiber, healthier snack',
   'decision.alt.lateNightMilkName': 'Warm milk',
@@ -2212,7 +2307,26 @@ const jaJP: Record<string, string> = {
     '脂肪肝: 高飽和脂肪 ({{amount}}g/100g)',
   'health.condition.fattyLiverHighSugar': '脂肪肝: 高糖 ({{amount}}g/100g)',
   'health.condition.ibsHighFODMAP': 'IBS: 高FODMAP食品',
+  'health.condition.ibsFodmapLevel':
+    'IBS: FODMAPレベルが高く、腸の不調を悪化させる可能性',
   'health.condition.anemiaTeaCoffee': '貧血: 茶/コーヒーが鉄の吸収を阻害',
+  // V7.9: 心血管疾患ペナルティ
+  'health.condition.cardiovascularHighSatFat':
+    '心血管: 飽和脂肪が多い ({{amount}}g/100g)、心血管リスク増加',
+  'health.condition.cardiovascularHighChol':
+    '心血管: コレステロールが多い ({{amount}}mg/100g)、心臓に不利',
+  'health.condition.cardiovascularSodium':
+    '心血管: ナトリウムが多い ({{amount}}mg/100g)、心臓への負担増加',
+  'health.condition.cardiovascularTransFat':
+    '心血管: トランス脂肪含有 ({{amount}}g/100g)、心血管に深刻な悪影響',
+  // V7.9: 甲状腺ペナルティ
+  'health.condition.thyroidHighIodine':
+    '甲状腺: 高ヨウ素食品 — 甲状腺サブタイプによって適否が異なる',
+  // V7.9: 骨粗鬆症ペナルティ（新規）
+  'health.condition.osteoHighOxalate':
+    '骨粗鬆症: 高シュウ酸食品はカルシウム吸収を阻害',
+  'health.condition.osteoHighSodium':
+    '骨粗鬆症: 高ナトリウムはカルシウム喪失を加速 ({{amount}}mg/100g)',
 
   // ── health.bonus ──
   'health.bonus.hyperlipidemiaOmega3':
@@ -2225,6 +2339,10 @@ const jaJP: Record<string, string> = {
     '貧血: 鉄分豊富な食品 ({{amount}}mg/100g)、鉄補給に有益',
   'health.bonus.osteoHighCalcium':
     '骨粗鬆症: カルシウム豊富な食品 ({{amount}}mg/100g)、骨に有益',
+  // V7.9: 心血管ボーナス
+  'health.bonus.cardiovascularOmega3': '心血管: Omega-3豊富で心臓保護に有益',
+  'health.bonus.cardiovascularFiber':
+    '心血管: 高食物繊維食品、心血管の健康に有益',
 
   // ── behavior.prompt ──
   'behavior.prompt.sectionHeader': '【ユーザー行動プロフィール】',
@@ -2735,6 +2853,32 @@ const jaJP: Record<string, string> = {
     '⚠️ ナトリウム {{sodium}}mg が高め、高血圧の方はご注意',
   'decision.context.healthHighSugar':
     '⚠️ 添加糖 {{sugar}}g が高め、糖尿病の方はご注意',
+  // V7.9: 心血管疾患決定メッセージ
+  'decision.context.cardiovascularHighSodium':
+    '⚠️ ナトリウム {{sodium}}mg が高め、心血管疾患の方は1日1500mgに制限推奨',
+  'decision.context.cardiovascularHighSatFat':
+    '⚠️ 飽和脂肪 {{satFat}}g が高め、心血管疾患の方は1日≤13gに制限推奨',
+  // V8.0: その他の健康状態の決定メッセージ
+  'decision.context.goutHighPurine':
+    '⚠️ プリン体総量 {{purine}}mg が高め、痛風の方はプリン体摂取量に注意',
+  'decision.context.kidneyHighPotassium':
+    '⚠️ カリウム {{potassium}}mg が高め、腎臓病の方は1日2000mgに制限推奨',
+  'decision.context.kidneyHighPhosphorus':
+    '⚠️ リン {{phosphorus}}mg が高め、腎臓病の方はリン摂取量に注意',
+  'decision.context.hyperlipidemiaHighSatFat':
+    '⚠️ 飽和脂肪 {{satFat}}g が高め、高脂血症の方は1日≤13gに制限推奨',
+  'decision.context.fattyLiverHighSatFat':
+    '⚠️ 飽和脂肪 {{satFat}}g が高め、脂肪肝の方は飽和脂肪を控えるよう推奨',
+  'decision.context.fattyLiverHighSugar':
+    '⚠️ 添加糖 {{sugar}}g が高め、脂肪肝の方は1日25gに制限推奨',
+  'decision.context.celiacGluten':
+    '🚫 「{{food}}」にグルテンが含まれており、セリアック病の方は厳禁',
+  'decision.context.anemiaLowIron':
+    'ℹ️ この食事は鉄分が少なめです。鉄欠乏性貧血の方は鉄分豊富な食品（赤身肉・豆類・緑葉野菜）と組み合わせをお勧め',
+  'decision.context.osteoporosisLowCalcium':
+    'ℹ️ この食事はカルシウムが少なめです。骨粗鬆症の方はカルシウム豊富な食品（乳製品・豆腐・緑葉野菜）と組み合わせをお勧め',
+  'decision.context.ibsHighFodmap':
+    '⚠️ 「{{food}}」は高FODMAP食品であり、過敏性腸症候群の症状を引き起こす可能性があります',
   'decision.alt.lateNightMilk': '低カロリーで安眠効果、夜に最適',
   'decision.alt.lateNightFruit': '天然糖+食物繊維、ヘルシーな夜食',
   'decision.alt.lateNightMilkName': 'ホットミルク',

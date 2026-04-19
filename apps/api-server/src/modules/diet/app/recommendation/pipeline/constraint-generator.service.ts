@@ -102,6 +102,27 @@ export class ConstraintGeneratorService {
             excludeTags.push('high_potassium', 'high_phosphorus');
           } else if (condition === HealthCondition.FATTY_LIVER) {
             excludeTags.push('high_fat', 'high_sugar');
+          } else if (condition === HealthCondition.CARDIOVASCULAR) {
+            // V7.9: 心血管疾病 — 排除高钠/高胆固醇/高脂食物，限制钠上限 400mg/100g
+            excludeTags.push('high_sodium', 'high_cholesterol', 'high_fat');
+            maxSodium = maxSodium == null ? 400 : Math.min(maxSodium, 400);
+          } else if (condition === HealthCondition.CELIAC_DISEASE) {
+            // 乳糜泻 — 排除麸质食物（gluten-free 硬约束）
+            excludeTags.push('gluten', 'contains_gluten', 'wheat');
+          } else if (condition === HealthCondition.IRON_DEFICIENCY_ANEMIA) {
+            // 缺铁性贫血 — 优先富铁食物
+            includeTags.push('high_iron');
+          } else if (condition === HealthCondition.OSTEOPOROSIS) {
+            // 骨质疏松 — 排除高草酸食物，优先高钙食物
+            excludeTags.push('high_oxalate');
+            includeTags.push('high_calcium');
+          } else if (condition === HealthCondition.IBS) {
+            // V7.9: IBS — 排除高 FODMAP 食物，优先低 FODMAP 食物
+            excludeTags.push('high_fodmap', 'fodmap_high');
+            includeTags.push('low_fodmap');
+          } else if (condition === HealthCondition.THYROID) {
+            // V7.9: 甲状腺 — 排除高碘食物（保守策略，甲亢/甲减均受高碘影响）
+            excludeTags.push('high_iodine');
           }
         }
       }

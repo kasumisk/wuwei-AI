@@ -123,6 +123,7 @@ export class NutritionTargetService {
       HealthCondition.HYPERLIPIDEMIA,
       HealthCondition.HYPERTENSION,
       HealthCondition.FATTY_LIVER,
+      HealthCondition.CARDIOVASCULAR, // V7.9: 心血管疾病也启用 NRF13.5
     ];
     return conditions.some((c) =>
       cardiovascularConditions.includes(c as HealthCondition),
@@ -304,7 +305,23 @@ export class NutritionTargetService {
           result.solubleFiber = Math.max(result.solubleFiber ?? 0, 5); // 适量可溶性纤维
           break;
 
-        // GOUT, CELIAC_DISEASE, IBS: 主要通过约束标签排除处理，营养目标不变
+        case HealthCondition.CARDIOVASCULAR:
+          // V7.9: 心血管疾病 — AHA/ACC 心脏健康膳食指南
+          // 低钠(<1500mg)、低饱和脂肪(<13g)、零反式脂肪、高纤维(≥30g)、Omega-3 强化
+          result.sodiumLimit = Math.min(result.sodiumLimit, 1500);
+          result.saturatedFatLimit = Math.min(result.saturatedFatLimit, 13);
+          result.transFatLimit = 0;
+          result.fiber = Math.max(result.fiber, 30);
+          result.nrf13_5Enabled = true;
+          result.omega3 = Math.max(result.omega3 ?? 0, 2000); // AHA 心血管推荐 2g/天
+          result.solubleFiber = Math.max(result.solubleFiber ?? 0, 10);
+          break;
+
+        // GOUT, CELIAC_DISEASE, IBS, OSTEOPOROSIS, THYROID: 主要通过约束标签/modifier处理，营养目标不变
+        case HealthCondition.IBS:
+          // IBS: 可溶性纤维目标 ≥5g/天，有助调节肠道菌群
+          result.solubleFiber = Math.max(result.solubleFiber ?? 0, 5);
+          break;
       }
     }
 
