@@ -54,7 +54,7 @@ function SegmentPicker<T extends string>({
   return (
     <div className="space-y-2">
       <p className="text-xs font-bold text-foreground">{label}</p>
-      <div className="flex bg-muted rounded-xl p-1 gap-1">
+      <div className="flex bg-muted  p-1 gap-1">
         {options.map((o) => (
           <button
             key={o.value}
@@ -134,7 +134,7 @@ export function LifestyleProfileCard() {
   if (!isLoggedIn) return null;
 
   return (
-    <div className="bg-card rounded-2xl p-4 space-y-4">
+    <div className="bg-card  p-4 space-y-4">
       <div className="flex items-center gap-2">
         <span className="text-base">🌱</span>
         <h3 className="text-sm font-bold">生活方式</h3>
@@ -176,12 +176,12 @@ export function LifestyleProfileCard() {
             placeholder="例如 2000"
             min={500}
             max={5000}
-            className="flex-1 px-4 py-2.5 rounded-xl bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
+            className="flex-1 px-4 py-2.5  bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
           />
           <button
             onClick={saveHydration}
             disabled={mutation.isPending}
-            className="px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold disabled:opacity-50"
+            className="px-4 py-2.5  bg-primary text-primary-foreground text-xs font-bold disabled:opacity-50"
           >
             保存
           </button>

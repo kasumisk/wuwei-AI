@@ -132,7 +132,7 @@ function Seg<T extends string>({
         <p className="text-sm font-bold text-foreground">{label}</p>
         {hint && <p className="text-[10px] text-muted-foreground">{hint}</p>}
       </div>
-      <div className="flex bg-muted rounded-xl p-1 gap-1">
+      <div className="flex bg-muted  p-1 gap-1">
         {options.map((o) => (
           <button
             key={o.value}
@@ -164,7 +164,7 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-card rounded-2xl p-5 space-y-5">
+    <div className="bg-card  p-5 space-y-5">
       <div className="flex items-center gap-2 pb-1 border-b border-border/30">
         <span className="text-lg">{icon}</span>
         <h2 className="text-sm font-extrabold">{title}</h2>
@@ -176,7 +176,7 @@ function SectionCard({
 
 function GroupLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest -mb-2">
+    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
       {children}
     </p>
   );
@@ -355,7 +355,7 @@ export default function PreferencesPage() {
               type="button"
               onClick={() => savePrefs('dietaryPhilosophy', value)}
               disabled={isSaving}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              className={`px-4 py-2  text-xs font-bold transition-all ${
                 localPrefs.dietaryPhilosophy === value
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-muted text-muted-foreground'
@@ -411,7 +411,7 @@ export default function PreferencesPage() {
 
   const renderKitchen = () => (
     <SectionCard title="厨房装备" icon="🍳">
-      <div className="px-3 py-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20">
+      <div className="px-3 py-2.5  bg-blue-500/10 border border-blue-500/20">
         <p className="text-xs text-blue-600 dark:text-blue-400">
           告诉 AI 你有哪些厨房设备，可以更精准推荐适合你的菜谱
         </p>
@@ -426,7 +426,7 @@ export default function PreferencesPage() {
               type="button"
               onClick={() => saveKitchen({ ...kitchen, primaryStove: value })}
               disabled={isSaving}
-              className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${
+              className={`flex-1 py-2.5  text-xs font-bold transition-all ${
                 kitchen.primaryStove === value
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-muted text-muted-foreground'
@@ -449,7 +449,7 @@ export default function PreferencesPage() {
                 type="button"
                 onClick={() => saveKitchen({ ...kitchen, [key]: !has })}
                 disabled={isSaving}
-                className={`flex flex-col items-center py-4 rounded-xl text-xs font-bold gap-1.5 transition-all ${
+                className={`flex flex-col items-center py-4  text-xs font-bold gap-1.5 transition-all ${
                   has ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground/50'
                 } disabled:opacity-30`}
               >
@@ -468,7 +468,7 @@ export default function PreferencesPage() {
 
   const renderLifestyle = () => (
     <SectionCard title="生活方式" icon="🌱">
-      <div className="px-3 py-2.5 rounded-xl bg-green-500/10 border border-green-500/20">
+      <div className="px-3 py-2.5  bg-green-500/10 border border-green-500/20">
         <p className="text-xs text-green-700 dark:text-green-400">
           生活方式数据帮助 AI 精调推荐权重，例如高压时期推荐更多舒压食物
         </p>
@@ -507,13 +507,13 @@ export default function PreferencesPage() {
             placeholder="例如 2000"
             min={500}
             max={5000}
-            className="flex-1 px-4 py-2.5 rounded-xl bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
+            className="flex-1 px-4 py-2.5  bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
           />
           <button
             type="button"
             onClick={saveHydration}
             disabled={isSaving}
-            className="px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold disabled:opacity-50"
+            className="px-4 py-2.5  bg-primary text-primary-foreground text-xs font-bold disabled:opacity-50"
           >
             保存
           </button>
@@ -576,7 +576,7 @@ export default function PreferencesPage() {
         {isLoading ? (
           <div className="space-y-3">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-14 bg-muted rounded-2xl animate-pulse" />
+              <div key={i} className="h-14 bg-muted  animate-pulse" />
             ))}
           </div>
         ) : (

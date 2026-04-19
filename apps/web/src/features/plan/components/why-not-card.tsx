@@ -35,7 +35,7 @@ export function WhyNotCard({ onExplain, isExplaining, result }: WhyNotCardProps)
 
   return (
     <section className="mb-6">
-      <div className="bg-surface-container-low rounded-2xl p-5">
+      <div className="bg-surface-container-low  p-5">
         {/* 标题 */}
         <div className="flex items-center gap-2 mb-3">
           <span className="text-lg">🤔</span>
@@ -55,7 +55,7 @@ export function WhyNotCard({ onExplain, isExplaining, result }: WhyNotCardProps)
               setShowResult(false);
             }}
             placeholder="例如：炸鸡、奶茶..."
-            className="flex-1 h-10 px-3 rounded-xl bg-muted border-none text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="flex-1 h-10 px-3  bg-muted border-none text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
           <select
             value={mealType}
@@ -63,7 +63,7 @@ export function WhyNotCard({ onExplain, isExplaining, result }: WhyNotCardProps)
               setMealType(e.target.value);
               setShowResult(false);
             }}
-            className="h-10 px-3 rounded-xl bg-muted text-sm border-none focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="h-10 px-3  bg-muted text-sm border-none focus:outline-none focus:ring-2 focus:ring-primary/30"
           >
             {MEAL_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
@@ -76,11 +76,11 @@ export function WhyNotCard({ onExplain, isExplaining, result }: WhyNotCardProps)
         <button
           onClick={handleSubmit}
           disabled={isExplaining || !foodName.trim()}
-          className="w-full py-2.5 rounded-xl text-sm font-bold bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all disabled:opacity-40"
+          className="w-full py-2.5  text-sm font-bold bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all disabled:opacity-40"
         >
           {isExplaining ? (
             <span className="flex items-center justify-center gap-2">
-              <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              <span className="w-4 h-4 border-2 border-white border-t-transparent  animate-spin" />
               分析中...
             </span>
           ) : (
@@ -90,7 +90,7 @@ export function WhyNotCard({ onExplain, isExplaining, result }: WhyNotCardProps)
 
         {/* 结果展示 */}
         {showResult && result && (
-          <div className="mt-4 bg-card rounded-xl p-4 space-y-3">
+          <div className="mt-4 bg-card  p-4 space-y-3">
             <p className="text-sm font-medium">{result.explanation}</p>
 
             {result.reasons && result.reasons.length > 0 && (

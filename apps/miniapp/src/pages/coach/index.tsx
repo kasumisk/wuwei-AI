@@ -164,7 +164,7 @@ function CoachPage() {
             </View>
           ) : (
             conversations.map((conv) => (
-              <View className="flex items-center bg-white rounded-xl p-4 mb-3" key={conv.id}>
+              <View className="flex items-center bg-white  p-4 mb-3" key={conv.id}>
                 <View className="flex-1" onClick={() => handleLoadConversation(conv)}>
                   <Text className="block text-sm font-medium">{conv.title || '对话'}</Text>
                   <Text className="block text-xs text-gray-400 mt-1">
@@ -201,7 +201,7 @@ function CoachPage() {
         {messages.length === 0 ? (
           <View className="py-8">
             {greeting && (
-              <View className="flex items-start bg-white rounded-2xl p-5 mb-5">
+              <View className="flex items-start bg-white  p-5 mb-5">
                 <Text className="text-2xl mr-3 shrink-0">🤖</Text>
                 <Text className="text-sm text-gray-600 leading-relaxed flex-1">
                   {greeting.greeting}
@@ -212,7 +212,7 @@ function CoachPage() {
             {(greeting?.suggestions || quickQuestions).map((q, i) => (
               <View
                 key={i}
-                className="bg-white rounded-xl p-4 mb-2 border border-gray-100"
+                className="bg-white  p-4 mb-2 border border-gray-100"
                 onClick={() => handleSend(q)}
               >
                 <Text className="text-sm text-gray-700">{q}</Text>
@@ -227,7 +227,7 @@ function CoachPage() {
             >
               {msg.role === 'assistant' && <Text className="text-xl mr-2 shrink-0 mt-1">🤖</Text>}
               <View
-                className={`coach-bubble px-4 py-3 text-sm leading-relaxed ${msg.role === 'user' ? 'coach-user-bubble rounded-2xl rounded-br-sm text-white' : 'bg-white rounded-2xl rounded-bl-sm text-gray-800'}`}
+                className={`coach-bubble px-4 py-3 text-sm leading-relaxed ${msg.role === 'user' ? 'coach-user-bubble  rounded-br-sm text-white' : 'bg-white  rounded-bl-sm text-gray-800'}`}
               >
                 <Text className="break-words whitespace-pre-wrap">
                   {msg.content}

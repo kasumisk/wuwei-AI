@@ -70,7 +70,7 @@ export function RecipeListPage() {
         <div className="flex items-center gap-3 px-4 py-3 max-w-lg mx-auto">
           <button
             onClick={() => router.back()}
-            className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-muted transition-colors shrink-0"
+            className="w-9 h-9 flex items-center justify-center  hover:bg-muted transition-colors shrink-0"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
               <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
@@ -96,7 +96,7 @@ export function RecipeListPage() {
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
               placeholder="搜索菜谱..."
-              className="w-full pl-10 pr-4 py-2.5 bg-card border border-border/30 rounded-xl text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+              className="w-full pl-10 pr-4 py-2.5 bg-card border border-border/30  text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
             />
           </div>
         </form>
@@ -108,7 +108,7 @@ export function RecipeListPage() {
               <button
                 key={c}
                 onClick={() => handleCuisineChange(c)}
-                className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all active:scale-[0.97] ${
+                className={`px-3 py-1.5  text-xs font-bold whitespace-nowrap transition-all active:scale-[0.97] ${
                   activeCuisine === c
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-muted text-muted-foreground hover:text-foreground'
@@ -141,7 +141,7 @@ export function RecipeListPage() {
         {isLoading && (
           <div className="grid grid-cols-2 gap-3">
             {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="bg-card rounded-2xl overflow-hidden animate-pulse">
+              <div key={i} className="bg-card  overflow-hidden animate-pulse">
                 <div className="h-40 bg-muted" />
                 <div className="p-3 space-y-2">
                   <div className="h-4 w-20 bg-muted rounded" />
@@ -189,7 +189,7 @@ export function RecipeListPage() {
                 <button
                   onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
                   disabled={isFetching}
-                  className="px-4 py-2 rounded-xl bg-muted text-sm font-medium text-foreground hover:bg-muted/80 transition-all disabled:opacity-50"
+                  className="px-4 py-2  bg-muted text-sm font-medium text-foreground hover:bg-muted/80 transition-all disabled:opacity-50"
                 >
                   上一页
                 </button>
@@ -198,7 +198,7 @@ export function RecipeListPage() {
                 <button
                   onClick={() => setOffset(offset + PAGE_SIZE)}
                   disabled={isFetching}
-                  className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:opacity-90 transition-all disabled:opacity-50"
+                  className="px-4 py-2  bg-primary text-primary-foreground text-sm font-bold hover:opacity-90 transition-all disabled:opacity-50"
                 >
                   {isFetching ? '加载中...' : '下一页'}
                 </button>

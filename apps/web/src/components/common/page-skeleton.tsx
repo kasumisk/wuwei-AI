@@ -31,7 +31,7 @@ export function PageSkeleton({
 
       {showAvatar && (
         <div className="flex items-center gap-3">
-          <Skeleton className="w-12 h-12 rounded-full" />
+          <Skeleton className="w-12 h-12 " />
           <div className="space-y-2 flex-1">
             <Skeleton className="h-4 w-24" />
             <Skeleton className="h-3 w-36" />
@@ -40,14 +40,14 @@ export function PageSkeleton({
       )}
 
       {Array.from({ length: cardCount }).map((_, i) => (
-        <div key={i} className="bg-card rounded-2xl p-4 space-y-3">
+        <div key={i} className="bg-card  p-4 space-y-3">
           <div className="flex items-center justify-between">
             <Skeleton className="h-4 w-20" />
             <Skeleton className="h-4 w-12" />
           </div>
           <Skeleton className="h-3 w-full" />
           <Skeleton className="h-3 w-3/4" />
-          {i === 0 && <Skeleton className="h-8 w-full rounded-xl" />}
+          {i === 0 && <Skeleton className="h-8 w-full " />}
         </div>
       ))}
     </div>
@@ -60,7 +60,7 @@ export function PageSkeleton({
  */
 export function CardSkeleton({ rows = 2 }: { rows?: number }) {
   return (
-    <div className="bg-card rounded-2xl p-4 space-y-3 animate-pulse">
+    <div className="bg-card  p-4 space-y-3 animate-pulse">
       <div className="flex items-center justify-between">
         <Skeleton className="h-4 w-24" />
         <Skeleton className="h-4 w-16" />

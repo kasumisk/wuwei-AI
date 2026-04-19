@@ -147,9 +147,9 @@ export function MacroProgressBars({
               )}
             </div>
             <div className="flex-1 flex items-center gap-2">
-              <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+              <div className="flex-1 h-1.5 bg-muted  overflow-hidden">
                 <div
-                  className={`h-full rounded-full transition-all duration-500 ${color}`}
+                  className={`h-full  transition-all duration-500 ${color}`}
                   style={{ width: `${pct}%` }}
                 />
               </div>

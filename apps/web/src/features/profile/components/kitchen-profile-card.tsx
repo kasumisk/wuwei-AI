@@ -84,7 +84,7 @@ export function KitchenProfileCard() {
   if (!isLoggedIn) return null;
 
   return (
-    <div className="bg-card rounded-2xl p-4 space-y-4">
+    <div className="bg-card  p-4 space-y-4">
       <div className="flex items-center gap-2">
         <span className="text-base">🍳</span>
         <h3 className="text-sm font-bold">厨房装备</h3>
@@ -100,7 +100,7 @@ export function KitchenProfileCard() {
               key={value}
               onClick={() => setStove(value)}
               disabled={mutation.isPending}
-              className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all active:scale-[0.97] ${
+              className={`flex-1 py-2  text-xs font-bold transition-all active:scale-[0.97] ${
                 local.primaryStove === value
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-muted text-muted-foreground'
@@ -123,7 +123,7 @@ export function KitchenProfileCard() {
                 key={key}
                 onClick={() => toggleAppliance(key)}
                 disabled={mutation.isPending}
-                className={`flex flex-col items-center py-3 rounded-xl text-xs font-bold transition-all gap-1 ${
+                className={`flex flex-col items-center py-3  text-xs font-bold transition-all gap-1 ${
                   has
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-muted text-muted-foreground opacity-50'

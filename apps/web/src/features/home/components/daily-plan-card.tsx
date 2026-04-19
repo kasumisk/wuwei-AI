@@ -37,7 +37,7 @@ function MacroBar({ protein, fat, carbs }: { protein: number; fat: number; carbs
 
   return (
     <div className="mt-3">
-      <div className="flex h-2 rounded-full overflow-hidden">
+      <div className="flex h-2  overflow-hidden">
         <div className="bg-blue-400" style={{ width: `${pPct}%` }} />
         <div className="bg-yellow-400" style={{ width: `${fPct}%` }} />
         <div className="bg-green-400" style={{ width: `${cPct}%` }} />
@@ -74,7 +74,7 @@ function MealPanel({
   const hasMacro = plan.protein > 0 || plan.fat > 0 || plan.carbs > 0;
 
   return (
-    <div className="bg-card rounded-xl p-4">
+    <div className="bg-card  p-4">
       {/* 餐次标题行 */}
       <div className="flex items-center justify-between mb-3">
         <span className="text-sm font-bold">
@@ -271,7 +271,7 @@ export function DailyPlanCard({ dailyPlan }: DailyPlanCardProps) {
 
   return (
     <section className="mb-6">
-      <div className="bg-surface-container-low rounded-2xl p-5">
+      <div className="bg-surface-container-low  p-5">
         {/* 标题行 */}
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
@@ -292,7 +292,7 @@ export function DailyPlanCard({ dailyPlan }: DailyPlanCardProps) {
 
         {/* 最近调整说明 */}
         {dailyPlan.adjustmentNote && (
-          <div className="mb-3 px-3 py-2 rounded-xl bg-blue-500/10 border border-blue-500/20">
+          <div className="mb-3 px-3 py-2  bg-blue-500/10 border border-blue-500/20">
             <p className="text-xs text-blue-600 dark:text-blue-400">
               🔄 {dailyPlan.adjustmentNote}
             </p>
@@ -300,7 +300,7 @@ export function DailyPlanCard({ dailyPlan }: DailyPlanCardProps) {
         )}
 
         {/* Tab 栏 */}
-        <div className="flex gap-1 mb-3 bg-muted/50 rounded-xl p-1">
+        <div className="flex gap-1 mb-3 bg-muted/50  p-1">
           {MEAL_SLOTS.map(({ key, label, emoji }) => {
             const plan = dailyPlan[key];
             const isActive = activeTab === key;

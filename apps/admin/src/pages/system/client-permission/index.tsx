@@ -448,7 +448,7 @@ const PermissionManagement: React.FC = () => {
   };
 
   return (
-    <div className="p-6">
+    <div className="p-4">
       <Card>
         <Alert
           message="权限配置说明"

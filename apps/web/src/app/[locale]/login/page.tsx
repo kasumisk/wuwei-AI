@@ -180,15 +180,15 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="bg-background text-foreground min-h-screen flex flex-col items-center justify-center p-6 selection:bg-(--color-primary-container) relative overflow-hidden">
+    <main className="bg-background text-foreground min-h-screen flex flex-col items-center justify-center p-4 selection:bg-(--color-primary-container) relative overflow-hidden">
       {/* Subtle Background Organic Shapes */}
-      <div className="fixed top-[-10%] right-[-10%] w-[60%] h-[50%] bg-surface-container-low rounded-full blur-[120px] -z-10" />
-      <div className="fixed bottom-[-5%] left-[-10%] w-[50%] h-[40%] bg-(--color-surface-variant)/40 rounded-full blur-[100px] -z-10" />
+      <div className="fixed top-[-10%] right-[-10%] w-[60%] h-[50%] bg-surface-container-low  blur-[120px] -z-10" />
+      <div className="fixed bottom-[-5%] left-[-10%] w-[50%] h-[40%] bg-(--color-surface-variant)/40  blur-[100px] -z-10" />
 
       <div className="w-full max-w-md flex flex-col space-y-12">
         {/* Header Branding */}
         <header className="space-y-4">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-primary rounded-2xl text-primary-foreground shadow-xl shadow-primary/10">
+          <div className="inline-flex items-center justify-center w-14 h-14 bg-primary  text-primary-foreground shadow-xl shadow-primary/10">
             <IconPlant className="w-8 h-8" />
           </div>
           <div className="space-y-2">
@@ -249,7 +249,7 @@ export default function LoginPage() {
                     onChange={(e) => setPhone(e.target.value.replace(/[^\d\s]/g, ''))}
                     disabled={isLoading}
                     maxLength={13}
-                    className="w-full bg-(--color-surface-variant) border-none rounded-2xl py-5 pl-20 pr-6 text-lg font-medium text-foreground placeholder:text-muted-foreground/40 focus:ring-2 focus:ring-primary focus:bg-card transition-all outline-none"
+                    className="w-full bg-(--color-surface-variant) border-none  py-5 pl-20 pr-6 text-lg font-medium text-foreground placeholder:text-muted-foreground/40 focus:ring-2 focus:ring-primary focus:bg-card transition-all outline-none"
                   />
                 </div>
               </div>
@@ -259,7 +259,7 @@ export default function LoginPage() {
                 type="button"
                 onClick={handleSendCode}
                 disabled={isLoading || phone.replace(/\s/g, '').length < 11}
-                className="w-full bg-primary text-primary-foreground font-bold py-5 rounded-full text-lg shadow-lg shadow-primary/20 active:scale-[0.98] transition-all flex items-center justify-center space-x-2 disabled:opacity-50 disabled:pointer-events-none"
+                className="w-full bg-primary text-primary-foreground font-bold py-5  text-lg shadow-lg shadow-primary/20 active:scale-[0.98] transition-all flex items-center justify-center space-x-2 disabled:opacity-50 disabled:pointer-events-none"
               >
                 <span>{isLoading ? '发送中...' : '获取验证码'}</span>
                 <IconArrowForward className="w-5 h-5" />
@@ -285,7 +285,7 @@ export default function LoginPage() {
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   disabled={isLoading}
                   maxLength={6}
-                  className="w-full bg-(--color-surface-variant) border-none rounded-2xl py-5 px-6 text-center text-2xl font-bold tracking-[0.5em] text-foreground placeholder:text-muted-foreground/40 placeholder:text-base placeholder:tracking-normal focus:ring-2 focus:ring-primary focus:bg-card transition-all outline-none"
+                  className="w-full bg-(--color-surface-variant) border-none  py-5 px-4 text-center text-2xl font-bold tracking-[0.5em] text-foreground placeholder:text-muted-foreground/40 placeholder:text-base placeholder:tracking-normal focus:ring-2 focus:ring-primary focus:bg-card transition-all outline-none"
                 />
                 <div className="text-center">
                   {countdown > 0 ? (
@@ -308,7 +308,7 @@ export default function LoginPage() {
                 type="button"
                 onClick={handleLogin}
                 disabled={isLoading || code.length < 4}
-                className="w-full bg-primary text-primary-foreground font-bold py-5 rounded-full text-lg shadow-lg shadow-primary/20 active:scale-[0.98] transition-all flex items-center justify-center space-x-2 disabled:opacity-50 disabled:pointer-events-none"
+                className="w-full bg-primary text-primary-foreground font-bold py-5  text-lg shadow-lg shadow-primary/20 active:scale-[0.98] transition-all flex items-center justify-center space-x-2 disabled:opacity-50 disabled:pointer-events-none"
               >
                 <span>{isLoading ? '登录中...' : '登录'}</span>
                 <IconArrowForward className="w-5 h-5" />
@@ -332,7 +332,7 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={handleWechatLogin}
-            className="w-14 h-14 flex items-center justify-center bg-(--color-surface-container-highest) rounded-full active:scale-95 transition-all hover:bg-surface-container-high group"
+            className="w-14 h-14 flex items-center justify-center bg-(--color-surface-container-highest)  active:scale-95 transition-all hover:bg-surface-container-high group"
             title="微信登录"
           >
             <IconChat className="w-6 h-6 text-muted-foreground group-hover:text-foreground" />
@@ -340,7 +340,7 @@ export default function LoginPage() {
         </footer>
 
         {/* Decorative botanical image */}
-        <div className="pt-8 overflow-hidden rounded-2xl opacity-40">
+        <div className="pt-8 overflow-hidden  opacity-40">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             alt="botanical background"
@@ -351,7 +351,7 @@ export default function LoginPage() {
       </div>
 
       {/* Bottom Legal Links */}
-      <div className="fixed bottom-8 text-center w-full px-6">
+      <div className="fixed bottom-8 text-center w-full px-4">
         <p className="text-[10px] text-muted-foreground/60 font-medium tracking-tight">
           继续即表示您同意我们的{' '}
           <a

@@ -124,7 +124,7 @@ export default function FoodDetailClient({ locale, food, relatedFoods }: FoodDet
 
       <main className="max-w-2xl mx-auto px-4 py-4 space-y-6">
         {/* 食物基本信息 */}
-        <div className="bg-linear-to-br from-primary/5 to-primary/10 rounded-2xl p-6">
+        <div className="bg-linear-to-br from-primary/5 to-primary/10  p-4">
           <div className="flex items-center gap-3 mb-4">
             <span className="text-4xl">{categoryEmoji[food.category] || '🍽️'}</span>
             <div>
@@ -137,7 +137,7 @@ export default function FoodDetailClient({ locale, food, relatedFoods }: FoodDet
           </div>
 
           {/* 核心热量数据 */}
-          <div className="bg-background/80 rounded-xl p-4 text-center">
+          <div className="bg-background/80  p-4 text-center">
             <p className="text-sm text-muted-foreground mb-1">{servingGrams}g 热量</p>
             <p className="text-4xl font-bold text-primary">
               {computed.calories}
@@ -152,21 +152,21 @@ export default function FoodDetailClient({ locale, food, relatedFoods }: FoodDet
             营养成分（{servingGrams}g）
           </h3>
           <div className="grid grid-cols-3 gap-3">
-            <div className="bg-blue-50 dark:bg-blue-950/30 rounded-xl p-4 text-center">
+            <div className="bg-blue-50 dark:bg-blue-950/30  p-4 text-center">
               <p className="text-xs text-blue-600 dark:text-blue-400 mb-1">蛋白质</p>
               <p className="text-xl font-bold text-blue-700 dark:text-blue-300">
                 {computed.protein ?? '-'}
                 <span className="text-xs font-normal ml-0.5">g</span>
               </p>
             </div>
-            <div className="bg-amber-50 dark:bg-amber-950/30 rounded-xl p-4 text-center">
+            <div className="bg-amber-50 dark:bg-amber-950/30  p-4 text-center">
               <p className="text-xs text-amber-600 dark:text-amber-400 mb-1">脂肪</p>
               <p className="text-xl font-bold text-amber-700 dark:text-amber-300">
                 {computed.fat ?? '-'}
                 <span className="text-xs font-normal ml-0.5">g</span>
               </p>
             </div>
-            <div className="bg-green-50 dark:bg-green-950/30 rounded-xl p-4 text-center">
+            <div className="bg-green-50 dark:bg-green-950/30  p-4 text-center">
               <p className="text-xs text-green-600 dark:text-green-400 mb-1">碳水</p>
               <p className="text-xl font-bold text-green-700 dark:text-green-300">
                 {computed.carbs ?? '-'}
@@ -190,7 +190,7 @@ export default function FoodDetailClient({ locale, food, relatedFoods }: FoodDet
               <button
                 key={s.value}
                 onClick={() => setServingGrams(s.value)}
-                className={`px-3 py-1.5 rounded-full text-sm transition-all
+                className={`px-3 py-1.5  text-sm transition-all
                   ${
                     servingGrams === s.value
                       ? 'bg-primary text-primary-foreground shadow-sm'
@@ -224,7 +224,7 @@ export default function FoodDetailClient({ locale, food, relatedFoods }: FoodDet
               <button
                 key={key}
                 onClick={() => setMealType(key)}
-                className={`flex-1 py-2 rounded-xl text-sm font-medium transition-all
+                className={`flex-1 py-2  text-sm font-medium transition-all
                   ${
                     mealType === key
                       ? 'bg-primary text-primary-foreground shadow-sm'
@@ -246,7 +246,7 @@ export default function FoodDetailClient({ locale, food, relatedFoods }: FoodDet
                 <Link
                   key={rf.id}
                   href={`${localePath}/foods/${encodeURIComponent(rf.name)}`}
-                  className="min-w-35 p-3 rounded-xl border border-border hover:border-primary/30 
+                  className="min-w-35 p-3  border border-border hover:border-primary/30 
                     hover:shadow-sm transition-all bg-card shrink-0"
                 >
                   <div className="flex items-center gap-2 mb-1">
@@ -284,7 +284,7 @@ export default function FoodDetailClient({ locale, food, relatedFoods }: FoodDet
           <button
             onClick={handleAddRecord}
             disabled={adding}
-            className={`w-full py-3 rounded-xl font-medium text-sm transition-all
+            className={`w-full py-3  font-medium text-sm transition-all
               ${
                 added
                   ? 'bg-green-500 text-white'
@@ -294,7 +294,7 @@ export default function FoodDetailClient({ locale, food, relatedFoods }: FoodDet
           >
             {adding ? (
               <span className="flex items-center justify-center gap-2">
-                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <span className="w-4 h-4 border-2 border-white border-t-transparent  animate-spin" />
                 添加中...
               </span>
             ) : added ? (

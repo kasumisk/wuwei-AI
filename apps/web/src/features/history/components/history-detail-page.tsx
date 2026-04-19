@@ -137,7 +137,7 @@ export function HistoryDetailPage({ analysisId }: HistoryDetailPageProps) {
       <div className="min-h-screen bg-background text-foreground">
         <Header onBack={() => router.back()} />
         <div className="flex flex-col items-center justify-center py-32 gap-4">
-          <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <div className="w-10 h-10 border-2 border-primary border-t-transparent  animate-spin" />
           <p className="text-sm text-muted-foreground">加载详情中...</p>
         </div>
       </div>
@@ -150,7 +150,7 @@ export function HistoryDetailPage({ analysisId }: HistoryDetailPageProps) {
       <div className="min-h-screen bg-background text-foreground">
         <Header onBack={() => router.back()} />
         <div className="flex flex-col items-center justify-center py-32 gap-4">
-          <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center">
+          <div className="w-16 h-16  bg-red-50 flex items-center justify-center">
             <svg className="w-7 h-7 text-red-400" fill="currentColor" viewBox="0 0 20 20">
               <path
                 fillRule="evenodd"
@@ -164,7 +164,7 @@ export function HistoryDetailPage({ analysisId }: HistoryDetailPageProps) {
           </p>
           <button
             onClick={() => router.back()}
-            className="px-5 py-2 bg-primary text-primary-foreground rounded-full text-sm font-bold active:scale-[0.97] transition-all"
+            className="px-5 py-2 bg-primary text-primary-foreground  text-sm font-bold active:scale-[0.97] transition-all"
           >
             返回
           </button>
@@ -187,25 +187,25 @@ export function HistoryDetailPage({ analysisId }: HistoryDetailPageProps) {
     <div className="min-h-screen bg-background text-foreground">
       <Header onBack={() => router.back()} onDelete={() => setShowDeleteConfirm(true)} />
 
-      <main className="px-6 py-4 max-w-lg mx-auto pb-32 space-y-5">
+      <main className="px-4 py-4 max-w-lg mx-auto pb-32 space-y-5">
         {/* 图片（如有） */}
         {result.imageUrl && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={result.imageUrl}
             alt="食物图片"
-            className="w-full rounded-2xl object-cover max-h-60"
+            className="w-full  object-cover max-h-60"
           />
         )}
 
         {/* 决策头卡 */}
-        <div className={`rounded-2xl border p-5 space-y-3 ${config.bgClass}`}>
+        <div className={` border p-5 space-y-3 ${config.bgClass}`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-2xl">{config.emoji}</span>
               <span className={`text-lg font-bold ${config.textClass}`}>{config.label}</span>
             </div>
-            <span className={`px-3 py-1 rounded-full text-xs font-bold ${config.badgeClass}`}>
+            <span className={`px-3 py-1  text-xs font-bold ${config.badgeClass}`}>
               {result.totalCalories} kcal
             </span>
           </div>
@@ -213,7 +213,7 @@ export function HistoryDetailPage({ analysisId }: HistoryDetailPageProps) {
           {/* 餐型 + 时间 */}
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
             {result.mealType && (
-              <span className="px-2 py-0.5 bg-white/50 rounded-full font-medium">
+              <span className="px-2 py-0.5 bg-white/50  font-medium">
                 {MEAL_LABELS[result.mealType] || result.mealType}
               </span>
             )}
@@ -226,7 +226,7 @@ export function HistoryDetailPage({ analysisId }: HistoryDetailPageProps) {
 
         {/* 食物清单 */}
         {result.foods && result.foods.length > 0 && (
-          <section className="bg-card rounded-2xl p-4 space-y-3">
+          <section className="bg-card  p-4 space-y-3">
             <h3 className="text-xs font-bold text-muted-foreground">
               识别食物（{result.foods.length} 种）
             </h3>
@@ -274,7 +274,7 @@ export function HistoryDetailPage({ analysisId }: HistoryDetailPageProps) {
 
         {/* 建议 */}
         {result.suggestion && (
-          <section className="bg-card rounded-2xl p-4">
+          <section className="bg-card  p-4">
             <h3 className="text-xs font-bold text-muted-foreground mb-2">建议</h3>
             <p className="text-sm leading-relaxed">{result.suggestion}</p>
           </section>
@@ -282,13 +282,13 @@ export function HistoryDetailPage({ analysisId }: HistoryDetailPageProps) {
 
         {/* 替代方案 */}
         {result.insteadOptions && result.insteadOptions.length > 0 && (
-          <section className="bg-card rounded-2xl p-4">
+          <section className="bg-card  p-4">
             <h3 className="text-xs font-bold text-muted-foreground mb-2">替代方案</h3>
             <div className="flex flex-wrap gap-2">
               {result.insteadOptions.map((opt, i) => (
                 <span
                   key={i}
-                  className="px-3 py-1.5 rounded-full text-xs font-medium bg-primary/5 border border-primary/10"
+                  className="px-3 py-1.5  text-xs font-medium bg-primary/5 border border-primary/10"
                 >
                   {opt}
                 </span>
@@ -302,7 +302,7 @@ export function HistoryDetailPage({ analysisId }: HistoryDetailPageProps) {
           (result.compensation.diet ||
             result.compensation.activity ||
             result.compensation.nextMeal) && (
-            <section className="bg-card rounded-2xl p-4 space-y-2">
+            <section className="bg-card  p-4 space-y-2">
               <h3 className="text-xs font-bold text-muted-foreground">补救策略</h3>
               {result.compensation.diet && (
                 <p className="text-sm flex items-start gap-2">
@@ -327,7 +327,7 @@ export function HistoryDetailPage({ analysisId }: HistoryDetailPageProps) {
 
         {/* 今日状态 + 鼓励 */}
         {(result.contextComment || result.encouragement) && (
-          <section className="bg-card rounded-2xl p-4 space-y-2">
+          <section className="bg-card  p-4 space-y-2">
             {result.contextComment && (
               <p className="text-xs text-muted-foreground italic">📊 {result.contextComment}</p>
             )}
@@ -339,13 +339,13 @@ export function HistoryDetailPage({ analysisId }: HistoryDetailPageProps) {
 
         {/* AI 建议（advice） */}
         {result.advice && (
-          <section className="bg-card rounded-2xl p-4">
+          <section className="bg-card  p-4">
             <h3 className="text-xs font-bold text-muted-foreground mb-2">AI 综合建议</h3>
             <p className="text-sm leading-relaxed text-foreground/80">{result.advice}</p>
           </section>
         )}
 
-        <section className="bg-card rounded-2xl p-4 space-y-3 border border-primary/10">
+        <section className="bg-card  p-4 space-y-3 border border-primary/10">
           <div className="flex items-start gap-2">
             <span className="text-lg">🧠</span>
             <div>
@@ -357,7 +357,7 @@ export function HistoryDetailPage({ analysisId }: HistoryDetailPageProps) {
           </div>
           <button
             onClick={handleCoachReview}
-            className="w-full py-3 rounded-xl bg-primary text-primary-foreground text-sm font-bold active:scale-[0.98] transition-all"
+            className="w-full py-3  bg-primary text-primary-foreground text-sm font-bold active:scale-[0.98] transition-all"
           >
             用这条记录问 AI 教练
           </button>
@@ -367,7 +367,7 @@ export function HistoryDetailPage({ analysisId }: HistoryDetailPageProps) {
       {/* 删除确认弹窗 */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-100 bg-black/50 flex items-end justify-center animate-in fade-in">
-          <div className="w-full max-w-lg bg-card rounded-t-3xl p-6 space-y-4 animate-in slide-in-from-bottom duration-200">
+          <div className="w-full max-w-lg bg-card rounded-t-3xl p-4 space-y-4 animate-in slide-in-from-bottom duration-200">
             <h3 className="text-lg font-bold text-center">确认删除</h3>
             <p className="text-sm text-muted-foreground text-center">
               删除后无法恢复，确定要删除这条分析记录吗？
@@ -376,14 +376,14 @@ export function HistoryDetailPage({ analysisId }: HistoryDetailPageProps) {
               <button
                 onClick={() => setShowDeleteConfirm(false)}
                 disabled={isDeletingAnalysis}
-                className="flex-1 py-3 rounded-2xl bg-muted text-sm font-bold active:scale-[0.97] transition-all"
+                className="flex-1 py-3  bg-muted text-sm font-bold active:scale-[0.97] transition-all"
               >
                 取消
               </button>
               <button
                 onClick={handleDelete}
                 disabled={isDeletingAnalysis}
-                className="flex-1 py-3 rounded-2xl bg-red-500 text-white text-sm font-bold active:scale-[0.97] transition-all disabled:opacity-60"
+                className="flex-1 py-3  bg-red-500 text-white text-sm font-bold active:scale-[0.97] transition-all disabled:opacity-60"
               >
                 {isDeletingAnalysis ? '删除中...' : '确认删除'}
               </button>
@@ -399,7 +399,7 @@ export function HistoryDetailPage({ analysisId }: HistoryDetailPageProps) {
 function Header({ onBack, onDelete }: { onBack: () => void; onDelete?: () => void }) {
   return (
     <nav className="sticky top-0 z-50 glass-morphism">
-      <div className="flex items-center justify-between px-6 py-4 max-w-lg mx-auto">
+      <div className="flex items-center justify-between px-4 py-4 max-w-lg mx-auto">
         <div className="flex items-center">
           <button onClick={onBack} className="mr-4 text-foreground/70 hover:text-foreground">
             <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
@@ -441,23 +441,23 @@ function NutritionScoreSection({
   const [showBreakdown, setShowBreakdown] = useState(false);
 
   return (
-    <section className="bg-card rounded-2xl p-4 space-y-3">
+    <section className="bg-card  p-4 space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="text-xs font-bold text-muted-foreground">营养评分</h3>
         <div className="flex items-center gap-1.5">
           <span className="text-xl font-extrabold">{score}</span>
           <span className="text-xs text-muted-foreground">/100</span>
           <span
-            className={`ml-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-white ${getScoreColor(score)}`}
+            className={`ml-1 px-2 py-0.5  text-[10px] font-bold text-white ${getScoreColor(score)}`}
           >
             {getScoreLabel(score)}
           </span>
         </div>
       </div>
 
-      <div className="h-2 bg-muted rounded-full overflow-hidden">
+      <div className="h-2 bg-muted  overflow-hidden">
         <div
-          className={`h-full rounded-full transition-all duration-500 ${getScoreColor(score)}`}
+          className={`h-full  transition-all duration-500 ${getScoreColor(score)}`}
           style={{ width: `${Math.min(score, 100)}%` }}
         />
       </div>
@@ -484,9 +484,9 @@ function NutritionScoreSection({
                     <span className="text-xs text-muted-foreground w-16 shrink-0 text-right">
                       {SCORE_LABELS[key]}
                     </span>
-                    <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div className="flex-1 h-1.5 bg-muted  overflow-hidden">
                       <div
-                        className={`h-full rounded-full transition-all duration-300 ${getScoreColor(value)}`}
+                        className={`h-full  transition-all duration-300 ${getScoreColor(value)}`}
                         style={{ width: `${Math.min(value, 100)}%` }}
                       />
                     </div>
@@ -505,7 +505,7 @@ function NutritionScoreSection({
           {highlights.map((h, i) => (
             <span
               key={i}
-              className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary/5 border border-primary/10 text-foreground/70"
+              className="px-2 py-0.5  text-[10px] font-medium bg-primary/5 border border-primary/10 text-foreground/70"
             >
               {h}
             </span>
@@ -529,9 +529,9 @@ function MacroDistribution({
   total: number;
 }) {
   return (
-    <section className="bg-card rounded-2xl p-4 space-y-2">
+    <section className="bg-card  p-4 space-y-2">
       <h3 className="text-xs font-bold text-muted-foreground">宏量素分布</h3>
-      <div className="h-3 rounded-full overflow-hidden flex">
+      <div className="h-3  overflow-hidden flex">
         <div
           className="bg-blue-500 transition-all duration-300"
           style={{ width: `${(protein / total) * 100}%` }}
@@ -547,15 +547,15 @@ function MacroDistribution({
       </div>
       <div className="flex justify-between text-[10px] text-muted-foreground">
         <span className="flex items-center gap-1">
-          <span className="inline-block w-2 h-2 rounded-full bg-blue-500" />
+          <span className="inline-block w-2 h-2  bg-blue-500" />
           蛋白质 {protein}g ({Math.round((protein / total) * 100)}%)
         </span>
         <span className="flex items-center gap-1">
-          <span className="inline-block w-2 h-2 rounded-full bg-amber-500" />
+          <span className="inline-block w-2 h-2  bg-amber-500" />
           脂肪 {fat}g ({Math.round((fat / total) * 100)}%)
         </span>
         <span className="flex items-center gap-1">
-          <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
+          <span className="inline-block w-2 h-2  bg-emerald-500" />
           碳水 {carbs}g ({Math.round((carbs / total) * 100)}%)
         </span>
       </div>

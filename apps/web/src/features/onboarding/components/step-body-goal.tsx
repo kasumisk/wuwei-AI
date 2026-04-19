@@ -80,7 +80,7 @@ export function StepBodyGoal({ data, onChange }: StepBodyGoalProps) {
                     key={key}
                     type="button"
                     onClick={() => onChange({ goalSpeed: key })}
-                    className={`flex flex-col items-center py-4 px-2 rounded-2xl text-center transition-all space-y-1 ${
+                    className={`flex flex-col items-center py-4 px-2  text-center transition-all space-y-1 ${
                       isSelected
                         ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
                         : 'bg-muted text-muted-foreground hover:bg-muted/80'

@@ -23,7 +23,7 @@ export function ProfileCompletionBar() {
 
   if (isLoading) {
     return (
-      <div className="bg-card rounded-2xl p-4 animate-pulse">
+      <div className="bg-card  p-4 animate-pulse">
         <div className="h-4 w-32 bg-muted rounded mb-3" />
         <div className="h-2 w-full bg-muted rounded" />
       </div>
@@ -75,7 +75,7 @@ export function ProfileCompletionBar() {
   }
 
   return (
-    <div className="bg-card rounded-2xl p-4 space-y-3">
+    <div className="bg-card  p-4 space-y-3">
       {/* 进度条头部 */}
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-bold flex items-center gap-1.5">
@@ -110,10 +110,10 @@ export function ProfileCompletionBar() {
                 <button
                   key={s.field}
                   onClick={() => router.push(getSuggestionHref(s.field))}
-                  className="w-full flex items-center gap-3 p-2.5 rounded-xl bg-background hover:bg-muted/50 transition-colors active:scale-[0.99] text-left"
+                  className="w-full flex items-center gap-3 p-2.5  bg-background hover:bg-muted/50 transition-colors active:scale-[0.99] text-left"
                 >
                   <span
-                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border shrink-0 ${priorityColors[s.priority]}`}
+                    className={`text-[10px] font-bold px-1.5 py-0.5  border shrink-0 ${priorityColors[s.priority]}`}
                   >
                     {priorityLabels[s.priority]}
                   </span>

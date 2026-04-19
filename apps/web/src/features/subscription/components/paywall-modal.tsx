@@ -180,17 +180,17 @@ export function PaywallModal() {
         aria-labelledby="paywall-title"
         aria-describedby="paywall-desc"
         tabIndex={-1}
-        className="relative w-full max-w-md bg-card rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-300 outline-none"
+        className="relative w-full max-w-md bg-card rounded-t-3xl sm: shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-300 outline-none"
       >
         {/* 顶部装饰 */}
-        <div className="bg-gradient-to-br from-primary to-primary/80 px-6 pt-6 pb-8 text-primary-foreground">
+        <div className="bg-gradient-to-br from-primary to-primary/80 px-4 pt-6 pb-8 text-primary-foreground">
           <div className="flex items-center justify-between mb-4">
-            <span className="text-xs font-medium bg-primary-foreground/20 px-2.5 py-1 rounded-full">
+            <span className="text-xs font-medium bg-primary-foreground/20 px-2.5 py-1 ">
               当前：{TIER_NAMES[tier]}
             </span>
             <button
               onClick={dismissPaywall}
-              className="w-8 h-8 flex items-center justify-center rounded-full bg-primary-foreground/10 hover:bg-primary-foreground/20 transition-colors"
+              className="w-8 h-8 flex items-center justify-center  bg-primary-foreground/10 hover:bg-primary-foreground/20 transition-colors"
               aria-label="关闭"
             >
               <svg
@@ -219,7 +219,7 @@ export function PaywallModal() {
         </div>
 
         {/* 功能对比 */}
-        <div className="px-6 py-5 space-y-3">
+        <div className="px-4 py-5 space-y-3">
           {/* 推荐等级亮点 */}
           <div className="space-y-2">
             {(TIER_HIGHLIGHTS[recommendedTier] || []).map((highlight, i) => (
@@ -249,7 +249,7 @@ export function PaywallModal() {
                 {upgradeFeatures.map((feat) => (
                   <span
                     key={feat.label}
-                    className="px-2.5 py-1 bg-primary/5 text-primary text-xs font-medium rounded-full"
+                    className="px-2.5 py-1 bg-primary/5 text-primary text-xs font-medium "
                   >
                     {feat.label}
                   </span>
@@ -260,15 +260,15 @@ export function PaywallModal() {
         </div>
 
         {/* CTA 按钮 */}
-        <div className="px-6 pb-6 pt-2 space-y-3">
+        <div className="px-4 pb-6 pt-2 space-y-3">
           <button
             onClick={handleUpgrade}
             disabled={purchasing}
-            className="w-full bg-primary text-primary-foreground font-bold py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-lg shadow-primary/20 disabled:opacity-60"
+            className="w-full bg-primary text-primary-foreground font-bold py-4  flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-lg shadow-primary/20 disabled:opacity-60"
           >
             {purchasing ? (
               <>
-                <span className="animate-spin inline-block w-5 h-5 border-2 border-current border-t-transparent rounded-full" />
+                <span className="animate-spin inline-block w-5 h-5 border-2 border-current border-t-transparent " />
                 处理中...
               </>
             ) : (

@@ -15,6 +15,7 @@ import {
 } from '@/lib/api/coach';
 import { gamificationService } from '@/lib/api/gamification';
 import { useProfile } from '@/features/profile/hooks/use-profile';
+import { BottomNav } from '@/components/common/bottom-nav';
 
 const COACH_STYLES = [
   {
@@ -460,7 +461,7 @@ export default function CoachPage() {
                     key={style.value}
                     onClick={() => handleStyleChange(style.value)}
                     disabled={updatingStyle || isActive}
-                    className={`w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all ${
+                    className={`w-full flex items-center gap-3 p-3  text-left transition-all ${
                       isActive
                         ? 'bg-primary/10 border-2 border-primary'
                         : 'bg-muted/50 border-2 border-transparent hover:bg-muted'
@@ -471,7 +472,7 @@ export default function CoachPage() {
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-bold">{style.label}</span>
                         {isActive && (
-                          <span className="text-[10px] font-medium text-primary bg-primary/10 px-1.5 py-0.5 rounded-full">
+                          <span className="text-[10px] font-medium text-primary bg-primary/10 px-1.5 py-0.5 ">
                             当前
                           </span>
                         )}
@@ -479,7 +480,7 @@ export default function CoachPage() {
                       <p className="text-xs text-muted-foreground mt-0.5">{style.desc}</p>
                     </div>
                     {updatingStyle && !isActive && (
-                      <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                      <div className="w-4 h-4 border-2 border-primary border-t-transparent  animate-spin flex-shrink-0" />
                     )}
                   </button>
                 );
@@ -551,14 +552,14 @@ export default function CoachPage() {
         {messages.length === 0 && (
           <div className="space-y-4 mt-4">
             {loadingGreeting ? (
-              <div className="bg-primary/5 rounded-2xl p-4 animate-pulse">
+              <div className="bg-primary/5  p-4 animate-pulse">
                 <div className="h-4 bg-primary/10 rounded w-3/4 mb-2" />
                 <div className="h-3 bg-primary/10 rounded w-1/2" />
               </div>
             ) : (
               greeting && (
                 <>
-                  <div className="bg-primary/5 border border-primary/10 rounded-2xl p-4">
+                  <div className="bg-primary/5 border border-primary/10  p-4">
                     <div className="flex items-start gap-3">
                       <span className="text-2xl">🤖</span>
                       <p className="text-sm text-foreground leading-relaxed pt-1">
@@ -569,7 +570,7 @@ export default function CoachPage() {
 
                   {/* 免费用户配额提示 */}
                   {isFree && (
-                    <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 flex items-center justify-between">
+                    <div className="bg-amber-50 border border-amber-200  px-4 py-2.5 flex items-center justify-between">
                       <span className="text-xs text-amber-700">免费版：每天可对话 5 次</span>
                       <button
                         onClick={() =>
@@ -597,7 +598,7 @@ export default function CoachPage() {
                           onClick={() => handleSend(s)}
                           disabled={isStreaming}
                           className="px-3 py-1.5 text-sm bg-muted hover:bg-muted/80 text-foreground 
-                            rounded-full transition-colors disabled:opacity-50"
+                             transition-colors disabled:opacity-50"
                         >
                           {s}
                         </button>
@@ -617,7 +618,7 @@ export default function CoachPage() {
             className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
           >
             <div
-              className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+              className={`max-w-[85%]  px-4 py-2.5 text-sm leading-relaxed ${
                 msg.role === 'user'
                   ? 'bg-primary text-primary-foreground rounded-br-md'
                   : 'bg-muted text-foreground rounded-bl-md'
@@ -648,13 +649,13 @@ export default function CoachPage() {
             onChange={(e) => setInputValue(e.target.value)}
             placeholder="问我任何饮食问题..."
             disabled={isStreaming}
-            className="flex-1 h-10 px-4 rounded-full bg-muted border-none text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50"
+            className="flex-1 h-10 px-4  bg-muted border-none text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50"
           />
           {isStreaming ? (
             <button
               type="button"
               onClick={handleStop}
-              className="h-10 w-10 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center flex-shrink-0 transition-colors"
+              className="h-10 w-10  bg-destructive text-destructive-foreground flex items-center justify-center flex-shrink-0 transition-colors"
             >
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                 <rect x="6" y="6" width="12" height="12" rx="2" />
@@ -664,7 +665,7 @@ export default function CoachPage() {
             <button
               type="submit"
               disabled={!inputValue.trim()}
-              className="h-10 w-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0 disabled:opacity-30 transition-colors"
+              className="h-10 w-10  bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0 disabled:opacity-30 transition-colors"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -678,6 +679,7 @@ export default function CoachPage() {
           )}
         </form>
       </div>
+      <BottomNav />
     </div>
   );
 }

@@ -46,7 +46,7 @@ export function FrequentInput({ mealType, onAddFromLibrary, isAdding }: Frequent
           <Skeleton className="h-4 w-24" />
         </div>
         {[...Array(4)].map((_, i) => (
-          <Skeleton key={i} className="h-16 w-full rounded-xl" />
+          <Skeleton key={i} className="h-16 w-full " />
         ))}
       </div>
     );
@@ -64,7 +64,7 @@ export function FrequentInput({ mealType, onAddFromLibrary, isAdding }: Frequent
   if (!frequentFoods || frequentFoods.length === 0) {
     return (
       <div className="text-center py-10 space-y-3">
-        <div className="w-16 h-16 mx-auto rounded-full bg-muted flex items-center justify-center">
+        <div className="w-16 h-16 mx-auto  bg-muted flex items-center justify-center">
           <svg
             viewBox="0 0 24 24"
             fill="currentColor"
@@ -109,12 +109,12 @@ export function FrequentInput({ mealType, onAddFromLibrary, isAdding }: Frequent
               key={item.name}
               onClick={() => handleAdd(item)}
               disabled={isAdding || !food?.id}
-              className="bg-card rounded-xl p-3.5 flex items-center justify-between hover:bg-accent/50 active:scale-[0.98] transition-all text-left disabled:opacity-50"
+              className="bg-card  p-3.5 flex items-center justify-between hover:bg-accent/50 active:scale-[0.98] transition-all text-left disabled:opacity-50"
             >
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <h4 className="font-bold text-sm truncate">{item.name}</h4>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium shrink-0">
+                  <span className="text-[10px] px-1.5 py-0.5  bg-primary/10 text-primary font-medium shrink-0">
                     吃过{item.count}次
                   </span>
                 </div>
@@ -129,9 +129,9 @@ export function FrequentInput({ mealType, onAddFromLibrary, isAdding }: Frequent
               </div>
               <div className="shrink-0 ml-3">
                 {isCurrentAdding ? (
-                  <span className="animate-spin inline-block w-5 h-5 border-2 border-primary border-t-transparent rounded-full" />
+                  <span className="animate-spin inline-block w-5 h-5 border-2 border-primary border-t-transparent " />
                 ) : (
-                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                  <div className="w-8 h-8  bg-primary/10 flex items-center justify-center">
                     <svg
                       viewBox="0 0 24 24"
                       fill="currentColor"

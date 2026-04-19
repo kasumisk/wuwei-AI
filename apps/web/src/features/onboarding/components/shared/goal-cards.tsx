@@ -14,7 +14,7 @@ export function GoalCards({ options, value, onChange }: GoalCardsProps) {
           key={key}
           type="button"
           onClick={() => onChange(key)}
-          className={`py-4 px-4 rounded-2xl text-left transition-all active:scale-[0.97] ${
+          className={`py-4 px-4  text-left transition-all active:scale-[0.97] ${
             value === key
               ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
               : 'bg-muted text-muted-foreground hover:bg-muted/80'

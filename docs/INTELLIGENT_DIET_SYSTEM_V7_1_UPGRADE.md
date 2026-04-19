@@ -259,7 +259,7 @@ interface ContrastiveInsight extends StructuredInsight {
 }
 ```
 
-- 对 Top-1 推荐食物，找到 Top-6~10 中的一个"直觉上可能更好"的食物（如更常见、更便宜）
+- 对 Top-1 推荐食物，找到 Top-4~10 中的一个"直觉上可能更好"的食物（如更常见、更便宜）
 - 解释"为什么推荐 A 而不是 B"
 - 只在 ScoreBreakdown 中有显著差异（>15%）时触发
 

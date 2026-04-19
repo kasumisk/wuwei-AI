@@ -132,7 +132,7 @@ export function NotificationPreferencesPage() {
     <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
       <nav className="sticky top-0 z-50 glass-morphism">
-        <div className="flex items-center justify-between px-6 py-4 max-w-lg mx-auto">
+        <div className="flex items-center justify-between px-4 py-4 max-w-lg mx-auto">
           <div className="flex items-center">
             <button
               onClick={() => router.back()}
@@ -146,12 +146,12 @@ export function NotificationPreferencesPage() {
             <h1 className="text-xl font-extrabold font-headline tracking-tight">通知设置</h1>
           </div>
           {saveMutation.isPending && (
-            <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <div className="w-4 h-4 border-2 border-primary border-t-transparent  animate-spin" />
           )}
         </div>
       </nav>
 
-      <main className="px-6 py-4 max-w-lg mx-auto pb-32 space-y-6">
+      <main className="px-4 py-4 max-w-lg mx-auto pb-32 space-y-6">
         {isLoading ? (
           <div className="space-y-4">
             <CardSkeleton rows={1} />
@@ -161,10 +161,10 @@ export function NotificationPreferencesPage() {
         ) : (
           <>
             {/* 推送总开关 */}
-            <section className="bg-card rounded-2xl p-4">
+            <section className="bg-card  p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <div className="w-10 h-10  bg-primary/10 flex items-center justify-center">
                     <svg
                       className="w-5 h-5 text-primary"
                       fill="none"
@@ -186,14 +186,14 @@ export function NotificationPreferencesPage() {
                 </div>
                 <button
                   onClick={handleTogglePush}
-                  className={`relative w-12 h-7 rounded-full transition-colors duration-200 ${
+                  className={`relative w-12 h-7  transition-colors duration-200 ${
                     pushEnabled ? 'bg-primary' : 'bg-muted'
                   }`}
                   role="switch"
                   aria-checked={pushEnabled}
                 >
                   <span
-                    className={`absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                    className={`absolute top-0.5 left-0.5 w-6 h-6  bg-white shadow-sm transition-transform duration-200 ${
                       pushEnabled ? 'translate-x-5' : 'translate-x-0'
                     }`}
                   />
@@ -204,7 +204,7 @@ export function NotificationPreferencesPage() {
             {/* 通知类型 */}
             <section className="space-y-2">
               <h2 className="text-xs font-bold text-muted-foreground px-1">通知类型</h2>
-              <div className="bg-card rounded-2xl divide-y divide-border/30">
+              <div className="bg-card  divide-y divide-border/30">
                 {NOTIFICATION_TYPES.map(({ type, label, description, icon }) => {
                   const isEnabled = enabledTypes.has(type);
                   return (
@@ -219,7 +219,7 @@ export function NotificationPreferencesPage() {
                       <button
                         onClick={() => handleToggleType(type)}
                         disabled={!pushEnabled}
-                        className={`relative w-11 h-6 rounded-full transition-colors duration-200 shrink-0 ml-3 disabled:opacity-40 ${
+                        className={`relative w-11 h-6  transition-colors duration-200 shrink-0 ml-3 disabled:opacity-40 ${
                           isEnabled ? 'bg-primary' : 'bg-muted'
                         }`}
                         role="switch"
@@ -227,7 +227,7 @@ export function NotificationPreferencesPage() {
                         aria-label={`${isEnabled ? '关闭' : '开启'}${label}`}
                       >
                         <span
-                          className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                          className={`absolute top-0.5 left-0.5 w-5 h-5  bg-white shadow-sm transition-transform duration-200 ${
                             isEnabled ? 'translate-x-5' : 'translate-x-0'
                           }`}
                         />
@@ -241,7 +241,7 @@ export function NotificationPreferencesPage() {
             {/* 免打扰时段 */}
             <section className="space-y-2">
               <h2 className="text-xs font-bold text-muted-foreground px-1">免打扰时段</h2>
-              <div className="bg-card rounded-2xl p-4 space-y-2">
+              <div className="bg-card  p-4 space-y-2">
                 <p className="text-xs text-muted-foreground">在此时段内不会收到推送通知</p>
                 <div className="flex flex-wrap gap-2 mt-2">
                   {QUIET_HOURS.map((option, i) => (
@@ -249,7 +249,7 @@ export function NotificationPreferencesPage() {
                       key={i}
                       onClick={() => handleQuietHoursChange(i)}
                       disabled={!pushEnabled}
-                      className={`px-3.5 py-2 rounded-xl text-sm font-medium transition-all disabled:opacity-40 ${
+                      className={`px-3.5 py-2  text-sm font-medium transition-all disabled:opacity-40 ${
                         quietHoursIndex === i
                           ? 'bg-primary text-primary-foreground shadow-sm'
                           : 'bg-muted text-muted-foreground hover:bg-muted/80'

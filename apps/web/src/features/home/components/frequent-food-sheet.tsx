@@ -131,18 +131,18 @@ export function FrequentFoodSheet({ open, onClose }: FrequentFoodSheetProps) {
       <div className="absolute bottom-0 left-0 right-0 bg-background rounded-t-3xl max-h-[75vh] flex flex-col animate-in slide-in-from-bottom duration-300">
         {/* Handle */}
         <div className="flex justify-center pt-3 pb-2">
-          <div className="w-10 h-1 rounded-full bg-muted-foreground/20" />
+          <div className="w-10 h-1  bg-muted-foreground/20" />
         </div>
 
         {/* Header */}
-        <div className="px-6 pb-3 flex items-center justify-between">
+        <div className="px-4 pb-3 flex items-center justify-between">
           <div>
             <h2 className="text-lg font-headline font-bold">常吃食物</h2>
             <p className="text-xs text-muted-foreground mt-0.5">一键记录，不消耗 AI 分析次数</p>
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors"
+            className="w-8 h-8  bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors"
           >
             <svg
               viewBox="0 0 24 24"
@@ -157,12 +157,12 @@ export function FrequentFoodSheet({ open, onClose }: FrequentFoodSheetProps) {
         </div>
 
         {/* Meal Type Selector */}
-        <div className="px-6 pb-3 flex gap-2">
+        <div className="px-4 pb-3 flex gap-2">
           {(Object.entries(mealTypeLabels) as [MealTypeOption, string][]).map(([key, label]) => (
             <button
               key={key}
               onClick={() => setMealType(key)}
-              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+              className={`px-3 py-1.5  text-xs font-bold transition-all ${
                 mealType === key
                   ? 'bg-primary text-primary-foreground shadow-sm'
                   : 'bg-muted text-muted-foreground'
@@ -174,16 +174,16 @@ export function FrequentFoodSheet({ open, onClose }: FrequentFoodSheetProps) {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto px-6 pb-8">
+        <div className="flex-1 overflow-y-auto px-4 pb-8">
           {isLoading ? (
             <div className="space-y-2">
               {[...Array(4)].map((_, i) => (
-                <Skeleton key={i} className="h-16 w-full rounded-xl" />
+                <Skeleton key={i} className="h-16 w-full " />
               ))}
             </div>
           ) : !frequentFoods || frequentFoods.length === 0 ? (
             <div className="text-center py-12 space-y-3">
-              <div className="w-16 h-16 mx-auto rounded-full bg-muted flex items-center justify-center">
+              <div className="w-16 h-16 mx-auto  bg-muted flex items-center justify-center">
                 <svg
                   viewBox="0 0 24 24"
                   fill="currentColor"
@@ -212,12 +212,12 @@ export function FrequentFoodSheet({ open, onClose }: FrequentFoodSheetProps) {
                     key={item.name}
                     onClick={() => handleAdd(item)}
                     disabled={addMutation.isPending || !food?.id}
-                    className="w-full bg-card rounded-xl p-3.5 flex items-center justify-between hover:bg-accent/50 active:scale-[0.98] transition-all text-left disabled:opacity-50"
+                    className="w-full bg-card  p-3.5 flex items-center justify-between hover:bg-accent/50 active:scale-[0.98] transition-all text-left disabled:opacity-50"
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <h4 className="font-bold text-sm truncate">{item.name}</h4>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium shrink-0">
+                        <span className="text-[10px] px-1.5 py-0.5  bg-primary/10 text-primary font-medium shrink-0">
                           {item.count}次
                         </span>
                       </div>
@@ -231,9 +231,9 @@ export function FrequentFoodSheet({ open, onClose }: FrequentFoodSheetProps) {
                     </div>
                     <div className="shrink-0 ml-3">
                       {isCurrentAdding ? (
-                        <span className="animate-spin inline-block w-5 h-5 border-2 border-primary border-t-transparent rounded-full" />
+                        <span className="animate-spin inline-block w-5 h-5 border-2 border-primary border-t-transparent " />
                       ) : (
-                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                        <div className="w-8 h-8  bg-primary/10 flex items-center justify-center">
                           <svg
                             viewBox="0 0 24 24"
                             fill="currentColor"

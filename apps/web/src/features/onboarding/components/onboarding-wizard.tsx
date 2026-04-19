@@ -69,7 +69,7 @@ export function OnboardingWizard({ startStep = 1 }: OnboardingWizardProps) {
   if (completed) {
     return (
       <div className="min-h-screen bg-background text-foreground">
-        <main className="px-6 py-6 max-w-lg mx-auto">
+        <main className="px-4 py-6 max-w-lg mx-auto">
           <StepComplete computed={state.computed} onAccept={handleComplete} />
         </main>
       </div>
@@ -80,13 +80,13 @@ export function OnboardingWizard({ startStep = 1 }: OnboardingWizardProps) {
     <div className="min-h-screen bg-background text-foreground">
       {/* 顶部导航 */}
       <nav className="sticky top-0 z-50 glass-morphism">
-        <div className="px-6 py-4 max-w-lg mx-auto">
+        <div className="px-4 py-4 max-w-lg mx-auto">
           <ProgressIndicator currentStep={state.currentStep} />
         </div>
       </nav>
 
       {/* 步骤内容 */}
-      <main className="px-6 py-6 max-w-lg mx-auto pb-32">
+      <main className="px-4 py-6 max-w-lg mx-auto pb-32">
         {state.currentStep === 1 && (
           <StepBasic data={state.stepData.step1} onChange={(d) => updateStepData('step1', d)} />
         )}
@@ -106,11 +106,11 @@ export function OnboardingWizard({ startStep = 1 }: OnboardingWizardProps) {
 
       {/* 底部操作按钮 */}
       <div className="fixed bottom-0 left-0 w-full glass-morphism z-50">
-        <div className="px-6 py-4 pb-8 max-w-lg mx-auto space-y-3">
+        <div className="px-4 py-4 pb-8 max-w-lg mx-auto space-y-3">
           <button
             onClick={handleNext}
             disabled={state.isSubmitting}
-            className="w-full bg-primary text-primary-foreground font-bold py-4 rounded-full active:scale-[0.98] transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
+            className="w-full bg-primary text-primary-foreground font-bold py-4  active:scale-[0.98] transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
           >
             {state.isSubmitting ? '保存中...' : state.currentStep === 4 ? '完成设置' : '下一步 →'}
           </button>

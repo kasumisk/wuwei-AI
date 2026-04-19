@@ -91,7 +91,7 @@ export function SearchInput({ mealType, onAddFromLibrary, isAdding }: SearchInpu
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="搜索食物名称，如：鸡胸肉、西蓝花..."
-          className="w-full h-11 pl-10 pr-4 bg-card rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+          className="w-full h-11 pl-10 pr-4 bg-card  text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
         />
         {query && (
           <button
@@ -120,7 +120,7 @@ export function SearchInput({ mealType, onAddFromLibrary, isAdding }: SearchInpu
       {isLoadingItems ? (
         <div className="grid grid-cols-1 gap-2">
           {[...Array(5)].map((_, i) => (
-            <Skeleton key={i} className="h-16 w-full rounded-xl" />
+            <Skeleton key={i} className="h-16 w-full " />
           ))}
         </div>
       ) : displayItems && displayItems.length > 0 ? (
@@ -136,7 +136,7 @@ export function SearchInput({ mealType, onAddFromLibrary, isAdding }: SearchInpu
                 key={food.id}
                 onClick={() => handleAdd(food)}
                 disabled={isAdding}
-                className="bg-card rounded-xl p-3.5 flex items-center justify-between hover:bg-accent/50 active:scale-[0.98] transition-all text-left disabled:opacity-50"
+                className="bg-card  p-3.5 flex items-center justify-between hover:bg-accent/50 active:scale-[0.98] transition-all text-left disabled:opacity-50"
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -162,9 +162,9 @@ export function SearchInput({ mealType, onAddFromLibrary, isAdding }: SearchInpu
                 </div>
                 <div className="shrink-0 ml-3">
                   {isCurrentAdding ? (
-                    <span className="animate-spin inline-block w-5 h-5 border-2 border-primary border-t-transparent rounded-full" />
+                    <span className="animate-spin inline-block w-5 h-5 border-2 border-primary border-t-transparent " />
                   ) : (
-                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                    <div className="w-8 h-8  bg-primary/10 flex items-center justify-center">
                       <svg
                         viewBox="0 0 24 24"
                         fill="currentColor"
@@ -185,7 +185,7 @@ export function SearchInput({ mealType, onAddFromLibrary, isAdding }: SearchInpu
         !isLoadingItems &&
         debouncedQuery && (
           <div className="text-center py-8 space-y-2">
-            <div className="w-14 h-14 mx-auto rounded-full bg-muted flex items-center justify-center">
+            <div className="w-14 h-14 mx-auto  bg-muted flex items-center justify-center">
               <svg
                 viewBox="0 0 24 24"
                 fill="currentColor"
@@ -203,7 +203,7 @@ export function SearchInput({ mealType, onAddFromLibrary, isAdding }: SearchInpu
       )}
 
       {/* Zero AI cost hint */}
-      <div className="bg-green-500/5 border border-green-500/10 rounded-xl px-4 py-2.5 flex items-center gap-2">
+      <div className="bg-green-500/5 border border-green-500/10  px-4 py-2.5 flex items-center gap-2">
         <svg
           viewBox="0 0 24 24"
           fill="currentColor"

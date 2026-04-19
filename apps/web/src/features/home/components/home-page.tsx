@@ -9,8 +9,7 @@ import { useUnreadCount } from '@/features/notification/hooks/use-notifications'
 import Image from 'next/image';
 
 /* ── new Phase-2 components ── */
-import { HeroBudgetCard } from './hero-budget-card';
-import { NutritionScoreCompact } from './nutrition-score-compact';
+import { TodayStatusCard } from './today-status-card';
 import { WeeklyTrendMini } from './weekly-trend-mini';
 import { SmartPromptSlot } from './smart-prompt-slot';
 import { NextMealCard } from './next-meal-card';
@@ -18,6 +17,7 @@ import { TodayMealList } from './today-meal-list';
 import { QuickActionBar } from './quick-action-bar';
 import { FrequentFoodPicker } from './frequent-food-picker';
 import { useState } from 'react';
+import { BottomNav } from '@/components/common/bottom-nav';
 
 /* ─── SVG Icons ─── */
 function IconPerson({ className = '' }: { className?: string }) {
@@ -69,17 +69,52 @@ export function HomePage() {
     router.replace(`/onboarding?step=${startStep}`);
   }
 
+  // 问候语
+  const greetingText = (() => {
+    const h = new Date().getHours();
+    if (h < 6) return '夜深了';
+    if (h < 11) return '早上好';
+    if (h < 13) return '午安';
+    if (h < 18) return '下午好';
+    return '晚上好';
+  })();
+  const dateText = new Date().toLocaleDateString('zh-CN', {
+    month: 'long',
+    day: 'numeric',
+    weekday: 'short',
+  });
+  const displayName = user?.nickname || user?.email?.split('@')[0] || '';
+
   return (
     <div className="min-h-screen bg-background text-foreground font-sans antialiased selection:bg-(--color-primary-container) selection:text-on-primary-container">
+      {/* ─── Top greeting bar ─── */}
+      <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-sm border-b border-border/30">
+        <div className="flex items-center justify-between px-4 py-3 max-w-lg mx-auto">
+          <div className="flex flex-col">
+            <span className="text-base font-bold leading-tight">
+              {greetingText}
+              {displayName ? `，${displayName}` : ''}
+            </span>
+            <span className="text-[11px] text-muted-foreground">{dateText}</span>
+          </div>
+          <LocalizedLink
+            href="/profile"
+            className="w-8 h-8  bg-muted flex items-center justify-center text-muted-foreground hover:bg-muted/80 transition-colors active:scale-95"
+            aria-label="个人资料"
+          >
+            <IconPerson className="w-5 h-5" />
+          </LocalizedLink>
+        </div>
+      </header>
 
       <main className="relative pt-4 pb-32 px-4 max-w-lg mx-auto">
         {/* Loading skeleton */}
         {isLoading && (
           <div className="space-y-4 animate-pulse">
-            <div className="bg-card rounded-2xl p-5 space-y-3">
+            <div className="bg-card  p-5 space-y-3">
               <div className="h-4 w-24 bg-muted rounded" />
               <div className="h-10 w-36 bg-muted rounded" />
-              <div className="h-2 w-full bg-muted rounded-full" />
+              <div className="h-2 w-full bg-muted " />
               <div className="space-y-2 pt-2">
                 {[1, 2, 3].map((i) => (
                   <div key={i} className="h-3 bg-muted rounded" />
@@ -87,12 +122,12 @@ export function HomePage() {
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="h-24 bg-muted rounded-2xl" />
-              <div className="h-24 bg-muted rounded-2xl" />
+              <div className="h-24 bg-muted " />
+              <div className="h-24 bg-muted " />
             </div>
             <div className="space-y-3">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="bg-card rounded-xl p-4 h-16 bg-muted" />
+                <div key={i} className="bg-card  p-4 h-16 bg-muted" />
               ))}
             </div>
           </div>
@@ -101,12 +136,9 @@ export function HomePage() {
         {/* Main content */}
         {!isLoading && (
           <>
-            <section className="home-hero-surface mb-6 space-y-3">
-              {/* 1. Hero: calorie budget + macro progress */}
-              <HeroBudgetCard summary={summary} profile={profile} scoreData={nutritionScore} />
-
-              {/* 2. Compact nutrition score */}
-              <NutritionScoreCompact scoreData={nutritionScore} />
+            <section className="home-hero-surface mb-6">
+              {/* 1. Unified today status card */}
+              <TodayStatusCard summary={summary} profile={profile} scoreData={nutritionScore} />
             </section>
 
             {/* 3. Mini weekly trend */}
@@ -145,6 +177,7 @@ export function HomePage() {
           </>
         )}
       </main>
+      <BottomNav />
     </div>
   );
 }

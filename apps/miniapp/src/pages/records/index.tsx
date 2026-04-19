@@ -65,7 +65,7 @@ function RecordsPage() {
           </View>
         ) : (
           records.map((record) => (
-            <View className="bg-white rounded-xl p-4 mb-3" key={record.id}>
+            <View className="bg-white  p-4 mb-3" key={record.id}>
               <View className="flex">
                 {record.imageUrl && (
                   <Image

@@ -21,7 +21,7 @@ export function YearPicker({ value, onChange, min = 1940, max = 2020 }: YearPick
       <select
         value={value ?? ''}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full appearance-none px-4 py-3.5 rounded-2xl bg-muted text-foreground text-base font-medium outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+        className="w-full appearance-none px-4 py-3.5  bg-muted text-foreground text-base font-medium outline-none focus:ring-2 focus:ring-primary cursor-pointer"
       >
         <option value="" disabled>
           选择出生年份

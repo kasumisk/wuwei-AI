@@ -49,6 +49,52 @@ export function MealRecordCard({ meal }: MealRecordCardProps) {
   const mealLabel = MEAL_LABELS[meal.mealType] || meal.mealType;
   const foodNames = meal.foods.map((f) => f.name).join('、');
 
+  // 时间展示
+  const recordTime = (() => {
+    try {
+      const d = new Date(meal.recordedAt || meal.createdAt);
+      return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+    } catch {
+      return '';
+    }
+  })();
+
+  // 来源标签
+  const SOURCE_LABELS: Record<string, { label: string; cls: string }> = {
+    camera: {
+      label: '📷 拍照',
+      cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+    },
+    image_analysis: {
+      label: '📷 图片',
+      cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+    },
+    screenshot: {
+      label: '🖼️ 截图',
+      cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+    },
+    text_analysis: {
+      label: '✏️ 文字',
+      cls: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+    },
+    manual: {
+      label: '✏️ 手动',
+      cls: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+    },
+    recommend: {
+      label: '🤖 推荐',
+      cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+    },
+    decision: {
+      label: '🎯 决策',
+      cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+    },
+  };
+  const sourceMeta = SOURCE_LABELS[meal.source] ?? null;
+
+  // 宏量
+  const hasMacros = meal.totalProtein != null || meal.totalFat != null || meal.totalCarbs != null;
+
   // 是否有 AI 决策信息可展示
   const hasDecisionInfo = !!(
     meal.reason ||
@@ -90,7 +136,7 @@ export function MealRecordCard({ meal }: MealRecordCardProps) {
   );
 
   return (
-    <div className="bg-card rounded-2xl shadow-sm overflow-hidden">
+    <div className="bg-card  shadow-sm overflow-hidden">
       {/* 主卡片区域（点击展开） */}
       <button
         onClick={() => hasDecisionInfo && setExpanded((v) => !v)}
@@ -99,20 +145,49 @@ export function MealRecordCard({ meal }: MealRecordCardProps) {
         {meal.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            className="w-14 h-14 rounded-full object-cover flex-shrink-0"
+            className="w-14 h-14  object-cover flex-shrink-0"
             src={meal.imageUrl}
             alt={foodNames}
           />
         ) : (
-          <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+          <div className="w-14 h-14  bg-muted flex items-center justify-center flex-shrink-0">
             <IconCamera className="w-6 h-6 text-muted-foreground" />
           </div>
         )}
         <div className="flex-1 min-w-0">
           <h4 className="font-bold text-sm truncate">{foodNames || '饮食记录'}</h4>
-          <p className="text-xs text-muted-foreground">
-            {mealLabel} • {meal.totalCalories} kcal
-          </p>
+          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+            <p className="text-xs text-muted-foreground">
+              {mealLabel}
+              {recordTime && <span> · {recordTime}</span>}
+              {' · '}
+              <strong className="text-foreground">{meal.totalCalories}</strong> kcal
+            </p>
+            {sourceMeta && (
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${sourceMeta.cls}`}>
+                {sourceMeta.label}
+              </span>
+            )}
+          </div>
+          {hasMacros && (
+            <div className="flex items-center gap-2 mt-1">
+              {meal.totalProtein != null && (
+                <span className="text-[10px] text-muted-foreground">
+                  蛋白 <strong className="text-foreground">{Math.round(meal.totalProtein)}g</strong>
+                </span>
+              )}
+              {meal.totalFat != null && (
+                <span className="text-[10px] text-muted-foreground">
+                  脂肪 <strong className="text-foreground">{Math.round(meal.totalFat)}g</strong>
+                </span>
+              )}
+              {meal.totalCarbs != null && (
+                <span className="text-[10px] text-muted-foreground">
+                  碳水 <strong className="text-foreground">{Math.round(meal.totalCarbs)}g</strong>
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {decisionStyle && (

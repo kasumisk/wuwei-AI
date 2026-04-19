@@ -99,7 +99,7 @@ function AnalyzePage() {
             {mealTypes.map((m) => (
               <View
                 key={m.key}
-                className={`flex-1 text-center py-3 rounded-xl ${mealType === m.key ? 'bg-blue-50 meal-active' : 'bg-white'}`}
+                className={`flex-1 text-center py-3  ${mealType === m.key ? 'bg-blue-50 meal-active' : 'bg-white'}`}
                 onClick={() => setMealType(m.key)}
               >
                 <Text className="block text-xl">{m.emoji}</Text>
@@ -112,7 +112,7 @@ function AnalyzePage() {
         <View className="mb-5">
           <Text className="block text-base font-semibold mb-3">拍照或上传图片</Text>
           <View
-            className="upload-area bg-white rounded-2xl overflow-hidden"
+            className="upload-area bg-white  overflow-hidden"
             onClick={handleChooseImage}
           >
             {imagePath ? (
@@ -167,16 +167,16 @@ function AnalyzePage() {
   return (
     <View className="min-h-screen bg-gray-50 p-5">
       {imagePath && (
-        <Image className="w-full rounded-2xl mb-4 result-img" src={imagePath} mode="aspectFill" />
+        <Image className="w-full  mb-4 result-img" src={imagePath} mode="aspectFill" />
       )}
 
-      <View className="bg-white rounded-2xl p-5 mb-4">
+      <View className="bg-white  p-5 mb-4">
         <View className="flex items-baseline gap-1">
           <Text className="text-4xl font-bold text-blue-500">{totalCal}</Text>
           <Text className="text-sm text-gray-500">千卡</Text>
           {result?.isHealthy != null && (
             <View
-              className={`ml-2 px-2 py-1 rounded-full text-xs ${result.isHealthy ? 'bg-green-50 text-green-500' : 'bg-yellow-50 text-yellow-500'}`}
+              className={`ml-2 px-2 py-1  text-xs ${result.isHealthy ? 'bg-green-50 text-green-500' : 'bg-yellow-50 text-yellow-500'}`}
             >
               <Text>{result.isHealthy ? '健康' : '偏高'}</Text>
             </View>
@@ -193,7 +193,7 @@ function AnalyzePage() {
         <Text className="block text-base font-semibold mb-3">识别到的食物</Text>
         {editFoods.map((food, idx) => (
           <View
-            className="flex items-center justify-between bg-white rounded-xl p-4 mb-2"
+            className="flex items-center justify-between bg-white  p-4 mb-2"
             key={idx}
           >
             <View className="flex-1">

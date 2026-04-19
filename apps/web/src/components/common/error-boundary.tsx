@@ -57,9 +57,9 @@ export class ErrorBoundary extends Component<Props, State> {
       }
 
       return (
-        <div className="flex min-h-[300px] items-center justify-center p-6">
+        <div className="flex min-h-[300px] items-center justify-center p-4">
           <div className="max-w-sm w-full text-center space-y-4">
-            <div className="w-14 h-14 rounded-full bg-destructive/10 flex items-center justify-center mx-auto">
+            <div className="w-14 h-14  bg-destructive/10 flex items-center justify-center mx-auto">
               <svg
                 className="w-7 h-7 text-destructive"
                 fill="none"
@@ -93,7 +93,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
             <button
               onClick={this.handleReset}
-              className="w-full bg-primary text-primary-foreground font-bold py-3 rounded-full active:scale-[0.98] transition-all text-sm"
+              className="w-full bg-primary text-primary-foreground font-bold py-3  active:scale-[0.98] transition-all text-sm"
             >
               {this.props.labels?.retry || '重新加载'}
             </button>

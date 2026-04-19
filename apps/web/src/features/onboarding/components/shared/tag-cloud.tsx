@@ -20,7 +20,7 @@ export function TagCloud({ options, selected, onChange }: TagCloudProps) {
             key={key}
             type="button"
             onClick={() => toggle(key)}
-            className={`px-4 py-2 rounded-full text-sm font-bold transition-all active:scale-95 ${
+            className={`px-4 py-2  text-sm font-bold transition-all active:scale-95 ${
               active
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted text-muted-foreground hover:bg-muted/80'

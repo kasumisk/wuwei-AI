@@ -31,7 +31,7 @@ export function AllergenSelector({ selected, onChange }: AllergenSelectorProps) 
               key={key}
               type="button"
               onClick={() => toggle(key)}
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-sm font-bold transition-all active:scale-95 border ${
+              className={`flex items-center gap-1.5 px-3.5 py-2  text-sm font-bold transition-all active:scale-95 border ${
                 active
                   ? 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-600'
                   : 'bg-muted text-muted-foreground border-transparent hover:bg-muted/80'

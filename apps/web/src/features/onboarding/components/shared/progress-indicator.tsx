@@ -16,7 +16,7 @@ export function ProgressIndicator({ currentStep }: ProgressIndicatorProps) {
         return (
           <div key={step} className="flex-1 flex flex-col items-center gap-1.5">
             <div
-              className={`h-1.5 w-full rounded-full transition-all duration-300 ${
+              className={`h-1.5 w-full  transition-all duration-300 ${
                 isCompleted ? 'bg-primary' : isActive ? 'bg-primary/60' : 'bg-muted'
               }`}
             />

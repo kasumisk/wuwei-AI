@@ -26,11 +26,11 @@ export function EmptyState({
   return (
     <div className="flex flex-col items-center justify-center py-16 gap-4">
       {icon ? (
-        <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+        <div className="w-16 h-16  bg-muted flex items-center justify-center">
           {icon}
         </div>
       ) : (
-        <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+        <div className="w-16 h-16  bg-muted flex items-center justify-center">
           <svg
             viewBox="0 0 24 24"
             fill="currentColor"
@@ -51,7 +51,7 @@ export function EmptyState({
       {actionLabel && actionHref && (
         <LocalizedLink
           href={actionHref}
-          className="mt-1 px-6 py-2.5 bg-primary text-primary-foreground text-sm font-bold rounded-full active:scale-[0.97] transition-all shadow-lg shadow-primary/20"
+          className="mt-1 px-4 py-2.5 bg-primary text-primary-foreground text-sm font-bold  active:scale-[0.97] transition-all shadow-lg shadow-primary/20"
           asButton
         >
           {actionLabel}
@@ -60,7 +60,7 @@ export function EmptyState({
       {actionLabel && onAction && !actionHref && (
         <button
           onClick={onAction}
-          className="mt-1 px-6 py-2.5 bg-primary text-primary-foreground text-sm font-bold rounded-full active:scale-[0.97] transition-all shadow-lg shadow-primary/20"
+          className="mt-1 px-4 py-2.5 bg-primary text-primary-foreground text-sm font-bold  active:scale-[0.97] transition-all shadow-lg shadow-primary/20"
         >
           {actionLabel}
         </button>

@@ -17,6 +17,7 @@ import { FrequentInput } from './frequent-input';
 import { SearchInput } from './search-input';
 import { LocalizedLink } from '@/components/common/localized-link';
 import type { AnalysisResult, FoodItem } from '@/types/food';
+import { BottomNav } from '@/components/common/bottom-nav';
 
 type MealTypeOption = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 type Step = 'upload' | 'analyzing' | 'result' | 'saved';
@@ -226,7 +227,6 @@ export function AnalyzePage() {
     null
   );
 
-  console.log('result', JSON.stringify(result));
   useEffect(() => {
     if (!isLoggedIn) router.push('/login');
   }, [isLoggedIn, router]);
@@ -613,7 +613,7 @@ export function AnalyzePage() {
     <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
       <nav className="sticky top-0 z-50 glass-morphism">
-        <div className="flex items-center justify-between px-6 py-4 max-w-lg mx-auto">
+        <div className="flex items-center justify-between px-4 py-4 max-w-lg mx-auto">
           <div className="flex items-center">
             <button
               onClick={() => router.back()}
@@ -639,7 +639,7 @@ export function AnalyzePage() {
         </div>
       </nav>
 
-      <main className="px-6 py-6 max-w-lg mx-auto pb-32">
+      <main className="px-4 py-6 max-w-lg mx-auto pb-32">
         {/* Step 1: Upload / Text / Frequent / Search Input */}
         {step === 'upload' && (
           <div className="space-y-5">
@@ -653,7 +653,7 @@ export function AnalyzePage() {
                   <button
                     key={key}
                     onClick={() => setMealType(key)}
-                    className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${
+                    className={`px-4 py-2  text-sm font-bold transition-all ${
                       mealType === key
                         ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
                         : 'bg-muted text-muted-foreground'
@@ -667,14 +667,14 @@ export function AnalyzePage() {
 
             {/* 免费用户提示 — 仅在 AI 模式(image/text)下显示 */}
             {isFree && (inputMode === 'image' || inputMode === 'text') && (
-              <div className="bg-linear-to-r from-primary/5 to-primary/10 border border-primary/15 rounded-xl px-4 py-3 space-y-1">
+              <div className="bg-linear-to-r from-primary/5 to-primary/10 border border-primary/15  px-4 py-3 space-y-1">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-foreground">
                     {inputMode === 'image' ? '📸 图片分析' : '✏️ 文字分析'}
                   </span>
                   <LocalizedLink
                     href="/pricing"
-                    className="text-xs text-primary font-bold shrink-0 px-3 py-1 rounded-full bg-primary/10 hover:bg-primary/20 transition-colors"
+                    className="text-xs text-primary font-bold shrink-0 px-3 py-1  bg-primary/10 hover:bg-primary/20 transition-colors"
                   >
                     升级解锁更多
                   </LocalizedLink>
@@ -691,7 +691,7 @@ export function AnalyzePage() {
             {inputMode === 'image' && (
               <>
                 <div
-                  className="bg-card rounded-2xl border-2 border-dashed border-(--color-outline-variant)/30 p-8 flex flex-col items-center gap-4 cursor-pointer active:scale-[0.98] transition-transform"
+                  className="bg-card  border-2 border-dashed border-(--color-outline-variant)/30 p-8 flex flex-col items-center gap-4 cursor-pointer active:scale-[0.98] transition-transform"
                   onClick={() => fileInputRef.current?.click()}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
@@ -708,11 +708,11 @@ export function AnalyzePage() {
                     <img
                       src={previewUrl}
                       alt="预览"
-                      className="w-full max-h-64 object-contain rounded-xl"
+                      className="w-full max-h-64 object-contain "
                     />
                   ) : (
                     <>
-                      <div className="w-20 h-20 rounded-full bg-secondary flex items-center justify-center">
+                      <div className="w-20 h-20  bg-secondary flex items-center justify-center">
                         <svg
                           viewBox="0 0 24 24"
                           fill="currentColor"
@@ -742,7 +742,7 @@ export function AnalyzePage() {
 
                 {selectedFile && (
                   <>
-                    <div className="bg-card border border-border rounded-xl p-3 space-y-1.5">
+                    <div className="bg-card border border-border  p-3 space-y-1.5">
                       <p className="text-xs font-bold">提升图片分析准确度</p>
                       <p className="text-[11px] text-muted-foreground">
                         1) 尽量一次拍全餐食 2) 保证光线清晰 3) 酱料和饮料尽量入镜
@@ -751,11 +751,11 @@ export function AnalyzePage() {
                     <button
                       onClick={handleAnalyzeImage}
                       disabled={analyzing}
-                      className="w-full bg-primary text-primary-foreground font-bold py-4 rounded-full flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
+                      className="w-full bg-primary text-primary-foreground font-bold py-4  flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
                     >
                       {analyzing ? (
                         <>
-                          <span className="animate-spin inline-block w-5 h-5 border-2 border-current border-t-transparent rounded-full" />
+                          <span className="animate-spin inline-block w-5 h-5 border-2 border-current border-t-transparent " />
                           AI 分析中...
                         </>
                       ) : (
@@ -770,7 +770,7 @@ export function AnalyzePage() {
             {/* ═══ Text Input Mode ═══ */}
             {inputMode === 'text' && (
               <>
-                <div className="bg-card rounded-2xl p-4 space-y-3">
+                <div className="bg-card  p-4 space-y-3">
                   <textarea
                     value={textInput}
                     onChange={(e) => setTextInput(e.target.value.slice(0, TEXT_MAX_LENGTH))}
@@ -790,7 +790,7 @@ export function AnalyzePage() {
                   </div>
                 </div>
 
-                <div className="bg-card border border-border rounded-xl p-3 space-y-2">
+                <div className="bg-card border border-border  p-3 space-y-2">
                   <p className="text-xs font-bold">输入完善建议</p>
                   <div className="text-[11px] text-muted-foreground space-y-1">
                     <p className={hasQuantityHint(textInput) ? 'text-emerald-600' : ''}>
@@ -811,7 +811,7 @@ export function AnalyzePage() {
                           (prev) => `${prev}${prev.trim() ? '，' : ''}每种食物请按常见份量估算`
                         )
                       }
-                      className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-primary/10 text-primary hover:bg-primary/15 transition-colors"
+                      className="px-2.5 py-1  text-[11px] font-bold bg-primary/10 text-primary hover:bg-primary/15 transition-colors"
                     >
                       一键补充“份量提示”
                     </button>
@@ -833,7 +833,7 @@ export function AnalyzePage() {
                       <button
                         key={example}
                         onClick={() => setTextInput(example)}
-                        className="px-3 py-1.5 bg-muted rounded-full text-xs text-muted-foreground hover:bg-muted/80 active:scale-[0.97] transition-all"
+                        className="px-3 py-1.5 bg-muted  text-xs text-muted-foreground hover:bg-muted/80 active:scale-[0.97] transition-all"
                       >
                         {example}
                       </button>
@@ -844,11 +844,11 @@ export function AnalyzePage() {
                 <button
                   onClick={handleAnalyzeText}
                   disabled={analyzing || !textInput.trim()}
-                  className="w-full bg-primary text-primary-foreground font-bold py-4 rounded-full flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
+                  className="w-full bg-primary text-primary-foreground font-bold py-4  flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
                 >
                   {analyzing ? (
                     <>
-                      <span className="animate-spin inline-block w-5 h-5 border-2 border-current border-t-transparent rounded-full" />
+                      <span className="animate-spin inline-block w-5 h-5 border-2 border-current border-t-transparent " />
                       AI 分析中...
                     </>
                   ) : (
@@ -880,10 +880,10 @@ export function AnalyzePage() {
 
         {/* Step 2: Analyzing */}
         {step === 'analyzing' && (
-          <div className="flex flex-col items-center justify-center py-20 gap-6">
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
             <div className="relative w-20 h-20">
-              <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping" />
-              <div className="relative w-20 h-20 rounded-full bg-primary flex items-center justify-center">
+              <div className="absolute inset-0  bg-primary/20 animate-ping" />
+              <div className="relative w-20 h-20  bg-primary flex items-center justify-center">
                 <svg
                   viewBox="0 0 24 24"
                   fill="currentColor"
@@ -929,13 +929,13 @@ export function AnalyzePage() {
               <img
                 src={previewUrl}
                 alt="食物"
-                className="w-full max-h-48 object-cover rounded-2xl"
+                className="w-full max-h-48 object-cover "
               />
             )}
 
             {/* 文字模式：显示输入内容 */}
             {inputMode === 'text' && textInput && (
-              <div className="bg-card rounded-2xl p-4">
+              <div className="bg-card  p-4">
                 <p className="text-xs text-muted-foreground font-medium mb-1">你的描述</p>
                 <p className="text-sm">{textInput}</p>
               </div>
@@ -945,7 +945,7 @@ export function AnalyzePage() {
             {(result.headline ||
               (result.topIssues && result.topIssues.length > 0) ||
               (result.topStrengths && result.topStrengths.length > 0)) && (
-              <section className="bg-card border border-border rounded-2xl p-4 space-y-3">
+              <section className="bg-card border border-border  p-4 space-y-3">
                 {result.headline && (
                   <h2 className="text-sm font-bold leading-snug">{result.headline}</h2>
                 )}
@@ -999,9 +999,89 @@ export function AnalyzePage() {
               }}
             />
 
+            {/* 宏量总览卡 — 热量 + 三大营养素绝对值 */}
+            {(result.totalProtein != null ||
+              result.totalFat != null ||
+              result.totalCarbs != null) && (
+              <section className="bg-card border border-border  p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold">本餐营养总览</h3>
+                  <span className="text-lg font-extrabold text-primary">{editedTotal} kcal</span>
+                </div>
+                <div className="space-y-2">
+                  {(
+                    [
+                      {
+                        key: 'protein',
+                        label: '蛋白质',
+                        value: result.totalProtein,
+                        unit: 'g',
+                        color: 'bg-blue-400',
+                        goal: 60,
+                      },
+                      {
+                        key: 'fat',
+                        label: '脂肪',
+                        value: result.totalFat,
+                        unit: 'g',
+                        color: 'bg-amber-400',
+                        goal: 65,
+                      },
+                      {
+                        key: 'carbs',
+                        label: '碳水',
+                        value: result.totalCarbs,
+                        unit: 'g',
+                        color: 'bg-violet-400',
+                        goal: 250,
+                      },
+                    ] as {
+                      key: string;
+                      label: string;
+                      value: number | undefined;
+                      unit: string;
+                      color: string;
+                      goal: number;
+                    }[]
+                  )
+                    .filter((m) => m.value != null)
+                    .map((m) => {
+                      const pct = Math.min(Math.round(((m.value ?? 0) / m.goal) * 100), 100);
+                      return (
+                        <div key={m.key}>
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="text-muted-foreground">{m.label}</span>
+                            <span className="font-bold">
+                              {m.value}
+                              {m.unit}
+                            </span>
+                          </div>
+                          <div className="h-1.5 bg-muted  overflow-hidden">
+                            <div
+                              className={`h-full  transition-all ${m.color}`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+                {result.totalSaturatedFat != null || result.totalAddedSugar != null ? (
+                  <div className="flex gap-3 pt-1 border-t border-border text-[11px] text-muted-foreground">
+                    {result.totalSaturatedFat != null && (
+                      <span>饱和脂肪 {result.totalSaturatedFat}g</span>
+                    )}
+                    {result.totalAddedSugar != null && (
+                      <span>添加糖 {result.totalAddedSugar}g</span>
+                    )}
+                  </div>
+                ) : null}
+              </section>
+            )}
+
             {/* 宏量完成度 — completionRatio */}
             {result.completionRatio && Object.keys(result.completionRatio).length > 0 && (
-              <section className="bg-card border border-border rounded-2xl p-4 space-y-3">
+              <section className="bg-card border border-border  p-4 space-y-3">
                 <h3 className="text-sm font-bold">餐后今日完成率</h3>
                 <div className="space-y-2">
                   {Object.entries(result.completionRatio).map(([key, ratio]) => {
@@ -1028,9 +1108,9 @@ export function AnalyzePage() {
                             {pct}%
                           </span>
                         </div>
-                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div className="h-1.5 bg-muted  overflow-hidden">
                           <div
-                            className={`h-full rounded-full transition-all ${colors[key] ?? 'bg-primary'}`}
+                            className={`h-full  transition-all ${colors[key] ?? 'bg-primary'}`}
                             style={{ width: `${pct}%` }}
                           />
                         </div>
@@ -1043,13 +1123,13 @@ export function AnalyzePage() {
 
             {/* 替代品候选 */}
             {result.replacementCandidates && result.replacementCandidates.length > 0 && (
-              <section className="bg-card border border-border rounded-2xl p-4 space-y-3">
+              <section className="bg-card border border-border  p-4 space-y-3">
                 <h3 className="text-sm font-bold">推荐替代方案</h3>
                 <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1 snap-x snap-mandatory">
                   {result.replacementCandidates.map((c, i) => (
                     <div
                       key={i}
-                      className="shrink-0 snap-start w-44 bg-muted/60 rounded-xl p-3 space-y-1.5"
+                      className="shrink-0 snap-start w-44 bg-muted/60  p-3 space-y-1.5"
                     >
                       <p className="text-xs font-bold leading-tight">{c.name}</p>
                       {c.reason && (
@@ -1096,48 +1176,52 @@ export function AnalyzePage() {
               </section>
             )}
 
-            {/* 8维评分详解 */}
+            {/* 8维评分详解 — 内联进度条 */}
             {result.breakdownExplanations && result.breakdownExplanations.length > 0 && (
-              <details className="bg-card border border-border rounded-2xl group">
-                <summary className="flex items-center justify-between p-4 cursor-pointer list-none select-none">
-                  <span className="text-sm font-bold">8维评分详解</span>
-                  <svg
-                    className="w-4 h-4 text-muted-foreground transition-transform group-open:rotate-180"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 9l-7 7-7-7"
-                    />
-                  </svg>
-                </summary>
-                <div className="px-4 pb-4 space-y-2.5">
-                  {result.breakdownExplanations.map((b, i) => (
-                    <div key={i} className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0 text-xs font-bold text-foreground">
-                        {normalizeScore(b.score)}
+              <section className="bg-card border border-border  p-4 space-y-3">
+                <h3 className="text-sm font-bold">8维评分详解</h3>
+                <div className="space-y-3">
+                  {result.breakdownExplanations.map((b, i) => {
+                    const score = normalizeScore(b.score);
+                    const barColor =
+                      score >= 75 ? 'bg-emerald-400' : score >= 50 ? 'bg-amber-400' : 'bg-rose-400';
+                    const scoreColor =
+                      score >= 75
+                        ? 'text-emerald-600'
+                        : score >= 50
+                          ? 'text-amber-600'
+                          : 'text-rose-500';
+                    return (
+                      <div key={i} className="space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-medium">
+                            {b.label ||
+                              BREAKDOWN_DIMENSION_LABELS[b.dimension || ''] ||
+                              b.dimension}
+                          </span>
+                          <span className={`font-bold tabular-nums ${scoreColor}`}>{score}</span>
+                        </div>
+                        <div className="h-1.5 bg-muted  overflow-hidden">
+                          <div
+                            className={`h-full  transition-all ${barColor}`}
+                            style={{ width: `${score}%` }}
+                          />
+                        </div>
+                        {b.message && b.message !== b.label && (
+                          <p className="text-[11px] text-muted-foreground leading-snug">
+                            {b.message}
+                          </p>
+                        )}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold">
-                          {b.label || BREAKDOWN_DIMENSION_LABELS[b.dimension || ''] || b.dimension}
-                        </p>
-                        <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">
-                          {b.message || b.label}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
-              </details>
+              </section>
             )}
 
             {/* 推理链 */}
             {result.decisionChain && result.decisionChain.length > 0 && (
-              <details className="bg-card border border-border rounded-2xl group">
+              <details className="bg-card border border-border  group">
                 <summary className="flex items-center justify-between p-4 cursor-pointer list-none select-none">
                   <span className="text-sm font-bold">决策推理链</span>
                   <svg
@@ -1157,7 +1241,7 @@ export function AnalyzePage() {
                 <div className="px-4 pb-4 space-y-3">
                   {result.decisionChain.map((chain, i) => (
                     <div key={i} className="relative pl-6">
-                      <div className="absolute left-0 top-1 w-4 h-4 rounded-full bg-primary/15 flex items-center justify-center text-[10px] font-bold text-primary">
+                      <div className="absolute left-0 top-1 w-4 h-4  bg-primary/15 flex items-center justify-center text-[10px] font-bold text-primary">
                         {i + 1}
                       </div>
                       {i < result.decisionChain!.length - 1 && (
@@ -1178,7 +1262,7 @@ export function AnalyzePage() {
             {result.recoveryAction &&
               (result.recoveryAction.nextMealDirection ||
                 result.recoveryAction.todayAdjustment) && (
-                <section className="bg-card border border-border rounded-2xl p-4 space-y-2">
+                <section className="bg-card border border-border  p-4 space-y-2">
                   <h3 className="text-sm font-bold">下餐补救方向</h3>
                   {result.recoveryAction.nextMealDirection && (
                     <p className="text-xs text-foreground/80">
@@ -1196,11 +1280,11 @@ export function AnalyzePage() {
               )}
 
             {resultQuality && (
-              <section className="bg-card border border-border rounded-2xl p-4 space-y-3">
+              <section className="bg-card border border-border  p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-bold">分析完整度</h3>
                   <span
-                    className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                    className={`px-2.5 py-1  text-[11px] font-bold ${
                       resultQuality.level === 'high'
                         ? 'bg-emerald-100 text-emerald-700'
                         : resultQuality.level === 'medium'
@@ -1228,6 +1312,27 @@ export function AnalyzePage() {
                       {resultQuality.hasBreakdown ? '已生成' : '未完整'}
                     </p>
                   </div>
+                  {result.confidenceDiagnostics?.overallConfidence != null && (
+                    <div className="bg-muted/60 rounded-lg px-3 py-2">
+                      <p className="text-muted-foreground">识别置信度</p>
+                      <p className="font-bold mt-0.5">
+                        {Math.round(
+                          result.confidenceDiagnostics.overallConfidence <= 1
+                            ? result.confidenceDiagnostics.overallConfidence * 100
+                            : result.confidenceDiagnostics.overallConfidence
+                        )}
+                        %
+                      </p>
+                    </div>
+                  )}
+                  {result.confidenceDiagnostics?.analysisQualityBand && (
+                    <div className="bg-muted/60 rounded-lg px-3 py-2">
+                      <p className="text-muted-foreground">质量等级</p>
+                      <p className="font-bold mt-0.5">
+                        {result.confidenceDiagnostics.analysisQualityBand}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {resultQuality.tips.length > 0 && (
@@ -1245,14 +1350,14 @@ export function AnalyzePage() {
                   {resultQuality.level !== 'high' && (
                     <button
                       onClick={handleQuickReanalyze}
-                      className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-primary/10 text-primary hover:bg-primary/15 active:scale-[0.98] transition-all"
+                      className="flex-1 py-2.5  text-xs font-bold bg-primary/10 text-primary hover:bg-primary/15 active:scale-[0.98] transition-all"
                     >
                       {inputMode === 'text' ? '一键补全后重分析' : '返回补充后重分析'}
                     </button>
                   )}
                   <button
                     onClick={handleCoachCompletenessReview}
-                    className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-muted text-foreground hover:bg-muted/80 active:scale-[0.98] transition-all"
+                    className="flex-1 py-2.5  text-xs font-bold bg-muted text-foreground hover:bg-muted/80 active:scale-[0.98] transition-all"
                   >
                     让教练做分项复盘
                   </button>
@@ -1262,9 +1367,9 @@ export function AnalyzePage() {
 
             {/* 免费用户：结果页 contextual CTA — 提示升级可获得更精准分析 */}
             {isFree && (
-              <div className="bg-linear-to-br from-primary/5 via-primary/8 to-violet-500/5 border border-primary/15 rounded-2xl p-4 space-y-3">
+              <div className="bg-linear-to-br from-primary/5 via-primary/8 to-violet-500/5 border border-primary/15  p-4 space-y-3">
                 <div className="flex items-start gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                  <div className="w-9 h-9  bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
                     <svg
                       className="w-5 h-5 text-primary"
                       fill="none"
@@ -1322,7 +1427,7 @@ export function AnalyzePage() {
                 </div>
                 <LocalizedLink
                   href="/pricing"
-                  className="block w-full text-center bg-primary text-primary-foreground text-sm font-bold py-2.5 rounded-xl active:scale-[0.98] transition-all shadow-sm"
+                  className="block w-full text-center bg-primary text-primary-foreground text-sm font-bold py-2.5  active:scale-[0.98] transition-all shadow-sm"
                   asButton
                 >
                   查看升级方案 · Pro ¥19.9/月起
@@ -1333,14 +1438,14 @@ export function AnalyzePage() {
             <div className="space-y-3">
               <h3 className="font-bold text-sm px-1">识别的食物（点击 x 可删除）</h3>
               {editedFoods.map((food, i) => (
-                <div key={i} className="bg-card rounded-xl p-4 flex items-center justify-between">
+                <div key={i} className="bg-card  p-4 flex items-center justify-between">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <h4 className="font-bold text-sm">{food.name}</h4>
                       {'confidence' in food &&
                         typeof (food as { confidence?: number }).confidence === 'number' && (
                           <span
-                            className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                            className={`text-[10px] px-1.5 py-0.5  font-medium ${
                               ((food as { confidence?: number }).confidence ?? 0) >= 0.8
                                 ? 'bg-emerald-100 text-emerald-700'
                                 : ((food as { confidence?: number }).confidence ?? 0) >= 0.5
@@ -1377,19 +1482,41 @@ export function AnalyzePage() {
               {editedFoods.length === 0 && (
                 <p className="text-center text-muted-foreground text-sm py-4">无识别结果</p>
               )}
+              {editedFoods.length > 1 && (
+                <div className="bg-muted/60  px-4 py-3 flex items-center justify-between">
+                  <div className="text-xs text-muted-foreground space-y-0.5">
+                    <p className="font-bold text-foreground">合计 {editedFoods.length} 种食物</p>
+                    {(() => {
+                      const totalP = editedFoods.reduce((s, f) => s + (f.protein ?? 0), 0);
+                      const totalF = editedFoods.reduce((s, f) => s + (f.fat ?? 0), 0);
+                      const totalC = editedFoods.reduce((s, f) => s + (f.carbs ?? 0), 0);
+                      const hasAny = editedFoods.some(
+                        (f) => f.protein != null || f.fat != null || f.carbs != null
+                      );
+                      return hasAny ? (
+                        <p>
+                          蛋白 {Math.round(totalP)}g · 脂肪 {Math.round(totalF)}g · 碳水{' '}
+                          {Math.round(totalC)}g
+                        </p>
+                      ) : null;
+                    })()}
+                  </div>
+                  <span className="text-base font-extrabold text-primary">{editedTotal} kcal</span>
+                </div>
+              )}
             </div>
 
             <div className="flex gap-3">
               <button
                 onClick={handleReset}
-                className="flex-1 bg-muted text-foreground font-bold py-4 rounded-full active:scale-[0.98] transition-all"
+                className="flex-1 bg-muted text-foreground font-bold py-4  active:scale-[0.98] transition-all"
               >
                 重新分析
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving || editedFoods.length === 0}
-                className="flex-1 bg-primary text-primary-foreground font-bold py-4 rounded-full active:scale-[0.98] transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
+                className="flex-1 bg-primary text-primary-foreground font-bold py-4  active:scale-[0.98] transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
               >
                 {saving ? '保存中...' : '确认保存'}
               </button>
@@ -1400,7 +1527,7 @@ export function AnalyzePage() {
               onClick={() => {
                 goToCoachWithAnalysis(result, editedFoods, editedTotal, mealType);
               }}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-card border border-border text-sm font-medium text-foreground hover:bg-muted active:scale-[0.98] transition-all"
+              className="w-full flex items-center justify-center gap-2 py-3  bg-card border border-border text-sm font-medium text-foreground hover:bg-muted active:scale-[0.98] transition-all"
             >
               <svg
                 className="w-4 h-4 text-primary"
@@ -1444,6 +1571,7 @@ export function AnalyzePage() {
           />
         )}
       </main>
+      <BottomNav />
     </div>
   );
 }

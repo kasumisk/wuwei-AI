@@ -24,7 +24,7 @@ export function PostSaveRecommendation() {
 
   if (isLoading) {
     return (
-      <div className="bg-card rounded-2xl p-4 space-y-3">
+      <div className="bg-card  p-4 space-y-3">
         <Skeleton className="h-4 w-32" />
         <Skeleton className="h-3 w-full" />
         <Skeleton className="h-3 w-2/3" />
@@ -37,12 +37,12 @@ export function PostSaveRecommendation() {
   const mealLabel = MEAL_LABELS[suggestion.mealType] || '下一餐';
 
   return (
-    <div className="bg-card rounded-2xl p-4 space-y-3 border border-primary/10">
+    <div className="bg-card  p-4 space-y-3 border border-primary/10">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-bold flex items-center gap-1.5">
           <span className="text-primary">AI</span> {mealLabel}推荐
         </h3>
-        <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
+        <span className="text-[10px] px-2 py-0.5  bg-primary/10 text-primary font-medium">
           刚更新
         </span>
       </div>

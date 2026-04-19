@@ -32,7 +32,7 @@ export function StepBehavior({ data, onChange }: StepBehaviorProps) {
                 key={key}
                 type="button"
                 onClick={() => onChange({ discipline: key as StepBehaviorData['discipline'] })}
-                className={`w-full px-4 py-3.5 rounded-2xl text-left text-sm font-medium transition-all active:scale-[0.98] ${
+                className={`w-full px-4 py-3.5  text-left text-sm font-medium transition-all active:scale-[0.98] ${
                   data.discipline === key
                     ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
                     : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -76,7 +76,7 @@ export function StepBehavior({ data, onChange }: StepBehaviorProps) {
                 key={String(key)}
                 type="button"
                 onClick={() => onChange({ canCook: key })}
-                className={`flex-1 py-3 rounded-2xl text-sm font-bold transition-all active:scale-95 ${
+                className={`flex-1 py-3  text-sm font-bold transition-all active:scale-95 ${
                   data.canCook === key
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -106,7 +106,7 @@ export function StepBehavior({ data, onChange }: StepBehaviorProps) {
                     const next = selected ? prev.filter((k) => k !== key) : [...prev, key];
                     onChange({ healthConditions: next });
                   }}
-                  className={`flex flex-col items-center gap-1 py-3 px-2 rounded-2xl text-xs font-medium transition-all active:scale-95 ${
+                  className={`flex flex-col items-center gap-1 py-3 px-2  text-xs font-medium transition-all active:scale-95 ${
                     selected
                       ? 'bg-amber-500 text-white shadow-sm shadow-amber-500/30'
                       : 'bg-muted text-muted-foreground hover:bg-muted/80'

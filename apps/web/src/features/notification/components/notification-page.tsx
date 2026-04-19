@@ -60,7 +60,7 @@ export function NotificationPage() {
     <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
       <nav className="sticky top-0 z-50 glass-morphism">
-        <div className="flex items-center justify-between px-6 py-4 max-w-lg mx-auto">
+        <div className="flex items-center justify-between px-4 py-4 max-w-lg mx-auto">
           <div className="flex items-center">
             <button
               onClick={() => router.back()}
@@ -106,11 +106,11 @@ export function NotificationPage() {
         </div>
       </nav>
 
-      <main className="px-6 py-4 max-w-lg mx-auto pb-32">
+      <main className="px-4 py-4 max-w-lg mx-auto pb-32">
         {/* Loading */}
         {isLoading && (
           <div className="flex flex-col items-center justify-center py-20 gap-4">
-            <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <div className="w-10 h-10 border-2 border-primary border-t-transparent  animate-spin" />
             <p className="text-sm text-muted-foreground">加载中...</p>
           </div>
         )}
@@ -118,7 +118,7 @@ export function NotificationPage() {
         {/* Empty */}
         {!isLoading && items.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 gap-4">
-            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+            <div className="w-16 h-16  bg-muted flex items-center justify-center">
               <svg
                 className="w-7 h-7 text-muted-foreground"
                 fill="currentColor"
@@ -149,7 +149,7 @@ export function NotificationPage() {
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1 || isFetching}
-              className="px-4 py-2 bg-muted rounded-full text-sm font-medium disabled:opacity-30 active:scale-[0.97] transition-all"
+              className="px-4 py-2 bg-muted  text-sm font-medium disabled:opacity-30 active:scale-[0.97] transition-all"
             >
               上一页
             </button>
@@ -159,7 +159,7 @@ export function NotificationPage() {
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages || isFetching}
-              className="px-4 py-2 bg-muted rounded-full text-sm font-medium disabled:opacity-30 active:scale-[0.97] transition-all"
+              className="px-4 py-2 bg-muted  text-sm font-medium disabled:opacity-30 active:scale-[0.97] transition-all"
             >
               下一页
             </button>
@@ -168,7 +168,7 @@ export function NotificationPage() {
 
         {isFetching && !isLoading && (
           <div className="flex justify-center mt-4">
-            <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <div className="w-5 h-5 border-2 border-primary border-t-transparent  animate-spin" />
           </div>
         )}
       </main>
@@ -199,14 +199,14 @@ function NotificationRow({
   return (
     <div
       onClick={handleClick}
-      className={`rounded-xl p-4 transition-all cursor-pointer active:scale-[0.99] ${
+      className={` p-4 transition-all cursor-pointer active:scale-[0.99] ${
         item.isRead ? 'bg-card opacity-70' : 'bg-card border-l-4 border-l-primary'
       }`}
     >
       <div className="flex items-start gap-3">
         {/* 类型图标 */}
         <div
-          className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-sm ${config.color}`}
+          className={`w-9 h-9  flex items-center justify-center shrink-0 text-sm ${config.color}`}
         >
           {config.icon}
         </div>
@@ -227,14 +227,14 @@ function NotificationRow({
 
           {/* 类型标签 */}
           <span
-            className={`inline-block mt-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium ${config.color}`}
+            className={`inline-block mt-1.5 px-2 py-0.5  text-[10px] font-medium ${config.color}`}
           >
             {config.label}
           </span>
         </div>
 
         {/* 未读点 */}
-        {!item.isRead && <div className="w-2 h-2 rounded-full bg-primary shrink-0 mt-2" />}
+        {!item.isRead && <div className="w-2 h-2  bg-primary shrink-0 mt-2" />}
       </div>
     </div>
   );

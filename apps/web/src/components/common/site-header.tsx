@@ -41,7 +41,7 @@ export function SiteHeader({ searchQuery = '', onSearchChange }: SiteHeaderProps
               无畏健康
             </h1>
           </LocalizedLink>
-          <nav className="hidden md:flex items-center gap-6">
+          <nav className="hidden md:flex items-center gap-4">
             {headerNav.map((item) => (
               <LocalizedLink
                 key={item.labelKey}
@@ -59,12 +59,12 @@ export function SiteHeader({ searchQuery = '', onSearchChange }: SiteHeaderProps
         </div>
 
         {/* Right: Search + Controls */}
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-4">
           {/* Search Bar */}
           <div className="hidden lg:flex relative group items-center">
             <Search className="absolute left-3 h-4 w-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
             <input
-              className="block w-64 pl-10 pr-4 py-1.5 bg-slate-100/50 dark:bg-slate-800/50 border-none rounded-full text-sm focus:ring-2 focus:ring-blue-600/20 focus:bg-white dark:focus:bg-slate-800 transition-all outline-none text-slate-900 dark:text-white placeholder:text-slate-400"
+              className="block w-64 pl-10 pr-4 py-1.5 bg-slate-100/50 dark:bg-slate-800/50 border-none  text-sm focus:ring-2 focus:ring-blue-600/20 focus:bg-white dark:focus:bg-slate-800 transition-all outline-none text-slate-900 dark:text-white placeholder:text-slate-400"
               placeholder={t('nav.searchTools')}
               type="text"
               value={searchQuery}
@@ -79,7 +79,7 @@ export function SiteHeader({ searchQuery = '', onSearchChange }: SiteHeaderProps
             <LanguageToggle />
             <ThemeToggle />
             {/* <button className="flex items-center gap-2 group transition-all duration-200 hover:opacity-80 active:scale-95">
-              <div className="h-8 w-8 rounded-full overflow-hidden bg-slate-200 dark:bg-slate-700 border border-slate-200/50 flex items-center justify-center">
+              <div className="h-8 w-8  overflow-hidden bg-slate-200 dark:bg-slate-700 border border-slate-200/50 flex items-center justify-center">
                 <User className="h-4 w-4 text-slate-500 dark:text-slate-400" />
               </div>
               <span className="hidden sm:inline font-headline tracking-tight text-sm font-semibold text-slate-700 dark:text-slate-300">

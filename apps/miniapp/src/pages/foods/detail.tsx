@@ -76,7 +76,7 @@ function FoodDetailPage() {
         <Text className="block text-xs text-gray-400 mt-1">{food.category}</Text>
       </View>
 
-      <View className="bg-white rounded-2xl p-5 mb-4">
+      <View className="bg-white  p-5 mb-4">
         <View className="text-center mb-4">
           <Text className="text-4xl font-bold text-blue-500">{cal}</Text>
           <Text className="text-sm text-gray-500 ml-1">千卡 / {grams}g</Text>
@@ -111,13 +111,13 @@ function FoodDetailPage() {
         </View>
       </View>
 
-      <View className="bg-white rounded-2xl p-5 mb-4">
+      <View className="bg-white  p-5 mb-4">
         <Text className="block text-sm font-semibold mb-3">份量 (克)</Text>
         <View className="flex gap-2 flex-wrap">
           {[50, 100, 150, 200, food.standardServingG].filter(Boolean).map((g) => (
             <View
               key={g}
-              className={`detail-gram-btn px-4 py-2 rounded-full text-xs ${grams === g ? 'bg-blue-50 text-blue-500 detail-gram-btn--active' : 'bg-gray-50 text-gray-600'}`}
+              className={`detail-gram-btn px-4 py-2  text-xs ${grams === g ? 'bg-blue-50 text-blue-500 detail-gram-btn--active' : 'bg-gray-50 text-gray-600'}`}
               onClick={() => setGrams(g!)}
             >
               <Text>{g}g</Text>
@@ -126,13 +126,13 @@ function FoodDetailPage() {
         </View>
       </View>
 
-      <View className="bg-white rounded-2xl p-5 mb-5">
+      <View className="bg-white  p-5 mb-5">
         <Text className="block text-sm font-semibold mb-3">添加到</Text>
         <View className="flex gap-2">
           {mealTypes.map((m) => (
             <View
               key={m.key}
-              className={`detail-gram-btn flex-1 text-center py-2 rounded-full text-xs ${mealType === m.key ? 'bg-blue-50 text-blue-500 detail-gram-btn--active' : 'bg-gray-50 text-gray-600'}`}
+              className={`detail-gram-btn flex-1 text-center py-2  text-xs ${mealType === m.key ? 'bg-blue-50 text-blue-500 detail-gram-btn--active' : 'bg-gray-50 text-gray-600'}`}
               onClick={() => setMealType(m.key)}
             >
               <Text>{m.label}</Text>
@@ -151,7 +151,7 @@ function FoodDetailPage() {
           {related.map((r) => (
             <View
               key={r.id}
-              className="flex items-center justify-between bg-white rounded-xl p-4 mb-2"
+              className="flex items-center justify-between bg-white  p-4 mb-2"
               onClick={() =>
                 Taro.navigateTo({ url: '/pages/foods/detail?name=' + encodeURIComponent(r.name) })
               }

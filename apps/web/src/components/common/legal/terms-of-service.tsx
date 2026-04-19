@@ -16,7 +16,7 @@ function Ul({ items }: { items: string[] }) {
     <ul className="space-y-1.5">
       {items.map((item, i) => (
         <li key={i} className="flex items-start gap-2">
-          <span className="mt-2 w-1.5 h-1.5 rounded-full bg-purple-400 dark:bg-purple-500 shrink-0" />
+          <span className="mt-2 w-1.5 h-1.5  bg-purple-400 dark:bg-purple-500 shrink-0" />
           <span>{item}</span>
         </li>
       ))}
@@ -29,9 +29,9 @@ export function TermsOfServicePage() {
     <div className="min-h-screen bg-[#f7f9fb] dark:bg-slate-950 text-slate-900 dark:text-white">
       <main className="">
         {/* Content */}
-        <div className="max-w-3xl mx-auto px-6 py-6">
+        <div className="max-w-3xl mx-auto px-4 py-6">
           {/* Language notice */}
-          <div className="mb-10 rounded-2xl border border-purple-100 dark:border-purple-900/40 bg-purple-50/60 dark:bg-purple-950/30 px-6 py-4 text-sm text-purple-700 dark:text-purple-300">
+          <div className="mb-10  border border-purple-100 dark:border-purple-900/40 bg-purple-50/60 dark:bg-purple-950/30 px-4 py-4 text-sm text-purple-700 dark:text-purple-300">
             本文档提供中英双语版本。Chinese and English versions are both provided below.
           </div>
 

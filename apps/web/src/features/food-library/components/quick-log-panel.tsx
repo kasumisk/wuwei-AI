@@ -89,10 +89,10 @@ export function QuickLogPanel({ food, onClose, onSuccess }: QuickLogPanelProps) 
 
       {/* 面板 */}
       <div className="fixed bottom-0 left-0 right-0 z-50 bg-background rounded-t-3xl shadow-2xl animate-in slide-in-from-bottom duration-300">
-        <div className="max-w-lg mx-auto p-6 space-y-5">
+        <div className="max-w-lg mx-auto p-4 space-y-5">
           {/* 拖拽指示条 */}
           <div className="flex justify-center">
-            <div className="w-10 h-1 rounded-full bg-muted-foreground/20" />
+            <div className="w-10 h-1  bg-muted-foreground/20" />
           </div>
 
           {/* 食物信息 */}
@@ -106,7 +106,7 @@ export function QuickLogPanel({ food, onClose, onSuccess }: QuickLogPanelProps) 
             </div>
             <button
               onClick={onClose}
-              className="p-2 rounded-full hover:bg-muted transition-colors text-muted-foreground"
+              className="p-2  hover:bg-muted transition-colors text-muted-foreground"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -127,7 +127,7 @@ export function QuickLogPanel({ food, onClose, onSuccess }: QuickLogPanelProps) 
                 <button
                   key={m.key}
                   onClick={() => setMealType(m.key)}
-                  className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
+                  className={`flex-1 py-2  text-xs font-bold transition-all ${
                     mealType === m.key
                       ? 'bg-primary text-primary-foreground shadow-sm'
                       : 'bg-muted text-muted-foreground'
@@ -152,7 +152,7 @@ export function QuickLogPanel({ food, onClose, onSuccess }: QuickLogPanelProps) 
                     setServings(s);
                     setCustomGrams('');
                   }}
-                  className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all ${
+                  className={`flex-1 py-2  text-sm font-bold transition-all ${
                     !useCustom && servings === s
                       ? 'bg-primary text-primary-foreground shadow-sm'
                       : 'bg-muted text-muted-foreground'
@@ -169,14 +169,14 @@ export function QuickLogPanel({ food, onClose, onSuccess }: QuickLogPanelProps) 
                 value={customGrams}
                 onChange={(e) => setCustomGrams(e.target.value)}
                 placeholder="克数"
-                className="flex-1 px-3 py-2 rounded-xl border border-border bg-muted/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                className="flex-1 px-3 py-2  border border-border bg-muted/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
               />
               <span className="text-xs text-muted-foreground">g</span>
             </div>
           </div>
 
           {/* 预计营养 */}
-          <div className="bg-card rounded-xl p-4">
+          <div className="bg-card  p-4">
             <p className="text-xs font-bold text-muted-foreground mb-2">
               预计摄入（{actualGrams}g）
             </p>
@@ -194,7 +194,7 @@ export function QuickLogPanel({ food, onClose, onSuccess }: QuickLogPanelProps) 
           <button
             onClick={handleSubmit}
             disabled={addMutation.isPending || actualGrams <= 0}
-            className="w-full bg-primary text-primary-foreground font-bold py-4 rounded-full active:scale-[0.98] transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
+            className="w-full bg-primary text-primary-foreground font-bold py-4  active:scale-[0.98] transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
           >
             {addMutation.isPending ? '记录中...' : `确认记录 ${food.name}`}
           </button>

@@ -37,7 +37,7 @@ export function RecipeCard({ recipe }: { recipe: RecipeSummary }) {
 
   return (
     <LocalizedLink href={`/recipes/${recipe.id}`} className="block group">
-      <div className="bg-card rounded-2xl overflow-hidden border border-border/10 hover:border-border/30 transition-all active:scale-[0.99]">
+      <div className="bg-card  overflow-hidden border border-border/10 hover:border-border/30 transition-all active:scale-[0.99]">
         {/* 图片 */}
         <div className="relative h-40 bg-muted">
           {recipe.imageUrl ? (
@@ -56,7 +56,7 @@ export function RecipeCard({ recipe }: { recipe: RecipeSummary }) {
           {/* 难度标签 */}
           {diffLabel && (
             <span
-              className={`absolute top-2 right-2 text-[10px] font-bold px-2 py-0.5 rounded-full border ${diffColor}`}
+              className={`absolute top-2 right-2 text-[10px] font-bold px-2 py-0.5  border ${diffColor}`}
             >
               {diffLabel}
             </span>

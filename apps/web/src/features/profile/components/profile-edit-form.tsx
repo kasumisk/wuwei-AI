@@ -217,7 +217,7 @@ export function ProfileEditForm() {
           key={key}
           type="button"
           onClick={() => onChange(key)}
-          className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${
+          className={`flex-1 py-2.5  text-sm font-bold transition-all ${
             value === key ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
           }`}
         >
@@ -248,7 +248,7 @@ export function ProfileEditForm() {
           value={form.birthYear}
           onChange={(e) => up('birthYear', e.target.value)}
           placeholder="例如 1995"
-          className="w-full px-4 py-2.5 rounded-xl bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
+          className="w-full px-4 py-2.5  bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
         />
       </div>
 
@@ -260,7 +260,7 @@ export function ProfileEditForm() {
             value={form.heightCm}
             onChange={(e) => up('heightCm', e.target.value)}
             placeholder="170"
-            className="w-full px-4 py-2.5 rounded-xl bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
+            className="w-full px-4 py-2.5  bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
           />
         </div>
         <div>
@@ -270,7 +270,7 @@ export function ProfileEditForm() {
             value={form.weightKg}
             onChange={(e) => up('weightKg', e.target.value)}
             placeholder="65"
-            className="w-full px-4 py-2.5 rounded-xl bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
+            className="w-full px-4 py-2.5  bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
           />
         </div>
       </div>
@@ -282,7 +282,7 @@ export function ProfileEditForm() {
           value={form.targetWeightKg}
           onChange={(e) => up('targetWeightKg', e.target.value)}
           placeholder="60"
-          className="w-full px-4 py-2.5 rounded-xl bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
+          className="w-full px-4 py-2.5  bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
         />
       </div>
 
@@ -295,7 +295,7 @@ export function ProfileEditForm() {
           placeholder="例如 20"
           min={3}
           max={60}
-          className="w-full px-4 py-2.5 rounded-xl bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
+          className="w-full px-4 py-2.5  bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
         />
         <p className="text-[11px] text-muted-foreground mt-1">
           填写后将使用 Katch-McArdle 公式代替 Mifflin 公式计算基础代谢
@@ -311,7 +311,7 @@ export function ProfileEditForm() {
             key={key}
             type="button"
             onClick={() => up('activityLevel', key)}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left text-sm font-medium transition-all ${
+            className={`w-full flex items-center gap-3 px-4 py-3  text-left text-sm font-medium transition-all ${
               form.activityLevel === key
                 ? 'bg-primary text-primary-foreground font-bold'
                 : 'bg-muted text-muted-foreground'
@@ -339,7 +339,7 @@ export function ProfileEditForm() {
             key={key}
             type="button"
             onClick={() => up('goal', key)}
-            className={`py-3 px-3 rounded-xl text-sm font-bold transition-all text-left ${
+            className={`py-3 px-3  text-sm font-bold transition-all text-left ${
               form.goal === key
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted text-muted-foreground'
@@ -377,7 +377,7 @@ export function ProfileEditForm() {
           value={form.dailyCalorieGoal}
           onChange={(e) => up('dailyCalorieGoal', e.target.value)}
           placeholder="自动计算"
-          className="w-full px-4 py-2.5 rounded-xl bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
+          className="w-full px-4 py-2.5  bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
         />
       </div>
 
@@ -389,7 +389,7 @@ export function ProfileEditForm() {
               key={n}
               type="button"
               onClick={() => up('familySize', String(n))}
-              className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${
+              className={`flex-1 py-2.5  text-sm font-bold transition-all ${
                 form.familySize === String(n)
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-muted text-muted-foreground'
@@ -401,7 +401,7 @@ export function ProfileEditForm() {
           <button
             type="button"
             onClick={() => up('familySize', '6')}
-            className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${
+            className={`flex-1 py-2.5  text-sm font-bold transition-all ${
               parseInt(form.familySize) >= 6
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted text-muted-foreground'
@@ -421,7 +421,7 @@ export function ProfileEditForm() {
             key={key}
             type="button"
             onClick={() => up('exerciseType', key)}
-            className={`flex items-center gap-2 px-3 py-3 rounded-xl text-sm font-medium transition-all text-left ${
+            className={`flex items-center gap-2 px-3 py-3  text-sm font-medium transition-all text-left ${
               form.exerciseType === key
                 ? 'bg-primary text-primary-foreground font-bold'
                 : 'bg-muted text-muted-foreground'
@@ -443,7 +443,7 @@ export function ProfileEditForm() {
                   key={n}
                   type="button"
                   onClick={() => up('exerciseFrequency', n)}
-                  className={`w-10 h-10 rounded-xl text-sm font-bold transition-all ${
+                  className={`w-10 h-10  text-sm font-bold transition-all ${
                     form.exerciseFrequency === n
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted text-muted-foreground'
@@ -462,7 +462,7 @@ export function ProfileEditForm() {
                   key={n}
                   type="button"
                   onClick={() => up('exerciseDuration', n)}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                  className={`flex-1 py-2.5  text-sm font-bold transition-all ${
                     form.exerciseDuration === n
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted text-muted-foreground'
@@ -487,7 +487,7 @@ export function ProfileEditForm() {
             key={n}
             type="button"
             onClick={() => up('mealsPerDay', n)}
-            className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${
+            className={`flex-1 py-2.5  text-sm font-bold transition-all ${
               form.mealsPerDay === n
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted text-muted-foreground'
@@ -528,7 +528,7 @@ export function ProfileEditForm() {
                 key={key}
                 type="button"
                 onClick={() => up('cookingSkillLevel', key)}
-                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-left text-sm font-medium transition-all ${
+                className={`w-full flex items-center justify-between px-4 py-3  text-left text-sm font-medium transition-all ${
                   form.cookingSkillLevel === key
                     ? 'bg-primary text-primary-foreground font-bold'
                     : 'bg-muted text-muted-foreground'
@@ -554,7 +554,7 @@ export function ProfileEditForm() {
               key={key}
               type="button"
               onClick={() => up('budgetLevel', key)}
-              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-left text-sm font-medium transition-all ${
+              className={`w-full flex items-center justify-between px-4 py-3  text-left text-sm font-medium transition-all ${
                 form.budgetLevel === key
                   ? 'bg-primary text-primary-foreground font-bold'
                   : 'bg-muted text-muted-foreground'
@@ -594,7 +594,7 @@ export function ProfileEditForm() {
               key={key}
               type="button"
               onClick={() => up('cuisinePreferences', toggleArr(form.cuisinePreferences, key))}
-              className={`flex flex-col items-center py-3 rounded-xl text-xs font-bold transition-all gap-1 ${
+              className={`flex flex-col items-center py-3  text-xs font-bold transition-all gap-1 ${
                 selected ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
               }`}
             >
@@ -643,7 +643,7 @@ export function ProfileEditForm() {
             key={key}
             type="button"
             onClick={() => up('discipline', key)}
-            className={`w-full px-4 py-3 rounded-xl text-left text-sm font-medium transition-all ${
+            className={`w-full px-4 py-3  text-left text-sm font-medium transition-all ${
               form.discipline === key
                 ? 'bg-primary text-primary-foreground font-bold'
                 : 'bg-muted text-muted-foreground'
@@ -662,7 +662,7 @@ export function ProfileEditForm() {
               key={key}
               type="button"
               onClick={() => up('mealTimingPreference', key)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left text-sm font-medium transition-all ${
+              className={`w-full flex items-center gap-3 px-4 py-3  text-left text-sm font-medium transition-all ${
                 form.mealTimingPreference === key
                   ? 'bg-primary text-primary-foreground font-bold'
                   : 'bg-muted text-muted-foreground'
@@ -704,7 +704,7 @@ export function ProfileEditForm() {
 
   const HealthTab = () => (
     <>
-      <div className="mb-4 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
+      <div className="mb-4 px-4 py-3  bg-amber-500/10 border border-amber-500/20">
         <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">
           ⚠️ 健康状况用于过滤不适合你的食物，直接影响推荐安全性。请如实填写。
         </p>
@@ -719,7 +719,7 @@ export function ProfileEditForm() {
               key={key}
               type="button"
               onClick={() => up('healthConditions', toggleArr(form.healthConditions, key))}
-              className={`flex items-center gap-2 px-3 py-3 rounded-xl text-sm font-medium transition-all text-left ${
+              className={`flex items-center gap-2 px-3 py-3  text-sm font-medium transition-all text-left ${
                 selected
                   ? 'bg-primary text-primary-foreground font-bold'
                   : 'bg-muted text-muted-foreground'
@@ -733,7 +733,7 @@ export function ProfileEditForm() {
       </div>
 
       {form.healthConditions.length === 0 && (
-        <div className="mt-4 px-4 py-3 rounded-xl bg-muted/60 text-center">
+        <div className="mt-4 px-4 py-3  bg-muted/60 text-center">
           <p className="text-xs text-muted-foreground">未选择任何健康状况 — 视为无特殊限制</p>
         </div>
       )}
@@ -747,7 +747,7 @@ export function ProfileEditForm() {
             key={key}
             type="button"
             onClick={() => up('sleepQuality', key)}
-            className={`flex-1 flex flex-col items-center py-3 rounded-xl text-xs font-bold transition-all gap-1 ${
+            className={`flex-1 flex flex-col items-center py-3  text-xs font-bold transition-all gap-1 ${
               form.sleepQuality === key
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted text-muted-foreground'
@@ -772,7 +772,7 @@ export function ProfileEditForm() {
               key={key}
               type="button"
               onClick={() => up('stressLevel', key)}
-              className={`flex-1 flex flex-col items-center py-3 rounded-xl text-xs font-bold transition-all gap-1 ${
+              className={`flex-1 flex flex-col items-center py-3  text-xs font-bold transition-all gap-1 ${
                 form.stressLevel === key
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-muted text-muted-foreground'
@@ -802,7 +802,7 @@ export function ProfileEditForm() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <nav className="sticky top-0 z-50 glass-morphism">
-        <div className="flex items-center px-6 py-4 max-w-lg mx-auto">
+        <div className="flex items-center px-4 py-4 max-w-lg mx-auto">
           <button
             onClick={() => router.back()}
             className="mr-4 text-foreground/70 hover:text-foreground"
@@ -834,17 +834,17 @@ export function ProfileEditForm() {
         </div>
       </nav>
 
-      <main className="px-6 py-6 max-w-lg mx-auto pb-32">
-        <div className="bg-card rounded-2xl p-6 mb-5">{tabContent[activeTab]}</div>
+      <main className="px-4 py-6 max-w-lg mx-auto pb-32">
+        <div className="bg-card  p-4 mb-5">{tabContent[activeTab]}</div>
       </main>
 
       {/* Floating save button */}
       <div className="fixed bottom-0 left-0 right-0 z-40 pb-safe">
-        <div className="max-w-lg mx-auto px-6 pb-6">
+        <div className="max-w-lg mx-auto px-4 pb-6">
           <button
             onClick={handleSave}
             disabled={isUpdating}
-            className="w-full bg-primary text-primary-foreground font-bold py-4 rounded-full active:scale-[0.98] transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
+            className="w-full bg-primary text-primary-foreground font-bold py-4  active:scale-[0.98] transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
           >
             {isUpdating ? '保存中...' : '保存档案'}
           </button>

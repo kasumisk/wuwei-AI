@@ -17,7 +17,7 @@ export function ProactiveReminderCard({ reminder, onDismiss }: ProactiveReminder
   const config = URGENCY_CONFIG[reminder.urgency] || URGENCY_CONFIG.low;
 
   return (
-    <div className={`rounded-2xl p-4 border ${config.bgClass} flex items-start gap-3`}>
+    <div className={` p-4 border ${config.bgClass} flex items-start gap-3`}>
       <span className="text-xl flex-shrink-0">{config.icon}</span>
       <div className="flex-1 min-w-0">
         <p className={`text-sm font-medium ${config.textClass}`}>{reminder.message}</p>

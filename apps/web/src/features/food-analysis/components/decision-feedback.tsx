@@ -68,13 +68,13 @@ export function DecisionFeedback({ recordId, decision }: DecisionFeedbackProps) 
   if (!recordId) {
     if (step === 'done') {
       return (
-        <div className="bg-white/60 rounded-xl p-3 text-center">
+        <div className="bg-white/60  p-3 text-center">
           <p className="text-sm font-medium text-primary">感谢反馈！</p>
         </div>
       );
     }
     return (
-      <div className="bg-white/60 rounded-xl p-3 space-y-2">
+      <div className="bg-white/60  p-3 space-y-2">
         <p className="text-xs font-bold text-muted-foreground">这个建议有帮助吗？</p>
         <div className="flex gap-2">
           <button
@@ -96,7 +96,7 @@ export function DecisionFeedback({ recordId, decision }: DecisionFeedbackProps) 
 
   if (step === 'done') {
     return (
-      <div className="bg-white/60 rounded-xl p-3 text-center">
+      <div className="bg-white/60  p-3 text-center">
         <p className="text-sm font-medium text-primary">感谢你的反馈，AI 会越来越懂你</p>
       </div>
     );
@@ -104,7 +104,7 @@ export function DecisionFeedback({ recordId, decision }: DecisionFeedbackProps) 
 
   if (step === 'rating') {
     return (
-      <div className="bg-white/60 rounded-xl p-3 space-y-2">
+      <div className="bg-white/60  p-3 space-y-2">
         <p className="text-xs font-bold text-muted-foreground">
           {followed ? '很棒！觉得这次建议怎么样？' : '了解，觉得 AI 建议有帮助吗？'}
         </p>
@@ -137,7 +137,7 @@ export function DecisionFeedback({ recordId, decision }: DecisionFeedbackProps) 
 
   // step === 'initial'
   return (
-    <div className="bg-white/60 rounded-xl p-3 space-y-2">
+    <div className="bg-white/60  p-3 space-y-2">
       <p className="text-xs font-bold text-muted-foreground">你后来怎么做的？</p>
       <div className="flex gap-2">
         <button

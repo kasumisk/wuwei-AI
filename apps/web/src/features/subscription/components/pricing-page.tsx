@@ -158,7 +158,7 @@ export function PricingPage() {
     <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
       <nav className="sticky top-0 z-50 glass-morphism">
-        <div className="flex items-center px-6 py-4 max-w-lg mx-auto">
+        <div className="flex items-center px-4 py-4 max-w-lg mx-auto">
           <button
             onClick={handleBack}
             aria-label="返回"
@@ -172,7 +172,7 @@ export function PricingPage() {
         </div>
       </nav>
 
-      <main className="px-6 py-6 max-w-lg mx-auto pb-32">
+      <main className="px-4 py-6 max-w-lg mx-auto pb-32">
         {/* 副标题 */}
         <p className="text-sm text-muted-foreground mb-4 text-center">
           选择最适合你的计划，让 AI 营养管家为你服务
@@ -190,12 +190,12 @@ export function PricingPage() {
             role="switch"
             aria-checked={billingCycle === 'yearly'}
             aria-label="切换月付/年付"
-            className={`relative w-12 h-7 rounded-full transition-colors ${
+            className={`relative w-12 h-7  transition-colors ${
               billingCycle === 'yearly' ? 'bg-primary' : 'bg-muted-foreground/30'
             }`}
           >
             <span
-              className={`absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform ${
+              className={`absolute top-0.5 left-0.5 w-6 h-6  bg-white shadow transition-transform ${
                 billingCycle === 'yearly' ? 'translate-x-5' : ''
               }`}
             />
@@ -206,7 +206,7 @@ export function PricingPage() {
             年付
           </span>
           {billingCycle === 'yearly' && (
-            <span className="text-[10px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
+            <span className="text-[10px] font-bold text-green-700 bg-green-100 px-2 py-0.5 ">
               省20%
             </span>
           )}
@@ -230,7 +230,7 @@ export function PricingPage() {
             return (
               <div
                 key={t.tier}
-                className={`relative rounded-2xl border-2 ${t.color} bg-card overflow-hidden transition-all ${
+                className={`relative  border-2 ${t.color} bg-card overflow-hidden transition-all ${
                   isCurrent ? 'ring-2 ring-primary/30' : ''
                 } ${t.badge ? 'shadow-lg shadow-primary/10' : ''}`}
               >
@@ -246,7 +246,7 @@ export function PricingPage() {
                   <div className="flex items-baseline gap-2 mb-1">
                     <h3 className="text-lg font-extrabold">{t.name}</h3>
                     {isCurrent && (
-                      <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+                      <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 ">
                         当前方案
                       </span>
                     )}
@@ -257,7 +257,7 @@ export function PricingPage() {
                     <span className="text-3xl font-extrabold">{price}</span>
                     <span className="text-sm text-muted-foreground">{priceNote}</span>
                     {billingCycle === 'yearly' && t.yearlySaving && (
-                      <span className="text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full ml-1">
+                      <span className="text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5  ml-1">
                         {t.yearlySaving}
                       </span>
                     )}
@@ -265,18 +265,18 @@ export function PricingPage() {
 
                   {/* CTA */}
                   {isCurrent ? (
-                    <div className="w-full py-3 rounded-xl bg-muted text-center text-sm font-bold text-muted-foreground">
+                    <div className="w-full py-3  bg-muted text-center text-sm font-bold text-muted-foreground">
                       当前方案
                     </div>
                   ) : isUpgrade ? (
                     <button
                       onClick={() => handlePurchase(planId, t.tier)}
                       disabled={!!purchasing}
-                      className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-bold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
+                      className="w-full py-3  bg-primary text-primary-foreground font-bold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
                     >
                       {purchasing === planId ? (
                         <>
-                          <span className="animate-spin inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full" />
+                          <span className="animate-spin inline-block w-4 h-4 border-2 border-current border-t-transparent " />
                           处理中...
                         </>
                       ) : (
@@ -287,7 +287,7 @@ export function PricingPage() {
                     <button
                       onClick={() => handlePurchase(planId, t.tier)}
                       disabled={!!purchasing}
-                      className="w-full py-3 rounded-xl bg-muted text-foreground font-bold text-sm active:scale-[0.98] transition-all disabled:opacity-50"
+                      className="w-full py-3  bg-muted text-foreground font-bold text-sm active:scale-[0.98] transition-all disabled:opacity-50"
                     >
                       切换到 {t.name}
                     </button>
@@ -299,7 +299,7 @@ export function PricingPage() {
         </div>
 
         {/* 功能对比表（语义化 table） */}
-        <div className="bg-card rounded-2xl overflow-hidden">
+        <div className="bg-card  overflow-hidden">
           <div className="px-4 py-3 border-b border-border/40">
             <h3 className="text-sm font-bold" id="comparison-heading">
               功能对比
@@ -340,7 +340,7 @@ export function PricingPage() {
 
         {/* 模拟模式提示 */}
         {subscriptionService.isMockMode() && (
-          <div className="mt-6 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-center">
+          <div className="mt-6 bg-amber-50 border border-amber-200  px-4 py-3 text-center">
             <p className="text-xs text-amber-700 font-medium">
               [DEV] 模拟支付模式 — 所有购买将直接成功，不产生实际扣费
             </p>
@@ -360,7 +360,7 @@ export function PricingPage() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="downgrade-title"
-            className="relative bg-card rounded-2xl shadow-2xl w-[90%] max-w-sm p-6 animate-in zoom-in-95 duration-200"
+            className="relative bg-card  shadow-2xl w-[90%] max-w-sm p-4 animate-in zoom-in-95 duration-200"
           >
             <h3 id="downgrade-title" className="text-lg font-extrabold mb-2">
               确定降级方案？
@@ -399,13 +399,13 @@ export function PricingPage() {
             <div className="flex gap-3">
               <button
                 onClick={() => setDowngradeConfirm(null)}
-                className="flex-1 py-3 rounded-xl bg-muted text-foreground font-bold text-sm active:scale-[0.98] transition-all"
+                className="flex-1 py-3  bg-muted text-foreground font-bold text-sm active:scale-[0.98] transition-all"
               >
                 取消
               </button>
               <button
                 onClick={confirmDowngrade}
-                className="flex-1 py-3 rounded-xl bg-destructive text-destructive-foreground font-bold text-sm active:scale-[0.98] transition-all"
+                className="flex-1 py-3  bg-destructive text-destructive-foreground font-bold text-sm active:scale-[0.98] transition-all"
               >
                 确认降级
               </button>
@@ -426,12 +426,12 @@ export function PricingPage() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="celebration-title"
-            className="relative bg-card rounded-3xl shadow-2xl w-[85%] max-w-sm overflow-hidden animate-in zoom-in-90 duration-300"
+            className="relative bg-card  shadow-2xl w-[85%] max-w-sm overflow-hidden animate-in zoom-in-90 duration-300"
           >
             {/* 顶部渐变装饰 */}
-            <div className="bg-gradient-to-br from-primary via-primary/90 to-primary/70 px-6 pt-8 pb-6 text-center text-primary-foreground">
+            <div className="bg-gradient-to-br from-primary via-primary/90 to-primary/70 px-4 pt-8 pb-6 text-center text-primary-foreground">
               {/* 庆祝图标 */}
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary-foreground/20 mb-4 animate-bounce">
+              <div className="inline-flex items-center justify-center w-16 h-16  bg-primary-foreground/20 mb-4 animate-bounce">
                 <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                   <path
                     fillRule="evenodd"
@@ -445,7 +445,7 @@ export function PricingPage() {
               </h3>
               <p className="text-sm text-primary-foreground/80">欢迎使用 {celebration.tierName}</p>
             </div>
-            <div className="px-6 py-5 text-center">
+            <div className="px-4 py-5 text-center">
               <p className="text-sm text-muted-foreground mb-4">
                 所有高级功能已解锁，立即体验 AI 营养管家的完整能力
               </p>
@@ -454,7 +454,7 @@ export function PricingPage() {
                   setCelebration(null);
                   push('/');
                 }}
-                className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-bold text-sm active:scale-[0.98] transition-all shadow-lg shadow-primary/20"
+                className="w-full py-3  bg-primary text-primary-foreground font-bold text-sm active:scale-[0.98] transition-all shadow-lg shadow-primary/20"
               >
                 开始使用
               </button>

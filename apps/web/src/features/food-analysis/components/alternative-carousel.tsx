@@ -35,7 +35,7 @@ export function AlternativeCarousel({
   if (!options || options.length === 0) return null;
 
   return (
-    <div className="bg-white/60 rounded-xl p-3 space-y-2">
+    <div className="bg-white/60  p-3 space-y-2">
       <div className="flex items-center justify-between">
         <p className="text-xs font-bold text-muted-foreground">🔄 替代方案</p>
         <span className="text-[10px] text-muted-foreground">
@@ -57,7 +57,7 @@ export function AlternativeCarousel({
           return (
             <div
               key={i}
-              className={`flex-none w-44 snap-start rounded-xl border border-white/40 p-3 space-y-2 bg-white/50 hover:bg-white/70 transition-all`}
+              className={`flex-none w-44 snap-start  border border-white/40 p-3 space-y-2 bg-white/50 hover:bg-white/70 transition-all`}
             >
               {/* Food icon + name */}
               <div className="flex items-start gap-2">
@@ -67,7 +67,7 @@ export function AlternativeCarousel({
 
               {/* Calories badge */}
               {cals != null && (
-                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary/10 text-primary">
+                <span className="inline-block px-2 py-0.5  text-[10px] font-bold bg-primary/10 text-primary">
                   {cals} kcal
                 </span>
               )}
@@ -107,7 +107,7 @@ export function AlternativeCarousel({
           {options.map((_, i) => (
             <div
               key={i}
-              className={`w-1.5 h-1.5 rounded-full transition-all ${i === 0 ? 'bg-primary' : 'bg-muted'}`}
+              className={`w-1.5 h-1.5  transition-all ${i === 0 ? 'bg-primary' : 'bg-muted'}`}
             />
           ))}
         </div>

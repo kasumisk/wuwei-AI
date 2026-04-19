@@ -101,7 +101,7 @@ function FoodsPage() {
         {categories.map((cat) => (
           <View
             key={cat.name}
-            className={`foods-cat inline-flex flex-col items-center px-3 py-2 rounded-xl mr-2 ${activeCategory === cat.name ? 'bg-blue-50 foods-cat--active' : 'bg-gray-50'}`}
+            className={`foods-cat inline-flex flex-col items-center px-3 py-2  mr-2 ${activeCategory === cat.name ? 'bg-blue-50 foods-cat--active' : 'bg-gray-50'}`}
             onClick={() => handleCategoryClick(cat.name)}
           >
             <Text className="text-xl">{categoryEmoji[cat.name] || '🍽️'}</Text>
@@ -125,7 +125,7 @@ function FoodsPage() {
         ) : (
           foods.map((food) => (
             <View
-              className="flex items-center bg-white rounded-xl p-4 mb-2"
+              className="flex items-center bg-white  p-4 mb-2"
               key={food.id}
               onClick={() =>
                 Taro.navigateTo({

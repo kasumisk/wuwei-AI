@@ -12,7 +12,7 @@ export function AchievementBadge({ achievement, unlocked }: AchievementBadgeProp
 
   return (
     <div
-      className={`flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${
+      className={`flex flex-col items-center gap-1 p-3  transition-all ${
         isUnlocked ? 'bg-card shadow-sm' : 'bg-muted/30 opacity-50'
       }`}
     >

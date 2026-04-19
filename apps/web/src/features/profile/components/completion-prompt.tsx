@@ -11,7 +11,7 @@ export function CompletionPrompt({ onDismiss }: { onDismiss?: () => void }) {
   const pct = Math.round(completeness * 100);
 
   return (
-    <div className="bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-500/20 rounded-2xl p-5 mb-4">
+    <div className="bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-500/20  p-5 mb-4">
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <p className="text-sm font-extrabold text-foreground mb-1">📋 完善你的档案</p>
@@ -30,9 +30,9 @@ export function CompletionPrompt({ onDismiss }: { onDismiss?: () => void }) {
       </div>
 
       {/* Progress bar */}
-      <div className="mt-3 h-2 bg-muted rounded-full overflow-hidden">
+      <div className="mt-3 h-2 bg-muted  overflow-hidden">
         <div
-          className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full transition-all duration-500"
+          className="h-full bg-gradient-to-r from-amber-500 to-orange-500  transition-all duration-500"
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -50,7 +50,7 @@ export function CompletionPrompt({ onDismiss }: { onDismiss?: () => void }) {
 
       <Link
         href="/profile/edit"
-        className="block mt-3 text-center w-full bg-primary text-primary-foreground text-sm font-bold py-2.5 rounded-xl active:scale-[0.98] transition-all"
+        className="block mt-3 text-center w-full bg-primary text-primary-foreground text-sm font-bold py-2.5  active:scale-[0.98] transition-all"
       >
         去完善
       </Link>

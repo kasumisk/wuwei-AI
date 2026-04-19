@@ -1,18 +1,10 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { useUnreadCount } from '@/features/notification/hooks/use-notifications';
 import { LocalizedLink } from '@/components/common/localized-link';
+import { useLocalizedRouter } from '@/lib/hooks/use-localized-router';
 
-/* ─── 隐藏底部导航的路由 ─── */
-const HIDDEN_ROUTES = ['/login', '/onboarding', '/terms', '/privacy'];
-
-function shouldHideNav(pathname: string): boolean {
-  // 去掉 locale 前缀进行匹配
-  const path = pathname.replace(/^\/[a-z]{2}(?=\/|$)/, '') || '/';
-  return HIDDEN_ROUTES.some((r) => path.startsWith(r));
-}
 
 /* ─── Tab 配置 ─── */
 interface NavTab {
@@ -122,15 +114,13 @@ const TABS: NavTab[] = [
 ];
 
 export function BottomNav() {
-  const pathname = usePathname();
   const { isLoggedIn } = useAuth();
   const { data: unreadData } = useUnreadCount(isLoggedIn);
   const unreadCount = unreadData?.unreadCount ?? 0;
-
-  if (shouldHideNav(pathname)) return null;
+  const { getCurrentPath } = useLocalizedRouter();
 
   // 去掉 locale 前缀用于匹配
-  const normalizedPath = pathname.replace(/^\/[a-z]{2}(?=\/|$)/, '') || '/';
+  const normalizedPath = getCurrentPath();
 
   return (
     <nav className="fixed bottom-0 left-0 w-full z-50 bg-background/80 backdrop-blur-xl border-t border-border safe-bottom">
@@ -145,19 +135,30 @@ export function BottomNav() {
             <LocalizedLink
               key={tab.key}
               href={href}
-              className={`relative flex flex-col items-center justify-center min-w-[3.5rem] py-1 rounded-xl transition-all duration-200 active:scale-90
-                ${active ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+              className={`relative flex flex-col items-center justify-center min-w-14 py-1 transition-all duration-200 active:scale-90
+                ${
+                  active
+                    ? 'text-primary'
+                    : 'text-muted-foreground/75'
+                }`}
+              aria-current={active ? 'page' : undefined}
             >
+              {active && (
+                <span
+                  aria-hidden="true"
+                  className="absolute -top-1.5 w-6 h-0.5 rounded-full bg-primary"
+                />
+              )}
               <div className="relative">
                 <tab.icon active={active} />
                 {showBadge && (
-                  <span className="absolute -top-1 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+                  <span className="absolute -top-1 -right-1.5 min-w-4 h-4 px-1 bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
                     {unreadCount > 99 ? '99+' : unreadCount}
                   </span>
                 )}
               </div>
               <span
-                className={`text-[10px] mt-0.5 font-medium ${active ? 'font-bold text-primary' : ''}`}
+                className={`text-[10px] mt-0.5 ${active ? 'font-bold text-primary' : 'font-medium'}`}
               >
                 {tab.label}
               </span>

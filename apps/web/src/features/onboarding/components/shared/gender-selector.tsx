@@ -16,7 +16,7 @@ export function GenderSelector({ value, onChange }: GenderSelectorProps) {
           key={key}
           type="button"
           onClick={() => onChange(key)}
-          className={`flex flex-col items-center gap-3 py-8 rounded-2xl font-bold text-lg transition-all active:scale-[0.97] ${
+          className={`flex flex-col items-center gap-3 py-8  font-bold text-lg transition-all active:scale-[0.97] ${
             value === key
               ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
               : 'bg-muted text-muted-foreground hover:bg-muted/80'

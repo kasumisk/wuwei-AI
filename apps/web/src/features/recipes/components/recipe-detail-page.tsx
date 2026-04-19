@@ -93,7 +93,7 @@ export function RecipeDetailPage({ recipeId }: { recipeId: string }) {
           <div className="h-6 w-40 bg-muted rounded" />
           <div className="h-4 w-full bg-muted rounded" />
           <div className="h-4 w-2/3 bg-muted rounded" />
-          <div className="h-20 bg-muted rounded-xl" />
+          <div className="h-20 bg-muted " />
         </div>
       </div>
     );
@@ -151,7 +151,7 @@ export function RecipeDetailPage({ recipeId }: { recipeId: string }) {
         {/* Back button */}
         <button
           onClick={() => router.back()}
-          className="absolute top-4 left-4 w-9 h-9 rounded-full bg-background/80 backdrop-blur-sm flex items-center justify-center shadow-sm"
+          className="absolute top-4 left-4 w-9 h-9  bg-background/80 backdrop-blur-sm flex items-center justify-center shadow-sm"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
             <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
@@ -161,7 +161,7 @@ export function RecipeDetailPage({ recipeId }: { recipeId: string }) {
 
       <div className="px-5 max-w-lg mx-auto -mt-4 relative z-10">
         {/* 基本信息卡片 */}
-        <div className="bg-card rounded-2xl p-4 shadow-sm space-y-3">
+        <div className="bg-card  p-4 shadow-sm space-y-3">
           <h1 className="text-xl font-extrabold">{recipe.name}</h1>
 
           {recipe.description && (
@@ -185,7 +185,7 @@ export function RecipeDetailPage({ recipeId }: { recipeId: string }) {
 
           {/* 营养信息 */}
           {recipe.caloriesPerServing && (
-            <div className="grid grid-cols-4 gap-2 bg-muted/50 rounded-xl p-3">
+            <div className="grid grid-cols-4 gap-2 bg-muted/50  p-3">
               <div className="text-center">
                 <p className="text-sm font-extrabold text-primary">
                   {Math.round(recipe.caloriesPerServing)}
@@ -230,7 +230,7 @@ export function RecipeDetailPage({ recipeId }: { recipeId: string }) {
 
         {/* 食材列表 */}
         {recipe.ingredients.length > 0 && (
-          <div className="bg-card rounded-2xl p-4 mt-3 space-y-2">
+          <div className="bg-card  p-4 mt-3 space-y-2">
             <h2 className="text-sm font-bold flex items-center gap-1.5">
               <span>🥗</span> 食材
               <span className="text-[11px] text-muted-foreground font-normal">
@@ -262,14 +262,14 @@ export function RecipeDetailPage({ recipeId }: { recipeId: string }) {
 
         {/* 步骤 */}
         {instructions.length > 0 && (
-          <div className="bg-card rounded-2xl p-4 mt-3 space-y-3">
+          <div className="bg-card  p-4 mt-3 space-y-3">
             <h2 className="text-sm font-bold flex items-center gap-1.5">
               <span>👨‍🍳</span> 做法
             </h2>
             <ol className="space-y-3">
               {instructions.map((step, i) => (
                 <li key={i} className="flex gap-3">
-                  <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="w-6 h-6  bg-primary/10 text-primary text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
                     {i + 1}
                   </span>
                   <p className="text-sm text-foreground leading-relaxed flex-1">{step}</p>
@@ -280,7 +280,7 @@ export function RecipeDetailPage({ recipeId }: { recipeId: string }) {
         )}
 
         {/* 评分区域 */}
-        <div className="bg-card rounded-2xl p-4 mt-3 space-y-3">
+        <div className="bg-card  p-4 mt-3 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold flex items-center gap-1.5">
               <span>⭐</span> 评分
@@ -307,9 +307,9 @@ export function RecipeDetailPage({ recipeId }: { recipeId: string }) {
                     <svg className="w-3 h-3 text-amber-400" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                     </svg>
-                    <div className="flex-1 bg-muted rounded-full h-1.5 overflow-hidden">
+                    <div className="flex-1 bg-muted  h-1.5 overflow-hidden">
                       <div
-                        className="h-full bg-amber-400 rounded-full"
+                        className="h-full bg-amber-400 "
                         style={{ width: `${pct}%` }}
                       />
                     </div>
@@ -322,7 +322,7 @@ export function RecipeDetailPage({ recipeId }: { recipeId: string }) {
 
           {/* 我的评分 */}
           {myRating ? (
-            <div className="bg-muted/50 rounded-xl p-3 space-y-2">
+            <div className="bg-muted/50  p-3 space-y-2">
               <p className="text-xs text-muted-foreground">你的评分</p>
               <div className="flex items-center gap-2">
                 <StarSelector value={myRating.rating} onChange={() => {}} disabled />
@@ -346,19 +346,19 @@ export function RecipeDetailPage({ recipeId }: { recipeId: string }) {
                 onChange={(e) => setRatingComment(e.target.value)}
                 placeholder="写点评价（可选）"
                 rows={2}
-                className="w-full px-3 py-2 bg-background border border-border/30 rounded-xl text-sm placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
+                className="w-full px-3 py-2 bg-background border border-border/30  text-sm placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
               />
               <div className="flex gap-2">
                 <button
                   onClick={handleSubmitRating}
                   disabled={rateMutation.isPending || ratingValue === 0}
-                  className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-bold disabled:opacity-50 active:scale-[0.98] transition-all"
+                  className="flex-1 py-2  bg-primary text-primary-foreground text-sm font-bold disabled:opacity-50 active:scale-[0.98] transition-all"
                 >
                   {rateMutation.isPending ? '提交中...' : '提交评分'}
                 </button>
                 <button
                   onClick={() => setShowRatingForm(false)}
-                  className="px-4 py-2 rounded-xl bg-muted text-sm text-muted-foreground"
+                  className="px-4 py-2  bg-muted text-sm text-muted-foreground"
                 >
                   取消
                 </button>
@@ -367,7 +367,7 @@ export function RecipeDetailPage({ recipeId }: { recipeId: string }) {
           ) : (
             <button
               onClick={() => setShowRatingForm(true)}
-              className="w-full py-2.5 rounded-xl bg-primary/10 text-primary text-sm font-bold active:scale-[0.98] transition-all"
+              className="w-full py-2.5  bg-primary/10 text-primary text-sm font-bold active:scale-[0.98] transition-all"
             >
               评价这道菜谱
             </button>

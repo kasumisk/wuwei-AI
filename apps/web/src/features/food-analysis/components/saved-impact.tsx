@@ -82,9 +82,9 @@ function MacroRow({
   return (
     <div className="flex items-center gap-2">
       <span className="text-xs text-muted-foreground w-14 shrink-0">{label}</span>
-      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+      <div className="flex-1 h-1.5 bg-muted  overflow-hidden">
         <div
-          className={`h-full rounded-full transition-all duration-500 ${color}`}
+          className={`h-full  transition-all duration-500 ${color}`}
           style={{ width: `${Math.min(percent, 100)}%` }}
         />
       </div>
@@ -130,8 +130,8 @@ export function SavedImpact({
   if (isLoading || !summary) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-4">
-        <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center">
-          <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        <div className="w-12 h-12  bg-secondary flex items-center justify-center">
+          <div className="w-5 h-5 border-2 border-primary border-t-transparent  animate-spin" />
         </div>
         <p className="text-sm text-muted-foreground">正在更新今日数据...</p>
       </div>
@@ -158,7 +158,7 @@ export function SavedImpact({
     <div className="space-y-5">
       {/* 成功头部 */}
       <div className="flex flex-col items-center gap-3 pt-4">
-        <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center">
+        <div className="w-16 h-16  bg-green-100 flex items-center justify-center">
           <svg
             viewBox="0 0 24 24"
             fill="currentColor"
@@ -178,7 +178,7 @@ export function SavedImpact({
       </div>
 
       {/* 今日预算卡片 */}
-      <div className="bg-card rounded-2xl p-5 space-y-4">
+      <div className="bg-card  p-5 space-y-4">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold text-muted-foreground">📊 今日预算更新</span>
           {summary.nutritionScore != null && summary.nutritionScore > 0 && (
@@ -201,9 +201,9 @@ export function SavedImpact({
               {summary.totalCalories} / {calGoal} kcal
             </span>
           </div>
-          <div className="mt-2 h-2.5 bg-muted rounded-full overflow-hidden">
+          <div className="mt-2 h-2.5 bg-muted  overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all duration-500 ${
+              className={`h-full  transition-all duration-500 ${
                 calPct > 100 ? 'bg-red-500' : calPct > 85 ? 'bg-orange-500' : 'bg-primary'
               }`}
               style={{ width: `${Math.min(calPct, 100)}%` }}
@@ -214,15 +214,15 @@ export function SavedImpact({
           {beforeCalPct !== null && addedCalories !== null && (
             <div className="mt-3 space-y-1.5">
               <span className="text-[10px] font-bold text-muted-foreground">📊 本餐变化</span>
-              <div className="relative h-3 bg-muted rounded-full overflow-hidden">
+              <div className="relative h-3 bg-muted  overflow-hidden">
                 {/* Before bar */}
                 <div
-                  className="absolute left-0 top-0 h-full rounded-full bg-muted-foreground/30 transition-all duration-700"
+                  className="absolute left-0 top-0 h-full  bg-muted-foreground/30 transition-all duration-700"
                   style={{ width: `${Math.min(beforeCalPct, 100)}%` }}
                 />
                 {/* After bar (animate on top) */}
                 <div
-                  className={`absolute left-0 top-0 h-full rounded-full transition-all duration-700 delay-300 ${
+                  className={`absolute left-0 top-0 h-full  transition-all duration-700 delay-300 ${
                     calPct > 100
                       ? 'bg-red-500/70'
                       : calPct > 85
@@ -286,7 +286,7 @@ export function SavedImpact({
 
       {/* 下一步建议 */}
       {tips.length > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 space-y-1.5">
+        <div className="bg-blue-50 border border-blue-200  p-4 space-y-1.5">
           <span className="text-xs font-bold text-blue-800">💡 下一步建议</span>
           {tips.map((tip, i) => (
             <p key={i} className="text-sm text-blue-700">
@@ -302,8 +302,8 @@ export function SavedImpact({
 
       {/* 免费用户：保存后升级引导 — 强调趋势分析&周报价值 */}
       {isFree && (
-        <div className="bg-card border border-border rounded-2xl p-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-violet-500/20 flex items-center justify-center shrink-0">
+        <div className="bg-card border border-border  p-4 flex items-center gap-3">
+          <div className="w-10 h-10  bg-gradient-to-br from-primary/20 to-violet-500/20 flex items-center justify-center shrink-0">
             <svg
               className="w-5 h-5 text-primary"
               fill="none"
@@ -326,7 +326,7 @@ export function SavedImpact({
           </div>
           <LocalizedLink
             href="/pricing"
-            className="text-xs text-primary font-bold shrink-0 px-3 py-1.5 rounded-full bg-primary/10 hover:bg-primary/20 transition-colors"
+            className="text-xs text-primary font-bold shrink-0 px-3 py-1.5  bg-primary/10 hover:bg-primary/20 transition-colors"
           >
             了解更多
           </LocalizedLink>
@@ -337,7 +337,7 @@ export function SavedImpact({
       {onGoToCoach && (
         <button
           onClick={onGoToCoach}
-          className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-card border border-border text-sm font-medium text-foreground hover:bg-muted active:scale-[0.98] transition-all"
+          className="w-full flex items-center justify-center gap-2 py-3  bg-card border border-border text-sm font-medium text-foreground hover:bg-muted active:scale-[0.98] transition-all"
         >
           <svg
             className="w-4 h-4 text-primary"
@@ -360,19 +360,19 @@ export function SavedImpact({
       <div className="flex gap-3">
         <button
           onClick={onReset}
-          className="flex-1 bg-muted text-foreground font-bold py-3 rounded-full active:scale-[0.98] transition-all text-sm"
+          className="flex-1 bg-muted text-foreground font-bold py-3  active:scale-[0.98] transition-all text-sm"
         >
           继续记录
         </button>
         <button
           onClick={onGoToPlan}
-          className="flex-1 bg-card border border-primary/30 text-primary font-bold py-3 rounded-full active:scale-[0.98] transition-all text-sm"
+          className="flex-1 bg-card border border-primary/30 text-primary font-bold py-3  active:scale-[0.98] transition-all text-sm"
         >
           查看计划
         </button>
         <button
           onClick={onGoHome}
-          className="flex-1 bg-primary text-primary-foreground font-bold py-3 rounded-full active:scale-[0.98] transition-all shadow-lg shadow-primary/20 text-sm"
+          className="flex-1 bg-primary text-primary-foreground font-bold py-3  active:scale-[0.98] transition-all shadow-lg shadow-primary/20 text-sm"
         >
           返回首页
         </button>

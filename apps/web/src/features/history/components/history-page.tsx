@@ -99,7 +99,7 @@ export function HistoryPage() {
     <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
       <nav className="sticky top-0 z-50 glass-morphism">
-        <div className="flex items-center justify-between px-6 py-4 max-w-lg mx-auto">
+        <div className="flex items-center justify-between px-4 py-4 max-w-lg mx-auto">
           <div className="flex items-center">
             <button
               onClick={() => router.back()}
@@ -116,14 +116,14 @@ export function HistoryPage() {
         </div>
       </nav>
 
-      <main className="px-6 py-4 max-w-lg mx-auto pb-32">
+      <main className="px-4 py-4 max-w-lg mx-auto pb-32">
         {/* Filter Tabs */}
         <div className="flex gap-2 mb-5">
           {(Object.entries(filterLabels) as [FilterType, string][]).map(([key, label]) => (
             <button
               key={key}
               onClick={() => handleFilterChange(key)}
-              className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${
+              className={`px-4 py-2  text-sm font-bold transition-all ${
                 filter === key
                   ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
                   : 'bg-muted text-muted-foreground'
@@ -138,10 +138,10 @@ export function HistoryPage() {
         {isLoading && (
           <div className="space-y-3">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="bg-card rounded-xl p-4 space-y-3 animate-pulse">
+              <div key={i} className="bg-card  p-4 space-y-3 animate-pulse">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <div className="w-12 h-5 bg-muted rounded-full" />
+                    <div className="w-12 h-5 bg-muted " />
                     <div className="w-8 h-4 bg-muted rounded" />
                   </div>
                   <div className="w-16 h-4 bg-muted rounded" />
@@ -164,7 +164,7 @@ export function HistoryPage() {
         {/* Empty State */}
         {!isLoading && items.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 gap-4">
-            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+            <div className="w-16 h-16  bg-muted flex items-center justify-center">
               <svg
                 viewBox="0 0 24 24"
                 fill="currentColor"
@@ -187,7 +187,7 @@ export function HistoryPage() {
             </div>
             <LocalizedLink
               href="/analyze"
-              className="mt-2 px-6 py-2.5 bg-primary text-primary-foreground text-sm font-bold rounded-full active:scale-[0.97] transition-all shadow-lg shadow-primary/20"
+              className="mt-2 px-4 py-2.5 bg-primary text-primary-foreground text-sm font-bold  active:scale-[0.97] transition-all shadow-lg shadow-primary/20"
               asButton
             >
               开始记录
@@ -203,8 +203,8 @@ export function HistoryPage() {
                 <HistoryItem item={item} />
                 {/* 免费用户：第3条后插入 inline CTA */}
                 {isFree && index === 2 && items.length > 3 && (
-                  <div className="mt-3 bg-linear-to-r from-primary/5 to-violet-500/5 border border-primary/10 rounded-xl p-3.5 flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  <div className="mt-3 bg-linear-to-r from-primary/5 to-violet-500/5 border border-primary/10  p-3.5 flex items-center gap-3">
+                    <div className="w-8 h-8  bg-primary/10 flex items-center justify-center shrink-0">
                       <svg
                         className="w-4 h-4 text-primary"
                         fill="none"
@@ -227,7 +227,7 @@ export function HistoryPage() {
                     </div>
                     <LocalizedLink
                       href="/pricing"
-                      className="text-xs text-primary font-bold shrink-0 px-3 py-1.5 rounded-full bg-primary/10"
+                      className="text-xs text-primary font-bold shrink-0 px-3 py-1.5  bg-primary/10"
                     >
                       升级
                     </LocalizedLink>
@@ -240,9 +240,9 @@ export function HistoryPage() {
 
         {/* 免费用户历史受限提示 */}
         {!isLoading && isFree && total > 0 && (
-          <div className="mt-4 bg-linear-to-r from-primary/5 to-primary/10 border border-primary/15 rounded-2xl p-4 space-y-3">
+          <div className="mt-4 bg-linear-to-r from-primary/5 to-primary/10 border border-primary/15  p-4 space-y-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10  bg-primary/10 flex items-center justify-center shrink-0">
                 <svg className="w-5 h-5 text-primary" fill="currentColor" viewBox="0 0 20 20">
                   <path
                     fillRule="evenodd"
@@ -294,7 +294,7 @@ export function HistoryPage() {
             </div>
             <LocalizedLink
               href="/pricing"
-              className="block w-full text-center bg-primary text-primary-foreground text-sm font-bold py-2.5 rounded-xl active:scale-[0.97] transition-all"
+              className="block w-full text-center bg-primary text-primary-foreground text-sm font-bold py-2.5  active:scale-[0.97] transition-all"
               asButton
             >
               升级 Pro · ¥19.9/月
@@ -308,7 +308,7 @@ export function HistoryPage() {
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1 || isFetching}
-              className="px-4 py-2 bg-muted rounded-full text-sm font-medium disabled:opacity-30 active:scale-[0.97] transition-all"
+              className="px-4 py-2 bg-muted  text-sm font-medium disabled:opacity-30 active:scale-[0.97] transition-all"
             >
               上一页
             </button>
@@ -318,7 +318,7 @@ export function HistoryPage() {
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages || isFetching}
-              className="px-4 py-2 bg-muted rounded-full text-sm font-medium disabled:opacity-30 active:scale-[0.97] transition-all"
+              className="px-4 py-2 bg-muted  text-sm font-medium disabled:opacity-30 active:scale-[0.97] transition-all"
             >
               下一页
             </button>
@@ -328,7 +328,7 @@ export function HistoryPage() {
         {/* Fetching indicator (not initial load) */}
         {isFetching && !isLoading && (
           <div className="flex justify-center mt-4">
-            <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <div className="w-5 h-5 border-2 border-primary border-t-transparent  animate-spin" />
           </div>
         )}
       </main>
@@ -397,7 +397,7 @@ function HistoryItem({ item }: { item: AnalysisHistoryItem }) {
   return (
     <>
       <div
-        className="bg-card rounded-xl p-4 space-y-2 cursor-pointer active:scale-[0.98] transition-all relative group"
+        className="bg-card  p-4 space-y-2 cursor-pointer active:scale-[0.98] transition-all relative group"
         onClick={handleClick}
         onContextMenu={(e) => {
           e.preventDefault();
@@ -408,7 +408,7 @@ function HistoryItem({ item }: { item: AnalysisHistoryItem }) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span
-              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+              className={`px-2 py-0.5  text-[10px] font-bold ${
                 item.inputType === 'image'
                   ? 'bg-blue-100 text-blue-700'
                   : 'bg-purple-100 text-purple-700'
@@ -430,7 +430,7 @@ function HistoryItem({ item }: { item: AnalysisHistoryItem }) {
                 e.stopPropagation();
                 setShowActions(!showActions);
               }}
-              className="opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity p-1.5 -mr-1 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted"
+              className="opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity p-1.5 -mr-1 text-muted-foreground hover:text-foreground  hover:bg-muted"
               aria-label="更多操作"
             >
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
@@ -465,7 +465,7 @@ function HistoryItem({ item }: { item: AnalysisHistoryItem }) {
                   e.stopPropagation();
                   handleQuickCoachReview();
                 }}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-primary/10 text-primary hover:bg-primary/15 active:scale-[0.98] transition-all"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1  text-[11px] font-bold bg-primary/10 text-primary hover:bg-primary/15 active:scale-[0.98] transition-all"
               >
                 <span>🧠</span>
                 <span>快速复盘到 AI 教练</span>
@@ -493,7 +493,7 @@ function HistoryItem({ item }: { item: AnalysisHistoryItem }) {
         {/* 操作菜单（浮层） */}
         {showActions && (
           <div
-            className="absolute right-3 top-10 z-10 bg-card shadow-xl border border-border rounded-xl overflow-hidden min-w-30 animate-in fade-in slide-in-from-top-1 duration-150"
+            className="absolute right-3 top-10 z-10 bg-card shadow-xl border border-border  overflow-hidden min-w-30 animate-in fade-in slide-in-from-top-1 duration-150"
             onClick={(e) => e.stopPropagation()}
           >
             <button
@@ -563,7 +563,7 @@ function HistoryItem({ item }: { item: AnalysisHistoryItem }) {
           aria-modal="true"
           aria-labelledby="delete-confirm-title"
         >
-          <div className="w-full max-w-lg bg-card rounded-t-3xl p-6 space-y-4 animate-in slide-in-from-bottom duration-200">
+          <div className="w-full max-w-lg bg-card rounded-t-3xl p-4 space-y-4 animate-in slide-in-from-bottom duration-200">
             <h3 id="delete-confirm-title" className="text-lg font-bold text-center">
               确认删除
             </h3>
@@ -574,14 +574,14 @@ function HistoryItem({ item }: { item: AnalysisHistoryItem }) {
               <button
                 onClick={() => setShowDeleteConfirm(false)}
                 disabled={isDeletingAnalysis}
-                className="flex-1 py-3 rounded-2xl bg-muted text-sm font-bold active:scale-[0.97] transition-all"
+                className="flex-1 py-3  bg-muted text-sm font-bold active:scale-[0.97] transition-all"
               >
                 取消
               </button>
               <button
                 onClick={handleDelete}
                 disabled={isDeletingAnalysis}
-                className="flex-1 py-3 rounded-2xl bg-red-500 text-white text-sm font-bold active:scale-[0.97] transition-all disabled:opacity-60"
+                className="flex-1 py-3  bg-red-500 text-white text-sm font-bold active:scale-[0.97] transition-all disabled:opacity-60"
               >
                 {isDeletingAnalysis ? '删除中...' : '确认删除'}
               </button>

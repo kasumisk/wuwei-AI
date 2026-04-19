@@ -52,11 +52,11 @@ export function DecisionCard({ result, recordId, onAnalyzeAlternative }: Decisio
   };
 
   return (
-    <div className={`rounded-2xl border overflow-hidden ${config.bgClass}`}>
+    <div className={` border overflow-hidden ${config.bgClass}`}>
       {/* V3: 决策横幅 — 更大更醒目的头部 */}
       <div className={`px-5 pt-5 pb-4 flex items-center justify-between`}>
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-white/40 flex items-center justify-center shadow-sm">
+          <div className="w-12 h-12  bg-white/40 flex items-center justify-center shadow-sm">
             <span className="text-2xl leading-none">{config.emoji}</span>
           </div>
           <div>
@@ -67,7 +67,7 @@ export function DecisionCard({ result, recordId, onAnalyzeAlternative }: Decisio
               {/* P1-3: 风险等级标签 */}
               {result.riskLevel && RISK_LEVEL_CONFIG[result.riskLevel] && (
                 <span
-                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${RISK_LEVEL_CONFIG[result.riskLevel].className}`}
+                  className={`px-2 py-0.5  text-[10px] font-bold ${RISK_LEVEL_CONFIG[result.riskLevel].className}`}
                 >
                   {RISK_LEVEL_CONFIG[result.riskLevel].label}
                 </span>
@@ -81,7 +81,7 @@ export function DecisionCard({ result, recordId, onAnalyzeAlternative }: Decisio
           </div>
         </div>
         <div className="flex flex-col items-end gap-1">
-          <span className={`px-3 py-1 rounded-full text-sm font-extrabold ${config.badgeClass}`}>
+          <span className={`px-3 py-1  text-sm font-extrabold ${config.badgeClass}`}>
             {result.totalCalories} kcal
           </span>
           {hasNutritionScore && (
@@ -100,7 +100,7 @@ export function DecisionCard({ result, recordId, onAnalyzeAlternative }: Decisio
 
         {/* P1-3: 行动建议 */}
         {result.advice && (
-          <div className="bg-white/70 rounded-xl p-3 border border-current/5">
+          <div className="bg-white/70  p-3 border border-current/5">
             <p className="text-xs font-bold text-muted-foreground mb-1">🎯 行动建议</p>
             <p className="text-sm font-medium">{result.advice}</p>
           </div>
@@ -120,7 +120,7 @@ export function DecisionCard({ result, recordId, onAnalyzeAlternative }: Decisio
                   {explainLoading ? '分析中...' : `🤔 为什么不推荐「${result.foods[0]?.name}」？`}
                 </button>
               ) : (
-                <div className="bg-white/60 rounded-xl p-3">
+                <div className="bg-white/60  p-3">
                   <p className="text-xs font-bold text-muted-foreground mb-1">🔍 详细解释</p>
                   <p className="text-sm">{explainResult}</p>
                 </div>
@@ -130,22 +130,22 @@ export function DecisionCard({ result, recordId, onAnalyzeAlternative }: Decisio
 
         {/* V6: 营养评分总分 */}
         {hasNutritionScore && (
-          <div className="bg-white/60 rounded-xl p-3 space-y-2">
+          <div className="bg-white/60  p-3 space-y-2">
             <div className="flex items-center justify-between">
               <p className="text-xs font-bold text-muted-foreground">📈 营养评分</p>
               <div className="flex items-center gap-1.5">
                 <span className="text-lg font-extrabold">{result.nutritionScore}</span>
                 <span className="text-xs text-muted-foreground">/100</span>
                 <span
-                  className={`ml-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-white ${getScoreColor(result.nutritionScore!)}`}
+                  className={`ml-1 px-2 py-0.5  text-[10px] font-bold text-white ${getScoreColor(result.nutritionScore!)}`}
                 >
                   {getScoreLabel(result.nutritionScore!)}
                 </span>
               </div>
             </div>
-            <div className="h-2 bg-black/5 rounded-full overflow-hidden">
+            <div className="h-2 bg-black/5  overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all duration-500 ${getScoreColor(result.nutritionScore!)}`}
+                className={`h-full  transition-all duration-500 ${getScoreColor(result.nutritionScore!)}`}
                 style={{ width: `${Math.min(result.nutritionScore!, 100)}%` }}
               />
             </div>
@@ -176,9 +176,9 @@ export function DecisionCard({ result, recordId, onAnalyzeAlternative }: Decisio
                         <span className="text-xs text-muted-foreground w-16 shrink-0 text-right">
                           {SCORE_LABELS[key]}
                         </span>
-                        <div className="flex-1 h-1.5 bg-black/5 rounded-full overflow-hidden">
+                        <div className="flex-1 h-1.5 bg-black/5  overflow-hidden">
                           <div
-                            className={`h-full rounded-full transition-all duration-300 ${getScoreColor(value)}`}
+                            className={`h-full  transition-all duration-300 ${getScoreColor(value)}`}
                             style={{ width: `${Math.min(value, 100)}%` }}
                           />
                         </div>
@@ -196,7 +196,7 @@ export function DecisionCard({ result, recordId, onAnalyzeAlternative }: Decisio
                 {result.highlights.map((h, i) => (
                   <span
                     key={i}
-                    className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-white/80 border border-current/10 text-foreground/70"
+                    className="px-2 py-0.5  text-[10px] font-medium bg-white/80 border border-current/10 text-foreground/70"
                   >
                     {h}
                   </span>
@@ -208,9 +208,9 @@ export function DecisionCard({ result, recordId, onAnalyzeAlternative }: Decisio
 
         {/* V6: 宏量素分布条 */}
         {hasMacros && macroTotal > 0 && (
-          <div className="bg-white/60 rounded-xl p-3 space-y-2">
+          <div className="bg-white/60  p-3 space-y-2">
             <p className="text-xs font-bold text-muted-foreground">🥗 宏量素分布</p>
-            <div className="h-3 rounded-full overflow-hidden flex">
+            <div className="h-3  overflow-hidden flex">
               <div
                 className="bg-blue-500 transition-all duration-300"
                 style={{ width: `${(protein / macroTotal) * 100}%` }}
@@ -229,15 +229,15 @@ export function DecisionCard({ result, recordId, onAnalyzeAlternative }: Decisio
             </div>
             <div className="flex justify-between text-[10px] text-muted-foreground">
               <span className="flex items-center gap-1">
-                <span className="inline-block w-2 h-2 rounded-full bg-blue-500" />
+                <span className="inline-block w-2 h-2  bg-blue-500" />
                 蛋白质 {protein}g ({Math.round((protein / macroTotal) * 100)}%)
               </span>
               <span className="flex items-center gap-1">
-                <span className="inline-block w-2 h-2 rounded-full bg-amber-500" />
+                <span className="inline-block w-2 h-2  bg-amber-500" />
                 脂肪 {fat}g ({Math.round((fat / macroTotal) * 100)}%)
               </span>
               <span className="flex items-center gap-1">
-                <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
+                <span className="inline-block w-2 h-2  bg-emerald-500" />
                 碳水 {carbs}g ({Math.round((carbs / macroTotal) * 100)}%)
               </span>
             </div>
@@ -246,7 +246,7 @@ export function DecisionCard({ result, recordId, onAnalyzeAlternative }: Decisio
 
         {/* 建议 */}
         {result.suggestion && (
-          <div className="bg-white/60 rounded-xl p-3">
+          <div className="bg-white/60  p-3">
             <p className="text-xs font-bold text-muted-foreground mb-1">💡 建议</p>
             <p className="text-sm">{result.suggestion}</p>
           </div>
@@ -266,7 +266,7 @@ export function DecisionCard({ result, recordId, onAnalyzeAlternative }: Decisio
           (result.compensation.diet ||
             result.compensation.activity ||
             result.compensation.nextMeal) && (
-            <div className="bg-white/60 rounded-xl p-3">
+            <div className="bg-white/60  p-3">
               <p className="text-xs font-bold text-muted-foreground mb-2">🛟 补救策略</p>
               <div className="space-y-1.5">
                 {result.compensation.diet && (

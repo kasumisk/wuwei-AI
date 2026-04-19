@@ -96,10 +96,10 @@ export function ProfileCollectionCard({ onDismiss }: { onDismiss?: () => void })
 
   return (
     <section className="mb-4">
-      <div className={`rounded-2xl p-4 border ${priorityStyles[trigger.priority]} transition-all`}>
+      <div className={` p-4 border ${priorityStyles[trigger.priority]} transition-all`}>
         <div className="flex items-start gap-3">
           <div
-            className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${priorityIconBg[trigger.priority]}`}
+            className={`w-9 h-9  flex items-center justify-center shrink-0 ${priorityIconBg[trigger.priority]}`}
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
@@ -111,14 +111,14 @@ export function ProfileCollectionCard({ onDismiss }: { onDismiss?: () => void })
             <div className="flex items-center gap-2 mt-3">
               <button
                 onClick={() => handleAction(trigger)}
-                className="px-4 py-1.5 rounded-full bg-primary text-primary-foreground text-xs font-bold active:scale-[0.97] transition-all"
+                className="px-4 py-1.5  bg-primary text-primary-foreground text-xs font-bold active:scale-[0.97] transition-all"
               >
                 去完善
               </button>
               {trigger.dismissable && (
                 <button
                   onClick={() => handleDismiss(trigger.field)}
-                  className="px-3 py-1.5 rounded-full text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  className="px-3 py-1.5  text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
                   稍后提醒
                 </button>

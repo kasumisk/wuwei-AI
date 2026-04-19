@@ -95,7 +95,7 @@ function SegmentPicker<T extends string>({
   return (
     <div className="space-y-2">
       <p className="text-xs font-bold text-foreground">{label}</p>
-      <div className="flex bg-muted rounded-xl p-1 gap-1">
+      <div className="flex bg-muted  p-1 gap-1">
         {options.map((o) => (
           <button
             key={o.value}
@@ -192,10 +192,10 @@ export function RecommendationPreferences() {
 
   if (isLoading) {
     return (
-      <div className="bg-card rounded-2xl p-4 animate-pulse space-y-4">
+      <div className="bg-card  p-4 animate-pulse space-y-4">
         <div className="h-4 w-28 bg-muted rounded" />
         {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="h-10 bg-muted rounded-xl" />
+          <div key={i} className="h-10 bg-muted " />
         ))}
       </div>
     );
@@ -204,7 +204,7 @@ export function RecommendationPreferences() {
   const isPending = updateMutation.isPending;
 
   return (
-    <div className="bg-card rounded-2xl p-4 space-y-5">
+    <div className="bg-card  p-4 space-y-5">
       <div className="flex items-center gap-2">
         <span className="text-base">🎛️</span>
         <h3 className="text-sm font-bold">推荐偏好</h3>
@@ -213,7 +213,7 @@ export function RecommendationPreferences() {
 
       {/* ── 第一组：基础偏好 ── */}
       <div className="space-y-4">
-        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+        <p className="text-[10px] font-bold text-muted-foreground">
           基础设置
         </p>
         <SegmentPicker
@@ -255,7 +255,7 @@ export function RecommendationPreferences() {
                 key={value}
                 onClick={() => handleChange('philosophy', value)}
                 disabled={isPending}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-[0.97] ${
+                className={`px-3 py-1.5  text-xs font-bold transition-all active:scale-[0.97] ${
                   local.philosophy === value
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-muted text-muted-foreground'

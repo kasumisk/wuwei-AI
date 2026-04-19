@@ -94,7 +94,7 @@ export function FoodLibraryPage({
   const renderFoodCard = (food: FoodLibraryItem) => (
     <div
       key={food.id}
-      className="p-4 rounded-xl border border-border hover:border-primary/30 hover:shadow-md 
+      className="p-4  border border-border hover:border-primary/30 hover:shadow-md 
         transition-all duration-200 bg-card"
     >
       <div className="flex items-start justify-between mb-2">
@@ -106,7 +106,7 @@ export function FoodLibraryPage({
           <h3 className="font-medium text-foreground">{food.name}</h3>
           {food.isVerified && (
             <span
-              className="shrink-0 text-[10px] font-medium text-primary bg-primary/10 px-1.5 py-0.5 rounded-full"
+              className="shrink-0 text-[10px] font-medium text-primary bg-primary/10 px-1.5 py-0.5 "
               title="官方验证数据"
             >
               ✓ 已验证
@@ -121,7 +121,7 @@ export function FoodLibraryPage({
               e.stopPropagation();
               setLogTarget(food);
             }}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-primary text-primary-foreground text-lg font-bold hover:bg-primary/90 active:scale-95 transition-all shadow-sm"
+            className="w-8 h-8 flex items-center justify-center  bg-primary text-primary-foreground text-lg font-bold hover:bg-primary/90 active:scale-95 transition-all shadow-sm"
             title="快速记录"
           >
             +
@@ -137,17 +137,17 @@ export function FoodLibraryPage({
         </p>
         <div className="flex gap-2">
           {food.protein != null && (
-            <span className={`text-xs px-2 py-0.5 rounded-full ${getNutrientColor('蛋白质')}`}>
+            <span className={`text-xs px-2 py-0.5  ${getNutrientColor('蛋白质')}`}>
               蛋白质 {food.protein}g
             </span>
           )}
           {food.fat != null && (
-            <span className={`text-xs px-2 py-0.5 rounded-full ${getNutrientColor('脂肪')}`}>
+            <span className={`text-xs px-2 py-0.5  ${getNutrientColor('脂肪')}`}>
               脂肪 {food.fat}g
             </span>
           )}
           {food.carbs != null && (
-            <span className={`text-xs px-2 py-0.5 rounded-full ${getNutrientColor('碳水')}`}>
+            <span className={`text-xs px-2 py-0.5  ${getNutrientColor('碳水')}`}>
               碳水 {food.carbs}g
             </span>
           )}
@@ -194,7 +194,7 @@ export function FoodLibraryPage({
                 value={query}
                 onChange={(e) => onQueryChange(e.target.value)}
                 placeholder="搜索食物名称，如：米饭、鸡胸肉..."
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-border bg-muted/50 
+                className="w-full pl-10 pr-4 py-2.5  border border-border bg-muted/50 
                   text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 
                   focus:ring-primary/20 focus:border-primary/30 transition-all"
               />
@@ -204,7 +204,7 @@ export function FoodLibraryPage({
                     clearSearch();
                     inputRef.current?.focus();
                   }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded-full 
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5  
                     hover:bg-muted-foreground/20 transition-colors"
                 >
                   <svg
@@ -240,7 +240,7 @@ export function FoodLibraryPage({
                     if (ff.food) setLogTarget(ff.food);
                   }}
                   disabled={!ff.food}
-                  className="shrink-0 flex items-center gap-2 px-3 py-2 rounded-xl bg-card border border-border hover:border-primary/30 transition-all active:scale-[0.97] disabled:opacity-50"
+                  className="shrink-0 flex items-center gap-2 px-3 py-2  bg-card border border-border hover:border-primary/30 transition-all active:scale-[0.97] disabled:opacity-50"
                 >
                   <span className="text-sm">{categoryEmoji[ff.food?.category || ''] || '🍽️'}</span>
                   <div className="text-left">
@@ -263,7 +263,7 @@ export function FoodLibraryPage({
                 <button
                   key={cat.category}
                   onClick={() => handleCategoryClick(cat.category)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-all
+                  className={`flex items-center gap-1.5 px-3 py-1.5  text-sm transition-all
                     ${
                       activeCategory === cat.category
                         ? 'bg-primary text-primary-foreground shadow-sm'
@@ -281,7 +281,7 @@ export function FoodLibraryPage({
 
         {searching && (
           <div className="flex items-center justify-center py-8">
-            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <div className="w-6 h-6 border-2 border-primary border-t-transparent  animate-spin" />
             <span className="ml-2 text-sm text-muted-foreground">搜索中...</span>
           </div>
         )}
@@ -311,7 +311,7 @@ export function FoodLibraryPage({
 
         {showCategoryFoods && loadingCategory && (
           <div className="flex items-center justify-center py-8">
-            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <div className="w-6 h-6 border-2 border-primary border-t-transparent  animate-spin" />
           </div>
         )}
 

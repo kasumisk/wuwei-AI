@@ -428,7 +428,7 @@ export interface PreferenceSignal {
 export interface ContrastiveInsight {
   /** 推荐的食物名 */
   recommended: string;
-  /** 对比的食物名（通常取 Top-6~10 中的一个） */
+  /** 对比的食物名（通常取 Top-4~10 中的一个） */
   alternative: string;
   /** 推荐食物的优势维度 */
   advantageDimension: ScoreDimension;

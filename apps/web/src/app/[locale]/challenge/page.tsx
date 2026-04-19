@@ -45,13 +45,13 @@ export default function ChallengePage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-24">
-      <header className="sticky top-0 z-40 glass-morphism px-6 py-4">
+      <header className="sticky top-0 z-40 glass-morphism px-4 py-4">
         <h1 className="text-xl font-extrabold font-headline">🏆 挑战与成就</h1>
       </header>
 
-      <main className="px-6 max-w-lg mx-auto mt-4 space-y-6">
+      <main className="px-4 max-w-lg mx-auto mt-4 space-y-6">
         {/* 连胜状态 */}
-        <section className="bg-card rounded-2xl p-5 shadow-sm">
+        <section className="bg-card  p-5 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
               <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
@@ -86,9 +86,9 @@ export default function ChallengePage() {
               {[...Array(8)].map((_, i) => (
                 <div
                   key={i}
-                  className="flex flex-col items-center gap-1 p-3 rounded-2xl bg-muted/30 animate-pulse"
+                  className="flex flex-col items-center gap-1 p-3  bg-muted/30 animate-pulse"
                 >
-                  <div className="w-8 h-8 rounded-full bg-muted" />
+                  <div className="w-8 h-8  bg-muted" />
                   <div className="w-10 h-3 rounded bg-muted" />
                 </div>
               ))}
@@ -117,11 +117,11 @@ export default function ChallengePage() {
         {/* 成就详情弹层 */}
         {selectedAchievement && (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-6"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
             onClick={() => setSelectedAchievement(null)}
           >
             <div
-              className="bg-card rounded-2xl p-5 w-full max-w-sm shadow-xl"
+              className="bg-card  p-5 w-full max-w-sm shadow-xl"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex flex-col items-center text-center gap-2">
@@ -172,7 +172,7 @@ export default function ChallengePage() {
               </div>
               <button
                 onClick={() => setSelectedAchievement(null)}
-                className="w-full mt-4 py-2 rounded-xl bg-muted text-sm font-medium"
+                className="w-full mt-4 py-2  bg-muted text-sm font-medium"
               >
                 关闭
               </button>
@@ -186,7 +186,7 @@ export default function ChallengePage() {
           {isLoading ? (
             <div className="space-y-3">
               {[...Array(3)].map((_, i) => (
-                <div key={i} className="bg-card rounded-2xl p-4 shadow-sm animate-pulse">
+                <div key={i} className="bg-card  p-4 shadow-sm animate-pulse">
                   <div className="h-4 bg-muted rounded w-1/3 mb-2" />
                   <div className="h-3 bg-muted rounded w-2/3 mb-2" />
                   <div className="h-3 bg-muted rounded w-1/4" />
@@ -207,7 +207,7 @@ export default function ChallengePage() {
                 const isCompleted = activeRecord?.status === 'completed';
 
                 return (
-                  <div key={c.id} className="bg-card rounded-2xl p-4 shadow-sm">
+                  <div key={c.id} className="bg-card  p-4 shadow-sm">
                     <div className="flex items-center justify-between">
                       <div className="flex-1 min-w-0">
                         <h3 className="font-bold text-sm">{c.title}</h3>
@@ -230,7 +230,7 @@ export default function ChallengePage() {
                         <button
                           onClick={() => handleJoin(c.id)}
                           disabled={isJoining}
-                          className="flex-shrink-0 ml-3 bg-primary text-primary-foreground px-4 py-1.5 rounded-full text-xs font-bold active:scale-95 transition-all disabled:opacity-50"
+                          className="flex-shrink-0 ml-3 bg-primary text-primary-foreground px-4 py-1.5  text-xs font-bold active:scale-95 transition-all disabled:opacity-50"
                         >
                           {isJoining ? '...' : '参加'}
                         </button>
@@ -239,9 +239,9 @@ export default function ChallengePage() {
                     {/* 进度条 */}
                     {isActive && (
                       <div className="mt-3">
-                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div className="h-1.5 bg-muted  overflow-hidden">
                           <div
-                            className={`h-full rounded-full transition-all duration-500 ${
+                            className={`h-full  transition-all duration-500 ${
                               isCompleted ? 'bg-green-500' : 'bg-primary'
                             }`}
                             style={{ width: `${Math.min(progress, 100)}%` }}

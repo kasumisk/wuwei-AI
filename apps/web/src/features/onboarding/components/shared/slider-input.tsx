@@ -36,7 +36,7 @@ export function SliderInput({
         step={step}
         value={value ?? Math.round((min + max) / 2)}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full h-2 bg-muted rounded-full appearance-none cursor-pointer accent-primary"
+        className="w-full h-2 bg-muted  appearance-none cursor-pointer accent-primary"
       />
       <div className="flex justify-between mt-1">
         <span className="text-[10px] text-muted-foreground">

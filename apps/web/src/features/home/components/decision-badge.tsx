@@ -37,7 +37,7 @@ export function DecisionBadge({ decision, label, className = '' }: DecisionBadge
   const cfg = CONFIG[decision?.toUpperCase()] ?? CONFIG.NEUTRAL;
   return (
     <span
-      className={`inline-flex items-center text-[11px] font-semibold px-2 py-0.5 rounded-full border ${cfg.className} ${className}`}
+      className={`inline-flex items-center text-[11px] font-semibold px-2 py-0.5  border ${cfg.className} ${className}`}
     >
       {label ?? cfg.label}
     </span>

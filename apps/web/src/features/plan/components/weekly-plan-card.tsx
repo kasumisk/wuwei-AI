@@ -40,7 +40,7 @@ function MacroBar({ protein, fat, carbs }: { protein: number; fat: number; carbs
 
   return (
     <div className="mt-2">
-      <div className="flex h-1.5 rounded-full overflow-hidden">
+      <div className="flex h-1.5  overflow-hidden">
         <div className="bg-blue-400" style={{ width: `${pPct}%` }} />
         <div className="bg-yellow-400" style={{ width: `${fPct}%` }} />
         <div className="bg-green-400" style={{ width: `${cPct}%` }} />
@@ -72,7 +72,7 @@ function SubstitutePanel({
   });
 
   return (
-    <div className="mt-2 bg-primary/5 rounded-xl p-3 space-y-2 border border-primary/10 animate-in slide-in-from-top-1 duration-200">
+    <div className="mt-2 bg-primary/5  p-3 space-y-2 border border-primary/10 animate-in slide-in-from-top-1 duration-200">
       <div className="flex items-center justify-between">
         <p className="text-xs font-bold text-primary">「{foodItem.name}」的替代推荐</p>
         <button
@@ -85,7 +85,7 @@ function SubstitutePanel({
 
       {isLoading && (
         <div className="flex items-center gap-2 py-2">
-          <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <div className="w-4 h-4 border-2 border-primary border-t-transparent  animate-spin" />
           <span className="text-xs text-muted-foreground">搜索替代中...</span>
         </div>
       )}
@@ -183,7 +183,7 @@ function DayDetail({ day }: { day: DailyPlanSummary }) {
         const hasFoodItems = meal.foodItems && meal.foodItems.length > 0;
 
         return (
-          <div key={key} className="bg-card rounded-xl p-3">
+          <div key={key} className="bg-card  p-3">
             <div className="flex items-start justify-between">
               <div className="flex-1 min-w-0">
                 <span className="text-xs font-bold text-muted-foreground">
@@ -231,7 +231,7 @@ export function WeeklyPlanCard({ weeklyPlan }: WeeklyPlanCardProps) {
 
   return (
     <section className="mb-6">
-      <div className="bg-surface-container-low rounded-2xl p-5">
+      <div className="bg-surface-container-low  p-5">
         {/* 标题 */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
@@ -252,7 +252,7 @@ export function WeeklyPlanCard({ weeklyPlan }: WeeklyPlanCardProps) {
               <button
                 key={plan.date}
                 onClick={() => setSelectedIdx(idx)}
-                className={`flex flex-col items-center min-w-[2.75rem] py-2 px-1.5 rounded-xl transition-all duration-200
+                className={`flex flex-col items-center min-w-[2.75rem] py-2 px-1.5  transition-all duration-200
                   ${
                     isSelected
                       ? 'bg-primary text-primary-foreground shadow-sm'

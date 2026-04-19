@@ -52,9 +52,9 @@ export function GoalTransitionCard({ onDismiss }: GoalTransitionCardProps) {
   if (accepted) {
     return (
       <section className="mb-6 animate-in fade-in duration-300">
-        <div className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/20 rounded-2xl p-5">
+        <div className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/20  p-5">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
+            <div className="w-10 h-10  bg-green-500/20 flex items-center justify-center">
               <svg className="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
                 <path
                   fillRule="evenodd"
@@ -81,7 +81,7 @@ export function GoalTransitionCard({ onDismiss }: GoalTransitionCardProps) {
 
   return (
     <section className="mb-6 animate-in slide-in-from-top-2 fade-in duration-300">
-      <div className="bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border border-indigo-500/20 rounded-2xl overflow-hidden">
+      <div className="bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border border-indigo-500/20  overflow-hidden">
         {/* 标题行 */}
         <div className="flex items-center justify-between px-5 pt-4 pb-2">
           <div className="flex items-center gap-2">
@@ -105,9 +105,9 @@ export function GoalTransitionCard({ onDismiss }: GoalTransitionCardProps) {
         </div>
 
         {/* 建议目标卡片 */}
-        <div className="mx-5 bg-card rounded-xl p-3.5">
+        <div className="mx-5 bg-card  p-3.5">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+            <div className="w-11 h-11  bg-primary/10 flex items-center justify-center shrink-0">
               <span className="text-xl">{emoji}</span>
             </div>
             <div className="flex-1 min-w-0">
@@ -155,11 +155,11 @@ export function GoalTransitionCard({ onDismiss }: GoalTransitionCardProps) {
           <button
             onClick={handleAccept}
             disabled={isAccepting}
-            className="flex-1 bg-primary text-primary-foreground text-sm font-bold py-2.5 rounded-xl active:scale-[0.98] transition-all disabled:opacity-50 shadow-sm shadow-primary/20"
+            className="flex-1 bg-primary text-primary-foreground text-sm font-bold py-2.5  active:scale-[0.98] transition-all disabled:opacity-50 shadow-sm shadow-primary/20"
           >
             {isAccepting ? (
               <span className="flex items-center justify-center gap-2">
-                <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                <span className="w-4 h-4 border-2 border-current border-t-transparent  animate-spin" />
                 调整中...
               </span>
             ) : (
@@ -168,7 +168,7 @@ export function GoalTransitionCard({ onDismiss }: GoalTransitionCardProps) {
           </button>
           <button
             onClick={onDismiss}
-            className="px-4 py-2.5 rounded-xl bg-muted text-muted-foreground text-sm font-bold active:scale-[0.98] transition-all"
+            className="px-4 py-2.5  bg-muted text-muted-foreground text-sm font-bold active:scale-[0.98] transition-all"
           >
             暂不
           </button>

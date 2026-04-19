@@ -35,7 +35,7 @@ export function StepDietHabits({ data, onChange }: StepDietHabitsProps) {
                 key={n}
                 type="button"
                 onClick={() => onChange({ mealsPerDay: n })}
-                className={`flex-1 py-3 rounded-2xl text-sm font-bold transition-all active:scale-95 ${
+                className={`flex-1 py-3  text-sm font-bold transition-all active:scale-95 ${
                   data.mealsPerDay === n
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -58,7 +58,7 @@ export function StepDietHabits({ data, onChange }: StepDietHabitsProps) {
                 onClick={() =>
                   onChange({ takeoutFrequency: key as StepDietHabitsData['takeoutFrequency'] })
                 }
-                className={`flex-1 py-3 rounded-2xl text-sm font-bold transition-all active:scale-95 ${
+                className={`flex-1 py-3  text-sm font-bold transition-all active:scale-95 ${
                   data.takeoutFrequency === key
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -111,7 +111,7 @@ export function StepDietHabits({ data, onChange }: StepDietHabitsProps) {
                     const next = selected ? prev.filter((k) => k !== key) : [...prev, key];
                     onChange({ cuisinePreferences: next });
                   }}
-                  className={`flex flex-col items-center gap-1 py-3 rounded-2xl text-xs font-medium transition-all active:scale-95 ${
+                  className={`flex flex-col items-center gap-1 py-3  text-xs font-medium transition-all active:scale-95 ${
                     selected
                       ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/20'
                       : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -136,7 +136,7 @@ export function StepDietHabits({ data, onChange }: StepDietHabitsProps) {
                   key={key}
                   type="button"
                   onClick={() => onChange({ cookingSkillLevel: key })}
-                  className={`flex flex-col items-start gap-0.5 px-4 py-3 rounded-2xl text-left transition-all active:scale-[0.98] ${
+                  className={`flex flex-col items-start gap-0.5 px-4 py-3  text-left transition-all active:scale-[0.98] ${
                     selected
                       ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/20'
                       : 'bg-muted text-muted-foreground hover:bg-muted/80'

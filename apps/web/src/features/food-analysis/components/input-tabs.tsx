@@ -57,7 +57,7 @@ interface InputTabsProps {
 
 export function InputTabs({ activeTab, onTabChange, disabled }: InputTabsProps) {
   return (
-    <div className="flex bg-muted rounded-xl p-1 gap-0.5">
+    <div className="flex bg-muted  p-1 gap-0.5">
       {tabs.map((tab) => (
         <button
           key={tab.key}
