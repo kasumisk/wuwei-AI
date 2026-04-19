@@ -67,6 +67,8 @@ export interface DecisionFoodItem {
   estimated?: boolean;
   /** 食物库过敏原字段（优先用于过敏原判断） */
   allergens?: string[];
+  /** 标签 */
+  tags?: string[];
 }
 
 /** V1.3: 结构化决策因子 */
