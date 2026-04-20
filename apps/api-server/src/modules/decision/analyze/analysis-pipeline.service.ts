@@ -30,6 +30,10 @@ import {
   FoodAnalysisPackage,
   StructuredDecision,
   ContextualAnalysis,
+  AnalyzeStageResult,
+  DecideStageResult,
+  PostProcessStageResult,
+  NutritionIssue,
 } from '../types/analysis-result.types';
 import {
   aggregateNutrition,
@@ -41,11 +45,14 @@ import {
   TextPersistInput,
   ImagePersistInput,
 } from './analysis-persistence.service';
-import { UserContextBuilderService } from '../decision/user-context-builder.service';
+import { UserContextBuilderService } from './user-context-builder.service';
 import {
   FoodScoringService,
   ScoringFoodItem,
 } from '../score/food-scoring.service';
+import { ScoringStageService } from '../score/scoring-stage.service';
+import { DecisionStageService } from '../decision/decision-stage.service';
+import { CoachingStageService } from '../coach/coaching-stage.service';
 import {
   FoodDecisionService,
   DecisionOutput,
@@ -114,6 +121,9 @@ export class AnalysisPipelineService {
   constructor(
     private readonly userContextBuilder: UserContextBuilderService,
     private readonly foodScoringService: FoodScoringService,
+    private readonly scoringStageService: ScoringStageService,
+    private readonly decisionStageService: DecisionStageService,
+    private readonly coachingStageService: CoachingStageService,
     private readonly foodDecisionService: FoodDecisionService,
     private readonly resultAssembler: ResultAssemblerService,
     private readonly persistence: AnalysisPersistenceService,
@@ -131,268 +141,49 @@ export class AnalysisPipelineService {
   ) {}
 
   /**
-   * 执行统一分析管道
+   * 执行统一分析管道（V3.9 三阶段架构）
    *
-   * Step 2: 营养汇总
-   * Step 3: 用户上下文
-   * Step 4: 评分
-   * Step 5: 决策
-   * Step 6: 组装
-   * Step 7: 持久化（异步）
-   * Step 8: 事件发射
+   * Stage 1 — Analyze: 营养汇总 → 用户上下文 → 评分 → 上下文分析
+   * Stage 2 — Decide:  决策判断 → 结构化决策 → 摘要
+   * Stage 3 — Coach:   置信度诊断 → 恢复建议 → 证据包 → ShouldEat → 准确度
+   *
+   * V4.6: Stage 3 重命名为 runCoaching（原 runPostProcess），
+   * Phase 3 将在此阶段注入个性化教练消息。
+   *
+   * 最终组装 + 持久化 + 事件发射
    */
   async execute(input: PipelineInput): Promise<FoodAnalysisResultV61> {
-    const analysisId = crypto.randomUUID();
+    // Stage 1: Analyze
+    const analyze = await this.runAnalyze(input);
 
-    // Step 2: 营养汇总
-    const totals =
-      input.inputType === 'image' && input.precomputedTotals
-        ? input.precomputedTotals
-        : aggregateNutrition(input.foods);
-
-    // Step 3: 用户上下文（优先复用预构建的，避免重复调用）
-    const userContext = input.prebuiltUserContext
-      ? input.prebuiltUserContext
-      : await this.userContextBuilder.build(input.userId, input.locale);
-    if (input.mealType) {
-      userContext.mealType = input.mealType;
-    }
-
-    // Step 4: 评分
-    const score = await this.computeScore(input, totals, userContext);
-    const mode = input.decisionMode || 'pre_eat';
-
-    // V3.3 Step 4.1: 构建上下文分析（当天摄入 + 用户画像 + 问题识别）
-    let contextualAnalysis: ContextualAnalysis | undefined;
-    try {
-      contextualAnalysis = this.analysisContextService.buildContextualAnalysis(
-        userContext,
-        input.locale,
-      );
-      // 将当前食物加入排除列表（去重）
-      if (contextualAnalysis) {
-        contextualAnalysis =
-          this.analysisContextService.excludeFoodsFromRecommendation(
-            contextualAnalysis,
-            input.foods.map((f) => f.name),
-          );
-      }
-    } catch (err) {
-      this.logger.warn(`上下文分析构建失败: ${(err as Error).message}`);
-    }
-
-    // Step 4.5: 构建分析状态
-    const analysisState = this.analysisStateBuilder.build({
+    // Stage 2: Decide — V5.0: delegated to DecisionStageService
+    const decide = await this.decisionStageService.run({
       foods: input.foods,
-      totals,
-      score,
-      userContext,
-      mealType: input.mealType,
+      analyze,
+      userId: input.userId,
+      locale: input.locale,
+      decisionMode: input.decisionMode,
     });
 
-    // Step 5: 决策
-    let decisionOutput: DecisionOutput;
-    try {
-      decisionOutput = await this.foodDecisionService.computeFullDecision(
-        this.toDecisionFoodItems(input.foods),
-        totals,
-        userContext,
-        score.nutritionScore,
-        score.breakdown,
-        input.userId,
-        input.locale,
-        mode,
-        contextualAnalysis?.identifiedIssues,
-        contextualAnalysis, // V3.6 P2.1: 传入完整上下文分析供动态目标参数
-      );
-    } catch (err) {
-      this.logger.warn(`决策计算失败，使用默认: ${(err as Error).message}`);
-      decisionOutput = this.buildFallbackDecision(input.locale);
-    }
-
-    // V3.3 Step 5.45: 计算 StructuredDecision（在摘要之前，供摘要消费）
-    let structuredDecision: StructuredDecision | undefined;
-    try {
-      structuredDecision = this.decisionEngineService.computeStructuredDecision(
-        this.toDecisionFoodItems(input.foods),
-        userContext,
-        score.nutritionScore,
-        score.breakdown,
-        input.locale,
-      );
-    } catch (err) {
-      this.logger.warn(
-        `StructuredDecision 计算失败: ${(err as Error).message}`,
-      );
-    }
-
-    // Step 6: 组装
-    // V2.2: Step 5.5 — 生成决策结构化摘要
-    let summary;
-    try {
-      summary = this.decisionSummaryService.summarize({
-        decisionOutput,
-        totals,
-        userContext,
-        foodNames: input.foods.map((f) => f.name),
-        structuredDecision,
-        // V3.5 P2.3: 传入营养问题列表和决策模式
-        nutritionIssues: contextualAnalysis?.identifiedIssues,
-        decisionMode: mode,
-        // V3.8: locale for i18n
-        locale: input.locale,
-      });
-    } catch (err) {
-      this.logger.warn(`摘要生成失败: ${(err as Error).message}`);
-    }
-
-    // Step 5.6: 分层置信度诊断
-    let confidenceDiagnostics: ConfidenceDiagnostics | undefined;
-    try {
-      confidenceDiagnostics = await this.confidenceDiagnosticsService.diagnose({
-        foods: input.foods,
-        userId: input.userId,
-        summary,
-      });
-      if (summary && confidenceDiagnostics) {
-        this.enrichSummaryWithConfidence(
-          summary,
-          confidenceDiagnostics,
-          mode,
-          input.locale,
-        );
-      }
-    } catch (err) {
-      this.logger.warn(`置信度诊断失败: ${(err as Error).message}`);
-    }
-
-    // Step 5.7: 补偿建议 + 证据块 + 行动决策
-    const recoveryAction = this.postMealRecoveryService.build({
-      mode,
-      macroProgress: decisionOutput.macroProgress,
-      userContext,
+    // Stage 3: Coaching (V4.6: renamed from PostProcess) — V5.0: delegated to CoachingStageService
+    const postProcess = await this.coachingStageService.run({
+      foods: input.foods,
+      analyze,
+      decide,
+      userId: input.userId,
+      locale: input.locale,
+      decisionMode: input.decisionMode,
     });
 
-    const evidencePack: EvidencePack = this.evidencePackBuilder.build({
-      decisionOutput,
-      analysisState,
-      confidenceDiagnostics: confidenceDiagnostics || {
-        recognitionConfidence: 0.7,
-        normalizationConfidence: 0.7,
-        nutritionEstimationConfidence: 0.7,
-        decisionConfidence: 0.7,
-        overallConfidence: 0.7,
-        analysisQualityBand: 'medium',
-        qualitySignals: [],
-        analysisCompletenessScore: 0.7,
-        reviewLevel: 'auto_review',
-        uncertaintyReasons: [],
-      },
-      summary,
-      contextualAnalysis,
-      structuredDecision,
-    });
-    // V3.0: 注入语气修饰
-    evidencePack.toneModifier =
-      this.decisionToneResolverService.resolveModifier({
-        goalType: userContext.goalType,
-        verdict: decisionOutput.decision.recommendation,
-        coachFocus: summary.coachFocus,
-      });
+    // 准确度→决策联动：低准确度时自动降级 verdict
+    this.applyAccuracyDowngrade(
+      postProcess.analysisAccuracy,
+      decide,
+      input.locale,
+    );
 
-    const shouldEatAction = this.shouldEatActionService.build({
-      mode,
-      decisionOutput,
-      summary,
-      evidencePack,
-      userContext,
-      confidenceDiagnostics: confidenceDiagnostics || {
-        recognitionConfidence: 0.7,
-        normalizationConfidence: 0.7,
-        nutritionEstimationConfidence: 0.7,
-        decisionConfidence: 0.7,
-        overallConfidence: 0.7,
-        analysisQualityBand: 'medium',
-        qualitySignals: [],
-        analysisCompletenessScore: 0.7,
-        reviewLevel: 'auto_review',
-        uncertaintyReasons: [],
-      },
-      recoveryAction,
-    });
-
-    // V3.3 Step 5.8: 组装 FoodAnalysisPackage
-    let foodAnalysisPackage: FoodAnalysisPackage | undefined;
-    try {
-      const reviewLevel = confidenceDiagnostics?.reviewLevel || 'auto_review';
-      // V3.4 P1.4: 使用多信号 assessFromFoods() 替代单一 assessAccuracy()
-      const accuracyMetrics = this.analysisAccuracyService.assessFromFoods(
-        input.foods,
-        reviewLevel,
-      );
-      foodAnalysisPackage = {
-        totalCalories: totals.calories,
-        macros: {
-          protein: totals.protein,
-          fat: totals.fat,
-          carbs: totals.carbs,
-        },
-        accuracyLevel: accuracyMetrics.level,
-        accuracyScore: accuracyMetrics.score,
-        accuracyFactors: accuracyMetrics.factors,
-        nutritionBreakdown: score.breakdown || {
-          energy: 50,
-          proteinRatio: 50,
-          macroBalance: 50,
-          foodQuality: 50,
-          satiety: 50,
-          stability: 50,
-          glycemicImpact: 50,
-          mealQuality: 50,
-        },
-      };
-    } catch (err) {
-      this.logger.warn(
-        `FoodAnalysisPackage 组装失败: ${(err as Error).message}`,
-      );
-    }
-
-    // V3.7 P2.2: 准确度→决策联动 — 低准确度时自动降级 verdict
-    if (foodAnalysisPackage?.accuracyLevel === 'low') {
-      // avoid → caution + disclaimer
-      if (structuredDecision && structuredDecision.verdict === 'avoid') {
-        structuredDecision = {
-          ...structuredDecision,
-          verdict: 'caution',
-        };
-        this.logger.log('P2.2: accuracy=low, downgraded verdict avoid→caution');
-      }
-      if (decisionOutput.decision.recommendation === 'avoid') {
-        decisionOutput = {
-          ...decisionOutput,
-          decision: {
-            ...decisionOutput.decision,
-            recommendation: 'caution',
-          },
-        };
-      }
-      // Enrich summary with accuracy disclaimer
-      if (summary) {
-        const disclaimers: Record<string, string> = {
-          'zh-CN':
-            '⚠️ 分析准确度较低，本次决策已自动降级为谨慎建议，请结合实际情况判断。',
-          'en-US':
-            '⚠️ Analysis accuracy is low. The decision has been automatically downgraded to caution. Please use your own judgment.',
-          'ja-JP':
-            '⚠️ 分析精度が低いため、判定は自動的に注意レベルに引き下げられました。ご自身の判断も併せてください。',
-        };
-        const loc = input.locale || 'zh-CN';
-        const disclaimer = disclaimers[loc] || disclaimers['zh-CN'];
-        summary.analysisQualityNote = disclaimer;
-      }
-    }
-
-    const avgConfidence = computeAvgConfidence(input.foods);
+    // 组装最终结果
+    const avgConfidence = analyze.avgConfidence;
     const ingestion =
       input.inputType === 'text'
         ? this.resultAssembler.evaluateTextIngestion(input.foods)
@@ -407,44 +198,49 @@ export class AnalysisPipelineService {
         : { imageUrl: input.imageUrl, mealType: input.mealType as any };
 
     const result = this.resultAssembler.assemble({
-      analysisId,
+      analysisId: analyze.analysisId,
       inputType: input.inputType,
       inputSnapshot,
       foods: input.foods,
-      totals,
-      score,
-      decisionOutput,
+      totals: analyze.totals,
+      score: analyze.score,
+      decisionOutput: decide.decision,
       ingestion,
-      summary,
-      analysisState,
-      confidenceDiagnostics,
-      evidencePack,
-      shouldEatAction,
-      foodAnalysisPackage,
-      structuredDecision,
+      summary: decide.summary,
+      analysisState: analyze.analysisState,
+      confidenceDiagnostics: postProcess.confidenceDiagnostics,
+      evidencePack: postProcess.evidencePack,
+      shouldEatAction: postProcess.shouldEatAction ?? undefined,
+      foodAnalysisPackage: postProcess.analysisAccuracy,
+      structuredDecision: decide.structuredDecision ?? undefined,
+      decisionMode: input.decisionMode as
+        | 'pre_eat'
+        | 'post_eat'
+        | 'default'
+        | undefined,
     });
 
-    // Step 7: 持久化（fire-and-forget，不阻塞响应）
+    // 附上下文分析和用户上下文到 result，供 CoachService 缓存后注入教练 prompt
+    if (analyze.contextualAnalysis) {
+      result.contextualAnalysis = analyze.contextualAnalysis;
+    }
+    result.unifiedUserContext = analyze.userContext ?? undefined;
+
+    // 持久化（fire-and-forget，不阻塞响应）
     if (input.userId) {
-      this.persistRecord(input, analysisId, result).catch((err) =>
-        this.logger.error(`分析记录持久化失败: ${(err as Error).message}`),
+      this.persistRecord(input, analyze.analysisId, result).catch((err) =>
+        this.logger.error(`Analysis record persistence failed: ${(err as Error).message}`),
       );
     }
 
-    // V3.5 P3.2: 附上下文分析和用户上下文到 result，供 CoachService 缓存后注入教练 prompt
-    if (contextualAnalysis) {
-      result.contextualAnalysis = contextualAnalysis;
-    }
-    result.unifiedUserContext = userContext;
-
-    // Step 8: 事件发射
+    // 事件发射
     if (input.userId) {
       this.emitAnalysisCompleted(
         input.userId,
-        analysisId,
+        analyze.analysisId,
         input.inputType,
         input.foods,
-        totals,
+        analyze.totals,
         result.decision.recommendation,
         avgConfidence,
         result,
@@ -454,84 +250,132 @@ export class AnalysisPipelineService {
     return result;
   }
 
-  // ==================== 私有方法 ====================
+  // ==================== V3.9: 三阶段编排 ====================
 
   /**
-   * Step 4: 评分 — 根据输入类型选择评分策略
+   * Stage 1 — Analyze: 营养汇总 + 用户上下文 + 评分 + 上下文分析
+   *
+   * 纯分析，不包含任何决策逻辑。
    */
-  private async computeScore(
-    input: PipelineInput,
-    totals: NutritionTotals,
-    userContext: Awaited<ReturnType<UserContextBuilderService['build']>>,
-  ): Promise<AnalysisScore> {
-    // 图片链路如果有预计算评分，直接使用
-    if (input.inputType === 'image' && input.precomputedScore) {
-      return input.precomputedScore;
+  private async runAnalyze(input: PipelineInput): Promise<AnalyzeStageResult> {
+    const analysisId = crypto.randomUUID();
+
+    // 营养汇总
+    const totals =
+      input.inputType === 'image' && input.precomputedTotals
+        ? input.precomputedTotals
+        : aggregateNutrition(input.foods);
+
+    // 用户上下文（优先复用预构建的）
+    const userContext = input.prebuiltUserContext
+      ? input.prebuiltUserContext
+      : await this.userContextBuilder.build(input.userId, input.locale);
+    if (input.mealType) {
+      userContext.mealType = input.mealType;
     }
 
+    // 评分 — V5.0: delegated to ScoringStageService
+    const score = await this.scoringStageService.run({
+      foods: input.foods,
+      totals,
+      userContext,
+      scoringFoods: input.inputType === 'text' ? input.scoringFoods : undefined,
+      precomputedScore: input.inputType === 'image' ? input.precomputedScore : undefined,
+      userId: input.userId,
+      locale: input.locale,
+    });
+
+    // 上下文分析（当天摄入 + 用户画像 + 营养问题识别）
+    let contextualAnalysis: ContextualAnalysis | undefined;
     try {
-      if (input.inputType === 'text' && input.scoringFoods) {
-        const result = await this.foodScoringService.calculateScore(
-          input.scoringFoods,
-          totals,
-          {
-            profile: userContext.profile,
-            todayCalories: userContext.todayCalories,
-            todayProtein: userContext.todayProtein,
-            todayFat: userContext.todayFat,
-            todayCarbs: userContext.todayCarbs,
-            goalType: userContext.goalType,
-            // V3.5 P1.2: 注入健康条件用于健康感知评分调整
-            healthConditions: userContext.healthConditions,
-          },
-          input.userId,
-          input.locale,
-        );
-        return result.analysisScore;
-      }
-
-      // 图片链路无预计算评分时，使用 calculateImageScore
-      if (input.inputType === 'image' && input.userId) {
-        const avgQuality =
-          input.foods.length > 0
-            ? input.foods.reduce((s, f) => s + (f.confidence * 8 || 5), 0) /
-              input.foods.length
-            : 5;
-        const avgSatiety = avgQuality; // 简化估算
-
-        const result = await this.foodScoringService.calculateImageScore(
-          {
-            calories: totals.calories,
-            protein: totals.protein,
-            fat: totals.fat,
-            carbs: totals.carbs,
-            avgQuality,
-            avgSatiety,
-            healthConditions: userContext.healthConditions, // V3.6 P1.5
-          },
-          input.userId,
-          userContext.goalType,
-          userContext.profile,
-          input.locale,
-        );
-        return {
-          healthScore: result.score,
-          nutritionScore: result.score,
-          confidenceScore: Math.round(computeAvgConfidence(input.foods) * 100),
-          breakdown: result.breakdown,
-        };
+      contextualAnalysis = this.analysisContextService.buildContextualAnalysis(
+        userContext,
+        input.locale,
+      );
+      if (contextualAnalysis) {
+        contextualAnalysis =
+          this.analysisContextService.excludeFoodsFromRecommendation(
+            contextualAnalysis,
+            input.foods.map((f) => f.name),
+          );
       }
     } catch (err) {
-      this.logger.warn(`评分计算失败: ${(err as Error).message}`);
+      this.logger.warn(`Contextual analysis build failed: ${(err as Error).message}`);
     }
 
-    // fallback 评分
+    // 分析状态（吃前/吃后投影）
+    const analysisState = this.analysisStateBuilder.build({
+      foods: input.foods,
+      totals,
+      score,
+      userContext,
+      mealType: input.mealType,
+    });
+
+    const avgConfidence = computeAvgConfidence(input.foods);
+
     return {
-      healthScore: 50,
-      nutritionScore: 50,
-      confidenceScore: Math.round(computeAvgConfidence(input.foods) * 100),
+      analysisId,
+      foods: input.foods,
+      totals,
+      userContext,
+      score,
+      contextualAnalysis: contextualAnalysis || null,
+      avgConfidence,
+      breakdown: score.breakdown || null,
+      nutritionIssues: contextualAnalysis?.identifiedIssues || [],
+      analysisState: analysisState || null,
     };
   }
+
+  /**
+   * Stage 2 — Decide: 决策判断 + 结构化决策 + 摘要
+   *
+   * 基于分析结果生成"吃/不吃"判断和可执行建议。
+   */
+
+  /**
+   * V3.9: 准确度→决策联动 — 低准确度时自动降级 verdict
+   */
+  private applyAccuracyDowngrade(
+    accuracy: FoodAnalysisPackage | undefined,
+    decide: DecideStageResult,
+    locale?: Locale,
+  ): void {
+    // V4.1: 优先使用 decisionImpact 判断是否降级
+    const shouldDowngrade =
+      accuracy?.decisionImpact?.shouldDowngrade ??
+      accuracy?.accuracyLevel === 'low';
+    if (!accuracy || !shouldDowngrade) return;
+
+    if (
+      decide.structuredDecision &&
+      decide.structuredDecision.verdict === 'avoid'
+    ) {
+      decide.structuredDecision = {
+        ...decide.structuredDecision,
+        verdict: 'caution',
+      };
+      this.logger.log('V3.9: accuracy=low, downgraded verdict avoid→caution');
+    }
+    if (decide.decision.decision.recommendation === 'avoid') {
+      decide.decision = {
+        ...decide.decision,
+        decision: {
+          ...decide.decision.decision,
+          recommendation: 'caution',
+        },
+      };
+    }
+    if (decide.summary) {
+      decide.summary.analysisQualityNote = cl(
+        'pipeline.guardrail.accuracyLow',
+        locale,
+      );
+    }
+  }
+
+  // ==================== 私有方法 ====================
 
   /**
    * Step 7: 异步持久化
@@ -559,7 +403,7 @@ export class AnalysisPipelineService {
           candidateFoodCount: textInput.parsedFoodMeta.length - matchedCount,
         });
       } catch (err) {
-        this.logger.warn(`保存文本分析记录失败: ${(err as Error).message}`);
+        this.logger.warn(`Failed to save text analysis record: ${(err as Error).message}`);
       }
     } else {
       const imageInput = input as ImagePipelineInput;
@@ -572,7 +416,7 @@ export class AnalysisPipelineService {
           result,
         });
       } catch (err) {
-        this.logger.warn(`保存图片分析记录失败: ${(err as Error).message}`);
+        this.logger.warn(`Failed to save image analysis record: ${(err as Error).message}`);
       }
     }
   }
@@ -613,45 +457,6 @@ export class AnalysisPipelineService {
   /**
    * V3.8: 将 AnalyzedFoodItem[] 转换为决策所需的食物参数格式
    */
-  private toDecisionFoodItems(foods: AnalyzedFoodItem[]) {
-    return foods.map((f) => ({
-      name: f.name,
-      estimatedWeightGrams:
-        f.estimatedWeightGrams ||
-        (f.calories > 0 ? Math.round(f.calories / 1.5) : 100),
-      category: f.category,
-      confidence: f.confidence,
-      calories: f.calories || 0,
-      protein: f.protein || 0,
-      fat: f.fat || 0,
-      carbs: f.carbs || 0,
-      fiber: f.fiber,
-      sodium: f.sodium,
-      saturatedFat: f.saturatedFat,
-      addedSugar: f.addedSugar,
-      allergens: f.allergens,
-      tags: f.tags,
-    }));
-  }
-
-  /**
-   * 构建 fallback 决策输出（当决策服务失败时）
-   */
-  private buildFallbackDecision(locale?: Locale): DecisionOutput {
-    return {
-      decision: {
-        recommendation: 'caution',
-        shouldEat: true,
-        reason: cl('pipeline.fallback.reason', locale),
-        riskLevel: 'medium',
-      },
-      alternatives: [],
-      explanation: {
-        summary: cl('pipeline.fallback.summary', locale),
-      },
-      decisionFactors: [],
-    };
-  }
 
   private enrichSummaryWithConfidence(
     summary: NonNullable<FoodAnalysisResultV61['summary']>,

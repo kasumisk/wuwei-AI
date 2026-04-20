@@ -156,4 +156,57 @@ export const MODIFIER_PARAMS = {
   multiplierMin: 0.5,
   /** 分数乘数上限 */
   multiplierMax: 1.08,
+  /** V4.2: 暴食风险小时窗口乘数 */
+  bingeHourMultiplier: 0.92,
+  /** V4.2: 7天摄入趋势上升乘数 */
+  trendIncreasingMultiplier: 0.95,
+  /** V4.2: 7天摄入趋势下降乘数 */
+  trendDecreasingMultiplier: 1.03,
+  /** V4.2: 连续超标额外惩罚天数阈值 */
+  consecutiveExcessExtraDays: 3,
+  /** V4.2: 连续超标额外惩罚乘数 */
+  consecutiveExcessExtraPenalty: 0.95,
+} as const;
+
+// ==================== V5.0 P2.2: 替代建议参数 ====================
+
+export const ALTERNATIVE_PARAMS = {
+  /** 深夜高热量触发最低热量（kcal） */
+  lateNightMinCalories: 200,
+  /** 默认目标类型 */
+  defaultGoalType: 'health',
+
+  // --- rankScore 权重 ---
+  /** 引擎分数基础权重 */
+  rankBaseWeight: 0.4,
+  /** 热量差归一化分母（kcal） */
+  rankCalNormDenom: 200,
+  /** 蛋白质差归一化分母（g） */
+  rankProteinNormDenom: 20,
+  /** 热量维度权重 — fat_loss */
+  rankCalWeightFatLoss: 0.35,
+  /** 热量维度权重 — 默认 */
+  rankCalWeightDefault: 0.15,
+  /** 蛋白质维度权重 — muscle_gain */
+  rankProteinWeightMuscleGain: 0.25,
+  /** 蛋白质维度权重 — 默认 */
+  rankProteinWeightDefault: 0.1,
+  /** 热量差显著阈值（kcal，用于 reason 文案） */
+  rankCalDiffThreshold: 50,
+  /** 蛋白质差显著阈值（g，用于 reason 文案） */
+  rankProteinDiffThreshold: 5,
+
+  // --- source priority ---
+  /** 引擎来源优先级 */
+  sourcePriorityEngine: 1,
+  /** substitution 来源优先级 */
+  sourcePrioritySubstitution: 0.5,
+  /** 静态来源优先级 */
+  sourcePriorityStatic: 0,
+
+  // --- flavorProfile boost ---
+  /** 口味相似替代方案 rankScore 加分 */
+  flavorMatchBoost: 0.08,
+  /** foodForm 相同替代方案 rankScore 加分 */
+  foodFormMatchBoost: 0.05,
 } as const;

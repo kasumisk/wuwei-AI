@@ -3,6 +3,9 @@
 import { HttpClient } from './http-client';
 import { env } from '../env';
 import { useAuthStore } from '@/features/auth/store/auth-store';
+import { useSubscriptionStore } from '@/features/subscription/store/subscription-store';
+import { useDismissStore } from '@/store';
+import { queryClient } from '@/lib/react-query/client';
 import { useToastStore } from '@/lib/hooks/use-toast';
 
 /**
@@ -42,6 +45,11 @@ class ClientAPI extends HttpClient {
           // 同时清除 Zustand auth state
           try {
             useAuthStore.getState().clearAuth();
+            // 清除 React Query 缓存，防止账号切换后数据污染
+            queryClient.clear();
+            // 重置其他用户相关的 zustand store
+            useSubscriptionStore.getState().reset();
+            useDismissStore.getState().resetAllDismissed();
           } catch {
             // auth store 可能尚未初始化，忽略
           }

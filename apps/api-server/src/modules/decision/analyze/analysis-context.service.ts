@@ -71,6 +71,16 @@ export class AnalysisContextService {
       macroProgress,
       ctx.healthConditions,
       locale,
+      // V4.0: 透传行为上下文
+      {
+        shortTermBehavior: ctx.shortTermBehavior
+          ? {
+              bingeRiskHours: ctx.shortTermBehavior.bingeRiskHours,
+              intakeTrends: ctx.shortTermBehavior.intakeTrends,
+            }
+          : undefined,
+        localHour: ctx.localHour,
+      },
     );
 
     // 构建推荐系统条件
@@ -82,7 +92,7 @@ export class AnalysisContextService {
         carbs: ctx.remainingCarbs,
       },
       excludeFoods: [], // 由外部提供（当前用户今日已吃过的食物）
-      preferredScenarios: ['homeCook'], // 默认，由用户偏好覆盖
+      preferredScenarios: this.inferPreferredScenarios(ctx.localHour),
     };
 
     return {
@@ -101,19 +111,22 @@ export class AnalysisContextService {
    *
    * 如果用户上下文中未包含 macroSlotStatus，基于 consumed vs goals 推导
    *
-   * 边界条件：
-   * - < 90% → deficit
-   * - >= 90% && <= 110% → ok
-   * - > 110% → excess
+   * 边界条件（V4.2: 与 UserContextBuilderService 统一为 12% 阈值）：
+   * - remaining/goal > 12% → deficit
+   * - remaining/goal < -12% → excess
+   * - 其他 → ok
    */
   private inferMacroSlotStatus(progress: MacroProgress): MacroSlotStatus {
+    const threshold = 0.12; // V4.2: 统一 12% 阈值（与 UserContextBuilderService 一致）
     const inferSlot = (
       consumed: number,
       goal: number,
     ): 'deficit' | 'ok' | 'excess' => {
-      const ratio = consumed / goal;
-      if (ratio < 0.9) return 'deficit';
-      if (ratio > 1.1) return 'excess';
+      if (goal <= 0) return 'ok';
+      const remaining = goal - consumed;
+      const ratio = remaining / goal;
+      if (ratio < -threshold) return 'excess';
+      if (ratio > threshold) return 'deficit';
       return 'ok';
     };
 
@@ -124,31 +137,58 @@ export class AnalysisContextService {
       carbs: inferSlot(progress.consumed.carbs, progress.goals.carbs),
     };
 
-    // 计算主要缺/超项
-    const deficits: Array<'protein' | 'fat' | 'carbs' | 'calories'> = [];
-    const excesses: Array<'protein' | 'fat' | 'carbs' | 'calories'> = [];
+    // 计算主要缺/超项（V4.2: 按 remaining/goal 比值排序取最大缺口）
+    const macroKeys: Array<'protein' | 'fat' | 'carbs' | 'calories'> = [
+      'calories',
+      'protein',
+      'fat',
+      'carbs',
+    ];
+    const goalMap = {
+      calories: progress.goals.calories,
+      protein: progress.goals.protein,
+      fat: progress.goals.fat,
+      carbs: progress.goals.carbs,
+    };
+    const remainingMap = {
+      calories: progress.goals.calories - progress.consumed.calories,
+      protein: progress.goals.protein - progress.consumed.protein,
+      fat: progress.goals.fat - progress.consumed.fat,
+      carbs: progress.goals.carbs - progress.consumed.carbs,
+    };
 
-    if (slot.calories === 'deficit') deficits.push('calories');
-    if (slot.calories === 'excess') excesses.push('calories');
-
-    if (slot.protein === 'deficit') deficits.push('protein');
-    if (slot.protein === 'excess') excesses.push('protein');
-
-    if (slot.fat === 'deficit') deficits.push('fat');
-    if (slot.fat === 'excess') excesses.push('fat');
-
-    if (slot.carbs === 'deficit') deficits.push('carbs');
-    if (slot.carbs === 'excess') excesses.push('carbs');
-
-    // 计算最大缺/超项
-    if (deficits.length > 0) {
-      slot.dominantDeficit = deficits[0]; // 简化：取第一个
+    const deficitEntries = macroKeys
+      .filter((k) => slot[k] === 'deficit')
+      .map(
+        (k) => [k, goalMap[k] > 0 ? remainingMap[k] / goalMap[k] : 0] as const,
+      )
+      .sort((a, b) => b[1] - a[1]);
+    if (deficitEntries.length > 0) {
+      slot.dominantDeficit = deficitEntries[0][0];
     }
-    if (excesses.length > 0) {
-      slot.dominantExcess = excesses[0];
+
+    const excessEntries = macroKeys
+      .filter((k) => slot[k] === 'excess')
+      .map(
+        (k) => [k, goalMap[k] > 0 ? -remainingMap[k] / goalMap[k] : 0] as const,
+      )
+      .sort((a, b) => b[1] - a[1]);
+    if (excessEntries.length > 0) {
+      slot.dominantExcess = excessEntries[0][0];
     }
 
     return slot;
+  }
+
+  /**
+   * V4.2: 基于时间推断场景偏好
+   */
+  private inferPreferredScenarios(localHour?: number): string[] {
+    const hour = localHour ?? 12;
+    if (hour >= 6 && hour < 10) return ['homeCook', 'convenience'];
+    if (hour >= 10 && hour < 14) return ['takeout', 'homeCook'];
+    if (hour >= 17 && hour < 21) return ['homeCook', 'takeout'];
+    return ['convenience', 'homeCook'];
   }
 
   /**

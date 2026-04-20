@@ -258,6 +258,7 @@ export class FoodAnalyzeController {
           protein: f.protein,
           fat: f.fat,
           carbs: f.carbs,
+          glycemicIndex: f.glycemicIndex,
         })) ?? [],
       totalCalories: result.totals?.calories ?? 0,
       advice: result.explanation?.summary,

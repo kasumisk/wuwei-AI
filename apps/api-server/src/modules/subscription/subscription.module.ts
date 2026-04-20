@@ -44,6 +44,8 @@ import { SubscriptionPlansController } from './app/controllers/subscription-plan
 import { SubscriptionEventListener } from './app/listeners/subscription-event.listener';
 // V6.2: 付费墙分析事件监听器
 import { PaywallAnalyticsListener } from './app/listeners/paywall-analytics.listener';
+// 基于功能权益的访问门控
+import { FeatureGuard } from './app/guards/feature.guard';
 
 @Global()
 @Module({
@@ -66,6 +68,7 @@ import { PaywallAnalyticsListener } from './app/listeners/paywall-analytics.list
     SubscriptionManagementService, // Phase 1: 订阅管理后台
     SubscriptionEventListener, // V6.2: 订阅变更事件监听器
     PaywallAnalyticsListener, // V6.2: 付费墙分析监听器
+    FeatureGuard, // 基于功能权益的访问门控
   ],
   exports: [
     PlanEntitlementResolver,
@@ -77,6 +80,7 @@ import { PaywallAnalyticsListener } from './app/listeners/paywall-analytics.list
     PaywallTriggerService, // V6.1: 付费墙触发策略
     AppleIapService,
     WechatPayService,
+    FeatureGuard, // 基于功能权益的访问门控
   ],
 })
 export class SubscriptionModule {}

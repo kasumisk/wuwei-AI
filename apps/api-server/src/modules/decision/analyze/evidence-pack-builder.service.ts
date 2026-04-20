@@ -11,7 +11,9 @@ import {
   StructuredDecision,
 } from '../types/analysis-result.types';
 import { DecisionOutput } from '../decision/food-decision.service';
-import { DailyMacroSummaryService } from '../decision/daily-macro-summary.service';
+import { DailyMacroSummaryService } from '../coach/daily-macro-summary.service';
+import { cl } from '../i18n/decision-labels';
+import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 
 @Injectable()
 export class EvidencePackBuilderService {
@@ -29,6 +31,7 @@ export class EvidencePackBuilderService {
     contextualAnalysis?: ContextualAnalysis;
     /** V3.3: 结构化决策 */
     structuredDecision?: StructuredDecision;
+    locale?: Locale;
   }): EvidencePack {
     const {
       decisionOutput,
@@ -38,6 +41,7 @@ export class EvidencePackBuilderService {
       userContext,
       contextualAnalysis,
       structuredDecision,
+      locale,
     } = input;
 
     const scoreEvidence = [
@@ -51,14 +55,45 @@ export class EvidencePackBuilderService {
 
     const projected = analysisState.projectedAfterMeal.completionRatio;
     const contextEvidence = [
-      `餐后热量完成度 ${projected.calories}%`,
-      `餐后蛋白完成度 ${projected.protein}%`,
-      `餐后脂肪完成度 ${projected.fat}%`,
-      `餐后碳水完成度 ${projected.carbs}%`,
+      cl('evidence.caloriesCompletion', locale).replace(
+        '{percent}',
+        String(projected.calories),
+      ),
+      cl('evidence.proteinCompletion', locale).replace(
+        '{percent}',
+        String(projected.protein),
+      ),
+      cl('evidence.fatCompletion', locale).replace(
+        '{percent}',
+        String(projected.fat),
+      ),
+      cl('evidence.carbsCompletion', locale).replace(
+        '{percent}',
+        String(projected.carbs),
+      ),
       // V3.3: 上下文分析问题
       ...(contextualAnalysis?.identifiedIssues || [])
         .slice(0, 3)
         .map((issue) => `[${issue.severity}] ${issue.implication}`),
+      // V4.0 P3.3: 连续天数激励
+      ...(userContext?.goalProgress?.streakDays != null &&
+      userContext.goalProgress.streakDays >= 2
+        ? [
+            cl('evidence.healthyStreak', locale).replace(
+              '{days}',
+              String(userContext.goalProgress.streakDays),
+            ),
+          ]
+        : []),
+      // V4.0 P3.3: 执行率
+      ...(userContext?.goalProgress?.executionRate != null
+        ? [
+            cl('evidence.executionRate', locale).replace(
+              '{rate}',
+              String(Math.round(userContext.goalProgress.executionRate * 100)),
+            ),
+          ]
+        : []),
     ];
 
     const issueEvidence = [
@@ -84,18 +119,40 @@ export class EvidencePackBuilderService {
           ]
         : []),
       ...(confidenceDiagnostics.analysisQualityBand
-        ? [`分析质量: ${confidenceDiagnostics.analysisQualityBand}`]
+        ? [
+            cl('evidence.analysisQuality', locale).replace(
+              '{band}',
+              confidenceDiagnostics.analysisQualityBand,
+            ),
+          ]
         : []),
       ...(confidenceDiagnostics.analysisCompletenessScore != null
         ? [
-            `分析完整度: ${Math.round(confidenceDiagnostics.analysisCompletenessScore * 100)}%`,
+            cl('evidence.analysisCompleteness', locale).replace(
+              '{percent}',
+              String(
+                Math.round(
+                  confidenceDiagnostics.analysisCompletenessScore * 100,
+                ),
+              ),
+            ),
           ]
         : []),
       ...(confidenceDiagnostics.reviewLevel
-        ? [`复核级别: ${confidenceDiagnostics.reviewLevel}`]
+        ? [
+            cl('evidence.reviewLevel', locale).replace(
+              '{level}',
+              confidenceDiagnostics.reviewLevel,
+            ),
+          ]
         : []),
       ...(confidenceDiagnostics.qualitySignals?.length
-        ? [`质量信号: ${confidenceDiagnostics.qualitySignals.join(', ')}`]
+        ? [
+            cl('evidence.qualitySignals', locale).replace(
+              '{signals}',
+              confidenceDiagnostics.qualitySignals.join(', '),
+            ),
+          ]
         : []),
       ...confidenceDiagnostics.uncertaintyReasons,
     ].filter(Boolean);
@@ -106,9 +163,13 @@ export class EvidencePackBuilderService {
       summary,
       confidenceDiagnostics,
       promptDepth,
+      locale,
     );
     const dailyMacroSummary = userContext
-      ? this.dailyMacroSummaryService.buildSummaryText(userContext, 'zh-CN')
+      ? this.dailyMacroSummaryService.buildSummaryText(
+          userContext,
+          locale ?? 'zh-CN',
+        )
       : undefined;
 
     return {
@@ -128,6 +189,7 @@ export class EvidencePackBuilderService {
     summary: DecisionSummary | undefined,
     diag: ConfidenceDiagnostics,
     promptDepth: PromptDepthLevel,
+    locale?: Locale,
   ): CoachOutputSchema {
     const verdict = decisionOutput.decision.recommendation ?? 'caution';
     const mainReason = decisionOutput.decision.reason ?? '';
@@ -140,7 +202,7 @@ export class EvidencePackBuilderService {
       actionSteps.push(...summary.actionItems.slice(0, 2));
     }
     if (actionSteps.length === 0) {
-      actionSteps.push('保持均衡饮食，注意控制摄入量');
+      actionSteps.push(cl('evidence.defaultAction', locale));
     }
 
     const cautionNote =
@@ -150,7 +212,10 @@ export class EvidencePackBuilderService {
 
     const confidenceNote =
       promptDepth === 'detailed'
-        ? `数据置信度 ${Math.round((diag.overallConfidence ?? 0.7) * 100)}%，建议结合实际情况判断`
+        ? cl('evidence.confidenceNote', locale).replace(
+            '{percent}',
+            String(Math.round((diag.overallConfidence ?? 0.7) * 100)),
+          )
         : undefined;
 
     return {

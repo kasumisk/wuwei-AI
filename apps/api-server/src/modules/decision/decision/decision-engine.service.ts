@@ -13,18 +13,14 @@ import {
   DetailedRationale,
 } from '../types/analysis-result.types';
 import { NutritionScoreBreakdown } from '../../diet/app/services/nutrition-score.service';
-import { t, Locale } from '../../diet/app/recommendation/utils/i18n-messages';
+import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 import { cl } from '../i18n/decision-labels';
 import { DIMENSION_LABELS } from '../config/scoring-dimensions';
 import {
   GOAL_DECISION_THRESHOLDS,
   DEFAULT_THRESHOLDS,
 } from '../config/decision-thresholds';
-import {
-  checkAllergenConflict,
-  checkRestrictionConflict,
-  checkHealthConditionRisk,
-} from './decision-checks';
+import { buildConflictReport } from '../config/decision-checks';
 import { DecisionFoodItem, DecisionFactor } from './food-decision.service';
 import {
   DynamicThresholdsService,
@@ -63,6 +59,7 @@ export class DecisionEngineService {
       nutritionScore,
       locale,
       ctx.goalType,
+      ctx.goalProgress,
     );
     const contextReasons: string[] = [];
 
@@ -70,7 +67,7 @@ export class DecisionEngineService {
     const hour = ctx.localHour ?? 12;
     if (hour >= th.lateNightStart || hour < th.lateNightEnd) {
       if (totalCalories > th.significantMealCal) {
-        contextReasons.push(t('decision.context.lateNightHighCal', {}, locale));
+        contextReasons.push(cl('context.lateNightHighCal', locale));
         if (scoreDecision.recommendation === 'recommend') {
           scoreDecision = this.scoreToFoodDecision(
             Math.min(nutritionScore, 50),
@@ -81,7 +78,7 @@ export class DecisionEngineService {
       }
     } else if (hour >= th.eveningStart && hour < th.lateNightStart) {
       if (totalCarbs > th.highCarbMeal && ctx.goalType === 'fat_loss') {
-        contextReasons.push(t('decision.context.eveningHighCarb', {}, locale));
+        contextReasons.push(cl('context.eveningHighCarb', locale));
       }
     }
 
@@ -93,31 +90,28 @@ export class DecisionEngineService {
         totalProtein < th.lowProteinMeal &&
         totalCalories > th.snackHighCal
       ) {
-        contextReasons.push(
-          t('decision.context.breakfastLowProtein', {}, locale),
-        );
+        contextReasons.push(cl('context.breakfastLowProtein', locale));
       }
     } else if (mealType === 'dinner') {
       if (ctx.goalType === 'fat_loss' && totalCarbs > th.dinnerHighCarb) {
-        contextReasons.push(t('decision.context.dinnerHighCarb', {}, locale));
+        contextReasons.push(cl('context.dinnerHighCarb', locale));
       }
     } else if (mealType === 'snack') {
       if (totalCalories > th.snackHighCal) {
-        contextReasons.push(t('decision.context.snackHighCal', {}, locale));
+        contextReasons.push(cl('context.snackHighCal', locale));
       }
     }
 
     // 热量预算检查（V2.2: 动态 overBudgetMargin）
     if (remainingAfter < -th.overBudgetMargin) {
       contextReasons.push(
-        t(
-          'decision.context.overBudget',
-          { amount: String(Math.abs(Math.round(remainingAfter))) },
-          locale,
+        cl('context.overBudget', locale).replace(
+          '{amount}',
+          String(Math.abs(Math.round(remainingAfter))),
         ),
       );
     } else if (remainingAfter < 0) {
-      contextReasons.push(t('decision.context.nearLimit', {}, locale));
+      contextReasons.push(cl('context.nearLimit', locale));
     }
 
     // 蛋白质检查（V2.2: 动态阈值）
@@ -126,17 +120,17 @@ export class DecisionEngineService {
       totalProtein < th.lowProteinMeal &&
       totalCalories > th.significantMealCal
     ) {
-      contextReasons.push(t('decision.context.lowProtein', {}, locale));
+      contextReasons.push(cl('context.lowProtein', locale));
     }
 
     if (ctx.goalType === 'muscle_gain') {
       if (totalProtein >= th.highProteinMeal) {
-        contextReasons.push(t('decision.context.goodProtein', {}, locale));
+        contextReasons.push(cl('context.goodProtein', locale));
       } else if (
         totalProtein < th.veryLowProteinMeal &&
         totalCalories > th.significantMealCal
       ) {
-        contextReasons.push(t('decision.context.lowProteinMuscle', {}, locale));
+        contextReasons.push(cl('context.lowProteinMuscle', locale));
       }
     }
 
@@ -144,7 +138,7 @@ export class DecisionEngineService {
     const calorieRatio =
       ctx.goalCalories > 0 ? totalCalories / ctx.goalCalories : 0;
     if (totalCalories > 0 && calorieRatio > th.singleMealMaxRatio) {
-      contextReasons.push(t('decision.context.highCalMeal', {}, locale));
+      contextReasons.push(cl('context.highCalMeal', locale));
     }
 
     // 脂肪超标检测（V2.2: 动态阈值）
@@ -156,14 +150,9 @@ export class DecisionEngineService {
       (ctx.goalType === 'fat_loss' || ctx.goalType === 'health')
     ) {
       contextReasons.push(
-        t(
-          'decision.context.highFat',
-          {
-            fat: String(Math.round(totalFat)),
-            percent: String(Math.round(projectedFatPct)),
-          },
-          locale,
-        ),
+        cl('context.highFat', locale)
+          .replace('{fat}', String(Math.round(totalFat)))
+          .replace('{percent}', String(Math.round(projectedFatPct))),
       );
     }
 
@@ -177,10 +166,9 @@ export class DecisionEngineService {
       ctx.goalType === 'fat_loss'
     ) {
       contextReasons.push(
-        t(
-          'decision.context.highCarbs',
-          { percent: String(Math.round(projectedCarbsPct)) },
-          locale,
+        cl('context.highCarbs', locale).replace(
+          '{percent}',
+          String(Math.round(projectedCarbsPct)),
         ),
       );
     }
@@ -195,41 +183,41 @@ export class DecisionEngineService {
       const proteinProgress =
         ((ctx.todayProtein + totalProtein) / ctx.goalProtein) * 100;
       if (proteinProgress < 50 && ctx.goalType !== 'fat_loss') {
-        contextReasons.push(
-          t('decision.context.lowProteinGeneral', {}, locale),
-        );
+        contextReasons.push(cl('context.lowProteinGeneral', locale));
       }
     }
 
-    // 过敏原检查 → 强制 avoid
-    const allergenCheck = checkAllergenConflict(foods, ctx, locale);
-    if (allergenCheck?.triggered) {
-      contextReasons.unshift(allergenCheck.reason!);
-      scoreDecision = {
-        recommendation: 'avoid',
-        shouldEat: false,
-        reason: allergenCheck.reason!,
-        riskLevel: 'high',
-      };
-    }
-
-    // 饮食限制检查
-    const restrictionCheck = checkRestrictionConflict(foods, ctx, locale);
-    if (restrictionCheck?.triggered) {
-      contextReasons.unshift(restrictionCheck.reason!);
-      scoreDecision = {
-        recommendation: 'avoid',
-        shouldEat: false,
-        reason: restrictionCheck.reason!,
-        riskLevel: 'high',
-      };
-    }
-
-    // 健康状况警告（V2.2: 动态阈值）
-    const healthChecks = checkHealthConditionRisk(foods, ctx, locale, th);
-    for (const check of healthChecks) {
-      if (check.triggered && check.reason) {
-        contextReasons.push(check.reason);
+    // 过敏原 / 饮食限制 / 健康状况 → 统一冲突报告（V4.5）
+    const conflictReport = buildConflictReport(foods, ctx, locale, th);
+    if (conflictReport.hasConflict) {
+      for (const item of conflictReport.items) {
+        if (item.message) {
+          // override 项优先插到最前
+          if (item.decisionOverride) {
+            contextReasons.unshift(item.message);
+          } else {
+            contextReasons.push(item.message);
+          }
+        }
+      }
+      if (conflictReport.forceOverride === 'avoid') {
+        scoreDecision = {
+          recommendation: 'avoid',
+          shouldEat: false,
+          reason:
+            conflictReport.items[0]?.message ?? cl('score.veryLow', locale),
+          riskLevel: 'high',
+        };
+      } else if (
+        conflictReport.forceOverride === 'caution' &&
+        scoreDecision.recommendation === 'recommend'
+      ) {
+        scoreDecision = {
+          recommendation: 'caution',
+          shouldEat: true,
+          reason: conflictReport.items[0]?.message ?? cl('score.low', locale),
+          riskLevel: 'medium',
+        };
       }
     }
 
@@ -258,16 +246,38 @@ export class DecisionEngineService {
     score: number,
     locale?: Locale,
     goalType?: string,
+    goalProgress?: UnifiedUserContext['goalProgress'],
   ): FoodDecision {
-    const thresholds = goalType
+    const baseThresholds = goalType
       ? GOAL_DECISION_THRESHOLDS[goalType] || DEFAULT_THRESHOLDS
       : DEFAULT_THRESHOLDS;
+
+    // V4.0: 根据执行率和连续天数动态调整阈值
+    // 执行率低（<50%）→ 适当放宽（降低阈值5分，避免过严导致放弃）
+    // 连续天数高（>7天）→ 可适当收紧（提高阈值3分，用户已建立习惯）
+    let thresholdAdjust = 0;
+    if (goalProgress) {
+      if (goalProgress.executionRate < 0.5) {
+        thresholdAdjust = -5;
+      } else if (
+        goalProgress.executionRate > 0.8 &&
+        goalProgress.streakDays > 7
+      ) {
+        thresholdAdjust = 3;
+      }
+    }
+
+    const thresholds = {
+      excellent: baseThresholds.excellent + thresholdAdjust,
+      good: baseThresholds.good + thresholdAdjust,
+      caution: baseThresholds.caution + thresholdAdjust,
+    };
 
     if (score >= thresholds.excellent) {
       return {
         recommendation: 'recommend',
         shouldEat: true,
-        reason: t('decision.score.excellent', {}, locale),
+        reason: cl('score.excellent', locale),
         riskLevel: 'low',
       };
     }
@@ -275,7 +285,7 @@ export class DecisionEngineService {
       return {
         recommendation: 'recommend',
         shouldEat: true,
-        reason: t('decision.score.good', {}, locale),
+        reason: cl('score.good', locale),
         riskLevel: 'low',
       };
     }
@@ -283,14 +293,14 @@ export class DecisionEngineService {
       return {
         recommendation: 'caution',
         shouldEat: true,
-        reason: t('decision.score.low', {}, locale),
+        reason: cl('score.low', locale),
         riskLevel: 'medium',
       };
     }
     return {
       recommendation: 'avoid',
       shouldEat: false,
-      reason: t('decision.score.veryLow', {}, locale),
+      reason: cl('score.veryLow', locale),
       riskLevel: 'high',
     };
   }
@@ -322,33 +332,27 @@ export class DecisionEngineService {
           dimension: dim,
           score: roundedScore,
           impact: 'critical',
-          message: t(
-            'decision.factor.critical',
-            { dimension: labels[dim] || dim, score: String(roundedScore) },
-            locale,
-          ),
+          message: cl('factor.critical', locale)
+            .replace('{dimension}', labels[dim] || dim)
+            .replace('{score}', String(roundedScore)),
         });
       } else if (roundedScore < 50) {
         factors.push({
           dimension: dim,
           score: roundedScore,
           impact: 'warning',
-          message: t(
-            'decision.factor.warning',
-            { dimension: labels[dim] || dim, score: String(roundedScore) },
-            locale,
-          ),
+          message: cl('factor.warning', locale)
+            .replace('{dimension}', labels[dim] || dim)
+            .replace('{score}', String(roundedScore)),
         });
       } else if (roundedScore >= 85) {
         factors.push({
           dimension: dim,
           score: roundedScore,
           impact: 'positive',
-          message: t(
-            'decision.factor.positive',
-            { dimension: labels[dim] || dim, score: String(roundedScore) },
-            locale,
-          ),
+          message: cl('factor.positive', locale)
+            .replace('{dimension}', labels[dim] || dim)
+            .replace('{score}', String(roundedScore)),
         });
       }
     }
@@ -358,6 +362,55 @@ export class DecisionEngineService {
   }
 
   // ==================== V3.3: 结构化决策 ====================
+
+  /** V4.2: 目标自适应权重 */
+  private static readonly GOAL_FACTOR_WEIGHTS: Record<
+    string,
+    {
+      nutrition: number;
+      macroBalance: number;
+      healthConstraint: number;
+      timeliness: number;
+    }
+  > = {
+    fat_loss: {
+      nutrition: 0.4,
+      macroBalance: 0.25,
+      healthConstraint: 0.2,
+      timeliness: 0.15,
+    },
+    muscle_gain: {
+      nutrition: 0.3,
+      macroBalance: 0.35,
+      healthConstraint: 0.2,
+      timeliness: 0.15,
+    },
+    health: {
+      nutrition: 0.25,
+      macroBalance: 0.2,
+      healthConstraint: 0.4,
+      timeliness: 0.15,
+    },
+    maintain: {
+      nutrition: 0.3,
+      macroBalance: 0.3,
+      healthConstraint: 0.2,
+      timeliness: 0.2,
+    },
+    habit: {
+      nutrition: 0.3,
+      macroBalance: 0.25,
+      healthConstraint: 0.25,
+      timeliness: 0.2,
+    },
+  };
+
+  private static readonly DEFAULT_FACTOR_WEIGHTS = {
+    nutrition: 0.3,
+    macroBalance: 0.25,
+    healthConstraint: 0.25,
+    timeliness: 0.2,
+  };
 
   /**
    * V3.3: 计算结构化决策（含四维因素明细 + 多维原因）
@@ -414,12 +467,15 @@ export class DecisionEngineService {
       locale,
     );
 
-    // 加权综合评分
+    // V4.2: 目标自适应加权综合评分
+    const w =
+      DecisionEngineService.GOAL_FACTOR_WEIGHTS[ctx.goalType] ||
+      DecisionEngineService.DEFAULT_FACTOR_WEIGHTS;
     const finalScore = Math.round(
-      nutritionAlignment.score * 0.35 +
-        macroBalance.score * 0.25 +
-        healthConstraint.score * 0.25 +
-        timeliness.score * 0.15,
+      nutritionAlignment.score * w.nutrition +
+        macroBalance.score * w.macroBalance +
+        healthConstraint.score * w.healthConstraint +
+        timeliness.score * w.timeliness,
     );
 
     // 多维原因
@@ -479,14 +535,8 @@ export class DecisionEngineService {
     score = Math.max(0, Math.min(100, Math.round(score)));
     const rationale =
       remainingAfter >= 0
-        ? t('decision.factor.nutritionOk', {}, locale) ||
-          cl('factor.nutritionOk', locale)
-        : t(
-            'decision.factor.nutritionOver',
-            { amount: String(Math.abs(Math.round(remainingAfter))) },
-            locale,
-          ) ||
-          cl('factor.nutritionOver', locale).replace(
+        ? cl('factor.nutritionOk', locale)
+        : cl('factor.nutritionOver', locale).replace(
             '{amount}',
             String(Math.abs(Math.round(remainingAfter))),
           );
@@ -504,9 +554,7 @@ export class DecisionEngineService {
     if (!breakdown) {
       return {
         score: 60,
-        rationale:
-          t('decision.factor.noBreakdown', {}, locale) ||
-          cl('factor.noBreakdown', locale),
+        rationale: cl('factor.noBreakdown', locale),
       };
     }
 
@@ -516,13 +564,10 @@ export class DecisionEngineService {
     );
     const rationale =
       score >= 70
-        ? t('decision.factor.macroBalanced', {}, locale) ||
-          cl('factor.macroBalanced', locale)
+        ? cl('factor.macroBalanced', locale)
         : score >= 40
-          ? t('decision.factor.macroImbalanced', {}, locale) ||
-            cl('factor.macroImbalanced', locale)
-          : t('decision.factor.macroSeverelyImbalanced', {}, locale) ||
-            cl('factor.macroSeverelyImbalanced', locale);
+          ? cl('factor.macroImbalanced', locale)
+          : cl('factor.macroSeverelyImbalanced', locale);
 
     return { score, rationale };
   }
@@ -538,43 +583,22 @@ export class DecisionEngineService {
     let score = 100;
     const issues: string[] = [];
 
-    // 过敏原检查
-    const allergenCheck = checkAllergenConflict(foods, ctx, locale);
-    if (allergenCheck?.triggered) {
-      score = 0;
-      issues.push(
-        allergenCheck.reason ||
-          t('decision.factor.allergenDetected', {}, locale) ||
-          'Allergen detected',
-      );
-    }
-
-    // 饮食限制检查
-    const restrictionCheck = checkRestrictionConflict(foods, ctx, locale);
-    if (restrictionCheck?.triggered) {
-      score = Math.min(score, 10);
-      issues.push(
-        restrictionCheck.reason ||
-          t('decision.factor.restrictionViolated', {}, locale) ||
-          'Dietary restriction violated',
-      );
-    }
-
-    // 健康状况检查
     const th = this.dynamicThresholds.compute(ctx);
-    const healthChecks = checkHealthConditionRisk(foods, ctx, locale, th);
-    for (const check of healthChecks) {
-      if (check.triggered) {
+    const conflictReport = buildConflictReport(foods, ctx, locale, th);
+
+    for (const item of conflictReport.items) {
+      if (item.severity === 'critical' && item.decisionOverride === 'avoid') {
+        score = 0;
+      } else if (item.decisionOverride === 'avoid') {
+        score = Math.min(score, 10);
+      } else {
         score = Math.min(score, 30);
-        if (check.reason) issues.push(check.reason);
       }
+      if (item.message) issues.push(item.message);
     }
 
     const rationale =
-      issues.length > 0
-        ? issues[0]
-        : t('decision.factor.noHealthIssue', {}, locale) ||
-          cl('factor.noHealthIssue', locale);
+      issues.length > 0 ? issues[0] : cl('factor.noHealthIssue', locale);
 
     return { score, rationale };
   }
@@ -591,31 +615,23 @@ export class DecisionEngineService {
     locale?: Locale,
   ): DecisionFactorDetail {
     let score = 90;
-    let rationale =
-      t('decision.factor.goodTiming', {}, locale) ||
-      cl('factor.goodTiming', locale);
+    let rationale = cl('factor.goodTiming', locale);
 
     // 深夜
     if (hour >= th.lateNightStart || hour < th.lateNightEnd) {
       if (totalCalories > th.significantMealCal) {
         score = 30;
-        rationale =
-          t('decision.factor.lateNight', {}, locale) ||
-          cl('factor.lateNight', locale);
+        rationale = cl('factor.lateNight', locale);
       } else {
         score = 60;
-        rationale =
-          t('decision.factor.lateNightLight', {}, locale) ||
-          cl('factor.lateNightLight', locale);
+        rationale = cl('factor.lateNightLight', locale);
       }
     }
     // 晚间高碳水
     else if (hour >= th.eveningStart && hour < th.lateNightStart) {
       if (totalCarbs > th.highCarbMeal && ctx.goalType === 'fat_loss') {
         score = 50;
-        rationale =
-          t('decision.factor.eveningHighCarb', {}, locale) ||
-          cl('factor.eveningHighCarb', locale);
+        rationale = cl('factor.eveningHighCarb', locale);
       }
     }
 

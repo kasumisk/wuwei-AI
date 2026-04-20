@@ -8,9 +8,13 @@
  * - 纯函数，无 IO，可独立测试
  * - 不修改 coach-tone.config.ts 的人格 prompt（正交关系）
  * - 输出 toneModifier 字符串，直接嵌入 coach prompt
+ *
+ * V4.4: 内联多语言 maps 已迁移为 cl() 调用（decision-labels.ts tone.* keys）
  */
 
 import { Injectable } from '@nestjs/common';
+import { cl } from '../i18n/decision-labels';
+import type { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 
 // ==================== 语气修饰矩阵 ====================
 
@@ -61,52 +65,17 @@ const FOCUS_TONE_OVERRIDE: Record<string, ToneKey> = {
   protein_gap: 'encourage',
 };
 
-/** toneKey → 多语言修饰字符串 */
-const TONE_MODIFIER_TEXT: Record<ToneKey, Record<string, string>> = {
-  urgent: {
-    'zh-CN': '请以紧迫且关切的语气，优先强调风险，建议立刻行动。',
-    'en-US':
-      'Use an urgent and concerned tone. Emphasize risks first and suggest immediate action.',
-    'ja-JP':
-      '緊迫感を持って関心を示し、リスクを優先して即座な行動を促してください。',
-  },
-  control: {
-    'zh-CN': '请以控制型语气，帮助用户克制冲动，聚焦于目标管理。',
-    'en-US':
-      'Use a firm, controlling tone to help the user resist impulses and focus on goal management.',
-    'ja-JP':
-      'コントロール型の語調で、ユーザーの衝動を抑え、目標管理に集中させてください。',
-  },
-  encourage: {
-    'zh-CN': '请以鼓励型语气，肯定用户的努力，给出正向激励和可执行建议。',
-    'en-US':
-      "Use an encouraging tone. Acknowledge the user's efforts and provide positive motivation with actionable advice.",
-    'ja-JP':
-      '励ます語調で、ユーザーの努力を認め、ポジティブな動機付けと実行可能なアドバイスを提供してください。',
-  },
-  affirm: {
-    'zh-CN': '请以肯定语气，让用户感到选择正确并强化好习惯。',
-    'en-US':
-      'Use an affirming tone. Make the user feel their choice is correct and reinforce good habits.',
-    'ja-JP':
-      '肯定的な語調で、ユーザーの選択が正しいと感じさせ、良い習慣を強化してください。',
-  },
-  neutral: {
-    'zh-CN': '请保持中立客观语气，提供数据支撑的分析和具体建议。',
-    'en-US':
-      'Use a neutral and objective tone. Provide data-supported analysis and specific recommendations.',
-    'ja-JP':
-      '中立的かつ客観的な語調で、データに基づく分析と具体的なアドバイスを提供してください。',
-  },
-};
-
 // ==================== 服务 ====================
 
 export interface ToneResolveInput {
   goalType?: string;
   verdict?: 'recommend' | 'caution' | 'avoid';
   coachFocus?: string;
-  locale?: string;
+  locale?: Locale;
+  /** V4.0: 用户执行率 (0-1)，影响语气强度 */
+  executionRate?: number;
+  /** V4.0: 连续天数 */
+  streakDays?: number;
 }
 
 @Injectable()
@@ -119,7 +88,9 @@ export class DecisionToneResolverService {
       goalType = 'health',
       verdict = 'caution',
       coachFocus,
-      locale = 'zh-CN',
+      locale = 'zh-CN' as Locale,
+      executionRate,
+      streakDays,
     } = input;
 
     // 1. 先检查 coachFocus 是否有覆盖语气
@@ -128,21 +99,53 @@ export class DecisionToneResolverService {
     if (signalOverride) {
       return {
         toneKey: signalOverride,
-        toneModifier:
-          TONE_MODIFIER_TEXT[signalOverride][locale] ??
-          TONE_MODIFIER_TEXT[signalOverride]['zh-CN'],
+        toneModifier: cl(`tone.${signalOverride}`, locale),
       };
     }
 
     // 2. goalType × verdict 矩阵
     const goalMatrix = GOAL_VERDICT_TONE[goalType] ?? GOAL_VERDICT_TONE.health;
-    const toneKey: ToneKey = goalMatrix[verdict] ?? 'neutral';
+    let toneKey: ToneKey = goalMatrix[verdict] ?? 'neutral';
+
+    // V4.0 P3.2: 根据 executionRate 调整语气
+    // 高执行率(>80%) → 偏鼓励；低执行率(<50%) → 偏温和引导
+    if (executionRate != null) {
+      if (
+        executionRate > 0.8 &&
+        (toneKey === 'control' || toneKey === 'urgent')
+      ) {
+        toneKey = 'encourage';
+      } else if (executionRate < 0.5 && toneKey === 'urgent') {
+        toneKey = 'neutral'; // 低执行率时避免打击
+      }
+    }
+
+    const baseTone = cl(`tone.${toneKey}`, locale);
+
+    // V3.9 P3.1: 追加 goalType 专属语气补充
+    const supplement = cl(`tone.supplement.${goalType}`, locale);
+    // 若 key 不存在，cl() 会返回 key 本身；此时跳过追加
+    const hasSupplementKey = [
+      'fat_loss',
+      'muscle_gain',
+      'health',
+      'habit',
+    ].includes(goalType);
+    let toneModifier =
+      hasSupplementKey && supplement ? `${baseTone}\n${supplement}` : baseTone;
+
+    // V4.0 P3.2: 连续天数 > 7 天时追加激励
+    if (streakDays != null && streakDays > 7) {
+      const streakBoostText = cl('tone.streakBoost', locale).replace(
+        '{days}',
+        String(streakDays),
+      );
+      toneModifier += '\n' + streakBoostText;
+    }
 
     return {
       toneKey,
-      toneModifier:
-        TONE_MODIFIER_TEXT[toneKey][locale] ??
-        TONE_MODIFIER_TEXT[toneKey]['zh-CN'],
+      toneModifier,
     };
   }
 

@@ -50,6 +50,8 @@ export interface AssembleInput {
   foodAnalysisPackage?: FoodAnalysisPackage;
   /** V3.3: 结构化决策 */
   structuredDecision?: StructuredDecision;
+  /** V3.9 P1.4: 决策模式，用于裁剪返回字段 */
+  decisionMode?: 'pre_eat' | 'post_eat' | 'default';
 }
 
 @Injectable()
@@ -58,7 +60,7 @@ export class ResultAssemblerService {
    * 组装 V61 统一结果
    */
   assemble(input: AssembleInput): FoodAnalysisResultV61 {
-    return {
+    const result: FoodAnalysisResultV61 = {
       analysisId: input.analysisId,
       inputType: input.inputType,
       inputSnapshot: input.inputSnapshot,
@@ -83,6 +85,37 @@ export class ResultAssemblerService {
       foodAnalysisPackage: input.foodAnalysisPackage,
       structuredDecision: input.structuredDecision,
     };
+
+    // V3.9 P1.4: 按 decisionMode 裁剪返回字段
+    this.trimByMode(result, input.decisionMode);
+
+    return result;
+  }
+
+  /**
+   * V3.9 P1.4: 按决策模式裁剪结果字段
+   *
+   * - pre_eat: 突出 shouldEatAction / alternatives / structuredDecision，
+   *            隐藏 post_eat 专属的 recoveryAction
+   * - post_eat: 突出 macroProgress / nextMealAdvice / analysisState，
+   *             隐藏 pre_eat 专属的 shouldEatAction / alternatives / structuredDecision
+   * - default/undefined: 完整返回
+   */
+  private trimByMode(
+    result: FoodAnalysisResultV61,
+    mode?: 'pre_eat' | 'post_eat' | 'default',
+  ): void {
+    if (!mode || mode === 'default') return;
+
+    if (mode === 'post_eat') {
+      // post_eat 模式：清除 pre_eat 专属字段
+      result.shouldEatAction = undefined;
+      result.alternatives = [];
+      result.structuredDecision = undefined;
+    } else if (mode === 'pre_eat') {
+      // pre_eat 模式：保留 shouldEatAction / alternatives / structuredDecision
+      // 无需额外裁剪
+    }
   }
 
   /**

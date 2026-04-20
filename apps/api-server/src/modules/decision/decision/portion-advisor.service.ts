@@ -12,7 +12,8 @@ import {
   NutritionTotals,
   UnifiedUserContext,
 } from '../types/analysis-result.types';
-import { t, Locale } from '../../diet/app/recommendation/utils/i18n-messages';
+import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
+import { cl } from '../i18n/decision-labels';
 import { OptimalPortion, NextMealAdvice } from './food-decision.service';
 import { UserThresholds } from '../config/dynamic-thresholds.service';
 import {
@@ -139,16 +140,14 @@ export class PortionAdvisorService {
 
     if (goalType === 'fat_loss' || goalType === 'muscle_gain') {
       const proteinEntry = priorities.find((p) => p.macro === 'protein');
-      if (proteinEntry)
-        return t('decision.nextMeal.emphasisProtein', {}, locale);
+      if (proteinEntry) return cl('nextMeal.emphasisProtein', locale);
     }
 
-    if (priorities.length === 0)
-      return t('decision.nextMeal.emphasisBalanced', {}, locale);
+    if (priorities.length === 0) return cl('nextMeal.emphasisBalanced', locale);
 
     priorities.sort((a, b) => b.gap - a.gap);
     const top = priorities[0].macro;
-    return t(`decision.nextMeal.emphasis.${top}`, {}, locale);
+    return cl(`nextMeal.emphasis.${top}`, locale);
   }
 
   private buildNextMealSuggestion(
@@ -167,22 +166,16 @@ export class PortionAdvisorService {
   ): string {
     const lowBudget = thresholds?.nextMealLowBudget ?? 100;
     if (remainingCalories <= lowBudget) {
-      return t(
-        'decision.nextMeal.budgetLow',
-        { calories: String(remainingCalories) },
-        locale,
+      return cl('nextMeal.budgetLow', locale).replace(
+        '{calories}',
+        String(remainingCalories),
       );
     }
 
-    let suggestion = t(
-      'decision.nextMeal.suggestion',
-      {
-        calories: String(remainingCalories),
-        protein: String(Math.round(remainingProtein)),
-        emphasis,
-      },
-      locale,
-    );
+    let suggestion = cl('nextMeal.suggestion', locale)
+      .replace('{calories}', String(remainingCalories))
+      .replace('{protein}', String(Math.round(remainingProtein)))
+      .replace('{emphasis}', emphasis);
 
     if (foodPreferences) {
       const candidates = [
@@ -197,10 +190,9 @@ export class PortionAdvisorService {
       );
       const unique = [...new Set(filtered)].slice(0, 3);
       if (unique.length > 0) {
-        suggestion += t(
-          'decision.nextMeal.foodRecommendation',
-          { foods: unique.join('、') },
-          locale,
+        suggestion += cl('nextMeal.foodRecommendation', locale).replace(
+          '{foods}',
+          unique.join('、'),
         );
       }
     }

@@ -23,8 +23,8 @@ import { ApiResponse } from '../../../common/types/response.type';
 import { CoachService } from './coach.service';
 import { BehaviorService } from '../../diet/app/services/behavior.service';
 import { CoachChatDto, CoachMessagesQueryDto } from './dto/coach.dto';
-import { RequireSubscription } from '../../subscription/app/decorators/require-subscription.decorator';
-import { SubscriptionTier } from '../../subscription/subscription.types';
+import { RequireFeature } from '../../subscription/app/decorators/require-feature.decorator';
+import { GatedFeature } from '../../subscription/subscription.types';
 
 @ApiTags('App AI 教练')
 @Controller('app/coach')
@@ -245,7 +245,7 @@ export class CoachController {
    * PUT /api/app/coach/style
    */
   @Put('style')
-  @RequireSubscription(SubscriptionTier.PRO)
+  @RequireFeature(GatedFeature.COACH_STYLE)
   @ApiOperation({ summary: '切换教练风格' })
   async updateCoachStyle(
     @CurrentAppUser() user: AppUserPayload,

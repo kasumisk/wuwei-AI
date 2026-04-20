@@ -9,6 +9,8 @@ import {
   UnifiedUserContext,
 } from '../types/analysis-result.types';
 import { DecisionOutput } from './food-decision.service';
+import { cl } from '../i18n/decision-labels';
+import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 
 @Injectable()
 export class ShouldEatActionService {
@@ -20,6 +22,7 @@ export class ShouldEatActionService {
     userContext?: UnifiedUserContext;
     confidenceDiagnostics: ConfidenceDiagnostics;
     recoveryAction?: RecoveryAction;
+    locale?: Locale;
   }): ShouldEatAction {
     const {
       mode,
@@ -29,6 +32,7 @@ export class ShouldEatActionService {
       userContext,
       confidenceDiagnostics,
       recoveryAction,
+      locale,
     } = input;
     const { decision, alternatives } = decisionOutput;
 
@@ -39,6 +43,7 @@ export class ShouldEatActionService {
       userContext,
       confidenceDiagnostics,
       recoveryAction,
+      locale,
     );
 
     const replacementAction =
@@ -71,6 +76,7 @@ export class ShouldEatActionService {
         portionAction,
         replacementAction,
         recoveryAction,
+        locale,
       }),
       portionAction,
       replacementAction,
@@ -85,6 +91,7 @@ export class ShouldEatActionService {
     userContext: UnifiedUserContext | undefined,
     confidenceDiagnostics: ConfidenceDiagnostics,
     recoveryAction?: RecoveryAction,
+    locale?: Locale,
   ): string {
     if (mode === 'post_eat' && recoveryAction) {
       return recoveryAction.todayAdjustment;
@@ -95,11 +102,11 @@ export class ShouldEatActionService {
       (userContext?.dietaryRestrictions?.length || 0) > 0 ||
       (userContext?.healthConditions?.length || 0) > 0;
     if (hasHealthConstraint) {
-      return '先满足过敏/忌口/健康约束，再决定是否食用与食用份量';
+      return cl('action.healthConstraintFirst', locale);
     }
 
     if (confidenceDiagnostics.decisionConfidence < 0.6) {
-      return '先按保守策略处理，必要时补充更清晰输入后再判断';
+      return cl('action.conservativeFirst', locale);
     }
 
     if (summary?.actionItems?.[0]) {
@@ -111,20 +118,31 @@ export class ShouldEatActionService {
     }
 
     return decisionOutput.decision.recommendation === 'recommend'
-      ? '按当前搭配食用即可'
-      : '优先调整份量或更换搭配后再食用';
+      ? cl('action.eatAsIs', locale)
+      : cl('action.adjustFirst', locale);
   }
 
+  /**
+   * V4.2: 基于结构化数据的替换策略解析（取代关键词匹配）
+   */
   private resolveReplacementStrategy(
     alternatives: FoodAlternative[],
   ): 'replace_food' | 'reduce_portion' | 'change_pairing' {
-    const reasons = alternatives.map((item) => item.reason).join(' ');
-    if (reasons.includes('减') || reasons.includes('portion')) {
+    // 策略1: 如果替代方案有 comparison 且热量差异大 → reduce_portion
+    const hasSignificantCalDiff = alternatives.some((alt) => {
+      if (!alt.comparison?.caloriesDiff) return false;
+      return Math.abs(alt.comparison.caloriesDiff) > 100;
+    });
+    if (hasSignificantCalDiff && alternatives.length <= 1) {
       return 'reduce_portion';
     }
-    if (reasons.includes('搭配') || reasons.includes('pair')) {
-      return 'change_pairing';
+
+    // 策略2: 如果有多个不同的替代食物 → replace_food
+    if (alternatives.length >= 2) {
+      return 'replace_food';
     }
+
+    // 默认
     return 'replace_food';
   }
 
@@ -139,6 +157,7 @@ export class ShouldEatActionService {
       candidates: FoodAlternative[];
     };
     recoveryAction?: RecoveryAction;
+    locale?: Locale;
   }): string[] {
     const actions = [...(input.summary?.actionItems || [])];
     if (input.summary?.decisionGuardrails?.length) {
@@ -147,12 +166,19 @@ export class ShouldEatActionService {
 
     if (input.portionAction) {
       actions.push(
-        `优先按 ${input.portionAction.suggestedPercent}% 份量控制，本次约 ${input.portionAction.suggestedCalories} kcal`,
+        cl('action.portionControl', input.locale)
+          .replace('{percent}', String(input.portionAction.suggestedPercent))
+          .replace('{cal}', String(input.portionAction.suggestedCalories)),
       );
     }
 
     if (input.replacementAction?.candidates?.[0]) {
-      actions.push(`优先改成 ${input.replacementAction.candidates[0].name}`);
+      actions.push(
+        cl('action.switchTo', input.locale).replace(
+          '{name}',
+          input.replacementAction.candidates[0].name,
+        ),
+      );
     }
 
     if (input.recoveryAction) {

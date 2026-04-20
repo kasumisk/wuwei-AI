@@ -10,6 +10,7 @@ import {
   AnalysisQualityMetrics,
   PolicySuggestion,
 } from './feedback.types';
+import { cl } from '../i18n/decision-labels';
 
 @Injectable()
 export class AnalysisQualityFeedbackService {
@@ -115,8 +116,11 @@ export class AnalysisQualityFeedbackService {
       suggestions.push({
         suggestionId: 'pol_001',
         type: 'decision_rule',
-        description: '降低决策严格性',
-        rationale: `当前接受率仅 ${metrics.acceptanceRate.toFixed(1)}%，低于目标70%`,
+        description: cl('feedback.reduceStrictness'),
+        rationale: cl('feedback.reduceStrictnessRationale').replace(
+          '{rate}',
+          metrics.acceptanceRate.toFixed(1),
+        ),
         impact: 'high',
       });
     }
@@ -126,8 +130,8 @@ export class AnalysisQualityFeedbackService {
       suggestions.push({
         suggestionId: 'pol_002',
         type: 'scoring_weight',
-        description: '提升蛋白质评分权重',
-        rationale: '用户反馈表明蛋白质评分问题频繁',
+        description: cl('feedback.boostProteinWeight'),
+        rationale: cl('feedback.boostProteinRationale'),
         impact: 'medium',
       });
     }

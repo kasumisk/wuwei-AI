@@ -25,7 +25,11 @@ import {
 } from '../types/analysis-result.types';
 import { DecisionOutput } from './food-decision.service';
 import { UnifiedUserContext } from '../types/analysis-result.types';
-import { getSignalPriority } from '../config/signal-priority.config';
+import {
+  getSignalPriority,
+  SIGNAL_PRIORITY_MATRIX,
+} from '../config/signal-priority.config';
+import { DynamicSignalWeightService } from '../config/dynamic-signal-weight.service';
 import { cl } from '../i18n/decision-labels';
 import type { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 
@@ -56,6 +60,10 @@ const SEVERITY_ORDER: Record<string, number> = {
 
 @Injectable()
 export class DecisionSummaryService {
+  constructor(
+    private readonly dynamicSignalWeightService: DynamicSignalWeightService,
+  ) {}
+
   /**
    * 从决策输出中生成结构化摘要
    */
@@ -160,6 +168,9 @@ export class DecisionSummaryService {
       locale,
     );
 
+    // V4.0: 生成行为上下文说明
+    const behaviorNote = this.buildBehaviorNote(userContext, locale);
+
     return {
       headline,
       verdict: decision.recommendation,
@@ -173,6 +184,7 @@ export class DecisionSummaryService {
       dynamicDecisionHint,
       healthConstraintNote,
       signalTrace,
+      behaviorNote,
     };
   }
 
@@ -756,16 +768,8 @@ export class DecisionSummaryService {
     };
 
     const goalType = ctx.goalType || 'health';
-    const {
-      getSignalPriority,
-      SIGNAL_PRIORITY_MATRIX,
-    } = require('../config/signal-priority.config');
-    const {
-      DynamicSignalWeightService,
-    } = require('../config/dynamic-signal-weight.service');
-    const dynamicWeightSvc = new DynamicSignalWeightService();
     const baseWeights = SIGNAL_PRIORITY_MATRIX[goalType] ?? {};
-    const adjustedWeights = dynamicWeightSvc.adjustWeights(
+    const adjustedWeights = this.dynamicSignalWeightService.adjustWeights(
       baseWeights,
       ctx.macroSlotStatus,
       goalType,
@@ -786,5 +790,45 @@ export class DecisionSummaryService {
     trace.sort((a, b) => b.priority - a.priority);
 
     return trace;
+  }
+
+  /**
+   * V4.0: 基于用户行为画像生成行为上下文说明
+   */
+  private buildBehaviorNote(
+    ctx: UnifiedUserContext,
+    locale?: Locale,
+  ): string | undefined {
+    const parts: string[] = [];
+
+    if (ctx.goalProgress) {
+      const gp = ctx.goalProgress;
+      if (gp.streakDays > 0) {
+        parts.push(
+          cl('summary.streakNote', locale).replace(
+            '{days}',
+            String(gp.streakDays),
+          ),
+        );
+      }
+      if (gp.executionRate > 0) {
+        parts.push(
+          cl('summary.executionNote', locale).replace(
+            '{rate}',
+            String(Math.round(gp.executionRate * 100)),
+          ),
+        );
+      }
+    }
+
+    if (ctx.shortTermBehavior?.intakeTrends === 'increasing') {
+      parts.push(cl('summary.trendIncreasing', locale));
+    } else if (ctx.shortTermBehavior?.intakeTrends === 'decreasing') {
+      parts.push(cl('summary.trendDecreasing', locale));
+    }
+
+    return parts.length > 0
+      ? parts.join(cl('summary.noteSep', locale))
+      : undefined;
   }
 }

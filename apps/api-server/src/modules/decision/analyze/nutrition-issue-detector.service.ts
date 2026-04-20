@@ -18,6 +18,7 @@ import {
   IssueType,
 } from '../types/analysis-result.types';
 import { cl } from '../i18n/decision-labels';
+import { hasCondition } from '../config/condition-aliases';
 import type { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 
 interface MacroProgress {
@@ -201,6 +202,14 @@ export class NutritionIssueDetector {
     progress: MacroProgress,
     healthConditions?: string[],
     locale?: Locale,
+    /** V4.0: 短期行为画像 + 当前小时 */
+    behaviorContext?: {
+      shortTermBehavior?: {
+        bingeRiskHours: number[];
+        intakeTrends: 'increasing' | 'stable' | 'decreasing';
+      };
+      localHour?: number;
+    },
   ): NutritionIssue[] {
     const issues: NutritionIssue[] = [];
 
@@ -224,11 +233,10 @@ export class NutritionIssueDetector {
     if (healthConditions && healthConditions.length > 0) {
       const condSet = new Set(healthConditions.map((c) => c.toLowerCase()));
 
+      const condArr = [...condSet];
+
       // 糖尿病：碳水超标 → 血糖风险
-      if (
-        (condSet.has('diabetes') || condSet.has('糖尿病')) &&
-        slot.carbs === 'excess'
-      ) {
+      if (hasCondition(condArr, 'diabetes') && slot.carbs === 'excess') {
         const carbsExcess = progress.consumed.carbs - progress.goals.carbs;
         issues.push({
           type: 'glycemic_risk',
@@ -244,11 +252,7 @@ export class NutritionIssueDetector {
       }
 
       // 高血压：钠摄入风险（当 fat_excess 或 calorie_excess 时附加提醒）
-      if (
-        condSet.has('hypertension') ||
-        condSet.has('高血压') ||
-        condSet.has('高血圧')
-      ) {
+      if (hasCondition(condArr, 'hypertension')) {
         if (slot.fat === 'excess' || slot.calories === 'excess') {
           issues.push({
             type: 'sodium_risk',
@@ -261,12 +265,7 @@ export class NutritionIssueDetector {
       }
 
       // 心脏病/心血管：脂肪超标 → 心血管风险
-      if (
-        (condSet.has('heart_disease') ||
-          condSet.has('cardiovascular') ||
-          condSet.has('心脏病')) &&
-        slot.fat === 'excess'
-      ) {
+      if (hasCondition(condArr, 'cardiovascular') && slot.fat === 'excess') {
         const fatExcess = progress.consumed.fat - progress.goals.fat;
         issues.push({
           type: 'cardiovascular_risk',
@@ -281,10 +280,7 @@ export class NutritionIssueDetector {
       }
 
       // 痛风：高嘌呤风险（蛋白质超标时提示）
-      if (
-        (condSet.has('gout') || condSet.has('痛风')) &&
-        slot.protein === 'excess'
-      ) {
+      if (hasCondition(condArr, 'gout') && slot.protein === 'excess') {
         issues.push({
           type: 'purine_risk',
           severity: 'medium',
@@ -296,7 +292,7 @@ export class NutritionIssueDetector {
 
       // 肾病：蛋白质/钾磷风险（蛋白质超标时提示）
       if (
-        (condSet.has('kidney_disease') || condSet.has('肾病')) &&
+        hasCondition(condArr, 'kidney_disease') &&
         slot.protein === 'excess'
       ) {
         const proteinExcess =
@@ -312,6 +308,67 @@ export class NutritionIssueDetector {
             String(Math.round(proteinExcess)),
           ),
         });
+      }
+    }
+
+    // V4.0: 行为感知问题识别
+    if (behaviorContext?.shortTermBehavior) {
+      const stb = behaviorContext.shortTermBehavior;
+      const hour = behaviorContext.localHour ?? new Date().getHours();
+
+      // 暴食风险小时窗口
+      if (stb.bingeRiskHours.length > 0 && stb.bingeRiskHours.includes(hour)) {
+        issues.push({
+          type: 'binge_risk_window',
+          severity: 'medium',
+          metric: hour,
+          threshold: 0,
+          implication: cl('issue.bingeRiskWindow', locale).replace(
+            '{hour}',
+            String(hour),
+          ),
+        });
+      }
+
+      // 连续多日摄入上升趋势 + 当前已超标
+      if (
+        stb.intakeTrends === 'increasing' &&
+        (slot.calories === 'excess' || slot.fat === 'excess')
+      ) {
+        issues.push({
+          type: 'trend_excess',
+          severity: 'medium',
+          metric: 0,
+          threshold: 0,
+          implication: cl('issue.trendExcess', locale),
+        });
+      }
+    }
+
+    // V4.2: 时间归一化 — 早晨deficit类issue降级（早餐前不足是正常的）
+    const hour = behaviorContext?.localHour ?? new Date().getHours();
+    if (hour >= 6 && hour < 12) {
+      const deficitTypes: IssueType[] = [
+        'protein_deficit',
+        'calorie_deficit',
+        'fiber_deficit',
+      ];
+      for (const issue of issues) {
+        if (deficitTypes.includes(issue.type)) {
+          if (hour < 10) {
+            // 早餐时段：降两级 high→low, medium→low
+            issue.severity =
+              issue.severity === 'high'
+                ? 'medium'
+                : issue.severity === 'medium'
+                  ? 'low'
+                  : 'low';
+          } else {
+            // 午餐前(10-12)：降一级
+            issue.severity =
+              issue.severity === 'high' ? 'medium' : issue.severity;
+          }
+        }
       }
     }
 

@@ -1,352 +1,266 @@
 /**
- * P1-2 / V1.9: 替代食物规则配置（i18n 增强）
+ * V4.9: 替代食物规则配置（constraint-based）
  *
- * 按食物品类 + 用户目标提供替代建议，替代3条硬编码规则。
- * 每条规则包含触发条件和多语言替代建议列表。
+ * 按食物品类 + 用户目标提供替代约束，传递给推荐引擎动态匹配。
+ * 不再硬编码具体食物名称，改为 substitutionConstraints 描述替代方向。
+ *
+ * V4.9 变更:
+ * - category 统一为 DB 14 分类（grain/vegetable/fruit/meat/seafood/dairy/egg/legume/nut/fat/beverage/condiment/snack/other）
+ * - 移除旧 protein/veggie/composite 分类引用
+ * - preferCategories 使用 DB 分类
  */
 
-type LocaleKey = 'zh-CN' | 'en-US' | 'ja-JP';
+// V5.2: LocaleKey removed — fallbackHint now uses cl() key string
 
-export interface I18nAlternative {
-  name: Record<LocaleKey, string>;
-  reason: Record<LocaleKey, string>;
-}
-
+/**
+ * 营养约束阈值说明（NutritionConstraints）
+ *
+ * 以下阈值均为每次**餐次分析**的绝对值，基于典型成人 TDEE 2000kcal 场景推导：
+ *
+ * | 字段          | 单位  | 推导依据                                              |
+ * |--------------|-------|------------------------------------------------------|
+ * | minCalories  | kcal  | 餐次热量下限：超过该值认为是"正式餐/高热量点心"           |
+ * | maxProtein   | g     | 蛋白质上限（低于该值视为蛋白质不足，触发补充建议）         |
+ * | minCarbs     | g     | 碳水下限（超过该值视为碳水偏高，触发替换建议）             |
+ * | minFat       | g     | 脂肪下限（超过该值视为脂肪偏高，触发低脂替代）             |
+ *
+ * 注意：这些阈值为**静态配置基准值**，动态用户个性化阈值由
+ * `DynamicThresholdsService.compute()` 产出的 `UserThresholds` 管理。
+ * 如需与用户画像对齐，上游调用方应优先使用动态阈值过滤后再调用此规则集。
+ */
 export interface AlternativeRule {
   /** 规则ID（调试用） */
   id: string;
-  /** 触发条件 */
+  /** 触发条件（见上方 NutritionConstraints 说明） */
   trigger: {
     /** 匹配的食物品类（为空表示不限品类） */
     categories?: string[];
     /** 匹配的目标类型（为空表示所有目标） */
     goals?: string[];
-    /** 热量阈值：食物热量 > 此值时触发 */
+    /** 热量阈值：餐次总热量 > 此值时触发 */
     minCalories?: number;
-    /** 蛋白质阈值：总蛋白质 < 此值时触发 */
+    /** 蛋白质上限：餐次总蛋白质 < 此值时触发（视为蛋白不足） */
     maxProtein?: number;
-    /** 碳水阈值：总碳水 > 此值时触发 */
+    /** 碳水下限：餐次总碳水 > 此值时触发（视为碳水偏高） */
     minCarbs?: number;
-    /** 脂肪阈值：总脂肪 > 此值时触发 */
+    /** 脂肪下限：餐次总脂肪 > 此值时触发（视为脂肪偏高） */
     minFat?: number;
   };
-  /** 替代建议（多语言） */
-  i18nAlternatives: I18nAlternative[];
-  /** 替代建议（运行时解析后的单语言版本，由 resolveAlternatives 填充） */
-  alternatives: Array<{ name: string; reason: string }>;
-}
-
-/**
- * V1.9: 根据 locale 解析 i18n 替代建议为单语言 { name, reason } 数组
- */
-export function resolveAlternatives(
-  rules: AlternativeRule[],
-  locale: string = 'zh-CN',
-): AlternativeRule[] {
-  const loc = (
-    locale === 'en-US' || locale === 'ja-JP' ? locale : 'zh-CN'
-  ) as LocaleKey;
-  return rules.map((rule) => ({
-    ...rule,
-    alternatives: rule.i18nAlternatives.map((alt) => ({
-      name: alt.name[loc] || alt.name['zh-CN'],
-      reason: alt.reason[loc] || alt.reason['zh-CN'],
-    })),
-  }));
-}
-
-// ==================== Helper: 简化 i18n 条目构建 ====================
-function alt(
-  zh: [string, string],
-  en: [string, string],
-  ja: [string, string],
-): I18nAlternative {
-  return {
-    name: { 'zh-CN': zh[0], 'en-US': en[0], 'ja-JP': ja[0] },
-    reason: { 'zh-CN': zh[1], 'en-US': en[1], 'ja-JP': ja[1] },
+  /** V4.6: 替代约束（传递给推荐引擎） */
+  substitutionConstraints: {
+    /** 优先推荐的食物品类 */
+    preferCategories?: string[];
+    /** 替代品热量上限（相对原食物比例，如 0.7 = 原食物的 70%） */
+    maxCaloriesRatio?: number;
+    /** 替代品蛋白质下限（相对原食物比例，如 1.2 = 原食物的 120%） */
+    minProteinRatio?: number;
+    /** 优先匹配的标签 */
+    preferTags?: string[];
+    /** 排除的标签 */
+    avoidTags?: string[];
+    /** NOVA 加工等级上限（1-4） */
+    processingLevelMax?: number;
+    /** 血糖负荷上限 */
+    maxGlycemicLoad?: number;
   };
+  /** V5.2: i18n key for fallback hint (resolved via cl()) */
+  fallbackHint: string;
 }
 
-/**
- * 按品类的替代规则
- */
+// =====================================================================
+//  按品类的替代规则
+// =====================================================================
+
 export const CATEGORY_ALTERNATIVE_RULES: AlternativeRule[] = [
-  // ===== 高热量/快餐/零食 =====
+  // ===== 高热量零食 =====
   {
     id: 'snack-high-cal',
     trigger: { categories: ['snack'], minCalories: 200 },
-    i18nAlternatives: [
-      alt(
-        ['坚果（一小把）', '健康脂肪+蛋白质，饱腹感更强'],
-        ['Nuts (small handful)', 'Healthy fats + protein, more satiating'],
-        ['ナッツ（少量）', '健康的な脂肪+タンパク質、満腹感アップ'],
-      ),
-      alt(
-        ['希腊酸奶', '高蛋白低糖，满足甜食渴望'],
-        ['Greek yogurt', 'High protein, low sugar, satisfies sweet cravings'],
-        ['ギリシャヨーグルト', '高タンパク低糖、甘いもの欲を満たす'],
-      ),
-    ],
-    alternatives: [], // resolved at runtime
+    substitutionConstraints: {
+      preferCategories: ['meat', 'egg', 'dairy'],
+      maxCaloriesRatio: 0.6,
+      preferTags: ['high_protein', 'low_calorie'],
+      processingLevelMax: 2,
+    },
+    fallbackHint: 'alt.hint.snackHighCal',
   },
+
+  // ===== 含糖饮料 =====
   {
     id: 'beverage-sugar',
     trigger: { categories: ['beverage'], minCalories: 100 },
-    i18nAlternatives: [
-      alt(
-        ['无糖绿茶', '零热量，提神解渴'],
-        ['Unsweetened green tea', 'Zero calories, refreshing'],
-        ['無糖緑茶', 'ゼロカロリー、リフレッシュ'],
-      ),
-      alt(
-        ['黑咖啡', '几乎零热量，提升代谢'],
-        ['Black coffee', 'Near-zero calories, boosts metabolism'],
-        ['ブラックコーヒー', 'ほぼゼロカロリー、代謝アップ'],
-      ),
-      alt(
-        ['气泡水+柠檬', '零糖替代甜饮料'],
-        ['Sparkling water + lemon', 'Sugar-free alternative to sweet drinks'],
-        ['炭酸水+レモン', 'ゼロシュガーで甘い飲み物の代替'],
-      ),
-    ],
-    alternatives: [],
+    substitutionConstraints: {
+      preferCategories: ['beverage'],
+      maxCaloriesRatio: 0.1,
+      avoidTags: ['sugar', 'sweetened'],
+      preferTags: ['low_calorie', 'unsweetened'],
+    },
+    fallbackHint: 'alt.hint.beverageSugar',
   },
 
-  // ===== 主食/谷物 =====
+  // ===== 精制谷物 =====
   {
     id: 'grain-refined',
     trigger: { categories: ['grain'], minCarbs: 60 },
-    i18nAlternatives: [
-      alt(
-        ['糙米', '低GI粗粮，升糖更平缓'],
-        ['Brown rice', 'Low GI whole grain, gentler blood sugar rise'],
-        ['玄米', '低GI全粒穀物、血糖の上昇が緩やか'],
-      ),
-      alt(
-        ['燕麦', '高纤维，饱腹感更强'],
-        ['Oats', 'High fiber, more filling'],
-        ['オートミール', '高食物繊維、満腹感アップ'],
-      ),
-      alt(
-        ['荞麦面', '低GI，适合控糖'],
-        ['Buckwheat noodles', 'Low GI, good for blood sugar control'],
-        ['そば', '低GI、血糖コントロールに適する'],
-      ),
-    ],
-    alternatives: [],
+    substitutionConstraints: {
+      preferCategories: ['grain'],
+      preferTags: ['whole_grain', 'high_fiber', 'low_gi'],
+      avoidTags: ['refined'],
+      maxGlycemicLoad: 15,
+      processingLevelMax: 2,
+    },
+    fallbackHint: 'alt.hint.grainRefined',
   },
+
+  // ===== 高热量谷物 =====
   {
     id: 'grain-high-cal',
     trigger: { categories: ['grain'], minCalories: 400 },
-    i18nAlternatives: [
-      alt(
-        ['杂粮饭（半份）', '减少份量+增加纤维'],
-        ['Mixed grain rice (half)', 'Reduce portion + more fiber'],
-        ['雑穀米（半分）', '量を減らし+食物繊維アップ'],
-      ),
-      alt(
-        ['红薯/紫薯', '低热量粗粮替代精制主食'],
-        ['Sweet potato', 'Low-cal whole grain alternative to refined staples'],
-        ['さつまいも', '低カロリーの全粒穀物で精製主食の代替'],
-      ),
-    ],
-    alternatives: [],
+    substitutionConstraints: {
+      preferCategories: ['grain', 'tuber'],
+      maxCaloriesRatio: 0.6,
+      preferTags: ['whole_grain', 'high_fiber'],
+      avoidTags: ['refined'],
+      processingLevelMax: 1,
+    },
+    fallbackHint: 'alt.hint.grainHighCal',
   },
 
-  // ===== 蛋白质 =====
+  // ===== 高脂蛋白质 =====
   {
     id: 'protein-high-fat',
-    trigger: { categories: ['protein'], minFat: 20 },
-    i18nAlternatives: [
-      alt(
-        ['鸡胸肉', '高蛋白低脂，减脂首选'],
-        ['Chicken breast', 'High protein, low fat — top choice for fat loss'],
-        ['鶏むね肉', '高タンパク低脂肪、減量の第一選択'],
-      ),
-      alt(
-        ['虾仁', '极低脂高蛋白'],
-        ['Shrimp', 'Very low fat, high protein'],
-        ['エビ', '超低脂肪・高タンパク'],
-      ),
-      alt(
-        ['豆腐', '植物蛋白，低脂低卡'],
-        ['Tofu', 'Plant protein, low fat & calories'],
-        ['豆腐', '植物性タンパク質、低脂肪低カロリー'],
-      ),
-    ],
-    alternatives: [],
+    trigger: { categories: ['meat', 'seafood', 'egg'], minFat: 20 },
+    substitutionConstraints: {
+      preferCategories: ['meat', 'seafood', 'egg'],
+      preferTags: ['lean', 'low_fat', 'high_protein'],
+      avoidTags: ['high_fat', 'fried'],
+      processingLevelMax: 1,
+    },
+    fallbackHint: 'alt.hint.proteinHighFat',
   },
 
-  // ===== 油脂类 =====
+  // ===== 油脂过多 =====
   {
     id: 'fat-excessive',
     trigger: { categories: ['fat'], minCalories: 200 },
-    i18nAlternatives: [
-      alt(
-        ['牛油果（半个）', '健康不饱和脂肪'],
-        ['Avocado (half)', 'Healthy unsaturated fats'],
-        ['アボカド（半分）', '健康的な不飽和脂肪'],
-      ),
-      alt(
-        ['橄榄油（少量）', '控制用量，优质脂肪'],
-        ['Olive oil (small amount)', 'Portion control, quality fats'],
-        ['オリーブオイル（少量）', '量をコントロール、良質な脂肪'],
-      ),
-    ],
-    alternatives: [],
+    substitutionConstraints: {
+      preferCategories: ['fat'],
+      maxCaloriesRatio: 0.5,
+      preferTags: ['unsaturated', 'portion_control'],
+      avoidTags: ['saturated', 'trans_fat'],
+    },
+    fallbackHint: 'alt.hint.fatExcessive',
   },
 
   // ===== 复合菜/外卖 =====
   {
     id: 'composite-high-cal',
-    trigger: { categories: ['composite'], minCalories: 500 },
-    i18nAlternatives: [
-      alt(
-        ['蒸鱼+蔬菜', '少油烹饪，控制热量'],
-        ['Steamed fish + vegetables', 'Low-oil cooking, fewer calories'],
-        ['蒸し魚+野菜', '少油調理、カロリーコントロール'],
-      ),
-      alt(
-        ['白灼虾+西兰花', '高蛋白低脂搭配'],
-        ['Boiled shrimp + broccoli', 'High protein, low fat combo'],
-        ['茹でエビ+ブロッコリー', '高タンパク低脂肪の組み合わせ'],
-      ),
-    ],
-    alternatives: [],
+    trigger: { categories: ['other'], minCalories: 500 },
+    substitutionConstraints: {
+      preferCategories: ['meat', 'seafood', 'egg', 'vegetable'],
+      maxCaloriesRatio: 0.6,
+      preferTags: ['steamed', 'boiled', 'low_oil', 'high_protein'],
+      avoidTags: ['fried', 'heavy_oil'],
+      processingLevelMax: 2,
+    },
+    fallbackHint: 'alt.hint.compositeHighCal',
   },
 ];
 
-/**
- * 按目标 + 营养缺口的通用规则
- */
+// =====================================================================
+//  按目标 + 营养缺口的通用规则
+// =====================================================================
+
 export const GOAL_ALTERNATIVE_RULES: AlternativeRule[] = [
   // 减脂: 蛋白质不足
   {
     id: 'fat-loss-low-protein',
     trigger: { goals: ['fat_loss'], maxProtein: 15, minCalories: 200 },
-    i18nAlternatives: [
-      alt(
-        ['鸡胸肉沙拉', '低卡高蛋白，替代高热量食物'],
-        [
-          'Chicken breast salad',
-          'Low-cal high-protein, replaces high-cal foods',
-        ],
-        ['鶏むね肉サラダ', '低カロリー高タンパク、高カロリー食品の代替'],
-      ),
-      alt(
-        ['水煮蛋（2个）', '低成本补充优质蛋白质'],
-        ['Boiled eggs (2)', 'Affordable quality protein'],
-        ['ゆで卵（2個）', '手軽に良質なタンパク質を補給'],
-      ),
-      alt(
-        ['无糖豆浆', '植物蛋白+低卡'],
-        ['Unsweetened soy milk', 'Plant protein + low cal'],
-        ['無糖豆乳', '植物性タンパク質+低カロリー'],
-      ),
-    ],
-    alternatives: [],
+    substitutionConstraints: {
+      preferCategories: ['meat', 'seafood', 'egg', 'legume'],
+      minProteinRatio: 1.5,
+      maxCaloriesRatio: 0.7,
+      preferTags: ['high_protein', 'low_fat', 'low_calorie'],
+      processingLevelMax: 1,
+    },
+    fallbackHint: 'alt.hint.fatLossLowProtein',
   },
+
   // 减脂: 高热量
   {
     id: 'fat-loss-high-cal',
     trigger: { goals: ['fat_loss'], minCalories: 500 },
-    i18nAlternatives: [
-      alt(
-        ['同类食物减半份量', '保持食物种类，减少总热量'],
-        ['Same food, half portion', 'Keep variety, reduce total calories'],
-        ['同じ食品の半分量', '種類を維持しつつ総カロリー削減'],
-      ),
-      alt(
-        ['蔬菜汤+主食', '先喝汤增加饱腹感'],
-        ['Veggie soup + staple', 'Soup first for satiety'],
-        ['野菜スープ+主食', 'スープを先に飲んで満腹感アップ'],
-      ),
-    ],
-    alternatives: [],
+    substitutionConstraints: {
+      maxCaloriesRatio: 0.5,
+      preferTags: ['high_fiber', 'high_satiety', 'low_calorie'],
+      avoidTags: ['fried', 'heavy_oil', 'sugar'],
+      processingLevelMax: 2,
+    },
+    fallbackHint: 'alt.hint.fatLossHighCal',
   },
+
   // 增肌: 蛋白质不足
   {
     id: 'muscle-gain-low-protein',
     trigger: { goals: ['muscle_gain'], maxProtein: 20, minCalories: 200 },
-    i18nAlternatives: [
-      alt(
-        ['牛肉', '高蛋白+肌酸，增肌利器'],
-        ['Beef', 'High protein + creatine, great for muscle gain'],
-        ['牛肉', '高タンパク+クレアチン、筋肉増量に最適'],
-      ),
-      alt(
-        ['鸡蛋（3个全蛋）', '完全蛋白+健康脂肪'],
-        ['Eggs (3 whole)', 'Complete protein + healthy fats'],
-        ['卵（全卵3個）', '完全タンパク+健康的な脂肪'],
-      ),
-      alt(
-        ['金枪鱼', '极高蛋白，增肌首选'],
-        ['Tuna', 'Very high protein, top pick for muscle gain'],
-        ['マグロ', '超高タンパク、筋肉増量の第一選択'],
-      ),
-    ],
-    alternatives: [],
+    substitutionConstraints: {
+      preferCategories: ['meat', 'egg', 'dairy'],
+      minProteinRatio: 2.0,
+      preferTags: ['high_protein', 'complete_protein', 'creatine'],
+      processingLevelMax: 2,
+    },
+    fallbackHint: 'alt.hint.muscleGainLowProtein',
   },
+
   // 增肌: 热量不足
   {
     id: 'muscle-gain-low-cal',
     trigger: { goals: ['muscle_gain'] },
-    i18nAlternatives: [
-      alt(
-        ['全脂牛奶+香蕉', '快速补充热量和碳水'],
-        ['Whole milk + banana', 'Quick calorie and carb boost'],
-        ['全脂牛乳+バナナ', '素早くカロリーと炭水化物を補給'],
-      ),
-    ],
-    alternatives: [],
+    substitutionConstraints: {
+      preferCategories: ['dairy', 'grain', 'fruit'],
+      preferTags: ['calorie_dense', 'high_protein', 'high_carb'],
+    },
+    fallbackHint: 'alt.hint.muscleGainLowCal',
   },
+
   // 健康: 碳水过高
   {
     id: 'health-high-carbs',
     trigger: { goals: ['health'], minCarbs: 80 },
-    i18nAlternatives: [
-      alt(
-        ['混合蔬菜沙拉', '增加膳食纤维和微量元素'],
-        ['Mixed veggie salad', 'More dietary fiber and micronutrients'],
-        ['ミックスサラダ', '食物繊維と微量栄養素をプラス'],
-      ),
-      alt(
-        ['全麦面包', '低GI替代精制碳水'],
-        ['Whole wheat bread', 'Low GI alternative to refined carbs'],
-        ['全粒粉パン', '低GIで精製炭水化物の代替'],
-      ),
-    ],
-    alternatives: [],
+    substitutionConstraints: {
+      preferCategories: ['vegetable', 'grain'],
+      preferTags: ['high_fiber', 'low_gi', 'micronutrient_rich'],
+      avoidTags: ['refined', 'sugar'],
+      maxGlycemicLoad: 12,
+      processingLevelMax: 2,
+    },
+    fallbackHint: 'alt.hint.healthHighCarbs',
   },
+
   // 通用: 蛋白质不足
   {
     id: 'general-low-protein',
     trigger: { maxProtein: 10, minCalories: 300 },
-    i18nAlternatives: [
-      alt(
-        ['水煮蛋', '低成本补充优质蛋白质'],
-        ['Boiled egg', 'Affordable quality protein'],
-        ['ゆで卵', '手軽に良質なタンパク質を補給'],
-      ),
-      alt(
-        ['鸡胸肉', '高蛋白低脂'],
-        ['Chicken breast', 'High protein, low fat'],
-        ['鶏むね肉', '高タンパク低脂肪'],
-      ),
-    ],
-    alternatives: [],
+    substitutionConstraints: {
+      preferCategories: ['meat', 'seafood', 'egg', 'legume', 'dairy'],
+      minProteinRatio: 1.5,
+      preferTags: ['high_protein', 'low_fat'],
+      processingLevelMax: 1,
+    },
+    fallbackHint: 'alt.hint.generalLowProtein',
   },
+
   // 通用: 碳水过高
   {
     id: 'general-high-carbs',
     trigger: { minCarbs: 100 },
-    i18nAlternatives: [
-      alt(
-        ['糙米/燕麦', '用粗粮替代精制碳水'],
-        ['Brown rice / oats', 'Replace refined carbs with whole grains'],
-        ['玄米/オートミール', '精製炭水化物を全粒穀物に置換'],
-      ),
-    ],
-    alternatives: [],
+    substitutionConstraints: {
+      preferCategories: ['grain'],
+      preferTags: ['whole_grain', 'high_fiber', 'low_gi'],
+      avoidTags: ['refined', 'sugar'],
+      maxGlycemicLoad: 15,
+      processingLevelMax: 2,
+    },
+    fallbackHint: 'alt.hint.generalHighCarbs',
   },
 ];

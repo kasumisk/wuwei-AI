@@ -285,6 +285,15 @@ export class AnalysisAccuracyService {
       reviewLevel,
     );
 
+    // V4.1: 计算决策影响
+    const shouldDowngrade = level === 'low' && avgConfidence < 0.5;
+    const decisionImpact = {
+      shouldDowngrade,
+      reason: shouldDowngrade
+        ? `Low accuracy (score=${score}, confidence=${avgConfidence.toFixed(2)})`
+        : undefined,
+    };
+
     return {
       level,
       score,
@@ -293,6 +302,7 @@ export class AnalysisAccuracyService {
         reviewLevel,
         completenessScore: nutrientCompletenessRate,
       },
+      decisionImpact,
     };
   }
 }

@@ -203,6 +203,8 @@ export class FoodLibraryService {
           protein,
           fat,
           carbs,
+          glycemicIndex:
+            food.glycemicIndex != null ? Number(food.glycemicIndex) : undefined,
         },
       ],
       totalCalories: calories,

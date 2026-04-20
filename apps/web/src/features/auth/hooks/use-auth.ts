@@ -2,6 +2,9 @@
 
 import { useCallback } from 'react';
 import { useAuthStore } from '../store/auth-store';
+import { useSubscriptionStore } from '@/features/subscription/store/subscription-store';
+import { useDismissStore } from '@/store';
+import { queryClient } from '@/lib/react-query/client';
 import appAuthService, { type AppLoginResponse } from '@/lib/api/user/auth';
 
 function getDeviceId(): string {
@@ -107,6 +110,11 @@ export function useAuth() {
       // 即使 API 调用失败也清除本地状态
     }
     clearAuth();
+    // 清除 React Query 缓存，防止账号切换后数据污染
+    queryClient.clear();
+    // 重置其他用户相关的 zustand store
+    useSubscriptionStore.getState().reset();
+    useDismissStore.getState().resetAllDismissed();
   }, [clearAuth]);
 
   const sendPhoneCode = useCallback(

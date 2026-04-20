@@ -13,8 +13,8 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AppJwtAuthGuard } from '../../../auth/app/app-jwt-auth.guard';
 import { CurrentAppUser } from '../../../auth/app/current-app-user.decorator';
 import { AppUserPayload } from '../../../auth/app/app-user-payload.type';
-import { RequireSubscription } from '../../../subscription/app/decorators/require-subscription.decorator';
-import { SubscriptionTier } from '../../../subscription/subscription.types';
+import { RequireFeature } from '../../../subscription/app/decorators/require-feature.decorator';
+import { GatedFeature } from '../../../subscription/subscription.types';
 import { ApiResponse } from '../../../../common/types/response.type';
 import { FoodService } from '../services/food.service';
 import { DailyPlanService } from '../services/daily-plan.service';
@@ -101,7 +101,7 @@ export class FoodPlanController {
    * GET /api/app/food/daily-plan
    */
   @Get('daily-plan')
-  @RequireSubscription(SubscriptionTier.PRO)
+  @RequireFeature(GatedFeature.FULL_DAY_PLAN)
   @ApiOperation({ summary: '获取今日饮食计划' })
   async getDailyPlan(
     @CurrentAppUser() user: AppUserPayload,
@@ -142,6 +142,7 @@ export class FoodPlanController {
    * POST /api/app/food/daily-plan/adjust
    */
   @Post('daily-plan/adjust')
+  @RequireFeature(GatedFeature.FULL_DAY_PLAN)
   @AiHeavyThrottle(3, 60)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '触发饮食计划调整' })
@@ -171,6 +172,7 @@ export class FoodPlanController {
    * POST /api/app/food/daily-plan/regenerate
    */
   @Post('daily-plan/regenerate')
+  @RequireFeature(GatedFeature.FULL_DAY_PLAN)
   @AiHeavyThrottle(3, 60)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '强制重新生成今日饮食计划' })

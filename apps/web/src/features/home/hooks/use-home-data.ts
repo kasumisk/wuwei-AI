@@ -67,7 +67,6 @@ export function useHomeData() {
       profileQuery.isLoading ||
       nutritionScoreQuery.isLoading ||
       suggestionQuery.isLoading ||
-      reminderQuery.isLoading ||
-      recentSummariesQuery.isLoading,
+      recentSummariesQuery.isLoading, // reminderQuery 为非关键功能，不阻塞页面加载
   };
 }

@@ -16,7 +16,7 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { BehaviorService } from '../../../diet/app/services/behavior.service';
-import { UserContextBuilderService } from '../../../decision/decision/user-context-builder.service';
+import { UserContextBuilderService } from '../../../decision/analyze/user-context-builder.service';
 import {
   FoodAnalysisResultV61,
   AnalyzedFoodItem,
@@ -28,194 +28,23 @@ import { buildTonePrompt } from '../../../coach/app/config/coach-tone.config';
 import { AnalysisPipelineService } from '../../../decision/analyze/analysis-pipeline.service';
 import { AnalysisPersistenceService } from '../../../decision/analyze/analysis-persistence.service';
 import { validateAndCorrectFoods } from '../../../decision/analyze/nutrition-sanity-validator';
+import { FoodLibraryService } from './food-library.service';
+import {
+  buildBasePrompt,
+  getGoalFocusBlock,
+  buildGoalAwarePrompt as _buildGoalAwarePrompt,
+  buildUserContextPrompt,
+  getUserMessage,
+} from './analysis-prompt-schema';
 
-// ==================== Prompt 常量（从 analyze.service.ts 迁移） ====================
+// ==================== Prompt 常量（V4.7: 委托 analysis-prompt-schema.ts） ====================
 
 // V2.0: PERSONA_PROMPTS 已移除，统一使用 coach-tone.config.ts 的 buildTonePrompt()
 
-const BASE_PROMPT = `你是专业饮食教练，风格：朋友式、简洁、可执行。
-你的目标不是提供营养知识，而是帮助用户做"吃或不吃"的决策。
-
-用户上传了一张外卖或餐食图片。请识别图中所有菜品，估算多维营养数据，并做出决策判断。
-
-以 JSON 格式返回（不要输出任何其他文字，只输出纯 JSON）：
-{
-  "foods": [
-    {
-      "name": "菜名",
-      "calories": 数字,
-      "protein": 数字,
-      "fat": 数字,
-      "carbs": 数字,
-      "fiber": 数字或null,
-      "sodium": 数字或null,
-      "saturatedFat": 数字或null,
-      "addedSugar": 数字或null,
-      "vitaminA": 数字或null,
-      "vitaminC": 数字或null,
-      "calcium": 数字或null,
-      "iron": 数字或null,
-      "allergens": ["过敏原列表，从以下选择：gluten/dairy/egg/fish/shellfish/tree_nuts/peanuts/soy/sesame，无则返回[]"],
-      "tags": ["饮食标签，从以下选择：vegan/vegetarian/gluten_free/dairy_free/high_protein/low_fat/low_carb/high_fiber/low_calorie/low_sodium/keto，无则返回[]"],
-      "quantity": "份量描述",
-      "category": "分类",
-      "quality": 数字1到10,
-      "satiety": 数字1到10,
-      "confidence": 0到1之间的数字表示识别置信度,
-      "estimated": true或false
-    }
-  ],
-  "totalCalories": 总热量数字,
-  "totalProtein": 总蛋白质克数,
-  "totalFat": 总脂肪克数,
-  "totalCarbs": 总碳水克数,
-  "avgQuality": 所有食物质量分均值(保留1位小数),
-  "avgSatiety": 所有食物饱腹感均值(保留1位小数),
-  "mealType": "breakfast|lunch|dinner|snack",
-  "decision": "SAFE|OK|LIMIT|AVOID",
-  "riskLevel": "🟢|🟡|🟠|🔴",
-  "reason": "一句话原因，不超过20字",
-  "suggestion": "具体可执行建议，不超过25字",
-  "insteadOptions": ["替代方案1", "替代方案2", "替代方案3"],
-  "compensation": {
-    "diet": "饮食补救，一句话",
-    "activity": "运动补救，一句话",
-    "nextMeal": "下一餐建议，一句话"
-  },
-  "contextComment": "基于今日多维营养状态的点评，一句话",
-  "encouragement": "积极鼓励语，一句话",
-  "advice": "综合营养建议，不超过30字",
-  "isHealthy": true或false
-}
-
-营养估算规则：
-- 必须返回（4维）：calories(kcal)、protein(g)、fat(g)、carbs(g)，精确到整数
-- 尽量返回（8维）：fiber(g)、sodium(mg)、saturatedFat(g)、addedSugar(g)、vitaminA(μg RAE)、vitaminC(mg)、calcium(mg)、iron(mg)
-- 如果微量营养素不确定，返回 null 并设 estimated: true
-- allergens：只列出作为原料存在的过敏原（Big-9 标准），不包含交叉污染风险；无则返回空数组 []
-- tags：只列出有客观营养数据支撑的标签；无则返回空数组 []
-- confidence 表示你对该食物识别的把握程度：
-  - 0.9-1.0: 非常确定（清晰可见的常见食物）
-  - 0.7-0.89: 比较确定（可辨识但有遮挡或角度问题）
-  - 0.5-0.69: 不太确定（模糊或不常见食物）
-  - 0.3-0.49: 猜测（严重遮挡或看不清）
-- quality（食物质量）评分标准：
-  - 9-10: 天然未加工（水煮蛋、三文鱼、西兰花）
-  - 7-8: 轻加工（烤鸡胸、糙米、无糖酸奶）
-  - 5-6: 中度加工（白米饭、炒菜少油）
-  - 3-4: 深度加工（炸鸡、红烧肉、蛋糕）
-  - 1-2: 超加工（薯片、碳酸饮料、方便面）
-- satiety（饱腹感）评分标准：
-  - 9-10: 高蛋白+高纤维+大体积（鸡胸+蔬菜、燕麦粥）
-  - 7-8: 中等蛋白或纤维（米饭+肉菜）
-  - 5-6: 一般（炒饭、面条）
-  - 3-4: 低饱腹（甜品、白面包、果汁）
-  - 1-2: 几乎无饱腹（碳酸饮料、糖果）
-
-替代方案规则：
-- 替代方案应补足当前缺失的维度（如蛋白不足→推荐高蛋白替代）
-- 每条不超过15字
-
-其他规则：
-- category 只能是 主食/蔬菜/蛋白质/汤类/水果/饮品/零食
-- 热量和营养素估算保守（宁少不多）
-- 无法识别时，foods 返回空数组
-- 像朋友一样说话`;
-
-/** 目标差异化 Prompt 块 */
-const GOAL_FOCUS_BLOCK: Record<string, string> = {
-  fat_loss: `
-【减脂用户特别指令 — 你最关注的是热量和蛋白质】
-决策优先级：1.热量在剩余预算内？超出太多直接LIMIT/AVOID 2.蛋白质占比≥25%？不够在suggestion提醒 3.食物质量 4.饱腹感
-语气：对高蛋白低热量热情肯定，对高碳水低蛋白直接指出。contextComment必须提到热量预算和蛋白质缺口。`,
-  muscle_gain: `
-【增肌用户特别指令 — 你最关注的是蛋白质和够不够吃】
-决策优先级：1.蛋白质是否充足(本餐≥30g)？不够明确建议加量 2.热量足够？不够提醒"增肌得吃够" 3.碳水支撑训练 4.质量参考
-语气：对大份高蛋白热情肯定，对吃太少温和提醒。不要因为热量高就判LIMIT。contextComment必须提到蛋白质进度。`,
-  health: `
-【健康均衡用户特别指令 — 你最关注的是食物质量和营养均衡】
-决策优先级：1.食物是否天然少加工？quality<5要提醒 2.三大营养素比例均衡 3.热量大致合理(±20%可接受) 4.饱腹感
-语气：对天然食物真诚肯定，对加工食品温和建议。热量不敏感。contextComment聚焦食物质量和搭配。`,
-  habit: `
-【改善习惯用户特别指令 — 你最关注的是食物质量和坚持记录】
-决策优先级：1.记录本身值得肯定 2.食物质量和天然食物占比 3.饱腹感 4.热量不是重点
-语气：全程正向为主，"记录就是最大的进步！"即使选择不太好也先肯定再建议。热量判断很宽松。`,
-};
-
-/** 目标上下文描述 */
-const GOAL_CONTEXT: Record<string, { label: string; focus: string }> = {
-  fat_loss: { label: '减脂', focus: '优先关注：热量不超标 + 蛋白质充足' },
-  muscle_gain: {
-    label: '增肌',
-    focus: '优先关注：蛋白质是否充足 + 热量不能太低',
-  },
-  health: { label: '均衡健康', focus: '优先关注：食物质量和营养均衡' },
-  habit: {
-    label: '改善饮食习惯',
-    focus: '优先关注：食物质量和饱腹感，鼓励坚持记录',
-  },
-};
-
-// ==================== 辅助函数 ====================
-
-/** 构建目标感知 Prompt */
-function buildGoalAwarePrompt(goalType: string, userContext: string): string {
-  const focusBlock = GOAL_FOCUS_BLOCK[goalType] || GOAL_FOCUS_BLOCK.health;
-  return [BASE_PROMPT, focusBlock, userContext].join('\n\n');
-}
-
 /**
- * V3.4 P1.2: 构建决策优先级块
- *
- * 根据 nutritionPriority 和 healthConditions 告知 AI 本餐最重要的判断维度，
- * 使 AI 的 decision/reason/suggestion 更贴合用户实际需求。
+ * V4.7: BASE_PROMPT / GOAL_FOCUS_BLOCK / getLocaleInstruction / buildGoalAwarePrompt / buildDecisionContextBlock
+ * 已提取到 analysis-prompt-schema.ts，本文件直接消费共享模块。
  */
-function buildDecisionContextBlock(
-  nutritionPriority: string[],
-  healthConditions: string[],
-  budgetStatus: string,
-): string {
-  const lines: string[] = ['【本次分析决策优先级】'];
-
-  // 基于预算状态
-  if (budgetStatus === 'over_limit') {
-    lines.push(
-      '- ⚠️ 今日热量已超标，此餐 decision 必须严格，倾向 LIMIT 或 AVOID',
-    );
-  } else if (budgetStatus === 'near_limit') {
-    lines.push('- 热量接近上限，此餐需控制总量，优先推荐低热量替代');
-  }
-
-  // 基于营养优先级
-  if (nutritionPriority.includes('protein_gap')) {
-    lines.push('- 今日蛋白质不足，优先关注此餐蛋白质含量，高蛋白食物加分');
-  }
-  if (nutritionPriority.includes('fat_excess')) {
-    lines.push('- 今日脂肪已超标，高脂肪食物直接 LIMIT/AVOID，reason 必须提及');
-  }
-  if (nutritionPriority.includes('carb_excess')) {
-    lines.push('- 今日碳水已超标，高碳水食物需 LIMIT，建议蛋白质/蔬菜替代');
-  }
-
-  // 基于健康条件（简版，完整版在 formatAsPromptString 已注入）
-  if (healthConditions.includes('diabetes')) {
-    lines.push('- 糖尿病：此餐碳水和升糖影响是最高优先级判断维度');
-  }
-  if (healthConditions.includes('hypertension')) {
-    lines.push('- 高血压：此餐钠含量是关键判断维度，外卖/腌制食品直接 LIMIT');
-  }
-  if (
-    healthConditions.includes('heart_disease') ||
-    healthConditions.includes('cardiovascular')
-  ) {
-    lines.push(
-      '- 心脏病：此餐饱和脂肪是关键判断维度，油炸/肥肉类直接 LIMIT/AVOID',
-    );
-  }
-
-  if (lines.length === 1) return ''; // 只有标题，无内容，不注入
-  return lines.join('\n');
-}
 
 /** 评分覆盖：AI decision 仅参考，引擎为准 */
 function resolveDecision(
@@ -245,24 +74,29 @@ function estimateNutrition(
   protein: number;
   fat: number;
   carbs: number;
-  quality: number;
-  satiety: number;
+  qualityScore: number;
+  satietyScore: number;
 } {
   const CATEGORY_DEFAULTS: Record<
     string,
-    { quality: number; satiety: number }
+    { qualityScore: number; satietyScore: number }
   > = {
-    蛋白质: { quality: 7, satiety: 8 },
-    蔬菜: { quality: 8, satiety: 6 },
-    主食: { quality: 5, satiety: 6 },
-    零食: { quality: 3, satiety: 3 },
-    饮品: { quality: 4, satiety: 2 },
-    水果: { quality: 7, satiety: 5 },
-    汤类: { quality: 6, satiety: 5 },
+    protein: { qualityScore: 7, satietyScore: 8 },
+    veggie: { qualityScore: 8, satietyScore: 6 },
+    grain: { qualityScore: 5, satietyScore: 6 },
+    snack: { qualityScore: 3, satietyScore: 3 },
+    beverage: { qualityScore: 4, satietyScore: 2 },
+    fruit: { qualityScore: 7, satietyScore: 5 },
+    soup: { qualityScore: 6, satietyScore: 5 },
+    // V4.8: composite/condiment/dairy/fat 补全
+    composite: { qualityScore: 5, satietyScore: 6 },
+    condiment: { qualityScore: 4, satietyScore: 2 },
+    dairy: { qualityScore: 6, satietyScore: 6 },
+    fat: { qualityScore: 4, satietyScore: 3 },
   };
   const defaults = CATEGORY_DEFAULTS[category || ''] || {
-    quality: 5,
-    satiety: 5,
+    qualityScore: 5,
+    satietyScore: 5,
   };
   return {
     protein: Math.round((totalCalories * 0.15) / 4),
@@ -316,6 +150,8 @@ export class ImageFoodAnalysisService {
     private readonly analysisPipeline: AnalysisPipelineService,
     // V2.1: 持久化服务（供 persistAnalysisRecord 使用）
     private readonly persistence: AnalysisPersistenceService,
+    // V5.0 P2.5: 食物库服务（图片链路 post-analysis 匹配）
+    private readonly foodLibraryService: FoodLibraryService,
   ) {
     this.apiKey =
       this.configService.get<string>('OPENROUTER_API_KEY') ||
@@ -339,7 +175,7 @@ export class ImageFoodAnalysisService {
     mealType?: string,
     userId?: string,
   ): Promise<AnalysisResult> {
-    const userHint = mealType ? `用户提示这是${mealType}。` : '';
+    const userHint = mealType ? `User hint: this is ${mealType}. ` : '';
     const {
       context: userContext,
       goalType,
@@ -367,21 +203,22 @@ export class ImageFoodAnalysisService {
       personaPrompt = buildTonePrompt(style, goalType);
     }
 
-    // V3.4 P1.2: 决策优先级块（基于实时营养状态和健康条件）
-    const decisionContextBlock = buildDecisionContextBlock(
+    // V5.0: 统一用户上下文 prompt 块（合并 context + precision）
+    const userContextBlock = buildUserContextPrompt({
+      goalType,
       nutritionPriority,
       healthConditions,
       budgetStatus,
-    );
+    });
     const fullContext = [
       personaPrompt,
       userContext,
       behaviorContext,
-      decisionContextBlock,
+      userContextBlock,
     ]
       .filter(Boolean)
       .join('\n\n');
-    const systemPrompt = buildGoalAwarePrompt(goalType, fullContext);
+    const systemPrompt = _buildGoalAwarePrompt(goalType, fullContext);
 
     try {
       const response = await fetch(`${this.baseUrl}/chat/completions`, {
@@ -401,7 +238,7 @@ export class ImageFoodAnalysisService {
               content: [
                 {
                   type: 'text',
-                  text: `${userHint}请分析这张图片中的食物和热量。`,
+                  text: getUserMessage('image', userHint),
                 },
                 {
                   type: 'image_url',
@@ -419,14 +256,14 @@ export class ImageFoodAnalysisService {
 
       if (!response.ok) {
         const err = await response.text();
-        this.logger.error(`OpenRouter API 错误: ${response.status} ${err}`);
-        throw new BadRequestException('AI 分析失败，请稍后重试');
+        this.logger.error(`OpenRouter API error: ${response.status} ${err}`);
+        throw new BadRequestException('AI analysis failed, please try again later');
       }
 
       const data = await response.json();
       const content = data.choices?.[0]?.message?.content || '';
       this.logger.debug(
-        `AI 图片分析完成: model=${data.model}, tokens=${data.usage?.total_tokens || 'N/A'}`,
+        `AI image analysis completed: model=${data.model}, tokens=${data.usage?.total_tokens || 'N/A'}`,
       );
 
       // 解析 AI 返回
@@ -441,53 +278,328 @@ export class ImageFoodAnalysisService {
       return result;
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
-      this.logger.error(`AI 图片分析异常: ${(err as Error).message}`);
-      throw new BadRequestException('AI 分析超时，请重试');
+      this.logger.error(`AI image analysis error: ${(err as Error).message}`);
+      throw new BadRequestException('AI analysis timed out, please retry');
     }
   }
 
   /**
-   * V6.1: 执行图片分析并返回统一结构 FoodAnalysisResultV61
+   * V5.0: 执行图片分析并返回统一结构 FoodAnalysisResultV61
    *
-   * 完整流程: AI 识别 → 多食物拆解 → 置信度标注 → 营养估算 → 决策 → 组装统一结构 → 异步保存分析记录
+   * 完整流程: AI 识别 → 直接解析为 AnalyzedFoodItem[] → 统一管道处理
+   * 消除 legacy AnalysisResult 中间层。
    */
   async analyzeToV61(
     imageUrl: string,
     mealType: string | undefined,
     userId: string,
   ): Promise<FoodAnalysisResultV61> {
-    // 1. 执行 AI 分析（复用已有逻辑）
-    const legacyResult = await this.executeAnalysis(imageUrl, mealType, userId);
+    // 1. 构建 prompt 并调用 AI（直接解析为 AnalyzedFoodItem[]）
+    const foods = await this.analyzeImageToFoods(imageUrl, mealType, userId);
 
-    // 2. 转换为统一 AnalyzedFoodItem[]
-    const foods = this.legacyFoodsToAnalyzed(legacyResult);
+    // V5.0 P2.5: Post-analysis library matching — enrich with foodLibraryId + calibrated data
+    await this.matchFoodsToLibrary(foods);
 
-    // 3. V2.1: 委托统一管道（评分 → 决策 → 组装 → 持久化 → 事件）
+    // 2. 委托统一管道（评分 → 决策 → 组装 → 持久化 → 事件）
     return this.analysisPipeline.execute({
       inputType: 'image',
       imageUrl,
       mealType,
       userId,
       foods,
-      precomputedScore: legacyResult.nutritionScore
-        ? {
-            healthScore: legacyResult.nutritionScore,
-            nutritionScore: legacyResult.nutritionScore,
-            confidenceScore: Math.round(
-              (foods.reduce((s, f) => s + f.confidence, 0) /
-                Math.max(1, foods.length)) *
-                100,
-            ),
-            breakdown: legacyResult.scoreBreakdown,
-          }
-        : undefined,
-      precomputedTotals: {
-        calories: legacyResult.totalCalories,
-        protein: legacyResult.totalProtein,
-        fat: legacyResult.totalFat,
-        carbs: legacyResult.totalCarbs,
-      },
+      // V5.0: 不传 precomputedScore/precomputedTotals，由 pipeline 统一计算
     });
+  }
+
+  /**
+   * V5.0: 图片 AI 识别 → 直接解析为 AnalyzedFoodItem[]
+   *
+   * 复用 executeAnalysis 的 prompt 构建逻辑，但跳过 legacy AnalysisResult 转换。
+   */
+  private async analyzeImageToFoods(
+    imageUrl: string,
+    mealType: string | undefined,
+    userId: string,
+  ): Promise<AnalyzedFoodItem[]> {
+    const userHint = mealType ? `User hint: this is ${mealType}. ` : '';
+    const {
+      context: userContext,
+      goalType,
+      healthConditions,
+      nutritionPriority,
+      budgetStatus,
+    } = await this.buildUserContext(userId);
+
+    // 行为画像上下文
+    let behaviorContext = '';
+    if (userId) {
+      behaviorContext = await this.behaviorService
+        .getBehaviorContext(userId)
+        .catch(() => '');
+    }
+
+    // AI 人格
+    let personaPrompt = '';
+    if (userId) {
+      const behaviorProfile = await this.behaviorService
+        .getProfile(userId)
+        .catch(() => null);
+      const style = behaviorProfile?.coachStyle || 'friendly';
+      personaPrompt = buildTonePrompt(style, goalType);
+    }
+
+    // V5.0: 统一用户上下文 prompt 块
+    const userContextBlock = buildUserContextPrompt({
+      goalType,
+      nutritionPriority,
+      healthConditions,
+      budgetStatus,
+    });
+    const fullContext = [
+      personaPrompt,
+      userContext,
+      behaviorContext,
+      userContextBlock,
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+    const systemPrompt = _buildGoalAwarePrompt(goalType, fullContext);
+
+    try {
+      const response = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.apiKey}`,
+          'HTTP-Referer': 'https://uway.dev-net.uk',
+          'X-Title': 'Wuwei Health',
+        },
+        body: JSON.stringify({
+          model: this.model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: getUserMessage('image', userHint),
+                },
+                {
+                  type: 'image_url',
+                  imageUrl: { url: imageUrl, detail: 'auto' },
+                },
+              ],
+            },
+          ],
+          max_tokens: 1500,
+          temperature: 0.3,
+        }),
+        signal: AbortSignal.timeout(30000),
+      });
+
+      if (!response.ok) {
+        const err = await response.text();
+        this.logger.error(`OpenRouter API error: ${response.status} ${err}`);
+        throw new BadRequestException('AI analysis failed, please try again later');
+      }
+
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content || '';
+      this.logger.debug(
+        `AI image analysis completed: model=${data.model}, tokens=${data.usage?.total_tokens || 'N/A'}`,
+      );
+
+      return this.parseToAnalyzedFoods(content);
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      this.logger.error(`AI image analysis error: ${(err as Error).message}`);
+      throw new BadRequestException('AI analysis timed out, please retry');
+    }
+  }
+
+  /**
+   * V5.0: 直接将 AI JSON 响应解析为 AnalyzedFoodItem[]
+   *
+   * 消除 legacy AnalysisResult 中间格式。
+   */
+  private parseToAnalyzedFoods(content: string): AnalyzedFoodItem[] {
+    try {
+      const cleaned = content
+        .replace(/```json\s*/g, '')
+        .replace(/```\s*/g, '')
+        .trim();
+      const parsed = JSON.parse(cleaned);
+      const rawFoods = Array.isArray(parsed.foods) ? parsed.foods : [];
+
+      if (rawFoods.length === 0) return [];
+
+      // 填充缺失的宏量营养素
+      for (const f of rawFoods) {
+        if (!f.protein && !f.fat && !f.carbs && f.calories > 0) {
+          const est = estimateNutrition(f.calories, f.category);
+          f.protein = est.protein;
+          f.fat = est.fat;
+          f.carbs = est.carbs;
+        }
+        if (!f.qualityScore) f.qualityScore = 5;
+        if (!f.satietyScore) f.satietyScore = 5;
+        if (typeof f.confidence !== 'number') f.confidence = 0.6;
+      }
+
+      // 热力学一致性校验
+      const validatedFoods = validateAndCorrectFoods(
+        rawFoods.map((f: any) => ({
+          calories: f.calories || 0,
+          protein: f.protein || 0,
+          fat: f.fat || 0,
+          carbs: f.carbs || 0,
+          category: f.category,
+          confidence: f.confidence,
+          _ref: f,
+        })),
+      );
+      validatedFoods.forEach((v, i) => {
+        rawFoods[i].protein = v.protein;
+        rawFoods[i].fat = v.fat;
+        rawFoods[i].carbs = v.carbs;
+        rawFoods[i].confidence = v.confidence;
+      });
+
+      // 直接映射到 AnalyzedFoodItem（含 V5.0 新字段）
+      return rawFoods.map((f: any): AnalyzedFoodItem => ({
+        name: f.name,
+        nameEn: f.nameEn,
+        quantity: f.quantity,
+        estimatedWeightGrams: f.estimatedWeightGrams,
+        standardServingG: f.standardServingG,
+        standardServingDesc: f.standardServingDesc,
+        category: f.category,
+        confidence: f.confidence,
+        estimated: f.estimated,
+        calories: f.calories || 0,
+        protein: f.protein || 0,
+        fat: f.fat || 0,
+        carbs: f.carbs || 0,
+        fiber: f.fiber,
+        sodium: f.sodium,
+        sugar: f.sugar,
+        saturatedFat: f.saturatedFat,
+        addedSugar: f.addedSugar,
+        transFat: f.transFat,
+        cholesterol: f.cholesterol,
+        omega3: f.omega3,
+        omega6: f.omega6,
+        solubleFiber: f.solubleFiber,
+        vitaminA: f.vitaminA,
+        vitaminC: f.vitaminC,
+        vitaminD: f.vitaminD,
+        calcium: f.calcium,
+        iron: f.iron,
+        potassium: f.potassium,
+        zinc: f.zinc,
+        glycemicIndex: f.glycemicIndex,
+        glycemicLoad: f.glycemicLoad,
+        qualityScore: f.qualityScore,
+        satietyScore: f.satietyScore,
+        processingLevel: f.processingLevel,
+        nutrientDensity: f.nutrientDensity,
+        fodmapLevel: f.fodmapLevel,
+        oxalateLevel: f.oxalateLevel,
+        purine: f.purine,
+        allergens: Array.isArray(f.allergens) && f.allergens.length ? f.allergens : undefined,
+        tags: Array.isArray(f.tags) && f.tags.length ? f.tags : undefined,
+        cookingMethods: Array.isArray(f.cookingMethods) ? f.cookingMethods : undefined,
+        ingredientList: Array.isArray(f.ingredientList) ? f.ingredientList : undefined,
+        // V5.0: 新增食物库对齐字段
+        foodForm: f.foodForm,
+        commonPortions: Array.isArray(f.commonPortions) ? f.commonPortions : undefined,
+        dishPriority: f.dishPriority,
+      }));
+    } catch {
+      this.logger.warn(`AI response parse to AnalyzedFoodItem[] failed: ${content.substring(0, 200)}`);
+      return [];
+    }
+  }
+
+  /**
+   * V5.0 P2.5: Post-analysis library matching for image path
+   *
+   * Uses nameEn (primary) and name (fallback) to search the food library.
+   * Enriches AnalyzedFoodItem with foodLibraryId and calibrated nutrition data
+   * when a high-confidence match is found.
+   */
+  private async matchFoodsToLibrary(foods: AnalyzedFoodItem[]): Promise<void> {
+    const MATCH_THRESHOLD = 0.5;
+
+    await Promise.all(
+      foods.map(async (food) => {
+        if (food.foodLibraryId) return; // Already matched
+
+        try {
+          // Try nameEn first (more likely to match English-keyed library)
+          const searchName = food.nameEn || food.name;
+          if (!searchName) return;
+
+          const results = (await this.foodLibraryService.search(
+            searchName,
+            1,
+          )) as any[];
+
+          if (!results?.length || !results[0] || results[0].sim_score < MATCH_THRESHOLD) {
+            // If nameEn search failed, try name as fallback (if different)
+            if (food.nameEn && food.name && food.nameEn !== food.name) {
+              const fallbackResults = (await this.foodLibraryService.search(
+                food.name,
+                1,
+              )) as any[];
+              if (!fallbackResults?.length || !fallbackResults[0] || fallbackResults[0].sim_score < MATCH_THRESHOLD) {
+                return;
+              }
+              this.applyLibraryMatch(food, fallbackResults[0]);
+              return;
+            }
+            return;
+          }
+
+          this.applyLibraryMatch(food, results[0]);
+        } catch {
+          // Search failure is non-fatal for image path
+        }
+      }),
+    );
+  }
+
+  /**
+   * V5.0 P2.5: Apply library match data to an AnalyzedFoodItem
+   */
+  private applyLibraryMatch(food: AnalyzedFoodItem, match: any): void {
+    food.foodLibraryId = match.id;
+
+    // Calibrate nutrition from library (per-100g) if available
+    // Only override if library has the field and AI confidence is not high
+    if (food.confidence < 0.8) {
+      if (match.calories != null) food.calories = Number(match.calories);
+      if (match.protein != null) food.protein = Number(match.protein);
+      if (match.fat != null) food.fat = Number(match.fat);
+      if (match.carbs != null) food.carbs = Number(match.carbs);
+      if (match.fiber != null) food.fiber = Number(match.fiber);
+      if (match.sodium != null) food.sodium = Number(match.sodium);
+    }
+
+    // Enrich quality/satiety from library
+    if (match.qualityScore != null) food.qualityScore = Number(match.qualityScore);
+    if (match.satietyScore != null) food.satietyScore = Number(match.satietyScore);
+
+    // V5.0: Enrich foodForm and flavorProfile from library
+    if (match.foodForm && !food.foodForm) food.foodForm = match.foodForm;
+    if (match.flavorProfile) food.flavorProfile = match.flavorProfile;
+    // V5.0 P3.5: Carry compatibility data for coach enrichment
+    if (match.compatibility) food.compatibility = match.compatibility;
+
+    this.logger.debug(
+      `Image food library matched: "${food.name}" → id=${match.id}, sim=${match.sim_score}`,
+    );
   }
 
   // ==================== 私有方法 ====================
@@ -537,7 +649,7 @@ export class ImageFoodAnalysisService {
       },
       alternatives: (legacyResult.insteadOptions || []).map((name) => ({
         name,
-        reason: '更适合当前目标',
+        reason: 'Better suited for current goal',
       })),
       explanation: {
         summary: legacyResult.advice || legacyResult.contextComment || '',
@@ -554,7 +666,7 @@ export class ImageFoodAnalysisService {
     this.persistence
       .saveImageRecord({ analysisId, userId, imageUrl, mealType, result })
       .catch((err) =>
-        this.logger.warn(`异步保存图片分析记录失败: ${(err as Error).message}`),
+        this.logger.warn(`Failed to save image analysis record async: ${(err as Error).message}`),
       );
 
     return analysisId;
@@ -571,6 +683,7 @@ export class ImageFoodAnalysisService {
     return legacy.foods.map((f: any) => ({
       name: f.name,
       quantity: f.quantity,
+      estimatedWeightGrams: f.estimatedWeightGrams,
       category: f.category,
       confidence: typeof f.confidence === 'number' ? f.confidence : 0.6,
       calories: f.calories || 0,
@@ -579,6 +692,7 @@ export class ImageFoodAnalysisService {
       carbs: f.carbs || 0,
       fiber: f.fiber,
       sodium: f.sodium,
+      sugar: f.sugar,
       saturatedFat: f.saturatedFat,
       addedSugar: f.addedSugar,
       vitaminA: f.vitaminA,
@@ -590,7 +704,34 @@ export class ImageFoodAnalysisService {
         Array.isArray(f.allergens) && f.allergens.length
           ? f.allergens
           : undefined,
-      dietaryTags: Array.isArray(f.tags) && f.tags.length ? f.tags : undefined,
+      tags: Array.isArray(f.tags) && f.tags.length ? f.tags : undefined,
+      glycemicIndex: f.glycemicIndex,
+      // V4.6: 统一字段名
+      qualityScore: f.qualityScore ?? undefined,
+      satietyScore: f.satietyScore ?? undefined,
+      processingLevel: f.processingLevel,
+      // V4.6: 新增字段
+      nameEn: f.nameEn,
+      standardServingDesc: f.standardServingDesc,
+      transFat: f.transFat,
+      cholesterol: f.cholesterol,
+      omega3: f.omega3,
+      omega6: f.omega6,
+      solubleFiber: f.solubleFiber,
+      vitaminD: f.vitaminD,
+      potassium: f.potassium,
+      zinc: f.zinc,
+      glycemicLoad: f.glycemicLoad,
+      nutrientDensity: f.nutrientDensity,
+      fodmapLevel: f.fodmapLevel,
+      oxalateLevel: f.oxalateLevel,
+      purine: f.purine,
+      cookingMethods: Array.isArray(f.cookingMethods)
+        ? f.cookingMethods
+        : undefined,
+      ingredientList: Array.isArray(f.ingredientList)
+        ? f.ingredientList
+        : undefined,
     }));
   }
 
@@ -651,14 +792,12 @@ export class ImageFoodAnalysisService {
       result.highlights = scoreResult.highlights;
       result.decision = resolveDecision(result.decision, scoreResult.decision);
     } catch (err) {
-      this.logger.warn(`评分计算失败: ${(err as Error).message}`);
+      this.logger.warn(`Score computation failed: ${(err as Error).message}`);
     }
   }
 
   /**
-   * 解析 AI 返回的文本为结构化结果
-   *
-   * V6.1 增强: 支持 per-food confidence 字段
+   * V4.6: 解析 AI 返回的文本为结构化结果
    */
   private parseAnalysisResult(content: string): AnalysisResult {
     try {
@@ -669,60 +808,54 @@ export class ImageFoodAnalysisService {
       const parsed = JSON.parse(cleaned);
 
       const foods = Array.isArray(parsed.foods) ? parsed.foods : [];
-      let totalProtein =
-        typeof parsed.totalProtein === 'number' ? parsed.totalProtein : 0;
-      let totalFat = typeof parsed.totalFat === 'number' ? parsed.totalFat : 0;
-      let totalCarbs =
-        typeof parsed.totalCarbs === 'number' ? parsed.totalCarbs : 0;
-      let avgQuality =
-        typeof parsed.avgQuality === 'number' ? parsed.avgQuality : 0;
-      let avgSatiety =
-        typeof parsed.avgSatiety === 'number' ? parsed.avgSatiety : 0;
-      const totalCalories =
-        typeof parsed.totalCalories === 'number' ? parsed.totalCalories : 0;
 
-      // AI 容错：如果没返回汇总营养，从 foods 或粗估
-      if (totalProtein === 0 && totalFat === 0 && totalCarbs === 0) {
-        if (foods.some((f: any) => f.protein > 0)) {
-          totalProtein = foods.reduce(
-            (s: number, f: any) => s + (f.protein || 0),
-            0,
-          );
-          totalFat = foods.reduce((s: number, f: any) => s + (f.fat || 0), 0);
-          totalCarbs = foods.reduce(
-            (s: number, f: any) => s + (f.carbs || 0),
-            0,
-          );
-        } else {
-          const est = estimateNutrition(totalCalories);
-          totalProtein = est.protein;
-          totalFat = est.fat;
-          totalCarbs = est.carbs;
-        }
+      // V4.8: 从 foods 聚合汇总
+      let totalCalories = 0;
+      let totalProtein = 0;
+      let totalFat = 0;
+      let totalCarbs = 0;
+
+      for (const f of foods) {
+        totalCalories += f.calories || 0;
+        totalProtein += f.protein || 0;
+        totalFat += f.fat || 0;
+        totalCarbs += f.carbs || 0;
       }
 
-      if (avgQuality === 0 || avgSatiety === 0) {
-        if (foods.some((f: any) => f.quality > 0)) {
-          avgQuality =
-            avgQuality ||
-            Math.round(
-              (foods.reduce((s: number, f: any) => s + (f.quality || 5), 0) /
-                Math.max(1, foods.length)) *
-                10,
-            ) / 10;
-          avgSatiety =
-            avgSatiety ||
-            Math.round(
-              (foods.reduce((s: number, f: any) => s + (f.satiety || 5), 0) /
-                Math.max(1, foods.length)) *
-                10,
-            ) / 10;
-        } else {
-          const mainCategory = foods[0]?.category;
-          const est = estimateNutrition(totalCalories, mainCategory);
-          avgQuality = est.quality;
-          avgSatiety = est.satiety;
-        }
+      // 如果汇总营养为零，从粗估兜底
+      if (
+        totalProtein === 0 &&
+        totalFat === 0 &&
+        totalCarbs === 0 &&
+        totalCalories > 0
+      ) {
+        const est = estimateNutrition(totalCalories);
+        totalProtein = est.protein;
+        totalFat = est.fat;
+        totalCarbs = est.carbs;
+      }
+
+      // 计算 avgQuality / avgSatiety
+      let avgQuality = 0;
+      let avgSatiety = 0;
+      if (foods.some((f: any) => f.qualityScore > 0)) {
+        avgQuality =
+          Math.round(
+            (foods.reduce((s: number, f: any) => s + (f.qualityScore || 5), 0) /
+              Math.max(1, foods.length)) *
+              10,
+          ) / 10;
+        avgSatiety =
+          Math.round(
+            (foods.reduce((s: number, f: any) => s + (f.satietyScore || 5), 0) /
+              Math.max(1, foods.length)) *
+              10,
+          ) / 10;
+      } else {
+        const mainCategory = foods[0]?.category;
+        const est = estimateNutrition(totalCalories, mainCategory);
+        avgQuality = est.qualityScore;
+        avgSatiety = est.satietyScore;
       }
 
       // 给 foods 中缺失数据的项填充粗估值
@@ -733,9 +866,12 @@ export class ImageFoodAnalysisService {
           food.fat = est.fat;
           food.carbs = est.carbs;
         }
-        if (!food.quality) food.quality = avgQuality || 5;
-        if (!food.satiety) food.satiety = avgSatiety || 5;
-        // V6.1: 确保 confidence 字段存在
+        if (!food.qualityScore) {
+          food.qualityScore = avgQuality || 5;
+        }
+        if (!food.satietyScore) {
+          food.satietyScore = avgSatiety || 5;
+        }
         if (typeof food.confidence !== 'number') food.confidence = 0.6;
       }
 
@@ -758,6 +894,13 @@ export class ImageFoodAnalysisService {
         foods[i].confidence = v.confidence;
       });
 
+      // V4.5: 从 parsed 中提取兼容旧格式的决策字段（pipeline 会覆盖）
+      const decision = ['SAFE', 'OK', 'LIMIT', 'AVOID'].includes(
+        parsed.decision,
+      )
+        ? parsed.decision
+        : 'SAFE';
+
       return {
         foods,
         totalCalories,
@@ -767,12 +910,10 @@ export class ImageFoodAnalysisService {
         avgQuality,
         avgSatiety,
         mealType: parsed.mealType || 'lunch',
-        advice: parsed.advice || '',
+        advice: parsed.advice || parsed.summary || '',
         isHealthy:
           typeof parsed.isHealthy === 'boolean' ? parsed.isHealthy : true,
-        decision: ['SAFE', 'OK', 'LIMIT', 'AVOID'].includes(parsed.decision)
-          ? parsed.decision
-          : 'SAFE',
+        decision,
         riskLevel: parsed.riskLevel || '🟢',
         reason: parsed.reason || '',
         suggestion: parsed.suggestion || '',
@@ -785,7 +926,7 @@ export class ImageFoodAnalysisService {
         nutritionScore: 0,
       };
     } catch {
-      this.logger.warn(`AI 返回解析失败: ${content.substring(0, 200)}`);
+      this.logger.warn(`AI response parse failed: ${content.substring(0, 200)}`);
       return {
         foods: [],
         totalCalories: 0,
@@ -795,7 +936,7 @@ export class ImageFoodAnalysisService {
         avgQuality: 5,
         avgSatiety: 5,
         mealType: 'lunch',
-        advice: '无法识别图片内容，请重新上传清晰的食物图片',
+        advice: 'Unable to identify image content, please upload a clearer food photo',
         isHealthy: true,
         decision: 'SAFE' as const,
         riskLevel: '🟢',

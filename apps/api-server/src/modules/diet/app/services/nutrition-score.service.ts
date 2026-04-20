@@ -726,7 +726,10 @@ export class NutritionScoreService {
     }
 
     // 无碳水数据 → 仅基于 GI 做粗略评分
-    const carbs = carbsPerServing ?? totalCarbs ?? 15;
+    // 当 GI 是估算值（无真实 glycemicIndex）时，使用参考份量 15g 而非全天总碳水，
+    // 避免 totalCarbs 过大（如 100g）导致 GL 爆高、分数趋近 0 的问题。
+    const isEstimatedGI = !glycemicIndex || glycemicIndex <= 0;
+    const carbs = carbsPerServing ?? (isEstimatedGI ? 15 : (totalCarbs ?? 15));
     const gl = (gi * carbs) / 100;
     // Sigmoid: score = 100 / (1 + e^(0.3 * (GL - 15)))
     return this.clamp(100 / (1 + Math.exp(0.3 * (gl - 15))));

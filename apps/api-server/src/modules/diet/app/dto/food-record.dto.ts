@@ -72,6 +72,13 @@ export class FoodItemDto {
   @IsOptional()
   @IsNumber()
   satiety?: number;
+
+  @ApiPropertyOptional({ description: '血糖指数 0-100' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  glycemicIndex?: number;
 }
 
 // ========== Food Records ==========

@@ -36,8 +36,6 @@ import {
   PaymentStatus,
   GatedFeature,
   QuotaCycle,
-  TIER_ENTITLEMENTS,
-  UNLIMITED,
   FeatureEntitlements,
 } from '../../subscription.types';
 import {

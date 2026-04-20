@@ -43,7 +43,9 @@ import {
   estimateQuality as _estimateQuality,
   estimateSatiety as _estimateSatiety,
 } from '../../food/app/config/nutrition-estimator';
+import { matchAllergenInFoods } from '../config/decision-checks';
 import { ContextualAnalysis } from '../types/analysis-result.types';
+import { PreferenceProfileService } from '../../diet/app/recommendation/profile/preference-profile.service';
 
 // ==================== 公共类型 ====================
 
@@ -69,6 +71,10 @@ export interface DecisionFoodItem {
   allergens?: string[];
   /** 标签 */
   tags?: string[];
+  /** V5.0: 食物形态（来自 AI 分析） */
+  foodForm?: string;
+  /** V5.0: 风味画像（来自食物库匹配） */
+  flavorProfile?: string;
 }
 
 /** V1.3: 结构化决策因子 */
@@ -135,6 +141,8 @@ export class FoodDecisionService {
     private readonly decisionEngine: DecisionEngineService,
     private readonly portionAdvisor: PortionAdvisorService,
     private readonly issueDetector: IssueDetectorService,
+    // V4.0: 偏好画像服务（用于替代方案深度排序）
+    private readonly preferenceProfileService: PreferenceProfileService,
   ) {}
 
   // ==================== 主入口 ====================
@@ -275,6 +283,16 @@ export class FoodDecisionService {
     }
 
     // 5. 替代建议（委托 AlternativeSuggestionService）
+    // V4.0: 获取用户偏好画像用于替代方案深度排序
+    let preferenceProfile: any = undefined;
+    if (userId) {
+      try {
+        preferenceProfile =
+          await this.preferenceProfileService.getUserPreferenceProfile(userId);
+      } catch {
+        /* 偏好画像获取失败不影响主流程 */
+      }
+    }
     const alternatives =
       await this.alternativeSuggestionService.generateAlternatives({
         foods,
@@ -289,6 +307,7 @@ export class FoodDecisionService {
           dietaryRestrictions: ctx.dietaryRestrictions,
           healthConditions: ctx.healthConditions,
         },
+        preferenceProfile,
         nutritionIssues,
         contextualAnalysis, // V3.6 P2.1
       });
@@ -311,33 +330,9 @@ export class FoodDecisionService {
     const totalCalories = foods.reduce((s, f) => s + f.calories, 0);
 
     // 仅使用食物库结构化 allergens 字段进行精确匹配
-    const ALLERGEN_EXPAND: Record<string, string[]> = {
-      gluten: ['gluten', 'wheat'],
-      dairy: ['dairy', 'milk', 'lactose'],
-      egg: ['egg', 'eggs'],
-      fish: ['fish'],
-      shellfish: ['shellfish', 'shrimp'],
-      tree_nuts: ['tree_nuts', 'tree_nut', 'nuts'],
-      peanuts: ['peanuts', 'peanut', 'nuts'],
-      soy: ['soy', 'soybeans'],
-      sesame: ['sesame'],
-      peanut: ['peanuts', 'peanut', 'nuts'],
-      tree_nut: ['tree_nuts', 'tree_nut', 'nuts'],
-      milk: ['dairy', 'milk', 'lactose'],
-      eggs: ['egg', 'eggs'],
-      soybeans: ['soy', 'soybeans'],
-      wheat: ['gluten', 'wheat'],
-    };
-    const matchAllergen = (a: string): boolean => {
-      const keys = ALLERGEN_EXPAND[a.toLowerCase()] ?? [a.toLowerCase()];
-      return foods.some(
-        (f) =>
-          Array.isArray(f.allergens) &&
-          (f.allergens as string[]).some((fa) =>
-            keys.includes(fa.toLowerCase()),
-          ),
-      );
-    };
+    // V4.0: 使用共享过敏原展开工具
+    const matchAllergen = (a: string): boolean =>
+      matchAllergenInFoods(a, foods);
     const allergenTriggered =
       ctx.allergens.length > 0 && ctx.allergens.some(matchAllergen);
     const triggeredAllergens = ctx.allergens.filter(matchAllergen);

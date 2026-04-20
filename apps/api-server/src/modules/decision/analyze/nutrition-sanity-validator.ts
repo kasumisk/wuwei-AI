@@ -1,10 +1,16 @@
 /**
- * V3.6 P1.1 — 营养数据合理性校验器（纯函数）
+ * V4.9 P1.5 — 营养数据合理性校验器（纯函数）
  *
  * 职责：
  * - 校验 AI 估算的营养数据是否符合热力学一致性
  * - 规则：protein×4 + fat×9 + carbs×4 ≈ calories（±15% 容差）
  * - 异常时用 category defaults 纠偏 + 建议降低置信度
+ *
+ * V4.9 变更:
+ * - CATEGORY_MACRO_RATIO 统一为 DB 14 分类
+ * - 移除旧 protein/veggie/composite 分类
+ * - 新增 meat/seafood/egg/legume/nut/other 分类
+ * - 营养数据现在是 per 100g 基准（热力学一致性校验同样适用）
  *
  * 设计原则：
  * - 纯函数，无状态，无副作用，可独立单元测试
@@ -12,20 +18,25 @@
  * - 只校验 AI/LLM 估算数据，标准库数据信任度高无需校验
  */
 
-/** 每类食物的默认宏量比例（kcal%），用于纠偏 */
+/** 每类食物的默认宏量比例（kcal%），用于纠偏。V4.9: 统一为 DB 14 分类 */
 const CATEGORY_MACRO_RATIO: Record<
   string,
   { proteinRatio: number; fatRatio: number; carbsRatio: number }
 > = {
-  protein: { proteinRatio: 0.4, fatRatio: 0.25, carbsRatio: 0.05 }, // 蛋白质类：鸡胸肉等
-  grain: { proteinRatio: 0.1, fatRatio: 0.08, carbsRatio: 0.82 }, // 谷物
-  veggie: { proteinRatio: 0.2, fatRatio: 0.1, carbsRatio: 0.7 }, // 蔬菜
-  fruit: { proteinRatio: 0.06, fatRatio: 0.04, carbsRatio: 0.9 }, // 水果
-  dairy: { proteinRatio: 0.22, fatRatio: 0.48, carbsRatio: 0.3 }, // 乳制品
-  beverage: { proteinRatio: 0.04, fatRatio: 0.0, carbsRatio: 0.96 }, // 饮品
-  snack: { proteinRatio: 0.08, fatRatio: 0.38, carbsRatio: 0.54 }, // 零食
-  fat: { proteinRatio: 0.0, fatRatio: 1.0, carbsRatio: 0.0 }, // 油脂
-  composite: { proteinRatio: 0.18, fatRatio: 0.3, carbsRatio: 0.52 }, // 复合食物
+  grain:     { proteinRatio: 0.10, fatRatio: 0.08, carbsRatio: 0.82 }, // 谷物
+  vegetable: { proteinRatio: 0.20, fatRatio: 0.10, carbsRatio: 0.70 }, // 蔬菜
+  fruit:     { proteinRatio: 0.06, fatRatio: 0.04, carbsRatio: 0.90 }, // 水果
+  meat:      { proteinRatio: 0.42, fatRatio: 0.30, carbsRatio: 0.00 }, // 畜禽肉
+  seafood:   { proteinRatio: 0.50, fatRatio: 0.20, carbsRatio: 0.00 }, // 鱼虾贝
+  dairy:     { proteinRatio: 0.22, fatRatio: 0.48, carbsRatio: 0.30 }, // 乳制品
+  egg:       { proteinRatio: 0.35, fatRatio: 0.60, carbsRatio: 0.05 }, // 蛋类
+  legume:    { proteinRatio: 0.30, fatRatio: 0.15, carbsRatio: 0.55 }, // 豆类
+  nut:       { proteinRatio: 0.12, fatRatio: 0.72, carbsRatio: 0.16 }, // 坚果
+  fat:       { proteinRatio: 0.00, fatRatio: 1.00, carbsRatio: 0.00 }, // 油脂
+  beverage:  { proteinRatio: 0.04, fatRatio: 0.00, carbsRatio: 0.96 }, // 饮品
+  condiment: { proteinRatio: 0.10, fatRatio: 0.30, carbsRatio: 0.60 }, // 调味品
+  snack:     { proteinRatio: 0.08, fatRatio: 0.38, carbsRatio: 0.54 }, // 零食
+  other:     { proteinRatio: 0.15, fatRatio: 0.30, carbsRatio: 0.55 }, // 其他/复合食物
 };
 
 const DEFAULT_RATIO = { proteinRatio: 0.15, fatRatio: 0.3, carbsRatio: 0.55 };

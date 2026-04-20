@@ -31,8 +31,9 @@ import {
 } from '../../../diet/app/recommendation/utils/i18n-messages';
 import { ScoringFoodItem } from '../../../decision/score/food-scoring.service';
 import { AnalysisPipelineService } from '../../../decision/analyze/analysis-pipeline.service';
-import { validateAndCorrectFoods } from '../../../decision/analyze/nutrition-sanity-validator';
-import { UserContextBuilderService } from '../../../decision/decision/user-context-builder.service';
+import { validateAndCorrectFoods, NutritionInput } from '../../../decision/analyze/nutrition-sanity-validator';
+import { UserContextBuilderService } from '../../../decision/analyze/user-context-builder.service';
+import { buildBasePrompt, buildUserContextPrompt, getUserMessage } from './analysis-prompt-schema';
 
 // ==================== 常量 ====================
 
@@ -63,6 +64,8 @@ const CATEGORY_DEFAULT_SERVING: Record<string, number> = {
   beverage: 250,
   snack: 30,
   composite: 200,
+  condiment: 10,
+  soup: 300,
 };
 
 /** 常见数量词映射到克数的粗估表 */
@@ -101,181 +104,43 @@ const CATEGORY_DEFAULT_NUTRITION: Record<
 // ==================== LLM Prompt ====================
 
 /**
- * 文本分析 LLM Prompt（基础版，无用户上下文时使用）
+ * V5.0: 文本分析 prompt 使用统一 buildBasePrompt + buildUserContextPrompt
  */
-const TEXT_ANALYSIS_PROMPT = `你是专业营养分析助手。用户输入了一段食物描述文本，请识别其中所有食物，估算份量和营养。
 
-以 JSON 格式返回（不要输出任何其他文字，只输出纯 JSON）：
-{
-  "foods": [
-    {
-      "name": "食物名称",
-      "quantity": "份量描述（如一份、200g）",
-      "estimatedWeightGrams": 数字,
-      "category": "分类（protein/grain/veggie/fruit/dairy/fat/beverage/snack/composite）",
-      "calories": 数字（千卡），
-      "protein": 数字（克），
-      "fat": 数字（克），
-      "carbs": 数字（克），
-      "fiber": 数字（克），
-      "sodium": 数字（毫克），
-      "saturatedFat": 数字（克）或null,
-      "addedSugar": 数字（克）或null,
-      "vitaminA": 数字（微克RAE）或null,
-      "vitaminC": 数字（毫克）或null,
-      "calcium": 数字（毫克）或null,
-      "iron": 数字（毫克）或null,
-      "allergens": ["过敏原列表，从以下选择：gluten/dairy/egg/fish/shellfish/tree_nuts/peanuts/soy/sesame，无则返回[]"],
-      "tags": ["饮食标签，从以下选择：vegan/vegetarian/gluten_free/dairy_free/high_protein/low_fat/low_carb/high_fiber/low_calorie/low_sodium/keto，无则返回[]"],
-      "estimated": true或false
-    }
-  ],
-  "summary": "一句话总结这顿饭的特点",
-  "alternatives": [
-    { "name": "替代食物名", "reason": "推荐理由（不超过15字）" }
-  ]
-}
-
-规则：
-- 必须返回（6维）：calories、protein、fat、carbs、fiber、sodium
-- 尽量返回（6维）：saturatedFat、addedSugar、vitaminA、vitaminC、calcium、iron
-- 如果微量营养素（saturatedFat/addedSugar/vitaminA/vitaminC/calcium/iron）不确定，返回 null 并设 estimated: true
-- allergens：只列出作为原料存在的过敏原（Big-9 标准），不包含交叉污染风险；无则返回空数组 []
-- tags：只列出有客观营养数据支撑的标签；无则返回空数组 []
-- 热量和营养素估算保守（宁少不多）
-- 每种食物单独列出，不要合并
-- 组合食物（如牛肉面）拆解为主要组成（面条、牛肉、汤底等）
-- category 使用英文编码: protein/grain/veggie/fruit/dairy/fat/beverage/snack/composite
-- 替代方案不超过 3 个，每条不超过 15 字
-- 如果描述不是食物，返回空 foods 数组`;
-
-/**
- * V3.4 P1.3: 构建用户上下文感知的文本分析 Prompt
- *
- * 在通用 TEXT_ANALYSIS_PROMPT 基础上注入：
- * - 用户目标类型和营养优先级
- * - 健康条件特异性估算指令
- * - 决策导向的重点（决定 summary 和 alternatives 方向）
- */
-function buildContextAwareTextPrompt(params: {
-  goalType: string;
-  nutritionPriority: string[];
-  healthConditions: string[];
-  budgetStatus: string;
-  remainingCalories: number;
-  remainingProtein: number;
-}): string {
-  const contextLines: string[] = [
-    '\n\n【用户目标上下文 — 影响你的营养估算精度和替代方案方向】',
-  ];
-
-  const goalLabels: Record<string, string> = {
-    fat_loss: '减脂',
-    muscle_gain: '增肌',
-    health: '均衡健康',
-    habit: '改善饮食习惯',
-  };
-  contextLines.push(`- 目标：${goalLabels[params.goalType] || '健康'}`);
-
-  if (params.budgetStatus === 'over_limit') {
-    contextLines.push(`- 今日热量已超标，calories 估算需要特别精确`);
-  } else if (params.remainingCalories > 0) {
-    contextLines.push(`- 今日剩余热量预算约 ${params.remainingCalories} kcal`);
-  }
-
-  if (params.nutritionPriority.includes('protein_gap')) {
-    contextLines.push(
-      `- 今日蛋白质不足，protein 字段估算要尽量准确，替代方案优先推荐高蛋白食物`,
-    );
-  }
-  if (params.nutritionPriority.includes('fat_excess')) {
-    contextLines.push(
-      `- 今日脂肪已超标，fat 和 saturatedFat 字段要认真估算，替代方案推荐低脂选择`,
-    );
-  }
-  if (params.nutritionPriority.includes('carb_excess')) {
-    contextLines.push(
-      `- 今日碳水已超标，carbs 估算要精确，替代方案推荐低碳水食物`,
-    );
-  }
-
-  // 健康条件特异性估算指令
-  if (params.healthConditions.includes('diabetes')) {
-    contextLines.push(
-      `- 用户有糖尿病：carbs 和 addedSugar 必须精确估算，升糖风险高的食物在 summary 中标注`,
-    );
-  }
-  if (params.healthConditions.includes('hypertension')) {
-    contextLines.push(
-      `- 用户有高血压：sodium 必须认真估算（不要填 null），腌制/重口食物的钠含量要估高而非低`,
-    );
-  }
-  if (
-    params.healthConditions.includes('heart_disease') ||
-    params.healthConditions.includes('cardiovascular')
-  ) {
-    contextLines.push(
-      `- 用户有心脏病：saturatedFat 必须认真估算，油炸/肥肉/全脂乳制品的饱和脂肪要估准`,
-    );
-  }
-
-  return TEXT_ANALYSIS_PROMPT + contextLines.join('\n');
+function buildContextAwareTextPrompt(
+  params: {
+    goalType: string;
+    nutritionPriority: string[];
+    healthConditions: string[];
+    budgetStatus: string;
+    remainingCalories: number;
+    remainingProtein: number;
+  },
+  locale: Locale = 'zh-CN',
+): string {
+  return (
+    buildBasePrompt(undefined, locale) + buildUserContextPrompt({ ...params, locale })
+  );
 }
 
 // ==================== 内部类型 ====================
 
-/** 文本解析出的食物项（LLM 或标准库） */
-interface ParsedFoodItem {
-  /** 原始名称 */
-  name: string;
-  /** 标准化名称 */
-  normalizedName?: string;
-  /** 匹配到的标准食物库条目 */
+/**
+ * V4.8: 文本解析出的食物项 — 扩展 AnalyzedFoodItem 以携带食物库匹配引用
+ *
+ * 与 AnalyzedFoodItem 字段完全对齐，仅新增 libraryMatch 用于内部处理。
+ * toAnalyzedFoodItem() 转换时会剥离 libraryMatch，提取 foodLibraryId。
+ */
+type ParsedFoodItem = AnalyzedFoodItem & {
+  /** 匹配到的标准食物库条目（内部使用，不暴露到最终输出） */
   libraryMatch?: any;
-  /** 数量描述 */
-  quantity?: string;
-  /** 估算重量（克） */
-  estimatedWeightGrams: number;
-  /** 分类 */
-  category?: string;
-  /** 置信度 0-1 */
-  confidence: number;
-  /** 热量（千卡） */
-  calories: number;
-  /** 蛋白质（克） */
-  protein: number;
-  /** 脂肪（克） */
-  fat: number;
-  /** 碳水化合物（克） */
-  carbs: number;
-  /** 膳食纤维（克） */
-  fiber?: number;
-  /** 钠（毫克） */
-  sodium?: number;
-  /** V6.3 P1-11: 饱和脂肪（克） */
-  saturatedFat?: number | null;
-  /** V6.3 P1-11: 添加糖（克） */
-  addedSugar?: number | null;
-  /** V6.3 P1-11: 维生素A（μg RAE） */
-  vitaminA?: number | null;
-  /** V6.3 P1-11: 维生素C（mg） */
-  vitaminC?: number | null;
-  /** V6.3 P1-11: 钙（mg） */
-  calcium?: number | null;
-  /** V6.3 P1-11: 铁（mg） */
-  iron?: number | null;
-  /** V6.3 P1-11: 是否为 AI 估算值 */
-  estimated?: boolean;
-  /** Big-9 过敏原列表（AI 估算，食物库命中时优先用库字段覆盖） */
-  allergens?: string[];
-  /** 饮食标签（AI 估算） */
-  tags?: string[];
-}
+};
 
 /** LLM 返回的解析结构 */
 interface LlmTextParseResult {
   foods: Array<{
     name: string;
+    nameEn?: string;
     quantity?: string;
     estimatedWeightGrams?: number;
     category?: string;
@@ -285,21 +150,47 @@ interface LlmTextParseResult {
     carbs?: number;
     fiber?: number;
     sodium?: number;
-    /** V6.3 P1-11: 扩展营养维度 (6 → 12) */
     saturatedFat?: number | null;
+    transFat?: number | null;
     addedSugar?: number | null;
+    cholesterol?: number | null;
+    omega3?: number | null;
+    omega6?: number | null;
+    solubleFiber?: number | null;
     vitaminA?: number | null;
     vitaminC?: number | null;
+    vitaminD?: number | null;
     calcium?: number | null;
     iron?: number | null;
+    potassium?: number | null;
+    zinc?: number | null;
     estimated?: boolean;
     /** Big-9 过敏原列表 */
     allergens?: string[];
     /** 饮食标签 */
     tags?: string[];
+    /** V4.5: 食物质量评分 1-10（对齐食物库 qualityScore） */
+    qualityScore?: number;
+    /** V4.5: 饱腹感评分 1-10（对齐食物库 satietyScore） */
+    satietyScore?: number;
+    /** V4.5: NOVA 加工分级 1-4 */
+    processingLevel?: number;
+    /** V4.5: 总糖（克） */
+    sugar?: number | null;
+    /** V4.5: LLM 置信度 0-1 */
+    confidence?: number;
+    standardServingG?: number;
+    standardServingDesc?: string;
+    glycemicIndex?: number;
+    glycemicLoad?: number | null;
+    nutrientDensity?: number | null;
+    fodmapLevel?: string | null;
+    oxalateLevel?: string | null;
+    purine?: string | null;
+    cookingMethods?: string[];
+    ingredientList?: string[];
   }>;
   summary?: string;
-  alternatives?: Array<{ name: string; reason: string }>;
 }
 
 @Injectable()
@@ -383,20 +274,45 @@ export class TextFoodAnalysisService {
     );
 
     // V2.1: Steps 4-13 委托给统一分析管道
-    const scoringFoods: ScoringFoodItem[] = parsedFoods.map((f) => ({
-      name: f.name,
-      confidence: f.confidence,
-      calories: f.calories,
-      protein: f.protein,
-      fat: f.fat,
-      carbs: f.carbs,
-      fiber: f.fiber,
-      sodium: f.sodium,
-      saturatedFat: f.saturatedFat,
-      addedSugar: f.addedSugar,
-      estimatedWeightGrams: f.estimatedWeightGrams,
-      libraryMatch: f.libraryMatch,
-    }));
+    // V4.9: scoringFoods 需要 per-serving 值（从 per-100g 换算）
+    const scoringFoods: ScoringFoodItem[] = parsedFoods.map((f) => {
+      const grams = f.estimatedWeightGrams || f.standardServingG || 100;
+      const factor = grams / 100;
+      return {
+        name: f.name,
+        confidence: f.confidence,
+        calories: (f.calories || 0) * factor,
+        protein: (f.protein || 0) * factor,
+        fat: (f.fat || 0) * factor,
+        carbs: (f.carbs || 0) * factor,
+        fiber: f.fiber != null ? (f.fiber || 0) * factor : undefined,
+        sodium: f.sodium != null ? (f.sodium || 0) * factor : undefined,
+        saturatedFat:
+          f.saturatedFat != null
+            ? (Number(f.saturatedFat) || 0) * factor
+            : undefined,
+        addedSugar:
+          f.addedSugar != null
+            ? (Number(f.addedSugar) || 0) * factor
+            : undefined,
+        estimatedWeightGrams: grams,
+        // V4.7: 补全 V4.6 新增字段（此前缺失导致评分链路健康调整失效）
+        transFat:
+          f.transFat != null
+            ? (Number(f.transFat) || 0) * factor
+            : undefined,
+        cholesterol:
+          f.cholesterol != null
+            ? (Number(f.cholesterol) || 0) * factor
+            : undefined,
+        glycemicLoad: f.glycemicLoad,
+        nutrientDensity: f.nutrientDensity,
+        fodmapLevel: f.fodmapLevel as ScoringFoodItem['fodmapLevel'],
+        purine: f.purine as ScoringFoodItem['purine'],
+        oxalateLevel: f.oxalateLevel as ScoringFoodItem['oxalateLevel'],
+        libraryMatch: f.libraryMatch,
+      };
+    });
 
     return this.analysisPipeline.execute({
       inputType: 'text',
@@ -528,6 +444,7 @@ export class TextFoodAnalysisService {
         unmatchedTerms.map((t) => t.term).join(', '),
         originalText,
         userCtx,
+        locale,
       );
       results.push(...llmResults);
 
@@ -538,6 +455,7 @@ export class TextFoodAnalysisService {
           originalText,
           originalText,
           userCtx,
+          locale,
         );
         results.push(...llmFullTextResults);
       }
@@ -572,7 +490,7 @@ export class TextFoodAnalysisService {
 
     // 3c. 如果全部为空（匹配失败 + LLM 也无结果），返回降级结果
     if (merged.length === 0) {
-      this.logger.warn(`文本分析无法识别任何食物: "${originalText}"`);
+      this.logger.warn(`Text analysis could not identify any food: "${originalText}"`);
       throw new BadRequestException(t('decision.error.noFood', {}, locale));
     }
 
@@ -802,6 +720,9 @@ export class TextFoodAnalysisService {
         ? Math.round(Number(food.fiber) * ratio * 10) / 10
         : undefined,
       sodium: food.sodium ? Math.round(Number(food.sodium) * ratio) : undefined,
+      // GI 是食物固有属性，不按份量缩放
+      glycemicIndex:
+        food.glycemicIndex != null ? Number(food.glycemicIndex) : undefined,
       // V1.2: 从标准库提取扩展营养字段
       saturatedFat:
         food.saturatedFat != null
@@ -811,6 +732,70 @@ export class TextFoodAnalysisService {
         food.addedSugar != null
           ? Math.round(Number(food.addedSugar) * ratio * 10) / 10
           : undefined,
+      // V4.6: 新增营养字段
+      transFat:
+        food.transFat != null
+          ? Math.round(Number(food.transFat) * ratio * 10) / 10
+          : undefined,
+      cholesterol:
+        food.cholesterol != null
+          ? Math.round(Number(food.cholesterol) * ratio)
+          : undefined,
+      omega3:
+        food.omega3 != null
+          ? Math.round(Number(food.omega3) * ratio)
+          : undefined,
+      omega6:
+        food.omega6 != null
+          ? Math.round(Number(food.omega6) * ratio)
+          : undefined,
+      solubleFiber:
+        food.solubleFiber != null
+          ? Math.round(Number(food.solubleFiber) * ratio * 10) / 10
+          : undefined,
+      vitaminD:
+        food.vitaminD != null
+          ? Math.round(Number(food.vitaminD) * ratio * 10) / 10
+          : undefined,
+      potassium:
+        food.potassium != null
+          ? Math.round(Number(food.potassium) * ratio)
+          : undefined,
+      zinc:
+        food.zinc != null
+          ? Math.round(Number(food.zinc) * ratio * 10) / 10
+          : undefined,
+      // V4.5: 统一为新字段名
+      qualityScore:
+        food.qualityScore != null ? Number(food.qualityScore) : undefined,
+      satietyScore:
+        food.satietyScore != null ? Number(food.satietyScore) : undefined,
+      processingLevel:
+        food.processingLevel != null ? Number(food.processingLevel) : undefined,
+      sugar:
+        food.sugar != null
+          ? Math.round(Number(food.sugar) * ratio * 10) / 10
+          : undefined,
+      standardServingG:
+        food.standardServingG != null
+          ? Number(food.standardServingG)
+          : undefined,
+      // V4.6: 新增非营养字段（不按份量缩放）
+      nameEn: food.nameEn ?? undefined,
+      standardServingDesc: food.standardServingDesc ?? undefined,
+      glycemicLoad:
+        food.glycemicLoad != null ? Number(food.glycemicLoad) : undefined,
+      nutrientDensity:
+        food.nutrientDensity != null ? Number(food.nutrientDensity) : undefined,
+      fodmapLevel: food.fodmapLevel ?? undefined,
+      oxalateLevel: food.oxalateLevel ?? undefined,
+      purine: food.purine ?? undefined,
+      cookingMethods: Array.isArray(food.cookingMethods)
+        ? food.cookingMethods
+        : undefined,
+      ingredientList: Array.isArray(food.ingredientList)
+        ? food.ingredientList
+        : undefined,
     };
   }
 
@@ -825,27 +810,31 @@ export class TextFoodAnalysisService {
     unmatchedText: string,
     _originalText: string,
     userCtx?: any,
+    locale?: Locale,
   ): Promise<ParsedFoodItem[]> {
     if (!this.apiKey) {
-      this.logger.warn('LLM API 未配置，跳过 LLM 解析');
+      this.logger.warn('LLM API not configured, skipping LLM parsing');
       return [];
     }
 
     try {
       // V3.4 P1.3: 根据用户上下文选择 system prompt
       const systemPrompt = userCtx
-        ? buildContextAwareTextPrompt({
-            goalType: userCtx.goalType || 'health',
-            nutritionPriority: userCtx.nutritionPriority || [],
-            healthConditions: userCtx.healthConditions || [],
-            budgetStatus: userCtx.budgetStatus || 'under_target',
-            remainingCalories: userCtx.remainingCalories ?? 2000,
-            remainingProtein: userCtx.remainingProtein ?? 65,
-          })
-        : TEXT_ANALYSIS_PROMPT;
+        ? buildContextAwareTextPrompt(
+            {
+              goalType: userCtx.goalType || 'health',
+              nutritionPriority: userCtx.nutritionPriority || [],
+              healthConditions: userCtx.healthConditions || [],
+              budgetStatus: userCtx.budgetStatus || 'under_target',
+              remainingCalories: userCtx.remainingCalories ?? 2000,
+              remainingProtein: userCtx.remainingProtein ?? 65,
+            },
+            locale,
+          )
+        : buildBasePrompt(undefined, locale);
 
       this.logger.log(
-        `[LLM] 调用文本解析 | 输入: "${unmatchedText.slice(0, 80)}"`,
+        `[LLM] Text parsing call | input: "${unmatchedText.slice(0, 80)}"`,
       );
 
       const response = await fetch(`${this.baseUrl}/chat/completions`, {
@@ -862,7 +851,7 @@ export class TextFoodAnalysisService {
             { role: 'system', content: systemPrompt },
             {
               role: 'user',
-              content: `分析以下食物描述：${unmatchedText}`,
+              content: getUserMessage('text', unmatchedText, locale),
             },
           ],
           max_tokens: 800,
@@ -873,7 +862,7 @@ export class TextFoodAnalysisService {
 
       if (!response.ok) {
         const err = await response.text();
-        this.logger.error(`LLM API 错误: ${response.status} ${err}`);
+        this.logger.error(`LLM API error: ${response.status} ${err}`);
         return [];
       }
 
@@ -915,6 +904,7 @@ export class TextFoodAnalysisService {
         resolved.push({
           name: f.llmName,
           normalizedName: f.llmName,
+          nameEn: f.nameEn ?? undefined,
           quantity: f.quantity,
           estimatedWeightGrams: f.estimatedWeightGrams || DEFAULT_SERVING_GRAMS,
           category: f.category,
@@ -926,21 +916,51 @@ export class TextFoodAnalysisService {
           fiber: f.fiber,
           sodium: f.sodium,
           saturatedFat: f.saturatedFat ?? null,
+          transFat: f.transFat ?? null,
           addedSugar: f.addedSugar ?? null,
+          cholesterol: f.cholesterol ?? null,
+          omega3: f.omega3 ?? null,
+          omega6: f.omega6 ?? null,
+          solubleFiber: f.solubleFiber ?? null,
           vitaminA: f.vitaminA ?? null,
           vitaminC: f.vitaminC ?? null,
+          vitaminD: f.vitaminD ?? null,
           calcium: f.calcium ?? null,
           iron: f.iron ?? null,
+          potassium: f.potassium ?? null,
+          zinc: f.zinc ?? null,
           estimated: f.estimated,
           allergens: Array.isArray(f.allergens) ? f.allergens : undefined,
           tags: Array.isArray(f.tags) ? f.tags : undefined,
+          // V4.6: 统一字段名
+          qualityScore: f.qualityScore ?? undefined,
+          satietyScore: f.satietyScore ?? undefined,
+          processingLevel: f.processingLevel ?? undefined,
+          sugar: f.sugar ?? undefined,
+          standardServingG: f.standardServingG ?? undefined,
+          standardServingDesc: f.standardServingDesc ?? undefined,
+          glycemicIndex: f.glycemicIndex ?? undefined,
+          glycemicLoad: f.glycemicLoad ?? undefined,
+          nutrientDensity: f.nutrientDensity ?? undefined,
+          fodmapLevel: (f.fodmapLevel ?? undefined) as AnalyzedFoodItem['fodmapLevel'],
+          oxalateLevel: (f.oxalateLevel ?? undefined) as AnalyzedFoodItem['oxalateLevel'],
+          purine: (f.purine ?? undefined) as AnalyzedFoodItem['purine'],
+          cookingMethods: Array.isArray(f.cookingMethods)
+            ? f.cookingMethods
+            : undefined,
+          ingredientList: Array.isArray(f.ingredientList)
+            ? f.ingredientList
+            : undefined,
         });
       }
 
       // V3.6 P1.2: 校验并纠偏 LLM 估算的营养数据（热力学一致性）
-      return validateAndCorrectFoods(resolved);
+      // resolved items always have protein/fat/carbs/calories set as numbers
+      return validateAndCorrectFoods(
+        resolved as Array<ParsedFoodItem & NutritionInput>,
+      );
     } catch (err) {
-      this.logger.warn(`LLM 文本解析失败: ${(err as Error).message}`);
+      this.logger.warn(`LLM text parsing failed: ${(err as Error).message}`);
       return [];
     }
   }
@@ -1146,13 +1166,10 @@ export class TextFoodAnalysisService {
       return {
         foods: Array.isArray(parsed.foods) ? parsed.foods : [],
         summary: parsed.summary,
-        alternatives: Array.isArray(parsed.alternatives)
-          ? parsed.alternatives
-          : [],
       };
     } catch {
-      this.logger.warn(`LLM 返回解析失败: ${content.substring(0, 200)}`);
-      return { foods: [], alternatives: [] };
+      this.logger.warn(`LLM response parse failed: ${content.substring(0, 200)}`);
+      return { foods: [] };
     }
   }
 
@@ -1171,6 +1188,23 @@ export class TextFoodAnalysisService {
         ? food.allergens
         : undefined;
 
+    // V4.6: 食物库命中时优先用库值
+    const lib = food.libraryMatch;
+    const qualityScore =
+      lib?.qualityScore != null
+        ? Number(lib.qualityScore)
+        : (food.qualityScore ?? undefined);
+    const satietyScore =
+      lib?.satietyScore != null
+        ? Number(lib.satietyScore)
+        : (food.satietyScore ?? undefined);
+    const processingLevel =
+      lib?.processingLevel != null
+        ? Number(lib.processingLevel)
+        : (food.processingLevel ?? undefined);
+    const sugar =
+      lib?.sugar != null ? Number(lib.sugar) : (food.sugar ?? undefined);
+
     return {
       name: food.name,
       normalizedName: food.normalizedName,
@@ -1185,7 +1219,7 @@ export class TextFoodAnalysisService {
       carbs: food.carbs,
       fiber: food.fiber,
       sodium: food.sodium,
-      // V6.3 P1-11: 扩展营养维度
+      // 扩展营养维度
       saturatedFat: food.saturatedFat,
       addedSugar: food.addedSugar,
       vitaminA: food.vitaminA,
@@ -1195,6 +1229,53 @@ export class TextFoodAnalysisService {
       estimated: food.estimated,
       allergens,
       tags: food.tags?.length ? food.tags : undefined,
+      glycemicIndex: food.glycemicIndex,
+      // V4.6: 决策辅助字段
+      qualityScore,
+      satietyScore,
+      processingLevel,
+      sugar,
+      // V4.6: 新增字段（食物库优先，LLM 补位）
+      nameEn: food.nameEn ?? undefined,
+      standardServingDesc: food.standardServingDesc ?? undefined,
+      transFat:
+        lib?.transFat != null
+          ? Number(lib.transFat)
+          : (food.transFat ?? undefined),
+      cholesterol:
+        lib?.cholesterol != null
+          ? Number(lib.cholesterol)
+          : (food.cholesterol ?? undefined),
+      omega3:
+        lib?.omega3 != null ? Number(lib.omega3) : (food.omega3 ?? undefined),
+      omega6:
+        lib?.omega6 != null ? Number(lib.omega6) : (food.omega6 ?? undefined),
+      solubleFiber:
+        lib?.solubleFiber != null
+          ? Number(lib.solubleFiber)
+          : (food.solubleFiber ?? undefined),
+      vitaminD:
+        lib?.vitaminD != null
+          ? Number(lib.vitaminD)
+          : (food.vitaminD ?? undefined),
+      potassium:
+        lib?.potassium != null
+          ? Number(lib.potassium)
+          : (food.potassium ?? undefined),
+      zinc: lib?.zinc != null ? Number(lib.zinc) : (food.zinc ?? undefined),
+      glycemicLoad:
+        lib?.glycemicLoad != null
+          ? Number(lib.glycemicLoad)
+          : (food.glycemicLoad ?? undefined),
+      nutrientDensity:
+        lib?.nutrientDensity != null
+          ? Number(lib.nutrientDensity)
+          : (food.nutrientDensity ?? undefined),
+      fodmapLevel: lib?.fodmapLevel ?? food.fodmapLevel ?? undefined,
+      oxalateLevel: lib?.oxalateLevel ?? food.oxalateLevel ?? undefined,
+      purine: lib?.purine ?? food.purine ?? undefined,
+      cookingMethods: food.cookingMethods ?? undefined,
+      ingredientList: food.ingredientList ?? undefined,
     };
   }
 }

@@ -12,11 +12,15 @@ import { Injectable, Logger } from '@nestjs/common';
 import { FoodService } from '../../diet/app/services/food.service';
 import { NutritionScoreService } from '../../diet/app/services/nutrition-score.service';
 import { UserProfileService } from '../../user/app/services/profile/user-profile.service';
+import { GoalTrackerService } from '../../user/app/services/goal/goal-tracker.service';
+import { GoalPhaseService } from '../../user/app/services/goal/goal-phase.service';
+import { RealtimeProfileService } from '../../user/app/services/profile/realtime-profile.service';
+import { BehaviorService } from '../../diet/app/services/behavior.service';
 import {
   getUserLocalHour,
   DEFAULT_TIMEZONE,
 } from '../../../common/utils/timezone.util';
-import { t, Locale } from '../../diet/app/recommendation/utils/i18n-messages';
+import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 import {
   UnifiedUserContext,
   MacroSlotStatus,
@@ -85,6 +89,10 @@ export class UserContextBuilderService {
     private readonly foodService: FoodService,
     private readonly nutritionScoreService: NutritionScoreService,
     private readonly userProfileService: UserProfileService,
+    private readonly goalTrackerService: GoalTrackerService,
+    private readonly goalPhaseService: GoalPhaseService,
+    private readonly realtimeProfileService: RealtimeProfileService,
+    private readonly behaviorService: BehaviorService,
   ) {}
 
   /**
@@ -94,7 +102,7 @@ export class UserContextBuilderService {
     const localHour = getUserLocalHour(DEFAULT_TIMEZONE);
     const defaults: UnifiedUserContext = {
       goalType: 'health',
-      goalLabel: t('decision.goal.health', {}, locale),
+      goalLabel: cl('goal.health', locale),
       todayCalories: 0,
       todayProtein: 0,
       todayFat: 0,
@@ -121,10 +129,51 @@ export class UserContextBuilderService {
     if (!userId) return defaults;
 
     try {
-      const [summary, profile] = await Promise.all([
+      const [
+        summary,
+        profile,
+        goalProgress,
+        effectiveGoal,
+        shortTermProfile,
+        behaviorProfile,
+      ] = await Promise.all([
         this.foodService.getTodaySummary(userId),
         this.userProfileService.getProfile(userId),
+        this.goalTrackerService.getProgress(userId).catch(() => null),
+        this.goalPhaseService.getCurrentGoal(userId).catch(() => null),
+        this.realtimeProfileService
+          .getShortTermProfile(userId)
+          .catch(() => null),
+        this.behaviorService.getProfile(userId).catch(() => null),
       ]);
+
+      // V4.2: 信号完整度追踪
+      const signalNames = [
+        'todaySummary',
+        'profile',
+        'goalProgress',
+        'effectiveGoal',
+        'shortTermProfile',
+        'behaviorProfile',
+      ];
+      const signalValues = [
+        summary,
+        profile,
+        goalProgress,
+        effectiveGoal,
+        shortTermProfile,
+        behaviorProfile,
+      ];
+      const availableSignals: string[] = [];
+      const missingSignals: string[] = [];
+      signalNames.forEach((name, i) => {
+        if (signalValues[i] != null) availableSignals.push(name);
+        else missingSignals.push(name);
+      });
+      const completenessRatio =
+        signalNames.length > 0
+          ? availableSignals.length / signalNames.length
+          : 1;
 
       const goalType = profile?.goal || 'health';
       const goals = this.nutritionScoreService.calculateDailyGoals(profile);
@@ -179,11 +228,30 @@ export class UserContextBuilderService {
         goalCarbs: goals.carbs,
       });
 
+      // V4.0: 目标执行进度
+      const goalProgressData = goalProgress
+        ? {
+            executionRate: goalProgress.executionRate ?? 0,
+            streakDays: goalProgress.streakDays ?? 0,
+            calorieCompliance: goalProgress.calorieCompliance ?? 0,
+            proteinCompliance: goalProgress.proteinCompliance ?? 0,
+          }
+        : undefined;
+
+      // V4.0: 7天短期行为画像
+      const shortTermBehavior = this.resolveShortTermBehavior(
+        shortTermProfile,
+        behaviorProfile,
+      );
+
+      // V4.0: 目标阶段权重调整
+      const phaseWeightAdjustment = effectiveGoal?.weightAdjustment
+        ? (effectiveGoal.weightAdjustment as Partial<Record<string, number>>)
+        : undefined;
+
       return {
         goalType,
-        goalLabel:
-          t(`decision.goal.${goalType}`, {}, locale) ||
-          t('decision.goal.health', {}, locale),
+        goalLabel: cl(`goal.${goalType}`, locale) || cl('goal.health', locale),
         todayCalories,
         todayProtein,
         todayFat,
@@ -206,9 +274,17 @@ export class UserContextBuilderService {
         nutritionPriority,
         contextSignals,
         macroSlotStatus,
+        goalProgress: goalProgressData,
+        shortTermBehavior,
+        phaseWeightAdjustment,
+        contextCompleteness: {
+          availableSignals,
+          missingSignals,
+          completenessRatio,
+        },
       };
     } catch (err) {
-      this.logger.warn(`构建用户上下文失败: ${(err as Error).message}`);
+      this.logger.warn(`Failed to build user context: ${(err as Error).message}`);
       return defaults;
     }
   }
@@ -266,6 +342,72 @@ ${cl('ctx.prompt.budgetHeader', locale)}
     }
 
     return text;
+  }
+
+  /**
+   * V4.0: 从 ShortTermProfile + BehaviorProfile 组装短期行为画像
+   */
+  private resolveShortTermBehavior(
+    shortTermProfile: any | null,
+    behaviorProfile: any | null,
+  ): UnifiedUserContext['shortTermBehavior'] | undefined {
+    if (!shortTermProfile && !behaviorProfile) return undefined;
+
+    // 从 shortTermProfile 提取拒绝模式
+    const rejectedFoods = shortTermProfile?.rejectedFoods as
+      | Record<string, number>
+      | undefined;
+    const recentRejectionPatterns = rejectedFoods
+      ? Object.keys(rejectedFoods).slice(0, 10)
+      : [];
+
+    // 从 shortTermProfile.dailyIntakes 推导摄入趋势
+    const dailyIntakes = (shortTermProfile?.dailyIntakes ?? []) as Array<{
+      date: string;
+      calories: number;
+    }>;
+    const intakeTrends = this.inferIntakeTrend(dailyIntakes);
+
+    // 从 behaviorProfile 提取暴食风险小时
+    const bingeRiskHours = (behaviorProfile?.bingeRiskHours ?? []) as number[];
+
+    // 从 shortTermProfile 提取活跃时段
+    const activeTimeSlots = shortTermProfile?.activeTimeSlots
+      ? Object.keys(shortTermProfile.activeTimeSlots as Record<string, unknown>)
+      : [];
+
+    return {
+      recentRejectionPatterns,
+      intakeTrends,
+      bingeRiskHours,
+      activeTimeSlots,
+    };
+  }
+
+  /**
+   * V4.0: 基于近7天每日热量推导摄入趋势
+   */
+  private inferIntakeTrend(
+    dailyIntakes: Array<{ date: string; calories: number }>,
+  ): 'increasing' | 'stable' | 'decreasing' {
+    if (dailyIntakes.length < 3) return 'stable';
+
+    // 简单线性趋势：比较前半段和后半段的平均热量
+    const mid = Math.floor(dailyIntakes.length / 2);
+    const firstHalf = dailyIntakes.slice(0, mid);
+    const secondHalf = dailyIntakes.slice(mid);
+
+    const avgFirst =
+      firstHalf.reduce((s, d) => s + d.calories, 0) / firstHalf.length;
+    const avgSecond =
+      secondHalf.reduce((s, d) => s + d.calories, 0) / secondHalf.length;
+
+    const diff = avgSecond - avgFirst;
+    const threshold = avgFirst * 0.1; // 10% 变化视为趋势
+
+    if (diff > threshold) return 'increasing';
+    if (diff < -threshold) return 'decreasing';
+    return 'stable';
   }
 
   private resolveBudgetStatus(

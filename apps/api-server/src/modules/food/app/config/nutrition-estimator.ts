@@ -13,7 +13,7 @@ export interface EstimatableFoodItem {
   protein: number;
   fat: number;
   carbs: number;
-  estimatedWeightGrams: number;
+  estimatedWeightGrams?: number;
   fiber?: number;
   sodium?: number;
   saturatedFat?: number | null;
@@ -34,6 +34,7 @@ export function estimateQuality(food: EstimatableFoodItem): number {
   const proteinRatio = (food.protein * 4) / Math.max(1, food.calories);
   if (proteinRatio > 0.25) q += 1;
   if (
+    food.estimatedWeightGrams &&
     food.estimatedWeightGrams > 0 &&
     food.calories / food.estimatedWeightGrams < 1.2
   ) {

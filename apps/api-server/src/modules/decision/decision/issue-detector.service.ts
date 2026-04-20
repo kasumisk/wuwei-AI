@@ -15,7 +15,8 @@ import {
   UnifiedUserContext,
 } from '../types/analysis-result.types';
 import { NutritionScoreBreakdown } from '../../diet/app/services/nutrition-score.service';
-import { t, Locale } from '../../diet/app/recommendation/utils/i18n-messages';
+import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
+import { cl } from '../i18n/decision-labels';
 import { DIMENSION_LABELS } from '../config/scoring-dimensions';
 import {
   checkCalorieOverrun,
@@ -26,7 +27,7 @@ import {
   checkAllergenConflict,
   checkRestrictionConflict,
   checkHealthConditionRisk,
-} from './decision-checks';
+} from '../config/decision-checks';
 import { DecisionFoodItem } from './food-decision.service';
 import { DynamicThresholdsService } from '../config/dynamic-thresholds.service';
 
@@ -80,16 +81,13 @@ export class IssueDetectorService {
       issues.push({
         category: 'low_quality',
         severity: 'warning',
-        message: t(
-          'decision.factor.critical',
-          {
-            dimension:
-              (DIMENSION_LABELS[locale || 'zh-CN'] || DIMENSION_LABELS['zh-CN'])
-                .foodQuality || '食物质量',
-            score: String(Math.round(breakdown.foodQuality)),
-          },
-          locale,
-        ),
+        message: cl('factor.critical', locale)
+          .replace(
+            '{dimension}',
+            (DIMENSION_LABELS[locale || 'zh-CN'] || DIMENSION_LABELS['zh-CN'])
+              .foodQuality || cl('dim.foodQuality', locale),
+          )
+          .replace('{score}', String(Math.round(breakdown.foodQuality))),
         data: { qualityScore: Math.round(breakdown.foodQuality) },
       });
     }
@@ -137,51 +135,18 @@ export class IssueDetectorService {
   // ==================== 私有方法 ====================
 
   private populateActionable(issues: DietIssue[], locale?: Locale): void {
-    const actionableMap: Record<
-      string,
-      { 'zh-CN': string; 'en-US': string; 'ja-JP': string }
-    > = {
-      calorie_excess: {
-        'zh-CN': '减少份量或选择低热量替代',
-        'en-US': 'Reduce portion or choose lower-calorie alternative',
-        'ja-JP': '量を減らすか低カロリーの代替品を選ぶ',
-      },
-      protein_deficit: {
-        'zh-CN': '添加高蛋白食材（如鸡蛋、鸡胸肉、豆腐）',
-        'en-US': 'Add high-protein foods (e.g., eggs, chicken breast, tofu)',
-        'ja-JP': '高タンパク食材を追加（卵、鶏胸肉、豆腐など）',
-      },
-      fat_excess: {
-        'zh-CN': '选择少油烹饪方式或减少油脂摄入',
-        'en-US': 'Choose low-fat cooking methods or reduce oil intake',
-        'ja-JP': '低脂肪の調理法を選ぶか油脂摂取を減らす',
-      },
-      carb_excess: {
-        'zh-CN': '减少主食份量或选择全谷物',
-        'en-US': 'Reduce staple portion or choose whole grains',
-        'ja-JP': '主食の量を減らすか全粒穀物を選ぶ',
-      },
-      low_quality: {
-        'zh-CN': '增加蔬菜和优质蛋白的比例',
-        'en-US': 'Increase proportion of vegetables and quality protein',
-        'ja-JP': '野菜と良質なタンパク質の割合を増やす',
-      },
-      cumulative_excess: {
-        'zh-CN': '下一餐适当减量以平衡全天摄入',
-        'en-US': 'Reduce next meal to balance daily intake',
-        'ja-JP': '次の食事を減らして1日の摂取バランスを取る',
-      },
-      multi_day_excess: {
-        'zh-CN': '连续超标，建议重新规划本周饮食',
-        'en-US': 'Multiple days over budget, consider replanning this week',
-        'ja-JP': '連日超過、今週の食事を再計画することを推奨',
-      },
-    };
-    const loc = locale || 'zh-CN';
+    const actionableCategories = [
+      'calorie_excess',
+      'protein_deficit',
+      'fat_excess',
+      'carb_excess',
+      'low_quality',
+      'cumulative_excess',
+      'multi_day_excess',
+    ];
     for (const issue of issues) {
-      const entry = actionableMap[issue.category];
-      if (entry) {
-        issue.actionable = entry[loc] || entry['zh-CN'];
+      if (actionableCategories.includes(issue.category)) {
+        issue.actionable = cl(`actionable.${issue.category}`, locale);
       }
     }
   }

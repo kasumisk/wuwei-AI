@@ -89,7 +89,7 @@ export class AnalysisPersistenceService {
         persistStatus: PersistStatus.PENDING,
       },
     });
-    this.logger.debug(`文本分析记录已保存: ${input.analysisId}`);
+    this.logger.debug(`Text analysis record saved: ${input.analysisId}`);
   }
 
   /**
@@ -128,6 +128,6 @@ export class AnalysisPersistenceService {
         candidateFoodCount: 0,
       },
     });
-    this.logger.debug(`图片分析记录已保存: ${input.analysisId}`);
+    this.logger.debug(`Image analysis record saved: ${input.analysisId}`);
   }
 }

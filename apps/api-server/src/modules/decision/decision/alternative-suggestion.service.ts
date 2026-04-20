@@ -25,7 +25,6 @@ import {
   AlternativeRule,
   CATEGORY_ALTERNATIVE_RULES,
   GOAL_ALTERNATIVE_RULES,
-  resolveAlternatives,
 } from '../config/alternative-food-rules';
 import { SubstitutionService } from '../../diet/app/recommendation/filter/substitution.service';
 import type {
@@ -33,12 +32,16 @@ import type {
   UserPreferenceProfile,
 } from '../../diet/app/recommendation/types/recommendation.types';
 import { FoodLibraryService } from '../../food/app/services/food-library.service';
-import { t, Locale } from '../../diet/app/recommendation/utils/i18n-messages';
+import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 import { cl } from '../i18n/decision-labels';
 import { DecisionFoodItem } from './food-decision.service';
 import { RecommendationEngineService } from '../../diet/app/services/recommendation-engine.service';
 import { MealRecommendation } from '../../diet/app/recommendation/types/recommendation.types';
 import { ContextualAnalysis } from '../types/analysis-result.types';
+import {
+  TIME_BOUNDARIES,
+  ALTERNATIVE_PARAMS,
+} from '../config/decision-thresholds';
 
 // ==================== 输入类型 ====================
 
@@ -132,7 +135,7 @@ export class AlternativeSuggestionService {
         }
       } catch (err) {
         this.logger.warn(
-          `推荐引擎替代方案获取失败，降级到二级替代路径: ${(err as Error).message}`,
+          `Engine alternatives fetch failed, falling back to secondary path: ${(err as Error).message}`,
         );
       }
     }
@@ -154,14 +157,14 @@ export class AlternativeSuggestionService {
         }
       } catch (err) {
         this.logger.warn(
-          `SubstitutionService 替代方案获取失败，降级静态规则: ${(err as Error).message}`,
+          `SubstitutionService alternatives fetch failed, falling back to static rules: ${(err as Error).message}`,
         );
       }
     }
 
     // 3. 静态规则 fallback
     if (results.length === 0) {
-      results = this.generateStaticAlternatives(foods, ctx, locale);
+      results = await this.generateStaticAlternatives(foods, ctx, locale);
     }
 
     // 4. 添加 comparison 字段（定量对比）
@@ -200,15 +203,26 @@ export class AlternativeSuggestionService {
   // ==================== 定量对比构建 ====================
 
   /**
-   * 构建替代方案与原始食物的定量对比
-   * 当缺少替代食物的营养数据时返回 undefined
+   * V4.2: 构建替代方案与原始食物的定量对比
+   * 对引擎替代方案使用真实数据，对静态替代方案提供估算值
    */
   private buildComparison(
-    _alt: FoodAlternative,
-    _avgCalories: number,
+    alt: FoodAlternative,
+    avgCalories: number,
     _avgProtein: number,
   ): AlternativeComparison | undefined {
-    // 静态规则生成的替代方案没有真实营养数据，无法计算定量对比
+    // 引擎替代方案已有 comparison（在 getEngineAlternatives 中构建）
+    if (alt.comparison) return alt.comparison;
+
+    // V4.2: 静态替代方案 — 估算热量差（静态替代通常是更健康的选择，假设降低约 30%）
+    if (alt.source === 'static' && avgCalories > 0) {
+      return {
+        caloriesDiff: Math.round(-avgCalories * 0.3),
+        proteinDiff: 0, // 未知，用 0 表示
+        scoreDiff: undefined,
+      };
+    }
+
     return undefined;
   }
 
@@ -232,6 +246,10 @@ export class AlternativeSuggestionService {
       (sum, food) => sum + food.protein,
       0,
     );
+
+    // V3.9 P2.1: 从 macroProgress.remaining 提取营养缺口，动态约束替代方案目标
+    const remaining = contextualAnalysis?.macroProgress?.remaining;
+
     const scenarioRecommendations =
       await this.recommendationEngineService.recommendByScenario(
         userId,
@@ -242,21 +260,45 @@ export class AlternativeSuggestionService {
           protein: Math.max(0, ctx.todayProtein || 0),
         },
         {
-          calories:
-            constraints?.maxCalories || Math.max(currentMealCalories, 150),
-          protein: constraints?.preferHighProtein
-            ? Math.max(currentMealProtein + 8, 20)
-            : Math.max(currentMealProtein, 12),
-          fat: constraints?.preferLowFat
-            ? Math.min(currentMealCalories * 0.2, 12)
-            : Math.max(
-                10,
-                foods.reduce((sum, food) => sum + food.fat, 0),
-              ),
+          calories: (() => {
+            if (remaining?.calories !== undefined && remaining.calories > 0) {
+              const dynamicTarget = Math.round(remaining.calories * 0.4);
+              return constraints?.preferLowCalorie
+                ? Math.min(dynamicTarget, currentMealCalories * 0.7)
+                : Math.max(dynamicTarget, 150);
+            }
+            return (
+              constraints?.maxCalories || Math.max(currentMealCalories, 150)
+            );
+          })(),
+          protein: (() => {
+            if (remaining?.protein !== undefined && remaining.protein > 0) {
+              const dynamicTarget = Math.round(remaining.protein * 0.4);
+              return constraints?.preferHighProtein
+                ? Math.max(dynamicTarget, 20)
+                : Math.max(dynamicTarget, 12);
+            }
+            return constraints?.preferHighProtein
+              ? Math.max(currentMealProtein + 8, 20)
+              : Math.max(currentMealProtein, 12);
+          })(),
+          fat: (() => {
+            if (remaining?.fat !== undefined && remaining.fat > 0) {
+              const dynamicTarget = Math.round(remaining.fat * 0.3);
+              return constraints?.preferLowFat
+                ? Math.min(dynamicTarget, 10)
+                : Math.max(dynamicTarget, 8);
+            }
+            return constraints?.preferLowFat
+              ? Math.min(currentMealCalories * 0.2, 12)
+              : Math.max(
+                  10,
+                  foods.reduce((sum, food) => sum + food.fat, 0),
+                );
+          })(),
           carbs: (() => {
             // V3.6 P2.1: 用剩余碳水动态计算，替代写死的 20g/15g
-            const remainingCarbs =
-              contextualAnalysis?.macroProgress.remaining.carbs;
+            const remainingCarbs = remaining?.carbs;
             if (remainingCarbs !== undefined && remainingCarbs > 0) {
               // 建议摄入 30% 的剩余碳水量（当前餐分配）
               const dynamicTarget = Math.round(remainingCarbs * 0.3);
@@ -336,7 +378,13 @@ export class AlternativeSuggestionService {
       }
     }
 
-    return this.attachRankScores(alternatives.slice(0, 5), ctx, locale);
+    return this.attachRankScores(
+      alternatives.slice(0, 5),
+      ctx,
+      locale,
+      foods.map((f) => f.foodForm).filter(Boolean) as string[],
+      foods.map((f) => f.flavorProfile).filter(Boolean) as string[],
+    );
   }
 
   private explainEngineCandidate(
@@ -351,10 +399,9 @@ export class AlternativeSuggestionService {
       constraints?.preferLowCalorie &&
       candidate.servingCalories < currentMealCalories
     ) {
-      return t('decision.alt.lowerCal', {
-        newCal: String(Math.round(candidate.servingCalories)),
-        oldCal: String(Math.round(currentMealCalories)),
-      });
+      return cl('alt.lowerCal', locale)
+        .replace('{newCal}', String(Math.round(candidate.servingCalories)))
+        .replace('{oldCal}', String(Math.round(currentMealCalories)));
     }
 
     if (
@@ -362,14 +409,9 @@ export class AlternativeSuggestionService {
       candidate.servingCarbs !== undefined &&
       candidate.servingCarbs < 15
     ) {
-      return (
-        t('decision.alt.lowGlycemic', {
-          carbs: String(Math.round(candidate.servingCarbs)),
-        }) ||
-        cl('alt.lowGlycemicFallback', locale).replace(
-          '{carbs}',
-          String(Math.round(candidate.servingCarbs)),
-        )
+      return cl('alt.lowGlycemic', locale).replace(
+        '{carbs}',
+        String(Math.round(candidate.servingCarbs)),
       );
     }
 
@@ -377,19 +419,19 @@ export class AlternativeSuggestionService {
       constraints?.preferHighProtein &&
       candidate.servingProtein > currentMealProtein
     ) {
-      return t('decision.alt.higherProtein', {
-        newPro: String(Math.round(candidate.servingProtein)),
-        oldPro: String(Math.round(currentMealProtein)),
-      });
+      return cl('alt.higherProtein', locale)
+        .replace('{newPro}', String(Math.round(candidate.servingProtein)))
+        .replace('{oldPro}', String(Math.round(currentMealProtein)));
     }
 
     if (scenarioType === 'convenience') {
-      return t('decision.alt.similar');
+      return cl('alt.similar', locale);
     }
 
-    return t('decision.alt.balanced', {
-      score: String(Math.round((candidate.score || 0) * 100)),
-    });
+    return cl('alt.matchScore', locale).replace(
+      '{score}',
+      String(Math.round((candidate.score || 0) * 100)),
+    );
   }
 
   private async getSubstitutionAlternatives(
@@ -452,40 +494,37 @@ export class AlternativeSuggestionService {
           constraints?.preferLowCalorie &&
           c.servingCalories < food.calories * 0.8
         ) {
-          reason = t('decision.alt.lowerCal', {
-            newCal: String(Math.round(c.servingCalories)),
-            oldCal: String(Math.round(food.calories)),
-          });
+          reason = cl('alt.lowerCal', locale)
+            .replace('{newCal}', String(Math.round(c.servingCalories)))
+            .replace('{oldCal}', String(Math.round(food.calories)));
         } else if (
           constraints?.preferHighProtein &&
           c.servingProtein > food.protein * 1.1
         ) {
-          reason = t('decision.alt.higherProtein', {
-            newPro: String(Math.round(c.servingProtein)),
-            oldPro: String(Math.round(food.protein)),
-          });
+          reason = cl('alt.higherProtein', locale)
+            .replace('{newPro}', String(Math.round(c.servingProtein)))
+            .replace('{oldPro}', String(Math.round(food.protein)));
         } else if (
           ctx.goalType === 'fat_loss' &&
           c.servingCalories < food.calories * 0.7
         ) {
-          reason = t('decision.alt.lowerCal', {
-            newCal: String(Math.round(c.servingCalories)),
-            oldCal: String(Math.round(food.calories)),
-          });
+          reason = cl('alt.lowerCal', locale)
+            .replace('{newCal}', String(Math.round(c.servingCalories)))
+            .replace('{oldCal}', String(Math.round(food.calories)));
         } else if (
           ctx.goalType === 'muscle_gain' &&
           c.servingProtein > food.protein * 1.2
         ) {
-          reason = t('decision.alt.higherProtein', {
-            newPro: String(Math.round(c.servingProtein)),
-            oldPro: String(Math.round(food.protein)),
-          });
+          reason = cl('alt.higherProtein', locale)
+            .replace('{newPro}', String(Math.round(c.servingProtein)))
+            .replace('{oldPro}', String(Math.round(food.protein)));
         } else if (c.substituteScore > 0.7) {
-          reason = t('decision.alt.balanced', {
-            score: String(Math.round(c.substituteScore * 100)),
-          });
+          reason = cl('alt.matchScore', locale).replace(
+            '{score}',
+            String(Math.round(c.substituteScore * 100)),
+          );
         } else {
-          reason = t('decision.alt.similar');
+          reason = cl('alt.similar', locale);
         }
 
         alternatives.push({
@@ -508,10 +547,16 @@ export class AlternativeSuggestionService {
     // V2.1: 推荐引擎调用指标日志
     const latencyMs = Date.now() - startTime;
     this.logger.debug(
-      `推荐引擎替代方案: count=${alternatives.length}, latency=${latencyMs}ms, userId=${userId}`,
+      `Substitution alternatives: count=${alternatives.length}, latency=${latencyMs}ms, userId=${userId}`,
     );
 
-    return this.attachRankScores(alternatives, ctx, locale);
+    return this.attachRankScores(
+      alternatives,
+      ctx,
+      locale,
+      foods.map((f) => f.foodForm).filter(Boolean) as string[],
+      foods.map((f) => f.flavorProfile).filter(Boolean) as string[],
+    );
   }
 
   // ==================== V2.2: 问题约束提取 ====================
@@ -660,11 +705,25 @@ export class AlternativeSuggestionService {
 
   // ==================== 静态规则替代 ====================
 
-  private generateStaticAlternatives(
+  /**
+   * V5.0 P2.2: Constants now sourced from decision-thresholds.ts
+   * @deprecated Use TIME_BOUNDARIES.lateNightStart / ALTERNATIVE_PARAMS.lateNightMinCalories
+   */
+  private static readonly LATE_NIGHT_HOUR = TIME_BOUNDARIES.lateNightStart;
+  private static readonly LATE_NIGHT_MIN_CAL = ALTERNATIVE_PARAMS.lateNightMinCalories;
+  private static readonly DEFAULT_GOAL_TYPE = ALTERNATIVE_PARAMS.defaultGoalType;
+
+  /**
+   * V4.8 P2.2: Static rule fallback — hint-only, no food library search
+   *
+   * Engine and substitution paths handle real food lookup.
+   * Static fallback provides category-level hints from substitutionConstraints.
+   */
+  private async generateStaticAlternatives(
     foods: DecisionFoodItem[],
     ctx: UnifiedUserContext,
     locale?: Locale,
-  ): FoodAlternative[] {
+  ): Promise<FoodAlternative[]> {
     const totalProtein = foods.reduce((s, f) => s + f.protein, 0);
     const totalCalories = foods.reduce((s, f) => s + f.calories, 0);
     const totalCarbs = foods.reduce((s, f) => s + f.carbs, 0);
@@ -673,24 +732,22 @@ export class AlternativeSuggestionService {
     const matched: FoodAlternative[] = [];
     const seenNames = new Set<string>();
 
-    const addAlternatives = (alts: FoodAlternative[]) => {
-      for (const alt of alts) {
-        if (!seenNames.has(alt.name)) {
-          seenNames.add(alt.name);
-          matched.push({ ...alt, source: alt.source || 'static' });
-        }
-      }
+    // V4.8: Hint-only — no food library search (engine paths handle that)
+    const addFromRule = (rule: AlternativeRule) => {
+      if (matched.length >= 5) return;
+      const hint = cl(rule.fallbackHint, locale);
+      if (!hint || seenNames.has(hint)) return;
+
+      seenNames.add(hint);
+      matched.push({
+        name: hint,
+        reason: hint,
+        source: 'static',
+      });
     };
 
-    // V1.9: resolve i18n alternatives by locale
-    const categoryRules = resolveAlternatives(
-      CATEGORY_ALTERNATIVE_RULES,
-      locale,
-    );
-    const goalRules = resolveAlternatives(GOAL_ALTERNATIVE_RULES, locale);
-
     for (const food of foods) {
-      for (const rule of categoryRules) {
+      for (const rule of CATEGORY_ALTERNATIVE_RULES) {
         if (
           this.matchesAlternativeRule(
             rule,
@@ -702,12 +759,12 @@ export class AlternativeSuggestionService {
             totalFat,
           )
         ) {
-          addAlternatives(rule.alternatives);
+          addFromRule(rule);
         }
       }
     }
 
-    for (const rule of goalRules) {
+    for (const rule of GOAL_ALTERNATIVE_RULES) {
       if (
         this.matchesGoalRule(
           rule,
@@ -718,34 +775,34 @@ export class AlternativeSuggestionService {
           totalFat,
         )
       ) {
-        addAlternatives(rule.alternatives);
+        addFromRule(rule);
       }
     }
 
-    const remaining = ctx.remainingCalories - totalCalories;
-    if (remaining < 0 && matched.length > 0) {
-      matched[0] = {
-        ...matched[0],
-        reason: `${matched[0].reason}${t('decision.alt.saveBudget', { amount: String(Math.abs(Math.round(remaining))) })}`,
-      };
-    }
-
+    // Late-night high-calorie hints
     const hour = ctx.localHour ?? 0;
-    if (hour >= 21 && totalCalories > 200) {
-      addAlternatives([
+    if (
+      hour >= AlternativeSuggestionService.LATE_NIGHT_HOUR &&
+      totalCalories > AlternativeSuggestionService.LATE_NIGHT_MIN_CAL
+    ) {
+      const lateHints: FoodAlternative[] = [
         {
-          name:
-            t('decision.alt.lateNightMilkName', {}, locale) ||
-            cl('alt.lateNightMilk', locale),
-          reason: t('decision.alt.lateNightMilk', {}, locale),
+          name: cl('alt.lateNightMilk', locale),
+          reason: cl('alt.lateNightMilkReason', locale),
+          source: 'static',
         },
         {
-          name:
-            t('decision.alt.lateNightFruitName', {}, locale) ||
-            cl('alt.lateNightFruit', locale),
-          reason: t('decision.alt.lateNightFruit', {}, locale),
+          name: cl('alt.lateNightFruit', locale),
+          reason: cl('alt.lateNightFruitReason', locale),
+          source: 'static',
         },
-      ]);
+      ];
+      for (const alt of lateHints) {
+        if (!seenNames.has(alt.name)) {
+          seenNames.add(alt.name);
+          matched.push(alt);
+        }
+      }
     }
 
     return matched.slice(0, 5);
@@ -768,7 +825,9 @@ export class AlternativeSuggestionService {
       return false;
     if (
       trigger.goals?.length &&
-      !trigger.goals.includes(ctx.goalType || 'health')
+      !trigger.goals.includes(
+        ctx.goalType || AlternativeSuggestionService.DEFAULT_GOAL_TYPE,
+      )
     )
       return false;
     if (trigger.minCalories != null && food.calories < trigger.minCalories)
@@ -789,7 +848,9 @@ export class AlternativeSuggestionService {
     const trigger = rule.trigger;
     if (
       trigger.goals?.length &&
-      !trigger.goals.includes(ctx.goalType || 'health')
+      !trigger.goals.includes(
+        ctx.goalType || AlternativeSuggestionService.DEFAULT_GOAL_TYPE,
+      )
     )
       return false;
     if (trigger.minCalories != null && totalCalories < trigger.minCalories)
@@ -803,19 +864,23 @@ export class AlternativeSuggestionService {
 
   /**
    * V3.0: 为替代方案列表计算 rankScore 和 rankReasons
+   * V5.0 P2.1: 新增 foodForm/flavorProfile 匹配加分
+   * V5.0 P2.2: 权重/阈值从 ALTERNATIVE_PARAMS 读取
    *
    * rankScore 越高 → 越推荐
-   * 评分维度:
-   * - 热量差（越小/负越好，尤其 fat_loss/maintenance）
-   * - 蛋白质差（越大越好，尤其 muscle_gain）
-   * - substituteScore（来自引擎，直接加权）
    */
   private attachRankScores(
     alternatives: FoodAlternative[],
     ctx: UnifiedUserContext,
     locale?: Locale,
+    /** V5.0: 原始食物的 foodForm（用于匹配加分） */
+    originalFoodForms?: string[],
+    /** V5.0: 原始食物的 flavorProfile（用于匹配加分） */
+    originalFlavorProfiles?: string[],
   ): FoodAlternative[] {
     if (!alternatives.length) return alternatives;
+
+    const AP = ALTERNATIVE_PARAMS;
 
     return alternatives
       .map((alt) => {
@@ -825,39 +890,55 @@ export class AlternativeSuggestionService {
         const rawScore = typeof alt.score === 'number' ? alt.score : 0.5;
 
         const reasons: string[] = [];
-        let score = rawScore * 0.4; // base 40% from engine score
+        let score = rawScore * AP.rankBaseWeight;
 
-        // 热量维度（最高 35%）
-        const calScore = Math.max(-1, Math.min(1, -calDiff / 200)); // -200kcal diff = +1
-        const calWeight = ctx.goalType === 'fat_loss' ? 0.35 : 0.15;
+        // 热量维度
+        const calScore = Math.max(-1, Math.min(1, -calDiff / AP.rankCalNormDenom));
+        const calWeight = ctx.goalType === 'fat_loss' ? AP.rankCalWeightFatLoss : AP.rankCalWeightDefault;
         score += calScore * calWeight;
-        if (calDiff < -50)
+        if (calDiff < -AP.rankCalDiffThreshold)
           reasons.push(
             cl('alt.calLess', locale).replace(
               '{amount}',
               String(Math.abs(calDiff)),
             ),
           );
-        else if (calDiff > 50)
+        else if (calDiff > AP.rankCalDiffThreshold)
           reasons.push(
             cl('alt.calMore', locale).replace('{amount}', String(calDiff)),
           );
 
-        // 蛋白质维度（最高 25%）
-        const prosScore = Math.max(-1, Math.min(1, prosDiff / 20)); // +20g = +1
-        const prosWeight = ctx.goalType === 'muscle_gain' ? 0.25 : 0.1;
+        // 蛋白质维度
+        const prosScore = Math.max(-1, Math.min(1, prosDiff / AP.rankProteinNormDenom));
+        const prosWeight = ctx.goalType === 'muscle_gain' ? AP.rankProteinWeightMuscleGain : AP.rankProteinWeightDefault;
         score += prosScore * prosWeight;
-        if (prosDiff > 5)
+        if (prosDiff > AP.rankProteinDiffThreshold)
           reasons.push(
             cl('alt.proteinMore', locale).replace('{amount}', String(prosDiff)),
           );
-        else if (prosDiff < -5)
+        else if (prosDiff < -AP.rankProteinDiffThreshold)
           reasons.push(
             cl('alt.proteinLess', locale).replace(
               '{amount}',
               String(Math.abs(prosDiff)),
             ),
           );
+
+        // V5.0 P2.1: foodForm match boost
+        if (originalFoodForms?.length && (alt as any).foodForm) {
+          if (originalFoodForms.includes((alt as any).foodForm)) {
+            score += AP.foodFormMatchBoost;
+            reasons.push(cl('alt.similarForm', locale));
+          }
+        }
+
+        // V5.0 P2.1: flavorProfile match boost
+        if (originalFlavorProfiles?.length && (alt as any).flavorProfile) {
+          if (originalFlavorProfiles.includes((alt as any).flavorProfile)) {
+            score += AP.flavorMatchBoost;
+            reasons.push(cl('alt.similarFlavor', locale));
+          }
+        }
 
         // 归一化到 [0, 1]
         const finalScore = Math.max(0, Math.min(1, score));
@@ -869,6 +950,13 @@ export class AlternativeSuggestionService {
           rankReasons: reasons,
         };
       })
-      .sort((a, b) => (b.rankScore ?? 0) - (a.rankScore ?? 0));
+      .sort((a, b) => {
+        // V5.0 P2.2: source priority from ALTERNATIVE_PARAMS
+        const sourcePriority = (s?: string) =>
+          s === 'engine' ? AP.sourcePriorityEngine : s === 'static' ? AP.sourcePriorityStatic : AP.sourcePrioritySubstitution;
+        const srcDiff = sourcePriority(b.source) - sourcePriority(a.source);
+        if (srcDiff !== 0) return srcDiff;
+        return (b.rankScore ?? 0) - (a.rankScore ?? 0);
+      });
   }
 }

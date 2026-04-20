@@ -14,8 +14,8 @@ import { AppUserPayload } from '../../../auth/app/app-user-payload.type';
 import { ApiResponse } from '../../../../common/types/response.type';
 import { BehaviorService } from '../services/behavior.service';
 import { DecisionFeedbackDto } from '../dto/food.dto';
-import { RequireSubscription } from '../../../subscription/app/decorators/require-subscription.decorator';
-import { SubscriptionTier } from '../../../subscription/subscription.types';
+import { RequireFeature } from '../../../subscription/app/decorators/require-feature.decorator';
+import { GatedFeature } from '../../../subscription/subscription.types';
 
 @ApiTags('App 行为建模')
 @Controller('app/food')
@@ -29,7 +29,7 @@ export class FoodBehaviorController {
    * GET /api/app/food/behavior-profile
    */
   @Get('behavior-profile')
-  @RequireSubscription(SubscriptionTier.PRO)
+  @RequireFeature(GatedFeature.BEHAVIOR_ANALYSIS)
   @ApiOperation({ summary: '获取用户行为画像' })
   async getBehaviorProfile(
     @CurrentAppUser() user: AppUserPayload,
@@ -48,7 +48,7 @@ export class FoodBehaviorController {
    * GET /api/app/food/proactive-check
    */
   @Get('proactive-check')
-  @RequireSubscription(SubscriptionTier.PRO)
+  @RequireFeature(GatedFeature.BEHAVIOR_ANALYSIS)
   @ApiOperation({ summary: '主动提醒检查' })
   async proactiveCheck(
     @CurrentAppUser() user: AppUserPayload,

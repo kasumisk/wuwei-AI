@@ -15,7 +15,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { BehaviorService } from '../../diet/app/services/behavior.service';
 import { FoodService } from '../../diet/app/services/food.service';
 import { DietIssue } from '../types/analysis-result.types';
-import { t, Locale } from '../../diet/app/recommendation/utils/i18n-messages';
+import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
+import { cl } from '../i18n/decision-labels';
 import { ci, toCoachLocale } from '../coach/coach-i18n';
 import {
   MODIFIER_PARAMS,
@@ -56,6 +57,11 @@ export class ContextualDecisionModifierService {
       goalCalories: number;
       localHour: number;
       goalType: string;
+      /** V4.0: 短期行为画像 */
+      shortTermBehavior?: {
+        bingeRiskHours: number[];
+        intakeTrends: 'increasing' | 'stable' | 'decreasing';
+      };
     },
     mealCalories: number,
     locale?: Locale,
@@ -81,21 +87,16 @@ export class ContextualDecisionModifierService {
       result.additionalIssues.push({
         category: 'cumulative_excess',
         severity: excessPct > 30 ? 'critical' : 'warning',
-        message: t(
-          'decision.context.overBudget',
-          { amount: String(Math.round(projectedTotal - ctx.goalCalories)) },
-          locale,
+        message: cl('context.overBudget', locale).replace(
+          '{amount}',
+          String(Math.round(projectedTotal - ctx.goalCalories)),
         ),
       });
       result.additionalReasons.push(
-        t(
-          'decision.modifier.cumulativeSaturation',
-          { percent: String(excessPct) },
-          locale,
-        ) ||
-          ci('modifier.cumulativeSaturation', toCoachLocale(locale), {
-            percent: String(excessPct),
-          }),
+        cl('modifier.cumulativeSaturation', locale).replace(
+          '{percent}',
+          String(excessPct),
+        ),
       );
     }
 
@@ -114,10 +115,7 @@ export class ContextualDecisionModifierService {
         result.additionalIssues.push({
           category: 'binge_risk',
           severity: 'warning',
-          message:
-            (t('decision.modifier.lateNightRisk', {}, locale) ||
-              ci('modifier.lateNightRisk', toCoachLocale(locale))) +
-            lateCalSuffix,
+          message: cl('modifier.lateNightRisk', locale) + lateCalSuffix,
         });
       }
     }
@@ -142,23 +140,19 @@ export class ContextualDecisionModifierService {
           );
           result.scoreMultiplier *= 1 - strictnessPenalty;
 
-          // V3.6 P2.2: 连续 3 天超标时额外收紧 ×0.95
-          if (consecutiveExcess >= 3) {
-            result.scoreMultiplier *= 0.95;
+          // V3.6 P2.2: 连续超标时额外收紧
+          if (consecutiveExcess >= MODIFIER_PARAMS.consecutiveExcessExtraDays) {
+            result.scoreMultiplier *=
+              MODIFIER_PARAMS.consecutiveExcessExtraPenalty;
           }
 
           result.additionalIssues.push({
             category: 'multi_day_excess',
             severity: consecutiveExcess >= 5 ? 'critical' : 'warning',
-            message:
-              t(
-                'decision.modifier.multiDayExcess',
-                { days: String(consecutiveExcess) },
-                locale,
-              ) ||
-              ci('modifier.multiDayExcess', toCoachLocale(locale), {
-                days: String(consecutiveExcess),
-              }),
+            message: cl('modifier.multiDayExcess', locale).replace(
+              '{days}',
+              String(consecutiveExcess),
+            ),
           });
         }
 
@@ -170,14 +164,10 @@ export class ContextualDecisionModifierService {
         ) {
           result.scoreMultiplier *= MODIFIER_PARAMS.healthyStreakBonus;
           result.additionalReasons.push(
-            t(
-              'decision.modifier.healthyStreak',
-              { days: String(healthyDays) },
-              locale,
-            ) ||
-              ci('modifier.healthyStreak', toCoachLocale(locale), {
-                days: String(healthyDays),
-              }),
+            cl('modifier.healthyStreak', locale).replace(
+              '{days}',
+              String(healthyDays),
+            ),
           );
         }
 
@@ -189,32 +179,45 @@ export class ContextualDecisionModifierService {
           result.additionalIssues.push({
             category: 'binge_risk',
             severity: 'critical',
-            message:
-              t(
-                'decision.modifier.bingeRisk',
-                { count: String(mealCount) },
-                locale,
-              ) ||
-              ci('modifier.bingeRisk', toCoachLocale(locale), {
-                count: String(mealCount),
-              }),
+            message: cl('modifier.bingeRisk', locale).replace(
+              '{count}',
+              String(mealCount),
+            ),
           });
           result.additionalReasons.push(
-            t(
-              'decision.modifier.bingeRisk',
-              { count: String(mealCount) },
-              locale,
-            ) ||
-              ci('modifier.bingeRiskReason', toCoachLocale(locale), {
-                count: String(mealCount),
-              }),
+            cl('modifier.bingeRiskReason', locale).replace(
+              '{count}',
+              String(mealCount),
+            ),
           );
         }
       }
     } catch (err) {
       this.logger.warn(
-        `获取行为数据失败，跳过多日趋势分析: ${(err as Error).message}`,
+        `Failed to fetch behavior data, skipping multi-day trend analysis: ${(err as Error).message}`,
       );
+    }
+
+    // V4.0: 暴食风险小时窗口感知（来自 shortTermBehavior）
+    if (ctx.shortTermBehavior?.bingeRiskHours?.length) {
+      if (ctx.shortTermBehavior.bingeRiskHours.includes(ctx.localHour)) {
+        result.scoreMultiplier *= MODIFIER_PARAMS.bingeHourMultiplier;
+        result.additionalReasons.push(
+          ci('modifier.bingeRiskHour', toCoachLocale(locale), {
+            hour: String(ctx.localHour),
+          }),
+        );
+      }
+    }
+
+    // V4.0: 7天摄入趋势修正
+    if (ctx.shortTermBehavior?.intakeTrends === 'increasing') {
+      result.scoreMultiplier *= MODIFIER_PARAMS.trendIncreasingMultiplier;
+      result.additionalReasons.push(
+        ci('modifier.trendIncreasing', toCoachLocale(locale)),
+      );
+    } else if (ctx.shortTermBehavior?.intakeTrends === 'decreasing') {
+      result.scoreMultiplier *= MODIFIER_PARAMS.trendDecreasingMultiplier;
     }
 
     // 确保乘数在合理范围

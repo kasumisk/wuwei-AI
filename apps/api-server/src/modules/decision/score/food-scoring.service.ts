@@ -20,7 +20,10 @@ import {
 import { BehaviorService } from '../../diet/app/services/behavior.service';
 import { FoodService } from '../../diet/app/services/food.service';
 import { AnalysisScore } from '../types/analysis-result.types';
-import { t, Locale } from '../../diet/app/recommendation/utils/i18n-messages';
+import type { AnalyzedFoodItem } from '../types/food-item.types';
+import type { BreakdownExplanation } from '../types/decision.types';
+import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
+import { cl } from '../i18n/decision-labels';
 import {
   estimateQuality as _estimateQuality,
   estimateSatiety as _estimateSatiety,
@@ -32,28 +35,43 @@ import {
   scoreToImpact,
   getDimensionSuggestion,
 } from '../config/scoring-dimensions';
+import { hasCondition } from '../config/condition-aliases';
 
 // ==================== 输入/输出类型 ====================
 
-/** 评分输入：食物项（文本链路） */
-export interface ScoringFoodItem {
-  name: string;
-  confidence: number;
-  calories: number;
+/**
+ * V4.7: 评分输入 — 从 AnalyzedFoodItem 中 Pick 评分所需字段
+ *
+ * 不再独立定义重复接口，直接复用 AnalyzedFoodItem 类型子集。
+ */
+export type ScoringFoodItem = Pick<
+  AnalyzedFoodItem,
+  | 'name'
+  | 'confidence'
+  | 'calories'
+  | 'estimatedWeightGrams'
+  | 'saturatedFat'
+  | 'addedSugar'
+  | 'transFat'
+  | 'cholesterol'
+  | 'glycemicLoad'
+  | 'nutrientDensity'
+  | 'fodmapLevel'
+  | 'purine'
+  | 'oxalateLevel'
+> & {
+  /** 必须字段（AnalyzedFoodItem 中为 optional，评分链路中保证存在） */
   protein: number;
   fat: number;
   carbs: number;
   fiber?: number;
   sodium?: number;
-  saturatedFat?: number | null;
-  addedSugar?: number | null;
-  estimatedWeightGrams: number;
   /** 标准库匹配（有则用库的 quality/satiety） */
   libraryMatch?: {
     qualityScore?: number | string | null;
     satietyScore?: number | string | null;
   };
-}
+};
 
 /** 评分上下文 */
 export interface ScoringContext {
@@ -68,6 +86,8 @@ export interface ScoringContext {
   goalType: string;
   /** V3.5: 用户健康条件（用于调整 healthScore） */
   healthConditions?: string[];
+  /** V4.0: 目标阶段权重调整（来自 GoalPhaseService） */
+  phaseWeightAdjustment?: Partial<Record<string, number>>;
 }
 
 /** 图片链路评分输入（AI 已计算 avgQuality/avgSatiety） */
@@ -82,27 +102,8 @@ export interface ImageScoringInput {
   healthConditions?: string[];
 }
 
-/** Breakdown 维度解释 */
-export interface BreakdownExplanation {
-  /** 维度键 */
-  dimension: string;
-  /** 维度本地化标签 */
-  label: string;
-  /** 维度分数 0-100 */
-  score: number;
-  /** 影响等级 */
-  impact: 'positive' | 'warning' | 'critical';
-  /** 人类可读解释 */
-  message: string;
-  /** V1.7: 实际值 */
-  actualValue?: number;
-  /** V1.7: 目标/推荐值 */
-  targetValue?: number;
-  /** V1.7: 单位 */
-  unit?: string;
-  /** V1.9: 改善建议 */
-  suggestion?: string;
-}
+/** Re-exported from decision.types.ts for convenience */
+export type { BreakdownExplanation } from '../types/decision.types';
 
 /** 完整评分结果 */
 export interface ScoringResult {
@@ -222,6 +223,8 @@ export class FoodScoringService {
             avgQuality,
             avgSatiety,
           },
+          avgConfidence,
+          phaseWeightAdjustment: ctx.phaseWeightAdjustment,
         });
 
         nutritionScore = core.scoreResult.score;
@@ -474,6 +477,10 @@ export class FoodScoringService {
     };
     locale: Locale;
     quantitativeData?: Parameters<FoodScoringService['explainBreakdown']>[2];
+    /** V3.9 P1.3: 平均置信度 0-100，低于 50 时触发评分衰减 */
+    avgConfidence?: number;
+    /** V4.0: 目标阶段权重调整（来自 GoalPhaseService） */
+    phaseWeightAdjustment?: Partial<Record<string, number>>;
   }): Promise<{
     scoreResult: NutritionScoreResult;
     breakdownExplanations: BreakdownExplanation[];
@@ -492,6 +499,92 @@ export class FoodScoringService {
       params.goalType,
       params.stabilityData,
     );
+
+    // V3.9 P1.3: 低置信度评分衰减 — 各维度向中性值 60 分衰减
+    const conf = params.avgConfidence ?? 100;
+    if (conf < 50) {
+      const NEUTRAL = 60;
+      const decay = 1 - ((50 - conf) / 100) * 0.4; // conf=30 → decay=0.92
+      const dims: (keyof NutritionScoreBreakdown)[] = [
+        'energy',
+        'proteinRatio',
+        'macroBalance',
+        'foodQuality',
+        'satiety',
+        'stability',
+        'glycemicImpact',
+      ];
+      let weightedSum = 0;
+      let totalWeight = 0;
+      for (const dim of dims) {
+        const raw = scoreResult.breakdown[dim];
+        if (raw != null) {
+          scoreResult.breakdown[dim] = Math.round(
+            raw * decay + NEUTRAL * (1 - decay),
+          );
+        }
+      }
+      // 重算总分（使用 weights 如果有，否则等权）
+      const weights = scoreResult.weights ?? {};
+      for (const dim of dims) {
+        const val = scoreResult.breakdown[dim];
+        if (val != null) {
+          const w = weights[dim] ?? 1;
+          weightedSum += val * w;
+          totalWeight += w;
+        }
+      }
+      if (totalWeight > 0) {
+        scoreResult.score = Math.round(weightedSum / totalWeight);
+      }
+    }
+
+    // V4.0: 目标阶段权重调整 — 根据 GoalPhase 动态调整各维度权重并重算总分
+    const phaseAdj = params.phaseWeightAdjustment;
+    if (phaseAdj && Object.keys(phaseAdj).length > 0) {
+      const weights = { ...(scoreResult.weights ?? {}) };
+      // 维度名映射：ScoreDimension → NutritionScoreBreakdown key
+      const dimMap: Record<string, keyof NutritionScoreBreakdown> = {
+        calories: 'energy',
+        protein: 'proteinRatio',
+        carbs: 'macroBalance',
+        fat: 'macroBalance',
+        quality: 'foodQuality',
+        satiety: 'satiety',
+        glycemic: 'glycemicImpact',
+      };
+      for (const [dim, multiplier] of Object.entries(phaseAdj)) {
+        if (multiplier == null) continue;
+        const bKey = dimMap[dim];
+        if (bKey && weights[bKey] != null) {
+          weights[bKey] = (weights[bKey] as number) * multiplier;
+        }
+      }
+      // 用调整后的权重重算总分
+      const dims: (keyof NutritionScoreBreakdown)[] = [
+        'energy',
+        'proteinRatio',
+        'macroBalance',
+        'foodQuality',
+        'satiety',
+        'stability',
+        'glycemicImpact',
+      ];
+      let ws = 0;
+      let tw = 0;
+      for (const d of dims) {
+        const val = scoreResult.breakdown[d];
+        if (val != null) {
+          const w = weights[d] ?? 1;
+          ws += val * (w as number);
+          tw += w as number;
+        }
+      }
+      if (tw > 0) {
+        scoreResult.score = Math.round(ws / tw);
+      }
+      scoreResult.weights = weights;
+    }
 
     const breakdownExplanations = this.explainBreakdown(
       scoreResult.breakdown,
@@ -556,94 +649,145 @@ export class FoodScoringService {
     adjustedHealthScore: number;
     explanations: BreakdownExplanation[] | undefined;
   } {
-    const condSet = new Set(healthConditions.map((c) => c.toLowerCase()));
+    const condList = healthConditions.map((c) => c.toLowerCase());
     let adjusted = healthScore;
     const warnings: BreakdownExplanation[] = [];
-    const isEn = locale === 'en-US';
-    const isJa = locale === 'ja-JP';
 
     // 糖尿病：血糖影响维度 < 60 → healthScore × 0.85
-    if (condSet.has('diabetes') || condSet.has('糖尿病')) {
+    if (hasCondition(condList, 'diabetes')) {
       if (breakdown.glycemicImpact < 60) {
         adjusted = Math.round(adjusted * 0.85);
         warnings.push({
           dimension: 'healthCondition_diabetes',
-          label: isEn ? 'Diabetes Risk' : isJa ? '糖尿病リスク' : '糖尿病风险',
+          label: cl('health.diabetesRisk.label', locale),
           score: breakdown.glycemicImpact,
           impact: 'critical',
-          message: isEn
-            ? `High glycemic impact (score ${breakdown.glycemicImpact}) — not recommended for diabetes`
-            : isJa
-              ? `血糖影響が高い（スコア ${breakdown.glycemicImpact}）— 糖尿病には不適`
-              : `血糖影响较高（评分 ${breakdown.glycemicImpact}），糖尿病用户慎食`,
-          suggestion: isEn
-            ? 'Choose low-GI alternatives'
-            : isJa
-              ? '低GI食品を選ぶ'
-              : '选择低GI替代食物',
+          message: cl('health.diabetesRisk.message', locale).replace(
+            '{score}',
+            String(breakdown.glycemicImpact),
+          ),
+          suggestion: cl('health.diabetesRisk.suggestion', locale),
         });
       }
     }
 
     // 心脏病/心血管：宏量均衡 < 60（脂肪偏高）→ healthScore × 0.85
-    if (
-      condSet.has('heart_disease') ||
-      condSet.has('cardiovascular') ||
-      condSet.has('心脏病')
-    ) {
+    if (hasCondition(condList, 'cardiovascular')) {
       if (breakdown.macroBalance < 60) {
         adjusted = Math.round(adjusted * 0.85);
         warnings.push({
           dimension: 'healthCondition_cardiovascular',
-          label: isEn
-            ? 'Cardiovascular Risk'
-            : isJa
-              ? '心血管リスク'
-              : '心血管风险',
+          label: cl('health.cardiovascularRisk.label', locale),
           score: breakdown.macroBalance,
           impact: 'critical',
-          message: isEn
-            ? `Macro balance concern (score ${breakdown.macroBalance}) — high fat risk for cardiovascular condition`
-            : isJa
-              ? `マクロバランスに懸念（スコア ${breakdown.macroBalance}）— 心疾患には脂質過多に注意`
-              : `宏量均衡偏差（评分 ${breakdown.macroBalance}），心血管疾病用户需控制饱和脂肪`,
-          suggestion: isEn
-            ? 'Reduce saturated fat intake'
-            : isJa
-              ? '飽和脂肪を減らす'
-              : '减少饱和脂肪摄入',
+          message: cl('health.cardiovascularRisk.message', locale).replace(
+            '{score}',
+            String(breakdown.macroBalance),
+          ),
+          suggestion: cl('health.cardiovascularRisk.suggestion', locale),
         });
       }
     }
 
     // 高血压：检查 foods 中钠含量 > 800mg → healthScore × 0.9
-    if (
-      condSet.has('hypertension') ||
-      condSet.has('高血压') ||
-      condSet.has('高血圧')
-    ) {
+    if (hasCondition(condList, 'hypertension')) {
       const totalSodium = foods.reduce((s, f) => s + (f.sodium || 0), 0);
       if (totalSodium > 800) {
         adjusted = Math.round(adjusted * 0.9);
         warnings.push({
           dimension: 'healthCondition_hypertension',
-          label: isEn
-            ? 'Hypertension Risk'
-            : isJa
-              ? '高血圧リスク'
-              : '高血压风险',
+          label: cl('health.hypertensionRisk.label', locale),
           score: Math.max(0, 100 - Math.round((totalSodium - 800) / 10)),
           impact: 'warning',
-          message: isEn
-            ? `High sodium content (${Math.round(totalSodium)}mg) — exceeds recommended limit for hypertension`
-            : isJa
-              ? `ナトリウム過多（${Math.round(totalSodium)}mg）— 高血圧には推奨上限超え`
-              : `钠含量偏高（${Math.round(totalSodium)}mg），高血压用户需控制钠摄入`,
-          suggestion: isEn
-            ? 'Limit high-sodium foods'
-            : isJa
-              ? '高塩分食品を避ける'
-              : '避免高盐食物',
+          message: cl('health.hypertensionRisk.message', locale).replace(
+            '{sodium}',
+            String(Math.round(totalSodium)),
+          ),
+          suggestion: cl('health.hypertensionRisk.suggestion', locale),
+        });
+      }
+    }
+
+    // V4.6: 痛风 — 高嘌呤食物 → healthScore × 0.85
+    if (hasCondition(condList, 'gout')) {
+      const highPurineFoods = foods.filter((f) => f.purine === 'high');
+      if (highPurineFoods.length > 0) {
+        adjusted = Math.round(adjusted * 0.85);
+        warnings.push({
+          dimension: 'healthCondition_gout',
+          label: cl('health.goutRisk.label', locale),
+          score: 30,
+          impact: 'critical',
+          message: cl('health.goutRisk.message', locale).replace(
+            '{foods}',
+            highPurineFoods.map((f) => f.name).join(', '),
+          ),
+          suggestion: cl('health.goutRisk.suggestion', locale),
+        });
+      }
+    }
+
+    // V4.6: IBS — 高 FODMAP 食物 → healthScore × 0.85
+    if (hasCondition(condList, 'ibs')) {
+      const highFodmapFoods = foods.filter((f) => f.fodmapLevel === 'high');
+      if (highFodmapFoods.length > 0) {
+        adjusted = Math.round(adjusted * 0.85);
+        warnings.push({
+          dimension: 'healthCondition_ibs',
+          label: cl('health.ibsRisk.label', locale),
+          score: 30,
+          impact: 'critical',
+          message: cl('health.ibsRisk.message', locale).replace(
+            '{foods}',
+            highFodmapFoods.map((f) => f.name).join(', '),
+          ),
+          suggestion: cl('health.ibsRisk.suggestion', locale),
+        });
+      }
+    }
+
+    // V4.6: 肾结石 — 高草酸食物 → healthScore × 0.9
+    if (hasCondition(condList, 'kidney_disease')) {
+      const highOxalateFoods = foods.filter((f) => f.oxalateLevel === 'high');
+      if (highOxalateFoods.length > 0) {
+        adjusted = Math.round(adjusted * 0.9);
+        warnings.push({
+          dimension: 'healthCondition_kidney_stones',
+          label: cl('health.kidneyStoneRisk.label', locale),
+          score: 40,
+          impact: 'warning',
+          message: cl('health.kidneyStoneRisk.message', locale).replace(
+            '{foods}',
+            highOxalateFoods.map((f) => f.name).join(', '),
+          ),
+          suggestion: cl('health.kidneyStoneRisk.suggestion', locale),
+        });
+      }
+    }
+
+    // V4.6: 高血脂 — 高胆固醇或高反式脂肪 → healthScore × 0.85
+    if (hasCondition(condList, 'hyperlipidemia')) {
+      const totalCholesterol = foods.reduce(
+        (s, f) => s + (f.cholesterol || 0),
+        0,
+      );
+      const totalTransFat = foods.reduce((s, f) => s + (f.transFat || 0), 0);
+      if (totalCholesterol > 200 || totalTransFat > 1) {
+        adjusted = Math.round(adjusted * 0.85);
+        warnings.push({
+          dimension: 'healthCondition_hyperlipidemia',
+          label: cl('health.hyperlipidemiaRisk.label', locale),
+          score: Math.max(
+            0,
+            100 -
+              Math.round(totalCholesterol / 5) -
+              Math.round(totalTransFat * 20),
+          ),
+          impact: totalTransFat > 1 ? 'critical' : 'warning',
+          message: cl('health.hyperlipidemiaRisk.message', locale)
+            .replace('{cholesterol}', String(Math.round(totalCholesterol)))
+            .replace('{transFat}', String(Math.round(totalTransFat * 10) / 10)),
+          suggestion: cl('health.hyperlipidemiaRisk.suggestion', locale),
         });
       }
     }

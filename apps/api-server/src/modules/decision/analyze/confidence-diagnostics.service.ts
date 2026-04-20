@@ -6,6 +6,8 @@ import {
   FoodAnalysisResultV61,
 } from '../types/analysis-result.types';
 import { AnalyzedFoodItem } from '../types/analysis-result.types';
+import { cl } from '../i18n/decision-labels';
+import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 
 @Injectable()
 export class ConfidenceDiagnosticsService {
@@ -15,8 +17,9 @@ export class ConfidenceDiagnosticsService {
     foods: AnalyzedFoodItem[];
     userId?: string;
     summary?: DecisionSummary;
+    locale?: Locale;
   }): Promise<ConfidenceDiagnostics> {
-    const { foods, userId, summary } = input;
+    const { foods, userId, summary, locale } = input;
 
     const recognitionConfidence = this.avg(
       foods.map((food) => this.clamp(food.confidence ?? 0.7)),
@@ -70,20 +73,32 @@ export class ConfidenceDiagnosticsService {
 
     const uncertaintyReasons: string[] = [];
     if (recognitionConfidence < 0.7) {
-      uncertaintyReasons.push('识别置信度偏低，原始输入可能存在歧义');
+      uncertaintyReasons.push(cl('diag.recognitionLow', locale));
     }
     if (normalizationConfidence < 0.7) {
-      uncertaintyReasons.push('标准化命中率偏低，部分食物未稳定映射到食物库');
+      uncertaintyReasons.push(cl('diag.normalizationLow', locale));
     }
     if (nutritionEstimationConfidence < 0.7) {
-      uncertaintyReasons.push('营养估算包含较多推断值，建议将结论视为保守估算');
+      uncertaintyReasons.push(cl('diag.nutritionEstimationLow', locale));
     }
     if (auditConfidence < 0.7) {
-      uncertaintyReasons.push('近期人工审核准确率偏低，建议教练输出更保守');
+      uncertaintyReasons.push(cl('diag.auditLow', locale));
     }
     if (summary?.verdict === 'avoid' && decisionConfidence < 0.6) {
-      uncertaintyReasons.push('当前建议偏严格，适合配合人工复核或更清晰输入');
+      uncertaintyReasons.push(cl('diag.avoidLowConfidence', locale));
     }
+
+    // V4.9 P3.4: Category mismatch detection (LLM category vs library category)
+    const categoryMismatches = await this.detectCategoryMismatches(foods);
+    if (categoryMismatches.length > 0) {
+      qualitySignals.push('category_mismatch');
+      for (const mm of categoryMismatches) {
+        uncertaintyReasons.push(
+          `Category mismatch: "${mm.name}" LLM=${mm.llmCategory} vs DB=${mm.dbCategory}`,
+        );
+      }
+    }
+
     const reviewLevel = this.resolveReviewLevel(
       analysisQualityBand,
       qualitySignals,
@@ -159,6 +174,44 @@ export class ConfidenceDiagnosticsService {
     ).length;
     const ratio = accurate / rows.length;
     return this.clamp(0.55 + ratio * 0.45);
+  }
+
+  /**
+   * V4.9 P3.4: Detect category mismatches between LLM-assigned and DB categories
+   */
+  private async detectCategoryMismatches(
+    foods: AnalyzedFoodItem[],
+  ): Promise<Array<{ name: string; llmCategory: string; dbCategory: string }>> {
+    const mismatches: Array<{
+      name: string;
+      llmCategory: string;
+      dbCategory: string;
+    }> = [];
+
+    const foodsWithLibId = foods.filter(
+      (f) => f.foodLibraryId && f.category,
+    );
+    if (foodsWithLibId.length === 0) return mismatches;
+
+    const libraryIds = foodsWithLibId.map((f) => f.foodLibraryId!);
+    const dbFoods = await this.prisma.foods.findMany({
+      where: { id: { in: libraryIds } },
+      select: { id: true, category: true },
+    });
+    const dbCategoryMap = new Map(dbFoods.map((f) => [f.id, f.category]));
+
+    for (const food of foodsWithLibId) {
+      const dbCategory = dbCategoryMap.get(food.foodLibraryId!);
+      if (dbCategory && food.category && dbCategory !== food.category) {
+        mismatches.push({
+          name: food.name,
+          llmCategory: food.category,
+          dbCategory,
+        });
+      }
+    }
+
+    return mismatches;
   }
 
   private avg(values: number[]): number {

@@ -5,6 +5,7 @@ import {
   UnifiedUserContext,
 } from '../types/analysis-result.types';
 import { ci, toCoachLocale } from './coach-i18n';
+import { ActionPlan } from './decision-coach.service';
 
 /**
  * V3.3 Phase 3 — CoachInsightService
@@ -47,12 +48,18 @@ export class CoachInsightService {
       userContext,
       lang,
     );
+    const actionPlan = this.buildActionPlan(
+      userContext,
+      structuredDecision,
+      lang,
+    );
 
     return {
       priorityInsight,
       trendInsight,
       goalInsight,
       timingInsight,
+      actionPlan,
     };
   }
 
@@ -78,7 +85,7 @@ export class CoachInsightService {
       (i) => HEALTH_RISK_TYPES.has(i.type) && i.severity === 'high',
     );
     if (highHealthRisk && highHealthRisk.implication) {
-      return highHealthRisk.implication;
+      return ci('insight.healthRiskPrefix', lang) + highHealthRisk.implication;
     }
 
     // 优先来自 ContextualAnalysis 高严重度问题
@@ -118,59 +125,47 @@ export class CoachInsightService {
     const slots = analysis.macroSlotStatus;
     if (!slots) return '';
 
-    const SLOT_LABELS: Record<
-      ReturnType<typeof toCoachLocale>,
-      Record<string, Record<string, string>>
+    const SLOT_KEYS: Record<
+      string,
+      Record<string, keyof import('./coach-i18n').CoachI18nStrings>
     > = {
-      zh: {
-        protein: {
-          deficit: '蛋白质不足',
-          normal: '蛋白质正常',
-          excess: '蛋白质充足',
-        },
-        carbs: { deficit: '碳水偏低', normal: '碳水正常', excess: '碳水偏高' },
-        fat: { deficit: '脂肪偏低', normal: '脂肪正常', excess: '脂肪偏高' },
+      protein: {
+        deficit: 'insight.slot.protein.deficit',
+        normal: 'insight.slot.protein.normal',
+        excess: 'insight.slot.protein.excess',
       },
-      en: {
-        protein: {
-          deficit: 'protein low',
-          normal: 'protein normal',
-          excess: 'protein sufficient',
-        },
-        carbs: {
-          deficit: 'carbs low',
-          normal: 'carbs normal',
-          excess: 'carbs high',
-        },
-        fat: { deficit: 'fat low', normal: 'fat normal', excess: 'fat high' },
+      carbs: {
+        deficit: 'insight.slot.carbs.deficit',
+        normal: 'insight.slot.carbs.normal',
+        excess: 'insight.slot.carbs.excess',
       },
-      ja: {
-        protein: {
-          deficit: 'タンパク質不足',
-          normal: 'タンパク質正常',
-          excess: 'タンパク質充分',
-        },
-        carbs: {
-          deficit: '炭水化物不足',
-          normal: '炭水化物正常',
-          excess: '炭水化物過多',
-        },
-        fat: { deficit: '脂肪不足', normal: '脂肪正常', excess: '脂肪過多' },
+      fat: {
+        deficit: 'insight.slot.fat.deficit',
+        normal: 'insight.slot.fat.normal',
+        excess: 'insight.slot.fat.excess',
       },
     };
 
-    const labels = SLOT_LABELS[lang];
-    const proteinLabel = labels.protein[slots.protein] || slots.protein;
-    const carbsLabel = labels.carbs[slots.carbs] || slots.carbs;
-    const fatLabel = labels.fat[slots.fat] || slots.fat;
+    const proteinLabel =
+      ci(
+        SLOT_KEYS.protein[slots.protein] ??
+          ('insight.slot.protein.normal' as any),
+        lang,
+      ) || slots.protein;
+    const carbsLabel =
+      ci(
+        SLOT_KEYS.carbs[slots.carbs] ?? ('insight.slot.carbs.normal' as any),
+        lang,
+      ) || slots.carbs;
+    const fatLabel =
+      ci(
+        SLOT_KEYS.fat[slots.fat] ?? ('insight.slot.fat.normal' as any),
+        lang,
+      ) || slots.fat;
 
-    const PREFIX: Record<ReturnType<typeof toCoachLocale>, string> = {
-      zh: '今日状态：',
-      en: "Today's status: ",
-      ja: '今日の状態：',
-    };
+    const prefix = ci('insight.trendPrefix', lang);
 
-    return `${PREFIX[lang]}${proteinLabel}、${carbsLabel}、${fatLabel}`;
+    return `${prefix}${proteinLabel}、${carbsLabel}、${fatLabel}`;
   }
 
   /**
@@ -184,38 +179,11 @@ export class CoachInsightService {
     // 优先使用 rationale 中的目标对齐说明（由调用方注入 sd）
     const goalType = ctx.goalType || 'health';
 
-    const GOAL_HINTS: Record<
-      ReturnType<typeof toCoachLocale>,
-      Record<string, string>
-    > = {
-      zh: {
-        fat_loss: '聚焦热量控制和蛋白质保留，当前优先减少热量密度高的食物。',
-        muscle_gain: '聚焦蛋白质摄入和碳水时机，训练后及时补充。',
-        maintenance: '维持宏量均衡，避免连续多日偏离目标。',
-        health: '优先保证营养全面，关注膳食纤维和微量营养素。',
-      },
-      en: {
-        fat_loss:
-          'Focus on calorie control and protein retention. Prioritize lower-calorie-density foods.',
-        muscle_gain:
-          'Focus on protein intake and carb timing. Refuel promptly after training.',
-        maintenance:
-          'Maintain macro balance and avoid multi-day deviations from targets.',
-        health:
-          'Prioritize nutritional completeness, especially dietary fiber and micronutrients.',
-      },
-      ja: {
-        fat_loss:
-          'カロリーコントロールとタンパク質維持に集中しましょう。カロリー密度の高い食品を減らしてください。',
-        muscle_gain:
-          'タンパク質摂取と炭水化物のタイミングに集中してください。トレーニング後に速やかに補給しましょう。',
-        maintenance:
-          'マクロバランスを維持し、複数日にわたる目標からの逸脱を避けてください。',
-        health: '栄養の完全性を優先し、食物繊維とミネラルに注意してください。',
-      },
-    };
-
-    return GOAL_HINTS[lang]?.[goalType] || GOAL_HINTS[lang]?.['health'] || '';
+    const goalKey =
+      `insight.goal.${goalType}` as keyof import('./coach-i18n').CoachI18nStrings;
+    const fallbackKey =
+      'insight.goal.health' as keyof import('./coach-i18n').CoachI18nStrings;
+    return ci(goalKey, lang) || ci(fallbackKey, lang);
   }
 
   /**
@@ -232,36 +200,6 @@ export class CoachInsightService {
     }
 
     const hour = ctx.localHour ?? 12;
-    const TIMING: Record<
-      ReturnType<typeof toCoachLocale>,
-      Record<string, string>
-    > = {
-      zh: {
-        morning: '早晨是补充蛋白质和复合碳水的好时机。',
-        lunch: '午餐提供全天能量，均衡搭配蛋白质与碳水。',
-        afternoon: '下午可适量补充轻食，避免能量下降。',
-        evening: '晚餐建议以蛋白质和蔬菜为主，控制碳水量。',
-        late_night: '夜间尽量避免高热量食物，选择易消化的轻食。',
-      },
-      en: {
-        morning: 'Morning is a great time for protein and complex carbs.',
-        lunch: 'Lunch provides all-day energy — balance protein and carbs.',
-        afternoon: 'An afternoon snack can prevent energy dips.',
-        evening:
-          'Evening meals should focus on protein and veggies, limiting carbs.',
-        late_night:
-          'Late night — avoid high-calorie foods; choose light, easily digestible options.',
-      },
-      ja: {
-        morning: '朝はタンパク質と複合炭水化物を補給する良い機会です。',
-        lunch:
-          '昼食は一日のエネルギーを提供します。タンパク質と炭水化物をバランスよく。',
-        afternoon: '午後は軽食でエネルギー低下を防ぎましょう。',
-        evening: '夕食はタンパク質と野菜中心に、炭水化物を控えめに。',
-        late_night:
-          '深夜は高カロリー食品を避け、消化しやすい軽食を選んでください。',
-      },
-    };
 
     let slot = 'lunch';
     if (hour >= 5 && hour < 10) slot = 'morning';
@@ -270,7 +208,58 @@ export class CoachInsightService {
     else if (hour >= 18 && hour < 21) slot = 'evening';
     else slot = 'late_night';
 
-    return TIMING[lang]?.[slot];
+    const timingKey =
+      `insight.timing.${slot}` as keyof import('./coach-i18n').CoachI18nStrings;
+    return ci(timingKey, lang) || undefined;
+  }
+
+  /**
+   * V4.5 P3.2: 三段式行动计划生成
+   * V4.6: 消费 shortTermBehavior.intakeTrends + goalProgress.executionRate
+   *
+   * - immediate: 基于当前决策判定（avoid/caution/recommend）
+   *              V4.6: 摄入上升趋势 → 更严格 immediate
+   * - nextMeal:  基于用户目标类型
+   * - longTerm:  基于用户目标类型的长期习惯建议
+   *              V4.6: 执行率低 → 鼓励性 longTerm
+   */
+  private buildActionPlan(
+    ctx: UnifiedUserContext,
+    sd: StructuredDecision | undefined,
+    lang: ReturnType<typeof toCoachLocale>,
+  ): ActionPlan {
+    const verdict = sd?.verdict ?? 'recommend';
+    const goalType = ctx.goalType || 'health';
+
+    // V4.6: 摄入趋势上升 → 替换 immediate 为更严格版本
+    let immediate: string;
+    if (ctx.shortTermBehavior?.intakeTrends === 'increasing') {
+      immediate = ci('actionPlan.trendUp.immediate', lang);
+    } else {
+      const immediateKey =
+        `actionPlan.immediate.${verdict}` as keyof import('./coach-i18n').CoachI18nStrings;
+      immediate = ci(immediateKey, lang);
+    }
+
+    const goalNextKey =
+      `actionPlan.nextMeal.${goalType}` as keyof import('./coach-i18n').CoachI18nStrings;
+    const goalLongKey =
+      `actionPlan.longTerm.${goalType}` as keyof import('./coach-i18n').CoachI18nStrings;
+
+    const nextMeal =
+      ci(goalNextKey, lang) || ci('actionPlan.nextMeal.default' as any, lang);
+
+    // V4.6: 执行率低 → 替换 longTerm 为鼓励性版本
+    let longTerm: string;
+    const execRate = ctx.goalProgress?.executionRate;
+    if (execRate != null && execRate < 0.4) {
+      longTerm = ci('actionPlan.lowExecution.longTerm', lang);
+    } else {
+      longTerm =
+        ci(goalLongKey, lang) || ci('actionPlan.longTerm.default' as any, lang);
+    }
+
+    return { immediate, nextMeal, longTerm };
   }
 }
 
@@ -285,4 +274,6 @@ export interface CoachInsightPack {
   goalInsight: string;
   /** 时机建议（可选） */
   timingInsight?: string;
+  /** V4.5 P3.2: 三段式行动计划 */
+  actionPlan: ActionPlan;
 }

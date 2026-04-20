@@ -16,6 +16,7 @@ import {
   ADDED_SUGAR_LIMITS,
   TIME_BOUNDARIES,
 } from './decision-thresholds';
+import { hasCondition } from './condition-aliases';
 
 // ==================== 输出类型 ====================
 
@@ -85,12 +86,11 @@ export class DynamicThresholdsService {
     const gCarbs = ctx.goalCarbs || 275;
 
     // 健康状况检测
-    const hasHypertension = ctx.healthConditions?.some((c) =>
-      ['高血压', 'hypertension', '高血圧'].includes(c.toLowerCase()),
+    const lowerConditions = (ctx.healthConditions ?? []).map((c) =>
+      c.toLowerCase(),
     );
-    const hasDiabetes = ctx.healthConditions?.some((c) =>
-      ['糖尿病', 'diabetes'].includes(c.toLowerCase()),
-    );
+    const hasHypertension = hasCondition(lowerConditions, 'hypertension');
+    const hasDiabetes = hasCondition(lowerConditions, 'diabetes');
 
     return {
       // 餐级营养阈值

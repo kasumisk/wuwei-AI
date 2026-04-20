@@ -12,8 +12,6 @@ import { logger } from '../monitoring/logger';
 export interface RequestConfig extends AxiosRequestConfig {
   skipErrorHandler?: boolean; // 跳过全局错误处理
   showErrorToast?: boolean; // 是否显示错误提示
-  retryCount?: number; // 重试次数
-  retryDelay?: number; // 重试延迟（毫秒）
 }
 
 // 响应数据格式
@@ -131,19 +129,6 @@ export class HttpClient {
    * 错误处理
    */
   private async handleError(error: AxiosError): Promise<never> {
-    const config = error.config as RequestConfig;
-
-    // 处理重试逻辑
-    // 4xx 客户端错误（含 403 付费墙）不重试，直接报错
-    const statusCode = error.response?.status;
-    const isClientError = statusCode !== undefined && statusCode >= 400 && statusCode < 500;
-    if (!isClientError && config?.retryCount && config.retryCount > 0) {
-      const retryDelay = config.retryDelay || 1000;
-      await this.delay(retryDelay);
-      config.retryCount--;
-      return this.instance.request(config);
-    }
-
     // 构造错误信息
     let apiError: APIError;
 
@@ -175,13 +160,6 @@ export class HttpClient {
     }
 
     return Promise.reject(apiError);
-  }
-
-  /**
-   * 延迟函数
-   */
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**
