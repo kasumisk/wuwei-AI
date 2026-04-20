@@ -164,7 +164,7 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-card  p-5 space-y-5">
+    <div className="bg-card rounded-md p-5 space-y-5">
       <div className="flex items-center gap-2 pb-1 border-b border-border/30">
         <span className="text-lg">{icon}</span>
         <h2 className="text-sm font-extrabold">{title}</h2>

@@ -37,7 +37,7 @@ export function RecipeCard({ recipe }: { recipe: RecipeSummary }) {
 
   return (
     <LocalizedLink href={`/recipes/${recipe.id}`} className="block group">
-      <div className="bg-card  overflow-hidden border border-border/10 hover:border-border/30 transition-all active:scale-[0.99]">
+      <div className="bg-card rounded-md overflow-hidden border border-border/10 hover:border-border/30 transition-all active:scale-[0.99]">
         {/* 图片 */}
         <div className="relative h-40 bg-muted">
           {recipe.imageUrl ? (

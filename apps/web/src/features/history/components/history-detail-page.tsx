@@ -226,7 +226,7 @@ export function HistoryDetailPage({ analysisId }: HistoryDetailPageProps) {
 
         {/* 食物清单 */}
         {result.foods && result.foods.length > 0 && (
-          <section className="bg-card  p-4 space-y-3">
+          <section className="bg-card rounded-md p-4 space-y-3">
             <h3 className="text-xs font-bold text-muted-foreground">
               识别食物（{result.foods.length} 种）
             </h3>
@@ -274,7 +274,7 @@ export function HistoryDetailPage({ analysisId }: HistoryDetailPageProps) {
 
         {/* 建议 */}
         {result.suggestion && (
-          <section className="bg-card  p-4">
+          <section className="bg-card rounded-md p-4">
             <h3 className="text-xs font-bold text-muted-foreground mb-2">建议</h3>
             <p className="text-sm leading-relaxed">{result.suggestion}</p>
           </section>
@@ -282,7 +282,7 @@ export function HistoryDetailPage({ analysisId }: HistoryDetailPageProps) {
 
         {/* 替代方案 */}
         {result.insteadOptions && result.insteadOptions.length > 0 && (
-          <section className="bg-card  p-4">
+          <section className="bg-card rounded-md p-4">
             <h3 className="text-xs font-bold text-muted-foreground mb-2">替代方案</h3>
             <div className="flex flex-wrap gap-2">
               {result.insteadOptions.map((opt, i) => (
@@ -302,7 +302,7 @@ export function HistoryDetailPage({ analysisId }: HistoryDetailPageProps) {
           (result.compensation.diet ||
             result.compensation.activity ||
             result.compensation.nextMeal) && (
-            <section className="bg-card  p-4 space-y-2">
+            <section className="bg-card rounded-md p-4 space-y-2">
               <h3 className="text-xs font-bold text-muted-foreground">补救策略</h3>
               {result.compensation.diet && (
                 <p className="text-sm flex items-start gap-2">
@@ -327,7 +327,7 @@ export function HistoryDetailPage({ analysisId }: HistoryDetailPageProps) {
 
         {/* 今日状态 + 鼓励 */}
         {(result.contextComment || result.encouragement) && (
-          <section className="bg-card  p-4 space-y-2">
+          <section className="bg-card rounded-md p-4 space-y-2">
             {result.contextComment && (
               <p className="text-xs text-muted-foreground italic">📊 {result.contextComment}</p>
             )}
@@ -339,13 +339,13 @@ export function HistoryDetailPage({ analysisId }: HistoryDetailPageProps) {
 
         {/* AI 建议（advice） */}
         {result.advice && (
-          <section className="bg-card  p-4">
+          <section className="bg-card rounded-md p-4">
             <h3 className="text-xs font-bold text-muted-foreground mb-2">AI 综合建议</h3>
             <p className="text-sm leading-relaxed text-foreground/80">{result.advice}</p>
           </section>
         )}
 
-        <section className="bg-card  p-4 space-y-3 border border-primary/10">
+        <section className="bg-card rounded-md p-4 space-y-3 border border-primary/10">
           <div className="flex items-start gap-2">
             <span className="text-lg">🧠</span>
             <div>
@@ -441,7 +441,7 @@ function NutritionScoreSection({
   const [showBreakdown, setShowBreakdown] = useState(false);
 
   return (
-    <section className="bg-card  p-4 space-y-3">
+    <section className="bg-card rounded-md p-4 space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="text-xs font-bold text-muted-foreground">营养评分</h3>
         <div className="flex items-center gap-1.5">
@@ -529,7 +529,7 @@ function MacroDistribution({
   total: number;
 }) {
   return (
-    <section className="bg-card  p-4 space-y-2">
+    <section className="bg-card rounded-md p-4 space-y-2">
       <h3 className="text-xs font-bold text-muted-foreground">宏量素分布</h3>
       <div className="h-3  overflow-hidden flex">
         <div

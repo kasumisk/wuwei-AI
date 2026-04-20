@@ -35,7 +35,7 @@ export function WhyNotCard({ onExplain, isExplaining, result }: WhyNotCardProps)
 
   return (
     <section className="mb-6">
-      <div className="bg-surface-container-low  p-5">
+      <div className="bg-surface-container-low rounded-md p-5">
         {/* 标题 */}
         <div className="flex items-center gap-2 mb-3">
           <span className="text-lg">🤔</span>
@@ -90,7 +90,7 @@ export function WhyNotCard({ onExplain, isExplaining, result }: WhyNotCardProps)
 
         {/* 结果展示 */}
         {showResult && result && (
-          <div className="mt-4 bg-card  p-4 space-y-3">
+          <div className="mt-4 bg-card rounded-md p-4 space-y-3">
             <p className="text-sm font-medium">{result.explanation}</p>
 
             {result.reasons && result.reasons.length > 0 && (

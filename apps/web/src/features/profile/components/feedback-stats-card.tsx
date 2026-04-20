@@ -63,7 +63,7 @@ export function FeedbackStatsCard() {
 
   if (isLoading) {
     return (
-      <div className="bg-card  p-4 animate-pulse space-y-3">
+      <div className="bg-card rounded-md p-4 animate-pulse space-y-3">
         <div className="h-4 w-24 bg-muted rounded" />
         {[1, 2, 3, 4].map((i) => (
           <div key={i} className="h-3 w-full bg-muted rounded" />
@@ -74,7 +74,7 @@ export function FeedbackStatsCard() {
 
   if (!data || data.global.ratedCount === 0) {
     return (
-      <div className="bg-card  p-4">
+      <div className="bg-card rounded-md p-4">
         <div className="flex items-center gap-2 mb-2">
           <span className="text-base">📈</span>
           <h3 className="text-sm font-bold">反馈统计</h3>
@@ -94,7 +94,7 @@ export function FeedbackStatsCard() {
     .slice(0, 3);
 
   return (
-    <div className="bg-card  p-4 space-y-3">
+    <div className="bg-card rounded-md p-4 space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-base">📈</span>

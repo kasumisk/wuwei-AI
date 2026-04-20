@@ -176,7 +176,7 @@ export function QuickLogPanel({ food, onClose, onSuccess }: QuickLogPanelProps) 
           </div>
 
           {/* 预计营养 */}
-          <div className="bg-card  p-4">
+          <div className="bg-card rounded-md p-4">
             <p className="text-xs font-bold text-muted-foreground mb-2">
               预计摄入（{actualGrams}g）
             </p>

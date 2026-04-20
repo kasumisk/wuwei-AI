@@ -230,7 +230,7 @@ export function PricingPage() {
             return (
               <div
                 key={t.tier}
-                className={`relative  border-2 ${t.color} bg-card overflow-hidden transition-all ${
+                className={`relative  border-2  bg-card rounded-md overflow-hidden transition-all ${
                   isCurrent ? 'ring-2 ring-primary/30' : ''
                 } ${t.badge ? 'shadow-lg shadow-primary/10' : ''}`}
               >
@@ -299,7 +299,7 @@ export function PricingPage() {
         </div>
 
         {/* 功能对比表（语义化 table） */}
-        <div className="bg-card  overflow-hidden">
+        <div className="bg-card rounded-md overflow-hidden">
           <div className="px-4 py-3 border-b border-border/40">
             <h3 className="text-sm font-bold" id="comparison-heading">
               功能对比
@@ -360,7 +360,7 @@ export function PricingPage() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="downgrade-title"
-            className="relative bg-card  shadow-2xl w-[90%] max-w-sm p-4 animate-in zoom-in-95 duration-200"
+            className="relative bg-card rounded-md shadow-2xl w-[90%] max-w-sm p-4 animate-in zoom-in-95 duration-200"
           >
             <h3 id="downgrade-title" className="text-lg font-extrabold mb-2">
               确定降级方案？
@@ -426,7 +426,7 @@ export function PricingPage() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="celebration-title"
-            className="relative bg-card  shadow-2xl w-[85%] max-w-sm overflow-hidden animate-in zoom-in-90 duration-300"
+            className="relative bg-card rounded-md shadow-2xl w-[85%] max-w-sm overflow-hidden animate-in zoom-in-90 duration-300"
           >
             {/* 顶部渐变装饰 */}
             <div className="bg-gradient-to-br from-primary via-primary/90 to-primary/70 px-4 pt-8 pb-6 text-center text-primary-foreground">

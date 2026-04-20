@@ -180,7 +180,7 @@ export function RecommendationPreferences() {
 
   if (isLoading) {
     return (
-      <div className="bg-card  p-4 animate-pulse space-y-4">
+      <div className="bg-card rounded-md p-4 animate-pulse space-y-4">
         <div className="h-4 w-28 bg-muted rounded" />
         {Array.from({ length: 5 }).map((_, i) => (
           <div key={i} className="h-10 bg-muted " />
@@ -192,7 +192,7 @@ export function RecommendationPreferences() {
   const isPending = updateMutation.isPending;
 
   return (
-    <div className="bg-card  p-4 space-y-5">
+    <div className="bg-card rounded-md p-4 space-y-5">
       <div className="flex items-center gap-2">
         <span className="text-base">🎛️</span>
         <h3 className="text-sm font-bold">推荐偏好</h3>

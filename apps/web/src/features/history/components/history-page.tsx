@@ -138,7 +138,7 @@ export function HistoryPage() {
         {isLoading && (
           <div className="space-y-3">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="bg-card  p-4 space-y-3 animate-pulse">
+              <div key={i} className="bg-card rounded-md p-4 space-y-3 animate-pulse">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="w-12 h-5 bg-muted " />
@@ -397,7 +397,7 @@ function HistoryItem({ item }: { item: AnalysisHistoryItem }) {
   return (
     <>
       <div
-        className="bg-card  p-4 space-y-2 cursor-pointer active:scale-[0.98] transition-all relative group"
+        className="bg-card rounded-md p-4 space-y-2 cursor-pointer active:scale-[0.98] transition-all relative group"
         onClick={handleClick}
         onContextMenu={(e) => {
           e.preventDefault();
@@ -493,7 +493,7 @@ function HistoryItem({ item }: { item: AnalysisHistoryItem }) {
         {/* 操作菜单（浮层） */}
         {showActions && (
           <div
-            className="absolute right-3 top-10 z-10 bg-card shadow-xl border border-border  overflow-hidden min-w-30 animate-in fade-in slide-in-from-top-1 duration-150"
+            className="absolute right-3 top-10 z-10 bg-card rounded-md shadow-xl border border-border overflow-hidden min-w-30 animate-in fade-in slide-in-from-top-1 duration-150"
             onClick={(e) => e.stopPropagation()}
           >
             <button

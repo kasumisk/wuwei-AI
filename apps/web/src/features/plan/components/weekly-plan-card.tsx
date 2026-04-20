@@ -183,7 +183,7 @@ function DayDetail({ day }: { day: DailyPlanSummary }) {
         const hasFoodItems = meal.foodItems && meal.foodItems.length > 0;
 
         return (
-          <div key={key} className="bg-card  p-3">
+          <div key={key} className="bg-card rounded-md p-3">
             <div className="flex items-start justify-between">
               <div className="flex-1 min-w-0">
                 <span className="text-xs font-bold text-muted-foreground">
@@ -231,7 +231,7 @@ export function WeeklyPlanCard({ weeklyPlan }: WeeklyPlanCardProps) {
 
   return (
     <section className="mb-6">
-      <div className="bg-surface-container-low  p-5">
+      <div className="bg-surface-container-low rounded-md p-5">
         {/* 标题 */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">

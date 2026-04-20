@@ -51,7 +51,7 @@ export default function ChallengePage() {
 
       <main className="px-4 max-w-lg mx-auto mt-4 space-y-6">
         {/* 连胜状态 */}
-        <section className="bg-card  p-5 shadow-sm">
+        <section className="bg-card rounded-md p-5 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
               <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
@@ -121,7 +121,7 @@ export default function ChallengePage() {
             onClick={() => setSelectedAchievement(null)}
           >
             <div
-              className="bg-card  p-5 w-full max-w-sm shadow-xl"
+              className="bg-card rounded-md p-5 w-full max-w-sm shadow-xl"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex flex-col items-center text-center gap-2">
@@ -186,7 +186,7 @@ export default function ChallengePage() {
           {isLoading ? (
             <div className="space-y-3">
               {[...Array(3)].map((_, i) => (
-                <div key={i} className="bg-card  p-4 shadow-sm animate-pulse">
+                <div key={i} className="bg-card rounded-md p-4 shadow-sm animate-pulse">
                   <div className="h-4 bg-muted rounded w-1/3 mb-2" />
                   <div className="h-3 bg-muted rounded w-2/3 mb-2" />
                   <div className="h-3 bg-muted rounded w-1/4" />
@@ -207,7 +207,7 @@ export default function ChallengePage() {
                 const isCompleted = activeRecord?.status === 'completed';
 
                 return (
-                  <div key={c.id} className="bg-card  p-4 shadow-sm">
+                  <div key={c.id} className="bg-card rounded-md p-4 shadow-sm">
                     <div className="flex items-center justify-between">
                       <div className="flex-1 min-w-0">
                         <h3 className="font-bold text-sm">{c.title}</h3>

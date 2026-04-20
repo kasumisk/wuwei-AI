@@ -40,7 +40,7 @@ export function PageSkeleton({
       )}
 
       {Array.from({ length: cardCount }).map((_, i) => (
-        <div key={i} className="bg-card  p-4 space-y-3">
+        <div key={i} className="bg-card rounded-md p-4 space-y-3">
           <div className="flex items-center justify-between">
             <Skeleton className="h-4 w-20" />
             <Skeleton className="h-4 w-12" />
@@ -60,7 +60,7 @@ export function PageSkeleton({
  */
 export function CardSkeleton({ rows = 2 }: { rows?: number }) {
   return (
-    <div className="bg-card  p-4 space-y-3 animate-pulse">
+    <div className="bg-card rounded-md p-4 space-y-3 animate-pulse">
       <div className="flex items-center justify-between">
         <Skeleton className="h-4 w-24" />
         <Skeleton className="h-4 w-16" />

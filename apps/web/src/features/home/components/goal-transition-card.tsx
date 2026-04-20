@@ -105,7 +105,7 @@ export function GoalTransitionCard({ onDismiss }: GoalTransitionCardProps) {
         </div>
 
         {/* 建议目标卡片 */}
-        <div className="mx-5 bg-card  p-3.5">
+        <div className="mx-5 bg-card rounded-md p-3.5">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11  bg-primary/10 flex items-center justify-center shrink-0">
               <span className="text-xl">{emoji}</span>

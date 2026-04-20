@@ -76,13 +76,6 @@ export const GOAL_LABELS: Record<string, string> = {
   habit: '改善习惯',
 };
 
-// ── 目标标签（带 emoji，用于个人资料展示等） ──
-export const GOAL_LABELS_EMOJI: Record<string, string> = {
-  fat_loss: '🔥 减脂',
-  muscle_gain: '💪 增肌',
-  health: '🧘 保持健康',
-  habit: '🌱 改善习惯',
-};
 
 // ── 评分维度标签 ──
 export const SCORE_LABELS: Record<string, string> = {

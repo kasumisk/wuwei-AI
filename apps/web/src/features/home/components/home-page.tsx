@@ -111,7 +111,7 @@ export function HomePage() {
         {/* Loading skeleton */}
         {isLoading && (
           <div className="space-y-4 animate-pulse">
-            <div className="bg-card  p-5 space-y-3">
+            <div className="bg-card rounded-md p-5 space-y-3">
               <div className="h-4 w-24 bg-muted rounded" />
               <div className="h-10 w-36 bg-muted rounded" />
               <div className="h-2 w-full bg-muted " />
@@ -127,7 +127,7 @@ export function HomePage() {
             </div>
             <div className="space-y-3">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="bg-card  p-4 h-16 bg-muted" />
+                <div key={i} className="bg-card rounded-md p-4 h-16 bg-muted" />
               ))}
             </div>
           </div>

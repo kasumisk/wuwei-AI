@@ -23,7 +23,7 @@ export function ProfileCompletionBar() {
 
   if (isLoading) {
     return (
-      <div className="bg-card  p-4 animate-pulse">
+      <div className="bg-card rounded-md p-4 animate-pulse">
         <div className="h-4 w-32 bg-muted rounded mb-3" />
         <div className="h-2 w-full bg-muted rounded" />
       </div>
@@ -75,7 +75,7 @@ export function ProfileCompletionBar() {
   }
 
   return (
-    <div className="bg-card  p-4 space-y-3">
+    <div className="bg-card rounded-md p-4 space-y-3">
       {/* 进度条头部 */}
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-bold flex items-center gap-1.5">

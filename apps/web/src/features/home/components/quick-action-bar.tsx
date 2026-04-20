@@ -75,7 +75,7 @@ export function QuickActionBar({ onFrequentClick }: QuickActionBarProps) {
             <LocalizedLink
               key={action.key}
               href={action.href}
-              className={`${action.color}  p-3 flex flex-col items-center gap-2 active:scale-[0.95] transition-all shadow-sm`}
+              className={`${action.color}  rounded-md p-3 flex flex-col items-center gap-2 active:scale-[0.95] transition-all shadow-sm`}
             >
               {action.icon}
               <span className="text-xs font-bold">{action.label}</span>
@@ -84,7 +84,7 @@ export function QuickActionBar({ onFrequentClick }: QuickActionBarProps) {
             <button
               key={action.key}
               onClick={onFrequentClick}
-              className={`${action.color}  p-3 flex flex-col items-center gap-2 active:scale-[0.95] transition-all shadow-sm`}
+              className={`${action.color}  rounded-md p-3 flex flex-col items-center gap-2 active:scale-[0.95] transition-all shadow-sm`}
             >
               {action.icon}
               <span className="text-xs font-bold">{action.label}</span>

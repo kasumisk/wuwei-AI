@@ -178,7 +178,7 @@ export function SavedImpact({
       </div>
 
       {/* 今日预算卡片 */}
-      <div className="bg-card  p-5 space-y-4">
+      <div className="bg-card rounded-md p-5 space-y-4">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold text-muted-foreground">📊 今日预算更新</span>
           {summary.nutritionScore != null && summary.nutritionScore > 0 && (
@@ -302,7 +302,7 @@ export function SavedImpact({
 
       {/* 免费用户：保存后升级引导 — 强调趋势分析&周报价值 */}
       {isFree && (
-        <div className="bg-card border border-border  p-4 flex items-center gap-3">
+        <div className="bg-card rounded-md border border-border p-4 flex items-center gap-3">
           <div className="w-10 h-10  bg-gradient-to-br from-primary/20 to-violet-500/20 flex items-center justify-center shrink-0">
             <svg
               className="w-5 h-5 text-primary"

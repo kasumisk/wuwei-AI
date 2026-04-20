@@ -17,7 +17,7 @@ export function StepComplete({ computed, onAccept }: StepCompleteProps) {
       </div>
 
       {computed && (computed.bmr || computed.tdee || computed.recommendedCalories) && (
-        <div className="bg-card  p-4 w-full max-w-sm shadow-sm space-y-4">
+        <div className="bg-card rounded-md p-4 w-full max-w-sm shadow-sm space-y-4">
           <h3 className="text-sm font-bold text-muted-foreground">你的健康参数</h3>
           <div className="grid grid-cols-3 gap-3">
             {computed.bmr && (

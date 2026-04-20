@@ -161,7 +161,7 @@ export function NotificationPreferencesPage() {
         ) : (
           <>
             {/* 推送总开关 */}
-            <section className="bg-card  p-4">
+            <section className="bg-card rounded-md p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10  bg-primary/10 flex items-center justify-center">
@@ -204,7 +204,7 @@ export function NotificationPreferencesPage() {
             {/* 通知类型 */}
             <section className="space-y-2">
               <h2 className="text-xs font-bold text-muted-foreground px-1">通知类型</h2>
-              <div className="bg-card  divide-y divide-border/30">
+              <div className="bg-card rounded-md divide-y divide-border/30">
                 {NOTIFICATION_TYPES.map(({ type, label, description, icon }) => {
                   const isEnabled = enabledTypes.has(type);
                   return (
@@ -241,7 +241,7 @@ export function NotificationPreferencesPage() {
             {/* 免打扰时段 */}
             <section className="space-y-2">
               <h2 className="text-xs font-bold text-muted-foreground px-1">免打扰时段</h2>
-              <div className="bg-card  p-4 space-y-2">
+              <div className="bg-card rounded-md p-4 space-y-2">
                 <p className="text-xs text-muted-foreground">在此时段内不会收到推送通知</p>
                 <div className="flex flex-wrap gap-2 mt-2">
                   {QUIET_HOURS.map((option, i) => (

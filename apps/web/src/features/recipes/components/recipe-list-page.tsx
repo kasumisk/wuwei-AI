@@ -141,7 +141,7 @@ export function RecipeListPage() {
         {isLoading && (
           <div className="grid grid-cols-2 gap-3">
             {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="bg-card  overflow-hidden animate-pulse">
+              <div key={i} className="bg-card rounded-md overflow-hidden animate-pulse">
                 <div className="h-40 bg-muted" />
                 <div className="p-3 space-y-2">
                   <div className="h-4 w-20 bg-muted rounded" />

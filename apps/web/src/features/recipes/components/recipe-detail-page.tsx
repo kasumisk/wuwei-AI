@@ -161,7 +161,7 @@ export function RecipeDetailPage({ recipeId }: { recipeId: string }) {
 
       <div className="px-5 max-w-lg mx-auto -mt-4 relative z-10">
         {/* 基本信息卡片 */}
-        <div className="bg-card  p-4 shadow-sm space-y-3">
+        <div className="bg-card rounded-md p-4 shadow-sm space-y-3">
           <h1 className="text-xl font-extrabold">{recipe.name}</h1>
 
           {recipe.description && (
@@ -230,7 +230,7 @@ export function RecipeDetailPage({ recipeId }: { recipeId: string }) {
 
         {/* 食材列表 */}
         {recipe.ingredients.length > 0 && (
-          <div className="bg-card  p-4 mt-3 space-y-2">
+          <div className="bg-card rounded-md p-4 mt-3 space-y-2">
             <h2 className="text-sm font-bold flex items-center gap-1.5">
               <span>🥗</span> 食材
               <span className="text-[11px] text-muted-foreground font-normal">
@@ -262,7 +262,7 @@ export function RecipeDetailPage({ recipeId }: { recipeId: string }) {
 
         {/* 步骤 */}
         {instructions.length > 0 && (
-          <div className="bg-card  p-4 mt-3 space-y-3">
+          <div className="bg-card rounded-md p-4 mt-3 space-y-3">
             <h2 className="text-sm font-bold flex items-center gap-1.5">
               <span>👨‍🍳</span> 做法
             </h2>
@@ -280,7 +280,7 @@ export function RecipeDetailPage({ recipeId }: { recipeId: string }) {
         )}
 
         {/* 评分区域 */}
-        <div className="bg-card  p-4 mt-3 space-y-3">
+        <div className="bg-card rounded-md p-4 mt-3 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold flex items-center gap-1.5">
               <span>⭐</span> 评分

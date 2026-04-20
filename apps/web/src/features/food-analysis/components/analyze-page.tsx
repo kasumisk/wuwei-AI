@@ -653,7 +653,7 @@ export function AnalyzePage() {
                   <button
                     key={key}
                     onClick={() => setMealType(key)}
-                    className={`px-4 py-2  text-sm font-bold transition-all ${
+                    className={`px-4 py-2 rounded-md  text-sm font-bold transition-all ${
                       mealType === key
                         ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
                         : 'bg-muted text-muted-foreground'
@@ -691,7 +691,7 @@ export function AnalyzePage() {
             {inputMode === 'image' && (
               <>
                 <div
-                  className="bg-card  border-2 border-dashed border-(--color-outline-variant)/30 p-8 flex flex-col items-center gap-4 cursor-pointer active:scale-[0.98] transition-transform"
+                  className="bg-card rounded-md border-2 border-dashed border-(--color-outline-variant)/30 p-8 flex flex-col items-center gap-4 cursor-pointer active:scale-[0.98] transition-transform"
                   onClick={() => fileInputRef.current?.click()}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
@@ -742,7 +742,7 @@ export function AnalyzePage() {
 
                 {selectedFile && (
                   <>
-                    <div className="bg-card border border-border  p-3 space-y-1.5">
+                    <div className="bg-card rounded-md border border-border p-3 space-y-1.5">
                       <p className="text-xs font-bold">提升图片分析准确度</p>
                       <p className="text-[11px] text-muted-foreground">
                         1) 尽量一次拍全餐食 2) 保证光线清晰 3) 酱料和饮料尽量入镜
@@ -770,7 +770,7 @@ export function AnalyzePage() {
             {/* ═══ Text Input Mode ═══ */}
             {inputMode === 'text' && (
               <>
-                <div className="bg-card  p-4 space-y-3">
+                <div className="bg-card rounded-md p-4 space-y-3">
                   <textarea
                     value={textInput}
                     onChange={(e) => setTextInput(e.target.value.slice(0, TEXT_MAX_LENGTH))}
@@ -790,7 +790,7 @@ export function AnalyzePage() {
                   </div>
                 </div>
 
-                <div className="bg-card border border-border  p-3 space-y-2">
+                <div className="bg-card rounded-md border border-border p-3 space-y-2">
                   <p className="text-xs font-bold">输入完善建议</p>
                   <div className="text-[11px] text-muted-foreground space-y-1">
                     <p className={hasQuantityHint(textInput) ? 'text-emerald-600' : ''}>
@@ -935,7 +935,7 @@ export function AnalyzePage() {
 
             {/* 文字模式：显示输入内容 */}
             {inputMode === 'text' && textInput && (
-              <div className="bg-card  p-4">
+              <div className="bg-card rounded-md p-4">
                 <p className="text-xs text-muted-foreground font-medium mb-1">你的描述</p>
                 <p className="text-sm">{textInput}</p>
               </div>
@@ -945,7 +945,7 @@ export function AnalyzePage() {
             {(result.headline ||
               (result.topIssues && result.topIssues.length > 0) ||
               (result.topStrengths && result.topStrengths.length > 0)) && (
-              <section className="bg-card border border-border  p-4 space-y-3">
+              <section className="bg-card rounded-md border border-border p-4 space-y-3">
                 {result.headline && (
                   <h2 className="text-sm font-bold leading-snug">{result.headline}</h2>
                 )}
@@ -1003,7 +1003,7 @@ export function AnalyzePage() {
             {(result.totalProtein != null ||
               result.totalFat != null ||
               result.totalCarbs != null) && (
-              <section className="bg-card border border-border  p-4 space-y-3">
+              <section className="bg-card rounded-md border border-border p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-bold">本餐营养总览</h3>
                   <span className="text-lg font-extrabold text-primary">{editedTotal} kcal</span>
@@ -1081,7 +1081,7 @@ export function AnalyzePage() {
 
             {/* 宏量完成度 — completionRatio */}
             {result.completionRatio && Object.keys(result.completionRatio).length > 0 && (
-              <section className="bg-card border border-border  p-4 space-y-3">
+              <section className="bg-card rounded-md border border-border p-4 space-y-3">
                 <h3 className="text-sm font-bold">餐后今日完成率</h3>
                 <div className="space-y-2">
                   {Object.entries(result.completionRatio).map(([key, ratio]) => {
@@ -1123,7 +1123,7 @@ export function AnalyzePage() {
 
             {/* 替代品候选 */}
             {result.replacementCandidates && result.replacementCandidates.length > 0 && (
-              <section className="bg-card border border-border  p-4 space-y-3">
+              <section className="bg-card rounded-md border border-border p-4 space-y-3">
                 <h3 className="text-sm font-bold">推荐替代方案</h3>
                 <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1 snap-x snap-mandatory">
                   {result.replacementCandidates.map((c, i) => (
@@ -1178,7 +1178,7 @@ export function AnalyzePage() {
 
             {/* 8维评分详解 — 内联进度条 */}
             {result.breakdownExplanations && result.breakdownExplanations.length > 0 && (
-              <section className="bg-card border border-border  p-4 space-y-3">
+              <section className="bg-card rounded-md border border-border p-4 space-y-3">
                 <h3 className="text-sm font-bold">8维评分详解</h3>
                 <div className="space-y-3">
                   {result.breakdownExplanations.map((b, i) => {
@@ -1262,7 +1262,7 @@ export function AnalyzePage() {
             {result.recoveryAction &&
               (result.recoveryAction.nextMealDirection ||
                 result.recoveryAction.todayAdjustment) && (
-                <section className="bg-card border border-border  p-4 space-y-2">
+                <section className="bg-card rounded-md border border-border p-4 space-y-2">
                   <h3 className="text-sm font-bold">下餐补救方向</h3>
                   {result.recoveryAction.nextMealDirection && (
                     <p className="text-xs text-foreground/80">
@@ -1280,7 +1280,7 @@ export function AnalyzePage() {
               )}
 
             {resultQuality && (
-              <section className="bg-card border border-border  p-4 space-y-3">
+              <section className="bg-card rounded-md border border-border p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-bold">分析完整度</h3>
                   <span
@@ -1438,7 +1438,7 @@ export function AnalyzePage() {
             <div className="space-y-3">
               <h3 className="font-bold text-sm px-1">识别的食物（点击 x 可删除）</h3>
               {editedFoods.map((food, i) => (
-                <div key={i} className="bg-card  p-4 flex items-center justify-between">
+                <div key={i} className="bg-card rounded-md p-4 flex items-center justify-between">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <h4 className="font-bold text-sm">{food.name}</h4>

@@ -8,7 +8,7 @@ import { useSubscription } from '@/features/subscription/hooks/use-subscription'
 import { LocalizedLink } from '@/components/common/localized-link';
 import { ProfileCompletionBar } from '@/features/profile/components/profile-completion-bar';
 import { FeedbackStatsCard } from '@/features/profile/components/feedback-stats-card';
-import { GOAL_LABELS_EMOJI } from '@/lib/constants/food';
+import { GOAL_LABELS } from '@/lib/constants/food';
 import type { BehaviorProfile } from '@/types/user';
 import { BottomNav } from '@/components/common/bottom-nav';
 
@@ -85,7 +85,7 @@ export default function ProfilePage() {
         {/* 订阅状态卡片 */}
         <LocalizedLink
           href="/pricing"
-          className="block bg-card  p-4 hover:bg-muted/30 transition-colors"
+          className="block bg-card rounded-md p-4 hover:bg-muted/30 transition-colors"
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -125,7 +125,7 @@ export default function ProfilePage() {
 
         {/* 健康概览 */}
         {profile && (
-          <div className="bg-card  p-4 grid grid-cols-4 gap-2">
+          <div className="bg-card rounded-md p-4 grid grid-cols-4 gap-2">
             <div className="text-center">
               <p className="text-lg font-extrabold text-primary">{profile.heightCm || '--'}</p>
               <p className="text-[11px] text-muted-foreground mt-0.5">身高 cm</p>
@@ -135,16 +135,16 @@ export default function ProfilePage() {
               <p className="text-[11px] text-muted-foreground mt-0.5">体重 kg</p>
             </div>
             <div className="text-center border-l border-border/40">
-              <p className="text-base font-extrabold text-primary leading-5">
-                {profile.goal ? GOAL_LABELS_EMOJI[profile.goal] : '--'}
+              <p className="text-base font-extrabold text-primary">
+                {profile.goal ? GOAL_LABELS[profile.goal] : '--'}
               </p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">目标</p>
+              <p className="text-[11px] text-muted-foreground mt-1">目标</p>
             </div>
             <div className="text-center border-l border-border/40">
-              <p className="text-base font-extrabold text-primary leading-5">
+              <p className="text-base font-extrabold text-primary">
                 {profile.activityLevel ? activityLabelMap[profile.activityLevel] : '--'}
               </p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">活动</p>
+              <p className="text-[11px] text-muted-foreground mt-1">活动</p>
             </div>
           </div>
         )}
@@ -154,7 +154,7 @@ export default function ProfilePage() {
 
         {/* 饮食数据 */}
         {behaviorProfile && (
-          <div className="bg-card  p-4 grid grid-cols-4 gap-2">
+          <div className="bg-card rounded-md p-4 grid grid-cols-4 gap-2">
             <div className="text-center">
               <p className="text-xl font-extrabold text-primary">{behaviorProfile.streakDays}</p>
               <p className="text-[11px] text-muted-foreground mt-0.5">连续天数</p>
@@ -183,7 +183,7 @@ export default function ProfilePage() {
         <FeedbackStatsCard />
 
         {/* 菜单列表 */}
-        <div className="bg-card  overflow-hidden divide-y divide-border/40">
+        <div className="bg-card rounded-md overflow-hidden divide-y divide-border/40">
           <LocalizedLink
             href="/profile/edit"
             className="flex items-center justify-between px-5 py-4 hover:bg-muted/50 transition-colors"
@@ -283,7 +283,7 @@ export default function ProfilePage() {
         </div>
 
         {/* 法律信息 */}
-        <div className="bg-card  overflow-hidden divide-y divide-border/40">
+        <div className="bg-card rounded-md overflow-hidden divide-y divide-border/40">
           <LocalizedLink
             href="/terms"
             className="flex items-center justify-between px-5 py-3 hover:bg-muted/50 transition-colors"
@@ -357,7 +357,7 @@ function BehaviorInsightCard({
   if (!hasPreferences && !hasRiskHours && !hasTriggers && !hasCoachStyle) return null;
 
   return (
-    <div className="bg-card  p-4 space-y-4">
+    <div className="bg-card rounded-md p-4 space-y-4">
       <div className="flex items-center gap-2">
         <span className="text-base">🧠</span>
         <h3 className="text-sm font-bold">AI 对你的了解</h3>

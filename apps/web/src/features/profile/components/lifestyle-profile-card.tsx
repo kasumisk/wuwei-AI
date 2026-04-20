@@ -134,7 +134,7 @@ export function LifestyleProfileCard() {
   if (!isLoggedIn) return null;
 
   return (
-    <div className="bg-card  p-4 space-y-4">
+    <div className="bg-card rounded-md p-4 space-y-4">
       <div className="flex items-center gap-2">
         <span className="text-base">🌱</span>
         <h3 className="text-sm font-bold">生活方式</h3>

@@ -835,7 +835,7 @@ export function ProfileEditForm() {
       </nav>
 
       <main className="px-4 py-6 max-w-lg mx-auto pb-32">
-        <div className="bg-card  p-4 mb-5">{tabContent[activeTab]}</div>
+        <div className="bg-card rounded-md p-4 mb-5">{tabContent[activeTab]}</div>
       </main>
 
       {/* Floating save button */}

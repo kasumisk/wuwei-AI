@@ -54,7 +54,7 @@ export function WeeklyTrendMini({ summaries }: WeeklyTrendMiniProps) {
   const goalLinePct = Math.min(100, (medianGoal / maxCals) * 100);
 
   return (
-    <section className="mb-5 bg-card px-4 pt-4 pb-3">
+    <section className="mb-5 bg-card rounded-md px-4 pt-4 pb-3">
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <span className="text-xs font-bold text-muted-foreground">近 {sorted.length} 天趋势</span>

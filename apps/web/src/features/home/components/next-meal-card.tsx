@@ -138,7 +138,7 @@ export function NextMealCard({ suggestion, summary: _summary, profile }: NextMea
 
   return (
     <section className="mb-5">
-      <div className="bg-surface-container-low  p-4">
+      <div className="bg-surface-container-low rounded-md p-4">
         {/* Header */}
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-1.5">

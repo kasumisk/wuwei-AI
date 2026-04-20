@@ -79,7 +79,7 @@ export function PlanPage() {
         <h2 className="text-xl font-extrabold font-headline mb-6">饮食推荐</h2>
         <div className="space-y-4">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="bg-surface-container-low  p-5 animate-pulse">
+            <div key={i} className="bg-surface-container-low rounded-md p-5 animate-pulse">
               <div className="h-4 bg-muted rounded w-1/3 mb-3" />
               <div className="h-3 bg-muted rounded w-full mb-2" />
               <div className="h-3 bg-muted rounded w-2/3" />
@@ -127,11 +127,11 @@ export function PlanPage() {
 
       {/* 今日计划加载中 */}
       {dailyLoading && !dailyPlan && (
-        <div className="bg-surface-container-low  p-5 mb-6 animate-pulse">
+        <div className="bg-surface-container-low rounded-md p-5 mb-6 animate-pulse">
           <div className="h-4 bg-muted rounded w-1/3 mb-3" />
           <div className="grid grid-cols-2 gap-2">
             {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="bg-card  p-3 h-20" />
+              <div key={i} className="bg-card rounded-md p-3 h-20" />
             ))}
           </div>
         </div>
@@ -142,7 +142,7 @@ export function PlanPage() {
 
       {/* 免费用户：周计划锁定提示（显示真实数据 + 模糊遮罩） */}
       {isFree && (
-        <div className="bg-card  p-5 mb-6 relative overflow-hidden">
+        <div className="bg-card rounded-md p-5 mb-6 relative overflow-hidden">
           {/* 真实数据占位（有数据用真实的，没有用骨架） */}
           <div className="blur-sm pointer-events-none opacity-50 space-y-3">
             <h3 className="text-base font-bold">本周计划</h3>
@@ -217,7 +217,7 @@ export function PlanPage() {
 
       {/* 周计划加载中 */}
       {weeklyLoading && !weeklyPlan && (
-        <div className="bg-surface-container-low  p-5 mb-6 animate-pulse">
+        <div className="bg-surface-container-low rounded-md p-5 mb-6 animate-pulse">
           <div className="h-4 bg-muted rounded w-1/4 mb-4" />
           <div className="flex gap-1 mb-4">
             {[1, 2, 3, 4, 5, 6, 7].map((i) => (

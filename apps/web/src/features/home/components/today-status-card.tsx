@@ -115,7 +115,7 @@ export function TodayStatusCard({ summary, profile, scoreData }: TodayStatusCard
 
   return (
     <section className="mb-5">
-      <div className="bg-card overflow-hidden">
+      <div className="bg-card rounded-md overflow-hidden">
         {/* ─── Header: goal + streak + score ring ─── */}
         <div className="px-5 pt-5 pb-0 flex items-center justify-between">
           <div className="flex items-center gap-2">
