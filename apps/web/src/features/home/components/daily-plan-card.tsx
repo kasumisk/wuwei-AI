@@ -191,7 +191,7 @@ export function DailyPlanCard({ dailyPlan }: DailyPlanCardProps) {
    * 重构要点：
    * 1. 废弃 addFromLibrary 混合路径——该 API 每次调用独立创建一条 record，
    *    导致同一餐被拆为多条，汇总热量重复计算。
-   * 2. 统一走单次 createFoodLog（source: 'recommend'），一餐 = 一条 record，
+   * 2. 统一走单次 createRecord（source: 'recommend'），一餐 = 一条 record，
    *    热量/宏量素精确按比例分配到每个食物子项。
    * 3. totalCalories 直接取 plan.calories（不再手工估算），避免数值偏差。
    */
@@ -201,8 +201,8 @@ export function DailyPlanCard({ dailyPlan }: DailyPlanCardProps) {
       setLoggingSlot(slotKey);
       try {
         const mealType = MEAL_TYPE_MAP[slotKey] || 'lunch';
-      
-        await foodRecordService.createFoodLog({
+
+        await foodRecordService.createRecord({
           foods: plan.foodItems,
           totalCalories: plan.calories,
           mealType,

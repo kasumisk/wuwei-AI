@@ -192,8 +192,8 @@ export class FoodLibraryService {
         ? Math.round(((Number(food.carbs) * servingGrams) / 100) * 10) / 10
         : 0;
 
-    // 复用 FoodService.createFoodLog（统一写入 V8）
-    return this.foodService.createFoodLog(userId, {
+    // 复用 FoodService.createRecord（统一写入 V8）
+    return this.foodService.createRecord(userId, {
       foods: [
         {
           name: food.name,
@@ -224,7 +224,7 @@ export class FoodLibraryService {
         `SELECT food_item->>'name' AS name, COUNT(*) AS frequency
        FROM food_records fr
        CROSS JOIN LATERAL jsonb_array_elements(fr.foods) AS food_item
-       WHERE fr.user_id = $1
+       WHERE fr.user_id = $1::uuid
        GROUP BY food_item->>'name'
        ORDER BY frequency DESC
        LIMIT $2`,

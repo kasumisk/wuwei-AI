@@ -103,6 +103,12 @@ export enum GatedFeature {
   HEALTH_TREND = 'health_trend',
   /** 优先 AI 响应 */
   PRIORITY_AI = 'priority_ai',
+  /** 行为分析（V3 行为画像、主动提醒、决策反馈） */
+  BEHAVIOR_ANALYSIS = 'behavior_analysis',
+  /** 教练风格选择（V5 严格/友善/数据三种人格） */
+  COACH_STYLE = 'coach_style',
+  /** 高级挑战（V4 高级挑战模式，Free 仅基础） */
+  ADVANCED_CHALLENGES = 'advanced_challenges',
 }
 
 /**
@@ -137,6 +143,11 @@ export interface FeatureEntitlements {
   [GatedFeature.HEALTH_TREND]: boolean;
   [GatedFeature.PRIORITY_AI]: boolean;
 
+  // ---- V3/V4/V5 能力级 ----
+  [GatedFeature.BEHAVIOR_ANALYSIS]: boolean;
+  [GatedFeature.COACH_STYLE]: boolean;
+  [GatedFeature.ADVANCED_CHALLENGES]: boolean;
+
   // ---- 混合型 ----
   [GatedFeature.DATA_EXPORT]: boolean | string;
 }
@@ -160,8 +171,8 @@ export const TIER_ENTITLEMENTS: Record<SubscriptionTier, FeatureEntitlements> =
   {
     [SubscriptionTier.FREE]: {
       [GatedFeature.RECOMMENDATION]: 3,
-      [GatedFeature.AI_IMAGE_ANALYSIS]: 3,
-      [GatedFeature.AI_TEXT_ANALYSIS]: 20,
+      [GatedFeature.AI_IMAGE_ANALYSIS]: 1,
+      [GatedFeature.AI_TEXT_ANALYSIS]: 3,
       [GatedFeature.AI_COACH]: 5,
       [GatedFeature.ANALYSIS_HISTORY]: 3,
       [GatedFeature.DETAILED_SCORE]: false,
@@ -175,6 +186,9 @@ export const TIER_ENTITLEMENTS: Record<SubscriptionTier, FeatureEntitlements> =
       [GatedFeature.RECIPE_GENERATION]: false,
       [GatedFeature.HEALTH_TREND]: false,
       [GatedFeature.PRIORITY_AI]: false,
+      [GatedFeature.BEHAVIOR_ANALYSIS]: false,
+      [GatedFeature.COACH_STYLE]: false,
+      [GatedFeature.ADVANCED_CHALLENGES]: false,
     },
     [SubscriptionTier.PRO]: {
       [GatedFeature.RECOMMENDATION]: UNLIMITED,
@@ -188,11 +202,14 @@ export const TIER_ENTITLEMENTS: Record<SubscriptionTier, FeatureEntitlements> =
       [GatedFeature.PERSONALIZED_ALTERNATIVES]: true,
       [GatedFeature.REPORTS]: true,
       [GatedFeature.DATA_EXPORT]: 'csv',
-      [GatedFeature.FULL_DAY_PLAN]: false,
+      [GatedFeature.FULL_DAY_PLAN]: true,
       [GatedFeature.FULL_DAY_LINKAGE]: false,
       [GatedFeature.RECIPE_GENERATION]: false,
       [GatedFeature.HEALTH_TREND]: false,
       [GatedFeature.PRIORITY_AI]: false,
+      [GatedFeature.BEHAVIOR_ANALYSIS]: true,
+      [GatedFeature.COACH_STYLE]: true,
+      [GatedFeature.ADVANCED_CHALLENGES]: true,
     },
     [SubscriptionTier.PREMIUM]: {
       [GatedFeature.RECOMMENDATION]: UNLIMITED,
@@ -211,6 +228,9 @@ export const TIER_ENTITLEMENTS: Record<SubscriptionTier, FeatureEntitlements> =
       [GatedFeature.RECIPE_GENERATION]: true,
       [GatedFeature.HEALTH_TREND]: true,
       [GatedFeature.PRIORITY_AI]: true,
+      [GatedFeature.BEHAVIOR_ANALYSIS]: true,
+      [GatedFeature.COACH_STYLE]: true,
+      [GatedFeature.ADVANCED_CHALLENGES]: true,
     },
   };
 

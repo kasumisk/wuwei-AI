@@ -8,9 +8,14 @@ export interface User {
   updatedAt: string;
 }
 
+/**
+ * 统一 API 响应格式，与后端 ResponseWrapper 完全对齐：
+ * { code: number, data: T, message: string, success: boolean }
+ */
 export interface ApiResponse<T> {
+  code: number;
   data: T;
-  message?: string;
+  message: string;
   success: boolean;
 }
 

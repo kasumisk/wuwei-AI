@@ -21,8 +21,8 @@ import { FoodLibraryService } from '../../../food/app/services/food-library.serv
 import {
   UpdateFoodRecordDto,
   AddFromLibraryDto,
-  CreateFoodLogDto,
-  FoodLogQueryDto,
+  CreateFoodRecordDto,
+  FoodRecordQueryDto,
 } from '../dto/food.dto';
 
 @ApiTags('App 饮食记录')
@@ -35,20 +35,20 @@ export class FoodRecordController {
     private readonly foodLibraryService: FoodLibraryService,
   ) {}
 
-  // ==================== V8: Food Log 统一接口 ====================
+  // ==================== V8: Food Records 统一接口 ====================
 
   /**
-   * V8: 统一写入 Food Log（支持所有来源）
+   * V8: 统一写入 Food Record（支持所有来源）
    * POST /api/app/food/records
    */
   @Post('records')
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'V8: 统一写入 Food Log' })
-  async createFoodLog(
+  @ApiOperation({ summary: 'V8: 统一写入 Food Record' })
+  async createRecord(
     @CurrentAppUser() user: AppUserPayload,
-    @Body() dto: CreateFoodLogDto,
+    @Body() dto: CreateFoodRecordDto,
   ): Promise<ApiResponse> {
-    const record = await this.foodService.createFoodLog(user.id, dto);
+    const record = await this.foodService.createRecord(user.id, dto);
     return {
       success: true,
       code: HttpStatus.CREATED,
@@ -58,16 +58,44 @@ export class FoodRecordController {
   }
 
   /**
-   * V8: 按日期+来源查询 Food Log
-   * GET /api/app/food/records?date=2026-04-18&source=recommend
+   * 从食物库添加饮食记录
+   * POST /api/app/food/records/from-library
+   *
+   * 根据食物库 ID + 用餐克数，自动换算营养素并创建记录。
+   */
+  @Post('records/from-library')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: '从食物库添加饮食记录' })
+  async addFromLibrary(
+    @CurrentAppUser() user: AppUserPayload,
+    @Body() dto: AddFromLibraryDto,
+  ): Promise<ApiResponse> {
+    const record = await this.foodLibraryService.addFromLibrary(
+      user.id,
+      dto.foodLibraryId,
+      dto.servingGrams,
+      dto.mealType,
+    );
+    return {
+      success: true,
+      code: HttpStatus.CREATED,
+      message: '添加成功',
+      data: record,
+    };
+  }
+
+  /**
+   * V8: 查询 Food Records（支持单日/日期范围+来源筛选）
+   * GET /api/app/food/records?date=2026-04-18
+   * GET /api/app/food/records?startDate=2026-04-13&endDate=2026-04-20
    */
   @Get('records')
-  @ApiOperation({ summary: 'V8: 按日期查询 Food Log' })
-  async getFoodLog(
+  @ApiOperation({ summary: 'V8: 查询 Food Records' })
+  async queryRecords(
     @CurrentAppUser() user: AppUserPayload,
-    @Query() query: FoodLogQueryDto,
+    @Query() query: FoodRecordQueryDto,
   ): Promise<ApiResponse> {
-    const data = await this.foodService.getFoodLog(user.id, query);
+    const data = await this.foodService.queryRecords(user.id, query);
     return {
       success: true,
       code: HttpStatus.OK,
@@ -77,12 +105,12 @@ export class FoodRecordController {
   }
 
   /**
-   * V8: 修改 Food Log 条目
+   * V8: 修改 Food Record 条目
    * PUT /api/app/food/records/:id
    */
   @Put('records/:id')
-  @ApiOperation({ summary: 'V8: 修改 Food Log 条目' })
-  async updateFoodLog(
+  @ApiOperation({ summary: 'V8: 修改 Food Record 条目' })
+  async updateRecord(
     @CurrentAppUser() user: AppUserPayload,
     @Param('id') id: string,
     @Body() dto: UpdateFoodRecordDto,
@@ -97,12 +125,12 @@ export class FoodRecordController {
   }
 
   /**
-   * V8: 删除 Food Log 条目
+   * V8: 删除 Food Record 条目
    * DELETE /api/app/food/records/:id
    */
   @Delete('records/:id')
-  @ApiOperation({ summary: 'V8: 删除 Food Log 条目' })
-  async deleteFoodLog(
+  @ApiOperation({ summary: 'V8: 删除 Food Record 条目' })
+  async deleteRecord(
     @CurrentAppUser() user: AppUserPayload,
     @Param('id') id: string,
   ): Promise<ApiResponse> {

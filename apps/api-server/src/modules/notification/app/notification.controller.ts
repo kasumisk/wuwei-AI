@@ -44,6 +44,7 @@ import { CurrentAppUser } from '../../auth/app/current-app-user.decorator';
 import { AppUserPayload } from '../../auth/app/app-user-payload.type';
 import { NotificationService } from './notification.service';
 import { DevicePlatform } from '../notification.types';
+import { ResponseWrapper, ApiResponse } from '../../../common/types/response.type';
 
 // ─── DTO ───
 
@@ -108,17 +109,18 @@ export class NotificationController {
   async getNotifications(
     @CurrentAppUser() user: AppUserPayload,
     @Query() query: NotificationListQueryDto,
-  ) {
+  ): Promise<ApiResponse> {
     const page = query.page || 1;
     const limit = Math.min(query.limit || 20, 50);
-    return this.notificationService.getNotifications(user.id, page, limit);
+    const data = await this.notificationService.getNotifications(user.id, page, limit);
+    return ResponseWrapper.success(data, '获取成功');
   }
 
   @Get('unread')
   @ApiOperation({ summary: '获取未读通知数量' })
-  async getUnreadCount(@CurrentAppUser() user: AppUserPayload) {
+  async getUnreadCount(@CurrentAppUser() user: AppUserPayload): Promise<ApiResponse> {
     const count = await this.notificationService.getUnreadCount(user.id);
-    return { unreadCount: count };
+    return ResponseWrapper.success({ unreadCount: count }, '获取成功');
   }
 
   @Post(':id/read')
@@ -127,16 +129,16 @@ export class NotificationController {
   async markAsRead(
     @CurrentAppUser() user: AppUserPayload,
     @Param('id', ParseUUIDPipe) id: string,
-  ) {
+  ): Promise<void> {
     await this.notificationService.markAsRead(user.id, id);
   }
 
   @Post('read-all')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '标记全部通知为已读' })
-  async markAllAsRead(@CurrentAppUser() user: AppUserPayload) {
+  async markAllAsRead(@CurrentAppUser() user: AppUserPayload): Promise<ApiResponse> {
     const count = await this.notificationService.markAllAsRead(user.id);
-    return { markedCount: count };
+    return ResponseWrapper.success({ markedCount: count }, '操作成功');
   }
 
   // ─── 设备令牌 ───
@@ -147,18 +149,18 @@ export class NotificationController {
   async registerDevice(
     @CurrentAppUser() user: AppUserPayload,
     @Body() dto: RegisterDeviceDto,
-  ) {
+  ): Promise<ApiResponse> {
     const token = await this.notificationService.registerDeviceToken(
       user.id,
       dto.token,
       dto.deviceId,
       dto.platform,
     );
-    return {
+    return ResponseWrapper.success({
       id: token.id,
       deviceId: token.deviceId,
       platform: token.platform,
-    };
+    }, '注册成功');
   }
 
   @Delete('device')
@@ -167,7 +169,7 @@ export class NotificationController {
   async deactivateDevice(
     @CurrentAppUser() user: AppUserPayload,
     @Body() dto: DeactivateDeviceDto,
-  ) {
+  ): Promise<void> {
     await this.notificationService.deactivateDeviceToken(user.id, dto.deviceId);
   }
 
@@ -175,14 +177,14 @@ export class NotificationController {
 
   @Get('preference')
   @ApiOperation({ summary: '获取通知偏好设置' })
-  async getPreference(@CurrentAppUser() user: AppUserPayload) {
+  async getPreference(@CurrentAppUser() user: AppUserPayload): Promise<ApiResponse> {
     const pref = await this.notificationService.getPreference(user.id);
-    return {
+    return ResponseWrapper.success({
       pushEnabled: pref.pushEnabled,
       enabledTypes: pref.enabledTypes,
       quietStart: pref.quietStart,
       quietEnd: pref.quietEnd,
-    };
+    }, '获取成功');
   }
 
   @Put('preference')
@@ -190,7 +192,7 @@ export class NotificationController {
   async updatePreference(
     @CurrentAppUser() user: AppUserPayload,
     @Body() dto: UpdatePreferenceDto,
-  ) {
+  ): Promise<ApiResponse> {
     const updates: Partial<{
       pushEnabled: boolean;
       enabledTypes: string[];
@@ -206,11 +208,11 @@ export class NotificationController {
       user.id,
       updates,
     );
-    return {
+    return ResponseWrapper.success({
       pushEnabled: pref.pushEnabled,
       enabledTypes: pref.enabledTypes,
       quietStart: pref.quietStart,
       quietEnd: pref.quietEnd,
-    };
+    }, '更新成功');
   }
 }

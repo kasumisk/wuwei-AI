@@ -219,29 +219,45 @@ export class QuotaService {
    * 仅对计次类功能创建记录，布尔型功能不需要配额追踪。
    *
    * V6.1: 使用 PlanEntitlementResolver 判断功能类型和获取限额
+   * V6.x fix: 找到已有记录后，对比当前 plan 配额，不一致时同步更新（避免改 plan 后旧记录不生效）
    */
   private async getOrCreateQuota(
     userId: string,
     feature: GatedFeature,
   ): Promise<any | null> {
-    // 先查已有记录
-    const existing = await this.prisma.usageQuota.findUnique({
-      where: { userId_feature: { userId: userId, feature } },
-    });
-    if (existing) return existing;
-
     // 使用 PlanEntitlementResolver 检查该功能是否为计次类型
     if (!this.entitlementResolver.isCountableFeature(feature)) return null;
 
-    // 根据用户订阅概要获取权益配置
+    // 根据用户订阅概要获取当前 plan 配额上限
     const summary = await this.subscriptionService.getUserSummary(userId);
-    const limit = this.entitlementResolver.getQuotaLimit(
+    const currentLimit = this.entitlementResolver.getQuotaLimit(
       summary.entitlements,
       feature,
     );
 
     // 非数值型权益 → 不需要配额追踪
-    if (limit === null) return null;
+    if (currentLimit === null) return null;
+
+    // 查找已有记录
+    const existing = await this.prisma.usageQuota.findUnique({
+      where: { userId_feature: { userId: userId, feature } },
+    });
+
+    if (existing) {
+      // 检查 quota_limit 是否与当前 plan 一致，不一致则同步更新
+      if (existing.quotaLimit !== currentLimit) {
+        this.logger.log(
+          `同步配额上限: userId=${userId}, feature=${feature}, ` +
+            `old=${existing.quotaLimit}, new=${currentLimit}`,
+        );
+        const updated = await this.prisma.usageQuota.update({
+          where: { id: existing.id },
+          data: { quotaLimit: currentLimit },
+        });
+        return updated;
+      }
+      return existing;
+    }
 
     // 自动创建配额记录
     const now = new Date();
@@ -251,7 +267,7 @@ export class QuotaService {
         userId: userId,
         feature,
         used: 0,
-        quotaLimit: limit,
+        quotaLimit: currentLimit,
         cycle: QuotaCycle.DAILY,
         resetAt: resetAt,
       },

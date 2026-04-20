@@ -61,7 +61,7 @@ export function useFoodAnalysis() {
       avgSatiety?: number;
       nutritionScore?: number;
     }) =>
-      foodRecordService.createFoodLog({
+      foodRecordService.createRecord({
         foods: data.foods,
         totalCalories: data.totalCalories,
         mealType: data.mealType || 'lunch',

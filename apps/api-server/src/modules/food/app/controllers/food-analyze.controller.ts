@@ -240,7 +240,7 @@ export class FoodAnalyzeController {
       throw new BadRequestException('该分析尚未完成，无法保存');
     }
 
-    // 4. 从分析记录中提取数据构建 CreateFoodLogDto
+    // 4. 从分析记录中提取数据构建 CreateFoodRecordDto
     const result = this.reconstructAnalysisResult(analysisRecord);
     const mealType =
       dto.mealType || (analysisRecord.mealType as MealType) || MealType.LUNCH;
@@ -278,8 +278,8 @@ export class FoodAnalyzeController {
       nutritionScore: result.score?.nutritionScore ?? 0,
     };
 
-    // 5. 保存饮食记录（统一 Food Log V8，会触发 MEAL_RECORDED 事件和日报更新）
-    const record = await this.foodService.createFoodLog(
+    // 5. 保存饮食记录（统一 Food Records V8，会触发 MEAL_RECORDED 事件和日报更新）
+    const record = await this.foodService.createRecord(
       user.id,
       createDto as any,
     );
@@ -321,8 +321,44 @@ export class FoodAnalyzeController {
       unknown
     > | null;
 
+    // 优先从 recognizedPayload.foods 或 nutritionPayload.foods 读取食物列表
+    let foods = (recognized?.foods ??
+      (nutrition as any)?.foods ??
+      []) as FoodAnalysisResultV61['foods'];
+
+    // 兜底：当 foods 为空但 recognizedPayload.terms 存在时（历史记录兼容）
+    // 用 terms 元数据 + totals 平摊营养值构建近似食物列表
+    if (
+      (!foods || foods.length === 0) &&
+      Array.isArray((recognized as any)?.terms) &&
+      (recognized as any).terms.length > 0
+    ) {
+      const terms = (recognized as any).terms as Array<{
+        name: string;
+        quantity?: string;
+        fromLibrary?: boolean;
+      }>;
+      const totals = (nutrition?.totals ?? {}) as {
+        calories?: number;
+        protein?: number;
+        fat?: number;
+        carbs?: number;
+      };
+      const count = terms.length;
+      foods = terms.map((t) => ({
+        name: t.name,
+        quantity: t.quantity,
+        category: 'unknown',
+        calories: count > 0 ? Math.round((totals.calories ?? 0) / count) : 0,
+        protein: count > 0 ? Math.round((totals.protein ?? 0) / count) : 0,
+        fat: count > 0 ? Math.round((totals.fat ?? 0) / count) : 0,
+        carbs: count > 0 ? Math.round((totals.carbs ?? 0) / count) : 0,
+        confidence: 0.5,
+      })) as FoodAnalysisResultV61['foods'];
+    }
+
     return {
-      foods: (recognized?.foods ?? []) as FoodAnalysisResultV61['foods'],
+      foods,
       totals: (nutrition?.totals ?? {
         calories: 0,
         protein: 0,

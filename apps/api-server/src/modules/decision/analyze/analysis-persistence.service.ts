@@ -62,6 +62,7 @@ export class AnalysisPersistenceService {
         status: AnalysisRecordStatus.COMPLETED,
         recognizedPayload: {
           terms: input.parsedFoodMeta,
+          foods: input.result.foods,
         } as any,
         normalizedPayload: {
           foods: input.result.foods,

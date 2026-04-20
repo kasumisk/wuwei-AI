@@ -11,8 +11,7 @@ export {
   UpdateFoodRecordDto,
   FoodRecordQueryDto,
   AddFromLibraryDto,
-  CreateFoodLogDto,
-  FoodLogQueryDto,
+  CreateFoodRecordDto,
 } from './food-record.dto';
 
 export { SaveUserProfileDto } from './user-profile.dto';

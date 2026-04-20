@@ -3,8 +3,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   UpdateFoodRecordDto,
   FoodRecordQueryDto,
-  CreateFoodLogDto,
-  FoodLogQueryDto,
+  CreateFoodRecordDto,
 } from '../dto/food.dto';
 import { NutritionScoreService } from './nutrition-score.service';
 import { UserProfileService } from '../../../user/app/services/profile/user-profile.service';
@@ -844,13 +843,13 @@ export class FoodService {
     );
   }
 
-  // ==================== V8: Food Log 统一接口 ====================
+  // ==================== V8: Food Records 统一接口 ====================
 
   /**
-   * V8: 统一写入 Food Log，触发每日汇总更新和 MEAL_RECORDED 事件
+   * V8: 统一写入 Food Record，触发每日汇总更新和 MEAL_RECORDED 事件
    */
-  async createFoodLog(userId: string, dto: CreateFoodLogDto): Promise<any> {
-    const saved = await this.foodRecordService.createFoodLog(userId, dto);
+  async createRecord(userId: string, dto: CreateFoodRecordDto): Promise<any> {
+    const saved = await this.foodRecordService.createRecord(userId, dto);
 
     this.dailySummaryService
       .updateDailySummary(userId, saved.recordedAt)
@@ -871,10 +870,11 @@ export class FoodService {
     return saved;
   }
 
-  // ==================== V8: Food Log 统一接口 ====================
-
-  async getFoodLog(userId: string, query: FoodLogQueryDto): Promise<any> {
+  /**
+   * V8: 查询 Food Records（支持单日/日期范围）
+   */
+  async queryRecords(userId: string, query: FoodRecordQueryDto): Promise<any> {
     const tz = await this.userProfileService.getTimezone(userId);
-    return this.foodRecordService.getFoodLogByDate(userId, query, tz);
+    return this.foodRecordService.queryRecords(userId, query, tz);
   }
 }

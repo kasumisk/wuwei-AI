@@ -74,6 +74,22 @@ export class SubscriptionManagementController {
   }
 
   /**
+   * 查询单个订阅计划（含完整 entitlements）
+   * GET /admin/subscriptions/plans/:id
+   */
+  @Get('plans/:id')
+  @ApiOperation({ summary: '查询单个订阅计划' })
+  async findPlanById(@Param('id') id: string): Promise<ApiResponse> {
+    const data = await this.subscriptionManagementService.findPlanById(id);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '获取成功',
+      data,
+    };
+  }
+
+  /**
    * 更新订阅计划
    */
   @Put('plans/:id')

@@ -147,6 +147,10 @@ export class FoodNutritionController {
       complianceRate: Number(behaviorProfile?.avgComplianceRate) || 0,
     };
 
+    // Bug1 fix: 从当天食物记录聚合加权平均 GI 和总碳水
+    const { avgGI, totalCarbsFromFoods } =
+      this.aggregateGlycemicData(todayRecords);
+
     const score = this.nutritionScoreService.calculateScore(
       {
         calories: summary.totalCalories,
@@ -168,6 +172,8 @@ export class FoodNutritionController {
               ? summary.avgSatiety
               : 3
             : 0,
+        glycemicIndex: avgGI || undefined,
+        carbsPerServing: totalCarbsFromFoods || undefined,
       },
       profile?.goal || 'health',
       stabilityData,
@@ -416,6 +422,35 @@ export class FoodNutritionController {
       code: HttpStatus.OK,
       message: '保存成功',
       data: toProfileResponse(profile),
+    };
+  }
+
+  /**
+   * 从当天食物记录的 foods JSON 中聚合加权平均 GI 和总碳水。
+   * 权重 = 每个食物的碳水含量（碳水高的食物对血糖影响更大）。
+   */
+  private aggregateGlycemicData(records: any[]): {
+    avgGI: number;
+    totalCarbsFromFoods: number;
+  } {
+    let totalCarbs = 0;
+    let weightedGISum = 0;
+
+    for (const record of records) {
+      const foods = Array.isArray(record.foods) ? record.foods : [];
+      for (const food of foods) {
+        const gi = Number(food.glycemicIndex) || 0;
+        const carbs = Number(food.carbs) || Number(food.carbsG) || 0;
+        if (gi > 0 && carbs > 0) {
+          weightedGISum += gi * carbs;
+          totalCarbs += carbs;
+        }
+      }
+    }
+
+    return {
+      avgGI: totalCarbs > 0 ? Math.round(weightedGISum / totalCarbs) : 0,
+      totalCarbsFromFoods: Math.round(totalCarbs),
     };
   }
 }

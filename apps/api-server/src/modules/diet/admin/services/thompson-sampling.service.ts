@@ -93,7 +93,7 @@ export class ThompsonSamplingService {
               SUM(CASE WHEN f.action = 'accepted' THEN 1 ELSE 0 END)::text AS "accepted",
               SUM(CASE WHEN f.action != 'accepted' THEN 1 ELSE 0 END)::text AS "rejected"
        FROM recommendation_feedbacks f
-       WHERE f.user_id = $1
+       WHERE f.user_id = $1::uuid
          AND f.created_at >= $2
        GROUP BY f.food_name
        ORDER BY SUM(CASE WHEN f.action = 'accepted' THEN 1 ELSE 0 END) +

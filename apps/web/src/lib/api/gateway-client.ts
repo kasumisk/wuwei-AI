@@ -38,7 +38,7 @@ export interface GenerateImageRequest {
   n?: number;
 }
 
-export interface ApiResponse<T> {
+export interface GatewayApiResponse<T> {
   success: boolean;
   message?: string;
   data?: T;
@@ -130,7 +130,7 @@ function getHeaders(config?: ApiKeyConfig): HeadersInit {
 export async function generateText(
   request: GenerateTextRequest,
   config?: ApiKeyConfig
-): Promise<ApiResponse<TextGenerationResponse>> {
+): Promise<GatewayApiResponse<TextGenerationResponse>> {
   try {
     const response = await fetch(`${GATEWAY_BASE_URL}/gateway/text/generation`, {
       method: 'POST',
@@ -266,7 +266,7 @@ export function generateTextStream(
 export async function generateImage(
   request: GenerateImageRequest,
   config?: ApiKeyConfig
-): Promise<ApiResponse<ImageGenerationResponse>> {
+): Promise<GatewayApiResponse<ImageGenerationResponse>> {
   try {
     const response = await fetch(`${GATEWAY_BASE_URL}/gateway/image/generation`, {
       method: 'POST',

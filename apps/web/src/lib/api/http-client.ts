@@ -134,7 +134,10 @@ export class HttpClient {
     const config = error.config as RequestConfig;
 
     // 处理重试逻辑
-    if (config?.retryCount && config.retryCount > 0) {
+    // 4xx 客户端错误（含 403 付费墙）不重试，直接报错
+    const statusCode = error.response?.status;
+    const isClientError = statusCode !== undefined && statusCode >= 400 && statusCode < 500;
+    if (!isClientError && config?.retryCount && config.retryCount > 0) {
       const retryDelay = config.retryDelay || 1000;
       await this.delay(retryDelay);
       config.retryCount--;

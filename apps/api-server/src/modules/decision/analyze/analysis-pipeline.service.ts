@@ -83,6 +83,8 @@ export interface TextPipelineInput {
     fromLibrary: boolean;
   }>;
   decisionMode?: 'pre_eat' | 'post_eat';
+  /** 预构建的用户上下文，避免重复调用 UserContextBuilder */
+  prebuiltUserContext?: any;
 }
 
 /** 图片链路管道输入 */
@@ -99,6 +101,8 @@ export interface ImagePipelineInput {
   /** 图片链路已有营养汇总（来自 legacy result），可选 */
   precomputedTotals?: NutritionTotals;
   decisionMode?: 'pre_eat' | 'post_eat';
+  /** 预构建的用户上下文，避免重复调用 UserContextBuilder */
+  prebuiltUserContext?: any;
 }
 
 export type PipelineInput = TextPipelineInput | ImagePipelineInput;
@@ -146,11 +150,10 @@ export class AnalysisPipelineService {
         ? input.precomputedTotals
         : aggregateNutrition(input.foods);
 
-    // Step 3: 用户上下文
-    const userContext = await this.userContextBuilder.build(
-      input.userId,
-      input.locale,
-    );
+    // Step 3: 用户上下文（优先复用预构建的，避免重复调用）
+    const userContext = input.prebuiltUserContext
+      ? input.prebuiltUserContext
+      : await this.userContextBuilder.build(input.userId, input.locale);
     if (input.mealType) {
       userContext.mealType = input.mealType;
     }
@@ -421,9 +424,11 @@ export class AnalysisPipelineService {
       structuredDecision,
     });
 
-    // Step 7: 持久化（先落库，再发事件，避免监听器读不到记录）
+    // Step 7: 持久化（fire-and-forget，不阻塞响应）
     if (input.userId) {
-      await this.persistRecord(input, analysisId, result);
+      this.persistRecord(input, analysisId, result).catch((err) =>
+        this.logger.error(`分析记录持久化失败: ${(err as Error).message}`),
+      );
     }
 
     // V3.5 P3.2: 附上下文分析和用户上下文到 result，供 CoachService 缓存后注入教练 prompt

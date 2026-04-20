@@ -364,7 +364,7 @@ export class CollaborativeFilteringService {
               f.action AS "action"
        FROM recommendation_feedbacks f
        LEFT JOIN foods fl ON fl.name = f.food_name
-       WHERE f.user_id = $1
+       WHERE f.user_id = $1::uuid
          AND COALESCE(f.food_id, fl.id::varchar) IS NOT NULL`,
       userId,
     );

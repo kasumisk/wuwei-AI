@@ -14,7 +14,7 @@ import {
   IsIn,
   IsObject,
 } from 'class-validator';
-// Note: IsIn kept for CreateFoodLogDto.decision field
+// Note: IsIn kept for CreateFoodRecordDto.decision field
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { MealType, RecordSource } from '../../diet.types';
@@ -106,28 +106,6 @@ export class UpdateFoodRecordDto {
   isHealthy?: boolean;
 }
 
-export class FoodRecordQueryDto {
-  @ApiPropertyOptional({ description: '页码，默认1' })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page?: number;
-
-  @ApiPropertyOptional({ description: '每页条数，默认20' })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  limit?: number;
-
-  @ApiPropertyOptional({ description: '查询日期 YYYY-MM-DD' })
-  @IsOptional()
-  @IsString()
-  date?: string;
-}
-
 // ========== Food Library ==========
 
 export class AddFromLibraryDto {
@@ -153,7 +131,7 @@ export class AddFromLibraryDto {
  * V8: 统一 Food Log 写入 DTO
  * 所有来源（手动/推荐/分析决策）均通过此 DTO 写入。
  */
-export class CreateFoodLogDto {
+export class CreateFoodRecordDto {
   @ApiProperty({ type: [FoodItemDto], description: '食物列表' })
   @IsArray()
   @ValidateNested({ each: true })
@@ -227,13 +205,29 @@ export class CreateFoodLogDto {
 }
 
 /**
- * V8: Food Log 查询 DTO（支持按日期+来源筛选）
+ * V8: Food Log 查询 DTO（支持按日期/日期范围+来源筛选）
+ *
+ * 优先级：startDate+endDate > date > 默认今日
  */
-export class FoodLogQueryDto {
+export class FoodRecordQueryDto {
   @ApiPropertyOptional({ description: '查询日期 YYYY-MM-DD，默认今日' })
   @IsOptional()
   @IsString()
   date?: string;
+
+  @ApiPropertyOptional({
+    description: '范围起始日期 YYYY-MM-DD（含），与 endDate 配合使用',
+  })
+  @IsOptional()
+  @IsString()
+  startDate?: string;
+
+  @ApiPropertyOptional({
+    description: '范围结束日期 YYYY-MM-DD（含），与 startDate 配合使用',
+  })
+  @IsOptional()
+  @IsString()
+  endDate?: string;
 
   @ApiPropertyOptional({ enum: RecordSource, description: '按来源筛选' })
   @IsOptional()

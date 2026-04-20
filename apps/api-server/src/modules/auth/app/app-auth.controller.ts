@@ -290,7 +290,7 @@ export class AppAuthController {
       success: true,
       code: HttpStatus.OK,
       message: data.message,
-      data: null,
+      data: { message: data.message },
     };
   }
 
@@ -312,7 +312,7 @@ export class AppAuthController {
       success: true,
       code: HttpStatus.OK,
       message: data.message,
-      data: null,
+      data: { message: data.message },
     };
   }
 

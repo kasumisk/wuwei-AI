@@ -276,6 +276,9 @@ export class QuotaGateService {
       [GatedFeature.RECIPE_GENERATION]: '食谱生成',
       [GatedFeature.HEALTH_TREND]: '健康趋势分析',
       [GatedFeature.PRIORITY_AI]: '优先 AI 响应',
+      [GatedFeature.BEHAVIOR_ANALYSIS]: '行为分析',
+      [GatedFeature.COACH_STYLE]: '教练风格选择',
+      [GatedFeature.ADVANCED_CHALLENGES]: '高级挑战',
     };
     return names[feature] ?? feature;
   }

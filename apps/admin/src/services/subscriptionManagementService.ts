@@ -252,6 +252,18 @@ export const useSubscriptionPlans = (
     ...options,
   });
 
+export const useSubscriptionPlanById = (
+  id: string | null,
+  options?: Omit<UseQueryOptions<SubscriptionPlanDto>, 'queryKey' | 'queryFn'>
+) =>
+  useQuery({
+    queryKey: [...subscriptionQueryKeys.plans, id] as const,
+    queryFn: () => subscriptionApi.getPlanById(id!),
+    enabled: !!id,
+    staleTime: 5 * 60 * 1000,
+    ...options,
+  });
+
 export const useCreatePlan = (
   options?: UseMutationOptions<SubscriptionPlanDto, Error, CreatePlanDto>
 ) => {

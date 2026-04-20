@@ -13,6 +13,8 @@ import { CurrentAppUser } from '../../auth/app/current-app-user.decorator';
 import { AppUserPayload } from '../../auth/app/app-user-payload.type';
 import { ApiResponse } from '../../../common/types/response.type';
 import { GamificationService } from './gamification.service';
+import { RequireSubscription } from '../../subscription/app/decorators/require-subscription.decorator';
+import { SubscriptionTier } from '../../subscription/subscription.types';
 
 @ApiTags('App 游戏化')
 @Controller('app')
@@ -62,6 +64,7 @@ export class GamificationController {
    * POST /api/app/challenges/:id/join
    */
   @Post('challenges/:id/join')
+  @RequireSubscription(SubscriptionTier.PRO)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '参加挑战' })
   async joinChallenge(

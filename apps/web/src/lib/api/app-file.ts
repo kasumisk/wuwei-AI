@@ -51,6 +51,10 @@ export const appFileService = {
       },
     });
 
+    if (!response.success) {
+      throw new Error(response.message || '文件上传失败');
+    }
+
     return response.data;
   },
 
@@ -67,6 +71,10 @@ export const appFileService = {
       mimeType,
       category,
     });
+
+    if (!response.success) {
+      throw new Error(response.message || '获取上传地址失败');
+    }
 
     return response.data;
   },

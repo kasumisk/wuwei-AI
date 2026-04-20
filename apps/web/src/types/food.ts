@@ -170,6 +170,14 @@ export interface AnalysisResult {
     analysisQualityBand?: string;
     analysisCompletenessScore?: number;
   };
+
+  // ── 权益裁剪信息（软付费墙） ──
+  entitlement?: {
+    /** 用户当前订阅等级 */
+    tier: string;
+    /** 本次被隐藏的字段列表 */
+    fieldsHidden: string[];
+  };
 }
 
 // ── 旧 issue 类型（兼容旧组件） ──

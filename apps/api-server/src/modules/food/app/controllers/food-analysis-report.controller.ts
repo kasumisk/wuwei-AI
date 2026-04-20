@@ -19,6 +19,7 @@ import { CurrentAppUser } from '../../../auth/app/current-app-user.decorator';
 import { AppUserPayload } from '../../../auth/app/app-user-payload.type';
 import { AnalysisQualityFeedbackService } from '../../../decision/feedback/quality-feedback.service';
 import { UserDecisionFeedback } from '../../../decision/feedback/feedback.types';
+import { ResponseWrapper, ApiResponse } from '../../../../common/types/response.type';
 
 @ApiTags('App 食物分析反馈')
 @Controller('app/food-analysis')
@@ -51,7 +52,7 @@ export class FoodAnalysisReportController {
       selectedAlternative?: string;
       locale?: string;
     },
-  ) {
+  ): Promise<ApiResponse> {
     const userFeedback: UserDecisionFeedback = {
       analysisId,
       userId: user.id,
@@ -66,11 +67,7 @@ export class FoodAnalysisReportController {
 
     this.feedbackService.recordUserFeedback(userFeedback);
 
-    return {
-      success: true,
-      message: '反馈已记录',
-      analysisId,
-    };
+    return ResponseWrapper.success({ analysisId }, '反馈已记录');
   }
 
   /**
@@ -83,16 +80,13 @@ export class FoodAnalysisReportController {
   getQualityStats(
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
-  ) {
+  ): ApiResponse {
     const metrics = this.feedbackService.getQualityMetrics(
       startDate && endDate
         ? { start: new Date(startDate), end: new Date(endDate) }
         : undefined,
     );
-    return {
-      success: true,
-      data: metrics,
-    };
+    return ResponseWrapper.success(metrics, '获取成功');
   }
 
   /**
@@ -102,12 +96,9 @@ export class FoodAnalysisReportController {
    */
   @Get('quality/suggestions')
   @ApiOperation({ summary: '获取分析策略优化建议' })
-  getPolicySuggestions() {
+  getPolicySuggestions(): ApiResponse {
     const suggestions = this.feedbackService.suggestPolicyChanges();
-    return {
-      success: true,
-      data: suggestions,
-    };
+    return ResponseWrapper.success(suggestions, '获取成功');
   }
 
   /**
@@ -117,11 +108,8 @@ export class FoodAnalysisReportController {
    */
   @Get('quality/distribution')
   @ApiOperation({ summary: '获取反馈分布' })
-  getFeedbackDistribution() {
+  getFeedbackDistribution(): ApiResponse {
     const distribution = this.feedbackService.getFeedbackDistribution();
-    return {
-      success: true,
-      data: distribution,
-    };
+    return ResponseWrapper.success(distribution, '获取成功');
   }
 }

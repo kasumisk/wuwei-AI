@@ -200,7 +200,7 @@ export class RecommendationFeedbackService {
                   SUM(CASE WHEN f.action = 'accepted' THEN 1 ELSE 0 END) AS "accepted",
                   SUM(CASE WHEN f.action != 'accepted' THEN 1 ELSE 0 END) AS "rejected"
            FROM recommendation_feedbacks f
-           WHERE f.user_id = $1
+           WHERE f.user_id = $1::uuid
              AND f.created_at >= $2
            GROUP BY f.food_name`,
           userId,
@@ -255,7 +255,7 @@ export class RecommendationFeedbackService {
                 AVG(d.timing_rating) AS "avgTiming",
                 COUNT(*) AS "cnt"
          FROM feedback_details d
-         WHERE d.user_id = $1
+         WHERE d.user_id = $1::uuid
            AND d.created_at >= $2
          GROUP BY d.food_name`,
         userId,
@@ -310,7 +310,7 @@ export class RecommendationFeedbackService {
                 AVG(d.timing_rating) AS "avgTiming",
                 COUNT(*) AS "cnt"
          FROM feedback_details d
-         WHERE d.user_id = $1
+         WHERE d.user_id = $1::uuid
            AND d.created_at >= $2`,
         userId,
         since,

@@ -39,6 +39,32 @@ import { UserContextBuilderService } from '../../../decision/decision/user-conte
 /** 默认份量（克），用于标准食物库命中但无数量描述时 */
 const DEFAULT_SERVING_GRAMS = 100;
 
+/**
+ * 按食物类别设定更合理的默认份量（无量词且库中 standardServingG=100 时使用）
+ *
+ * 依据：中国居民膳食指南常见一餐份量参考
+ * - grain: 米饭/面条熟重约 150g（约半碗）
+ * - protein: 肉/蛋/豆腐一份约 100g
+ * - veggie: 蔬菜一盘约 120g
+ * - fruit: 水果一份约 150g
+ * - dairy: 牛奶/酸奶一杯约 200g
+ * - fat: 油脂/坚果一份约 15g
+ * - beverage: 饮料一杯约 250g
+ * - snack: 零食一份约 30g
+ * - composite: 复合菜肴（如炒菜、炖汤）约 200g
+ */
+const CATEGORY_DEFAULT_SERVING: Record<string, number> = {
+  grain: 150,
+  protein: 100,
+  veggie: 120,
+  fruit: 150,
+  dairy: 200,
+  fat: 15,
+  beverage: 250,
+  snack: 30,
+  composite: 200,
+};
+
 /** 常见数量词映射到克数的粗估表 */
 const QUANTITY_GRAMS_MAP: Record<string, number> = {
   一份: 200,
@@ -385,6 +411,7 @@ export class TextFoodAnalysisService {
         quantity: f.quantity,
         fromLibrary: !!f.libraryMatch,
       })),
+      prebuiltUserContext: userCtx || undefined,
     });
   }
 
@@ -465,10 +492,20 @@ export class TextFoodAnalysisService {
       foodName: string;
     }> = [];
 
-    // 3a. 逐个词条尝试精确/模糊匹配标准食物库
-    for (const term of foodTerms) {
+    // 3a. 并行匹配所有词条的标准食物库（优化：Promise.all 替代顺序循环）
+    const termData = foodTerms.map((term) => {
       const { quantity, foodName } = this.extractQuantity(term);
-      const matchResult = await this.matchFoodLibrary(foodName);
+      return { term, quantity, foodName };
+    });
+    const matchResults = await Promise.all(
+      termData.map((td) =>
+        this.matchFoodLibrary(td.foodName).catch(() => null),
+      ),
+    );
+
+    for (let i = 0; i < termData.length; i++) {
+      const { quantity, foodName } = termData[i];
+      const matchResult = matchResults[i];
 
       if (matchResult) {
         const { match, simScore } = matchResult;
@@ -478,11 +515,10 @@ export class TextFoodAnalysisService {
           quantity,
           servingGrams,
         );
-        // V1.1 P1-2: 动态置信度 — 基于 sim_score 而非固定 0.95
         parsed.confidence = simScore >= 1.0 ? 0.95 : 0.6 + simScore * 0.3;
         results.push(parsed);
       } else {
-        unmatchedTerms.push({ term, quantity, foodName });
+        unmatchedTerms.push({ term: foodTerms[i], quantity, foodName });
       }
     }
 
@@ -495,12 +531,9 @@ export class TextFoodAnalysisService {
       );
       results.push(...llmResults);
 
-      // 若仍有缺失，再对完整原文进行一次全量解析，降低输入格式约束
-      const expectedCount = Math.max(
-        foodTerms.length,
-        this.estimateExpectedFoodCount(originalText),
-      );
-      if (results.length < expectedCount) {
+      // 仅当 LLM 返回零结果且有多词条时，才对完整原文进行全量重试
+      // （避免大多数场景下的第二次 LLM 调用，节省 5-15s）
+      if (llmResults.length === 0 && unmatchedTerms.length > 1) {
         const llmFullTextResults = await this.llmParseFoods(
           originalText,
           originalText,
@@ -509,26 +542,29 @@ export class TextFoodAnalysisService {
         results.push(...llmFullTextResults);
       }
 
-      // 仍未覆盖的词条使用启发式保底，避免直接丢失食物
-      const coveredKeys = new Set(
-        results.map((r) => this.normalizeFoodKey(r.name)),
-      );
-      for (const item of unmatchedTerms) {
-        const key = this.normalizeFoodKey(item.foodName);
-        if (coveredKeys.has(key)) continue;
-        if (
-          this.isSemanticallyCoveredByResolvedFoods(
-            item.foodName,
-            results.map((r) => r.name),
-          )
-        ) {
-          continue;
-        }
-
-        results.push(
-          this.buildHeuristicFallbackFood(item.foodName, item.quantity),
+      // Bug 5a 修复: 仅当 LLM 完全无结果时，才启用启发式保底
+      // 若 LLM 有任何返回，视为已覆盖所有未命中词条（避免组合食物拆解后原词重复入账）
+      if (llmResults.length === 0) {
+        const coveredKeys = new Set(
+          results.map((r) => this.normalizeFoodKey(r.name)),
         );
-        coveredKeys.add(key);
+        for (const item of unmatchedTerms) {
+          const key = this.normalizeFoodKey(item.foodName);
+          if (coveredKeys.has(key)) continue;
+          if (
+            this.isSemanticallyCoveredByResolvedFoods(
+              item.foodName,
+              results.map((r) => r.name),
+            )
+          ) {
+            continue;
+          }
+
+          results.push(
+            this.buildHeuristicFallbackFood(item.foodName, item.quantity),
+          );
+          coveredKeys.add(key);
+        }
       }
     }
 
@@ -703,8 +739,19 @@ export class TextFoodAnalysisService {
    * 解析份量克数
    */
   private resolveServingGrams(quantity: string | undefined, food: any): number {
+    /**
+     * 当食物库中 standardServingG=100 时，无法区分"真的是 100g"和"schema 默认值"。
+     * 因此当无量词输入且库值为 100 时，优先使用按类别设定的合理默认份量。
+     */
+    const categoryServingFallback = (): number => {
+      const libVal = food.standardServingG;
+      if (libVal && libVal !== 100) return libVal;
+      const cat = food.category as string | undefined;
+      return (cat && CATEGORY_DEFAULT_SERVING[cat]) || DEFAULT_SERVING_GRAMS;
+    };
+
     if (!quantity) {
-      return food.standardServingG || DEFAULT_SERVING_GRAMS;
+      return categoryServingFallback();
     }
 
     // 数字单位（200g、100ml）
@@ -726,7 +773,7 @@ export class TextFoodAnalysisService {
       if (portion) return portion.grams;
     }
 
-    return food.standardServingG || DEFAULT_SERVING_GRAMS;
+    return categoryServingFallback();
   }
 
   /**
@@ -797,6 +844,10 @@ export class TextFoodAnalysisService {
           })
         : TEXT_ANALYSIS_PROMPT;
 
+      this.logger.log(
+        `[LLM] 调用文本解析 | 输入: "${unmatchedText.slice(0, 80)}"`,
+      );
+
       const response = await fetch(`${this.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -830,12 +881,19 @@ export class TextFoodAnalysisService {
       const content = data.choices?.[0]?.message?.content || '';
       const parsed = this.parseLlmResponse(content);
 
-      const resolved: ParsedFoodItem[] = [];
-      for (const f of parsed.foods) {
-        const llmName = this.normalizeFoodTerm(f.name || '');
-        if (!llmName) continue;
+      // 并行查询所有 LLM 解析食物的食物库匹配
+      const llmFoods = parsed.foods
+        .map((f) => ({ ...f, llmName: this.normalizeFoodTerm(f.name || '') }))
+        .filter((f) => f.llmName);
+      const libraryMatches = await Promise.all(
+        llmFoods.map((f) => this.matchFoodLibrary(f.llmName).catch(() => null)),
+      );
 
-        const libraryMatch = await this.matchFoodLibrary(llmName);
+      const resolved: ParsedFoodItem[] = [];
+      for (let i = 0; i < llmFoods.length; i++) {
+        const f = llmFoods[i];
+        const libraryMatch = libraryMatches[i];
+
         if (libraryMatch) {
           const servingGrams = this.resolveServingGrams(
             f.quantity,
@@ -855,19 +913,18 @@ export class TextFoodAnalysisService {
         }
 
         resolved.push({
-          name: llmName,
-          normalizedName: llmName,
+          name: f.llmName,
+          normalizedName: f.llmName,
           quantity: f.quantity,
           estimatedWeightGrams: f.estimatedWeightGrams || DEFAULT_SERVING_GRAMS,
           category: f.category,
-          confidence: 0.7, // LLM 解析中等置信度
+          confidence: 0.7,
           calories: f.calories || 0,
           protein: f.protein || 0,
           fat: f.fat || 0,
           carbs: f.carbs || 0,
           fiber: f.fiber,
           sodium: f.sodium,
-          // V6.3 P1-11: 扩展营养维度 — null 表示 LLM 无法确定
           saturatedFat: f.saturatedFat ?? null,
           addedSugar: f.addedSugar ?? null,
           vitaminA: f.vitaminA ?? null,

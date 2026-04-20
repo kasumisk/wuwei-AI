@@ -102,7 +102,7 @@ export class PreferenceProfileService {
               fl.category, fl.main_ingredient, fl.food_group
        FROM recommendation_feedbacks rf
        LEFT JOIN foods fl ON fl.id = rf.food_id
-       WHERE rf.user_id = $1
+       WHERE rf.user_id = $1::uuid
          AND rf.created_at >= $2`,
       userId,
       since,
@@ -242,7 +242,7 @@ export class PreferenceProfileService {
           `SELECT DISTINCT food_item->>'name' AS name
            FROM food_records fr
            CROSS JOIN LATERAL jsonb_array_elements(fr.foods) AS food_item
-           WHERE fr.user_id = $1
+           WHERE fr.user_id = $1::uuid
              AND fr.recorded_at >= $2`,
           userId,
           since,

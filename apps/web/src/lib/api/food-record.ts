@@ -7,6 +7,7 @@
 
 import { clientGet, clientPost, clientPut, clientDelete, clientUpload } from './client-api';
 import type { ApiResponse } from './http-client';
+import { APIError } from './error-handler';
 import type {
   FoodItem,
   AnalysisResult,
@@ -150,6 +151,11 @@ type RawAnalysisData = {
     analysisQualityBand?: string;
     analysisCompletenessScore?: number;
   };
+  /** 权益裁剪信息：后端按订阅等级 trim 结果后注入 */
+  entitlement?: {
+    tier: string;
+    fieldsHidden: string[];
+  };
   // 轮询专用
   status?: 'processing' | 'completed' | 'failed';
   error?: string;
@@ -280,6 +286,10 @@ function mapAnalysisData(raw: RawAnalysisData, overrideRequestId?: string): Anal
           analysisCompletenessScore: raw.confidenceDiagnostics.analysisCompletenessScore,
         }
       : undefined,
+
+    entitlement: raw.entitlement
+      ? { tier: raw.entitlement.tier, fieldsHidden: raw.entitlement.fieldsHidden ?? [] }
+      : undefined,
   };
 }
 
@@ -293,11 +303,18 @@ async function sleep(ms: number): Promise<void> {
 async function pollAnalyzeResult(requestId: string): Promise<AnalysisResult> {
   const maxAttempts = 20;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const res = await clientGet<RawAnalysisData>(`/app/food/analyze/${requestId}`);
+    let res: ApiResponse<RawAnalysisData>;
+    try {
+      res = await clientGet<RawAnalysisData>(`/app/food/analyze/${requestId}`);
+    } catch (err) {
+      // Axios 遇到 4xx（含配额 403）时 reject，需透传 paywall
+      rethrowWithPaywall(err);
+    }
     if (!res.success) {
       const d = res.data as RawAnalysisData | undefined;
       if (d?.status === 'failed') throw new Error(d.error || res.message || 'AI 分析失败');
-      throw new Error(res.message || 'AI 分析失败');
+      // 轮询结果中同样可能携带 paywall（如配额在轮询期间被并发请求耗尽）
+      throw buildApiError(res.message, res.data);
     }
     const data = res.data as RawAnalysisData;
     if (data.status === 'completed') {
@@ -312,9 +329,56 @@ async function pollAnalyzeResult(requestId: string): Promise<AnalysisResult> {
 }
 
 async function unwrap<T>(promise: Promise<ApiResponse<T>>): Promise<T> {
-  const res = await promise;
-  if (!res.success) throw new Error(res.message || '请求失败');
-  return res.data;
+  try {
+    const res = await promise;
+    if (!res.success) {
+      throw buildApiError(res.message, res.data);
+    }
+    return res.data;
+  } catch (err) {
+    rethrowWithPaywall(err);
+  }
+}
+
+/**
+ * 统一构建带 paywall 信息的错误对象
+ *
+ * 支持两种来源：
+ * 1. 从 ApiResponse（!success）中提取：res.data = EnhancedPaywallDisplay = { paywall: {...}, type, benefits }
+ * 2. 从 APIError（Axios 4xx reject）中透传：apiError.paywall 已由 fromResponse 提取
+ *
+ * handlePaywallError() 检查 err.paywall.code && err.paywall.recommendedTier，
+ * 因此需要把 paywall 挂到 err.paywall 上。
+ */
+function buildApiError(message: string | undefined, data: unknown): Error & { paywall?: unknown } {
+  // 如果入参本身是 APIError，透传已解析的 paywall
+  if (data instanceof APIError) {
+    const err = new Error(message || data.message || '请求失败') as Error & { paywall?: unknown };
+    if (data.paywall) err.paywall = data.paywall;
+    return err;
+  }
+  const err = new Error(message || '请求失败') as Error & { paywall?: unknown };
+  const rawData = data as Record<string, unknown> | null | undefined;
+  const rawPaywall = rawData?.paywall as Record<string, unknown> | undefined;
+  if (
+    rawPaywall &&
+    typeof rawPaywall.code === 'string' &&
+    typeof rawPaywall.recommendedTier === 'string'
+  ) {
+    err.paywall = rawPaywall;
+  }
+  return err;
+}
+
+/**
+ * 将 APIError（Axios reject on 4xx/5xx）转为带 paywall 的错误对象并重新抛出
+ * 在 try/catch 中拦截 Axios 错误，确保 paywall 信息传递给 handlePaywallError
+ */
+function rethrowWithPaywall(err: unknown): never {
+  if (err instanceof APIError) {
+    throw buildApiError(err.message, err);
+  }
+  throw err;
 }
 
 // ─────────────────────────────────────────────
@@ -326,8 +390,17 @@ export const foodRecordService = {
     const formData = new FormData();
     formData.append('file', file);
     if (mealType) formData.append('mealType', mealType);
-    const submitRes = await clientUpload<RawAnalysisData>('/app/food/analyze', formData);
-    if (!submitRes.success) throw new Error(submitRes.message || '提交分析任务失败');
+    let submitRes: ApiResponse<RawAnalysisData>;
+    try {
+      submitRes = await clientUpload<RawAnalysisData>('/app/food/analyze', formData);
+    } catch (err) {
+      // 上传阶段可能触发配额硬付费墙，Axios reject 时需透传 paywall
+      rethrowWithPaywall(err);
+    }
+    if (!submitRes.success) {
+      // 上传阶段也可能触发配额硬付费墙，需携带 paywall 信息
+      throw buildApiError(submitRes.message, submitRes.data);
+    }
     const d = submitRes.data as RawAnalysisData & { requestId?: string };
     const requestId = d?.requestId || d?.analysisId;
     if (!requestId) throw new Error('分析任务创建失败，请重试');
@@ -445,8 +518,8 @@ export const foodRecordService = {
 
   // ── V8: Food Log 统一接口 ──
 
-  /** V8: 统一写入 Food Log */
-  createFoodLog: async (data: {
+  /** V8: 统一写入 Food Record */
+  createRecord: async (data: {
     foods: FoodItem[];
     totalCalories: number;
     mealType: string;
@@ -467,9 +540,11 @@ export const foodRecordService = {
     return unwrap(clientPost<FoodRecord>('/app/food/records', data));
   },
 
-  /** V8: 按日期查询 Food Log */
-  getFoodLog: async (params?: {
+  /** V8: 查询 Food Records（支持单日/日期范围） */
+  queryRecords: async (params?: {
     date?: string;
+    startDate?: string;
+    endDate?: string;
     source?: string;
     page?: number;
     limit?: number;
@@ -479,6 +554,8 @@ export const foodRecordService = {
     page: number;
     limit: number;
     date?: string;
+    startDate?: string;
+    endDate?: string;
     summary?: {
       totalCalories: number;
       totalProtein: number;
@@ -489,6 +566,8 @@ export const foodRecordService = {
   }> => {
     const sp = new URLSearchParams();
     if (params?.date) sp.set('date', params.date);
+    if (params?.startDate) sp.set('startDate', params.startDate);
+    if (params?.endDate) sp.set('endDate', params.endDate);
     if (params?.source) sp.set('source', params.source);
     if (params?.page) sp.set('page', String(params.page));
     if (params?.limit) sp.set('limit', String(params.limit));

@@ -89,7 +89,7 @@ export function NextMealCard({ suggestion, summary: _summary, profile }: NextMea
         totalCarbs: content.totalCarbs ?? macroFallback.carbs,
       };
       await Promise.all([
-        foodRecordService.createFoodLog({
+        foodRecordService.createRecord({
           foods: content.foodItems,
           totalCalories: content.calories,
           ...macros,
@@ -222,9 +222,7 @@ export function NextMealCard({ suggestion, summary: _summary, profile }: NextMea
             onClick={handleEaten}
             disabled={isAdjusting || isLogging || eaten}
             className={`w-full py-2.5  text-sm font-bold transition-all active:scale-[0.97] disabled:opacity-60 ${
-              eaten
-                ? 'bg-green-100 text-green-700'
-                : 'bg-primary/10 text-primary'
+              eaten ? 'bg-green-100 text-green-700' : 'bg-primary/10 text-primary'
             }`}
           >
             {isLogging ? (

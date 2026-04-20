@@ -192,7 +192,7 @@ export function AnalyzePage() {
     isSavingAnalysis,
   } = useFoodAnalysis();
   const { toast } = useToast();
-  const { isFree } = useSubscription();
+  const { isFree, triggerPaywall } = useSubscription();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const analyzeAbortRef = useRef(false);
   const queryClient = useQueryClient();
@@ -295,6 +295,15 @@ export function AnalyzePage() {
       setResult(res);
       setEditedFoods(res.foods);
       setStep('result');
+      // 软付费墙：分析结果有字段被隐藏时，弹出升级引导
+      if (res.entitlement && res.entitlement.fieldsHidden.length > 0) {
+        triggerPaywall({
+          code: 'advanced_result_hidden',
+          message: '升级 Pro 版即可解锁深度营养分析、个性化替代建议等高级功能',
+          recommendedTier: 'pro',
+          triggerScene: 'advanced_result',
+        });
+      }
     } catch (err) {
       if (analyzeAbortRef.current) return; // 用户已取消
       // 检查是否是 paywall 错误
@@ -308,7 +317,7 @@ export function AnalyzePage() {
       });
       setStep('upload');
     }
-  }, [selectedFile, mealType, analyzeImage, toast]);
+  }, [selectedFile, mealType, analyzeImage, toast, triggerPaywall]);
 
   // ── 文字分析（带超时） ──
   const analyzeTextByContent = useCallback(
@@ -337,6 +346,15 @@ export function AnalyzePage() {
         setResult(res);
         setEditedFoods(res.foods);
         setStep('result');
+        // 软付费墙：分析结果有字段被隐藏时，弹出升级引导
+        if (res.entitlement && res.entitlement.fieldsHidden.length > 0) {
+          triggerPaywall({
+            code: 'advanced_result_hidden',
+            message: '升级 Pro 版即可解锁深度营养分析、个性化替代建议等高级功能',
+            recommendedTier: 'pro',
+            triggerScene: 'advanced_result',
+          });
+        }
       } catch (err) {
         if (analyzeAbortRef.current) return;
         if (err && typeof err === 'object' && handlePaywallError(err as Record<string, unknown>)) {
@@ -350,7 +368,7 @@ export function AnalyzePage() {
         setStep('upload');
       }
     },
-    [analyzeText, mealType, toast]
+    [analyzeText, mealType, toast, triggerPaywall]
   );
 
   const handleAnalyzeText = useCallback(async () => {
@@ -423,7 +441,7 @@ export function AnalyzePage() {
         });
       } else {
         const totalCalories = editedFoods.reduce((sum, f) => sum + f.calories, 0);
-        savedResult = await foodRecordService.createFoodLog({
+        savedResult = await foodRecordService.createRecord({
           imageUrl: result.imageUrl,
           foods: editedFoods,
           totalCalories,
@@ -705,11 +723,7 @@ export function AnalyzePage() {
                 >
                   {previewUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={previewUrl}
-                      alt="预览"
-                      className="w-full max-h-64 object-contain "
-                    />
+                    <img src={previewUrl} alt="预览" className="w-full max-h-64 object-contain " />
                   ) : (
                     <>
                       <div className="w-20 h-20  bg-secondary flex items-center justify-center">
@@ -926,11 +940,7 @@ export function AnalyzePage() {
             {/* 图片模式：显示预览 */}
             {inputMode === 'image' && previewUrl && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={previewUrl}
-                alt="食物"
-                className="w-full max-h-48 object-cover "
-              />
+              <img src={previewUrl} alt="食物" className="w-full max-h-48 object-cover " />
             )}
 
             {/* 文字模式：显示输入内容 */}
@@ -1127,10 +1137,7 @@ export function AnalyzePage() {
                 <h3 className="text-sm font-bold">推荐替代方案</h3>
                 <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1 snap-x snap-mandatory">
                   {result.replacementCandidates.map((c, i) => (
-                    <div
-                      key={i}
-                      className="shrink-0 snap-start w-44 bg-muted/60  p-3 space-y-1.5"
-                    >
+                    <div key={i} className="shrink-0 snap-start w-44 bg-muted/60  p-3 space-y-1.5">
                       <p className="text-xs font-bold leading-tight">{c.name}</p>
                       {c.reason && (
                         <p className="text-[11px] text-muted-foreground leading-snug">{c.reason}</p>

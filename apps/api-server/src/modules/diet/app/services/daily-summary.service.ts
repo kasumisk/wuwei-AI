@@ -110,6 +110,8 @@ export class DailySummaryService {
             records,
             Number((profile as any)?.mealsPerDay) || 3,
           );
+          const { avgGI, totalCarbsFromFoods } =
+            this.aggregateGlycemicData(records);
           const scoreResult = this.nutritionScoreService.calculateScore(
             {
               calories: totalCalories,
@@ -119,6 +121,8 @@ export class DailySummaryService {
               carbs: totalCarbs,
               foodQuality: avgQuality || 3,
               satiety: avgSatiety || 3,
+              glycemicIndex: avgGI || undefined,
+              carbsPerServing: totalCarbsFromFoods || undefined,
             },
             goalType,
             undefined,
@@ -339,5 +343,31 @@ export class DailySummaryService {
         },
       });
     }
+  }
+
+  /**
+   * 从食物记录的 foods JSON 聚合加权平均 GI 和总碳水
+   */
+  private aggregateGlycemicData(records: any[]): {
+    avgGI: number;
+    totalCarbsFromFoods: number;
+  } {
+    let totalCarbs = 0;
+    let weightedGISum = 0;
+    for (const record of records) {
+      const foods = Array.isArray(record.foods) ? record.foods : [];
+      for (const food of foods) {
+        const gi = Number(food.glycemicIndex) || 0;
+        const carbs = Number(food.carbs) || Number(food.carbsG) || 0;
+        if (gi > 0 && carbs > 0) {
+          weightedGISum += gi * carbs;
+          totalCarbs += carbs;
+        }
+      }
+    }
+    return {
+      avgGI: totalCarbs > 0 ? Math.round(weightedGISum / totalCarbs) : 0,
+      totalCarbsFromFoods: Math.round(totalCarbs),
+    };
   }
 }

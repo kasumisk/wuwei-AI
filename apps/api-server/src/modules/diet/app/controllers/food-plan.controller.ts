@@ -13,6 +13,8 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AppJwtAuthGuard } from '../../../auth/app/app-jwt-auth.guard';
 import { CurrentAppUser } from '../../../auth/app/current-app-user.decorator';
 import { AppUserPayload } from '../../../auth/app/app-user-payload.type';
+import { RequireSubscription } from '../../../subscription/app/decorators/require-subscription.decorator';
+import { SubscriptionTier } from '../../../subscription/subscription.types';
 import { ApiResponse } from '../../../../common/types/response.type';
 import { FoodService } from '../services/food.service';
 import { DailyPlanService } from '../services/daily-plan.service';
@@ -99,6 +101,7 @@ export class FoodPlanController {
    * GET /api/app/food/daily-plan
    */
   @Get('daily-plan')
+  @RequireSubscription(SubscriptionTier.PRO)
   @ApiOperation({ summary: '获取今日饮食计划' })
   async getDailyPlan(
     @CurrentAppUser() user: AppUserPayload,

@@ -72,6 +72,19 @@ export class SubscriptionManagementService {
   }
 
   /**
+   * 查询单个订阅计划（含完整 entitlements）
+   */
+  async findPlanById(id: string) {
+    const plan = await this.prisma.subscriptionPlan.findUnique({
+      where: { id },
+    });
+    if (!plan) {
+      throw new NotFoundException(`订阅计划 #${id} 不存在`);
+    }
+    return plan;
+  }
+
+  /**
    * 创建订阅计划
    */
   async createPlan(dto: CreateSubscriptionPlanDto) {

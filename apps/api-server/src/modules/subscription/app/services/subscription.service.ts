@@ -599,14 +599,21 @@ export class SubscriptionService implements OnModuleInit {
         : sub;
 
     if (!activeSub || !activeSub.subscriptionPlan) {
-      // 免费用户: 使用 resolver 解析默认权益
+      // 免费用户: 从 DB subscription_plan 表读 tier='free' 的权益，
+      // 不使用硬编码的 TIER_ENTITLEMENTS，以确保 DB 中的配额修改生效
+      const freePlan = await this.prisma.subscriptionPlan.findFirst({
+        where: { tier: SubscriptionTier.FREE },
+      });
       return {
         tier: SubscriptionTier.FREE,
         subscriptionId: null,
-        planName: 'Free',
+        planName: freePlan?.name ?? 'Free',
         expiresAt: null,
         autoRenew: false,
-        entitlements: this.entitlementResolver.resolve(SubscriptionTier.FREE),
+        entitlements: this.entitlementResolver.resolve(
+          SubscriptionTier.FREE,
+          freePlan?.entitlements as any,
+        ),
       };
     }
 

@@ -35,6 +35,7 @@ import {
   TuningPendingQueryDto,
 } from './dto/strategy-management.dto';
 import { ApiResponse } from '../../../common/types/response.type';
+import { CurrentUser } from '../../auth/admin/current-user.decorator';
 
 @ApiTags('管理后台 - 推荐策略管理')
 @Controller('admin/strategies')
@@ -100,9 +101,9 @@ export class StrategyManagementController {
   async approveTuning(
     @Param('tuningId') tuningId: string,
     @Body() dto: TuningReviewDto,
+    @CurrentUser() admin: any,
   ): Promise<ApiResponse> {
-    // TODO: 从 JWT token 中获取真实 adminUserId，当前使用占位值
-    const adminUserId = 'admin';
+    const adminUserId = admin?.id || admin?.sub || 'unknown';
     const data = await this.strategyManagementService.approveTuning(
       tuningId,
       adminUserId,
@@ -124,9 +125,9 @@ export class StrategyManagementController {
   async rejectTuning(
     @Param('tuningId') tuningId: string,
     @Body() dto: TuningReviewDto,
+    @CurrentUser() admin: any,
   ): Promise<ApiResponse> {
-    // TODO: 从 JWT token 中获取真实 adminUserId，当前使用占位值
-    const adminUserId = 'admin';
+    const adminUserId = admin?.id || admin?.sub || 'unknown';
     const data = await this.strategyManagementService.rejectTuning(
       tuningId,
       adminUserId,

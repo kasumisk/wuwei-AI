@@ -49,7 +49,7 @@ export function TodayMealList({ meals, defaultVisible = 3 }: TodayMealListProps)
       <div className="flex items-center justify-between mb-3 px-1">
         <h3 className="text-base font-headline font-bold">今日记录</h3>
         <LocalizedLink
-          href="/history"
+          href="/records"
           className="text-xs text-primary font-medium flex items-center gap-0.5 hover:opacity-80"
         >
           全部历史

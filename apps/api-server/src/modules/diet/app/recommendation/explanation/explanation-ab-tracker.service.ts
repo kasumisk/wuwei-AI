@@ -104,7 +104,7 @@ export class ExplanationABTrackerService {
            '{explanationStyle}',
            $1::jsonb
          )
-         WHERE id = $2 AND user_id = $3`,
+         WHERE id = $2 AND user_id = $3::uuid`,
         JSON.stringify(explanationStyle),
         traceId,
         userId,

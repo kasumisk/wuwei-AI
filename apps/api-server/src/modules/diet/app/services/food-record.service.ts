@@ -10,8 +10,7 @@ import { Prisma } from '@prisma/client';
 import {
   UpdateFoodRecordDto,
   FoodRecordQueryDto,
-  CreateFoodLogDto,
-  FoodLogQueryDto,
+  CreateFoodRecordDto,
 } from '../dto/food.dto';
 import {
   getUserLocalDayBounds,
@@ -136,7 +135,7 @@ export class FoodRecordService {
    * V8: 统一写入 Food Log
    * 所有来源（manual/recommend/decision/...）均调用此方法。
    */
-  async createFoodLog(userId: string, dto: CreateFoodLogDto) {
+  async createRecord(userId: string, dto: CreateFoodRecordDto) {
     return this.prisma.foodRecords.create({
       data: {
         userId,
@@ -174,20 +173,32 @@ export class FoodRecordService {
   }
 
   /**
-   * V8: 按日期+来源查询 Food Log
-   * 返回 items + 汇总统计（totalCalories, totalProtein, totalFat, totalCarbs, mealCount）
+   * V8: 按日期/日期范围+来源查询 Food Records
+   *
+   * 优先级：startDate+endDate > date > 默认今日
    */
-  async getFoodLogByDate(
+  async queryRecords(
     userId: string,
-    query: FoodLogQueryDto,
+    query: FoodRecordQueryDto,
     timezone: string = DEFAULT_TIMEZONE,
   ) {
-    const { startOfDay, endOfDay } = query.date
-      ? {
-          startOfDay: new Date(`${query.date}T00:00:00.000Z`),
-          endOfDay: new Date(`${query.date}T23:59:59.999Z`),
-        }
-      : getUserLocalDayBounds(timezone);
+    let startOfDay: Date;
+    let endOfDay: Date;
+
+    if (query.startDate && query.endDate) {
+      // 日期范围查询
+      startOfDay = new Date(`${query.startDate}T00:00:00.000Z`);
+      endOfDay = new Date(`${query.endDate}T23:59:59.999Z`);
+    } else if (query.date) {
+      // 单日查询
+      startOfDay = new Date(`${query.date}T00:00:00.000Z`);
+      endOfDay = new Date(`${query.date}T23:59:59.999Z`);
+    } else {
+      // 默认今日
+      const bounds = getUserLocalDayBounds(timezone);
+      startOfDay = bounds.startOfDay;
+      endOfDay = bounds.endOfDay;
+    }
 
     const page = query.page ?? 1;
     const limit = query.limit ?? 50;
@@ -203,7 +214,7 @@ export class FoodRecordService {
     const [items, total] = await Promise.all([
       this.prisma.foodRecords.findMany({
         where,
-        orderBy: { recordedAt: 'asc' },
+        orderBy: { recordedAt: 'desc' },
         skip: (page - 1) * limit,
         take: limit,
       }),
@@ -222,6 +233,15 @@ export class FoodRecordService {
       mealCount: items.length,
     };
 
-    return { items, total, page, limit, date: query.date, summary };
+    return {
+      items,
+      total,
+      page,
+      limit,
+      date: query.date,
+      startDate: query.startDate,
+      endDate: query.endDate,
+      summary,
+    };
   }
 }

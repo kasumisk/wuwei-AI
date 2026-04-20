@@ -693,16 +693,41 @@ export class NutritionScoreService {
    * GL < 10 → ~95分（低血糖负荷）
    * GL 10-20 → ~75分（中等）
    * GL > 20 → 分数急剧下降
+   *
+   * 当无 GI 数据时，通过碳水占比估算 GI（优于固定 75 中性值）：
+   * - 碳水占比 > 60%：估算 GI ≈ 65（中高，精粮主食型）
+   * - 碳水占比 30-60%：估算 GI ≈ 48（中等，均衡餐）
+   * - 碳水占比 < 30%：估算 GI ≈ 30（低，蛋白/脂肪主导）
    */
   private calcGlycemicImpactScore(
     glycemicIndex?: number,
     carbsPerServing?: number,
+    totalCarbs?: number,
+    totalProtein?: number,
+    totalFat?: number,
   ): number {
-    // 无 GI 数据 → 给中等分，不影响整体评分
-    if (!glycemicIndex || glycemicIndex <= 0) return 75;
+    let gi = glycemicIndex;
+
+    // 无 GI 数据 → 根据宏量营养素比例估算 GI
+    if (!gi || gi <= 0) {
+      const c = totalCarbs ?? 0;
+      const p = totalProtein ?? 0;
+      const f = totalFat ?? 0;
+      const macroTotal = c + p + f;
+      if (macroTotal > 0) {
+        const carbFraction = c / macroTotal;
+        if (carbFraction > 0.6) gi = 65;
+        else if (carbFraction > 0.3) gi = 48;
+        else gi = 30;
+      } else {
+        // 完全无数据 → 保守中性值
+        return 75;
+      }
+    }
+
     // 无碳水数据 → 仅基于 GI 做粗略评分
-    const carbs = carbsPerServing ?? 15; // 默认 15g 碳水作为 fallback
-    const gl = (glycemicIndex * carbs) / 100;
+    const carbs = carbsPerServing ?? totalCarbs ?? 15;
+    const gl = (gi * carbs) / 100;
     // Sigmoid: score = 100 / (1 + e^(0.3 * (GL - 15)))
     return this.clamp(100 / (1 + Math.exp(0.3 * (gl - 15))));
   }
@@ -1528,6 +1553,9 @@ export class NutritionScoreService {
     const glycemicImpact = this.calcGlycemicImpactScore(
       input.glycemicIndex,
       input.carbsPerServing,
+      input.carbs,
+      input.protein,
+      input.fat,
     );
     // V1.4: 餐食质量综合分
     const mealQuality = mealSignals
