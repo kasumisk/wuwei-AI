@@ -1,25 +1,34 @@
-# 只保留 apps/web 所需内容，排除其他所有 app
+# Admin 部署时排除不需要的目录
+
+# ===== 大体积目录（关键：防止超量上传）=====
+node_modules
+**/node_modules
+.turbo
+**/.turbo
 
 # 其他 app（不需要上传）
-apps/admin
+apps/web
 apps/api-server
 apps/miniapp
 
-# 本地包（web 不依赖本地 packages）
-packages
+# packages: admin 依赖 constants 和 shared，只排除其他 packages
+packages/database
+packages/types
+packages/utils
 
 # 文档和脚本
 docs
 scripts
 
-# 构建产物（以防 gitignore 未覆盖）
-apps/web/.next
-apps/web/node_modules
+# 构建产物
+apps/admin/.vite
+dist
 
-# 日志目录（gitignore 只忽略 *.log 文件，不忽略 logs 目录）
+# 日志目录
 **/logs
+logs
 
-# 测试和配置
+# 测试和构建缓存
 **/coverage
 **/*.tsbuildinfo
 

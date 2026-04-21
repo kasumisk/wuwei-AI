@@ -64,7 +64,7 @@ export const routeConfig = {
 const FieldWithTooltip: React.FC<{
   label: string;
   tip: string;
-  name: string | string[];
+  name: string | (string | number)[];
   min?: number;
   max?: number;
   step?: number;

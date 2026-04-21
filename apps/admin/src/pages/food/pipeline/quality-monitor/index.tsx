@@ -72,55 +72,54 @@ const QualityMonitorPage: React.FC = () => {
     );
   }
 
-  const { summary, completeness, quality, conflicts, translations } = report;
-  const total = summary?.totalFoods || 1;
+  const { totalFoods, completeness, quality, conflicts, translations } = report;
+  const total = totalFoods || 1;
 
   // 计算综合得分
   const completenessScore = completeness
     ? Math.round(
-        ((completeness.hasMacros +
-          completeness.hasMicros +
-          completeness.hasAllergens +
-          completeness.hasImage +
-          completeness.hasBarcode +
-          completeness.hasMealTypes +
-          completeness.hasCompatibility) /
-          (total * 7)) *
+        ((completeness.withProtein +
+          completeness.withMicronutrients +
+          completeness.withAllergens +
+          completeness.withImage +
+          completeness.withCompatibility +
+          completeness.withTags) /
+          (total * 6)) *
           100
       )
     : 0;
 
   const qualityScore = quality
     ? Math.round(
-        (quality.verifiedCount / total) * 40 +
+        (quality.verified / total) * 40 +
           quality.avgConfidence * 30 +
-          (quality.macroConsistencyPass / total) * 30
+          ((total - quality.macroInconsistent) / total) * 30
       )
     : 0;
 
   // 分类分布
-  const categoryData = summary?.byCategory
-    ? Object.entries(summary.byCategory).map(([cat, count]) => ({
-        category: cat,
-        label: CATEGORY_LABELS[cat] || cat,
-        count: count as number,
-        percent: (((count as number) / total) * 100).toFixed(1),
+  const categoryData = report.byCategory
+    ? report.byCategory.map(({ category, count }) => ({
+        category,
+        label: CATEGORY_LABELS[category] || category,
+        count,
+        percent: ((count / total) * 100).toFixed(1),
       }))
     : [];
 
   // 来源分布
-  const sourceData = summary?.bySource
-    ? Object.entries(summary.bySource).map(([src, count]) => ({
-        source: src,
-        label: SOURCE_LABELS[src] || src,
-        count: count as number,
-        percent: (((count as number) / total) * 100).toFixed(1),
+  const sourceData = report.bySource
+    ? report.bySource.map(({ source, count }) => ({
+        source,
+        label: SOURCE_LABELS[source] || source,
+        count,
+        percent: ((count / total) * 100).toFixed(1),
       }))
     : [];
 
   // 状态分布
-  const statusData = summary?.byStatus
-    ? Object.entries(summary.byStatus).map(([status, count]) => ({
+  const statusData = report.byStatus
+    ? Object.entries(report.byStatus).map(([status, count]) => ({
         status,
         count: count as number,
       }))
@@ -177,12 +176,13 @@ const QualityMonitorPage: React.FC = () => {
           <Card>
             <Statistic
               title="宏量一致性"
-              value={quality?.macroConsistencyPass || 0}
+              value={quality ? total - quality.macroInconsistent : 0}
               suffix={`/ ${total}`}
               prefix={<SafetyCertificateOutlined />}
               valueStyle={{
                 color:
-                  quality?.macroConsistencyPass && quality.macroConsistencyPass / total > 0.8
+                  quality?.macroInconsistent !== undefined &&
+                    (total - quality.macroInconsistent) / total > 0.8
                     ? '#3f8600'
                     : '#cf1322',
               }}
@@ -209,13 +209,13 @@ const QualityMonitorPage: React.FC = () => {
             {completeness && (
               <Space direction="vertical" style={{ width: '100%' }} size={10}>
                 {[
-                  { label: '宏量营养素', value: completeness.hasMacros, color: '#1890ff' },
-                  { label: '微量营养素', value: completeness.hasMicros, color: '#722ed1' },
-                  { label: '过敏原信息', value: completeness.hasAllergens, color: '#eb2f96' },
-                  { label: '食物图片', value: completeness.hasImage, color: '#fa8c16' },
-                  { label: '条形码', value: completeness.hasBarcode, color: '#13c2c2' },
-                  { label: '餐次类型', value: completeness.hasMealTypes, color: '#52c41a' },
-                  { label: '搭配关系', value: completeness.hasCompatibility, color: '#2f54eb' },
+                  { label: '宏量营养素', value: completeness.withProtein, color: '#1890ff' },
+                  { label: '微量营养素', value: completeness.withMicronutrients, color: '#722ed1' },
+                  { label: '过敏原信息', value: completeness.withAllergens, color: '#eb2f96' },
+                  { label: '食物图片', value: completeness.withImage, color: '#fa8c16' },
+                  { label: 'GI指数', value: completeness.withGI, color: '#13c2c2' },
+                  { label: '餐次标签', value: completeness.withTags, color: '#52c41a' },
+                  { label: '搭配关系', value: completeness.withCompatibility, color: '#2f54eb' },
                 ].map((item) => {
                   const pct = Math.round((item.value / total) * 100);
                   return (
@@ -255,9 +255,9 @@ const QualityMonitorPage: React.FC = () => {
             <Descriptions column={1} size="small">
               <Descriptions.Item label="已验证食物">
                 <Space>
-                  <Tag color="green">{quality?.verifiedCount || 0}</Tag>
+                  <Tag color="green">{quality?.verified || 0}</Tag>
                   <Text type="secondary">
-                    ({(((quality?.verifiedCount || 0) / total) * 100).toFixed(1)}%)
+                    ({(((quality?.verified || 0) / total) * 100).toFixed(1)}%)
                   </Text>
                 </Space>
               </Descriptions.Item>
@@ -298,10 +298,10 @@ const QualityMonitorPage: React.FC = () => {
               </Descriptions.Item>
               <Descriptions.Item label="翻译覆盖">
                 <Space wrap>
-                  {translations?.byLocale &&
-                    Object.entries(translations.byLocale).map(([locale, count]) => (
+                  {translations?.locales &&
+                    translations.locales.map(({ locale, count }) => (
                       <Tag key={locale} color="purple">
-                        {locale}: {count as number}
+                        {locale}: {count}
                       </Tag>
                     ))}
                 </Space>

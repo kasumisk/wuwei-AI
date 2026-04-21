@@ -1,9 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import {
   Card,
   Form,
   Select,
-  InputNumber,
   Button,
   Row,
   Col,
@@ -16,7 +15,6 @@ import {
   Table,
   Divider,
   Progress,
-  Tooltip,
   Badge,
 } from 'antd';
 import {
@@ -45,7 +43,6 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import {
   usePipelineStats,
-  type PipelineStatsResult,
   type PipelineStatsQueryDto,
   type PipelineStageStats,
 } from '@/services/recommendDebugService';
@@ -221,18 +218,18 @@ const DistributionPieChart: React.FC<{
             cy="50%"
             outerRadius={90}
             innerRadius={45}
-            label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
-            labelLine={{ length: 15, length2: 8 }}
+            label={({ name, percent }) => `${name} (${((percent ?? 0) * 100).toFixed(0)}%)`}
+            labelLine={true}
           >
             {pieData.map((_, index) => (
               <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
             ))}
           </Pie>
           <RechartsTooltip
-            formatter={(value: number, name: string) => [
-              `${value} 次 (${((value / total) * 100).toFixed(1)}%)`,
-              name,
-            ]}
+            formatter={(value: number | string | Array<number | string> | undefined) => {
+              const num = Number(value ?? 0);
+              return [`${num} 次 (${((num / total) * 100).toFixed(1)}%)`, '数量'] as [string, string];
+            }}
           />
         </PieChart>
       </ResponsiveContainer>

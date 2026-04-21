@@ -65,12 +65,12 @@ const TranslationPage: React.FC = () => {
     },
   ];
 
-  const localeData = translationStats?.byLocale
-    ? Object.entries(translationStats.byLocale).map(([locale, count]) => ({
+  const localeData = translationStats?.locales
+    ? translationStats.locales.map(({ locale, count }) => ({
         locale,
-        count: count as number,
-        coverage: report?.summary?.totalFoods
-          ? ((count as number) / report.summary.totalFoods) * 100
+        count,
+        coverage: report?.totalFoods
+          ? (count / report.totalFoods) * 100
           : 0,
       }))
     : [];
@@ -83,7 +83,7 @@ const TranslationPage: React.FC = () => {
           <Card>
             <Statistic
               title="总翻译条目"
-              value={translationStats?.totalTranslations || 0}
+              value={translationStats?.foodsWithTranslation || 0}
               prefix={<GlobalOutlined />}
             />
           </Card>
@@ -92,8 +92,8 @@ const TranslationPage: React.FC = () => {
           <Card>
             <Statistic
               title="未翻译食物"
-              value={translationStats?.untranslatedCount || 0}
-              valueStyle={{ color: translationStats?.untranslatedCount ? '#cf1322' : '#3f8600' }}
+              value={translationStats?.foodsWithoutTranslation || 0}
+              valueStyle={{ color: translationStats?.foodsWithoutTranslation ? '#cf1322' : '#3f8600' }}
             />
           </Card>
         </Col>

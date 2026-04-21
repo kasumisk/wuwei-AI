@@ -533,7 +533,7 @@ const RealismConfigView: React.FC<{ config?: RealismConfig }> = ({ config }) => 
 
 // ==================== 编辑表单组件 ====================
 
-const RankEditForm: React.FC<{ form: any; prefix: string[] }> = ({ form, prefix }) => (
+const RankEditForm: React.FC<{ form: any; prefix: string[] }> = ({ prefix }) => (
   <div>
     <SectionTitle
       icon={<SettingOutlined />}

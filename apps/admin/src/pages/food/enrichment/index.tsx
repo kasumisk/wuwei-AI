@@ -82,7 +82,6 @@ import {
   type EnrichableField,
   type StagedEnrichment,
   type EnrichmentStatsResponse,
-  type ReEnqueueParams,
 } from '@/services/foodPipelineService';
 import { LOCALE_OPTIONS } from '@/pages/food/library/constants';
 import { globalMessage as message } from '@/utils/message';

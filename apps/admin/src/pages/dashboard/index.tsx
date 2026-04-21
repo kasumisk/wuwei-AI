@@ -733,17 +733,17 @@ const Dashboard: React.FC = () => {
   const renderFoodQualityCard = () => {
     if (!qualityReport) return null;
 
-    const { completeness, summary, enrichment, fieldCompleteness } = qualityReport;
-    const total = summary?.totalFoods || 1;
+    const { completeness, totalFoods, enrichment, fieldCompleteness } = qualityReport;
+    const total = totalFoods || 1;
 
     // 核心完整度指标
     const coreMetrics = [
-      { label: '宏量营养素', value: completeness.hasMacros, color: '#1677ff' },
-      { label: '微量营养素', value: completeness.hasMicros, color: '#52c41a' },
-      { label: '过敏原', value: completeness.hasAllergens, color: '#faad14' },
-      { label: '餐型标签', value: completeness.hasMealTypes, color: '#13c2c2' },
-      { label: '图片', value: completeness.hasImage, color: '#722ed1' },
-      { label: '条形码', value: completeness.hasBarcode, color: '#eb2f96' },
+      { label: '宏量营养素', value: completeness.withProtein, color: '#1677ff' },
+      { label: '微量营养素', value: completeness.withMicronutrients, color: '#52c41a' },
+      { label: '过敏原', value: completeness.withAllergens, color: '#faad14' },
+      { label: '餐型标签', value: completeness.withTags, color: '#13c2c2' },
+      { label: '图片', value: completeness.withImage, color: '#722ed1' },
+      { label: '兼容性', value: completeness.withCompatibility, color: '#eb2f96' },
     ];
 
     // 挑选 fieldCompleteness 中最低的5个字段展示
@@ -757,7 +757,7 @@ const Dashboard: React.FC = () => {
           <Space>
             <DatabaseOutlined />
             <span>食物库数据质量</span>
-            <Tag color="blue">{summary?.totalFoods} 条</Tag>
+            <Tag color="blue">{totalFoods} 条</Tag>
           </Space>
         }
         size="small"

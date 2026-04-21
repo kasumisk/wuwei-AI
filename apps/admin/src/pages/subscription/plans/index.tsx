@@ -411,12 +411,12 @@ const SubscriptionPlanManagement: React.FC = () => {
           <Space size={4} wrap>
             <Tag style={{ fontSize: 11 }}>图片 {fmt(imgVal)}</Tag>
             <Tag style={{ fontSize: 11 }}>教练 {fmt(coachVal)}</Tag>
-            {e['full_day_plan'] && (
+            {!!e['full_day_plan'] && (
               <Tag color="blue" style={{ fontSize: 11 }}>
                 日计划
               </Tag>
             )}
-            {e['behavior_analysis'] && (
+            {!!e['behavior_analysis'] && (
               <Tag color="purple" style={{ fontSize: 11 }}>
                 行为分析
               </Tag>

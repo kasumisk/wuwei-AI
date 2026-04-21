@@ -55,7 +55,7 @@ import {
   type ScoreChainAdjustment,
 } from '@/services/recommendDebugService';
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
 export const routeConfig = {
   name: 'recommend-score-breakdown',
@@ -312,7 +312,7 @@ const ScoreChainVisualization: React.FC<{
   const { baseScore, finalScore, adjustments } = chainResult;
 
   // Build bar chart data for adjustments
-  const barData = adjustments.map((adj, i) => ({
+  const barData = adjustments.map((adj) => ({
     name: adj.factorName,
     multiplier: adj.multiplier !== 1 ? parseFloat(((adj.multiplier - 1) * 100).toFixed(2)) : 0,
     additive: adj.additive !== 0 ? parseFloat((adj.additive * 100).toFixed(2)) : 0,
