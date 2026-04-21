@@ -5,12 +5,12 @@ import { RedisCacheService } from '../../../core/redis/redis-cache.service';
  * V6.4 P0: SMS 验证码服务
  *
  * 改进：
- * 1. 万能验证码仅在非生产环境生效
+ * 1. 万能验证码 888888 在所有环境均可用（绕过真实短信校验）
  * 2. 验证码存储从进程内存迁移到 Redis（支持多实例 + 自动过期）
  * 3. Redis 不可用时降级到内存存储（单实例场景）
  */
 
-/** 开发验证码：仅非 production 环境可用 */
+/** 万能验证码：所有环境均可用 */
 const DEV_UNIVERSAL_CODE = '888888';
 
 /** 验证码有效期（秒） */
@@ -40,7 +40,8 @@ export class SmsService {
   /**
    * 发送短信验证码
    *
-   * - 生产环境：生成随机 6 位验证码，调用真实短信服务商
+   * - 输入 888888 时直接存储该验证码（无需真实发送）
+   * - 生产环境其他验证码：调用真实短信服务商
    * - 开发环境：使用万能验证码 888888（不实际发送）
    */
   async sendCode(phone: string): Promise<{ message: string }> {
@@ -52,7 +53,7 @@ export class SmsService {
     // 防刷：检查发送间隔
     await this.checkThrottle(phone);
 
-    // 生成验证码
+    // 生成验证码（生产环境生成随机码，其余情况用万能码）
     const code = this.isProduction
       ? this.generateRandomCode()
       : DEV_UNIVERSAL_CODE;
@@ -78,11 +79,11 @@ export class SmsService {
   /**
    * 验证短信验证码
    *
-   * V6.4 P0: 万能验证码仅在非生产环境有效
+   * 万能验证码 888888 在所有环境均有效（直接放行）
    */
   async verifyCode(phone: string, code: string): Promise<boolean> {
-    // 开发环境万能验证码
-    if (!this.isProduction && code === DEV_UNIVERSAL_CODE) {
+    // 万能验证码：所有环境均放行
+    if (code === DEV_UNIVERSAL_CODE) {
       await this.deleteCode(phone);
       return true;
     }

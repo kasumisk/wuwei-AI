@@ -67,50 +67,13 @@ async function bootstrap() {
     configService.get<string>('app.apiPrefix', { infer: true }) || 'api';
   app.setGlobalPrefix(apiPrefix);
 
-  // ─── V6.4 P0: CORS 白名单（基于环境变量配置） ───
-  if (!isProduction) {
-    // 开发环境：始终允许所有来源，方便本地调试（无论是否设置 CORS_ORIGINS）
-    app.enableCors({
-      origin: true,
-      credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['*'],
-    });
-  } else {
-    // 生产环境：严格白名单
-    const corsOrigins = process.env.CORS_ORIGINS;
-    if (corsOrigins) {
-      const origins = corsOrigins
-        .split(',')
-        .map((o) => o.trim())
-        .filter(Boolean);
-      app.enableCors({
-        origin: origins,
-        credentials: true,
-        methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-        allowedHeaders: [
-          'Content-Type',
-          'Authorization',
-          'X-Requested-With',
-          'Accept',
-          'Accept-Language',
-          'X-Request-ID',
-          'X-Request-Id',
-          'Cache-Control',
-          'Pragma',
-        ],
-      });
-    } else {
-      Logger.warn(
-        '⚠️ CORS_ORIGINS 未设置，生产环境仅允许同源请求',
-        'Bootstrap',
-      );
-      app.enableCors({
-        origin: false,
-        credentials: true,
-      });
-    }
-  }
+  // 允许所有来源，无 CORS 限制
+  app.enableCors({
+    origin: true,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['*'],
+  });
 
   // 设置 Swagger（仅非生产环境，或通过 ENABLE_SWAGGER=true 手动开启）
   if (!isProduction || process.env.ENABLE_SWAGGER === 'true') {
