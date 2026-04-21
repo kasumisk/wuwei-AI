@@ -160,6 +160,12 @@ deploy_web() {
     
     cd "$ROOT_DIR"
     
+    # 备份原 vercel.json 并使用 web 配置
+    if [ -f "$ROOT_DIR/vercel.json" ]; then
+        cp "$ROOT_DIR/vercel.json" "$ROOT_DIR/vercel.json.bak"
+    fi
+    cp "$ROOT_DIR/vercel.web.json" "$ROOT_DIR/vercel.json"
+    
     # 切换 .vercelignore 为 web 专用版本
     [ -f "$ROOT_DIR/.vercelignore" ] && cp "$ROOT_DIR/.vercelignore" "$ROOT_DIR/.vercelignore.bak"
     cp "$ROOT_DIR/.vercelignore-web" "$ROOT_DIR/.vercelignore"
@@ -184,6 +190,11 @@ deploy_web() {
     # 如果是新项目，保存配置
     if [ "$is_new_project" = true ]; then
         save_vercel_config "web"
+    fi
+    
+    # 恢复原 vercel.json
+    if [ -f "$ROOT_DIR/vercel.json.bak" ]; then
+        mv "$ROOT_DIR/vercel.json.bak" "$ROOT_DIR/vercel.json"
     fi
     
     # 恢复 .vercelignore

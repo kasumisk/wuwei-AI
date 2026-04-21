@@ -1,5 +1,11 @@
 # Admin 部署时排除不需要的目录
 
+# ===== 大体积目录（关键：防止超量上传）=====
+node_modules
+**/node_modules
+.turbo
+**/.turbo
+
 # 其他 app（不需要上传）
 apps/web
 apps/api-server
@@ -16,10 +22,11 @@ scripts
 
 # 构建产物
 apps/admin/.vite
-apps/admin/node_modules
+dist
 
 # 日志目录
 **/logs
+logs
 
 # 测试和构建缓存
 **/coverage

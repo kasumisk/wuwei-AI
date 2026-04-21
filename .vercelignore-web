@@ -1,5 +1,11 @@
 # 只保留 apps/web 所需内容，排除其他所有 app
 
+# ===== 大体积目录（关键：防止超量上传）=====
+node_modules
+**/node_modules
+.turbo
+**/.turbo
+
 # 其他 app（不需要上传）
 apps/admin
 apps/api-server
@@ -14,10 +20,11 @@ scripts
 
 # 构建产物（以防 gitignore 未覆盖）
 apps/web/.next
-apps/web/node_modules
+dist
 
 # 日志目录（gitignore 只忽略 *.log 文件，不忽略 logs 目录）
 **/logs
+logs
 
 # 测试和配置
 **/coverage
