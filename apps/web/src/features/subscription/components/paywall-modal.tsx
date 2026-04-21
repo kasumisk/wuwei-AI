@@ -19,7 +19,6 @@ import { subscriptionService } from '@/lib/api/subscription';
 import { useLocalizedRouter } from '@/lib/hooks/use-localized-router';
 import { useToast } from '@/lib/hooks/use-toast';
 import type { SubscriptionTier } from '@/types/subscription';
-import { TIER_COMPARISON } from '@/types/subscription';
 
 /** 等级显示名 */
 const TIER_NAMES: Record<SubscriptionTier, string> = {
@@ -154,17 +153,8 @@ export function PaywallModal() {
     pendingPaywall.message ||
     '升级解锁更多功能';
 
-  // 计算推荐等级比当前等级多出的功能
-  const upgradeFeatures = TIER_COMPARISON.filter((row) => {
-    const currentVal = row[tier];
-    const targetVal = row[recommendedTier];
-    // 当前没有但升级后有
-    if (currentVal === false && targetVal !== false) return true;
-    // 当前有限但升级后更多/无限
-    if (typeof currentVal === 'string' && typeof targetVal === 'string' && currentVal !== targetVal)
-      return true;
-    return false;
-  }).slice(0, 5); // 最多展示5条
+  // 升级后多出的功能 — 使用 TIER_HIGHLIGHTS 展示简短描述
+  const upgradeHighlights = TIER_HIGHLIGHTS[recommendedTier] || [];
 
   return (
     <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center">
@@ -274,17 +264,17 @@ export function PaywallModal() {
             ))}
           </div>
 
-          {/* 新增功能（如果有通过对比计算出来的） */}
-          {upgradeFeatures.length > 0 && (
+          {/* 新增功能亮点 */}
+          {upgradeHighlights.length > 0 && (
             <div className="pt-2 border-t border-border/30">
               <p className="text-xs text-muted-foreground mb-2">升级后解锁</p>
               <div className="flex flex-wrap gap-1.5">
-                {upgradeFeatures.map((feat) => (
+                {upgradeHighlights.map((label) => (
                   <span
-                    key={feat.label}
+                    key={label}
                     className="px-2.5 py-1 bg-primary/5 text-primary text-xs font-medium "
                   >
-                    {feat.label}
+                    {label}
                   </span>
                 ))}
               </div>

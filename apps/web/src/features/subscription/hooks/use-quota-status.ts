@@ -31,17 +31,18 @@ export function useQuotaStatus() {
   const quotas = data?.quotas ?? [];
   const tier = data?.tier ?? 'free';
 
-  /** 按 feature name 查找 */
+  /** 按 feature name 查找（大小写不敏感，兼容后端返回的小写蛇形命名） */
   function getQuota(feature: string): QuotaItem | undefined {
-    return quotas.find((q) => q.feature === feature);
+    const target = feature.toLowerCase();
+    return quotas.find((q) => (q.feature || '').toLowerCase() === target);
   }
 
   /** 文字分析配额 */
-  const textAnalysis = getQuota('AI_TEXT_ANALYSIS');
+  const textAnalysis = getQuota('ai_text_analysis');
   /** 图片分析配额 */
-  const imageAnalysis = getQuota('AI_IMAGE_ANALYSIS');
+  const imageAnalysis = getQuota('ai_image_analysis');
   /** AI 教练配额 */
-  const coach = getQuota('AI_COACH');
+  const coach = getQuota('ai_coach');
 
   return {
     tier,

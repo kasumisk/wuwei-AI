@@ -15,8 +15,12 @@ import { useSubscription } from '@/features/subscription/hooks/use-subscription'
 import { subscriptionService } from '@/lib/api/subscription';
 import { useLocalizedRouter } from '@/lib/hooks/use-localized-router';
 import { useToast } from '@/lib/hooks/use-toast';
-import { TIER_COMPARISON } from '@/types/subscription';
-import type { SubscriptionTier, SubscriptionPlan } from '@/types/subscription';
+import type {
+  SubscriptionTier,
+  SubscriptionPlan,
+  FeatureEntitlements,
+  GatedFeature,
+} from '@/types/subscription';
 
 /** 等级显示信息 — 硬编码 fallback，价格将被 API 覆盖 */
 const TIER_DISPLAY: Record<SubscriptionTier, {
@@ -28,6 +32,101 @@ const TIER_DISPLAY: Record<SubscriptionTier, {
   pro: { name: 'Pro', badge: '最受欢迎', color: 'border-primary' },
   premium: { name: 'Premium', color: 'border-amber-500' },
 };
+
+/** 功能对比行 — 从 entitlements 动态构造 */
+interface ComparisonRow {
+  label: string;
+  free: string | boolean;
+  pro: string | boolean;
+  premium: string | boolean;
+}
+
+/** 功能显示元信息：label + 单位后缀（用于 countable 字段） */
+const FEATURE_META: Array<{
+  key: GatedFeature;
+  label: string;
+  kind: 'countable' | 'boolean' | 'export';
+  suffix?: string;
+}> = [
+  { key: 'ai_image_analysis', label: '图片分析', kind: 'countable', suffix: '次/天' },
+  { key: 'ai_text_analysis', label: '文字分析', kind: 'countable', suffix: '次/天' },
+  { key: 'ai_coach', label: 'AI 教练', kind: 'countable', suffix: '次/天' },
+  { key: 'analysis_history', label: '分析历史', kind: 'countable', suffix: '条' },
+  { key: 'recommendation', label: '智能推荐', kind: 'countable', suffix: '次/天' },
+  { key: 'detailed_score', label: '详细评分', kind: 'boolean' },
+  { key: 'advanced_explain', label: '高级营养解读', kind: 'boolean' },
+  { key: 'deep_nutrition', label: '深度营养分析', kind: 'boolean' },
+  { key: 'personalized_alternatives', label: '个性化替代方案', kind: 'boolean' },
+  { key: 'reports', label: '周报/月报', kind: 'boolean' },
+  { key: 'data_export', label: '数据导出', kind: 'export' },
+  { key: 'full_day_plan', label: '全天计划', kind: 'boolean' },
+  { key: 'full_day_linkage', label: '全天计划联动', kind: 'boolean' },
+  { key: 'recipe_generation', label: '食谱生成', kind: 'boolean' },
+  { key: 'health_trend', label: '健康趋势分析', kind: 'boolean' },
+  { key: 'priority_ai', label: '优先 AI 响应', kind: 'boolean' },
+];
+
+/** 从 entitlements 提取某功能在某 tier 下的展示值 */
+function formatEntitlementValue(
+  entitlements: FeatureEntitlements | undefined,
+  meta: (typeof FEATURE_META)[number],
+): string | boolean {
+  if (!entitlements) return false;
+  const raw = entitlements[meta.key];
+
+  if (meta.kind === 'countable') {
+    if (typeof raw !== 'number') return false;
+    if (raw === -1) return '无限';
+    if (raw === 0) return false;
+    return `${raw}${meta.suffix || ''}`;
+  }
+
+  if (meta.kind === 'boolean') {
+    return raw === true;
+  }
+
+  // export: boolean | 'csv' | 'pdf_excel'
+  if (raw === false) return false;
+  if (raw === 'csv') return 'CSV';
+  if (raw === 'pdf_excel') return 'PDF+Excel';
+  if (raw === true) return true;
+  return false;
+}
+
+/** 为每个 tier 选出其"代表性" entitlements（优先月付，回退年付） */
+function pickRepresentativeEntitlements(
+  plans: SubscriptionPlan[],
+): Record<SubscriptionTier, FeatureEntitlements | undefined> {
+  const result: Record<SubscriptionTier, FeatureEntitlements | undefined> = {
+    free: undefined,
+    pro: undefined,
+    premium: undefined,
+  };
+  (['free', 'pro', 'premium'] as SubscriptionTier[]).forEach((tier) => {
+    const monthly = plans.find((p) => p.tier === tier && p.billingCycle === 'monthly');
+    const yearly = plans.find((p) => p.tier === tier && p.billingCycle === 'yearly');
+    result[tier] = monthly?.entitlements || yearly?.entitlements;
+  });
+  return result;
+}
+
+/** 基于 API entitlements 构造对比行；过滤掉三档都相同且全为 false 的无意义行 */
+function buildComparisonRows(plans: SubscriptionPlan[]): ComparisonRow[] {
+  const byTier = pickRepresentativeEntitlements(plans);
+  return FEATURE_META.map((meta) => {
+    const row: ComparisonRow = {
+      label: meta.label,
+      free: formatEntitlementValue(byTier.free, meta),
+      pro: formatEntitlementValue(byTier.pro, meta),
+      premium: formatEntitlementValue(byTier.premium, meta),
+    };
+    return row;
+  }).filter((r) => {
+    // 三档都为 false / 0 → 不展示（该功能未配置）
+    const allEmpty = r.free === false && r.pro === false && r.premium === false;
+    return !allEmpty;
+  });
+}
 
 /** 从 API 计划列表构建 tier 显示数据 */
 function buildTierCards(plans: SubscriptionPlan[]) {
@@ -79,13 +178,15 @@ export function PricingPage() {
   } | null>(null);
 
   // 从 API 获取计划列表
-  const { data: plans } = useQuery({
+  const { data: plans, isLoading: plansLoading, isError: plansError } = useQuery({
     queryKey: ['subscription-plans'],
     queryFn: () => subscriptionService.getPlans(),
     staleTime: 30 * 60 * 1000,
+    retry: 2,
   });
 
   const TIERS = useMemo(() => buildTierCards(plans ?? []), [plans]);
+  const comparisonRows = useMemo(() => buildComparisonRows(plans ?? []), [plans]);
 
   // 自动关闭庆祝弹窗
   useEffect(() => {
@@ -180,6 +281,30 @@ export function PricingPage() {
         <p className="text-sm text-muted-foreground mb-4 text-center">
           选择最适合你的计划，让 AI 营养管家为你服务
         </p>
+
+        {/* 加载中 */}
+        {plansLoading && (
+          <div className="flex flex-col items-center py-20 gap-4">
+            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <p className="text-sm text-muted-foreground">加载方案中...</p>
+          </div>
+        )}
+
+        {/* 加载失败 */}
+        {plansError && !plansLoading && (
+          <div className="text-center py-20 space-y-3">
+            <p className="text-muted-foreground">暂时无法加载订阅方案，请稍后重试。</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="text-sm text-primary hover:underline"
+            >
+              重新加载
+            </button>
+          </div>
+        )}
+
+        {/* 内容 — 仅在计划加载成功后显示 */}
+        {!plansLoading && !plansError && plans && plans.length > 0 && (<>
 
         {/* 月付/年付切换 */}
         <div className="flex items-center justify-center gap-3 mb-6">
@@ -327,7 +452,7 @@ export function PricingPage() {
               </tr>
             </thead>
             <tbody>
-              {TIER_COMPARISON.map((row, i) => (
+              {comparisonRows.map((row, i) => (
                 <tr key={row.label} className={i % 2 === 0 ? '' : 'bg-muted/20'}>
                   <th scope="row" className="text-left px-4 py-2.5 font-medium">
                     {row.label}
@@ -349,6 +474,7 @@ export function PricingPage() {
             </p>
           </div>
         )}
+        </>)}
       </main>
 
       {/* 降级确认弹窗 */}
@@ -373,7 +499,7 @@ export function PricingPage() {
               后，您将失去以下功能：
             </p>
             <ul className="space-y-1.5 mb-5">
-              {TIER_COMPARISON.filter((row) => {
+              {comparisonRows.filter((row) => {
                 const currentVal = row[currentTier];
                 const targetVal = row[downgradeConfirm.targetTier];
                 if (currentVal !== false && targetVal === false) return true;

@@ -7,8 +7,6 @@ import { useFoodAnalysis } from '@/features/food-analysis/hooks/use-food-analysi
 import { useToast } from '@/lib/hooks/use-toast';
 import { useSubscription } from '@/features/subscription/hooks/use-subscription';
 import { handlePaywallError } from '@/features/subscription/hooks/use-subscription';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { foodLibraryClientAPI } from '@/lib/api/food-library';
 import { foodRecordService } from '@/lib/api/food-record';
 import { DecisionCard } from './decision-card';
 import { DecisionFactors } from './decision-factors';
@@ -197,10 +195,9 @@ export function AnalyzePage() {
     isSavingAnalysis,
   } = useFoodAnalysis();
   const { toast } = useToast();
-  const { isFree, triggerPaywall } = useSubscription();
+  const { isFree } = useSubscription();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const analyzeAbortRef = useRef(false);
-  const queryClient = useQueryClient();
 
   const [step, setStep] = useState<Step>('upload');
   const [inputMode, setInputMode] = useState<InputTabType>(() => {
@@ -300,15 +297,6 @@ export function AnalyzePage() {
       setResult(res);
       setEditedFoods(res.foods);
       setStep('result');
-      // 软付费墙：分析结果有字段被隐藏时，弹出升级引导
-      if (res.entitlement && res.entitlement.fieldsHidden.length > 0) {
-        triggerPaywall({
-          code: 'advanced_result_hidden',
-          message: '升级 Pro 版即可解锁深度营养分析、个性化替代建议等高级功能',
-          recommendedTier: 'pro',
-          triggerScene: 'advanced_result',
-        });
-      }
     } catch (err) {
       if (analyzeAbortRef.current) return; // 用户已取消
       // 检查是否是 paywall 错误
@@ -322,7 +310,7 @@ export function AnalyzePage() {
       });
       setStep('upload');
     }
-  }, [selectedFile, mealType, analyzeImage, toast, triggerPaywall]);
+  }, [selectedFile, mealType, analyzeImage, toast]);
 
   // ── 文字分析（带超时） ──
   const analyzeTextByContent = useCallback(
@@ -351,15 +339,6 @@ export function AnalyzePage() {
         setResult(res);
         setEditedFoods(res.foods);
         setStep('result');
-        // 软付费墙：分析结果有字段被隐藏时，弹出升级引导
-        if (res.entitlement && res.entitlement.fieldsHidden.length > 0) {
-          triggerPaywall({
-            code: 'advanced_result_hidden',
-            message: '升级 Pro 版即可解锁深度营养分析、个性化替代建议等高级功能',
-            recommendedTier: 'pro',
-            triggerScene: 'advanced_result',
-          });
-        }
       } catch (err) {
         if (analyzeAbortRef.current) return;
         if (err && typeof err === 'object' && handlePaywallError(err as Record<string, unknown>)) {
@@ -373,7 +352,7 @@ export function AnalyzePage() {
         setStep('upload');
       }
     },
-    [analyzeText, mealType, toast, triggerPaywall]
+    [analyzeText, mealType, toast]
   );
 
   const handleAnalyzeText = useCallback(async () => {
@@ -385,46 +364,21 @@ export function AnalyzePage() {
     await analyzeTextByContent(trimmed);
   }, [textInput, analyzeTextByContent, toast]);
 
-  // ── 从食物库/常吃直接添加记录 ──
-  const addFromLibraryMutation = useMutation({
-    mutationFn: ({
-      foodId,
-      servingGrams,
-    }: {
-      foodId: string;
-      name: string;
-      servingGrams: number;
-    }) => foodLibraryClientAPI.addFromLibrary(foodId, servingGrams, mealType),
-    onSuccess: (_data, variables) => {
-      // Invalidate relevant queries
-      queryClient.invalidateQueries({ queryKey: ['records'] });
-      queryClient.invalidateQueries({ queryKey: ['summary'] });
-      queryClient.invalidateQueries({ queryKey: ['nutrition-score'] });
-      queryClient.invalidateQueries({ queryKey: ['meal-suggestion'] });
-      queryClient.invalidateQueries({ queryKey: ['daily-plan'] });
-      toast({ title: `已将「${variables.name}」记录到${mealTypeLabels[mealType]}` });
-    },
-    onError: (err) => {
-      // 检查是否是 paywall 错误
-      if (
-        err &&
-        typeof err === 'object' &&
-        handlePaywallError(err as unknown as Record<string, unknown>)
-      ) {
-        return;
-      }
-      toast({
-        title: err instanceof Error ? err.message : '添加失败',
-        variant: 'destructive',
-      });
-    },
-  });
+  // ── 从食物库/常吃触发 AI 分析（不直接存库） ──
+  const addFromLibraryMutation = { isPending: false }; // kept for prop compat; logic moved to handleAddFromLibrary
 
   const handleAddFromLibrary = useCallback(
-    (foodId: string, name: string, servingGrams: number) => {
-      addFromLibraryMutation.mutate({ foodId, name, servingGrams });
+    (_foodId: string, name: string, _servingGrams: number) => {
+      // 切换到文字模式，用食物名称预填，触发 AI 分析
+      const draft = name;
+      setTextInput(draft);
+      setInputMode('text');
+      // 小延迟后自动触发分析，让 UI 先切换
+      setTimeout(() => {
+        analyzeTextByContent(draft);
+      }, 50);
     },
-    [addFromLibraryMutation]
+    [analyzeTextByContent]
   );
 
   // ── 保存（优先使用 saveAnalysis 简化接口） ──

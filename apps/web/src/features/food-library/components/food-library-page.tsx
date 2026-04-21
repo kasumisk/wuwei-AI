@@ -1,10 +1,9 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useFoodLibrary } from '@/features/food-library/hooks/use-food-library';
-import { QuickLogPanel } from './quick-log-panel';
 import {
   foodLibraryClientAPI,
   type FoodLibraryItem,
@@ -45,6 +44,12 @@ interface FoodLibraryPageProps {
   initialPopularFoods: FoodLibraryItem[];
 }
 
+/** 构造食物描述文本，用于预填分析页输入框 */
+function buildFoodDraft(food: FoodLibraryItem): string {
+  const servingDesc = food.standardServingDesc || `${food.standardServingG || 100}g`;
+  return `${food.name} ${servingDesc}`;
+}
+
 export function FoodLibraryPage({
   locale,
   initialCategories,
@@ -53,8 +58,33 @@ export function FoodLibraryPage({
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // 快速记录面板状态
-  const [logTarget, setLogTarget] = useState<FoodLibraryItem | null>(null);
+  // ── 多选"待分析篮" ──
+  const [basket, setBasket] = useState<FoodLibraryItem[]>([]);
+  const basketIds = useMemo(() => new Set(basket.map((f) => f.id)), [basket]);
+
+  const toggleBasket = useCallback((food: FoodLibraryItem) => {
+    setBasket((prev) => {
+      if (prev.some((f) => f.id === food.id)) {
+        return prev.filter((f) => f.id !== food.id);
+      }
+      return [...prev, food];
+    });
+  }, []);
+
+  const clearBasket = useCallback(() => setBasket([]), []);
+
+  /** 确认：将全部食物合成文本，跳转分析页触发 AI 决策 */
+  const confirmAnalyze = useCallback(() => {
+    if (basket.length === 0) return;
+    const draft = basket.map(buildFoodDraft).join('，');
+    try {
+      sessionStorage.setItem('analyze_text_draft', draft);
+    } catch {
+      /* ignore */
+    }
+    setBasket([]);
+    router.push('/analyze?tab=text');
+  }, [basket, router]);
 
   // 常吃食物
   const [frequentFoods, setFrequentFoods] = useState<FrequentFood[]>([]);
@@ -91,70 +121,88 @@ export function FoodLibraryPage({
 
   const localePath = locale === 'en' ? '' : `/${locale}`;
 
-  const renderFoodCard = (food: FoodLibraryItem) => (
-    <div
-      key={food.id}
-      className="p-4  border border-border hover:border-primary/30 hover:shadow-md 
-        transition-all duration-200 bg-card"
-    >
-      <div className="flex items-start justify-between mb-2">
-        <Link
-          href={`${localePath}/foods/${encodeURIComponent(food.name)}`}
-          className="flex items-center gap-2 flex-1 min-w-0"
-        >
-          <span className="text-lg">{categoryEmoji[food.category] || '🍽️'}</span>
-          <h3 className="font-medium text-foreground">{food.name}</h3>
-          {food.isVerified && (
-            <span
-              className="shrink-0 text-[10px] font-medium text-primary bg-primary/10 px-1.5 py-0.5 "
-              title="官方验证数据"
-            >
-              ✓ 已验证
-            </span>
-          )}
-        </Link>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-sm font-semibold text-primary">{food.calories} kcal</span>
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setLogTarget(food);
-            }}
-            className="w-8 h-8 flex items-center justify-center  bg-primary text-primary-foreground text-lg font-bold hover:bg-primary/90 active:scale-95 transition-all shadow-sm"
-            title="快速记录"
+  const renderFoodCard = (food: FoodLibraryItem) => {
+    const selected = basketIds.has(food.id);
+    return (
+      <div
+        key={food.id}
+        className={`p-4 border  transition-all duration-200 bg-card ${
+          selected
+            ? 'border-primary shadow-md ring-1 ring-primary/20'
+            : 'border-border hover:border-primary/30 hover:shadow-md'
+        }`}
+      >
+        <div className="flex items-start justify-between mb-2">
+          <Link
+            href={`${localePath}/foods/${encodeURIComponent(food.name)}`}
+            className="flex items-center gap-2 flex-1 min-w-0"
           >
-            +
-          </button>
+            <span className="text-lg">{categoryEmoji[food.category] || '🍽️'}</span>
+            <h3 className="font-medium text-foreground">{food.name}</h3>
+            {food.isVerified && (
+              <span
+                className="shrink-0 text-[10px] font-medium text-primary bg-primary/10 px-1.5 py-0.5 "
+                title="官方验证数据"
+              >
+                ✓ 已验证
+              </span>
+            )}
+          </Link>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-sm font-semibold text-primary">{food.calories} kcal</span>
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                toggleBasket(food);
+              }}
+              aria-pressed={selected}
+              aria-label={selected ? `取消选择 ${food.name}` : `选择 ${food.name} 进行分析`}
+              className={`w-8 h-8 flex items-center justify-center text-lg font-bold active:scale-95 transition-all shadow-sm ${
+                selected
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-foreground hover:bg-primary/10'
+              }`}
+              title={selected ? '已加入分析篮' : '加入分析篮'}
+            >
+              {selected ? (
+                <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                  <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
+                </svg>
+              ) : (
+                '+'
+              )}
+            </button>
+          </div>
         </div>
+        <Link href={`${localePath}/foods/${encodeURIComponent(food.name)}`} className="block">
+          <p className="text-xs text-muted-foreground mb-2">
+            每100g · {food.standardServingDesc || `标准份${food.standardServingG}g`}
+            {food.aliases && food.aliases.length > 0 && (
+              <span className="ml-1">· 又名: {food.aliases.split(',').slice(0, 3).join('、')}</span>
+            )}
+          </p>
+          <div className="flex gap-2">
+            {food.protein != null && (
+              <span className={`text-xs px-2 py-0.5  ${getNutrientColor('蛋白质')}`}>
+                蛋白质 {food.protein}g
+              </span>
+            )}
+            {food.fat != null && (
+              <span className={`text-xs px-2 py-0.5  ${getNutrientColor('脂肪')}`}>
+                脂肪 {food.fat}g
+              </span>
+            )}
+            {food.carbs != null && (
+              <span className={`text-xs px-2 py-0.5  ${getNutrientColor('碳水')}`}>
+                碳水 {food.carbs}g
+              </span>
+            )}
+          </div>
+        </Link>
       </div>
-      <Link href={`${localePath}/foods/${encodeURIComponent(food.name)}`} className="block">
-        <p className="text-xs text-muted-foreground mb-2">
-          每100g · {food.standardServingDesc || `标准份${food.standardServingG}g`}
-          {food.aliases && food.aliases.length > 0 && (
-            <span className="ml-1">· 又名: {food.aliases.split(',').slice(0, 3).join('、')}</span>
-          )}
-        </p>
-        <div className="flex gap-2">
-          {food.protein != null && (
-            <span className={`text-xs px-2 py-0.5  ${getNutrientColor('蛋白质')}`}>
-              蛋白质 {food.protein}g
-            </span>
-          )}
-          {food.fat != null && (
-            <span className={`text-xs px-2 py-0.5  ${getNutrientColor('脂肪')}`}>
-              脂肪 {food.fat}g
-            </span>
-          )}
-          {food.carbs != null && (
-            <span className={`text-xs px-2 py-0.5  ${getNutrientColor('碳水')}`}>
-              碳水 {food.carbs}g
-            </span>
-          )}
-        </div>
-      </Link>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -227,30 +275,56 @@ export function FoodLibraryPage({
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-4 py-4 pb-24 space-y-6">
+      <main
+        className={`max-w-2xl mx-auto px-4 py-4 space-y-6 ${
+          basket.length > 0 ? 'pb-44' : 'pb-24'
+        }`}
+      >
+        {/* 顶部提示：多选模式说明 */}
+        <div className="bg-primary/5 border border-primary/15  px-3 py-2 text-xs text-primary/90">
+          💡 选择一个或多个食物，确认后进入 AI 分析决策
+        </div>
+
         {/* 常吃食物快捷区 */}
         {!showSearchResults && frequentLoaded && frequentFoods.length > 0 && (
           <div className="space-y-2">
             <h2 className="text-sm font-medium text-muted-foreground px-1">⚡ 你的常吃食物</h2>
             <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-              {frequentFoods.map((ff) => (
-                <button
-                  key={ff.name}
-                  onClick={() => {
-                    if (ff.food) setLogTarget(ff.food);
-                  }}
-                  disabled={!ff.food}
-                  className="shrink-0 flex items-center gap-2 px-3 py-2  bg-card border border-border hover:border-primary/30 transition-all active:scale-[0.97] disabled:opacity-50"
-                >
-                  <span className="text-sm">{categoryEmoji[ff.food?.category || ''] || '🍽️'}</span>
-                  <div className="text-left">
-                    <p className="text-xs font-bold">{ff.name}</p>
-                    <p className="text-[10px] text-muted-foreground">
-                      吃过{ff.count}次{ff.food ? ` · ${ff.food.calories}kcal/100g` : ''}
-                    </p>
-                  </div>
-                </button>
-              ))}
+              {frequentFoods.map((ff) => {
+                const selected = ff.food ? basketIds.has(ff.food.id) : false;
+                return (
+                  <button
+                    key={ff.name}
+                    onClick={() => {
+                      if (ff.food) toggleBasket(ff.food);
+                    }}
+                    disabled={!ff.food}
+                    aria-pressed={selected}
+                    className={`shrink-0 flex items-center gap-2 px-3 py-2 border transition-all active:scale-[0.97] disabled:opacity-50 ${
+                      selected
+                        ? 'bg-primary/10 border-primary ring-1 ring-primary/20'
+                        : 'bg-card border-border hover:border-primary/30'
+                    }`}
+                  >
+                    <span className="text-sm">{categoryEmoji[ff.food?.category || ''] || '🍽️'}</span>
+                    <div className="text-left">
+                      <p className="text-xs font-bold">{ff.name}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        吃过{ff.count}次{ff.food ? ` · ${ff.food.calories}kcal/100g` : ''}
+                      </p>
+                    </div>
+                    {selected && (
+                      <svg
+                        className="w-4 h-4 text-primary"
+                        fill="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
+                      </svg>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
@@ -345,8 +419,31 @@ export function FoodLibraryPage({
         )}
       </main>
 
-      {/* 快速记录面板 */}
-      {logTarget && <QuickLogPanel food={logTarget} onClose={() => setLogTarget(null)} />}
+      {/* 底部浮动确认栏 */}
+      {basket.length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-t border-border shadow-lg animate-in slide-in-from-bottom duration-200">
+          <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-muted-foreground">已选 {basket.length} 个食物</p>
+              <p className="text-sm font-medium truncate">
+                {basket.map((f) => f.name).join('、')}
+              </p>
+            </div>
+            <button
+              onClick={clearBasket}
+              className="shrink-0 text-xs text-muted-foreground hover:text-foreground px-2 py-1"
+            >
+              清空
+            </button>
+            <button
+              onClick={confirmAnalyze}
+              className="shrink-0 bg-primary text-primary-foreground font-bold text-sm px-5 py-2.5 rounded-md active:scale-95 transition-all shadow-md"
+            >
+              开始 AI 分析 →
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

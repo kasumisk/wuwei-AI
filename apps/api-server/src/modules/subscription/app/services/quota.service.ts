@@ -159,13 +159,51 @@ export class QuotaService {
    * V6.4 P2: 去除内联重置逻辑。
    * 原因：查询操作不应触发写入，过期配额由每小时 Cron（resetExpiredQuotas）统一重置。
    * 此处仅标记是否已过期供前端展示，不修改数据库。
+   *
+   * V7 修复：为所有计次类功能返回状态（包括尚未创建 UsageQuota 记录的新用户）。
+   * 原实现仅返回已有记录，导致首次访问的用户前端拿不到任何配额信息。
    */
   async getAllQuotaStatus(userId: string): Promise<QuotaStatus[]> {
-    const quotas = await this.prisma.usageQuota.findMany({
-      where: { userId: userId },
-    });
+    const [quotas, summary] = await Promise.all([
+      this.prisma.usageQuota.findMany({ where: { userId: userId } }),
+      this.subscriptionService.getUserSummary(userId),
+    ]);
 
-    return quotas.map((quota) => this.toStatus(quota));
+    const existingMap = new Map<string, UsageQuota>();
+    for (const q of quotas) existingMap.set(q.feature, q);
+
+    // 枚举所有计次类功能，确保未创建记录时仍返回默认状态（used=0）
+    const countableFeatures = Object.values(GatedFeature).filter((f) =>
+      this.entitlementResolver.isCountableFeature(f as GatedFeature),
+    ) as GatedFeature[];
+
+    const now = new Date();
+    const defaultResetAt = this.calcNextReset(now, QuotaCycle.DAILY);
+
+    return countableFeatures.map((feature) => {
+      const existing = existingMap.get(feature);
+      if (existing) {
+        return this.toStatus(existing);
+      }
+      // 未创建记录 → 按当前 plan 配额返回默认状态
+      const limit = this.entitlementResolver.getQuotaLimit(
+        summary.entitlements,
+        feature,
+      );
+      if (limit === null) {
+        // 不是计次类型（理论上不会走到这里，双重保险）
+        return null;
+      }
+      const unlimited = limit === UNLIMITED;
+      return {
+        feature,
+        used: 0,
+        limit,
+        remaining: unlimited ? UNLIMITED : limit,
+        unlimited,
+        resetAt: defaultResetAt,
+      } as QuotaStatus;
+    }).filter((s): s is QuotaStatus => s !== null);
   }
 
   // ==================== Cron 定时重置 ====================

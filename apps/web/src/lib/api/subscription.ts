@@ -200,14 +200,10 @@ const SEED_PLANS: SubscriptionPlan[] = [
 export const subscriptionService = {
   // ── 订阅计划查询 ──
 
-  /** 获取可用的订阅计划列表（激活状态）— 优先 API，fallback SEED_PLANS */
+  /** 获取可用的订阅计划列表（激活状态）— 直接读取 API */
   getPlans: async (): Promise<SubscriptionPlan[]> => {
-    try {
-      const res = await unwrap(clientGet<{ list: SubscriptionPlan[] }>('/app/subscription/plans'));
-      return res.list;
-    } catch {
-      return SEED_PLANS;
-    }
+    const res = await unwrap(clientGet<{ list: SubscriptionPlan[] }>('/app/subscription/plans'));
+    return res.list;
   },
 
   /** 获取当前用户配额使用状态 */
