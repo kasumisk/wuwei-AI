@@ -90,6 +90,8 @@ export interface TextPipelineInput {
     fromLibrary: boolean;
   }>;
   decisionMode?: 'pre_eat' | 'post_eat';
+  /** V5.2: 覆盖 localHour（补录/跨时区场景） */
+  localHourOverride?: number;
   /** 预构建的用户上下文，避免重复调用 UserContextBuilder */
   prebuiltUserContext?: any;
 }
@@ -108,6 +110,8 @@ export interface ImagePipelineInput {
   /** 图片链路已有营养汇总（来自 legacy result），可选 */
   precomputedTotals?: NutritionTotals;
   decisionMode?: 'pre_eat' | 'post_eat';
+  /** V5.2: 覆盖 localHour（补录/跨时区场景） */
+  localHourOverride?: number;
   /** 预构建的用户上下文，避免重复调用 UserContextBuilder */
   prebuiltUserContext?: any;
 }
@@ -272,6 +276,10 @@ export class AnalysisPipelineService {
       : await this.userContextBuilder.build(input.userId, input.locale);
     if (input.mealType) {
       userContext.mealType = input.mealType;
+    }
+    // V5.2: localHour override for retroactive logging / cross-timezone
+    if (input.localHourOverride != null) {
+      userContext.localHour = input.localHourOverride;
     }
 
     // 评分 — V5.0: delegated to ScoringStageService

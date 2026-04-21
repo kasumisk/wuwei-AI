@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { usePlanAdjust } from '@/features/home/hooks/use-plan-adjust';
 import { foodPlanService } from '@/lib/api/food-plan';
@@ -34,7 +34,7 @@ const DISLIKE_REASONS = [
 
 interface NextMealCardProps {
   suggestion: MealSuggestion;
-  summary: DailySummary;
+  summary: DailySummary | undefined;
   profile: UserProfile | null;
 }
 
@@ -48,6 +48,14 @@ export function NextMealCard({ suggestion, summary: _summary, profile }: NextMea
   const [showDislike, setShowDislike] = useState(false);
   const [liked, setLiked] = useState(false);
   const [scenarioIdx, setScenarioIdx] = useState(0);
+
+  // Reset scenario index and eaten state when suggestion prop changes
+  useEffect(() => {
+    setScenarioIdx(0);
+    setEaten(false);
+    setLiked(false);
+    setShowDislike(false);
+  }, [suggestion]);
 
   const scenarios = suggestion.scenarios ?? [];
 
@@ -206,12 +214,14 @@ export function NextMealCard({ suggestion, summary: _summary, profile }: NextMea
                 )}
               </div>
             )}
-            <LocalizedLink
-              href={`/recipes?q=${encodeURIComponent(content.foods.split(/[、，+]/)[0].trim())}`}
-              className="mt-1.5 inline-flex items-center gap-1 text-xs text-primary font-medium hover:opacity-80"
-            >
-              🍳 <span className="underline underline-offset-2">查看菜谱</span>
-            </LocalizedLink>
+            {content.foods && (
+              <LocalizedLink
+                href={`/recipes?q=${encodeURIComponent(content.foods.split(/[、，+]/)[0].trim())}`}
+                className="mt-1.5 inline-flex items-center gap-1 text-xs text-primary font-medium hover:opacity-80"
+              >
+                🍳 <span className="underline underline-offset-2">查看菜谱</span>
+              </LocalizedLink>
+            )}
           </>
         )}
 
@@ -258,7 +268,7 @@ export function NextMealCard({ suggestion, summary: _summary, profile }: NextMea
             </button>
             <button
               onClick={() => handleSwap()}
-              disabled={isAdjusting}
+              disabled={isAdjusting || eaten}
               className="flex-1 py-2  text-xs font-bold bg-muted text-muted-foreground hover:bg-muted/80 transition-all active:scale-[0.97] disabled:opacity-50"
             >
               🔄 换一个

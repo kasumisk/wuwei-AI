@@ -55,10 +55,12 @@ export function RecordsPage() {
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ['records-history', startDate, endDate],
-    queryFn: () => foodRecordService.queryRecords({ startDate, endDate, limit: 200 }),
+    queryFn: () => foodRecordService.queryRecords({ startDate, endDate, limit: 100 }),
   });
 
   const items = data?.items ?? [];
+  const totalCount = data?.total ?? items.length;
+  const isTruncated = items.length < totalCount;
   const summary = data?.summary;
 
   // 按日期分组，每天内按餐次分组
@@ -102,7 +104,11 @@ export function RecordsPage() {
             <h1 className="text-xl font-extrabold font-headline tracking-tight">记录历史</h1>
           </div>
           <span className="text-xs text-muted-foreground">
-            {items.length > 0 ? `共 ${items.length} 条` : ''}
+            {totalCount > 0
+              ? isTruncated
+                ? `显示 ${items.length} / 共 ${totalCount} 条`
+                : `共 ${totalCount} 条`
+              : ''}
           </span>
         </div>
       </nav>

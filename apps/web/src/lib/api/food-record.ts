@@ -182,6 +182,7 @@ function normalizeScoreBreakdown(b?: Record<string, number>): NutritionScoreBrea
     satiety: Number(b.satiety ?? 0),
     stability: Number(b.stability ?? 0),
     glycemicImpact: Number(b.glycemicImpact ?? 0),
+    mealQuality: Number(b.mealQuality ?? 0),
   };
 }
 
@@ -473,7 +474,7 @@ export const foodRecordService = {
     inputType?: 'text' | 'image';
   }): Promise<AnalysisHistoryResponse> => {
     const sp = new URLSearchParams();
-    if (params?.page) sp.set('page', String(params.page));
+    if (params?.page != null) sp.set('page', String(params.page));
     if (params?.pageSize) sp.set('pageSize', String(params.pageSize));
     if (params?.inputType) sp.set('inputType', params.inputType);
     const qs = sp.toString();
@@ -569,8 +570,8 @@ export const foodRecordService = {
     if (params?.startDate) sp.set('startDate', params.startDate);
     if (params?.endDate) sp.set('endDate', params.endDate);
     if (params?.source) sp.set('source', params.source);
-    if (params?.page) sp.set('page', String(params.page));
-    if (params?.limit) sp.set('limit', String(params.limit));
+    if (params?.page != null) sp.set('page', String(params.page));
+    if (params?.limit != null) sp.set('limit', String(params.limit));
     const qs = sp.toString();
     return unwrap(clientGet(`/app/food/records${qs ? `?${qs}` : ''}`));
   },

@@ -36,98 +36,27 @@ export class ResultEntitlementService {
   /**
    * 按订阅等级裁剪分析结果
    *
-   * 输入完整的分析结果，输出裁剪后的结果（深拷贝，不修改原对象）
+   * V7: 不再裁剪任何字段 — 所有等级返回完整结果。
+   * 变现仅通过配额限制分析次数，不隐藏已产出的分析内容。
+   * 保留 entitlement.tier 供前端展示等级标识。
    *
    * @param result - 完整的分析结果
    * @param tier - 用户当前订阅等级
-   * @param entitlements - 用户的权益配置
-   * @returns 裁剪后的分析结果
+   * @param _entitlements - 用户的权益配置（保留参数签名兼容性）
+   * @returns 附带 entitlement 元数据的完整分析结果
    */
   trimResult(
     result: FoodAnalysisResultV61,
     tier: SubscriptionTier,
-    entitlements: FeatureEntitlements,
+    _entitlements: FeatureEntitlements,
   ): FoodAnalysisResultV61 {
-    // Premium 不裁剪
-    if (tier === SubscriptionTier.PREMIUM) {
-      return {
-        ...result,
-        entitlement: {
-          tier,
-          fieldsHidden: PREMIUM_TIER_HIDDEN_FIELDS,
-        },
-      };
-    }
-
-    // 深拷贝避免修改原对象
-    const trimmed: FoodAnalysisResultV61 = JSON.parse(JSON.stringify(result));
-
-    // 判断各能力
-    const hasDeepNutrition = this.entitlementResolver.hasCapability(
-      entitlements,
-      GatedFeature.DEEP_NUTRITION,
-    );
-    const hasAlternatives = this.entitlementResolver.hasCapability(
-      entitlements,
-      GatedFeature.PERSONALIZED_ALTERNATIVES,
-    );
-    const hasAdvancedExplain = this.entitlementResolver.hasCapability(
-      entitlements,
-      GatedFeature.ADVANCED_EXPLAIN,
-    );
-
-    const fieldsHidden: string[] = [];
-
-    // ---- 深度营养拆解裁剪 ----
-    if (!hasDeepNutrition) {
-      // 移除微量营养素（fiber, sodium）
-      for (const food of trimmed.foods) {
-        delete food.fiber;
-        delete food.sodium;
-      }
-      delete trimmed.totals.fiber;
-      delete trimmed.totals.sodium;
-      fieldsHidden.push(
-        'foods.*.fiber',
-        'foods.*.sodium',
-        'totals.fiber',
-        'totals.sodium',
-      );
-    }
-
-    // ---- 个性化替代建议裁剪 ----
-    if (!hasAlternatives) {
-      trimmed.alternatives = [];
-      fieldsHidden.push('alternatives');
-    }
-
-    // ---- 高级解释裁剪 ----
-    if (!hasAdvancedExplain) {
-      delete trimmed.explanation.primaryReason;
-      delete trimmed.explanation.userContextImpact;
-      fieldsHidden.push(
-        'explanation.primaryReason',
-        'explanation.userContextImpact',
-      );
-
-      // 注入升级引导文案
-      trimmed.explanation.upgradeTeaser =
-        '升级后可查看详细分析原因和个性化建议';
-    }
-
-    // ---- 入库信息只返回给 Premium（已经 early return 了，此处 tier 必为 FREE 或 PRO） ----
-    delete trimmed.ingestion;
-    if (!fieldsHidden.includes('ingestion')) {
-      fieldsHidden.push('ingestion');
-    }
-
-    // 更新权益信息
-    trimmed.entitlement = {
-      tier,
-      fieldsHidden,
+    return {
+      ...result,
+      entitlement: {
+        tier,
+        fieldsHidden: [],
+      },
     };
-
-    return trimmed;
   }
 
   /**

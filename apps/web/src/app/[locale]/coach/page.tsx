@@ -6,6 +6,7 @@ import { useAuth } from '@/features/auth/hooks/use-auth';
 import { useToast } from '@/lib/hooks/use-toast';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSubscription } from '@/features/subscription/hooks/use-subscription';
+import { useQuotaStatus } from '@/features/subscription/hooks/use-quota-status';
 import ReactMarkdown from 'react-markdown';
 import {
   sendCoachMessage,
@@ -98,6 +99,7 @@ export default function CoachPage() {
   const queryClient = useQueryClient();
   const { behaviorProfile } = useProfile();
   const { isFree, triggerPaywall } = useSubscription();
+  const { coach: coachQuota } = useQuotaStatus();
 
   // 状态
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -259,8 +261,13 @@ export default function CoachPage() {
     setMessages((prev) => {
       const updated = [...prev];
       const last = updated[updated.length - 1];
-      if (last) {
-        updated[updated.length - 1] = { ...last, streaming: false };
+      if (last && last.role === 'assistant') {
+        if (!last.content.trim()) {
+          // Remove blank assistant bubble that arrived before any delta
+          updated.pop();
+        } else {
+          updated[updated.length - 1] = { ...last, streaming: false };
+        }
       }
       return updated;
     });
@@ -571,7 +578,11 @@ export default function CoachPage() {
                   {/* 免费用户配额提示 */}
                   {isFree && (
                     <div className="bg-amber-50 border border-amber-200  px-4 py-2.5 flex items-center justify-between">
-                      <span className="text-xs text-amber-700">免费版：每天可对话 5 次</span>
+                      <span className="text-xs text-amber-700">
+                        {coachQuota && !coachQuota.unlimited
+                          ? `今日已用 ${coachQuota.used}/${coachQuota.limit} 次对话`
+                          : '免费版每日对话次数有限'}
+                      </span>
                       <button
                         onClick={() =>
                           triggerPaywall({

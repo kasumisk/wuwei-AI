@@ -248,6 +248,7 @@ export class TextFoodAnalysisService {
     mealType?: string,
     userId?: string,
     locale?: Locale,
+    localHourOverride?: number,
   ): Promise<FoodAnalysisResultV61> {
     // 1. 预处理文本
     const cleanedText = this.preprocessText(text);
@@ -320,6 +321,7 @@ export class TextFoodAnalysisService {
       mealType,
       userId,
       locale,
+      localHourOverride,
       foods: parsedFoods.map((f) => this.toAnalyzedFoodItem(f)),
       scoringFoods,
       parsedFoodMeta: parsedFoods.map((f) => ({

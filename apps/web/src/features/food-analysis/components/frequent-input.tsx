@@ -118,12 +118,16 @@ export function FrequentInput({ mealType, onAddFromLibrary, isAdding }: Frequent
                     吃过{item.count}次
                   </span>
                 </div>
-                {food && (
+                {food ? (
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {food.standardServingDesc || `${food.standardServingG}g`}
                     {' · '}
                     {Math.round((food.calories * (food.standardServingG || 100)) / 100)} kcal
                     {food.category && ` · ${food.category}`}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground/50 mt-0.5">
+                    未收录到食物库，暂不支持快速记录
                   </p>
                 )}
               </div>

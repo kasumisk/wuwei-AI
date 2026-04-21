@@ -96,6 +96,8 @@ export const profileService = {
     suggestions: Array<{
       field: string;
       priority: 'high' | 'medium' | 'low';
+      /** V5.2: safety → 安全关键字段（过敏源/健康状况/饮食限制），accuracy → 精度字段，optional → 锦上添花 */
+      impactLevel?: 'safety' | 'accuracy' | 'optional';
       reason: string;
       estimatedImpact: string;
     }>;

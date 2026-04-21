@@ -489,7 +489,7 @@ export interface MealFoodExplanation {
 }
 
 export interface MealPlanDetailed extends MealPlan {
-  foodItems?: MealFoodItem[];
+  foodItems: MealFoodItem[];
   explanations?: Record<string, MealFoodExplanation>;
 }
 
@@ -528,6 +528,11 @@ export interface WeeklyPlanData {
 export interface AnalyzeTextRequest {
   text: string; // 1-500 chars
   mealType?: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+  /** V5.2: 上下文覆盖（补录/跨时区场景） */
+  contextOverride?: {
+    /** 覆盖本地小时(0-23)，修正时间维度评分 */
+    localHour?: number;
+  };
 }
 
 // ── 保存分析到记录 ──

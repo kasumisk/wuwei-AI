@@ -29,188 +29,26 @@ import { AllergenSelector } from '@/features/onboarding/components/shared/allerg
 
 type TabKey = 'basic' | 'diet' | 'behavior' | 'health';
 
-const TABS: { key: TabKey; label: string; icon: string }[] = [
-  { key: 'basic', label: '基本体征', icon: '📏' },
-  { key: 'diet', label: '饮食习惯', icon: '🥗' },
-  { key: 'behavior', label: '行为偏好', icon: '🧠' },
-  { key: 'health', label: '健康状况', icon: '❤️' },
-];
+// ── Shared UI primitives (module-level — pure, no closures over component state) ──
 
-function toggleArr(arr: string[], val: string): string[] {
-  return arr.includes(val) ? arr.filter((x) => x !== val) : [...arr, val];
+function SubLabel({ children }: { children: React.ReactNode }) {
+  return <p className="text-xs font-semibold text-muted-foreground mb-2">{children}</p>;
 }
 
-export function ProfileEditForm() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const { isLoggedIn } = useAuth();
-  const { profile, updateProfile, isUpdating } = useProfile();
-  const { toast } = useToast();
+function Divider() {
+  return <div className="border-t border-border/40 my-5" />;
+}
 
-  const VALID_TABS: TabKey[] = ['basic', 'diet', 'behavior', 'health'];
-  const initialTab = searchParams.get('tab') as TabKey | null;
-  const [activeTab, setActiveTab] = useState<TabKey>(
-    initialTab && VALID_TABS.includes(initialTab) ? initialTab : 'basic'
-  );
-
-  const [form, setForm] = useState({
-    // 基本体征
-    gender: 'male',
-    birthYear: '',
-    heightCm: '',
-    weightKg: '',
-    targetWeightKg: '',
-    bodyFatPercent: '',
-    activityLevel: 'light',
-    dailyCalorieGoal: '',
-    goal: 'health' as string,
-    goalSpeed: 'steady' as string,
-    familySize: '' as string,
-    // 运动概况
-    exerciseType: 'none' as string,
-    exerciseFrequency: 3,
-    exerciseDuration: 45,
-    // 饮食习惯
-    mealsPerDay: 3,
-    takeoutFrequency: 'sometimes' as string,
-    canCook: true,
-    cookingSkillLevel: 'basic' as string,
-    foodPreferences: [] as string[],
-    cuisinePreferences: [] as string[],
-    dietaryRestrictions: [] as string[],
-    allergens: [] as string[],
-    budgetLevel: 'medium' as string,
-    mealPrepWilling: false,
-    // 行为偏好
-    weakTimeSlots: [] as string[],
-    bingeTriggers: [] as string[],
-    discipline: 'medium' as string,
-    mealTimingPreference: 'standard' as string,
-    // 健康状况
-    healthConditions: [] as string[],
-    sleepQuality: 'fair' as string,
-    stressLevel: 'medium' as string,
-  });
-
-  useEffect(() => {
-    if (!isLoggedIn) {
-      router.push('/login');
-      return;
-    }
-    if (profile) {
-      setForm({
-        gender: profile.gender || 'male',
-        birthYear: profile.birthYear ? String(profile.birthYear) : '',
-        heightCm: profile.heightCm ? String(profile.heightCm) : '',
-        weightKg: profile.weightKg ? String(profile.weightKg) : '',
-        targetWeightKg: profile.targetWeightKg ? String(profile.targetWeightKg) : '',
-        bodyFatPercent: (profile as any).bodyFatPercent
-          ? String((profile as any).bodyFatPercent)
-          : '',
-        activityLevel: profile.activityLevel || 'light',
-        dailyCalorieGoal: profile.dailyCalorieGoal ? String(profile.dailyCalorieGoal) : '',
-        goal: profile.goal || 'health',
-        goalSpeed: profile.goalSpeed || 'steady',
-        familySize: profile.familySize ? String(profile.familySize) : '',
-        exerciseType: profile.exerciseProfile?.type || 'none',
-        exerciseFrequency: profile.exerciseProfile?.frequencyPerWeek || 3,
-        exerciseDuration: profile.exerciseProfile?.avgDurationMinutes || 45,
-        mealsPerDay: profile.mealsPerDay || 3,
-        takeoutFrequency: profile.takeoutFrequency || 'sometimes',
-        canCook: profile.canCook !== undefined ? profile.canCook : true,
-        cookingSkillLevel: profile.cookingSkillLevel || 'basic',
-        foodPreferences: profile.foodPreferences || [],
-        cuisinePreferences: profile.cuisinePreferences || [],
-        dietaryRestrictions: profile.dietaryRestrictions || [],
-        allergens: profile.allergens || [],
-        budgetLevel: profile.budgetLevel || 'medium',
-        mealPrepWilling: profile.mealPrepWilling ?? false,
-        weakTimeSlots: profile.weakTimeSlots || [],
-        bingeTriggers: profile.bingeTriggers || [],
-        discipline: profile.discipline || 'medium',
-        mealTimingPreference: profile.mealTimingPreference || 'standard',
-        healthConditions: profile.healthConditions || [],
-        sleepQuality: profile.sleepQuality || 'fair',
-        stressLevel: profile.stressLevel || 'medium',
-      });
-    }
-  }, [isLoggedIn, profile, router]);
-
-  const up = useCallback(<K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
-    setForm((f) => ({ ...f, [key]: value }));
-  }, []);
-
-  const handleSave = useCallback(async () => {
-    if (!form.heightCm || !form.weightKg || !form.birthYear) {
-      toast({ title: '请填写身高、体重和出生年份', variant: 'destructive' });
-      setActiveTab('basic');
-      return;
-    }
-    try {
-      const data: Partial<UserProfile> = {
-        gender: form.gender,
-        activityLevel: form.activityLevel,
-        goal: form.goal as UserProfile['goal'],
-        goalSpeed: form.goalSpeed as UserProfile['goalSpeed'],
-        mealsPerDay: form.mealsPerDay,
-        takeoutFrequency: form.takeoutFrequency as UserProfile['takeoutFrequency'],
-        canCook: form.canCook,
-        cookingSkillLevel: form.cookingSkillLevel as UserProfile['cookingSkillLevel'],
-        foodPreferences: form.foodPreferences,
-        cuisinePreferences: form.cuisinePreferences,
-        dietaryRestrictions: form.dietaryRestrictions,
-        allergens: form.allergens,
-        weakTimeSlots: form.weakTimeSlots,
-        bingeTriggers: form.bingeTriggers,
-        discipline: form.discipline as UserProfile['discipline'],
-        healthConditions: form.healthConditions,
-        budgetLevel: form.budgetLevel as UserProfile['budgetLevel'],
-        mealPrepWilling: form.mealPrepWilling,
-        mealTimingPreference: form.mealTimingPreference as UserProfile['mealTimingPreference'],
-        sleepQuality: form.sleepQuality as UserProfile['sleepQuality'],
-        stressLevel: form.stressLevel as UserProfile['stressLevel'],
-        exerciseProfile: {
-          type: form.exerciseType as 'none' | 'cardio' | 'strength' | 'mixed',
-          ...(form.exerciseType !== 'none' && {
-            frequencyPerWeek: form.exerciseFrequency,
-            avgDurationMinutes: form.exerciseDuration,
-          }),
-        },
-      };
-      if (form.birthYear) data.birthYear = parseInt(form.birthYear);
-      if (form.heightCm) data.heightCm = parseFloat(form.heightCm);
-      if (form.weightKg) data.weightKg = parseFloat(form.weightKg);
-      if (form.targetWeightKg) data.targetWeightKg = parseFloat(form.targetWeightKg);
-      if (form.dailyCalorieGoal) data.dailyCalorieGoal = parseInt(form.dailyCalorieGoal);
-      if (form.familySize) data.familySize = parseInt(form.familySize);
-      if ((form as any).bodyFatPercent)
-        (data as any).bodyFatPercent = parseFloat((form as any).bodyFatPercent);
-
-      await updateProfile(data);
-      toast({ title: '保存成功' });
-      router.back();
-    } catch (err) {
-      toast({ title: err instanceof Error ? err.message : '保存失败', variant: 'destructive' });
-    }
-  }, [form, updateProfile, toast, router]);
-
-  // ── Shared UI primitives ──
-
-  const SubLabel = ({ children }: { children: React.ReactNode }) => (
-    <p className="text-xs font-semibold text-muted-foreground mb-2">{children}</p>
-  );
-
-  const Divider = () => <div className="border-t border-border/40 my-5" />;
-
-  const BtnGroup = ({
-    options,
-    value,
-    onChange,
-  }: {
-    options: ReadonlyArray<{ key: string; label: string }>;
-    value: string;
-    onChange: (k: string) => void;
-  }) => (
+function BtnGroup({
+  options,
+  value,
+  onChange,
+}: {
+  options: ReadonlyArray<{ key: string; label: string }>;
+  value: string;
+  onChange: (k: string) => void;
+}) {
+  return (
     <div className="flex gap-2">
       {options.map(({ key, label }) => (
         <button
@@ -226,10 +64,60 @@ export function ProfileEditForm() {
       ))}
     </div>
   );
+}
 
-  // ── Tab panels ──
+const TABS: { key: TabKey; label: string; icon: string }[] = [
+  { key: 'basic', label: '基本体征', icon: '📏' },
+  { key: 'diet', label: '饮食习惯', icon: '🥗' },
+  { key: 'behavior', label: '行为偏好', icon: '🧠' },
+  { key: 'health', label: '健康状况', icon: '❤️' },
+];
 
-  const BasicTab = () => (
+function toggleArr(arr: string[], val: string): string[] {
+  return arr.includes(val) ? arr.filter((x) => x !== val) : [...arr, val];
+}
+
+// ── Form state type shared by all tab components ──
+type FormState = {
+  gender: string;
+  birthYear: string;
+  heightCm: string;
+  weightKg: string;
+  targetWeightKg: string;
+  bodyFatPercent: string;
+  activityLevel: string;
+  dailyCalorieGoal: string;
+  goal: string;
+  goalSpeed: string;
+  familySize: string;
+  exerciseType: string;
+  exerciseFrequency: number;
+  exerciseDuration: number;
+  mealsPerDay: number;
+  takeoutFrequency: string;
+  canCook: boolean;
+  cookingSkillLevel: string;
+  foodPreferences: string[];
+  cuisinePreferences: string[];
+  dietaryRestrictions: string[];
+  allergens: string[];
+  budgetLevel: string;
+  mealPrepWilling: boolean;
+  weakTimeSlots: string[];
+  bingeTriggers: string[];
+  discipline: string;
+  mealTimingPreference: string;
+  healthConditions: string[];
+  sleepQuality: string;
+  stressLevel: string;
+};
+
+type UpFn = <K extends keyof FormState>(key: K, value: FormState[K]) => void;
+
+// ── Tab panels (module-level — receive form + up as props) ──
+
+function BasicTab({ form, up }: { form: FormState; up: UpFn }) {
+  return (
     <>
       <SubLabel>性别</SubLabel>
       <BtnGroup
@@ -290,8 +178,8 @@ export function ProfileEditForm() {
         <SubLabel>体脂率 (%) — 选填，用于精准 TDEE 计算</SubLabel>
         <input
           type="number"
-          value={(form as any).bodyFatPercent}
-          onChange={(e) => up('bodyFatPercent' as any, e.target.value)}
+          value={form.bodyFatPercent}
+          onChange={(e) => up('bodyFatPercent', e.target.value)}
           placeholder="例如 20"
           min={3}
           max={60}
@@ -477,8 +365,10 @@ export function ProfileEditForm() {
       )}
     </>
   );
+}
 
-  const DietTab = () => (
+function DietTab({ form, up }: { form: FormState; up: UpFn }) {
+  return (
     <>
       <SubLabel>一天几餐</SubLabel>
       <div className="flex gap-2">
@@ -633,8 +523,10 @@ export function ProfileEditForm() {
       </div>
     </>
   );
+}
 
-  const BehaviorTab = () => (
+function BehaviorTab({ form, up }: { form: FormState; up: UpFn }) {
+  return (
     <>
       <SubLabel>饮食执行力</SubLabel>
       <div className="space-y-2">
@@ -701,8 +593,10 @@ export function ProfileEditForm() {
       </div>
     </>
   );
+}
 
-  const HealthTab = () => (
+function HealthTab({ form, up }: { form: FormState; up: UpFn }) {
+  return (
     <>
       <div className="mb-4 px-4 py-3  bg-amber-500/10 border border-amber-500/20">
         <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">
@@ -710,7 +604,7 @@ export function ProfileEditForm() {
         </p>
       </div>
 
-      <SubLabel>已有健康状况（可多选，无则留空）</SubLabel>
+      <SubLabel>已有健康状况（可多选）</SubLabel>
       <div className="grid grid-cols-2 gap-2">
         {HEALTH_CONDITION_OPTIONS.map(({ key, label, icon }) => {
           const selected = form.healthConditions.includes(key);
@@ -718,7 +612,14 @@ export function ProfileEditForm() {
             <button
               key={key}
               type="button"
-              onClick={() => up('healthConditions', toggleArr(form.healthConditions, key))}
+              onClick={() => {
+                if (key === 'none') {
+                  up('healthConditions', selected ? [] : ['none']);
+                } else {
+                  const prev = form.healthConditions.filter((k: string) => k !== 'none');
+                  up('healthConditions', toggleArr(prev, key));
+                }
+              }}
               className={`flex items-center gap-2 px-3 py-3  text-sm font-medium transition-all text-left ${
                 selected
                   ? 'bg-primary text-primary-foreground font-bold'
@@ -791,12 +692,166 @@ export function ProfileEditForm() {
       </div>
     </>
   );
+}
+
+export function ProfileEditForm() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { isLoggedIn } = useAuth();
+  const { profile, updateProfile, isUpdating } = useProfile();
+  const { toast } = useToast();
+
+  const VALID_TABS: TabKey[] = ['basic', 'diet', 'behavior', 'health'];
+  const initialTab = searchParams.get('tab') as TabKey | null;
+  const [activeTab, setActiveTab] = useState<TabKey>(
+    initialTab && VALID_TABS.includes(initialTab) ? initialTab : 'basic'
+  );
+
+  const [form, setForm] = useState<FormState>({
+    // 基本体征
+    gender: 'male',
+    birthYear: '',
+    heightCm: '',
+    weightKg: '',
+    targetWeightKg: '',
+    bodyFatPercent: '',
+    activityLevel: 'light',
+    dailyCalorieGoal: '',
+    goal: 'health',
+    goalSpeed: 'steady',
+    familySize: '',
+    // 运动概况
+    exerciseType: 'none',
+    exerciseFrequency: 3,
+    exerciseDuration: 45,
+    // 饮食习惯
+    mealsPerDay: 3,
+    takeoutFrequency: 'sometimes',
+    canCook: true,
+    cookingSkillLevel: 'basic',
+    foodPreferences: [],
+    cuisinePreferences: [],
+    dietaryRestrictions: [],
+    allergens: [],
+    budgetLevel: 'medium',
+    mealPrepWilling: false,
+    // 行为偏好
+    weakTimeSlots: [],
+    bingeTriggers: [],
+    discipline: 'medium',
+    mealTimingPreference: 'standard',
+    // 健康状况
+    healthConditions: [],
+    sleepQuality: 'fair',
+    stressLevel: 'medium',
+  });
+
+  useEffect(() => {
+    if (!isLoggedIn) {
+      router.push('/login');
+      return;
+    }
+    if (profile) {
+      setForm({
+        gender: profile.gender || 'male',
+        birthYear: profile.birthYear ? String(profile.birthYear) : '',
+        heightCm: profile.heightCm ? String(profile.heightCm) : '',
+        weightKg: profile.weightKg ? String(profile.weightKg) : '',
+        targetWeightKg: profile.targetWeightKg ? String(profile.targetWeightKg) : '',
+        bodyFatPercent: (profile as any).bodyFatPercent
+          ? String((profile as any).bodyFatPercent)
+          : '',
+        activityLevel: profile.activityLevel || 'light',
+        dailyCalorieGoal: profile.dailyCalorieGoal ? String(profile.dailyCalorieGoal) : '',
+        goal: profile.goal || 'health',
+        goalSpeed: profile.goalSpeed || 'steady',
+        familySize: profile.familySize ? String(profile.familySize) : '',
+        exerciseType: profile.exerciseProfile?.type || 'none',
+        exerciseFrequency: profile.exerciseProfile?.frequencyPerWeek || 3,
+        exerciseDuration: profile.exerciseProfile?.avgDurationMinutes || 45,
+        mealsPerDay: profile.mealsPerDay || 3,
+        takeoutFrequency: profile.takeoutFrequency || 'sometimes',
+        canCook: profile.canCook !== undefined ? profile.canCook : true,
+        cookingSkillLevel: profile.cookingSkillLevel || 'basic',
+        foodPreferences: profile.foodPreferences || [],
+        cuisinePreferences: profile.cuisinePreferences || [],
+        dietaryRestrictions: profile.dietaryRestrictions || [],
+        allergens: profile.allergens || [],
+        budgetLevel: profile.budgetLevel || 'medium',
+        mealPrepWilling: profile.mealPrepWilling ?? false,
+        weakTimeSlots: profile.weakTimeSlots || [],
+        bingeTriggers: profile.bingeTriggers || [],
+        discipline: profile.discipline || 'medium',
+        mealTimingPreference: profile.mealTimingPreference || 'standard',
+        healthConditions: profile.healthConditions || [],
+        sleepQuality: profile.sleepQuality || 'fair',
+        stressLevel: profile.stressLevel || 'medium',
+      });
+    }
+  }, [isLoggedIn, profile, router]);
+
+  const up: UpFn = useCallback(<K extends keyof FormState>(key: K, value: FormState[K]) => {
+    setForm((f) => ({ ...f, [key]: value }));
+  }, []);
+
+  const handleSave = useCallback(async () => {
+    if (!form.heightCm || !form.weightKg || !form.birthYear) {
+      toast({ title: '请填写身高、体重和出生年份', variant: 'destructive' });
+      setActiveTab('basic');
+      return;
+    }
+    try {
+      const data: Partial<UserProfile> = {
+        gender: form.gender,
+        activityLevel: form.activityLevel,
+        goal: form.goal as UserProfile['goal'],
+        goalSpeed: form.goalSpeed as UserProfile['goalSpeed'],
+        mealsPerDay: form.mealsPerDay,
+        takeoutFrequency: form.takeoutFrequency as UserProfile['takeoutFrequency'],
+        canCook: form.canCook,
+        cookingSkillLevel: form.cookingSkillLevel as UserProfile['cookingSkillLevel'],
+        foodPreferences: form.foodPreferences,
+        cuisinePreferences: form.cuisinePreferences,
+        dietaryRestrictions: form.dietaryRestrictions,
+        allergens: form.allergens,
+        weakTimeSlots: form.weakTimeSlots,
+        bingeTriggers: form.bingeTriggers,
+        discipline: form.discipline as UserProfile['discipline'],
+        healthConditions: form.healthConditions,
+        budgetLevel: form.budgetLevel as UserProfile['budgetLevel'],
+        mealPrepWilling: form.mealPrepWilling,
+        mealTimingPreference: form.mealTimingPreference as UserProfile['mealTimingPreference'],
+        sleepQuality: form.sleepQuality as UserProfile['sleepQuality'],
+        stressLevel: form.stressLevel as UserProfile['stressLevel'],
+        exerciseProfile: {
+          type: form.exerciseType as 'none' | 'cardio' | 'strength' | 'mixed',
+          ...(form.exerciseType !== 'none' && {
+            frequencyPerWeek: form.exerciseFrequency,
+            avgDurationMinutes: form.exerciseDuration,
+          }),
+        },
+      };
+      if (form.birthYear) data.birthYear = parseInt(form.birthYear);
+      if (form.heightCm) data.heightCm = parseFloat(form.heightCm);
+      if (form.weightKg) data.weightKg = parseFloat(form.weightKg);
+      if (form.targetWeightKg) data.targetWeightKg = parseFloat(form.targetWeightKg);
+      if (form.dailyCalorieGoal) data.dailyCalorieGoal = parseInt(form.dailyCalorieGoal);
+      if (form.familySize) data.familySize = parseInt(form.familySize);
+      if (form.bodyFatPercent) (data as any).bodyFatPercent = parseFloat(form.bodyFatPercent);
+
+      await updateProfile(data);
+      toast({ title: '保存成功' });
+      router.back();
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : '保存失败', variant: 'destructive' });
+    }
+  }, [form, updateProfile, toast, router]);
 
   const tabContent: Record<TabKey, React.ReactNode> = {
-    basic: <BasicTab />,
-    diet: <DietTab />,
-    behavior: <BehaviorTab />,
-    health: <HealthTab />,
+    basic: <BasicTab form={form} up={up} />,
+    diet: <DietTab form={form} up={up} />,
+    behavior: <BehaviorTab form={form} up={up} />,
+    health: <HealthTab form={form} up={up} />,
   };
 
   return (

@@ -221,7 +221,7 @@ export class FoodLibraryService {
    */
   async getFrequent(userId: string, limit: number = 10) {
     // 从 food_records 的 JSONB foods 字段中统计用户常用食物名
-    const frequentNames: Array<{ name: string }> =
+    const frequentNames: Array<{ name: string; frequency: string }> =
       await this.prisma.$queryRawUnsafe(
         `SELECT food_item->>'name' AS name, COUNT(*) AS frequency
        FROM food_records fr
@@ -237,9 +237,18 @@ export class FoodLibraryService {
     if (frequentNames.length === 0) return [];
 
     const names = frequentNames.map((r) => r.name);
-    return this.prisma.foods.findMany({
+    const foods = await this.prisma.foods.findMany({
       where: { name: { in: names } },
     });
+
+    const foodByName = new Map(foods.map((f) => [f.name, f]));
+
+    // Return shape: { name, count, food? } — matching frontend FrequentFood type
+    return frequentNames.map((r) => ({
+      name: r.name,
+      count: Number(r.frequency),
+      food: foodByName.get(r.name) ?? undefined,
+    }));
   }
 
   /**

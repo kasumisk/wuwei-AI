@@ -91,6 +91,7 @@ export const BINGE_TRIGGER_OPTIONS = [
 
 // ── 健康状况选项 ──
 export const HEALTH_CONDITION_OPTIONS = [
+  { key: 'none', label: '无', icon: '✅' },
   { key: 'diabetes', label: '糖尿病', icon: '🩸' },
   { key: 'hypertension', label: '高血压', icon: '❤️' },
   { key: 'hyperlipidemia', label: '高血脂', icon: '🫀' },

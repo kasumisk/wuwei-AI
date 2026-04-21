@@ -531,6 +531,8 @@ export class UserProfileService {
       priority: 'high' | 'medium' | 'low';
       reason: string;
       estimatedImpact: string;
+      /** V5.2: 影响级别 — safety=影响食物安全检测, accuracy=影响推荐准确度, optional=锦上添花 */
+      impactLevel: 'safety' | 'accuracy' | 'optional';
     }>;
     currentCompleteness: number;
   }> {
@@ -546,61 +548,72 @@ export class UserProfileService {
       priority: 'high' | 'medium' | 'low';
       reason: string;
       estimatedImpact: string;
+      impactLevel: 'safety' | 'accuracy' | 'optional';
     }> = [];
 
     const fieldMeta: Record<
       string,
-      { priority: 'high' | 'medium' | 'low'; reason: string; impact: string }
+      { priority: 'high' | 'medium' | 'low'; reason: string; impact: string; impactLevel: 'safety' | 'accuracy' | 'optional' }
     > = {
       heightCm: {
         priority: 'high',
         reason: '计算基础代谢率的核心参数',
         impact: '推荐准确度提升 ~20%',
+        impactLevel: 'accuracy',
       },
       weightKg: {
         priority: 'high',
         reason: '计算基础代谢率的核心参数',
         impact: '推荐准确度提升 ~20%',
+        impactLevel: 'accuracy',
       },
       allergens: {
         priority: 'high',
         reason: '确保推荐食物安全，排除过敏原',
         impact: '安全性保障',
+        impactLevel: 'safety',
       },
       goal: {
         priority: 'high',
         reason: '决定营养分配策略',
         impact: '推荐准确度提升 ~15%',
+        impactLevel: 'accuracy',
       },
       dietaryRestrictions: {
         priority: 'medium',
         reason: '过滤不适合的食物',
         impact: '推荐准确度提升 ~10%',
+        impactLevel: 'safety',
       },
       healthConditions: {
         priority: 'medium',
         reason: '针对健康状况调整推荐',
         impact: '安全性 + 准确度提升',
+        impactLevel: 'safety',
       },
       discipline: {
         priority: 'medium',
         reason: '调整推荐约束松紧度',
         impact: '执行率提升 ~15%',
+        impactLevel: 'optional',
       },
       bingeTriggers: {
         priority: 'medium',
         reason: '暴食预防干预',
         impact: '坚持率提升 ~10%',
+        impactLevel: 'optional',
       },
       exerciseProfile: {
         priority: 'low',
         reason: '运动用户热量需求不同',
         impact: '热量计算更精确',
+        impactLevel: 'optional',
       },
       cookingSkillLevel: {
         priority: 'low',
         reason: '匹配烹饪难度',
         impact: '推荐可行性提升',
+        impactLevel: 'optional',
       },
     };
 
@@ -620,14 +633,18 @@ export class UserProfileService {
           priority: meta.priority,
           reason: meta.reason,
           estimatedImpact: meta.impact,
+          impactLevel: meta.impactLevel,
         });
       }
     }
 
-    // 按优先级排序
+    // 按优先级排序（safety 字段优先）
     const priorityOrder = { high: 0, medium: 1, low: 2 };
+    const impactOrder = { safety: 0, accuracy: 1, optional: 2 };
     suggestions.sort(
-      (a, b) => priorityOrder[a.priority] - priorityOrder[b.priority],
+      (a, b) =>
+        impactOrder[a.impactLevel] - impactOrder[b.impactLevel] ||
+        priorityOrder[a.priority] - priorityOrder[b.priority],
     );
 
     return {

@@ -1,12 +1,11 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { useHomeData } from '@/features/home/hooks/use-home-data';
 import { useDismissStore } from '@/store';
 import { LocalizedLink } from '@/components/common/localized-link';
-import { useUnreadCount } from '@/features/notification/hooks/use-notifications';
-import Image from 'next/image';
 
 /* ── new Phase-2 components ── */
 import { TodayStatusCard } from './today-status-card';
@@ -16,8 +15,8 @@ import { NextMealCard } from './next-meal-card';
 import { TodayMealList } from './today-meal-list';
 import { QuickActionBar } from './quick-action-bar';
 import { FrequentFoodPicker } from './frequent-food-picker';
-import { useState } from 'react';
 import { BottomNav } from '@/components/common/bottom-nav';
+import { HomeQuotaSummary } from '@/features/subscription/components/quota-badge';
 
 /* ─── SVG Icons ─── */
 function IconPerson({ className = '' }: { className?: string }) {
@@ -60,14 +59,14 @@ export function HomePage() {
   const setDismissedCollectionCard = useDismissStore((s) => s.setDismissedCollectionCard);
 
   const [frequentOpen, setFrequentOpen] = useState(false);
-  // const { data: unreadData } = useUnreadCount(isLoggedIn);
-  // const unreadCount = unreadData?.unreadCount ?? 0;
 
-  // 安全网：登录且未完成引导时跳转分步引导
-  if (isLoggedIn && profile && !profile.onboardingCompleted) {
-    const startStep = profile.onboardingStep ?? 1;
-    router.replace(`/onboarding?step=${startStep}`);
-  }
+  // 安全网：登录且未完成引导时跳转分步引导（必须在 useEffect 中，避免渲染阶段副作用）
+  useEffect(() => {
+    if (isLoggedIn && profile && !profile.onboardingCompleted) {
+      const startStep = profile.onboardingStep ?? 1;
+      router.replace(`/onboarding?step=${startStep}`);
+    }
+  }, [isLoggedIn, profile, router]);
 
   // 问候语
   const greetingText = (() => {
@@ -140,6 +139,9 @@ export function HomePage() {
               {/* 1. Unified today status card */}
               <TodayStatusCard summary={summary} profile={profile} scoreData={nutritionScore} />
             </section>
+
+            {/* 1b. Quota summary */}
+            <HomeQuotaSummary />
 
             {/* 3. Mini weekly trend */}
             <WeeklyTrendMini summaries={recentSummaries} />

@@ -11,6 +11,10 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { foodLibraryClientAPI } from '@/lib/api/food-library';
 import { foodRecordService } from '@/lib/api/food-record';
 import { DecisionCard } from './decision-card';
+import { DecisionFactors } from './decision-factors';
+import { KeyMetrics } from './key-metrics';
+import { AlternativeCompareCard } from './alternative-compare-card';
+import { PortionAdvice } from './portion-advice';
 import { SavedImpact } from './saved-impact';
 import { InputTabs, type InputTabType } from './input-tabs';
 import { FrequentInput } from './frequent-input';
@@ -18,6 +22,7 @@ import { SearchInput } from './search-input';
 import { LocalizedLink } from '@/components/common/localized-link';
 import type { AnalysisResult, FoodItem } from '@/types/food';
 import { BottomNav } from '@/components/common/bottom-nav';
+import { AnalyzeQuotaBadge } from '@/features/subscription/components/quota-badge';
 
 type MealTypeOption = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 type Step = 'upload' | 'analyzing' | 'result' | 'saved';
@@ -556,7 +561,7 @@ export function AnalyzePage() {
         /* ignore */
       }
 
-      router.push(`/coach?q=${encodeURIComponent(prompt)}`);
+      router.push('/coach');
     },
     [router]
   );
@@ -683,26 +688,9 @@ export function AnalyzePage() {
               )}
             </div>
 
-            {/* 免费用户提示 — 仅在 AI 模式(image/text)下显示 */}
-            {isFree && (inputMode === 'image' || inputMode === 'text') && (
-              <div className="bg-linear-to-r from-primary/5 to-primary/10 border border-primary/15  px-4 py-3 space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-foreground">
-                    {inputMode === 'image' ? '📸 图片分析' : '✏️ 文字分析'}
-                  </span>
-                  <LocalizedLink
-                    href="/pricing"
-                    className="text-xs text-primary font-bold shrink-0 px-3 py-1  bg-primary/10 hover:bg-primary/20 transition-colors"
-                  >
-                    升级解锁更多
-                  </LocalizedLink>
-                </div>
-                <p className="text-[11px] text-muted-foreground">
-                  {inputMode === 'image'
-                    ? '免费版每天 3 次图片分析 · 升级 Pro 可达 20 次/天'
-                    : '免费版每天 20 次文字分析 · 升级 Pro 无限制'}
-                </p>
-              </div>
+            {/* 配额提示 — 仅在 AI 模式(image/text)下显示，数据来自 API */}
+            {(inputMode === 'image' || inputMode === 'text') && (
+              <AnalyzeQuotaBadge mode={inputMode} />
             )}
 
             {/* ═══ Image Upload Mode ═══ */}
@@ -1009,84 +997,15 @@ export function AnalyzePage() {
               }}
             />
 
-            {/* 宏量总览卡 — 热量 + 三大营养素绝对值 */}
-            {(result.totalProtein != null ||
-              result.totalFat != null ||
-              result.totalCarbs != null) && (
-              <section className="bg-card rounded-md border border-border p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold">本餐营养总览</h3>
-                  <span className="text-lg font-extrabold text-primary">{editedTotal} kcal</span>
-                </div>
-                <div className="space-y-2">
-                  {(
-                    [
-                      {
-                        key: 'protein',
-                        label: '蛋白质',
-                        value: result.totalProtein,
-                        unit: 'g',
-                        color: 'bg-blue-400',
-                        goal: 60,
-                      },
-                      {
-                        key: 'fat',
-                        label: '脂肪',
-                        value: result.totalFat,
-                        unit: 'g',
-                        color: 'bg-amber-400',
-                        goal: 65,
-                      },
-                      {
-                        key: 'carbs',
-                        label: '碳水',
-                        value: result.totalCarbs,
-                        unit: 'g',
-                        color: 'bg-violet-400',
-                        goal: 250,
-                      },
-                    ] as {
-                      key: string;
-                      label: string;
-                      value: number | undefined;
-                      unit: string;
-                      color: string;
-                      goal: number;
-                    }[]
-                  )
-                    .filter((m) => m.value != null)
-                    .map((m) => {
-                      const pct = Math.min(Math.round(((m.value ?? 0) / m.goal) * 100), 100);
-                      return (
-                        <div key={m.key}>
-                          <div className="flex justify-between text-xs mb-1">
-                            <span className="text-muted-foreground">{m.label}</span>
-                            <span className="font-bold">
-                              {m.value}
-                              {m.unit}
-                            </span>
-                          </div>
-                          <div className="h-1.5 bg-muted  overflow-hidden">
-                            <div
-                              className={`h-full  transition-all ${m.color}`}
-                              style={{ width: `${pct}%` }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                </div>
-                {result.totalSaturatedFat != null || result.totalAddedSugar != null ? (
-                  <div className="flex gap-3 pt-1 border-t border-border text-[11px] text-muted-foreground">
-                    {result.totalSaturatedFat != null && (
-                      <span>饱和脂肪 {result.totalSaturatedFat}g</span>
-                    )}
-                    {result.totalAddedSugar != null && (
-                      <span>添加糖 {result.totalAddedSugar}g</span>
-                    )}
-                  </div>
-                ) : null}
-              </section>
+            {/* V5.2: Key metrics — 关键数字一目了然 */}
+            <KeyMetrics result={result} />
+
+            {/* V5.2: Portion advice — 份量可视化 */}
+            <PortionAdvice result={result} />
+
+            {/* V5.2: Decision factors — 为什么这么判断 */}
+            {result.decisionFactors && result.decisionFactors.length > 0 && (
+              <DecisionFactors factors={result.decisionFactors} />
             )}
 
             {/* 宏量完成度 — completionRatio */}
@@ -1131,56 +1050,21 @@ export function AnalyzePage() {
               </section>
             )}
 
-            {/* 替代品候选 */}
-            {result.replacementCandidates && result.replacementCandidates.length > 0 && (
-              <section className="bg-card rounded-md border border-border p-4 space-y-3">
-                <h3 className="text-sm font-bold">推荐替代方案</h3>
-                <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1 snap-x snap-mandatory">
-                  {result.replacementCandidates.map((c, i) => (
-                    <div key={i} className="shrink-0 snap-start w-44 bg-muted/60  p-3 space-y-1.5">
-                      <p className="text-xs font-bold leading-tight">{c.name}</p>
-                      {c.reason && (
-                        <p className="text-[11px] text-muted-foreground leading-snug">{c.reason}</p>
-                      )}
-                      {c.comparison && (
-                        <div className="text-[11px] space-y-0.5 pt-1 border-t border-border">
-                          {c.comparison.caloriesDiff != null && (
-                            <p
-                              className={
-                                c.comparison.caloriesDiff < 0 ? 'text-emerald-600' : 'text-rose-500'
-                              }
-                            >
-                              热量 {c.comparison.caloriesDiff > 0 ? '+' : ''}
-                              {c.comparison.caloriesDiff} kcal
-                            </p>
-                          )}
-                          {c.comparison.proteinDiff != null && (
-                            <p
-                              className={
-                                c.comparison.proteinDiff > 0
-                                  ? 'text-blue-600'
-                                  : 'text-muted-foreground'
-                              }
-                            >
-                              蛋白质 {c.comparison.proteinDiff > 0 ? '+' : ''}
-                              {c.comparison.proteinDiff}g
-                            </p>
-                          )}
-                        </div>
-                      )}
-                      <button
-                        onClick={() => {
-                          setTextInput(c.name);
-                          setStep('upload');
-                        }}
-                        className="w-full text-[11px] font-bold text-primary hover:text-primary/80 text-left mt-1"
-                      >
-                        分析此替代 →
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </section>
+            {/* 替代品候选 — AlternativeCompareCard */}
+            {((result.replacementCandidates && result.replacementCandidates.length > 0) ||
+              (result.insteadOptions && result.insteadOptions.length > 0)) && (
+              <AlternativeCompareCard
+                candidates={result.replacementCandidates}
+                fallbackOptions={
+                  result.replacementCandidates && result.replacementCandidates.length > 0
+                    ? undefined
+                    : result.insteadOptions
+                }
+                onAnalyze={(name) => {
+                  setTextInput(name);
+                  setStep('upload');
+                }}
+              />
             )}
 
             {/* 8维评分详解 — 内联进度条 */}
@@ -1534,7 +1418,8 @@ export function AnalyzePage() {
               onClick={() => {
                 goToCoachWithAnalysis(result, editedFoods, editedTotal, mealType);
               }}
-              className="w-full flex items-center justify-center gap-2 py-3  bg-card border border-border text-sm font-medium text-foreground hover:bg-muted active:scale-[0.98] transition-all"
+              disabled={saving}
+              className="w-full flex items-center justify-center gap-2 py-3  bg-card border border-border text-sm font-medium text-foreground hover:bg-muted active:scale-[0.98] transition-all disabled:opacity-50"
             >
               <svg
                 className="w-4 h-4 text-primary"
@@ -1573,7 +1458,7 @@ export function AnalyzePage() {
               } catch {
                 /* ignore */
               }
-              router.push(`/coach?q=${encodeURIComponent(fallbackPrompt)}`);
+              router.push('/coach');
             }}
           />
         )}

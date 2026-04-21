@@ -177,6 +177,7 @@ export class FoodAnalyzeController {
       dto.mealType,
       user.id,
       (dto.locale as any) || undefined,
+      dto.contextOverride?.localHour,
     );
 
     // V7.9 P3-4: 写入缓存（使用完整结果，裁剪在读取时按当前订阅等级执行）

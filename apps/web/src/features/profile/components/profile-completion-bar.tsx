@@ -51,6 +51,13 @@ export function ProfileCompletionBar() {
     low: '可选',
   };
 
+  /** V5.2: impactLevel 安全标记样式 */
+  const impactBadge: Record<string, { label: string; cls: string }> = {
+    safety: { label: '⚠ 安全', cls: 'text-red-600 bg-red-50 border-red-300' },
+    accuracy: { label: '精准', cls: 'text-indigo-600 bg-indigo-50 border-indigo-200' },
+    optional: { label: '锦上添花', cls: 'text-muted-foreground bg-muted border-border/30' },
+  };
+
   // 根据字段名决定跳转路径
   const FIELD_TAB: Record<string, string> = {
     heightCm: 'basic',
@@ -112,11 +119,20 @@ export function ProfileCompletionBar() {
                   onClick={() => router.push(getSuggestionHref(s.field))}
                   className="w-full flex items-center gap-3 p-2.5  bg-background hover:bg-muted/50 transition-colors active:scale-[0.99] text-left"
                 >
-                  <span
-                    className={`text-[10px] font-bold px-1.5 py-0.5  border shrink-0 ${priorityColors[s.priority]}`}
-                  >
-                    {priorityLabels[s.priority]}
-                  </span>
+                  <div className="flex flex-col gap-1 shrink-0">
+                    <span
+                      className={`text-[10px] font-bold px-1.5 py-0.5 border ${priorityColors[s.priority]}`}
+                    >
+                      {priorityLabels[s.priority]}
+                    </span>
+                    {s.impactLevel && impactBadge[s.impactLevel] && (
+                      <span
+                        className={`text-[10px] font-bold px-1.5 py-0.5 border ${impactBadge[s.impactLevel].cls}`}
+                      >
+                        {impactBadge[s.impactLevel].label}
+                      </span>
+                    )}
+                  </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium text-foreground truncate">{s.reason}</p>
                     <p className="text-[11px] text-muted-foreground truncate mt-0.5">

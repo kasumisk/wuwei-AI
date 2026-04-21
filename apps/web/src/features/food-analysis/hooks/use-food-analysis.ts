@@ -22,12 +22,17 @@ export function useFoodAnalysis() {
   );
 
   const analyzeText = useCallback(
-    async (text: string, mealType?: string): Promise<AnalysisResult> => {
+    async (
+      text: string,
+      mealType?: string,
+      contextOverride?: { localHour?: number }
+    ): Promise<AnalysisResult> => {
       setAnalyzing(true);
       try {
         return await foodRecordService.analyzeText({
           text,
           mealType: mealType as 'breakfast' | 'lunch' | 'dinner' | 'snack' | undefined,
+          contextOverride,
         });
       } finally {
         setAnalyzing(false);

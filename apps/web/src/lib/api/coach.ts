@@ -68,14 +68,15 @@ export async function sendCoachMessage(
 
   const apiUrl = typeof window !== 'undefined' ? process.env.NEXT_PUBLIC_API_URL || '' : '';
 
-  // P2-5: 读取 sessionStorage 中的分析上下文
+  // P2-5: 读取 sessionStorage 中的分析上下文（不立即删除，等流成功后再清理）
   let analysisContext: Record<string, unknown> | undefined;
+  let hasAnalysisContext = false;
   try {
     const raw =
       typeof window !== 'undefined' ? sessionStorage.getItem('coach_analysis_context') : null;
     if (raw) {
       analysisContext = JSON.parse(raw);
-      sessionStorage.removeItem('coach_analysis_context'); // 用后即删
+      hasAnalysisContext = true;
     }
   } catch {
     /* ignore */
@@ -130,6 +131,10 @@ export async function sendCoachMessage(
             callbacks.onDelta(data.delta);
           }
           if (data.done) {
+            // Delete the analysis context only after successful stream completion
+            if (hasAnalysisContext) {
+              try { sessionStorage.removeItem('coach_analysis_context'); } catch { /* ignore */ }
+            }
             callbacks.onDone(data.conversationId);
             return;
           }
@@ -169,8 +174,8 @@ export const coachService = {
     limit?: number
   ): Promise<CoachMessagesPaginated> => {
     const params = new URLSearchParams();
-    if (page) params.set('page', String(page));
-    if (limit) params.set('limit', String(limit));
+    if (page != null) params.set('page', String(page));
+    if (limit != null) params.set('limit', String(limit));
     const qs = params.toString();
     return unwrap(
       clientGet<CoachMessagesPaginated>(

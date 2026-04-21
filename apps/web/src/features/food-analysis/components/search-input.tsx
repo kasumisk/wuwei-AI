@@ -11,10 +11,16 @@ interface SearchInputProps {
   isAdding?: boolean;
 }
 
+interface CartItem {
+  food: FoodLibraryItem;
+}
+
 export function SearchInput({ mealType, onAddFromLibrary, isAdding }: SearchInputProps) {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [addingId, setAddingId] = useState<string | null>(null);
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [batchAdding, setBatchAdding] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Debounce search query
@@ -46,13 +52,38 @@ export function SearchInput({ mealType, onAddFromLibrary, isAdding }: SearchInpu
     enabled: !debouncedQuery,
   });
 
-  const handleAdd = useCallback(
+  const isInCart = useCallback(
+    (foodId: string) => cart.some((c) => c.food.id === foodId),
+    [cart]
+  );
+
+  const toggleCart = useCallback((food: FoodLibraryItem) => {
+    setCart((prev) => {
+      const exists = prev.some((c) => c.food.id === food.id);
+      if (exists) return prev.filter((c) => c.food.id !== food.id);
+      return [...prev, { food }];
+    });
+  }, []);
+
+  const handleSingleAdd = useCallback(
     (food: FoodLibraryItem) => {
       setAddingId(food.id);
       onAddFromLibrary(food.id, food.name, food.standardServingG || 100);
     },
     [onAddFromLibrary]
   );
+
+  const handleBatchAdd = useCallback(async () => {
+    if (cart.length === 0) return;
+    setBatchAdding(true);
+    for (const item of cart) {
+      onAddFromLibrary(item.food.id, item.food.name, item.food.standardServingG || 100);
+      // Small delay between calls to avoid overwhelming the API
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    setCart([]);
+    setBatchAdding(false);
+  }, [cart, onAddFromLibrary]);
 
   // Reset addingId when isAdding goes false
   useEffect(() => {
@@ -105,15 +136,15 @@ export function SearchInput({ mealType, onAddFromLibrary, isAdding }: SearchInpu
         )}
       </div>
 
-      {/* Section title */}
+      {/* Multi-select hint */}
       <p className="text-xs text-muted-foreground font-medium px-1">
         {debouncedQuery
           ? searchResults && searchResults.length > 0
-            ? `找到 ${searchResults.length} 个结果，点击添加到「${mealLabel}」`
+            ? `找到 ${searchResults.length} 个结果 · 点击选择，长按单独添加`
             : isSearching
               ? '搜索中...'
               : '未找到匹配食物'
-          : `热门食物 · 点击添加到「${mealLabel}」`}
+          : `热门食物 · 点击选择多个，一次性添加到「${mealLabel}」`}
       </p>
 
       {/* Results */}
@@ -126,6 +157,7 @@ export function SearchInput({ mealType, onAddFromLibrary, isAdding }: SearchInpu
       ) : displayItems && displayItems.length > 0 ? (
         <div className="grid grid-cols-1 gap-2">
           {displayItems.map((food) => {
+            const selected = isInCart(food.id);
             const isCurrentAdding = addingId === food.id && isAdding;
             const servingCalories = Math.round(
               (food.calories * (food.standardServingG || 100)) / 100
@@ -134,9 +166,11 @@ export function SearchInput({ mealType, onAddFromLibrary, isAdding }: SearchInpu
             return (
               <button
                 key={food.id}
-                onClick={() => handleAdd(food)}
-                disabled={isAdding}
-                className="bg-card  p-3.5 flex items-center justify-between hover:bg-accent/50 active:scale-[0.98] transition-all text-left disabled:opacity-50"
+                onClick={() => toggleCart(food)}
+                disabled={isAdding || batchAdding}
+                className={`bg-card p-3.5 flex items-center justify-between hover:bg-accent/50 active:scale-[0.98] transition-all text-left disabled:opacity-50 ${
+                  selected ? 'ring-2 ring-primary/40 bg-primary/5' : ''
+                }`}
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -163,15 +197,15 @@ export function SearchInput({ mealType, onAddFromLibrary, isAdding }: SearchInpu
                 <div className="shrink-0 ml-3">
                   {isCurrentAdding ? (
                     <span className="animate-spin inline-block w-5 h-5 border-2 border-primary border-t-transparent " />
+                  ) : selected ? (
+                    <div className="w-8 h-8 bg-primary flex items-center justify-center">
+                      <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" className="text-primary-foreground">
+                        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+                      </svg>
+                    </div>
                   ) : (
-                    <div className="w-8 h-8  bg-primary/10 flex items-center justify-center">
-                      <svg
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                        width="16"
-                        height="16"
-                        className="text-primary"
-                      >
+                    <div className="w-8 h-8 bg-primary/10 flex items-center justify-center">
+                      <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" className="text-primary">
                         <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
                       </svg>
                     </div>
@@ -215,6 +249,37 @@ export function SearchInput({ mealType, onAddFromLibrary, isAdding }: SearchInpu
         </svg>
         <span className="text-xs text-green-700">从食物库添加不消耗 AI 分析次数</span>
       </div>
+
+      {/* Floating cart bar */}
+      {cart.length > 0 && (
+        <div className="fixed bottom-20 left-0 right-0 z-50 px-4 max-w-lg mx-auto">
+          <div className="bg-primary text-primary-foreground rounded-xl shadow-xl shadow-primary/30 p-3 flex items-center justify-between">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-sm font-bold shrink-0">
+                已选 {cart.length} 项
+              </span>
+              <span className="text-xs opacity-80 truncate">
+                {cart.map((c) => c.food.name).join('、')}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 ml-2">
+              <button
+                onClick={() => setCart([])}
+                className="text-xs opacity-80 hover:opacity-100 underline underline-offset-2"
+              >
+                清空
+              </button>
+              <button
+                onClick={handleBatchAdd}
+                disabled={batchAdding}
+                className="bg-primary-foreground text-primary font-bold text-sm px-4 py-1.5 rounded-lg active:scale-95 transition-all disabled:opacity-50"
+              >
+                {batchAdding ? '添加中...' : `添加到${mealLabel}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

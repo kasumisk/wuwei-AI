@@ -9,66 +9,60 @@
  * - 当前方案高亮
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useSubscription } from '@/features/subscription/hooks/use-subscription';
 import { subscriptionService } from '@/lib/api/subscription';
 import { useLocalizedRouter } from '@/lib/hooks/use-localized-router';
 import { useToast } from '@/lib/hooks/use-toast';
 import { TIER_COMPARISON } from '@/types/subscription';
-import type { SubscriptionTier } from '@/types/subscription';
+import type { SubscriptionTier, SubscriptionPlan } from '@/types/subscription';
 
-/** 等级显示信息 */
-const TIERS: {
-  tier: SubscriptionTier;
+/** 等级显示信息 — 硬编码 fallback，价格将被 API 覆盖 */
+const TIER_DISPLAY: Record<SubscriptionTier, {
   name: string;
-  monthlyPrice: string;
-  yearlyPrice: string;
-  yearlySaving: string;
-  priceNoteMonthly: string;
-  priceNoteYearly: string;
   badge?: string;
-  monthlyPlanId: string;
-  yearlyPlanId: string;
   color: string;
-}[] = [
-  {
-    tier: 'free',
-    name: '免费版',
-    monthlyPrice: '¥0',
-    yearlyPrice: '¥0',
-    yearlySaving: '',
-    priceNoteMonthly: '永久免费',
-    priceNoteYearly: '永久免费',
-    monthlyPlanId: 'plan_free',
-    yearlyPlanId: 'plan_free',
-    color: 'border-border',
-  },
-  {
-    tier: 'pro',
-    name: 'Pro',
-    monthlyPrice: '¥19.9',
-    yearlyPrice: '¥15.9',
-    yearlySaving: '省20%',
-    priceNoteMonthly: '/月',
-    priceNoteYearly: '/月 (年付 ¥190.8)',
-    badge: '最受欢迎',
-    monthlyPlanId: 'plan_pro_monthly',
-    yearlyPlanId: 'plan_pro_yearly',
-    color: 'border-primary',
-  },
-  {
-    tier: 'premium',
-    name: 'Premium',
-    monthlyPrice: '¥39.9',
-    yearlyPrice: '¥31.9',
-    yearlySaving: '省20%',
-    priceNoteMonthly: '/月',
-    priceNoteYearly: '/月 (年付 ¥382.8)',
-    monthlyPlanId: 'plan_premium_monthly',
-    yearlyPlanId: 'plan_premium_yearly',
-    color: 'border-amber-500',
-  },
-];
+}> = {
+  free: { name: '免费版', color: 'border-border' },
+  pro: { name: 'Pro', badge: '最受欢迎', color: 'border-primary' },
+  premium: { name: 'Premium', color: 'border-amber-500' },
+};
+
+/** 从 API 计划列表构建 tier 显示数据 */
+function buildTierCards(plans: SubscriptionPlan[]) {
+  const tiers: SubscriptionTier[] = ['free', 'pro', 'premium'];
+  return tiers.map((tier) => {
+    const display = TIER_DISPLAY[tier];
+    const monthly = plans.find((p) => p.tier === tier && p.billingCycle === 'monthly');
+    const yearly = plans.find((p) => p.tier === tier && p.billingCycle === 'yearly');
+
+    const monthlyPriceCents = monthly?.priceCents ?? 0;
+    const yearlyPriceCents = yearly?.priceCents ?? 0;
+    const yearlyMonthly = yearly ? Math.round(yearlyPriceCents / 12) : monthlyPriceCents;
+
+    const formatPrice = (cents: number) => cents === 0 ? '¥0' : `¥${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 1)}`;
+
+    return {
+      tier,
+      name: display.name,
+      badge: display.badge,
+      color: display.color,
+      monthlyPrice: formatPrice(monthlyPriceCents),
+      yearlyPrice: formatPrice(yearlyMonthly),
+      yearlySaving: yearlyPriceCents > 0 && yearlyMonthly < monthlyPriceCents
+        ? `省${Math.round((1 - yearlyMonthly / monthlyPriceCents) * 100)}%`
+        : '',
+      priceNoteMonthly: monthlyPriceCents === 0 ? '永久免费' : '/月',
+      priceNoteYearly: yearlyPriceCents === 0
+        ? '永久免费'
+        : `/月 (年付 ${formatPrice(yearlyPriceCents)})`,
+      monthlyPlanId: monthly?.id ?? `plan_${tier}`,
+      yearlyPlanId: yearly?.id ?? monthly?.id ?? `plan_${tier}`,
+      entitlements: monthly?.entitlements ?? yearly?.entitlements,
+    };
+  });
+}
 
 export function PricingPage() {
   const { push, router } = useLocalizedRouter();
@@ -83,6 +77,15 @@ export function PricingPage() {
   const [celebration, setCelebration] = useState<{
     tierName: string;
   } | null>(null);
+
+  // 从 API 获取计划列表
+  const { data: plans } = useQuery({
+    queryKey: ['subscription-plans'],
+    queryFn: () => subscriptionService.getPlans(),
+    staleTime: 30 * 60 * 1000,
+  });
+
+  const TIERS = useMemo(() => buildTierCards(plans ?? []), [plans]);
 
   // 自动关闭庆祝弹窗
   useEffect(() => {

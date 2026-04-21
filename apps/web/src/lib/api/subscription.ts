@@ -200,17 +200,29 @@ const SEED_PLANS: SubscriptionPlan[] = [
 export const subscriptionService = {
   // ── 订阅计划查询 ──
 
-  /** 获取可用的订阅计划列表（激活状态） */
+  /** 获取可用的订阅计划列表（激活状态）— 优先 API，fallback SEED_PLANS */
   getPlans: async (): Promise<SubscriptionPlan[]> => {
-    if (MOCK_PAYMENT) {
-      return SEED_PLANS;
-    }
     try {
       const res = await unwrap(clientGet<{ list: SubscriptionPlan[] }>('/app/subscription/plans'));
       return res.list;
     } catch {
       return SEED_PLANS;
     }
+  },
+
+  /** 获取当前用户配额使用状态 */
+  getQuotaStatus: async (): Promise<{
+    tier: SubscriptionTier;
+    quotas: Array<{
+      feature: string;
+      used: number;
+      limit: number;
+      remaining: number;
+      unlimited: boolean;
+      resetAt: string | null;
+    }>;
+  }> => {
+    return unwrap(clientGet('/app/subscription/quota-status'));
   },
 
   // ── 模拟支付：购买指定计划 ──

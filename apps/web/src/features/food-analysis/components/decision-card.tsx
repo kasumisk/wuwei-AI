@@ -75,7 +75,7 @@ export function DecisionCard({ result, recordId, onAnalyzeAlternative }: Decisio
             </div>
             {result.foods && result.foods.length > 0 && (
               <p className={`text-xs mt-0.5 opacity-70 ${config.textClass}`}>
-                {result.foods.map((f: any) => (typeof f === 'string' ? f : f.name)).join('、')}
+                {result.foods.map((f) => (typeof f === 'string' ? f : f.name)).join('、')}
               </p>
             )}
           </div>

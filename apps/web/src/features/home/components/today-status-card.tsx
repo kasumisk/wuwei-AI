@@ -66,13 +66,15 @@ const GOAL_LABELS: Record<string, string> = {
 /* ── component ── */
 
 interface TodayStatusCardProps {
-  summary: DailySummary;
+  summary: DailySummary | undefined;
   profile: UserProfile | null;
   scoreData?: NutritionScoreResult | null;
 }
 
 export function TodayStatusCard({ summary, profile, scoreData }: TodayStatusCardProps) {
   const [expanded, setExpanded] = useState(false);
+
+  if (!summary) return null;
 
   const goalType = profile?.goal || 'health';
   const score =
@@ -91,10 +93,6 @@ export function TodayStatusCard({ summary, profile, scoreData }: TodayStatusCard
 
   /* daily progress */
   const dp = scoreData?.dailyProgress;
-  const progressGap =
-    dp && dp.expectedProgress != null && dp.actualProgress != null
-      ? dp.actualProgress - dp.expectedProgress
-      : null;
 
   /* score ring */
   const r = 24;
@@ -169,7 +167,7 @@ export function TodayStatusCard({ summary, profile, scoreData }: TodayStatusCard
             <span
               className={`text-[42px] font-extrabold font-headline tracking-tighter leading-none ${over ? 'text-red-500' : 'text-primary'}`}
             >
-              {remaining.toLocaleString()}
+              {remaining.toLocaleString('zh-CN')}
             </span>
             <div className="flex flex-col">
               <span className="text-sm font-medium text-muted-foreground">kcal 剩余</span>
@@ -205,8 +203,18 @@ export function TodayStatusCard({ summary, profile, scoreData }: TodayStatusCard
           </div>
         </div>
 
-        {/* ─── Macro progress ─── */}
+        {/* ─── Goal-specific key metric highlight ─── */}
         <div className="px-5 mt-4 pt-4 border-t border-border/40">
+          {(() => {
+            const insight = buildGoalInsight(summary, scoreData, goalType);
+            if (!insight) return null;
+            return (
+              <div className={`flex items-center gap-2 mb-3 px-3 py-2 rounded-lg text-[11px] font-medium ${insight.cls}`}>
+                <span>{insight.icon}</span>
+                <span>{insight.text}</span>
+              </div>
+            );
+          })()}
           <div className="space-y-2.5">
             {macros.map((m) => {
               const mPct = m.goal > 0 ? Math.min(100, Math.round((m.val / m.goal) * 100)) : 0;
@@ -370,6 +378,112 @@ export function TodayStatusCard({ summary, profile, scoreData }: TodayStatusCard
   );
 }
 
+/* ── goal insight builder ── */
+
+interface GoalInsight {
+  icon: string;
+  text: string;
+  cls: string;
+}
+
+function buildGoalInsight(
+  summary: DailySummary,
+  scoreData: NutritionScoreResult | null | undefined,
+  goalType: string
+): GoalInsight | null {
+  const intake = scoreData?.intake;
+  const goals = scoreData?.goals;
+  const slots = scoreData?.macroSlotStatus;
+  const compliance = scoreData?.complianceInsight;
+  const mealSignals = scoreData?.mealSignals;
+
+  if (goalType === 'fat_loss') {
+    // Key: calorie deficit adherence
+    const cal = intake?.calories ?? summary.totalCalories ?? 0;
+    const calGoal = goals?.calories ?? summary.calorieGoal ?? 2000;
+    const deficit = calGoal - cal;
+    if (deficit > 0) {
+      return {
+        icon: '🎯',
+        text: `热量缺口 ${Math.round(deficit)} kcal，减脂进度正常`,
+        cls: 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400',
+      };
+    }
+    return {
+      icon: '⚠️',
+      text: `已超出目标 ${Math.round(-deficit)} kcal，注意控制下一餐`,
+      cls: 'bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400',
+    };
+  }
+
+  if (goalType === 'muscle_gain') {
+    // Key: protein adherence
+    const prot = intake?.protein ?? Number(summary.totalProtein) ?? 0;
+    const protGoal = goals?.protein ?? Number(summary.proteinGoal) ?? 0;
+    if (protGoal > 0) {
+      const pctProtein = Math.round((prot / protGoal) * 100);
+      if (pctProtein >= 80) {
+        return {
+          icon: '💪',
+          text: `蛋白质已达 ${pctProtein}%，增肌补给充足`,
+          cls: 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400',
+        };
+      }
+      return {
+        icon: '🥩',
+        text: `蛋白质仅 ${pctProtein}%，还需 ${Math.round(protGoal - prot)}g 达标`,
+        cls: 'bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400',
+      };
+    }
+    // protGoal unknown — show raw intake
+    return {
+      icon: '🥩',
+      text: `今日蛋白质摄入 ${Math.round(prot)}g，继续保持`,
+      cls: 'bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400',
+    };
+  }
+
+  if (goalType === 'habit') {
+    // Key: meal consistency
+    const meals = mealSignals?.totalMeals ?? summary.mealCount ?? 0;
+    const healthyRatio = mealSignals?.healthyRatio;
+    if (healthyRatio != null) {
+      const rPct = Math.round(healthyRatio * 100);
+      return {
+        icon: rPct >= 70 ? '🌱' : '📝',
+        text: `今日 ${meals} 餐中 ${rPct}% 为健康餐${rPct >= 70 ? '，习惯养成中' : '，继续加油'}`,
+        cls: rPct >= 70
+          ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400'
+          : 'bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400',
+      };
+    }
+    if (meals >= 3) {
+      return {
+        icon: '🌱',
+        text: `已记录 ${meals} 餐，坚持记录是好习惯`,
+        cls: 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400',
+      };
+    }
+  }
+
+  // health / default: macro balance
+  if (slots?.dominantDeficit) {
+    const deficitLabels: Record<string, string> = {
+      protein: '蛋白质',
+      fat: '脂肪',
+      carbs: '碳水',
+      calories: '热量',
+    };
+    return {
+      icon: '⚖️',
+      text: `${deficitLabels[slots.dominantDeficit] ?? slots.dominantDeficit}摄入偏低，建议下一餐补充`,
+      cls: 'bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400',
+    };
+  }
+
+  return null;
+}
+
 /* ── macro list builder ── */
 
 interface MacroItem {
@@ -415,8 +529,19 @@ function buildMacroList(
     slotStatus: slots?.carbs,
   };
 
-  // Order by goal type priority
-  if (goalType === 'fat_loss') return [protein, carbs, fat];
-  if (goalType === 'muscle_gain') return [protein, carbs, fat];
+  // Order by goal type priority and include goal-specific extra metrics
+  if (goalType === 'fat_loss') {
+    // Fat loss: protein first (preserve muscle), then carbs (limit), then fat
+    return [protein, carbs, fat];
+  }
+  if (goalType === 'muscle_gain') {
+    // Muscle gain: protein is king, then calories (surplus), then carbs
+    return [protein, carbs, fat];
+  }
+  if (goalType === 'habit') {
+    // Habit: simplified — just the big 3 in standard order
+    return [protein, fat, carbs];
+  }
+  // health: balanced
   return [protein, fat, carbs];
 }

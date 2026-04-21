@@ -103,8 +103,15 @@ export function StepBehavior({ data, onChange }: StepBehaviorProps) {
                   type="button"
                   onClick={() => {
                     const prev = data.healthConditions ?? [];
-                    const next = selected ? prev.filter((k) => k !== key) : [...prev, key];
-                    onChange({ healthConditions: next });
+                    if (key === 'none') {
+                      // "无" is mutex: clear all others
+                      onChange({ healthConditions: selected ? [] : ['none'] });
+                    } else {
+                      // Selecting a condition clears "none"
+                      const filtered = prev.filter((k) => k !== 'none');
+                      const next = selected ? filtered.filter((k) => k !== key) : [...filtered, key];
+                      onChange({ healthConditions: next });
+                    }
                   }}
                   className={`flex flex-col items-center gap-1 py-3 px-2  text-xs font-medium transition-all active:scale-95 ${
                     selected

@@ -14,6 +14,7 @@
 
 import { useCallback, useState, useEffect, useRef } from 'react';
 import { useSubscription } from '@/features/subscription/hooks/use-subscription';
+import { useQuotaStatus } from '@/features/subscription/hooks/use-quota-status';
 import { subscriptionService } from '@/lib/api/subscription';
 import { useLocalizedRouter } from '@/lib/hooks/use-localized-router';
 import { useToast } from '@/lib/hooks/use-toast';
@@ -34,10 +35,10 @@ const TIER_PRICES: Record<SubscriptionTier, string> = {
   premium: '¥39.9/月',
 };
 
-/** 等级亮点（简短，用于弹窗中快速展示） */
+/** 等级亮点（简短，用于弹窗中快速展示）— 功能描述，非配额数字 */
 const TIER_HIGHLIGHTS: Record<SubscriptionTier, string[]> = {
   free: [],
-  pro: ['20次/天图片分析', '无限文字分析', '无限AI教练', '全部分析历史', '详细评分+深度分析'],
+  pro: ['更多图片分析次数', '无限文字分析', '无限AI教练', '全部分析历史', '详细评分+深度分析'],
   premium: ['无限全部功能', '全天计划联动', '食谱生成', '健康趋势分析', '优先AI响应'],
 };
 
@@ -52,6 +53,7 @@ const SCENE_MESSAGES: Record<string, string> = {
 export function PaywallModal() {
   const { push } = useLocalizedRouter();
   const { showPaywall, pendingPaywall, dismissPaywall, tier, updateTier } = useSubscription();
+  const { coach: coachQuota, imageAnalysis, textAnalysis } = useQuotaStatus();
   const { toast } = useToast();
   const [purchasing, setPurchasing] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
@@ -180,7 +182,7 @@ export function PaywallModal() {
         aria-labelledby="paywall-title"
         aria-describedby="paywall-desc"
         tabIndex={-1}
-        className="relative w-full max-w-md bg-card rounded-t-3xl sm: shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-300 outline-none"
+        className="relative w-full max-w-md bg-card rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-300 outline-none"
       >
         {/* 顶部装饰 */}
         <div className="bg-gradient-to-br from-primary to-primary/80 px-4 pt-6 pb-8 text-primary-foreground">
@@ -220,6 +222,37 @@ export function PaywallModal() {
 
         {/* 功能对比 */}
         <div className="px-4 py-5 space-y-3">
+          {/* 当前配额使用情况 */}
+          {(imageAnalysis || textAnalysis || coachQuota) && (
+            <div className="bg-muted/60 rounded-lg px-3 py-2.5 space-y-1.5 text-xs">
+              <p className="font-semibold text-muted-foreground mb-1">今日用量</p>
+              {imageAnalysis && !imageAnalysis.unlimited && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">图片分析</span>
+                  <span className={imageAnalysis.remaining === 0 ? 'text-red-500 font-bold' : 'text-foreground'}>
+                    {imageAnalysis.used}/{imageAnalysis.limit}
+                  </span>
+                </div>
+              )}
+              {textAnalysis && !textAnalysis.unlimited && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">文字分析</span>
+                  <span className={textAnalysis.remaining === 0 ? 'text-red-500 font-bold' : 'text-foreground'}>
+                    {textAnalysis.used}/{textAnalysis.limit}
+                  </span>
+                </div>
+              )}
+              {coachQuota && !coachQuota.unlimited && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">AI 教练</span>
+                  <span className={coachQuota.remaining === 0 ? 'text-red-500 font-bold' : 'text-foreground'}>
+                    {coachQuota.used}/{coachQuota.limit}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* 推荐等级亮点 */}
           <div className="space-y-2">
             {(TIER_HIGHLIGHTS[recommendedTier] || []).map((highlight, i) => (
@@ -289,8 +322,8 @@ export function PaywallModal() {
           </button>
         </div>
 
-        {/* 模拟模式标识 */}
-        {subscriptionService.isMockMode() && (
+        {/* 模拟模式标识 — 仅 development 构建可见 */}
+        {process.env.NODE_ENV === 'development' && subscriptionService.isMockMode() && (
           <div className="bg-amber-50 border-t border-amber-200 px-4 py-2 text-center">
             <p className="text-[11px] text-amber-700 font-medium">
               [DEV] 模拟支付模式 — 点击升级将直接成功
