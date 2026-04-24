@@ -1313,8 +1313,192 @@ export class PipelineBuilderService implements OnModuleInit {
       }
 
       if (selected) {
+        // P-α 修复：累积脂肪/碳水预算检查
+        // rerankAndSelect 只看单食物得分，多角色各自选出的高脂 Top-1 累加后
+        // 常使本餐总脂肪超标 2-3×（食物过滤器的 80% 单份上限无法跨角色累积）。
+        // 这里在每轮角色选出后，检查 cumFat/cumCarbs 是否越过 maxMealFat/maxMealCarbs，
+        // 若越过则从同角色 finalRanked 中寻找首个得分最高且仍在预算内的替代。
+        const picksFatSoFar = picks.reduce(
+          (s, p) => s + (p.servingFat || 0),
+          0,
+        );
+        const picksCarbsSoFar = picks.reduce(
+          (s, p) => s + (p.servingCarbs || 0),
+          0,
+        );
+        const maxFat = ctx.constraints.maxMealFat;
+        const maxCarbs = ctx.constraints.maxMealCarbs;
+        const overflowsFat =
+          maxFat != null &&
+          maxFat > 0 &&
+          picksFatSoFar + (selected.servingFat || 0) > maxFat;
+        const overflowsCarbs =
+          maxCarbs != null &&
+          maxCarbs > 0 &&
+          picksCarbsSoFar + (selected.servingCarbs || 0) > maxCarbs;
+
+        if (overflowsFat || overflowsCarbs) {
+          const alt = finalRanked.find((cand) => {
+            if (cand.food.name === selected!.food.name) return false;
+            if (usedNames.has(cand.food.name)) return false;
+            const fatOk =
+              maxFat == null ||
+              maxFat <= 0 ||
+              picksFatSoFar + (cand.servingFat || 0) <= maxFat;
+            const carbsOk =
+              maxCarbs == null ||
+              maxCarbs <= 0 ||
+              picksCarbsSoFar + (cand.servingCarbs || 0) <= maxCarbs;
+            return fatOk && carbsOk;
+          });
+          if (alt) {
+            this.logger.debug(
+              `[P-α cumFatGuard] role=${role} 原选 ${selected.food.name}` +
+                `(fat=${(selected.servingFat || 0).toFixed(1)}g, carbs=${(selected.servingCarbs || 0).toFixed(1)}g) ` +
+                `累积超限 cumFat=${(picksFatSoFar + (selected.servingFat || 0)).toFixed(1)}/${maxFat?.toFixed(1) ?? '∞'}, ` +
+                `cumCarbs=${(picksCarbsSoFar + (selected.servingCarbs || 0)).toFixed(1)}/${maxCarbs?.toFixed(1) ?? '∞'} → ` +
+                `替换为 ${alt.food.name}(fat=${(alt.servingFat || 0).toFixed(1)}g, carbs=${(alt.servingCarbs || 0).toFixed(1)}g)`,
+            );
+            selected = alt;
+          } else {
+            // 无替代则保留原选（降级），打日志供诊断
+            this.logger.debug(
+              `[P-α cumFatGuard] role=${role} 无可替代候选，保留原选 ${selected.food.name}（本餐总脂肪/碳水将超预算）`,
+            );
+          }
+        }
+
         picks.push(selected);
         usedNames.add(selected.food.name);
+      }
+    }
+
+    // P-β 修复：累积蛋白下限守门（与 P-α cumFatGuard 对称）
+    // 角色循环仅单食物 top-1，即使每角色评分最佳，累加后本餐蛋白常低于目标 30-50%，
+    // 尤其 habit/fat_loss 目标（蛋白比例 25-35%），饮料/配菜角色拉低总 P。
+    // 这里在角色循环结束后，若 cumProtein < targetMealProtein × 0.85，
+    // 从 allCandidates 中寻找高蛋白替代，换掉 picks 中蛋白最低的槽位，
+    // 同时保持 fat/carbs 仍在 maxMealFat/maxMealCarbs 预算内。最多交换 3 次。
+    const targetProtein = ctx.constraints.targetMealProtein;
+    if (targetProtein != null && targetProtein > 0 && picks.length > 0) {
+      const proteinFloor = targetProtein * 0.85;
+      const maxFatBudget = ctx.constraints.maxMealFat;
+      const maxCarbsBudget = ctx.constraints.maxMealCarbs;
+      const targetKcal = ctx.constraints.targetMealCalories;
+      let cumProtein = picks.reduce((s, p) => s + (p.servingProtein || 0), 0);
+      // P-ε 阶段 2 修复：严格饮食下（素食/多过敏/糖尿病）3 次交换常常不足以补齐蛋白，
+      // 扩展到 8 次并在仍不达标且 kcal 仍有空间时 ADD 高蛋白补充项。
+      for (let tries = 0; tries < 8 && cumProtein < proteinFloor; tries++) {
+        let worstIdx = -1;
+        let worstProtein = Infinity;
+        for (let i = 0; i < picks.length; i++) {
+          const pp = picks[i].servingProtein || 0;
+          if (pp < worstProtein) {
+            worstProtein = pp;
+            worstIdx = i;
+          }
+        }
+        if (worstIdx < 0) break;
+        const worst = picks[worstIdx];
+        const restFat = picks.reduce(
+          (s, p, i) => (i === worstIdx ? s : s + (p.servingFat || 0)),
+          0,
+        );
+        const restCarbs = picks.reduce(
+          (s, p, i) => (i === worstIdx ? s : s + (p.servingCarbs || 0)),
+          0,
+        );
+        const worstCal = worst.servingCalories || 0;
+        const alt = allCandidates
+          .filter(
+            (c) =>
+              !usedNames.has(c.food.name) &&
+              (c.servingProtein || 0) > (worst.servingProtein || 0) + 2,
+          )
+          // 卡路里等效：替代食物的热量不能少于被换食物的 70%，避免整餐变稀
+          .filter(
+            (c) =>
+              worstCal <= 0 || (c.servingCalories || 0) >= worstCal * 0.7,
+          )
+          .filter(
+            (c) =>
+              maxFatBudget == null ||
+              maxFatBudget <= 0 ||
+              restFat + (c.servingFat || 0) <= maxFatBudget,
+          )
+          .filter(
+            (c) =>
+              maxCarbsBudget == null ||
+              maxCarbsBudget <= 0 ||
+              restCarbs + (c.servingCarbs || 0) <= maxCarbsBudget,
+          )
+          .sort(
+            (a, b) => (b.servingProtein || 0) - (a.servingProtein || 0),
+          )[0];
+        if (!alt) break;
+        this.logger.debug(
+          `[P-β proteinFloor] cumP=${cumProtein.toFixed(1)}/${proteinFloor.toFixed(1)} ` +
+            `换 ${worst.food.name}(P=${(worst.servingProtein || 0).toFixed(1)}g) → ` +
+            `${alt.food.name}(P=${(alt.servingProtein || 0).toFixed(1)}g)`,
+        );
+        usedNames.delete(worst.food.name);
+        usedNames.add(alt.food.name);
+        picks[worstIdx] = alt;
+        cumProtein = picks.reduce(
+          (s, p) => s + (p.servingProtein || 0),
+          0,
+        );
+      }
+
+      // P-ε 阶段 2：swap 耗尽仍不达标 → 仅当 kcal 仍有明显空间（< target × 0.95）时 ADD 高蛋白补充项。
+      // 这一限制防止 ADD 在已接近 kcal 目标的场景（如 baseline）推升总热量。
+      const MAX_PICKS = 6;
+      if (cumProtein < proteinFloor && picks.length < MAX_PICKS) {
+        let cumCal = picks.reduce((s, p) => s + (p.servingCalories || 0), 0);
+        let cumFat = picks.reduce((s, p) => s + (p.servingFat || 0), 0);
+        let cumCarbs = picks.reduce((s, p) => s + (p.servingCarbs || 0), 0);
+        // 允许 ADD 的条件：kcal 离目标还有 ≥5% 空间
+        const kcalCeiling =
+          targetKcal != null && targetKcal > 0 ? targetKcal * 1.02 : Infinity;
+        const kcalAddThreshold =
+          targetKcal != null && targetKcal > 0 ? targetKcal * 0.95 : Infinity;
+        for (
+          let addTries = 0;
+          addTries < 4 &&
+          cumProtein < proteinFloor &&
+          picks.length < MAX_PICKS &&
+          cumCal < kcalAddThreshold;
+          addTries++
+        ) {
+          const supplement = allCandidates
+            .filter(
+              (c) =>
+                !usedNames.has(c.food.name) &&
+                (c.servingProtein || 0) >= 5 &&
+                cumCal + (c.servingCalories || 0) <= kcalCeiling &&
+                (maxFatBudget == null ||
+                  maxFatBudget <= 0 ||
+                  cumFat + (c.servingFat || 0) <= maxFatBudget) &&
+                (maxCarbsBudget == null ||
+                  maxCarbsBudget <= 0 ||
+                  cumCarbs + (c.servingCarbs || 0) <= maxCarbsBudget),
+            )
+            .sort(
+              (a, b) => (b.servingProtein || 0) - (a.servingProtein || 0),
+            )[0];
+          if (!supplement) break;
+          this.logger.debug(
+            `[P-ε proteinFloorAdd] cumP=${cumProtein.toFixed(1)}/${proteinFloor.toFixed(1)} ` +
+              `ADD ${supplement.food.name}(P=${(supplement.servingProtein || 0).toFixed(1)}g, ` +
+              `cal=${(supplement.servingCalories || 0).toFixed(0)})`,
+          );
+          picks.push(supplement);
+          usedNames.add(supplement.food.name);
+          cumProtein += supplement.servingProtein || 0;
+          cumCal += supplement.servingCalories || 0;
+          cumFat += supplement.servingFat || 0;
+          cumCarbs += supplement.servingCarbs || 0;
+        }
       }
     }
 

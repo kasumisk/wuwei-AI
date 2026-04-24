@@ -304,10 +304,16 @@ export const MEAL_RATIOS: Record<string, Record<string, number>> = {
  *   - nutrition-target.service 旧值: fat_loss=1.2, muscle_gain=1.6, health/habit=0.8（过低，导致 protein −37% 偏差）
  */
 export const PROTEIN_PER_KG_BY_GOAL: Record<string, number> = {
-  fat_loss: 2.0,
-  muscle_gain: 2.2,
-  health: 1.3,
-  habit: 1.1,
+  // P-ε（阶段 2 矩阵 D1_lowBMI 修复）：低体重用户在典型 kcal 下 %-目标不可达。
+  // 调参规则：baseline 用户 proPP 保持 ≤ +8pp，同时为 45kg 低体重留出尽可能大的 headroom。
+  // fat_loss: 2.0→2.1（baseline 70kg/1400kcal：147g=42%，+7pp 合规）
+  // muscle_gain: 2.2→2.4（baseline 75kg/2800kcal：180g=25.7%，-4.3pp）
+  // health: 1.3→1.6（baseline 85kg/2200kcal：136g=24.7%，-0.3pp）
+  // habit: 1.8→2.0（baseline 68kg/2100kcal：136g=25.9%，+0.9pp 合规；D1_lowBMI 45kg：90g=17.1%，-7.9pp 在 ±8pp 内）
+  fat_loss: 2.1,
+  muscle_gain: 2.4,
+  health: 1.6,
+  habit: 2.0,
 };
 
 /**

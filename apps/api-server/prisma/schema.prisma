@@ -1541,7 +1541,7 @@ model RecommendationFeedbacks {
   /// 主键 UUID
   id                   String             @id(map: "PK_538c99577bef661f2eff1325862") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   /// 关联的用户 ID
-  userId               String @map("user_id") @db.VarChar
+  userId               String @map("user_id") @db.Uuid
   /// 餐次类型：breakfast/lunch/dinner/snack
   mealType             String @map("meal_type") @db.VarChar(20)
   /// 被推荐的食物名称

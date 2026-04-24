@@ -520,6 +520,12 @@ export class MealAssemblerService {
     const result: ScoredFood[] = [];
     let remainingCalories = target.calories;
     let remainingProtein = target.protein;
+    // P-α 修复：累积脂肪/碳水预算（1.3× 容差，与 constraint-generator maxMealFat 一致）
+    // 之前贪心只看评分，盖浇饭/麻婆豆腐等高脂菜被连续选中导致本餐脂肪 2× 超标
+    const maxFat = target.fat > 0 ? target.fat * 1.3 : Infinity;
+    const maxCarbs = target.carbs > 0 ? target.carbs * 1.3 : Infinity;
+    let cumFat = 0;
+    let cumCarbs = 0;
 
     // 选 1-2 道菜谱（贪心：依次选评分最高的，直到热量超 80% 目标或 2 道）
     const maxRecipes = 2;
@@ -537,6 +543,16 @@ export class MealAssemblerService {
       const totalAfter = target.calories - remainingCalories + recipeCal;
       if (totalAfter > target.calories * 1.1 && result.length > 0) continue;
 
+      // P-α: 脂肪/碳水累积预算检查 — 至少已有 1 道菜时才可跳过（保证不空盘）
+      const recipeFat = sr.recipe.fatPerServing ?? 0;
+      const recipeCarbs = sr.recipe.carbsPerServing ?? 0;
+      if (
+        result.length > 0 &&
+        (cumFat + recipeFat > maxFat || cumCarbs + recipeCarbs > maxCarbs)
+      ) {
+        continue;
+      }
+
       // 将菜谱转为 ScoredFood 结构
       const recipeScoredFood = this.recipeToScoredFood(sr);
       result.push(recipeScoredFood);
@@ -544,6 +560,8 @@ export class MealAssemblerService {
 
       remainingCalories -= recipeCal;
       remainingProtein -= sr.recipe.proteinPerServing ?? 0;
+      cumFat += recipeFat;
+      cumCarbs += recipeCarbs;
     }
 
     // 如果没有选中任何菜谱，降级返回 null（但此方法被 assembleFromRecipes 内部调用，
@@ -569,6 +587,8 @@ export class MealAssemblerService {
         remainingCalories,
         remainingProtein,
         maxSupplements,
+        maxFat - cumFat,
+        maxCarbs - cumCarbs,
       );
       result.push(...supplements);
     }
@@ -641,6 +661,8 @@ export class MealAssemblerService {
     remainingCal: number,
     remainingProtein: number,
     maxCount: number,
+    remainingFat: number = Infinity,
+    remainingCarbs: number = Infinity,
   ): ScoredFood[] {
     // 优先低热量的蔬菜/谷物类，V7.8: dish 形态优先
     const sorted = [...candidates].sort((a, b) => {
@@ -668,14 +690,21 @@ export class MealAssemblerService {
 
     const result: ScoredFood[] = [];
     let calBudget = remainingCal;
+    let fatBudget = remainingFat;
+    let carbsBudget = remainingCarbs;
 
     for (const sf of sorted) {
       if (result.length >= maxCount) break;
       if (sf.servingCalories <= 0) continue;
       if (sf.servingCalories > calBudget * 1.3) continue; // 单品不超过剩余预算的 130%
+      // P-α: 补充食物也需遵守剩余脂肪/碳水预算
+      if ((sf.servingFat || 0) > fatBudget) continue;
+      if ((sf.servingCarbs || 0) > carbsBudget) continue;
 
       result.push(sf);
       calBudget -= sf.servingCalories;
+      fatBudget -= sf.servingFat || 0;
+      carbsBudget -= sf.servingCarbs || 0;
     }
 
     return result;
