@@ -256,13 +256,7 @@ export class UpdateDeclaredProfileDto {
   @IsEnum(ActivityLevel)
   activityLevel?: ActivityLevel;
 
-  @ApiPropertyOptional()
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(800)
-  @Max(5000)
-  dailyCalorieGoal?: number;
+  // dailyCalorieGoal 由服务端根据体征自动计算，不接受客户端传入
 
   @ApiPropertyOptional({ enum: GoalType })
   @IsOptional()

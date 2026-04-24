@@ -86,7 +86,8 @@ type FormState = {
   targetWeightKg: string;
   bodyFatPercent: string;
   activityLevel: string;
-  dailyCalorieGoal: string;
+  /** 只读 — 由后端根据体征自动计算，不允许用户手动修改 */
+  dailyCalorieGoal: number | null;
   goal: string;
   goalSpeed: string;
   familySize: string;
@@ -116,109 +117,16 @@ type UpFn = <K extends keyof FormState>(key: K, value: FormState[K]) => void;
 
 // ── Tab panels (module-level — receive form + up as props) ──
 
+// 根据目标类型决定目标体重/体脂是否显示
+const GOAL_SHOW_TARGET_WEIGHT = new Set(['fat_loss', 'muscle_gain']);
+const GOAL_SHOW_BODY_FAT = new Set(['fat_loss', 'muscle_gain', 'health']);
+
 function BasicTab({ form, up }: { form: FormState; up: UpFn }) {
+  const showTargetWeight = GOAL_SHOW_TARGET_WEIGHT.has(form.goal);
+  const showBodyFat = GOAL_SHOW_BODY_FAT.has(form.goal);
+
   return (
     <>
-      <SubLabel>性别</SubLabel>
-      <BtnGroup
-        options={[
-          { key: 'male', label: '男' },
-          { key: 'female', label: '女' },
-        ]}
-        value={form.gender}
-        onChange={(k) => up('gender', k)}
-      />
-
-      <div className="mt-4">
-        <SubLabel>出生年份 *</SubLabel>
-        <input
-          type="number"
-          value={form.birthYear}
-          onChange={(e) => up('birthYear', e.target.value)}
-          placeholder="例如 1995"
-          className="w-full px-4 py-2.5  bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 mt-4">
-        <div>
-          <SubLabel>身高 (cm) *</SubLabel>
-          <input
-            type="number"
-            value={form.heightCm}
-            onChange={(e) => up('heightCm', e.target.value)}
-            placeholder="170"
-            className="w-full px-4 py-2.5  bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
-          />
-        </div>
-        <div>
-          <SubLabel>体重 (kg) *</SubLabel>
-          <input
-            type="number"
-            value={form.weightKg}
-            onChange={(e) => up('weightKg', e.target.value)}
-            placeholder="65"
-            className="w-full px-4 py-2.5  bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
-          />
-        </div>
-      </div>
-
-      <div className="mt-4">
-        <SubLabel>目标体重 (kg)</SubLabel>
-        <input
-          type="number"
-          value={form.targetWeightKg}
-          onChange={(e) => up('targetWeightKg', e.target.value)}
-          placeholder="60"
-          className="w-full px-4 py-2.5  bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
-        />
-      </div>
-
-      <div className="mt-4">
-        <SubLabel>体脂率 (%) — 选填，用于精准 TDEE 计算</SubLabel>
-        <input
-          type="number"
-          value={form.bodyFatPercent}
-          onChange={(e) => up('bodyFatPercent', e.target.value)}
-          placeholder="例如 20"
-          min={3}
-          max={60}
-          className="w-full px-4 py-2.5  bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
-        />
-        <p className="text-[11px] text-muted-foreground mt-1">
-          填写后将使用 Katch-McArdle 公式代替 Mifflin 公式计算基础代谢
-        </p>
-      </div>
-
-      <Divider />
-
-      <SubLabel>活动等级</SubLabel>
-      <div className="space-y-2">
-        {ACTIVITY_LEVEL_OPTIONS.map(({ key, label, icon, desc }) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => up('activityLevel', key)}
-            className={`w-full flex items-center gap-3 px-4 py-3  text-left text-sm font-medium transition-all ${
-              form.activityLevel === key
-                ? 'bg-primary text-primary-foreground font-bold'
-                : 'bg-muted text-muted-foreground'
-            }`}
-          >
-            <span>{icon}</span>
-            <div>
-              <span className="font-bold">{label}</span>
-              <p
-                className={`text-[11px] ${form.activityLevel === key ? 'text-primary-foreground/80' : 'text-muted-foreground/70'}`}
-              >
-                {desc}
-              </p>
-            </div>
-          </button>
-        ))}
-      </div>
-
-      <Divider />
 
       <SubLabel>主要目标</SubLabel>
       <div className="grid grid-cols-2 gap-2">
@@ -257,16 +165,126 @@ function BasicTab({ form, up }: { form: FormState; up: UpFn }) {
           onChange={(k) => up('goalSpeed', k)}
         />
       </div>
-
+        <Divider />
+      <SubLabel>性别</SubLabel>
+      <BtnGroup
+        options={[
+          { key: 'male', label: '男' },
+          { key: 'female', label: '女' },
+        ]}
+        value={form.gender}
+        onChange={(k) => up('gender', k)}
+      />
+   
       <div className="mt-4">
-        <SubLabel>每日热量目标 (kcal，留空自动计算)</SubLabel>
+        <SubLabel>出生年份 *</SubLabel>
         <input
           type="number"
-          value={form.dailyCalorieGoal}
-          onChange={(e) => up('dailyCalorieGoal', e.target.value)}
-          placeholder="自动计算"
+          value={form.birthYear}
+          onChange={(e) => up('birthYear', e.target.value)}
+          placeholder="例如 1995"
           className="w-full px-4 py-2.5  bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
         />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 mt-4">
+        <div>
+          <SubLabel>身高 (cm) *</SubLabel>
+          <input
+            type="number"
+            value={form.heightCm}
+            onChange={(e) => up('heightCm', e.target.value)}
+            placeholder="170"
+            className="w-full px-4 py-2.5  bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
+          />
+        </div>
+        <div>
+          <SubLabel>体重 (kg) *</SubLabel>
+          <input
+            type="number"
+            value={form.weightKg}
+            onChange={(e) => up('weightKg', e.target.value)}
+            placeholder="65"
+            className="w-full px-4 py-2.5  bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
+          />
+        </div>
+      </div>
+
+      {showTargetWeight && (
+        <div className="mt-4">
+          <SubLabel>
+            目标体重 (kg){form.goal === 'fat_loss' ? ' *' : ' — 选填'}
+          </SubLabel>
+          <input
+            type="number"
+            value={form.targetWeightKg}
+            onChange={(e) => up('targetWeightKg', e.target.value)}
+            placeholder="60"
+            className="w-full px-4 py-2.5  bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
+          />
+        </div>
+      )}
+
+      {showBodyFat && (
+        <div className="mt-4">
+          <SubLabel>体脂率 (%) — 选填，用于精准 TDEE 计算</SubLabel>
+          <input
+            type="number"
+            value={form.bodyFatPercent}
+            onChange={(e) => up('bodyFatPercent', e.target.value)}
+            placeholder="例如 20"
+            min={3}
+            max={60}
+            className="w-full px-4 py-2.5  bg-muted text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
+          />
+          <p className="text-[11px] text-muted-foreground mt-1">
+            填写后将使用 Katch-McArdle 公式代替 Mifflin 公式计算基础代谢
+          </p>
+        </div>
+      )}
+
+      <Divider />
+
+      <SubLabel>活动等级</SubLabel>
+      <div className="space-y-2">
+        {ACTIVITY_LEVEL_OPTIONS.map(({ key, label, icon, desc }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => up('activityLevel', key)}
+            className={`w-full flex items-center gap-3 px-4 py-3  text-left text-sm font-medium transition-all ${
+              form.activityLevel === key
+                ? 'bg-primary text-primary-foreground font-bold'
+                : 'bg-muted text-muted-foreground'
+            }`}
+          >
+            <span>{icon}</span>
+            <div>
+              <span className="font-bold">{label}</span>
+              <p
+                className={`text-[11px] ${form.activityLevel === key ? 'text-primary-foreground/80' : 'text-muted-foreground/70'}`}
+              >
+                {desc}
+              </p>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      <Divider />
+
+
+      <div className="mt-4">
+        <SubLabel>每日热量目标 (kcal)</SubLabel>
+        <div className="w-full px-4 py-2.5 bg-muted/50 text-foreground text-sm flex items-center justify-between">
+          <span className="text-muted-foreground text-xs">根据体征自动计算</span>
+          <span className="font-bold tabular-nums">
+            {form.dailyCalorieGoal ? `${form.dailyCalorieGoal} kcal` : '— 待计算'}
+          </span>
+        </div>
+        <p className="text-[11px] text-muted-foreground mt-1">
+          由身高、体重、年龄、活动等级和目标自动计算，保存后更新
+        </p>
       </div>
 
       <div className="mt-4">
@@ -716,7 +734,7 @@ export function ProfileEditForm() {
     targetWeightKg: '',
     bodyFatPercent: '',
     activityLevel: 'light',
-    dailyCalorieGoal: '',
+    dailyCalorieGoal: null,
     goal: 'health',
     goalSpeed: 'steady',
     familySize: '',
@@ -762,7 +780,7 @@ export function ProfileEditForm() {
           ? String((profile as any).bodyFatPercent)
           : '',
         activityLevel: profile.activityLevel || 'light',
-        dailyCalorieGoal: profile.dailyCalorieGoal ? String(profile.dailyCalorieGoal) : '',
+        dailyCalorieGoal: profile.dailyCalorieGoal ?? null,
         goal: profile.goal || 'health',
         goalSpeed: profile.goalSpeed || 'steady',
         familySize: profile.familySize ? String(profile.familySize) : '',
@@ -834,10 +852,18 @@ export function ProfileEditForm() {
       if (form.birthYear) data.birthYear = parseInt(form.birthYear);
       if (form.heightCm) data.heightCm = parseFloat(form.heightCm);
       if (form.weightKg) data.weightKg = parseFloat(form.weightKg);
-      if (form.targetWeightKg) data.targetWeightKg = parseFloat(form.targetWeightKg);
-      if (form.dailyCalorieGoal) data.dailyCalorieGoal = parseInt(form.dailyCalorieGoal);
+      // 目标体重：仅 fat_loss / muscle_gain 时提交
+      if (form.targetWeightKg && GOAL_SHOW_TARGET_WEIGHT.has(form.goal)) {
+        data.targetWeightKg = parseFloat(form.targetWeightKg);
+      } else {
+        data.targetWeightKg = undefined;
+      }
       if (form.familySize) data.familySize = parseInt(form.familySize);
-      if (form.bodyFatPercent) (data as any).bodyFatPercent = parseFloat(form.bodyFatPercent);
+      // 体脂率：仅对应目标类型时提交
+      if (form.bodyFatPercent && GOAL_SHOW_BODY_FAT.has(form.goal)) {
+        (data as any).bodyFatPercent = parseFloat(form.bodyFatPercent);
+      }
+      // dailyCalorieGoal 不由前端提交，后端自动计算
 
       await updateProfile(data);
       toast({ title: '保存成功' });

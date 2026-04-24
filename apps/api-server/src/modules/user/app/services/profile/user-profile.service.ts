@@ -117,9 +117,8 @@ export class UserProfileService {
       profile = { userId: userId, ...dto } as any;
     }
 
-    // 如果未手动设置热量目标且有足够信息，自动计算
+    // 强制重算热量：忽略客户端传入值，始终由服务端根据体征计算
     if (
-      !dto.dailyCalorieGoal &&
       profile!.gender &&
       profile!.birthYear &&
       profile!.heightCm &&
@@ -441,10 +440,9 @@ export class UserProfileService {
     const oldProfile = { ...profile };
     const merged = { ...profile, ...dto };
 
-    // 重算热量（如果体重/身高/目标等变化且用户未手动设定）
+    // 强制重算热量：忽略客户端传入的 dailyCalorieGoal，始终由服务端根据体征计算
+    // 体征完整（gender/birthYear/heightCm/weightKg）时必算
     if (
-      (dto.weightKg || dto.heightCm || dto.goal || dto.activityLevel) &&
-      !dto.dailyCalorieGoal &&
       merged.gender &&
       merged.birthYear &&
       merged.heightCm &&
