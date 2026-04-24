@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { GoalType } from '../../services/nutrition-score.service';
 import { HealthCondition } from '../types/recommendation.types';
+import { getProteinPerKg } from '../types/scoring.types';
 
 // ==================== 类型 ====================
 
@@ -187,10 +188,12 @@ export class NutritionTargetService {
 
   /**
    * 蛋白质 (g/天)
-   * 基础: 体重(kg) × 系数
-   *   - 健康/习惯: 0.8 g/kg
-   *   - 减脂: 1.2 g/kg（保肌肉）
-   *   - 增肌: 1.6 g/kg
+   *
+   * P1-2: 使用统一 PROTEIN_PER_KG_BY_GOAL 单一数据源，不再维护本地系数表。
+   *   - 健康: 1.3 g/kg
+   *   - 习惯: 1.1 g/kg
+   *   - 减脂: 2.0 g/kg（保肌肉，原 1.2 g/kg 过低导致 protein −37% 偏差）
+   *   - 增肌: 2.2 g/kg
    * 下限 50g (FDA DV)
    */
   private calcProtein(
@@ -198,9 +201,8 @@ export class NutritionTargetService {
     weightKg: number,
     goal: GoalType,
   ): number {
-    const multiplier =
-      goal === 'muscle_gain' ? 1.6 : goal === 'fat_loss' ? 1.2 : 0.8;
-    const calculated = Math.round(weightKg * multiplier);
+    void gender; // 目前蛋白质口径与性别无关，保留参数以维持签名
+    const calculated = Math.round(weightKg * getProteinPerKg(goal));
     return Math.max(calculated, 50); // 不低于 FDA DV
   }
 

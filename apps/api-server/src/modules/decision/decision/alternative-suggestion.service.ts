@@ -321,6 +321,8 @@ export class AlternativeSuggestionService {
         {
           calories: Math.max(ctx.goalCalories || 0, currentMealCalories),
           protein: Math.max(ctx.goalProtein || 0, currentMealProtein),
+          fat: Math.max(ctx.goalFat || 0, 0),
+          carbs: Math.max(ctx.goalCarbs || 0, 0),
         },
         userConstraints || {
           allergens: ctx.allergens,

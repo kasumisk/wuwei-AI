@@ -14,6 +14,7 @@
 import type {
   CrossMealAdjustment,
   DailyPlanState,
+  MealTarget,
   ScoreDimension,
 } from '../types/recommendation.types';
 
@@ -29,8 +30,8 @@ export interface CrossMealRuleContext {
   state: DailyPlanState;
   /** 当前是第几餐（0-based） */
   mealIndex: number;
-  /** 日目标 */
-  dailyTarget: { calories: number; protein: number };
+  /** 日目标（完整四宏量） */
+  dailyTarget: MealTarget;
 }
 
 /**

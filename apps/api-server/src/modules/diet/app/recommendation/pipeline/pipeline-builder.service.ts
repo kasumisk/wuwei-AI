@@ -620,6 +620,7 @@ export class PipelineBuilderService implements OnModuleInit {
         food,
         goalType: ctx.goalType,
         target: ctx.target,
+        dailyTarget: ctx.dailyTarget,
         penaltyContext: penaltyCtx,
         mealType: ctx.mealType,
         statusFlags: undefined,
@@ -1245,14 +1246,22 @@ export class PipelineBuilderService implements OnModuleInit {
         trace.stages.push(stageTrace);
       }
 
-      // 多目标优化（可选）
+      // 多目标优化（永远启用 — 根因#1 修复：去掉 enabled gate，
+      // 改为策略通过 preferences 权重控制各维度影响力，避免默认路径退回 10 维健康排序）
       let finalRanked: ScoredFood[];
       try {
-        const moConfig = ctx.resolvedStrategy?.config?.multiObjective;
+        const moConfig = ctx.resolvedStrategy?.config?.multiObjective ?? {};
         finalRanked =
-          moConfig?.enabled && ranked.length > 0
+          ranked.length > 0
             ? extractRankedFoods(
-                multiObjectiveOptimize(ranked, moConfig),
+                multiObjectiveOptimize(
+                  ranked,
+                  moConfig,
+                  undefined,
+                  ctx.dailyTarget,
+                  ctx.mealType,
+                  ctx.goalType,
+                ),
                 ranked.length,
               )
             : ranked;

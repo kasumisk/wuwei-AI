@@ -5,6 +5,7 @@ import {
   ScoringConfigService,
   DailyScoreWeightsConfig,
 } from '../recommendation/context/scoring-config.service';
+import { getProteinPerKg } from '../recommendation/types/scoring.types';
 
 // ==================== 类型 ====================
 
@@ -486,13 +487,8 @@ export class NutritionScoreService {
     const calorieGoal = profile?.dailyCalorieGoal || 2000;
     const goal = profile?.goal || 'health';
 
-    const proteinPerKg: Record<string, number> = {
-      fat_loss: 2.0,
-      muscle_gain: 2.2,
-      health: 1.3,
-      habit: 1.1,
-    };
-    const protein = Math.round(weight * (proteinPerKg[goal] || 1.3));
+    // P1-2: 使用统一 PROTEIN_PER_KG_BY_GOAL，避免与 nutrition-target.service 口径分叉
+    const protein = Math.round(weight * getProteinPerKg(goal));
 
     const fatPercent: Record<string, number> = {
       fat_loss: 0.22,

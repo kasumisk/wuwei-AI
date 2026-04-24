@@ -49,8 +49,20 @@ export interface Constraint {
   maxSodium?: number;
   /** #fix Bug19: 嘌呤上限 (mg/100g)，用于 gout 硬过滤 */
   maxPurine?: number;
-  /** #fix Bug31: 脂肪上限 (g/100g)，用于 low_fat 饮食限制硬过滤 */
+  /** #fix Bug31: 脂肪上限 (g/100g)，用于 low_fat 饮食限制硬过滤（食物密度级） */
   maxFat?: number;
+  /** P0-2: 餐级脂肪上限 (g)，用于总量硬约束。避免 MACRO_RANGES 奖励高脂 → fat +73% 偏差 */
+  maxMealFat?: number;
+  /** P0-2: 餐级脂肪目标 (g)，用于 MacroFit 评分维度 */
+  targetMealFat?: number;
+  /** P0-2: 餐级碳水目标 (g)，用于 MacroFit 评分维度 */
+  targetMealCarbs?: number;
+  /** P0-2: 餐级碳水上限 (g)，避免碳水过度 */
+  maxMealCarbs?: number;
+  /** P0-2: 餐级蛋白质目标 (g)，用于 MacroFit 评分（与 minProtein 区分：这是"贴近"目标而非"最低"） */
+  targetMealProtein?: number;
+  /** P0-2: 餐级热量目标 (kcal)，用于 MacroFit 评分 */
+  targetMealCalories?: number;
 }
 
 export interface ScoredFood {

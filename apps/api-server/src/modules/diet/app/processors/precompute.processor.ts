@@ -25,7 +25,10 @@ import {
 import { RecommendationEngineService } from '../services/recommendation-engine.service';
 import { ProfileCacheService } from '../../../user/app/services/profile/profile-cache.service';
 import { NutritionScoreService } from '../services/nutrition-score.service';
-import { UserProfileConstraints } from '../recommendation/types/recommendation.types';
+import {
+  UserProfileConstraints,
+  MealTarget,
+} from '../recommendation/types/recommendation.types';
 
 @Processor(QUEUE_NAMES.RECOMMENDATION_PRECOMPUTE)
 export class PrecomputeProcessor extends WorkerHost {
@@ -67,7 +70,12 @@ export class PrecomputeProcessor extends WorkerHost {
 
       // 2. 预计算默认: consumed=0（次日初始状态）
       const consumed = { calories: 0, protein: 0 };
-      const dailyTarget = { calories: goals.calories, protein: goals.protein };
+      const dailyTarget: MealTarget = {
+        calories: goals.calories,
+        protein: goals.protein,
+        fat: goals.fat,
+        carbs: goals.carbs,
+      };
 
       const userConstraints: UserProfileConstraints = {
         dietaryRestrictions: (declared.dietaryRestrictions as string[]) || [],

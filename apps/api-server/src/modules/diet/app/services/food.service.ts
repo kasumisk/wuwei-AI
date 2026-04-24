@@ -20,6 +20,7 @@ import {
 import {
   MEAL_RATIOS,
   UserProfileConstraints,
+  MealTarget,
 } from '../recommendation/types/recommendation.types';
 import {
   DomainEvents,
@@ -368,7 +369,12 @@ export class FoodService {
       calories: summary.totalCalories || 0,
       protein: summary.totalProtein || 0,
     };
-    const dailyTarget = { calories: goals.calories, protein: goals.protein };
+    const dailyTarget: MealTarget = {
+      calories: goals.calories,
+      protein: goals.protein,
+      fat: goals.fat,
+      carbs: goals.carbs,
+    };
     const budget = {
       calories: calBudget,
       protein: Math.round(proteinRem * ratio),
@@ -813,7 +819,12 @@ export class FoodService {
       calories: summary.totalCalories || 0,
       protein: summary.totalProtein || 0,
     };
-    const dailyTarget = { calories: goals.calories, protein: goals.protein };
+    const dailyTarget: MealTarget = {
+      calories: goals.calories,
+      protein: goals.protein,
+      fat: goals.fat,
+      carbs: goals.carbs,
+    };
     const target = {
       calories: calBudget,
       protein: Math.round(proteinRem * ratio),

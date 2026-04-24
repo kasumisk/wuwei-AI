@@ -21,7 +21,7 @@ export class ConstraintGeneratorService {
     goalType: string,
     consumed: { calories: number; protein: number },
     target: MealTarget,
-    dailyTarget: { calories: number; protein: number },
+    dailyTarget: MealTarget,
     mealType?: string,
     userProfile?: UserProfileConstraints,
     /** V5: IANA 时区字符串（如 'Asia/Shanghai'），替代 V4 的 timezoneOffset 数字 */
@@ -208,8 +208,17 @@ export class ConstraintGeneratorService {
       maxSodium,
       // #fix Bug19: 嘌呤硬过滤上限
       maxPurine,
-      // #fix Bug31: 脂肪硬过滤上限
+      // #fix Bug31: 脂肪硬过滤上限（食物密度）
       maxFat,
+      // P0-2: 餐级宏量硬边界与目标值（修复根因——ConstraintGenerator 之前只输出 maxCalories/minProtein，
+      // 导致 fat/carbs 无边界。这里把餐级目标完整下发到 FoodFilter / Assembler / MacroFit 评分）
+      targetMealCalories: target.calories,
+      targetMealProtein: target.protein,
+      targetMealFat: target.fat,
+      targetMealCarbs: target.carbs,
+      // 餐级脂肪上限 = 1.30 × 目标（容忍黄区上沿，超出视为违约），carbs 上限同理
+      maxMealFat: target.fat > 0 ? target.fat * 1.3 : undefined,
+      maxMealCarbs: target.carbs > 0 ? target.carbs * 1.3 : undefined,
     };
   }
 }

@@ -277,7 +277,12 @@ export class DailyPlanService {
       calories: summary.totalCalories || 0,
       protein: summary.totalProtein || 0,
     };
-    const dailyTarget = { calories: goals.calories, protein: goals.protein };
+    const dailyTarget: MealTarget = {
+      calories: goals.calories,
+      protein: goals.protein,
+      fat: goals.fat,
+      carbs: goals.carbs,
+    };
     const mealTarget: MealTarget = {
       calories: Math.round(goals.calories * ratio),
       protein: Math.round(goals.protein * ratio),
@@ -501,7 +506,12 @@ export class DailyPlanService {
       calories: summary.totalCalories || 0,
       protein: summary.totalProtein || 0,
     };
-    const dailyTarget = { calories: goals.calories, protein: goals.protein };
+    const dailyTarget: MealTarget = {
+      calories: goals.calories,
+      protein: goals.protein,
+      fat: goals.fat,
+      carbs: goals.carbs,
+    };
 
     // V5 2.5: 使用预加载数据或现场查询（避免周计划 N 天重复查询）
     const allFoods =

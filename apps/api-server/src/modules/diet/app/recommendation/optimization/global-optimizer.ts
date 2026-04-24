@@ -25,14 +25,14 @@ import { ScoredFood, MealTarget } from '../types/recommendation.types';
  * - 替换评分下降不超过 15%（保证推荐质量）
  */
 
-// ─── V5 偏差权重配置 ───
+// ─── V5 偏差权重配置（P1-1: fat/carbs 权重提升，覆盖四宏量均衡） ───
 const DEVIATION_WEIGHTS = {
-  calories: 0.3, // V4: 0.35
-  protein: 0.25, // V4: 0.30
-  fat: 0.12, // V4: 0.15
-  carbs: 0.15, // V4: 0.20
+  calories: 0.22, // V4: 0.35 / V5: 0.30 → P1-1: 0.22
+  protein: 0.22, // V4: 0.30 / V5: 0.25 → P1-1: 0.22
+  fat: 0.2, // V4: 0.15 / V5: 0.12 → P1-1: 0.20（fat +73% 偏差的核心修复）
+  carbs: 0.2, // V4: 0.20 / V5: 0.15 → P1-1: 0.20
   fiber: 0.1, // V5 新增
-  glycemicLoad: 0.08, // V5 新增
+  glycemicLoad: 0.06, // V5: 0.08 → P1-1: 0.06
 };
 
 /** V5: 份量调整倍数选项 */
@@ -68,8 +68,8 @@ export interface OptimizationResult {
 export function optimizeDailyPlan(
   meals: MealSlot[],
   dailyTarget: MealTarget,
-  maxIterations = 12,
-  minScoreRatio = 0.85,
+  maxIterations = 24,
+  minScoreRatio = 0.75,
 ): OptimizationResult {
   // 深拷贝，避免修改输入
   const mealSlots: MealSlot[] = meals.map((m) => ({

@@ -492,4 +492,7 @@ export interface ScoringContext {
   preferencesProfile?: PreferencesProfile;
   /** V7.1 P3-C: 统一偏好信号（由 PreferenceProfileService.computePreferenceSignal 计算） */
   preferenceSignal?: PreferenceSignal;
+  /** P0-3: 当日完整营养目标（四宏量），用于动态派生 MACRO_RANGES 奖励区间，
+   *  修复 "MACRO_RANGES 硬编码与用户目标冲突导致 fat +73%" 的 Bug */
+  dailyTarget?: MealTarget;
 }

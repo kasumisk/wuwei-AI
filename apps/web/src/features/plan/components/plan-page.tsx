@@ -138,7 +138,7 @@ export function PlanPage() {
       )}
 
       {/* 周计划（付费用户显示，免费用户显示升级提示） */}
-      {isPaid && weeklyPlan && <WeeklyPlanCard weeklyPlan={weeklyPlan} />}
+      {weeklyPlan && <WeeklyPlanCard weeklyPlan={weeklyPlan} />}
 
       {/* 免费用户：周计划锁定提示（显示真实数据 + 模糊遮罩） */}
       {isFree && (

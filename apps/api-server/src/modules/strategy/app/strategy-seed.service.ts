@@ -50,7 +50,7 @@ interface PresetStrategy {
  * - meal: 餐次组合（保持默认）
  * - realism: 现实性过滤（V6.5+）
  */
-const PRESET_STRATEGIES: PresetStrategy[] = [
+export const PRESET_STRATEGIES: PresetStrategy[] = [
   {
     name: 'warm_start',
     description:
@@ -184,10 +184,11 @@ const PRESET_STRATEGIES: PresetStrategy[] = [
       multiObjective: {
         enabled: true,
         preferences: {
-          health: 0.5,
-          taste: 0.25,
-          cost: 0.1,
-          convenience: 0.15,
+          macroFit: 0.45,
+          health: 0.25,
+          taste: 0.15,
+          cost: 0.05,
+          convenience: 0.1,
         },
       },
       assembly: {
@@ -246,10 +247,11 @@ const PRESET_STRATEGIES: PresetStrategy[] = [
       multiObjective: {
         enabled: true,
         preferences: {
-          health: 0.35,
-          taste: 0.35,
-          cost: 0.15,
-          convenience: 0.15,
+          macroFit: 0.35,
+          health: 0.25,
+          taste: 0.25,
+          cost: 0.05,
+          convenience: 0.1,
         },
       },
       assembly: {
@@ -311,10 +313,11 @@ const PRESET_STRATEGIES: PresetStrategy[] = [
       multiObjective: {
         enabled: true,
         preferences: {
-          health: 0.3,
-          taste: 0.35,
-          cost: 0.2,
-          convenience: 0.15,
+          macroFit: 0.35,
+          health: 0.2,
+          taste: 0.25,
+          cost: 0.1,
+          convenience: 0.1,
         },
       },
       realism: {
@@ -379,10 +382,11 @@ const PRESET_STRATEGIES: PresetStrategy[] = [
       multiObjective: {
         enabled: true,
         preferences: {
-          health: 0.35,
-          taste: 0.3,
-          cost: 0.2,
-          convenience: 0.15,
+          macroFit: 0.4,
+          health: 0.25,
+          taste: 0.2,
+          cost: 0.1,
+          convenience: 0.05,
         },
       },
       realism: {
@@ -448,10 +452,11 @@ const PRESET_STRATEGIES: PresetStrategy[] = [
       multiObjective: {
         enabled: true,
         preferences: {
-          health: 0.6,
-          taste: 0.2,
-          cost: 0.1,
-          convenience: 0.1,
+          macroFit: 0.35,
+          health: 0.4,
+          taste: 0.15,
+          cost: 0.05,
+          convenience: 0.05,
         },
       },
       realism: {
@@ -514,10 +519,11 @@ const PRESET_STRATEGIES: PresetStrategy[] = [
       multiObjective: {
         enabled: true,
         preferences: {
-          health: 0.6,
-          taste: 0.2,
-          cost: 0.1,
-          convenience: 0.1,
+          macroFit: 0.35,
+          health: 0.4,
+          taste: 0.15,
+          cost: 0.05,
+          convenience: 0.05,
         },
       },
       realism: {
@@ -580,10 +586,11 @@ const PRESET_STRATEGIES: PresetStrategy[] = [
       multiObjective: {
         enabled: true,
         preferences: {
-          health: 0.45,
-          taste: 0.3,
-          cost: 0.1,
-          convenience: 0.15,
+          macroFit: 0.35,
+          health: 0.3,
+          taste: 0.2,
+          cost: 0.05,
+          convenience: 0.1,
         },
       },
       realism: {
@@ -646,10 +653,11 @@ const PRESET_STRATEGIES: PresetStrategy[] = [
       multiObjective: {
         enabled: true,
         preferences: {
-          health: 0.3,
-          taste: 0.25,
-          cost: 0.35,
-          convenience: 0.1,
+          macroFit: 0.3,
+          health: 0.2,
+          taste: 0.15,
+          cost: 0.3,
+          convenience: 0.05,
         },
       },
       realism: {

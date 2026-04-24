@@ -59,6 +59,8 @@ export class PipelineContextFactory {
       mealType: req.mealType,
       goalType: req.goalType,
       target: req.target,
+      // P0-3: 下沉 dailyTarget 到 PipelineContext，供 FoodScorer/MultiObjectiveOptimizer 使用
+      dailyTarget: req.dailyTarget,
       constraints: params.constraints,
       usedNames: params.usedNames,
       picks: params.picks,

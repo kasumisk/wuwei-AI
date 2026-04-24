@@ -7,6 +7,7 @@ import {
   CATEGORY_QUALITY,
   CATEGORY_SATIETY,
   MACRO_RANGES,
+  deriveMacroRangesFromTarget,
   MEAL_RATIOS,
   MicroNutrientDefaults,
   computeWeights,
@@ -200,7 +201,13 @@ export class FoodScorerService {
     );
 
     // 碳水/脂肪：V4 目标自适应区间评分 (修复 E2)
-    const macroRange = MACRO_RANGES[goalType] || MACRO_RANGES.health;
+    // P0-3: 优先使用 dailyTarget 动态派生的区间（与用户真实目标一致），
+    //       fallback 到硬编码 MACRO_RANGES（旧行为，与 nutrition-score 目标可能方向相反）
+    const dynamicRange = ctx.dailyTarget
+      ? deriveMacroRangesFromTarget(ctx.dailyTarget)
+      : null;
+    const macroRange =
+      dynamicRange || MACRO_RANGES[goalType] || MACRO_RANGES.health;
     // 从配置读取碳水/脂肪默认分和区间惩罚陡度
     const defaultCarbFatScore = scoringConfig?.defaultCarbFatScore ?? 0.5;
     const rangeOutSteepness = scoringConfig?.rangeOutPenaltySteepness ?? 2;

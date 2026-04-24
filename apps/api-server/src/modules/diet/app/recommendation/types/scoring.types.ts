@@ -241,6 +241,10 @@ export const CATEGORY_SATIETY: Record<string, number> = {
 /**
  * V4: 目标自适应宏量营养素评分范围 (修复 E2)
  * 不同目标类型使用不同的碳水/脂肪供能比理想范围
+ *
+ * ⚠️ P0-3 警告：此常量为 **fallback**。当 ScoringContext.dailyTarget 可用时，
+ *     应改用 deriveMacroRangesFromTarget() 动态派生，避免与用户真实目标冲突。
+ *     典型 Bug: fat_loss fat 上限 0.35 奖励高脂食物 → 与 nutrition-score 的 22% 目标冲突 → fat +73%
  */
 export const MACRO_RANGES: Record<
   string,
@@ -253,6 +257,33 @@ export const MACRO_RANGES: Record<
 };
 
 /**
+ * P0-3: 由 dailyTarget 派生供能比奖励区间
+ *
+ * 原理：以用户真实目标供能比为中心，±5pp 形成 Green-Zone，
+ *       替代硬编码的 MACRO_RANGES（后者可能与用户目标方向相反）。
+ *
+ * 示例（fat_loss, 1500kcal, protein=144g, fat=37g, carbs=148g）：
+ *   - fatRatio  = 37*9/1500  = 22.2%  →  fat  区间 [17.2%, 27.2%]
+ *   - carbRatio = 148*4/1500 = 39.5%  →  carb 区间 [34.5%, 44.5%]
+ *   相比旧 MACRO_RANGES.fat_loss.fat=[20%,35%] — 不再奖励 35% 高脂食物
+ */
+export function deriveMacroRangesFromTarget(target: {
+  calories: number;
+  fat: number;
+  carbs: number;
+}): { carb: [number, number]; fat: [number, number] } | null {
+  if (!target || target.calories <= 0) return null;
+  const fatRatio = (target.fat * 9) / target.calories;
+  const carbRatio = (target.carbs * 4) / target.calories;
+  const band = 0.05; // ±5pp Green-Zone
+  const clamp = (v: number): number => Math.max(0, Math.min(1, v));
+  return {
+    fat: [clamp(fatRatio - band), clamp(fatRatio + band)],
+    carb: [clamp(carbRatio - band), clamp(carbRatio + band)],
+  };
+}
+
+/**
  * V4: 目标自适应餐次比例 (修复 E3)
  * 不同目标类型使用不同的热量分配比例
  */
@@ -262,6 +293,30 @@ export const MEAL_RATIOS: Record<string, Record<string, number>> = {
   health: { breakfast: 0.25, lunch: 0.35, dinner: 0.3, snack: 0.1 },
   habit: { breakfast: 0.25, lunch: 0.35, dinner: 0.3, snack: 0.1 },
 };
+
+/**
+ * P1-2: 统一蛋白质系数（g/kg 体重）
+ *
+ * 作为 nutrition-score.service 与 nutrition-target.service 的单一数据源。
+ * 数值采纳 nutrition-score 的较高标准（fat_loss=2.0 足以保肌肉、muscle_gain=2.2 符合运动营养学共识）。
+ *
+ * 历史（已废弃）：
+ *   - nutrition-target.service 旧值: fat_loss=1.2, muscle_gain=1.6, health/habit=0.8（过低，导致 protein −37% 偏差）
+ */
+export const PROTEIN_PER_KG_BY_GOAL: Record<string, number> = {
+  fat_loss: 2.0,
+  muscle_gain: 2.2,
+  health: 1.3,
+  habit: 1.1,
+};
+
+/**
+ * P1-2: 查询指定目标对应的 g/kg 系数，未知目标回退到 health
+ */
+export function getProteinPerKg(goal: string | undefined | null): number {
+  if (!goal) return PROTEIN_PER_KG_BY_GOAL.health;
+  return PROTEIN_PER_KG_BY_GOAL[goal] ?? PROTEIN_PER_KG_BY_GOAL.health;
+}
 
 export const MEAL_PREFERENCES: Record<
   string,
@@ -309,12 +364,52 @@ export const ROLE_CATEGORIES: Record<string, string[]> = {
   carb: ['grain', 'composite'],
   protein: ['protein', 'dairy'],
   protein2: ['protein', 'dairy'], // #fix Bug13: 第二蛋白质槽位，使用相同品类
+  protein3: ['protein', 'dairy'], // P0-A: 第三蛋白质槽位（减脂/高蛋白需求动态扩容）
   veggie: ['veggie'],
   side: ['veggie', 'dairy', 'beverage', 'fruit'],
   snack1: ['fruit', 'snack', 'dairy'],
   snack_protein: ['protein', 'dairy', 'snack'], // muscle_gain snack: protein-first
   snack2: ['beverage', 'snack', 'fruit'],
 };
+
+/**
+ * P0-A 根因#3 修复：按当餐蛋白目标动态构建 role 数组
+ *
+ * 问题背景：原 `MEAL_ROLES` 硬编码每餐 1 个 protein slot，日总 3 slot，
+ * 物理天花板 ≈105g（命中线上 107g 偏差）。即使优化器权重拉满也突破不了。
+ *
+ * 策略：按 `targetProtein / 25g per slot` 估算所需 slot 数，clamp [1, 3]。
+ * - 减脂 152g/日 ÷ 4 餐 ≈ 38g/餐 → 2 slot/餐 → 日总 8 slot
+ * - 维持 100g/日 ÷ 4 餐 ≈ 25g/餐 → 1 slot/餐 → 日总 4 slot
+ * - 增肌 180g/日 ÷ 4 餐 ≈ 45g/餐 → 2-3 slot/餐 → 日总 10 slot+
+ *
+ * 注意：此函数不再依赖 goalType 硬分支，纯数据驱动。
+ */
+export function buildMealRoles(
+  mealType: string,
+  targetProtein: number,
+): string[] {
+  const slotsNeeded =
+    targetProtein > 0
+      ? Math.max(1, Math.min(3, Math.ceil(targetProtein / 25)))
+      : 1;
+
+  // snack 特殊处理：有蛋白需求走 protein-first snack
+  if (mealType === 'snack') {
+    return slotsNeeded >= 1
+      ? ['snack_protein', 'snack2']
+      : ['snack1', 'snack2'];
+  }
+
+  const baseStructure: Record<string, string[]> = {
+    breakfast: ['carb'],
+    lunch: ['carb', 'veggie'],
+    dinner: ['veggie', 'side'],
+  };
+  const base = baseStructure[mealType] ?? ['carb', 'veggie'];
+  const proteinRoles = ['protein', 'protein2', 'protein3'].slice(0, slotsNeeded);
+  return [...base, ...proteinRoles];
+}
 
 // ==================== V5 2.7: 微量营养素品类均值插补 ====================
 

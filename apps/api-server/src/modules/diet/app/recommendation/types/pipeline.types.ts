@@ -45,6 +45,9 @@ export interface PipelineContext {
   mealType: string;
   goalType: string;
   target: MealTarget;
+  /** P0-3: 当日完整营养目标（四宏量），供 FoodScorer 动态派生 MACRO_RANGES，
+   *  及 MultiObjectiveOptimizer/MacroFit 评分使用 */
+  dailyTarget?: MealTarget;
   constraints: Constraint;
   usedNames: Set<string>;
   picks: ScoredFood[];
@@ -312,8 +315,8 @@ export interface MealFromPoolRequest {
   consumed: { calories: number; protein: number };
   /** 本餐目标 */
   target: MealTarget;
-  /** 当日总目标 */
-  dailyTarget: { calories: number; protein: number };
+  /** 当日总目标（完整四宏量 + 可选 fiber/GL，用于 ConstraintGenerator 派生硬边界与 MacroFit 评分） */
+  dailyTarget: MealTarget;
   /** 排除食物名称列表（去重） */
   excludeNames: string[];
   /** 用户偏好（loves/avoids） */

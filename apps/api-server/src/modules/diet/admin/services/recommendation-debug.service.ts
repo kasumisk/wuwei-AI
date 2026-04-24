@@ -101,9 +101,11 @@ export class RecommendationDebugService {
       protein: consumedProtein,
     };
 
-    const dailyTarget = {
+    const dailyTarget: MealTarget = {
       calories: dailyCalorieGoal,
       protein: dailyProteinGoal,
+      fat: dailyFatGoal,
+      carbs: dailyCarbsGoal,
     };
 
     // 3. 构建 userProfile 约束
@@ -188,9 +190,11 @@ export class RecommendationDebugService {
       carbs: Math.round(dailyCarbsGoal * ratio),
     };
 
-    const dailyTarget = {
+    const dailyTarget: MealTarget = {
       calories: dailyCalorieGoal,
       protein: dailyProteinGoal,
+      fat: dailyFatGoal,
+      carbs: dailyCarbsGoal,
     };
 
     const consumed = { calories: 0, protein: 0 };
@@ -542,9 +546,11 @@ export class RecommendationDebugService {
       fat: Math.round(dailyFatGoal * ratio),
       carbs: Math.round(dailyCarbsGoal * ratio),
     };
-    const dailyTarget = {
+    const dailyTarget: MealTarget = {
       calories: dailyCalorieGoal,
       protein: dailyProteinGoal,
+      fat: dailyFatGoal,
+      carbs: dailyCarbsGoal,
     };
 
     // 3. 分别使用两个策略运行模拟推荐

@@ -20,6 +20,8 @@
  */
 
 import { ScoredFood } from '../types/recommendation.types';
+import { MealTarget } from '../types/meal.types';
+import { MEAL_RATIOS } from '../types/scoring.types';
 import {
   MultiObjectiveConfig,
   MultiObjectiveDimension,
@@ -29,12 +31,13 @@ import { FoodLibrary } from '../../../../food/food.types';
 
 // ─── 默认配置 ───
 
-/** 默认偏好权重（健康优先，兼顾口味） */
+/** 默认偏好权重（宏量贴合优先，兼顾健康/口味） */
 const DEFAULT_PREFERENCES: Record<MultiObjectiveDimension, number> = {
-  health: 0.4,
-  taste: 0.3,
-  cost: 0.15,
-  convenience: 0.15,
+  macroFit: 0.35,
+  health: 0.25,
+  taste: 0.2,
+  cost: 0.1,
+  convenience: 0.1,
 };
 
 /** 默认口味偏好（中性，无特别偏好） */
@@ -110,6 +113,9 @@ export function multiObjectiveOptimize(
   candidates: ScoredFood[],
   config: MultiObjectiveConfig,
   maxScoreInPool?: number,
+  dailyTarget?: MealTarget,
+  mealType?: string,
+  goalType?: string,
 ): MultiObjectiveResult {
   if (candidates.length === 0) {
     return {
@@ -128,9 +134,12 @@ export function multiObjectiveOptimize(
   const maxScore =
     maxScoreInPool ?? Math.max(...candidates.map((c) => c.score), 1);
 
-  // 3. 为每个候选食物计算 4 维目标向量
+  // P0-4: 派生餐级目标（按 MEAL_RATIOS 分摊日目标）
+  const mealTarget = deriveMealTarget(dailyTarget, mealType, goalType);
+
+  // 3. 为每个候选食物计算 5 维目标向量
   const scored: MultiObjectiveScoredFood[] = candidates.map((sf) => {
-    const objectives = computeObjectives(sf, maxScore, tasteRef);
+    const objectives = computeObjectives(sf, maxScore, tasteRef, mealTarget);
     return {
       scoredFood: sf,
       objectives,
@@ -214,18 +223,20 @@ export function extractRankedFoods(
 // ─── 目标维度计算 ───
 
 /**
- * 计算单个食物的 4 维目标向量
+ * 计算单个食物的 5 维目标向量
  */
 function computeObjectives(
   sf: ScoredFood,
   maxScore: number,
   tasteRef: Required<NonNullable<MultiObjectiveConfig['tastePreference']>>,
+  mealTarget: MealTarget | null,
 ): Record<MultiObjectiveDimension, number> {
   return {
     health: computeHealthScore(sf, maxScore),
     taste: computeTasteScore(sf.food, tasteRef),
     cost: computeCostScore(sf.food),
     convenience: computeConvenienceScore(sf.food),
+    macroFit: computeMacroFitScore(sf, mealTarget),
   };
 }
 
@@ -339,6 +350,76 @@ function computeConvenienceScore(food: FoodLibrary): number {
 
   if (!hasAnyData) return 0.5;
   return totalWeight > 0 ? weightedScore / totalWeight : 0.5;
+}
+
+/**
+ * P0-4: 宏量贴合度 — 食物（按标准份量）与餐级目标在四宏量上的平均贴合度
+ *
+ * 公式: macroFit = 1 − avg(|actual − target| / target)  for (calories, protein, fat, carbs)
+ *   - actual: 该食物每份的宏量
+ *   - target: 日目标 × MEAL_RATIOS[goalType][mealType]（餐级分摊）
+ *   - 单份食物很难"完美"贴合，故用相对偏差衡量贡献度；越接近餐级目标分越高
+ *   - 避免单份食物爆掉餐级目标：actual > 2×target 时强烈惩罚
+ *
+ * 若缺少 dailyTarget/mealType/goalType，则返回中性分 0.5（不影响 Pareto 排序）
+ */
+function computeMacroFitScore(
+  sf: ScoredFood,
+  mealTarget: MealTarget | null,
+): number {
+  if (!mealTarget) return 0.5;
+
+  const dims: Array<{ actual: number; target: number }> = [
+    { actual: sf.servingCalories, target: mealTarget.calories },
+    { actual: sf.servingProtein, target: mealTarget.protein },
+    { actual: sf.servingFat, target: mealTarget.fat },
+    { actual: sf.servingCarbs, target: mealTarget.carbs },
+  ];
+
+  let totalFit = 0;
+  let validDims = 0;
+  for (const { actual, target } of dims) {
+    if (target <= 0) continue;
+    // 相对偏差 → 贴合度
+    // 单份食物通常只贡献餐级目标的一部分（20%~80% 正常）
+    // 贡献度接近 1.0×target 满分；过多（>2×target）强惩罚；过少（<0.1×target）弱分
+    const ratio = actual / target;
+    let fit: number;
+    if (ratio <= 1.0) {
+      // 欠量：线性打分，ratio=0 → 0.3（仍有基础分，因为不是每个食物都要贡献所有维度），ratio=1.0 → 1.0
+      fit = 0.3 + 0.7 * ratio;
+    } else if (ratio <= 2.0) {
+      // 超量但可控：1.0 → 1.0, 2.0 → 0.3
+      fit = 1.0 - 0.7 * (ratio - 1.0);
+    } else {
+      // 严重超量：强惩罚
+      fit = Math.max(0, 0.3 - 0.15 * (ratio - 2.0));
+    }
+    totalFit += fit;
+    validDims++;
+  }
+
+  return validDims > 0 ? totalFit / validDims : 0.5;
+}
+
+/**
+ * P0-4: 派生餐级目标 = 日目标 × MEAL_RATIOS[goalType][mealType]
+ */
+function deriveMealTarget(
+  dailyTarget: MealTarget | undefined,
+  mealType: string | undefined,
+  goalType: string | undefined,
+): MealTarget | null {
+  if (!dailyTarget || !mealType || !goalType) return null;
+  const ratios = MEAL_RATIOS[goalType] || MEAL_RATIOS.health;
+  const ratio = ratios[mealType];
+  if (!ratio || ratio <= 0) return null;
+  return {
+    calories: dailyTarget.calories * ratio,
+    protein: dailyTarget.protein * ratio,
+    fat: dailyTarget.fat * ratio,
+    carbs: dailyTarget.carbs * ratio,
+  };
 }
 
 // ─── Pareto 非支配排序 ───

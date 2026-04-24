@@ -166,6 +166,7 @@ export const MULTI_OBJECTIVE_DIMENSIONS = [
   'taste',
   'cost',
   'convenience',
+  'macroFit',
 ] as const;
 
 export type MultiObjectiveDimension =
@@ -182,7 +183,7 @@ export interface MultiObjectiveConfig {
    * 各维度偏好权重（0-1），用于从 Pareto 前沿中选择最优解
    * 缺失的维度使用默认权重
    *
-   * 默认值: { health: 0.4, taste: 0.3, cost: 0.15, convenience: 0.15 }
+   * 默认值: { macroFit: 0.35, health: 0.25, taste: 0.2, cost: 0.1, convenience: 0.1 }
    */
   preferences?: Partial<Record<MultiObjectiveDimension, number>>;
 

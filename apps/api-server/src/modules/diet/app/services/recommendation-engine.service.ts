@@ -11,6 +11,7 @@ import {
   PipelineContext,
   MEAL_ROLES,
   MUSCLE_GAIN_MEAL_ROLES,
+  buildMealRoles,
   MealFromPoolRequest,
 } from '../recommendation/types/recommendation.types';
 import { HealthModifierContext } from '../recommendation/modifier/health-modifier-engine.service';
@@ -145,7 +146,7 @@ export class RecommendationEngineService implements OnModuleInit {
     goalType: string,
     consumed: { calories: number; protein: number },
     target: MealTarget,
-    dailyTarget: { calories: number; protein: number },
+    dailyTarget: MealTarget,
     userProfile?: UserProfileConstraints,
     additionalExcludeNames?: string[],
   ): Promise<MealRecommendation> {
@@ -373,7 +374,7 @@ export class RecommendationEngineService implements OnModuleInit {
     goalType: string,
     consumed: { calories: number; protein: number },
     target: MealTarget,
-    dailyTarget: { calories: number; protein: number },
+    dailyTarget: MealTarget,
     userProfile?: UserProfileConstraints,
   ): Promise<{
     takeout: MealRecommendation;
@@ -483,11 +484,16 @@ export class RecommendationEngineService implements OnModuleInit {
       );
 
       const mealPolicy = resolvedStrategy?.config?.meal;
+      // P0-A 根因#3 修复：按当餐蛋白目标动态构建 role 数组，突破 3 protein slot 天花板。
+      // 原硬编码 MEAL_ROLES 每餐 1 个 protein slot，减脂 152g/日目标物理不可达（天花板 ~105g）。
+      // 优先级：策略覆盖 > 动态派生 > 兜底增肌/普通模板
+      const dynamicRoles = buildMealRoles(mealType, target.protein);
       const defaultRoles =
         goalType === 'muscle_gain'
           ? (MUSCLE_GAIN_MEAL_ROLES[mealType] ?? MEAL_ROLES[mealType])
           : MEAL_ROLES[mealType];
       const roles = mealPolicy?.mealRoles?.[mealType] ??
+        dynamicRoles ??
         defaultRoles ?? ['carb', 'protein', 'veggie'];
 
       const {
@@ -570,11 +576,14 @@ export class RecommendationEngineService implements OnModuleInit {
 
     // MealPolicy 覆盖餐次角色模板
     const mealPolicy = resolvedStrategy?.config?.meal;
+    // P0-A 根因#3 修复：按当餐蛋白目标动态构建 role 数组
+    const dynamicRolesLegacy = buildMealRoles(mealType, target.protein);
     const defaultRolesLegacy =
       goalType === 'muscle_gain'
         ? (MUSCLE_GAIN_MEAL_ROLES[mealType] ?? MEAL_ROLES[mealType])
         : MEAL_ROLES[mealType];
     const roles = mealPolicy?.mealRoles?.[mealType] ??
+      dynamicRolesLegacy ??
       defaultRolesLegacy ?? ['carb', 'protein', 'veggie'];
     const picks: ScoredFood[] = [];
     const usedNames = new Set(excludeNames);
@@ -895,7 +904,7 @@ export class RecommendationEngineService implements OnModuleInit {
     mealType: string,
     goalType: string,
     target: MealTarget,
-    dailyTarget: { calories: number; protein: number },
+    dailyTarget: MealTarget,
     consumed: { calories: number; protein: number },
     userProfile?: UserProfileConstraints,
   ): Promise<WhyNotResult> {

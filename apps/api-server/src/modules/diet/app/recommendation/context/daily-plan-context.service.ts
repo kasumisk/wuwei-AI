@@ -38,6 +38,7 @@ import {
   CrossMealAdjustment,
   DailyPlanState,
   MealRecommendation,
+  MealTarget,
   ScoringConfigSnapshot,
 } from '../types/recommendation.types';
 import {
@@ -321,14 +322,14 @@ export class DailyPlanContextService {
    *
    * @param state       当前日计划状态
    * @param mealIndex   当前是第几餐（0-based）
-   * @param dailyTarget 日目标（热量 + 蛋白）
+   * @param dailyTarget 日目标（完整四宏量：calories/protein/fat/carbs + 可选 fiber/GL）
    * @param customRules 可选自定义规则（追加到内置规则后按 priority 排序执行）
    * @returns 跨餐调整参数
    */
   computeCrossMealAdjustment(
     state: DailyPlanState,
     mealIndex: number,
-    dailyTarget: { calories: number; protein: number },
+    dailyTarget: MealTarget,
     customRules?: readonly CrossMealRule[],
   ): CrossMealAdjustment {
     // 构建规则执行上下文
