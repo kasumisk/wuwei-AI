@@ -9,6 +9,12 @@ import { QUEUE_NAMES, QUEUE_DEFAULT_OPTIONS } from '../../../../core/queue';
 import { FoodAnalysisJobData } from '../processors/food-analysis.processor';
 import { ImageFoodAnalysisService } from './image-food-analysis.service';
 import {
+  AnalysisSessionService,
+  AnalyzedFoodItemLite,
+  AnalysisConfidenceLevel,
+} from './analysis-session.service';
+import { ConfidenceJudgeService } from './confidence-judge.service';
+import {
   DomainEvents,
   AnalysisSubmittedEvent,
   AnalysisCompletedEvent,
@@ -80,10 +86,32 @@ export interface AnalysisResult {
 /** 分析任务状态 */
 export type AnalysisStatus = 'processing' | 'completed' | 'failed';
 
+/**
+ * 置信度驱动的饮食图片分析 V1：链路阶段
+ * - analyzing    — Vision 调用中（status=processing 时同义）
+ * - needs_review — 低置信度，等待用户 refine（status=completed，但仅含 foods 骨架）
+ * - final        — 完整结果就绪（status=completed，含完整 AnalysisResult）
+ */
+export type AnalysisStage = 'analyzing' | 'needs_review' | 'final';
+
 /** Redis 中存储的分析结果 wrapper */
 export interface AnalysisCacheEntry {
   status: AnalysisStatus;
+  /** 置信度驱动的阶段标识；未设置视为 final（向后兼容） */
+  stage?: AnalysisStage;
   data?: AnalysisResult;
+  /** 持久化后的数据库 analysisId，供 analyze-save 使用 */
+  analysisId?: string;
+  /** 低置信度时仅有该字段（data 保持 undefined，避免把低质量数据误当最终结果） */
+  needsReview?: {
+    analysisSessionId: string;
+    imageUrl: string;
+    overallConfidence: number;
+    confidenceLevel: AnalysisConfidenceLevel;
+    reasons: string[];
+    foods: AnalyzedFoodItemLite[];
+    expiresAt: string;
+  };
   error?: string;
   createdAt: number;
 }
@@ -122,6 +150,9 @@ export class AnalyzeService {
     private readonly imageFoodAnalysisService: ImageFoodAnalysisService,
     // V6.1 Phase 2.6: 域事件发射
     private readonly eventEmitter: EventEmitter2,
+    // 置信度驱动 V1: session + 判定
+    private readonly sessionService: AnalysisSessionService,
+    private readonly confidenceJudge: ConfidenceJudgeService,
   ) {
     // 仅用于 submitAnalysis 的前置校验（API Key 是否配置）
     this.apiKey =
@@ -196,6 +227,11 @@ export class AnalyzeService {
    *
    * V6.1: 委托给 ImageFoodAnalysisService.executeAnalysis()，
    * 并在有 userId 时异步保存分析记录（V61 格式）。
+   *
+   * 置信度驱动 V1：在 Vision 结果到手后调用 ConfidenceJudgeService：
+   * - 高置信度：保持原有写缓存 + 持久化 + 事件流
+   * - 低置信度：Redis 写 needs_review 缓存 + 更新 session 为 awaiting_refine，
+   *   **不** persist 到 FoodIngestion，**不** emit ANALYSIS_COMPLETED
    */
   async processAnalysis(
     requestId: string,
@@ -209,17 +245,82 @@ export class AnalyzeService {
       userId,
     );
 
+    // 置信度驱动 V1：feature flag 启用 && 能找到 session 时才分支
+    const session = this.confidenceJudge.isEnabled()
+      ? await this.sessionService.getByRequestId(requestId)
+      : null;
+
+    if (session) {
+      const judgement = this.confidenceJudge.judge(result);
+      this.logger.log(
+        `confidence judgement: requestId=${requestId}, overall=${judgement.overallConfidence}, level=${judgement.level}`,
+      );
+
+      if (judgement.level === 'low') {
+        // —— 低置信度分支：仅写 needs_review，不持久化，不 emit 完成事件 ——
+        await this.sessionService.markAwaitingRefine(session.id, {
+          overallConfidence: judgement.overallConfidence,
+          confidenceLevel: judgement.level,
+          rawFoods: judgement.liteFoods,
+          reasons: judgement.reasons,
+          imageUrl,
+        });
+
+        await this.cacheAnalysisStatus(requestId, {
+          status: 'completed',
+          stage: 'needs_review',
+          needsReview: {
+            analysisSessionId: session.id,
+            imageUrl,
+            overallConfidence: judgement.overallConfidence,
+            confidenceLevel: judgement.level,
+            reasons: judgement.reasons,
+            foods: judgement.liteFoods,
+            expiresAt: session.expiresAt,
+          },
+          createdAt: Date.now(),
+        });
+
+        this.logger.log(
+          `analysis needs_review: requestId=${requestId}, sessionId=${session.id}, reasons=[${judgement.reasons.join(',')}]`,
+        );
+        return;
+      }
+
+      // 高置信度分支：标记 session 为 finalized，继续走原有持久化流程
+      await this.sessionService.markFinalized(session.id, {
+        imagePhase: {
+          overallConfidence: judgement.overallConfidence,
+          confidenceLevel: judgement.level,
+          rawFoods: judgement.liteFoods,
+          reasons: judgement.reasons,
+          imageUrl,
+        },
+      });
+    }
+
     // 写入 Redis 缓存（completed 状态，旧格式供轮询端点返回）
     await this.cacheAnalysisStatus(requestId, {
       status: 'completed',
+      stage: 'final',
       data: result,
       createdAt: Date.now(),
     });
 
-    // V6.1 Phase 2.4: 有登录用户时，异步保存分析记录到 food_analysis_records
+    // V6.1 Phase 2.4: 有登录用户时，持久化分析记录并把真实 analysisId 写回 cache
     if (userId) {
       this.imageFoodAnalysisService
         .persistAnalysisRecord(result, userId, imageUrl, mealType)
+        .then(async (analysisId) => {
+          // 把数据库 analysisId 补写进 Redis，供 analyze-save 使用
+          const entry = await this.getAnalysisStatus(requestId);
+          if (entry) {
+            await this.cacheAnalysisStatus(requestId, {
+              ...entry,
+              analysisId,
+            });
+          }
+        })
         .catch((err) =>
           this.logger.warn(
             `异步保存图片分析记录失败: ${(err as Error).message}`,

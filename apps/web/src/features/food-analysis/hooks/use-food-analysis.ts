@@ -3,17 +3,52 @@
 import { useState, useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { foodRecordService } from '@/lib/api/food-record';
-import type { AnalysisResult, FoodItem, FoodRecord, AnalysisHistoryResponse } from '@/types/food';
+import type {
+  AnalysisResult,
+  FoodItem,
+  FoodRecord,
+  AnalysisHistoryResponse,
+  AnalyzeImageOutcome,
+  RefinedFoodInput,
+} from '@/types/food';
 
 export function useFoodAnalysis() {
   const [analyzing, setAnalyzing] = useState(false);
   const queryClient = useQueryClient();
 
+  /**
+   * 置信度驱动 V1：返回判别联合 outcome
+   * - final：直接展示结果
+   * - needs_review：进入编辑态，调用 refineAnalysis 完成修正
+   */
   const analyzeImage = useCallback(
-    async (file: File, mealType?: string): Promise<AnalysisResult> => {
+    async (file: File, mealType?: string): Promise<AnalyzeImageOutcome> => {
       setAnalyzing(true);
       try {
         return await foodRecordService.analyzeImage(file, mealType);
+      } finally {
+        setAnalyzing(false);
+      }
+    },
+    []
+  );
+
+  /**
+   * 置信度驱动 V1：用户修正后重新生成最终分析
+   * 后端凭 analysisSessionId 跳过配额扣减
+   */
+  const refineAnalysis = useCallback(
+    async (
+      requestId: string,
+      payload: {
+        analysisSessionId: string;
+        foods: RefinedFoodInput[];
+        userNote?: string;
+      }
+    ): Promise<AnalysisResult> => {
+      setAnalyzing(true);
+      try {
+        return await foodRecordService.refineAnalysis(requestId, payload);
       } finally {
         setAnalyzing(false);
       }
@@ -131,6 +166,7 @@ export function useFoodAnalysis() {
   return {
     analyzing,
     analyzeImage,
+    refineAnalysis,
     analyzeText,
     saveRecord: saveMutation.mutateAsync,
     isSaving: saveMutation.isPending,

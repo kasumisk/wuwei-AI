@@ -83,7 +83,7 @@ async function bootstrap() {
   app.useStaticAssets(join(__dirname, '..', 'static'));
 
   const port = configService.get<number>('app.port', { infer: true }) || 3000;
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
 
   const appUrl = await app.getUrl();
   Logger.log(`应用运行在: ${appUrl}`, 'Bootstrap');

@@ -524,6 +524,82 @@ export interface WeeklyPlanData {
   weeklyNutrition: WeeklyNutritionSummary;
 }
 
+// ──────────────────────────────────────────────
+// 置信度驱动的饮食图片分析 V1
+// 关联：docs/CONFIDENCE_DRIVEN_FOOD_ANALYSIS_V1.md
+// ──────────────────────────────────────────────
+
+/** 分析结果阶段：analyzing → (final | needs_review → refine → final) */
+export type AnalysisStage = 'analyzing' | 'needs_review' | 'final';
+
+/** 置信度等级 */
+export type AnalysisConfidenceLevel = 'high' | 'low';
+
+/** 低置信度返回的食物骨架（无营养数据） */
+export interface AnalyzedFoodItemLite {
+  id: string;
+  name: string;
+  quantity: string;
+  estimatedWeightGrams: number | null;
+  confidence: number;
+  uncertaintyHints?: string[];
+}
+
+/** 用户修正后提交的食物项（v1.1：estimatedWeightGrams 必填，只用克数） */
+export interface RefinedFoodInput {
+  name: string;
+  estimatedWeightGrams: number;
+  originalId?: string;
+}
+
+/** 图片分析提交成功响应（processing） */
+export interface AnalyzeSubmitResponse {
+  requestId: string;
+  analysisSessionId?: string;
+  stage: 'analyzing';
+  imageUrl?: string;
+}
+
+/** 轮询结果：低置信度，待用户修正 */
+export interface AnalyzeNeedsReviewResponse {
+  status: 'completed';
+  stage: 'needs_review';
+  requestId: string;
+  analysisSessionId: string;
+  confidence: {
+    level: AnalysisConfidenceLevel;
+    overall: number;
+    threshold: number;
+    reasons: string[];
+  };
+  foods: AnalyzedFoodItemLite[];
+  imageUrl?: string;
+  expiresAt: string;
+  refineUrl: string;
+}
+
+/** 轮询结果：高置信度直出 final */
+export interface AnalyzeFinalResponse {
+  status: 'completed';
+  stage: 'final';
+  requestId: string;
+  analysisSessionId?: string;
+  confidence?: {
+    level: AnalysisConfidenceLevel;
+    overall?: number;
+    threshold?: number;
+    source?: 'vision' | 'user_refined';
+  };
+  result: AnalysisResult;
+}
+
+/** 图片分析端到端聚合结果（给上层组件消费） */
+export type AnalyzeImageOutcome =
+  | { stage: 'final'; result: AnalysisResult }
+  | { stage: 'needs_review'; needsReview: AnalyzeNeedsReviewResponse };
+
+// ──────────────────────────────────────────────
+
 // ── 文字分析请求 ──
 export interface AnalyzeTextRequest {
   text: string; // 1-500 chars

@@ -40,8 +40,10 @@ import {
 import { StorageService } from '../../../../storage/storage.service';
 import { AnalyzeService } from '../services/analyze.service';
 import { TextFoodAnalysisService } from '../services/text-food-analysis.service';
+import { AnalysisSessionService } from '../services/analysis-session.service';
 import { AnalyzeImageDto } from '../../../diet/app/dto/food.dto';
 import { AnalyzeTextDto } from '../dto/analyze-text.dto';
+import { RefineAnalysisDto } from '../dto/refine-analysis.dto';
 import { SaveAnalysisToRecordDto } from '../dto/save-analysis.dto';
 import { UserApiThrottle } from '../../../../core/throttle/throttle.constants';
 import { QuotaGateService } from '../../../subscription/app/services/quota-gate.service';
@@ -101,6 +103,8 @@ export class FoodAnalyzeController {
     private readonly prisma: PrismaService,
     private readonly foodService: FoodService,
     private readonly eventEmitter: EventEmitter2,
+    // 置信度驱动 V1：session 服务
+    private readonly analysisSessionService: AnalysisSessionService,
   ) {}
 
   // ==================== V6.1: 文本分析端点 ====================
@@ -797,10 +801,20 @@ export class FoodAnalyzeController {
       user.id,
     );
 
+    // 置信度驱动 V1：为本次请求创建 AnalysisSession（绑定 requestId + 配额记录）
+    const session = await this.analysisSessionService.createSession({
+      userId: user.id,
+      requestId,
+      mealType: dto.mealType,
+      imageUrl: uploaded.url,
+    });
+
     return ResponseWrapper.success(
       {
         requestId,
+        analysisSessionId: session.id,
         status: 'processing',
+        stage: 'analyzing' as const,
         imageUrl: uploaded.url,
       },
       '分析任务已提交',
@@ -834,7 +848,7 @@ export class FoodAnalyzeController {
 
     if (entry.status === 'processing') {
       return ResponseWrapper.success(
-        { requestId, status: 'processing' },
+        { requestId, status: 'processing', stage: 'analyzing' as const },
         '分析进行中',
       );
     }
@@ -844,6 +858,37 @@ export class FoodAnalyzeController {
         entry.error || 'AI 分析失败',
         HttpStatus.OK,
         { requestId, status: 'failed', error: entry.error },
+      );
+    }
+
+    // 置信度驱动 V1：needs_review 分支（低置信度，仅返回 foods 骨架）
+    if (entry.stage === 'needs_review' && entry.needsReview) {
+      const nr = entry.needsReview;
+      // 二次校验 session 归属（防止 requestId 被窃取轮询）
+      const session = await this.analysisSessionService.getById(
+        nr.analysisSessionId,
+      );
+      if (session && session.userId !== user.id) {
+        throw new ForbiddenException('无权访问该分析任务');
+      }
+      return ResponseWrapper.success(
+        {
+          requestId,
+          analysisSessionId: nr.analysisSessionId,
+          status: 'completed',
+          stage: 'needs_review' as const,
+          confidence: {
+            level: nr.confidenceLevel,
+            overall: nr.overallConfidence,
+            threshold: Number(process.env.CONFIDENCE_HIGH_THRESHOLD ?? 0.75),
+            reasons: nr.reasons,
+          },
+          foods: nr.foods,
+          imageUrl: nr.imageUrl,
+          expiresAt: nr.expiresAt,
+          refineUrl: `/api/app/food/analyze/${requestId}/refine`,
+        },
+        '识别可能不准确，请核对以获得准确分析',
       );
     }
 
@@ -939,14 +984,142 @@ export class FoodAnalyzeController {
         });
     }
 
+    // 置信度驱动 V1：高置信度直出时也反查 session，便于前端联动
+    const linkedSession =
+      await this.analysisSessionService.getByRequestId(requestId);
+
     return ResponseWrapper.success(
       {
         requestId,
+        // 优先用数据库 analysisId（供 analyze-save），fallback 为 requestId（兼容旧逻辑）
+        analysisId: entry.analysisId ?? requestId,
+        analysisSessionId: linkedSession?.id,
         status: 'completed',
+        stage: 'final' as const,
+        confidence: linkedSession?.imagePhase
+          ? {
+              level: linkedSession.imagePhase.confidenceLevel,
+              overall: linkedSession.imagePhase.overallConfidence,
+              threshold: Number(
+                process.env.CONFIDENCE_HIGH_THRESHOLD ?? 0.75,
+              ),
+              source: 'vision' as const,
+            }
+          : undefined,
         // 统一返回结构，客户端只消费 result
         result: trimmedResult,
       },
       '分析完成',
+    );
+  }
+
+  // ==================== 置信度驱动 V1：refine 端点 ====================
+
+  /**
+   * 用户修正低置信度识别结果，不扣配额，同步返回最终营养分析
+   * POST /api/app/food/analyze/:requestId/refine
+   *
+   * 关联设计文档：docs/CONFIDENCE_DRIVEN_FOOD_ANALYSIS_V1.md §4.3.3
+   *
+   * 流程：
+   * 1. 通过 requestId 反查 session
+   * 2. 校验归属 / 状态（awaiting_refine） / 未过期
+   * 3. 将 refinedFoods 拼成描述文本，调 TextFoodAnalysisService.analyze()
+   *    —— **不扣 AI_TEXT_ANALYSIS 配额**（session 已扣过 AI_IMAGE_ANALYSIS）
+   * 4. 结果按订阅裁剪后返回，session 置为 finalized
+   */
+  @Post('analyze/:requestId/refine')
+  @HttpCode(HttpStatus.OK)
+  @UserApiThrottle(10, 60)
+  @ApiOperation({ summary: '低置信度分析结果修正（不扣配额）' })
+  @ApiParam({ name: 'requestId', description: '首次图片分析 requestId' })
+  @ApiBody({ type: RefineAnalysisDto })
+  async refineAnalysis(
+    @Param('requestId') requestId: string,
+    @Body() dto: RefineAnalysisDto,
+    @CurrentAppUser() user: AppUserPayload,
+  ): Promise<ApiResponse> {
+    // 1. 反查 session（首选通过 requestId，其次 dto 中的 sessionId 作为双重校验）
+    const session =
+      await this.analysisSessionService.getByRequestId(requestId);
+    if (!session) {
+      throw new NotFoundException('分析任务不存在或已过期');
+    }
+    if (session.id !== dto.analysisSessionId) {
+      throw new BadRequestException('analysisSessionId 与 requestId 不匹配');
+    }
+
+    // 2. 校验归属 / 状态 / 未过期
+    try {
+      await this.analysisSessionService.assertRefineable(session.id, user.id);
+    } catch (err) {
+      const code = (err as { code?: string }).code;
+      if (code === 'SESSION_FORBIDDEN') {
+        throw new ForbiddenException('无权修正该分析任务');
+      }
+      if (code === 'SESSION_EXPIRED') {
+        return ResponseWrapper.error('分析会话已过期，请重新上传图片', 410);
+      }
+      if (code === 'SESSION_WRONG_STATUS') {
+        return ResponseWrapper.error(
+          '该分析任务不在待修正状态（可能已完成或已作废）',
+          409,
+        );
+      }
+      throw err;
+    }
+
+    // 3. 拼接描述文本并复用 TextFoodAnalysisService（不扣配额）
+    let derivedText: string;
+    try {
+      derivedText = this.analysisSessionService.buildDerivedText(
+        dto.foods,
+        dto.userNote,
+      );
+    } catch (e) {
+      throw new BadRequestException((e as Error).message || '修正后的食物列表无效');
+    }
+    if (!derivedText) {
+      throw new BadRequestException('修正后的食物列表无效');
+    }
+
+    const fullResult = await this.textFoodAnalysisService.analyze(
+      derivedText,
+      session.mealType,
+      user.id,
+    );
+
+    // 4. 按订阅等级裁剪
+    const summary = await this.subscriptionService.getUserSummary(user.id);
+    const trimmedResult = this.resultEntitlementService.trimResult(
+      fullResult,
+      summary.tier,
+      summary.entitlements,
+    );
+
+    // 5. 更新 session
+    await this.analysisSessionService.markFinalized(session.id, {
+      refinePhase: {
+        submittedAt: new Date().toISOString(),
+        refinedFoods: dto.foods,
+        derivedText,
+      },
+    });
+
+    return ResponseWrapper.success(
+      {
+        requestId,
+        analysisSessionId: session.id,
+        status: 'completed',
+        stage: 'final' as const,
+        confidence: {
+          level: 'high' as const,
+          source: 'user_refined' as const,
+        },
+        result: trimmedResult,
+        quotaConsumed: false,
+      },
+      '已按你的修正重新计算',
     );
   }
 

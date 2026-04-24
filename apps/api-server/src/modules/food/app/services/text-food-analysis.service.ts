@@ -903,20 +903,24 @@ export class TextFoodAnalysisService {
           continue;
         }
 
+        const fallbackGrams = f.estimatedWeightGrams || DEFAULT_SERVING_GRAMS;
+        const fallbackRatio = fallbackGrams / 100; // LLM 返回 per-100g，需换算为 per-serving
+
         resolved.push({
           name: f.llmName,
           normalizedName: f.llmName,
           nameEn: f.nameEn ?? undefined,
           quantity: f.quantity,
-          estimatedWeightGrams: f.estimatedWeightGrams || DEFAULT_SERVING_GRAMS,
+          estimatedWeightGrams: fallbackGrams,
           category: f.category,
           confidence: 0.7,
-          calories: f.calories || 0,
-          protein: f.protein || 0,
-          fat: f.fat || 0,
-          carbs: f.carbs || 0,
-          fiber: f.fiber,
-          sodium: f.sodium,
+          // per-100g → per-serving 换算（与 buildFromLibraryMatch 保持一致）
+          calories: Math.round((f.calories || 0) * fallbackRatio),
+          protein: Math.round((f.protein || 0) * fallbackRatio * 10) / 10,
+          fat: Math.round((f.fat || 0) * fallbackRatio * 10) / 10,
+          carbs: Math.round((f.carbs || 0) * fallbackRatio * 10) / 10,
+          fiber: f.fiber != null ? Math.round((f.fiber || 0) * fallbackRatio * 10) / 10 : undefined,
+          sodium: f.sodium != null ? Math.round((f.sodium || 0) * fallbackRatio) : undefined,
           saturatedFat: f.saturatedFat ?? null,
           transFat: f.transFat ?? null,
           addedSugar: f.addedSugar ?? null,

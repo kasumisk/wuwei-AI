@@ -21,6 +21,11 @@ import type {
   AnalysisHistoryItem,
   AnalysisHistoryResponse,
   NutritionScoreBreakdown,
+  AnalyzeImageOutcome,
+  AnalyzeNeedsReviewResponse,
+  AnalyzedFoodItemLite,
+  AnalysisConfidenceLevel,
+  RefinedFoodInput,
 } from '@/types/food';
 
 // ─────────────────────────────────────────────
@@ -160,6 +165,21 @@ type RawAnalysisData = {
   status?: 'processing' | 'completed' | 'failed';
   error?: string;
   result?: RawAnalysisData;
+  // ── 置信度驱动 V1：stage + needs_review 分支字段 ──
+  stage?: 'analyzing' | 'needs_review' | 'final';
+  analysisSessionId?: string;
+  imageUrl?: string;
+  expiresAt?: string;
+  refineUrl?: string;
+  confidence?: {
+    level?: AnalysisConfidenceLevel;
+    overall?: number;
+    threshold?: number;
+    reasons?: string[];
+    source?: 'vision' | 'user_refined';
+  };
+  // needs_review 时 foods 是 lite（无营养数据）— 复用 foods 字段
+  quotaConsumed?: boolean;
 };
 
 // ─────────────────────────────────────────────
@@ -301,7 +321,7 @@ async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function pollAnalyzeResult(requestId: string): Promise<AnalysisResult> {
+async function pollAnalyzeResult(requestId: string): Promise<AnalyzeImageOutcome> {
   const maxAttempts = 20;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     let res: ApiResponse<RawAnalysisData>;
@@ -319,9 +339,40 @@ async function pollAnalyzeResult(requestId: string): Promise<AnalysisResult> {
     }
     const data = res.data as RawAnalysisData;
     if (data.status === 'completed') {
+      // 置信度驱动 V1：needs_review 分支（低置信度，仅返回食物骨架）
+      if (data.stage === 'needs_review') {
+        const liteFoods: AnalyzedFoodItemLite[] = (data.foods ?? []).map((f, idx) => ({
+          id: (f as { id?: string }).id ?? `f_${String(idx + 1).padStart(2, '0')}`,
+          name: f.name ?? '未识别食物',
+          quantity: f.quantity ?? '',
+          estimatedWeightGrams:
+            typeof f.estimatedWeightGrams === 'number' ? f.estimatedWeightGrams : null,
+          confidence: typeof f.confidence === 'number' ? f.confidence : 0.6,
+          uncertaintyHints: (f as { uncertaintyHints?: string[] }).uncertaintyHints,
+        }));
+        const needsReview: AnalyzeNeedsReviewResponse = {
+          status: 'completed',
+          stage: 'needs_review',
+          requestId,
+          analysisSessionId: data.analysisSessionId ?? '',
+          confidence: {
+            level: data.confidence?.level ?? 'low',
+            overall: Number(data.confidence?.overall ?? 0),
+            threshold: Number(data.confidence?.threshold ?? 0.75),
+            reasons: data.confidence?.reasons ?? [],
+          },
+          foods: liteFoods,
+          imageUrl: data.imageUrl,
+          expiresAt: data.expiresAt ?? '',
+          refineUrl: data.refineUrl ?? `/app/food/analyze/${requestId}/refine`,
+        };
+        return { stage: 'needs_review', needsReview };
+      }
       // 新协议: data.result 为统一结构；兜底兼容历史混合响应
+      // data.analysisId 是后端写回的真实数据库 ID，优先使用（供 analyze-save）
       const payload = data.result ?? data;
-      return mapAnalysisData(payload, requestId);
+      const realAnalysisId = data.analysisId ?? requestId;
+      return { stage: 'final', result: mapAnalysisData(payload, realAnalysisId) };
     }
     if (data.status === 'failed') throw new Error(data.error || 'AI 分析失败');
     await sleep(1500);
@@ -386,8 +437,14 @@ function rethrowWithPaywall(err: unknown): never {
 // 导出服务
 // ─────────────────────────────────────────────
 export const foodRecordService = {
-  /** 上传食物图片 AI 分析 */
-  analyzeImage: async (file: File, mealType?: string): Promise<AnalysisResult> => {
+  /**
+   * 上传食物图片 AI 分析
+   *
+   * 置信度驱动 V1：返回判别联合
+   * - { stage: 'final', result }：高置信度直出
+   * - { stage: 'needs_review', needsReview }：低置信度，需要用户修正后调用 refineAnalysis
+   */
+  analyzeImage: async (file: File, mealType?: string): Promise<AnalyzeImageOutcome> => {
     const formData = new FormData();
     formData.append('file', file);
     if (mealType) formData.append('mealType', mealType);
@@ -406,6 +463,35 @@ export const foodRecordService = {
     const requestId = d?.requestId || d?.analysisId;
     if (!requestId) throw new Error('分析任务创建失败，请重试');
     return pollAnalyzeResult(requestId);
+  },
+
+  /**
+   * 置信度驱动 V1：用户修正后重新分析
+   *
+   * 复用原 requestId，后端凭 analysisSessionId 校验归属 + 跳过配额扣减。
+   * 返回最终分析结果（等价于高置信度直出）。
+   */
+  refineAnalysis: async (
+    requestId: string,
+    payload: {
+      analysisSessionId: string;
+      foods: RefinedFoodInput[];
+      userNote?: string;
+    }
+  ): Promise<AnalysisResult> => {
+    let res: ApiResponse<RawAnalysisData>;
+    try {
+      res = await clientPost<RawAnalysisData>(`/app/food/analyze/${requestId}/refine`, payload);
+    } catch (err) {
+      rethrowWithPaywall(err);
+    }
+    if (!res.success) {
+      throw buildApiError(res.message, res.data);
+    }
+    const data = res.data as RawAnalysisData;
+    // 后端返回 { status:'completed', stage:'final', analysisSessionId, confidence, result, quotaConsumed:false }
+    const payloadData = data.result ?? data;
+    return mapAnalysisData(payloadData, requestId);
   },
 
   /** 更新饮食记录 */

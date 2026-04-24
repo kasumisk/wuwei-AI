@@ -138,6 +138,7 @@ export class ImageFoodAnalysisService {
   private readonly apiKey: string;
   private readonly baseUrl: string;
   private readonly model: string;
+  private readonly fallbackModel: string;
 
   constructor(
     private readonly configService: ConfigService,
@@ -162,7 +163,10 @@ export class ImageFoodAnalysisService {
       'https://openrouter.ai/api/v1';
     this.model =
       this.configService.get<string>('VISION_MODEL') ||
-      'baidu/ernie-4.5-vl-28b-a3b';
+      'qwen/qwen3-vl-32b-instruct';
+    this.fallbackModel =
+      this.configService.get<string>('VISION_MODEL_FALLBACK') ||
+      'qwen/qwen-vl-plus';
   }
 
   // ==================== 公共方法 ====================
@@ -221,50 +225,7 @@ export class ImageFoodAnalysisService {
     const systemPrompt = _buildGoalAwarePrompt(goalType, fullContext);
 
     try {
-      const response = await fetch(`${this.baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.apiKey}`,
-          'HTTP-Referer': 'https://uway.dev-net.uk',
-          'X-Title': 'Wuwei Health',
-        },
-        body: JSON.stringify({
-          model: this.model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: getUserMessage('image', userHint),
-                },
-                {
-                  type: 'image_url',
-                  // V3.4 P1.2: 'auto' 让模型根据图片自适应选择细节级别，提升多菜品识别率
-                  imageUrl: { url: imageUrl, detail: 'auto' },
-                },
-              ],
-            },
-          ],
-          max_tokens: 1500, // V3.4 P1.2: 1000→1500，防止多食物 JSON 被截断
-          temperature: 0.3,
-        }),
-        signal: AbortSignal.timeout(30000),
-      });
-
-      if (!response.ok) {
-        const err = await response.text();
-        this.logger.error(`OpenRouter API error: ${response.status} ${err}`);
-        throw new BadRequestException('AI analysis failed, please try again later');
-      }
-
-      const data = await response.json();
-      const content = data.choices?.[0]?.message?.content || '';
-      this.logger.debug(
-        `AI image analysis completed: model=${data.model}, tokens=${data.usage?.total_tokens || 'N/A'}`,
-      );
+      const content = await this.callVisionApi(systemPrompt, imageUrl, userHint);
 
       // 解析 AI 返回
       const result = this.parseAnalysisResult(content);
@@ -366,7 +327,49 @@ export class ImageFoodAnalysisService {
     const systemPrompt = _buildGoalAwarePrompt(goalType, fullContext);
 
     try {
-      const response = await fetch(`${this.baseUrl}/chat/completions`, {
+      const content = await this.callVisionApi(systemPrompt, imageUrl, userHint);
+      return this.parseToAnalyzedFoods(content);
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      this.logger.error(`AI image analysis error: ${(err as Error).message}`);
+      throw new BadRequestException('AI analysis timed out, please retry');
+    }
+  }
+
+  /**
+   * 统一 Vision API 调用：OpenRouter Chat Completions（图片多模态）
+   *
+   * - 使用 VISION_MODEL（默认 qwen/qwen2.5-vl-32b-instruct）
+   * - 遇到 429 Rate-Limit 自动切 VISION_MODEL_FALLBACK 重试一次
+   * - image_url 字段名符合 OpenAI/OpenRouter 规范
+   */
+  private async callVisionApi(
+    systemPrompt: string,
+    imageUrl: string,
+    userHint: string,
+  ): Promise<string> {
+    const buildBody = (model: string) =>
+      JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: getUserMessage('image', userHint) },
+              {
+                type: 'image_url',
+                image_url: { url: imageUrl, detail: 'auto' },
+              },
+            ],
+          },
+        ],
+        max_tokens: 1500,
+        temperature: 0.3,
+      });
+
+    const doFetch = async (model: string): Promise<Response> =>
+      fetch(`${this.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -374,48 +377,36 @@ export class ImageFoodAnalysisService {
           'HTTP-Referer': 'https://uway.dev-net.uk',
           'X-Title': 'Wuwei Health',
         },
-        body: JSON.stringify({
-          model: this.model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: getUserMessage('image', userHint),
-                },
-                {
-                  type: 'image_url',
-                  imageUrl: { url: imageUrl, detail: 'auto' },
-                },
-              ],
-            },
-          ],
-          max_tokens: 1500,
-          temperature: 0.3,
-        }),
+        body: buildBody(model),
         signal: AbortSignal.timeout(30000),
       });
 
-      if (!response.ok) {
-        const err = await response.text();
-        this.logger.error(`OpenRouter API error: ${response.status} ${err}`);
-        throw new BadRequestException('AI analysis failed, please try again later');
-      }
+    let response = await doFetch(this.model);
 
-      const data = await response.json();
-      const content = data.choices?.[0]?.message?.content || '';
-      this.logger.debug(
-        `AI image analysis completed: model=${data.model}, tokens=${data.usage?.total_tokens || 'N/A'}`,
+    // 429 → 切 fallback 重试一次
+    if (response.status === 429) {
+      this.logger.warn(
+        `Vision model ${this.model} rate-limited (429), retrying with fallback ${this.fallbackModel}`,
       );
-
-      return this.parseToAnalyzedFoods(content);
-    } catch (err) {
-      if (err instanceof BadRequestException) throw err;
-      this.logger.error(`AI image analysis error: ${(err as Error).message}`);
-      throw new BadRequestException('AI analysis timed out, please retry');
+      response = await doFetch(this.fallbackModel);
     }
+
+    if (!response.ok) {
+      const errText = await response.text();
+      this.logger.error(`OpenRouter API error: ${response.status} ${errText}`);
+      throw new BadRequestException('AI analysis failed, please try again later');
+    }
+
+    const data = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+      model?: string;
+      usage?: { total_tokens?: number };
+    };
+    const content = data.choices?.[0]?.message?.content ?? '';
+    this.logger.debug(
+      `Vision API completed: model=${data.model}, tokens=${data.usage?.total_tokens ?? 'N/A'}`,
+    );
+    return content;
   }
 
   /**
@@ -467,37 +458,42 @@ export class ImageFoodAnalysisService {
       });
 
       // 直接映射到 AnalyzedFoodItem（含 V5.0 新字段）
-      return rawFoods.map((f: any): AnalyzedFoodItem => ({
+      // LLM 返回的营养数据是 per-100g，需乘 estimatedWeightGrams/100 换算为 per-serving
+      return rawFoods.map((f: any): AnalyzedFoodItem => {
+        const grams = f.estimatedWeightGrams || 100;
+        const ratio = grams / 100;
+        return {
         name: f.name,
         nameEn: f.nameEn,
         quantity: f.quantity,
-        estimatedWeightGrams: f.estimatedWeightGrams,
+        estimatedWeightGrams: grams,
         standardServingG: f.standardServingG,
         standardServingDesc: f.standardServingDesc,
         category: f.category,
         confidence: f.confidence,
         estimated: f.estimated,
-        calories: f.calories || 0,
-        protein: f.protein || 0,
-        fat: f.fat || 0,
-        carbs: f.carbs || 0,
-        fiber: f.fiber,
-        sodium: f.sodium,
-        sugar: f.sugar,
-        saturatedFat: f.saturatedFat,
-        addedSugar: f.addedSugar,
-        transFat: f.transFat,
-        cholesterol: f.cholesterol,
-        omega3: f.omega3,
-        omega6: f.omega6,
-        solubleFiber: f.solubleFiber,
-        vitaminA: f.vitaminA,
-        vitaminC: f.vitaminC,
-        vitaminD: f.vitaminD,
-        calcium: f.calcium,
-        iron: f.iron,
-        potassium: f.potassium,
-        zinc: f.zinc,
+        calories: Math.round((f.calories || 0) * ratio),
+        protein: Math.round((f.protein || 0) * ratio * 10) / 10,
+        fat: Math.round((f.fat || 0) * ratio * 10) / 10,
+        carbs: Math.round((f.carbs || 0) * ratio * 10) / 10,
+        fiber: f.fiber != null ? Math.round((f.fiber || 0) * ratio * 10) / 10 : undefined,
+        sodium: f.sodium != null ? Math.round((f.sodium || 0) * ratio) : undefined,
+        sugar: f.sugar != null ? Math.round((f.sugar || 0) * ratio * 10) / 10 : undefined,
+        saturatedFat: f.saturatedFat != null ? Math.round((f.saturatedFat || 0) * ratio * 10) / 10 : undefined,
+        addedSugar: f.addedSugar != null ? Math.round((f.addedSugar || 0) * ratio * 10) / 10 : undefined,
+        transFat: f.transFat != null ? Math.round((f.transFat || 0) * ratio * 10) / 10 : undefined,
+        cholesterol: f.cholesterol != null ? Math.round((f.cholesterol || 0) * ratio) : undefined,
+        omega3: f.omega3 != null ? Math.round((f.omega3 || 0) * ratio) : undefined,
+        omega6: f.omega6 != null ? Math.round((f.omega6 || 0) * ratio) : undefined,
+        solubleFiber: f.solubleFiber != null ? Math.round((f.solubleFiber || 0) * ratio * 10) / 10 : undefined,
+        vitaminA: f.vitaminA != null ? Math.round((f.vitaminA || 0) * ratio) : undefined,
+        vitaminC: f.vitaminC != null ? Math.round((f.vitaminC || 0) * ratio * 10) / 10 : undefined,
+        vitaminD: f.vitaminD != null ? Math.round((f.vitaminD || 0) * ratio * 10) / 10 : undefined,
+        calcium: f.calcium != null ? Math.round((f.calcium || 0) * ratio) : undefined,
+        iron: f.iron != null ? Math.round((f.iron || 0) * ratio * 10) / 10 : undefined,
+        potassium: f.potassium != null ? Math.round((f.potassium || 0) * ratio) : undefined,
+        zinc: f.zinc != null ? Math.round((f.zinc || 0) * ratio * 10) / 10 : undefined,
+        // GI、GL 是食物固有属性，不按份量缩放
         glycemicIndex: f.glycemicIndex,
         glycemicLoad: f.glycemicLoad,
         qualityScore: f.qualityScore,
@@ -515,7 +511,8 @@ export class ImageFoodAnalysisService {
         foodForm: f.foodForm,
         commonPortions: Array.isArray(f.commonPortions) ? f.commonPortions : undefined,
         dishPriority: f.dishPriority,
-      }));
+        };
+      });
     } catch {
       this.logger.warn(`AI response parse to AnalyzedFoodItem[] failed: ${content.substring(0, 200)}`);
       return [];

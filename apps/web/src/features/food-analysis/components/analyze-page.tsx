@@ -17,13 +17,25 @@ import { SavedImpact } from './saved-impact';
 import { InputTabs, type InputTabType } from './input-tabs';
 import { FrequentInput } from './frequent-input';
 import { SearchInput } from './search-input';
+import { FoodEditList } from './food-edit-list';
 import { LocalizedLink } from '@/components/common/localized-link';
-import type { AnalysisResult, FoodItem } from '@/types/food';
+import type {
+  AnalysisResult,
+  FoodItem,
+  AnalyzeNeedsReviewResponse,
+  RefinedFoodInput,
+} from '@/types/food';
 import { BottomNav } from '@/components/common/bottom-nav';
 import { AnalyzeQuotaBadge } from '@/features/subscription/components/quota-badge';
 
 type MealTypeOption = 'breakfast' | 'lunch' | 'dinner' | 'snack';
-type Step = 'upload' | 'analyzing' | 'result' | 'saved';
+type Step =
+  | 'upload'
+  | 'analyzing'
+  | 'low_confidence'
+  | 'analyzing_refine'
+  | 'result'
+  | 'saved';
 
 const mealTypeLabels: Record<MealTypeOption, string> = {
   breakfast: '早餐',
@@ -187,6 +199,7 @@ export function AnalyzePage() {
   const { isLoggedIn } = useAuth();
   const {
     analyzeImage,
+    refineAnalysis,
     analyzeText,
     saveRecord,
     saveAnalysis,
@@ -228,6 +241,8 @@ export function AnalyzePage() {
   const [preSaveSummary, setPreSaveSummary] = useState<import('@/types/food').DailySummary | null>(
     null
   );
+  /** 置信度驱动 V1：低置信度时保留 needs_review 数据供编辑 */
+  const [pendingReview, setPendingReview] = useState<AnalyzeNeedsReviewResponse | null>(null);
 
   useEffect(() => {
     if (!isLoggedIn) router.push('/login');
@@ -279,23 +294,31 @@ export function AnalyzePage() {
     [toast, previewUrl]
   );
 
-  // ── 图片分析（带超时） ──
+  // ── 图片分析（带超时；置信度驱动 V1：按 outcome.stage 分支） ──
   const handleAnalyzeImage = useCallback(async () => {
     if (!selectedFile) return;
     setAnalyzeElapsed(0);
     setStep('analyzing');
     analyzeAbortRef.current = false;
+    setPendingReview(null);
 
     try {
-      const res = await Promise.race([
+      const outcome = await Promise.race([
         analyzeImage(selectedFile, mealType),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('分析超时，请重试')), ANALYZE_TIMEOUT_MS)
         ),
       ]);
       if (analyzeAbortRef.current) return; // 用户已取消
-      setResult(res);
-      setEditedFoods(res.foods);
+
+      if (outcome.stage === 'needs_review') {
+        setPendingReview(outcome.needsReview);
+        setStep('low_confidence');
+        return;
+      }
+      // stage === 'final'
+      setResult(outcome.result);
+      setEditedFoods(outcome.result.foods);
       setStep('result');
     } catch (err) {
       if (analyzeAbortRef.current) return; // 用户已取消
@@ -311,6 +334,49 @@ export function AnalyzePage() {
       setStep('upload');
     }
   }, [selectedFile, mealType, analyzeImage, toast]);
+
+  // ── 低置信度用户修正后重新分析 ──
+  const handleRefineSubmit = useCallback(
+    async (foods: RefinedFoodInput[], userNote?: string) => {
+      if (!pendingReview) return;
+      const { requestId, analysisSessionId } = pendingReview;
+      setAnalyzeElapsed(0);
+      setStep('analyzing_refine');
+      analyzeAbortRef.current = false;
+      try {
+        const res = await Promise.race([
+          refineAnalysis(requestId, { analysisSessionId, foods, userNote }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('分析超时，请重试')), ANALYZE_TIMEOUT_MS)
+          ),
+        ]);
+        if (analyzeAbortRef.current) return;
+        setResult(res);
+        setEditedFoods(res.foods);
+        setPendingReview(null);
+        setStep('result');
+      } catch (err) {
+        if (analyzeAbortRef.current) return;
+        if (err && typeof err === 'object' && handlePaywallError(err as Record<string, unknown>)) {
+          // refine 不应触发 paywall，但兜底处理
+          setStep('low_confidence');
+          return;
+        }
+        toast({
+          title: err instanceof Error ? err.message : '重新分析失败',
+          variant: 'destructive',
+        });
+        setStep('low_confidence');
+      }
+    },
+    [pendingReview, refineAnalysis, toast]
+  );
+
+  // ── 取消低置信度修正，回到上传态 ──
+  const handleRefineCancel = useCallback(() => {
+    setPendingReview(null);
+    setStep('upload');
+  }, []);
 
   // ── 文字分析（带超时） ──
   const analyzeTextByContent = useCallback(
@@ -442,6 +508,7 @@ export function AnalyzePage() {
     setResult(null);
     setEditedFoods([]);
     setSavedRecordId(null);
+    setPendingReview(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, [previewUrl]);
 
@@ -834,8 +901,8 @@ export function AnalyzePage() {
           </div>
         )}
 
-        {/* Step 2: Analyzing */}
-        {step === 'analyzing' && (
+        {/* Step 2: Analyzing（含 refine 重新分析） */}
+        {(step === 'analyzing' || step === 'analyzing_refine') && (
           <div className="flex flex-col items-center justify-center py-20 gap-4">
             <div className="relative w-20 h-20">
               <div className="absolute inset-0  bg-primary/20 animate-ping" />
@@ -853,26 +920,89 @@ export function AnalyzePage() {
               </div>
             </div>
             <div className="text-center">
-              <h2 className="text-xl font-headline font-bold">AI 正在分析...</h2>
+              <h2 className="text-xl font-headline font-bold">
+                {step === 'analyzing_refine' ? '根据您的修正重新分析...' : 'AI 正在分析...'}
+              </h2>
               <p className="text-muted-foreground text-sm mt-2">
-                {analyzeElapsed < 3
-                  ? '上传中...'
-                  : analyzeElapsed < 8
-                    ? inputMode === 'text'
-                      ? '解析食物描述...'
-                      : '识别食物中...'
-                    : analyzeElapsed < 20
-                      ? '计算营养数据...'
-                      : '即将完成...'}
+                {step === 'analyzing_refine'
+                  ? '基于修正内容生成营养分析（不额外计次）'
+                  : analyzeElapsed < 3
+                    ? '上传中...'
+                    : analyzeElapsed < 8
+                      ? inputMode === 'text'
+                        ? '解析食物描述...'
+                        : '识别食物中...'
+                      : analyzeElapsed < 20
+                        ? '计算营养数据...'
+                        : '即将完成...'}
               </p>
               <p className="text-xs text-muted-foreground/60 mt-1">已用时 {analyzeElapsed}s</p>
             </div>
-            <button
-              onClick={handleCancelAnalyze}
-              className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-4 transition-colors mt-2"
-            >
-              取消分析
-            </button>
+            {step === 'analyzing' && (
+              <button
+                onClick={handleCancelAnalyze}
+                className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-4 transition-colors mt-2"
+              >
+                取消分析
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Step 2.5: Low Confidence — 低置信度修正（置信度驱动 V1） */}
+        {step === 'low_confidence' && pendingReview && (
+          <div className="space-y-5">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    width="18"
+                    height="18"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 2L1 21h22L12 2zm0 6l7.53 13H4.47L12 8zm-1 4v4h2v-4h-2zm0 6v2h2v-2h-2z" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-sm font-semibold text-amber-900">
+                    识别结果置信度较低，请确认食物信息
+                  </h3>
+                  <p className="mt-1 text-xs text-amber-800">
+                    置信度 {Math.round(pendingReview.confidence.overall * 100)}%，低于阈值{' '}
+                    {Math.round(pendingReview.confidence.threshold * 100)}
+                    %。请修正后继续，不会重复计次。
+                  </p>
+                  {pendingReview.confidence.reasons &&
+                    pendingReview.confidence.reasons.length > 0 && (
+                      <ul className="mt-2 list-disc space-y-0.5 pl-4 text-xs text-amber-800">
+                        {pendingReview.confidence.reasons.map((reason, i) => (
+                          <li key={i}>{reason}</li>
+                        ))}
+                      </ul>
+                    )}
+                </div>
+              </div>
+            </div>
+
+            {pendingReview.imageUrl && (
+              <div className="overflow-hidden rounded-lg border border-gray-200">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={pendingReview.imageUrl}
+                  alt="待分析图片"
+                  className="h-48 w-full object-cover"
+                />
+              </div>
+            )}
+
+            <FoodEditList
+              initialFoods={pendingReview.foods}
+              onSubmit={handleRefineSubmit}
+              onCancel={handleRefineCancel}
+              submitting={analyzing}
+            />
           </div>
         )}
 

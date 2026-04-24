@@ -11,6 +11,9 @@ import { FoodAnalysisProcessor } from './app/processors/food-analysis.processor'
 import { TextFoodAnalysisService } from './app/services/text-food-analysis.service';
 // V6.1 Phase 2.3: 图片分析服务（从 AnalyzeService 拆分出的核心分析逻辑）
 import { ImageFoodAnalysisService } from './app/services/image-food-analysis.service';
+// 置信度驱动 V1：Session + 判定
+import { AnalysisSessionService } from './app/services/analysis-session.service';
+import { ConfidenceJudgeService } from './app/services/confidence-judge.service';
 // V6.1 Phase 2.6: 分析事件监听器（联动画像和推荐）
 import { AnalysisEventListener } from './app/listeners/analysis-event.listener';
 // V6.2 Phase 2.3: 分析保存事件监听器（popularity 更新）
@@ -61,6 +64,9 @@ import { RbacModule } from '../rbac/rbac.module';
     TextFoodAnalysisService,
     // V6.1 Phase 2.3: 图片分析核心服务
     ImageFoodAnalysisService,
+    // 置信度驱动 V1
+    AnalysisSessionService,
+    ConfidenceJudgeService,
     // V6.1 Phase 2.6: 分析事件监听器
     AnalysisEventListener,
     // V6.2 Phase 2.3: 分析保存事件监听器
