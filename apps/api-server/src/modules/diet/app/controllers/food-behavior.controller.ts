@@ -48,7 +48,6 @@ export class FoodBehaviorController {
    * GET /api/app/food/proactive-check
    */
   @Get('proactive-check')
-  @RequireFeature(GatedFeature.BEHAVIOR_ANALYSIS)
   @ApiOperation({ summary: '主动提醒检查' })
   async proactiveCheck(
     @CurrentAppUser() user: AppUserPayload,

@@ -275,37 +275,28 @@ export class TextFoodAnalysisService {
     );
 
     // V2.1: Steps 4-13 委托给统一分析管道
-    // V4.9: scoringFoods 需要 per-serving 值（从 per-100g 换算）
+    // parsedFoods 里的营养值已经是 per-serving（buildFromLibraryMatch / fallback 均已换算），
+    // 直接使用，不再乘 factor，避免双重换算导致 totals 虚高。
     const scoringFoods: ScoringFoodItem[] = parsedFoods.map((f) => {
       const grams = f.estimatedWeightGrams || f.standardServingG || 100;
-      const factor = grams / 100;
       return {
         name: f.name,
         confidence: f.confidence,
-        calories: (f.calories || 0) * factor,
-        protein: (f.protein || 0) * factor,
-        fat: (f.fat || 0) * factor,
-        carbs: (f.carbs || 0) * factor,
-        fiber: f.fiber != null ? (f.fiber || 0) * factor : undefined,
-        sodium: f.sodium != null ? (f.sodium || 0) * factor : undefined,
+        calories: f.calories || 0,
+        protein: f.protein || 0,
+        fat: f.fat || 0,
+        carbs: f.carbs || 0,
+        fiber: f.fiber != null ? f.fiber || 0 : undefined,
+        sodium: f.sodium != null ? f.sodium || 0 : undefined,
         saturatedFat:
-          f.saturatedFat != null
-            ? (Number(f.saturatedFat) || 0) * factor
-            : undefined,
+          f.saturatedFat != null ? Number(f.saturatedFat) || 0 : undefined,
         addedSugar:
-          f.addedSugar != null
-            ? (Number(f.addedSugar) || 0) * factor
-            : undefined,
+          f.addedSugar != null ? Number(f.addedSugar) || 0 : undefined,
         estimatedWeightGrams: grams,
         // V4.7: 补全 V4.6 新增字段（此前缺失导致评分链路健康调整失效）
-        transFat:
-          f.transFat != null
-            ? (Number(f.transFat) || 0) * factor
-            : undefined,
+        transFat: f.transFat != null ? Number(f.transFat) || 0 : undefined,
         cholesterol:
-          f.cholesterol != null
-            ? (Number(f.cholesterol) || 0) * factor
-            : undefined,
+          f.cholesterol != null ? Number(f.cholesterol) || 0 : undefined,
         glycemicLoad: f.glycemicLoad,
         nutrientDensity: f.nutrientDensity,
         fodmapLevel: f.fodmapLevel as ScoringFoodItem['fodmapLevel'],
