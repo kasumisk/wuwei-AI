@@ -558,7 +558,7 @@ export class AppAuthService {
     };
   }
 
-  async refreshToken(userId: string): Promise<{ token: string }> {
+  async refreshToken(userId: string): Promise<AppLoginResponseDto> {
     const user = await this.prisma.appUsers.findUnique({
       where: { id: userId },
     });
@@ -571,8 +571,17 @@ export class AppAuthService {
       throw new UnauthorizedException('账号已被禁用');
     }
 
+    await this.prisma.appUsers.update({
+      where: { id: userId },
+      data: { lastLoginAt: new Date() },
+    });
+
     const token = this.generateToken(user as any);
-    return { token };
+    return {
+      token,
+      user: this.toUserResponse(user as any),
+      isNewUser: false,
+    };
   }
 
   async findById(id: string): Promise<AppUser | null> {
