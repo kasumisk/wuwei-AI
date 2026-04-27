@@ -435,10 +435,7 @@ export class CnFoodCompositionImporterService {
         name: 'oxalate_level',
         sql: `ALTER TABLE "foods" ADD COLUMN IF NOT EXISTS "oxalate_level" VARCHAR(10)`,
       },
-      {
-        name: 'embedding_v5',
-        sql: `ALTER TABLE "foods" ADD COLUMN IF NOT EXISTS "embedding_v5" VARCHAR`,
-      },
+      // V8.2: embedding_v5 已迁移到 food_embeddings 关联表，不再属于 foods 表 DDL 自动补齐范围
     ];
 
     for (const column of requiredColumns) {

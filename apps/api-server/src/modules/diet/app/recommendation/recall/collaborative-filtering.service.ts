@@ -146,7 +146,7 @@ export class CollaborativeFilteringService {
    * 用于 buildItemSimilarityMatrix 品类分块，减少 O(n²) 比较量
    */
   private async loadFoodCategories(): Promise<void> {
-    const foods = await this.prisma.foods.findMany({
+    const foods = await this.prisma.food.findMany({
       select: { id: true, category: true },
     });
     this.foodCategories = new Map(

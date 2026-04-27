@@ -58,7 +58,7 @@ export class FoodLibraryService {
          data_completeness, enrichment_status, last_enriched_at,
          field_sources, field_confidence,
          -- V8.1 审核
-         review_status, reviewed_by, reviewed_at, failed_fields,
+         review_status, reviewed_by, reviewed_at,
          created_at, updated_at,
          GREATEST(
            similarity(name, $1),
@@ -90,7 +90,7 @@ export class FoodLibraryService {
       where.category = category;
     }
 
-    return this.prisma.foods.findMany({
+    return this.prisma.food.findMany({
       where,
       orderBy: { searchWeight: 'desc' },
       take: safeLimit,
@@ -116,7 +116,7 @@ export class FoodLibraryService {
    * 按名称精确查找（SEO 落地页使用）
    */
   async findByName(name: string) {
-    const food = await this.prisma.foods.findFirst({
+    const food = await this.prisma.food.findFirst({
       where: { name },
     });
     if (!food) {
@@ -129,7 +129,7 @@ export class FoodLibraryService {
    * 按 ID 查找
    */
   async findById(id: string) {
-    const food = await this.prisma.foods.findUnique({
+    const food = await this.prisma.food.findUnique({
       where: { id },
     });
     if (!food) {
@@ -143,7 +143,7 @@ export class FoodLibraryService {
    */
   async getRelated(name: string, limit: number = 5) {
     const food = await this.findByName(name);
-    return this.prisma.foods.findMany({
+    return this.prisma.food.findMany({
       where: {
         category: food.category,
         name: { not: name },
@@ -159,11 +159,11 @@ export class FoodLibraryService {
   async findAll(limit: number = 500) {
     const take = Math.min(limit, 1000);
     const [items, total] = await Promise.all([
-      this.prisma.foods.findMany({
+      this.prisma.food.findMany({
         orderBy: { searchWeight: 'desc' },
         take,
       }),
-      this.prisma.foods.count(),
+      this.prisma.food.count(),
     ]);
     return { items, total };
   }
@@ -237,7 +237,7 @@ export class FoodLibraryService {
     if (frequentNames.length === 0) return [];
 
     const names = frequentNames.map((r) => r.name);
-    const foods = await this.prisma.foods.findMany({
+    const foods = await this.prisma.food.findMany({
       where: { name: { in: names } },
     });
 
@@ -255,7 +255,7 @@ export class FoodLibraryService {
    * 新增食物条目（管理员 / 后台用）
    */
   async create(data: any) {
-    return this.prisma.foods.create({ data });
+    return this.prisma.food.create({ data });
   }
 
   /**
@@ -263,7 +263,7 @@ export class FoodLibraryService {
    */
   async update(id: string, data: any) {
     await this.findById(id);
-    return this.prisma.foods.update({
+    return this.prisma.food.update({
       where: { id },
       data,
     });
@@ -274,7 +274,7 @@ export class FoodLibraryService {
    */
   async remove(id: string): Promise<void> {
     await this.findById(id);
-    await this.prisma.foods.delete({ where: { id } });
+    await this.prisma.food.delete({ where: { id } });
   }
 
   /**
@@ -283,7 +283,7 @@ export class FoodLibraryService {
    * V6 优化: 按 category 分组使用 updateMany 替代逐条 update，减少 DB 往返
    */
   async enrichMissingFields(): Promise<{ updated: number }> {
-    const foods = await this.prisma.foods.findMany();
+    const foods = await this.prisma.food.findMany();
     let updated = 0;
 
     const categoryQuality: Record<string, number> = {
@@ -358,7 +358,7 @@ export class FoodLibraryService {
       const chunk = batchUpdates.slice(i, i + TX_BATCH);
       await this.prisma.$transaction(
         chunk.map(({ id, data }) =>
-          this.prisma.foods.update({ where: { id }, data }),
+          this.prisma.food.update({ where: { id }, data }),
         ),
       );
       updated += chunk.length;

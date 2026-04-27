@@ -1174,7 +1174,7 @@ export class FoodAnalyzeController {
     @CurrentAppUser() user: AppUserPayload,
   ): Promise<ApiResponse> {
     // 1. 查找食物库记录
-    const food = await this.prisma.foods.findUnique({
+    const food = await this.prisma.food.findUnique({
       where: { id: foodId },
     });
     if (!food) {

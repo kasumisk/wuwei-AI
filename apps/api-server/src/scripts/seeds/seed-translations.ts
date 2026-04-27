@@ -630,7 +630,7 @@ async function seedTranslations() {
   let foodNotFound = 0;
 
   for (const t of FOOD_TRANSLATIONS_EN) {
-    const food = await prisma.foods.findFirst({ where: { name: t.zhName } });
+    const food = await prisma.food.findFirst({ where: { name: t.zhName } });
     if (!food) {
       foodNotFound++;
       console.warn(`  ⚠ 食物 "${t.zhName}" 未找到，跳过翻译`);

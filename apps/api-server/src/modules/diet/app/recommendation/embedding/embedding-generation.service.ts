@@ -11,7 +11,7 @@
  *     → EmbeddingGenerationService.onFoodPromoted()
  *       → safeEnqueue('embedding-generation', { foodIds: [...] })
  *         → EmbeddingGenerationProcessor.process()
- *           → computeFoodEmbedding() → 写入 foods.embedding + embedding_v5
+ *           → computeFoodEmbedding() → 写入 food_embeddings (model_version='v5')
  *
  * 批量 API 流程：
  *   Admin 调用 regenerateAll()
@@ -109,14 +109,14 @@ export class EmbeddingGenerationService {
    * Admin 管理端调用，分批入队
    */
   async regenerateAll(): Promise<RegenerateResult> {
-    // 查询所有缺 embedding 的活跃食物 ID
-    const foods = await this.prisma.foods.findMany({
-      where: {
-        OR: [{ embedding: { isEmpty: true } }, { embedding: { equals: [] } }],
-        status: 'active',
-      },
-      select: { id: true },
-    });
+    // V8.2: 查询所有缺 v5 嵌入的活跃食物 ID（通过 food_embeddings 关联表 LEFT JOIN）
+    const rows = await this.prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT f.id FROM "foods" f
+      LEFT JOIN "food_embeddings" fe
+        ON fe.food_id = f.id AND fe.model_version = 'v5'
+      WHERE fe.food_id IS NULL AND f.status = 'active'
+    `;
+    const foods = rows.map((r) => ({ id: r.id }));
 
     if (foods.length === 0) {
       return {
@@ -156,26 +156,36 @@ export class EmbeddingGenerationService {
    */
   async generateSync(foodId: string): Promise<boolean> {
     try {
-      const food = await this.prisma.foods.findUnique({
+      const food = await this.prisma.food.findUnique({
         where: { id: foodId },
       });
       if (!food) return false;
 
       const vec = computeFoodEmbedding(food as any);
+      const now = new Date();
+      const dimension = vec.length;
 
-      // 写入 embedding 字段
-      await this.prisma.foods.update({
-        where: { id: foodId },
-        data: {
-          embedding: vec,
-          embeddingUpdatedAt: new Date(),
-        },
-      });
+      // V8.2: 双模型写入 food_embeddings（legacy_v4 = Float[] + openai_v5 = vector）
+      await this.prisma.$executeRaw`
+        INSERT INTO "food_embeddings" ("food_id", "model_name", "vector_legacy", "dimension", "generated_at", "updated_at")
+        VALUES (${foodId}::uuid, 'legacy_v4', ${vec}::real[], ${dimension}, ${now}, ${now})
+        ON CONFLICT ("food_id", "model_name")
+        DO UPDATE SET "vector_legacy" = EXCLUDED."vector_legacy",
+                      "dimension"     = EXCLUDED."dimension",
+                      "updated_at"    = EXCLUDED."updated_at"
+      `;
 
       // 尝试写入 pgvector 列（失败不阻塞）
       try {
-        await this.prisma
-          .$queryRaw`UPDATE "foods" SET "embedding_v5" = ${`[${vec.join(',')}]`}::vector WHERE "id" = ${foodId}`;
+        await this.prisma.$executeRaw`
+          INSERT INTO "food_embeddings" ("food_id", "model_name", "model_version", "vector", "dimension", "generated_at", "updated_at")
+          VALUES (${foodId}::uuid, 'openai_v5', 'text-embedding-3-small', ${`[${vec.join(',')}]`}::vector, ${dimension}, ${now}, ${now})
+          ON CONFLICT ("food_id", "model_name")
+          DO UPDATE SET "vector"        = EXCLUDED."vector",
+                        "model_version" = EXCLUDED."model_version",
+                        "dimension"     = EXCLUDED."dimension",
+                        "updated_at"    = EXCLUDED."updated_at"
+        `;
       } catch {
         // pgvector 不可用时忽略
       }

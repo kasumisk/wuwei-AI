@@ -862,7 +862,7 @@ export class FoodEnrichmentService {
       return null;
     }
 
-    const food = await this.prisma.foods.findUnique({ where: { id: foodId } });
+    const food = await this.prisma.food.findUnique({ where: { id: foodId } });
     if (!food) {
       this.logger.warn(`食物 ${foodId} 不存在`);
       return null;
@@ -1616,7 +1616,7 @@ ${CORE_RULES}`;
     completeness: CompletenessScore;
     enrichmentStatus: string;
   }> {
-    const food = await this.prisma.foods.findUnique({ where: { id: foodId } });
+    const food = await this.prisma.food.findUnique({ where: { id: foodId } });
     if (!food) {
       throw new Error(`食物 ${foodId} 不存在`);
     }
@@ -1768,7 +1768,7 @@ ${CORE_RULES}`;
     }
 
     // 重新获取食物以计算最终完整度
-    const updatedFood = await this.prisma.foods.findUnique({
+    const updatedFood = await this.prisma.food.findUnique({
       where: { id: foodId },
     });
     const completeness = this.computeCompletenessScore(updatedFood || food);
@@ -1795,7 +1795,7 @@ ${CORE_RULES}`;
     // 不更新 data_completeness（需审核通过后才更新）
     // V8.3: 全部失败时写入 'failed'，非staged非失败时由 applyEnrichment 已更新
     if (shouldStage || (totalEnriched === 0 && totalFailed > 0)) {
-      await this.prisma.foods.update({
+      await this.prisma.food.update({
         where: { id: foodId },
         data: {
           enrichmentStatus: enrichmentStatus,
@@ -1804,7 +1804,7 @@ ${CORE_RULES}`;
       });
     }
 
-    // V8.1: 持久化失败字段到 failed_fields + 更新 field_sources
+    // V8.2: 持久化失败字段到 food_field_provenance + 更新 field_sources
     const allFailedFields = multiResult.stages.flatMap((sr) => sr.failedFields);
     if (allFailedFields.length > 0) {
       await this.persistFailedFields(
@@ -1837,7 +1837,7 @@ ${CORE_RULES}`;
    * 由 Processor onFailed 在最终失败时调用
    */
   async markEnrichmentFailed(foodId: string, errorMsg?: string): Promise<void> {
-    await this.prisma.foods.update({
+    await this.prisma.food.update({
       where: { id: foodId },
       data: {
         enrichmentStatus: 'failed',
@@ -1878,7 +1878,7 @@ ${CORE_RULES}`;
     }
     if (!fields || fields.length === 0) return null;
 
-    const food = await this.prisma.foods.findUnique({ where: { id: foodId } });
+    const food = await this.prisma.food.findUnique({ where: { id: foodId } });
     if (!food) {
       this.logger.warn(`enrichFieldsDirect: 食物 ${foodId} 不存在`);
       return null;
@@ -2173,7 +2173,7 @@ ${jsonSchema}`;
     };
     if (foodId) where.id = foodId;
 
-    return this.prisma.foods.findMany({
+    return this.prisma.food.findMany({
       where,
       select: { id: true, name: true },
       take: limit,
@@ -2184,7 +2184,7 @@ ${jsonSchema}`;
    * 重置食物的 enrichment_status 为 pending（用于重新入队前）
    */
   async resetEnrichmentStatus(foodId: string): Promise<void> {
-    await this.prisma.foods.update({
+    await this.prisma.food.update({
       where: { id: foodId },
       data: { enrichmentStatus: 'pending' },
     });
@@ -2221,7 +2221,7 @@ ${jsonSchema}`;
     if (category) where.category = category;
     if (primarySource) where.primarySource = primarySource;
 
-    return this.prisma.foods.findMany({
+    return this.prisma.food.findMany({
       where,
       select: { id: true, name: true },
       ...(limit && limit > 0 ? { take: limit } : {}),
@@ -2284,7 +2284,7 @@ ${jsonSchema}`;
     let cleared = 0;
     for (let i = 0; i < foodIds.length; i += BATCH) {
       const batch = foodIds.slice(i, i + BATCH);
-      await this.prisma.foods.updateMany({
+      await this.prisma.food.updateMany({
         where: { id: { in: batch } },
         data: { ...clearData, enrichmentStatus: 'pending' },
       });
@@ -2323,7 +2323,7 @@ ${jsonSchema}`;
     errors: number;
     statusChanges: Record<string, number>;
   }> {
-    const total = await this.prisma.foods.count();
+    const total = await this.prisma.food.count();
     let updated = 0;
     let errors = 0;
     const statusChanges: Record<string, number> = {};
@@ -2334,7 +2334,7 @@ ${jsonSchema}`;
     );
 
     while (true) {
-      const foods = await this.prisma.foods.findMany({
+      const foods = await this.prisma.food.findMany({
         take: batchSize,
         ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
         orderBy: { id: 'asc' },
@@ -2367,7 +2367,7 @@ ${jsonSchema}`;
             oldCompleteness !== completeness.score ||
             oldStatus !== newStatus
           ) {
-            await this.prisma.foods.update({
+            await this.prisma.food.update({
               where: { id: food.id },
               data: {
                 dataCompleteness: completeness.score,
@@ -2410,7 +2410,7 @@ ${jsonSchema}`;
       } & CompletenessScore)
     | null
   > {
-    const food = await this.prisma.foods.findUnique({
+    const food = await this.prisma.food.findUnique({
       where: { id: foodId },
     });
     if (!food) return null;
@@ -2423,12 +2423,14 @@ ${jsonSchema}`;
     };
   }
 
-  // ─── V8.1: 失败字段持久化 ──────────────────────────────────────────────
+  // ─── V8.2: 失败字段持久化（迁移到 food_field_provenance 表） ──────────
 
   /**
-   * 将补全失败的字段记录到 foods.failed_fields（JSONB）和 field_sources
-   * failed_fields 格式: { "field_name": { "lastAttempt": "ISO date", "attempts": N, "reason": "..." }, ... }
-   * field_sources 中失败字段标记为 "ai_enrichment_failed"
+   * 将补全失败的字段记录到 food_field_provenance 表（status='failed'）
+   * 同时更新 foods.field_sources 标记为 "ai_enrichment_failed"
+   *
+   * V8.2 重构：原 foods.failed_fields JSONB 列已删除，改用 food_field_provenance 关联表。
+   * 失败信息以 source='ai_enrichment' + status='failed' 写入；attempts 通过查询既有行计算。
    */
   private async persistFailedFields(
     foodId: string,
@@ -2437,19 +2439,17 @@ ${jsonSchema}`;
   ): Promise<void> {
     if (failedFields.length === 0) return;
 
-    const food = await this.prisma.foods.findUnique({ where: { id: foodId } });
+    const food = await this.prisma.food.findUnique({
+      where: { id: foodId },
+      select: { id: true, fieldSources: true },
+    });
     if (!food) return;
 
-    const existingFailed = (food.failedFields as Record<string, any>) || {};
     const existingSources = (food.fieldSources as Record<string, string>) || {};
-
-    const updatedFailed = { ...existingFailed };
     const updatedSources = { ...existingSources };
+    const PROVENANCE_SOURCE = 'ai_enrichment';
 
     for (const field of failedFields) {
-      const prev = updatedFailed[field];
-      const attempts = (prev?.attempts ?? 0) + 1;
-      // V8.2: 更精细的失败原因分类
       const stageResult = stageResults.find((sr) =>
         sr.failedFields.includes(field),
       );
@@ -2463,7 +2463,6 @@ ${jsonSchema}`;
         reason = 'AI和Fallback均失败';
         reasonCode = 'all_sources_failed';
       } else if (stageResult?.result) {
-        // AI 成功返回了结果，但该字段为 null（含重试后仍为null）
         reason = 'AI无法估算（返回null）';
         reasonCode = 'ai_returned_null';
       } else {
@@ -2471,24 +2470,66 @@ ${jsonSchema}`;
         reasonCode = 'unknown';
       }
 
-      updatedFailed[field] = {
+      // 查既有 attempts 计数（rawValue.attempts）
+      const existing = await this.prisma.foodFieldProvenance.findUnique({
+        where: {
+          foodId_fieldName_source: {
+            foodId,
+            fieldName: field,
+            source: PROVENANCE_SOURCE,
+          },
+        },
+        select: { rawValue: true, createdAt: true },
+      });
+
+      const prevAttempts =
+        ((existing?.rawValue as Record<string, any>)?.attempts as number) ?? 0;
+      const attempts = prevAttempts + 1;
+      const firstAttempt =
+        ((existing?.rawValue as Record<string, any>)?.firstAttempt as string) ??
+        existing?.createdAt?.toISOString() ??
+        new Date().toISOString();
+
+      const rawValue = {
         lastAttempt: new Date().toISOString(),
-        firstAttempt: prev?.firstAttempt ?? new Date().toISOString(),
+        firstAttempt,
         attempts,
-        reason,
         reasonCode,
         stage: stageResult?.stage ?? null,
         stageName: stageResult?.stageName ?? null,
       };
+
+      // UPSERT food_field_provenance
+      await this.prisma.foodFieldProvenance.upsert({
+        where: {
+          foodId_fieldName_source: {
+            foodId,
+            fieldName: field,
+            source: PROVENANCE_SOURCE,
+          },
+        },
+        create: {
+          foodId,
+          fieldName: field,
+          source: PROVENANCE_SOURCE,
+          status: 'failed',
+          failureReason: reason,
+          rawValue,
+        },
+        update: {
+          status: 'failed',
+          failureReason: reason,
+          rawValue,
+          updatedAt: new Date(),
+        },
+      });
+
       updatedSources[field] = 'ai_enrichment_failed';
     }
 
-    await this.prisma.foods.update({
+    await this.prisma.food.update({
       where: { id: foodId },
-      data: {
-        failedFields: updatedFailed,
-        fieldSources: updatedSources,
-      },
+      data: { fieldSources: updatedSources },
     });
 
     this.logger.log(
@@ -2641,7 +2682,7 @@ ${jsonSchema}`;
    *        修复 — avgCompleteness 改用 AVG(data_completeness) 而非阶段覆盖率均值
    */
   async getEnrichmentProgress(): Promise<EnrichmentProgress> {
-    const totalFoods = await this.prisma.foods.count();
+    const totalFoods = await this.prisma.food.count();
     if (totalFoods === 0) {
       return {
         totalFoods: 0,
@@ -2742,7 +2783,7 @@ ${jsonSchema}`;
     distribution: { range: string; min: number; max: number; count: number }[];
     avgCompleteness: number;
   }> {
-    const total = await this.prisma.foods.count();
+    const total = await this.prisma.food.count();
     if (total === 0) {
       return {
         total: 0,
@@ -2807,7 +2848,7 @@ ${jsonSchema}`;
   // ─── 扫描缺失字段统计（V7.9 优化：单次 SQL 聚合）───────────────────────
 
   async scanMissingFields(): Promise<MissingFieldStats> {
-    const total = await this.prisma.foods.count();
+    const total = await this.prisma.food.count();
 
     // V8.0: 字段名来自 ENRICHABLE_FIELDS 常量白名单，使用 Prisma.raw 安全构建
     const selectParts = ENRICHABLE_FIELDS.map((field) => {
@@ -3002,7 +3043,7 @@ ${jsonSchema}`;
   ): Promise<Record<string, any> | null> {
     if (!this.apiKey) return null;
 
-    const food = await this.prisma.foods.findUnique({ where: { id: foodId } });
+    const food = await this.prisma.food.findUnique({ where: { id: foodId } });
     if (!food) return null;
 
     // 检查是否已存在该语言翻译
@@ -3062,7 +3103,7 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
   ): Promise<Record<string, any> | null> {
     if (!this.apiKey) return null;
 
-    const food = await this.prisma.foods.findUnique({ where: { id: foodId } });
+    const food = await this.prisma.food.findUnique({ where: { id: foodId } });
     if (!food) return null;
 
     const existing = await this.prisma.foodRegionalInfo.findFirst({
@@ -3107,7 +3148,7 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
     result: EnrichmentResult,
     operator = 'ai_enrichment',
   ): Promise<{ updated: EnrichableField[]; skipped: EnrichableField[] }> {
-    const food = await this.prisma.foods.findUnique({ where: { id: foodId } });
+    const food = await this.prisma.food.findUnique({ where: { id: foodId } });
     if (!food) throw new Error(`Food ${foodId} not found`);
 
     const updates: Record<string, any> = {};
@@ -3186,7 +3227,7 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
           : 'pending';
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.foods.update({
+      await tx.food.update({
         where: { id: foodId },
         data: {
           ...prismaUpdates,
@@ -3265,7 +3306,7 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
         });
       }
 
-      const food = await tx.foods.findUnique({ where: { id: foodId } });
+      const food = await tx.food.findUnique({ where: { id: foodId } });
       if (food) {
         await tx.foodChangeLogs.create({
           data: {
@@ -3336,7 +3377,7 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
         });
       }
 
-      const food = await tx.foods.findUnique({ where: { id: foodId } });
+      const food = await tx.food.findUnique({ where: { id: foodId } });
       if (food) {
         await tx.foodChangeLogs.create({
           data: {
@@ -3374,7 +3415,7 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
     region?: string,
     operator = 'ai_enrichment',
   ): Promise<string> {
-    const food = await this.prisma.foods.findUnique({ where: { id: foodId } });
+    const food = await this.prisma.food.findUnique({ where: { id: foodId } });
     if (!food) throw new Error(`Food ${foodId} not found`);
 
     const changesPayload = {
@@ -3465,7 +3506,7 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
     const foodIds = [...new Set(rawList.map((log) => log.foodId))];
     const foods =
       foodIds.length > 0
-        ? await this.prisma.foods.findMany({
+        ? await this.prisma.food.findMany({
             where: { id: { in: foodIds } },
           })
         : [];
@@ -3550,7 +3591,7 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
       throw new Error(`Log ${logId} is not a staged enrichment`);
     }
 
-    const food = await this.prisma.foods.findUnique({
+    const food = await this.prisma.food.findUnique({
       where: { id: log.foodId },
       include: {
         foodTranslations: {
@@ -3797,7 +3838,7 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
     // V8.1: 更新 foods 表的审核者追踪字段
     // V8.2: 审核通过后重新计算并更新 data_completeness 和 enrichment_status
     if (target === 'foods') {
-      const updatedFood = await this.prisma.foods.findUnique({
+      const updatedFood = await this.prisma.food.findUnique({
         where: { id: log.foodId },
       });
       if (updatedFood) {
@@ -3809,7 +3850,7 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
               ? 'partial'
               : 'pending';
 
-        await this.prisma.foods.update({
+        await this.prisma.food.update({
           where: { id: log.foodId },
           data: {
             reviewedBy: operator,
@@ -3850,7 +3891,7 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
 
     // V8.3: 更新 foods.enrichment_status 为 'rejected'
     // 修复：拒绝前状态为 'staged'，拒绝后应标记为 'rejected' 以便统计和重新补全
-    await this.prisma.foods.update({
+    await this.prisma.food.update({
       where: { id: log.foodId },
       data: { enrichmentStatus: 'rejected' },
     });
@@ -4007,7 +4048,7 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
       return { rolledBack: false, detail: '该记录无可回退的字段' };
     }
 
-    const food = await this.prisma.foods.findUnique({
+    const food = await this.prisma.food.findUnique({
       where: { id: log.foodId },
     });
     if (!food) throw new Error(`食物 ${log.foodId} 不存在`);
@@ -4046,7 +4087,7 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
 
     await this.prisma.$transaction(async (tx) => {
       // 重置字段值（使用 camelCase 键）
-      await tx.foods.update({
+      await tx.food.update({
         where: { id: log.foodId },
         data: {
           ...rollbackUpdatesCamel,
@@ -4319,7 +4360,7 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
     }>;
     peerCount: number;
   } | null> {
-    const food = await this.prisma.foods.findUnique({ where: { id: foodId } });
+    const food = await this.prisma.food.findUnique({ where: { id: foodId } });
     if (!food || !food.category) return null;
 
     // 查询同类食物数量
@@ -4558,7 +4599,7 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
       avgSuccessRate: number;
     }>
   > {
-    const totalFoods = await this.prisma.foods.count();
+    const totalFoods = await this.prisma.food.count();
     if (totalFoods === 0) {
       return ENRICHMENT_STAGES.map((stage) => ({
         stage: stage.stage,
@@ -4622,7 +4663,7 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
     };
     /** 补全状态分布 */
     enrichmentStatusDistribution: Record<string, number>;
-    /** 失败字段 Top10（按 failed_fields 中出现频次降序） */
+    /** 失败字段 Top10（按 food_field_provenance.status='failed' 出现频次降序） */
     topFailedFields: Array<{ field: string; count: number }>;
     /** 最近 7 天补全趋势 */
     recentTrend: Array<{ date: string; enriched: number; failed: number }>;
@@ -4633,7 +4674,7 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
     });
 
     // 2. 全库食物总数
-    const totalFoods = await this.prisma.foods.count();
+    const totalFoods = await this.prisma.food.count();
 
     // 3. 完整度分布
     const compDist = await this.prisma.$queryRaw<
@@ -4670,14 +4711,15 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
       enrichmentStatusDistribution[row.status] = parseInt(row.cnt, 10);
     }
 
-    // 5. 失败字段 Top10（从 failed_fields JSONB 中提取 key 并计数）
+    // 5. 失败字段 Top10（V8.2: 从 food_field_provenance 表统计 status='failed'）
     const topFailedResult = await this.prisma.$queryRaw<
       Array<{ field: string; cnt: string }>
     >(
-      Prisma.sql`SELECT key AS field, COUNT(*)::text AS cnt
-       FROM foods, jsonb_object_keys(COALESCE(failed_fields, '{}'::jsonb)) AS key
-       GROUP BY key
-       ORDER BY COUNT(*) DESC
+      Prisma.sql`SELECT field_name AS field, COUNT(DISTINCT food_id)::text AS cnt
+       FROM food_field_provenance
+       WHERE status = 'failed'
+       GROUP BY field_name
+       ORDER BY COUNT(DISTINCT food_id) DESC
        LIMIT 10`,
     );
 
@@ -4863,7 +4905,7 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
     const confidence =
       changes.confidence != null ? Number(changes.confidence) : null;
 
-    const food = await this.prisma.foods.findUnique({
+    const food = await this.prisma.food.findUnique({
       where: { id: log.foodId },
     });
 

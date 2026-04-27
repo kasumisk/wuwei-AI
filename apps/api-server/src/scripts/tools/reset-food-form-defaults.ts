@@ -268,7 +268,7 @@ async function main() {
   for (const r of changed) {
     try {
       // 先用 Prisma ORM 更新 food_form（自动处理 uuid 类型）
-      const current = await prisma.foods.findUnique({
+      const current = await prisma.food.findUnique({
         where: { id: r.id },
         select: { fieldSources: true },
       });
@@ -279,7 +279,7 @@ async function main() {
           : {}),
         food_form: 'rule_inferred',
       };
-      await prisma.foods.update({
+      await prisma.food.update({
         where: { id: r.id },
         data: {
           foodForm: r.newForm,

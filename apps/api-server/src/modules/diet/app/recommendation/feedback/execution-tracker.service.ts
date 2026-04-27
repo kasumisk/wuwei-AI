@@ -207,7 +207,7 @@ export class ExecutionTrackerService {
 
     // 批量查询推荐 + 执行的食物信息（仅需匹配字段）
     const allIds = [...new Set([...recommendedIds, ...executedIds])];
-    const foods = await this.prisma.foods.findMany({
+    const foods = await this.prisma.food.findMany({
       where: { id: { in: allIds } },
       select: {
         id: true,

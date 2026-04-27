@@ -172,7 +172,7 @@ export class PreferenceUpdaterService {
 
       // 优先按 ID 查找
       if (foodId) {
-        food = await this.prisma.foods.findFirst({
+        food = await this.prisma.food.findFirst({
           where: { id: foodId },
           select: {
             id: true,
@@ -185,7 +185,7 @@ export class PreferenceUpdaterService {
 
       // 回退到按名称查找
       if (!food && foodName) {
-        food = await this.prisma.foods.findFirst({
+        food = await this.prisma.food.findFirst({
           where: { name: foodName },
           select: {
             id: true,

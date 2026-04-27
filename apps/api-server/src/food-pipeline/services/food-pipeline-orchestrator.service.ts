@@ -120,7 +120,7 @@ export class FoodPipelineOrchestratorService {
     await this.persistSingleFood(cleaned, result);
 
     if (result.created > 0 || result.updated > 0) {
-      return this.prisma.foods.findFirst({ where: { barcode } });
+      return this.prisma.food.findFirst({ where: { barcode } });
     }
     return null;
   }
@@ -172,7 +172,7 @@ export class FoodPipelineOrchestratorService {
     labeled: number;
     failed: number;
   }> {
-    const where: Prisma.FoodsWhereInput = {};
+    const where: Prisma.FoodWhereInput = {};
 
     if (options.category) {
       where.category = options.category;
@@ -184,7 +184,7 @@ export class FoodPipelineOrchestratorService {
       ];
     }
 
-    const foods = await this.prisma.foods.findMany({
+    const foods = await this.prisma.food.findMany({
       where,
       take: options.limit || 100,
     });
@@ -224,7 +224,7 @@ export class FoodPipelineOrchestratorService {
         update.tags = [...new Set([...existingTags, ...labelResult.tags])];
 
         if (Object.keys(update).length > 0) {
-          await this.prisma.foods.update({
+          await this.prisma.food.update({
             where: { id: food.id },
             data: update,
           });
@@ -244,12 +244,12 @@ export class FoodPipelineOrchestratorService {
 
     // 利用标注结果重新计算分数
     for (const food of foods) {
-      const updated = await this.prisma.foods.findUnique({
+      const updated = await this.prisma.food.findUnique({
         where: { id: food.id },
       });
       if (updated) {
         const scores = this.ruleEngine.applyAllRules(updated as any);
-        await this.prisma.foods.update({
+        await this.prisma.food.update({
           where: { id: food.id },
           data: {
             qualityScore: scores.qualityScore,
@@ -273,7 +273,7 @@ export class FoodPipelineOrchestratorService {
     limit?: number;
     untranslatedOnly?: boolean;
   }): Promise<{ translated: number; failed: number }> {
-    let where: Prisma.FoodsWhereInput = {};
+    let where: Prisma.FoodWhereInput = {};
 
     if (options.untranslatedOnly) {
       where = {
@@ -283,7 +283,7 @@ export class FoodPipelineOrchestratorService {
       };
     }
 
-    const foods = await this.prisma.foods.findMany({
+    const foods = await this.prisma.food.findMany({
       where,
       take: options.limit || 100,
     });
@@ -342,14 +342,14 @@ export class FoodPipelineOrchestratorService {
   async batchApplyRules(
     options: { limit?: number; recalcAll?: boolean } = {},
   ): Promise<{ processed: number }> {
-    let where: Prisma.FoodsWhereInput = {};
+    let where: Prisma.FoodWhereInput = {};
     if (!options.recalcAll) {
       where = {
         OR: [{ qualityScore: null }, { satietyScore: null }],
       };
     }
 
-    const foods = await this.prisma.foods.findMany({
+    const foods = await this.prisma.food.findMany({
       where,
       take: options.limit || 500,
     });
@@ -358,7 +358,7 @@ export class FoodPipelineOrchestratorService {
     for (const food of foods) {
       const scores = this.ruleEngine.applyAllRules(food as any);
       const existingTags = (food.tags as any[]) || [];
-      await this.prisma.foods.update({
+      await this.prisma.food.update({
         where: { id: food.id },
         data: {
           qualityScore: scores.qualityScore,
@@ -404,7 +404,7 @@ export class FoodPipelineOrchestratorService {
         tags: [...new Set(combinedTags)],
       });
 
-      await this.prisma.foods.update({
+      await this.prisma.food.update({
         where: { id: dup.existingFood.id },
         data: {
           ...mergedFields,
@@ -448,7 +448,7 @@ export class FoodPipelineOrchestratorService {
         ]),
       ];
 
-      const saved = await this.prisma.foods.create({
+      const saved = await this.prisma.food.create({
         data: {
           code,
           name: food.name,
@@ -576,7 +576,7 @@ export class FoodPipelineOrchestratorService {
   }
 
   private async generateCode(): Promise<string> {
-    const count = await this.prisma.foods.count();
+    const count = await this.prisma.food.count();
     return `FOOD_G_${String(count + 1).padStart(5, '0')}`;
   }
 
@@ -628,7 +628,7 @@ export class FoodPipelineOrchestratorService {
   }> {
     this.logger.log('开始批量回填营养密度分数...');
 
-    const total = await this.prisma.foods.count({
+    const total = await this.prisma.food.count({
       where: {
         OR: [{ nutrientDensity: null }, { nutrientDensity: 0 }],
       },
@@ -646,7 +646,7 @@ export class FoodPipelineOrchestratorService {
     let offset = 0;
 
     while (offset < total) {
-      const foods = await this.prisma.foods.findMany({
+      const foods = await this.prisma.food.findMany({
         where: {
           OR: [{ nutrientDensity: null }, { nutrientDensity: 0 }],
         },
@@ -659,7 +659,7 @@ export class FoodPipelineOrchestratorService {
       for (const food of foods) {
         try {
           const scores = this.ruleEngine.applyAllRules(food as any);
-          await this.prisma.foods.update({
+          await this.prisma.food.update({
             where: { id: food.id },
             data: {
               nutrientDensity: scores.nutrientDensity,
@@ -758,7 +758,7 @@ export class FoodPipelineOrchestratorService {
     for (const candidate of candidates) {
       try {
         // 去重检查：按名称精确匹配
-        const existing = await this.prisma.foods.findFirst({
+        const existing = await this.prisma.food.findFirst({
           where: {
             OR: [
               { name: candidate.name },
@@ -795,7 +795,7 @@ export class FoodPipelineOrchestratorService {
 
         const candidateFields = this.extractCandidateFields(candidateData);
 
-        await this.prisma.foods.create({
+        await this.prisma.food.create({
           data: {
             code,
             name: candidate.name,
@@ -916,7 +916,7 @@ export class FoodPipelineOrchestratorService {
     const stages = options.stages ?? ENRICHMENT_STAGES.map((s) => s.stage);
     const limit = options.limit ?? 10;
 
-    const where: Prisma.FoodsWhereInput = {};
+    const where: Prisma.FoodWhereInput = {};
     if (options.category) {
       where.category = options.category as any;
     }

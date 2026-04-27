@@ -24,7 +24,7 @@ export class FoodDedupService {
   async findDuplicate(food: CleanedFoodData): Promise<DedupMatch | null> {
     // 优先级 1: 条形码精确匹配
     if (food.rawPayload?.code) {
-      const barMatch = await this.prisma.foods.findFirst({
+      const barMatch = await this.prisma.food.findFirst({
         where: { barcode: food.rawPayload.code },
       });
       if (barMatch) {
@@ -38,7 +38,7 @@ export class FoodDedupService {
 
     // 优先级 2: 来源ID匹配 (source_type + source_id)
     if (food.primarySource && food.primarySourceId) {
-      const sourceMatch = await this.prisma.foods.findFirst({
+      const sourceMatch = await this.prisma.food.findFirst({
         where: {
           primarySource: food.primarySource,
           primarySourceId: food.primarySourceId,
@@ -58,7 +58,7 @@ export class FoodDedupService {
     if (!nameNormalized) return null;
 
     // 3a: 精确名称匹配
-    const exactMatch = await this.prisma.foods.findFirst({
+    const exactMatch = await this.prisma.food.findFirst({
       where: { name: food.name },
     });
     if (exactMatch) {
@@ -71,7 +71,7 @@ export class FoodDedupService {
 
     // 3b: 模糊名称匹配（使用 ILIKE + 营养数据辅助）
     const searchPattern = nameNormalized.substring(0, 20);
-    const candidates = await this.prisma.foods.findMany({
+    const candidates = await this.prisma.food.findMany({
       where: {
         OR: [
           { name: { contains: searchPattern, mode: 'insensitive' } },

@@ -96,7 +96,7 @@ export class FoodQualityMonitorService {
       fieldCompleteness,
       enrichmentTrend,
     ] = await Promise.all([
-      this.prisma.foods.count(),
+      this.prisma.food.count(),
       this.getByStatus(),
       this.getByCategory(),
       this.getBySource(),
@@ -155,7 +155,7 @@ export class FoodQualityMonitorService {
   }
 
   private async getCompleteness() {
-    const total = await this.prisma.foods.count();
+    const total = await this.prisma.food.count();
 
     const [
       withProtein,
@@ -217,8 +217,8 @@ export class FoodQualityMonitorService {
 
   private async getQuality() {
     const [verified, unverified] = await Promise.all([
-      this.prisma.foods.count({ where: { isVerified: true } }),
-      this.prisma.foods.count({ where: { isVerified: false } }),
+      this.prisma.food.count({ where: { isVerified: true } }),
+      this.prisma.food.count({ where: { isVerified: false } }),
     ]);
 
     const avgConf = await this.prisma.$queryRaw<[{ avg: number | null }]>(
@@ -270,7 +270,7 @@ export class FoodQualityMonitorService {
       Prisma.sql`SELECT COUNT(DISTINCT food_id)::int as count FROM food_translations`,
     );
 
-    const totalFoods = await this.prisma.foods.count();
+    const totalFoods = await this.prisma.food.count();
     const foodsWithTranslation = withTranslation[0]?.count || 0;
 
     return {
@@ -316,7 +316,7 @@ export class FoodQualityMonitorService {
     }
 
     // 核心营养素覆盖率（6 个字段全部非 NULL 的食物占比）
-    const totalFoods = await this.prisma.foods.count();
+    const totalFoods = await this.prisma.food.count();
     const coreResult = await this.prisma.$queryRaw<[{ count: number }]>(
       Prisma.sql`SELECT COUNT(*)::int AS count FROM foods
                  WHERE protein IS NOT NULL AND fat IS NOT NULL AND carbs IS NOT NULL

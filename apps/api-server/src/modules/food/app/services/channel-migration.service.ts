@@ -42,7 +42,7 @@ export class ChannelMigrationService {
     let cursor: string | undefined;
 
     while (true) {
-      const foods = await this.prisma.foods.findMany({
+      const foods = await this.prisma.food.findMany({
         select: {
           id: true,
           category: true,
@@ -69,7 +69,7 @@ export class ChannelMigrationService {
             continue;
           }
 
-          await this.prisma.foods.update({
+          await this.prisma.food.update({
             where: { id: food.id },
             data: { availableChannels: newChannels },
           });

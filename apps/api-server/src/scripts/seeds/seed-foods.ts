@@ -10,7 +10,7 @@ const prisma = new PrismaClient();
 function mapToData(
   food: (typeof SEED_FOODS)[number],
   code: string,
-): Prisma.FoodsCreateInput {
+): Prisma.FoodCreateInput {
   return {
     code,
     name: food.name,
@@ -101,20 +101,20 @@ async function seedFoods() {
 
   for (let i = 0; i < SEED_FOODS.length; i++) {
     const food = SEED_FOODS[i];
-    const existing = await prisma.foods.findFirst({
+    const existing = await prisma.food.findFirst({
       where: { name: food.name },
     });
     const code = existing?.code ?? `FOOD_CN_${String(i + 1).padStart(4, '0')}`;
 
     if (existing) {
       const { code: _code, ...updateData } = mapToData(food, code);
-      await prisma.foods.update({
+      await prisma.food.update({
         where: { id: existing.id },
         data: updateData,
       });
       updated++;
     } else {
-      await prisma.foods.create({
+      await prisma.food.create({
         data: mapToData(food, code),
       });
       inserted++;

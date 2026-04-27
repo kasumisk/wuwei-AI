@@ -324,7 +324,7 @@ export class CollectionTriggerService {
     if (replacementNames.length < 3) return null;
 
     // 批量查询食物品类
-    const foods = await this.prisma.foods.findMany({
+    const foods = await this.prisma.food.findMany({
       where: { name: { in: replacementNames } },
       select: { name: true, category: true },
     });

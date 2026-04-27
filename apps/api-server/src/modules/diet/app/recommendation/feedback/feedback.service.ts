@@ -134,7 +134,7 @@ export class RecommendationFeedbackService {
       // V6.2 A5 fix: 查询食物品类用于短期画像品类偏好学习
       let foodCategory: string | undefined;
       if (params.foodId) {
-        const food = await this.prisma.foods.findUnique({
+        const food = await this.prisma.food.findUnique({
           where: { id: params.foodId },
           select: { category: true },
         });

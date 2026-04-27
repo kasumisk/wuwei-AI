@@ -59,7 +59,7 @@ export class AnalysisSaveListener {
    * 对在标准食物库中匹配到的食物 popularity +1
    */
   private async updateFoodPopularity(foodNames: string[]): Promise<void> {
-    const result = await this.prisma.foods.updateMany({
+    const result = await this.prisma.food.updateMany({
       where: {
         name: { in: foodNames },
         status: 'active',

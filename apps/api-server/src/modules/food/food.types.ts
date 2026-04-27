@@ -180,9 +180,8 @@ export interface FoodLibrary {
   verifiedAt?: Date;
   searchWeight: number;
   popularity: number;
+  /** V8.2: 嵌入向量（运行时缓存字段，DB 中已迁移到 food_embeddings 表） */
   embedding?: number[];
-  embeddingV5?: string;
-  embeddingUpdatedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
   /** V6.4 Phase 3.3: 可获取渠道列表 */

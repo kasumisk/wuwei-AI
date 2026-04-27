@@ -8,13 +8,16 @@ import {
   EMBEDDING_DIM,
 } from './food-embedding';
 /**
- * 向量搜索服务 (V5 4.1: pgvector 模式)
+ * 向量搜索服务 (V8.2: food_embeddings 关联表)
  *
  * 管理 FoodLibrary 的 96 维嵌入向量，提供高效的向量相似度搜索。
  *
+ * V8.2 重构后：embedding 全部存储在 `food_embeddings` 关联表中（1:N 多模型）。
+ * 当前使用 model_version = 'v5'（96 维）。
+ *
  * 两种运行模式（启动时自动检测）：
  * 1. **pgvector 模式**（优先）— 使用 PostgreSQL pgvector 扩展
- *    通过 embedding_v5 vector(96) 列 + HNSW 索引进行 ANN 搜索
+ *    通过 food_embeddings.vector + HNSW 索引进行 ANN 搜索
  *    性能：O(log N) 查询，1000 食物 ≤3ms
  *
  * 2. **应用层模式**（回退）— 从 DB 加载嵌入到内存，JS 计算余弦相似度
@@ -22,11 +25,14 @@ import {
  *    性能：O(N) 暴力扫描，~15ms/1000 食物
  *
  * 核心功能：
- * - syncEmbeddings()     — 计算并持久化向量（同步写入 embedding + embedding_v5）
+ * - syncEmbeddings()     — 计算并持久化向量到 food_embeddings (UPSERT v5)
  * - findSimilarFoods()   — 查找最相似的 K 个食物
  * - findSimilarByVector() — 按嵌入向量直接搜索（pgvector 专用）
  * - getEmbedding()       — 获取指定食物的嵌入向量
  */
+
+/** 当前向量模型版本 */
+const MODEL_VERSION = 'v5';
 
 /** 相似食物搜索结果 */
 export interface SimilarFoodResult {
@@ -61,7 +67,7 @@ export class VectorSearchService implements OnModuleInit {
   }
 
   /**
-   * 检测 pgvector 扩展是否已安装且 embedding_v5 列存在
+   * 检测 pgvector 扩展是否已安装且 food_embeddings 表存在
    */
   private async detectPgvector(): Promise<void> {
     try {
@@ -77,15 +83,15 @@ export class VectorSearchService implements OnModuleInit {
         return;
       }
 
-      // 检测 embedding_v5 列是否存在
-      const colCheck: Array<{ column_name: string }> = await this.prisma
-        .$queryRaw<Array<{ column_name: string }>>`
-          SELECT column_name FROM information_schema.columns
-          WHERE table_name = 'foods' AND column_name = 'embedding_v5'
+      // 检测 food_embeddings 表是否存在
+      const tableCheck: Array<{ table_name: string }> = await this.prisma
+        .$queryRaw<Array<{ table_name: string }>>`
+          SELECT table_name FROM information_schema.tables
+          WHERE table_name = 'food_embeddings'
         `;
-      if (colCheck.length === 0) {
+      if (tableCheck.length === 0) {
         this.logger.log(
-          'embedding_v5 列不存在，使用应用层模式（内存暴力搜索）',
+          'food_embeddings 表不存在，使用应用层模式（内存暴力搜索）',
         );
         this.pgvectorAvailable = false;
         return;
@@ -102,7 +108,7 @@ export class VectorSearchService implements OnModuleInit {
   /**
    * 同步嵌入向量 — 为所有缺失向量的食物计算并持久化
    *
-   * V5 4.1: 同时写入 embedding (float4[]) 和 embedding_v5 (vector(96))。
+   * V8.2: 写入 food_embeddings 关联表（UPSERT model_version='v5'）。
    * 设计为幂等操作，可重复调用。
    *
    * @returns 新计算的嵌入数量
@@ -110,16 +116,20 @@ export class VectorSearchService implements OnModuleInit {
   async syncEmbeddings(): Promise<{ synced: number; total: number }> {
     const startTime = Date.now();
 
-    // 查找所有缺失嵌入的 active 食物
+    // 查找所有缺失 v5 嵌入的 active 食物
     const foods: any[] = await this.prisma.$queryRaw<any[]>`
-      SELECT * FROM "foods" WHERE "embedding" IS NULL AND "status" = 'active'
+      SELECT f.* FROM "foods" f
+      LEFT JOIN "food_embeddings" fe
+        ON fe.food_id = f.id AND fe.model_version = ${MODEL_VERSION}
+      WHERE fe.food_id IS NULL AND f.status = 'active'
     `;
 
     if (foods.length === 0) {
       const countResult: Array<{ count: string }> = await this.prisma.$queryRaw<
         Array<{ count: string }>
       >`
-          SELECT COUNT(*)::text AS "count" FROM "foods" WHERE "embedding" IS NOT NULL
+          SELECT COUNT(*)::text AS "count" FROM "food_embeddings"
+          WHERE model_version = ${MODEL_VERSION}
         `;
       const total = Number(countResult[0]?.count ?? 0);
       return { synced: 0, total };
@@ -138,29 +148,27 @@ export class VectorSearchService implements OnModuleInit {
         vec: computeFoodEmbedding(food as any),
       }));
 
-      // 使用 $transaction 批量写入，减少 N 次独立 DB 往返为 1 次事务
-      await this.prisma.$transaction(
-        embeddings.map(({ id, vec }) =>
-          this.prisma.foods.update({
-            where: { id },
-            data: {
-              embedding: vec,
-              embeddingUpdatedAt: new Date(),
-            },
-          }),
-        ),
-      );
-
-      // V5 4.1: 如果 pgvector 可用，批量同步写入 embedding_v5
+      // 批量 UPSERT 到 food_embeddings 表（pgvector 模式 vs 应用层模式分开走）
       if (this.pgvectorAvailable) {
         await this.prisma.$transaction(
           embeddings.map(
             ({ id, vec }) =>
-              this.prisma.$queryRaw`
-              UPDATE "foods" SET "embedding_v5" = ${`[${vec.join(',')}]`}::vector WHERE "id" = ${id}
-            `,
+              this.prisma.$executeRaw`
+                INSERT INTO "food_embeddings" ("food_id", "model_version", "vector", "dim", "updated_at")
+                VALUES (${id}::uuid, ${MODEL_VERSION}, ${`[${vec.join(',')}]`}::vector, ${EMBEDDING_DIM}, NOW())
+                ON CONFLICT ("food_id", "model_version")
+                DO UPDATE SET "vector" = EXCLUDED.vector, "dim" = EXCLUDED.dim, "updated_at" = NOW()
+              `,
           ),
         );
+      } else {
+        // 应用层模式：vector 列必须为 NULL（无 pgvector），改为存到 vector_legacy float[]
+        // 但当前 schema vector 列定义为 vector(96)，无 pgvector 扩展时该列不可用
+        // 应用层模式下跳过持久化，仅在内存索引中使用实时计算结果
+        this.logger.warn(
+          'pgvector 不可用，syncEmbeddings 跳过持久化（仅内存计算）',
+        );
+        break;
       }
 
       synced += batch.length;
@@ -175,16 +183,20 @@ export class VectorSearchService implements OnModuleInit {
       `Synced ${synced} food embeddings in ${elapsed}ms (pgvector=${this.pgvectorAvailable})`,
     );
 
-    const total: number = await this.prisma.$queryRaw<Array<{ count: number }>>`
-        SELECT COUNT(*)::int AS "count" FROM "foods" WHERE "embedding" IS NOT NULL
-      `.then((rows: Array<{ count: number }>) => rows[0]?.count ?? 0);
+    const totalRows: Array<{ count: number }> = await this.prisma.$queryRaw<
+      Array<{ count: number }>
+    >`
+        SELECT COUNT(*)::int AS "count" FROM "food_embeddings"
+        WHERE model_version = ${MODEL_VERSION}
+      `;
+    const total = totalRows[0]?.count ?? 0;
     return { synced, total };
   }
 
   /**
    * 查找与目标食物最相似的 K 个食物
    *
-   * V5 4.1: 优先使用 pgvector ANN 搜索，回退到应用层暴力扫描
+   * V8.2: 优先使用 pgvector ANN 搜索，回退到应用层暴力扫描
    *
    * @param foodId 目标食物 ID
    * @param topK 返回数量
@@ -214,7 +226,7 @@ export class VectorSearchService implements OnModuleInit {
   }
 
   /**
-   * V5 4.1: 按嵌入向量直接搜索（pgvector 专用）
+   * V8.2: 按嵌入向量直接搜索（pgvector 专用）
    *
    * 适用于：给定一个计算好的嵌入向量，找最相似的食物。
    * 场景：偏好嵌入搜索、多食物平均向量搜索等。
@@ -240,13 +252,14 @@ export class VectorSearchService implements OnModuleInit {
     const embeddingStr = `[${targetEmbedding.join(',')}]`;
     let sql = `
       SELECT f.id AS "foodId",
-             1 - (f.embedding_v5 <=> $1::vector) AS "similarity"
+             1 - (fe.vector <=> $1::vector) AS "similarity"
       FROM "foods" f
+      INNER JOIN "food_embeddings" fe
+        ON fe.food_id = f.id AND fe.model_version = $2
       WHERE f.is_verified = true
-        AND f.embedding_v5 IS NOT NULL
     `;
-    const params: any[] = [embeddingStr];
-    let paramIdx = 2;
+    const params: any[] = [embeddingStr, MODEL_VERSION];
+    let paramIdx = 3;
 
     if (options?.excludeIds?.length) {
       sql += ` AND f.id NOT IN (${options.excludeIds
@@ -261,12 +274,12 @@ export class VectorSearchService implements OnModuleInit {
       params.push(...options.categoryFilter);
     }
     if (options?.minSimilarity != null) {
-      sql += ` AND 1 - (f.embedding_v5 <=> $${paramIdx}::vector) >= $${paramIdx + 1}`;
+      sql += ` AND 1 - (fe.vector <=> $${paramIdx}::vector) >= $${paramIdx + 1}`;
       params.push(embeddingStr, options.minSimilarity);
       paramIdx += 2;
     }
 
-    sql += ` ORDER BY f.embedding_v5 <=> $1::vector LIMIT $${paramIdx}`;
+    sql += ` ORDER BY fe.vector <=> $1::vector LIMIT $${paramIdx}`;
     params.push(topK);
 
     // SET LOCAL 必须与查询在同一事务中才生效
@@ -283,7 +296,7 @@ export class VectorSearchService implements OnModuleInit {
   }
 
   /**
-   * V5 4.1: pgvector 模式 — 使用 DB 层 ANN 搜索
+   * V8.2: pgvector 模式 — 使用 DB 层 ANN 搜索
    */
   private async findSimilarFoodsPgvector(
     foodId: string,
@@ -291,10 +304,11 @@ export class VectorSearchService implements OnModuleInit {
     excludeIds?: Set<string>,
     categoryFilter?: string,
   ): Promise<SimilarFoodResult[]> {
-    // 先获取目标食物的 embedding_v5
-    const targetRows: Array<{ embeddingV5: string }> = await this.prisma
-      .$queryRaw<Array<{ embeddingV5: string }>>`
-        SELECT "embedding_v5" FROM "foods" WHERE "id" = ${foodId} AND "embedding_v5" IS NOT NULL
+    // 先确认目标食物有 v5 嵌入
+    const targetRows: Array<{ food_id: string }> = await this.prisma
+      .$queryRaw<Array<{ food_id: string }>>`
+        SELECT food_id FROM "food_embeddings"
+        WHERE food_id = ${foodId}::uuid AND model_version = ${MODEL_VERSION}
       `;
 
     if (targetRows.length === 0) {
@@ -320,13 +334,17 @@ export class VectorSearchService implements OnModuleInit {
              f.fat,
              f.carbs,
              f.fiber,
-             1 - (f.embedding_v5 <=> (SELECT embedding_v5 FROM "foods" WHERE id = $1::uuid)) AS similarity
+             1 - (fe.vector <=> (
+               SELECT vector FROM "food_embeddings"
+               WHERE food_id = $1::uuid AND model_version = $2
+             )) AS similarity
       FROM "foods" f
+      INNER JOIN "food_embeddings" fe
+        ON fe.food_id = f.id AND fe.model_version = $2
       WHERE f.id != $1::uuid
-        AND f.embedding_v5 IS NOT NULL
     `;
-    const params: any[] = [foodId];
-    let paramIdx = 2;
+    const params: any[] = [foodId, MODEL_VERSION];
+    let paramIdx = 3;
 
     if (categoryFilter) {
       sql += ` AND f.category = $${paramIdx}`;
@@ -334,7 +352,10 @@ export class VectorSearchService implements OnModuleInit {
       paramIdx++;
     }
 
-    sql += ` ORDER BY f.embedding_v5 <=> (SELECT embedding_v5 FROM "foods" WHERE id = $1::uuid) LIMIT $${paramIdx}`;
+    sql += ` ORDER BY fe.vector <=> (
+              SELECT vector FROM "food_embeddings"
+              WHERE food_id = $1::uuid AND model_version = $2
+            ) LIMIT $${paramIdx}`;
     params.push(fetchLimit);
 
     const rows: Array<{
@@ -406,7 +427,7 @@ export class VectorSearchService implements OnModuleInit {
    * 为给定的食物列表批量查找相似食物
    * 适用于替代推荐场景
    *
-   * V5 4.1: 支持 pgvector 模式（计算平均向量后用 findSimilarByVector）
+   * V8.2: 支持 pgvector 模式（计算平均向量后用 findSimilarByVector）
    */
   async findSimilarToMultiple(
     foodIds: string[],
@@ -420,7 +441,7 @@ export class VectorSearchService implements OnModuleInit {
   }
 
   /**
-   * V5 4.1: pgvector 模式批量相似搜索
+   * V8.2: pgvector 模式批量相似搜索
    */
   private async findSimilarToMultiplePgvector(
     foodIds: string[],
@@ -432,9 +453,10 @@ export class VectorSearchService implements OnModuleInit {
     // 在 DB 中计算平均嵌入
     const avgResult: Array<{ avg_embedding: string }> = await this.prisma
       .$queryRaw<Array<{ avg_embedding: string }>>`
-        SELECT avg(embedding_v5)::vector AS avg_embedding
-        FROM "foods"
-        WHERE id IN (${Prisma.join(foodIds)}) AND embedding_v5 IS NOT NULL
+        SELECT avg(vector)::vector AS avg_embedding
+        FROM "food_embeddings"
+        WHERE food_id IN (${Prisma.join(foodIds)})
+          AND model_version = ${MODEL_VERSION}
       `;
 
     if (!avgResult[0]?.avg_embedding) {
@@ -456,19 +478,20 @@ export class VectorSearchService implements OnModuleInit {
     const embeddingParam = `[${avgVec.join(',')}]`;
     let sql = `
       SELECT f.id, f.name, f.category, f.calories, f.protein, f.fat, f.carbs, f.fiber,
-             1 - (f.embedding_v5 <=> $1::vector) AS similarity
+             1 - (fe.vector <=> $1::vector) AS similarity
       FROM "foods" f
-      WHERE f.embedding_v5 IS NOT NULL
+      INNER JOIN "food_embeddings" fe
+        ON fe.food_id = f.id AND fe.model_version = $2
     `;
-    const params: any[] = [embeddingParam];
-    let paramIdx = 2;
+    const params: any[] = [embeddingParam, MODEL_VERSION];
+    let paramIdx = 3;
 
     if (allExcludeIds.length > 0) {
-      sql += ` AND f.id NOT IN (${allExcludeIds.map(() => `$${paramIdx++}`).join(',')})`;
+      sql += ` WHERE f.id NOT IN (${allExcludeIds.map(() => `$${paramIdx++}`).join(',')})`;
       params.push(...allExcludeIds);
     }
 
-    sql += ` ORDER BY f.embedding_v5 <=> $1::vector LIMIT $${paramIdx}`;
+    sql += ` ORDER BY fe.vector <=> $1::vector LIMIT $${paramIdx}`;
     params.push(fetchLimit);
 
     const rows: Array<{
@@ -541,35 +564,48 @@ export class VectorSearchService implements OnModuleInit {
 
   /**
    * 获取指定食物的嵌入向量
-   * 如果 DB 中没有或维度不匹配（V4→V5 过渡），实时计算并缓存
+   * 如果 DB 中没有或维度不匹配，实时计算并异步持久化
    */
   async getEmbedding(food: FoodLibrary): Promise<number[]> {
+    // 优先用入参中的嵌入（来自 cache 或预加载）
     if (food.embedding && food.embedding.length === EMBEDDING_DIM) {
       return food.embedding;
+    }
+
+    // 尝试从 food_embeddings 表读取
+    if (this.pgvectorAvailable) {
+      try {
+        const rows: Array<{ vector: string }> = await this.prisma.$queryRaw<
+          Array<{ vector: string }>
+        >`
+          SELECT vector::text AS vector FROM "food_embeddings"
+          WHERE food_id = ${food.id}::uuid AND model_version = ${MODEL_VERSION}
+        `;
+        if (rows.length > 0 && rows[0].vector) {
+          const vec = rows[0].vector
+            .replace(/[\[\]]/g, '')
+            .split(',')
+            .map(Number);
+          if (vec.length === EMBEDDING_DIM) return vec;
+        }
+      } catch (err) {
+        this.logger.debug(`Failed to load embedding from DB: ${err}`);
+      }
     }
 
     // 实时计算
     const vec = computeFoodEmbedding(food);
 
-    // 异步持久化 float4[] embedding（不阻塞返回）
-    this.prisma.foods
-      .update({
-        where: { id: food.id },
-        data: { embedding: vec, embeddingUpdatedAt: new Date() },
-      })
-      .catch((err) =>
-        this.logger.warn(
-          `Failed to persist embedding for ${food.id}: ${err.message}`,
-        ),
-      );
-
-    // V5 4.1: 同步写入 pgvector 列
+    // 异步 UPSERT 到 food_embeddings 表（不阻塞返回）
     if (this.pgvectorAvailable) {
-      this.prisma.$queryRaw`
-          UPDATE "foods" SET "embedding_v5" = ${`[${vec.join(',')}]`}::vector WHERE "id" = ${food.id}
+      this.prisma.$executeRaw`
+          INSERT INTO "food_embeddings" ("food_id", "model_version", "vector", "dim", "updated_at")
+          VALUES (${food.id}::uuid, ${MODEL_VERSION}, ${`[${vec.join(',')}]`}::vector, ${EMBEDDING_DIM}, NOW())
+          ON CONFLICT ("food_id", "model_version")
+          DO UPDATE SET "vector" = EXCLUDED.vector, "dim" = EXCLUDED.dim, "updated_at" = NOW()
         `.catch((err) =>
         this.logger.warn(
-          `Failed to persist embedding_v5 for ${food.id}: ${err.message}`,
+          `Failed to persist embedding for ${food.id}: ${err.message}`,
         ),
       );
     }
@@ -579,6 +615,8 @@ export class VectorSearchService implements OnModuleInit {
 
   /**
    * 获取或构建内存索引（应用层模式回退用）
+   *
+   * V8.2: 从 food_embeddings 表加载，不再读 foods.embedding
    */
   private async getOrBuildIndex(): Promise<
     Map<string, { food: any; vec: number[] }>
@@ -593,17 +631,43 @@ export class VectorSearchService implements OnModuleInit {
 
     const startTime = Date.now();
 
-    // 加载所有有嵌入的食物
-    const foods: any[] = await this.prisma.$queryRaw<any[]>`
-      SELECT * FROM "foods" WHERE "embedding" IS NOT NULL
-    `;
+    // V8.2: 通过 JOIN 加载所有有 v5 嵌入的食物
+    // 注意：内存模式仍需要从 vector 列读取（::text 解析），仅当 pgvector 可用时才有数据
+    let foods: any[] = [];
+
+    if (this.pgvectorAvailable) {
+      foods = await this.prisma.$queryRaw<any[]>`
+        SELECT f.*, fe.vector::text AS embedding_text
+        FROM "foods" f
+        INNER JOIN "food_embeddings" fe
+          ON fe.food_id = f.id AND fe.model_version = ${MODEL_VERSION}
+      `;
+    } else {
+      // 无 pgvector：实时为所有 active 食物计算嵌入到内存
+      foods = await this.prisma.$queryRaw<any[]>`
+        SELECT * FROM "foods" WHERE status = 'active'
+      `;
+    }
 
     this.embeddingIndex.clear();
     for (const food of foods) {
-      // V5 2.11: 兼容旧 64 维和新 96 维嵌入
-      // cosineSimilarity 已支持不同长度向量比较
-      if (food.embedding && food.embedding.length >= 1) {
-        this.embeddingIndex.set(food.id, { food, vec: food.embedding });
+      let vec: number[] | undefined;
+      if (food.embedding_text) {
+        // 来自 food_embeddings.vector::text，格式 "[v1,v2,...]"
+        vec = String(food.embedding_text)
+          .replace(/[\[\]]/g, '')
+          .split(',')
+          .map(Number);
+      } else {
+        // 应用层模式回退：实时计算
+        try {
+          vec = computeFoodEmbedding(food as any);
+        } catch {
+          continue;
+        }
+      }
+      if (vec && vec.length >= 1) {
+        this.embeddingIndex.set(food.id, { food, vec });
       }
     }
 
