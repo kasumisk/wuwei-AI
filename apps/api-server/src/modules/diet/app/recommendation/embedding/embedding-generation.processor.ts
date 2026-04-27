@@ -5,7 +5,7 @@
  * 1. 接收食物 ID 列表
  * 2. 查询食物数据
  * 3. 调用 computeFoodEmbedding() 计算 96 维向量
- * 4. 批量写入 food_embeddings (model_version='v5')
+ * 4. 批量写入 food_embeddings (model_name='feature_v5')
  *
  * 配合 DeadLetterService：重试耗尽后存入 DLQ
  */
@@ -73,14 +73,14 @@ export class EmbeddingGenerationProcessor extends WorkerHost {
       ),
     );
 
-    // 尝试同步写入 food_embeddings(openai_v5) — pgvector 列
+    // 尝试同步写入 food_embeddings(feature_v5) — pgvector 列
     try {
       await this.prisma.$transaction(
         embeddings.map(
           ({ id, vec }) =>
             this.prisma.$executeRaw`
-              INSERT INTO "food_embeddings" ("food_id", "model_name", "model_version", "vector", "dimension", "generated_at", "updated_at")
-              VALUES (${id}::uuid, 'openai_v5', 'text-embedding-3-small', ${`[${vec.join(',')}]`}::vector, ${vec.length}, ${now}, ${now})
+              INSERT INTO "food_embeddings" ("food_id", "model_name", "vector", "dimension", "generated_at", "updated_at")
+              VALUES (${id}::uuid, 'feature_v5', ${`[${vec.join(',')}]`}::vector, ${vec.length}, ${now}, ${now})
               ON CONFLICT ("food_id", "model_name")
               DO UPDATE SET "vector"        = EXCLUDED."vector",
                             "model_version" = EXCLUDED."model_version",

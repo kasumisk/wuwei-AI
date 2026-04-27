@@ -29,6 +29,12 @@ import { AnalysisIngestionService } from './app/ingestion/analysis-ingestion.ser
 import { CandidateAggregationService } from './app/ingestion/candidate-aggregation.service';
 // V6.9 Phase 3-C: 渠道标注迁移服务
 import { ChannelMigrationService } from './app/services/channel-migration.service';
+// V8.2: Repository 包装层（food_embeddings / food_field_provenance 收口）
+import {
+  FoodRepository,
+  FoodEmbeddingRepository,
+  FoodProvenanceRepository,
+} from './repositories';
 // Admin 端
 import { FoodLibraryManagementController } from './admin/food-library-management.controller';
 import { FoodLibraryManagementService } from './admin/food-library-management.service';
@@ -86,6 +92,10 @@ import { RbacModule } from '../rbac/rbac.module';
     // V6.2 3.8: CandidatePromotedListener 已移至 DietModule
     // V6.9 Phase 3-C: 渠道标注迁移
     ChannelMigrationService,
+    // V8.2: Repository 层
+    FoodRepository,
+    FoodEmbeddingRepository,
+    FoodProvenanceRepository,
   ],
   exports: [
     FoodLibraryService,
@@ -98,6 +108,10 @@ import { RbacModule } from '../rbac/rbac.module';
     CandidateAggregationService,
     // V6.9 Phase 3-C: 渠道标注迁移（可被其他模块/CLI调用）
     ChannelMigrationService,
+    // V8.2: 导出仓储以便其他模块（diet / food-pipeline）注入
+    FoodRepository,
+    FoodEmbeddingRepository,
+    FoodProvenanceRepository,
   ],
 })
 export class FoodModule {}

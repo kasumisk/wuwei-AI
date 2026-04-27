@@ -284,7 +284,7 @@ export class SemanticRecallService {
       SELECT f.id, f.category, fe.vector::text AS embedding_text
       FROM "foods" f
       INNER JOIN "food_embeddings" fe
-        ON fe.food_id = f.id AND fe.model_version = 'v5'
+        ON fe.food_id = f.id AND fe.model_name = 'feature_v5'
       WHERE f.id = ANY(${uniqueFoodIds}::uuid[])
     `;
 

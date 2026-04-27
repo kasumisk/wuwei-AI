@@ -13,7 +13,8 @@ import {
  * 管理 FoodLibrary 的 96 维嵌入向量，提供高效的向量相似度搜索。
  *
  * V8.2 重构后：embedding 全部存储在 `food_embeddings` 关联表中（1:N 多模型）。
- * 当前使用 model_version = 'v5'（96 维）。
+ * 当前使用 model_name = 'feature_v5'（96 维特征向量，computeFoodEmbedding 拼接）。
+ * 与 OpenAI text-embedding-3-small (1536 维 / model_name='openai_v5') 是独立的两套向量。
  *
  * 两种运行模式（启动时自动检测）：
  * 1. **pgvector 模式**（优先）— 使用 PostgreSQL pgvector 扩展
@@ -31,8 +32,8 @@ import {
  * - getEmbedding()       — 获取指定食物的嵌入向量
  */
 
-/** 当前向量模型版本 */
-const MODEL_VERSION = 'v5';
+/** 当前向量模型名（feature_v5 = 96 维特征拼接向量；与 openai_v5 1536 维独立） */
+const MODEL_NAME = 'feature_v5';
 
 /** 相似食物搜索结果 */
 export interface SimilarFoodResult {
@@ -108,7 +109,7 @@ export class VectorSearchService implements OnModuleInit {
   /**
    * 同步嵌入向量 — 为所有缺失向量的食物计算并持久化
    *
-   * V8.2: 写入 food_embeddings 关联表（UPSERT model_version='v5'）。
+   * V8.2: 写入 food_embeddings 关联表（UPSERT model_name='feature_v5'）。
    * 设计为幂等操作，可重复调用。
    *
    * @returns 新计算的嵌入数量
@@ -120,7 +121,7 @@ export class VectorSearchService implements OnModuleInit {
     const foods: any[] = await this.prisma.$queryRaw<any[]>`
       SELECT f.* FROM "foods" f
       LEFT JOIN "food_embeddings" fe
-        ON fe.food_id = f.id AND fe.model_version = ${MODEL_VERSION}
+        ON fe.food_id = f.id AND fe.model_name = ${MODEL_NAME}
       WHERE fe.food_id IS NULL AND f.status = 'active'
     `;
 
@@ -129,7 +130,7 @@ export class VectorSearchService implements OnModuleInit {
         Array<{ count: string }>
       >`
           SELECT COUNT(*)::text AS "count" FROM "food_embeddings"
-          WHERE model_version = ${MODEL_VERSION}
+          WHERE model_name = ${MODEL_NAME}
         `;
       const total = Number(countResult[0]?.count ?? 0);
       return { synced: 0, total };
@@ -154,10 +155,10 @@ export class VectorSearchService implements OnModuleInit {
           embeddings.map(
             ({ id, vec }) =>
               this.prisma.$executeRaw`
-                INSERT INTO "food_embeddings" ("food_id", "model_version", "vector", "dim", "updated_at")
-                VALUES (${id}::uuid, ${MODEL_VERSION}, ${`[${vec.join(',')}]`}::vector, ${EMBEDDING_DIM}, NOW())
-                ON CONFLICT ("food_id", "model_version")
-                DO UPDATE SET "vector" = EXCLUDED.vector, "dim" = EXCLUDED.dim, "updated_at" = NOW()
+                INSERT INTO "food_embeddings" ("food_id", "model_name", "vector", "dimension", "updated_at")
+                VALUES (${id}::uuid, ${MODEL_NAME}, ${`[${vec.join(',')}]`}::vector, ${EMBEDDING_DIM}, NOW())
+                ON CONFLICT ("food_id", "model_name")
+                DO UPDATE SET "vector" = EXCLUDED.vector, "dimension" = EXCLUDED.dim, "updated_at" = NOW()
               `,
           ),
         );
@@ -187,7 +188,7 @@ export class VectorSearchService implements OnModuleInit {
       Array<{ count: number }>
     >`
         SELECT COUNT(*)::int AS "count" FROM "food_embeddings"
-        WHERE model_version = ${MODEL_VERSION}
+        WHERE model_name = ${MODEL_NAME}
       `;
     const total = totalRows[0]?.count ?? 0;
     return { synced, total };
@@ -255,10 +256,10 @@ export class VectorSearchService implements OnModuleInit {
              1 - (fe.vector <=> $1::vector) AS "similarity"
       FROM "foods" f
       INNER JOIN "food_embeddings" fe
-        ON fe.food_id = f.id AND fe.model_version = $2
+        ON fe.food_id = f.id AND fe.model_name = $2
       WHERE f.is_verified = true
     `;
-    const params: any[] = [embeddingStr, MODEL_VERSION];
+    const params: any[] = [embeddingStr, MODEL_NAME];
     let paramIdx = 3;
 
     if (options?.excludeIds?.length) {
@@ -308,7 +309,7 @@ export class VectorSearchService implements OnModuleInit {
     const targetRows: Array<{ food_id: string }> = await this.prisma
       .$queryRaw<Array<{ food_id: string }>>`
         SELECT food_id FROM "food_embeddings"
-        WHERE food_id = ${foodId}::uuid AND model_version = ${MODEL_VERSION}
+        WHERE food_id = ${foodId}::uuid AND model_name = ${MODEL_NAME}
       `;
 
     if (targetRows.length === 0) {
@@ -336,14 +337,14 @@ export class VectorSearchService implements OnModuleInit {
              f.fiber,
              1 - (fe.vector <=> (
                SELECT vector FROM "food_embeddings"
-               WHERE food_id = $1::uuid AND model_version = $2
+               WHERE food_id = $1::uuid AND model_name = $2
              )) AS similarity
       FROM "foods" f
       INNER JOIN "food_embeddings" fe
-        ON fe.food_id = f.id AND fe.model_version = $2
+        ON fe.food_id = f.id AND fe.model_name = $2
       WHERE f.id != $1::uuid
     `;
-    const params: any[] = [foodId, MODEL_VERSION];
+    const params: any[] = [foodId, MODEL_NAME];
     let paramIdx = 3;
 
     if (categoryFilter) {
@@ -354,7 +355,7 @@ export class VectorSearchService implements OnModuleInit {
 
     sql += ` ORDER BY fe.vector <=> (
               SELECT vector FROM "food_embeddings"
-              WHERE food_id = $1::uuid AND model_version = $2
+              WHERE food_id = $1::uuid AND model_name = $2
             ) LIMIT $${paramIdx}`;
     params.push(fetchLimit);
 
@@ -456,7 +457,7 @@ export class VectorSearchService implements OnModuleInit {
         SELECT avg(vector)::vector AS avg_embedding
         FROM "food_embeddings"
         WHERE food_id IN (${Prisma.join(foodIds)})
-          AND model_version = ${MODEL_VERSION}
+          AND model_name = ${MODEL_NAME}
       `;
 
     if (!avgResult[0]?.avg_embedding) {
@@ -481,9 +482,9 @@ export class VectorSearchService implements OnModuleInit {
              1 - (fe.vector <=> $1::vector) AS similarity
       FROM "foods" f
       INNER JOIN "food_embeddings" fe
-        ON fe.food_id = f.id AND fe.model_version = $2
+        ON fe.food_id = f.id AND fe.model_name = $2
     `;
-    const params: any[] = [embeddingParam, MODEL_VERSION];
+    const params: any[] = [embeddingParam, MODEL_NAME];
     let paramIdx = 3;
 
     if (allExcludeIds.length > 0) {
@@ -579,7 +580,7 @@ export class VectorSearchService implements OnModuleInit {
           Array<{ vector: string }>
         >`
           SELECT vector::text AS vector FROM "food_embeddings"
-          WHERE food_id = ${food.id}::uuid AND model_version = ${MODEL_VERSION}
+          WHERE food_id = ${food.id}::uuid AND model_name = ${MODEL_NAME}
         `;
         if (rows.length > 0 && rows[0].vector) {
           const vec = rows[0].vector
@@ -599,10 +600,10 @@ export class VectorSearchService implements OnModuleInit {
     // 异步 UPSERT 到 food_embeddings 表（不阻塞返回）
     if (this.pgvectorAvailable) {
       this.prisma.$executeRaw`
-          INSERT INTO "food_embeddings" ("food_id", "model_version", "vector", "dim", "updated_at")
-          VALUES (${food.id}::uuid, ${MODEL_VERSION}, ${`[${vec.join(',')}]`}::vector, ${EMBEDDING_DIM}, NOW())
-          ON CONFLICT ("food_id", "model_version")
-          DO UPDATE SET "vector" = EXCLUDED.vector, "dim" = EXCLUDED.dim, "updated_at" = NOW()
+          INSERT INTO "food_embeddings" ("food_id", "model_name", "vector", "dimension", "updated_at")
+          VALUES (${food.id}::uuid, ${MODEL_NAME}, ${`[${vec.join(',')}]`}::vector, ${EMBEDDING_DIM}, NOW())
+          ON CONFLICT ("food_id", "model_name")
+          DO UPDATE SET "vector" = EXCLUDED.vector, "dimension" = EXCLUDED.dim, "updated_at" = NOW()
         `.catch((err) =>
         this.logger.warn(
           `Failed to persist embedding for ${food.id}: ${err.message}`,
@@ -640,7 +641,7 @@ export class VectorSearchService implements OnModuleInit {
         SELECT f.*, fe.vector::text AS embedding_text
         FROM "foods" f
         INNER JOIN "food_embeddings" fe
-          ON fe.food_id = f.id AND fe.model_version = ${MODEL_VERSION}
+          ON fe.food_id = f.id AND fe.model_name = ${MODEL_NAME}
       `;
     } else {
       // 无 pgvector：实时为所有 active 食物计算嵌入到内存

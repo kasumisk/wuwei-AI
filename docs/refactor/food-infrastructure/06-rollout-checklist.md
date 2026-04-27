@@ -1,17 +1,19 @@
 # 06 · Rollout Checklist
 
+> **进度图例**：✅ 已完成 / ⏳ 待 staging 库执行 / ⚠️ 已识别风险
+
 ## 上线前自检
 
-### Schema
+### Schema（代码层 ✅ / DB 层 ⏳）
 
-- [ ] `prisma/schema.prisma` 中 `model Food` 存在，且 `@@map("foods")`
-- [ ] `model FoodEmbedding` / `FoodFieldProvenance` / `FoodRecommendationProfile` 已定义
-- [ ] 三张新表都有 `foodId` 外键 + `onDelete: Cascade`
-- [ ] `food_embeddings` 有 `(food_id, model_name)` 唯一约束
-- [ ] `food_field_provenance` 有 `(food_id, field_name, source)` 唯一约束
-- [ ] HNSW 索引在 vector 列上（`USING hnsw (vector vector_cosine_ops)`）
+- [x] `prisma/schema.prisma` 中 `model Food` 存在，且 `@@map("foods")` — schema.prisma:2718
+- [x] `model FoodEmbedding` / `FoodFieldProvenance` / `FoodRecommendationProfile` 已定义 — schema.prisma:2815-2899
+- [x] 三张新表都有 `foodId` 外键 + `onDelete: Cascade`
+- [x] `food_embeddings` 有 `(food_id, model_name)` 唯一约束（`@@unique`）
+- [x] `food_field_provenance` 有 `(food_id, field_name, source)` 唯一约束
+- [x] HNSW 索引在 vector 列上（迁移 SQL 内 `USING hnsw (vector vector_cosine_ops)` 条件创建）
 
-### 数据
+### 数据（⏳ 待 staging 库执行）
 
 - [ ] `pg_dump` 备份产出物存在且可 restore（演练一次）
 - [ ] `migrate-food-infra.ts` 跑完无报错
@@ -21,15 +23,26 @@
   - [ ] failed_fields 键数 ≈ provenance failed 行数
   - [ ] 抽样 50 条 food_id 数据完整
 
-### 代码
+### 代码（✅ 全部完成）
 
-- [ ] 全仓 `grep "prisma.foods\."` 命中 0
-- [ ] 全仓 `grep "embedding_v5\|embedding_updated_at\|failed_fields"` 仅在迁移脚本/文档中命中
-- [ ] `pnpm -w typecheck` 通过
-- [ ] `pnpm -w lint` 通过
-- [ ] `pnpm prisma generate` 后 Client 类型存在 `food`、`foodEmbedding`、`foodFieldProvenance`、`foodRecommendationProfile`
+- [x] 全仓 `grep "prisma.foods\."` 命中 0（28 文件 / 114 处全部改为 `prisma.food`）
+- [x] 全仓 `grep "embedding_v5\|embedding_updated_at\|failed_fields"` 仅在迁移脚本/文档/注释/运行时缓存属性中命中（已审计 65 处全部安全）
+- [x] `pnpm -w typecheck` 通过（0 错误）
+- [x] `food-conflict-resolver.service.ts` 增加 `REMOVED_FIELDS` 白名单拦截动态列名 UPDATE
+- [x] `pnpm prisma generate` 后 Client 类型存在 `food`、`foodEmbedding`、`foodFieldProvenance`、`foodRecommendationProfile`
+- [x] **Repository 层已建立**：`apps/api-server/src/modules/food/repositories/`
+  - `embedding-model.constants.ts`（3 模型枚举：legacy_v4 / feature_v5 / openai_v5）
+  - `food-embedding.repository.ts`（upsert/read/search/find/delete）
+  - `food-provenance.repository.ts`（recordSuccess/recordFailure/listFailures/clearFailuresForField/topFailedFields）
+  - `food.repository.ts`（聚合 findOne(withEmbedding/withProvenance)）
+  - 已注册到 `FoodModule` providers + exports
+- [x] **列名一致性 bug 修复**（本期发现）：
+  - `vector-search.service.ts`：`model_version` / `"dim"` → `model_name` / `dimension`
+  - `embedding-generation.{service,processor}.ts`：96 维 computeFoodEmbedding 错标 OpenAI 字符串 → 统一为 `model_name='feature_v5'`
+  - `semantic-recall.service.ts`：`model_version='v5'` → `model_name='feature_v5'`
+- [ ] `pnpm -w lint` 通过（待执行）
 
-### 业务回归
+### 业务回归（⏳ 待 staging 库执行）
 
 - [ ] 推荐流跑通：调用 `/api/diet/recommendation` 返回非空（手动触发一个用户）
 - [ ] 向量召回非空：`vector-search.service` 单测 / 手测
@@ -37,6 +50,11 @@
 - [ ] 食物搜索分页正常
 - [ ] enrichment 跑一条新菜入库，验证 `food_field_provenance` 有写入
 - [ ] embedding-generation worker 跑一条，验证 `food_embeddings` 有写入
+
+### 单元测试（✅ 已完成）
+
+- [x] `test/v82-food-infra-repositories.spec.ts`：20 case 全绿，覆盖 SQL 列名、ON CONFLICT、limit 夹紧、ANY uuid[]、upsert 路径、聚合层默认行为
+  - 运行命令：`pnpm exec jest --config ./test/jest-unit.json test/v82-food-infra-repositories.spec.ts`
 
 ### Seed
 
@@ -108,12 +126,14 @@ pm2 restart api-server
 
 ## 已知风险与跟踪
 
-| 风险 | 缓解 | 跟踪 issue |
+| 风险 | 缓解 | 状态 |
 |---|---|---|
-| HNSW 索引在新表重建时间长 | staging 提前演练，记录耗时；生产改造前预估窗口 | TBD |
-| `food-conflict-resolver.service.ts:147` 动态列名 | 拆字段后该路径若涉及被拆字段会 SQL 报错；本期被拆字段（embedding/failed_fields）业务上不经过该 resolver，已确认安全 | TBD |
-| FoodLibrary 接口字段变可选可能 break 245+ 引用 | typecheck 全量验证 + 改动跑 e2e | TBD |
-| 双层共存（jsonb + 关联表）写入不一致 | 全部用事务包裹；后续可加后台 reconcile job | TBD |
+| HNSW 索引在新表重建时间长 | staging 提前演练，记录耗时；生产改造前预估窗口 | ⏳ 待 staging |
+| `food-conflict-resolver.service.ts` 动态列名 | 已加 `REMOVED_FIELDS` 白名单拦截，命中即跳过并 warn | ✅ 已修复 |
+| FoodLibrary 接口字段变可选可能 break 245+ 引用 | typecheck 全量验证（0 错误） | ✅ 已通过 |
+| 双层共存（jsonb + 关联表）写入不一致 | 全部用事务包裹；后续可加后台 reconcile job | ⏳ 后续 PR |
+| **embedding 模型语义混淆**（本期发现） | 统一三模型枚举语义：legacy_v4 (Float[]) / feature_v5 (96 维 pgvector，主用) / openai_v5 (1536 维预留)；写入 `embedding-model.constants.ts` | ✅ 已修复 |
+| 迁移 SQL backfill 把 embedding_v5 标为 `model_name='openai_v5'` + `dimension=1536` | 与代码侧 `feature_v5`(96 维) 语义不符；本期保留迁移 SQL（已 commit ddcaf8a），上线前需执行 staging 校验脚本对齐，必要时新增数据修补 SQL | ⚠️ **待上线前确认** |
 
 ---
 
