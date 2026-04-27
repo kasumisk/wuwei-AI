@@ -177,10 +177,7 @@ export class AnalysisSessionService {
    * Refine 前置校验：归属 + 状态 + 未过期。
    * 校验失败时抛标准 Error（Controller 层转换为 HTTP 错误）。
    */
-  async assertRefineable(
-    id: string,
-    userId: string,
-  ): Promise<AnalysisSession> {
+  async assertRefineable(id: string, userId: string): Promise<AnalysisSession> {
     const session = await this.getById(id);
     if (!session) {
       throw Object.assign(new Error('SESSION_NOT_FOUND'), {
@@ -213,18 +210,21 @@ export class AnalysisSessionService {
    * 而不是降级到 quantity 字符串（防止 AI 对非结构化份量描述产生幻觉）。
    */
   buildDerivedText(foods: RefinedFoodInput[], userNote?: string): string {
-    const parts = foods.map((f) => {
-      const name = (f.name || '').trim();
-      if (!name) return '';
-      const grams =
-        typeof f.estimatedWeightGrams === 'number' && f.estimatedWeightGrams > 0
-          ? Math.round(f.estimatedWeightGrams)
-          : null;
-      if (!grams) {
-        throw new Error(`食物「${name}」未填写克数，请填写后重试`);
-      }
-      return `${name} ${grams}克`;
-    }).filter(Boolean);
+    const parts = foods
+      .map((f) => {
+        const name = (f.name || '').trim();
+        if (!name) return '';
+        const grams =
+          typeof f.estimatedWeightGrams === 'number' &&
+          f.estimatedWeightGrams > 0
+            ? Math.round(f.estimatedWeightGrams)
+            : null;
+        if (!grams) {
+          throw new Error(`食物「${name}」未填写克数，请填写后重试`);
+        }
+        return `${name} ${grams}克`;
+      })
+      .filter(Boolean);
 
     const base = parts.join('、');
     const note = userNote?.trim();
@@ -233,10 +233,7 @@ export class AnalysisSessionService {
 
   private async persist(session: AnalysisSession): Promise<void> {
     // TTL 以 expiresAt 为准，避免延长
-    const remainMs = Math.max(
-      1000,
-      Date.parse(session.expiresAt) - Date.now(),
-    );
+    const remainMs = Math.max(1000, Date.parse(session.expiresAt) - Date.now());
     await this.redis.set(this.sessionKey(session.id), session, remainMs);
   }
 

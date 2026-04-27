@@ -9,6 +9,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { UserApiThrottle, AiHeavyThrottle } from '../../../../core/throttle';
+import { I18nService } from '../../../../core/i18n';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AppJwtAuthGuard } from '../../../auth/app/app-jwt-auth.guard';
 import { CurrentAppUser } from '../../../auth/app/current-app-user.decorator';
@@ -67,6 +68,7 @@ export class FoodPlanController {
     private readonly userProfileService: UserProfileService,
     private readonly preferenceProfileService: PreferenceProfileService,
     private readonly substitutionService: SubstitutionService,
+    private readonly i18n: I18nService,
   ) {}
 
   /**
@@ -91,7 +93,7 @@ export class FoodPlanController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: this.i18n.t('common.ok'),
       data: suggestion,
     };
   }
@@ -110,7 +112,7 @@ export class FoodPlanController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: this.i18n.t('common.ok'),
       data: toDailyPlanResponse(plan),
     };
   }
@@ -132,7 +134,7 @@ export class FoodPlanController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: this.i18n.t('common.ok'),
       data: weeklyPlan,
     };
   }
@@ -159,7 +161,7 @@ export class FoodPlanController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '计划已调整',
+      message: this.i18n.t('diet.planAdjusted'),
       data: {
         ...toDailyPlanResponse(result.updatedPlan),
         adjustmentNote: result.adjustmentNote,
@@ -240,7 +242,7 @@ export class FoodPlanController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: this.i18n.t('common.ok'),
       data: substitutes.map((s) => ({
         foodId: s.food.id,
         name: s.food.name,
@@ -298,7 +300,7 @@ export class FoodPlanController {
     return {
       success: true,
       code: HttpStatus.CREATED,
-      message: '反馈已记录',
+      message: this.i18n.t('diet.feedbackRecorded'),
       data: null,
     };
   }
@@ -326,11 +328,12 @@ export class FoodPlanController {
       user.id,
       dto.foodName,
       dto.mealType,
+      dto.locale || undefined,
     );
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '解释生成成功',
+      message: this.i18n.t('diet.explanationGenerated'),
       data: result,
     };
   }
@@ -362,7 +365,7 @@ export class FoodPlanController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: this.i18n.t('common.ok'),
       data: { perFood, global, days },
     };
   }

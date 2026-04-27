@@ -34,6 +34,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
 import { PaymentChannel, PaymentStatus } from '../../subscription.types';
+import { I18nService } from '../../../../core/i18n/i18n.service';
 import {
   WechatPayCreateOrderRequest,
   WechatPayCreateOrderResponse,
@@ -66,6 +67,7 @@ export class WechatPayService {
     private readonly configService: ConfigService,
     private readonly subscriptionService: SubscriptionService,
     private readonly prisma: PrismaService,
+    private readonly i18n: I18nService,
   ) {
     this.appid = this.configService.get<string>('WECHAT_PAY_APPID', '');
     this.mchid = this.configService.get<string>('WECHAT_PAY_MCHID', '');
@@ -105,7 +107,9 @@ export class WechatPayService {
       where: { id: planId, isActive: true },
     });
     if (!plan) {
-      throw new BadRequestException('订阅计划不存在或已下架');
+      throw new BadRequestException(
+        this.i18n.t('subscription.error.planUnavailable'),
+      );
     }
 
     // 2. 生成订单号
@@ -180,7 +184,9 @@ export class WechatPayService {
     // 2. 解密通知数据
     const transaction = this.decryptNotification(body.resource);
     if (!transaction) {
-      throw new BadRequestException('通知数据解密失败');
+      throw new BadRequestException(
+        this.i18n.t('subscription.error.notifyDecryptFailed'),
+      );
     }
 
     this.logger.log(
@@ -319,7 +325,9 @@ export class WechatPayService {
     )) as WechatPayCreateOrderResponse;
 
     if (!response.prepay_id) {
-      throw new InternalServerErrorException('微信支付下单失败: 无 prepay_id');
+      throw new InternalServerErrorException(
+        this.i18n.t('subscription.error.wxPayFailedNoPrepayId'),
+      );
     }
 
     return response.prepay_id;
@@ -420,7 +428,9 @@ export class WechatPayService {
     const serial = normalizedHeaders['wechatpay-serial'];
 
     if (!timestamp || !nonce || !signature) {
-      throw new BadRequestException('微信支付通知缺少签名信息');
+      throw new BadRequestException(
+        this.i18n.t('subscription.error.wxNotifyMissingSignature'),
+      );
     }
 
     // 检查时间戳（防重放攻击 — 5 分钟窗口）
@@ -430,7 +440,9 @@ export class WechatPayService {
       this.logger.warn(
         `微信支付通知时间戳过期: timestamp=${timestamp}, now=${now}`,
       );
-      throw new BadRequestException('通知时间戳过期');
+      throw new BadRequestException(
+        this.i18n.t('subscription.error.notifyTimestampExpired'),
+      );
     }
 
     // 构造验签串: timestamp\nnonce\nbody_json\n
@@ -447,14 +459,18 @@ export class WechatPayService {
         this.logger.warn(
           `微信支付通知签名验证失败: serial=${serial || 'unknown'}`,
         );
-        throw new BadRequestException('通知签名验证失败');
+        throw new BadRequestException(
+          this.i18n.t('subscription.error.notifySignatureInvalid'),
+        );
       }
 
       this.logger.debug('微信支付通知签名验证通过');
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
       this.logger.error(`微信支付签名验证异常: ${(err as Error).message}`);
-      throw new BadRequestException('通知签名验证失败');
+      throw new BadRequestException(
+        this.i18n.t('subscription.error.notifySignatureInvalid'),
+      );
     }
   }
 

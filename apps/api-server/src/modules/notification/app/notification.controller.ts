@@ -44,7 +44,11 @@ import { CurrentAppUser } from '../../auth/app/current-app-user.decorator';
 import { AppUserPayload } from '../../auth/app/app-user-payload.type';
 import { NotificationService } from './notification.service';
 import { DevicePlatform } from '../notification.types';
-import { ResponseWrapper, ApiResponse } from '../../../common/types/response.type';
+import {
+  ResponseWrapper,
+  ApiResponse,
+} from '../../../common/types/response.type';
+import { I18nService } from '../../../core/i18n/i18n.service';
 
 // ─── DTO ───
 
@@ -98,7 +102,10 @@ class NotificationListQueryDto {
 @UseGuards(AppJwtAuthGuard)
 @ApiBearerAuth()
 export class NotificationController {
-  constructor(private readonly notificationService: NotificationService) {}
+  constructor(
+    private readonly notificationService: NotificationService,
+    private readonly i18n: I18nService,
+  ) {}
 
   // ─── 站内信 ───
 
@@ -112,15 +119,27 @@ export class NotificationController {
   ): Promise<ApiResponse> {
     const page = query.page || 1;
     const limit = Math.min(query.limit || 20, 50);
-    const data = await this.notificationService.getNotifications(user.id, page, limit);
-    return ResponseWrapper.success(data, '获取成功');
+    const data = await this.notificationService.getNotifications(
+      user.id,
+      page,
+      limit,
+    );
+    return ResponseWrapper.success(
+      data,
+      this.i18n.t('notification.message.fetchSuccess'),
+    );
   }
 
   @Get('unread')
   @ApiOperation({ summary: '获取未读通知数量' })
-  async getUnreadCount(@CurrentAppUser() user: AppUserPayload): Promise<ApiResponse> {
+  async getUnreadCount(
+    @CurrentAppUser() user: AppUserPayload,
+  ): Promise<ApiResponse> {
     const count = await this.notificationService.getUnreadCount(user.id);
-    return ResponseWrapper.success({ unreadCount: count }, '获取成功');
+    return ResponseWrapper.success(
+      { unreadCount: count },
+      this.i18n.t('notification.message.fetchSuccess'),
+    );
   }
 
   @Post(':id/read')
@@ -136,9 +155,14 @@ export class NotificationController {
   @Post('read-all')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '标记全部通知为已读' })
-  async markAllAsRead(@CurrentAppUser() user: AppUserPayload): Promise<ApiResponse> {
+  async markAllAsRead(
+    @CurrentAppUser() user: AppUserPayload,
+  ): Promise<ApiResponse> {
     const count = await this.notificationService.markAllAsRead(user.id);
-    return ResponseWrapper.success({ markedCount: count }, '操作成功');
+    return ResponseWrapper.success(
+      { markedCount: count },
+      this.i18n.t('notification.message.operationSuccess'),
+    );
   }
 
   // ─── 设备令牌 ───
@@ -156,11 +180,14 @@ export class NotificationController {
       dto.deviceId,
       dto.platform,
     );
-    return ResponseWrapper.success({
-      id: token.id,
-      deviceId: token.deviceId,
-      platform: token.platform,
-    }, '注册成功');
+    return ResponseWrapper.success(
+      {
+        id: token.id,
+        deviceId: token.deviceId,
+        platform: token.platform,
+      },
+      this.i18n.t('notification.message.registerSuccess'),
+    );
   }
 
   @Delete('device')
@@ -177,14 +204,19 @@ export class NotificationController {
 
   @Get('preference')
   @ApiOperation({ summary: '获取通知偏好设置' })
-  async getPreference(@CurrentAppUser() user: AppUserPayload): Promise<ApiResponse> {
+  async getPreference(
+    @CurrentAppUser() user: AppUserPayload,
+  ): Promise<ApiResponse> {
     const pref = await this.notificationService.getPreference(user.id);
-    return ResponseWrapper.success({
-      pushEnabled: pref.pushEnabled,
-      enabledTypes: pref.enabledTypes,
-      quietStart: pref.quietStart,
-      quietEnd: pref.quietEnd,
-    }, '获取成功');
+    return ResponseWrapper.success(
+      {
+        pushEnabled: pref.pushEnabled,
+        enabledTypes: pref.enabledTypes,
+        quietStart: pref.quietStart,
+        quietEnd: pref.quietEnd,
+      },
+      this.i18n.t('notification.message.fetchSuccess'),
+    );
   }
 
   @Put('preference')
@@ -208,11 +240,14 @@ export class NotificationController {
       user.id,
       updates,
     );
-    return ResponseWrapper.success({
-      pushEnabled: pref.pushEnabled,
-      enabledTypes: pref.enabledTypes,
-      quietStart: pref.quietStart,
-      quietEnd: pref.quietEnd,
-    }, '更新成功');
+    return ResponseWrapper.success(
+      {
+        pushEnabled: pref.pushEnabled,
+        enabledTypes: pref.enabledTypes,
+        quietStart: pref.quietStart,
+        quietEnd: pref.quietEnd,
+      },
+      this.i18n.t('notification.message.updateSuccess'),
+    );
   }
 }

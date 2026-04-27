@@ -1,0 +1,13 @@
+{
+  "analytics": {
+    "overviewSuccess": "概要データを取得しました",
+    "topClientsSuccess": "クライアントランキングを取得しました",
+    "capabilityUsageSuccess": "機能使用統計を取得しました",
+    "timeSeriesSuccess": "時系列データを取得しました",
+    "costAnalysisSuccess": "コスト分析を取得しました",
+    "errorAnalysisSuccess": "エラー分析を取得しました",
+    "dashboardSuccess": "ダッシュボードデータを取得しました",
+    "funnelSuccess": "コンバージョンファネルデータを取得しました",
+    "trendSuccess": "コンバージョントレンドデータを取得しました"
+  }
+}

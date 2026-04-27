@@ -69,7 +69,11 @@ export class CoachingStageService {
   async run(input: CoachingStageInput): Promise<PostProcessStageResult> {
     const mode = input.decisionMode || 'pre_eat';
     const { userContext, analysisState, contextualAnalysis } = input.analyze;
-    const { decision: decisionOutput, structuredDecision, summary } = input.decide;
+    const {
+      decision: decisionOutput,
+      structuredDecision,
+      summary,
+    } = input.decide;
 
     // Confidence diagnostics
     let confidenceDiagnostics: ConfidenceDiagnostics | undefined;
@@ -89,10 +93,13 @@ export class CoachingStageService {
         );
       }
     } catch (err) {
-      this.logger.warn(`Confidence diagnostics failed: ${(err as Error).message}`);
+      this.logger.warn(
+        `Confidence diagnostics failed: ${(err as Error).message}`,
+      );
     }
 
-    const diagnostics = confidenceDiagnostics || CoachingStageService.DEFAULT_DIAGNOSTICS;
+    const diagnostics =
+      confidenceDiagnostics || CoachingStageService.DEFAULT_DIAGNOSTICS;
 
     // Recovery action
     const recoveryAction = this.postMealRecoveryService.build({

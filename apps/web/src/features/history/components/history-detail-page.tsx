@@ -191,11 +191,7 @@ export function HistoryDetailPage({ analysisId }: HistoryDetailPageProps) {
         {/* 图片（如有） */}
         {result.imageUrl && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={result.imageUrl}
-            alt="食物图片"
-            className="w-full  object-cover max-h-60"
-          />
+          <img src={result.imageUrl} alt="食物图片" className="w-full  object-cover max-h-60" />
         )}
 
         {/* 决策头卡 */}

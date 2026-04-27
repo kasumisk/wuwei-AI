@@ -1,0 +1,31 @@
+{
+  "appVersion": {
+    "notFound": "版本 #{{id}} 不存在",
+    "alreadyExists": "版本已存在: {{platform}} v{{version}}",
+    "cannotDeletePublished": "已发布的版本不能直接删除，请先归档",
+    "cannotUpdatePublishedFields": "已发布版本不能修改以下字段: {{fields}}",
+    "alreadyPublished": "版本已经发布",
+    "cannotPublishArchived": "已归档版本不能发布",
+    "alreadyArchived": "版本已经归档",
+    "fetchListSuccess": "获取版本列表成功",
+    "fetchStatsSuccess": "获取版本统计成功",
+    "fetchDetailSuccess": "获取版本详情成功",
+    "createSuccess": "版本创建成功",
+    "updateSuccess": "版本更新成功",
+    "deleteSuccess": "版本删除成功",
+    "publishSuccess": "版本发布成功",
+    "archiveSuccess": "版本归档成功"
+  },
+  "appVersionPackage": {
+    "alreadyExists": "渠道包 {{channel}} 已存在",
+    "downloadUrlRequired": "下载链接不能为空",
+    "notFound": "渠道包 #{{packageId}} 不存在",
+    "versionNotFound": "版本 #{{versionId}} 不存在",
+    "createSuccess": "渠道包创建成功",
+    "updateSuccess": "渠道包更新成功",
+    "deleteSuccess": "渠道包删除成功",
+    "fetchSuccess": "获取渠道包列表成功",
+    "toggleSuccess": "状态已切换",
+    "storeDefaultsSuccess": "获取默认配置成功"
+  }
+}

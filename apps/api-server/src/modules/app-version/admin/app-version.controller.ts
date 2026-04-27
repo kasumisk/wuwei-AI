@@ -15,6 +15,7 @@ import {
   ApiOperation,
   ApiResponse as SwaggerResponse,
 } from '@nestjs/swagger';
+import { I18n, I18nContext } from '../../../core/i18n/i18n.decorator';
 import { JwtAuthGuard } from '../../auth/admin/jwt-auth.guard';
 import { RolesGuard } from '../../rbac/admin/roles.guard';
 import { Roles } from '../../rbac/admin/roles.decorator';
@@ -36,142 +37,127 @@ import { ApiResponse } from '../../../common/types/response.type';
 export class AppVersionController {
   constructor(private readonly appVersionService: AppVersionService) {}
 
-  /**
-   * 获取版本列表
-   * GET /api/admin/app-versions
-   */
   @Get()
   @ApiOperation({ summary: '获取版本列表' })
   @SwaggerResponse({ status: 200, type: AppVersionsListResponseDto })
-  async findAll(@Query() query: GetAppVersionsQueryDto): Promise<ApiResponse> {
+  async findAll(
+    @Query() query: GetAppVersionsQueryDto,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.appVersionService.findAll(query);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取版本列表成功',
+      message: i18n.t('appVersion.appVersion.fetchListSuccess'),
       data,
     };
   }
 
-  /**
-   * 获取版本详情
-   * GET /api/admin/app-versions/:id
-   */
   @Get('stats')
   @ApiOperation({ summary: '获取版本统计信息' })
-  async getStats(): Promise<ApiResponse> {
+  async getStats(@I18n() i18n: I18nContext): Promise<ApiResponse> {
     const data = await this.appVersionService.getStats();
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取版本统计成功',
+      message: i18n.t('appVersion.appVersion.fetchStatsSuccess'),
       data,
     };
   }
 
-  /**
-   * 获取版本详情
-   * GET /api/admin/app-versions/:id
-   */
   @Get(':id')
   @ApiOperation({ summary: '获取版本详情' })
   @SwaggerResponse({ status: 200, type: AppVersionInfoDto })
-  async findOne(@Param('id') id: string): Promise<ApiResponse> {
+  async findOne(
+    @Param('id') id: string,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.appVersionService.findOne(id);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取版本详情成功',
+      message: i18n.t('appVersion.appVersion.fetchDetailSuccess'),
       data,
     };
   }
 
-  /**
-   * 创建版本
-   * POST /api/admin/app-versions
-   */
   @Post()
   @ApiOperation({ summary: '创建版本' })
   @SwaggerResponse({ status: 201, type: AppVersionInfoDto })
-  async create(@Body() createDto: CreateAppVersionDto): Promise<ApiResponse> {
+  async create(
+    @Body() createDto: CreateAppVersionDto,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.appVersionService.create(createDto);
     return {
       success: true,
       code: HttpStatus.CREATED,
-      message: '版本创建成功',
+      message: i18n.t('appVersion.appVersion.createSuccess'),
       data,
     };
   }
 
-  /**
-   * 更新版本
-   * PUT /api/admin/app-versions/:id
-   */
   @Put(':id')
   @ApiOperation({ summary: '更新版本' })
   @SwaggerResponse({ status: 200, type: AppVersionInfoDto })
   async update(
     @Param('id') id: string,
     @Body() updateDto: UpdateAppVersionDto,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.appVersionService.update(id, updateDto);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '版本更新成功',
+      message: i18n.t('appVersion.appVersion.updateSuccess'),
       data,
     };
   }
 
-  /**
-   * 删除版本
-   * DELETE /api/admin/app-versions/:id
-   */
   @Delete(':id')
   @ApiOperation({ summary: '删除版本' })
-  async remove(@Param('id') id: string): Promise<ApiResponse> {
+  async remove(
+    @Param('id') id: string,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.appVersionService.remove(id);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '版本删除成功',
+      message: i18n.t('appVersion.appVersion.deleteSuccess'),
       data,
     };
   }
 
-  /**
-   * 发布版本
-   * POST /api/admin/app-versions/:id/publish
-   */
   @Post(':id/publish')
   @ApiOperation({ summary: '发布版本' })
   @SwaggerResponse({ status: 200, type: AppVersionInfoDto })
   async publish(
     @Param('id') id: string,
     @Body() publishDto: PublishAppVersionDto,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.appVersionService.publish(id, publishDto);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '版本发布成功',
+      message: i18n.t('appVersion.appVersion.publishSuccess'),
       data,
     };
   }
 
-  /**
-   * 归档版本
-   * POST /api/admin/app-versions/:id/archive
-   */
   @Post(':id/archive')
   @ApiOperation({ summary: '归档版本' })
   @SwaggerResponse({ status: 200, type: AppVersionInfoDto })
-  async archive(@Param('id') id: string): Promise<ApiResponse> {
+  async archive(
+    @Param('id') id: string,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.appVersionService.archive(id);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '版本归档成功',
+      message: i18n.t('appVersion.appVersion.archiveSuccess'),
       data,
     };
   }

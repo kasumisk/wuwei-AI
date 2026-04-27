@@ -1,0 +1,12 @@
+{
+  "message": {
+    "fetchSuccess": "取得しました",
+    "joinedChallenge": "チャレンジに参加しました",
+    "createSuccess": "作成しました",
+    "updateSuccess": "更新しました",
+    "statusUpdated": "ステータスを更新しました"
+  },
+  "error": {
+    "challengeNotFound": "チャレンジが見つかりません"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "client": {
+    "notFound": "客户端 #{{id}} 不存在",
+    "fetchListSuccess": "获取客户端列表成功",
+    "fetchDetailSuccess": "获取客户端详情成功",
+    "createSuccess": "客户端创建成功",
+    "updateSuccess": "客户端更新成功",
+    "deleteSuccess": "客户端删除成功",
+    "regenerateSecretSuccess": "API Secret 重新生成成功",
+    "usageStatsSuccess": "获取客户端使用统计成功"
+  },
+  "clientPermission": {
+    "clientNotFound": "客户端 #{{clientId}} 不存在",
+    "permissionNotFound": "权限 #{{permissionId}} 不存在",
+    "capabilityNotFound": "客户端 #{{clientId}} 不存在能力 {{capability}}",
+    "alreadyExists": "客户端 #{{clientId}} 已拥有能力 {{capability}}",
+    "fetchSuccess": "获取权限列表成功",
+    "grantSuccess": "权限授予成功",
+    "updateSuccess": "权限更新成功",
+    "revokeSuccess": "权限撤销成功",
+    "revokeAllSuccess": "所有权限已撤销"
+  }
+}

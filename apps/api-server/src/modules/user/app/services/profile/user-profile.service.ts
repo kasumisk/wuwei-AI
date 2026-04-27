@@ -33,6 +33,7 @@ import {
   ProfileUpdatedEvent,
 } from '../../../../../core/events/domain-events';
 import { PrismaService } from '../../../../../core/prisma/prisma.service';
+import { I18nService } from '../../../../../core/i18n';
 
 /** 字段权重表 — 权重越高，对推荐质量影响越大 */
 const FIELD_WEIGHTS: Record<string, number> = {
@@ -77,6 +78,7 @@ export class UserProfileService {
     private readonly prisma: PrismaService,
     private readonly profileCacheService: ProfileCacheService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly i18n: I18nService,
   ) {}
 
   /**
@@ -549,68 +551,74 @@ export class UserProfileService {
       impactLevel: 'safety' | 'accuracy' | 'optional';
     }> = [];
 
+    const t = (key: string) => this.i18n.t(`user.${key}`);
     const fieldMeta: Record<
       string,
-      { priority: 'high' | 'medium' | 'low'; reason: string; impact: string; impactLevel: 'safety' | 'accuracy' | 'optional' }
+      {
+        priority: 'high' | 'medium' | 'low';
+        reason: string;
+        impact: string;
+        impactLevel: 'safety' | 'accuracy' | 'optional';
+      }
     > = {
       heightCm: {
         priority: 'high',
-        reason: '计算基础代谢率的核心参数',
-        impact: '推荐准确度提升 ~20%',
+        reason: t('field.reason.heightForBmr'),
+        impact: t('field.impact.bmrAccuracy'),
         impactLevel: 'accuracy',
       },
       weightKg: {
         priority: 'high',
-        reason: '计算基础代谢率的核心参数',
-        impact: '推荐准确度提升 ~20%',
+        reason: t('field.reason.weightForBmr'),
+        impact: t('field.impact.bmrAccuracy'),
         impactLevel: 'accuracy',
       },
       allergens: {
         priority: 'high',
-        reason: '确保推荐食物安全，排除过敏原',
-        impact: '安全性保障',
+        reason: t('field.reason.allergiesSafety'),
+        impact: t('field.impact.safety'),
         impactLevel: 'safety',
       },
       goal: {
         priority: 'high',
-        reason: '决定营养分配策略',
-        impact: '推荐准确度提升 ~15%',
+        reason: t('field.reason.goalNutritionStrategy'),
+        impact: t('field.impact.goalAccuracy'),
         impactLevel: 'accuracy',
       },
       dietaryRestrictions: {
         priority: 'medium',
-        reason: '过滤不适合的食物',
-        impact: '推荐准确度提升 ~10%',
+        reason: t('field.reason.dietaryFiltering'),
+        impact: t('field.impact.dietaryAccuracy'),
         impactLevel: 'safety',
       },
       healthConditions: {
         priority: 'medium',
-        reason: '针对健康状况调整推荐',
-        impact: '安全性 + 准确度提升',
+        reason: t('field.reason.healthConditions'),
+        impact: t('field.impact.healthSafetyAccuracy'),
         impactLevel: 'safety',
       },
       discipline: {
         priority: 'medium',
-        reason: '调整推荐约束松紧度',
-        impact: '执行率提升 ~15%',
+        reason: t('field.reason.constraintTightness'),
+        impact: t('field.impact.complianceBoost'),
         impactLevel: 'optional',
       },
       bingeTriggers: {
         priority: 'medium',
-        reason: '暴食预防干预',
-        impact: '坚持率提升 ~10%',
+        reason: t('field.reason.bingePrevention'),
+        impact: t('field.impact.persistenceBoost'),
         impactLevel: 'optional',
       },
       exerciseProfile: {
         priority: 'low',
-        reason: '运动用户热量需求不同',
-        impact: '热量计算更精确',
+        reason: t('field.reason.activityCalories'),
+        impact: t('field.impact.calorieAccuracy'),
         impactLevel: 'optional',
       },
       cookingSkillLevel: {
         priority: 'low',
-        reason: '匹配烹饪难度',
-        impact: '推荐可行性提升',
+        reason: t('field.reason.cookingDifficultyMatch'),
+        impact: t('field.impact.feasibility'),
         impactLevel: 'optional',
       },
     };

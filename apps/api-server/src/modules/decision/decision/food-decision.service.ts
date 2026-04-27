@@ -364,7 +364,7 @@ export class FoodDecisionService {
 
     // 9. breakdownExplanations
     const breakdownExplanations = breakdown
-      ? this.foodScoringService.explainBreakdown(breakdown, locale || 'zh-CN')
+      ? this.foodScoringService.explainBreakdown(breakdown, locale)
       : undefined;
 
     // 合并到 decision 中

@@ -1,0 +1,35 @@
+{
+  "provider": {
+    "notFound": "Provider #{{id}} not found",
+    "alreadyExists": "Provider already exists: {{name}} ({{type}})",
+    "deleteWithModels": "Cannot delete provider: {{count}} associated model configurations exist",
+    "notEnabled": "This provider is not enabled",
+    "testSuccess": "Connection test successful",
+    "testFailed": "Connection test failed",
+    "updateNoField": "No fields to update",
+    "fetchListSuccess": "Providers retrieved successfully",
+    "fetchDetailSuccess": "Provider details retrieved successfully",
+    "createSuccess": "Provider created successfully",
+    "updateSuccess": "Provider updated successfully",
+    "deleteSuccess": "Provider deleted successfully",
+    "testComplete": "Test complete",
+    "healthSuccess": "Health status retrieved successfully",
+    "healthCheckComplete": "Health check complete"
+  },
+  "model": {
+    "notFound": "Model #{{id}} not found",
+    "providerNotFound": "Provider #{{providerId}} not found or disabled",
+    "alreadyExists": "Model already exists: {{modelId}} ({{providerId}})",
+    "notEnabled": "This model is not enabled",
+    "providerNotEnabledForModel": "The provider for this model is not enabled",
+    "testSuccess": "Test successful (simulated)",
+    "testFailed": "Test failed",
+    "deleteSuccess": "Model deleted successfully",
+    "fetchListSuccess": "Models retrieved successfully",
+    "fetchDetailSuccess": "Model details retrieved successfully",
+    "createSuccess": "Model created successfully",
+    "updateSuccess": "Model updated successfully",
+    "testComplete": "Test complete",
+    "healthSuccess": "Health status retrieved successfully"
+  }
+}

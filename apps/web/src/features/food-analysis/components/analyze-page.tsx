@@ -29,13 +29,7 @@ import { BottomNav } from '@/components/common/bottom-nav';
 import { AnalyzeQuotaBadge } from '@/features/subscription/components/quota-badge';
 
 type MealTypeOption = 'breakfast' | 'lunch' | 'dinner' | 'snack';
-type Step =
-  | 'upload'
-  | 'analyzing'
-  | 'low_confidence'
-  | 'analyzing_refine'
-  | 'result'
-  | 'saved';
+type Step = 'upload' | 'analyzing' | 'low_confidence' | 'analyzing_refine' | 'result' | 'saved';
 
 const mealTypeLabels: Record<MealTypeOption, string> = {
   breakfast: '早餐',
@@ -165,15 +159,16 @@ function computeResultQuality(result: AnalysisResult, foods: FoodItem[]): Result
   };
 }
 
-function buildEnhancedTextInput(text: string): string {
-  let next = text.trim();
-  if (!hasQuantityHint(next)) {
-    next = `${next}${next ? '，' : ''}每种食物请按常见份量估算`;
+function buildEnhancedTextInput(text: string): { text: string; hints: string[] } {
+  const trimmed = text.trim();
+  const hints: string[] = [];
+  if (!hasQuantityHint(trimmed)) {
+    hints.push('每种食物请按常见份量估算');
   }
-  if (!hasCookingHint(next)) {
-    next = `${next}${next ? '，' : ''}并注明主要做法（如清蒸/红烧/油炸）`;
+  if (!hasCookingHint(trimmed)) {
+    hints.push('并注明主要做法（如清蒸/红烧/油炸）');
   }
-  return next.slice(0, TEXT_MAX_LENGTH);
+  return { text: trimmed.slice(0, TEXT_MAX_LENGTH), hints };
 }
 
 function buildCompletenessCoachPrompt(params: {
@@ -234,6 +229,8 @@ export function AnalyzePage() {
     }
     return '';
   });
+  /** 分析提示（不拼入 text，独立传给后端 LLM 指导估算） */
+  const [textHints, setTextHints] = useState<string[]>([]);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [editedFoods, setEditedFoods] = useState<FoodItem[]>([]);
   const [analyzeElapsed, setAnalyzeElapsed] = useState(0);
@@ -380,7 +377,7 @@ export function AnalyzePage() {
 
   // ── 文字分析（带超时） ──
   const analyzeTextByContent = useCallback(
-    async (text: string) => {
+    async (text: string, hints?: string[]) => {
       const trimmed = text.trim();
       if (!trimmed) {
         toast({ title: '请输入食物描述', variant: 'destructive' });
@@ -396,7 +393,7 @@ export function AnalyzePage() {
 
       try {
         const res = await Promise.race([
-          analyzeText(trimmed, mealType),
+          analyzeText(trimmed, mealType, undefined, hints?.length ? hints : undefined),
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error('分析超时，请重试')), ANALYZE_TIMEOUT_MS)
           ),
@@ -427,8 +424,8 @@ export function AnalyzePage() {
       toast({ title: '请输入食物描述', variant: 'destructive' });
       return;
     }
-    await analyzeTextByContent(trimmed);
-  }, [textInput, analyzeTextByContent, toast]);
+    await analyzeTextByContent(trimmed, textHints);
+  }, [textInput, textHints, analyzeTextByContent, toast]);
 
   // ── 从食物库/常吃触发 AI 分析（不直接存库） ──
   const addFromLibraryMutation = { isPending: false }; // kept for prop compat; logic moved to handleAddFromLibrary
@@ -620,15 +617,15 @@ export function AnalyzePage() {
       return;
     }
 
-    const enhanced = buildEnhancedTextInput(textInput);
-    if (!enhanced.trim()) {
+    const trimmed = textInput.trim();
+    if (!trimmed) {
       toast({ title: '请先输入食物描述', variant: 'destructive' });
       setStep('upload');
       return;
     }
 
-    setTextInput(enhanced);
-    await analyzeTextByContent(enhanced);
+    const { hints } = buildEnhancedTextInput(trimmed);
+    await analyzeTextByContent(trimmed, hints);
   }, [inputMode, textInput, analyzeTextByContent, toast]);
 
   const handleCoachCompletenessReview = useCallback(() => {
@@ -796,7 +793,11 @@ export function AnalyzePage() {
                 <div className="bg-card rounded-md p-4 space-y-3">
                   <textarea
                     value={textInput}
-                    onChange={(e) => setTextInput(e.target.value.slice(0, TEXT_MAX_LENGTH))}
+                    onChange={(e) => {
+                      setTextInput(e.target.value.slice(0, TEXT_MAX_LENGTH));
+                      // 输入变更时清空 hints，避免旧提示污染新食物的分析
+                      setTextHints([]);
+                    }}
                     placeholder="描述你吃了什么，例如：&#10;一碗白米饭、红烧肉三块、炒青菜一盘、紫菜蛋花汤"
                     className="w-full min-h-35 bg-transparent resize-none text-sm leading-relaxed placeholder:text-muted-foreground/50 focus:outline-none"
                     autoFocus
@@ -816,8 +817,14 @@ export function AnalyzePage() {
                 <div className="bg-card rounded-md border border-border p-3 space-y-2">
                   <p className="text-xs font-bold">输入完善建议</p>
                   <div className="text-[11px] text-muted-foreground space-y-1">
-                    <p className={hasQuantityHint(textInput) ? 'text-emerald-600' : ''}>
-                      {hasQuantityHint(textInput)
+                    <p
+                      className={
+                        hasQuantityHint(textInput) || textHints.includes('每种食物请按常见份量估算')
+                          ? 'text-emerald-600'
+                          : ''
+                      }
+                    >
+                      {hasQuantityHint(textInput) || textHints.includes('每种食物请按常见份量估算')
                         ? '已包含份量信息'
                         : '建议补充份量（如 100g / 半碗 / 2个）'}
                     </p>
@@ -827,18 +834,21 @@ export function AnalyzePage() {
                         : '建议补充做法（如油炸/清蒸/红烧）'}
                     </p>
                   </div>
-                  {!hasQuantityHint(textInput) && (
-                    <button
-                      onClick={() =>
-                        setTextInput(
-                          (prev) => `${prev}${prev.trim() ? '，' : ''}每种食物请按常见份量估算`
-                        )
-                      }
-                      className="px-2.5 py-1  text-[11px] font-bold bg-primary/10 text-primary hover:bg-primary/15 transition-colors"
-                    >
-                      一键补充“份量提示”
-                    </button>
-                  )}
+                  {!hasQuantityHint(textInput) &&
+                    !textHints.includes('每种食物请按常见份量估算') && (
+                      <button
+                        onClick={() =>
+                          setTextHints((prev) =>
+                            prev.includes('每种食物请按常见份量估算')
+                              ? prev
+                              : [...prev, '每种食物请按常见份量估算']
+                          )
+                        }
+                        className="px-2.5 py-1  text-[11px] font-bold bg-primary/10 text-primary hover:bg-primary/15 transition-colors"
+                      >
+                        一键补充"份量提示"
+                      </button>
+                    )}
                 </div>
 
                 {/* 快捷输入示例 */}

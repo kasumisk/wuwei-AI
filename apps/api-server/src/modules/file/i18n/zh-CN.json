@@ -1,0 +1,11 @@
+{
+  "admin": {
+    "uploadSuccess": "文件上传成功",
+    "presignedUrlSuccess": "获取预签名 URL 成功",
+    "deleteSuccess": "文件删除成功"
+  },
+  "app": {
+    "uploadSuccess": "上传成功",
+    "presignedUrlSuccess": "获取上传链接成功"
+  }
+}

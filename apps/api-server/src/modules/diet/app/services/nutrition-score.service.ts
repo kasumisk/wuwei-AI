@@ -38,6 +38,10 @@ export interface NutritionInput {
   protein: number;
   carbs: number;
   fat: number;
+  /** Bug-Fix: 用于"绝对量达成度门槛"评分，避免比例对但绝对量不足时的误判 */
+  targetProtein?: number;
+  targetCarbs?: number;
+  targetFat?: number;
   foodQuality: number; // 1-10
   satiety: number; // 1-10
   /** 血糖指数 0-100，可选 */
@@ -652,35 +656,102 @@ export class NutritionScoreService {
   }
 
   /**
-   * 蛋白质评分 — 分段函数
+   * 蛋白质评分 — 分段函数 + 绝对量达成度门槛
    * 不足区线性增长，达标区满分，超标区缓慢下降。
+   *
+   * Bug-Fix: 引入"绝对量达成度门槛"。即使供能比正确，
+   * 若蛋白质摄入绝对量远低于目标（按时间进度调整），也不能给满分。
+   * 避免出现"摄入 19.5g (目标 168g, 12%) 但 proteinRatio=100"的误判。
+   *
+   * @param protein         蛋白质摄入(g)
+   * @param calories        热量摄入(kcal)
+   * @param goal            目标类型
+   * @param targetProtein   蛋白质日目标(g)，用于绝对量评估（可选）
+   * @param expectedProgress 时间进度 0-1（默认 1.0 = 全天结算）
    */
   private calcProteinRatioScore(
     protein: number,
     calories: number,
     goal: string,
+    targetProtein?: number,
+    expectedProgress: number = 1.0,
   ): number {
     // 零摄入时返回 0（无数据 = 无法评估，而非"良好"）
     if (calories <= 0) return 0;
     const ratio = (protein * 4) / calories;
     const [min, max] = PROTEIN_RATIO_RANGES[goal] || [0.15, 0.25];
 
-    if (ratio >= min && ratio <= max) return 100;
-    if (ratio < min) return this.clamp(30 + 70 * (ratio / min));
+    let ratioScore: number;
+    if (ratio >= min && ratio <= max) ratioScore = 100;
+    else if (ratio < min) ratioScore = this.clamp(30 + 70 * (ratio / min));
     // 超标区缓慢衰减
-    return this.clamp(100 - 50 * ((ratio - max) / 0.15));
+    else ratioScore = this.clamp(100 - 50 * ((ratio - max) / 0.15));
+
+    // ── 绝对量达成度门槛（adequacy gate）──
+    // 当未提供 targetProtein 时退化为旧行为。
+    if (!targetProtein || targetProtein <= 0) return ratioScore;
+
+    const adequacy = protein / targetProtein; // 实际摄入占目标比例
+    // 期望摄入：按时间进度的 80%（给一定缓冲，不要求严格按进度均匀分配）
+    const expectedAdequacy = Math.max(0.15, expectedProgress * 0.8);
+
+    if (adequacy >= expectedAdequacy) {
+      // 达成预期或超额 → 不惩罚
+      return ratioScore;
+    }
+    // 未达预期 → 按"达成度 / 期望"比例线性折扣
+    const adequacyFactor = adequacy / expectedAdequacy; // 0..1
+    // 设置最低保护：即便严重不足也保留 ratioScore × 0.3 的下限，避免雪崩
+    return this.clamp(ratioScore * Math.max(0.3, adequacyFactor));
   }
 
-  private calcMacroScore(carbs: number, fat: number, calories: number): number {
+  /**
+   * 宏量平衡评分 — 占比 + 绝对量达成度
+   *
+   * Bug-Fix: 同 proteinRatio，引入碳水/脂肪绝对量达成度门槛。
+   * 避免出现"碳水占比正确但只摄入 13% 目标"时仍给高分的误判。
+   */
+  private calcMacroScore(
+    carbs: number,
+    fat: number,
+    calories: number,
+    targetCarbs?: number,
+    targetFat?: number,
+    expectedProgress: number = 1.0,
+  ): number {
     // 零摄入时返回 0（无数据 = 无法评估，而非"良好"）
     if (calories <= 0) return 0;
     const carbRatio = (carbs * 4) / calories;
     const fatRatio = (fat * 9) / calories;
-    return (
+    const ratioScore =
       (this.rangeScore(carbRatio, 0.4, 0.55) +
         this.rangeScore(fatRatio, 0.2, 0.3)) /
-      2
-    );
+      2;
+
+    // 绝对量达成度门槛
+    const expectedAdequacy = Math.max(0.15, expectedProgress * 0.8);
+    let adequacyFactor = 1.0;
+
+    if (targetCarbs && targetCarbs > 0) {
+      const carbAdequacy = carbs / targetCarbs;
+      if (carbAdequacy < expectedAdequacy) {
+        adequacyFactor = Math.min(
+          adequacyFactor,
+          Math.max(0.3, carbAdequacy / expectedAdequacy),
+        );
+      }
+    }
+    if (targetFat && targetFat > 0) {
+      const fatAdequacy = fat / targetFat;
+      if (fatAdequacy < expectedAdequacy) {
+        adequacyFactor = Math.min(
+          adequacyFactor,
+          Math.max(0.3, fatAdequacy / expectedAdequacy),
+        );
+      }
+    }
+
+    return this.clamp(ratioScore * adequacyFactor);
   }
 
   /**
@@ -806,6 +877,7 @@ export class NutritionScoreService {
   private generateHighlights(
     scores: NutritionScoreBreakdown,
     input: NutritionInput,
+    expectedProgress: number = 1.0,
   ): string[] {
     const hl: string[] = [];
     const pct = (value: number): string => String(Math.round(value));
@@ -815,6 +887,27 @@ export class NutritionScoreService {
       hl.push(t('nutrition.highlight.noIntake') || '📝 今日尚未记录饮食');
       return hl;
     }
+
+    // Bug-Fix: 计算绝对量达成度，用于"达标 highlight"门槛
+    // 即便 ratioScore=100，若摄入按时间进度仍显著不足，也不能说"达标"
+    const proteinAdequacy =
+      input.targetProtein && input.targetProtein > 0
+        ? input.protein / input.targetProtein
+        : 1;
+    const carbsAdequacy =
+      input.targetCarbs && input.targetCarbs > 0
+        ? input.carbs / input.targetCarbs
+        : 1;
+    const fatAdequacy =
+      input.targetFat && input.targetFat > 0 ? input.fat / input.targetFat : 1;
+    const caloriesAdequacy =
+      input.targetCalories > 0 ? input.calories / input.targetCalories : 1;
+    // 时间感知"不足"阈值：与 macroSlotStatus 对齐 (expectedProgress * 0.7)
+    // 时间感知"达标"阈值：在不足阈值之上、超标阈值以下
+    const DEFICIT = Math.max(0.15, expectedProgress * 0.7);
+    const ADEQUATE = DEFICIT; // 达成 deficit 门槛即视为"达标"
+    // "超标"门槛：>115% 视为超标（与 macroSlotStatus 对齐）
+    const OVER = 1.15;
 
     if (input.calories > input.targetCalories * 1.3)
       hl.push(
@@ -834,25 +927,36 @@ export class NutritionScoreService {
         }),
       );
 
-    if (scores.proteinRatio < 50)
+    // ── 蛋白质 ──
+    // Bug-Fix: 优先看绝对量；若摄入严重不足，直接报"不足"
+    if (input.targetProtein && proteinAdequacy < ADEQUATE) {
+      hl.push(
+        t('nutrition.highlight.proteinLow', {
+          percent: pct(Math.max(0, (1 - proteinAdequacy) * 100)),
+        }),
+      );
+    } else if (scores.proteinRatio < 70) {
       hl.push(
         t('nutrition.highlight.proteinLow', {
           percent: pct(100 - scores.proteinRatio),
         }),
       );
-    else if (scores.proteinRatio < 70)
-      hl.push(
-        t('nutrition.highlight.proteinLow', {
-          percent: pct(100 - scores.proteinRatio),
-        }),
-      );
+    }
 
-    if (scores.macroBalance < 50)
+    // ── 碳水/脂肪（macroBalance 维度）──
+    if (input.targetCarbs && carbsAdequacy < ADEQUATE) {
+      hl.push(
+        t('nutrition.highlight.carbsLow', {
+          percent: pct(Math.max(0, (1 - carbsAdequacy) * 100)),
+        }) || `⚠️ 碳水不足 ${pct(Math.max(0, (1 - carbsAdequacy) * 100))}%`,
+      );
+    } else if (scores.macroBalance < 50) {
       hl.push(
         t('nutrition.highlight.carbsHigh', {
           percent: pct(100 - scores.macroBalance),
         }),
       );
+    }
     // foodQuality → 应对应"食物质量"而非"脂肪超标"
     if (scores.foodQuality < 40 && input.foodQuality > 0)
       hl.push(
@@ -874,11 +978,37 @@ export class NutritionScoreService {
         }),
       );
 
-    if (scores.energy >= 85) hl.push(t('nutrition.highlight.caloriesGood'));
-    if (scores.proteinRatio >= 85)
+    // ── 正向高亮（达标）—— 必须满足"分数高 & 绝对量也达标"双重条件 ──
+    // Bug-Fix: 旧逻辑仅看 score>=85，会与 issueHighlights/macroSlotStatus 冲突
+    if (
+      scores.energy >= 85 &&
+      caloriesAdequacy >= ADEQUATE &&
+      caloriesAdequacy <= OVER
+    )
+      hl.push(t('nutrition.highlight.caloriesGood'));
+    if (
+      scores.proteinRatio >= 85 &&
+      (!input.targetProtein || proteinAdequacy >= ADEQUATE)
+    )
       hl.push(t('nutrition.highlight.proteinGood'));
-    if (scores.macroBalance >= 85) hl.push(t('nutrition.highlight.carbsGood'));
-    if (scores.foodQuality >= 80) hl.push(t('nutrition.highlight.fatGood'));
+    if (
+      scores.macroBalance >= 85 &&
+      (!input.targetCarbs || carbsAdequacy >= ADEQUATE) &&
+      (!input.targetFat || fatAdequacy >= ADEQUATE)
+    )
+      hl.push(t('nutrition.highlight.carbsGood'));
+    // Bug-Fix: 原逻辑用 foodQuality 触发 fatGood —— 完全错位
+    // foodQuality 高 → 应触发"食物质量好"，而非"脂肪达标"
+    if (scores.foodQuality >= 80 && input.foodQuality > 0)
+      hl.push(t('nutrition.highlight.qualityGood') || '✅ 食物质量良好');
+    // 脂肪达标：基于绝对量
+    if (
+      input.targetFat &&
+      fatAdequacy >= ADEQUATE &&
+      fatAdequacy <= OVER &&
+      scores.macroBalance >= 60
+    )
+      hl.push(t('nutrition.highlight.fatGood'));
 
     return hl.slice(0, 3);
   }
@@ -1523,6 +1653,10 @@ export class NutritionScoreService {
     /** V1.4: 每餐决策信号聚合，用于 mealQuality 维度 */
     mealSignals?: MealSignalAggregation,
   ): NutritionScoreResult {
+    // Bug-Fix: 计算时间进度，供 proteinRatio/macroBalance 的"绝对量达成度"门槛使用
+    const expectedProgress =
+      localHour != null ? this.getExpectedProgress(localHour) : 1.0;
+
     const energy = this.calcEnergyScore(
       input.calories,
       input.targetCalories,
@@ -1533,11 +1667,16 @@ export class NutritionScoreService {
       input.protein,
       input.calories,
       goal,
+      input.targetProtein,
+      expectedProgress,
     );
     const macroBalance = this.calcMacroScore(
       input.carbs,
       input.fat,
       input.calories,
+      input.targetCarbs,
+      input.targetFat,
+      expectedProgress,
     );
     const foodQuality = this.logScale100(input.foodQuality);
     const satiety = this.logScale100(input.satiety);
@@ -1616,7 +1755,11 @@ export class NutritionScoreService {
       glycemicImpact,
       mealQuality,
     };
-    const highlights = this.generateHighlights(breakdown, input);
+    const highlights = this.generateHighlights(
+      breakdown,
+      input,
+      expectedProgress,
+    );
     const decision = this.scoreToDecision(score);
 
     return {

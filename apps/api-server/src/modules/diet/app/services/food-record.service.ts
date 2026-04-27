@@ -5,6 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
+import { I18nService } from '../../../../core/i18n';
 import { Prisma } from '@prisma/client';
 
 import {
@@ -21,7 +22,10 @@ import {
 export class FoodRecordService {
   private readonly logger = new Logger(FoodRecordService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly i18n: I18nService,
+  ) {}
 
   /**
    * 获取今日记录
@@ -87,8 +91,10 @@ export class FoodRecordService {
     const record = await this.prisma.foodRecords.findUnique({
       where: { id: recordId },
     });
-    if (!record) throw new NotFoundException('记录不存在');
-    if (record.userId !== userId) throw new ForbiddenException('无权操作');
+    if (!record)
+      throw new NotFoundException(this.i18n.t('diet.recordNotFound'));
+    if (record.userId !== userId)
+      throw new ForbiddenException(this.i18n.t('diet.noPermission'));
 
     const data: any = {};
     if (dto.foods !== undefined) data.foods = dto.foods;
@@ -110,8 +116,10 @@ export class FoodRecordService {
     const record = await this.prisma.foodRecords.findUnique({
       where: { id: recordId },
     });
-    if (!record) throw new NotFoundException('记录不存在');
-    if (record.userId !== userId) throw new ForbiddenException('无权操作');
+    if (!record)
+      throw new NotFoundException(this.i18n.t('diet.recordNotFound'));
+    if (record.userId !== userId)
+      throw new ForbiddenException(this.i18n.t('diet.noPermission'));
 
     await this.prisma.foodRecords.delete({ where: { id: recordId } });
     return record;

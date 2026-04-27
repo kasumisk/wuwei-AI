@@ -24,9 +24,7 @@ export const GOAL_FOCUS_BLOCKS: Record<string, Record<string, string>> = {
   health: Object.fromEntries(
     LOCALES.map((l) => [l, cl('goal.focus.health', l)]),
   ),
-  habit: Object.fromEntries(
-    LOCALES.map((l) => [l, cl('goal.focus.habit', l)]),
-  ),
+  habit: Object.fromEntries(LOCALES.map((l) => [l, cl('goal.focus.habit', l)])),
 };
 
 // ==================== Health Condition Instructions (P3.3) ====================
@@ -126,9 +124,7 @@ export const GOAL_LABELS: Record<string, Record<string, string>> = {
   health: Object.fromEntries(
     LOCALES.map((l) => [l, cl('goal.label.health', l)]),
   ),
-  habit: Object.fromEntries(
-    LOCALES.map((l) => [l, cl('goal.label.habit', l)]),
-  ),
+  habit: Object.fromEntries(LOCALES.map((l) => [l, cl('goal.label.habit', l)])),
 };
 
 // ==================== Context / Precision Headers (P3.5) ====================

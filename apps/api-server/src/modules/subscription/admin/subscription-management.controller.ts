@@ -26,6 +26,7 @@ import {
   GetTriggerStatsQueryDto,
 } from './dto/subscription-management.dto';
 import { ApiResponse } from '../../../common/types/response.type';
+import { I18nService } from '../../../core/i18n/i18n.service';
 
 @ApiTags('管理后台 - 订阅管理')
 @Controller('admin/subscriptions')
@@ -35,13 +36,11 @@ import { ApiResponse } from '../../../common/types/response.type';
 export class SubscriptionManagementController {
   constructor(
     private readonly subscriptionManagementService: SubscriptionManagementService,
+    private readonly i18n: I18nService,
   ) {}
 
   // ==================== 订阅计划管理 ====================
 
-  /**
-   * 获取订阅计划列表
-   */
   @Get('plans')
   @ApiOperation({ summary: '获取订阅计划列表' })
   async findPlans(
@@ -51,14 +50,11 @@ export class SubscriptionManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取订阅计划列表成功',
+      message: this.i18n.t('subscription.controller.fetchPlansSuccess'),
       data,
     };
   }
 
-  /**
-   * 创建订阅计划
-   */
   @Post('plans')
   @ApiOperation({ summary: '创建订阅计划' })
   async createPlan(
@@ -68,15 +64,11 @@ export class SubscriptionManagementController {
     return {
       success: true,
       code: HttpStatus.CREATED,
-      message: '创建订阅计划成功',
+      message: this.i18n.t('subscription.controller.createPlanSuccess'),
       data,
     };
   }
 
-  /**
-   * 查询单个订阅计划（含完整 entitlements）
-   * GET /admin/subscriptions/plans/:id
-   */
   @Get('plans/:id')
   @ApiOperation({ summary: '查询单个订阅计划' })
   async findPlanById(@Param('id') id: string): Promise<ApiResponse> {
@@ -84,14 +76,11 @@ export class SubscriptionManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: this.i18n.t('subscription.controller.fetchSuccess'),
       data,
     };
   }
 
-  /**
-   * 更新订阅计划
-   */
   @Put('plans/:id')
   @ApiOperation({ summary: '更新订阅计划' })
   async updatePlan(
@@ -102,16 +91,13 @@ export class SubscriptionManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '更新订阅计划成功',
+      message: this.i18n.t('subscription.controller.updatePlanSuccess'),
       data,
     };
   }
 
   // ==================== 订阅概览统计 ====================
 
-  /**
-   * 获取订阅概览统计
-   */
   @Get('overview')
   @ApiOperation({ summary: '获取订阅概览统计' })
   async getOverview(): Promise<ApiResponse> {
@@ -120,16 +106,13 @@ export class SubscriptionManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取订阅概览成功',
+      message: this.i18n.t('subscription.controller.fetchOverviewSuccess'),
       data,
     };
   }
 
   // ==================== 支付记录 ====================
 
-  /**
-   * 获取支付记录列表
-   */
   @Get('payments')
   @ApiOperation({ summary: '获取支付记录列表' })
   async findPaymentRecords(
@@ -140,16 +123,13 @@ export class SubscriptionManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取支付记录列表成功',
+      message: this.i18n.t('subscription.controller.fetchPaymentsSuccess'),
       data,
     };
   }
 
   // ==================== 用量配额 ====================
 
-  /**
-   * 获取用户用量配额
-   */
   @Get('usage-quotas')
   @ApiOperation({ summary: '获取用户用量配额' })
   async getUserUsageQuotas(
@@ -160,14 +140,11 @@ export class SubscriptionManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取用量配额成功',
+      message: this.i18n.t('subscription.controller.fetchQuotaSuccess'),
       data,
     };
   }
 
-  /**
-   * 重置用量配额
-   */
   @Put('usage-quotas/:id/reset')
   @ApiOperation({ summary: '重置用量配额' })
   async resetUsageQuota(@Param('id') id: string): Promise<ApiResponse> {
@@ -175,16 +152,13 @@ export class SubscriptionManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '重置用量配额成功',
+      message: this.i18n.t('subscription.controller.resetQuotaSuccess'),
       data,
     };
   }
 
   // ==================== 付费墙触发统计 ====================
 
-  /**
-   * 获取付费墙触发统计
-   */
   @Get('trigger-stats')
   @ApiOperation({ summary: '获取付费墙触发统计' })
   async getTriggerStats(
@@ -195,16 +169,13 @@ export class SubscriptionManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取触发统计成功',
+      message: this.i18n.t('subscription.controller.fetchTriggerStatsSuccess'),
       data,
     };
   }
 
   // ==================== 用户订阅管理 ====================
 
-  /**
-   * 获取用户订阅列表
-   */
   @Get()
   @ApiOperation({ summary: '获取用户订阅列表' })
   async findSubscriptions(
@@ -215,14 +186,11 @@ export class SubscriptionManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取订阅列表成功',
+      message: this.i18n.t('subscription.controller.fetchSubsListSuccess'),
       data,
     };
   }
 
-  /**
-   * 获取订阅详情
-   */
   @Get(':id')
   @ApiOperation({ summary: '获取订阅详情' })
   async getSubscriptionDetail(@Param('id') id: string): Promise<ApiResponse> {
@@ -231,14 +199,11 @@ export class SubscriptionManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取订阅详情成功',
+      message: this.i18n.t('subscription.controller.fetchSubsDetailSuccess'),
       data,
     };
   }
 
-  /**
-   * 延长订阅
-   */
   @Put(':id/extend')
   @ApiOperation({ summary: '延长订阅' })
   async extendSubscription(
@@ -252,14 +217,11 @@ export class SubscriptionManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '延长订阅成功',
+      message: this.i18n.t('subscription.controller.extendSubsSuccess'),
       data,
     };
   }
 
-  /**
-   * 变更订阅计划
-   */
   @Put(':id/change-plan')
   @ApiOperation({ summary: '变更订阅计划' })
   async changeSubscriptionPlan(
@@ -271,7 +233,7 @@ export class SubscriptionManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '变更订阅计划成功',
+      message: this.i18n.t('subscription.controller.changePlanSuccess'),
       data,
     };
   }

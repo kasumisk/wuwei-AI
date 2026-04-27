@@ -5,6 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../core/prisma/prisma.service';
+import { I18nService } from '../../../core/i18n/i18n.service';
 import { StrategyService } from '../app/strategy.service';
 import {
   GetStrategiesQueryDto,
@@ -33,6 +34,7 @@ export class StrategyManagementService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly strategyService: StrategyService,
+    private readonly i18n: I18nService,
   ) {}
 
   // ==================== 策略列表 ====================
@@ -75,7 +77,7 @@ export class StrategyManagementService {
   async getStrategyDetail(id: string) {
     const strategy = await this.prisma.strategy.findUnique({ where: { id } });
     if (!strategy) {
-      throw new NotFoundException(`策略 ${id} 不存在`);
+      throw new NotFoundException(this.i18n.t('strategy.notFound', { id }));
     }
 
     // 同时查询该策略的活跃分配数
@@ -108,7 +110,7 @@ export class StrategyManagementService {
       where: { id },
     });
     if (!oldStrategy) {
-      throw new NotFoundException(`策略 ${id} 不存在`);
+      throw new NotFoundException(this.i18n.t('strategy.notFound', { id }));
     }
 
     const updateData: Record<string, any> = {};
@@ -118,7 +120,7 @@ export class StrategyManagementService {
     if (dto.priority !== undefined) updateData.priority = dto.priority;
 
     if (Object.keys(updateData).length === 0) {
-      throw new BadRequestException('没有需要更新的字段');
+      throw new BadRequestException(this.i18n.t('strategy.noFieldsToUpdate'));
     }
 
     const updated = await this.strategyService.update(id, updateData);
@@ -151,10 +153,14 @@ export class StrategyManagementService {
       where: { id: strategyId },
     });
     if (!strategy) {
-      throw new NotFoundException(`策略 ${strategyId} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('strategy.notFound', { id: strategyId }),
+      );
     }
     if (strategy.status !== StrategyStatus.ACTIVE) {
-      throw new BadRequestException('只能分配激活状态的策略');
+      throw new BadRequestException(
+        this.i18n.t('strategy.onlyActiveCanBeAssigned'),
+      );
     }
 
     // 先取消该用户该策略的现有分配（避免重复）
@@ -214,12 +220,14 @@ export class StrategyManagementService {
       where: { id: assignmentId, strategyId: strategyId },
     });
     if (!assignment) {
-      throw new NotFoundException(`分配记录 ${assignmentId} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('strategy.assignmentNotFound', { assignmentId }),
+      );
     }
 
     await this.strategyService.removeUserAssignment(dto.userId, assignmentId);
 
-    return { message: '分配已取消' };
+    return { message: this.i18n.t('strategy.assignmentRemoved') };
   }
 
   // ==================== 策略统计概览 ====================
@@ -318,7 +326,9 @@ export class StrategyManagementService {
       where: { id: strategyId },
     });
     if (!strategy) {
-      throw new NotFoundException(`策略 ${strategyId} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('strategy.notFound', { id: strategyId }),
+      );
     }
 
     const existingConfig = (strategy.config as Record<string, any>) ?? {};
@@ -359,7 +369,10 @@ export class StrategyManagementService {
     const preset = PRESET_REALISM[presetName];
     if (!preset) {
       throw new BadRequestException(
-        `未知预设名 "${presetName}"，可选: ${Object.keys(PRESET_REALISM).join(', ')}`,
+        this.i18n.t('strategy.unknownPreset', {
+          presetName,
+          available: Object.keys(PRESET_REALISM).join(', '),
+        }),
       );
     }
 
@@ -367,7 +380,9 @@ export class StrategyManagementService {
       where: { id: strategyId },
     });
     if (!strategy) {
-      throw new NotFoundException(`策略 ${strategyId} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('strategy.notFound', { id: strategyId }),
+      );
     }
 
     const existingConfig = (strategy.config as Record<string, any>) ?? {};
@@ -409,7 +424,11 @@ export class StrategyManagementService {
     });
 
     if (strategies.length === 0) {
-      throw new NotFoundException(`未找到匹配分群 "${dto.segment}" 的活跃策略`);
+      throw new NotFoundException(
+        this.i18n.t('strategy.noActiveStrategyForSegment', {
+          segment: dto.segment,
+        }),
+      );
     }
 
     const realismUpdate = this.pickDefined(dto.realism);
@@ -452,7 +471,9 @@ export class StrategyManagementService {
       where: { id: strategyId },
     });
     if (!strategy) {
-      throw new NotFoundException(`策略 ${strategyId} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('strategy.notFound', { id: strategyId }),
+      );
     }
 
     const mealType = dto.mealType || 'lunch';
@@ -486,10 +507,14 @@ export class StrategyManagementService {
     ]);
 
     if (!strategyA) {
-      throw new NotFoundException(`策略 ${strategyId} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('strategy.notFound', { id: strategyId }),
+      );
     }
     if (!strategyB) {
-      throw new NotFoundException(`策略 ${compareWithId} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('strategy.notFound', { id: compareWithId }),
+      );
     }
 
     const configA = (strategyA.config as Record<string, any>) || {};
@@ -584,11 +609,15 @@ export class StrategyManagementService {
       where: { id: tuningId },
     });
     if (!tuning) {
-      throw new NotFoundException(`调优记录 ${tuningId} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('strategy.tuningNotFound', { tuningId }),
+      );
     }
     if (tuning.reviewStatus !== 'pending_review') {
       throw new BadRequestException(
-        `调优记录当前状态为 "${tuning.reviewStatus}"，只有 pending_review 状态可以审核`,
+        this.i18n.t('strategy.tuningNotPending', {
+          status: tuning.reviewStatus,
+        }),
       );
     }
 
@@ -619,11 +648,15 @@ export class StrategyManagementService {
       where: { id: tuningId },
     });
     if (!tuning) {
-      throw new NotFoundException(`调优记录 ${tuningId} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('strategy.tuningNotFound', { tuningId }),
+      );
     }
     if (tuning.reviewStatus !== 'pending_review') {
       throw new BadRequestException(
-        `调优记录当前状态为 "${tuning.reviewStatus}"，只有 pending_review 状态可以审核`,
+        this.i18n.t('strategy.tuningNotPending', {
+          status: tuning.reviewStatus,
+        }),
       );
     }
 

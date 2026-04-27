@@ -168,7 +168,7 @@ export class EvidencePackBuilderService {
     const dailyMacroSummary = userContext
       ? this.dailyMacroSummaryService.buildSummaryText(
           userContext,
-          locale ?? 'zh-CN',
+          locale,
         )
       : undefined;
 

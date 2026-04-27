@@ -27,6 +27,7 @@
  * ```
  */
 import { Injectable, Logger } from '@nestjs/common';
+import { I18nService } from '../../../../core/i18n/i18n.service';
 import {
   GatedFeature,
   FeatureEntitlements,
@@ -55,6 +56,7 @@ export class QuotaGateService {
     private readonly quotaService: QuotaService,
     private readonly subscriptionService: SubscriptionService,
     private readonly entitlementResolver: PlanEntitlementResolver,
+    private readonly i18n: I18nService,
   ) {}
 
   /**
@@ -225,13 +227,21 @@ export class QuotaGateService {
     scene?: string,
   ): PaywallInfo {
     const targetTier = UPGRADE_TARGET[tier];
-    const resetInfo = quotaStatus?.resetAt
-      ? `，配额将于 ${quotaStatus.resetAt.toLocaleString('zh-CN')} 重置`
-      : '';
+    const featureName = this.featureDisplayName(feature);
+    const message = quotaStatus?.resetAt
+      ? this.i18n.t('subscription.quota.exceededWithReset', {
+          feature: featureName,
+          resetAt: quotaStatus.resetAt.toLocaleString('zh-CN'),
+          targetTier,
+        })
+      : this.i18n.t('subscription.quota.exceededNoReset', {
+          feature: featureName,
+          targetTier,
+        });
 
     return {
       code: 'quota_exceeded',
-      message: `${this.featureDisplayName(feature)} 今日配额已用完${resetInfo}。升级到 ${targetTier} 获取更多额度`,
+      message,
       recommendedTier: targetTier,
       triggerScene: scene ?? `${feature}_quota_exceeded`,
     };
@@ -249,7 +259,10 @@ export class QuotaGateService {
 
     return {
       code: 'advanced_result_hidden',
-      message: `升级到 ${targetTier} 解锁${this.featureDisplayName(feature)}`,
+      message: this.i18n.t('subscription.quota.upgradeUnlock', {
+        targetTier,
+        feature: this.featureDisplayName(feature),
+      }),
       recommendedTier: targetTier,
       triggerScene: scene ?? `${feature}_capability_locked`,
     };
@@ -259,27 +272,38 @@ export class QuotaGateService {
    * 功能标识的中文展示名
    */
   private featureDisplayName(feature: GatedFeature): string {
-    const names: Record<GatedFeature, string> = {
-      [GatedFeature.RECOMMENDATION]: '推荐',
-      [GatedFeature.AI_IMAGE_ANALYSIS]: '图片分析',
-      [GatedFeature.AI_TEXT_ANALYSIS]: '文本分析',
-      [GatedFeature.AI_COACH]: 'AI 教练',
-      [GatedFeature.ANALYSIS_HISTORY]: '分析历史',
-      [GatedFeature.DETAILED_SCORE]: '详细评分拆解',
-      [GatedFeature.ADVANCED_EXPLAIN]: '高级解释',
-      [GatedFeature.DEEP_NUTRITION]: '深度营养拆解',
-      [GatedFeature.PERSONALIZED_ALTERNATIVES]: '个性化替代建议',
-      [GatedFeature.REPORTS]: '周报/月报',
-      [GatedFeature.DATA_EXPORT]: '数据导出',
-      [GatedFeature.FULL_DAY_PLAN]: '全天膳食规划',
-      [GatedFeature.FULL_DAY_LINKAGE]: '全天膳食联动',
-      [GatedFeature.RECIPE_GENERATION]: '食谱生成',
-      [GatedFeature.HEALTH_TREND]: '健康趋势分析',
-      [GatedFeature.PRIORITY_AI]: '优先 AI 响应',
-      [GatedFeature.BEHAVIOR_ANALYSIS]: '行为分析',
-      [GatedFeature.COACH_STYLE]: '教练风格选择',
-      [GatedFeature.ADVANCED_CHALLENGES]: '高级挑战',
+    const keyMap: Record<GatedFeature, string> = {
+      [GatedFeature.RECOMMENDATION]: 'subscription.featureName.recommendation',
+      [GatedFeature.AI_IMAGE_ANALYSIS]:
+        'subscription.featureName.aiImageAnalysis',
+      [GatedFeature.AI_TEXT_ANALYSIS]:
+        'subscription.featureName.aiTextAnalysis',
+      [GatedFeature.AI_COACH]: 'subscription.featureName.aiCoach',
+      [GatedFeature.ANALYSIS_HISTORY]:
+        'subscription.featureName.analysisHistory',
+      [GatedFeature.DETAILED_SCORE]: 'subscription.featureName.detailedScore',
+      [GatedFeature.ADVANCED_EXPLAIN]:
+        'subscription.featureName.advancedExplain',
+      [GatedFeature.DEEP_NUTRITION]: 'subscription.featureName.deepNutrition',
+      [GatedFeature.PERSONALIZED_ALTERNATIVES]:
+        'subscription.featureName.personalizedAlternatives',
+      [GatedFeature.REPORTS]: 'subscription.featureName.reports',
+      [GatedFeature.DATA_EXPORT]: 'subscription.featureName.dataExport',
+      [GatedFeature.FULL_DAY_PLAN]: 'subscription.featureName.fullDayPlan',
+      [GatedFeature.FULL_DAY_LINKAGE]:
+        'subscription.featureName.fullDayLinkage',
+      [GatedFeature.RECIPE_GENERATION]:
+        'subscription.featureName.recipeGeneration',
+      [GatedFeature.HEALTH_TREND]: 'subscription.featureName.healthTrend',
+      [GatedFeature.PRIORITY_AI]: 'subscription.featureName.priorityAi',
+      [GatedFeature.BEHAVIOR_ANALYSIS]:
+        'subscription.featureName.behaviorAnalysis',
+      [GatedFeature.COACH_STYLE]: 'subscription.featureName.coachStyle',
+      [GatedFeature.ADVANCED_CHALLENGES]:
+        'subscription.featureName.advancedChallenges',
     };
-    return names[feature] ?? feature;
+    const i18nKey = keyMap[feature];
+    if (!i18nKey) return feature;
+    return this.i18n.t(i18nKey);
   }
 }

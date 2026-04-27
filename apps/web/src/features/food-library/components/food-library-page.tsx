@@ -276,9 +276,7 @@ export function FoodLibraryPage({
       </header>
 
       <main
-        className={`max-w-2xl mx-auto px-4 py-4 space-y-6 ${
-          basket.length > 0 ? 'pb-44' : 'pb-24'
-        }`}
+        className={`max-w-2xl mx-auto px-4 py-4 space-y-6 ${basket.length > 0 ? 'pb-44' : 'pb-24'}`}
       >
         {/* 顶部提示：多选模式说明 */}
         <div className="bg-primary/5 border border-primary/15  px-3 py-2 text-xs text-primary/90">
@@ -306,7 +304,9 @@ export function FoodLibraryPage({
                         : 'bg-card border-border hover:border-primary/30'
                     }`}
                   >
-                    <span className="text-sm">{categoryEmoji[ff.food?.category || ''] || '🍽️'}</span>
+                    <span className="text-sm">
+                      {categoryEmoji[ff.food?.category || ''] || '🍽️'}
+                    </span>
                     <div className="text-left">
                       <p className="text-xs font-bold">{ff.name}</p>
                       <p className="text-[10px] text-muted-foreground">
@@ -314,11 +314,7 @@ export function FoodLibraryPage({
                       </p>
                     </div>
                     {selected && (
-                      <svg
-                        className="w-4 h-4 text-primary"
-                        fill="currentColor"
-                        viewBox="0 0 24 24"
-                      >
+                      <svg className="w-4 h-4 text-primary" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
                       </svg>
                     )}
@@ -425,9 +421,7 @@ export function FoodLibraryPage({
           <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
             <div className="flex-1 min-w-0">
               <p className="text-xs text-muted-foreground">已选 {basket.length} 个食物</p>
-              <p className="text-sm font-medium truncate">
-                {basket.map((f) => f.name).join('、')}
-              </p>
+              <p className="text-sm font-medium truncate">{basket.map((f) => f.name).join('、')}</p>
             </div>
             <button
               onClick={clearBasket}

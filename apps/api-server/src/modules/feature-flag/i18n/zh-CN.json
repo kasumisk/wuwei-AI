@@ -1,0 +1,8 @@
+{
+  "fetchSuccess": "获取成功",
+  "saveSuccess": "保存成功",
+  "notFound": "功能开关不存在",
+  "enabled": "已启用",
+  "disabled": "已禁用",
+  "deleteSuccess": "删除成功"
+}

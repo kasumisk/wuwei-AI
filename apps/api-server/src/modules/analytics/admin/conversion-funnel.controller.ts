@@ -1,5 +1,6 @@
 import { Controller, Get, Query, UseGuards, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { I18n, I18nContext } from '../../../core/i18n/i18n.decorator';
 import { JwtAuthGuard } from '../../auth/admin/jwt-auth.guard';
 import { RolesGuard } from '../../rbac/admin/roles.guard';
 import { Roles } from '../../rbac/admin/roles.decorator';
@@ -28,12 +29,13 @@ export class ConversionFunnelController {
   @ApiOperation({ summary: '获取转化漏斗数据' })
   async getFunnel(
     @Query() query: GetConversionFunnelQueryDto,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.conversionFunnelService.getConversionFunnel(query);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取转化漏斗数据成功',
+      message: i18n.t('analytics.analytics.funnelSuccess'),
       data,
     };
   }
@@ -46,12 +48,13 @@ export class ConversionFunnelController {
   @ApiOperation({ summary: '获取转化趋势数据' })
   async getTrend(
     @Query() query: GetConversionTrendQueryDto,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.conversionFunnelService.getConversionTrend(query);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取转化趋势数据成功',
+      message: i18n.t('analytics.analytics.trendSuccess'),
       data,
     };
   }

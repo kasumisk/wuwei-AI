@@ -1,0 +1,36 @@
+{
+  "message": {
+    "fetchSuccess": "Fetched successfully",
+    "operationSuccess": "Operation successful",
+    "registerSuccess": "Registered successfully",
+    "updateSuccess": "Updated successfully"
+  },
+  "meal": {
+    "breakfast": "Breakfast",
+    "lunch": "Lunch",
+    "dinner": "Dinner",
+    "snack": "Snack"
+  },
+  "push": {
+    "mealReminder": {
+      "title": "It's {{label}} time",
+      "body": "Check today's {{label}} recommendations and keep up healthy eating habits"
+    },
+    "streakRisk": {
+      "title": "Don't break your streak",
+      "body": "You've logged {{currentStreak}} days in a row. One more log today keeps it going!"
+    },
+    "goalProgress": {
+      "title": "Weekly goal progress",
+      "body": "You've reached {{achieved}}/{{total}} days of your weekly goal. Keep it up!"
+    },
+    "weeklyReport": {
+      "title": "Your weekly nutrition report is ready",
+      "body": "View your weekly nutrition analysis and improvement suggestions"
+    },
+    "precomputedReady": {
+      "title": "Today's meal plan is ready",
+      "body": "View the three meals carefully prepared for you today"
+    }
+  }
+}

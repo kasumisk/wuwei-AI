@@ -1,0 +1,35 @@
+{
+  "provider": {
+    "notFound": "提供商 #{{id}} 不存在",
+    "alreadyExists": "提供商已存在: {{name}} ({{type}})",
+    "deleteWithModels": "无法删除提供商，存在 {{count}} 个关联的模型配置",
+    "notEnabled": "该提供商未启用",
+    "testSuccess": "连接测试成功",
+    "testFailed": "连接测试失败",
+    "updateNoField": "没有需要更新的字段",
+    "fetchListSuccess": "获取提供商列表成功",
+    "fetchDetailSuccess": "获取提供商详情成功",
+    "createSuccess": "提供商创建成功",
+    "updateSuccess": "提供商更新成功",
+    "deleteSuccess": "提供商删除成功",
+    "testComplete": "测试完成",
+    "healthSuccess": "获取健康状态成功",
+    "healthCheckComplete": "健康检查完成"
+  },
+  "model": {
+    "notFound": "模型 #{{id}} 不存在",
+    "providerNotFound": "提供商 #{{providerId}} 不存在或已禁用",
+    "alreadyExists": "模型已存在: {{modelId}} ({{providerId}})",
+    "notEnabled": "该模型未启用",
+    "providerNotEnabledForModel": "该模型的提供商未启用",
+    "testSuccess": "测试成功（模拟）",
+    "testFailed": "测试失败",
+    "deleteSuccess": "模型删除成功",
+    "fetchListSuccess": "获取模型列表成功",
+    "fetchDetailSuccess": "获取模型详情成功",
+    "createSuccess": "模型创建成功",
+    "updateSuccess": "模型更新成功",
+    "testComplete": "测试完成",
+    "healthSuccess": "获取健康状态成功"
+  }
+}

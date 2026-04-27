@@ -18,6 +18,7 @@ import { Queue } from 'bullmq';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { QUEUE_NAMES } from '../../../core/queue/queue.constants';
+import { I18nService } from '../../../core/i18n/i18n.service';
 
 // ─── 类型定义 ───
 
@@ -84,6 +85,7 @@ export class NotificationService {
     private readonly prisma: PrismaService,
     @InjectQueue(QUEUE_NAMES.NOTIFICATION)
     private readonly notificationQueue: Queue,
+    private readonly i18n: I18nService,
   ) {}
 
   // ─── 发送通知（核心方法） ───
@@ -317,18 +319,19 @@ export class NotificationService {
 
   /** 餐次提醒 */
   async sendMealReminder(userId: string, mealType: string): Promise<void> {
-    const mealLabels: Record<string, string> = {
-      breakfast: '早餐',
-      lunch: '午餐',
-      dinner: '晚餐',
-      snack: '加餐',
+    const mealKeyMap: Record<string, string> = {
+      breakfast: 'notification.meal.breakfast',
+      lunch: 'notification.meal.lunch',
+      dinner: 'notification.meal.dinner',
+      snack: 'notification.meal.snack',
     };
-    const label = mealLabels[mealType] || mealType;
+    const labelKey = mealKeyMap[mealType];
+    const label = labelKey ? this.i18n.t(labelKey) : mealType;
     await this.send({
       userId,
       type: 'meal_reminder',
-      title: `${label}时间到了`,
-      body: `查看今日${label}推荐，保持健康饮食习惯`,
+      title: this.i18n.t('notification.push.mealReminder.title', { label }),
+      body: this.i18n.t('notification.push.mealReminder.body', { label }),
       data: { mealType },
     });
   }
@@ -338,8 +341,8 @@ export class NotificationService {
     await this.send({
       userId,
       type: 'streak_risk',
-      title: '别让连续记录中断',
-      body: `你已经连续记录 ${currentStreak} 天了，今天还差一次记录就能继续保持！`,
+      title: this.i18n.t('notification.push.streakRisk.title'),
+      body: this.i18n.t('notification.push.streakRisk.body', { currentStreak }),
       data: { currentStreak },
     });
   }
@@ -353,8 +356,11 @@ export class NotificationService {
     await this.send({
       userId,
       type: 'goal_progress',
-      title: '本周目标进展',
-      body: `本周已达成 ${achieved}/${total} 天目标，继续加油！`,
+      title: this.i18n.t('notification.push.goalProgress.title'),
+      body: this.i18n.t('notification.push.goalProgress.body', {
+        achieved,
+        total,
+      }),
       data: { achieved, total },
     });
   }
@@ -364,8 +370,8 @@ export class NotificationService {
     await this.send({
       userId,
       type: 'weekly_report',
-      title: '周度营养报告已生成',
-      body: '查看你的周度营养分析和改善建议',
+      title: this.i18n.t('notification.push.weeklyReport.title'),
+      body: this.i18n.t('notification.push.weeklyReport.body'),
     });
   }
 
@@ -374,8 +380,8 @@ export class NotificationService {
     await this.send({
       userId,
       type: 'precomputed_ready',
-      title: '今日餐单已备好',
-      body: '查看为你精心准备的一日三餐推荐',
+      title: this.i18n.t('notification.push.precomputedReady.title'),
+      body: this.i18n.t('notification.push.precomputedReady.body'),
     });
   }
 

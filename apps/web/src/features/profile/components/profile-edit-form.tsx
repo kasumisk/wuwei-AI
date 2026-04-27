@@ -127,7 +127,6 @@ function BasicTab({ form, up }: { form: FormState; up: UpFn }) {
 
   return (
     <>
-
       <SubLabel>主要目标</SubLabel>
       <div className="grid grid-cols-2 gap-2">
         {GOAL_OPTIONS.map(({ key, label, emoji, desc }) => (
@@ -165,7 +164,7 @@ function BasicTab({ form, up }: { form: FormState; up: UpFn }) {
           onChange={(k) => up('goalSpeed', k)}
         />
       </div>
-        <Divider />
+      <Divider />
       <SubLabel>性别</SubLabel>
       <BtnGroup
         options={[
@@ -175,7 +174,7 @@ function BasicTab({ form, up }: { form: FormState; up: UpFn }) {
         value={form.gender}
         onChange={(k) => up('gender', k)}
       />
-   
+
       <div className="mt-4">
         <SubLabel>出生年份 *</SubLabel>
         <input
@@ -212,9 +211,7 @@ function BasicTab({ form, up }: { form: FormState; up: UpFn }) {
 
       {showTargetWeight && (
         <div className="mt-4">
-          <SubLabel>
-            目标体重 (kg){form.goal === 'fat_loss' ? ' *' : ' — 选填'}
-          </SubLabel>
+          <SubLabel>目标体重 (kg){form.goal === 'fat_loss' ? ' *' : ' — 选填'}</SubLabel>
           <input
             type="number"
             value={form.targetWeightKg}
@@ -272,7 +269,6 @@ function BasicTab({ form, up }: { form: FormState; up: UpFn }) {
       </div>
 
       <Divider />
-
 
       <div className="mt-4">
         <SubLabel>每日热量目标 (kcal)</SubLabel>

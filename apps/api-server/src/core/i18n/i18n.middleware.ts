@@ -8,7 +8,7 @@
  * 优先级：
  *   1. Query param ?lang=en / ?lang=zh-CN / ?lang=ja-JP
  *   2. Accept-Language header（取第一段，如 "en-US,en;q=0.9" → "en-US"）
- *   3. 默认 'zh-CN'
+ *   3. 默认 'en-US'
  *
  * V6.8 变更:
  *   - 添加 LOCALE_MAP 将各种格式（短代码、小写 BCP-47）标准化为 'zh-CN'|'en-US'|'ja-JP'
@@ -17,49 +17,69 @@
 import { Injectable, NestMiddleware } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { RequestContextService } from '../context/request-context.service';
+import { I18nService } from './i18n.service';
+import { I18N_REQUEST_KEY } from './i18n.decorator';
 
 /**
  * V6.8: Locale 标准化映射
  *
  * 将各种输入格式映射到 i18n-messages.ts 期望的 BCP-47 格式。
- * 不在映射表中的值会 fallback 到 'zh-CN'。
+ * 不在映射表中的值会 fallback 到 'en-US'。
  */
 const LOCALE_MAP: Record<string, string> = {
   // 中文
   zh: 'zh-CN',
   'zh-cn': 'zh-CN',
-  'zh-tw': 'zh-TW', // 预留繁体支持，fallback 到 zh-CN 在 t() 层处理
-  'zh-hk': 'zh-TW',
+  'zh-hans': 'zh-CN',
+  'zh-tw': 'zh-CN', // 暂回退简体；新增 zh-TW 翻译文件后在 i18n.types.ts 升级
+  'zh-hk': 'zh-CN',
+  'zh-hant': 'zh-CN',
   // 英文
   en: 'en-US',
   'en-us': 'en-US',
-  'en-gb': 'en-GB', // 预留英式英语，fallback 到 en-US 在 t() 层处理
+  'en-gb': 'en-US',
   // 日文
   ja: 'ja-JP',
   'ja-jp': 'ja-JP',
 };
 
+function readHeaderValue(value: string | string[] | undefined): string | undefined {
+  if (Array.isArray(value)) return value[0];
+  return value;
+}
+
 @Injectable()
 export class I18nMiddleware implements NestMiddleware {
-  constructor(private readonly ctx: RequestContextService) {}
+  constructor(
+    private readonly ctx: RequestContextService,
+    private readonly i18n: I18nService,
+  ) {}
 
-  use(req: Request, _res: Response, next: NextFunction): void {
-    // 1. Query param 优先级最高（?lang=en / ?lang=zh-CN）
+  use(req: Request, res: Response, next: NextFunction): void {
+    // 1. 优先级：?lang= > x-lang header > Accept-Language > 默认
     const queryLang = req.query?.['lang'] as string | undefined;
-
-    // 2. Accept-Language header：取第一段完整 locale（保留 region）
-    const acceptLangRaw = (req.headers['accept-language'] as string | undefined)
+    const xLang = readHeaderValue(req.headers['x-lang'])?.trim();
+    const acceptLangRaw = readHeaderValue(req.headers['accept-language'])
       ?.split(',')[0]
       ?.trim()
       ?.split(';')[0]; // 去掉 q= 权重
 
-    const raw = (queryLang || acceptLangRaw || 'zh').toLowerCase();
+    const raw = (queryLang || xLang || acceptLangRaw || 'en').toLowerCase();
 
     // V6.8: 标准化映射 — 先尝试完整匹配，再尝试取主语言部分
     const normalizedLocale =
-      LOCALE_MAP[raw] ?? LOCALE_MAP[raw.split(/[-_]/)[0]] ?? 'zh-CN';
+      LOCALE_MAP[raw] ?? LOCALE_MAP[raw.split(/[-_]/)[0]] ?? 'en-US';
 
     this.ctx.setLocale(normalizedLocale);
+
+    // 便于客户端和网关确认本次请求的最终语言解析结果。
+    res.setHeader('Content-Language', normalizedLocale);
+    res.setHeader('Vary', 'Accept-Language');
+
+    // I18n V7: 挂载 service 到 request，供 @I18n() 装饰器使用
+    (req as unknown as Record<symbol, I18nService>)[I18N_REQUEST_KEY] =
+      this.i18n;
+
     next();
   }
 }

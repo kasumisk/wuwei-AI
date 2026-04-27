@@ -28,13 +28,17 @@ import {
   ApiResponse,
 } from '../../../../common/types/response.type';
 import { WechatPayNotificationBody } from '../payment/wechat-pay.types';
+import { I18nService } from '../../../../core/i18n/i18n.service';
 
 @ApiTags('订阅 - 微信支付')
 @Controller('app/subscription/wechat')
 export class WechatPayController {
   private readonly logger = new Logger(WechatPayController.name);
 
-  constructor(private readonly wechatPayService: WechatPayService) {}
+  constructor(
+    private readonly wechatPayService: WechatPayService,
+    private readonly i18n: I18nService,
+  ) {}
 
   /**
    * 创建微信支付订单
@@ -75,14 +79,20 @@ export class WechatPayController {
   ): Promise<{ code: string; message: string }> {
     try {
       await this.wechatPayService.handleNotification(body, headers);
-      return { code: 'SUCCESS', message: '成功' };
+      return {
+        code: 'SUCCESS',
+        message: this.i18n.t('subscription.wechatNotify.success'),
+      };
     } catch (error) {
       this.logger.error(
         '微信支付通知处理失败',
         error instanceof Error ? error.stack : String(error),
       );
       // 返回 SUCCESS 避免微信频繁重试（已记录错误日志）
-      return { code: 'SUCCESS', message: '已接收' };
+      return {
+        code: 'SUCCESS',
+        message: this.i18n.t('subscription.wechatNotify.received'),
+      };
     }
   }
 

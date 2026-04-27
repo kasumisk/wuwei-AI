@@ -14,6 +14,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/admin/jwt-auth.guard';
 import { RolesGuard } from '../../rbac/admin/roles.guard';
 import { Roles } from '../../rbac/admin/roles.decorator';
+import { I18n, I18nContext } from '../../../core/i18n';
 import { AppUserManagementService } from './app-user-management.service';
 import {
   GetAppUsersQueryDto,
@@ -36,12 +37,15 @@ export class AppUserManagementController {
    */
   @Get()
   @ApiOperation({ summary: '获取 App 用户列表' })
-  async findAll(@Query() query: GetAppUsersQueryDto): Promise<ApiResponse> {
+  async findAll(
+    @Query() query: GetAppUsersQueryDto,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.appUserManagementService.findAll(query);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取 App 用户列表成功',
+      message: i18n.t('user.appUserListFetched'),
       data,
     };
   }
@@ -51,12 +55,12 @@ export class AppUserManagementController {
    */
   @Get('statistics')
   @ApiOperation({ summary: '获取 App 用户统计' })
-  async getStatistics(): Promise<ApiResponse> {
+  async getStatistics(@I18n() i18n: I18nContext): Promise<ApiResponse> {
     const data = await this.appUserManagementService.getStatistics();
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取统计成功',
+      message: i18n.t('user.statsFetched'),
       data,
     };
   }
@@ -66,12 +70,15 @@ export class AppUserManagementController {
    */
   @Get(':id')
   @ApiOperation({ summary: '获取 App 用户详情' })
-  async findOne(@Param('id') id: string): Promise<ApiResponse> {
+  async findOne(
+    @Param('id') id: string,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.appUserManagementService.findOne(id);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取 App 用户详情成功',
+      message: i18n.t('user.appUserDetailFetched'),
       data,
     };
   }
@@ -84,12 +91,13 @@ export class AppUserManagementController {
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateAppUserByAdminDto,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.appUserManagementService.update(id, dto);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '更新成功',
+      message: i18n.t('user.userUpdated'),
       data,
     };
   }
@@ -144,12 +152,15 @@ export class AppUserManagementController {
    */
   @Get(':id/behavior-profile')
   @ApiOperation({ summary: '获取用户行为画像（食物偏好、依从率、连续打卡等）' })
-  async getBehaviorProfile(@Param('id') id: string): Promise<ApiResponse> {
+  async getBehaviorProfile(
+    @Param('id') id: string,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.appUserManagementService.getBehaviorProfile(id);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取用户行为画像成功',
+      message: i18n.t('user.behaviorProfileFetched'),
       data,
     };
   }
@@ -161,12 +172,15 @@ export class AppUserManagementController {
   @ApiOperation({
     summary: '获取用户推断画像（BMR/TDEE、宏量素目标、流失风险、目标进度等）',
   })
-  async getInferredProfile(@Param('id') id: string): Promise<ApiResponse> {
+  async getInferredProfile(
+    @Param('id') id: string,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.appUserManagementService.getInferredProfile(id);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取用户推断画像成功',
+      message: i18n.t('user.inferredProfileFetched'),
       data,
     };
   }

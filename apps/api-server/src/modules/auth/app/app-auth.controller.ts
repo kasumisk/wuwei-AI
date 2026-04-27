@@ -34,6 +34,7 @@ import { AppJwtAuthGuard } from './app-jwt-auth.guard';
 import { CurrentAppUser } from './current-app-user.decorator';
 import { AppUserPayload } from './app-user-payload.type';
 import { ApiResponse } from '../../../common/types/response.type';
+import { I18n, I18nContext } from '../../../core/i18n';
 
 @ApiTags('App 用户认证')
 @Controller('app/auth')
@@ -50,12 +51,15 @@ export class AppAuthController {
   @Post('anonymous')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '匿名登录' })
-  async anonymousLogin(@Body() dto: AnonymousLoginDto): Promise<ApiResponse> {
+  async anonymousLogin(
+    @Body() dto: AnonymousLoginDto,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.appAuthService.anonymousLogin(dto.deviceId);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '登录成功',
+      message: i18n.t('auth.loginSuccess'),
       data,
     };
   }
@@ -88,12 +92,15 @@ export class AppAuthController {
   @Post('phone/verify')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '手机号验证码登录（新用户自动注册）' })
-  async phoneLogin(@Body() dto: PhoneVerifyDto): Promise<ApiResponse> {
+  async phoneLogin(
+    @Body() dto: PhoneVerifyDto,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.appAuthService.phoneLogin(dto.phone, dto.code);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '登录成功',
+      message: i18n.t('auth.loginSuccess'),
       data,
     };
   }
@@ -108,7 +115,10 @@ export class AppAuthController {
   @Post('wechat/auth-url')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '获取微信网页授权 URL' })
-  getWechatAuthUrl(@Body() dto: WechatAuthUrlDto): ApiResponse {
+  getWechatAuthUrl(
+    @Body() dto: WechatAuthUrlDto,
+    @I18n() i18n: I18nContext,
+  ): ApiResponse {
     const url = this.appAuthService.getWechatAuthUrl(
       dto.redirectUri,
       dto.state,
@@ -116,7 +126,7 @@ export class AppAuthController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: i18n.t('auth.fetchSuccess'),
       data: { url },
     };
   }
@@ -129,12 +139,15 @@ export class AppAuthController {
   @Post('wechat/login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '微信授权码登录' })
-  async wechatLogin(@Body() dto: WechatCodeLoginDto): Promise<ApiResponse> {
+  async wechatLogin(
+    @Body() dto: WechatCodeLoginDto,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.appAuthService.wechatLogin(dto.code);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '登录成功',
+      message: i18n.t('auth.loginSuccess'),
       data,
     };
   }
@@ -147,12 +160,15 @@ export class AppAuthController {
   @Post('wechat/mini-login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '微信小程序登录' })
-  async wechatMiniLogin(@Body() dto: WechatMiniLoginDto): Promise<ApiResponse> {
+  async wechatMiniLogin(
+    @Body() dto: WechatMiniLoginDto,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.appAuthService.wechatMiniLogin(dto.code);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '登录成功',
+      message: i18n.t('auth.loginSuccess'),
       data,
     };
   }
@@ -226,7 +242,10 @@ export class AppAuthController {
   @Post('email/register')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: '邮箱注册' })
-  async emailRegister(@Body() dto: EmailRegisterDto): Promise<ApiResponse> {
+  async emailRegister(
+    @Body() dto: EmailRegisterDto,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.appAuthService.emailRegister(
       dto.email,
       dto.password,
@@ -235,7 +254,7 @@ export class AppAuthController {
     return {
       success: true,
       code: HttpStatus.CREATED,
-      message: '注册成功',
+      message: i18n.t('auth.registerSuccess'),
       data,
     };
   }
@@ -248,12 +267,15 @@ export class AppAuthController {
   @Post('email/login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '邮箱密码登录' })
-  async emailLogin(@Body() dto: EmailLoginDto): Promise<ApiResponse> {
+  async emailLogin(
+    @Body() dto: EmailLoginDto,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.appAuthService.emailLogin(dto.email, dto.password);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '登录成功',
+      message: i18n.t('auth.loginSuccess'),
       data,
     };
   }
@@ -266,12 +288,15 @@ export class AppAuthController {
   @Post('email/code-login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '邮箱验证码登录' })
-  async emailCodeLogin(@Body() dto: EmailCodeLoginDto): Promise<ApiResponse> {
+  async emailCodeLogin(
+    @Body() dto: EmailCodeLoginDto,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.appAuthService.emailCodeLogin(dto.email, dto.code);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '登录成功',
+      message: i18n.t('auth.loginSuccess'),
       data,
     };
   }
@@ -328,12 +353,13 @@ export class AppAuthController {
   @ApiOperation({ summary: '获取当前用户信息' })
   async getProfile(
     @CurrentAppUser() user: AppUserPayload,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.appAuthService.getUserInfo(user.id);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取用户信息成功',
+      message: i18n.t('auth.userInfoFetched'),
       data,
     };
   }
@@ -349,12 +375,13 @@ export class AppAuthController {
   async updateProfile(
     @CurrentAppUser() user: AppUserPayload,
     @Body() dto: UpdateAppUserProfileDto,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.appAuthService.updateProfile(user.id, dto);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '更新用户资料成功',
+      message: i18n.t('auth.profileUpdated'),
       data,
     };
   }
@@ -371,6 +398,7 @@ export class AppAuthController {
   async upgradeAnonymous(
     @CurrentAppUser() user: AppUserPayload,
     @Body() dto: UpgradeAnonymousDto,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.appAuthService.upgradeAnonymous(
       user.id,
@@ -380,7 +408,7 @@ export class AppAuthController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '账号升级成功',
+      message: i18n.t('auth.accountUpgraded'),
       data,
     };
   }
@@ -396,12 +424,13 @@ export class AppAuthController {
   @ApiOperation({ summary: '刷新 Token' })
   async refreshToken(
     @CurrentAppUser() user: AppUserPayload,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.appAuthService.refreshToken(user.id);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '刷新 Token 成功',
+      message: i18n.t('auth.tokenRefreshed'),
       data,
     };
   }
@@ -415,11 +444,11 @@ export class AppAuthController {
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @ApiOperation({ summary: '退出登录' })
-  logout(): ApiResponse {
+  logout(@I18n() i18n: I18nContext): ApiResponse {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '退出成功',
+      message: i18n.t('auth.logoutSuccess'),
       data: null,
     };
   }

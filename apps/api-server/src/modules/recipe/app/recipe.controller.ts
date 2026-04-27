@@ -20,6 +20,7 @@ import { CurrentAppUser } from '../../auth/app/current-app-user.decorator';
 import { AppUserPayload } from '../../auth/app/app-user-payload.type';
 import { ApiResponse } from '../../../common/types/response.type';
 import { RecipeService } from './recipe.service';
+import { I18nService } from '../../../core/i18n/i18n.service';
 import {
   SearchRecipesDto,
   SubmitRecipeDto,
@@ -37,7 +38,10 @@ import {
 @UseGuards(AppJwtAuthGuard)
 @ApiBearerAuth()
 export class RecipeController {
-  constructor(private readonly recipeService: RecipeService) {}
+  constructor(
+    private readonly recipeService: RecipeService,
+    private readonly i18n: I18nService,
+  ) {}
 
   /**
    * 搜索菜谱
@@ -50,7 +54,7 @@ export class RecipeController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: this.i18n.t('recipe.ok'),
       data: result,
     };
   }
@@ -66,7 +70,7 @@ export class RecipeController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: this.i18n.t('recipe.ok'),
       data: recipe,
     };
   }
@@ -85,7 +89,7 @@ export class RecipeController {
     return {
       success: true,
       code: HttpStatus.CREATED,
-      message: '提交成功，等待审核',
+      message: this.i18n.t('recipe.submittedAwaitingReview'),
       data: recipe,
     };
   }
@@ -107,7 +111,7 @@ export class RecipeController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '评分成功',
+      message: this.i18n.t('recipe.ratingOk'),
       data: rating,
     };
   }
@@ -126,7 +130,7 @@ export class RecipeController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: this.i18n.t('recipe.ok'),
       data: rating,
     };
   }
@@ -142,7 +146,7 @@ export class RecipeController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: this.i18n.t('recipe.ok'),
       data: summary,
     };
   }
@@ -161,7 +165,9 @@ export class RecipeController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: deleted ? '删除成功' : '无评分记录',
+      message: deleted
+        ? this.i18n.t('recipe.deletedOk')
+        : this.i18n.t('recipe.ratingNone'),
       data: { deleted },
     };
   }

@@ -1,0 +1,8 @@
+{
+  "fetchSuccess": "Fetched successfully",
+  "saveSuccess": "Saved successfully",
+  "notFound": "Feature flag not found",
+  "enabled": "Enabled",
+  "disabled": "Disabled",
+  "deleteSuccess": "Deleted successfully"
+}

@@ -183,7 +183,10 @@ const PipelineWaterfall: React.FC<{ stages: PipelineStageTrace[] }> = ({ stages 
           <XAxis dataKey="name" tick={{ fontSize: 11 }} />
           <YAxis label={{ value: 'ms', angle: -90, position: 'insideLeft' }} />
           <RechartsTooltip
-            formatter={(value: number | string | Array<number | string> | undefined, name: string | undefined) => {
+            formatter={(
+              value: number | string | Array<number | string> | undefined,
+              name: string | undefined
+            ) => {
               if (name === '耗时') return [`${value}ms`, name] as [string, string];
               return [`${value}`, name ?? ''] as [string, string];
             }}

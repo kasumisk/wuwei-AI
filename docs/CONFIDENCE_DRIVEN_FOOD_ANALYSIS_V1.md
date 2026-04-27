@@ -27,11 +27,11 @@
 
 当前图片食物分析链路（`POST /api/app/food/analyze`）无论模型置信度高低，**都会走完整 V6.1 决策 pipeline 并一次性返回完整营养 + 决策结果**，存在三大问题：
 
-| 问题                           | 具体表现                                                                                                                 | 影响                                                         |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ |
-| **低置信度时仍给权威结论**     | AI 把一盘炒饭识别成"盖饭"、把"半只鸡"识别成"200g 鸡胸肉"，依然生成 kcal/GI 全套数据并贴上"该吃/不该吃"结论                | 用户误以为数据准确，长期形成错误饮食认知；**系统可信度受损** |
-| **没有用户修正回路**           | 用户即使看出识别错了，也只能**重新拍照**（再次消耗 AI 配额）或**转用文本输入**（又消耗一次配额）                          | 用户体验差 + 配额无谓消耗，付费墙触发率虚高                  |
-| **配额模型与用户心智不一致**   | `AI_IMAGE_ANALYSIS` 和 `AI_TEXT_ANALYSIS` 独立计次，导致"我就想记一顿饭"的用户被计费 2-3 次                               | 付费转化受阻，订阅感知"扣次太频繁"                           |
+| 问题                         | 具体表现                                                                                                   | 影响                                                         |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| **低置信度时仍给权威结论**   | AI 把一盘炒饭识别成"盖饭"、把"半只鸡"识别成"200g 鸡胸肉"，依然生成 kcal/GI 全套数据并贴上"该吃/不该吃"结论 | 用户误以为数据准确，长期形成错误饮食认知；**系统可信度受损** |
+| **没有用户修正回路**         | 用户即使看出识别错了，也只能**重新拍照**（再次消耗 AI 配额）或**转用文本输入**（又消耗一次配额）           | 用户体验差 + 配额无谓消耗，付费墙触发率虚高                  |
+| **配额模型与用户心智不一致** | `AI_IMAGE_ANALYSIS` 和 `AI_TEXT_ANALYSIS` 独立计次，导致"我就想记一顿饭"的用户被计费 2-3 次                | 付费转化受阻，订阅感知"扣次太频繁"                           |
 
 ### 1.2 设计目标
 
@@ -43,13 +43,13 @@
 
 ### 1.3 核心概念
 
-| 概念                     | 定义                                                                                                      |
-| ------------------------ | --------------------------------------------------------------------------------------------------------- |
-| **Analysis Session**     | 一次用户"我想记录/分析这餐"的完整意图，从图片上传到最终 `final` 结果为止。由 `analysisSessionId` 唯一标识 |
-| **Stage**                | 后端告知前端的链路阶段：`analyzing` / `needs_review` / `final`                                            |
-| **Confidence Level**     | 基于 `overallConfidence` 的二元分流：`high`（≥阈值）/ `low`（<阈值）                                      |
-| **Refine**               | 用户对低置信度识别结果的修正操作；复用 `TextFoodAnalysisService` 生成最终结果，**不扣配额**               |
-| **High Threshold**       | 环境变量 `CONFIDENCE_HIGH_THRESHOLD`，默认 `0.75`，决定分流点                                             |
+| 概念                 | 定义                                                                                                      |
+| -------------------- | --------------------------------------------------------------------------------------------------------- |
+| **Analysis Session** | 一次用户"我想记录/分析这餐"的完整意图，从图片上传到最终 `final` 结果为止。由 `analysisSessionId` 唯一标识 |
+| **Stage**            | 后端告知前端的链路阶段：`analyzing` / `needs_review` / `final`                                            |
+| **Confidence Level** | 基于 `overallConfidence` 的二元分流：`high`（≥阈值）/ `low`（<阈值）                                      |
+| **Refine**           | 用户对低置信度识别结果的修正操作；复用 `TextFoodAnalysisService` 生成最终结果，**不扣配额**               |
+| **High Threshold**   | 环境变量 `CONFIDENCE_HIGH_THRESHOLD`，默认 `0.75`，决定分流点                                             |
 
 ---
 
@@ -87,15 +87,15 @@ flowchart TD
 
 ### 2.2 关键节点语义
 
-| 节点 | 后端行为                                                                                                            | 配额                                    | 数据库                                         |
-| ---- | ------------------------------------------------------------------------------------------------------------------- | --------------------------------------- | ---------------------------------------------- |
-| B    | `QuotaGateService.consume(AI_IMAGE_ANALYSIS)` → 创建 `AnalysisSession` 写 Redis（key: `analysis_session:{id}`） | **扣 1 次**                             | Redis only                                     |
-| E    | Vision 返回后写 `imageAnalysisRaw` 到 session 缓存；不写 DB                                                         | —                                       | —                                              |
-| G    | 走 `AnalysisPipelineService`（持久化 `FoodIngestion` + 事件）                                                     | —                                       | 写 `FoodIngestion`（via `persistAnalysisRecord`） |
-| I    | 仅缓存 `rawFoods` 到 session；`FoodIngestion` **此时不写**（避免低质量数据污染库）                                  | —                                       | Redis only                                     |
-| L    | 校验 `session.status === 'awaiting_refine'` 且未过期（默认 30 分钟）                                                | **跳过** (`SkipQuotaReason.refineSession`) | —                                              |
-| N    | 复用 `TextFoodAnalysisService.analyze()`；内部走 pipeline                                                           | —                                       | 写 `FoodIngestion`                            |
-| P    | 复用现有 `analyze-save`                                                                                             | —                                       | 写 `FoodRecord`                                |
+| 节点 | 后端行为                                                                                                        | 配额                                       | 数据库                                            |
+| ---- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------- |
+| B    | `QuotaGateService.consume(AI_IMAGE_ANALYSIS)` → 创建 `AnalysisSession` 写 Redis（key: `analysis_session:{id}`） | **扣 1 次**                                | Redis only                                        |
+| E    | Vision 返回后写 `imageAnalysisRaw` 到 session 缓存；不写 DB                                                     | —                                          | —                                                 |
+| G    | 走 `AnalysisPipelineService`（持久化 `FoodIngestion` + 事件）                                                   | —                                          | 写 `FoodIngestion`（via `persistAnalysisRecord`） |
+| I    | 仅缓存 `rawFoods` 到 session；`FoodIngestion` **此时不写**（避免低质量数据污染库）                              | —                                          | Redis only                                        |
+| L    | 校验 `session.status === 'awaiting_refine'` 且未过期（默认 30 分钟）                                            | **跳过** (`SkipQuotaReason.refineSession`) | —                                                 |
+| N    | 复用 `TextFoodAnalysisService.analyze()`；内部走 pipeline                                                       | —                                          | 写 `FoodIngestion`                                |
+| P    | 复用现有 `analyze-save`                                                                                         | —                                          | 写 `FoodRecord`                                   |
 
 ### 2.3 生命周期与超时
 
@@ -167,14 +167,14 @@ flowchart LR
 
 ### 3.2 新增 / 重构的服务
 
-| 服务                                 | 类型 | 职责                                                                                                          |
-| ------------------------------------ | ---- | ------------------------------------------------------------------------------------------------------------- |
-| `AnalysisSessionService`             | 新增 | 创建/查询/更新/终结 session；封装 Redis 存取；负责 refine 幂等性与配额跳过标记                                |
-| `ConfidenceJudgeService`             | 新增 | 读取 `CONFIDENCE_HIGH_THRESHOLD`；基于 `ConfidenceDiagnostics.overallConfidence` 决定走 pipeline 还是 needs_review |
-| `ImageFoodAnalysisService`           | 改造 | `executeAnalysis()` 拆分为两阶段：Phase A（Vision→foods，必跑）；Phase B（走 pipeline，仅高置信度触发）       |
-| `TextFoodAnalysisService`            | 改造 | 新增 `analyze()` 可选参数 `skipQuotaReason?: 'refine-session'`                                                |
-| `FoodAnalyzeController`              | 改造 | 新增 `POST /analyze/:requestId/refine`；`/analyze` 响应扩展 `stage`/`confidence`                              |
-| `QuotaGateService`                   | 小改 | 支持 `consume(feature, { skipReason })`；skip 时写审计日志但不扣额                                             |
+| 服务                       | 类型 | 职责                                                                                                               |
+| -------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------ |
+| `AnalysisSessionService`   | 新增 | 创建/查询/更新/终结 session；封装 Redis 存取；负责 refine 幂等性与配额跳过标记                                     |
+| `ConfidenceJudgeService`   | 新增 | 读取 `CONFIDENCE_HIGH_THRESHOLD`；基于 `ConfidenceDiagnostics.overallConfidence` 决定走 pipeline 还是 needs_review |
+| `ImageFoodAnalysisService` | 改造 | `executeAnalysis()` 拆分为两阶段：Phase A（Vision→foods，必跑）；Phase B（走 pipeline，仅高置信度触发）            |
+| `TextFoodAnalysisService`  | 改造 | 新增 `analyze()` 可选参数 `skipQuotaReason?: 'refine-session'`                                                     |
+| `FoodAnalyzeController`    | 改造 | 新增 `POST /analyze/:requestId/refine`；`/analyze` 响应扩展 `stage`/`confidence`                                   |
+| `QuotaGateService`         | 小改 | 支持 `consume(feature, { skipReason })`；skip 时写审计日志但不扣额                                                 |
 
 ### 3.3 数据流与职责边界
 
@@ -190,6 +190,7 @@ Vision 层 (ImageFoodAnalysisService)
 ```
 
 **关键设计原则**：
+
 - 决策内核 `AnalysisPipelineService` **不感知 session**，只消费 `AnalyzedFoodItem[]`
 - Vision 和 Text 都是"食物识别器"，决策统一由 pipeline 完成
 - Session 服务是**流程控制层**，不做业务判断
@@ -200,14 +201,14 @@ Vision 层 (ImageFoodAnalysisService)
 
 ### 4.1 接口清单（新增 / 变更 / 不变）
 
-| 接口                                             | 变化       | 说明                                                |
-| ------------------------------------------------ | ---------- | --------------------------------------------------- |
-| `POST /api/app/food/analyze`                     | **响应扩展** | 上传图片；扣配额；创建 session；返回 `requestId` + `analysisSessionId` |
-| `GET  /api/app/food/analyze/:requestId`          | **响应扩展** | 轮询；响应增加 `stage`/`confidence`；低置信度返回缩减字段 |
-| `POST /api/app/food/analyze/:requestId/refine`   | **新增**   | 提交用户修正的 foods，不扣配额                      |
-| `POST /api/app/food/analyze-text`                | 小改       | 内部支持 `skipQuotaReason`（仅服务间使用，不对外）  |
-| `POST /api/app/food/analyze-save`                | 不变       | 保存为 FoodRecord                                   |
-| `GET  /api/app/food/analysis/history`            | 不变       | 历史列表                                            |
+| 接口                                           | 变化         | 说明                                                                   |
+| ---------------------------------------------- | ------------ | ---------------------------------------------------------------------- |
+| `POST /api/app/food/analyze`                   | **响应扩展** | 上传图片；扣配额；创建 session；返回 `requestId` + `analysisSessionId` |
+| `GET  /api/app/food/analyze/:requestId`        | **响应扩展** | 轮询；响应增加 `stage`/`confidence`；低置信度返回缩减字段              |
+| `POST /api/app/food/analyze/:requestId/refine` | **新增**     | 提交用户修正的 foods，不扣配额                                         |
+| `POST /api/app/food/analyze-text`              | 小改         | 内部支持 `skipQuotaReason`（仅服务间使用，不对外）                     |
+| `POST /api/app/food/analyze-save`              | 不变         | 保存为 FoodRecord                                                      |
+| `GET  /api/app/food/analysis/history`          | 不变         | 历史列表                                                               |
 
 ### 4.2 数据结构
 
@@ -216,9 +217,9 @@ Vision 层 (ImageFoodAnalysisService)
 ```ts
 /** 后端驱动的链路阶段（与前端状态机 1:1 对齐） */
 export type AnalysisStage =
-  | 'analyzing'      // 队列中/Vision 调用中
-  | 'needs_review'   // 低置信度，等待用户修正
-  | 'final';         // 完整结果就绪
+  | 'analyzing' // 队列中/Vision 调用中
+  | 'needs_review' // 低置信度，等待用户修正
+  | 'final'; // 完整结果就绪
 
 export type AnalysisConfidenceLevel = 'high' | 'low';
 ```
@@ -227,30 +228,30 @@ export type AnalysisConfidenceLevel = 'high' | 'low';
 
 ```ts
 export interface AnalysisSession {
-  id: string;                           // analysisSessionId (UUID)
+  id: string; // analysisSessionId (UUID)
   userId: string;
-  requestId: string;                    // 关联图片分析 requestId
+  requestId: string; // 关联图片分析 requestId
   mealType: MealType;
   status: 'pending' | 'awaiting_refine' | 'finalized' | 'abandoned';
-  createdAt: string;                    // ISO
-  expiresAt: string;                    // ISO, createdAt + 30min
+  createdAt: string; // ISO
+  expiresAt: string; // ISO, createdAt + 30min
   quotaConsumed: {
     feature: 'AI_IMAGE_ANALYSIS';
-    recordId: string;                   // 配额扣减记录ID，用于审计
+    recordId: string; // 配额扣减记录ID，用于审计
   };
   imagePhase: {
-    overallConfidence: number;          // 0~1
+    overallConfidence: number; // 0~1
     confidenceLevel: AnalysisConfidenceLevel;
-    rawFoods: AnalyzedFoodItemLite[];   // 低置信度时发给前端的骨架
+    rawFoods: AnalyzedFoodItemLite[]; // 低置信度时发给前端的骨架
     diagnostics: ConfidenceDiagnostics;
     imageUrl: string;
   };
   refinePhase?: {
     submittedAt: string;
     refinedFoods: RefinedFoodInput[];
-    derivedText: string;                // 拼接给 Text 服务的描述
+    derivedText: string; // 拼接给 Text 服务的描述
   };
-  finalResultKey?: string;              // Redis 中完整 result 的 cache key
+  finalResultKey?: string; // Redis 中完整 result 的 cache key
 }
 ```
 
@@ -259,20 +260,20 @@ export interface AnalysisSession {
 ```ts
 /** 后端 → 前端（低置信度时返回） */
 export interface AnalyzedFoodItemLite {
-  id: string;                           // 本次分析内唯一；前端 list key
-  name: string;                         // AI 识别的中文名
-  quantity: string;                     // e.g. "1 碗" / "约半盘"
+  id: string; // 本次分析内唯一；前端 list key
+  name: string; // AI 识别的中文名
+  quantity: string; // e.g. "1 碗" / "约半盘"
   estimatedWeightGrams: number | null;
-  confidence: number;                   // 0~1 per-item
-  uncertaintyHints?: string[];          // e.g. ["光线较暗", "遮挡严重"]
+  confidence: number; // 0~1 per-item
+  uncertaintyHints?: string[]; // e.g. ["光线较暗", "遮挡严重"]
 }
 
 /** 前端 → 后端（refine 提交） */
 export interface RefinedFoodInput {
-  name: string;                         // 必填：用户最终确认的名称
-  quantity?: string;                    // 可选描述：如 "1 大碗"
-  estimatedWeightGrams?: number;        // 可选：直接指定克数（优先级最高）
-  originalId?: string;                  // 可选：对应 lite.id，用于审计
+  name: string; // 必填：用户最终确认的名称
+  quantity?: string; // 可选描述：如 "1 大碗"
+  estimatedWeightGrams?: number; // 可选：直接指定克数（优先级最高）
+  originalId?: string; // 可选：对应 lite.id，用于审计
 }
 ```
 
@@ -281,6 +282,7 @@ export interface RefinedFoodInput {
 #### 4.3.1 `POST /api/app/food/analyze`（扩展响应）
 
 **请求**：multipart/form-data（不变）
+
 - `image: File`
 - `mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack'`
 - `contextOverride?: string`（可选，JSON）
@@ -298,6 +300,7 @@ export interface RefinedFoodInput {
 ```
 
 **错误**：
+
 - `402 PAYMENT_REQUIRED` — 配额耗尽，携带 `paywallTrigger` 字段
 - `400 INVALID_IMAGE` — 图片解析失败
 
@@ -317,10 +320,18 @@ export interface RefinedFoodInput {
   },
   "result": {
     "version": "6.1",
-    "foods": [ /* AnalyzedFoodItem[] */ ],
-    "score": { /* ... */ },
-    "decision": { /* ... */ },
-    "confidenceDiagnostics": { /* ... */ }
+    "foods": [
+      /* AnalyzedFoodItem[] */
+    ],
+    "score": {
+      /* ... */
+    },
+    "decision": {
+      /* ... */
+    },
+    "confidenceDiagnostics": {
+      /* ... */
+    }
   }
 }
 ```
@@ -404,12 +415,15 @@ export interface RefinedFoodInput {
     "overall": 0.92,
     "source": "user_refined"
   },
-  "result": { /* FoodAnalysisResultV61 完整 */ },
+  "result": {
+    /* FoodAnalysisResultV61 完整 */
+  },
   "quotaConsumed": false
 }
 ```
 
 **错误**：
+
 - `404 SESSION_NOT_FOUND` — session 不存在
 - `410 SESSION_EXPIRED` — session 已超时
 - `409 SESSION_WRONG_STATUS` — session 不在 `awaiting_refine` 状态（幂等保护）
@@ -420,7 +434,18 @@ export interface RefinedFoodInput {
 
 ```ts
 // apps/api-server/src/modules/food/app/dto/refine-analysis.dto.ts
-import { ArrayMinSize, IsArray, IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min, ValidateNested } from 'class-validator';
+import {
+  ArrayMinSize,
+  IsArray,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  MaxLength,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class RefinedFoodInputDto {
@@ -476,6 +501,7 @@ export class RefineAnalysisDto {
 ```
 
 示例：
+
 ```
 输入：
   [
@@ -491,12 +517,12 @@ export class RefineAnalysisDto {
 
 ### 4.6 配额计数契约
 
-| 场景                               | 扣 `AI_IMAGE_ANALYSIS` | 扣 `AI_TEXT_ANALYSIS` | 备注                     |
-| ---------------------------------- | ---------------------- | --------------------- | ------------------------ |
-| POST /analyze（首次）              | ✅ 1 次                | ❌                    | 建 session               |
+| 场景                               | 扣 `AI_IMAGE_ANALYSIS` | 扣 `AI_TEXT_ANALYSIS` | 备注                        |
+| ---------------------------------- | ---------------------- | --------------------- | --------------------------- |
+| POST /analyze（首次）              | ✅ 1 次                | ❌                    | 建 session                  |
 | POST /analyze/:id/refine           | ❌                     | ❌                    | `skipReason=refine-session` |
-| POST /analyze-text（直接用户发起） | ❌                     | ✅ 1 次               | 与本链路无关             |
-| 首次 session 过期后用户重新上传    | ✅ 1 次                | ❌                    | 新 session               |
+| POST /analyze-text（直接用户发起） | ❌                     | ✅ 1 次               | 与本链路无关                |
+| 首次 session 过期后用户重新上传    | ✅ 1 次                | ❌                    | 新 session                  |
 
 ---
 
@@ -523,15 +549,15 @@ stateDiagram-v2
 
 ### 5.2 状态详解
 
-| 状态                 | 触发                         | UI 要素                                                                                         | 可操作                                                 |
-| -------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| `upload`             | 入口                         | 拍照/选图按钮、mealType 选择                                                                     | 提交图片                                               |
-| `analyzing`          | 图片已上传                   | Loading + 进度提示（"AI 正在识别食物..."）                                                       | 取消                                                   |
-| `low_confidence`     | 后端返回 `needs_review`      | **醒目提示条**「识别可能不准确，请核对以获得准确分析」 + 食物骨架卡片 + **原图对照**             | 进入编辑 / 重新拍照 / 放弃                              |
-| `editing`            | 用户点击"核对并修正"         | **列表式编辑**：每项可改名称/份量/克数、删除、新增                                              | 提交修正（`Refine`）/ 取消                              |
-| `analyzing_refine`   | 提交 refine 后                | Loading（"正在根据你的修正计算营养..."）                                                         | —                                                      |
-| `result`             | 后端返回 `final`              | 完整营养卡片、决策建议、confidenceBadge（仅在 user_refined 时显示"已按你的修正计算"）            | 保存 / 重新分析                                        |
-| `saved`              | 保存成功                     | 成功提示 + 跳转记录详情                                                                         | 查看记录                                               |
+| 状态               | 触发                    | UI 要素                                                                               | 可操作                     |
+| ------------------ | ----------------------- | ------------------------------------------------------------------------------------- | -------------------------- |
+| `upload`           | 入口                    | 拍照/选图按钮、mealType 选择                                                          | 提交图片                   |
+| `analyzing`        | 图片已上传              | Loading + 进度提示（"AI 正在识别食物..."）                                            | 取消                       |
+| `low_confidence`   | 后端返回 `needs_review` | **醒目提示条**「识别可能不准确，请核对以获得准确分析」 + 食物骨架卡片 + **原图对照**  | 进入编辑 / 重新拍照 / 放弃 |
+| `editing`          | 用户点击"核对并修正"    | **列表式编辑**：每项可改名称/份量/克数、删除、新增                                    | 提交修正（`Refine`）/ 取消 |
+| `analyzing_refine` | 提交 refine 后          | Loading（"正在根据你的修正计算营养..."）                                              | —                          |
+| `result`           | 后端返回 `final`        | 完整营养卡片、决策建议、confidenceBadge（仅在 user_refined 时显示"已按你的修正计算"） | 保存 / 重新分析            |
+| `saved`            | 保存成功                | 成功提示 + 跳转记录详情                                                               | 查看记录                   |
 
 ### 5.3 低置信度分支 UI 关键原则
 
@@ -551,7 +577,14 @@ stateDiagram-v2
   // 现状
   type Step = 'upload' | 'analyzing' | 'result' | 'saved';
   // 目标
-  type Step = 'upload' | 'analyzing' | 'low_confidence' | 'editing' | 'analyzing_refine' | 'result' | 'saved';
+  type Step =
+    | 'upload'
+    | 'analyzing'
+    | 'low_confidence'
+    | 'editing'
+    | 'analyzing_refine'
+    | 'result'
+    | 'saved';
   ```
 - **新增组件**：`features/food-analysis/components/food-edit-list.tsx`
 - **新增 hook 方法**：`useFoodAnalysis().refineAnalysis(requestId, payload)`
@@ -567,15 +600,15 @@ Flutter 端按相同 `Step` 枚举建 `StateNotifier`（Riverpod）或 `Bloc`；
 
 ### 6.1 分层策略总览
 
-| 层级                | 策略                                                                                       | 实施点                              |
-| ------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------- |
-| **模型输入**        | Vision prompt 强制结构化输出 + **要求模型自评 per-item 与 overall confidence**              | `ImageFoodAnalysisService` prompt   |
-| **模型输出**        | Schema 校验 + 异常值兜底（如 weight > 3000g 触发降 confidence）                             | `parseToAnalyzedFoods()`            |
-| **后处理校准**      | 多信号融合：`per-item conf` + `food-library match score` + `image quality hints`            | `ConfidenceJudgeService`            |
-| **业务分流**        | **低置信度不出营养结论**（本设计核心）                                                     | Pipeline 分支                       |
-| **用户回路**        | 修正后走 Text pipeline，文本识别通常比 Vision 可靠                                          | Refine 接口                         |
-| **持久化门槛**      | 低置信度 session **不写 FoodIngestion**，避免污染用户画像                                   | `persistAnalysisRecord` 分支        |
-| **可观测性**        | 所有分支都打点到 `DomainEventBus`，支持后续校准                                             | 新增 `AnalysisConfidenceJudgedEvent` |
+| 层级           | 策略                                                                             | 实施点                               |
+| -------------- | -------------------------------------------------------------------------------- | ------------------------------------ |
+| **模型输入**   | Vision prompt 强制结构化输出 + **要求模型自评 per-item 与 overall confidence**   | `ImageFoodAnalysisService` prompt    |
+| **模型输出**   | Schema 校验 + 异常值兜底（如 weight > 3000g 触发降 confidence）                  | `parseToAnalyzedFoods()`             |
+| **后处理校准** | 多信号融合：`per-item conf` + `food-library match score` + `image quality hints` | `ConfidenceJudgeService`             |
+| **业务分流**   | **低置信度不出营养结论**（本设计核心）                                           | Pipeline 分支                        |
+| **用户回路**   | 修正后走 Text pipeline，文本识别通常比 Vision 可靠                               | Refine 接口                          |
+| **持久化门槛** | 低置信度 session **不写 FoodIngestion**，避免污染用户画像                        | `persistAnalysisRecord` 分支         |
+| **可观测性**   | 所有分支都打点到 `DomainEventBus`，支持后续校准                                  | 新增 `AnalysisConfidenceJudgedEvent` |
 
 ### 6.2 置信度融合算法（`ConfidenceJudgeService`）
 
@@ -591,11 +624,11 @@ function judgeConfidence(input: VisionRawResult): ConfidenceJudgement {
   const totalWeight = foods.reduce((s, f) => s + (f.estimatedWeightGrams ?? 100), 0);
   const weightedConf = foods.reduce(
     (s, f) => s + f.confidence * ((f.estimatedWeightGrams ?? 100) / totalWeight),
-    0,
+    0
   );
 
   // 2. 食物库命中率惩罚（未命中的食物通常是 AI 自创名）
-  const matchRate = foods.filter(f => f.libraryMatched).length / foods.length;
+  const matchRate = foods.filter((f) => f.libraryMatched).length / foods.length;
   const matchPenalty = matchRate < 0.5 ? 0.85 : 1.0;
 
   // 3. 图像质量信号惩罚
@@ -641,31 +674,35 @@ function judgeConfidence(input: VisionRawResult): ConfidenceJudgement {
 ### 7.1 多模型融合（Ensemble）
 
 **短期（V1.1）**：
+
 - 主模型失败或 confidence < 0.4 时，降级到备用模型（如 `qwen2-vl-72b`）
 - 实现点：`ImageFoodAnalysisService.analyzeWithFallback()`
 
 **中期（V1.2）**：
+
 - 两模型并发调用 + **加权投票**：名称匹配则相信，差异大则自动触发 `needs_review`
 - 投票权重在 `ConfidenceJudgeService` 扩展
 
 ### 7.2 置信度校准（Calibration）
 
 **数据收集**：
+
 - 每次分析发射事件 `AnalysisConfidenceJudgedEvent { sessionId, predictedConfidence, actualOutcome: 'user_accepted' | 'user_edited' | 'user_abandoned' }`
 - 离线 job 按周聚合，用 **Platt scaling / isotonic regression** 校准阈值
 
 **动态阈值**：
+
 - 按用户分层：新用户默认阈值 0.8（更保守），活跃用户 0.7（更信任 AI）
 - 按食物类别：单一主食类可宽松，混合菜肴严格
 
 ### 7.3 用户行为反哺（Feedback Loop）
 
-| 信号            | 来源                       | 用途                                          |
-| --------------- | -------------------------- | --------------------------------------------- |
-| **用户修正内容** | Refine 接口 `foods` diff   | 训练名称纠错 dataset / 扩充食物库同义词       |
-| **用户接受度**  | 高置信度时是否直接 save    | 校准 confidence 真实可靠性                    |
-| **克数调整分布** | Refine 中克数变化分布      | 修正 Vision 克数估计偏差（如系统性低估 20%）  |
-| **放弃率**      | `abandoned` session 占比   | A/B 测试阈值变更                              |
+| 信号             | 来源                     | 用途                                         |
+| ---------------- | ------------------------ | -------------------------------------------- |
+| **用户修正内容** | Refine 接口 `foods` diff | 训练名称纠错 dataset / 扩充食物库同义词      |
+| **用户接受度**   | 高置信度时是否直接 save  | 校准 confidence 真实可靠性                   |
+| **克数调整分布** | Refine 中克数变化分布    | 修正 Vision 克数估计偏差（如系统性低估 20%） |
+| **放弃率**       | `abandoned` session 占比 | A/B 测试阈值变更                             |
 
 ### 7.4 未来形态（V2+）
 
@@ -679,12 +716,12 @@ function judgeConfidence(input: VisionRawResult): ConfidenceJudgement {
 
 ### 8.1 阶段划分
 
-| 阶段  | 交付                                                                                                    | 预期工时 |
-| ----- | ------------------------------------------------------------------------------------------------------- | -------- |
-| **S1 · 设计**（本文档） | 本 Markdown + 契约 review                                                                             | 0.5 d    |
-| **S2 · 后端**           | `AnalysisSessionService`、`ConfidenceJudgeService`、Controller 扩展、refine 接口、DTO、单测             | 2 d      |
-| **S3 · Web**            | `use-food-analysis` 扩展、`food-edit-list.tsx`、`analyze-page.tsx` 状态机重构                          | 1.5 d    |
-| **S4 · 联调 + 灰度**    | e2e 测试、配额审计校对、线上灰度 20% 用户观察 `abandoned` 率                                            | 1 d      |
+| 阶段                    | 交付                                                                                        | 预期工时 |
+| ----------------------- | ------------------------------------------------------------------------------------------- | -------- |
+| **S1 · 设计**（本文档） | 本 Markdown + 契约 review                                                                   | 0.5 d    |
+| **S2 · 后端**           | `AnalysisSessionService`、`ConfidenceJudgeService`、Controller 扩展、refine 接口、DTO、单测 | 2 d      |
+| **S3 · Web**            | `use-food-analysis` 扩展、`food-edit-list.tsx`、`analyze-page.tsx` 状态机重构               | 1.5 d    |
+| **S4 · 联调 + 灰度**    | e2e 测试、配额审计校对、线上灰度 20% 用户观察 `abandoned` 率                                | 1 d      |
 
 ### 8.2 兼容性承诺
 
@@ -706,23 +743,25 @@ function judgeConfidence(input: VisionRawResult): ConfidenceJudgement {
 
 ### 8.4 风险与对策
 
-| 风险                               | 对策                                                                   |
-| ---------------------------------- | ---------------------------------------------------------------------- |
-| AI 自评 confidence 过高虚报        | `ConfidenceJudgeService` 融合算法引入多信号惩罚，不单信 AI 自评          |
-| 用户嫌 refine 麻烦直接放弃         | UI 编辑摩擦最小化 + 预设 chip；观测 abandoned 率动态调阈值              |
-| Session 过期导致付费用户不满       | 过期前 5 分钟本地推送提醒；过期后 1 小时内支持一次"免费重新分析"兜底    |
-| Redis 故障丢 session               | Session 写入前先持久化最小恢复单元（`FoodAnalysisRecoveryRecord`）到 DB |
+| 风险                         | 对策                                                                    |
+| ---------------------------- | ----------------------------------------------------------------------- |
+| AI 自评 confidence 过高虚报  | `ConfidenceJudgeService` 融合算法引入多信号惩罚，不单信 AI 自评         |
+| 用户嫌 refine 麻烦直接放弃   | UI 编辑摩擦最小化 + 预设 chip；观测 abandoned 率动态调阈值              |
+| Session 过期导致付费用户不满 | 过期前 5 分钟本地推送提醒；过期后 1 小时内支持一次"免费重新分析"兜底    |
+| Redis 故障丢 session         | Session 写入前先持久化最小恢复单元（`FoodAnalysisRecoveryRecord`）到 DB |
 
 ---
 
 ## 附录 A：文件清单（实施时触达）
 
 ### 后端新增
+
 - `apps/api-server/src/modules/food/app/services/analysis-session.service.ts`
 - `apps/api-server/src/modules/food/app/services/confidence-judge.service.ts`
 - `apps/api-server/src/modules/food/app/dto/refine-analysis.dto.ts`
 
 ### 后端改造
+
 - `apps/api-server/src/modules/food/app/controllers/food-analyze.controller.ts`
 - `apps/api-server/src/modules/food/app/services/analyze.service.ts`
 - `apps/api-server/src/modules/food/app/services/image-food-analysis.service.ts`
@@ -731,9 +770,11 @@ function judgeConfidence(input: VisionRawResult): ConfidenceJudgement {
 - `apps/api-server/src/modules/subscription/app/services/quota-gate.service.ts`（`skipReason`）
 
 ### Web 新增
+
 - `apps/web/src/features/food-analysis/components/food-edit-list.tsx`
 
 ### Web 改造
+
 - `apps/web/src/features/food-analysis/components/analyze-page.tsx`
 - `apps/web/src/features/food-analysis/hooks/use-food-analysis.ts`
 - `apps/web/src/lib/api/food-record.ts`
@@ -743,13 +784,13 @@ function judgeConfidence(input: VisionRawResult): ConfidenceJudgement {
 
 ## 附录 B：环境变量清单
 
-| 变量                                  | 默认    | 说明                                         |
-| ------------------------------------- | ------- | -------------------------------------------- |
-| `CONFIDENCE_HIGH_THRESHOLD`           | `0.75`  | 高/低置信度分流阈值                          |
-| `ANALYSIS_SESSION_TTL_SECONDS`        | `1800`  | Session 有效期（秒）                         |
-| `ENABLE_CONFIDENCE_DRIVEN_ANALYSIS`   | `true`  | Feature flag，关闭则走旧逻辑                 |
-| `CONFIDENCE_IMAGE_MODEL`              | `baidu/ernie-4.5-vl-28b-a3b` | Vision 主模型                 |
-| `CONFIDENCE_IMAGE_FALLBACK_MODEL`     | 空      | 可选备用模型，空则不降级                     |
+| 变量                                | 默认                         | 说明                         |
+| ----------------------------------- | ---------------------------- | ---------------------------- |
+| `CONFIDENCE_HIGH_THRESHOLD`         | `0.75`                       | 高/低置信度分流阈值          |
+| `ANALYSIS_SESSION_TTL_SECONDS`      | `1800`                       | Session 有效期（秒）         |
+| `ENABLE_CONFIDENCE_DRIVEN_ANALYSIS` | `true`                       | Feature flag，关闭则走旧逻辑 |
+| `CONFIDENCE_IMAGE_MODEL`            | `baidu/ernie-4.5-vl-28b-a3b` | Vision 主模型                |
+| `CONFIDENCE_IMAGE_FALLBACK_MODEL`   | 空                           | 可选备用模型，空则不降级     |
 
 ---
 

@@ -609,6 +609,11 @@ export interface AnalyzeTextRequest {
     /** 覆盖本地小时(0-23)，修正时间维度评分 */
     localHour?: number;
   };
+  /**
+   * 分析提示（不作为食物词条，仅作为 LLM 估算指导）
+   * 例如 ["每种食物请按常见份量估算", "注明主要做法"]
+   */
+  hints?: string[];
 }
 
 // ── 保存分析到记录 ──

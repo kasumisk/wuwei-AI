@@ -27,6 +27,7 @@ import {
   ImportExternalRecipesDto,
 } from './dto/recipe-management.dto';
 import { RecipeGenerationService } from '../app/recipe-generation.service';
+import { I18nService } from '../../../core/i18n/i18n.service';
 
 /**
  * V6.3 P2-6: 管理后台菜谱管理接口
@@ -42,6 +43,7 @@ export class RecipeManagementController {
   constructor(
     private readonly recipeManagementService: RecipeManagementService,
     private readonly recipeGenerationService: RecipeGenerationService,
+    private readonly i18n: I18nService,
   ) {}
 
   // ==================== 查询 ====================
@@ -50,14 +52,24 @@ export class RecipeManagementController {
   @ApiOperation({ summary: '获取菜谱列表' })
   async findAll(@Query() query: GetRecipesQueryDto): Promise<ApiResponse> {
     const data = await this.recipeManagementService.findAll(query);
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('recipe.ok'),
+      data,
+    };
   }
 
   @Get('statistics')
   @ApiOperation({ summary: '获取菜谱统计' })
   async getStatistics(): Promise<ApiResponse> {
     const data = await this.recipeManagementService.getStatistics();
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('recipe.ok'),
+      data,
+    };
   }
 
   @Post('recalculate-scores')
@@ -73,7 +85,10 @@ export class RecipeManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: `批量重算完成: 更新 ${data.updated} 条, 未变 ${data.unchanged} 条`,
+      message: this.i18n.t('recipe.batchRecalcDone', {
+        updated: data.updated,
+        unchanged: data.unchanged,
+      }),
       data,
     };
   }
@@ -82,7 +97,12 @@ export class RecipeManagementController {
   @ApiOperation({ summary: '获取菜谱详情' })
   async findById(@Param('id') id: string): Promise<ApiResponse> {
     const data = await this.recipeManagementService.findById(id);
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('recipe.ok'),
+      data,
+    };
   }
 
   // ==================== AI 生成 ====================
@@ -94,7 +114,10 @@ export class RecipeManagementController {
     return {
       success: true,
       code: HttpStatus.CREATED,
-      message: data.mode === 'sync' ? '生成完成' : '已提交异步生成任务',
+      message:
+        data.mode === 'sync'
+          ? this.i18n.t('recipe.generationDone')
+          : this.i18n.t('recipe.generationQueued'),
       data,
     };
   }
@@ -108,7 +131,7 @@ export class RecipeManagementController {
     return {
       success: true,
       code: HttpStatus.CREATED,
-      message: '导入成功',
+      message: this.i18n.t('recipe.importOk'),
       data,
     };
   }
@@ -122,7 +145,7 @@ export class RecipeManagementController {
     return {
       success: true,
       code: HttpStatus.CREATED,
-      message: '创建成功',
+      message: this.i18n.t('recipe.createdOk'),
       data,
     };
   }
@@ -134,7 +157,12 @@ export class RecipeManagementController {
     @Body() dto: UpdateRecipeDto,
   ): Promise<ApiResponse> {
     const data = await this.recipeManagementService.update(id, dto);
-    return { success: true, code: HttpStatus.OK, message: '更新成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('recipe.updatedOk'),
+      data,
+    };
   }
 
   @Put(':id/review')
@@ -150,7 +178,12 @@ export class RecipeManagementController {
       note: dto.note,
       adminUserId,
     });
-    return { success: true, code: HttpStatus.OK, message: '审核成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('recipe.reviewOk'),
+      data,
+    };
   }
 
   @Delete(':id')
@@ -160,7 +193,7 @@ export class RecipeManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '删除成功',
+      message: this.i18n.t('recipe.deletedOk'),
       data: null,
     };
   }
@@ -171,7 +204,12 @@ export class RecipeManagementController {
   @ApiOperation({ summary: 'V6.4: 获取菜谱所有翻译' })
   async getTranslations(@Param('id') id: string): Promise<ApiResponse> {
     const data = await this.recipeManagementService.getTranslations(id);
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('recipe.ok'),
+      data,
+    };
   }
 
   @Put(':id/translations/:locale')
@@ -188,7 +226,12 @@ export class RecipeManagementController {
       description: body.description,
       instructions: body.instructions,
     });
-    return { success: true, code: HttpStatus.OK, message: '翻译已保存', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('recipe.translationSaved'),
+      data,
+    };
   }
 
   @Delete(':id/translations/:locale')
@@ -201,7 +244,7 @@ export class RecipeManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '翻译已删除',
+      message: this.i18n.t('recipe.translationDeleted'),
       data: null,
     };
   }

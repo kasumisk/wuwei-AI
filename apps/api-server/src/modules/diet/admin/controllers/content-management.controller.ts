@@ -21,6 +21,7 @@ import {
   GetAiDecisionLogsQueryDto,
 } from '../dto/content-management.dto';
 import { ApiResponse } from '../../../../common/types/response.type';
+import { I18nService } from '../../../../core/i18n';
 
 @ApiTags('管理后台 - 饮食记录 & 计划 & AI日志')
 @Controller('admin/content')
@@ -31,6 +32,7 @@ export class ContentManagementController {
   constructor(
     private readonly contentService: ContentManagementService,
     private readonly qualityService: RecommendationQualityService,
+    private readonly i18n: I18nService,
   ) {}
 
   // ==================== 饮食记录 ====================
@@ -41,21 +43,36 @@ export class ContentManagementController {
     @Query() query: GetFoodRecordsQueryDto,
   ): Promise<ApiResponse> {
     const data = await this.contentService.findFoodRecords(query);
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('common.ok'),
+      data,
+    };
   }
 
   @Get('food-records/statistics')
   @ApiOperation({ summary: '获取饮食记录统计' })
   async getFoodRecordStatistics(): Promise<ApiResponse> {
     const data = await this.contentService.getFoodRecordStatistics();
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('common.ok'),
+      data,
+    };
   }
 
   @Get('food-records/:id')
   @ApiOperation({ summary: '获取饮食记录详情' })
   async getFoodRecordDetail(@Param('id') id: string): Promise<ApiResponse> {
     const data = await this.contentService.getFoodRecordDetail(id);
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('common.ok'),
+      data,
+    };
   }
 
   @Delete('food-records/:id')
@@ -73,14 +90,24 @@ export class ContentManagementController {
     @Query() query: GetDailyPlansQueryDto,
   ): Promise<ApiResponse> {
     const data = await this.contentService.findDailyPlans(query);
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('common.ok'),
+      data,
+    };
   }
 
   @Get('daily-plans/:id')
   @ApiOperation({ summary: '获取每日计划详情' })
   async getDailyPlanDetail(@Param('id') id: string): Promise<ApiResponse> {
     const data = await this.contentService.getDailyPlanDetail(id);
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('common.ok'),
+      data,
+    };
   }
 
   // ==================== AI 对话 ====================
@@ -91,21 +118,36 @@ export class ContentManagementController {
     @Query() query: GetCoachConversationsQueryDto,
   ): Promise<ApiResponse> {
     const data = await this.contentService.findConversations(query);
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('common.ok'),
+      data,
+    };
   }
 
   @Get('conversations/statistics')
   @ApiOperation({ summary: '获取AI对话统计' })
   async getConversationStatistics(): Promise<ApiResponse> {
     const data = await this.contentService.getConversationStatistics();
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('common.ok'),
+      data,
+    };
   }
 
   @Get('conversations/:id')
   @ApiOperation({ summary: '获取AI对话详情（含消息）' })
   async getConversationDetail(@Param('id') id: string): Promise<ApiResponse> {
     const data = await this.contentService.getConversationDetail(id);
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('common.ok'),
+      data,
+    };
   }
 
   @Delete('conversations/:id')
@@ -123,14 +165,24 @@ export class ContentManagementController {
     @Query() query: GetRecommendationFeedbackQueryDto,
   ): Promise<ApiResponse> {
     const data = await this.contentService.findRecommendationFeedback(query);
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('common.ok'),
+      data,
+    };
   }
 
   @Get('recommendation-feedback/statistics')
   @ApiOperation({ summary: '获取推荐反馈统计' })
   async getFeedbackStatistics(): Promise<ApiResponse> {
     const data = await this.contentService.getFeedbackStatistics();
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('common.ok'),
+      data,
+    };
   }
 
   // ==================== AI决策日志 ====================
@@ -141,14 +193,24 @@ export class ContentManagementController {
     @Query() query: GetAiDecisionLogsQueryDto,
   ): Promise<ApiResponse> {
     const data = await this.contentService.findAiDecisionLogs(query);
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('common.ok'),
+      data,
+    };
   }
 
   @Get('ai-decision-logs/statistics')
   @ApiOperation({ summary: '获取AI决策日志统计' })
   async getAiLogStatistics(): Promise<ApiResponse> {
     const data = await this.contentService.getAiLogStatistics();
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('common.ok'),
+      data,
+    };
   }
 
   // ==================== V4 Phase 3.6: 推荐质量仪表盘 ====================
@@ -159,7 +221,12 @@ export class ContentManagementController {
     const data = await this.qualityService.getQualityOverview(
       days ? parseInt(days, 10) : 30,
     );
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('common.ok'),
+      data,
+    };
   }
 
   @Get('recommendation-quality/by-goal')
@@ -170,7 +237,12 @@ export class ContentManagementController {
     const data = await this.qualityService.getAcceptanceByGoalType(
       days ? parseInt(days, 10) : 30,
     );
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('common.ok'),
+      data,
+    };
   }
 
   @Get('recommendation-quality/by-meal')
@@ -181,7 +253,12 @@ export class ContentManagementController {
     const data = await this.qualityService.getAcceptanceByMealType(
       days ? parseInt(days, 10) : 30,
     );
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('common.ok'),
+      data,
+    };
   }
 
   @Get('recommendation-quality/trend')
@@ -190,7 +267,12 @@ export class ContentManagementController {
     const data = await this.qualityService.getDailyTrend(
       days ? parseInt(days, 10) : 30,
     );
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('common.ok'),
+      data,
+    };
   }
 
   @Get('recommendation-quality/plan-coverage')
@@ -199,7 +281,12 @@ export class ContentManagementController {
     const data = await this.qualityService.getPlanCoverage(
       days ? parseInt(days, 10) : 30,
     );
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('common.ok'),
+      data,
+    };
   }
 
   @Get('recommendation-quality/dashboard')
@@ -210,6 +297,11 @@ export class ContentManagementController {
     const data = await this.qualityService.getDashboardSummary(
       days ? parseInt(days, 10) : 30,
     );
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('common.ok'),
+      data,
+    };
   }
 }

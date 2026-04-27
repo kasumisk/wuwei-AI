@@ -12,10 +12,7 @@ import {
   AnalysisScore,
   NutritionTotals,
 } from '../types/analysis-result.types';
-import {
-  FoodScoringService,
-  ScoringFoodItem,
-} from './food-scoring.service';
+import { FoodScoringService, ScoringFoodItem } from './food-scoring.service';
 import { computeAvgConfidence } from '../analyze/nutrition-aggregator';
 import { UserContextBuilderService } from '../analyze/user-context-builder.service';
 import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
@@ -37,9 +34,7 @@ export interface ScoringStageInput {
 export class ScoringStageService {
   private readonly logger = new Logger(ScoringStageService.name);
 
-  constructor(
-    private readonly foodScoringService: FoodScoringService,
-  ) {}
+  constructor(private readonly foodScoringService: FoodScoringService) {}
 
   /**
    * V5.0: Run unified scoring stage
@@ -54,7 +49,8 @@ export class ScoringStageService {
 
     try {
       // Use pre-built scoringFoods (text path with libraryMatch) or convert from foods
-      const scoringFoods = input.scoringFoods || this.toScoringFoodItems(input.foods);
+      const scoringFoods =
+        input.scoringFoods || this.toScoringFoodItems(input.foods);
 
       const result = await this.foodScoringService.calculateScore(
         scoringFoods,

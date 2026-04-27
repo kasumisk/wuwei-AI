@@ -4,6 +4,7 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
+import { I18nService } from '../../../core/i18n/i18n.service';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { AppChannel, STORE_CHANNELS } from '../app-version.types';
 import {
@@ -17,6 +18,7 @@ export class AppVersionPackageService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly i18n: I18nService,
   ) {}
 
   /** 获取某版本的所有渠道包 */
@@ -37,7 +39,9 @@ export class AppVersionPackageService {
     });
     if (existing) {
       throw new ConflictException(
-        `渠道包已存在: ${dto.platform} ${dto.channel}，请直接编辑`,
+        this.i18n.t('appVersion.appVersionPackage.alreadyExists', {
+          channel: dto.channel,
+        }),
       );
     }
 
@@ -48,7 +52,9 @@ export class AppVersionPackageService {
     }
 
     if (!downloadUrl) {
-      throw new BadRequestException('下载链接不能为空');
+      throw new BadRequestException(
+        this.i18n.t('appVersion.appVersionPackage.downloadUrlRequired'),
+      );
     }
 
     return this.prisma.appVersionPackages.create({
@@ -85,7 +91,9 @@ export class AppVersionPackageService {
   ): Promise<{ message: string }> {
     const pkg = await this.findOne(versionId, packageId);
     await this.prisma.appVersionPackages.delete({ where: { id: pkg.id } });
-    return { message: '渠道包删除成功' };
+    return {
+      message: this.i18n.t('appVersion.appVersionPackage.deleteSuccess'),
+    };
   }
 
   /** 切换渠道包启用状态 */
@@ -103,7 +111,9 @@ export class AppVersionPackageService {
       where: { id: packageId, versionId },
     });
     if (!pkg) {
-      throw new NotFoundException(`渠道包 #${packageId} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('appVersion.appVersionPackage.notFound', { packageId }),
+      );
     }
     return pkg;
   }
@@ -113,7 +123,11 @@ export class AppVersionPackageService {
       where: { id: versionId },
     });
     if (!count) {
-      throw new NotFoundException(`版本 #${versionId} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('appVersion.appVersionPackage.versionNotFound', {
+          versionId,
+        }),
+      );
     }
   }
 

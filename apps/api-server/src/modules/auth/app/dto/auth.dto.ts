@@ -14,7 +14,7 @@ import {
 export class FirebaseLoginDto {
   @ApiProperty({ description: 'Firebase ID Token' })
   @IsString()
-  @IsNotEmpty({ message: 'Firebase Token 不能为空' })
+  @IsNotEmpty({ message: 'common.validation.firebaseTokenRequired' })
   firebaseToken: string;
 }
 
@@ -24,7 +24,7 @@ export class FirebaseLoginDto {
 export class AnonymousLoginDto {
   @ApiProperty({ description: '设备唯一标识', example: 'device-uuid-123' })
   @IsString()
-  @IsNotEmpty({ message: '设备ID不能为空' })
+  @IsNotEmpty({ message: 'common.validation.deviceIdRequired' })
   deviceId: string;
 }
 
@@ -34,7 +34,7 @@ export class AnonymousLoginDto {
 export class GoogleLoginDto {
   @ApiProperty({ description: 'Google ID Token（客户端获取）' })
   @IsString()
-  @IsNotEmpty({ message: 'Google ID Token 不能为空' })
+  @IsNotEmpty({ message: 'common.validation.googleTokenRequired' })
   idToken: string;
 }
 
@@ -43,14 +43,14 @@ export class GoogleLoginDto {
  */
 export class EmailRegisterDto {
   @ApiProperty({ description: '邮箱地址', example: 'user@example.com' })
-  @IsEmail({}, { message: '邮箱格式不正确' })
-  @IsNotEmpty({ message: '邮箱不能为空' })
+  @IsEmail({}, { message: 'common.validation.emailInvalid' })
+  @IsNotEmpty({ message: 'common.validation.emailRequired' })
   email: string;
 
   @ApiProperty({ description: '密码' })
   @IsString()
-  @IsNotEmpty({ message: '密码不能为空' })
-  @MinLength(6, { message: '密码至少6个字符' })
+  @IsNotEmpty({ message: 'common.validation.passwordRequired' })
+  @MinLength(6, { message: 'common.validation.passwordTooShort' })
   password: string;
 
   @ApiPropertyOptional({ description: '昵称' })
@@ -64,13 +64,13 @@ export class EmailRegisterDto {
  */
 export class EmailLoginDto {
   @ApiProperty({ description: '邮箱地址', example: 'user@example.com' })
-  @IsEmail({}, { message: '邮箱格式不正确' })
-  @IsNotEmpty({ message: '邮箱不能为空' })
+  @IsEmail({}, { message: 'common.validation.emailInvalid' })
+  @IsNotEmpty({ message: 'common.validation.emailRequired' })
   email: string;
 
   @ApiProperty({ description: '密码' })
   @IsString()
-  @IsNotEmpty({ message: '密码不能为空' })
+  @IsNotEmpty({ message: 'common.validation.passwordRequired' })
   password: string;
 }
 
@@ -79,13 +79,13 @@ export class EmailLoginDto {
  */
 export class EmailCodeLoginDto {
   @ApiProperty({ description: '邮箱地址', example: 'user@example.com' })
-  @IsEmail({}, { message: '邮箱格式不正确' })
-  @IsNotEmpty({ message: '邮箱不能为空' })
+  @IsEmail({}, { message: 'common.validation.emailInvalid' })
+  @IsNotEmpty({ message: 'common.validation.emailRequired' })
   email: string;
 
   @ApiProperty({ description: '验证码' })
   @IsString()
-  @IsNotEmpty({ message: '验证码不能为空' })
+  @IsNotEmpty({ message: 'common.validation.codeRequired' })
   code: string;
 }
 
@@ -94,8 +94,8 @@ export class EmailCodeLoginDto {
  */
 export class SendEmailCodeDto {
   @ApiProperty({ description: '邮箱地址', example: 'user@example.com' })
-  @IsEmail({}, { message: '邮箱格式不正确' })
-  @IsNotEmpty({ message: '邮箱不能为空' })
+  @IsEmail({}, { message: 'common.validation.emailInvalid' })
+  @IsNotEmpty({ message: 'common.validation.emailRequired' })
   email: string;
 
   @ApiProperty({ description: '类型', enum: ['login', 'register', 'reset'] })
@@ -109,7 +109,7 @@ export class SendEmailCodeDto {
  */
 export class ResetPasswordDto {
   @ApiProperty({ description: '邮箱地址' })
-  @IsEmail({}, { message: '邮箱格式不正确' })
+  @IsEmail({}, { message: 'common.validation.emailInvalid' })
   @IsNotEmpty()
   email: string;
 
@@ -121,7 +121,7 @@ export class ResetPasswordDto {
   @ApiProperty({ description: '新密码' })
   @IsString()
   @IsNotEmpty()
-  @MinLength(6, { message: '密码至少6个字符' })
+  @MinLength(6, { message: 'common.validation.passwordTooShort' })
   newPassword: string;
 }
 
@@ -145,14 +145,14 @@ export class UpdateAppUserProfileDto {
  */
 export class UpgradeAnonymousDto {
   @ApiProperty({ description: '邮箱地址' })
-  @IsEmail({}, { message: '邮箱格式不正确' })
+  @IsEmail({}, { message: 'common.validation.emailInvalid' })
   @IsNotEmpty()
   email: string;
 
   @ApiProperty({ description: '密码' })
   @IsString()
   @IsNotEmpty()
-  @MinLength(6, { message: '密码至少6个字符' })
+  @MinLength(6, { message: 'common.validation.passwordTooShort' })
   password: string;
 }
 
@@ -164,8 +164,8 @@ export class UpgradeAnonymousDto {
 export class PhoneSendCodeDto {
   @ApiProperty({ description: '手机号', example: '13800138000' })
   @IsString()
-  @IsNotEmpty({ message: '手机号不能为空' })
-  @Matches(/^1[3-9]\d{9}$/, { message: '手机号格式不正确' })
+  @IsNotEmpty({ message: 'common.validation.phoneRequired' })
+  @Matches(/^1[3-9]\d{9}$/, { message: 'common.validation.phoneInvalid' })
   phone: string;
 }
 
@@ -175,8 +175,8 @@ export class PhoneSendCodeDto {
 export class PhoneVerifyDto {
   @ApiProperty({ description: '手机号', example: '13800138000' })
   @IsString()
-  @IsNotEmpty({ message: '手机号不能为空' })
-  @Matches(/^1[3-9]\d{9}$/, { message: '手机号格式不正确' })
+  @IsNotEmpty({ message: 'common.validation.phoneRequired' })
+  @Matches(/^1[3-9]\d{9}$/, { message: 'common.validation.phoneInvalid' })
   phone: string;
 
   @ApiProperty({
@@ -184,7 +184,7 @@ export class PhoneVerifyDto {
     example: '888888',
   })
   @IsString()
-  @IsNotEmpty({ message: '验证码不能为空' })
+  @IsNotEmpty({ message: 'common.validation.codeRequired' })
   code: string;
 
   @ApiPropertyOptional({ description: '设备ID（可选，用于匿名升级绑定）' })
@@ -201,7 +201,7 @@ export class PhoneVerifyDto {
 export class WechatCodeLoginDto {
   @ApiProperty({ description: '微信授权 code' })
   @IsString()
-  @IsNotEmpty({ message: '微信授权 code 不能为空' })
+  @IsNotEmpty({ message: 'common.validation.wechatCodeRequired' })
   code: string;
 }
 
@@ -211,7 +211,7 @@ export class WechatCodeLoginDto {
 export class WechatMiniLoginDto {
   @ApiProperty({ description: '小程序 wx.login 获取的 code' })
   @IsString()
-  @IsNotEmpty({ message: '小程序 code 不能为空' })
+  @IsNotEmpty({ message: 'common.validation.wechatMiniCodeRequired' })
   code: string;
 }
 
@@ -221,7 +221,7 @@ export class WechatMiniLoginDto {
 export class WechatAuthUrlDto {
   @ApiProperty({ description: '授权后回调的前端页面地址' })
   @IsString()
-  @IsNotEmpty({ message: '回调地址不能为空' })
+  @IsNotEmpty({ message: 'common.validation.redirectUriRequired' })
   redirectUri: string;
 
   @ApiPropertyOptional({ description: '防 CSRF state 参数' })

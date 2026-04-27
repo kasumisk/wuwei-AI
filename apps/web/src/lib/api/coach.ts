@@ -133,7 +133,11 @@ export async function sendCoachMessage(
           if (data.done) {
             // Delete the analysis context only after successful stream completion
             if (hasAnalysisContext) {
-              try { sessionStorage.removeItem('coach_analysis_context'); } catch { /* ignore */ }
+              try {
+                sessionStorage.removeItem('coach_analysis_context');
+              } catch {
+                /* ignore */
+              }
             }
             callbacks.onDone(data.conversationId);
             return;

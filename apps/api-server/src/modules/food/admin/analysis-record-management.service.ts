@@ -1,5 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../core/prisma/prisma.service';
+import { I18nService } from '../../../core/i18n';
 import {
   GetAnalysisRecordsQueryDto,
   ReviewAnalysisRecordDto,
@@ -9,7 +10,10 @@ import {
 export class AnalysisRecordManagementService {
   private readonly logger = new Logger(AnalysisRecordManagementService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly i18n: I18nService,
+  ) {}
 
   private mapStoredReviewStatusToApi(
     reviewStatus?: string | null,
@@ -214,7 +218,8 @@ export class AnalysisRecordManagementService {
     const record = await this.prisma.foodAnalysisRecords.findUnique({
       where: { id },
     });
-    if (!record) throw new NotFoundException('分析记录不存在');
+    if (!record)
+      throw new NotFoundException(this.i18n.t('food.analysisRecordNotFound'));
 
     // 获取用户信息
     const user = await this.prisma.appUsers.findUnique({
@@ -242,7 +247,8 @@ export class AnalysisRecordManagementService {
     const record = await this.prisma.foodAnalysisRecords.findUnique({
       where: { id },
     });
-    if (!record) throw new NotFoundException('分析记录不存在');
+    if (!record)
+      throw new NotFoundException(this.i18n.t('food.analysisRecordNotFound'));
 
     const updated = await this.prisma.foodAnalysisRecords.update({
       where: { id },

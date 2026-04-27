@@ -31,9 +31,16 @@ import {
 } from '../../../diet/app/recommendation/utils/i18n-messages';
 import { ScoringFoodItem } from '../../../decision/score/food-scoring.service';
 import { AnalysisPipelineService } from '../../../decision/analyze/analysis-pipeline.service';
-import { validateAndCorrectFoods, NutritionInput } from '../../../decision/analyze/nutrition-sanity-validator';
+import {
+  validateAndCorrectFoods,
+  NutritionInput,
+} from '../../../decision/analyze/nutrition-sanity-validator';
 import { UserContextBuilderService } from '../../../decision/analyze/user-context-builder.service';
-import { buildBasePrompt, buildUserContextPrompt, getUserMessage } from './analysis-prompt-schema';
+import {
+  buildBasePrompt,
+  buildUserContextPrompt,
+  getUserMessage,
+} from './analysis-prompt-schema';
 
 // ==================== 常量 ====================
 
@@ -52,7 +59,7 @@ const DEFAULT_SERVING_GRAMS = 100;
  * - fat: 油脂/坚果一份约 15g
  * - beverage: 饮料一杯约 250g
  * - snack: 零食一份约 30g
- * - composite: 复合菜肴（如炒菜、炖汤）约 200g
+ * - composite: 复合菜肴（盖饭/套餐/炒饭/烩面）约 350g（米饭~200g + 主菜~150g）
  */
 const CATEGORY_DEFAULT_SERVING: Record<string, number> = {
   grain: 150,
@@ -63,7 +70,7 @@ const CATEGORY_DEFAULT_SERVING: Record<string, number> = {
   fat: 15,
   beverage: 250,
   snack: 30,
-  composite: 200,
+  composite: 350,
   condiment: 10,
   soup: 300,
 };
@@ -116,10 +123,11 @@ function buildContextAwareTextPrompt(
     remainingCalories: number;
     remainingProtein: number;
   },
-  locale: Locale = 'zh-CN',
+  locale?: Locale,
 ): string {
   return (
-    buildBasePrompt(undefined, locale) + buildUserContextPrompt({ ...params, locale })
+    buildBasePrompt(undefined, locale) +
+    buildUserContextPrompt({ ...params, locale })
   );
 }
 
@@ -249,6 +257,7 @@ export class TextFoodAnalysisService {
     userId?: string,
     locale?: Locale,
     localHourOverride?: number,
+    hints?: string[],
   ): Promise<FoodAnalysisResultV61> {
     // 1. 预处理文本
     const cleanedText = this.preprocessText(text);
@@ -272,11 +281,11 @@ export class TextFoodAnalysisService {
       cleanedText,
       locale,
       userCtx,
+      hints,
     );
 
-    // V2.1: Steps 4-13 委托给统一分析管道
-    // parsedFoods 里的营养值已经是 per-serving（buildFromLibraryMatch / fallback 均已换算），
-    // 直接使用，不再乘 factor，避免双重换算导致 totals 虚高。
+    // V6.x: parsedFoods 上的营养值是 per-serving 实际摄入（数据契约见 AnalyzedFoodItem JSDoc），
+    // 直接透传到 scoring 层即可。
     const scoringFoods: ScoringFoodItem[] = parsedFoods.map((f) => {
       const grams = f.estimatedWeightGrams || f.standardServingG || 100;
       return {
@@ -393,6 +402,7 @@ export class TextFoodAnalysisService {
     originalText: string,
     locale?: Locale,
     userCtx?: any,
+    hints?: string[],
   ): Promise<ParsedFoodItem[]> {
     const results: ParsedFoodItem[] = [];
     const unmatchedTerms: Array<{
@@ -438,6 +448,7 @@ export class TextFoodAnalysisService {
         originalText,
         userCtx,
         locale,
+        hints,
       );
       results.push(...llmResults);
 
@@ -449,6 +460,7 @@ export class TextFoodAnalysisService {
           originalText,
           userCtx,
           locale,
+          hints,
         );
         results.push(...llmFullTextResults);
       }
@@ -483,7 +495,9 @@ export class TextFoodAnalysisService {
 
     // 3c. 如果全部为空（匹配失败 + LLM 也无结果），返回降级结果
     if (merged.length === 0) {
-      this.logger.warn(`Text analysis could not identify any food: "${originalText}"`);
+      this.logger.warn(
+        `Text analysis could not identify any food: "${originalText}"`,
+      );
       throw new BadRequestException(t('decision.error.noFood', {}, locale));
     }
 
@@ -804,6 +818,7 @@ export class TextFoodAnalysisService {
     _originalText: string,
     userCtx?: any,
     locale?: Locale,
+    hints?: string[],
   ): Promise<ParsedFoodItem[]> {
     if (!this.apiKey) {
       this.logger.warn('LLM API not configured, skipping LLM parsing');
@@ -830,6 +845,12 @@ export class TextFoodAnalysisService {
         `[LLM] Text parsing call | input: "${unmatchedText.slice(0, 80)}"`,
       );
 
+      // 将 hints 拼接到 user message 末尾（作为估算指导，不作为食物词条）
+      let userContent = getUserMessage('text', unmatchedText, locale);
+      if (hints && hints.length > 0) {
+        userContent += `\n\n【估算指导】${hints.join('；')}`;
+      }
+
       const response = await fetch(`${this.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -844,7 +865,7 @@ export class TextFoodAnalysisService {
             { role: 'system', content: systemPrompt },
             {
               role: 'user',
-              content: getUserMessage('text', unmatchedText, locale),
+              content: userContent,
             },
           ],
           max_tokens: 800,
@@ -910,37 +931,94 @@ export class TextFoodAnalysisService {
           protein: Math.round((f.protein || 0) * fallbackRatio * 10) / 10,
           fat: Math.round((f.fat || 0) * fallbackRatio * 10) / 10,
           carbs: Math.round((f.carbs || 0) * fallbackRatio * 10) / 10,
-          fiber: f.fiber != null ? Math.round((f.fiber || 0) * fallbackRatio * 10) / 10 : undefined,
-          sodium: f.sodium != null ? Math.round((f.sodium || 0) * fallbackRatio) : undefined,
-          saturatedFat: f.saturatedFat ?? null,
-          transFat: f.transFat ?? null,
-          addedSugar: f.addedSugar ?? null,
-          cholesterol: f.cholesterol ?? null,
-          omega3: f.omega3 ?? null,
-          omega6: f.omega6 ?? null,
-          solubleFiber: f.solubleFiber ?? null,
-          vitaminA: f.vitaminA ?? null,
-          vitaminC: f.vitaminC ?? null,
-          vitaminD: f.vitaminD ?? null,
-          calcium: f.calcium ?? null,
-          iron: f.iron ?? null,
-          potassium: f.potassium ?? null,
-          zinc: f.zinc ?? null,
+          fiber:
+            f.fiber != null
+              ? Math.round((f.fiber || 0) * fallbackRatio * 10) / 10
+              : undefined,
+          sodium:
+            f.sodium != null
+              ? Math.round((f.sodium || 0) * fallbackRatio)
+              : undefined,
+          // V6.x: 扩展营养字段同样需按 fallbackRatio 缩放（LLM 输出 per-100g）
+          saturatedFat:
+            f.saturatedFat != null
+              ? Math.round((Number(f.saturatedFat) || 0) * fallbackRatio * 10) /
+                10
+              : undefined,
+          transFat:
+            f.transFat != null
+              ? Math.round((Number(f.transFat) || 0) * fallbackRatio * 10) / 10
+              : undefined,
+          addedSugar:
+            f.addedSugar != null
+              ? Math.round((Number(f.addedSugar) || 0) * fallbackRatio * 10) /
+                10
+              : undefined,
+          cholesterol:
+            f.cholesterol != null
+              ? Math.round((Number(f.cholesterol) || 0) * fallbackRatio)
+              : undefined,
+          omega3:
+            f.omega3 != null
+              ? Math.round((Number(f.omega3) || 0) * fallbackRatio)
+              : undefined,
+          omega6:
+            f.omega6 != null
+              ? Math.round((Number(f.omega6) || 0) * fallbackRatio)
+              : undefined,
+          solubleFiber:
+            f.solubleFiber != null
+              ? Math.round((Number(f.solubleFiber) || 0) * fallbackRatio * 10) /
+                10
+              : undefined,
+          vitaminA:
+            f.vitaminA != null
+              ? Math.round((Number(f.vitaminA) || 0) * fallbackRatio)
+              : undefined,
+          vitaminC:
+            f.vitaminC != null
+              ? Math.round((Number(f.vitaminC) || 0) * fallbackRatio * 10) / 10
+              : undefined,
+          vitaminD:
+            f.vitaminD != null
+              ? Math.round((Number(f.vitaminD) || 0) * fallbackRatio * 10) / 10
+              : undefined,
+          calcium:
+            f.calcium != null
+              ? Math.round((Number(f.calcium) || 0) * fallbackRatio)
+              : undefined,
+          iron:
+            f.iron != null
+              ? Math.round((Number(f.iron) || 0) * fallbackRatio * 10) / 10
+              : undefined,
+          potassium:
+            f.potassium != null
+              ? Math.round((Number(f.potassium) || 0) * fallbackRatio)
+              : undefined,
+          zinc:
+            f.zinc != null
+              ? Math.round((Number(f.zinc) || 0) * fallbackRatio * 10) / 10
+              : undefined,
+          sugar:
+            f.sugar != null
+              ? Math.round((Number(f.sugar) || 0) * fallbackRatio * 10) / 10
+              : undefined,
           estimated: f.estimated,
           allergens: Array.isArray(f.allergens) ? f.allergens : undefined,
           tags: Array.isArray(f.tags) ? f.tags : undefined,
-          // V4.6: 统一字段名
+          // V4.6: 统一字段名（评分/分级类与重量无关，不缩放）
           qualityScore: f.qualityScore ?? undefined,
           satietyScore: f.satietyScore ?? undefined,
           processingLevel: f.processingLevel ?? undefined,
-          sugar: f.sugar ?? undefined,
           standardServingG: f.standardServingG ?? undefined,
           standardServingDesc: f.standardServingDesc ?? undefined,
           glycemicIndex: f.glycemicIndex ?? undefined,
           glycemicLoad: f.glycemicLoad ?? undefined,
           nutrientDensity: f.nutrientDensity ?? undefined,
-          fodmapLevel: (f.fodmapLevel ?? undefined) as AnalyzedFoodItem['fodmapLevel'],
-          oxalateLevel: (f.oxalateLevel ?? undefined) as AnalyzedFoodItem['oxalateLevel'],
+          fodmapLevel: (f.fodmapLevel ??
+            undefined) as AnalyzedFoodItem['fodmapLevel'],
+          oxalateLevel: (f.oxalateLevel ??
+            undefined) as AnalyzedFoodItem['oxalateLevel'],
           purine: (f.purine ?? undefined) as AnalyzedFoodItem['purine'],
           cookingMethods: Array.isArray(f.cookingMethods)
             ? f.cookingMethods
@@ -1075,6 +1153,9 @@ export class TextFoodAnalysisService {
     const servingGrams = this.resolveServingGrams(quantity, {
       standardServingG: DEFAULT_SERVING_GRAMS,
       commonPortions: [],
+      // 关键：把 category 传给 resolveServingGrams，让 categoryServingFallback 走对分支
+      // 否则 composite/grain/protein 等的类别默认份量永远用不上，会回落到 100g
+      category,
     });
     const ratio = servingGrams / 100;
     const profile =
@@ -1129,9 +1210,33 @@ export class TextFoodAnalysisService {
 
   /**
    * 基于关键词推测食物类别
+   *
+   * 顺序敏感：复合主食（盖饭/套餐/炒饭）必须早于单一蛋白和单一谷物匹配，
+   * 否则"猪脚饭"会被 /(猪|牛|羊...)/ 命中归为 protein，导致默认 100g/165kcal
+   * 严重低估真实摄入（一份盖饭通常 350g+）。
    */
   private inferCategoryByKeywords(foodName: string): string {
     const name = foodName.toLowerCase();
+
+    // 米饭/盖饭类复合菜：饭 + 主菜（猪脚饭、黄焖鸡米饭、鱼香肉丝盖饭、卤肉饭、咖喱饭…）
+    // 以及套餐、炒饭、焖饭、烩饭、拌饭、煲仔饭等
+    if (
+      /(盖饭|盖浇饭|盖浇|套餐|炒饭|焖饭|烩饭|拌饭|煲仔饭|卤肉饭|咖喱饭|烧饭|烤饭|手抓饭)/.test(
+        name,
+      ) ||
+      /(.+饭$)/.test(name)
+    ) {
+      return 'composite';
+    }
+
+    // 面食类复合主食（牛肉面、炸酱面、拉面套餐、麻辣烫…）
+    if (
+      /(牛肉面|炸酱面|拉面|担担面|刀削面|过桥米线|麻辣烫|盖浇面|捞面|炒面|烩面|汤面|米线|河粉)/.test(
+        name,
+      )
+    ) {
+      return 'composite';
+    }
 
     if (/(牛奶|酸奶|奶酪|芝士|乳)/.test(name)) return 'dairy';
     if (/(鸡蛋|鸭蛋|鹅蛋|蛋白|蛋黄)/.test(name)) return 'protein';
@@ -1165,7 +1270,9 @@ export class TextFoodAnalysisService {
         summary: parsed.summary,
       };
     } catch {
-      this.logger.warn(`LLM response parse failed: ${content.substring(0, 200)}`);
+      this.logger.warn(
+        `LLM response parse failed: ${content.substring(0, 200)}`,
+      );
       return { foods: [] };
     }
   }
@@ -1176,6 +1283,18 @@ export class TextFoodAnalysisService {
 
   /**
    * ParsedFoodItem → AnalyzedFoodItem（统一输出格式）
+   *
+   * 数据契约：输出的 AnalyzedFoodItem 上所有营养字段均为 per-serving（实际摄入量）。
+   *
+   * food.calories/protein/fat/carbs/fiber/sodium/saturatedFat/addedSugar 等
+   * 在上游（buildFromLibraryMatch、llmParseFoods fallback、buildHeuristicFallbackFood）
+   * 已完成 per-serving 换算，此处直接透传；
+   * 而 lib?.* 优先取值的扩展营养字段（transFat、cholesterol、omega3、omega6、
+   * solubleFiber、vitaminD、potassium、zinc、sugar 等）来自 food_library 的 per-100g 原始值，
+   * 此处需按 ratio = estimatedWeightGrams/100 缩放。
+   *
+   * 不缩放的字段：GI/GL（食物固有属性）、qualityScore/satietyScore/processingLevel
+   * （评分类，与重量无关）、nutrientDensity（密度本身已是单位归一）、fodmapLevel/oxalateLevel/purine（定性）。
    */
   private toAnalyzedFoodItem(food: ParsedFoodItem): AnalyzedFoodItem {
     // 食物库命中时，allergens 优先用库字段（结构化、人工核验）
@@ -1185,8 +1304,28 @@ export class TextFoodAnalysisService {
         ? food.allergens
         : undefined;
 
-    // V4.6: 食物库命中时优先用库值
+    // V4.6: 食物库命中时优先用库值（库值为 per-100g，需按 ratio 缩放）
     const lib = food.libraryMatch;
+    const grams = food.estimatedWeightGrams || food.standardServingG || 100;
+    const ratio = grams / 100;
+
+    /** 缩放可空数值（保留 1 位小数） */
+    const scale1 = (
+      libVal: unknown,
+      foodVal: number | null | undefined,
+    ): number | undefined => {
+      if (libVal != null) return Math.round(Number(libVal) * ratio * 10) / 10;
+      return foodVal ?? undefined;
+    };
+    /** 缩放可空数值（整数） */
+    const scale0 = (
+      libVal: unknown,
+      foodVal: number | null | undefined,
+    ): number | undefined => {
+      if (libVal != null) return Math.round(Number(libVal) * ratio);
+      return foodVal ?? undefined;
+    };
+
     const qualityScore =
       lib?.qualityScore != null
         ? Number(lib.qualityScore)
@@ -1199,8 +1338,7 @@ export class TextFoodAnalysisService {
       lib?.processingLevel != null
         ? Number(lib.processingLevel)
         : (food.processingLevel ?? undefined);
-    const sugar =
-      lib?.sugar != null ? Number(lib.sugar) : (food.sugar ?? undefined);
+    const sugar = scale1(lib?.sugar, food.sugar);
 
     return {
       name: food.name,
@@ -1227,39 +1365,23 @@ export class TextFoodAnalysisService {
       allergens,
       tags: food.tags?.length ? food.tags : undefined,
       glycemicIndex: food.glycemicIndex,
-      // V4.6: 决策辅助字段
+      // V4.6: 决策辅助字段（与重量无关，不缩放）
       qualityScore,
       satietyScore,
       processingLevel,
       sugar,
-      // V4.6: 新增字段（食物库优先，LLM 补位）
+      // V4.6: 库优先字段（库值 per-100g → per-serving 缩放）
       nameEn: food.nameEn ?? undefined,
       standardServingDesc: food.standardServingDesc ?? undefined,
-      transFat:
-        lib?.transFat != null
-          ? Number(lib.transFat)
-          : (food.transFat ?? undefined),
-      cholesterol:
-        lib?.cholesterol != null
-          ? Number(lib.cholesterol)
-          : (food.cholesterol ?? undefined),
-      omega3:
-        lib?.omega3 != null ? Number(lib.omega3) : (food.omega3 ?? undefined),
-      omega6:
-        lib?.omega6 != null ? Number(lib.omega6) : (food.omega6 ?? undefined),
-      solubleFiber:
-        lib?.solubleFiber != null
-          ? Number(lib.solubleFiber)
-          : (food.solubleFiber ?? undefined),
-      vitaminD:
-        lib?.vitaminD != null
-          ? Number(lib.vitaminD)
-          : (food.vitaminD ?? undefined),
-      potassium:
-        lib?.potassium != null
-          ? Number(lib.potassium)
-          : (food.potassium ?? undefined),
-      zinc: lib?.zinc != null ? Number(lib.zinc) : (food.zinc ?? undefined),
+      transFat: scale1(lib?.transFat, food.transFat),
+      cholesterol: scale0(lib?.cholesterol, food.cholesterol),
+      omega3: scale0(lib?.omega3, food.omega3),
+      omega6: scale0(lib?.omega6, food.omega6),
+      solubleFiber: scale1(lib?.solubleFiber, food.solubleFiber),
+      vitaminD: scale1(lib?.vitaminD, food.vitaminD),
+      potassium: scale0(lib?.potassium, food.potassium),
+      zinc: scale1(lib?.zinc, food.zinc),
+      // GL/nutrientDensity 与重量无关，沿用原值
       glycemicLoad:
         lib?.glycemicLoad != null
           ? Number(lib.glycemicLoad)

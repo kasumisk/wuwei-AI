@@ -119,6 +119,10 @@ export class DailySummaryService {
               protein: totalProtein,
               fat: totalFat,
               carbs: totalCarbs,
+              // Bug-Fix: 传入宏量绝对量目标
+              targetProtein: goals.protein,
+              targetCarbs: goals.carbs,
+              targetFat: goals.fat,
               foodQuality: avgQuality || 3,
               satiety: avgSatiety || 3,
               glycemicIndex: avgGI || undefined,
@@ -288,6 +292,10 @@ export class DailySummaryService {
         protein: totalProtein,
         fat: totalFat,
         carbs: totalCarbs,
+        // Bug-Fix: 传入宏量绝对量目标
+        targetProtein: goals.protein,
+        targetCarbs: goals.carbs,
+        targetFat: goals.fat,
         foodQuality: records.length > 0 ? avgQuality || 3 : 0,
         satiety: records.length > 0 ? avgSatiety || 3 : 0,
       },

@@ -1085,6 +1085,15 @@
   "profile": {
     "bodyFatPercent": "Taux de graisse (%)",
     "bodyFatPercentHint": "Utilise la formule Katch-McArdle pour un BMR plus précis",
-    "bodyFatPercentPlaceholder": "ex: 20"
+    "bodyFatPercentPlaceholder": "ex: 20",
+    "language": "Langue",
+    "languageDesc": "Langue d'affichage de l'application",
+    "languageSwitched": "Langue modifiée"
+  },
+  "languages": {
+    "en": "English",
+    "zh": "中文",
+    "ja": "日本語",
+    "fr": "Français"
   }
 }

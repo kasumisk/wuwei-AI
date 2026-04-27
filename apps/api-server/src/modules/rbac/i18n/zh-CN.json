@@ -1,0 +1,39 @@
+{
+  "role": {
+    "notFound": "角色 #{{id}} 不存在",
+    "codeExists": "角色编码 {{code}} 已存在",
+    "parentNotFound": "父角色 #{{id}} 不存在",
+    "maxDepthExceeded": "角色继承层级不能超过3层",
+    "systemRoleNoInheritance": "系统角色不允许修改继承关系",
+    "circularInheritance": "检测到循环继承",
+    "systemRoleNoDelete": "系统角色不允许删除",
+    "deleteChildFirst": "请先删除子角色",
+    "inUseByUsers": "该角色已被 {{count}} 个用户使用，无法删除",
+    "deleteSuccess": "角色删除成功",
+    "assignSuccess": "权限分配成功"
+  },
+  "permission": {
+    "notFound": "权限 #{{id}} 不存在",
+    "codeExists": "权限编码 {{code}} 已存在",
+    "parentNotFound": "父权限 #{{id}} 不存在",
+    "systemPermNoTypeChange": "系统权限不允许修改类型",
+    "circularParent": "检测到循环父级关系",
+    "systemPermNoDelete": "系统权限不允许删除",
+    "deleteChildFirst": "请先删除子权限",
+    "deleteSuccess": "权限删除成功"
+  },
+  "guard": {
+    "loginRequired": "请先登录",
+    "noAccess": "没有访问权限"
+  },
+  "template": {
+    "notFound": "权限模板 #{{id}} 不存在",
+    "codeNotFound": "权限模板 {{code}} 不存在",
+    "codeExists": "模板编码 {{code}} 已存在",
+    "systemTemplateNoModify": "系统模板不允许修改",
+    "systemTemplateNoDelete": "系统模板不允许删除",
+    "deleteSuccess": "权限模板删除成功",
+    "noMatchingPermission": "没有匹配的权限",
+    "applySuccess": "模板应用成功"
+  }
+}

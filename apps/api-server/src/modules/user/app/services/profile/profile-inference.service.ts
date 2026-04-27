@@ -6,6 +6,7 @@ import {
 } from '@prisma/client';
 import { inferUserSegment } from '../segmentation.util';
 import { PrismaService } from '../../../../../core/prisma/prisma.service';
+import { I18nService } from '../../../../../core/i18n';
 
 export interface GoalTransitionSuggestion {
   currentGoal: GoalType;
@@ -19,7 +20,10 @@ export interface GoalTransitionSuggestion {
 export class ProfileInferenceService {
   private readonly logger = new Logger(ProfileInferenceService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly i18n: I18nService,
+  ) {}
 
   /**
    * 获取推断数据
@@ -176,7 +180,7 @@ export class ProfileInferenceService {
       return {
         currentGoal: GoalType.FAT_LOSS,
         suggestedGoal: GoalType.HEALTH,
-        reason: '恭喜！你已达到目标体重，建议切换到"保持健康"模式',
+        reason: this.i18n.t('user.goal.reachedSwitchToMaintain'),
         suggestedCalories: inferred?.estimatedTdee ?? undefined,
       };
     }
@@ -194,7 +198,7 @@ export class ProfileInferenceService {
         currentGoal: profile.goal as GoalType,
         suggestedGoal: profile.goal as GoalType,
         suggestedSpeed: GoalSpeed.RELAXED,
-        reason: '进度有些慢，建议调整到"佛系"节奏，长期坚持更重要',
+        reason: this.i18n.t('user.goal.slowProgressSwitchToRelaxed'),
       };
     }
 
@@ -207,7 +211,7 @@ export class ProfileInferenceService {
       return {
         currentGoal: GoalType.MUSCLE_GAIN,
         suggestedGoal: GoalType.HEALTH,
-        reason: '你已达到目标体重，建议切换到"保持健康"模式来巩固成果',
+        reason: this.i18n.t('user.goal.consolidateWithMaintain'),
         suggestedCalories: inferred?.estimatedTdee ?? undefined,
       };
     }

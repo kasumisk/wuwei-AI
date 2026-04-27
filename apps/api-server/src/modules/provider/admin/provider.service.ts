@@ -4,6 +4,7 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
+import { I18nService } from '../../../core/i18n/i18n.service';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import {
   CreateProviderDto,
@@ -15,7 +16,10 @@ import { ProviderStatus } from '@ai-platform/shared';
 
 @Injectable()
 export class ProviderService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly i18n: I18nService,
+  ) {}
 
   /**
    * 获取提供商列表（分页）
@@ -74,7 +78,9 @@ export class ProviderService {
     });
 
     if (!provider) {
-      throw new NotFoundException(`提供商 #${id} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('provider.provider.notFound', { id }),
+      );
     }
 
     // 隐藏敏感信息
@@ -98,7 +104,10 @@ export class ProviderService {
 
     if (existing) {
       throw new ConflictException(
-        `提供商已存在: ${createProviderDto.name} (${createProviderDto.type})`,
+        this.i18n.t('provider.provider.alreadyExists', {
+          name: createProviderDto.name,
+          type: createProviderDto.type,
+        }),
       );
     }
 
@@ -129,7 +138,9 @@ export class ProviderService {
     });
 
     if (!provider) {
-      throw new NotFoundException(`提供商 #${id} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('provider.provider.notFound', { id }),
+      );
     }
 
     // 合并更新
@@ -155,19 +166,23 @@ export class ProviderService {
     });
 
     if (!provider) {
-      throw new NotFoundException(`提供商 #${id} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('provider.provider.notFound', { id }),
+      );
     }
 
     // 检查是否有关联的模型
     if (provider.modelConfigs && provider.modelConfigs.length > 0) {
       throw new BadRequestException(
-        `无法删除提供商，存在 ${provider.modelConfigs.length} 个关联的模型配置`,
+        this.i18n.t('provider.provider.deleteWithModels', {
+          count: provider.modelConfigs.length,
+        }),
       );
     }
 
     await this.prisma.providers.delete({ where: { id } });
 
-    return { message: '提供商删除成功' };
+    return { message: this.i18n.t('provider.provider.deleteSuccess') };
   }
 
   /**
@@ -179,13 +194,15 @@ export class ProviderService {
     });
 
     if (!provider) {
-      throw new NotFoundException(`提供商 #${testDto.providerId} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('provider.provider.notFound', { id: testDto.providerId }),
+      );
     }
 
     if (!provider.enabled) {
       return {
         success: false,
-        message: '该提供商未启用',
+        message: this.i18n.t('provider.provider.notEnabled'),
       };
     }
 
@@ -210,7 +227,7 @@ export class ProviderService {
 
       return {
         success: true,
-        message: '连接测试成功',
+        message: this.i18n.t('provider.provider.testSuccess'),
         latency,
       };
     } catch (error) {
@@ -225,7 +242,7 @@ export class ProviderService {
 
       return {
         success: false,
-        error: error.message || '连接测试失败',
+        error: error.message || this.i18n.t('provider.provider.testFailed'),
       };
     }
   }
@@ -239,7 +256,9 @@ export class ProviderService {
     });
 
     if (!provider) {
-      throw new NotFoundException(`提供商 #${id} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('provider.provider.notFound', { id }),
+      );
     }
 
     return {

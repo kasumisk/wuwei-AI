@@ -13,6 +13,7 @@ import {
   IsInt,
   Min,
   Max,
+  IsArray,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -38,8 +39,8 @@ export class AnalyzeTextDto {
     maxLength: 500,
   })
   @IsString()
-  @MinLength(1, { message: '文本不能为空' })
-  @MaxLength(500, { message: '文本长度不能超过 500 字' })
+  @MinLength(1, { message: 'food.validation.textRequired' })
+  @MaxLength(500, { message: 'food.validation.textTooLong' })
   text: string;
 
   /** 餐次（可选，用于更精准的建议） */
@@ -59,9 +60,26 @@ export class AnalyzeTextDto {
   locale?: string;
 
   /** V5.2: 上下文覆盖（补录/跨时区场景） */
-  @ApiPropertyOptional({ type: ContextOverrideDto, description: '上下文覆盖参数' })
+  @ApiPropertyOptional({
+    type: ContextOverrideDto,
+    description: '上下文覆盖参数',
+  })
   @IsOptional()
   @ValidateNested()
   @Type(() => ContextOverrideDto)
   contextOverride?: ContextOverrideDto;
+
+  /**
+   * 分析提示（不作为食物词条，仅作为 LLM 推断指导）
+   * 例如 ["每种食物请按常见份量估算", "注明主要做法"]
+   */
+  @ApiPropertyOptional({
+    description: '分析提示（不参与食物拆分，仅用于指导 LLM 估算）',
+    example: ['每种食物请按常见份量估算'],
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  hints?: string[];
 }

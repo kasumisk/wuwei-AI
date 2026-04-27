@@ -1,0 +1,8 @@
+{
+  "ok": "取得しました",
+  "deletedOk": "削除しました",
+  "coachStyleUpdated": "コーチスタイルを更新しました",
+  "serviceNotConfigured": "AI コーチサービスが設定されていません",
+  "conversationNotFound": "会話が見つかりません",
+  "serviceUnavailable": "AI サービスが一時的に利用できません。後ほど再試行してください"
+}

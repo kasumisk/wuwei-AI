@@ -18,6 +18,7 @@ import { AppJwtAuthGuard } from '../../../auth/app/app-jwt-auth.guard';
 import { CurrentAppUser } from '../../../auth/app/current-app-user.decorator';
 import { AppUserPayload } from '../../../auth/app/app-user-payload.type';
 import { ApiResponse } from '../../../../common/types/response.type';
+import { I18n, I18nContext } from '../../../../core/i18n';
 import { UserProfileService } from '../services/profile/user-profile.service';
 import { ProfileInferenceService } from '../services/profile/profile-inference.service';
 import { CollectionTriggerService } from '../services/profile/collection-trigger.service';
@@ -59,9 +60,10 @@ export class UserProfileController {
       | OnboardingStep3Dto
       | OnboardingStep4Dto,
     @CurrentAppUser() user: AppUserPayload,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     if (step < 1 || step > 4) {
-      throw new BadRequestException('Step 必须为 1-4');
+      throw new BadRequestException(i18n.t('user.stepOutOfRange'));
     }
 
     // NestJS ValidationPipe 在 union type 下不会按 step 选择 DTO，
@@ -85,7 +87,9 @@ export class UserProfileController {
       const messages = errors
         .map((e) => Object.values(e.constraints || {}).join(', '))
         .join('; ');
-      throw new BadRequestException(`步骤 ${step} 数据验证失败: ${messages}`);
+      throw new BadRequestException(
+        i18n.t('user.stepValidationFailed', { step, messages }),
+      );
     }
 
     const result = await this.userProfileService.saveOnboardingStep(
@@ -97,7 +101,7 @@ export class UserProfileController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: `步骤 ${step} 保存成功`,
+      message: i18n.t('user.stepSaved', { step }),
       data: result,
     };
   }
@@ -112,9 +116,10 @@ export class UserProfileController {
   async skipOnboardingStep(
     @Param('step', ParseIntPipe) step: number,
     @CurrentAppUser() user: AppUserPayload,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     if (step < 3 || step > 4) {
-      throw new BadRequestException('仅 Step 3 和 Step 4 可跳过');
+      throw new BadRequestException(i18n.t('user.stepNotSkippable'));
     }
 
     const result = await this.userProfileService.skipOnboardingStep(
@@ -125,7 +130,7 @@ export class UserProfileController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: `步骤 ${step} 已跳过`,
+      message: i18n.t('user.stepSkipped', { step }),
       data: result,
     };
   }
@@ -140,12 +145,13 @@ export class UserProfileController {
   @ApiOperation({ summary: '获取完整用户画像（三层聚合）' })
   async getFullProfile(
     @CurrentAppUser() user: AppUserPayload,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const profile = await this.userProfileService.getFullProfile(user.id);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: i18n.t('user.profileFetched'),
       data: profile,
     };
   }
@@ -159,6 +165,7 @@ export class UserProfileController {
   async updateDeclaredProfile(
     @Body() dto: UpdateDeclaredProfileDto,
     @CurrentAppUser() user: AppUserPayload,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const profile = await this.userProfileService.updateDeclaredProfile(
       user.id,
@@ -167,7 +174,7 @@ export class UserProfileController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '更新成功',
+      message: i18n.t('user.profileUpdated'),
       data: profile,
     };
   }
@@ -190,6 +197,7 @@ export class UserProfileController {
     @Body(new ValidationPipe({ transform: true, whitelist: true }))
     dto: UpdateRecommendationPreferencesDto,
     @CurrentAppUser() user: AppUserPayload,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const prefs = await this.userProfileService.updateRecommendationPreferences(
       user.id,
@@ -198,7 +206,7 @@ export class UserProfileController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '推荐偏好更新成功',
+      message: i18n.t('user.preferencesUpdated'),
       data: prefs,
     };
   }
@@ -211,6 +219,7 @@ export class UserProfileController {
   @ApiOperation({ summary: '获取推荐偏好设置' })
   async getRecommendationPreferences(
     @CurrentAppUser() user: AppUserPayload,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const prefs = await this.userProfileService.getRecommendationPreferences(
       user.id,
@@ -218,7 +227,7 @@ export class UserProfileController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: i18n.t('user.profileFetched'),
       data: prefs,
     };
   }
@@ -231,6 +240,7 @@ export class UserProfileController {
   @ApiOperation({ summary: '获取档案补全建议' })
   async getCompletionSuggestions(
     @CurrentAppUser() user: AppUserPayload,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const result = await this.userProfileService.getCompletionSuggestions(
       user.id,
@@ -238,7 +248,7 @@ export class UserProfileController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: i18n.t('user.profileFetched'),
       data: result,
     };
   }
@@ -254,6 +264,7 @@ export class UserProfileController {
   @ApiOperation({ summary: '手动触发推断数据更新' })
   async refreshInference(
     @CurrentAppUser() user: AppUserPayload,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const inferred = await this.profileInferenceService.refreshInference(
       user.id,
@@ -261,7 +272,7 @@ export class UserProfileController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '推断已更新',
+      message: i18n.t('user.inferenceUpdated'),
       data: inferred,
     };
   }
@@ -274,13 +285,14 @@ export class UserProfileController {
   @ApiOperation({ summary: '获取目标迁移建议' })
   async getGoalTransitionSuggestion(
     @CurrentAppUser() user: AppUserPayload,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const suggestion =
       await this.profileInferenceService.getGoalTransitionSuggestion(user.id);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: i18n.t('user.profileFetched'),
       data: suggestion,
     };
   }
@@ -295,13 +307,14 @@ export class UserProfileController {
   @ApiOperation({ summary: '获取字段收集提醒（App 打开时调用）' })
   async getCollectionTriggers(
     @CurrentAppUser() user: AppUserPayload,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const reminders =
       await this.collectionTriggerService.checkCollectionTriggers(user.id);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: i18n.t('user.profileFetched'),
       data: reminders,
     };
   }

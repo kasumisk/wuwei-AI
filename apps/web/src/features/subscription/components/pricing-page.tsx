@@ -23,11 +23,14 @@ import type {
 } from '@/types/subscription';
 
 /** 等级显示信息 — 硬编码 fallback，价格将被 API 覆盖 */
-const TIER_DISPLAY: Record<SubscriptionTier, {
-  name: string;
-  badge?: string;
-  color: string;
-}> = {
+const TIER_DISPLAY: Record<
+  SubscriptionTier,
+  {
+    name: string;
+    badge?: string;
+    color: string;
+  }
+> = {
   free: { name: '免费版', color: 'border-border' },
   pro: { name: 'Pro', badge: '最受欢迎', color: 'border-primary' },
   premium: { name: 'Premium', color: 'border-amber-500' },
@@ -69,7 +72,7 @@ const FEATURE_META: Array<{
 /** 从 entitlements 提取某功能在某 tier 下的展示值 */
 function formatEntitlementValue(
   entitlements: FeatureEntitlements | undefined,
-  meta: (typeof FEATURE_META)[number],
+  meta: (typeof FEATURE_META)[number]
 ): string | boolean {
   if (!entitlements) return false;
   const raw = entitlements[meta.key];
@@ -95,7 +98,7 @@ function formatEntitlementValue(
 
 /** 为每个 tier 选出其"代表性" entitlements（优先月付，回退年付） */
 function pickRepresentativeEntitlements(
-  plans: SubscriptionPlan[],
+  plans: SubscriptionPlan[]
 ): Record<SubscriptionTier, FeatureEntitlements | undefined> {
   const result: Record<SubscriptionTier, FeatureEntitlements | undefined> = {
     free: undefined,
@@ -140,7 +143,8 @@ function buildTierCards(plans: SubscriptionPlan[]) {
     const yearlyPriceCents = yearly?.priceCents ?? 0;
     const yearlyMonthly = yearly ? Math.round(yearlyPriceCents / 12) : monthlyPriceCents;
 
-    const formatPrice = (cents: number) => cents === 0 ? '¥0' : `¥${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 1)}`;
+    const formatPrice = (cents: number) =>
+      cents === 0 ? '¥0' : `¥${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 1)}`;
 
     return {
       tier,
@@ -149,13 +153,13 @@ function buildTierCards(plans: SubscriptionPlan[]) {
       color: display.color,
       monthlyPrice: formatPrice(monthlyPriceCents),
       yearlyPrice: formatPrice(yearlyMonthly),
-      yearlySaving: yearlyPriceCents > 0 && yearlyMonthly < monthlyPriceCents
-        ? `省${Math.round((1 - yearlyMonthly / monthlyPriceCents) * 100)}%`
-        : '',
+      yearlySaving:
+        yearlyPriceCents > 0 && yearlyMonthly < monthlyPriceCents
+          ? `省${Math.round((1 - yearlyMonthly / monthlyPriceCents) * 100)}%`
+          : '',
       priceNoteMonthly: monthlyPriceCents === 0 ? '永久免费' : '/月',
-      priceNoteYearly: yearlyPriceCents === 0
-        ? '永久免费'
-        : `/月 (年付 ${formatPrice(yearlyPriceCents)})`,
+      priceNoteYearly:
+        yearlyPriceCents === 0 ? '永久免费' : `/月 (年付 ${formatPrice(yearlyPriceCents)})`,
       monthlyPlanId: monthly?.id ?? `plan_${tier}`,
       yearlyPlanId: yearly?.id ?? monthly?.id ?? `plan_${tier}`,
       entitlements: monthly?.entitlements ?? yearly?.entitlements,
@@ -178,7 +182,11 @@ export function PricingPage() {
   } | null>(null);
 
   // 从 API 获取计划列表
-  const { data: plans, isLoading: plansLoading, isError: plansError } = useQuery({
+  const {
+    data: plans,
+    isLoading: plansLoading,
+    isError: plansError,
+  } = useQuery({
     queryKey: ['subscription-plans'],
     queryFn: () => subscriptionService.getPlans(),
     staleTime: 30 * 60 * 1000,
@@ -304,177 +312,188 @@ export function PricingPage() {
         )}
 
         {/* 内容 — 仅在计划加载成功后显示 */}
-        {!plansLoading && !plansError && plans && plans.length > 0 && (<>
-
-        {/* 月付/年付切换 */}
-        <div className="flex items-center justify-center gap-3 mb-6">
-          <span
-            className={`text-sm font-medium ${billingCycle === 'monthly' ? 'text-foreground' : 'text-muted-foreground'}`}
-          >
-            月付
-          </span>
-          <button
-            onClick={() => setBillingCycle((c) => (c === 'monthly' ? 'yearly' : 'monthly'))}
-            role="switch"
-            aria-checked={billingCycle === 'yearly'}
-            aria-label="切换月付/年付"
-            className={`relative w-12 h-7  transition-colors ${
-              billingCycle === 'yearly' ? 'bg-primary' : 'bg-muted-foreground/30'
-            }`}
-          >
-            <span
-              className={`absolute top-0.5 left-0.5 w-6 h-6  bg-white shadow transition-transform ${
-                billingCycle === 'yearly' ? 'translate-x-5' : ''
-              }`}
-            />
-          </button>
-          <span
-            className={`text-sm font-medium ${billingCycle === 'yearly' ? 'text-foreground' : 'text-muted-foreground'}`}
-          >
-            年付
-          </span>
-          {billingCycle === 'yearly' && (
-            <span className="text-[10px] font-bold text-green-700 bg-green-100 px-2 py-0.5 ">
-              省20%
-            </span>
-          )}
-        </div>
-
-        {/* 三列卡片 */}
-        <div className="space-y-4 mb-8">
-          {TIERS.map((t) => {
-            const isCurrent = currentTier === t.tier;
-            const isUpgrade =
-              (t.tier === 'pro' && currentTier === 'free') ||
-              (t.tier === 'premium' && currentTier !== 'premium');
-            const isDowngrade =
-              (t.tier === 'free' && currentTier !== 'free') ||
-              (t.tier === 'pro' && currentTier === 'premium');
-
-            const price = billingCycle === 'yearly' ? t.yearlyPrice : t.monthlyPrice;
-            const priceNote = billingCycle === 'yearly' ? t.priceNoteYearly : t.priceNoteMonthly;
-            const planId = billingCycle === 'yearly' ? t.yearlyPlanId : t.monthlyPlanId;
-
-            return (
-              <div
-                key={t.tier}
-                className={`relative  border-2  bg-card rounded-md overflow-hidden transition-all ${
-                  isCurrent ? 'ring-2 ring-primary/30' : ''
-                } ${t.badge ? 'shadow-lg shadow-primary/10' : ''}`}
+        {!plansLoading && !plansError && plans && plans.length > 0 && (
+          <>
+            {/* 月付/年付切换 */}
+            <div className="flex items-center justify-center gap-3 mb-6">
+              <span
+                className={`text-sm font-medium ${billingCycle === 'monthly' ? 'text-foreground' : 'text-muted-foreground'}`}
               >
-                {/* 徽章（最受欢迎 强调） */}
-                {t.badge && (
-                  <div className="absolute top-0 right-0 bg-primary text-primary-foreground text-[10px] font-bold px-3 py-1 rounded-bl-xl">
-                    {t.badge}
-                  </div>
-                )}
+                月付
+              </span>
+              <button
+                onClick={() => setBillingCycle((c) => (c === 'monthly' ? 'yearly' : 'monthly'))}
+                role="switch"
+                aria-checked={billingCycle === 'yearly'}
+                aria-label="切换月付/年付"
+                className={`relative w-12 h-7  transition-colors ${
+                  billingCycle === 'yearly' ? 'bg-primary' : 'bg-muted-foreground/30'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 w-6 h-6  bg-white shadow transition-transform ${
+                    billingCycle === 'yearly' ? 'translate-x-5' : ''
+                  }`}
+                />
+              </button>
+              <span
+                className={`text-sm font-medium ${billingCycle === 'yearly' ? 'text-foreground' : 'text-muted-foreground'}`}
+              >
+                年付
+              </span>
+              {billingCycle === 'yearly' && (
+                <span className="text-[10px] font-bold text-green-700 bg-green-100 px-2 py-0.5 ">
+                  省20%
+                </span>
+              )}
+            </div>
 
-                <div className="p-5">
-                  {/* 标题行 */}
-                  <div className="flex items-baseline gap-2 mb-1">
-                    <h3 className="text-lg font-extrabold">{t.name}</h3>
-                    {isCurrent && (
-                      <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 ">
-                        当前方案
-                      </span>
+            {/* 三列卡片 */}
+            <div className="space-y-4 mb-8">
+              {TIERS.map((t) => {
+                const isCurrent = currentTier === t.tier;
+                const isUpgrade =
+                  (t.tier === 'pro' && currentTier === 'free') ||
+                  (t.tier === 'premium' && currentTier !== 'premium');
+                const isDowngrade =
+                  (t.tier === 'free' && currentTier !== 'free') ||
+                  (t.tier === 'pro' && currentTier === 'premium');
+
+                const price = billingCycle === 'yearly' ? t.yearlyPrice : t.monthlyPrice;
+                const priceNote =
+                  billingCycle === 'yearly' ? t.priceNoteYearly : t.priceNoteMonthly;
+                const planId = billingCycle === 'yearly' ? t.yearlyPlanId : t.monthlyPlanId;
+
+                return (
+                  <div
+                    key={t.tier}
+                    className={`relative  border-2  bg-card rounded-md overflow-hidden transition-all ${
+                      isCurrent ? 'ring-2 ring-primary/30' : ''
+                    } ${t.badge ? 'shadow-lg shadow-primary/10' : ''}`}
+                  >
+                    {/* 徽章（最受欢迎 强调） */}
+                    {t.badge && (
+                      <div className="absolute top-0 right-0 bg-primary text-primary-foreground text-[10px] font-bold px-3 py-1 rounded-bl-xl">
+                        {t.badge}
+                      </div>
                     )}
-                  </div>
 
-                  {/* 价格 */}
-                  <div className="flex items-baseline gap-1 mb-4">
-                    <span className="text-3xl font-extrabold">{price}</span>
-                    <span className="text-sm text-muted-foreground">{priceNote}</span>
-                    {billingCycle === 'yearly' && t.yearlySaving && (
-                      <span className="text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5  ml-1">
-                        {t.yearlySaving}
-                      </span>
-                    )}
-                  </div>
+                    <div className="p-5">
+                      {/* 标题行 */}
+                      <div className="flex items-baseline gap-2 mb-1">
+                        <h3 className="text-lg font-extrabold">{t.name}</h3>
+                        {isCurrent && (
+                          <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 ">
+                            当前方案
+                          </span>
+                        )}
+                      </div>
 
-                  {/* CTA */}
-                  {isCurrent ? (
-                    <div className="w-full py-3  bg-muted text-center text-sm font-bold text-muted-foreground">
-                      当前方案
+                      {/* 价格 */}
+                      <div className="flex items-baseline gap-1 mb-4">
+                        <span className="text-3xl font-extrabold">{price}</span>
+                        <span className="text-sm text-muted-foreground">{priceNote}</span>
+                        {billingCycle === 'yearly' && t.yearlySaving && (
+                          <span className="text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5  ml-1">
+                            {t.yearlySaving}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* CTA */}
+                      {isCurrent ? (
+                        <div className="w-full py-3  bg-muted text-center text-sm font-bold text-muted-foreground">
+                          当前方案
+                        </div>
+                      ) : isUpgrade ? (
+                        <button
+                          onClick={() => handlePurchase(planId, t.tier)}
+                          disabled={!!purchasing}
+                          className="w-full py-3  bg-primary text-primary-foreground font-bold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
+                        >
+                          {purchasing === planId ? (
+                            <>
+                              <span className="animate-spin inline-block w-4 h-4 border-2 border-current border-t-transparent " />
+                              处理中...
+                            </>
+                          ) : (
+                            `升级到 ${t.name}`
+                          )}
+                        </button>
+                      ) : isDowngrade ? (
+                        <button
+                          onClick={() => handlePurchase(planId, t.tier)}
+                          disabled={!!purchasing}
+                          className="w-full py-3  bg-muted text-foreground font-bold text-sm active:scale-[0.98] transition-all disabled:opacity-50"
+                        >
+                          切换到 {t.name}
+                        </button>
+                      ) : null}
                     </div>
-                  ) : isUpgrade ? (
-                    <button
-                      onClick={() => handlePurchase(planId, t.tier)}
-                      disabled={!!purchasing}
-                      className="w-full py-3  bg-primary text-primary-foreground font-bold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
-                    >
-                      {purchasing === planId ? (
-                        <>
-                          <span className="animate-spin inline-block w-4 h-4 border-2 border-current border-t-transparent " />
-                          处理中...
-                        </>
-                      ) : (
-                        `升级到 ${t.name}`
-                      )}
-                    </button>
-                  ) : isDowngrade ? (
-                    <button
-                      onClick={() => handlePurchase(planId, t.tier)}
-                      disabled={!!purchasing}
-                      className="w-full py-3  bg-muted text-foreground font-bold text-sm active:scale-[0.98] transition-all disabled:opacity-50"
-                    >
-                      切换到 {t.name}
-                    </button>
-                  ) : null}
-                </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* 功能对比表（语义化 table） */}
+            <div className="bg-card rounded-md overflow-hidden">
+              <div className="px-4 py-3 border-b border-border/40">
+                <h3 className="text-sm font-bold" id="comparison-heading">
+                  功能对比
+                </h3>
               </div>
-            );
-          })}
-        </div>
 
-        {/* 功能对比表（语义化 table） */}
-        <div className="bg-card rounded-md overflow-hidden">
-          <div className="px-4 py-3 border-b border-border/40">
-            <h3 className="text-sm font-bold" id="comparison-heading">
-              功能对比
-            </h3>
-          </div>
+              <table className="w-full text-xs" aria-labelledby="comparison-heading">
+                <thead>
+                  <tr className="bg-muted/50">
+                    <th scope="col" className="text-left px-4 py-2 font-bold text-muted-foreground">
+                      功能
+                    </th>
+                    <th
+                      scope="col"
+                      className="text-center px-2 py-2 font-bold text-muted-foreground"
+                    >
+                      免费版
+                    </th>
+                    <th
+                      scope="col"
+                      className="text-center px-2 py-2 font-bold text-muted-foreground"
+                    >
+                      Pro
+                    </th>
+                    <th
+                      scope="col"
+                      className="text-center px-2 py-2 font-bold text-muted-foreground"
+                    >
+                      Premium
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {comparisonRows.map((row, i) => (
+                    <tr key={row.label} className={i % 2 === 0 ? '' : 'bg-muted/20'}>
+                      <th scope="row" className="text-left px-4 py-2.5 font-medium">
+                        {row.label}
+                      </th>
+                      <FeatureCell value={row.free} tier="free" currentTier={currentTier} />
+                      <FeatureCell value={row.pro} tier="pro" currentTier={currentTier} />
+                      <FeatureCell value={row.premium} tier="premium" currentTier={currentTier} />
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
-          <table className="w-full text-xs" aria-labelledby="comparison-heading">
-            <thead>
-              <tr className="bg-muted/50">
-                <th scope="col" className="text-left px-4 py-2 font-bold text-muted-foreground">
-                  功能
-                </th>
-                <th scope="col" className="text-center px-2 py-2 font-bold text-muted-foreground">
-                  免费版
-                </th>
-                <th scope="col" className="text-center px-2 py-2 font-bold text-muted-foreground">
-                  Pro
-                </th>
-                <th scope="col" className="text-center px-2 py-2 font-bold text-muted-foreground">
-                  Premium
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {comparisonRows.map((row, i) => (
-                <tr key={row.label} className={i % 2 === 0 ? '' : 'bg-muted/20'}>
-                  <th scope="row" className="text-left px-4 py-2.5 font-medium">
-                    {row.label}
-                  </th>
-                  <FeatureCell value={row.free} tier="free" currentTier={currentTier} />
-                  <FeatureCell value={row.pro} tier="pro" currentTier={currentTier} />
-                  <FeatureCell value={row.premium} tier="premium" currentTier={currentTier} />
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* 模拟模式提示 */}
-        {subscriptionService.isMockMode() && (
-          <div className="mt-6 bg-amber-50 border border-amber-200  px-4 py-3 text-center">
-            <p className="text-xs text-amber-700 font-medium">
-              [DEV] 模拟支付模式 — 所有购买将直接成功，不产生实际扣费
-            </p>
-          </div>
+            {/* 模拟模式提示 */}
+            {subscriptionService.isMockMode() && (
+              <div className="mt-6 bg-amber-50 border border-amber-200  px-4 py-3 text-center">
+                <p className="text-xs text-amber-700 font-medium">
+                  [DEV] 模拟支付模式 — 所有购买将直接成功，不产生实际扣费
+                </p>
+              </div>
+            )}
+          </>
         )}
-        </>)}
       </main>
 
       {/* 降级确认弹窗 */}
@@ -499,18 +518,19 @@ export function PricingPage() {
               后，您将失去以下功能：
             </p>
             <ul className="space-y-1.5 mb-5">
-              {comparisonRows.filter((row) => {
-                const currentVal = row[currentTier];
-                const targetVal = row[downgradeConfirm.targetTier];
-                if (currentVal !== false && targetVal === false) return true;
-                if (
-                  typeof currentVal === 'string' &&
-                  typeof targetVal === 'string' &&
-                  currentVal !== targetVal
-                )
-                  return true;
-                return false;
-              })
+              {comparisonRows
+                .filter((row) => {
+                  const currentVal = row[currentTier];
+                  const targetVal = row[downgradeConfirm.targetTier];
+                  if (currentVal !== false && targetVal === false) return true;
+                  if (
+                    typeof currentVal === 'string' &&
+                    typeof targetVal === 'string' &&
+                    currentVal !== targetVal
+                  )
+                    return true;
+                  return false;
+                })
                 .slice(0, 6)
                 .map((row) => (
                   <li key={row.label} className="flex items-center gap-2 text-sm text-destructive">

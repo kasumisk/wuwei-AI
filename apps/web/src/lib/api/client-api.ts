@@ -2,6 +2,7 @@
 
 import { HttpClient } from './http-client';
 import { env } from '../env';
+import { getClientAcceptLanguage } from '../i18n/accept-language';
 import { useAuthStore } from '@/features/auth/store/auth-store';
 import { useSubscriptionStore } from '@/features/subscription/store/subscription-store';
 import { useDismissStore } from '@/store';
@@ -27,6 +28,9 @@ class ClientAPI extends HttpClient {
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
+
+        // 注入 Accept-Language，server 端 i18n 中间件读取此头决定响应语言
+        config.headers['Accept-Language'] = getClientAcceptLanguage();
 
         // 添加客户端特定的 headers
         config.headers['X-Client-Type'] = 'web';

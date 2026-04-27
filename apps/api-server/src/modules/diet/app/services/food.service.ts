@@ -662,7 +662,7 @@ export class FoodService {
     if (mealCalories <= remainingCalories * 1.05) {
       tags.push({
         type: 'compliance',
-        label: '热量在预算内',
+        label: t('response.tag.withinBudget'),
         dimension: 'calories',
         value: mealCalories,
         target: remainingCalories,
@@ -670,7 +670,7 @@ export class FoodService {
     } else {
       tags.push({
         type: 'warning',
-        label: '热量略超预算',
+        label: t('response.tag.slightlyOverBudget'),
         dimension: 'calories',
         value: mealCalories,
         target: remainingCalories,
@@ -684,7 +684,7 @@ export class FoodService {
     if (proteinRatio >= 0.9) {
       tags.push({
         type: 'achievement',
-        label: '蛋白质充足',
+        label: t('response.tag.proteinAdequate'),
         dimension: 'protein',
         value: Math.round(proteinRatio * 100),
         target: 100,
@@ -700,7 +700,7 @@ export class FoodService {
       if (fatRatio > 1.15) {
         tags.push({
           type: 'warning',
-          label: '脂肪累计偏高',
+          label: t('response.tag.fatHigh'),
           dimension: 'fat',
           value: Math.round(fatRatio * 100),
           target: 100,
@@ -708,7 +708,7 @@ export class FoodService {
       } else {
         tags.push({
           type: 'compliance',
-          label: '脂肪累计进度正常',
+          label: t('response.tag.fatNormal'),
           dimension: 'fat',
           value: Math.round(fatRatio * 100),
           target: 100,
@@ -721,7 +721,7 @@ export class FoodService {
       if (carbsRatio > 1.2) {
         tags.push({
           type: 'warning',
-          label: '碳水累计偏高',
+          label: t('response.tag.carbsHigh'),
           dimension: 'carbs',
           value: Math.round(carbsRatio * 100),
           target: 100,
@@ -729,7 +729,7 @@ export class FoodService {
       } else if (carbsRatio < 0.6) {
         tags.push({
           type: 'warning',
-          label: '碳水累计偏低',
+          label: t('response.tag.carbsLow'),
           dimension: 'carbs',
           value: Math.round(carbsRatio * 100),
           target: 100,
@@ -737,7 +737,7 @@ export class FoodService {
       } else {
         tags.push({
           type: 'compliance',
-          label: '碳水累计进度正常',
+          label: t('response.tag.carbsNormal'),
           dimension: 'carbs',
           value: Math.round(carbsRatio * 100),
           target: 100,
@@ -752,7 +752,7 @@ export class FoodService {
     if (dailyComplianceRate >= 0.7 && dailyComplianceRate <= 1.05) {
       tags.push({
         type: 'bonus',
-        label: '今日热量进度正常',
+        label: t('response.tag.dailyProgressNormal'),
         dimension: 'daily_compliance',
         value: Math.round(dailyComplianceRate * 100),
         target: 100,
@@ -764,13 +764,13 @@ export class FoodService {
     if (goalType === 'fat_loss' && mealCalories < remainingCalories * 0.8) {
       tags.push({
         type: 'bonus',
-        label: '有利于减脂目标',
+        label: t('response.tag.supportsFatLoss'),
         dimension: 'goal',
       });
     } else if (goalType === 'muscle_gain' && mealProtein >= 25) {
       tags.push({
         type: 'achievement',
-        label: '高蛋白餐，助力增肌',
+        label: t('response.tag.highProteinForMuscleGain'),
         dimension: 'goal',
         value: mealProtein,
       });
@@ -795,6 +795,7 @@ export class FoodService {
     userId: string,
     foodName: string,
     mealType: string,
+    locale?: string,
   ): Promise<WhyNotResult> {
     const [summary, profile] = await Promise.all([
       this.getTodaySummary(userId),
@@ -851,6 +852,7 @@ export class FoodService {
       dailyTarget,
       consumed,
       userConstraints,
+      locale,
     );
   }
 

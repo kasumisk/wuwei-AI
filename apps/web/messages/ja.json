@@ -340,11 +340,7 @@
       },
       "error": {
         "title": "⚠️ エラーハンドリング",
-        "items": [
-          "統一エラー型（APIError）",
-          "詳細なエラーメッセージ",
-          "設定可能なエラー通知"
-        ]
+        "items": ["統一エラー型（APIError）", "詳細なエラーメッセージ", "設定可能なエラー通知"]
       },
       "types": {
         "title": "📝 型安全性",
@@ -364,11 +360,7 @@
       },
       "logging": {
         "title": "📊 ログ",
-        "items": [
-          "リクエストログ",
-          "エラーログ",
-          "開発/本番環境の分離"
-        ]
+        "items": ["リクエストログ", "エラーログ", "開発/本番環境の分離"]
       }
     },
     "docs": {
@@ -1085,6 +1077,15 @@
   "profile": {
     "bodyFatPercent": "体脂肪率 (%)",
     "bodyFatPercentHint": "入力するとKatch-McArdle式でより正確なBMRを計算します",
-    "bodyFatPercentPlaceholder": "例: 20"
+    "bodyFatPercentPlaceholder": "例: 20",
+    "language": "言語",
+    "languageDesc": "アプリの表示言語",
+    "languageSwitched": "言語を変更しました"
+  },
+  "languages": {
+    "en": "English",
+    "zh": "中文",
+    "ja": "日本語",
+    "fr": "Français"
   }
 }

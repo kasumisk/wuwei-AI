@@ -188,9 +188,7 @@ export class ConfidenceDiagnosticsService {
       dbCategory: string;
     }> = [];
 
-    const foodsWithLibId = foods.filter(
-      (f) => f.foodLibraryId && f.category,
-    );
+    const foodsWithLibId = foods.filter((f) => f.foodLibraryId && f.category);
     if (foodsWithLibId.length === 0) return mismatches;
 
     const libraryIds = foodsWithLibId.map((f) => f.foodLibraryId!);

@@ -356,19 +356,11 @@
       },
       "files": {
         "title": "📤 File Operations",
-        "items": [
-          "File upload (progress tracking)",
-          "File download",
-          "Multi-file batch upload"
-        ]
+        "items": ["File upload (progress tracking)", "File download", "Multi-file batch upload"]
       },
       "logging": {
         "title": "📊 Logging",
-        "items": [
-          "Request logs",
-          "Error logs",
-          "Dev/production environment separation"
-        ]
+        "items": ["Request logs", "Error logs", "Dev/production environment separation"]
       }
     },
     "docs": {
@@ -1085,6 +1077,15 @@
   "profile": {
     "bodyFatPercent": "Body Fat (%)",
     "bodyFatPercentHint": "With body fat % we use Katch-McArdle formula for more accurate BMR",
-    "bodyFatPercentPlaceholder": "e.g. 20"
+    "bodyFatPercentPlaceholder": "e.g. 20",
+    "language": "Language",
+    "languageDesc": "App display language",
+    "languageSwitched": "Language switched"
+  },
+  "languages": {
+    "en": "English",
+    "zh": "中文",
+    "ja": "日本語",
+    "fr": "Français"
   }
 }

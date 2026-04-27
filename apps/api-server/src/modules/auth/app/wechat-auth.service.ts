@@ -1,5 +1,6 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { I18nService } from '../../../core/i18n';
 
 /**
  * 微信网页扫码登录服务
@@ -37,7 +38,10 @@ export class WechatAuthService {
   private readonly miniAppId: string;
   private readonly miniAppSecret: string;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly i18n: I18nService,
+  ) {
     this.appId =
       this.configService.get<string>('WECHAT_APPID') || 'wx615a34b78f5fb359';
     this.appSecret =
@@ -97,7 +101,7 @@ export class WechatAuthService {
     if (data.errcode) {
       this.logger.error(`微信 access_token 获取失败: ${JSON.stringify(data)}`);
       throw new UnauthorizedException(
-        `微信授权失败: ${data.errmsg || '未知错误'}`,
+        `${this.i18n.t('auth.wechatAuthFailed')}: ${data.errmsg || ''}`.trim(),
       );
     }
 
@@ -126,7 +130,7 @@ export class WechatAuthService {
     if (data.errcode) {
       this.logger.error(`微信用户信息获取失败: ${JSON.stringify(data)}`);
       throw new UnauthorizedException(
-        `微信用户信息获取失败: ${data.errmsg || '未知错误'}`,
+        `${this.i18n.t('auth.wechatLoginFailed')}: ${data.errmsg || ''}`.trim(),
       );
     }
 
@@ -162,7 +166,7 @@ export class WechatAuthService {
    */
   async miniProgramLogin(code: string): Promise<WechatMiniSessionResult> {
     if (!this.miniAppId || !this.miniAppSecret) {
-      throw new UnauthorizedException('微信小程序未配置 appid/secret');
+      throw new UnauthorizedException(this.i18n.t('auth.wechatNotConfigured'));
     }
 
     const url =
@@ -178,7 +182,7 @@ export class WechatAuthService {
     if (data.errcode) {
       this.logger.error(`小程序 code2session 失败: ${JSON.stringify(data)}`);
       throw new UnauthorizedException(
-        `微信小程序登录失败: ${data.errmsg || '未知错误'}`,
+        `${this.i18n.t('auth.wechatLoginFailed')}: ${data.errmsg || ''}`.trim(),
       );
     }
 

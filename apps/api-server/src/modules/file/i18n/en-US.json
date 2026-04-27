@@ -1,0 +1,11 @@
+{
+  "admin": {
+    "uploadSuccess": "File uploaded successfully",
+    "presignedUrlSuccess": "Presigned URL retrieved successfully",
+    "deleteSuccess": "File deleted successfully"
+  },
+  "app": {
+    "uploadSuccess": "Upload successful",
+    "presignedUrlSuccess": "Upload URL retrieved successfully"
+  }
+}

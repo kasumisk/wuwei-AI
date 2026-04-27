@@ -9,9 +9,24 @@ interface KeyMetricsProps {
 export function KeyMetrics({ result }: KeyMetricsProps) {
   const metrics = [
     { label: '热量', value: result.totalCalories, unit: 'kcal', color: 'text-orange-500' },
-    result.totalProtein != null && { label: '蛋白质', value: Math.round(result.totalProtein), unit: 'g', color: 'text-blue-500' },
-    result.totalFat != null && { label: '脂肪', value: Math.round(result.totalFat), unit: 'g', color: 'text-amber-500' },
-    result.totalCarbs != null && { label: '碳水', value: Math.round(result.totalCarbs), unit: 'g', color: 'text-violet-500' },
+    result.totalProtein != null && {
+      label: '蛋白质',
+      value: Math.round(result.totalProtein),
+      unit: 'g',
+      color: 'text-blue-500',
+    },
+    result.totalFat != null && {
+      label: '脂肪',
+      value: Math.round(result.totalFat),
+      unit: 'g',
+      color: 'text-amber-500',
+    },
+    result.totalCarbs != null && {
+      label: '碳水',
+      value: Math.round(result.totalCarbs),
+      unit: 'g',
+      color: 'text-violet-500',
+    },
   ].filter(Boolean) as { label: string; value: number; unit: string; color: string }[];
 
   return (

@@ -35,6 +35,7 @@ import * as crypto from 'crypto';
 import { X509Certificate } from 'crypto';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
 import { SubscriptionService } from '../services/subscription.service';
+import { I18nService } from '../../../../core/i18n/i18n.service';
 import {
   TieredCacheManager,
   TieredCacheNamespace,
@@ -92,6 +93,7 @@ export class AppleIapService implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly eventEmitter: EventEmitter2,
     private readonly cacheManager: TieredCacheManager,
+    private readonly i18n: I18nService,
   ) {
     this.bundleId = this.configService.get<string>('APPLE_BUNDLE_ID', '');
     this.keyId = this.configService.get<string>('APPLE_IAP_KEY_ID', '');
@@ -246,7 +248,9 @@ export class AppleIapService implements OnModuleInit {
     const payload =
       this.verifyAndDecodeJWS<AppleNotificationPayload>(signedPayload);
     if (!payload) {
-      throw new BadRequestException('无效的通知载荷（签名验证失败）');
+      throw new BadRequestException(
+        this.i18n.t('subscription.error.appleNotifyInvalidPayload'),
+      );
     }
 
     // 2. A7 fix → V6.2 3.9: TieredCache 通知去重（替代直接 Redis）

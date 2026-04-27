@@ -9,6 +9,7 @@ import {
   UseGuards,
   HttpStatus,
 } from '@nestjs/common';
+import { I18n, I18nContext } from '../../../core/i18n/i18n.decorator';
 import { JwtAuthGuard } from '../../auth/admin/jwt-auth.guard';
 import { RolesGuard } from '../../rbac/admin/roles.guard';
 import { Roles } from '../../rbac/admin/roles.decorator';
@@ -26,53 +27,42 @@ import { ApiResponse } from '../../../common/types/response.type';
 export class PermissionController {
   constructor(private readonly permissionService: PermissionService) {}
 
-  /**
-   * 获取客户端权限列表
-   * GET /api/admin/clients/:clientId/permissions
-   */
   @Get()
   async findByClient(
     @Param('clientId') clientId: string,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.permissionService.findByClient(clientId);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取客户端权限列表成功',
+      message: i18n.t('client.clientPermission.fetchSuccess'),
       data,
     };
   }
 
-  /**
-   * 添加权限
-   * POST /api/admin/clients/:clientId/permissions
-   */
   @Post()
   async create(
     @Param('clientId') clientId: string,
     @Body() createPermissionDto: CreatePermissionDto,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
-    // 确保 clientId 匹配
     createPermissionDto.clientId = clientId;
-
     const data = await this.permissionService.create(createPermissionDto);
     return {
       success: true,
       code: HttpStatus.CREATED,
-      message: '权限添加成功',
+      message: i18n.t('client.clientPermission.grantSuccess'),
       data,
     };
   }
 
-  /**
-   * 更新权限
-   * PUT /api/admin/clients/:clientId/permissions/:permissionId
-   */
   @Put(':permissionId')
   async update(
     @Param('clientId') clientId: string,
     @Param('permissionId') permissionId: string,
     @Body() updatePermissionDto: UpdatePermissionDto,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.permissionService.update(
       permissionId,
@@ -81,43 +71,37 @@ export class PermissionController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '权限更新成功',
+      message: i18n.t('client.clientPermission.updateSuccess'),
       data,
     };
   }
 
-  /**
-   * 删除权限
-   * DELETE /api/admin/clients/:clientId/permissions/:permissionId
-   */
   @Delete(':permissionId')
   async remove(
     @Param('clientId') clientId: string,
     @Param('permissionId') permissionId: string,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.permissionService.remove(permissionId);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '权限删除成功',
+      message: i18n.t('client.clientPermission.revokeSuccess'),
       data,
     };
   }
 
-  /**
-   * 批量更新权限
-   * POST /api/admin/clients/:clientId/permissions/batch
-   */
   @Post('batch')
   async batchUpdate(
     @Param('clientId') clientId: string,
     @Body() batchDto: BatchUpdatePermissionsDto,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.permissionService.batchUpdate(clientId, batchDto);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '批量更新权限完成',
+      message: i18n.t('client.clientPermission.updateSuccess'),
       data,
     };
   }

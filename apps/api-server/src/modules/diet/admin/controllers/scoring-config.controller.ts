@@ -15,6 +15,7 @@ import { ScoringConfigService } from '../../app/recommendation/context/scoring-c
 import { DailyScoreWeightsConfig } from '../../app/recommendation/context/scoring-config.service';
 import { ScoringConfigSnapshot } from '../../app/recommendation/types/recommendation.types';
 import { ApiResponse } from '../../../../common/types/response.type';
+import { I18nService } from '../../../../core/i18n';
 
 /**
  * V6.7 Phase 1-B: 评分参数中心化管理 — Admin 端点
@@ -28,7 +29,10 @@ import { ApiResponse } from '../../../../common/types/response.type';
 @Roles('admin', 'super_admin')
 @ApiBearerAuth()
 export class ScoringConfigController {
-  constructor(private readonly scoringConfigService: ScoringConfigService) {}
+  constructor(
+    private readonly scoringConfigService: ScoringConfigService,
+    private readonly i18n: I18nService,
+  ) {}
 
   @Get()
   @ApiOperation({
@@ -41,7 +45,7 @@ export class ScoringConfigController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取评分配置成功',
+      message: this.i18n.t('diet.scoringConfigOk'),
       data: {
         config,
         defaults: this.scoringConfigService.getDefaults(),
@@ -62,7 +66,7 @@ export class ScoringConfigController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '评分配置更新成功',
+      message: this.i18n.t('diet.scoringConfigUpdated'),
       data: config,
     };
   }
@@ -81,7 +85,9 @@ export class ScoringConfigController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: config ? '获取每日评分权重成功' : '未配置，使用默认权重',
+      message: config
+        ? this.i18n.t('diet.dailyWeightsOk')
+        : this.i18n.t('diet.dailyWeightsUsingDefault'),
       data: {
         current: config,
         defaults,
@@ -101,7 +107,7 @@ export class ScoringConfigController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取默认权重成功',
+      message: this.i18n.t('diet.defaultWeightsOk'),
       data: defaults,
     };
   }
@@ -121,7 +127,7 @@ export class ScoringConfigController {
       throw new BadRequestException({
         success: false,
         code: HttpStatus.BAD_REQUEST,
-        message: '权重配置验证失败',
+        message: this.i18n.t('diet.weightValidationFailed'),
         data: { errors },
       });
     }
@@ -131,7 +137,7 @@ export class ScoringConfigController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '每日评分权重更新成功',
+      message: this.i18n.t('diet.dailyWeightsUpdated'),
       data: config,
     };
   }

@@ -8,23 +8,23 @@
 
 ### 1.1 Text / Image 分析 Prompt 各自独立（Critical）
 
-| 维度 | Text 链路 | Image 链路 | 影响 |
-|------|-----------|-----------|------|
+| 维度            | Text 链路                                       | Image 链路                                                               | 影响                                                              |
+| --------------- | ----------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------- |
 | **Prompt 构建** | `buildBasePrompt('text') + buildContextBlock()` | `buildGoalAwarePrompt()` + tonePrompt + behaviorContext + precisionBlock | 两条链路注入的上下文完全不同，text 缺少 persona tone 和行为上下文 |
-| **模型** | `deepseek-chat-v3` (text) | `ernie-4.5-vl-28b` (vision) | 合理，但 prompt 结构差异不应因模型而异 |
-| **库匹配** | 先库匹配 → LLM fallback → 再 re-match | 无库匹配，纯 AI 输出 | image 链路的营养数据无校准源 |
-| **评分路径** | `calculateScore()` — per-food granularity | `calculateImageScore()` — aggregated totals only | 图片链路失去 per-food 质量/饱腹评分精度 |
-| **结果格式** | 直接 AnalyzedFoodItem[] → pipeline | legacy AnalysisResult → legacyFoodsToAnalyzed() → pipeline | image 有额外转换层 |
+| **模型**        | `deepseek-chat-v3` (text)                       | `ernie-4.5-vl-28b` (vision)                                              | 合理，但 prompt 结构差异不应因模型而异                            |
+| **库匹配**      | 先库匹配 → LLM fallback → 再 re-match           | 无库匹配，纯 AI 输出                                                     | image 链路的营养数据无校准源                                      |
+| **评分路径**    | `calculateScore()` — per-food granularity       | `calculateImageScore()` — aggregated totals only                         | 图片链路失去 per-food 质量/饱腹评分精度                           |
+| **结果格式**    | 直接 AnalyzedFoodItem[] → pipeline              | legacy AnalysisResult → legacyFoodsToAnalyzed() → pipeline               | image 有额外转换层                                                |
 
 ### 1.2 Prompt 字段与食物库 / 食物富化 Pipeline 不完全对齐
 
-| Prompt 已有 | 食物库有但 Prompt 未要求 | 影响 |
-|------------|------------------------|------|
-| ~40 字段 | `foodForm` (ingredient/dish/semi_prepared) | 无法区分原料 vs 菜品，scoring 中 dish 拆解逻辑缺失 |
-| | `commonPortions` (JSON: [{name, grams}]) | LLM 只返回单一 `standardServingG`，缺少多份量规格 |
-| | `dishPriority` (0-100) | 推荐引擎依赖此字段，分析链路未产出 |
-| | `flavorProfile` (JSON: {sweet, salty, ...}) | coach 个性化建议缺少口味偏好依据 |
-| | `compatibility` (JSON: {good:[], avoid:[]}) | 替代建议缺少搭配/冲突信息 |
+| Prompt 已有 | 食物库有但 Prompt 未要求                    | 影响                                               |
+| ----------- | ------------------------------------------- | -------------------------------------------------- |
+| ~40 字段    | `foodForm` (ingredient/dish/semi_prepared)  | 无法区分原料 vs 菜品，scoring 中 dish 拆解逻辑缺失 |
+|             | `commonPortions` (JSON: [{name, grams}])    | LLM 只返回单一 `standardServingG`，缺少多份量规格  |
+|             | `dishPriority` (0-100)                      | 推荐引擎依赖此字段，分析链路未产出                 |
+|             | `flavorProfile` (JSON: {sweet, salty, ...}) | coach 个性化建议缺少口味偏好依据                   |
+|             | `compatibility` (JSON: {good:[], avoid:[]}) | 替代建议缺少搭配/冲突信息                          |
 
 ### 1.3 评分系统 Text/Image 双路径冗余
 
@@ -33,6 +33,7 @@
 ### 1.4 决策系统与分析系统耦合
 
 `AnalysisPipelineService` 同时编排分析和决策，809 行文件包含：
+
 - 营养汇总（分析）
 - 评分（分析/评分边界）
 - 决策判断（决策）
@@ -44,6 +45,7 @@
 ### 1.5 替代建议硬编码阈值
 
 `AlternativeSuggestionService` 中：
+
 - 静态规则 `CATEGORY_ALTERNATIVE_RULES` + `GOAL_ALTERNATIVE_RULES` 作为 fallback
 - 约束提取阈值硬编码（如 late-night hour=21, calorie floor=200）
 - 推荐引擎可用时仍有大量 fallback 逻辑分支
@@ -136,6 +138,7 @@
 ```
 
 **变更**：
+
 - `SYSTEM_ROLE` 合并为单一角色（不区分 text/image），mode 差异仅在 user message
 - `buildBasePrompt()` 移除 mode 参数，返回统一 base prompt
 - Image 链路的 persona tone 和 behavior context 统一为 `buildEnrichedContextBlock()`，text 链路同样可用
@@ -164,6 +167,7 @@
 ```
 
 **ESTIMATION_RULES 新增指引**：
+
 - `foodForm`：单一食材（raw/cooked）= `ingredient`，包含多种食材的成品 = `dish`，工厂预制 = `semi_prepared`
 - `commonPortions`：列出 1-3 个最常见份量规格（碗/盘/个/片等），每个包含 name 和 grams
 - `dishPriority`：日常主食（米饭/面条）和经典菜品（番茄炒蛋）= 80-100，常见但非主食 = 40-70，罕见/特殊 = 0-30
@@ -171,12 +175,14 @@
 ### 3.3 统一评分路径
 
 **Before (V4.9)**:
+
 ```
 Text  → ScoringFoodItem[]  → calculateScore()      → AnalysisScore
 Image → ImageScoringInput   → calculateImageScore() → {score, breakdown}
 ```
 
 **After (V5.0)**:
+
 ```
 Text  → ScoringFoodItem[] ─┐
                             ├→ calculateScore() → AnalysisScore
@@ -191,6 +197,7 @@ Image 链路的食物列表通过 `toScoringFoodItems()` 转换为 `ScoringFoodI
 **Before (V4.9)**: `AnalysisPipelineService` 包含 `runAnalyze()` + `runDecide()` + `runCoaching()` 全部逻辑 (809 行)
 
 **After (V5.0)**:
+
 ```
 AnalysisPipelineService (编排器，~200 行)
   ├── ScoringStageService.run()     ← 新文件：decision/score/scoring-stage.service.ts
@@ -199,6 +206,7 @@ AnalysisPipelineService (编排器，~200 行)
 ```
 
 每个 Stage Service 封装完整的阶段逻辑，Pipeline 只负责：
+
 1. 调用三个 stage
 2. 组装最终结果
 3. 持久化 + 事件发射
@@ -206,11 +214,13 @@ AnalysisPipelineService (编排器，~200 行)
 ### 3.5 Image 链路消除 Legacy 转换
 
 **Before (V4.9)**:
+
 ```
 Vision AI → JSON → AnalysisResult (legacy) → legacyFoodsToAnalyzed() → AnalyzedFoodItem[]
 ```
 
 **After (V5.0)**:
+
 ```
 Vision AI → JSON → AnalyzedFoodItem[] (直接映射)
 ```
@@ -220,6 +230,7 @@ Vision AI → JSON → AnalyzedFoodItem[] (直接映射)
 ### 3.6 Coach i18n 统一
 
 **Before (V4.9)**:
+
 ```
 coach-i18n.ts (858 lines, standalone translations)
   ci('coach.headline.balanced', 'zh-CN')
@@ -233,6 +244,7 @@ decision-labels.ts
 ```
 
 **After (V5.0)**:
+
 ```
 labels-zh.ts / labels-en.ts / labels-ja.ts
   新增 coach.* 命名空间
@@ -254,9 +266,9 @@ interface ConflictExplanation {
   message: string;
   /** 冲突数据佐证 */
   evidence: {
-    current: number;   // 当前值/分数
+    current: number; // 当前值/分数
     threshold: number; // 阈值
-    unit?: string;     // 单位
+    unit?: string; // 单位
   };
   /** 改善建议 */
   suggestion?: string;
@@ -264,6 +276,7 @@ interface ConflictExplanation {
 ```
 
 Coach 根据 `StructuredDecision` 的 4 维度分数生成冲突解释：
+
 - `nutritionAlignment < 40` → 营养偏离冲突
 - `macroBalance < 40` → 宏量失衡冲突
 - `healthConstraint < 40` → 健康条件冲突
@@ -328,36 +341,36 @@ Coach 根据 `StructuredDecision` 的 4 维度分数生成冲突解释：
 
 ### Phase 1：统一 Prompt + 合并评分 + 解耦分析（6 个目标）
 
-| 编号 | 文件 | 改动 |
-|------|------|------|
-| P1.1 | `analysis-prompt-schema.ts` | `FOOD_JSON_SCHEMA` 三语新增 `foodForm`、`commonPortions`、`dishPriority` 字段；`ESTIMATION_RULES` 三语新增这三个字段的估算指引 |
-| P1.2 | `analysis-prompt-schema.ts` | `SYSTEM_ROLE` 合并为统一角色（移除 text/image 分支）；`buildBasePrompt()` 移除 mode 参数；新增 `buildUserContextPrompt()` 合并 context + precision block；`buildContextBlock()` 和 `buildPrecisionBlock()` 标记 @deprecated；更新 text-food-analysis.service.ts 和 image-food-analysis.service.ts 的调用 |
-| P1.3 | `image-food-analysis.service.ts` | 移除 legacy `AnalysisResult` 类型和 `legacyFoodsToAnalyzed()` 转换，JSON 解析直接映射到 `AnalyzedFoodItem[]`；调用统一 prompt 函数 |
-| P1.4 | `food-scoring.service.ts` + `analysis-pipeline.service.ts` | 新增 `toScoringFoodItems()` 通用转换；image 链路改用 `calculateScore()` 路径；`calculateImageScore()` 标记 @deprecated 或移除 |
-| P1.5 | 新文件 `decision/score/scoring-stage.service.ts` | 从 `AnalysisPipelineService.computeScore()` 提取：封装评分入口 + toScoringFoodItems 转换 + fallback；Pipeline 的 `runAnalyze()` 调用 `ScoringStageService.run()` |
-| P1.6 | — | tsc 0 errors |
+| 编号 | 文件                                                       | 改动                                                                                                                                                                                                                                                                                                     |
+| ---- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1.1 | `analysis-prompt-schema.ts`                                | `FOOD_JSON_SCHEMA` 三语新增 `foodForm`、`commonPortions`、`dishPriority` 字段；`ESTIMATION_RULES` 三语新增这三个字段的估算指引                                                                                                                                                                           |
+| P1.2 | `analysis-prompt-schema.ts`                                | `SYSTEM_ROLE` 合并为统一角色（移除 text/image 分支）；`buildBasePrompt()` 移除 mode 参数；新增 `buildUserContextPrompt()` 合并 context + precision block；`buildContextBlock()` 和 `buildPrecisionBlock()` 标记 @deprecated；更新 text-food-analysis.service.ts 和 image-food-analysis.service.ts 的调用 |
+| P1.3 | `image-food-analysis.service.ts`                           | 移除 legacy `AnalysisResult` 类型和 `legacyFoodsToAnalyzed()` 转换，JSON 解析直接映射到 `AnalyzedFoodItem[]`；调用统一 prompt 函数                                                                                                                                                                       |
+| P1.4 | `food-scoring.service.ts` + `analysis-pipeline.service.ts` | 新增 `toScoringFoodItems()` 通用转换；image 链路改用 `calculateScore()` 路径；`calculateImageScore()` 标记 @deprecated 或移除                                                                                                                                                                            |
+| P1.5 | 新文件 `decision/score/scoring-stage.service.ts`           | 从 `AnalysisPipelineService.computeScore()` 提取：封装评分入口 + toScoringFoodItems 转换 + fallback；Pipeline 的 `runAnalyze()` 调用 `ScoringStageService.run()`                                                                                                                                         |
+| P1.6 | —                                                          | tsc 0 errors                                                                                                                                                                                                                                                                                             |
 
 ### Phase 2：替代建议增强 + 决策解耦 + Image 库匹配（6 个目标）
 
-| 编号 | 文件 | 改动 |
-|------|------|------|
-| P2.1 | `alternative-suggestion.service.ts` | 引擎调用时传入匹配到的 `foodForm` 和 `flavorProfile`；引擎路径权重提升（优先级 1），substitution 路径权重降低（优先级 2），静态规则仅作 fallback（优先级 3） |
-| P2.2 | `decision-thresholds.ts` + `alternative-suggestion.service.ts` | 将 late-night hour (21)、calorie floor (200)、rank weight ratios、engine/substitution/static 优先级阈值提取到 `decision-thresholds.ts` 统一管理 |
-| P2.3 | 新文件 `decision/decision/decision-stage.service.ts` | 从 `AnalysisPipelineService.runDecide()` 提取：封装完整决策阶段逻辑（decision + structuredDecision + summary）；包含 `toDecisionFoodItems()` 转换和 fallback |
-| P2.4 | 新文件 `decision/coach/coaching-stage.service.ts` | 从 `AnalysisPipelineService.runCoaching()` 提取：封装完整 coaching 阶段逻辑（诊断 + 恢复 + 证据包 + shouldEat + 准确度） |
-| P2.5 | `image-food-analysis.service.ts` + `analysis-ingestion.service.ts` | Image 分析结果的 `nameEn` 用于 post-analysis 库匹配，补充 `foodLibraryId` 和营养校准。复用 `AnalysisIngestionService` 的匹配逻辑 |
-| P2.6 | — | tsc 0 errors |
+| 编号 | 文件                                                               | 改动                                                                                                                                                         |
+| ---- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| P2.1 | `alternative-suggestion.service.ts`                                | 引擎调用时传入匹配到的 `foodForm` 和 `flavorProfile`；引擎路径权重提升（优先级 1），substitution 路径权重降低（优先级 2），静态规则仅作 fallback（优先级 3） |
+| P2.2 | `decision-thresholds.ts` + `alternative-suggestion.service.ts`     | 将 late-night hour (21)、calorie floor (200)、rank weight ratios、engine/substitution/static 优先级阈值提取到 `decision-thresholds.ts` 统一管理              |
+| P2.3 | 新文件 `decision/decision/decision-stage.service.ts`               | 从 `AnalysisPipelineService.runDecide()` 提取：封装完整决策阶段逻辑（decision + structuredDecision + summary）；包含 `toDecisionFoodItems()` 转换和 fallback |
+| P2.4 | 新文件 `decision/coach/coaching-stage.service.ts`                  | 从 `AnalysisPipelineService.runCoaching()` 提取：封装完整 coaching 阶段逻辑（诊断 + 恢复 + 证据包 + shouldEat + 准确度）                                     |
+| P2.5 | `image-food-analysis.service.ts` + `analysis-ingestion.service.ts` | Image 分析结果的 `nameEn` 用于 post-analysis 库匹配，补充 `foodLibraryId` 和营养校准。复用 `AnalysisIngestionService` 的匹配逻辑                             |
+| P2.6 | —                                                                  | tsc 0 errors                                                                                                                                                 |
 
 ### Phase 3：Coach 增强 + i18n 统一 + 个性化（6 个目标）
 
-| 编号 | 文件 | 改动 |
-|------|------|------|
-| P3.1 | `decision-coach.service.ts` | 新增 `buildConflictExplanations()` 方法：从 `StructuredDecision` 4 维度分数生成 `ConflictExplanation[]`，阈值 <40 触发冲突；输出附加到 `CoachingExplanation.conflictExplanations` |
-| P3.2 | `coach-i18n.ts` + `labels-zh.ts` + `labels-en.ts` + `labels-ja.ts` | coach-i18n.ts 中 `COACH_TRANSLATIONS` 迁移到 labels-*.ts（`coach.*` 命名空间）；`ci()` 函数改为 `cl('coach.' + key, locale)` + 变量替换的 thin wrapper；coach-i18n.ts 缩减到 ~100 行 |
-| P3.3 | `decision-coach.service.ts` | `buildEducationPoints()` 改为基于 `DietIssue[]` 动态生成：issue.category 映射到教育主题，issue.severity 决定深度。教育内容翻译 key 存储在 labels-*.ts 的 `coach.education.*` 命名空间 |
-| P3.4 | `prompt-labels.ts` | 新增 `COACH_PROMPT_TEMPLATES` 三语 coach 对话模板（headline / guidance / close 模板），供 `decision-coach.service.ts` 使用 |
-| P3.5 | `decision-coach.service.ts` | 当食物有 `foodLibraryId` 且库中有 `flavorProfile` / `compatibility` 时：替代建议添加"口味相似"标注；搭配建议引用 `compatibility.good[]`；冲突提示引用 `compatibility.avoid[]` |
-| P3.6 | — | tsc 0 errors |
+| 编号 | 文件                                                               | 改动                                                                                                                                                                                  |
+| ---- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P3.1 | `decision-coach.service.ts`                                        | 新增 `buildConflictExplanations()` 方法：从 `StructuredDecision` 4 维度分数生成 `ConflictExplanation[]`，阈值 <40 触发冲突；输出附加到 `CoachingExplanation.conflictExplanations`     |
+| P3.2 | `coach-i18n.ts` + `labels-zh.ts` + `labels-en.ts` + `labels-ja.ts` | coach-i18n.ts 中 `COACH_TRANSLATIONS` 迁移到 labels-_.ts（`coach._` 命名空间）；`ci()`函数改为`cl('coach.' + key, locale)` + 变量替换的 thin wrapper；coach-i18n.ts 缩减到 ~100 行    |
+| P3.3 | `decision-coach.service.ts`                                        | `buildEducationPoints()` 改为基于 `DietIssue[]` 动态生成：issue.category 映射到教育主题，issue.severity 决定深度。教育内容翻译 key 存储在 labels-_.ts 的 `coach.education._` 命名空间 |
+| P3.4 | `prompt-labels.ts`                                                 | 新增 `COACH_PROMPT_TEMPLATES` 三语 coach 对话模板（headline / guidance / close 模板），供 `decision-coach.service.ts` 使用                                                            |
+| P3.5 | `decision-coach.service.ts`                                        | 当食物有 `foodLibraryId` 且库中有 `flavorProfile` / `compatibility` 时：替代建议添加"口味相似"标注；搭配建议引用 `compatibility.good[]`；冲突提示引用 `compatibility.avoid[]`         |
+| P3.6 | —                                                                  | tsc 0 errors                                                                                                                                                                          |
 
 ---
 
@@ -368,6 +381,7 @@ Coach 根据 `StructuredDecision` 的 4 维度分数生成冲突解释：
 **风险**：`foodForm`、`commonPortions`、`dishPriority` 增加 ~50 tokens/food 的输出。
 
 **缓解**：
+
 - 这三个字段信息量高，对推荐和教练有直接价值
 - `commonPortions` 限制最多 3 个规格
 - `dishPriority` 为单个数字，overhead 极小
@@ -377,6 +391,7 @@ Coach 根据 `StructuredDecision` 的 4 维度分数生成冲突解释：
 **风险**：Image 链路从 `calculateImageScore()` 切换到 `calculateScore()` 后，per-food 粒度可能因 image AI 的 quality/satiety 估算不够准确而产生偏差。
 
 **缓解**：
+
 - Image 链路的 `confidence` 本身反映 AI 不确定性，低 confidence 食物在评分中已有衰减机制
 - `calculateScore()` 的 confidence-weighted 聚合比 `calculateImageScore()` 的 flat aggregation 更合理
 - V5.0 P2.5 的 Image 库匹配增强会补充更准确的 quality/satiety 数据
@@ -386,6 +401,7 @@ Coach 根据 `StructuredDecision` 的 4 维度分数生成冲突解释：
 **风险**：858 行 coach-i18n.ts 中可能有 key 迁移遗漏。
 
 **缓解**：
+
 - 迁移后跑 tsc + 单元测试确保所有 key 可解析
 - `ci()` 函数保留作为 thin wrapper，调用端不需要改动
 - 分批迁移：先迁移高频 key（headline/summary/guidance），再迁移低频 key（education/behavior）
@@ -395,6 +411,7 @@ Coach 根据 `StructuredDecision` 的 4 维度分数生成冲突解释：
 **风险**：新增 ScoringStageService / DecisionStageService / CoachingStageService 可能引入新的循环依赖。
 
 **缓解**：
+
 - 三个 Stage Service 只依赖已有的 leaf services（FoodScoringService, FoodDecisionService, etc.），不依赖 Pipeline
 - Pipeline 只依赖三个 Stage Service，不反向依赖
 - 如有 DI 问题，使用 `forwardRef()` 解决（现有模式）
@@ -404,6 +421,7 @@ Coach 根据 `StructuredDecision` 的 4 维度分数生成冲突解释：
 **风险**：Image 分析后增加库匹配步骤，增加约 50-200ms 延迟。
 
 **缓解**：
+
 - 库匹配使用已有的 `FoodLibraryService`，有 Redis 缓存
 - 匹配是 fire-and-forget 或 parallel 执行，不阻塞主返回路径
 - 仅在 `nameEn` 存在时触发匹配
@@ -434,10 +452,10 @@ Coach 根据 `StructuredDecision` 的 4 维度分数生成冲突解释：
 
 ## 九、新增文件清单
 
-| 文件 | 模块 | 职责 |
-|------|------|------|
-| `decision/score/scoring-stage.service.ts` | decision | 评分阶段封装（P1.5） |
-| `decision/decision/decision-stage.service.ts` | decision | 决策阶段封装（P2.3） |
-| `decision/coach/coaching-stage.service.ts` | decision | Coaching 阶段封装（P2.4） |
+| 文件                                          | 模块     | 职责                      |
+| --------------------------------------------- | -------- | ------------------------- |
+| `decision/score/scoring-stage.service.ts`     | decision | 评分阶段封装（P1.5）      |
+| `decision/decision/decision-stage.service.ts` | decision | 决策阶段封装（P2.3）      |
+| `decision/coach/coaching-stage.service.ts`    | decision | Coaching 阶段封装（P2.4） |
 
 所有新文件在现有 decision 模块内，不引入新模块。

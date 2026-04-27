@@ -13,6 +13,7 @@
  */
 
 import { Injectable } from '@nestjs/common';
+import { ClsServiceManager } from 'nestjs-cls';
 import { UnifiedUserContext } from '../types/analysis-result.types';
 import { ci, CoachLocale } from './coach-i18n';
 
@@ -24,6 +25,23 @@ const LOCALE_TO_COACH: Record<SummaryLocale, CoachLocale> = {
   'ja-JP': 'ja',
 };
 
+function resolveSummaryLocale(locale?: SummaryLocale): SummaryLocale {
+  if (locale === 'en-US' || locale === 'zh-CN' || locale === 'ja-JP') {
+    return locale;
+  }
+
+  try {
+    const raw = ClsServiceManager.getClsService()?.get('locale');
+    if (raw === 'en-US' || raw === 'zh-CN' || raw === 'ja-JP') {
+      return raw;
+    }
+  } catch {
+    // Ignore missing CLS context and fallback below.
+  }
+
+  return 'zh-CN';
+}
+
 @Injectable()
 export class DailyMacroSummaryService {
   /**
@@ -32,7 +50,7 @@ export class DailyMacroSummaryService {
    */
   buildSummaryText(
     ctx: UnifiedUserContext,
-    locale: SummaryLocale = 'zh-CN',
+    locale?: SummaryLocale,
   ): string {
     const cal = Math.round(ctx.todayCalories);
     const goalCal = Math.round(ctx.goalCalories);
@@ -42,7 +60,7 @@ export class DailyMacroSummaryService {
     const fatDiff = Math.round(ctx.remainingFat);
     const carbDiff = Math.round(ctx.remainingCarbs);
 
-    const lang = LOCALE_TO_COACH[locale] ?? 'zh';
+    const lang = LOCALE_TO_COACH[resolveSummaryLocale(locale)] ?? 'zh';
 
     const calPart =
       remCal >= 0

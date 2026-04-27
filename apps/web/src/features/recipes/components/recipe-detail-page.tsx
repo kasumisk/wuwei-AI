@@ -308,10 +308,7 @@ export function RecipeDetailPage({ recipeId }: { recipeId: string }) {
                       <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                     </svg>
                     <div className="flex-1 bg-muted  h-1.5 overflow-hidden">
-                      <div
-                        className="h-full bg-amber-400 "
-                        style={{ width: `${pct}%` }}
-                      />
+                      <div className="h-full bg-amber-400 " style={{ width: `${pct}%` }} />
                     </div>
                     <span className="w-8 text-right text-muted-foreground">{pct}%</span>
                   </div>

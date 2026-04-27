@@ -89,7 +89,8 @@ export class FoodFilterService {
       // 导致脂肪偏差 +45%（三文鱼/奶酪/坚果无过滤路径）。
       // 策略：单份食物脂肪不得 > 本餐脂肪总上限的 80%（留 20% 给其他 role）
       if (constraint.maxMealFat != null && constraint.maxMealFat > 0) {
-        const servingFat = ((Number(food.fat) || 0) * food.standardServingG) / 100;
+        const servingFat =
+          ((Number(food.fat) || 0) * food.standardServingG) / 100;
         if (servingFat > constraint.maxMealFat * 0.8) return false;
       }
       if (constraint.maxMealCarbs != null && constraint.maxMealCarbs > 0) {

@@ -1417,8 +1417,7 @@ export class PipelineBuilderService implements OnModuleInit {
           )
           // 卡路里等效：替代食物的热量不能少于被换食物的 70%，避免整餐变稀
           .filter(
-            (c) =>
-              worstCal <= 0 || (c.servingCalories || 0) >= worstCal * 0.7,
+            (c) => worstCal <= 0 || (c.servingCalories || 0) >= worstCal * 0.7,
           )
           .filter(
             (c) =>
@@ -1432,9 +1431,7 @@ export class PipelineBuilderService implements OnModuleInit {
               maxCarbsBudget <= 0 ||
               restCarbs + (c.servingCarbs || 0) <= maxCarbsBudget,
           )
-          .sort(
-            (a, b) => (b.servingProtein || 0) - (a.servingProtein || 0),
-          )[0];
+          .sort((a, b) => (b.servingProtein || 0) - (a.servingProtein || 0))[0];
         if (!alt) break;
         this.logger.debug(
           `[P-β proteinFloor] cumP=${cumProtein.toFixed(1)}/${proteinFloor.toFixed(1)} ` +
@@ -1444,10 +1441,7 @@ export class PipelineBuilderService implements OnModuleInit {
         usedNames.delete(worst.food.name);
         usedNames.add(alt.food.name);
         picks[worstIdx] = alt;
-        cumProtein = picks.reduce(
-          (s, p) => s + (p.servingProtein || 0),
-          0,
-        );
+        cumProtein = picks.reduce((s, p) => s + (p.servingProtein || 0), 0);
       }
 
       // P-ε 阶段 2：swap 耗尽仍不达标 → 仅当 kcal 仍有明显空间（< target × 0.95）时 ADD 高蛋白补充项。

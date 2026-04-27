@@ -26,9 +26,7 @@ export function EmptyState({
   return (
     <div className="flex flex-col items-center justify-center py-16 gap-4">
       {icon ? (
-        <div className="w-16 h-16  bg-muted flex items-center justify-center">
-          {icon}
-        </div>
+        <div className="w-16 h-16  bg-muted flex items-center justify-center">{icon}</div>
       ) : (
         <div className="w-16 h-16  bg-muted flex items-center justify-center">
           <svg

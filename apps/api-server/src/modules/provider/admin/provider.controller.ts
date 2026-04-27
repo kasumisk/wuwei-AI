@@ -15,6 +15,7 @@ import {
   ApiOperation,
   ApiResponse as SwaggerResponse,
 } from '@nestjs/swagger';
+import { I18n, I18nContext } from '../../../core/i18n/i18n.decorator';
 import { JwtAuthGuard } from '../../auth/admin/jwt-auth.guard';
 import { RolesGuard } from '../../rbac/admin/roles.guard';
 import { Roles } from '../../rbac/admin/roles.decorator';
@@ -45,12 +46,15 @@ export class ProviderController {
   @Get()
   @ApiOperation({ summary: '获取提供商列表' })
   @SwaggerResponse({ status: 200, type: ProvidersListResponseDto })
-  async findAll(@Query() query: GetProvidersQueryDto): Promise<ApiResponse> {
+  async findAll(
+    @Query() query: GetProvidersQueryDto,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.providerService.findAll(query);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取提供商列表成功',
+      message: i18n.t('provider.provider.fetchListSuccess'),
       data,
     };
   }
@@ -62,12 +66,15 @@ export class ProviderController {
   @Get(':id')
   @ApiOperation({ summary: '获取提供商详情' })
   @SwaggerResponse({ status: 200, type: ProviderInfoDto })
-  async findOne(@Param('id') id: string): Promise<ApiResponse> {
+  async findOne(
+    @Param('id') id: string,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.providerService.findOne(id);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取提供商详情成功',
+      message: i18n.t('provider.provider.fetchDetailSuccess'),
       data,
     };
   }
@@ -81,12 +88,13 @@ export class ProviderController {
   @SwaggerResponse({ status: 201, type: ProviderInfoDto })
   async create(
     @Body() createProviderDto: CreateProviderDto,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.providerService.create(createProviderDto);
     return {
       success: true,
       code: HttpStatus.CREATED,
-      message: '提供商创建成功',
+      message: i18n.t('provider.provider.createSuccess'),
       data,
     };
   }
@@ -101,12 +109,13 @@ export class ProviderController {
   async update(
     @Param('id') id: string,
     @Body() updateProviderDto: UpdateProviderDto,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.providerService.update(id, updateProviderDto);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '提供商更新成功',
+      message: i18n.t('provider.provider.updateSuccess'),
       data,
     };
   }
@@ -117,12 +126,15 @@ export class ProviderController {
    */
   @Delete(':id')
   @ApiOperation({ summary: '删除提供商' })
-  async remove(@Param('id') id: string): Promise<ApiResponse> {
+  async remove(
+    @Param('id') id: string,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.providerService.remove(id);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '提供商删除成功',
+      message: i18n.t('provider.provider.deleteSuccess'),
       data,
     };
   }
@@ -134,12 +146,15 @@ export class ProviderController {
   @Post('test')
   @ApiOperation({ summary: '测试提供商连接' })
   @SwaggerResponse({ status: 200, type: TestProviderResponseDto })
-  async test(@Body() testDto: TestProviderDto): Promise<ApiResponse> {
+  async test(
+    @Body() testDto: TestProviderDto,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.providerService.test(testDto);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '测试完成',
+      message: i18n.t('provider.provider.testComplete'),
       data,
     };
   }
@@ -151,12 +166,15 @@ export class ProviderController {
   @Get(':id/health')
   @ApiOperation({ summary: '获取提供商健康状态' })
   @SwaggerResponse({ status: 200, type: ProviderHealthDto })
-  async getHealth(@Param('id') id: string): Promise<ApiResponse> {
+  async getHealth(
+    @Param('id') id: string,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.providerService.getHealth(id);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取健康状态成功',
+      message: i18n.t('provider.provider.healthSuccess'),
       data,
     };
   }
@@ -167,12 +185,12 @@ export class ProviderController {
    */
   @Post('health/check-all')
   @ApiOperation({ summary: '批量检查所有提供商健康状态' })
-  async checkAllHealth(): Promise<ApiResponse> {
+  async checkAllHealth(@I18n() i18n: I18nContext): Promise<ApiResponse> {
     const data = await this.providerService.checkAllHealth();
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '健康检查完成',
+      message: i18n.t('provider.provider.healthCheckComplete'),
       data,
     };
   }

@@ -8,28 +8,28 @@
 
 ### 1.1 V4.7 已完成的优化
 
-| 编号 | 优化项 | 状态 |
-|------|--------|------|
-| P1.1 | Prompt Schema 共享（`analysis-prompt-schema.ts`） | ✅ 完成 |
+| 编号 | 优化项                                               | 状态    |
+| ---- | ---------------------------------------------------- | ------- |
+| P1.1 | Prompt Schema 共享（`analysis-prompt-schema.ts`）    | ✅ 完成 |
 | P1.2 | Prompt 多语言支持（`buildBasePrompt(mode, locale)`） | ✅ 完成 |
 | P1.3 | `ScoringFoodItem` 改为 `Pick<AnalyzedFoodItem, ...>` | ✅ 完成 |
-| P2.1 | `decision-checks.ts` 拆分为 4 个子文件 + 聚合入口 | ✅ 完成 |
-| P2.4 | `buildConflictReport` 提取为独立文件 | ✅ 完成 |
+| P2.1 | `decision-checks.ts` 拆分为 4 个子文件 + 聚合入口    | ✅ 完成 |
+| P2.4 | `buildConflictReport` 提取为独立文件                 | ✅ 完成 |
 
 ### 1.2 V4.7 未充分解决的遗留问题
 
-| 层级 | 问题 | 影响 | V4.8 优先级 |
-|------|------|------|-------------|
-| **分析** | `image-food-analysis.service.ts` 仍有 `legacyFoodsToAnalyzed` 桥接适配器，`executeAnalysis()` 返回旧 `AnalysisResult` 格式再转换 | 多余的类型转换层，增加复杂度 | P1 |
-| **分析** | `image-food-analysis.service.ts` 中 `quality→qualityScore` / `satiety→satietyScore` 字段重命名仍在 `parseAnalysisResult()` | LLM 旧字段名兼容逻辑应清除 | P1 |
-| **分析** | `image-food-analysis.service.ts` 中 `totalCalories` 顶层回退逻辑 | 旧 prompt 格式遗留，当前 prompt 已不会产生此格式 | P1 |
-| **分析** | `text-food-analysis.service.ts` 第 928 行 LLM user message 为硬编码中文，未使用共享 prompt schema | 多语言 LLM 效果下降 | P1 |
-| **分析** | `ParsedFoodItem` 与 `AnalyzedFoodItem` 高度重复，`libraryMatch` 为 `any` 类型 | 类型安全差，维护成本高 | P2 |
-| **分析** | `image-food-analysis.service.ts` 中 `CATEGORY_DEFAULTS` 含内联中文 key（`蛋白质`/`蔬菜`等） | 旧数据兼容，应移除 | P2 |
-| **分析** | `image-food-analysis.service.ts` 中 6 处用户可见中文字符串（错误消息、替代原因等）未 i18n | 非中文用户体验差 | P2 |
-| **决策** | `alternative-suggestion.service.ts` 静态规则中仍有品类硬编码逻辑 | 推荐引擎已集成，静态规则应精简 | P2 |
-| **教练** | `decision-coach.service.ts` 的 `enrichWithStructuredFactors` 中 factor-type 映射硬编码 | 可维护性差 | P3 |
-| **全局** | Logger 消息全部中文（17处），虽不影响用户但影响国际化运维 | 运维可读性差 | P3 |
+| 层级     | 问题                                                                                                                             | 影响                                             | V4.8 优先级 |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ | ----------- |
+| **分析** | `image-food-analysis.service.ts` 仍有 `legacyFoodsToAnalyzed` 桥接适配器，`executeAnalysis()` 返回旧 `AnalysisResult` 格式再转换 | 多余的类型转换层，增加复杂度                     | P1          |
+| **分析** | `image-food-analysis.service.ts` 中 `quality→qualityScore` / `satiety→satietyScore` 字段重命名仍在 `parseAnalysisResult()`       | LLM 旧字段名兼容逻辑应清除                       | P1          |
+| **分析** | `image-food-analysis.service.ts` 中 `totalCalories` 顶层回退逻辑                                                                 | 旧 prompt 格式遗留，当前 prompt 已不会产生此格式 | P1          |
+| **分析** | `text-food-analysis.service.ts` 第 928 行 LLM user message 为硬编码中文，未使用共享 prompt schema                                | 多语言 LLM 效果下降                              | P1          |
+| **分析** | `ParsedFoodItem` 与 `AnalyzedFoodItem` 高度重复，`libraryMatch` 为 `any` 类型                                                    | 类型安全差，维护成本高                           | P2          |
+| **分析** | `image-food-analysis.service.ts` 中 `CATEGORY_DEFAULTS` 含内联中文 key（`蛋白质`/`蔬菜`等）                                      | 旧数据兼容，应移除                               | P2          |
+| **分析** | `image-food-analysis.service.ts` 中 6 处用户可见中文字符串（错误消息、替代原因等）未 i18n                                        | 非中文用户体验差                                 | P2          |
+| **决策** | `alternative-suggestion.service.ts` 静态规则中仍有品类硬编码逻辑                                                                 | 推荐引擎已集成，静态规则应精简                   | P2          |
+| **教练** | `decision-coach.service.ts` 的 `enrichWithStructuredFactors` 中 factor-type 映射硬编码                                           | 可维护性差                                       | P3          |
+| **全局** | Logger 消息全部中文（17处），虽不影响用户但影响国际化运维                                                                        | 运维可读性差                                     | P3          |
 
 ---
 
@@ -113,6 +113,7 @@ FoodAnalysisResultV61（最终输出）
 ### 4.1 图片分析类型统一（P1.1）
 
 **Before (V4.7)**:
+
 ```
 executeAnalysis() → AnalysisResult (legacy)
   → legacyFoodsToAnalyzed() → AnalyzedFoodItem[]
@@ -120,6 +121,7 @@ executeAnalysis() → AnalysisResult (legacy)
 ```
 
 **After (V4.8)**:
+
 ```
 executeAnalysis() → AnalyzedFoodItem[]
   → (直接传入 pipeline) → FoodAnalysisResultV61
@@ -130,6 +132,7 @@ executeAnalysis() → AnalyzedFoodItem[]
 **Before**: `ParsedFoodItem` 独立接口，~90 行定义，与 `AnalyzedFoodItem` 高度重复
 
 **After**:
+
 ```typescript
 import type { FoodLibraryEntity } from '../../food/food.types';
 
@@ -146,34 +149,34 @@ export type ParsedFoodItem = AnalyzedFoodItem & {
 
 ### Phase 1：分析清洗 + 类型统一（6 个目标）
 
-| 编号 | 文件 | 改动 |
-|------|------|------|
-| P1.1 | `image-food-analysis.service.ts` | 移除 `legacyFoodsToAnalyzed`，`executeAnalysis` 直接产出 `AnalyzedFoodItem[]`，`analyzeToV61` 不再做格式转换 |
-| P1.2 | `image-food-analysis.service.ts` | `parseAnalysisResult` 移除 `quality→qualityScore` 重命名、`totalCalories` 回退 |
-| P1.3 | `analysis-prompt-schema.ts` + `text-food-analysis.service.ts` | 新增 `USER_MESSAGE_TEMPLATE` 三语模板，第 928 行改用共享模板 |
-| P1.4 | `text-food-analysis.service.ts` | `ParsedFoodItem` 改为 `AnalyzedFoodItem & { libraryMatch }` 类型别名，删除重复字段定义 |
-| P1.5 | `image-food-analysis.service.ts` | `CATEGORY_DEFAULTS` 中文 key 替换为英文 category code |
-| P1.6 | — | tsc 0 errors |
+| 编号 | 文件                                                          | 改动                                                                                                         |
+| ---- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| P1.1 | `image-food-analysis.service.ts`                              | 移除 `legacyFoodsToAnalyzed`，`executeAnalysis` 直接产出 `AnalyzedFoodItem[]`，`analyzeToV61` 不再做格式转换 |
+| P1.2 | `image-food-analysis.service.ts`                              | `parseAnalysisResult` 移除 `quality→qualityScore` 重命名、`totalCalories` 回退                               |
+| P1.3 | `analysis-prompt-schema.ts` + `text-food-analysis.service.ts` | 新增 `USER_MESSAGE_TEMPLATE` 三语模板，第 928 行改用共享模板                                                 |
+| P1.4 | `text-food-analysis.service.ts`                               | `ParsedFoodItem` 改为 `AnalyzedFoodItem & { libraryMatch }` 类型别名，删除重复字段定义                       |
+| P1.5 | `image-food-analysis.service.ts`                              | `CATEGORY_DEFAULTS` 中文 key 替换为英文 category code                                                        |
+| P1.6 | —                                                             | tsc 0 errors                                                                                                 |
 
 ### Phase 2：i18n + 替代方案 + 可解释性（5 个目标）
 
-| 编号 | 文件 | 改动 |
-|------|------|------|
-| P2.1 | `image-food-analysis.service.ts` | 6 处用户可见中文字符串迁移到 `t()` |
+| 编号 | 文件                                | 改动                                                       |
+| ---- | ----------------------------------- | ---------------------------------------------------------- |
+| P2.1 | `image-food-analysis.service.ts`    | 6 处用户可见中文字符串迁移到 `t()`                         |
 | P2.2 | `alternative-suggestion.service.ts` | 移除与推荐引擎重叠的品类硬编码，精简为最小 fallback 规则集 |
-| P2.3 | `decision-explainer.service.ts` | 冲突解释细化：per-conflict-type 解释节点 |
-| P2.4 | `analysis-pipeline.service.ts` | `toDecisionFoodItems` 用 spread + pick 替代手动字段映射 |
-| P2.5 | — | tsc 0 errors |
+| P2.3 | `decision-explainer.service.ts`     | 冲突解释细化：per-conflict-type 解释节点                   |
+| P2.4 | `analysis-pipeline.service.ts`      | `toDecisionFoodItems` 用 spread + pick 替代手动字段映射    |
+| P2.5 | —                                   | tsc 0 errors                                               |
 
 ### Phase 3：教练 + logger 国际化 + 审计（5 个目标）
 
-| 编号 | 文件 | 改动 |
-|------|------|------|
-| P3.1 | `decision-coach.service.ts` | `enrichWithStructuredFactors` factor-type 映射提取为 `FACTOR_TYPE_CONFIG` 常量 |
-| P3.2 | decision 模块全局 (5 files) | 17 处 logger 中文消息 → 英文 |
-| P3.3 | `image-food-analysis.service.ts` | logger 中文消息 → 英文 |
-| P3.4 | `text-food-analysis.service.ts` | logger 中文消息 → 英文 |
-| P3.5 | — | tsc 0 errors |
+| 编号 | 文件                             | 改动                                                                           |
+| ---- | -------------------------------- | ------------------------------------------------------------------------------ |
+| P3.1 | `decision-coach.service.ts`      | `enrichWithStructuredFactors` factor-type 映射提取为 `FACTOR_TYPE_CONFIG` 常量 |
+| P3.2 | decision 模块全局 (5 files)      | 17 处 logger 中文消息 → 英文                                                   |
+| P3.3 | `image-food-analysis.service.ts` | logger 中文消息 → 英文                                                         |
+| P3.4 | `text-food-analysis.service.ts`  | logger 中文消息 → 英文                                                         |
+| P3.5 | —                                | tsc 0 errors                                                                   |
 
 ---
 

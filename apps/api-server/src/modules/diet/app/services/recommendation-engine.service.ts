@@ -53,6 +53,7 @@ import { FeatureFlagService } from '../../../feature-flag/feature-flag.service';
 import { v4 as uuidv4 } from 'uuid';
 import { PipelineContextFactory } from '../recommendation/context/pipeline-context-factory.service';
 import { RecommendationResultProcessor } from './recommendation-result-processor.service';
+import { t, type Locale } from '../recommendation/utils/i18n-messages';
 
 /** 反向解释 API 返回结构 */
 export interface WhyNotResult {
@@ -136,6 +137,19 @@ export class RecommendationEngineService implements OnModuleInit {
         l1TtlMs: 5 * 60 * 1000,
         l2TtlMs: 7 * 24 * 60 * 60 * 1000,
       });
+  }
+
+  private resolveLocale(locale?: string): Locale {
+    if (locale === 'en-US' || locale === 'ja-JP' || locale === 'zh-CN') {
+      return locale;
+    }
+
+    const requestLocale = this.requestCtx.locale;
+    return requestLocale === 'en-US' ||
+      requestLocale === 'ja-JP' ||
+      requestLocale === 'zh-CN'
+      ? requestLocale
+      : 'zh-CN';
   }
 
   // ─── 核心推荐函数 ───
@@ -907,7 +921,9 @@ export class RecommendationEngineService implements OnModuleInit {
     dailyTarget: MealTarget,
     consumed: { calories: number; protein: number },
     userProfile?: UserProfileConstraints,
+    locale?: string,
   ): Promise<WhyNotResult> {
+    const resolvedLocale = this.resolveLocale(locale);
     // 1. 查找食物 — 先精确匹配，再模糊匹配
     const allFoods = await this.getAllFoods();
     const foodMatches = (food: (typeof allFoods)[number]): boolean => {
@@ -946,7 +962,7 @@ export class RecommendationEngineService implements OnModuleInit {
         foodName,
         found: false,
         score: 0,
-        reason: `食物库中未找到"${foodName}"，请检查食物名称是否正确`,
+        reason: t('error.foodNotFound', { foodName }, resolvedLocale),
         alternatives: [],
       };
     }
@@ -958,15 +974,33 @@ export class RecommendationEngineService implements OnModuleInit {
     if (userProfile?.allergens?.length) {
       const conflicts = matchAllergens(food, userProfile.allergens);
       if (conflicts.length > 0) {
-        filterReasons.push(`含有你的过敏原: ${conflicts.join('、')}`);
+        filterReasons.push(
+          t(
+            'filter_reason.allergen',
+            {
+              allergen: conflicts.join(
+                resolvedLocale === 'en-US' ? ', ' : '、',
+              ),
+            },
+            resolvedLocale,
+          ),
+        );
       }
     }
 
     // 2b. 餐次不适配
     const foodMealTypes: string[] = food.mealTypes || [];
     if (foodMealTypes.length > 0 && !foodMealTypes.includes(mealType)) {
+      const currentMealLabel = t(`meal.label.${mealType}`, {}, resolvedLocale);
+      const supportedMeals = foodMealTypes
+        .map((type) => t(`meal.label.${type}`, {}, resolvedLocale))
+        .join(resolvedLocale === 'en-US' ? ', ' : '、');
       filterReasons.push(
-        `该食物不适合${mealType}餐次（适合: ${foodMealTypes.join('、')}）`,
+        resolvedLocale === 'en-US'
+          ? `Not suitable for ${currentMealLabel} (better for: ${supportedMeals})`
+          : resolvedLocale === 'ja-JP'
+            ? `${currentMealLabel}には不向きです（適した食事: ${supportedMeals}）`
+            : `该食物不适合${currentMealLabel}餐次（适合: ${supportedMeals}）`,
       );
     }
 
@@ -982,9 +1016,7 @@ export class RecommendationEngineService implements OnModuleInit {
     );
     const servingCal = (food.calories * food.standardServingG) / 100;
     if (servingCal > constraints.maxCalories) {
-      filterReasons.push(
-        `单份热量 ${Math.round(servingCal)}kcal 超过该餐上限 ${Math.round(constraints.maxCalories)}kcal`,
-      );
+      filterReasons.push(t('filter_reason.calorieTooHigh', {}, resolvedLocale));
     }
 
     // 2d. 蛋白质不足
@@ -992,7 +1024,11 @@ export class RecommendationEngineService implements OnModuleInit {
       const servingProtein = (food.protein * food.standardServingG) / 100;
       if (servingProtein < constraints.minProtein) {
         filterReasons.push(
-          `蛋白质 ${Math.round(servingProtein)}g 低于该餐最低要求 ${Math.round(constraints.minProtein)}g`,
+          resolvedLocale === 'en-US'
+            ? `Protein ${Math.round(servingProtein)}g is below the minimum target ${Math.round(constraints.minProtein)}g for this meal`
+            : resolvedLocale === 'ja-JP'
+              ? `たんぱく質 ${Math.round(servingProtein)}g はこの食事の最低目標 ${Math.round(constraints.minProtein)}g を下回っています`
+              : `蛋白质 ${Math.round(servingProtein)}g 低于该餐最低要求 ${Math.round(constraints.minProtein)}g`,
         );
       }
     }
@@ -1004,7 +1040,17 @@ export class RecommendationEngineService implements OnModuleInit {
         foodTags.includes(t),
       );
       if (hitTags.length > 0) {
-        filterReasons.push(`含有限制标签: ${hitTags.join('、')}`);
+        filterReasons.push(
+          t(
+            'filter_reason.dietary',
+            {
+              restriction: hitTags.join(
+                resolvedLocale === 'en-US' ? ', ' : '、',
+              ),
+            },
+            resolvedLocale,
+          ),
+        );
       }
     }
 
@@ -1019,9 +1065,7 @@ export class RecommendationEngineService implements OnModuleInit {
     const rejectThreshold = recallConfig?.shortTermRejectThreshold ?? 2;
     const rejectCount = shortTermProfile?.rejectedFoods?.[food.name] || 0;
     if (rejectCount >= rejectThreshold) {
-      filterReasons.push(
-        `你近 7 天内已拒绝该食物 ${rejectCount} 次，系统暂时将其排除`,
-      );
+      filterReasons.push(t('filter_reason.userRejected', {}, resolvedLocale));
     }
 
     // 3. 跑评分流程（即使被硬过滤也跑分，用于分析弱维度）
@@ -1067,6 +1111,7 @@ export class RecommendationEngineService implements OnModuleInit {
       filterReasons,
       userProfile,
       goalType,
+      resolvedLocale,
     );
 
     // 5. 查找替代推荐 — 同餐次 Top-5（排除该食物本身）

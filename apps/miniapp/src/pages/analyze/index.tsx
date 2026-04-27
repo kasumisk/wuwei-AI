@@ -111,10 +111,7 @@ function AnalyzePage() {
 
         <View className="mb-5">
           <Text className="block text-base font-semibold mb-3">拍照或上传图片</Text>
-          <View
-            className="upload-area bg-white  overflow-hidden"
-            onClick={handleChooseImage}
-          >
+          <View className="upload-area bg-white  overflow-hidden" onClick={handleChooseImage}>
             {imagePath ? (
               <Image className="w-full upload-img" src={imagePath} mode="aspectFill" />
             ) : (
@@ -166,9 +163,7 @@ function AnalyzePage() {
 
   return (
     <View className="min-h-screen bg-gray-50 p-5">
-      {imagePath && (
-        <Image className="w-full  mb-4 result-img" src={imagePath} mode="aspectFill" />
-      )}
+      {imagePath && <Image className="w-full  mb-4 result-img" src={imagePath} mode="aspectFill" />}
 
       <View className="bg-white  p-5 mb-4">
         <View className="flex items-baseline gap-1">
@@ -192,10 +187,7 @@ function AnalyzePage() {
       <View className="mb-5">
         <Text className="block text-base font-semibold mb-3">识别到的食物</Text>
         {editFoods.map((food, idx) => (
-          <View
-            className="flex items-center justify-between bg-white  p-4 mb-2"
-            key={idx}
-          >
+          <View className="flex items-center justify-between bg-white  p-4 mb-2" key={idx}>
             <View className="flex-1">
               <Text className="block text-sm font-medium">{food.name}</Text>
               {food.quantity && (

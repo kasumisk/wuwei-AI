@@ -21,6 +21,7 @@ import {
   t,
   Locale,
 } from '../../../diet/app/recommendation/utils/i18n-messages';
+import { ClsServiceManager } from 'nestjs-cls';
 import { COACH_LABELS, cl } from '../../../decision/i18n/decision-labels';
 import {
   buildTonePrompt,
@@ -112,6 +113,23 @@ export interface AnalysisContextInput {
 export class CoachPromptBuilderService {
   private readonly logger = new Logger(CoachPromptBuilderService.name);
 
+  private resolveLocale(locale?: Locale): Locale {
+    if (locale === 'en-US' || locale === 'zh-CN' || locale === 'ja-JP') {
+      return locale;
+    }
+
+    try {
+      const raw = ClsServiceManager.getClsService()?.get('locale');
+      if (raw === 'en-US' || raw === 'zh-CN' || raw === 'ja-JP') {
+        return raw;
+      }
+    } catch {
+      // Ignore missing CLS context and fallback below.
+    }
+
+    return 'zh-CN';
+  }
+
   constructor(
     private readonly foodService: FoodService,
     private readonly userProfileService: UserProfileService,
@@ -124,6 +142,7 @@ export class CoachPromptBuilderService {
    * 构建完整系统 Prompt（用户档案 + 饮食数据 + 行为洞察 + 人格语气）
    */
   async buildSystemPrompt(userId: string, locale?: Locale): Promise<string> {
+    const resolvedLocale = this.resolveLocale(locale);
     const [
       profile,
       todaySummary,
@@ -141,14 +160,14 @@ export class CoachPromptBuilderService {
     const hour = getUserLocalHour(profile?.timezone || DEFAULT_TIMEZONE);
     const timeHint =
       hour < 10
-        ? t('coach.time.morning', {}, locale)
+        ? t('coach.time.morning', {}, resolvedLocale)
         : hour < 14
-          ? t('coach.time.lunch', {}, locale)
+          ? t('coach.time.lunch', {}, resolvedLocale)
           : hour < 18
-            ? t('coach.time.afternoon', {}, locale)
+            ? t('coach.time.afternoon', {}, resolvedLocale)
             : hour < 21
-              ? t('coach.time.dinner', {}, locale)
-              : t('coach.time.night', {}, locale);
+              ? t('coach.time.dinner', {}, resolvedLocale)
+              : t('coach.time.night', {}, resolvedLocale);
 
     const bmi =
       profile && profile.heightCm && profile.weightKg
@@ -173,8 +192,8 @@ export class CoachPromptBuilderService {
           ).length
         : 0;
 
-    const isEn = locale === 'en-US';
-    const isJa = locale === 'ja-JP';
+    const isEn = resolvedLocale === 'en-US';
+    const isJa = resolvedLocale === 'ja-JP';
 
     const replyLang = isEn
       ? 'Reply in English'
@@ -279,7 +298,7 @@ ${replyLang}，每条消息不超过 150 字，不要使用 Markdown 格式。`;
     // V1.9: 使用 Goal×Tone 矩阵构建语气 prompt
     const coachStyle = behaviorProfile?.coachStyle || 'friendly';
     const goalType = (profile?.goal as string) || 'health';
-    const tonePrompt = buildTonePrompt(coachStyle, goalType, locale);
+    const tonePrompt = buildTonePrompt(coachStyle, goalType, resolvedLocale);
 
     const basePrompt = [
       this.buildBasePersona(
@@ -578,8 +597,9 @@ ${replyLang}，每条消息不超过 150 字，不要使用 Markdown 格式。`;
     sd: StructuredDecision,
     locale?: Locale,
   ): string {
-    const isEn = locale === 'en-US';
-    const isJa = locale === 'ja-JP';
+    const resolvedLocale = this.resolveLocale(locale);
+    const isEn = resolvedLocale === 'en-US';
+    const isJa = resolvedLocale === 'ja-JP';
 
     const LABELS = isEn
       ? {
@@ -663,15 +683,16 @@ ${replyLang}，每条消息不超过 150 字，不要使用 Markdown 格式。`;
     locale?: Locale,
   ): string {
     try {
+      const resolvedLocale = this.resolveLocale(locale);
       const insightPack = this.coachInsightService.generateInsights(
         contextualAnalysis,
         userContext,
         structuredDecision,
-        locale,
+        resolvedLocale,
       );
 
-      const isEn = locale === 'en-US';
-      const isJa = locale === 'ja-JP';
+      const isEn = resolvedLocale === 'en-US';
+      const isJa = resolvedLocale === 'ja-JP';
       const title = isEn
         ? 'Coach Insights'
         : isJa

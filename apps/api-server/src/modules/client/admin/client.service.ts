@@ -6,6 +6,7 @@ import {
 import * as crypto from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../../core/prisma/prisma.service';
+import { I18nService } from '../../../core/i18n/i18n.service';
 import { Prisma } from '@prisma/client';
 import {
   CreateClientDto,
@@ -16,7 +17,10 @@ import {
 
 @Injectable()
 export class ClientService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly i18n: I18nService,
+  ) {}
 
   /**
    * 生成 API Key
@@ -95,7 +99,9 @@ export class ClientService {
     });
 
     if (!client) {
-      throw new NotFoundException(`客户端 #${id} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('client.client.notFound', { id }),
+      );
     }
 
     const { apiSecret, ...rest } = client;
@@ -143,7 +149,9 @@ export class ClientService {
     const client = await this.prisma.clients.findUnique({ where: { id } });
 
     if (!client) {
-      throw new NotFoundException(`客户端 #${id} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('client.client.notFound', { id }),
+      );
     }
 
     const { metadata, quotaConfig, ...restDto } = updateClientDto;
@@ -170,12 +178,14 @@ export class ClientService {
     const client = await this.prisma.clients.findUnique({ where: { id } });
 
     if (!client) {
-      throw new NotFoundException(`客户端 #${id} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('client.client.notFound', { id }),
+      );
     }
 
     await this.prisma.clients.delete({ where: { id } });
 
-    return { message: '客户端删除成功' };
+    return { message: this.i18n.t('client.client.deleteSuccess') };
   }
 
   /**
@@ -185,7 +195,9 @@ export class ClientService {
     const client = await this.prisma.clients.findUnique({ where: { id } });
 
     if (!client) {
-      throw new NotFoundException(`客户端 #${id} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('client.client.notFound', { id }),
+      );
     }
 
     const newApiSecret = this.generateApiSecret();
@@ -198,8 +210,8 @@ export class ClientService {
 
     return {
       apiKey: client.apiKey,
-      apiSecret: newApiSecret, // 返回新的明文 Secret
-      message: 'API Secret 已重新生成，请妥善保存',
+      apiSecret: newApiSecret,
+      message: this.i18n.t('client.client.regenerateSecretSuccess'),
     };
   }
 
@@ -230,7 +242,9 @@ export class ClientService {
     });
 
     if (!client) {
-      throw new NotFoundException(`客户端 #${clientId} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('client.client.notFound', { id: clientId }),
+      );
     }
 
     const { startDate, endDate } = query;

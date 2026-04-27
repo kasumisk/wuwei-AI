@@ -1,0 +1,39 @@
+{
+  "role": {
+    "notFound": "Role #{{id}} not found",
+    "codeExists": "Role code {{code}} already exists",
+    "parentNotFound": "Parent role #{{id}} not found",
+    "maxDepthExceeded": "Role inheritance depth cannot exceed 3 levels",
+    "systemRoleNoInheritance": "System roles cannot have their inheritance modified",
+    "circularInheritance": "Circular inheritance detected",
+    "systemRoleNoDelete": "System roles cannot be deleted",
+    "deleteChildFirst": "Please delete child roles first",
+    "inUseByUsers": "This role is used by {{count}} user(s) and cannot be deleted",
+    "deleteSuccess": "Role deleted successfully",
+    "assignSuccess": "Permissions assigned successfully"
+  },
+  "permission": {
+    "notFound": "Permission #{{id}} not found",
+    "codeExists": "Permission code {{code}} already exists",
+    "parentNotFound": "Parent permission #{{id}} not found",
+    "systemPermNoTypeChange": "System permission type cannot be changed",
+    "circularParent": "Circular parent relationship detected",
+    "systemPermNoDelete": "System permissions cannot be deleted",
+    "deleteChildFirst": "Please delete child permissions first",
+    "deleteSuccess": "Permission deleted successfully"
+  },
+  "guard": {
+    "loginRequired": "Please log in first",
+    "noAccess": "Access denied"
+  },
+  "template": {
+    "notFound": "Permission template #{{id}} not found",
+    "codeNotFound": "Permission template {{code}} not found",
+    "codeExists": "Template code {{code}} already exists",
+    "systemTemplateNoModify": "System templates cannot be modified",
+    "systemTemplateNoDelete": "System templates cannot be deleted",
+    "deleteSuccess": "Permission template deleted successfully",
+    "noMatchingPermission": "No matching permissions found",
+    "applySuccess": "Template applied successfully"
+  }
+}

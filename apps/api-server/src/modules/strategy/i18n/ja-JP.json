@@ -1,0 +1,30 @@
+{
+  "strategy": {
+    "notFound": "ストラテジー {{id}} が見つかりません",
+    "noFieldsToUpdate": "更新するフィールドがありません",
+    "onlyActiveCanBeAssigned": "アクティブなストラテジーのみ割り当て可能です",
+    "assignmentNotFound": "割り当て記録 {{assignmentId}} が見つかりません",
+    "assignmentRemoved": "割り当てを取り消しました",
+    "noActiveStrategyForSegment": "セグメント \"{{segment}}\" に一致するアクティブなストラテジーが見つかりません",
+    "unknownPreset": "不明なプリセット名 \"{{presetName}}\"、利用可能: {{available}}",
+    "tuningNotFound": "チューニング記録 {{tuningId}} が見つかりません",
+    "tuningNotPending": "チューニング記録の現在のステータスは \"{{status}}\" です。審査できるのは pending_review 状態のみです",
+    "fetchListSuccess": "ストラテジー一覧を取得しました",
+    "fetchOverviewSuccess": "ストラテジー概要を取得しました",
+    "fetchDetailSuccess": "ストラテジー詳細を取得しました",
+    "createSuccess": "ストラテジーを作成しました",
+    "updateSuccess": "ストラテジーを更新しました",
+    "activateSuccess": "ストラテジーをアクティブにしました",
+    "archiveSuccess": "ストラテジーをアーカイブしました",
+    "assignSuccess": "ストラテジーを割り当てました",
+    "removeAssignmentSuccess": "割り当てを取り消しました",
+    "realismUpdateSuccess": "Realism設定を更新しました",
+    "realismPresetApplied": "プリセット \"{{preset}}\" を適用しました",
+    "realismSegmentApplied": "セグメント \"{{segment}}\" にRealism設定を適用しました",
+    "simulateSuccess": "ストラテジーシミュレーション完了",
+    "diffSuccess": "ストラテジー比較完了",
+    "tuningApproved": "チューニング提案を承認しました",
+    "tuningRejected": "チューニング提案を却下しました",
+    "pendingTuningsSuccess": "審査待ちチューニング一覧を取得しました"
+  }
+}

@@ -26,6 +26,7 @@ import { GatedFeature } from '../../subscription.types';
 import { SubscriptionService } from '../services/subscription.service';
 import { PlanEntitlementResolver } from '../services/plan-entitlement-resolver.service';
 import { REQUIRED_FEATURE_KEY } from '../decorators/require-feature.decorator';
+import { I18nService } from '../../../../core/i18n/i18n.service';
 
 @Injectable()
 export class FeatureGuard implements CanActivate {
@@ -35,6 +36,7 @@ export class FeatureGuard implements CanActivate {
     private readonly reflector: Reflector,
     private readonly subscriptionService: SubscriptionService,
     private readonly entitlementResolver: PlanEntitlementResolver,
+    private readonly i18n: I18nService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -54,7 +56,7 @@ export class FeatureGuard implements CanActivate {
     if (!user?.id) {
       throw new ForbiddenException({
         code: 'AUTH_REQUIRED',
-        message: '需要登录后才能使用此功能',
+        message: this.i18n.t('subscription.guard.loginRequired'),
       });
     }
 
@@ -73,7 +75,7 @@ export class FeatureGuard implements CanActivate {
       );
       throw new ForbiddenException({
         code: 'FEATURE_NOT_ENABLED',
-        message: '当前套餐未包含此功能，请升级套餐',
+        message: this.i18n.t('subscription.guard.featureNotIncluded'),
         currentTier: summary.tier,
         requiredFeature,
       });

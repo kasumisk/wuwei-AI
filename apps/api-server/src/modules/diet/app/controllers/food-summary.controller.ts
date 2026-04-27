@@ -8,6 +8,7 @@ import { FoodService } from '../services/food.service';
 import { UserProfileService } from '../../../user/app/services/profile/user-profile.service';
 import { NutritionScoreService } from '../services/nutrition-score.service';
 import { RecentSummaryQueryDto } from '../dto/food.dto';
+import { I18nService } from '../../../../core/i18n';
 
 @ApiTags('App 饮食汇总')
 @Controller('app/food')
@@ -18,6 +19,7 @@ export class FoodSummaryController {
     private readonly foodService: FoodService,
     private readonly userProfileService: UserProfileService,
     private readonly nutritionScoreService: NutritionScoreService,
+    private readonly i18n: I18nService,
   ) {}
 
   /**
@@ -62,7 +64,7 @@ export class FoodSummaryController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: this.i18n.t('common.ok'),
       data: summary,
     };
   }
@@ -84,7 +86,7 @@ export class FoodSummaryController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: this.i18n.t('common.ok'),
       data,
     };
   }

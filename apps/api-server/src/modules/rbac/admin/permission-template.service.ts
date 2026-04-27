@@ -5,6 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../core/prisma/prisma.service';
+import { I18nService } from '../../../core/i18n/i18n.service';
 import { PermissionStatus } from '../rbac.types';
 import type {
   CreatePermissionTemplateDto,
@@ -16,23 +17,17 @@ import type {
 
 @Injectable()
 export class PermissionTemplateService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly i18n: I18nService,
+  ) {}
 
-  /**
-   * 获取权限模板列表
-   */
   async findAll(query: PermissionTemplateQueryDto) {
     const { page = 1, pageSize = 20, code, name } = query;
 
     const where: any = {};
-
-    if (code) {
-      where.code = { contains: code };
-    }
-
-    if (name) {
-      where.name = { contains: name };
-    }
+    if (code) where.code = { contains: code };
+    if (name) where.name = { contains: name };
 
     const skip = (page - 1) * pageSize;
 
@@ -46,58 +41,51 @@ export class PermissionTemplateService {
       this.prisma.permissionTemplates.count({ where }),
     ]);
 
-    // 转换数据格式
-    const formattedList = list.map((t) => this.formatTemplateInfo(t));
-
     return {
-      list: formattedList,
+      list: list.map((t) => this.formatTemplateInfo(t)),
       total,
       page,
       pageSize,
     };
   }
 
-  /**
-   * 获取模板详情
-   */
   async findOne(id: string) {
     const template = await this.prisma.permissionTemplates.findUnique({
       where: { id },
     });
 
     if (!template) {
-      throw new NotFoundException(`权限模板 #${id} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('rbac.template.notFound', { id }),
+      );
     }
 
     return this.formatTemplateInfo(template);
   }
 
-  /**
-   * 根据编码获取模板
-   */
   async findByCode(code: string) {
     const template = await this.prisma.permissionTemplates.findFirst({
       where: { code },
     });
 
     if (!template) {
-      throw new NotFoundException(`权限模板 ${code} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('rbac.template.codeNotFound', { code }),
+      );
     }
 
     return this.formatTemplateInfo(template);
   }
 
-  /**
-   * 创建权限模板
-   */
   async create(createDto: CreatePermissionTemplateDto) {
-    // 检查编码唯一性
     const existing = await this.prisma.permissionTemplates.findFirst({
       where: { code: createDto.code },
     });
 
     if (existing) {
-      throw new ConflictException(`模板编码 ${createDto.code} 已存在`);
+      throw new ConflictException(
+        this.i18n.t('rbac.template.codeExists', { code: createDto.code }),
+      );
     }
 
     const savedTemplate = await this.prisma.permissionTemplates.create({
@@ -113,20 +101,21 @@ export class PermissionTemplateService {
     return this.formatTemplateInfo(savedTemplate);
   }
 
-  /**
-   * 更新权限模板
-   */
   async update(id: string, updateDto: UpdatePermissionTemplateDto) {
     const template = await this.prisma.permissionTemplates.findUnique({
       where: { id },
     });
 
     if (!template) {
-      throw new NotFoundException(`权限模板 #${id} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('rbac.template.notFound', { id }),
+      );
     }
 
     if (template.isSystem) {
-      throw new BadRequestException('系统模板不允许修改');
+      throw new BadRequestException(
+        this.i18n.t('rbac.template.systemTemplateNoModify'),
+      );
     }
 
     const data: any = { ...updateDto };
@@ -145,30 +134,28 @@ export class PermissionTemplateService {
     return this.formatTemplateInfo(updatedTemplate);
   }
 
-  /**
-   * 删除权限模板
-   */
   async remove(id: string) {
     const template = await this.prisma.permissionTemplates.findUnique({
       where: { id },
     });
 
     if (!template) {
-      throw new NotFoundException(`权限模板 #${id} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('rbac.template.notFound', { id }),
+      );
     }
 
     if (template.isSystem) {
-      throw new BadRequestException('系统模板不允许删除');
+      throw new BadRequestException(
+        this.i18n.t('rbac.template.systemTemplateNoDelete'),
+      );
     }
 
     await this.prisma.permissionTemplates.delete({ where: { id } });
 
-    return { message: '权限模板删除成功' };
+    return { message: this.i18n.t('rbac.template.deleteSuccess') };
   }
 
-  /**
-   * 预览模板展开后的权限
-   */
   async preview(previewDto: TemplatePreviewDto) {
     const expandedCodes = await this.expandPatterns(
       previewDto.permissionPatterns,
@@ -181,16 +168,15 @@ export class PermissionTemplateService {
     };
   }
 
-  /**
-   * 应用模板到角色
-   */
   async applyToRole(roleId: string, templateCode: string, modules?: string[]) {
     const template = await this.prisma.permissionTemplates.findFirst({
       where: { code: templateCode },
     });
 
     if (!template) {
-      throw new NotFoundException(`权限模板 ${templateCode} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('rbac.template.codeNotFound', { code: templateCode }),
+      );
     }
 
     const permissionPatterns =
@@ -198,13 +184,11 @@ export class PermissionTemplateService {
         ? template.permissionPatterns.split(',').filter(Boolean)
         : template.permissionPatterns;
 
-    // 展开模板中的通配符
     const permissionCodes = await this.expandPatterns(
       permissionPatterns,
       modules,
     );
 
-    // 获取权限实体
     const permissions = await this.prisma.permissions.findMany({
       where: {
         code: { in: permissionCodes },
@@ -213,47 +197,37 @@ export class PermissionTemplateService {
     });
 
     if (permissions.length === 0) {
-      return { message: '没有匹配的权限' };
+      return { message: this.i18n.t('rbac.template.noMatchingPermission') };
     }
 
-    // 获取角色现有权限
     const existingRolePermissions = await this.prisma.rolePermissions.findMany({
-      where: { roleId: roleId },
+      where: { roleId },
     });
     const existingPermissionIds = new Set(
       existingRolePermissions.map((rp) => rp.permissionId),
     );
 
-    // 过滤出需要新增的权限
     const newPermissions = permissions.filter(
       (p) => !existingPermissionIds.has(p.id),
     );
 
-    // 分配给角色
     if (newPermissions.length > 0) {
       await Promise.all(
         newPermissions.map((p) =>
           this.prisma.rolePermissions.create({
-            data: {
-              roleId: roleId,
-              permissionId: p.id,
-            },
+            data: { roleId, permissionId: p.id },
           }),
         ),
       );
     }
 
     return {
-      message: '模板应用成功',
+      message: this.i18n.t('rbac.template.applySuccess'),
       addedCount: newPermissions.length,
     };
   }
 
-  /**
-   * 展开通配符模式
-   */
   async expandPatterns(patterns: string[], modules?: string[]) {
-    // 如果没有指定模块，获取所有模块
     if (!modules || modules.length === 0) {
       modules = await this.getAllModules();
     }
@@ -262,51 +236,33 @@ export class PermissionTemplateService {
 
     for (const pattern of patterns) {
       if (pattern.startsWith('*:')) {
-        // 通配符: *:list -> user:list, role:list, ...
         const action = pattern.slice(2);
         modules.forEach((m) => result.push(`${m}:${action}`));
       } else if (pattern.endsWith(':*')) {
-        // 模块通配符: user:* -> user:list, user:create, ...
         const module = pattern.slice(0, -2);
         const actions = await this.getModuleActions(module);
         actions.forEach((a) => result.push(`${module}:${a}`));
       } else {
-        // 直接添加
         result.push(pattern);
       }
     }
 
-    return [...new Set(result)]; // 去重
+    return [...new Set(result)];
   }
 
-  /**
-   * 获取所有模块（顶级菜单权限的code）
-   */
   private async getAllModules(): Promise<string[]> {
     const menuPermissions = await this.prisma.permissions.findMany({
-      where: {
-        type: 'menu' as any,
-        status: PermissionStatus.ACTIVE,
-      },
+      where: { type: 'menu' as any, status: PermissionStatus.ACTIVE },
     });
-
-    // 返回不含冒号的code（即顶级模块）
     return menuPermissions
       .filter((p) => !p.code.includes(':'))
       .map((p) => p.code);
   }
 
-  /**
-   * 获取模块的所有操作
-   */
   private async getModuleActions(module: string): Promise<string[]> {
     const permissions = await this.prisma.permissions.findMany({
-      where: {
-        status: PermissionStatus.ACTIVE,
-      },
+      where: { status: PermissionStatus.ACTIVE },
     });
-
-    // 过滤出该模块的操作权限
     return permissions
       .filter(
         (p) =>
@@ -315,9 +271,6 @@ export class PermissionTemplateService {
       .map((p) => p.code.split(':')[1]);
   }
 
-  /**
-   * 格式化模板信息
-   */
   private formatTemplateInfo(template: any): PermissionTemplateInfoDto {
     return {
       id: template.id,

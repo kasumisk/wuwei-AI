@@ -32,6 +32,7 @@ import { Roles } from '../../rbac/admin/roles.decorator';
 import { ApiResponse } from '../../../common/types/response.type';
 import { FeatureFlagService } from '../feature-flag.service';
 import { FeatureFlagType } from '../feature-flag.types';
+import { I18nService } from '../../../core/i18n/i18n.service';
 
 // ─── DTO ───
 
@@ -79,7 +80,10 @@ class UpsertFeatureFlagDto {
 @Roles('admin', 'super_admin')
 @ApiBearerAuth()
 export class FeatureFlagManagementController {
-  constructor(private readonly featureFlagService: FeatureFlagService) {}
+  constructor(
+    private readonly featureFlagService: FeatureFlagService,
+    private readonly i18n: I18nService,
+  ) {}
 
   /**
    * 获取所有功能开关
@@ -92,7 +96,7 @@ export class FeatureFlagManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: this.i18n.t('featureFlag.fetchSuccess'),
       data: flags,
     };
   }
@@ -109,7 +113,7 @@ export class FeatureFlagManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '保存成功',
+      message: this.i18n.t('featureFlag.saveSuccess'),
       data: flag,
     };
   }
@@ -127,7 +131,7 @@ export class FeatureFlagManagementController {
       return {
         success: false,
         code: HttpStatus.NOT_FOUND,
-        message: '功能开关不存在',
+        message: this.i18n.t('featureFlag.notFound'),
         data: null,
       };
     }
@@ -140,7 +144,9 @@ export class FeatureFlagManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: `已${updated.enabled ? '启用' : '禁用'}`,
+      message: updated.enabled
+        ? this.i18n.t('featureFlag.enabled')
+        : this.i18n.t('featureFlag.disabled'),
       data: updated,
     };
   }
@@ -156,7 +162,7 @@ export class FeatureFlagManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '删除成功',
+      message: this.i18n.t('featureFlag.deleteSuccess'),
       data: null,
     };
   }

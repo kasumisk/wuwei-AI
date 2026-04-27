@@ -324,51 +324,27 @@
       "title": "API 功能特性",
       "auth": {
         "title": "🔐 认证管理",
-        "items": [
-          "自动添加 Authorization 令牌",
-          "令牌过期自动处理",
-          "支持服务端和客户端"
-        ]
+        "items": ["自动添加 Authorization 令牌", "令牌过期自动处理", "支持服务端和客户端"]
       },
       "request": {
         "title": "🔄 请求管理",
-        "items": [
-          "自动重试机制",
-          "请求超时控制",
-          "请求/响应拦截器"
-        ]
+        "items": ["自动重试机制", "请求超时控制", "请求/响应拦截器"]
       },
       "error": {
         "title": "⚠️ 错误处理",
-        "items": [
-          "统一错误类型 (APIError)",
-          "详细错误信息",
-          "可配置错误提示"
-        ]
+        "items": ["统一错误类型 (APIError)", "详细错误信息", "可配置错误提示"]
       },
       "types": {
         "title": "📝 类型安全",
-        "items": [
-          "完整 TypeScript 支持",
-          "泛型响应类型",
-          "服务层封装"
-        ]
+        "items": ["完整 TypeScript 支持", "泛型响应类型", "服务层封装"]
       },
       "files": {
         "title": "📤 文件操作",
-        "items": [
-          "文件上传（进度追踪）",
-          "文件下载",
-          "多文件批量上传"
-        ]
+        "items": ["文件上传（进度追踪）", "文件下载", "多文件批量上传"]
       },
       "logging": {
         "title": "📊 日志记录",
-        "items": [
-          "请求日志",
-          "错误日志",
-          "开发/生产环境分离"
-        ]
+        "items": ["请求日志", "错误日志", "开发/生产环境分离"]
       }
     },
     "docs": {
@@ -1085,6 +1061,15 @@
   "profile": {
     "bodyFatPercent": "体脂率 (%)",
     "bodyFatPercentHint": "填写后将使用 Katch-McArdle 公式代替 Mifflin 公式计算基础代谢",
-    "bodyFatPercentPlaceholder": "例如 20"
+    "bodyFatPercentPlaceholder": "例如 20",
+    "language": "语言",
+    "languageDesc": "应用显示语言",
+    "languageSwitched": "语言已切换"
+  },
+  "languages": {
+    "en": "English",
+    "zh": "中文",
+    "ja": "日本語",
+    "fr": "Français"
   }
 }

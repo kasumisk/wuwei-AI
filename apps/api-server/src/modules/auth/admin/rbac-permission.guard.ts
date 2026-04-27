@@ -7,12 +7,14 @@ import {
 import { Reflector } from '@nestjs/core';
 import { RbacPermissionService } from '../../rbac/admin/rbac-permission.service';
 import { PERMISSIONS_KEY } from '../../rbac/admin/require-permission.decorator';
+import { I18nService } from '../../../core/i18n';
 
 @Injectable()
 export class RbacPermissionGuard implements CanActivate {
   constructor(
     private reflector: Reflector,
     private permissionService: RbacPermissionService,
+    private readonly i18n: I18nService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -31,7 +33,7 @@ export class RbacPermissionGuard implements CanActivate {
 
     // 用户未登录
     if (!user || !user.id) {
-      throw new ForbiddenException('请先登录');
+      throw new ForbiddenException(this.i18n.t('auth.pleaseLoginFirst'));
     }
 
     // 检查是否超级管理员
@@ -50,7 +52,7 @@ export class RbacPermissionGuard implements CanActivate {
     );
 
     if (!hasPermission) {
-      throw new ForbiddenException('没有访问权限');
+      throw new ForbiddenException(this.i18n.t('auth.noAccessPermission'));
     }
 
     return true;

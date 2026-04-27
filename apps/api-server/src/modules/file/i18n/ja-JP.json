@@ -1,0 +1,11 @@
+{
+  "admin": {
+    "uploadSuccess": "ファイルのアップロードが成功しました",
+    "presignedUrlSuccess": "署名付き URL の取得に成功しました",
+    "deleteSuccess": "ファイルを削除しました"
+  },
+  "app": {
+    "uploadSuccess": "アップロード成功",
+    "presignedUrlSuccess": "アップロードリンクの取得に成功しました"
+  }
+}

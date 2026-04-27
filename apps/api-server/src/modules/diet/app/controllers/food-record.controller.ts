@@ -24,6 +24,7 @@ import {
   CreateFoodRecordDto,
   FoodRecordQueryDto,
 } from '../dto/food.dto';
+import { I18nService } from '../../../../core/i18n';
 
 @ApiTags('App 饮食记录')
 @Controller('app/food')
@@ -33,6 +34,7 @@ export class FoodRecordController {
   constructor(
     private readonly foodService: FoodService,
     private readonly foodLibraryService: FoodLibraryService,
+    private readonly i18n: I18nService,
   ) {}
 
   // ==================== V8: Food Records 统一接口 ====================
@@ -52,7 +54,7 @@ export class FoodRecordController {
     return {
       success: true,
       code: HttpStatus.CREATED,
-      message: '记录已保存',
+      message: this.i18n.t('diet.recordSaved'),
       data: record,
     };
   }
@@ -79,7 +81,7 @@ export class FoodRecordController {
     return {
       success: true,
       code: HttpStatus.CREATED,
-      message: '添加成功',
+      message: this.i18n.t('common.created'),
       data: record,
     };
   }
@@ -99,7 +101,7 @@ export class FoodRecordController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: this.i18n.t('common.ok'),
       data,
     };
   }
@@ -119,7 +121,7 @@ export class FoodRecordController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '更新成功',
+      message: this.i18n.t('common.updated'),
       data: record,
     };
   }
@@ -138,7 +140,7 @@ export class FoodRecordController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '删除成功',
+      message: this.i18n.t('common.deleted'),
       data: null,
     };
   }
@@ -162,7 +164,7 @@ export class FoodRecordController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: this.i18n.t('common.ok'),
       data,
     };
   }

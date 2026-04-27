@@ -413,7 +413,10 @@ export function buildMealRoles(
     dinner: ['veggie', 'side'],
   };
   const base = baseStructure[mealType] ?? ['carb', 'veggie'];
-  const proteinRoles = ['protein', 'protein2', 'protein3'].slice(0, slotsNeeded);
+  const proteinRoles = ['protein', 'protein2', 'protein3'].slice(
+    0,
+    slotsNeeded,
+  );
   return [...base, ...proteinRoles];
 }
 

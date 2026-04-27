@@ -255,8 +255,10 @@ export interface ProfileConflict {
   resolution: 'use_declared' | 'use_observed' | 'blend';
   /** 置信度 0-1（基于观察数据量） */
   confidence: number;
-  /** 冲突原因标识 */
+  /** 冲突原因标识（系统稳定 code，永不翻译） */
   reason: string;
+  /** 冲突原因可读文案（i18n 翻译后，按当前请求 locale 输出） */
+  reasonText?: string;
 }
 
 /**

@@ -1,5 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
+import { I18nService } from '../../../../core/i18n';
 import { Prisma } from '@prisma/client';
 import {
   GetFoodRecordsQueryDto,
@@ -23,6 +24,7 @@ export class ContentManagementService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly appDataQuery: AppDataQueryService,
+    private readonly i18n: I18nService,
   ) {}
 
   // ==================== 饮食记录管理（委托） ====================
@@ -127,7 +129,8 @@ export class ContentManagementService {
     const achievement = await this.prisma.achievements.findFirst({
       where: { id },
     });
-    if (!achievement) throw new NotFoundException('成就不存在');
+    if (!achievement)
+      throw new NotFoundException(this.i18n.t('diet.achievementNotFound'));
     return this.prisma.achievements.update({
       where: { id },
       data: dto as any,
@@ -138,9 +141,10 @@ export class ContentManagementService {
     const achievement = await this.prisma.achievements.findFirst({
       where: { id },
     });
-    if (!achievement) throw new NotFoundException('成就不存在');
+    if (!achievement)
+      throw new NotFoundException(this.i18n.t('diet.achievementNotFound'));
     await this.prisma.achievements.delete({ where: { id } });
-    return { message: '成就已删除' };
+    return { message: this.i18n.t('diet.achievementDeleted') };
   }
 
   // ==================== 挑战管理 ====================
@@ -196,7 +200,8 @@ export class ContentManagementService {
     const challenge = await this.prisma.challenges.findFirst({
       where: { id },
     });
-    if (!challenge) throw new NotFoundException('挑战不存在');
+    if (!challenge)
+      throw new NotFoundException(this.i18n.t('diet.challengeNotFound'));
     return this.prisma.challenges.update({
       where: { id },
       data: dto as any,
@@ -207,16 +212,18 @@ export class ContentManagementService {
     const challenge = await this.prisma.challenges.findFirst({
       where: { id },
     });
-    if (!challenge) throw new NotFoundException('挑战不存在');
+    if (!challenge)
+      throw new NotFoundException(this.i18n.t('diet.challengeNotFound'));
     await this.prisma.challenges.delete({ where: { id } });
-    return { message: '挑战已删除' };
+    return { message: this.i18n.t('diet.challengeDeleted') };
   }
 
   async toggleChallengeActive(id: string) {
     const challenge = await this.prisma.challenges.findFirst({
       where: { id },
     });
-    if (!challenge) throw new NotFoundException('挑战不存在');
+    if (!challenge)
+      throw new NotFoundException(this.i18n.t('diet.challengeNotFound'));
     return this.prisma.challenges.update({
       where: { id },
       data: { isActive: !challenge.isActive },

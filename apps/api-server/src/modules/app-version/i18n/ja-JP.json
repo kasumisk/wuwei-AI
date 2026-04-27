@@ -1,0 +1,31 @@
+{
+  "appVersion": {
+    "notFound": "バージョン #{{id}} が見つかりません",
+    "alreadyExists": "バージョンはすでに存在します: {{platform}} v{{version}}",
+    "cannotDeletePublished": "公開済みバージョンは直接削除できません。先にアーカイブしてください",
+    "cannotUpdatePublishedFields": "公開済みバージョンは次のフィールドを変更できません: {{fields}}",
+    "alreadyPublished": "バージョンはすでに公開されています",
+    "cannotPublishArchived": "アーカイブ済みバージョンは公開できません",
+    "alreadyArchived": "バージョンはすでにアーカイブされています",
+    "fetchListSuccess": "バージョン一覧を取得しました",
+    "fetchStatsSuccess": "バージョン統計を取得しました",
+    "fetchDetailSuccess": "バージョン詳細を取得しました",
+    "createSuccess": "バージョンを作成しました",
+    "updateSuccess": "バージョンを更新しました",
+    "deleteSuccess": "バージョンを削除しました",
+    "publishSuccess": "バージョンを公開しました",
+    "archiveSuccess": "バージョンをアーカイブしました"
+  },
+  "appVersionPackage": {
+    "alreadyExists": "チャンネル {{channel}} のパッケージはすでに存在します",
+    "downloadUrlRequired": "ダウンロードURLは必須です",
+    "notFound": "パッケージ #{{packageId}} が見つかりません",
+    "versionNotFound": "バージョン #{{versionId}} が見つかりません",
+    "createSuccess": "パッケージを作成しました",
+    "updateSuccess": "パッケージを更新しました",
+    "deleteSuccess": "パッケージを削除しました",
+    "fetchSuccess": "パッケージ一覧を取得しました",
+    "toggleSuccess": "ステータスを切り替えました",
+    "storeDefaultsSuccess": "デフォルト設定を取得しました"
+  }
+}

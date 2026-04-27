@@ -1,0 +1,30 @@
+{
+  "strategy": {
+    "notFound": "策略 {{id}} 不存在",
+    "noFieldsToUpdate": "没有需要更新的字段",
+    "onlyActiveCanBeAssigned": "只能分配激活状态的策略",
+    "assignmentNotFound": "分配记录 {{assignmentId}} 不存在",
+    "assignmentRemoved": "分配已取消",
+    "noActiveStrategyForSegment": "未找到匹配分群 \"{{segment}}\" 的活跃策略",
+    "unknownPreset": "未知预设名 \"{{presetName}}\"，可选: {{available}}",
+    "tuningNotFound": "调优记录 {{tuningId}} 不存在",
+    "tuningNotPending": "调优记录当前状态为 \"{{status}}\"，只有 pending_review 状态可以审核",
+    "fetchListSuccess": "获取策略列表成功",
+    "fetchOverviewSuccess": "获取策略概览成功",
+    "fetchDetailSuccess": "获取策略详情成功",
+    "createSuccess": "策略创建成功",
+    "updateSuccess": "策略更新成功",
+    "activateSuccess": "策略已激活",
+    "archiveSuccess": "策略已归档",
+    "assignSuccess": "策略分配成功",
+    "removeAssignmentSuccess": "分配已取消",
+    "realismUpdateSuccess": "Realism 配置更新成功",
+    "realismPresetApplied": "已应用预设 \"{{preset}}\"",
+    "realismSegmentApplied": "Realism 配置已应用到分群 \"{{segment}}\"",
+    "simulateSuccess": "策略模拟完成",
+    "diffSuccess": "策略对比完成",
+    "tuningApproved": "调优建议已批准",
+    "tuningRejected": "调优建议已拒绝",
+    "pendingTuningsSuccess": "获取待审核调优列表成功"
+  }
+}

@@ -9,6 +9,7 @@ import * as bcrypt from 'bcrypt';
 import { AdminRole, AdminUserStatus } from '../../user/user.types';
 import { AdminUsers as AdminUser } from '@prisma/client';
 import { PrismaService } from '../../../core/prisma/prisma.service';
+import { I18nService } from '../../../core/i18n';
 import {
   LoginDto,
   LoginByPhoneDto,
@@ -30,6 +31,7 @@ export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly i18n: I18nService,
   ) {}
 
   /**
@@ -46,18 +48,22 @@ export class AdminService {
     });
 
     if (!user) {
-      throw new UnauthorizedException('用户名或密码错误');
+      throw new UnauthorizedException(
+        this.i18n.t('auth.usernameOrPasswordInvalid'),
+      );
     }
 
     // 验证密码
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-      throw new UnauthorizedException('用户名或密码错误');
+      throw new UnauthorizedException(
+        this.i18n.t('auth.usernameOrPasswordInvalid'),
+      );
     }
 
     // 检查用户状态
     if (user.status !== AdminUserStatus.ACTIVE) {
-      throw new UnauthorizedException('账号已被禁用');
+      throw new UnauthorizedException(this.i18n.t('auth.accountDisabled'));
     }
 
     // 更新最后登录时间
@@ -85,14 +91,16 @@ export class AdminService {
 
     // 验证验证码
     if (!this.verifyCode(phone, code)) {
-      throw new UnauthorizedException('验证码错误或已过期');
+      throw new UnauthorizedException(this.i18n.t('auth.codeInvalidOrExpired'));
     }
 
     // 查找管理员用户
     const user = await this.prisma.adminUsers.findFirst({ where: { phone } });
 
     if (!user) {
-      throw new UnauthorizedException('该手机号未注册管理员账号');
+      throw new UnauthorizedException(
+        this.i18n.t('auth.phoneNotRegisteredAdmin'),
+      );
     }
 
     // 更新最后登录时间
@@ -116,11 +124,11 @@ export class AdminService {
       const user = await this.findById(payload.sub);
 
       if (!user) {
-        throw new UnauthorizedException('用户不存在');
+        throw new UnauthorizedException(this.i18n.t('auth.userNotFound'));
       }
 
       if (user.status !== AdminUserStatus.ACTIVE) {
-        throw new UnauthorizedException('账号已被禁用');
+        throw new UnauthorizedException(this.i18n.t('auth.accountDisabled'));
       }
 
       // 生成新的 token
@@ -128,7 +136,9 @@ export class AdminService {
 
       return { token: newToken, user: user as any };
     } catch {
-      throw new UnauthorizedException('Token 无效或已过期');
+      throw new UnauthorizedException(
+        this.i18n.t('auth.tokenInvalidOrExpired'),
+      );
     }
   }
 
@@ -147,10 +157,10 @@ export class AdminService {
 
     if (existingUser) {
       if (existingUser.username === username) {
-        throw new ConflictException('用户名已存在');
+        throw new ConflictException(this.i18n.t('auth.usernameTaken'));
       }
       if (email && existingUser.email === email) {
-        throw new ConflictException('邮箱已被注册');
+        throw new ConflictException(this.i18n.t('auth.emailRegistered'));
       }
     }
 
@@ -194,7 +204,7 @@ export class AdminService {
     // TODO: 实际环境中应该调用短信服务
     console.log(`[验证码] 手机号: ${phone}, 验证码: ${code}, 类型: ${type}`);
 
-    return { message: '验证码已发送' };
+    return { message: this.i18n.t('auth.smsSent') };
   }
 
   /**
@@ -206,7 +216,7 @@ export class AdminService {
     });
 
     if (!user) {
-      throw new UnauthorizedException('用户不存在');
+      throw new UnauthorizedException(this.i18n.t('auth.userNotFound'));
     }
 
     return user as any;
@@ -222,7 +232,7 @@ export class AdminService {
     const user = await this.findById(userId);
 
     if (!user) {
-      throw new BadRequestException('用户不存在');
+      throw new BadRequestException(this.i18n.t('auth.userNotFound'));
     }
 
     await this.prisma.adminUsers.update({
@@ -232,7 +242,7 @@ export class AdminService {
 
     const updatedUser = await this.findById(userId);
     if (!updatedUser) {
-      throw new BadRequestException('更新失败');
+      throw new BadRequestException(this.i18n.t('auth.updateFailed'));
     }
     return updatedUser as any;
   }

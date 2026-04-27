@@ -14,15 +14,12 @@ import {
   DecideStageResult,
   StructuredDecision,
 } from '../types/analysis-result.types';
-import {
-  FoodDecisionService,
-  DecisionOutput,
-} from './food-decision.service';
+import { FoodDecisionService, DecisionOutput } from './food-decision.service';
 import { DecisionEngineService } from './decision-engine.service';
 import { DecisionSummaryService } from './decision-summary.service';
 import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 import { cl } from '../i18n/decision-labels';
-import { toPerServing, getWeightFactor } from '../analyze/nutrition-aggregator';
+// nutrition-aggregator 不再导出按重量缩放的工具；AnalyzedFoodItem 已是 per-serving。
 
 /** Input for the decision stage */
 export interface DecisionStageInput {
@@ -67,7 +64,9 @@ export class DecisionStageService {
         contextualAnalysis ?? undefined,
       );
     } catch (err) {
-      this.logger.warn(`Decision computation failed, using fallback: ${(err as Error).message}`);
+      this.logger.warn(
+        `Decision computation failed, using fallback: ${(err as Error).message}`,
+      );
       decisionOutput = this.buildFallbackDecision(input.locale);
     }
 
@@ -112,30 +111,19 @@ export class DecisionStageService {
   }
 
   /**
-   * V5.1: Convert AnalyzedFoodItem[] to DecisionFoodItem[] using centralized per-serving conversion
+   * 将 AnalyzedFoodItem[] 转换为决策层使用的 DecisionFoodItem[]。
+   *
+   * AnalyzedFoodItem 上的营养字段已是 per-serving（实际摄入），
+   * 此处仅剥离内部字段（libraryMatch 等）并归一化 purine 字段类型。
    */
   toDecisionFoodItems(foods: AnalyzedFoodItem[]) {
     return foods.map((f) => {
-      const {
-        libraryMatch: _lib,
-        normalizedName: _norm,
-        ...rest
-      } = f as any;
-
-      const grams = f.estimatedWeightGrams || f.standardServingG || 100;
-      const perServing = toPerServing(f);
+      const { libraryMatch: _lib, normalizedName: _norm, ...rest } = f as any;
 
       return {
         ...rest,
-        estimatedWeightGrams: grams,
-        calories: perServing.calories,
-        protein: perServing.protein,
-        fat: perServing.fat,
-        carbs: perServing.carbs,
-        fiber: perServing.fiber || undefined,
-        sodium: perServing.sodium || undefined,
-        saturatedFat: perServing.saturatedFat,
-        addedSugar: perServing.addedSugar,
+        estimatedWeightGrams:
+          f.estimatedWeightGrams || f.standardServingG || 100,
         purineLevel: typeof f.purine === 'string' ? f.purine : undefined,
         purine: typeof f.purine === 'number' ? f.purine : undefined,
       };

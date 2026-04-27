@@ -1,29 +1,20 @@
 /**
  * V5.1 P2.3/P2.5 — 共享评分维度常量
  *
- * 维度标签/解释/建议已迁移至 labels-*.ts，通过 cl() 查询。
- * getDimensionLabel/Explanation/Suggestion 保持公开 API 不变。
+ * V8 (i18n migration): 数据源改为 decision/i18n/{en-US,zh-CN,ja-JP}.json，
+ *  通过 _load.ts 同步加载，labels-*.ts 已删除。
  *
- * NOTE: 不可从 decision-labels.ts barrel 导入（循环依赖）。
- * 直接从各 locale 子文件导入，组合为内部 LABELS map。
+ * 维度标签/解释/建议存放于 JSON 中（key 形如 `dim.label.energy`），
+ * getDimensionLabel/Explanation/Suggestion 公共 API 不变。
+ *
+ * NOTE: 不从 decision-labels.ts barrel 导入（避免循环依赖），
+ * 直接从 _load.ts 拿到 BY_LOCALE 字典。
  */
-import { COACH_LABELS_ZH } from '../i18n/labels-zh';
-import { COACH_LABELS_EN } from '../i18n/labels-en';
-import { COACH_LABELS_JA } from '../i18n/labels-ja';
-
-const _DIM_LABELS: Record<string, Record<string, string>> = {
-  'zh-CN': COACH_LABELS_ZH,
-  'en-US': COACH_LABELS_EN,
-  'ja-JP': COACH_LABELS_JA,
-};
-
-function _cl(key: string, locale: string = 'zh-CN'): string {
-  return (
-    _DIM_LABELS[locale]?.[key] ||
-    _DIM_LABELS['zh-CN']?.[key] ||
-    key
-  );
-}
+import {
+  DECISION_LABELS_ZH as COACH_LABELS_ZH,
+  DECISION_LABELS_EN as COACH_LABELS_EN,
+  DECISION_LABELS_JA as COACH_LABELS_JA,
+} from '../i18n/_load';
 
 // ==================== 维度键名 ====================
 
@@ -76,7 +67,10 @@ export const DIMENSION_EXPLANATIONS: Record<
         critical: COACH_LABELS_ZH[`dim.explain.${d}.critical`] ?? '',
       },
     ]),
-  ) as Record<ScoringDimension, Record<'positive' | 'warning' | 'critical', string>>,
+  ) as Record<
+    ScoringDimension,
+    Record<'positive' | 'warning' | 'critical', string>
+  >,
   'en-US': Object.fromEntries(
     SCORING_DIMENSIONS.map((d) => [
       d,
@@ -86,7 +80,10 @@ export const DIMENSION_EXPLANATIONS: Record<
         critical: COACH_LABELS_EN[`dim.explain.${d}.critical`] ?? '',
       },
     ]),
-  ) as Record<ScoringDimension, Record<'positive' | 'warning' | 'critical', string>>,
+  ) as Record<
+    ScoringDimension,
+    Record<'positive' | 'warning' | 'critical', string>
+  >,
   'ja-JP': Object.fromEntries(
     SCORING_DIMENSIONS.map((d) => [
       d,
@@ -96,7 +93,10 @@ export const DIMENSION_EXPLANATIONS: Record<
         critical: COACH_LABELS_JA[`dim.explain.${d}.critical`] ?? '',
       },
     ]),
-  ) as Record<ScoringDimension, Record<'positive' | 'warning' | 'critical', string>>,
+  ) as Record<
+    ScoringDimension,
+    Record<'positive' | 'warning' | 'critical', string>
+  >,
 };
 
 /**
@@ -159,9 +159,11 @@ export function scoreToImpact(
  */
 export function getDimensionLabel(
   dimension: string,
-  locale: string = 'zh-CN',
+  locale?: string,
 ): string {
-  const labels = DIMENSION_LABELS[locale] || DIMENSION_LABELS['zh-CN'];
+  const resolvedLocale =
+    locale || (ClsServiceManager.getClsService()?.get('locale') as string) || 'zh-CN';
+  const labels = DIMENSION_LABELS[resolvedLocale] || DIMENSION_LABELS['zh-CN'];
   return labels[dimension as ScoringDimension] || dimension;
 }
 
@@ -171,10 +173,12 @@ export function getDimensionLabel(
 export function getDimensionExplanation(
   dimension: string,
   impact: 'positive' | 'warning' | 'critical',
-  locale: string = 'zh-CN',
+  locale?: string,
 ): string {
+  const resolvedLocale =
+    locale || (ClsServiceManager.getClsService()?.get('locale') as string) || 'zh-CN';
   const explanations =
-    DIMENSION_EXPLANATIONS[locale] || DIMENSION_EXPLANATIONS['zh-CN'];
+    DIMENSION_EXPLANATIONS[resolvedLocale] || DIMENSION_EXPLANATIONS['zh-CN'];
   return explanations[dimension as ScoringDimension]?.[impact] || '';
 }
 
@@ -184,9 +188,12 @@ export function getDimensionExplanation(
 export function getDimensionSuggestion(
   dimension: string,
   impact: 'warning' | 'critical',
-  locale: string = 'zh-CN',
+  locale?: string,
 ): string | undefined {
+  const resolvedLocale =
+    locale || (ClsServiceManager.getClsService()?.get('locale') as string) || 'zh-CN';
   const suggestions =
-    DIMENSION_SUGGESTIONS[locale] || DIMENSION_SUGGESTIONS['zh-CN'];
+    DIMENSION_SUGGESTIONS[resolvedLocale] || DIMENSION_SUGGESTIONS['zh-CN'];
   return suggestions[dimension as ScoringDimension]?.[impact];
 }
+import { ClsServiceManager } from 'nestjs-cls';

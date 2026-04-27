@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/admin/jwt-auth.guard';
 import { RolesGuard } from '../../rbac/admin/roles.guard';
 import { Roles } from '../../rbac/admin/roles.decorator';
+import { I18n, I18nContext } from '../../../core/i18n';
 import { UserProfileDashboardService } from './user-profile-dashboard.service';
 import {
   UserGrowthTrendQueryDto,
@@ -27,12 +28,13 @@ export class UserProfileDashboardController {
   })
   async getGrowthTrend(
     @Query() query: UserGrowthTrendQueryDto,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.dashboardService.getGrowthTrend(query);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取用户增长趋势成功',
+      message: i18n.t('user.growthTrendFetched'),
       data,
     };
   }
@@ -47,12 +49,13 @@ export class UserProfileDashboardController {
   })
   async getProfileDistribution(
     @Query() query: ProfileDistributionQueryDto,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.dashboardService.getProfileDistribution(query);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取用户画像分布成功',
+      message: i18n.t('user.profileDistributionFetched'),
       data,
     };
   }
@@ -64,14 +67,17 @@ export class UserProfileDashboardController {
     summary: '活跃用户统计',
     description: 'DAU / WAU / MAU，粘性比率，日活趋势',
   })
-  async getActiveStats(@Query('days') days?: number): Promise<ApiResponse> {
+  async getActiveStats(
+    @Query('days') days: number | undefined,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.dashboardService.getActiveStats(
       days ? Number(days) : 30,
     );
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取活跃用户统计成功',
+      message: i18n.t('user.activeUserStatsFetched'),
       data,
     };
   }

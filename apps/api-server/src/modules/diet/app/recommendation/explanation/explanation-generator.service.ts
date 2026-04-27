@@ -64,6 +64,24 @@ import type { ScoringAdjustment } from '../scoring-chain/scoring-factor.interfac
 // V7.6 P2: 拆分后的子服务
 import { MealExplanationService } from './meal-explanation.service';
 import { ComparisonExplanationService } from './comparison-explanation.service';
+import { ClsServiceManager } from 'nestjs-cls';
+
+function resolveExplanationLocale(locale?: Locale): Locale {
+  if (locale === 'en-US' || locale === 'zh-CN' || locale === 'ja-JP') {
+    return locale;
+  }
+
+  try {
+    const raw = ClsServiceManager.getClsService()?.get('locale');
+    if (raw === 'en-US' || raw === 'zh-CN' || raw === 'ja-JP') {
+      return raw;
+    }
+  } catch {
+    // Ignore missing CLS context and fallback below.
+  }
+
+  return 'zh-CN';
+}
 
 // V7.6 P2-A: 类型从 explanation.types.ts re-export（保持向后兼容）
 export type {
@@ -295,7 +313,7 @@ export class ExplanationGeneratorService {
       styleVariant,
 
       // locale 标记
-      locale: locale || 'zh-CN',
+      locale: resolveExplanationLocale(locale),
     };
   }
 
@@ -883,7 +901,7 @@ export class ExplanationGeneratorService {
   generateChannelFilterExplanation(
     channel: AcquisitionChannel,
     filteredCount: number,
-    locale: Locale = 'zh-CN',
+    locale?: Locale,
   ): string | null {
     return this.comparisonExplanation.generateChannelFilterExplanation(
       channel,
@@ -976,7 +994,7 @@ export class ExplanationGeneratorService {
     recommended: ScoredFood,
     alternative: ScoredFood,
     goalType: string,
-    locale: Locale = 'zh-CN',
+    locale?: Locale,
   ): ComparisonExplanation {
     return this.comparisonExplanation.generateComparisonExplanation(
       recommended,
@@ -994,7 +1012,7 @@ export class ExplanationGeneratorService {
     substitute: ScoredFood,
     goalType: string,
     target: MealTarget,
-    locale: Locale = 'zh-CN',
+    locale?: Locale,
   ): SubstitutionExplanation {
     return this.comparisonExplanation.generateSubstitutionExplanation(
       original,

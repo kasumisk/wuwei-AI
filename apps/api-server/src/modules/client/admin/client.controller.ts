@@ -10,6 +10,7 @@ import {
   UseGuards,
   HttpStatus,
 } from '@nestjs/common';
+import { I18n, I18nContext } from '../../../core/i18n/i18n.decorator';
 import { JwtAuthGuard } from '../../auth/admin/jwt-auth.guard';
 import { RolesGuard } from '../../rbac/admin/roles.guard';
 import { Roles } from '../../rbac/admin/roles.decorator';
@@ -28,113 +29,102 @@ import { ApiResponse } from '../../../common/types/response.type';
 export class ClientController {
   constructor(private readonly clientService: ClientService) {}
 
-  /**
-   * 获取客户端列表
-   * GET /api/admin/clients
-   */
   @Get()
-  async findAll(@Query() query: GetClientsQueryDto): Promise<ApiResponse> {
+  async findAll(
+    @Query() query: GetClientsQueryDto,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.clientService.findAll(query);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取客户端列表成功',
+      message: i18n.t('client.client.fetchListSuccess'),
       data,
     };
   }
 
-  /**
-   * 获取客户端详情
-   * GET /api/admin/clients/:id
-   */
   @Get(':id')
-  async findOne(@Param('id') id: string): Promise<ApiResponse> {
+  async findOne(
+    @Param('id') id: string,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.clientService.findOne(id);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取客户端详情成功',
+      message: i18n.t('client.client.fetchDetailSuccess'),
       data,
     };
   }
 
-  /**
-   * 创建客户端
-   * POST /api/admin/clients
-   */
   @Post()
-  async create(@Body() createClientDto: CreateClientDto): Promise<ApiResponse> {
+  async create(
+    @Body() createClientDto: CreateClientDto,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.clientService.create(createClientDto);
     return {
       success: true,
       code: HttpStatus.CREATED,
-      message: '客户端创建成功',
+      message: i18n.t('client.client.createSuccess'),
       data,
     };
   }
 
-  /**
-   * 更新客户端
-   * PUT /api/admin/clients/:id
-   */
   @Put(':id')
   async update(
     @Param('id') id: string,
     @Body() updateClientDto: UpdateClientDto,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.clientService.update(id, updateClientDto);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '客户端更新成功',
+      message: i18n.t('client.client.updateSuccess'),
       data,
     };
   }
 
-  /**
-   * 删除客户端
-   * DELETE /api/admin/clients/:id
-   */
   @Delete(':id')
-  async remove(@Param('id') id: string): Promise<ApiResponse> {
+  async remove(
+    @Param('id') id: string,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.clientService.remove(id);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '客户端删除成功',
+      message: i18n.t('client.client.deleteSuccess'),
       data,
     };
   }
 
-  /**
-   * 重新生成 API Secret
-   * POST /api/admin/clients/:id/regenerate-secret
-   */
   @Post(':id/regenerate-secret')
-  async regenerateSecret(@Param('id') id: string): Promise<ApiResponse> {
+  async regenerateSecret(
+    @Param('id') id: string,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.clientService.regenerateSecret(id);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: 'API Secret 重新生成成功',
+      message: i18n.t('client.client.regenerateSecretSuccess'),
       data,
     };
   }
 
-  /**
-   * 获取客户端使用统计
-   * GET /api/admin/clients/:id/usage
-   */
   @Get(':id/usage')
   async getUsageStats(
     @Param('id') id: string,
     @Query() query: GetClientUsageQueryDto,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.clientService.getUsageStats(id, query);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取客户端使用统计成功',
+      message: i18n.t('client.client.usageStatsSuccess'),
       data,
     };
   }

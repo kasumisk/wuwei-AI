@@ -1,0 +1,36 @@
+{
+  "message": {
+    "fetchSuccess": "取得しました",
+    "operationSuccess": "操作が完了しました",
+    "registerSuccess": "登録しました",
+    "updateSuccess": "更新しました"
+  },
+  "meal": {
+    "breakfast": "朝食",
+    "lunch": "昼食",
+    "dinner": "夕食",
+    "snack": "間食"
+  },
+  "push": {
+    "mealReminder": {
+      "title": "{{label}}の時間です",
+      "body": "本日の{{label}}のおすすめをチェックして、健康的な食習慣を続けましょう"
+    },
+    "streakRisk": {
+      "title": "連続記録を途切れさせないで",
+      "body": "{{currentStreak}}日間連続で記録しています。今日もう1回記録すれば継続できます！"
+    },
+    "goalProgress": {
+      "title": "今週の目標進捗",
+      "body": "今週は{{achieved}}/{{total}}日の目標を達成しました。引き続き頑張りましょう！"
+    },
+    "weeklyReport": {
+      "title": "週次栄養レポートが生成されました",
+      "body": "今週の栄養分析と改善アドバイスをご覧ください"
+    },
+    "precomputedReady": {
+      "title": "本日の献立をご用意しました",
+      "body": "あなたのために厳選した一日三食のおすすめをご覧ください"
+    }
+  }
+}

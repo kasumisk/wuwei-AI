@@ -13,6 +13,7 @@ import {
 import { JwtAuthGuard } from '../../auth/admin/jwt-auth.guard';
 import { RolesGuard } from '../../rbac/admin/roles.guard';
 import { Roles } from '../../rbac/admin/roles.decorator';
+import { I18n, I18nContext } from '../../../core/i18n';
 import { AdminUserService } from './admin-user.service';
 import {
   CreateUserDto,
@@ -33,12 +34,15 @@ export class AdminUserController {
    * GET /api/admin/users
    */
   @Get()
-  async findAll(@Query() query: GetUsersQueryDto): Promise<ApiResponse> {
+  async findAll(
+    @Query() query: GetUsersQueryDto,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.adminUserService.findAll(query);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取用户列表成功',
+      message: i18n.t('user.userListFetched'),
       data,
     };
   }
@@ -48,12 +52,15 @@ export class AdminUserController {
    * GET /api/admin/users/:id
    */
   @Get(':id')
-  async findOne(@Param('id') id: string): Promise<ApiResponse> {
+  async findOne(
+    @Param('id') id: string,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.adminUserService.findOne(id);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取用户详情成功',
+      message: i18n.t('user.userDetailFetched'),
       data,
     };
   }
@@ -63,12 +70,15 @@ export class AdminUserController {
    * POST /api/admin/users
    */
   @Post()
-  async create(@Body() createUserDto: CreateUserDto): Promise<ApiResponse> {
+  async create(
+    @Body() createUserDto: CreateUserDto,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.adminUserService.create(createUserDto);
     return {
       success: true,
       code: HttpStatus.CREATED,
-      message: '用户创建成功',
+      message: i18n.t('user.userCreated'),
       data,
     };
   }
@@ -81,12 +91,13 @@ export class AdminUserController {
   async update(
     @Param('id') id: string,
     @Body() updateUserDto: UpdateUserDto,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.adminUserService.update(id, updateUserDto);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '用户更新成功',
+      message: i18n.t('user.userUpdated'),
       data,
     };
   }
@@ -96,12 +107,15 @@ export class AdminUserController {
    * DELETE /api/admin/users/:id
    */
   @Delete(':id')
-  async remove(@Param('id') id: string): Promise<ApiResponse> {
+  async remove(
+    @Param('id') id: string,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.adminUserService.remove(id);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '用户删除成功',
+      message: i18n.t('user.userDeleted'),
       data,
     };
   }
@@ -114,6 +128,7 @@ export class AdminUserController {
   async resetPassword(
     @Param('id') id: string,
     @Body() resetPasswordDto: AdminResetPasswordDto,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.adminUserService.resetPassword(
       id,
@@ -122,7 +137,7 @@ export class AdminUserController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '密码重置成功',
+      message: i18n.t('user.passwordReset'),
       data,
     };
   }
@@ -132,12 +147,15 @@ export class AdminUserController {
    * GET /api/admin/users/:id/roles
    */
   @Get(':id/roles')
-  async getUserRoles(@Param('id') id: string): Promise<ApiResponse> {
+  async getUserRoles(
+    @Param('id') id: string,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.adminUserService.getUserRoles(id);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取用户角色成功',
+      message: i18n.t('user.rolesFetched'),
       data,
     };
   }
@@ -150,12 +168,13 @@ export class AdminUserController {
   async assignRoles(
     @Param('id') id: string,
     @Body() body: { roleIds: string[] },
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.adminUserService.assignRoles(id, body.roleIds);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '角色分配成功',
+      message: i18n.t('user.rolesAssigned'),
       data,
     };
   }

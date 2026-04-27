@@ -10,15 +10,27 @@
  *   (numeric mg/100g preferred, string for backward compat)
  * - Validation ranges added to JSDoc comments matching FIELD_DESC
  *
- * All nutrition fields: per 100g edible portion (aligned with Foods model)
- * Actual intake computed by nutrition-aggregator via estimatedWeightGrams
+ * V6.x 数据契约（重要）：
+ * AnalyzedFoodItem 上的所有营养字段（calories/protein/fat/carbs/fiber/sodium/
+ * 以及所有扩展营养字段）一律存储 **per-serving 实际摄入值**，
+ * 即已乘以 estimatedWeightGrams/100 后的真实摄入量。
+ *
+ * 上游所有生成路径（buildFromLibraryMatch、llmParseFoods fallback、
+ * buildHeuristicFallbackFood、image parseToAnalyzedFoods、applyLibraryMatch）
+ * 必须在写入 AnalyzedFoodItem 前完成 per-100g → per-serving 的换算。
+ *
+ * 下游消费者（aggregateNutrition、前端、决策层）直接使用，不再二次缩放。
+ *
+ * 字段单位注释中的 "/100g" 仅表示**取值范围参考**（来自食物库 FIELD_DESC），
+ * 不代表运行期值的单位语义。
  */
 
 /**
  * 单个被分析的食物项
  *
- * 营养数据基准：per 100g 可食部分（V4.9）
- * 实际摄入 = 营养值 × estimatedWeightGrams / 100
+ * 营养数据基准：**per-serving 实际摄入值**（V6.x 起）
+ * 即所有 calories/protein/fat/carbs/... 字段已经按 estimatedWeightGrams/100 换算完成。
+ * 详见文件顶部"V6.x 数据契约"说明。
  */
 export interface AnalyzedFoodItem {
   /** 食物名称（用户可见） */

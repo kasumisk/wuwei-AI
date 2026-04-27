@@ -5,6 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
+import { I18nService } from '../../../../core/i18n';
 import { ExperimentStatus } from '../../diet.types';
 import { ABTestingService } from '../../app/recommendation/experiment/ab-testing.service';
 import {
@@ -22,6 +23,7 @@ export class ABExperimentManagementService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly abTestingService: ABTestingService,
+    private readonly i18n: I18nService,
   ) {}
 
   // ==================== 列表（分页 + 筛选） ====================
@@ -93,7 +95,7 @@ export class ABExperimentManagementService {
       where: { id },
     });
     if (!experiment) {
-      throw new NotFoundException(`实验 ${id} 不存在`);
+      throw new NotFoundException(this.i18n.t('diet.experimentNotFound'));
     }
 
     // 计算分组流量汇总
@@ -116,14 +118,16 @@ export class ABExperimentManagementService {
       const totalRatio = dto.groups.reduce((s, g) => s + g.trafficRatio, 0);
       if (Math.abs(totalRatio - 1.0) > 0.01) {
         throw new BadRequestException(
-          `分组流量占比之和必须为 1.0，当前为 ${totalRatio.toFixed(4)}`,
+          this.i18n.t('diet.trafficSumInvalid', {
+            total: totalRatio.toFixed(4),
+          }),
         );
       }
 
       // 验证分组名称不重复
       const names = dto.groups.map((g) => g.name);
       if (new Set(names).size !== names.length) {
-        throw new BadRequestException('分组名称不能重复');
+        throw new BadRequestException(this.i18n.t('diet.groupNameDuplicate'));
       }
     }
 
@@ -147,7 +151,7 @@ export class ABExperimentManagementService {
       where: { id },
     });
     if (!experiment) {
-      throw new NotFoundException(`实验 ${id} 不存在`);
+      throw new NotFoundException(this.i18n.t('diet.experimentNotFound'));
     }
 
     // 仅 draft 和 paused 状态可以编辑
@@ -156,7 +160,9 @@ export class ABExperimentManagementService {
       experiment.status !== ExperimentStatus.PAUSED
     ) {
       throw new BadRequestException(
-        `实验处于 ${experiment.status} 状态，不允许编辑（仅 draft/paused 可编辑）`,
+        this.i18n.t('diet.experimentNotEditable', {
+          status: experiment.status,
+        }),
       );
     }
 
@@ -165,13 +171,15 @@ export class ABExperimentManagementService {
       const totalRatio = dto.groups.reduce((s, g) => s + g.trafficRatio, 0);
       if (Math.abs(totalRatio - 1.0) > 0.01) {
         throw new BadRequestException(
-          `分组流量占比之和必须为 1.0，当前为 ${totalRatio.toFixed(4)}`,
+          this.i18n.t('diet.trafficSumInvalid', {
+            total: totalRatio.toFixed(4),
+          }),
         );
       }
 
       const names = dto.groups.map((g) => g.name);
       if (new Set(names).size !== names.length) {
-        throw new BadRequestException('分组名称不能重复');
+        throw new BadRequestException(this.i18n.t('diet.groupNameDuplicate'));
       }
     }
 
@@ -206,7 +214,7 @@ export class ABExperimentManagementService {
       // ABTestingService 抛 Error，转为 NestJS 异常
       if (err instanceof Error) {
         if (err.message.includes('Could not find')) {
-          throw new NotFoundException(`实验 ${id} 不存在`);
+          throw new NotFoundException(this.i18n.t('diet.experimentNotFound'));
         }
         throw new BadRequestException(err.message);
       }
@@ -222,7 +230,7 @@ export class ABExperimentManagementService {
       where: { id },
     });
     if (!experiment) {
-      throw new NotFoundException(`实验 ${id} 不存在`);
+      throw new NotFoundException(this.i18n.t('diet.experimentNotFound'));
     }
 
     const metrics = await this.abTestingService.collectMetrics(id);
@@ -244,7 +252,7 @@ export class ABExperimentManagementService {
       where: { id },
     });
     if (!experiment) {
-      throw new NotFoundException(`实验 ${id} 不存在`);
+      throw new NotFoundException(this.i18n.t('diet.experimentNotFound'));
     }
 
     const analysis = await this.abTestingService.analyzeExperiment(id);

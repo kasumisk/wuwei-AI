@@ -45,6 +45,7 @@ import { AnalyzeImageDto } from '../../../diet/app/dto/food.dto';
 import { AnalyzeTextDto } from '../dto/analyze-text.dto';
 import { RefineAnalysisDto } from '../dto/refine-analysis.dto';
 import { SaveAnalysisToRecordDto } from '../dto/save-analysis.dto';
+import type { Locale } from '../../../diet/app/recommendation/utils/i18n-messages';
 import { UserApiThrottle } from '../../../../core/throttle/throttle.constants';
 import { QuotaGateService } from '../../../subscription/app/services/quota-gate.service';
 import { ResultEntitlementService } from '../../../subscription/app/services/result-entitlement.service';
@@ -63,6 +64,7 @@ import {
 } from '../../../../core/events/domain-events';
 import { FoodAnalysisResultV61 } from '../../../decision/types/analysis-result.types';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
+import { I18nService } from '../../../../core/i18n';
 
 // ─── V7.9 Phase 3-4: 文本分析缓存配置 ───
 
@@ -105,6 +107,7 @@ export class FoodAnalyzeController {
     private readonly eventEmitter: EventEmitter2,
     // 置信度驱动 V1：session 服务
     private readonly analysisSessionService: AnalysisSessionService,
+    private readonly i18n: I18nService,
   ) {}
 
   // ==================== V6.1: 文本分析端点 ====================
@@ -147,7 +150,10 @@ export class FoodAnalyzeController {
         summary.tier,
         summary.entitlements,
       );
-      return ResponseWrapper.success(trimmedResult, '分析完成（缓存）');
+      return ResponseWrapper.success(
+        trimmedResult,
+        this.i18n.t('food.analyzeCompleteCached'),
+      );
     }
 
     // 2. 配额门控检查（AI_TEXT_ANALYSIS 计次类功能）
@@ -168,7 +174,8 @@ export class FoodAnalyzeController {
           summary.tier,
         );
 
-      const errorMessage = access.paywall?.message ?? '文本分析配额不足';
+      const errorMessage =
+        access.paywall?.message ?? this.i18n.t('food.textQuotaExceeded');
       if (paywallDisplay) {
         return ResponseWrapper.error(errorMessage, 403, paywallDisplay);
       }
@@ -182,6 +189,7 @@ export class FoodAnalyzeController {
       user.id,
       (dto.locale as any) || undefined,
       dto.contextOverride?.localHour,
+      dto.hints,
     );
 
     // V7.9 P3-4: 写入缓存（使用完整结果，裁剪在读取时按当前订阅等级执行）
@@ -204,7 +212,10 @@ export class FoodAnalyzeController {
         });
     }
 
-    return ResponseWrapper.success(trimmedResult, '分析完成');
+    return ResponseWrapper.success(
+      trimmedResult,
+      this.i18n.t('food.analyzeComplete'),
+    );
   }
 
   /**
@@ -232,17 +243,19 @@ export class FoodAnalyzeController {
     });
 
     if (!analysisRecord) {
-      throw new NotFoundException('分析记录不存在');
+      throw new NotFoundException(this.i18n.t('food.analysisRecordNotFound'));
     }
 
     // 2. 验证归属
     if (analysisRecord.userId !== user.id) {
-      throw new ForbiddenException('无权操作该分析记录');
+      throw new ForbiddenException(
+        this.i18n.t('food.analysisNoPermissionEdit'),
+      );
     }
 
     // 3. 检查分析状态
     if (analysisRecord.status !== 'completed') {
-      throw new BadRequestException('该分析尚未完成，无法保存');
+      throw new BadRequestException(this.i18n.t('food.analysisIncomplete'));
     }
 
     // 4. 从分析记录中提取数据构建 CreateFoodRecordDto
@@ -306,7 +319,7 @@ export class FoodAnalyzeController {
 
     return ResponseWrapper.success(
       { recordId: record.id, analysisId: dto.analysisId },
-      '分析结果已保存为饮食记录',
+      this.i18n.t('food.analyzeSavedAsRecord'),
     );
   }
 
@@ -544,7 +557,9 @@ export class FoodAnalyzeController {
     const paywallHint = !isUnlimited
       ? {
           limitedTo: historyLimit,
-          message: `免费版仅可查看最近 ${historyLimit} 条分析记录`,
+          message: this.i18n.t('food.freeTierHistoryLimit', {
+            limit: historyLimit,
+          }),
           recommendedTier: SubscriptionTier.PRO,
         }
       : null;
@@ -579,12 +594,14 @@ export class FoodAnalyzeController {
     });
 
     if (!record) {
-      throw new NotFoundException('分析记录不存在');
+      throw new NotFoundException(this.i18n.t('food.analysisRecordNotFound'));
     }
 
     // 2. 验证归属
     if (record.userId !== user.id) {
-      throw new ForbiddenException('无权查看该分析记录');
+      throw new ForbiddenException(
+        this.i18n.t('food.analysisNoPermissionView'),
+      );
     }
 
     // 3. 获取用户订阅信息
@@ -678,18 +695,23 @@ export class FoodAnalyzeController {
     });
 
     if (!record) {
-      throw new NotFoundException('分析记录不存在');
+      throw new NotFoundException(this.i18n.t('food.analysisRecordNotFound'));
     }
 
     if (record.userId !== user.id) {
-      throw new ForbiddenException('无权删除该分析记录');
+      throw new ForbiddenException(
+        this.i18n.t('food.analysisNoPermissionDelete'),
+      );
     }
 
     await this.prisma.foodAnalysisRecords.delete({
       where: { id: analysisId },
     });
 
-    return ResponseWrapper.success(null, '分析记录已删除');
+    return ResponseWrapper.success(
+      null,
+      this.i18n.t('food.analyzeRecordDeleted'),
+    );
   }
 
   /**
@@ -779,7 +801,8 @@ export class FoodAnalyzeController {
           summary.tier,
         );
 
-      const errorMessage = access.paywall?.message ?? '图片分析配额不足';
+      const errorMessage =
+        access.paywall?.message ?? this.i18n.t('food.imageQuotaExceeded');
       if (paywallDisplay) {
         return ResponseWrapper.error(errorMessage, 403, paywallDisplay);
       }
@@ -799,6 +822,7 @@ export class FoodAnalyzeController {
       uploaded.url,
       dto.mealType,
       user.id,
+      (dto.locale as Locale | undefined) || undefined,
     );
 
     // 置信度驱动 V1：为本次请求创建 AnalysisSession（绑定 requestId + 配额记录）
@@ -817,7 +841,7 @@ export class FoodAnalyzeController {
         stage: 'analyzing' as const,
         imageUrl: uploaded.url,
       },
-      '分析任务已提交',
+      this.i18n.t('food.analyzeSubmitted'),
     );
   }
 
@@ -843,19 +867,19 @@ export class FoodAnalyzeController {
     const entry = await this.analyzeService.getAnalysisStatus(requestId);
 
     if (!entry) {
-      throw new NotFoundException('分析任务不存在或已过期');
+      throw new NotFoundException(this.i18n.t('food.analysisTaskNotFound'));
     }
 
     if (entry.status === 'processing') {
       return ResponseWrapper.success(
         { requestId, status: 'processing', stage: 'analyzing' as const },
-        '分析进行中',
+        this.i18n.t('food.analyzeInProgress'),
       );
     }
 
     if (entry.status === 'failed') {
       return ResponseWrapper.error(
-        entry.error || 'AI 分析失败',
+        entry.error || this.i18n.t('food.analyzeFailed'),
         HttpStatus.OK,
         { requestId, status: 'failed', error: entry.error },
       );
@@ -869,7 +893,9 @@ export class FoodAnalyzeController {
         nr.analysisSessionId,
       );
       if (session && session.userId !== user.id) {
-        throw new ForbiddenException('无权访问该分析任务');
+        throw new ForbiddenException(
+          this.i18n.t('food.analysisTaskNoPermission'),
+        );
       }
       return ResponseWrapper.success(
         {
@@ -888,7 +914,7 @@ export class FoodAnalyzeController {
           expiresAt: nr.expiresAt,
           refineUrl: `/api/app/food/analyze/${requestId}/refine`,
         },
-        '识别可能不准确，请核对以获得准确分析',
+        this.i18n.t('food.analyzeNeedsReview'),
       );
     }
 
@@ -902,7 +928,7 @@ export class FoodAnalyzeController {
     if (!rawData) {
       return ResponseWrapper.success(
         { requestId, status: 'completed', result: null },
-        '分析完成',
+        this.i18n.t('food.analyzeComplete'),
       );
     }
 
@@ -950,7 +976,7 @@ export class FoodAnalyzeController {
       },
       alternatives: (rawData.insteadOptions || []).map((name) => ({
         name,
-        reason: '更适合当前目标',
+        reason: this.i18n.t('food.betterForCurrentGoal'),
       })),
       explanation: {
         summary: rawData.advice || rawData.contextComment || '',
@@ -1000,16 +1026,14 @@ export class FoodAnalyzeController {
           ? {
               level: linkedSession.imagePhase.confidenceLevel,
               overall: linkedSession.imagePhase.overallConfidence,
-              threshold: Number(
-                process.env.CONFIDENCE_HIGH_THRESHOLD ?? 0.75,
-              ),
+              threshold: Number(process.env.CONFIDENCE_HIGH_THRESHOLD ?? 0.75),
               source: 'vision' as const,
             }
           : undefined,
         // 统一返回结构，客户端只消费 result
         result: trimmedResult,
       },
-      '分析完成',
+      this.i18n.t('food.analyzeComplete'),
     );
   }
 
@@ -1040,13 +1064,12 @@ export class FoodAnalyzeController {
     @CurrentAppUser() user: AppUserPayload,
   ): Promise<ApiResponse> {
     // 1. 反查 session（首选通过 requestId，其次 dto 中的 sessionId 作为双重校验）
-    const session =
-      await this.analysisSessionService.getByRequestId(requestId);
+    const session = await this.analysisSessionService.getByRequestId(requestId);
     if (!session) {
-      throw new NotFoundException('分析任务不存在或已过期');
+      throw new NotFoundException(this.i18n.t('food.analysisTaskNotFound'));
     }
     if (session.id !== dto.analysisSessionId) {
-      throw new BadRequestException('analysisSessionId 与 requestId 不匹配');
+      throw new BadRequestException(this.i18n.t('food.sessionMismatch'));
     }
 
     // 2. 校验归属 / 状态 / 未过期
@@ -1055,14 +1078,16 @@ export class FoodAnalyzeController {
     } catch (err) {
       const code = (err as { code?: string }).code;
       if (code === 'SESSION_FORBIDDEN') {
-        throw new ForbiddenException('无权修正该分析任务');
+        throw new ForbiddenException(
+          this.i18n.t('food.analysisTaskCorrectNoPermission'),
+        );
       }
       if (code === 'SESSION_EXPIRED') {
-        return ResponseWrapper.error('分析会话已过期，请重新上传图片', 410);
+        return ResponseWrapper.error(this.i18n.t('food.sessionExpired'), 410);
       }
       if (code === 'SESSION_WRONG_STATUS') {
         return ResponseWrapper.error(
-          '该分析任务不在待修正状态（可能已完成或已作废）',
+          this.i18n.t('food.sessionWrongStatus'),
           409,
         );
       }
@@ -1077,10 +1102,12 @@ export class FoodAnalyzeController {
         dto.userNote,
       );
     } catch (e) {
-      throw new BadRequestException((e as Error).message || '修正后的食物列表无效');
+      throw new BadRequestException(
+        (e as Error).message || this.i18n.t('food.correctedListInvalid'),
+      );
     }
     if (!derivedText) {
-      throw new BadRequestException('修正后的食物列表无效');
+      throw new BadRequestException(this.i18n.t('food.correctedListInvalid'));
     }
 
     const fullResult = await this.textFoodAnalysisService.analyze(
@@ -1119,7 +1146,7 @@ export class FoodAnalyzeController {
         result: trimmedResult,
         quotaConsumed: false,
       },
-      '已按你的修正重新计算',
+      this.i18n.t('food.refineSuccess'),
     );
   }
 
@@ -1148,7 +1175,7 @@ export class FoodAnalyzeController {
       where: { id: foodId },
     });
     if (!food) {
-      throw new NotFoundException('未找到该食物');
+      throw new NotFoundException(this.i18n.t('food.foodNotFound'));
     }
 
     // 2. 获取用户订阅信息（用于结果裁剪）
@@ -1217,7 +1244,12 @@ export class FoodAnalyzeController {
       },
       alternatives: [],
       explanation: {
-        summary: `${food.name}（每${servingDesc}）含 ${calories}kcal 热量、${protein}g 蛋白质`,
+        summary: this.i18n.t('food.quickSummaryTemplate', {
+          name: food.name,
+          servingDesc,
+          calories,
+          protein,
+        }),
       },
       ingestion: {
         matchedExistingFoods: true,
@@ -1234,7 +1266,10 @@ export class FoodAnalyzeController {
       summary.entitlements,
     );
 
-    return ResponseWrapper.success(trimmedResult, '快捷分析完成');
+    return ResponseWrapper.success(
+      trimmedResult,
+      this.i18n.t('food.analyzeQuickComplete'),
+    );
   }
 
   // ─── V7.9 Phase 3-3: 快捷分析辅助方法 ───
@@ -1249,27 +1284,29 @@ export class FoodAnalyzeController {
 
     const qualityScore = Number(food.qualityScore) || 0;
     if (qualityScore >= 70) {
-      parts.push('数据质量良好');
+      parts.push(this.i18n.t('food.quickReason.qualityGood'));
     }
 
     if (food.isFried) {
-      parts.push('油炸食品，建议控量');
+      parts.push(this.i18n.t('food.quickReason.friedControl'));
     }
     if (Number(food.processingLevel) >= 3) {
-      parts.push('加工程度较高');
+      parts.push(this.i18n.t('food.quickReason.highProcessing'));
     }
 
     const protein = Number(food.protein) || 0;
     const calories = Number(food.calories) || 1;
     if (protein / calories > 0.08) {
-      parts.push('蛋白质含量丰富');
+      parts.push(this.i18n.t('food.quickReason.highProtein'));
     }
 
     if (Number(food.fiber) >= 3) {
-      parts.push('膳食纤维丰富');
+      parts.push(this.i18n.t('food.quickReason.highFiber'));
     }
 
-    return parts.length > 0 ? parts.join('，') : '综合评估适中';
+    return parts.length > 0
+      ? parts.join(this.i18n.t('food.quickReason.separator'))
+      : this.i18n.t('food.quickReason.moderate');
   }
 
   // ─── V7.9 Phase 3-4: 文本分析缓存工具方法 ───

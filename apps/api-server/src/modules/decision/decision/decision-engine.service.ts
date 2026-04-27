@@ -15,7 +15,7 @@ import {
 import { NutritionScoreBreakdown } from '../../diet/app/services/nutrition-score.service';
 import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 import { cl } from '../i18n/decision-labels';
-import { DIMENSION_LABELS } from '../config/scoring-dimensions';
+import { getDimensionLabel } from '../config/scoring-dimensions';
 import {
   GOAL_DECISION_THRESHOLDS,
   DEFAULT_THRESHOLDS,
@@ -311,8 +311,6 @@ export class DecisionEngineService {
     breakdown: NutritionScoreBreakdown,
     locale?: Locale,
   ): DecisionFactor[] {
-    const loc = locale || 'zh-CN';
-    const labels = DIMENSION_LABELS[loc] || DIMENSION_LABELS['zh-CN'];
     const factors: DecisionFactor[] = [];
 
     const entries: Array<[string, number]> = [
@@ -327,13 +325,14 @@ export class DecisionEngineService {
 
     for (const [dim, score] of entries) {
       const roundedScore = Math.round(score);
+      const dimensionLabel = getDimensionLabel(dim, locale);
       if (roundedScore < 30) {
         factors.push({
           dimension: dim,
           score: roundedScore,
           impact: 'critical',
           message: cl('factor.critical', locale)
-            .replace('{dimension}', labels[dim] || dim)
+            .replace('{dimension}', dimensionLabel)
             .replace('{score}', String(roundedScore)),
         });
       } else if (roundedScore < 50) {
@@ -342,7 +341,7 @@ export class DecisionEngineService {
           score: roundedScore,
           impact: 'warning',
           message: cl('factor.warning', locale)
-            .replace('{dimension}', labels[dim] || dim)
+            .replace('{dimension}', dimensionLabel)
             .replace('{score}', String(roundedScore)),
         });
       } else if (roundedScore >= 85) {
@@ -351,7 +350,7 @@ export class DecisionEngineService {
           score: roundedScore,
           impact: 'positive',
           message: cl('factor.positive', locale)
-            .replace('{dimension}', labels[dim] || dim)
+            .replace('{dimension}', dimensionLabel)
             .replace('{score}', String(roundedScore)),
         });
       }

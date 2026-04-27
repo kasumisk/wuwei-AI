@@ -31,6 +31,7 @@ import {
   FileCategory,
 } from '../../../storage/dto/upload.dto';
 import { ApiResponse } from '../../../common/types/response.type';
+import { I18nService } from '../../../core/i18n/i18n.service';
 
 /** 管理后台最大上传 500MB（App 安装包可能较大） */
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
@@ -41,7 +42,10 @@ const MAX_FILE_SIZE = 500 * 1024 * 1024;
 @Roles('admin')
 @ApiBearerAuth()
 export class FileController {
-  constructor(private readonly storageService: StorageService) {}
+  constructor(
+    private readonly storageService: StorageService,
+    private readonly i18n: I18nService,
+  ) {}
 
   @Post('upload')
   @ApiOperation({ summary: '上传文件（管理后台通用）' })
@@ -67,7 +71,7 @@ export class FileController {
     return {
       success: true,
       code: HttpStatus.CREATED,
-      message: '文件上传成功',
+      message: this.i18n.t('file.admin.uploadSuccess'),
       data: result,
     };
   }
@@ -85,7 +89,7 @@ export class FileController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取预签名 URL 成功',
+      message: this.i18n.t('file.admin.presignedUrlSuccess'),
       data: result,
     };
   }
@@ -97,7 +101,7 @@ export class FileController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '文件删除成功',
+      message: this.i18n.t('file.admin.deleteSuccess'),
       data: null,
     };
   }

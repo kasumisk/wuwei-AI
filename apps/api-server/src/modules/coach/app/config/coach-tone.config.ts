@@ -6,6 +6,24 @@
  */
 
 import { Locale } from '../../../diet/app/recommendation/utils/i18n-messages';
+import { ClsServiceManager } from 'nestjs-cls';
+
+function resolveToneLocale(locale?: Locale): Locale {
+  if (locale === 'en-US' || locale === 'zh-CN' || locale === 'ja-JP') {
+    return locale;
+  }
+
+  try {
+    const raw = ClsServiceManager.getClsService()?.get('locale');
+    if (raw === 'en-US' || raw === 'zh-CN' || raw === 'ja-JP') {
+      return raw;
+    }
+  } catch {
+    // Ignore missing CLS context and fallback below.
+  }
+
+  return 'zh-CN';
+}
 
 // ==================== 教练人格 Prompt ====================
 
@@ -171,11 +189,12 @@ export const GOAL_TONE_MODIFIERS: Record<string, Record<string, string>> = {
  */
 export function getConfidenceModifier(
   avgConfidence: number,
-  locale: Locale = 'zh-CN',
+  locale?: Locale,
 ): string {
+  const resolvedLocale = resolveToneLocale(locale);
   if (avgConfidence >= 0.85) return ''; // 高置信度，无需修饰
-  const isEn = locale === 'en-US';
-  const isJa = locale === 'ja-JP';
+  const isEn = resolvedLocale === 'en-US';
+  const isJa = resolvedLocale === 'ja-JP';
   if (avgConfidence >= 0.6) {
     return isEn
       ? '\nNote: Analysis confidence is moderate. Use softer language like "likely" or "it seems".'
@@ -196,11 +215,16 @@ export function getConfidenceModifier(
 export function buildTonePrompt(
   coachStyle: string,
   goalType: string,
-  locale: Locale = 'zh-CN',
+  locale?: Locale,
   avgConfidence?: number,
 ): string {
+  const resolvedLocale = resolveToneLocale(locale);
   const loc =
-    locale === 'ja-JP' ? 'ja-JP' : locale === 'en-US' ? 'en-US' : 'zh-CN';
+    resolvedLocale === 'ja-JP'
+      ? 'ja-JP'
+      : resolvedLocale === 'en-US'
+      ? 'en-US'
+      : 'zh-CN';
   const persona =
     PERSONA_PROMPTS[coachStyle]?.[loc] ||
     PERSONA_PROMPTS['friendly']?.[loc] ||
@@ -210,6 +234,8 @@ export function buildTonePrompt(
     GOAL_TONE_MODIFIERS['health']?.[loc] ||
     '';
   const confMod =
-    avgConfidence != null ? getConfidenceModifier(avgConfidence, locale) : '';
+    avgConfidence != null
+      ? getConfidenceModifier(avgConfidence, resolvedLocale)
+      : '';
   return `${persona}\n\n${goalMod}${confMod}`;
 }

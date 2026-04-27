@@ -15,6 +15,7 @@ import { AppUsers as AppUser } from '@prisma/client';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { SmsService } from './sms.service';
 import { WechatAuthService } from './wechat-auth.service';
+import { I18nService } from '../../../core/i18n';
 import type { AppLoginResponseDto, AppUserResponseDto } from './dto/auth.dto';
 
 @Injectable()
@@ -30,6 +31,7 @@ export class AppAuthService {
     private readonly jwtService: JwtService,
     private readonly smsService: SmsService,
     private readonly wechatAuthService: WechatAuthService,
+    private readonly i18n: I18nService,
   ) {}
 
   // ==================== 匿名登录 ====================
@@ -77,7 +79,7 @@ export class AppAuthService {
     // V6.4: verifyCode 已改为异步（Redis 存储）
     const valid = await this.smsService.verifyCode(phone, code);
     if (!valid) {
-      throw new UnauthorizedException('验证码错误或已过期');
+      throw new UnauthorizedException(this.i18n.t('auth.codeInvalidOrExpired'));
     }
 
     let user = await this.prisma.appUsers.findFirst({
@@ -323,7 +325,7 @@ export class AppAuthService {
     });
 
     if (existing) {
-      throw new ConflictException('该邮箱已被注册');
+      throw new ConflictException(this.i18n.t('auth.emailRegistered'));
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -357,20 +359,24 @@ export class AppAuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedException('邮箱或密码错误');
+      throw new UnauthorizedException(
+        this.i18n.t('auth.emailOrPasswordInvalid'),
+      );
     }
 
     if (!user.password) {
-      throw new UnauthorizedException('该邮箱未设置密码，请使用其他方式登录');
+      throw new UnauthorizedException(this.i18n.t('auth.emailHasNoPassword'));
     }
 
     const isValid = await bcrypt.compare(password, user.password);
     if (!isValid) {
-      throw new UnauthorizedException('邮箱或密码错误');
+      throw new UnauthorizedException(
+        this.i18n.t('auth.emailOrPasswordInvalid'),
+      );
     }
 
     if (user.status !== AppUserStatus.ACTIVE) {
-      throw new UnauthorizedException('账号已被禁用');
+      throw new UnauthorizedException(this.i18n.t('auth.accountDisabled'));
     }
 
     await this.prisma.appUsers.update({
@@ -391,7 +397,7 @@ export class AppAuthService {
     code: string,
   ): Promise<AppLoginResponseDto> {
     if (!this.verifyEmailCode(email, code)) {
-      throw new UnauthorizedException('验证码错误或已过期');
+      throw new UnauthorizedException(this.i18n.t('auth.codeInvalidOrExpired'));
     }
 
     let user = await this.prisma.appUsers.findFirst({
@@ -448,7 +454,7 @@ export class AppAuthService {
       `[邮箱验证码] email: ${email}, code: ${code}, type: ${type}`,
     );
 
-    return { message: '验证码已发送' };
+    return { message: this.i18n.t('auth.smsSent') };
   }
 
   // ==================== 密码重置 ====================
@@ -459,7 +465,7 @@ export class AppAuthService {
     newPassword: string,
   ): Promise<{ message: string }> {
     if (!this.verifyEmailCode(email, code)) {
-      throw new BadRequestException('验证码错误或已过期');
+      throw new BadRequestException(this.i18n.t('auth.codeInvalidOrExpired'));
     }
 
     const user = await this.prisma.appUsers.findFirst({
@@ -467,7 +473,7 @@ export class AppAuthService {
     });
 
     if (!user) {
-      throw new BadRequestException('用户不存在');
+      throw new BadRequestException(this.i18n.t('auth.userNotFound'));
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
@@ -476,7 +482,7 @@ export class AppAuthService {
       data: { password: hashedPassword },
     });
 
-    return { message: '密码重置成功' };
+    return { message: this.i18n.t('auth.passwordResetSuccess') };
   }
 
   // ==================== 用户信息管理 ====================
@@ -487,7 +493,7 @@ export class AppAuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedException('用户不存在');
+      throw new UnauthorizedException(this.i18n.t('auth.userNotFound'));
     }
 
     return this.toUserResponse(user as any);
@@ -502,7 +508,7 @@ export class AppAuthService {
     });
 
     if (!user) {
-      throw new BadRequestException('用户不存在');
+      throw new BadRequestException(this.i18n.t('auth.userNotFound'));
     }
 
     const updateData: Record<string, any> = {};
@@ -526,18 +532,20 @@ export class AppAuthService {
     });
 
     if (!user) {
-      throw new BadRequestException('用户不存在');
+      throw new BadRequestException(this.i18n.t('auth.userNotFound'));
     }
 
     if (user.authType !== AppUserAuthType.ANONYMOUS) {
-      throw new BadRequestException('仅匿名用户可升级');
+      throw new BadRequestException(
+        this.i18n.t('auth.onlyAnonymousCanUpgrade'),
+      );
     }
 
     const existing = await this.prisma.appUsers.findFirst({
       where: { email },
     });
     if (existing) {
-      throw new ConflictException('该邮箱已被注册');
+      throw new ConflictException(this.i18n.t('auth.emailRegistered'));
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -564,11 +572,11 @@ export class AppAuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedException('用户不存在');
+      throw new UnauthorizedException(this.i18n.t('auth.userNotFound'));
     }
 
     if (user.status !== AppUserStatus.ACTIVE) {
-      throw new UnauthorizedException('账号已被禁用');
+      throw new UnauthorizedException(this.i18n.t('auth.accountDisabled'));
     }
 
     await this.prisma.appUsers.update({
@@ -637,13 +645,15 @@ export class AppAuthService {
       );
 
       if (!response.ok) {
-        throw new UnauthorizedException('Google Token 验证失败');
+        throw new UnauthorizedException(
+          this.i18n.t('auth.googleVerificationFailed'),
+        );
       }
 
       const payload = await response.json();
 
       if (!payload.sub) {
-        throw new UnauthorizedException('Google Token 无效');
+        throw new UnauthorizedException(this.i18n.t('auth.googleTokenInvalid'));
       }
 
       return {
@@ -658,7 +668,7 @@ export class AppAuthService {
         throw error;
       }
       this.logger.error('Google Token 验证异常', error);
-      throw new UnauthorizedException('Google 授权验证失败');
+      throw new UnauthorizedException(this.i18n.t('auth.googleAuthFailed'));
     }
   }
 
@@ -681,7 +691,9 @@ export class AppAuthService {
 
     const googleClientId = process.env.GOOGLE_CLIENT_ID;
     if (googleClientId && payload.aud !== googleClientId) {
-      throw new UnauthorizedException('Google Token audience 不匹配');
+      throw new UnauthorizedException(
+        this.i18n.t('auth.googleAudienceMismatch'),
+      );
     }
 
     return {

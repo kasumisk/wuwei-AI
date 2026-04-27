@@ -29,6 +29,7 @@ import {
   FileCategory,
 } from '../../../storage/dto/upload.dto';
 import { ApiResponse } from '../../../common/types/response.type';
+import { I18nService } from '../../../core/i18n/i18n.service';
 
 /** App 端最大上传 20MB */
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
@@ -38,7 +39,10 @@ const MAX_FILE_SIZE = 20 * 1024 * 1024;
 @UseGuards(AppJwtAuthGuard)
 @ApiBearerAuth()
 export class AppFileController {
-  constructor(private readonly storageService: StorageService) {}
+  constructor(
+    private readonly storageService: StorageService,
+    private readonly i18n: I18nService,
+  ) {}
 
   /**
    * 上传文件（App 用户）
@@ -70,7 +74,7 @@ export class AppFileController {
     return {
       success: true,
       code: HttpStatus.CREATED,
-      message: '上传成功',
+      message: this.i18n.t('file.app.uploadSuccess'),
       data: result,
     };
   }
@@ -96,7 +100,7 @@ export class AppFileController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取上传链接成功',
+      message: this.i18n.t('file.app.presignedUrlSuccess'),
       data: result,
     };
   }

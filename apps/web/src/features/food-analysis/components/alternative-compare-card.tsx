@@ -79,9 +79,7 @@ export function AlternativeCompareCard({
     <div className="bg-white/60 p-3 space-y-2">
       <div className="flex items-center justify-between">
         <p className="text-xs font-bold text-muted-foreground">🔄 替代方案</p>
-        <span className="text-[10px] text-muted-foreground">
-          {items.length} 个建议 · 左右滑动
-        </span>
+        <span className="text-[10px] text-muted-foreground">{items.length} 个建议 · 左右滑动</span>
       </div>
 
       {/* Horizontal scroll */}
@@ -111,9 +109,13 @@ export function AlternativeCompareCard({
               {(calDiff != null || protDiff != null || scoreDiff != null) && (
                 <div className="flex flex-wrap gap-1">
                   {/* Calories: positive = more calories = bad (red) */}
-                  {calDiff != null && <DiffBadge value={calDiff} unit=" kcal" positiveIsGood={false} />}
+                  {calDiff != null && (
+                    <DiffBadge value={calDiff} unit=" kcal" positiveIsGood={false} />
+                  )}
                   {/* Protein: positive = more protein = good (green) */}
-                  {protDiff != null && <DiffBadge value={protDiff} unit="g 蛋白" positiveIsGood={true} />}
+                  {protDiff != null && (
+                    <DiffBadge value={protDiff} unit="g 蛋白" positiveIsGood={true} />
+                  )}
                   {/* Score: positive = better score = good (green) */}
                   {scoreDiff != null && scoreDiff !== 0 && (
                     <DiffBadge value={scoreDiff} unit=" 分" positiveIsGood={true} />

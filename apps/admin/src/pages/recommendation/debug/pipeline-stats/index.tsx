@@ -228,7 +228,10 @@ const DistributionPieChart: React.FC<{
           <RechartsTooltip
             formatter={(value: number | string | Array<number | string> | undefined) => {
               const num = Number(value ?? 0);
-              return [`${num} 次 (${((num / total) * 100).toFixed(1)}%)`, '数量'] as [string, string];
+              return [`${num} 次 (${((num / total) * 100).toFixed(1)}%)`, '数量'] as [
+                string,
+                string,
+              ];
             }}
           />
         </PieChart>

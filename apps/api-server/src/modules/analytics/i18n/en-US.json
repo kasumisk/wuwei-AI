@@ -1,0 +1,13 @@
+{
+  "analytics": {
+    "overviewSuccess": "Overview data retrieved successfully",
+    "topClientsSuccess": "Top clients retrieved successfully",
+    "capabilityUsageSuccess": "Capability usage statistics retrieved successfully",
+    "timeSeriesSuccess": "Time series data retrieved successfully",
+    "costAnalysisSuccess": "Cost analysis retrieved successfully",
+    "errorAnalysisSuccess": "Error analysis retrieved successfully",
+    "dashboardSuccess": "Dashboard data retrieved successfully",
+    "funnelSuccess": "Conversion funnel data retrieved successfully",
+    "trendSuccess": "Conversion trend data retrieved successfully"
+  }
+}

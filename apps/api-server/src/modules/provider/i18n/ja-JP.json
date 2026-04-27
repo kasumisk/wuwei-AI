@@ -1,0 +1,35 @@
+{
+  "provider": {
+    "notFound": "プロバイダー #{{id}} が見つかりません",
+    "alreadyExists": "プロバイダーはすでに存在します: {{name}} ({{type}})",
+    "deleteWithModels": "プロバイダーを削除できません: {{count}} 件の関連モデル設定があります",
+    "notEnabled": "このプロバイダーは有効になっていません",
+    "testSuccess": "接続テストが成功しました",
+    "testFailed": "接続テストが失敗しました",
+    "updateNoField": "更新するフィールドがありません",
+    "fetchListSuccess": "プロバイダー一覧を取得しました",
+    "fetchDetailSuccess": "プロバイダー詳細を取得しました",
+    "createSuccess": "プロバイダーを作成しました",
+    "updateSuccess": "プロバイダーを更新しました",
+    "deleteSuccess": "プロバイダーを削除しました",
+    "testComplete": "テスト完了",
+    "healthSuccess": "ヘルス状態を取得しました",
+    "healthCheckComplete": "ヘルスチェック完了"
+  },
+  "model": {
+    "notFound": "モデル #{{id}} が見つかりません",
+    "providerNotFound": "プロバイダー #{{providerId}} が見つからないか無効です",
+    "alreadyExists": "モデルはすでに存在します: {{modelId}} ({{providerId}})",
+    "notEnabled": "このモデルは有効になっていません",
+    "providerNotEnabledForModel": "このモデルのプロバイダーが有効になっていません",
+    "testSuccess": "テスト成功（シミュレーション）",
+    "testFailed": "テスト失敗",
+    "deleteSuccess": "モデルを削除しました",
+    "fetchListSuccess": "モデル一覧を取得しました",
+    "fetchDetailSuccess": "モデル詳細を取得しました",
+    "createSuccess": "モデルを作成しました",
+    "updateSuccess": "モデルを更新しました",
+    "testComplete": "テスト完了",
+    "healthSuccess": "ヘルス状態を取得しました"
+  }
+}

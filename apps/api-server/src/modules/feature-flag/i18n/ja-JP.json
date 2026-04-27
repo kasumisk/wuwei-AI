@@ -1,0 +1,8 @@
+{
+  "fetchSuccess": "取得成功",
+  "saveSuccess": "保存成功",
+  "notFound": "機能フラグが見つかりません",
+  "enabled": "有効化しました",
+  "disabled": "無効化しました",
+  "deleteSuccess": "削除成功"
+}

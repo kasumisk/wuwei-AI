@@ -201,7 +201,9 @@ const ScoreDistributionChart: React.FC<{
           <XAxis type="number" domain={[0, 100]} />
           <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={80} />
           <RechartsTooltip
-            formatter={(value: number | string | Array<number | string> | undefined) => [`${Number(value ?? 0).toFixed(1)}`, '分数'] as [string, string]}
+            formatter={(value: number | string | Array<number | string> | undefined) =>
+              [`${Number(value ?? 0).toFixed(1)}`, '分数'] as [string, string]
+            }
           />
           <Legend />
           <Bar dataKey="scoreA" name={nameA} fill="#1677ff" radius={[0, 2, 2, 0]} barSize={10} />

@@ -14,6 +14,7 @@ import { JwtAuthGuard } from '../../auth/admin/jwt-auth.guard';
 import { RolesGuard } from '../../rbac/admin/roles.guard';
 import { Roles } from '../../rbac/admin/roles.decorator';
 import { AnalysisRecordManagementService } from './analysis-record-management.service';
+import { I18nService } from '../../../core/i18n/i18n.service';
 import {
   GetAnalysisRecordsQueryDto,
   ReviewAnalysisRecordDto,
@@ -28,6 +29,7 @@ import { ApiResponse } from '../../../common/types/response.type';
 export class AnalysisRecordManagementController {
   constructor(
     private readonly analysisService: AnalysisRecordManagementService,
+    private readonly i18n: I18nService,
   ) {}
 
   @Get()
@@ -36,14 +38,24 @@ export class AnalysisRecordManagementController {
     @Query() query: GetAnalysisRecordsQueryDto,
   ): Promise<ApiResponse> {
     const data = await this.analysisService.findAnalysisRecords(query);
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('food.ok'),
+      data,
+    };
   }
 
   @Get('statistics')
   @ApiOperation({ summary: '分析记录统计' })
   async getStatistics(): Promise<ApiResponse> {
     const data = await this.analysisService.getAnalysisStatistics();
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('food.ok'),
+      data,
+    };
   }
 
   @Get('popular-foods')
@@ -56,14 +68,24 @@ export class AnalysisRecordManagementController {
       limit ? parseInt(limit, 10) : 20,
       days ? parseInt(days, 10) : 7,
     );
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('food.ok'),
+      data,
+    };
   }
 
   @Get(':id')
   @ApiOperation({ summary: '获取分析记录详情' })
   async getDetail(@Param('id') id: string): Promise<ApiResponse> {
     const data = await this.analysisService.getAnalysisRecordDetail(id);
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('food.ok'),
+      data,
+    };
   }
 
   @Put(':id/review')
@@ -79,6 +101,11 @@ export class AnalysisRecordManagementController {
       dto,
       adminUserId,
     );
-    return { success: true, code: HttpStatus.OK, message: '审核成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('food.reviewOk'),
+      data,
+    };
   }
 }

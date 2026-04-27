@@ -1,0 +1,13 @@
+{
+  "analytics": {
+    "overviewSuccess": "获取总览数据成功",
+    "topClientsSuccess": "获取客户端排行成功",
+    "capabilityUsageSuccess": "获取能力使用统计成功",
+    "timeSeriesSuccess": "获取时间序列数据成功",
+    "costAnalysisSuccess": "获取成本分析成功",
+    "errorAnalysisSuccess": "获取错误分析成功",
+    "dashboardSuccess": "获取仪表盘数据成功",
+    "funnelSuccess": "获取转化漏斗数据成功",
+    "trendSuccess": "获取转化趋势数据成功"
+  }
+}

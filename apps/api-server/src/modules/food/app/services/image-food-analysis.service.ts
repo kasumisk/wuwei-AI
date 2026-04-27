@@ -178,6 +178,7 @@ export class ImageFoodAnalysisService {
     imageUrl: string,
     mealType?: string,
     userId?: string,
+    locale?: Locale,
   ): Promise<AnalysisResult> {
     const userHint = mealType ? `User hint: this is ${mealType}. ` : '';
     const {
@@ -204,7 +205,7 @@ export class ImageFoodAnalysisService {
         .getProfile(userId)
         .catch(() => null);
       const style = behaviorProfile?.coachStyle || 'friendly';
-      personaPrompt = buildTonePrompt(style, goalType);
+      personaPrompt = buildTonePrompt(style, goalType, locale);
     }
 
     // V5.0: 统一用户上下文 prompt 块（合并 context + precision）
@@ -213,6 +214,7 @@ export class ImageFoodAnalysisService {
       nutritionPriority,
       healthConditions,
       budgetStatus,
+      locale,
     });
     const fullContext = [
       personaPrompt,
@@ -222,10 +224,14 @@ export class ImageFoodAnalysisService {
     ]
       .filter(Boolean)
       .join('\n\n');
-    const systemPrompt = _buildGoalAwarePrompt(goalType, fullContext);
+    const systemPrompt = _buildGoalAwarePrompt(goalType, fullContext, locale);
 
     try {
-      const content = await this.callVisionApi(systemPrompt, imageUrl, userHint);
+      const content = await this.callVisionApi(
+        systemPrompt,
+        imageUrl,
+        userHint,
+      );
 
       // 解析 AI 返回
       const result = this.parseAnalysisResult(content);
@@ -233,7 +239,7 @@ export class ImageFoodAnalysisService {
 
       // 评分引擎覆盖
       if (userId && profile) {
-        await this.applyScoreEngine(result, userId, goalType, profile);
+        await this.applyScoreEngine(result, userId, goalType, profile, locale);
       }
 
       return result;
@@ -254,9 +260,15 @@ export class ImageFoodAnalysisService {
     imageUrl: string,
     mealType: string | undefined,
     userId: string,
+    locale?: Locale,
   ): Promise<FoodAnalysisResultV61> {
     // 1. 构建 prompt 并调用 AI（直接解析为 AnalyzedFoodItem[]）
-    const foods = await this.analyzeImageToFoods(imageUrl, mealType, userId);
+    const foods = await this.analyzeImageToFoods(
+      imageUrl,
+      mealType,
+      userId,
+      locale,
+    );
 
     // V5.0 P2.5: Post-analysis library matching — enrich with foodLibraryId + calibrated data
     await this.matchFoodsToLibrary(foods);
@@ -281,6 +293,7 @@ export class ImageFoodAnalysisService {
     imageUrl: string,
     mealType: string | undefined,
     userId: string,
+    locale?: Locale,
   ): Promise<AnalyzedFoodItem[]> {
     const userHint = mealType ? `User hint: this is ${mealType}. ` : '';
     const {
@@ -306,7 +319,7 @@ export class ImageFoodAnalysisService {
         .getProfile(userId)
         .catch(() => null);
       const style = behaviorProfile?.coachStyle || 'friendly';
-      personaPrompt = buildTonePrompt(style, goalType);
+      personaPrompt = buildTonePrompt(style, goalType, locale);
     }
 
     // V5.0: 统一用户上下文 prompt 块
@@ -315,6 +328,7 @@ export class ImageFoodAnalysisService {
       nutritionPriority,
       healthConditions,
       budgetStatus,
+      locale,
     });
     const fullContext = [
       personaPrompt,
@@ -324,10 +338,14 @@ export class ImageFoodAnalysisService {
     ]
       .filter(Boolean)
       .join('\n\n');
-    const systemPrompt = _buildGoalAwarePrompt(goalType, fullContext);
+    const systemPrompt = _buildGoalAwarePrompt(goalType, fullContext, locale);
 
     try {
-      const content = await this.callVisionApi(systemPrompt, imageUrl, userHint);
+      const content = await this.callVisionApi(
+        systemPrompt,
+        imageUrl,
+        userHint,
+      );
       return this.parseToAnalyzedFoods(content);
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
@@ -394,7 +412,9 @@ export class ImageFoodAnalysisService {
     if (!response.ok) {
       const errText = await response.text();
       this.logger.error(`OpenRouter API error: ${response.status} ${errText}`);
-      throw new BadRequestException('AI analysis failed, please try again later');
+      throw new BadRequestException(
+        'AI analysis failed, please try again later',
+      );
     }
 
     const data = (await response.json()) as {
@@ -463,58 +483,114 @@ export class ImageFoodAnalysisService {
         const grams = f.estimatedWeightGrams || 100;
         const ratio = grams / 100;
         return {
-        name: f.name,
-        nameEn: f.nameEn,
-        quantity: f.quantity,
-        estimatedWeightGrams: grams,
-        standardServingG: f.standardServingG,
-        standardServingDesc: f.standardServingDesc,
-        category: f.category,
-        confidence: f.confidence,
-        estimated: f.estimated,
-        calories: Math.round((f.calories || 0) * ratio),
-        protein: Math.round((f.protein || 0) * ratio * 10) / 10,
-        fat: Math.round((f.fat || 0) * ratio * 10) / 10,
-        carbs: Math.round((f.carbs || 0) * ratio * 10) / 10,
-        fiber: f.fiber != null ? Math.round((f.fiber || 0) * ratio * 10) / 10 : undefined,
-        sodium: f.sodium != null ? Math.round((f.sodium || 0) * ratio) : undefined,
-        sugar: f.sugar != null ? Math.round((f.sugar || 0) * ratio * 10) / 10 : undefined,
-        saturatedFat: f.saturatedFat != null ? Math.round((f.saturatedFat || 0) * ratio * 10) / 10 : undefined,
-        addedSugar: f.addedSugar != null ? Math.round((f.addedSugar || 0) * ratio * 10) / 10 : undefined,
-        transFat: f.transFat != null ? Math.round((f.transFat || 0) * ratio * 10) / 10 : undefined,
-        cholesterol: f.cholesterol != null ? Math.round((f.cholesterol || 0) * ratio) : undefined,
-        omega3: f.omega3 != null ? Math.round((f.omega3 || 0) * ratio) : undefined,
-        omega6: f.omega6 != null ? Math.round((f.omega6 || 0) * ratio) : undefined,
-        solubleFiber: f.solubleFiber != null ? Math.round((f.solubleFiber || 0) * ratio * 10) / 10 : undefined,
-        vitaminA: f.vitaminA != null ? Math.round((f.vitaminA || 0) * ratio) : undefined,
-        vitaminC: f.vitaminC != null ? Math.round((f.vitaminC || 0) * ratio * 10) / 10 : undefined,
-        vitaminD: f.vitaminD != null ? Math.round((f.vitaminD || 0) * ratio * 10) / 10 : undefined,
-        calcium: f.calcium != null ? Math.round((f.calcium || 0) * ratio) : undefined,
-        iron: f.iron != null ? Math.round((f.iron || 0) * ratio * 10) / 10 : undefined,
-        potassium: f.potassium != null ? Math.round((f.potassium || 0) * ratio) : undefined,
-        zinc: f.zinc != null ? Math.round((f.zinc || 0) * ratio * 10) / 10 : undefined,
-        // GI、GL 是食物固有属性，不按份量缩放
-        glycemicIndex: f.glycemicIndex,
-        glycemicLoad: f.glycemicLoad,
-        qualityScore: f.qualityScore,
-        satietyScore: f.satietyScore,
-        processingLevel: f.processingLevel,
-        nutrientDensity: f.nutrientDensity,
-        fodmapLevel: f.fodmapLevel,
-        oxalateLevel: f.oxalateLevel,
-        purine: f.purine,
-        allergens: Array.isArray(f.allergens) && f.allergens.length ? f.allergens : undefined,
-        tags: Array.isArray(f.tags) && f.tags.length ? f.tags : undefined,
-        cookingMethods: Array.isArray(f.cookingMethods) ? f.cookingMethods : undefined,
-        ingredientList: Array.isArray(f.ingredientList) ? f.ingredientList : undefined,
-        // V5.0: 新增食物库对齐字段
-        foodForm: f.foodForm,
-        commonPortions: Array.isArray(f.commonPortions) ? f.commonPortions : undefined,
-        dishPriority: f.dishPriority,
+          name: f.name,
+          nameEn: f.nameEn,
+          quantity: f.quantity,
+          estimatedWeightGrams: grams,
+          standardServingG: f.standardServingG,
+          standardServingDesc: f.standardServingDesc,
+          category: f.category,
+          confidence: f.confidence,
+          estimated: f.estimated,
+          calories: Math.round((f.calories || 0) * ratio),
+          protein: Math.round((f.protein || 0) * ratio * 10) / 10,
+          fat: Math.round((f.fat || 0) * ratio * 10) / 10,
+          carbs: Math.round((f.carbs || 0) * ratio * 10) / 10,
+          fiber:
+            f.fiber != null
+              ? Math.round((f.fiber || 0) * ratio * 10) / 10
+              : undefined,
+          sodium:
+            f.sodium != null ? Math.round((f.sodium || 0) * ratio) : undefined,
+          sugar:
+            f.sugar != null
+              ? Math.round((f.sugar || 0) * ratio * 10) / 10
+              : undefined,
+          saturatedFat:
+            f.saturatedFat != null
+              ? Math.round((f.saturatedFat || 0) * ratio * 10) / 10
+              : undefined,
+          addedSugar:
+            f.addedSugar != null
+              ? Math.round((f.addedSugar || 0) * ratio * 10) / 10
+              : undefined,
+          transFat:
+            f.transFat != null
+              ? Math.round((f.transFat || 0) * ratio * 10) / 10
+              : undefined,
+          cholesterol:
+            f.cholesterol != null
+              ? Math.round((f.cholesterol || 0) * ratio)
+              : undefined,
+          omega3:
+            f.omega3 != null ? Math.round((f.omega3 || 0) * ratio) : undefined,
+          omega6:
+            f.omega6 != null ? Math.round((f.omega6 || 0) * ratio) : undefined,
+          solubleFiber:
+            f.solubleFiber != null
+              ? Math.round((f.solubleFiber || 0) * ratio * 10) / 10
+              : undefined,
+          vitaminA:
+            f.vitaminA != null
+              ? Math.round((f.vitaminA || 0) * ratio)
+              : undefined,
+          vitaminC:
+            f.vitaminC != null
+              ? Math.round((f.vitaminC || 0) * ratio * 10) / 10
+              : undefined,
+          vitaminD:
+            f.vitaminD != null
+              ? Math.round((f.vitaminD || 0) * ratio * 10) / 10
+              : undefined,
+          calcium:
+            f.calcium != null
+              ? Math.round((f.calcium || 0) * ratio)
+              : undefined,
+          iron:
+            f.iron != null
+              ? Math.round((f.iron || 0) * ratio * 10) / 10
+              : undefined,
+          potassium:
+            f.potassium != null
+              ? Math.round((f.potassium || 0) * ratio)
+              : undefined,
+          zinc:
+            f.zinc != null
+              ? Math.round((f.zinc || 0) * ratio * 10) / 10
+              : undefined,
+          // GI、GL 是食物固有属性，不按份量缩放
+          glycemicIndex: f.glycemicIndex,
+          glycemicLoad: f.glycemicLoad,
+          qualityScore: f.qualityScore,
+          satietyScore: f.satietyScore,
+          processingLevel: f.processingLevel,
+          nutrientDensity: f.nutrientDensity,
+          fodmapLevel: f.fodmapLevel,
+          oxalateLevel: f.oxalateLevel,
+          purine: f.purine,
+          allergens:
+            Array.isArray(f.allergens) && f.allergens.length
+              ? f.allergens
+              : undefined,
+          tags: Array.isArray(f.tags) && f.tags.length ? f.tags : undefined,
+          cookingMethods: Array.isArray(f.cookingMethods)
+            ? f.cookingMethods
+            : undefined,
+          ingredientList: Array.isArray(f.ingredientList)
+            ? f.ingredientList
+            : undefined,
+          // V5.0: 新增食物库对齐字段
+          foodForm: f.foodForm,
+          commonPortions: Array.isArray(f.commonPortions)
+            ? f.commonPortions
+            : undefined,
+          dishPriority: f.dishPriority,
         };
       });
     } catch {
-      this.logger.warn(`AI response parse to AnalyzedFoodItem[] failed: ${content.substring(0, 200)}`);
+      this.logger.warn(
+        `AI response parse to AnalyzedFoodItem[] failed: ${content.substring(0, 200)}`,
+      );
       return [];
     }
   }
@@ -543,14 +619,22 @@ export class ImageFoodAnalysisService {
             1,
           )) as any[];
 
-          if (!results?.length || !results[0] || results[0].sim_score < MATCH_THRESHOLD) {
+          if (
+            !results?.length ||
+            !results[0] ||
+            results[0].sim_score < MATCH_THRESHOLD
+          ) {
             // If nameEn search failed, try name as fallback (if different)
             if (food.nameEn && food.name && food.nameEn !== food.name) {
               const fallbackResults = (await this.foodLibraryService.search(
                 food.name,
                 1,
               )) as any[];
-              if (!fallbackResults?.length || !fallbackResults[0] || fallbackResults[0].sim_score < MATCH_THRESHOLD) {
+              if (
+                !fallbackResults?.length ||
+                !fallbackResults[0] ||
+                fallbackResults[0].sim_score < MATCH_THRESHOLD
+              ) {
                 return;
               }
               this.applyLibraryMatch(food, fallbackResults[0]);
@@ -569,6 +653,10 @@ export class ImageFoodAnalysisService {
 
   /**
    * V5.0 P2.5: Apply library match data to an AnalyzedFoodItem
+   *
+   * 数据契约：传入的 food 上营养字段已是 per-serving（parseToAnalyzedFoods 已缩放）；
+   * match 来自 food_library 是 per-100g。因此用库值覆盖时必须按
+   * ratio = estimatedWeightGrams / 100 缩放，避免 per-100g 值直接覆盖到 per-serving 字段。
    */
   private applyLibraryMatch(food: AnalyzedFoodItem, match: any): void {
     food.foodLibraryId = match.id;
@@ -576,17 +664,26 @@ export class ImageFoodAnalysisService {
     // Calibrate nutrition from library (per-100g) if available
     // Only override if library has the field and AI confidence is not high
     if (food.confidence < 0.8) {
-      if (match.calories != null) food.calories = Number(match.calories);
-      if (match.protein != null) food.protein = Number(match.protein);
-      if (match.fat != null) food.fat = Number(match.fat);
-      if (match.carbs != null) food.carbs = Number(match.carbs);
-      if (match.fiber != null) food.fiber = Number(match.fiber);
-      if (match.sodium != null) food.sodium = Number(match.sodium);
+      const grams = food.estimatedWeightGrams || food.standardServingG || 100;
+      const ratio = grams / 100;
+      const round1 = (v: number) => Math.round(v * 10) / 10;
+
+      if (match.calories != null)
+        food.calories = Math.round(Number(match.calories) * ratio);
+      if (match.protein != null)
+        food.protein = round1(Number(match.protein) * ratio);
+      if (match.fat != null) food.fat = round1(Number(match.fat) * ratio);
+      if (match.carbs != null) food.carbs = round1(Number(match.carbs) * ratio);
+      if (match.fiber != null) food.fiber = round1(Number(match.fiber) * ratio);
+      if (match.sodium != null)
+        food.sodium = Math.round(Number(match.sodium) * ratio);
     }
 
     // Enrich quality/satiety from library
-    if (match.qualityScore != null) food.qualityScore = Number(match.qualityScore);
-    if (match.satietyScore != null) food.satietyScore = Number(match.satietyScore);
+    if (match.qualityScore != null)
+      food.qualityScore = Number(match.qualityScore);
+    if (match.satietyScore != null)
+      food.satietyScore = Number(match.satietyScore);
 
     // V5.0: Enrich foodForm and flavorProfile from library
     if (match.foodForm && !food.foodForm) food.foodForm = match.foodForm;
@@ -663,7 +760,9 @@ export class ImageFoodAnalysisService {
     this.persistence
       .saveImageRecord({ analysisId, userId, imageUrl, mealType, result })
       .catch((err) =>
-        this.logger.warn(`Failed to save image analysis record async: ${(err as Error).message}`),
+        this.logger.warn(
+          `Failed to save image analysis record async: ${(err as Error).message}`,
+        ),
       );
 
     return analysisId;
@@ -765,7 +864,7 @@ export class ImageFoodAnalysisService {
     userId: string,
     goalType: string,
     profile: any,
-    locale: Locale = 'zh-CN',
+    locale?: Locale,
   ): Promise<void> {
     try {
       // V1.6: 委托给 FoodScoringService
@@ -923,7 +1022,9 @@ export class ImageFoodAnalysisService {
         nutritionScore: 0,
       };
     } catch {
-      this.logger.warn(`AI response parse failed: ${content.substring(0, 200)}`);
+      this.logger.warn(
+        `AI response parse failed: ${content.substring(0, 200)}`,
+      );
       return {
         foods: [],
         totalCalories: 0,
@@ -933,7 +1034,8 @@ export class ImageFoodAnalysisService {
         avgQuality: 5,
         avgSatiety: 5,
         mealType: 'lunch',
-        advice: 'Unable to identify image content, please upload a clearer food photo',
+        advice:
+          'Unable to identify image content, please upload a clearer food photo',
         isHealthy: true,
         decision: 'SAFE' as const,
         riskLevel: '🟢',

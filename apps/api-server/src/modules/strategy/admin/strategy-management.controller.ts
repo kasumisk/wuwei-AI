@@ -17,6 +17,7 @@ import {
   ApiBearerAuth,
   ApiQuery,
 } from '@nestjs/swagger';
+import { I18n, I18nContext } from '../../../core/i18n/i18n.decorator';
 import { JwtAuthGuard } from '../../auth/admin/jwt-auth.guard';
 import { RolesGuard } from '../../rbac/admin/roles.guard';
 import { Roles } from '../../rbac/admin/roles.decorator';
@@ -51,24 +52,27 @@ export class StrategyManagementController {
 
   @Get()
   @ApiOperation({ summary: '获取策略列表' })
-  async findAll(@Query() query: GetStrategiesQueryDto): Promise<ApiResponse> {
+  async findAll(
+    @Query() query: GetStrategiesQueryDto,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.strategyManagementService.findStrategies(query);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取策略列表成功',
+      message: i18n.t('strategy.strategy.fetchListSuccess'),
       data,
     };
   }
 
   @Get('overview')
   @ApiOperation({ summary: '获取策略统计概览' })
-  async getOverview(): Promise<ApiResponse> {
+  async getOverview(@I18n() i18n: I18nContext): Promise<ApiResponse> {
     const data = await this.strategyManagementService.getStrategyOverview();
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取策略概览成功',
+      message: i18n.t('strategy.strategy.fetchOverviewSuccess'),
       data,
     };
   }
@@ -76,32 +80,27 @@ export class StrategyManagementController {
   // ==================== V7.9 P2-10: 调优审核（静态路由，必须在 :id 之前） ====================
 
   @Get('auto-tune/pending')
-  @ApiOperation({
-    summary: '获取待审核的自动调优建议列表',
-    description: '列出所有 reviewStatus 为 pending_review 的调优记录，支持分页',
-  })
+  @ApiOperation({ summary: '获取待审核的自动调优建议列表' })
   async getPendingTunings(
     @Query() query: TuningPendingQueryDto,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.strategyManagementService.getPendingTunings(query);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取待审核调优列表成功',
+      message: i18n.t('strategy.strategy.pendingTuningsSuccess'),
       data,
     };
   }
 
   @Post('auto-tune/:tuningId/approve')
-  @ApiOperation({
-    summary: '批准自动调优建议',
-    description:
-      '将指定调优记录标记为 approved，记录审核人和审核时间，并标记为已应用',
-  })
+  @ApiOperation({ summary: '批准自动调优建议' })
   async approveTuning(
     @Param('tuningId') tuningId: string,
     @Body() dto: TuningReviewDto,
     @CurrentUser() admin: any,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const adminUserId = admin?.id || admin?.sub || 'unknown';
     const data = await this.strategyManagementService.approveTuning(
@@ -112,20 +111,18 @@ export class StrategyManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '调优建议已批准',
+      message: i18n.t('strategy.strategy.tuningApproved'),
       data,
     };
   }
 
   @Post('auto-tune/:tuningId/reject')
-  @ApiOperation({
-    summary: '拒绝自动调优建议',
-    description: '将指定调优记录标记为 rejected，记录审核人和审核时间',
-  })
+  @ApiOperation({ summary: '拒绝自动调优建议' })
   async rejectTuning(
     @Param('tuningId') tuningId: string,
     @Body() dto: TuningReviewDto,
     @CurrentUser() admin: any,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const adminUserId = admin?.id || admin?.sub || 'unknown';
     const data = await this.strategyManagementService.rejectTuning(
@@ -136,7 +133,7 @@ export class StrategyManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '调优建议已拒绝',
+      message: i18n.t('strategy.strategy.tuningRejected'),
       data,
     };
   }
@@ -145,24 +142,30 @@ export class StrategyManagementController {
 
   @Get(':id')
   @ApiOperation({ summary: '获取策略详情' })
-  async findOne(@Param('id') id: string): Promise<ApiResponse> {
+  async findOne(
+    @Param('id') id: string,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.strategyManagementService.getStrategyDetail(id);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取策略详情成功',
+      message: i18n.t('strategy.strategy.fetchDetailSuccess'),
       data,
     };
   }
 
   @Post()
   @ApiOperation({ summary: '创建策略' })
-  async create(@Body() dto: CreateStrategyDto): Promise<ApiResponse> {
+  async create(
+    @Body() dto: CreateStrategyDto,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.strategyManagementService.createStrategy(dto);
     return {
       success: true,
       code: HttpStatus.CREATED,
-      message: '策略创建成功',
+      message: i18n.t('strategy.strategy.createSuccess'),
       data,
     };
   }
@@ -172,36 +175,43 @@ export class StrategyManagementController {
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateStrategyDto,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.strategyManagementService.updateStrategy(id, dto);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '策略更新成功',
+      message: i18n.t('strategy.strategy.updateSuccess'),
       data,
     };
   }
 
   @Post(':id/activate')
   @ApiOperation({ summary: '激活策略' })
-  async activate(@Param('id') id: string): Promise<ApiResponse> {
+  async activate(
+    @Param('id') id: string,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.strategyManagementService.activateStrategy(id);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '策略已激活',
+      message: i18n.t('strategy.strategy.activateSuccess'),
       data,
     };
   }
 
   @Post(':id/archive')
   @ApiOperation({ summary: '归档策略' })
-  async archive(@Param('id') id: string): Promise<ApiResponse> {
+  async archive(
+    @Param('id') id: string,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
     const data = await this.strategyManagementService.archiveStrategy(id);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '策略已归档',
+      message: i18n.t('strategy.strategy.archiveSuccess'),
       data,
     };
   }
@@ -213,12 +223,13 @@ export class StrategyManagementController {
   async assign(
     @Param('id') id: string,
     @Body() dto: AssignStrategyDto,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.strategyManagementService.assignStrategy(id, dto);
     return {
       success: true,
       code: HttpStatus.CREATED,
-      message: '策略分配成功',
+      message: i18n.t('strategy.strategy.assignSuccess'),
       data,
     };
   }
@@ -228,12 +239,13 @@ export class StrategyManagementController {
   async getAssignments(
     @Param('id') id: string,
     @Query() query: GetAssignmentsQueryDto,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.strategyManagementService.getAssignments(id, query);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取分配列表成功',
+      message: i18n.t('strategy.strategy.fetchListSuccess'),
       data,
     };
   }
@@ -244,6 +256,7 @@ export class StrategyManagementController {
     @Param('id') id: string,
     @Param('assignmentId') assignmentId: string,
     @Body() dto: RemoveAssignmentDto,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.strategyManagementService.removeAssignment(
       id,
@@ -253,7 +266,7 @@ export class StrategyManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '分配已取消',
+      message: i18n.t('strategy.strategy.removeAssignmentSuccess'),
       data,
     };
   }
@@ -261,29 +274,23 @@ export class StrategyManagementController {
   // ==================== V6.5 Phase 3H: Realism 配置管理 ====================
 
   @Get('realism/overview')
-  @ApiOperation({
-    summary: '获取所有活跃策略的 Realism 配置概览',
-    description: '返回系统默认值、预设值、以及每个活跃策略当前的 realism 配置',
-  })
-  async getRealismOverview(): Promise<ApiResponse> {
+  @ApiOperation({ summary: '获取所有活跃策略的 Realism 配置概览' })
+  async getRealismOverview(@I18n() i18n: I18nContext): Promise<ApiResponse> {
     const data = await this.strategyManagementService.getRealismOverview();
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取 Realism 配置概览成功',
+      message: i18n.t('strategy.strategy.fetchOverviewSuccess'),
       data,
     };
   }
 
   @Patch(':id/realism')
-  @ApiOperation({
-    summary: '更新策略的 Realism 配置',
-    description:
-      '只修改 config.realism 子字段，不影响策略其他配置维度。支持部分更新。',
-  })
+  @ApiOperation({ summary: '更新策略的 Realism 配置' })
   async updateRealism(
     @Param('id') id: string,
     @Body() dto: UpdateRealismConfigDto,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.strategyManagementService.updateStrategyRealism(
       id,
@@ -292,16 +299,13 @@ export class StrategyManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: 'Realism 配置更新成功',
+      message: i18n.t('strategy.strategy.realismUpdateSuccess'),
       data,
     };
   }
 
   @Post(':id/realism/preset')
-  @ApiOperation({
-    summary: '将预设 Realism 配置应用到策略',
-    description: '可选预设: warm_start, re_engage, precision, discovery',
-  })
+  @ApiOperation({ summary: '将预设 Realism 配置应用到策略' })
   @ApiQuery({
     name: 'preset',
     required: true,
@@ -311,6 +315,7 @@ export class StrategyManagementController {
   async applyRealismPreset(
     @Param('id') id: string,
     @Query('preset') preset: string,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.strategyManagementService.applyRealismPreset(
       id,
@@ -319,25 +324,25 @@ export class StrategyManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: `已应用预设 "${preset}"`,
+      message: i18n.t('strategy.strategy.realismPresetApplied', { preset }),
       data,
     };
   }
 
   @Post('realism/apply-to-segment')
-  @ApiOperation({
-    summary: '按分群批量应用 Realism 配置',
-    description: '查找匹配分群名称的所有活跃策略，批量更新 realism 配置',
-  })
+  @ApiOperation({ summary: '按分群批量应用 Realism 配置' })
   async applyRealismToSegment(
     @Body() dto: ApplyRealismToSegmentDto,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data =
       await this.strategyManagementService.applyRealismToSegment(dto);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: `Realism 配置已应用到分群 "${dto.segment}"`,
+      message: i18n.t('strategy.strategy.realismSegmentApplied', {
+        segment: dto.segment,
+      }),
       data,
     };
   }
@@ -345,20 +350,17 @@ export class StrategyManagementController {
   // ==================== V7.9 P2-06: 策略模拟推荐 ====================
 
   @Post(':id/simulate')
-  @ApiOperation({
-    summary: '模拟指定策略的推荐效果',
-    description:
-      '输入 userId 列表，使用指定策略模拟推荐，返回策略配置快照和用户列表。只读操作，不保存推荐记录。',
-  })
+  @ApiOperation({ summary: '模拟指定策略的推荐效果' })
   async simulateStrategy(
     @Param('id') id: string,
     @Body() dto: StrategySimulateDto,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.strategyManagementService.simulateStrategy(id, dto);
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '策略模拟完成',
+      message: i18n.t('strategy.strategy.simulateSuccess'),
       data,
     };
   }
@@ -366,11 +368,7 @@ export class StrategyManagementController {
   // ==================== V7.9 P2-07: 策略参数 Diff ====================
 
   @Get(':id/diff')
-  @ApiOperation({
-    summary: '对比两个策略的 9 维配置差异',
-    description:
-      '逐维度对比 rank/recall/boost/meal/multiObjective/exploration/assembly/explain/realism，列出差异项',
-  })
+  @ApiOperation({ summary: '对比两个策略的 9 维配置差异' })
   @ApiQuery({
     name: 'compareWith',
     required: true,
@@ -379,6 +377,7 @@ export class StrategyManagementController {
   async diffStrategies(
     @Param('id') id: string,
     @Query('compareWith') compareWith: string,
+    @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.strategyManagementService.diffStrategies(
       id,
@@ -387,7 +386,7 @@ export class StrategyManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '策略对比完成',
+      message: i18n.t('strategy.strategy.diffSuccess'),
       data,
     };
   }

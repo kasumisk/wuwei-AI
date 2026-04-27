@@ -17,7 +17,7 @@ import {
 import { NutritionScoreBreakdown } from '../../diet/app/services/nutrition-score.service';
 import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 import { cl } from '../i18n/decision-labels';
-import { DIMENSION_LABELS } from '../config/scoring-dimensions';
+import { getDimensionLabel } from '../config/scoring-dimensions';
 import {
   checkCalorieOverrun,
   checkProteinDeficit,
@@ -84,8 +84,7 @@ export class IssueDetectorService {
         message: cl('factor.critical', locale)
           .replace(
             '{dimension}',
-            (DIMENSION_LABELS[locale || 'zh-CN'] || DIMENSION_LABELS['zh-CN'])
-              .foodQuality || cl('dim.foodQuality', locale),
+            getDimensionLabel('foodQuality', locale),
           )
           .replace('{score}', String(Math.round(breakdown.foodQuality))),
         data: { qualityScore: Math.round(breakdown.foodQuality) },

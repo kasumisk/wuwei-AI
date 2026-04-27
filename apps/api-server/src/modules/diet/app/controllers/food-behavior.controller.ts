@@ -16,13 +16,17 @@ import { BehaviorService } from '../services/behavior.service';
 import { DecisionFeedbackDto } from '../dto/food.dto';
 import { RequireFeature } from '../../../subscription/app/decorators/require-feature.decorator';
 import { GatedFeature } from '../../../subscription/subscription.types';
+import { I18nService } from '../../../../core/i18n';
 
 @ApiTags('App 行为建模')
 @Controller('app/food')
 @UseGuards(AppJwtAuthGuard)
 @ApiBearerAuth()
 export class FoodBehaviorController {
-  constructor(private readonly behaviorService: BehaviorService) {}
+  constructor(
+    private readonly behaviorService: BehaviorService,
+    private readonly i18n: I18nService,
+  ) {}
 
   /**
    * 获取行为画像
@@ -38,7 +42,7 @@ export class FoodBehaviorController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: this.i18n.t('common.ok'),
       data: profile,
     };
   }
@@ -56,7 +60,7 @@ export class FoodBehaviorController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '检查完成',
+      message: this.i18n.t('diet.checkComplete'),
       data: { reminder },
     };
   }
@@ -79,7 +83,7 @@ export class FoodBehaviorController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '反馈已记录',
+      message: this.i18n.t('diet.feedbackRecorded'),
       data: null,
     };
   }

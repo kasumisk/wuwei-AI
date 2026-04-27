@@ -302,15 +302,13 @@ describe('ScoringChainService', () => {
     });
 
     it('should short-circuit when score drops to floor during chain', () => {
-      const computeSpy = jest
-        .fn()
-        .mockReturnValue({
-          factorName: 'late',
-          multiplier: 99.0,
-          additive: 0,
-          explanationKey: null,
-          reason: 'late',
-        });
+      const computeSpy = jest.fn().mockReturnValue({
+        factorName: 'late',
+        multiplier: 99.0,
+        additive: 0,
+        explanationKey: null,
+        reason: 'late',
+      });
       const lateApplicableSpy = jest.fn().mockReturnValue(true);
 
       class LateFactor implements ScoringFactor {

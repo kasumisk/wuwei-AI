@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException, Logger } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { AdminService } from './admin-auth.service';
+import { I18nService } from '../../../core/i18n';
 
 export interface JwtPayload {
   sub: string;
@@ -33,7 +34,10 @@ function getJwtSecret(): string {
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
-  constructor(private readonly adminService: AdminService) {
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly i18n: I18nService,
+  ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
@@ -44,17 +48,17 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   async validate(payload: JwtPayload) {
     // 仅验证管理员 token
     if (payload.type && payload.type !== 'admin') {
-      throw new UnauthorizedException('非管理员令牌');
+      throw new UnauthorizedException(this.i18n.t('auth.notAdminToken'));
     }
 
     const user = await this.adminService.findById(payload.sub);
 
     if (!user) {
-      throw new UnauthorizedException('用户不存在');
+      throw new UnauthorizedException(this.i18n.t('auth.userNotFound'));
     }
 
     if (user.status !== 'active') {
-      throw new UnauthorizedException('用户已被禁用');
+      throw new UnauthorizedException(this.i18n.t('auth.userDisabled'));
     }
 
     return {

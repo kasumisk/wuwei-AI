@@ -1,0 +1,23 @@
+{
+  "client": {
+    "notFound": "クライアント #{{id}} が見つかりません",
+    "fetchListSuccess": "クライアント一覧を取得しました",
+    "fetchDetailSuccess": "クライアント詳細を取得しました",
+    "createSuccess": "クライアントを作成しました",
+    "updateSuccess": "クライアントを更新しました",
+    "deleteSuccess": "クライアントを削除しました",
+    "regenerateSecretSuccess": "API Secretを再生成しました",
+    "usageStatsSuccess": "クライアント使用統計を取得しました"
+  },
+  "clientPermission": {
+    "clientNotFound": "クライアント #{{clientId}} が見つかりません",
+    "permissionNotFound": "権限 #{{permissionId}} が見つかりません",
+    "capabilityNotFound": "クライアント #{{clientId}} に機能 {{capability}} が見つかりません",
+    "alreadyExists": "クライアント #{{clientId}} はすでに機能 {{capability}} を持っています",
+    "fetchSuccess": "権限一覧を取得しました",
+    "grantSuccess": "権限を付与しました",
+    "updateSuccess": "権限を更新しました",
+    "revokeSuccess": "権限を取り消しました",
+    "revokeAllSuccess": "すべての権限を取り消しました"
+  }
+}

@@ -27,6 +27,7 @@ import { Reflector } from '@nestjs/core';
 import { SubscriptionTier } from '../../subscription.types';
 import { SubscriptionService } from '../services/subscription.service';
 import { SUBSCRIPTION_TIER_KEY } from '../decorators/require-subscription.decorator';
+import { I18nService } from '../../../../core/i18n/i18n.service';
 
 /**
  * 等级权重映射 — 用于数值比较
@@ -45,6 +46,7 @@ export class SubscriptionGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly subscriptionService: SubscriptionService,
+    private readonly i18n: I18nService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -65,7 +67,7 @@ export class SubscriptionGuard implements CanActivate {
       // 未认证 — 此处不应出现（门控守卫应在 Auth 守卫之后执行）
       throw new ForbiddenException({
         code: 'AUTH_REQUIRED',
-        message: '需要登录后才能使用此功能',
+        message: this.i18n.t('subscription.guard.loginRequired'),
       });
     }
 
@@ -87,7 +89,9 @@ export class SubscriptionGuard implements CanActivate {
 
     throw new ForbiddenException({
       code: 'SUBSCRIPTION_REQUIRED',
-      message: `此功能需要 ${requiredTier} 或更高等级订阅`,
+      message: this.i18n.t('subscription.guard.tierRequired', {
+        tier: requiredTier,
+      }),
       currentTier: userTier,
       requiredTier,
     });

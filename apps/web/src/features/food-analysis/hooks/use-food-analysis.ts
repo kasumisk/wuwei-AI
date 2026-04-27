@@ -60,7 +60,8 @@ export function useFoodAnalysis() {
     async (
       text: string,
       mealType?: string,
-      contextOverride?: { localHour?: number }
+      contextOverride?: { localHour?: number },
+      hints?: string[]
     ): Promise<AnalysisResult> => {
       setAnalyzing(true);
       try {
@@ -68,6 +69,7 @@ export function useFoodAnalysis() {
           text,
           mealType: mealType as 'breakfast' | 'lunch' | 'dinner' | 'snack' | undefined,
           contextOverride,
+          hints,
         });
       } finally {
         setAnalyzing(false);

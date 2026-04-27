@@ -23,6 +23,7 @@ import {
   PipelineStatsQueryDto,
 } from '../dto/recommendation-debug.dto';
 import { ApiResponse } from '../../../../common/types/response.type';
+import { I18nService } from '../../../../core/i18n';
 
 @ApiTags('管理后台 - 推荐调试')
 @Controller('admin/recommendation-debug')
@@ -30,7 +31,10 @@ import { ApiResponse } from '../../../../common/types/response.type';
 @Roles('admin', 'super_admin')
 @ApiBearerAuth()
 export class RecommendationDebugController {
-  constructor(private readonly debugService: RecommendationDebugService) {}
+  constructor(
+    private readonly debugService: RecommendationDebugService,
+    private readonly i18n: I18nService,
+  ) {}
 
   // ==================== 模拟推荐 ====================
 
@@ -47,7 +51,7 @@ export class RecommendationDebugController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '模拟推荐成功',
+      message: this.i18n.t('diet.simulateRecommendOk'),
       data,
     };
   }
@@ -64,7 +68,7 @@ export class RecommendationDebugController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取反向解释成功',
+      message: this.i18n.t('diet.reverseExplainOk'),
       data,
     };
   }
@@ -85,7 +89,7 @@ export class RecommendationDebugController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取用户策略成功',
+      message: this.i18n.t('diet.userStrategyOk'),
       data,
     };
   }
@@ -105,7 +109,7 @@ export class RecommendationDebugController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取质量仪表盘成功',
+      message: this.i18n.t('diet.qualityDashboardOk'),
       data,
     };
   }
@@ -123,7 +127,7 @@ export class RecommendationDebugController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取 Trace 详情成功',
+      message: this.i18n.t('diet.traceDetailOk'),
       data,
     };
   }
@@ -141,7 +145,7 @@ export class RecommendationDebugController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取 Trace 列表成功',
+      message: this.i18n.t('diet.traceListOk'),
       data,
     };
   }
@@ -161,7 +165,7 @@ export class RecommendationDebugController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取得分分解成功',
+      message: this.i18n.t('diet.scoreBreakdownOk'),
       data,
     };
   }
@@ -179,7 +183,7 @@ export class RecommendationDebugController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取策略差异对比成功',
+      message: this.i18n.t('diet.strategyDiffOk'),
       data,
     };
   }
@@ -199,7 +203,7 @@ export class RecommendationDebugController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取管道统计成功',
+      message: this.i18n.t('diet.pipelineStatsOk'),
       data,
     };
   }

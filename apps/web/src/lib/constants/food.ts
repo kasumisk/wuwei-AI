@@ -76,7 +76,6 @@ export const GOAL_LABELS: Record<string, string> = {
   habit: '改善习惯',
 };
 
-
 // ── 评分维度标签 ──
 export const SCORE_LABELS: Record<string, string> = {
   energy: '能量',

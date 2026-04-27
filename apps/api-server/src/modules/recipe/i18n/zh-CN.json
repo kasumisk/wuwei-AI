@@ -1,0 +1,17 @@
+{
+  "ok": "获取成功",
+  "recipeNotFound": "菜谱 {{id}} 不存在",
+  "createdOk": "创建成功",
+  "updatedOk": "更新成功",
+  "deletedOk": "删除成功",
+  "reviewOk": "审核成功",
+  "submittedAwaitingReview": "提交成功，等待审核",
+  "ratingOk": "评分成功",
+  "ratingNone": "无评分记录",
+  "translationSaved": "翻译已保存",
+  "translationDeleted": "翻译已删除",
+  "importOk": "导入成功",
+  "generationDone": "生成完成",
+  "generationQueued": "已提交异步生成任务",
+  "batchRecalcDone": "批量重算完成: 更新 {{updated}} 条, 未变 {{unchanged}} 条"
+}

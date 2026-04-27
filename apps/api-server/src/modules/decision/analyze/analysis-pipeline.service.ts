@@ -233,7 +233,9 @@ export class AnalysisPipelineService {
     // 持久化（fire-and-forget，不阻塞响应）
     if (input.userId) {
       this.persistRecord(input, analyze.analysisId, result).catch((err) =>
-        this.logger.error(`Analysis record persistence failed: ${(err as Error).message}`),
+        this.logger.error(
+          `Analysis record persistence failed: ${(err as Error).message}`,
+        ),
       );
     }
 
@@ -288,7 +290,8 @@ export class AnalysisPipelineService {
       totals,
       userContext,
       scoringFoods: input.inputType === 'text' ? input.scoringFoods : undefined,
-      precomputedScore: input.inputType === 'image' ? input.precomputedScore : undefined,
+      precomputedScore:
+        input.inputType === 'image' ? input.precomputedScore : undefined,
       userId: input.userId,
       locale: input.locale,
     });
@@ -308,7 +311,9 @@ export class AnalysisPipelineService {
           );
       }
     } catch (err) {
-      this.logger.warn(`Contextual analysis build failed: ${(err as Error).message}`);
+      this.logger.warn(
+        `Contextual analysis build failed: ${(err as Error).message}`,
+      );
     }
 
     // 分析状态（吃前/吃后投影）
@@ -411,7 +416,9 @@ export class AnalysisPipelineService {
           candidateFoodCount: textInput.parsedFoodMeta.length - matchedCount,
         });
       } catch (err) {
-        this.logger.warn(`Failed to save text analysis record: ${(err as Error).message}`);
+        this.logger.warn(
+          `Failed to save text analysis record: ${(err as Error).message}`,
+        );
       }
     } else {
       const imageInput = input as ImagePipelineInput;
@@ -424,7 +431,9 @@ export class AnalysisPipelineService {
           result,
         });
       } catch (err) {
-        this.logger.warn(`Failed to save image analysis record: ${(err as Error).message}`);
+        this.logger.warn(
+          `Failed to save image analysis record: ${(err as Error).message}`,
+        );
       }
     }
   }

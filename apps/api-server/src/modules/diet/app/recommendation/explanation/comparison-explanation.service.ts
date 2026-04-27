@@ -18,6 +18,7 @@ import {
   EnrichedProfileContext,
 } from '../types/recommendation.types';
 import { t, Locale } from '../utils/i18n-messages';
+import { ClsServiceManager } from 'nestjs-cls';
 import type {
   ComparisonExplanation,
   SubstitutionExplanation,
@@ -26,6 +27,23 @@ import type {
 
 @Injectable()
 export class ComparisonExplanationService {
+  private resolveLocale(locale?: Locale): Locale {
+    if (locale === 'en-US' || locale === 'zh-CN' || locale === 'ja-JP') {
+      return locale;
+    }
+
+    try {
+      const raw = ClsServiceManager.getClsService()?.get('locale');
+      if (raw === 'en-US' || raw === 'zh-CN' || raw === 'ja-JP') {
+        return raw;
+      }
+    } catch {
+      // Ignore missing CLS context and fallback below.
+    }
+
+    return 'zh-CN';
+  }
+
   /**
    * V7.4 P2-F: 生成两个食物之间的对比解释
    *
@@ -36,8 +54,9 @@ export class ComparisonExplanationService {
     recommended: ScoredFood,
     alternative: ScoredFood,
     goalType: string,
-    locale: Locale = 'zh-CN',
+    locale?: Locale,
   ): ComparisonExplanation {
+    const resolvedLocale = this.resolveLocale(locale);
     const recFood = recommended.food;
     const altFood = alternative.food;
 
@@ -117,7 +136,7 @@ export class ComparisonExplanationService {
       disadvantages,
       scorePercent,
       goalType,
-      locale,
+      resolvedLocale,
     );
 
     return {
@@ -142,8 +161,9 @@ export class ComparisonExplanationService {
     substitute: ScoredFood,
     goalType: string,
     target: MealTarget,
-    locale: Locale = 'zh-CN',
+    locale?: Locale,
   ): SubstitutionExplanation {
+    const resolvedLocale = this.resolveLocale(locale);
     const origFood = original.food;
     const subFood = substitute.food;
 
@@ -230,7 +250,7 @@ export class ComparisonExplanationService {
       impacts,
       sameCategorySubstitute,
       goalType,
-      locale,
+      resolvedLocale,
     );
 
     return {
@@ -291,7 +311,7 @@ export class ComparisonExplanationService {
   generateChannelFilterExplanation(
     channel: AcquisitionChannel,
     filteredCount: number,
-    locale: Locale = 'zh-CN',
+    locale?: Locale,
   ): string | null {
     if (filteredCount <= 0) return null;
 

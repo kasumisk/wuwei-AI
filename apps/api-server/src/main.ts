@@ -1,10 +1,16 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe, Logger } from '@nestjs/common';
+import {
+  ValidationPipe,
+  Logger,
+  BadRequestException,
+  ValidationError,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { AppModule } from './app.module';
 import { setupSwagger } from './core/swagger/swagger.config';
 import { Config } from './core/config/configuration';
+import { I18nService } from './core/i18n';
 import { join } from 'path';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import * as bodyParser from 'body-parser';
@@ -44,6 +50,57 @@ async function bootstrap() {
   app.use(bodyParser.json({ limit: '10mb' }));
   app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
 
+  const apiPrefix =
+    configService.get<string>('app.apiPrefix', { infer: true }) || 'api';
+
+  // ─── i18n: 翻译 class-validator 错误信息 ───
+  // DTO 中 message 写 i18n key（如 'common.validation.emailInvalid'），
+  // 这里在抛 400 前根据 CLS 中的 locale 翻译为最终字符串
+  const i18nService = app.get(I18nService);
+  const i18nKeyPrefixes = [
+    'common.',
+    'auth.',
+    'user.',
+    'diet.',
+    'food.',
+    'recipe.',
+    'coach.',
+    'decision.',
+    'recommendation.',
+    'notification.',
+    'gamification.',
+    'subscription.',
+    'admin.',
+    'file.',
+    'rbac.',
+    'provider.',
+    'feature-flag.',
+    'app-version.',
+    'analytics.',
+    'client.',
+  ];
+  const isI18nKey = (s: string): boolean =>
+    typeof s === 'string' && i18nKeyPrefixes.some((p) => s.startsWith(p));
+  const translateConstraints = (
+    constraints: Record<string, string> | undefined,
+  ): Record<string, string> | undefined => {
+    if (!constraints) return constraints;
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(constraints)) {
+      out[k] = isI18nKey(v) ? i18nService.t(v) : v;
+    }
+    return out;
+  };
+  const walk = (errors: ValidationError[]): ValidationError[] =>
+    errors.map((e) => {
+      const cloned: ValidationError = {
+        ...e,
+        constraints: translateConstraints(e.constraints),
+        children: e.children ? walk(e.children) : e.children,
+      };
+      return cloned;
+    });
+
   // ─── V6.4 P0: 开启白名单验证（防 Mass Assignment） ───
   app.useGlobalPipes(
     new ValidationPipe({
@@ -60,11 +117,34 @@ async function bootstrap() {
         target: false,
         value: false,
       },
+      exceptionFactory: (errors: ValidationError[]) => {
+        const translated = walk(errors);
+        // 收集首条错误信息作为 message
+        const firstMsg = (() => {
+          const collect = (es: ValidationError[]): string | undefined => {
+            for (const e of es) {
+              if (e.constraints) {
+                const v = Object.values(e.constraints)[0];
+                if (v) return v;
+              }
+              if (e.children?.length) {
+                const c = collect(e.children);
+                if (c) return c;
+              }
+            }
+            return undefined;
+          };
+          return collect(translated);
+        })();
+        return new BadRequestException({
+          statusCode: 400,
+          message: firstMsg ?? i18nService.t('common.validation.invalid'),
+          errors: translated,
+        });
+      },
     }),
   );
 
-  const apiPrefix =
-    configService.get<string>('app.apiPrefix', { infer: true }) || 'api';
   app.setGlobalPrefix(apiPrefix);
 
   // 允许所有来源，无 CORS 限制

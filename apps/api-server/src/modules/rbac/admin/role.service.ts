@@ -5,6 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../core/prisma/prisma.service';
+import { I18nService } from '../../../core/i18n/i18n.service';
 import type {
   CreateRoleDto,
   UpdateRoleDto,
@@ -16,7 +17,10 @@ import { RoleStatus } from '@ai-platform/shared';
 
 @Injectable()
 export class RoleService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly i18n: I18nService,
+  ) {}
 
   /**
    * 获取角色列表（分页）
@@ -50,7 +54,6 @@ export class RoleService {
       this.prisma.roles.count({ where }),
     ]);
 
-    // 转换数据格式
     const formattedList = list.map((role) => this.formatRoleInfo(role));
 
     return {
@@ -84,7 +87,7 @@ export class RoleService {
     });
 
     if (!role) {
-      throw new NotFoundException(`角色 #${id} 不存在`);
+      throw new NotFoundException(this.i18n.t('rbac.role.notFound', { id }));
     }
 
     return this.formatRoleInfo(role);
@@ -94,28 +97,33 @@ export class RoleService {
    * 创建角色
    */
   async create(createRoleDto: CreateRoleDto) {
-    // 检查编码唯一性
     const existing = await this.prisma.roles.findFirst({
       where: { code: createRoleDto.code },
     });
 
     if (existing) {
-      throw new ConflictException(`角色编码 ${createRoleDto.code} 已存在`);
+      throw new ConflictException(
+        this.i18n.t('rbac.role.codeExists', { code: createRoleDto.code }),
+      );
     }
 
-    // 如果指定了父角色，检查父角色是否存在
     if (createRoleDto.parentId) {
       const parent = await this.prisma.roles.findUnique({
         where: { id: createRoleDto.parentId },
       });
       if (!parent) {
-        throw new NotFoundException(`父角色 #${createRoleDto.parentId} 不存在`);
+        throw new NotFoundException(
+          this.i18n.t('rbac.role.parentNotFound', {
+            id: createRoleDto.parentId,
+          }),
+        );
       }
 
-      // 检查继承深度
       const depth = await this.getInheritanceDepth(createRoleDto.parentId);
       if (depth >= 3) {
-        throw new BadRequestException('角色继承层级不能超过3层');
+        throw new BadRequestException(
+          this.i18n.t('rbac.role.maxDepthExceeded'),
+        );
       }
     }
 
@@ -141,15 +149,15 @@ export class RoleService {
     const role = await this.prisma.roles.findUnique({ where: { id } });
 
     if (!role) {
-      throw new NotFoundException(`角色 #${id} 不存在`);
+      throw new NotFoundException(this.i18n.t('rbac.role.notFound', { id }));
     }
 
-    // 系统角色不允许修改关键字段
     if (role.isSystem && updateRoleDto.parentId !== undefined) {
-      throw new BadRequestException('系统角色不允许修改继承关系');
+      throw new BadRequestException(
+        this.i18n.t('rbac.role.systemRoleNoInheritance'),
+      );
     }
 
-    // 如果修改父角色，检查循环继承
     if (
       updateRoleDto.parentId !== undefined &&
       updateRoleDto.parentId !== null
@@ -159,13 +167,16 @@ export class RoleService {
         updateRoleDto.parentId,
       );
       if (isCircular) {
-        throw new BadRequestException('检测到循环继承');
+        throw new BadRequestException(
+          this.i18n.t('rbac.role.circularInheritance'),
+        );
       }
 
-      // 检查继承深度
       const depth = await this.getInheritanceDepth(updateRoleDto.parentId);
       if (depth >= 3) {
-        throw new BadRequestException('角色继承层级不能超过3层');
+        throw new BadRequestException(
+          this.i18n.t('rbac.role.maxDepthExceeded'),
+        );
       }
     }
 
@@ -195,35 +206,33 @@ export class RoleService {
     });
 
     if (!role) {
-      throw new NotFoundException(`角色 #${id} 不存在`);
+      throw new NotFoundException(this.i18n.t('rbac.role.notFound', { id }));
     }
 
     if (role.isSystem) {
-      throw new BadRequestException('系统角色不允许删除');
+      throw new BadRequestException(
+        this.i18n.t('rbac.role.systemRoleNoDelete'),
+      );
     }
 
-    // 检查是否有子角色
     if (role.otherRoles && role.otherRoles.length > 0) {
-      throw new BadRequestException('请先删除子角色');
+      throw new BadRequestException(this.i18n.t('rbac.role.deleteChildFirst'));
     }
 
-    // 检查是否有用户使用该角色
     const userRoleCount = await this.prisma.userRoles.count({
       where: { roleId: id },
     });
 
     if (userRoleCount > 0) {
       throw new BadRequestException(
-        `该角色已被 ${userRoleCount} 个用户使用，无法删除`,
+        this.i18n.t('rbac.role.inUseByUsers', { count: userRoleCount }),
       );
     }
 
-    // 删除角色权限关联
     await this.prisma.rolePermissions.deleteMany({ where: { roleId: id } });
-    // 删除角色
     await this.prisma.roles.delete({ where: { id } });
 
-    return { message: '角色删除成功' };
+    return { message: this.i18n.t('rbac.role.deleteSuccess') };
   }
 
   /**
@@ -233,17 +242,15 @@ export class RoleService {
     const role = await this.prisma.roles.findUnique({ where: { id } });
 
     if (!role) {
-      throw new NotFoundException(`角色 #${id} 不存在`);
+      throw new NotFoundException(this.i18n.t('rbac.role.notFound', { id }));
     }
 
-    // 获取角色自身的权限
     const ownPermissions = await this.prisma.rolePermissions.findMany({
       where: { roleId: id },
       include: { permissions: true },
     });
     const ownPermissionIds = ownPermissions.map((rp) => rp.permissionId);
 
-    // 获取继承的权限
     const ancestors = await this.getRoleAncestors(id);
     const ancestorIds = ancestors.filter((r) => r.id !== id).map((r) => r.id);
 
@@ -257,7 +264,6 @@ export class RoleService {
       ];
     }
 
-    // 获取所有权限Code
     const allPermissionIds = [
       ...new Set([...ownPermissionIds, ...inheritedPermissionIds]),
     ];
@@ -286,13 +292,11 @@ export class RoleService {
     const role = await this.prisma.roles.findUnique({ where: { id } });
 
     if (!role) {
-      throw new NotFoundException(`角色 #${id} 不存在`);
+      throw new NotFoundException(this.i18n.t('rbac.role.notFound', { id }));
     }
 
-    // 删除现有权限
     await this.prisma.rolePermissions.deleteMany({ where: { roleId: id } });
 
-    // 分配新权限
     if (dto.permissionIds.length > 0) {
       await this.prisma.rolePermissions.createMany({
         data: dto.permissionIds.map((permissionId) => ({
@@ -302,7 +306,7 @@ export class RoleService {
       });
     }
 
-    return { message: '权限分配成功' };
+    return { message: this.i18n.t('rbac.role.assignSuccess') };
   }
 
   /**

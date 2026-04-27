@@ -21,7 +21,7 @@ import {
 import { NutritionScoreBreakdown } from '../../diet/app/services/nutrition-score.service';
 import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 import { DecisionFoodItem } from './food-decision.service';
-import { DIMENSION_LABELS } from '../config/scoring-dimensions';
+import { getDimensionLabel } from '../config/scoring-dimensions';
 import { cl as dlCl } from '../i18n/decision-labels';
 import { chainLabel as cl, CHAIN_LABELS } from '../i18n/explainer-labels';
 import {
@@ -549,8 +549,6 @@ export class DecisionExplainerService {
 
     // Breakdown 弱项分析
     if (breakdown) {
-      const loc = locale || 'zh-CN';
-      const labels = DIMENSION_LABELS[loc] || DIMENSION_LABELS['zh-CN'];
       const weakDims = Object.entries(breakdown)
         .filter(([_, score]) => (score as number) < 50)
         .sort((a, b) => (a[1] as number) - (b[1] as number));
@@ -560,7 +558,7 @@ export class DecisionExplainerService {
           .slice(0, 3)
           .map(
             ([dim, score]) =>
-              `${labels[dim] || dim}(${Math.round(score as number)})`,
+              `${getDimensionLabel(dim, locale)}(${Math.round(score as number)})`,
           )
           .join(dlCl('separator.enumeration', locale));
         userContextImpact.push(
@@ -618,9 +616,6 @@ export class DecisionExplainerService {
   ): string | undefined {
     if (!breakdown) return undefined;
 
-    const loc = locale || 'zh-CN';
-    const labels = DIMENSION_LABELS[loc] || DIMENSION_LABELS['zh-CN'];
-
     // 找出 score < 60 的弱项维度
     const weakFactors = Object.entries(breakdown)
       .filter(([_, score]) => (score as number) < 60)
@@ -628,7 +623,7 @@ export class DecisionExplainerService {
       .slice(0, 3)
       .map(
         ([dim, score]) =>
-          `${labels[dim] || dim}(${Math.round(score as number)})`,
+          `${getDimensionLabel(dim, locale)}(${Math.round(score as number)})`,
       );
 
     if (weakFactors.length === 0) return undefined;

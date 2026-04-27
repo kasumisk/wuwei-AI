@@ -109,9 +109,7 @@ function FrequentFoodPickerSheet({ open, onClose }: FrequentFoodPickerSheetProps
         <div className="px-4 pb-3 flex items-center justify-between">
           <div>
             <h2 className="text-lg font-headline font-bold">常吃食物</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              选择一个或多个，AI 一起分析决策
-            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">选择一个或多个，AI 一起分析决策</p>
           </div>
           <button
             onClick={onClose}

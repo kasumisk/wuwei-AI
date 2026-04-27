@@ -1,0 +1,8 @@
+{
+  "ok": "获取成功",
+  "deletedOk": "删除成功",
+  "coachStyleUpdated": "教练风格已更新",
+  "serviceNotConfigured": "AI Coach 服务未配置",
+  "conversationNotFound": "对话不存在",
+  "serviceUnavailable": "AI 服务暂时不可用，请稍后重试"
+}

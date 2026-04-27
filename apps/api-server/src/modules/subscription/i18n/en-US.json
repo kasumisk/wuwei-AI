@@ -1,0 +1,81 @@
+{
+  "error": {
+    "planNotFound": "Subscription plan not found",
+    "planUnavailable": "Subscription plan not found or unavailable",
+    "notifyDecryptFailed": "Failed to decrypt notification data",
+    "wxPayFailedNoPrepayId": "WeChat Pay order failed: missing prepay_id",
+    "wxNotifyMissingSignature": "WeChat Pay notification missing signature",
+    "notifyTimestampExpired": "Notification timestamp expired",
+    "notifySignatureInvalid": "Notification signature verification failed",
+    "appleNotifyInvalidPayload": "Invalid notification payload (signature verification failed)"
+  },
+  "guard": {
+    "loginRequired": "Login required to use this feature",
+    "featureNotIncluded": "This feature is not included in your current plan, please upgrade",
+    "tierRequired": "This feature requires {{tier}} or higher subscription"
+  },
+  "quota": {
+    "exceeded": "{{feature}} daily quota exhausted",
+    "exceededWithReset": "{{feature}} daily quota exhausted, will reset at {{resetAt}}. Upgrade to {{targetTier}} for more quota",
+    "exceededNoReset": "{{feature}} daily quota exhausted. Upgrade to {{targetTier}} for more quota",
+    "upgradeUnlock": "Upgrade to {{targetTier}} to unlock {{feature}}"
+  },
+  "wechatNotify": {
+    "success": "Success",
+    "received": "Received"
+  },
+  "controller": {
+    "fetchPlansSuccess": "Fetched subscription plans successfully",
+    "fetchSuccess": "Fetched successfully",
+    "createPlanSuccess": "Subscription plan created successfully",
+    "updatePlanSuccess": "Subscription plan updated successfully",
+    "fetchOverviewSuccess": "Fetched subscription overview successfully",
+    "fetchPaymentsSuccess": "Fetched payment records successfully",
+    "fetchQuotaSuccess": "Fetched usage quota successfully",
+    "resetQuotaSuccess": "Usage quota reset successfully",
+    "fetchTriggerStatsSuccess": "Fetched trigger stats successfully",
+    "fetchSubsListSuccess": "Fetched subscription list successfully",
+    "fetchSubsDetailSuccess": "Fetched subscription details successfully",
+    "extendSubsSuccess": "Subscription extended successfully",
+    "changePlanSuccess": "Subscription plan changed successfully"
+  },
+  "featureName": {
+    "recommendation": "Recommendations",
+    "aiImageAnalysis": "Image analysis",
+    "aiTextAnalysis": "Text analysis",
+    "aiCoach": "AI coach",
+    "analysisHistory": "Analysis history",
+    "detailedScore": "Detailed score breakdown",
+    "advancedExplain": "Advanced explanations",
+    "deepNutrition": "Deep nutrition breakdown",
+    "personalizedAlternatives": "Personalized alternative suggestions",
+    "reports": "Weekly/Monthly reports",
+    "dataExport": "Data export",
+    "fullDayPlan": "Full-day meal planning",
+    "fullDayLinkage": "Full-day meal linkage",
+    "recipeGeneration": "Recipe generation",
+    "healthTrend": "Health trend analysis",
+    "priorityAi": "Priority AI response",
+    "behaviorAnalysis": "Behavior analysis",
+    "coachStyle": "Coach style selection",
+    "advancedChallenges": "Advanced challenges"
+  },
+  "benefits": {
+    "pro": {
+      "1": "Unlimited text analysis",
+      "2": "10 image analyses per day",
+      "3": "In-depth nutrient breakdown",
+      "4": "Personalized food alternatives",
+      "5": "Full analysis history",
+      "6": "Detailed scores and advanced explanations"
+    },
+    "premium": {
+      "1": "All Pro features",
+      "2": "Unlimited image analyses",
+      "3": "Full-day meal linkage",
+      "4": "Smart recipe generation",
+      "5": "Health trend analysis",
+      "6": "Priority AI response"
+    }
+  }
+}

@@ -13,10 +13,14 @@ import {
   AdminResetPasswordDto,
 } from './dto/user-management.dto';
 import { PrismaService } from '../../../core/prisma/prisma.service';
+import { I18nService } from '../../../core/i18n';
 
 @Injectable()
 export class AdminUserService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly i18n: I18nService,
+  ) {}
 
   /**
    * 获取管理员用户列表（分页）
@@ -106,7 +110,7 @@ export class AdminUserService {
     const user = await this.prisma.adminUsers.findUnique({ where: { id } });
 
     if (!user) {
-      throw new NotFoundException(`用户 #${id} 不存在`);
+      throw new NotFoundException(this.i18n.t('user.userNotFound', { id }));
     }
 
     // Exclude password from response
@@ -123,7 +127,7 @@ export class AdminUserService {
       where: { username: createUserDto.username },
     });
     if (existingByUsername) {
-      throw new ConflictException('用户名已存在');
+      throw new ConflictException(this.i18n.t('user.usernameTaken'));
     }
 
     if (createUserDto.email) {
@@ -131,7 +135,7 @@ export class AdminUserService {
         where: { email: createUserDto.email },
       });
       if (existingByEmail) {
-        throw new ConflictException('邮箱已存在');
+        throw new ConflictException(this.i18n.t('user.emailTaken'));
       }
     }
 
@@ -163,7 +167,7 @@ export class AdminUserService {
     const user = await this.prisma.adminUsers.findUnique({ where: { id } });
 
     if (!user) {
-      throw new NotFoundException(`用户 #${id} 不存在`);
+      throw new NotFoundException(this.i18n.t('user.userNotFound', { id }));
     }
 
     // 检查邮箱是否被其他用户使用
@@ -172,7 +176,7 @@ export class AdminUserService {
         where: { email: updateUserDto.email },
       });
       if (existingUser) {
-        throw new ConflictException('邮箱已被使用');
+        throw new ConflictException(this.i18n.t('user.emailInUse'));
       }
     }
 
@@ -192,17 +196,17 @@ export class AdminUserService {
     const user = await this.prisma.adminUsers.findUnique({ where: { id } });
 
     if (!user) {
-      throw new NotFoundException(`用户 #${id} 不存在`);
+      throw new NotFoundException(this.i18n.t('user.userNotFound', { id }));
     }
 
     // 不允许删除超级管理员
     if (user.username === 'admin') {
-      throw new BadRequestException('不能删除超级管理员账户');
+      throw new BadRequestException(this.i18n.t('user.cannotDeleteSuperAdmin'));
     }
 
     await this.prisma.adminUsers.delete({ where: { id } });
 
-    return { message: '用户删除成功' };
+    return { message: this.i18n.t('user.userDeleted') };
   }
 
   /**
@@ -214,7 +218,7 @@ export class AdminUserService {
     const user = await this.prisma.adminUsers.findUnique({ where: { id } });
 
     if (!user) {
-      throw new NotFoundException(`用户 #${id} 不存在`);
+      throw new NotFoundException(this.i18n.t('user.userNotFound', { id }));
     }
 
     // 加密新密码
@@ -225,7 +229,7 @@ export class AdminUserService {
       data: { password: hashedPassword },
     });
 
-    return { message: '密码重置成功' };
+    return { message: this.i18n.t('user.passwordReset') };
   }
 
   /**
@@ -237,7 +241,9 @@ export class AdminUserService {
     });
 
     if (!user) {
-      throw new NotFoundException(`用户 #${userId} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('user.userNotFound', { id: userId }),
+      );
     }
 
     const userRoles = await this.prisma.userRoles.findMany({
@@ -266,7 +272,9 @@ export class AdminUserService {
     });
 
     if (!user) {
-      throw new NotFoundException(`用户 #${userId} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('user.userNotFound', { id: userId }),
+      );
     }
 
     // 验证角色是否存在
@@ -275,7 +283,7 @@ export class AdminUserService {
         where: { id: { in: roleIds } },
       });
       if (roles.length !== roleIds.length) {
-        throw new BadRequestException('部分角色不存在');
+        throw new BadRequestException(this.i18n.t('user.roleNotFoundPartial'));
       }
     }
 
@@ -292,6 +300,6 @@ export class AdminUserService {
       });
     }
 
-    return { message: '角色分配成功' };
+    return { message: this.i18n.t('user.rolesAssigned') };
   }
 }

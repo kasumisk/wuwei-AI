@@ -7,6 +7,10 @@
   "entryFile": "./main",
   "compilerOptions": {
     "deleteOutDir": true,
-    "tsConfigPath": "tsconfig.build.json"
+    "tsConfigPath": "tsconfig.build.json",
+    "assets": [
+      { "include": "**/i18n/*.json", "outDir": "dist", "watchAssets": true },
+      { "include": "common/i18n/*.json", "outDir": "dist", "watchAssets": true }
+    ]
   }
 }

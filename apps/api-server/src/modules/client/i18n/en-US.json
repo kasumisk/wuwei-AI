@@ -1,0 +1,23 @@
+{
+  "client": {
+    "notFound": "Client #{{id}} not found",
+    "fetchListSuccess": "Clients retrieved successfully",
+    "fetchDetailSuccess": "Client details retrieved successfully",
+    "createSuccess": "Client created successfully",
+    "updateSuccess": "Client updated successfully",
+    "deleteSuccess": "Client deleted successfully",
+    "regenerateSecretSuccess": "API Secret regenerated successfully",
+    "usageStatsSuccess": "Client usage statistics retrieved successfully"
+  },
+  "clientPermission": {
+    "clientNotFound": "Client #{{clientId}} not found",
+    "permissionNotFound": "Permission #{{permissionId}} not found",
+    "capabilityNotFound": "Capability {{capability}} not found for client #{{clientId}}",
+    "alreadyExists": "Capability {{capability}} already granted to client #{{clientId}}",
+    "fetchSuccess": "Permissions retrieved successfully",
+    "grantSuccess": "Permission granted successfully",
+    "updateSuccess": "Permission updated successfully",
+    "revokeSuccess": "Permission revoked successfully",
+    "revokeAllSuccess": "All permissions revoked successfully"
+  }
+}

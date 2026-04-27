@@ -1,0 +1,8 @@
+{
+  "ok": "OK.",
+  "deletedOk": "Deleted.",
+  "coachStyleUpdated": "Coach style updated.",
+  "serviceNotConfigured": "AI Coach service is not configured.",
+  "conversationNotFound": "Conversation not found.",
+  "serviceUnavailable": "AI service is temporarily unavailable, please try again later."
+}

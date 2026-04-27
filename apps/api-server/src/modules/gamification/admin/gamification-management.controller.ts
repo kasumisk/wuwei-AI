@@ -24,6 +24,7 @@ import {
   UpdateChallengeDto,
 } from '../../diet/admin/dto/content-management.dto';
 import { ApiResponse } from '../../../common/types/response.type';
+import { I18nService } from '../../../core/i18n/i18n.service';
 
 @ApiTags('管理后台 - 成就 & 挑战管理')
 @Controller('admin/gamification')
@@ -31,7 +32,10 @@ import { ApiResponse } from '../../../common/types/response.type';
 @Roles('admin', 'super_admin')
 @ApiBearerAuth()
 export class GamificationManagementController {
-  constructor(private readonly contentService: ContentManagementService) {}
+  constructor(
+    private readonly contentService: ContentManagementService,
+    private readonly i18n: I18nService,
+  ) {}
 
   // ==================== 成就管理 ====================
 
@@ -41,7 +45,12 @@ export class GamificationManagementController {
     @Query() query: GetAchievementsQueryDto,
   ): Promise<ApiResponse> {
     const data = await this.contentService.findAchievements(query);
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('gamification.message.fetchSuccess'),
+      data,
+    };
   }
 
   @Post('achievements')
@@ -53,7 +62,7 @@ export class GamificationManagementController {
     return {
       success: true,
       code: HttpStatus.CREATED,
-      message: '创建成功',
+      message: this.i18n.t('gamification.message.createSuccess'),
       data,
     };
   }
@@ -65,7 +74,12 @@ export class GamificationManagementController {
     @Body() dto: UpdateAchievementDto,
   ): Promise<ApiResponse> {
     const data = await this.contentService.updateAchievement(id, dto);
-    return { success: true, code: HttpStatus.OK, message: '更新成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('gamification.message.updateSuccess'),
+      data,
+    };
   }
 
   @Delete('achievements/:id')
@@ -83,7 +97,12 @@ export class GamificationManagementController {
     @Query() query: GetChallengesQueryDto,
   ): Promise<ApiResponse> {
     const data = await this.contentService.findChallenges(query);
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('gamification.message.fetchSuccess'),
+      data,
+    };
   }
 
   @Post('challenges')
@@ -93,7 +112,7 @@ export class GamificationManagementController {
     return {
       success: true,
       code: HttpStatus.CREATED,
-      message: '创建成功',
+      message: this.i18n.t('gamification.message.createSuccess'),
       data,
     };
   }
@@ -105,14 +124,24 @@ export class GamificationManagementController {
     @Body() dto: UpdateChallengeDto,
   ): Promise<ApiResponse> {
     const data = await this.contentService.updateChallenge(id, dto);
-    return { success: true, code: HttpStatus.OK, message: '更新成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('gamification.message.updateSuccess'),
+      data,
+    };
   }
 
   @Post('challenges/:id/toggle-active')
   @ApiOperation({ summary: '切换挑战启用状态' })
   async toggleChallengeActive(@Param('id') id: string): Promise<ApiResponse> {
     const data = await this.contentService.toggleChallengeActive(id);
-    return { success: true, code: HttpStatus.OK, message: '状态已更新', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('gamification.message.statusUpdated'),
+      data,
+    };
   }
 
   @Delete('challenges/:id')

@@ -284,7 +284,9 @@ export class UserContextBuilderService {
         },
       };
     } catch (err) {
-      this.logger.warn(`Failed to build user context: ${(err as Error).message}`);
+      this.logger.warn(
+        `Failed to build user context: ${(err as Error).message}`,
+      );
       return defaults;
     }
   }

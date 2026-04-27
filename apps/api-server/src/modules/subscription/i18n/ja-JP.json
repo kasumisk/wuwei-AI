@@ -1,0 +1,81 @@
+{
+  "error": {
+    "planNotFound": "サブスクリプションプランが見つかりません",
+    "planUnavailable": "サブスクリプションプランが見つからないか、提供を終了しました",
+    "notifyDecryptFailed": "通知データの復号化に失敗しました",
+    "wxPayFailedNoPrepayId": "WeChat Pay 注文失敗: prepay_id がありません",
+    "wxNotifyMissingSignature": "WeChat Pay 通知に署名情報がありません",
+    "notifyTimestampExpired": "通知のタイムスタンプが期限切れです",
+    "notifySignatureInvalid": "通知の署名検証に失敗しました",
+    "appleNotifyInvalidPayload": "無効な通知ペイロード（署名検証失敗）"
+  },
+  "guard": {
+    "loginRequired": "この機能を利用するにはログインが必要です",
+    "featureNotIncluded": "現在のプランにはこの機能が含まれていません。アップグレードしてください",
+    "tierRequired": "この機能には {{tier}} 以上のサブスクリプションが必要です"
+  },
+  "quota": {
+    "exceeded": "{{feature}} の本日の利用枠を使い切りました",
+    "exceededWithReset": "{{feature}} の本日の利用枠を使い切りました。{{resetAt}} にリセットされます。{{targetTier}} にアップグレードしてさらに利用しましょう",
+    "exceededNoReset": "{{feature}} の本日の利用枠を使い切りました。{{targetTier}} にアップグレードしてさらに利用しましょう",
+    "upgradeUnlock": "{{targetTier}} にアップグレードして{{feature}}をアンロック"
+  },
+  "wechatNotify": {
+    "success": "成功",
+    "received": "受信しました"
+  },
+  "controller": {
+    "fetchPlansSuccess": "サブスクリプションプラン一覧を取得しました",
+    "fetchSuccess": "取得しました",
+    "createPlanSuccess": "サブスクリプションプランを作成しました",
+    "updatePlanSuccess": "サブスクリプションプランを更新しました",
+    "fetchOverviewSuccess": "サブスクリプション概要を取得しました",
+    "fetchPaymentsSuccess": "支払い記録一覧を取得しました",
+    "fetchQuotaSuccess": "利用枠を取得しました",
+    "resetQuotaSuccess": "利用枠をリセットしました",
+    "fetchTriggerStatsSuccess": "トリガー統計を取得しました",
+    "fetchSubsListSuccess": "サブスクリプション一覧を取得しました",
+    "fetchSubsDetailSuccess": "サブスクリプション詳細を取得しました",
+    "extendSubsSuccess": "サブスクリプションを延長しました",
+    "changePlanSuccess": "サブスクリプションプランを変更しました"
+  },
+  "featureName": {
+    "recommendation": "おすすめ",
+    "aiImageAnalysis": "画像分析",
+    "aiTextAnalysis": "テキスト分析",
+    "aiCoach": "AI コーチ",
+    "analysisHistory": "分析履歴",
+    "detailedScore": "詳細スコア解析",
+    "advancedExplain": "詳細な解説",
+    "deepNutrition": "深い栄養素解析",
+    "personalizedAlternatives": "パーソナライズ代替提案",
+    "reports": "週次/月次レポート",
+    "dataExport": "データエクスポート",
+    "fullDayPlan": "一日の食事プラン",
+    "fullDayLinkage": "一日の食事連携",
+    "recipeGeneration": "レシピ生成",
+    "healthTrend": "健康トレンド分析",
+    "priorityAi": "優先 AI レスポンス",
+    "behaviorAnalysis": "行動分析",
+    "coachStyle": "コーチスタイル選択",
+    "advancedChallenges": "上級チャレンジ"
+  },
+  "benefits": {
+    "pro": {
+      "1": "テキスト分析無制限",
+      "2": "1日10回の画像分析",
+      "3": "詳細な栄養成分解析",
+      "4": "パーソナライズされた代替食品提案",
+      "5": "完全な分析履歴",
+      "6": "詳細スコアと高度な解説"
+    },
+    "premium": {
+      "1": "Pro 全機能",
+      "2": "画像分析無制限",
+      "3": "一日の食事連携アドバイス",
+      "4": "スマートレシピ生成",
+      "5": "健康トレンド分析",
+      "6": "優先 AI レスポンス"
+    }
+  }
+}

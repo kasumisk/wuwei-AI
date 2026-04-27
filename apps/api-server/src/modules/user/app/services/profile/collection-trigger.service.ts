@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../../../core/prisma/prisma.service';
+import { I18nService } from '../../../../../core/i18n';
 
 /**
  * 持续收集触发器
@@ -28,7 +29,10 @@ export interface CollectionReminder {
 export class CollectionTriggerService {
   private readonly logger = new Logger(CollectionTriggerService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly i18n: I18nService,
+  ) {}
 
   /**
    * 检查并返回需要收集的字段提醒
@@ -62,8 +66,8 @@ export class CollectionTriggerService {
         reminders.push({
           type: 'popup',
           field: 'allergens',
-          title: '⚠️ 你有食物过敏吗？',
-          message: '告诉我们你的过敏原，确保推荐的食物绝对安全',
+          title: this.i18n.t('user.trigger.allergies.title'),
+          message: this.i18n.t('user.trigger.allergies.message'),
           priority: 'high',
           dismissable: true,
           nextReminderDays: 7,
@@ -77,8 +81,8 @@ export class CollectionTriggerService {
         reminders.push({
           type: 'popup',
           field: 'dietaryRestrictions',
-          title: '有没有忌口的食物？',
-          message: '比如素食、不吃辣、低盐等，帮我们更好地过滤推荐',
+          title: this.i18n.t('user.trigger.dietaryRestrictions.title'),
+          message: this.i18n.t('user.trigger.dietaryRestrictions.message'),
           priority: 'medium',
           dismissable: true,
           nextReminderDays: 14,
@@ -92,8 +96,8 @@ export class CollectionTriggerService {
         reminders.push({
           type: 'settings_guide',
           field: 'cookingSkillLevel',
-          title: '你的烹饪水平如何？',
-          message: '告诉我们你的厨艺，推荐更适合你的食谱',
+          title: this.i18n.t('user.trigger.cookingSkill.title'),
+          message: this.i18n.t('user.trigger.cookingSkill.message'),
           priority: 'low',
           dismissable: true,
           nextReminderDays: 30,
@@ -104,8 +108,8 @@ export class CollectionTriggerService {
         reminders.push({
           type: 'settings_guide',
           field: 'budgetLevel',
-          title: '你的饮食预算偏好？',
-          message: '帮我们推荐更符合你预算的食物',
+          title: this.i18n.t('user.trigger.budget.title'),
+          message: this.i18n.t('user.trigger.budget.message'),
           priority: 'low',
           dismissable: true,
           nextReminderDays: 30,
@@ -123,9 +127,8 @@ export class CollectionTriggerService {
         reminders.push({
           type: 'card',
           field: 'exerciseProfile',
-          title: '💪 告诉我们你的运动习惯',
-          message:
-            '运动用户的热量和蛋白质需求不同，完善运动信息可以让推荐更精准',
+          title: this.i18n.t('user.trigger.exercise.title'),
+          message: this.i18n.t('user.trigger.exercise.message'),
           priority: 'medium',
           dismissable: true,
           nextReminderDays: 30,
@@ -143,8 +146,8 @@ export class CollectionTriggerService {
       reminders.push({
         type: 'popup',
         field: 'healthConditions',
-        title: '有特殊健康状况吗？',
-        message: '如糖尿病、高血压等，确保推荐食物的安全性',
+        title: this.i18n.t('user.trigger.healthConditions.title'),
+        message: this.i18n.t('user.trigger.healthConditions.message'),
         priority: 'high',
         dismissable: true,
         nextReminderDays: 14,
@@ -156,8 +159,10 @@ export class CollectionTriggerService {
       reminders.push({
         type: 'popup',
         field: 'general',
-        title: '完善信息，提升推荐准确度',
-        message: `当前信息完整度 ${Math.round(completeness * 100)}%，完善基本信息可提升推荐准确度约 30%`,
+        title: this.i18n.t('user.trigger.completeness.title'),
+        message: this.i18n.t('user.trigger.completeness.message', {
+          percent: Math.round(completeness * 100),
+        }),
         priority: 'high',
         dismissable: false,
         nextReminderDays: 3,
@@ -172,8 +177,10 @@ export class CollectionTriggerService {
         reminders.push({
           type: 'toast',
           field: 'preferenceConfirmation',
-          title: `你似乎更喜欢「${categoryPreference}」类食物`,
-          message: '我们注意到你连续多次替换为同类食物，是否确认这个偏好？',
+          title: this.i18n.t('user.trigger.swapPreference.title', {
+            category: categoryPreference,
+          }),
+          message: this.i18n.t('user.trigger.swapPreference.message'),
           priority: 'low',
           dismissable: true,
           nextReminderDays: 30,
@@ -373,8 +380,10 @@ export class CollectionTriggerService {
       return {
         type: 'card',
         field: 'goal',
-        title: '🎉 目标即将达成！',
-        message: `你的目标已完成 ${Math.round(progressPercent)}%，是否设定新的目标？`,
+        title: this.i18n.t('user.trigger.goalReached.title'),
+        message: this.i18n.t('user.trigger.goalReached.message', {
+          percent: Math.round(progressPercent),
+        }),
         priority: 'medium',
         dismissable: true,
         nextReminderDays: 7,
@@ -386,9 +395,8 @@ export class CollectionTriggerService {
       return {
         type: 'card',
         field: 'goalSpeed',
-        title: '📊 进展似乎有些停滞',
-        message:
-          '你的体重/指标近期波动不大，是否要调整目标速度或重新评估计划？',
+        title: this.i18n.t('user.trigger.goalPlateau.title'),
+        message: this.i18n.t('user.trigger.goalPlateau.message'),
         priority: 'medium',
         dismissable: true,
         nextReminderDays: 14,
@@ -424,28 +432,20 @@ export class CollectionTriggerService {
     return {
       type: 'settings_guide',
       field: 'tasteIntensity',
-      title: '🍽️ 我们可以帮你分析口味偏好',
-      message: `你已记录 ${recordCount} 餐，系统可以根据你的饮食历史自动推断口味偏好，让推荐更精准`,
+      title: this.i18n.t('user.trigger.tasteIntensity.title'),
+      message: this.i18n.t('user.trigger.tasteIntensity.message', {
+        count: recordCount,
+      }),
       priority: 'low',
       dismissable: true,
       nextReminderDays: 30,
     };
   }
 
-  /** 品类代码 → 显示名称 */
+  /** 品类代码 → 显示名称（i18n） */
   private categoryToDisplayName(category: string): string {
-    const map: Record<string, string> = {
-      protein: '蛋白质',
-      grain: '谷物',
-      veggie: '蔬菜',
-      fruit: '水果',
-      dairy: '乳制品',
-      fat: '油脂',
-      beverage: '饮品',
-      snack: '零食',
-      condiment: '调味品',
-      composite: '复合菜肴',
-    };
-    return map[category] || category;
+    const translated = this.i18n.t(`user.category.${category}`);
+    // 若 key 缺失，i18n.t 返回原 key 本身，此时回退到 category 原值
+    return translated === `user.category.${category}` ? category : translated;
   }
 }

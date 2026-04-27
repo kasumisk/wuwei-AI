@@ -8,20 +8,20 @@
 
 ### 1.1 Prompt ↔ 食物库数据基准不一致（Critical）
 
-| 维度 | LLM Prompt (当前) | Foods DB (per 100g) | 影响 |
-|------|-------------------|---------------------|------|
-| **营养数据基准** | "per serving" — LLM 返回的是实际份量的营养值 | per 100g 可食部分 | 食物库匹配后无法直接对比/验证 LLM 数据；food enrichment pipeline 也用 per-100g 基准 |
-| **下游换算** | 无统一换算逻辑 | `standardServingG` 字段存在 | aggregator 直接累加 per-serving 值，无法利用 DB 的 per-100g 数据做校准 |
+| 维度             | LLM Prompt (当前)                            | Foods DB (per 100g)         | 影响                                                                                |
+| ---------------- | -------------------------------------------- | --------------------------- | ----------------------------------------------------------------------------------- |
+| **营养数据基准** | "per serving" — LLM 返回的是实际份量的营养值 | per 100g 可食部分           | 食物库匹配后无法直接对比/验证 LLM 数据；food enrichment pipeline 也用 per-100g 基准 |
+| **下游换算**     | 无统一换算逻辑                               | `standardServingG` 字段存在 | aggregator 直接累加 per-serving 值，无法利用 DB 的 per-100g 数据做校准              |
 
 ### 1.2 Category 枚举不统一
 
-| Prompt 分类 (11) | DB 分类 (14) | 问题 |
-|------------------|--------------|------|
-| `protein` | `meat`, `seafood`, `egg`, `legume` | prompt 用一个笼统的 `protein` 覆盖 4 个 DB 分类 |
-| `veggie` | `vegetable` | 命名不同 |
-| `composite` | 无对应 | DB 没有 composite 分类 |
-| `soup` | 无对应 | DB 没有 soup 分类 |
-| 无对应 | `nut`, `egg`, `legume`, `seafood`, `other` | prompt 缺少这些分类 |
+| Prompt 分类 (11) | DB 分类 (14)                               | 问题                                            |
+| ---------------- | ------------------------------------------ | ----------------------------------------------- |
+| `protein`        | `meat`, `seafood`, `egg`, `legume`         | prompt 用一个笼统的 `protein` 覆盖 4 个 DB 分类 |
+| `veggie`         | `vegetable`                                | 命名不同                                        |
+| `composite`      | 无对应                                     | DB 没有 composite 分类                          |
+| `soup`           | 无对应                                     | DB 没有 soup 分类                               |
+| 无对应           | `nut`, `egg`, `legume`, `seafood`, `other` | prompt 缺少这些分类                             |
 
 ### 1.3 AnalyzedFoodItem 注释误导
 
@@ -38,6 +38,7 @@
 ### 1.6 i18n 分散
 
 当前有 4 套 i18n 系统：
+
 - `analysis-prompt-schema.ts` 内联常量（GOAL_FOCUS_BLOCKS, HEALTH_CONDITION_INSTRUCTIONS 等）
 - `decision-labels.ts` (cl) + 3 个 locale 子文件
 - `explainer-labels.ts` (chainLabel)
@@ -113,12 +114,14 @@ NutritionTotals (per-serving 累加值)
 ### 3.2 AnalyzedFoodItem 字段语义变更
 
 **Before (V4.8)**:
+
 ```typescript
 calories: number;  // per serving
 protein?: number;  // per serving
 ```
 
 **After (V4.9)**:
+
 ```typescript
 calories: number;  // per 100g（与食物库对齐）
 protein?: number;  // per 100g
@@ -128,41 +131,41 @@ protein?: number;  // per 100g
 
 ### 3.3 Category 统一映射
 
-| 新统一分类 (14) | 原 Prompt 分类 | 映射说明 |
-|----------------|---------------|----------|
-| `grain` | `grain` | 不变 |
-| `vegetable` | `veggie` | 重命名 |
-| `fruit` | `fruit` | 不变 |
-| `meat` | `protein`(部分) | 拆分：畜禽肉 |
-| `seafood` | `protein`(部分) | 拆分：鱼虾贝 |
-| `dairy` | `dairy` | 不变 |
-| `egg` | `protein`(部分) | 拆分：蛋类 |
-| `legume` | `protein`(部分) | 拆分：豆类 |
-| `nut` | 无 | 新增 |
-| `fat` | `fat` | 不变 |
-| `beverage` | `beverage` | 不变 |
-| `condiment` | `condiment` | 不变 |
-| `snack` | `snack` | 不变 |
-| `other` | `composite`/`soup` | 合并为 other |
+| 新统一分类 (14) | 原 Prompt 分类     | 映射说明     |
+| --------------- | ------------------ | ------------ |
+| `grain`         | `grain`            | 不变         |
+| `vegetable`     | `veggie`           | 重命名       |
+| `fruit`         | `fruit`            | 不变         |
+| `meat`          | `protein`(部分)    | 拆分：畜禽肉 |
+| `seafood`       | `protein`(部分)    | 拆分：鱼虾贝 |
+| `dairy`         | `dairy`            | 不变         |
+| `egg`           | `protein`(部分)    | 拆分：蛋类   |
+| `legume`        | `protein`(部分)    | 拆分：豆类   |
+| `nut`           | 无                 | 新增         |
+| `fat`           | `fat`              | 不变         |
+| `beverage`      | `beverage`         | 不变         |
+| `condiment`     | `condiment`        | 不变         |
+| `snack`         | `snack`            | 不变         |
+| `other`         | `composite`/`soup` | 合并为 other |
 
 ### 3.4 CATEGORY_MACRO_RATIO 更新
 
 ```typescript
 const CATEGORY_MACRO_RATIO = {
-  grain:     { proteinRatio: 0.10, fatRatio: 0.08, carbsRatio: 0.82 },
-  vegetable: { proteinRatio: 0.20, fatRatio: 0.10, carbsRatio: 0.70 },
-  fruit:     { proteinRatio: 0.06, fatRatio: 0.04, carbsRatio: 0.90 },
-  meat:      { proteinRatio: 0.42, fatRatio: 0.30, carbsRatio: 0.00 }, // 畜禽肉
-  seafood:   { proteinRatio: 0.50, fatRatio: 0.20, carbsRatio: 0.00 }, // 鱼虾
-  dairy:     { proteinRatio: 0.22, fatRatio: 0.48, carbsRatio: 0.30 },
-  egg:       { proteinRatio: 0.35, fatRatio: 0.60, carbsRatio: 0.05 }, // 蛋类
-  legume:    { proteinRatio: 0.30, fatRatio: 0.15, carbsRatio: 0.55 }, // 豆类
-  nut:       { proteinRatio: 0.12, fatRatio: 0.72, carbsRatio: 0.16 }, // 坚果
-  fat:       { proteinRatio: 0.00, fatRatio: 1.00, carbsRatio: 0.00 },
-  beverage:  { proteinRatio: 0.04, fatRatio: 0.00, carbsRatio: 0.96 },
-  condiment: { proteinRatio: 0.10, fatRatio: 0.30, carbsRatio: 0.60 },
-  snack:     { proteinRatio: 0.08, fatRatio: 0.38, carbsRatio: 0.54 },
-  other:     { proteinRatio: 0.15, fatRatio: 0.30, carbsRatio: 0.55 }, // 默认比例
+  grain: { proteinRatio: 0.1, fatRatio: 0.08, carbsRatio: 0.82 },
+  vegetable: { proteinRatio: 0.2, fatRatio: 0.1, carbsRatio: 0.7 },
+  fruit: { proteinRatio: 0.06, fatRatio: 0.04, carbsRatio: 0.9 },
+  meat: { proteinRatio: 0.42, fatRatio: 0.3, carbsRatio: 0.0 }, // 畜禽肉
+  seafood: { proteinRatio: 0.5, fatRatio: 0.2, carbsRatio: 0.0 }, // 鱼虾
+  dairy: { proteinRatio: 0.22, fatRatio: 0.48, carbsRatio: 0.3 },
+  egg: { proteinRatio: 0.35, fatRatio: 0.6, carbsRatio: 0.05 }, // 蛋类
+  legume: { proteinRatio: 0.3, fatRatio: 0.15, carbsRatio: 0.55 }, // 豆类
+  nut: { proteinRatio: 0.12, fatRatio: 0.72, carbsRatio: 0.16 }, // 坚果
+  fat: { proteinRatio: 0.0, fatRatio: 1.0, carbsRatio: 0.0 },
+  beverage: { proteinRatio: 0.04, fatRatio: 0.0, carbsRatio: 0.96 },
+  condiment: { proteinRatio: 0.1, fatRatio: 0.3, carbsRatio: 0.6 },
+  snack: { proteinRatio: 0.08, fatRatio: 0.38, carbsRatio: 0.54 },
+  other: { proteinRatio: 0.15, fatRatio: 0.3, carbsRatio: 0.55 }, // 默认比例
 };
 ```
 
@@ -214,35 +217,35 @@ FoodAnalysisResultV61（最终输出）
 
 ### Phase 1：Prompt Per-100g + Category + 类型（6 个目标）
 
-| 编号 | 文件 | 改动 |
-|------|------|------|
-| P1.1 | `analysis-prompt-schema.ts` | `FOOD_JSON_SCHEMA` 三语版本中营养字段注释改为 per-100g；`ESTIMATION_RULES` 规则改为"所有营养数据为 per 100g 可食部分"；新增 per-100g 校准说明 |
-| P1.2 | `analysis-prompt-schema.ts` | category 枚举改为 DB 14 分类 `grain/vegetable/fruit/meat/seafood/dairy/egg/legume/nut/fat/beverage/condiment/snack/other` |
-| P1.3 | `food-item.types.ts` | 注释更新为 per-100g；确认 `estimatedWeightGrams` 已存在 |
-| P1.4 | `nutrition-aggregator.ts` | `aggregateNutrition()` 增加 per-100g → per-serving 换算逻辑 |
-| P1.5 | `nutrition-sanity-validator.ts` | `CATEGORY_MACRO_RATIO` 更新为 14 分类 |
-| P1.6 | — | tsc 0 errors |
+| 编号 | 文件                            | 改动                                                                                                                                          |
+| ---- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1.1 | `analysis-prompt-schema.ts`     | `FOOD_JSON_SCHEMA` 三语版本中营养字段注释改为 per-100g；`ESTIMATION_RULES` 规则改为"所有营养数据为 per 100g 可食部分"；新增 per-100g 校准说明 |
+| P1.2 | `analysis-prompt-schema.ts`     | category 枚举改为 DB 14 分类 `grain/vegetable/fruit/meat/seafood/dairy/egg/legume/nut/fat/beverage/condiment/snack/other`                     |
+| P1.3 | `food-item.types.ts`            | 注释更新为 per-100g；确认 `estimatedWeightGrams` 已存在                                                                                       |
+| P1.4 | `nutrition-aggregator.ts`       | `aggregateNutrition()` 增加 per-100g → per-serving 换算逻辑                                                                                   |
+| P1.5 | `nutrition-sanity-validator.ts` | `CATEGORY_MACRO_RATIO` 更新为 14 分类                                                                                                         |
+| P1.6 | —                               | tsc 0 errors                                                                                                                                  |
 
 ### Phase 2：评分/决策适配 + 替代方案（5 个目标）
 
-| 编号 | 文件 | 改动 |
-|------|------|------|
-| P2.1 | `food-scoring.service.ts` | 确认 ScoringFoodItem 来源是换算后值；如果 pipeline 传入 per-100g 原始值则需要在 toScoringFoodItems 中换算 |
-| P2.2 | `food-decision.service.ts` + `analysis-pipeline.service.ts` | `toDecisionFoodItems()` 适配换算后值 |
-| P2.3 | `alternative-suggestion.service.ts` + `alternative-food-rules.ts` | category 匹配逻辑更新为 DB 14 分类 |
-| P2.4 | `analysis-context.service.ts` | macro progress 确认使用 aggregator 换算后的 NutritionTotals |
-| P2.5 | — | tsc 0 errors |
+| 编号 | 文件                                                              | 改动                                                                                                      |
+| ---- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| P2.1 | `food-scoring.service.ts`                                         | 确认 ScoringFoodItem 来源是换算后值；如果 pipeline 传入 per-100g 原始值则需要在 toScoringFoodItems 中换算 |
+| P2.2 | `food-decision.service.ts` + `analysis-pipeline.service.ts`       | `toDecisionFoodItems()` 适配换算后值                                                                      |
+| P2.3 | `alternative-suggestion.service.ts` + `alternative-food-rules.ts` | category 匹配逻辑更新为 DB 14 分类                                                                        |
+| P2.4 | `analysis-context.service.ts`                                     | macro progress 确认使用 aggregator 换算后的 NutritionTotals                                               |
+| P2.5 | —                                                                 | tsc 0 errors                                                                                              |
 
 ### Phase 3：Coach + i18n + 可解释性（6 个目标）
 
-| 编号 | 文件 | 改动 |
-|------|------|------|
-| P3.1 | `decision-coach.service.ts` | 确认教练使用的营养数据是 per-serving 换算后值 |
-| P3.2 | 新文件 `decision/i18n/prompt-labels.ts` + `analysis-prompt-schema.ts` | 提取 GOAL_FOCUS_BLOCKS 等 i18n 块到独立文件，prompt schema 导入使用 |
-| P3.3 | `decision-explainer.service.ts` | 决策链路中增加"per-100g 基准 + 实际摄入"双重展示 |
-| P3.4 | `confidence-diagnostics.service.ts` | 增加 category mismatch 检测（LLM vs library match） |
-| P3.5 | `analysis-prompt-schema.ts` | `ESTIMATION_RULES` 增加 per-100g 校准参考（如"参照 USDA/中国食物成分表的 per-100g 标准值"） |
-| P3.6 | — | tsc 0 errors |
+| 编号 | 文件                                                                  | 改动                                                                                        |
+| ---- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| P3.1 | `decision-coach.service.ts`                                           | 确认教练使用的营养数据是 per-serving 换算后值                                               |
+| P3.2 | 新文件 `decision/i18n/prompt-labels.ts` + `analysis-prompt-schema.ts` | 提取 GOAL_FOCUS_BLOCKS 等 i18n 块到独立文件，prompt schema 导入使用                         |
+| P3.3 | `decision-explainer.service.ts`                                       | 决策链路中增加"per-100g 基准 + 实际摄入"双重展示                                            |
+| P3.4 | `confidence-diagnostics.service.ts`                                   | 增加 category mismatch 检测（LLM vs library match）                                         |
+| P3.5 | `analysis-prompt-schema.ts`                                           | `ESTIMATION_RULES` 增加 per-100g 校准参考（如"参照 USDA/中国食物成分表的 per-100g 标准值"） |
+| P3.6 | —                                                                     | tsc 0 errors                                                                                |
 
 ---
 
@@ -253,6 +256,7 @@ FoodAnalysisResultV61（最终输出）
 **风险**：LLM 习惯输出 per-serving 数据，切换到 per-100g 可能导致初期准确率下降。
 
 **缓解**：
+
 - `ESTIMATION_RULES` 中明确给出 per-100g 参考示例（如"白米饭 per 100g: 116kcal, protein 2.6g"）
 - `nutrition-sanity-validator` 的热力学一致性校验仍然有效（per-100g 数据同样满足 P×4 + F×9 + C×4 ≈ Cal）
 - 在 `ESTIMATION_RULES` 中增加 "estimatedWeightGrams 表示用户实际食用量（克），营养值 × estimatedWeightGrams / 100 = 实际摄入" 的明确说明
@@ -268,6 +272,7 @@ FoodAnalysisResultV61（最终输出）
 **风险**：旧数据中可能存在使用旧 category 值（protein/veggie/composite/soup）的缓存。
 
 **缓解**：
+
 - `nutrition-sanity-validator` 的 `CATEGORY_MACRO_RATIO` 保留 `other` 作为 fallback
 - `validateNutrition()` 中 category 查找失败时已使用 `DEFAULT_RATIO`
 

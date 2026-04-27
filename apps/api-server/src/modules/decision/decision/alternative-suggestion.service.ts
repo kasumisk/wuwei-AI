@@ -712,8 +712,10 @@ export class AlternativeSuggestionService {
    * @deprecated Use TIME_BOUNDARIES.lateNightStart / ALTERNATIVE_PARAMS.lateNightMinCalories
    */
   private static readonly LATE_NIGHT_HOUR = TIME_BOUNDARIES.lateNightStart;
-  private static readonly LATE_NIGHT_MIN_CAL = ALTERNATIVE_PARAMS.lateNightMinCalories;
-  private static readonly DEFAULT_GOAL_TYPE = ALTERNATIVE_PARAMS.defaultGoalType;
+  private static readonly LATE_NIGHT_MIN_CAL =
+    ALTERNATIVE_PARAMS.lateNightMinCalories;
+  private static readonly DEFAULT_GOAL_TYPE =
+    ALTERNATIVE_PARAMS.defaultGoalType;
 
   /**
    * V4.8 P2.2: Static rule fallback — hint-only, no food library search
@@ -895,8 +897,14 @@ export class AlternativeSuggestionService {
         let score = rawScore * AP.rankBaseWeight;
 
         // 热量维度
-        const calScore = Math.max(-1, Math.min(1, -calDiff / AP.rankCalNormDenom));
-        const calWeight = ctx.goalType === 'fat_loss' ? AP.rankCalWeightFatLoss : AP.rankCalWeightDefault;
+        const calScore = Math.max(
+          -1,
+          Math.min(1, -calDiff / AP.rankCalNormDenom),
+        );
+        const calWeight =
+          ctx.goalType === 'fat_loss'
+            ? AP.rankCalWeightFatLoss
+            : AP.rankCalWeightDefault;
         score += calScore * calWeight;
         if (calDiff < -AP.rankCalDiffThreshold)
           reasons.push(
@@ -911,8 +919,14 @@ export class AlternativeSuggestionService {
           );
 
         // 蛋白质维度
-        const prosScore = Math.max(-1, Math.min(1, prosDiff / AP.rankProteinNormDenom));
-        const prosWeight = ctx.goalType === 'muscle_gain' ? AP.rankProteinWeightMuscleGain : AP.rankProteinWeightDefault;
+        const prosScore = Math.max(
+          -1,
+          Math.min(1, prosDiff / AP.rankProteinNormDenom),
+        );
+        const prosWeight =
+          ctx.goalType === 'muscle_gain'
+            ? AP.rankProteinWeightMuscleGain
+            : AP.rankProteinWeightDefault;
         score += prosScore * prosWeight;
         if (prosDiff > AP.rankProteinDiffThreshold)
           reasons.push(
@@ -955,7 +969,11 @@ export class AlternativeSuggestionService {
       .sort((a, b) => {
         // V5.0 P2.2: source priority from ALTERNATIVE_PARAMS
         const sourcePriority = (s?: string) =>
-          s === 'engine' ? AP.sourcePriorityEngine : s === 'static' ? AP.sourcePriorityStatic : AP.sourcePrioritySubstitution;
+          s === 'engine'
+            ? AP.sourcePriorityEngine
+            : s === 'static'
+              ? AP.sourcePriorityStatic
+              : AP.sourcePrioritySubstitution;
         const srcDiff = sourcePriority(b.source) - sourcePriority(a.source);
         if (srcDiff !== 0) return srcDiff;
         return (b.rankScore ?? 0) - (a.rankScore ?? 0);

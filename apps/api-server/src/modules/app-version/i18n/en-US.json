@@ -1,0 +1,31 @@
+{
+  "appVersion": {
+    "notFound": "Version #{{id}} not found",
+    "alreadyExists": "Version already exists: {{platform}} v{{version}}",
+    "cannotDeletePublished": "A published version cannot be deleted directly, please archive it first",
+    "cannotUpdatePublishedFields": "A published version cannot modify the following fields: {{fields}}",
+    "alreadyPublished": "Version is already published",
+    "cannotPublishArchived": "An archived version cannot be published",
+    "alreadyArchived": "Version is already archived",
+    "fetchListSuccess": "Versions retrieved successfully",
+    "fetchStatsSuccess": "Version statistics retrieved successfully",
+    "fetchDetailSuccess": "Version details retrieved successfully",
+    "createSuccess": "Version created successfully",
+    "updateSuccess": "Version updated successfully",
+    "deleteSuccess": "Version deleted successfully",
+    "publishSuccess": "Version published successfully",
+    "archiveSuccess": "Version archived successfully"
+  },
+  "appVersionPackage": {
+    "alreadyExists": "Package already exists for channel {{channel}}",
+    "downloadUrlRequired": "Download URL is required",
+    "notFound": "Package #{{packageId}} not found",
+    "versionNotFound": "Version #{{versionId}} not found",
+    "createSuccess": "Package created successfully",
+    "updateSuccess": "Package updated successfully",
+    "deleteSuccess": "Package deleted successfully",
+    "fetchSuccess": "Packages retrieved successfully",
+    "toggleSuccess": "Status toggled successfully",
+    "storeDefaultsSuccess": "Default configuration retrieved successfully"
+  }
+}

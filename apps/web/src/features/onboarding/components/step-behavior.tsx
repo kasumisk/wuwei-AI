@@ -109,7 +109,9 @@ export function StepBehavior({ data, onChange }: StepBehaviorProps) {
                     } else {
                       // Selecting a condition clears "none"
                       const filtered = prev.filter((k) => k !== 'none');
-                      const next = selected ? filtered.filter((k) => k !== key) : [...filtered, key];
+                      const next = selected
+                        ? filtered.filter((k) => k !== key)
+                        : [...filtered, key];
                       onChange({ healthConditions: next });
                     }
                   }}

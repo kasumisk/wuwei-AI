@@ -1,0 +1,39 @@
+{
+  "role": {
+    "notFound": "ロール #{{id}} が見つかりません",
+    "codeExists": "ロールコード {{code}} はすでに存在します",
+    "parentNotFound": "親ロール #{{id}} が見つかりません",
+    "maxDepthExceeded": "ロール継承は3階層を超えられません",
+    "systemRoleNoInheritance": "システムロールの継承関係は変更できません",
+    "circularInheritance": "循環継承を検出しました",
+    "systemRoleNoDelete": "システムロールは削除できません",
+    "deleteChildFirst": "先に子ロールを削除してください",
+    "inUseByUsers": "このロールは {{count}} 人のユーザーが使用しているため削除できません",
+    "deleteSuccess": "ロールを削除しました",
+    "assignSuccess": "権限を割り当てました"
+  },
+  "permission": {
+    "notFound": "権限 #{{id}} が見つかりません",
+    "codeExists": "権限コード {{code}} はすでに存在します",
+    "parentNotFound": "親権限 #{{id}} が見つかりません",
+    "systemPermNoTypeChange": "システム権限のタイプは変更できません",
+    "circularParent": "循環親関係を検出しました",
+    "systemPermNoDelete": "システム権限は削除できません",
+    "deleteChildFirst": "先に子権限を削除してください",
+    "deleteSuccess": "権限を削除しました"
+  },
+  "guard": {
+    "loginRequired": "先にログインしてください",
+    "noAccess": "アクセス権限がありません"
+  },
+  "template": {
+    "notFound": "権限テンプレート #{{id}} が見つかりません",
+    "codeNotFound": "権限テンプレート {{code}} が見つかりません",
+    "codeExists": "テンプレートコード {{code}} はすでに存在します",
+    "systemTemplateNoModify": "システムテンプレートは変更できません",
+    "systemTemplateNoDelete": "システムテンプレートは削除できません",
+    "deleteSuccess": "権限テンプレートを削除しました",
+    "noMatchingPermission": "一致する権限が見つかりません",
+    "applySuccess": "テンプレートを適用しました"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "strategy": {
+    "notFound": "Strategy {{id}} not found",
+    "noFieldsToUpdate": "No fields to update",
+    "onlyActiveCanBeAssigned": "Only active strategies can be assigned",
+    "assignmentNotFound": "Assignment {{assignmentId}} not found",
+    "assignmentRemoved": "Assignment removed",
+    "noActiveStrategyForSegment": "No active strategy found matching segment \"{{segment}}\"",
+    "unknownPreset": "Unknown preset \"{{presetName}}\", available: {{available}}",
+    "tuningNotFound": "Tuning record {{tuningId}} not found",
+    "tuningNotPending": "Tuning record current status is \"{{status}}\", only pending_review can be reviewed",
+    "fetchListSuccess": "Strategies retrieved successfully",
+    "fetchOverviewSuccess": "Strategy overview retrieved successfully",
+    "fetchDetailSuccess": "Strategy details retrieved successfully",
+    "createSuccess": "Strategy created successfully",
+    "updateSuccess": "Strategy updated successfully",
+    "activateSuccess": "Strategy activated",
+    "archiveSuccess": "Strategy archived",
+    "assignSuccess": "Strategy assigned successfully",
+    "removeAssignmentSuccess": "Assignment removed successfully",
+    "realismUpdateSuccess": "Realism configuration updated successfully",
+    "realismPresetApplied": "Preset \"{{preset}}\" applied",
+    "realismSegmentApplied": "Realism configuration applied to segment \"{{segment}}\"",
+    "simulateSuccess": "Strategy simulation complete",
+    "diffSuccess": "Strategy diff complete",
+    "tuningApproved": "Tuning suggestion approved",
+    "tuningRejected": "Tuning suggestion rejected",
+    "pendingTuningsSuccess": "Pending tunings retrieved successfully"
+  }
+}

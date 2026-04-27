@@ -1,6 +1,7 @@
 import { HttpClient } from './http-client';
 import { headers } from 'next/headers';
 import { env } from '../env';
+import { toAcceptLanguage } from '../i18n/accept-language';
 
 /**
  * 服务端 API 实例
@@ -21,6 +22,14 @@ class ServerAPI extends HttpClient {
           const authorization = headersList.get('authorization');
           if (authorization) {
             config.headers.Authorization = authorization;
+          }
+
+          const acceptLanguage = headersList.get('accept-language');
+          config.headers['Accept-Language'] = toAcceptLanguage(acceptLanguage);
+
+          const xLang = headersList.get('x-lang');
+          if (xLang) {
+            config.headers['X-Lang'] = xLang;
           }
 
           // 转发客户端 IP

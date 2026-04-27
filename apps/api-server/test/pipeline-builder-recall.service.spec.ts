@@ -31,13 +31,11 @@ function createService(): PipelineBuilderService {
   };
   const mockMealAssembler = { assemble: jest.fn().mockReturnValue([]) };
   const mockHealthModifier = {
-    evaluate: jest
-      .fn()
-      .mockReturnValue({
-        finalMultiplier: 1.0,
-        modifiers: [],
-        isVetoed: false,
-      }),
+    evaluate: jest.fn().mockReturnValue({
+      finalMultiplier: 1.0,
+      modifiers: [],
+      isVetoed: false,
+    }),
     hashContext: jest.fn(),
     preloadL1: jest.fn(),
   };

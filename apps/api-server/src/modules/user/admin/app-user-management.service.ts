@@ -9,10 +9,14 @@ import {
   UpdateAppUserByAdminDto,
 } from './dto/app-user-management.dto';
 import { PrismaService } from '../../../core/prisma/prisma.service';
+import { I18nService } from '../../../core/i18n';
 
 @Injectable()
 export class AppUserManagementService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly i18n: I18nService,
+  ) {}
 
   /**
    * 获取 App 用户列表（分页）
@@ -65,7 +69,7 @@ export class AppUserManagementService {
     const user = await this.prisma.appUsers.findUnique({ where: { id } });
 
     if (!user) {
-      throw new NotFoundException(`App 用户 #${id} 不存在`);
+      throw new NotFoundException(this.i18n.t('user.userNotFound', { id }));
     }
 
     return user;
@@ -78,7 +82,7 @@ export class AppUserManagementService {
     const user = await this.prisma.appUsers.findUnique({ where: { id } });
 
     if (!user) {
-      throw new NotFoundException(`App 用户 #${id} 不存在`);
+      throw new NotFoundException(this.i18n.t('user.userNotFound', { id }));
     }
 
     const data: any = {};
@@ -101,7 +105,7 @@ export class AppUserManagementService {
     const user = await this.prisma.appUsers.findUnique({ where: { id } });
 
     if (!user) {
-      throw new NotFoundException(`App 用户 #${id} 不存在`);
+      throw new NotFoundException(this.i18n.t('user.userNotFound', { id }));
     }
 
     await this.prisma.appUsers.update({
@@ -109,7 +113,7 @@ export class AppUserManagementService {
       data: { status: AppUserStatus.BANNED as any },
     });
 
-    return { message: '用户已封禁' };
+    return { message: this.i18n.t('user.userBanned') };
   }
 
   /**
@@ -119,11 +123,11 @@ export class AppUserManagementService {
     const user = await this.prisma.appUsers.findUnique({ where: { id } });
 
     if (!user) {
-      throw new NotFoundException(`App 用户 #${id} 不存在`);
+      throw new NotFoundException(this.i18n.t('user.userNotFound', { id }));
     }
 
     if (user.status !== (AppUserStatus.BANNED as any)) {
-      throw new BadRequestException('用户未被封禁');
+      throw new BadRequestException(this.i18n.t('user.userNotBanned'));
     }
 
     await this.prisma.appUsers.update({
@@ -131,7 +135,7 @@ export class AppUserManagementService {
       data: { status: AppUserStatus.ACTIVE as any },
     });
 
-    return { message: '用户已解封' };
+    return { message: this.i18n.t('user.userUnbanned') };
   }
 
   /**
@@ -141,12 +145,12 @@ export class AppUserManagementService {
     const user = await this.prisma.appUsers.findUnique({ where: { id } });
 
     if (!user) {
-      throw new NotFoundException(`App 用户 #${id} 不存在`);
+      throw new NotFoundException(this.i18n.t('user.userNotFound', { id }));
     }
 
     await this.prisma.appUsers.delete({ where: { id } });
 
-    return { message: '用户已删除' };
+    return { message: this.i18n.t('user.userDeleted') };
   }
 
   /**
@@ -183,7 +187,9 @@ export class AppUserManagementService {
       where: { id: userId },
     });
     if (!user) {
-      throw new NotFoundException(`App 用户 #${userId} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('user.userNotFound', { id: userId }),
+      );
     }
 
     // 并行查询行为画像、声明档案、近期变更日志
@@ -249,7 +255,9 @@ export class AppUserManagementService {
       where: { id: userId },
     });
     if (!user) {
-      throw new NotFoundException(`App 用户 #${userId} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('user.userNotFound', { id: userId }),
+      );
     }
 
     // 并行查询推断画像、近期变更日志

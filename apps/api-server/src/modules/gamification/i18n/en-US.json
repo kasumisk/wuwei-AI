@@ -1,0 +1,12 @@
+{
+  "message": {
+    "fetchSuccess": "Fetched successfully",
+    "joinedChallenge": "Joined the challenge",
+    "createSuccess": "Created successfully",
+    "updateSuccess": "Updated successfully",
+    "statusUpdated": "Status updated"
+  },
+  "error": {
+    "challengeNotFound": "Challenge not found"
+  }
+}

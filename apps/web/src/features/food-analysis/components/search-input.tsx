@@ -52,10 +52,7 @@ export function SearchInput({ mealType, onAddFromLibrary, isAdding }: SearchInpu
     enabled: !debouncedQuery,
   });
 
-  const isInCart = useCallback(
-    (foodId: string) => cart.some((c) => c.food.id === foodId),
-    [cart]
-  );
+  const isInCart = useCallback((foodId: string) => cart.some((c) => c.food.id === foodId), [cart]);
 
   const toggleCart = useCallback((food: FoodLibraryItem) => {
     setCart((prev) => {
@@ -199,13 +196,25 @@ export function SearchInput({ mealType, onAddFromLibrary, isAdding }: SearchInpu
                     <span className="animate-spin inline-block w-5 h-5 border-2 border-primary border-t-transparent " />
                   ) : selected ? (
                     <div className="w-8 h-8 bg-primary flex items-center justify-center">
-                      <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" className="text-primary-foreground">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        width="16"
+                        height="16"
+                        className="text-primary-foreground"
+                      >
                         <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
                       </svg>
                     </div>
                   ) : (
                     <div className="w-8 h-8 bg-primary/10 flex items-center justify-center">
-                      <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" className="text-primary">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        width="16"
+                        height="16"
+                        className="text-primary"
+                      >
                         <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
                       </svg>
                     </div>
@@ -255,9 +264,7 @@ export function SearchInput({ mealType, onAddFromLibrary, isAdding }: SearchInpu
         <div className="fixed bottom-20 left-0 right-0 z-50 px-4 max-w-lg mx-auto">
           <div className="bg-primary text-primary-foreground rounded-xl shadow-xl shadow-primary/30 p-3 flex items-center justify-between">
             <div className="flex items-center gap-2 min-w-0">
-              <span className="text-sm font-bold shrink-0">
-                已选 {cart.length} 项
-              </span>
+              <span className="text-sm font-bold shrink-0">已选 {cart.length} 项</span>
               <span className="text-xs opacity-80 truncate">
                 {cart.map((c) => c.food.name).join('、')}
               </span>

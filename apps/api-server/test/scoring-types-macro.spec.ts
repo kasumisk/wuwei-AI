@@ -91,7 +91,9 @@ describe('scoring.types — P0-3/P1-2 新增导出', () => {
       const roles = buildMealRoles('dinner', 76);
       const proteinCount = roles.filter((r) => r.startsWith('protein')).length;
       expect(proteinCount).toBe(3);
-      expect(roles).toEqual(expect.arrayContaining(['protein', 'protein2', 'protein3']));
+      expect(roles).toEqual(
+        expect.arrayContaining(['protein', 'protein2', 'protein3']),
+      );
     });
 
     it('极端超目标 200g/餐 仍 clamp 到 3 slot（不越界）', () => {
@@ -101,8 +103,12 @@ describe('scoring.types — P0-3/P1-2 新增导出', () => {
     });
 
     it('零/负蛋白目标 → fallback 到 1 slot（防御式）', () => {
-      expect(buildMealRoles('lunch', 0).filter((r) => r.startsWith('protein'))).toHaveLength(1);
-      expect(buildMealRoles('lunch', -10).filter((r) => r.startsWith('protein'))).toHaveLength(1);
+      expect(
+        buildMealRoles('lunch', 0).filter((r) => r.startsWith('protein')),
+      ).toHaveLength(1);
+      expect(
+        buildMealRoles('lunch', -10).filter((r) => r.startsWith('protein')),
+      ).toHaveLength(1);
     });
 
     it('breakfast 返回 carb + protein 组合（含 carb 基础槽）', () => {
@@ -141,7 +147,9 @@ describe('scoring.types — P0-3/P1-2 新增导出', () => {
 
     it('ROLE_CATEGORIES 必须包含 protein3 映射（防止动态 slot 派生后无类目可召回）', () => {
       expect(ROLE_CATEGORIES.protein3).toBeDefined();
-      expect(ROLE_CATEGORIES.protein3).toEqual(expect.arrayContaining(['protein']));
+      expect(ROLE_CATEGORIES.protein3).toEqual(
+        expect.arrayContaining(['protein']),
+      );
     });
 
     it('减脂日蛋白天花板数学验证：152g÷4餐=38g/餐→2 slot→日8 slot→天花板≈280g（足够）', () => {

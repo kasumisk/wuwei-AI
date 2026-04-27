@@ -5,6 +5,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../core/prisma/prisma.service';
+import { I18nService } from '../../../core/i18n';
 import {
   ENRICHABLE_FIELDS,
   JSON_ARRAY_FIELDS,
@@ -26,7 +27,10 @@ import {
 export class FoodLibraryManagementService {
   private readonly logger = new Logger(FoodLibraryManagementService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly i18n: I18nService,
+  ) {}
 
   // ==================== DTO → DB 字段映射 ====================
   // After Prisma schema migration to camelCase field names, the DTO keys
@@ -298,7 +302,7 @@ export class FoodLibraryManagementService {
   private async findOneSimple(id: string) {
     const food = await this.prisma.foods.findUnique({ where: { id } });
     if (!food) {
-      throw new NotFoundException('食物不存在');
+      throw new NotFoundException(this.i18n.t('food.foodNotFound'));
     }
     return food;
   }
@@ -409,13 +413,17 @@ export class FoodLibraryManagementService {
       where: { name: dto.name },
     });
     if (existing) {
-      throw new ConflictException(`食物 "${dto.name}" 已存在`);
+      throw new ConflictException(
+        this.i18n.t('food.foodNameDuplicate', { name: dto.name }),
+      );
     }
     const codeExisting = await this.prisma.foods.findFirst({
       where: { code: dto.code },
     });
     if (codeExisting) {
-      throw new ConflictException(`编码 "${dto.code}" 已存在`);
+      throw new ConflictException(
+        this.i18n.t('food.foodCodeDuplicate', { code: dto.code }),
+      );
     }
     const saved = await this.prisma.foods.create({
       data: this.stripUndefined(dto) as any,
@@ -441,7 +449,9 @@ export class FoodLibraryManagementService {
         where: { name: dto.name },
       });
       if (existing) {
-        throw new ConflictException(`食物 "${(dto as any).name}" 已存在`);
+        throw new ConflictException(
+          this.i18n.t('food.foodNameDuplicate', { name: (dto as any).name }),
+        );
       }
     }
 
@@ -801,7 +811,8 @@ export class FoodLibraryManagementService {
     const translation = await this.prisma.foodTranslations.findUnique({
       where: { id: translationId },
     });
-    if (!translation) throw new NotFoundException('翻译记录不存在');
+    if (!translation)
+      throw new NotFoundException(this.i18n.t('food.translationNotFound'));
     return this.prisma.foodTranslations.update({
       where: { id: translationId },
       data: dto as any,
@@ -812,11 +823,12 @@ export class FoodLibraryManagementService {
     const translation = await this.prisma.foodTranslations.findUnique({
       where: { id: translationId },
     });
-    if (!translation) throw new NotFoundException('翻译记录不存在');
+    if (!translation)
+      throw new NotFoundException(this.i18n.t('food.translationNotFound'));
     await this.prisma.foodTranslations.delete({
       where: { id: translationId },
     });
-    return { message: '翻译已删除' };
+    return { message: this.i18n.t('food.translationDeleted') };
   }
 
   // ==================== 数据来源管理 ====================
@@ -839,9 +851,10 @@ export class FoodLibraryManagementService {
     const source = await this.prisma.foodSources.findUnique({
       where: { id: sourceId },
     });
-    if (!source) throw new NotFoundException('来源记录不存在');
+    if (!source)
+      throw new NotFoundException(this.i18n.t('food.sourceNotFound'));
     await this.prisma.foodSources.delete({ where: { id: sourceId } });
-    return { message: '来源已删除' };
+    return { message: this.i18n.t('food.sourceDeleted') };
   }
 
   // ==================== 变更日志 ====================
@@ -916,7 +929,8 @@ export class FoodLibraryManagementService {
     const conflict = await this.prisma.foodConflicts.findUnique({
       where: { id: conflictId },
     });
-    if (!conflict) throw new NotFoundException('冲突记录不存在');
+    if (!conflict)
+      throw new NotFoundException(this.i18n.t('food.conflictNotFound'));
 
     return this.prisma.foodConflicts.update({
       where: { id: conflictId },

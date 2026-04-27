@@ -5,7 +5,6 @@ import { useUnreadCount } from '@/features/notification/hooks/use-notifications'
 import { LocalizedLink } from '@/components/common/localized-link';
 import { useLocalizedRouter } from '@/lib/hooks/use-localized-router';
 
-
 /* ─── Tab 配置 ─── */
 interface NavTab {
   key: string;
@@ -136,11 +135,7 @@ export function BottomNav() {
               key={tab.key}
               href={href}
               className={`relative flex flex-col items-center justify-center min-w-14 py-1 transition-all duration-200 active:scale-90
-                ${
-                  active
-                    ? 'text-primary'
-                    : 'text-muted-foreground/75'
-                }`}
+                ${active ? 'text-primary' : 'text-muted-foreground/75'}`}
               aria-current={active ? 'page' : undefined}
             >
               {active && (

@@ -53,15 +53,8 @@ const MAX_ROWS = 20;
 // 常用克数预设
 const WEIGHT_PRESETS = [50, 100, 150, 200, 300];
 
-export function FoodEditList({
-  initialFoods,
-  onSubmit,
-  onCancel,
-  submitting,
-}: FoodEditListProps) {
-  const [rows, setRows] = useState<EditableFoodRow[]>(() =>
-    (initialFoods ?? []).map(toRow)
-  );
+export function FoodEditList({ initialFoods, onSubmit, onCancel, submitting }: FoodEditListProps) {
+  const [rows, setRows] = useState<EditableFoodRow[]>(() => (initialFoods ?? []).map(toRow));
   const [userNote, setUserNote] = useState('');
 
   const updateRow = useCallback((key: string, patch: Partial<EditableFoodRow>) => {
@@ -125,8 +118,11 @@ export function FoodEditList({
                   <label className="mb-1 block text-xs text-gray-500">
                     食物 #{idx + 1}
                     {typeof row.confidence === 'number' && (
-                      <span className={`ml-2 ${row.confidence >= 0.7 ? 'text-gray-400' : 'text-amber-500'}`}>
-                        {row.confidence >= 0.7 ? '可能是' : '不太确定'}·{Math.round(row.confidence * 100)}%
+                      <span
+                        className={`ml-2 ${row.confidence >= 0.7 ? 'text-gray-400' : 'text-amber-500'}`}
+                      >
+                        {row.confidence >= 0.7 ? '可能是' : '不太确定'}·
+                        {Math.round(row.confidence * 100)}%
                       </span>
                     )}
                   </label>
@@ -236,12 +232,7 @@ export function FoodEditList({
           {submitting ? '重新分析中...' : '确认并分析'}
         </Button>
         {onCancel && (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onCancel}
-            disabled={submitting}
-          >
+          <Button type="button" variant="outline" onClick={onCancel} disabled={submitting}>
             取消
           </Button>
         )}

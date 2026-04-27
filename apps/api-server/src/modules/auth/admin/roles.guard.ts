@@ -5,12 +5,16 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { I18nService } from '../../../core/i18n';
 
 export const ROLES_KEY = 'roles';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
-  constructor(private reflector: Reflector) {}
+  constructor(
+    private reflector: Reflector,
+    private readonly i18n: I18nService,
+  ) {}
 
   canActivate(context: ExecutionContext): boolean {
     const requiredRoles = this.reflector.getAllAndOverride<string[]>(
@@ -25,7 +29,7 @@ export class RolesGuard implements CanActivate {
     const { user } = context.switchToHttp().getRequest();
 
     if (!user) {
-      throw new ForbiddenException('未登录');
+      throw new ForbiddenException(this.i18n.t('auth.notLoggedIn'));
     }
 
     // 超级管理员拥有所有权限
@@ -38,7 +42,7 @@ export class RolesGuard implements CanActivate {
     );
 
     if (!hasRole) {
-      throw new ForbiddenException('权限不足');
+      throw new ForbiddenException(this.i18n.t('auth.permissionDenied'));
     }
 
     return true;

@@ -10,6 +10,7 @@ import { AppJwtAuthGuard } from '../../../auth/app/app-jwt-auth.guard';
 import { SubscriptionService } from '../services/subscription.service';
 import { QuotaService } from '../services/quota.service';
 import { ApiResponse } from '../../../../common/types/response.type';
+import { I18nService } from '../../../../core/i18n/i18n.service';
 
 @ApiTags('订阅 - 计划查询')
 @Controller('app/subscription')
@@ -17,6 +18,7 @@ export class SubscriptionPlansController {
   constructor(
     private readonly subscriptionService: SubscriptionService,
     private readonly quotaService: QuotaService,
+    private readonly i18n: I18nService,
   ) {}
 
   /**
@@ -48,7 +50,7 @@ export class SubscriptionPlansController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取订阅计划成功',
+      message: this.i18n.t('subscription.controller.fetchPlansSuccess'),
       data: { list },
     };
   }

@@ -1,5 +1,6 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { RedisCacheService } from '../../../core/redis/redis-cache.service';
+import { I18nService } from '../../../core/i18n';
 
 /**
  * V6.4 P0: SMS 验证码服务
@@ -35,7 +36,10 @@ export class SmsService {
     { code: string; expireAt: number; sentAt: number }
   >();
 
-  constructor(private readonly redis: RedisCacheService) {}
+  constructor(
+    private readonly redis: RedisCacheService,
+    private readonly i18n: I18nService,
+  ) {}
 
   /**
    * 发送短信验证码
@@ -47,7 +51,7 @@ export class SmsService {
   async sendCode(phone: string): Promise<{ message: string }> {
     // 手机号格式简单校验
     if (!/^1[3-9]\d{9}$/.test(phone)) {
-      throw new BadRequestException('手机号格式不正确');
+      throw new BadRequestException(this.i18n.t('auth.phoneInvalid'));
     }
 
     // 防刷：检查发送间隔
@@ -73,7 +77,7 @@ export class SmsService {
       this.logger.log(`[短信验证码] phone: ${phone}, code: ${code} (开发模式)`);
     }
 
-    return { message: '验证码已发送' };
+    return { message: this.i18n.t('auth.smsSent') };
   }
 
   /**
@@ -119,7 +123,7 @@ export class SmsService {
       const throttleKey = `${SMS_THROTTLE_PREFIX}:${phone}`;
       const existing = await this.redis.get<number>(throttleKey);
       if (existing) {
-        throw new BadRequestException('发送太频繁，请稍后再试');
+        throw new BadRequestException(this.i18n.t('auth.smsTooFrequent'));
       }
     } else {
       // 降级：内存检查
@@ -132,7 +136,9 @@ export class SmsService {
           (SEND_INTERVAL_SECONDS * 1000 - (Date.now() - existing.sentAt)) /
             1000,
         );
-        throw new BadRequestException(`发送太频繁，请 ${remaining} 秒后再试`);
+        throw new BadRequestException(
+          this.i18n.t('auth.smsTooFrequentRetry', { seconds: remaining }),
+        );
       }
     }
   }

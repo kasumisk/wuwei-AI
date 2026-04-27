@@ -21,6 +21,7 @@ import {
   UpdateExperimentStatusDto,
 } from '../dto/ab-experiment-management.dto';
 import { ApiResponse } from '../../../../common/types/response.type';
+import { I18nService } from '../../../../core/i18n';
 
 @ApiTags('管理后台 - A/B 实验管理')
 @Controller('admin/ab-experiments')
@@ -30,6 +31,7 @@ import { ApiResponse } from '../../../../common/types/response.type';
 export class ABExperimentManagementController {
   constructor(
     private readonly abExperimentService: ABExperimentManagementService,
+    private readonly i18n: I18nService,
   ) {}
 
   // ==================== 列表 ====================
@@ -41,7 +43,7 @@ export class ABExperimentManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取实验列表成功',
+      message: this.i18n.t('diet.experimentListOk'),
       data,
     };
   }
@@ -55,7 +57,7 @@ export class ABExperimentManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取实验概览成功',
+      message: this.i18n.t('diet.experimentOverviewOk'),
       data,
     };
   }
@@ -69,7 +71,7 @@ export class ABExperimentManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取实验详情成功',
+      message: this.i18n.t('diet.experimentDetailOk'),
       data,
     };
   }
@@ -83,7 +85,7 @@ export class ABExperimentManagementController {
     return {
       success: true,
       code: HttpStatus.CREATED,
-      message: '创建实验成功',
+      message: this.i18n.t('diet.experimentCreated'),
       data,
     };
   }
@@ -100,7 +102,7 @@ export class ABExperimentManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '更新实验成功',
+      message: this.i18n.t('diet.experimentUpdated'),
       data,
     };
   }
@@ -117,7 +119,7 @@ export class ABExperimentManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '实验状态更新成功',
+      message: this.i18n.t('diet.experimentStatusUpdated'),
       data,
     };
   }
@@ -131,7 +133,7 @@ export class ABExperimentManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取实验指标成功',
+      message: this.i18n.t('diet.experimentMetricsOk'),
       data,
     };
   }
@@ -145,7 +147,7 @@ export class ABExperimentManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取实验分析成功',
+      message: this.i18n.t('diet.experimentAnalysisOk'),
       data,
     };
   }

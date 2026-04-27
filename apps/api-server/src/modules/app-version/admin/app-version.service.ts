@@ -4,6 +4,7 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
+import { I18nService } from '../../../core/i18n/i18n.service';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { UpdateType, AppVersionStatus } from '../app-version.types';
 import {
@@ -16,7 +17,10 @@ import {
 
 @Injectable()
 export class AppVersionService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly i18n: I18nService,
+  ) {}
 
   /**
    * 将语义化版本号转换为数值（用于比较）
@@ -87,7 +91,9 @@ export class AppVersionService {
     });
 
     if (!version) {
-      throw new NotFoundException(`版本 #${id} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('appVersion.appVersion.notFound', { id }),
+      );
     }
 
     return version;
@@ -107,9 +113,12 @@ export class AppVersionService {
     const existing = await this.prisma.appVersions.findFirst({ where });
 
     if (existing) {
-      const platLabel = createDto.platform || '全平台';
+      const platLabel = createDto.platform || 'all';
       throw new ConflictException(
-        `版本已存在: ${platLabel} v${createDto.version}`,
+        this.i18n.t('appVersion.appVersion.alreadyExists', {
+          platform: platLabel,
+          version: createDto.version,
+        }),
       );
     }
 
@@ -144,7 +153,9 @@ export class AppVersionService {
     });
 
     if (!version) {
-      throw new NotFoundException(`版本 #${id} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('appVersion.appVersion.notFound', { id }),
+      );
     }
 
     // 已发布的版本只能修改部分字段
@@ -163,7 +174,9 @@ export class AppVersionService {
       const invalidKeys = updateKeys.filter((k) => !allowedFields.includes(k));
       if (invalidKeys.length > 0) {
         throw new BadRequestException(
-          `已发布版本不能修改以下字段: ${invalidKeys.join(', ')}`,
+          this.i18n.t('appVersion.appVersion.cannotUpdatePublishedFields', {
+            fields: invalidKeys.join(', '),
+          }),
         );
       }
     }
@@ -195,16 +208,20 @@ export class AppVersionService {
     });
 
     if (!version) {
-      throw new NotFoundException(`版本 #${id} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('appVersion.appVersion.notFound', { id }),
+      );
     }
 
     if (version.status === AppVersionStatus.PUBLISHED) {
-      throw new BadRequestException('已发布的版本不能直接删除，请先归档');
+      throw new BadRequestException(
+        this.i18n.t('appVersion.appVersion.cannotDeletePublished'),
+      );
     }
 
     await this.prisma.appVersions.delete({ where: { id } });
 
-    return { message: '版本删除成功' };
+    return { message: this.i18n.t('appVersion.appVersion.deleteSuccess') };
   }
 
   /**
@@ -216,15 +233,21 @@ export class AppVersionService {
     });
 
     if (!version) {
-      throw new NotFoundException(`版本 #${id} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('appVersion.appVersion.notFound', { id }),
+      );
     }
 
     if (version.status === AppVersionStatus.PUBLISHED) {
-      throw new BadRequestException('版本已经发布');
+      throw new BadRequestException(
+        this.i18n.t('appVersion.appVersion.alreadyPublished'),
+      );
     }
 
     if (version.status === AppVersionStatus.ARCHIVED) {
-      throw new BadRequestException('已归档版本不能发布');
+      throw new BadRequestException(
+        this.i18n.t('appVersion.appVersion.cannotPublishArchived'),
+      );
     }
 
     return await this.prisma.appVersions.update({
@@ -247,11 +270,15 @@ export class AppVersionService {
     });
 
     if (!version) {
-      throw new NotFoundException(`版本 #${id} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('appVersion.appVersion.notFound', { id }),
+      );
     }
 
     if (version.status === AppVersionStatus.ARCHIVED) {
-      throw new BadRequestException('版本已经归档');
+      throw new BadRequestException(
+        this.i18n.t('appVersion.appVersion.alreadyArchived'),
+      );
     }
 
     return await this.prisma.appVersions.update({

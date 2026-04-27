@@ -1,5 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../core/prisma/prisma.service';
+import { I18nService } from '../../../core/i18n/i18n.service';
 import { Prisma } from '@prisma/client';
 import {
   RecipeSummary,
@@ -24,7 +25,10 @@ import {
 export class RecipeService {
   private readonly logger = new Logger(RecipeService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly i18n: I18nService,
+  ) {}
 
   // ==================== 查询 ====================
 
@@ -98,7 +102,7 @@ export class RecipeService {
     });
 
     if (!recipe) {
-      throw new NotFoundException(`菜谱 ${id} 不存在`);
+      throw new NotFoundException(this.i18n.t('recipe.recipeNotFound', { id }));
     }
 
     // V6.5 Phase 2M: 获取平均评分
@@ -500,7 +504,9 @@ export class RecipeService {
       select: { id: true },
     });
     if (!recipe) {
-      throw new NotFoundException(`菜谱 ${recipeId} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('recipe.recipeNotFound', { id: recipeId }),
+      );
     }
 
     const row = await this.prisma.recipeRatings.upsert({

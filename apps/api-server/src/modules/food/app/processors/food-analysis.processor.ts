@@ -22,6 +22,7 @@ import {
   DeadLetterService,
 } from '../../../../core/queue';
 import { AnalyzeService } from '../services/analyze.service';
+import type { Locale } from '../../../diet/app/recommendation/utils/i18n-messages';
 import {
   DomainEvents,
   AnalysisFailedEvent,
@@ -33,6 +34,7 @@ export interface FoodAnalysisJobData {
   imageUrl: string;
   mealType?: string;
   userId?: string;
+  locale?: Locale;
 }
 
 @Processor(QUEUE_NAMES.FOOD_ANALYSIS, {
@@ -56,7 +58,7 @@ export class FoodAnalysisProcessor extends WorkerHost {
    * 由 BullMQ Worker 自动调用
    */
   async process(job: Job<FoodAnalysisJobData>): Promise<void> {
-    const { requestId, imageUrl, mealType, userId } = job.data;
+    const { requestId, imageUrl, mealType, userId, locale } = job.data;
     this.logger.log(
       `开始处理 AI 分析任务: requestId=${requestId}, jobId=${job.id}`,
     );
@@ -68,6 +70,7 @@ export class FoodAnalysisProcessor extends WorkerHost {
         imageUrl,
         mealType,
         userId,
+        locale,
       );
 
       this.logger.log(

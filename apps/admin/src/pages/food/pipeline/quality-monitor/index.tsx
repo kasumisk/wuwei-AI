@@ -182,7 +182,7 @@ const QualityMonitorPage: React.FC = () => {
               valueStyle={{
                 color:
                   quality?.macroInconsistent !== undefined &&
-                    (total - quality.macroInconsistent) / total > 0.8
+                  (total - quality.macroInconsistent) / total > 0.8
                     ? '#3f8600'
                     : '#cf1322',
               }}

@@ -14,6 +14,7 @@ import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { ApiResponse } from '../../../../common/types/response.type';
 import { FoodLibraryService } from '../services/food-library.service';
 import { UserApiThrottle } from '../../../../core/throttle';
+import { I18nService } from '../../../../core/i18n/i18n.service';
 
 /**
  * 食物库公开查询接口
@@ -25,7 +26,10 @@ import { UserApiThrottle } from '../../../../core/throttle';
 @ApiTags('食物库（公开）')
 @Controller('foods')
 export class FoodLibraryController {
-  constructor(private readonly foodLibraryService: FoodLibraryService) {}
+  constructor(
+    private readonly foodLibraryService: FoodLibraryService,
+    private readonly i18n: I18nService,
+  ) {}
 
   /**
    * 搜索食物
@@ -44,7 +48,7 @@ export class FoodLibraryController {
       return {
         success: true,
         code: HttpStatus.OK,
-        message: '请输入搜索关键词',
+        message: this.i18n.t('food.searchKeywordRequired'),
         data: { items: [], total: 0 },
       };
     }
@@ -57,7 +61,7 @@ export class FoodLibraryController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '搜索成功',
+      message: this.i18n.t('food.searchOk'),
       data: { items, total: items.length },
     };
   }
@@ -83,7 +87,7 @@ export class FoodLibraryController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: this.i18n.t('food.ok'),
       data: items,
     };
   }
@@ -100,7 +104,7 @@ export class FoodLibraryController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: this.i18n.t('food.ok'),
       data: categories,
     };
   }
@@ -120,7 +124,7 @@ export class FoodLibraryController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: this.i18n.t('food.ok'),
       data,
     };
   }
@@ -141,7 +145,7 @@ export class FoodLibraryController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: this.i18n.t('food.ok'),
       data: { ...food, related },
     };
   }
@@ -158,7 +162,7 @@ export class FoodLibraryController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: this.i18n.t('food.ok'),
       data: food,
     };
   }

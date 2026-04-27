@@ -14,6 +14,9 @@ import {
   AnalysisConfidenceLevel,
 } from './analysis-session.service';
 import { ConfidenceJudgeService } from './confidence-judge.service';
+import { I18nService } from '../../../../core/i18n';
+import { RequestContextService } from '../../../../core/context/request-context.service';
+import type { Locale } from '../../../diet/app/recommendation/utils/i18n-messages';
 import {
   DomainEvents,
   AnalysisSubmittedEvent,
@@ -153,6 +156,8 @@ export class AnalyzeService {
     // 置信度驱动 V1: session + 判定
     private readonly sessionService: AnalysisSessionService,
     private readonly confidenceJudge: ConfidenceJudgeService,
+    private readonly i18n: I18nService,
+    private readonly requestCtx: RequestContextService,
   ) {
     // 仅用于 submitAnalysis 的前置校验（API Key 是否配置）
     this.apiKey =
@@ -178,11 +183,13 @@ export class AnalyzeService {
     imageUrl: string,
     mealType?: string,
     userId?: string,
+    locale?: Locale,
   ): Promise<{ requestId: string }> {
     if (!this.apiKey) {
-      throw new BadRequestException('AI 分析服务未配置');
+      throw new BadRequestException(this.i18n.t('food.aiServiceUnavailable'));
     }
 
+    const resolvedLocale = locale ?? (this.requestCtx.locale as Locale);
     const requestId = crypto.randomUUID();
 
     // 先在 Redis 中创建 "processing" 占位，客户端轮询可立即看到状态
@@ -195,7 +202,7 @@ export class AnalyzeService {
     const queueConfig = QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_ANALYSIS];
     await this.foodAnalysisQueue.add(
       'analyze', // job name
-      { requestId, imageUrl, mealType, userId },
+      { requestId, imageUrl, mealType, userId, locale: resolvedLocale },
       {
         attempts: queueConfig.maxRetries + 1, // BullMQ attempts 包含首次执行
         backoff: {
@@ -238,11 +245,13 @@ export class AnalyzeService {
     imageUrl: string,
     mealType?: string,
     userId?: string,
+    locale?: Locale,
   ): Promise<void> {
     const result = await this.imageFoodAnalysisService.executeAnalysis(
       imageUrl,
       mealType,
       userId,
+      locale,
     );
 
     // 置信度驱动 V1：feature flag 启用 && 能找到 session 时才分支
@@ -402,15 +411,17 @@ export class AnalyzeService {
     imageUrl: string,
     mealType?: string,
     userId?: string,
+    locale?: Locale,
   ): Promise<{ requestId: string } & AnalysisResult> {
     if (!this.apiKey) {
-      throw new BadRequestException('AI 分析服务未配置');
+      throw new BadRequestException(this.i18n.t('food.aiServiceUnavailable'));
     }
 
     const result = await this.imageFoodAnalysisService.executeAnalysis(
       imageUrl,
       mealType,
       userId,
+      locale,
     );
 
     // 生成 requestId 并写入 Redis（兼容旧的 getCachedResult 逻辑）

@@ -11,11 +11,7 @@ function SingleQuota({ item, label }: { item: QuotaItem | undefined; label: stri
   if (!item) return null;
 
   if (item.unlimited) {
-    return (
-      <span className="text-[11px] text-muted-foreground">
-        {label}：无限制
-      </span>
-    );
+    return <span className="text-[11px] text-muted-foreground">{label}：无限制</span>;
   }
 
   const pct = item.limit > 0 ? item.remaining / item.limit : 0;

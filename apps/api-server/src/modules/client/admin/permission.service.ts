@@ -5,6 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../core/prisma/prisma.service';
+import { I18nService } from '../../../core/i18n/i18n.service';
 import {
   CreatePermissionDto,
   UpdatePermissionDto,
@@ -14,7 +15,10 @@ import {
 
 @Injectable()
 export class PermissionService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly i18n: I18nService,
+  ) {}
 
   /**
    * 获取客户端的所有权限
@@ -26,7 +30,9 @@ export class PermissionService {
     });
 
     if (!client) {
-      throw new NotFoundException(`客户端 #${clientId} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('client.clientPermission.clientNotFound', { clientId }),
+      );
     }
 
     const permissions = await this.prisma.clientCapabilityPermissions.findMany({
@@ -48,7 +54,11 @@ export class PermissionService {
     );
 
     if (!permission) {
-      throw new NotFoundException(`权限 #${permissionId} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('client.clientPermission.permissionNotFound', {
+          permissionId,
+        }),
+      );
     }
 
     return permission;
@@ -65,7 +75,9 @@ export class PermissionService {
 
     if (!client) {
       throw new NotFoundException(
-        `客户端 #${createPermissionDto.clientId} 不存在`,
+        this.i18n.t('client.clientPermission.clientNotFound', {
+          clientId: createPermissionDto.clientId,
+        }),
       );
     }
 
@@ -79,7 +91,10 @@ export class PermissionService {
 
     if (existing) {
       throw new ConflictException(
-        `客户端 ${createPermissionDto.clientId} 已有 ${createPermissionDto.capabilityType} 权限`,
+        this.i18n.t('client.clientPermission.alreadyExists', {
+          clientId: createPermissionDto.clientId,
+          capability: createPermissionDto.capabilityType,
+        }),
       );
     }
 
@@ -110,7 +125,11 @@ export class PermissionService {
     );
 
     if (!permission) {
-      throw new NotFoundException(`权限 #${permissionId} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('client.clientPermission.permissionNotFound', {
+          permissionId,
+        }),
+      );
     }
 
     const updateData: any = {};
@@ -162,14 +181,18 @@ export class PermissionService {
     );
 
     if (!permission) {
-      throw new NotFoundException(`权限 #${permissionId} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('client.clientPermission.permissionNotFound', {
+          permissionId,
+        }),
+      );
     }
 
     await this.prisma.clientCapabilityPermissions.delete({
       where: { id: permissionId },
     });
 
-    return { message: '权限删除成功' };
+    return { message: this.i18n.t('client.clientPermission.revokeSuccess') };
   }
 
   /**
@@ -182,7 +205,9 @@ export class PermissionService {
     });
 
     if (!client) {
-      throw new NotFoundException(`客户端 #${clientId} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('client.clientPermission.clientNotFound', { clientId }),
+      );
     }
 
     const results: Array<{

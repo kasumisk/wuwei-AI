@@ -25,6 +25,10 @@ import { BehaviorService } from '../../diet/app/services/behavior.service';
 import { CoachChatDto, CoachMessagesQueryDto } from './dto/coach.dto';
 import { RequireFeature } from '../../subscription/app/decorators/require-feature.decorator';
 import { GatedFeature } from '../../subscription/subscription.types';
+import { QuotaGateService } from '../../subscription/app/services/quota-gate.service';
+import { SubscriptionService } from '../../subscription/app/services/subscription.service';
+import { I18nService } from '../../../core/i18n/i18n.service';
+import type { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 
 @ApiTags('App AI 教练')
 @Controller('app/coach')
@@ -36,6 +40,9 @@ export class CoachController {
   constructor(
     private readonly coachService: CoachService,
     private readonly behaviorService: BehaviorService,
+    private readonly quotaGateService: QuotaGateService,
+    private readonly subscriptionService: SubscriptionService,
+    private readonly i18n: I18nService,
   ) {}
 
   /**
@@ -50,6 +57,39 @@ export class CoachController {
     @Body() dto: CoachChatDto,
     @Res() res: Response,
   ): Promise<void> {
+    const summary = await this.subscriptionService.getUserSummary(user.id);
+    const access = await this.quotaGateService.checkAccess({
+      userId: user.id,
+      feature: GatedFeature.AI_COACH,
+      scene: 'ai_coach_chat',
+      consumeQuota: true,
+    });
+
+    if (!access.allowed) {
+      const locale = (dto.locale as Locale | undefined) || undefined;
+      const errorMessage =
+        access.paywall?.message ??
+        (locale === 'en-US'
+          ? 'AI coach quota exceeded'
+          : locale === 'ja-JP'
+            ? 'AIコーチの利用枠が不足しています'
+            : 'AI 教练配额不足');
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.flushHeaders();
+      res.write(
+        `data: ${JSON.stringify({
+          error: errorMessage,
+          feature: GatedFeature.AI_COACH,
+          tier: summary.tier,
+        })}\n\n`,
+      );
+      res.end();
+      return;
+    }
+
     // SSE 响应头
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -62,7 +102,7 @@ export class CoachController {
 
     try {
       // 1. 准备对话上下文
-      const locale = (dto.locale as any) || undefined;
+      const locale = (dto.locale as Locale | undefined) || undefined;
       const context = await this.coachService.prepareContext(
         user.id,
         dto.conversationId,
@@ -151,7 +191,7 @@ export class CoachController {
     } catch (error) {
       this.logger.error(`Coach chat error: ${(error as Error).message}`);
       res.write(
-        `data: ${JSON.stringify({ error: '服务暂时不可用，请稍后重试' })}\n\n`,
+        `data: ${JSON.stringify({ error: this.i18n.t('coach.serviceUnavailable') })}\n\n`,
       );
       res.end();
     }
@@ -170,7 +210,7 @@ export class CoachController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: this.i18n.t('coach.ok'),
       data,
     };
   }
@@ -192,7 +232,7 @@ export class CoachController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: this.i18n.t('coach.ok'),
       data,
     };
   }
@@ -211,7 +251,7 @@ export class CoachController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '删除成功',
+      message: this.i18n.t('coach.deletedOk'),
       data: null,
     };
   }
@@ -228,12 +268,12 @@ export class CoachController {
   ): Promise<ApiResponse> {
     const data = await this.coachService.getDailyGreeting(
       user.id,
-      (locale as any) || undefined,
+      (locale as Locale | undefined) || undefined,
     );
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: this.i18n.t('coach.ok'),
       data,
     };
   }
@@ -258,7 +298,7 @@ export class CoachController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '教练风格已更新',
+      message: this.i18n.t('coach.coachStyleUpdated'),
       data: { coachStyle: profile.coachStyle },
     };
   }

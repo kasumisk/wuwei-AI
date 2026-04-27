@@ -16,6 +16,7 @@ import { JwtAuthGuard } from '../../auth/admin/jwt-auth.guard';
 import { RolesGuard } from '../../rbac/admin/roles.guard';
 import { Roles } from '../../rbac/admin/roles.decorator';
 import { FoodLibraryManagementService } from './food-library-management.service';
+import { I18nService } from '../../../core/i18n/i18n.service';
 import {
   GetFoodLibraryQueryDto,
   CreateFoodLibraryDto,
@@ -37,6 +38,7 @@ import { ApiResponse } from '../../../common/types/response.type';
 export class FoodLibraryManagementController {
   constructor(
     private readonly foodLibraryService: FoodLibraryManagementService,
+    private readonly i18n: I18nService,
   ) {}
 
   // ==================== 食物 CRUD ====================
@@ -45,21 +47,36 @@ export class FoodLibraryManagementController {
   @ApiOperation({ summary: '获取食物库列表' })
   async findAll(@Query() query: GetFoodLibraryQueryDto): Promise<ApiResponse> {
     const data = await this.foodLibraryService.findAll(query);
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('food.ok'),
+      data,
+    };
   }
 
   @Get('statistics')
   @ApiOperation({ summary: '获取食物库统计' })
   async getStatistics(): Promise<ApiResponse> {
     const data = await this.foodLibraryService.getStatistics();
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('food.ok'),
+      data,
+    };
   }
 
   @Get('categories')
   @ApiOperation({ summary: '获取食物分类列表' })
   async getCategories(): Promise<ApiResponse> {
     const data = await this.foodLibraryService.getCategories();
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('food.ok'),
+      data,
+    };
   }
 
   @Get('conflicts')
@@ -74,14 +91,24 @@ export class FoodLibraryManagementController {
     },
   ): Promise<ApiResponse> {
     const data = await this.foodLibraryService.getConflicts(query);
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('food.ok'),
+      data,
+    };
   }
 
   @Get(':id')
   @ApiOperation({ summary: '获取食物详情（含翻译/来源/冲突）' })
   async findOne(@Param('id') id: string): Promise<ApiResponse> {
     const data = await this.foodLibraryService.findOne(id);
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('food.ok'),
+      data,
+    };
   }
 
   @Post()
@@ -91,7 +118,7 @@ export class FoodLibraryManagementController {
     return {
       success: true,
       code: HttpStatus.CREATED,
-      message: '创建成功',
+      message: this.i18n.t('food.createdOk'),
       data,
     };
   }
@@ -100,7 +127,12 @@ export class FoodLibraryManagementController {
   @ApiOperation({ summary: '批量导入食物' })
   async batchImport(@Body() dto: BatchImportFoodDto): Promise<ApiResponse> {
     const data = await this.foodLibraryService.batchImport(dto.foods);
-    return { success: true, code: HttpStatus.OK, message: '导入完成', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('food.importComplete'),
+      data,
+    };
   }
 
   @Put(':id')
@@ -112,7 +144,12 @@ export class FoodLibraryManagementController {
   ): Promise<ApiResponse> {
     const operator: string = req.user?.username ?? 'admin';
     const data = await this.foodLibraryService.update(id, dto, operator);
-    return { success: true, code: HttpStatus.OK, message: '更新成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('food.updatedOk'),
+      data,
+    };
   }
 
   @Post(':id/toggle-verified')
@@ -123,7 +160,12 @@ export class FoodLibraryManagementController {
   ): Promise<ApiResponse> {
     const operator: string = req.user?.username ?? 'admin';
     const data = await this.foodLibraryService.toggleVerified(id, operator);
-    return { success: true, code: HttpStatus.OK, message: '状态已更新', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('food.statusUpdated'),
+      data,
+    };
   }
 
   @Post(':id/status')
@@ -139,7 +181,12 @@ export class FoodLibraryManagementController {
       status,
       operator,
     );
-    return { success: true, code: HttpStatus.OK, message: '状态已更新', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('food.statusUpdated'),
+      data,
+    };
   }
 
   @Delete(':id')
@@ -155,7 +202,12 @@ export class FoodLibraryManagementController {
   @ApiOperation({ summary: '获取食物翻译列表' })
   async getTranslations(@Param('id') id: string): Promise<ApiResponse> {
     const data = await this.foodLibraryService.getTranslations(id);
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('food.ok'),
+      data,
+    };
   }
 
   @Post(':id/translations')
@@ -168,7 +220,7 @@ export class FoodLibraryManagementController {
     return {
       success: true,
       code: HttpStatus.CREATED,
-      message: '创建成功',
+      message: this.i18n.t('food.createdOk'),
       data,
     };
   }
@@ -183,7 +235,12 @@ export class FoodLibraryManagementController {
       translationId,
       dto,
     );
-    return { success: true, code: HttpStatus.OK, message: '更新成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('food.updatedOk'),
+      data,
+    };
   }
 
   @Delete('translations/:translationId')
@@ -201,7 +258,12 @@ export class FoodLibraryManagementController {
   @ApiOperation({ summary: '获取食物数据来源列表' })
   async getSources(@Param('id') id: string): Promise<ApiResponse> {
     const data = await this.foodLibraryService.getSources(id);
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('food.ok'),
+      data,
+    };
   }
 
   @Post(':id/sources')
@@ -214,7 +276,7 @@ export class FoodLibraryManagementController {
     return {
       success: true,
       code: HttpStatus.CREATED,
-      message: '创建成功',
+      message: this.i18n.t('food.createdOk'),
       data,
     };
   }
@@ -242,7 +304,12 @@ export class FoodLibraryManagementController {
       page ? Number(page) : 1,
       pageSize ? Number(pageSize) : 20,
     );
-    return { success: true, code: HttpStatus.OK, message: '获取成功', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('food.ok'),
+      data,
+    };
   }
 
   // ==================== 冲突解决 ====================
@@ -260,7 +327,12 @@ export class FoodLibraryManagementController {
       dto,
       operator,
     );
-    return { success: true, code: HttpStatus.OK, message: '冲突已解决', data };
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('food.conflictResolved'),
+      data,
+    };
   }
 
   // ==================== V8.1: 批量审核 ====================
@@ -281,7 +353,9 @@ export class FoodLibraryManagementController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: `批量审核完成，更新 ${data.updated} 条`,
+      message: this.i18n.t('food.batchReviewComplete', {
+        updated: data.updated,
+      }),
       data,
     };
   }

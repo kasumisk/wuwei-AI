@@ -88,7 +88,7 @@ export class DecisionToneResolverService {
       goalType = 'health',
       verdict = 'caution',
       coachFocus,
-      locale = 'zh-CN' as Locale,
+      locale,
       executionRate,
       streakDays,
     } = input;

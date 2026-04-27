@@ -115,11 +115,7 @@ export function PlanPage() {
 
       {/* 下一餐推荐 */}
       {suggestion && suggestion.suggestion && (
-        <NextMealCard
-          suggestion={suggestion}
-          summary={summaryFallback}
-          profile={profile ?? null}
-        />
+        <NextMealCard suggestion={suggestion} summary={summaryFallback} profile={profile ?? null} />
       )}
 
       {/* 今日计划 */}

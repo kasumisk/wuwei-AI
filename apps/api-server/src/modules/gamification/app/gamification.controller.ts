@@ -15,13 +15,17 @@ import { ApiResponse } from '../../../common/types/response.type';
 import { GamificationService } from './gamification.service';
 import { RequireFeature } from '../../subscription/app/decorators/require-feature.decorator';
 import { GatedFeature } from '../../subscription/subscription.types';
+import { I18nService } from '../../../core/i18n/i18n.service';
 
 @ApiTags('App 游戏化')
 @Controller('app')
 @UseGuards(AppJwtAuthGuard)
 @ApiBearerAuth()
 export class GamificationController {
-  constructor(private readonly gamificationService: GamificationService) {}
+  constructor(
+    private readonly gamificationService: GamificationService,
+    private readonly i18n: I18nService,
+  ) {}
 
   /**
    * 获取成就列表
@@ -36,7 +40,7 @@ export class GamificationController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: this.i18n.t('gamification.message.fetchSuccess'),
       data,
     };
   }
@@ -54,7 +58,7 @@ export class GamificationController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: this.i18n.t('gamification.message.fetchSuccess'),
       data,
     };
   }
@@ -78,7 +82,7 @@ export class GamificationController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '已参加挑战',
+      message: this.i18n.t('gamification.message.joinedChallenge'),
       data: userChallenge,
     };
   }
@@ -96,7 +100,7 @@ export class GamificationController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: this.i18n.t('gamification.message.fetchSuccess'),
       data,
     };
   }

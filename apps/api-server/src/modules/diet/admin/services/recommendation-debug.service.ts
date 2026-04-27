@@ -10,6 +10,7 @@ import { RecommendationQualityService } from './recommendation-quality.service';
 import { StrategyResolver } from '../../../strategy/app/strategy-resolver.service';
 import { ABTestingService } from '../../app/recommendation/experiment/ab-testing.service';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
+import { I18nService } from '../../../../core/i18n';
 import { FoodScorerService } from '../../app/recommendation/pipeline/food-scorer.service';
 import { ScoringChainService } from '../../app/recommendation/scoring-chain/scoring-chain.service';
 import { ScoringConfigService } from '../../app/recommendation/context/scoring-config.service';
@@ -58,6 +59,7 @@ export class RecommendationDebugService {
     private readonly scoringConfigService: ScoringConfigService,
     private readonly healthModifierEngine: HealthModifierEngineService,
     private readonly strategyService: StrategyService,
+    private readonly i18n: I18nService,
   ) {}
 
   // ==================== 模拟推荐 ====================
@@ -68,7 +70,7 @@ export class RecommendationDebugService {
     // 1. 获取用户档案
     const profile = await this.userProfileService.getProfile(userId);
     if (!profile) {
-      throw new NotFoundException(`用户 ${userId} 没有档案，无法模拟推荐`);
+      throw new NotFoundException(this.i18n.t('diet.profileMissing'));
     }
 
     const goalType = dto.goalType || profile.goal || 'health';
@@ -154,7 +156,7 @@ export class RecommendationDebugService {
       performance: {
         elapsedMs,
       },
-      note: '这是模拟推荐结果，不会保存到数据库',
+      note: this.i18n.t('diet.simulateRecommendOk'),
     };
   }
 
@@ -166,7 +168,7 @@ export class RecommendationDebugService {
     // 1. 获取用户档案
     const profile = await this.userProfileService.getProfile(userId);
     if (!profile) {
-      throw new NotFoundException(`用户 ${userId} 没有档案`);
+      throw new NotFoundException(this.i18n.t('diet.profileMissingShort'));
     }
 
     const goalType = dto.goalType || profile.goal || 'health';
@@ -300,7 +302,7 @@ export class RecommendationDebugService {
       where: { id: traceId },
     });
     if (!trace) {
-      throw new NotFoundException(`Trace ${traceId} 不存在`);
+      throw new NotFoundException(this.i18n.t('diet.traceNotFound'));
     }
     return trace;
   }
@@ -358,7 +360,7 @@ export class RecommendationDebugService {
     // 1. 获取用户档案
     const profile = await this.userProfileService.getProfile(userId);
     if (!profile) {
-      throw new NotFoundException(`用户 ${userId} 没有档案`);
+      throw new NotFoundException(this.i18n.t('diet.profileMissingShort'));
     }
 
     // 2. 获取食物
@@ -366,7 +368,7 @@ export class RecommendationDebugService {
       where: { id: foodId },
     });
     if (!food) {
-      throw new NotFoundException(`食物 ${foodId} 不存在`);
+      throw new NotFoundException(this.i18n.t('diet.foodNotFound'));
     }
 
     const goalType = dto.goalType || profile.goal || 'health';
@@ -499,7 +501,7 @@ export class RecommendationDebugService {
     // 1. 获取用户档案
     const profile = await this.userProfileService.getProfile(userId);
     if (!profile) {
-      throw new NotFoundException(`用户 ${userId} 没有档案`);
+      throw new NotFoundException(this.i18n.t('diet.profileMissingShort'));
     }
 
     // 2. 获取两个策略记录
@@ -508,10 +510,10 @@ export class RecommendationDebugService {
       this.strategyService.findById(strategyIdB),
     ]);
     if (!strategyA) {
-      throw new NotFoundException(`策略 ${strategyIdA} 不存在`);
+      throw new NotFoundException(this.i18n.t('diet.strategyNotFound'));
     }
     if (!strategyB) {
-      throw new NotFoundException(`策略 ${strategyIdB} 不存在`);
+      throw new NotFoundException(this.i18n.t('diet.strategyNotFound'));
     }
 
     const goalType = dto.goalType || profile.goal || 'health';
@@ -655,7 +657,7 @@ export class RecommendationDebugService {
       return {
         days,
         traceCount: 0,
-        message: '指定时间范围内没有 V7.9 格式的 trace 数据',
+        message: this.i18n.t('diet.noTraceData'),
       };
     }
 

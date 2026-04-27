@@ -15,7 +15,10 @@
  * - image-food-analysis.service.ts
  */
 
-import type { Locale } from '../../../diet/app/recommendation/utils/i18n-messages';
+import {
+  type Locale,
+  getSupportedLocales,
+} from '../../../diet/app/recommendation/utils/i18n-messages';
 import { cl } from '../../../decision/i18n/decision-labels';
 import {
   GOAL_FOCUS_BLOCKS,
@@ -28,15 +31,25 @@ import {
 
 // ==================== Public API ====================
 
+const FALLBACK_LOCALE: Locale = 'zh-CN';
+
+function resolvePromptLocale(locale?: Locale): Locale {
+  const resolvedLocale = locale ?? FALLBACK_LOCALE;
+  return getSupportedLocales().includes(resolvedLocale)
+    ? resolvedLocale
+    : FALLBACK_LOCALE;
+}
+
 /**
  * Get LLM user message for text or image analysis
  */
 export function getUserMessage(
   mode: 'text' | 'image',
   input: string,
-  locale: Locale = 'zh-CN',
+  locale?: Locale,
 ): string {
-  const key = mode === 'text' ? 'prompt.userMessage.text' : 'prompt.userMessage.image';
+  const key =
+    mode === 'text' ? 'prompt.userMessage.text' : 'prompt.userMessage.image';
   return cl(key, locale).replace('{input}', input).replace('{hint}', input);
 }
 
@@ -45,7 +58,7 @@ export function getUserMessage(
  */
 export function buildBasePrompt(
   _mode?: 'text' | 'image',
-  locale: Locale = 'zh-CN',
+  locale?: Locale,
 ): string {
   return [
     cl('prompt.systemRole', locale),
@@ -62,9 +75,9 @@ export function buildBasePrompt(
  */
 export function getGoalFocusBlock(
   goalType: string,
-  locale: Locale = 'zh-CN',
+  locale?: Locale,
 ): string {
-  const loc = locale in GOAL_FOCUS_BLOCKS.health ? locale : 'zh-CN';
+  const loc = resolvePromptLocale(locale);
   const block = GOAL_FOCUS_BLOCKS[goalType] || GOAL_FOCUS_BLOCKS.health;
   return block[loc];
 }
@@ -83,22 +96,21 @@ export function buildUserContextPrompt(params: {
   remainingProtein?: number;
   locale?: Locale;
 }): string {
-  const locale = params.locale || 'zh-CN';
-  const loc = locale in CONTEXT_HEADER ? locale : 'zh-CN';
+  const loc = resolvePromptLocale(params.locale);
   const lines: string[] = [CONTEXT_HEADER[loc]];
 
   // Goal
   const goalLabel =
     GOAL_LABELS[params.goalType]?.[loc] || GOAL_LABELS.health[loc];
   lines.push(
-    `- ${locale === 'en-US' ? 'Goal' : locale === 'ja-JP' ? '目標' : '目标'}：${goalLabel}`,
+    `- ${loc === 'en-US' ? 'Goal' : loc === 'ja-JP' ? '目標' : '目标'}：${goalLabel}`,
   );
 
   // Budget status
   if (params.budgetStatus === 'over_limit') {
     lines.push(`- ⚠️ ${BUDGET_STATUS_LABELS.over_limit[loc]}`);
   } else if (params.budgetStatus === 'near_limit') {
-    lines.push(`- ${cl('prompt.nearLimit', locale)}`);
+    lines.push(`- ${cl('prompt.nearLimit', loc)}`);
   } else if (params.remainingCalories && params.remainingCalories > 0) {
     lines.push(
       `- ${BUDGET_STATUS_LABELS.has_remaining[loc].replace('{remaining}', String(params.remainingCalories))}`,
@@ -121,7 +133,7 @@ export function buildUserContextPrompt(params: {
 
   // Precision note for health conditions
   if (params.healthConditions.length > 0) {
-    lines.push(`- ${cl('prompt.precisionNote', locale)}`);
+    lines.push(`- ${cl('prompt.precisionNote', loc)}`);
   }
 
   if (lines.length === 1) return '';
@@ -134,7 +146,7 @@ export function buildUserContextPrompt(params: {
 export function buildGoalAwarePrompt(
   goalType: string,
   userContext: string,
-  locale: Locale = 'zh-CN',
+  locale?: Locale,
 ): string {
   const basePrompt = buildBasePrompt(undefined, locale);
   const focusBlock = getGoalFocusBlock(goalType, locale);

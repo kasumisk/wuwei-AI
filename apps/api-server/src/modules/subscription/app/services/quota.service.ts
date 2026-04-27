@@ -24,6 +24,7 @@ import { GatedFeature, QuotaCycle, UNLIMITED } from '../../subscription.types';
 import { SubscriptionService } from './subscription.service';
 import { PlanEntitlementResolver } from './plan-entitlement-resolver.service';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
+import { I18nService } from '../../../../core/i18n/i18n.service';
 
 /** 单个功能的配额状态 */
 export interface QuotaStatus {
@@ -45,6 +46,7 @@ export class QuotaService {
     private readonly prisma: PrismaService,
     private readonly subscriptionService: SubscriptionService,
     private readonly entitlementResolver: PlanEntitlementResolver,
+    private readonly i18n: I18nService,
   ) {}
 
   // ==================== 核心方法 ====================
@@ -108,7 +110,7 @@ export class QuotaService {
     if (quota.used >= quota.quotaLimit) {
       throw new ForbiddenException({
         code: 'QUOTA_EXCEEDED',
-        message: `${feature} 今日配额已用完`,
+        message: this.i18n.t('subscription.quota.exceeded', { feature }),
         feature,
         used: quota.used,
         limit: quota.quotaLimit,
@@ -180,30 +182,32 @@ export class QuotaService {
     const now = new Date();
     const defaultResetAt = this.calcNextReset(now, QuotaCycle.DAILY);
 
-    return countableFeatures.map((feature) => {
-      const existing = existingMap.get(feature);
-      if (existing) {
-        return this.toStatus(existing);
-      }
-      // 未创建记录 → 按当前 plan 配额返回默认状态
-      const limit = this.entitlementResolver.getQuotaLimit(
-        summary.entitlements,
-        feature,
-      );
-      if (limit === null) {
-        // 不是计次类型（理论上不会走到这里，双重保险）
-        return null;
-      }
-      const unlimited = limit === UNLIMITED;
-      return {
-        feature,
-        used: 0,
-        limit,
-        remaining: unlimited ? UNLIMITED : limit,
-        unlimited,
-        resetAt: defaultResetAt,
-      } as QuotaStatus;
-    }).filter((s): s is QuotaStatus => s !== null);
+    return countableFeatures
+      .map((feature) => {
+        const existing = existingMap.get(feature);
+        if (existing) {
+          return this.toStatus(existing);
+        }
+        // 未创建记录 → 按当前 plan 配额返回默认状态
+        const limit = this.entitlementResolver.getQuotaLimit(
+          summary.entitlements,
+          feature,
+        );
+        if (limit === null) {
+          // 不是计次类型（理论上不会走到这里，双重保险）
+          return null;
+        }
+        const unlimited = limit === UNLIMITED;
+        return {
+          feature,
+          used: 0,
+          limit,
+          remaining: unlimited ? UNLIMITED : limit,
+          unlimited,
+          resetAt: defaultResetAt,
+        } as QuotaStatus;
+      })
+      .filter((s): s is QuotaStatus => s !== null);
   }
 
   // ==================== Cron 定时重置 ====================

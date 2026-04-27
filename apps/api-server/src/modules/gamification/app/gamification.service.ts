@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { FoodService } from '../../diet/app/services/food.service';
+import { I18nService } from '../../../core/i18n/i18n.service';
 
 export interface StreakStatus {
   current: number;
@@ -15,6 +16,7 @@ export class GamificationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly foodService: FoodService,
+    private readonly i18n: I18nService,
   ) {}
 
   /**
@@ -111,7 +113,10 @@ export class GamificationService {
     const challenge = await this.prisma.challenges.findUnique({
       where: { id: challengeId },
     });
-    if (!challenge) throw new NotFoundException('挑战不存在');
+    if (!challenge)
+      throw new NotFoundException(
+        this.i18n.t('gamification.error.challengeNotFound'),
+      );
 
     // 检查是否已参加
     const existing = await this.prisma.userChallenges.findFirst({

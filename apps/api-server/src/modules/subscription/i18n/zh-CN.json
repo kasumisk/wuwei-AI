@@ -1,0 +1,81 @@
+{
+  "error": {
+    "planNotFound": "订阅计划不存在",
+    "planUnavailable": "订阅计划不存在或已下架",
+    "notifyDecryptFailed": "通知数据解密失败",
+    "wxPayFailedNoPrepayId": "微信支付下单失败: 无 prepay_id",
+    "wxNotifyMissingSignature": "微信支付通知缺少签名信息",
+    "notifyTimestampExpired": "通知时间戳过期",
+    "notifySignatureInvalid": "通知签名验证失败",
+    "appleNotifyInvalidPayload": "无效的通知载荷（签名验证失败）"
+  },
+  "guard": {
+    "loginRequired": "需要登录后才能使用此功能",
+    "featureNotIncluded": "当前套餐未包含此功能，请升级套餐",
+    "tierRequired": "此功能需要 {{tier}} 或更高等级订阅"
+  },
+  "quota": {
+    "exceeded": "{{feature}} 今日配额已用完",
+    "exceededWithReset": "{{feature}} 今日配额已用完，配额将于 {{resetAt}} 重置。升级到 {{targetTier}} 获取更多额度",
+    "exceededNoReset": "{{feature}} 今日配额已用完。升级到 {{targetTier}} 获取更多额度",
+    "upgradeUnlock": "升级到 {{targetTier}} 解锁{{feature}}"
+  },
+  "wechatNotify": {
+    "success": "成功",
+    "received": "已接收"
+  },
+  "controller": {
+    "fetchPlansSuccess": "获取订阅计划成功",
+    "fetchSuccess": "获取成功",
+    "createPlanSuccess": "创建订阅计划成功",
+    "updatePlanSuccess": "更新订阅计划成功",
+    "fetchOverviewSuccess": "获取订阅概览成功",
+    "fetchPaymentsSuccess": "获取支付记录列表成功",
+    "fetchQuotaSuccess": "获取用量配额成功",
+    "resetQuotaSuccess": "重置用量配额成功",
+    "fetchTriggerStatsSuccess": "获取触发统计成功",
+    "fetchSubsListSuccess": "获取订阅列表成功",
+    "fetchSubsDetailSuccess": "获取订阅详情成功",
+    "extendSubsSuccess": "延长订阅成功",
+    "changePlanSuccess": "变更订阅计划成功"
+  },
+  "featureName": {
+    "recommendation": "推荐",
+    "aiImageAnalysis": "图片分析",
+    "aiTextAnalysis": "文本分析",
+    "aiCoach": "AI 教练",
+    "analysisHistory": "分析历史",
+    "detailedScore": "详细评分拆解",
+    "advancedExplain": "高级解释",
+    "deepNutrition": "深度营养拆解",
+    "personalizedAlternatives": "个性化替代建议",
+    "reports": "周报/月报",
+    "dataExport": "数据导出",
+    "fullDayPlan": "全天膳食规划",
+    "fullDayLinkage": "全天膳食联动",
+    "recipeGeneration": "食谱生成",
+    "healthTrend": "健康趋势分析",
+    "priorityAi": "优先 AI 响应",
+    "behaviorAnalysis": "行为分析",
+    "coachStyle": "教练风格选择",
+    "advancedChallenges": "高级挑战"
+  },
+  "benefits": {
+    "pro": {
+      "1": "无限文本分析次数",
+      "2": "每天 10 次图片分析",
+      "3": "深度营养成分拆解",
+      "4": "个性化替代食物建议",
+      "5": "完整分析历史记录",
+      "6": "详细评分和高级解释"
+    },
+    "premium": {
+      "1": "所有 Pro 功能",
+      "2": "无限图片分析次数",
+      "3": "全天膳食联动建议",
+      "4": "食谱智能生成",
+      "5": "健康趋势分析",
+      "6": "优先 AI 响应"
+    }
+  }
+}

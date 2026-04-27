@@ -3,6 +3,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { AppUsers as AppUser } from '@prisma/client';
+import { I18nService } from '../../../core/i18n';
 
 export interface AppJwtPayload {
   sub: string;
@@ -35,7 +36,10 @@ function getJwtSecret(): string {
 
 @Injectable()
 export class AppJwtStrategy extends PassportStrategy(Strategy, 'app-jwt') {
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly i18n: I18nService,
+  ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
@@ -46,7 +50,7 @@ export class AppJwtStrategy extends PassportStrategy(Strategy, 'app-jwt') {
   async validate(payload: AppJwtPayload) {
     // 仅验证 App 用户 token
     if (payload.type !== 'app') {
-      throw new UnauthorizedException('非 App 用户令牌');
+      throw new UnauthorizedException(this.i18n.t('auth.notAppUserToken'));
     }
 
     const user = await this.prisma.appUsers.findUnique({
@@ -54,11 +58,11 @@ export class AppJwtStrategy extends PassportStrategy(Strategy, 'app-jwt') {
     });
 
     if (!user) {
-      throw new UnauthorizedException('用户不存在');
+      throw new UnauthorizedException(this.i18n.t('auth.userNotFound'));
     }
 
     if (user.status !== 'active') {
-      throw new UnauthorizedException('用户已被禁用');
+      throw new UnauthorizedException(this.i18n.t('auth.userDisabled'));
     }
 
     return {

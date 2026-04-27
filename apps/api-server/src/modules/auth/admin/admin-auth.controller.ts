@@ -22,6 +22,7 @@ import { Public } from '../../../core/decorators/public.decorator';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { CurrentUser } from './current-user.decorator';
 import { LoginResponseDto } from '@ai-platform/shared';
+import { I18n, I18nContext } from '../../../core/i18n';
 
 @ApiTags('管理员认证')
 @Controller('auth')
@@ -79,12 +80,12 @@ export class AdminController {
   @Post('send_code')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '发送验证码' })
-  async sendCode(@Body() sendCodeDto: SendCodeDto) {
+  async sendCode(@Body() sendCodeDto: SendCodeDto, @I18n() i18n: I18nContext) {
     const { phone, email, type } = sendCodeDto;
     const target = phone || email;
 
     if (!target) {
-      return { message: '请提供手机号或邮箱' };
+      return { message: i18n.t('auth.providePhoneOrEmail') };
     }
 
     return this.adminService.sendCode(target, type);
@@ -123,8 +124,8 @@ export class AdminController {
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @ApiOperation({ summary: '退出登录' })
-  logout() {
+  logout(@I18n() i18n: I18nContext) {
     // JWT 是无状态的,前端删除 token 即可
-    return { message: '退出成功' };
+    return { message: i18n.t('auth.logoutSuccess') };
   }
 }

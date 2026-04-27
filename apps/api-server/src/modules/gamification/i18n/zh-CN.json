@@ -1,0 +1,12 @@
+{
+  "message": {
+    "fetchSuccess": "获取成功",
+    "joinedChallenge": "已参加挑战",
+    "createSuccess": "创建成功",
+    "updateSuccess": "更新成功",
+    "statusUpdated": "状态已更新"
+  },
+  "error": {
+    "challengeNotFound": "挑战不存在"
+  }
+}

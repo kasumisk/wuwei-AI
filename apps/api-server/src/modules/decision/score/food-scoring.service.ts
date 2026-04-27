@@ -34,8 +34,14 @@ import {
   DIMENSION_EXPLANATIONS,
   scoreToImpact,
   getDimensionSuggestion,
+  getDimensionLabel,
+  getDimensionExplanation,
 } from '../config/scoring-dimensions';
 import { hasCondition } from '../config/condition-aliases';
+
+function resolveScoringLocale(locale?: Locale): Locale {
+  return locale ?? 'zh-CN';
+}
 
 // ==================== 输入/输出类型 ====================
 
@@ -139,7 +145,7 @@ export class FoodScoringService {
     totals: { calories: number; protein: number; fat: number; carbs: number },
     ctx: ScoringContext,
     userId?: string,
-    locale: Locale = 'zh-CN',
+    locale?: Locale,
   ): Promise<ScoringResult> {
     // 置信度: 食物置信度均值
     const avgConfidence =
@@ -201,6 +207,7 @@ export class FoodScoringService {
           carbs: goals.carbs / mealsPerDay,
         };
         const weightedTotals = aggregateWithConfidence(foods, mealTarget);
+        const resolvedLocale = resolveScoringLocale(locale);
 
         // V2.1: 委托 computeScoreCore
         const core = await this.computeScoreCore({
@@ -211,7 +218,7 @@ export class FoodScoringService {
           goals,
           goalType: ctx.goalType,
           stabilityData,
-          locale,
+          locale: resolvedLocale,
           quantitativeData: {
             mealCalories: totals.calories,
             targetCalories: goals.calories,
@@ -245,7 +252,7 @@ export class FoodScoringService {
             breakdown,
             foods,
             breakdownExplanations,
-            locale,
+            resolvedLocale,
           );
           healthScore = adjustment.adjustedHealthScore;
           breakdownExplanations = adjustment.explanations;
@@ -279,7 +286,7 @@ export class FoodScoringService {
     userId: string,
     goalType: string,
     profile: any,
-    locale: Locale = 'zh-CN',
+    locale?: Locale,
   ): Promise<{
     score: number;
     breakdown: NutritionScoreBreakdown;
@@ -287,6 +294,7 @@ export class FoodScoringService {
     decision: 'SAFE' | 'OK' | 'LIMIT' | 'AVOID';
     breakdownExplanations: BreakdownExplanation[];
   }> {
+    const resolvedLocale = resolveScoringLocale(locale);
     const goals = this.nutritionScoreService.calculateDailyGoals(profile);
     const summary = await this.foodService.getTodaySummary(userId);
     const todayTotals = {
@@ -313,7 +321,7 @@ export class FoodScoringService {
       goals,
       goalType,
       stabilityData,
-      locale,
+      locale: resolvedLocale,
     });
 
     // V3.6 P1.4: 健康条件分数调整（只影响 healthScore，保留客观 nutritionScore）
@@ -329,7 +337,7 @@ export class FoodScoringService {
         scoreResult.breakdown,
         [],
         breakdownExplanations,
-        locale,
+        resolvedLocale,
       );
       adjustedBreakdownExplanations = adjustment.explanations ?? [];
     }
@@ -347,7 +355,7 @@ export class FoodScoringService {
    */
   explainBreakdown(
     breakdown: NutritionScoreBreakdown,
-    locale: Locale = 'zh-CN',
+    locale?: Locale,
     quantitativeData?: {
       mealCalories?: number;
       targetCalories?: number;
@@ -358,10 +366,6 @@ export class FoodScoringService {
       avgSatiety?: number;
     },
   ): BreakdownExplanation[] {
-    const labels = DIMENSION_LABELS[locale] || DIMENSION_LABELS['zh-CN'];
-    const explanations =
-      DIMENSION_EXPLANATIONS[locale] || DIMENSION_EXPLANATIONS['zh-CN'];
-
     const dimensions: Array<keyof NutritionScoreBreakdown> = [
       'energy',
       'proteinRatio',
@@ -375,13 +379,15 @@ export class FoodScoringService {
     return dimensions.map((dim) => {
       const score = breakdown[dim] ?? 75;
       const impact = this.scoreToImpact(score);
+      const label = getDimensionLabel(dim, locale);
+      const message = getDimensionExplanation(dim, impact, locale);
 
       const result: BreakdownExplanation = {
         dimension: dim,
-        label: labels[dim] || dim,
+        label,
         score: score as number,
         impact,
-        message: explanations[dim]?.[impact] || '',
+        message,
       };
 
       // V1.9: populate suggestion for warning/critical dimensions

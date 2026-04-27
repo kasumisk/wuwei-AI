@@ -4,6 +4,7 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
+import { I18nService } from '../../../core/i18n/i18n.service';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import {
   CreateModelDto,
@@ -15,7 +16,10 @@ import { ModelStatus } from '@ai-platform/shared';
 
 @Injectable()
 export class ModelService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly i18n: I18nService,
+  ) {}
 
   /**
    * 获取模型列表（分页）
@@ -128,7 +132,9 @@ export class ModelService {
     });
 
     if (!model) {
-      throw new NotFoundException(`模型 #${id} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('provider.model.notFound', { id }),
+      );
     }
 
     return {
@@ -186,7 +192,9 @@ export class ModelService {
 
     if (!provider) {
       throw new NotFoundException(
-        `提供商 #${createModelDto.providerId} 不存在`,
+        this.i18n.t('provider.model.providerNotFound', {
+          providerId: createModelDto.providerId,
+        }),
       );
     }
 
@@ -201,7 +209,10 @@ export class ModelService {
 
     if (existing) {
       throw new ConflictException(
-        `模型配置已存在: ${createModelDto.modelName} (${createModelDto.capabilityType})`,
+        this.i18n.t('provider.model.alreadyExists', {
+          modelId: createModelDto.modelName,
+          providerId: createModelDto.providerId,
+        }),
       );
     }
 
@@ -250,7 +261,9 @@ export class ModelService {
     });
 
     if (!model) {
-      throw new NotFoundException(`模型 #${id} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('provider.model.notFound', { id }),
+      );
     }
 
     // 构建更新数据
@@ -354,14 +367,16 @@ export class ModelService {
     });
 
     if (!model) {
-      throw new NotFoundException(`模型 #${id} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('provider.model.notFound', { id }),
+      );
     }
 
     // TODO: 检查是否有关联的使用记录或权限配置
 
     await this.prisma.modelConfigs.delete({ where: { id } });
 
-    return { message: '模型删除成功' };
+    return { message: this.i18n.t('provider.model.deleteSuccess') };
   }
 
   /**
@@ -374,20 +389,22 @@ export class ModelService {
     });
 
     if (!model) {
-      throw new NotFoundException(`模型 #${testDto.modelId} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('provider.model.notFound', { id: testDto.modelId }),
+      );
     }
 
     if (!model.enabled) {
       return {
         success: false,
-        error: '该模型未启用',
+        error: this.i18n.t('provider.model.notEnabled'),
       };
     }
 
     if (!model.providers || !model.providers.enabled) {
       return {
         success: false,
-        error: '该模型的提供商未启用',
+        error: this.i18n.t('provider.model.providerNotEnabledForModel'),
       };
     }
 
@@ -412,7 +429,7 @@ export class ModelService {
       return {
         success: true,
         output: {
-          message: '测试成功（模拟）',
+          message: this.i18n.t('provider.model.testSuccess'),
           modelName: model.modelName,
           capabilityType: model.capabilityType,
         },
@@ -422,7 +439,7 @@ export class ModelService {
     } catch (error) {
       return {
         success: false,
-        error: error.message || '测试失败',
+        error: error.message || this.i18n.t('provider.model.testFailed'),
       };
     }
   }

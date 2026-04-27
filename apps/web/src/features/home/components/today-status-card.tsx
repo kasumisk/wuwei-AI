@@ -209,7 +209,9 @@ export function TodayStatusCard({ summary, profile, scoreData }: TodayStatusCard
             const insight = buildGoalInsight(summary, scoreData, goalType);
             if (!insight) return null;
             return (
-              <div className={`flex items-center gap-2 mb-3 px-3 py-2 rounded-lg text-[11px] font-medium ${insight.cls}`}>
+              <div
+                className={`flex items-center gap-2 mb-3 px-3 py-2 rounded-lg text-[11px] font-medium ${insight.cls}`}
+              >
                 <span>{insight.icon}</span>
                 <span>{insight.text}</span>
               </div>
@@ -452,9 +454,10 @@ function buildGoalInsight(
       return {
         icon: rPct >= 70 ? '🌱' : '📝',
         text: `今日 ${meals} 餐中 ${rPct}% 为健康餐${rPct >= 70 ? '，习惯养成中' : '，继续加油'}`,
-        cls: rPct >= 70
-          ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400'
-          : 'bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400',
+        cls:
+          rPct >= 70
+            ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400'
+            : 'bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400',
       };
     }
     if (meals >= 3) {

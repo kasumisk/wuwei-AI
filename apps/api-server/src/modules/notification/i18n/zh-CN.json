@@ -1,0 +1,36 @@
+{
+  "message": {
+    "fetchSuccess": "获取成功",
+    "operationSuccess": "操作成功",
+    "registerSuccess": "注册成功",
+    "updateSuccess": "更新成功"
+  },
+  "meal": {
+    "breakfast": "早餐",
+    "lunch": "午餐",
+    "dinner": "晚餐",
+    "snack": "加餐"
+  },
+  "push": {
+    "mealReminder": {
+      "title": "{{label}}时间到了",
+      "body": "查看今日{{label}}推荐，保持健康饮食习惯"
+    },
+    "streakRisk": {
+      "title": "别让连续记录中断",
+      "body": "你已经连续记录 {{currentStreak}} 天了，今天还差一次记录就能继续保持！"
+    },
+    "goalProgress": {
+      "title": "本周目标进展",
+      "body": "本周已达成 {{achieved}}/{{total}} 天目标，继续加油！"
+    },
+    "weeklyReport": {
+      "title": "周度营养报告已生成",
+      "body": "查看你的周度营养分析和改善建议"
+    },
+    "precomputedReady": {
+      "title": "今日餐单已备好",
+      "body": "查看为你精心准备的一日三餐推荐"
+    }
+  }
+}

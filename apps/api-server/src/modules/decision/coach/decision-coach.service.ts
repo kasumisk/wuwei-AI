@@ -350,10 +350,7 @@ export class DecisionCoachService {
           dimension: key,
           score: factor.score,
           severity: factor.score < 20 ? 'critical' : 'warning',
-          explanation: ci(
-            `conflict.${key}` as any,
-            lang,
-          ),
+          explanation: ci(`conflict.${key}` as any, lang),
           rationale: factor.rationale,
         });
       }
@@ -388,11 +385,13 @@ export class DecisionCoachService {
         flavorTags.push(food.flavorProfile);
       }
       if (food.compatibility) {
-        const good = food.compatibility['good'] || food.compatibility['recommended'];
+        const good =
+          food.compatibility['good'] || food.compatibility['recommended'];
         if (good?.length) {
           pairingSuggestions.push(...good.slice(0, 3));
         }
-        const avoid = food.compatibility['avoid'] || food.compatibility['conflict'];
+        const avoid =
+          food.compatibility['avoid'] || food.compatibility['conflict'];
         if (avoid?.length) {
           avoidTips.push(...avoid.slice(0, 3));
         }
@@ -687,7 +686,11 @@ export interface EducationPoint {
  */
 export interface ConflictExplanation {
   /** Which of the 4 decision dimensions */
-  dimension: 'nutritionAlignment' | 'macroBalance' | 'healthConstraint' | 'timeliness';
+  dimension:
+    | 'nutritionAlignment'
+    | 'macroBalance'
+    | 'healthConstraint'
+    | 'timeliness';
   /** The dimension score (0-100) */
   score: number;
   /** Severity derived from score */

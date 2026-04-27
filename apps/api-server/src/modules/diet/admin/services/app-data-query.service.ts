@@ -1,5 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
+import { I18nService } from '../../../../core/i18n';
 import { Prisma } from '@prisma/client';
 import {
   GetFoodRecordsQueryDto,
@@ -18,7 +19,10 @@ import {
 export class AppDataQueryService {
   private readonly logger = new Logger(AppDataQueryService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly i18n: I18nService,
+  ) {}
 
   // ==================== 饮食记录 ====================
 
@@ -120,14 +124,15 @@ export class AppDataQueryService {
       where: { id },
       include: { appUsers: true },
     });
-    if (!record) throw new NotFoundException('饮食记录不存在');
+    if (!record)
+      throw new NotFoundException(this.i18n.t('diet.dietRecordNotFound'));
     return record;
   }
 
   async deleteFoodRecord(id: string) {
     await this.getFoodRecordDetail(id);
     await this.prisma.foodRecords.delete({ where: { id } });
-    return { message: '饮食记录已删除' };
+    return { message: this.i18n.t('diet.dietRecordDeleted') };
   }
 
   async getFoodRecordStatistics() {
@@ -193,7 +198,8 @@ export class AppDataQueryService {
 
   async getDailyPlanDetail(id: string) {
     const plan = await this.prisma.dailyPlans.findFirst({ where: { id } });
-    if (!plan) throw new NotFoundException('每日计划不存在');
+    if (!plan)
+      throw new NotFoundException(this.i18n.t('diet.dailyPlanNotFound'));
     return plan;
   }
 
@@ -241,7 +247,8 @@ export class AppDataQueryService {
         },
       },
     });
-    if (!conversation) throw new NotFoundException('对话不存在');
+    if (!conversation)
+      throw new NotFoundException(this.i18n.t('diet.conversationNotFound'));
 
     return conversation;
   }
@@ -250,9 +257,10 @@ export class AppDataQueryService {
     const conversation = await this.prisma.coachConversations.findFirst({
       where: { id },
     });
-    if (!conversation) throw new NotFoundException('对话不存在');
+    if (!conversation)
+      throw new NotFoundException(this.i18n.t('diet.conversationNotFound'));
     await this.prisma.coachConversations.delete({ where: { id } });
-    return { message: '对话已删除' };
+    return { message: this.i18n.t('diet.conversationDeleted') };
   }
 
   async getConversationStatistics() {

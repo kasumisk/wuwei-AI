@@ -203,6 +203,15 @@ export class ExplainWhyNotDto {
   })
   @IsEnum(MealType)
   mealType: MealType;
+
+  @ApiPropertyOptional({
+    description: '语言区域（可选，默认跟随请求头）',
+    example: 'en-US',
+    enum: ['zh-CN', 'en-US', 'ja-JP'],
+  })
+  @IsOptional()
+  @IsString()
+  locale?: string;
 }
 
 // ========== Behavior DTO ==========

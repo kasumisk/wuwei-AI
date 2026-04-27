@@ -18,6 +18,8 @@ import { NutritionScoreService } from '../services/nutrition-score.service';
 import { BehaviorService } from '../services/behavior.service';
 import { SaveUserProfileDto } from '../dto/food.dto';
 import { getUserLocalHour } from '../../../../common/utils/timezone.util';
+import { I18nService } from '../../../../core/i18n';
+import { RequestContextService } from '../../../../core/context/request-context.service';
 
 /** P3.1: 评分等级标签（与前端 4 档一致） */
 function getStatusLabel(score: number): string {
@@ -94,6 +96,8 @@ export class FoodNutritionController {
     private readonly userProfileService: UserProfileService,
     private readonly nutritionScoreService: NutritionScoreService,
     private readonly behaviorService: BehaviorService,
+    private readonly i18n: I18nService,
+    private readonly requestCtx: RequestContextService,
   ) {}
 
   /**
@@ -158,6 +162,10 @@ export class FoodNutritionController {
         protein: summary.totalProtein || 0,
         fat: summary.totalFat || 0,
         carbs: summary.totalCarbs || 0,
+        // Bug-Fix: 传入宏量绝对量目标，供"达成度门槛"评分使用
+        targetProtein: goals.protein,
+        targetCarbs: goals.carbs,
+        targetFat: goals.fat,
         // Phase 1.2: 有记录时用真实值(若缺失用合理中性值3)，无记录时返回0
         // 这样权重分摊逻辑会自动处理零值维度
         foodQuality:
@@ -201,6 +209,13 @@ export class FoodNutritionController {
           : 0,
     };
 
+    const locale: 'zh' | 'en' | 'ja' = (() => {
+      const raw = this.requestCtx.locale;
+      if (raw === 'ja-JP') return 'ja';
+      if (raw === 'en-US') return 'en';
+      return 'zh';
+    })();
+
     const feedbackBase = this.nutritionScoreService.generateFeedback(
       score.highlights,
       profile?.goal || 'health',
@@ -211,18 +226,30 @@ export class FoodNutritionController {
       .filter(([, value]) => value > 0 && (value < 70 || value > 110))
       .map(([key]) => key.replace('Adherence', ''));
 
-    const macroNameMap: Record<string, string> = {
-      calorie: '热量',
-      protein: '蛋白质',
-      fat: '脂肪',
-      carbs: '碳水',
+    const macroNameMap: Record<string, Record<'zh' | 'en' | 'ja', string>> = {
+      calorie: { zh: '热量', en: 'calories', ja: 'カロリー' },
+      protein: { zh: '蛋白质', en: 'protein', ja: 'たんぱく質' },
+      fat: { zh: '脂肪', en: 'fat', ja: '脂質' },
+      carbs: { zh: '碳水', en: 'carbs', ja: '炭水化物' },
     };
 
     const feedback =
       summary.mealCount === 0
-        ? '今日尚未记录饮食，开始记录第一餐吧。'
+        ? locale === 'en'
+          ? 'No meals recorded today yet. Start by logging your first meal.'
+          : locale === 'ja'
+            ? '今日はまだ食事記録がありません。まずは1食目を記録しましょう。'
+            : '今日尚未记录饮食，开始记录第一餐吧。'
         : outOfRangeMacros.length > 0
-          ? `${outOfRangeMacros.map((m) => macroNameMap[m] || m).join('、')}尚未达成平衡，建议按目标比例微调。`
+          ? locale === 'en'
+            ? `${outOfRangeMacros
+                .map((m) => macroNameMap[m]?.[locale] || m)
+                .join(', ')} are not balanced yet. Adjust them gradually toward your target.`
+            : locale === 'ja'
+              ? `${outOfRangeMacros
+                  .map((m) => macroNameMap[m]?.[locale] || m)
+                  .join('、')}はまだバランスが取れていません。目標比率に向けて少しずつ調整しましょう。`
+              : `${outOfRangeMacros.map((m) => macroNameMap[m]?.[locale] || m).join('、')}尚未达成平衡，建议按目标比例微调。`
           : feedbackBase;
 
     // V1.2: 宏量槽位状态检测
@@ -244,13 +271,6 @@ export class FoodNutritionController {
     );
 
     // V1.2: 结构化问题识别
-    const locale: 'zh' | 'en' | 'ja' = (() => {
-      const region = (profile as any)?.regionCode || 'CN';
-      if (region === 'JP') return 'ja';
-      if (region === 'CN' || region === 'TW' || region === 'HK') return 'zh';
-      return 'en';
-    })();
-
     const issueHighlights = this.nutritionScoreService.detectIssueHighlights(
       intake,
       {
@@ -315,7 +335,7 @@ export class FoodNutritionController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: this.i18n.t('common.ok'),
       data: {
         totalScore: score.score,
         breakdown: score.breakdown,
@@ -401,7 +421,7 @@ export class FoodNutritionController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '获取成功',
+      message: this.i18n.t('common.ok'),
       data: toProfileResponse(profile),
     };
   }
@@ -420,7 +440,7 @@ export class FoodNutritionController {
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '保存成功',
+      message: this.i18n.t('common.success'),
       data: toProfileResponse(profile),
     };
   }

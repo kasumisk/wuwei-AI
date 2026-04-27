@@ -48,6 +48,7 @@ import {
   DomainEvents,
   SubscriptionChangedEvent,
 } from '../../../../core/events/domain-events';
+import { I18nService } from '../../../../core/i18n/i18n.service';
 
 /** 用户订阅状态概要（缓存友好的扁平结构） */
 export interface UserSubscriptionSummary {
@@ -80,6 +81,7 @@ export class SubscriptionService implements OnModuleInit {
     private readonly cacheManager: TieredCacheManager,
     private readonly eventEmitter: EventEmitter2,
     private readonly entitlementResolver: PlanEntitlementResolver,
+    private readonly i18n: I18nService,
   ) {}
 
   onModuleInit(): void {
@@ -112,7 +114,10 @@ export class SubscriptionService implements OnModuleInit {
     const plan = await this.prisma.subscriptionPlan.findUnique({
       where: { id: planId },
     });
-    if (!plan) throw new NotFoundException('订阅计划不存在');
+    if (!plan)
+      throw new NotFoundException(
+        this.i18n.t('subscription.error.planNotFound'),
+      );
     const updated = await this.prisma.subscriptionPlan.update({
       where: { id: planId },
       data: data as any,
@@ -167,7 +172,10 @@ export class SubscriptionService implements OnModuleInit {
     const plan = await this.prisma.subscriptionPlan.findUnique({
       where: { id: params.planId },
     });
-    if (!plan) throw new NotFoundException('订阅计划不存在');
+    if (!plan)
+      throw new NotFoundException(
+        this.i18n.t('subscription.error.planNotFound'),
+      );
 
     // 1. 失效旧订阅
     await this.prisma.subscription.updateMany({

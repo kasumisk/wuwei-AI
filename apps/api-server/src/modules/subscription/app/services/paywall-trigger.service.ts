@@ -21,6 +21,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SubscriptionTriggerLogs as SubscriptionTriggerLog } from '@prisma/client';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
+import { I18nService } from '../../../../core/i18n/i18n.service';
 import {
   AccessDecision,
   PaywallInfo,
@@ -68,6 +69,7 @@ export class PaywallTriggerService {
     private readonly prisma: PrismaService,
     // V6.1 Phase 2.6: 域事件发射
     private readonly eventEmitter: EventEmitter2,
+    private readonly i18n: I18nService,
   ) {}
 
   /**
@@ -258,25 +260,16 @@ export class PaywallTriggerService {
    * 获取各档位的升级卖点（前端展示用）
    */
   private getBenefitsForTier(tier: SubscriptionTier): string[] {
-    const benefits: Record<SubscriptionTier, string[]> = {
-      [SubscriptionTier.PRO]: [
-        '无限文本分析次数',
-        '每天 20 次图片分析',
-        '深度营养成分拆解',
-        '个性化替代食物建议',
-        '完整分析历史记录',
-        '详细评分和高级解释',
-      ],
-      [SubscriptionTier.PREMIUM]: [
-        '所有 Pro 功能',
-        '无限图片分析次数',
-        '全天膳食联动建议',
-        '食谱智能生成',
-        '健康趋势分析',
-        '优先 AI 响应',
-      ],
-      [SubscriptionTier.FREE]: [],
-    };
-    return benefits[tier] ?? [];
+    if (tier === SubscriptionTier.PRO) {
+      return [1, 2, 3, 4, 5, 6].map((n) =>
+        this.i18n.t(`subscription.benefits.pro.${n}`),
+      );
+    }
+    if (tier === SubscriptionTier.PREMIUM) {
+      return [1, 2, 3, 4, 5, 6].map((n) =>
+        this.i18n.t(`subscription.benefits.premium.${n}`),
+      );
+    }
+    return [];
   }
 }

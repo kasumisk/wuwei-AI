@@ -40,6 +40,8 @@ import { ProfileResolverService } from '../../../user/app/services/profile/profi
 import { StrategyResolver } from '../../../strategy/app/strategy-resolver.service';
 import type { ExplainPolicyConfig } from '../../../strategy/strategy.types';
 import { AdaptiveExplanationDepthService } from '../recommendation/explanation/adaptive-explanation-depth.service';
+import { RequestContextService } from '../../../../core/context/request-context.service';
+import type { Locale } from '../recommendation/utils/i18n-messages';
 
 /**
  * V5 2.5: 预加载上下文 — 周计划批量生成时一次性查询，避免 N天×5 次重复 DB 查询
@@ -146,7 +148,15 @@ export class DailyPlanService {
     private readonly adaptiveDepth: AdaptiveExplanationDepthService,
     private readonly preferenceProfileService: PreferenceProfileService,
     private readonly feedbackService: RecommendationFeedbackService,
+    private readonly requestCtx: RequestContextService,
   ) {}
+
+  private getCurrentLocale(): Locale {
+    const locale = this.requestCtx.locale;
+    return locale === 'en-US' || locale === 'ja-JP' || locale === 'zh-CN'
+      ? locale
+      : 'zh-CN';
+  }
 
   /**
    * 获取今日计划（惰性生成：不存在则自动创建）
@@ -158,7 +168,7 @@ export class DailyPlanService {
     let plan = await this.prisma.dailyPlans.findFirst({
       where: { userId: userId, date: new Date(today) },
     });
-    if (plan) return plan;
+    if (plan) return this.localizePlan(plan, userId);
 
     // 幂等锁：30 秒过期，防止并发生成
     const lockKey = this.redis.buildKey('diet', 'plan_gen', userId, today);
@@ -169,7 +179,7 @@ export class DailyPlanService {
       plan = await this.prisma.dailyPlans.findFirst({
         where: { userId: userId, date: new Date(today) },
       });
-      if (plan) return plan;
+      if (plan) return this.localizePlan(plan, userId);
       // 超时后 fallback：直接生成（极端情况）
     }
 
@@ -178,7 +188,7 @@ export class DailyPlanService {
     } finally {
       await this.redis.del(lockKey);
     }
-    return plan!;
+    return this.localizePlan(plan!, userId);
   }
 
   /**
@@ -358,6 +368,7 @@ export class DailyPlanService {
     );
 
     // V5 3.6 + V6 2.7 + V6.3 P2-3: 为单餐生成用户可读解释（含 V2 可视化数据）
+    const locale = this.getCurrentLocale();
     const explanations = this.buildMealExplanations(
       newRec,
       userProfileConstraints,
@@ -367,6 +378,7 @@ export class DailyPlanService {
       explainPolicy,
       userId,
       resolvedDetailLevel,
+      locale,
     );
 
     // 仅更新指定餐次
@@ -646,6 +658,7 @@ export class DailyPlanService {
     }
 
     // 优化后偏差检查 → 生成提示信息
+    const locale = this.getCurrentLocale();
     let compensationTip = '';
     const planTotals = {
       calories: allRecs.reduce((s, r) => s + r.totalCalories, 0),
@@ -657,30 +670,37 @@ export class DailyPlanService {
       (planTotals.protein - goals.protein) / goals.protein;
 
     if (Math.abs(proteinDeviation) > 0.1) {
-      compensationTip = t('compensation.lowProtein');
+      compensationTip = t('compensation.lowProtein', {}, locale);
     } else if (calDeviation > 0.1) {
-      compensationTip = t('compensation.highCalories');
+      compensationTip = t('compensation.highCalories', {}, locale);
     }
 
     const strategy =
-      this.buildStrategy(goals.calories, profile, goalType, profile?.timezone) +
+      this.buildStrategy(
+        goals.calories,
+        profile,
+        goalType,
+        profile?.timezone,
+        locale,
+      ) +
       (compensationTip ? `；${compensationTip}` : '');
 
     // V5 3.6 + V6 2.7 + V6.3 P2-3: 为每餐生成用户可读解释（含 V2 可视化数据）
     // explainPolicy 控制解释详细程度和雷达图可见性
     // V6.5 Phase 3K: resolvedDetailLevel 由自适应深度覆盖
     const mealExplanations = allRecs.map((rec, i) =>
-      this.buildMealExplanations(
-        rec,
-        userProfileConstraints,
-        goalType,
-        buildBudget(normalizedRatios[mealTypes[i]] || 0),
-        mealTypes[i],
-        explainPolicy,
-        userId,
-        resolvedDetailLevel,
-      ),
-    );
+        this.buildMealExplanations(
+          rec,
+          userProfileConstraints,
+          goalType,
+          buildBudget(normalizedRatios[mealTypes[i]] || 0),
+          mealTypes[i],
+          explainPolicy,
+          userId,
+          resolvedDetailLevel,
+          locale,
+        ),
+      );
 
     // V6.3 P1-4: 仅为活跃餐次生成 plan 数据，非活跃餐次存 null
     const plan = await this.prisma.dailyPlans.create({
@@ -818,6 +838,7 @@ export class DailyPlanService {
     userId?: string,
     /** V6.5 Phase 3K: 自适应覆盖后的 detailLevel（如果已预计算） */
     resolvedDetailLevel?: 'simple' | 'standard' | 'detailed',
+    locale?: Locale,
   ): Record<string, MealFoodExplanation> | undefined {
     const detailLevel =
       resolvedDetailLevel ?? explainPolicy?.detailLevel ?? 'standard';
@@ -829,7 +850,7 @@ export class DailyPlanService {
       rec.foods,
       userProfileConstraints,
       goalType,
-      undefined,
+      locale,
       styleVariant,
     );
     if (map.size === 0) return undefined;
@@ -844,7 +865,7 @@ export class DailyPlanService {
             userProfileConstraints,
             goalType,
             mealType,
-            undefined,
+            locale,
             styleVariant,
           )
         : null;
@@ -971,22 +992,158 @@ export class DailyPlanService {
     _profile: { goal?: string } | null | undefined,
     goalType: string,
     timezone?: string,
+    locale?: Locale,
   ): string {
     const strategies: string[] = [];
 
     const strategyKey = `strategy.${goalType}`;
     strategies.push(
-      t(strategyKey) !== strategyKey ? t(strategyKey) : t('strategy.health'),
+      t(strategyKey, {}, locale) !== strategyKey
+        ? t(strategyKey, {}, locale)
+        : t('strategy.health', {}, locale),
     );
 
-    if (goal < 1600) strategies.push(t('strategy.lowCalorie'));
-    else if (goal >= 2500) strategies.push(t('strategy.highCalorie'));
+    if (goal < 1600) strategies.push(t('strategy.lowCalorie', {}, locale));
+    else if (goal >= 2500)
+      strategies.push(t('strategy.highCalorie', {}, locale));
 
     const hour = getUserLocalHour(timezone || DEFAULT_TIMEZONE);
-    if (hour < 10) strategies.push(t('strategy.morningWater'));
+    if (hour < 10) strategies.push(t('strategy.morningWater', {}, locale));
     if (hour >= 14 && hour < 17)
-      strategies.push(t('strategy.afternoonHydration'));
+      strategies.push(t('strategy.afternoonHydration', {}, locale));
 
     return strategies.join('；');
+  }
+
+  async localizePlan(plan: any, userId: string): Promise<any> {
+    if (!plan) return plan;
+
+    const locale = this.getCurrentLocale();
+    const profile = await this.userProfileService.getProfile(userId);
+    const goalType = profile?.goal || 'health';
+    const goals = this.nutritionScoreService.calculateDailyGoals(profile);
+    const mealRatios = MEAL_RATIOS[goalType] || MEAL_RATIOS.health;
+
+    const localizedPlan = {
+      ...plan,
+      strategy: this.buildStrategy(
+        goals.calories,
+        profile,
+        goalType,
+        profile?.timezone,
+        locale,
+      ),
+    } as any;
+
+    const meals: Array<{
+      key: 'morningPlan' | 'lunchPlan' | 'dinnerPlan' | 'snackPlan';
+      mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+    }> = [
+      { key: 'morningPlan', mealType: 'breakfast' },
+      { key: 'lunchPlan', mealType: 'lunch' },
+      { key: 'dinnerPlan', mealType: 'dinner' },
+      { key: 'snackPlan', mealType: 'snack' },
+    ];
+
+    for (const { key, mealType } of meals) {
+      const meal = localizedPlan[key];
+      if (!meal) continue;
+
+      const ratio = mealRatios[mealType] || 0.25;
+      const target: MealTarget = {
+        calories: Math.round(goals.calories * ratio),
+        protein: Math.round(goals.protein * ratio),
+        fat: Math.round(goals.fat * ratio),
+        carbs: Math.round(goals.carbs * ratio),
+      };
+
+      localizedPlan[key] = {
+        ...meal,
+        tip: this.rebuildMealTip(mealType, goalType, target, meal.calories ?? 0, locale),
+        explanations: this.localizeMealExplanations(meal.explanations, locale),
+      };
+    }
+
+    return localizedPlan;
+  }
+
+  private rebuildMealTip(
+    mealType: string,
+    goalType: string,
+    target: MealTarget,
+    actualCal: number,
+    locale: Locale,
+  ): string {
+    const tips: string[] = [];
+
+    if (actualCal > target.calories * 1.1) {
+      tips.push(t('tip.caloriesOver', {}, locale));
+    } else if (actualCal < target.calories * 0.7) {
+      tips.push(t('tip.caloriesUnder', {}, locale));
+    }
+
+    const goalTipKey = `tip.goal.${goalType}`;
+    tips.push(
+      t(goalTipKey, {}, locale) !== goalTipKey
+        ? t(goalTipKey, {}, locale)
+        : t('tip.goal.health', {}, locale),
+    );
+
+    const mealTipKey = `tip.meal.${mealType}`;
+    const mealTip = t(mealTipKey, {}, locale);
+    if (mealTip !== mealTipKey) tips.push(mealTip);
+
+    return tips.filter(Boolean).join('；');
+  }
+
+  private localizeMealExplanations(
+    explanations: Record<string, MealFoodExplanation> | undefined,
+    locale: Locale,
+  ): Record<string, MealFoodExplanation> | undefined {
+    if (!explanations) return explanations;
+
+    const labelMap: Record<string, string> = {
+      'Low GI': t('explain.tag.lowGI', {}, locale),
+      'Natural Food': t('explain.tag.naturalFood', {}, locale),
+      'High Protein': t('explain.tag.highProtein', {}, locale),
+      'Rich Fiber': t('explain.tag.richFiber', {}, locale),
+      'High Nutrient Density': t('explain.tag.highNutrientDensity', {}, locale),
+      'Low Saturated Fat': t('explain.tag.lowSaturatedFat', {}, locale),
+      'Low Sodium': t('explain.tag.lowSodium', {}, locale),
+      'Low FODMAP': t('explain.tag.lowFODMAP', {}, locale),
+      'High Calcium': t('explain.tag.highCalcium', {}, locale),
+      'Rich Iron': t('explain.tag.richIron', {}, locale),
+    };
+
+    const reasonMap: Record<string, string> = {
+      'Good anti-inflammatory properties': t('explain.reason.antiInflammation', {}, locale),
+      'Minimally processed, retains more nutrients': t('explain.reason.naturalFood', {}, locale),
+      'Well-balanced nutrition': t('explain.reason.balancedNutrition', {}, locale),
+      'Good glycemic control': t('explain.reason.glycemicGood', {}, locale),
+      'Moderate protein, fits daily target': t('explain.reason.proteinModerate', {}, locale),
+      'Rich in fiber, helps fullness': t('explain.reason.richFiber', {}, locale),
+      'High nutrient density': t('explain.reason.highNutrientDensity', {}, locale),
+      'High satiety, helps control total intake': t('explain.reason.highSatiety', {}, locale),
+      'Fat composition is relatively balanced': t('explain.reason.fatBalanced', {}, locale),
+      'Carb ratio fits this meal target': t('explain.reason.carbsMatch', {}, locale),
+    };
+
+    return Object.fromEntries(
+      Object.entries(explanations).map(([foodId, explanation]) => [
+        foodId,
+        {
+          ...explanation,
+          primaryReason:
+            reasonMap[explanation.primaryReason] || explanation.primaryReason,
+          nutritionHighlights: (explanation.nutritionHighlights || []).map((item) => ({
+            ...item,
+            label: labelMap[item.label] || item.label,
+          })),
+          healthTip: explanation.healthTip
+            ? reasonMap[explanation.healthTip] || explanation.healthTip
+            : explanation.healthTip,
+        },
+      ]),
+    );
   }
 }

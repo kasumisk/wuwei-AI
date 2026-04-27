@@ -68,7 +68,11 @@ export class RefineAnalysisDto {
   @Type(() => RefinedFoodInputDto)
   foods!: RefinedFoodInputDto[];
 
-  @ApiProperty({ description: '用户备注（可选）', required: false, maxLength: 200 })
+  @ApiProperty({
+    description: '用户备注（可选）',
+    required: false,
+    maxLength: 200,
+  })
   @IsOptional()
   @IsString()
   @MaxLength(200)

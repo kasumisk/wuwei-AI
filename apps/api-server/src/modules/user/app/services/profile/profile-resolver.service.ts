@@ -18,6 +18,7 @@
  *   填充到 EnrichedProfileContext 的 UserProfileConstraints 基础字段中
  */
 import { Injectable, Logger } from '@nestjs/common';
+import { I18nService } from '../../../../../core/i18n';
 import {
   UserProfiles as UserProfile,
   UserBehaviorProfiles as UserBehaviorProfile,
@@ -56,6 +57,7 @@ export class ProfileResolverService {
     private readonly profileCache: ProfileCacheService,
     private readonly realtimeProfile: RealtimeProfileService,
     private readonly contextualProfile: ContextualProfileService,
+    private readonly i18n: I18nService,
   ) {}
 
   /**
@@ -378,6 +380,9 @@ export class ProfileResolverService {
           resolution: context.profileFreshness > 0.5 ? 'use_declared' : 'blend',
           confidence: Math.min(1, (observed?.totalRecords ?? 0) / 30),
           reason: 'declared_goal_conflicts_with_observed_intake',
+          reasonText: this.i18n.t(
+            'user.profile.declaredGoalConflictsObservedIntake',
+          ),
         });
       }
     }
@@ -398,6 +403,9 @@ export class ProfileResolverService {
         resolution: context.profileFreshness > 0.7 ? 'use_declared' : 'blend',
         confidence: Math.min(1, (observed?.totalRecords ?? 0) / 20),
         reason: 'high_declared_activity_but_low_compliance',
+        reasonText: this.i18n.t(
+          'user.profile.highDeclaredActivityLowCompliance',
+        ),
       });
     }
 
@@ -415,6 +423,9 @@ export class ProfileResolverService {
         resolution: 'blend',
         confidence: 0.6, // 基于声明数据，置信度中等
         reason: 'declared_cook_but_high_takeout_frequency',
+        reasonText: this.i18n.t(
+          'user.profile.declaredCookHighTakeoutFrequency',
+        ),
       });
     }
 

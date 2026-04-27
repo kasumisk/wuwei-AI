@@ -69,9 +69,7 @@ const TranslationPage: React.FC = () => {
     ? translationStats.locales.map(({ locale, count }) => ({
         locale,
         count,
-        coverage: report?.totalFoods
-          ? (count / report.totalFoods) * 100
-          : 0,
+        coverage: report?.totalFoods ? (count / report.totalFoods) * 100 : 0,
       }))
     : [];
 
@@ -93,7 +91,9 @@ const TranslationPage: React.FC = () => {
             <Statistic
               title="未翻译食物"
               value={translationStats?.foodsWithoutTranslation || 0}
-              valueStyle={{ color: translationStats?.foodsWithoutTranslation ? '#cf1322' : '#3f8600' }}
+              valueStyle={{
+                color: translationStats?.foodsWithoutTranslation ? '#cf1322' : '#3f8600',
+              }}
             />
           </Card>
         </Col>

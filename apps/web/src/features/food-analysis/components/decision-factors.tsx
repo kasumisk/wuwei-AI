@@ -33,7 +33,9 @@ export function DecisionFactors({ factors }: DecisionFactorsProps) {
   // Sort: negatives first (most impactful)
   const sorted = [...factors].sort((a, b) => {
     const order = { negative: 0, neutral: 1, positive: 2 };
-    return (order[a.impact as keyof typeof order] ?? 1) - (order[b.impact as keyof typeof order] ?? 1);
+    return (
+      (order[a.impact as keyof typeof order] ?? 1) - (order[b.impact as keyof typeof order] ?? 1)
+    );
   });
 
   return (

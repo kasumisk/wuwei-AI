@@ -1,14 +1,17 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations, useLocale } from 'next-intl';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { useProfile } from '@/features/profile/hooks/use-profile';
 import { useSubscription } from '@/features/subscription/hooks/use-subscription';
+import { useLocalizedRouter } from '@/lib/hooks/use-localized-router';
 import { LocalizedLink } from '@/components/common/localized-link';
 import { ProfileCompletionBar } from '@/features/profile/components/profile-completion-bar';
 import { FeedbackStatsCard } from '@/features/profile/components/feedback-stats-card';
 import { GOAL_LABELS } from '@/lib/constants/food';
+import { i18n } from '@/lib/i18n/config';
 import type { BehaviorProfile } from '@/types/user';
 import { BottomNav } from '@/components/common/bottom-nav';
 
@@ -35,9 +38,13 @@ function ChevronRight() {
 
 export default function ProfilePage() {
   const router = useRouter();
+  const t = useTranslations();
+  const currentLocale = useLocale();
+  const { switchLocale } = useLocalizedRouter();
   const { user, isLoggedIn, isAnonymous, logout } = useAuth();
   const { profile, behaviorProfile } = useProfile();
   const { tier, isFree, isPro, isPremium } = useSubscription();
+  const [showLangPicker, setShowLangPicker] = useState(false);
 
   if (!isLoggedIn) {
     router.push('/login');
@@ -280,6 +287,50 @@ export default function ProfilePage() {
             </div>
             <ChevronRight />
           </LocalizedLink>
+
+          {/* 语言切换 */}
+          <div>
+            <button
+              onClick={() => setShowLangPicker((v) => !v)}
+              className="w-full flex items-center justify-between px-5 py-4 hover:bg-muted/50 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-xl">🌐</span>
+                <div className="text-left">
+                  <p className="text-sm font-bold">{t('profile.language')}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {t(`languages.${currentLocale}`)}
+                  </p>
+                </div>
+              </div>
+              <span
+                className={`text-muted-foreground transition-transform duration-200 ${showLangPicker ? 'rotate-90' : ''}`}
+              >
+                <ChevronRight />
+              </span>
+            </button>
+
+            {showLangPicker && (
+              <div className="border-t border-border/40 bg-muted/20 px-5 py-3 grid grid-cols-2 gap-2">
+                {i18n.locales.map((loc) => (
+                  <button
+                    key={loc}
+                    onClick={() => {
+                      setShowLangPicker(false);
+                      switchLocale(loc);
+                    }}
+                    className={`py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+                      loc === currentLocale
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-background hover:bg-muted text-foreground'
+                    }`}
+                  >
+                    {t(`languages.${loc}`)}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* 法律信息 */}
@@ -466,7 +517,7 @@ function BehaviorInsightCard({
         </div>
       )}
 
-       <BottomNav />
+      <BottomNav />
     </div>
   );
 }

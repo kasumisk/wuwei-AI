@@ -1,0 +1,17 @@
+{
+  "ok": "OK.",
+  "recipeNotFound": "Recipe \"{{id}}\" not found.",
+  "createdOk": "Created.",
+  "updatedOk": "Updated.",
+  "deletedOk": "Deleted.",
+  "reviewOk": "Review complete.",
+  "submittedAwaitingReview": "Submitted, awaiting review.",
+  "ratingOk": "Rating saved.",
+  "ratingNone": "No rating record.",
+  "translationSaved": "Translation saved.",
+  "translationDeleted": "Translation deleted.",
+  "importOk": "Import successful.",
+  "generationDone": "Generation complete.",
+  "generationQueued": "Async generation task submitted.",
+  "batchRecalcDone": "Batch recompute done: {{updated}} updated, {{unchanged}} unchanged."
+}

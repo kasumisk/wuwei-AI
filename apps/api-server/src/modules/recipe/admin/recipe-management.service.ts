@@ -1,5 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../core/prisma/prisma.service';
+import { I18nService } from '../../../core/i18n/i18n.service';
 import { Prisma } from '@prisma/client';
 import {
   CreateRecipeDto,
@@ -17,7 +18,10 @@ import {
 export class RecipeManagementService {
   private readonly logger = new Logger(RecipeManagementService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly i18n: I18nService,
+  ) {}
 
   // ==================== CRUD ====================
 
@@ -79,7 +83,7 @@ export class RecipeManagementService {
     });
 
     if (!recipe) {
-      throw new NotFoundException(`菜谱 ${id} 不存在`);
+      throw new NotFoundException(this.i18n.t('recipe.recipeNotFound', { id }));
     }
 
     return recipe;
@@ -198,7 +202,7 @@ export class RecipeManagementService {
   async update(id: string, dto: UpdateRecipeDto) {
     const existing = await this.prisma.recipes.findUnique({ where: { id } });
     if (!existing) {
-      throw new NotFoundException(`菜谱 ${id} 不存在`);
+      throw new NotFoundException(this.i18n.t('recipe.recipeNotFound', { id }));
     }
 
     const { ingredients, ...updateData } = dto;
@@ -316,7 +320,7 @@ export class RecipeManagementService {
   async softDelete(id: string) {
     const existing = await this.prisma.recipes.findUnique({ where: { id } });
     if (!existing) {
-      throw new NotFoundException(`菜谱 ${id} 不存在`);
+      throw new NotFoundException(this.i18n.t('recipe.recipeNotFound', { id }));
     }
 
     await this.prisma.recipes.update({
@@ -344,7 +348,7 @@ export class RecipeManagementService {
       include: { recipeIngredients: true },
     });
     if (!existing) {
-      throw new NotFoundException(`菜谱 ${id} 不存在`);
+      throw new NotFoundException(this.i18n.t('recipe.recipeNotFound', { id }));
     }
 
     const approved = params.action === 'approved';
@@ -711,7 +715,9 @@ export class RecipeManagementService {
       select: { id: true },
     });
     if (!recipe) {
-      throw new NotFoundException(`菜谱 ${params.recipeId} 不存在`);
+      throw new NotFoundException(
+        this.i18n.t('recipe.recipeNotFound', { id: params.recipeId }),
+      );
     }
 
     const existing = await this.prisma.recipeTranslations.findFirst({

@@ -1,0 +1,17 @@
+{
+  "ok": "取得しました",
+  "recipeNotFound": "レシピ {{id}} が見つかりません",
+  "createdOk": "作成しました",
+  "updatedOk": "更新しました",
+  "deletedOk": "削除しました",
+  "reviewOk": "レビュー完了",
+  "submittedAwaitingReview": "送信しました。審査をお待ちください",
+  "ratingOk": "評価を保存しました",
+  "ratingNone": "評価レコードがありません",
+  "translationSaved": "翻訳を保存しました",
+  "translationDeleted": "翻訳を削除しました",
+  "importOk": "インポート成功",
+  "generationDone": "生成完了",
+  "generationQueued": "非同期生成タスクを送信しました",
+  "batchRecalcDone": "一括再計算完了：更新 {{updated}} 件、変更なし {{unchanged}} 件"
+}

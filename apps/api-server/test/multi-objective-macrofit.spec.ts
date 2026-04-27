@@ -91,9 +91,8 @@ describe('multiObjectiveOptimize — P0-4 macroFit 维度', () => {
     expect(result.ranked[1].scoredFood.food.id).toBe('fatBomb');
 
     // macroFit 分应：good > fatBomb
-    const goodMF = result.ranked.find(
-      (r) => r.scoredFood.food.id === 'good',
-    )!.objectives.macroFit;
+    const goodMF = result.ranked.find((r) => r.scoredFood.food.id === 'good')!
+      .objectives.macroFit;
     const bombMF = result.ranked.find(
       (r) => r.scoredFood.food.id === 'fatBomb',
     )!.objectives.macroFit;

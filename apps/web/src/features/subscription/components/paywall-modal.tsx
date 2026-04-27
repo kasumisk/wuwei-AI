@@ -219,7 +219,11 @@ export function PaywallModal() {
               {imageAnalysis && !imageAnalysis.unlimited && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">图片分析</span>
-                  <span className={imageAnalysis.remaining === 0 ? 'text-red-500 font-bold' : 'text-foreground'}>
+                  <span
+                    className={
+                      imageAnalysis.remaining === 0 ? 'text-red-500 font-bold' : 'text-foreground'
+                    }
+                  >
                     {imageAnalysis.used}/{imageAnalysis.limit}
                   </span>
                 </div>
@@ -227,7 +231,11 @@ export function PaywallModal() {
               {textAnalysis && !textAnalysis.unlimited && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">文字分析</span>
-                  <span className={textAnalysis.remaining === 0 ? 'text-red-500 font-bold' : 'text-foreground'}>
+                  <span
+                    className={
+                      textAnalysis.remaining === 0 ? 'text-red-500 font-bold' : 'text-foreground'
+                    }
+                  >
                     {textAnalysis.used}/{textAnalysis.limit}
                   </span>
                 </div>
@@ -235,7 +243,11 @@ export function PaywallModal() {
               {coachQuota && !coachQuota.unlimited && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">AI 教练</span>
-                  <span className={coachQuota.remaining === 0 ? 'text-red-500 font-bold' : 'text-foreground'}>
+                  <span
+                    className={
+                      coachQuota.remaining === 0 ? 'text-red-500 font-bold' : 'text-foreground'
+                    }
+                  >
                     {coachQuota.used}/{coachQuota.limit}
                   </span>
                 </div>
