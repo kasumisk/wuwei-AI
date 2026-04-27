@@ -28,8 +28,12 @@ import {
   RecommendationGeneratedEvent,
 } from '../../../../core/events/domain-events';
 import { PrecomputeService } from './precompute.service';
-import { t } from '../recommendation/utils/i18n-messages';
+import {
+  t,
+  type Locale,
+} from '../recommendation/utils/i18n-messages';
 import type { DecisionValueTag } from '../recommendation/types/meal.types';
+import { RequestContextService } from '../../../../core/context/request-context.service';
 
 // ─── V7.9 Phase 3-1: 推荐粘性缓存配置 ───
 
@@ -103,6 +107,7 @@ export class FoodService {
     private readonly recommendationEngine: RecommendationEngineService,
     private readonly eventEmitter: EventEmitter2,
     private readonly precomputeService: PrecomputeService,
+    private readonly requestCtx: RequestContextService,
   ) {}
 
   /**
@@ -192,6 +197,7 @@ export class FoodService {
     userId: string,
     forceRefresh = false,
   ): Promise<MealSuggestionResponse> {
+    const locale = this.getCurrentLocale();
     const [summary, profile] = await Promise.all([
       this.getTodaySummary(userId),
       this.userProfileService.getProfile(userId),
@@ -202,6 +208,7 @@ export class FoodService {
     const remaining = Math.max(0, goal - summary.totalCalories);
     const tz = profile?.timezone || DEFAULT_TIMEZONE;
     const hour = getUserLocalHour(tz);
+    const mealRatios = MEAL_RATIOS[goalType] || MEAL_RATIOS.health;
 
     let nextMeal: string;
     if (hour < 9) nextMeal = 'breakfast';
@@ -209,20 +216,30 @@ export class FoodService {
     else if (hour < 17) nextMeal = 'snack';
     else nextMeal = 'dinner';
 
+    const ratio = mealRatios[nextMeal] || 0.25;
+    const calBudget = Math.min(Math.round(goals.calories * ratio), remaining);
+    const proteinRem = Math.max(0, goals.protein - (summary.totalProtein || 0));
+    const budget = {
+      calories: calBudget,
+      protein: Math.round(proteinRem * ratio),
+      fat: Math.round(goals.fat * ratio),
+      carbs: Math.round(goals.carbs * ratio),
+    };
+
     if (remaining <= 0) {
       return {
         mealType: nextMeal,
         remainingCalories: 0,
         suggestion: {
-          foods: t('food.suggestion.caloriesReached'),
+          foods: t('food.suggestion.caloriesReached', {}, locale),
           calories: 0,
-          tip: t('food.suggestion.noMoreFood'),
+          tip: t('food.suggestion.noMoreFood', {}, locale),
         },
       };
     }
 
     // ─── V7.9 Phase 3-1: 粘性缓存检查 ───
-    const cacheKey = this.buildStickinessCacheKey(userId, nextMeal);
+    const cacheKey = this.buildStickinessCacheKey(userId, nextMeal, locale);
     if (!forceRefresh) {
       const cached = this.getFromStickinessCache(
         cacheKey,
@@ -263,9 +280,9 @@ export class FoodService {
       const scenarios = scenarioResults
         ? Object.entries(scenarioResults).map(([key, rec]) => {
             const scenarioLabels: Record<string, string> = {
-              takeout: t('scenario.takeout'),
-              convenience: t('scenario.convenience'),
-              homeCook: t('scenario.homeCook'),
+              takeout: t('scenario.takeout', {}, locale),
+              convenience: t('scenario.convenience', {}, locale),
+              homeCook: t('scenario.homeCook', {}, locale),
             };
             const r = rec as {
               displayText?: string;
@@ -288,26 +305,18 @@ export class FoodService {
               }>;
             };
             const scenarioCalories = r.totalCalories || 0;
-            const scenarioMealBudget = mainRec.totalCalories || 0;
-            let scenarioTip = r.tip || '';
-            if (
-              scenarioMealBudget > 0 &&
-              scenarioCalories > 0 &&
-              scenarioCalories < scenarioMealBudget * 0.5
-            ) {
-              const underTip = t('tip.caloriesUnder');
-              if (!scenarioTip.includes(underTip)) {
-                scenarioTip = scenarioTip
-                  ? `${scenarioTip}；${underTip}`
-                  : underTip;
-              }
-            }
             return {
               scenario: scenarioLabels[key] || key,
               foods: r.displayText || '',
               foodItems: this.toSuggestionFoodItems(r.foods),
               calories: scenarioCalories,
-              tip: scenarioTip,
+              tip: this.buildSuggestionTip(
+                nextMeal,
+                goalType,
+                budget,
+                scenarioCalories,
+                locale,
+              ),
               totalProtein: r.totalProtein,
               totalFat: r.totalFat,
               totalCarbs: r.totalCarbs,
@@ -329,6 +338,7 @@ export class FoodService {
         goals,
         summary,
         goalType,
+        locale,
       );
 
       const result = {
@@ -338,7 +348,13 @@ export class FoodService {
           foods: mainRec.displayText,
           foodItems: this.toSuggestionFoodItems(mainRec.foods),
           calories: mainRec.totalCalories,
-          tip: mainRec.tip,
+          tip: this.buildSuggestionTip(
+            nextMeal,
+            goalType,
+            budget,
+            Math.max(mainRec.totalCalories || 0, 0),
+            locale,
+          ),
           totalProtein: mainRec.totalProtein,
           totalFat: mainRec.totalFat,
           totalCarbs: mainRec.totalCarbs,
@@ -357,14 +373,6 @@ export class FoodService {
 
     // V5 1.10: 使用统一的 MEAL_RATIOS 替代硬编码比例
     // FIX: 用全天目标热量 × 餐次比例计算单餐预算，而非剩余热量 × 比例（后者在已摄入多时会严重低估预算）
-    const mealRatios = MEAL_RATIOS[goalType] || MEAL_RATIOS.health;
-    const ratio = mealRatios[nextMeal] || 0.25;
-    const calBudget = Math.min(
-      Math.round(goals.calories * ratio),
-      remaining, // 预算不超过剩余量（防止热量超标）
-    );
-    const proteinRem = Math.max(0, goals.protein - (summary.totalProtein || 0));
-
     const consumed = {
       calories: summary.totalCalories || 0,
       protein: summary.totalProtein || 0,
@@ -375,13 +383,6 @@ export class FoodService {
       fat: goals.fat,
       carbs: goals.carbs,
     };
-    const budget = {
-      calories: calBudget,
-      protein: Math.round(proteinRem * ratio),
-      fat: Math.round(goals.fat * ratio),
-      carbs: Math.round(goals.carbs * ratio),
-    };
-
     // S4 fix: 构建 userConstraints 传入推荐引擎，确保过敏原/忌口/健康状况被过滤
     const userConstraints: UserProfileConstraints | undefined = profile
       ? {
@@ -436,31 +437,23 @@ export class FoodService {
 
     const scenarios = Object.entries(scenarioRecs).map(([key, rec]) => {
       const scenarioLabels: Record<string, string> = {
-        takeout: t('scenario.takeout'),
-        convenience: t('scenario.convenience'),
-        homeCook: t('scenario.homeCook'),
+        takeout: t('scenario.takeout', {}, locale),
+        convenience: t('scenario.convenience', {}, locale),
+        homeCook: t('scenario.homeCook', {}, locale),
       };
       const scenarioCalories = rec.totalCalories || 0;
-      // #fix R3-04: 场景推荐热量低于单餐预算50%时追加热量偏低提示
-      // 用 budget.calories 作为本餐预算基准
-      // 注意：meal-assembler 可能已在 rec.tip 中添加了 caloriesUnder，避免重复追加
-      let scenarioTip = rec.tip || '';
-      if (
-        budget.calories > 0 &&
-        scenarioCalories > 0 &&
-        scenarioCalories < budget.calories * 0.5
-      ) {
-        const underTip = t('tip.caloriesUnder');
-        if (!scenarioTip.includes(underTip)) {
-          scenarioTip = scenarioTip ? `${scenarioTip}；${underTip}` : underTip;
-        }
-      }
       return {
         scenario: scenarioLabels[key] || key,
         foods: rec.displayText,
         foodItems: this.toSuggestionFoodItems(rec.foods),
         calories: scenarioCalories,
-        tip: scenarioTip,
+        tip: this.buildSuggestionTip(
+          nextMeal,
+          goalType,
+          budget,
+          scenarioCalories,
+          locale,
+        ),
         totalProtein: rec.totalProtein,
         totalFat: rec.totalFat,
         totalCarbs: rec.totalCarbs,
@@ -477,6 +470,7 @@ export class FoodService {
       goals,
       summary,
       goalType,
+      locale,
     );
 
     const result = {
@@ -486,7 +480,13 @@ export class FoodService {
         foods: mainRec.displayText,
         foodItems: this.toSuggestionFoodItems(mainRec.foods),
         calories: mainRec.totalCalories,
-        tip: mainRec.tip,
+        tip: this.buildSuggestionTip(
+          nextMeal,
+          goalType,
+          budget,
+          mainRec.totalCalories,
+          locale,
+        ),
         totalProtein: mainRec.totalProtein,
         totalFat: mainRec.totalFat,
         totalCarbs: mainRec.totalCarbs,
@@ -543,9 +543,13 @@ export class FoodService {
    * 格式：userId:mealType:日期
    * 同一用户、同一餐次、同一天只缓存一个推荐结果。
    */
-  private buildStickinessCacheKey(userId: string, mealType: string): string {
+  private buildStickinessCacheKey(
+    userId: string,
+    mealType: string,
+    locale: Locale,
+  ): string {
     const dateStr = new Date().toISOString().slice(0, 10);
-    return `${userId}:${mealType}:${dateStr}`;
+    return `${userId}:${mealType}:${locale}:${dateStr}`;
   }
 
   /**
@@ -611,13 +615,18 @@ export class FoodService {
    */
   invalidateMealSuggestionCache(userId: string, mealType?: string): void {
     const dateStr = new Date().toISOString().slice(0, 10);
+    const locales: Locale[] = ['zh-CN', 'en-US', 'ja-JP'];
     if (mealType) {
-      this.stickinessCache.delete(`${userId}:${mealType}:${dateStr}`);
+      for (const locale of locales) {
+        this.stickinessCache.delete(`${userId}:${mealType}:${locale}:${dateStr}`);
+      }
       return;
     }
 
     for (const mt of ['breakfast', 'lunch', 'snack', 'dinner']) {
-      this.stickinessCache.delete(`${userId}:${mt}:${dateStr}`);
+      for (const locale of locales) {
+        this.stickinessCache.delete(`${userId}:${mt}:${locale}:${dateStr}`);
+      }
     }
   }
 
@@ -655,6 +664,7 @@ export class FoodService {
       totalCarbs?: number;
     },
     goalType: string,
+    locale: Locale,
   ): DecisionValueTag[] {
     const tags: DecisionValueTag[] = [];
 
@@ -662,7 +672,7 @@ export class FoodService {
     if (mealCalories <= remainingCalories * 1.05) {
       tags.push({
         type: 'compliance',
-        label: t('response.tag.withinBudget'),
+        label: t('response.tag.withinBudget', {}, locale),
         dimension: 'calories',
         value: mealCalories,
         target: remainingCalories,
@@ -670,7 +680,7 @@ export class FoodService {
     } else {
       tags.push({
         type: 'warning',
-        label: t('response.tag.slightlyOverBudget'),
+        label: t('response.tag.slightlyOverBudget', {}, locale),
         dimension: 'calories',
         value: mealCalories,
         target: remainingCalories,
@@ -684,7 +694,7 @@ export class FoodService {
     if (proteinRatio >= 0.9) {
       tags.push({
         type: 'achievement',
-        label: t('response.tag.proteinAdequate'),
+        label: t('response.tag.proteinAdequate', {}, locale),
         dimension: 'protein',
         value: Math.round(proteinRatio * 100),
         target: 100,
@@ -700,7 +710,7 @@ export class FoodService {
       if (fatRatio > 1.15) {
         tags.push({
           type: 'warning',
-          label: t('response.tag.fatHigh'),
+          label: t('response.tag.fatHigh', {}, locale),
           dimension: 'fat',
           value: Math.round(fatRatio * 100),
           target: 100,
@@ -708,7 +718,7 @@ export class FoodService {
       } else {
         tags.push({
           type: 'compliance',
-          label: t('response.tag.fatNormal'),
+          label: t('response.tag.fatNormal', {}, locale),
           dimension: 'fat',
           value: Math.round(fatRatio * 100),
           target: 100,
@@ -721,7 +731,7 @@ export class FoodService {
       if (carbsRatio > 1.2) {
         tags.push({
           type: 'warning',
-          label: t('response.tag.carbsHigh'),
+          label: t('response.tag.carbsHigh', {}, locale),
           dimension: 'carbs',
           value: Math.round(carbsRatio * 100),
           target: 100,
@@ -729,7 +739,7 @@ export class FoodService {
       } else if (carbsRatio < 0.6) {
         tags.push({
           type: 'warning',
-          label: t('response.tag.carbsLow'),
+          label: t('response.tag.carbsLow', {}, locale),
           dimension: 'carbs',
           value: Math.round(carbsRatio * 100),
           target: 100,
@@ -737,7 +747,7 @@ export class FoodService {
       } else {
         tags.push({
           type: 'compliance',
-          label: t('response.tag.carbsNormal'),
+          label: t('response.tag.carbsNormal', {}, locale),
           dimension: 'carbs',
           value: Math.round(carbsRatio * 100),
           target: 100,
@@ -752,7 +762,7 @@ export class FoodService {
     if (dailyComplianceRate >= 0.7 && dailyComplianceRate <= 1.05) {
       tags.push({
         type: 'bonus',
-        label: t('response.tag.dailyProgressNormal'),
+        label: t('response.tag.dailyProgressNormal', {}, locale),
         dimension: 'daily_compliance',
         value: Math.round(dailyComplianceRate * 100),
         target: 100,
@@ -764,19 +774,57 @@ export class FoodService {
     if (goalType === 'fat_loss' && mealCalories < remainingCalories * 0.8) {
       tags.push({
         type: 'bonus',
-        label: t('response.tag.supportsFatLoss'),
+        label: t('response.tag.supportsFatLoss', {}, locale),
         dimension: 'goal',
       });
     } else if (goalType === 'muscle_gain' && mealProtein >= 25) {
       tags.push({
         type: 'achievement',
-        label: t('response.tag.highProteinForMuscleGain'),
+        label: t('response.tag.highProteinForMuscleGain', {}, locale),
         dimension: 'goal',
         value: mealProtein,
       });
     }
 
     return tags;
+  }
+
+  private getCurrentLocale(): Locale {
+    const locale = this.requestCtx.locale;
+    return locale === 'en-US' || locale === 'ja-JP' || locale === 'zh-CN'
+      ? locale
+      : 'zh-CN';
+  }
+
+  private buildSuggestionTip(
+    mealType: string,
+    goalType: string,
+    target: Pick<MealTarget, 'calories'>,
+    actualCalories: number,
+    locale: Locale,
+  ): string {
+    const tips: string[] = [];
+
+    if (actualCalories > target.calories * 1.1) {
+      tips.push(t('tip.caloriesOver', {}, locale));
+    } else if (actualCalories < target.calories * 0.7) {
+      tips.push(t('tip.caloriesUnder', {}, locale));
+    }
+
+    const goalTipKey = `tip.goal.${goalType}`;
+    tips.push(
+      t(goalTipKey, {}, locale) !== goalTipKey
+        ? t(goalTipKey, {}, locale)
+        : t('tip.goal.health', {}, locale),
+    );
+
+    const mealTipKey = `tip.meal.${mealType}`;
+    const mealTip = t(mealTipKey, {}, locale);
+    if (mealTip !== mealTipKey) {
+      tips.push(mealTip);
+    }
+
+    return tips.filter(Boolean).join('；');
   }
 
   // ─── V6 2.8: 反向解释 API ───

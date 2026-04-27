@@ -92,9 +92,7 @@ export function checkProteinDeficit(
     const actual = Math.round(totals.protein);
     const recommended = Math.round(lowProtein);
     const quantSuffix =
-      cl('check.quantSuffix', locale)
-        .replace('{actual}', String(actual))
-        .replace('{recommended}', String(recommended)) ||
+      cl('check.quantSuffix', locale, { actual, recommended }) ||
       ` (${actual}g / ${recommended}g)`;
     const msgBase = cl('check.lowProtein', locale);
     return {
@@ -140,15 +138,17 @@ export function checkFatExcess(
     return {
       triggered: true,
       severity: projectedFatPct > criticalRatio ? 'critical' : 'warning',
-      reason: cl('check.highFat', locale)
-        .replace('{fat}', String(Math.round(totals.fat)))
-        .replace('{percent}', String(Math.round(projectedFatPct))),
+      reason: cl('check.highFat', locale, {
+        fat: Math.round(totals.fat),
+        percent: Math.round(projectedFatPct),
+      }),
       issue: {
         category: 'fat_excess',
         severity: projectedFatPct > criticalRatio ? 'critical' : 'warning',
-        message: cl('check.highFat', locale)
-          .replace('{fat}', String(Math.round(totals.fat)))
-          .replace('{percent}', String(Math.round(projectedFatPct))),
+        message: cl('check.highFat', locale, {
+          fat: Math.round(totals.fat),
+          percent: Math.round(projectedFatPct),
+        }),
         data: {
           mealFat: Math.round(totals.fat),
           projectedPercent: Math.round(projectedFatPct),

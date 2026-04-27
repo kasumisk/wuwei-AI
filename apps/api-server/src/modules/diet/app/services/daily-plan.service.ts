@@ -793,13 +793,13 @@ export class DailyPlanService {
     // 替换后主动失效推荐粘性缓存，确保下一次 meal-suggestion 返回新结果
     this.foodService.invalidateMealSuggestionCache(userId, targetMeal);
 
-    const mealLabelMap: Record<string, string> = {
-      breakfast: '早餐',
-      lunch: '午餐',
-      dinner: '晚餐',
-      snack: '加餐',
-    };
-    const adjustmentNote = `已为你更换${mealLabelMap[targetMeal] || targetMeal}推荐`;
+    const locale = this.getCurrentLocale();
+    const mealLabel = t(`meal.label.${targetMeal}`, {}, locale);
+    const adjustmentNote = t(
+      'response.replacedMealRecommendation',
+      { meal: mealLabel === `meal.label.${targetMeal}` ? targetMeal : mealLabel },
+      locale,
+    );
 
     return { updatedPlan: updatedPlan as any, adjustmentNote };
   }

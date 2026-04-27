@@ -790,9 +790,10 @@ export class FoodScoringService {
               Math.round(totalTransFat * 20),
           ),
           impact: totalTransFat > 1 ? 'critical' : 'warning',
-          message: cl('health.hyperlipidemiaRisk.message', locale)
-            .replace('{cholesterol}', String(Math.round(totalCholesterol)))
-            .replace('{transFat}', String(Math.round(totalTransFat * 10) / 10)),
+          message: cl('health.hyperlipidemiaRisk.message', locale, {
+            cholesterol: Math.round(totalCholesterol),
+            transFat: Math.round(totalTransFat * 10) / 10,
+          }),
           suggestion: cl('health.hyperlipidemiaRisk.suggestion', locale),
         });
       }

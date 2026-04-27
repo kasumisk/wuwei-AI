@@ -31,6 +31,7 @@ import {
 } from '../config/signal-priority.config';
 import { DynamicSignalWeightService } from '../config/dynamic-signal-weight.service';
 import { cl } from '../i18n/decision-labels';
+import { translateEnumList } from '../../../common/i18n/enum-i18n';
 import type { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 
 // ==================== 摘要输入 ====================
@@ -203,57 +204,62 @@ export class DecisionSummaryService {
     const foodDesc =
       foodNames.length <= 2
         ? foodNames.join(cl('summary.join', locale))
-        : cl('summary.foodCount', locale)
-            .replace('{first}', foodNames[0])
-            .replace('{count}', String(foodNames.length));
+        : cl('summary.foodCount', locale, {
+            first: foodNames[0],
+            count: foodNames.length,
+          });
 
     const calText = `${Math.round(totals.calories)}kcal`;
 
     if (decision.recommendation === 'recommend') {
       if (ctx.budgetStatus === 'near_limit') {
-        return cl('summary.recommend.nearLimit', locale)
-          .replace('{food}', foodDesc)
-          .replace('{cal}', calText);
+        return cl('summary.recommend.nearLimit', locale, {
+          food: foodDesc,
+          cal: calText,
+        });
       }
-      return cl('summary.recommend.ok', locale)
-        .replace('{food}', foodDesc)
-        .replace('{cal}', calText);
+      return cl('summary.recommend.ok', locale, {
+        food: foodDesc,
+        cal: calText,
+      });
     }
 
     if (decision.recommendation === 'avoid') {
       if (ctx.budgetStatus === 'over_limit') {
-        return cl('summary.avoid.overLimit', locale)
-          .replace('{food}', foodDesc)
-          .replace('{cal}', calText);
+        return cl('summary.avoid.overLimit', locale, {
+          food: foodDesc,
+          cal: calText,
+        });
       }
-      return cl('summary.avoid.generic', locale)
-        .replace('{food}', foodDesc)
-        .replace('{cal}', calText);
+      return cl('summary.avoid.generic', locale, {
+        food: foodDesc,
+        cal: calText,
+      });
     }
 
     // caution — 给出具体原因
     if (decision.optimalPortion) {
-      return cl('summary.caution.portion', locale)
-        .replace('{food}', foodDesc)
-        .replace('{cal}', calText)
-        .replace(
-          '{percent}',
-          String(decision.optimalPortion.recommendedPercent),
-        );
+      return cl('summary.caution.portion', locale, {
+        food: foodDesc,
+        cal: calText,
+        percent: decision.optimalPortion.recommendedPercent,
+      });
     }
 
     const remaining = ctx.remainingCalories;
     if (totals.calories > remaining && remaining > 0) {
-      return cl('summary.caution.overBudget', locale)
-        .replace('{food}', foodDesc)
-        .replace('{cal}', calText)
-        .replace('{amount}', String(Math.round(totals.calories - remaining)));
+      return cl('summary.caution.overBudget', locale, {
+        food: foodDesc,
+        cal: calText,
+        amount: Math.round(totals.calories - remaining),
+      });
     }
 
-    return cl('summary.caution.reason', locale)
-      .replace('{food}', foodDesc)
-      .replace('{cal}', calText)
-      .replace('{reason}', decision.reason);
+    return cl('summary.caution.reason', locale, {
+      food: foodDesc,
+      cal: calText,
+      reason: decision.reason,
+    });
   }
 
   /**
@@ -289,10 +295,11 @@ export class DecisionSummaryService {
       .sort((a, b) => b.score - a.score)
       .slice(0, maxCount)
       .map((e) =>
-        cl('summary.strength', locale)
-          .replace('{label}', e.label)
-          .replace('{score}', String(e.score))
-          .replace('{message}', e.message),
+        cl('summary.strength', locale, {
+          label: e.label,
+          score: e.score,
+          message: e.message,
+        }),
       );
   }
 
@@ -397,14 +404,14 @@ export class DecisionSummaryService {
               ? cl('summary.status.low', locale)
               : cl('summary.status.ok', locale);
 
-      return cl('summary.quantitative', locale)
-        .replace('{name}', mostDeviated.name)
-        .replace('{consumed}', String(mostDeviated.consumed))
-        .replace('{unit}', mostDeviated.unit)
-        .replace('{target}', String(mostDeviated.target))
-        .replace('{unit}', mostDeviated.unit)
-        .replace('{percent}', String(mostDeviated.percent))
-        .replace('{status}', status);
+      return cl('summary.quantitative', locale, {
+        name: mostDeviated.name,
+        consumed: mostDeviated.consumed,
+        unit: mostDeviated.unit,
+        target: mostDeviated.target,
+        percent: mostDeviated.percent,
+        status,
+      });
     }
 
     // fallback: 用 totals + ctx 计算热量进度
@@ -414,13 +421,11 @@ export class DecisionSummaryService {
             ((ctx.todayCalories + totals.calories) / ctx.goalCalories) * 100,
           )
         : 0;
-    return cl('summary.quantitativeFallback', locale)
-      .replace(
-        '{consumed}',
-        String(Math.round(ctx.todayCalories + totals.calories)),
-      )
-      .replace('{target}', String(ctx.goalCalories))
-      .replace('{percent}', String(calPercent));
+    return cl('summary.quantitativeFallback', locale, {
+      consumed: Math.round(ctx.todayCalories + totals.calories),
+      target: ctx.goalCalories,
+      percent: calPercent,
+    });
   }
 
   /**
@@ -437,31 +442,29 @@ export class DecisionSummaryService {
     if (top.comparison) {
       if (top.comparison.caloriesDiff < 0) {
         parts.push(
-          cl('summary.altCalLess', locale).replace(
-            '{amount}',
-            String(Math.abs(top.comparison.caloriesDiff)),
-          ),
+          cl('summary.altCalLess', locale, {
+            amount: Math.abs(top.comparison.caloriesDiff),
+          }),
         );
       }
       if (top.comparison.proteinDiff > 0) {
         parts.push(
-          cl('summary.altProteinMore', locale).replace(
-            '{amount}',
-            String(top.comparison.proteinDiff),
-          ),
+          cl('summary.altProteinMore', locale, {
+            amount: top.comparison.proteinDiff,
+          }),
         );
       }
     }
 
     if (alternatives.length > 1) {
-      return cl('summary.altSummary.multi', locale)
-        .replace('{desc}', parts.join(', '))
-        .replace('{count}', String(alternatives.length - 1));
+      return cl('summary.altSummary.multi', locale, {
+        desc: parts.join(', '),
+        count: alternatives.length - 1,
+      });
     }
-    return cl('summary.altSummary.single', locale).replace(
-      '{desc}',
-      parts.join(', '),
-    );
+    return cl('summary.altSummary.single', locale, {
+      desc: parts.join(', '),
+    });
   }
 
   private extractContextSignals(
@@ -620,13 +623,13 @@ export class DecisionSummaryService {
     if (healthIssueImplications.length > 0) {
       return cl('summary.healthNote.issues', locale).replace(
         '{details}',
-        healthIssueImplications.join('；'),
+        healthIssueImplications.join(cl('separator.list', locale)),
       );
     }
 
     return cl('summary.healthNote.generic', locale).replace(
       '{constraints}',
-      constraints.slice(0, 3).join('、'),
+      constraints.slice(0, 3).join(cl('separator.enumeration', locale)),
     );
   }
   // ==================== V3.3: StructuredDecision 增强 ====================
@@ -724,46 +727,45 @@ export class DecisionSummaryService {
     };
 
     const SIGNAL_DESC_MAP: Record<string, string> = {
-      health_constraint: cl('summary.signal.healthConstraint', locale).replace(
-        '{details}',
-        [
-          ...(ctx.allergens || []),
-          ...(ctx.dietaryRestrictions || []),
-          ...(ctx.healthConditions || []),
+      health_constraint: cl('summary.signal.healthConstraint', locale, {
+        details: [
+          ...translateEnumList('allergen', ctx.allergens, locale),
+          ...translateEnumList(
+            'dietaryRestriction',
+            ctx.dietaryRestrictions,
+            locale,
+          ),
+          ...translateEnumList('healthCondition', ctx.healthConditions, locale),
         ]
           .slice(0, 2)
           .join('/'),
-      ),
-      over_limit: cl('summary.signal.overLimit', locale)
-        .replace('{consumed}', String(Math.round(ctx.todayCalories)))
-        .replace('{goal}', String(ctx.goalCalories)),
-      near_limit: cl('summary.signal.nearLimit', locale).replace(
-        '{remaining}',
-        String(Math.round(ctx.remainingCalories)),
-      ),
-      under_target: cl('summary.signal.underTarget', locale).replace(
-        '{remaining}',
-        String(Math.round(ctx.remainingCalories)),
-      ),
-      protein_gap: cl('summary.signal.proteinGap', locale)
-        .replace('{remaining}', String(Math.round(ctx.remainingProtein)))
-        .replace('{goal}', String(ctx.goalProtein)),
-      fat_excess: cl('summary.signal.fatExcess', locale).replace(
-        '{amount}',
-        String(Math.abs(Math.round(ctx.remainingFat))),
-      ),
-      carb_excess: cl('summary.signal.carbExcess', locale).replace(
-        '{amount}',
-        String(Math.abs(Math.round(ctx.remainingCarbs))),
-      ),
-      late_night_window: cl('summary.signal.lateNight', locale).replace(
-        '{hour}',
-        String(ctx.localHour),
-      ),
-      meal_count_low: cl('summary.signal.mealCountLow', locale).replace(
-        '{count}',
-        String(ctx.mealCount),
-      ),
+      }),
+      over_limit: cl('summary.signal.overLimit', locale, {
+        consumed: Math.round(ctx.todayCalories),
+        goal: ctx.goalCalories,
+      }),
+      near_limit: cl('summary.signal.nearLimit', locale, {
+        remaining: Math.round(ctx.remainingCalories),
+      }),
+      under_target: cl('summary.signal.underTarget', locale, {
+        remaining: Math.round(ctx.remainingCalories),
+      }),
+      protein_gap: cl('summary.signal.proteinGap', locale, {
+        remaining: Math.round(ctx.remainingProtein),
+        goal: ctx.goalProtein,
+      }),
+      fat_excess: cl('summary.signal.fatExcess', locale, {
+        amount: Math.abs(Math.round(ctx.remainingFat)),
+      }),
+      carb_excess: cl('summary.signal.carbExcess', locale, {
+        amount: Math.abs(Math.round(ctx.remainingCarbs)),
+      }),
+      late_night_window: cl('summary.signal.lateNight', locale, {
+        hour: ctx.localHour,
+      }),
+      meal_count_low: cl('summary.signal.mealCountLow', locale, {
+        count: ctx.mealCount,
+      }),
       fresh_day: cl('summary.signal.freshDay', locale),
     };
 

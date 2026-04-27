@@ -73,6 +73,48 @@ export interface SanityResult {
 const TOLERANCE = 0.15;
 
 /**
+ * 每 100g 热量物理上限（kcal/100g）
+ *
+ * 来源：纯脂肪 ~900；坚果/油炸 ~600；常规熟食 < 400。
+ * 用于检测异常值（任何来源的 calories per-100g 不应超过此上限）。
+ * 注意：此处校验的是 per-100g 基准；如需按一份估算需先归一化。
+ */
+const CALORIES_PER_100G_CAP: Record<string, number> = {
+  fat: 950,
+  nut: 700,
+  snack: 600,
+  condiment: 600,
+  dairy: 500,
+  meat: 450,
+  egg: 400,
+  seafood: 400,
+  grain: 420,
+  legume: 400,
+  vegetable: 200,
+  fruit: 350,
+  beverage: 250,
+  other: 400,
+};
+const CALORIES_PER_100G_DEFAULT_CAP = 400;
+
+/**
+ * 校验 per-100g 营养数据的物理合理性（独立于宏量自洽校验）
+ *
+ * @param caloriesPer100g per-100g 热量
+ * @param category 食物类别
+ * @returns 是否在物理合理范围内
+ */
+export function isPlausiblePer100gCalories(
+  caloriesPer100g: number,
+  category?: string,
+): boolean {
+  if (!caloriesPer100g || caloriesPer100g <= 0) return true;
+  const cap =
+    CALORIES_PER_100G_CAP[category || ''] ?? CALORIES_PER_100G_DEFAULT_CAP;
+  return caloriesPer100g <= cap;
+}
+
+/**
  * 校验并纠偏单个食物项的营养数据
  *
  * @param input 食物营养数据（来自 AI/LLM 估算）

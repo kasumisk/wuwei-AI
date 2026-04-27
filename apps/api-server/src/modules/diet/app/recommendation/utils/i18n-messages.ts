@@ -29,8 +29,8 @@ import { ClsServiceManager } from 'nestjs-cls';
 
 export type Locale = 'zh-CN' | 'en-US' | 'ja-JP';
 
-/** 默认回退语言 */
-const FALLBACK_LOCALE: Locale = 'zh-CN';
+/** 默认回退语言 — 与 core/i18n/i18n.types.ts 的 I18N_DEFAULT_LOCALE 对齐 */
+const FALLBACK_LOCALE: Locale = 'en-US';
 
 /** JSON key 前缀（与 dump-recommendation-i18n.ts 保持一致） */
 const KEY_PREFIX = 'recommendation.';

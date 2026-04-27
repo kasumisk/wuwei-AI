@@ -15,6 +15,7 @@ import { AppUsers as AppUser } from '@prisma/client';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { SmsService } from './sms.service';
 import { WechatAuthService } from './wechat-auth.service';
+import { FirebaseAdminService } from './firebase-admin.service';
 import { I18nService } from '../../../core/i18n';
 import type { AppLoginResponseDto, AppUserResponseDto } from './dto/auth.dto';
 
@@ -31,6 +32,7 @@ export class AppAuthService {
     private readonly jwtService: JwtService,
     private readonly smsService: SmsService,
     private readonly wechatAuthService: WechatAuthService,
+    private readonly firebaseAdminService: FirebaseAdminService,
     private readonly i18n: I18nService,
   ) {}
 
@@ -60,6 +62,134 @@ export class AppAuthService {
       where: { id: user.id },
       data: { lastLoginAt: new Date() },
     });
+
+    const token = this.generateToken(user as any);
+    return {
+      token,
+      user: this.toUserResponse(user as any),
+      isNewUser,
+    };
+  }
+
+  // ==================== Firebase 登录 ====================
+
+  async firebaseLogin(firebaseToken: string): Promise<AppLoginResponseDto> {
+    const decodedToken =
+      await this.firebaseAdminService.verifyIdToken(firebaseToken);
+
+    if (decodedToken) {
+      return this.loginWithVerifiedIdentity({
+        uid: decodedToken.uid,
+        signInProvider:
+          decodedToken.firebase?.sign_in_provider ??
+          decodedToken.sign_in_provider,
+        email: decodedToken.email?.toLowerCase(),
+        emailVerified: decodedToken.email_verified,
+        displayName: decodedToken.name,
+        avatar: decodedToken.picture,
+      });
+    }
+
+    this.logger.warn(
+      `Firebase verifyIdToken 失败，尝试按 Google token 回退验证（projectId=${this.firebaseAdminService.getCurrentProjectId() ?? 'unknown'}）`,
+    );
+
+    try {
+      const googleUserInfo = await this.verifyGoogleToken(firebaseToken);
+      return this.loginWithVerifiedIdentity({
+        uid: googleUserInfo.sub,
+        signInProvider: 'google.com',
+        email: googleUserInfo.email?.toLowerCase(),
+        emailVerified: googleUserInfo.emailVerified,
+        displayName: googleUserInfo.name,
+        avatar: googleUserInfo.picture,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Firebase/Google 双重验证均失败: ${error instanceof Error ? error.message : error}`,
+      );
+      throw new UnauthorizedException(this.i18n.t('auth.googleTokenInvalid'));
+    }
+  }
+
+  private async loginWithVerifiedIdentity(params: {
+    uid: string;
+    signInProvider?: string;
+    email?: string;
+    emailVerified?: boolean;
+    displayName?: string;
+    avatar?: string;
+  }): Promise<AppLoginResponseDto> {
+    const { uid, signInProvider, email, emailVerified, displayName, avatar } =
+      params;
+
+    let user = await this.findUserByFirebaseIdentity({
+      uid,
+      signInProvider,
+      email,
+    });
+
+    let isNewUser = false;
+
+    if (!user) {
+      user = await this.findUserByEmail(email);
+      if (user) {
+        user = await this.prisma.appUsers.update({
+          where: { id: user.id },
+          data: this.buildFirebaseIdentityUpdate({
+            currentUser: user,
+            uid,
+            signInProvider,
+            emailVerified,
+            displayName,
+            avatar,
+          }),
+        });
+        this.logger.log(`Firebase 账号绑定到已有邮箱用户: ${user.id}`);
+      }
+    }
+
+    if (!user) {
+      user = await this.prisma.appUsers.create({
+        data: {
+          authType: this.resolveFirebaseAuthType(signInProvider),
+          email,
+          nickname:
+            displayName || `用户${crypto.randomBytes(3).toString('hex')}`,
+          avatar,
+          emailVerified: !!emailVerified,
+          googleId: this.isGoogleProvider(signInProvider) ? uid : undefined,
+          appleId: this.isAppleProvider(signInProvider) ? uid : undefined,
+          status: AppUserStatus.ACTIVE,
+          lastLoginAt: new Date(),
+          metadata: {
+            firebase: {
+              uid,
+              provider: signInProvider,
+            },
+          },
+        },
+      });
+      isNewUser = true;
+      this.logger.log(
+        `Firebase 用户创建成功: ${user.id}, provider: ${signInProvider}`,
+      );
+    } else {
+      user = await this.prisma.appUsers.update({
+        where: { id: user.id },
+        data: {
+          ...this.buildFirebaseIdentityUpdate({
+            currentUser: user,
+            uid,
+            signInProvider,
+            emailVerified,
+            displayName,
+            avatar,
+          }),
+          lastLoginAt: new Date(),
+        },
+      });
+    }
 
     const token = this.generateToken(user as any);
     return {
@@ -607,6 +737,95 @@ export class AppAuthService {
     };
 
     return this.jwtService.sign(payload);
+  }
+
+  private async findUserByFirebaseIdentity(params: {
+    uid: string;
+    signInProvider?: string;
+    email?: string;
+  }) {
+    const { uid, signInProvider, email } = params;
+
+    if (this.isGoogleProvider(signInProvider)) {
+      const user = await this.prisma.appUsers.findFirst({
+        where: { googleId: uid },
+      });
+      if (user) return user;
+    }
+
+    if (this.isAppleProvider(signInProvider)) {
+      const user = await this.prisma.appUsers.findFirst({
+        where: { appleId: uid },
+      });
+      if (user) return user;
+    }
+
+    return this.findUserByEmail(email);
+  }
+
+  private async findUserByEmail(email?: string) {
+    if (!email) return null;
+    return this.prisma.appUsers.findFirst({ where: { email } });
+  }
+
+  private buildFirebaseIdentityUpdate(params: {
+    currentUser: any;
+    uid: string;
+    signInProvider?: string;
+    emailVerified?: boolean;
+    displayName?: string;
+    avatar?: string;
+  }) {
+    const {
+      currentUser,
+      uid,
+      signInProvider,
+      emailVerified,
+      displayName,
+      avatar,
+    } = params;
+
+    return {
+      authType: this.resolveFirebaseAuthType(signInProvider),
+      googleId:
+        this.isGoogleProvider(signInProvider) && currentUser.googleId !== uid
+          ? uid
+          : undefined,
+      appleId:
+        this.isAppleProvider(signInProvider) && currentUser.appleId !== uid
+          ? uid
+          : undefined,
+      emailVerified: emailVerified ?? currentUser.emailVerified,
+      nickname: currentUser.nickname || displayName || undefined,
+      avatar: currentUser.avatar || avatar || undefined,
+      metadata: {
+        ...(currentUser.metadata && typeof currentUser.metadata === 'object'
+          ? currentUser.metadata
+          : {}),
+        firebase: {
+          uid,
+          provider: signInProvider,
+        },
+      },
+    };
+  }
+
+  private resolveFirebaseAuthType(signInProvider?: string): AppUserAuthType {
+    if (this.isAppleProvider(signInProvider)) return AppUserAuthType.APPLE;
+    if (this.isEmailProvider(signInProvider)) return AppUserAuthType.EMAIL;
+    return AppUserAuthType.GOOGLE;
+  }
+
+  private isGoogleProvider(signInProvider?: string): boolean {
+    return signInProvider == 'google.com';
+  }
+
+  private isAppleProvider(signInProvider?: string): boolean {
+    return signInProvider == 'apple.com';
+  }
+
+  private isEmailProvider(signInProvider?: string): boolean {
+    return signInProvider == 'password' || signInProvider == 'emailLink';
   }
 
   private getProxyAgent(): HttpsProxyAgent<string> | undefined {

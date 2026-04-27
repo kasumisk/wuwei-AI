@@ -537,15 +537,17 @@ export function checkHealthConditionRisk(
       results.push({
         triggered: true,
         severity: 'warning',
-        reason: cl('check.diabetesHighGL', locale)
-          .replace('{food}', highGlFood.name)
-          .replace('{gl}', String(Math.round(highGlFood.glycemicLoad!))),
+        reason: cl('check.diabetesHighGL', locale, {
+          food: highGlFood.name,
+          gl: Math.round(highGlFood.glycemicLoad!),
+        }),
         issue: {
           category: 'health_risk',
           severity: 'warning',
-          message: cl('check.diabetesHighGL', locale)
-            .replace('{food}', highGlFood.name)
-            .replace('{gl}', String(Math.round(highGlFood.glycemicLoad!))),
+          message: cl('check.diabetesHighGL', locale, {
+            food: highGlFood.name,
+            gl: Math.round(highGlFood.glycemicLoad!),
+          }),
           data: {
             food: highGlFood.name,
             glycemicLoad: Math.round(highGlFood.glycemicLoad!),

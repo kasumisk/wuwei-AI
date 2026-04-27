@@ -29,6 +29,7 @@ import {
 import { NutritionScoreBreakdown } from '../../diet/app/services/nutrition-score.service';
 import { BehaviorService } from '../../diet/app/services/behavior.service';
 import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
+import { cl } from '../i18n/decision-labels';
 import { AlternativeSuggestionService } from './alternative-suggestion.service';
 import { DecisionExplainerService } from './decision-explainer.service';
 import {
@@ -196,6 +197,7 @@ export class FoodDecisionService {
       ctx,
       nutritionScore,
       locale,
+      breakdown,
     );
 
     // 1.5 V1.9: 动态上下文修正（累积饱和/多日趋势/暴食风险）
@@ -242,7 +244,7 @@ export class FoodDecisionService {
     if (modification.additionalReasons.length > 0) {
       decision.reason = [decision.reason, ...modification.additionalReasons]
         .filter(Boolean)
-        .join('；');
+        .join(cl('separator.list', locale));
     }
 
     // 2. 结构化决策因子（委托 DecisionEngineService）

@@ -14,6 +14,7 @@ import { DecisionOutput } from '../decision/food-decision.service';
 import { DailyMacroSummaryService } from '../coach/daily-macro-summary.service';
 import { cl } from '../i18n/decision-labels';
 import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
+import { translateEnum } from '../../../common/i18n/enum-i18n';
 
 @Injectable()
 export class EvidencePackBuilderService {
@@ -122,7 +123,11 @@ export class EvidencePackBuilderService {
         ? [
             cl('evidence.analysisQuality', locale).replace(
               '{band}',
-              confidenceDiagnostics.analysisQualityBand,
+              translateEnum(
+                'analysisQuality',
+                confidenceDiagnostics.analysisQualityBand,
+                locale,
+              ),
             ),
           ]
         : []),
@@ -142,7 +147,11 @@ export class EvidencePackBuilderService {
         ? [
             cl('evidence.reviewLevel', locale).replace(
               '{level}',
-              confidenceDiagnostics.reviewLevel,
+              translateEnum(
+                'reviewLevel',
+                confidenceDiagnostics.reviewLevel,
+                locale,
+              ),
             ),
           ]
         : []),

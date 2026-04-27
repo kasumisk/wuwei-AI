@@ -31,7 +31,7 @@ import {
 
 // ==================== Public API ====================
 
-const FALLBACK_LOCALE: Locale = 'zh-CN';
+const FALLBACK_LOCALE: Locale = 'en-US';
 
 function resolvePromptLocale(locale?: Locale): Locale {
   const resolvedLocale = locale ?? FALLBACK_LOCALE;
@@ -50,7 +50,8 @@ export function getUserMessage(
 ): string {
   const key =
     mode === 'text' ? 'prompt.userMessage.text' : 'prompt.userMessage.image';
-  return cl(key, locale).replace('{input}', input).replace('{hint}', input);
+  // Templates use {{input}} (text mode) and {{hint}} (image mode); pass both.
+  return cl(key, locale, { input, hint: input });
 }
 
 /**
@@ -102,9 +103,7 @@ export function buildUserContextPrompt(params: {
   // Goal
   const goalLabel =
     GOAL_LABELS[params.goalType]?.[loc] || GOAL_LABELS.health[loc];
-  lines.push(
-    `- ${loc === 'en-US' ? 'Goal' : loc === 'ja-JP' ? '目標' : '目标'}：${goalLabel}`,
-  );
+  lines.push(`- ${cl('prompt.contextLabel.goal', loc, { label: goalLabel })}`);
 
   // Budget status
   if (params.budgetStatus === 'over_limit') {
@@ -112,8 +111,10 @@ export function buildUserContextPrompt(params: {
   } else if (params.budgetStatus === 'near_limit') {
     lines.push(`- ${cl('prompt.nearLimit', loc)}`);
   } else if (params.remainingCalories && params.remainingCalories > 0) {
+    // Use cl() directly so the {{remaining}} placeholder is interpolated correctly
+    // (BUDGET_STATUS_LABELS only stores the raw template string).
     lines.push(
-      `- ${BUDGET_STATUS_LABELS.has_remaining[loc].replace('{remaining}', String(params.remainingCalories))}`,
+      `- ${cl('budget.has_remaining', loc, { remaining: params.remainingCalories })}`,
     );
   }
 

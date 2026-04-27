@@ -1,6 +1,8 @@
 export { I18nModule } from './i18n.module';
 export { I18nService } from './i18n.service';
 export { I18nMiddleware } from './i18n.middleware';
+export { LanguageContextService } from './language-context.service';
+export { PromptBuilderService } from './prompt-builder.service';
 export { I18n, I18nContext, I18N_REQUEST_KEY } from './i18n.decorator';
 export {
   I18nLocale,

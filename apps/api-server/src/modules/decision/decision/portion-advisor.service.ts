@@ -166,16 +166,14 @@ export class PortionAdvisorService {
   ): string {
     const lowBudget = thresholds?.nextMealLowBudget ?? 100;
     if (remainingCalories <= lowBudget) {
-      return cl('nextMeal.budgetLow', locale).replace(
-        '{calories}',
-        String(remainingCalories),
-      );
+      return cl('nextMeal.budgetLow', locale, { calories: remainingCalories });
     }
 
-    let suggestion = cl('nextMeal.suggestion', locale)
-      .replace('{calories}', String(remainingCalories))
-      .replace('{protein}', String(Math.round(remainingProtein)))
-      .replace('{emphasis}', emphasis);
+    let suggestion = cl('nextMeal.suggestion', locale, {
+      calories: remainingCalories,
+      protein: Math.round(remainingProtein),
+      emphasis,
+    });
 
     if (foodPreferences) {
       const candidates = [
@@ -190,10 +188,9 @@ export class PortionAdvisorService {
       );
       const unique = [...new Set(filtered)].slice(0, 3);
       if (unique.length > 0) {
-        suggestion += cl('nextMeal.foodRecommendation', locale).replace(
-          '{foods}',
-          unique.join('、'),
-        );
+        suggestion += cl('nextMeal.foodRecommendation', locale, {
+          foods: unique.join(cl('separator.enumeration', locale)),
+        });
       }
     }
 

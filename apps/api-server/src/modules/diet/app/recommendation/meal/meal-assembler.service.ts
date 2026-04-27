@@ -8,7 +8,7 @@ import {
 } from '../types/recommendation.types';
 import { ScoredRecipe } from '../../../../recipe/recipe.types';
 import { AssemblyPolicyConfig } from '../../../../strategy/strategy.types';
-import { t } from '../utils/i18n-messages';
+import { t, type Locale } from '../utils/i18n-messages';
 import { ExplanationGeneratorService } from '../explanation/explanation-generator.service';
 import { PreferenceProfileService } from '../profile/preference-profile.service';
 import { ScoringConfigService } from '../context/scoring-config.service';
@@ -716,22 +716,25 @@ export class MealAssemblerService {
     goalType: string,
     target: MealTarget,
     actualCal: number,
+    locale?: Locale,
   ): string {
     const tips: string[] = [];
 
     if (actualCal > target.calories * 1.1) {
-      tips.push(t('tip.caloriesOver'));
+      tips.push(t('tip.caloriesOver', {}, locale));
     } else if (actualCal < target.calories * 0.7) {
-      tips.push(t('tip.caloriesUnder'));
+      tips.push(t('tip.caloriesUnder', {}, locale));
     }
 
     const goalTipKey = `tip.goal.${goalType}`;
     tips.push(
-      t(goalTipKey) !== goalTipKey ? t(goalTipKey) : t('tip.goal.health'),
+      t(goalTipKey, {}, locale) !== goalTipKey
+        ? t(goalTipKey, {}, locale)
+        : t('tip.goal.health', {}, locale),
     );
 
     const mealTipKey = `tip.meal.${mealType}`;
-    const mealTip = t(mealTipKey);
+    const mealTip = t(mealTipKey, {}, locale);
     if (mealTip !== mealTipKey) tips.push(mealTip);
 
     return tips.filter(Boolean).join('；');

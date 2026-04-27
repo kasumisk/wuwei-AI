@@ -657,6 +657,7 @@
   "recommendation.response.tag.supportsFatLoss": "減量目標に適しています",
   "recommendation.response.tag.highProteinForMuscleGain": "高たんぱくで筋力アップに適した食事です",
   "recommendation.response.planAdjusted": "プランを調整しました",
+  "recommendation.response.replacedMealRecommendation": "{{meal}}のおすすめに切り替えました",
   "recommendation.response.planRegenerated": "プランを再生成しました",
   "recommendation.response.success": "成功",
   "recommendation.response.updated": "更新成功",

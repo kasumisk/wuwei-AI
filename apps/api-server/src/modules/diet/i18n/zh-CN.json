@@ -657,6 +657,7 @@
   "recommendation.response.tag.supportsFatLoss": "有利于减脂目标",
   "recommendation.response.tag.highProteinForMuscleGain": "高蛋白餐，助力增肌",
   "recommendation.response.planAdjusted": "计划已调整",
+  "recommendation.response.replacedMealRecommendation": "已为你更换{{meal}}推荐",
   "recommendation.response.planRegenerated": "计划已重新生成",
   "recommendation.response.success": "操作成功",
   "recommendation.response.updated": "更新成功",

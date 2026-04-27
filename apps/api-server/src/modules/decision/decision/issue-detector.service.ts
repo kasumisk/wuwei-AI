@@ -81,12 +81,10 @@ export class IssueDetectorService {
       issues.push({
         category: 'low_quality',
         severity: 'warning',
-        message: cl('factor.critical', locale)
-          .replace(
-            '{dimension}',
-            getDimensionLabel('foodQuality', locale),
-          )
-          .replace('{score}', String(Math.round(breakdown.foodQuality))),
+        message: cl('factor.critical', locale, {
+          dimension: getDimensionLabel('foodQuality', locale),
+          score: Math.round(breakdown.foodQuality),
+        }),
         data: { qualityScore: Math.round(breakdown.foodQuality) },
       });
     }

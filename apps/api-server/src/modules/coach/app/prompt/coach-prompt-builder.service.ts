@@ -467,10 +467,11 @@ ${replyLang}，每条消息不超过 150 字，不要使用 Markdown 格式。`;
     // V1.3: 下一餐建议
     if (analysisContext.nextMealAdvice) {
       const nma = analysisContext.nextMealAdvice;
-      const nmaText = cl('nextMealTemplate', locale)
-        .replace('{{emphasis}}', nma.emphasis)
-        .replace('{{cal}}', String(nma.targetCalories))
-        .replace('{{protein}}', String(nma.targetProtein));
+      const nmaText = cl('nextMealTemplate', locale, {
+        emphasis: nma.emphasis,
+        cal: nma.targetCalories,
+        protein: nma.targetProtein,
+      });
       ctx += `\n- ${cl('nextMealAdvice', locale)}: ${nmaText}`;
     }
 

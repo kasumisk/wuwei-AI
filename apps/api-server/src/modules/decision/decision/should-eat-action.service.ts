@@ -166,18 +166,18 @@ export class ShouldEatActionService {
 
     if (input.portionAction) {
       actions.push(
-        cl('action.portionControl', input.locale)
-          .replace('{percent}', String(input.portionAction.suggestedPercent))
-          .replace('{cal}', String(input.portionAction.suggestedCalories)),
+        cl('action.portionControl', input.locale, {
+          percent: input.portionAction.suggestedPercent,
+          cal: input.portionAction.suggestedCalories,
+        }),
       );
     }
 
     if (input.replacementAction?.candidates?.[0]) {
       actions.push(
-        cl('action.switchTo', input.locale).replace(
-          '{name}',
-          input.replacementAction.candidates[0].name,
-        ),
+        cl('action.switchTo', input.locale, {
+          name: input.replacementAction.candidates[0].name,
+        }),
       );
     }
 

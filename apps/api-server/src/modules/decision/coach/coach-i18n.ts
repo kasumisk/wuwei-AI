@@ -176,22 +176,17 @@ const COACH_LOCALE_BCP47: Record<CoachLocale, string> = {
 /**
  * Coach i18n helper — thin wrapper over cl().
  * Prefixes key with `coach.`, maps CoachLocale → BCP-47, then delegates to cl().
+ *
+ * 占位符: 委托给 cl() 处理 {{var}} 与历史 {var} 双语法插值，
+ * 不再在这里手工 .replace('{x}', v) 单花括号 — 那种写法匹配不到 JSON 里的 {{x}}。
  */
 export function ci(
   key: keyof CoachI18nStrings,
   locale: CoachLocale = 'zh',
   vars?: Record<string, string | number>,
 ): string {
-  const bcp47 = COACH_LOCALE_BCP47[locale] ?? 'zh-CN';
-  let text = cl(`coach.${key}`, bcp47 as any);
-
-  if (vars) {
-    for (const [k, v] of Object.entries(vars)) {
-      text = text.replace(`{${k}}`, String(v));
-    }
-  }
-
-  return text;
+  const bcp47 = COACH_LOCALE_BCP47[locale] ?? 'en-US';
+  return cl(`coach.${key}`, bcp47 as any, vars);
 }
 
 /**

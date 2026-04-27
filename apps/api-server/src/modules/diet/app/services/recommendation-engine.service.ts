@@ -706,6 +706,7 @@ export class RecommendationEngineService implements OnModuleInit {
           goalType,
           target,
           finalizedRecipePicks.reduce((s, p) => s + p.servingCalories, 0),
+          this.resolveLocale(),
         );
         const result = this.mealAssembler.aggregateMealResult(
           finalizedRecipePicks,

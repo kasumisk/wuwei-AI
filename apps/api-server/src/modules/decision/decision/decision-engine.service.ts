@@ -46,6 +46,7 @@ export class DecisionEngineService {
     ctx: UnifiedUserContext,
     nutritionScore: number,
     locale?: Locale,
+    breakdown?: NutritionScoreBreakdown,
   ): FoodDecision {
     const th = this.dynamicThresholds.compute(ctx);
 
@@ -62,6 +63,26 @@ export class DecisionEngineService {
       ctx.goalProgress,
     );
     const contextReasons: string[] = [];
+
+    // V4.6: 小份健康零食/零热量饮品豁免
+    // 场景：低热量、高食物质量但低蛋白的天然食物（苹果/胡萝卜/白开水等）
+    // 原始评分会因 proteinRatio/macroBalance 偏低落到 caution，但语义上不应建议"减少份量"。
+    // 条件：snack 餐次 + kcal<200 + foodQuality≥60 + 在预算内 + 评分为 caution。
+    const isLightHealthySnack =
+      breakdown !== undefined &&
+      ctx.mealType === 'snack' &&
+      totalCalories < 200 &&
+      breakdown.foodQuality >= 60 &&
+      remainingAfter >= 0 &&
+      scoreDecision.recommendation === 'caution';
+    if (isLightHealthySnack) {
+      scoreDecision = {
+        recommendation: 'recommend',
+        shouldEat: true,
+        reason: cl('score.lightSnackOk', locale),
+        riskLevel: 'low',
+      };
+    }
 
     // 时间感知决策调整（V2.2: 动态时间边界 + 动态热量阈值）
     const hour = ctx.localHour ?? 12;
@@ -150,9 +171,10 @@ export class DecisionEngineService {
       (ctx.goalType === 'fat_loss' || ctx.goalType === 'health')
     ) {
       contextReasons.push(
-        cl('context.highFat', locale)
-          .replace('{fat}', String(Math.round(totalFat)))
-          .replace('{percent}', String(Math.round(projectedFatPct))),
+        cl('context.highFat', locale, {
+          fat: Math.round(totalFat),
+          percent: Math.round(projectedFatPct),
+        }),
       );
     }
 
@@ -166,10 +188,9 @@ export class DecisionEngineService {
       ctx.goalType === 'fat_loss'
     ) {
       contextReasons.push(
-        cl('context.highCarbs', locale).replace(
-          '{percent}',
-          String(Math.round(projectedCarbsPct)),
-        ),
+        cl('context.highCarbs', locale, {
+          percent: Math.round(projectedCarbsPct),
+        }),
       );
     }
 
@@ -223,7 +244,7 @@ export class DecisionEngineService {
 
     const reason =
       contextReasons.length > 0
-        ? contextReasons.join('；')
+        ? contextReasons.join(cl('separator.list', locale))
         : scoreDecision.reason;
 
     const advice = this.explainer.generateDecisionAdvice(
@@ -331,27 +352,30 @@ export class DecisionEngineService {
           dimension: dim,
           score: roundedScore,
           impact: 'critical',
-          message: cl('factor.critical', locale)
-            .replace('{dimension}', dimensionLabel)
-            .replace('{score}', String(roundedScore)),
+          message: cl('factor.critical', locale, {
+            dimension: dimensionLabel,
+            score: roundedScore,
+          }),
         });
       } else if (roundedScore < 50) {
         factors.push({
           dimension: dim,
           score: roundedScore,
           impact: 'warning',
-          message: cl('factor.warning', locale)
-            .replace('{dimension}', dimensionLabel)
-            .replace('{score}', String(roundedScore)),
+          message: cl('factor.warning', locale, {
+            dimension: dimensionLabel,
+            score: roundedScore,
+          }),
         });
       } else if (roundedScore >= 85) {
         factors.push({
           dimension: dim,
           score: roundedScore,
           impact: 'positive',
-          message: cl('factor.positive', locale)
-            .replace('{dimension}', dimensionLabel)
-            .replace('{score}', String(roundedScore)),
+          message: cl('factor.positive', locale, {
+            dimension: dimensionLabel,
+            score: roundedScore,
+          }),
         });
       }
     }
@@ -431,6 +455,7 @@ export class DecisionEngineService {
       ctx,
       nutritionScore,
       locale,
+      breakdown,
     );
 
     const totalCalories = foods.reduce((s, f) => s + f.calories, 0);

@@ -117,7 +117,7 @@ export class CoachFormatService {
     }
 
     const strings = this.i18nStrings[this.resolveLanguage(language)];
-    return strings['coach.timebound.hours'].replace('{{hours}}', String(hours));
+    return strings['coach.timebound.hours'].replace(/\{\{hours\}\}/g, String(hours));
   }
 
   /**
@@ -146,7 +146,7 @@ export class CoachFormatService {
     const strings = this.i18nStrings[this.resolveLanguage(language)];
     const template = strings[key];
     if (!template) return `${value}${unit}`;
-    return template.replace('{{value}}', value.toFixed(1));
+    return template.replace(/\{\{value\}\}/g, value.toFixed(1));
   }
 
   /**

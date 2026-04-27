@@ -123,20 +123,16 @@ export class DecisionExplainerService {
       const remaining = ctx.remainingCalories - totalCalories;
       if (remaining < -(th?.overBudgetMargin ?? 100)) {
         const excessCal = Math.abs(Math.round(remaining));
-        const excessSuffix = dlCl('suffix.excessCal', locale).replace(
-          '{amount}',
-          String(excessCal),
-        );
+        const excessSuffix = dlCl('suffix.excessCal', locale, {
+          amount: excessCal,
+        });
         return (
-          dlCl('advice.reducePortion', locale).replace(
-            '{percent}',
-            String(
-              Math.max(
-                30,
-                Math.round((ctx.remainingCalories / totalCalories) * 100),
-              ),
+          dlCl('advice.reducePortion', locale, {
+            percent: Math.max(
+              30,
+              Math.round((ctx.remainingCalories / totalCalories) * 100),
             ),
-          ) + excessSuffix
+          }) + excessSuffix
         );
       }
       return dlCl('advice.switch', locale);
@@ -149,10 +145,9 @@ export class DecisionExplainerService {
       totalProtein < lowProtein &&
       totalCalories > significantCal
     ) {
-      const proteinQuantSuffix = dlCl('suffix.currentProtein', locale).replace(
-        '{amount}',
-        String(Math.round(totalProtein)),
-      );
+      const proteinQuantSuffix = dlCl('suffix.currentProtein', locale, {
+        amount: Math.round(totalProtein),
+      });
       tips.push(dlCl('advice.addProtein', locale) + proteinQuantSuffix);
     }
     if (ctx.remainingCalories - totalCalories < 0) {
@@ -198,16 +193,14 @@ export class DecisionExplainerService {
       ctx.goalCalories > 0
         ? Math.round((ctx.todayCalories / ctx.goalCalories) * 100)
         : 0;
-    const contextual = dlCl('rationale.contextual', locale).replace(
-      '{percent}',
-      String(calorieProgress),
-    );
+    const contextual = dlCl('rationale.contextual', locale, {
+      percent: calorieProgress,
+    });
 
     const goalLabel = ctx.goalLabel || ctx.goalType;
-    const goalAlignment = dlCl('rationale.goalAlignment', locale).replace(
-      '{goalLabel}',
+    const goalAlignment = dlCl('rationale.goalAlignment', locale, {
       goalLabel,
-    );
+    });
 
     const allergenCheck = checkAllergenConflict(foods, ctx, locale);
     const restrictionCheck = checkRestrictionConflict(foods, ctx, locale);
@@ -385,10 +378,7 @@ export class DecisionExplainerService {
       );
       const msg =
         cl('step.budget.over', {}, locale) +
-        dlCl('explainer.budgetExcess', locale).replace(
-          '{amount}',
-          String(budgetExcess),
-        );
+        dlCl('explainer.budgetExcess', locale, { amount: budgetExcess });
       decisionFactors.push(msg);
       conflictNodes.push({ type: 'budget', severity: 'warning', message: msg });
     }
@@ -483,24 +473,26 @@ export class DecisionExplainerService {
     const verdict = decision.shouldEat
       ? dlCl('explain.suitable', locale)
       : dlCl('explain.adjust', locale);
-    const summary = dlCl('explain.summary', locale)
-      .replace('{foods}', foodNames)
-      .replace('{calories}', String(totalCalories))
-      .replace('{verdict}', verdict);
+    const summary = dlCl('explain.summary', locale, {
+      foods: foodNames,
+      calories: totalCalories,
+      verdict,
+    });
 
     const primaryReason = decision.reason;
 
     const userContextImpact: string[] = [];
     if (ctx.goalType !== 'health') {
       userContextImpact.push(
-        dlCl('explain.goal', locale).replace('{goal}', ctx.goalLabel),
+        dlCl('explain.goal', locale, { goal: ctx.goalLabel }),
       );
     }
     if (ctx.remainingCalories < totalCalories && ctx.goalCalories > 0) {
       userContextImpact.push(
-        dlCl('explain.remaining', locale)
-          .replace('{remaining}', String(Math.round(ctx.remainingCalories)))
-          .replace('{meal}', String(totalCalories)),
+        dlCl('explain.remaining', locale, {
+          remaining: Math.round(ctx.remainingCalories),
+          meal: totalCalories,
+        }),
       );
     }
     if (totalProtein > 0) {
@@ -512,12 +504,11 @@ export class DecisionExplainerService {
       const proteinQuantSuffix = dlCl(
         'explainer.proteinQuantSuffix',
         locale,
-      ).replace('{grams}', String(proteinGrams));
+        { grams: proteinGrams },
+      );
       userContextImpact.push(
-        dlCl('explain.proteinRatio', locale).replace(
-          '{percent}',
-          String(proteinPercent),
-        ) + proteinQuantSuffix,
+        dlCl('explain.proteinRatio', locale, { percent: proteinPercent }) +
+          proteinQuantSuffix,
       );
     }
 
@@ -529,10 +520,7 @@ export class DecisionExplainerService {
         ((ctx.todayFat + totalFat) / ctx.goalFat) * 100,
       );
       userContextImpact.push(
-        dlCl('explain.fatProgress', locale).replace(
-          '{percent}',
-          String(fatProgress),
-        ),
+        dlCl('explain.fatProgress', locale, { percent: fatProgress }),
       );
     }
     if (ctx.goalCarbs > 0 && totalCarbs > 0) {
@@ -540,10 +528,7 @@ export class DecisionExplainerService {
         ((ctx.todayCarbs + totalCarbs) / ctx.goalCarbs) * 100,
       );
       userContextImpact.push(
-        dlCl('explain.carbsProgress', locale).replace(
-          '{percent}',
-          String(carbsProgress),
-        ),
+        dlCl('explain.carbsProgress', locale, { percent: carbsProgress }),
       );
     }
 
@@ -562,10 +547,7 @@ export class DecisionExplainerService {
           )
           .join(dlCl('separator.enumeration', locale));
         userContextImpact.push(
-          dlCl('explain.weakDimensions', locale).replace(
-            '{dimensions}',
-            weakList,
-          ),
+          dlCl('explain.weakDimensions', locale, { dimensions: weakList }),
         );
       }
     }

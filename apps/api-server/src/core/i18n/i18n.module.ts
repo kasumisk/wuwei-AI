@@ -13,10 +13,22 @@
 import { Global, Module } from '@nestjs/common';
 import { I18nService } from './i18n.service';
 import { I18nMiddleware } from './i18n.middleware';
+import { LanguageContextService } from './language-context.service';
+import { PromptBuilderService } from './prompt-builder.service';
 
 @Global()
 @Module({
-  providers: [I18nService, I18nMiddleware],
-  exports: [I18nService, I18nMiddleware],
+  providers: [
+    I18nService,
+    I18nMiddleware,
+    LanguageContextService,
+    PromptBuilderService,
+  ],
+  exports: [
+    I18nService,
+    I18nMiddleware,
+    LanguageContextService,
+    PromptBuilderService,
+  ],
 })
 export class I18nModule {}

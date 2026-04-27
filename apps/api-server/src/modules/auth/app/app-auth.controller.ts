@@ -15,6 +15,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AppAuthService } from './app-auth.service';
 import {
   AnonymousLoginDto,
+  FirebaseLoginDto,
   EmailRegisterDto,
   EmailLoginDto,
   EmailCodeLoginDto,
@@ -56,6 +57,27 @@ export class AppAuthController {
     @I18n() i18n: I18nContext,
   ): Promise<ApiResponse> {
     const data = await this.appAuthService.anonymousLogin(dto.deviceId);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: i18n.t('auth.loginSuccess'),
+      data,
+    };
+  }
+
+  /**
+   * Firebase 登录换业务 Token
+   * POST /api/app/auth/firebase/login
+   */
+  @Public()
+  @Post('firebase/login')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Firebase 登录换业务 Token' })
+  async firebaseLogin(
+    @Body() dto: FirebaseLoginDto,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
+    const data = await this.appAuthService.firebaseLogin(dto.firebaseToken);
     return {
       success: true,
       code: HttpStatus.OK,

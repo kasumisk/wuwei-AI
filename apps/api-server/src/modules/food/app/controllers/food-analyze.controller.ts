@@ -65,6 +65,7 @@ import {
 import { FoodAnalysisResultV61 } from '../../../decision/types/analysis-result.types';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
 import { I18nService } from '../../../../core/i18n';
+import { translateEnum } from '../../../../common/i18n/enum-i18n';
 
 // ─── V7.9 Phase 3-4: 文本分析缓存配置 ───
 
@@ -544,6 +545,7 @@ export class FoodAnalyzeController {
       analysisId: r.id,
       inputType: r.inputType,
       mealType: r.mealType,
+      mealTypeLabel: translateEnum('mealType', r.mealType),
       status: r.status,
       confidenceScore: r.confidenceScore,
       qualityScore: r.qualityScore,
@@ -669,6 +671,7 @@ export class FoodAnalyzeController {
         matchedFoodCount: record.matchedFoodCount,
         candidateFoodCount: record.candidateFoodCount,
         createdAt: record.createdAt,
+        mealTypeLabel: translateEnum('mealType', record.mealType),
       },
     };
 

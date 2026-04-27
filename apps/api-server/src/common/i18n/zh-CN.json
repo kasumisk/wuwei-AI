@@ -62,5 +62,82 @@
   "validation.wechatMiniCodeRequired": "小程序 code 不能为空",
   "validation.redirectUriRequired": "回调地址不能为空",
   "validation.firebaseTokenRequired": "Firebase Token 不能为空",
-  "validation.googleTokenRequired": "Google ID Token 不能为空"
+  "validation.googleTokenRequired": "Google ID Token 不能为空",
+
+  "enum.allergen.peanut": "花生",
+  "enum.allergen.tree_nut": "坚果",
+  "enum.allergen.milk": "牛奶",
+  "enum.allergen.dairy": "乳制品",
+  "enum.allergen.egg": "鸡蛋",
+  "enum.allergen.soy": "大豆",
+  "enum.allergen.wheat": "小麦",
+  "enum.allergen.gluten": "麸质",
+  "enum.allergen.fish": "鱼类",
+  "enum.allergen.shellfish": "贝类",
+  "enum.allergen.sesame": "芝麻",
+
+  "enum.dietaryRestriction.vegetarian": "素食",
+  "enum.dietaryRestriction.vegan": "纯素",
+  "enum.dietaryRestriction.pescatarian": "鱼素",
+  "enum.dietaryRestriction.halal": "清真",
+  "enum.dietaryRestriction.kosher": "犹太洁食",
+  "enum.dietaryRestriction.gluten_free": "无麸质",
+  "enum.dietaryRestriction.lactose_free": "无乳糖",
+  "enum.dietaryRestriction.low_sodium": "低钠",
+  "enum.dietaryRestriction.low_sugar": "低糖",
+  "enum.dietaryRestriction.low_carb": "低碳水",
+  "enum.dietaryRestriction.keto": "生酮",
+  "enum.dietaryRestriction.paleo": "原始饮食",
+
+  "enum.healthCondition.diabetes": "糖尿病",
+  "enum.healthCondition.hypertension": "高血压",
+  "enum.healthCondition.heart_disease": "心脏病",
+  "enum.healthCondition.kidney_disease": "肾脏疾病",
+  "enum.healthCondition.high_cholesterol": "高胆固醇",
+  "enum.healthCondition.gout": "痛风",
+  "enum.healthCondition.ibs": "肠易激综合征",
+
+  "enum.mealType.breakfast": "早餐",
+  "enum.mealType.lunch": "午餐",
+  "enum.mealType.dinner": "晚餐",
+  "enum.mealType.snack": "加餐",
+  "enum.mealType.late_night": "夜宵",
+
+  "enum.budgetStatus.under_target": "未达目标",
+  "enum.budgetStatus.near_limit": "接近上限",
+  "enum.budgetStatus.at_limit": "已达上限",
+  "enum.budgetStatus.over_limit": "超出上限",
+  "enum.budgetStatus.has_remaining": "尚有热量余量",
+
+  "enum.activityLevel.sedentary": "久坐",
+  "enum.activityLevel.light": "轻度活动",
+  "enum.activityLevel.moderate": "中等活动",
+  "enum.activityLevel.active": "积极活动",
+  "enum.activityLevel.very_active": "高强度活动",
+
+  "enum.gender.male": "男",
+  "enum.gender.female": "女",
+  "enum.gender.other": "其他",
+
+  "enum.goal.fat_loss": "减脂",
+  "enum.goal.muscle_gain": "增肌",
+  "enum.goal.health": "均衡健康",
+  "enum.goal.habit": "改善饮食习惯",
+  "enum.goal.maintain": "维持体重",
+
+  "enum.accuracyLevel.high": "高精度",
+  "enum.accuracyLevel.medium": "中等精度",
+  "enum.accuracyLevel.low": "低精度",
+
+  "enum.reviewLevel.auto_review": "自动审核",
+  "enum.reviewLevel.manual_review": "人工审核",
+  "enum.reviewLevel.expert_review": "专家审核",
+
+  "enum.analysisQuality.high": "高质量",
+  "enum.analysisQuality.medium": "中等质量",
+  "enum.analysisQuality.low": "低质量",
+
+  "enum.recommendation.recommend": "推荐食用",
+  "enum.recommendation.caution": "谨慎食用",
+  "enum.recommendation.avoid": "避免食用"
 }

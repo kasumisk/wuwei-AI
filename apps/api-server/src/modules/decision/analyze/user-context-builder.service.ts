@@ -26,6 +26,7 @@ import {
   MacroSlotStatus,
 } from '../types/analysis-result.types';
 import { cl } from '../i18n/decision-labels';
+import { translateEnum } from '../../../common/i18n/enum-i18n';
 
 // ==================== 输出类型 ====================
 
@@ -102,7 +103,7 @@ export class UserContextBuilderService {
     const localHour = getUserLocalHour(DEFAULT_TIMEZONE);
     const defaults: UnifiedUserContext = {
       goalType: 'health',
-      goalLabel: cl('goal.health', locale),
+      goalLabel: cl('goal.label.health', locale),
       todayCalories: 0,
       todayProtein: 0,
       todayFat: 0,
@@ -251,7 +252,9 @@ export class UserContextBuilderService {
 
       return {
         goalType,
-        goalLabel: cl(`goal.${goalType}`, locale) || cl('goal.health', locale),
+        goalLabel:
+          cl(`goal.label.${goalType}`, locale) ||
+          cl('goal.label.health', locale),
         todayCalories,
         todayProtein,
         todayFat,
@@ -311,28 +314,29 @@ export class UserContextBuilderService {
 ${gc.focus}
 
 ${cl('ctx.prompt.budgetHeader', locale)}
-- ${cl('ctx.prompt.calories', locale).replace('{remaining}', String(ctx.remainingCalories)).replace('{goal}', String(ctx.goalCalories)).replace('{consumed}', String(ctx.todayCalories))}
-- ${cl('ctx.prompt.protein', locale).replace('{remaining}', String(ctx.remainingProtein)).replace('{goal}', String(ctx.goalProtein)).replace('{consumed}', String(ctx.todayProtein))}
-- ${cl('ctx.prompt.fat', locale).replace('{remaining}', String(ctx.remainingFat)).replace('{goal}', String(ctx.goalFat)).replace('{consumed}', String(ctx.todayFat))}
-- ${cl('ctx.prompt.carbs', locale).replace('{remaining}', String(ctx.remainingCarbs)).replace('{goal}', String(ctx.goalCarbs)).replace('{consumed}', String(ctx.todayCarbs))}
-- ${cl('ctx.prompt.mealCount', locale).replace('{count}', String(ctx.mealCount))}
-- ${cl('ctx.prompt.mealPeriod', locale).replace('{period}', mealHint)}`;
+- ${cl('ctx.prompt.calories', locale, { remaining: ctx.remainingCalories, goal: ctx.goalCalories, consumed: ctx.todayCalories })}
+- ${cl('ctx.prompt.protein', locale, { remaining: ctx.remainingProtein, goal: ctx.goalProtein, consumed: ctx.todayProtein })}
+- ${cl('ctx.prompt.fat', locale, { remaining: ctx.remainingFat, goal: ctx.goalFat, consumed: ctx.todayFat })}
+- ${cl('ctx.prompt.carbs', locale, { remaining: ctx.remainingCarbs, goal: ctx.goalCarbs, consumed: ctx.todayCarbs })}
+- ${cl('ctx.prompt.mealCount', locale, { count: ctx.mealCount })}
+- ${cl('ctx.prompt.mealPeriod', locale, { period: mealHint })}`;
 
     const profile = ctx.profile;
     if (profile.gender)
-      text += `\n- ${cl('ctx.prompt.gender', locale).replace('{value}', profile.gender === 'male' ? cl('ctx.prompt.gender.male', locale) : cl('ctx.prompt.gender.female', locale))}`;
+      text += `\n- ${cl('ctx.prompt.gender', locale, { value: profile.gender === 'male' ? cl('ctx.prompt.gender.male', locale) : cl('ctx.prompt.gender.female', locale) })}`;
     if (profile.activityLevel)
-      text += `\n- ${cl('ctx.prompt.activityLevel', locale).replace('{value}', profile.activityLevel)}`;
+      text += `\n- ${cl('ctx.prompt.activityLevel', locale, { value: translateEnum('activityLevel', profile.activityLevel, locale) })}`;
+    const enumerationSeparator = cl('separator.enumeration', locale);
     if ((profile.foodPreferences as string[])?.length)
-      text += `\n- ${cl('ctx.prompt.foodPreferences', locale).replace('{value}', (profile.foodPreferences as string[]).join('、'))}`;
+      text += `\n- ${cl('ctx.prompt.foodPreferences', locale, { value: (profile.foodPreferences as string[]).join(enumerationSeparator) })}`;
     if (ctx.dietaryRestrictions.length)
-      text += `\n- ${cl('ctx.prompt.dietaryRestrictions', locale).replace('{value}', ctx.dietaryRestrictions.join('、'))}`;
+      text += `\n- ${cl('ctx.prompt.dietaryRestrictions', locale, { value: ctx.dietaryRestrictions.map((r) => translateEnum('dietaryRestriction', r, locale)).join(enumerationSeparator) })}`;
     if (ctx.budgetStatus)
-      text += `\n- ${cl('ctx.prompt.budgetStatus', locale).replace('{value}', ctx.budgetStatus)}`;
+      text += `\n- ${cl('ctx.prompt.budgetStatus', locale, { value: translateEnum('budgetStatus', ctx.budgetStatus, locale) })}`;
     if (ctx.nutritionPriority?.length)
-      text += `\n- ${cl('ctx.prompt.nutritionPriority', locale).replace('{value}', ctx.nutritionPriority.join('、'))}`;
+      text += `\n- ${cl('ctx.prompt.nutritionPriority', locale, { value: ctx.nutritionPriority.join(enumerationSeparator) })}`;
     if (ctx.contextSignals?.length)
-      text += `\n- ${cl('ctx.prompt.contextSignals', locale).replace('{value}', ctx.contextSignals.join('、'))}`;
+      text += `\n- ${cl('ctx.prompt.contextSignals', locale, { value: ctx.contextSignals.join(enumerationSeparator) })}`;
 
     // V3.4 P1.1: 健康条件特异性指令
     const healthGuidance = buildHealthConditionGuidance(

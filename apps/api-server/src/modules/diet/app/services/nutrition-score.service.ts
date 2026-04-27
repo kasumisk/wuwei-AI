@@ -652,6 +652,16 @@ export class NutritionScoreService {
     if (goal === 'muscle_gain' && diff < 0) {
       score *= 0.9;
     }
+    // P11 修复：actual < effectiveTarget（未达目标）时不应给极低分。
+    // 单餐场景下 cumulative actual 可能远低于 effectiveTarget（例如只吃一个苹果），
+    // Gaussian 衰减会让 energy → 0，进而把决策拖到 caution。
+    // 真实语义"今日热量摄入不足"对 fat_loss/health 用户并非危险，仅是"待补充"。
+    // 因此为下行尾部设置最低 50 分（中性），由其他维度（foodQuality/satiety）主导评分。
+    // muscle_gain 用户保留较低底线 35 分以保留"该多吃"的信号。
+    if (diff < 0) {
+      const floor = goal === 'muscle_gain' ? 35 : 50;
+      score = Math.max(score, floor);
+    }
     return this.clamp(score);
   }
 
@@ -685,13 +695,25 @@ export class NutritionScoreService {
     if (ratio >= min && ratio <= max) ratioScore = 100;
     else if (ratio < min) ratioScore = this.clamp(30 + 70 * (ratio / min));
     // 超标区缓慢衰减
-    else ratioScore = this.clamp(100 - 50 * ((ratio - max) / 0.15));
+    // 单餐评估时高蛋白食物（鸡胸/鱼/蛋白粉）必然 ratio≈0.7-0.95，
+    // 不应一刀切判为"过度蛋白"。衰减步长放宽为 0.5，
+    // 即超出 max 0.5（绝对值）才衰减到 0。配合下方 adequacy gate
+    // 实现"全天蛋白未达标 → 不惩罚 / 已达标且过量 → 才扣分"。
+    else ratioScore = this.clamp(100 - 50 * ((ratio - max) / 0.5));
 
     // ── 绝对量达成度门槛（adequacy gate）──
     // 当未提供 targetProtein 时退化为旧行为。
     if (!targetProtein || targetProtein <= 0) return ratioScore;
 
     const adequacy = protein / targetProtein; // 实际摄入占目标比例
+
+    // ── 单餐高蛋白豁免 ──
+    // 如果蛋白比例超标（>max）但全日蛋白尚未达成（adequacy<0.9），
+    // 则视为"集中型蛋白摄入"，不应扣分（吃完鸡胸还需碳水/脂肪平衡）。
+    // 这避免了"100% 蛋白源食物（鸡胸/蛋白粉）单餐独立评估时分数为 0"的误判。
+    if (ratio > max && adequacy < 0.9) {
+      return Math.max(ratioScore, 80);
+    }
     // 期望摄入：按时间进度的 80%（给一定缓冲，不要求严格按进度均匀分配）
     const expectedAdequacy = Math.max(0.15, expectedProgress * 0.8);
 

@@ -657,6 +657,7 @@
   "recommendation.response.tag.supportsFatLoss": "Supports fat-loss goal",
   "recommendation.response.tag.highProteinForMuscleGain": "High-protein meal that supports muscle gain",
   "recommendation.response.planAdjusted": "Plan adjusted",
+  "recommendation.response.replacedMealRecommendation": "Updated your {{meal}} recommendation",
   "recommendation.response.planRegenerated": "Plan regenerated",
   "recommendation.response.success": "Success",
   "recommendation.response.updated": "Updated successfully",

@@ -401,9 +401,10 @@ export class AlternativeSuggestionService {
       constraints?.preferLowCalorie &&
       candidate.servingCalories < currentMealCalories
     ) {
-      return cl('alt.lowerCal', locale)
-        .replace('{newCal}', String(Math.round(candidate.servingCalories)))
-        .replace('{oldCal}', String(Math.round(currentMealCalories)));
+      return cl('alt.lowerCal', locale, {
+        newCal: Math.round(candidate.servingCalories),
+        oldCal: Math.round(currentMealCalories),
+      });
     }
 
     if (
@@ -411,29 +412,28 @@ export class AlternativeSuggestionService {
       candidate.servingCarbs !== undefined &&
       candidate.servingCarbs < 15
     ) {
-      return cl('alt.lowGlycemic', locale).replace(
-        '{carbs}',
-        String(Math.round(candidate.servingCarbs)),
-      );
+      return cl('alt.lowGlycemic', locale, {
+        carbs: Math.round(candidate.servingCarbs),
+      });
     }
 
     if (
       constraints?.preferHighProtein &&
       candidate.servingProtein > currentMealProtein
     ) {
-      return cl('alt.higherProtein', locale)
-        .replace('{newPro}', String(Math.round(candidate.servingProtein)))
-        .replace('{oldPro}', String(Math.round(currentMealProtein)));
+      return cl('alt.higherProtein', locale, {
+        newPro: Math.round(candidate.servingProtein),
+        oldPro: Math.round(currentMealProtein),
+      });
     }
 
     if (scenarioType === 'convenience') {
       return cl('alt.similar', locale);
     }
 
-    return cl('alt.matchScore', locale).replace(
-      '{score}',
-      String(Math.round((candidate.score || 0) * 100)),
-    );
+    return cl('alt.matchScore', locale, {
+      score: Math.round((candidate.score || 0) * 100),
+    });
   }
 
   private async getSubstitutionAlternatives(
@@ -496,35 +496,38 @@ export class AlternativeSuggestionService {
           constraints?.preferLowCalorie &&
           c.servingCalories < food.calories * 0.8
         ) {
-          reason = cl('alt.lowerCal', locale)
-            .replace('{newCal}', String(Math.round(c.servingCalories)))
-            .replace('{oldCal}', String(Math.round(food.calories)));
+          reason = cl('alt.lowerCal', locale, {
+            newCal: Math.round(c.servingCalories),
+            oldCal: Math.round(food.calories),
+          });
         } else if (
           constraints?.preferHighProtein &&
           c.servingProtein > food.protein * 1.1
         ) {
-          reason = cl('alt.higherProtein', locale)
-            .replace('{newPro}', String(Math.round(c.servingProtein)))
-            .replace('{oldPro}', String(Math.round(food.protein)));
+          reason = cl('alt.higherProtein', locale, {
+            newPro: Math.round(c.servingProtein),
+            oldPro: Math.round(food.protein),
+          });
         } else if (
           ctx.goalType === 'fat_loss' &&
           c.servingCalories < food.calories * 0.7
         ) {
-          reason = cl('alt.lowerCal', locale)
-            .replace('{newCal}', String(Math.round(c.servingCalories)))
-            .replace('{oldCal}', String(Math.round(food.calories)));
+          reason = cl('alt.lowerCal', locale, {
+            newCal: Math.round(c.servingCalories),
+            oldCal: Math.round(food.calories),
+          });
         } else if (
           ctx.goalType === 'muscle_gain' &&
           c.servingProtein > food.protein * 1.2
         ) {
-          reason = cl('alt.higherProtein', locale)
-            .replace('{newPro}', String(Math.round(c.servingProtein)))
-            .replace('{oldPro}', String(Math.round(food.protein)));
+          reason = cl('alt.higherProtein', locale, {
+            newPro: Math.round(c.servingProtein),
+            oldPro: Math.round(food.protein),
+          });
         } else if (c.substituteScore > 0.7) {
-          reason = cl('alt.matchScore', locale).replace(
-            '{score}',
-            String(Math.round(c.substituteScore * 100)),
-          );
+          reason = cl('alt.matchScore', locale, {
+            score: Math.round(c.substituteScore * 100),
+          });
         } else {
           reason = cl('alt.similar', locale);
         }
@@ -908,15 +911,10 @@ export class AlternativeSuggestionService {
         score += calScore * calWeight;
         if (calDiff < -AP.rankCalDiffThreshold)
           reasons.push(
-            cl('alt.calLess', locale).replace(
-              '{amount}',
-              String(Math.abs(calDiff)),
-            ),
+            cl('alt.calLess', locale, { amount: Math.abs(calDiff) }),
           );
         else if (calDiff > AP.rankCalDiffThreshold)
-          reasons.push(
-            cl('alt.calMore', locale).replace('{amount}', String(calDiff)),
-          );
+          reasons.push(cl('alt.calMore', locale, { amount: calDiff }));
 
         // 蛋白质维度
         const prosScore = Math.max(
@@ -929,15 +927,10 @@ export class AlternativeSuggestionService {
             : AP.rankProteinWeightDefault;
         score += prosScore * prosWeight;
         if (prosDiff > AP.rankProteinDiffThreshold)
-          reasons.push(
-            cl('alt.proteinMore', locale).replace('{amount}', String(prosDiff)),
-          );
+          reasons.push(cl('alt.proteinMore', locale, { amount: prosDiff }));
         else if (prosDiff < -AP.rankProteinDiffThreshold)
           reasons.push(
-            cl('alt.proteinLess', locale).replace(
-              '{amount}',
-              String(Math.abs(prosDiff)),
-            ),
+            cl('alt.proteinLess', locale, { amount: Math.abs(prosDiff) }),
           );
 
         // V5.0 P2.1: foodForm match boost

@@ -63,9 +63,14 @@ export class RequestContextService {
     return Date.now() - this.startTime;
   }
 
-  /** V6.6 Phase 3-B: 获取当前请求语言 — V6.8: 默认 'zh-CN'（BCP-47 格式） */
+  /**
+   * V6.6 Phase 3-B: 获取当前请求语言（BCP-47 格式）
+   * V8 i18n audit: 默认 'en-US'，与 core/i18n/i18n.types.ts 的 I18N_DEFAULT_LOCALE
+   *   及所有模块 i18n helper 的 FALLBACK_LOCALE 保持一致，避免出现请求未声明语言时
+   *   不同代码路径解析到不同默认值导致响应混合三语种的情况。
+   */
   get locale(): string {
-    return this.cls.get(CLS_KEYS.LOCALE) || 'zh-CN';
+    return this.cls.get(CLS_KEYS.LOCALE) || 'en-US';
   }
 
   // ─── 写入器（仅供中间件/Guard 调用） ───

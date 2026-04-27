@@ -108,6 +108,34 @@ const CATEGORY_DEFAULT_NUTRITION: Record<
   composite: { calories: 180, protein: 8, fat: 6, carbs: 22 },
 };
 
+/**
+ * 每 100g 热量物理上限（kcal/100g）。
+ * 来源：纯脂肪 ~900；坚果/油炸 ~600；常规熟食 ~300-400。
+ * 用于检测 LLM 返回值是否把 per-serving 误当 per-100g。
+ */
+const CALORIES_PER_100G_HARD_CAP: Record<string, number> = {
+  fat: 950, // 纯油脂理论最大值（100g 全脂肪 = 900kcal）
+  nut: 700, // 坚果/种子
+  snack: 600, // 油炸/酥皮零食
+  condiment: 600, // 重油调料
+  dairy: 500, // 奶酪/黄油偏高
+  meat: 450, // 肥肉、培根
+  egg: 400,
+  seafood: 400,
+  protein: 450, // 旧分类兼容
+  grain: 420, // 干谷物/油炒饭
+  legume: 400,
+  vegetable: 200,
+  veggie: 200,
+  fruit: 350, // 干果允许偏高
+  beverage: 250, // 含糖饮料
+  composite: 300, // 复合菜肴一份本身大都 < 300/100g（油炸/糕点除外，已单列）
+  dish: 280, // 中式正餐菜肴（拉面、盖饭、椰子鸡等）真实密度 ~150-250/100g
+  soup: 200,
+  other: 400,
+};
+const CALORIES_PER_100G_DEFAULT_CAP = 400;
+
 // ==================== LLM Prompt ====================
 
 /**
@@ -434,9 +462,19 @@ export class TextFoodAnalysisService {
           quantity,
           servingGrams,
         );
-        parsed.confidence = simScore >= 1.0 ? 0.95 : 0.6 + simScore * 0.3;
+        // 置信度：精确命中 0.95；模糊命中按 simScore 线性映射 0.65~0.9
+        parsed.confidence =
+          simScore >= 1.0
+            ? 0.95
+            : Math.min(0.9, 0.65 + (simScore - 0.7) * 0.8);
         results.push(parsed);
       } else {
+        // P9: zero-calorie passthrough for water/clear-tea (food library lacks "白开水/纯净水/凉白开"等)
+        const zeroCal = this.tryZeroCaloriePassthrough(foodName, quantity);
+        if (zeroCal) {
+          results.push(zeroCal);
+          continue;
+        }
         unmatchedTerms.push({ term: foodTerms[i], quantity, foodName });
       }
     }
@@ -483,6 +521,14 @@ export class TextFoodAnalysisService {
             continue;
           }
 
+          // P3 修复: 跳过明显非食物输入，避免给"空气/一大堆/我吃了点东西"伪造 630kcal
+          if (this.isLikelyNonFood(item.foodName)) {
+            this.logger.warn(
+              `Skip heuristic fallback for non-food input: "${item.foodName}"`,
+            );
+            continue;
+          }
+
           results.push(
             this.buildHeuristicFallbackFood(item.foodName, item.quantity),
           );
@@ -519,8 +565,10 @@ export class TextFoodAnalysisService {
     const normalizedTerm = this.normalizeFoodTerm(term);
 
     // 匹配中文数量词
+    // 注意：单字量词（条/个/块/片/根/碗/杯…）必须有前置数词（一/二/半/小/大/几等），
+    // 否则会把"薯条/油条/红薯片"等食物名误识别为量词。
     const chinesePattern =
-      /^(一|二|两|三|四|五|六|七|八|九|十|半|小|大|几)?(份|碗|杯|盘|个|块|片|根|条|勺|把)/;
+      /^(一|二|两|三|四|五|六|七|八|九|十|半|小|大|几)(份|碗|杯|盘|个|块|片|根|条|勺|把)/;
     const chineseMatch = normalizedTerm.match(chinesePattern);
     if (chineseMatch) {
       const quantity = chineseMatch[0];
@@ -550,9 +598,10 @@ export class TextFoodAnalysisService {
       if (foodName) return { quantity, foodName };
     }
 
-    // 匹配后缀中文数量（如 牛奶一杯）
+    // 匹配后缀中文数量（如 牛奶一杯 / 米饭两碗）
+    // 同前缀模式：单字量词必须有前置数词，否则会把"薯条/红薯片/油条"等剥成"薯/红薯/油"
     const suffixChinesePattern =
-      /^(.*?)(一|二|两|三|四|五|六|七|八|九|十|半|小|大|几)?(份|碗|杯|盘|个|块|片|根|条|勺|把)$/;
+      /^(.+?)(一|二|两|三|四|五|六|七|八|九|十|半|小|大|几)(份|碗|杯|盘|个|块|片|根|条|勺|把)$/;
     const suffixChineseMatch = normalizedTerm.match(suffixChinesePattern);
     if (suffixChineseMatch) {
       const foodName = this.normalizeFoodTerm(suffixChineseMatch[1]);
@@ -573,6 +622,18 @@ export class TextFoodAnalysisService {
     foodName: string,
   ): Promise<{ match: any; simScore: number } | null> {
     const hasCompositeDelimiter = /[+＋,，、；;/／|｜＆&]/.test(foodName);
+    // 复合菜品尾字（饭/面/粉/汤/煲/锅/堡/卷/串/丼/炒等）：禁止用"短库名 includes 长输入"反匹配
+    // 例如："椰子鸡饭" 不应反向匹配到库内的 "椰子"
+    const isCompositeDish =
+      /(饭|面|麵|粉|米线|河粉|汤|羹|煲|锅|堡|卷|串|丼|盖浇|拌饭|炒饭|炒面|沙拉|意面|披萨|比萨|寿司|便当|套餐|套餐饭|盒饭|定食|拉面)$/.test(
+        foodName,
+      );
+
+    // 模糊匹配 sim_score 准入门槛：收紧到 0.72，宁可走 LLM 也不要错匹配库
+    const SIM_ACCEPT_THRESHOLD = 0.72;
+    // includes 反向匹配（query.includes(name)）的最小覆盖率：库名长度需达到 query 70% 以上
+    const REVERSE_INCLUDE_MIN_RATIO = 0.7;
+
     const lookupQueries = this.expandLookupQueries(foodName);
 
     try {
@@ -594,22 +655,37 @@ export class TextFoodAnalysisService {
         for (const candidate of results) {
           const simScore = Number(candidate.sim_score) || 0;
           const name: string = candidate.name || '';
+
+          // 1) 别名精确命中：高置信信号，保留
           const aliasMatched =
             !!candidate.aliases &&
             candidate.aliases
               .split(',')
               .map((a: string) => a.trim())
               .includes(query);
-          const includeMatched =
-            !hasCompositeDelimiter &&
-            (name.includes(query) || query.includes(name));
-          const accepted = simScore >= 0.3 || aliasMatched || includeMatched;
 
+          // 2) 包含匹配：
+          //    - 正向：库名包含整个 query（query 较短，库名是其扩展）→ 通常可信，如 "鸡胸肉" ⊂ "去皮鸡胸肉"
+          //    - 反向：query 包含整个库名（库名是 query 的子串）→ 高风险，复合菜禁用；
+          //      非复合菜也要求库名长度 ≥ query 70%，否则视为短词误伤
+          const forwardInclude = !!query && name.includes(query);
+          const reverseInclude =
+            !!name &&
+            query.includes(name) &&
+            !isCompositeDish &&
+            !hasCompositeDelimiter &&
+            name.length / Math.max(query.length, 1) >= REVERSE_INCLUDE_MIN_RATIO;
+          const includeMatched =
+            !hasCompositeDelimiter && (forwardInclude || reverseInclude);
+
+          // 3) sim_score 阈值收紧
+          const accepted =
+            simScore >= SIM_ACCEPT_THRESHOLD || aliasMatched || includeMatched;
           if (!accepted) continue;
 
           const normalizedScore = Math.max(
             simScore,
-            includeMatched || aliasMatched ? 0.3 : 0,
+            aliasMatched ? 0.9 : includeMatched ? 0.75 : 0,
           );
           if (!bestAcceptable || normalizedScore > bestAcceptable.score) {
             bestAcceptable = { item: candidate, score: normalizedScore };
@@ -916,7 +992,26 @@ export class TextFoodAnalysisService {
         }
 
         const fallbackGrams = f.estimatedWeightGrams || DEFAULT_SERVING_GRAMS;
-        const fallbackRatio = fallbackGrams / 100; // LLM 返回 per-100g，需换算为 per-serving
+
+        // ==== Bug #2 修复：检测 LLM 返回的"假 per-100g"（实为 per-serving）====
+        // LLM 偶尔会忽略 per-100g 约定，按一份的总量返回。
+        // 例如海南鸡饭 calories=600（实际是一份 350g 的总量），
+        // 经 ratio 3.5 缩放后 = 2100kcal，验证器仅做宏量自洽时无法发现。
+        // 检测方法：与按类别的 per-100g 物理上限对比。
+        const cap =
+          CALORIES_PER_100G_HARD_CAP[f.category as string] ??
+          CALORIES_PER_100G_DEFAULT_CAP;
+        const reportedCalPer100g = Number(f.calories) || 0;
+        const looksLikePerServing =
+          reportedCalPer100g > cap && fallbackGrams > 100;
+        // 若疑似 per-serving，则不再做 ratio 缩放（直接当一份总量），并降低置信度
+        const fallbackRatio = looksLikePerServing ? 1 : fallbackGrams / 100;
+        const baseConfidence = looksLikePerServing ? 0.45 : 0.7;
+        if (looksLikePerServing) {
+          this.logger.warn(
+            `[LLM] Suspicious per-100g for "${f.llmName}": calories=${reportedCalPer100g} > cap ${cap} (cat=${f.category}). Treat as per-serving (no ratio scaling).`,
+          );
+        }
 
         resolved.push({
           name: f.llmName,
@@ -925,7 +1020,7 @@ export class TextFoodAnalysisService {
           quantity: f.quantity,
           estimatedWeightGrams: fallbackGrams,
           category: f.category,
-          confidence: 0.7,
+          confidence: baseConfidence,
           // per-100g → per-serving 换算（与 buildFromLibraryMatch 保持一致）
           calories: Math.round((f.calories || 0) * fallbackRatio),
           protein: Math.round((f.protein || 0) * fallbackRatio * 10) / 10,
@@ -1206,6 +1301,121 @@ export class TextFoodAnalysisService {
     if (category === 'beverage') return 35;
 
     return null;
+  }
+
+  /**
+   * P9: 零热量饮品旁路 — 食物库缺少"白开水/纯净水/凉白开/矿泉水/无糖茶"等条目时，
+   * LLM 容易给水类胡乱估热量（曾出现 500g/900kcal）。
+   * 这里在进入 LLM fallback 前命中关键词，直接合成一个 0kcal beverage 条目。
+   *
+   * 命中规则（保守）：
+   * - 名称含"水"且不含会污染语义的字（汤/果/糖/盐/调/咸/油 等） → 视为白水
+   * - 名称含"凉白开/温开水/沸水/苏打水(无糖)" 也算
+   * 不命中场景（继续走 LLM）：可乐、椰子水、橙汁、汤、糖水、咖啡、奶茶
+   */
+  private tryZeroCaloriePassthrough(
+    foodName: string,
+    quantity?: string,
+  ): ParsedFoodItem | null {
+    if (!foodName) return null;
+    const name = foodName.trim();
+    if (!name) return null;
+
+    // 形如"水煮虾/水果/水饺/糖水/汤水"等需排除
+    const exclude =
+      /(水果|水饺|水煮|水蒸|汤|糖水|盐水|调味|咸|油|虾|鱼|果汁|椰|柠|蜜|味|奶|咖啡|可乐|雪碧|果)/;
+    if (exclude.test(name)) return null;
+
+    const isPlainWater =
+      /^(白开水|纯净水|矿泉水|凉白开|温开水|沸水|开水|清水|白水|冰水)$/.test(
+        name,
+      ) ||
+      (/^水$/.test(name)) ||
+      /^苏打水$/.test(name);
+
+    if (!isPlainWater) return null;
+
+    // 估算克数：从 quantity 解析"500ml/一杯/一瓶"，否则默认 250g
+    let grams = 250;
+    if (quantity) {
+      const ml = quantity.match(/(\d+(?:\.\d+)?)\s*(ml|毫升)/i);
+      const l = quantity.match(/(\d+(?:\.\d+)?)\s*(l|升)/i);
+      if (ml) grams = Math.round(parseFloat(ml[1])); // 1ml ≈ 1g
+      else if (l) grams = Math.round(parseFloat(l[1]) * 1000);
+      else if (/瓶|大瓶/.test(quantity)) grams = 500;
+      else if (/杯/.test(quantity)) grams = 250;
+    }
+
+    return {
+      name,
+      normalizedName: name,
+      quantity,
+      estimatedWeightGrams: grams,
+      category: 'beverage',
+      confidence: 0.95,
+      calories: 0,
+      protein: 0,
+      fat: 0,
+      carbs: 0,
+      fiber: 0,
+      sugar: 0,
+      sodium: 0,
+    } as ParsedFoodItem;
+  }
+
+  /**
+   * P3 修复: 判定输入是否明显不是食物（用于跳过启发式兜底）
+   * - 含明确食物字根（米/饭/面/菜/肉/果/奶/茶/酒…）→ 不算非食物
+   * - 命中黑名单（空气/东西/一大堆/随便/不知道 等）→ 算非食物
+   * - 命中后下游会跳过 fallback，触发 BadRequestException("decision.error.noFood")
+   */
+  private isLikelyNonFood(foodName: string): boolean {
+    if (!foodName) return true;
+    const name = foodName.trim().toLowerCase();
+    if (name.length === 0) return true;
+
+    // 含明确食物字根 → 不是非食物
+    if (
+      /(米|饭|面|粉|粥|菜|肉|鱼|虾|蛋|奶|茶|酒|果|汁|汤|包|饼|糕|油|盐|糖|豆|薯|条|包子|馒头|烧烤|沙拉|寿司|披萨|汉堡|鸡|鸭|猪|牛|羊|海鲜|水果|坚果|零食|主食|蔬菜|饮料|咖啡|可乐|巧克力)/.test(
+        name,
+      )
+    ) {
+      return false;
+    }
+
+    // 黑名单：通用代词、非食物名词
+    const NON_FOOD_PATTERNS: RegExp[] = [
+      /^空气$/,
+      /^水分$/,
+      /^石头$/,
+      /^沙子$/,
+      /^塑料$/,
+      /^一大堆$/,
+      /^一大盆$/,
+      /^一些东西$/,
+      /^点东西$/,
+      /^东西$/,
+      /^食物$/,
+      /^饭菜$/,
+      /^没吃$/,
+      /^啥都没$/,
+      /^啥都行$/,
+      /^随便$/,
+      /^不知道$/,
+    ];
+    if (NON_FOOD_PATTERNS.some((re) => re.test(name))) return true;
+
+    // 仅量词/代词构成
+    if (
+      name.length <= 4 &&
+      /^(一|二|两|三|四|五|六|七|八|九|十|半|小|大|几|很多|许多|一些|这|那|啥|什么|某)+(份|碗|杯|盘|个|块|片|根|条|勺|把|点|些)?$/.test(
+        name,
+      )
+    ) {
+      return true;
+    }
+
+    return false;
   }
 
   /**

@@ -62,5 +62,82 @@
   "validation.wechatMiniCodeRequired": "Mini Program code is required.",
   "validation.redirectUriRequired": "Redirect URI is required.",
   "validation.firebaseTokenRequired": "Firebase Token is required.",
-  "validation.googleTokenRequired": "Google ID Token is required."
+  "validation.googleTokenRequired": "Google ID Token is required.",
+
+  "enum.allergen.peanut": "Peanut",
+  "enum.allergen.tree_nut": "Tree nuts",
+  "enum.allergen.milk": "Milk",
+  "enum.allergen.dairy": "Dairy",
+  "enum.allergen.egg": "Egg",
+  "enum.allergen.soy": "Soy",
+  "enum.allergen.wheat": "Wheat",
+  "enum.allergen.gluten": "Gluten",
+  "enum.allergen.fish": "Fish",
+  "enum.allergen.shellfish": "Shellfish",
+  "enum.allergen.sesame": "Sesame",
+
+  "enum.dietaryRestriction.vegetarian": "Vegetarian",
+  "enum.dietaryRestriction.vegan": "Vegan",
+  "enum.dietaryRestriction.pescatarian": "Pescatarian",
+  "enum.dietaryRestriction.halal": "Halal",
+  "enum.dietaryRestriction.kosher": "Kosher",
+  "enum.dietaryRestriction.gluten_free": "Gluten-free",
+  "enum.dietaryRestriction.lactose_free": "Lactose-free",
+  "enum.dietaryRestriction.low_sodium": "Low-sodium",
+  "enum.dietaryRestriction.low_sugar": "Low-sugar",
+  "enum.dietaryRestriction.low_carb": "Low-carb",
+  "enum.dietaryRestriction.keto": "Keto",
+  "enum.dietaryRestriction.paleo": "Paleo",
+
+  "enum.healthCondition.diabetes": "Diabetes",
+  "enum.healthCondition.hypertension": "Hypertension",
+  "enum.healthCondition.heart_disease": "Heart disease",
+  "enum.healthCondition.kidney_disease": "Kidney disease",
+  "enum.healthCondition.high_cholesterol": "High cholesterol",
+  "enum.healthCondition.gout": "Gout",
+  "enum.healthCondition.ibs": "IBS",
+
+  "enum.mealType.breakfast": "Breakfast",
+  "enum.mealType.lunch": "Lunch",
+  "enum.mealType.dinner": "Dinner",
+  "enum.mealType.snack": "Snack",
+  "enum.mealType.late_night": "Late-night snack",
+
+  "enum.budgetStatus.under_target": "Under target",
+  "enum.budgetStatus.near_limit": "Near limit",
+  "enum.budgetStatus.at_limit": "At limit",
+  "enum.budgetStatus.over_limit": "Over limit",
+  "enum.budgetStatus.has_remaining": "Calories remaining",
+
+  "enum.activityLevel.sedentary": "Sedentary",
+  "enum.activityLevel.light": "Light activity",
+  "enum.activityLevel.moderate": "Moderate activity",
+  "enum.activityLevel.active": "Active",
+  "enum.activityLevel.very_active": "Very active",
+
+  "enum.gender.male": "Male",
+  "enum.gender.female": "Female",
+  "enum.gender.other": "Other",
+
+  "enum.goal.fat_loss": "Fat loss",
+  "enum.goal.muscle_gain": "Muscle gain",
+  "enum.goal.health": "Balanced health",
+  "enum.goal.habit": "Improve eating habits",
+  "enum.goal.maintain": "Maintain weight",
+
+  "enum.accuracyLevel.high": "High accuracy",
+  "enum.accuracyLevel.medium": "Medium accuracy",
+  "enum.accuracyLevel.low": "Low accuracy",
+
+  "enum.reviewLevel.auto_review": "Auto review",
+  "enum.reviewLevel.manual_review": "Manual review",
+  "enum.reviewLevel.expert_review": "Expert review",
+
+  "enum.analysisQuality.high": "High quality",
+  "enum.analysisQuality.medium": "Medium quality",
+  "enum.analysisQuality.low": "Low quality",
+
+  "enum.recommendation.recommend": "Recommended",
+  "enum.recommendation.caution": "With caution",
+  "enum.recommendation.avoid": "Avoid"
 }

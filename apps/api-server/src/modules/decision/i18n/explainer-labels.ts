@@ -41,7 +41,7 @@ function resolveChainLocale(): Locale {
   } catch {
     // Ignore missing CLS context and fallback below.
   }
-  return 'zh-CN';
+  return 'en-US';
 }
 
 /**
@@ -57,7 +57,8 @@ export function chainLabel(
   locale?: Locale,
 ): string {
   const loc = locale || resolveChainLocale();
-  const labels = CHAIN_LABELS[loc] || CHAIN_LABELS['zh-CN'];
+  const labels =
+    CHAIN_LABELS[loc] || CHAIN_LABELS['en-US'] || CHAIN_LABELS['zh-CN'];
   let text = labels[key] || key;
   if (vars) {
     for (const [k, v] of Object.entries(vars)) {

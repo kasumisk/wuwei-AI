@@ -9,6 +9,7 @@ import { SmsService } from './app/sms.service';
 import { WechatAuthService } from './app/wechat-auth.service';
 import { AppJwtStrategy } from './app/app-jwt.strategy';
 import { AppJwtAuthGuard } from './app/app-jwt-auth.guard';
+import { FirebaseAdminService } from './app/firebase-admin.service';
 // Admin 端
 import { AdminController } from './admin/admin-auth.controller';
 import { AdminService } from './admin/admin-auth.service';
@@ -44,6 +45,7 @@ import { JwtAuthGuard } from './admin/jwt-auth.guard';
     AppAuthService,
     SmsService,
     WechatAuthService,
+    FirebaseAdminService,
     AppJwtStrategy,
     AppJwtAuthGuard,
     // Admin 端

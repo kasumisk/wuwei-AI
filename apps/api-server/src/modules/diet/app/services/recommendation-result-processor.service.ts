@@ -35,6 +35,8 @@ import type { InsightContext } from '../recommendation/types/insight.types';
 import type { EffectiveGoal } from '../../../user/app/services/goal/goal-phase.service';
 import type { GoalProgress } from '../../../user/app/services/goal/goal-tracker.service';
 import type { DailyPlanState } from '../recommendation/types/meal.types';
+import { RequestContextService } from '../../../../core/context/request-context.service';
+import type { Locale } from '../recommendation/utils/i18n-messages';
 
 /** 后处理所需的上下文参数 */
 export interface ResultProcessingParams {
@@ -86,6 +88,7 @@ export class RecommendationResultProcessor {
     private readonly mealTemplateService: MealTemplateService,
     private readonly recipeAssembler: RecipeAssemblerService,
     private readonly insightGenerator: InsightGeneratorService,
+    private readonly requestCtx: RequestContextService,
   ) {}
 
   /**
@@ -188,6 +191,7 @@ export class RecommendationResultProcessor {
       goalType,
       target,
       finalizedPicks.reduce((s, p) => s + p.servingCalories, 0),
+      this.getCurrentLocale(),
     );
     const result = this.mealAssembler.aggregateMealResult(
       finalizedPicks,
@@ -256,5 +260,12 @@ export class RecommendationResultProcessor {
     }
 
     return result;
+  }
+
+  private getCurrentLocale(): Locale {
+    const locale = this.requestCtx.locale;
+    return locale === 'en-US' || locale === 'ja-JP' || locale === 'zh-CN'
+      ? locale
+      : 'zh-CN';
   }
 }

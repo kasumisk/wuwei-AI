@@ -62,5 +62,82 @@
   "validation.wechatMiniCodeRequired": "ミニプログラムの code を入力してください",
   "validation.redirectUriRequired": "リダイレクト URL を入力してください",
   "validation.firebaseTokenRequired": "Firebase Token を入力してください",
-  "validation.googleTokenRequired": "Google ID Token を入力してください"
+  "validation.googleTokenRequired": "Google ID Token を入力してください",
+
+  "enum.allergen.peanut": "ピーナッツ",
+  "enum.allergen.tree_nut": "木の実",
+  "enum.allergen.milk": "牛乳",
+  "enum.allergen.dairy": "乳製品",
+  "enum.allergen.egg": "卵",
+  "enum.allergen.soy": "大豆",
+  "enum.allergen.wheat": "小麦",
+  "enum.allergen.gluten": "グルテン",
+  "enum.allergen.fish": "魚",
+  "enum.allergen.shellfish": "甲殻類",
+  "enum.allergen.sesame": "ごま",
+
+  "enum.dietaryRestriction.vegetarian": "ベジタリアン",
+  "enum.dietaryRestriction.vegan": "ヴィーガン",
+  "enum.dietaryRestriction.pescatarian": "ペスカタリアン",
+  "enum.dietaryRestriction.halal": "ハラル",
+  "enum.dietaryRestriction.kosher": "コーシャ",
+  "enum.dietaryRestriction.gluten_free": "グルテンフリー",
+  "enum.dietaryRestriction.lactose_free": "乳糖フリー",
+  "enum.dietaryRestriction.low_sodium": "減塩",
+  "enum.dietaryRestriction.low_sugar": "低糖",
+  "enum.dietaryRestriction.low_carb": "低炭水化物",
+  "enum.dietaryRestriction.keto": "ケトジェニック",
+  "enum.dietaryRestriction.paleo": "パレオ",
+
+  "enum.healthCondition.diabetes": "糖尿病",
+  "enum.healthCondition.hypertension": "高血圧",
+  "enum.healthCondition.heart_disease": "心疾患",
+  "enum.healthCondition.kidney_disease": "腎臓病",
+  "enum.healthCondition.high_cholesterol": "高コレステロール",
+  "enum.healthCondition.gout": "痛風",
+  "enum.healthCondition.ibs": "過敏性腸症候群",
+
+  "enum.mealType.breakfast": "朝食",
+  "enum.mealType.lunch": "昼食",
+  "enum.mealType.dinner": "夕食",
+  "enum.mealType.snack": "間食",
+  "enum.mealType.late_night": "夜食",
+
+  "enum.budgetStatus.under_target": "目標未達",
+  "enum.budgetStatus.near_limit": "上限に近い",
+  "enum.budgetStatus.at_limit": "上限到達",
+  "enum.budgetStatus.over_limit": "上限超過",
+  "enum.budgetStatus.has_remaining": "カロリー残量あり",
+
+  "enum.activityLevel.sedentary": "座位中心",
+  "enum.activityLevel.light": "軽い活動",
+  "enum.activityLevel.moderate": "中程度の活動",
+  "enum.activityLevel.active": "活発",
+  "enum.activityLevel.very_active": "非常に活発",
+
+  "enum.gender.male": "男性",
+  "enum.gender.female": "女性",
+  "enum.gender.other": "その他",
+
+  "enum.goal.fat_loss": "減脂",
+  "enum.goal.muscle_gain": "増筋",
+  "enum.goal.health": "バランス健康",
+  "enum.goal.habit": "食習慣改善",
+  "enum.goal.maintain": "体重維持",
+
+  "enum.accuracyLevel.high": "高精度",
+  "enum.accuracyLevel.medium": "中精度",
+  "enum.accuracyLevel.low": "低精度",
+
+  "enum.reviewLevel.auto_review": "自動レビュー",
+  "enum.reviewLevel.manual_review": "手動レビュー",
+  "enum.reviewLevel.expert_review": "専門家レビュー",
+
+  "enum.analysisQuality.high": "高品質",
+  "enum.analysisQuality.medium": "中品質",
+  "enum.analysisQuality.low": "低品質",
+
+  "enum.recommendation.recommend": "推奨",
+  "enum.recommendation.caution": "注意して摂取",
+  "enum.recommendation.avoid": "避ける"
 }

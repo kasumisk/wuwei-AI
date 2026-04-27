@@ -8,6 +8,7 @@ import {
 import { AnalyzedFoodItem } from '../types/analysis-result.types';
 import { cl } from '../i18n/decision-labels';
 import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
+import { translateEnum } from '../../../common/i18n/enum-i18n';
 
 @Injectable()
 export class ConfidenceDiagnosticsService {
@@ -94,7 +95,11 @@ export class ConfidenceDiagnosticsService {
       qualitySignals.push('category_mismatch');
       for (const mm of categoryMismatches) {
         uncertaintyReasons.push(
-          `Category mismatch: "${mm.name}" LLM=${mm.llmCategory} vs DB=${mm.dbCategory}`,
+          cl('diag.categoryMismatch', locale, {
+            name: mm.name,
+            llmCategory: translateEnum('foodCategory', mm.llmCategory, locale),
+            dbCategory: translateEnum('foodCategory', mm.dbCategory, locale),
+          }),
         );
       }
     }

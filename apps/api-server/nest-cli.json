@@ -10,7 +10,9 @@
     "tsConfigPath": "tsconfig.build.json",
     "assets": [
       { "include": "**/i18n/*.json", "outDir": "dist", "watchAssets": true },
-      { "include": "common/i18n/*.json", "outDir": "dist", "watchAssets": true }
+      { "include": "common/i18n/*.json", "outDir": "dist", "watchAssets": true },
+      { "include": "**/i18n/prompts/**/*.md", "outDir": "dist", "watchAssets": true },
+      { "include": "**/i18n/prompts/**/*.txt", "outDir": "dist", "watchAssets": true }
     ]
   }
 }
