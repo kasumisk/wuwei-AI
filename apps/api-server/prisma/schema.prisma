@@ -143,7 +143,7 @@ model AnalysisFoodLink {
   createdAt            DateTime? @map("created_at") @default(now()) @db.Timestamptz(6)
   foodAnalysisRecords   FoodAnalysisRecords @relation(fields: [analysisId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_afl_analysis")
   foodCandidate        FoodCandidate?      @relation(fields: [foodCandidateId], references: [id], onUpdate: NoAction, map: "fk_afl_food_candidate")
-  foods                Foods?               @relation(fields: [foodLibraryId], references: [id], onUpdate: NoAction, map: "fk_afl_food_library")
+  foods                Food?               @relation(fields: [foodLibraryId], references: [id], onUpdate: NoAction, map: "fk_afl_food_library")
 
   @@index([analysisId], map: "idx_analysis_food_link_analysis_id")
   @@index([foodCandidateId], map: "idx_analysis_food_link_food_candidate_id")
@@ -709,7 +709,7 @@ model FoodChangeLogs {
   operator   String?  @db.VarChar(100)
   /// 变更时间
   createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
-  foods      Foods    @relation(fields: [foodId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_3bed3ebac60097ade2410992361")
+  foods      Food    @relation(fields: [foodId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_3bed3ebac60097ade2410992361")
 
   @@index([foodId, version], map: "IDX_c05fd8febec4e6c891d55037bb")
 
@@ -737,7 +737,7 @@ model FoodConflicts {
   resolvedAt     DateTime? @map("resolved_at") @db.Timestamptz(6)
   /// 冲突发现时间
   createdAt      DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
-  foods          Foods     @relation(fields: [foodId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_c38e8be317412e0e211bde36c2c")
+  foods          Food     @relation(fields: [foodId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_c38e8be317412e0e211bde36c2c")
 
   @@index([foodId], map: "IDX_c38e8be317412e0e211bde36c2")
   @@index([resolution], map: "IDX_f70f77608ec0d03dcb273d28b7")
@@ -837,7 +837,7 @@ model FoodRegionalInfo {
   regulatoryInfo    Json? @map("regulatory_info")
   /// 创建时间
   createdAt         DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
-  foods             Foods    @relation(fields: [foodId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_999e5485019b3efa2aae0a557f5")
+  foods             Food    @relation(fields: [foodId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_999e5485019b3efa2aae0a557f5")
   monthWeights      Json? @map("month_weights") @db.JsonB /// V7.0: 食物级月份权重（12 元素数组 0-1），替代品类级峰值月份
 
   @@unique([foodId, region], map: "UQ_41a17bad128becea48895910fa6")
@@ -874,7 +874,7 @@ model FoodSources {
   fetchedAt   DateTime @map("fetched_at") @default(now()) @db.Timestamptz(6)
   /// 记录创建时间
   createdAt   DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
-  foods       Foods    @relation(fields: [foodId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_dd78760b3ccd557a6be426c896f")
+  foods       Food    @relation(fields: [foodId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_dd78760b3ccd557a6be426c896f")
 
   @@index([sourceType], map: "IDX_c358d4034107dae538d5e906e9")
   @@index([foodId], map: "IDX_dd78760b3ccd557a6be426c896")
@@ -903,7 +903,7 @@ model FoodTranslations {
   createdAt    DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
   /// 最后更新时间
   updatedAt    DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
-  foods        Foods    @relation(fields: [foodId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_880ef718b1e294d7cbeb2c7265a")
+  foods        Food    @relation(fields: [foodId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_880ef718b1e294d7cbeb2c7265a")
 
   @@unique([foodId, locale], map: "UQ_5ce4d8b4f0dad567d3b81052e34")
   @@index([locale], map: "IDX_eafdca1bd9632ceabd94d182f2")
@@ -914,7 +914,9 @@ model FoodTranslations {
 /// 全球化食物库主表 — 存储食物的营养、属性、来源及推荐引擎所需的全部字段
 /// 字段分组：基本信息 → 宏量营养素 → 微量营养素 → 健康评估 → 标签与决策 →
 ///           份量 → 烹饪与风味 → 媒体 → 数据溯源 → 向量检索
-model Foods {
+/// 食物主表（原 model Foods，重构后改名为 Food，物理表名通过 @@map 保留为 "foods"）
+/// embedding 系列、failed_fields 字段已迁移至 FoodEmbedding / FoodFieldProvenance 关联表
+model Food {
   // ─── 基本信息 ───────────────────────────────────────────────────────────
   /// 主键 UUID
   id                    String                 @id(map: "PK_0cc83421325632f61fa27a52b59") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
@@ -1134,16 +1136,11 @@ model Foods {
   reviewedBy            String? @map("reviewed_by") @db.VarChar(100)
   /// V8.1: 最近审核时间
   reviewedAt            DateTime? @map("reviewed_at") @db.Timestamptz(6)
-  /// V8.1: 补全失败字段记录（JSONB，如 {"protein":{"reason":"AI返回null","at":"2026-04-13"}}）
-  failedFields          Json @map("failed_fields") @default("{}")
 
-  // ─── 向量检索（AI 语义搜索）────────────────────────────────────────────
-  /// 语义向量（float32 数组，用于余弦相似度搜索；v4 模型）
-  embedding             Float[]                @db.Real
-  /// v4 向量最后更新时间
-  embeddingUpdatedAt    DateTime? @map("embedding_updated_at") @db.Timestamptz(6)
-  /// 语义向量（pgvector 原生类型，v5 模型；支持 <=> 余弦距离操作符）
-  embeddingV5           Unsupported("vector")? @map("embedding_v5")
+  // ─── V8.2 重构：embedding/failed_fields 字段已迁移至关联表 ──────────────────
+  //   embedding / embedding_v5 / embedding_updated_at → FoodEmbedding
+  //   failed_fields                                  → FoodFieldProvenance (status='failed')
+  //   field_sources / field_confidence 仍保留在主表作为 jsonb 缓存层（双层共存）
 
   // ─── 关联关系（反向引用，不存储于本表）───────────────────────────────────
   analysisFoodLink      AnalysisFoodLink[]
@@ -1154,6 +1151,9 @@ model Foods {
   foodSources           FoodSources[]
   foodTranslations      FoodTranslations[]
   recipeIngredients     RecipeIngredients[]
+  embeddings            FoodEmbedding[]
+  fieldProvenance       FoodFieldProvenance[]
+  recommendationProfile FoodRecommendationProfile?
 
   @@index([searchWeight], map: "IDX_5f8b45ec9d0608cffe04d3afbe")
   @@index([allergens], map: "IDX_foods_allergens_gin", type: Gin)
@@ -2473,7 +2473,7 @@ model RecipeIngredients {
   sortOrder       Int @map("sort_order") @default(0) @db.SmallInt
 
   recipe Recipes  @relation(fields: [recipeId], references: [id], onDelete: Cascade)
-  food   Foods?   @relation(fields: [foodId], references: [id], onDelete: SetNull)
+  food   Food?   @relation(fields: [foodId], references: [id], onDelete: SetNull)
 
   @@index([recipeId], map: "idx_recipe_ingredients_recipe")
   @@index([foodId], map: "idx_recipe_ingredients_food")
@@ -2622,7 +2622,7 @@ model DailyPlanItems {
   sortOrder     Int @map("sort_order") @default(0)
 
   dailyPlan  DailyPlans @relation(fields: [dailyPlanId], references: [id], onDelete: Cascade)
-  food       Foods?      @relation(fields: [foodId], references: [id])
+  food       Food?      @relation(fields: [foodId], references: [id])
   recipe     Recipes?    @relation(fields: [recipeId], references: [id])
 
   @@index([dailyPlanId, mealType], map: "idx_dpi_plan_meal")
@@ -2804,4 +2804,96 @@ model GoalPhases {
   @@index([userId, phaseOrder], map: "idx_goal_phases_user_order")
 
   @@map("goal_phases")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// V8.2 Food Infrastructure Refactor — 拆表关联模型
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// 食物语义向量表（多模型共存：legacy_v4 / openai_v5 / 未来新模型）
+/// 拆出原因：embedding 字段宽（1536 维 + Float[] 双份）、热路径 food-pool-cache 不读
+model FoodEmbedding {
+  /// 主键 UUID
+  id            String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 关联食物 ID
+  foodId        String                 @map("food_id") @db.Uuid
+  /// 模型名（legacy_v4 / openai_v5 / ...）
+  modelName     String                 @map("model_name") @db.VarChar(50)
+  /// 模型版本（如 text-embedding-3-small）
+  modelVersion  String?                @map("model_version") @db.VarChar(100)
+  /// pgvector 类型向量（v5+ 使用此列）
+  vector        Unsupported("vector")?
+  /// 旧版 Float[] 向量（legacy_v4 使用此列）
+  vectorLegacy  Float[]                @map("vector_legacy") @db.Real
+  /// 向量维度
+  dimension     Int
+  /// 生成时间
+  generatedAt   DateTime               @map("generated_at") @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
+  updatedAt     DateTime               @map("updated_at") @default(now()) @db.Timestamptz(6)
+
+  food          Food                   @relation(fields: [foodId], references: [id], onDelete: Cascade)
+
+  @@unique([foodId, modelName], map: "uq_food_embeddings_food_model")
+  @@index([foodId], map: "idx_food_embeddings_food")
+  @@index([modelName], map: "idx_food_embeddings_model")
+  @@map("food_embeddings")
+}
+
+/// 字段级数据溯源表（成功/失败/置信度）
+/// 拆出原因：原 failed_fields jsonb 不可索引；field_sources 可双层共存（主表保留 jsonb 缓存）
+model FoodFieldProvenance {
+  /// 主键 UUID
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 关联食物 ID
+  foodId          String   @map("food_id") @db.Uuid
+  /// 字段名（如 protein, calories）
+  fieldName       String   @map("field_name") @db.VarChar(100)
+  /// 数据来源（usda / cfsb / gpt / manual / translated / enrichment / ...）
+  source          String   @db.VarChar(50)
+  /// 置信度 0-1
+  confidence      Float?
+  /// 状态：success / failed / pending
+  status          String   @default("success") @db.VarChar(20)
+  /// 失败原因（status='failed' 时填写）
+  failureReason   String?  @map("failure_reason") @db.VarChar(500)
+  /// 原始值快照（可选）
+  rawValue        Json?    @map("raw_value")
+  /// 创建时间
+  createdAt       DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
+  /// 最后更新时间
+  updatedAt       DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
+
+  food            Food     @relation(fields: [foodId], references: [id], onDelete: Cascade)
+
+  @@unique([foodId, fieldName, source], map: "uq_food_field_provenance_food_field_source")
+  @@index([foodId], map: "idx_food_field_provenance_food")
+  @@index([fieldName], map: "idx_food_field_provenance_field")
+  @@index([status], map: "idx_food_field_provenance_status")
+  @@map("food_field_provenance")
+}
+
+/// 食物推荐画像表（离线计算的预聚合分数；本期只建表+迁移占位行，不接入推荐排序）
+/// 拆出原因：未来推荐排序需要 fat_loss_score / muscle_gain_score 等字段，独立表方便频繁刷写
+model FoodRecommendationProfile {
+  /// 关联食物 ID（同时作为主键，1:1）
+  foodId               String   @id @map("food_id") @db.Uuid
+  /// 减脂适配度 0-1
+  fatLossScore         Float?   @map("fat_loss_score")
+  /// 增肌适配度 0-1
+  muscleGainScore      Float?   @map("muscle_gain_score")
+  /// 综合健康度 0-1
+  generalHealthScore   Float?   @map("general_health_score")
+  /// 大众化度 0-1（与 foods.commonality_score 不同：基于真实点击聚合）
+  popularityScore      Float?   @map("popularity_score")
+  /// 区域适配度（jsonb，如 {asia:0.9, europe:0.6}）
+  regionFitness        Json?    @map("region_fitness")
+  /// 计算时间
+  computedAt           DateTime @map("computed_at") @default(now()) @db.Timestamptz(6)
+  /// 计算版本号
+  computedVersion      String?  @map("computed_version") @db.VarChar(50)
+
+  food                 Food     @relation(fields: [foodId], references: [id], onDelete: Cascade)
+
+  @@map("food_recommendation_profile")
 }
