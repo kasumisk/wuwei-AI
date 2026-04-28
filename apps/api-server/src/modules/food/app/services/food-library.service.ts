@@ -2,6 +2,10 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { MealType, RecordSource } from '../../../diet/diet.types';
 import { FoodService } from '../../../diet/app/services/food.service';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
+import {
+  upsertFoodSplitTables,
+  FOOD_SPLIT_INCLUDE,
+} from '../../food-split.helper';
 
 @Injectable()
 export class FoodLibraryService {
@@ -54,11 +58,10 @@ export class FoodLibraryService {
          vitamin_b6, omega3, omega6,
          soluble_fiber, insoluble_fiber, water_content_percent,
          acquisition_difficulty,
-         -- 补全元数据
-         data_completeness, enrichment_status, last_enriched_at,
-         field_sources, field_confidence,
+          -- 补全元数据
+          data_completeness, enrichment_status, last_enriched_at,
          -- V8.1 审核
-         review_status, reviewed_by, reviewed_at, failed_fields,
+         review_status, reviewed_by, reviewed_at,
          created_at, updated_at,
          GREATEST(
            similarity(name, $1),
@@ -90,7 +93,7 @@ export class FoodLibraryService {
       where.category = category;
     }
 
-    return this.prisma.foods.findMany({
+    return this.prisma.food.findMany({
       where,
       orderBy: { searchWeight: 'desc' },
       take: safeLimit,
@@ -116,7 +119,7 @@ export class FoodLibraryService {
    * 按名称精确查找（SEO 落地页使用）
    */
   async findByName(name: string) {
-    const food = await this.prisma.foods.findFirst({
+    const food = await this.prisma.food.findFirst({
       where: { name },
     });
     if (!food) {
@@ -129,8 +132,9 @@ export class FoodLibraryService {
    * 按 ID 查找
    */
   async findById(id: string) {
-    const food = await this.prisma.foods.findUnique({
+    const food = await this.prisma.food.findUnique({
       where: { id },
+      include: FOOD_SPLIT_INCLUDE,
     });
     if (!food) {
       throw new NotFoundException(`未找到食物`);
@@ -143,7 +147,7 @@ export class FoodLibraryService {
    */
   async getRelated(name: string, limit: number = 5) {
     const food = await this.findByName(name);
-    return this.prisma.foods.findMany({
+    return this.prisma.food.findMany({
       where: {
         category: food.category,
         name: { not: name },
@@ -159,11 +163,11 @@ export class FoodLibraryService {
   async findAll(limit: number = 500) {
     const take = Math.min(limit, 1000);
     const [items, total] = await Promise.all([
-      this.prisma.foods.findMany({
+      this.prisma.food.findMany({
         orderBy: { searchWeight: 'desc' },
         take,
       }),
-      this.prisma.foods.count(),
+      this.prisma.food.count(),
     ]);
     return { items, total };
   }
@@ -204,7 +208,9 @@ export class FoodLibraryService {
           fat,
           carbs,
           glycemicIndex:
-            food.glycemicIndex != null ? Number(food.glycemicIndex) : undefined,
+            food.healthAssessment?.glycemicIndex != null
+              ? Number(food.healthAssessment.glycemicIndex)
+              : undefined,
         },
       ],
       totalCalories: calories,
@@ -237,7 +243,7 @@ export class FoodLibraryService {
     if (frequentNames.length === 0) return [];
 
     const names = frequentNames.map((r) => r.name);
-    const foods = await this.prisma.foods.findMany({
+    const foods = await this.prisma.food.findMany({
       where: { name: { in: names } },
     });
 
@@ -255,7 +261,9 @@ export class FoodLibraryService {
    * 新增食物条目（管理员 / 后台用）
    */
   async create(data: any) {
-    return this.prisma.foods.create({ data });
+    const food = await this.prisma.food.create({ data });
+    await upsertFoodSplitTables(this.prisma, food.id, data);
+    return food;
   }
 
   /**
@@ -263,10 +271,12 @@ export class FoodLibraryService {
    */
   async update(id: string, data: any) {
     await this.findById(id);
-    return this.prisma.foods.update({
+    const food = await this.prisma.food.update({
       where: { id },
       data,
     });
+    await upsertFoodSplitTables(this.prisma, id, data);
+    return food;
   }
 
   /**
@@ -274,7 +284,7 @@ export class FoodLibraryService {
    */
   async remove(id: string): Promise<void> {
     await this.findById(id);
-    await this.prisma.foods.delete({ where: { id } });
+    await this.prisma.food.delete({ where: { id } });
   }
 
   /**
@@ -283,7 +293,12 @@ export class FoodLibraryService {
    * V6 优化: 按 category 分组使用 updateMany 替代逐条 update，减少 DB 往返
    */
   async enrichMissingFields(): Promise<{ updated: number }> {
-    const foods = await this.prisma.foods.findMany();
+    const foods = await this.prisma.food.findMany({
+      include: {
+        healthAssessment: { select: { qualityScore: true, satietyScore: true, isProcessed: true, isFried: true } },
+        taxonomy: { select: { mealTypes: true } },
+      },
+    });
     let updated = 0;
 
     const categoryQuality: Record<string, number> = {
@@ -327,23 +342,26 @@ export class FoodLibraryService {
     const batchUpdates: Array<{ id: string; data: Record<string, any> }> = [];
 
     for (const food of foods) {
+      const ha = (food as any).healthAssessment;
+      const tx = (food as any).taxonomy;
       const changes: Record<string, any> = {};
 
-      if (!food.qualityScore) {
+      if (!ha?.qualityScore) {
         changes.qualityScore = categoryQuality[food.category] || 5;
       }
-      if (!food.satietyScore) {
+      if (!ha?.satietyScore) {
         changes.satietyScore = categorySatiety[food.category] || 4;
       }
-      if (!food.mealTypes || (food.mealTypes as string[]).length === 0) {
+      const mealTypes = tx?.mealTypes as string[] | null;
+      if (!mealTypes || mealTypes.length === 0) {
         changes.mealTypes = mealTypeMap[food.category] || ['lunch', 'dinner'];
       }
-      if (food.isProcessed === undefined || food.isProcessed === null) {
+      if (ha?.isProcessed === undefined || ha?.isProcessed === null) {
         changes.isProcessed =
           ['snack', 'composite'].includes(food.category) ||
           /加工|方便|速食|罐头|腌/.test(food.name);
       }
-      if (food.isFried === undefined || food.isFried === null) {
+      if (ha?.isFried === undefined || ha?.isFried === null) {
         changes.isFried = /炸|煎饺|油条|锅贴|油炸|煎饼/.test(food.name);
       }
 
@@ -352,15 +370,13 @@ export class FoodLibraryService {
       }
     }
 
-    // 使用 $transaction 批量写入（每批 200 条）
+    // 使用 $transaction 批量写入拆分表（每批 200 条）
     const TX_BATCH = 200;
     for (let i = 0; i < batchUpdates.length; i += TX_BATCH) {
       const chunk = batchUpdates.slice(i, i + TX_BATCH);
-      await this.prisma.$transaction(
-        chunk.map(({ id, data }) =>
-          this.prisma.foods.update({ where: { id }, data }),
-        ),
-      );
+      for (const { id, data } of chunk) {
+        await upsertFoodSplitTables(this.prisma, id, data);
+      }
       updated += chunk.length;
     }
 

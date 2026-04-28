@@ -364,7 +364,7 @@ export class RecommendationDebugService {
     }
 
     // 2. 获取食物
-    const food = await this.prisma.foods.findUnique({
+    const food = await this.prisma.food.findUnique({
       where: { id: foodId },
     });
     if (!food) {

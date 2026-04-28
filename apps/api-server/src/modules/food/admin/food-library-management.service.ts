@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { I18nService } from '../../../core/i18n';
+import { FoodProvenanceRepository } from '../repositories';
 import {
   ENRICHABLE_FIELDS,
   JSON_ARRAY_FIELDS,
@@ -30,6 +31,7 @@ export class FoodLibraryManagementService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly i18n: I18nService,
+    private readonly provenanceRepo: FoodProvenanceRepository,
   ) {}
 
   // ==================== DTO → DB 字段映射 ====================
@@ -160,9 +162,11 @@ export class FoodLibraryManagementService {
         conditions.push(`(${nullConds})`);
       }
     }
-    // V8.1: 按补全失败字段筛选（field_sources 中含 'ai_failed' 的字段）
+    // V8.1: 按补全失败字段筛选（V8.2: 改为 EXISTS 子查询 food_field_provenance 表）
     if (failedField && /^[a-z_][a-z0-9_]*$/.test(failedField)) {
-      conditions.push(`f.failed_fields ? $${paramIdx}`);
+      conditions.push(
+        `EXISTS (SELECT 1 FROM food_field_provenance p WHERE p.food_id = f.id AND p.status = 'failed' AND p.field_name = $${paramIdx})`,
+      );
       params.push(failedField);
       paramIdx++;
     }
@@ -241,14 +245,18 @@ export class FoodLibraryManagementService {
          f.vitamin_b6, f.omega3, f.omega6,
          f.soluble_fiber, f.insoluble_fiber, f.water_content_percent,
          f.acquisition_difficulty,
-         -- 补全元数据
-         f.data_completeness, f.enrichment_status, f.last_enriched_at,
-         f.field_sources, f.field_confidence,
+          -- 补全元数据
+          f.data_completeness, f.enrichment_status, f.last_enriched_at,
          -- V8.1: 整体审核状态 + 审核元数据
          f.review_status,
          f.reviewed_by,
          f.reviewed_at,
-         f.failed_fields
+         -- V8.2: failed_fields 已迁移到 food_field_provenance 表，按需 JOIN 查询
+         (
+           SELECT jsonb_object_agg(p.field_name, jsonb_build_object('reason', COALESCE(p.failure_reason, ''), 'updatedAt', p.updated_at))
+             FROM food_field_provenance p
+            WHERE p.food_id = f.id AND p.status = 'failed'
+         ) AS "failedFields"
        FROM foods f
        WHERE ${whereClause}
        ORDER BY ${orderClause}
@@ -288,8 +296,8 @@ export class FoodLibraryManagementService {
       this.prisma.foodConflicts.findMany({ where: { foodId: id } }),
     ]);
 
-    // V8.1: 构建 enrichmentMeta — 字段级完整度详情
-    const enrichmentMeta = this.buildEnrichmentMeta(food);
+    // V8.2: 构建 enrichmentMeta — 字段级完整度详情（异步：从 provenance 表查失败字段）
+    const enrichmentMeta = await this.buildEnrichmentMeta(food);
 
     return { ...food, translations, sources, conflicts, enrichmentMeta };
   }
@@ -300,7 +308,7 @@ export class FoodLibraryManagementService {
    * 避免加载 translations/sources/conflicts/enrichmentMeta（4个额外查询）
    */
   private async findOneSimple(id: string) {
-    const food = await this.prisma.foods.findUnique({ where: { id } });
+    const food = await this.prisma.food.findUnique({ where: { id } });
     if (!food) {
       throw new NotFoundException(this.i18n.t('food.foodNotFound'));
     }
@@ -308,14 +316,26 @@ export class FoodLibraryManagementService {
   }
 
   /**
-   * V8.1: 构建食物字段级补全元数据
+   * V8.2: 构建食物字段级补全元数据
    * 提供每个可补全字段的填充状态、数据来源、置信度等信息
+   *
+   * V8.2 重构：failed_fields JSONB 已删除，改为从 food_field_provenance 表
+   * 查询 status='failed' 行；本方法变为异步。
    */
-  private buildEnrichmentMeta(food: any) {
-    const fieldSources = (food.fieldSources as Record<string, string>) || {};
-    const fieldConfidence =
-      (food.fieldConfidence as Record<string, number>) || {};
-    const failedFields = (food.failedFields as Record<string, any>) || {};
+  private async buildEnrichmentMeta(food: any) {
+    const [successMap, failedRows] = await Promise.all([
+      this.provenanceRepo.getSuccessMap(food.id),
+      this.provenanceRepo.listFailures(food.id),
+    ]);
+    const failedFields: Record<string, any> = {};
+    for (const row of failedRows) {
+      const raw = (row.rawValue as Record<string, any>) || {};
+      failedFields[row.fieldName] = {
+        reason: row.failureReason ?? raw.reasonCode ?? null,
+        ...raw,
+        updatedAt: row.updatedAt,
+      };
+    }
 
     const isFieldFilled = (field: string): boolean => {
       const value = food[field];
@@ -324,6 +344,13 @@ export class FoodLibraryManagementService {
         return Array.isArray(value) && value.length > 0;
       if ((JSON_OBJECT_FIELDS as readonly string[]).includes(field))
         return typeof value === 'object' && Object.keys(value).length > 0;
+      if (
+        field === 'processing_level' ||
+        field === 'commonality_score' ||
+        field === 'available_channels'
+      ) {
+        return Boolean(successMap[field]);
+      }
       return true;
     };
 
@@ -331,22 +358,16 @@ export class FoodLibraryManagementService {
     const fieldDetails = (ENRICHABLE_FIELDS as readonly string[]).map(
       (field) => {
         const filled = isFieldFilled(field);
-        const label =
-          ENRICHMENT_FIELD_LABELS[
-            field as keyof typeof ENRICHMENT_FIELD_LABELS
-          ] ?? field;
-        const unit =
-          ENRICHMENT_FIELD_UNITS[
-            field as keyof typeof ENRICHMENT_FIELD_UNITS
-          ] ?? '';
+        const label = ENRICHMENT_FIELD_LABELS[field] ?? field;
+        const unit = ENRICHMENT_FIELD_UNITS[field] ?? '';
         return {
           field,
           label,
           unit,
           filled,
           value: filled ? food[field] : null,
-          source: fieldSources[field] ?? null,
-          confidence: fieldConfidence[field] ?? null,
+          source: successMap[field]?.source ?? null,
+          confidence: successMap[field]?.confidence ?? null,
           failed: failedFields[field] ?? null,
         };
       },
@@ -384,13 +405,16 @@ export class FoodLibraryManagementService {
 
     // 来源分布
     const sourceDistribution: Record<string, number> = {};
-    for (const src of Object.values(fieldSources)) {
-      sourceDistribution[src] = (sourceDistribution[src] || 0) + 1;
+    for (const meta of Object.values(successMap)) {
+      sourceDistribution[meta.source] =
+        (sourceDistribution[meta.source] || 0) + 1;
     }
 
     return {
       completeness: {
-        score: food.dataCompleteness ?? this.computeSimpleCompleteness(food),
+        score:
+          food.dataCompleteness ??
+          this.computeSimpleCompleteness(food, successMap),
         groups,
       },
       fieldDetails,
@@ -409,7 +433,7 @@ export class FoodLibraryManagementService {
   }
 
   async create(dto: CreateFoodLibraryDto) {
-    const existing = await this.prisma.foods.findFirst({
+    const existing = await this.prisma.food.findFirst({
       where: { name: dto.name },
     });
     if (existing) {
@@ -417,7 +441,7 @@ export class FoodLibraryManagementService {
         this.i18n.t('food.foodNameDuplicate', { name: dto.name }),
       );
     }
-    const codeExisting = await this.prisma.foods.findFirst({
+    const codeExisting = await this.prisma.food.findFirst({
       where: { code: dto.code },
     });
     if (codeExisting) {
@@ -425,7 +449,7 @@ export class FoodLibraryManagementService {
         this.i18n.t('food.foodCodeDuplicate', { code: dto.code }),
       );
     }
-    const saved = await this.prisma.foods.create({
+    const saved = await this.prisma.food.create({
       data: this.stripUndefined(dto) as any,
     });
 
@@ -445,7 +469,7 @@ export class FoodLibraryManagementService {
     // V8.3: 使用 findOneSimple 避免加载 translations/sources/conflicts/enrichmentMeta
     const food = await this.findOneSimple(id);
     if (dto.name && dto.name !== food.name) {
-      const existing = await this.prisma.foods.findFirst({
+      const existing = await this.prisma.food.findFirst({
         where: { name: dto.name },
       });
       if (existing) {
@@ -466,27 +490,23 @@ export class FoodLibraryManagementService {
     const mappedData = this.stripUndefined(dto);
     const newVersion = (food.dataVersion || 1) + 1;
 
-    // V8.0: 更新 field_sources — 手动编辑的字段标记为 'manual'
-    const existingSources = (food.fieldSources as Record<string, string>) || {};
-    const existingConfidence =
-      (food.fieldConfidence as Record<string, number>) || {};
-    const newSources = { ...existingSources };
-    const newConfidence = { ...existingConfidence };
     const enrichableSet = new Set<string>(
       ENRICHABLE_FIELDS as unknown as string[],
     );
 
-    for (const [dbKey] of Object.entries(mappedData)) {
-      if (enrichableSet.has(dbKey)) {
-        newSources[dbKey] = 'manual';
-        newConfidence[dbKey] = 1.0; // 手动编辑置信度为 1.0
-      }
-    }
-
     // V8.3: 预计算完整度，合并到单次 UPDATE 中（避免双重 UPDATE）
     // 需要先合并 mappedData 到 food 上以计算更新后的完整度
     const mergedForCompleteness = { ...food, ...mappedData };
-    const completeness = this.computeSimpleCompleteness(mergedForCompleteness);
+    const successMap = await this.provenanceRepo.getSuccessMap(id);
+    for (const [dbKey] of Object.entries(mappedData)) {
+      if (enrichableSet.has(dbKey)) {
+        successMap[dbKey] = { source: 'manual', confidence: 1.0 };
+      }
+    }
+    const completeness = this.computeSimpleCompleteness(
+      mergedForCompleteness,
+      successMap,
+    );
     const enrichmentStatus =
       completeness >= 80
         ? 'completed'
@@ -494,17 +514,27 @@ export class FoodLibraryManagementService {
           ? 'partial'
           : 'pending';
 
-    const saved = await this.prisma.foods.update({
+    const saved = await this.prisma.food.update({
       where: { id },
       data: {
         ...mappedData,
         dataVersion: newVersion,
-        fieldSources: newSources,
-        fieldConfidence: newConfidence,
         dataCompleteness: completeness,
         enrichmentStatus: enrichmentStatus,
       },
     });
+
+    for (const [dbKey] of Object.entries(mappedData)) {
+      if (enrichableSet.has(dbKey)) {
+        await this.provenanceRepo.recordSuccess({
+          foodId: id,
+          fieldName: dbKey,
+          source: 'manual',
+          confidence: 1.0,
+        });
+        await this.provenanceRepo.clearFailuresForField(id, dbKey);
+      }
+    }
 
     if (Object.keys(changes).length > 0) {
       await this.createChangeLog(
@@ -523,7 +553,13 @@ export class FoodLibraryManagementService {
    * V8.0: 简化版完整度计算（复用 ENRICHMENT_STAGES 权重逻辑）
    * 避免循环依赖：不引入 FoodEnrichmentService，直接使用常量计算
    */
-  private computeSimpleCompleteness(food: any): number {
+  private computeSimpleCompleteness(
+    food: any,
+    successMap: Record<
+      string,
+      { source: string; confidence: number | null }
+    > = {},
+  ): number {
     const isFieldFilled = (field: string): boolean => {
       const value = food[field];
       if (value === null || value === undefined) return false;
@@ -531,6 +567,13 @@ export class FoodLibraryManagementService {
         return Array.isArray(value) && value.length > 0;
       if ((JSON_OBJECT_FIELDS as readonly string[]).includes(field))
         return typeof value === 'object' && Object.keys(value).length > 0;
+      if (
+        field === 'processing_level' ||
+        field === 'commonality_score' ||
+        field === 'available_channels'
+      ) {
+        return Boolean(successMap[field]);
+      }
       return true;
     };
 
@@ -553,7 +596,7 @@ export class FoodLibraryManagementService {
   async remove(id: string): Promise<{ message: string }> {
     // V8.3: 使用 findOneSimple 避免不必要的关联查询
     const food = await this.findOneSimple(id);
-    await this.prisma.foods.delete({ where: { id } });
+    await this.prisma.food.delete({ where: { id } });
     return { message: `食物 "${food.name}" 已删除` };
   }
 
@@ -566,14 +609,14 @@ export class FoodLibraryManagementService {
 
     for (const dto of foods) {
       try {
-        const existing = await this.prisma.foods.findFirst({
+        const existing = await this.prisma.food.findFirst({
           where: { code: dto.code },
         });
         if (existing) {
           skipped++;
           continue;
         }
-        const saved = await this.prisma.foods.create({
+        const saved = await this.prisma.food.create({
           data: this.stripUndefined(dto) as any,
         });
         await this.createChangeLog(
@@ -598,7 +641,7 @@ export class FoodLibraryManagementService {
     const food = await this.findOneSimple(id);
     const newIsVerified = !food.isVerified;
     const newVersion = (food.dataVersion || 1) + 1;
-    const saved = await this.prisma.foods.update({
+    const saved = await this.prisma.food.update({
       where: { id },
       data: {
         isVerified: newIsVerified,
@@ -626,7 +669,7 @@ export class FoodLibraryManagementService {
     const food = await this.findOneSimple(id);
     const oldStatus = food.status;
     const newVersion = (food.dataVersion || 1) + 1;
-    const saved = await this.prisma.foods.update({
+    const saved = await this.prisma.food.update({
       where: { id },
       data: {
         status: newStatus,
@@ -963,7 +1006,7 @@ export class FoodLibraryManagementService {
       updateData.reviewedBy = null;
       updateData.reviewedAt = null;
     }
-    const result = await this.prisma.foods.updateMany({
+    const result = await this.prisma.food.updateMany({
       where: { id: { in: ids } },
       data: updateData as any,
     });
@@ -975,7 +1018,7 @@ export class FoodLibraryManagementService {
       pending: 'review_reset',
     };
     const action = actionMap[reviewStatus] ?? 'review_reset';
-    const foods = await this.prisma.foods.findMany({
+    const foods = await this.prisma.food.findMany({
       where: { id: { in: ids } },
       select: { id: true, dataVersion: true },
     });

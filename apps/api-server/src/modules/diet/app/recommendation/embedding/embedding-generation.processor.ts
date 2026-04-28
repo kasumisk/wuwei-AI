@@ -5,7 +5,7 @@
  * 1. 接收食物 ID 列表
  * 2. 查询食物数据
  * 3. 调用 computeFoodEmbedding() 计算 96 维向量
- * 4. 批量写入 foods.embedding + embedding_v5
+ * 4. 批量写入 food_embeddings (model_name='feature_v5')
  *
  * 配合 DeadLetterService：重试耗尽后存入 DLQ
  */
@@ -40,7 +40,7 @@ export class EmbeddingGenerationProcessor extends WorkerHost {
     const startTime = Date.now();
 
     // 查询食物数据
-    const foods = await this.prisma.foods.findMany({
+    const foods = await this.prisma.food.findMany({
       where: { id: { in: foodIds } },
     });
 
@@ -57,31 +57,42 @@ export class EmbeddingGenerationProcessor extends WorkerHost {
       vec: computeFoodEmbedding(food as any),
     }));
 
-    // 批量写入 foods.embedding (Prisma Float[])
+    const now = new Date();
+
+    // V8.2: 批量写入 food_embeddings(legacy_v4) — Float[] 列
     await this.prisma.$transaction(
-      embeddings.map(({ id, vec }) =>
-        this.prisma.foods.update({
-          where: { id },
-          data: {
-            embedding: vec,
-            embeddingUpdatedAt: new Date(),
-          },
-        }),
+      embeddings.map(
+        ({ id, vec }) =>
+          this.prisma.$executeRaw`
+          INSERT INTO "food_embeddings" ("food_id", "model_name", "vector_legacy", "dimension", "generated_at", "updated_at")
+          VALUES (${id}::uuid, 'legacy_v4', ${vec}::real[], ${vec.length}, ${now}, ${now})
+          ON CONFLICT ("food_id", "model_name")
+          DO UPDATE SET "vector_legacy" = EXCLUDED."vector_legacy",
+                        "dimension"     = EXCLUDED."dimension",
+                        "updated_at"    = EXCLUDED."updated_at"
+        `,
       ),
     );
 
-    // 尝试同步写入 pgvector 列 embedding_v5
+    // 尝试同步写入 food_embeddings(feature_v5) — pgvector 列
     try {
       await this.prisma.$transaction(
         embeddings.map(
           ({ id, vec }) =>
-            this.prisma
-              .$queryRaw`UPDATE "foods" SET "embedding_v5" = ${`[${vec.join(',')}]`}::vector WHERE "id" = ${id}`,
+            this.prisma.$executeRaw`
+              INSERT INTO "food_embeddings" ("food_id", "model_name", "vector", "dimension", "generated_at", "updated_at")
+              VALUES (${id}::uuid, 'feature_v5', ${`[${vec.join(',')}]`}::vector, ${vec.length}, ${now}, ${now})
+              ON CONFLICT ("food_id", "model_name")
+              DO UPDATE SET "vector"        = EXCLUDED."vector",
+                            "model_version" = EXCLUDED."model_version",
+                            "dimension"     = EXCLUDED."dimension",
+                            "updated_at"    = EXCLUDED."updated_at"
+            `,
         ),
       );
     } catch {
       // pgvector 不可用时跳过，不影响主流程
-      this.logger.debug('pgvector embedding_v5 写入跳过（扩展可能不可用）');
+      this.logger.debug('pgvector embedding 写入跳过（扩展可能不可用）');
     }
 
     const elapsed = Date.now() - startTime;

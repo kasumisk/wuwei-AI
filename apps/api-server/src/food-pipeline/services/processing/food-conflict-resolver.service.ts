@@ -143,6 +143,20 @@ export class FoodConflictResolverService {
         if (result.resolution !== 'needs_review') {
           // Use raw SQL for dynamic field update since field names may be camelCase or snake_case
           const snakeField = this.toSnakeCase(conflict.field);
+          // V8.2: 拦截已迁移到关联表的字段（embedding* / failed_fields），防止 UPDATE 失败
+          const REMOVED_FIELDS = new Set([
+            'embedding',
+            'embedding_v5',
+            'embedding_updated_at',
+            'failed_fields',
+          ]);
+          if (REMOVED_FIELDS.has(snakeField)) {
+            this.logger.warn(
+              `Skip conflict resolve for migrated field "${conflict.field}" (food=${conflict.foodId}): use food_embeddings / food_field_provenance instead`,
+            );
+            needsReview++;
+            continue;
+          }
           await this.prisma.$executeRawUnsafe(
             `UPDATE foods SET "${snakeField}" = $1 WHERE id = $2::uuid`,
             result.resolvedValue,

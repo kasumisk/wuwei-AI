@@ -596,22 +596,22 @@ export class StrategyAutoTuner implements OnModuleInit, OnModuleDestroy {
       }>
     >`
       SELECT
-        uip.user_segment AS segment_name,
+        (up.inferred_data->>'userSegment') AS segment_name,
         t.strategy_id,
         COALESCE(s.name, 'unknown') AS strategy_name,
         COUNT(f.id) AS total_feedbacks,
         COUNT(CASE WHEN f.action = 'accepted' THEN 1 END) AS accepted_count
       FROM recommendation_traces t
       JOIN recommendation_feedbacks f ON f.trace_id = t.id
-      JOIN user_inferred_profiles uip ON uip.user_id = t.user_id
+      JOIN user_profiles up ON up.user_id = t.user_id
       LEFT JOIN strategy s ON s.id = t.strategy_id
       WHERE t.created_at >= ${startDate}
         AND t.created_at < ${endDate}
-        AND uip.user_segment IS NOT NULL
+        AND up.inferred_data->>'userSegment' IS NOT NULL
         AND t.strategy_id IS NOT NULL
-      GROUP BY uip.user_segment, t.strategy_id, s.name
+      GROUP BY (up.inferred_data->>'userSegment'), t.strategy_id, s.name
       HAVING COUNT(f.id) >= 3
-      ORDER BY uip.user_segment, COUNT(f.id) DESC
+      ORDER BY (up.inferred_data->>'userSegment'), COUNT(f.id) DESC
     `;
 
     return rows.map((r) => {

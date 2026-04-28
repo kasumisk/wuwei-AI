@@ -1174,7 +1174,7 @@ export class FoodAnalyzeController {
     @CurrentAppUser() user: AppUserPayload,
   ): Promise<ApiResponse> {
     // 1. 查找食物库记录
-    const food = await this.prisma.foods.findUnique({
+    const food = await this.prisma.food.findUnique({
       where: { id: foodId },
     });
     if (!food) {
@@ -1190,12 +1190,12 @@ export class FoodAnalyzeController {
     const fat = Number(food.fat) || 0;
     const carbs = Number(food.carbs) || 0;
     const fiber = Number(food.fiber) || 0;
-    const sodium = Number(food.sodium) || 0;
+    const sodium = Number((food as any).sodium) || 0;
     const confidence = Number(food.confidence) || 50;
 
-    // 基于数据计算简单的健康评分
-    const qualityScore = Number(food.qualityScore) || 50;
-    const nutrientDensity = Number(food.nutrientDensity) || 50;
+    // 基于数据计算简单的健康评分（优先从拆分表读）
+    const qualityScore = Number((food as any).healthAssessment?.qualityScore ?? (food as any).qualityScore) || 50;
+    const nutrientDensity = Number((food as any).healthAssessment?.nutrientDensity ?? (food as any).nutrientDensity) || 50;
     const healthScore = Math.round((qualityScore + nutrientDensity) / 2);
 
     // 简化决策：基于 quality_score
@@ -1210,8 +1210,9 @@ export class FoodAnalyzeController {
       qualityScore >= 70 ? 'low' : qualityScore >= 40 ? 'medium' : 'high';
 
     const analysisId = `quick-${foodId}`;
+    const pg = (food as any).portionGuide;
     const servingDesc =
-      food.standardServingDesc || `${food.standardServingG || 100}g`;
+      pg?.standardServingDesc || `${pg?.standardServingG || 100}g`;
 
     const v61: FoodAnalysisResultV61 = {
       analysisId,
@@ -1222,7 +1223,7 @@ export class FoodAnalyzeController {
           name: food.name,
           foodLibraryId: food.id,
           quantity: servingDesc,
-          estimatedWeightGrams: Number(food.standardServingG) || 100,
+          estimatedWeightGrams: Number(pg?.standardServingG) || 100,
           category: food.category || undefined,
           confidence: confidence / 100,
           calories,

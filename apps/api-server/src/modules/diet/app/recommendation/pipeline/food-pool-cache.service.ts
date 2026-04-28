@@ -319,11 +319,7 @@ function mapRowToFoodLibrary(row: Record<string, unknown>): FoodLibrary {
       row.verifiedAt != null ? new Date(row.verifiedAt as string) : undefined,
     searchWeight: n(row.searchWeight) || 100,
     popularity: n(row.popularity),
-    embedding: row.embedding != null ? (row.embedding as number[]) : undefined,
-    embeddingUpdatedAt:
-      row.embeddingUpdatedAt != null
-        ? new Date(row.embeddingUpdatedAt as string)
-        : undefined,
+    embedding: undefined,
     createdAt: new Date((row.createdAt as string) || Date.now()),
     updatedAt: new Date((row.updatedAt as string) || Date.now()),
     // V6.4 Phase 3.3: 可获取渠道

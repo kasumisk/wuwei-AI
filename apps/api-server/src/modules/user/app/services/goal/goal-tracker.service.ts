@@ -5,11 +5,11 @@
  * 1. calorieCompliance  — 热量达成率（14天均值 actual/goal）
  * 2. proteinCompliance  — 蛋白质达成率（14天均值）
  * 3. executionRate      — 推荐执行率（14天，复用 recommendation_executions）
- * 4. streakDays         — 连续健康天数（来自 user_behavior_profiles）
+ * 4. streakDays         — 连续健康天数（来自 user_profiles.behavior_data）
  * 5. phaseRemainingDays — 当前阶段剩余天数（如有 CompoundGoal.phases）
  * 6. phaseProgress      — 阶段进度百分比 (0-1)
  *
- * 数据源：daily_summaries + user_behavior_profiles + goal_phases + user_profiles.compound_goal
+ * 数据源：daily_summaries + user_profiles.behavior_data + goal_phases + user_profiles.compound_goal
  * 缓存：Redis 4h TTL
  *
  * 依赖：PrismaService, RedisCacheService
@@ -19,6 +19,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../../../core/prisma/prisma.service';
 import { RedisCacheService } from '../../../../../core/redis/redis-cache.service';
 import { GoalPhase, GoalType, CompoundGoal } from '../../../user.types';
+import { getBehavior } from '../../../user-profile-merge.helper';
 
 // ─── 常量 ───
 
@@ -308,18 +309,20 @@ export class GoalTrackerService {
   }
 
   /**
-   * 获取 user_behavior_profiles（连续天数等）
+   * 获取 behavior_data（连续天数等）
    */
   private async getBehaviorProfile(userId: string) {
     try {
-      return await this.prisma.userBehaviorProfiles.findUnique({
+      const profile = await this.prisma.userProfiles.findUnique({
         where: { userId: userId },
-        select: {
-          streakDays: true,
-          longestStreak: true,
-          avgComplianceRate: true,
-        },
       });
+      if (!profile) return null;
+      const behavior = getBehavior(profile);
+      return {
+        streakDays: behavior.streakDays ?? 0,
+        longestStreak: behavior.longestStreak ?? 0,
+        avgComplianceRate: behavior.avgComplianceRate ?? 0,
+      };
     } catch (err) {
       this.logger.warn(
         `getBehaviorProfile failed for user ${userId}: ${(err as Error).message}`,

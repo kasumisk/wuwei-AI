@@ -21,9 +21,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { I18nService } from '../../../../../core/i18n';
 import {
   UserProfiles as UserProfile,
-  UserBehaviorProfiles as UserBehaviorProfile,
-  UserInferredProfiles as UserInferredProfile,
 } from '@prisma/client';
+import { BehaviorData, InferredData } from '../../../user-profile-merge.helper';
 import { ProfileCacheService } from './profile-cache.service';
 import { RealtimeProfileService } from './realtime-profile.service';
 import {
@@ -154,8 +153,8 @@ export class ProfileResolverService {
    */
   private buildContext(
     declared: UserProfile | null,
-    observed: UserBehaviorProfile | null,
-    inferred: UserInferredProfile | null,
+    observed: BehaviorData | null,
+    inferred: InferredData | null,
     shortTerm: import('./realtime-profile.service').ShortTermProfile | null,
     contextual: ContextualProfile | null,
   ): EnrichedProfileContext {
@@ -347,7 +346,7 @@ export class ProfileResolverService {
   private resolveConflicts(
     context: EnrichedProfileContext,
     declared: UserProfile | null,
-    observed: UserBehaviorProfile | null,
+    observed: BehaviorData | null,
   ): void {
     const conflicts: ProfileConflict[] = [];
 

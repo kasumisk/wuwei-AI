@@ -273,18 +273,30 @@ export class SemanticRecallService {
 
     if (uniqueFoodIds.length === 0) return null;
 
-    const foods = await this.prisma.foods.findMany({
-      where: {
-        id: { in: uniqueFoodIds },
-        embedding: { isEmpty: false },
-      },
-      select: { id: true, embedding: true, category: true },
-    });
+    // V8.2: 从 food_embeddings 关联表读取 v5 嵌入（vector::text 解析）
+    const foods: Array<{
+      id: string;
+      category: string;
+      embedding_text: string | null;
+    }> = await this.prisma.$queryRaw<
+      Array<{ id: string; category: string; embedding_text: string | null }>
+    >`
+      SELECT f.id, f.category, fe.vector::text AS embedding_text
+      FROM "foods" f
+      INNER JOIN "food_embeddings" fe
+        ON fe.food_id = f.id AND fe.model_name = 'feature_v5'
+      WHERE f.id = ANY(${uniqueFoodIds}::uuid[])
+    `;
 
     const foodEmbeddingMap = new Map<string, number[]>();
     for (const food of foods) {
-      if (food.embedding.length > 0) {
-        foodEmbeddingMap.set(food.id, food.embedding);
+      if (!food.embedding_text) continue;
+      const vec = String(food.embedding_text)
+        .replace(/[[\]]/g, '')
+        .split(',')
+        .map(Number);
+      if (vec.length > 0 && !vec.some((v) => Number.isNaN(v))) {
+        foodEmbeddingMap.set(food.id, vec);
       }
     }
 
@@ -391,7 +403,7 @@ export class SemanticRecallService {
 
     // 查询品类信息
     const foodIds = candidates.map((c) => c.foodId);
-    const foods = await this.prisma.foods.findMany({
+    const foods = await this.prisma.food.findMany({
       where: { id: { in: foodIds } },
       select: { id: true, category: true },
     });
@@ -487,8 +499,8 @@ export class SemanticRecallService {
     const dim = points[0].length;
 
     // 初始化 centroids：取前 k 个点的副本
-    let centroids = points.slice(0, effectiveK).map((p) => [...p]);
-    let assignments = new Array<number>(points.length).fill(0);
+    const centroids = points.slice(0, effectiveK).map((p) => [...p]);
+    const assignments = new Array<number>(points.length).fill(0);
 
     for (let iter = 0; iter < maxIter; iter++) {
       // Assign：每个点分配到最近的 centroid

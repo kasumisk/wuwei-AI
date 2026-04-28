@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
+import { upsertFoodSplitTables } from '../../food-split.helper';
 
 /**
  * V6.9 Phase 3-C: 食物数据渠道标注迁移服务
@@ -42,18 +43,20 @@ export class ChannelMigrationService {
     let cursor: string | undefined;
 
     while (true) {
-      const foods = await this.prisma.foods.findMany({
+      const foods = await this.prisma.food.findMany({
         select: {
           id: true,
           category: true,
-          processingLevel: true,
           commonalityScore: true,
-          availableChannels: true,
         },
+        include: {
+          healthAssessment: { select: { processingLevel: true } },
+          taxonomy: { select: { availableChannels: true } },
+        } as any,
         take: BATCH_SIZE,
         ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
         orderBy: { id: 'asc' },
-      });
+      } as any);
 
       if (foods.length === 0) break;
 
@@ -61,7 +64,7 @@ export class ChannelMigrationService {
         stats.total++;
         try {
           const newChannels = this.inferChannels(food);
-          const oldChannels = this.parseChannels(food.availableChannels);
+          const oldChannels = this.parseChannels((food as any).taxonomy?.availableChannels);
 
           // 只在渠道列表发生变化时更新
           if (this.channelsEqual(oldChannels, newChannels)) {
@@ -69,9 +72,8 @@ export class ChannelMigrationService {
             continue;
           }
 
-          await this.prisma.foods.update({
-            where: { id: food.id },
-            data: { availableChannels: newChannels },
+          await upsertFoodSplitTables(this.prisma, food.id, {
+            availableChannels: newChannels,
           });
           stats.updated++;
         } catch (err) {
@@ -100,12 +102,13 @@ export class ChannelMigrationService {
    */
   inferChannels(food: {
     category: string;
-    processingLevel: number | null;
+    processingLevel?: number | null;
+    healthAssessment?: { processingLevel?: number | null } | null;
     commonalityScore: number;
   }): string[] {
     const channels: string[] = [];
     const cat = food.category;
-    const nova = food.processingLevel ?? 0;
+    const nova = food.healthAssessment?.processingLevel ?? food.processingLevel ?? 0;
 
     // 生鲜食材: 家庭烹饪；低加工追加餐厅
     if (['veggie', 'fruit', 'protein', 'dairy', 'grain'].includes(cat)) {

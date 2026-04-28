@@ -10,6 +10,10 @@
  */
 
 import { PrismaClient } from '@prisma/client';
+import {
+  getBehavior,
+  updateBehavior,
+} from '../../modules/user/user-profile-merge.helper';
 
 const prisma = new PrismaClient();
 
@@ -27,8 +31,8 @@ async function recalc() {
   try {
     console.log('Database connected');
 
-    const profiles = await prisma.userBehaviorProfiles.findMany();
-    console.log(`Found ${profiles.length} behavior profiles to recalculate`);
+    const profiles = await prisma.userProfiles.findMany();
+    console.log(`Found ${profiles.length} user profiles to recalculate`);
 
     let updatedCount = 0;
 
@@ -43,15 +47,12 @@ async function recalc() {
 
       if (summaries.length === 0) {
         // 无记录，全部归零
-        await prisma.userBehaviorProfiles.update({
-          where: { id: profile.id },
-          data: {
-            streakDays: 0,
-            longestStreak: 0,
-            healthyRecords: 0,
-            avgComplianceRate: 0,
-            lastStreakDate: null,
-          },
+        await updateBehavior(prisma as any, userId, {
+          streakDays: 0,
+          longestStreak: 0,
+          healthyRecords: 0,
+          avgComplianceRate: 0,
+          lastStreakDate: null,
         });
         updatedCount++;
         continue;
@@ -103,15 +104,12 @@ async function recalc() {
         .toISOString()
         .slice(0, 10);
 
-      await prisma.userBehaviorProfiles.update({
-        where: { id: profile.id },
-        data: {
-          streakDays: currentStreak,
-          longestStreak: longestStreak,
-          healthyRecords: healthyDays,
-          avgComplianceRate: avgComplianceRate,
-          lastStreakDate: lastStreakDate,
-        },
+      await updateBehavior(prisma as any, userId, {
+        streakDays: currentStreak,
+        longestStreak: longestStreak,
+        healthyRecords: healthyDays,
+        avgComplianceRate: avgComplianceRate,
+        lastStreakDate: lastStreakDate,
       });
       updatedCount++;
 

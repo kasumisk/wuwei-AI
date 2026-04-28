@@ -94,26 +94,24 @@ export class RecommendationFeedbackService {
         },
       });
 
-      // 2. V6 2.19: 如果有多维评分或隐式信号，保存详情记录
+      // 2. V6 2.19: 如果有多维评分或隐式信号，回写到主表 details JSONB
       const hasRatings = params.ratings && this.hasAnyRating(params.ratings);
       const hasSignals =
         params.implicitSignals && this.hasAnySignal(params.implicitSignals);
 
       if (hasRatings || hasSignals) {
-        await this.prisma.feedbackDetails.create({
-          data: {
-            feedbackId: feedback.id,
-            userId: params.userId,
-            foodName: params.foodName,
-            mealType: params.mealType,
-            tasteRating: params.ratings?.taste ?? null,
-            portionRating: params.ratings?.portion ?? null,
-            priceRating: params.ratings?.price ?? null,
-            timingRating: params.ratings?.timing ?? null,
-            comment: params.ratings?.comment ?? null,
-            dwellTimeMs: params.implicitSignals?.dwellTimeMs ?? null,
-            detailExpanded: params.implicitSignals?.detailExpanded ?? null,
-          },
+        const details: Record<string, unknown> = {};
+        if (params.ratings?.taste != null) details.tasteRating = params.ratings.taste;
+        if (params.ratings?.portion != null) details.portionRating = params.ratings.portion;
+        if (params.ratings?.price != null) details.priceRating = params.ratings.price;
+        if (params.ratings?.timing != null) details.timingRating = params.ratings.timing;
+        if (params.ratings?.comment) details.comment = params.ratings.comment;
+        if (params.implicitSignals?.dwellTimeMs != null) details.dwellTimeMs = params.implicitSignals.dwellTimeMs;
+        if (params.implicitSignals?.detailExpanded != null) details.detailExpanded = params.implicitSignals.detailExpanded;
+
+        await this.prisma.recommendationFeedbacks.update({
+          where: { id: feedback.id },
+          data: { details: details as object },
         });
         this.logger.debug(
           `多维反馈详情已记录: [${params.foodName}] ` +
@@ -134,7 +132,7 @@ export class RecommendationFeedbackService {
       // V6.2 A5 fix: 查询食物品类用于短期画像品类偏好学习
       let foodCategory: string | undefined;
       if (params.foodId) {
-        const food = await this.prisma.foods.findUnique({
+        const food = await this.prisma.food.findUnique({
           where: { id: params.foodId },
           select: { category: true },
         });
@@ -248,16 +246,17 @@ export class RecommendationFeedbackService {
         avgTiming: string | null;
         cnt: string;
       }[] = await this.prisma.$queryRawUnsafe(
-        `SELECT d.food_name AS "foodName",
-                AVG(d.taste_rating) AS "avgTaste",
-                AVG(d.portion_rating) AS "avgPortion",
-                AVG(d.price_rating) AS "avgPrice",
-                AVG(d.timing_rating) AS "avgTiming",
-                COUNT(*) AS "cnt"
-         FROM feedback_details d
-         WHERE d.user_id = $1::uuid
-           AND d.created_at >= $2
-         GROUP BY d.food_name`,
+        `SELECT f.food_name AS "foodName",
+                AVG((f.details->>'tasteRating')::numeric)   AS "avgTaste",
+                AVG((f.details->>'portionRating')::numeric) AS "avgPortion",
+                AVG((f.details->>'priceRating')::numeric)   AS "avgPrice",
+                AVG((f.details->>'timingRating')::numeric)  AS "avgTiming",
+                COUNT(*) FILTER (WHERE f.details IS NOT NULL) AS "cnt"
+         FROM recommendation_feedbacks f
+         WHERE f.user_id = $1::uuid
+           AND f.created_at >= $2
+           AND f.details IS NOT NULL
+         GROUP BY f.food_name`,
         userId,
         since,
       );
@@ -304,14 +303,15 @@ export class RecommendationFeedbackService {
         avgTiming: string | null;
         cnt: string;
       }> = await this.prisma.$queryRawUnsafe(
-        `SELECT AVG(d.taste_rating) AS "avgTaste",
-                AVG(d.portion_rating) AS "avgPortion",
-                AVG(d.price_rating) AS "avgPrice",
-                AVG(d.timing_rating) AS "avgTiming",
-                COUNT(*) AS "cnt"
-         FROM feedback_details d
-         WHERE d.user_id = $1::uuid
-           AND d.created_at >= $2`,
+        `SELECT AVG((f.details->>'tasteRating')::numeric)   AS "avgTaste",
+                AVG((f.details->>'portionRating')::numeric) AS "avgPortion",
+                AVG((f.details->>'priceRating')::numeric)   AS "avgPrice",
+                AVG((f.details->>'timingRating')::numeric)  AS "avgTiming",
+                COUNT(*) FILTER (WHERE f.details IS NOT NULL) AS "cnt"
+         FROM recommendation_feedbacks f
+         WHERE f.user_id = $1::uuid
+           AND f.created_at >= $2
+           AND f.details IS NOT NULL`,
         userId,
         since,
       );

@@ -25,6 +25,7 @@ import {
   TieredCacheManager,
   TieredCacheNamespace,
 } from '../../../../../core/cache/tiered-cache-manager';
+import { getInferred } from '../../../../user/user-profile-merge.helper';
 
 /** 特性开关 key */
 const FF_LEARNED_RANKING = 'learned_ranking_enabled';
@@ -140,19 +141,21 @@ export class LearnedRankingService implements OnModuleInit {
 
   /**
    * V6.7 Phase 3-A: 从 DB 动态获取活跃分群列表，替代硬编码 USER_SEGMENTS
-   * 查询 user_inferred_profiles 中所有不为 null 的 distinct user_segment
+   * 查询 user_profiles.inferred_data 中所有不为 null 的 distinct userSegment
    * 失败时回退到 FALLBACK_SEGMENTS
    */
   private async getActiveSegments(): Promise<string[]> {
     try {
-      const segments = await this.prisma.userInferredProfiles.findMany({
-        select: { userSegment: true },
-        distinct: ['userSegment'],
-        where: { userSegment: { not: null } },
+      const profiles = await this.prisma.userProfiles.findMany({
+        select: { inferredData: true },
+        where: { inferredData: { not: undefined } },
       });
-      const dynamicSegments = segments
-        .map((s) => s.userSegment!)
-        .filter(Boolean);
+      const segmentSet = new Set<string>();
+      for (const p of profiles) {
+        const seg = getInferred(p).userSegment;
+        if (seg) segmentSet.add(seg);
+      }
+      const dynamicSegments = Array.from(segmentSet);
 
       if (dynamicSegments.length > 0) {
         this.logger.debug(
@@ -187,10 +190,10 @@ export class LearnedRankingService implements OnModuleInit {
       FROM recommendation_traces rt
       INNER JOIN recommendation_feedbacks rf
         ON rf.trace_id = rt.id
-      INNER JOIN user_inferred_profiles uip
-        ON uip.user_id = rt.user_id
+      INNER JOIN user_profiles up
+        ON up.user_id = rt.user_id
       WHERE rt.created_at >= NOW() - INTERVAL '30 days'
-        AND uip.user_segment = ${segment}
+        AND up.inferred_data->>'userSegment' = ${segment}
         AND rt.top_foods IS NOT NULL
       LIMIT 2000
     `;

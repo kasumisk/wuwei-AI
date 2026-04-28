@@ -2,6 +2,11 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { FoodService } from '../../diet/app/services/food.service';
 import { I18nService } from '../../../core/i18n/i18n.service';
+import {
+  getBehavior,
+  updateBehavior,
+  upsertBehavior,
+} from '../../user/user-profile-merge.helper';
 
 export interface StreakStatus {
   current: number;
@@ -37,10 +42,11 @@ export class GamificationService {
    * 检查并解锁成就
    */
   async checkAchievements(userId: string): Promise<any[]> {
-    const profile = await this.prisma.userBehaviorProfiles.findFirst({
+    const userProfile = await this.prisma.userProfiles.findUnique({
       where: { userId: userId },
     });
-    if (!profile) return [];
+    if (!userProfile) return [];
+    const profile = getBehavior(userProfile);
 
     const all = await this.prisma.achievements.findMany();
     const unlocked = await this.prisma.userAchievements.findMany({
@@ -57,20 +63,20 @@ export class GamificationService {
 
       switch (achievement.category) {
         case 'streak':
-          qualified = profile.streakDays >= achievement.threshold;
+          qualified = (profile.streakDays ?? 0) >= achievement.threshold;
           break;
         case 'record':
-          qualified = profile.totalRecords >= achievement.threshold;
+          qualified = (profile.totalRecords ?? 0) >= achievement.threshold;
           break;
         case 'milestone':
           if (achievement.code === 'healthy_rate_80') {
             qualified =
-              profile.totalRecords >= 10 &&
+              (profile.totalRecords ?? 0) >= 10 &&
               Number(profile.avgComplianceRate) * 100 >= achievement.threshold;
           } else if (achievement.code === 'first_analyze') {
-            qualified = profile.totalRecords >= 1;
+            qualified = (profile.totalRecords ?? 0) >= 1;
           } else if (achievement.code === 'first_plan') {
-            qualified = profile.totalRecords >= 1; // simplified check
+            qualified = (profile.totalRecords ?? 0) >= 1; // simplified check
           }
           break;
       }
@@ -139,9 +145,10 @@ export class GamificationService {
    * 获取连胜状态
    */
   async getStreakStatus(userId: string): Promise<StreakStatus> {
-    const profile = await this.prisma.userBehaviorProfiles.findFirst({
+    const userProfile = await this.prisma.userProfiles.findUnique({
       where: { userId: userId },
     });
+    const profile = userProfile ? getBehavior(userProfile) : null;
     const summary = await this.foodService.getTodaySummary(userId);
     const goal = summary.calorieGoal || 2000;
 
@@ -165,18 +172,19 @@ export class GamificationService {
   async updateStreak(userId: string): Promise<void> {
     const summary = await this.foodService.getTodaySummary(userId);
     const goal = summary.calorieGoal || 2000;
-    let profile = await this.prisma.userBehaviorProfiles.findFirst({
+    const userProfile = await this.prisma.userProfiles.findUnique({
       where: { userId: userId },
     });
 
-    if (!profile) {
-      profile = await this.prisma.userBehaviorProfiles.create({
-        data: { userId: userId },
-      });
+    let profile = userProfile ? getBehavior(userProfile) : null;
+
+    if (!userProfile) {
+      // No profile to update
+      return;
     }
 
-    let streakDays = profile.streakDays;
-    let longestStreak = profile.longestStreak;
+    let streakDays = profile?.streakDays ?? 0;
+    let longestStreak = profile?.longestStreak ?? 0;
 
     if (summary.totalCalories > 0 && summary.totalCalories <= goal) {
       streakDays += 1;
@@ -188,12 +196,9 @@ export class GamificationService {
       streakDays = Math.max(0, Math.floor(streakDays * 0.5));
     }
 
-    await this.prisma.userBehaviorProfiles.update({
-      where: { id: profile.id },
-      data: {
-        streakDays: streakDays,
-        longestStreak: longestStreak,
-      },
+    await updateBehavior(this.prisma, userId, {
+      streakDays: streakDays,
+      longestStreak: longestStreak,
     });
 
     // 自动检查成就

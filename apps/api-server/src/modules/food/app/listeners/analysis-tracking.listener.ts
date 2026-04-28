@@ -5,7 +5,7 @@
  *
  * 职责:
  * - 记录用户的分析行为到行为画像（分析频次、偏好的分析类型）
- * - 更新 user_behavior_profiles 中的活跃度指标
+ * - 更新 user_profiles.behavior_data 中的活跃度指标
  *
  * 与 AnalysisEventListener 的区别:
  * - AnalysisEventListener 监听 ANALYSIS_COMPLETED（分析完成后联动画像+推荐）
@@ -18,6 +18,10 @@ import {
   AnalysisSubmittedEvent,
 } from '../../../../core/events/domain-events';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
+import {
+  getBehavior,
+  updateBehavior,
+} from '../../../user/user-profile-merge.helper';
 
 @Injectable()
 export class AnalysisTrackingListener {
@@ -60,14 +64,16 @@ export class AnalysisTrackingListener {
   private async updateBehaviorProfile(
     event: AnalysisSubmittedEvent,
   ): Promise<void> {
-    const profile = await this.prisma.userBehaviorProfiles.findUnique({
+    const userProfile = await this.prisma.userProfiles.findUnique({
       where: { userId: event.userId },
     });
 
-    if (!profile) {
+    if (!userProfile) {
       this.logger.debug(`用户 ${event.userId} 无行为画像，跳过分析追踪`);
       return;
     }
+
+    const profile = getBehavior(userProfile);
 
     // 读取现有 engagement_metrics（存储在 replacement_patterns JSON 的 _engagement 子键中）
     // 注意：V6.2 暂借用 replacement_patterns JSON 字段，未来迁移后移至独立列
@@ -82,16 +88,13 @@ export class AnalysisTrackingListener {
       (typeDistribution[event.inputType] ?? 0) + 1;
 
     // 更新
-    await this.prisma.userBehaviorProfiles.update({
-      where: { userId: event.userId },
-      data: {
-        replacementPatterns: {
-          ...(replacementData as object),
-          _engagement: {
-            analysisCount,
-            lastAnalysisAt: new Date().toISOString(),
-            analysisTypeDistribution: typeDistribution,
-          },
+    await updateBehavior(this.prisma, event.userId, {
+      replacementPatterns: {
+        ...(replacementData as object),
+        _engagement: {
+          analysisCount,
+          lastAnalysisAt: new Date().toISOString(),
+          analysisTypeDistribution: typeDistribution,
         },
       },
     });

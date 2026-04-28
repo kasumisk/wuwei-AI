@@ -20,6 +20,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
 import { RedisCacheService } from '../../../../core/redis/redis-cache.service';
+import {
+  getBehavior,
+  getInferred,
+} from '../../user-profile-merge.helper';
 
 /** 单个特征得分 */
 export interface ChurnFeature {
@@ -160,15 +164,19 @@ export class ChurnPredictionService {
    * Admin: 获取全局流失风险分布
    */
   async getDistribution(topN = 20): Promise<ChurnDistribution> {
-    const profiles = await this.prisma.userInferredProfiles.findMany({
+    const profileRows = await this.prisma.userProfiles.findMany({
       where: {
-        churnRisk: { not: null },
+        inferredData: { not: undefined },
       },
       select: {
         userId: true,
-        churnRisk: true,
+        inferredData: true,
       },
     });
+
+    const profiles = profileRows
+      .map((r) => ({ userId: r.userId, churnRisk: getInferred(r).churnRisk ?? null }))
+      .filter((p) => p.churnRisk !== null && p.churnRisk !== undefined);
 
     const distribution = { low: 0, medium: 0, high: 0, critical: 0 };
     let totalRisk = 0;
@@ -410,14 +418,9 @@ export class ChurnPredictionService {
 
   private async computePrediction(userId: string): Promise<ChurnPrediction> {
     // 获取基础数据
-    const [behavior, lastRecord] = await Promise.all([
-      this.prisma.userBehaviorProfiles.findUnique({
+    const [userProfileRow, lastRecord] = await Promise.all([
+      this.prisma.userProfiles.findUnique({
         where: { userId: userId },
-        select: {
-          avgComplianceRate: true,
-          streakDays: true,
-          totalRecords: true,
-        },
       }),
       this.prisma.foodRecords.findFirst({
         where: { userId: userId },
@@ -425,6 +428,8 @@ export class ChurnPredictionService {
         select: { createdAt: true },
       }),
     ]);
+
+    const behavior = userProfileRow ? getBehavior(userProfileRow) : null;
 
     const complianceRate = Number(behavior?.avgComplianceRate ?? 0);
     const streakDays = behavior?.streakDays ?? 0;

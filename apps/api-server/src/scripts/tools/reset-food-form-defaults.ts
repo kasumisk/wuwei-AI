@@ -25,10 +25,10 @@
  *   DRY_RUN=false npx ts-node -r tsconfig-paths/register src/scripts/tools/reset-food-form-defaults.ts
  *
  * 安全：
- *   - 只修改 food_form 字段（以及 field_sources 中对应的来源标记）
+ *   - 只修改 food_form 字段（以及 provenance 中对应的来源标记）
  *   - 不修改营养素、评分、其他元数据
  *   - 幂等：重复运行不产生副作用（相同输入产生相同输出）
- *   - 只处理 field_sources->food_form 非 'manual'/'ai_enrichment' 来源的食物
+ *   - 只处理 provenance 中 food_form 非 'manual'/'ai_enrichment' 来源的食物
  *     （即尊重人工录入和已被 AI 正确补全的记录）
  */
 
@@ -164,7 +164,6 @@ async function main() {
       cooking_methods: string[];
       processing_level: number;
       is_processed: boolean;
-      field_sources: any;
       enrichment_status: string | null;
     }[]
   >(
@@ -172,12 +171,17 @@ async function main() {
       SELECT
         id, name, category, food_form, dish_type,
         cooking_methods, processing_level, is_processed,
-        field_sources, enrichment_status
+        enrichment_status
       FROM foods
       WHERE
-        field_sources IS NULL
-        OR field_sources->>'food_form' IS NULL
-        OR field_sources->>'food_form' NOT IN ('manual', 'ai_enrichment', 'ai_enrichment_staged')
+        NOT EXISTS (
+          SELECT 1
+          FROM food_field_provenance p
+          WHERE p.food_id = foods.id
+            AND p.field_name = 'food_form'
+            AND p.status = 'success'
+            AND p.source IN ('manual', 'ai_enrichment', 'ai_enrichment_staged')
+        )
       ORDER BY category, name
     `,
   );
@@ -267,24 +271,35 @@ async function main() {
 
   for (const r of changed) {
     try {
-      // 先用 Prisma ORM 更新 food_form（自动处理 uuid 类型）
-      const current = await prisma.foods.findUnique({
-        where: { id: r.id },
-        select: { fieldSources: true },
-      });
-      const updatedSources = {
-        ...(typeof current?.fieldSources === 'object' &&
-        current.fieldSources !== null
-          ? (current.fieldSources as Record<string, unknown>)
-          : {}),
-        food_form: 'rule_inferred',
-      };
-      await prisma.foods.update({
+      await prisma.food.update({
         where: { id: r.id },
         data: {
           foodForm: r.newForm,
-          fieldSources: updatedSources,
           updatedAt: new Date(),
+        },
+      });
+      await prisma.foodFieldProvenance.upsert({
+        where: {
+          foodId_fieldName_source: {
+            foodId: r.id,
+            fieldName: 'food_form',
+            source: 'rule_inferred',
+          },
+        },
+        update: {
+          status: 'success',
+          confidence: 1,
+          failureReason: null,
+          rawValue: r.newForm,
+          updatedAt: new Date(),
+        },
+        create: {
+          foodId: r.id,
+          fieldName: 'food_form',
+          source: 'rule_inferred',
+          status: 'success',
+          confidence: 1,
+          rawValue: r.newForm,
         },
       });
       fixed++;
@@ -309,7 +324,7 @@ async function main() {
 
   console.log(`\n结束时间: ${new Date().toISOString()}`);
   console.log(
-    '数据已修复，field_sources->food_form 标记为 "rule_inferred"，后续 AI 补全不会覆盖此来源。',
+    '数据已修复，food_field_provenance.food_form 标记为 "rule_inferred"，后续 AI 补全不会覆盖此来源。',
   );
 }
 

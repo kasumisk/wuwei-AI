@@ -197,7 +197,7 @@ export class ConfidenceDiagnosticsService {
     if (foodsWithLibId.length === 0) return mismatches;
 
     const libraryIds = foodsWithLibId.map((f) => f.foodLibraryId!);
-    const dbFoods = await this.prisma.foods.findMany({
+    const dbFoods = await this.prisma.food.findMany({
       where: { id: { in: libraryIds } },
       select: { id: true, category: true },
     });

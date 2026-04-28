@@ -1,6 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../../../core/prisma/prisma.service';
 import { I18nService } from '../../../../../core/i18n';
+import {
+  getBehavior,
+  getInferred,
+} from '../../../user-profile-merge.helper';
 
 /**
  * 持续收集触发器
@@ -39,12 +43,9 @@ export class CollectionTriggerService {
    * 由客户端在 App 打开时调用
    */
   async checkCollectionTriggers(userId: string): Promise<CollectionReminder[]> {
-    const [profile, behavior] = await Promise.all([
-      this.prisma.userProfiles.findUnique({ where: { userId: userId } }),
-      this.prisma.userBehaviorProfiles.findUnique({
-        where: { userId: userId },
-      }),
-    ]);
+    const profile = await this.prisma.userProfiles.findUnique({
+      where: { userId: userId },
+    });
 
     if (!profile) return [];
 
@@ -324,7 +325,7 @@ export class CollectionTriggerService {
     if (replacementNames.length < 3) return null;
 
     // 批量查询食物品类
-    const foods = await this.prisma.foods.findMany({
+    const foods = await this.prisma.food.findMany({
       where: { name: { in: replacementNames } },
       select: { name: true, category: true },
     });
@@ -367,9 +368,10 @@ export class CollectionTriggerService {
   private async detectGoalAdjustmentNeed(
     userId: string,
   ): Promise<CollectionReminder | null> {
-    const inferred = await this.prisma.userInferredProfiles.findUnique({
+    const userProfile = await this.prisma.userProfiles.findUnique({
       where: { userId: userId },
     });
+    const inferred = userProfile ? getInferred(userProfile) : null;
     const goalProgress = inferred?.goalProgress as any;
     if (!goalProgress) return null;
 

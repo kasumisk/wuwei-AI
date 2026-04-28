@@ -141,19 +141,19 @@ export class ExplanationABTrackerService {
         }[]
       >`
         SELECT
-          uip.user_segment,
+          (up.inferred_data->>'userSegment') AS "userSegment",
           (rt.pipeline_snapshot->>'explanationStyle') AS explanation_style,
           COUNT(rf.id)                                AS total,
           COUNT(rf.id) FILTER (WHERE rf.action = 'accepted') AS accepted
         FROM recommendation_traces rt
         INNER JOIN recommendation_feedbacks rf
           ON rf.trace_id = rt.id
-        INNER JOIN user_inferred_profiles uip
-          ON uip.user_id = rt.user_id
+        INNER JOIN user_profiles up
+          ON up.user_id = rt.user_id
         WHERE rt.created_at >= NOW() - INTERVAL '30 days'
           AND rt.pipeline_snapshot->>'explanationStyle' IS NOT NULL
-          AND uip.user_segment IS NOT NULL
-        GROUP BY uip.user_segment, explanation_style
+          AND up.inferred_data->>'userSegment' IS NOT NULL
+        GROUP BY (up.inferred_data->>'userSegment'), explanation_style
         HAVING COUNT(rf.id) >= 50
       `;
 

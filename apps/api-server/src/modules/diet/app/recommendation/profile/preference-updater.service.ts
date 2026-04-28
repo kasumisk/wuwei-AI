@@ -5,6 +5,11 @@ import {
   DomainEvents,
   FeedbackSubmittedEvent,
 } from '../../../../../core/events/domain-events';
+import {
+  getInferred,
+  updateInferred,
+  upsertInferred,
+} from '../../../../user/user-profile-merge.helper';
 
 /**
  * 偏好自动更新服务 (V4 Phase 3.1)
@@ -25,7 +30,7 @@ import {
  * 注意:
  * - 这是一个 "即时反馈 → 即时更新" 的热路径，不替代
  *   PreferenceProfileService 的全量重算（那是冷路径，用于初始化和校准）
- * - 增量权重存储在 user_inferred_profiles.preferenceWeights (jsonb)
+ * - 增量权重存储在 user_profiles.inferred_data.preferenceWeights (jsonb)
  * - 如果用户没有增量权重，回退到 PreferenceProfileService 的全量计算
  */
 
@@ -172,7 +177,7 @@ export class PreferenceUpdaterService {
 
       // 优先按 ID 查找
       if (foodId) {
-        food = await this.prisma.foods.findFirst({
+        food = await this.prisma.food.findFirst({
           where: { id: foodId },
           select: {
             id: true,
@@ -185,7 +190,7 @@ export class PreferenceUpdaterService {
 
       // 回退到按名称查找
       if (!food && foodName) {
-        food = await this.prisma.foods.findFirst({
+        food = await this.prisma.food.findFirst({
           where: { name: foodName },
           select: {
             id: true,
@@ -231,10 +236,11 @@ export class PreferenceUpdaterService {
   async handleFeedbackSubmitted(event: FeedbackSubmittedEvent): Promise<void> {
     try {
       // 1. 读取当前增量权重
-      const inferredProfile = await this.prisma.userInferredProfiles.findFirst({
+      const userProfile = await this.prisma.userProfiles.findFirst({
         where: { userId: event.userId },
       });
 
+      const inferredProfile = userProfile ? getInferred(userProfile) : null;
       const currentWeights =
         (inferredProfile?.preferenceWeights as IncrementalPreferenceWeights | null) ??
         null;
@@ -251,19 +257,9 @@ export class PreferenceUpdaterService {
       );
 
       // 3. 写回
-      if (inferredProfile) {
-        await this.prisma.userInferredProfiles.update({
-          where: { id: inferredProfile.id },
-          data: { preferenceWeights: updatedWeights as any },
-        });
-      } else {
-        await this.prisma.userInferredProfiles.create({
-          data: {
-            userId: event.userId,
-            preferenceWeights: updatedWeights as any,
-          },
-        });
-      }
+      await upsertInferred(this.prisma, event.userId, {
+        preferenceWeights: updatedWeights as any,
+      });
 
       this.logger.debug(
         `偏好权重增量更新(事件驱动): userId=${event.userId}, action=${event.action}, ` +

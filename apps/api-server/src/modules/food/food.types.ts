@@ -180,9 +180,8 @@ export interface FoodLibrary {
   verifiedAt?: Date;
   searchWeight: number;
   popularity: number;
+  /** V8.2: 嵌入向量（运行时缓存字段，DB 中已迁移到 food_embeddings 表） */
   embedding?: number[];
-  embeddingV5?: string;
-  embeddingUpdatedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
   /** V6.4 Phase 3.3: 可获取渠道列表 */
@@ -216,6 +215,75 @@ export interface FoodLibrary {
 
   /** V7.4: 食物可获得性难度 (1=随处可得, 2=常见, 3=普通, 4=较难, 5=稀有) */
   acquisitionDifficulty?: number;
+
+  // ─── ARB-2026-04: 拆分表关联（通过 include: FOOD_SPLIT_INCLUDE 加载）───
+
+  /** 微量营养详情拆分表 */
+  nutritionDetail?: {
+    vitaminA?: number | null;
+    vitaminC?: number | null;
+    vitaminD?: number | null;
+    vitaminE?: number | null;
+    vitaminB6?: number | null;
+    vitaminB12?: number | null;
+    folate?: number | null;
+    zinc?: number | null;
+    magnesium?: number | null;
+    phosphorus?: number | null;
+    purine?: number | null;
+    cholesterol?: number | null;
+    saturatedFat?: number | null;
+    transFat?: number | null;
+    omega3?: number | null;
+    omega6?: number | null;
+    addedSugar?: number | null;
+    naturalSugar?: number | null;
+    solubleFiber?: number | null;
+    insolubleFiber?: number | null;
+  } | null;
+
+  /** 健康评估拆分表 */
+  healthAssessment?: {
+    glycemicIndex?: number | null;
+    glycemicLoad?: number | null;
+    isProcessed?: boolean | null;
+    isFried?: boolean | null;
+    processingLevel?: number | null;
+    fodmapLevel?: string | null;
+    oxalateLevel?: string | null;
+    qualityScore?: number | null;
+    satietyScore?: number | null;
+    nutrientDensity?: number | null;
+  } | null;
+
+  /** 分类/标签拆分表 */
+  taxonomy?: {
+    mealTypes?: string[] | null;
+    tags?: string[] | null;
+    allergens?: string[] | null;
+    compatibility?: Record<string, string[]> | null;
+    availableChannels?: string[] | null;
+    flavorProfile?: Record<string, number> | null;
+    textureTags?: string[] | null;
+    cuisine?: string | null;
+    dishType?: string | null;
+  } | null;
+
+  /** 份量/烹饪拆分表 */
+  portionGuide?: {
+    standardServingG?: number | null;
+    standardServingDesc?: string | null;
+    commonPortions?: Array<{ name: string; grams: number }> | null;
+    cookingMethods?: string[] | null;
+    requiredEquipment?: string[] | null;
+    prepTimeMinutes?: number | null;
+    cookTimeMinutes?: number | null;
+    skillRequired?: string | null;
+    servingTemperature?: string | null;
+    estimatedCostLevel?: number | null;
+    shelfLifeDays?: number | null;
+    waterContentPercent?: number | null;
+  } | null;
 }
 
 // ─── V7.0 Phase 1-D: 类型辅助视图 ───
@@ -305,8 +373,11 @@ export interface FoodMetaView {
  * V7.0: 从 FoodLibrary 提取营养数据视图
  *
  * 所有 optional/undefined 字段安全转换为 number（默认 0）。
+ * ARB-2026-04: 优先从拆分表 nutritionDetail / healthAssessment 读取，回退到主表字段。
  */
 export function extractNutrition(food: FoodLibrary): FoodNutritionView {
+  const nd = food.nutritionDetail;
+  const ha = food.healthAssessment;
   return {
     calories: food.calories || 0,
     protein: Number(food.protein) || 0,
@@ -314,52 +385,55 @@ export function extractNutrition(food: FoodLibrary): FoodNutritionView {
     carbs: Number(food.carbs) || 0,
     fiber: Number(food.fiber) || 0,
     sugar: Number(food.sugar) || 0,
-    addedSugar: Number(food.addedSugar) || 0,
-    naturalSugar: Number(food.naturalSugar) || 0,
-    saturatedFat: Number(food.saturatedFat) || 0,
-    transFat: Number(food.transFat) || 0,
-    cholesterol: Number(food.cholesterol) || 0,
+    addedSugar: Number(nd?.addedSugar ?? food.addedSugar) || 0,
+    naturalSugar: Number(nd?.naturalSugar ?? food.naturalSugar) || 0,
+    saturatedFat: Number(nd?.saturatedFat ?? food.saturatedFat) || 0,
+    transFat: Number(nd?.transFat ?? food.transFat) || 0,
+    cholesterol: Number(nd?.cholesterol ?? food.cholesterol) || 0,
     sodium: Number(food.sodium) || 0,
     potassium: Number(food.potassium) || 0,
     calcium: Number(food.calcium) || 0,
     iron: Number(food.iron) || 0,
-    vitaminA: Number(food.vitaminA) || 0,
-    vitaminC: Number(food.vitaminC) || 0,
-    vitaminD: Number(food.vitaminD) || 0,
-    vitaminE: Number(food.vitaminE) || 0,
-    vitaminB12: Number(food.vitaminB12) || 0,
-    folate: Number(food.folate) || 0,
-    zinc: Number(food.zinc) || 0,
-    magnesium: Number(food.magnesium) || 0,
-    purine: Number(food.purine) || 0,
-    phosphorus: Number(food.phosphorus) || 0,
-    glycemicIndex: Number(food.glycemicIndex) || 0,
-    glycemicLoad: Number(food.glycemicLoad) || 0,
+    vitaminA: Number(nd?.vitaminA ?? food.vitaminA) || 0,
+    vitaminC: Number(nd?.vitaminC ?? food.vitaminC) || 0,
+    vitaminD: Number(nd?.vitaminD ?? food.vitaminD) || 0,
+    vitaminE: Number(nd?.vitaminE ?? food.vitaminE) || 0,
+    vitaminB12: Number(nd?.vitaminB12 ?? food.vitaminB12) || 0,
+    folate: Number(nd?.folate ?? food.folate) || 0,
+    zinc: Number(nd?.zinc ?? food.zinc) || 0,
+    magnesium: Number(nd?.magnesium ?? food.magnesium) || 0,
+    purine: Number(nd?.purine ?? food.purine) || 0,
+    phosphorus: Number(nd?.phosphorus ?? food.phosphorus) || 0,
+    glycemicIndex: Number(ha?.glycemicIndex ?? food.glycemicIndex) || 0,
+    glycemicLoad: Number(ha?.glycemicLoad ?? food.glycemicLoad) || 0,
     // V7.4 Phase 3-A: 精细化营养字段
-    omega3: Number(food.omega3) || 0,
-    omega6: Number(food.omega6) || 0,
-    solubleFiber: Number(food.solubleFiber) || 0,
-    insolubleFiber: Number(food.insolubleFiber) || 0,
+    omega3: Number(nd?.omega3 ?? food.omega3) || 0,
+    omega6: Number(nd?.omega6 ?? food.omega6) || 0,
+    solubleFiber: Number(nd?.solubleFiber ?? food.solubleFiber) || 0,
+    insolubleFiber: Number(nd?.insolubleFiber ?? food.insolubleFiber) || 0,
   };
 }
 
 /**
  * V7.0: 从 FoodLibrary 提取烹饪数据视图
+ * ARB-2026-04: 优先从拆分表 portionGuide / healthAssessment 读取。
  */
 export function extractCooking(food: FoodLibrary): FoodCookingView {
+  const pg = food.portionGuide;
+  const ha = food.healthAssessment;
   return {
-    cookingMethods: food.cookingMethods ?? [],
-    prepTimeMinutes: Number(food.prepTimeMinutes) || 0,
-    cookTimeMinutes: Number(food.cookTimeMinutes) || 0,
-    skillRequired: food.skillRequired || 'beginner',
-    estimatedCostLevel: Number(food.estimatedCostLevel) || 1,
-    isProcessed: food.isProcessed,
-    isFried: food.isFried,
-    processingLevel: food.processingLevel,
+    cookingMethods: pg?.cookingMethods ?? food.cookingMethods ?? [],
+    prepTimeMinutes: Number(pg?.prepTimeMinutes ?? food.prepTimeMinutes) || 0,
+    cookTimeMinutes: Number(pg?.cookTimeMinutes ?? food.cookTimeMinutes) || 0,
+    skillRequired: pg?.skillRequired ?? food.skillRequired ?? 'beginner',
+    estimatedCostLevel: Number(pg?.estimatedCostLevel ?? food.estimatedCostLevel) || 1,
+    isProcessed: ha?.isProcessed ?? food.isProcessed,
+    isFried: ha?.isFried ?? food.isFried,
+    processingLevel: ha?.processingLevel ?? food.processingLevel,
     // V7.1: 扩展字段（为空时提供合理默认）
-    requiredEquipment: food.requiredEquipment ?? [],
-    servingTemperature: food.servingTemperature ?? 'hot',
-    dishType: food.dishType ?? 'dish',
+    requiredEquipment: pg?.requiredEquipment ?? food.requiredEquipment ?? [],
+    servingTemperature: pg?.servingTemperature ?? food.servingTemperature ?? 'hot',
+    dishType: food.taxonomy?.dishType ?? food.dishType ?? 'dish',
   };
 }
 

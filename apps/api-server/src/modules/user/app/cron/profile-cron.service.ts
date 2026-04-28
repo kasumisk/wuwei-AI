@@ -11,6 +11,11 @@ import { RedisCacheService } from '../../../../core/redis/redis-cache.service';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
 import { StrategySelectorService } from '../../../strategy/app/strategy-selector.service';
 import { ChurnPredictionService } from '../services/churn-prediction.service';
+import {
+  updateInferred,
+  updateBehavior,
+  getBehavior,
+} from '../../user-profile-merge.helper';
 
 /**
  * 用户画像定时任务
@@ -53,7 +58,6 @@ export class ProfileCronService {
     try {
       // V6.2 3.6: 游标分页替代全量 findMany
       const behaviorResult = await this.processCursorPaged(
-        'user_behavior_profiles',
         (behavior: any) => this.updateDailyBehavior(behavior),
         '每日行为更新',
       );
@@ -63,15 +67,15 @@ export class ProfileCronService {
       let optimalMealCountUpdated = 0;
 
       const inferredResult = await this.processCursorPaged(
-        'user_inferred_profiles',
         async (inf: any) => {
           const gpChanged = await this.updateGoalProgress(inf);
           if (gpChanged) goalProgressUpdated++;
 
           // optimalMealCount: 基于对应 behavior 的 mealTimingPatterns
-          const behavior = await this.prisma.userBehaviorProfiles.findUnique({
+          const _behaviorProfile = await this.prisma.userProfiles.findUnique({
             where: { userId: inf.userId },
           });
+          const behavior = _behaviorProfile ? getBehavior(_behaviorProfile) : null;
           if (behavior?.mealTimingPatterns) {
             const stableSlots = (
               ['breakfast', 'lunch', 'dinner', 'snack'] as const
@@ -79,19 +83,16 @@ export class ProfileCronService {
             if (stableSlots > 0) {
               const newCount = Math.max(3, stableSlots);
               if (inf.optimalMealCount !== newCount) {
-                await this.prisma.userInferredProfiles.update({
-                  where: { userId: inf.userId },
-                  data: {
-                    optimalMealCount: newCount,
-                    confidenceScores: {
-                      ...((inf.confidenceScores as any) || {}),
-                      optimalMealCount: Math.min(
-                        0.9,
-                        0.5 + (behavior.totalRecords || 0) * 0.01,
-                      ),
-                    },
-                    lastComputedAt: new Date(),
+                await updateInferred(this.prisma, inf.userId, {
+                  optimalMealCount: newCount,
+                  confidenceScores: {
+                    ...((inf.confidenceScores as any) || {}),
+                    optimalMealCount: Math.min(
+                      0.9,
+                      0.5 + (behavior.totalRecords || 0) * 0.01,
+                    ),
                   },
+                  lastComputedAt: new Date(),
                 });
                 optimalMealCountUpdated++;
               }
@@ -230,14 +231,11 @@ export class ProfileCronService {
       }
     }
 
-    await this.prisma.userBehaviorProfiles.update({
-      where: { userId: userId },
-      data: {
-        avgComplianceRate: avgComplianceRate,
-        mealTimingPatterns: mealTimingPatterns as any,
-        bingeRiskHours: bingeRiskHours.sort((a, b) => a - b),
-        portionTendency: portionTendency,
-      },
+    await updateBehavior(this.prisma, userId, {
+      avgComplianceRate: avgComplianceRate,
+      mealTimingPatterns: mealTimingPatterns as any,
+      bingeRiskHours: bingeRiskHours.sort((a, b) => a - b),
+      portionTendency: portionTendency,
     });
   }
 
@@ -262,7 +260,6 @@ export class ProfileCronService {
     try {
       // V6.2 3.6: 游标分页替代全量 findMany
       const result = await this.processCursorPaged(
-        'user_inferred_profiles',
         (inf: any) => this.updateWeeklySegmentation(inf),
         '每周分段更新',
       );
@@ -283,12 +280,8 @@ export class ProfileCronService {
 
   private async updateWeeklySegmentation(inferred: any): Promise<void> {
     const userId = inferred.userId;
-    const [profile, behavior] = await Promise.all([
-      this.prisma.userProfiles.findUnique({ where: { userId: userId } }),
-      this.prisma.userBehaviorProfiles.findUnique({
-        where: { userId: userId },
-      }),
-    ]);
+    const profile = await this.prisma.userProfiles.findUnique({ where: { userId: userId } });
+    const behavior = profile ? getBehavior(profile) : null;
 
     if (!profile) return;
 
@@ -375,15 +368,12 @@ export class ProfileCronService {
       nutritionGaps: weeklyRecords.length >= 10 ? 0.7 : 0.4,
     };
 
-    await this.prisma.userInferredProfiles.update({
-      where: { userId: userId },
-      data: {
-        userSegment: segmentResult.segment,
-        churnRisk: Number(churnRisk.toFixed(2)),
-        nutritionGaps: nutritionGaps,
-        confidenceScores: confidenceScores as any,
-        lastComputedAt: new Date(),
-      },
+    await updateInferred(this.prisma, userId, {
+      userSegment: segmentResult.segment,
+      churnRisk: Number(churnRisk.toFixed(2)),
+      nutritionGaps: nutritionGaps,
+      confidenceScores: confidenceScores as any,
+      lastComputedAt: new Date(),
     });
 
     // V6.3 P2-2: 分群变更时自动映射推荐策略
@@ -433,7 +423,6 @@ export class ProfileCronService {
     try {
       // V6.2 3.6: 游标分页替代全量 findMany
       const result = await this.processCursorPaged(
-        'user_inferred_profiles',
         async (inf: any) => {
           if (!inf.preferenceWeights) return;
 
@@ -468,11 +457,8 @@ export class ProfileCronService {
           }
 
           if (changed) {
-            await this.prisma.userInferredProfiles.update({
-              where: { userId: inf.userId },
-              data: {
-                preferenceWeights: weights as any,
-              },
+            await updateInferred(this.prisma, inf.userId, {
+              preferenceWeights: weights as any,
             });
           }
         },
@@ -633,13 +619,10 @@ export class ProfileCronService {
       goalProgress: Math.min(0.95, 0.3 + weightRecords.length * 0.05),
     };
 
-    await this.prisma.userInferredProfiles.update({
-      where: { userId: userId },
-      data: {
-        goalProgress: goalProgress as any,
-        confidenceScores: confidenceScores as any,
-        lastComputedAt: new Date(),
-      },
+    await updateInferred(this.prisma, userId, {
+      goalProgress: goalProgress as any,
+      confidenceScores: confidenceScores as any,
+      lastComputedAt: new Date(),
     });
     return true;
   }
@@ -709,13 +692,11 @@ export class ProfileCronService {
    * 使用 Prisma cursor-based pagination 逐页加载数据，
    * 避免一次性加载全量用户到内存。
    *
-   * @param model Prisma model 名称（user_behavior_profiles / user_inferred_profiles）
    * @param processor 每条记录的处理函数
    * @param label 日志标签
    * @param pageSize 每页大小（默认 100）
    */
   async processCursorPaged<T extends { userId: string }>(
-    model: 'user_behavior_profiles' | 'user_inferred_profiles',
     processor: (item: T) => Promise<void>,
     label: string,
     pageSize: number = 100,
@@ -728,7 +709,7 @@ export class ProfileCronService {
 
     // eslint-disable-next-line no-constant-condition
     while (true) {
-      const page = (await (this.prisma[model] as any).findMany({
+      const page = (await (this.prisma.userProfiles as any).findMany({
         take: pageSize,
         ...(cursor ? { skip: 1, cursor: { userId: cursor } } : {}),
         orderBy: { userId: 'asc' },

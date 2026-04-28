@@ -104,7 +104,7 @@ export class SubstitutionService {
     preferenceProfile?: UserPreferenceProfile,
   ): Promise<SubstituteCandidate[]> {
     // 1. 加载原食物
-    const originalFood = await this.prisma.foods.findFirst({
+    const originalFood = await this.prisma.food.findFirst({
       where: { id: foodId },
     });
     if (!originalFood) {
@@ -113,7 +113,7 @@ export class SubstitutionService {
     }
 
     // 2. 加载候选池 — 同 category 优先，V4 E7: 不足时扩展到相关品类
-    let candidates = await this.prisma.foods.findMany({
+    let candidates = await this.prisma.food.findMany({
       where: { isVerified: true, category: originalFood.category },
     });
 
@@ -128,7 +128,7 @@ export class SubstitutionService {
     if (candidates.length < MIN_SAME_CATEGORY) {
       const relatedCategories = RELATED_CATEGORIES[originalFood.category] || [];
       if (relatedCategories.length > 0) {
-        const crossCandidates = await this.prisma.foods.findMany({
+        const crossCandidates = await this.prisma.food.findMany({
           where: {
             isVerified: true,
             category: { in: relatedCategories },
