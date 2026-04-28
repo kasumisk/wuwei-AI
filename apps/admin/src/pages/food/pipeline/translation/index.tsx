@@ -139,16 +139,16 @@ const TranslationPage: React.FC = () => {
         <Form
           form={form}
           layout="vertical"
-          initialValues={{ targetLocale: 'en-US', limit: 50, untranslatedOnly: true }}
+          initialValues={{ targetLocales: ['en-US'], limit: 50, untranslatedOnly: true }}
           onFinish={(values) => batchTranslate.mutate(values)}
           style={{ maxWidth: 600 }}
         >
           <Form.Item
-            name="targetLocale"
+            name="targetLocales"
             label="目标语言"
-            rules={[{ required: true, message: '请选择目标语言' }]}
+            rules={[{ required: true, message: '请选择至少一个目标语言' }]}
           >
-            <Select options={LOCALE_OPTIONS} />
+            <Select mode="multiple" options={LOCALE_OPTIONS} maxTagCount={3} />
           </Form.Item>
           <Form.Item name="untranslatedOnly" label="仅处理未翻译的" valuePropName="checked">
             <Switch defaultChecked />

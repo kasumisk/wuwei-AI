@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { FoodEmbeddingRepository } from './food-embedding.repository';
 import { FoodProvenanceRepository } from './food-provenance.repository';
+import { FOOD_SPLIT_INCLUDE } from '../food-split.helper';
 import {
   EmbeddingModelName,
   RECOMMENDATION_EMBEDDING_MODEL,
@@ -35,7 +36,10 @@ export class FoodRepository {
     embedding?: number[] | null;
     failedFields?: Record<string, string>;
   } | null> {
-    const food = await this.prisma.food.findUnique({ where: { id } });
+    const food = await this.prisma.food.findUnique({
+      where: { id },
+      include: FOOD_SPLIT_INCLUDE,
+    });
     if (!food) return null;
 
     const result: {

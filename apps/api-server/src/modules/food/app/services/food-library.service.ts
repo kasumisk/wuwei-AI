@@ -30,49 +30,53 @@ export class FoodLibraryService {
     // pg_trgm similarity 搜索（利用已有 GIN 索引）
     const results = await this.prisma.$queryRawUnsafe(
       `SELECT
-         id, code, name, aliases, barcode, status,
-         category, sub_category, food_group,
-         calories, protein, fat, carbs, fiber, sugar,
-         added_sugar, natural_sugar, saturated_fat, trans_fat,
-         cholesterol, sodium, potassium, calcium, iron,
-         vitamin_a, vitamin_c, vitamin_d, vitamin_e,
-         vitamin_b12, folate, zinc, magnesium, purine, phosphorus,
-         glycemic_index, glycemic_load,
-         is_processed, is_fried, processing_level,
-         allergens, quality_score, satiety_score, nutrient_density,
-         meal_types, tags, main_ingredient, compatibility,
-         standard_serving_g, standard_serving_desc, common_portions,
-         image_url, thumbnail_url,
-         primary_source, primary_source_id,
-         data_version, confidence, is_verified,
-         verified_by, verified_at, search_weight, popularity,
-         cuisine, flavor_profile, cooking_methods,
-         required_equipment, serving_temperature,
-         texture_tags, dish_type, food_form, dish_priority,
-         ingredient_list,
-         prep_time_minutes, cook_time_minutes, skill_required,
-         estimated_cost_level, shelf_life_days,
-         fodmap_level, oxalate_level,
-         available_channels, commonality_score,
+         f.id, f.code, f.name, f.aliases, f.barcode, f.status,
+         f.category, f.sub_category, f.food_group,
+         f.calories, f.protein, f.fat, f.carbs, f.fiber, f.sugar,
+         nd.added_sugar AS added_sugar, nd.natural_sugar AS natural_sugar, nd.saturated_fat AS saturated_fat, nd.trans_fat AS trans_fat,
+         nd.cholesterol AS cholesterol, f.sodium, f.potassium, f.calcium, f.iron,
+         nd.vitamin_a AS vitamin_a, nd.vitamin_c AS vitamin_c, nd.vitamin_d AS vitamin_d, nd.vitamin_e AS vitamin_e,
+         nd.vitamin_b12 AS vitamin_b12, nd.folate AS folate, nd.zinc AS zinc, nd.magnesium AS magnesium, nd.purine AS purine, nd.phosphorus AS phosphorus,
+         ha.glycemic_index AS glycemic_index, ha.glycemic_load AS glycemic_load,
+         ha.is_processed AS is_processed, ha.is_fried AS is_fried, ha.processing_level AS processing_level,
+         tx.allergens AS allergens, ha.quality_score AS quality_score, ha.satiety_score AS satiety_score, ha.nutrient_density AS nutrient_density,
+         tx.meal_types AS meal_types, tx.tags AS tags, f.main_ingredient, tx.compatibility AS compatibility,
+         pg.standard_serving_g AS standard_serving_g, pg.standard_serving_desc AS standard_serving_desc, pg.common_portions AS common_portions,
+         f.image_url, f.thumbnail_url,
+         f.primary_source, f.primary_source_id,
+         f.data_version, f.confidence, f.is_verified,
+         f.verified_by, f.verified_at, f.search_weight, f.popularity,
+         tx.cuisine AS cuisine, tx.flavor_profile AS flavor_profile, pg.cooking_methods AS cooking_methods,
+         pg.required_equipment AS required_equipment, pg.serving_temperature AS serving_temperature,
+         tx.texture_tags AS texture_tags, tx.dish_type AS dish_type, f.food_form, f.dish_priority,
+         f.ingredient_list,
+         pg.prep_time_minutes AS prep_time_minutes, pg.cook_time_minutes AS cook_time_minutes, pg.skill_required AS skill_required,
+         pg.estimated_cost_level AS estimated_cost_level, pg.shelf_life_days AS shelf_life_days,
+         ha.fodmap_level AS fodmap_level, ha.oxalate_level AS oxalate_level,
+         tx.available_channels AS available_channels, f.commonality_score,
          -- V7.9 营养素字段
-         vitamin_b6, omega3, omega6,
-         soluble_fiber, insoluble_fiber, water_content_percent,
-         acquisition_difficulty,
+         nd.vitamin_b6 AS vitamin_b6, nd.omega3 AS omega3, nd.omega6 AS omega6,
+         nd.soluble_fiber AS soluble_fiber, nd.insoluble_fiber AS insoluble_fiber, pg.water_content_percent AS water_content_percent,
+         f.acquisition_difficulty,
           -- 补全元数据
-          data_completeness, enrichment_status, last_enriched_at,
-         -- V8.1 审核
-         review_status, reviewed_by, reviewed_at,
-         created_at, updated_at,
+           f.data_completeness, f.enrichment_status, f.last_enriched_at,
+          -- V8.1 审核
+         f.review_status, f.reviewed_by, f.reviewed_at,
+         f.created_at, f.updated_at,
          GREATEST(
-           similarity(name, $1),
-           similarity(COALESCE(aliases, ''), $1)
+           similarity(f.name, $1),
+           similarity(COALESCE(f.aliases, ''), $1)
          ) AS sim_score
-       FROM foods
-       WHERE similarity(name, $1) > 0.2
-          OR similarity(COALESCE(aliases, ''), $1) > 0.2
-          OR name ILIKE $2
-          OR aliases ILIKE $2
-       ORDER BY sim_score DESC, search_weight DESC, name ASC
+       FROM foods f
+       LEFT JOIN food_nutrition_details nd ON nd.food_id = f.id
+       LEFT JOIN food_health_assessments ha ON ha.food_id = f.id
+       LEFT JOIN food_taxonomies tx ON tx.food_id = f.id
+       LEFT JOIN food_portion_guides pg ON pg.food_id = f.id
+       WHERE similarity(f.name, $1) > 0.2
+          OR similarity(COALESCE(f.aliases, ''), $1) > 0.2
+          OR f.name ILIKE $2
+          OR f.aliases ILIKE $2
+       ORDER BY sim_score DESC, f.search_weight DESC, f.name ASC
        LIMIT $3`,
       q,
       `%${q}%`,
@@ -95,6 +99,7 @@ export class FoodLibraryService {
 
     return this.prisma.food.findMany({
       where,
+      include: FOOD_SPLIT_INCLUDE,
       orderBy: { searchWeight: 'desc' },
       take: safeLimit,
     });
@@ -121,6 +126,7 @@ export class FoodLibraryService {
   async findByName(name: string) {
     const food = await this.prisma.food.findFirst({
       where: { name },
+      include: FOOD_SPLIT_INCLUDE,
     });
     if (!food) {
       throw new NotFoundException(`未找到食物: ${name}`);
@@ -152,6 +158,7 @@ export class FoodLibraryService {
         category: food.category,
         name: { not: name },
       },
+      include: FOOD_SPLIT_INCLUDE,
       orderBy: { searchWeight: 'desc' },
       take: limit,
     });
@@ -164,6 +171,7 @@ export class FoodLibraryService {
     const take = Math.min(limit, 1000);
     const [items, total] = await Promise.all([
       this.prisma.food.findMany({
+        include: FOOD_SPLIT_INCLUDE,
         orderBy: { searchWeight: 'desc' },
         take,
       }),
@@ -245,6 +253,7 @@ export class FoodLibraryService {
     const names = frequentNames.map((r) => r.name);
     const foods = await this.prisma.food.findMany({
       where: { name: { in: names } },
+      include: FOOD_SPLIT_INCLUDE,
     });
 
     const foodByName = new Map(foods.map((f) => [f.name, f]));

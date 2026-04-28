@@ -53,7 +53,7 @@ export class FoodEnrichmentProcessor extends WorkerHost {
       foodId,
       target = 'foods',
       staged = false,
-      locale,
+      locales,
       region,
       stages,
       fields,
@@ -69,7 +69,7 @@ export class FoodEnrichmentProcessor extends WorkerHost {
 
     try {
       if (target === 'translations') {
-        await this.processTranslation(foodId, locale ?? 'en-US', staged);
+        await this.processTranslation(foodId, locales ?? ['en-US'], staged);
       } else if (target === 'regional') {
         await this.processRegional(foodId, region ?? 'CN', staged);
       } else if (mode === 'direct_fields') {
@@ -252,45 +252,55 @@ export class FoodEnrichmentProcessor extends WorkerHost {
 
   private async processTranslation(
     foodId: string,
-    locale: string,
+    locales: string[],
     staged: boolean,
   ): Promise<void> {
-    const result = await this.enrichmentService.enrichTranslation(
-      foodId,
-      locale,
-    );
-    if (!result) {
-      this.logger.warn(`无翻译补全结果: foodId=${foodId}, locale=${locale}`);
+    const normalizedLocales = [...new Set(locales.filter(Boolean))];
+    if (normalizedLocales.length === 0) {
+      this.logger.warn(`无翻译补全目标语言: foodId=${foodId}`);
       return;
     }
 
-    const shouldStage = this.enrichmentService.shouldStage(
-      result as any,
-      staged,
+    const results = await this.enrichmentService.enrichTranslations(
+      foodId,
+      normalizedLocales,
     );
 
-    if (shouldStage) {
-      const logId = await this.enrichmentService.stageEnrichment(
-        foodId,
+    for (const locale of normalizedLocales) {
+      const result = results[locale];
+      if (!result) {
+        this.logger.warn(`无翻译补全结果: foodId=${foodId}, locale=${locale}`);
+        continue;
+      }
+
+      const shouldStage = this.enrichmentService.shouldStage(
         result as any,
-        'translations',
-        locale,
-        undefined,
-        'ai_enrichment_worker',
+        staged,
       );
-      this.logger.log(
-        `Staged（translations/${locale}）foodId=${foodId}, logId=${logId}`,
-      );
-    } else {
-      const res = await this.enrichmentService.applyTranslationEnrichment(
-        foodId,
-        locale,
-        result,
-        'ai_enrichment_worker',
-      );
-      this.logger.log(
-        `直接入库（translations/${locale}）foodId=${foodId}, ${res.action} fields=[${res.fields.join(',')}]`,
-      );
+
+      if (shouldStage) {
+        const logId = await this.enrichmentService.stageEnrichment(
+          foodId,
+          result as any,
+          'translations',
+          [locale],
+          undefined,
+          'ai_enrichment_worker',
+        );
+        this.logger.log(
+          `Staged（translations/${locale}）foodId=${foodId}, logId=${logId}`,
+        );
+      } else {
+        const res = await this.enrichmentService.applyTranslationEnrichment(
+          foodId,
+          locale,
+          result,
+          'ai_enrichment_worker',
+        );
+        this.logger.log(
+          `直接入库（translations/${locale}）foodId=${foodId}, ${res.action} fields=[${res.fields.join(',')}]`,
+        );
+      }
     }
   }
 

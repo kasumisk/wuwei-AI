@@ -106,8 +106,8 @@ export class FoodEnrichmentController {
       offset?: number;
       /** 目标：foods / translations / regional */
       target?: EnrichmentTarget;
-      /** translations 时必填 */
-      locale?: string;
+      /** translations 时可多选 */
+      locales?: string[];
       /** regional 时必填 */
       region?: string;
       /** 是否 staging 模式（先暂存，不直接落库） */
@@ -130,7 +130,7 @@ export class FoodEnrichmentController {
         target,
         limit,
         offset,
-        body.locale,
+        body.locales,
         body.region,
       );
     } else {
@@ -158,7 +158,7 @@ export class FoodEnrichmentController {
         fields: target === 'foods' ? food.missingFields : [],
         target,
         staged: body.staged ?? false,
-        locale: body.locale,
+        locales: body.locales,
         region: body.region,
       },
       opts: {
@@ -272,7 +272,7 @@ export class FoodEnrichmentController {
       fields: job.data?.fields,
       target: job.data?.target ?? 'foods',
       staged: job.data?.staged ?? false,
-      locale: job.data?.locale ?? null,
+      locales: job.data?.locales ?? null,
       region: job.data?.region ?? null,
       status: job.finishedOn
         ? 'completed'

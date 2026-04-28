@@ -67,6 +67,7 @@ export const LOCALE_OPTIONS = [
   { label: '英语', value: 'en-US' },
   { label: '日语', value: 'ja-JP' },
   { label: '韩语', value: 'ko-KR' },
+  { label: '西班牙', value: 'es-ES' },
 ];
 
 // V8.0 补全状态

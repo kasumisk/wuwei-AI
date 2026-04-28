@@ -438,10 +438,15 @@ const PipelineDashboard: React.FC = () => {
         <Form
           form={translateForm}
           layout="vertical"
-          initialValues={{ limit: 50, targetLocale: 'en-US', untranslatedOnly: true }}
+          initialValues={{ limit: 50, targetLocales: ['en-US'], untranslatedOnly: true }}
         >
-          <Form.Item name="targetLocale" label="目标语言" rules={[{ required: true }]}>
+          <Form.Item
+            name="targetLocales"
+            label="目标语言"
+            rules={[{ required: true, message: '请选择至少一个目标语言' }]}
+          >
             <Select
+              mode="multiple"
               options={[
                 { label: '英语 (en-US)', value: 'en-US' },
                 { label: '简体中文 (zh-CN)', value: 'zh-CN' },
@@ -449,6 +454,7 @@ const PipelineDashboard: React.FC = () => {
                 { label: '日语 (ja-JP)', value: 'ja-JP' },
                 { label: '韩语 (ko-KR)', value: 'ko-KR' },
               ]}
+              maxTagCount={3}
             />
           </Form.Item>
           <Form.Item name="untranslatedOnly" label="仅翻译未翻译的">

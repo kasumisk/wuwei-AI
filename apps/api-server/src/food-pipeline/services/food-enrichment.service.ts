@@ -41,6 +41,12 @@ import {
   ALL_COOKING_METHODS,
 } from '../../modules/food/cooking-method.constants';
 import { upsertFoodSplitTables } from '../../modules/food/food-split.helper';
+import {
+  HEALTH_ASSESSMENT_FIELDS,
+  NUTRITION_DETAIL_FIELDS,
+  PORTION_GUIDE_FIELDS,
+  TAXONOMY_FIELDS,
+} from '../../modules/food/food-split.helper';
 
 // ─── 可补全字段定义（foods 主表）───────────────────────────────────────────
 
@@ -794,8 +800,8 @@ export interface EnrichmentJobData {
   target?: EnrichmentTarget;
   /** 是否 staging 模式（先暂存，不直接落库）*/
   staged?: boolean;
-  /** 目标语言（translations 补全时使用）*/
-  locale?: string;
+  /** 目标语言列表（translations 补全时使用）*/
+  locales?: string[];
   /** 目标地区（regional 补全时使用）*/
   region?: string;
   /** V7.9: 分阶段补全模式，指定阶段编号 1-5 */
@@ -850,6 +856,25 @@ export class FoodEnrichmentService {
       },
       timeout: 90000,
     });
+  }
+
+  private getFieldSqlRef(field: string): string {
+    const camelField = snakeToCamel(field);
+    const column = field;
+
+    if (NUTRITION_DETAIL_FIELDS.has(camelField)) {
+      return `nd."${column}"`;
+    }
+    if (HEALTH_ASSESSMENT_FIELDS.has(camelField)) {
+      return `ha."${column}"`;
+    }
+    if (TAXONOMY_FIELDS.has(camelField)) {
+      return `tx."${column}"`;
+    }
+    if (PORTION_GUIDE_FIELDS.has(camelField)) {
+      return `pg."${column}"`;
+    }
+    return `foods."${column}"`;
   }
 
   private async getSuccessSourcePresence(
@@ -2673,12 +2698,18 @@ ${jsonSchema}`;
     for (const stage of ENRICHMENT_STAGES) {
       const conditions = stage.fields.map((f) =>
         (JSON_ARRAY_FIELDS as readonly string[]).includes(f)
-          ? `("${f}" IS NOT NULL AND "${f}"::text != '[]')`
-          : `"${f}" IS NOT NULL`,
+          ? `(${this.getFieldSqlRef(f)} IS NOT NULL AND ${this.getFieldSqlRef(f)}::text != '[]')`
+          : `${this.getFieldSqlRef(f)} IS NOT NULL`,
       );
       const allFilledCondition = conditions.join(' AND ');
       const countResult = await this.prisma.$queryRaw<[{ count: string }]>(
-        Prisma.sql`SELECT COUNT(*)::text AS count FROM foods WHERE ${Prisma.raw(allFilledCondition)}`,
+        Prisma.sql`SELECT COUNT(*)::text AS count
+                   FROM foods
+                   LEFT JOIN food_nutrition_details nd ON nd.food_id = foods.id
+                   LEFT JOIN food_health_assessments ha ON ha.food_id = foods.id
+                   LEFT JOIN food_taxonomies tx ON tx.food_id = foods.id
+                   LEFT JOIN food_portion_guides pg ON pg.food_id = foods.id
+                   WHERE ${Prisma.raw(allFilledCondition)}`,
       );
       const count = parseInt(countResult[0]?.count ?? '0', 10);
       stagesCoverage.push({
@@ -2955,18 +2986,26 @@ ${jsonSchema}`;
     target: 'translations' | 'regional',
     limit: number,
     offset: number,
-    locale?: string,
+    locales?: string[],
     region?: string,
   ): Promise<{ id: string; name: string; missingFields: EnrichableField[] }[]> {
     let rows: { id: string; name: string }[];
 
     // V8.8: 优先未补全（data_completeness IS NULL）的食物，其次按完整度升序
     if (target === 'translations') {
-      if (locale) {
+      const targetLocales = (locales ?? []).filter(Boolean);
+      if (targetLocales.length > 0) {
+        const localeConditions = Prisma.join(
+          targetLocales.map(
+            (targetLocale) => Prisma.sql`NOT EXISTS (
+              SELECT 1 FROM food_translations ft WHERE ft.food_id = foods.id AND ft.locale = ${targetLocale}
+            )`,
+          ),
+          ' OR ',
+        );
         rows = await this.prisma.$queryRaw<{ id: string; name: string }[]>(
-          Prisma.sql`SELECT id, name FROM foods WHERE NOT EXISTS (
-            SELECT 1 FROM food_translations ft WHERE ft.food_id = foods.id AND ft.locale = ${locale}
-          ) ORDER BY data_completeness ASC NULLS FIRST, created_at ASC LIMIT ${limit} OFFSET ${offset}`,
+          Prisma.sql`SELECT id, name FROM foods WHERE (${localeConditions})
+          ORDER BY data_completeness ASC NULLS FIRST, created_at ASC LIMIT ${limit} OFFSET ${offset}`,
         );
       } else {
         rows = await this.prisma.$queryRaw<{ id: string; name: string }[]>(
@@ -3000,31 +3039,43 @@ ${jsonSchema}`;
 
   // ─── 翻译补全（food_translations 表）─────────────────────────────────
 
-  async enrichTranslation(
+  async enrichTranslations(
     foodId: string,
-    locale: string,
-  ): Promise<Record<string, any> | null> {
-    if (!this.apiKey) return null;
+    locales: string[],
+  ): Promise<Record<string, Record<string, any>>> {
+    if (!this.apiKey) return {};
 
     const food = await this.prisma.food.findUnique({ where: { id: foodId } });
-    if (!food) return null;
+    if (!food) return {};
 
-    // 检查是否已存在该语言翻译
-    const existing = await this.prisma.foodTranslations.findFirst({
-      where: { foodId: foodId, locale },
+    const normalizedLocales = [...new Set(locales.filter(Boolean))];
+    if (normalizedLocales.length === 0) return {};
+
+    const existingTranslations = await this.prisma.foodTranslations.findMany({
+      where: { foodId: foodId, locale: { in: normalizedLocales } },
     });
 
-    const missingTransFields: string[] = [];
-    if (!existing) {
-      missingTransFields.push('name', 'aliases', 'description', 'serving_desc');
-    } else {
-      if (!existing.name) missingTransFields.push('name');
-      if (!existing.aliases) missingTransFields.push('aliases');
-      if (!existing.description) missingTransFields.push('description');
-      if (!existing.servingDesc) missingTransFields.push('serving_desc');
+    const existingMap = new Map(existingTranslations.map((item) => [item.locale, item]));
+    const localeFieldMap = new Map<string, string[]>();
+
+    for (const targetLocale of normalizedLocales) {
+      const existing = existingMap.get(targetLocale);
+      const missingTransFields: string[] = [];
+      if (!existing) {
+        missingTransFields.push('name', 'aliases', 'description', 'serving_desc');
+      } else {
+        if (!existing.name) missingTransFields.push('name');
+        if (!existing.aliases) missingTransFields.push('aliases');
+        if (!existing.description) missingTransFields.push('description');
+        if (!existing.servingDesc) missingTransFields.push('serving_desc');
+      }
+
+      if (missingTransFields.length > 0) {
+        localeFieldMap.set(targetLocale, missingTransFields);
+      }
     }
 
-    if (missingTransFields.length === 0) return null;
+    if (localeFieldMap.size === 0) return {};
 
     const localeNames: Record<string, string> = {
       'zh-CN': '简体中文',
@@ -3032,7 +3083,15 @@ ${jsonSchema}`;
       'en-US': '英语',
       'ja-JP': '日语',
       'ko-KR': '韩语',
+      'es-ES': '西班牙语',
     };
+
+    const localeInstructions = Array.from(localeFieldMap.entries())
+      .map(
+        ([targetLocale, fields]) =>
+          `- ${targetLocale} (${localeNames[targetLocale] ?? targetLocale}): ${fields.join(', ')}`,
+      )
+      .join('\n');
 
     const prompt = `食物信息（中文）：
 名称: ${food.name}
@@ -3040,22 +3099,65 @@ ${jsonSchema}`;
 分类: ${food.category}
 标准份量: ${(food as any).portionGuide?.standardServingDesc ?? `${(food as any).portionGuide?.standardServingG ?? ''}g`}
 
-请将以下字段翻译成${localeNames[locale] ?? locale}（locale: ${locale}）：
-${missingTransFields.map((f) => `- ${f}`).join('\n')}
+要求：
+1. name 使用目标地区最常见、最稳定、最适合普通用户理解的食品名称，优先常用名，不要机械直译。
+2. 必须保持食品类别正确，不要把原材料翻成菜名，也不要把菜名翻成原材料。
+3. aliases 只保留真实常见别名/异名/拼写变体，逗号分隔；不可靠时返回空字符串。
+4. description 只写 1 句客观描述，简洁、非营销、非功效宣称。
+5. 遇到地区差异时，按 locale 对应地区习惯翻译；不确定时采用保守、通用、可信的叫法。
+6. 严格返回 JSON，不要输出任何额外文本。
+
+请按 locale 一次性返回以下翻译缺失字段：
+${localeInstructions}
 
 返回 JSON：
 {
-  ${missingTransFields.map((f) => `"${f}": "<${localeNames[locale] ?? locale}内容>"`).join(',\n  ')},
+  "translations": {
+    ${Array.from(localeFieldMap.entries())
+      .map(
+        ([targetLocale, fields]) => `"${targetLocale}": {
+      ${fields.map((f) => `"${f}": "<${localeNames[targetLocale] ?? targetLocale}内容>"`).join(',\n      ')}
+    }`,
+      )
+      .join(',\n    ')}
+  },
   "confidence": <0.0-1.0>,
   "reasoning": "<说明>"
 }`;
 
-    return this.callAI(
-      food.name,
-      prompt,
-      missingTransFields as any,
-      'translations',
-    );
+    const raw = await this.callAIRaw(food.name, prompt, {
+      systemPrompt:
+        '你是权威食品多语言本地化专家。为食品数据库生成准确、保守、可直接入库的翻译。严格返回完整 JSON，不要输出 JSON 之外的任何文本。',
+      maxTokens: 2800,
+    });
+    if (!raw || typeof raw.translations !== 'object' || Array.isArray(raw.translations)) {
+      return {};
+    }
+
+    const confidence =
+      typeof raw.confidence === 'number'
+        ? Math.max(0, Math.min(1, raw.confidence))
+        : 0.5;
+    const reasoning = typeof raw.reasoning === 'string' ? raw.reasoning : undefined;
+    const translationMap = raw.translations as Record<string, Record<string, any>>;
+    const results: Record<string, Record<string, any>> = {};
+
+    for (const [targetLocale, fields] of localeFieldMap.entries()) {
+      const cleaned = this.validateAndClean(
+        {
+          ...(translationMap[targetLocale] ?? {}),
+          confidence,
+          reasoning,
+        },
+        fields,
+        'translations',
+      );
+      if (cleaned) {
+        results[targetLocale] = cleaned;
+      }
+    }
+
+    return results;
   }
 
   // ─── 地区信息补全（food_regional_info 表）────────────────────────────
@@ -3261,11 +3363,15 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
 
     const { confidence, reasoning, ...fields } = result;
     const updates: Record<string, any> = {};
+    const translationFieldMap: Record<string, string> = {
+      serving_desc: 'servingDesc',
+    };
 
     for (const [k, v] of Object.entries(fields)) {
+      const prismaField = translationFieldMap[k] ?? k;
       if (v === null || v === undefined) continue;
-      if (existing && (existing as any)[k]) continue; // 不覆盖已有
-      updates[k] = v;
+      if (existing && (existing as any)[prismaField]) continue; // 不覆盖已有
+      updates[prismaField] = v;
     }
 
     if (Object.keys(updates).length === 0)
@@ -3394,16 +3500,19 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
     foodId: string,
     result: EnrichmentResult,
     target: EnrichmentTarget = 'foods',
-    locale?: string,
+    locales?: string[],
     region?: string,
     operator = 'ai_enrichment',
   ): Promise<string> {
     const food = await this.prisma.food.findUnique({ where: { id: foodId } });
     if (!food) throw new Error(`Food ${foodId} not found`);
 
+    const normalizedLocales = [...new Set((locales ?? []).filter(Boolean))];
+    const locale = normalizedLocales.length === 1 ? normalizedLocales[0] : null;
+
     const changesPayload = {
       target,
-      locale: locale ?? null,
+      locales: normalizedLocales.length > 0 ? normalizedLocales : null,
       region: region ?? null,
       proposedValues: result,
       confidence: result.confidence,
@@ -3412,8 +3521,22 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
 
     // V8.4: 防重 — 若该食物已存在未审核的 staged 记录，则覆盖而非新建
     // 避免重复入队时产生多条 ai_enrichment_staged 日志堆积在审核列表
+    const andConditions: Prisma.FoodChangeLogsWhereInput[] = [
+      { changes: { path: ['target'], equals: target } },
+    ];
+    if (normalizedLocales.length > 0) {
+      andConditions.push({ changes: { path: ['locales'], equals: normalizedLocales } });
+    }
+    if (region) andConditions.push({ changes: { path: ['region'], equals: region } });
+
+    const existingStagedWhere: Prisma.FoodChangeLogsWhereInput = {
+      foodId,
+      action: 'ai_enrichment_staged',
+      AND: andConditions,
+    };
+
     const existingStaged = await this.prisma.foodChangeLogs.findFirst({
-      where: { foodId, action: 'ai_enrichment_staged' },
+      where: existingStagedWhere,
       orderBy: { createdAt: 'desc' },
     });
 
@@ -3425,7 +3548,7 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
         data: {
           version: food.dataVersion ?? 1,
           changes: changesPayload,
-          reason: `AI 暂存补全（${target}${locale ? '/' + locale : ''}${region ? '/' + region : ''}），待人工审核`,
+          reason: `AI 暂存补全（${target}${normalizedLocales.length > 0 ? '/' + normalizedLocales.join(',') : ''}${region ? '/' + region : ''}），待人工审核`,
           operator,
           createdAt: new Date(), // 刷新时间戳，确保排序正确
         },
@@ -3441,7 +3564,7 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
           version: food.dataVersion ?? 1,
           action: 'ai_enrichment_staged',
           changes: changesPayload,
-          reason: `AI 暂存补全（${target}${locale ? '/' + locale : ''}${region ? '/' + region : ''}），待人工审核`,
+          reason: `AI 暂存补全（${target}${normalizedLocales.length > 0 ? '/' + normalizedLocales.join(',') : ''}${region ? '/' + region : ''}），待人工审核`,
           operator,
         },
       });
@@ -3790,14 +3913,23 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
       if (selectedFields) {
         detail += `, selectedFields=[${selectedFields.join(',')}]`;
       }
-    } else if (target === 'translations' && changes.locale) {
-      const res = await this.applyTranslationEnrichment(
-        log.foodId,
-        changes.locale,
-        proposed,
-        operator,
-      );
-      detail = `${res.action} fields=[${res.fields.join(',')}]`;
+    } else if (target === 'translations') {
+      const targetLocales = this.normalizeTranslationLocales(changes);
+      if (targetLocales.length === 0) {
+        throw new Error(`Staged log ${logId} missing translation locale`);
+      }
+      const appliedDetails: string[] = [];
+      for (const locale of targetLocales) {
+        const localeProposed = this.getTranslationProposedValues(changes, proposed, locale);
+        const res = await this.applyTranslationEnrichment(
+          log.foodId,
+          locale,
+          localeProposed,
+          operator,
+        );
+        appliedDetails.push(`${locale}:${res.action}[${res.fields.join(',')}]`);
+      }
+      detail = appliedDetails.join('; ');
     } else if (target === 'regional' && changes.region) {
       const res = await this.applyRegionalEnrichment(
         log.foodId,
@@ -4161,6 +4293,24 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
     requestedFields: readonly string[],
     target: EnrichmentTarget,
   ): Promise<EnrichmentResult | null> {
+    const raw = await this.callAIRaw(foodName, prompt);
+    if (!raw) return null;
+
+    const validated = this.validateAndClean(raw, requestedFields, target);
+    if (validated) return validated;
+
+    this.logger.error(`All AI attempts failed for "${foodName}"`);
+    return null;
+  }
+
+  private async callAIRaw(
+    foodName: string,
+    prompt: string,
+    options?: {
+      systemPrompt?: string;
+      maxTokens?: number;
+    },
+  ): Promise<Record<string, any> | null> {
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
         const response = await this.client.post('/chat/completions', {
@@ -4170,24 +4320,19 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
             {
               role: 'system',
               content:
+                options?.systemPrompt ??
                 '你是权威食品营养数据库专家。根据食物名称和已有数据，推算缺失字段。严格按JSON格式返回，数值基于每100g计算，禁止自由文本。',
             },
             { role: 'user', content: prompt },
           ],
           temperature: 0.1,
-          max_tokens: 1200,
+          max_tokens: options?.maxTokens ?? 1200,
         });
 
         const content = response.data.choices[0]?.message?.content;
         if (!content) continue;
 
-        const raw = JSON.parse(content) as Record<string, any>;
-        const validated = this.validateAndClean(raw, requestedFields, target);
-        if (validated) return validated;
-
-        this.logger.warn(
-          `Attempt ${attempt} validation failed for "${foodName}"`,
-        );
+        return JSON.parse(content) as Record<string, any>;
       } catch (e) {
         this.logger.warn(
           `Attempt ${attempt} failed for "${foodName}": ${(e as Error).message}`,
@@ -4199,6 +4344,28 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
 
     this.logger.error(`All AI attempts failed for "${foodName}"`);
     return null;
+  }
+
+  private normalizeTranslationLocales(changes: Record<string, any>): string[] {
+    const locales = Array.isArray(changes.locales)
+      ? changes.locales.filter(
+          (locale): locale is string => typeof locale === 'string' && locale.length > 0,
+        )
+      : [];
+    if (locales.length > 0) return [...new Set(locales)];
+    return [];
+  }
+
+  private getTranslationProposedValues(
+    changes: Record<string, any>,
+    proposed: EnrichmentResult,
+    locale: string,
+  ): EnrichmentResult {
+    const localized = changes.proposedValuesByLocale?.[locale];
+    if (localized && typeof localized === 'object' && !Array.isArray(localized)) {
+      return localized as EnrichmentResult;
+    }
+    return proposed;
   }
 
   // ─── 验证和清理 AI 结果 ───────────────────────────────────────────────
@@ -4618,13 +4785,18 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
       // 计算该阶段每个字段的非 NULL 比例，取平均
       const conditions = stage.fields.map((f) =>
         (JSON_ARRAY_FIELDS as readonly string[]).includes(f)
-          ? `AVG(CASE WHEN "${f}" IS NOT NULL AND "${f}"::text != '[]' THEN 1.0 ELSE 0.0 END)`
-          : `AVG(CASE WHEN "${f}" IS NOT NULL THEN 1.0 ELSE 0.0 END)`,
+          ? `AVG(CASE WHEN ${this.getFieldSqlRef(f)} IS NOT NULL AND ${this.getFieldSqlRef(f)}::text != '[]' THEN 1.0 ELSE 0.0 END)`
+          : `AVG(CASE WHEN ${this.getFieldSqlRef(f)} IS NOT NULL THEN 1.0 ELSE 0.0 END)`,
       );
       const avgExpr = `(${conditions.join(' + ')}) / ${stage.fields.length}`;
 
       const row = await this.prisma.$queryRaw<[{ rate: string }]>(
-        Prisma.sql`SELECT (${Prisma.raw(avgExpr)})::text AS rate FROM foods`,
+        Prisma.sql`SELECT (${Prisma.raw(avgExpr)})::text AS rate
+                   FROM foods
+                   LEFT JOIN food_nutrition_details nd ON nd.food_id = foods.id
+                   LEFT JOIN food_health_assessments ha ON ha.food_id = foods.id
+                   LEFT JOIN food_taxonomies tx ON tx.food_id = foods.id
+                   LEFT JOIN food_portion_guides pg ON pg.food_id = foods.id`,
       );
 
       const avgSuccessRate = row[0]?.rate

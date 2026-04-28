@@ -12,8 +12,16 @@ import {
   JSON_ARRAY_FIELDS,
   JSON_OBJECT_FIELDS,
   ENRICHMENT_STAGES,
+  snakeToCamel,
 } from '../../../food-pipeline/services/food-enrichment.service';
 import { ENRICHMENT_FIELD_LABELS, ENRICHMENT_FIELD_UNITS } from '../food.types';
+import {
+  HEALTH_ASSESSMENT_FIELDS,
+  NUTRITION_DETAIL_FIELDS,
+  FOOD_SPLIT_INCLUDE,
+  PORTION_GUIDE_FIELDS,
+  TAXONOMY_FIELDS,
+} from '../food-split.helper';
 import {
   GetFoodLibraryQueryDto,
   CreateFoodLibraryDto,
@@ -76,6 +84,14 @@ export class FoodLibraryManagementService {
     const conditions: string[] = ['1=1'];
     const params: any[] = [];
     let paramIdx = 1;
+    const getFieldSqlRef = (field: string): string => {
+      const camelField = snakeToCamel(field);
+      if (NUTRITION_DETAIL_FIELDS.has(camelField)) return `nd.${field}`;
+      if (HEALTH_ASSESSMENT_FIELDS.has(camelField)) return `ha.${field}`;
+      if (TAXONOMY_FIELDS.has(camelField)) return `tx.${field}`;
+      if (PORTION_GUIDE_FIELDS.has(camelField)) return `pg.${field}`;
+      return `f.${field}`;
+    };
 
     // keyword：同时模糊匹配 name / aliases / code（兼容旧调用方）
     if (keyword) {
@@ -149,7 +165,7 @@ export class FoodLibraryManagementService {
     }
     // V8.1: 按指定字段为空筛选（仅允许字母/数字/下划线，防止 SQL 注入）
     if (missingField && /^[a-z_][a-z0-9_]*$/.test(missingField)) {
-      conditions.push(`f.${missingField} IS NULL`);
+      conditions.push(`${getFieldSqlRef(missingField)} IS NULL`);
     }
     // V8.1: 多字段缺失组合筛选（逗号分隔，所有字段均为空才匹配）
     if (missingFields) {
@@ -158,7 +174,7 @@ export class FoodLibraryManagementService {
         .map((f) => f.trim())
         .filter((f) => /^[a-z_][a-z0-9_]*$/.test(f));
       if (fields.length > 0) {
-        const nullConds = fields.map((f) => `f.${f} IS NULL`).join(' AND ');
+        const nullConds = fields.map((f) => `${getFieldSqlRef(f)} IS NULL`).join(' AND ');
         conditions.push(`(${nullConds})`);
       }
     }
@@ -206,47 +222,47 @@ export class FoodLibraryManagementService {
          f.id, f.code, f.name, f.aliases, f.barcode, f.status,
          f.category, f.sub_category, f.food_group,
          f.food_form, f.dish_priority,
-         -- 宏量营养素（per 100g）
+          -- 宏量营养素（per 100g）
          f.calories, f.protein, f.fat, f.carbs, f.fiber, f.sugar,
-         f.added_sugar, f.natural_sugar, f.saturated_fat, f.trans_fat,
-         f.cholesterol,
-         -- 微量营养素（per 100g）
+         nd.added_sugar AS added_sugar, nd.natural_sugar AS natural_sugar, nd.saturated_fat AS saturated_fat, nd.trans_fat AS trans_fat,
+         nd.cholesterol AS cholesterol,
+          -- 微量营养素（per 100g）
          f.sodium, f.potassium, f.calcium, f.iron,
-         f.vitamin_a, f.vitamin_c, f.vitamin_d, f.vitamin_e,
-         f.vitamin_b12, f.folate, f.zinc, f.magnesium,
-         f.phosphorus, f.purine,
-         -- 健康评估
-         f.glycemic_index, f.glycemic_load,
-         f.is_processed, f.is_fried, f.processing_level,
-         f.fodmap_level, f.oxalate_level,
-         f.allergens, f.quality_score, f.satiety_score, f.nutrient_density,
-         -- 标签与推荐决策
-         f.meal_types, f.tags,
-         f.main_ingredient, f.ingredient_list,
-         f.compatibility, f.available_channels, f.commonality_score,
-         -- 份量信息
-         f.standard_serving_g, f.standard_serving_desc, f.common_portions,
-         -- 烹饪与风味
-         f.cuisine, f.flavor_profile,
-         f.cooking_methods,
-         f.required_equipment, f.serving_temperature,
-         f.texture_tags, f.dish_type,
-         f.prep_time_minutes, f.cook_time_minutes, f.skill_required,
-         f.estimated_cost_level, f.shelf_life_days,
-         -- 媒体资源
+         nd.vitamin_a AS vitamin_a, nd.vitamin_c AS vitamin_c, nd.vitamin_d AS vitamin_d, nd.vitamin_e AS vitamin_e,
+         nd.vitamin_b12 AS vitamin_b12, nd.folate AS folate, nd.zinc AS zinc, nd.magnesium AS magnesium,
+         nd.phosphorus AS phosphorus, nd.purine AS purine,
+          -- 健康评估
+         ha.glycemic_index AS glycemic_index, ha.glycemic_load AS glycemic_load,
+         ha.is_processed AS is_processed, ha.is_fried AS is_fried, ha.processing_level AS processing_level,
+         ha.fodmap_level AS fodmap_level, ha.oxalate_level AS oxalate_level,
+         tx.allergens AS allergens, ha.quality_score AS quality_score, ha.satiety_score AS satiety_score, ha.nutrient_density AS nutrient_density,
+          -- 标签与推荐决策
+         tx.meal_types AS meal_types, tx.tags AS tags,
+          f.main_ingredient, f.ingredient_list,
+         tx.compatibility AS compatibility, tx.available_channels AS available_channels, f.commonality_score,
+          -- 份量信息
+         pg.standard_serving_g AS standard_serving_g, pg.standard_serving_desc AS standard_serving_desc, pg.common_portions AS common_portions,
+          -- 烹饪与风味
+         tx.cuisine AS cuisine, tx.flavor_profile AS flavor_profile,
+         pg.cooking_methods AS cooking_methods,
+         pg.required_equipment AS required_equipment, pg.serving_temperature AS serving_temperature,
+         tx.texture_tags AS texture_tags, tx.dish_type AS dish_type,
+         pg.prep_time_minutes AS prep_time_minutes, pg.cook_time_minutes AS cook_time_minutes, pg.skill_required AS skill_required,
+         pg.estimated_cost_level AS estimated_cost_level, pg.shelf_life_days AS shelf_life_days,
+          -- 媒体资源
          f.image_url, f.thumbnail_url,
          -- 数据溯源与质控
          f.primary_source, f.primary_source_id,
          f.data_version, f.confidence, f.is_verified,
          f.verified_by, f.verified_at,
-         f.search_weight, f.popularity,
-         f.created_at, f.updated_at,
-         -- V7.9 营养素字段
-         f.vitamin_b6, f.omega3, f.omega6,
-         f.soluble_fiber, f.insoluble_fiber, f.water_content_percent,
+          f.search_weight, f.popularity,
+          f.created_at, f.updated_at,
+          -- V7.9 营养素字段
+         nd.vitamin_b6 AS vitamin_b6, nd.omega3 AS omega3, nd.omega6 AS omega6,
+         nd.soluble_fiber AS soluble_fiber, nd.insoluble_fiber AS insoluble_fiber, pg.water_content_percent AS water_content_percent,
          f.acquisition_difficulty,
-          -- 补全元数据
-          f.data_completeness, f.enrichment_status, f.last_enriched_at,
+           -- 补全元数据
+           f.data_completeness, f.enrichment_status, f.last_enriched_at,
          -- V8.1: 整体审核状态 + 审核元数据
          f.review_status,
          f.reviewed_by,
@@ -257,10 +273,14 @@ export class FoodLibraryManagementService {
              FROM food_field_provenance p
             WHERE p.food_id = f.id AND p.status = 'failed'
          ) AS "failedFields"
-       FROM foods f
-       WHERE ${whereClause}
-       ORDER BY ${orderClause}
-       LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+        FROM foods f
+        LEFT JOIN food_nutrition_details nd ON nd.food_id = f.id
+        LEFT JOIN food_health_assessments ha ON ha.food_id = f.id
+        LEFT JOIN food_taxonomies tx ON tx.food_id = f.id
+        LEFT JOIN food_portion_guides pg ON pg.food_id = f.id
+        WHERE ${whereClause}
+        ORDER BY ${orderClause}
+        LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
       ...params,
       pageSize,
       offset,
@@ -288,7 +308,13 @@ export class FoodLibraryManagementService {
   }
 
   async findOne(id: string) {
-    const food = await this.findOneSimple(id);
+    const food = await this.prisma.food.findUnique({
+      where: { id },
+      include: FOOD_SPLIT_INCLUDE,
+    });
+    if (!food) {
+      throw new NotFoundException(this.i18n.t('food.foodNotFound'));
+    }
     // Load relations separately
     const [translations, sources, conflicts] = await Promise.all([
       this.prisma.foodTranslations.findMany({ where: { foodId: id } }),
@@ -308,7 +334,10 @@ export class FoodLibraryManagementService {
    * 避免加载 translations/sources/conflicts/enrichmentMeta（4个额外查询）
    */
   private async findOneSimple(id: string) {
-    const food = await this.prisma.food.findUnique({ where: { id } });
+    const food = await this.prisma.food.findUnique({
+      where: { id },
+      include: FOOD_SPLIT_INCLUDE,
+    });
     if (!food) {
       throw new NotFoundException(this.i18n.t('food.foodNotFound'));
     }
@@ -337,8 +366,17 @@ export class FoodLibraryManagementService {
       };
     }
 
+    const getFieldValue = (field: string) => {
+      const camelField = snakeToCamel(field);
+      if (NUTRITION_DETAIL_FIELDS.has(camelField)) return food.nutritionDetail?.[camelField];
+      if (HEALTH_ASSESSMENT_FIELDS.has(camelField)) return food.healthAssessment?.[camelField];
+      if (TAXONOMY_FIELDS.has(camelField)) return food.taxonomy?.[camelField];
+      if (PORTION_GUIDE_FIELDS.has(camelField)) return food.portionGuide?.[camelField];
+      return food[camelField];
+    };
+
     const isFieldFilled = (field: string): boolean => {
-      const value = food[field];
+      const value = getFieldValue(field);
       if (value === null || value === undefined) return false;
       if ((JSON_ARRAY_FIELDS as readonly string[]).includes(field))
         return Array.isArray(value) && value.length > 0;
@@ -365,7 +403,7 @@ export class FoodLibraryManagementService {
           label,
           unit,
           filled,
-          value: filled ? food[field] : null,
+          value: filled ? getFieldValue(field) : null,
           source: successMap[field]?.source ?? null,
           confidence: successMap[field]?.confidence ?? null,
           failed: failedFields[field] ?? null,
@@ -560,8 +598,17 @@ export class FoodLibraryManagementService {
       { source: string; confidence: number | null }
     > = {},
   ): number {
+    const getFieldValue = (field: string) => {
+      const camelField = snakeToCamel(field);
+      if (NUTRITION_DETAIL_FIELDS.has(camelField)) return food.nutritionDetail?.[camelField];
+      if (HEALTH_ASSESSMENT_FIELDS.has(camelField)) return food.healthAssessment?.[camelField];
+      if (TAXONOMY_FIELDS.has(camelField)) return food.taxonomy?.[camelField];
+      if (PORTION_GUIDE_FIELDS.has(camelField)) return food.portionGuide?.[camelField];
+      return food[camelField];
+    };
+
     const isFieldFilled = (field: string): boolean => {
-      const value = food[field];
+      const value = getFieldValue(field);
       if (value === null || value === undefined) return false;
       if ((JSON_ARRAY_FIELDS as readonly string[]).includes(field))
         return Array.isArray(value) && value.length > 0;

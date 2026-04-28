@@ -64,6 +64,7 @@ import {
 } from '../../../../core/events/domain-events';
 import { FoodAnalysisResultV61 } from '../../../decision/types/analysis-result.types';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
+import { FOOD_SPLIT_INCLUDE } from '../../food-split.helper';
 import { I18nService } from '../../../../core/i18n';
 import { translateEnum } from '../../../../common/i18n/enum-i18n';
 
@@ -1177,6 +1178,7 @@ export class FoodAnalyzeController {
     // 1. 查找食物库记录
     const food = await this.prisma.food.findUnique({
       where: { id: foodId },
+      include: FOOD_SPLIT_INCLUDE,
     });
     if (!food) {
       throw new NotFoundException(this.i18n.t('food.foodNotFound'));

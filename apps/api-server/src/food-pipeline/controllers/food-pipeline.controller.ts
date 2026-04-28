@@ -124,7 +124,7 @@ export class FoodPipelineController {
   async batchAiTranslate(
     @Body()
     body: {
-      targetLocale: string;
+      targetLocales?: string[];
       limit?: number;
       untranslatedOnly?: boolean;
     },

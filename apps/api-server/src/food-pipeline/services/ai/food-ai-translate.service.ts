@@ -93,7 +93,7 @@ export class FoodAiTranslateService {
         name: parsed.name || '',
         aliases: parsed.aliases || '',
         description: parsed.description || '',
-        servingDesc: parsed.servingDesc || parsed.servingDesc || '',
+        servingDesc: parsed.servingDesc || parsed.serving_desc || '',
       };
     } catch (e) {
       this.logger.error(
@@ -202,7 +202,7 @@ ${foodList}
             name: item.name || '',
             aliases: item.aliases || '',
             description: item.description || '',
-            servingDesc: item.servingDesc || item.servingDesc || '',
+            servingDesc: item.servingDesc || item.serving_desc || '',
           });
         }
       }

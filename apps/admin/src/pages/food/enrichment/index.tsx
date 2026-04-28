@@ -424,20 +424,24 @@ const EnrichmentPage: React.FC = () => {
       title: '目标',
       dataIndex: 'target',
       width: 90,
-      render: (t: string, r: EnrichmentJob) => (
-        <Space size={2}>
+        render: (t: string, r: EnrichmentJob) => (
+          <Space size={2}>
           {t === 'translations' ? (
             <GlobalOutlined />
           ) : t === 'regional' ? (
             <EnvironmentOutlined />
           ) : (
             <ThunderboltOutlined />
-          )}
-          <Text style={{ fontSize: 12 }}>{t}</Text>
-          {r.locale && <Tag style={{ fontSize: 10 }}>{r.locale}</Tag>}
-          {r.region && <Tag style={{ fontSize: 10 }}>{r.region}</Tag>}
-        </Space>
-      ),
+            )}
+            <Text style={{ fontSize: 12 }}>{t}</Text>
+            {r.locales?.map((locale) => (
+              <Tag key={locale} style={{ fontSize: 10 }}>
+                {locale}
+              </Tag>
+            ))}
+            {r.region && <Tag style={{ fontSize: 10 }}>{r.region}</Tag>}
+          </Space>
+        ),
     },
     {
       title: '食物 ID',
@@ -518,20 +522,22 @@ const EnrichmentPage: React.FC = () => {
       title: '目标',
       key: 'target',
       width: 110,
-      render: (_, r) => {
-        const t = r.changes?.target ?? 'foods';
-        const locale = r.changes?.locale;
-        const region = r.changes?.region;
-        return (
-          <Space size={2}>
-            <Tag color={t === 'translations' ? 'purple' : t === 'regional' ? 'geekblue' : 'blue'}>
-              {t === 'translations' ? '翻译' : t === 'regional' ? '地区' : '主表'}
-            </Tag>
-            {locale && <Tag>{locale}</Tag>}
-            {region && <Tag>{region}</Tag>}
-          </Space>
-        );
-      },
+        render: (_, r) => {
+          const t = r.changes?.target ?? 'foods';
+          const locales = Array.isArray(r.changes?.locales) ? r.changes.locales : [];
+          const region = r.changes?.region;
+          return (
+            <Space size={2}>
+              <Tag color={t === 'translations' ? 'purple' : t === 'regional' ? 'geekblue' : 'blue'}>
+                {t === 'translations' ? '翻译' : t === 'regional' ? '地区' : '主表'}
+              </Tag>
+              {locales.map((locale) => (
+                <Tag key={locale}>{locale}</Tag>
+              ))}
+              {region && <Tag>{region}</Tag>}
+            </Space>
+          );
+        },
     },
     {
       title: '置信度',
@@ -1054,8 +1060,13 @@ const EnrichmentPage: React.FC = () => {
                         <Form.Item noStyle shouldUpdate={(prev, cur) => prev.target !== cur.target}>
                           {({ getFieldValue }) =>
                             getFieldValue('target') === 'translations' ? (
-                              <Form.Item name="locale" label="目标语言">
-                                <Select options={LOCALE_OPTIONS} placeholder="选择语言" />
+                              <Form.Item name="locales" label="目标语言">
+                                <Select
+                                  mode="multiple"
+                                  options={LOCALE_OPTIONS}
+                                  placeholder="选择一个或多个语言"
+                                  maxTagCount={3}
+                                />
                               </Form.Item>
                             ) : getFieldValue('target') === 'regional' ? (
                               <Form.Item name="region" label="目标地区">
@@ -2157,7 +2168,9 @@ const EnrichmentPage: React.FC = () => {
                   </Descriptions.Item>
                   <Descriptions.Item label="补全目标">
                     <Tag>{r.changes?.target ?? 'foods'}</Tag>
-                    {r.changes?.locale && <Tag>{r.changes.locale}</Tag>}
+                    {(Array.isArray(r.changes?.locales) ? r.changes.locales : []).map((locale: string) => (
+                      <Tag key={locale}>{locale}</Tag>
+                    ))}
                     {r.changes?.region && <Tag>{r.changes.region}</Tag>}
                   </Descriptions.Item>
                   <Descriptions.Item label="置信度">

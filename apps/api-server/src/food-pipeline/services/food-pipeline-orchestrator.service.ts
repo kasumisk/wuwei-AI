@@ -277,17 +277,24 @@ export class FoodPipelineOrchestratorService {
   // ==================== 批量 AI 翻译 ====================
 
   async batchAiTranslate(options: {
-    targetLocale: string;
+    targetLocales?: string[];
     limit?: number;
     untranslatedOnly?: boolean;
   }): Promise<{ translated: number; failed: number }> {
+    const normalizedLocales = [...new Set((options.targetLocales ?? []).filter(Boolean))];
+    if (normalizedLocales.length === 0) {
+      return { translated: 0, failed: 0 };
+    }
+
     let where: Prisma.FoodWhereInput = {};
 
     if (options.untranslatedOnly) {
       where = {
-        foodTranslations: {
-          none: { locale: options.targetLocale },
-        },
+        NOT: normalizedLocales.map((locale) => ({
+          foodTranslations: {
+            some: { locale },
+          },
+        })),
       };
     }
 
@@ -296,49 +303,52 @@ export class FoodPipelineOrchestratorService {
       take: options.limit || 100,
     });
     this.logger.log(
-      `AI translating ${foods.length} foods to ${options.targetLocale}`,
+      `AI translating ${foods.length} foods to [${normalizedLocales.join(', ')}]`,
     );
 
-    const results = await this.aiTranslate.translateBatch(
-      foods as any,
-      options.targetLocale,
-    );
     let translated = 0;
     let failed = 0;
 
-    for (const [idx, result] of results) {
-      const food = foods[idx];
-      if (!food || !result.name) {
-        failed++;
-        continue;
-      }
+    for (const locale of normalizedLocales) {
+      const results = await this.aiTranslate.translateBatch(
+        foods as any,
+        locale,
+      );
 
-      try {
-        await this.prisma.foodTranslations.upsert({
-          where: {
-            foodId_locale: {
+      for (const [idx, result] of results) {
+        const food = foods[idx];
+        if (!food || !result.name) {
+          failed++;
+          continue;
+        }
+
+        try {
+          await this.prisma.foodTranslations.upsert({
+            where: {
+              foodId_locale: {
+                foodId: food.id,
+                locale: result.locale,
+              },
+            },
+            create: {
               foodId: food.id,
               locale: result.locale,
+              name: result.name,
+              aliases: result.aliases,
+              description: result.description,
+              servingDesc: result.servingDesc,
             },
-          },
-          create: {
-            foodId: food.id,
-            locale: result.locale,
-            name: result.name,
-            aliases: result.aliases,
-            description: result.description,
-            servingDesc: result.servingDesc,
-          },
-          update: {
-            name: result.name,
-            aliases: result.aliases,
-            description: result.description,
-            servingDesc: result.servingDesc,
-          },
-        });
-        translated++;
-      } catch (e) {
-        failed++;
+            update: {
+              name: result.name,
+              aliases: result.aliases,
+              description: result.description,
+              servingDesc: result.servingDesc,
+            },
+          });
+          translated++;
+        } catch (e) {
+          failed++;
+        }
       }
     }
 

@@ -150,7 +150,7 @@ export const foodPipelineApi = {
   }): Promise<AiLabelResult> => request.post(`${PATH.ADMIN.FOOD_PIPELINE}/ai/label`, data),
 
   batchAiTranslate: (data: {
-    targetLocale: string;
+    targetLocales?: string[];
     limit?: number;
     untranslatedOnly?: boolean;
   }): Promise<AiTranslateResult> => request.post(`${PATH.ADMIN.FOOD_PIPELINE}/ai/translate`, data),
@@ -220,7 +220,7 @@ export const useBatchAiTranslate = (
   options?: UseMutationOptions<
     AiTranslateResult,
     Error,
-    { targetLocale: string; limit?: number; untranslatedOnly?: boolean }
+    { targetLocales?: string[]; limit?: number; untranslatedOnly?: boolean }
   >
 ) => {
   const queryClient = useQueryClient();
@@ -407,7 +407,7 @@ export interface EnrichmentJob {
   fields: EnrichableField[];
   target: EnrichmentTarget;
   staged: boolean;
-  locale: string | null;
+  locales?: string[] | null;
   region: string | null;
   status: 'pending' | 'completed' | 'failed';
   attemptsMade: number;
@@ -652,7 +652,7 @@ export const enrichmentApi = {
     limit?: number;
     offset?: number;
     target?: EnrichmentTarget;
-    locale?: string;
+    locales?: string[];
     region?: string;
     staged?: boolean;
     /** V8.0: 仅入队完整度 <= 此值的食物（0-100） */
@@ -865,7 +865,7 @@ export const useEnqueueEnrichment = (
       limit?: number;
       offset?: number;
       target?: EnrichmentTarget;
-      locale?: string;
+      locales?: string[];
       region?: string;
       staged?: boolean;
     }
