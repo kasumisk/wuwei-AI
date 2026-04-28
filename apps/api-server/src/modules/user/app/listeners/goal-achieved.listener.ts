@@ -2,7 +2,7 @@
  * V6.2 Phase 3.8 — 目标达成事件监听器
  *
  * 监听 GOAL_ACHIEVED 事件，处理：
- * - 记录成就日志到 user_inferred_profiles
+ * - 记录成就日志到 user_profiles.inferred_data
  * - 更新连续达成天数
  * - 日志记录
  *

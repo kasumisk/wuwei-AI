@@ -5,7 +5,7 @@
  *
  * 职责:
  * - 记录用户的分析行为到行为画像（分析频次、偏好的分析类型）
- * - 更新 user_behavior_profiles 中的活跃度指标
+ * - 更新 user_profiles.behavior_data 中的活跃度指标
  *
  * 与 AnalysisEventListener 的区别:
  * - AnalysisEventListener 监听 ANALYSIS_COMPLETED（分析完成后联动画像+推荐）

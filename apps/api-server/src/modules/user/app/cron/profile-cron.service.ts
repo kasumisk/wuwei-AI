@@ -58,7 +58,6 @@ export class ProfileCronService {
     try {
       // V6.2 3.6: 游标分页替代全量 findMany
       const behaviorResult = await this.processCursorPaged(
-        'user_behavior_profiles',
         (behavior: any) => this.updateDailyBehavior(behavior),
         '每日行为更新',
       );
@@ -68,7 +67,6 @@ export class ProfileCronService {
       let optimalMealCountUpdated = 0;
 
       const inferredResult = await this.processCursorPaged(
-        'user_inferred_profiles',
         async (inf: any) => {
           const gpChanged = await this.updateGoalProgress(inf);
           if (gpChanged) goalProgressUpdated++;
@@ -262,7 +260,6 @@ export class ProfileCronService {
     try {
       // V6.2 3.6: 游标分页替代全量 findMany
       const result = await this.processCursorPaged(
-        'user_inferred_profiles',
         (inf: any) => this.updateWeeklySegmentation(inf),
         '每周分段更新',
       );
@@ -426,7 +423,6 @@ export class ProfileCronService {
     try {
       // V6.2 3.6: 游标分页替代全量 findMany
       const result = await this.processCursorPaged(
-        'user_inferred_profiles',
         async (inf: any) => {
           if (!inf.preferenceWeights) return;
 
@@ -696,13 +692,11 @@ export class ProfileCronService {
    * 使用 Prisma cursor-based pagination 逐页加载数据，
    * 避免一次性加载全量用户到内存。
    *
-   * @param model Prisma model 名称（user_behavior_profiles / user_inferred_profiles）
    * @param processor 每条记录的处理函数
    * @param label 日志标签
    * @param pageSize 每页大小（默认 100）
    */
   async processCursorPaged<T extends { userId: string }>(
-    model: 'user_behavior_profiles' | 'user_inferred_profiles',
     processor: (item: T) => Promise<void>,
     label: string,
     pageSize: number = 100,

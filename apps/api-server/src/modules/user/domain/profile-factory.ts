@@ -1,7 +1,7 @@
 /**
  * V7.0 Phase 1-A: 画像工厂
  *
- * 从 Prisma 记录（user_profiles / user_inferred_profiles / user_behavior_profiles）
+ * 从 Prisma 记录（user_profiles，含 inferred_data + behavior_data JSONB）
  * 转换为强类型领域实体，消除 any 转换。
  *
  * 所有字段有安全默认值 — 即使 Prisma 记录为 null 也能生成有效的领域实体。

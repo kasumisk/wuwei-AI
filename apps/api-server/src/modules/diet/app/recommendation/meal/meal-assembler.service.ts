@@ -172,7 +172,7 @@ export class MealAssemblerService {
    * 份量调整：缩放到目标预算，支持边界裁剪 + 步进量化
    *
    * @param portionTendency V6.2 Phase 2.14: 用户份量倾向（'small'|'normal'|'large'），
-   *                        来自行为画像 user_behavior_profiles.portion_tendency。
+   *                        来自行为画像 user_profiles.behavior_data.portionTendency。
    *                        'small' → 份量系数 ×0.9（偏小 10%）
    *                        'large' → 份量系数 ×1.1（偏大 10%）
    *                        'normal' / undefined → 不调整

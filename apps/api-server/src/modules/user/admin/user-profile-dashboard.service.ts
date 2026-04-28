@@ -158,7 +158,7 @@ export class UserProfileDashboardService {
       where: { onboardingCompleted: true },
     });
 
-    // 6. 行为画像统计（依从率分布、平均连续天数）
+    // 6. 行为画像统计（依从率分布、平均连续天数）— 从 user_profiles.behavior_data JSONB 聚合
     const behaviorStats = await this.prisma.$queryRaw<
       Array<{
         totalWithBehavior: number;
@@ -171,16 +171,17 @@ export class UserProfileDashboardService {
       Prisma.sql`
         SELECT
           COUNT(*)::int AS "totalWithBehavior",
-          AVG(avg_compliance_rate) AS "avgComplianceRate",
-          AVG(streak_days) AS "avgStreakDays",
-          MAX(longest_streak) AS "maxLongestStreak",
-          AVG(total_records) AS "avgTotalRecords"
-        FROM user_behavior_profiles
+          AVG((behavior_data->>'avgComplianceRate')::numeric)  AS "avgComplianceRate",
+          AVG((behavior_data->>'streakDays')::numeric)         AS "avgStreakDays",
+          MAX((behavior_data->>'longestStreak')::numeric)      AS "maxLongestStreak",
+          AVG((behavior_data->>'totalRecords')::numeric)       AS "avgTotalRecords"
+        FROM user_profiles
+        WHERE behavior_data IS NOT NULL
       `,
     );
     const behaviorStatsRow = behaviorStats?.[0] || null;
 
-    // 7. 推断画像统计（流失风险分布、BMR/TDEE 均值）
+    // 7. 推断画像统计（流失风险分布、BMR/TDEE 均值）— 从 user_profiles.inferred_data JSONB 聚合
     const inferredStats = await this.prisma.$queryRaw<
       Array<{
         totalWithInferred: number;
@@ -193,58 +194,59 @@ export class UserProfileDashboardService {
       Prisma.sql`
         SELECT
           COUNT(*)::int AS "totalWithInferred",
-          AVG(estimated_bmr) AS "avgBMR",
-          AVG(estimated_tdee) AS "avgTDEE",
-          AVG(recommended_calories) AS "avgRecommendedCalories",
-          AVG(churn_risk) AS "avgChurnRisk"
-        FROM user_inferred_profiles
+          AVG((inferred_data->>'estimatedBMR')::numeric)          AS "avgBMR",
+          AVG((inferred_data->>'estimatedTDEE')::numeric)         AS "avgTDEE",
+          AVG((inferred_data->>'recommendedCalories')::numeric)   AS "avgRecommendedCalories",
+          AVG((inferred_data->>'churnRisk')::numeric)             AS "avgChurnRisk"
+        FROM user_profiles
+        WHERE inferred_data IS NOT NULL
       `,
     );
     const inferredStatsRow = inferredStats?.[0] || null;
 
-    // 8. 流失风险分段
+    // 8. 流失风险分段 — 从 user_profiles.inferred_data JSONB
     const churnRiskSegments = await this.prisma.$queryRaw<
       Array<{ segment: string; count: number }>
     >(
       Prisma.sql`
         SELECT
           CASE
-            WHEN churn_risk < 0.3 THEN 'low'
-            WHEN churn_risk < 0.6 THEN 'medium'
+            WHEN (inferred_data->>'churnRisk')::numeric < 0.3 THEN 'low'
+            WHEN (inferred_data->>'churnRisk')::numeric < 0.6 THEN 'medium'
             ELSE 'high'
           END AS segment,
           COUNT(*)::int AS count
-        FROM user_inferred_profiles
-        WHERE churn_risk IS NOT NULL
+        FROM user_profiles
+        WHERE inferred_data->>'churnRisk' IS NOT NULL
         GROUP BY
           CASE
-            WHEN churn_risk < 0.3 THEN 'low'
-            WHEN churn_risk < 0.6 THEN 'medium'
+            WHEN (inferred_data->>'churnRisk')::numeric < 0.3 THEN 'low'
+            WHEN (inferred_data->>'churnRisk')::numeric < 0.6 THEN 'medium'
             ELSE 'high'
           END
       `,
     );
 
-    // 9. 依从率分段
+    // 9. 依从率分段 — 从 user_profiles.behavior_data JSONB
     const complianceSegments = await this.prisma.$queryRaw<
       Array<{ segment: string; count: number }>
     >(
       Prisma.sql`
         SELECT
           CASE
-            WHEN avg_compliance_rate >= 0.8 THEN 'excellent'
-            WHEN avg_compliance_rate >= 0.6 THEN 'good'
-            WHEN avg_compliance_rate >= 0.4 THEN 'fair'
+            WHEN (behavior_data->>'avgComplianceRate')::numeric >= 0.8 THEN 'excellent'
+            WHEN (behavior_data->>'avgComplianceRate')::numeric >= 0.6 THEN 'good'
+            WHEN (behavior_data->>'avgComplianceRate')::numeric >= 0.4 THEN 'fair'
             ELSE 'poor'
           END AS segment,
           COUNT(*)::int AS count
-        FROM user_behavior_profiles
-        WHERE avg_compliance_rate IS NOT NULL
+        FROM user_profiles
+        WHERE behavior_data->>'avgComplianceRate' IS NOT NULL
         GROUP BY
           CASE
-            WHEN avg_compliance_rate >= 0.8 THEN 'excellent'
-            WHEN avg_compliance_rate >= 0.6 THEN 'good'
-            WHEN avg_compliance_rate >= 0.4 THEN 'fair'
+            WHEN (behavior_data->>'avgComplianceRate')::numeric >= 0.8 THEN 'excellent'
+            WHEN (behavior_data->>'avgComplianceRate')::numeric >= 0.6 THEN 'good'
+            WHEN (behavior_data->>'avgComplianceRate')::numeric >= 0.4 THEN 'fair'
             ELSE 'poor'
           END
       `,

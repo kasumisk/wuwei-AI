@@ -503,18 +503,7 @@ model DeviceToken {
 }
 
 /// 文档向量嵌入表 — 存储 RAG 知识库文档片段及其向量表示，用于语义检索
-model DocumentEmbeddings {
-  /// 主键 UUID
-  id        String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  /// 文档原始文本片段
-  text      String?
-  /// 元数据（JSON，如来源文件名、chunk 索引、标签等）
-  metadata  Json?
-  /// 文本向量（pgvector 类型，支持余弦/L2 距离查询）
-  embedding Unsupported("vector")?
 
-  @@map("document_embeddings")
-}
 
 /// 功能开关配置表 — 动态控制功能的开启/关闭及灰度策略，无需重新部署
 model FeatureFlag {
@@ -541,42 +530,7 @@ model FeatureFlag {
   @@map("feature_flag")
 }
 
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-/// 推荐反馈明细表 — 记录用户对单个推荐食物的多维度评分（口味/份量/价格/时机）
-model FeedbackDetails {
-  /// 主键 UUID
-  id                      String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  /// 关联的推荐反馈 ID（外键 → recommendation_feedbacks.id）
-  feedbackId              String                  @map("feedback_id") @db.Uuid
-  /// 关联的用户 ID
-  userId                  String                  @map("user_id") @db.Uuid
-  /// 被评分的食物名称
-  foodName                String                  @map("food_name") @db.VarChar(100)
-  /// 餐次类型：breakfast/lunch/dinner/snack
-  mealType                String                  @map("meal_type") @db.VarChar(20)
-  /// 口味评分 1-5
-  tasteRating             Int?                    @map("taste_rating") @db.SmallInt
-  /// 份量评分 1-5（1=太少, 3=刚好, 5=太多）
-  portionRating           Int?                    @map("portion_rating") @db.SmallInt
-  /// 价格评分 1-5（1=太贵, 3=合理, 5=很划算）
-  priceRating             Int?                    @map("price_rating") @db.SmallInt
-  /// 时机评分 1-5（评估该食物推荐的时间是否合适）
-  timingRating            Int?                    @map("timing_rating") @db.SmallInt
-  /// 用户文字评论
-  comment                 String?
-  /// 用户在推荐卡片上的停留时长（毫秒），用于隐式兴趣信号
-  dwellTimeMs             Int?                    @map("dwell_time_ms")
-  /// 用户是否展开了食物详情
-  detailExpanded          Boolean?                @map("detail_expanded")
-  /// 创建时间
-  createdAt               DateTime?               @default(now()) @map("created_at") @db.Timestamptz(6)
-  recommendationFeedbacks RecommendationFeedbacks @relation(fields: [feedbackId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_feedback_details_feedback")
 
-  @@index([feedbackId], map: "IDX_feedback_details_feedback_id")
-  @@index([userId, createdAt], map: "IDX_feedback_details_user_created")
-  @@index([userId], map: "IDX_feedback_details_user_id")
-  @@map("feedback_details")
-}
 
 /// 食物识别分析记录表 — 存储每次 AI 识别请求的输入、中间结果和最终决策快照
 model FoodAnalysisRecords {
@@ -1024,8 +978,6 @@ model Food {
   recipeIngredients     RecipeIngredients[]
   embeddings            FoodEmbedding[]
   fieldProvenance       FoodFieldProvenance[]
-  recommendationProfile FoodRecommendationProfile?
-  // ─── ARB-2026-04: God-table split (列已 DROP，通过关联表访问) ────────────
   nutritionDetail       FoodNutritionDetail?
   healthAssessment      FoodHealthAssessment?
   taxonomy              FoodTaxonomy?
@@ -1197,16 +1149,6 @@ model FoodPortionGuide {
 }
 
 /// 数据库迁移记录表 — 由 TypeORM 自动维护，记录已执行的迁移文件（勿手动修改）
-model Migrations {
-  /// 自增主键
-  id        Int    @id(map: "PK_8c82d7f526340ab734260ea46be") @default(autoincrement())
-  /// 迁移时间戳（毫秒级，用于排序）
-  timestamp BigInt
-  /// 迁移文件名
-  name      String @db.VarChar
-
-  @@map("migrations")
-}
 
 /// AI 模型配置表 — 存储每个 Provider 下各模型的能力参数、费率和访问限制
 model ModelConfigs {
@@ -1573,9 +1515,10 @@ model RecommendationFeedbacks {
   groupId             String?           @map("group_id") @db.VarChar
   /// 关联 recommendation_traces.id，用于归因分析
   traceId             String?           @map("trace_id") @db.Uuid /// 关联 recommendation_traces.id，用于归因分析
+  /// 多维评分 + 隐式信号（JSONB）：{ tasteRating?, portionRating?, priceRating?, timingRating?, comment?, dwellTimeMs?, detailExpanded? }
+  details             Json?             @db.JsonB
   /// 反馈时间
   createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
-  feedbackDetails     FeedbackDetails[]
 
   @@index([userId], map: "IDX_84be6fe526b10313d0015fbdea")
   @@index([userId, createdAt], map: "IDX_f3a0234ecd1f178e4c36fb8f00")
@@ -2710,27 +2653,3 @@ model FoodFieldProvenance {
   @@map("food_field_provenance")
 }
 
-/// 食物推荐画像表（离线计算的预聚合分数；本期只建表+迁移占位行，不接入推荐排序）
-/// 拆出原因：未来推荐排序需要 fat_loss_score / muscle_gain_score 等字段，独立表方便频繁刷写
-model FoodRecommendationProfile {
-  /// 关联食物 ID（同时作为主键，1:1）
-  foodId             String   @id @map("food_id") @db.Uuid
-  /// 减脂适配度 0-1
-  fatLossScore       Float?   @map("fat_loss_score")
-  /// 增肌适配度 0-1
-  muscleGainScore    Float?   @map("muscle_gain_score")
-  /// 综合健康度 0-1
-  generalHealthScore Float?   @map("general_health_score")
-  /// 大众化度 0-1（与 foods.commonality_score 不同：基于真实点击聚合）
-  popularityScore    Float?   @map("popularity_score")
-  /// 区域适配度（jsonb，如 {asia:0.9, europe:0.6}）
-  regionFitness      Json?    @map("region_fitness")
-  /// 计算时间
-  computedAt         DateTime @default(now()) @map("computed_at") @db.Timestamptz(6)
-  /// 计算版本号
-  computedVersion    String?  @map("computed_version") @db.VarChar(50)
-
-  food Food @relation(fields: [foodId], references: [id], onDelete: Cascade)
-
-  @@map("food_recommendation_profile")
-}

@@ -30,7 +30,7 @@ import {
  * 注意:
  * - 这是一个 "即时反馈 → 即时更新" 的热路径，不替代
  *   PreferenceProfileService 的全量重算（那是冷路径，用于初始化和校准）
- * - 增量权重存储在 user_inferred_profiles.preferenceWeights (jsonb)
+ * - 增量权重存储在 user_profiles.inferred_data.preferenceWeights (jsonb)
  * - 如果用户没有增量权重，回退到 PreferenceProfileService 的全量计算
  */
 
