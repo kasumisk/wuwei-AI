@@ -61,8 +61,9 @@ export class EmbeddingGenerationProcessor extends WorkerHost {
 
     // V8.2: 批量写入 food_embeddings(legacy_v4) — Float[] 列
     await this.prisma.$transaction(
-      embeddings.map(({ id, vec }) =>
-        this.prisma.$executeRaw`
+      embeddings.map(
+        ({ id, vec }) =>
+          this.prisma.$executeRaw`
           INSERT INTO "food_embeddings" ("food_id", "model_name", "vector_legacy", "dimension", "generated_at", "updated_at")
           VALUES (${id}::uuid, 'legacy_v4', ${vec}::real[], ${vec.length}, ${now}, ${now})
           ON CONFLICT ("food_id", "model_name")

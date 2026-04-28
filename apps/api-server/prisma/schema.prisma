@@ -1128,10 +1128,6 @@ model Food {
   reviewStatus          String @map("review_status") @default("pending") @db.VarChar(20)
   /// V8.0: 最后一次 AI 补全时间
   lastEnrichedAt        DateTime? @map("last_enriched_at") @db.Timestamptz(6)
-  /// V8.0: 字段级数据来源，如 {"protein":"ai_enrichment","fat":"manual","carbs":"usda"}
-  fieldSources          Json @map("field_sources") @default("{}")
-  /// V8.0: 字段级置信度，如 {"protein":0.85,"fat":0.92}
-  fieldConfidence       Json @map("field_confidence") @default("{}")
   /// V8.1: 最近审核者用户名
   reviewedBy            String? @map("reviewed_by") @db.VarChar(100)
   /// V8.1: 最近审核时间
@@ -1140,7 +1136,7 @@ model Food {
   // ─── V8.2 重构：embedding/failed_fields 字段已迁移至关联表 ──────────────────
   //   embedding / embedding_v5 / embedding_updated_at → FoodEmbedding
   //   failed_fields                                  → FoodFieldProvenance (status='failed')
-  //   field_sources / field_confidence 仍保留在主表作为 jsonb 缓存层（双层共存）
+  //   field_sources / field_confidence               → FoodFieldProvenance (status='success')
 
   // ─── 关联关系（反向引用，不存储于本表）───────────────────────────────────
   analysisFoodLink      AnalysisFoodLink[]

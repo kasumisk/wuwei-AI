@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { I18nService } from '../../../core/i18n';
+import { FoodProvenanceRepository } from '../repositories';
 import {
   ENRICHABLE_FIELDS,
   JSON_ARRAY_FIELDS,
@@ -30,6 +31,7 @@ export class FoodLibraryManagementService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly i18n: I18nService,
+    private readonly provenanceRepo: FoodProvenanceRepository,
   ) {}
 
   // ==================== DTO → DB 字段映射 ====================
@@ -243,9 +245,8 @@ export class FoodLibraryManagementService {
          f.vitamin_b6, f.omega3, f.omega6,
          f.soluble_fiber, f.insoluble_fiber, f.water_content_percent,
          f.acquisition_difficulty,
-         -- 补全元数据
-         f.data_completeness, f.enrichment_status, f.last_enriched_at,
-         f.field_sources, f.field_confidence,
+          -- 补全元数据
+          f.data_completeness, f.enrichment_status, f.last_enriched_at,
          -- V8.1: 整体审核状态 + 审核元数据
          f.review_status,
          f.reviewed_by,
@@ -322,20 +323,10 @@ export class FoodLibraryManagementService {
    * 查询 status='failed' 行；本方法变为异步。
    */
   private async buildEnrichmentMeta(food: any) {
-    const fieldSources = (food.fieldSources as Record<string, string>) || {};
-    const fieldConfidence =
-      (food.fieldConfidence as Record<string, number>) || {};
-
-    // 从 food_field_provenance 加载失败字段（status='failed'）
-    const failedRows = await this.prisma.foodFieldProvenance.findMany({
-      where: { foodId: food.id, status: 'failed' },
-      select: {
-        fieldName: true,
-        failureReason: true,
-        rawValue: true,
-        updatedAt: true,
-      },
-    });
+    const [successMap, failedRows] = await Promise.all([
+      this.provenanceRepo.getSuccessMap(food.id),
+      this.provenanceRepo.listFailures(food.id),
+    ]);
     const failedFields: Record<string, any> = {};
     for (const row of failedRows) {
       const raw = (row.rawValue as Record<string, any>) || {};
@@ -353,6 +344,13 @@ export class FoodLibraryManagementService {
         return Array.isArray(value) && value.length > 0;
       if ((JSON_OBJECT_FIELDS as readonly string[]).includes(field))
         return typeof value === 'object' && Object.keys(value).length > 0;
+      if (
+        field === 'processing_level' ||
+        field === 'commonality_score' ||
+        field === 'available_channels'
+      ) {
+        return Boolean(successMap[field]);
+      }
       return true;
     };
 
@@ -360,22 +358,16 @@ export class FoodLibraryManagementService {
     const fieldDetails = (ENRICHABLE_FIELDS as readonly string[]).map(
       (field) => {
         const filled = isFieldFilled(field);
-        const label =
-          ENRICHMENT_FIELD_LABELS[
-            field as keyof typeof ENRICHMENT_FIELD_LABELS
-          ] ?? field;
-        const unit =
-          ENRICHMENT_FIELD_UNITS[
-            field as keyof typeof ENRICHMENT_FIELD_UNITS
-          ] ?? '';
+        const label = ENRICHMENT_FIELD_LABELS[field] ?? field;
+        const unit = ENRICHMENT_FIELD_UNITS[field] ?? '';
         return {
           field,
           label,
           unit,
           filled,
           value: filled ? food[field] : null,
-          source: fieldSources[field] ?? null,
-          confidence: fieldConfidence[field] ?? null,
+          source: successMap[field]?.source ?? null,
+          confidence: successMap[field]?.confidence ?? null,
           failed: failedFields[field] ?? null,
         };
       },
@@ -413,13 +405,16 @@ export class FoodLibraryManagementService {
 
     // 来源分布
     const sourceDistribution: Record<string, number> = {};
-    for (const src of Object.values(fieldSources)) {
-      sourceDistribution[src] = (sourceDistribution[src] || 0) + 1;
+    for (const meta of Object.values(successMap)) {
+      sourceDistribution[meta.source] =
+        (sourceDistribution[meta.source] || 0) + 1;
     }
 
     return {
       completeness: {
-        score: food.dataCompleteness ?? this.computeSimpleCompleteness(food),
+        score:
+          food.dataCompleteness ??
+          this.computeSimpleCompleteness(food, successMap),
         groups,
       },
       fieldDetails,
@@ -495,27 +490,23 @@ export class FoodLibraryManagementService {
     const mappedData = this.stripUndefined(dto);
     const newVersion = (food.dataVersion || 1) + 1;
 
-    // V8.0: 更新 field_sources — 手动编辑的字段标记为 'manual'
-    const existingSources = (food.fieldSources as Record<string, string>) || {};
-    const existingConfidence =
-      (food.fieldConfidence as Record<string, number>) || {};
-    const newSources = { ...existingSources };
-    const newConfidence = { ...existingConfidence };
     const enrichableSet = new Set<string>(
       ENRICHABLE_FIELDS as unknown as string[],
     );
 
-    for (const [dbKey] of Object.entries(mappedData)) {
-      if (enrichableSet.has(dbKey)) {
-        newSources[dbKey] = 'manual';
-        newConfidence[dbKey] = 1.0; // 手动编辑置信度为 1.0
-      }
-    }
-
     // V8.3: 预计算完整度，合并到单次 UPDATE 中（避免双重 UPDATE）
     // 需要先合并 mappedData 到 food 上以计算更新后的完整度
     const mergedForCompleteness = { ...food, ...mappedData };
-    const completeness = this.computeSimpleCompleteness(mergedForCompleteness);
+    const successMap = await this.provenanceRepo.getSuccessMap(id);
+    for (const [dbKey] of Object.entries(mappedData)) {
+      if (enrichableSet.has(dbKey)) {
+        successMap[dbKey] = { source: 'manual', confidence: 1.0 };
+      }
+    }
+    const completeness = this.computeSimpleCompleteness(
+      mergedForCompleteness,
+      successMap,
+    );
     const enrichmentStatus =
       completeness >= 80
         ? 'completed'
@@ -528,12 +519,22 @@ export class FoodLibraryManagementService {
       data: {
         ...mappedData,
         dataVersion: newVersion,
-        fieldSources: newSources,
-        fieldConfidence: newConfidence,
         dataCompleteness: completeness,
         enrichmentStatus: enrichmentStatus,
       },
     });
+
+    for (const [dbKey] of Object.entries(mappedData)) {
+      if (enrichableSet.has(dbKey)) {
+        await this.provenanceRepo.recordSuccess({
+          foodId: id,
+          fieldName: dbKey,
+          source: 'manual',
+          confidence: 1.0,
+        });
+        await this.provenanceRepo.clearFailuresForField(id, dbKey);
+      }
+    }
 
     if (Object.keys(changes).length > 0) {
       await this.createChangeLog(
@@ -552,7 +553,13 @@ export class FoodLibraryManagementService {
    * V8.0: 简化版完整度计算（复用 ENRICHMENT_STAGES 权重逻辑）
    * 避免循环依赖：不引入 FoodEnrichmentService，直接使用常量计算
    */
-  private computeSimpleCompleteness(food: any): number {
+  private computeSimpleCompleteness(
+    food: any,
+    successMap: Record<
+      string,
+      { source: string; confidence: number | null }
+    > = {},
+  ): number {
     const isFieldFilled = (field: string): boolean => {
       const value = food[field];
       if (value === null || value === undefined) return false;
@@ -560,6 +567,13 @@ export class FoodLibraryManagementService {
         return Array.isArray(value) && value.length > 0;
       if ((JSON_OBJECT_FIELDS as readonly string[]).includes(field))
         return typeof value === 'object' && Object.keys(value).length > 0;
+      if (
+        field === 'processing_level' ||
+        field === 'commonality_score' ||
+        field === 'available_channels'
+      ) {
+        return Boolean(successMap[field]);
+      }
       return true;
     };
 

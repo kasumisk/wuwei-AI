@@ -292,7 +292,7 @@ export class SemanticRecallService {
     for (const food of foods) {
       if (!food.embedding_text) continue;
       const vec = String(food.embedding_text)
-        .replace(/[\[\]]/g, '')
+        .replace(/[[\]]/g, '')
         .split(',')
         .map(Number);
       if (vec.length > 0 && !vec.some((v) => Number.isNaN(v))) {
@@ -499,8 +499,8 @@ export class SemanticRecallService {
     const dim = points[0].length;
 
     // 初始化 centroids：取前 k 个点的副本
-    let centroids = points.slice(0, effectiveK).map((p) => [...p]);
-    let assignments = new Array<number>(points.length).fill(0);
+    const centroids = points.slice(0, effectiveK).map((p) => [...p]);
+    const assignments = new Array<number>(points.length).fill(0);
 
     for (let iter = 0; iter < maxIter; iter++) {
       // Assign：每个点分配到最近的 centroid

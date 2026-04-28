@@ -146,7 +146,7 @@ export class VectorSearchService implements OnModuleInit {
       // 预计算所有嵌入向量
       const embeddings = batch.map((food) => ({
         id: food.id as string,
-        vec: computeFoodEmbedding(food as any),
+        vec: computeFoodEmbedding(food),
       }));
 
       // 批量 UPSERT 到 food_embeddings 表（pgvector 模式 vs 应用层模式分开走）
@@ -306,8 +306,9 @@ export class VectorSearchService implements OnModuleInit {
     categoryFilter?: string,
   ): Promise<SimilarFoodResult[]> {
     // 先确认目标食物有 v5 嵌入
-    const targetRows: Array<{ food_id: string }> = await this.prisma
-      .$queryRaw<Array<{ food_id: string }>>`
+    const targetRows: Array<{ food_id: string }> = await this.prisma.$queryRaw<
+      Array<{ food_id: string }>
+    >`
         SELECT food_id FROM "food_embeddings"
         WHERE food_id = ${foodId}::uuid AND model_name = ${MODEL_NAME}
       `;
@@ -584,7 +585,7 @@ export class VectorSearchService implements OnModuleInit {
         `;
         if (rows.length > 0 && rows[0].vector) {
           const vec = rows[0].vector
-            .replace(/[\[\]]/g, '')
+            .replace(/[[\]]/g, '')
             .split(',')
             .map(Number);
           if (vec.length === EMBEDDING_DIM) return vec;
@@ -656,13 +657,13 @@ export class VectorSearchService implements OnModuleInit {
       if (food.embedding_text) {
         // 来自 food_embeddings.vector::text，格式 "[v1,v2,...]"
         vec = String(food.embedding_text)
-          .replace(/[\[\]]/g, '')
+          .replace(/[[\]]/g, '')
           .split(',')
           .map(Number);
       } else {
         // 应用层模式回退：实时计算
         try {
-          vec = computeFoodEmbedding(food as any);
+          vec = computeFoodEmbedding(food);
         } catch {
           continue;
         }

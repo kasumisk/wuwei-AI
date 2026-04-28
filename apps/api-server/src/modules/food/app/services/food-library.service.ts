@@ -54,9 +54,8 @@ export class FoodLibraryService {
          vitamin_b6, omega3, omega6,
          soluble_fiber, insoluble_fiber, water_content_percent,
          acquisition_difficulty,
-         -- 补全元数据
-         data_completeness, enrichment_status, last_enriched_at,
-         field_sources, field_confidence,
+          -- 补全元数据
+          data_completeness, enrichment_status, last_enriched_at,
          -- V8.1 审核
          review_status, reviewed_by, reviewed_at,
          created_at, updated_at,

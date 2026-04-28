@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { HttpModule } from '@nestjs/axios';
 import { BullModule } from '@nestjs/bullmq';
@@ -22,12 +22,14 @@ import { FoodEnrichmentProcessor } from './food-enrichment.processor';
 import { FoodPipelineController } from './controllers/food-pipeline.controller';
 import { FoodEnrichmentController } from './controllers/food-enrichment.controller';
 import { QUEUE_NAMES } from '../core/queue';
+import { FoodModule } from '../modules/food/food.module';
 
 @Module({
   imports: [
     ConfigModule,
     HttpModule.register({ timeout: 30000 }),
     BullModule.registerQueue({ name: QUEUE_NAMES.FOOD_ENRICHMENT }),
+    forwardRef(() => FoodModule),
     // V6.5 Phase 1J: ScheduleModule.forRoot() 已迁移到 AppModule（全局唯一注册）
   ],
   providers: [

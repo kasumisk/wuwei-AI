@@ -38,10 +38,10 @@ async function columnExists(table: string, column: string): Promise<boolean> {
   const rows = await prisma.$queryRawUnsafe<{ exists: boolean }[]>(
     `SELECT EXISTS(
        SELECT 1 FROM information_schema.columns
-        WHERE table_schema='public' AND table_name=$1 AND column_name=$2
+        WHERE table_schema='public'
+          AND table_name='${table}'
+          AND column_name='${column}'
      ) AS exists`,
-    table,
-    column,
   );
   return Boolean(rows[0]?.exists);
 }
@@ -50,7 +50,14 @@ async function main() {
   let allOk = true;
 
   // ─── Schema sanity ──────────────────────────────────────────────────────
-  for (const col of ['embedding', 'embedding_v5', 'embedding_updated_at', 'failed_fields']) {
+  for (const col of [
+    'embedding',
+    'embedding_v5',
+    'embedding_updated_at',
+    'failed_fields',
+    'field_sources',
+    'field_confidence',
+  ]) {
     const exists = await columnExists('foods', col);
     const ok = !exists;
     console.log(`[${ok ? 'OK ' : 'FAIL'}] foods.${col} dropped (exists=${exists})`);
@@ -68,10 +75,15 @@ async function main() {
   const legacyCount = await scalarCount(
     `SELECT COUNT(*)::bigint AS count FROM food_embeddings WHERE model_name='legacy_v4'`,
   );
-  const v5Count = await scalarCount(
+  const featureV5Count = await scalarCount(
+    `SELECT COUNT(*)::bigint AS count FROM food_embeddings WHERE model_name='feature_v5'`,
+  );
+  const openaiV5Count = await scalarCount(
     `SELECT COUNT(*)::bigint AS count FROM food_embeddings WHERE model_name='openai_v5'`,
   );
-  console.log(`[INFO] food_embeddings legacy_v4=${legacyCount} openai_v5=${v5Count}`);
+  console.log(
+    `[INFO] food_embeddings legacy_v4=${legacyCount} feature_v5=${featureV5Count} openai_v5=${openaiV5Count}`,
+  );
 
   // legacy must have non-empty arrays
   const legacyBad = await scalarCount(`
@@ -82,10 +94,19 @@ async function main() {
   allOk = (await check('legacy_v4 rows have non-empty vector_legacy', legacyBad, 0)) && allOk;
 
   if (await pgvectorAvailable()) {
-    const v5Bad = await scalarCount(
-      `SELECT COUNT(*)::bigint AS count FROM food_embeddings WHERE model_name='openai_v5' AND (vector IS NULL OR dimension <> 1536)`,
+    // feature_v5：computeFoodEmbedding 96 维特征向量（当前推荐主用）
+    const featureV5Bad = await scalarCount(
+      `SELECT COUNT(*)::bigint AS count FROM food_embeddings
+        WHERE model_name='feature_v5' AND (vector IS NULL OR dimension <= 0)`,
     );
-    allOk = (await check('openai_v5 rows have valid 1536-dim vector', v5Bad, 0)) && allOk;
+    allOk = (await check('feature_v5 rows have valid vector + dimension', featureV5Bad, 0)) && allOk;
+
+    // openai_v5：1536 维 OpenAI text-embedding-3-small（预留）
+    const openaiV5Bad = await scalarCount(
+      `SELECT COUNT(*)::bigint AS count FROM food_embeddings
+        WHERE model_name='openai_v5' AND (vector IS NULL OR dimension <> 1536)`,
+    );
+    allOk = (await check('openai_v5 rows have valid 1536-dim vector', openaiV5Bad, 0)) && allOk;
   }
 
   // FK orphans
@@ -116,15 +137,12 @@ async function main() {
   `);
   console.log(`[INFO] provenance success=${provSuccessKeys} failed=${provFailedKeys}`);
 
-  // field_sources jsonb cache (kept on foods) should match success rows count
-  const cacheSourceKeys = await scalarCount(`
-    SELECT COALESCE(SUM(jsonb_object_length(COALESCE(field_sources, '{}'::jsonb))), 0)::bigint AS count
-      FROM foods
+  const successNullMeta = await scalarCount(`
+    SELECT COUNT(*)::bigint AS count
+      FROM food_field_provenance
+     WHERE status='success' AND source IS NULL
   `);
-  // tolerance: source name collisions across multiple keys should be exact, but
-  // any duplicate (foodId, fieldName, source) was DO-NOTHING'd in migration.
-  // Allow small slack of 0 — should match exactly.
-  allOk = (await check('field_sources keys ≈ provenance success rows', cacheSourceKeys, provSuccessKeys, 0)) && allOk;
+  allOk = (await check('food_field_provenance success rows have source', successNullMeta, 0)) && allOk;
 
   // FK orphans
   const orphanProv = await scalarCount(`

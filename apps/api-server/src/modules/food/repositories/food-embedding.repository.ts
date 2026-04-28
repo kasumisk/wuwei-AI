@@ -95,9 +95,7 @@ export class FoodEmbeddingRepository {
     modelName: EmbeddingModelName = RECOMMENDATION_EMBEDDING_MODEL,
   ): Promise<number[] | null> {
     try {
-      const rows = await this.prisma.$queryRaw<
-        Array<{ vec: string | null }>
-      >`
+      const rows = await this.prisma.$queryRaw<Array<{ vec: string | null }>>`
         SELECT vector::text AS vec
           FROM "food_embeddings"
          WHERE food_id = ${foodId}::uuid

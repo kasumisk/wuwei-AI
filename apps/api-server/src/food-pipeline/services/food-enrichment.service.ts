@@ -31,6 +31,7 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import axios, { AxiosInstance } from 'axios';
 import { PrismaService } from '../../core/prisma/prisma.service';
+import { FoodProvenanceRepository } from '../../modules/food/repositories';
 import {
   ENRICHMENT_FIELD_LABELS,
   ENRICHMENT_FIELD_UNITS,
@@ -828,10 +829,16 @@ export class FoodEnrichmentService {
   private readonly client: AxiosInstance;
   private readonly apiKey: string;
   private readonly maxRetries = 3;
+  private readonly completenessSourceFields = new Set<string>([
+    'processing_level',
+    'commonality_score',
+    'available_channels',
+  ]);
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly provenanceRepo: FoodProvenanceRepository,
   ) {
     this.apiKey = this.configService.get<string>('DEEPSEEK_API_KEY') || '';
     this.client = axios.create({
@@ -842,6 +849,16 @@ export class FoodEnrichmentService {
       },
       timeout: 90000,
     });
+  }
+
+  private async getSuccessSourcePresence(
+    foodId: string,
+    fields: string[],
+  ): Promise<Record<string, boolean>> {
+    const trackedFields = fields.filter((field) =>
+      this.completenessSourceFields.has(field),
+    );
+    return this.provenanceRepo.hasSuccessfulSources(foodId, trackedFields);
   }
 
   // ─── V7.9: 分阶段补全（核心新增）────────────────────────────────────────
@@ -871,6 +888,10 @@ export class FoodEnrichmentService {
     const stages = targetStages
       ? ENRICHMENT_STAGES.filter((s) => targetStages.includes(s.stage))
       : ENRICHMENT_STAGES;
+    const successSourcePresence = await this.getSuccessSourcePresence(
+      foodId,
+      stages.flatMap((stage) => stage.fields as readonly string[]),
+    );
 
     const stageResults: StageEnrichmentResult[] = [];
     // 累积已补全数据，供后续阶段作为上下文
@@ -913,14 +934,8 @@ export class FoodEnrichmentService {
         )
           return true;
         // V8.2: 默认值字段 — 检查 field_sources 判断是否被真正补全过
-        if (field === 'processing_level' || field === 'commonality_score') {
-          const sources = (food.fieldSources as Record<string, string>) || {};
-          if (!sources[field]) return true; // 无来源记录 → 还是默认值，视为缺失
-        }
-        // V8.2: available_channels — 检查是否是 schema 默认值（未被定制）
-        if (field === 'available_channels') {
-          const sources = (food.fieldSources as Record<string, string>) || {};
-          if (!sources[field]) return true;
+        if (this.completenessSourceFields.has(field)) {
+          if (!successSourcePresence[field]) return true;
         }
         return false;
       });
@@ -1162,7 +1177,7 @@ export class FoodEnrichmentService {
 
       // field 是 camelCase（来自 CONTEXT_LABELS），accumulatedData 用 snake_case key
       const snakeField = camelToSnake(field);
-      const value = accumulatedData[snakeField] ?? (food as any)[field];
+      const value = accumulatedData[snakeField] ?? food[field];
       if (value != null) {
         const [label, unit] = labelInfo;
         const displayValue = Array.isArray(value)
@@ -1591,7 +1606,7 @@ ${CORE_RULES}`;
 
   /**
    * 单条食物立即补全（同步执行，不走队列）
-   * 支持指定阶段和字段，补全后自动更新 field_sources/field_confidence/data_completeness
+   * 支持指定阶段和字段，补全后自动更新 provenance/data_completeness
    *
    * @param foodId 食物 ID
    * @param options.stages 指定阶段编号 1-5，默认自动检测需要补全的阶段
@@ -1654,7 +1669,15 @@ ${CORE_RULES}`;
 
     if (targetStages.length === 0) {
       // 已完整，无需补全
-      const completeness = this.computeCompletenessScore(food);
+      const completeness = this.computeCompletenessScore(
+        food,
+        await this.getSuccessSourcePresence(
+          foodId,
+          ENRICHMENT_STAGES.flatMap(
+            (stage) => stage.fields as readonly string[],
+          ),
+        ),
+      );
       return {
         success: true,
         foodId,
@@ -1674,7 +1697,15 @@ ${CORE_RULES}`;
       options.fields, // V8.1: 传递字段级过滤
     );
     if (!multiResult) {
-      const completeness = this.computeCompletenessScore(food);
+      const completeness = this.computeCompletenessScore(
+        food,
+        await this.getSuccessSourcePresence(
+          foodId,
+          ENRICHMENT_STAGES.flatMap(
+            (stage) => stage.fields as readonly string[],
+          ),
+        ),
+      );
       return {
         success: false,
         foodId,
@@ -1683,7 +1714,7 @@ ${CORE_RULES}`;
         totalEnriched: 0,
         totalFailed: 0,
         completeness,
-        enrichmentStatus: (food.enrichmentStatus as string) || 'failed',
+        enrichmentStatus: food.enrichmentStatus || 'failed',
       };
     }
 
@@ -1718,7 +1749,7 @@ ${CORE_RULES}`;
       const fc = sr.result.fieldConfidence ?? {};
       for (const [k, v] of Object.entries(fc)) {
         if (!(k in mergedFieldConfidence)) {
-          mergedFieldConfidence[k] = v as number;
+          mergedFieldConfidence[k] = v;
         }
       }
       totalFailed += sr.failedFields.length;
@@ -1771,7 +1802,13 @@ ${CORE_RULES}`;
     const updatedFood = await this.prisma.food.findUnique({
       where: { id: foodId },
     });
-    const completeness = this.computeCompletenessScore(updatedFood || food);
+    const completeness = this.computeCompletenessScore(
+      updatedFood || food,
+      await this.getSuccessSourcePresence(
+        foodId,
+        ENRICHMENT_STAGES.flatMap((stage) => stage.fields as readonly string[]),
+      ),
+    );
 
     // V8.3: enrichment_status 判定增加 'failed' 分支
     let enrichmentStatus: string;
@@ -2291,20 +2328,7 @@ ${jsonSchema}`;
       cleared += batch.length;
     }
 
-    // 同步清理 field_sources 中对应字段的来源标记（使其可被 AI 重新写入）
-    // 逐字段删除 JSONB key，PostgreSQL `#-` 操作符不支持数组批量删除，只能循环处理
-    for (let i = 0; i < foodIds.length; i += BATCH) {
-      const batch = foodIds.slice(i, i + BATCH);
-      for (const field of fields) {
-        await this.prisma.$executeRaw`
-          UPDATE foods
-          SET field_sources = field_sources - ${field}
-          WHERE id = ANY(${batch}::uuid[])
-            AND field_sources IS NOT NULL
-            AND field_sources ? ${field}
-        `;
-      }
-    }
+    await this.provenanceRepo.clearSuccessesForFields(foodIds, validFields);
 
     return { cleared };
   }
@@ -2345,8 +2369,16 @@ ${jsonSchema}`;
 
       for (const food of foods) {
         try {
-          const completeness = this.computeCompletenessScore(food);
-          const oldStatus = (food.enrichmentStatus as string) || 'pending';
+          const completeness = this.computeCompletenessScore(
+            food,
+            await this.getSuccessSourcePresence(
+              food.id,
+              ENRICHMENT_STAGES.flatMap(
+                (stage) => stage.fields as readonly string[],
+              ),
+            ),
+          );
+          const oldStatus = food.enrichmentStatus || 'pending';
 
           // 仅对非 staged/rejected/failed 的食物重新判定状态
           // staged/rejected/failed 是由审核流程或失败逻辑设置的，不应被覆盖
@@ -2360,7 +2392,7 @@ ${jsonSchema}`;
                   : 'pending';
           }
 
-          const oldCompleteness = (food.dataCompleteness as number) ?? 0;
+          const oldCompleteness = food.dataCompleteness ?? 0;
 
           // 仅在值有变化时才更新，减少写入
           if (
@@ -2427,7 +2459,6 @@ ${jsonSchema}`;
 
   /**
    * 将补全失败的字段记录到 food_field_provenance 表（status='failed'）
-   * 同时更新 foods.field_sources 标记为 "ai_enrichment_failed"
    *
    * V8.2 重构：原 foods.failed_fields JSONB 列已删除，改用 food_field_provenance 关联表。
    * 失败信息以 source='ai_enrichment' + status='failed' 写入；attempts 通过查询既有行计算。
@@ -2438,15 +2469,6 @@ ${jsonSchema}`;
     stageResults: StageEnrichmentResult[],
   ): Promise<void> {
     if (failedFields.length === 0) return;
-
-    const food = await this.prisma.food.findUnique({
-      where: { id: foodId },
-      select: { id: true, fieldSources: true },
-    });
-    if (!food) return;
-
-    const existingSources = (food.fieldSources as Record<string, string>) || {};
-    const updatedSources = { ...existingSources };
     const PROVENANCE_SOURCE = 'ai_enrichment';
 
     for (const field of failedFields) {
@@ -2470,67 +2492,19 @@ ${jsonSchema}`;
         reasonCode = 'unknown';
       }
 
-      // 查既有 attempts 计数（rawValue.attempts）
-      const existing = await this.prisma.foodFieldProvenance.findUnique({
-        where: {
-          foodId_fieldName_source: {
-            foodId,
-            fieldName: field,
-            source: PROVENANCE_SOURCE,
-          },
-        },
-        select: { rawValue: true, createdAt: true },
-      });
-
-      const prevAttempts =
-        ((existing?.rawValue as Record<string, any>)?.attempts as number) ?? 0;
-      const attempts = prevAttempts + 1;
-      const firstAttempt =
-        ((existing?.rawValue as Record<string, any>)?.firstAttempt as string) ??
-        existing?.createdAt?.toISOString() ??
-        new Date().toISOString();
-
-      const rawValue = {
-        lastAttempt: new Date().toISOString(),
-        firstAttempt,
-        attempts,
-        reasonCode,
-        stage: stageResult?.stage ?? null,
-        stageName: stageResult?.stageName ?? null,
-      };
-
-      // UPSERT food_field_provenance
-      await this.prisma.foodFieldProvenance.upsert({
-        where: {
-          foodId_fieldName_source: {
-            foodId,
-            fieldName: field,
-            source: PROVENANCE_SOURCE,
-          },
-        },
-        create: {
-          foodId,
-          fieldName: field,
-          source: PROVENANCE_SOURCE,
-          status: 'failed',
-          failureReason: reason,
-          rawValue,
-        },
-        update: {
-          status: 'failed',
-          failureReason: reason,
-          rawValue,
-          updatedAt: new Date(),
+      // 累加 attempts、保留 firstAttempt（V8.2 收口到 FoodProvenanceRepository）
+      await this.provenanceRepo.recordFailureWithAttempts({
+        foodId,
+        fieldName: field,
+        source: PROVENANCE_SOURCE,
+        reason,
+        extra: {
+          reasonCode,
+          stage: stageResult?.stage ?? null,
+          stageName: stageResult?.stageName ?? null,
         },
       });
-
-      updatedSources[field] = 'ai_enrichment_failed';
     }
-
-    await this.prisma.food.update({
-      where: { id: foodId },
-      data: { fieldSources: updatedSources },
-    });
 
     this.logger.log(
       `Persisted ${failedFields.length} failed fields for food ${foodId}: [${failedFields.join(', ')}]`,
@@ -2543,11 +2517,10 @@ ${jsonSchema}`;
    * 计算单个食物的数据完整度评分
    * 加权计算：核心营养素(0.35) + 微量营养素(0.25) + 健康属性(0.15) + 使用属性(0.15) + 扩展属性(0.10)
    */
-  computeCompletenessScore(food: any): CompletenessScore {
-    // V8.2: field_sources 用于判断默认值字段是否被真正补全
-    const fieldSources: Record<string, string> =
-      (food.fieldSources as Record<string, string>) || {};
-
+  computeCompletenessScore(
+    food: any,
+    successSourcePresence: Record<string, boolean> = {},
+  ): CompletenessScore {
     const isFieldFilled = (field: string): boolean => {
       // Prisma 返回的 food 对象使用 camelCase 字段名，ENRICHABLE_FIELDS 是 snake_case
       const value = food[snakeToCamel(field)];
@@ -2556,13 +2529,9 @@ ${jsonSchema}`;
         return Array.isArray(value) && value.length > 0;
       if ((JSON_OBJECT_FIELDS as readonly string[]).includes(field))
         return typeof value === 'object' && Object.keys(value).length > 0;
-      // V8.2: 默认值字段 — 无 field_sources 记录则视为未真正填充
-      // fieldSources 的 key 是 snake_case（写入时即如此），保持原样
-      if (field === 'processing_level' || field === 'commonality_score') {
-        return !!fieldSources[field];
-      }
-      if (field === 'available_channels') {
-        return !!fieldSources[field];
+      // 默认值字段只有在 provenance success 存在时才视为真实补全
+      if (this.completenessSourceFields.has(field)) {
+        return Boolean(successSourcePresence[field]);
       }
       return true;
     };
@@ -2909,12 +2878,7 @@ ${jsonSchema}`;
   ): Promise<{ id: string; name: string; missingFields: EnrichableField[] }[]> {
     if (fields.length === 0) return [];
 
-    // V8.0: 字段名来自 ENRICHABLE_FIELDS/阶段字段白名单，使用 Prisma.raw 安全构建
-    // V8.8: AI_OVERRIDABLE_FIELDS 中的字段（如 food_form）除了 IS NULL 外，
-    //       还需匹配"字段来源为种子/导入默认值"的情况，即 field_sources 中标记为非 ai_enrichment 的。
-    //       但 field_sources 是 JSON 字段，查询成本高；改用更简单的策略：
-    //       overridable 字段的筛选条件放宽为 IS NULL（已有 AI 补全的会被 applyEnrichment 重新覆盖）
-    //       实际"是否需要纠正"由 applyEnrichment 的白名单逻辑决定，此处只负责"让食物进入队列"。
+    // 字段名来自 ENRICHABLE_FIELDS/阶段字段白名单，使用 Prisma.raw 安全构建。
     const nullConditions = fields
       .map((f) =>
         (JSON_ARRAY_FIELDS as readonly string[]).includes(f)
@@ -2923,10 +2887,9 @@ ${jsonSchema}`;
       )
       .join(' OR ');
 
-    // V8.8: AI_OVERRIDABLE_FIELDS 字段有默认值时也应被扫描（允许 AI 纠正）
-    // 为这些字段额外生成"非 AI 补全来源"的匹配条件
+    // 对允许 AI 覆盖的默认值字段，改用 provenance success 作为“是否真实补全”的依据。
     const overridableFields = fields.filter((f) =>
-      (AI_OVERRIDABLE_FIELDS as readonly string[]).includes(f),
+      AI_OVERRIDABLE_FIELDS.includes(f),
     );
     const overridableCondition =
       overridableFields.length > 0
@@ -2934,7 +2897,7 @@ ${jsonSchema}`;
           overridableFields
             .map(
               (f) =>
-                `("${f}" IS NOT NULL AND (field_sources IS NULL OR field_sources->>'${f}' IS NULL OR field_sources->>'${f}' NOT IN ('ai_enrichment', 'ai_enrichment_staged')))`,
+                `("${f}" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM food_field_provenance p WHERE p.food_id = foods.id AND p.field_name = '${f}' AND p.status = 'success' AND p.source IN ('ai_enrichment', 'ai_enrichment_now', 'ai_enrichment_worker', 'batch_enrichment', 'manual', 'rule_inferred')))`,
             )
             .join(' OR ')
         : '';
@@ -2975,8 +2938,7 @@ ${jsonSchema}`;
         )
           return true;
         // V8.8: overridable 字段始终加入 missingFields，确保 AI 有机会纠正默认值
-        if ((AI_OVERRIDABLE_FIELDS as readonly string[]).includes(f))
-          return true;
+        if (AI_OVERRIDABLE_FIELDS.includes(f)) return true;
         return false;
       }),
     }));
@@ -3164,7 +3126,7 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
       if (existing !== null && existing !== undefined) {
         // V8.8: AI_OVERRIDABLE_FIELDS 白名单字段即使已有值也允许 AI 覆盖
         // 用于修正种子/导入时写入的默认值（如 food_form 的 'ingredient' 默认值）
-        if ((AI_OVERRIDABLE_FIELDS as readonly string[]).includes(field)) {
+        if (AI_OVERRIDABLE_FIELDS.includes(field)) {
           // 直接落入下方赋值逻辑，不跳过
         } else if (
           (JSON_ARRAY_FIELDS as readonly string[]).includes(field) &&
@@ -3195,18 +3157,7 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
 
     if (Object.keys(updates).length === 0) return { updated: [], skipped };
 
-    // V8.0: 合并 field_sources 和 field_confidence 元数据
-    // 优先使用 AI 返回的字段级置信度，回退到整体 confidence
-    const existingSources = (food.fieldSources as Record<string, string>) || {};
-    const existingConfidence =
-      (food.fieldConfidence as Record<string, number>) || {};
-    const newSources = { ...existingSources };
-    const newConfidence = { ...existingConfidence };
     const aiFieldConf = result.fieldConfidence ?? {};
-    for (const field of updated) {
-      newSources[field] = operator;
-      newConfidence[field] = aiFieldConf[field] ?? result.confidence;
-    }
 
     // V8.0: 使用 Prisma 交互式事务保证 foods.update + changelog.create 原子性
     const newVersion = (food.dataVersion || 1) + 1;
@@ -3218,7 +3169,17 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
       prismaUpdates[snakeToCamel(k)] = v;
     }
     const mergedFood = { ...food, ...prismaUpdates };
-    const completeness = this.computeCompletenessScore(mergedFood);
+    const successSourcePresence = {
+      ...(await this.getSuccessSourcePresence(
+        foodId,
+        Object.keys(prismaUpdates),
+      )),
+      ...Object.fromEntries(updated.map((field) => [field, true])),
+    };
+    const completeness = this.computeCompletenessScore(
+      mergedFood,
+      successSourcePresence,
+    );
     const enrichmentStatus =
       completeness.score >= COMPLETENESS_COMPLETE_THRESHOLD
         ? 'completed'
@@ -3236,9 +3197,6 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
             result.confidence,
           ) as any,
           dataVersion: newVersion,
-          // V8.0: 更新补全元数据
-          fieldSources: newSources,
-          fieldConfidence: newConfidence,
           dataCompleteness: completeness.score,
           enrichmentStatus: enrichmentStatus,
           lastEnrichedAt: new Date(),
@@ -3253,6 +3211,12 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
           changes: {
             enrichedFields: updated,
             confidence: result.confidence,
+            fieldConfidence: Object.fromEntries(
+              updated.map((field) => [
+                field,
+                aiFieldConf[field] ?? result.confidence,
+              ]),
+            ),
             values: updates,
             reasoning: result.reasoning ?? null,
           },
@@ -3261,6 +3225,17 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
         },
       });
     });
+
+    for (const field of updated) {
+      await this.provenanceRepo.recordSuccess({
+        foodId,
+        fieldName: field,
+        source: operator,
+        confidence: aiFieldConf[field] ?? result.confidence,
+        rawValue: updates[field] as Prisma.InputJsonValue,
+      });
+      await this.provenanceRepo.clearFailuresForField(foodId, field);
+    }
 
     this.logger.log(
       `Applied enrichment "${food.name}": [${updated.join(', ')}] completeness=${completeness.score}%`,
@@ -3293,7 +3268,9 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
       return { action: 'updated', fields: [] };
 
     // V8.0: 使用 Prisma 交互式事务保证翻译写入 + changelog 原子性
-    let resultAction: 'created' | 'updated' = existing ? 'updated' : 'created';
+    const resultAction: 'created' | 'updated' = existing
+      ? 'updated'
+      : 'created';
     await this.prisma.$transaction(async (tx) => {
       if (!existing) {
         await tx.foodTranslations.create({
@@ -3364,7 +3341,9 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
       return { action: 'updated', fields: [] };
 
     // V8.0: 使用 Prisma 交互式事务保证地区信息写入 + changelog 原子性
-    let resultAction: 'created' | 'updated' = existing ? 'updated' : 'created';
+    const resultAction: 'created' | 'updated' = existing
+      ? 'updated'
+      : 'created';
     await this.prisma.$transaction(async (tx) => {
       if (!existing) {
         await tx.foodRegionalInfo.create({
@@ -3842,7 +3821,15 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
         where: { id: log.foodId },
       });
       if (updatedFood) {
-        const completeness = this.computeCompletenessScore(updatedFood);
+        const completeness = this.computeCompletenessScore(
+          updatedFood,
+          await this.getSuccessSourcePresence(
+            log.foodId,
+            ENRICHMENT_STAGES.flatMap(
+              (stage) => stage.fields as readonly string[],
+            ),
+          ),
+        );
         const enrichmentStatus =
           completeness.score >= COMPLETENESS_COMPLETE_THRESHOLD
             ? 'completed'
@@ -4008,7 +3995,7 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
   /**
    * 回退单条补全记录：
    * 1. 根据 change_log 中记录的 enrichedFields 列表，把对应字段重置为 null
-   * 2. 清理 field_sources / field_confidence 中对应条目
+   * 2. 清理 provenance success 中对应条目
    * 3. 重算 data_completeness / enrichment_status
    * 4. 写入一条 ai_enrichment_rollback 日志
    * 5. 将原 change_log 标记为 ai_enrichment_rolled_back
@@ -4038,7 +4025,12 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
     if (enrichedFields.length === 0) {
       // 如果是 approved 记录，可能字段在 proposedValues 里
       const proposed = changes.proposedValues ?? {};
-      const { confidence, reasoning, fieldConfidence, ...fields } = proposed;
+      const {
+        confidence: _confidence,
+        reasoning: _reasoning,
+        fieldConfidence: _fieldConfidence,
+        ...fields
+      } = proposed;
       enrichedFields.push(
         ...Object.keys(fields).filter((k) => fields[k] != null),
       );
@@ -4062,20 +4054,19 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
       rollbackUpdatesCamel[snakeToCamel(field)] = null; // camelCase，用于 Prisma update
     }
 
-    // 清理 field_sources / field_confidence 中的对应条目
-    const existingSources = (food.fieldSources as Record<string, string>) || {};
-    const existingConfidence =
-      (food.fieldConfidence as Record<string, number>) || {};
-    const newSources = { ...existingSources };
-    const newConfidence = { ...existingConfidence };
-    for (const field of enrichedFields) {
-      delete newSources[field];
-      delete newConfidence[field];
-    }
-
     // 重算完整度（mergedFood 需用 camelCase 与 food 结构一致）
     const mergedFood = { ...food, ...rollbackUpdatesCamel };
-    const completeness = this.computeCompletenessScore(mergedFood);
+    const existingSuccessMap = await this.getSuccessSourcePresence(
+      log.foodId,
+      enrichedFields,
+    );
+    for (const field of enrichedFields) {
+      delete existingSuccessMap[field];
+    }
+    const completeness = this.computeCompletenessScore(
+      mergedFood,
+      existingSuccessMap,
+    );
     const enrichmentStatus =
       completeness.score >= COMPLETENESS_COMPLETE_THRESHOLD
         ? 'completed'
@@ -4092,8 +4083,6 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
         data: {
           ...rollbackUpdatesCamel,
           dataVersion: newVersion,
-          fieldSources: newSources,
-          fieldConfidence: newConfidence,
           dataCompleteness: completeness.score,
           enrichmentStatus: enrichmentStatus,
           lastEnrichedAt: food.lastEnrichedAt, // 保持不变
@@ -4122,6 +4111,11 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
         },
       });
     });
+
+    for (const field of enrichedFields) {
+      await this.provenanceRepo.clearSuccessesForField(log.foodId, field);
+      await this.provenanceRepo.clearFailuresForField(log.foodId, field);
+    }
 
     const detail = `已回退 ${enrichedFields.length} 个字段: [${enrichedFields.join(', ')}]，完整度 ${completeness.score}%`;
     this.logger.log(

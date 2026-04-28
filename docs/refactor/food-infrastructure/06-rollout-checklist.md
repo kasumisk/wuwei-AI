@@ -11,17 +11,17 @@
 - [x] 三张新表都有 `foodId` 外键 + `onDelete: Cascade`
 - [x] `food_embeddings` 有 `(food_id, model_name)` 唯一约束（`@@unique`）
 - [x] `food_field_provenance` 有 `(food_id, field_name, source)` 唯一约束
-- [x] HNSW 索引在 vector 列上（迁移 SQL 内 `USING hnsw (vector vector_cosine_ops)` 条件创建）
+- [x] HNSW 索引创建已显式延后（当前 `vector` 无固定维度，staging 校验确认先不建索引）
 
-### 数据（⏳ 待 staging 库执行）
+### 数据（✅ 已在本地 staging 演练）
 
-- [ ] `pg_dump` 备份产出物存在且可 restore（演练一次）
-- [ ] `migrate-food-infra.ts` 跑完无报错
-- [ ] `verify-food-infra.ts` 全部断言通过：
-  - [ ] embedding 总数对齐（legacy + v5）
-  - [ ] field_sources 键数 ≈ provenance success 行数
-  - [ ] failed_fields 键数 ≈ provenance failed 行数
-  - [ ] 抽样 50 条 food_id 数据完整
+- [x] `pg_dump` 备份产出物存在且可 restore（`/tmp/wuwei-backup/pre-v82-20260428-030933.dump`）
+- [x] `pnpm prisma migrate deploy` 跑完无报错
+- [x] `verify-food-infra.ts` 全部断言通过：
+  - [x] embedding 总数/维度自洽（legacy + feature_v5 + openai_v5）
+  - [x] `foods.field_sources` / `foods.field_confidence` 已删除
+  - [x] `food_field_provenance` success/failed 唯一约束与 orphan 校验通过
+  - [x] `food_recommendation_profile` 行数与 foods 对齐
 
 ### 代码（✅ 全部完成）
 
@@ -40,7 +40,7 @@
   - `vector-search.service.ts`：`model_version` / `"dim"` → `model_name` / `dimension`
   - `embedding-generation.{service,processor}.ts`：96 维 computeFoodEmbedding 错标 OpenAI 字符串 → 统一为 `model_name='feature_v5'`
   - `semantic-recall.service.ts`：`model_version='v5'` → `model_name='feature_v5'`
-- [ ] `pnpm -w lint` 通过（待执行）
+- [x] 本期相关文件 lint 通过（工作区仍有 1 处历史遗留 lint，不在本期改动范围）
 
 ### 业务回归（⏳ 待 staging 库执行）
 
@@ -48,7 +48,7 @@
 - [ ] 向量召回非空：`vector-search.service` 单测 / 手测
 - [ ] 食物详情页查询正常
 - [ ] 食物搜索分页正常
-- [ ] enrichment 跑一条新菜入库，验证 `food_field_provenance` 有写入
+- [ ] enrichment 跑一条新菜入库，验证 `food_field_provenance` success/failed 都能写入
 - [ ] embedding-generation worker 跑一条，验证 `food_embeddings` 有写入
 
 ### 单元测试（✅ 已完成）
@@ -131,15 +131,15 @@ pm2 restart api-server
 | HNSW 索引在新表重建时间长 | staging 提前演练，记录耗时；生产改造前预估窗口 | ⏳ 待 staging |
 | `food-conflict-resolver.service.ts` 动态列名 | 已加 `REMOVED_FIELDS` 白名单拦截，命中即跳过并 warn | ✅ 已修复 |
 | FoodLibrary 接口字段变可选可能 break 245+ 引用 | typecheck 全量验证（0 错误） | ✅ 已通过 |
-| 双层共存（jsonb + 关联表）写入不一致 | 全部用事务包裹；后续可加后台 reconcile job | ⏳ 后续 PR |
+| provenance success/failed 与业务状态回写不一致 | 相关写路径已切到 repository；需继续用 staging 业务回归验证 enrichment / rollback / manual edit | ⏳ 待 staging 回归 |
 | **embedding 模型语义混淆**（本期发现） | 统一三模型枚举语义：legacy_v4 (Float[]) / feature_v5 (96 维 pgvector，主用) / openai_v5 (1536 维预留)；写入 `embedding-model.constants.ts` | ✅ 已修复 |
-| 迁移 SQL backfill 把 embedding_v5 标为 `model_name='openai_v5'` + `dimension=1536` | 与代码侧 `feature_v5`(96 维) 语义不符；本期保留迁移 SQL（已 commit ddcaf8a），上线前需执行 staging 校验脚本对齐，必要时新增数据修补 SQL | ⚠️ **待上线前确认** |
+| 迁移 SQL backfill 把 embedding_v5 标为 `model_name='openai_v5'` + `dimension=1536` | 已修正为 `feature_v5 + vector_dims()`，本地 staging 校验通过 | ✅ 已修复 |
 
 ---
 
 ## 后续 PR 路线（不在本期）
 
 1. 接入 `food_recommendation_profile` 离线计算 + 推荐排序
-2. 把剩余 `prisma.foods` 调用收口到 `FoodRepository`
-3. enrichment 服务彻底切到 provenance 表，主表 jsonb 列在观察 1 个月后下线
+2. 把剩余普通 CRUD `prisma.food` 调用按需收口到 `FoodRepository`
+3. 补 staging/生产业务回归，观察 provenance 读写稳定性
 4. 引入 AI healthScore / aiAnalysisVersion 时再增 `food_ai_profiles` 表（本期不做）
