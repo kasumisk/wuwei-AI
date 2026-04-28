@@ -14,10 +14,15 @@ import {
 } from '../../../user.types';
 import {
   UserProfiles as UserProfile,
-  UserInferredProfiles as UserInferredProfile,
-  UserBehaviorProfiles as UserBehaviorProfile,
-  ProfileSnapshots as ProfileSnapshot,
 } from '@prisma/client';
+import {
+  updateInferred,
+  updateBehavior,
+  getInferred,
+  getBehavior,
+  InferredData,
+  BehaviorData,
+} from '../../../user-profile-merge.helper';
 import { ProfileCacheService } from './profile-cache.service';
 import {
   OnboardingStep1Dto,
@@ -394,28 +399,25 @@ export class UserProfileService {
    */
   async getFullProfile(userId: string): Promise<{
     declared: UserProfile | null;
-    observed: UserBehaviorProfile | null;
-    inferred: UserInferredProfile | null;
+    observed: BehaviorData | null;
+    inferred: InferredData | null;
     meta: {
       completeness: number;
       onboardingStep: number;
       profileVersion: number;
     };
   }> {
-    const [declared, observed, inferred] = await Promise.all([
-      this.prisma.userProfiles.findUnique({ where: { userId: userId } }),
-      this.prisma.userBehaviorProfiles.findUnique({
-        where: { userId: userId },
-      }),
-      this.prisma.userInferredProfiles.findUnique({
-        where: { userId: userId },
-      }),
-    ]);
+    const declared = await this.prisma.userProfiles.findUnique({
+      where: { userId: userId },
+    });
+
+    const observed = declared ? getBehavior(declared) : null;
+    const inferred = declared ? getInferred(declared) : null;
 
     return {
       declared: declared as any,
-      observed: observed as any,
-      inferred: inferred as any,
+      observed,
+      inferred,
       meta: {
         completeness: Number(declared?.dataCompleteness ?? 0),
         onboardingStep: declared?.onboardingStep ?? 0,
@@ -831,7 +833,7 @@ export class UserProfileService {
   /**
    * 同步更新推断数据（BMR/TDEE/macroTargets）
    */
-  private async syncInferredProfile(profile: any): Promise<any | null> {
+  private async syncInferredProfile(profile: any): Promise<InferredData | null> {
     const gender = profile.gender;
     const birthYear = profile.birthYear;
     const heightCm = profile.heightCm;
@@ -842,9 +844,10 @@ export class UserProfileService {
       return null;
     }
 
-    const inferred = await this.prisma.userInferredProfiles.findUnique({
+    const existingProfile = await this.prisma.userProfiles.findUnique({
       where: { userId: userId },
     });
+    const inferred = existingProfile ? getInferred(existingProfile) : null;
 
     const bmr = this.calculateBMR(profile);
     const activityLevel = profile.activityLevel;
@@ -883,7 +886,7 @@ export class UserProfileService {
       macroTargets: 0.75,
     };
 
-    const data = {
+    const data: Partial<InferredData> = {
       estimatedBmr: Math.round(bmr),
       estimatedTdee: Math.round(tdee),
       recommendedCalories: recommendedCalories,
@@ -892,19 +895,8 @@ export class UserProfileService {
       confidenceScores: confidenceScores as any,
     };
 
-    if (inferred) {
-      return this.prisma.userInferredProfiles.update({
-        where: { userId: userId },
-        data,
-      });
-    } else {
-      return this.prisma.userInferredProfiles.create({
-        data: {
-          userId: userId,
-          ...data,
-        },
-      });
-    }
+    await updateInferred(this.prisma, userId, data);
+    return { ...inferred, ...data } as InferredData;
   }
 
   /**
@@ -912,13 +904,12 @@ export class UserProfileService {
    * 使用 findUnique + create 模式避免重复创建
    */
   private async ensureBehaviorProfile(userId: string): Promise<void> {
-    const existing = await this.prisma.userBehaviorProfiles.findUnique({
+    const profile = await this.prisma.userProfiles.findUnique({
       where: { userId: userId },
     });
+    const existing = profile ? getBehavior(profile) : null;
     if (!existing) {
-      await this.prisma.userBehaviorProfiles.create({
-        data: { userId: userId },
-      });
+      await updateBehavior(this.prisma, userId, {});
       this.logger.log(
         `Created behavior profile for user ${userId} on onboarding completion`,
       );

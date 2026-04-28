@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../core/prisma/prisma.service';
+import { upsertFoodSplitTables } from '../../modules/food/food-split.helper';
 import {
   UsdaFetcherService,
   NormalizedFoodData,
@@ -177,62 +178,72 @@ export class FoodPipelineOrchestratorService {
     if (options.category) {
       where.category = options.category;
     }
-    if (options.unlabeled) {
-      where.OR = [
-        { tags: { equals: Prisma.DbNull } },
-        { tags: { equals: [] } },
-      ];
-    }
-
+    // tags moved to food_taxonomies split table; unlabeled filter applied post-query
     const foods = await this.prisma.food.findMany({
       where,
+      include: { taxonomy: true, healthAssessment: true, portionGuide: true },
       take: options.limit || 100,
     });
-    this.logger.log(`AI labeling ${foods.length} foods`);
+    // Filter unlabeled: foods whose taxonomy has no tags
+    const filteredFoods = options.unlabeled
+      ? foods.filter(
+          (f) =>
+            !f.taxonomy ||
+            !(f.taxonomy.tags as any[])?.length,
+        )
+      : foods;
+    this.logger.log(`AI labeling ${filteredFoods.length} foods`);
 
-    const labelResults = await this.aiLabel.labelBatch(foods as any);
+    const labelResults = await this.aiLabel.labelBatch(filteredFoods as any);
     let labeled = 0;
     let failed = 0;
 
     for (const [idx, labelResult] of labelResults) {
-      const food = foods[idx];
+      const food = filteredFoods[idx];
       if (!food) continue;
 
       try {
-        const update: Record<string, any> = {};
+        const mainUpdate: Record<string, any> = {};
+        const splitUpdate: Record<string, any> = {};
+
         if (!food.category && labelResult.category)
-          update.category = labelResult.category;
-        if (!food.subCategory) update.subCategory = labelResult.subCategory;
-        if (!food.foodGroup) update.foodGroup = labelResult.foodGroup;
+          mainUpdate.category = labelResult.category;
+        if (!food.subCategory) mainUpdate.subCategory = labelResult.subCategory;
+        if (!food.foodGroup) mainUpdate.foodGroup = labelResult.foodGroup;
         if (!food.mainIngredient)
-          update.mainIngredient = labelResult.mainIngredient;
-        if (!food.processingLevel)
-          update.processingLevel = labelResult.processingLevel;
-        if (!(food.mealTypes as any[])?.length)
-          update.mealTypes = labelResult.mealTypes;
-        if (!(food.allergens as any[])?.length)
-          update.allergens = labelResult.allergens;
+          mainUpdate.mainIngredient = labelResult.mainIngredient;
+
+        // Split table fields (healthAssessment / taxonomy)
+        if (!(food.healthAssessment as any)?.processingLevel)
+          splitUpdate.processingLevel = labelResult.processingLevel;
+        if (!(food.taxonomy?.mealTypes as any[])?.length)
+          splitUpdate.mealTypes = labelResult.mealTypes;
+        if (!(food.taxonomy?.allergens as any[])?.length)
+          splitUpdate.allergens = labelResult.allergens;
         if (
-          !food.compatibility ||
-          !Object.keys(food.compatibility as object).length
+          !food.taxonomy?.compatibility ||
+          !Object.keys(food.taxonomy.compatibility as object).length
         ) {
-          update.compatibility = labelResult.compatibility;
+          splitUpdate.compatibility = labelResult.compatibility;
         }
 
-        // 合并标签
-        const existingTags = (food.tags as any[]) || [];
-        update.tags = [...new Set([...existingTags, ...labelResult.tags])];
+        // 合并标签（在 taxonomy 中）
+        const existingTags = (food.taxonomy?.tags as any[]) || [];
+        splitUpdate.tags = [...new Set([...existingTags, ...labelResult.tags])];
 
-        if (Object.keys(update).length > 0) {
-          await this.prisma.food.update({
-            where: { id: food.id },
-            data: update,
-          });
+        if (Object.keys(mainUpdate).length > 0 || Object.keys(splitUpdate).length > 0) {
+          if (Object.keys(mainUpdate).length > 0) {
+            await this.prisma.food.update({
+              where: { id: food.id },
+              data: mainUpdate,
+            });
+          }
+          await upsertFoodSplitTables(this.prisma, food.id, splitUpdate);
           await this.logChange(
             food.id,
             food.dataVersion,
             'update',
-            update,
+            { ...mainUpdate, ...splitUpdate },
             'ai_label',
           );
           labeled++;
@@ -246,19 +257,16 @@ export class FoodPipelineOrchestratorService {
     for (const food of foods) {
       const updated = await this.prisma.food.findUnique({
         where: { id: food.id },
+        include: { taxonomy: true },
       });
       if (updated) {
         const scores = this.ruleEngine.applyAllRules(updated as any);
-        await this.prisma.food.update({
-          where: { id: food.id },
-          data: {
-            qualityScore: scores.qualityScore,
-            satietyScore: scores.satietyScore,
-            nutrientDensity: scores.nutrientDensity,
-            tags: [
-              ...new Set([...((updated.tags as any[]) || []), ...scores.tags]),
-            ],
-          },
+        const existingTags = (updated.taxonomy?.tags as any[]) || [];
+        await upsertFoodSplitTables(this.prisma, food.id, {
+          qualityScore: scores.qualityScore,
+          satietyScore: scores.satietyScore,
+          nutrientDensity: scores.nutrientDensity,
+          tags: [...new Set([...existingTags, ...scores.tags])],
         });
       }
     }
@@ -342,31 +350,33 @@ export class FoodPipelineOrchestratorService {
   async batchApplyRules(
     options: { limit?: number; recalcAll?: boolean } = {},
   ): Promise<{ processed: number }> {
-    let where: Prisma.FoodWhereInput = {};
-    if (!options.recalcAll) {
-      where = {
-        OR: [{ qualityScore: null }, { satietyScore: null }],
-      };
-    }
-
+    // qualityScore/satietyScore/nutrientDensity now live in food_health_assessments;
+    // fetch all (or limited) foods and filter post-query when not recalcAll
     const foods = await this.prisma.food.findMany({
-      where,
+      include: { taxonomy: true, healthAssessment: true },
       take: options.limit || 500,
     });
+
+    const toProcess = options.recalcAll
+      ? foods
+      : foods.filter(
+          (f) =>
+            f.healthAssessment?.qualityScore == null ||
+            f.healthAssessment?.satietyScore == null,
+        );
+
     let processed = 0;
 
-    for (const food of foods) {
+    for (const food of toProcess) {
       const scores = this.ruleEngine.applyAllRules(food as any);
-      const existingTags = (food.tags as any[]) || [];
-      await this.prisma.food.update({
-        where: { id: food.id },
-        data: {
-          qualityScore: scores.qualityScore,
-          satietyScore: scores.satietyScore,
-          nutrientDensity: scores.nutrientDensity,
-          tags: [...new Set([...existingTags, ...scores.tags])],
-        },
-      });
+      const existingTags = (food.taxonomy?.tags as any[]) || [];
+      const scoreData = {
+        qualityScore: scores.qualityScore,
+        satietyScore: scores.satietyScore,
+        nutrientDensity: scores.nutrientDensity,
+        tags: [...new Set([...existingTags, ...scores.tags])],
+      };
+      await upsertFoodSplitTables(this.prisma, food.id, scoreData);
       processed++;
     }
 
@@ -394,7 +404,7 @@ export class FoodPipelineOrchestratorService {
         this.getSourcePriority(food.primarySource),
       );
       const combinedTags = [
-        ...((dup.existingFood.tags as any[]) || []),
+        ...((dup.existingFood as any).taxonomy?.tags as any[] || []),
         ...(food.tags || []),
         ...directives.extraTags,
       ];
@@ -404,20 +414,33 @@ export class FoodPipelineOrchestratorService {
         tags: [...new Set(combinedTags)],
       });
 
+      // Separate split-table fields from main-table fields in mergedFields
+      const { tags: _t, qualityScore: _q, satietyScore: _s, nutrientDensity: _n,
+              saturatedFat: _sf, transFat: _tf, cholesterol: _ch,
+              vitaminA: _va, vitaminC: _vc, vitaminD: _vd, vitaminE: _ve, vitaminB12: _vb, folate: _fo,
+              zinc: _zn, magnesium: _mg, phosphorus: _ph,
+              glycemicIndex: _gi, glycemicLoad: _gl, isProcessed: _ip, isFried: _ifd,
+              processingLevel: _pl, allergens: _al, mealTypes: _mt, compatibility: _co,
+              standardServingG: _ssg, standardServingDesc: _ssd, commonPortions: _cp,
+              omega3: _o3, omega6: _o6, solubleFiber: _slf, insolubleFiber: _ilf,
+              ...mainMergedFields } = mergedFields as any;
+
       await this.prisma.food.update({
         where: { id: dup.existingFood.id },
         data: {
-          ...mergedFields,
+          ...mainMergedFields,
           dataVersion: dup.existingFood.dataVersion + 1,
-          ...scores,
-          tags: [
-            ...new Set([
-              ...((mergedFields as any).tags || []),
-              ...combinedTags,
-              ...(scores.tags || []),
-            ]),
-          ],
         },
+      });
+      await upsertFoodSplitTables(this.prisma, dup.existingFood.id, {
+        ...mergedFields,
+        ...scores,
+        tags: [
+          ...new Set([
+            ...combinedTags,
+            ...(scores.tags || []),
+          ]),
+        ],
       });
 
       await this.saveSource(dup.existingFood.id, food);
@@ -463,34 +486,7 @@ export class FoodPipelineOrchestratorService {
           carbs: food.carbs,
           fiber: food.fiber,
           sugar: food.sugar,
-          saturatedFat: food.saturatedFat,
-          transFat: food.transFat,
-          cholesterol: food.cholesterol,
-          sodium: food.sodium,
-          potassium: food.potassium,
-          calcium: food.calcium,
-          iron: food.iron,
-          vitaminA: food.vitaminA,
-          vitaminC: food.vitaminC,
-          vitaminD: food.vitaminD,
-          vitaminE: food.vitaminE,
-          vitaminB12: food.vitaminB12,
-          folate: food.folate,
-          zinc: food.zinc,
-          magnesium: food.magnesium,
-          phosphorus: food.phosphorus,
-          glycemicIndex: food.glycemicIndex,
-          glycemicLoad: food.glycemicLoad,
-          isProcessed: food.isProcessed ?? false,
-          isFried: food.isFried ?? false,
-          processingLevel: food.processingLevel ?? 1,
-          allergens: food.allergens || [],
-          mealTypes: food.mealTypes || [],
           mainIngredient: food.mainIngredient,
-          compatibility: food.compatibility || {},
-          standardServingG: food.standardServingG ?? 100,
-          standardServingDesc: food.standardServingDesc,
-          commonPortions: food.commonPortions || [],
           searchWeight: food.searchWeight ?? directives.searchWeight,
           barcode: food.barcode || food.rawPayload?.code || undefined,
           primarySource: food.primarySource,
@@ -500,16 +496,19 @@ export class FoodPipelineOrchestratorService {
           isVerified: directives.isVerified,
           verifiedBy: directives.isVerified ? directives.verifiedBy : undefined,
           verifiedAt: directives.isVerified ? new Date() : undefined,
-          qualityScore: scores.qualityScore,
-          satietyScore: scores.satietyScore,
-          nutrientDensity: scores.nutrientDensity,
           commonalityScore: (food as any).commonalityScore ?? 50,
-          tags,
         },
       });
 
       // 记录来源
       await this.saveSource(saved.id, food);
+
+      // ARB-2026-04: 同步写入拆分表（包括 scores、tags 及所有迁移字段）
+      await upsertFoodSplitTables(this.prisma, saved.id, {
+        ...(food as any),
+        ...scores,
+        tags,
+      });
 
       // 记录变更日志
       await this.logChange(
@@ -628,10 +627,9 @@ export class FoodPipelineOrchestratorService {
   }> {
     this.logger.log('开始批量回填营养密度分数...');
 
+    // nutrientDensity now lives in food_health_assessments; count foods without a healthAssessment record
     const total = await this.prisma.food.count({
-      where: {
-        OR: [{ nutrientDensity: null }, { nutrientDensity: 0 }],
-      },
+      where: { healthAssessment: { is: null } },
     });
 
     if (total === 0) {
@@ -647,9 +645,8 @@ export class FoodPipelineOrchestratorService {
 
     while (offset < total) {
       const foods = await this.prisma.food.findMany({
-        where: {
-          OR: [{ nutrientDensity: null }, { nutrientDensity: 0 }],
-        },
+        where: { healthAssessment: { is: null } },
+        include: { taxonomy: true },
         orderBy: { id: 'asc' },
         take: batchSize,
       });
@@ -659,16 +656,12 @@ export class FoodPipelineOrchestratorService {
       for (const food of foods) {
         try {
           const scores = this.ruleEngine.applyAllRules(food as any);
-          await this.prisma.food.update({
-            where: { id: food.id },
-            data: {
-              nutrientDensity: scores.nutrientDensity,
-              qualityScore: scores.qualityScore,
-              satietyScore: scores.satietyScore,
-              tags: [
-                ...new Set([...((food.tags as any[]) || []), ...scores.tags]),
-              ],
-            },
+          const existingTags = (food.taxonomy?.tags as any[]) || [];
+          await upsertFoodSplitTables(this.prisma, food.id, {
+            nutrientDensity: scores.nutrientDensity,
+            qualityScore: scores.qualityScore,
+            satietyScore: scores.satietyScore,
+            tags: [...new Set([...existingTags, ...scores.tags])],
           });
           updated++;
         } catch (err) {
@@ -795,7 +788,20 @@ export class FoodPipelineOrchestratorService {
 
         const candidateFields = this.extractCandidateFields(candidateData);
 
-        await this.prisma.food.create({
+        // Strip split-table fields from candidateFields before writing to main table
+        const {
+          tags: _ct, qualityScore: _cq, satietyScore: _cs, nutrientDensity: _cn,
+          saturatedFat: _csf, transFat: _ctf, cholesterol: _cch,
+          vitaminA: _cva, vitaminC: _cvc, vitaminD: _cvd, vitaminE: _cve, vitaminB12: _cvb, folate: _cfo,
+          zinc: _czn, magnesium: _cmg, phosphorus: _cph,
+          glycemicIndex: _cgi, glycemicLoad: _cgl, isProcessed: _cip, isFried: _cifd,
+          processingLevel: _cpl, allergens: _cal, mealTypes: _cmt, compatibility: _cco,
+          standardServingG: _cssg, standardServingDesc: _cssd, commonPortions: _ccp,
+          omega3: _co3, omega6: _co6, solubleFiber: _cslf, insolubleFiber: _cilf,
+          ...mainCandidateFields
+        } = candidateFields as any;
+
+        const promoted = await this.prisma.food.create({
           data: {
             code,
             name: candidate.name,
@@ -806,13 +812,16 @@ export class FoodPipelineOrchestratorService {
             confidence: candidate.confidence,
             dataVersion: 1,
             isVerified: false,
-            qualityScore: scores.qualityScore,
-            satietyScore: scores.satietyScore,
-            nutrientDensity: scores.nutrientDensity,
             commonalityScore: (candidateFields as any).commonalityScore ?? 50,
-            tags: scores.tags || [],
-            ...candidateFields,
+            ...mainCandidateFields,
           },
+        });
+
+        // Write split-table fields (scores + migrated fields)
+        await upsertFoodSplitTables(this.prisma, promoted.id, {
+          ...candidateFields,
+          ...scores,
+          tags: scores.tags || [],
         });
 
         // 标记候选为已晋升

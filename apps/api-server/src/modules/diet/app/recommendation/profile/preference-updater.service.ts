@@ -5,6 +5,11 @@ import {
   DomainEvents,
   FeedbackSubmittedEvent,
 } from '../../../../../core/events/domain-events';
+import {
+  getInferred,
+  updateInferred,
+  upsertInferred,
+} from '../../../../user/user-profile-merge.helper';
 
 /**
  * 偏好自动更新服务 (V4 Phase 3.1)
@@ -231,10 +236,11 @@ export class PreferenceUpdaterService {
   async handleFeedbackSubmitted(event: FeedbackSubmittedEvent): Promise<void> {
     try {
       // 1. 读取当前增量权重
-      const inferredProfile = await this.prisma.userInferredProfiles.findFirst({
+      const userProfile = await this.prisma.userProfiles.findFirst({
         where: { userId: event.userId },
       });
 
+      const inferredProfile = userProfile ? getInferred(userProfile) : null;
       const currentWeights =
         (inferredProfile?.preferenceWeights as IncrementalPreferenceWeights | null) ??
         null;
@@ -251,19 +257,9 @@ export class PreferenceUpdaterService {
       );
 
       // 3. 写回
-      if (inferredProfile) {
-        await this.prisma.userInferredProfiles.update({
-          where: { id: inferredProfile.id },
-          data: { preferenceWeights: updatedWeights as any },
-        });
-      } else {
-        await this.prisma.userInferredProfiles.create({
-          data: {
-            userId: event.userId,
-            preferenceWeights: updatedWeights as any,
-          },
-        });
-      }
+      await upsertInferred(this.prisma, event.userId, {
+        preferenceWeights: updatedWeights as any,
+      });
 
       this.logger.debug(
         `偏好权重增量更新(事件驱动): userId=${event.userId}, action=${event.action}, ` +

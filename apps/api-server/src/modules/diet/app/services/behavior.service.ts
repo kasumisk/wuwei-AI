@@ -6,6 +6,11 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import {
+  getBehavior,
+  updateBehavior,
+  upsertBehavior,
+} from '../../../user/user-profile-merge.helper';
 import { FoodService } from './food.service';
 import { UserProfileService } from '../../../user/app/services/profile/user-profile.service';
 import {
@@ -40,15 +45,13 @@ export class BehaviorService {
    * 获取或创建用户行为画像
    */
   async getProfile(userId: string): Promise<any> {
-    let profile = await this.prisma.userBehaviorProfiles.findUnique({
+    let profile = await this.prisma.userProfiles.findUnique({
       where: { userId: userId },
     });
     if (!profile) {
-      profile = await this.prisma.userBehaviorProfiles.create({
-        data: { userId: userId },
-      });
+      return {};
     }
-    return profile;
+    return getBehavior(profile);
   }
 
   /**
@@ -56,10 +59,7 @@ export class BehaviorService {
    */
   async updateCoachStyle(userId: string, style: string): Promise<any> {
     await this.getProfile(userId);
-    return this.prisma.userBehaviorProfiles.update({
-      where: { userId: userId },
-      data: { coachStyle: style },
-    });
+    return updateBehavior(this.prisma, userId, { coachStyle: style });
   }
 
   /**
@@ -128,10 +128,7 @@ export class BehaviorService {
 
     // 防止同一天重复评估 streak（修复 B1）
     if (profile.lastStreakDate === today) {
-      await this.prisma.userBehaviorProfiles.update({
-        where: { userId: userId },
-        data: { totalRecords: totalRecords },
-      });
+      await updateBehavior(this.prisma, userId, { totalRecords: totalRecords });
       return;
     }
 
@@ -189,16 +186,13 @@ export class BehaviorService {
       totalDays > 0 ? Number((healthyDays / totalDays).toFixed(2)) : 0;
     healthyRecords = healthyDays; // 现在表示健康天数
 
-    await this.prisma.userBehaviorProfiles.update({
-      where: { userId: userId },
-      data: {
-        totalRecords: totalRecords,
-        streakDays: streakDays,
-        longestStreak: longestStreak,
-        avgComplianceRate: avgComplianceRate,
-        healthyRecords: healthyRecords,
-        lastStreakDate: today,
-      },
+    await updateBehavior(this.prisma, userId, {
+      totalRecords: totalRecords,
+      streakDays: streakDays,
+      longestStreak: longestStreak,
+      avgComplianceRate: avgComplianceRate,
+      healthyRecords: healthyRecords,
+      lastStreakDate: today,
     });
   }
 
@@ -206,10 +200,11 @@ export class BehaviorService {
    * 获取行为上下文（注入 AI prompt）
    */
   async getBehaviorContext(userId: string): Promise<string> {
-    const profile = await this.prisma.userBehaviorProfiles.findUnique({
+    const userProfile = await this.prisma.userProfiles.findUnique({
       where: { userId: userId },
     });
-    if (!profile) return '';
+    if (!userProfile) return '';
+    const profile = getBehavior(userProfile);
 
     const parts: string[] = [t('behavior.prompt.sectionHeader')];
     const foodPreferences = profile.foodPreferences as any;
@@ -240,9 +235,10 @@ export class BehaviorService {
   async proactiveCheck(userId: string): Promise<ProactiveReminder | null> {
     const tz = await this.userProfileService.getTimezone(userId);
     const hour = getUserLocalHour(tz);
-    const profile = await this.prisma.userBehaviorProfiles.findUnique({
+    const userProfile = await this.prisma.userProfiles.findUnique({
       where: { userId: userId },
     });
+    const profile = userProfile ? getBehavior(userProfile) : null;
     const summary = await this.foodService.getTodaySummary(userId);
 
     // 场景1：高风险暴食时段
@@ -367,18 +363,15 @@ export class BehaviorService {
     // ── 替换模式分析 ──
     const replacementPatterns = await this.analyzeReplacementPatterns(userId);
 
-    await this.prisma.userBehaviorProfiles.update({
-      where: { userId: userId },
-      data: {
-        foodPreferences: updatedPrefs || foodPreferences,
-        bingeRiskHours: bingeRiskHours,
-        ...(mealTimingPatterns !== undefined
-          ? { mealTimingPatterns: mealTimingPatterns }
-          : {}),
-        ...(replacementPatterns !== undefined
-          ? { replacementPatterns: replacementPatterns }
-          : {}),
-      },
+    await updateBehavior(this.prisma, userId, {
+      foodPreferences: updatedPrefs || foodPreferences,
+      bingeRiskHours: bingeRiskHours,
+      ...(mealTimingPatterns !== undefined
+        ? { mealTimingPatterns: mealTimingPatterns }
+        : {}),
+      ...(replacementPatterns !== undefined
+        ? { replacementPatterns: replacementPatterns }
+        : {}),
     });
     this.logger.log(
       `用户 ${userId} 行为分析完成，常用食物 ${frequentFoods.length} 种，风险时段 ${bingeHours.length} 个`,

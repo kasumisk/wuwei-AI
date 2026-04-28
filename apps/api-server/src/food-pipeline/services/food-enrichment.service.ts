@@ -40,6 +40,7 @@ import {
   COOKING_METHODS_FIELD_DESC,
   ALL_COOKING_METHODS,
 } from '../../modules/food/cooking-method.constants';
+import { upsertFoodSplitTables } from '../../modules/food/food-split.helper';
 
 // ─── 可补全字段定义（foods 主表）───────────────────────────────────────────
 
@@ -3037,7 +3038,7 @@ ${jsonSchema}`;
 名称: ${food.name}
 别名: ${food.aliases ?? '无'}
 分类: ${food.category}
-标准份量: ${food.standardServingDesc ?? `${food.standardServingG}g`}
+标准份量: ${(food as any).portionGuide?.standardServingDesc ?? `${(food as any).portionGuide?.standardServingG ?? ''}g`}
 
 请将以下字段翻译成${localeNames[locale] ?? locale}（locale: ${locale}）：
 ${missingTransFields.map((f) => `- ${f}`).join('\n')}
@@ -3202,6 +3203,9 @@ ${missingTransFields.map((f) => `- ${f}`).join('\n')}
           lastEnrichedAt: new Date(),
         },
       });
+
+      // ARB-2026-04: 同步写入拆分表
+      await upsertFoodSplitTables(tx, foodId, prismaUpdates);
 
       await tx.foodChangeLogs.create({
         data: {

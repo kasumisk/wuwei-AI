@@ -1,12 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { GoalType, GoalSpeed } from '../../../user.types';
-import {
-  UserInferredProfiles as UserInferredProfile,
-  UserBehaviorProfiles as UserBehaviorProfile,
-} from '@prisma/client';
 import { inferUserSegment } from '../segmentation.util';
 import { PrismaService } from '../../../../../core/prisma/prisma.service';
 import { I18nService } from '../../../../../core/i18n';
+import {
+  getInferred,
+  getBehavior,
+  updateInferred,
+  InferredData,
+} from '../../../user-profile-merge.helper';
 
 export interface GoalTransitionSuggestion {
   currentGoal: GoalType;
@@ -28,32 +30,30 @@ export class ProfileInferenceService {
   /**
    * 获取推断数据
    */
-  async getInferred(userId: string): Promise<UserInferredProfile | null> {
-    return this.prisma.userInferredProfiles.findUnique({
-      where: { userId: userId },
-    }) as any;
+  async getInferred(userId: string): Promise<InferredData | null> {
+    const profile = await this.prisma.userProfiles.findUnique({
+      where: { userId },
+    });
+    if (!profile) return null;
+    return getInferred(profile);
   }
 
   /**
    * 刷新推断数据（手动触发）
    */
-  async refreshInference(userId: string): Promise<UserInferredProfile | null> {
+  async refreshInference(userId: string): Promise<InferredData | null> {
     const profile = await this.prisma.userProfiles.findUnique({
-      where: { userId: userId },
+      where: { userId },
     });
     if (!profile) return null;
 
-    const behavior = await this.prisma.userBehaviorProfiles.findUnique({
-      where: { userId: userId },
-    });
-    let inferred = await this.prisma.userInferredProfiles.findUnique({
-      where: { userId: userId },
-    });
+    const behavior = getBehavior(profile);
+    const inferred = getInferred(profile);
 
     // 用户分段 — 统一使用 segmentation.util (V4 A4, V5 3.4 升级)
     const segBehavior:
       | import('../segmentation.util').SegmentBehaviorInput
-      | null = behavior
+      | null = Object.keys(behavior).length
       ? {
           avgComplianceRate:
             behavior.avgComplianceRate != null
@@ -67,16 +67,16 @@ export class ProfileInferenceService {
     const segResult = inferUserSegment(profile.goal as GoalType, segBehavior);
 
     const confidenceScores = {
-      ...((inferred?.confidenceScores as any) || {}),
+      ...((inferred.confidenceScores as any) || {}),
       userSegment: segResult.confidence,
     };
 
     // 最优餐次推断（基于行为数据）
-    let optimalMealCount = inferred?.optimalMealCount ?? null;
-    if (behavior?.mealTimingPatterns) {
-      const timingCount = Object.keys(
-        behavior.mealTimingPatterns as any,
-      ).filter((k) => (behavior.mealTimingPatterns as any)[k]).length;
+    let optimalMealCount = inferred.optimalMealCount ?? null;
+    if (behavior.mealTimingPatterns) {
+      const timingCount = Object.keys(behavior.mealTimingPatterns as any).filter(
+        (k) => (behavior.mealTimingPatterns as any)[k],
+      ).length;
       if (timingCount > 0) {
         optimalMealCount = timingCount;
         confidenceScores.optimalMealCount = Math.min(
@@ -89,7 +89,7 @@ export class ProfileInferenceService {
     // 目标进展
     // V5 3.1: goalProgress 现在主要由 profile-cron.service 基于 weight_history 计算
     // 此处仅做简易回退：当 cron 尚未计算（无 weight_history 数据）时，基于 profile 体重粗略估算
-    let goalProgress = (inferred?.goalProgress as any) || null;
+    let goalProgress = (inferred.goalProgress as any) || null;
     if (profile.targetWeightKg && profile.weightKg) {
       const startWeight = goalProgress?.startWeight || Number(profile.weightKg);
       const currentWeight = Number(profile.weightKg);
@@ -129,31 +129,17 @@ export class ProfileInferenceService {
 
     const now = new Date();
 
-    if (inferred) {
-      const updated = await this.prisma.userInferredProfiles.update({
-        where: { userId: userId },
-        data: {
-          userSegment: segResult.segment,
-          confidenceScores: confidenceScores,
-          optimalMealCount: optimalMealCount,
-          goalProgress: goalProgress,
-          lastComputedAt: now,
-        },
-      });
-      return updated as any;
-    } else {
-      const created = await this.prisma.userInferredProfiles.create({
-        data: {
-          userId: userId,
-          userSegment: segResult.segment,
-          confidenceScores: confidenceScores,
-          optimalMealCount: optimalMealCount,
-          goalProgress: goalProgress,
-          lastComputedAt: now,
-        },
-      });
-      return created as any;
-    }
+    const patch: InferredData = {
+      userSegment: segResult.segment,
+      confidenceScores,
+      optimalMealCount,
+      goalProgress,
+      lastComputedAt: now,
+    };
+
+    await updateInferred(this.prisma, userId, patch);
+
+    return { ...inferred, ...patch };
   }
 
   /**
@@ -163,13 +149,11 @@ export class ProfileInferenceService {
     userId: string,
   ): Promise<GoalTransitionSuggestion | null> {
     const profile = await this.prisma.userProfiles.findUnique({
-      where: { userId: userId },
+      where: { userId },
     });
     if (!profile) return null;
 
-    const inferred = await this.prisma.userInferredProfiles.findUnique({
-      where: { userId: userId },
-    });
+    const inferred = getInferred(profile);
 
     // fat_loss 达成
     if (
@@ -181,11 +165,11 @@ export class ProfileInferenceService {
         currentGoal: GoalType.FAT_LOSS,
         suggestedGoal: GoalType.HEALTH,
         reason: this.i18n.t('user.goal.reachedSwitchToMaintain'),
-        suggestedCalories: inferred?.estimatedTdee ?? undefined,
+        suggestedCalories: inferred.estimatedTdee ?? undefined,
       };
     }
 
-    const goalProgress = inferred?.goalProgress as any;
+    const goalProgress = inferred.goalProgress as any;
 
     // 长期停滞（进展缓慢）— V5: 'behind' 映射为 plateau 或 fluctuating
     if (
@@ -212,7 +196,7 @@ export class ProfileInferenceService {
         currentGoal: GoalType.MUSCLE_GAIN,
         suggestedGoal: GoalType.HEALTH,
         reason: this.i18n.t('user.goal.consolidateWithMaintain'),
-        suggestedCalories: inferred?.estimatedTdee ?? undefined,
+        suggestedCalories: inferred.estimatedTdee ?? undefined,
       };
     }
 

@@ -1,12 +1,13 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { config } from 'dotenv';
 import { SEED_FOODS } from './seed-foods.data';
+import { upsertFoodSplitTables } from '../../modules/food/food-split.helper';
 
 config();
 
 const prisma = new PrismaClient();
 
-/** 将 SeedFood 映射为 Prisma foods 表字段 */
+/** 将 SeedFood 映射为 Prisma foods 表字段（仅主表保留列） */
 function mapToData(
   food: (typeof SEED_FOODS)[number],
   code: string,
@@ -19,71 +20,25 @@ function mapToData(
     category: food.category,
     subCategory: food.subCategory,
     foodGroup: food.foodGroup,
-    // 宏量营养素
+    // 宏量营养素（主表保留）
     calories: food.calories,
     protein: food.protein,
     fat: food.fat,
     carbs: food.carbs,
     fiber: food.fiber,
     sugar: food.sugar,
-    saturatedFat: food.saturatedFat,
-    transFat: food.transFat,
-    cholesterol: food.cholesterol,
-    // 矿物质
-    sodium: food.sodium,
-    potassium: food.potassium,
-    calcium: food.calcium,
-    iron: food.iron,
-    zinc: food.zinc,
-    magnesium: food.magnesium,
-    // 维生素
-    vitaminA: food.vitaminA,
-    vitaminC: food.vitaminC,
-    vitaminD: food.vitaminD,
-    vitaminE: food.vitaminE,
-    vitaminB12: food.vitaminB12,
-    folate: food.folate,
-    // 健康指标
-    glycemicIndex: food.glycemicIndex,
-    glycemicLoad: food.glycemicLoad,
-    isProcessed: food.isProcessed ?? false,
-    isFried: food.isFried ?? false,
-    processingLevel: food.processingLevel ?? 1,
-    allergens: food.allergens ?? [],
-    // 评分
-    qualityScore: food.qualityScore,
-    satietyScore: food.satietyScore,
-    nutrientDensity: food.nutrientDensity,
-    // 行为
-    mealTypes: food.mealTypes ?? [],
-    tags: food.tags ?? [],
-    mainIngredient: food.mainIngredient,
-    compatibility: food.compatibility ?? {},
-    // 份量
-    standardServingG: food.standardServingG ?? 100,
-    standardServingDesc: food.standardServingDesc,
-    commonPortions: food.commonPortions ?? [],
     // 元数据
+    mainIngredient: food.mainIngredient,
     searchWeight: food.searchWeight ?? 100,
     primarySource: food.primarySource ?? 'official',
     confidence: food.confidence ?? 0.95,
     dataVersion: 1,
     isVerified: true,
     verifiedBy: 'seed-script',
-    // V7.3: 食物大众化
-    // V8.8 FIX: 不设默认值，保持 NULL 让 AI 补全判断真实形态
-    // 原 `?? 'ingredient'` 默认值会导致 applyEnrichment 因字段非 NULL 而跳过补全
     foodForm: food.foodForm ?? undefined,
     dishPriority: food.dishPriority ?? undefined,
-    // V7.4: 食物可获得性
     acquisitionDifficulty: food.acquisitionDifficulty ?? 3,
-    // V7.8 P2-J: 大众化评分（基于中国饮食调查数据校准）
     commonalityScore: food.commonalityScore ?? 50,
-    // V7.4 Phase 3-A: 精细化营养字段
-    omega3: food.omega3 ?? undefined,
-    omega6: food.omega6 ?? undefined,
-    solubleFiber: food.solubleFiber ?? undefined,
-    insolubleFiber: food.insolubleFiber ?? undefined,
   };
 }
 
@@ -112,11 +67,13 @@ async function seedFoods() {
         where: { id: existing.id },
         data: updateData,
       });
+      await upsertFoodSplitTables(prisma, existing.id, food as any);
       updated++;
     } else {
-      await prisma.food.create({
+      const created = await prisma.food.create({
         data: mapToData(food, code),
       });
+      await upsertFoodSplitTables(prisma, created.id, food as any);
       inserted++;
     }
   }

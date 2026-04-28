@@ -19,6 +19,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../../../core/prisma/prisma.service';
 import { RedisCacheService } from '../../../../../core/redis/redis-cache.service';
 import { GoalPhase, GoalType, CompoundGoal } from '../../../user.types';
+import { getBehavior } from '../../../user-profile-merge.helper';
 
 // ─── 常量 ───
 
@@ -312,14 +313,16 @@ export class GoalTrackerService {
    */
   private async getBehaviorProfile(userId: string) {
     try {
-      return await this.prisma.userBehaviorProfiles.findUnique({
+      const profile = await this.prisma.userProfiles.findUnique({
         where: { userId: userId },
-        select: {
-          streakDays: true,
-          longestStreak: true,
-          avgComplianceRate: true,
-        },
       });
+      if (!profile) return null;
+      const behavior = getBehavior(profile);
+      return {
+        streakDays: behavior.streakDays ?? 0,
+        longestStreak: behavior.longestStreak ?? 0,
+        avgComplianceRate: behavior.avgComplianceRate ?? 0,
+      };
     } catch (err) {
       this.logger.warn(
         `getBehaviorProfile failed for user ${userId}: ${(err as Error).message}`,

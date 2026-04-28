@@ -25,6 +25,7 @@ import {
   TieredCacheManager,
   TieredCacheNamespace,
 } from '../../../../../core/cache/tiered-cache-manager';
+import { getInferred } from '../../../../user/user-profile-merge.helper';
 
 /** 特性开关 key */
 const FF_LEARNED_RANKING = 'learned_ranking_enabled';
@@ -145,14 +146,16 @@ export class LearnedRankingService implements OnModuleInit {
    */
   private async getActiveSegments(): Promise<string[]> {
     try {
-      const segments = await this.prisma.userInferredProfiles.findMany({
-        select: { userSegment: true },
-        distinct: ['userSegment'],
-        where: { userSegment: { not: null } },
+      const profiles = await this.prisma.userProfiles.findMany({
+        select: { inferredData: true },
+        where: { inferredData: { not: undefined } },
       });
-      const dynamicSegments = segments
-        .map((s) => s.userSegment!)
-        .filter(Boolean);
+      const segmentSet = new Set<string>();
+      for (const p of profiles) {
+        const seg = getInferred(p).userSegment;
+        if (seg) segmentSet.add(seg);
+      }
+      const dynamicSegments = Array.from(segmentSet);
 
       if (dynamicSegments.length > 0) {
         this.logger.debug(

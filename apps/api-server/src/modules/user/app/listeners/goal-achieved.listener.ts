@@ -15,6 +15,10 @@ import {
   GoalAchievedEvent,
 } from '../../../../core/events/domain-events';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
+import {
+  getInferred,
+  updateInferred,
+} from '../../user-profile-merge.helper';
 
 @Injectable()
 export class GoalAchievedListener {
@@ -30,11 +34,12 @@ export class GoalAchievedListener {
       );
 
       // 更新推断画像中的成就记录
-      const inferred = await this.prisma.userInferredProfiles.findUnique({
+      const userProfile = await this.prisma.userProfiles.findUnique({
         where: { userId: event.userId },
       });
 
-      if (inferred) {
+      if (userProfile) {
+        const inferred = getInferred(userProfile);
         const achievements = ((inferred.confidenceScores as any)
           ?._achievements || []) as Array<{
           goalType: string;
@@ -51,16 +56,13 @@ export class GoalAchievedListener {
         // 只保留最近 50 条成就记录
         const recentAchievements = achievements.slice(-50);
 
-        await this.prisma.userInferredProfiles.update({
-          where: { userId: event.userId },
-          data: {
-            confidenceScores: {
-              ...((inferred.confidenceScores as any) || {}),
-              _achievements: recentAchievements,
-              _lastGoalAchievedAt: event.timestamp.toISOString(),
-            },
-            lastComputedAt: new Date(),
+        await updateInferred(this.prisma, event.userId, {
+          confidenceScores: {
+            ...((inferred.confidenceScores as any) || {}),
+            _achievements: recentAchievements,
+            _lastGoalAchievedAt: event.timestamp.toISOString(),
           },
+          lastComputedAt: new Date(),
         });
       }
     } catch (err) {

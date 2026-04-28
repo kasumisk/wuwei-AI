@@ -2,6 +2,10 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { MealType, RecordSource } from '../../../diet/diet.types';
 import { FoodService } from '../../../diet/app/services/food.service';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
+import {
+  upsertFoodSplitTables,
+  FOOD_SPLIT_INCLUDE,
+} from '../../food-split.helper';
 
 @Injectable()
 export class FoodLibraryService {
@@ -130,6 +134,7 @@ export class FoodLibraryService {
   async findById(id: string) {
     const food = await this.prisma.food.findUnique({
       where: { id },
+      include: FOOD_SPLIT_INCLUDE,
     });
     if (!food) {
       throw new NotFoundException(`未找到食物`);
@@ -203,7 +208,9 @@ export class FoodLibraryService {
           fat,
           carbs,
           glycemicIndex:
-            food.glycemicIndex != null ? Number(food.glycemicIndex) : undefined,
+            food.healthAssessment?.glycemicIndex != null
+              ? Number(food.healthAssessment.glycemicIndex)
+              : undefined,
         },
       ],
       totalCalories: calories,
@@ -254,7 +261,9 @@ export class FoodLibraryService {
    * 新增食物条目（管理员 / 后台用）
    */
   async create(data: any) {
-    return this.prisma.food.create({ data });
+    const food = await this.prisma.food.create({ data });
+    await upsertFoodSplitTables(this.prisma, food.id, data);
+    return food;
   }
 
   /**
@@ -262,10 +271,12 @@ export class FoodLibraryService {
    */
   async update(id: string, data: any) {
     await this.findById(id);
-    return this.prisma.food.update({
+    const food = await this.prisma.food.update({
       where: { id },
       data,
     });
+    await upsertFoodSplitTables(this.prisma, id, data);
+    return food;
   }
 
   /**
@@ -282,7 +293,12 @@ export class FoodLibraryService {
    * V6 优化: 按 category 分组使用 updateMany 替代逐条 update，减少 DB 往返
    */
   async enrichMissingFields(): Promise<{ updated: number }> {
-    const foods = await this.prisma.food.findMany();
+    const foods = await this.prisma.food.findMany({
+      include: {
+        healthAssessment: { select: { qualityScore: true, satietyScore: true, isProcessed: true, isFried: true } },
+        taxonomy: { select: { mealTypes: true } },
+      },
+    });
     let updated = 0;
 
     const categoryQuality: Record<string, number> = {
@@ -326,23 +342,26 @@ export class FoodLibraryService {
     const batchUpdates: Array<{ id: string; data: Record<string, any> }> = [];
 
     for (const food of foods) {
+      const ha = (food as any).healthAssessment;
+      const tx = (food as any).taxonomy;
       const changes: Record<string, any> = {};
 
-      if (!food.qualityScore) {
+      if (!ha?.qualityScore) {
         changes.qualityScore = categoryQuality[food.category] || 5;
       }
-      if (!food.satietyScore) {
+      if (!ha?.satietyScore) {
         changes.satietyScore = categorySatiety[food.category] || 4;
       }
-      if (!food.mealTypes || (food.mealTypes as string[]).length === 0) {
+      const mealTypes = tx?.mealTypes as string[] | null;
+      if (!mealTypes || mealTypes.length === 0) {
         changes.mealTypes = mealTypeMap[food.category] || ['lunch', 'dinner'];
       }
-      if (food.isProcessed === undefined || food.isProcessed === null) {
+      if (ha?.isProcessed === undefined || ha?.isProcessed === null) {
         changes.isProcessed =
           ['snack', 'composite'].includes(food.category) ||
           /加工|方便|速食|罐头|腌/.test(food.name);
       }
-      if (food.isFried === undefined || food.isFried === null) {
+      if (ha?.isFried === undefined || ha?.isFried === null) {
         changes.isFried = /炸|煎饺|油条|锅贴|油炸|煎饼/.test(food.name);
       }
 
@@ -351,15 +370,13 @@ export class FoodLibraryService {
       }
     }
 
-    // 使用 $transaction 批量写入（每批 200 条）
+    // 使用 $transaction 批量写入拆分表（每批 200 条）
     const TX_BATCH = 200;
     for (let i = 0; i < batchUpdates.length; i += TX_BATCH) {
       const chunk = batchUpdates.slice(i, i + TX_BATCH);
-      await this.prisma.$transaction(
-        chunk.map(({ id, data }) =>
-          this.prisma.food.update({ where: { id }, data }),
-        ),
-      );
+      for (const { id, data } of chunk) {
+        await upsertFoodSplitTables(this.prisma, id, data);
+      }
       updated += chunk.length;
     }
 

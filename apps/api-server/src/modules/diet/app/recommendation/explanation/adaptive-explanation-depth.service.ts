@@ -16,6 +16,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../../../core/prisma/prisma.service';
 import { RedisCacheService } from '../../../../../core/redis/redis-cache.service';
+import { getBehavior } from '../../../../user/user-profile-merge.helper';
 
 /** 用户互动意愿等级 */
 export type EngagementLevel = 'low' | 'medium' | 'high';
@@ -105,15 +106,10 @@ export class AdaptiveExplanationDepthService {
     userId: string,
   ): Promise<EngagementAssessment> {
     // 并行查询行为数据
-    const [behaviorProfile, recentRecordCount, lastRecordDate] =
+    const [userProfileRow, recentRecordCount, lastRecordDate] =
       await Promise.all([
-        this.prisma.userBehaviorProfiles.findUnique({
+        this.prisma.userProfiles.findUnique({
           where: { userId: userId },
-          select: {
-            avgComplianceRate: true,
-            streakDays: true,
-            totalRecords: true,
-          },
         }),
         // 最近 7 天的记录数
         this.prisma.foodRecords.count({
@@ -131,6 +127,8 @@ export class AdaptiveExplanationDepthService {
           select: { createdAt: true },
         }),
       ]);
+
+    const behaviorProfile = userProfileRow ? getBehavior(userProfileRow) : null;
 
     // 1. 记录频率评分 (0-1): 7天内每天2条以上 = 满分
     const avgDailyRecords = recentRecordCount / 7;

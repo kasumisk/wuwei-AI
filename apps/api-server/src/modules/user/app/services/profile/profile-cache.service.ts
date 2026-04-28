@@ -2,8 +2,6 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import {
   UserProfiles as UserProfile,
-  UserBehaviorProfiles as UserBehaviorProfile,
-  UserInferredProfiles as UserInferredProfile,
 } from '@prisma/client';
 import { RedisCacheService } from '../../../../../core/redis/redis-cache.service';
 import {
@@ -15,14 +13,20 @@ import {
   DomainEvents,
   ProfileUpdatedEvent,
 } from '../../../../../core/events/domain-events';
+import {
+  getBehavior,
+  getInferred,
+  BehaviorData,
+  InferredData,
+} from '../../../user-profile-merge.helper';
 
 /**
  * 三层画像聚合结果
  */
 export interface FullUserProfile {
   declared: UserProfile | null;
-  observed: UserBehaviorProfile | null;
-  inferred: UserInferredProfile | null;
+  observed: BehaviorData | null;
+  inferred: InferredData | null;
 }
 
 /**
@@ -70,19 +74,13 @@ export class ProfileCacheService implements OnModuleInit {
    * 从数据库并行加载三层画像
    */
   private async loadFromDB(userId: string): Promise<FullUserProfile> {
-    const [declared, observed, inferred] = await Promise.all([
-      this.prisma.userProfiles.findUnique({ where: { userId: userId } }),
-      this.prisma.userBehaviorProfiles.findUnique({
-        where: { userId: userId },
-      }),
-      this.prisma.userInferredProfiles.findUnique({
-        where: { userId: userId },
-      }),
-    ]);
+    const profile = await this.prisma.userProfiles.findUnique({
+      where: { userId: userId },
+    });
     return {
-      declared: declared as any,
-      observed: observed as any,
-      inferred: inferred as any,
+      declared: profile as any,
+      observed: profile ? getBehavior(profile) : null,
+      inferred: profile ? getInferred(profile) : null,
     };
   }
 
