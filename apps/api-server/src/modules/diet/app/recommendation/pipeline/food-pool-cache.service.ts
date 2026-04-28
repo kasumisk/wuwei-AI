@@ -44,6 +44,8 @@ const REFRESH_AHEAD_MS = 2 * 60 * 1000;
 /** L1 容量上限：20 条（10 个品类 + 余量） */
 const L1_MAX_ENTRIES = 20;
 
+// ARB-2026-04: food 上帝表已拆分，food-pool 查询通过 JOIN 4 张分表获取完整数据。
+// 此列表仅保留 foods 主表中仍存在的列；分表字段在 buildFoodPoolSQL() 中通过 JOIN 引入。
 const FOOD_POOL_SELECTABLE_COLUMNS: string[] = [
   'id',
   'code',
@@ -60,38 +62,11 @@ const FOOD_POOL_SELECTABLE_COLUMNS: string[] = [
   'carbs',
   'fiber',
   'sugar',
-  'saturated_fat',
-  'trans_fat',
-  'cholesterol',
   'sodium',
   'potassium',
   'calcium',
   'iron',
-  'vitamin_a',
-  'vitamin_c',
-  'vitamin_d',
-  'vitamin_e',
-  'vitamin_b12',
-  'vitamin_b6',
-  'folate',
-  'zinc',
-  'magnesium',
-  'glycemic_index',
-  'glycemic_load',
-  'is_processed',
-  'is_fried',
-  'processing_level',
-  'allergens',
-  'quality_score',
-  'satiety_score',
-  'nutrient_density',
-  'meal_types',
-  'tags',
   'main_ingredient',
-  'compatibility',
-  'standard_serving_g',
-  'standard_serving_desc',
-  'common_portions',
   'primary_source',
   'primary_source_id',
   'data_version',
@@ -103,20 +78,6 @@ const FOOD_POOL_SELECTABLE_COLUMNS: string[] = [
   'popularity',
   'created_at',
   'updated_at',
-  // V5 4.6: 嵌入扩展字段（用于 96 维嵌入生成 + 可解释性）
-  'cuisine',
-  'flavor_profile',
-  'prep_time_minutes',
-  'cook_time_minutes',
-  'skill_required',
-  'estimated_cost_level',
-  'shelf_life_days',
-  // V7.5 P1-C: 含水量百分比
-  'water_content_percent',
-  'fodmap_level',
-  'oxalate_level',
-  // V6.4 Phase 3.3: 可获取渠道
-  'available_channels',
   // V6.5: 大众化评分
   'commonality_score',
   // V7.3 Phase 1-A: 食物大众化扩展
@@ -124,13 +85,9 @@ const FOOD_POOL_SELECTABLE_COLUMNS: string[] = [
   'dish_priority',
   // V7.4 Phase 1-B: 食物可获得性
   'acquisition_difficulty',
-  // V7.4 Phase 3-A: 精细化营养字段
-  'omega3',
-  'omega6',
-  'soluble_fiber',
-  'insoluble_fiber',
-  // #fix Bug9: 痛风嘌呤惩罚需要 purine 数据
-  'purine',
+  // image
+  'image_url',
+  'thumbnail_url',
 ];
 
 // ==================== Raw row → FoodLibrary 映射 ====================
@@ -365,7 +322,6 @@ export class FoodPoolCacheService implements OnModuleInit {
   /** V6 1.7: 统一缓存 namespace，key = 品类名 */
   private cache: TieredCacheNamespace<FoodLibrary[]>;
 
-  private selectableColumnsPromise: Promise<string[]> | null = null;
   /** V5 2.7: 品类微量营养素均值缓存（与食物池同步刷新） */
   private categoryMicroAverages: Map<string, MicroNutrientDefaults> | null =
     null;
@@ -444,19 +400,59 @@ export class FoodPoolCacheService implements OnModuleInit {
   }
 
   /**
+   * ARB-2026-04: food 上帝表已拆分为 5 张子表。
+   * 构建带 LEFT JOIN 的食物池查询 SQL，将主表 + 4 张分表数据合并为单行。
+   * 主表列前缀 f.，分表列通过 COALESCE 提供默认值。
+   */
+  private buildFoodPoolSQL(whereClause: string): string {
+    const mainCols = FOOD_POOL_SELECTABLE_COLUMNS.map((c) => `f.${c}`).join(
+      ', ',
+    );
+    return `
+      SELECT
+        ${mainCols},
+        -- food_nutrition_details
+        fnd.vitamin_a, fnd.vitamin_c, fnd.vitamin_d, fnd.vitamin_e,
+        fnd.vitamin_b6, fnd.vitamin_b12, fnd.folate, fnd.zinc,
+        fnd.magnesium, fnd.phosphorus, fnd.purine, fnd.cholesterol,
+        fnd.saturated_fat, fnd.trans_fat, fnd.omega3, fnd.omega6,
+        fnd.added_sugar, fnd.natural_sugar, fnd.soluble_fiber, fnd.insoluble_fiber,
+        -- food_health_assessments
+        fha.glycemic_index, fha.glycemic_load,
+        fha.is_processed, fha.is_fried, fha.processing_level,
+        fha.fodmap_level, fha.oxalate_level,
+        fha.quality_score, fha.satiety_score, fha.nutrient_density,
+        -- food_taxonomies
+        ftx.meal_types, ftx.tags, ftx.allergens, ftx.compatibility,
+        ftx.available_channels, ftx.flavor_profile, ftx.texture_tags,
+        ftx.cuisine, ftx.dish_type,
+        -- food_portion_guides
+        COALESCE(fpg.standard_serving_g, 100)  AS standard_serving_g,
+        fpg.standard_serving_desc,
+        COALESCE(fpg.common_portions, '[]'::jsonb) AS common_portions,
+        COALESCE(fpg.cooking_methods, ARRAY[]::TEXT[]) AS cooking_methods,
+        COALESCE(fpg.required_equipment, ARRAY[]::TEXT[]) AS required_equipment,
+        fpg.prep_time_minutes, fpg.cook_time_minutes,
+        fpg.skill_required, fpg.serving_temperature,
+        fpg.estimated_cost_level, fpg.shelf_life_days, fpg.water_content_percent
+      FROM foods f
+      LEFT JOIN food_nutrition_details  fnd ON fnd.food_id = f.id
+      LEFT JOIN food_health_assessments fha ON fha.food_id = f.id
+      LEFT JOIN food_taxonomies         ftx ON ftx.food_id = f.id
+      LEFT JOIN food_portion_guides     fpg ON fpg.food_id = f.id
+      ${whereClause}
+    `;
+  }
+
+  /**
    * V5 4.3: 从数据库加载指定品类的已验证食物
-   * #12 fix: 原始 SQL 行（snake_case + Decimal 字符串）→ FoodLibrary（camelCase + number）
+   * ARB-2026-04: 改为 JOIN 4 张分表获取完整字段。
    */
   private async loadCategoryFromDB(category: string): Promise<FoodLibrary[]> {
-    const selectColumns = await this.getSelectableColumns();
-    const columnList = selectColumns.join(', ');
-    const rows: any[] = await this.prisma.$queryRawUnsafe(
-      `SELECT ${columnList}
-       FROM foods
-       WHERE is_verified = true
-         AND category = $1`,
-      category,
+    const sql = this.buildFoodPoolSQL(
+      'WHERE f.is_verified = true AND f.category = $1',
     );
+    const rows: any[] = await this.prisma.$queryRawUnsafe(sql, category);
 
     this.logger.debug(
       `Food pool shard [${category}] loaded from DB: ${rows.length} foods`,
@@ -468,50 +464,9 @@ export class FoodPoolCacheService implements OnModuleInit {
     return rows.map((row) => mapRowToFoodLibrary(normalizeRow(row)));
   }
 
-  private async getSelectableColumns(): Promise<string[]> {
-    if (!this.selectableColumnsPromise) {
-      this.selectableColumnsPromise = this.loadSelectableColumns();
-    }
-
-    return this.selectableColumnsPromise;
-  }
-
-  private async loadSelectableColumns(): Promise<string[]> {
-    const existingColumns: Array<{ column_name: string }> =
-      await this.prisma.$queryRawUnsafe(
-        `SELECT column_name
-         FROM information_schema.columns
-         WHERE table_schema = current_schema()
-           AND table_name = $1`,
-        'foods',
-      );
-
-    const existingColumnNames = new Set(
-      existingColumns.map((column) => column.column_name),
-    );
-    const missingColumnNames: string[] = [];
-
-    const selectableColumns = FOOD_POOL_SELECTABLE_COLUMNS.filter(
-      (columnName) => {
-        if (!existingColumnNames.has(columnName)) {
-          missingColumnNames.push(columnName);
-          return false;
-        }
-        return true;
-      },
-    );
-
-    if (missingColumnNames.length > 0) {
-      this.logger.warn(
-        `Food pool query skipped missing columns: ${missingColumnNames.join(', ')}`,
-      );
-    }
-
-    if (selectableColumns.length === 0) {
-      throw new Error('No selectable columns available for foods table');
-    }
-
-    return selectableColumns;
+  /** @deprecated ARB-2026-04 后列过滤逻辑已由 buildFoodPoolSQL JOIN 替代，保留以防其他调用方引用 */
+  private getSelectableColumns(): Promise<string[]> {
+    return Promise.resolve(FOOD_POOL_SELECTABLE_COLUMNS);
   }
 
   /**
@@ -519,7 +474,6 @@ export class FoodPoolCacheService implements OnModuleInit {
    * V6 1.7: 委托 TieredCacheNamespace 双清 L1 + L2
    */
   invalidate(): void {
-    this.selectableColumnsPromise = null;
     this.categoryMicroAverages = null;
     this.cache.invalidateAll().catch(() => {
       /* non-critical */
