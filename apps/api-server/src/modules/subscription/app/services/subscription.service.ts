@@ -720,4 +720,12 @@ export class SubscriptionService implements OnModuleInit {
   private async invalidateUserCache(userId: string): Promise<void> {
     await this.cache.invalidate(userId);
   }
+
+  /**
+   * 对外暴露的用户订阅摘要缓存失效入口。
+   * 用于 webhook / reconcile 等外部同步流程在直接更新 subscription 表后刷新缓存。
+   */
+  async invalidateUserSummaryCache(userId: string): Promise<void> {
+    await this.invalidateUserCache(userId);
+  }
 }

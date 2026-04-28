@@ -24,15 +24,22 @@ import {
   GetSubscriptionsQueryDto,
   ExtendSubscriptionDto,
   ChangeSubscriptionPlanDto,
+  SubscriptionResyncDto,
   GetPaymentRecordsQueryDto,
   GetUsageQuotasQueryDto,
   GetTriggerStatsQueryDto,
+  GetSubscriptionTimelineQueryDto,
+  GetSubscriptionAnomaliesQueryDto,
 } from './dto/subscription-management.dto';
 import { PrismaService } from '../../../core/prisma/prisma.service';
+import { RevenueCatSyncService } from '../app/services/revenuecat-sync.service';
 
 @Injectable()
 export class SubscriptionManagementService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly revenueCatSyncService: RevenueCatSyncService,
+  ) {}
 
   // ==================== 订阅计划管理 ====================
 
@@ -98,6 +105,7 @@ export class SubscriptionManagementService {
         currency: dto.currency ?? 'CNY',
         entitlements: dto.entitlements as any,
         appleProductId: dto.appleProductId ?? null,
+        googleProductId: dto.googleProductId ?? null,
         wechatProductId: dto.wechatProductId ?? null,
         sortOrder: dto.sortOrder ?? 0,
       },
@@ -129,6 +137,8 @@ export class SubscriptionManagementService {
       updateData.entitlements = dto.entitlements;
     if (dto.appleProductId !== undefined)
       updateData.appleProductId = dto.appleProductId;
+    if (dto.googleProductId !== undefined)
+      updateData.googleProductId = dto.googleProductId;
     if (dto.wechatProductId !== undefined)
       updateData.wechatProductId = dto.wechatProductId;
     if (dto.sortOrder !== undefined) updateData.sortOrder = dto.sortOrder;
@@ -151,10 +161,14 @@ export class SubscriptionManagementService {
       pageSize = 10,
       userId,
       status,
+      tier,
       paymentChannel,
       planId,
       startDate,
       endDate,
+      keyword,
+      platformSubscriptionId,
+      productId,
     } = query;
 
     const where: any = {};
@@ -164,16 +178,129 @@ export class SubscriptionManagementService {
     if (status) {
       where.status = status;
     }
+    if (tier) {
+      where.subscriptionPlan = {
+        is: { tier },
+      };
+    }
     if (paymentChannel) {
       where.paymentChannel = paymentChannel;
     }
     if (planId) {
       where.planId = planId;
     }
+    if (platformSubscriptionId?.trim()) {
+      where.platformSubscriptionId = {
+        contains: platformSubscriptionId.trim(),
+        mode: 'insensitive',
+      };
+    }
     if (startDate || endDate) {
       where.createdAt = {};
       if (startDate) where.createdAt.gte = startDate;
       if (endDate) where.createdAt.lte = endDate;
+    }
+
+    const normalizedKeyword = keyword?.trim();
+    if (normalizedKeyword) {
+      const matchedUsers = await this.prisma.appUsers.findMany({
+        where: {
+          OR: [
+            { id: normalizedKeyword.match(/^[0-9a-f-]{36}$/i) ? normalizedKeyword : undefined },
+            { nickname: { contains: normalizedKeyword, mode: 'insensitive' } },
+            { email: { contains: normalizedKeyword, mode: 'insensitive' } },
+          ],
+        },
+        select: { id: true },
+        take: 100,
+      });
+
+      const matchedUserIds = matchedUsers.map((user) => user.id);
+      if (normalizedKeyword.match(/^[0-9a-f-]{36}$/i)) {
+        matchedUserIds.push(normalizedKeyword);
+      }
+
+      const uniqueUserIds = [...new Set(matchedUserIds)];
+      if (uniqueUserIds.length === 0) {
+        return {
+          list: [],
+          total: 0,
+          page,
+          pageSize,
+          totalPages: 0,
+        };
+      }
+
+      where.userId = where.userId
+        ? { in: uniqueUserIds.filter((id) => id === where.userId) }
+        : { in: uniqueUserIds };
+    }
+
+    const normalizedProductId = productId?.trim();
+    if (normalizedProductId) {
+      const [matchedPlans, matchedTransactions, matchedWebhookUsers] = await Promise.all([
+        this.prisma.subscriptionPlan.findMany({
+          where: {
+            OR: [
+              { appleProductId: { contains: normalizedProductId, mode: 'insensitive' } },
+              { googleProductId: { contains: normalizedProductId, mode: 'insensitive' } },
+              { wechatProductId: { contains: normalizedProductId, mode: 'insensitive' } },
+            ],
+          },
+          select: { id: true },
+        }),
+        this.prisma.subscriptionTransactions.findMany({
+          where: {
+            storeProductId: { contains: normalizedProductId, mode: 'insensitive' },
+          },
+          select: { subscriptionId: true },
+          take: 100,
+        }),
+        this.prisma.billingWebhookEvents.findMany({
+          where: {
+            productId: { contains: normalizedProductId, mode: 'insensitive' },
+          },
+          select: { appUserId: true },
+          take: 100,
+        }),
+      ]);
+
+      const matchedPlanIds = matchedPlans.map((item) => item.id);
+      const matchedSubscriptionIds = matchedTransactions
+        .map((item) => item.subscriptionId)
+        .filter((value): value is string => !!value);
+      const matchedWebhookUserIds = matchedWebhookUsers
+        .map((item) => item.appUserId)
+        .filter((value): value is string => this.isUuid(value));
+
+      if (
+        matchedPlanIds.length === 0 &&
+        matchedSubscriptionIds.length === 0 &&
+        matchedWebhookUserIds.length === 0
+      ) {
+        return {
+          list: [],
+          total: 0,
+          page,
+          pageSize,
+          totalPages: 0,
+        };
+      }
+
+      where.AND = [
+        ...(where.AND ?? []),
+        {
+          OR: [
+            ...(matchedPlanIds.length ? [{ planId: { in: matchedPlanIds } }] : []),
+            ...(matchedSubscriptionIds.length
+              ? [{ id: { in: [...new Set(matchedSubscriptionIds)] } }]
+              : []),
+            ...(matchedWebhookUserIds.length
+              ? [{ userId: { in: [...new Set(matchedWebhookUserIds)] } }]
+              : []),
+          ],
+        },
+      ];
     }
 
     const skip = (page - 1) * pageSize;
@@ -199,12 +326,91 @@ export class SubscriptionManagementService {
           })
         : [];
 
+    const subscriptionIds = rawList.map((item) => item.id);
+    const [latestAudits, latestTransactions, latestWebhookEvents] = await Promise.all([
+      this.prisma.subscriptionAuditLogs.findMany({
+        where: {
+          OR: [{ subscriptionId: { in: subscriptionIds } }, { userId: { in: userIds } }],
+        },
+        orderBy: { createdAt: 'desc' },
+        take: Math.max(subscriptionIds.length * 4, 20),
+      }),
+      this.prisma.subscriptionTransactions.findMany({
+        where: {
+          OR: [{ subscriptionId: { in: subscriptionIds } }, { userId: { in: userIds } }],
+        },
+        orderBy: { createdAt: 'desc' },
+        take: Math.max(subscriptionIds.length * 4, 20),
+      }),
+      this.prisma.billingWebhookEvents.findMany({
+        where: { appUserId: { in: userIds } },
+        orderBy: { receivedAt: 'desc' },
+        take: Math.max(subscriptionIds.length * 6, 30),
+      }),
+    ]);
+
     const userMap = new Map(users.map((u) => [u.id, u]));
+    const auditBySubscriptionId = new Map<string, (typeof latestAudits)[number]>();
+    const auditByUserId = new Map<string, (typeof latestAudits)[number]>();
+    const transactionBySubscriptionId = new Map<string, (typeof latestTransactions)[number]>();
+    const transactionByUserId = new Map<string, (typeof latestTransactions)[number]>();
+    const webhookByUserId = new Map<string, (typeof latestWebhookEvents)[number]>();
+    const failedWebhookByUserId = new Map<string, (typeof latestWebhookEvents)[number]>();
+
+    for (const item of latestAudits) {
+      if (item.subscriptionId && !auditBySubscriptionId.has(item.subscriptionId)) {
+        auditBySubscriptionId.set(item.subscriptionId, item);
+      }
+      if (item.userId && !auditByUserId.has(item.userId)) {
+        auditByUserId.set(item.userId, item);
+      }
+    }
+    for (const item of latestTransactions) {
+      if (item.subscriptionId && !transactionBySubscriptionId.has(item.subscriptionId)) {
+        transactionBySubscriptionId.set(item.subscriptionId, item);
+      }
+      if (item.userId && !transactionByUserId.has(item.userId)) {
+        transactionByUserId.set(item.userId, item);
+      }
+    }
+    for (const item of latestWebhookEvents) {
+      if (this.isUuid(item.appUserId) && !webhookByUserId.has(item.appUserId!)) {
+        webhookByUserId.set(item.appUserId!, item);
+      }
+      if (
+        this.isUuid(item.appUserId) &&
+        item.processingStatus === 'failed' &&
+        !failedWebhookByUserId.has(item.appUserId!)
+      ) {
+        failedWebhookByUserId.set(item.appUserId!, item);
+      }
+    }
 
     const list = rawList.map((sub) => ({
       ...sub,
       plan: sub.subscriptionPlan,
       user: userMap.get(sub.userId) ?? null,
+      lastSyncedAt:
+        auditBySubscriptionId.get(sub.id)?.createdAt ??
+        auditByUserId.get(sub.userId)?.createdAt ??
+        webhookByUserId.get(sub.userId)?.processedAt ??
+        webhookByUserId.get(sub.userId)?.receivedAt ??
+        null,
+      lastSyncSource:
+        auditBySubscriptionId.get(sub.id)?.actorType ??
+        auditByUserId.get(sub.userId)?.actorType ??
+        (webhookByUserId.get(sub.userId) ? 'webhook' : null),
+      lastSyncStatus: failedWebhookByUserId.has(sub.userId)
+        ? 'failed'
+        : auditBySubscriptionId.get(sub.id) || auditByUserId.get(sub.userId) || webhookByUserId.get(sub.userId)
+          ? 'ok'
+          : 'unknown',
+      lastWebhookStatus: webhookByUserId.get(sub.userId)?.processingStatus ?? null,
+      lastWebhookError: failedWebhookByUserId.get(sub.userId)?.lastError ?? null,
+      latestStoreProductId:
+        transactionBySubscriptionId.get(sub.id)?.storeProductId ??
+        transactionByUserId.get(sub.userId)?.storeProductId ??
+        null,
     }));
 
     return {
@@ -254,6 +460,81 @@ export class SubscriptionManagementService {
       paymentRecords,
       usageQuotas,
     };
+  }
+
+  async getSubscriptionTimeline(
+    id: string,
+    query: GetSubscriptionTimelineQueryDto,
+  ) {
+    const subscription = await this.prisma.subscription.findUnique({
+      where: { id },
+    });
+
+    if (!subscription) {
+      throw new NotFoundException(`订阅记录 #${id} 不存在`);
+    }
+
+    const limit = query.limit ?? 50;
+    const [audits, transactions, webhookEvents] = await Promise.all([
+      this.prisma.subscriptionAuditLogs.findMany({
+        where: {
+          OR: [{ subscriptionId: id }, { userId: subscription.userId }],
+        },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+      }),
+      this.prisma.subscriptionTransactions.findMany({
+        where: {
+          OR: [{ subscriptionId: id }, { userId: subscription.userId }],
+        },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+      }),
+      this.prisma.billingWebhookEvents.findMany({
+        where: { appUserId: subscription.userId },
+        orderBy: { receivedAt: 'desc' },
+        take: limit,
+      }),
+    ]);
+
+    return {
+      subscriptionId: id,
+      userId: subscription.userId,
+      audits,
+      transactions,
+      webhookEvents,
+    };
+  }
+
+  async resyncSubscription(id: string, dto: SubscriptionResyncDto) {
+    const subscription = await this.prisma.subscription.findUnique({
+      where: { id },
+    });
+
+    if (!subscription) {
+      throw new NotFoundException(`订阅记录 #${id} 不存在`);
+    }
+
+    const result = await this.revenueCatSyncService.triggerSyncForUser(
+      subscription.userId,
+      'client_trigger',
+    );
+
+    await this.prisma.subscriptionAuditLogs.create({
+      data: {
+        subscriptionId: subscription.id,
+        userId: subscription.userId,
+        actorType: 'admin',
+        actorId: 'manual-resync',
+        action: 'resync',
+        runtimeEnv: process.env.NODE_ENV || 'unknown',
+        beforeState: {},
+        afterState: {},
+        reason: dto.reason ?? 'Admin manual resync',
+      },
+    });
+
+    return result;
   }
 
   /**
@@ -601,5 +882,172 @@ export class SubscriptionManagementService {
       byScene: enrichWithRate(byScene),
       byTier: enrichWithRate(byTier),
     };
+  }
+
+  async getSubscriptionAnomalies(query: GetSubscriptionAnomaliesQueryDto) {
+    const limit = query.limit ?? 20;
+
+    const [failedWebhooks, orphanTransactions, activeSubscriptions] = await Promise.all([
+      this.prisma.billingWebhookEvents.findMany({
+        where: {
+          provider: 'revenuecat',
+          processingStatus: 'failed',
+        },
+        orderBy: { receivedAt: 'desc' },
+        take: limit,
+      }),
+      this.prisma.subscriptionTransactions.findMany({
+        where: {
+          provider: 'revenuecat',
+          subscriptionId: null,
+        },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+      }),
+      this.prisma.subscription.findMany({
+        where: {
+          status: {
+            in: [
+              SubscriptionStatus.ACTIVE,
+              SubscriptionStatus.GRACE_PERIOD,
+              SubscriptionStatus.CANCELLED,
+            ],
+          },
+          paymentChannel: {
+            in: ['apple_iap', 'google_play'],
+          },
+        },
+        include: { subscriptionPlan: true },
+        orderBy: { updatedAt: 'desc' },
+        take: limit * 3,
+      }),
+    ]);
+
+    const planProductIds = new Set(
+      (
+        await this.prisma.subscriptionPlan.findMany({
+          select: { appleProductId: true, googleProductId: true, wechatProductId: true },
+        })
+      )
+        .flatMap((plan) => [plan.appleProductId, plan.googleProductId, plan.wechatProductId])
+        .filter((value): value is string => !!value),
+    );
+
+    const [unmappedWebhookCandidates, unmappedTransactionCandidates] = await Promise.all([
+      this.prisma.billingWebhookEvents.findMany({
+        where: {
+          provider: 'revenuecat',
+          productId: { not: null },
+        },
+        orderBy: { receivedAt: 'desc' },
+        take: limit * 10,
+      }),
+      this.prisma.subscriptionTransactions.findMany({
+        where: {
+          provider: 'revenuecat',
+          storeProductId: { not: null },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: limit * 10,
+      }),
+    ]);
+
+    const unmappedProducts = [
+      ...unmappedWebhookCandidates
+        .filter((item) => item.productId && !planProductIds.has(item.productId))
+        .map((item) => ({
+          source: 'webhook',
+          productId: item.productId,
+          userId: item.appUserId,
+          eventType: item.eventType,
+          happenedAt: item.receivedAt,
+        })),
+      ...unmappedTransactionCandidates
+        .filter((item) => item.storeProductId && !planProductIds.has(item.storeProductId))
+        .map((item) => ({
+          source: 'transaction',
+          productId: item.storeProductId,
+          userId: item.userId,
+          eventType: item.transactionType,
+          happenedAt: item.createdAt,
+        })),
+    ]
+      .filter(
+        (item, index, self) =>
+          self.findIndex((candidate) => `${candidate.source}:${candidate.productId}` === `${item.source}:${item.productId}`) ===
+          index,
+      )
+      .slice(0, limit);
+
+    const activeUserIds = [...new Set(activeSubscriptions.map((item) => item.userId))];
+    const activeSubscriptionIds = activeSubscriptions.map((item) => item.id);
+    const [signalWebhooks, signalTransactions, activeUsers] = await Promise.all([
+      this.prisma.billingWebhookEvents.findMany({
+        where: { appUserId: { in: activeUserIds } },
+        select: { appUserId: true },
+      }),
+      this.prisma.subscriptionTransactions.findMany({
+        where: {
+          OR: [{ subscriptionId: { in: activeSubscriptionIds } }, { userId: { in: activeUserIds } }],
+        },
+        select: { subscriptionId: true, userId: true },
+      }),
+      this.prisma.appUsers.findMany({
+        where: { id: { in: activeUserIds } },
+        select: { id: true, nickname: true, email: true },
+      }),
+    ]);
+
+    const webhookSignalUsers = new Set(
+      signalWebhooks
+        .map((item) => item.appUserId)
+        .filter((value): value is string => this.isUuid(value)),
+    );
+    const transactionSignalSubscriptions = new Set(
+      signalTransactions
+        .map((item) => item.subscriptionId)
+        .filter((value): value is string => !!value),
+    );
+    const transactionSignalUsers = new Set(
+      signalTransactions.map((item) => item.userId).filter((value): value is string => !!value),
+    );
+    const activeUserMap = new Map(activeUsers.map((item) => [item.id, item]));
+
+    const activeWithoutRevenueCatSignals = activeSubscriptions
+      .filter(
+        (item) =>
+          !webhookSignalUsers.has(item.userId) &&
+          !transactionSignalSubscriptions.has(item.id) &&
+          !transactionSignalUsers.has(item.userId),
+      )
+      .slice(0, limit)
+      .map((item) => ({
+        id: item.id,
+        userId: item.userId,
+        user: activeUserMap.get(item.userId) ?? null,
+        status: item.status,
+        paymentChannel: item.paymentChannel,
+        platformSubscriptionId: item.platformSubscriptionId,
+        expiresAt: item.expiresAt,
+        updatedAt: item.updatedAt,
+        plan: item.subscriptionPlan,
+      }));
+
+    return {
+      summary: {
+        failedWebhookCount: failedWebhooks.length,
+        orphanTransactionCount: orphanTransactions.length,
+        unmappedProductCount: unmappedProducts.length,
+        activeWithoutRevenueCatSignalCount: activeWithoutRevenueCatSignals.length,
+      },
+      failedWebhooks,
+      orphanTransactions,
+      unmappedProducts,
+      activeWithoutRevenueCatSignals,
+    };
+  }
+
+  private isUuid(value?: string | null): boolean {
+    return !!value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
   }
 }

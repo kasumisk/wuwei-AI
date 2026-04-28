@@ -38,6 +38,7 @@ export interface SubscriptionPlanDto {
   currency: string;
   entitlements: Record<string, unknown>;
   appleProductId?: string | null;
+  googleProductId?: string | null;
   wechatProductId?: string | null;
   sortOrder: number;
   isActive: boolean;
@@ -64,6 +65,14 @@ export interface SubscriptionDto {
   canceledAt?: string;
   cancelledAt?: string;
   platformSubscriptionId?: string | null;
+  lastSyncedAt?: string | null;
+  lastSyncSource?: string | null;
+  lastSyncStatus?: 'ok' | 'failed' | 'unknown';
+  lastWebhookStatus?: string | null;
+  lastWebhookError?: string | null;
+  latestStoreProductId?: string | null;
+  paymentRecords?: PaymentRecordDto[];
+  usageQuotas?: UsageQuotaItem[];
   createdAt: string;
   updatedAt: string;
 }
@@ -77,7 +86,11 @@ export interface PaymentRecordDto {
   currency: string;
   channel: PaymentChannel;
   status: string;
+  transactionId?: string | null;
   platformTransactionId?: string | null;
+  refundAmountCents?: number;
+  paidAt?: string | null;
+  refundedAt?: string | null;
   createdAt: string;
 }
 
@@ -88,6 +101,8 @@ export interface GetSubscriptionsQuery {
   tier?: SubscriptionTier | '';
   paymentChannel?: PaymentChannel | '';
   keyword?: string;
+  platformSubscriptionId?: string;
+  productId?: string;
 }
 
 export interface SubscriptionsListResponse {
@@ -123,6 +138,84 @@ export interface ChangeSubscriptionPlanDto {
   newPlanId: string;
 }
 
+export interface SubscriptionResyncDto {
+  reason?: string;
+}
+
+export interface SubscriptionTimelineQuery {
+  limit?: number;
+}
+
+export interface SubscriptionAuditLogDto {
+  id: string;
+  subscriptionId?: string | null;
+  userId?: string | null;
+  actorType: string;
+  actorId?: string | null;
+  action: string;
+  runtimeEnv: string;
+  beforeState: Record<string, unknown>;
+  afterState: Record<string, unknown>;
+  reason?: string | null;
+  createdAt: string;
+}
+
+export interface SubscriptionTransactionDto {
+  id: string;
+  subscriptionId?: string | null;
+  userId?: string | null;
+  provider: string;
+  providerEventId?: string | null;
+  transactionType: string;
+  store?: string | null;
+  environment?: string | null;
+  runtimeEnv: string;
+  storeProductId?: string | null;
+  transactionId?: string | null;
+  originalTransactionId?: string | null;
+  purchaseToken?: string | null;
+  purchasedAt?: string | null;
+  effectiveFrom?: string | null;
+  effectiveTo?: string | null;
+  amountCents?: number | null;
+  currency?: string | null;
+  status: string;
+  rawSnapshot: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface BillingWebhookEventDto {
+  id: string;
+  provider: string;
+  providerEventId: string;
+  eventType?: string | null;
+  appUserId?: string | null;
+  originalAppUserId?: string | null;
+  aliases: string[];
+  store?: string | null;
+  environment?: string | null;
+  runtimeEnv: string;
+  productId?: string | null;
+  entitlementIds: string[];
+  transactionId?: string | null;
+  originalTransactionId?: string | null;
+  eventTimestamp?: string | null;
+  receivedAt: string;
+  processingStatus: string;
+  retryCount: number;
+  lastError?: string | null;
+  processedAt?: string | null;
+  rawPayload: Record<string, unknown>;
+}
+
+export interface SubscriptionTimelineResponse {
+  subscriptionId: string;
+  userId: string;
+  audits: SubscriptionAuditLogDto[];
+  transactions: SubscriptionTransactionDto[];
+  webhookEvents: BillingWebhookEventDto[];
+}
+
 export interface SubscriptionOverview {
   totalSubscriptions: number;
   activeSubscriptions: number;
@@ -130,6 +223,45 @@ export interface SubscriptionOverview {
   byChannel: Record<PaymentChannel, number>;
   mrr: number;
   currency: string;
+}
+
+export interface SubscriptionAnomalySummary {
+  failedWebhookCount: number;
+  orphanTransactionCount: number;
+  unmappedProductCount: number;
+  activeWithoutRevenueCatSignalCount: number;
+}
+
+export interface UnmappedProductAnomaly {
+  source: 'webhook' | 'transaction';
+  productId?: string | null;
+  userId?: string | null;
+  eventType?: string | null;
+  happenedAt: string;
+}
+
+export interface ActiveWithoutRevenueCatSignalItem {
+  id: string;
+  userId: string;
+  user?: {
+    id: string;
+    nickname?: string;
+    email?: string;
+  } | null;
+  status: string;
+  paymentChannel: PaymentChannel;
+  platformSubscriptionId?: string | null;
+  expiresAt: string;
+  updatedAt: string;
+  plan?: SubscriptionPlanDto;
+}
+
+export interface SubscriptionAnomaliesResponse {
+  summary: SubscriptionAnomalySummary;
+  failedWebhooks: BillingWebhookEventDto[];
+  orphanTransactions: SubscriptionTransactionDto[];
+  unmappedProducts: UnmappedProductAnomaly[];
+  activeWithoutRevenueCatSignals: ActiveWithoutRevenueCatSignalItem[];
 }
 
 export interface CreatePlanDto {
@@ -209,8 +341,11 @@ export const subscriptionQueryKeys = {
   planDetail: (id: string) => [..._all, 'plans', id] as const,
   list: (params?: GetSubscriptionsQuery) => [..._all, 'list', params] as const,
   detail: (id: string) => [..._all, 'detail', id] as const,
+  timeline: (id: string, params?: SubscriptionTimelineQuery) =>
+    [..._all, 'timeline', id, params] as const,
   payments: (params?: GetPaymentRecordsQuery) => [..._all, 'payments', params] as const,
   overview: [..._all, 'overview'] as const,
+  anomalies: (params?: { limit?: number }) => [..._all, 'anomalies', params] as const,
   userQuota: (userId: string) => [..._all, 'quota', userId] as const,
   usageQuotas: (userId: string, feature?: string) =>
     [..._all, 'usage-quotas', userId, feature] as const,
@@ -240,11 +375,23 @@ export const subscriptionApi = {
   getSubscriptionById: (id: string): Promise<SubscriptionDto> =>
     request.get(`${PATH.ADMIN.SUBSCRIPTIONS}/${id}`),
 
+  getSubscriptionTimeline: (
+    id: string,
+    params?: SubscriptionTimelineQuery
+  ): Promise<SubscriptionTimelineResponse> =>
+    request.get(`${PATH.ADMIN.SUBSCRIPTIONS}/${id}/timeline`, params),
+
+  getSubscriptionAnomalies: (params?: { limit?: number }): Promise<SubscriptionAnomaliesResponse> =>
+    request.get(`${PATH.ADMIN.SUBSCRIPTIONS}/anomalies`, params),
+
   extendSubscription: (id: string, data: ExtendSubscriptionDto): Promise<SubscriptionDto> =>
     request.put(`${PATH.ADMIN.SUBSCRIPTIONS}/${id}/extend`, data),
 
   changeSubscriptionPlan: (id: string, data: ChangeSubscriptionPlanDto): Promise<SubscriptionDto> =>
     request.put(`${PATH.ADMIN.SUBSCRIPTIONS}/${id}/change-plan`, data),
+
+  resyncSubscription: (id: string, data: SubscriptionResyncDto): Promise<unknown> =>
+    request.post(`${PATH.ADMIN.SUBSCRIPTIONS}/${id}/resync`, data),
 
   // --- Payment Records ---
   getPaymentRecords: (params?: GetPaymentRecordsQuery): Promise<PaymentRecordsListResponse> =>
@@ -342,6 +489,23 @@ export const useSubscriptionDetail = (
     ...options,
   });
 
+export const useSubscriptionTimeline = (
+  id: string,
+  params?: SubscriptionTimelineQuery,
+  enabled = true,
+  options?: Omit<
+    UseQueryOptions<SubscriptionTimelineResponse>,
+    'queryKey' | 'queryFn' | 'enabled'
+  >
+) =>
+  useQuery({
+    queryKey: subscriptionQueryKeys.timeline(id, params),
+    queryFn: () => subscriptionApi.getSubscriptionTimeline(id, params),
+    enabled: enabled && !!id,
+    staleTime: 60 * 1000,
+    ...options,
+  });
+
 export const useExtendSubscription = (
   options?: UseMutationOptions<SubscriptionDto, Error, { id: string; data: ExtendSubscriptionDto }>
 ) => {
@@ -374,6 +538,21 @@ export const useChangeSubscriptionPlan = (
   });
 };
 
+export const useResyncSubscription = (
+  options?: UseMutationOptions<unknown, Error, { id: string; data: SubscriptionResyncDto }>
+) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }) => subscriptionApi.resyncSubscription(id, data),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: subscriptionQueryKeys.detail(id) });
+      queryClient.invalidateQueries({ queryKey: subscriptionQueryKeys.timeline(id) });
+      queryClient.invalidateQueries({ queryKey: subscriptionQueryKeys.all });
+    },
+    ...options,
+  });
+};
+
 // Payments
 export const usePaymentRecords = (
   params?: GetPaymentRecordsQuery,
@@ -394,6 +573,17 @@ export const useSubscriptionOverview = (
     queryKey: subscriptionQueryKeys.overview,
     queryFn: () => subscriptionApi.getOverview(),
     staleTime: 5 * 60 * 1000,
+    ...options,
+  });
+
+export const useSubscriptionAnomalies = (
+  params?: { limit?: number },
+  options?: Omit<UseQueryOptions<SubscriptionAnomaliesResponse>, 'queryKey' | 'queryFn'>
+) =>
+  useQuery({
+    queryKey: subscriptionQueryKeys.anomalies(params),
+    queryFn: () => subscriptionApi.getSubscriptionAnomalies(params),
+    staleTime: 60 * 1000,
     ...options,
   });
 

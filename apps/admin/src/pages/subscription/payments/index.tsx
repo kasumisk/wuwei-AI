@@ -16,11 +16,13 @@ const channelConfig: Record<PaymentChannel, { color: string; text: string }> = {
   apple_iap: { color: 'geekblue', text: 'Apple IAP' },
   google_play: { color: 'green', text: 'Google Play' },
   wechat_pay: { color: 'lime', text: '微信支付' },
+  alipay: { color: 'gold', text: '支付宝' },
   manual: { color: 'default', text: '人工操作' },
 };
 
 const paymentStatusConfig: Record<string, { color: string; text: string }> = {
   succeeded: { color: 'success', text: '成功' },
+  success: { color: 'success', text: '成功' },
   pending: { color: 'processing', text: '处理中' },
   failed: { color: 'error', text: '失败' },
   refunded: { color: 'warning', text: '已退款' },
@@ -34,12 +36,14 @@ const PaymentRecordList: React.FC = () => {
   const columns: ProColumns<PaymentRecordDto>[] = [
     {
       title: '交易ID',
-      dataIndex: 'transactionId',
+      dataIndex: 'platformTransactionId',
       width: 200,
       ellipsis: true,
       render: (_: unknown, record: PaymentRecordDto) =>
-        record.transactionId ? (
-          <Tooltip title={record.transactionId}>{record.transactionId.slice(0, 16)}...</Tooltip>
+        record.platformTransactionId ? (
+          <Tooltip title={record.platformTransactionId}>
+            {record.platformTransactionId.slice(0, 16)}...
+          </Tooltip>
         ) : (
           <span style={{ color: '#bbb' }}>-</span>
         ),
@@ -67,7 +71,7 @@ const PaymentRecordList: React.FC = () => {
     },
     {
       title: '支付渠道',
-      dataIndex: 'paymentChannel',
+      dataIndex: 'channel',
       width: 120,
       valueType: 'select',
       valueEnum: {
@@ -75,11 +79,12 @@ const PaymentRecordList: React.FC = () => {
         apple_iap: { text: 'Apple IAP' },
         google_play: { text: 'Google Play' },
         wechat_pay: { text: '微信支付' },
+        alipay: { text: '支付宝' },
         manual: { text: '人工操作' },
       },
       render: (_: unknown, record: PaymentRecordDto) => {
-        const cfg = channelConfig[record.paymentChannel];
-        return cfg ? <Tag color={cfg.color}>{cfg.text}</Tag> : record.paymentChannel;
+        const cfg = channelConfig[record.channel];
+        return cfg ? <Tag color={cfg.color}>{cfg.text}</Tag> : record.channel;
       },
     },
     {
@@ -122,7 +127,7 @@ const PaymentRecordList: React.FC = () => {
               page: params.current,
               pageSize: params.pageSize,
               userId: params.userId || undefined,
-              paymentChannel: params.paymentChannel || undefined,
+              paymentChannel: params.channel || undefined,
             });
             return { data: list || [], total: total || 0, success: true };
           } catch {

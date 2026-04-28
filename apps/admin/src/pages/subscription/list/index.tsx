@@ -13,7 +13,6 @@ import {
   Modal,
   Form,
   InputNumber,
-  Input,
   Select,
 } from 'antd';
 import {
@@ -25,6 +24,7 @@ import {
   ClockCircleOutlined,
   SwapOutlined,
   PlusCircleOutlined,
+  WarningOutlined,
 } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
@@ -221,6 +221,30 @@ const SubscriptionList: React.FC = () => {
       },
     },
     {
+      title: '商品ID',
+      dataIndex: 'productId',
+      width: 180,
+      render: (_: unknown, record: SubscriptionDto) => (
+        <Tooltip title={record.latestStoreProductId || '-'}>
+          {record.latestStoreProductId
+            ? `${record.latestStoreProductId.slice(0, 24)}${record.latestStoreProductId.length > 24 ? '...' : ''}`
+            : '-'}
+        </Tooltip>
+      ),
+    },
+    {
+      title: '平台订阅ID',
+      dataIndex: 'platformSubscriptionId',
+      width: 180,
+      render: (_: unknown, record: SubscriptionDto) => (
+        <Tooltip title={record.platformSubscriptionId || '-'}>
+          {record.platformSubscriptionId
+            ? `${record.platformSubscriptionId.slice(0, 20)}${record.platformSubscriptionId.length > 20 ? '...' : ''}`
+            : '-'}
+        </Tooltip>
+      ),
+    },
+    {
       title: '自动续费',
       dataIndex: 'autoRenew',
       width: 90,
@@ -250,6 +274,53 @@ const SubscriptionList: React.FC = () => {
           </span>
         );
       },
+    },
+    {
+      title: '最近同步',
+      dataIndex: 'lastSyncedAt',
+      width: 180,
+      search: false,
+      render: (_: unknown, record: SubscriptionDto) => {
+        const color =
+          record.lastSyncStatus === 'failed'
+            ? 'error'
+            : record.lastSyncStatus === 'ok'
+              ? 'success'
+              : 'default';
+        return (
+          <Space direction="vertical" size={2}>
+            <Tag color={color}>{record.lastSyncStatus || 'unknown'}</Tag>
+            <span style={{ fontSize: 12, color: '#666' }}>
+              {record.lastSyncedAt
+                ? new Date(record.lastSyncedAt).toLocaleString('zh-CN')
+                : '-'}
+            </span>
+          </Space>
+        );
+      },
+    },
+    {
+      title: '同步来源',
+      dataIndex: 'lastSyncSource',
+      width: 110,
+      search: false,
+      render: (_: unknown, record: SubscriptionDto) => record.lastSyncSource || '-',
+    },
+    {
+      title: 'Webhook',
+      dataIndex: 'lastWebhookStatus',
+      width: 130,
+      search: false,
+      render: (_: unknown, record: SubscriptionDto) =>
+        record.lastWebhookStatus ? (
+          <Tooltip title={record.lastWebhookError || undefined}>
+            <Tag color={record.lastWebhookStatus === 'failed' ? 'error' : 'default'}>
+              {record.lastWebhookStatus}
+            </Tag>
+          </Tooltip>
+        ) : (
+          '-'
+        ),
     },
     {
       title: '操作',
@@ -393,7 +464,7 @@ const SubscriptionList: React.FC = () => {
           rowKey="id"
           headerTitle="订阅用户管理"
           columns={columns}
-          scroll={{ x: 1400 }}
+          scroll={{ x: 2100 }}
           request={async (params) => {
             try {
               const { list, total } = await subscriptionApi.getSubscriptions({
@@ -403,16 +474,25 @@ const SubscriptionList: React.FC = () => {
                 tier: params['plan,tier'] || params.tier || undefined,
                 paymentChannel: params.paymentChannel || undefined,
                 keyword: params.userId || undefined,
+                platformSubscriptionId: params.platformSubscriptionId || undefined,
+                productId: params.productId || undefined,
               });
               return { data: list || [], total: total || 0, success: true };
             } catch {
               return { data: [], total: 0, success: false };
             }
           }}
-          toolBarRender={() => [
-            <Button
-              key="refresh"
-              icon={<ReloadOutlined />}
+        toolBarRender={() => [
+          <Button
+            key="anomalies"
+            icon={<WarningOutlined />}
+            onClick={() => navigate('/subscription/anomalies')}
+          >
+            异常看板
+          </Button>,
+          <Button
+            key="refresh"
+            icon={<ReloadOutlined />}
               onClick={() => actionRef.current?.reload()}
             >
               刷新

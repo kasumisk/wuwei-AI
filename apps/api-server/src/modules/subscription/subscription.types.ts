@@ -45,6 +45,7 @@ export enum SubscriptionStatus {
 /** 支付渠道 */
 export enum PaymentChannel {
   APPLE_IAP = 'apple_iap',
+  GOOGLE_PLAY = 'google_play',
   WECHAT_PAY = 'wechat_pay',
   ALIPAY = 'alipay',
   /** 系统赠送 / 管理员操作 */

@@ -14,8 +14,8 @@
  * 用量配额（V6 2.14）:
  * - QuotaService: check/increment/reset + Cron 重置
  *
- * 支付集成（V6 2.15 + 2.16）:
- * - AppleIapService: Apple IAP 验证 + S2S 通知
+ * 支付集成（V6 2.16 + RC 主链）:
+ * - RevenueCat webhook + subscriber sync
  * - WechatPayService: 微信支付下单 + 通知处理 + 订单查询
  *
  * V6.1 新增:
@@ -31,8 +31,6 @@ import { QuotaGateService } from './app/services/quota-gate.service';
 import { ResultEntitlementService } from './app/services/result-entitlement.service';
 // V6.1: 付费墙触发策略
 import { PaywallTriggerService } from './app/services/paywall-trigger.service';
-import { AppleIapService } from './app/payment/apple-iap.service';
-import { AppleIapController } from './app/controllers/apple-iap.controller';
 import { WechatPayService } from './app/payment/wechat-pay.service';
 import { WechatPayController } from './app/controllers/wechat-pay.controller';
 // Phase 1: 订阅管理后台
@@ -40,20 +38,22 @@ import { SubscriptionManagementController } from './admin/subscription-managemen
 import { SubscriptionManagementService } from './admin/subscription-management.service';
 // App 端订阅计划查询
 import { SubscriptionPlansController } from './app/controllers/subscription-plans.controller';
+import { RevenueCatWebhookController } from './app/controllers/revenuecat-webhook.controller';
 // V6.2: 订阅变更事件监听器
 import { SubscriptionEventListener } from './app/listeners/subscription-event.listener';
 // V6.2: 付费墙分析事件监听器
 import { PaywallAnalyticsListener } from './app/listeners/paywall-analytics.listener';
 // 基于功能权益的访问门控
 import { FeatureGuard } from './app/guards/feature.guard';
+import { RevenueCatSyncService } from './app/services/revenuecat-sync.service';
 
 @Global()
 @Module({
   controllers: [
-    AppleIapController,
     WechatPayController,
     SubscriptionManagementController,
     SubscriptionPlansController,
+    RevenueCatWebhookController,
   ],
   providers: [
     PlanEntitlementResolver,
@@ -63,12 +63,12 @@ import { FeatureGuard } from './app/guards/feature.guard';
     QuotaGateService,
     ResultEntitlementService,
     PaywallTriggerService, // V6.1: 付费墙触发策略
-    AppleIapService,
     WechatPayService,
     SubscriptionManagementService, // Phase 1: 订阅管理后台
     SubscriptionEventListener, // V6.2: 订阅变更事件监听器
     PaywallAnalyticsListener, // V6.2: 付费墙分析监听器
     FeatureGuard, // 基于功能权益的访问门控
+    RevenueCatSyncService,
   ],
   exports: [
     PlanEntitlementResolver,
@@ -78,9 +78,9 @@ import { FeatureGuard } from './app/guards/feature.guard';
     QuotaGateService,
     ResultEntitlementService,
     PaywallTriggerService, // V6.1: 付费墙触发策略
-    AppleIapService,
     WechatPayService,
     FeatureGuard, // 基于功能权益的访问门控
+    RevenueCatSyncService,
   ],
 })
 export class SubscriptionModule {}

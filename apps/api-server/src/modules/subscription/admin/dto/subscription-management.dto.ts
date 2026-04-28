@@ -95,6 +95,11 @@ export class CreateSubscriptionPlanDto {
   @IsString()
   appleProductId?: string;
 
+  @ApiPropertyOptional({ description: 'Google Play 产品 ID' })
+  @IsOptional()
+  @IsString()
+  googleProductId?: string;
+
   @ApiPropertyOptional({ description: '微信支付商品 ID' })
   @IsOptional()
   @IsString()
@@ -153,6 +158,11 @@ export class UpdateSubscriptionPlanDto {
   @IsString()
   appleProductId?: string;
 
+  @ApiPropertyOptional({ description: 'Google Play 产品 ID' })
+  @IsOptional()
+  @IsString()
+  googleProductId?: string;
+
   @ApiPropertyOptional({ description: '微信支付商品 ID' })
   @IsOptional()
   @IsString()
@@ -202,10 +212,30 @@ export class GetSubscriptionsQueryDto {
   @IsEnum(SubscriptionStatus)
   status?: SubscriptionStatus;
 
+  @ApiPropertyOptional({ description: '订阅等级', enum: SubscriptionTier })
+  @IsOptional()
+  @IsEnum(SubscriptionTier)
+  tier?: SubscriptionTier;
+
   @ApiPropertyOptional({ description: '支付渠道', enum: PaymentChannel })
   @IsOptional()
   @IsEnum(PaymentChannel)
   paymentChannel?: PaymentChannel;
+
+  @ApiPropertyOptional({ description: '关键词（用户ID / 昵称 / 邮箱）' })
+  @IsOptional()
+  @IsString()
+  keyword?: string;
+
+  @ApiPropertyOptional({ description: '平台订阅 ID' })
+  @IsOptional()
+  @IsString()
+  platformSubscriptionId?: string;
+
+  @ApiPropertyOptional({ description: 'RevenueCat / Store 商品 ID' })
+  @IsOptional()
+  @IsString()
+  productId?: string;
 
   @ApiPropertyOptional({ description: '计划 ID' })
   @IsOptional()
@@ -241,6 +271,13 @@ export class ChangeSubscriptionPlanDto {
   @ApiProperty({ description: '新计划 ID' })
   @IsUUID()
   newPlanId: string;
+}
+
+export class SubscriptionResyncDto {
+  @ApiPropertyOptional({ description: '重同步原因说明' })
+  @IsOptional()
+  @IsString()
+  reason?: string;
 }
 
 // ==================== 支付记录 ====================
@@ -334,4 +371,24 @@ export class GetTriggerStatsQueryDto {
   @IsOptional()
   @IsString()
   triggerScene?: string;
+}
+
+export class GetSubscriptionTimelineQueryDto {
+  @ApiPropertyOptional({ description: '限制返回条数', default: 50 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  limit?: number = 50;
+}
+
+export class GetSubscriptionAnomaliesQueryDto {
+  @ApiPropertyOptional({ description: '每类异常返回条数', default: 20 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number = 20;
 }

@@ -10,22 +10,27 @@ import {
   Tabs,
   Modal,
   Form,
-  Input,
   InputNumber,
   Select,
   message,
+  Alert,
+  Timeline,
+  Table,
 } from 'antd';
 import {
   ArrowLeftOutlined,
   ClockCircleOutlined,
   SwapOutlined,
   CrownOutlined,
+  SyncOutlined,
 } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   useSubscriptionDetail,
+  useSubscriptionTimeline,
   useExtendSubscription,
   useChangeSubscriptionPlan,
+  useResyncSubscription,
   useSubscriptionPlans,
   type SubscriptionStatus,
   type SubscriptionTier,
@@ -54,6 +59,7 @@ const channelLabels: Record<PaymentChannel, string> = {
   apple_iap: 'Apple IAP',
   google_play: 'Google Play',
   wechat_pay: '微信支付',
+  alipay: '支付宝',
   manual: '人工操作',
 };
 
@@ -68,6 +74,11 @@ const SubscriptionDetail: React.FC = () => {
   const [changePlanForm] = Form.useForm();
 
   const { data: subscription, isLoading } = useSubscriptionDetail(id!, !!id);
+  const { data: timeline, isLoading: timelineLoading } = useSubscriptionTimeline(
+    id!,
+    { limit: 50 },
+    !!id,
+  );
   const { data: plans } = useSubscriptionPlans({ enabled: changePlanVisible });
 
   const extendMutation = useExtendSubscription({
@@ -86,6 +97,11 @@ const SubscriptionDetail: React.FC = () => {
       changePlanForm.resetFields();
     },
     onError: (err: any) => message.error(`变更失败: ${err.message}`),
+  });
+
+  const resyncMutation = useResyncSubscription({
+    onSuccess: () => message.success('已触发重同步'),
+    onError: (err: any) => message.error(`重同步失败: ${err.message}`),
   });
 
   if (isLoading) {
@@ -126,6 +142,18 @@ const SubscriptionDetail: React.FC = () => {
             </Typography.Title>
           </Space>
           <Space>
+            <Button
+              icon={<SyncOutlined />}
+              loading={resyncMutation.isPending}
+              onClick={() =>
+                resyncMutation.mutate({
+                  id: id!,
+                  data: { reason: 'Admin manual test resync' },
+                })
+              }
+            >
+              重同步
+            </Button>
             <Button
               icon={<ClockCircleOutlined />}
               onClick={() => setExtendVisible(true)}
@@ -215,6 +243,9 @@ const SubscriptionDetail: React.FC = () => {
                           Apple: {subscription.plan.appleProductId || '-'}
                         </Typography.Text>
                         <Typography.Text>
+                          Google: {subscription.plan.googleProductId || '-'}
+                        </Typography.Text>
+                        <Typography.Text>
                           WeChat: {subscription.plan.wechatProductId || '-'}
                         </Typography.Text>
                       </Space>
@@ -247,6 +278,223 @@ const SubscriptionDetail: React.FC = () => {
                 </pre>
               ) : (
                 <Typography.Text type="secondary">暂无权益数据</Typography.Text>
+              ),
+            },
+            {
+              key: 'payments',
+              label: `支付记录 (${subscription.paymentRecords?.length || 0})`,
+              children: subscription.paymentRecords?.length ? (
+                <Table
+                  rowKey="id"
+                  size="small"
+                  pagination={false}
+                  dataSource={subscription.paymentRecords}
+                  columns={[
+                    {
+                      title: '订单号',
+                      dataIndex: 'orderNo',
+                      width: 180,
+                    },
+                    {
+                      title: '渠道',
+                      dataIndex: 'channel',
+                      width: 120,
+                      render: (value: PaymentChannel) => channelLabels[value] || value,
+                    },
+                    {
+                      title: '金额',
+                      dataIndex: 'amountCents',
+                      width: 120,
+                      render: (value: number, record: any) =>
+                        `${record.currency || 'CNY'} ${(value / 100).toFixed(2)}`,
+                    },
+                    {
+                      title: '状态',
+                      dataIndex: 'status',
+                      width: 100,
+                      render: (value: string) => <Tag>{value}</Tag>,
+                    },
+                    {
+                      title: '平台流水号',
+                      dataIndex: 'platformTransactionId',
+                      ellipsis: true,
+                      render: (value?: string | null) => value || '-',
+                    },
+                    {
+                      title: '支付时间',
+                      dataIndex: 'paidAt',
+                      width: 180,
+                      render: (value?: string | null) =>
+                        value ? new Date(value).toLocaleString('zh-CN') : '-',
+                    },
+                  ]}
+                />
+              ) : (
+                <Typography.Text type="secondary">暂无支付记录</Typography.Text>
+              ),
+            },
+            {
+              key: 'quotas',
+              label: `用量配额 (${subscription.usageQuotas?.length || 0})`,
+              children: subscription.usageQuotas?.length ? (
+                <Table
+                  rowKey="id"
+                  size="small"
+                  pagination={false}
+                  dataSource={subscription.usageQuotas}
+                  columns={[
+                    {
+                      title: '功能',
+                      dataIndex: 'feature',
+                    },
+                    {
+                      title: '已用',
+                      dataIndex: 'used',
+                      width: 100,
+                    },
+                    {
+                      title: '额度',
+                      dataIndex: 'quotaLimit',
+                      width: 100,
+                      render: (value: number) => (value === 0 ? '无限制' : value),
+                    },
+                    {
+                      title: '周期',
+                      dataIndex: 'cycle',
+                      width: 100,
+                    },
+                    {
+                      title: '重置时间',
+                      dataIndex: 'resetAt',
+                      width: 180,
+                      render: (value?: string | null) =>
+                        value ? new Date(value).toLocaleString('zh-CN') : '-',
+                    },
+                  ]}
+                />
+              ) : (
+                <Typography.Text type="secondary">暂无用量配额数据</Typography.Text>
+              ),
+            },
+            {
+              key: 'timeline',
+              label: '时间线',
+              children: timelineLoading ? (
+                <Spin />
+              ) : timeline ? (
+                <Space direction="vertical" style={{ width: '100%' }} size={16}>
+                  <Alert
+                    type="info"
+                    showIcon
+                    message={`审计 ${timeline.audits.length} 条，交易 ${timeline.transactions.length} 条，Webhook ${timeline.webhookEvents.length} 条`}
+                  />
+                  <Timeline
+                    items={[
+                      ...timeline.audits.map((item) => ({
+                        color: 'blue',
+                        children: (
+                          <div>
+                            <Typography.Text strong>[Audit] {item.action}</Typography.Text>
+                            <div>{item.reason || '-'}</div>
+                            <details style={{ marginTop: 8 }}>
+                              <summary style={{ cursor: 'pointer', color: '#1677ff' }}>
+                                查看 before/after
+                              </summary>
+                              <pre
+                                style={{
+                                  background: '#f7f7f7',
+                                  padding: 12,
+                                  borderRadius: 6,
+                                  marginTop: 8,
+                                  fontSize: 12,
+                                  overflow: 'auto',
+                                }}
+                              >
+                                {JSON.stringify(
+                                  {
+                                    beforeState: item.beforeState,
+                                    afterState: item.afterState,
+                                  },
+                                  null,
+                                  2,
+                                )}
+                              </pre>
+                            </details>
+                            <Typography.Text type="secondary">
+                              {new Date(item.createdAt).toLocaleString('zh-CN')}
+                            </Typography.Text>
+                          </div>
+                        ),
+                      })),
+                      ...timeline.transactions.map((item) => ({
+                        color: 'green',
+                        children: (
+                          <div>
+                            <Typography.Text strong>[Txn] {item.transactionType}</Typography.Text>
+                            <div>
+                              {item.storeProductId || '-'} / {item.status}
+                            </div>
+                            <details style={{ marginTop: 8 }}>
+                              <summary style={{ cursor: 'pointer', color: '#1677ff' }}>
+                                查看快照
+                              </summary>
+                              <pre
+                                style={{
+                                  background: '#f7f7f7',
+                                  padding: 12,
+                                  borderRadius: 6,
+                                  marginTop: 8,
+                                  fontSize: 12,
+                                  overflow: 'auto',
+                                }}
+                              >
+                                {JSON.stringify(item.rawSnapshot, null, 2)}
+                              </pre>
+                            </details>
+                            <Typography.Text type="secondary">
+                              {new Date(item.createdAt).toLocaleString('zh-CN')}
+                            </Typography.Text>
+                          </div>
+                        ),
+                      })),
+                      ...timeline.webhookEvents.map((item) => ({
+                        color: item.processingStatus === 'failed' ? 'red' : 'gray',
+                        children: (
+                          <div>
+                            <Typography.Text strong>
+                              [Webhook] {item.eventType || 'unknown'}
+                            </Typography.Text>
+                            <div>
+                              {item.providerEventId} / {item.processingStatus}
+                            </div>
+                            <details style={{ marginTop: 8 }}>
+                              <summary style={{ cursor: 'pointer', color: '#1677ff' }}>
+                                查看 payload
+                              </summary>
+                              <pre
+                                style={{
+                                  background: '#f7f7f7',
+                                  padding: 12,
+                                  borderRadius: 6,
+                                  marginTop: 8,
+                                  fontSize: 12,
+                                  overflow: 'auto',
+                                }}
+                              >
+                                {JSON.stringify(item.rawPayload, null, 2)}
+                              </pre>
+                            </details>
+                            <Typography.Text type="secondary">
+                              {new Date(item.receivedAt).toLocaleString('zh-CN')}
+                            </Typography.Text>
+                          </div>
+                        ),
+                      })),
+                    ]}
+                  />
+                </Space>
+              ) : (
+                <Typography.Text type="secondary">暂无时间线数据</Typography.Text>
               ),
             },
           ]}

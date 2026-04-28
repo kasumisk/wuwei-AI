@@ -21,9 +21,12 @@ import {
   GetSubscriptionsQueryDto,
   ExtendSubscriptionDto,
   ChangeSubscriptionPlanDto,
+  SubscriptionResyncDto,
   GetPaymentRecordsQueryDto,
   GetUsageQuotasQueryDto,
   GetTriggerStatsQueryDto,
+  GetSubscriptionTimelineQueryDto,
+  GetSubscriptionAnomaliesQueryDto,
 } from './dto/subscription-management.dto';
 import { ApiResponse } from '../../../common/types/response.type';
 import { I18nService } from '../../../core/i18n/i18n.service';
@@ -174,6 +177,21 @@ export class SubscriptionManagementController {
     };
   }
 
+  @Get('anomalies')
+  @ApiOperation({ summary: '获取订阅异常看板' })
+  async getSubscriptionAnomalies(
+    @Query() query: GetSubscriptionAnomaliesQueryDto,
+  ): Promise<ApiResponse> {
+    const data =
+      await this.subscriptionManagementService.getSubscriptionAnomalies(query);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('subscription.controller.fetchSuccess'),
+      data,
+    };
+  }
+
   // ==================== 用户订阅管理 ====================
 
   @Get()
@@ -200,6 +218,42 @@ export class SubscriptionManagementController {
       success: true,
       code: HttpStatus.OK,
       message: this.i18n.t('subscription.controller.fetchSubsDetailSuccess'),
+      data,
+    };
+  }
+
+  @Get(':id/timeline')
+  @ApiOperation({ summary: '获取订阅时间线' })
+  async getSubscriptionTimeline(
+    @Param('id') id: string,
+    @Query() query: GetSubscriptionTimelineQueryDto,
+  ): Promise<ApiResponse> {
+    const data = await this.subscriptionManagementService.getSubscriptionTimeline(
+      id,
+      query,
+    );
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('subscription.controller.fetchSuccess'),
+      data,
+    };
+  }
+
+  @Post(':id/resync')
+  @ApiOperation({ summary: '手动触发订阅重同步' })
+  async resyncSubscription(
+    @Param('id') id: string,
+    @Body() dto: SubscriptionResyncDto,
+  ): Promise<ApiResponse> {
+    const data = await this.subscriptionManagementService.resyncSubscription(
+      id,
+      dto,
+    );
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('subscription.controller.fetchSuccess'),
       data,
     };
   }

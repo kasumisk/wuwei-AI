@@ -1676,6 +1676,141 @@ model Subscription {
   @@map("subscription")
 }
 
+/// 计费 Webhook 事件表 — 持久化外部订阅平台推送的原始事件，支持幂等、重试和审计
+model BillingWebhookEvents {
+  /// 主键 UUID
+  id                    String    @id(map: "PK_billing_webhook_events") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 事件来源提供商：revenuecat / apple / google
+  provider              String    @db.VarChar(32)
+  /// 提供商事件唯一 ID
+  providerEventId       String    @map("provider_event_id") @db.VarChar(128)
+  /// 事件类型
+  eventType             String?   @map("event_type") @db.VarChar(64)
+  /// RevenueCat / provider app user id
+  appUserId             String?   @map("app_user_id") @db.VarChar(128)
+  /// 原始 app user id
+  originalAppUserId     String?   @map("original_app_user_id") @db.VarChar(128)
+  /// alias 列表
+  aliases               Json      @default("[]")
+  /// Store 来源：app_store / play_store
+  store                 String?   @db.VarChar(32)
+  /// 运行环境：sandbox / production
+  environment           String?   @db.VarChar(16)
+  /// 运行时环境：dev / staging / production / review
+  runtimeEnv            String    @default("unknown") @map("runtime_env") @db.VarChar(32)
+  /// 商品 ID
+  productId             String?   @map("product_id") @db.VarChar(256)
+  /// entitlement id 列表
+  entitlementIds        Json      @default("[]") @map("entitlement_ids")
+  /// 当前交易 ID
+  transactionId         String?   @map("transaction_id") @db.VarChar(256)
+  /// 原始交易链 ID
+  originalTransactionId String?   @map("original_transaction_id") @db.VarChar(256)
+  /// 事件发生时间
+  eventTimestamp        DateTime? @map("event_timestamp") @db.Timestamptz(6)
+  /// 接收时间
+  receivedAt            DateTime  @default(now()) @map("received_at") @db.Timestamptz(6)
+  /// 处理状态：pending / processed / failed
+  processingStatus      String    @default("pending") @map("processing_status") @db.VarChar(32)
+  /// 重试次数
+  retryCount            Int       @default(0) @map("retry_count")
+  /// 最近一次错误
+  lastError             String?   @map("last_error")
+  /// 处理完成时间
+  processedAt           DateTime? @map("processed_at") @db.Timestamptz(6)
+  /// 原始事件载荷
+  rawPayload            Json      @map("raw_payload")
+
+  @@unique([provider, providerEventId], map: "uq_billing_webhook_provider_event")
+  @@index([appUserId, eventTimestamp(sort: Desc)], map: "idx_billing_webhook_app_user_time")
+  @@index([processingStatus, receivedAt], map: "idx_billing_webhook_status_received")
+  @@index([originalTransactionId], map: "idx_billing_webhook_original_txn")
+  @@map("billing_webhook_events")
+}
+
+/// 订阅交易历史表 — 保存订阅生命周期中的购买、续费、取消、退款、过期等交易级事件
+model SubscriptionTransactions {
+  /// 主键 UUID
+  id                    String    @id(map: "PK_subscription_transactions") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 关联的订阅 ID（可为空，兼容早期无法映射内部订阅时的落库）
+  subscriptionId        String?   @map("subscription_id") @db.Uuid
+  /// 关联的用户 ID
+  userId                String?   @map("user_id") @db.Uuid
+  /// 来源提供商
+  provider              String    @db.VarChar(32)
+  /// 触发本交易记录的 provider event id
+  providerEventId       String?   @map("provider_event_id") @db.VarChar(128)
+  /// 交易类型：initial_purchase / renewal / cancellation / refund / expiration / resync
+  transactionType       String    @map("transaction_type") @db.VarChar(32)
+  /// Store 来源
+  store                 String?   @db.VarChar(32)
+  /// 运行环境：sandbox / production
+  environment           String?   @db.VarChar(16)
+  /// 运行时环境：dev / staging / production / review
+  runtimeEnv            String    @default("unknown") @map("runtime_env") @db.VarChar(32)
+  /// Store 商品 ID
+  storeProductId        String?   @map("store_product_id") @db.VarChar(256)
+  /// 当前交易 ID
+  transactionId         String?   @map("transaction_id") @db.VarChar(256)
+  /// 原始交易链 ID
+  originalTransactionId String?   @map("original_transaction_id") @db.VarChar(256)
+  /// Google purchase token 或其他平台订阅 token
+  purchaseToken         String?   @map("purchase_token") @db.VarChar(512)
+  /// 购买时间
+  purchasedAt           DateTime? @map("purchased_at") @db.Timestamptz(6)
+  /// 生效开始时间
+  effectiveFrom         DateTime? @map("effective_from") @db.Timestamptz(6)
+  /// 生效结束时间
+  effectiveTo           DateTime? @map("effective_to") @db.Timestamptz(6)
+  /// 金额（分）
+  amountCents           Int?      @map("amount_cents")
+  /// 货币代码
+  currency              String?   @db.VarChar(8)
+  /// 交易状态：success / refunded / expired / cancelled
+  status                String    @default("success") @db.VarChar(32)
+  /// 同步时抓取的原始快照片段
+  rawSnapshot           Json      @default("{}") @map("raw_snapshot")
+  /// 创建时间
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([subscriptionId, createdAt(sort: Desc)], map: "idx_subscription_txn_subscription_time")
+  @@index([userId, createdAt(sort: Desc)], map: "idx_subscription_txn_user_time")
+  @@index([transactionId], map: "idx_subscription_txn_transaction_id")
+  @@index([originalTransactionId], map: "idx_subscription_txn_original_transaction_id")
+  @@map("subscription_transactions")
+}
+
+/// 订阅审计日志表 — 记录系统、Webhook、Cron、管理员触发的订阅状态变化前后快照
+model SubscriptionAuditLogs {
+  /// 主键 UUID
+  id           String   @id(map: "PK_subscription_audit_logs") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 关联的订阅 ID（可为空）
+  subscriptionId String? @map("subscription_id") @db.Uuid
+  /// 关联的用户 ID
+  userId       String?  @map("user_id") @db.Uuid
+  /// 操作者类型：system / webhook / cron / admin / client_trigger
+  actorType    String   @map("actor_type") @db.VarChar(32)
+  /// 操作者 ID（如 provider event id / admin id）
+  actorId      String?  @map("actor_id") @db.VarChar(128)
+  /// 动作类型：activate / renew / cancel / expire / refund / resync / noop
+  action       String   @db.VarChar(64)
+  /// 运行时环境：dev / staging / production / review
+  runtimeEnv   String   @default("unknown") @map("runtime_env") @db.VarChar(32)
+  /// 变更前快照
+  beforeState  Json     @default("{}") @map("before_state")
+  /// 变更后快照
+  afterState   Json     @default("{}") @map("after_state")
+  /// 变更原因说明
+  reason       String?
+  /// 创建时间
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([subscriptionId, createdAt(sort: Desc)], map: "idx_subscription_audit_subscription_time")
+  @@index([userId, createdAt(sort: Desc)], map: "idx_subscription_audit_user_time")
+  @@index([actorType, createdAt(sort: Desc)], map: "idx_subscription_audit_actor_time")
+  @@map("subscription_audit_logs")
+}
+
 /// 订阅套餐定义表 — 存储各会员档位的价格、权益和支付平台商品 ID
 model SubscriptionPlan {
   /// 主键 UUID
@@ -1696,6 +1831,8 @@ model SubscriptionPlan {
   entitlements    Json           @default("{}")
   /// Apple App Store 内购商品 ID
   appleProductId  String?        @map("apple_product_id") @db.VarChar(256)
+  /// Google Play 订阅商品 ID
+  googleProductId String?        @map("google_product_id") @db.VarChar(256)
   /// 微信支付商品 ID
   wechatProductId String?        @map("wechat_product_id") @db.VarChar(256)
   /// 套餐在列表中的排序值（值越小越靠前）
@@ -2652,4 +2789,3 @@ model FoodFieldProvenance {
   @@index([status], map: "idx_food_field_provenance_status")
   @@map("food_field_provenance")
 }
-
