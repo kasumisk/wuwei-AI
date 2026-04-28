@@ -53,16 +53,20 @@ function interpolate(
   text: string,
   vars?: Record<string, string | number | undefined | null>,
 ): string {
-  if (!vars) return text;
   let out = text;
-  for (const [k, v] of Object.entries(vars)) {
-    if (v === undefined || v === null) continue;
-    const safe = String(v);
-    // {{var}} (canonical)
-    out = out.replace(new RegExp(`\\{\\{\\s*${k}\\s*\\}\\}`, 'g'), safe);
-    // {var} (legacy, defensive)
-    out = out.replace(new RegExp(`(?<!\\{)\\{\\s*${k}\\s*\\}(?!\\})`, 'g'), safe);
+  if (vars) {
+    for (const [k, v] of Object.entries(vars)) {
+      if (v === undefined || v === null) continue;
+      const safe = String(v);
+      // {{var}} (canonical)
+      out = out.replace(new RegExp(`\\{\\{\\s*${k}\\s*\\}\\}`, 'g'), safe);
+      // {var} (legacy, defensive)
+      out = out.replace(new RegExp(`(?<!\\{)\\{\\s*${k}\\s*\\}(?!\\})`, 'g'), safe);
+    }
   }
+  // Convert any remaining {{xxx}} to {xxx} so callers using legacy
+  // .replace('{xxx}', value) can still match them correctly.
+  out = out.replace(/\{\{(\s*\w+\s*)\}\}/g, '{$1}');
   return out;
 }
 
