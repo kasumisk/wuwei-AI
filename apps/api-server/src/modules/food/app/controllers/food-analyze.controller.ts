@@ -142,6 +142,7 @@ export class FoodAnalyzeController {
       dto.text,
       dto.mealType,
       user.id,
+      dto.locale,
     );
     const cached = this.getFromTextAnalysisCache(cacheKey);
     if (cached) {
@@ -1325,8 +1326,9 @@ export class FoodAnalyzeController {
     text: string,
     mealType: string | undefined,
     userId: string,
+    locale?: string,
   ): string {
-    const raw = `${userId}:${mealType || 'none'}:${text.trim().toLowerCase()}`;
+    const raw = `${userId}:${mealType || 'none'}:${locale || 'default'}:${text.trim().toLowerCase()}`;
     return createHash('sha256').update(raw).digest('hex').slice(0, 24);
   }
 
