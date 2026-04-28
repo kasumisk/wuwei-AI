@@ -33,7 +33,11 @@ import {
   PaymentRecords as PaymentRecord,
 } from '@prisma/client';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
-import { PaymentChannel, PaymentStatus } from '../../subscription.types';
+import {
+  BillingCycle,
+  PaymentChannel,
+  PaymentStatus,
+} from '../../subscription.types';
 import { I18nService } from '../../../../core/i18n/i18n.service';
 import {
   WechatPayCreateOrderRequest,
@@ -577,16 +581,27 @@ export class WechatPayService {
   /**
    * 根据计划计费周期计算到期时间
    */
-  private calcExpiresDate(plan: any): Date {
+  private calcExpiresDate(
+    plan: Pick<SubscriptionPlan, 'billingCycle'>,
+  ): Date {
     const now = new Date();
-    switch (plan.billingCycle) {
-      case 'monthly':
+    const billingCycle = String(plan.billingCycle ?? '').toLowerCase();
+
+    switch (billingCycle) {
+      case BillingCycle.MONTHLY:
+      case 'month':
         return new Date(now.setMonth(now.getMonth() + 1));
-      case 'quarterly':
+      case BillingCycle.QUARTERLY:
+      case 'quarter':
         return new Date(now.setMonth(now.getMonth() + 3));
-      case 'yearly':
+      case BillingCycle.YEARLY:
+      case 'year':
+      case 'annual':
         return new Date(now.setFullYear(now.getFullYear() + 1));
       default:
+        this.logger.warn(
+          `未知 billingCycle=${plan.billingCycle}，回退按月计算 expiresAt`,
+        );
         return new Date(now.setMonth(now.getMonth() + 1));
     }
   }

@@ -30,7 +30,7 @@ import {
   optimizeDailyPlan,
   MealSlot,
 } from '../recommendation/optimization/global-optimizer';
-import { t } from '../recommendation/utils/i18n-messages';
+import { getSupportedLocales, t } from '../recommendation/utils/i18n-messages';
 import {
   getUserLocalDate,
   getUserLocalHour,
@@ -42,6 +42,7 @@ import type { ExplainPolicyConfig } from '../../../strategy/strategy.types';
 import { AdaptiveExplanationDepthService } from '../recommendation/explanation/adaptive-explanation-depth.service';
 import { RequestContextService } from '../../../../core/context/request-context.service';
 import type { Locale } from '../recommendation/utils/i18n-messages';
+import { FoodI18nService } from './food-i18n.service';
 
 /**
  * V5 2.5: 预加载上下文 — 周计划批量生成时一次性查询，避免 N天×5 次重复 DB 查询
@@ -69,7 +70,9 @@ interface MealRecLike {
     food: {
       id: string;
       name: string;
+      displayName?: string;
       standardServingDesc?: string;
+      displayServingDesc?: string;
       standardServingG: number;
       category: string;
     };
@@ -95,8 +98,9 @@ function toMealPlan(
       ? rec.foods.map(
           (sf): MealFoodItem => ({
             foodId: sf.food?.id ?? '',
-            name: sf.food?.name ?? '',
+            name: sf.food?.displayName ?? sf.food?.name ?? '',
             servingDesc:
+              sf.food?.displayServingDesc ||
               sf.food?.standardServingDesc ||
               `${sf.food?.standardServingG || 100}g`,
             calories: sf.servingCalories ?? 0,
@@ -149,6 +153,7 @@ export class DailyPlanService {
     private readonly preferenceProfileService: PreferenceProfileService,
     private readonly feedbackService: RecommendationFeedbackService,
     private readonly requestCtx: RequestContextService,
+    private readonly foodI18nService: FoodI18nService,
   ) {}
 
   private getCurrentLocale(): Locale {
@@ -1045,6 +1050,15 @@ export class DailyPlanService {
       { key: 'snackPlan', mealType: 'snack' },
     ];
 
+    const foodIds = meals
+      .flatMap(({ key }) => localizedPlan[key]?.foodItems || [])
+      .map((item: MealFoodItem) => item.foodId)
+      .filter((foodId: string | undefined): foodId is string => !!foodId);
+    const foodLocalizationMap = await this.foodI18nService.loadLocalizedDetails(
+      [...new Set(foodIds)],
+      locale,
+    );
+
     for (const { key, mealType } of meals) {
       const meal = localizedPlan[key];
       if (!meal) continue;
@@ -1059,6 +1073,8 @@ export class DailyPlanService {
 
       localizedPlan[key] = {
         ...meal,
+        foodItems: this.localizeMealFoodItems(meal.foodItems, foodLocalizationMap),
+        foods: this.rebuildMealFoodsText(meal.foodItems, foodLocalizationMap, locale),
         tip: this.rebuildMealTip(mealType, goalType, target, meal.calories ?? 0, locale),
         explanations: this.localizeMealExplanations(meal.explanations, locale),
       };
@@ -1096,52 +1112,192 @@ export class DailyPlanService {
     return tips.filter(Boolean).join('；');
   }
 
+  private localizeMealFoodItems(
+    foodItems: MealFoodItem[] | undefined,
+    foodLocalizationMap: Map<string, { name: string; servingDesc?: string | null }>,
+  ): MealFoodItem[] | undefined {
+    if (!foodItems) return foodItems;
+
+    return foodItems.map((item) => {
+      const localized = item.foodId ? foodLocalizationMap.get(item.foodId) : undefined;
+      if (!localized) return item;
+
+      return {
+        ...item,
+        name: localized.name,
+        servingDesc: localized.servingDesc || item.servingDesc,
+      };
+    });
+  }
+
+  private rebuildMealFoodsText(
+    foodItems: MealFoodItem[] | undefined,
+    foodLocalizationMap: Map<string, { name: string; servingDesc?: string | null }>,
+    locale: Locale,
+  ): string | undefined {
+    if (!foodItems?.length) return undefined;
+
+    return foodItems
+      .map((item) => {
+        const localized = item.foodId ? foodLocalizationMap.get(item.foodId) : undefined;
+        return t(
+          'display.foodItem',
+          {
+            name: localized?.name || item.name,
+            serving: localized?.servingDesc || item.servingDesc || '',
+            calories: item.calories ?? 0,
+          },
+          locale,
+        );
+      })
+      .join(' + ');
+  }
+
+  private buildLocalizedAliasMap(keys: string[], locale: Locale): Map<string, string> {
+    const map = new Map<string, string>();
+
+    for (const key of keys) {
+      const localized = t(key, {}, locale);
+      for (const sourceLocale of getSupportedLocales()) {
+        const alias = t(key, {}, sourceLocale);
+        if (alias && alias !== key) {
+          map.set(alias, localized);
+        }
+      }
+    }
+
+    return map;
+  }
+
+  private localizeByAlias(
+    value: string | undefined,
+    aliasMap: Map<string, string>,
+  ): string | undefined {
+    if (!value) return value;
+    return aliasMap.get(value) || value;
+  }
+
   private localizeMealExplanations(
     explanations: Record<string, MealFoodExplanation> | undefined,
     locale: Locale,
   ): Record<string, MealFoodExplanation> | undefined {
     if (!explanations) return explanations;
 
-    const labelMap: Record<string, string> = {
-      'Low GI': t('explain.tag.lowGI', {}, locale),
-      'Natural Food': t('explain.tag.naturalFood', {}, locale),
-      'High Protein': t('explain.tag.highProtein', {}, locale),
-      'Rich Fiber': t('explain.tag.richFiber', {}, locale),
-      'High Nutrient Density': t('explain.tag.highNutrientDensity', {}, locale),
-      'Low Saturated Fat': t('explain.tag.lowSaturatedFat', {}, locale),
-      'Low Sodium': t('explain.tag.lowSodium', {}, locale),
-      'Low FODMAP': t('explain.tag.lowFODMAP', {}, locale),
-      'High Calcium': t('explain.tag.highCalcium', {}, locale),
-      'Rich Iron': t('explain.tag.richIron', {}, locale),
-    };
-
-    const reasonMap: Record<string, string> = {
-      'Good anti-inflammatory properties': t('explain.reason.antiInflammation', {}, locale),
-      'Minimally processed, retains more nutrients': t('explain.reason.naturalFood', {}, locale),
-      'Well-balanced nutrition': t('explain.reason.balancedNutrition', {}, locale),
-      'Good glycemic control': t('explain.reason.glycemicGood', {}, locale),
-      'Moderate protein, fits daily target': t('explain.reason.proteinModerate', {}, locale),
-      'Rich in fiber, helps fullness': t('explain.reason.richFiber', {}, locale),
-      'High nutrient density': t('explain.reason.highNutrientDensity', {}, locale),
-      'High satiety, helps control total intake': t('explain.reason.highSatiety', {}, locale),
-      'Fat composition is relatively balanced': t('explain.reason.fatBalanced', {}, locale),
-      'Carb ratio fits this meal target': t('explain.reason.carbsMatch', {}, locale),
-    };
+    const tagAliasMap = this.buildLocalizedAliasMap(
+      [
+        'explain.tag.lowGI',
+        'explain.tag.naturalFood',
+        'explain.tag.highProtein',
+        'explain.tag.richFiber',
+        'explain.tag.highNutrientDensity',
+        'explain.tag.lowSaturatedFat',
+        'explain.tag.lowSodium',
+        'explain.tag.lowFODMAP',
+        'explain.tag.highCalcium',
+        'explain.tag.richIron',
+      ],
+      locale,
+    );
+    const reasonAliasMap = this.buildLocalizedAliasMap(
+      [
+        'explain.reason.antiInflammation',
+        'explain.reason.naturalFood',
+        'explain.reason.balancedNutrition',
+        'explain.reason.glycemicGood',
+        'explain.reason.proteinModerate',
+        'explain.reason.richFiber',
+        'explain.reason.highNutrientDensity',
+        'explain.reason.highSatiety',
+        'explain.reason.fatBalanced',
+        'explain.reason.carbsMatch',
+      ],
+      locale,
+    );
+    const dimensionAliasMap = this.buildLocalizedAliasMap(
+      [
+        'explain.dim.calories',
+        'explain.dim.protein',
+        'explain.dim.carbs',
+        'explain.dim.fat',
+        'explain.dim.quality',
+        'explain.dim.satiety',
+        'explain.dim.glycemic',
+        'explain.dim.nutrientDensity',
+        'explain.dim.inflammation',
+        'explain.dim.fiber',
+        'explain.dim.seasonality',
+        'explain.dim.executability',
+        'explain.dim.popularity',
+        'explain.dim.acquisition',
+      ],
+      locale,
+    );
+    const nutrientAliasMap = this.buildLocalizedAliasMap(
+      [
+        'explain.nutrient.calories',
+        'explain.nutrient.protein',
+        'explain.nutrient.carbs',
+        'explain.nutrient.fat',
+        'explain.nutrient.fiber',
+      ],
+      locale,
+    );
 
     return Object.fromEntries(
       Object.entries(explanations).map(([foodId, explanation]) => [
         foodId,
         {
           ...explanation,
-          primaryReason:
-            reasonMap[explanation.primaryReason] || explanation.primaryReason,
+          primaryReason: this.localizeByAlias(
+            explanation.primaryReason,
+            reasonAliasMap,
+          )!,
           nutritionHighlights: (explanation.nutritionHighlights || []).map((item) => ({
             ...item,
-            label: labelMap[item.label] || item.label,
+            label: this.localizeByAlias(item.label, tagAliasMap) || item.label,
           })),
           healthTip: explanation.healthTip
-            ? reasonMap[explanation.healthTip] || explanation.healthTip
+            ? this.localizeByAlias(explanation.healthTip, reasonAliasMap) ||
+              explanation.healthTip
             : explanation.healthTip,
+          scoreBreakdown: explanation.scoreBreakdown?.map((item) => ({
+            ...item,
+            dimension:
+              this.localizeByAlias(item.dimension, dimensionAliasMap) ||
+              item.dimension,
+          })),
+          v2: explanation.v2
+            ? {
+                ...explanation.v2,
+                summary:
+                  this.localizeByAlias(explanation.v2.summary, reasonAliasMap) ||
+                  explanation.v2.summary,
+                primaryReason:
+                  this.localizeByAlias(
+                    explanation.v2.primaryReason,
+                    reasonAliasMap,
+                  ) || explanation.v2.primaryReason,
+                healthTip: explanation.v2.healthTip
+                  ? this.localizeByAlias(explanation.v2.healthTip, reasonAliasMap) ||
+                    explanation.v2.healthTip
+                  : explanation.v2.healthTip,
+                radarChart: {
+                  ...explanation.v2.radarChart,
+                  dimensions: explanation.v2.radarChart.dimensions.map((item) => ({
+                    ...item,
+                    label:
+                      this.localizeByAlias(item.label, dimensionAliasMap) || item.label,
+                  })),
+                },
+                progressBars: explanation.v2.progressBars.map((item) => ({
+                  ...item,
+                  nutrient:
+                    this.localizeByAlias(item.nutrient, nutrientAliasMap) ||
+                    item.nutrient,
+                })),
+                locale,
+              }
+            : explanation.v2,
         },
       ]),
     );

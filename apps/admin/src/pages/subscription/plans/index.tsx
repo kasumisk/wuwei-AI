@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import {
+  Alert,
   Card,
   Button,
   Tag,
@@ -7,6 +8,7 @@ import {
   Modal,
   Drawer,
   Form,
+  Input,
   InputNumber,
   Select,
   Switch,
@@ -50,9 +52,12 @@ const tierConfig: Record<SubscriptionTier, { color: string; text: string }> = {
 
 const cycleLabels: Record<BillingCycle, string> = {
   monthly: '月付',
+  quarterly: '季付',
   yearly: '年付',
   lifetime: '终身',
 };
+
+type MappingFilter = 'all' | 'fully_mapped' | 'apple_missing' | 'wechat_missing' | 'any_missing';
 
 /**
  * 计次配额功能：值为 number，-1 表示无限制
@@ -311,7 +316,11 @@ const SubscriptionPlanManagement: React.FC = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingPlan, setEditingPlan] = useState<SubscriptionPlanDto | null>(null);
   const [quotaPlanId, setQuotaPlanId] = useState<string | null>(null);
+  const [mappingFilter, setMappingFilter] = useState<MappingFilter>('all');
   const [form] = Form.useForm();
+  const watchedTier = Form.useWatch('tier', form) as SubscriptionTier | undefined;
+  const watchedAppleProductId = Form.useWatch('appleProductId', form) as string | undefined;
+  const watchedWechatProductId = Form.useWatch('wechatProductId', form) as string | undefined;
 
   const createMutation = useCreatePlan({
     onSuccess: () => {
@@ -343,9 +352,15 @@ const SubscriptionPlanManagement: React.FC = () => {
   const handleEdit = (record: SubscriptionPlanDto) => {
     setEditingPlan(record);
     form.setFieldsValue({
+      name: record.name,
+      description: record.description,
       tier: record.tier,
       billingCycle: record.billingCycle,
       priceCents: record.priceCents,
+      currency: record.currency,
+      appleProductId: record.appleProductId,
+      wechatProductId: record.wechatProductId,
+      sortOrder: record.sortOrder,
       isActive: record.isActive,
     });
     setModalVisible(true);
@@ -353,16 +368,76 @@ const SubscriptionPlanManagement: React.FC = () => {
 
   const handleSubmit = async () => {
     const values = await form.validateFields();
+    const payload = {
+      ...values,
+      appleProductId: values.appleProductId?.trim() || undefined,
+      wechatProductId: values.wechatProductId?.trim() || undefined,
+    };
+
     if (editingPlan) {
       updateMutation.mutate({
         id: editingPlan.id,
         data: {
-          priceCents: values.priceCents,
-          isActive: values.isActive,
+          name: payload.name,
+          description: payload.description,
+          currency: payload.currency,
+          priceCents: payload.priceCents,
+          appleProductId: payload.appleProductId,
+          wechatProductId: payload.wechatProductId,
+          sortOrder: payload.sortOrder,
+          isActive: payload.isActive,
         },
       });
     } else {
-      createMutation.mutate(values);
+      createMutation.mutate({
+        ...payload,
+        entitlements: {},
+      });
+    }
+  };
+
+  const requiresProductMapping = watchedTier != null && watchedTier !== 'free';
+
+  const hasMappingValue = (value?: string | null) => (value?.trim().length ?? 0) > 0;
+
+  const buildMappingRules = (label: string) => [
+    {
+      validator: async (_: unknown, value?: string) => {
+        if (!requiresProductMapping || hasMappingValue(value)) return;
+        throw new Error(`付费套餐请填写${label}`);
+      },
+    },
+  ];
+
+  const getMappingState = (record: SubscriptionPlanDto) => {
+    const requiresMapping = record.tier !== 'free';
+    const hasApple = hasMappingValue(record.appleProductId);
+    const hasWechat = hasMappingValue(record.wechatProductId);
+
+    return {
+      requiresMapping,
+      hasApple,
+      hasWechat,
+      missingApple: requiresMapping && !hasApple,
+      missingWechat: requiresMapping && !hasWechat,
+      fullyMapped: !requiresMapping || (hasApple && hasWechat),
+    };
+  };
+
+  const matchesMappingFilter = (record: SubscriptionPlanDto) => {
+    const state = getMappingState(record);
+    switch (mappingFilter) {
+      case 'fully_mapped':
+        return state.requiresMapping && state.fullyMapped;
+      case 'apple_missing':
+        return state.missingApple;
+      case 'wechat_missing':
+        return state.missingWechat;
+      case 'any_missing':
+        return state.missingApple || state.missingWechat;
+      case 'all':
+      default:
+        return true;
     }
   };
 
@@ -397,6 +472,50 @@ const SubscriptionPlanManagement: React.FC = () => {
           ¥{(record.priceCents / 100).toFixed(2)}
         </span>
       ),
+    },
+    {
+      title: '商品映射',
+      key: 'productMapping',
+      width: 260,
+      render: (_: unknown, record: SubscriptionPlanDto) => {
+        const mappingState = getMappingState(record);
+        return (
+          <Space direction="vertical" size={4}>
+            <Space size={6} wrap>
+              <Tag
+                color={
+                  !mappingState.requiresMapping
+                    ? 'default'
+                    : mappingState.hasApple
+                      ? 'success'
+                      : 'error'
+                }
+              >
+                Apple{' '}
+                {mappingState.requiresMapping ? (mappingState.hasApple ? '已映射' : '缺失') : 'N/A'}
+              </Tag>
+              <Tag
+                color={
+                  !mappingState.requiresMapping
+                    ? 'default'
+                    : mappingState.hasWechat
+                      ? 'success'
+                      : 'error'
+                }
+              >
+                微信{' '}
+                {mappingState.requiresMapping
+                  ? mappingState.hasWechat
+                    ? '已映射'
+                    : '缺失'
+                  : 'N/A'}
+              </Tag>
+            </Space>
+            <Text style={{ fontSize: 12 }}>Apple: {record.appleProductId || '-'}</Text>
+            <Text style={{ fontSize: 12 }}>WeChat: {record.wechatProductId || '-'}</Text>
+          </Space>
+        );
+      },
     },
     {
       title: '配额概览',
@@ -479,7 +598,8 @@ const SubscriptionPlanManagement: React.FC = () => {
         request={async () => {
           try {
             const { list } = await subscriptionApi.getPlans();
-            return { data: list || [], total: list?.length || 0, success: true };
+            const filteredList = (list || []).filter(matchesMappingFilter);
+            return { data: filteredList, total: filteredList.length, success: true };
           } catch {
             return { data: [], total: 0, success: false };
           }
@@ -488,6 +608,22 @@ const SubscriptionPlanManagement: React.FC = () => {
           <Button key="create" type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
             新增套餐
           </Button>,
+          <Select
+            key="mapping-filter"
+            value={mappingFilter}
+            style={{ width: 180 }}
+            onChange={(value) => {
+              setMappingFilter(value);
+              actionRef.current?.reload();
+            }}
+            options={[
+              { label: '全部套餐', value: 'all' },
+              { label: '已完整映射', value: 'fully_mapped' },
+              { label: '缺 Apple 映射', value: 'apple_missing' },
+              { label: '缺微信映射', value: 'wechat_missing' },
+              { label: '任一映射缺失', value: 'any_missing' },
+            ]}
+          />,
           <Button
             key="refresh"
             icon={<ReloadOutlined />}
@@ -513,6 +649,26 @@ const SubscriptionPlanManagement: React.FC = () => {
         width={480}
       >
         <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
+          {requiresProductMapping &&
+            (!hasMappingValue(watchedAppleProductId) ||
+              !hasMappingValue(watchedWechatProductId)) && (
+              <Alert
+                type="warning"
+                showIcon
+                message="当前为付费套餐，建议同时配置 Apple / 微信商品映射。正式购买验单依赖精确商品 ID。"
+                style={{ marginBottom: 16 }}
+              />
+            )}
+          <Form.Item
+            name="name"
+            label="套餐名称"
+            rules={[{ required: true, message: '请输入套餐名称' }]}
+          >
+            <Input placeholder="例如：Pro 月付" />
+          </Form.Item>
+          <Form.Item name="description" label="套餐描述">
+            <Input.TextArea rows={3} placeholder="简要说明套餐价值和适用人群" />
+          </Form.Item>
           <Form.Item
             name="tier"
             label="套餐等级"
@@ -531,6 +687,7 @@ const SubscriptionPlanManagement: React.FC = () => {
           >
             <Select disabled={!!editingPlan} placeholder="选择周期">
               <Select.Option value="monthly">月付</Select.Option>
+              <Select.Option value="quarterly">季付</Select.Option>
               <Select.Option value="yearly">年付</Select.Option>
               <Select.Option value="lifetime">终身</Select.Option>
             </Select>
@@ -555,6 +712,26 @@ const SubscriptionPlanManagement: React.FC = () => {
               formatter={(v) => (v ? `${(Number(v) / 100).toFixed(2)}` : '')}
               parser={(v) => Math.round(parseFloat(v?.replace('¥', '') || '0') * 100) as any}
             />
+          </Form.Item>
+          <Form.Item name="currency" label="货币代码" initialValue="CNY">
+            <Input placeholder="例如：CNY / USD" />
+          </Form.Item>
+          <Form.Item
+            name="appleProductId"
+            label="Apple 商品 ID"
+            rules={buildMappingRules('Apple 商品 ID')}
+          >
+            <Input placeholder="例如：eatcheck.monthly.v2" />
+          </Form.Item>
+          <Form.Item
+            name="wechatProductId"
+            label="微信商品 ID"
+            rules={buildMappingRules('微信商品 ID')}
+          >
+            <Input placeholder="例如：pro_monthly" />
+          </Form.Item>
+          <Form.Item name="sortOrder" label="排序权重" initialValue={0}>
+            <InputNumber min={0} style={{ width: '100%' }} />
           </Form.Item>
           {editingPlan && (
             <Form.Item name="isActive" label="是否启用" valuePropName="checked">

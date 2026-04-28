@@ -4,6 +4,7 @@ import {
   Get,
   Put,
   Patch,
+  Delete,
   Body,
   Param,
   UseGuards,
@@ -29,6 +30,7 @@ import {
   OnboardingStep4Dto,
   UpdateDeclaredProfileDto,
   UpdateRecommendationPreferencesDto,
+  DeleteAccountDto,
 } from '../dto/user-profile.dto';
 
 @ApiTags('用户画像')
@@ -176,6 +178,28 @@ export class UserProfileController {
       code: HttpStatus.OK,
       message: i18n.t('user.profileUpdated'),
       data: profile,
+    };
+  }
+
+  /**
+   * 删除当前账号
+   * DELETE /api/app/user-profile/account
+   */
+  @Delete('account')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '删除当前账号及关联数据' })
+  async deleteCurrentAccount(
+    @Body(new ValidationPipe({ transform: true, whitelist: true }))
+    dto: DeleteAccountDto,
+    @CurrentAppUser() user: AppUserPayload,
+    @I18n() i18n: I18nContext,
+  ): Promise<ApiResponse> {
+    await this.userProfileService.deleteAccount(user.id, dto.confirmationText);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: i18n.t('user.userDeleted'),
+      data: null,
     };
   }
 

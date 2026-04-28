@@ -48,7 +48,8 @@ export type ProfileChangeType =
   | 'inferred' // 推断画像变更
   | 'declared' // 用户声明信息变更（手动修改目标/过敏原等）
   | 'short_term' // 短期画像变更
-  | 'segment'; // 用户细分变更
+  | 'segment' // 用户细分变更
+  | 'account'; // 账号级变更（如删除）
 
 /**
  * 变更来源

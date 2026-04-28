@@ -163,7 +163,9 @@ export class FoodPlanController {
       code: HttpStatus.OK,
       message: this.i18n.t('diet.planAdjusted'),
       data: {
-        ...toDailyPlanResponse(result.updatedPlan),
+        ...toDailyPlanResponse(
+          await this.dailyPlanService.localizePlan(result.updatedPlan, user.id),
+        ),
         adjustmentNote: result.adjustmentNote,
       },
     };
@@ -188,12 +190,17 @@ export class FoodPlanController {
     const plan = mealType
       ? await this.dailyPlanService.regenerateMeal(user.id, mealType)
       : await this.dailyPlanService.regeneratePlan(user.id);
+    const localizedPlan = await this.dailyPlanService.localizePlan(plan, user.id);
 
     return {
       success: true,
       code: HttpStatus.OK,
-      message: mealType ? `${mealType} 已重新生成` : '计划已重新生成',
-      data: toDailyPlanResponse(plan),
+      message: mealType
+        ? this.i18n.t('diet.recommendation.response.replacedMealRecommendation', {
+            meal: this.i18n.t(`diet.recommendation.meal.label.${mealType}`),
+          })
+        : this.i18n.t('diet.recommendation.response.planRegenerated'),
+      data: toDailyPlanResponse(localizedPlan),
     };
   }
 

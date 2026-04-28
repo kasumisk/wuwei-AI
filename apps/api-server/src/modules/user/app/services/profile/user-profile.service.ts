@@ -1,4 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   ActivityLevel,
@@ -39,6 +44,10 @@ import {
 } from '../../../../../core/events/domain-events';
 import { PrismaService } from '../../../../../core/prisma/prisma.service';
 import { I18nService } from '../../../../../core/i18n';
+import { ProfileChangeLogService } from './profile-change-log.service';
+import { RequestContextService } from '../../../../../core/context/request-context.service';
+
+const DELETE_ACCOUNT_CONFIRMATION_TEXT = 'DELETE';
 
 /** 字段权重表 — 权重越高，对推荐质量影响越大 */
 const FIELD_WEIGHTS: Record<string, number> = {
@@ -84,6 +93,8 @@ export class UserProfileService {
     private readonly profileCacheService: ProfileCacheService,
     private readonly eventEmitter: EventEmitter2,
     private readonly i18n: I18nService,
+    private readonly profileChangeLogService: ProfileChangeLogService,
+    private readonly requestContext: RequestContextService,
   ) {}
 
   /**
@@ -104,6 +115,59 @@ export class UserProfileService {
       select: { timezone: true },
     });
     return profile?.timezone || 'Asia/Shanghai';
+  }
+
+  async deleteAccount(
+    userId: string,
+    confirmationText: string,
+  ): Promise<void> {
+    if (confirmationText.trim() != DELETE_ACCOUNT_CONFIRMATION_TEXT) {
+      throw new BadRequestException('Invalid delete confirmation text');
+    }
+
+    const user = await this.prisma.appUsers.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        authType: true,
+        email: true,
+        phone: true,
+        nickname: true,
+        createdAt: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException(this.i18n.t('user.userNotFound', { id: userId }));
+    }
+
+    await this.profileChangeLogService.createLog({
+      userId,
+      changeType: 'account',
+      source: 'manual',
+      changedFields: ['account'],
+      beforeValues: {
+        status: 'active',
+        authType: user.authType,
+        email: user.email,
+        phone: user.phone,
+        nickname: user.nickname,
+        createdAt: user.createdAt.toISOString(),
+      } as any,
+      afterValues: {
+        status: 'deleted',
+      } as any,
+      triggerEvent: 'app.user.delete_account',
+      reason: '用户主动删除账号',
+      metadata: {
+        requestId: this.requestContext.requestId,
+        locale: this.requestContext.locale,
+        confirmationText,
+      } as any,
+    });
+
+    await this.prisma.appUsers.delete({ where: { id: userId } });
+    this.profileCacheService.invalidate(userId);
   }
 
   /**

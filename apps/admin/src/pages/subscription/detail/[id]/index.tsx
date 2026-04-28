@@ -37,9 +37,10 @@ import {
 const statusConfig: Record<SubscriptionStatus, { color: string; text: string }> = {
   active: { color: 'success', text: '生效中' },
   expired: { color: 'default', text: '已过期' },
+  cancelled: { color: 'warning', text: '已取消' },
   canceled: { color: 'warning', text: '已取消' },
-  past_due: { color: 'error', text: '逾期' },
-  trialing: { color: 'processing', text: '试用中' },
+  grace_period: { color: 'processing', text: '宽限期' },
+  paused: { color: 'default', text: '已暂停' },
 };
 
 const tierConfig: Record<SubscriptionTier, { color: string; text: string }> = {
@@ -128,14 +129,14 @@ const SubscriptionDetail: React.FC = () => {
             <Button
               icon={<ClockCircleOutlined />}
               onClick={() => setExtendVisible(true)}
-              disabled={subscription.status === 'canceled'}
+              disabled={subscription.status === 'canceled' || subscription.status === 'cancelled'}
             >
               延期
             </Button>
             <Button
               icon={<SwapOutlined />}
               onClick={() => setChangePlanVisible(true)}
-              disabled={subscription.status === 'canceled'}
+              disabled={subscription.status === 'canceled' || subscription.status === 'cancelled'}
             >
               变更套餐
             </Button>
@@ -179,6 +180,9 @@ const SubscriptionDetail: React.FC = () => {
                   <Descriptions.Item label="支付渠道">
                     {channelLabels[subscription.paymentChannel] || subscription.paymentChannel}
                   </Descriptions.Item>
+                  <Descriptions.Item label="平台订阅ID">
+                    {subscription.platformSubscriptionId || '-'}
+                  </Descriptions.Item>
                   <Descriptions.Item label="自动续费">
                     <Tag color={subscription.autoRenew ? 'green' : 'default'}>
                       {subscription.autoRenew ? '是' : '否'}
@@ -197,9 +201,23 @@ const SubscriptionDetail: React.FC = () => {
                       </Tag>
                     )}
                   </Descriptions.Item>
-                  {subscription.canceledAt && (
+                  {(subscription.canceledAt || subscription.cancelledAt) && (
                     <Descriptions.Item label="取消时间" span={2}>
-                      {new Date(subscription.canceledAt).toLocaleString('zh-CN')}
+                      {new Date(
+                        subscription.canceledAt || subscription.cancelledAt!
+                      ).toLocaleString('zh-CN')}
+                    </Descriptions.Item>
+                  )}
+                  {subscription.plan && (
+                    <Descriptions.Item label="商品映射" span={2}>
+                      <Space direction="vertical" size={2}>
+                        <Typography.Text>
+                          Apple: {subscription.plan.appleProductId || '-'}
+                        </Typography.Text>
+                        <Typography.Text>
+                          WeChat: {subscription.plan.wechatProductId || '-'}
+                        </Typography.Text>
+                      </Space>
                     </Descriptions.Item>
                   )}
                   <Descriptions.Item label="创建时间">
@@ -253,18 +271,11 @@ const SubscriptionDetail: React.FC = () => {
       >
         <Form form={extendForm} layout="vertical" style={{ marginTop: 16 }}>
           <Form.Item
-            name="days"
+            name="extendDays"
             label="延长天数"
             rules={[{ required: true, message: '请输入延长天数' }]}
           >
             <InputNumber min={1} max={365} placeholder="输入天数" style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item
-            name="reason"
-            label="延期原因"
-            rules={[{ required: true, message: '请输入延期原因' }]}
-          >
-            <Input.TextArea rows={3} placeholder="请输入延期原因" />
           </Form.Item>
         </Form>
       </Modal>
@@ -304,13 +315,6 @@ const SubscriptionDetail: React.FC = () => {
                 </Select.Option>
               ))}
             </Select>
-          </Form.Item>
-          <Form.Item
-            name="reason"
-            label="变更原因"
-            rules={[{ required: true, message: '请输入变更原因' }]}
-          >
-            <Input.TextArea rows={3} placeholder="请输入变更原因" />
           </Form.Item>
         </Form>
       </Modal>

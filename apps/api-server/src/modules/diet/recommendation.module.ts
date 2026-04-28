@@ -150,6 +150,7 @@ const RECOMMENDATION_PROVIDERS = [
     // V7.5 P3-C: 只导出被外部模块实际注入的 service（原 38 个全部导出）
     RecommendationEngineService, // → DailyPlanService, FoodPlanController, WeeklyPlanService, FoodService, PrecomputeProcessor, RecommendationDebugService
     SubstitutionService, // → FoodPlanController
+    FoodI18nService, // → DailyPlanService
     ABTestingService, // → RecommendationDebugService, ABExperimentManagementService
     FoodPoolCacheService, // → CandidatePromotedListener
     ScoringConfigService, // → ScoringConfigController, RecommendationDebugService

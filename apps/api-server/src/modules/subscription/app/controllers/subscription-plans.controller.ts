@@ -71,6 +71,11 @@ export class SubscriptionPlansController {
       this.quotaService.getAllQuotaStatus(user.id),
       this.subscriptionService.getUserSummary(user.id),
     ]);
+    const expiresAt = summary.expiresAt ? new Date(summary.expiresAt) : null;
+    const serializedExpiresAt =
+      expiresAt && !Number.isNaN(expiresAt.getTime())
+        ? expiresAt.toISOString()
+        : null;
 
     return {
       success: true,
@@ -78,6 +83,8 @@ export class SubscriptionPlansController {
       message: 'OK',
       data: {
         tier: summary.tier,
+        autoRenew: summary.autoRenew,
+        expiresAt: serializedExpiresAt,
         quotas,
       },
     };

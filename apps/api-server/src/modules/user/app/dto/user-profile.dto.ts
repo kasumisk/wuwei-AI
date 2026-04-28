@@ -532,3 +532,13 @@ export class UpdateRecommendationPreferencesDto {
   @IsIn(['conservative', 'moderate', 'adventurous'])
   flavorOpenness?: 'conservative' | 'moderate' | 'adventurous';
 }
+
+export class DeleteAccountDto {
+  @ApiProperty({
+    description: '删除确认文本，必须严格等于 DELETE',
+    example: 'DELETE',
+  })
+  @IsNotEmpty()
+  @IsString()
+  confirmationText: string;
+}

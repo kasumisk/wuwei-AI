@@ -45,7 +45,12 @@ import {
   Subscription,
   PaymentRecords as PaymentRecord,
 } from '@prisma/client';
-import { PaymentChannel, PaymentStatus } from '../../subscription.types';
+import {
+  BillingCycle,
+  PaymentChannel,
+  PaymentStatus,
+  SubscriptionTier,
+} from '../../subscription.types';
 import {
   AppleTransactionInfo,
   AppleNotificationType,
@@ -68,6 +73,7 @@ const APP_STORE_API_BASE = {
 @Injectable()
 export class AppleIapService implements OnModuleInit {
   private readonly logger = new Logger(AppleIapService.name);
+  private readonly isProduction: boolean;
 
   /** Apple Bundle ID */
   private readonly bundleId: string;
@@ -107,6 +113,7 @@ export class AppleIapService implements OnModuleInit {
       'sandbox',
     ) as 'sandbox' | 'production';
     this.apiBase = APP_STORE_API_BASE[this.environment];
+    this.isProduction = process.env.NODE_ENV === 'production';
   }
 
   onModuleInit(): void {
@@ -139,6 +146,10 @@ export class AppleIapService implements OnModuleInit {
     productId: string,
   ): Promise<AppleVerifyPurchaseResult> {
     try {
+      if (this.shouldUseLocalTestFallback(transactionId)) {
+        return this.processLocalTestPurchase(userId, productId);
+      }
+
       // 1. 获取交易信息
       const transaction = await this.getTransactionInfo(transactionId);
       if (!transaction) {
@@ -582,6 +593,181 @@ export class AppleIapService implements OnModuleInit {
     return { id: sub.id, userId: sub.userId, expiresAt: sub.expiresAt };
   }
 
+  private shouldUseLocalTestFallback(transactionId: string): boolean {
+    return !this.isProduction && transactionId === '0';
+  }
+
+  private async processLocalTestPurchase(
+    userId: string,
+    productId: string,
+  ): Promise<AppleVerifyPurchaseResult> {
+    this.logger.warn(
+      `使用本地 StoreKit 测试回退逻辑: userId=${userId}, productId=${productId}`,
+    );
+
+    const plan = await this.resolveLocalTestPlan(productId);
+    if (!plan) {
+      this.logger.warn(`未找到对应的订阅计划: productId=${productId}`);
+      return { valid: false, error: '未找到对应的订阅计划' };
+    }
+
+    const syntheticTransactionId = this.buildLocalTestTransactionId(
+      userId,
+      productId,
+    );
+    const existingPayment = await this.prisma.paymentRecords.findUnique({
+      where: { orderNo: `apple_${syntheticTransactionId}` },
+    });
+
+    const transaction = this.buildLocalTestTransaction(
+      syntheticTransactionId,
+      productId,
+      plan,
+    );
+
+    if (existingPayment) {
+      this.logger.log(
+        `本地 StoreKit 测试交易已处理: ${syntheticTransactionId}`,
+      );
+      return { valid: true, transaction };
+    }
+
+    await this.subscriptionService.createPaymentRecord({
+      userId,
+      orderNo: `apple_${syntheticTransactionId}`,
+      channel: PaymentChannel.APPLE_IAP,
+      amountCents: plan.priceCents,
+      currency: plan.currency,
+    });
+
+    await this.subscriptionService.updatePaymentStatus(
+      `apple_${syntheticTransactionId}`,
+      PaymentStatus.SUCCESS,
+      syntheticTransactionId,
+      {
+        localTest: true,
+        originalTransactionId: syntheticTransactionId,
+      },
+    );
+
+    await this.subscriptionService.createSubscription({
+      userId,
+      planId: plan.id,
+      paymentChannel: PaymentChannel.APPLE_IAP,
+      platformSubscriptionId: syntheticTransactionId,
+      expiresAt: new Date(transaction.expiresDate ?? Date.now()),
+    });
+
+    this.logger.log(
+      `本地 StoreKit 测试订阅已激活: userId=${userId}, productId=${productId}`,
+    );
+
+    return { valid: true, transaction };
+  }
+
+  private buildLocalTestTransaction(
+    transactionId: string,
+    productId: string,
+    plan: Pick<SubscriptionPlan, 'priceCents' | 'currency' | 'billingCycle'>,
+  ): AppleTransactionInfo {
+    const purchaseDate = Date.now();
+    const inferredBillingCycle = this.inferBillingCycleFromProductId(productId);
+    const effectiveBillingCycle = inferredBillingCycle ?? plan.billingCycle;
+
+    if (
+      inferredBillingCycle != null &&
+      String(plan.billingCycle).toLowerCase() !==
+        String(inferredBillingCycle).toLowerCase()
+    ) {
+      this.logger.warn(
+        `本地 StoreKit 商品周期与套餐配置不一致，按商品周期计算 expiresAt: productId=${productId}, inferred=${inferredBillingCycle}, planBillingCycle=${plan.billingCycle}`,
+      );
+    }
+
+    const expiresDate = this.calcExpiresDate({
+      billingCycle: effectiveBillingCycle,
+    }).getTime();
+
+    return {
+      transactionId,
+      originalTransactionId: transactionId,
+      bundleId: this.bundleId,
+      productId,
+      purchaseDate,
+      expiresDate,
+      type: 'Auto-Renewable Subscription',
+      environment: AppleEnvironment.SANDBOX,
+      price: plan.priceCents,
+      currency: plan.currency,
+    };
+  }
+
+  private buildLocalTestTransactionId(
+    userId: string,
+    productId: string,
+  ): string {
+    const digest = crypto
+      .createHash('sha256')
+      .update(`${userId}:${productId}`)
+      .digest('hex')
+      .slice(0, 24);
+
+    return `local_${digest}`;
+  }
+
+  private async resolveLocalTestPlan(
+    productId: string,
+  ): Promise<SubscriptionPlan | null> {
+    const exactPlan = await this.prisma.subscriptionPlan.findFirst({
+      where: {
+        appleProductId: productId,
+        isActive: true,
+      },
+    });
+    if (exactPlan) {
+      return exactPlan;
+    }
+
+    const billingCycle = this.inferBillingCycleFromProductId(productId);
+    const fallbackPlan = await this.prisma.subscriptionPlan.findFirst({
+      where: {
+        tier: SubscriptionTier.PRO,
+        isActive: true,
+        ...(billingCycle == null ? {} : { billingCycle }),
+      },
+      orderBy: [{ sortOrder: 'asc' }, { priceCents: 'asc' }],
+    });
+
+    if (fallbackPlan) {
+      this.logger.warn(
+        `本地 StoreKit 商品未配置 appleProductId，回退使用套餐: productId=${productId}, planId=${fallbackPlan.id}, billingCycle=${fallbackPlan.billingCycle}`,
+      );
+    }
+
+    return fallbackPlan;
+  }
+
+  private inferBillingCycleFromProductId(
+    productId: string,
+  ): BillingCycle | null {
+    const normalizedProductId = productId.toLowerCase();
+
+    if (
+      normalizedProductId.includes('year') ||
+      normalizedProductId.includes('annual')
+    ) {
+      return BillingCycle.YEARLY;
+    }
+    if (normalizedProductId.includes('quarter')) {
+      return BillingCycle.QUARTERLY;
+    }
+    if (normalizedProductId.includes('month')) {
+      return BillingCycle.MONTHLY;
+    }
+
+    return null;
+  }
+
   /**
    * 生成 App Store Server API JWT Token
    *
@@ -772,16 +958,27 @@ export class AppleIapService implements OnModuleInit {
   /**
    * 根据计划计费周期计算到期时间
    */
-  private calcExpiresDate(plan: any): Date {
+  private calcExpiresDate(
+    plan: Pick<SubscriptionPlan, 'billingCycle'>,
+  ): Date {
     const now = new Date();
-    switch (plan.billingCycle) {
-      case 'monthly':
+    const billingCycle = String(plan.billingCycle ?? '').toLowerCase();
+
+    switch (billingCycle) {
+      case BillingCycle.MONTHLY:
+      case 'month':
         return new Date(now.setMonth(now.getMonth() + 1));
-      case 'quarterly':
+      case BillingCycle.QUARTERLY:
+      case 'quarter':
         return new Date(now.setMonth(now.getMonth() + 3));
-      case 'yearly':
+      case BillingCycle.YEARLY:
+      case 'year':
+      case 'annual':
         return new Date(now.setFullYear(now.getFullYear() + 1));
       default:
+        this.logger.warn(
+          `未知 billingCycle=${plan.billingCycle}，回退按月计算 expiresAt`,
+        );
         return new Date(now.setMonth(now.getMonth() + 1));
     }
   }

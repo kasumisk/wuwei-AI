@@ -23,11 +23,22 @@ import {
 /** 食物翻译映射：food_id → 目标语言名称 */
 export type FoodTranslationMap = Map<string, string>;
 
+export interface FoodLocalization {
+  name: string;
+  servingDesc?: string | null;
+}
+
+export type FoodLocalizationMap = Map<string, FoodLocalization>;
+
 @Injectable()
 export class FoodI18nService {
   private readonly logger = new Logger(FoodI18nService.name);
 
   constructor(private readonly prisma: PrismaService) {}
+
+  private isDefaultLocale(locale: string): boolean {
+    return /^zh(?:[-_]|$)/i.test(locale);
+  }
 
   /**
    * 批量加载指定语言的食物翻译。
@@ -39,9 +50,22 @@ export class FoodI18nService {
     locale: string,
   ): Promise<FoodTranslationMap> {
     const map = new Map<string, string>();
+    const localizedMap = await this.loadLocalizedDetails(foodIds, locale);
 
-    // zh 为原始语言，不需要翻译
-    if (locale === 'zh' || foodIds.length === 0) {
+    for (const [foodId, localized] of localizedMap) {
+      map.set(foodId, localized.name);
+    }
+
+    return map;
+  }
+
+  async loadLocalizedDetails(
+    foodIds: string[],
+    locale: string,
+  ): Promise<FoodLocalizationMap> {
+    const map = new Map<string, FoodLocalization>();
+
+    if (this.isDefaultLocale(locale) || foodIds.length === 0) {
       return map;
     }
 
@@ -54,20 +78,23 @@ export class FoodI18nService {
         select: {
           foodId: true,
           name: true,
+          servingDesc: true,
         },
       });
 
       for (const row of rows) {
-        map.set(row.foodId, row.name);
+        map.set(row.foodId, {
+          name: row.name,
+          servingDesc: row.servingDesc,
+        });
       }
 
       this.logger.debug(
-        `FoodI18n: loaded ${map.size}/${foodIds.length} translations for locale=${locale}`,
+        `FoodI18n: loaded ${map.size}/${foodIds.length} localizations for locale=${locale}`,
       );
     } catch (err) {
-      // 翻译查询失败不影响推荐结果，仅记录警告
       this.logger.warn(
-        `FoodI18n: translation lookup failed for locale=${locale}: ${(err as Error).message}`,
+        `FoodI18n: localization lookup failed for locale=${locale}: ${(err as Error).message}`,
       );
     }
 
@@ -83,22 +110,23 @@ export class FoodI18nService {
    */
   applyToScoredFoods(
     foods: ScoredFood[],
-    translationMap: FoodTranslationMap,
+    localizationMap: FoodLocalizationMap,
   ): ScoredFood[] {
-    if (translationMap.size === 0) {
+    if (localizationMap.size === 0) {
       return foods; // zh 语言或无翻译，直接返回原对象
     }
 
     return foods.map((sf) => {
-      const translated = translationMap.get(sf.food.id);
-      if (!translated) return sf;
+      const localized = localizationMap.get(sf.food.id);
+      if (!localized) return sf;
 
       return {
         ...sf,
         food: {
           ...sf.food,
           // 覆盖 displayName（不影响 food.name，保持内部逻辑稳定）
-          displayName: translated,
+          displayName: localized.name,
+          displayServingDesc: localized.servingDesc || sf.food.standardServingDesc,
         } as any,
       };
     });
@@ -117,18 +145,18 @@ export class FoodI18nService {
       .map((sf) => sf.food.id)
       .filter(Boolean);
 
-    if (foodIds.length === 0 || locale === 'zh') {
+    if (foodIds.length === 0 || this.isDefaultLocale(locale)) {
       return recommendation;
     }
 
-    const translationMap = await this.loadTranslations(foodIds, locale);
-    if (translationMap.size === 0) {
+    const localizationMap = await this.loadLocalizedDetails(foodIds, locale);
+    if (localizationMap.size === 0) {
       return recommendation;
     }
 
     return {
       ...recommendation,
-      foods: this.applyToScoredFoods(recommendation.foods, translationMap),
+      foods: this.applyToScoredFoods(recommendation.foods, localizationMap),
     };
   }
 }

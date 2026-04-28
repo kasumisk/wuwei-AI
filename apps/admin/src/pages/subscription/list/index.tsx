@@ -46,9 +46,10 @@ import {
 const statusConfig: Record<SubscriptionStatus, { color: string; text: string }> = {
   active: { color: 'success', text: '生效中' },
   expired: { color: 'default', text: '已过期' },
+  cancelled: { color: 'warning', text: '已取消' },
   canceled: { color: 'warning', text: '已取消' },
-  past_due: { color: 'error', text: '逾期' },
-  trialing: { color: 'processing', text: '试用中' },
+  grace_period: { color: 'processing', text: '宽限期' },
+  paused: { color: 'default', text: '已暂停' },
 };
 
 const tierConfig: Record<SubscriptionTier, { color: string; text: string }> = {
@@ -62,6 +63,7 @@ const channelConfig: Record<PaymentChannel, { text: string }> = {
   apple_iap: { text: 'Apple IAP' },
   google_play: { text: 'Google Play' },
   wechat_pay: { text: '微信支付' },
+  alipay: { text: '支付宝' },
   manual: { text: '人工操作' },
 };
 
@@ -111,7 +113,7 @@ const SubscriptionList: React.FC = () => {
 
   const handleExtend = (record: SubscriptionDto) => {
     setExtendingRecord(record);
-    extendForm.setFieldsValue({ days: 30, reason: '' });
+    extendForm.setFieldsValue({ extendDays: 30 });
     setExtendVisible(true);
   };
 
@@ -120,13 +122,13 @@ const SubscriptionList: React.FC = () => {
     if (!extendingRecord) return;
     extendMutation.mutate({
       id: extendingRecord.id,
-      data: { days: values.days, reason: values.reason },
+      data: { extendDays: values.extendDays },
     });
   };
 
   const handleChangePlan = (record: SubscriptionDto) => {
     setChangingRecord(record);
-    changePlanForm.setFieldsValue({ newPlanId: '', reason: '' });
+    changePlanForm.setFieldsValue({ newPlanId: '' });
     setChangePlanVisible(true);
   };
 
@@ -135,7 +137,7 @@ const SubscriptionList: React.FC = () => {
     if (!changingRecord) return;
     changePlanMutation.mutate({
       id: changingRecord.id,
-      data: { newPlanId: values.newPlanId, reason: values.reason },
+      data: { newPlanId: values.newPlanId },
     });
   };
 
@@ -191,9 +193,10 @@ const SubscriptionList: React.FC = () => {
       valueEnum: {
         active: { text: '生效中', status: 'Success' },
         expired: { text: '已过期', status: 'Default' },
+        cancelled: { text: '已取消', status: 'Warning' },
         canceled: { text: '已取消', status: 'Warning' },
-        past_due: { text: '逾期', status: 'Error' },
-        trialing: { text: '试用中', status: 'Processing' },
+        grace_period: { text: '宽限期', status: 'Processing' },
+        paused: { text: '已暂停', status: 'Default' },
       },
       render: (_: unknown, record: SubscriptionDto) => {
         const cfg = statusConfig[record.status];
@@ -297,7 +300,7 @@ const SubscriptionList: React.FC = () => {
     ? (plansData as any).list
         .filter((p: any) => p.isActive)
         .map((p: any) => ({
-          label: `${tierConfig[p.tier as SubscriptionTier]?.text || p.tier} - ${p.billingCycle === 'monthly' ? '月付' : p.billingCycle === 'yearly' ? '年付' : '终身'} ($${(p.priceCents / 100).toFixed(2)})`,
+          label: `${tierConfig[p.tier as SubscriptionTier]?.text || p.tier} - ${p.billingCycle === 'monthly' ? '月付' : p.billingCycle === 'quarterly' ? '季付' : p.billingCycle === 'yearly' ? '年付' : '终身'} ($${(p.priceCents / 100).toFixed(2)})`,
           value: p.id,
         }))
     : [];
@@ -356,7 +359,7 @@ const SubscriptionList: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col xs={12} sm={8} lg={4}>
+        {/* <Col xs={12} sm={8} lg={4}>
           <Card size="small" hoverable loading={overviewLoading}>
             <Tooltip title="按支付渠道统计">
               <Statistic
@@ -366,11 +369,11 @@ const SubscriptionList: React.FC = () => {
               />
             </Tooltip>
           </Card>
-        </Col>
+        </Col> */}
       </Row>
 
       {/* 渠道分布标签 */}
-      {overview && Object.keys(overview.byChannel).length > 0 && (
+      {/* {overview && Object.keys(overview.byChannel).length > 0 && (
         <Card size="small" title="支付渠道分布" style={{ marginBottom: 16 }}>
           <Space wrap>
             {Object.entries(overview.byChannel).map(([channel, count]) => (
@@ -381,7 +384,7 @@ const SubscriptionList: React.FC = () => {
             ))}
           </Space>
         </Card>
-      )}
+      )} */}
 
       {/* 表格 */}
       <Card>
@@ -440,7 +443,7 @@ const SubscriptionList: React.FC = () => {
         <Form form={extendForm} layout="vertical">
           <Form.Item
             label="延期天数"
-            name="days"
+            name="extendDays"
             rules={[{ required: true, message: '请输入延期天数' }]}
           >
             <InputNumber
@@ -450,13 +453,6 @@ const SubscriptionList: React.FC = () => {
               placeholder="输入延期天数"
               addonAfter="天"
             />
-          </Form.Item>
-          <Form.Item
-            label="延期原因"
-            name="reason"
-            rules={[{ required: true, message: '请输入延期原因' }]}
-          >
-            <Input.TextArea placeholder="请输入延期原因" rows={3} />
           </Form.Item>
         </Form>
         {extendingRecord && (
@@ -496,13 +492,6 @@ const SubscriptionList: React.FC = () => {
               showSearch
               optionFilterProp="label"
             />
-          </Form.Item>
-          <Form.Item
-            label="换餐原因"
-            name="reason"
-            rules={[{ required: true, message: '请输入换餐原因' }]}
-          >
-            <Input.TextArea placeholder="请输入换套餐原因" rows={3} />
           </Form.Item>
         </Form>
         {changingRecord && (

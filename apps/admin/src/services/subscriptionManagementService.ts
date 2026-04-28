@@ -11,18 +11,35 @@ import type { PageResponse } from '@ai-platform/shared';
 
 // ==================== 类型定义 ====================
 
-export type SubscriptionStatus = 'active' | 'expired' | 'canceled' | 'past_due' | 'trialing';
+export type SubscriptionStatus =
+  | 'active'
+  | 'expired'
+  | 'cancelled'
+  | 'canceled'
+  | 'grace_period'
+  | 'paused';
 export type SubscriptionTier = 'free' | 'pro' | 'premium';
-export type BillingCycle = 'monthly' | 'yearly' | 'lifetime';
-export type PaymentChannel = 'stripe' | 'apple_iap' | 'google_play' | 'wechat_pay' | 'manual';
+export type BillingCycle = 'monthly' | 'quarterly' | 'yearly' | 'lifetime';
+export type PaymentChannel =
+  | 'apple_iap'
+  | 'wechat_pay'
+  | 'alipay'
+  | 'manual'
+  | 'stripe'
+  | 'google_play';
 
 export interface SubscriptionPlanDto {
   id: string;
+  name: string;
+  description?: string | null;
   tier: SubscriptionTier;
   billingCycle: BillingCycle;
   priceCents: number;
   currency: string;
   entitlements: Record<string, unknown>;
+  appleProductId?: string | null;
+  wechatProductId?: string | null;
+  sortOrder: number;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -45,6 +62,8 @@ export interface SubscriptionDto {
   expiresAt: string;
   autoRenew: boolean;
   canceledAt?: string;
+  cancelledAt?: string;
+  platformSubscriptionId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -52,12 +71,13 @@ export interface SubscriptionDto {
 export interface PaymentRecordDto {
   id: string;
   userId: string;
-  subscriptionId: string;
+  subscriptionId?: string | null;
+  orderNo: string;
   amountCents: number;
   currency: string;
-  paymentChannel: PaymentChannel;
+  channel: PaymentChannel;
   status: string;
-  transactionId?: string;
+  platformTransactionId?: string | null;
   createdAt: string;
 }
 
@@ -96,13 +116,11 @@ export interface PaymentRecordsListResponse {
 }
 
 export interface ExtendSubscriptionDto {
-  days: number;
-  reason: string;
+  extendDays: number;
 }
 
 export interface ChangeSubscriptionPlanDto {
   newPlanId: string;
-  reason: string;
 }
 
 export interface SubscriptionOverview {
@@ -115,16 +133,29 @@ export interface SubscriptionOverview {
 }
 
 export interface CreatePlanDto {
+  name: string;
+  description?: string;
   tier: SubscriptionTier;
   billingCycle: BillingCycle;
   priceCents: number;
   currency?: string;
-  entitlements?: Record<string, unknown>;
+  entitlements: Record<string, unknown>;
+  appleProductId?: string;
+  wechatProductId?: string;
+  sortOrder?: number;
 }
 
 export interface UpdatePlanDto {
+  name?: string;
+  description?: string;
+  tier?: SubscriptionTier;
+  billingCycle?: BillingCycle;
   priceCents?: number;
+  currency?: string;
   entitlements?: Record<string, unknown>;
+  appleProductId?: string;
+  wechatProductId?: string;
+  sortOrder?: number;
   isActive?: boolean;
 }
 
@@ -210,10 +241,10 @@ export const subscriptionApi = {
     request.get(`${PATH.ADMIN.SUBSCRIPTIONS}/${id}`),
 
   extendSubscription: (id: string, data: ExtendSubscriptionDto): Promise<SubscriptionDto> =>
-    request.post(`${PATH.ADMIN.SUBSCRIPTIONS}/${id}/extend`, data),
+    request.put(`${PATH.ADMIN.SUBSCRIPTIONS}/${id}/extend`, data),
 
   changeSubscriptionPlan: (id: string, data: ChangeSubscriptionPlanDto): Promise<SubscriptionDto> =>
-    request.post(`${PATH.ADMIN.SUBSCRIPTIONS}/${id}/change-plan`, data),
+    request.put(`${PATH.ADMIN.SUBSCRIPTIONS}/${id}/change-plan`, data),
 
   // --- Payment Records ---
   getPaymentRecords: (params?: GetPaymentRecordsQuery): Promise<PaymentRecordsListResponse> =>

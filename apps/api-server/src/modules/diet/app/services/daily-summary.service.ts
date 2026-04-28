@@ -12,6 +12,41 @@ import {
   getUserLocalDayBounds,
   getUserLocalHour,
 } from '../../../../common/utils/timezone.util';
+import { I18nService } from '../../../../core/i18n';
+import { RequestContextService } from '../../../../core/context/request-context.service';
+import type { I18nLocale } from '../../../../core/i18n';
+
+type DailyMetricStatus = 'no_data' | 'low' | 'normal' | 'high';
+type DailyScoreStatus = 'no_data' | 'needs_work' | 'fair' | 'good';
+type DailyTrendDirection = 'insufficient' | 'up' | 'down' | 'stable';
+
+interface DailyMetricView {
+  value: number;
+  goal: number;
+  ratio: number | null;
+  diff: number;
+  status: DailyMetricStatus;
+}
+
+interface DailySummaryInsightView {
+  calories: DailyMetricView;
+  macros: {
+    protein: DailyMetricView;
+    fat: DailyMetricView;
+    carbs: DailyMetricView;
+  };
+  score: number;
+  scoreStatus: DailyScoreStatus;
+  dataStatus: 'empty' | 'recorded';
+  tags: string[];
+  summary: string;
+  trend: {
+    calories: DailyTrendDirection;
+    caloriesDelta: number | null;
+    score: DailyTrendDirection;
+    scoreDelta: number | null;
+  };
+}
 
 @Injectable()
 export class DailySummaryService {
@@ -22,6 +57,8 @@ export class DailySummaryService {
     private readonly nutritionScoreService: NutritionScoreService,
     private readonly userProfileService: UserProfileService,
     private readonly foodRecordService: FoodRecordService,
+    private readonly i18n: I18nService,
+    private readonly requestCtx: RequestContextService,
     @Inject(forwardRef(() => BehaviorService))
     private readonly behaviorService: BehaviorService,
   ) {}
@@ -182,18 +219,319 @@ export class DailySummaryService {
    * 获取最近 N 天的汇总数据（趋势图用）
    */
   async getRecentSummaries(userId: string, days: number = 7) {
+    const locale = I18nService.normalizeLocale(this.requestCtx.locale);
     const tz = await this.userProfileService.getTimezone(userId);
-    const since = new Date();
-    since.setDate(since.getDate() - days);
-    const sinceDate = getUserLocalDate(tz, since);
+    const safeDays = Math.min(Math.max(Math.trunc(days) || 7, 1), 90);
+    const todayKey = getUserLocalDate(tz);
+    const startKey = this.addDaysToDateKey(todayKey, -(safeDays - 1));
 
-    return this.prisma.dailySummaries.findMany({
+    let goals = {
+      calories: 2000,
+      protein: 0,
+      fat: 0,
+      carbs: 0,
+      quality: 7,
+      satiety: 6,
+    };
+    try {
+      const profile = await this.userProfileService.getProfile(userId);
+      goals = this.nutritionScoreService.calculateDailyGoals(profile);
+    } catch {
+      /* keep default goals */
+    }
+
+    const rows = await this.prisma.dailySummaries.findMany({
       where: {
         userId: userId,
-        date: { gte: new Date(sinceDate) },
+        date: {
+          gte: new Date(`${startKey}T00:00:00.000Z`),
+          lte: new Date(`${todayKey}T00:00:00.000Z`),
+        },
       },
       orderBy: { date: 'asc' },
     });
+
+    const byDate = new Map(
+      rows.map((row) => [this.toDateKey(row.date), row] as const),
+    );
+    let previousRecorded: DailySummaryInsightView | null = null;
+
+    return Array.from({ length: safeDays }, (_, index) => {
+      const dateKey = this.addDaysToDateKey(startKey, index);
+      const row = byDate.get(dateKey);
+      const mealCount = row?.mealCount ?? 0;
+      const calorieGoal = row?.calorieGoal ?? goals.calories;
+      const proteinGoal = this.toNumber(row?.proteinGoal) || goals.protein;
+      const fatGoal = this.toNumber(row?.fatGoal) || goals.fat;
+      const carbsGoal = this.toNumber(row?.carbsGoal) || goals.carbs;
+
+      const base = {
+        id: row?.id ?? '',
+        userId,
+        date: row?.date ?? new Date(`${dateKey}T00:00:00.000Z`),
+        totalCalories: row?.totalCalories ?? 0,
+        calorieGoal,
+        mealCount,
+        totalProtein: this.round(this.toNumber(row?.totalProtein), 1),
+        totalFat: this.round(this.toNumber(row?.totalFat), 1),
+        totalCarbs: this.round(this.toNumber(row?.totalCarbs), 1),
+        avgQuality: this.round(this.toNumber(row?.avgQuality), 1),
+        avgSatiety: this.round(this.toNumber(row?.avgSatiety), 1),
+        nutritionScore: row?.nutritionScore ?? 0,
+        proteinGoal,
+        fatGoal,
+        carbsGoal,
+        createdAt: row?.createdAt ?? null,
+        updatedAt: row?.updatedAt ?? null,
+        sourceBreakdown: this.normalizeSourceBreakdown(row?.sourceBreakdown),
+        recommendExecutionCount: row?.recommendExecutionCount ?? 0,
+      };
+      const insight = this.buildDailyInsight(base, previousRecorded, locale);
+      if (mealCount > 0) previousRecorded = insight;
+      return { ...base, ...insight };
+    });
+  }
+
+  private buildDailyInsight(
+    day: {
+      totalCalories: number;
+      calorieGoal: number;
+      mealCount: number;
+      totalProtein: number;
+      totalFat: number;
+      totalCarbs: number;
+      nutritionScore: number;
+      proteinGoal: number;
+      fatGoal: number;
+      carbsGoal: number;
+      recommendExecutionCount: number;
+    },
+    previous: DailySummaryInsightView | null,
+    locale: I18nLocale,
+  ): DailySummaryInsightView {
+    const hasData = day.mealCount > 0;
+    const calories = this.buildMetric(
+      day.totalCalories,
+      day.calorieGoal,
+      hasData,
+      0.85,
+      1.1,
+    );
+    const protein = this.buildMetric(
+      day.totalProtein,
+      day.proteinGoal,
+      hasData,
+      0.8,
+      1.2,
+    );
+    const fat = this.buildMetric(day.totalFat, day.fatGoal, hasData, 0.6, 1.15);
+    const carbs = this.buildMetric(
+      day.totalCarbs,
+      day.carbsGoal,
+      hasData,
+      0.6,
+      1.15,
+    );
+    const score = hasData ? day.nutritionScore || 0 : 0;
+    const scoreStatus = this.getScoreStatus(score, hasData);
+    const tags = this.buildTags(
+      day,
+      calories,
+      protein,
+      fat,
+      carbs,
+      scoreStatus,
+    );
+    const trend = {
+      calories: this.getTrendDirection(
+        previous?.calories.value ?? null,
+        hasData ? calories.value : null,
+        80,
+      ),
+      caloriesDelta:
+        previous && hasData
+          ? Math.round(calories.value - previous.calories.value)
+          : null,
+      score: this.getTrendDirection(
+        previous?.score ?? null,
+        hasData ? score : null,
+        5,
+      ),
+      scoreDelta:
+        previous && hasData ? Math.round(score - previous.score) : null,
+    };
+
+    return {
+      calories,
+      macros: { protein, fat, carbs },
+      score,
+      scoreStatus,
+      dataStatus: hasData ? 'recorded' : 'empty',
+      tags,
+      summary: this.buildSummary(tags, calories, protein, fat, carbs, locale),
+      trend,
+    };
+  }
+
+  private buildMetric(
+    value: number,
+    goal: number,
+    hasData: boolean,
+    lowRatio: number,
+    highRatio: number,
+  ): DailyMetricView {
+    const safeValue = this.round(value, 1);
+    const safeGoal = this.round(goal, 1);
+    if (!hasData || safeGoal <= 0) {
+      return {
+        value: safeValue,
+        goal: safeGoal,
+        ratio: null,
+        diff: this.round(safeValue - safeGoal, 1),
+        status: 'no_data',
+      };
+    }
+    const ratio = safeValue / safeGoal;
+    const status: DailyMetricStatus =
+      ratio < lowRatio ? 'low' : ratio <= highRatio ? 'normal' : 'high';
+    return {
+      value: safeValue,
+      goal: safeGoal,
+      ratio: this.round(ratio, 3),
+      diff: this.round(safeValue - safeGoal, 1),
+      status,
+    };
+  }
+
+  private buildTags(
+    day: { mealCount: number; recommendExecutionCount: number },
+    calories: DailyMetricView,
+    protein: DailyMetricView,
+    fat: DailyMetricView,
+    carbs: DailyMetricView,
+    scoreStatus: DailyScoreStatus,
+  ): string[] {
+    if (day.mealCount <= 0) return ['no_record'];
+    const tags: string[] = [];
+    if (calories.status === 'high') tags.push('calories_high');
+    if (calories.status === 'low') tags.push('calories_low');
+    if (protein.status === 'low') tags.push('low_protein');
+    if (fat.status === 'high') tags.push('high_fat');
+    if (carbs.status === 'high') tags.push('high_carbs');
+    if (scoreStatus === 'needs_work') tags.push('low_score');
+    if (day.mealCount < 3) tags.push('low_meal_count');
+    if (day.recommendExecutionCount > 0) tags.push('ai_recommend_used');
+    if (tags.length === 0) tags.push('balanced_day');
+    return tags;
+  }
+
+  private buildSummary(
+    tags: string[],
+    calories: DailyMetricView,
+    protein: DailyMetricView,
+    fat: DailyMetricView,
+    carbs: DailyMetricView,
+    locale: I18nLocale,
+  ): string {
+    if (tags.includes('no_record')) {
+      return this.i18n.translate('diet.trend.summary.noRecord', locale);
+    }
+    if (tags.includes('balanced_day')) {
+      return this.i18n.translate('diet.trend.summary.balanced', locale);
+    }
+
+    const parts: string[] = [];
+    if (tags.includes('calories_high')) {
+      parts.push(
+        this.i18n.translate('diet.trend.summary.caloriesHigh', locale, {
+          amount: Math.abs(Math.round(calories.diff)),
+        }),
+      );
+    } else if (tags.includes('calories_low')) {
+      parts.push(
+        this.i18n.translate('diet.trend.summary.caloriesLow', locale, {
+          amount: Math.abs(Math.round(calories.diff)),
+        }),
+      );
+    }
+    if (tags.includes('low_protein') && protein.ratio !== null) {
+      parts.push(
+        this.i18n.translate('diet.trend.summary.proteinRatio', locale, {
+          percent: Math.round(protein.ratio * 100),
+        }),
+      );
+    }
+    if (tags.includes('high_fat') && fat.ratio !== null) {
+      parts.push(
+        this.i18n.translate('diet.trend.summary.fatRatio', locale, {
+          percent: Math.round(fat.ratio * 100),
+        }),
+      );
+    }
+    if (tags.includes('high_carbs') && carbs.ratio !== null) {
+      parts.push(
+        this.i18n.translate('diet.trend.summary.carbsRatio', locale, {
+          percent: Math.round(carbs.ratio * 100),
+        }),
+      );
+    }
+    return parts.length > 0
+      ? this.i18n.translate('diet.trend.summary.combined', locale, {
+          parts: parts.join(
+            this.i18n.translate('diet.trend.summary.separator', locale),
+          ),
+        })
+      : this.i18n.translate('diet.trend.summary.generic', locale);
+  }
+
+  private getScoreStatus(score: number, hasData: boolean): DailyScoreStatus {
+    if (!hasData) return 'no_data';
+    if (score < 60) return 'needs_work';
+    if (score < 75) return 'fair';
+    return 'good';
+  }
+
+  private getTrendDirection(
+    previous: number | null,
+    current: number | null,
+    stableThreshold: number,
+  ): DailyTrendDirection {
+    if (previous === null || current === null) return 'insufficient';
+    const delta = current - previous;
+    if (Math.abs(delta) <= stableThreshold) return 'stable';
+    return delta > 0 ? 'up' : 'down';
+  }
+
+  private addDaysToDateKey(dateKey: string, days: number): string {
+    const date = new Date(`${dateKey}T00:00:00.000Z`);
+    date.setUTCDate(date.getUTCDate() + days);
+    return date.toISOString().slice(0, 10);
+  }
+
+  private toDateKey(date: Date): string {
+    return date.toISOString().slice(0, 10);
+  }
+
+  private toNumber(value: unknown): number {
+    if (value === null || value === undefined) return 0;
+    return Number(value) || 0;
+  }
+
+  private round(value: number, digits = 0): number {
+    const factor = 10 ** digits;
+    return Math.round(value * factor) / factor;
+  }
+
+  private normalizeSourceBreakdown(value: unknown): Record<string, number> {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    return Object.entries(value as Record<string, unknown>).reduce(
+      (acc, [key, raw]) => {
+        const count = Number(raw) || 0;
+        if (count > 0) acc[key] = count;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
   }
 
   /**
