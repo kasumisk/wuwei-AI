@@ -9,6 +9,7 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
 import { SubscriptionService } from './subscription.service';
 import {
+  BillingCycle,
   PaymentChannel,
   SubscriptionStatus,
   SubscriptionTier,
@@ -479,6 +480,26 @@ export class RevenueCatSyncService {
           ],
         },
       });
+
+      if (!matchedPlan) {
+        const billingCycle = this.inferBillingCycleFromProductId(
+          candidate.productId,
+        );
+        matchedPlan = await this.prisma.subscriptionPlan.findFirst({
+          where: {
+            tier: SubscriptionTier.PRO,
+            isActive: true,
+            ...(billingCycle == null ? {} : { billingCycle }),
+          },
+          orderBy: [{ sortOrder: 'asc' }, { priceCents: 'asc' }],
+        });
+
+        if (matchedPlan) {
+          this.logger.warn(
+            `RevenueCat 商品未配置映射，按商品周期回退套餐: userId=${userId}, productId=${candidate.productId}, planId=${matchedPlan.id}, billingCycle=${matchedPlan.billingCycle}`,
+          );
+        }
+      }
     }
 
     if (active && candidateExpiresAt && matchedPlan) {
@@ -684,6 +705,27 @@ export class RevenueCatSyncService {
         rawSnapshot: snapshot as any,
       },
     });
+  }
+
+  private inferBillingCycleFromProductId(
+    productId: string,
+  ): BillingCycle | null {
+    const normalizedProductId = productId.toLowerCase();
+
+    if (
+      normalizedProductId.includes('year') ||
+      normalizedProductId.includes('annual')
+    ) {
+      return BillingCycle.YEARLY;
+    }
+    if (normalizedProductId.includes('quarter')) {
+      return BillingCycle.QUARTERLY;
+    }
+    if (normalizedProductId.includes('month')) {
+      return BillingCycle.MONTHLY;
+    }
+
+    return null;
   }
 
   private mapActionToTransactionType(action: string): string {
