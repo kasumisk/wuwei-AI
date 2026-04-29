@@ -169,12 +169,18 @@ export class WeeklyPlanService {
     for (const date of dates) {
       const existing = existingMap.get(date);
       if (existing) {
-        const localized = await this.dailyPlanService.localizePlan(existing, userId);
+        const localized = await this.dailyPlanService.localizePlan(
+          existing,
+          userId,
+        );
         dailySummaries.push(this.toPlanSummary(localized, false));
       } else {
         const plan = generatedMap.get(date);
         if (plan) {
-          const localized = await this.dailyPlanService.localizePlan(plan, userId);
+          const localized = await this.dailyPlanService.localizePlan(
+            plan,
+            userId,
+          );
           dailySummaries.push(this.toPlanSummary(localized, true));
         }
       }

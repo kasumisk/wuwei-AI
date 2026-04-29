@@ -17,7 +17,7 @@ import { FoodI18nService } from '../../../diet/app/services/food-i18n.service';
 import { DecisionSummaryService } from '../../../decision/decision/decision-summary.service';
 import { FoodAnalysisResultV61 } from '../../../decision/types/analysis-result.types';
 import { DecisionOutput } from '../../../decision/decision/food-decision.service';
-import { cl } from '../../../decision/i18n/decision-labels';
+// V13.5: cl() 已迁移为 this.i18n.t('decision.xxx', locale, vars)
 
 // ─── 文本分析缓存配置 ───
 const TEXT_ANALYSIS_CACHE_TTL_MS = 10 * 60 * 1000; // 10 分钟
@@ -164,30 +164,32 @@ export class AnalyzeResultHelperService {
     const cal = `${Math.round(calories)}kcal`;
     switch (recommendation) {
       case 'recommend':
-        return cl('summary.recommend.ok', locale as Locale, {
+        return this.i18n.t('decision.summary.recommend.ok', locale as Locale, {
           food: foodName,
           cal,
         });
       case 'avoid':
-        return cl('summary.avoid.generic', locale as Locale, {
+        return this.i18n.t('decision.summary.avoid.generic', locale as Locale, {
           food: foodName,
           cal,
         });
       case 'caution':
       default:
-        return cl('summary.caution.reason', locale as Locale, {
-          food: foodName,
-          cal,
-          reason: reason || this.i18n.t('food.betterForCurrentGoal'),
-        });
+        return this.i18n.t(
+          'decision.summary.caution.reason',
+          locale as Locale,
+          {
+            food: foodName,
+            cal,
+            reason: reason || this.i18n.t('food.betterForCurrentGoal'),
+          },
+        );
     }
   }
 
   // ─── DB 重建 ───
 
-  reconstructAnalysisResult(
-    record: any,
-  ): Partial<FoodAnalysisResultV61> {
+  reconstructAnalysisResult(record: any): Partial<FoodAnalysisResultV61> {
     const nutrition = record.nutritionPayload as Record<string, unknown> | null;
     const decision = record.decisionPayload as Record<string, unknown> | null;
     const recognized = record.recognizedPayload as Record<

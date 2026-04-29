@@ -25,7 +25,7 @@ import { DecisionToneResolverService } from '../decision/decision-tone-resolver.
 import { ShouldEatActionService } from '../decision/should-eat-action.service';
 import { AnalysisAccuracyService } from '../analyze/analysis-accuracy.service';
 import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
-import { cl } from '../i18n/decision-labels';
+import { I18nService, I18nLocale } from '../../../core/i18n';
 
 /** Input for the coaching stage */
 export interface CoachingStageInput {
@@ -48,6 +48,7 @@ export class CoachingStageService {
     private readonly decisionToneResolverService: DecisionToneResolverService,
     private readonly shouldEatActionService: ShouldEatActionService,
     private readonly analysisAccuracyService: AnalysisAccuracyService,
+    private readonly i18n: I18nService,
   ) {}
 
   private static readonly DEFAULT_DIAGNOSTICS: ConfidenceDiagnostics = {
@@ -195,17 +196,29 @@ export class CoachingStageService {
   ): void {
     summary.analysisQualityBand = diagnostics.analysisQualityBand;
     summary.reviewLevel = diagnostics.reviewLevel;
+    const loc = (locale ?? this.i18n.currentLocale()) as I18nLocale;
     if (diagnostics.analysisQualityBand === 'high') {
-      summary.analysisQualityNote = cl('pipeline.quality.high', locale);
+      summary.analysisQualityNote = this.i18n.t(
+        'decision.pipeline.quality.high',
+        loc,
+      );
     } else if (diagnostics.analysisQualityBand === 'medium') {
-      summary.analysisQualityNote = cl('pipeline.quality.medium', locale);
+      summary.analysisQualityNote = this.i18n.t(
+        'decision.pipeline.quality.medium',
+        loc,
+      );
     } else {
-      summary.analysisQualityNote = cl('pipeline.quality.low', locale);
+      summary.analysisQualityNote = this.i18n.t(
+        'decision.pipeline.quality.low',
+        loc,
+      );
     }
 
     const guardrails: string[] = [];
     if (summary.analysisQualityBand === 'low') {
-      guardrails.push(cl('pipeline.guardrail.lowQuality', locale));
+      guardrails.push(
+        this.i18n.t('decision.pipeline.guardrail.lowQuality', loc),
+      );
     }
     if (summary.healthConstraintNote) {
       guardrails.push(summary.healthConstraintNote);
@@ -214,10 +227,10 @@ export class CoachingStageService {
       guardrails.push(summary.dynamicDecisionHint);
     }
     if (summary.verdict === 'avoid') {
-      guardrails.push(cl('pipeline.guardrail.avoid', locale));
+      guardrails.push(this.i18n.t('decision.pipeline.guardrail.avoid', loc));
     }
     if (mode === 'post_eat') {
-      guardrails.push(cl('pipeline.guardrail.postEat', locale));
+      guardrails.push(this.i18n.t('decision.pipeline.guardrail.postEat', loc));
     }
 
     summary.decisionGuardrails = Array.from(new Set(guardrails)).slice(0, 3);

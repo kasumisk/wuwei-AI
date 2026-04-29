@@ -398,7 +398,7 @@ export class ContextualProfileService {
     if (!shortTermProfile) return { scene, modifiers: null };
 
     const modifiers: Partial<Record<ScoreDimension, number>> = {};
-    let sceneChanged = false;
+    const sceneChanged = false;
 
     // ── 场景微调（保留原有逻辑） ──
 

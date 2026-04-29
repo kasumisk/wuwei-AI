@@ -61,7 +61,8 @@ const SEVERITY_ORDER: Record<string, number> = {
 
 @Injectable()
 export class DecisionSummaryService {
-  constructor(private readonly dynamicSignalWeightService: DynamicSignalWeightService,
+  constructor(
+    private readonly dynamicSignalWeightService: DynamicSignalWeightService,
     private readonly i18n: I18nService,
   ) {}
 
@@ -557,7 +558,9 @@ export class DecisionSummaryService {
       return this.i18n.t('decision.summary.focus.avoid', locale);
     }
     if (topIssues.length > 0) {
-      return this.i18n.t('decision.summary.focus.topIssue', locale, { issue: topIssues[0] });
+      return this.i18n.t('decision.summary.focus.topIssue', locale, {
+        issue: topIssues[0],
+      });
     }
     return this.i18n.t('decision.summary.focus.default', locale);
   }
@@ -618,7 +621,9 @@ export class DecisionSummaryService {
 
     if (healthIssueImplications.length > 0) {
       return this.i18n.t('decision.summary.healthNote.issues', locale, {
-        details: healthIssueImplications.join(this.i18n.t('decision.separator.list', locale)),
+        details: healthIssueImplications.join(
+          this.i18n.t('decision.separator.list', locale),
+        ),
       });
     }
 
@@ -659,8 +664,8 @@ export class DecisionSummaryService {
     for (const [key, factor] of lowScoreFactors) {
       if (topIssues.length >= 4) break;
       const label = DIMENSION_LABEL_KEYS[key]
-        // i18n-allow-dynamic
-        ? this.i18n.t(`decision.${DIMENSION_LABEL_KEYS[key]}`, locale)
+        ? // i18n-allow-dynamic
+          this.i18n.t(`decision.${DIMENSION_LABEL_KEYS[key]}`, locale)
         : key;
       const msg = `${label}: ${factor.rationale}`;
       if (!existing.has(msg)) {
@@ -724,19 +729,27 @@ export class DecisionSummaryService {
     };
 
     const SIGNAL_DESC_MAP: Record<string, string> = {
-      health_constraint: this.i18n.t('decision.summary.signal.healthConstraint', locale, {
-        details: [
-          ...translateEnumList('allergen', ctx.allergens, locale),
-          ...translateEnumList(
-            'dietaryRestriction',
-            ctx.dietaryRestrictions,
-            locale,
-          ),
-          ...translateEnumList('healthCondition', ctx.healthConditions, locale),
-        ]
-          .slice(0, 2)
-          .join('/'),
-      }),
+      health_constraint: this.i18n.t(
+        'decision.summary.signal.healthConstraint',
+        locale,
+        {
+          details: [
+            ...translateEnumList('allergen', ctx.allergens, locale),
+            ...translateEnumList(
+              'dietaryRestriction',
+              ctx.dietaryRestrictions,
+              locale,
+            ),
+            ...translateEnumList(
+              'healthCondition',
+              ctx.healthConditions,
+              locale,
+            ),
+          ]
+            .slice(0, 2)
+            .join('/'),
+        },
+      ),
       over_limit: this.i18n.t('decision.summary.signal.overLimit', locale, {
         consumed: Math.round(ctx.todayCalories),
         goal: ctx.goalCalories,
@@ -757,12 +770,20 @@ export class DecisionSummaryService {
       carb_excess: this.i18n.t('decision.summary.signal.carbExcess', locale, {
         amount: Math.abs(Math.round(ctx.remainingCarbs)),
       }),
-      late_night_window: this.i18n.t('decision.summary.signal.lateNight', locale, {
-        hour: ctx.localHour,
-      }),
-      meal_count_low: this.i18n.t('decision.summary.signal.mealCountLow', locale, {
-        count: ctx.mealCount,
-      }),
+      late_night_window: this.i18n.t(
+        'decision.summary.signal.lateNight',
+        locale,
+        {
+          hour: ctx.localHour,
+        },
+      ),
+      meal_count_low: this.i18n.t(
+        'decision.summary.signal.mealCountLow',
+        locale,
+        {
+          count: ctx.mealCount,
+        },
+      ),
       fresh_day: this.i18n.t('decision.summary.signal.freshDay', locale),
     };
 
@@ -804,12 +825,16 @@ export class DecisionSummaryService {
       const gp = ctx.goalProgress;
       if (gp.streakDays > 0) {
         parts.push(
-          this.i18n.t('decision.summary.streakNote', locale, { days: gp.streakDays }),
+          this.i18n.t('decision.summary.streakNote', locale, {
+            days: gp.streakDays,
+          }),
         );
       }
       if (gp.executionRate > 0) {
         parts.push(
-          this.i18n.t('decision.summary.executionNote', locale, { rate: Math.round(gp.executionRate * 100) }),
+          this.i18n.t('decision.summary.executionNote', locale, {
+            rate: Math.round(gp.executionRate * 100),
+          }),
         );
       }
     }

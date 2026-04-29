@@ -222,19 +222,19 @@ function mapRowToFoodLibrary(row: Record<string, unknown>): FoodLibrary {
     cookingMethods: Array.isArray(row.cookingMethods)
       ? row.cookingMethods.map(String)
       : [],
-    prepTimeMinutes: nOpt(row.prepTimeMinutes) as number | undefined,
-    cookTimeMinutes: nOpt(row.cookTimeMinutes) as number | undefined,
+    prepTimeMinutes: nOpt(row.prepTimeMinutes),
+    cookTimeMinutes: nOpt(row.cookTimeMinutes),
     skillRequired:
       row.skillRequired != null ? String(row.skillRequired) : undefined,
-    estimatedCostLevel: nOpt(row.estimatedCostLevel) as number | undefined,
-    shelfLifeDays: nOpt(row.shelfLifeDays) as number | undefined,
+    estimatedCostLevel: nOpt(row.estimatedCostLevel),
+    shelfLifeDays: nOpt(row.shelfLifeDays),
     waterContentPercent: nOpt(row.waterContentPercent),
     fodmapLevel: row.fodmapLevel != null ? String(row.fodmapLevel) : undefined,
     oxalateLevel:
       row.oxalateLevel != null ? String(row.oxalateLevel) : undefined,
 
     // 评分/指数
-    glycemicIndex: nOpt(row.glycemicIndex) as number | undefined,
+    glycemicIndex: nOpt(row.glycemicIndex),
     glycemicLoad: nOpt(row.glycemicLoad),
     isProcessed: Boolean(row.isProcessed),
     isFried: Boolean(row.isFried),
@@ -293,11 +293,9 @@ function mapRowToFoodLibrary(row: Record<string, unknown>): FoodLibrary {
       row.foodForm != null
         ? (String(row.foodForm) as FoodLibrary['foodForm'])
         : undefined,
-    dishPriority: nOpt(row.dishPriority) as number | undefined,
+    dishPriority: nOpt(row.dishPriority),
     // V7.4 Phase 1-B: 食物可获得性
-    acquisitionDifficulty: nOpt(row.acquisitionDifficulty) as
-      | number
-      | undefined,
+    acquisitionDifficulty: nOpt(row.acquisitionDifficulty),
   };
 }
 

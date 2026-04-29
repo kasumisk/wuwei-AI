@@ -221,7 +221,7 @@ export class MealTemplateService {
       let slotScore = candidate.score;
 
       // foodForm 匹配加分
-      const foodForm = (candidate.food as FoodLibrary).foodForm;
+      const foodForm = candidate.food.foodForm;
       if (slot.preferredFoodForm && foodForm) {
         if (foodForm === slot.preferredFoodForm) {
           slotScore *= 1.2; // 完全匹配 +20%
@@ -234,7 +234,7 @@ export class MealTemplateService {
       }
 
       // dishPriority 加分
-      const dishPriority = (candidate.food as FoodLibrary).dishPriority;
+      const dishPriority = candidate.food.dishPriority;
       if (dishPriority != null && dishPriority > 0) {
         slotScore *= 1 + dishPriority / 500; // 0-100 → 0-20% 加分
       }
@@ -275,7 +275,7 @@ export class MealTemplateService {
       formCheckCount++;
       const filled = filledSlots.find((fs) => fs.role === slot.role);
       if (filled) {
-        const foodForm = (filled.food.food as FoodLibrary).foodForm;
+        const foodForm = filled.food.food.foodForm;
         if (foodForm === slot.preferredFoodForm) formMatchCount++;
       }
     }

@@ -20,10 +20,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
 import { RedisCacheService } from '../../../../core/redis/redis-cache.service';
-import {
-  getBehavior,
-  getInferred,
-} from '../../user-profile-merge.helper';
+import { getBehavior, getInferred } from '../../user-profile-merge.helper';
 
 /** 单个特征得分 */
 export interface ChurnFeature {
@@ -175,7 +172,10 @@ export class ChurnPredictionService {
     });
 
     const profiles = profileRows
-      .map((r) => ({ userId: r.userId, churnRisk: getInferred(r).churnRisk ?? null }))
+      .map((r) => ({
+        userId: r.userId,
+        churnRisk: getInferred(r).churnRisk ?? null,
+      }))
       .filter((p) => p.churnRisk !== null && p.churnRisk !== undefined);
 
     const distribution = { low: 0, medium: 0, high: 0, critical: 0 };

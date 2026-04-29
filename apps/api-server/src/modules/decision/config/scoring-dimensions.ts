@@ -1,17 +1,16 @@
 /**
- * V5.1 P2.3/P2.5 — 共享评分维度常量
+ * V13.2 — 评分维度纯常量 + impact 阈值
  *
- * V8 (i18n migration): 数据源改为 decision/i18n/{en-US,zh-CN,ja-JP}.json，
- *  通过 _load.ts 同步加载，labels-*.ts 已删除。
+ * i18n 已下放到调用方：调用方注入 I18nService 后直接调
+ *   this.i18n.t(`decision.dim.label.${dim}`, locale)
+ *   this.i18n.t(`decision.dim.explain.${dim}.${impact}`, locale)
+ *   this.i18n.t(`decision.dim.suggest.${dim}.${impact}`, locale)
  *
- * 维度标签/解释/建议存放于 JSON 中（key 形如 `dim.label.energy`），
- * getDimensionLabel/Explanation/Suggestion 公共 API 不变。
- *
- * NOTE: 不从 decision-labels.ts barrel 导入（避免循环依赖），
- * 直接从 _load.ts 拿到 BY_LOCALE 字典。
+ * 此文件保留：
+ *   - SCORING_DIMENSIONS / ScoringDimension（维度枚举）
+ *   - IMPACT_THRESHOLDS（阈值）
+ *   - scoreToImpact()（纯函数）
  */
-import { DECISION_LABELS_BY_LOCALE } from '../i18n/_load';
-import { resolveDecisionLocale } from '../i18n/decision-labels';
 
 // ==================== 维度键名 ====================
 
@@ -44,42 +43,4 @@ export function scoreToImpact(
   if (score >= IMPACT_THRESHOLDS.positive) return 'positive';
   if (score >= IMPACT_THRESHOLDS.warning) return 'warning';
   return 'critical';
-}
-
-/**
- * 获取维度标签
- */
-export function getDimensionLabel(
-  dimension: string,
-  locale?: string,
-): string {
-  const loc = locale || resolveDecisionLocale();
-  const labels = DECISION_LABELS_BY_LOCALE[loc] ?? DECISION_LABELS_BY_LOCALE['zh-CN'];
-  return labels[`dim.label.${dimension}`] || dimension;
-}
-
-/**
- * 获取维度解释
- */
-export function getDimensionExplanation(
-  dimension: string,
-  impact: 'positive' | 'warning' | 'critical',
-  locale?: string,
-): string {
-  const loc = locale || resolveDecisionLocale();
-  const labels = DECISION_LABELS_BY_LOCALE[loc] ?? DECISION_LABELS_BY_LOCALE['zh-CN'];
-  return labels[`dim.explain.${dimension}.${impact}`] || '';
-}
-
-/**
- * V1.9: 获取维度改善建议
- */
-export function getDimensionSuggestion(
-  dimension: string,
-  impact: 'warning' | 'critical',
-  locale?: string,
-): string | undefined {
-  const loc = locale || resolveDecisionLocale();
-  const labels = DECISION_LABELS_BY_LOCALE[loc] ?? DECISION_LABELS_BY_LOCALE['zh-CN'];
-  return labels[`dim.suggest.${dimension}.${impact}`] || undefined;
 }

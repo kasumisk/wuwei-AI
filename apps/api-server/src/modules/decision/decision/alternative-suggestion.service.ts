@@ -85,7 +85,8 @@ export interface AlternativeInput {
 export class AlternativeSuggestionService {
   private readonly logger = new Logger(AlternativeSuggestionService.name);
 
-  constructor(private readonly recommendationEngineService: RecommendationEngineService,
+  constructor(
+    private readonly recommendationEngineService: RecommendationEngineService,
     private readonly substitutionService: SubstitutionService,
     private readonly foodLibraryService: FoodLibraryService,
     private readonly foodI18nService: FoodI18nService,
@@ -217,7 +218,10 @@ export class AlternativeSuggestionService {
     alternatives: FoodAlternative[],
     locale?: I18nLocale,
   ): Promise<void> {
-    return this.applyI18nToAlternatives(alternatives, locale ?? this.resolveLocale());
+    return this.applyI18nToAlternatives(
+      alternatives,
+      locale ?? this.resolveLocale(),
+    );
   }
 
   /**
@@ -1014,10 +1018,14 @@ export class AlternativeSuggestionService {
         score += calScore * calWeight;
         if (calDiff < -AP.rankCalDiffThreshold)
           reasons.push(
-            this.i18n.t('decision.alt.calLess', locale, { amount: Math.abs(calDiff) }),
+            this.i18n.t('decision.alt.calLess', locale, {
+              amount: Math.abs(calDiff),
+            }),
           );
         else if (calDiff > AP.rankCalDiffThreshold)
-          reasons.push(this.i18n.t('decision.alt.calMore', locale, { amount: calDiff }));
+          reasons.push(
+            this.i18n.t('decision.alt.calMore', locale, { amount: calDiff }),
+          );
 
         // 蛋白质维度
         const prosScore = Math.max(
@@ -1030,10 +1038,16 @@ export class AlternativeSuggestionService {
             : AP.rankProteinWeightDefault;
         score += prosScore * prosWeight;
         if (prosDiff > AP.rankProteinDiffThreshold)
-          reasons.push(this.i18n.t('decision.alt.proteinMore', locale, { amount: prosDiff }));
+          reasons.push(
+            this.i18n.t('decision.alt.proteinMore', locale, {
+              amount: prosDiff,
+            }),
+          );
         else if (prosDiff < -AP.rankProteinDiffThreshold)
           reasons.push(
-            this.i18n.t('decision.alt.proteinLess', locale, { amount: Math.abs(prosDiff) }),
+            this.i18n.t('decision.alt.proteinLess', locale, {
+              amount: Math.abs(prosDiff),
+            }),
           );
 
         // V5.0 P2.1: foodForm match boost
@@ -1054,7 +1068,8 @@ export class AlternativeSuggestionService {
 
         // 归一化到 [0, 1]
         const finalScore = Math.max(0, Math.min(1, score));
-        if (reasons.length === 0) reasons.push(this.i18n.t('decision.alt.balanced', locale));
+        if (reasons.length === 0)
+          reasons.push(this.i18n.t('decision.alt.balanced', locale));
 
         return {
           ...alt,

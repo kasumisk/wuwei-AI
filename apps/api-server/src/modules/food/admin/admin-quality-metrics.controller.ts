@@ -54,9 +54,7 @@ export class AdminQualityMetricsController {
         dateRange: metrics.dateRange,
 
         // 问题分布
-        topIssues: (
-          Object.entries(metrics.issueBreakdown) as Array<[string, number]>
-        )
+        topIssues: Object.entries(metrics.issueBreakdown)
           .sort((a, b) => b[1] - a[1])
           .slice(0, 5)
           .map(([issue, count]) => ({

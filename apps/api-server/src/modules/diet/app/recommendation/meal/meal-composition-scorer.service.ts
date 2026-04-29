@@ -254,7 +254,7 @@ export class MealCompositionScorer {
   private calcCookingMethodDiversity(foods: ScoredFood[]): number {
     const methods = foods
       .flatMap((f) => f.food.cookingMethods?.map((m) => m.toLowerCase()) ?? [])
-      .filter(Boolean) as string[];
+      .filter(Boolean);
 
     if (methods.length <= 1) return 100;
 

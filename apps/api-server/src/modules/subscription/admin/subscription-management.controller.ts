@@ -228,10 +228,11 @@ export class SubscriptionManagementController {
     @Param('id') id: string,
     @Query() query: GetSubscriptionTimelineQueryDto,
   ): Promise<ApiResponse> {
-    const data = await this.subscriptionManagementService.getSubscriptionTimeline(
-      id,
-      query,
-    );
+    const data =
+      await this.subscriptionManagementService.getSubscriptionTimeline(
+        id,
+        query,
+      );
     return {
       success: true,
       code: HttpStatus.OK,

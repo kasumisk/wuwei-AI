@@ -46,7 +46,6 @@ function loadLocaleJson(locale: Locale): Record<string, string> {
     const txt = fs.readFileSync(file, 'utf8');
     return JSON.parse(txt) as Record<string, string>;
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error(
       `[recommendation/i18n-messages] failed to load ${file}: ${(err as Error).message}`,
     );

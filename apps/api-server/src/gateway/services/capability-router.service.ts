@@ -88,7 +88,7 @@ export class CapabilityRouter {
 
     // 如果客户端指定了首选提供商，提升其优先级（排序）
     if (permission?.preferredProvider) {
-      const preferred = (permission.preferredProvider as string).toLowerCase();
+      const preferred = permission.preferredProvider.toLowerCase();
       models.sort((a, b) => {
         const aPriority =
           a.providers && a.providers.name.toLowerCase() === preferred ? 0 : 1;

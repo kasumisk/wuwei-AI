@@ -61,8 +61,7 @@ export class PromptBuilderService implements OnModuleInit {
     vars?: Record<string, string | number>,
     locale?: I18nLocale,
   ): string {
-    const loc =
-      locale ?? this.lang?.locale ?? I18N_DEFAULT_LOCALE;
+    const loc = locale ?? this.lang?.locale ?? I18N_DEFAULT_LOCALE;
     const tpl = this.resolveTemplate(module, name, loc);
     if (tpl == null) {
       this.logger.warn(

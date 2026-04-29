@@ -1,4 +1,8 @@
-export { AllergenChecksService, ALLERGEN_EXPAND, matchAllergenInFoods } from './allergen-checks.service';
+export {
+  AllergenChecksService,
+  ALLERGEN_EXPAND,
+  matchAllergenInFoods,
+} from './allergen-checks.service';
 export { RestrictionChecksService } from './restriction-checks.service';
 export { BudgetTimingChecksService } from './budget-timing-checks.service';
 export { HealthConditionChecksService } from './health-condition-checks.service';

@@ -43,7 +43,9 @@ const LOCALE_MAP: Record<string, string> = {
   'ja-jp': 'ja-JP',
 };
 
-function readHeaderValue(value: string | string[] | undefined): string | undefined {
+function readHeaderValue(
+  value: string | string[] | undefined,
+): string | undefined {
   if (Array.isArray(value)) return value[0];
   return value;
 }

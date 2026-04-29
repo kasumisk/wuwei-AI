@@ -16,7 +16,6 @@ import {
 } from '../types/analysis-result.types';
 import { NutritionScoreBreakdown } from '../../diet/app/services/nutrition-score.service';
 import { I18nService, I18nLocale } from '../../../core/i18n';
-import { getDimensionLabel } from '../config/scoring-dimensions';
 import { DecisionFoodItem } from './food-decision.service';
 import { DynamicThresholdsService } from '../config/dynamic-thresholds.service';
 import { AllergenChecksService } from '../checks/allergen-checks.service';
@@ -83,7 +82,7 @@ export class IssueDetectorService {
         category: 'low_quality',
         severity: 'warning',
         message: this.i18n.t('decision.factor.critical', loc, {
-          dimension: getDimensionLabel('foodQuality', loc),
+          dimension: this.i18n.t('decision.dim.label.foodQuality', loc),
           score: Math.round(breakdown.foodQuality),
         }),
         data: { qualityScore: Math.round(breakdown.foodQuality) },

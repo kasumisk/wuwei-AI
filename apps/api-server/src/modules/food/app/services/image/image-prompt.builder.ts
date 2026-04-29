@@ -11,10 +11,7 @@ import { Injectable } from '@nestjs/common';
 import { BehaviorService } from '../../../../diet/app/services/behavior.service';
 import { UserContextBuilderService } from '../../../../decision/analyze/user-context-builder.service';
 import { buildTonePrompt } from '../../../../coach/app/config/coach-tone.config';
-import {
-  buildGoalAwarePrompt,
-  buildUserContextPrompt,
-} from '../analysis-prompt-schema';
+import { AnalysisPromptSchemaService } from '../analysis-prompt-schema.service';
 import type { Locale } from '../../../../diet/app/recommendation/utils/i18n-messages';
 
 export interface BuiltImagePrompt {
@@ -31,9 +28,13 @@ export class ImagePromptBuilder {
   constructor(
     private readonly behaviorService: BehaviorService,
     private readonly userContextBuilder: UserContextBuilderService,
+    private readonly promptSchema: AnalysisPromptSchemaService,
   ) {}
 
-  async build(userId: string | undefined, locale?: Locale): Promise<BuiltImagePrompt> {
+  async build(
+    userId: string | undefined,
+    locale?: Locale,
+  ): Promise<BuiltImagePrompt> {
     const ctx = await this.userContextBuilder.build(userId);
     const userContext = this.userContextBuilder.formatAsPromptString(ctx);
 
@@ -42,7 +43,7 @@ export class ImagePromptBuilder {
       this.loadPersonaPrompt(userId, ctx.goalType, locale),
     ]);
 
-    const userContextBlock = buildUserContextPrompt({
+    const userContextBlock = this.promptSchema.buildUserContextPrompt({
       goalType: ctx.goalType,
       nutritionPriority: ctx.nutritionPriority || [],
       healthConditions: ctx.healthConditions || [],
@@ -50,12 +51,21 @@ export class ImagePromptBuilder {
       locale,
     });
 
-    const fullContext = [personaPrompt, userContext, behaviorContext, userContextBlock]
+    const fullContext = [
+      personaPrompt,
+      userContext,
+      behaviorContext,
+      userContextBlock,
+    ]
       .filter(Boolean)
       .join('\n\n');
 
     return {
-      systemPrompt: buildGoalAwarePrompt(ctx.goalType, fullContext, locale),
+      systemPrompt: this.promptSchema.buildGoalAwarePrompt(
+        ctx.goalType,
+        fullContext,
+        locale,
+      ),
       goalType: ctx.goalType,
       profile: ctx.profile,
       healthConditions: ctx.healthConditions || [],
@@ -75,7 +85,9 @@ export class ImagePromptBuilder {
     locale?: Locale,
   ): Promise<string> {
     if (!userId) return '';
-    const profile = await this.behaviorService.getProfile(userId).catch(() => null);
+    const profile = await this.behaviorService
+      .getProfile(userId)
+      .catch(() => null);
     const style = profile?.coachStyle || 'friendly';
     return buildTonePrompt(style, goalType, locale);
   }

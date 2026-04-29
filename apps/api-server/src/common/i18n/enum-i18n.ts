@@ -51,7 +51,6 @@ function loadJson(locale: EnumLocale): Record<string, string> {
     const txt = fs.readFileSync(file, 'utf8');
     return JSON.parse(txt) as Record<string, string>;
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error(
       `[common/i18n/enum-i18n] failed to load ${file}: ${(err as Error).message}`,
     );
@@ -69,7 +68,10 @@ function resolveLocale(): EnumLocale {
   try {
     const cls = ClsServiceManager.getClsService();
     const raw = cls?.get('locale');
-    if (typeof raw === 'string' && (SUPPORTED as readonly string[]).includes(raw)) {
+    if (
+      typeof raw === 'string' &&
+      (SUPPORTED as readonly string[]).includes(raw)
+    ) {
       return raw as EnumLocale;
     }
   } catch {
@@ -93,9 +95,11 @@ export function translateEnum(
 ): string {
   if (!value) return '';
   const key = `enum.${category}.${value}`;
-  const loc = ((SUPPORTED as readonly string[]).includes(String(locale))
-    ? locale
-    : resolveLocale()) as EnumLocale;
+  const loc = (
+    (SUPPORTED as readonly string[]).includes(String(locale))
+      ? locale
+      : resolveLocale()
+  ) as EnumLocale;
   return (
     DICT[loc]?.[key] ||
     (loc !== FALLBACK_LOCALE ? DICT[FALLBACK_LOCALE]?.[key] : undefined) ||

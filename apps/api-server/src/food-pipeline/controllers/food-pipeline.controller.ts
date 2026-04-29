@@ -109,7 +109,12 @@ export class FoodPipelineController {
   @Post('import/usda-category')
   @ApiOperation({ summary: '按 USDA 分类分页导入' })
   async importUsdaCategory(
-    @Body() body: { foodCategory: string; pageSize?: number; maxPages?: number },
+    @Body()
+    body: {
+      foodCategory: string;
+      pageSize?: number;
+      maxPages?: number;
+    },
   ): Promise<ApiResponse> {
     const result = await this.orchestrator.importFromUsdaCategory(body);
     return {

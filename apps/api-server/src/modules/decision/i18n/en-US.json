@@ -702,5 +702,6 @@
   "ui.text.reviewAuto": "Auto Review",
   "ui.text.reviewManual": "Manual Review",
   "ui.text.unknown": "Unknown",
-  "ui.tone.encouraging": "Encouraging"
+  "ui.tone.encouraging": "Encouraging",
+  "prompt.nameField": "Field constraints:\n- Return food names only in the `name` field\n- `name` must use the current response language for this request\n- Do not return `nameEn`, `nameZh`, or any additional name fields"
 }

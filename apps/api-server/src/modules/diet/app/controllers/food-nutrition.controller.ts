@@ -244,11 +244,15 @@ export class FoodNutritionController {
           ? locale === 'en'
             ? `${outOfRangeMacros
                 .map((m) => macroNameMap[m]?.[locale] || m)
-                .join(', ')} are not balanced yet. Adjust them gradually toward your target.`
+                .join(
+                  ', ',
+                )} are not balanced yet. Adjust them gradually toward your target.`
             : locale === 'ja'
               ? `${outOfRangeMacros
                   .map((m) => macroNameMap[m]?.[locale] || m)
-                  .join('、')}はまだバランスが取れていません。目標比率に向けて少しずつ調整しましょう。`
+                  .join(
+                    '、',
+                  )}はまだバランスが取れていません。目標比率に向けて少しずつ調整しましょう。`
               : `${outOfRangeMacros.map((m) => macroNameMap[m]?.[locale] || m).join('、')}尚未达成平衡，建议按目标比例微调。`
           : feedbackBase;
 

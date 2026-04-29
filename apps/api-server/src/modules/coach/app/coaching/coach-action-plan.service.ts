@@ -9,10 +9,13 @@ import {
   StructuredDecision,
   NutritionTotals,
 } from '../../../decision/types/analysis-result.types';
+import { I18nService } from '../../../../core/i18n';
 import { ci, toCoachLocale } from '../../../decision/coach/coach-i18n';
 
 @Injectable()
 export class CoachActionPlanService {
+  constructor(private readonly i18n: I18nService) {}
+
   build(input: {
     shouldEatAction: ShouldEatAction;
     summary?: DecisionSummary;
@@ -149,7 +152,7 @@ export class CoachActionPlanService {
       confidenceDiagnostics?.decisionConfidence != null &&
       confidenceDiagnostics.decisionConfidence < 0.6
     ) {
-      why.push(ci('modifier.lowConfidence', lang));
+      why.push(ci(this.i18n, 'modifier.lowConfidence', lang));
     }
 
     // 去重 + 截取
@@ -180,7 +183,7 @@ export class CoachActionPlanService {
     const key = educationKeys[weakest[0]] as
       | keyof import('../../../decision/coach/coach-i18n').CoachI18nStrings
       | undefined;
-    return key ? ci(key, lang) : undefined;
+    return key ? ci(this.i18n, key, lang) : undefined;
   }
 
   private resolveTone(goalType?: string): 'strict' | 'encouraging' | 'neutral' {

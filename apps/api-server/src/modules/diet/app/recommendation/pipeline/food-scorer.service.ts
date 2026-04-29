@@ -244,7 +244,7 @@ export class FoodScorerService {
     // 传入用户营养缺口，对缺乏营养素的食物额外加分
     // 传入个性化营养目标，替代硬编码 DV
     // Sigmoid 参数从 scoringConfig 读取
-    let nutrientDensityScore = this.calcNutrientDensityScore(
+    const nutrientDensityScore = this.calcNutrientDensityScore(
       food,
       nutritionGaps,
       nutritionTargets,

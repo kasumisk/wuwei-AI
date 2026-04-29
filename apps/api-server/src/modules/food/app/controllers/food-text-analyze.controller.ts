@@ -16,12 +16,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiBearerAuth,
-  ApiBody,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { AppJwtAuthGuard } from '../../../auth/app/app-jwt-auth.guard';
 import { CurrentAppUser } from '../../../auth/app/current-app-user.decorator';
 import { AppUserPayload } from '../../../auth/app/app-user-payload.type';

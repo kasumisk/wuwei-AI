@@ -1,10 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../../../core/prisma/prisma.service';
 import { I18nService } from '../../../../../core/i18n';
-import {
-  getBehavior,
-  getInferred,
-} from '../../../user-profile-merge.helper';
+import { getBehavior, getInferred } from '../../../user-profile-merge.helper';
 
 /**
  * 持续收集触发器

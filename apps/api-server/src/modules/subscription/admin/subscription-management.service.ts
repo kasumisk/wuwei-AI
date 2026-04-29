@@ -206,7 +206,11 @@ export class SubscriptionManagementService {
       const matchedUsers = await this.prisma.appUsers.findMany({
         where: {
           OR: [
-            { id: normalizedKeyword.match(/^[0-9a-f-]{36}$/i) ? normalizedKeyword : undefined },
+            {
+              id: normalizedKeyword.match(/^[0-9a-f-]{36}$/i)
+                ? normalizedKeyword
+                : undefined,
+            },
             { nickname: { contains: normalizedKeyword, mode: 'insensitive' } },
             { email: { contains: normalizedKeyword, mode: 'insensitive' } },
           ],
@@ -238,32 +242,51 @@ export class SubscriptionManagementService {
 
     const normalizedProductId = productId?.trim();
     if (normalizedProductId) {
-      const [matchedPlans, matchedTransactions, matchedWebhookUsers] = await Promise.all([
-        this.prisma.subscriptionPlan.findMany({
-          where: {
-            OR: [
-              { appleProductId: { contains: normalizedProductId, mode: 'insensitive' } },
-              { googleProductId: { contains: normalizedProductId, mode: 'insensitive' } },
-              { wechatProductId: { contains: normalizedProductId, mode: 'insensitive' } },
-            ],
-          },
-          select: { id: true },
-        }),
-        this.prisma.subscriptionTransactions.findMany({
-          where: {
-            storeProductId: { contains: normalizedProductId, mode: 'insensitive' },
-          },
-          select: { subscriptionId: true },
-          take: 100,
-        }),
-        this.prisma.billingWebhookEvents.findMany({
-          where: {
-            productId: { contains: normalizedProductId, mode: 'insensitive' },
-          },
-          select: { appUserId: true },
-          take: 100,
-        }),
-      ]);
+      const [matchedPlans, matchedTransactions, matchedWebhookUsers] =
+        await Promise.all([
+          this.prisma.subscriptionPlan.findMany({
+            where: {
+              OR: [
+                {
+                  appleProductId: {
+                    contains: normalizedProductId,
+                    mode: 'insensitive',
+                  },
+                },
+                {
+                  googleProductId: {
+                    contains: normalizedProductId,
+                    mode: 'insensitive',
+                  },
+                },
+                {
+                  wechatProductId: {
+                    contains: normalizedProductId,
+                    mode: 'insensitive',
+                  },
+                },
+              ],
+            },
+            select: { id: true },
+          }),
+          this.prisma.subscriptionTransactions.findMany({
+            where: {
+              storeProductId: {
+                contains: normalizedProductId,
+                mode: 'insensitive',
+              },
+            },
+            select: { subscriptionId: true },
+            take: 100,
+          }),
+          this.prisma.billingWebhookEvents.findMany({
+            where: {
+              productId: { contains: normalizedProductId, mode: 'insensitive' },
+            },
+            select: { appUserId: true },
+            take: 100,
+          }),
+        ]);
 
       const matchedPlanIds = matchedPlans.map((item) => item.id);
       const matchedSubscriptionIds = matchedTransactions
@@ -291,7 +314,9 @@ export class SubscriptionManagementService {
         ...(where.AND ?? []),
         {
           OR: [
-            ...(matchedPlanIds.length ? [{ planId: { in: matchedPlanIds } }] : []),
+            ...(matchedPlanIds.length
+              ? [{ planId: { in: matchedPlanIds } }]
+              : []),
             ...(matchedSubscriptionIds.length
               ? [{ id: { in: [...new Set(matchedSubscriptionIds)] } }]
               : []),
@@ -327,38 +352,63 @@ export class SubscriptionManagementService {
         : [];
 
     const subscriptionIds = rawList.map((item) => item.id);
-    const [latestAudits, latestTransactions, latestWebhookEvents] = await Promise.all([
-      this.prisma.subscriptionAuditLogs.findMany({
-        where: {
-          OR: [{ subscriptionId: { in: subscriptionIds } }, { userId: { in: userIds } }],
-        },
-        orderBy: { createdAt: 'desc' },
-        take: Math.max(subscriptionIds.length * 4, 20),
-      }),
-      this.prisma.subscriptionTransactions.findMany({
-        where: {
-          OR: [{ subscriptionId: { in: subscriptionIds } }, { userId: { in: userIds } }],
-        },
-        orderBy: { createdAt: 'desc' },
-        take: Math.max(subscriptionIds.length * 4, 20),
-      }),
-      this.prisma.billingWebhookEvents.findMany({
-        where: { appUserId: { in: userIds } },
-        orderBy: { receivedAt: 'desc' },
-        take: Math.max(subscriptionIds.length * 6, 30),
-      }),
-    ]);
+    const [latestAudits, latestTransactions, latestWebhookEvents] =
+      await Promise.all([
+        this.prisma.subscriptionAuditLogs.findMany({
+          where: {
+            OR: [
+              { subscriptionId: { in: subscriptionIds } },
+              { userId: { in: userIds } },
+            ],
+          },
+          orderBy: { createdAt: 'desc' },
+          take: Math.max(subscriptionIds.length * 4, 20),
+        }),
+        this.prisma.subscriptionTransactions.findMany({
+          where: {
+            OR: [
+              { subscriptionId: { in: subscriptionIds } },
+              { userId: { in: userIds } },
+            ],
+          },
+          orderBy: { createdAt: 'desc' },
+          take: Math.max(subscriptionIds.length * 4, 20),
+        }),
+        this.prisma.billingWebhookEvents.findMany({
+          where: { appUserId: { in: userIds } },
+          orderBy: { receivedAt: 'desc' },
+          take: Math.max(subscriptionIds.length * 6, 30),
+        }),
+      ]);
 
     const userMap = new Map(users.map((u) => [u.id, u]));
-    const auditBySubscriptionId = new Map<string, (typeof latestAudits)[number]>();
+    const auditBySubscriptionId = new Map<
+      string,
+      (typeof latestAudits)[number]
+    >();
     const auditByUserId = new Map<string, (typeof latestAudits)[number]>();
-    const transactionBySubscriptionId = new Map<string, (typeof latestTransactions)[number]>();
-    const transactionByUserId = new Map<string, (typeof latestTransactions)[number]>();
-    const webhookByUserId = new Map<string, (typeof latestWebhookEvents)[number]>();
-    const failedWebhookByUserId = new Map<string, (typeof latestWebhookEvents)[number]>();
+    const transactionBySubscriptionId = new Map<
+      string,
+      (typeof latestTransactions)[number]
+    >();
+    const transactionByUserId = new Map<
+      string,
+      (typeof latestTransactions)[number]
+    >();
+    const webhookByUserId = new Map<
+      string,
+      (typeof latestWebhookEvents)[number]
+    >();
+    const failedWebhookByUserId = new Map<
+      string,
+      (typeof latestWebhookEvents)[number]
+    >();
 
     for (const item of latestAudits) {
-      if (item.subscriptionId && !auditBySubscriptionId.has(item.subscriptionId)) {
+      if (
+        item.subscriptionId &&
+        !auditBySubscriptionId.has(item.subscriptionId)
+      ) {
         auditBySubscriptionId.set(item.subscriptionId, item);
       }
       if (item.userId && !auditByUserId.has(item.userId)) {
@@ -366,7 +416,10 @@ export class SubscriptionManagementService {
       }
     }
     for (const item of latestTransactions) {
-      if (item.subscriptionId && !transactionBySubscriptionId.has(item.subscriptionId)) {
+      if (
+        item.subscriptionId &&
+        !transactionBySubscriptionId.has(item.subscriptionId)
+      ) {
         transactionBySubscriptionId.set(item.subscriptionId, item);
       }
       if (item.userId && !transactionByUserId.has(item.userId)) {
@@ -374,7 +427,10 @@ export class SubscriptionManagementService {
       }
     }
     for (const item of latestWebhookEvents) {
-      if (this.isUuid(item.appUserId) && !webhookByUserId.has(item.appUserId!)) {
+      if (
+        this.isUuid(item.appUserId) &&
+        !webhookByUserId.has(item.appUserId!)
+      ) {
         webhookByUserId.set(item.appUserId!, item);
       }
       if (
@@ -402,11 +458,15 @@ export class SubscriptionManagementService {
         (webhookByUserId.get(sub.userId) ? 'webhook' : null),
       lastSyncStatus: failedWebhookByUserId.has(sub.userId)
         ? 'failed'
-        : auditBySubscriptionId.get(sub.id) || auditByUserId.get(sub.userId) || webhookByUserId.get(sub.userId)
+        : auditBySubscriptionId.get(sub.id) ||
+            auditByUserId.get(sub.userId) ||
+            webhookByUserId.get(sub.userId)
           ? 'ok'
           : 'unknown',
-      lastWebhookStatus: webhookByUserId.get(sub.userId)?.processingStatus ?? null,
-      lastWebhookError: failedWebhookByUserId.get(sub.userId)?.lastError ?? null,
+      lastWebhookStatus:
+        webhookByUserId.get(sub.userId)?.processingStatus ?? null,
+      lastWebhookError:
+        failedWebhookByUserId.get(sub.userId)?.lastError ?? null,
       latestStoreProductId:
         transactionBySubscriptionId.get(sub.id)?.storeProductId ??
         transactionByUserId.get(sub.userId)?.storeProductId ??
@@ -887,70 +947,80 @@ export class SubscriptionManagementService {
   async getSubscriptionAnomalies(query: GetSubscriptionAnomaliesQueryDto) {
     const limit = query.limit ?? 20;
 
-    const [failedWebhooks, orphanTransactions, activeSubscriptions] = await Promise.all([
-      this.prisma.billingWebhookEvents.findMany({
-        where: {
-          provider: 'revenuecat',
-          processingStatus: 'failed',
-        },
-        orderBy: { receivedAt: 'desc' },
-        take: limit,
-      }),
-      this.prisma.subscriptionTransactions.findMany({
-        where: {
-          provider: 'revenuecat',
-          subscriptionId: null,
-        },
-        orderBy: { createdAt: 'desc' },
-        take: limit,
-      }),
-      this.prisma.subscription.findMany({
-        where: {
-          status: {
-            in: [
-              SubscriptionStatus.ACTIVE,
-              SubscriptionStatus.GRACE_PERIOD,
-              SubscriptionStatus.CANCELLED,
-            ],
+    const [failedWebhooks, orphanTransactions, activeSubscriptions] =
+      await Promise.all([
+        this.prisma.billingWebhookEvents.findMany({
+          where: {
+            provider: 'revenuecat',
+            processingStatus: 'failed',
           },
-          paymentChannel: {
-            in: ['apple_iap', 'google_play'],
+          orderBy: { receivedAt: 'desc' },
+          take: limit,
+        }),
+        this.prisma.subscriptionTransactions.findMany({
+          where: {
+            provider: 'revenuecat',
+            subscriptionId: null,
           },
-        },
-        include: { subscriptionPlan: true },
-        orderBy: { updatedAt: 'desc' },
-        take: limit * 3,
-      }),
-    ]);
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+        }),
+        this.prisma.subscription.findMany({
+          where: {
+            status: {
+              in: [
+                SubscriptionStatus.ACTIVE,
+                SubscriptionStatus.GRACE_PERIOD,
+                SubscriptionStatus.CANCELLED,
+              ],
+            },
+            paymentChannel: {
+              in: ['apple_iap', 'google_play'],
+            },
+          },
+          include: { subscriptionPlan: true },
+          orderBy: { updatedAt: 'desc' },
+          take: limit * 3,
+        }),
+      ]);
 
     const planProductIds = new Set(
       (
         await this.prisma.subscriptionPlan.findMany({
-          select: { appleProductId: true, googleProductId: true, wechatProductId: true },
+          select: {
+            appleProductId: true,
+            googleProductId: true,
+            wechatProductId: true,
+          },
         })
       )
-        .flatMap((plan) => [plan.appleProductId, plan.googleProductId, plan.wechatProductId])
+        .flatMap((plan) => [
+          plan.appleProductId,
+          plan.googleProductId,
+          plan.wechatProductId,
+        ])
         .filter((value): value is string => !!value),
     );
 
-    const [unmappedWebhookCandidates, unmappedTransactionCandidates] = await Promise.all([
-      this.prisma.billingWebhookEvents.findMany({
-        where: {
-          provider: 'revenuecat',
-          productId: { not: null },
-        },
-        orderBy: { receivedAt: 'desc' },
-        take: limit * 10,
-      }),
-      this.prisma.subscriptionTransactions.findMany({
-        where: {
-          provider: 'revenuecat',
-          storeProductId: { not: null },
-        },
-        orderBy: { createdAt: 'desc' },
-        take: limit * 10,
-      }),
-    ]);
+    const [unmappedWebhookCandidates, unmappedTransactionCandidates] =
+      await Promise.all([
+        this.prisma.billingWebhookEvents.findMany({
+          where: {
+            provider: 'revenuecat',
+            productId: { not: null },
+          },
+          orderBy: { receivedAt: 'desc' },
+          take: limit * 10,
+        }),
+        this.prisma.subscriptionTransactions.findMany({
+          where: {
+            provider: 'revenuecat',
+            storeProductId: { not: null },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: limit * 10,
+        }),
+      ]);
 
     const unmappedProducts = [
       ...unmappedWebhookCandidates
@@ -963,7 +1033,10 @@ export class SubscriptionManagementService {
           happenedAt: item.receivedAt,
         })),
       ...unmappedTransactionCandidates
-        .filter((item) => item.storeProductId && !planProductIds.has(item.storeProductId))
+        .filter(
+          (item) =>
+            item.storeProductId && !planProductIds.has(item.storeProductId),
+        )
         .map((item) => ({
           source: 'transaction',
           productId: item.storeProductId,
@@ -974,29 +1047,39 @@ export class SubscriptionManagementService {
     ]
       .filter(
         (item, index, self) =>
-          self.findIndex((candidate) => `${candidate.source}:${candidate.productId}` === `${item.source}:${item.productId}`) ===
-          index,
+          self.findIndex(
+            (candidate) =>
+              `${candidate.source}:${candidate.productId}` ===
+              `${item.source}:${item.productId}`,
+          ) === index,
       )
       .slice(0, limit);
 
-    const activeUserIds = [...new Set(activeSubscriptions.map((item) => item.userId))];
+    const activeUserIds = [
+      ...new Set(activeSubscriptions.map((item) => item.userId)),
+    ];
     const activeSubscriptionIds = activeSubscriptions.map((item) => item.id);
-    const [signalWebhooks, signalTransactions, activeUsers] = await Promise.all([
-      this.prisma.billingWebhookEvents.findMany({
-        where: { appUserId: { in: activeUserIds } },
-        select: { appUserId: true },
-      }),
-      this.prisma.subscriptionTransactions.findMany({
-        where: {
-          OR: [{ subscriptionId: { in: activeSubscriptionIds } }, { userId: { in: activeUserIds } }],
-        },
-        select: { subscriptionId: true, userId: true },
-      }),
-      this.prisma.appUsers.findMany({
-        where: { id: { in: activeUserIds } },
-        select: { id: true, nickname: true, email: true },
-      }),
-    ]);
+    const [signalWebhooks, signalTransactions, activeUsers] = await Promise.all(
+      [
+        this.prisma.billingWebhookEvents.findMany({
+          where: { appUserId: { in: activeUserIds } },
+          select: { appUserId: true },
+        }),
+        this.prisma.subscriptionTransactions.findMany({
+          where: {
+            OR: [
+              { subscriptionId: { in: activeSubscriptionIds } },
+              { userId: { in: activeUserIds } },
+            ],
+          },
+          select: { subscriptionId: true, userId: true },
+        }),
+        this.prisma.appUsers.findMany({
+          where: { id: { in: activeUserIds } },
+          select: { id: true, nickname: true, email: true },
+        }),
+      ],
+    );
 
     const webhookSignalUsers = new Set(
       signalWebhooks
@@ -1009,7 +1092,9 @@ export class SubscriptionManagementService {
         .filter((value): value is string => !!value),
     );
     const transactionSignalUsers = new Set(
-      signalTransactions.map((item) => item.userId).filter((value): value is string => !!value),
+      signalTransactions
+        .map((item) => item.userId)
+        .filter((value): value is string => !!value),
     );
     const activeUserMap = new Map(activeUsers.map((item) => [item.id, item]));
 
@@ -1038,7 +1123,8 @@ export class SubscriptionManagementService {
         failedWebhookCount: failedWebhooks.length,
         orphanTransactionCount: orphanTransactions.length,
         unmappedProductCount: unmappedProducts.length,
-        activeWithoutRevenueCatSignalCount: activeWithoutRevenueCatSignals.length,
+        activeWithoutRevenueCatSignalCount:
+          activeWithoutRevenueCatSignals.length,
       },
       failedWebhooks,
       orphanTransactions,
@@ -1048,6 +1134,11 @@ export class SubscriptionManagementService {
   }
 
   private isUuid(value?: string | null): boolean {
-    return !!value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+    return (
+      !!value &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        value,
+      )
+    );
   }
 }

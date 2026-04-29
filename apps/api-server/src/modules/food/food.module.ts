@@ -20,6 +20,7 @@ import { ImageFoodAnalysisService } from './app/services/image-food-analysis.ser
 // 图片分析子组件（V6.x 重构：解耦 prompt / HTTP / 解析 / 库匹配 / legacy 适配）
 import { VisionApiClient } from './app/services/image/vision-api.client';
 import { ImagePromptBuilder } from './app/services/image/image-prompt.builder';
+import { AnalysisPromptSchemaService } from './app/services/analysis-prompt-schema.service';
 import { ImageResultParser } from './app/services/image/image-result.parser';
 import { FoodLibraryMatcher } from './app/services/image/food-library-matcher.service';
 import { LegacyResultAdapter } from './app/services/image/mappers/legacy-result.adapter';
@@ -94,6 +95,7 @@ import { RecommendationModule } from '../diet/recommendation.module';
     // 图片分析子组件
     VisionApiClient,
     ImagePromptBuilder,
+    AnalysisPromptSchemaService,
     ImageResultParser,
     FoodLibraryMatcher,
     LegacyResultAdapter,

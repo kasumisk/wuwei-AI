@@ -24,7 +24,6 @@ import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
 import { RequestContextService } from '../context/request-context.service';
-import { setI18nSingleton } from './i18n.runtime';
 import {
   I18N_DEFAULT_LOCALE,
   I18N_LOCALES,
@@ -65,8 +64,6 @@ export class I18nService implements OnModuleInit {
 
   onModuleInit(): void {
     this.loadAll();
-    // 注册全局 singleton，供纯函数适配器（decision cl() 等）使用
-    setI18nSingleton(this);
   }
 
   /** 测试场景下手动重载 */
@@ -253,17 +250,13 @@ export class I18nService implements OnModuleInit {
     // 判断 arg2 是 locale 还是 vars
     if (
       typeof arg2 === 'string' ||
-      arg2 === undefined && arg3 !== undefined
+      (arg2 === undefined && arg3 !== undefined)
     ) {
-      const locale = (arg2 as I18nLocale | undefined) ?? this.currentLocale();
+      const locale = arg2 ?? this.currentLocale();
       return this.translate(key, locale, arg3);
     }
     // arg2 是 vars 或 undefined（无 vars）
-    return this.translate(
-      key,
-      this.currentLocale(),
-      arg2 as Record<string, string | number> | undefined,
-    );
+    return this.translate(key, this.currentLocale(), arg2);
   }
 
   /** 显式 locale 翻译 */

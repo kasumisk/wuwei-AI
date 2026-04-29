@@ -101,13 +101,19 @@ export class RecommendationFeedbackService {
 
       if (hasRatings || hasSignals) {
         const details: Record<string, unknown> = {};
-        if (params.ratings?.taste != null) details.tasteRating = params.ratings.taste;
-        if (params.ratings?.portion != null) details.portionRating = params.ratings.portion;
-        if (params.ratings?.price != null) details.priceRating = params.ratings.price;
-        if (params.ratings?.timing != null) details.timingRating = params.ratings.timing;
+        if (params.ratings?.taste != null)
+          details.tasteRating = params.ratings.taste;
+        if (params.ratings?.portion != null)
+          details.portionRating = params.ratings.portion;
+        if (params.ratings?.price != null)
+          details.priceRating = params.ratings.price;
+        if (params.ratings?.timing != null)
+          details.timingRating = params.ratings.timing;
         if (params.ratings?.comment) details.comment = params.ratings.comment;
-        if (params.implicitSignals?.dwellTimeMs != null) details.dwellTimeMs = params.implicitSignals.dwellTimeMs;
-        if (params.implicitSignals?.detailExpanded != null) details.detailExpanded = params.implicitSignals.detailExpanded;
+        if (params.implicitSignals?.dwellTimeMs != null)
+          details.dwellTimeMs = params.implicitSignals.dwellTimeMs;
+        if (params.implicitSignals?.detailExpanded != null)
+          details.detailExpanded = params.implicitSignals.detailExpanded;
 
         await this.prisma.recommendationFeedbacks.update({
           where: { id: feedback.id },

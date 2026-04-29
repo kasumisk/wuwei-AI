@@ -223,8 +223,8 @@ export function buildTonePrompt(
     resolvedLocale === 'ja-JP'
       ? 'ja-JP'
       : resolvedLocale === 'en-US'
-      ? 'en-US'
-      : 'zh-CN';
+        ? 'en-US'
+        : 'zh-CN';
   const persona =
     PERSONA_PROMPTS[coachStyle]?.[loc] ||
     PERSONA_PROMPTS['friendly']?.[loc] ||

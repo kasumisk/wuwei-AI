@@ -74,9 +74,9 @@ export class ProfileInferenceService {
     // 最优餐次推断（基于行为数据）
     let optimalMealCount = inferred.optimalMealCount ?? null;
     if (behavior.mealTimingPatterns) {
-      const timingCount = Object.keys(behavior.mealTimingPatterns as any).filter(
-        (k) => (behavior.mealTimingPatterns as any)[k],
-      ).length;
+      const timingCount = Object.keys(
+        behavior.mealTimingPatterns as any,
+      ).filter((k) => (behavior.mealTimingPatterns as any)[k]).length;
       if (timingCount > 0) {
         optimalMealCount = timingCount;
         confidenceScores.optimalMealCount = Math.min(

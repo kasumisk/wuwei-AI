@@ -77,7 +77,9 @@ export class StrategyManagementService {
   async getStrategyDetail(id: string) {
     const strategy = await this.prisma.strategy.findUnique({ where: { id } });
     if (!strategy) {
-      throw new NotFoundException(this.i18n.t('strategy.strategy.notFound', { id }));
+      throw new NotFoundException(
+        this.i18n.t('strategy.strategy.notFound', { id }),
+      );
     }
 
     // 同时查询该策略的活跃分配数
@@ -110,7 +112,9 @@ export class StrategyManagementService {
       where: { id },
     });
     if (!oldStrategy) {
-      throw new NotFoundException(this.i18n.t('strategy.strategy.notFound', { id }));
+      throw new NotFoundException(
+        this.i18n.t('strategy.strategy.notFound', { id }),
+      );
     }
 
     const updateData: Record<string, any> = {};
@@ -120,7 +124,9 @@ export class StrategyManagementService {
     if (dto.priority !== undefined) updateData.priority = dto.priority;
 
     if (Object.keys(updateData).length === 0) {
-      throw new BadRequestException(this.i18n.t('strategy.strategy.noFieldsToUpdate'));
+      throw new BadRequestException(
+        this.i18n.t('strategy.strategy.noFieldsToUpdate'),
+      );
     }
 
     const updated = await this.strategyService.update(id, updateData);

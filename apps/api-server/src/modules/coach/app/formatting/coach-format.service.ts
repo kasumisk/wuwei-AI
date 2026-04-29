@@ -11,6 +11,7 @@
 
 import { Injectable } from '@nestjs/common';
 import { I18nManagementService } from '../../../../config/i18n-management.service';
+import { I18nService } from '../../../../core/i18n';
 import { CoachFormatOptions, FormattedCoachOutput } from './coach-format.types';
 import { ci, toCoachLocale } from '../../../decision/coach/coach-i18n';
 
@@ -67,7 +68,10 @@ export class CoachFormatService {
     },
   } as const;
 
-  constructor(private readonly i18nManagementService: I18nManagementService) {}
+  constructor(
+    private readonly i18nManagementService: I18nManagementService,
+    private readonly i18n: I18nService,
+  ) {}
 
   private resolveLanguage(language?: string): 'zh' | 'en' | 'ja' {
     if (language === 'en') return 'en';
@@ -117,7 +121,10 @@ export class CoachFormatService {
     }
 
     const strings = this.i18nStrings[this.resolveLanguage(language)];
-    return strings['coach.timebound.hours'].replace(/\{\{hours\}\}/g, String(hours));
+    return strings['coach.timebound.hours'].replace(
+      /\{\{hours\}\}/g,
+      String(hours),
+    );
   }
 
   /**
@@ -209,13 +216,21 @@ export class CoachFormatService {
   ): string[] {
     if (action === 'should_avoid') {
       return [
-        ci('format.reason.pushOverload', toCoachLocale(options.language)),
+        ci(
+          this.i18n,
+          'format.reason.pushOverload',
+          toCoachLocale(options.language),
+        ),
         calorieText,
       ];
     }
     if (action === 'can_skip') {
       return [
-        ci('format.reason.noSignal', toCoachLocale(options.language)),
+        ci(
+          this.i18n,
+          'format.reason.noSignal',
+          toCoachLocale(options.language),
+        ),
         calorieText,
       ];
     }
@@ -238,22 +253,22 @@ export class CoachFormatService {
     if (action === 'should_avoid') {
       const lang = toCoachLocale(options.language);
       return [
-        ci('format.suggestion.switchLighter', lang),
-        ci('format.suggestion.reduceFirst', lang),
+        ci(this.i18n, 'format.suggestion.switchLighter', lang),
+        ci(this.i18n, 'format.suggestion.reduceFirst', lang),
       ];
     }
     if (action === 'can_skip') {
       const lang = toCoachLocale(options.language);
       return [
-        ci('format.suggestion.observeHunger', lang),
-        ci('format.suggestion.nextMealProtein', lang),
+        ci(this.i18n, 'format.suggestion.observeHunger', lang),
+        ci(this.i18n, 'format.suggestion.nextMealProtein', lang),
       ];
     }
 
     const lang = toCoachLocale(options.language);
-    const suggestions = [ci('format.suggestion.keepPace', lang)];
+    const suggestions = [ci(this.i18n, 'format.suggestion.keepPace', lang)];
     if (typeof nutrition.protein === 'number' && nutrition.protein < 20) {
-      suggestions.push(ci('format.suggestion.addProtein', lang));
+      suggestions.push(ci(this.i18n, 'format.suggestion.addProtein', lang));
     }
     return suggestions;
   }
@@ -261,9 +276,9 @@ export class CoachFormatService {
   private resolveEncouragement(options: CoachFormatOptions): string {
     const lang = toCoachLocale(options.language);
     const toneMap: Record<CoachFormatOptions['persona'], string> = {
-      strict: ci('format.encouragement.strict', lang),
-      friendly: ci('format.encouragement.friendly', lang),
-      data: ci('format.encouragement.data', lang),
+      strict: ci(this.i18n, 'format.encouragement.strict', lang),
+      friendly: ci(this.i18n, 'format.encouragement.friendly', lang),
+      data: ci(this.i18n, 'format.encouragement.data', lang),
     };
 
     return toneMap[options.persona];
@@ -293,7 +308,7 @@ export class CoachFormatService {
     const worst = candidates.reduce((a, b) => (a.score <= b.score ? a : b));
     const label = worst.label || worst.dimension;
     return worst.message
-      ? ci('format.scoreInsight', toCoachLocale(language), {
+      ? ci(this.i18n, 'format.scoreInsight', toCoachLocale(language), {
           label,
           score: String(worst.score),
           message: worst.message,

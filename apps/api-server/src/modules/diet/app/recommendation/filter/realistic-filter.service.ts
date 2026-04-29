@@ -352,7 +352,7 @@ export class RealisticFilterService {
     const ctxLevel = context.realismOverride?.level;
     if (ctxLevel) {
       // 兼容旧的 3 级 + 新的 'off'
-      return ctxLevel as RealismLevel;
+      return ctxLevel;
     }
 
     // 从场景推断

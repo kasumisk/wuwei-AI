@@ -252,7 +252,7 @@ export class AdminService {
    */
   async findById(id: string): Promise<AdminUser | null> {
     const user = await this.prisma.adminUsers.findUnique({ where: { id } });
-    return user as AdminUser | null;
+    return user;
   }
 
   /**

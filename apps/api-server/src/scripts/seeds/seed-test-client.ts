@@ -44,7 +44,7 @@ async function seedTestClient() {
 
     // 2. Grant Permissions
     const capabilityType = 'text.generation';
-    let permission = await prisma.clientCapabilityPermissions.findFirst({
+    const permission = await prisma.clientCapabilityPermissions.findFirst({
       where: {
         clientId: client.id,
         capabilityType: capabilityType,

@@ -581,9 +581,7 @@ export class WechatPayService {
   /**
    * 根据计划计费周期计算到期时间
    */
-  private calcExpiresDate(
-    plan: Pick<SubscriptionPlan, 'billingCycle'>,
-  ): Date {
+  private calcExpiresDate(plan: Pick<SubscriptionPlan, 'billingCycle'>): Date {
     const now = new Date();
     const billingCycle = String(plan.billingCycle ?? '').toLowerCase();
 

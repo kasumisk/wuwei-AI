@@ -426,13 +426,15 @@ export function extractCooking(food: FoodLibrary): FoodCookingView {
     prepTimeMinutes: Number(pg?.prepTimeMinutes ?? food.prepTimeMinutes) || 0,
     cookTimeMinutes: Number(pg?.cookTimeMinutes ?? food.cookTimeMinutes) || 0,
     skillRequired: pg?.skillRequired ?? food.skillRequired ?? 'beginner',
-    estimatedCostLevel: Number(pg?.estimatedCostLevel ?? food.estimatedCostLevel) || 1,
+    estimatedCostLevel:
+      Number(pg?.estimatedCostLevel ?? food.estimatedCostLevel) || 1,
     isProcessed: ha?.isProcessed ?? food.isProcessed,
     isFried: ha?.isFried ?? food.isFried,
     processingLevel: ha?.processingLevel ?? food.processingLevel,
     // V7.1: 扩展字段（为空时提供合理默认）
     requiredEquipment: pg?.requiredEquipment ?? food.requiredEquipment ?? [],
-    servingTemperature: pg?.servingTemperature ?? food.servingTemperature ?? 'hot',
+    servingTemperature:
+      pg?.servingTemperature ?? food.servingTemperature ?? 'hot',
     dishType: food.taxonomy?.dishType ?? food.dishType ?? 'dish',
   };
 }

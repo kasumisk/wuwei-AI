@@ -9,10 +9,7 @@ import { I18nLocale } from '../../../core/i18n';
 import { ConflictItem, ConflictReport } from '../types/decision.types';
 import type { UnifiedUserContext } from '../types/analysis-result.types';
 import { UserThresholds } from '../config/dynamic-thresholds.service';
-import type {
-  CheckResult,
-  CheckableFoodItem,
-} from '../config/decision-checks';
+import type { CheckResult, CheckableFoodItem } from './types';
 import { AllergenChecksService } from './allergen-checks.service';
 import { RestrictionChecksService } from './restriction-checks.service';
 import { HealthConditionChecksService } from './health-condition-checks.service';

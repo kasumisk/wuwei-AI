@@ -538,11 +538,11 @@ export class NutritionScoreService {
     const cfg = this.cachedWeightsConfig;
 
     // Step 1: 基础权重（按目标）— 配置优先，降级到硬编码
-    let weights: Record<string, number> = {
-      ...((cfg?.goalWeights?.[goalType] ||
+    const weights: Record<string, number> = {
+      ...(cfg?.goalWeights?.[goalType] ||
         cfg?.goalWeights?.health ||
         GOAL_WEIGHTS[goalType] ||
-        GOAL_WEIGHTS.health) as Record<string, number>),
+        GOAL_WEIGHTS.health),
     };
 
     // Step 2: 健康条件调整 — 配置优先，降级到硬编码
@@ -1723,7 +1723,7 @@ export class NutritionScoreService {
       : 75;
 
     // Layer 2: 个性化权重计算 (V1.1 Phase 1)
-    let w = this.computePersonalizedWeights(goal, healthConditions || []);
+    const w = this.computePersonalizedWeights(goal, healthConditions || []);
 
     // 处理零值维度：当 foodQuality/satiety 数据缺失（值 <= 0）时，
     // 将其权重分摊给有数据的维度（保证总权重 = 1.0）

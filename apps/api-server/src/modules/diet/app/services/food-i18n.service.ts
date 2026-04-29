@@ -174,7 +174,8 @@ export class FoodI18nService {
           ...sf.food,
           // 覆盖 displayName（不影响 food.name，保持内部逻辑稳定）
           displayName: localized.name,
-          displayServingDesc: localized.servingDesc || sf.food.standardServingDesc,
+          displayServingDesc:
+            localized.servingDesc || sf.food.standardServingDesc,
         } as any,
       };
     });
@@ -207,7 +208,10 @@ export class FoodI18nService {
     }
 
     // 直接 mutate foods 数组，确保调用方无需接收返回值也能生效
-    recommendation.foods = this.applyToScoredFoods(recommendation.foods, localizationMap);
+    recommendation.foods = this.applyToScoredFoods(
+      recommendation.foods,
+      localizationMap,
+    );
 
     return recommendation;
   }

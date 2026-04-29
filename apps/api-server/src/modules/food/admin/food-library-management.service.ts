@@ -174,7 +174,9 @@ export class FoodLibraryManagementService {
         .map((f) => f.trim())
         .filter((f) => /^[a-z_][a-z0-9_]*$/.test(f));
       if (fields.length > 0) {
-        const nullConds = fields.map((f) => `${getFieldSqlRef(f)} IS NULL`).join(' AND ');
+        const nullConds = fields
+          .map((f) => `${getFieldSqlRef(f)} IS NULL`)
+          .join(' AND ');
         conditions.push(`(${nullConds})`);
       }
     }
@@ -368,10 +370,13 @@ export class FoodLibraryManagementService {
 
     const getFieldValue = (field: string) => {
       const camelField = snakeToCamel(field);
-      if (NUTRITION_DETAIL_FIELDS.has(camelField)) return food.nutritionDetail?.[camelField];
-      if (HEALTH_ASSESSMENT_FIELDS.has(camelField)) return food.healthAssessment?.[camelField];
+      if (NUTRITION_DETAIL_FIELDS.has(camelField))
+        return food.nutritionDetail?.[camelField];
+      if (HEALTH_ASSESSMENT_FIELDS.has(camelField))
+        return food.healthAssessment?.[camelField];
       if (TAXONOMY_FIELDS.has(camelField)) return food.taxonomy?.[camelField];
-      if (PORTION_GUIDE_FIELDS.has(camelField)) return food.portionGuide?.[camelField];
+      if (PORTION_GUIDE_FIELDS.has(camelField))
+        return food.portionGuide?.[camelField];
       return food[camelField];
     };
 
@@ -600,10 +605,13 @@ export class FoodLibraryManagementService {
   ): number {
     const getFieldValue = (field: string) => {
       const camelField = snakeToCamel(field);
-      if (NUTRITION_DETAIL_FIELDS.has(camelField)) return food.nutritionDetail?.[camelField];
-      if (HEALTH_ASSESSMENT_FIELDS.has(camelField)) return food.healthAssessment?.[camelField];
+      if (NUTRITION_DETAIL_FIELDS.has(camelField))
+        return food.nutritionDetail?.[camelField];
+      if (HEALTH_ASSESSMENT_FIELDS.has(camelField))
+        return food.healthAssessment?.[camelField];
       if (TAXONOMY_FIELDS.has(camelField)) return food.taxonomy?.[camelField];
-      if (PORTION_GUIDE_FIELDS.has(camelField)) return food.portionGuide?.[camelField];
+      if (PORTION_GUIDE_FIELDS.has(camelField))
+        return food.portionGuide?.[camelField];
       return food[camelField];
     };
 
@@ -887,7 +895,11 @@ export class FoodLibraryManagementService {
       where: { foodId: foodId, locale: (dto as any).locale },
     });
     if (existing) {
-      throw new ConflictException(this.i18n.t('food.translationDuplicate', { locale: (dto as any).locale }));
+      throw new ConflictException(
+        this.i18n.t('food.translationDuplicate', {
+          locale: (dto as any).locale,
+        }),
+      );
     }
     return this.prisma.foodTranslations.create({
       data: { ...(dto as any), foodId: foodId },

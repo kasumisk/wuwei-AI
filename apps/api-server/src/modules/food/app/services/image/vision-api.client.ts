@@ -10,15 +10,11 @@
  *  - prompt 构建（见 ImagePromptBuilder）
  *  - 响应解析（见 ImageResultParser）
  */
-import {
-  Injectable,
-  Logger,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { I18nService } from '../../../../../core/i18n';
 import type { Locale } from '../../../../diet/app/recommendation/utils/i18n-messages';
-import { getUserMessage } from '../analysis-prompt-schema';
+import { AnalysisPromptSchemaService } from '../analysis-prompt-schema.service';
 
 const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_TOKENS = 1500;
@@ -41,6 +37,7 @@ export class VisionApiClient {
   constructor(
     private readonly config: ConfigService,
     private readonly i18n: I18nService,
+    private readonly promptSchema: AnalysisPromptSchemaService,
   ) {
     this.apiKey =
       this.config.get<string>('OPENROUTER_API_KEY') ||
@@ -50,11 +47,9 @@ export class VisionApiClient {
       this.config.get<string>('OPENROUTER_BASE_URL') ||
       'https://openrouter.ai/api/v1';
     this.model =
-      this.config.get<string>('VISION_MODEL') ||
-      'qwen/qwen3-vl-32b-instruct';
+      this.config.get<string>('VISION_MODEL') || 'qwen/qwen3-vl-32b-instruct';
     this.fallbackModel =
-      this.config.get<string>('VISION_MODEL_FALLBACK') ||
-      'qwen/qwen-vl-plus';
+      this.config.get<string>('VISION_MODEL_FALLBACK') || 'qwen/qwen-vl-plus';
   }
 
   /**
@@ -76,7 +71,14 @@ export class VisionApiClient {
           {
             role: 'user',
             content: [
-              { type: 'text', text: getUserMessage('image', userHint, locale) },
+              {
+                type: 'text',
+                text: this.promptSchema.getUserMessage(
+                  'image',
+                  userHint,
+                  locale,
+                ),
+              },
               {
                 type: 'image_url',
                 image_url: { url: imageUrl, detail: 'auto' },

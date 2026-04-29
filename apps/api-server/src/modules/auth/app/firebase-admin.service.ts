@@ -244,7 +244,8 @@ export class FirebaseAdminService implements OnModuleInit {
   private decodeTokenForLocalDevelopment(
     token: string,
   ): admin.auth.DecodedIdToken | null {
-    if (this.configService.get<string>('NODE_ENV') === 'production') return null;
+    if (this.configService.get<string>('NODE_ENV') === 'production')
+      return null;
 
     const payload = this.decodeJwtPayload(token);
     if (!payload || !this.projectId) return null;

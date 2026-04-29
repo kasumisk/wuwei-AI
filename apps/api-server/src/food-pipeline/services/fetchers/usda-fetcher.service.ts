@@ -245,7 +245,9 @@ export class UsdaFetcherService {
           query,
           pageSize,
           pageNumber,
-          dataType: (options.dataTypes || ['Foundation', 'SR Legacy']).join(','),
+          dataType: (options.dataTypes || ['Foundation', 'SR Legacy']).join(
+            ',',
+          ),
           foodCategory: options.foodCategory,
         },
       }),

@@ -29,7 +29,7 @@ import { RequestContextService, CLS_KEYS } from './request-context.service';
 
           // 如果请求已经通过认证（Passport 注入了 user），写入 userId
           // 注意: 在中间件阶段 Guard 尚未执行，userId 通常由后续的 Interceptor 补充
-          const user = (req as any).user as { id?: string } | undefined;
+          const user = req.user as { id?: string } | undefined;
           if (user?.id) {
             cls.set(CLS_KEYS.USER_ID, user.id);
           }

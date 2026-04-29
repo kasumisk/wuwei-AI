@@ -644,7 +644,7 @@ export class DailySummaryService {
       mealSignals,
     );
 
-    let summary = await this.prisma.dailySummaries.findFirst({
+    const summary = await this.prisma.dailySummaries.findFirst({
       where: { userId: userId, date: new Date(date) },
     });
 

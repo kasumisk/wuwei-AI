@@ -170,9 +170,14 @@ export class FoodPipelineOrchestratorService {
 
     for (let pageNumber = 1; pageNumber <= maxPages; pageNumber++) {
       try {
-        const result = await this.usdaFetcher.search('*', pageSize, pageNumber, {
-          foodCategory: options.foodCategory,
-        });
+        const result = await this.usdaFetcher.search(
+          '*',
+          pageSize,
+          pageNumber,
+          {
+            foodCategory: options.foodCategory,
+          },
+        );
         details.push(
           `Category page ${pageNumber}: fetched ${result.foods.length}/${result.totalHits}`,
         );
@@ -292,11 +297,7 @@ export class FoodPipelineOrchestratorService {
     });
     // Filter unlabeled: foods whose taxonomy has no tags
     const filteredFoods = options.unlabeled
-      ? foods.filter(
-          (f) =>
-            !f.taxonomy ||
-            !(f.taxonomy.tags as any[])?.length,
-        )
+      ? foods.filter((f) => !f.taxonomy || !(f.taxonomy.tags as any[])?.length)
       : foods;
     this.logger.log(`AI labeling ${filteredFoods.length} foods`);
 
@@ -337,7 +338,10 @@ export class FoodPipelineOrchestratorService {
         const existingTags = (food.taxonomy?.tags as any[]) || [];
         splitUpdate.tags = [...new Set([...existingTags, ...labelResult.tags])];
 
-        if (Object.keys(mainUpdate).length > 0 || Object.keys(splitUpdate).length > 0) {
+        if (
+          Object.keys(mainUpdate).length > 0 ||
+          Object.keys(splitUpdate).length > 0
+        ) {
           if (Object.keys(mainUpdate).length > 0) {
             await this.prisma.food.update({
               where: { id: food.id },
@@ -387,7 +391,9 @@ export class FoodPipelineOrchestratorService {
     limit?: number;
     untranslatedOnly?: boolean;
   }): Promise<{ translated: number; failed: number }> {
-    const normalizedLocales = [...new Set((options.targetLocales ?? []).filter(Boolean))];
+    const normalizedLocales = [
+      ...new Set((options.targetLocales ?? []).filter(Boolean)),
+    ];
     if (normalizedLocales.length === 0) {
       return { translated: 0, failed: 0 };
     }
@@ -520,7 +526,7 @@ export class FoodPipelineOrchestratorService {
         this.getSourcePriority(food.primarySource),
       );
       const combinedTags = [
-        ...((dup.existingFood as any).taxonomy?.tags as any[] || []),
+        ...((dup.existingFood.taxonomy?.tags as any[]) || []),
         ...(food.tags || []),
         ...directives.extraTags,
       ];
@@ -531,15 +537,40 @@ export class FoodPipelineOrchestratorService {
       });
 
       // Separate split-table fields from main-table fields in mergedFields
-      const { tags: _t, qualityScore: _q, satietyScore: _s, nutrientDensity: _n,
-              saturatedFat: _sf, transFat: _tf, cholesterol: _ch,
-              vitaminA: _va, vitaminC: _vc, vitaminD: _vd, vitaminE: _ve, vitaminB12: _vb, folate: _fo,
-              zinc: _zn, magnesium: _mg, phosphorus: _ph,
-              glycemicIndex: _gi, glycemicLoad: _gl, isProcessed: _ip, isFried: _ifd,
-              processingLevel: _pl, allergens: _al, mealTypes: _mt, compatibility: _co,
-              standardServingG: _ssg, standardServingDesc: _ssd, commonPortions: _cp,
-              omega3: _o3, omega6: _o6, solubleFiber: _slf, insolubleFiber: _ilf,
-              ...mainMergedFields } = mergedFields as any;
+      const {
+        tags: _t,
+        qualityScore: _q,
+        satietyScore: _s,
+        nutrientDensity: _n,
+        saturatedFat: _sf,
+        transFat: _tf,
+        cholesterol: _ch,
+        vitaminA: _va,
+        vitaminC: _vc,
+        vitaminD: _vd,
+        vitaminE: _ve,
+        vitaminB12: _vb,
+        folate: _fo,
+        zinc: _zn,
+        magnesium: _mg,
+        phosphorus: _ph,
+        glycemicIndex: _gi,
+        glycemicLoad: _gl,
+        isProcessed: _ip,
+        isFried: _ifd,
+        processingLevel: _pl,
+        allergens: _al,
+        mealTypes: _mt,
+        compatibility: _co,
+        standardServingG: _ssg,
+        standardServingDesc: _ssd,
+        commonPortions: _cp,
+        omega3: _o3,
+        omega6: _o6,
+        solubleFiber: _slf,
+        insolubleFiber: _ilf,
+        ...mainMergedFields
+      } = mergedFields as any;
 
       await this.prisma.food.update({
         where: { id: dup.existingFood.id },
@@ -551,12 +582,7 @@ export class FoodPipelineOrchestratorService {
       await upsertFoodSplitTables(this.prisma, dup.existingFood.id, {
         ...mergedFields,
         ...scores,
-        tags: [
-          ...new Set([
-            ...combinedTags,
-            ...(scores.tags || []),
-          ]),
-        ],
+        tags: [...new Set([...combinedTags, ...(scores.tags || [])])],
       });
 
       await this.saveSource(dup.existingFood.id, food);
@@ -906,14 +932,37 @@ export class FoodPipelineOrchestratorService {
 
         // Strip split-table fields from candidateFields before writing to main table
         const {
-          tags: _ct, qualityScore: _cq, satietyScore: _cs, nutrientDensity: _cn,
-          saturatedFat: _csf, transFat: _ctf, cholesterol: _cch,
-          vitaminA: _cva, vitaminC: _cvc, vitaminD: _cvd, vitaminE: _cve, vitaminB12: _cvb, folate: _cfo,
-          zinc: _czn, magnesium: _cmg, phosphorus: _cph,
-          glycemicIndex: _cgi, glycemicLoad: _cgl, isProcessed: _cip, isFried: _cifd,
-          processingLevel: _cpl, allergens: _cal, mealTypes: _cmt, compatibility: _cco,
-          standardServingG: _cssg, standardServingDesc: _cssd, commonPortions: _ccp,
-          omega3: _co3, omega6: _co6, solubleFiber: _cslf, insolubleFiber: _cilf,
+          tags: _ct,
+          qualityScore: _cq,
+          satietyScore: _cs,
+          nutrientDensity: _cn,
+          saturatedFat: _csf,
+          transFat: _ctf,
+          cholesterol: _cch,
+          vitaminA: _cva,
+          vitaminC: _cvc,
+          vitaminD: _cvd,
+          vitaminE: _cve,
+          vitaminB12: _cvb,
+          folate: _cfo,
+          zinc: _czn,
+          magnesium: _cmg,
+          phosphorus: _cph,
+          glycemicIndex: _cgi,
+          glycemicLoad: _cgl,
+          isProcessed: _cip,
+          isFried: _cifd,
+          processingLevel: _cpl,
+          allergens: _cal,
+          mealTypes: _cmt,
+          compatibility: _cco,
+          standardServingG: _cssg,
+          standardServingDesc: _cssd,
+          commonPortions: _ccp,
+          omega3: _co3,
+          omega6: _co6,
+          solubleFiber: _cslf,
+          insolubleFiber: _cilf,
           ...mainCandidateFields
         } = candidateFields as any;
 
@@ -1100,8 +1149,7 @@ export class FoodPipelineOrchestratorService {
         }
         const fc = sr.result.fieldConfidence ?? {};
         for (const [k, v] of Object.entries(fc)) {
-          if (!(k in mergedFieldConfidence))
-            mergedFieldConfidence[k] = v as number;
+          if (!(k in mergedFieldConfidence)) mergedFieldConfidence[k] = v;
         }
         stagesTotalFailed += sr.failedFields.length;
       }

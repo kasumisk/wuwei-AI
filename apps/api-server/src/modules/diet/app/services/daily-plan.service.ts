@@ -687,25 +687,24 @@ export class DailyPlanService {
         goalType,
         profile?.timezone,
         locale,
-      ) +
-      (compensationTip ? `；${compensationTip}` : '');
+      ) + (compensationTip ? `；${compensationTip}` : '');
 
     // V5 3.6 + V6 2.7 + V6.3 P2-3: 为每餐生成用户可读解释（含 V2 可视化数据）
     // explainPolicy 控制解释详细程度和雷达图可见性
     // V6.5 Phase 3K: resolvedDetailLevel 由自适应深度覆盖
     const mealExplanations = allRecs.map((rec, i) =>
-        this.buildMealExplanations(
-          rec,
-          userProfileConstraints,
-          goalType,
-          buildBudget(normalizedRatios[mealTypes[i]] || 0),
-          mealTypes[i],
-          explainPolicy,
-          userId,
-          resolvedDetailLevel,
-          locale,
-        ),
-      );
+      this.buildMealExplanations(
+        rec,
+        userProfileConstraints,
+        goalType,
+        buildBudget(normalizedRatios[mealTypes[i]] || 0),
+        mealTypes[i],
+        explainPolicy,
+        userId,
+        resolvedDetailLevel,
+        locale,
+      ),
+    );
 
     // V6.3 P1-4: 仅为活跃餐次生成 plan 数据，非活跃餐次存 null
     const plan = await this.prisma.dailyPlans.create({
@@ -802,7 +801,9 @@ export class DailyPlanService {
     const mealLabel = t(`meal.label.${targetMeal}`, {}, locale);
     const adjustmentNote = t(
       'response.replacedMealRecommendation',
-      { meal: mealLabel === `meal.label.${targetMeal}` ? targetMeal : mealLabel },
+      {
+        meal: mealLabel === `meal.label.${targetMeal}` ? targetMeal : mealLabel,
+      },
       locale,
     );
 
@@ -1038,7 +1039,7 @@ export class DailyPlanService {
         profile?.timezone,
         locale,
       ),
-    } as any;
+    };
 
     const meals: Array<{
       key: 'morningPlan' | 'lunchPlan' | 'dinnerPlan' | 'snackPlan';
@@ -1073,9 +1074,22 @@ export class DailyPlanService {
 
       localizedPlan[key] = {
         ...meal,
-        foodItems: this.localizeMealFoodItems(meal.foodItems, foodLocalizationMap),
-        foods: this.rebuildMealFoodsText(meal.foodItems, foodLocalizationMap, locale),
-        tip: this.rebuildMealTip(mealType, goalType, target, meal.calories ?? 0, locale),
+        foodItems: this.localizeMealFoodItems(
+          meal.foodItems,
+          foodLocalizationMap,
+        ),
+        foods: this.rebuildMealFoodsText(
+          meal.foodItems,
+          foodLocalizationMap,
+          locale,
+        ),
+        tip: this.rebuildMealTip(
+          mealType,
+          goalType,
+          target,
+          meal.calories ?? 0,
+          locale,
+        ),
         explanations: this.localizeMealExplanations(meal.explanations, locale),
       };
     }
@@ -1114,12 +1128,17 @@ export class DailyPlanService {
 
   private localizeMealFoodItems(
     foodItems: MealFoodItem[] | undefined,
-    foodLocalizationMap: Map<string, { name: string; servingDesc?: string | null }>,
+    foodLocalizationMap: Map<
+      string,
+      { name: string; servingDesc?: string | null }
+    >,
   ): MealFoodItem[] | undefined {
     if (!foodItems) return foodItems;
 
     return foodItems.map((item) => {
-      const localized = item.foodId ? foodLocalizationMap.get(item.foodId) : undefined;
+      const localized = item.foodId
+        ? foodLocalizationMap.get(item.foodId)
+        : undefined;
       if (!localized) return item;
 
       return {
@@ -1132,14 +1151,19 @@ export class DailyPlanService {
 
   private rebuildMealFoodsText(
     foodItems: MealFoodItem[] | undefined,
-    foodLocalizationMap: Map<string, { name: string; servingDesc?: string | null }>,
+    foodLocalizationMap: Map<
+      string,
+      { name: string; servingDesc?: string | null }
+    >,
     locale: Locale,
   ): string | undefined {
     if (!foodItems?.length) return undefined;
 
     return foodItems
       .map((item) => {
-        const localized = item.foodId ? foodLocalizationMap.get(item.foodId) : undefined;
+        const localized = item.foodId
+          ? foodLocalizationMap.get(item.foodId)
+          : undefined;
         return t(
           'display.foodItem',
           {
@@ -1153,7 +1177,10 @@ export class DailyPlanService {
       .join(' + ');
   }
 
-  private buildLocalizedAliasMap(keys: string[], locale: Locale): Map<string, string> {
+  private buildLocalizedAliasMap(
+    keys: string[],
+    locale: Locale,
+  ): Map<string, string> {
     const map = new Map<string, string>();
 
     for (const key of keys) {
@@ -1252,10 +1279,13 @@ export class DailyPlanService {
             explanation.primaryReason,
             reasonAliasMap,
           )!,
-          nutritionHighlights: (explanation.nutritionHighlights || []).map((item) => ({
-            ...item,
-            label: this.localizeByAlias(item.label, tagAliasMap) || item.label,
-          })),
+          nutritionHighlights: (explanation.nutritionHighlights || []).map(
+            (item) => ({
+              ...item,
+              label:
+                this.localizeByAlias(item.label, tagAliasMap) || item.label,
+            }),
+          ),
           healthTip: explanation.healthTip
             ? this.localizeByAlias(explanation.healthTip, reasonAliasMap) ||
               explanation.healthTip
@@ -1270,24 +1300,31 @@ export class DailyPlanService {
             ? {
                 ...explanation.v2,
                 summary:
-                  this.localizeByAlias(explanation.v2.summary, reasonAliasMap) ||
-                  explanation.v2.summary,
+                  this.localizeByAlias(
+                    explanation.v2.summary,
+                    reasonAliasMap,
+                  ) || explanation.v2.summary,
                 primaryReason:
                   this.localizeByAlias(
                     explanation.v2.primaryReason,
                     reasonAliasMap,
                   ) || explanation.v2.primaryReason,
                 healthTip: explanation.v2.healthTip
-                  ? this.localizeByAlias(explanation.v2.healthTip, reasonAliasMap) ||
-                    explanation.v2.healthTip
+                  ? this.localizeByAlias(
+                      explanation.v2.healthTip,
+                      reasonAliasMap,
+                    ) || explanation.v2.healthTip
                   : explanation.v2.healthTip,
                 radarChart: {
                   ...explanation.v2.radarChart,
-                  dimensions: explanation.v2.radarChart.dimensions.map((item) => ({
-                    ...item,
-                    label:
-                      this.localizeByAlias(item.label, dimensionAliasMap) || item.label,
-                  })),
+                  dimensions: explanation.v2.radarChart.dimensions.map(
+                    (item) => ({
+                      ...item,
+                      label:
+                        this.localizeByAlias(item.label, dimensionAliasMap) ||
+                        item.label,
+                    }),
+                  ),
                 },
                 progressBars: explanation.v2.progressBars.map((item) => ({
                   ...item,

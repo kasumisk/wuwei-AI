@@ -67,7 +67,7 @@ export class SceneContextFactor implements ScoringFactor {
       // 基于维度调整值计算整体场景乘数
       const adjustValues = Object.values(
         this.profile.dimensionWeightAdjustments,
-      ).filter((v) => v !== undefined) as number[];
+      ).filter((v) => v !== undefined);
       if (adjustValues.length > 0) {
         const product = adjustValues.reduce((p, v) => p * v, 1.0);
         this.sceneBoost = Math.pow(product, 1 / adjustValues.length);
@@ -87,9 +87,7 @@ export class SceneContextFactor implements ScoringFactor {
         return;
       }
 
-      const modValues = Object.values(mods).filter(
-        (v) => v !== undefined,
-      ) as number[];
+      const modValues = Object.values(mods).filter((v) => v !== undefined);
       if (modValues.length > 0) {
         const product = modValues.reduce((p, v) => p * v, 1.0);
         this.sceneBoost = Math.pow(product, 1 / modValues.length);

@@ -51,13 +51,13 @@ export class SubscriptionPlansController {
       tier: p.tier,
       billingCycle: p.billingCycle,
       priceCents: p.priceCents,
-        currency: p.currency,
-        entitlements: p.entitlements,
-        appleProductId: p.appleProductId,
-        googleProductId: p.googleProductId,
-        wechatProductId: p.wechatProductId,
-        sortOrder: p.sortOrder,
-        isActive: p.isActive,
+      currency: p.currency,
+      entitlements: p.entitlements,
+      appleProductId: p.appleProductId,
+      googleProductId: p.googleProductId,
+      wechatProductId: p.wechatProductId,
+      sortOrder: p.sortOrder,
+      isActive: p.isActive,
     }));
 
     return {

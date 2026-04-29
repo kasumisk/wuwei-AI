@@ -176,7 +176,7 @@ export function computeWeights(
     if (mealMod) {
       SCORE_DIMENSIONS.forEach((dim, i) => {
         if (mealMod[dim] !== undefined) {
-          base[i] *= mealMod[dim]!;
+          base[i] *= mealMod[dim];
         }
       });
     }
@@ -191,7 +191,7 @@ export function computeWeights(
       if (!statusMod) continue;
       SCORE_DIMENSIONS.forEach((dim, i) => {
         if (statusMod[dim] !== undefined) {
-          base[i] *= statusMod[dim]!;
+          base[i] *= statusMod[dim];
         }
       });
     }

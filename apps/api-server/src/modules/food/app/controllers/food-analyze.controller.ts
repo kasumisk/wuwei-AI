@@ -68,7 +68,7 @@ import { FOOD_SPLIT_INCLUDE } from '../../food-split.helper';
 import { I18nService } from '../../../../core/i18n';
 import { translateEnum } from '../../../../common/i18n/enum-i18n';
 import { AlternativeSuggestionService } from '../../../decision/decision/alternative-suggestion.service';
-import { cl } from '../../../decision/i18n/decision-labels';
+// V13.5: cl() 已迁移为 this.i18n.t('decision.xxx', locale, vars)
 import { FoodI18nService } from '../../../diet/app/services/food-i18n.service';
 import { DecisionSummaryService } from '../../../decision/decision/decision-summary.service';
 import { DecisionOutput } from '../../../decision/decision/food-decision.service';
@@ -1141,8 +1141,7 @@ export class FoodAnalyzeController {
         const localizedName =
           (food.foodLibraryId
             ? translatedById.get(food.foodLibraryId)
-            : undefined) ??
-          translatedByName.get(food.name);
+            : undefined) ?? translatedByName.get(food.name);
         if (localizedName) {
           food.name = localizedName;
         }
@@ -1230,22 +1229,26 @@ export class FoodAnalyzeController {
 
     switch (recommendation) {
       case 'recommend':
-        return cl('summary.recommend.ok', locale as Locale, {
+        return this.i18n.t('decision.summary.recommend.ok', locale as Locale, {
           food: foodName,
           cal,
         });
       case 'avoid':
-        return cl('summary.avoid.generic', locale as Locale, {
+        return this.i18n.t('decision.summary.avoid.generic', locale as Locale, {
           food: foodName,
           cal,
         });
       case 'caution':
       default:
-        return cl('summary.caution.reason', locale as Locale, {
-          food: foodName,
-          cal,
-          reason: reason || this.i18n.t('food.betterForCurrentGoal'),
-        });
+        return this.i18n.t(
+          'decision.summary.caution.reason',
+          locale as Locale,
+          {
+            food: foodName,
+            cal,
+            reason: reason || this.i18n.t('food.betterForCurrentGoal'),
+          },
+        );
     }
   }
 

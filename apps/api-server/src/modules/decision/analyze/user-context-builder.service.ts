@@ -87,7 +87,8 @@ function buildHealthConditionGuidance(
 export class UserContextBuilderService {
   private readonly logger = new Logger(UserContextBuilderService.name);
 
-  constructor(private readonly foodService: FoodService,
+  constructor(
+    private readonly foodService: FoodService,
     private readonly nutritionScoreService: NutritionScoreService,
     private readonly userProfileService: UserProfileService,
     private readonly goalTrackerService: GoalTrackerService,
@@ -100,7 +101,10 @@ export class UserContextBuilderService {
   /**
    * 构建结构化用户上下文
    */
-  async build(userId?: string, locale?: I18nLocale): Promise<UnifiedUserContext> {
+  async build(
+    userId?: string,
+    locale?: I18nLocale,
+  ): Promise<UnifiedUserContext> {
     const localHour = getUserLocalHour(DEFAULT_TIMEZONE);
     const defaults: UnifiedUserContext = {
       goalType: 'health',
@@ -328,7 +332,10 @@ ${this.i18n.t('decision.ctx.prompt.budgetHeader', locale)}
       text += `\n- ${this.i18n.t('decision.ctx.prompt.gender', locale, { value: profile.gender === 'male' ? this.i18n.t('decision.ctx.prompt.gender.male', locale) : this.i18n.t('decision.ctx.prompt.gender.female', locale) })}`;
     if (profile.activityLevel)
       text += `\n- ${this.i18n.t('decision.ctx.prompt.activityLevel', locale, { value: translateEnum('activityLevel', profile.activityLevel, locale) })}`;
-    const enumerationSeparator = this.i18n.t('decision.separator.enumeration', locale);
+    const enumerationSeparator = this.i18n.t(
+      'decision.separator.enumeration',
+      locale,
+    );
     if ((profile.foodPreferences as string[])?.length)
       text += `\n- ${this.i18n.t('decision.ctx.prompt.foodPreferences', locale, { value: (profile.foodPreferences as string[]).join(enumerationSeparator) })}`;
     if (ctx.dietaryRestrictions.length)

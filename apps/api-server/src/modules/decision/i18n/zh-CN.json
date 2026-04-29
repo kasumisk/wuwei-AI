@@ -702,5 +702,6 @@
   "ui.text.reviewAuto": "自动复核",
   "ui.text.reviewManual": "人工复核",
   "ui.text.unknown": "未知",
-  "ui.tone.encouraging": "鼓励型"
+  "ui.tone.encouraging": "鼓励型",
+  "prompt.nameField": "字段约束：\n- 食物名只返回在 `name` 字段中\n- `name` 必须使用本次请求的当前响应语言\n- 不要返回 `nameEn`、`nameZh` 或其他额外命名字段"
 }

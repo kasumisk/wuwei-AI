@@ -11,7 +11,8 @@ import { translateEnum } from '../../../common/i18n/enum-i18n';
 
 @Injectable()
 export class ConfidenceDiagnosticsService {
-  constructor(private readonly prisma: PrismaService,
+  constructor(
+    private readonly prisma: PrismaService,
     private readonly i18n: I18nService,
   ) {}
 
@@ -75,19 +76,27 @@ export class ConfidenceDiagnosticsService {
 
     const uncertaintyReasons: string[] = [];
     if (recognitionConfidence < 0.7) {
-      uncertaintyReasons.push(this.i18n.t('decision.diag.recognitionLow', locale));
+      uncertaintyReasons.push(
+        this.i18n.t('decision.diag.recognitionLow', locale),
+      );
     }
     if (normalizationConfidence < 0.7) {
-      uncertaintyReasons.push(this.i18n.t('decision.diag.normalizationLow', locale));
+      uncertaintyReasons.push(
+        this.i18n.t('decision.diag.normalizationLow', locale),
+      );
     }
     if (nutritionEstimationConfidence < 0.7) {
-      uncertaintyReasons.push(this.i18n.t('decision.diag.nutritionEstimationLow', locale));
+      uncertaintyReasons.push(
+        this.i18n.t('decision.diag.nutritionEstimationLow', locale),
+      );
     }
     if (auditConfidence < 0.7) {
       uncertaintyReasons.push(this.i18n.t('decision.diag.auditLow', locale));
     }
     if (summary?.verdict === 'avoid' && decisionConfidence < 0.6) {
-      uncertaintyReasons.push(this.i18n.t('decision.diag.avoidLowConfidence', locale));
+      uncertaintyReasons.push(
+        this.i18n.t('decision.diag.avoidLowConfidence', locale),
+      );
     }
 
     // V4.9 P3.4: Category mismatch detection (LLM category vs library category)

@@ -36,11 +36,7 @@ import {
   NutritionInput,
 } from '../../../decision/analyze/nutrition-sanity-validator';
 import { UserContextBuilderService } from '../../../decision/analyze/user-context-builder.service';
-import {
-  buildBasePrompt,
-  buildUserContextPrompt,
-  getUserMessage,
-} from './analysis-prompt-schema';
+import { AnalysisPromptSchemaService } from './analysis-prompt-schema.service';
 
 // ==================== 常量 ====================
 
@@ -142,22 +138,7 @@ const CALORIES_PER_100G_DEFAULT_CAP = 400;
  * V5.0: 文本分析 prompt 使用统一 buildBasePrompt + buildUserContextPrompt
  */
 
-function buildContextAwareTextPrompt(
-  params: {
-    goalType: string;
-    nutritionPriority: string[];
-    healthConditions: string[];
-    budgetStatus: string;
-    remainingCalories: number;
-    remainingProtein: number;
-  },
-  locale?: Locale,
-): string {
-  return (
-    buildBasePrompt(undefined, locale) +
-    buildUserContextPrompt({ ...params, locale })
-  );
-}
+// 注：原 buildContextAwareTextPrompt 已内联到 caller，直接调用 promptSchema.buildBasePrompt + buildUserContextPrompt
 
 // ==================== 内部类型 ====================
 
@@ -243,6 +224,8 @@ export class TextFoodAnalysisService {
     private readonly analysisPipeline: AnalysisPipelineService,
     // V3.4 P1.3: 用户上下文（LLM 动态 prompt）
     private readonly userContextBuilder: UserContextBuilderService,
+    // V13.3: 注入 prompt schema service，取代模块级 free function
+    private readonly promptSchema: AnalysisPromptSchemaService,
   ) {
     // 复用与图片分析相同的 API 配置
     this.apiKey =
@@ -336,9 +319,9 @@ export class TextFoodAnalysisService {
           f.cholesterol != null ? Number(f.cholesterol) || 0 : undefined,
         glycemicLoad: f.glycemicLoad,
         nutrientDensity: f.nutrientDensity,
-        fodmapLevel: f.fodmapLevel as ScoringFoodItem['fodmapLevel'],
-        purine: f.purine as ScoringFoodItem['purine'],
-        oxalateLevel: f.oxalateLevel as ScoringFoodItem['oxalateLevel'],
+        fodmapLevel: f.fodmapLevel,
+        purine: f.purine,
+        oxalateLevel: f.oxalateLevel,
         libraryMatch: f.libraryMatch,
       };
     });
@@ -464,9 +447,7 @@ export class TextFoodAnalysisService {
         );
         // 置信度：精确命中 0.95；模糊命中按 simScore 线性映射 0.65~0.9
         parsed.confidence =
-          simScore >= 1.0
-            ? 0.95
-            : Math.min(0.9, 0.65 + (simScore - 0.7) * 0.8);
+          simScore >= 1.0 ? 0.95 : Math.min(0.9, 0.65 + (simScore - 0.7) * 0.8);
         results.push(parsed);
       } else {
         // P9: zero-calorie passthrough for water/clear-tea (food library lacks "白开水/纯净水/凉白开"等)
@@ -686,7 +667,8 @@ export class TextFoodAnalysisService {
             query.includes(name) &&
             !isCompositeDish &&
             !hasCompositeDelimiter &&
-            name.length / Math.max(query.length, 1) >= REVERSE_INCLUDE_MIN_RATIO;
+            name.length / Math.max(query.length, 1) >=
+              REVERSE_INCLUDE_MIN_RATIO;
           const includeMatched =
             !hasCompositeDelimiter && (forwardInclude || reverseInclude);
 
@@ -928,25 +910,28 @@ export class TextFoodAnalysisService {
     try {
       // V3.4 P1.3: 根据用户上下文选择 system prompt
       const systemPrompt = userCtx
-        ? buildContextAwareTextPrompt(
-            {
-              goalType: userCtx.goalType || 'health',
-              nutritionPriority: userCtx.nutritionPriority || [],
-              healthConditions: userCtx.healthConditions || [],
-              budgetStatus: userCtx.budgetStatus || 'under_target',
-              remainingCalories: userCtx.remainingCalories ?? 2000,
-              remainingProtein: userCtx.remainingProtein ?? 65,
-            },
+        ? this.promptSchema.buildBasePrompt(undefined, locale) +
+          this.promptSchema.buildUserContextPrompt({
+            goalType: userCtx.goalType || 'health',
+            nutritionPriority: userCtx.nutritionPriority || [],
+            healthConditions: userCtx.healthConditions || [],
+            budgetStatus: userCtx.budgetStatus || 'under_target',
+            remainingCalories: userCtx.remainingCalories ?? 2000,
+            remainingProtein: userCtx.remainingProtein ?? 65,
             locale,
-          )
-        : buildBasePrompt(undefined, locale);
+          })
+        : this.promptSchema.buildBasePrompt(undefined, locale);
 
       this.logger.log(
         `[LLM] Text parsing call | input: "${unmatchedText.slice(0, 80)}"`,
       );
 
       // 将 hints 拼接到 user message 末尾（作为估算指导，不作为食物词条）
-      let userContent = getUserMessage('text', unmatchedText, locale);
+      let userContent = this.promptSchema.getUserMessage(
+        'text',
+        unmatchedText,
+        locale,
+      );
       if (hints && hints.length > 0) {
         userContent += `\n\n【估算指导】${hints.join('；')}`;
       }
@@ -1354,7 +1339,7 @@ export class TextFoodAnalysisService {
       /^(白开水|纯净水|矿泉水|凉白开|温开水|沸水|开水|清水|白水|冰水)$/.test(
         name,
       ) ||
-      (/^水$/.test(name)) ||
+      /^水$/.test(name) ||
       /^苏打水$/.test(name);
 
     if (!isPlainWater) return null;
@@ -1364,7 +1349,8 @@ export class TextFoodAnalysisService {
     if (quantity) {
       const ml = quantity.match(/(\d+(?:\.\d+)?)\s*(ml|毫升)/i);
       const l = quantity.match(/(\d+(?:\.\d+)?)\s*(l|升)/i);
-      if (ml) grams = Math.round(parseFloat(ml[1])); // 1ml ≈ 1g
+      if (ml)
+        grams = Math.round(parseFloat(ml[1])); // 1ml ≈ 1g
       else if (l) grams = Math.round(parseFloat(l[1]) * 1000);
       else if (/瓶|大瓶/.test(quantity)) grams = 500;
       else if (/杯/.test(quantity)) grams = 250;

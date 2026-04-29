@@ -22,7 +22,7 @@ import {
   Locale,
 } from '../../../diet/app/recommendation/utils/i18n-messages';
 import { ClsServiceManager } from 'nestjs-cls';
-import { COACH_LABELS, cl } from '../../../decision/i18n/decision-labels';
+import { I18nService } from '../../../../core/i18n';
 import {
   buildTonePrompt,
   getConfidenceModifier,
@@ -136,6 +136,7 @@ export class CoachPromptBuilderService {
     private readonly behaviorService: BehaviorService,
     private readonly coachActionPlanService: CoachActionPlanService,
     private readonly coachInsightService: CoachInsightService,
+    private readonly i18n: I18nService,
   ) {}
 
   /**
@@ -407,33 +408,36 @@ ${replyLang}，每条消息不超过 150 字，不要使用 Markdown 格式。`;
 
     const macroSummary = [
       analysisContext.totalProtein != null
-        ? `${cl('ui.macro.protein', locale)}${analysisContext.totalProtein}g`
+        ? `${this.i18n.t('decision.ui.macro.protein', locale)}${analysisContext.totalProtein}g`
         : '',
       analysisContext.totalFat != null
-        ? `${cl('ui.macro.fat', locale)}${analysisContext.totalFat}g`
+        ? `${this.i18n.t('decision.ui.macro.fat', locale)}${analysisContext.totalFat}g`
         : '',
       analysisContext.totalCarbs != null
-        ? `${cl('ui.macro.carbs', locale)}${analysisContext.totalCarbs}g`
+        ? `${this.i18n.t('decision.ui.macro.carbs', locale)}${analysisContext.totalCarbs}g`
         : '',
     ]
       .filter(Boolean)
       .join('、');
 
-    ctx += `\n\n【${cl('ui.label.analyzedFood', locale)}】
-- ${cl('ui.label.food', locale)}: ${foodList}
-- ${cl('ui.label.totalCalories', locale)}: ${analysisContext.totalCalories || 0} kcal${macroSummary ? `\n- ${cl('ui.label.macros', locale)}: ${macroSummary}` : ''}
-- ${cl('ui.label.aiDecision', locale)}: ${analysisContext.decision || cl('ui.text.unknown', locale)}
-- ${cl('ui.label.riskLevel', locale)}: ${analysisContext.riskLevel || cl('ui.text.unknown', locale)}
-- ${cl('ui.label.nutritionScore', locale)}: ${analysisContext.nutritionScore || cl('ui.text.unknown', locale)}/100
-- ${cl('ui.label.aiAdvice', locale)}: ${analysisContext.advice || cl('ui.text.none', locale)}
-- ${cl('ui.label.mealType', locale)}: ${analysisContext.mealType || cl('ui.text.unknown', locale)}`;
+    ctx += `\n\n【${this.i18n.t('decision.ui.label.analyzedFood', locale)}】
+- ${this.i18n.t('decision.ui.label.food', locale)}: ${foodList}
+- ${this.i18n.t('decision.ui.label.totalCalories', locale)}: ${analysisContext.totalCalories || 0} kcal${macroSummary ? `\n- ${this.i18n.t('decision.ui.label.macros', locale)}: ${macroSummary}` : ''}
+- ${this.i18n.t('decision.ui.label.aiDecision', locale)}: ${analysisContext.decision || this.i18n.t('decision.ui.text.unknown', locale)}
+- ${this.i18n.t('decision.ui.label.riskLevel', locale)}: ${analysisContext.riskLevel || this.i18n.t('decision.ui.text.unknown', locale)}
+- ${this.i18n.t('decision.ui.label.nutritionScore', locale)}: ${analysisContext.nutritionScore || this.i18n.t('decision.ui.text.unknown', locale)}/100
+- ${this.i18n.t('decision.ui.label.aiAdvice', locale)}: ${analysisContext.advice || this.i18n.t('decision.ui.text.none', locale)}
+- ${this.i18n.t('decision.ui.label.mealType', locale)}: ${analysisContext.mealType || this.i18n.t('decision.ui.text.unknown', locale)}`;
 
     // V1.3: 7维评分分解
     if (analysisContext.breakdown) {
       const dims = Object.entries(analysisContext.breakdown)
-        .map(([k, v]) => `${k}: ${v}${cl('ui.text.points', locale)}`)
+        .map(
+          ([k, v]) =>
+            `${k}: ${v}${this.i18n.t('decision.ui.text.points', locale)}`,
+        )
         .join('、');
-      ctx += `\n- ${cl('ui.label.breakdown7d', locale)}: ${dims}`;
+      ctx += `\n- ${this.i18n.t('decision.ui.label.breakdown7d', locale)}: ${dims}`;
     }
 
     // V1.3: 决策因子
@@ -444,30 +448,34 @@ ${replyLang}，每条消息不超过 150 字，不要使用 Markdown 格式。`;
       const factors = analysisContext.decisionFactors
         .map(
           (f) =>
-            `[${f.impact}] ${f.dimension}(${f.score}${cl('ui.text.points', locale)}): ${f.message}`,
+            `[${f.impact}] ${f.dimension}(${f.score}${this.i18n.t('decision.ui.text.points', locale)}): ${f.message}`,
         )
         .join('；');
-      ctx += `\n- ${cl('ui.label.decisionFactors', locale)}: ${factors}`;
+      ctx += `\n- ${this.i18n.t('decision.ui.label.decisionFactors', locale)}: ${factors}`;
     }
 
     // V1.3: 最优份量建议
     if (analysisContext.optimalPortion) {
-      const portionText = cl('ui.text.portionTemplate', locale, {
-        percent: analysisContext.optimalPortion.recommendedPercent,
-        cal: analysisContext.optimalPortion.recommendedCalories,
-      });
-      ctx += `\n- ${cl('ui.label.suggestedPortion', locale)}: ${portionText}`;
+      const portionText = this.i18n.t(
+        'decision.ui.text.portionTemplate',
+        locale,
+        {
+          percent: analysisContext.optimalPortion.recommendedPercent,
+          cal: analysisContext.optimalPortion.recommendedCalories,
+        },
+      );
+      ctx += `\n- ${this.i18n.t('decision.ui.label.suggestedPortion', locale)}: ${portionText}`;
     }
 
     // V1.3: 下一餐建议
     if (analysisContext.nextMealAdvice) {
       const nma = analysisContext.nextMealAdvice;
-      const nmaText = cl('ui.text.nextMealTemplate', locale, {
+      const nmaText = this.i18n.t('decision.ui.text.nextMealTemplate', locale, {
         emphasis: nma.emphasis,
         cal: nma.targetCalories,
         protein: nma.targetProtein,
       });
-      ctx += `\n- ${cl('ui.label.nextMealAdvice', locale)}: ${nmaText}`;
+      ctx += `\n- ${this.i18n.t('decision.ui.label.nextMealAdvice', locale)}: ${nmaText}`;
     }
 
     // V1.6: 评分维度解释
@@ -477,11 +485,12 @@ ${replyLang}，每条消息不超过 150 字，不要使用 Markdown 格式。`;
     ) {
       const bdLines = analysisContext.breakdownExplanations
         .map((be) => {
-          const impactLabel = cl(
-            `ui.impact.${be.impact}`,
+          const impactLabel = this.i18n.t(
+            // i18n-allow-dynamic
+            `decision.ui.impact.${be.impact}`,
             locale,
           );
-          let line = `- ${be.label}: ${be.score}${cl('ui.text.points', locale)} (${impactLabel}) — ${be.message}`;
+          let line = `- ${be.label}: ${be.score}${this.i18n.t('decision.ui.text.points', locale)} (${impactLabel}) — ${be.message}`;
           // V1.9: 附加改善建议
           if (be.suggestion) {
             line += ` → ${be.suggestion}`;
@@ -489,7 +498,7 @@ ${replyLang}，每条消息不超过 150 字，不要使用 Markdown 格式。`;
           return line;
         })
         .join('\n');
-      ctx += `\n\n【${cl('ui.label.scoreBreakdown', locale)}】\n${bdLines}`;
+      ctx += `\n\n【${this.i18n.t('decision.ui.label.scoreBreakdown', locale)}】\n${bdLines}`;
     }
 
     // V1.6: 决策推理链
@@ -507,13 +516,14 @@ ${replyLang}，每条消息不超过 150 字，不要使用 Markdown 格式。`;
           return line;
         })
         .join('\n');
-      ctx += `\n\n【${cl('ui.label.decisionChain', locale)}】\n${dcLines}`;
+      ctx += `\n\n【${this.i18n.t('decision.ui.label.decisionChain', locale)}】\n${dcLines}`;
     }
 
     // V1.7: 结构化问题
     if (analysisContext.issues && analysisContext.issues.length > 0) {
       const severityLabel = (s: string) =>
-        cl(`ui.severity.${s}`, locale);
+        // i18n-allow-dynamic
+        this.i18n.t(`decision.ui.severity.${s}`, locale);
       const issueLines = analysisContext.issues
         .map((issue) => {
           let line = `- [${severityLabel(issue.severity)}] ${issue.message}`;
@@ -524,22 +534,22 @@ ${replyLang}，每条消息不超过 150 字，不要使用 Markdown 格式。`;
           return line;
         })
         .join('\n');
-      ctx += `\n\n【${cl('ui.label.issues', locale)}】\n${issueLines}`;
+      ctx += `\n\n【${this.i18n.t('decision.ui.label.issues', locale)}】\n${issueLines}`;
     }
 
     // V1.7: 宏量进度
     if (analysisContext.macroProgress) {
       const mp = analysisContext.macroProgress;
       const lines = [
-        `- ${cl('ui.label.totalCalories', locale)}: ${mp.calories.consumed}/${mp.calories.target} kcal (${mp.calories.percent}%)`,
-        `- ${cl('ui.macro.protein', locale)}: ${mp.protein.consumed}/${mp.protein.target}g (${mp.protein.percent}%)`,
-        `- ${cl('ui.macro.fat', locale)}: ${mp.fat.consumed}/${mp.fat.target}g (${mp.fat.percent}%)`,
-        `- ${cl('ui.macro.carbs', locale)}: ${mp.carbs.consumed}/${mp.carbs.target}g (${mp.carbs.percent}%)`,
+        `- ${this.i18n.t('decision.ui.label.totalCalories', locale)}: ${mp.calories.consumed}/${mp.calories.target} kcal (${mp.calories.percent}%)`,
+        `- ${this.i18n.t('decision.ui.macro.protein', locale)}: ${mp.protein.consumed}/${mp.protein.target}g (${mp.protein.percent}%)`,
+        `- ${this.i18n.t('decision.ui.macro.fat', locale)}: ${mp.fat.consumed}/${mp.fat.target}g (${mp.fat.percent}%)`,
+        `- ${this.i18n.t('decision.ui.macro.carbs', locale)}: ${mp.carbs.consumed}/${mp.carbs.target}g (${mp.carbs.percent}%)`,
       ].join('\n');
-      ctx += `\n\n【${cl('ui.label.macroProgress', locale)}】\n${lines}`;
+      ctx += `\n\n【${this.i18n.t('decision.ui.label.macroProgress', locale)}】\n${lines}`;
     }
 
-    ctx += `\n${cl('ui.text.contextHint', locale)}`;
+    ctx += `\n${this.i18n.t('decision.ui.text.contextHint', locale)}`;
 
     // V1.9 Phase 3.4: 分析置信度影响教练语气
     if (
@@ -764,54 +774,54 @@ ${replyLang}，每条消息不超过 150 字，不要使用 Markdown 格式。`;
       .foods!.map((f) => `${f.name}(${f.calories}kcal)`)
       .join('、');
 
-    ctx += `\n\n【${cl('ui.label.analyzedFood', locale)}】${foodList}`;
-    ctx += `\n\n【${cl('ui.label.summary', locale)}】`;
-    ctx += `\n- ${cl('ui.label.verdict', locale)}：${summary.headline}`;
-    ctx += `\n- ${cl('ui.label.verdict', locale)}等级：${summary.verdict}`;
+    ctx += `\n\n【${this.i18n.t('decision.ui.label.analyzedFood', locale)}】${foodList}`;
+    ctx += `\n\n【${this.i18n.t('decision.ui.label.summary', locale)}】`;
+    ctx += `\n- ${this.i18n.t('decision.ui.label.verdict', locale)}：${summary.headline}`;
+    ctx += `\n- ${this.i18n.t('decision.ui.label.verdict', locale)}等级：${summary.verdict}`;
 
     if (summary.topIssues.length > 0) {
-      ctx += `\n- ${cl('ui.label.topIssues', locale)}：${summary.topIssues.join('；')}`;
+      ctx += `\n- ${this.i18n.t('decision.ui.label.topIssues', locale)}：${summary.topIssues.join('；')}`;
     }
 
     if (summary.topStrengths.length > 0) {
-      ctx += `\n- ${cl('ui.label.strengths', locale)}：${summary.topStrengths.join('；')}`;
+      ctx += `\n- ${this.i18n.t('decision.ui.label.strengths', locale)}：${summary.topStrengths.join('；')}`;
     }
 
-    ctx += `\n- ${cl('ui.label.data', locale)}：${summary.quantitativeHighlight}`;
+    ctx += `\n- ${this.i18n.t('decision.ui.label.data', locale)}：${summary.quantitativeHighlight}`;
 
     if (summary.actionItems.length > 0) {
-      ctx += `\n- ${cl('ui.label.actionItems', locale)}：${summary.actionItems.join('；')}`;
+      ctx += `\n- ${this.i18n.t('decision.ui.label.actionItems', locale)}：${summary.actionItems.join('；')}`;
     }
 
     if (summary.contextSignals && summary.contextSignals.length > 0) {
-      ctx += `\n- ${cl('ui.label.contextSignal', locale)}：${summary.contextSignals.join('；')}`;
+      ctx += `\n- ${this.i18n.t('decision.ui.label.contextSignal', locale)}：${summary.contextSignals.join('；')}`;
     }
 
     if (summary.coachFocus) {
-      ctx += `\n- ${cl('ui.label.coachFocus', locale)}：${summary.coachFocus}`;
+      ctx += `\n- ${this.i18n.t('decision.ui.label.coachFocus', locale)}：${summary.coachFocus}`;
     }
 
     if (summary.alternativeSummary) {
-      ctx += `\n- ${cl('ui.label.alternative', locale)}：${summary.alternativeSummary}`;
+      ctx += `\n- ${this.i18n.t('decision.ui.label.alternative', locale)}：${summary.alternativeSummary}`;
     }
     if (summary.analysisQualityNote) {
-      ctx += `\n- ${cl('ui.label.analysisQuality', locale)}：${summary.analysisQualityNote}`;
+      ctx += `\n- ${this.i18n.t('decision.ui.label.analysisQuality', locale)}：${summary.analysisQualityNote}`;
     }
     if (summary.dynamicDecisionHint) {
-      ctx += `\n- ${cl('ui.label.dynamicHint', locale)}：${summary.dynamicDecisionHint}`;
+      ctx += `\n- ${this.i18n.t('decision.ui.label.dynamicHint', locale)}：${summary.dynamicDecisionHint}`;
     }
     if (summary.healthConstraintNote) {
-      ctx += `\n- ${cl('ui.label.healthConstraint', locale)}：${summary.healthConstraintNote}`;
+      ctx += `\n- ${this.i18n.t('decision.ui.label.healthConstraint', locale)}：${summary.healthConstraintNote}`;
     }
     if (summary.decisionGuardrails && summary.decisionGuardrails.length > 0) {
-      ctx += `\n- ${cl('ui.label.decisionGuardrails', locale)}：${summary.decisionGuardrails.join('；')}`;
+      ctx += `\n- ${this.i18n.t('decision.ui.label.decisionGuardrails', locale)}：${summary.decisionGuardrails.join('；')}`;
     }
     if (summary.reviewLevel) {
       const reviewLevelText =
         summary.reviewLevel === 'manual_review'
-          ? cl('ui.text.reviewManual', locale)
-          : cl('ui.text.reviewAuto', locale);
-      ctx += `\n- ${cl('ui.label.reviewLevel', locale)}：${reviewLevelText}`;
+          ? this.i18n.t('decision.ui.text.reviewManual', locale)
+          : this.i18n.t('decision.ui.text.reviewAuto', locale);
+      ctx += `\n- ${this.i18n.t('decision.ui.label.reviewLevel', locale)}：${reviewLevelText}`;
     }
     // V3.0: 信号追踪
     if (summary.signalTrace && summary.signalTrace.length > 0) {
@@ -825,15 +835,15 @@ ${replyLang}，每条消息不超过 150 字，不要使用 Markdown 格式。`;
             `  ${i + 1}. [${t.source}] ${t.description} (priority=${t.priority})`,
         )
         .join('\n');
-      ctx += `\n\n【${cl('ui.label.signalTrace', locale)}】\n${traceLines}`;
+      ctx += `\n\n【${this.i18n.t('decision.ui.label.signalTrace', locale)}】\n${traceLines}`;
     }
     // V3.1: dailyMacroSummary 摘要文本
     if (analysisContext.evidencePack?.dailyMacroSummary) {
-      ctx += `\n\n【${cl('ui.label.dailySummary', locale)}】\n${analysisContext.evidencePack.dailyMacroSummary}`;
+      ctx += `\n\n【${this.i18n.t('decision.ui.label.dailySummary', locale)}】\n${analysisContext.evidencePack.dailyMacroSummary}`;
     }
     // V3.0: 语气修饰
     if (analysisContext.evidencePack?.toneModifier) {
-      ctx += `\n\n【${cl('ui.label.toneModifier', locale)}】\n${analysisContext.evidencePack.toneModifier}`;
+      ctx += `\n\n【${this.i18n.t('decision.ui.label.toneModifier', locale)}】\n${analysisContext.evidencePack.toneModifier}`;
     }
     // V3.0: 解释节点 — V3.1 brief 模式下跳过
     const promptDepth = analysisContext.evidencePack?.promptDepth ?? 'standard';
@@ -847,7 +857,7 @@ ${replyLang}，每条消息不超过 150 字，不要使用 Markdown 格式。`;
             `  ${n.step}. [${n.source}${n.weight ? '/' + n.weight : ''}] ${n.content}`,
         )
         .join('\n');
-      ctx += `\n\n【${cl('ui.label.explanationChain', locale)}】\n${nodeLines}`;
+      ctx += `\n\n【${this.i18n.t('decision.ui.label.explanationChain', locale)}】\n${nodeLines}`;
     }
     // V3.1: detailed 模式追加结构化输出摘要
     if (
@@ -855,26 +865,26 @@ ${replyLang}，每条消息不超过 150 字，不要使用 Markdown 格式。`;
       analysisContext.evidencePack?.structuredOutput
     ) {
       const so = analysisContext.evidencePack.structuredOutput;
-      ctx += `\n\n【${cl('ui.label.structuredAdvice', locale)}】\n${cl('ui.label.verdict', locale)}: ${so.verdict}\n${cl('ui.label.mainReason', locale)}: ${so.mainReason}`;
+      ctx += `\n\n【${this.i18n.t('decision.ui.label.structuredAdvice', locale)}】\n${this.i18n.t('decision.ui.label.verdict', locale)}: ${so.verdict}\n${this.i18n.t('decision.ui.label.mainReason', locale)}: ${so.mainReason}`;
       if (so.cautionNote)
-        ctx += `\n${cl('ui.label.cautionNote', locale)}: ${so.cautionNote}`;
+        ctx += `\n${this.i18n.t('decision.ui.label.cautionNote', locale)}: ${so.cautionNote}`;
       if (so.confidenceNote)
-        ctx += `\n${cl('ui.label.confidenceNote', locale)}: ${so.confidenceNote}`;
+        ctx += `\n${this.i18n.t('decision.ui.label.confidenceNote', locale)}: ${so.confidenceNote}`;
     }
 
     // 宏量进度（保留，教练需要全局视角）
     if (analysisContext.macroProgress) {
       const mp = analysisContext.macroProgress;
       const lines = [
-        `- ${cl('ui.label.totalCalories', locale)}: ${mp.calories.consumed}/${mp.calories.target} kcal (${mp.calories.percent}%)`,
-        `- ${cl('ui.macro.protein', locale)}: ${mp.protein.consumed}/${mp.protein.target}g (${mp.protein.percent}%)`,
-        `- ${cl('ui.macro.fat', locale)}: ${mp.fat.consumed}/${mp.fat.target}g (${mp.fat.percent}%)`,
-        `- ${cl('ui.macro.carbs', locale)}: ${mp.carbs.consumed}/${mp.carbs.target}g (${mp.carbs.percent}%)`,
+        `- ${this.i18n.t('decision.ui.label.totalCalories', locale)}: ${mp.calories.consumed}/${mp.calories.target} kcal (${mp.calories.percent}%)`,
+        `- ${this.i18n.t('decision.ui.macro.protein', locale)}: ${mp.protein.consumed}/${mp.protein.target}g (${mp.protein.percent}%)`,
+        `- ${this.i18n.t('decision.ui.macro.fat', locale)}: ${mp.fat.consumed}/${mp.fat.target}g (${mp.fat.percent}%)`,
+        `- ${this.i18n.t('decision.ui.macro.carbs', locale)}: ${mp.carbs.consumed}/${mp.carbs.target}g (${mp.carbs.percent}%)`,
       ].join('\n');
-      ctx += `\n\n【${cl('ui.label.macroProgress', locale)}】\n${lines}`;
+      ctx += `\n\n【${this.i18n.t('decision.ui.label.macroProgress', locale)}】\n${lines}`;
     }
 
-    ctx += `\n${cl('ui.text.contextHint', locale)}`;
+    ctx += `\n${this.i18n.t('decision.ui.text.contextHint', locale)}`;
 
     // V1.9 Phase 3.4: 分析置信度影响教练语气
     if (
@@ -921,51 +931,51 @@ ${replyLang}，每条消息不超过 150 字，不要使用 Markdown 格式。`;
       .foods!.map((f) => `${f.name}(${f.calories}kcal)`)
       .join('、');
 
-    ctx += `\n\n【${cl('ui.label.analyzedFood', locale)}】${foodList}`;
-    ctx += `\n\n【${cl('ui.label.coachPlan', locale)}】`;
-    ctx += `\n- ${cl('ui.label.conclusion', locale)}：${plan.conclusion}`;
+    ctx += `\n\n【${this.i18n.t('decision.ui.label.analyzedFood', locale)}】${foodList}`;
+    ctx += `\n\n【${this.i18n.t('decision.ui.label.coachPlan', locale)}】`;
+    ctx += `\n- ${this.i18n.t('decision.ui.label.conclusion', locale)}：${plan.conclusion}`;
     if (plan.why.length > 0) {
-      ctx += `\n- ${cl('ui.label.reason', locale)}：${plan.why.join('；')}`;
+      ctx += `\n- ${this.i18n.t('decision.ui.label.reason', locale)}：${plan.why.join('；')}`;
     }
     if (plan.doNow.length > 0) {
-      ctx += `\n- ${cl('ui.label.doNow', locale)}：${plan.doNow.join('；')}`;
+      ctx += `\n- ${this.i18n.t('decision.ui.label.doNow', locale)}：${plan.doNow.join('；')}`;
     }
     if (analysisContext.shouldEatAction?.followUpActions?.length) {
-      ctx += `\n- ${cl('ui.label.followUp', locale)}：${analysisContext.shouldEatAction.followUpActions.join('；')}`;
+      ctx += `\n- ${this.i18n.t('decision.ui.label.followUp', locale)}：${analysisContext.shouldEatAction.followUpActions.join('；')}`;
     }
     if (plan.ifAlreadyAte && plan.ifAlreadyAte.length > 0) {
-      ctx += `\n- ${cl('ui.label.ifAlreadyAte', locale)}：${plan.ifAlreadyAte.join('；')}`;
+      ctx += `\n- ${this.i18n.t('decision.ui.label.ifAlreadyAte', locale)}：${plan.ifAlreadyAte.join('；')}`;
     }
     if (plan.alternatives && plan.alternatives.length > 0) {
-      ctx += `\n- ${cl('ui.label.alternatives', locale)}：${plan.alternatives.join('；')}`;
+      ctx += `\n- ${this.i18n.t('decision.ui.label.alternatives', locale)}：${plan.alternatives.join('；')}`;
     }
     if (plan.nextMeal) {
-      ctx += `\n- ${cl('ui.label.nextMeal', locale)}：${plan.nextMeal}`;
+      ctx += `\n- ${this.i18n.t('decision.ui.label.nextMeal', locale)}：${plan.nextMeal}`;
     }
     if (analysisContext.confidenceDiagnostics?.uncertaintyReasons?.length) {
-      ctx += `\n- ${cl('ui.label.uncertainty', locale)}：${analysisContext.confidenceDiagnostics.uncertaintyReasons.join('；')}`;
+      ctx += `\n- ${this.i18n.t('decision.ui.label.uncertainty', locale)}：${analysisContext.confidenceDiagnostics.uncertaintyReasons.join('；')}`;
     }
     if (analysisContext.summary?.analysisQualityNote) {
-      ctx += `\n- ${cl('ui.label.analysisQuality', locale)}：${analysisContext.summary.analysisQualityNote}`;
+      ctx += `\n- ${this.i18n.t('decision.ui.label.analysisQuality', locale)}：${analysisContext.summary.analysisQualityNote}`;
     }
     if (analysisContext.summary?.dynamicDecisionHint) {
-      ctx += `\n- ${cl('ui.label.dynamicHint', locale)}：${analysisContext.summary.dynamicDecisionHint}`;
+      ctx += `\n- ${this.i18n.t('decision.ui.label.dynamicHint', locale)}：${analysisContext.summary.dynamicDecisionHint}`;
     }
     if (analysisContext.summary?.healthConstraintNote) {
-      ctx += `\n- ${cl('ui.label.healthConstraint', locale)}：${analysisContext.summary.healthConstraintNote}`;
+      ctx += `\n- ${this.i18n.t('decision.ui.label.healthConstraint', locale)}：${analysisContext.summary.healthConstraintNote}`;
     }
     if (analysisContext.summary?.decisionGuardrails?.length) {
-      ctx += `\n- ${cl('ui.label.decisionGuardrails', locale)}：${analysisContext.summary.decisionGuardrails.join('；')}`;
+      ctx += `\n- ${this.i18n.t('decision.ui.label.decisionGuardrails', locale)}：${analysisContext.summary.decisionGuardrails.join('；')}`;
     }
     if (analysisContext.summary?.reviewLevel) {
       const reviewLevelText =
         analysisContext.summary.reviewLevel === 'manual_review'
-          ? cl('ui.text.reviewManual', locale)
-          : cl('ui.text.reviewAuto', locale);
-      ctx += `\n- ${cl('ui.label.reviewLevel', locale)}：${reviewLevelText}`;
+          ? this.i18n.t('decision.ui.text.reviewManual', locale)
+          : this.i18n.t('decision.ui.text.reviewAuto', locale);
+      ctx += `\n- ${this.i18n.t('decision.ui.label.reviewLevel', locale)}：${reviewLevelText}`;
     }
     if (analysisContext.confidenceDiagnostics?.decisionConfidence != null) {
-      ctx += `\n- ${cl('ui.label.decisionConfidence', locale)}：${Math.round(analysisContext.confidenceDiagnostics.decisionConfidence * 100)}%`;
+      ctx += `\n- ${this.i18n.t('decision.ui.label.decisionConfidence', locale)}：${Math.round(analysisContext.confidenceDiagnostics.decisionConfidence * 100)}%`;
     }
     // V3.0: 信号追踪
     if (analysisContext.summary?.signalTrace?.length) {
@@ -979,19 +989,19 @@ ${replyLang}，每条消息不超过 150 字，不要使用 Markdown 格式。`;
             `  ${i + 1}. [${t.source}] ${t.description} (priority=${t.priority})`,
         )
         .join('\n');
-      ctx += `\n\n【${cl('ui.label.signalTrace', locale)}】\n${traceLines}`;
+      ctx += `\n\n【${this.i18n.t('decision.ui.label.signalTrace', locale)}】\n${traceLines}`;
     }
     // V3.1: dailyMacroSummary
     if (analysisContext.evidencePack?.dailyMacroSummary) {
-      ctx += `\n\n【${cl('ui.label.dailySummary', locale)}】\n${analysisContext.evidencePack.dailyMacroSummary}`;
+      ctx += `\n\n【${this.i18n.t('decision.ui.label.dailySummary', locale)}】\n${analysisContext.evidencePack.dailyMacroSummary}`;
     }
     // V3.0: 语气修饰
     if (analysisContext.evidencePack?.toneModifier) {
-      ctx += `\n\n【${cl('ui.label.toneModifier', locale)}】\n${analysisContext.evidencePack.toneModifier}`;
+      ctx += `\n\n【${this.i18n.t('decision.ui.label.toneModifier', locale)}】\n${analysisContext.evidencePack.toneModifier}`;
     }
     if (analysisContext.macroProgress) {
       const mp = analysisContext.macroProgress;
-      ctx += `\n- ${cl('ui.label.macroInline', locale)}：${cl('ui.label.totalCalories', locale)}${mp.calories.percent}% / ${cl('ui.macro.protein', locale)}${mp.protein.percent}% / ${cl('ui.macro.fat', locale)}${mp.fat.percent}% / ${cl('ui.macro.carbs', locale)}${mp.carbs.percent}%`;
+      ctx += `\n- ${this.i18n.t('decision.ui.label.macroInline', locale)}：${this.i18n.t('decision.ui.label.totalCalories', locale)}${mp.calories.percent}% / ${this.i18n.t('decision.ui.macro.protein', locale)}${mp.protein.percent}% / ${this.i18n.t('decision.ui.macro.fat', locale)}${mp.fat.percent}% / ${this.i18n.t('decision.ui.macro.carbs', locale)}${mp.carbs.percent}%`;
     }
 
     return ctx;

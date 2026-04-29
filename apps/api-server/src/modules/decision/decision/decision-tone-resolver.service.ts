@@ -128,7 +128,10 @@ export class DecisionToneResolverService {
 
     // V3.9 P3.1: 追加 goalType 专属语气补充
     // i18n-allow-dynamic
-    const supplement = this.i18n.t(`decision.tone.supplement.${goalType}`, locale);
+    const supplement = this.i18n.t(
+      `decision.tone.supplement.${goalType}`,
+      locale,
+    );
     // 若 key 不存在，cl() 会返回 key 本身；此时跳过追加
     const hasSupplementKey = [
       'fat_loss',
@@ -141,7 +144,9 @@ export class DecisionToneResolverService {
 
     // V4.0 P3.2: 连续天数 > 7 天时追加激励
     if (streakDays != null && streakDays > 7) {
-      const streakBoostText = this.i18n.t('decision.tone.streakBoost', locale, { days: streakDays });
+      const streakBoostText = this.i18n.t('decision.tone.streakBoost', locale, {
+        days: streakDays,
+      });
       toneModifier += '\n' + streakBoostText;
     }
 

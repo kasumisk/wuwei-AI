@@ -375,7 +375,6 @@ export class PrecomputeService {
     const userIds: string[] = [];
     let offset = 0;
 
-    // eslint-disable-next-line no-constant-condition
     while (true) {
       const page = await this.prisma.$queryRawUnsafe<Array<{ userId: string }>>(
         `SELECT DISTINCT user_id FROM food_records

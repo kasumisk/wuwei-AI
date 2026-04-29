@@ -45,7 +45,7 @@ export class BehaviorService {
    * 获取或创建用户行为画像
    */
   async getProfile(userId: string): Promise<any> {
-    let profile = await this.prisma.userProfiles.findUnique({
+    const profile = await this.prisma.userProfiles.findUnique({
       where: { userId: userId },
     });
     if (!profile) {
@@ -120,7 +120,7 @@ export class BehaviorService {
     const today = getUserLocalDate(tz);
 
     // 递增总记录数（仍按记录计数，用于其他用途如 collection-trigger）
-    let totalRecords = (profile.totalRecords || 0) + 1;
+    const totalRecords = (profile.totalRecords || 0) + 1;
     let streakDays = profile.streakDays || 0;
     let longestStreak = profile.longestStreak || 0;
     let avgComplianceRate = profile.avgComplianceRate || 0;
@@ -344,7 +344,7 @@ export class BehaviorService {
       .sort((a, b) => b[1] - a[1])
       .map(([h]) => parseInt(h, 10));
 
-    const existingPrefs = (profile.foodPreferences as any) || {};
+    const existingPrefs = profile.foodPreferences || {};
     const foodPreferences = {
       ...existingPrefs,
       frequentFoods,

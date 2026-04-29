@@ -190,15 +190,21 @@ export class FoodPlanController {
     const plan = mealType
       ? await this.dailyPlanService.regenerateMeal(user.id, mealType)
       : await this.dailyPlanService.regeneratePlan(user.id);
-    const localizedPlan = await this.dailyPlanService.localizePlan(plan, user.id);
+    const localizedPlan = await this.dailyPlanService.localizePlan(
+      plan,
+      user.id,
+    );
 
     return {
       success: true,
       code: HttpStatus.OK,
       message: mealType
-        ? this.i18n.t('diet.recommendation.response.replacedMealRecommendation', {
-            meal: this.i18n.t(`diet.recommendation.meal.label.${mealType}`),
-          })
+        ? this.i18n.t(
+            'diet.recommendation.response.replacedMealRecommendation',
+            {
+              meal: this.i18n.t(`diet.recommendation.meal.label.${mealType}`),
+            },
+          )
         : this.i18n.t('diet.recommendation.response.planRegenerated'),
       data: toDailyPlanResponse(localizedPlan),
     };

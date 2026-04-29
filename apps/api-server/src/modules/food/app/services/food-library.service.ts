@@ -131,7 +131,9 @@ export class FoodLibraryService {
       include: FOOD_SPLIT_INCLUDE,
     });
     if (!food) {
-      throw new NotFoundException(this.i18n.t('food.foodNotFoundByName', { name }));
+      throw new NotFoundException(
+        this.i18n.t('food.foodNotFoundByName', { name }),
+      );
     }
     return food;
   }
@@ -306,7 +308,14 @@ export class FoodLibraryService {
   async enrichMissingFields(): Promise<{ updated: number }> {
     const foods = await this.prisma.food.findMany({
       include: {
-        healthAssessment: { select: { qualityScore: true, satietyScore: true, isProcessed: true, isFried: true } },
+        healthAssessment: {
+          select: {
+            qualityScore: true,
+            satietyScore: true,
+            isProcessed: true,
+            isFried: true,
+          },
+        },
         taxonomy: { select: { mealTypes: true } },
       },
     });

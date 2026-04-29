@@ -314,8 +314,7 @@ export class RecommendationEngineService implements OnModuleInit {
       sceneContext,
       effectiveGoal,
       goalProgress,
-      domainProfiles: (enrichedProfile as EnrichedProfileWithDomain)
-        .domainProfiles,
+      domainProfiles: enrichedProfile.domainProfiles,
       kitchenProfile: kitchenProfile ?? null,
       substitutions,
     });
@@ -1118,7 +1117,7 @@ export class RecommendationEngineService implements OnModuleInit {
     // 5. 查找替代推荐 — 同餐次 Top-5（排除该食物本身）
     const alternativeFoods = this.foodScorer
       .scoreFoodsWithServing(
-        allFoods.filter((f) => f.id !== food!.id),
+        allFoods.filter((f) => f.id !== food.id),
         goalType,
         target,
         penaltyCtx,

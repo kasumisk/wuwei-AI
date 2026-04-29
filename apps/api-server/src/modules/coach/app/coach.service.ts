@@ -116,13 +116,21 @@ export class CoachService {
   private localizeCategory(category: string, locale: Locale): string {
     const labels: Record<string, Record<Locale, string>> = {
       grain: { 'zh-CN': '谷物', 'en-US': 'grains', 'ja-JP': '穀物' },
-      protein: { 'zh-CN': '蛋白质类', 'en-US': 'protein', 'ja-JP': 'たんぱく質系' },
+      protein: {
+        'zh-CN': '蛋白质类',
+        'en-US': 'protein',
+        'ja-JP': 'たんぱく質系',
+      },
       veggie: { 'zh-CN': '蔬菜', 'en-US': 'vegetables', 'ja-JP': '野菜' },
       fruit: { 'zh-CN': '水果', 'en-US': 'fruit', 'ja-JP': '果物' },
       dairy: { 'zh-CN': '乳制品', 'en-US': 'dairy', 'ja-JP': '乳製品' },
       beverage: { 'zh-CN': '饮品', 'en-US': 'beverages', 'ja-JP': '飲み物' },
       snack: { 'zh-CN': '零食', 'en-US': 'snacks', 'ja-JP': 'スナック' },
-      composite: { 'zh-CN': '复合主食', 'en-US': 'mixed meals', 'ja-JP': '複合食' },
+      composite: {
+        'zh-CN': '复合主食',
+        'en-US': 'mixed meals',
+        'ja-JP': '複合食',
+      },
     };
 
     return labels[category]?.[locale] || category;
@@ -462,13 +470,13 @@ export class CoachService {
     // 根据时段+状态生成问候语
     let greeting: string;
     if (hour < 10) {
-        greeting =
-          summary.mealCount === 0
+      greeting =
+        summary.mealCount === 0
           ? t('coach.greeting.morning.noMeal', {}, resolvedLocale)
           : t('coach.greeting.morning.hasMeal', {}, resolvedLocale);
     } else if (hour < 14) {
-        greeting =
-          summary.mealCount === 0
+      greeting =
+        summary.mealCount === 0
           ? t('coach.greeting.noon.noMeal', {}, resolvedLocale)
           : t(
               'coach.greeting.noon.hasMeal',
@@ -479,15 +487,15 @@ export class CoachService {
       const pct = summary.calorieGoal
         ? Math.round((summary.totalCalories / summary.calorieGoal) * 100)
         : 0;
-        const hint =
-          pct > 80
+      const hint =
+        pct > 80
           ? t('coach.greeting.afternoon.over80', {}, resolvedLocale)
           : t('coach.greeting.afternoon.under80', {}, resolvedLocale);
-        greeting = t(
-          'coach.greeting.afternoon',
-          { percent: String(pct), hint },
-          resolvedLocale,
-        );
+      greeting = t(
+        'coach.greeting.afternoon',
+        { percent: String(pct), hint },
+        resolvedLocale,
+      );
     } else if (hour < 21) {
       greeting = t(
         'coach.greeting.evening',

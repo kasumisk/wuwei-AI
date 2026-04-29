@@ -212,7 +212,7 @@ export class SubscriptionService implements OnModuleInit {
       new SubscriptionChangedEvent(
         params.userId,
         SubscriptionTier.FREE,
-        plan.tier as string,
+        plan.tier,
         'purchase',
       ),
     );
@@ -244,8 +244,8 @@ export class SubscriptionService implements OnModuleInit {
       DomainEvents.SUBSCRIPTION_CHANGED,
       new SubscriptionChangedEvent(
         userId,
-        sub.subscriptionPlan.tier as string,
-        sub.subscriptionPlan.tier as string,
+        sub.subscriptionPlan.tier,
+        sub.subscriptionPlan.tier,
         'cancel',
       ),
     );
@@ -294,8 +294,8 @@ export class SubscriptionService implements OnModuleInit {
       DomainEvents.SUBSCRIPTION_CHANGED,
       new SubscriptionChangedEvent(
         userId,
-        sub.subscriptionPlan.tier as string,
-        sub.subscriptionPlan.tier as string,
+        sub.subscriptionPlan.tier,
+        sub.subscriptionPlan.tier,
         'upgrade',
       ),
     );
@@ -479,10 +479,8 @@ export class SubscriptionService implements OnModuleInit {
           DomainEvents.SUBSCRIPTION_CHANGED,
           new SubscriptionChangedEvent(
             sub.userId,
-            sub.subscriptionPlan.tier as string,
-            sub.autoRenew
-              ? (sub.subscriptionPlan.tier as string)
-              : SubscriptionTier.FREE,
+            sub.subscriptionPlan.tier,
+            sub.autoRenew ? sub.subscriptionPlan.tier : SubscriptionTier.FREE,
             sub.autoRenew ? 'downgrade' : 'expire',
           ),
         );
@@ -526,7 +524,7 @@ export class SubscriptionService implements OnModuleInit {
           DomainEvents.SUBSCRIPTION_CHANGED,
           new SubscriptionChangedEvent(
             sub.userId,
-            sub.subscriptionPlan.tier as string,
+            sub.subscriptionPlan.tier,
             SubscriptionTier.FREE,
             'expire',
           ),

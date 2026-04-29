@@ -118,9 +118,13 @@ export class AnalysisQualityFeedbackService {
         suggestionId: 'pol_001',
         type: 'decision_rule',
         description: this.i18n.t('decision.feedback.reduceStrictness'),
-        rationale: this.i18n.t('decision.feedback.reduceStrictnessRationale', undefined, {
-          rate: metrics.acceptanceRate.toFixed(1),
-        }),
+        rationale: this.i18n.t(
+          'decision.feedback.reduceStrictnessRationale',
+          undefined,
+          {
+            rate: metrics.acceptanceRate.toFixed(1),
+          },
+        ),
         impact: 'high',
       });
     }

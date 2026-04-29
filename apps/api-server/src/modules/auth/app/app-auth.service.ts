@@ -724,7 +724,7 @@ export class AppAuthService {
 
   async findById(id: string): Promise<AppUser | null> {
     const user = await this.prisma.appUsers.findUnique({ where: { id } });
-    return user as AppUser | null;
+    return user;
   }
 
   // ==================== 私有方法 ====================

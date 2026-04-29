@@ -176,7 +176,7 @@ export class GamificationService {
       where: { userId: userId },
     });
 
-    let profile = userProfile ? getBehavior(userProfile) : null;
+    const profile = userProfile ? getBehavior(userProfile) : null;
 
     if (!userProfile) {
       // No profile to update

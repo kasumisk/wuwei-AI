@@ -4,6 +4,7 @@ import {
   StructuredDecision,
   UnifiedUserContext,
 } from '../types/analysis-result.types';
+import { I18nService } from '../../../core/i18n';
 import { ci, toCoachLocale } from './coach-i18n';
 import { ActionPlan } from './decision-coach.service';
 
@@ -21,6 +22,8 @@ import { ActionPlan } from './decision-coach.service';
  */
 @Injectable()
 export class CoachInsightService {
+  constructor(private readonly i18n: I18nService) {}
+
   /**
    * 生成完整的教练洞察包
    */
@@ -85,7 +88,10 @@ export class CoachInsightService {
       (i) => HEALTH_RISK_TYPES.has(i.type) && i.severity === 'high',
     );
     if (highHealthRisk && highHealthRisk.implication) {
-      return ci('insight.healthRiskPrefix', lang) + highHealthRisk.implication;
+      return (
+        ci(this.i18n, 'insight.healthRiskPrefix', lang) +
+        highHealthRisk.implication
+      );
     }
 
     // 优先来自 ContextualAnalysis 高严重度问题
@@ -95,8 +101,8 @@ export class CoachInsightService {
     if (highIssue) {
       // 如果有量化 implication，优先使用
       if (highIssue.implication) return highIssue.implication;
-      const key = `action.${highIssue.type}` as Parameters<typeof ci>[0];
-      const text = ci(key, lang);
+      const key = `action.${highIssue.type}` as Parameters<typeof ci>[1];
+      const text = ci(this.i18n, key, lang);
       if (text !== key) return text;
     }
 
@@ -112,7 +118,7 @@ export class CoachInsightService {
     }
 
     // fallback
-    return ci('guidance.close', lang);
+    return ci(this.i18n, 'guidance.close', lang);
   }
 
   /**
@@ -148,22 +154,25 @@ export class CoachInsightService {
 
     const proteinLabel =
       ci(
+        this.i18n,
         SLOT_KEYS.protein[slots.protein] ??
           ('insight.slot.protein.normal' as any),
         lang,
       ) || slots.protein;
     const carbsLabel =
       ci(
+        this.i18n,
         SLOT_KEYS.carbs[slots.carbs] ?? ('insight.slot.carbs.normal' as any),
         lang,
       ) || slots.carbs;
     const fatLabel =
       ci(
+        this.i18n,
         SLOT_KEYS.fat[slots.fat] ?? ('insight.slot.fat.normal' as any),
         lang,
       ) || slots.fat;
 
-    const prefix = ci('insight.trendPrefix', lang);
+    const prefix = ci(this.i18n, 'insight.trendPrefix', lang);
 
     return `${prefix}${proteinLabel}、${carbsLabel}、${fatLabel}`;
   }
@@ -183,7 +192,7 @@ export class CoachInsightService {
       `insight.goal.${goalType}` as keyof import('./coach-i18n').CoachI18nStrings;
     const fallbackKey =
       'insight.goal.health' as keyof import('./coach-i18n').CoachI18nStrings;
-    return ci(goalKey, lang) || ci(fallbackKey, lang);
+    return ci(this.i18n, goalKey, lang) || ci(this.i18n, fallbackKey, lang);
   }
 
   /**
@@ -210,7 +219,7 @@ export class CoachInsightService {
 
     const timingKey =
       `insight.timing.${slot}` as keyof import('./coach-i18n').CoachI18nStrings;
-    return ci(timingKey, lang) || undefined;
+    return ci(this.i18n, timingKey, lang) || undefined;
   }
 
   /**
@@ -234,11 +243,11 @@ export class CoachInsightService {
     // V4.6: 摄入趋势上升 → 替换 immediate 为更严格版本
     let immediate: string;
     if (ctx.shortTermBehavior?.intakeTrends === 'increasing') {
-      immediate = ci('actionPlan.trendUp.immediate', lang);
+      immediate = ci(this.i18n, 'actionPlan.trendUp.immediate', lang);
     } else {
       const immediateKey =
         `actionPlan.immediate.${verdict}` as keyof import('./coach-i18n').CoachI18nStrings;
-      immediate = ci(immediateKey, lang);
+      immediate = ci(this.i18n, immediateKey, lang);
     }
 
     const goalNextKey =
@@ -247,16 +256,18 @@ export class CoachInsightService {
       `actionPlan.longTerm.${goalType}` as keyof import('./coach-i18n').CoachI18nStrings;
 
     const nextMeal =
-      ci(goalNextKey, lang) || ci('actionPlan.nextMeal.default' as any, lang);
+      ci(this.i18n, goalNextKey, lang) ||
+      ci(this.i18n, 'actionPlan.nextMeal.default' as any, lang);
 
     // V4.6: 执行率低 → 替换 longTerm 为鼓励性版本
     let longTerm: string;
     const execRate = ctx.goalProgress?.executionRate;
     if (execRate != null && execRate < 0.4) {
-      longTerm = ci('actionPlan.lowExecution.longTerm', lang);
+      longTerm = ci(this.i18n, 'actionPlan.lowExecution.longTerm', lang);
     } else {
       longTerm =
-        ci(goalLongKey, lang) || ci('actionPlan.longTerm.default' as any, lang);
+        ci(this.i18n, goalLongKey, lang) ||
+        ci(this.i18n, 'actionPlan.longTerm.default' as any, lang);
     }
 
     return { immediate, nextMeal, longTerm };

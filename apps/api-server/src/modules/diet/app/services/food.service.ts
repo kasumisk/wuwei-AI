@@ -28,10 +28,7 @@ import {
   RecommendationGeneratedEvent,
 } from '../../../../core/events/domain-events';
 import { PrecomputeService } from './precompute.service';
-import {
-  t,
-  type Locale,
-} from '../recommendation/utils/i18n-messages';
+import { t, type Locale } from '../recommendation/utils/i18n-messages';
 import type { DecisionValueTag } from '../recommendation/types/meal.types';
 import { RequestContextService } from '../../../../core/context/request-context.service';
 import { FoodI18nService } from './food-i18n.service';
@@ -268,7 +265,10 @@ export class FoodService {
       const { result: mainRec, scenarioResults } = precomputed;
 
       // 预计算结果没有经过推荐引擎的实时翻译注入，这里补注 displayName
-      await this.foodI18nService.applyToMealRecommendation(mainRec as any, locale);
+      await this.foodI18nService.applyToMealRecommendation(
+        mainRec as any,
+        locale,
+      );
       if (scenarioResults) {
         await Promise.all(
           Object.values(scenarioResults).map((rec) =>
@@ -319,7 +319,11 @@ export class FoodService {
             const scenarioCalories = r.totalCalories || 0;
             return {
               scenario: scenarioLabels[key] || key,
-              foods: this.rebuildDisplayText(r.foods, r.displayText || '', locale),
+              foods: this.rebuildDisplayText(
+                r.foods,
+                r.displayText || '',
+                locale,
+              ),
               foodItems: this.toSuggestionFoodItems(r.foods),
               calories: scenarioCalories,
               tip: this.buildSuggestionTip(
@@ -357,7 +361,11 @@ export class FoodService {
         mealType: nextMeal,
         remainingCalories: remaining,
         suggestion: {
-          foods: this.rebuildDisplayText(mainRec.foods, mainRec.displayText, locale),
+          foods: this.rebuildDisplayText(
+            mainRec.foods,
+            mainRec.displayText,
+            locale,
+          ),
           foodItems: this.toSuggestionFoodItems(mainRec.foods),
           calories: mainRec.totalCalories,
           tip: this.buildSuggestionTip(
@@ -496,7 +504,11 @@ export class FoodService {
       mealType: nextMeal,
       remainingCalories: remaining,
       suggestion: {
-        foods: this.rebuildDisplayText(mainRec.foods, mainRec.displayText, locale),
+        foods: this.rebuildDisplayText(
+          mainRec.foods,
+          mainRec.displayText,
+          locale,
+        ),
         foodItems: this.toSuggestionFoodItems(mainRec.foods),
         calories: mainRec.totalCalories,
         tip: this.buildSuggestionTip(
@@ -544,7 +556,8 @@ export class FoodService {
       .map((pick) => ({
         foodId: pick.food?.id || '',
         name: pick.food?.displayName || pick.food?.name || '',
-        servingDesc: pick.food?.displayServingDesc || pick.food?.standardServingDesc || '',
+        servingDesc:
+          pick.food?.displayServingDesc || pick.food?.standardServingDesc || '',
         calories: Math.round(Number(pick.servingCalories) || 0),
         protein: Math.round(Number(pick.servingProtein) || 0),
         fat: Math.round(Number(pick.servingFat) || 0),
@@ -577,7 +590,11 @@ export class FoodService {
           p.food?.standardServingDesc ||
           `${p.food?.standardServingG || 100}g`;
         const calories = Math.round(Number(p.servingCalories) || 0);
-        return t('display.foodItem', { name, serving, calories }, locale as any);
+        return t(
+          'display.foodItem',
+          { name, serving, calories },
+          locale as any,
+        );
       })
       .join(' + ');
   }
@@ -665,7 +682,9 @@ export class FoodService {
     const locales: Locale[] = ['zh-CN', 'en-US', 'ja-JP'];
     if (mealType) {
       for (const locale of locales) {
-        this.stickinessCache.delete(`${userId}:${mealType}:${locale}:${dateStr}`);
+        this.stickinessCache.delete(
+          `${userId}:${mealType}:${locale}:${dateStr}`,
+        );
       }
       return;
     }

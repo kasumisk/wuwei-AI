@@ -37,7 +37,10 @@ export class PostMealRecoveryService {
 
     // V3.1: 优先使用 signalTrace 顶部信号驱动建议方向
     const dominantSignal = signalTrace?.[0]?.signal;
-    let nextMealDirection = this.i18n.t('decision.recovery.defaultDirection', locale);
+    let nextMealDirection = this.i18n.t(
+      'decision.recovery.defaultDirection',
+      locale,
+    );
 
     // V3.1: signal trace takes priority over raw macro checks
     if (dominantSignal === 'protein_gap') {

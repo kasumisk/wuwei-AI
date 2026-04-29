@@ -24,10 +24,7 @@
 import { Injectable } from '@nestjs/common';
 import { I18nService } from './i18n.service';
 import { I18N_DEFAULT_LOCALE, I18nLocale } from './i18n.types';
-import {
-  translateEnum,
-  translateEnumList,
-} from '../../common/i18n/enum-i18n';
+import { translateEnum, translateEnumList } from '../../common/i18n/enum-i18n';
 
 @Injectable()
 export class LanguageContextService {
@@ -54,7 +51,10 @@ export class LanguageContextService {
   }
 
   /** 枚举数组翻译 */
-  enumList(category: string, values: ReadonlyArray<string> | undefined): string[] {
+  enumList(
+    category: string,
+    values: ReadonlyArray<string> | undefined,
+  ): string[] {
     return translateEnumList(category, values, this.locale);
   }
 

@@ -75,7 +75,12 @@ export class ImageFoodAnalysisService {
     userId: string,
     locale?: Locale,
   ): Promise<FoodAnalysisResultV61> {
-    const foods = await this.analyzeImageToFoods(imageUrl, mealType, userId, locale);
+    const foods = await this.analyzeImageToFoods(
+      imageUrl,
+      mealType,
+      userId,
+      locale,
+    );
 
     // Post-analysis 食物库匹配：补 foodLibraryId + 校准营养
     await this.libraryMatcher.matchAll(foods);

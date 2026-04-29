@@ -17,9 +17,7 @@ import {
   KitchenProfile,
   DEFAULT_KITCHEN_PROFILE,
 } from '../../../user.types';
-import {
-  UserProfiles as UserProfile,
-} from '@prisma/client';
+import { UserProfiles as UserProfile } from '@prisma/client';
 import {
   updateInferred,
   updateBehavior,
@@ -117,10 +115,7 @@ export class UserProfileService {
     return profile?.timezone || 'Asia/Shanghai';
   }
 
-  async deleteAccount(
-    userId: string,
-    confirmationText: string,
-  ): Promise<void> {
+  async deleteAccount(userId: string, confirmationText: string): Promise<void> {
     if (confirmationText.trim() != DELETE_ACCOUNT_CONFIRMATION_TEXT) {
       throw new BadRequestException('Invalid delete confirmation text');
     }
@@ -138,7 +133,9 @@ export class UserProfileService {
     });
 
     if (!user) {
-      throw new NotFoundException(this.i18n.t('user.userNotFound', { id: userId }));
+      throw new NotFoundException(
+        this.i18n.t('user.userNotFound', { id: userId }),
+      );
     }
 
     await this.profileChangeLogService.createLog({
@@ -248,7 +245,7 @@ export class UserProfileService {
     const afterVals: Record<string, unknown> = {};
     for (const k of dtoKeys) {
       beforeVals[k] = oldProfile ? (oldProfile as any)[k] : null;
-      afterVals[k] = (saved as any)[k];
+      afterVals[k] = saved[k];
     }
     this.eventEmitter.emit(
       DomainEvents.PROFILE_UPDATED,
@@ -263,7 +260,7 @@ export class UserProfileService {
       ),
     );
 
-    return saved as any;
+    return saved;
   }
 
   // ==================== 分步引导流 ====================
@@ -363,7 +360,7 @@ export class UserProfileService {
     const onboardingFields = Object.keys(dto);
     const onboardingAfter: Record<string, unknown> = {};
     for (const k of onboardingFields) {
-      onboardingAfter[k] = (saved as any)[k];
+      onboardingAfter[k] = saved[k];
     }
     this.eventEmitter.emit(
       DomainEvents.PROFILE_UPDATED,
@@ -379,7 +376,7 @@ export class UserProfileService {
     );
 
     return {
-      profile: saved as any,
+      profile: saved,
       computed: {
         bmr: computed?.estimatedBmr ?? undefined,
         tdee: computed?.estimatedTdee ?? undefined,
@@ -412,13 +409,11 @@ export class UserProfileService {
     if (profile) {
       // Compute completeness with merged data
       const merged = { ...profile, ...updateData };
-      updateData.dataCompleteness = this.calculateCompleteness(merged as any);
+      updateData.dataCompleteness = this.calculateCompleteness(merged);
       profile = await this.updateProfileWithVersion(userId, updateData);
     } else {
       updateData.userId = userId;
-      updateData.dataCompleteness = this.calculateCompleteness(
-        updateData as any,
-      );
+      updateData.dataCompleteness = this.calculateCompleteness(updateData);
       profile = await this.prisma.userProfiles.create({
         data: updateData,
       });
@@ -561,8 +556,7 @@ export class UserProfileService {
     // V6 Phase 1.2: 发布画像更新事件（含变更字段信息）
     const changedFields = Object.keys(dto).filter((k) => {
       return (
-        JSON.stringify((oldProfile as any)[k]) !==
-        JSON.stringify((saved as any)[k])
+        JSON.stringify((oldProfile as any)[k]) !== JSON.stringify(saved[k])
       );
     });
     // V6 2.17: 构建变更前后值
@@ -570,7 +564,7 @@ export class UserProfileService {
     const declaredAfter: Record<string, unknown> = {};
     for (const k of changedFields) {
       declaredBefore[k] = (oldProfile as any)[k];
-      declaredAfter[k] = (saved as any)[k];
+      declaredAfter[k] = saved[k];
     }
     this.eventEmitter.emit(
       DomainEvents.PROFILE_UPDATED,
@@ -585,7 +579,7 @@ export class UserProfileService {
       ),
     );
 
-    return saved as any;
+    return saved;
   }
 
   /**
@@ -883,7 +877,7 @@ export class UserProfileService {
     await this.prisma.profileSnapshots.create({
       data: {
         userId: userId,
-        snapshot: oldProfile as any,
+        snapshot: oldProfile,
         triggerType: triggerType,
         changedFields: changed,
       },
@@ -897,7 +891,9 @@ export class UserProfileService {
   /**
    * 同步更新推断数据（BMR/TDEE/macroTargets）
    */
-  private async syncInferredProfile(profile: any): Promise<InferredData | null> {
+  private async syncInferredProfile(
+    profile: any,
+  ): Promise<InferredData | null> {
     const gender = profile.gender;
     const birthYear = profile.birthYear;
     const heightCm = profile.heightCm;
@@ -956,7 +952,7 @@ export class UserProfileService {
       recommendedCalories: recommendedCalories,
       macroTargets: macroTargets as any,
       lastComputedAt: new Date(),
-      confidenceScores: confidenceScores as any,
+      confidenceScores: confidenceScores,
     };
 
     await updateInferred(this.prisma, userId, data);

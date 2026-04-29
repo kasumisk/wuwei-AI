@@ -398,10 +398,12 @@ export class RevenueCatSyncService {
     latest: SelectedSubscription | null;
     active: SelectedSubscription | null;
   } {
-    const items = Object.entries(subscriptions ?? {}).map(([productId, snapshot]) => ({
-      productId,
-      ...snapshot,
-    }));
+    const items = Object.entries(subscriptions ?? {}).map(
+      ([productId, snapshot]) => ({
+        productId,
+        ...snapshot,
+      }),
+    );
 
     items.sort((a, b) => {
       const aTs = this.parseDate(a.expires_date)?.getTime() ?? 0;
@@ -436,14 +438,17 @@ export class RevenueCatSyncService {
     webhookEventId?: string;
     providerEventId?: string;
   }): Promise<{ cacheInvalidated: boolean }> {
-    const { userId, source, snapshot, webhookEventId, providerEventId } = params;
+    const { userId, source, snapshot, webhookEventId, providerEventId } =
+      params;
     const runtimeEnv = this.getRuntimeEnv();
     const { latest, active } = this.selectSubscription(
       snapshot.subscriber?.subscriptions,
     );
     const candidate = active ?? latest;
     const candidateExpiresAt = this.parseDate(candidate?.expires_date);
-    const candidateCancelledAt = this.parseDate(candidate?.unsubscribe_detected_at);
+    const candidateCancelledAt = this.parseDate(
+      candidate?.unsubscribe_detected_at,
+    );
     const candidateRefundedAt = this.parseDate(candidate?.refunded_at);
     const providerSubscriptionKey =
       candidate?.original_transaction_id ?? candidate?.purchase_token ?? null;
@@ -515,7 +520,9 @@ export class RevenueCatSyncService {
         const updated = await this.prisma.subscription.update({
           where: { id: currentSub.id },
           data: {
-            paymentChannel: this.mapStoreToPaymentChannel(selectedCandidate.store),
+            paymentChannel: this.mapStoreToPaymentChannel(
+              selectedCandidate.store,
+            ),
             expiresAt: candidateExpiresAt,
             status: nextStatus,
             autoRenew: !candidateCancelledAt,
@@ -530,7 +537,9 @@ export class RevenueCatSyncService {
         const created = await this.subscriptionService.createSubscription({
           userId,
           planId: matchedPlan.id,
-          paymentChannel: this.mapStoreToPaymentChannel(selectedCandidate.store),
+          paymentChannel: this.mapStoreToPaymentChannel(
+            selectedCandidate.store,
+          ),
           platformSubscriptionId: providerSubscriptionKey ?? undefined,
           startsAt:
             this.parseDate(selectedCandidate.original_purchase_date) ??
@@ -582,7 +591,11 @@ export class RevenueCatSyncService {
       });
       action = candidateExpiresAt > new Date() ? 'cancel' : 'expire';
       cacheInvalidated = true;
-    } else if (currentSub && candidateExpiresAt && candidateExpiresAt <= new Date()) {
+    } else if (
+      currentSub &&
+      candidateExpiresAt &&
+      candidateExpiresAt <= new Date()
+    ) {
       await this.prisma.subscription.update({
         where: { id: currentSub.id },
         data: {
@@ -630,7 +643,8 @@ export class RevenueCatSyncService {
         data: {
           subscriptionId: targetSubscriptionId,
           userId,
-          actorType: source === 'revenuecat_webhook' ? 'webhook' : 'client_trigger',
+          actorType:
+            source === 'revenuecat_webhook' ? 'webhook' : 'client_trigger',
           actorId: providerEventId ?? webhookEventId ?? null,
           action,
           runtimeEnv,
@@ -656,8 +670,14 @@ export class RevenueCatSyncService {
     snapshot: SelectedSubscription | null;
     action: string;
   }): Promise<void> {
-    const { providerEventId, runtimeEnv, userId, subscriptionId, snapshot, action } =
-      params;
+    const {
+      providerEventId,
+      runtimeEnv,
+      userId,
+      subscriptionId,
+      snapshot,
+      action,
+    } = params;
 
     if (!snapshot) return;
 
@@ -746,7 +766,9 @@ export class RevenueCatSyncService {
     }
   }
 
-  private serializeSubscriptionState(subscription: any): Record<string, unknown> {
+  private serializeSubscriptionState(
+    subscription: any,
+  ): Record<string, unknown> {
     if (!subscription) return {};
     return {
       id: subscription.id,
@@ -760,7 +782,8 @@ export class RevenueCatSyncService {
       cancelledAt: subscription.cancelledAt?.toISOString?.() ?? null,
       autoRenew: subscription.autoRenew,
       platformSubscriptionId: subscription.platformSubscriptionId,
-      gracePeriodEndsAt: subscription.gracePeriodEndsAt?.toISOString?.() ?? null,
+      gracePeriodEndsAt:
+        subscription.gracePeriodEndsAt?.toISOString?.() ?? null,
     };
   }
 

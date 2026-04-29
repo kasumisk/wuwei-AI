@@ -57,7 +57,8 @@ export class LegacyResultAdapter {
     const avg = (key: 'quality' | 'satiety') =>
       foods.length === 0
         ? 0
-        : foods.map((f) => f[key] ?? 0).reduce((s, v) => s + v, 0) / foods.length;
+        : foods.map((f) => f[key] ?? 0).reduce((s, v) => s + v, 0) /
+          foods.length;
 
     return {
       foods,

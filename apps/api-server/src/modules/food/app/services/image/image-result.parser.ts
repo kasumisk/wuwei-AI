@@ -91,7 +91,7 @@ export class ImageResultParser {
       return [];
     }
 
-    const rawFoods = Array.isArray(parsed.foods) ? (parsed.foods as any[]) : [];
+    const rawFoods = Array.isArray(parsed.foods) ? parsed.foods : [];
     if (rawFoods.length === 0) return [];
 
     // 1. 缺失字段补齐

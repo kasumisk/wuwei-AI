@@ -227,7 +227,7 @@ export class MealExplanationService {
       // 找到最常见的烹饪方式
       const methods = picks
         .flatMap((p) => p.food.cookingMethods ?? [])
-        .filter(Boolean) as string[];
+        .filter(Boolean);
       const methodCount = new Map<string, number>();
       for (const m of methods) {
         methodCount.set(m, (methodCount.get(m) ?? 0) + 1);

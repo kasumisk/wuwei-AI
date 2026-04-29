@@ -33,7 +33,8 @@ export interface DecisionStageInput {
 export class DecisionStageService {
   private readonly logger = new Logger(DecisionStageService.name);
 
-  constructor(private readonly foodDecisionService: FoodDecisionService,
+  constructor(
+    private readonly foodDecisionService: FoodDecisionService,
     private readonly decisionEngineService: DecisionEngineService,
     private readonly decisionSummaryService: DecisionSummaryService,
     private readonly i18n: I18nService,

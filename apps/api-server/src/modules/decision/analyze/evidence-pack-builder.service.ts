@@ -17,7 +17,8 @@ import { translateEnum } from '../../../common/i18n/enum-i18n';
 
 @Injectable()
 export class EvidencePackBuilderService {
-  constructor(private readonly dailyMacroSummaryService: DailyMacroSummaryService,
+  constructor(
+    private readonly dailyMacroSummaryService: DailyMacroSummaryService,
     private readonly i18n: I18nService,
   ) {}
 
@@ -61,8 +62,12 @@ export class EvidencePackBuilderService {
       this.i18n.t('decision.evidence.proteinCompletion', locale, {
         percent: projected.protein,
       }),
-      this.i18n.t('decision.evidence.fatCompletion', locale, { percent: projected.fat }),
-      this.i18n.t('decision.evidence.carbsCompletion', locale, { percent: projected.carbs }),
+      this.i18n.t('decision.evidence.fatCompletion', locale, {
+        percent: projected.fat,
+      }),
+      this.i18n.t('decision.evidence.carbsCompletion', locale, {
+        percent: projected.carbs,
+      }),
       // V3.3: 上下文分析问题
       ...(contextualAnalysis?.identifiedIssues || [])
         .slice(0, 3)
@@ -158,10 +163,7 @@ export class EvidencePackBuilderService {
       locale,
     );
     const dailyMacroSummary = userContext
-      ? this.dailyMacroSummaryService.buildSummaryText(
-          userContext,
-          locale,
-        )
+      ? this.dailyMacroSummaryService.buildSummaryText(userContext, locale)
       : undefined;
 
     return {
@@ -210,7 +212,7 @@ export class EvidencePackBuilderService {
         : undefined;
 
     return {
-      verdict: verdict as CoachOutputSchema['verdict'],
+      verdict: verdict,
       mainReason,
       actionSteps: actionSteps.slice(0, 3),
       cautionNote,

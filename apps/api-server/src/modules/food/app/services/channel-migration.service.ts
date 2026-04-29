@@ -64,7 +64,9 @@ export class ChannelMigrationService {
         stats.total++;
         try {
           const newChannels = this.inferChannels(food);
-          const oldChannels = this.parseChannels((food as any).taxonomy?.availableChannels);
+          const oldChannels = this.parseChannels(
+            (food as any).taxonomy?.availableChannels,
+          );
 
           // 只在渠道列表发生变化时更新
           if (this.channelsEqual(oldChannels, newChannels)) {
@@ -108,7 +110,8 @@ export class ChannelMigrationService {
   }): string[] {
     const channels: string[] = [];
     const cat = food.category;
-    const nova = food.healthAssessment?.processingLevel ?? food.processingLevel ?? 0;
+    const nova =
+      food.healthAssessment?.processingLevel ?? food.processingLevel ?? 0;
 
     // 生鲜食材: 家庭烹饪；低加工追加餐厅
     if (['veggie', 'fruit', 'protein', 'dairy', 'grain'].includes(cat)) {

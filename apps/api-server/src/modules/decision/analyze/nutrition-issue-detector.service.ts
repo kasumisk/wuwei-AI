@@ -61,7 +61,9 @@ export class NutritionIssueDetector {
       metricCalculator: (progress) => progress.remaining.protein,
       thresholdCalculator: (progress) => progress.goals.protein * 0.1, // 10% 差值认为缺口
       implicationTemplate: (metric, _threshold, locale) =>
-        this.i18n.t('decision.issue.proteinDeficit', locale, { amount: Math.round(metric) }),
+        this.i18n.t('decision.issue.proteinDeficit', locale, {
+          amount: Math.round(metric),
+        }),
     },
 
     // 脂肪超标
@@ -79,7 +81,9 @@ export class NutritionIssueDetector {
         progress.consumed.fat - progress.goals.fat,
       thresholdCalculator: (progress) => progress.goals.fat * 0.15,
       implicationTemplate: (metric, _threshold, locale) =>
-        this.i18n.t('decision.issue.fatExcess', locale, { amount: Math.round(metric) }),
+        this.i18n.t('decision.issue.fatExcess', locale, {
+          amount: Math.round(metric),
+        }),
     },
 
     // 碳水超标
@@ -97,7 +101,9 @@ export class NutritionIssueDetector {
         progress.consumed.carbs - progress.goals.carbs,
       thresholdCalculator: (progress) => progress.goals.carbs * 0.15,
       implicationTemplate: (metric, _threshold, locale) =>
-        this.i18n.t('decision.issue.carbExcess', locale, { amount: Math.round(metric) }),
+        this.i18n.t('decision.issue.carbExcess', locale, {
+          amount: Math.round(metric),
+        }),
     },
 
     // 热量超标
@@ -115,7 +121,9 @@ export class NutritionIssueDetector {
         progress.consumed.calories - progress.goals.calories,
       thresholdCalculator: (progress) => progress.goals.calories * 0.08,
       implicationTemplate: (metric, _threshold, locale) =>
-        this.i18n.t('decision.issue.calorieExcess', locale, { amount: Math.round(metric) }),
+        this.i18n.t('decision.issue.calorieExcess', locale, {
+          amount: Math.round(metric),
+        }),
     },
 
     // 热量不足
@@ -133,7 +141,9 @@ export class NutritionIssueDetector {
         progress.goals.calories - progress.consumed.calories,
       thresholdCalculator: (progress) => progress.goals.calories * 0.1,
       implicationTemplate: (metric, _threshold, locale) =>
-        this.i18n.t('decision.issue.calorieDeficit', locale, { amount: Math.round(metric) }),
+        this.i18n.t('decision.issue.calorieDeficit', locale, {
+          amount: Math.round(metric),
+        }),
     },
 
     // 纤维素不足（仅当 slot.carbs 不超标时才检测，作为代理信号）
@@ -151,7 +161,8 @@ export class NutritionIssueDetector {
       severityCalculator: () => 'low', // 纤维问题通常低优先级
       metricCalculator: () => 0, // 占位
       thresholdCalculator: () => 0,
-      implicationTemplate: (_m, _t, locale) => this.i18n.t('decision.issue.fiberDeficit', locale),
+      implicationTemplate: (_m, _t, locale) =>
+        this.i18n.t('decision.issue.fiberDeficit', locale),
     },
 
     // 糖分超标（V3.6 P1.6 新增）
@@ -169,7 +180,9 @@ export class NutritionIssueDetector {
         progress.consumed.carbs - progress.goals.carbs,
       thresholdCalculator: (progress) => progress.goals.carbs * 0.15,
       implicationTemplate: (metric, _t, locale) =>
-        this.i18n.t('decision.issue.sugarExcess', locale, { amount: Math.round(metric) }),
+        this.i18n.t('decision.issue.sugarExcess', locale, {
+          amount: Math.round(metric),
+        }),
     },
   ];
 
@@ -255,9 +268,13 @@ export class NutritionIssueDetector {
           severity: fatExcess > progress.goals.fat * 0.25 ? 'high' : 'medium',
           metric: Math.round(fatExcess * 100) / 100,
           threshold: 0,
-          implication: this.i18n.t('decision.issue.cardiovascularRisk', locale, {
-            amount: Math.round(fatExcess),
-          }),
+          implication: this.i18n.t(
+            'decision.issue.cardiovascularRisk',
+            locale,
+            {
+              amount: Math.round(fatExcess),
+            },
+          ),
         });
       }
 
@@ -304,7 +321,9 @@ export class NutritionIssueDetector {
           severity: 'medium',
           metric: hour,
           threshold: 0,
-          implication: this.i18n.t('decision.issue.bingeRiskWindow', locale, { hour }),
+          implication: this.i18n.t('decision.issue.bingeRiskWindow', locale, {
+            hour,
+          }),
         });
       }
 

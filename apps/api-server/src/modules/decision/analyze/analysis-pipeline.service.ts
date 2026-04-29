@@ -120,7 +120,8 @@ export type PipelineInput = TextPipelineInput | ImagePipelineInput;
 export class AnalysisPipelineService {
   private readonly logger = new Logger(AnalysisPipelineService.name);
 
-  constructor(private readonly userContextBuilder: UserContextBuilderService,
+  constructor(
+    private readonly userContextBuilder: UserContextBuilderService,
     private readonly foodScoringService: FoodScoringService,
     private readonly scoringStageService: ScoringStageService,
     private readonly decisionStageService: DecisionStageService,
@@ -413,7 +414,7 @@ export class AnalysisPipelineService {
     result: FoodAnalysisResultV61,
   ): Promise<void> {
     if (input.inputType === 'text') {
-      const textInput = input as TextPipelineInput;
+      const textInput = input;
       const matchedCount = textInput.parsedFoodMeta.filter(
         (f) => f.fromLibrary,
       ).length;
@@ -435,7 +436,7 @@ export class AnalysisPipelineService {
         );
       }
     } else {
-      const imageInput = input as ImagePipelineInput;
+      const imageInput = input;
       try {
         await this.persistence.saveImageRecord({
           analysisId,
@@ -498,16 +499,27 @@ export class AnalysisPipelineService {
     summary.analysisQualityBand = diagnostics.analysisQualityBand;
     summary.reviewLevel = diagnostics.reviewLevel;
     if (diagnostics.analysisQualityBand === 'high') {
-      summary.analysisQualityNote = this.i18n.t('decision.pipeline.quality.high', locale);
+      summary.analysisQualityNote = this.i18n.t(
+        'decision.pipeline.quality.high',
+        locale,
+      );
     } else if (diagnostics.analysisQualityBand === 'medium') {
-      summary.analysisQualityNote = this.i18n.t('decision.pipeline.quality.medium', locale);
+      summary.analysisQualityNote = this.i18n.t(
+        'decision.pipeline.quality.medium',
+        locale,
+      );
     } else {
-      summary.analysisQualityNote = this.i18n.t('decision.pipeline.quality.low', locale);
+      summary.analysisQualityNote = this.i18n.t(
+        'decision.pipeline.quality.low',
+        locale,
+      );
     }
 
     const guardrails: string[] = [];
     if (summary.analysisQualityBand === 'low') {
-      guardrails.push(this.i18n.t('decision.pipeline.guardrail.lowQuality', locale));
+      guardrails.push(
+        this.i18n.t('decision.pipeline.guardrail.lowQuality', locale),
+      );
     }
     if (summary.healthConstraintNote) {
       guardrails.push(summary.healthConstraintNote);
@@ -520,7 +532,9 @@ export class AnalysisPipelineService {
     }
     // V3.5 P3.1: post_eat 模式追加恢复型 guardrail
     if (mode === 'post_eat') {
-      guardrails.push(this.i18n.t('decision.pipeline.guardrail.postEat', locale));
+      guardrails.push(
+        this.i18n.t('decision.pipeline.guardrail.postEat', locale),
+      );
     }
 
     summary.decisionGuardrails = Array.from(new Set(guardrails)).slice(0, 3);

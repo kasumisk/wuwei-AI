@@ -419,8 +419,8 @@ export class CandidateAggregationService {
     // 分类必须一致
     if (a.category !== b.category) return false;
 
-    const nutA = a.estimatedNutrition as any;
-    const nutB = b.estimatedNutrition as any;
+    const nutA = a.estimatedNutrition;
+    const nutB = b.estimatedNutrition;
 
     // 如果任一没有营养数据，只要分类一致+名称相似就算接近
     if (!nutA || !nutB) return true;

@@ -43,7 +43,7 @@ import {
   estimateQuality as _estimateQuality,
   estimateSatiety as _estimateSatiety,
 } from '../../food/app/config/nutrition-estimator';
-import { matchAllergenInFoods } from '../config/decision-checks';
+import { matchAllergenInFoods } from '../checks/allergen-match';
 import { ContextualAnalysis } from '../types/analysis-result.types';
 import { PreferenceProfileService } from '../../diet/app/recommendation/profile/preference-profile.service';
 import { FoodI18nService } from '../../diet/app/services/food-i18n.service';
@@ -132,7 +132,8 @@ export interface DecisionOutput {
 export class FoodDecisionService {
   private readonly logger = new Logger(FoodDecisionService.name);
 
-  constructor(private readonly behaviorService: BehaviorService,
+  constructor(
+    private readonly behaviorService: BehaviorService,
     private readonly alternativeSuggestionService: AlternativeSuggestionService,
     private readonly decisionExplainerService: DecisionExplainerService,
     private readonly foodScoringService: FoodScoringService,
@@ -514,10 +515,11 @@ export class FoodDecisionService {
     if (allNames.length === 0) return foodPreferences;
 
     // 直接通过 foods JOIN food_translations 按食物中文名批量查翻译（一次查询）
-    const nameTranslation = await this.foodI18nService.loadTranslationsByFoodNames(
-      allNames,
-      resolvedLocale,
-    );
+    const nameTranslation =
+      await this.foodI18nService.loadTranslationsByFoodNames(
+        allNames,
+        resolvedLocale,
+      );
 
     if (nameTranslation.size === 0) return foodPreferences;
 

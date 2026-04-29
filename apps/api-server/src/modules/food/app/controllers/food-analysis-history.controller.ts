@@ -338,11 +338,10 @@ export class FoodAnalysisHistoryController {
       .slice(0, 5);
 
     if (foodNames.length > 0) {
-      const translated =
-        await this.foodI18nService.loadTranslationsByFoodNames(
-          foodNames,
-          locale,
-        );
+      const translated = await this.foodI18nService.loadTranslationsByFoodNames(
+        foodNames,
+        locale,
+      );
       foodNames = foodNames.map((name) => translated.get(name) ?? name);
     }
 

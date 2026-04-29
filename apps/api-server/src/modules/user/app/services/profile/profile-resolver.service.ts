@@ -19,9 +19,7 @@
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { I18nService } from '../../../../../core/i18n';
-import {
-  UserProfiles as UserProfile,
-} from '@prisma/client';
+import { UserProfiles as UserProfile } from '@prisma/client';
 import { BehaviorData, InferredData } from '../../../user-profile-merge.helper';
 import { ProfileCacheService } from './profile-cache.service';
 import { RealtimeProfileService } from './realtime-profile.service';

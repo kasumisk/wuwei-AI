@@ -116,8 +116,7 @@ export class DynamicThresholdsService {
       fatCriticalRatio: THRESHOLD_RATIOS.fatCriticalRatio,
 
       // 份量阈值
-      portionBufferRatio:
-        PORTION_BUFFER[ctx.goalType!] || PORTION_BUFFER.health,
+      portionBufferRatio: PORTION_BUFFER[ctx.goalType] || PORTION_BUFFER.health,
       portionMinPercent: PORTION_MIN_PERCENT,
       nextMealLowBudget: Math.round(
         gc * THRESHOLD_RATIOS.nextMealLowBudgetRatio,

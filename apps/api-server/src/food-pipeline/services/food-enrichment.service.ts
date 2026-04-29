@@ -3055,14 +3055,21 @@ ${jsonSchema}`;
       where: { foodId: foodId, locale: { in: normalizedLocales } },
     });
 
-    const existingMap = new Map(existingTranslations.map((item) => [item.locale, item]));
+    const existingMap = new Map(
+      existingTranslations.map((item) => [item.locale, item]),
+    );
     const localeFieldMap = new Map<string, string[]>();
 
     for (const targetLocale of normalizedLocales) {
       const existing = existingMap.get(targetLocale);
       const missingTransFields: string[] = [];
       if (!existing) {
-        missingTransFields.push('name', 'aliases', 'description', 'serving_desc');
+        missingTransFields.push(
+          'name',
+          'aliases',
+          'description',
+          'serving_desc',
+        );
       } else {
         if (!existing.name) missingTransFields.push('name');
         if (!existing.aliases) missingTransFields.push('aliases');
@@ -3130,7 +3137,11 @@ ${localeInstructions}
         '你是权威食品多语言本地化专家。为食品数据库生成准确、保守、可直接入库的翻译。严格返回完整 JSON，不要输出 JSON 之外的任何文本。',
       maxTokens: 2800,
     });
-    if (!raw || typeof raw.translations !== 'object' || Array.isArray(raw.translations)) {
+    if (
+      !raw ||
+      typeof raw.translations !== 'object' ||
+      Array.isArray(raw.translations)
+    ) {
       return {};
     }
 
@@ -3138,8 +3149,12 @@ ${localeInstructions}
       typeof raw.confidence === 'number'
         ? Math.max(0, Math.min(1, raw.confidence))
         : 0.5;
-    const reasoning = typeof raw.reasoning === 'string' ? raw.reasoning : undefined;
-    const translationMap = raw.translations as Record<string, Record<string, any>>;
+    const reasoning =
+      typeof raw.reasoning === 'string' ? raw.reasoning : undefined;
+    const translationMap = raw.translations as Record<
+      string,
+      Record<string, any>
+    >;
     const results: Record<string, Record<string, any>> = {};
 
     for (const [targetLocale, fields] of localeFieldMap.entries()) {
@@ -3525,9 +3540,12 @@ ${localeInstructions}
       { changes: { path: ['target'], equals: target } },
     ];
     if (normalizedLocales.length > 0) {
-      andConditions.push({ changes: { path: ['locales'], equals: normalizedLocales } });
+      andConditions.push({
+        changes: { path: ['locales'], equals: normalizedLocales },
+      });
     }
-    if (region) andConditions.push({ changes: { path: ['region'], equals: region } });
+    if (region)
+      andConditions.push({ changes: { path: ['region'], equals: region } });
 
     const existingStagedWhere: Prisma.FoodChangeLogsWhereInput = {
       foodId,
@@ -3920,7 +3938,11 @@ ${localeInstructions}
       }
       const appliedDetails: string[] = [];
       for (const locale of targetLocales) {
-        const localeProposed = this.getTranslationProposedValues(changes, proposed, locale);
+        const localeProposed = this.getTranslationProposedValues(
+          changes,
+          proposed,
+          locale,
+        );
         const res = await this.applyTranslationEnrichment(
           log.foodId,
           locale,
@@ -4349,7 +4371,8 @@ ${localeInstructions}
   private normalizeTranslationLocales(changes: Record<string, any>): string[] {
     const locales = Array.isArray(changes.locales)
       ? changes.locales.filter(
-          (locale): locale is string => typeof locale === 'string' && locale.length > 0,
+          (locale): locale is string =>
+            typeof locale === 'string' && locale.length > 0,
         )
       : [];
     if (locales.length > 0) return [...new Set(locales)];
@@ -4362,7 +4385,11 @@ ${localeInstructions}
     locale: string,
   ): EnrichmentResult {
     const localized = changes.proposedValuesByLocale?.[locale];
-    if (localized && typeof localized === 'object' && !Array.isArray(localized)) {
+    if (
+      localized &&
+      typeof localized === 'object' &&
+      !Array.isArray(localized)
+    ) {
       return localized as EnrichmentResult;
     }
     return proposed;

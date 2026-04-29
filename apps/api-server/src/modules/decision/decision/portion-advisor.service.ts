@@ -141,10 +141,12 @@ export class PortionAdvisorService {
 
     if (goalType === 'fat_loss' || goalType === 'muscle_gain') {
       const proteinEntry = priorities.find((p) => p.macro === 'protein');
-      if (proteinEntry) return this.i18n.t('decision.nextMeal.emphasisProtein', locale);
+      if (proteinEntry)
+        return this.i18n.t('decision.nextMeal.emphasisProtein', locale);
     }
 
-    if (priorities.length === 0) return this.i18n.t('decision.nextMeal.emphasisBalanced', locale);
+    if (priorities.length === 0)
+      return this.i18n.t('decision.nextMeal.emphasisBalanced', locale);
 
     priorities.sort((a, b) => b.gap - a.gap);
     const top = priorities[0].macro;
@@ -168,7 +170,9 @@ export class PortionAdvisorService {
   ): string {
     const lowBudget = thresholds?.nextMealLowBudget ?? 100;
     if (remainingCalories <= lowBudget) {
-      return this.i18n.t('decision.nextMeal.budgetLow', locale, { calories: remainingCalories });
+      return this.i18n.t('decision.nextMeal.budgetLow', locale, {
+        calories: remainingCalories,
+      });
     }
 
     let suggestion = this.i18n.t('decision.nextMeal.suggestion', locale, {
@@ -190,9 +194,15 @@ export class PortionAdvisorService {
       );
       const unique = [...new Set(filtered)].slice(0, 3);
       if (unique.length > 0) {
-        suggestion += this.i18n.t('decision.nextMeal.foodRecommendation', locale, {
-          foods: unique.join(this.i18n.t('decision.separator.enumeration', locale)),
-        });
+        suggestion += this.i18n.t(
+          'decision.nextMeal.foodRecommendation',
+          locale,
+          {
+            foods: unique.join(
+              this.i18n.t('decision.separator.enumeration', locale),
+            ),
+          },
+        );
       }
     }
 

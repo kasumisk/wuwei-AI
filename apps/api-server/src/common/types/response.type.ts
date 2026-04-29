@@ -17,7 +17,9 @@ const DEFAULT_RESPONSE_MESSAGES: Record<
 };
 
 function resolveResponseLocale(): I18nLocale {
-  const raw = String(ClsServiceManager.getClsService()?.get('locale') || '').trim();
+  const raw = String(
+    ClsServiceManager.getClsService()?.get('locale') || '',
+  ).trim();
   if (I18N_LOCALES.includes(raw as I18nLocale)) {
     return raw as I18nLocale;
   }
@@ -45,7 +47,10 @@ export class ResponseWrapper {
   /**
    * 成功响应
    */
-  static success<T>(data: T, message = getDefaultSuccessMessage()): ApiResponse<T> {
+  static success<T>(
+    data: T,
+    message = getDefaultSuccessMessage(),
+  ): ApiResponse<T> {
     return {
       code: 200,
       data,

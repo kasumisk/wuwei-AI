@@ -73,7 +73,7 @@ export class StrategyResolver {
       () => this.doResolve(userId, goalType, contextInput),
     );
 
-    return cached!;
+    return cached;
   }
 
   /**

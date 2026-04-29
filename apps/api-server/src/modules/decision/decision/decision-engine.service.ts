@@ -14,7 +14,7 @@ import {
 } from '../types/analysis-result.types';
 import { NutritionScoreBreakdown } from '../../diet/app/services/nutrition-score.service';
 import { I18nService, I18nLocale } from '../../../core/i18n';
-import { getDimensionLabel } from '../config/scoring-dimensions';
+
 import {
   GOAL_DECISION_THRESHOLDS,
   DEFAULT_THRESHOLDS,
@@ -89,7 +89,9 @@ export class DecisionEngineService {
     const hour = ctx.localHour ?? 12;
     if (hour >= th.lateNightStart || hour < th.lateNightEnd) {
       if (totalCalories > th.significantMealCal) {
-        contextReasons.push(this.i18n.t('decision.context.lateNightHighCal', locale));
+        contextReasons.push(
+          this.i18n.t('decision.context.lateNightHighCal', locale),
+        );
         if (scoreDecision.recommendation === 'recommend') {
           scoreDecision = this.scoreToFoodDecision(
             Math.min(nutritionScore, 50),
@@ -100,7 +102,9 @@ export class DecisionEngineService {
       }
     } else if (hour >= th.eveningStart && hour < th.lateNightStart) {
       if (totalCarbs > th.highCarbMeal && ctx.goalType === 'fat_loss') {
-        contextReasons.push(this.i18n.t('decision.context.eveningHighCarb', locale));
+        contextReasons.push(
+          this.i18n.t('decision.context.eveningHighCarb', locale),
+        );
       }
     }
 
@@ -112,15 +116,21 @@ export class DecisionEngineService {
         totalProtein < th.lowProteinMeal &&
         totalCalories > th.snackHighCal
       ) {
-        contextReasons.push(this.i18n.t('decision.context.breakfastLowProtein', locale));
+        contextReasons.push(
+          this.i18n.t('decision.context.breakfastLowProtein', locale),
+        );
       }
     } else if (mealType === 'dinner') {
       if (ctx.goalType === 'fat_loss' && totalCarbs > th.dinnerHighCarb) {
-        contextReasons.push(this.i18n.t('decision.context.dinnerHighCarb', locale));
+        contextReasons.push(
+          this.i18n.t('decision.context.dinnerHighCarb', locale),
+        );
       }
     } else if (mealType === 'snack') {
       if (totalCalories > th.snackHighCal) {
-        contextReasons.push(this.i18n.t('decision.context.snackHighCal', locale));
+        contextReasons.push(
+          this.i18n.t('decision.context.snackHighCal', locale),
+        );
       }
     }
 
@@ -146,12 +156,16 @@ export class DecisionEngineService {
 
     if (ctx.goalType === 'muscle_gain') {
       if (totalProtein >= th.highProteinMeal) {
-        contextReasons.push(this.i18n.t('decision.context.goodProtein', locale));
+        contextReasons.push(
+          this.i18n.t('decision.context.goodProtein', locale),
+        );
       } else if (
         totalProtein < th.veryLowProteinMeal &&
         totalCalories > th.significantMealCal
       ) {
-        contextReasons.push(this.i18n.t('decision.context.lowProteinMuscle', locale));
+        contextReasons.push(
+          this.i18n.t('decision.context.lowProteinMuscle', locale),
+        );
       }
     }
 
@@ -204,7 +218,9 @@ export class DecisionEngineService {
       const proteinProgress =
         ((ctx.todayProtein + totalProtein) / ctx.goalProtein) * 100;
       if (proteinProgress < 50 && ctx.goalType !== 'fat_loss') {
-        contextReasons.push(this.i18n.t('decision.context.lowProteinGeneral', locale));
+        contextReasons.push(
+          this.i18n.t('decision.context.lowProteinGeneral', locale),
+        );
       }
     }
 
@@ -226,7 +242,8 @@ export class DecisionEngineService {
           recommendation: 'avoid',
           shouldEat: false,
           reason:
-            conflictReport.items[0]?.message ?? this.i18n.t('decision.score.veryLow', locale),
+            conflictReport.items[0]?.message ??
+            this.i18n.t('decision.score.veryLow', locale),
           riskLevel: 'high',
         };
       } else if (
@@ -236,7 +253,9 @@ export class DecisionEngineService {
         scoreDecision = {
           recommendation: 'caution',
           shouldEat: true,
-          reason: conflictReport.items[0]?.message ?? this.i18n.t('decision.score.low', locale),
+          reason:
+            conflictReport.items[0]?.message ??
+            this.i18n.t('decision.score.low', locale),
           riskLevel: 'medium',
         };
       }
@@ -346,7 +365,8 @@ export class DecisionEngineService {
 
     for (const [dim, score] of entries) {
       const roundedScore = Math.round(score);
-      const dimensionLabel = getDimensionLabel(dim, locale);
+      // i18n-allow-dynamic
+      const dimensionLabel = this.i18n.t(`decision.dim.label.${dim}`, locale);
       if (roundedScore < 30) {
         factors.push({
           dimension: dim,
@@ -621,7 +641,9 @@ export class DecisionEngineService {
     }
 
     const rationale =
-      issues.length > 0 ? issues[0] : this.i18n.t('decision.factor.noHealthIssue', locale);
+      issues.length > 0
+        ? issues[0]
+        : this.i18n.t('decision.factor.noHealthIssue', locale);
 
     return { score, rationale };
   }

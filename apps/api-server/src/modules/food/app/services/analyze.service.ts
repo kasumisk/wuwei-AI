@@ -377,9 +377,7 @@ export class AnalyzeService {
     userId: string,
     imageUrl: string,
     mealType: string | undefined,
-    v61: Parameters<
-      ImageFoodAnalysisService['persistV61AnalysisRecord']
-    >[0],
+    v61: Parameters<ImageFoodAnalysisService['persistV61AnalysisRecord']>[0],
   ): void {
     this.imageFoodAnalysisService
       .persistV61AnalysisRecord(v61, userId, imageUrl, mealType)
@@ -390,9 +388,7 @@ export class AnalyzeService {
         }
       })
       .catch((err) =>
-        this.logger.warn(
-          `异步保存图片分析记录失败: ${(err as Error).message}`,
-        ),
+        this.logger.warn(`异步保存图片分析记录失败: ${(err as Error).message}`),
       );
   }
 

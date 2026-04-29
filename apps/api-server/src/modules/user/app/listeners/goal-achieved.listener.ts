@@ -15,10 +15,7 @@ import {
   GoalAchievedEvent,
 } from '../../../../core/events/domain-events';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
-import {
-  getInferred,
-  updateInferred,
-} from '../../user-profile-merge.helper';
+import { getInferred, updateInferred } from '../../user-profile-merge.helper';
 
 @Injectable()
 export class GoalAchievedListener {

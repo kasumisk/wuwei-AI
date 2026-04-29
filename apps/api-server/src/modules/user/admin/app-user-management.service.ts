@@ -10,10 +10,7 @@ import {
 } from './dto/app-user-management.dto';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { I18nService } from '../../../core/i18n';
-import {
-  getBehavior,
-  getInferred,
-} from '../user-profile-merge.helper';
+import { getBehavior, getInferred } from '../user-profile-merge.helper';
 
 @Injectable()
 export class AppUserManagementService {
@@ -197,17 +194,16 @@ export class AppUserManagementService {
     }
 
     // 并行查询行为画像、声明档案、近期变更日志
-    const [userProfileRow, recentChangeLogs] =
-      await Promise.all([
-        this.prisma.userProfiles.findUnique({
-          where: { userId: userId },
-        }),
-        this.prisma.profileChangeLog.findMany({
-          where: { userId: userId, changeType: 'behavior' as any },
-          orderBy: { createdAt: 'desc' },
-          take: 20,
-        }),
-      ]);
+    const [userProfileRow, recentChangeLogs] = await Promise.all([
+      this.prisma.userProfiles.findUnique({
+        where: { userId: userId },
+      }),
+      this.prisma.profileChangeLog.findMany({
+        where: { userId: userId, changeType: 'behavior' as any },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+    ]);
 
     const behaviorProfile = userProfileRow ? getBehavior(userProfileRow) : null;
     const declaredProfile = userProfileRow;
@@ -278,7 +274,9 @@ export class AppUserManagementService {
       }),
     ]);
 
-    const inferredProfile = inferredProfileRow ? getInferred(inferredProfileRow) : null;
+    const inferredProfile = inferredProfileRow
+      ? getInferred(inferredProfileRow)
+      : null;
 
     return {
       user: {

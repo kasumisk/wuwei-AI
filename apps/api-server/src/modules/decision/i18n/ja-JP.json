@@ -702,5 +702,6 @@
   "ui.text.reviewAuto": "自動レビュー",
   "ui.text.reviewManual": "手動レビュー",
   "ui.text.unknown": "不明",
-  "ui.tone.encouraging": "励まし型"
+  "ui.tone.encouraging": "励まし型",
+  "prompt.nameField": "フィールド制約:\n- 食品名は `name` フィールドのみに返すこと\n- `name` はこのリクエストの現在の応答言語を使うこと\n- `nameEn`、`nameZh`、その他の別名フィールドは返さないこと"
 }

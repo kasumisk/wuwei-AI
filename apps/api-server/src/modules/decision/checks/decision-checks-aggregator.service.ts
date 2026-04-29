@@ -15,10 +15,7 @@ import {
   NutritionTotals,
   UnifiedUserContext,
 } from '../types/analysis-result.types';
-import type {
-  CheckResult,
-  CheckableFoodItem,
-} from '../config/decision-checks';
+import type { CheckResult, CheckableFoodItem } from './types';
 import { UserThresholds } from '../config/dynamic-thresholds.service';
 import { AllergenChecksService } from './allergen-checks.service';
 import { RestrictionChecksService } from './restriction-checks.service';

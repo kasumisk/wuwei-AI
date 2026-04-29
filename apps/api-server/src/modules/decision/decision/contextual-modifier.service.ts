@@ -41,7 +41,8 @@ export interface ContextualModification {
 export class ContextualDecisionModifierService {
   private readonly logger = new Logger(ContextualDecisionModifierService.name);
 
-  constructor(private readonly behaviorService: BehaviorService,
+  constructor(
+    private readonly behaviorService: BehaviorService,
     private readonly foodService: FoodService,
     private readonly i18n: I18nService,
   ) {}
@@ -86,10 +87,14 @@ export class ContextualDecisionModifierService {
       result.additionalIssues.push({
         category: 'cumulative_excess',
         severity: excessPct > 30 ? 'critical' : 'warning',
-        message: this.i18n.t('decision.context.overBudget', locale, { amount: Math.round(projectedTotal - ctx.goalCalories) }),
+        message: this.i18n.t('decision.context.overBudget', locale, {
+          amount: Math.round(projectedTotal - ctx.goalCalories),
+        }),
       });
       result.additionalReasons.push(
-        this.i18n.t('decision.modifier.cumulativeSaturation', locale, { percent: excessPct }),
+        this.i18n.t('decision.modifier.cumulativeSaturation', locale, {
+          percent: excessPct,
+        }),
       );
     }
 
@@ -108,7 +113,9 @@ export class ContextualDecisionModifierService {
         result.additionalIssues.push({
           category: 'binge_risk',
           severity: 'warning',
-          message: this.i18n.t('decision.modifier.lateNightRisk', locale) + lateCalSuffix,
+          message:
+            this.i18n.t('decision.modifier.lateNightRisk', locale) +
+            lateCalSuffix,
         });
       }
     }
@@ -142,7 +149,9 @@ export class ContextualDecisionModifierService {
           result.additionalIssues.push({
             category: 'multi_day_excess',
             severity: consecutiveExcess >= 5 ? 'critical' : 'warning',
-            message: this.i18n.t('decision.modifier.multiDayExcess', locale, { days: consecutiveExcess }),
+            message: this.i18n.t('decision.modifier.multiDayExcess', locale, {
+              days: consecutiveExcess,
+            }),
           });
         }
 
@@ -154,7 +163,9 @@ export class ContextualDecisionModifierService {
         ) {
           result.scoreMultiplier *= MODIFIER_PARAMS.healthyStreakBonus;
           result.additionalReasons.push(
-            this.i18n.t('decision.modifier.healthyStreak', locale, { days: healthyDays }),
+            this.i18n.t('decision.modifier.healthyStreak', locale, {
+              days: healthyDays,
+            }),
           );
         }
 
@@ -166,10 +177,14 @@ export class ContextualDecisionModifierService {
           result.additionalIssues.push({
             category: 'binge_risk',
             severity: 'critical',
-            message: this.i18n.t('decision.modifier.bingeRisk', locale, { count: mealCount }),
+            message: this.i18n.t('decision.modifier.bingeRisk', locale, {
+              count: mealCount,
+            }),
           });
           result.additionalReasons.push(
-            this.i18n.t('decision.modifier.bingeRiskReason', locale, { count: mealCount }),
+            this.i18n.t('decision.modifier.bingeRiskReason', locale, {
+              count: mealCount,
+            }),
           );
         }
       }
@@ -184,7 +199,7 @@ export class ContextualDecisionModifierService {
       if (ctx.shortTermBehavior.bingeRiskHours.includes(ctx.localHour)) {
         result.scoreMultiplier *= MODIFIER_PARAMS.bingeHourMultiplier;
         result.additionalReasons.push(
-          ci('modifier.bingeRiskHour', toCoachLocale(locale), {
+          ci(this.i18n, 'modifier.bingeRiskHour', toCoachLocale(locale), {
             hour: String(ctx.localHour),
           }),
         );
@@ -195,7 +210,7 @@ export class ContextualDecisionModifierService {
     if (ctx.shortTermBehavior?.intakeTrends === 'increasing') {
       result.scoreMultiplier *= MODIFIER_PARAMS.trendIncreasingMultiplier;
       result.additionalReasons.push(
-        ci('modifier.trendIncreasing', toCoachLocale(locale)),
+        ci(this.i18n, 'modifier.trendIncreasing', toCoachLocale(locale)),
       );
     } else if (ctx.shortTermBehavior?.intakeTrends === 'decreasing') {
       result.scoreMultiplier *= MODIFIER_PARAMS.trendDecreasingMultiplier;

@@ -30,7 +30,9 @@ export function resolveDecision(
 ): LegacyDecision {
   const ai = LEGACY_RANK[aiDecision as LegacyDecision] ?? 1;
   const eng = LEGACY_RANK[engineDecision as LegacyDecision] ?? 1;
-  return Math.abs(ai - eng) > 1 ? LEGACY_LIST[Math.max(ai, eng)] : LEGACY_LIST[eng];
+  return Math.abs(ai - eng) > 1
+    ? LEGACY_LIST[Math.max(ai, eng)]
+    : LEGACY_LIST[eng];
 }
 
 export function legacyToRecommendation(decision: string): Recommendation {

@@ -183,7 +183,7 @@ export class FoodEnrichmentController {
     // 若旧 job 仍在 Redis 中，addBulk 会静默跳过，导致实际 waiting 数为 0
     await Promise.all(
       jobs.map(async (job) => {
-        const existing = await this.enrichmentQueue.getJob(job.opts.jobId!);
+        const existing = await this.enrichmentQueue.getJob(job.opts.jobId);
         if (existing) {
           const state = await existing.getState();
           // 只移除终态（failed/completed）或卡住的 job，不移除 waiting/active
@@ -686,9 +686,7 @@ export class FoodEnrichmentController {
         (ENRICHABLE_FIELDS as readonly string[]).includes(f),
       );
       if (validRequested.length > 0) {
-        targetFields = targetFields.filter((f) =>
-          validRequested.includes(f),
-        ) as typeof targetFields;
+        targetFields = targetFields.filter((f) => validRequested.includes(f));
         // 如果交集为空，使用用户指定的有效字段
         if (targetFields.length === 0) {
           targetFields = validRequested as typeof targetFields;
@@ -740,7 +738,7 @@ export class FoodEnrichmentController {
     // FIX: 入队前清除 failed/stalled 的旧 job，防止 jobId 幂等机制阻塞重新入队
     await Promise.all(
       jobs.map(async (job) => {
-        const existing = await this.enrichmentQueue.getJob(job.opts.jobId!);
+        const existing = await this.enrichmentQueue.getJob(job.opts.jobId);
         if (existing) {
           const state = await existing.getState();
           if (
@@ -826,7 +824,7 @@ export class FoodEnrichmentController {
 
     // 2. 查询目标食物（不过滤字段是否为 NULL）
     const foods = await this.enrichmentService.getALLFoodsForReEnqueue(
-      validFields as EnrichableField[],
+      validFields,
       {
         limit: body.limit,
         category: body.category,
@@ -848,7 +846,7 @@ export class FoodEnrichmentController {
     if (body.clearFields) {
       const result = await this.enrichmentService.clearFieldsForFoods(
         foods.map((f) => f.id),
-        validFields as EnrichableField[],
+        validFields,
       );
       cleared = result.cleared;
     }
@@ -858,7 +856,7 @@ export class FoodEnrichmentController {
       name: 'enrich',
       data: {
         foodId: food.id,
-        fields: validFields as EnrichableField[],
+        fields: validFields,
         target: 'foods' as const,
         staged: body.staged ?? false,
         // V2.1: re-enqueue 使用 direct_fields 模式，跳过5阶段流程直接补全指定字段

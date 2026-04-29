@@ -171,8 +171,7 @@ export class FoodEnrichmentProcessor extends WorkerHost {
       }
       const fc = sr.result.fieldConfidence ?? {};
       for (const [k, v] of Object.entries(fc)) {
-        if (!(k in mergedFieldConfidence))
-          mergedFieldConfidence[k] = v as number;
+        if (!(k in mergedFieldConfidence)) mergedFieldConfidence[k] = v;
       }
     }
 

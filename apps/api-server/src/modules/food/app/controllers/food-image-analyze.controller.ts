@@ -350,8 +350,7 @@ export class FoodImageAnalyzeController {
     @Body() dto: RefineAnalysisDto,
     @CurrentAppUser() user: AppUserPayload,
   ): Promise<ApiResponse> {
-    const session =
-      await this.analysisSessionService.getByRequestId(requestId);
+    const session = await this.analysisSessionService.getByRequestId(requestId);
     if (!session) {
       throw new NotFoundException(this.i18n.t('food.analysisTaskNotFound'));
     }

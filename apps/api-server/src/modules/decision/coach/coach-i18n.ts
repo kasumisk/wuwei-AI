@@ -1,12 +1,15 @@
 /**
- * V5.0 P3.2 — Decision Coach i18n (thin wrapper over cl())
+ * V13.5 — Decision Coach i18n thin wrapper（DI 注入式）
  *
- * All translations now live in labels-zh/en/ja.ts under the `coach.*` namespace.
- * This file retains the CoachLocale type, CoachI18nStrings interface, ci() helper,
- * and toCoachLocale() for backward compatibility — but ci() delegates to cl().
+ * 翻译资源在 modules/decision/i18n/{en-US,zh-CN,ja-JP}.json，namespace `coach.*`，
+ * 由 I18nService 启动时自动加载，完整 key 形如 `decision.coach.headline.balanced`。
+ *
+ * 此文件保留 ci() / toCoachLocale() / CoachLocale 类型供 7 个 coach 文件复用。
+ * 与 V13.1 不同的是 ci() 现在接收 I18nService 实例，由 caller DI 注入后传入，
+ * 不再依赖 getI18nSingleton（13.6 删除 i18n.runtime.ts 后该路径将彻底消失）。
  */
 
-import { cl } from '../i18n/decision-labels';
+import { I18nService, I18nLocale } from '../../../core/i18n';
 
 // ── Types ──
 
@@ -167,26 +170,35 @@ export interface CoachI18nStrings {
 
 // ── BCP-47 locale mapping ──
 
-const COACH_LOCALE_BCP47: Record<CoachLocale, string> = {
+const COACH_LOCALE_BCP47: Record<CoachLocale, I18nLocale> = {
   zh: 'zh-CN',
   en: 'en-US',
   ja: 'ja-JP',
 };
 
 /**
- * Coach i18n helper — thin wrapper over cl().
- * Prefixes key with `coach.`, maps CoachLocale → BCP-47, then delegates to cl().
+ * Coach i18n helper — caller 注入 I18nService 后调用此 helper。
  *
- * 占位符: 委托给 cl() 处理 {{var}} 与历史 {var} 双语法插值，
- * 不再在这里手工 .replace('{x}', v) 单花括号 — 那种写法匹配不到 JSON 里的 {{x}}。
+ * 完整 key 形如 `decision.coach.${key}`（namespace=decision, 字典内 localKey=`coach.xxx`）。
+ * 占位符: I18nService 处理 {{var}} 双花括号插值。
+ *
+ * 示例：
+ *   ci(this.i18n, 'headline.balanced', lang)
+ *   ci(this.i18n, 'macro.calOver', lang, { cal: 1800, over: 200 })
  */
 export function ci(
+  i18n: I18nService,
   key: keyof CoachI18nStrings,
   locale: CoachLocale = 'zh',
   vars?: Record<string, string | number>,
 ): string {
   const bcp47 = COACH_LOCALE_BCP47[locale] ?? 'en-US';
-  return cl(`coach.${key}`, bcp47 as any, vars);
+  // i18n-allow-dynamic
+  const fullKey = `decision.coach.${key}`;
+  const text = i18n.t(fullKey, bcp47, vars);
+  // 未命中时 I18nService 返回 fullKey；这里抹掉前缀保持历史行为（caller 收到 raw key）
+  if (text === fullKey) return key;
+  return text;
 }
 
 /**

@@ -1,8 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import {
-  UserProfiles as UserProfile,
-} from '@prisma/client';
+import { UserProfiles as UserProfile } from '@prisma/client';
 import { RedisCacheService } from '../../../../../core/redis/redis-cache.service';
 import {
   TieredCacheManager,
