@@ -29,7 +29,7 @@ export const COACH_LABELS: Record<
 /** 默认回退语言 — 与 core/i18n/i18n.types.ts 的 I18N_DEFAULT_LOCALE 保持一致 */
 const FALLBACK_LOCALE: Locale = 'en-US';
 
-function resolveDecisionLocale(): Locale {
+export function resolveDecisionLocale(): Locale {
   try {
     const cls = ClsServiceManager.getClsService();
     const raw = cls?.get('locale');
@@ -104,15 +104,9 @@ export {
 export {
   SCORING_DIMENSIONS,
   type ScoringDimension,
-  DIMENSION_LABELS,
-  DIMENSION_EXPLANATIONS,
-  DIMENSION_SUGGESTIONS,
   getDimensionLabel,
   getDimensionExplanation,
   getDimensionSuggestion,
   scoreToImpact,
 } from '../config/scoring-dimensions';
 
-// ==================== 决策链路标签重导出（P3.3）====================
-
-export { CHAIN_LABELS, chainLabel } from './explainer-labels';

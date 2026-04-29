@@ -20,14 +20,26 @@ import {
   getSupportedLocales,
 } from '../../../diet/app/recommendation/utils/i18n-messages';
 import { cl } from '../../../decision/i18n/decision-labels';
-import {
-  GOAL_FOCUS_BLOCKS,
-  HEALTH_CONDITION_INSTRUCTIONS,
-  PRIORITY_LABELS,
-  BUDGET_STATUS_LABELS,
-  GOAL_LABELS,
-  CONTEXT_HEADER,
-} from '../../../decision/i18n/prompt-labels';
+
+// ==================== Health Condition Instructions ====================
+
+interface HealthEstimationInstruction {
+  condition: string;
+  aliases: string[];
+  instruction: Record<string, string>;
+}
+
+const LOCALES: Locale[] = ['zh-CN', 'en-US', 'ja-JP'];
+
+const HEALTH_CONDITION_INSTRUCTIONS: HealthEstimationInstruction[] = [
+  { condition: 'diabetes', aliases: ['diabetes'], instruction: Object.fromEntries(LOCALES.map((l) => [l, cl('health.inst.diabetes', l)])) },
+  { condition: 'hypertension', aliases: ['hypertension'], instruction: Object.fromEntries(LOCALES.map((l) => [l, cl('health.inst.hypertension', l)])) },
+  { condition: 'cardiovascular', aliases: ['heart_disease', 'cardiovascular'], instruction: Object.fromEntries(LOCALES.map((l) => [l, cl('health.inst.cardiovascular', l)])) },
+  { condition: 'gout', aliases: ['gout'], instruction: Object.fromEntries(LOCALES.map((l) => [l, cl('health.inst.gout', l)])) },
+  { condition: 'ibs', aliases: ['IBS'], instruction: Object.fromEntries(LOCALES.map((l) => [l, cl('health.inst.ibs', l)])) },
+  { condition: 'kidney_stones', aliases: ['kidney_stones'], instruction: Object.fromEntries(LOCALES.map((l) => [l, cl('health.inst.kidney_stones', l)])) },
+  { condition: 'hyperlipidemia', aliases: ['hyperlipidemia'], instruction: Object.fromEntries(LOCALES.map((l) => [l, cl('health.inst.hyperlipidemia', l)])) },
+];
 
 // ==================== Public API ====================
 
@@ -110,8 +122,10 @@ export function getGoalFocusBlock(
   locale?: Locale,
 ): string {
   const loc = resolvePromptLocale(locale);
-  const block = GOAL_FOCUS_BLOCKS[goalType] || GOAL_FOCUS_BLOCKS.health;
-  return block[loc];
+  const key = `goal.focus.${goalType}`;
+  const result = cl(key, loc);
+  // Fallback to health if key not found (cl returns key itself when missing)
+  return result === key ? cl('goal.focus.health', loc) : result;
 }
 
 /**
@@ -129,21 +143,20 @@ export function buildUserContextPrompt(params: {
   locale?: Locale;
 }): string {
   const loc = resolvePromptLocale(params.locale);
-  const lines: string[] = [CONTEXT_HEADER[loc]];
+  const lines: string[] = [cl('header.context', loc)];
 
   // Goal
-  const goalLabel =
-    GOAL_LABELS[params.goalType]?.[loc] || GOAL_LABELS.health[loc];
+  const goalKey = `goal.label.${params.goalType}`;
+  const goalLabelRaw = cl(goalKey, loc);
+  const goalLabel = goalLabelRaw === goalKey ? cl('goal.label.health', loc) : goalLabelRaw;
   lines.push(`- ${cl('prompt.contextLabel.goal', loc, { label: goalLabel })}`);
 
   // Budget status
   if (params.budgetStatus === 'over_limit') {
-    lines.push(`- ⚠️ ${BUDGET_STATUS_LABELS.over_limit[loc]}`);
+    lines.push(`- ⚠️ ${cl('budget.over_limit', loc)}`);
   } else if (params.budgetStatus === 'near_limit') {
     lines.push(`- ${cl('prompt.nearLimit', loc)}`);
   } else if (params.remainingCalories && params.remainingCalories > 0) {
-    // Use cl() directly so the {{remaining}} placeholder is interpolated correctly
-    // (BUDGET_STATUS_LABELS only stores the raw template string).
     lines.push(
       `- ${cl('budget.has_remaining', loc, { remaining: params.remainingCalories })}`,
     );
@@ -151,8 +164,10 @@ export function buildUserContextPrompt(params: {
 
   // Nutrition priorities
   for (const priority of params.nutritionPriority) {
-    if (PRIORITY_LABELS[priority]) {
-      lines.push(`- ${PRIORITY_LABELS[priority][loc]}`);
+    const priorityKey = `priority.${priority}`;
+    const priorityLabel = cl(priorityKey, loc);
+    if (priorityLabel !== priorityKey) {
+      lines.push(`- ${priorityLabel}`);
     }
   }
 

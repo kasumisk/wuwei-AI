@@ -30,8 +30,6 @@ import {
 } from '../../food/app/config/nutrition-estimator';
 import { aggregateWithConfidence } from './confidence-weighting';
 import {
-  DIMENSION_LABELS,
-  DIMENSION_EXPLANATIONS,
   scoreToImpact,
   getDimensionSuggestion,
   getDimensionLabel,

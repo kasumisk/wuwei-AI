@@ -13,11 +13,15 @@ import {
   Modal,
   Alert,
   Descriptions,
+  Row,
+  Col,
 } from 'antd';
 import { SearchOutlined, CloudDownloadOutlined, DatabaseOutlined } from '@ant-design/icons';
 import {
   foodPipelineApi,
   useImportUsda,
+  useImportUsdaPreset,
+  useUsdaPresets,
   type UsdaSearchResult,
 } from '@/services/foodPipelineService';
 
@@ -38,7 +42,10 @@ const UsdaImportPage: React.FC = () => {
   const [searchResult, setSearchResult] = useState<UsdaSearchResult | null>(null);
   const [importModal, setImportModal] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
+  const [presetModal, setPresetModal] = useState(false);
   const [form] = Form.useForm();
+  const [presetForm] = Form.useForm();
+  const { data: presets, isLoading: presetsLoading } = useUsdaPresets();
 
   const importUsda = useImportUsda({
     onSuccess: (result) => {
@@ -48,6 +55,16 @@ const UsdaImportPage: React.FC = () => {
       form.resetFields();
     },
     onError: (e) => message.error(`导入失败: ${e.message}`),
+  });
+
+  const importUsdaPreset = useImportUsdaPreset({
+    onSuccess: (result) => {
+      setImportResult(result);
+      message.success(`预设导入完成: 新增 ${result.created}, 更新 ${result.updated}`);
+      setPresetModal(false);
+      presetForm.resetFields();
+    },
+    onError: (e) => message.error(`预设导入失败: ${e.message}`),
   });
 
   const handleSearch = async () => {
@@ -119,9 +136,44 @@ const UsdaImportPage: React.FC = () => {
         style={{ marginBottom: 16 }}
       >
         <Alert
-          message="使用说明"
-          description="1. 输入英文关键词搜索 USDA 数据库（如 chicken, rice, apple）。2. 预览搜索结果确认数据。3. 点击「批量导入」将数据导入到系统中，系统会自动清洗、去重和计算评分。"
+          message="推荐方式：优先使用预设导入包"
+          description="关键词搜索容易漏掉同义词和细分类。日常补库建议直接使用预设包导入，系统会按多组常用查询词批量拉取，再走统一清洗、去重和评分流程。"
           type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+        />
+        <Row gutter={[16, 16]}>
+          {(presets || []).map((preset) => (
+            <Col xs={24} md={12} xl={8} key={preset.key}>
+              <Card size="small" title={preset.label} style={{ height: '100%' }} loading={presetsLoading}>
+                <Space direction="vertical" style={{ width: '100%' }}>
+                  <Text type="secondary">{preset.description}</Text>
+                  <Tag>{preset.queryCount} 组查询词</Tag>
+                  <Button
+                    type="primary"
+                    icon={<CloudDownloadOutlined />}
+                    onClick={() => {
+                      presetForm.setFieldsValue({
+                        presetKey: preset.key,
+                        maxItemsPerQuery: 50,
+                      });
+                      setPresetModal(true);
+                    }}
+                  >
+                    导入这个预设包
+                  </Button>
+                </Space>
+              </Card>
+            </Col>
+          ))}
+        </Row>
+      </Card>
+
+      <Card title="高级模式：关键词搜索预览" style={{ marginBottom: 16 }}>
+        <Alert
+          message="适合补单个食物，不适合建库"
+          description="只有在你明确知道要查某个食物时，才建议使用关键词预览。大规模导入请优先用上面的预设包。"
+          type="warning"
           showIcon
           style={{ marginBottom: 16 }}
         />
@@ -148,7 +200,7 @@ const UsdaImportPage: React.FC = () => {
             disabled={!searchQuery.trim()}
             loading={importUsda.isPending}
           >
-            批量导入
+            关键词导入
           </Button>
         </Space>
       </Card>
@@ -224,6 +276,27 @@ const UsdaImportPage: React.FC = () => {
           </Form.Item>
           <Form.Item name="maxItems" label="最大导入数量" extra="建议首次不超过 200 条">
             <InputNumber min={1} max={500} style={{ width: '100%' }} />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title="导入 USDA 预设包"
+        open={presetModal}
+        onCancel={() => setPresetModal(false)}
+        onOk={() => presetForm.validateFields().then((v) => importUsdaPreset.mutate(v))}
+        confirmLoading={importUsdaPreset.isPending}
+      >
+        <Form form={presetForm} layout="vertical" initialValues={{ maxItemsPerQuery: 50 }}>
+          <Form.Item name="presetKey" label="预设包" rules={[{ required: true }]}>
+            <Input disabled />
+          </Form.Item>
+          <Form.Item
+            name="maxItemsPerQuery"
+            label="每组查询词导入上限"
+            extra="每个预设包会包含多组查询词，系统会自动聚合并去重"
+          >
+            <InputNumber min={1} max={200} style={{ width: '100%' }} />
           </Form.Item>
         </Form>
       </Modal>

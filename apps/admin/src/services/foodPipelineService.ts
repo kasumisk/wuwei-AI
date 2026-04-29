@@ -29,6 +29,20 @@ export interface UsdaSearchResult {
   totalHits: number;
 }
 
+export interface UsdaImportPreset {
+  key: string;
+  label: string;
+  description: string;
+  queryCount: number;
+  coverage: string[];
+}
+
+export interface UsdaCategoryOption {
+  value: string;
+  label: string;
+  mappedCategory: string;
+}
+
 export interface AiLabelResult {
   labeled: number;
   failed: number;
@@ -187,6 +201,8 @@ export const foodPipelineQueryKeys = {
   all: _all,
   qualityReport: [..._all, 'qualityReport'] as const,
   usdaSearch: (query: string) => [..._all, 'usdaSearch', query] as const,
+  usdaPresets: [..._all, 'usdaPresets'] as const,
+  usdaCategories: [..._all, 'usdaCategories'] as const,
   offSearch: (query: string) => [..._all, 'offSearch', query] as const,
 };
 
@@ -196,6 +212,23 @@ export const foodPipelineApi = {
   // USDA
   importUsda: (data: { query: string; maxItems?: number }): Promise<ImportResult> =>
     request.post(`${PATH.ADMIN.FOOD_PIPELINE}/import/usda`, data),
+
+  getUsdaPresets: (): Promise<UsdaImportPreset[]> =>
+    request.get(`${PATH.ADMIN.FOOD_PIPELINE}/usda/presets`),
+
+  getUsdaCategories: (): Promise<UsdaCategoryOption[]> =>
+    request.get(`${PATH.ADMIN.FOOD_PIPELINE}/usda/categories`),
+
+  importUsdaPreset: (data: {
+    presetKey: string;
+    maxItemsPerQuery?: number;
+  }): Promise<ImportResult> => request.post(`${PATH.ADMIN.FOOD_PIPELINE}/import/usda-preset`, data),
+
+  importUsdaCategory: (data: {
+    foodCategory: string;
+    pageSize?: number;
+    maxPages?: number;
+  }): Promise<ImportResult> => request.post(`${PATH.ADMIN.FOOD_PIPELINE}/import/usda-category`, data),
 
   searchUsda: (query: string, pageSize = 20): Promise<UsdaSearchResult> =>
     request.get(`${PATH.ADMIN.FOOD_PIPELINE}/usda/search`, { query, pageSize }),
@@ -280,6 +313,52 @@ export const useImportUsda = (
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data) => foodPipelineApi.importUsda(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['foodLibrary'] });
+      queryClient.invalidateQueries({ queryKey: foodPipelineQueryKeys.qualityReport });
+    },
+    ...options,
+  });
+};
+
+export const useUsdaPresets = () =>
+  useQuery({
+    queryKey: foodPipelineQueryKeys.usdaPresets,
+    queryFn: () => foodPipelineApi.getUsdaPresets(),
+    staleTime: 10 * 60 * 1000,
+  });
+
+export const useUsdaCategories = () =>
+  useQuery({
+    queryKey: foodPipelineQueryKeys.usdaCategories,
+    queryFn: () => foodPipelineApi.getUsdaCategories(),
+    staleTime: 10 * 60 * 1000,
+  });
+
+export const useImportUsdaPreset = (
+  options?: UseMutationOptions<ImportResult, Error, { presetKey: string; maxItemsPerQuery?: number }>
+) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data) => foodPipelineApi.importUsdaPreset(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['foodLibrary'] });
+      queryClient.invalidateQueries({ queryKey: foodPipelineQueryKeys.qualityReport });
+    },
+    ...options,
+  });
+};
+
+export const useImportUsdaCategory = (
+  options?: UseMutationOptions<
+    ImportResult,
+    Error,
+    { foodCategory: string; pageSize?: number; maxPages?: number }
+  >
+) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data) => foodPipelineApi.importUsdaCategory(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['foodLibrary'] });
       queryClient.invalidateQueries({ queryKey: foodPipelineQueryKeys.qualityReport });

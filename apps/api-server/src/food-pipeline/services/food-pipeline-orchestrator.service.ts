@@ -6,6 +6,7 @@ import {
   UsdaFetcherService,
   NormalizedFoodData,
   ImportMetadata,
+  USDA_IMPORT_PRESETS,
 } from './fetchers/usda-fetcher.service';
 import { OpenFoodFactsService } from './fetchers/openfoodfacts.service';
 import {
@@ -99,6 +100,111 @@ export class FoodPipelineOrchestratorService {
       `USDA import done: created=${result.created}, updated=${result.updated}, errors=${result.errors}`,
     );
     return result;
+  }
+
+  async importFromUsdaPreset(
+    presetKey: string,
+    maxItemsPerQuery = 50,
+  ): Promise<ImportResult> {
+    const preset = USDA_IMPORT_PRESETS.find((item) => item.key === presetKey);
+    if (!preset) {
+      return {
+        total: 0,
+        created: 0,
+        updated: 0,
+        skipped: 0,
+        errors: 1,
+        details: [`Unknown USDA preset: ${presetKey}`],
+      };
+    }
+
+    this.logger.log(
+      `Starting USDA preset import: preset=${preset.key}, queries=${preset.queries.length}, maxItemsPerQuery=${maxItemsPerQuery}`,
+    );
+
+    const aggregated = new Map<string, NormalizedFoodData>();
+    const details: string[] = [];
+
+    for (const query of preset.queries) {
+      try {
+        const result = await this.usdaFetcher.search(
+          query,
+          Math.min(maxItemsPerQuery, 200),
+        );
+        details.push(
+          `Preset query "${query}": fetched ${result.foods.length}/${result.totalHits}`,
+        );
+        for (const food of result.foods) {
+          aggregated.set(`${food.sourceType}:${food.sourceId}`, food);
+        }
+      } catch (e) {
+        details.push(`Preset query "${query}" failed: ${e.message}`);
+      }
+    }
+
+    const importResult = await this.importNormalizedFoods(
+      [...aggregated.values()],
+      `usda_preset:${preset.key}`,
+    );
+
+    return {
+      ...importResult,
+      details: [
+        `Preset: ${preset.label}`,
+        `Unique aggregated foods: ${aggregated.size}`,
+        ...details,
+        ...importResult.details,
+      ],
+    };
+  }
+
+  async importFromUsdaCategory(options: {
+    foodCategory: string;
+    pageSize?: number;
+    maxPages?: number;
+  }): Promise<ImportResult> {
+    const pageSize = Math.min(options.pageSize || 50, 200);
+    const maxPages = Math.max(options.maxPages || 1, 1);
+    const aggregated = new Map<string, NormalizedFoodData>();
+    const details: string[] = [];
+
+    for (let pageNumber = 1; pageNumber <= maxPages; pageNumber++) {
+      try {
+        const result = await this.usdaFetcher.search('*', pageSize, pageNumber, {
+          foodCategory: options.foodCategory,
+        });
+        details.push(
+          `Category page ${pageNumber}: fetched ${result.foods.length}/${result.totalHits}`,
+        );
+        if (result.foods.length === 0) {
+          break;
+        }
+        for (const food of result.foods) {
+          aggregated.set(`${food.sourceType}:${food.sourceId}`, food);
+        }
+        if (result.foods.length < pageSize) {
+          break;
+        }
+      } catch (e) {
+        details.push(`Category page ${pageNumber} failed: ${e.message}`);
+        break;
+      }
+    }
+
+    const importResult = await this.importNormalizedFoods(
+      [...aggregated.values()],
+      `usda_category:${options.foodCategory}`,
+    );
+
+    return {
+      ...importResult,
+      details: [
+        `USDA category: ${options.foodCategory}`,
+        `Unique aggregated foods: ${aggregated.size}`,
+        ...details,
+        ...importResult.details,
+      ],
+    };
   }
 
   // ==================== 条形码查询导入 ====================

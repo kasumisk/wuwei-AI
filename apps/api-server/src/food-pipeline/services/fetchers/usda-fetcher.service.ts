@@ -31,6 +31,58 @@ interface UsdaSearchResponse {
   foods: UsdaRawFood[];
 }
 
+export interface UsdaImportPreset {
+  key: string;
+  label: string;
+  description: string;
+  queries: string[];
+  coverage: string[];
+}
+
+export interface UsdaCategoryOption {
+  value: string;
+  label: string;
+  mappedCategory: string;
+}
+
+export const USDA_IMPORT_PRESETS: UsdaImportPreset[] = [
+  {
+    key: 'core_protein',
+    label: '基础蛋白包',
+    description: '鸡肉、牛肉、猪肉、鱼、鸡蛋等高频蛋白食物。',
+    queries: ['chicken breast', 'beef', 'pork', 'fish', 'egg'],
+    coverage: ['鸡胸肉', '牛肉', '猪肉', '鱼类', '鸡蛋'],
+  },
+  {
+    key: 'staple_carbs',
+    label: '主食碳水包',
+    description: '米饭、面包、面食、燕麦、土豆等基础主食。',
+    queries: ['rice', 'bread', 'pasta', 'oat', 'potato'],
+    coverage: ['米饭', '面包', '意面', '燕麦', '土豆'],
+  },
+  {
+    key: 'vegetables',
+    label: '蔬菜包',
+    description: '西兰花、菠菜、胡萝卜、番茄、洋葱等常见蔬菜。',
+    queries: ['broccoli', 'spinach', 'carrot', 'tomato', 'onion'],
+    coverage: ['西兰花', '菠菜', '胡萝卜', '番茄', '洋葱'],
+  },
+  {
+    key: 'fruits',
+    label: '水果包',
+    description: '苹果、香蕉、橙子、草莓等高频水果。',
+    queries: ['apple', 'banana', 'orange', 'strawberry'],
+    coverage: ['苹果', '香蕉', '橙子', '草莓'],
+  },
+  {
+    key: 'dairy',
+    label: '乳制品包',
+    description: '牛奶、酸奶、奶酪等常见乳制品。',
+    queries: ['milk', 'yogurt', 'cheese'],
+    coverage: ['牛奶', '酸奶', '奶酪'],
+  },
+];
+
 /** 标准化后的食物数据 */
 export interface ImportMetadata {
   group?: 'regular' | 'special';
@@ -183,6 +235,7 @@ export class UsdaFetcherService {
     query: string,
     pageSize = 25,
     pageNumber = 1,
+    options: { foodCategory?: string; dataTypes?: string[] } = {},
   ): Promise<{ foods: NormalizedFoodData[]; totalHits: number }> {
     const url = `${this.baseUrl}/foods/search`;
     const { data } = await firstValueFrom(
@@ -192,7 +245,8 @@ export class UsdaFetcherService {
           query,
           pageSize,
           pageNumber,
-          dataType: ['Foundation', 'SR Legacy'].join(','),
+          dataType: (options.dataTypes || ['Foundation', 'SR Legacy']).join(','),
+          foodCategory: options.foodCategory,
         },
       }),
     );
@@ -309,6 +363,16 @@ export class UsdaFetcherService {
       zinc: nutrients.zinc,
       magnesium: nutrients.magnesium,
     };
+  }
+
+  getSupportedCategories(): UsdaCategoryOption[] {
+    return Object.entries(this.CATEGORY_MAP)
+      .map(([label, mappedCategory]) => ({
+        value: label,
+        label,
+        mappedCategory,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
   }
 
   private sleep(ms: number) {

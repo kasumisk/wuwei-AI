@@ -24,6 +24,7 @@ import { FoodAiLabelService } from '../services/ai/food-ai-label.service';
 import { FoodImageRecognitionService } from '../services/ai/food-image-recognition.service';
 import { FoodQualityMonitorService } from '../services/food-quality-monitor.service';
 import { FoodEnrichmentService } from '../services/food-enrichment.service';
+import { USDA_IMPORT_PRESETS } from '../services/fetchers/usda-fetcher.service';
 
 @ApiTags('管理后台 - 食物数据管道')
 @Controller('admin/food-pipeline')
@@ -57,6 +58,64 @@ export class FoodPipelineController {
       success: true,
       code: HttpStatus.OK,
       message: '导入完成',
+      data: result,
+    };
+  }
+
+  @Get('usda/presets')
+  @ApiOperation({ summary: 'USDA 预设导入包列表' })
+  async getUsdaPresets(): Promise<ApiResponse> {
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '获取成功',
+      data: USDA_IMPORT_PRESETS.map((preset) => ({
+        key: preset.key,
+        label: preset.label,
+        description: preset.description,
+        queryCount: preset.queries.length,
+      })),
+    };
+  }
+
+  @Get('usda/categories')
+  @ApiOperation({ summary: 'USDA 分类导入选项列表' })
+  async getUsdaCategories(): Promise<ApiResponse> {
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '获取成功',
+      data: this.usdaFetcher.getSupportedCategories(),
+    };
+  }
+
+  @Post('import/usda-preset')
+  @ApiOperation({ summary: '按预设包批量导入 USDA 数据' })
+  async importUsdaPreset(
+    @Body() body: { presetKey: string; maxItemsPerQuery?: number },
+  ): Promise<ApiResponse> {
+    const result = await this.orchestrator.importFromUsdaPreset(
+      body.presetKey,
+      body.maxItemsPerQuery || 50,
+    );
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '预设导入完成',
+      data: result,
+    };
+  }
+
+  @Post('import/usda-category')
+  @ApiOperation({ summary: '按 USDA 分类分页导入' })
+  async importUsdaCategory(
+    @Body() body: { foodCategory: string; pageSize?: number; maxPages?: number },
+  ): Promise<ApiResponse> {
+    const result = await this.orchestrator.importFromUsdaCategory(body);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '分类导入完成',
       data: result,
     };
   }

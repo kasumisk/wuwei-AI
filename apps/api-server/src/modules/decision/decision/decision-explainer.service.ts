@@ -22,8 +22,7 @@ import { NutritionScoreBreakdown } from '../../diet/app/services/nutrition-score
 import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 import { DecisionFoodItem } from './food-decision.service';
 import { getDimensionLabel } from '../config/scoring-dimensions';
-import { cl as dlCl } from '../i18n/decision-labels';
-import { chainLabel as cl, CHAIN_LABELS } from '../i18n/explainer-labels';
+import { cl } from '../i18n/decision-labels';
 import {
   checkAllergenConflict,
   checkRestrictionConflict,
@@ -111,23 +110,23 @@ export class DecisionExplainerService {
 
     if (decision.recommendation === 'recommend') {
       if (ctx.goalType === 'muscle_gain' && totalProtein >= highProtein) {
-        return dlCl('advice.goodProtein', locale);
+        return cl('advice.goodProtein', locale);
       }
-      return dlCl('advice.balanced', locale);
+      return cl('advice.balanced', locale);
     }
 
     if (decision.recommendation === 'avoid') {
       if (decision.reason?.includes('⚠️')) {
-        return dlCl('advice.switch', locale);
+        return cl('advice.switch', locale);
       }
       const remaining = ctx.remainingCalories - totalCalories;
       if (remaining < -(th?.overBudgetMargin ?? 100)) {
         const excessCal = Math.abs(Math.round(remaining));
-        const excessSuffix = dlCl('suffix.excessCal', locale, {
+        const excessSuffix = cl('suffix.excessCal', locale, {
           amount: excessCal,
         });
         return (
-          dlCl('advice.reducePortion', locale, {
+          cl('advice.reducePortion', locale, {
             percent: Math.max(
               30,
               Math.round((ctx.remainingCalories / totalCalories) * 100),
@@ -135,7 +134,7 @@ export class DecisionExplainerService {
           }) + excessSuffix
         );
       }
-      return dlCl('advice.switch', locale);
+      return cl('advice.switch', locale);
     }
 
     // caution
@@ -145,13 +144,13 @@ export class DecisionExplainerService {
       totalProtein < lowProtein &&
       totalCalories > significantCal
     ) {
-      const proteinQuantSuffix = dlCl('suffix.currentProtein', locale, {
+      const proteinQuantSuffix = cl('suffix.currentProtein', locale, {
         amount: Math.round(totalProtein),
       });
-      tips.push(dlCl('advice.addProtein', locale) + proteinQuantSuffix);
+      tips.push(cl('advice.addProtein', locale) + proteinQuantSuffix);
     }
     if (ctx.remainingCalories - totalCalories < 0) {
-      tips.push(dlCl('advice.halfPortion', locale));
+      tips.push(cl('advice.halfPortion', locale));
     }
     if (
       totalFat != null &&
@@ -159,7 +158,7 @@ export class DecisionExplainerService {
       ctx.goalFat > 0 &&
       (ctx.todayFat + totalFat) / ctx.goalFat > (th?.fatExcessRatio ?? 1)
     ) {
-      tips.push(dlCl('advice.reduceFat', locale));
+      tips.push(cl('advice.reduceFat', locale));
     }
     if (
       totalCarbs != null &&
@@ -168,12 +167,12 @@ export class DecisionExplainerService {
         (th?.carbExcessRatio ?? 1.1) &&
       ctx.goalType === 'fat_loss'
     ) {
-      tips.push(dlCl('advice.reduceCarbs', locale));
+      tips.push(cl('advice.reduceCarbs', locale));
     }
     if (tips.length === 0) {
-      tips.push(dlCl('advice.controlOther', locale));
+      tips.push(cl('advice.controlOther', locale));
     }
-    return tips.join(dlCl('separator.list', locale));
+    return tips.join(cl('separator.list', locale));
   }
 
   /**
@@ -193,12 +192,12 @@ export class DecisionExplainerService {
       ctx.goalCalories > 0
         ? Math.round((ctx.todayCalories / ctx.goalCalories) * 100)
         : 0;
-    const contextual = dlCl('rationale.contextual', locale, {
+    const contextual = cl('rationale.contextual', locale, {
       percent: calorieProgress,
     });
 
     const goalLabel = ctx.goalLabel || ctx.goalType;
-    const goalAlignment = dlCl('rationale.goalAlignment', locale, {
+    const goalAlignment = cl('rationale.goalAlignment', locale, {
       goalLabel,
     });
 
@@ -213,16 +212,16 @@ export class DecisionExplainerService {
     let timelinessNote: string | null = null;
     const dynamicTh = this.dynamicThresholds.compute(ctx);
     if (hour >= dynamicTh.lateNightStart || hour < dynamicTh.lateNightEnd) {
-      timelinessNote = dlCl('rationale.timelinessLateNight', locale);
+      timelinessNote = cl('rationale.timelinessLateNight', locale);
     } else if (hour >= 6 && hour < 10) {
       // V4.2: 使用 DynamicThresholds 但保留早餐时段标注
-      timelinessNote = dlCl('rationale.timelinessBreakfast', locale);
+      timelinessNote = cl('rationale.timelinessBreakfast', locale);
     } else if (hour >= 10 && hour < dynamicTh.eveningStart - 3) {
       // V4.2: 午餐到下午前段
       if (hour < 14) {
-        timelinessNote = dlCl('rationale.timelinessLunch', locale);
+        timelinessNote = cl('rationale.timelinessLunch', locale);
       } else {
-        timelinessNote = dlCl('rationale.timelinessAfternoon', locale);
+        timelinessNote = cl('rationale.timelinessAfternoon', locale);
       }
     }
 
@@ -247,21 +246,21 @@ export class DecisionExplainerService {
     if (input.nutritionAggregation) {
       const agg = input.nutritionAggregation;
       steps.push({
-        step: cl('step.aggregation', {}, locale),
+        step: cl('chain.step.aggregation', locale),
         input: cl(
-          'step.aggregation.input',
-          { count: String(agg.foodCount) },
+          'chain.step.aggregation.input',
           locale,
+          { count: String(agg.foodCount) },
         ),
         output: cl(
-          'step.aggregation.output',
+          'chain.step.aggregation.output',
+          locale,
           {
             cal: String(Math.round(agg.totalCalories)),
             pro: String(Math.round(agg.totalProtein)),
             fat: String(Math.round(agg.totalFat)),
             carbs: String(Math.round(agg.totalCarbs)),
           },
-          locale,
         ),
         confidence: Math.max(0.3, Math.min(1, agg.avgConfidence / 100)),
         snapshot: {
@@ -278,18 +277,18 @@ export class DecisionExplainerService {
       const conditionsText =
         ctx.healthConditions.length > 0
           ? ctx.healthConditions.join(', ')
-          : dlCl('explainer.noConditions', locale);
+          : cl('explainer.noConditions', locale);
       steps.push({
-        step: cl('step.context', {}, locale),
-        input: cl('step.context.input', {}, locale),
+        step: cl('chain.step.context', locale),
+        input: cl('chain.step.context.input', locale),
         output: cl(
-          'step.context.output',
+          'chain.step.context.output',
+          locale,
           {
             goal: ctx.goalType,
             remaining: String(Math.round(ctx.remainingCalories)),
             conditions: conditionsText,
           },
-          locale,
         ),
         confidence: 0.95,
         snapshot: {
@@ -304,17 +303,17 @@ export class DecisionExplainerService {
     // Step 3: 营养评分
     const scoreLabel =
       input.baseScore >= 75
-        ? 'step.scoring.output.high'
+        ? 'chain.step.scoring.output.high'
         : input.baseScore >= 45
-          ? 'step.scoring.output.mid'
-          : 'step.scoring.output.low';
+          ? 'chain.step.scoring.output.mid'
+          : 'chain.step.scoring.output.low';
     steps.push({
-      step: cl('step.scoring', {}, locale),
-      input: cl('step.scoring.input', {}, locale),
+      step: cl('chain.step.scoring', locale),
+      input: cl('chain.step.scoring.input', locale),
       output: cl(
         scoreLabel,
-        { score: String(Math.round(input.baseScore)) },
         locale,
+        { score: String(Math.round(input.baseScore)) },
       ),
       confidence: input.baseScore >= 75 || input.baseScore < 30 ? 0.95 : 0.7,
       snapshot: input.scoreBreakdown
@@ -339,9 +338,9 @@ export class DecisionExplainerService {
 
     if (input.allergenCheck.triggered) {
       const msg = cl(
-        'step.allergen.triggered',
-        { allergens: input.allergenCheck.allergens.join(', ') },
+        'chain.step.allergen.triggered',
         locale,
+        { allergens: input.allergenCheck.allergens.join(', ') },
       );
       decisionFactors.push(msg);
       conflictNodes.push({
@@ -352,9 +351,9 @@ export class DecisionExplainerService {
     }
     if (input.healthCheck.triggered) {
       const msg = cl(
-        'step.health.triggered',
-        { conditions: input.healthCheck.conditions.join(', ') },
+        'chain.step.health.triggered',
         locale,
+        { conditions: input.healthCheck.conditions.join(', ') },
       );
       decisionFactors.push(msg);
       conflictNodes.push({
@@ -364,7 +363,7 @@ export class DecisionExplainerService {
       });
     }
     if (input.timingCheck.isLateNight) {
-      const msg = cl('step.timing.lateNight', {}, locale);
+      const msg = cl('chain.step.timing.lateNight', locale);
       decisionFactors.push(msg);
       conflictNodes.push({ type: 'timing', severity: 'info', message: msg });
     }
@@ -377,8 +376,8 @@ export class DecisionExplainerService {
           input.dailyBudgetCheck.remainingCalories,
       );
       const msg =
-        cl('step.budget.over', {}, locale) +
-        dlCl('explainer.budgetExcess', locale, { amount: budgetExcess });
+        cl('chain.step.budget.over', locale) +
+        cl('explainer.budgetExcess', locale, { amount: budgetExcess });
       decisionFactors.push(msg);
       conflictNodes.push({ type: 'budget', severity: 'warning', message: msg });
     }
@@ -402,9 +401,9 @@ export class DecisionExplainerService {
 
     // Step 4 output: Final decision
     steps.push({
-      step: cl('step.final', {}, locale),
-      input: cl('step.final.input', {}, locale),
-      output: cl(`step.final.${input.finalDecision}`, {}, locale),
+      step: cl('chain.step.final', locale),
+      input: cl('chain.step.final.input', locale),
+      output: cl(`chain.step.final.${input.finalDecision}`, locale),
       confidence:
         input.allergenCheck.triggered || input.healthCheck.triggered
           ? 0.95
@@ -434,15 +433,15 @@ export class DecisionExplainerService {
     if (input.coachSummary) {
       const coach = input.coachSummary;
       steps.push({
-        step: cl('step.coach', {}, locale),
-        input: cl('step.coach.input', {}, locale),
+        step: cl('chain.step.coach', locale),
+        input: cl('chain.step.coach.input', locale),
         output: cl(
-          'step.coach.output',
+          'chain.step.coach.output',
+          locale,
           {
             verdict: coach.verdict,
             count: String(coach.actionCount),
           },
-          locale,
         ),
         confidence: 0.85,
         snapshot: {
@@ -468,12 +467,12 @@ export class DecisionExplainerService {
     const totalProtein = foods.reduce((s, f) => s + f.protein, 0);
     const foodNames = foods
       .map((f) => f.name)
-      .join(dlCl('separator.enumeration', locale));
+      .join(cl('separator.enumeration', locale));
 
     const verdict = decision.shouldEat
-      ? dlCl('explain.suitable', locale)
-      : dlCl('explain.adjust', locale);
-    const summary = dlCl('explain.summary', locale, {
+      ? cl('explain.suitable', locale)
+      : cl('explain.adjust', locale);
+    const summary = cl('explain.summary', locale, {
       foods: foodNames,
       calories: totalCalories,
       verdict,
@@ -484,12 +483,12 @@ export class DecisionExplainerService {
     const userContextImpact: string[] = [];
     if (ctx.goalType !== 'health') {
       userContextImpact.push(
-        dlCl('explain.goal', locale, { goal: ctx.goalLabel }),
+        cl('explain.goal', locale, { goal: ctx.goalLabel }),
       );
     }
     if (ctx.remainingCalories < totalCalories && ctx.goalCalories > 0) {
       userContextImpact.push(
-        dlCl('explain.remaining', locale, {
+        cl('explain.remaining', locale, {
           remaining: Math.round(ctx.remainingCalories),
           meal: totalCalories,
         }),
@@ -501,13 +500,13 @@ export class DecisionExplainerService {
       );
       const proteinGrams = Math.round(totalProtein);
       // 量化：附带绝对蛋白克数，如 "蛋白质占比 15%（18g）"
-      const proteinQuantSuffix = dlCl(
+      const proteinQuantSuffix = cl(
         'explainer.proteinQuantSuffix',
         locale,
         { grams: proteinGrams },
       );
       userContextImpact.push(
-        dlCl('explain.proteinRatio', locale, { percent: proteinPercent }) +
+        cl('explain.proteinRatio', locale, { percent: proteinPercent }) +
           proteinQuantSuffix,
       );
     }
@@ -520,7 +519,7 @@ export class DecisionExplainerService {
         ((ctx.todayFat + totalFat) / ctx.goalFat) * 100,
       );
       userContextImpact.push(
-        dlCl('explain.fatProgress', locale, { percent: fatProgress }),
+        cl('explain.fatProgress', locale, { percent: fatProgress }),
       );
     }
     if (ctx.goalCarbs > 0 && totalCarbs > 0) {
@@ -528,7 +527,7 @@ export class DecisionExplainerService {
         ((ctx.todayCarbs + totalCarbs) / ctx.goalCarbs) * 100,
       );
       userContextImpact.push(
-        dlCl('explain.carbsProgress', locale, { percent: carbsProgress }),
+        cl('explain.carbsProgress', locale, { percent: carbsProgress }),
       );
     }
 
@@ -545,9 +544,9 @@ export class DecisionExplainerService {
             ([dim, score]) =>
               `${getDimensionLabel(dim, locale)}(${Math.round(score as number)})`,
           )
-          .join(dlCl('separator.enumeration', locale));
+          .join(cl('separator.enumeration', locale));
         userContextImpact.push(
-          dlCl('explain.weakDimensions', locale, { dimensions: weakList }),
+          cl('explain.weakDimensions', locale, { dimensions: weakList }),
         );
       }
     }
@@ -610,9 +609,9 @@ export class DecisionExplainerService {
 
     if (weakFactors.length === 0) return undefined;
 
-    const because = dlCl('causal.because', locale);
-    const and = dlCl('causal.and', locale);
-    const therefore = dlCl(
+    const because = cl('causal.because', locale);
+    const and = cl('causal.and', locale);
+    const therefore = cl(
       `causal.therefore.${decision.recommendation}`,
       locale,
     );

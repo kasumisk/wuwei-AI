@@ -2,19 +2,17 @@
  * Decision i18n 同步加载器
  *
  * 模块加载时一次性读取 en-US.json / zh-CN.json / ja-JP.json，
- * 提供给 cl() / chainLabel() / scoring-dimensions / coach-i18n 等纯函数使用。
+ * 提供给 cl() / scoring-dimensions / coach-i18n 等纯函数使用。
  *
  * 不依赖 NestJS DI（这些函数在 service 之外的纯函数模块中也会被调用）。
  *
- * Key 命名约定（来自 dump-decision-i18n.ts）：
- *   - 顶层 key：来自 labels-*.ts 的 COACH_LABELS_* 字典 (cl/ci 路径)
- *   - chain.step.*：来自 explainer-labels.ts 的 CHAIN_LABELS (chainLabel 路径)
+ * Key 命名约定：
+ *   - 顶层分组 key (chain.* / dim.* / score.* / ui.* / coach.* / …)
+ *   - 占位符：统一为 {{var}} 双花括号
  *
- * 占位符：统一为 {{var}} 双花括号，由 chainLabel/ci 内部 .replace 完成。
- *        cl() 不做替换 (调用方手工 .replace)。
- *
- * NOTE: I18nService 在 NestJS 启动后会再次扫描这些 JSON 用于 i18n.t('decision.xxx')
- *       调用 — 这是双源加载，但数据等价、互不冲突。
+ * 启动校验（末尾）：
+ *   - dev  (NODE_ENV !== 'production'): key 集合不一致 / 单花括号占位符 → 抛出 Error
+ *   - prod                            : 同上 → logger.warn 不中断启动
  */
 
 import * as fs from 'fs';
@@ -49,3 +47,49 @@ export const DECISION_LABELS_BY_LOCALE: Record<
   'en-US': DECISION_LABELS_EN,
   'ja-JP': DECISION_LABELS_JA,
 };
+
+// ==================== 启动校验 ====================
+
+(function validateOnLoad() {
+  const isDev = process.env.NODE_ENV !== 'production';
+
+  function warn(msg: string): void {
+    if (isDev) {
+      throw new Error(`[decision/i18n] ${msg}`);
+    } else {
+      // eslint-disable-next-line no-console
+      console.warn(`[decision/i18n] WARN: ${msg}`);
+    }
+  }
+
+  const localeEntries = Object.entries(DECISION_LABELS_BY_LOCALE) as [
+    string,
+    Record<string, string>,
+  ][];
+  const [baseLocale, baseLabels] = localeEntries[0];
+  const baseKeys = new Set(Object.keys(baseLabels));
+
+  // 1. Key set consistency check
+  for (const [locale, labels] of localeEntries.slice(1)) {
+    const keys = new Set(Object.keys(labels));
+    const missing = [...baseKeys].filter((k) => !keys.has(k));
+    const extra = [...keys].filter((k) => !baseKeys.has(k));
+    if (missing.length > 0) {
+      warn(`[${locale}] missing ${missing.length} keys vs ${baseLocale}: ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? '…' : ''}`);
+    }
+    if (extra.length > 0) {
+      warn(`[${locale}] has ${extra.length} extra keys vs ${baseLocale}: ${extra.slice(0, 5).join(', ')}${extra.length > 5 ? '…' : ''}`);
+    }
+  }
+
+  // 2. Single-brace placeholder check
+  const singleBraceRe = /(?<!\{)\{(\w+)\}(?!\})/g;
+  for (const [locale, labels] of localeEntries) {
+    for (const [key, value] of Object.entries(labels)) {
+      const m = value.match(singleBraceRe);
+      if (m) {
+        warn(`[${locale}] key "${key}" has single-brace placeholder(s): ${m.join(', ')}`);
+      }
+    }
+  }
+})();
