@@ -59,17 +59,14 @@ export class PostMealRecoveryService {
     }
 
     const todayAdjustment = overBudget
-      ? cl('recovery.todayRemaining', locale).replace(
-          '{amount}',
-          String(
-            Math.max(
-              0,
-              Math.round(
-                userContext.goalCalories - macroProgress.calories.consumed,
-              ),
+      ? cl('recovery.todayRemaining', locale, {
+          amount: Math.max(
+            0,
+            Math.round(
+              userContext.goalCalories - macroProgress.calories.consumed,
             ),
           ),
-        )
+        })
       : cl('recovery.todaySteady', locale);
 
     return {

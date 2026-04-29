@@ -668,10 +668,7 @@ export class FoodScoringService {
           label: cl('health.diabetesRisk.label', locale),
           score: breakdown.glycemicImpact,
           impact: 'critical',
-          message: cl('health.diabetesRisk.message', locale).replace(
-            '{score}',
-            String(breakdown.glycemicImpact),
-          ),
+          message: cl('health.diabetesRisk.message', locale, { score: breakdown.glycemicImpact }),
           suggestion: cl('health.diabetesRisk.suggestion', locale),
         });
       }
@@ -686,10 +683,7 @@ export class FoodScoringService {
           label: cl('health.cardiovascularRisk.label', locale),
           score: breakdown.macroBalance,
           impact: 'critical',
-          message: cl('health.cardiovascularRisk.message', locale).replace(
-            '{score}',
-            String(breakdown.macroBalance),
-          ),
+          message: cl('health.cardiovascularRisk.message', locale, { score: breakdown.macroBalance }),
           suggestion: cl('health.cardiovascularRisk.suggestion', locale),
         });
       }
@@ -705,10 +699,7 @@ export class FoodScoringService {
           label: cl('health.hypertensionRisk.label', locale),
           score: Math.max(0, 100 - Math.round((totalSodium - 800) / 10)),
           impact: 'warning',
-          message: cl('health.hypertensionRisk.message', locale).replace(
-            '{sodium}',
-            String(Math.round(totalSodium)),
-          ),
+          message: cl('health.hypertensionRisk.message', locale, { sodium: Math.round(totalSodium) }),
           suggestion: cl('health.hypertensionRisk.suggestion', locale),
         });
       }
@@ -724,10 +715,9 @@ export class FoodScoringService {
           label: cl('health.goutRisk.label', locale),
           score: 30,
           impact: 'critical',
-          message: cl('health.goutRisk.message', locale).replace(
-            '{foods}',
-            highPurineFoods.map((f) => f.name).join(', '),
-          ),
+          message: cl('health.goutRisk.message', locale, {
+            foods: highPurineFoods.map((f) => f.name).join(', '),
+          }),
           suggestion: cl('health.goutRisk.suggestion', locale),
         });
       }
@@ -743,10 +733,9 @@ export class FoodScoringService {
           label: cl('health.ibsRisk.label', locale),
           score: 30,
           impact: 'critical',
-          message: cl('health.ibsRisk.message', locale).replace(
-            '{foods}',
-            highFodmapFoods.map((f) => f.name).join(', '),
-          ),
+          message: cl('health.ibsRisk.message', locale, {
+            foods: highFodmapFoods.map((f) => f.name).join(', '),
+          }),
           suggestion: cl('health.ibsRisk.suggestion', locale),
         });
       }
@@ -762,10 +751,9 @@ export class FoodScoringService {
           label: cl('health.kidneyStoneRisk.label', locale),
           score: 40,
           impact: 'warning',
-          message: cl('health.kidneyStoneRisk.message', locale).replace(
-            '{foods}',
-            highOxalateFoods.map((f) => f.name).join(', '),
-          ),
+          message: cl('health.kidneyStoneRisk.message', locale, {
+            foods: highOxalateFoods.map((f) => f.name).join(', '),
+          }),
           suggestion: cl('health.kidneyStoneRisk.suggestion', locale),
         });
       }

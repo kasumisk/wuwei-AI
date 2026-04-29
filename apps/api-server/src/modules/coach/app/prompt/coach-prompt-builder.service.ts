@@ -452,15 +452,10 @@ ${replyLang}，每条消息不超过 150 字，不要使用 Markdown 格式。`;
 
     // V1.3: 最优份量建议
     if (analysisContext.optimalPortion) {
-      const portionText = cl('portionTemplate', locale)
-        .replace(
-          '{{percent}}',
-          String(analysisContext.optimalPortion.recommendedPercent),
-        )
-        .replace(
-          '{{cal}}',
-          String(analysisContext.optimalPortion.recommendedCalories),
-        );
+      const portionText = cl('portionTemplate', locale, {
+        percent: analysisContext.optimalPortion.recommendedPercent,
+        cal: analysisContext.optimalPortion.recommendedCalories,
+      });
       ctx += `\n- ${cl('suggestedPortion', locale)}: ${portionText}`;
     }
 

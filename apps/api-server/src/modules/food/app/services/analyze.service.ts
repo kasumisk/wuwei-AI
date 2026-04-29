@@ -247,17 +247,16 @@ export class AnalyzeService {
     userId?: string,
     locale?: Locale,
   ): Promise<void> {
-    const result = await this.imageFoodAnalysisService.executeAnalysis(
-      imageUrl,
-      mealType,
-      userId,
-      locale,
-    );
+    const { legacy: result, v61 } =
+      await this.imageFoodAnalysisService.executeAnalysisBundle(
+        imageUrl,
+        mealType,
+        userId,
+        locale,
+      );
 
-    // 置信度驱动 V1：feature flag 启用 && 能找到 session 时才分支
-    const session = this.confidenceJudge.isEnabled()
-      ? await this.sessionService.getByRequestId(requestId)
-      : null;
+    // 置信度驱动 V1：feature flag + session 查找
+    const session = await this.resolveSession(requestId);
 
     if (session) {
       const judgement = this.confidenceJudge.judge(result);
@@ -266,109 +265,177 @@ export class AnalyzeService {
       );
 
       if (judgement.level === 'low') {
-        // —— 低置信度分支：仅写 needs_review，不持久化，不 emit 完成事件 ——
-        await this.sessionService.markAwaitingRefine(session.id, {
-          overallConfidence: judgement.overallConfidence,
-          confidenceLevel: judgement.level,
-          rawFoods: judgement.liteFoods,
-          reasons: judgement.reasons,
-          imageUrl,
-        });
-
-        await this.cacheAnalysisStatus(requestId, {
-          status: 'completed',
-          stage: 'needs_review',
-          needsReview: {
-            analysisSessionId: session.id,
-            imageUrl,
-            overallConfidence: judgement.overallConfidence,
-            confidenceLevel: judgement.level,
-            reasons: judgement.reasons,
-            foods: judgement.liteFoods,
-            expiresAt: session.expiresAt,
-          },
-          createdAt: Date.now(),
-        });
-
-        this.logger.log(
-          `analysis needs_review: requestId=${requestId}, sessionId=${session.id}, reasons=[${judgement.reasons.join(',')}]`,
-        );
+        // 低置信度：写 needs_review 后短路，不持久化、不 emit
+        await this.handleNeedsReview(requestId, session, imageUrl, judgement);
         return;
       }
 
-      // 高置信度分支：标记 session 为 finalized，继续走原有持久化流程
-      await this.sessionService.markFinalized(session.id, {
-        imagePhase: {
-          overallConfidence: judgement.overallConfidence,
-          confidenceLevel: judgement.level,
-          rawFoods: judgement.liteFoods,
-          reasons: judgement.reasons,
-          imageUrl,
-        },
-      });
+      // 高置信度：标记 session 为 finalized，继续主流程
+      await this.markSessionFinalized(session.id, imageUrl, judgement);
     }
 
-    // 写入 Redis 缓存（completed 状态，旧格式供轮询端点返回）
+    // 主流程：写最终缓存 + 可选持久化与事件
+    await this.cacheFinalResult(requestId, result);
+
+    if (userId) {
+      this.persistAnalysisAsync(requestId, userId, imageUrl, mealType, v61);
+      this.emitAnalysisCompleted(userId, requestId, result);
+    }
+  }
+
+  /**
+   * 置信度驱动 V1：feature flag 启用 && 能找到 session 时返回；否则 null
+   */
+  private async resolveSession(
+    requestId: string,
+  ): Promise<Awaited<
+    ReturnType<AnalysisSessionService['getByRequestId']>
+  > | null> {
+    if (!this.confidenceJudge.isEnabled()) return null;
+    return this.sessionService.getByRequestId(requestId);
+  }
+
+  /**
+   * 低置信度分支：更新 session + 写 needs_review 缓存
+   */
+  private async handleNeedsReview(
+    requestId: string,
+    session: NonNullable<
+      Awaited<ReturnType<AnalysisSessionService['getByRequestId']>>
+    >,
+    imageUrl: string,
+    judgement: ReturnType<ConfidenceJudgeService['judge']>,
+  ): Promise<void> {
+    await this.sessionService.markAwaitingRefine(session.id, {
+      overallConfidence: judgement.overallConfidence,
+      confidenceLevel: judgement.level,
+      rawFoods: judgement.liteFoods,
+      reasons: judgement.reasons,
+      imageUrl,
+    });
+
+    await this.cacheAnalysisStatus(requestId, {
+      status: 'completed',
+      stage: 'needs_review',
+      needsReview: {
+        analysisSessionId: session.id,
+        imageUrl,
+        overallConfidence: judgement.overallConfidence,
+        confidenceLevel: judgement.level,
+        reasons: judgement.reasons,
+        foods: judgement.liteFoods,
+        expiresAt: session.expiresAt,
+      },
+      createdAt: Date.now(),
+    });
+
+    this.logger.log(
+      `analysis needs_review: requestId=${requestId}, sessionId=${session.id}, reasons=[${judgement.reasons.join(',')}]`,
+    );
+  }
+
+  /**
+   * 高置信度：标记 session 为 finalized
+   */
+  private async markSessionFinalized(
+    sessionId: string,
+    imageUrl: string,
+    judgement: ReturnType<ConfidenceJudgeService['judge']>,
+  ): Promise<void> {
+    await this.sessionService.markFinalized(sessionId, {
+      imagePhase: {
+        overallConfidence: judgement.overallConfidence,
+        confidenceLevel: judgement.level,
+        rawFoods: judgement.liteFoods,
+        reasons: judgement.reasons,
+        imageUrl,
+      },
+    });
+  }
+
+  /**
+   * 写入 final 状态缓存（completed + 完整 AnalysisResult）
+   */
+  private async cacheFinalResult(
+    requestId: string,
+    result: AnalysisResult,
+  ): Promise<void> {
     await this.cacheAnalysisStatus(requestId, {
       status: 'completed',
       stage: 'final',
       data: result,
       createdAt: Date.now(),
     });
+  }
 
-    // V6.1 Phase 2.4: 有登录用户时，持久化分析记录并把真实 analysisId 写回 cache
-    if (userId) {
-      this.imageFoodAnalysisService
-        .persistAnalysisRecord(result, userId, imageUrl, mealType)
-        .then(async (analysisId) => {
-          // 把数据库 analysisId 补写进 Redis，供 analyze-save 使用
-          const entry = await this.getAnalysisStatus(requestId);
-          if (entry) {
-            await this.cacheAnalysisStatus(requestId, {
-              ...entry,
-              analysisId,
-            });
-          }
-        })
-        .catch((err) =>
-          this.logger.warn(
-            `异步保存图片分析记录失败: ${(err as Error).message}`,
-          ),
-        );
-
-      // V6.1 Phase 2.6: 发射分析完成事件（推动画像更新和推荐联动）
-      const foodNames = result.foods.map((f) => f.name);
-      const foodCategories = [
-        ...new Set(
-          result.foods.map((f) => f.category).filter(Boolean) as string[],
-        ),
-      ];
-      const avgConfidence =
-        result.foods.length > 0
-          ? result.foods.reduce(
-              (s, f) => s + ((f as any).confidence ?? 0.6),
-              0,
-            ) / result.foods.length
-          : 0.5;
-
-      this.eventEmitter.emit(
-        DomainEvents.ANALYSIS_COMPLETED,
-        new AnalysisCompletedEvent(
-          userId,
-          requestId,
-          'image',
-          foodNames,
-          foodCategories,
-          result.totalCalories,
-          result.decision === 'AVOID'
-            ? 'avoid'
-            : result.decision === 'LIMIT'
-              ? 'caution'
-              : 'recommend',
-          avgConfidence,
+  /**
+   * 异步持久化分析记录，并把数据库 analysisId 回写到 Redis cache
+   * (V6.1 Phase 2.4：fire-and-forget，错误仅 warn 不抛)
+   */
+  private persistAnalysisAsync(
+    requestId: string,
+    userId: string,
+    imageUrl: string,
+    mealType: string | undefined,
+    v61: Parameters<
+      ImageFoodAnalysisService['persistV61AnalysisRecord']
+    >[0],
+  ): void {
+    this.imageFoodAnalysisService
+      .persistV61AnalysisRecord(v61, userId, imageUrl, mealType)
+      .then(async (analysisId) => {
+        const entry = await this.getAnalysisStatus(requestId);
+        if (entry) {
+          await this.cacheAnalysisStatus(requestId, { ...entry, analysisId });
+        }
+      })
+      .catch((err) =>
+        this.logger.warn(
+          `异步保存图片分析记录失败: ${(err as Error).message}`,
         ),
       );
-    }
+  }
+
+  /**
+   * 发射 ANALYSIS_COMPLETED 事件（推动画像更新和推荐联动）
+   */
+  private emitAnalysisCompleted(
+    userId: string,
+    requestId: string,
+    result: AnalysisResult,
+  ): void {
+    const foodNames = result.foods.map((f) => f.name);
+    const foodCategories = [
+      ...new Set(
+        result.foods.map((f) => f.category).filter(Boolean) as string[],
+      ),
+    ];
+    const avgConfidence =
+      result.foods.length > 0
+        ? result.foods.reduce((s, f) => s + ((f as any).confidence ?? 0.6), 0) /
+          result.foods.length
+        : 0.5;
+
+    const recommendation =
+      result.decision === 'AVOID'
+        ? 'avoid'
+        : result.decision === 'LIMIT'
+          ? 'caution'
+          : 'recommend';
+
+    this.eventEmitter.emit(
+      DomainEvents.ANALYSIS_COMPLETED,
+      new AnalysisCompletedEvent(
+        userId,
+        requestId,
+        'image',
+        foodNames,
+        foodCategories,
+        result.totalCalories,
+        recommendation,
+        avgConfidence,
+      ),
+    );
   }
 
   /**
@@ -398,58 +465,6 @@ export class AnalyzeService {
       error: errorMessage,
       createdAt: Date.now(),
     });
-  }
-
-  // ==================== 原同步接口（保留用于内部调用 / 兼容场景） ====================
-
-  /**
-   * 同步分析食物图片（阻塞式，用于内部服务调用）
-   *
-   * V6.1: 委托给 ImageFoodAnalysisService.executeAnalysis()
-   */
-  async analyzeImage(
-    imageUrl: string,
-    mealType?: string,
-    userId?: string,
-    locale?: Locale,
-  ): Promise<{ requestId: string } & AnalysisResult> {
-    if (!this.apiKey) {
-      throw new BadRequestException(this.i18n.t('food.aiServiceUnavailable'));
-    }
-
-    const result = await this.imageFoodAnalysisService.executeAnalysis(
-      imageUrl,
-      mealType,
-      userId,
-      locale,
-    );
-
-    // 生成 requestId 并写入 Redis（兼容旧的 getCachedResult 逻辑）
-    const requestId = crypto.randomUUID();
-    await this.cacheAnalysisStatus(requestId, {
-      status: 'completed',
-      data: result,
-      createdAt: Date.now(),
-    });
-
-    return { requestId, ...result };
-  }
-
-  /**
-   * 获取暂存的分析结果（V6: 从 Redis 读取，兼容旧接口签名）
-   */
-  getCachedResult(requestId: string): Promise<AnalysisResult | null> {
-    return this.getAnalysisStatus(requestId).then((entry) => {
-      if (!entry || entry.status !== 'completed') return null;
-      return entry.data ?? null;
-    });
-  }
-
-  /**
-   * V6.1: 获取 ImageFoodAnalysisService 实例（供 Processor 等外部直接调用 V61 链路）
-   */
-  getImageAnalysisService(): ImageFoodAnalysisService {
-    return this.imageFoodAnalysisService;
   }
 
   // ==================== 私有方法 ====================

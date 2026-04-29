@@ -43,6 +43,71 @@ export interface RulesApplyResult {
   processed: number;
 }
 
+export interface BackfillNutrientScoresResult {
+  total: number;
+  updated: number;
+  errors: number;
+}
+
+export interface CandidatePromoteResult {
+  total: number;
+  promoted: number;
+  skipped: number;
+  duplicates: number;
+  errors: number;
+  details: string[];
+}
+
+export interface BatchEnrichByStageResult {
+  processed: number;
+  totalEnriched: number;
+  totalFailed: number;
+  details: Array<{
+    foodId: string;
+    foodName: string;
+    enriched: number;
+    failed: number;
+  }>;
+}
+
+export interface ConsistencyCheckResult {
+  foodId: string;
+  foodName: string;
+  category: string;
+  peerCount: number;
+  outliers: Array<{
+    field: string;
+    value: number;
+    q1: number;
+    q3: number;
+    iqr: number;
+    lowerBound: number;
+    upperBound: number;
+    severity: 'warning' | 'critical';
+  }>;
+}
+
+export interface EnrichmentStatisticsResult {
+  total: number;
+  directApplied: number;
+  staged: number;
+  approved: number;
+  rejected: number;
+  approvalRate: number;
+  avgConfidence: number;
+  dailyStats: Array<{
+    date: string;
+    count: number;
+    action: string;
+  }>;
+  stageStats: Array<{
+    stage: number;
+    stageName: string;
+    totalFields: number;
+    avgSuccessRate: number;
+  }>;
+}
+
 export interface QualityReport {
   timestamp: Date;
   /** 食物总数（顶层，无 summary 包装） */
@@ -159,6 +224,28 @@ export const foodPipelineApi = {
   batchApplyRules: (data: { limit?: number; recalcAll?: boolean }): Promise<RulesApplyResult> =>
     request.post(`${PATH.ADMIN.FOOD_PIPELINE}/rules/apply`, data),
 
+  backfillNutrientScores: (data: { batchSize?: number }): Promise<BackfillNutrientScoresResult> =>
+    request.post(`${PATH.ADMIN.FOOD_PIPELINE}/rules/backfill-nutrient-scores`, data),
+
+  promoteCandidates: (data: {
+    minConfidence?: number;
+    limit?: number;
+  }): Promise<CandidatePromoteResult> =>
+    request.post(`${PATH.ADMIN.FOOD_PIPELINE}/candidates/promote`, data),
+
+  batchEnrichByStage: (data: {
+    stages?: number[];
+    limit?: number;
+    category?: string;
+  }): Promise<BatchEnrichByStageResult> =>
+    request.post(`${PATH.ADMIN.FOOD_PIPELINE}/enrichment/batch-stage`, data),
+
+  checkConsistency: (foodId: string): Promise<ConsistencyCheckResult> =>
+    request.get(`${PATH.ADMIN.FOOD_PIPELINE}/quality/consistency/${foodId}`),
+
+  getEnrichmentStatistics: (): Promise<EnrichmentStatisticsResult> =>
+    request.get(`${PATH.ADMIN.FOOD_PIPELINE}/enrichment/statistics`),
+
   // 冲突
   resolveAllConflicts: (): Promise<any> =>
     request.post(`${PATH.ADMIN.FOOD_PIPELINE}/conflicts/resolve-all`, {}),
@@ -211,7 +298,10 @@ export const useBatchAiLabel = (
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data) => foodPipelineApi.batchAiLabel(data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['foodLibrary'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['foodLibrary'] });
+      queryClient.invalidateQueries({ queryKey: foodPipelineQueryKeys.qualityReport });
+    },
     ...options,
   });
 };
@@ -226,7 +316,10 @@ export const useBatchAiTranslate = (
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data) => foodPipelineApi.batchAiTranslate(data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['foodLibrary'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['foodLibrary'] });
+      queryClient.invalidateQueries({ queryKey: foodPipelineQueryKeys.qualityReport });
+    },
     ...options,
   });
 };
@@ -237,7 +330,24 @@ export const useBatchApplyRules = (
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data) => foodPipelineApi.batchApplyRules(data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['foodLibrary'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['foodLibrary'] });
+      queryClient.invalidateQueries({ queryKey: foodPipelineQueryKeys.qualityReport });
+    },
+    ...options,
+  });
+};
+
+export const useBackfillNutrientScores = (
+  options?: UseMutationOptions<BackfillNutrientScoresResult, Error, { batchSize?: number }>
+) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data) => foodPipelineApi.backfillNutrientScores(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['foodLibrary'] });
+      queryClient.invalidateQueries({ queryKey: foodPipelineQueryKeys.qualityReport });
+    },
     ...options,
   });
 };
@@ -246,10 +356,61 @@ export const useResolveAllConflicts = (options?: UseMutationOptions<any, Error, 
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => foodPipelineApi.resolveAllConflicts(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['foodLibrary'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['foodLibrary'] });
+      queryClient.invalidateQueries({ queryKey: foodPipelineQueryKeys.qualityReport });
+    },
     ...options,
   });
 };
+
+export const usePromoteCandidates = (
+  options?: UseMutationOptions<CandidatePromoteResult, Error, { minConfidence?: number; limit?: number }>
+) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data) => foodPipelineApi.promoteCandidates(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['foodLibrary'] });
+      queryClient.invalidateQueries({ queryKey: foodPipelineQueryKeys.qualityReport });
+    },
+    ...options,
+  });
+};
+
+export const useBatchEnrichByStage = (
+  options?: UseMutationOptions<
+    BatchEnrichByStageResult,
+    Error,
+    { stages?: number[]; limit?: number; category?: string }
+  >
+) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data) => foodPipelineApi.batchEnrichByStage(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['foodLibrary'] });
+      queryClient.invalidateQueries({ queryKey: foodPipelineQueryKeys.qualityReport });
+    },
+    ...options,
+  });
+};
+
+export const useCheckConsistency = (
+  options?: UseMutationOptions<ConsistencyCheckResult, Error, string>
+) =>
+  useMutation({
+    mutationFn: (foodId) => foodPipelineApi.checkConsistency(foodId),
+    ...options,
+  });
+
+export const useEnrichmentStatistics = (
+  options?: UseMutationOptions<EnrichmentStatisticsResult, Error, void>
+) =>
+  useMutation({
+    mutationFn: () => foodPipelineApi.getEnrichmentStatistics(),
+    ...options,
+  });
 
 export const useLookupBarcode = (options?: UseMutationOptions<any, Error, string>) => {
   const queryClient = useQueryClient();

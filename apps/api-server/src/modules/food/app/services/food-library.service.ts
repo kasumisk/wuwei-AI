@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { MealType, RecordSource } from '../../../diet/diet.types';
 import { FoodService } from '../../../diet/app/services/food.service';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
+import { I18nService } from '../../../../core/i18n';
 import {
   upsertFoodSplitTables,
   FOOD_SPLIT_INCLUDE,
@@ -14,6 +15,7 @@ export class FoodLibraryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly foodService: FoodService,
+    private readonly i18n: I18nService,
   ) {}
 
   /**
@@ -129,7 +131,7 @@ export class FoodLibraryService {
       include: FOOD_SPLIT_INCLUDE,
     });
     if (!food) {
-      throw new NotFoundException(`未找到食物: ${name}`);
+      throw new NotFoundException(this.i18n.t('food.foodNotFoundByName', { name }));
     }
     return food;
   }
@@ -143,7 +145,7 @@ export class FoodLibraryService {
       include: FOOD_SPLIT_INCLUDE,
     });
     if (!food) {
-      throw new NotFoundException(`未找到食物`);
+      throw new NotFoundException(this.i18n.t('food.foodNotFound'));
     }
     return food;
   }

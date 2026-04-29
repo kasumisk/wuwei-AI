@@ -18,36 +18,21 @@
 
 ## 1. 现状分析
 
-### 1.1 当前 food_library 表结构
+### 1.1 当前食物数据结构（已落地）
 
-| 字段                  | 类型         | 说明                                                            |
-| --------------------- | ------------ | --------------------------------------------------------------- |
-| id                    | uuid         | 主键                                                            |
-| name                  | varchar(100) | 食物名称（唯一）                                                |
-| aliases               | varchar(300) | 别名，逗号分隔                                                  |
-| category              | varchar(50)  | 食物分类：主食/肉类/蔬菜/水果/豆制品/汤类/饮品/零食/快餐/调味料 |
-| calories_per_100g     | int          | 每100g热量 kcal                                                 |
-| protein_per_100g      | decimal(5,1) | 蛋白质 g/100g                                                   |
-| fat_per_100g          | decimal(5,1) | 脂肪 g/100g                                                     |
-| carbs_per_100g        | decimal(5,1) | 碳水 g/100g                                                     |
-| fiber_per_100g        | decimal(5,1) | 膳食纤维 g/100g                                                 |
-| sugar_per_100g        | decimal(5,1) | 糖 g/100g                                                       |
-| sodium_per_100g       | decimal(6,1) | 钠 mg/100g                                                      |
-| glycemic_index        | int          | GI值                                                            |
-| is_processed          | boolean      | 是否加工食品                                                    |
-| is_fried              | boolean      | 是否油炸                                                        |
-| meal_types            | jsonb        | 适合餐次                                                        |
-| main_ingredient       | varchar(50)  | 主要食材                                                        |
-| sub_category          | varchar(50)  | 子分类                                                          |
-| quality_score         | int          | 食物品质评分 1-10                                               |
-| satiety_score         | int          | 饱腹感评分 1-10                                                 |
-| standard_serving_g    | int          | 标准份量克数                                                    |
-| standard_serving_desc | varchar(50)  | 份量描述                                                        |
-| search_weight         | int          | 搜索排序权重                                                    |
-| is_verified           | boolean      | 是否已审核                                                      |
-| tags                  | jsonb        | 标签                                                            |
-| source                | varchar(20)  | 数据来源: official/estimated/ai                                 |
-| confidence            | decimal(3,2) | 营养数据置信度 0-1                                              |
+> 说明：代码库已不再使用 `food_library` 单表结构，当前真实实现是 `foods` 主表 + 4 张 1:1 split tables。
+
+| 表 / 结构 | 主要字段 | 用途 |
+| --------- | -------- | ---- |
+| `foods` | `id` `code` `name` `aliases` `barcode` `status` `category` `sub_category` `food_group` `calories` `protein` `fat` `carbs` `fiber` `sugar` `image_url` `primary_source` `confidence` `data_version` | 基础信息、宏量营养、来源元数据 |
+| `food_health_assessments` | `glycemic_index` `glycemic_load` `is_processed` `is_fried` `processing_level` `quality_score` `satiety_score` `nutrient_density` | 健康评估与评分 |
+| `food_taxonomies` | `meal_types` `tags` `allergens` `compatibility` `available_channels` | 标签、过敏原、搭配、餐次 |
+| `food_nutrition_details` | `vitamin_a` `vitamin_c` `vitamin_d` `vitamin_e` `vitamin_b12` `folate` `zinc` `magnesium` `phosphorus` `saturated_fat` `trans_fat` `cholesterol` | 微量营养与精细化营养字段 |
+| `food_portion_guides` | `standard_serving_g` `standard_serving_desc` `common_portions` `cooking_methods` `required_equipment` | 份量、烹饪与操作信息 |
+| `food_sources` | `source_type` `source_id` `raw_data` `mapped_data` `priority` | 多来源追踪 |
+| `food_translations` | `locale` `name` `aliases` `description` `serving_desc` | 国际化翻译 |
+| `food_change_logs` | `version` `action` `changes` `operator` | 审计日志 |
+| `food_conflicts` | `field` `sources` `resolution` | 多来源冲突处理 |
 
 ### 1.2 当前存在的问题
 
@@ -80,6 +65,9 @@
 
 #### 2.2.1 主表 `foods`（食物核心表）
 
+> 当前实现备注：`foods` 主表只保留基础信息、宏量营养和元数据。
+> `GI/评分`、`标签/过敏原/compatibility`、`微量营养`、`份量/烹饪` 已迁移到 split tables。
+
 ```sql
 CREATE TABLE foods (
   -- ═══ 基础标识 ═══
@@ -104,43 +92,14 @@ CREATE TABLE foods (
   trans_fat       DECIMAL(5,2),                      -- 反式脂肪 g
   cholesterol     DECIMAL(6,1),                      -- 胆固醇 mg
 
-  -- ═══ 微量营养素 (per 100g) ═══
+  -- ═══ 主表保留的微量营养素 (per 100g) ═══
   sodium          DECIMAL(7,1),                      -- 钠 mg
   potassium       DECIMAL(7,1),                      -- 钾 mg
   calcium         DECIMAL(7,1),                      -- 钙 mg
   iron            DECIMAL(5,2),                      -- 铁 mg
-  vitamin_a       DECIMAL(7,1),                      -- 维生素A μg RAE
-  vitamin_c       DECIMAL(6,1),                      -- 维生素C mg
-  vitamin_d       DECIMAL(5,2),                      -- 维生素D μg
-  vitamin_e       DECIMAL(5,2),                      -- 维生素E mg
-  vitamin_b12     DECIMAL(5,2),                      -- 维生素B12 μg
-  folate          DECIMAL(6,1),                      -- 叶酸 μg
-  zinc            DECIMAL(5,2),                      -- 锌 mg
-  magnesium       DECIMAL(6,1),                      -- 镁 mg
 
-  -- ═══ 健康评估 ═══
-  glycemic_index  INT,                               -- GI值 0-100
-  glycemic_load   DECIMAL(5,1),                      -- GL值
-  is_processed    BOOLEAN DEFAULT false,
-  is_fried        BOOLEAN DEFAULT false,
-  processing_level INT DEFAULT 1,                    -- NOVA分级 1-4 (1=天然, 4=超加工)
-  allergens       JSONB DEFAULT '[]',                -- 过敏原: ["gluten","dairy","nuts","soy","egg","shellfish"]
-
-  -- ═══ 决策引擎字段 ═══
-  quality_score   DECIMAL(3,1),                      -- 食物品质评分 1-10
-  satiety_score   DECIMAL(3,1),                      -- 饱腹感评分 1-10
-  nutrient_density DECIMAL(5,1),                     -- 营养密度评分 (NRF 9.3 算法)
-  meal_types      JSONB DEFAULT '[]',                -- ["breakfast","lunch","dinner","snack"]
-  tags            JSONB DEFAULT '[]',                -- ["high_protein","low_fat","keto","vegan"]
-
-  -- ═══ 多样性 & 搭配 ═══
+  -- ═══ 多样性 & 搭配（主表仅保留兼容字段） ═══
   main_ingredient VARCHAR(50),                       -- 主原料: chicken / rice / tofu
-  compatibility   JSONB DEFAULT '{}',                -- {"goodWith": ["rice","broccoli"], "badWith": ["cola"]}
-
-  -- ═══ 份量系统 ═══
-  standard_serving_g   INT DEFAULT 100,
-  standard_serving_desc VARCHAR(100),                -- "1碗约200g" / "1片约30g"
-  common_portions JSONB DEFAULT '[]',                -- [{"name":"1碗","grams":200},{"name":"1片","grams":30}]
 
   -- ═══ 媒体 ═══
   image_url       VARCHAR(500),                      -- 食物图片
@@ -171,9 +130,23 @@ CREATE INDEX idx_foods_barcode ON foods(barcode) WHERE barcode IS NOT NULL;
 CREATE INDEX idx_foods_search_weight ON foods(search_weight DESC);
 CREATE INDEX idx_foods_status ON foods(status);
 CREATE INDEX idx_foods_primary_source ON foods(primary_source);
-CREATE INDEX idx_foods_tags ON foods USING GIN(tags);
-CREATE INDEX idx_foods_meal_types ON foods USING GIN(meal_types);
 ```
+
+#### 2.2.1-A 健康评估拆分表 `food_health_assessments`
+
+承载 `glycemic_index`、`glycemic_load`、`is_processed`、`is_fried`、`processing_level`、`quality_score`、`satiety_score`、`nutrient_density`。
+
+#### 2.2.1-B 分类语义拆分表 `food_taxonomies`
+
+承载 `meal_types`、`tags`、`allergens`、`compatibility`、`available_channels`、`flavor_profile`、`texture_tags`、`cuisine`、`dish_type`。
+
+#### 2.2.1-C 微量营养拆分表 `food_nutrition_details`
+
+承载 `vitamin_a`、`vitamin_c`、`vitamin_d`、`vitamin_e`、`vitamin_b12`、`folate`、`zinc`、`magnesium`、`phosphorus`、`saturated_fat`、`trans_fat`、`cholesterol` 等非主表字段。
+
+#### 2.2.1-D 份量/烹饪拆分表 `food_portion_guides`
+
+承载 `standard_serving_g`、`standard_serving_desc`、`common_portions`、`cooking_methods`、`required_equipment`、`serving_temperature`、`prep_time_minutes`、`cook_time_minutes` 等展示和操作字段。
 
 #### 2.2.2 国际化翻译表 `food_translations`
 
@@ -356,26 +329,26 @@ CREATE TABLE food_regional_info (
 
 #### 健康评估层
 
-| 字段               | 类型         | 必须 | 说明                                                         |
-| ------------------ | ------------ | :--: | ------------------------------------------------------------ |
-| `glycemic_index`   | INT          |  ❌  | GI值 0-100，低GI≤55，中GI 56-69，高GI≥70                     |
-| `glycemic_load`    | DECIMAL(5,1) |  ❌  | GL值 = GI × 碳水含量 / 100                                   |
-| `is_processed`     | BOOLEAN      |  ✅  | 是否加工食品                                                 |
-| `is_fried`         | BOOLEAN      |  ✅  | 是否油炸                                                     |
-| `processing_level` | INT          |  ❌  | NOVA分级：1=天然未加工, 2=加工原料, 3=加工食品, 4=超加工食品 |
-| `allergens`        | JSONB        |  ❌  | 过敏原标签数组                                               |
+| 字段               | 类型         | 必须 | 当前存储位置 | 说明                                                         |
+| ------------------ | ------------ | :--: | ------------ | ------------------------------------------------------------ |
+| `glycemic_index`   | INT          |  ❌  | `food_health_assessments` | GI值 0-100，低GI≤55，中GI 56-69，高GI≥70                     |
+| `glycemic_load`    | DECIMAL(5,1) |  ❌  | `food_health_assessments` | GL值 = GI × 碳水含量 / 100                                   |
+| `is_processed`     | BOOLEAN      |  ✅  | `food_health_assessments` | 是否加工食品                                                 |
+| `is_fried`         | BOOLEAN      |  ✅  | `food_health_assessments` | 是否油炸                                                     |
+| `processing_level` | INT          |  ❌  | `food_health_assessments` | NOVA分级：1=天然未加工, 2=加工原料, 3=加工食品, 4=超加工食品 |
+| `allergens`        | JSONB        |  ❌  | `food_taxonomies` | 过敏原标签数组                                               |
 
 #### 决策引擎层
 
-| 字段               | 类型         | 必须 | 说明                                                |
-| ------------------ | ------------ | :--: | --------------------------------------------------- |
-| `quality_score`    | DECIMAL(3,1) |  ❌  | 食物品质评分 1-10，综合营养密度、加工程度           |
-| `satiety_score`    | DECIMAL(3,1) |  ❌  | 饱腹感评分 1-10，综合 fiber、protein、water content |
-| `nutrient_density` | DECIMAL(5,1) |  ❌  | NRF 9.3 营养密度评分                                |
-| `meal_types`       | JSONB        |  ❌  | 适合餐次数组                                        |
-| `tags`             | JSONB        |  ❌  | 推荐标签数组                                        |
-| `compatibility`    | JSONB        |  ❌  | 搭配关系                                            |
-| `main_ingredient`  | VARCHAR(50)  |  ❌  | 主原料，用于多样性控制                              |
+| 字段               | 类型         | 必须 | 当前存储位置 | 说明                                                |
+| ------------------ | ------------ | :--: | ------------ | --------------------------------------------------- |
+| `quality_score`    | DECIMAL(3,1) |  ❌  | `food_health_assessments` | 食物品质评分 1-10，综合营养密度、加工程度           |
+| `satiety_score`    | DECIMAL(3,1) |  ❌  | `food_health_assessments` | 饱腹感评分 1-10，综合 fiber、protein、water content |
+| `nutrient_density` | DECIMAL(5,1) |  ❌  | `food_health_assessments` | NRF 9.3 营养密度评分                                |
+| `meal_types`       | JSONB        |  ❌  | `food_taxonomies` | 适合餐次数组                                        |
+| `tags`             | JSONB        |  ❌  | `food_taxonomies` | 推荐标签数组                                        |
+| `compatibility`    | JSONB        |  ❌  | `food_taxonomies` | 搭配关系                                            |
+| `main_ingredient`  | VARCHAR(50)  |  ❌  | `foods` | 主原料，用于多样性控制                              |
 
 #### 数据溯源层
 
@@ -1159,7 +1132,7 @@ ComfyUI 可用场景：
 
 ### 7.1 MVP 阶段（第1-2周）
 
-**目标：在现有 `foods` 表基础上扩展，不做破坏性变更**
+**说明：以下为历史 MVP 路线图。当前代码库已演进到 `foods + split tables` 结构，`food_sources / food_change_logs / food_conflicts / food_translations` 均已落地。**
 
 ```
 Week 1:
@@ -1204,9 +1177,9 @@ Week 2:
 
 ```
 ├── Open Food Facts 对接（条形码扫描）
-├── food_sources 多来源追踪表
-├── food_change_logs 版本控制表
-├── food_conflicts 冲突检测 + 自动处理
+├── 持续完善 `food_sources` 多来源追踪
+├── 持续完善 `food_change_logs` 审计链路
+├── 持续完善 `food_conflicts` 冲突检测 + 自动处理
 ├── 去重 Pipeline
 ├── 标签体系完善（根据用户反馈调整）
 ├── 搭配关系大规模标注
@@ -1241,35 +1214,23 @@ Week 2:
 
 ---
 
-## 附录 A: 数据库迁移 SQL (MVP 阶段)
+## 附录 A: 数据库迁移 SQL（历史 MVP 草案）
+
+> 以下 SQL 是本设计稿早期的 MVP 草案，不再等同于当前仓库真实 schema。
+> 当前实现请以 `apps/api-server/prisma/schema.prisma` 与 `docs/refactor/food-infrastructure/*` 为准。
 
 ```sql
--- 1. 给现有 foods 表添加新字段
+-- 当前实现已进入 split-table 形态，以下仅保留历史演进参考
+
+-- 1. 给现有 foods 表添加基础字段
 ALTER TABLE foods
   ADD COLUMN IF NOT EXISTS code VARCHAR(50) UNIQUE,
   ADD COLUMN IF NOT EXISTS barcode VARCHAR(50),
   ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active',
   ADD COLUMN IF NOT EXISTS food_group VARCHAR(30),
-  ADD COLUMN IF NOT EXISTS saturated_fat DECIMAL(5,1),
-  ADD COLUMN IF NOT EXISTS trans_fat DECIMAL(5,2),
-  ADD COLUMN IF NOT EXISTS cholesterol DECIMAL(6,1),
   ADD COLUMN IF NOT EXISTS potassium DECIMAL(7,1),
   ADD COLUMN IF NOT EXISTS calcium DECIMAL(7,1),
   ADD COLUMN IF NOT EXISTS iron DECIMAL(5,2),
-  ADD COLUMN IF NOT EXISTS vitamin_a DECIMAL(7,1),
-  ADD COLUMN IF NOT EXISTS vitamin_c DECIMAL(6,1),
-  ADD COLUMN IF NOT EXISTS vitamin_d DECIMAL(5,2),
-  ADD COLUMN IF NOT EXISTS vitamin_e DECIMAL(5,2),
-  ADD COLUMN IF NOT EXISTS vitamin_b12 DECIMAL(5,2),
-  ADD COLUMN IF NOT EXISTS folate DECIMAL(6,1),
-  ADD COLUMN IF NOT EXISTS zinc DECIMAL(5,2),
-  ADD COLUMN IF NOT EXISTS magnesium DECIMAL(6,1),
-  ADD COLUMN IF NOT EXISTS glycemic_load DECIMAL(5,1),
-  ADD COLUMN IF NOT EXISTS processing_level INT DEFAULT 1,
-  ADD COLUMN IF NOT EXISTS allergens JSONB DEFAULT '[]',
-  ADD COLUMN IF NOT EXISTS nutrient_density DECIMAL(5,1),
-  ADD COLUMN IF NOT EXISTS compatibility JSONB DEFAULT '{}',
-  ADD COLUMN IF NOT EXISTS common_portions JSONB DEFAULT '[]',
   ADD COLUMN IF NOT EXISTS image_url VARCHAR(500),
   ADD COLUMN IF NOT EXISTS thumbnail_url VARCHAR(500),
   ADD COLUMN IF NOT EXISTS primary_source_id VARCHAR(100),
@@ -1289,7 +1250,6 @@ ALTER TABLE foods RENAME COLUMN source TO primary_source;
 CREATE INDEX IF NOT EXISTS idx_foods_barcode ON foods(barcode) WHERE barcode IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_foods_food_group ON foods(food_group);
 CREATE INDEX IF NOT EXISTS idx_foods_status ON foods(status);
-CREATE INDEX IF NOT EXISTS idx_foods_allergens ON foods USING GIN(allergens);
 
 -- 5. 创建翻译表
 CREATE TABLE IF NOT EXISTS food_translations (
@@ -1332,6 +1292,12 @@ CREATE TABLE IF NOT EXISTS food_change_logs (
   operator VARCHAR(100),
   created_at TIMESTAMP DEFAULT NOW()
 );
+
+-- 8. 当前真实实现额外包含 4 张 1:1 拆分表：
+-- food_health_assessments
+-- food_taxonomies
+-- food_nutrition_details
+-- food_portion_guides
 ```
 
 ## 附录 B: 标签自动生成规则

@@ -887,7 +887,7 @@ export class FoodLibraryManagementService {
       where: { foodId: foodId, locale: (dto as any).locale },
     });
     if (existing) {
-      throw new ConflictException(`该食物的 ${(dto as any).locale} 翻译已存在`);
+      throw new ConflictException(this.i18n.t('food.translationDuplicate', { locale: (dto as any).locale }));
     }
     return this.prisma.foodTranslations.create({
       data: { ...(dto as any), foodId: foodId },

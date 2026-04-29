@@ -31,17 +31,11 @@ export function checkCalorieOverrun(
     return {
       triggered: true,
       severity: 'critical',
-      reason: cl('check.overBudget', locale).replace(
-        '{amount}',
-        String(excess),
-      ),
+      reason: cl('check.overBudget', locale, { amount: excess }),
       issue: {
         category: 'calorie_excess',
         severity: 'critical',
-        message: cl('check.overBudget', locale).replace(
-          '{amount}',
-          String(excess),
-        ),
+        message: cl('check.overBudget', locale, { amount: excess }),
         data: {
           excess,
           mealCalories: Math.round(totals.calories),
@@ -181,17 +175,11 @@ export function checkCarbExcess(
     return {
       triggered: true,
       severity: projectedCarbsPct > criticalRatio ? 'critical' : 'warning',
-      reason: cl('check.highCarbs', locale).replace(
-        '{percent}',
-        String(Math.round(projectedCarbsPct)),
-      ),
+      reason: cl('check.highCarbs', locale, { percent: Math.round(projectedCarbsPct) }),
       issue: {
         category: 'carb_excess',
         severity: projectedCarbsPct > criticalRatio ? 'critical' : 'warning',
-        message: cl('check.highCarbs', locale).replace(
-          '{percent}',
-          String(Math.round(projectedCarbsPct)),
-        ),
+        message: cl('check.highCarbs', locale, { percent: Math.round(projectedCarbsPct) }),
         data: {
           mealCarbs: Math.round(totals.carbs),
           projectedPercent: Math.round(projectedCarbsPct),

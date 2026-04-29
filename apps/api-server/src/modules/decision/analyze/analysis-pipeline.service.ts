@@ -157,6 +157,16 @@ export class AnalysisPipelineService {
    * 最终组装 + 持久化 + 事件发射
    */
   async execute(input: PipelineInput): Promise<FoodAnalysisResultV61> {
+    return this.executeWithOptions(input);
+  }
+
+  async executeWithOptions(
+    input: PipelineInput,
+    options?: {
+      persistRecord?: boolean;
+      emitCompletedEvent?: boolean;
+    },
+  ): Promise<FoodAnalysisResultV61> {
     // Stage 1: Analyze
     const analyze = await this.runAnalyze(input);
 
@@ -229,9 +239,15 @@ export class AnalysisPipelineService {
       result.contextualAnalysis = analyze.contextualAnalysis;
     }
     result.unifiedUserContext = analyze.userContext ?? undefined;
+    if (postProcess.recoveryAction) {
+      result.contextualAnalysis = {
+        ...(result.contextualAnalysis ?? {}),
+        recoveryAction: postProcess.recoveryAction,
+      } as ContextualAnalysis;
+    }
 
     // 持久化（fire-and-forget，不阻塞响应）
-    if (input.userId) {
+    if (input.userId && options?.persistRecord != false) {
       this.persistRecord(input, analyze.analysisId, result).catch((err) =>
         this.logger.error(
           `Analysis record persistence failed: ${(err as Error).message}`,
@@ -240,7 +256,7 @@ export class AnalysisPipelineService {
     }
 
     // 事件发射
-    if (input.userId) {
+    if (input.userId && options?.emitCompletedEvent != false) {
       this.emitAnalysisCompleted(
         input.userId,
         analyze.analysisId,

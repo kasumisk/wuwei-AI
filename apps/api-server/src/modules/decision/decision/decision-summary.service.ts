@@ -509,10 +509,9 @@ export class DecisionSummaryService {
       (ni) => HEALTH_RISK_TYPES.has(ni.type) && ni.severity === 'high',
     );
     if (highRisk) {
-      return cl('summary.focus.healthRisk', locale).replace(
-        '{detail}',
-        highRisk.implication || highRisk.type,
-      );
+      return cl('summary.focus.healthRisk', locale, {
+        detail: highRisk.implication || highRisk.type,
+      });
     }
     // V2.7: 使用信号优先级仲裁矩阵替代顺序 if-else
     const signals = [
@@ -558,10 +557,7 @@ export class DecisionSummaryService {
       return cl('summary.focus.avoid', locale);
     }
     if (topIssues.length > 0) {
-      return cl('summary.focus.topIssue', locale).replace(
-        '{issue}',
-        topIssues[0],
-      );
+      return cl('summary.focus.topIssue', locale, { issue: topIssues[0] });
     }
     return cl('summary.focus.default', locale);
   }
@@ -621,16 +617,16 @@ export class DecisionSummaryService {
       .map((ni) => ni.implication);
 
     if (healthIssueImplications.length > 0) {
-      return cl('summary.healthNote.issues', locale).replace(
-        '{details}',
-        healthIssueImplications.join(cl('separator.list', locale)),
-      );
+      return cl('summary.healthNote.issues', locale, {
+        details: healthIssueImplications.join(cl('separator.list', locale)),
+      });
     }
 
-    return cl('summary.healthNote.generic', locale).replace(
-      '{constraints}',
-      constraints.slice(0, 3).join(cl('separator.enumeration', locale)),
-    );
+    return cl('summary.healthNote.generic', locale, {
+      constraints: constraints
+        .slice(0, 3)
+        .join(cl('separator.enumeration', locale)),
+    });
   }
   // ==================== V3.3: StructuredDecision 增强 ====================
 
@@ -807,18 +803,12 @@ export class DecisionSummaryService {
       const gp = ctx.goalProgress;
       if (gp.streakDays > 0) {
         parts.push(
-          cl('summary.streakNote', locale).replace(
-            '{days}',
-            String(gp.streakDays),
-          ),
+          cl('summary.streakNote', locale, { days: gp.streakDays }),
         );
       }
       if (gp.executionRate > 0) {
         parts.push(
-          cl('summary.executionNote', locale).replace(
-            '{rate}',
-            String(Math.round(gp.executionRate * 100)),
-          ),
+          cl('summary.executionNote', locale, { rate: Math.round(gp.executionRate * 100) }),
         );
       }
     }

@@ -3,6 +3,12 @@ import { Module, forwardRef } from '@nestjs/common';
 import { FoodLibraryController } from './app/controllers/food-library.controller';
 import { FoodLibraryService } from './app/services/food-library.service';
 import { FoodAnalyzeController } from './app/controllers/food-analyze.controller';
+// Phase 7: 拆分子控制器
+import { FoodImageAnalyzeController } from './app/controllers/food-image-analyze.controller';
+import { FoodTextAnalyzeController } from './app/controllers/food-text-analyze.controller';
+import { FoodAnalysisHistoryController } from './app/controllers/food-analysis-history.controller';
+import { FoodAnalysisSaveController } from './app/controllers/food-analysis-save.controller';
+import { AnalyzeResultHelperService } from './app/services/analyze-result-helper.service';
 import { FoodAnalysisReportController } from './app/controllers/food-analysis-report.controller';
 import { AnalyzeService } from './app/services/analyze.service';
 // V6 Phase 1.4: AI 分析队列处理器
@@ -11,6 +17,12 @@ import { FoodAnalysisProcessor } from './app/processors/food-analysis.processor'
 import { TextFoodAnalysisService } from './app/services/text-food-analysis.service';
 // V6.1 Phase 2.3: 图片分析服务（从 AnalyzeService 拆分出的核心分析逻辑）
 import { ImageFoodAnalysisService } from './app/services/image-food-analysis.service';
+// 图片分析子组件（V6.x 重构：解耦 prompt / HTTP / 解析 / 库匹配 / legacy 适配）
+import { VisionApiClient } from './app/services/image/vision-api.client';
+import { ImagePromptBuilder } from './app/services/image/image-prompt.builder';
+import { ImageResultParser } from './app/services/image/image-result.parser';
+import { FoodLibraryMatcher } from './app/services/image/food-library-matcher.service';
+import { LegacyResultAdapter } from './app/services/image/mappers/legacy-result.adapter';
 // 置信度驱动 V1：Session + 判定
 import { AnalysisSessionService } from './app/services/analysis-session.service';
 import { ConfidenceJudgeService } from './app/services/confidence-judge.service';
@@ -46,18 +58,25 @@ import { UserModule } from '../user/user.module';
 import { DecisionModule } from '../decision/decision.module';
 import { AuthModule } from '../auth/auth.module';
 import { RbacModule } from '../rbac/rbac.module';
+import { RecommendationModule } from '../diet/recommendation.module';
 
 @Module({
   imports: [
     AuthModule,
     RbacModule,
     forwardRef(() => DietModule),
+    RecommendationModule,
     UserModule,
     forwardRef(() => DecisionModule),
   ],
   controllers: [
     FoodLibraryController,
     FoodAnalyzeController,
+    // Phase 7: 新拆分子控制器
+    FoodImageAnalyzeController,
+    FoodTextAnalyzeController,
+    FoodAnalysisHistoryController,
+    FoodAnalysisSaveController,
     FoodAnalysisReportController,
     FoodLibraryManagementController,
     AnalysisRecordManagementController,
@@ -66,10 +85,18 @@ import { RbacModule } from '../rbac/rbac.module';
   providers: [
     FoodLibraryService,
     AnalyzeService,
+    // Phase 7: 共享辅助服务
+    AnalyzeResultHelperService,
     // V6.1 Phase 1.6: 文本分析服务
     TextFoodAnalysisService,
     // V6.1 Phase 2.3: 图片分析核心服务
     ImageFoodAnalysisService,
+    // 图片分析子组件
+    VisionApiClient,
+    ImagePromptBuilder,
+    ImageResultParser,
+    FoodLibraryMatcher,
+    LegacyResultAdapter,
     // 置信度驱动 V1
     AnalysisSessionService,
     ConfidenceJudgeService,

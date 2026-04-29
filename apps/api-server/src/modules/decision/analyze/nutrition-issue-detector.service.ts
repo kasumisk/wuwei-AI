@@ -59,10 +59,7 @@ export class NutritionIssueDetector {
       metricCalculator: (progress) => progress.remaining.protein,
       thresholdCalculator: (progress) => progress.goals.protein * 0.1, // 10% 差值认为缺口
       implicationTemplate: (metric, _threshold, locale) =>
-        cl('issue.proteinDeficit', locale).replace(
-          '{amount}',
-          String(Math.round(metric)),
-        ),
+        cl('issue.proteinDeficit', locale, { amount: Math.round(metric) }),
     },
 
     // 脂肪超标
@@ -80,10 +77,7 @@ export class NutritionIssueDetector {
         progress.consumed.fat - progress.goals.fat,
       thresholdCalculator: (progress) => progress.goals.fat * 0.15,
       implicationTemplate: (metric, _threshold, locale) =>
-        cl('issue.fatExcess', locale).replace(
-          '{amount}',
-          String(Math.round(metric)),
-        ),
+        cl('issue.fatExcess', locale, { amount: Math.round(metric) }),
     },
 
     // 碳水超标
@@ -101,10 +95,7 @@ export class NutritionIssueDetector {
         progress.consumed.carbs - progress.goals.carbs,
       thresholdCalculator: (progress) => progress.goals.carbs * 0.15,
       implicationTemplate: (metric, _threshold, locale) =>
-        cl('issue.carbExcess', locale).replace(
-          '{amount}',
-          String(Math.round(metric)),
-        ),
+        cl('issue.carbExcess', locale, { amount: Math.round(metric) }),
     },
 
     // 热量超标
@@ -122,10 +113,7 @@ export class NutritionIssueDetector {
         progress.consumed.calories - progress.goals.calories,
       thresholdCalculator: (progress) => progress.goals.calories * 0.08,
       implicationTemplate: (metric, _threshold, locale) =>
-        cl('issue.calorieExcess', locale).replace(
-          '{amount}',
-          String(Math.round(metric)),
-        ),
+        cl('issue.calorieExcess', locale, { amount: Math.round(metric) }),
     },
 
     // 热量不足
@@ -143,10 +131,7 @@ export class NutritionIssueDetector {
         progress.goals.calories - progress.consumed.calories,
       thresholdCalculator: (progress) => progress.goals.calories * 0.1,
       implicationTemplate: (metric, _threshold, locale) =>
-        cl('issue.calorieDeficit', locale).replace(
-          '{amount}',
-          String(Math.round(metric)),
-        ),
+        cl('issue.calorieDeficit', locale, { amount: Math.round(metric) }),
     },
 
     // 纤维素不足（仅当 slot.carbs 不超标时才检测，作为代理信号）
@@ -182,10 +167,7 @@ export class NutritionIssueDetector {
         progress.consumed.carbs - progress.goals.carbs,
       thresholdCalculator: (progress) => progress.goals.carbs * 0.15,
       implicationTemplate: (metric, _t, locale) =>
-        cl('issue.sugarExcess', locale).replace(
-          '{amount}',
-          String(Math.round(metric)),
-        ),
+        cl('issue.sugarExcess', locale, { amount: Math.round(metric) }),
     },
   ];
 
@@ -244,10 +226,9 @@ export class NutritionIssueDetector {
             carbsExcess > progress.goals.carbs * 0.2 ? 'high' : 'medium',
           metric: Math.round(carbsExcess * 100) / 100,
           threshold: 0,
-          implication: cl('issue.glycemicRisk', locale).replace(
-            '{amount}',
-            String(Math.round(carbsExcess)),
-          ),
+          implication: cl('issue.glycemicRisk', locale, {
+            amount: Math.round(carbsExcess),
+          }),
         });
       }
 
@@ -272,10 +253,9 @@ export class NutritionIssueDetector {
           severity: fatExcess > progress.goals.fat * 0.25 ? 'high' : 'medium',
           metric: Math.round(fatExcess * 100) / 100,
           threshold: 0,
-          implication: cl('issue.cardiovascularRisk', locale).replace(
-            '{amount}',
-            String(Math.round(fatExcess)),
-          ),
+          implication: cl('issue.cardiovascularRisk', locale, {
+            amount: Math.round(fatExcess),
+          }),
         });
       }
 
@@ -303,10 +283,9 @@ export class NutritionIssueDetector {
             proteinExcess > progress.goals.protein * 0.2 ? 'high' : 'medium',
           metric: Math.round(proteinExcess * 100) / 100,
           threshold: 0,
-          implication: cl('issue.kidneyStress', locale).replace(
-            '{amount}',
-            String(Math.round(proteinExcess)),
-          ),
+          implication: cl('issue.kidneyStress', locale, {
+            amount: Math.round(proteinExcess),
+          }),
         });
       }
     }
@@ -323,10 +302,7 @@ export class NutritionIssueDetector {
           severity: 'medium',
           metric: hour,
           threshold: 0,
-          implication: cl('issue.bingeRiskWindow', locale).replace(
-            '{hour}',
-            String(hour),
-          ),
+          implication: cl('issue.bingeRiskWindow', locale, { hour }),
         });
       }
 

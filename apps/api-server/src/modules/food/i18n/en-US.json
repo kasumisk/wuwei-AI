@@ -1,5 +1,6 @@
 {
   "foodNotFound": "Food not found.",
+  "foodNotFoundByName": "Food \"{{name}}\" not found.",
   "foodNameDuplicate": "Food \"{{name}}\" already exists.",
   "foodCodeDuplicate": "Code \"{{code}}\" already exists.",
   "translationNotFound": "Translation record not found.",
@@ -53,5 +54,9 @@
   "imageQuotaExceeded": "Image analysis quota exceeded.",
   "freeTierHistoryLimit": "Free tier can only view the most recent {{limit}} analysis records.",
   "validation.textRequired": "Text cannot be empty.",
-  "validation.textTooLong": "Text must not exceed 500 characters."
+  "validation.textTooLong": "Text must not exceed 500 characters.",
+  "analyze.timeout": "AI analysis timed out, please retry.",
+  "analyze.failed": "AI analysis failed, please try again later.",
+  "analyze.imageUnrecognizable": "Unable to identify image content, please upload a clearer food photo.",
+  "translationDuplicate": "A {{locale}} translation for this food already exists."
 }

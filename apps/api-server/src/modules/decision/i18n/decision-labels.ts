@@ -47,26 +47,20 @@ function resolveDecisionLocale(): Locale {
  * - 与 NestJS I18nService.interpolate / recommendation/utils/i18n-messages.t() 保持
  *   完全一致的占位符语法（双花括号），是修复"调用方用 .replace('{x}',v) 单花括号
  *   匹配不到 JSON 模板里的 {{x}}，导致响应体出现 `{食物名}` 等原文字符串"这一根因。
- * - 同时保留对历史单花括号 {var} 的兼容（防止个别 JSON key 用了旧风格）。
+ * - V9 (Phase 9): 全部调用方已迁移到 cl(key, loc, vars) 形式，移除单花括号兼容
+ *   与有损的 {{xxx}} → {xxx} 转换，杜绝未替换占位符在响应体中出现。
  */
 function interpolate(
   text: string,
   vars?: Record<string, string | number | undefined | null>,
 ): string {
+  if (!vars) return text;
   let out = text;
-  if (vars) {
-    for (const [k, v] of Object.entries(vars)) {
-      if (v === undefined || v === null) continue;
-      const safe = String(v);
-      // {{var}} (canonical)
-      out = out.replace(new RegExp(`\\{\\{\\s*${k}\\s*\\}\\}`, 'g'), safe);
-      // {var} (legacy, defensive)
-      out = out.replace(new RegExp(`(?<!\\{)\\{\\s*${k}\\s*\\}(?!\\})`, 'g'), safe);
-    }
+  for (const [k, v] of Object.entries(vars)) {
+    if (v === undefined || v === null) continue;
+    const safe = String(v);
+    out = out.replace(new RegExp(`\\{\\{\\s*${k}\\s*\\}\\}`, 'g'), safe);
   }
-  // Convert any remaining {{xxx}} to {xxx} so callers using legacy
-  // .replace('{xxx}', value) can still match them correctly.
-  out = out.replace(/\{\{(\s*\w+\s*)\}\}/g, '{$1}');
   return out;
 }
 

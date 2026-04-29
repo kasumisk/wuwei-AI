@@ -1,5 +1,6 @@
 {
   "foodNotFound": "食物不存在",
+  "foodNotFoundByName": "未找到食物: {{name}}",
   "foodNameDuplicate": "食物 \"{{name}}\" 已存在",
   "foodCodeDuplicate": "编码 \"{{code}}\" 已存在",
   "translationNotFound": "翻译记录不存在",
@@ -53,5 +54,9 @@
   "imageQuotaExceeded": "图片分析配额不足",
   "freeTierHistoryLimit": "免费版仅可查看最近 {{limit}} 条分析记录",
   "validation.textRequired": "文本不能为空",
-  "validation.textTooLong": "文本长度不能超过 500 字"
+  "validation.textTooLong": "文本长度不能超过 500 字",
+  "analyze.timeout": "AI 分析超时，请稍后重试",
+  "analyze.failed": "AI 分析失败，请稍后重试",
+  "analyze.imageUnrecognizable": "无法识别图片内容，请上传更清晰的食物照片",
+  "translationDuplicate": "该食物的 {{locale}} 翻译已存在"
 }

@@ -126,10 +126,9 @@ export class DecisionEngineService {
     // 热量预算检查（V2.2: 动态 overBudgetMargin）
     if (remainingAfter < -th.overBudgetMargin) {
       contextReasons.push(
-        cl('context.overBudget', locale).replace(
-          '{amount}',
-          String(Math.abs(Math.round(remainingAfter))),
-        ),
+        cl('context.overBudget', locale, {
+          amount: Math.abs(Math.round(remainingAfter)),
+        }),
       );
     } else if (remainingAfter < 0) {
       contextReasons.push(cl('context.nearLimit', locale));
@@ -560,10 +559,9 @@ export class DecisionEngineService {
     const rationale =
       remainingAfter >= 0
         ? cl('factor.nutritionOk', locale)
-        : cl('factor.nutritionOver', locale).replace(
-            '{amount}',
-            String(Math.abs(Math.round(remainingAfter))),
-          );
+        : cl('factor.nutritionOver', locale, {
+            amount: Math.abs(Math.round(remainingAfter)),
+          });
 
     return { score, rationale };
   }

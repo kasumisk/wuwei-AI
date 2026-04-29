@@ -54,17 +54,11 @@ export function checkAllergenConflict(
       triggered: true,
       severity: 'critical',
       decisionOverride: 'avoid',
-      reason: cl('check.allergen', locale).replace(
-        '{allergen}',
-        matchedAllergen,
-      ),
+      reason: cl('check.allergen', locale, { allergen: matchedAllergen }),
       issue: {
         category: 'allergen',
         severity: 'critical',
-        message: cl('check.allergen', locale).replace(
-          '{allergen}',
-          matchedAllergen,
-        ),
+        message: cl('check.allergen', locale, { allergen: matchedAllergen }),
         data: { allergen: matchedAllergen },
       },
     };

@@ -87,16 +87,10 @@ export class ContextualDecisionModifierService {
       result.additionalIssues.push({
         category: 'cumulative_excess',
         severity: excessPct > 30 ? 'critical' : 'warning',
-        message: cl('context.overBudget', locale).replace(
-          '{amount}',
-          String(Math.round(projectedTotal - ctx.goalCalories)),
-        ),
+        message: cl('context.overBudget', locale, { amount: Math.round(projectedTotal - ctx.goalCalories) }),
       });
       result.additionalReasons.push(
-        cl('modifier.cumulativeSaturation', locale).replace(
-          '{percent}',
-          String(excessPct),
-        ),
+        cl('modifier.cumulativeSaturation', locale, { percent: excessPct }),
       );
     }
 
@@ -149,10 +143,7 @@ export class ContextualDecisionModifierService {
           result.additionalIssues.push({
             category: 'multi_day_excess',
             severity: consecutiveExcess >= 5 ? 'critical' : 'warning',
-            message: cl('modifier.multiDayExcess', locale).replace(
-              '{days}',
-              String(consecutiveExcess),
-            ),
+            message: cl('modifier.multiDayExcess', locale, { days: consecutiveExcess }),
           });
         }
 
@@ -164,10 +155,7 @@ export class ContextualDecisionModifierService {
         ) {
           result.scoreMultiplier *= MODIFIER_PARAMS.healthyStreakBonus;
           result.additionalReasons.push(
-            cl('modifier.healthyStreak', locale).replace(
-              '{days}',
-              String(healthyDays),
-            ),
+            cl('modifier.healthyStreak', locale, { days: healthyDays }),
           );
         }
 
@@ -179,16 +167,10 @@ export class ContextualDecisionModifierService {
           result.additionalIssues.push({
             category: 'binge_risk',
             severity: 'critical',
-            message: cl('modifier.bingeRisk', locale).replace(
-              '{count}',
-              String(mealCount),
-            ),
+            message: cl('modifier.bingeRisk', locale, { count: mealCount }),
           });
           result.additionalReasons.push(
-            cl('modifier.bingeRiskReason', locale).replace(
-              '{count}',
-              String(mealCount),
-            ),
+            cl('modifier.bingeRiskReason', locale, { count: mealCount }),
           );
         }
       }

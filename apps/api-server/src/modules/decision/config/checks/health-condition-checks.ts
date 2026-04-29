@@ -67,17 +67,11 @@ export function checkHealthConditionRisk(
     results.push({
       triggered: true,
       severity: 'critical',
-      reason: cl('check.healthHighSodium', locale).replace(
-        '{sodium}',
-        String(Math.round(totalSodium)),
-      ),
+      reason: cl('check.healthHighSodium', locale, { sodium: Math.round(totalSodium) }),
       issue: {
         category: 'health_risk',
         severity: 'critical',
-        message: cl('check.healthHighSodium', locale).replace(
-          '{sodium}',
-          String(Math.round(totalSodium)),
-        ),
+        message: cl('check.healthHighSodium', locale, { sodium: Math.round(totalSodium) }),
         data: { sodium: Math.round(totalSodium), condition: 'hypertension' },
       },
     });
@@ -87,17 +81,11 @@ export function checkHealthConditionRisk(
     results.push({
       triggered: true,
       severity: 'critical',
-      reason: cl('check.healthHighSugar', locale).replace(
-        '{sugar}',
-        String(Math.round(totalAddedSugar)),
-      ),
+      reason: cl('check.healthHighSugar', locale, { sugar: Math.round(totalAddedSugar) }),
       issue: {
         category: 'health_risk',
         severity: 'critical',
-        message: cl('check.healthHighSugar', locale).replace(
-          '{sugar}',
-          String(Math.round(totalAddedSugar)),
-        ),
+        message: cl('check.healthHighSugar', locale, { sugar: Math.round(totalAddedSugar) }),
         data: {
           addedSugar: Math.round(totalAddedSugar),
           condition: 'diabetes',
@@ -112,17 +100,11 @@ export function checkHealthConditionRisk(
       results.push({
         triggered: true,
         severity: 'warning',
-        reason: cl('check.cardiovascularHighSodium', locale).replace(
-          '{sodium}',
-          String(Math.round(totalSodium)),
-        ),
+        reason: cl('check.cardiovascularHighSodium', locale, { sodium: Math.round(totalSodium) }),
         issue: {
           category: 'health_risk',
           severity: 'warning',
-          message: cl('check.cardiovascularHighSodium', locale).replace(
-            '{sodium}',
-            String(Math.round(totalSodium)),
-          ),
+          message: cl('check.cardiovascularHighSodium', locale, { sodium: Math.round(totalSodium) }),
           data: {
             sodium: Math.round(totalSodium),
             condition: 'cardiovascular',
@@ -134,17 +116,15 @@ export function checkHealthConditionRisk(
       results.push({
         triggered: true,
         severity: 'warning',
-        reason: cl('check.cardiovascularHighSatFat', locale).replace(
-          '{satFat}',
-          String(Math.round(totalSatFat * 10) / 10),
-        ),
-        issue: {
-          category: 'health_risk',
-          severity: 'warning',
-          message: cl('check.cardiovascularHighSatFat', locale).replace(
-            '{satFat}',
-            String(Math.round(totalSatFat * 10) / 10),
-          ),
+      reason: cl('check.cardiovascularHighSatFat', locale, {
+        satFat: Math.round(totalSatFat * 10) / 10,
+      }),
+      issue: {
+        category: 'health_risk',
+        severity: 'warning',
+        message: cl('check.cardiovascularHighSatFat', locale, {
+          satFat: Math.round(totalSatFat * 10) / 10,
+        }),
           data: {
             saturatedFat: Math.round(totalSatFat * 10) / 10,
             condition: 'cardiovascular',
@@ -160,17 +140,11 @@ export function checkHealthConditionRisk(
     results.push({
       triggered: true,
       severity: 'warning',
-      reason: cl('check.goutHighPurine', locale).replace(
-        '{purine}',
-        String(Math.round(totalPurine)),
-      ),
+      reason: cl('check.goutHighPurine', locale, { purine: Math.round(totalPurine) }),
       issue: {
         category: 'health_risk',
         severity: 'warning',
-        message: cl('check.goutHighPurine', locale).replace(
-          '{purine}',
-          String(Math.round(totalPurine)),
-        ),
+        message: cl('check.goutHighPurine', locale, { purine: Math.round(totalPurine) }),
         data: { purine: Math.round(totalPurine), condition: 'gout' },
       },
     });
@@ -184,17 +158,11 @@ export function checkHealthConditionRisk(
       results.push({
         triggered: true,
         severity: 'warning',
-        reason: cl('check.kidneyHighPotassium', locale).replace(
-          '{potassium}',
-          String(Math.round(totalPotassium)),
-        ),
+        reason: cl('check.kidneyHighPotassium', locale, { potassium: Math.round(totalPotassium) }),
         issue: {
           category: 'health_risk',
           severity: 'warning',
-          message: cl('check.kidneyHighPotassium', locale).replace(
-            '{potassium}',
-            String(Math.round(totalPotassium)),
-          ),
+          message: cl('check.kidneyHighPotassium', locale, { potassium: Math.round(totalPotassium) }),
           data: {
             potassium: Math.round(totalPotassium),
             condition: 'kidney_disease',
@@ -206,17 +174,11 @@ export function checkHealthConditionRisk(
       results.push({
         triggered: true,
         severity: 'warning',
-        reason: cl('check.kidneyHighPhosphorus', locale).replace(
-          '{phosphorus}',
-          String(Math.round(totalPhosphorus)),
-        ),
+        reason: cl('check.kidneyHighPhosphorus', locale, { phosphorus: Math.round(totalPhosphorus) }),
         issue: {
           category: 'health_risk',
           severity: 'warning',
-          message: cl('check.kidneyHighPhosphorus', locale).replace(
-            '{phosphorus}',
-            String(Math.round(totalPhosphorus)),
-          ),
+          message: cl('check.kidneyHighPhosphorus', locale, { phosphorus: Math.round(totalPhosphorus) }),
           data: {
             phosphorus: Math.round(totalPhosphorus),
             condition: 'kidney_disease',
@@ -232,17 +194,15 @@ export function checkHealthConditionRisk(
     results.push({
       triggered: true,
       severity: 'warning',
-      reason: cl('check.hyperlipidemiaHighSatFat', locale).replace(
-        '{satFat}',
-        String(Math.round(totalSatFat * 10) / 10),
-      ),
+      reason: cl('check.hyperlipidemiaHighSatFat', locale, {
+        satFat: Math.round(totalSatFat * 10) / 10,
+      }),
       issue: {
         category: 'health_risk',
         severity: 'warning',
-        message: cl('check.hyperlipidemiaHighSatFat', locale).replace(
-          '{satFat}',
-          String(Math.round(totalSatFat * 10) / 10),
-        ),
+        message: cl('check.hyperlipidemiaHighSatFat', locale, {
+          satFat: Math.round(totalSatFat * 10) / 10,
+        }),
         data: {
           saturatedFat: Math.round(totalSatFat * 10) / 10,
           condition: 'hyperlipidemia',
@@ -259,17 +219,15 @@ export function checkHealthConditionRisk(
       results.push({
         triggered: true,
         severity: 'warning',
-        reason: cl('check.fattyLiverHighSatFat', locale).replace(
-          '{satFat}',
-          String(Math.round(totalSatFat * 10) / 10),
-        ),
+        reason: cl('check.fattyLiverHighSatFat', locale, {
+          satFat: Math.round(totalSatFat * 10) / 10,
+        }),
         issue: {
           category: 'health_risk',
           severity: 'warning',
-          message: cl('check.fattyLiverHighSatFat', locale).replace(
-            '{satFat}',
-            String(Math.round(totalSatFat * 10) / 10),
-          ),
+          message: cl('check.fattyLiverHighSatFat', locale, {
+            satFat: Math.round(totalSatFat * 10) / 10,
+          }),
           data: {
             saturatedFat: Math.round(totalSatFat * 10) / 10,
             condition: 'fatty_liver',
@@ -281,17 +239,11 @@ export function checkHealthConditionRisk(
       results.push({
         triggered: true,
         severity: 'warning',
-        reason: cl('check.fattyLiverHighSugar', locale).replace(
-          '{sugar}',
-          String(Math.round(totalAddedSugar)),
-        ),
+        reason: cl('check.fattyLiverHighSugar', locale, { sugar: Math.round(totalAddedSugar) }),
         issue: {
           category: 'health_risk',
           severity: 'warning',
-          message: cl('check.fattyLiverHighSugar', locale).replace(
-            '{sugar}',
-            String(Math.round(totalAddedSugar)),
-          ),
+          message: cl('check.fattyLiverHighSugar', locale, { sugar: Math.round(totalAddedSugar) }),
           data: {
             addedSugar: Math.round(totalAddedSugar),
             condition: 'fatty_liver',
@@ -315,17 +267,11 @@ export function checkHealthConditionRisk(
         triggered: true,
         severity: 'critical',
         decisionOverride: 'avoid',
-        reason: cl('check.celiacGluten', locale).replace(
-          '{food}',
-          glutenFood.name,
-        ),
+        reason: cl('check.celiacGluten', locale, { food: glutenFood.name }),
         issue: {
           category: 'health_risk',
           severity: 'critical',
-          message: cl('check.celiacGluten', locale).replace(
-            '{food}',
-            glutenFood.name,
-          ),
+          message: cl('check.celiacGluten', locale, { food: glutenFood.name }),
           data: { food: glutenFood.name, condition: 'celiac_disease' },
         },
       });
@@ -391,17 +337,15 @@ export function checkHealthConditionRisk(
       results.push({
         triggered: true,
         severity: 'warning',
-        reason: cl('check.ibsHighFodmap', locale).replace(
-          '{food}',
-          highFodmapFood.name,
-        ),
+        reason: cl('check.ibsHighFodmap', locale, {
+          food: highFodmapFood.name,
+        }),
         issue: {
           category: 'health_risk',
           severity: 'warning',
-          message: cl('check.ibsHighFodmap', locale).replace(
-            '{food}',
-            highFodmapFood.name,
-          ),
+          message: cl('check.ibsHighFodmap', locale, {
+            food: highFodmapFood.name,
+          }),
           data: { food: highFodmapFood.name, condition: 'ibs' },
         },
       });
@@ -417,17 +361,15 @@ export function checkHealthConditionRisk(
       results.push({
         triggered: true,
         severity: 'warning',
-        reason: cl('check.goutHighPurineLevel', locale).replace(
-          '{food}',
-          highPurineFood.name,
-        ),
+        reason: cl('check.goutHighPurineLevel', locale, {
+          food: highPurineFood.name,
+        }),
         issue: {
           category: 'health_risk',
           severity: 'warning',
-          message: cl('check.goutHighPurineLevel', locale).replace(
-            '{food}',
-            highPurineFood.name,
-          ),
+          message: cl('check.goutHighPurineLevel', locale, {
+            food: highPurineFood.name,
+          }),
           data: { food: highPurineFood.name, condition: 'gout' },
         },
       });
@@ -444,17 +386,15 @@ export function checkHealthConditionRisk(
       results.push({
         triggered: true,
         severity: 'warning',
-        reason: cl('check.kidneyStoneHighOxalate', locale).replace(
-          '{food}',
-          highOxalateFood.name,
-        ),
+        reason: cl('check.kidneyStoneHighOxalate', locale, {
+          food: highOxalateFood.name,
+        }),
         issue: {
           category: 'health_risk',
           severity: 'warning',
-          message: cl('check.kidneyStoneHighOxalate', locale).replace(
-            '{food}',
-            highOxalateFood.name,
-          ),
+          message: cl('check.kidneyStoneHighOxalate', locale, {
+            food: highOxalateFood.name,
+          }),
           data: { food: highOxalateFood.name, condition: 'kidney_stone' },
         },
       });
@@ -474,17 +414,11 @@ export function checkHealthConditionRisk(
     results.push({
       triggered: true,
       severity: 'warning',
-      reason: cl('check.highCholesterol', locale).replace(
-        '{cholesterol}',
-        String(Math.round(totalCholesterol)),
-      ),
+      reason: cl('check.highCholesterol', locale, { cholesterol: Math.round(totalCholesterol) }),
       issue: {
         category: 'health_risk',
         severity: 'warning',
-        message: cl('check.highCholesterol', locale).replace(
-          '{cholesterol}',
-          String(Math.round(totalCholesterol)),
-        ),
+        message: cl('check.highCholesterol', locale, { cholesterol: Math.round(totalCholesterol) }),
         data: {
           cholesterol: Math.round(totalCholesterol),
           condition: hasCardiovascular ? 'cardiovascular' : 'hyperlipidemia',
@@ -505,17 +439,15 @@ export function checkHealthConditionRisk(
     results.push({
       triggered: true,
       severity,
-      reason: cl('check.highTransFat', locale).replace(
-        '{transFat}',
-        String(Math.round(totalTransFat * 10) / 10),
-      ),
+      reason: cl('check.highTransFat', locale, {
+        transFat: Math.round(totalTransFat * 10) / 10,
+      }),
       issue: {
         category: 'health_risk',
         severity,
-        message: cl('check.highTransFat', locale).replace(
-          '{transFat}',
-          String(Math.round(totalTransFat * 10) / 10),
-        ),
+        message: cl('check.highTransFat', locale, {
+          transFat: Math.round(totalTransFat * 10) / 10,
+        }),
         data: {
           transFat: Math.round(totalTransFat * 10) / 10,
           condition: hasCardiovascular

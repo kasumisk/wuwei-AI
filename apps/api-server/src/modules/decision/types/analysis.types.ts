@@ -286,6 +286,7 @@ export interface ContextualAnalysis {
   };
   identifiedIssues: NutritionIssue[];
   recommendationContext: RecommendationContext;
+  recoveryAction?: RecoveryAction;
 }
 
 /**

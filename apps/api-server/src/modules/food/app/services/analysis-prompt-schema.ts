@@ -33,6 +33,35 @@ import {
 
 const FALLBACK_LOCALE: Locale = 'en-US';
 
+function getNameFieldInstruction(locale?: Locale): string {
+  const resolved = resolvePromptLocale(locale);
+
+  switch (resolved) {
+    case 'zh-CN':
+      return [
+        '字段约束：',
+        '- 食物名只返回在 `name` 字段中',
+        '- `name` 必须使用本次请求的当前响应语言',
+        '- 不要返回 `nameEn`、`nameZh` 或其他额外命名字段',
+      ].join('\n');
+    case 'ja-JP':
+      return [
+        'フィールド制約:',
+        '- 食品名は `name` フィールドのみに返すこと',
+        '- `name` はこのリクエストの現在の応答言語を使うこと',
+        '- `nameEn`、`nameZh`、その他の別名フィールドは返さないこと',
+      ].join('\n');
+    case 'en-US':
+    default:
+      return [
+        'Field constraints:',
+        '- Return food names only in the `name` field',
+        '- `name` must use the current response language for this request',
+        '- Do not return `nameEn`, `nameZh`, or any additional name fields',
+      ].join('\n');
+  }
+}
+
 function resolvePromptLocale(locale?: Locale): Locale {
   const resolvedLocale = locale ?? FALLBACK_LOCALE;
   return getSupportedLocales().includes(resolvedLocale)
@@ -68,6 +97,8 @@ export function buildBasePrompt(
     cl('prompt.schema.foods', locale),
     '',
     cl('prompt.rules', locale),
+    '',
+    getNameFieldInstruction(locale),
   ].join('\n');
 }
 

@@ -136,10 +136,7 @@ export class DecisionToneResolverService {
 
     // V4.0 P3.2: 连续天数 > 7 天时追加激励
     if (streakDays != null && streakDays > 7) {
-      const streakBoostText = cl('tone.streakBoost', locale).replace(
-        '{days}',
-        String(streakDays),
-      );
+      const streakBoostText = cl('tone.streakBoost', locale, { days: streakDays });
       toneModifier += '\n' + streakBoostText;
     }
 

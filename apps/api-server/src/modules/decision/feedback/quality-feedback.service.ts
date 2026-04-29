@@ -117,10 +117,9 @@ export class AnalysisQualityFeedbackService {
         suggestionId: 'pol_001',
         type: 'decision_rule',
         description: cl('feedback.reduceStrictness'),
-        rationale: cl('feedback.reduceStrictnessRationale').replace(
-          '{rate}',
-          metrics.acceptanceRate.toFixed(1),
-        ),
+        rationale: cl('feedback.reduceStrictnessRationale', undefined, {
+          rate: metrics.acceptanceRate.toFixed(1),
+        }),
         impact: 'high',
       });
     }

@@ -628,6 +628,11 @@ export class TextFoodAnalysisService {
       /(饭|面|麵|粉|米线|河粉|汤|羹|煲|锅|堡|卷|串|丼|盖浇|拌饭|炒饭|炒面|沙拉|意面|披萨|比萨|寿司|便当|套餐|套餐饭|盒饭|定食|拉面)$/.test(
         foodName,
       );
+    const queryLooksSimpleIngredient =
+      !hasCompositeDelimiter &&
+      !isCompositeDish &&
+      !/\b(with|and|combo|set|meal|dinner|lunch|breakfast)\b/i.test(foodName) &&
+      foodName.trim().split(/\s+/).length <= 3;
 
     // 模糊匹配 sim_score 准入门槛：收紧到 0.72，宁可走 LLM 也不要错匹配库
     const SIM_ACCEPT_THRESHOLD = 0.72;
@@ -655,6 +660,13 @@ export class TextFoodAnalysisService {
         for (const candidate of results) {
           const simScore = Number(candidate.sim_score) || 0;
           const name: string = candidate.name || '';
+          const candidateLooksComposite =
+            /,|，|\b(with|and|combo|set|meal|dinner|lunch|breakfast|junior|baby food)\b/i.test(
+              name,
+            ) ||
+            /(饭|面|麵|粉|米线|河粉|汤|羹|煲|锅|堡|卷|串|丼|盖浇|拌饭|炒饭|炒面|沙拉|意面|披萨|比萨|寿司|便当|套餐|套餐饭|盒饭|定食|拉面)$/.test(
+              name,
+            );
 
           // 1) 别名精确命中：高置信信号，保留
           const aliasMatched =
@@ -677,6 +689,18 @@ export class TextFoodAnalysisService {
             name.length / Math.max(query.length, 1) >= REVERSE_INCLUDE_MIN_RATIO;
           const includeMatched =
             !hasCompositeDelimiter && (forwardInclude || reverseInclude);
+
+          // 对简单单食材词，拒绝仅靠宽松 includes 命中的复合菜/婴儿辅食候选，
+          // 否则类似 "rice" / "broccoli" 会误命中 "Baby Food, ... Dinner"。
+          if (
+            queryLooksSimpleIngredient &&
+            candidateLooksComposite &&
+            includeMatched &&
+            !aliasMatched &&
+            simScore < SIM_ACCEPT_THRESHOLD
+          ) {
+            continue;
+          }
 
           // 3) sim_score 阈值收紧
           const accepted =

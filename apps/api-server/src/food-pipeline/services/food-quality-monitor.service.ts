@@ -326,21 +326,25 @@ export class FoodQualityMonitorService {
 
     // 微量营养素覆盖率（至少 10 个微量元素非 NULL 的食物占比）
     const microResult = await this.prisma.$queryRaw<[{ count: number }]>(
-      Prisma.sql`SELECT COUNT(*)::int AS count FROM foods
-                 WHERE (
-                   CASE WHEN calcium IS NOT NULL THEN 1 ELSE 0 END +
-                   CASE WHEN iron IS NOT NULL THEN 1 ELSE 0 END +
-                   CASE WHEN potassium IS NOT NULL THEN 1 ELSE 0 END +
-                   CASE WHEN vitamin_a IS NOT NULL THEN 1 ELSE 0 END +
-                   CASE WHEN vitamin_c IS NOT NULL THEN 1 ELSE 0 END +
-                   CASE WHEN vitamin_d IS NOT NULL THEN 1 ELSE 0 END +
-                   CASE WHEN vitamin_e IS NOT NULL THEN 1 ELSE 0 END +
-                   CASE WHEN vitamin_b12 IS NOT NULL THEN 1 ELSE 0 END +
-                   CASE WHEN folate IS NOT NULL THEN 1 ELSE 0 END +
-                   CASE WHEN zinc IS NOT NULL THEN 1 ELSE 0 END +
-                   CASE WHEN magnesium IS NOT NULL THEN 1 ELSE 0 END +
-                   CASE WHEN phosphorus IS NOT NULL THEN 1 ELSE 0 END
-                 ) >= 10`,
+      Prisma.sql`
+        SELECT COUNT(*)::int AS count
+        FROM foods f
+        LEFT JOIN food_nutrition_details nd ON nd.food_id = f.id
+        WHERE (
+          CASE WHEN f.calcium IS NOT NULL THEN 1 ELSE 0 END +
+          CASE WHEN f.iron IS NOT NULL THEN 1 ELSE 0 END +
+          CASE WHEN f.potassium IS NOT NULL THEN 1 ELSE 0 END +
+          CASE WHEN nd.vitamin_a IS NOT NULL THEN 1 ELSE 0 END +
+          CASE WHEN nd.vitamin_c IS NOT NULL THEN 1 ELSE 0 END +
+          CASE WHEN nd.vitamin_d IS NOT NULL THEN 1 ELSE 0 END +
+          CASE WHEN nd.vitamin_e IS NOT NULL THEN 1 ELSE 0 END +
+          CASE WHEN nd.vitamin_b12 IS NOT NULL THEN 1 ELSE 0 END +
+          CASE WHEN nd.folate IS NOT NULL THEN 1 ELSE 0 END +
+          CASE WHEN nd.zinc IS NOT NULL THEN 1 ELSE 0 END +
+          CASE WHEN nd.magnesium IS NOT NULL THEN 1 ELSE 0 END +
+          CASE WHEN nd.phosphorus IS NOT NULL THEN 1 ELSE 0 END
+        ) >= 10
+      `,
     );
     const microCoverage =
       totalFoods > 0

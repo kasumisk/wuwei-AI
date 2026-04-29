@@ -1,5 +1,6 @@
 {
   "foodNotFound": "食品が見つかりません",
+  "foodNotFoundByName": "食品「{{name}}」が見つかりません",
   "foodNameDuplicate": "食品「{{name}}」は既に存在します",
   "foodCodeDuplicate": "コード「{{code}}」は既に存在します",
   "translationNotFound": "翻訳レコードが見つかりません",
@@ -53,5 +54,9 @@
   "imageQuotaExceeded": "画像分析の利用枠が不足しています",
   "freeTierHistoryLimit": "無料プランでは直近 {{limit}} 件の分析レコードのみ閲覧できます",
   "validation.textRequired": "テキストを入力してください",
-  "validation.textTooLong": "テキストは 500 文字以内で入力してください"
+  "validation.textTooLong": "テキストは 500 文字以内で入力してください",
+  "analyze.timeout": "AI 分析がタイムアウトしました。再試行してください",
+  "analyze.failed": "AI 分析に失敗しました。しばらくしてからお試しください",
+  "analyze.imageUnrecognizable": "画像内容を識別できません。より鮮明な食品写真をアップロードしてください",
+  "translationDuplicate": "この食品の {{locale}} 翻訳は既に存在します"
 }

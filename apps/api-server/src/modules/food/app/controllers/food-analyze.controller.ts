@@ -68,6 +68,10 @@ import { FOOD_SPLIT_INCLUDE } from '../../food-split.helper';
 import { I18nService } from '../../../../core/i18n';
 import { translateEnum } from '../../../../common/i18n/enum-i18n';
 import { AlternativeSuggestionService } from '../../../decision/decision/alternative-suggestion.service';
+import { cl } from '../../../decision/i18n/decision-labels';
+import { FoodI18nService } from '../../../diet/app/services/food-i18n.service';
+import { DecisionSummaryService } from '../../../decision/decision/decision-summary.service';
+import { DecisionOutput } from '../../../decision/decision/food-decision.service';
 
 // ─── V7.9 Phase 3-4: 文本分析缓存配置 ───
 
@@ -112,6 +116,8 @@ export class FoodAnalyzeController {
     private readonly analysisSessionService: AnalysisSessionService,
     private readonly i18n: I18nService,
     private readonly alternativeSuggestionService: AlternativeSuggestionService,
+    private readonly foodI18nService: FoodI18nService,
+    private readonly decisionSummaryService: DecisionSummaryService,
   ) {}
 
   // ==================== V6.1: 文本分析端点 ====================
@@ -195,6 +201,11 @@ export class FoodAnalyzeController {
       (dto.locale as any) || undefined,
       dto.contextOverride?.localHour,
       dto.hints,
+    );
+
+    await this.localizeAnalysisResult(
+      fullResult,
+      dto.locale || this.i18n.currentLocale(),
     );
 
     // V7.9 P3-4: 写入缓存（使用完整结果，裁剪在读取时按当前订阅等级执行）
@@ -411,6 +422,16 @@ export class FoodAnalyzeController {
         undefined) as FoodAnalysisResultV61['evidencePack'],
       shouldEatAction: (decision?.shouldEatAction ??
         undefined) as FoodAnalysisResultV61['shouldEatAction'],
+      foodAnalysisPackage: (decision?.foodAnalysisPackage ??
+        undefined) as FoodAnalysisResultV61['foodAnalysisPackage'],
+      structuredDecision: (decision?.structuredDecision ??
+        undefined) as FoodAnalysisResultV61['structuredDecision'],
+      contextualAnalysis: (decision?.contextualAnalysis ??
+        undefined) as FoodAnalysisResultV61['contextualAnalysis'],
+      unifiedUserContext: (decision?.unifiedUserContext ??
+        undefined) as FoodAnalysisResultV61['unifiedUserContext'],
+      coachActionPlan: (decision?.coachActionPlan ??
+        undefined) as FoodAnalysisResultV61['coachActionPlan'],
       analysisState: (nutrition?.analysisState ??
         undefined) as FoodAnalysisResultV61['analysisState'],
       confidenceDiagnostics: (nutrition?.confidenceDiagnostics ??
@@ -545,18 +566,23 @@ export class FoodAnalyzeController {
     }
 
     // 6. 映射为前端友好的列表结构
-    const list = items.map((r) => ({
+    const locale = this.i18n.currentLocale();
+    const summaries = await Promise.all(
+      items.map((r) => this.extractHistorySummary(r, locale)),
+    );
+
+    const list = items.map((r, index) => ({
       analysisId: r.id,
       inputType: r.inputType,
       mealType: r.mealType,
-      mealTypeLabel: translateEnum('mealType', r.mealType),
+      mealTypeLabel: translateEnum('mealType', r.mealType, locale),
       status: r.status,
       confidenceScore: r.confidenceScore,
       qualityScore: r.qualityScore,
       persistStatus: r.persistStatus,
       createdAt: r.createdAt,
       // 摘要信息（从 payload 中提取关键字段）
-      summary: this.extractHistorySummary(r),
+      summary: summaries[index],
     }));
 
     // 7. 如果 Free 用户，附加付费墙提示
@@ -615,11 +641,15 @@ export class FoodAnalyzeController {
 
     // 4. 从 JSONB 重建 V61 结构
     const fullResult = this.reconstructAnalysisResult(record);
+    const locale = this.i18n.currentLocale();
+
+    await this.localizeAnalysisResult(fullResult, locale);
 
     // 5a. 对历史 alternatives 补注当前请求语言的翻译
     if (fullResult.alternatives?.length) {
       await this.alternativeSuggestionService.localizeAlternatives(
         fullResult.alternatives,
+        locale as Locale,
       );
     }
 
@@ -659,6 +689,16 @@ export class FoodAnalyzeController {
       },
       alternatives: fullResult.alternatives ?? [],
       explanation: fullResult.explanation ?? { summary: '' },
+      summary: fullResult.summary,
+      analysisState: fullResult.analysisState,
+      confidenceDiagnostics: fullResult.confidenceDiagnostics,
+      evidencePack: fullResult.evidencePack,
+      shouldEatAction: fullResult.shouldEatAction,
+      foodAnalysisPackage: fullResult.foodAnalysisPackage,
+      structuredDecision: fullResult.structuredDecision,
+      contextualAnalysis: fullResult.contextualAnalysis,
+      unifiedUserContext: fullResult.unifiedUserContext,
+      coachActionPlan: fullResult.coachActionPlan,
       entitlement: {
         tier: summary.tier,
         fieldsHidden: [],
@@ -682,7 +722,7 @@ export class FoodAnalyzeController {
         matchedFoodCount: record.matchedFoodCount,
         candidateFoodCount: record.candidateFoodCount,
         createdAt: record.createdAt,
-        mealTypeLabel: translateEnum('mealType', record.mealType),
+        mealTypeLabel: translateEnum('mealType', record.mealType, locale),
       },
     };
 
@@ -731,11 +771,14 @@ export class FoodAnalyzeController {
   /**
    * 从分析记录提取历史列表的摘要信息
    */
-  private extractHistorySummary(record: any): {
+  private async extractHistorySummary(
+    record: any,
+    locale: string,
+  ): Promise<{
     foodNames: string[];
     totalCalories: number;
     recommendation?: string;
-  } {
+  }> {
     const recognized = record.recognizedPayload as Record<
       string,
       unknown
@@ -747,10 +790,18 @@ export class FoodAnalyzeController {
     const foods = (recognized?.foods ?? nutrition?.foods ?? []) as Array<{
       name?: string;
     }>;
-    const foodNames = foods
+    let foodNames = foods
       .map((f) => f.name)
       .filter((n): n is string => !!n)
       .slice(0, 5); // 最多显示 5 个
+
+    if (foodNames.length > 0) {
+      const translated = await this.foodI18nService.loadTranslationsByFoodNames(
+        foodNames,
+        locale,
+      );
+      foodNames = foodNames.map((name) => translated.get(name) ?? name);
+    }
 
     // 提取总热量
     const totals = nutrition?.totals as { calories?: number } | undefined;
@@ -1007,6 +1058,8 @@ export class FoodAnalyzeController {
       entitlement: { tier: userSummary.tier as any, fieldsHidden: [] },
     };
 
+    await this.localizeAnalysisResult(v61ForTrim, this.i18n.currentLocale());
+
     // 按订阅等级裁剪结果
     const trimmedResult = this.resultEntitlementService.trimResult(
       v61ForTrim,
@@ -1049,6 +1102,151 @@ export class FoodAnalyzeController {
       },
       this.i18n.t('food.analyzeComplete'),
     );
+  }
+
+  private async localizeAnalysisResult(
+    result: Partial<FoodAnalysisResultV61>,
+    locale: string,
+  ): Promise<void> {
+    const foods = result.foods;
+    if (foods?.length) {
+      const ids = foods
+        .filter((food) => !!food.foodLibraryId)
+        .map((food) => food.foodLibraryId as string);
+      const localizedDetails = await this.foodI18nService.loadLocalizedDetails(
+        ids,
+        locale,
+      );
+      const translatedById = await this.foodI18nService.loadTranslations(
+        ids,
+        locale,
+      );
+      const unresolvedNames = foods
+        .filter(
+          (food) =>
+            !food.foodLibraryId || !translatedById.get(food.foodLibraryId),
+        )
+        .map((food) => food.name)
+        .filter(Boolean);
+      const translatedByName =
+        await this.foodI18nService.loadTranslationsByFoodNames(
+          unresolvedNames,
+          locale,
+        );
+      for (const food of foods) {
+        const localizedDetail = food.foodLibraryId
+          ? localizedDetails.get(food.foodLibraryId)
+          : undefined;
+        const originalServingDesc = food.standardServingDesc;
+        const localizedName =
+          (food.foodLibraryId
+            ? translatedById.get(food.foodLibraryId)
+            : undefined) ??
+          translatedByName.get(food.name);
+        if (localizedName) {
+          food.name = localizedName;
+        }
+        if (localizedDetail?.servingDesc) {
+          food.standardServingDesc = localizedDetail.servingDesc;
+
+          // quantity 与标准份量描述相同的场景（快捷分析/库命中）一起本地化；
+          // 用户手输的 "200g" / "1 piece" 等保持原值，不做猜测替换。
+          if (
+            food.quantity &&
+            originalServingDesc &&
+            food.quantity === originalServingDesc
+          ) {
+            food.quantity = localizedDetail.servingDesc;
+          }
+        }
+      }
+    }
+
+    const primaryFoodName = result.foods?.[0]?.name;
+    const totalCalories = result.totals?.calories;
+
+    if (result.summary && primaryFoodName && totalCalories != null) {
+      result.summary.headline = this.buildLocalizedHeadline(
+        result.decision?.recommendation,
+        result.decision?.reason,
+        primaryFoodName,
+        totalCalories,
+        locale,
+      );
+    }
+
+    if (result.explanation && primaryFoodName && totalCalories != null) {
+      result.explanation.summary = this.buildLocalizedHeadline(
+        result.decision?.recommendation,
+        result.decision?.reason,
+        primaryFoodName,
+        totalCalories,
+        locale,
+      );
+    }
+
+    if (result.summary && result.unifiedUserContext) {
+      try {
+        const rebuiltSummary = this.decisionSummaryService.summarize({
+          decisionOutput: {
+            decision: result.decision!,
+            alternatives: result.alternatives ?? [],
+            explanation: result.explanation!,
+            decisionFactors: result.decision?.decisionFactors ?? [],
+            optimalPortion: result.decision?.optimalPortion,
+            nextMealAdvice: result.decision?.nextMealAdvice,
+            decisionChain: result.decision?.decisionChain,
+            breakdownExplanations: result.decision?.breakdownExplanations,
+            issues: result.decision?.issues,
+            mode: result.shouldEatAction?.mode,
+          } as DecisionOutput,
+          totals: result.totals!,
+          userContext: result.unifiedUserContext,
+          foodNames: result.foods?.map((food) => food.name) ?? [],
+          structuredDecision: result.structuredDecision,
+          nutritionIssues: result.contextualAnalysis?.identifiedIssues,
+          decisionMode: result.shouldEatAction?.mode,
+          locale: locale as Locale,
+        });
+        result.summary = {
+          ...result.summary,
+          ...rebuiltSummary,
+          headline: result.summary.headline,
+        };
+      } catch {
+        // Keep persisted summary when structured rebuild is unavailable.
+      }
+    }
+  }
+
+  private buildLocalizedHeadline(
+    recommendation: string | undefined,
+    reason: string | undefined,
+    foodName: string,
+    calories: number,
+    locale: string,
+  ): string {
+    const cal = `${Math.round(calories)}kcal`;
+
+    switch (recommendation) {
+      case 'recommend':
+        return cl('summary.recommend.ok', locale as Locale, {
+          food: foodName,
+          cal,
+        });
+      case 'avoid':
+        return cl('summary.avoid.generic', locale as Locale, {
+          food: foodName,
+          cal,
+        });
+      case 'caution':
+      default:
+        return cl('summary.caution.reason', locale as Locale, {
+          food: foodName,
+          cal,
+          reason: reason || this.i18n.t('food.betterForCurrentGoal'),
+        });
+    }
   }
 
   // ==================== 置信度驱动 V1：refine 端点 ====================
@@ -1130,6 +1328,8 @@ export class FoodAnalyzeController {
       user.id,
     );
 
+    await this.localizeAnalysisResult(fullResult, this.i18n.currentLocale());
+
     // 4. 按订阅等级裁剪
     const summary = await this.subscriptionService.getUserSummary(user.id);
     const trimmedResult = this.resultEntitlementService.trimResult(
@@ -1206,8 +1406,16 @@ export class FoodAnalyzeController {
     const confidence = Number(food.confidence) || 50;
 
     // 基于数据计算简单的健康评分（优先从拆分表读）
-    const qualityScore = Number((food as any).healthAssessment?.qualityScore ?? (food as any).qualityScore) || 50;
-    const nutrientDensity = Number((food as any).healthAssessment?.nutrientDensity ?? (food as any).nutrientDensity) || 50;
+    const qualityScore =
+      Number(
+        (food as any).healthAssessment?.qualityScore ??
+          (food as any).qualityScore,
+      ) || 50;
+    const nutrientDensity =
+      Number(
+        (food as any).healthAssessment?.nutrientDensity ??
+          (food as any).nutrientDensity,
+      ) || 50;
     const healthScore = Math.round((qualityScore + nutrientDensity) / 2);
 
     // 简化决策：基于 quality_score
@@ -1235,6 +1443,7 @@ export class FoodAnalyzeController {
           name: food.name,
           foodLibraryId: food.id,
           quantity: servingDesc,
+          standardServingDesc: servingDesc,
           estimatedWeightGrams: Number(pg?.standardServingG) || 100,
           category: food.category || undefined,
           confidence: confidence / 100,
@@ -1274,6 +1483,8 @@ export class FoodAnalyzeController {
       },
       entitlement: { tier: summary.tier, fieldsHidden: [] },
     };
+
+    await this.localizeAnalysisResult(v61, this.i18n.currentLocale());
 
     // 4. 按订阅等级裁剪
     const trimmedResult = this.resultEntitlementService.trimResult(

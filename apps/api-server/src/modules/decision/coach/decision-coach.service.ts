@@ -588,10 +588,7 @@ export class DecisionCoachService {
     const gp = userContext?.goalProgress;
     if (gp?.executionRate != null) {
       parts.push(
-        cl('summary.executionNote', locale).replace(
-          '{rate}',
-          String(Math.round(gp.executionRate * 100)),
-        ),
+        cl('summary.executionNote', locale, { rate: Math.round(gp.executionRate * 100) }),
       );
     }
 
@@ -611,10 +608,7 @@ export class DecisionCoachService {
     if (!gp?.streakDays || gp.streakDays < 2) return undefined;
 
     const locale = lang ? COACH_LOCALE_TO_BCP47[lang] : undefined;
-    return cl('summary.streakNote', locale).replace(
-      '{days}',
-      String(gp.streakDays),
-    );
+    return cl('summary.streakNote', locale, { days: gp.streakDays });
   }
 }
 

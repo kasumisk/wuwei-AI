@@ -56,22 +56,14 @@ export class EvidencePackBuilderService {
 
     const projected = analysisState.projectedAfterMeal.completionRatio;
     const contextEvidence = [
-      cl('evidence.caloriesCompletion', locale).replace(
-        '{percent}',
-        String(projected.calories),
-      ),
-      cl('evidence.proteinCompletion', locale).replace(
-        '{percent}',
-        String(projected.protein),
-      ),
-      cl('evidence.fatCompletion', locale).replace(
-        '{percent}',
-        String(projected.fat),
-      ),
-      cl('evidence.carbsCompletion', locale).replace(
-        '{percent}',
-        String(projected.carbs),
-      ),
+      cl('evidence.caloriesCompletion', locale, {
+        percent: projected.calories,
+      }),
+      cl('evidence.proteinCompletion', locale, {
+        percent: projected.protein,
+      }),
+      cl('evidence.fatCompletion', locale, { percent: projected.fat }),
+      cl('evidence.carbsCompletion', locale, { percent: projected.carbs }),
       // V3.3: 上下文分析问题
       ...(contextualAnalysis?.identifiedIssues || [])
         .slice(0, 3)
@@ -80,19 +72,17 @@ export class EvidencePackBuilderService {
       ...(userContext?.goalProgress?.streakDays != null &&
       userContext.goalProgress.streakDays >= 2
         ? [
-            cl('evidence.healthyStreak', locale).replace(
-              '{days}',
-              String(userContext.goalProgress.streakDays),
-            ),
+            cl('evidence.healthyStreak', locale, {
+              days: userContext.goalProgress.streakDays,
+            }),
           ]
         : []),
       // V4.0 P3.3: 执行率
       ...(userContext?.goalProgress?.executionRate != null
         ? [
-            cl('evidence.executionRate', locale).replace(
-              '{rate}',
-              String(Math.round(userContext.goalProgress.executionRate * 100)),
-            ),
+            cl('evidence.executionRate', locale, {
+              rate: Math.round(userContext.goalProgress.executionRate * 100),
+            }),
           ]
         : []),
     ];
@@ -121,46 +111,40 @@ export class EvidencePackBuilderService {
         : []),
       ...(confidenceDiagnostics.analysisQualityBand
         ? [
-            cl('evidence.analysisQuality', locale).replace(
-              '{band}',
-              translateEnum(
+            cl('evidence.analysisQuality', locale, {
+              band: translateEnum(
                 'analysisQuality',
                 confidenceDiagnostics.analysisQualityBand,
                 locale,
               ),
-            ),
+            }),
           ]
         : []),
       ...(confidenceDiagnostics.analysisCompletenessScore != null
         ? [
-            cl('evidence.analysisCompleteness', locale).replace(
-              '{percent}',
-              String(
-                Math.round(
-                  confidenceDiagnostics.analysisCompletenessScore * 100,
-                ),
+            cl('evidence.analysisCompleteness', locale, {
+              percent: Math.round(
+                confidenceDiagnostics.analysisCompletenessScore * 100,
               ),
-            ),
+            }),
           ]
         : []),
       ...(confidenceDiagnostics.reviewLevel
         ? [
-            cl('evidence.reviewLevel', locale).replace(
-              '{level}',
-              translateEnum(
+            cl('evidence.reviewLevel', locale, {
+              level: translateEnum(
                 'reviewLevel',
                 confidenceDiagnostics.reviewLevel,
                 locale,
               ),
-            ),
+            }),
           ]
         : []),
       ...(confidenceDiagnostics.qualitySignals?.length
         ? [
-            cl('evidence.qualitySignals', locale).replace(
-              '{signals}',
-              confidenceDiagnostics.qualitySignals.join(', '),
-            ),
+            cl('evidence.qualitySignals', locale, {
+              signals: confidenceDiagnostics.qualitySignals.join(', '),
+            }),
           ]
         : []),
       ...confidenceDiagnostics.uncertaintyReasons,
@@ -221,10 +205,9 @@ export class EvidencePackBuilderService {
 
     const confidenceNote =
       promptDepth === 'detailed'
-        ? cl('evidence.confidenceNote', locale).replace(
-            '{percent}',
-            String(Math.round((diag.overallConfidence ?? 0.7) * 100)),
-          )
+        ? cl('evidence.confidenceNote', locale, {
+            percent: Math.round((diag.overallConfidence ?? 0.7) * 100),
+          })
         : undefined;
 
     return {
