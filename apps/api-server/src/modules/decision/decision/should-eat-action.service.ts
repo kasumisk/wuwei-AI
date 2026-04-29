@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { I18nService, I18nLocale } from '../../../core/i18n';
 import {
   ConfidenceDiagnostics,
   DecisionSummary,
@@ -9,11 +10,10 @@ import {
   UnifiedUserContext,
 } from '../types/analysis-result.types';
 import { DecisionOutput } from './food-decision.service';
-import { cl } from '../i18n/decision-labels';
-import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
-
 @Injectable()
 export class ShouldEatActionService {
+  constructor(private readonly i18n: I18nService) {}
+
   build(input: {
     mode: 'pre_eat' | 'post_eat';
     decisionOutput: DecisionOutput;
@@ -22,7 +22,7 @@ export class ShouldEatActionService {
     userContext?: UnifiedUserContext;
     confidenceDiagnostics: ConfidenceDiagnostics;
     recoveryAction?: RecoveryAction;
-    locale?: Locale;
+    locale?: I18nLocale;
   }): ShouldEatAction {
     const {
       mode,
@@ -91,7 +91,7 @@ export class ShouldEatActionService {
     userContext: UnifiedUserContext | undefined,
     confidenceDiagnostics: ConfidenceDiagnostics,
     recoveryAction?: RecoveryAction,
-    locale?: Locale,
+    locale?: I18nLocale,
   ): string {
     if (mode === 'post_eat' && recoveryAction) {
       return recoveryAction.todayAdjustment;
@@ -102,11 +102,11 @@ export class ShouldEatActionService {
       (userContext?.dietaryRestrictions?.length || 0) > 0 ||
       (userContext?.healthConditions?.length || 0) > 0;
     if (hasHealthConstraint) {
-      return cl('action.healthConstraintFirst', locale);
+      return this.i18n.t('decision.action.healthConstraintFirst', locale);
     }
 
     if (confidenceDiagnostics.decisionConfidence < 0.6) {
-      return cl('action.conservativeFirst', locale);
+      return this.i18n.t('decision.action.conservativeFirst', locale);
     }
 
     if (summary?.actionItems?.[0]) {
@@ -118,8 +118,8 @@ export class ShouldEatActionService {
     }
 
     return decisionOutput.decision.recommendation === 'recommend'
-      ? cl('action.eatAsIs', locale)
-      : cl('action.adjustFirst', locale);
+      ? this.i18n.t('decision.action.eatAsIs', locale)
+      : this.i18n.t('decision.action.adjustFirst', locale);
   }
 
   /**
@@ -157,7 +157,7 @@ export class ShouldEatActionService {
       candidates: FoodAlternative[];
     };
     recoveryAction?: RecoveryAction;
-    locale?: Locale;
+    locale?: I18nLocale;
   }): string[] {
     const actions = [...(input.summary?.actionItems || [])];
     if (input.summary?.decisionGuardrails?.length) {
@@ -166,7 +166,7 @@ export class ShouldEatActionService {
 
     if (input.portionAction) {
       actions.push(
-        cl('action.portionControl', input.locale, {
+        this.i18n.t('decision.action.portionControl', input.locale, {
           percent: input.portionAction.suggestedPercent,
           cal: input.portionAction.suggestedCalories,
         }),
@@ -175,7 +175,7 @@ export class ShouldEatActionService {
 
     if (input.replacementAction?.candidates?.[0]) {
       actions.push(
-        cl('action.switchTo', input.locale, {
+        this.i18n.t('decision.action.switchTo', input.locale, {
           name: input.replacementAction.candidates[0].name,
         }),
       );

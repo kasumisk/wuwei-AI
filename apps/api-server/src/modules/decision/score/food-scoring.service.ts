@@ -12,6 +12,7 @@
  * - V1.9: 引用共享常量 scoring-dimensions.ts，使用 nutrition-estimator 纯函数
  */
 import { Injectable, Logger } from '@nestjs/common';
+import { I18nService, I18nLocale } from '../../../core/i18n';
 import {
   NutritionScoreService,
   NutritionScoreBreakdown,
@@ -22,8 +23,6 @@ import { FoodService } from '../../diet/app/services/food.service';
 import { AnalysisScore } from '../types/analysis-result.types';
 import type { AnalyzedFoodItem } from '../types/food-item.types';
 import type { BreakdownExplanation } from '../types/decision.types';
-import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
-import { cl } from '../i18n/decision-labels';
 import {
   estimateQuality as _estimateQuality,
   estimateSatiety as _estimateSatiety,
@@ -37,7 +36,7 @@ import {
 } from '../config/scoring-dimensions';
 import { hasCondition } from '../config/condition-aliases';
 
-function resolveScoringLocale(locale?: Locale): Locale {
+function resolveScoringLocale(locale?: I18nLocale): I18nLocale {
   return locale ?? 'zh-CN';
 }
 
@@ -125,10 +124,10 @@ export interface ScoringResult {
 export class FoodScoringService {
   private readonly logger = new Logger(FoodScoringService.name);
 
-  constructor(
-    private readonly nutritionScoreService: NutritionScoreService,
+  constructor(private readonly nutritionScoreService: NutritionScoreService,
     private readonly behaviorService: BehaviorService,
     private readonly foodService: FoodService,
+    private readonly i18n: I18nService,
   ) {}
 
   // ==================== 公共方法 ====================
@@ -143,7 +142,7 @@ export class FoodScoringService {
     totals: { calories: number; protein: number; fat: number; carbs: number },
     ctx: ScoringContext,
     userId?: string,
-    locale?: Locale,
+    locale?: I18nLocale,
   ): Promise<ScoringResult> {
     // 置信度: 食物置信度均值
     const avgConfidence =
@@ -284,7 +283,7 @@ export class FoodScoringService {
     userId: string,
     goalType: string,
     profile: any,
-    locale?: Locale,
+    locale?: I18nLocale,
   ): Promise<{
     score: number;
     breakdown: NutritionScoreBreakdown;
@@ -353,7 +352,7 @@ export class FoodScoringService {
    */
   explainBreakdown(
     breakdown: NutritionScoreBreakdown,
-    locale?: Locale,
+    locale?: I18nLocale,
     quantitativeData?: {
       mealCalories?: number;
       targetCalories?: number;
@@ -479,7 +478,7 @@ export class FoodScoringService {
       avgMealsPerDay: number;
       targetMeals: number;
     };
-    locale: Locale;
+    locale: I18nLocale;
     quantitativeData?: Parameters<FoodScoringService['explainBreakdown']>[2];
     /** V3.9 P1.3: 平均置信度 0-100，低于 50 时触发评分衰减 */
     avgConfidence?: number;
@@ -648,7 +647,7 @@ export class FoodScoringService {
     breakdown: import('../../diet/app/services/nutrition-score.service').NutritionScoreBreakdown,
     foods: ScoringFoodItem[],
     explanations: BreakdownExplanation[] | undefined,
-    locale: Locale,
+    locale: I18nLocale,
   ): {
     adjustedHealthScore: number;
     explanations: BreakdownExplanation[] | undefined;
@@ -663,11 +662,11 @@ export class FoodScoringService {
         adjusted = Math.round(adjusted * 0.85);
         warnings.push({
           dimension: 'healthCondition_diabetes',
-          label: cl('health.diabetesRisk.label', locale),
+          label: this.i18n.t('decision.health.diabetesRisk.label', locale),
           score: breakdown.glycemicImpact,
           impact: 'critical',
-          message: cl('health.diabetesRisk.message', locale, { score: breakdown.glycemicImpact }),
-          suggestion: cl('health.diabetesRisk.suggestion', locale),
+          message: this.i18n.t('decision.health.diabetesRisk.message', locale, { score: breakdown.glycemicImpact }),
+          suggestion: this.i18n.t('decision.health.diabetesRisk.suggestion', locale),
         });
       }
     }
@@ -678,11 +677,11 @@ export class FoodScoringService {
         adjusted = Math.round(adjusted * 0.85);
         warnings.push({
           dimension: 'healthCondition_cardiovascular',
-          label: cl('health.cardiovascularRisk.label', locale),
+          label: this.i18n.t('decision.health.cardiovascularRisk.label', locale),
           score: breakdown.macroBalance,
           impact: 'critical',
-          message: cl('health.cardiovascularRisk.message', locale, { score: breakdown.macroBalance }),
-          suggestion: cl('health.cardiovascularRisk.suggestion', locale),
+          message: this.i18n.t('decision.health.cardiovascularRisk.message', locale, { score: breakdown.macroBalance }),
+          suggestion: this.i18n.t('decision.health.cardiovascularRisk.suggestion', locale),
         });
       }
     }
@@ -694,11 +693,11 @@ export class FoodScoringService {
         adjusted = Math.round(adjusted * 0.9);
         warnings.push({
           dimension: 'healthCondition_hypertension',
-          label: cl('health.hypertensionRisk.label', locale),
+          label: this.i18n.t('decision.health.hypertensionRisk.label', locale),
           score: Math.max(0, 100 - Math.round((totalSodium - 800) / 10)),
           impact: 'warning',
-          message: cl('health.hypertensionRisk.message', locale, { sodium: Math.round(totalSodium) }),
-          suggestion: cl('health.hypertensionRisk.suggestion', locale),
+          message: this.i18n.t('decision.health.hypertensionRisk.message', locale, { sodium: Math.round(totalSodium) }),
+          suggestion: this.i18n.t('decision.health.hypertensionRisk.suggestion', locale),
         });
       }
     }
@@ -710,13 +709,13 @@ export class FoodScoringService {
         adjusted = Math.round(adjusted * 0.85);
         warnings.push({
           dimension: 'healthCondition_gout',
-          label: cl('health.goutRisk.label', locale),
+          label: this.i18n.t('decision.health.goutRisk.label', locale),
           score: 30,
           impact: 'critical',
-          message: cl('health.goutRisk.message', locale, {
+          message: this.i18n.t('decision.health.goutRisk.message', locale, {
             foods: highPurineFoods.map((f) => f.name).join(', '),
           }),
-          suggestion: cl('health.goutRisk.suggestion', locale),
+          suggestion: this.i18n.t('decision.health.goutRisk.suggestion', locale),
         });
       }
     }
@@ -728,13 +727,13 @@ export class FoodScoringService {
         adjusted = Math.round(adjusted * 0.85);
         warnings.push({
           dimension: 'healthCondition_ibs',
-          label: cl('health.ibsRisk.label', locale),
+          label: this.i18n.t('decision.health.ibsRisk.label', locale),
           score: 30,
           impact: 'critical',
-          message: cl('health.ibsRisk.message', locale, {
+          message: this.i18n.t('decision.health.ibsRisk.message', locale, {
             foods: highFodmapFoods.map((f) => f.name).join(', '),
           }),
-          suggestion: cl('health.ibsRisk.suggestion', locale),
+          suggestion: this.i18n.t('decision.health.ibsRisk.suggestion', locale),
         });
       }
     }
@@ -746,13 +745,13 @@ export class FoodScoringService {
         adjusted = Math.round(adjusted * 0.9);
         warnings.push({
           dimension: 'healthCondition_kidney_stones',
-          label: cl('health.kidneyStoneRisk.label', locale),
+          label: this.i18n.t('decision.health.kidneyStoneRisk.label', locale),
           score: 40,
           impact: 'warning',
-          message: cl('health.kidneyStoneRisk.message', locale, {
+          message: this.i18n.t('decision.health.kidneyStoneRisk.message', locale, {
             foods: highOxalateFoods.map((f) => f.name).join(', '),
           }),
-          suggestion: cl('health.kidneyStoneRisk.suggestion', locale),
+          suggestion: this.i18n.t('decision.health.kidneyStoneRisk.suggestion', locale),
         });
       }
     }
@@ -768,7 +767,7 @@ export class FoodScoringService {
         adjusted = Math.round(adjusted * 0.85);
         warnings.push({
           dimension: 'healthCondition_hyperlipidemia',
-          label: cl('health.hyperlipidemiaRisk.label', locale),
+          label: this.i18n.t('decision.health.hyperlipidemiaRisk.label', locale),
           score: Math.max(
             0,
             100 -
@@ -776,11 +775,11 @@ export class FoodScoringService {
               Math.round(totalTransFat * 20),
           ),
           impact: totalTransFat > 1 ? 'critical' : 'warning',
-          message: cl('health.hyperlipidemiaRisk.message', locale, {
+          message: this.i18n.t('decision.health.hyperlipidemiaRisk.message', locale, {
             cholesterol: Math.round(totalCholesterol),
             transFat: Math.round(totalTransFat * 10) / 10,
           }),
-          suggestion: cl('health.hyperlipidemiaRisk.suggestion', locale),
+          suggestion: this.i18n.t('decision.health.hyperlipidemiaRisk.suggestion', locale),
         });
       }
     }

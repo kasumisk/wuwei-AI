@@ -12,6 +12,7 @@
  * - 与 FoodDecisionService 解耦，可独立测试
  */
 import { Injectable, Logger } from '@nestjs/common';
+import { I18nService, I18nLocale } from '../../../core/i18n';
 import {
   FoodAlternative,
   AlternativeComparison,
@@ -32,8 +33,6 @@ import type {
   UserPreferenceProfile,
 } from '../../diet/app/recommendation/types/recommendation.types';
 import { FoodLibraryService } from '../../food/app/services/food-library.service';
-import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
-import { cl } from '../i18n/decision-labels';
 import { DecisionFoodItem } from './food-decision.service';
 import { RecommendationEngineService } from '../../diet/app/services/recommendation-engine.service';
 import { MealRecommendation } from '../../diet/app/recommendation/types/recommendation.types';
@@ -67,7 +66,7 @@ export interface AlternativeInput {
   totals: NutritionTotals;
   userContext: UnifiedUserContext;
   scoreBreakdown?: NutritionScoreBreakdown;
-  locale?: Locale;
+  locale?: I18nLocale;
   userId?: string;
   replacementPatterns?: Record<string, number>;
   /** V1.9: 用户安全约束（过敏原/饮食限制等） */
@@ -86,12 +85,12 @@ export interface AlternativeInput {
 export class AlternativeSuggestionService {
   private readonly logger = new Logger(AlternativeSuggestionService.name);
 
-  constructor(
-    private readonly recommendationEngineService: RecommendationEngineService,
+  constructor(private readonly recommendationEngineService: RecommendationEngineService,
     private readonly substitutionService: SubstitutionService,
     private readonly foodLibraryService: FoodLibraryService,
     private readonly foodI18nService: FoodI18nService,
     private readonly requestCtx: RequestContextService,
+    private readonly i18n: I18nService,
   ) {}
 
   // ==================== 主入口 ====================
@@ -216,7 +215,7 @@ export class AlternativeSuggestionService {
    */
   async localizeAlternatives(
     alternatives: FoodAlternative[],
-    locale?: Locale,
+    locale?: I18nLocale,
   ): Promise<void> {
     return this.applyI18nToAlternatives(alternatives, locale ?? this.resolveLocale());
   }
@@ -224,7 +223,7 @@ export class AlternativeSuggestionService {
   /**
    * 解析当前请求的 locale（回退到 zh-CN）
    */
-  private resolveLocale(): Locale {
+  private resolveLocale(): I18nLocale {
     const locale = this.requestCtx.locale;
     return locale === 'en-US' || locale === 'ja-JP' || locale === 'zh-CN'
       ? locale
@@ -240,7 +239,7 @@ export class AlternativeSuggestionService {
    */
   private async applyI18nToAlternatives(
     alternatives: FoodAlternative[],
-    locale: Locale | undefined,
+    locale: I18nLocale | undefined,
   ): Promise<void> {
     const effectiveLocale = locale ?? this.resolveLocale();
 
@@ -339,7 +338,7 @@ export class AlternativeSuggestionService {
     _preferenceProfile?: UserPreferenceProfile,
     constraints?: AlternativeConstraints,
     contextualAnalysis?: ContextualAnalysis,
-    locale?: Locale,
+    locale?: I18nLocale,
   ): Promise<FoodAlternative[]> {
     const currentMealCalories = foods.reduce(
       (sum, food) => sum + food.calories,
@@ -498,13 +497,13 @@ export class AlternativeSuggestionService {
     currentMealProtein: number,
     constraints?: AlternativeConstraints,
     scenarioType?: 'takeout' | 'convenience' | 'homeCook',
-    locale?: Locale,
+    locale?: I18nLocale,
   ): string {
     if (
       constraints?.preferLowCalorie &&
       candidate.servingCalories < currentMealCalories
     ) {
-      return cl('alt.lowerCal', locale, {
+      return this.i18n.t('decision.alt.lowerCal', locale, {
         newCal: Math.round(candidate.servingCalories),
         oldCal: Math.round(currentMealCalories),
       });
@@ -515,7 +514,7 @@ export class AlternativeSuggestionService {
       candidate.servingCarbs !== undefined &&
       candidate.servingCarbs < 15
     ) {
-      return cl('alt.lowGlycemic', locale, {
+      return this.i18n.t('decision.alt.lowGlycemic', locale, {
         carbs: Math.round(candidate.servingCarbs),
       });
     }
@@ -524,17 +523,17 @@ export class AlternativeSuggestionService {
       constraints?.preferHighProtein &&
       candidate.servingProtein > currentMealProtein
     ) {
-      return cl('alt.higherProtein', locale, {
+      return this.i18n.t('decision.alt.higherProtein', locale, {
         newPro: Math.round(candidate.servingProtein),
         oldPro: Math.round(currentMealProtein),
       });
     }
 
     if (scenarioType === 'convenience') {
-      return cl('alt.similar', locale);
+      return this.i18n.t('decision.alt.similar', locale);
     }
 
-    return cl('alt.matchScore', locale, {
+    return this.i18n.t('decision.alt.matchScore', locale, {
       score: Math.round((candidate.score || 0) * 100),
     });
   }
@@ -546,7 +545,7 @@ export class AlternativeSuggestionService {
     userConstraints?: UserProfileConstraints,
     preferenceProfile?: UserPreferenceProfile,
     constraints?: AlternativeConstraints,
-    locale?: Locale,
+    locale?: I18nLocale,
   ): Promise<FoodAlternative[]> {
     const alternatives: FoodAlternative[] = [];
     const seenNames = new Set<string>();
@@ -599,7 +598,7 @@ export class AlternativeSuggestionService {
           constraints?.preferLowCalorie &&
           c.servingCalories < food.calories * 0.8
         ) {
-          reason = cl('alt.lowerCal', locale, {
+          reason = this.i18n.t('decision.alt.lowerCal', locale, {
             newCal: Math.round(c.servingCalories),
             oldCal: Math.round(food.calories),
           });
@@ -607,7 +606,7 @@ export class AlternativeSuggestionService {
           constraints?.preferHighProtein &&
           c.servingProtein > food.protein * 1.1
         ) {
-          reason = cl('alt.higherProtein', locale, {
+          reason = this.i18n.t('decision.alt.higherProtein', locale, {
             newPro: Math.round(c.servingProtein),
             oldPro: Math.round(food.protein),
           });
@@ -615,7 +614,7 @@ export class AlternativeSuggestionService {
           ctx.goalType === 'fat_loss' &&
           c.servingCalories < food.calories * 0.7
         ) {
-          reason = cl('alt.lowerCal', locale, {
+          reason = this.i18n.t('decision.alt.lowerCal', locale, {
             newCal: Math.round(c.servingCalories),
             oldCal: Math.round(food.calories),
           });
@@ -623,16 +622,16 @@ export class AlternativeSuggestionService {
           ctx.goalType === 'muscle_gain' &&
           c.servingProtein > food.protein * 1.2
         ) {
-          reason = cl('alt.higherProtein', locale, {
+          reason = this.i18n.t('decision.alt.higherProtein', locale, {
             newPro: Math.round(c.servingProtein),
             oldPro: Math.round(food.protein),
           });
         } else if (c.substituteScore > 0.7) {
-          reason = cl('alt.matchScore', locale, {
+          reason = this.i18n.t('decision.alt.matchScore', locale, {
             score: Math.round(c.substituteScore * 100),
           });
         } else {
-          reason = cl('alt.similar', locale);
+          reason = this.i18n.t('decision.alt.similar', locale);
         }
 
         alternatives.push({
@@ -832,7 +831,7 @@ export class AlternativeSuggestionService {
   private async generateStaticAlternatives(
     foods: DecisionFoodItem[],
     ctx: UnifiedUserContext,
-    locale?: Locale,
+    locale?: I18nLocale,
   ): Promise<FoodAlternative[]> {
     const totalProtein = foods.reduce((s, f) => s + f.protein, 0);
     const totalCalories = foods.reduce((s, f) => s + f.calories, 0);
@@ -845,7 +844,8 @@ export class AlternativeSuggestionService {
     // V4.8: Hint-only — no food library search (engine paths handle that)
     const addFromRule = (rule: AlternativeRule) => {
       if (matched.length >= 5) return;
-      const hint = cl(rule.fallbackHint, locale);
+      // i18n-allow-dynamic
+      const hint = this.i18n.t(`decision.${rule.fallbackHint}`, locale);
       if (!hint || seenNames.has(hint)) return;
 
       seenNames.add(hint);
@@ -897,13 +897,13 @@ export class AlternativeSuggestionService {
     ) {
       const lateHints: FoodAlternative[] = [
         {
-          name: cl('alt.lateNightMilk', locale),
-          reason: cl('alt.lateNightMilkReason', locale),
+          name: this.i18n.t('decision.alt.lateNightMilk', locale),
+          reason: this.i18n.t('decision.alt.lateNightMilkReason', locale),
           source: 'static',
         },
         {
-          name: cl('alt.lateNightFruit', locale),
-          reason: cl('alt.lateNightFruitReason', locale),
+          name: this.i18n.t('decision.alt.lateNightFruit', locale),
+          reason: this.i18n.t('decision.alt.lateNightFruitReason', locale),
           source: 'static',
         },
       ];
@@ -982,7 +982,7 @@ export class AlternativeSuggestionService {
   private attachRankScores(
     alternatives: FoodAlternative[],
     ctx: UnifiedUserContext,
-    locale?: Locale,
+    locale?: I18nLocale,
     /** V5.0: 原始食物的 foodForm（用于匹配加分） */
     originalFoodForms?: string[],
     /** V5.0: 原始食物的 flavorProfile（用于匹配加分） */
@@ -1014,10 +1014,10 @@ export class AlternativeSuggestionService {
         score += calScore * calWeight;
         if (calDiff < -AP.rankCalDiffThreshold)
           reasons.push(
-            cl('alt.calLess', locale, { amount: Math.abs(calDiff) }),
+            this.i18n.t('decision.alt.calLess', locale, { amount: Math.abs(calDiff) }),
           );
         else if (calDiff > AP.rankCalDiffThreshold)
-          reasons.push(cl('alt.calMore', locale, { amount: calDiff }));
+          reasons.push(this.i18n.t('decision.alt.calMore', locale, { amount: calDiff }));
 
         // 蛋白质维度
         const prosScore = Math.max(
@@ -1030,17 +1030,17 @@ export class AlternativeSuggestionService {
             : AP.rankProteinWeightDefault;
         score += prosScore * prosWeight;
         if (prosDiff > AP.rankProteinDiffThreshold)
-          reasons.push(cl('alt.proteinMore', locale, { amount: prosDiff }));
+          reasons.push(this.i18n.t('decision.alt.proteinMore', locale, { amount: prosDiff }));
         else if (prosDiff < -AP.rankProteinDiffThreshold)
           reasons.push(
-            cl('alt.proteinLess', locale, { amount: Math.abs(prosDiff) }),
+            this.i18n.t('decision.alt.proteinLess', locale, { amount: Math.abs(prosDiff) }),
           );
 
         // V5.0 P2.1: foodForm match boost
         if (originalFoodForms?.length && (alt as any).foodForm) {
           if (originalFoodForms.includes((alt as any).foodForm)) {
             score += AP.foodFormMatchBoost;
-            reasons.push(cl('alt.similarForm', locale));
+            reasons.push(this.i18n.t('decision.alt.similarForm', locale));
           }
         }
 
@@ -1048,13 +1048,13 @@ export class AlternativeSuggestionService {
         if (originalFlavorProfiles?.length && (alt as any).flavorProfile) {
           if (originalFlavorProfiles.includes((alt as any).flavorProfile)) {
             score += AP.flavorMatchBoost;
-            reasons.push(cl('alt.similarFlavor', locale));
+            reasons.push(this.i18n.t('decision.alt.similarFlavor', locale));
           }
         }
 
         // 归一化到 [0, 1]
         const finalScore = Math.max(0, Math.min(1, score));
-        if (reasons.length === 0) reasons.push(cl('alt.balanced', locale));
+        if (reasons.length === 0) reasons.push(this.i18n.t('decision.alt.balanced', locale));
 
         return {
           ...alt,

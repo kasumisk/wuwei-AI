@@ -12,6 +12,7 @@
  * - 持久化是 fire-and-forget，不阻塞返回
  */
 import { Injectable, Logger } from '@nestjs/common';
+import { I18nService, I18nLocale } from '../../../core/i18n';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import * as crypto from 'crypto';
 import {
@@ -67,9 +68,6 @@ import { ShouldEatActionService } from '../decision/should-eat-action.service';
 import { AnalysisAccuracyService } from './analysis-accuracy.service';
 import { AnalysisContextService } from './analysis-context.service';
 import { DecisionEngineService } from '../decision/decision-engine.service';
-import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
-import { cl } from '../i18n/decision-labels';
-
 // ==================== 管道输入类型 ====================
 
 /** 文本链路管道输入 */
@@ -78,7 +76,7 @@ export interface TextPipelineInput {
   rawText: string;
   mealType?: string;
   userId?: string;
-  locale?: Locale;
+  locale?: I18nLocale;
   /** 解析后的食物列表（文本链路 Step 1 输出） */
   foods: AnalyzedFoodItem[];
   /** 用于评分的 ScoringFoodItem（含 libraryMatch 信息） */
@@ -102,7 +100,7 @@ export interface ImagePipelineInput {
   imageUrl: string;
   mealType?: string;
   userId: string;
-  locale?: Locale;
+  locale?: I18nLocale;
   /** 识别后的食物列表（图片链路 Step 1 输出） */
   foods: AnalyzedFoodItem[];
   /** 图片链路已有评分（来自 AI 或评分引擎覆盖），可选 */
@@ -122,8 +120,7 @@ export type PipelineInput = TextPipelineInput | ImagePipelineInput;
 export class AnalysisPipelineService {
   private readonly logger = new Logger(AnalysisPipelineService.name);
 
-  constructor(
-    private readonly userContextBuilder: UserContextBuilderService,
+  constructor(private readonly userContextBuilder: UserContextBuilderService,
     private readonly foodScoringService: FoodScoringService,
     private readonly scoringStageService: ScoringStageService,
     private readonly decisionStageService: DecisionStageService,
@@ -142,6 +139,7 @@ export class AnalysisPipelineService {
     private readonly analysisAccuracyService: AnalysisAccuracyService,
     private readonly analysisContextService: AnalysisContextService,
     private readonly decisionEngineService: DecisionEngineService,
+    private readonly i18n: I18nService,
   ) {}
 
   /**
@@ -369,7 +367,7 @@ export class AnalysisPipelineService {
   private applyAccuracyDowngrade(
     accuracy: FoodAnalysisPackage | undefined,
     decide: DecideStageResult,
-    locale?: Locale,
+    locale?: I18nLocale,
   ): void {
     // V4.1: 优先使用 decisionImpact 判断是否降级
     const shouldDowngrade =
@@ -397,8 +395,8 @@ export class AnalysisPipelineService {
       };
     }
     if (decide.summary) {
-      decide.summary.analysisQualityNote = cl(
-        'pipeline.guardrail.accuracyLow',
+      decide.summary.analysisQualityNote = this.i18n.t(
+        'decision.pipeline.guardrail.accuracyLow',
         locale,
       );
     }
@@ -495,21 +493,21 @@ export class AnalysisPipelineService {
     summary: NonNullable<FoodAnalysisResultV61['summary']>,
     diagnostics: ConfidenceDiagnostics,
     mode?: 'pre_eat' | 'post_eat',
-    locale?: Locale,
+    locale?: I18nLocale,
   ): void {
     summary.analysisQualityBand = diagnostics.analysisQualityBand;
     summary.reviewLevel = diagnostics.reviewLevel;
     if (diagnostics.analysisQualityBand === 'high') {
-      summary.analysisQualityNote = cl('pipeline.quality.high', locale);
+      summary.analysisQualityNote = this.i18n.t('decision.pipeline.quality.high', locale);
     } else if (diagnostics.analysisQualityBand === 'medium') {
-      summary.analysisQualityNote = cl('pipeline.quality.medium', locale);
+      summary.analysisQualityNote = this.i18n.t('decision.pipeline.quality.medium', locale);
     } else {
-      summary.analysisQualityNote = cl('pipeline.quality.low', locale);
+      summary.analysisQualityNote = this.i18n.t('decision.pipeline.quality.low', locale);
     }
 
     const guardrails: string[] = [];
     if (summary.analysisQualityBand === 'low') {
-      guardrails.push(cl('pipeline.guardrail.lowQuality', locale));
+      guardrails.push(this.i18n.t('decision.pipeline.guardrail.lowQuality', locale));
     }
     if (summary.healthConstraintNote) {
       guardrails.push(summary.healthConstraintNote);
@@ -518,11 +516,11 @@ export class AnalysisPipelineService {
       guardrails.push(summary.dynamicDecisionHint);
     }
     if (summary.verdict === 'avoid') {
-      guardrails.push(cl('pipeline.guardrail.avoid', locale));
+      guardrails.push(this.i18n.t('decision.pipeline.guardrail.avoid', locale));
     }
     // V3.5 P3.1: post_eat 模式追加恢复型 guardrail
     if (mode === 'post_eat') {
-      guardrails.push(cl('pipeline.guardrail.postEat', locale));
+      guardrails.push(this.i18n.t('decision.pipeline.guardrail.postEat', locale));
     }
 
     summary.decisionGuardrails = Array.from(new Set(guardrails)).slice(0, 3);

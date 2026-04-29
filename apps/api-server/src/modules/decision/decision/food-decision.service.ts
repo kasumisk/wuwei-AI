@@ -15,6 +15,7 @@
  * - 本服务只做编排，从 1064 行瘦身
  */
 import { Injectable, Logger } from '@nestjs/common';
+import { I18nService, I18nLocale } from '../../../core/i18n';
 import {
   FoodDecision,
   FoodAlternative,
@@ -28,8 +29,6 @@ import {
 } from '../types/analysis-result.types';
 import { NutritionScoreBreakdown } from '../../diet/app/services/nutrition-score.service';
 import { BehaviorService } from '../../diet/app/services/behavior.service';
-import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
-import { cl } from '../i18n/decision-labels';
 import { AlternativeSuggestionService } from './alternative-suggestion.service';
 import { DecisionExplainerService } from './decision-explainer.service';
 import {
@@ -133,8 +132,7 @@ export interface DecisionOutput {
 export class FoodDecisionService {
   private readonly logger = new Logger(FoodDecisionService.name);
 
-  constructor(
-    private readonly behaviorService: BehaviorService,
+  constructor(private readonly behaviorService: BehaviorService,
     private readonly alternativeSuggestionService: AlternativeSuggestionService,
     private readonly decisionExplainerService: DecisionExplainerService,
     private readonly foodScoringService: FoodScoringService,
@@ -149,6 +147,7 @@ export class FoodDecisionService {
     // 食物名多语言翻译服务（下一餐建议食物名 i18n）
     private readonly foodI18nService: FoodI18nService,
     private readonly requestCtx: RequestContextService,
+    private readonly i18n: I18nService,
   ) {}
 
   // ==================== 主入口 ====================
@@ -163,7 +162,7 @@ export class FoodDecisionService {
     nutritionScore: number,
     breakdown: NutritionScoreBreakdown | undefined,
     userId?: string,
-    locale?: Locale,
+    locale?: I18nLocale,
     mode: 'pre_eat' | 'post_eat' = 'pre_eat',
     /** V3.3: 上下文分析识别的营养问题 */
     nutritionIssues?: NutritionIssue[],
@@ -191,7 +190,7 @@ export class FoodDecisionService {
     nutritionScore: number,
     breakdown: NutritionScoreBreakdown | undefined,
     userId?: string,
-    locale?: Locale,
+    locale?: I18nLocale,
     mode: 'pre_eat' | 'post_eat' = 'pre_eat',
     nutritionIssues?: NutritionIssue[],
     contextualAnalysis?: ContextualAnalysis,
@@ -249,7 +248,7 @@ export class FoodDecisionService {
     if (modification.additionalReasons.length > 0) {
       decision.reason = [decision.reason, ...modification.additionalReasons]
         .filter(Boolean)
-        .join(cl('separator.list', locale));
+        .join(this.i18n.t('decision.separator.list', locale));
     }
 
     // 2. 结构化决策因子（委托 DecisionEngineService）
@@ -422,7 +421,7 @@ export class FoodDecisionService {
     foods: DecisionFoodItem[],
     ctx: UnifiedUserContext,
     nutritionScore: number,
-    locale?: Locale,
+    locale?: I18nLocale,
   ): FoodDecision {
     return this.decisionEngine.computeDecision(
       foods,
@@ -434,7 +433,7 @@ export class FoodDecisionService {
 
   extractDecisionFactors(
     breakdown: NutritionScoreBreakdown,
-    locale?: Locale,
+    locale?: I18nLocale,
   ): DecisionFactor[] {
     return this.decisionEngine.extractDecisionFactors(breakdown, locale);
   }
@@ -454,7 +453,7 @@ export class FoodDecisionService {
   generateNextMealAdvice(
     ctx: UnifiedUserContext,
     currentMealTotals: NutritionTotals,
-    locale?: Locale,
+    locale?: I18nLocale,
     foodPreferences?: {
       frequentFoods?: string[];
       loves?: string[];
@@ -490,7 +489,7 @@ export class FoodDecisionService {
     foodPreferences:
       | { frequentFoods?: string[]; loves?: string[]; avoids?: string[] }
       | undefined,
-    locale?: Locale,
+    locale?: I18nLocale,
   ): Promise<
     | { frequentFoods?: string[]; loves?: string[]; avoids?: string[] }
     | undefined

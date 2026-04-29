@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { I18nService, I18nLocale } from '../../../core/i18n';
 import {
   AnalysisState,
   ConfidenceDiagnostics,
@@ -12,14 +13,12 @@ import {
 } from '../types/analysis-result.types';
 import { DecisionOutput } from '../decision/food-decision.service';
 import { DailyMacroSummaryService } from '../coach/daily-macro-summary.service';
-import { cl } from '../i18n/decision-labels';
-import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 import { translateEnum } from '../../../common/i18n/enum-i18n';
 
 @Injectable()
 export class EvidencePackBuilderService {
-  constructor(
-    private readonly dailyMacroSummaryService: DailyMacroSummaryService,
+  constructor(private readonly dailyMacroSummaryService: DailyMacroSummaryService,
+    private readonly i18n: I18nService,
   ) {}
 
   build(input: {
@@ -32,7 +31,7 @@ export class EvidencePackBuilderService {
     contextualAnalysis?: ContextualAnalysis;
     /** V3.3: 结构化决策 */
     structuredDecision?: StructuredDecision;
-    locale?: Locale;
+    locale?: I18nLocale;
   }): EvidencePack {
     const {
       decisionOutput,
@@ -56,14 +55,14 @@ export class EvidencePackBuilderService {
 
     const projected = analysisState.projectedAfterMeal.completionRatio;
     const contextEvidence = [
-      cl('evidence.caloriesCompletion', locale, {
+      this.i18n.t('decision.evidence.caloriesCompletion', locale, {
         percent: projected.calories,
       }),
-      cl('evidence.proteinCompletion', locale, {
+      this.i18n.t('decision.evidence.proteinCompletion', locale, {
         percent: projected.protein,
       }),
-      cl('evidence.fatCompletion', locale, { percent: projected.fat }),
-      cl('evidence.carbsCompletion', locale, { percent: projected.carbs }),
+      this.i18n.t('decision.evidence.fatCompletion', locale, { percent: projected.fat }),
+      this.i18n.t('decision.evidence.carbsCompletion', locale, { percent: projected.carbs }),
       // V3.3: 上下文分析问题
       ...(contextualAnalysis?.identifiedIssues || [])
         .slice(0, 3)
@@ -72,7 +71,7 @@ export class EvidencePackBuilderService {
       ...(userContext?.goalProgress?.streakDays != null &&
       userContext.goalProgress.streakDays >= 2
         ? [
-            cl('evidence.healthyStreak', locale, {
+            this.i18n.t('decision.evidence.healthyStreak', locale, {
               days: userContext.goalProgress.streakDays,
             }),
           ]
@@ -80,7 +79,7 @@ export class EvidencePackBuilderService {
       // V4.0 P3.3: 执行率
       ...(userContext?.goalProgress?.executionRate != null
         ? [
-            cl('evidence.executionRate', locale, {
+            this.i18n.t('decision.evidence.executionRate', locale, {
               rate: Math.round(userContext.goalProgress.executionRate * 100),
             }),
           ]
@@ -111,7 +110,7 @@ export class EvidencePackBuilderService {
         : []),
       ...(confidenceDiagnostics.analysisQualityBand
         ? [
-            cl('evidence.analysisQuality', locale, {
+            this.i18n.t('decision.evidence.analysisQuality', locale, {
               band: translateEnum(
                 'analysisQuality',
                 confidenceDiagnostics.analysisQualityBand,
@@ -122,7 +121,7 @@ export class EvidencePackBuilderService {
         : []),
       ...(confidenceDiagnostics.analysisCompletenessScore != null
         ? [
-            cl('evidence.analysisCompleteness', locale, {
+            this.i18n.t('decision.evidence.analysisCompleteness', locale, {
               percent: Math.round(
                 confidenceDiagnostics.analysisCompletenessScore * 100,
               ),
@@ -131,7 +130,7 @@ export class EvidencePackBuilderService {
         : []),
       ...(confidenceDiagnostics.reviewLevel
         ? [
-            cl('evidence.reviewLevel', locale, {
+            this.i18n.t('decision.evidence.reviewLevel', locale, {
               level: translateEnum(
                 'reviewLevel',
                 confidenceDiagnostics.reviewLevel,
@@ -142,7 +141,7 @@ export class EvidencePackBuilderService {
         : []),
       ...(confidenceDiagnostics.qualitySignals?.length
         ? [
-            cl('evidence.qualitySignals', locale, {
+            this.i18n.t('decision.evidence.qualitySignals', locale, {
               signals: confidenceDiagnostics.qualitySignals.join(', '),
             }),
           ]
@@ -182,7 +181,7 @@ export class EvidencePackBuilderService {
     summary: DecisionSummary | undefined,
     diag: ConfidenceDiagnostics,
     promptDepth: PromptDepthLevel,
-    locale?: Locale,
+    locale?: I18nLocale,
   ): CoachOutputSchema {
     const verdict = decisionOutput.decision.recommendation ?? 'caution';
     const mainReason = decisionOutput.decision.reason ?? '';
@@ -195,7 +194,7 @@ export class EvidencePackBuilderService {
       actionSteps.push(...summary.actionItems.slice(0, 2));
     }
     if (actionSteps.length === 0) {
-      actionSteps.push(cl('evidence.defaultAction', locale));
+      actionSteps.push(this.i18n.t('decision.evidence.defaultAction', locale));
     }
 
     const cautionNote =
@@ -205,7 +204,7 @@ export class EvidencePackBuilderService {
 
     const confidenceNote =
       promptDepth === 'detailed'
-        ? cl('evidence.confidenceNote', locale, {
+        ? this.i18n.t('decision.evidence.confidenceNote', locale, {
             percent: Math.round((diag.overallConfidence ?? 0.7) * 100),
           })
         : undefined;

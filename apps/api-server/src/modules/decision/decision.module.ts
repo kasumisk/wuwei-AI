@@ -1,5 +1,5 @@
 import { Module, forwardRef } from '@nestjs/common';
-import { I18nService } from '../../config/i18n.service';
+import { I18nService } from '../../core/i18n';
 // V4.3: I18nManagementService removed — only used by deprecated DecisionClassifierService
 import { DietModule } from '../diet/diet.module';
 import { FoodModule } from '../food/food.module';
@@ -54,6 +54,16 @@ import { DecisionCoachService } from './coach/decision-coach.service';
 import { CoachInsightService } from './coach/coach-insight.service';
 import { CoachingStageService } from './coach/coaching-stage.service';
 
+// V12.5: Decision checks（DI 化的 check service，替代 config/checks/*.ts 纯函数）
+import {
+  AllergenChecksService,
+  RestrictionChecksService,
+  HealthConditionChecksService,
+  BudgetTimingChecksService,
+  ConflictReportBuilderService,
+  DecisionChecksAggregatorService,
+} from './checks';
+
 @Module({
   imports: [
     forwardRef(() => DietModule),
@@ -97,6 +107,13 @@ import { CoachingStageService } from './coach/coaching-stage.service';
     CoachInsightService,
     CoachingStageService,
     I18nService,
+    // V12.5: Decision checks (DI 化)
+    AllergenChecksService,
+    RestrictionChecksService,
+    HealthConditionChecksService,
+    BudgetTimingChecksService,
+    ConflictReportBuilderService,
+    DecisionChecksAggregatorService,
     // V4.3: I18nManagementService removed — only used by deprecated DecisionClassifierService
   ],
   exports: [
@@ -128,6 +145,13 @@ import { CoachingStageService } from './coach/coaching-stage.service';
     CoachInsightService,
     CoachingStageService,
     I18nService,
+    // V12.5: Decision checks (DI 化)
+    AllergenChecksService,
+    RestrictionChecksService,
+    HealthConditionChecksService,
+    BudgetTimingChecksService,
+    ConflictReportBuilderService,
+    DecisionChecksAggregatorService,
     // V4.3: I18nManagementService removed
   ],
 })

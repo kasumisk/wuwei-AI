@@ -12,12 +12,12 @@
  */
 
 import { Injectable } from '@nestjs/common';
+import { I18nService, I18nLocale } from '../../../core/i18n';
 import {
   MacroSlotStatus,
   NutritionIssue,
   IssueType,
 } from '../types/analysis-result.types';
-import { cl } from '../i18n/decision-labels';
 import { hasCondition } from '../config/condition-aliases';
 import type { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 
@@ -39,12 +39,14 @@ interface IssueDetectionRule {
   implicationTemplate: (
     metric: number,
     threshold: number,
-    locale?: Locale,
+    locale?: I18nLocale,
   ) => string;
 }
 
 @Injectable()
 export class NutritionIssueDetector {
+  constructor(private readonly i18n: I18nService) {}
+
   private readonly rules: IssueDetectionRule[] = [
     // 蛋白质缺口
     {
@@ -59,7 +61,7 @@ export class NutritionIssueDetector {
       metricCalculator: (progress) => progress.remaining.protein,
       thresholdCalculator: (progress) => progress.goals.protein * 0.1, // 10% 差值认为缺口
       implicationTemplate: (metric, _threshold, locale) =>
-        cl('issue.proteinDeficit', locale, { amount: Math.round(metric) }),
+        this.i18n.t('decision.issue.proteinDeficit', locale, { amount: Math.round(metric) }),
     },
 
     // 脂肪超标
@@ -77,7 +79,7 @@ export class NutritionIssueDetector {
         progress.consumed.fat - progress.goals.fat,
       thresholdCalculator: (progress) => progress.goals.fat * 0.15,
       implicationTemplate: (metric, _threshold, locale) =>
-        cl('issue.fatExcess', locale, { amount: Math.round(metric) }),
+        this.i18n.t('decision.issue.fatExcess', locale, { amount: Math.round(metric) }),
     },
 
     // 碳水超标
@@ -95,7 +97,7 @@ export class NutritionIssueDetector {
         progress.consumed.carbs - progress.goals.carbs,
       thresholdCalculator: (progress) => progress.goals.carbs * 0.15,
       implicationTemplate: (metric, _threshold, locale) =>
-        cl('issue.carbExcess', locale, { amount: Math.round(metric) }),
+        this.i18n.t('decision.issue.carbExcess', locale, { amount: Math.round(metric) }),
     },
 
     // 热量超标
@@ -113,7 +115,7 @@ export class NutritionIssueDetector {
         progress.consumed.calories - progress.goals.calories,
       thresholdCalculator: (progress) => progress.goals.calories * 0.08,
       implicationTemplate: (metric, _threshold, locale) =>
-        cl('issue.calorieExcess', locale, { amount: Math.round(metric) }),
+        this.i18n.t('decision.issue.calorieExcess', locale, { amount: Math.round(metric) }),
     },
 
     // 热量不足
@@ -131,7 +133,7 @@ export class NutritionIssueDetector {
         progress.goals.calories - progress.consumed.calories,
       thresholdCalculator: (progress) => progress.goals.calories * 0.1,
       implicationTemplate: (metric, _threshold, locale) =>
-        cl('issue.calorieDeficit', locale, { amount: Math.round(metric) }),
+        this.i18n.t('decision.issue.calorieDeficit', locale, { amount: Math.round(metric) }),
     },
 
     // 纤维素不足（仅当 slot.carbs 不超标时才检测，作为代理信号）
@@ -149,7 +151,7 @@ export class NutritionIssueDetector {
       severityCalculator: () => 'low', // 纤维问题通常低优先级
       metricCalculator: () => 0, // 占位
       thresholdCalculator: () => 0,
-      implicationTemplate: (_m, _t, locale) => cl('issue.fiberDeficit', locale),
+      implicationTemplate: (_m, _t, locale) => this.i18n.t('decision.issue.fiberDeficit', locale),
     },
 
     // 糖分超标（V3.6 P1.6 新增）
@@ -167,7 +169,7 @@ export class NutritionIssueDetector {
         progress.consumed.carbs - progress.goals.carbs,
       thresholdCalculator: (progress) => progress.goals.carbs * 0.15,
       implicationTemplate: (metric, _t, locale) =>
-        cl('issue.sugarExcess', locale, { amount: Math.round(metric) }),
+        this.i18n.t('decision.issue.sugarExcess', locale, { amount: Math.round(metric) }),
     },
   ];
 
@@ -183,7 +185,7 @@ export class NutritionIssueDetector {
     slot: MacroSlotStatus,
     progress: MacroProgress,
     healthConditions?: string[],
-    locale?: Locale,
+    locale?: I18nLocale,
     /** V4.0: 短期行为画像 + 当前小时 */
     behaviorContext?: {
       shortTermBehavior?: {
@@ -226,7 +228,7 @@ export class NutritionIssueDetector {
             carbsExcess > progress.goals.carbs * 0.2 ? 'high' : 'medium',
           metric: Math.round(carbsExcess * 100) / 100,
           threshold: 0,
-          implication: cl('issue.glycemicRisk', locale, {
+          implication: this.i18n.t('decision.issue.glycemicRisk', locale, {
             amount: Math.round(carbsExcess),
           }),
         });
@@ -240,7 +242,7 @@ export class NutritionIssueDetector {
             severity: 'medium',
             metric: 0,
             threshold: 0,
-            implication: cl('issue.sodiumRisk', locale),
+            implication: this.i18n.t('decision.issue.sodiumRisk', locale),
           });
         }
       }
@@ -253,7 +255,7 @@ export class NutritionIssueDetector {
           severity: fatExcess > progress.goals.fat * 0.25 ? 'high' : 'medium',
           metric: Math.round(fatExcess * 100) / 100,
           threshold: 0,
-          implication: cl('issue.cardiovascularRisk', locale, {
+          implication: this.i18n.t('decision.issue.cardiovascularRisk', locale, {
             amount: Math.round(fatExcess),
           }),
         });
@@ -266,7 +268,7 @@ export class NutritionIssueDetector {
           severity: 'medium',
           metric: 0,
           threshold: 0,
-          implication: cl('issue.purineRisk', locale),
+          implication: this.i18n.t('decision.issue.purineRisk', locale),
         });
       }
 
@@ -283,7 +285,7 @@ export class NutritionIssueDetector {
             proteinExcess > progress.goals.protein * 0.2 ? 'high' : 'medium',
           metric: Math.round(proteinExcess * 100) / 100,
           threshold: 0,
-          implication: cl('issue.kidneyStress', locale, {
+          implication: this.i18n.t('decision.issue.kidneyStress', locale, {
             amount: Math.round(proteinExcess),
           }),
         });
@@ -302,7 +304,7 @@ export class NutritionIssueDetector {
           severity: 'medium',
           metric: hour,
           threshold: 0,
-          implication: cl('issue.bingeRiskWindow', locale, { hour }),
+          implication: this.i18n.t('decision.issue.bingeRiskWindow', locale, { hour }),
         });
       }
 
@@ -316,7 +318,7 @@ export class NutritionIssueDetector {
           severity: 'medium',
           metric: 0,
           threshold: 0,
-          implication: cl('issue.trendExcess', locale),
+          implication: this.i18n.t('decision.issue.trendExcess', locale),
         });
       }
     }

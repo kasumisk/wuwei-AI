@@ -5,15 +5,16 @@
  */
 
 import { Injectable } from '@nestjs/common';
+import { I18nService } from '../../../core/i18n';
 import {
   UserDecisionFeedback,
   AnalysisQualityMetrics,
   PolicySuggestion,
 } from './feedback.types';
-import { cl } from '../i18n/decision-labels';
-
 @Injectable()
 export class AnalysisQualityFeedbackService {
+  constructor(private readonly i18n: I18nService) {}
+
   // 内存中存储反馈 (实际应持久化到数据库)
   private feedbackStore: Map<string, UserDecisionFeedback> = new Map();
   private metricsCache: AnalysisQualityMetrics | null = null;
@@ -116,8 +117,8 @@ export class AnalysisQualityFeedbackService {
       suggestions.push({
         suggestionId: 'pol_001',
         type: 'decision_rule',
-        description: cl('feedback.reduceStrictness'),
-        rationale: cl('feedback.reduceStrictnessRationale', undefined, {
+        description: this.i18n.t('decision.feedback.reduceStrictness'),
+        rationale: this.i18n.t('decision.feedback.reduceStrictnessRationale', undefined, {
           rate: metrics.acceptanceRate.toFixed(1),
         }),
         impact: 'high',
@@ -129,8 +130,8 @@ export class AnalysisQualityFeedbackService {
       suggestions.push({
         suggestionId: 'pol_002',
         type: 'scoring_weight',
-        description: cl('feedback.boostProteinWeight'),
-        rationale: cl('feedback.boostProteinRationale'),
+        description: this.i18n.t('decision.feedback.boostProteinWeight'),
+        rationale: this.i18n.t('decision.feedback.boostProteinRationale'),
         impact: 'medium',
       });
     }

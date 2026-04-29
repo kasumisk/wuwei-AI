@@ -9,6 +9,7 @@
  * - formatAsPromptString(): 将结构化上下文格式化为 prompt 字符串（供图片链路使用）
  */
 import { Injectable, Logger } from '@nestjs/common';
+import { I18nService, I18nLocale } from '../../../core/i18n';
 import { FoodService } from '../../diet/app/services/food.service';
 import { NutritionScoreService } from '../../diet/app/services/nutrition-score.service';
 import { UserProfileService } from '../../user/app/services/profile/user-profile.service';
@@ -20,12 +21,10 @@ import {
   getUserLocalHour,
   DEFAULT_TIMEZONE,
 } from '../../../common/utils/timezone.util';
-import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 import {
   UnifiedUserContext,
   MacroSlotStatus,
 } from '../types/analysis-result.types';
-import { cl } from '../i18n/decision-labels';
 import { translateEnum } from '../../../common/i18n/enum-i18n';
 
 // ==================== 输出类型 ====================
@@ -34,14 +33,16 @@ import { translateEnum } from '../../../common/i18n/enum-i18n';
 
 function getGoalContext(
   goalType: string,
-  locale?: Locale,
+  locale?: I18nLocale,
 ): { label: string; focus: string } {
   const key = ['fat_loss', 'muscle_gain', 'health', 'habit'].includes(goalType)
     ? goalType
     : 'health';
   return {
-    label: cl(`ctx.goal.${key}`, locale),
-    focus: cl(`ctx.focus.${key}`, locale),
+    // i18n-allow-dynamic
+    label: this.i18n.t(`decision.ctx.goal.${key}`, locale),
+    // i18n-allow-dynamic
+    focus: this.i18n.t(`decision.ctx.focus.${key}`, locale),
   };
 }
 
@@ -54,29 +55,29 @@ function getGoalContext(
  */
 function buildHealthConditionGuidance(
   conditions: string[],
-  locale?: Locale,
+  locale?: I18nLocale,
 ): string {
   if (!conditions || conditions.length === 0) return '';
 
-  const lines: string[] = [cl('ctx.health.header', locale)];
+  const lines: string[] = [this.i18n.t('decision.ctx.health.header', locale)];
 
   if (conditions.includes('diabetes')) {
-    lines.push(cl('ctx.health.diabetes', locale));
+    lines.push(this.i18n.t('decision.ctx.health.diabetes', locale));
   }
   if (conditions.includes('hypertension')) {
-    lines.push(cl('ctx.health.hypertension', locale));
+    lines.push(this.i18n.t('decision.ctx.health.hypertension', locale));
   }
   if (
     conditions.includes('heart_disease') ||
     conditions.includes('cardiovascular')
   ) {
-    lines.push(cl('ctx.health.heart', locale));
+    lines.push(this.i18n.t('decision.ctx.health.heart', locale));
   }
   if (conditions.includes('gout')) {
-    lines.push(cl('ctx.health.gout', locale));
+    lines.push(this.i18n.t('decision.ctx.health.gout', locale));
   }
   if (conditions.includes('kidney_disease')) {
-    lines.push(cl('ctx.health.kidney', locale));
+    lines.push(this.i18n.t('decision.ctx.health.kidney', locale));
   }
 
   return lines.length > 1 ? lines.join('\n') : '';
@@ -86,24 +87,24 @@ function buildHealthConditionGuidance(
 export class UserContextBuilderService {
   private readonly logger = new Logger(UserContextBuilderService.name);
 
-  constructor(
-    private readonly foodService: FoodService,
+  constructor(private readonly foodService: FoodService,
     private readonly nutritionScoreService: NutritionScoreService,
     private readonly userProfileService: UserProfileService,
     private readonly goalTrackerService: GoalTrackerService,
     private readonly goalPhaseService: GoalPhaseService,
     private readonly realtimeProfileService: RealtimeProfileService,
     private readonly behaviorService: BehaviorService,
+    private readonly i18n: I18nService,
   ) {}
 
   /**
    * 构建结构化用户上下文
    */
-  async build(userId?: string, locale?: Locale): Promise<UnifiedUserContext> {
+  async build(userId?: string, locale?: I18nLocale): Promise<UnifiedUserContext> {
     const localHour = getUserLocalHour(DEFAULT_TIMEZONE);
     const defaults: UnifiedUserContext = {
       goalType: 'health',
-      goalLabel: cl('goal.label.health', locale),
+      goalLabel: this.i18n.t('decision.goal.label.health', locale),
       todayCalories: 0,
       todayProtein: 0,
       todayFat: 0,
@@ -253,8 +254,9 @@ export class UserContextBuilderService {
       return {
         goalType,
         goalLabel:
-          cl(`goal.label.${goalType}`, locale) ||
-          cl('goal.label.health', locale),
+          // i18n-allow-dynamic
+          this.i18n.t(`decision.goal.label.${goalType}`, locale) ||
+          this.i18n.t('decision.goal.label.health', locale),
         todayCalories,
         todayProtein,
         todayFat,
@@ -297,46 +299,46 @@ export class UserContextBuilderService {
   /**
    * 将结构化上下文格式化为 prompt 字符串（图片链路使用）
    */
-  formatAsPromptString(ctx: UnifiedUserContext, locale?: Locale): string {
+  formatAsPromptString(ctx: UnifiedUserContext, locale?: I18nLocale): string {
     if (!ctx.profile) return '';
 
     const gc = getGoalContext(ctx.goalType, locale);
     const mealHint =
       ctx.localHour < 10
-        ? cl('ctx.meal.breakfast', locale)
+        ? this.i18n.t('decision.ctx.meal.breakfast', locale)
         : ctx.localHour < 14
-          ? cl('ctx.meal.lunch', locale)
+          ? this.i18n.t('decision.ctx.meal.lunch', locale)
           : ctx.localHour < 18
-            ? cl('ctx.meal.afternoon', locale)
-            : cl('ctx.meal.dinner', locale);
+            ? this.i18n.t('decision.ctx.meal.afternoon', locale)
+            : this.i18n.t('decision.ctx.meal.dinner', locale);
 
-    let text = `${cl('ctx.prompt.goalHeader', locale)}${gc.label}
+    let text = `${this.i18n.t('decision.ctx.prompt.goalHeader', locale)}${gc.label}
 ${gc.focus}
 
-${cl('ctx.prompt.budgetHeader', locale)}
-- ${cl('ctx.prompt.calories', locale, { remaining: ctx.remainingCalories, goal: ctx.goalCalories, consumed: ctx.todayCalories })}
-- ${cl('ctx.prompt.protein', locale, { remaining: ctx.remainingProtein, goal: ctx.goalProtein, consumed: ctx.todayProtein })}
-- ${cl('ctx.prompt.fat', locale, { remaining: ctx.remainingFat, goal: ctx.goalFat, consumed: ctx.todayFat })}
-- ${cl('ctx.prompt.carbs', locale, { remaining: ctx.remainingCarbs, goal: ctx.goalCarbs, consumed: ctx.todayCarbs })}
-- ${cl('ctx.prompt.mealCount', locale, { count: ctx.mealCount })}
-- ${cl('ctx.prompt.mealPeriod', locale, { period: mealHint })}`;
+${this.i18n.t('decision.ctx.prompt.budgetHeader', locale)}
+- ${this.i18n.t('decision.ctx.prompt.calories', locale, { remaining: ctx.remainingCalories, goal: ctx.goalCalories, consumed: ctx.todayCalories })}
+- ${this.i18n.t('decision.ctx.prompt.protein', locale, { remaining: ctx.remainingProtein, goal: ctx.goalProtein, consumed: ctx.todayProtein })}
+- ${this.i18n.t('decision.ctx.prompt.fat', locale, { remaining: ctx.remainingFat, goal: ctx.goalFat, consumed: ctx.todayFat })}
+- ${this.i18n.t('decision.ctx.prompt.carbs', locale, { remaining: ctx.remainingCarbs, goal: ctx.goalCarbs, consumed: ctx.todayCarbs })}
+- ${this.i18n.t('decision.ctx.prompt.mealCount', locale, { count: ctx.mealCount })}
+- ${this.i18n.t('decision.ctx.prompt.mealPeriod', locale, { period: mealHint })}`;
 
     const profile = ctx.profile;
     if (profile.gender)
-      text += `\n- ${cl('ctx.prompt.gender', locale, { value: profile.gender === 'male' ? cl('ctx.prompt.gender.male', locale) : cl('ctx.prompt.gender.female', locale) })}`;
+      text += `\n- ${this.i18n.t('decision.ctx.prompt.gender', locale, { value: profile.gender === 'male' ? this.i18n.t('decision.ctx.prompt.gender.male', locale) : this.i18n.t('decision.ctx.prompt.gender.female', locale) })}`;
     if (profile.activityLevel)
-      text += `\n- ${cl('ctx.prompt.activityLevel', locale, { value: translateEnum('activityLevel', profile.activityLevel, locale) })}`;
-    const enumerationSeparator = cl('separator.enumeration', locale);
+      text += `\n- ${this.i18n.t('decision.ctx.prompt.activityLevel', locale, { value: translateEnum('activityLevel', profile.activityLevel, locale) })}`;
+    const enumerationSeparator = this.i18n.t('decision.separator.enumeration', locale);
     if ((profile.foodPreferences as string[])?.length)
-      text += `\n- ${cl('ctx.prompt.foodPreferences', locale, { value: (profile.foodPreferences as string[]).join(enumerationSeparator) })}`;
+      text += `\n- ${this.i18n.t('decision.ctx.prompt.foodPreferences', locale, { value: (profile.foodPreferences as string[]).join(enumerationSeparator) })}`;
     if (ctx.dietaryRestrictions.length)
-      text += `\n- ${cl('ctx.prompt.dietaryRestrictions', locale, { value: ctx.dietaryRestrictions.map((r) => translateEnum('dietaryRestriction', r, locale)).join(enumerationSeparator) })}`;
+      text += `\n- ${this.i18n.t('decision.ctx.prompt.dietaryRestrictions', locale, { value: ctx.dietaryRestrictions.map((r) => translateEnum('dietaryRestriction', r, locale)).join(enumerationSeparator) })}`;
     if (ctx.budgetStatus)
-      text += `\n- ${cl('ctx.prompt.budgetStatus', locale, { value: translateEnum('budgetStatus', ctx.budgetStatus, locale) })}`;
+      text += `\n- ${this.i18n.t('decision.ctx.prompt.budgetStatus', locale, { value: translateEnum('budgetStatus', ctx.budgetStatus, locale) })}`;
     if (ctx.nutritionPriority?.length)
-      text += `\n- ${cl('ctx.prompt.nutritionPriority', locale, { value: ctx.nutritionPriority.join(enumerationSeparator) })}`;
+      text += `\n- ${this.i18n.t('decision.ctx.prompt.nutritionPriority', locale, { value: ctx.nutritionPriority.join(enumerationSeparator) })}`;
     if (ctx.contextSignals?.length)
-      text += `\n- ${cl('ctx.prompt.contextSignals', locale, { value: ctx.contextSignals.join(enumerationSeparator) })}`;
+      text += `\n- ${this.i18n.t('decision.ctx.prompt.contextSignals', locale, { value: ctx.contextSignals.join(enumerationSeparator) })}`;
 
     // V3.4 P1.1: 健康条件特异性指令
     const healthGuidance = buildHealthConditionGuidance(

@@ -13,14 +13,13 @@ import {
   DetailedRationale,
 } from '../types/analysis-result.types';
 import { NutritionScoreBreakdown } from '../../diet/app/services/nutrition-score.service';
-import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
-import { cl } from '../i18n/decision-labels';
+import { I18nService, I18nLocale } from '../../../core/i18n';
 import { getDimensionLabel } from '../config/scoring-dimensions';
 import {
   GOAL_DECISION_THRESHOLDS,
   DEFAULT_THRESHOLDS,
 } from '../config/decision-thresholds';
-import { buildConflictReport } from '../config/decision-checks';
+import { ConflictReportBuilderService } from '../checks/conflict-report-builder.service';
 import { DecisionFoodItem, DecisionFactor } from './food-decision.service';
 import {
   DynamicThresholdsService,
@@ -33,6 +32,8 @@ export class DecisionEngineService {
   constructor(
     private readonly dynamicThresholds: DynamicThresholdsService,
     private readonly explainer: DecisionExplainerService,
+    private readonly i18n: I18nService,
+    private readonly conflictReport: ConflictReportBuilderService,
   ) {}
 
   // ==================== 核心决策 ====================
@@ -45,7 +46,7 @@ export class DecisionEngineService {
     foods: DecisionFoodItem[],
     ctx: UnifiedUserContext,
     nutritionScore: number,
-    locale?: Locale,
+    locale?: I18nLocale,
     breakdown?: NutritionScoreBreakdown,
   ): FoodDecision {
     const th = this.dynamicThresholds.compute(ctx);
@@ -79,7 +80,7 @@ export class DecisionEngineService {
       scoreDecision = {
         recommendation: 'recommend',
         shouldEat: true,
-        reason: cl('score.lightSnackOk', locale),
+        reason: this.i18n.t('decision.score.lightSnackOk', locale),
         riskLevel: 'low',
       };
     }
@@ -88,7 +89,7 @@ export class DecisionEngineService {
     const hour = ctx.localHour ?? 12;
     if (hour >= th.lateNightStart || hour < th.lateNightEnd) {
       if (totalCalories > th.significantMealCal) {
-        contextReasons.push(cl('context.lateNightHighCal', locale));
+        contextReasons.push(this.i18n.t('decision.context.lateNightHighCal', locale));
         if (scoreDecision.recommendation === 'recommend') {
           scoreDecision = this.scoreToFoodDecision(
             Math.min(nutritionScore, 50),
@@ -99,7 +100,7 @@ export class DecisionEngineService {
       }
     } else if (hour >= th.eveningStart && hour < th.lateNightStart) {
       if (totalCarbs > th.highCarbMeal && ctx.goalType === 'fat_loss') {
-        contextReasons.push(cl('context.eveningHighCarb', locale));
+        contextReasons.push(this.i18n.t('decision.context.eveningHighCarb', locale));
       }
     }
 
@@ -111,27 +112,27 @@ export class DecisionEngineService {
         totalProtein < th.lowProteinMeal &&
         totalCalories > th.snackHighCal
       ) {
-        contextReasons.push(cl('context.breakfastLowProtein', locale));
+        contextReasons.push(this.i18n.t('decision.context.breakfastLowProtein', locale));
       }
     } else if (mealType === 'dinner') {
       if (ctx.goalType === 'fat_loss' && totalCarbs > th.dinnerHighCarb) {
-        contextReasons.push(cl('context.dinnerHighCarb', locale));
+        contextReasons.push(this.i18n.t('decision.context.dinnerHighCarb', locale));
       }
     } else if (mealType === 'snack') {
       if (totalCalories > th.snackHighCal) {
-        contextReasons.push(cl('context.snackHighCal', locale));
+        contextReasons.push(this.i18n.t('decision.context.snackHighCal', locale));
       }
     }
 
     // 热量预算检查（V2.2: 动态 overBudgetMargin）
     if (remainingAfter < -th.overBudgetMargin) {
       contextReasons.push(
-        cl('context.overBudget', locale, {
+        this.i18n.t('decision.context.overBudget', locale, {
           amount: Math.abs(Math.round(remainingAfter)),
         }),
       );
     } else if (remainingAfter < 0) {
-      contextReasons.push(cl('context.nearLimit', locale));
+      contextReasons.push(this.i18n.t('decision.context.nearLimit', locale));
     }
 
     // 蛋白质检查（V2.2: 动态阈值）
@@ -140,17 +141,17 @@ export class DecisionEngineService {
       totalProtein < th.lowProteinMeal &&
       totalCalories > th.significantMealCal
     ) {
-      contextReasons.push(cl('context.lowProtein', locale));
+      contextReasons.push(this.i18n.t('decision.context.lowProtein', locale));
     }
 
     if (ctx.goalType === 'muscle_gain') {
       if (totalProtein >= th.highProteinMeal) {
-        contextReasons.push(cl('context.goodProtein', locale));
+        contextReasons.push(this.i18n.t('decision.context.goodProtein', locale));
       } else if (
         totalProtein < th.veryLowProteinMeal &&
         totalCalories > th.significantMealCal
       ) {
-        contextReasons.push(cl('context.lowProteinMuscle', locale));
+        contextReasons.push(this.i18n.t('decision.context.lowProteinMuscle', locale));
       }
     }
 
@@ -158,7 +159,7 @@ export class DecisionEngineService {
     const calorieRatio =
       ctx.goalCalories > 0 ? totalCalories / ctx.goalCalories : 0;
     if (totalCalories > 0 && calorieRatio > th.singleMealMaxRatio) {
-      contextReasons.push(cl('context.highCalMeal', locale));
+      contextReasons.push(this.i18n.t('decision.context.highCalMeal', locale));
     }
 
     // 脂肪超标检测（V2.2: 动态阈值）
@@ -170,7 +171,7 @@ export class DecisionEngineService {
       (ctx.goalType === 'fat_loss' || ctx.goalType === 'health')
     ) {
       contextReasons.push(
-        cl('context.highFat', locale, {
+        this.i18n.t('decision.context.highFat', locale, {
           fat: Math.round(totalFat),
           percent: Math.round(projectedFatPct),
         }),
@@ -187,7 +188,7 @@ export class DecisionEngineService {
       ctx.goalType === 'fat_loss'
     ) {
       contextReasons.push(
-        cl('context.highCarbs', locale, {
+        this.i18n.t('decision.context.highCarbs', locale, {
           percent: Math.round(projectedCarbsPct),
         }),
       );
@@ -203,12 +204,12 @@ export class DecisionEngineService {
       const proteinProgress =
         ((ctx.todayProtein + totalProtein) / ctx.goalProtein) * 100;
       if (proteinProgress < 50 && ctx.goalType !== 'fat_loss') {
-        contextReasons.push(cl('context.lowProteinGeneral', locale));
+        contextReasons.push(this.i18n.t('decision.context.lowProteinGeneral', locale));
       }
     }
 
     // 过敏原 / 饮食限制 / 健康状况 → 统一冲突报告（V4.5）
-    const conflictReport = buildConflictReport(foods, ctx, locale, th);
+    const conflictReport = this.conflictReport.build(foods, ctx, locale, th);
     if (conflictReport.hasConflict) {
       for (const item of conflictReport.items) {
         if (item.message) {
@@ -225,7 +226,7 @@ export class DecisionEngineService {
           recommendation: 'avoid',
           shouldEat: false,
           reason:
-            conflictReport.items[0]?.message ?? cl('score.veryLow', locale),
+            conflictReport.items[0]?.message ?? this.i18n.t('decision.score.veryLow', locale),
           riskLevel: 'high',
         };
       } else if (
@@ -235,7 +236,7 @@ export class DecisionEngineService {
         scoreDecision = {
           recommendation: 'caution',
           shouldEat: true,
-          reason: conflictReport.items[0]?.message ?? cl('score.low', locale),
+          reason: conflictReport.items[0]?.message ?? this.i18n.t('decision.score.low', locale),
           riskLevel: 'medium',
         };
       }
@@ -243,7 +244,7 @@ export class DecisionEngineService {
 
     const reason =
       contextReasons.length > 0
-        ? contextReasons.join(cl('separator.list', locale))
+        ? contextReasons.join(this.i18n.t('decision.separator.list', locale))
         : scoreDecision.reason;
 
     const advice = this.explainer.generateDecisionAdvice(
@@ -264,7 +265,7 @@ export class DecisionEngineService {
 
   scoreToFoodDecision(
     score: number,
-    locale?: Locale,
+    locale?: I18nLocale,
     goalType?: string,
     goalProgress?: UnifiedUserContext['goalProgress'],
   ): FoodDecision {
@@ -297,7 +298,7 @@ export class DecisionEngineService {
       return {
         recommendation: 'recommend',
         shouldEat: true,
-        reason: cl('score.excellent', locale),
+        reason: this.i18n.t('decision.score.excellent', locale),
         riskLevel: 'low',
       };
     }
@@ -305,7 +306,7 @@ export class DecisionEngineService {
       return {
         recommendation: 'recommend',
         shouldEat: true,
-        reason: cl('score.good', locale),
+        reason: this.i18n.t('decision.score.good', locale),
         riskLevel: 'low',
       };
     }
@@ -313,14 +314,14 @@ export class DecisionEngineService {
       return {
         recommendation: 'caution',
         shouldEat: true,
-        reason: cl('score.low', locale),
+        reason: this.i18n.t('decision.score.low', locale),
         riskLevel: 'medium',
       };
     }
     return {
       recommendation: 'avoid',
       shouldEat: false,
-      reason: cl('score.veryLow', locale),
+      reason: this.i18n.t('decision.score.veryLow', locale),
       riskLevel: 'high',
     };
   }
@@ -329,7 +330,7 @@ export class DecisionEngineService {
 
   extractDecisionFactors(
     breakdown: NutritionScoreBreakdown,
-    locale?: Locale,
+    locale?: I18nLocale,
   ): DecisionFactor[] {
     const factors: DecisionFactor[] = [];
 
@@ -351,7 +352,7 @@ export class DecisionEngineService {
           dimension: dim,
           score: roundedScore,
           impact: 'critical',
-          message: cl('factor.critical', locale, {
+          message: this.i18n.t('decision.factor.critical', locale, {
             dimension: dimensionLabel,
             score: roundedScore,
           }),
@@ -361,7 +362,7 @@ export class DecisionEngineService {
           dimension: dim,
           score: roundedScore,
           impact: 'warning',
-          message: cl('factor.warning', locale, {
+          message: this.i18n.t('decision.factor.warning', locale, {
             dimension: dimensionLabel,
             score: roundedScore,
           }),
@@ -371,7 +372,7 @@ export class DecisionEngineService {
           dimension: dim,
           score: roundedScore,
           impact: 'positive',
-          message: cl('factor.positive', locale, {
+          message: this.i18n.t('decision.factor.positive', locale, {
             dimension: dimensionLabel,
             score: roundedScore,
           }),
@@ -446,7 +447,7 @@ export class DecisionEngineService {
     ctx: UnifiedUserContext,
     nutritionScore: number,
     breakdown: NutritionScoreBreakdown | undefined,
-    locale?: Locale,
+    locale?: I18nLocale,
   ): StructuredDecision {
     // 先计算基础决策
     const baseDecision = this.computeDecision(
@@ -533,7 +534,7 @@ export class DecisionEngineService {
     totalFat: number,
     totalCarbs: number,
     ctx: UnifiedUserContext,
-    locale?: Locale,
+    locale?: I18nLocale,
   ): DecisionFactorDetail {
     const remainingAfter = ctx.remainingCalories - totalCal;
     let score = 80; // 基础
@@ -558,8 +559,8 @@ export class DecisionEngineService {
     score = Math.max(0, Math.min(100, Math.round(score)));
     const rationale =
       remainingAfter >= 0
-        ? cl('factor.nutritionOk', locale)
-        : cl('factor.nutritionOver', locale, {
+        ? this.i18n.t('decision.factor.nutritionOk', locale)
+        : this.i18n.t('decision.factor.nutritionOver', locale, {
             amount: Math.abs(Math.round(remainingAfter)),
           });
 
@@ -571,12 +572,12 @@ export class DecisionEngineService {
    */
   private computeMacroBalance(
     breakdown: NutritionScoreBreakdown | undefined,
-    locale?: Locale,
+    locale?: I18nLocale,
   ): DecisionFactorDetail {
     if (!breakdown) {
       return {
         score: 60,
-        rationale: cl('factor.noBreakdown', locale),
+        rationale: this.i18n.t('decision.factor.noBreakdown', locale),
       };
     }
 
@@ -586,10 +587,10 @@ export class DecisionEngineService {
     );
     const rationale =
       score >= 70
-        ? cl('factor.macroBalanced', locale)
+        ? this.i18n.t('decision.factor.macroBalanced', locale)
         : score >= 40
-          ? cl('factor.macroImbalanced', locale)
-          : cl('factor.macroSeverelyImbalanced', locale);
+          ? this.i18n.t('decision.factor.macroImbalanced', locale)
+          : this.i18n.t('decision.factor.macroSeverelyImbalanced', locale);
 
     return { score, rationale };
   }
@@ -600,13 +601,13 @@ export class DecisionEngineService {
   private computeHealthConstraint(
     foods: DecisionFoodItem[],
     ctx: UnifiedUserContext,
-    locale?: Locale,
+    locale?: I18nLocale,
   ): DecisionFactorDetail {
     let score = 100;
     const issues: string[] = [];
 
     const th = this.dynamicThresholds.compute(ctx);
-    const conflictReport = buildConflictReport(foods, ctx, locale, th);
+    const conflictReport = this.conflictReport.build(foods, ctx, locale, th);
 
     for (const item of conflictReport.items) {
       if (item.severity === 'critical' && item.decisionOverride === 'avoid') {
@@ -620,7 +621,7 @@ export class DecisionEngineService {
     }
 
     const rationale =
-      issues.length > 0 ? issues[0] : cl('factor.noHealthIssue', locale);
+      issues.length > 0 ? issues[0] : this.i18n.t('decision.factor.noHealthIssue', locale);
 
     return { score, rationale };
   }
@@ -634,26 +635,26 @@ export class DecisionEngineService {
     totalCarbs: number,
     ctx: UnifiedUserContext,
     th: UserThresholds,
-    locale?: Locale,
+    locale?: I18nLocale,
   ): DecisionFactorDetail {
     let score = 90;
-    let rationale = cl('factor.goodTiming', locale);
+    let rationale = this.i18n.t('decision.factor.goodTiming', locale);
 
     // 深夜
     if (hour >= th.lateNightStart || hour < th.lateNightEnd) {
       if (totalCalories > th.significantMealCal) {
         score = 30;
-        rationale = cl('factor.lateNight', locale);
+        rationale = this.i18n.t('decision.factor.lateNight', locale);
       } else {
         score = 60;
-        rationale = cl('factor.lateNightLight', locale);
+        rationale = this.i18n.t('decision.factor.lateNightLight', locale);
       }
     }
     // 晚间高碳水
     else if (hour >= th.eveningStart && hour < th.lateNightStart) {
       if (totalCarbs > th.highCarbMeal && ctx.goalType === 'fat_loss') {
         score = 50;
-        rationale = cl('factor.eveningHighCarb', locale);
+        rationale = this.i18n.t('decision.factor.eveningHighCarb', locale);
       }
     }
 

@@ -15,25 +15,25 @@ import {
   UnifiedUserContext,
 } from '../types/analysis-result.types';
 import { NutritionScoreBreakdown } from '../../diet/app/services/nutrition-score.service';
-import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
-import { cl } from '../i18n/decision-labels';
+import { I18nService, I18nLocale } from '../../../core/i18n';
 import { getDimensionLabel } from '../config/scoring-dimensions';
-import {
-  checkCalorieOverrun,
-  checkProteinDeficit,
-  checkFatExcess,
-  checkCarbExcess,
-  checkLateNight,
-  checkAllergenConflict,
-  checkRestrictionConflict,
-  checkHealthConditionRisk,
-} from '../config/decision-checks';
 import { DecisionFoodItem } from './food-decision.service';
 import { DynamicThresholdsService } from '../config/dynamic-thresholds.service';
+import { AllergenChecksService } from '../checks/allergen-checks.service';
+import { RestrictionChecksService } from '../checks/restriction-checks.service';
+import { HealthConditionChecksService } from '../checks/health-condition-checks.service';
+import { BudgetTimingChecksService } from '../checks/budget-timing-checks.service';
 
 @Injectable()
 export class IssueDetectorService {
-  constructor(private readonly dynamicThresholds: DynamicThresholdsService) {}
+  constructor(
+    private readonly dynamicThresholds: DynamicThresholdsService,
+    private readonly i18n: I18nService,
+    private readonly allergenChecks: AllergenChecksService,
+    private readonly restrictionChecks: RestrictionChecksService,
+    private readonly healthConditionChecks: HealthConditionChecksService,
+    private readonly budgetTimingChecks: BudgetTimingChecksService,
+  ) {}
 
   // ==================== 结构化问题识别 ====================
 
@@ -42,20 +42,21 @@ export class IssueDetectorService {
     totals: NutritionTotals,
     ctx: UnifiedUserContext,
     breakdown: NutritionScoreBreakdown | undefined,
-    locale?: Locale,
+    locale?: I18nLocale,
   ): DietIssue[] {
     const issues: DietIssue[] = [];
     const thresholds = this.dynamicThresholds.compute(ctx);
+    const loc = locale ?? this.i18n.currentLocale();
 
     // 共享检查函数（传入动态阈值）
     const checks = [
-      checkCalorieOverrun(totals, ctx, locale, thresholds),
-      checkProteinDeficit(totals, ctx, locale, thresholds),
-      checkFatExcess(totals, ctx, locale, thresholds),
-      checkCarbExcess(totals, ctx, locale, thresholds),
-      checkLateNight(totals, ctx, locale, thresholds),
-      checkAllergenConflict(foods, ctx, locale),
-      checkRestrictionConflict(foods, ctx, locale),
+      this.budgetTimingChecks.checkCalorieOverrun(totals, ctx, loc, thresholds),
+      this.budgetTimingChecks.checkProteinDeficit(totals, ctx, loc, thresholds),
+      this.budgetTimingChecks.checkFatExcess(totals, ctx, loc, thresholds),
+      this.budgetTimingChecks.checkCarbExcess(totals, ctx, loc, thresholds),
+      this.budgetTimingChecks.checkLateNight(totals, ctx, loc, thresholds),
+      this.allergenChecks.check(foods, ctx, loc),
+      this.restrictionChecks.check(foods, ctx, loc),
     ];
     for (const check of checks) {
       if (check?.triggered && check.issue) {
@@ -64,10 +65,10 @@ export class IssueDetectorService {
     }
 
     // 健康状况检查（返回数组）
-    const healthChecks = checkHealthConditionRisk(
+    const healthChecks = this.healthConditionChecks.check(
       foods,
       ctx,
-      locale,
+      loc,
       thresholds,
     );
     for (const check of healthChecks) {
@@ -81,8 +82,8 @@ export class IssueDetectorService {
       issues.push({
         category: 'low_quality',
         severity: 'warning',
-        message: cl('factor.critical', locale, {
-          dimension: getDimensionLabel('foodQuality', locale),
+        message: this.i18n.t('decision.factor.critical', loc, {
+          dimension: getDimensionLabel('foodQuality', loc),
           score: Math.round(breakdown.foodQuality),
         }),
         data: { qualityScore: Math.round(breakdown.foodQuality) },
@@ -90,7 +91,7 @@ export class IssueDetectorService {
     }
 
     // actionable 建议
-    this.populateActionable(issues, locale);
+    this.populateActionable(issues, loc);
 
     // 按严重程度排序：critical > warning > info
     const severityOrder = { critical: 0, warning: 1, info: 2 };
@@ -131,7 +132,8 @@ export class IssueDetectorService {
 
   // ==================== 私有方法 ====================
 
-  private populateActionable(issues: DietIssue[], locale?: Locale): void {
+  private populateActionable(issues: DietIssue[], locale?: I18nLocale): void {
+    const loc = locale ?? this.i18n.currentLocale();
     const actionableCategories = [
       'calorie_excess',
       'protein_deficit',
@@ -143,7 +145,11 @@ export class IssueDetectorService {
     ];
     for (const issue of issues) {
       if (actionableCategories.includes(issue.category)) {
-        issue.actionable = cl(`actionable.${issue.category}`, locale);
+        // i18n-allow-dynamic
+        issue.actionable = this.i18n.t(
+          `decision.actionable.${issue.category}`,
+          loc,
+        );
       }
     }
   }

@@ -13,7 +13,7 @@
  */
 
 import { Injectable } from '@nestjs/common';
-import { cl } from '../i18n/decision-labels';
+import { I18nService, I18nLocale } from '../../../core/i18n';
 import type { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 
 // ==================== 语气修饰矩阵 ====================
@@ -71,7 +71,7 @@ export interface ToneResolveInput {
   goalType?: string;
   verdict?: 'recommend' | 'caution' | 'avoid';
   coachFocus?: string;
-  locale?: Locale;
+  locale?: I18nLocale;
   /** V4.0: 用户执行率 (0-1)，影响语气强度 */
   executionRate?: number;
   /** V4.0: 连续天数 */
@@ -80,6 +80,8 @@ export interface ToneResolveInput {
 
 @Injectable()
 export class DecisionToneResolverService {
+  constructor(private readonly i18n: I18nService) {}
+
   /**
    * 解析最终语气修饰符字符串
    */
@@ -99,7 +101,8 @@ export class DecisionToneResolverService {
     if (signalOverride) {
       return {
         toneKey: signalOverride,
-        toneModifier: cl(`tone.${signalOverride}`, locale),
+        // i18n-allow-dynamic
+        toneModifier: this.i18n.t(`decision.tone.${signalOverride}`, locale),
       };
     }
 
@@ -120,10 +123,12 @@ export class DecisionToneResolverService {
       }
     }
 
-    const baseTone = cl(`tone.${toneKey}`, locale);
+    // i18n-allow-dynamic
+    const baseTone = this.i18n.t(`decision.tone.${toneKey}`, locale);
 
     // V3.9 P3.1: 追加 goalType 专属语气补充
-    const supplement = cl(`tone.supplement.${goalType}`, locale);
+    // i18n-allow-dynamic
+    const supplement = this.i18n.t(`decision.tone.supplement.${goalType}`, locale);
     // 若 key 不存在，cl() 会返回 key 本身；此时跳过追加
     const hasSupplementKey = [
       'fat_loss',
@@ -136,7 +141,7 @@ export class DecisionToneResolverService {
 
     // V4.0 P3.2: 连续天数 > 7 天时追加激励
     if (streakDays != null && streakDays > 7) {
-      const streakBoostText = cl('tone.streakBoost', locale, { days: streakDays });
+      const streakBoostText = this.i18n.t('decision.tone.streakBoost', locale, { days: streakDays });
       toneModifier += '\n' + streakBoostText;
     }
 

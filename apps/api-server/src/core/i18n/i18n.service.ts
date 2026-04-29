@@ -234,9 +234,36 @@ export class I18nService implements OnModuleInit {
   /**
    * 翻译当前请求语言。变量插值采用 {{name}} 语法。
    * 命中链：requested → en-US → key 本身。
+   *
+   * 重载：
+   *  - t(key, vars?) — 使用当前请求 locale
+   *  - t(key, locale, vars?) — 显式 locale（locale 为 undefined 时退化为当前请求 locale）
    */
-  t(key: string, vars?: Record<string, string | number>): string {
-    return this.translate(key, this.currentLocale(), vars);
+  t(key: string, vars?: Record<string, string | number>): string;
+  t(
+    key: string,
+    locale: I18nLocale | undefined,
+    vars?: Record<string, string | number>,
+  ): string;
+  t(
+    key: string,
+    arg2?: I18nLocale | Record<string, string | number>,
+    arg3?: Record<string, string | number>,
+  ): string {
+    // 判断 arg2 是 locale 还是 vars
+    if (
+      typeof arg2 === 'string' ||
+      arg2 === undefined && arg3 !== undefined
+    ) {
+      const locale = (arg2 as I18nLocale | undefined) ?? this.currentLocale();
+      return this.translate(key, locale, arg3);
+    }
+    // arg2 是 vars 或 undefined（无 vars）
+    return this.translate(
+      key,
+      this.currentLocale(),
+      arg2 as Record<string, string | number> | undefined,
+    );
   }
 
   /** 显式 locale 翻译 */

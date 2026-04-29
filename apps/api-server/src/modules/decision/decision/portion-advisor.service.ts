@@ -8,12 +8,11 @@
  * V2.2: 支持可选 UserThresholds 参数，bufferRatio/minPercent/gap 阈值动态化。
  */
 import { Injectable } from '@nestjs/common';
+import { I18nService, I18nLocale } from '../../../core/i18n';
 import {
   NutritionTotals,
   UnifiedUserContext,
 } from '../types/analysis-result.types';
-import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
-import { cl } from '../i18n/decision-labels';
 import { OptimalPortion, NextMealAdvice } from './food-decision.service';
 import { UserThresholds } from '../config/dynamic-thresholds.service';
 import {
@@ -23,6 +22,8 @@ import {
 
 @Injectable()
 export class PortionAdvisorService {
+  constructor(private readonly i18n: I18nService) {}
+
   // ==================== 最优份量计算 ====================
 
   calculateOptimalPortion(
@@ -58,7 +59,7 @@ export class PortionAdvisorService {
   generateNextMealAdvice(
     ctx: UnifiedUserContext,
     currentMealTotals: NutritionTotals,
-    locale?: Locale,
+    locale?: I18nLocale,
     foodPreferences?: {
       frequentFoods?: string[];
       loves?: string[];
@@ -117,7 +118,7 @@ export class PortionAdvisorService {
     remainingFat: number,
     remainingCarbs: number,
     goalType: string,
-    locale?: Locale,
+    locale?: I18nLocale,
     thresholds?: UserThresholds,
   ): string {
     // 动态 gap 阈值：低蛋白门槛 / dinnerHighCarb 的一半 / highFatMeal 的 1/6
@@ -140,14 +141,15 @@ export class PortionAdvisorService {
 
     if (goalType === 'fat_loss' || goalType === 'muscle_gain') {
       const proteinEntry = priorities.find((p) => p.macro === 'protein');
-      if (proteinEntry) return cl('nextMeal.emphasisProtein', locale);
+      if (proteinEntry) return this.i18n.t('decision.nextMeal.emphasisProtein', locale);
     }
 
-    if (priorities.length === 0) return cl('nextMeal.emphasisBalanced', locale);
+    if (priorities.length === 0) return this.i18n.t('decision.nextMeal.emphasisBalanced', locale);
 
     priorities.sort((a, b) => b.gap - a.gap);
     const top = priorities[0].macro;
-    return cl(`nextMeal.emphasis.${top}`, locale);
+    // i18n-allow-dynamic
+    return this.i18n.t(`decision.nextMeal.emphasis.${top}`, locale);
   }
 
   private buildNextMealSuggestion(
@@ -156,7 +158,7 @@ export class PortionAdvisorService {
     _remainingFat: number,
     _remainingCarbs: number,
     emphasis: string,
-    locale?: Locale,
+    locale?: I18nLocale,
     foodPreferences?: {
       frequentFoods?: string[];
       loves?: string[];
@@ -166,10 +168,10 @@ export class PortionAdvisorService {
   ): string {
     const lowBudget = thresholds?.nextMealLowBudget ?? 100;
     if (remainingCalories <= lowBudget) {
-      return cl('nextMeal.budgetLow', locale, { calories: remainingCalories });
+      return this.i18n.t('decision.nextMeal.budgetLow', locale, { calories: remainingCalories });
     }
 
-    let suggestion = cl('nextMeal.suggestion', locale, {
+    let suggestion = this.i18n.t('decision.nextMeal.suggestion', locale, {
       calories: remainingCalories,
       protein: Math.round(remainingProtein),
       emphasis,
@@ -188,8 +190,8 @@ export class PortionAdvisorService {
       );
       const unique = [...new Set(filtered)].slice(0, 3);
       if (unique.length > 0) {
-        suggestion += cl('nextMeal.foodRecommendation', locale, {
-          foods: unique.join(cl('separator.enumeration', locale)),
+        suggestion += this.i18n.t('decision.nextMeal.foodRecommendation', locale, {
+          foods: unique.join(this.i18n.t('decision.separator.enumeration', locale)),
         });
       }
     }

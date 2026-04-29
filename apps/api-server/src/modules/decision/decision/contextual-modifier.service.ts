@@ -12,11 +12,10 @@
  * - 不修改原始决策对象，返回修正建议供调用方合并
  */
 import { Injectable, Logger } from '@nestjs/common';
+import { I18nService, I18nLocale } from '../../../core/i18n';
 import { BehaviorService } from '../../diet/app/services/behavior.service';
 import { FoodService } from '../../diet/app/services/food.service';
 import { DietIssue } from '../types/analysis-result.types';
-import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
-import { cl } from '../i18n/decision-labels';
 import { ci, toCoachLocale } from '../coach/coach-i18n';
 import {
   MODIFIER_PARAMS,
@@ -42,9 +41,9 @@ export interface ContextualModification {
 export class ContextualDecisionModifierService {
   private readonly logger = new Logger(ContextualDecisionModifierService.name);
 
-  constructor(
-    private readonly behaviorService: BehaviorService,
+  constructor(private readonly behaviorService: BehaviorService,
     private readonly foodService: FoodService,
+    private readonly i18n: I18nService,
   ) {}
 
   /**
@@ -64,7 +63,7 @@ export class ContextualDecisionModifierService {
       };
     },
     mealCalories: number,
-    locale?: Locale,
+    locale?: I18nLocale,
   ): Promise<ContextualModification> {
     const result: ContextualModification = {
       scoreMultiplier: 1,
@@ -87,10 +86,10 @@ export class ContextualDecisionModifierService {
       result.additionalIssues.push({
         category: 'cumulative_excess',
         severity: excessPct > 30 ? 'critical' : 'warning',
-        message: cl('context.overBudget', locale, { amount: Math.round(projectedTotal - ctx.goalCalories) }),
+        message: this.i18n.t('decision.context.overBudget', locale, { amount: Math.round(projectedTotal - ctx.goalCalories) }),
       });
       result.additionalReasons.push(
-        cl('modifier.cumulativeSaturation', locale, { percent: excessPct }),
+        this.i18n.t('decision.modifier.cumulativeSaturation', locale, { percent: excessPct }),
       );
     }
 
@@ -109,7 +108,7 @@ export class ContextualDecisionModifierService {
         result.additionalIssues.push({
           category: 'binge_risk',
           severity: 'warning',
-          message: cl('modifier.lateNightRisk', locale) + lateCalSuffix,
+          message: this.i18n.t('decision.modifier.lateNightRisk', locale) + lateCalSuffix,
         });
       }
     }
@@ -143,7 +142,7 @@ export class ContextualDecisionModifierService {
           result.additionalIssues.push({
             category: 'multi_day_excess',
             severity: consecutiveExcess >= 5 ? 'critical' : 'warning',
-            message: cl('modifier.multiDayExcess', locale, { days: consecutiveExcess }),
+            message: this.i18n.t('decision.modifier.multiDayExcess', locale, { days: consecutiveExcess }),
           });
         }
 
@@ -155,7 +154,7 @@ export class ContextualDecisionModifierService {
         ) {
           result.scoreMultiplier *= MODIFIER_PARAMS.healthyStreakBonus;
           result.additionalReasons.push(
-            cl('modifier.healthyStreak', locale, { days: healthyDays }),
+            this.i18n.t('decision.modifier.healthyStreak', locale, { days: healthyDays }),
           );
         }
 
@@ -167,10 +166,10 @@ export class ContextualDecisionModifierService {
           result.additionalIssues.push({
             category: 'binge_risk',
             severity: 'critical',
-            message: cl('modifier.bingeRisk', locale, { count: mealCount }),
+            message: this.i18n.t('decision.modifier.bingeRisk', locale, { count: mealCount }),
           });
           result.additionalReasons.push(
-            cl('modifier.bingeRiskReason', locale, { count: mealCount }),
+            this.i18n.t('decision.modifier.bingeRiskReason', locale, { count: mealCount }),
           );
         }
       }

@@ -11,6 +11,7 @@
  * - 不修改原始决策输出，只做信息提取和文案生成
  */
 import { Injectable } from '@nestjs/common';
+import { I18nService, I18nLocale } from '../../../core/i18n';
 import {
   DecisionSummary,
   FoodDecision,
@@ -30,7 +31,6 @@ import {
   SIGNAL_PRIORITY_MATRIX,
 } from '../config/signal-priority.config';
 import { DynamicSignalWeightService } from '../config/dynamic-signal-weight.service';
-import { cl } from '../i18n/decision-labels';
 import { translateEnumList } from '../../../common/i18n/enum-i18n';
 import type { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
 
@@ -48,7 +48,7 @@ export interface SummaryInput {
   /** V3.5: 决策模式（pre_eat / post_eat），影响 actionItems 建议方向 */
   decisionMode?: 'pre_eat' | 'post_eat';
   /** V3.8: locale for i18n */
-  locale?: Locale;
+  locale?: I18nLocale;
 }
 
 // ==================== 严重度权重 ====================
@@ -61,8 +61,8 @@ const SEVERITY_ORDER: Record<string, number> = {
 
 @Injectable()
 export class DecisionSummaryService {
-  constructor(
-    private readonly dynamicSignalWeightService: DynamicSignalWeightService,
+  constructor(private readonly dynamicSignalWeightService: DynamicSignalWeightService,
+    private readonly i18n: I18nService,
   ) {}
 
   /**
@@ -199,12 +199,12 @@ export class DecisionSummaryService {
     totals: NutritionTotals,
     foodNames: string[],
     ctx: UnifiedUserContext,
-    locale?: Locale,
+    locale?: I18nLocale,
   ): string {
     const foodDesc =
       foodNames.length <= 2
-        ? foodNames.join(cl('summary.join', locale))
-        : cl('summary.foodCount', locale, {
+        ? foodNames.join(this.i18n.t('decision.summary.join', locale))
+        : this.i18n.t('decision.summary.foodCount', locale, {
             first: foodNames[0],
             count: foodNames.length,
           });
@@ -213,12 +213,12 @@ export class DecisionSummaryService {
 
     if (decision.recommendation === 'recommend') {
       if (ctx.budgetStatus === 'near_limit') {
-        return cl('summary.recommend.nearLimit', locale, {
+        return this.i18n.t('decision.summary.recommend.nearLimit', locale, {
           food: foodDesc,
           cal: calText,
         });
       }
-      return cl('summary.recommend.ok', locale, {
+      return this.i18n.t('decision.summary.recommend.ok', locale, {
         food: foodDesc,
         cal: calText,
       });
@@ -226,12 +226,12 @@ export class DecisionSummaryService {
 
     if (decision.recommendation === 'avoid') {
       if (ctx.budgetStatus === 'over_limit') {
-        return cl('summary.avoid.overLimit', locale, {
+        return this.i18n.t('decision.summary.avoid.overLimit', locale, {
           food: foodDesc,
           cal: calText,
         });
       }
-      return cl('summary.avoid.generic', locale, {
+      return this.i18n.t('decision.summary.avoid.generic', locale, {
         food: foodDesc,
         cal: calText,
       });
@@ -239,7 +239,7 @@ export class DecisionSummaryService {
 
     // caution — 给出具体原因
     if (decision.optimalPortion) {
-      return cl('summary.caution.portion', locale, {
+      return this.i18n.t('decision.summary.caution.portion', locale, {
         food: foodDesc,
         cal: calText,
         percent: decision.optimalPortion.recommendedPercent,
@@ -248,14 +248,14 @@ export class DecisionSummaryService {
 
     const remaining = ctx.remainingCalories;
     if (totals.calories > remaining && remaining > 0) {
-      return cl('summary.caution.overBudget', locale, {
+      return this.i18n.t('decision.summary.caution.overBudget', locale, {
         food: foodDesc,
         cal: calText,
         amount: Math.round(totals.calories - remaining),
       });
     }
 
-    return cl('summary.caution.reason', locale, {
+    return this.i18n.t('decision.summary.caution.reason', locale, {
       food: foodDesc,
       cal: calText,
       reason: decision.reason,
@@ -286,7 +286,7 @@ export class DecisionSummaryService {
   private extractTopStrengths(
     explanations: BreakdownExplanation[] | undefined,
     maxCount: number,
-    locale?: Locale,
+    locale?: I18nLocale,
   ): string[] {
     if (!explanations || explanations.length === 0) return [];
 
@@ -295,7 +295,7 @@ export class DecisionSummaryService {
       .sort((a, b) => b.score - a.score)
       .slice(0, maxCount)
       .map((e) =>
-        cl('summary.strength', locale, {
+        this.i18n.t('decision.summary.strength', locale, {
           label: e.label,
           score: e.score,
           message: e.message,
@@ -314,7 +314,7 @@ export class DecisionSummaryService {
     decision: FoodDecision,
     maxCount: number,
     decisionMode?: 'pre_eat' | 'post_eat',
-    locale?: Locale,
+    locale?: I18nLocale,
   ): string[] {
     const items: string[] = [];
 
@@ -338,7 +338,7 @@ export class DecisionSummaryService {
 
     // 3. V3.5: post_eat 模式追加恢复性行动提示
     if (decisionMode === 'post_eat' && items.length < maxCount) {
-      items.push(cl('summary.postEatAction', locale));
+      items.push(this.i18n.t('decision.summary.postEatAction', locale));
     }
 
     return items.slice(0, maxCount);
@@ -353,34 +353,34 @@ export class DecisionSummaryService {
     macroProgress: MacroProgress | undefined,
     totals: NutritionTotals,
     ctx: UnifiedUserContext,
-    locale?: Locale,
+    locale?: I18nLocale,
   ): string {
     if (macroProgress) {
       // 找偏离最大的维度
       const dimensions = [
         {
-          name: cl('summary.macro.calories', locale),
+          name: this.i18n.t('decision.summary.macro.calories', locale),
           consumed: macroProgress.calories.consumed,
           target: macroProgress.calories.target,
           percent: macroProgress.calories.percent,
           unit: 'kcal',
         },
         {
-          name: cl('summary.macro.protein', locale),
+          name: this.i18n.t('decision.summary.macro.protein', locale),
           consumed: macroProgress.protein.consumed,
           target: macroProgress.protein.target,
           percent: macroProgress.protein.percent,
           unit: 'g',
         },
         {
-          name: cl('summary.macro.fat', locale),
+          name: this.i18n.t('decision.summary.macro.fat', locale),
           consumed: macroProgress.fat.consumed,
           target: macroProgress.fat.target,
           percent: macroProgress.fat.percent,
           unit: 'g',
         },
         {
-          name: cl('summary.macro.carbs', locale),
+          name: this.i18n.t('decision.summary.macro.carbs', locale),
           consumed: macroProgress.carbs.consumed,
           target: macroProgress.carbs.target,
           percent: macroProgress.carbs.percent,
@@ -397,14 +397,14 @@ export class DecisionSummaryService {
 
       const status =
         mostDeviated.percent > 120
-          ? cl('summary.status.over', locale)
+          ? this.i18n.t('decision.summary.status.over', locale)
           : mostDeviated.percent < 50
-            ? cl('summary.status.severeDeficit', locale)
+            ? this.i18n.t('decision.summary.status.severeDeficit', locale)
             : mostDeviated.percent < 80
-              ? cl('summary.status.low', locale)
-              : cl('summary.status.ok', locale);
+              ? this.i18n.t('decision.summary.status.low', locale)
+              : this.i18n.t('decision.summary.status.ok', locale);
 
-      return cl('summary.quantitative', locale, {
+      return this.i18n.t('decision.summary.quantitative', locale, {
         name: mostDeviated.name,
         consumed: mostDeviated.consumed,
         unit: mostDeviated.unit,
@@ -421,7 +421,7 @@ export class DecisionSummaryService {
             ((ctx.todayCalories + totals.calories) / ctx.goalCalories) * 100,
           )
         : 0;
-    return cl('summary.quantitativeFallback', locale, {
+    return this.i18n.t('decision.summary.quantitativeFallback', locale, {
       consumed: Math.round(ctx.todayCalories + totals.calories),
       target: ctx.goalCalories,
       percent: calPercent,
@@ -433,7 +433,7 @@ export class DecisionSummaryService {
    */
   private buildAlternativeSummary(
     alternatives: FoodAlternative[] | undefined,
-    locale?: Locale,
+    locale?: I18nLocale,
   ): string | undefined {
     if (!alternatives || alternatives.length === 0) return undefined;
 
@@ -442,14 +442,14 @@ export class DecisionSummaryService {
     if (top.comparison) {
       if (top.comparison.caloriesDiff < 0) {
         parts.push(
-          cl('summary.altCalLess', locale, {
+          this.i18n.t('decision.summary.altCalLess', locale, {
             amount: Math.abs(top.comparison.caloriesDiff),
           }),
         );
       }
       if (top.comparison.proteinDiff > 0) {
         parts.push(
-          cl('summary.altProteinMore', locale, {
+          this.i18n.t('decision.summary.altProteinMore', locale, {
             amount: top.comparison.proteinDiff,
           }),
         );
@@ -457,12 +457,12 @@ export class DecisionSummaryService {
     }
 
     if (alternatives.length > 1) {
-      return cl('summary.altSummary.multi', locale, {
+      return this.i18n.t('decision.summary.altSummary.multi', locale, {
         desc: parts.join(', '),
         count: alternatives.length - 1,
       });
     }
-    return cl('summary.altSummary.single', locale, {
+    return this.i18n.t('decision.summary.altSummary.single', locale, {
       desc: parts.join(', '),
     });
   }
@@ -495,7 +495,7 @@ export class DecisionSummaryService {
     topIssues: string[],
     decision: FoodDecision,
     nutritionIssues?: NutritionIssue[],
-    locale?: Locale,
+    locale?: I18nLocale,
   ): string {
     // V3.6 P2.3: 健康风险优先 — high severity 强制覆盖信号矩阵
     const HEALTH_RISK_TYPES = new Set([
@@ -509,7 +509,7 @@ export class DecisionSummaryService {
       (ni) => HEALTH_RISK_TYPES.has(ni.type) && ni.severity === 'high',
     );
     if (highRisk) {
-      return cl('summary.focus.healthRisk', locale, {
+      return this.i18n.t('decision.summary.focus.healthRisk', locale, {
         detail: highRisk.implication || highRisk.type,
       });
     }
@@ -529,61 +529,61 @@ export class DecisionSummaryService {
 
     if (topSignal === 'over_limit' || topSignal === 'near_limit') {
       return ctx.goalType === 'fat_loss'
-        ? cl('summary.focus.overLimit.fatLoss', locale)
-        : cl('summary.focus.overLimit.other', locale);
+        ? this.i18n.t('decision.summary.focus.overLimit.fatLoss', locale)
+        : this.i18n.t('decision.summary.focus.overLimit.other', locale);
     }
     if (topSignal === 'protein_gap') {
-      return cl('summary.focus.proteinGap', locale);
+      return this.i18n.t('decision.summary.focus.proteinGap', locale);
     }
     if (topSignal === 'health_constraint') {
-      return cl('summary.focus.healthConstraint', locale);
+      return this.i18n.t('decision.summary.focus.healthConstraint', locale);
     }
     if (topSignal === 'fat_excess') {
-      return cl('summary.focus.fatExcess', locale);
+      return this.i18n.t('decision.summary.focus.fatExcess', locale);
     }
     if (topSignal === 'carb_excess') {
-      return cl('summary.focus.carbExcess', locale);
+      return this.i18n.t('decision.summary.focus.carbExcess', locale);
     }
     if (topSignal === 'late_night_window') {
-      return cl('summary.focus.lateNight', locale);
+      return this.i18n.t('decision.summary.focus.lateNight', locale);
     }
     if (topSignal === 'meal_count_low') {
-      return cl('summary.focus.mealCountLow', locale);
+      return this.i18n.t('decision.summary.focus.mealCountLow', locale);
     }
     if (topSignal === 'under_target') {
-      return cl('summary.focus.underTarget', locale);
+      return this.i18n.t('decision.summary.focus.underTarget', locale);
     }
     if (decision.recommendation === 'avoid') {
-      return cl('summary.focus.avoid', locale);
+      return this.i18n.t('decision.summary.focus.avoid', locale);
     }
     if (topIssues.length > 0) {
-      return cl('summary.focus.topIssue', locale, { issue: topIssues[0] });
+      return this.i18n.t('decision.summary.focus.topIssue', locale, { issue: topIssues[0] });
     }
-    return cl('summary.focus.default', locale);
+    return this.i18n.t('decision.summary.focus.default', locale);
   }
 
   private buildDynamicDecisionHint(
     ctx: UnifiedUserContext,
     decision: FoodDecision,
-    locale?: Locale,
+    locale?: I18nLocale,
   ): string {
     const isLateWindow = ctx.localHour >= 21 || ctx.localHour <= 5;
     if (ctx.budgetStatus === 'over_limit') {
-      return cl('summary.hint.overLimit', locale);
+      return this.i18n.t('decision.summary.hint.overLimit', locale);
     }
     if (ctx.budgetStatus === 'near_limit') {
-      return cl('summary.hint.nearLimit', locale);
+      return this.i18n.t('decision.summary.hint.nearLimit', locale);
     }
     if (isLateWindow && decision.recommendation !== 'avoid') {
-      return cl('summary.hint.lateNight', locale);
+      return this.i18n.t('decision.summary.hint.lateNight', locale);
     }
-    return cl('summary.hint.default', locale);
+    return this.i18n.t('decision.summary.hint.default', locale);
   }
 
   private buildHealthConstraintNote(
     ctx: UnifiedUserContext,
     nutritionIssues?: NutritionIssue[],
-    locale?: Locale,
+    locale?: I18nLocale,
   ): string | undefined {
     const constraints = [
       ...(ctx.allergens || []),
@@ -617,15 +617,15 @@ export class DecisionSummaryService {
       .map((ni) => ni.implication);
 
     if (healthIssueImplications.length > 0) {
-      return cl('summary.healthNote.issues', locale, {
-        details: healthIssueImplications.join(cl('separator.list', locale)),
+      return this.i18n.t('decision.summary.healthNote.issues', locale, {
+        details: healthIssueImplications.join(this.i18n.t('decision.separator.list', locale)),
       });
     }
 
-    return cl('summary.healthNote.generic', locale, {
+    return this.i18n.t('decision.summary.healthNote.generic', locale, {
       constraints: constraints
         .slice(0, 3)
-        .join(cl('separator.enumeration', locale)),
+        .join(this.i18n.t('decision.separator.enumeration', locale)),
     });
   }
   // ==================== V3.3: StructuredDecision 增强 ====================
@@ -637,7 +637,7 @@ export class DecisionSummaryService {
   private enrichTopIssuesFromFactors(
     topIssues: string[],
     sd: StructuredDecision,
-    locale?: Locale,
+    locale?: I18nLocale,
   ): string[] {
     if (!sd.factors) return topIssues;
 
@@ -659,7 +659,8 @@ export class DecisionSummaryService {
     for (const [key, factor] of lowScoreFactors) {
       if (topIssues.length >= 4) break;
       const label = DIMENSION_LABEL_KEYS[key]
-        ? cl(DIMENSION_LABEL_KEYS[key], locale)
+        // i18n-allow-dynamic
+        ? this.i18n.t(`decision.${DIMENSION_LABEL_KEYS[key]}`, locale)
         : key;
       const msg = `${label}: ${factor.rationale}`;
       if (!existing.has(msg)) {
@@ -705,7 +706,7 @@ export class DecisionSummaryService {
   private buildSignalTrace(
     ctx: UnifiedUserContext,
     contextSignals: string[],
-    locale?: Locale,
+    locale?: I18nLocale,
   ): SignalTraceItem[] {
     const trace: SignalTraceItem[] = [];
 
@@ -723,7 +724,7 @@ export class DecisionSummaryService {
     };
 
     const SIGNAL_DESC_MAP: Record<string, string> = {
-      health_constraint: cl('summary.signal.healthConstraint', locale, {
+      health_constraint: this.i18n.t('decision.summary.signal.healthConstraint', locale, {
         details: [
           ...translateEnumList('allergen', ctx.allergens, locale),
           ...translateEnumList(
@@ -736,33 +737,33 @@ export class DecisionSummaryService {
           .slice(0, 2)
           .join('/'),
       }),
-      over_limit: cl('summary.signal.overLimit', locale, {
+      over_limit: this.i18n.t('decision.summary.signal.overLimit', locale, {
         consumed: Math.round(ctx.todayCalories),
         goal: ctx.goalCalories,
       }),
-      near_limit: cl('summary.signal.nearLimit', locale, {
+      near_limit: this.i18n.t('decision.summary.signal.nearLimit', locale, {
         remaining: Math.round(ctx.remainingCalories),
       }),
-      under_target: cl('summary.signal.underTarget', locale, {
+      under_target: this.i18n.t('decision.summary.signal.underTarget', locale, {
         remaining: Math.round(ctx.remainingCalories),
       }),
-      protein_gap: cl('summary.signal.proteinGap', locale, {
+      protein_gap: this.i18n.t('decision.summary.signal.proteinGap', locale, {
         remaining: Math.round(ctx.remainingProtein),
         goal: ctx.goalProtein,
       }),
-      fat_excess: cl('summary.signal.fatExcess', locale, {
+      fat_excess: this.i18n.t('decision.summary.signal.fatExcess', locale, {
         amount: Math.abs(Math.round(ctx.remainingFat)),
       }),
-      carb_excess: cl('summary.signal.carbExcess', locale, {
+      carb_excess: this.i18n.t('decision.summary.signal.carbExcess', locale, {
         amount: Math.abs(Math.round(ctx.remainingCarbs)),
       }),
-      late_night_window: cl('summary.signal.lateNight', locale, {
+      late_night_window: this.i18n.t('decision.summary.signal.lateNight', locale, {
         hour: ctx.localHour,
       }),
-      meal_count_low: cl('summary.signal.mealCountLow', locale, {
+      meal_count_low: this.i18n.t('decision.summary.signal.mealCountLow', locale, {
         count: ctx.mealCount,
       }),
-      fresh_day: cl('summary.signal.freshDay', locale),
+      fresh_day: this.i18n.t('decision.summary.signal.freshDay', locale),
     };
 
     const goalType = ctx.goalType || 'health';
@@ -795,7 +796,7 @@ export class DecisionSummaryService {
    */
   private buildBehaviorNote(
     ctx: UnifiedUserContext,
-    locale?: Locale,
+    locale?: I18nLocale,
   ): string | undefined {
     const parts: string[] = [];
 
@@ -803,24 +804,24 @@ export class DecisionSummaryService {
       const gp = ctx.goalProgress;
       if (gp.streakDays > 0) {
         parts.push(
-          cl('summary.streakNote', locale, { days: gp.streakDays }),
+          this.i18n.t('decision.summary.streakNote', locale, { days: gp.streakDays }),
         );
       }
       if (gp.executionRate > 0) {
         parts.push(
-          cl('summary.executionNote', locale, { rate: Math.round(gp.executionRate * 100) }),
+          this.i18n.t('decision.summary.executionNote', locale, { rate: Math.round(gp.executionRate * 100) }),
         );
       }
     }
 
     if (ctx.shortTermBehavior?.intakeTrends === 'increasing') {
-      parts.push(cl('summary.trendIncreasing', locale));
+      parts.push(this.i18n.t('decision.summary.trendIncreasing', locale));
     } else if (ctx.shortTermBehavior?.intakeTrends === 'decreasing') {
-      parts.push(cl('summary.trendDecreasing', locale));
+      parts.push(this.i18n.t('decision.summary.trendDecreasing', locale));
     }
 
     return parts.length > 0
-      ? parts.join(cl('summary.noteSep', locale))
+      ? parts.join(this.i18n.t('decision.summary.noteSep', locale))
       : undefined;
   }
 }

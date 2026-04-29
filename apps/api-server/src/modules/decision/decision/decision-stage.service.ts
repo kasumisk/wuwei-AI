@@ -8,6 +8,7 @@
  * Consumed by AnalysisPipelineService in Stage 2 (Decide).
  */
 import { Injectable, Logger } from '@nestjs/common';
+import { I18nService, I18nLocale } from '../../../core/i18n';
 import {
   AnalyzedFoodItem,
   AnalyzeStageResult,
@@ -17,8 +18,6 @@ import {
 import { FoodDecisionService, DecisionOutput } from './food-decision.service';
 import { DecisionEngineService } from './decision-engine.service';
 import { DecisionSummaryService } from './decision-summary.service';
-import { Locale } from '../../diet/app/recommendation/utils/i18n-messages';
-import { cl } from '../i18n/decision-labels';
 // nutrition-aggregator 不再导出按重量缩放的工具；AnalyzedFoodItem 已是 per-serving。
 
 /** Input for the decision stage */
@@ -26,7 +25,7 @@ export interface DecisionStageInput {
   foods: AnalyzedFoodItem[];
   analyze: AnalyzeStageResult;
   userId?: string;
-  locale?: Locale;
+  locale?: I18nLocale;
   decisionMode?: 'pre_eat' | 'post_eat';
 }
 
@@ -34,10 +33,10 @@ export interface DecisionStageInput {
 export class DecisionStageService {
   private readonly logger = new Logger(DecisionStageService.name);
 
-  constructor(
-    private readonly foodDecisionService: FoodDecisionService,
+  constructor(private readonly foodDecisionService: FoodDecisionService,
     private readonly decisionEngineService: DecisionEngineService,
     private readonly decisionSummaryService: DecisionSummaryService,
+    private readonly i18n: I18nService,
   ) {}
 
   /**
@@ -133,17 +132,17 @@ export class DecisionStageService {
   /**
    * Fallback decision output when decision service fails
    */
-  private buildFallbackDecision(locale?: Locale): DecisionOutput {
+  private buildFallbackDecision(locale?: I18nLocale): DecisionOutput {
     return {
       decision: {
         recommendation: 'caution',
         shouldEat: true,
-        reason: cl('pipeline.fallback.reason', locale),
+        reason: this.i18n.t('decision.pipeline.fallback.reason', locale),
         riskLevel: 'medium',
       },
       alternatives: [],
       explanation: {
-        summary: cl('pipeline.fallback.summary', locale),
+        summary: this.i18n.t('decision.pipeline.fallback.summary', locale),
       },
       decisionFactors: [],
     };
