@@ -2,7 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { Search, Gem, User } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { ThemeToggle } from '@/components/common/theme-toggle';
 import { LanguageToggle } from '@/components/common/language-toggle';
 import { LocalizedLink } from '@/components/common/localized-link';
@@ -36,7 +36,7 @@ export function SiteHeader({ searchQuery = '', onSearchChange }: SiteHeaderProps
       <div className="flex justify-between items-center px-8 h-16 w-full max-w-screen-2xl mx-auto">
         {/* Left: Logo + Nav */}
         <div className="flex items-center gap-8">
-          <LocalizedLink href="/">
+          <LocalizedLink href="/home">
             <h1 className="text-xl font-bold bg-linear-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent font-headline cursor-pointer">
               无畏健康
             </h1>

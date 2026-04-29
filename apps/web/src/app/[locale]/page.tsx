@@ -1,31 +1,26 @@
-import { getTranslations } from 'next-intl/server';
+import type { Metadata } from 'next';
 import { getLocale } from 'next-intl/server';
-import { HomePage } from '@/features/home/components/home-page';
-import { buildPageMetadata } from '@/lib/seo/metadata';
-import type { Locale } from '@/lib/i18n/config';
+import { EatCheckLanding } from '@/features/landing/components/eatcheck-landing';
+import { i18n } from '@/lib/i18n/config';
 
-export async function generateMetadata() {
-  const t = await getTranslations('common');
-  const locale = (await getLocale()) as Locale;
-  return buildPageMetadata({
-    title: t('appTitle'),
-    description: t('appDescription'),
-    path: '/',
-    locale,
-    keywords: [
-      'AI 饮食分析',
-      '营养管理',
-      '热量追踪',
-      '健康饮食',
-      '食物分析',
-      '减脂饮食',
-      '增肌饮食',
-      '无畏健康',
-      'AI nutrition',
-    ],
-  });
+export const metadata: Metadata = {
+  title: 'EatCheck | Nutrition awareness for everyday meals',
+  description:
+    'EatCheck helps people understand meal patterns, nutrition context, and daily eating habits for general wellness. Not medical advice.',
+};
+
+function localizedPath(path: string, locale: string) {
+  return locale === i18n.defaultLocale ? path : `/${locale}${path}`;
 }
 
-export default function Page() {
-  return <HomePage />;
+export default async function LandingPage() {
+  const locale = await getLocale();
+
+  return (
+    <EatCheckLanding
+      homeHref={localizedPath('/home', locale)}
+      privacyHref={localizedPath('/privacy', locale)}
+      termsHref={localizedPath('/terms', locale)}
+    />
+  );
 }

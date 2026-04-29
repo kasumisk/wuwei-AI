@@ -52,7 +52,7 @@ export default function LoginPage() {
     try {
       const profile = await profileService.getProfile();
       if (profile?.onboardingCompleted) {
-        router.push('/');
+        router.push('/home');
       } else {
         const startStep = profile?.onboardingStep ?? 1;
         router.push(`/onboarding?step=${startStep}`);

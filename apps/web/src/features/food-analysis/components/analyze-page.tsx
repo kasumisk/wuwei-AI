@@ -846,7 +846,7 @@ export function AnalyzePage() {
                         }
                         className="px-2.5 py-1  text-[11px] font-bold bg-primary/10 text-primary hover:bg-primary/15 transition-colors"
                       >
-                        一键补充"份量提示"
+                        一键补充&ldquo;份量提示&rdquo;
                       </button>
                     )}
                 </div>
@@ -1539,7 +1539,7 @@ export function AnalyzePage() {
             mealType={mealType}
             beforeSummary={preSaveSummary}
             onReset={handleReset}
-            onGoHome={() => router.push('/')}
+            onGoHome={() => router.push('/home')}
             onGoToPlan={() => router.push('/plan')}
             onGoToCoach={() => {
               if (result) {

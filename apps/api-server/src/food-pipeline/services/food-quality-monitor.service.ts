@@ -155,63 +155,62 @@ export class FoodQualityMonitorService {
   }
 
   private async getCompleteness() {
-    const total = await this.prisma.food.count();
-
-    const [
-      withProtein,
-      withMicro,
-      withGI,
-      withAllergens,
-      withCompat,
-      withTags,
-      withImage,
-    ] = await Promise.all([
-      this.prisma
-        .$queryRaw<
-          [{ count: number }]
-        >(Prisma.sql`SELECT COUNT(*)::int as count FROM foods WHERE protein IS NOT NULL`)
-        .then((r) => r[0].count),
-      this.prisma
-        .$queryRaw<
-          [{ count: number }]
-        >(Prisma.sql`SELECT COUNT(*)::int as count FROM foods WHERE vitamin_a IS NOT NULL OR vitamin_c IS NOT NULL OR calcium IS NOT NULL`)
-        .then((r) => r[0].count),
-      this.prisma
-        .$queryRaw<
-          [{ count: number }]
-        >(Prisma.sql`SELECT COUNT(*)::int as count FROM foods WHERE glycemic_index IS NOT NULL`)
-        .then((r) => r[0].count),
-      this.prisma
-        .$queryRaw<
-          [{ count: number }]
-        >(Prisma.sql`SELECT COUNT(*)::int as count FROM foods WHERE allergens IS NOT NULL AND allergens != '[]'::jsonb`)
-        .then((r) => r[0].count),
-      this.prisma
-        .$queryRaw<
-          [{ count: number }]
-        >(Prisma.sql`SELECT COUNT(*)::int as count FROM foods WHERE compatibility IS NOT NULL AND compatibility != '{}'::jsonb`)
-        .then((r) => r[0].count),
-      this.prisma
-        .$queryRaw<
-          [{ count: number }]
-        >(Prisma.sql`SELECT COUNT(*)::int as count FROM foods WHERE tags IS NOT NULL AND tags != '[]'::jsonb AND jsonb_array_length(tags) > 0`)
-        .then((r) => r[0].count),
-      this.prisma
-        .$queryRaw<
-          [{ count: number }]
-        >(Prisma.sql`SELECT COUNT(*)::int as count FROM foods WHERE image_url IS NOT NULL`)
-        .then((r) => r[0].count),
-    ]);
+    const [row] = await this.prisma.$queryRaw<
+      Array<{
+        total: number;
+        with_protein: number;
+        with_micro: number;
+        with_gi: number;
+        with_allergens: number;
+        with_compatibility: number;
+        with_tags: number;
+        with_image: number;
+      }>
+    >(Prisma.sql`
+      SELECT
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE f.protein IS NOT NULL)::int AS with_protein,
+        COUNT(*) FILTER (
+          WHERE nd.vitamin_a IS NOT NULL
+             OR nd.vitamin_c IS NOT NULL
+             OR f.calcium IS NOT NULL
+        )::int AS with_micro,
+        COUNT(*) FILTER (WHERE ha.glycemic_index IS NOT NULL)::int AS with_gi,
+        COUNT(*) FILTER (
+          WHERE tx.allergens IS NOT NULL
+            AND tx.allergens <> '[]'::jsonb
+            AND jsonb_typeof(tx.allergens) = 'array'
+            AND jsonb_array_length(tx.allergens) > 0
+        )::int AS with_allergens,
+        COUNT(*) FILTER (
+          WHERE tx.compatibility IS NOT NULL
+            AND tx.compatibility <> '{}'::jsonb
+        )::int AS with_compatibility,
+        COUNT(*) FILTER (
+          WHERE tx.tags IS NOT NULL
+            AND tx.tags <> '[]'::jsonb
+            AND jsonb_typeof(tx.tags) = 'array'
+            AND jsonb_array_length(tx.tags) > 0
+        )::int AS with_tags,
+        COUNT(*) FILTER (
+          WHERE f.image_url IS NOT NULL
+            AND BTRIM(f.image_url) <> ''
+        )::int AS with_image
+      FROM foods f
+      LEFT JOIN food_nutrition_details nd ON nd.food_id = f.id
+      LEFT JOIN food_health_assessments ha ON ha.food_id = f.id
+      LEFT JOIN food_taxonomies tx ON tx.food_id = f.id
+    `);
 
     return {
-      total,
-      withProtein,
-      withMicronutrients: withMicro,
-      withGI,
-      withAllergens,
-      withCompatibility: withCompat,
-      withTags,
-      withImage,
+      total: row?.total ?? 0,
+      withProtein: row?.with_protein ?? 0,
+      withMicronutrients: row?.with_micro ?? 0,
+      withGI: row?.with_gi ?? 0,
+      withAllergens: row?.with_allergens ?? 0,
+      withCompatibility: row?.with_compatibility ?? 0,
+      withTags: row?.with_tags ?? 0,
+      withImage: row?.with_image ?? 0,
     };
   }
 
@@ -397,32 +396,36 @@ export class FoodQualityMonitorService {
     // 单条 SQL 聚合所有字段的非 NULL 计数
     const result = await this.prisma.$queryRaw<
       [Record<string, number>]
-    >(Prisma.sql`SELECT
+    >(Prisma.sql`
+      SELECT
         COUNT(*)::int AS total,
-        COUNT(protein)::int AS protein,
-        COUNT(fat)::int AS fat,
-        COUNT(carbs)::int AS carbs,
-        COUNT(fiber)::int AS fiber,
-        COUNT(sugar)::int AS sugar,
-        COUNT(sodium)::int AS sodium,
-        COUNT(calcium)::int AS calcium,
-        COUNT(iron)::int AS iron,
-        COUNT(potassium)::int AS potassium,
-        COUNT(vitamin_a)::int AS vitamin_a,
-        COUNT(vitamin_c)::int AS vitamin_c,
-        COUNT(vitamin_d)::int AS vitamin_d,
-        COUNT(vitamin_e)::int AS vitamin_e,
-        COUNT(vitamin_b12)::int AS vitamin_b12,
-        COUNT(folate)::int AS folate,
-        COUNT(zinc)::int AS zinc,
-        COUNT(magnesium)::int AS magnesium,
-        COUNT(phosphorus)::int AS phosphorus,
-        COUNT(glycemic_index)::int AS glycemic_index,
-        COUNT(glycemic_load)::int AS glycemic_load,
-        COUNT(saturated_fat)::int AS saturated_fat,
-        COUNT(trans_fat)::int AS trans_fat,
-        COUNT(cholesterol)::int AS cholesterol
-      FROM foods`);
+        COUNT(f.protein)::int AS protein,
+        COUNT(f.fat)::int AS fat,
+        COUNT(f.carbs)::int AS carbs,
+        COUNT(f.fiber)::int AS fiber,
+        COUNT(f.sugar)::int AS sugar,
+        COUNT(f.sodium)::int AS sodium,
+        COUNT(f.calcium)::int AS calcium,
+        COUNT(f.iron)::int AS iron,
+        COUNT(f.potassium)::int AS potassium,
+        COUNT(nd.vitamin_a)::int AS vitamin_a,
+        COUNT(nd.vitamin_c)::int AS vitamin_c,
+        COUNT(nd.vitamin_d)::int AS vitamin_d,
+        COUNT(nd.vitamin_e)::int AS vitamin_e,
+        COUNT(nd.vitamin_b12)::int AS vitamin_b12,
+        COUNT(nd.folate)::int AS folate,
+        COUNT(nd.zinc)::int AS zinc,
+        COUNT(nd.magnesium)::int AS magnesium,
+        COUNT(nd.phosphorus)::int AS phosphorus,
+        COUNT(ha.glycemic_index)::int AS glycemic_index,
+        COUNT(ha.glycemic_load)::int AS glycemic_load,
+        COUNT(nd.saturated_fat)::int AS saturated_fat,
+        COUNT(nd.trans_fat)::int AS trans_fat,
+        COUNT(nd.cholesterol)::int AS cholesterol
+      FROM foods f
+      LEFT JOIN food_nutrition_details nd ON nd.food_id = f.id
+      LEFT JOIN food_health_assessments ha ON ha.food_id = f.id
+    `);
 
     const row = result[0];
     const total = row.total ?? 0;

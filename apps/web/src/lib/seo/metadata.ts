@@ -3,7 +3,7 @@ import { i18n, type Locale } from '@/lib/i18n/config';
 
 // ─── Site Configuration ───
 export const siteConfig = {
-  name: '无畏健康 uWay Health',
+  name: 'EatCheck',
   url: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
   ogImage: '/og-image.png',
   icons: {

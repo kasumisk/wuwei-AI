@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     default: siteConfig.name,
     template: `%s | ${siteConfig.name}`,
   },
-  description: '你的 AI 营养管家 — 拍照识别食物、个性化营养分析、智能饮食推荐',
+  description: 'AI-powered nutrition insights for smarter eating',
   manifest: '/manifest.json',
   icons: siteConfig.icons,
 };

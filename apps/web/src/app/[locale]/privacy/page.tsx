@@ -1,8 +1,8 @@
 import { PrivacyPolicyPage } from '@/components/common/legal/privacy-policy';
 
 export const metadata = {
-  title: '隐私政策 | 无畏健康 uWay Health',
-  description: '无畏健康 uWay Health 隐私政策 — 我们如何收集、使用和保护您的信息。',
+  title: 'Privacy Policy | EatCheck',
+  description: 'EatCheck Privacy Policy explaining what data we collect, how we use it, sharing, deletion rights, and contact information.',
 };
 
 export default function PrivacyPage() {

@@ -78,8 +78,8 @@ const TABS: NavTab[] = [
   {
     key: 'home',
     label: '首页',
-    href: '/',
-    matchPattern: /^\/$/,
+    href: '/home',
+    matchPattern: /^\/home/,
     icon: IconHome,
   },
   {
