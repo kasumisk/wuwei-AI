@@ -5,6 +5,11 @@ export { LanguageContextService } from './language-context.service';
 export { PromptBuilderService } from './prompt-builder.service';
 export { I18n, I18nContext, I18N_REQUEST_KEY } from './i18n.decorator';
 export {
+  setI18nSingleton,
+  getI18nSingleton,
+  clearI18nSingleton,
+} from './i18n.runtime';
+export {
   I18nLocale,
   I18N_LOCALES,
   I18N_DEFAULT_LOCALE,

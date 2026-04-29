@@ -149,7 +149,7 @@
   "recommendation.compare.easierToAcquire": "更容易获取",
   "recommendation.compare.fiberBetter": "膳食纤维更充足",
   "recommendation.compare.proteinRicher": "蛋白质更丰富（{{recProt}}g vs {{altProt}}g）",
-  "recommendation.compare.summary.noAdvantage": "综合{{goalText}}目标评估，「{{recName}}」整体评分更优。",
+  "recommendation.compare.summary.noAdvantage": "综合{{goalText}}目标评估，「{{recName}}」整体评分优于「{{altName}}」。",
   "recommendation.compare.summary.scoreHigher": "，综合评分高出 {{scorePercent}}%",
   "recommendation.compare.summary.withAdvantage": "相比「{{altName}}」，推荐「{{recName}}」因为{{advText}}{{scoreNote}}。",
   "recommendation.compensation.adjusted": "已自动调整{{meal}}以平衡全天营养",

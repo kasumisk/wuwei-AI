@@ -721,7 +721,7 @@
   "recommendation.substitute.proteinChange": "Protein {{direction}} by {{amount}}g",
   "recommendation.substitute.quality.acceptable": "an acceptable",
   "recommendation.substitute.quality.good": "a good",
-  "recommendation.substitute.suggestion": "{{subName}} is {{quality}} substitute for {{origName}}.{{impactText}}",
+  "recommendation.substitute.suggestion": "{{subName}} is {{quality}} substitute for {{origName}}.{{categoryNote}}{{impactText}}",
   "recommendation.tip.caloriesOver": "Recommended calories slightly exceed budget, consider smaller portions",
   "recommendation.tip.caloriesUnder": "Recommendation is a bit low, consider adding a fruit or yogurt",
   "recommendation.tip.goal.fat_loss": "Fat loss phase: prioritize high-protein, low-fat foods",

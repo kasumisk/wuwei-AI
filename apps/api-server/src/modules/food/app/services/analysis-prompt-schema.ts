@@ -23,23 +23,48 @@ import { cl } from '../../../decision/i18n/decision-labels';
 
 // ==================== Health Condition Instructions ====================
 
+const LOCALES: Locale[] = ['zh-CN', 'en-US', 'ja-JP'];
+
+/**
+ * 健康状况追加指令配置（仅 condition + aliases，文案走 i18n key）
+ *
+ * Phase 11.B (V8): 改为懒加载 — 模块顶层不再 eager 调用 cl()，
+ *   避免在 I18nService.onModuleInit 之前执行导致拿到 key 字面量。
+ */
+const HEALTH_CONDITION_DEFS: ReadonlyArray<{
+  condition: string;
+  aliases: string[];
+  /** i18n key（不带 'decision.' 前缀，cl() 内部会补） */
+  i18nKey: string;
+}> = [
+  { condition: 'diabetes', aliases: ['diabetes'], i18nKey: 'health.inst.diabetes' },
+  { condition: 'hypertension', aliases: ['hypertension'], i18nKey: 'health.inst.hypertension' },
+  { condition: 'cardiovascular', aliases: ['heart_disease', 'cardiovascular'], i18nKey: 'health.inst.cardiovascular' },
+  { condition: 'gout', aliases: ['gout'], i18nKey: 'health.inst.gout' },
+  { condition: 'ibs', aliases: ['IBS'], i18nKey: 'health.inst.ibs' },
+  { condition: 'kidney_stones', aliases: ['kidney_stones'], i18nKey: 'health.inst.kidney_stones' },
+  { condition: 'hyperlipidemia', aliases: ['hyperlipidemia'], i18nKey: 'health.inst.hyperlipidemia' },
+];
+
 interface HealthEstimationInstruction {
   condition: string;
   aliases: string[];
   instruction: Record<string, string>;
 }
 
-const LOCALES: Locale[] = ['zh-CN', 'en-US', 'ja-JP'];
+/** 缓存：首次构造后复用 */
+let HEALTH_CONDITION_INSTRUCTIONS_CACHE: HealthEstimationInstruction[] | null =
+  null;
 
-const HEALTH_CONDITION_INSTRUCTIONS: HealthEstimationInstruction[] = [
-  { condition: 'diabetes', aliases: ['diabetes'], instruction: Object.fromEntries(LOCALES.map((l) => [l, cl('health.inst.diabetes', l)])) },
-  { condition: 'hypertension', aliases: ['hypertension'], instruction: Object.fromEntries(LOCALES.map((l) => [l, cl('health.inst.hypertension', l)])) },
-  { condition: 'cardiovascular', aliases: ['heart_disease', 'cardiovascular'], instruction: Object.fromEntries(LOCALES.map((l) => [l, cl('health.inst.cardiovascular', l)])) },
-  { condition: 'gout', aliases: ['gout'], instruction: Object.fromEntries(LOCALES.map((l) => [l, cl('health.inst.gout', l)])) },
-  { condition: 'ibs', aliases: ['IBS'], instruction: Object.fromEntries(LOCALES.map((l) => [l, cl('health.inst.ibs', l)])) },
-  { condition: 'kidney_stones', aliases: ['kidney_stones'], instruction: Object.fromEntries(LOCALES.map((l) => [l, cl('health.inst.kidney_stones', l)])) },
-  { condition: 'hyperlipidemia', aliases: ['hyperlipidemia'], instruction: Object.fromEntries(LOCALES.map((l) => [l, cl('health.inst.hyperlipidemia', l)])) },
-];
+function getHealthConditionInstructions(): HealthEstimationInstruction[] {
+  if (HEALTH_CONDITION_INSTRUCTIONS_CACHE) return HEALTH_CONDITION_INSTRUCTIONS_CACHE;
+  HEALTH_CONDITION_INSTRUCTIONS_CACHE = HEALTH_CONDITION_DEFS.map((def) => ({
+    condition: def.condition,
+    aliases: def.aliases,
+    instruction: Object.fromEntries(LOCALES.map((l) => [l, cl(def.i18nKey, l)])),
+  }));
+  return HEALTH_CONDITION_INSTRUCTIONS_CACHE;
+}
 
 // ==================== Public API ====================
 
@@ -172,7 +197,7 @@ export function buildUserContextPrompt(params: {
   }
 
   // Health conditions
-  for (const hci of HEALTH_CONDITION_INSTRUCTIONS) {
+  for (const hci of getHealthConditionInstructions()) {
     if (hci.aliases.some((a) => params.healthConditions.includes(a))) {
       lines.push(`- ${hci.instruction[loc]}`);
     }

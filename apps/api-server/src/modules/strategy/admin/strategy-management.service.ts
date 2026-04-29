@@ -77,7 +77,7 @@ export class StrategyManagementService {
   async getStrategyDetail(id: string) {
     const strategy = await this.prisma.strategy.findUnique({ where: { id } });
     if (!strategy) {
-      throw new NotFoundException(this.i18n.t('strategy.notFound', { id }));
+      throw new NotFoundException(this.i18n.t('strategy.strategy.notFound', { id }));
     }
 
     // 同时查询该策略的活跃分配数
@@ -110,7 +110,7 @@ export class StrategyManagementService {
       where: { id },
     });
     if (!oldStrategy) {
-      throw new NotFoundException(this.i18n.t('strategy.notFound', { id }));
+      throw new NotFoundException(this.i18n.t('strategy.strategy.notFound', { id }));
     }
 
     const updateData: Record<string, any> = {};
@@ -120,7 +120,7 @@ export class StrategyManagementService {
     if (dto.priority !== undefined) updateData.priority = dto.priority;
 
     if (Object.keys(updateData).length === 0) {
-      throw new BadRequestException(this.i18n.t('strategy.noFieldsToUpdate'));
+      throw new BadRequestException(this.i18n.t('strategy.strategy.noFieldsToUpdate'));
     }
 
     const updated = await this.strategyService.update(id, updateData);
@@ -154,12 +154,12 @@ export class StrategyManagementService {
     });
     if (!strategy) {
       throw new NotFoundException(
-        this.i18n.t('strategy.notFound', { id: strategyId }),
+        this.i18n.t('strategy.strategy.notFound', { id: strategyId }),
       );
     }
     if (strategy.status !== StrategyStatus.ACTIVE) {
       throw new BadRequestException(
-        this.i18n.t('strategy.onlyActiveCanBeAssigned'),
+        this.i18n.t('strategy.strategy.onlyActiveCanBeAssigned'),
       );
     }
 
@@ -221,13 +221,13 @@ export class StrategyManagementService {
     });
     if (!assignment) {
       throw new NotFoundException(
-        this.i18n.t('strategy.assignmentNotFound', { assignmentId }),
+        this.i18n.t('strategy.strategy.assignmentNotFound', { assignmentId }),
       );
     }
 
     await this.strategyService.removeUserAssignment(dto.userId, assignmentId);
 
-    return { message: this.i18n.t('strategy.assignmentRemoved') };
+    return { message: this.i18n.t('strategy.strategy.assignmentRemoved') };
   }
 
   // ==================== 策略统计概览 ====================
@@ -327,7 +327,7 @@ export class StrategyManagementService {
     });
     if (!strategy) {
       throw new NotFoundException(
-        this.i18n.t('strategy.notFound', { id: strategyId }),
+        this.i18n.t('strategy.strategy.notFound', { id: strategyId }),
       );
     }
 
@@ -369,7 +369,7 @@ export class StrategyManagementService {
     const preset = PRESET_REALISM[presetName];
     if (!preset) {
       throw new BadRequestException(
-        this.i18n.t('strategy.unknownPreset', {
+        this.i18n.t('strategy.strategy.unknownPreset', {
           presetName,
           available: Object.keys(PRESET_REALISM).join(', '),
         }),
@@ -381,7 +381,7 @@ export class StrategyManagementService {
     });
     if (!strategy) {
       throw new NotFoundException(
-        this.i18n.t('strategy.notFound', { id: strategyId }),
+        this.i18n.t('strategy.strategy.notFound', { id: strategyId }),
       );
     }
 
@@ -425,7 +425,7 @@ export class StrategyManagementService {
 
     if (strategies.length === 0) {
       throw new NotFoundException(
-        this.i18n.t('strategy.noActiveStrategyForSegment', {
+        this.i18n.t('strategy.strategy.noActiveStrategyForSegment', {
           segment: dto.segment,
         }),
       );
@@ -472,7 +472,7 @@ export class StrategyManagementService {
     });
     if (!strategy) {
       throw new NotFoundException(
-        this.i18n.t('strategy.notFound', { id: strategyId }),
+        this.i18n.t('strategy.strategy.notFound', { id: strategyId }),
       );
     }
 
@@ -508,12 +508,12 @@ export class StrategyManagementService {
 
     if (!strategyA) {
       throw new NotFoundException(
-        this.i18n.t('strategy.notFound', { id: strategyId }),
+        this.i18n.t('strategy.strategy.notFound', { id: strategyId }),
       );
     }
     if (!strategyB) {
       throw new NotFoundException(
-        this.i18n.t('strategy.notFound', { id: compareWithId }),
+        this.i18n.t('strategy.strategy.notFound', { id: compareWithId }),
       );
     }
 
@@ -610,12 +610,12 @@ export class StrategyManagementService {
     });
     if (!tuning) {
       throw new NotFoundException(
-        this.i18n.t('strategy.tuningNotFound', { tuningId }),
+        this.i18n.t('strategy.strategy.tuningNotFound', { tuningId }),
       );
     }
     if (tuning.reviewStatus !== 'pending_review') {
       throw new BadRequestException(
-        this.i18n.t('strategy.tuningNotPending', {
+        this.i18n.t('strategy.strategy.tuningNotPending', {
           status: tuning.reviewStatus,
         }),
       );
@@ -649,12 +649,12 @@ export class StrategyManagementService {
     });
     if (!tuning) {
       throw new NotFoundException(
-        this.i18n.t('strategy.tuningNotFound', { tuningId }),
+        this.i18n.t('strategy.strategy.tuningNotFound', { tuningId }),
       );
     }
     if (tuning.reviewStatus !== 'pending_review') {
       throw new BadRequestException(
-        this.i18n.t('strategy.tuningNotPending', {
+        this.i18n.t('strategy.strategy.tuningNotPending', {
           status: tuning.reviewStatus,
         }),
       );

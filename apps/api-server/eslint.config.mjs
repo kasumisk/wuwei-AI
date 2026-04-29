@@ -75,6 +75,8 @@ export default tseslint.config(
       // i18n 治理（先以 warn 落地，待存量清零后改 error）
       'i18n/no-cjk-literal': 'warn',
       'i18n/no-locale-ternary': 'warn',
+      'i18n/no-key-concat': 'warn',
+      'i18n/no-cross-module-i18n-import': 'warn',
     },
   },
 );

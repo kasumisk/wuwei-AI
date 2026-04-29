@@ -24,6 +24,7 @@ import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
 import { RequestContextService } from '../context/request-context.service';
+import { setI18nSingleton } from './i18n.runtime';
 import {
   I18N_DEFAULT_LOCALE,
   I18N_LOCALES,
@@ -64,6 +65,8 @@ export class I18nService implements OnModuleInit {
 
   onModuleInit(): void {
     this.loadAll();
+    // 注册全局 singleton，供纯函数适配器（decision cl() 等）使用
+    setI18nSingleton(this);
   }
 
   /** 测试场景下手动重载 */
@@ -179,14 +182,16 @@ export class I18nService implements OnModuleInit {
 
   /**
    * 加载某模块的 i18n 目录。
-   * namespace = 包含 i18n 目录的父目录名（即模块文件夹名）
+   * namespace = 包含 i18n 目录的父目录名（即模块文件夹名），
+   * 自动将 kebab-case 转成 camelCase（`app-version` → `appVersion`），
+   * 让 ts 调用方可以使用更自然的 `i18n.t('appVersion.notFound')` 而不是带连字符。
    */
   private loadModuleI18n(
     i18nDir: string,
     moduleDir: string,
     seen: Map<string, string>,
   ): void {
-    const namespace = path.basename(moduleDir);
+    const namespace = I18nService.toCamelCase(path.basename(moduleDir));
     this.stats.modules.push(namespace);
 
     for (const locale of I18N_LOCALES) {
@@ -288,6 +293,11 @@ export class I18nService implements OnModuleInit {
     const k = (input || '').toLowerCase();
     if (I18N_LOCALES.includes(input as I18nLocale)) return input as I18nLocale;
     return I18N_LOCALE_ALIAS[k] ?? I18N_DEFAULT_LOCALE;
+  }
+
+  /** kebab-case → camelCase（保持已是 camelCase 的输入不变） */
+  static toCamelCase(input: string): string {
+    return input.replace(/-([a-z0-9])/g, (_m, c: string) => c.toUpperCase());
   }
 
   // ─────────────────────────────────────────────────────────────────

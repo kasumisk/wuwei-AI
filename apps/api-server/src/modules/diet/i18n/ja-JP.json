@@ -149,7 +149,7 @@
   "recommendation.compare.easierToAcquire": "より入手しやすい",
   "recommendation.compare.fiberBetter": "食物繊維がより充実",
   "recommendation.compare.proteinRicher": "タンパク質がより豊富（{{recProt}}g vs {{altProt}}g）",
-  "recommendation.compare.summary.noAdvantage": "{{goalText}}目標の総合評価で、「{{recName}}」が全体的に高評価です。",
+  "recommendation.compare.summary.noAdvantage": "{{goalText}}目標の総合評価で、「{{recName}}」が「{{altName}}」より高評価です。",
   "recommendation.compare.summary.scoreHigher": "、総合スコアが {{scorePercent}}% 高い",
   "recommendation.compare.summary.withAdvantage": "「{{altName}}」と比較して、「{{recName}}」をおすすめする理由は{{advText}}{{scoreNote}}。",
   "recommendation.compensation.adjusted": "{{meal}}を自動調整して一日の栄養バランスを整えました",
