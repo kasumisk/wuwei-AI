@@ -42,6 +42,8 @@ import {
   TIME_BOUNDARIES,
   ALTERNATIVE_PARAMS,
 } from '../config/decision-thresholds';
+import { FoodI18nService } from '../../diet/app/services/food-i18n.service';
+import { RequestContextService } from '../../../core/context/request-context.service';
 
 // ==================== 输入类型 ====================
 
@@ -88,6 +90,8 @@ export class AlternativeSuggestionService {
     private readonly recommendationEngineService: RecommendationEngineService,
     private readonly substitutionService: SubstitutionService,
     private readonly foodLibraryService: FoodLibraryService,
+    private readonly foodI18nService: FoodI18nService,
+    private readonly requestCtx: RequestContextService,
   ) {}
 
   // ==================== 主入口 ====================
@@ -197,7 +201,106 @@ export class AlternativeSuggestionService {
       results.sort((a, b) => (b.score || 0) - (a.score || 0));
     }
 
-    return results.slice(0, 5);
+    const finalResults = results.slice(0, 5);
+
+    // 批量翻译替代食物名（非 zh 语言时，通过 food_translations 查库覆盖 name 字段）
+    const resolvedLocaleForI18n = locale ?? this.resolveLocale();
+    await this.applyI18nToAlternatives(finalResults, resolvedLocaleForI18n);
+
+    return finalResults;
+  }
+
+  /**
+   * 对已持久化的 alternatives（历史记录读取场景）补注多语言翻译。
+   * 供 controller 在读取数据库记录后调用，无需重新计算推荐。
+   */
+  async localizeAlternatives(
+    alternatives: FoodAlternative[],
+    locale?: Locale,
+  ): Promise<void> {
+    return this.applyI18nToAlternatives(alternatives, locale ?? this.resolveLocale());
+  }
+
+  /**
+   * 解析当前请求的 locale（回退到 zh-CN）
+   */
+  private resolveLocale(): Locale {
+    const locale = this.requestCtx.locale;
+    return locale === 'en-US' || locale === 'ja-JP' || locale === 'zh-CN'
+      ? locale
+      : 'zh-CN';
+  }
+
+  /**
+   * 批量翻译替代食物名。
+   *
+   * 仅对有 foodLibraryId 的条目查 food_translations；
+   * 无翻译时保留原 name 不变（中文回退）。
+   * zh 语言时直接跳过（FoodI18nService.loadTranslations 内部保证幂等）。
+   */
+  private async applyI18nToAlternatives(
+    alternatives: FoodAlternative[],
+    locale: Locale | undefined,
+  ): Promise<void> {
+    const effectiveLocale = locale ?? this.resolveLocale();
+
+    // zh 系列语言无需翻译（与 FoodI18nService.isDefaultLocale 保持一致）
+    if (/^zh(?:[-_]|$)/i.test(effectiveLocale)) return;
+
+    if (alternatives.length === 0) return;
+
+    // 分两组：有 foodLibraryId 的按 id 查；无 id 的（static）按中文名查
+    const withId: Array<{ idx: number; id: string }> = [];
+    const withNameOnly: Array<{ idx: number; name: string }> = [];
+
+    for (let idx = 0; idx < alternatives.length; idx++) {
+      const alt = alternatives[idx];
+      if (alt.foodLibraryId) {
+        withId.push({ idx, id: alt.foodLibraryId });
+      } else if (alt.name) {
+        withNameOnly.push({ idx, name: alt.name });
+      }
+    }
+
+    try {
+      // 按 id 翻译
+      if (withId.length > 0) {
+        const idMap = await this.foodI18nService.loadTranslations(
+          withId.map((e) => e.id),
+          effectiveLocale,
+        );
+        for (const { idx, id } of withId) {
+          const translated = idMap.get(id);
+          if (translated) {
+            alternatives[idx] = { ...alternatives[idx], name: translated };
+          }
+        }
+      }
+
+      // 按中文名翻译（static alternatives 无 foodLibraryId）
+      if (withNameOnly.length > 0) {
+        const nameMap = await this.foodI18nService.loadTranslationsByFoodNames(
+          withNameOnly.map((e) => e.name),
+          effectiveLocale,
+        );
+        for (const { idx, name } of withNameOnly) {
+          const translated = nameMap.get(name);
+          if (translated) {
+            const alt = alternatives[idx];
+            alternatives[idx] = {
+              ...alt,
+              name: translated,
+              // reason 若等于原始中文名（static hint），也一并翻译
+              reason: alt.reason === name ? translated : alt.reason,
+            };
+          }
+        }
+      }
+    } catch (err) {
+      this.logger.warn(
+        `AlternativeSuggestion i18n lookup failed for locale=${effectiveLocale}: ${(err as Error).message}`,
+      );
+    }
   }
 
   // ==================== 定量对比构建 ====================

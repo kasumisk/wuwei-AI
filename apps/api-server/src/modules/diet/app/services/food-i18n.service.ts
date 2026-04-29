@@ -102,6 +102,54 @@ export class FoodI18nService {
   }
 
   /**
+   * 按食物中文名批量查翻译。
+   *
+   * 适用场景：调用方只有食物名字符串（无 food_id），需要翻译为目标语言。
+   * 实现：一次 JOIN 查询 foods + food_translations，按 foods.name 精确匹配。
+   *
+   * 返回 originalName → translatedName 映射。
+   * zh 语言时返回空 Map。
+   */
+  async loadTranslationsByFoodNames(
+    foodNames: string[],
+    locale: string,
+  ): Promise<Map<string, string>> {
+    const map = new Map<string, string>();
+
+    if (this.isDefaultLocale(locale) || foodNames.length === 0) {
+      return map;
+    }
+
+    try {
+      const rows = await this.prisma.$queryRawUnsafe<
+        Array<{ original_name: string; translated_name: string }>
+      >(
+        `SELECT f.name AS original_name, ft.name AS translated_name
+         FROM foods f
+         JOIN food_translations ft ON ft.food_id = f.id
+         WHERE f.name = ANY($1::text[])
+           AND ft.locale = $2`,
+        foodNames,
+        locale,
+      );
+
+      for (const row of rows) {
+        map.set(row.original_name, row.translated_name);
+      }
+
+      this.logger.debug(
+        `FoodI18n: loadTranslationsByFoodNames — resolved ${map.size}/${foodNames.length} names for locale=${locale}`,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `FoodI18n: loadTranslationsByFoodNames failed for locale=${locale}: ${(err as Error).message}`,
+      );
+    }
+
+    return map;
+  }
+
+  /**
    * 将翻译映射 apply 到 ScoredFood 列表。
    *
    * 实现：给每个 ScoredFood 的 food 对象添加 `displayName` 字段。
@@ -141,11 +189,15 @@ export class FoodI18nService {
     locale: string,
   ): Promise<MealRecommendation> {
     // 收集所有需要翻译的 food_id
+    if (!recommendation.foods?.length || this.isDefaultLocale(locale)) {
+      return recommendation;
+    }
+
     const foodIds = recommendation.foods
       .map((sf) => sf.food.id)
       .filter(Boolean);
 
-    if (foodIds.length === 0 || this.isDefaultLocale(locale)) {
+    if (foodIds.length === 0) {
       return recommendation;
     }
 
@@ -154,9 +206,9 @@ export class FoodI18nService {
       return recommendation;
     }
 
-    return {
-      ...recommendation,
-      foods: this.applyToScoredFoods(recommendation.foods, localizationMap),
-    };
+    // 直接 mutate foods 数组，确保调用方无需接收返回值也能生效
+    recommendation.foods = this.applyToScoredFoods(recommendation.foods, localizationMap);
+
+    return recommendation;
   }
 }

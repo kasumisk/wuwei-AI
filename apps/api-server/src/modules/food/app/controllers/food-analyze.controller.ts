@@ -67,6 +67,7 @@ import { PrismaService } from '../../../../core/prisma/prisma.service';
 import { FOOD_SPLIT_INCLUDE } from '../../food-split.helper';
 import { I18nService } from '../../../../core/i18n';
 import { translateEnum } from '../../../../common/i18n/enum-i18n';
+import { AlternativeSuggestionService } from '../../../decision/decision/alternative-suggestion.service';
 
 // ─── V7.9 Phase 3-4: 文本分析缓存配置 ───
 
@@ -110,6 +111,7 @@ export class FoodAnalyzeController {
     // 置信度驱动 V1：session 服务
     private readonly analysisSessionService: AnalysisSessionService,
     private readonly i18n: I18nService,
+    private readonly alternativeSuggestionService: AlternativeSuggestionService,
   ) {}
 
   // ==================== V6.1: 文本分析端点 ====================
@@ -613,6 +615,13 @@ export class FoodAnalyzeController {
 
     // 4. 从 JSONB 重建 V61 结构
     const fullResult = this.reconstructAnalysisResult(record);
+
+    // 5a. 对历史 alternatives 补注当前请求语言的翻译
+    if (fullResult.alternatives?.length) {
+      await this.alternativeSuggestionService.localizeAlternatives(
+        fullResult.alternatives,
+      );
+    }
 
     // 5. 构建完整的 V61 结构用于裁剪
     const v61: FoodAnalysisResultV61 = {

@@ -34,6 +34,7 @@ import {
 } from '../recommendation/utils/i18n-messages';
 import type { DecisionValueTag } from '../recommendation/types/meal.types';
 import { RequestContextService } from '../../../../core/context/request-context.service';
+import { FoodI18nService } from './food-i18n.service';
 
 // ─── V7.9 Phase 3-1: 推荐粘性缓存配置 ───
 
@@ -108,6 +109,7 @@ export class FoodService {
     private readonly eventEmitter: EventEmitter2,
     private readonly precomputeService: PrecomputeService,
     private readonly requestCtx: RequestContextService,
+    private readonly foodI18nService: FoodI18nService,
   ) {}
 
   /**
@@ -265,6 +267,16 @@ export class FoodService {
     if (precomputed) {
       const { result: mainRec, scenarioResults } = precomputed;
 
+      // 预计算结果没有经过推荐引擎的实时翻译注入，这里补注 displayName
+      await this.foodI18nService.applyToMealRecommendation(mainRec as any, locale);
+      if (scenarioResults) {
+        await Promise.all(
+          Object.values(scenarioResults).map((rec) =>
+            this.foodI18nService.applyToMealRecommendation(rec as any, locale),
+          ),
+        );
+      }
+
       // 发布推荐生成事件（标记来自预计算）
       this.eventEmitter.emit(
         DomainEvents.RECOMMENDATION_GENERATED,
@@ -307,7 +319,7 @@ export class FoodService {
             const scenarioCalories = r.totalCalories || 0;
             return {
               scenario: scenarioLabels[key] || key,
-              foods: r.displayText || '',
+              foods: this.rebuildDisplayText(r.foods, r.displayText || '', locale),
               foodItems: this.toSuggestionFoodItems(r.foods),
               calories: scenarioCalories,
               tip: this.buildSuggestionTip(
@@ -345,7 +357,7 @@ export class FoodService {
         mealType: nextMeal,
         remainingCalories: remaining,
         suggestion: {
-          foods: mainRec.displayText,
+          foods: this.rebuildDisplayText(mainRec.foods, mainRec.displayText, locale),
           foodItems: this.toSuggestionFoodItems(mainRec.foods),
           calories: mainRec.totalCalories,
           tip: this.buildSuggestionTip(
@@ -423,6 +435,13 @@ export class FoodService {
     ]);
     const latencyMs = Date.now() - startTime;
 
+    // recommendByScenario 没有内置翻译注入，这里补注 displayName
+    await Promise.all(
+      Object.values(scenarioRecs).map((rec) =>
+        this.foodI18nService.applyToMealRecommendation(rec, locale),
+      ),
+    );
+
     // V6 Phase 1.2: 发布推荐生成事件
     this.eventEmitter.emit(
       DomainEvents.RECOMMENDATION_GENERATED,
@@ -444,7 +463,7 @@ export class FoodService {
       const scenarioCalories = rec.totalCalories || 0;
       return {
         scenario: scenarioLabels[key] || key,
-        foods: rec.displayText,
+        foods: this.rebuildDisplayText(rec.foods, rec.displayText, locale),
         foodItems: this.toSuggestionFoodItems(rec.foods),
         calories: scenarioCalories,
         tip: this.buildSuggestionTip(
@@ -477,7 +496,7 @@ export class FoodService {
       mealType: nextMeal,
       remainingCalories: remaining,
       suggestion: {
-        foods: mainRec.displayText,
+        foods: this.rebuildDisplayText(mainRec.foods, mainRec.displayText, locale),
         foodItems: this.toSuggestionFoodItems(mainRec.foods),
         calories: mainRec.totalCalories,
         tip: this.buildSuggestionTip(
@@ -506,8 +525,10 @@ export class FoodService {
       food?: {
         id?: string;
         name?: string;
+        displayName?: string;
         category?: string;
         standardServingDesc?: string;
+        displayServingDesc?: string;
       };
       servingCalories?: number;
       servingProtein?: number;
@@ -522,8 +543,8 @@ export class FoodService {
     const items = picks
       .map((pick) => ({
         foodId: pick.food?.id || '',
-        name: pick.food?.name || '',
-        servingDesc: pick.food?.standardServingDesc || '',
+        name: pick.food?.displayName || pick.food?.name || '',
+        servingDesc: pick.food?.displayServingDesc || pick.food?.standardServingDesc || '',
         calories: Math.round(Number(pick.servingCalories) || 0),
         protein: Math.round(Number(pick.servingProtein) || 0),
         fat: Math.round(Number(pick.servingFat) || 0),
@@ -533,6 +554,32 @@ export class FoodService {
       .filter((item) => !!item.name);
 
     return items.length > 0 ? items : undefined;
+  }
+
+  /**
+   * 若食物已注入 displayName（多语言），用 displayName 重建 displayText。
+   * 无 displayName 时返回原 displayText 不变（zh 语言 / 无翻译回退）。
+   */
+  private rebuildDisplayText(
+    foods: Array<{ food?: any; servingCalories?: number }> | undefined,
+    originalDisplayText: string,
+    locale: string,
+  ): string {
+    if (!Array.isArray(foods) || foods.length === 0) return originalDisplayText;
+    const hasTranslation = foods.some((p) => p.food?.displayName);
+    if (!hasTranslation) return originalDisplayText;
+
+    return foods
+      .map((p) => {
+        const name = p.food?.displayName || p.food?.name || '';
+        const serving =
+          p.food?.displayServingDesc ||
+          p.food?.standardServingDesc ||
+          `${p.food?.standardServingG || 100}g`;
+        const calories = Math.round(Number(p.servingCalories) || 0);
+        return t('display.foodItem', { name, serving, calories }, locale as any);
+      })
+      .join(' + ');
   }
 
   // ─── V7.9 Phase 3-1: 粘性缓存工具方法 ───

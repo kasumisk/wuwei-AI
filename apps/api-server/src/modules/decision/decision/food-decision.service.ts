@@ -47,6 +47,8 @@ import {
 import { matchAllergenInFoods } from '../config/decision-checks';
 import { ContextualAnalysis } from '../types/analysis-result.types';
 import { PreferenceProfileService } from '../../diet/app/recommendation/profile/preference-profile.service';
+import { FoodI18nService } from '../../diet/app/services/food-i18n.service';
+import { RequestContextService } from '../../../core/context/request-context.service';
 
 // ==================== 公共类型 ====================
 
@@ -144,6 +146,9 @@ export class FoodDecisionService {
     private readonly issueDetector: IssueDetectorService,
     // V4.0: 偏好画像服务（用于替代方案深度排序）
     private readonly preferenceProfileService: PreferenceProfileService,
+    // 食物名多语言翻译服务（下一餐建议食物名 i18n）
+    private readonly foodI18nService: FoodI18nService,
+    private readonly requestCtx: RequestContextService,
   ) {}
 
   // ==================== 主入口 ====================
@@ -321,11 +326,16 @@ export class FoodDecisionService {
     );
 
     // 7. 下一餐建议（委托 PortionAdvisorService）
+    // 非 zh 语言时，翻译 foodPreferences 中的食物名（loves / frequentFoods）
+    const localizedFoodPreferences = await this.localizeNextMealFoodPreferences(
+      foodPreferences,
+      locale,
+    );
     const nextMealAdvice = this.portionAdvisor.generateNextMealAdvice(
       ctx,
       totals,
       locale,
-      foodPreferences,
+      localizedFoodPreferences,
     );
 
     // 8. 决策推理链（委托 DecisionExplainerService）
@@ -465,5 +475,60 @@ export class FoodDecisionService {
 
   estimateSatiety(food: DecisionFoodItem): number {
     return _estimateSatiety(food);
+  }
+
+  // ==================== 私有工具 ====================
+
+  /**
+   * 将 foodPreferences 中的食物名翻译为目标语言。
+   *
+   * 通过 FoodI18nService.loadTranslationsByFoodNames 直接 JOIN
+   * foods + food_translations 表，按食物中文名精确匹配，一次查询完成。
+   * zh 语言时跳过，避免无效 DB 往返。
+   */
+  private async localizeNextMealFoodPreferences(
+    foodPreferences:
+      | { frequentFoods?: string[]; loves?: string[]; avoids?: string[] }
+      | undefined,
+    locale?: Locale,
+  ): Promise<
+    | { frequentFoods?: string[]; loves?: string[]; avoids?: string[] }
+    | undefined
+  > {
+    if (!foodPreferences) return undefined;
+
+    const resolvedLocale =
+      locale ??
+      (() => {
+        const l = this.requestCtx.locale;
+        return l === 'en-US' || l === 'ja-JP' || l === 'zh-CN' ? l : 'zh-CN';
+      })();
+
+    // zh 语言直接返回原对象，FoodI18nService 内部也会 short-circuit
+    if (/^zh(?:[-_]|$)/i.test(resolvedLocale)) return foodPreferences;
+
+    const loves = foodPreferences.loves ?? [];
+    const frequentFoods = foodPreferences.frequentFoods ?? [];
+    const avoids = foodPreferences.avoids ?? [];
+
+    const allNames = [...new Set([...loves, ...frequentFoods])];
+    if (allNames.length === 0) return foodPreferences;
+
+    // 直接通过 foods JOIN food_translations 按食物中文名批量查翻译（一次查询）
+    const nameTranslation = await this.foodI18nService.loadTranslationsByFoodNames(
+      allNames,
+      resolvedLocale,
+    );
+
+    if (nameTranslation.size === 0) return foodPreferences;
+
+    const translateList = (list: string[]): string[] =>
+      list.map((n) => nameTranslation.get(n) ?? n);
+
+    return {
+      loves: translateList(loves),
+      frequentFoods: translateList(frequentFoods),
+      avoids, // avoids 是排除过滤用，无需翻译
+    };
   }
 }
