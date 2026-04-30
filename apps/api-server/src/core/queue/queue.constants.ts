@@ -28,6 +28,9 @@ export const QUEUE_NAMES = {
 
   /** V6.6: 食物数据 AI 补全回填 */
   FOOD_ENRICHMENT: 'food-enrichment',
+
+  /** USDA 数据导入异步任务 */
+  FOOD_USDA_IMPORT: 'food-usda-import',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -82,6 +85,12 @@ export const QUEUE_DEFAULT_OPTIONS: Record<
   [QUEUE_NAMES.FOOD_ENRICHMENT]: {
     concurrency: 3,
     maxRetries: 2,
+    backoffType: 'exponential',
+    backoffDelay: 5000,
+  },
+  [QUEUE_NAMES.FOOD_USDA_IMPORT]: {
+    concurrency: 1,
+    maxRetries: 1,
     backoffType: 'exponential',
     backoffDelay: 5000,
   },

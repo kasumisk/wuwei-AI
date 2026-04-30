@@ -195,7 +195,6 @@ export class UsdaFetcherService {
     'Finfish and Shellfish Products': 'protein',
     'Sausages and Luncheon Meats': 'protein',
     'Legumes and Legume Products': 'protein',
-    'Egg Products': 'protein',
     'Vegetables and Vegetable Products': 'veggie',
     'Fruits and Fruit Juices': 'fruit',
     'Cereal Grains and Pasta': 'grain',
@@ -238,25 +237,32 @@ export class UsdaFetcherService {
     options: { foodCategory?: string; dataTypes?: string[] } = {},
   ): Promise<{ foods: NormalizedFoodData[]; totalHits: number }> {
     const url = `${this.baseUrl}/foods/search`;
-    const { data } = await firstValueFrom(
-      this.httpService.get<UsdaSearchResponse>(url, {
-        params: {
-          apiKey: this.apiKey,
-          query,
-          pageSize,
-          pageNumber,
-          dataType: (options.dataTypes || ['Foundation', 'SR Legacy']).join(
-            ',',
-          ),
-          foodCategory: options.foodCategory,
-        },
-      }),
-    );
+    try {
+      const { data } = await firstValueFrom(
+        this.httpService.get<UsdaSearchResponse>(url, {
+          params: {
+            api_key: this.apiKey,
+            query,
+            pageSize,
+            pageNumber,
+            dataType: (options.dataTypes || ['Foundation', 'SR Legacy']).join(
+              ',',
+            ),
+            // USDA 对包含 "/" 的分类值存在兼容问题，例如
+            // "American Indian/Alaska Native Foods" 直接传会 400/500。
+            // 这里将 "/" 预替换为 "%2F"，让最终请求落成 USDA 可接受的格式。
+            foodCategory: this.normalizeFoodCategoryParam(options.foodCategory),
+          },
+        }),
+      );
 
-    return {
-      foods: data.foods.map((f) => this.normalize(f)),
-      totalHits: data.totalHits,
-    };
+      return {
+        foods: data.foods.map((f) => this.normalize(f)),
+        totalHits: data.totalHits,
+      };
+    } catch (e) {
+      throw this.wrapUsdaError(`search query="${query}"`, e);
+    }
   }
 
   /**
@@ -267,12 +273,14 @@ export class UsdaFetcherService {
       const url = `${this.baseUrl}/food/${fdcId}`;
       const { data } = await firstValueFrom(
         this.httpService.get<UsdaRawFood>(url, {
-          params: { apiKey: this.apiKey },
+          params: { api_key: this.apiKey },
         }),
       );
       return this.normalize(data);
     } catch (e) {
-      this.logger.warn(`Failed to fetch USDA food ${fdcId}: ${e.message}`);
+      this.logger.warn(
+        `Failed to fetch USDA food ${fdcId}: ${this.formatUsdaError(e)}`,
+      );
       return null;
     }
   }
@@ -282,16 +290,20 @@ export class UsdaFetcherService {
    */
   async batchGet(fdcIds: number[]): Promise<NormalizedFoodData[]> {
     const url = `${this.baseUrl}/foods`;
-    const { data } = await firstValueFrom(
-      this.httpService.post<UsdaRawFood[]>(
-        url,
-        { fdcIds },
-        {
-          params: { apiKey: this.apiKey },
-        },
-      ),
-    );
-    return data.map((f) => this.normalize(f));
+    try {
+      const { data } = await firstValueFrom(
+        this.httpService.post<UsdaRawFood[]>(
+          url,
+          { fdcIds },
+          {
+            params: { api_key: this.apiKey },
+          },
+        ),
+      );
+      return data.map((f) => this.normalize(f));
+    } catch (e) {
+      throw this.wrapUsdaError(`batchGet ids=${fdcIds.length}`, e);
+    }
   }
 
   /**
@@ -367,6 +379,11 @@ export class UsdaFetcherService {
     };
   }
 
+  private normalizeFoodCategoryParam(foodCategory?: string): string | undefined {
+    if (!foodCategory) return undefined;
+    return foodCategory.replaceAll('/', '%2F');
+  }
+
   getSupportedCategories(): UsdaCategoryOption[] {
     return Object.entries(this.CATEGORY_MAP)
       .map(([label, mappedCategory]) => ({
@@ -379,5 +396,19 @@ export class UsdaFetcherService {
 
   private sleep(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private wrapUsdaError(context: string, error: any): Error {
+    return new Error(`USDA ${context} failed: ${this.formatUsdaError(error)}`);
+  }
+
+  private formatUsdaError(error: any): string {
+    const status = error?.response?.status;
+    const remoteMessage =
+      error?.response?.data?.error ||
+      error?.response?.data?.message ||
+      error?.response?.statusText;
+    const message = remoteMessage || error?.message || 'Unknown error';
+    return status ? `status ${status} - ${message}` : message;
   }
 }

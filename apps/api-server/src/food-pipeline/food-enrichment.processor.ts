@@ -34,6 +34,7 @@ import {
   FoodEnrichmentService,
   type EnrichmentJobData,
 } from './services/food-enrichment.service';
+import { localesToFoodRegions } from '../common/utils/locale-region.util';
 
 @Processor(QUEUE_NAMES.FOOD_ENRICHMENT, {
   concurrency: QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_ENRICHMENT].concurrency,
@@ -55,6 +56,7 @@ export class FoodEnrichmentProcessor extends WorkerHost {
       staged = false,
       locales,
       region,
+      regions,
       stages,
       fields,
       mode,
@@ -71,7 +73,19 @@ export class FoodEnrichmentProcessor extends WorkerHost {
       if (target === 'translations') {
         await this.processTranslation(foodId, locales ?? ['en-US'], staged);
       } else if (target === 'regional') {
-        await this.processRegional(foodId, region ?? 'CN', staged);
+        const targetRegions = [
+          ...new Set(
+            (regions?.length
+              ? regions
+              : localesToFoodRegions(locales).concat(region ? [region] : [])
+            ).filter(Boolean),
+          ),
+        ];
+        await this.processRegionalBatch(
+          foodId,
+          targetRegions.length ? targetRegions : ['CN'],
+          staged,
+        );
       } else if (mode === 'direct_fields') {
         // V2.1: direct_fields 模式 — 跳过阶段路由，直接对指定 fields 发起一次性补全
         await this.processDirectFields(foodId, fields, staged);
@@ -247,7 +261,7 @@ export class FoodEnrichmentProcessor extends WorkerHost {
     );
   }
 
-  // ─── 翻译补全 ──────────────────────────────────────────────────────────
+  // ─── 翻译补全（V8.8: 所有 locale 汇总成单条记录）─────────────────────
 
   private async processTranslation(
     foodId: string,
@@ -260,24 +274,34 @@ export class FoodEnrichmentProcessor extends WorkerHost {
       return;
     }
 
+    // 一次性获取所有 locale 的 AI 补全结果
     const results = await this.enrichmentService.enrichTranslations(
       foodId,
       normalizedLocales,
     );
 
+    const validResults: Record<string, Record<string, any>> = {};
     for (const locale of normalizedLocales) {
       const result = results[locale];
       if (!result) {
         this.logger.warn(`无翻译补全结果: foodId=${foodId}, locale=${locale}`);
         continue;
       }
+      validResults[locale] = result;
+    }
 
-      const shouldStage = this.enrichmentService.shouldStage(
-        result as any,
-        staged,
+    if (Object.keys(validResults).length === 0) return;
+
+    // 判断是否需要 staged（任一 locale 置信度低于阈值则整体 staged）
+    const shouldStage =
+      staged ||
+      Object.values(validResults).some((r) =>
+        this.enrichmentService.shouldStage(r as any, false),
       );
 
-      if (shouldStage) {
+    if (shouldStage) {
+      // staged 模式：仍按 locale 分组写入 staged（每个 locale 一条待审记录，保持语义清晰）
+      for (const [locale, result] of Object.entries(validResults)) {
         const logId = await this.enrichmentService.stageEnrichment(
           foodId,
           result as any,
@@ -289,21 +313,81 @@ export class FoodEnrichmentProcessor extends WorkerHost {
         this.logger.log(
           `Staged（translations/${locale}）foodId=${foodId}, logId=${logId}`,
         );
-      } else {
-        const res = await this.enrichmentService.applyTranslationEnrichment(
-          foodId,
-          locale,
-          result,
-          'ai_enrichment_worker',
-        );
-        this.logger.log(
-          `直接入库（translations/${locale}）foodId=${foodId}, ${res.action} fields=[${res.fields.join(',')}]`,
-        );
       }
+    } else {
+      // 直接入库模式：所有 locale 一次性写入，只产生一条 changelog
+      const res = await this.enrichmentService.applyTranslationEnrichment(
+        foodId,
+        validResults,
+        'ai_enrichment_worker',
+      );
+      const summary = Object.entries(res.localesSummary)
+        .map(([l, s]) => `${l}:${s.action}(${s.fields.length}字段)`)
+        .join(', ');
+      this.logger.log(
+        `直接入库（translations 汇总）foodId=${foodId}, ${summary}`,
+      );
     }
   }
 
   // ─── 地区信息补全 ──────────────────────────────────────────────────────
+
+  private async processRegionalBatch(
+    foodId: string,
+    regions: string[],
+    staged: boolean,
+  ): Promise<void> {
+    const results: Record<string, Record<string, any>> = {};
+
+    for (const region of regions) {
+      const result = await this.enrichmentService.enrichRegional(
+        foodId,
+        region,
+      );
+      if (!result) {
+        this.logger.warn(
+          `无地区信息补全结果: foodId=${foodId}, region=${region}`,
+        );
+        continue;
+      }
+      results[region] = result;
+    }
+
+    if (Object.keys(results).length === 0) return;
+
+    const shouldStage =
+      staged ||
+      Object.values(results).some((result) =>
+        this.enrichmentService.shouldStage(result as any, false),
+      );
+
+    if (shouldStage) {
+      for (const [region, result] of Object.entries(results)) {
+        const logId = await this.enrichmentService.stageEnrichment(
+          foodId,
+          result as any,
+          'regional',
+          undefined,
+          region,
+          'ai_enrichment_worker',
+        );
+        this.logger.log(
+          `Staged（regional/${region}）foodId=${foodId}, logId=${logId}`,
+        );
+      }
+      return;
+    }
+
+    const res = await this.enrichmentService.applyRegionalEnrichments(
+      foodId,
+      results,
+      'ai_enrichment_worker',
+    );
+    const summary = Object.entries(res.regionsSummary)
+      .map(([region, s]) => `${region}:${s.action}(${s.fields.length}字段)`)
+      .join(', ');
+    this.logger.log(`直接入库（regional 汇总）foodId=${foodId}, ${summary}`);
+  }
 
   private async processRegional(
     foodId: string,

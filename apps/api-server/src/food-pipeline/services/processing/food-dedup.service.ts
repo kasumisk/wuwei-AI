@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { CleanedFoodData } from './food-data-cleaner.service';
+import { FoodImportMode } from '../food-pipeline-orchestrator.service';
 
 export interface DedupMatch {
   existingFood: any;
@@ -16,6 +17,39 @@ export interface DedupMatch {
 export class FoodDedupService {
   private readonly logger = new Logger(FoodDedupService.name);
 
+  private readonly EN_TO_ZH_FOOD_ALIASES: Record<string, string[]> = {
+    chickenbreast: ['鸡胸肉'],
+    beef: ['牛肉'],
+    pork: ['猪肉'],
+    fish: ['鱼', '鱼肉'],
+    egg: ['鸡蛋', '蛋'],
+    rice: ['米饭', '白米饭'],
+    bread: ['面包'],
+    pasta: ['意面', '意大利面', '面食'],
+    oat: ['燕麦', '燕麦片'],
+    potato: ['土豆', '马铃薯'],
+    broccoli: ['西兰花'],
+    spinach: ['菠菜'],
+    carrot: ['胡萝卜'],
+    tomato: ['番茄', '西红柿'],
+    onion: ['洋葱'],
+    apple: ['苹果'],
+    banana: ['香蕉'],
+    orange: ['橙子'],
+    strawberry: ['草莓'],
+    milk: ['牛奶'],
+    yogurt: ['酸奶'],
+    cheese: ['奶酪'],
+  };
+
+  private readonly FOOD_INCLUDE = {
+    taxonomy: true,
+    healthAssessment: true,
+    nutritionDetail: true,
+    portionGuide: true,
+    foodTranslations: true,
+  } as const;
+
   constructor(private readonly prisma: PrismaService) {}
 
   /**
@@ -26,6 +60,7 @@ export class FoodDedupService {
     if (food.rawPayload?.code) {
       const barMatch = await this.prisma.food.findFirst({
         where: { barcode: food.rawPayload.code },
+        include: this.FOOD_INCLUDE,
       });
       if (barMatch) {
         return {
@@ -43,6 +78,7 @@ export class FoodDedupService {
           primarySource: food.primarySource,
           primarySourceId: food.primarySourceId,
         },
+        include: this.FOOD_INCLUDE,
       });
       if (sourceMatch) {
         return {
@@ -60,6 +96,7 @@ export class FoodDedupService {
     // 3a: 精确名称匹配
     const exactMatch = await this.prisma.food.findFirst({
       where: { name: food.name },
+      include: this.FOOD_INCLUDE,
     });
     if (exactMatch) {
       return {
@@ -67,6 +104,92 @@ export class FoodDedupService {
         similarity: 1.0,
         matchType: 'name_exact',
       };
+    }
+
+    // 3a-2: 跨语言桥接匹配
+    // USDA 英文名与已有中文食物的英文翻译/别名匹配时，允许直接合并，
+    // 否则会把“鸡胸肉”与“chicken breast”导成两条独立记录。
+    const translationMatch = await this.prisma.food.findFirst({
+      where: {
+        OR: [
+          {
+            foodTranslations: {
+              some: {
+                locale: 'en-US',
+                name: { equals: food.name, mode: 'insensitive' },
+              },
+            },
+          },
+          { aliases: { contains: food.name, mode: 'insensitive' } },
+        ],
+      },
+      include: this.FOOD_INCLUDE,
+    });
+    if (translationMatch) {
+      return {
+        existingFood: translationMatch,
+        similarity: 0.98,
+        matchType: 'name_exact',
+      };
+    }
+
+    const mappedChineseNames = this.lookupChineseAliases(nameNormalized);
+    if (mappedChineseNames.length > 0) {
+      const dictionaryMatch = await this.prisma.food.findFirst({
+        where: {
+          OR: mappedChineseNames.flatMap((name) => [
+            { name },
+            { aliases: { contains: name, mode: 'insensitive' } },
+          ]),
+        },
+        include: this.FOOD_INCLUDE,
+      });
+      if (dictionaryMatch) {
+        return {
+          existingFood: dictionaryMatch,
+          similarity: 0.97,
+          matchType: 'name_exact',
+        };
+      }
+    }
+
+    const translationCandidates = await this.prisma.food.findMany({
+      where: {
+        foodTranslations: {
+          some: {
+            locale: 'en-US',
+            name: {
+              contains: food.name.substring(0, 20),
+              mode: 'insensitive',
+            },
+          },
+        },
+      },
+      include: this.FOOD_INCLUDE,
+      take: 10,
+    });
+
+    for (const candidate of translationCandidates) {
+      const translationName = candidate.foodTranslations.find(
+        (item) => item.locale === 'en-US',
+      )?.name;
+      if (!translationName) continue;
+
+      const nameSimilarity = this.calculateSimilarity(
+        nameNormalized,
+        this.normalizeName(translationName),
+      );
+      if (nameSimilarity < 0.82) continue;
+
+      const nutritionSimilarity = this.calculateNutritionSimilarity(food, candidate);
+      const combined = nameSimilarity * 0.7 + nutritionSimilarity * 0.3;
+      if (combined > 0.88) {
+        return {
+          existingFood: candidate,
+          similarity: combined,
+          matchType: 'name_fuzzy',
+        };
+      }
     }
 
     // 3b: 模糊名称匹配（使用 ILIKE + 营养数据辅助）
@@ -78,6 +201,7 @@ export class FoodDedupService {
           { aliases: { contains: searchPattern, mode: 'insensitive' } },
         ],
       },
+      include: this.FOOD_INCLUDE,
       take: 10,
     });
 
@@ -116,11 +240,114 @@ export class FoodDedupService {
     existing: any,
     incoming: CleanedFoodData,
     sourcePriority: number,
+    importMode: FoodImportMode,
   ): Record<string, any> {
     const merged: Record<string, any> = {};
 
     // 补充缺失字段（不覆盖已有数据，除非来源优先级更高）
-    const mergeFields = [
+    const mergeFields = this.getMergeFieldsByMode(importMode);
+    for (const field of mergeFields) {
+      const existingVal = this.getExistingFieldValue(existing, field);
+      const incomingVal = (incoming as any)[field];
+      if (existingVal == null && incomingVal != null) {
+        merged[field] = incomingVal;
+      }
+    }
+
+    if (importMode === 'fill_missing_only') {
+      if (incoming.allergens?.length) {
+        const existingAllergens = ((existing.taxonomy?.allergens as any[]) || []) as any[];
+        const incomingAllergens = incoming.allergens || [];
+        merged.allergens = [
+          ...new Set([...existingAllergens, ...incomingAllergens]),
+        ];
+      }
+
+      const existingTags = ((existing.taxonomy?.tags as any[]) || []) as any[];
+      const incomingTags = incoming.tags || incoming.importMetadata?.extraTags || [];
+      merged.tags = [...new Set([...existingTags, ...incomingTags])];
+
+      if (incoming.mealTypes?.length) {
+        merged.mealTypes = [
+          ...new Set([
+            ...((((existing.taxonomy?.mealTypes as any[]) || []) as any[])),
+            ...incoming.mealTypes,
+          ]),
+        ];
+      }
+
+      return merged;
+    }
+
+    // 对中国食物成分表主库，USDA 命中后默认只补缺失，不主动改写既有分类或核心营养。
+    // 分类字段只在主表缺失时补齐，避免“鸡胸肉”被 USDA 英文分类二次改写。
+    if (!existing.category && incoming.category) {
+      merged.category = incoming.category;
+    }
+    if (!existing.subCategory && incoming.subCategory) {
+      merged.subCategory = incoming.subCategory;
+    }
+    if (!existing.foodGroup && incoming.foodGroup) {
+      merged.foodGroup = incoming.foodGroup;
+    }
+
+    // 合并数组字段（去重取并集）
+    if (incoming.allergens?.length) {
+      const existingAllergens = ((existing.taxonomy?.allergens as any[]) || []) as any[];
+      const incomingAllergens = incoming.allergens || [];
+      merged.allergens = [
+        ...new Set([...existingAllergens, ...incomingAllergens]),
+      ];
+    }
+
+    const existingTags = ((existing.taxonomy?.tags as any[]) || []) as any[];
+    const incomingTags =
+      incoming.tags || incoming.importMetadata?.extraTags || [];
+    merged.tags = [...new Set([...existingTags, ...incomingTags])];
+
+    if (incoming.mealTypes?.length) {
+      merged.mealTypes = [
+        ...new Set([
+          ...((((existing.taxonomy?.mealTypes as any[]) || []) as any[])),
+          ...incoming.mealTypes,
+        ]),
+      ];
+    }
+
+    return merged;
+  }
+
+  private getMergeFieldsByMode(importMode: FoodImportMode): string[] {
+    if (importMode === 'fill_missing_only') {
+      return [
+        'fiber',
+        'sugar',
+        'saturatedFat',
+        'transFat',
+        'cholesterol',
+        'sodium',
+        'potassium',
+        'calcium',
+        'iron',
+        'vitaminA',
+        'vitaminC',
+        'vitaminD',
+        'vitaminE',
+        'vitaminB12',
+        'folate',
+        'zinc',
+        'magnesium',
+        'phosphorus',
+        'glycemicIndex',
+        'glycemicLoad',
+        'processingLevel',
+        'standardServingDesc',
+        'imageUrl',
+        'thumbnailUrl',
+      ];
+    }
+
+    return [
       'aliases',
       'barcode',
       'category',
@@ -152,50 +379,6 @@ export class FoodDedupService {
       'imageUrl',
       'thumbnailUrl',
     ];
-
-    for (const field of mergeFields) {
-      const existingVal = existing[field];
-      const incomingVal = (incoming as any)[field];
-      if (existingVal == null && incomingVal != null) {
-        merged[field] = incomingVal;
-      }
-    }
-
-    // 同 source_id 更新时，允许结构化字段被最新映射结果纠正
-    if (incoming.category && existing.category !== incoming.category) {
-      merged.category = incoming.category;
-    }
-    if (incoming.subCategory && existing.subCategory !== incoming.subCategory) {
-      merged.subCategory = incoming.subCategory;
-    }
-    if (incoming.foodGroup && existing.foodGroup !== incoming.foodGroup) {
-      merged.foodGroup = incoming.foodGroup;
-    }
-
-    // 合并数组字段（去重取并集）
-    if (incoming.rawPayload?.allergens) {
-      const existingAllergens = (existing.allergens as any[]) || [];
-      const incomingAllergens = incoming.rawPayload.allergens || [];
-      merged.allergens = [
-        ...new Set([...existingAllergens, ...incomingAllergens]),
-      ];
-    }
-
-    const existingTags = (existing.tags as any[]) || [];
-    const incomingTags =
-      incoming.tags || incoming.importMetadata?.extraTags || [];
-    merged.tags = [...new Set([...existingTags, ...incomingTags])];
-
-    if (incoming.mealTypes?.length) {
-      merged.mealTypes = [
-        ...new Set([
-          ...((existing.mealTypes as any[]) || []),
-          ...incoming.mealTypes,
-        ]),
-      ];
-    }
-
-    return merged;
   }
 
   /**
@@ -204,10 +387,44 @@ export class FoodDedupService {
   private normalizeName(name: string): string {
     return name
       .toLowerCase()
+      .replace(/\b(raw|cooked|boneless|skinless|roasted|grilled|boiled)\b/g, '')
       .replace(/\s+/g, '')
       .replace(/[,，、;；]/g, '')
       .replace(/[（(][^）)]*[)）]/g, '') // 去掉括号内容
       .trim();
+  }
+
+  private lookupChineseAliases(normalizedEnglishName: string): string[] {
+    const direct = this.EN_TO_ZH_FOOD_ALIASES[normalizedEnglishName];
+    if (direct) return direct;
+
+    return Object.entries(this.EN_TO_ZH_FOOD_ALIASES)
+      .filter(([english]) =>
+        normalizedEnglishName.includes(english) || english.includes(normalizedEnglishName),
+      )
+      .flatMap(([, aliases]) => aliases);
+  }
+
+  private getExistingFieldValue(existing: any, field: string): any {
+    if (existing[field] != null) return existing[field];
+
+    if (field in (existing.nutritionDetail || {})) {
+      return existing.nutritionDetail?.[field];
+    }
+
+    if (field in (existing.healthAssessment || {})) {
+      return existing.healthAssessment?.[field];
+    }
+
+    if (field in (existing.taxonomy || {})) {
+      return existing.taxonomy?.[field];
+    }
+
+    if (field in (existing.portionGuide || {})) {
+      return existing.portionGuide?.[field];
+    }
+
+    return undefined;
   }
 
   /**

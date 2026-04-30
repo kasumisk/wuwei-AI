@@ -1,5 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../core/prisma/prisma.service';
+import {
+  HEALTH_ASSESSMENT_FIELDS,
+  NUTRITION_DETAIL_FIELDS,
+  PORTION_GUIDE_FIELDS,
+  TAXONOMY_FIELDS,
+  upsertFoodSplitTables,
+} from '../../../modules/food/food-split.helper';
 
 /**
  * 食物数据冲突自动解决服务
@@ -14,9 +21,26 @@ import { PrismaService } from '../../../core/prisma/prisma.service';
 export class FoodConflictResolverService {
   private readonly logger = new Logger(FoodConflictResolverService.name);
 
+  private readonly CORE_NUMERIC_FIELDS = new Set([
+    'calories',
+    'protein',
+    'fat',
+    'carbs',
+  ]);
+
+  private readonly SUPPLEMENTAL_NUMERIC_FIELDS = new Set([
+    'fiber',
+    'sugar',
+    'sodium',
+    'potassium',
+    'calcium',
+    'iron',
+  ]);
+
   // 来源优先级 (值越大优先级越高)
   private readonly SOURCE_PRIORITY: Record<string, number> = {
     usda: 100,
+    cn_food_composition: 110,
     manual: 90,
     openfoodfacts: 70,
     ai: 50,
@@ -58,7 +82,8 @@ export class FoodConflictResolverService {
       if (oldVal === newVal) continue;
 
       const diff = oldVal > 0 ? Math.abs(oldVal - newVal) / oldVal : 1;
-      if (diff < 0.05) continue; // 差异小于5%忽略
+      const threshold = this.getConflictThreshold(field);
+      if (diff < threshold) continue;
 
       const existing = await this.prisma.foodConflicts.findFirst({
         where: { foodId: foodId, field, resolution: null },
@@ -111,6 +136,61 @@ export class FoodConflictResolverService {
     return conflicts;
   }
 
+  estimateConflicts(
+    existingValues: Record<string, any>,
+    incomingValues: Record<string, any>,
+  ): string[] {
+    const fields: string[] = [];
+    const numericFields = [
+      'calories',
+      'protein',
+      'fat',
+      'carbs',
+      'fiber',
+      'sugar',
+      'sodium',
+      'potassium',
+      'calcium',
+      'iron',
+      'glycemicIndex',
+      'processingLevel',
+    ];
+
+    for (const field of numericFields) {
+      const oldVal = existingValues[field];
+      const newVal = incomingValues[field];
+      if (oldVal == null || newVal == null) continue;
+      if (oldVal === newVal) continue;
+
+      const diff = oldVal > 0 ? Math.abs(oldVal - newVal) / oldVal : 1;
+      if (diff >= this.getConflictThreshold(field)) {
+        fields.push(field);
+      }
+    }
+
+    if (
+      existingValues.category &&
+      incomingValues.category &&
+      existingValues.category !== incomingValues.category
+    ) {
+      fields.push('category');
+    }
+
+    return fields;
+  }
+
+  private getConflictThreshold(field: string): number {
+    if (this.CORE_NUMERIC_FIELDS.has(field)) {
+      return 0.1;
+    }
+
+    if (this.SUPPLEMENTAL_NUMERIC_FIELDS.has(field)) {
+      return 0.2;
+    }
+
+    return 0.05;
+  }
+
   /**
    * 自动解决待处理冲突
    */
@@ -141,27 +221,15 @@ export class FoodConflictResolverService {
 
         // 更新食物数据
         if (result.resolution !== 'needs_review') {
-          // Use raw SQL for dynamic field update since field names may be camelCase or snake_case
-          const snakeField = this.toSnakeCase(conflict.field);
-          // V8.2: 拦截已迁移到关联表的字段（embedding* / failed_fields），防止 UPDATE 失败
-          const REMOVED_FIELDS = new Set([
-            'embedding',
-            'embedding_v5',
-            'embedding_updated_at',
-            'failed_fields',
-          ]);
-          if (REMOVED_FIELDS.has(snakeField)) {
+          if (this.isRemovedField(conflict.field)) {
             this.logger.warn(
               `Skip conflict resolve for migrated field "${conflict.field}" (food=${conflict.foodId}): use food_embeddings / food_field_provenance instead`,
             );
             needsReview++;
             continue;
           }
-          await this.prisma.$executeRawUnsafe(
-            `UPDATE foods SET "${snakeField}" = $1 WHERE id = $2::uuid`,
-            result.resolvedValue,
-            conflict.foodId,
-          );
+
+          await this.applyResolvedValue(conflict.field, conflict.foodId, result.resolvedValue);
           resolved++;
         } else {
           needsReview++;
@@ -300,5 +368,94 @@ export class FoodConflictResolverService {
       resolution: 'highest_priority',
       resolvedValue: String(highPriorityValue),
     };
+  }
+
+  private coerceResolvedValueForUpdate(field: string, resolvedValue: string): string | number {
+    if (
+      this.CORE_NUMERIC_FIELDS.has(field) ||
+      this.SUPPLEMENTAL_NUMERIC_FIELDS.has(field) ||
+      field === 'glycemicIndex' ||
+      field === 'processingLevel'
+    ) {
+      const parsed = Number(resolvedValue);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    return resolvedValue;
+  }
+
+  private isRemovedField(field: string): boolean {
+    return new Set([
+      'embedding',
+      'embedding_v5',
+      'embedding_updated_at',
+      'failed_fields',
+    ]).has(field);
+  }
+
+  private async applyResolvedValue(field: string, foodId: string, resolvedValue: string) {
+    const typedValue = this.coerceResolvedValueForField(field, resolvedValue);
+
+    if (
+      NUTRITION_DETAIL_FIELDS.has(field) ||
+      HEALTH_ASSESSMENT_FIELDS.has(field) ||
+      TAXONOMY_FIELDS.has(field) ||
+      PORTION_GUIDE_FIELDS.has(field)
+    ) {
+      await upsertFoodSplitTables(this.prisma, foodId, {
+        [field]: typedValue,
+      });
+      return;
+    }
+
+    const snakeField = this.toSnakeCase(field);
+    await this.prisma.$executeRawUnsafe(
+      `UPDATE foods SET "${snakeField}" = $1 WHERE id = $2::uuid`,
+      typedValue,
+      foodId,
+    );
+  }
+
+  private coerceResolvedValueForField(field: string, resolvedValue: string): any {
+    if (
+      this.CORE_NUMERIC_FIELDS.has(field) ||
+      this.SUPPLEMENTAL_NUMERIC_FIELDS.has(field) ||
+      field === 'glycemicIndex' ||
+      field === 'processingLevel'
+    ) {
+      const parsed = Number(resolvedValue);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    if (field === 'glycemicLoad' || field === 'qualityScore' || field === 'satietyScore' || field === 'nutrientDensity') {
+      const parsed = Number(resolvedValue);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    if (field === 'isProcessed' || field === 'isFried') {
+      if (resolvedValue === 'true') return true;
+      if (resolvedValue === 'false') return false;
+      return null;
+    }
+
+    if (field === 'allergens' || field === 'mealTypes' || field === 'tags' || field === 'commonPortions') {
+      try {
+        const parsed = JSON.parse(resolvedValue);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+
+    if (field === 'compatibility') {
+      try {
+        const parsed = JSON.parse(resolvedValue);
+        return parsed && typeof parsed === 'object' ? parsed : {};
+      } catch {
+        return {};
+      }
+    }
+
+    return resolvedValue;
   }
 }

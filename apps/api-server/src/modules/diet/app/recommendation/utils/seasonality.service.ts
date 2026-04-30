@@ -1,6 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../../../core/prisma/prisma.service';
 import { RedisCacheService } from '../../../../../core/redis/redis-cache.service';
+import {
+  buildFoodRegionalFallbackWhere,
+  getFoodRegionSpecificity,
+} from '../../../../../common/utils/food-regional-info.util';
 
 /**
  * V6.4 Phase 3.4 / V7.0 Phase 2-E: 时令感知服务
@@ -10,9 +14,9 @@ import { RedisCacheService } from '../../../../../core/redis/redis-cache.service
  *
  * 评分优先级:
  * 1. month_weights 存在 → 平滑曲线插值（V7.0）
- * 2. availability='seasonal' → 二值判断（当季1.0 / 非当季0.3）
- * 3. availability='common' → 0.7
- * 4. availability='rare' → 0.4
+ * 2. availability=SEASONAL → 二值判断（当季1.0 / 非当季0.3）
+ * 3. availability=YEAR_ROUND → 0.7
+ * 4. availability=RARE → 0.4
  * 5. 无数据 → 0.5（中性）
  *
  * 缓存策略:
@@ -99,9 +103,11 @@ export class SeasonalityService {
     // 查 DB
     try {
       const rows = await this.prisma.foodRegionalInfo.findMany({
-        where: { region: regionCode },
+        where: buildFoodRegionalFallbackWhere(regionCode),
         select: {
           foodId: true,
+          regionCode: true,
+          cityCode: true,
           availability: true,
           localPopularity: true,
           monthWeights: true, // V7.0: 食物级月份权重
@@ -109,7 +115,11 @@ export class SeasonalityService {
       });
 
       const map: Record<string, SeasonalityInfo> = {};
-      for (const row of rows) {
+      for (const row of rows.sort(
+        (a, b) => getFoodRegionSpecificity(b) - getFoodRegionSpecificity(a),
+      )) {
+        if (map[row.foodId]) continue;
+
         const info: SeasonalityInfo = {
           availability: row.availability,
           localPopularity: row.localPopularity,
@@ -183,18 +193,21 @@ export class SeasonalityService {
     }
 
     switch (info.availability) {
-      case 'common':
+      case 'YEAR_ROUND':
         return 0.7;
 
-      case 'seasonal': {
+      case 'SEASONAL': {
         const peakMonths =
           CATEGORY_PEAK_MONTHS[category] ?? DEFAULT_PEAK_MONTHS;
         const isInSeason = peakMonths.includes(currentMonth);
         return isInSeason ? 1.0 : 0.3;
       }
 
-      case 'rare':
+      case 'RARE':
         return 0.4;
+
+      case 'LIMITED':
+        return 0.45;
 
       default:
         return 0.5;

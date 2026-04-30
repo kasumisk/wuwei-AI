@@ -2,6 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../../../core/prisma/prisma.service';
 import { RedisCacheService } from '../../../../../core/redis/redis-cache.service';
 import {
+  buildFoodRegionalFallbackWhere,
+  getFoodRegionSpecificity,
+} from '../../../../../common/utils/food-regional-info.util';
+import {
   UserPreferenceProfile,
   FoodFeedbackStats,
   PreferenceSignal,
@@ -199,22 +203,30 @@ export class PreferenceProfileService {
         const boostMap: Record<string, number> = {};
         try {
           const infos = await this.prisma.foodRegionalInfo.findMany({
-            where: { region },
+            where: buildFoodRegionalFallbackWhere(region),
           });
 
-          for (const info of infos) {
+          for (const info of infos.sort(
+            (a, b) =>
+              getFoodRegionSpecificity(b) - getFoodRegionSpecificity(a),
+          )) {
+            if (boostMap[info.foodId] !== undefined) continue;
+
             let boost = 1.0;
             switch (info.availability) {
-              case 'common':
+              case 'YEAR_ROUND':
                 // 高流行度的常见食物额外加分（范围扩大: 1.08→1.20, 1.02→1.05）
                 boost = (info.localPopularity ?? 0) > 50 ? 1.2 : 1.05;
                 break;
-              case 'seasonal':
+              case 'SEASONAL':
                 boost = 0.9;
                 break;
-              case 'rare':
+              case 'RARE':
                 // 罕见食物惩罚加大（0.85→0.70）
                 boost = 0.7;
+                break;
+              case 'LIMITED':
+                boost = 0.8;
                 break;
             }
             if (boost !== 1.0) {

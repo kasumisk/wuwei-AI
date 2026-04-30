@@ -32,6 +32,7 @@ import { translateEnum } from '../../../common/i18n/enum-i18n';
 // ==================== 目标上下文（图片链路格式化用） ====================
 
 function getGoalContext(
+  i18n: I18nService,
   goalType: string,
   locale?: I18nLocale,
 ): { label: string; focus: string } {
@@ -40,9 +41,9 @@ function getGoalContext(
     : 'health';
   return {
     // i18n-allow-dynamic
-    label: this.i18n.t(`decision.ctx.goal.${key}`, locale),
+    label: i18n.t(`decision.ctx.goal.${key}`, locale),
     // i18n-allow-dynamic
-    focus: this.i18n.t(`decision.ctx.focus.${key}`, locale),
+    focus: i18n.t(`decision.ctx.focus.${key}`, locale),
   };
 }
 
@@ -54,30 +55,31 @@ function getGoalContext(
  * 目的：让 Vision AI / LLM 在分析时优先关注对该用户最重要的营养维度
  */
 function buildHealthConditionGuidance(
+  i18n: I18nService,
   conditions: string[],
   locale?: I18nLocale,
 ): string {
   if (!conditions || conditions.length === 0) return '';
 
-  const lines: string[] = [this.i18n.t('decision.ctx.health.header', locale)];
+  const lines: string[] = [i18n.t('decision.ctx.health.header', locale)];
 
   if (conditions.includes('diabetes')) {
-    lines.push(this.i18n.t('decision.ctx.health.diabetes', locale));
+    lines.push(i18n.t('decision.ctx.health.diabetes', locale));
   }
   if (conditions.includes('hypertension')) {
-    lines.push(this.i18n.t('decision.ctx.health.hypertension', locale));
+    lines.push(i18n.t('decision.ctx.health.hypertension', locale));
   }
   if (
     conditions.includes('heart_disease') ||
     conditions.includes('cardiovascular')
   ) {
-    lines.push(this.i18n.t('decision.ctx.health.heart', locale));
+    lines.push(i18n.t('decision.ctx.health.heart', locale));
   }
   if (conditions.includes('gout')) {
-    lines.push(this.i18n.t('decision.ctx.health.gout', locale));
+    lines.push(i18n.t('decision.ctx.health.gout', locale));
   }
   if (conditions.includes('kidney_disease')) {
-    lines.push(this.i18n.t('decision.ctx.health.kidney', locale));
+    lines.push(i18n.t('decision.ctx.health.kidney', locale));
   }
 
   return lines.length > 1 ? lines.join('\n') : '';
@@ -306,7 +308,7 @@ export class UserContextBuilderService {
   formatAsPromptString(ctx: UnifiedUserContext, locale?: I18nLocale): string {
     if (!ctx.profile) return '';
 
-    const gc = getGoalContext(ctx.goalType, locale);
+    const gc = getGoalContext(this.i18n, ctx.goalType, locale);
     const mealHint =
       ctx.localHour < 10
         ? this.i18n.t('decision.ctx.meal.breakfast', locale)
@@ -349,6 +351,7 @@ ${this.i18n.t('decision.ctx.prompt.budgetHeader', locale)}
 
     // V3.4 P1.1: 健康条件特异性指令
     const healthGuidance = buildHealthConditionGuidance(
+      this.i18n,
       ctx.healthConditions,
       locale,
     );

@@ -153,57 +153,57 @@ model AnalysisFoodLink {
 /// App 终端用户账号表 — 存储用户的认证信息、账号状态及各第三方登录标识
 model AppUsers {
   /// 主键 UUID
-  id                   String                   @id(map: "PK_9b97e4fbff9c2f3918fda27f999") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id                  String                   @id(map: "PK_9b97e4fbff9c2f3918fda27f999") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   /// 登录方式：anonymous=匿名, google=谷歌, email=邮箱, phone=手机号, wechat=微信公众号, wechat_mini=微信小程序, apple=苹果
-  authType             app_users_auth_type_enum @default(anonymous) @map("auth_type")
+  authType            app_users_auth_type_enum @default(anonymous) @map("auth_type")
   /// 用户邮箱，全局唯一
-  email                String?                  @unique(map: "IDX_28d5834968612821f4675a9f7a") @db.VarChar(255)
+  email               String?                  @unique(map: "IDX_28d5834968612821f4675a9f7a") @db.VarChar(255)
   /// 邮箱登录密码（bcrypt 哈希）
-  password             String?                  @db.VarChar(255)
+  password            String?                  @db.VarChar(255)
   /// Google OAuth 用户唯一 ID
-  googleId             String?                  @unique(map: "IDX_77751cf159acfefb704456e4f6") @map("google_id") @db.VarChar(255)
+  googleId            String?                  @unique(map: "IDX_77751cf159acfefb704456e4f6") @map("google_id") @db.VarChar(255)
   /// 设备唯一标识（匿名用户主键）
-  deviceId             String?                  @map("device_id") @db.VarChar(255)
+  deviceId            String?                  @map("device_id") @db.VarChar(255)
   /// 手机号，全局唯一（国际格式，如 +8613812345678）
-  phone                String?                  @unique(map: "IDX_app_users_phone") @db.VarChar(20)
+  phone               String?                  @unique(map: "IDX_app_users_phone") @db.VarChar(20)
   /// 手机号是否已验证
-  phoneVerified        Boolean                  @default(false) @map("phone_verified")
+  phoneVerified       Boolean                  @default(false) @map("phone_verified")
   /// 微信公众号 OpenID，全局唯一
-  wechatOpenId         String?                  @unique(map: "IDX_45e81ae90b9a0d7fb2b72e21b2") @map("wechat_open_id") @db.VarChar(128)
+  wechatOpenId        String?                  @unique(map: "IDX_45e81ae90b9a0d7fb2b72e21b2") @map("wechat_open_id") @db.VarChar(128)
   /// 微信 UnionID（同一微信主体下跨应用统一标识）
-  wechatUnionId        String?                  @map("wechat_union_id") @db.VarChar(128)
+  wechatUnionId       String?                  @map("wechat_union_id") @db.VarChar(128)
   /// 微信小程序 OpenID，全局唯一
-  wechatMiniOpenId     String?                  @unique(map: "IDX_app_users_wechat_mini_open_id") @map("wechat_mini_open_id") @db.VarChar(128)
+  wechatMiniOpenId    String?                  @unique(map: "IDX_app_users_wechat_mini_open_id") @map("wechat_mini_open_id") @db.VarChar(128)
   /// Apple Sign In 用户唯一 ID
-  appleId              String?                  @unique(map: "IDX_458012dc4bdbf3309edd3205da") @map("apple_id") @db.VarChar(255)
+  appleId             String?                  @unique(map: "IDX_458012dc4bdbf3309edd3205da") @map("apple_id") @db.VarChar(255)
   /// 用户昵称（来自第三方授权或自填）
-  nickname             String?                  @db.VarChar(100)
+  nickname            String?                  @db.VarChar(100)
   /// 头像 URL
-  avatar               String?                  @db.VarChar(255)
+  avatar              String?                  @db.VarChar(255)
   /// 账号状态：active=正常, inactive=未激活, banned=封禁
-  status               app_users_status_enum    @default(active)
+  status              app_users_status_enum    @default(active)
   /// 邮箱是否已验证
-  emailVerified        Boolean                  @default(false) @map("email_verified")
+  emailVerified       Boolean                  @default(false) @map("email_verified")
   /// 最后登录时间
-  lastLoginAt          DateTime?                @map("last_login_at") @db.Timestamptz(6)
+  lastLoginAt         DateTime?                @map("last_login_at") @db.Timestamptz(6)
   /// 扩展元数据（JSON，存放三方 OAuth 原始信息等）
-  metadata             Json?
+  metadata            Json?
   /// 创建时间
-  createdAt            DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdAt           DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
   /// 最后更新时间
-  updatedAt            DateTime                 @default(now()) @map("updated_at") @db.Timestamptz(6)
-  coachConversations   CoachConversations[]
-  dailySummaries       DailySummaries[]
-  foodRecords          FoodRecords[]
-  profileSnapshots     ProfileSnapshots[]
+  updatedAt           DateTime                 @default(now()) @map("updated_at") @db.Timestamptz(6)
+  coachConversations  CoachConversations[]
+  dailySummaries      DailySummaries[]
+  foodRecords         FoodRecords[]
+  profileSnapshots    ProfileSnapshots[]
   /// ARB-2026-04: userInferredProfiles merged into UserProfiles.inferredData
-  userProfiles         UserProfiles?
+  userProfiles        UserProfiles?
   /// V6.5 Phase 2I: FK 补齐 — 反向关联
-  dailyPlans           DailyPlans[]
+  dailyPlans          DailyPlans[]
   /// ARB-2026-04: userBehaviorProfiles merged into UserProfiles.behaviorData
-  strategyAssignments  StrategyAssignment[]
-  notifications        Notification[]
-  weightHistories      WeightHistory[]
+  strategyAssignments StrategyAssignment[]
+  notifications       Notification[]
+  weightHistories     WeightHistory[]
 
   @@index([deviceId], map: "IDX_601d4f4be742d3ca28891c0207")
   @@map("app_users")
@@ -504,7 +504,6 @@ model DeviceToken {
 
 /// 文档向量嵌入表 — 存储 RAG 知识库文档片段及其向量表示，用于语义检索
 
-
 /// 功能开关配置表 — 动态控制功能的开启/关闭及灰度策略，无需重新部署
 model FeatureFlag {
   /// 主键 UUID
@@ -529,8 +528,6 @@ model FeatureFlag {
   @@index([key], map: "IDX_feature_flag_key")
   @@map("feature_flag")
 }
-
-
 
 /// 食物识别分析记录表 — 存储每次 AI 识别请求的输入、中间结果和最终决策快照
 model FoodAnalysisRecords {
@@ -757,27 +754,51 @@ model FoodRecords {
 /// 食物区域信息表 — 存储同一食物在不同地区的流行度、价格和季节性数据
 model FoodRegionalInfo {
   /// 主键 UUID
-  id              String   @id(map: "PK_a85c86ffa0a1e8ad0b7b650d0e0") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id                    String           @id(map: "PK_a85c86ffa0a1e8ad0b7b650d0e0") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   /// 关联的食物 ID
-  foodId          String   @map("food_id") @db.Uuid
-  /// 地区编码（ISO 3166-1 alpha-2，如 CN/US/JP）
-  region          String   @db.VarChar(10)
+  foodId                String           @map("food_id") @db.Uuid
+  /// 国家编码（ISO 3166-1 alpha-2，如 CN/US/JP）
+  countryCode           String           @map("country_code") @db.VarChar(2)
+  /// 一级行政区编码（如 CA/NY/GD），为空表示国家级
+  regionCode            String?          @map("region_code") @db.VarChar(20)
+  /// 城市编码，空表示不细分到城市
+  cityCode              String?          @map("city_code") @db.VarChar(50)
   /// 本地受欢迎程度 0-100
-  localPopularity Int      @default(0) @map("local_popularity")
-  /// 本地价格区间（如 "5-15"，单位当地货币）
-  localPriceRange String?  @map("local_price_range") @db.VarChar(20)
-  /// 供应可获取性：year_round=全年, seasonal=季节性, rare=稀少
-  availability    String?  @db.VarChar(20)
+  localPopularity       Int              @default(0) @map("local_popularity")
+  /// 本地最低价格
+  priceMin              Decimal?         @map("price_min") @db.Decimal(10, 2)
+  /// 本地最高价格
+  priceMax              Decimal?         @map("price_max") @db.Decimal(10, 2)
+  /// 价格货币代码（ISO 4217，如 USD/CNY/JPY）
+  currencyCode          String?          @map("currency_code") @db.VarChar(3)
+  /// 价格单位（per_kg/per_serving/per_piece）
+  priceUnit             String?          @map("price_unit") @db.VarChar(30)
+  /// 供应可获取性
+  availability          FoodAvailability @default(UNKNOWN)
+  /// V7.0: 食物级月份权重（12 元素数组 0-1），替代品类级峰值月份
+  monthWeights          Json?            @map("month_weights") @db.JsonB
+  /// 季节性数据可信度 0-1
+  seasonalityConfidence Float?           @default(0) @map("seasonality_confidence")
   /// 当地法规信息（JSON，如允许添加剂、营养标签要求等）
-  regulatoryInfo  Json?    @map("regulatory_info")
+  regulatoryInfo        Json?            @map("regulatory_info")
+  /// 数据来源（USDA/OFF/AI/MANUAL 等）
+  source                String?          @db.VarChar(50)
+  /// 来源 URL
+  sourceUrl             String?          @map("source_url") @db.Text
+  /// 来源数据更新时间
+  sourceUpdatedAt       DateTime?        @map("source_updated_at") @db.Timestamptz(6)
+  /// 区域信息整体可信度 0-1
+  confidence            Float?           @default(0)
   /// 创建时间
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  foods           Food     @relation(fields: [foodId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_999e5485019b3efa2aae0a557f5")
-  monthWeights    Json?    @map("month_weights") @db.JsonB /// V7.0: 食物级月份权重（12 元素数组 0-1），替代品类级峰值月份
+  createdAt             DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 最后更新时间
+  updatedAt             DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  foods                 Food             @relation(fields: [foodId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_999e5485019b3efa2aae0a557f5")
 
-  @@unique([foodId, region], map: "UQ_41a17bad128becea48895910fa6")
+  @@unique([foodId, countryCode, regionCode, cityCode], map: "UQ_food_regional_info_scope")
   @@index([foodId], map: "IDX_food_regional_info_food_id")
-  @@index([region], map: "IDX_food_regional_info_region")
+  @@index([countryCode], map: "IDX_food_regional_info_country")
+  @@index([countryCode, regionCode], map: "IDX_food_regional_info_country_region")
   @@map("food_regional_info")
 }
 
@@ -819,27 +840,34 @@ model FoodSources {
 /// 食物多语言翻译表 — 存储食物名称、描述在各语言下的本地化文本
 model FoodTranslations {
   /// 主键 UUID
-  id          String   @id(map: "PK_f7e8f00e342c52db74bf2820e19") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id           String                  @id(map: "PK_f7e8f00e342c52db74bf2820e19") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   /// 关联的食物 ID
-  foodId      String   @map("food_id") @db.Uuid
+  foodId       String                  @map("food_id") @db.Uuid
   /// 语言区域代码（如 zh-CN/en-US/ja-JP）
-  locale      String   @db.VarChar(10)
+  locale       String                  @db.VarChar(10)
   /// 该语言下的食物名称
-  name        String   @db.VarChar(200)
+  name         String                  @db.VarChar(200)
   /// 该语言下的食物别名（逗号分隔）
-  aliases     String?
+  aliases      String?
   /// 该语言下的食物描述
-  description String?
-  /// 标准份量说明（本地化，如 "1 bowl (200g)"）
-  servingDesc String?  @map("serving_desc") @db.VarChar(100)
+  description  String?
+  /// @deprecated 份量不再由翻译表维护；使用 food_portion_guides.standard_serving_desc / common_portions
+  servingDesc  String?                 @map("serving_desc") @db.VarChar(100)
+  /// 翻译来源（ai/manual/imported/verified）
+  source       String?                 @db.VarChar(30)
+  /// 翻译质量/可信度 0-1
+  quality      Float?                  @default(0)
+  /// 翻译审核状态
+  reviewStatus TranslationReviewStatus @default(PENDING) @map("review_status")
   /// 创建时间
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdAt    DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
   /// 最后更新时间
-  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
-  foods       Food     @relation(fields: [foodId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_880ef718b1e294d7cbeb2c7265a")
+  updatedAt    DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  foods        Food                    @relation(fields: [foodId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_880ef718b1e294d7cbeb2c7265a")
 
   @@unique([foodId, locale], map: "UQ_5ce4d8b4f0dad567d3b81052e34")
   @@index([locale], map: "IDX_eafdca1bd9632ceabd94d182f2")
+  @@index([reviewStatus], map: "IDX_food_translations_review_status")
   @@map("food_translations")
 }
 
@@ -855,9 +883,9 @@ model Food {
   /// 食物编码，全局唯一（如 CN_RICE_WHITE_COOKED）
   code                  String  @unique(map: "IDX_94114b6498bb8a8c102e194b8c") @db.VarChar(50)
   /// 食物标准中文名，全局唯一
-  name                  String  @unique(map: "UQ_c3cf46642750fce8fea692ad946") @db.VarChar(100)
+  name                  String  @unique(map: "UQ_c3cf46642750fce8fea692ad946") @db.VarChar(255)
   /// 别名/俗称，逗号分隔（如"米饭,白饭,蒸米"），用于模糊搜索
-  aliases               String? @db.VarChar(1000)
+  aliases               String? @db.Text
   /// 商品条形码（EAN-13 / UPC）
   barcode               String? @db.VarChar(50)
   /// 生命周期状态：draft=草稿, active=上线, archived=归档, merged=已合并
@@ -865,9 +893,9 @@ model Food {
   /// 一级分类（grain/vegetable/fruit/meat/seafood/dairy/egg/legume/nut/fat/beverage/condiment/snack/other）
   category              String  @db.VarChar(30)
   /// 二级分类（如 grain → white_rice/brown_rice）
-  subCategory           String? @map("sub_category") @db.VarChar(200)
+  subCategory           String? @map("sub_category") @db.VarChar(255)
   /// 食物组（如 USDA 食物组分类）
-  foodGroup             String? @map("food_group") @db.VarChar(200)
+  foodGroup             String? @map("food_group") @db.VarChar(255)
   /// 食物形态：ingredient=原材料, dish=成品菜, semi_prepared=半成品（V7.3）
   foodForm              String? @map("food_form") @db.VarChar(20)
   /// 成品菜推荐优先级 0-100，值越高越优先推荐；仅 dish/semi_prepared 有值（V7.3）
@@ -877,17 +905,17 @@ model Food {
 
   // ─── 宏量营养素（per 100g 可食部分）────────────────────────────────────
   /// 热量，单位 kcal
-  calories     Decimal  @db.Decimal(7, 1)
+  calories Decimal  @db.Decimal(7, 1)
   /// 蛋白质，单位 g
-  protein      Decimal? @db.Decimal(6, 1)
+  protein  Decimal? @db.Decimal(6, 1)
   /// 脂肪总量，单位 g
-  fat          Decimal? @db.Decimal(6, 1)
+  fat      Decimal? @db.Decimal(6, 1)
   /// 碳水化合物，单位 g
-  carbs        Decimal? @db.Decimal(6, 1)
+  carbs    Decimal? @db.Decimal(6, 1)
   /// 膳食纤维，单位 g
-  fiber        Decimal? @db.Decimal(5, 1)
+  fiber    Decimal? @db.Decimal(5, 1)
   /// 总糖（添加糖 + 天然糖），单位 g
-  sugar        Decimal? @db.Decimal(5, 1)
+  sugar    Decimal? @db.Decimal(5, 1)
 
   // ─── 健康评估（已迁移至 food_health_assessments，读写通过关联表）───────
   // glycemicIndex / glycemicLoad / isProcessed / isFried / processingLevel
@@ -901,11 +929,11 @@ model Food {
   /// @deprecated [DEPRECATED-V7.1 / ARB-2026-04] DO NOT USE in new code.
   /// Replaced by `ingredientList` (string[]). Will be DROPPED in V9.
   /// All reads must fall back to ingredientList[0]; all writes are forbidden.
-  mainIngredient    String?  @map("main_ingredient") @db.VarChar(200)
+  mainIngredient   String?  @map("main_ingredient") @db.VarChar(255)
   /// 完整食材清单（字符串数组，V7.1 取代单一 main_ingredient）
-  ingredientList    String[] @default([]) @map("ingredient_list")
+  ingredientList   String[] @default([]) @map("ingredient_list")
   /// 大众化评分 0-100（0=极罕见食材, 50=一般常见, 100=日常必备）；影响推荐权重
-  commonalityScore  Int      @map("commonality_score")
+  commonalityScore Int      @map("commonality_score")
 
   // ─── 份量/烹饪/风味（已迁移至 food_portion_guides / food_taxonomies）────
   // standardServingG / standardServingDesc / commonPortions / cookingMethods
@@ -924,7 +952,7 @@ model Food {
   /// 主要数据来源标识（manual=人工录入, usda=USDA, cfsb=中国食物成分表, ai=AI生成, import=批量导入）
   primarySource   String    @default("manual") @map("primary_source") @db.VarChar(50)
   /// 主要数据来源的原始 ID（如 USDA FDC ID）
-  primarySourceId String?   @map("primary_source_id") @db.VarChar(100)
+  primarySourceId String?   @map("primary_source_id") @db.VarChar(255)
   /// @deprecated [DEPRECATED / ARB-2026-04] DO NOT USE in new code.
   /// Replaced by `primarySource`. Will be DROPPED in V9.
   /// All new writes must target primarySource only.
@@ -968,20 +996,20 @@ model Food {
   //   field_sources / field_confidence               → FoodFieldProvenance (status='success')
 
   // ─── 关联关系（反向引用，不存储于本表）───────────────────────────────────
-  analysisFoodLink      AnalysisFoodLink[]
-  dailyPlanItems        DailyPlanItems[]
-  foodChangeLogs        FoodChangeLogs[]
-  foodConflicts         FoodConflicts[]
-  foodRegionalInfo      FoodRegionalInfo[]
-  foodSources           FoodSources[]
-  foodTranslations      FoodTranslations[]
-  recipeIngredients     RecipeIngredients[]
-  embeddings            FoodEmbedding[]
-  fieldProvenance       FoodFieldProvenance[]
-  nutritionDetail       FoodNutritionDetail?
-  healthAssessment      FoodHealthAssessment?
-  taxonomy              FoodTaxonomy?
-  portionGuide          FoodPortionGuide?
+  analysisFoodLink  AnalysisFoodLink[]
+  dailyPlanItems    DailyPlanItems[]
+  foodChangeLogs    FoodChangeLogs[]
+  foodConflicts     FoodConflicts[]
+  foodRegionalInfo  FoodRegionalInfo[]
+  foodSources       FoodSources[]
+  foodTranslations  FoodTranslations[]
+  recipeIngredients RecipeIngredients[]
+  embeddings        FoodEmbedding[]
+  fieldProvenance   FoodFieldProvenance[]
+  nutritionDetail   FoodNutritionDetail?
+  healthAssessment  FoodHealthAssessment?
+  taxonomy          FoodTaxonomy?
+  portionGuide      FoodPortionGuide?
 
   @@index([searchWeight], map: "IDX_5f8b45ec9d0608cffe04d3afbe")
   @@index([barcode], map: "IDX_foods_barcode")
@@ -1492,33 +1520,33 @@ model Providers {
 /// 推荐反馈汇总表 — 记录用户对每次食物推荐的整体行为（采纳/替换/拒绝），用于算法迭代
 model RecommendationFeedbacks {
   /// 主键 UUID
-  id                  String            @id(map: "PK_538c99577bef661f2eff1325862") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id                  String   @id(map: "PK_538c99577bef661f2eff1325862") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   /// 关联的用户 ID
-  userId              String            @map("user_id") @db.Uuid
+  userId              String   @map("user_id") @db.Uuid
   /// 餐次类型：breakfast/lunch/dinner/snack
-  mealType            String            @map("meal_type") @db.VarChar(20)
+  mealType            String   @map("meal_type") @db.VarChar(20)
   /// 被推荐的食物名称
-  foodName            String            @map("food_name") @db.VarChar(100)
+  foodName            String   @map("food_name") @db.VarChar(100)
   /// 被推荐的食物 ID（存在于食物库时填写）
-  foodId              String?           @map("food_id") @db.VarChar
+  foodId              String?  @map("food_id") @db.VarChar
   /// 用户行为：accept=接受, replace=替换, reject=拒绝, skip=跳过
-  action              String            @db.VarChar(20)
+  action              String   @db.VarChar(20)
   /// 替换后的食物名称（action=replace 时填写）
-  replacementFood     String?           @map("replacement_food") @db.VarChar(100)
+  replacementFood     String?  @map("replacement_food") @db.VarChar(100)
   /// 推荐算法给出的评分 0.000-1.000
-  recommendationScore Decimal?          @map("recommendation_score") @db.Decimal(5, 3)
+  recommendationScore Decimal? @map("recommendation_score") @db.Decimal(5, 3)
   /// 用户当前的目标类型（如 fat_loss/muscle_gain/health）
-  goalType            String?           @map("goal_type") @db.VarChar(20)
+  goalType            String?  @map("goal_type") @db.VarChar(20)
   /// 关联的 A/B 实验 ID
-  experimentId        String?           @map("experiment_id") @db.VarChar
+  experimentId        String?  @map("experiment_id") @db.VarChar
   /// 命中的实验分组 ID
-  groupId             String?           @map("group_id") @db.VarChar
+  groupId             String?  @map("group_id") @db.VarChar
   /// 关联 recommendation_traces.id，用于归因分析
-  traceId             String?           @map("trace_id") @db.Uuid /// 关联 recommendation_traces.id，用于归因分析
+  traceId             String?  @map("trace_id") @db.Uuid /// 关联 recommendation_traces.id，用于归因分析
   /// 多维评分 + 隐式信号（JSONB）：{ tasteRating?, portionRating?, priceRating?, timingRating?, comment?, dwellTimeMs?, detailExpanded? }
-  details             Json?             @db.JsonB
+  details             Json?    @db.JsonB
   /// 反馈时间
-  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@index([userId], map: "IDX_84be6fe526b10313d0015fbdea")
   @@index([userId, createdAt], map: "IDX_f3a0234ecd1f178e4c36fb8f00")
@@ -1783,27 +1811,27 @@ model SubscriptionTransactions {
 /// 订阅审计日志表 — 记录系统、Webhook、Cron、管理员触发的订阅状态变化前后快照
 model SubscriptionAuditLogs {
   /// 主键 UUID
-  id           String   @id(map: "PK_subscription_audit_logs") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id             String   @id(map: "PK_subscription_audit_logs") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   /// 关联的订阅 ID（可为空）
-  subscriptionId String? @map("subscription_id") @db.Uuid
+  subscriptionId String?  @map("subscription_id") @db.Uuid
   /// 关联的用户 ID
-  userId       String?  @map("user_id") @db.Uuid
+  userId         String?  @map("user_id") @db.Uuid
   /// 操作者类型：system / webhook / cron / admin / client_trigger
-  actorType    String   @map("actor_type") @db.VarChar(32)
+  actorType      String   @map("actor_type") @db.VarChar(32)
   /// 操作者 ID（如 provider event id / admin id）
-  actorId      String?  @map("actor_id") @db.VarChar(128)
+  actorId        String?  @map("actor_id") @db.VarChar(128)
   /// 动作类型：activate / renew / cancel / expire / refund / resync / noop
-  action       String   @db.VarChar(64)
+  action         String   @db.VarChar(64)
   /// 运行时环境：dev / staging / production / review
-  runtimeEnv   String   @default("unknown") @map("runtime_env") @db.VarChar(32)
+  runtimeEnv     String   @default("unknown") @map("runtime_env") @db.VarChar(32)
   /// 变更前快照
-  beforeState  Json     @default("{}") @map("before_state")
+  beforeState    Json     @default("{}") @map("before_state")
   /// 变更后快照
-  afterState   Json     @default("{}") @map("after_state")
+  afterState     Json     @default("{}") @map("after_state")
   /// 变更原因说明
-  reason       String?
+  reason         String?
   /// 创建时间
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@index([subscriptionId, createdAt(sort: Desc)], map: "idx_subscription_audit_subscription_time")
   @@index([userId, createdAt(sort: Desc)], map: "idx_subscription_audit_user_time")
@@ -1951,7 +1979,6 @@ model UserAchievements {
   @@index([userId], map: "idx_user_achievements_user_id")
   @@map("user_achievements")
 }
-
 
 /// 用户挑战参与记录表 — 记录用户参与每个挑战的进度和完成状态
 model UserChallenges {
@@ -2168,6 +2195,26 @@ enum feature_flag_type_enum {
   percentage
   user_list
   segment
+}
+
+enum FoodAvailability {
+  YEAR_ROUND @map("year_round")
+  SEASONAL   @map("seasonal")
+  RARE       @map("rare")
+  LIMITED    @map("limited")
+  UNKNOWN    @map("unknown")
+
+  @@map("food_availability_enum")
+}
+
+enum TranslationReviewStatus {
+  PENDING
+  AI_GENERATED
+  REVIEWED
+  VERIFIED
+  REJECTED
+
+  @@map("translation_review_status_enum")
 }
 
 enum food_records_meal_type_enum {

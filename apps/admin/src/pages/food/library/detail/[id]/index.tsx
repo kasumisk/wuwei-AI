@@ -39,11 +39,13 @@ import { useCloseTab } from '@/hooks/useCloseTab';
 import {
   foodLibraryApi,
   useFoodDetail,
+  useFoodRegionalInfo,
   useFoodTranslations,
   useFoodSources,
   useFoodChangeLogs,
   useToggleFoodVerified,
   type FoodTranslationDto,
+  type FoodRegionalInfoDto,
   type FoodSourceDto,
   type FoodChangeLogDto,
   foodLibraryQueryKeys,
@@ -76,6 +78,7 @@ const FoodDetailPage: React.FC = () => {
 
   const { data: food, isLoading } = useFoodDetail(id!, !!id);
   const { data: translations } = useFoodTranslations(id!, !!id);
+  const { data: regionalInfo } = useFoodRegionalInfo(id!, !!id);
   const { data: sources } = useFoodSources(id!, !!id);
   const { data: changeLogs } = useFoodChangeLogs(id!);
   const { data: completeness } = useFoodCompleteness(id!, !!id);
@@ -837,6 +840,91 @@ const FoodDetailPage: React.FC = () => {
                     </Form>
                   </Modal>
                 </>
+              ),
+            },
+            {
+              key: 'regional',
+              label: (
+                <>
+                  <DatabaseOutlined /> 地区信息 ({regionalInfo?.length || 0})
+                </>
+              ),
+              children: (
+                <Table<FoodRegionalInfoDto>
+                  dataSource={regionalInfo || []}
+                  rowKey="id"
+                  size="small"
+                  pagination={false}
+                  scroll={{ x: 1300 }}
+                  columns={[
+                    {
+                      title: '地区',
+                      width: 130,
+                      render: (_, record) =>
+                        [record.countryCode, record.regionCode, record.cityCode]
+                          .filter(Boolean)
+                          .join('-'),
+                    },
+                    {
+                      title: '流行度',
+                      dataIndex: 'localPopularity',
+                      width: 90,
+                      render: (v) => `${v ?? 0}/100`,
+                    },
+                    {
+                      title: '价格',
+                      width: 180,
+                      render: (_, record) => {
+                        const min = record.priceMin ?? '-';
+                        const max = record.priceMax ?? '-';
+                        const unit = record.priceUnit ? ` / ${record.priceUnit}` : '';
+                        return `${record.currencyCode || ''} ${min}-${max}${unit}`.trim();
+                      },
+                    },
+                    {
+                      title: '可获得性',
+                      dataIndex: 'availability',
+                      width: 110,
+                      render: (v) => <Tag color="blue">{v}</Tag>,
+                    },
+                    {
+                      title: '月份权重',
+                      dataIndex: 'monthWeights',
+                      width: 220,
+                      render: (weights?: number[] | null) =>
+                        Array.isArray(weights) && weights.length === 12
+                          ? weights.map((w, idx) => (
+                              <Tooltip key={idx} title={`${idx + 1}月: ${w}`}>
+                                <Tag style={{ marginBottom: 2 }}>{w}</Tag>
+                              </Tooltip>
+                            ))
+                          : '-',
+                    },
+                    {
+                      title: '季节置信度',
+                      dataIndex: 'seasonalityConfidence',
+                      width: 110,
+                      render: (v) => (v == null ? '-' : `${(Number(v) * 100).toFixed(0)}%`),
+                    },
+                    {
+                      title: '来源',
+                      dataIndex: 'source',
+                      width: 90,
+                      render: (v) => v || '-',
+                    },
+                    {
+                      title: '置信度',
+                      dataIndex: 'confidence',
+                      width: 90,
+                      render: (v) => (v == null ? '-' : `${(Number(v) * 100).toFixed(0)}%`),
+                    },
+                    {
+                      title: '更新时间',
+                      dataIndex: 'updatedAt',
+                      width: 170,
+                    },
+                  ]}
+                />
               ),
             },
             {

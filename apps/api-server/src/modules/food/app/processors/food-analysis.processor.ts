@@ -79,23 +79,37 @@ export class FoodAnalysisProcessor extends WorkerHost {
     } catch (err) {
       this.logger.error(
         `AI 分析任务失败: requestId=${requestId}, jobId=${job.id}, error=${(err as Error).message}`,
-      );
-      // 将错误状态写入缓存，让客户端轮询时知道失败了
-      await this.analyzeService.cacheAnalysisError(
-        requestId,
-        (err as Error).message,
+        (err as Error).stack,
       );
 
-      // V6.1 Phase 2.6: 发射分析失败事件
-      if (userId) {
-        this.eventEmitter.emit(
-          DomainEvents.ANALYSIS_FAILED,
-          new AnalysisFailedEvent(
-            userId,
-            requestId,
-            'image',
-            (err as Error).message,
-          ),
+      const maxAttempts =
+        job.opts?.attempts ??
+        QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_ANALYSIS].maxRetries + 1;
+      const isFinalAttempt = job.attemptsMade >= maxAttempts;
+
+      if (isFinalAttempt) {
+        // 最终失败：写 failed 缓存，客户端轮询可感知
+        await this.analyzeService.cacheAnalysisError(
+          requestId,
+          (err as Error).message,
+        );
+
+        // V6.1 Phase 2.6: 发射分析失败事件
+        if (userId) {
+          this.eventEmitter.emit(
+            DomainEvents.ANALYSIS_FAILED,
+            new AnalysisFailedEvent(
+              userId,
+              requestId,
+              'image',
+              (err as Error).message,
+            ),
+          );
+        }
+      } else {
+        // 还有重试机会：保持 processing 状态，客户端继续等待
+        this.logger.warn(
+          `AI 分析任务将重试: requestId=${requestId}, jobId=${job.id}, attempt=${job.attemptsMade}/${maxAttempts}`,
         );
       }
 

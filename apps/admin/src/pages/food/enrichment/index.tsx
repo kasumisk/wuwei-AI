@@ -185,15 +185,6 @@ const FIELD_OPTIONS = ALL_FIELDS.map((f) => ({
   value: f.value,
 }));
 
-const REGION_OPTIONS = [
-  { label: '中国大陆 (CN)', value: 'CN' },
-  { label: '中国香港 (HK)', value: 'HK' },
-  { label: '中国台湾 (TW)', value: 'TW' },
-  { label: '美国 (US)', value: 'US' },
-  { label: '日本 (JP)', value: 'JP' },
-  { label: '韩国 (KR)', value: 'KR' },
-];
-
 // ─── 状态配置 ────────────────────────────────────────────────────────────
 
 const ACTION_CONFIG: Record<string, { color: string; text: string }> = {
@@ -424,24 +415,24 @@ const EnrichmentPage: React.FC = () => {
       title: '目标',
       dataIndex: 'target',
       width: 90,
-        render: (t: string, r: EnrichmentJob) => (
-          <Space size={2}>
+      render: (t: string, r: EnrichmentJob) => (
+        <Space size={2}>
           {t === 'translations' ? (
             <GlobalOutlined />
           ) : t === 'regional' ? (
             <EnvironmentOutlined />
           ) : (
             <ThunderboltOutlined />
-            )}
-            <Text style={{ fontSize: 12 }}>{t}</Text>
-            {r.locales?.map((locale) => (
-              <Tag key={locale} style={{ fontSize: 10 }}>
-                {locale}
-              </Tag>
-            ))}
-            {r.region && <Tag style={{ fontSize: 10 }}>{r.region}</Tag>}
-          </Space>
-        ),
+          )}
+          <Text style={{ fontSize: 12 }}>{t}</Text>
+          {r.locales?.map((locale) => (
+            <Tag key={locale} style={{ fontSize: 10 }}>
+              {locale}
+            </Tag>
+          ))}
+          {r.region && <Tag style={{ fontSize: 10 }}>{r.region}</Tag>}
+        </Space>
+      ),
     },
     {
       title: '食物 ID',
@@ -522,22 +513,22 @@ const EnrichmentPage: React.FC = () => {
       title: '目标',
       key: 'target',
       width: 110,
-        render: (_, r) => {
-          const t = r.changes?.target ?? 'foods';
-          const locales = Array.isArray(r.changes?.locales) ? r.changes.locales : [];
-          const region = r.changes?.region;
-          return (
-            <Space size={2}>
-              <Tag color={t === 'translations' ? 'purple' : t === 'regional' ? 'geekblue' : 'blue'}>
-                {t === 'translations' ? '翻译' : t === 'regional' ? '地区' : '主表'}
-              </Tag>
-              {locales.map((locale) => (
-                <Tag key={locale}>{locale}</Tag>
-              ))}
-              {region && <Tag>{region}</Tag>}
-            </Space>
-          );
-        },
+      render: (_, r) => {
+        const t = r.changes?.target ?? 'foods';
+        const locales = Array.isArray(r.changes?.locales) ? r.changes.locales : [];
+        const region = r.changes?.region;
+        return (
+          <Space size={2}>
+            <Tag color={t === 'translations' ? 'purple' : t === 'regional' ? 'geekblue' : 'blue'}>
+              {t === 'translations' ? '翻译' : t === 'regional' ? '地区' : '主表'}
+            </Tag>
+            {locales.map((locale) => (
+              <Tag key={locale}>{locale}</Tag>
+            ))}
+            {region && <Tag>{region}</Tag>}
+          </Space>
+        );
+      },
     },
     {
       title: '置信度',
@@ -1069,8 +1060,13 @@ const EnrichmentPage: React.FC = () => {
                                 />
                               </Form.Item>
                             ) : getFieldValue('target') === 'regional' ? (
-                              <Form.Item name="region" label="目标地区">
-                                <Select options={REGION_OPTIONS} placeholder="选择地区" />
+                              <Form.Item name="locales" label="目标语言/地区">
+                                <Select
+                                  mode="multiple"
+                                  options={[...LOCALE_OPTIONS, {label: '澳大利亚', value: 'AU'}]}
+                                  placeholder="与多语言补全一致，按语言映射地区"
+                                  maxTagCount={3}
+                                />
                               </Form.Item>
                             ) : (
                               <Form.Item name="fields" label="补全字段">
@@ -2168,9 +2164,11 @@ const EnrichmentPage: React.FC = () => {
                   </Descriptions.Item>
                   <Descriptions.Item label="补全目标">
                     <Tag>{r.changes?.target ?? 'foods'}</Tag>
-                    {(Array.isArray(r.changes?.locales) ? r.changes.locales : []).map((locale: string) => (
-                      <Tag key={locale}>{locale}</Tag>
-                    ))}
+                    {(Array.isArray(r.changes?.locales) ? r.changes.locales : []).map(
+                      (locale: string) => (
+                        <Tag key={locale}>{locale}</Tag>
+                      )
+                    )}
                     {r.changes?.region && <Tag>{r.changes.region}</Tag>}
                   </Descriptions.Item>
                   <Descriptions.Item label="置信度">

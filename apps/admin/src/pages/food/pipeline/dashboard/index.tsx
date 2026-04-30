@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Card,
@@ -19,25 +20,21 @@ import {
   Modal,
   Form,
   Alert,
-  Switch,
   Table,
 } from 'antd';
 import {
   CloudDownloadOutlined,
-  RobotOutlined,
-  TranslationOutlined,
   CalculatorOutlined,
   WarningOutlined,
   SyncOutlined,
   CheckCircleOutlined,
   DatabaseOutlined,
   BarcodeOutlined,
+  RobotOutlined,
 } from '@ant-design/icons';
 import {
   useQualityReport,
   useImportUsda,
-  useBatchAiLabel,
-  useBatchAiTranslate,
   useBatchApplyRules,
   useBackfillNutrientScores,
   usePromoteCandidates,
@@ -62,7 +59,9 @@ const { Text } = Typography;
 
 const formatPercent = (value: number) => `${Math.round(value)}%`;
 
-const getStepTone = (status: 'done' | 'in_progress' | 'todo' | 'warning') => {
+type PipelineStepStatus = 'done' | 'in_progress' | 'todo' | 'warning';
+
+const getStepTone = (status: PipelineStepStatus) => {
   if (status === 'done') return { color: 'green', label: '已完成' };
   if (status === 'in_progress') return { color: 'blue', label: '进行中' };
   if (status === 'warning') return { color: 'orange', label: '需处理' };
@@ -74,8 +73,6 @@ const PipelineDashboard: React.FC = () => {
   const { data: report, isLoading, refetch } = useQualityReport();
   const [usdaModal, setUsdaModal] = useState(false);
   const [barcodeModal, setBarcodeModal] = useState(false);
-  const [aiLabelModal, setAiLabelModal] = useState(false);
-  const [translateModal, setTranslateModal] = useState(false);
   const [backfillModal, setBackfillModal] = useState(false);
   const [candidateModal, setCandidateModal] = useState(false);
   const [stageModal, setStageModal] = useState(false);
@@ -88,8 +85,6 @@ const PipelineDashboard: React.FC = () => {
   const consistencySearchSeq = useRef(0);
 
   const [usdaForm] = Form.useForm();
-  const [aiLabelForm] = Form.useForm();
-  const [translateForm] = Form.useForm();
   const [backfillForm] = Form.useForm();
   const [candidateForm] = Form.useForm();
   const [stageForm] = Form.useForm();
@@ -98,34 +93,12 @@ const PipelineDashboard: React.FC = () => {
 
   const importUsda = useImportUsda({
     onSuccess: (result) => {
-      message.success(
-        `导入完成: 新增 ${result.created}, 更新 ${result.updated}, 跳过 ${result.skipped}`
-      );
+      message.success(`导入任务已提交，任务 ID: ${result.jobId}`);
       setUsdaModal(false);
       usdaForm.resetFields();
       refetch();
     },
     onError: (e) => message.error(`导入失败: ${e.message}`),
-  });
-
-  const batchLabel = useBatchAiLabel({
-    onSuccess: (result) => {
-      message.success(`标注完成: 成功 ${result.labeled}, 失败 ${result.failed}`);
-      setAiLabelModal(false);
-      aiLabelForm.resetFields();
-      refetch();
-    },
-    onError: (e) => message.error(`标注失败: ${e.message}`),
-  });
-
-  const batchTranslate = useBatchAiTranslate({
-    onSuccess: (result) => {
-      message.success(`翻译完成: 成功 ${result.translated}, 失败 ${result.failed}`);
-      setTranslateModal(false);
-      translateForm.resetFields();
-      refetch();
-    },
-    onError: (e) => message.error(`翻译失败: ${e.message}`),
   });
 
   const batchRules = useBatchApplyRules({
@@ -237,22 +210,36 @@ const PipelineDashboard: React.FC = () => {
     );
   }
 
-  // 直接从 report 顶层取字段（后端不再包装 summary）
   const totalFoods = report?.totalFoods ?? 0;
   const completeness = report?.completeness;
   const quality = report?.quality;
   const conflicts = report?.conflicts;
   const translations = report?.translations;
-  const tagCoverage = totalFoods ? ((completeness?.withTags || 0) / totalFoods) * 100 : 0;
-  const translationCoverage = totalFoods
-    ? (((translations?.foodsWithTranslation || 0) / totalFoods) * 100)
-    : 0;
   const macroConsistency = totalFoods
     ? (((totalFoods - (quality?.macroInconsistent || 0)) / totalFoods) * 100)
     : 0;
   const verifiedCoverage = totalFoods ? (((quality?.verified || 0) / totalFoods) * 100) : 0;
+  const enrichmentCoverage = totalFoods
+    ? (((completeness?.withProtein || 0) / totalFoods) * 100)
+    : 0;
 
-  const pipelineSteps = [
+  const pipelineSteps: Array<{
+    key: string;
+    index: string;
+    title: string;
+    summary: string;
+    metric: string;
+    status: PipelineStepStatus;
+    whenToUse: string;
+    skipWhen: string;
+    doneRule: string;
+    commonIssues: string;
+    solutionTip: string;
+    example: string;
+    detailLabel: string;
+    detailPath: string;
+    actions: ReactNode;
+  }> = [
     {
       key: 'ingest',
       index: '01',
@@ -263,7 +250,7 @@ const PipelineDashboard: React.FC = () => {
       doneRule: '食物总量 > 0，且本轮目标食物已经能在食物库中搜到。',
       commonIssues: '常见问题：导入后搜不到食物，通常是关键词太窄、条形码无结果，或源数据被清洗阶段丢弃。',
       solutionTip: '解决建议：先放宽关键词或更换英文同义词；条形码场景优先确认 Open Food Facts 是否有该商品；如果导入数量异常偏少，再去看质量报告和清洗日志。',
-      example: '例子：你想新增“chicken breast”或录入一包零食条形码，就先做这一步。',
+      example: '例子：你想新增"chicken breast"或录入一包零食条形码，就先做这一步。',
       detailPath: '/food/pipeline/usda-import',
       detailLabel: '查看导入页',
       metric: `${totalFoods} 条食物`,
@@ -280,61 +267,38 @@ const PipelineDashboard: React.FC = () => {
       ),
     },
     {
-      key: 'label',
+      key: 'enrich',
       index: '02',
-      title: '补全分类和标签',
-      summary: '让食物具备分类、标签、过敏原、餐次等结构化信息。',
-      whenToUse: '标签覆盖率低、推荐过滤条件不够用、导入后信息太“生”时。',
-      skipWhen: '标签、过敏原、餐次已经足够完整，不需要再补结构字段时。',
-      doneRule: '标签覆盖率建议达到 80% 以上，重点分类食物具备标签和餐次信息。',
-      commonIssues: '常见问题：AI 标注跑完覆盖率还是低，通常是目标分类太窄、limit 太小，或历史数据本身缺少可推断上下文。',
-      solutionTip: '解决建议：先扩大 limit，再去掉分类过滤重跑；如果仍然偏低，优先改用“分阶段补全”补结构字段，再回头跑 AI 标注。',
-      example: '例子：导入了一批米饭和肉类，但还没有“高蛋白”“早餐适合”这类标签，就跑这一步。',
-      detailPath: '/food/pipeline/ai-label',
-      detailLabel: '查看标注页',
-      metric: `标签覆盖 ${formatPercent(tagCoverage)}`,
-      status: tagCoverage >= 80 ? 'done' : tagCoverage > 0 ? 'in_progress' : 'todo' as const,
+      title: '分阶段 AI 补全',
+      summary: '用 AI 分阶段补全营养素、健康属性、标签餐次、份量和扩展属性等结构字段。',
+      whenToUse: '导入后字段缺失、推荐过滤条件不足、或历史数据完整度偏低时。',
+      skipWhen: '字段已足够完整，补全统计无缺口时。',
+      doneRule: '宏量营养素覆盖率建议达到 80% 以上，核心食物具备健康评分和标签。',
+      commonIssues: '常见问题：补全后字段覆盖率仍低，通常是 limit 太小或分类过滤太窄。',
+      solutionTip: '解决建议：扩大 limit、去掉分类过滤重跑；如果特定阶段失败率高，可单独跑该阶段定位问题。',
+      example: '例子：导入了一批食物，但缺少蛋白质/碳水/GI值/标签，就跑这一步。',
+      detailPath: '/food/enrichment',
+      detailLabel: '查看 AI 补全',
+      metric: `宏量覆盖 ${formatPercent(enrichmentCoverage)}`,
+      status: enrichmentCoverage >= 80 ? 'done' : enrichmentCoverage > 0 ? 'in_progress' : 'todo' as const,
       actions: (
         <Space wrap>
-          <Button type="primary" icon={<RobotOutlined />} onClick={() => setAiLabelModal(true)}>
-            AI 标注
+          <Button type="primary" icon={<RobotOutlined />} onClick={() => setStageModal(true)}>
+            分阶段补全
           </Button>
-          <Button onClick={() => setStageModal(true)}>分阶段补全</Button>
         </Space>
       ),
     },
     {
-      key: 'translation',
-      index: '03',
-      title: '补全多语言',
-      summary: '给 App / Web 提供可直接展示的多语言名称和描述。',
-      whenToUse: '要给英文/多语言端展示、运营要检查本地化文本时。',
-      skipWhen: '当前只服务单语言场景，或目标语言已覆盖到位时。',
-      doneRule: '目标语言覆盖率建议达到 80% 以上，至少核心食物有翻译。',
-      commonIssues: '常见问题：翻译成功率低，多半是批量太大、目标语言过多，或食物基础名称本身不规范。',
-      solutionTip: '解决建议：先只翻译一个目标语言并缩小批量；对命名明显混乱的食物，先补分类/标签再翻译。',
-      example: '例子：你希望英文端能展示 “鸡胸肉 / broccoli / yogurt” 的英文名，就先做这一步。',
-      detailPath: '/food/pipeline/translation',
-      detailLabel: '查看翻译页',
-      metric: `翻译覆盖 ${formatPercent(translationCoverage)}`,
-      status:
-        translationCoverage >= 80 ? 'done' : translationCoverage > 0 ? 'in_progress' : 'todo',
-      actions: (
-        <Button type="primary" icon={<TranslationOutlined />} onClick={() => setTranslateModal(true)}>
-          AI 翻译
-        </Button>
-      ),
-    },
-    {
       key: 'score',
-      index: '04',
+      index: '03',
       title: '计算评分与回填',
       summary: '把评分、营养密度和历史缺失值补齐，给推荐和分析使用。',
-      whenToUse: '导入/标注后需要刷新评分，或者历史数据没有 health assessment 时。',
+      whenToUse: '导入/补全后需要刷新评分，或者历史数据没有 health assessment 时。',
       skipWhen: '评分已经最新，且没有历史缺失记录需要回填时。',
       doneRule: '关键食物已有 qualityScore、satietyScore、nutrientDensity，可支持推荐与分析。',
       commonIssues: '常见问题：评分不变或回填数量很少，通常说明该批数据已有评分，或者上游营养字段还不够完整。',
-      solutionTip: '解决建议：新数据先跑“计算评分”；历史缺口再跑“回填评分”；如果结果仍少，先回头补宏量/标签/GI 等上游字段。',
+      solutionTip: '解决建议：新数据先跑"计算评分"；历史缺口再跑"回填评分"；如果结果仍少，先回头补宏量/标签/GI 等上游字段。',
       example: '例子：你刚导入一批食物，想马上让推荐系统用到 qualityScore，就做这一步。',
       detailPath: '/food/pipeline/scoring',
       detailLabel: '查看评分页',
@@ -351,7 +315,7 @@ const PipelineDashboard: React.FC = () => {
     },
     {
       key: 'quality',
-      index: '05',
+      index: '04',
       title: '处理冲突与质检',
       summary: '最后看冲突、异常值和补全统计，确认数据能稳定使用。',
       whenToUse: '导入完成后验收质量、发现异常营养值、或要核对补全效果时。',
@@ -385,44 +349,37 @@ const PipelineDashboard: React.FC = () => {
     totalFoods === 0
       ? {
           step: '步骤 01 导入原始数据',
-          reason: '当前食物库还是空的，后续标注、翻译和评分都没有处理对象。',
+          reason: '当前食物库还是空的，后续补全和评分都没有处理对象。',
           actionLabel: '去导入数据',
           action: () => setUsdaModal(true),
         }
-      : tagCoverage < 80
+      : enrichmentCoverage < 80
         ? {
-            step: '步骤 02 补全分类和标签',
-            reason: `当前标签覆盖率只有 ${formatPercent(tagCoverage)}，会直接影响推荐过滤、过敏原识别和餐次判断。`,
-            actionLabel: '去做 AI 标注',
-            action: () => setAiLabelModal(true),
+            step: '步骤 02 分阶段 AI 补全',
+            reason: `当前宏量营养素覆盖率只有 ${formatPercent(enrichmentCoverage)}，会直接影响推荐过滤和健康评估。`,
+            actionLabel: '去做 AI 补全',
+            action: () => setStageModal(true),
           }
-        : translationCoverage < 80
+        : verifiedCoverage < 70
           ? {
-              step: '步骤 03 补全多语言',
-              reason: `当前翻译覆盖率只有 ${formatPercent(translationCoverage)}，多语言端展示会不完整。`,
-              actionLabel: '去做 AI 翻译',
-              action: () => setTranslateModal(true),
+              step: '步骤 03 计算评分与回填',
+              reason: `当前已验证覆盖率只有 ${formatPercent(verifiedCoverage)}，建议先刷新评分和历史缺失值。`,
+              actionLabel: '去计算评分',
+              action: () => batchRules.mutate({ recalcAll: false }),
             }
-          : verifiedCoverage < 70
+          : (conflicts?.pending || 0) > 0 || macroConsistency < 80
             ? {
-                step: '步骤 04 计算评分与回填',
-                reason: `当前已验证覆盖率只有 ${formatPercent(verifiedCoverage)}，建议先刷新评分和历史缺失值。`,
-                actionLabel: '去计算评分',
-                action: () => batchRules.mutate({ recalcAll: false }),
+                step: '步骤 04 处理冲突与质检',
+                reason: `当前有 ${conflicts?.pending || 0} 条待处理冲突，宏量一致性为 ${formatPercent(macroConsistency)}，建议先做质检。`,
+                actionLabel: '去处理冲突',
+                action: () => resolveConflicts.mutate(),
               }
-            : (conflicts?.pending || 0) > 0 || macroConsistency < 80
-              ? {
-                  step: '步骤 05 处理冲突与质检',
-                  reason: `当前有 ${conflicts?.pending || 0} 条待处理冲突，宏量一致性为 ${formatPercent(macroConsistency)}，建议先做质检。`,
-                  actionLabel: '去处理冲突',
-                  action: () => resolveConflicts.mutate(),
-                }
-              : {
-                  step: '当前流程已基本健康',
-                  reason: '核心覆盖率和质检指标都已达标，后续主要按需导入新数据或做抽样复查。',
-                  actionLabel: '查看补全统计',
-                  action: () => enrichmentStats.mutate(),
-                };
+            : {
+                step: '当前流程已基本健康',
+                reason: '核心覆盖率和质检指标都已达标，后续主要按需导入新数据或做抽样复查。',
+                actionLabel: '查看补全统计',
+                action: () => enrichmentStats.mutate(),
+              };
 
   return (
     <div style={{ padding: 0 }}>
@@ -431,7 +388,7 @@ const PipelineDashboard: React.FC = () => {
         showIcon
         style={{ marginBottom: 16 }}
         message="先按流程走，再看高级工具"
-        description="建议顺序：1. 导入数据 -> 2. AI 标注 -> 3. AI 翻译 -> 4. 计算评分/回填 -> 5. 处理冲突和做质检。下面每张卡都告诉你这一步的目的、当前状态和直接操作入口。"
+        description="建议顺序：1. 导入数据 → 2. AI 分阶段补全（补营养素/标签/份量等结构字段）→ 3. 计算评分/回填 → 4. 处理冲突和做质检。下面每张卡都告诉你这一步的目的、当前状态和直接操作入口。"
       />
 
       <Alert
@@ -467,7 +424,7 @@ const PipelineDashboard: React.FC = () => {
           {pipelineSteps.map((step) => {
             const tone = getStepTone(step.status);
             return (
-              <Col xs={24} md={12} xl={8} key={step.key}>
+              <Col xs={24} md={12} xl={12} key={step.key}>
                 <Card size="small" style={{ height: '100%' }}>
                   <Space direction="vertical" size={10} style={{ width: '100%' }}>
                     <Space style={{ justifyContent: 'space-between', width: '100%' }}>
@@ -537,10 +494,9 @@ const PipelineDashboard: React.FC = () => {
               <Space direction="vertical" style={{ width: '100%' }}>
                 <Text type="secondary">用于修历史缺口，尤其是标签、评分、补全状态不完整时。</Text>
                 <Space wrap>
-                  <Button icon={<RobotOutlined />} onClick={() => setAiLabelModal(true)}>
-                    AI 标注
+                  <Button icon={<RobotOutlined />} onClick={() => setStageModal(true)}>
+                    分阶段补全
                   </Button>
-                  <Button onClick={() => setStageModal(true)}>分阶段补全</Button>
                   <Button onClick={() => setBackfillModal(true)}>回填评分</Button>
                 </Space>
               </Space>
@@ -745,96 +701,7 @@ const PipelineDashboard: React.FC = () => {
         />
       </Modal>
 
-      {/* AI 标注弹窗 */}
-      <Modal
-        title="AI 智能标注"
-        open={aiLabelModal}
-        onCancel={() => setAiLabelModal(false)}
-        onOk={() => aiLabelForm.validateFields().then((v) => batchLabel.mutate(v))}
-        confirmLoading={batchLabel.isPending}
-      >
-        <Alert
-          message="使用 DeepSeek V3 AI 对食物进行分类、标签和评分标注。"
-          type="info"
-          showIcon
-          style={{ marginBottom: 16 }}
-        />
-        <Form form={aiLabelForm} layout="vertical" initialValues={{ limit: 50, unlabeled: true }}>
-          <Form.Item name="category" label="限定分类（可选）">
-            <Select
-              allowClear
-              placeholder="全部分类"
-              options={[
-                { label: '蛋白质类', value: 'protein' },
-                { label: '谷物主食', value: 'grain' },
-                { label: '蔬菜', value: 'veggie' },
-                { label: '水果', value: 'fruit' },
-                { label: '乳制品', value: 'dairy' },
-                { label: '油脂坚果', value: 'fat' },
-                { label: '饮品', value: 'beverage' },
-                { label: '零食甜点', value: 'snack' },
-              ]}
-            />
-          </Form.Item>
-          <Form.Item name="unlabeled" label="仅处理未标注" valuePropName="checked">
-            <Switch />
-          </Form.Item>
-          <Form.Item name="limit" label="处理数量">
-            <InputNumber min={1} max={500} style={{ width: '100%' }} />
-          </Form.Item>
-        </Form>
-      </Modal>
-
-      {/* AI 翻译弹窗 */}
-      <Modal
-        title="AI 智能翻译"
-        open={translateModal}
-        onCancel={() => setTranslateModal(false)}
-        onOk={() => translateForm.validateFields().then((v) => batchTranslate.mutate(v))}
-        confirmLoading={batchTranslate.isPending}
-      >
-        <Alert
-          message="使用 DeepSeek V3 AI 将食物名称翻译为目标语言。"
-          type="info"
-          showIcon
-          style={{ marginBottom: 16 }}
-        />
-        <Form
-          form={translateForm}
-          layout="vertical"
-          initialValues={{ limit: 50, targetLocales: ['en-US'], untranslatedOnly: true }}
-        >
-          <Form.Item
-            name="targetLocales"
-            label="目标语言"
-            rules={[{ required: true, message: '请选择至少一个目标语言' }]}
-          >
-            <Select
-              mode="multiple"
-              options={[
-                { label: '英语 (en-US)', value: 'en-US' },
-                { label: '简体中文 (zh-CN)', value: 'zh-CN' },
-                { label: '繁体中文 (zh-TW)', value: 'zh-TW' },
-                { label: '日语 (ja-JP)', value: 'ja-JP' },
-                { label: '韩语 (ko-KR)', value: 'ko-KR' },
-              ]}
-              maxTagCount={3}
-            />
-          </Form.Item>
-          <Form.Item name="untranslatedOnly" label="仅翻译未翻译的">
-            <Select
-              options={[
-                { label: '是', value: true },
-                { label: '否', value: false },
-              ]}
-            />
-          </Form.Item>
-          <Form.Item name="limit" label="处理数量">
-            <InputNumber min={1} max={200} style={{ width: '100%' }} />
-          </Form.Item>
-        </Form>
-      </Modal>
-
+      {/* 评分回填弹窗 */}
       <Modal
         title="评分回填"
         open={backfillModal}
@@ -856,6 +723,7 @@ const PipelineDashboard: React.FC = () => {
         </Form>
       </Modal>
 
+      {/* 候选晋升弹窗 */}
       <Modal
         title="候选食物晋升"
         open={candidateModal}
@@ -880,6 +748,7 @@ const PipelineDashboard: React.FC = () => {
         </Form>
       </Modal>
 
+      {/* 分阶段补全弹窗 */}
       <Modal
         title="分阶段即时补全"
         open={stageModal}
@@ -889,7 +758,7 @@ const PipelineDashboard: React.FC = () => {
       >
         <Alert
           message="按阶段执行 AI 补全"
-          description="适合小批量即时补全，会直接按选定阶段触发 enrichment。"
+          description="适合小批量即时补全，会直接按选定阶段触发 enrichment。详细的批量补全和审核管理请前往「AI补全管理」页面。"
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
@@ -907,7 +776,7 @@ const PipelineDashboard: React.FC = () => {
               ]}
             />
           </Form.Item>
-          <Form.Item name="category" label="限定分类（可选)">
+          <Form.Item name="category" label="限定分类（可选）">
             <Select
               allowClear
               options={[
@@ -929,6 +798,7 @@ const PipelineDashboard: React.FC = () => {
         </Form>
       </Modal>
 
+      {/* 一致性校验弹窗 */}
       <Modal
         title="同类一致性校验"
         open={consistencyModal}
@@ -1012,6 +882,7 @@ const PipelineDashboard: React.FC = () => {
         )}
       </Modal>
 
+      {/* AI 补全统计弹窗 */}
       <Modal
         title="AI 补全统计"
         open={statsModal}

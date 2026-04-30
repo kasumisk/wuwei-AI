@@ -25,7 +25,6 @@ export type FoodTranslationMap = Map<string, string>;
 
 export interface FoodLocalization {
   name: string;
-  servingDesc?: string | null;
 }
 
 export type FoodLocalizationMap = Map<string, FoodLocalization>;
@@ -78,14 +77,12 @@ export class FoodI18nService {
         select: {
           foodId: true,
           name: true,
-          servingDesc: true,
         },
       });
 
       for (const row of rows) {
         map.set(row.foodId, {
           name: row.name,
-          servingDesc: row.servingDesc,
         });
       }
 
@@ -174,8 +171,7 @@ export class FoodI18nService {
           ...sf.food,
           // 覆盖 displayName（不影响 food.name，保持内部逻辑稳定）
           displayName: localized.name,
-          displayServingDesc:
-            localized.servingDesc || sf.food.standardServingDesc,
+          displayServingDesc: sf.food.standardServingDesc,
         } as any,
       };
     });

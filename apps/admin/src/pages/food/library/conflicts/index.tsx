@@ -41,7 +41,7 @@ const FoodConflictsPage: React.FC = () => {
     {
       title: '食物名称',
       dataIndex: ['food', 'name'],
-      width: 120,
+      width: 220,
       render: (_, record) => (
         <a onClick={() => record.food?.id && navigate(`/food/library/detail/${record.food.id}`)}>
           {record.food?.name || '-'}
@@ -49,9 +49,30 @@ const FoodConflictsPage: React.FC = () => {
       ),
     },
     {
+      title: '别名',
+      dataIndex: ['food', 'aliases'],
+      width: 260,
+      search: false,
+      ellipsis: true,
+      render: (value) => value || '-',
+    },
+    {
       title: '食物编码',
       dataIndex: ['food', 'code'],
       width: 130,
+    },
+    {
+      title: '详情',
+      width: 100,
+      search: false,
+      render: (_, record) =>
+        record.food?.id ? (
+          <Button type="link" size="small" onClick={() => navigate(`/food/library/detail/${record.food!.id}`)}>
+            查看食物
+          </Button>
+        ) : (
+          '-'
+        ),
     },
     {
       title: '冲突字段',

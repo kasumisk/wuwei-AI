@@ -1113,10 +1113,6 @@ export class FoodAnalyzeController {
       const ids = foods
         .filter((food) => !!food.foodLibraryId)
         .map((food) => food.foodLibraryId as string);
-      const localizedDetails = await this.foodI18nService.loadLocalizedDetails(
-        ids,
-        locale,
-      );
       const translatedById = await this.foodI18nService.loadTranslations(
         ids,
         locale,
@@ -1134,29 +1130,12 @@ export class FoodAnalyzeController {
           locale,
         );
       for (const food of foods) {
-        const localizedDetail = food.foodLibraryId
-          ? localizedDetails.get(food.foodLibraryId)
-          : undefined;
-        const originalServingDesc = food.standardServingDesc;
         const localizedName =
           (food.foodLibraryId
             ? translatedById.get(food.foodLibraryId)
             : undefined) ?? translatedByName.get(food.name);
         if (localizedName) {
           food.name = localizedName;
-        }
-        if (localizedDetail?.servingDesc) {
-          food.standardServingDesc = localizedDetail.servingDesc;
-
-          // quantity 与标准份量描述相同的场景（快捷分析/库命中）一起本地化；
-          // 用户手输的 "200g" / "1 piece" 等保持原值，不做猜测替换。
-          if (
-            food.quantity &&
-            originalServingDesc &&
-            food.quantity === originalServingDesc
-          ) {
-            food.quantity = localizedDetail.servingDesc;
-          }
         }
       }
     }

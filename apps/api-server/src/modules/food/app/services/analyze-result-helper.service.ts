@@ -52,10 +52,6 @@ export class AnalyzeResultHelperService {
       const ids = foods
         .filter((food) => !!food.foodLibraryId)
         .map((food) => food.foodLibraryId as string);
-      const localizedDetails = await this.foodI18nService.loadLocalizedDetails(
-        ids,
-        locale,
-      );
       const translatedById = await this.foodI18nService.loadTranslations(
         ids,
         locale,
@@ -73,26 +69,12 @@ export class AnalyzeResultHelperService {
           locale,
         );
       for (const food of foods) {
-        const localizedDetail = food.foodLibraryId
-          ? localizedDetails.get(food.foodLibraryId)
-          : undefined;
-        const originalServingDesc = food.standardServingDesc;
         const localizedName =
           (food.foodLibraryId
             ? translatedById.get(food.foodLibraryId)
             : undefined) ?? translatedByName.get(food.name);
         if (localizedName) {
           food.name = localizedName;
-        }
-        if (localizedDetail?.servingDesc) {
-          food.standardServingDesc = localizedDetail.servingDesc;
-          if (
-            food.quantity &&
-            originalServingDesc &&
-            food.quantity === originalServingDesc
-          ) {
-            food.quantity = localizedDetail.servingDesc;
-          }
         }
       }
     }

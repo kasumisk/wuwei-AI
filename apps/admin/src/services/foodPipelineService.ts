@@ -10,12 +10,46 @@ import {
 // ==================== 类型定义 ====================
 
 export interface ImportResult {
+  importMode: FoodImportMode;
   total: number;
   created: number;
   updated: number;
   skipped: number;
   errors: number;
+  matchedUpdated: number;
+  matchedSkipped: number;
+  conflictCreated: number;
+  detailGroups: {
+    system: string[];
+    matchedUpdated: string[];
+    matchedSkipped: string[];
+    conflicts: string[];
+    errors: string[];
+  };
   details: string[];
+}
+
+export interface ImportPreviewResult {
+  importMode: FoodImportMode;
+  total: number;
+  cleaned: number;
+  discarded: number;
+  estimatedCreated: number;
+  estimatedMatchedUpdated: number;
+  estimatedMatchedSkipped: number;
+  estimatedConflictCount: number;
+  samples: {
+    created: Array<{ name: string; sourceId: string }>;
+    matchedUpdated: Array<{ name: string; existingName: string; fields: string[] }>;
+    matchedSkipped: Array<{ name: string; existingName: string; reason: string }>;
+    conflicts: Array<{ name: string; existingName: string; fields: string[] }>;
+  };
+  detailGroups: {
+    system: string[];
+    matchedUpdated: string[];
+    matchedSkipped: string[];
+    conflicts: string[];
+  };
 }
 
 export interface UsdaSearchResult {
@@ -43,15 +77,25 @@ export interface UsdaCategoryOption {
   mappedCategory: string;
 }
 
-export interface AiLabelResult {
-  labeled: number;
-  failed: number;
+export interface UsdaImportJobAccepted {
+  jobId: string;
+  status: string;
 }
 
-export interface AiTranslateResult {
-  translated: number;
-  failed: number;
+export interface UsdaImportJobStatus {
+  id: string;
+  name: string;
+  status: 'waiting' | 'active' | 'completed' | 'failed' | 'delayed' | 'waiting-children' | 'unknown';
+  data: Record<string, any>;
+  result: ImportResult | null;
+  failedReason: string | null;
+  attemptsMade: number;
+  processedOn: number | null;
+  finishedOn: number | null;
+  timestamp: number;
 }
+
+export type FoodImportMode = 'conservative' | 'fill_missing_only' | 'create_only';
 
 export interface RulesApplyResult {
   processed: number;
@@ -201,6 +245,7 @@ export const foodPipelineQueryKeys = {
   all: _all,
   qualityReport: [..._all, 'qualityReport'] as const,
   usdaSearch: (query: string) => [..._all, 'usdaSearch', query] as const,
+  usdaImportJob: (jobId: string) => [..._all, 'usdaImportJob', jobId] as const,
   usdaPresets: [..._all, 'usdaPresets'] as const,
   usdaCategories: [..._all, 'usdaCategories'] as const,
   offSearch: (query: string) => [..._all, 'offSearch', query] as const,
@@ -210,8 +255,25 @@ export const foodPipelineQueryKeys = {
 
 export const foodPipelineApi = {
   // USDA
-  importUsda: (data: { query: string; maxItems?: number }): Promise<ImportResult> =>
-    request.post(`${PATH.ADMIN.FOOD_PIPELINE}/import/usda`, data),
+  importUsda: (data: {
+    query: string;
+    maxItems?: number;
+    importMode?: FoodImportMode;
+  }): Promise<UsdaImportJobAccepted> =>
+    request.post(`${PATH.ADMIN.FOOD_PIPELINE}/import/usda`, data, {
+      timeout: 180_000,
+      silentError: true,
+    }),
+
+  previewUsda: (data: {
+    query: string;
+    maxItems?: number;
+    importMode?: FoodImportMode;
+  }): Promise<ImportPreviewResult> =>
+    request.post(`${PATH.ADMIN.FOOD_PIPELINE}/preview/usda`, data, {
+      timeout: 120_000,
+      silentError: true,
+    }),
 
   getUsdaPresets: (): Promise<UsdaImportPreset[]> =>
     request.get(`${PATH.ADMIN.FOOD_PIPELINE}/usda/presets`),
@@ -222,16 +284,50 @@ export const foodPipelineApi = {
   importUsdaPreset: (data: {
     presetKey: string;
     maxItemsPerQuery?: number;
-  }): Promise<ImportResult> => request.post(`${PATH.ADMIN.FOOD_PIPELINE}/import/usda-preset`, data),
+    importMode?: FoodImportMode;
+  }): Promise<UsdaImportJobAccepted> =>
+    request.post(`${PATH.ADMIN.FOOD_PIPELINE}/import/usda-preset`, data, {
+      timeout: 240_000,
+      silentError: true,
+    }),
+
+  previewUsdaPreset: (data: {
+    presetKey: string;
+    maxItemsPerQuery?: number;
+    importMode?: FoodImportMode;
+  }): Promise<ImportPreviewResult> =>
+    request.post(`${PATH.ADMIN.FOOD_PIPELINE}/preview/usda-preset`, data, {
+      timeout: 180_000,
+      silentError: true,
+    }),
 
   importUsdaCategory: (data: {
     foodCategory: string;
     pageSize?: number;
     maxPages?: number;
-  }): Promise<ImportResult> => request.post(`${PATH.ADMIN.FOOD_PIPELINE}/import/usda-category`, data),
+    importMode?: FoodImportMode;
+  }): Promise<UsdaImportJobAccepted> =>
+    request.post(`${PATH.ADMIN.FOOD_PIPELINE}/import/usda-category`, data, {
+      timeout: 240_000,
+      silentError: true,
+    }),
+
+  previewUsdaCategory: (data: {
+    foodCategory: string;
+    pageSize?: number;
+    maxPages?: number;
+    importMode?: FoodImportMode;
+  }): Promise<ImportPreviewResult> =>
+    request.post(`${PATH.ADMIN.FOOD_PIPELINE}/preview/usda-category`, data, {
+      timeout: 180_000,
+      silentError: true,
+    }),
 
   searchUsda: (query: string, pageSize = 20): Promise<UsdaSearchResult> =>
-    request.get(`${PATH.ADMIN.FOOD_PIPELINE}/usda/search`, { query, pageSize }),
+    request.get(`${PATH.ADMIN.FOOD_PIPELINE}/usda/search`, { query, pageSize }, { timeout: 30_000 }),
+
+  getUsdaImportJob: (jobId: string): Promise<UsdaImportJobStatus> =>
+    request.get(`${PATH.ADMIN.FOOD_PIPELINE}/usda/jobs/${encodeURIComponent(jobId)}`),
 
   // OpenFoodFacts
   lookupBarcode: (barcode: string): Promise<any> =>
@@ -239,19 +335,6 @@ export const foodPipelineApi = {
 
   searchOff: (query: string, pageSize = 20): Promise<any> =>
     request.get(`${PATH.ADMIN.FOOD_PIPELINE}/openfoodfacts/search`, { query, pageSize }),
-
-  // AI
-  batchAiLabel: (data: {
-    category?: string;
-    unlabeled?: boolean;
-    limit?: number;
-  }): Promise<AiLabelResult> => request.post(`${PATH.ADMIN.FOOD_PIPELINE}/ai/label`, data),
-
-  batchAiTranslate: (data: {
-    targetLocales?: string[];
-    limit?: number;
-    untranslatedOnly?: boolean;
-  }): Promise<AiTranslateResult> => request.post(`${PATH.ADMIN.FOOD_PIPELINE}/ai/translate`, data),
 
   // 规则引擎
   batchApplyRules: (data: { limit?: number; recalcAll?: boolean }): Promise<RulesApplyResult> =>
@@ -308,7 +391,11 @@ export const useQualityReport = () =>
   });
 
 export const useImportUsda = (
-  options?: UseMutationOptions<ImportResult, Error, { query: string; maxItems?: number }>
+  options?: UseMutationOptions<
+    UsdaImportJobAccepted,
+    Error,
+    { query: string; maxItems?: number; importMode?: FoodImportMode }
+  >
 ) => {
   const queryClient = useQueryClient();
   return useMutation({
@@ -335,8 +422,27 @@ export const useUsdaCategories = () =>
     staleTime: 10 * 60 * 1000,
   });
 
+export const useUsdaImportJob = (jobId?: string) =>
+  useQuery({
+    queryKey: foodPipelineQueryKeys.usdaImportJob(jobId || ''),
+    queryFn: () => foodPipelineApi.getUsdaImportJob(jobId!),
+    enabled: Boolean(jobId),
+    retry: false,
+    refetchInterval: (query) => {
+      const data = query.state.data as UsdaImportJobStatus | undefined;
+      return data && (data.status === 'completed' || data.status === 'failed')
+        ? false
+        : 3000;
+    },
+    refetchIntervalInBackground: true,
+  });
+
 export const useImportUsdaPreset = (
-  options?: UseMutationOptions<ImportResult, Error, { presetKey: string; maxItemsPerQuery?: number }>
+  options?: UseMutationOptions<
+    UsdaImportJobAccepted,
+    Error,
+    { presetKey: string; maxItemsPerQuery?: number; importMode?: FoodImportMode }
+  >
 ) => {
   const queryClient = useQueryClient();
   return useMutation({
@@ -351,50 +457,14 @@ export const useImportUsdaPreset = (
 
 export const useImportUsdaCategory = (
   options?: UseMutationOptions<
-    ImportResult,
+    UsdaImportJobAccepted,
     Error,
-    { foodCategory: string; pageSize?: number; maxPages?: number }
+    { foodCategory: string; pageSize?: number; maxPages?: number; importMode?: FoodImportMode }
   >
 ) => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data) => foodPipelineApi.importUsdaCategory(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['foodLibrary'] });
-      queryClient.invalidateQueries({ queryKey: foodPipelineQueryKeys.qualityReport });
-    },
-    ...options,
-  });
-};
-
-export const useBatchAiLabel = (
-  options?: UseMutationOptions<
-    AiLabelResult,
-    Error,
-    { category?: string; unlabeled?: boolean; limit?: number }
-  >
-) => {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (data) => foodPipelineApi.batchAiLabel(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['foodLibrary'] });
-      queryClient.invalidateQueries({ queryKey: foodPipelineQueryKeys.qualityReport });
-    },
-    ...options,
-  });
-};
-
-export const useBatchAiTranslate = (
-  options?: UseMutationOptions<
-    AiTranslateResult,
-    Error,
-    { targetLocales?: string[]; limit?: number; untranslatedOnly?: boolean }
-  >
-) => {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (data) => foodPipelineApi.batchAiTranslate(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['foodLibrary'] });
       queryClient.invalidateQueries({ queryKey: foodPipelineQueryKeys.qualityReport });

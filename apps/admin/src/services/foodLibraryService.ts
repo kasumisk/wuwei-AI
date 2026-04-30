@@ -151,6 +151,7 @@ export interface FoodLibraryDto {
   translations?: FoodTranslationDto[];
   sources?: FoodSourceDto[];
   conflicts?: FoodConflictDto[];
+  regionalInfo?: FoodRegionalInfoDto[];
 }
 
 export interface FoodTranslationDto {
@@ -161,6 +162,29 @@ export interface FoodTranslationDto {
   aliases?: string;
   description?: string;
   servingDesc?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FoodRegionalInfoDto {
+  id: string;
+  foodId: string;
+  countryCode: string;
+  regionCode?: string | null;
+  cityCode?: string | null;
+  localPopularity: number;
+  priceMin?: number | string | null;
+  priceMax?: number | string | null;
+  currencyCode?: string | null;
+  priceUnit?: string | null;
+  availability: string;
+  monthWeights?: number[] | null;
+  seasonalityConfidence?: number | null;
+  regulatoryInfo?: Record<string, any> | null;
+  source?: string | null;
+  sourceUrl?: string | null;
+  sourceUpdatedAt?: string | null;
+  confidence?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -190,7 +214,7 @@ export interface FoodConflictDto {
   resolvedBy?: string;
   resolvedAt?: string;
   createdAt: string;
-  food?: FoodLibraryDto;
+  food?: Partial<FoodLibraryDto>;
 }
 
 export interface FoodChangeLogDto {
@@ -284,6 +308,7 @@ export const foodLibraryQueryKeys = {
   statistics: [..._all, 'statistics'] as const,
   categories: [..._all, 'categories'] as const,
   translations: (foodId: string) => [..._all, 'translations', foodId] as const,
+  regionalInfo: (foodId: string) => [..._all, 'regionalInfo', foodId] as const,
   sources: (foodId: string) => [..._all, 'sources', foodId] as const,
   changeLogs: (foodId: string) => [..._all, 'changeLogs', foodId] as const,
   conflicts: (params?: any) => [..._all, 'conflicts', params] as const,
@@ -327,6 +352,9 @@ export const foodLibraryApi = {
   // 翻译
   getTranslations: (foodId: string): Promise<FoodTranslationDto[]> =>
     request.get(`${PATH.ADMIN.FOOD_LIBRARY}/${foodId}/translations`),
+
+  getRegionalInfo: (foodId: string): Promise<FoodRegionalInfoDto[]> =>
+    request.get(`${PATH.ADMIN.FOOD_LIBRARY}/${foodId}/regional-info`),
 
   createTranslation: (
     foodId: string,
@@ -406,6 +434,13 @@ export const useFoodTranslations = (foodId: string, enabled = true) =>
   useQuery({
     queryKey: foodLibraryQueryKeys.translations(foodId),
     queryFn: () => foodLibraryApi.getTranslations(foodId),
+    enabled,
+  });
+
+export const useFoodRegionalInfo = (foodId: string, enabled = true) =>
+  useQuery({
+    queryKey: foodLibraryQueryKeys.regionalInfo(foodId),
+    queryFn: () => foodLibraryApi.getRegionalInfo(foodId),
     enabled,
   });
 

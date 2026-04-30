@@ -21,6 +21,7 @@ import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
 import { foodLibraryApi, type FoodConflictDto } from '@/services/foodLibraryService';
 import { useResolveAllConflicts, useQualityReport } from '@/services/foodPipelineService';
+import { useNavigate } from 'react-router-dom';
 
 export const routeConfig = {
   name: 'conflicts',
@@ -35,6 +36,7 @@ const { Text } = Typography;
 
 const ConflictsPage: React.FC = () => {
   const actionRef = useRef<ActionType>(null);
+  const navigate = useNavigate();
   const [resolveModal, setResolveModal] = useState(false);
   const [currentConflict, setCurrentConflict] = useState<FoodConflictDto | null>(null);
   const [resolveForm] = Form.useForm();
@@ -70,8 +72,23 @@ const ConflictsPage: React.FC = () => {
     {
       title: '食物',
       dataIndex: ['food', 'name'],
-      width: 150,
-      render: (_, record) => record.food?.name || record.foodId?.slice(0, 8),
+      width: 220,
+      render: (_, record) =>
+        record.food?.id ? (
+          <Button type="link" style={{ padding: 0 }} onClick={() => navigate(`/food/library/detail/${record.food!.id}`)}>
+            {record.food?.name}
+          </Button>
+        ) : (
+          record.foodId?.slice(0, 8)
+        ),
+    },
+    {
+      title: '别名',
+      dataIndex: ['food', 'aliases'],
+      width: 260,
+      search: false,
+      ellipsis: true,
+      render: (value) => value || '-',
     },
     {
       title: '冲突字段',
@@ -131,17 +148,31 @@ const ConflictsPage: React.FC = () => {
     },
     {
       title: '操作',
-      width: 100,
+      width: 160,
       search: false,
       render: (_, record) =>
         !record.resolution ||
         record.resolution === 'pending' ||
         record.resolution === 'needs_review' ? (
-          <Button type="link" onClick={() => handleResolve(record)}>
-            解决
-          </Button>
+          <Space size={4}>
+            {record.food?.id && (
+              <Button type="link" onClick={() => navigate(`/food/library/detail/${record.food!.id}`)}>
+                查看食物
+              </Button>
+            )}
+            <Button type="link" onClick={() => handleResolve(record)}>
+              解决
+            </Button>
+          </Space>
         ) : (
-          <Text type="secondary">已解决</Text>
+          <Space size={4}>
+            {record.food?.id && (
+              <Button type="link" onClick={() => navigate(`/food/library/detail/${record.food!.id}`)}>
+                查看食物
+              </Button>
+            )}
+            <Text type="secondary">已解决</Text>
+          </Space>
         ),
     },
   ];

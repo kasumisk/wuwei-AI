@@ -90,7 +90,11 @@ export class FoodLibraryManagementController {
       pageSize?: number;
     },
   ): Promise<ApiResponse> {
-    const data = await this.foodLibraryService.getConflicts(query);
+    const data = await this.foodLibraryService.getConflicts({
+      ...query,
+      page: query.page ? Number(query.page) : 1,
+      pageSize: query.pageSize ? Number(query.pageSize) : 20,
+    });
     return {
       success: true,
       code: HttpStatus.OK,
@@ -202,6 +206,18 @@ export class FoodLibraryManagementController {
   @ApiOperation({ summary: '获取食物翻译列表' })
   async getTranslations(@Param('id') id: string): Promise<ApiResponse> {
     const data = await this.foodLibraryService.getTranslations(id);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('food.ok'),
+      data,
+    };
+  }
+
+  @Get(':id/regional-info')
+  @ApiOperation({ summary: '获取食物地区信息列表' })
+  async getRegionalInfo(@Param('id') id: string): Promise<ApiResponse> {
+    const data = await this.foodLibraryService.getRegionalInfo(id);
     return {
       success: true,
       code: HttpStatus.OK,

@@ -67,6 +67,7 @@ import {
   type EnrichableField,
   type EnrichmentTarget,
 } from '../services/food-enrichment.service';
+import { localesToFoodRegions } from '../../common/utils/locale-region.util';
 
 @ApiTags('管理后台 - 食物数据管道')
 @Controller('admin/food-pipeline/enrichment')
@@ -108,7 +109,7 @@ export class FoodEnrichmentController {
       target?: EnrichmentTarget;
       /** translations 时可多选 */
       locales?: string[];
-      /** regional 时必填 */
+      /** @deprecated regional 目标现在优先使用 locales 映射地区 */
       region?: string;
       /** 是否 staging 模式（先暂存，不直接落库） */
       staged?: boolean;
@@ -121,6 +122,12 @@ export class FoodEnrichmentController {
     const limit = body.limit ?? 50;
     const offset = body.offset ?? 0;
     const target = body.target ?? 'foods';
+    const regionalRegions =
+      target === 'regional'
+        ? localesToFoodRegions(body.locales).concat(
+            body.region ? [body.region] : [],
+          )
+        : [];
 
     let foods: { id: string; name: string; missingFields: EnrichableField[] }[];
 
@@ -131,7 +138,9 @@ export class FoodEnrichmentController {
         limit,
         offset,
         body.locales,
-        body.region,
+        target === 'regional'
+          ? [...new Set(regionalRegions)]
+          : body.region,
       );
     } else {
       foods = await this.enrichmentService.getFoodsNeedingEnrichment(
@@ -160,6 +169,7 @@ export class FoodEnrichmentController {
         staged: body.staged ?? false,
         locales: body.locales,
         region: body.region,
+        regions: target === 'regional' ? [...new Set(regionalRegions)] : undefined,
       },
       opts: {
         // V8.4: jobId 幂等去重 — 同一 foodId 在队列中只保留一个 job

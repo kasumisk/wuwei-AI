@@ -318,16 +318,35 @@ export class FoodLibraryManagementService {
       throw new NotFoundException(this.i18n.t('food.foodNotFound'));
     }
     // Load relations separately
-    const [translations, sources, conflicts] = await Promise.all([
+    const [translations, sources, conflicts, regionalInfo] = await Promise.all([
       this.prisma.foodTranslations.findMany({ where: { foodId: id } }),
       this.prisma.foodSources.findMany({ where: { foodId: id } }),
       this.prisma.foodConflicts.findMany({ where: { foodId: id } }),
+      this.prisma.foodRegionalInfo.findMany({
+        where: { foodId: id },
+        orderBy: [
+          { countryCode: 'asc' },
+          { regionCode: 'asc' },
+          { cityCode: 'asc' },
+        ],
+      }),
     ]);
 
     // V8.2: 构建 enrichmentMeta — 字段级完整度详情（异步：从 provenance 表查失败字段）
     const enrichmentMeta = await this.buildEnrichmentMeta(food);
 
-    return { ...food, translations, sources, conflicts, enrichmentMeta };
+    return {
+      ...food,
+      ...(food.nutritionDetail || {}),
+      ...(food.healthAssessment || {}),
+      ...(food.taxonomy || {}),
+      ...(food.portionGuide || {}),
+      translations,
+      sources,
+      conflicts,
+      regionalInfo,
+      enrichmentMeta,
+    };
   }
 
   /**
@@ -889,6 +908,17 @@ export class FoodLibraryManagementService {
     });
   }
 
+  async getRegionalInfo(foodId: string) {
+    return this.prisma.foodRegionalInfo.findMany({
+      where: { foodId },
+      orderBy: [
+        { countryCode: 'asc' },
+        { regionCode: 'asc' },
+        { cityCode: 'asc' },
+      ],
+    });
+  }
+
   async createTranslation(foodId: string, dto: CreateFoodTranslationDto) {
     await this.findOne(foodId); // validate food exists
     const existing = await this.prisma.foodTranslations.findFirst({
@@ -1009,16 +1039,34 @@ export class FoodLibraryManagementService {
     if (foodId) where.foodId = foodId;
     if (resolution) where.resolution = resolution;
 
-    const [list, total] = await Promise.all([
+    const [rawList, total] = await Promise.all([
       this.prisma.foodConflicts.findMany({
         where,
-        include: { foods: true },
+        include: {
+          foods: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              aliases: true,
+              category: true,
+              subCategory: true,
+              primarySource: true,
+              primarySourceId: true,
+            },
+          },
+        },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
       this.prisma.foodConflicts.count({ where }),
     ]);
+
+    const list = rawList.map(({ foods, ...item }) => ({
+      ...item,
+      food: foods,
+    }));
 
     return { list, total, page, pageSize };
   }

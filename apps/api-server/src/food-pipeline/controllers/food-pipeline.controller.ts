@@ -11,7 +11,9 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { InjectQueue } from '@nestjs/bullmq';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Queue } from 'bullmq';
 import { JwtAuthGuard } from '../../modules/auth/admin/jwt-auth.guard';
 import { RolesGuard } from '../../modules/rbac/admin/roles.guard';
 import { Roles } from '../../modules/rbac/admin/roles.decorator';
@@ -20,11 +22,11 @@ import { FoodPipelineOrchestratorService } from '../services/food-pipeline-orche
 import { UsdaFetcherService } from '../services/fetchers/usda-fetcher.service';
 import { OpenFoodFactsService } from '../services/fetchers/openfoodfacts.service';
 import { FoodRuleEngineService } from '../services/processing/food-rule-engine.service';
-import { FoodAiLabelService } from '../services/ai/food-ai-label.service';
-import { FoodImageRecognitionService } from '../services/ai/food-image-recognition.service';
 import { FoodQualityMonitorService } from '../services/food-quality-monitor.service';
 import { FoodEnrichmentService } from '../services/food-enrichment.service';
 import { USDA_IMPORT_PRESETS } from '../services/fetchers/usda-fetcher.service';
+import { QUEUE_DEFAULT_OPTIONS, QUEUE_NAMES } from '../../core/queue';
+import { UsdaImportJobData } from '../food-usda-import.processor';
 
 @ApiTags('管理后台 - 食物数据管道')
 @Controller('admin/food-pipeline')
@@ -32,15 +34,26 @@ import { USDA_IMPORT_PRESETS } from '../services/fetchers/usda-fetcher.service';
 @Roles('admin', 'super_admin')
 @ApiBearerAuth()
 export class FoodPipelineController {
+  private buildSafeUsdaJobId(prefix: string, parts: Array<string | number | undefined>) {
+    const normalized = parts
+      .map((part) => String(part ?? ''))
+      .map((part) => part.replace(/[^a-zA-Z0-9_-]+/g, '_'))
+      .map((part) => part.replace(/_+/g, '_'))
+      .map((part) => part.replace(/^_+|_+$/g, ''))
+      .filter(Boolean);
+
+    return [prefix, ...normalized, Date.now()].join('_');
+  }
+
   constructor(
     private readonly orchestrator: FoodPipelineOrchestratorService,
     private readonly usdaFetcher: UsdaFetcherService,
     private readonly offService: OpenFoodFactsService,
     private readonly ruleEngine: FoodRuleEngineService,
-    private readonly aiLabel: FoodAiLabelService,
-    private readonly imageRecognition: FoodImageRecognitionService,
     private readonly qualityMonitor: FoodQualityMonitorService,
     private readonly enrichmentService: FoodEnrichmentService,
+    @InjectQueue(QUEUE_NAMES.FOOD_USDA_IMPORT)
+    private readonly usdaImportQueue: Queue<UsdaImportJobData>,
   ) {}
 
   // ==================== USDA 数据导入 ====================
@@ -48,16 +61,64 @@ export class FoodPipelineController {
   @Post('import/usda')
   @ApiOperation({ summary: 'USDA 数据导入' })
   async importUsda(
-    @Body() body: { query: string; maxItems?: number },
+    @Body()
+    body: {
+      query: string;
+      maxItems?: number;
+      importMode?: 'conservative' | 'fill_missing_only' | 'create_only';
+    },
   ): Promise<ApiResponse> {
-    const result = await this.orchestrator.importFromUsda(
+    const job = await this.usdaImportQueue.add(
+      'usda-import-keyword',
+      {
+        mode: 'keyword',
+        query: body.query,
+        maxItems: body.maxItems || 100,
+        importMode: body.importMode || 'conservative',
+      },
+      {
+        jobId: this.buildSafeUsdaJobId('usda_keyword', [
+          body.query,
+          body.maxItems || 100,
+          body.importMode || 'conservative',
+        ]),
+        attempts:
+          QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_USDA_IMPORT].maxRetries + 1,
+        backoff: {
+          type: QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_USDA_IMPORT].backoffType,
+          delay: QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_USDA_IMPORT].backoffDelay,
+        },
+        removeOnComplete: 200,
+        removeOnFail: 100,
+      },
+    );
+    return {
+      success: true,
+      code: HttpStatus.ACCEPTED,
+      message: '导入任务已入队',
+      data: { jobId: job.id, status: 'queued' },
+    };
+  }
+
+  @Post('preview/usda')
+  @ApiOperation({ summary: '预估 USDA 关键词导入结果' })
+  async previewUsda(
+    @Body()
+    body: {
+      query: string;
+      maxItems?: number;
+      importMode?: 'conservative' | 'fill_missing_only' | 'create_only';
+    },
+  ): Promise<ApiResponse> {
+    const result = await this.orchestrator.previewUsdaImport(
       body.query,
       body.maxItems || 100,
+      body.importMode || 'conservative',
     );
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '导入完成',
+      message: '预估完成',
       data: result,
     };
   }
@@ -74,6 +135,7 @@ export class FoodPipelineController {
         label: preset.label,
         description: preset.description,
         queryCount: preset.queries.length,
+        coverage: preset.coverage,
       })),
     };
   }
@@ -92,16 +154,64 @@ export class FoodPipelineController {
   @Post('import/usda-preset')
   @ApiOperation({ summary: '按预设包批量导入 USDA 数据' })
   async importUsdaPreset(
-    @Body() body: { presetKey: string; maxItemsPerQuery?: number },
+    @Body()
+    body: {
+      presetKey: string;
+      maxItemsPerQuery?: number;
+      importMode?: 'conservative' | 'fill_missing_only' | 'create_only';
+    },
   ): Promise<ApiResponse> {
-    const result = await this.orchestrator.importFromUsdaPreset(
+    const job = await this.usdaImportQueue.add(
+      'usda-import-preset',
+      {
+        mode: 'preset',
+        presetKey: body.presetKey,
+        maxItemsPerQuery: body.maxItemsPerQuery || 50,
+        importMode: body.importMode || 'conservative',
+      },
+      {
+        jobId: this.buildSafeUsdaJobId('usda_preset', [
+          body.presetKey,
+          body.maxItemsPerQuery || 50,
+          body.importMode || 'conservative',
+        ]),
+        attempts:
+          QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_USDA_IMPORT].maxRetries + 1,
+        backoff: {
+          type: QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_USDA_IMPORT].backoffType,
+          delay: QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_USDA_IMPORT].backoffDelay,
+        },
+        removeOnComplete: 200,
+        removeOnFail: 100,
+      },
+    );
+    return {
+      success: true,
+      code: HttpStatus.ACCEPTED,
+      message: '预设导入任务已入队',
+      data: { jobId: job.id, status: 'queued' },
+    };
+  }
+
+  @Post('preview/usda-preset')
+  @ApiOperation({ summary: '预估 USDA 预设包导入结果' })
+  async previewUsdaPreset(
+    @Body()
+    body: {
+      presetKey: string;
+      maxItemsPerQuery?: number;
+      importMode?: 'conservative' | 'fill_missing_only' | 'create_only';
+    },
+  ): Promise<ApiResponse> {
+    const result = await this.orchestrator.previewUsdaPresetImport(
       body.presetKey,
       body.maxItemsPerQuery || 50,
+      body.importMode || 'conservative',
     );
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '预设导入完成',
+      message: '预估完成',
       data: result,
     };
   }
@@ -114,13 +224,92 @@ export class FoodPipelineController {
       foodCategory: string;
       pageSize?: number;
       maxPages?: number;
+      importMode?: 'conservative' | 'fill_missing_only' | 'create_only';
     },
   ): Promise<ApiResponse> {
-    const result = await this.orchestrator.importFromUsdaCategory(body);
+    const job = await this.usdaImportQueue.add(
+      'usda-import-category',
+      {
+        mode: 'category',
+        foodCategory: body.foodCategory,
+        pageSize: body.pageSize,
+        maxPages: body.maxPages,
+        importMode: body.importMode || 'conservative',
+      },
+      {
+        jobId: this.buildSafeUsdaJobId('usda_category', [
+          body.foodCategory,
+          body.pageSize || 50,
+          body.maxPages || 1,
+          body.importMode || 'conservative',
+        ]),
+        attempts:
+          QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_USDA_IMPORT].maxRetries + 1,
+        backoff: {
+          type: QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_USDA_IMPORT].backoffType,
+          delay: QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_USDA_IMPORT].backoffDelay,
+        },
+        removeOnComplete: 200,
+        removeOnFail: 100,
+      },
+    );
+    return {
+      success: true,
+      code: HttpStatus.ACCEPTED,
+      message: '分类导入任务已入队',
+      data: { jobId: job.id, status: 'queued' },
+    };
+  }
+
+  @Get('usda/jobs/:jobId')
+  @ApiOperation({ summary: '查询 USDA 导入任务状态' })
+  async getUsdaImportJob(@Param('jobId') jobId: string): Promise<ApiResponse> {
+    const job = await this.usdaImportQueue.getJob(jobId);
+    if (!job) {
+      return {
+        success: false,
+        code: HttpStatus.NOT_FOUND,
+        message: '任务不存在',
+        data: null,
+      };
+    }
+
+    const state = await job.getState();
     return {
       success: true,
       code: HttpStatus.OK,
-      message: '分类导入完成',
+      message: '获取成功',
+      data: {
+        id: job.id,
+        name: job.name,
+        status: state,
+        data: job.data,
+        result: job.returnvalue ?? null,
+        failedReason: job.failedReason ?? null,
+        attemptsMade: job.attemptsMade,
+        processedOn: job.processedOn ?? null,
+        finishedOn: job.finishedOn ?? null,
+        timestamp: job.timestamp,
+      },
+    };
+  }
+
+  @Post('preview/usda-category')
+  @ApiOperation({ summary: '预估 USDA 分类导入结果' })
+  async previewUsdaCategory(
+    @Body()
+    body: {
+      foodCategory: string;
+      pageSize?: number;
+      maxPages?: number;
+      importMode?: 'conservative' | 'fill_missing_only' | 'create_only';
+    },
+  ): Promise<ApiResponse> {
+    const result = await this.orchestrator.previewUsdaCategoryImport(body);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '预估完成',
       data: result,
     };
   }
@@ -251,45 +440,6 @@ export class FoodPipelineController {
     };
   }
 
-  // ==================== 图片识别 ====================
-
-  @Post('recognize/image')
-  @ApiOperation({ summary: '食物图片识别' })
-  @UseInterceptors(FileInterceptor('image'))
-  async recognizeImage(@UploadedFile() file: any): Promise<ApiResponse> {
-    if (!file) {
-      return {
-        success: false,
-        code: HttpStatus.BAD_REQUEST,
-        message: '请上传图片',
-        data: null,
-      };
-    }
-    const imageBase64 = file.buffer.toString('base64');
-    const results = await this.imageRecognition.recognizeFood(imageBase64);
-    return {
-      success: true,
-      code: HttpStatus.OK,
-      message: '识别完成',
-      data: results,
-    };
-  }
-
-  @Post('recognize/url')
-  @ApiOperation({ summary: '通过URL识别食物图片' })
-  async recognizeImageByUrl(
-    @Body() body: { imageUrl: string },
-  ): Promise<ApiResponse> {
-    const results = await this.imageRecognition.recognizeFoodByUrl(
-      body.imageUrl,
-    );
-    return {
-      success: true,
-      code: HttpStatus.OK,
-      message: '识别完成',
-      data: results,
-    };
-  }
 
   // ==================== 数据质量监控 ====================
 

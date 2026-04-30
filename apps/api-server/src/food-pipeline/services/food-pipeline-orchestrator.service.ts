@@ -1,7 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../core/prisma/prisma.service';
-import { upsertFoodSplitTables } from '../../modules/food/food-split.helper';
+import {
+  HEALTH_ASSESSMENT_FIELDS,
+  NUTRITION_DETAIL_FIELDS,
+  PORTION_GUIDE_FIELDS,
+  TAXONOMY_FIELDS,
+  upsertFoodSplitTables,
+} from '../../modules/food/food-split.helper';
 import {
   UsdaFetcherService,
   NormalizedFoodData,
@@ -14,8 +20,6 @@ import {
   CleanedFoodData,
 } from './processing/food-data-cleaner.service';
 import { FoodRuleEngineService } from './processing/food-rule-engine.service';
-import { FoodAiLabelService } from './ai/food-ai-label.service';
-import { FoodAiTranslateService } from './ai/food-ai-translate.service';
 import { FoodDedupService } from './processing/food-dedup.service';
 import { FoodConflictResolverService } from './processing/food-conflict-resolver.service';
 import {
@@ -25,13 +29,52 @@ import {
 } from './food-enrichment.service';
 
 export interface ImportResult {
+  importMode: FoodImportMode;
   total: number;
   created: number;
   updated: number;
   skipped: number;
   errors: number;
+  matchedUpdated: number;
+  matchedSkipped: number;
+  conflictCreated: number;
+  detailGroups: {
+    system: string[];
+    matchedUpdated: string[];
+    matchedSkipped: string[];
+    conflicts: string[];
+    errors: string[];
+  };
   details: string[];
 }
+
+export interface ImportPreviewResult {
+  importMode: FoodImportMode;
+  total: number;
+  cleaned: number;
+  discarded: number;
+  estimatedCreated: number;
+  estimatedMatchedUpdated: number;
+  estimatedMatchedSkipped: number;
+  estimatedConflictCount: number;
+  samples: {
+    created: Array<{ name: string; sourceId: string }>;
+    matchedUpdated: Array<{ name: string; existingName: string; fields: string[] }>;
+    matchedSkipped: Array<{ name: string; existingName: string; reason: string }>;
+    conflicts: Array<{ name: string; existingName: string; fields: string[] }>;
+  };
+  detailGroups: {
+    system: string[];
+    matchedUpdated: string[];
+    matchedSkipped: string[];
+    conflicts: string[];
+  };
+}
+
+export type FoodImportMode =
+  | 'conservative'
+  | 'fill_missing_only'
+  | 'create_only';
 
 /**
  * 食物数据管道编排服务
@@ -40,6 +83,18 @@ export interface ImportResult {
 @Injectable()
 export class FoodPipelineOrchestratorService {
   private readonly logger = new Logger(FoodPipelineOrchestratorService.name);
+  private readonly LEGACY_RAW_MAIN_FIELDS = new Set([
+    'sodium',
+    'potassium',
+    'calcium',
+    'iron',
+  ]);
+  private readonly FOOD_NAME_MAX_LENGTH = 255;
+  private readonly OPTIONAL_MAIN_FIELD_LIMITS: Record<string, number> = {
+    subCategory: 255,
+    foodGroup: 255,
+    mainIngredient: 255,
+  };
 
   constructor(
     private readonly prisma: PrismaService,
@@ -47,8 +102,6 @@ export class FoodPipelineOrchestratorService {
     private readonly offService: OpenFoodFactsService,
     private readonly cleaner: FoodDataCleanerService,
     private readonly ruleEngine: FoodRuleEngineService,
-    private readonly aiLabel: FoodAiLabelService,
-    private readonly aiTranslate: FoodAiTranslateService,
     private readonly dedup: FoodDedupService,
     private readonly conflictResolver: FoodConflictResolverService,
     private readonly enrichmentService: FoodEnrichmentService,
@@ -56,14 +109,31 @@ export class FoodPipelineOrchestratorService {
 
   // ==================== USDA 批量导入 ====================
 
-  async importFromUsda(query: string, maxItems = 100): Promise<ImportResult> {
-    this.logger.log(`Starting USDA import: query="${query}", max=${maxItems}`);
+  async importFromUsda(
+    query: string,
+    maxItems = 100,
+    importMode: FoodImportMode = 'conservative',
+  ): Promise<ImportResult> {
+    this.logger.log(
+      `Starting USDA import: query="${query}", max=${maxItems}, mode=${importMode}`,
+    );
     const result: ImportResult = {
+      importMode,
       total: 0,
       created: 0,
       updated: 0,
       skipped: 0,
       errors: 0,
+      matchedUpdated: 0,
+      matchedSkipped: 0,
+      conflictCreated: 0,
+      detailGroups: {
+        system: [],
+        matchedUpdated: [],
+        matchedSkipped: [],
+        conflicts: [],
+        errors: [],
+      },
       details: [],
     };
 
@@ -78,22 +148,25 @@ export class FoodPipelineOrchestratorService {
       // 清洗
       const { cleaned, discarded } = this.cleaner.cleanBatch(rawFoods);
       result.skipped += discarded;
-      result.details.push(
+      this.pushImportDetail(result, 'system', `Import mode: ${importMode}`);
+      this.pushImportDetail(
+        result,
+        'system',
         `Cleaned: ${cleaned.length}, discarded: ${discarded}`,
       );
 
       // 逐条入库
       for (const food of cleaned) {
         try {
-          await this.persistSingleFood(food, result);
+          await this.persistSingleFood(food, result, importMode);
         } catch (e) {
           result.errors++;
-          result.details.push(`Error: ${food.name} - ${e.message}`);
+          this.pushImportDetail(result, 'errors', `Error: ${food.name} - ${e.message}`);
         }
       }
     } catch (e) {
       this.logger.error(`USDA import failed: ${e.message}`);
-      result.details.push(`Import error: ${e.message}`);
+      this.pushImportDetail(result, 'errors', `Import error: ${e.message}`);
     }
 
     this.logger.log(
@@ -102,19 +175,43 @@ export class FoodPipelineOrchestratorService {
     return result;
   }
 
+  async previewUsdaImport(
+    query: string,
+    maxItems = 100,
+    importMode: FoodImportMode = 'conservative',
+  ): Promise<ImportPreviewResult> {
+    const pageSize = Math.min(maxItems, 200);
+    const searchResult = await this.usdaFetcher.search(query, pageSize);
+    const rawFoods = searchResult.foods.slice(0, maxItems);
+    return this.previewNormalizedFoods(rawFoods, importMode, `query=${query}`);
+  }
+
   async importFromUsdaPreset(
     presetKey: string,
     maxItemsPerQuery = 50,
+    importMode: FoodImportMode = 'conservative',
   ): Promise<ImportResult> {
     const preset = USDA_IMPORT_PRESETS.find((item) => item.key === presetKey);
     if (!preset) {
+      const system = [`Unknown USDA preset: ${presetKey}`];
       return {
+        importMode,
         total: 0,
         created: 0,
         updated: 0,
         skipped: 0,
         errors: 1,
-        details: [`Unknown USDA preset: ${presetKey}`],
+        matchedUpdated: 0,
+        matchedSkipped: 0,
+        conflictCreated: 0,
+        detailGroups: {
+          system,
+          matchedUpdated: [],
+          matchedSkipped: [],
+          conflicts: [],
+          errors: [],
+        },
+        details: system,
       };
     }
 
@@ -145,16 +242,57 @@ export class FoodPipelineOrchestratorService {
     const importResult = await this.importNormalizedFoods(
       [...aggregated.values()],
       `usda_preset:${preset.key}`,
+      importMode,
     );
+
+    const extraSystemDetails = [
+      `Preset: ${preset.label}`,
+      `Import mode: ${importMode}`,
+      `Unique aggregated foods: ${aggregated.size}`,
+      ...details,
+    ];
 
     return {
       ...importResult,
-      details: [
-        `Preset: ${preset.label}`,
-        `Unique aggregated foods: ${aggregated.size}`,
-        ...details,
-        ...importResult.details,
-      ],
+      detailGroups: {
+        ...importResult.detailGroups,
+        system: [...extraSystemDetails, ...importResult.detailGroups.system],
+      },
+      details: [...extraSystemDetails, ...importResult.details],
+    };
+  }
+
+  async previewUsdaPresetImport(
+    presetKey: string,
+    maxItemsPerQuery = 50,
+    importMode: FoodImportMode = 'conservative',
+  ): Promise<ImportPreviewResult> {
+    const preset = USDA_IMPORT_PRESETS.find((item) => item.key === presetKey);
+    if (!preset) {
+      return this.emptyPreview(importMode, [`Unknown USDA preset: ${presetKey}`]);
+    }
+
+    const aggregated = new Map<string, NormalizedFoodData>();
+    const system: string[] = [`Preset: ${preset.label}`, `Import mode: ${importMode}`];
+    for (const query of preset.queries) {
+      const result = await this.usdaFetcher.search(query, Math.min(maxItemsPerQuery, 200));
+      system.push(`Preset query "${query}": fetched ${result.foods.length}/${result.totalHits}`);
+      for (const food of result.foods) {
+        aggregated.set(`${food.sourceType}:${food.sourceId}`, food);
+      }
+    }
+
+    const preview = await this.previewNormalizedFoods(
+      [...aggregated.values()],
+      importMode,
+      `preset=${preset.key}`,
+    );
+    return {
+      ...preview,
+      detailGroups: {
+        ...preview.detailGroups,
+        system: [...system, ...preview.detailGroups.system],
+      },
     };
   }
 
@@ -162,11 +300,13 @@ export class FoodPipelineOrchestratorService {
     foodCategory: string;
     pageSize?: number;
     maxPages?: number;
+    importMode?: FoodImportMode;
   }): Promise<ImportResult> {
     const pageSize = Math.min(options.pageSize || 50, 200);
     const maxPages = Math.max(options.maxPages || 1, 1);
     const aggregated = new Map<string, NormalizedFoodData>();
     const details: string[] = [];
+    let filteredOutCount = 0;
 
     for (let pageNumber = 1; pageNumber <= maxPages; pageNumber++) {
       try {
@@ -178,13 +318,17 @@ export class FoodPipelineOrchestratorService {
             foodCategory: options.foodCategory,
           },
         );
+        const matchedFoods = result.foods.filter(
+          (food) => food.rawPayload?.foodCategory === options.foodCategory,
+        );
+        filteredOutCount += result.foods.length - matchedFoods.length;
         details.push(
-          `Category page ${pageNumber}: fetched ${result.foods.length}/${result.totalHits}`,
+          `Category page ${pageNumber}: fetched ${result.foods.length}/${result.totalHits}, exact-category kept ${matchedFoods.length}, filtered out ${result.foods.length - matchedFoods.length}`,
         );
         if (result.foods.length === 0) {
           break;
         }
-        for (const food of result.foods) {
+        for (const food of matchedFoods) {
           aggregated.set(`${food.sourceType}:${food.sourceId}`, food);
         }
         if (result.foods.length < pageSize) {
@@ -199,16 +343,74 @@ export class FoodPipelineOrchestratorService {
     const importResult = await this.importNormalizedFoods(
       [...aggregated.values()],
       `usda_category:${options.foodCategory}`,
+      options.importMode || 'conservative',
     );
+
+    const extraSystemDetails = [
+      `USDA category: ${options.foodCategory}`,
+      `Import mode: ${options.importMode || 'conservative'}`,
+      `Unique aggregated foods: ${aggregated.size}`,
+      `Filtered out cross-category foods: ${filteredOutCount}`,
+      ...details,
+    ];
 
     return {
       ...importResult,
-      details: [
-        `USDA category: ${options.foodCategory}`,
-        `Unique aggregated foods: ${aggregated.size}`,
-        ...details,
-        ...importResult.details,
-      ],
+      detailGroups: {
+        ...importResult.detailGroups,
+        system: [...extraSystemDetails, ...importResult.detailGroups.system],
+      },
+      details: [...extraSystemDetails, ...importResult.details],
+    };
+  }
+
+  async previewUsdaCategoryImport(options: {
+    foodCategory: string;
+    pageSize?: number;
+    maxPages?: number;
+    importMode?: FoodImportMode;
+  }): Promise<ImportPreviewResult> {
+    const pageSize = Math.min(options.pageSize || 50, 200);
+    const maxPages = Math.max(options.maxPages || 1, 1);
+    const importMode = options.importMode || 'conservative';
+    const aggregated = new Map<string, NormalizedFoodData>();
+    let filteredOutCount = 0;
+    const system: string[] = [
+      `USDA category: ${options.foodCategory}`,
+      `Import mode: ${importMode}`,
+    ];
+
+    for (let pageNumber = 1; pageNumber <= maxPages; pageNumber++) {
+      const result = await this.usdaFetcher.search('*', pageSize, pageNumber, {
+        foodCategory: options.foodCategory,
+      });
+      const matchedFoods = result.foods.filter(
+        (food) => food.rawPayload?.foodCategory === options.foodCategory,
+      );
+      filteredOutCount += result.foods.length - matchedFoods.length;
+      system.push(
+        `Category page ${pageNumber}: fetched ${result.foods.length}/${result.totalHits}, exact-category kept ${matchedFoods.length}, filtered out ${result.foods.length - matchedFoods.length}`,
+      );
+      if (result.foods.length === 0) break;
+      for (const food of matchedFoods) {
+        aggregated.set(`${food.sourceType}:${food.sourceId}`, food);
+      }
+      if (result.foods.length < pageSize) break;
+    }
+
+    system.push(`Filtered out cross-category foods: ${filteredOutCount}`);
+
+    const preview = await this.previewNormalizedFoods(
+      [...aggregated.values()],
+      importMode,
+      `category=${options.foodCategory}`,
+    );
+    return {
+      ...preview,
+      detailGroups: {
+        ...preview.detailGroups,
+        system: [...system, ...preview.detailGroups.system],
+      },
     };
   }
 
@@ -222,14 +424,25 @@ export class FoodPipelineOrchestratorService {
     if (!cleaned) return null;
 
     const result: ImportResult = {
+      importMode: 'conservative',
       total: 1,
       created: 0,
       updated: 0,
       skipped: 0,
       errors: 0,
+      matchedUpdated: 0,
+      matchedSkipped: 0,
+      conflictCreated: 0,
+      detailGroups: {
+        system: [],
+        matchedUpdated: [],
+        matchedSkipped: [],
+        conflicts: [],
+        errors: [],
+      },
       details: [],
     };
-    await this.persistSingleFood(cleaned, result);
+    await this.persistSingleFood(cleaned, result, 'conservative');
 
     if (result.created > 0 || result.updated > 0) {
       return this.prisma.food.findFirst({ where: { barcode } });
@@ -240,34 +453,49 @@ export class FoodPipelineOrchestratorService {
   async importNormalizedFoods(
     normalizedFoods: NormalizedFoodData[],
     sourceLabel = 'custom',
+    importMode: FoodImportMode = 'conservative',
   ): Promise<ImportResult> {
     this.logger.log(
       `Starting normalized import: source=${sourceLabel}, total=${normalizedFoods.length}`,
     );
 
     const result: ImportResult = {
+      importMode,
       total: normalizedFoods.length,
       created: 0,
       updated: 0,
       skipped: 0,
       errors: 0,
+      matchedUpdated: 0,
+      matchedSkipped: 0,
+      conflictCreated: 0,
+      detailGroups: {
+        system: [],
+        matchedUpdated: [],
+        matchedSkipped: [],
+        conflicts: [],
+        errors: [],
+      },
       details: [],
     };
 
     const { cleaned, discarded } = this.cleaner.cleanBatch(normalizedFoods);
     result.skipped += discarded;
-    result.details.push(
+    this.pushImportDetail(result, 'system', `Import mode: ${importMode}`);
+    this.pushImportDetail(
+      result,
+      'system',
       `Cleaned: ${cleaned.length}, discarded: ${discarded}, source=${sourceLabel}`,
     );
 
     for (const food of cleaned) {
       try {
-        await this.persistSingleFood(food, result);
-      } catch (e) {
-        result.errors++;
-        result.details.push(`Error: ${food.name} - ${e.message}`);
+          await this.persistSingleFood(food, result, importMode);
+        } catch (e) {
+          result.errors++;
+          this.pushImportDetail(result, 'errors', `Error: ${food.name} - ${e.message}`);
+        }
       }
-    }
 
     this.logger.log(
       `Normalized import done: source=${sourceLabel}, created=${result.created}, updated=${result.updated}, skipped=${result.skipped}, errors=${result.errors}`,
@@ -276,195 +504,105 @@ export class FoodPipelineOrchestratorService {
     return result;
   }
 
-  // ==================== 批量 AI 标注 ====================
+  // ==================== 批量 AI 标注（已迁移至 FoodEnrichmentService）====================
 
+  /**
+   * @deprecated 旧链路已下线。
+   * 标注能力由 FoodEnrichmentService 的 5 阶段补全覆盖（含 Stage 1 food_form / Stage 3 tags/allergens / Stage 4 cuisine 等）。
+   * 请改用 POST /admin/food-pipeline/enrichment/enqueue 批量入队，或
+   *         POST /admin/food-pipeline/enrichment/batch-stage 批量暂存。
+   *
+   * 此方法保留签名以兼容现有调用，内部委托 enrichmentService.getFoodsNeedingEnrichment + 入队。
+   */
   async batchAiLabel(
     options: { category?: string; unlabeled?: boolean; limit?: number } = {},
-  ): Promise<{
-    labeled: number;
-    failed: number;
-  }> {
-    const where: Prisma.FoodWhereInput = {};
-
-    if (options.category) {
-      where.category = options.category;
-    }
-    // tags moved to food_taxonomies split table; unlabeled filter applied post-query
+  ): Promise<{ labeled: number; failed: number; deprecated: string }> {
+    this.logger.warn(
+      'batchAiLabel is deprecated — delegating to FoodEnrichmentService enrichment queue',
+    );
     const foods = await this.prisma.food.findMany({
-      where,
-      include: { taxonomy: true, healthAssessment: true, portionGuide: true },
-      take: options.limit || 100,
+      take: options.limit ?? 100,
+      ...(options.category ? { where: { category: options.category } } : {}),
+      select: { id: true },
     });
-    // Filter unlabeled: foods whose taxonomy has no tags
-    const filteredFoods = options.unlabeled
-      ? foods.filter((f) => !f.taxonomy || !(f.taxonomy.tags as any[])?.length)
-      : foods;
-    this.logger.log(`AI labeling ${filteredFoods.length} foods`);
-
-    const labelResults = await this.aiLabel.labelBatch(filteredFoods as any);
-    let labeled = 0;
-    let failed = 0;
-
-    for (const [idx, labelResult] of labelResults) {
-      const food = filteredFoods[idx];
-      if (!food) continue;
-
-      try {
-        const mainUpdate: Record<string, any> = {};
-        const splitUpdate: Record<string, any> = {};
-
-        if (!food.category && labelResult.category)
-          mainUpdate.category = labelResult.category;
-        if (!food.subCategory) mainUpdate.subCategory = labelResult.subCategory;
-        if (!food.foodGroup) mainUpdate.foodGroup = labelResult.foodGroup;
-        if (!food.mainIngredient)
-          mainUpdate.mainIngredient = labelResult.mainIngredient;
-
-        // Split table fields (healthAssessment / taxonomy)
-        if (!(food.healthAssessment as any)?.processingLevel)
-          splitUpdate.processingLevel = labelResult.processingLevel;
-        if (!(food.taxonomy?.mealTypes as any[])?.length)
-          splitUpdate.mealTypes = labelResult.mealTypes;
-        if (!(food.taxonomy?.allergens as any[])?.length)
-          splitUpdate.allergens = labelResult.allergens;
-        if (
-          !food.taxonomy?.compatibility ||
-          !Object.keys(food.taxonomy.compatibility as object).length
-        ) {
-          splitUpdate.compatibility = labelResult.compatibility;
-        }
-
-        // 合并标签（在 taxonomy 中）
-        const existingTags = (food.taxonomy?.tags as any[]) || [];
-        splitUpdate.tags = [...new Set([...existingTags, ...labelResult.tags])];
-
-        if (
-          Object.keys(mainUpdate).length > 0 ||
-          Object.keys(splitUpdate).length > 0
-        ) {
-          if (Object.keys(mainUpdate).length > 0) {
-            await this.prisma.food.update({
-              where: { id: food.id },
-              data: mainUpdate,
-            });
-          }
-          await upsertFoodSplitTables(this.prisma, food.id, splitUpdate);
-          await this.logChange(
-            food.id,
-            food.dataVersion,
-            'update',
-            { ...mainUpdate, ...splitUpdate },
-            'ai_label',
-          );
-          labeled++;
-        }
-      } catch (e) {
-        failed++;
-      }
-    }
-
-    // 利用标注结果重新计算分数
+    let enqueued = 0;
     for (const food of foods) {
-      const updated = await this.prisma.food.findUnique({
-        where: { id: food.id },
-        include: { taxonomy: true },
-      });
-      if (updated) {
-        const scores = this.ruleEngine.applyAllRules(updated as any);
-        const existingTags = (updated.taxonomy?.tags as any[]) || [];
-        await upsertFoodSplitTables(this.prisma, food.id, {
-          qualityScore: scores.qualityScore,
-          satietyScore: scores.satietyScore,
-          nutrientDensity: scores.nutrientDensity,
-          tags: [...new Set([...existingTags, ...scores.tags])],
-        });
+      try {
+        await this.enrichmentService.enrichFoodByStage(food.id, [1, 3, 4]);
+        enqueued++;
+      } catch {
+        // ignore individual failures
       }
     }
-
-    return { labeled, failed };
+    return {
+      labeled: enqueued,
+      failed: 0,
+      deprecated:
+        '此接口已废弃，请改用 POST /admin/food-pipeline/enrichment/enqueue',
+    };
   }
 
-  // ==================== 批量 AI 翻译 ====================
+  // ==================== 批量 AI 翻译（已迁移至 FoodEnrichmentService）====================
 
+  /**
+   * @deprecated 旧链路已下线。
+   * 翻译能力由 FoodEnrichmentService.enrichTranslations 覆盖（带 staging / provenance）。
+   * 请改用 POST /admin/food-pipeline/enrichment/enqueue（target=translations）。
+   *
+   * 此方法保留签名以兼容现有调用，内部委托 enrichmentService。
+   */
   async batchAiTranslate(options: {
     targetLocales?: string[];
     limit?: number;
     untranslatedOnly?: boolean;
-  }): Promise<{ translated: number; failed: number }> {
-    const normalizedLocales = [
-      ...new Set((options.targetLocales ?? []).filter(Boolean)),
-    ];
-    if (normalizedLocales.length === 0) {
-      return { translated: 0, failed: 0 };
-    }
-
-    let where: Prisma.FoodWhereInput = {};
-
-    if (options.untranslatedOnly) {
-      where = {
-        NOT: normalizedLocales.map((locale) => ({
-          foodTranslations: {
-            some: { locale },
-          },
-        })),
+  }): Promise<{ translated: number; failed: number; deprecated: string }> {
+    this.logger.warn(
+      'batchAiTranslate is deprecated — delegating to FoodEnrichmentService.enrichTranslations',
+    );
+    const locales = [...new Set((options.targetLocales ?? []).filter(Boolean))];
+    if (locales.length === 0) {
+      return {
+        translated: 0,
+        failed: 0,
+        deprecated:
+          '此接口已废弃，请改用 POST /admin/food-pipeline/enrichment/enqueue（target=translations）',
       };
     }
-
-    const foods = await this.prisma.food.findMany({
-      where,
-      take: options.limit || 100,
-    });
-    this.logger.log(
-      `AI translating ${foods.length} foods to [${normalizedLocales.join(', ')}]`,
-    );
 
     let translated = 0;
     let failed = 0;
 
-    for (const locale of normalizedLocales) {
-      const results = await this.aiTranslate.translateBatch(
-        foods as any,
-        locale,
-      );
-
-      for (const [idx, result] of results) {
-        const food = foods[idx];
-        if (!food || !result.name) {
-          failed++;
-          continue;
-        }
-
-        try {
-          await this.prisma.foodTranslations.upsert({
+    const foods = await this.prisma.food.findMany({
+      take: options.limit ?? 100,
+      ...(options.untranslatedOnly
+        ? {
             where: {
-              foodId_locale: {
-                foodId: food.id,
-                locale: result.locale,
-              },
+              NOT: locales.map((locale) => ({
+                foodTranslations: { some: { locale } },
+              })),
             },
-            create: {
-              foodId: food.id,
-              locale: result.locale,
-              name: result.name,
-              aliases: result.aliases,
-              description: result.description,
-              servingDesc: result.servingDesc,
-            },
-            update: {
-              name: result.name,
-              aliases: result.aliases,
-              description: result.description,
-              servingDesc: result.servingDesc,
-            },
-          });
+          }
+        : {}),
+      select: { id: true },
+    });
+
+    for (const food of foods) {
+      for (const locale of locales) {
+        try {
+          await this.enrichmentService.enrichTranslations(food.id, [locale]);
           translated++;
-        } catch (e) {
+        } catch {
           failed++;
         }
       }
     }
 
-    return { translated, failed };
+    return {
+      translated,
+      failed,
+      deprecated:
+        '此接口已废弃，请改用 POST /admin/food-pipeline/enrichment/enqueue（target=translations）',
+    };
   }
 
   // ==================== 批量规则计算 ====================
@@ -513,18 +651,35 @@ export class FoodPipelineOrchestratorService {
 
   // ==================== 内部方法 ====================
 
-  private async persistSingleFood(food: CleanedFoodData, result: ImportResult) {
+  private async persistSingleFood(
+    food: CleanedFoodData,
+    result: ImportResult,
+    importMode: FoodImportMode,
+  ) {
     const directives = this.resolveImportMetadata(food.importMetadata);
 
     // 去重检查
     const dup = await this.dedup.findDuplicate(food);
 
     if (dup) {
+      if (importMode === 'create_only') {
+        result.skipped++;
+        result.matchedSkipped++;
+        this.pushImportDetail(
+          result,
+          'matchedSkipped',
+          `Skipped existing match in create-only mode: ${food.name} -> ${dup.existingFood.name}`,
+        );
+        return;
+      }
+
       const mergedFields = this.dedup.mergeFood(
         dup.existingFood,
         food,
         this.getSourcePriority(food.primarySource),
+        importMode,
       );
+      const hasFieldUpdates = Object.keys(mergedFields).length > 0;
       const combinedTags = [
         ...((dup.existingFood.taxonomy?.tags as any[]) || []),
         ...(food.tags || []),
@@ -536,71 +691,73 @@ export class FoodPipelineOrchestratorService {
         tags: [...new Set(combinedTags)],
       });
 
-      // Separate split-table fields from main-table fields in mergedFields
-      const {
-        tags: _t,
-        qualityScore: _q,
-        satietyScore: _s,
-        nutrientDensity: _n,
-        saturatedFat: _sf,
-        transFat: _tf,
-        cholesterol: _ch,
-        vitaminA: _va,
-        vitaminC: _vc,
-        vitaminD: _vd,
-        vitaminE: _ve,
-        vitaminB12: _vb,
-        folate: _fo,
-        zinc: _zn,
-        magnesium: _mg,
-        phosphorus: _ph,
-        glycemicIndex: _gi,
-        glycemicLoad: _gl,
-        isProcessed: _ip,
-        isFried: _ifd,
-        processingLevel: _pl,
-        allergens: _al,
-        mealTypes: _mt,
-        compatibility: _co,
-        standardServingG: _ssg,
-        standardServingDesc: _ssd,
-        commonPortions: _cp,
-        omega3: _o3,
-        omega6: _o6,
-        solubleFiber: _slf,
-        insolubleFiber: _ilf,
-        ...mainMergedFields
-      } = mergedFields as any;
-
-      await this.prisma.food.update({
-        where: { id: dup.existingFood.id },
-        data: {
-          ...mainMergedFields,
-          dataVersion: dup.existingFood.dataVersion + 1,
-        },
-      });
-      await upsertFoodSplitTables(this.prisma, dup.existingFood.id, {
-        ...mergedFields,
-        ...scores,
-        tags: [...new Set([...combinedTags, ...(scores.tags || [])])],
-      });
+      const mainMergedFields = this.pickMainTableFields(mergedFields);
+      const legacyRawMainFields = this.pickLegacyRawMainFields(mergedFields);
 
       await this.saveSource(dup.existingFood.id, food);
-      await this.conflictResolver.detectConflicts(
-        dup.existingFood.id,
-        dup.existingFood,
-        food,
-        food.primarySource,
-      );
 
-      await this.logChange(
-        dup.existingFood.id,
-        dup.existingFood.dataVersion + 1,
-        'update',
-        mergedFields,
-        directives.operator,
-      );
-      result.updated++;
+      if (importMode === 'conservative') {
+        const conflicts = await this.conflictResolver.detectConflicts(
+          dup.existingFood.id,
+          this.flattenComparableFood(dup.existingFood),
+          food,
+          food.primarySource,
+        );
+        result.conflictCreated += conflicts.length;
+        if (conflicts.length > 0) {
+          this.pushImportDetail(
+            result,
+            'conflicts',
+            `Conflicts created for ${food.name}: ${conflicts
+              .map((conflict) => conflict.field)
+              .join(', ')}`,
+          );
+        }
+      }
+
+      if (hasFieldUpdates) {
+        await this.prisma.food.update({
+          where: { id: dup.existingFood.id },
+          data: this.sanitizeFoodMainWriteData({
+            ...mainMergedFields,
+            dataVersion: dup.existingFood.dataVersion + 1,
+          }),
+        });
+        await this.updateLegacyRawMainFields(
+          dup.existingFood.id,
+          legacyRawMainFields,
+        );
+        await upsertFoodSplitTables(this.prisma, dup.existingFood.id, {
+          ...mergedFields,
+          ...scores,
+          tags: [...new Set([...combinedTags, ...(scores.tags || [])])],
+        });
+
+        await this.logChange(
+          dup.existingFood.id,
+          dup.existingFood.dataVersion + 1,
+          'update',
+          mergedFields,
+          directives.operator,
+        );
+        result.updated++;
+        result.matchedUpdated++;
+        this.pushImportDetail(
+          result,
+          'matchedUpdated',
+          `Matched and updated: ${food.name} -> ${dup.existingFood.name} fields=[${Object.keys(
+            mergedFields,
+          ).join(', ')}] mode=${importMode}`,
+        );
+      } else {
+        result.skipped++;
+        result.matchedSkipped++;
+        this.pushImportDetail(
+          result,
+          'matchedSkipped',
+          `Matched existing without field updates: ${food.name} -> ${dup.existingFood.name} mode=${importMode}`,
+        );
+      }
     } else {
       // 新增
       const scores = this.ruleEngine.applyAllRules(food);
@@ -614,7 +771,7 @@ export class FoodPipelineOrchestratorService {
       ];
 
       const saved = await this.prisma.food.create({
-        data: {
+        data: this.sanitizeFoodMainWriteData({
           code,
           name: food.name,
           aliases: food.aliases,
@@ -639,7 +796,7 @@ export class FoodPipelineOrchestratorService {
           verifiedBy: directives.isVerified ? directives.verifiedBy : undefined,
           verifiedAt: directives.isVerified ? new Date() : undefined,
           commonalityScore: (food as any).commonalityScore ?? 50,
-        },
+        }),
       });
 
       // 记录来源
@@ -663,6 +820,175 @@ export class FoodPipelineOrchestratorService {
 
       result.created++;
     }
+  }
+
+  private flattenComparableFood(food: any): Record<string, any> {
+    return {
+      ...food,
+      ...(food.nutritionDetail || {}),
+      ...(food.healthAssessment || {}),
+      ...(food.taxonomy || {}),
+      ...(food.portionGuide || {}),
+      primarySource: food.primarySource,
+    };
+  }
+
+  private pushImportDetail(
+    result: ImportResult,
+    group: keyof ImportResult['detailGroups'],
+    message: string,
+  ) {
+    result.detailGroups[group].push(message);
+    result.details.push(message);
+  }
+
+  private async previewNormalizedFoods(
+    normalizedFoods: NormalizedFoodData[],
+    importMode: FoodImportMode,
+    sourceLabel: string,
+  ): Promise<ImportPreviewResult> {
+    const { cleaned, discarded } = this.cleaner.cleanBatch(normalizedFoods);
+    const preview: ImportPreviewResult = {
+      importMode,
+      total: normalizedFoods.length,
+      cleaned: cleaned.length,
+      discarded,
+      estimatedCreated: 0,
+      estimatedMatchedUpdated: 0,
+      estimatedMatchedSkipped: 0,
+      estimatedConflictCount: 0,
+      samples: {
+        created: [],
+        matchedUpdated: [],
+        matchedSkipped: [],
+        conflicts: [],
+      },
+      detailGroups: {
+        system: [
+          `Import mode: ${importMode}`,
+          `Source: ${sourceLabel}`,
+          `Cleaned: ${cleaned.length}, discarded: ${discarded}`,
+        ],
+        matchedUpdated: [],
+        matchedSkipped: [],
+        conflicts: [],
+      },
+    };
+
+    for (const food of cleaned) {
+      const dup = await this.dedup.findDuplicate(food as CleanedFoodData);
+      if (!dup) {
+        preview.estimatedCreated++;
+        if (preview.samples.created.length < 8) {
+          preview.samples.created.push({
+            name: food.name,
+            sourceId: food.sourceId,
+          });
+        }
+        continue;
+      }
+
+      if (importMode === 'create_only') {
+        preview.estimatedMatchedSkipped++;
+        if (preview.samples.matchedSkipped.length < 8) {
+          preview.samples.matchedSkipped.push({
+            name: food.name,
+            existingName: dup.existingFood.name,
+            reason: 'create_only mode',
+          });
+        }
+        preview.detailGroups.matchedSkipped.push(
+          `Create-only mode would skip: ${food.name} -> ${dup.existingFood.name}`,
+        );
+        continue;
+      }
+
+      const mergedFields = this.dedup.mergeFood(
+        dup.existingFood,
+        food as CleanedFoodData,
+        this.getSourcePriority(food.primarySource),
+        importMode,
+      );
+      const hasFieldUpdates = Object.keys(mergedFields).length > 0;
+
+      if (importMode === 'conservative') {
+        const conflicts = this.conflictResolver.estimateConflicts(
+          this.flattenComparableFood(dup.existingFood),
+          food,
+        );
+        preview.estimatedConflictCount += conflicts.length;
+        if (conflicts.length > 0) {
+          if (preview.samples.conflicts.length < 8) {
+            preview.samples.conflicts.push({
+              name: food.name,
+              existingName: dup.existingFood.name,
+              fields: conflicts,
+            });
+          }
+          preview.detailGroups.conflicts.push(
+            `Potential conflicts for ${food.name}: ${conflicts.join(', ')}`,
+          );
+        }
+      }
+
+      if (hasFieldUpdates) {
+        preview.estimatedMatchedUpdated++;
+        if (preview.samples.matchedUpdated.length < 8) {
+          preview.samples.matchedUpdated.push({
+            name: food.name,
+            existingName: dup.existingFood.name,
+            fields: Object.keys(mergedFields),
+          });
+        }
+        preview.detailGroups.matchedUpdated.push(
+          `Would update ${food.name} -> ${dup.existingFood.name} fields=[${Object.keys(
+            mergedFields,
+          ).join(', ')}]`,
+        );
+      } else {
+        preview.estimatedMatchedSkipped++;
+        if (preview.samples.matchedSkipped.length < 8) {
+          preview.samples.matchedSkipped.push({
+            name: food.name,
+            existingName: dup.existingFood.name,
+            reason: 'no missing fields',
+          });
+        }
+        preview.detailGroups.matchedSkipped.push(
+          `Would skip ${food.name} -> ${dup.existingFood.name} (no missing fields)`,
+        );
+      }
+    }
+
+    return preview;
+  }
+
+  private emptyPreview(
+    importMode: FoodImportMode,
+    systemMessages: string[],
+  ): ImportPreviewResult {
+    return {
+      importMode,
+      total: 0,
+      cleaned: 0,
+      discarded: 0,
+      estimatedCreated: 0,
+      estimatedMatchedUpdated: 0,
+      estimatedMatchedSkipped: 0,
+      estimatedConflictCount: 0,
+      samples: {
+        created: [],
+        matchedUpdated: [],
+        matchedSkipped: [],
+        conflicts: [],
+      },
+      detailGroups: {
+        system: systemMessages,
+        matchedUpdated: [],
+        matchedSkipped: [],
+        conflicts: [],
+      },
+    };
   }
 
   private async saveSource(foodId: string, food: CleanedFoodData) {
@@ -718,7 +1044,133 @@ export class FoodPipelineOrchestratorService {
 
   private async generateCode(): Promise<string> {
     const count = await this.prisma.food.count();
-    return `FOOD_G_${String(count + 1).padStart(5, '0')}`;
+      return `FOOD_G_${String(count + 1).padStart(5, '0')}`;
+  }
+
+  private sanitizeFoodMainWriteData<T extends Record<string, any>>(data: T): T {
+    const sanitized: Record<string, any> = { ...data };
+
+    if (typeof sanitized.name === 'string') {
+      const fullName = sanitized.name.trim();
+      if (fullName.length > this.FOOD_NAME_MAX_LENGTH) {
+        sanitized.name = this.buildCompactFoodName(fullName);
+        sanitized.aliases = this.mergeAliasesPreservingFullName(
+          sanitized.aliases,
+          fullName,
+        );
+
+        this.logger.warn(
+          `Compressed foods.name from ${fullName.length} chars to semantic short name for storage`,
+        );
+      } else {
+        sanitized.name = fullName;
+      }
+    }
+
+    if (typeof sanitized.aliases === 'string') {
+      const aliases = sanitized.aliases
+        .split(',')
+        .map((item: string) => item.trim())
+        .filter(Boolean)
+        .filter((item: string, index: number, arr: string[]) => arr.indexOf(item) === index)
+        .join(', ');
+
+      sanitized.aliases = aliases;
+    }
+
+    for (const [field, maxLength] of Object.entries(this.OPTIONAL_MAIN_FIELD_LIMITS)) {
+      const value = sanitized[field];
+      if (typeof value !== 'string') continue;
+
+      const trimmed = value.trim();
+      if (trimmed.length > maxLength) {
+        delete sanitized[field];
+        this.logger.warn(
+          `Skipped foods.${field} write because value length ${trimmed.length} exceeds ${maxLength}`,
+        );
+      } else {
+        sanitized[field] = trimmed;
+      }
+    }
+
+    return sanitized as T;
+  }
+
+  private buildCompactFoodName(fullName: string): string {
+    const parts = fullName
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    if (parts.length === 0) {
+      return fullName.slice(0, this.FOOD_NAME_MAX_LENGTH);
+    }
+
+    let compact = parts[0];
+    for (let i = 1; i < parts.length; i++) {
+      const candidate = `${compact}, ${parts[i]}`;
+      if (candidate.length > this.FOOD_NAME_MAX_LENGTH) break;
+      compact = candidate;
+    }
+
+    return compact;
+  }
+
+  private mergeAliasesPreservingFullName(
+    aliases: unknown,
+    fullName: string,
+  ): string | undefined {
+    const items = [
+      ...(typeof aliases === 'string'
+        ? aliases
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean)
+        : []),
+      fullName,
+    ].filter((item, index, arr) => arr.indexOf(item) === index);
+
+    return items.join(', ');
+  }
+
+  private pickMainTableFields(data: Record<string, any>): Record<string, any> {
+    const splitFieldSets = [
+      NUTRITION_DETAIL_FIELDS,
+      HEALTH_ASSESSMENT_FIELDS,
+      TAXONOMY_FIELDS,
+      PORTION_GUIDE_FIELDS,
+    ];
+
+    return Object.fromEntries(
+      Object.entries(data).filter(([field]) => {
+        if (this.LEGACY_RAW_MAIN_FIELDS.has(field)) {
+          return false;
+        }
+
+        return !splitFieldSets.some((fieldSet) => fieldSet.has(field));
+      }),
+    );
+  }
+
+  private pickLegacyRawMainFields(data: Record<string, any>): Record<string, any> {
+    return Object.fromEntries(
+      Object.entries(data).filter(([field, value]) => {
+        return this.LEGACY_RAW_MAIN_FIELDS.has(field) && value != null;
+      }),
+    );
+  }
+
+  private async updateLegacyRawMainFields(
+    foodId: string,
+    data: Record<string, any>,
+  ): Promise<void> {
+    for (const [field, value] of Object.entries(data)) {
+      await this.prisma.$executeRawUnsafe(
+        `UPDATE foods SET "${field}" = $1 WHERE id = $2::uuid`,
+        value,
+        foodId,
+      );
+    }
   }
 
   private resolveImportMetadata(importMetadata?: ImportMetadata): {

@@ -142,8 +142,11 @@ export const httpClient = createAxiosInstance();
 // 封装常用的请求方法
 export const request = {
   // GET 请求
-  get: <T = unknown>(url: string, params?: unknown, config?: AxiosRequestConfig): Promise<T> =>
-    httpClient.get(url, { params, ...config }),
+  get: <T = unknown>(
+    url: string,
+    params?: unknown,
+    config?: ExtendedRequestConfig
+  ): Promise<T> => httpClient.get(url, { params, ...config }),
 
   // POST 请求
   post: <T = unknown>(url: string, data?: unknown, config?: ExtendedRequestConfig): Promise<T> =>

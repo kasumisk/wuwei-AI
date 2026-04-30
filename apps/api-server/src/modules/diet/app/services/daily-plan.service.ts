@@ -1128,10 +1128,7 @@ export class DailyPlanService {
 
   private localizeMealFoodItems(
     foodItems: MealFoodItem[] | undefined,
-    foodLocalizationMap: Map<
-      string,
-      { name: string; servingDesc?: string | null }
-    >,
+    foodLocalizationMap: Map<string, { name: string }>,
   ): MealFoodItem[] | undefined {
     if (!foodItems) return foodItems;
 
@@ -1144,17 +1141,13 @@ export class DailyPlanService {
       return {
         ...item,
         name: localized.name,
-        servingDesc: localized.servingDesc || item.servingDesc,
       };
     });
   }
 
   private rebuildMealFoodsText(
     foodItems: MealFoodItem[] | undefined,
-    foodLocalizationMap: Map<
-      string,
-      { name: string; servingDesc?: string | null }
-    >,
+    foodLocalizationMap: Map<string, { name: string }>,
     locale: Locale,
   ): string | undefined {
     if (!foodItems?.length) return undefined;
@@ -1168,7 +1161,7 @@ export class DailyPlanService {
           'display.foodItem',
           {
             name: localized?.name || item.name,
-            serving: localized?.servingDesc || item.servingDesc || '',
+            serving: item.servingDesc || '',
             calories: item.calories ?? 0,
           },
           locale,
