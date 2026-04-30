@@ -916,6 +916,14 @@ model Food {
   fiber    Decimal? @db.Decimal(5, 1)
   /// 总糖（添加糖 + 天然糖），单位 g
   sugar    Decimal? @db.Decimal(5, 1)
+  /// 钠，单位 mg
+  sodium   Decimal? @db.Decimal(7, 1)
+  /// 钾，单位 mg
+  potassium Decimal? @db.Decimal(7, 1)
+  /// 钙，单位 mg
+  calcium  Decimal? @db.Decimal(7, 1)
+  /// 铁，单位 mg
+  iron     Decimal? @db.Decimal(5, 2)
 
   // ─── 健康评估（已迁移至 food_health_assessments，读写通过关联表）───────
   // glycemicIndex / glycemicLoad / isProcessed / isFried / processingLevel
@@ -1032,9 +1040,10 @@ model Food {
 // ============================================================================
 // ARB-2026-04: Food god-table split — 4 张领域 1:1 关联表
 // 设计原则：
-//   1. 主表 foods 对应列已于 migration 20260506000000 中 DROP
-//   2. 所有读写通过拆分表进行（include: FOOD_SPLIT_INCLUDE）
-//   3. 双写路径：food-library / food-enrichment / food-pipeline-orchestrator
+//   1. 主表 foods 大部分领域列已于 migration 20260506000000 中 DROP
+//   2. sodium/potassium/calcium/iron 仍保留在 foods 主表
+//   3. 其余读写通过拆分表进行（include: FOOD_SPLIT_INCLUDE）
+//   4. 双写路径：food-library / food-enrichment / food-pipeline-orchestrator
 // ============================================================================
 
 /// V8.3 拆分表：微量营养与精细化营养字段（per 100g）

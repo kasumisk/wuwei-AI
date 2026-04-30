@@ -26,6 +26,7 @@ export function getFieldSqlRef(field: string): string {
   const column = field.includes('_')
     ? field
     : field.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
+
   const camelField = snakeToCamel(column);
 
   if (NUTRITION_DETAIL_FIELDS.has(camelField)) return `nd."${column}"`;

@@ -227,9 +227,9 @@ export class FoodLibraryManagementService {
           -- 宏量营养素（per 100g）
          f.calories, f.protein, f.fat, f.carbs, f.fiber, f.sugar,
          nd.added_sugar AS added_sugar, nd.natural_sugar AS natural_sugar, nd.saturated_fat AS saturated_fat, nd.trans_fat AS trans_fat,
-         nd.cholesterol AS cholesterol,
-          -- 微量营养素（per 100g）
-         f.sodium, f.potassium, f.calcium, f.iron,
+          nd.cholesterol AS cholesterol,
+           -- 微量营养素（per 100g）
+          f.sodium, f.potassium, f.calcium, f.iron,
          nd.vitamin_a AS vitamin_a, nd.vitamin_c AS vitamin_c, nd.vitamin_d AS vitamin_d, nd.vitamin_e AS vitamin_e,
          nd.vitamin_b12 AS vitamin_b12, nd.folate AS folate, nd.zinc AS zinc, nd.magnesium AS magnesium,
          nd.phosphorus AS phosphorus, nd.purine AS purine,
