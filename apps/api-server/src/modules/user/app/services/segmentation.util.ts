@@ -45,6 +45,12 @@ export interface SegmentBehaviorInput {
   daysSinceLastRecord?: number;
   /** 用户使用天数（首次记录至今） */
   usageDays?: number;
+  /**
+   * P3-2.4: 用户区域代码（'US' / 'CN' / 'US-CA' 等）
+   * 用于按 region 调整 segment 阈值（详见 regional-defaults.REGION_SEGMENT_TUNING）
+   * 缺省时使用 DEFAULT_REGION_SEGMENT_TUNING（与历史行为完全一致）
+   */
+  regionCode?: string | null;
 }
 
 /**

@@ -13,38 +13,38 @@ ALTER TABLE usage_records
 
 COMMENT ON COLUMN usage_records.user_id IS '发起调用的用户 ID（系统级任务为 NULL）';
 
--- ─── 2. 删除旧索引（名称不规范，重建统一命名） ────────────────────────────
-DROP INDEX CONCURRENTLY IF EXISTS "IDX_0616a784ab63d9f654498cd84b"; -- capability_type, timestamp
-DROP INDEX CONCURRENTLY IF EXISTS "IDX_1f7f090f5d081ae21593ab3844"; -- provider, timestamp
-DROP INDEX CONCURRENTLY IF EXISTS "IDX_d397b87d28105b361b8f5a840d"; -- client_id, timestamp
+-- ─── 2. 删除旧索引（Prisma migration 在事务内执行，不能使用 CONCURRENTLY） ───
+DROP INDEX IF EXISTS "IDX_0616a784ab63d9f654498cd84b"; -- capability_type, timestamp
+DROP INDEX IF EXISTS "IDX_1f7f090f5d081ae21593ab3844"; -- provider, timestamp
+DROP INDEX IF EXISTS "IDX_d397b87d28105b361b8f5a840d"; -- client_id, timestamp
 
--- ─── 3. 重建 BTree 索引（CONCURRENTLY 避免锁表）──────────────────────────
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_usage_records_feature_ts
+-- ─── 3. 重建 BTree 索引 ───────────────────────────────────────────────────
+CREATE INDEX IF NOT EXISTS idx_usage_records_feature_ts
   ON usage_records (capability_type, timestamp DESC);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_usage_records_provider_ts
+CREATE INDEX IF NOT EXISTS idx_usage_records_provider_ts
   ON usage_records (provider, timestamp DESC);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_usage_records_client_ts
+CREATE INDEX IF NOT EXISTS idx_usage_records_client_ts
   ON usage_records (client_id, timestamp DESC);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_usage_records_user_ts
+CREATE INDEX IF NOT EXISTS idx_usage_records_user_ts
   ON usage_records (user_id, timestamp DESC)
   WHERE user_id IS NOT NULL;          -- partial index：系统调用不占索引空间
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_usage_records_timestamp
+CREATE INDEX IF NOT EXISTS idx_usage_records_timestamp
   ON usage_records (timestamp ASC);   -- 归档 cron range scan 专用
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_usage_records_status_ts
+CREATE INDEX IF NOT EXISTS idx_usage_records_status_ts
   ON usage_records (status, timestamp DESC);
 
 -- ─── 4. GIN 索引（JSONB 包含查询）────────────────────────────────────────
 -- usage 字段：如 usage @> '{"total_tokens": 1000}' 按 token 过滤
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_usage_records_usage_gin
+CREATE INDEX IF NOT EXISTS idx_usage_records_usage_gin
   ON usage_records USING gin (usage jsonb_path_ops);
 
 -- metadata 字段：如 metadata @> '{"feature": "CoachChat"}' 按特征过滤
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_usage_records_metadata_gin
+CREATE INDEX IF NOT EXISTS idx_usage_records_metadata_gin
   ON usage_records USING gin (metadata jsonb_path_ops)
   WHERE metadata IS NOT NULL;         -- partial：空 metadata 不占索引
 

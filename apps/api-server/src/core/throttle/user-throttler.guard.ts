@@ -11,9 +11,10 @@
  *    - 'user-api': 用户级常规
  *    - 'ai-heavy': 用户级 AI 重计算
  *    - 'strict':   用户级低频高消耗（登录/注册/导出）
- * 4. **Admin 限流**: /admin/* 路由仍然走限流（防暴力破解 admin 登录），
- *    但因 admin 操作幅度大，建议在 admin controller 上显式放宽，
- *    例如 @UserApiThrottle(300, 60)。健康检查 / metrics 端点仍跳过。
+ * 4. **Admin 路由完全豁免**: /admin/* 是内部后台接口，操作量大且已通过
+ *    独立的 AdminJwtGuard 做身份认证，无需额外限流保护。
+ *    Admin 登录接口（/auth/login 等）路径不含 /admin 前缀，仍受限流保护。
+ * 5. **探针端点豁免**: /health、/metrics 直接放行。
  *
  * 使用方式（Controller / Route 级别）：
  * ```
@@ -31,16 +32,21 @@ import { Request } from 'express';
 @Injectable()
 export class UserThrottlerGuard extends ThrottlerGuard {
   /**
-   * 覆盖 canActivate：仅对探针端点跳过限流。
-   *
-   * 之前版本会对 /admin/* 整体跳过，导致 admin 登录接口零防护，
-   * 任何攻击者扫到路径后可无限暴力破解。现在已收紧。
+   * 覆盖 canActivate：
+   * - /admin/* 内部后台接口：完全跳过限流（已有 AdminJwtGuard 鉴权）
+   * - /health、/metrics 探针端点：跳过限流
+   * - 其余客户端接口：走正常分层限流
    */
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<Request>();
     const path = req.path ?? '';
 
-    // 仅放行 K8s/Cloud Run 探针与 Prometheus 抓取端点
+    // 后台管理接口：完全豁免限流
+    if (path.startsWith('/admin/')) {
+      return true;
+    }
+
+    // K8s/Cloud Run 探针与 Prometheus 抓取端点
     if (
       path === '/health' ||
       path.endsWith('/health') ||

@@ -1086,7 +1086,7 @@ const EnrichmentPage: React.FC = () => {
                         <Row gutter={8}>
                           <Col span={8}>
                             <Form.Item name="limit" label="数量">
-                              <InputNumber min={1} max={500} style={{ width: '100%' }} />
+                              <InputNumber min={1} style={{ width: '100%' }} />
                             </Form.Item>
                           </Col>
                           <Col span={8}>
@@ -1196,7 +1196,6 @@ const EnrichmentPage: React.FC = () => {
                       <Form.Item label="数量" style={{ marginBottom: 8 }}>
                         <InputNumber
                           min={1}
-                          max={500}
                           value={stagedBatchLimit}
                           onChange={(v) => setStagedBatchLimit(v ?? 50)}
                           style={{ width: '100%' }}

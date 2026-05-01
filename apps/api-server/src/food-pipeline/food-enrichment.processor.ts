@@ -355,29 +355,9 @@ export class FoodEnrichmentProcessor extends WorkerHost {
 
     if (Object.keys(results).length === 0) return;
 
-    const shouldStage =
-      staged ||
-      Object.values(results).some((result) =>
-        this.enrichmentService.shouldStage(result as any, false),
-      );
-
-    if (shouldStage) {
-      for (const [region, result] of Object.entries(results)) {
-        const logId = await this.enrichmentService.stageEnrichment(
-          foodId,
-          result as any,
-          'regional',
-          undefined,
-          region,
-          'ai_enrichment_worker',
-        );
-        this.logger.log(
-          `Staged（regional/${region}）foodId=${foodId}, logId=${logId}`,
-        );
-      }
-      return;
-    }
-
+    // 地区信息本身是估算数据（AI confidence 通常 0.35-0.75），
+    // staged 流程对其意义不大且会导致补全历史无法写入，直接入库。
+    // staged 参数仅用于日志记录，不触发 staged 分支。
     const res = await this.enrichmentService.applyRegionalEnrichments(
       foodId,
       results,
@@ -402,34 +382,16 @@ export class FoodEnrichmentProcessor extends WorkerHost {
       return;
     }
 
-    const shouldStage = this.enrichmentService.shouldStage(
-      result as any,
-      staged,
+    // 地区信息是估算数据，直接入库（跳过 staged 阈值判断）
+    const res = await this.enrichmentService.applyRegionalEnrichment(
+      foodId,
+      region,
+      result,
+      'ai_enrichment_worker',
     );
-
-    if (shouldStage) {
-      const logId = await this.enrichmentService.stageEnrichment(
-        foodId,
-        result as any,
-        'regional',
-        undefined,
-        region,
-        'ai_enrichment_worker',
-      );
-      this.logger.log(
-        `Staged（regional/${region}）foodId=${foodId}, logId=${logId}`,
-      );
-    } else {
-      const res = await this.enrichmentService.applyRegionalEnrichment(
-        foodId,
-        region,
-        result,
-        'ai_enrichment_worker',
-      );
-      this.logger.log(
-        `直接入库（regional/${region}）foodId=${foodId}, ${res.action} fields=[${res.fields.join(',')}]`,
-      );
-    }
+    this.logger.log(
+      `直接入库（regional/${region}）foodId=${foodId}, ${res.action} fields=[${res.fields.join(',')}]`,
+    );
   }
 
   // ─── DLQ ──────────────────────────────────────────────────────────────
