@@ -16,6 +16,7 @@ import type { FoodLibrary } from '../../../../food/food.types';
 import type { PipelineContext } from '../types/recommendation.types';
 import type { ScoringExplanation } from '../types/scoring-explanation.interface';
 import { writeStageBuffer } from '../types/pipeline.types';
+import { MetricsService } from '../../../../../core/metrics/metrics.service';
 import {
   DEFAULT_SCORING_CHAIN_CONFIG,
   type ScoringAdjustment,
@@ -30,6 +31,8 @@ export class ScoringChainService {
 
   /** 已注册的因子（按 order 排序） */
   private factors: ScoringFactor[] = [];
+
+  constructor(private readonly metricsService: MetricsService) {}
 
   /**
    * 注册评分因子
@@ -197,6 +200,43 @@ export class ScoringChainService {
         disabledFactors: resolvedConfig.disabledFactors,
         candidateCount: candidates.length,
         factorHitCounts,
+      });
+    }
+
+    // P0-4: 推荐质量观测埋点（每次评分调用一次，避免按候选数膨胀）。
+    //
+    // (1) regional_boost_active：ctx.regionCode 非空且 regional-boost 因子在 active 集合中
+    //     视为"区域加成生效"。空 regionCode 说明用户画像没拿到区域信息（链路问题）。
+    const regionalBoostFactorActive = activeFactors.some(
+      (f) => f.name === 'regional-boost',
+    );
+    const regionActive =
+      !!ctx.regionCode &&
+      ctx.regionCode.trim().length > 0 &&
+      regionalBoostFactorActive;
+    this.metricsService.regionalBoostActive.inc({
+      active: regionActive ? 'yes' : 'no',
+    });
+
+    // (2) cuisine_affinity_hit：用户有偏好集合时，统计 top-1 推荐的 cuisine 是否命中。
+    //     无偏好用户单独标记 'no_preference' —— 否则会拉低分子让指标失真。
+    const userCuisines = ctx.userProfile?.cuisinePreferences ?? [];
+    if (userCuisines.length === 0) {
+      this.metricsService.cuisineAffinityHit.inc({ hit: 'no_preference' });
+    } else if (results.length > 0) {
+      // 取得分最高者作为代表（results 此处尚未排序，需即时找 max）
+      let topIdx = 0;
+      for (let i = 1; i < results.length; i++) {
+        if (results[i].finalScore > results[topIdx].finalScore) topIdx = i;
+      }
+      const topCuisine = results[topIdx].food.cuisine;
+      const userCuisineSet = new Set(
+        userCuisines.map((c) => c.toLowerCase().trim()),
+      );
+      const hit =
+        topCuisine && userCuisineSet.has(topCuisine.toLowerCase().trim());
+      this.metricsService.cuisineAffinityHit.inc({
+        hit: hit ? 'yes' : 'no',
       });
     }
 

@@ -74,6 +74,11 @@ export class FoodPlanController {
   /**
    * 获取下一餐推荐
    * GET /api/app/food/meal-suggestion
+   *
+   * TODO(P1): 接入 client-context middleware 后，从请求中解析 channel
+   * (X-Client-Type / User-Agent) 并透传到 foodService.getMealSuggestion 与
+   * precomputeService.{getPrecomputed,savePrecomputed}，激活 channel 维度
+   * 差异化推荐与独立缓存。当前所有渠道共享 'unknown' 缓存键。
    */
   @Get('meal-suggestion')
   @UserApiThrottle(10, 60)

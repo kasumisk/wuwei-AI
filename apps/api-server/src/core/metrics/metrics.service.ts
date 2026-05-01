@@ -152,6 +152,89 @@ export class MetricsService implements OnModuleInit {
     labelNames: ['queue'] as const,
   });
 
+  // ─── V8.0 P0-4: 推荐质量观测指标（审计 P0-4） ───
+  //
+  // 设计原则：
+  //   - 这些指标用于回答"推荐系统当前是否在做正确的事"，而不是"是否快"。
+  //   - 标签维度尽量低基数（避免 user/food id 直接打标签 → cardinality 爆炸）。
+  //   - 优先 Counter（累加 + rate）而非 Gauge（瞬时值，难做 SLO）。
+
+  /**
+   * 区域加成是否实际激活的计数器。
+   *
+   * 标签：
+   *   - active: 'yes' = ctx.regionCode 非空且命中区域配置
+   *             'no'  = regionCode 为空 / 未命中配置（说明用户画像缺失）
+   *
+   * 用途：监控 regional_boost_active_ratio = yes / (yes + no)。
+   *      预期 ≥ 0.85；若骤降说明用户区域信息采集链路异常。
+   */
+  readonly regionalBoostActive = new Counter({
+    name: 'recommendation_regional_boost_active_total',
+    help: '推荐时区域加成是否激活（按 active=yes/no 计数）',
+    labelNames: ['active'] as const,
+  });
+
+  /**
+   * 食物 RegionalInfo 数据覆盖率（按推荐召回的食物维度）。
+   *
+   * 标签：
+   *   - status: 'present' = 食物在当前 regionCode 下有 RegionalInfo
+   *             'missing' = 该 regionCode 下无 RegionalInfo（fallback 到默认）
+   *             'no_region' = 请求未带 regionCode
+   *
+   * 用途：coverage = present / total，是衡量 ContentOps 数据完成度的关键指标。
+   */
+  readonly foodRegionalInfoCoverage = new Counter({
+    name: 'recommendation_food_regional_info_coverage_total',
+    help: '推荐召回食物的 RegionalInfo 命中情况',
+    labelNames: ['status'] as const,
+  });
+
+  /**
+   * Cuisine 偏好命中率（用户 cuisine 偏好 vs 推荐结果 cuisine）。
+   *
+   * 标签：
+   *   - hit: 'yes' = 推荐结果 cuisine 在用户偏好集合中
+   *          'no'  = 不在偏好集合中（探索/兜底）
+   *          'no_preference' = 用户未设置 cuisine 偏好
+   *
+   * 用途：hit_ratio = yes / (yes + no)，过低说明 affinity 因子权重不足或
+   *      preference cache key 漂移；过高说明探索不够（多样性塌缩）。
+   */
+  readonly cuisineAffinityHit = new Counter({
+    name: 'recommendation_cuisine_affinity_hit_total',
+    help: 'Cuisine 偏好命中情况',
+    labelNames: ['hit'] as const,
+  });
+
+  /**
+   * LearnedRanking 维度对齐失败计数（审计 P0-1 / P5）。
+   *
+   * 当读取到的 learned weights 长度 ≠ SCORE_DIMENSIONS.length 时计数 +1。
+   * 触发场景：旧版本 12 维数据未被新版本 14 维 cron 覆盖；schema 升级期。
+   *
+   * 用途：>0 说明有维度污染降级，应触发 weight-learner 重训补救。
+   */
+  readonly seasonalityDimMismatch = new Counter({
+    name: 'recommendation_learned_weights_dim_mismatch_total',
+    help: 'LearnedRanking weights 维度与 SCORE_DIMENSIONS 不一致的次数（已降级到 baseline）',
+  });
+
+  /**
+   * 推荐 channel 分布（审计 P0-3 后续观察）。
+   *
+   * 标签：
+   *   - channel: 经过 normalizeChannel 后的白名单值（含 'unknown'）
+   *
+   * 用途：观察 unknown 占比；接入 client-context middleware 后预期降到 < 1%。
+   */
+  readonly recommendationChannel = new Counter({
+    name: 'recommendation_channel_total',
+    help: '推荐请求 channel 分布（已规范化）',
+    labelNames: ['channel'] as const,
+  });
+
   onModuleInit(): void {
     // 收集 Node.js 默认指标（CPU、内存、事件循环延迟等）
     collectDefaultMetrics({ register: this.registry });

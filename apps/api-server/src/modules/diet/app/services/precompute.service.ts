@@ -32,6 +32,11 @@ import {
   FeedbackSubmittedEvent,
 } from '../../../../core/events/domain-events';
 import { QUEUE_NAMES } from '../../../../core/queue/queue.constants';
+import { MetricsService } from '../../../../core/metrics/metrics.service';
+import {
+  normalizeChannel,
+  type RecommendationChannel,
+} from '../recommendation/utils/channel';
 
 // ─── 常量 ───
 
@@ -65,6 +70,7 @@ export class PrecomputeService {
     private readonly redisCache: RedisCacheService,
     @InjectQueue(QUEUE_NAMES.RECOMMENDATION_PRECOMPUTE)
     private readonly precomputeQueue: Queue,
+    private readonly metricsService: MetricsService,
   ) {}
 
   /**
@@ -95,12 +101,22 @@ export class PrecomputeService {
     result: MealRecommendation;
     scenarioResults: Record<string, unknown> | null;
   } | null> {
+    const ch: RecommendationChannel = normalizeChannel(channel, (raw) => {
+      // 非白名单值降级为 unknown 时记一条 warn，便于后续排查异常 channel 分布。
+      // 不阻塞主链路，不抛错。
+      this.logger.warn(
+        `[precompute.getPrecomputed] unknown channel "${raw}" normalized to "unknown"`,
+      );
+    });
+    // P0-4: 记录 channel 分布（含 unknown），观察 client-context middleware 上线
+    // 后 unknown 占比是否回落到 < 1%
+    this.metricsService.recommendationChannel.inc({ channel: ch });
     const record = await this.prisma.precomputedRecommendations.findFirst({
       where: {
         userId: userId,
         date,
         mealType: mealType,
-        channel: channel ?? 'unknown',
+        channel: ch,
         strategyVersion: this.strategyVersion,
         expiresAt: { gt: new Date() },
       },
@@ -140,7 +156,13 @@ export class PrecomputeService {
   ): Promise<void> {
     // 计算过期时间: date 当天 23:59:59
     const expiresAt = new Date(`${date}T23:59:59`);
-    const ch = channel ?? 'unknown';
+    // P0-3: 使用 normalizeChannel 保证 store 端与 lookup 端走同一规范化逻辑，
+    // 避免 "App"/"app"/" app " 等导致同一逻辑渠道写入多份缓存。
+    const ch: RecommendationChannel = normalizeChannel(channel, (raw) => {
+      this.logger.warn(
+        `[precompute.savePrecomputed] unknown channel "${raw}" normalized to "unknown"`,
+      );
+    });
 
     await this.prisma.precomputedRecommendations.upsert({
       where: {

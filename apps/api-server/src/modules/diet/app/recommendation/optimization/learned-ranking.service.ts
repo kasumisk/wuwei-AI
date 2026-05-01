@@ -21,6 +21,7 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../../../../core/prisma/prisma.service';
 import { RedisCacheService } from '../../../../../core/redis/redis-cache.service';
 import { FeatureFlagService } from '../../../../feature-flag/feature-flag.service';
+import { MetricsService } from '../../../../../core/metrics/metrics.service';
 import { SCORE_DIMENSIONS } from '../types/recommendation.types';
 import {
   TieredCacheManager,
@@ -45,8 +46,12 @@ const L2_LAMBDA = 0.01;
 /** V6.7 Phase 3-A: 验证集无改善容忍次数（early stopping） */
 const EARLY_STOPPING_PATIENCE = 50;
 
-/** 权重维度数量（与 SCORE_DIMENSIONS 对齐） */
-const DIM_COUNT = SCORE_DIMENSIONS.length; // 12
+/**
+ * 权重维度数量（与 SCORE_DIMENSIONS 对齐）
+ * V7.4 起 = 14（含 popularity / acquisition）
+ * 不要硬编码数字 — 始终使用 SCORE_DIMENSIONS.length
+ */
+const DIM_COUNT = SCORE_DIMENSIONS.length;
 
 /**
  * V6.7 Phase 3-A: 已知分群保留为 fallback
@@ -64,7 +69,7 @@ const FALLBACK_SEGMENTS = [
 
 /** 单个排序样本：食物维度评分向量 + 是否被接受 */
 interface RankingSample {
-  /** 12 维原始评分向量（0~1） */
+  /** 维度原始评分向量（0~1），长度 = SCORE_DIMENSIONS.length */
   dimScores: number[];
   /** 用户是否接受（1 = accepted，0 = replaced/skipped） */
   accepted: 0 | 1;
@@ -80,6 +85,7 @@ export class LearnedRankingService implements OnModuleInit {
     private readonly featureFlagService: FeatureFlagService,
     private readonly cacheManager: TieredCacheManager,
     private readonly redisCache: RedisCacheService,
+    private readonly metricsService: MetricsService,
   ) {}
 
   onModuleInit(): void {
@@ -409,6 +415,20 @@ export class LearnedRankingService implements OnModuleInit {
           return learnedWeights?.[segment] ?? null;
         },
       );
+
+      // P0-1 GUARD: 历史数据可能是旧维度（如 12 维）— 维度不一致直接弃用，
+      // 避免与当前 SCORE_WEIGHTS（14 维）错位叠加，产生静默偏差
+      if (cached && Array.isArray(cached) && cached.length !== DIM_COUNT) {
+        // P0-4: 计数器，监控维度污染发生频率（>0 触发 weight-learner 重训补救）
+        this.metricsService.seasonalityDimMismatch.inc();
+        this.logger.warn(
+          `[LearnedRanking] segment=${segment} learned weights dim mismatch: ` +
+            `expected ${DIM_COUNT}, got ${cached.length}; falling back to baseline. ` +
+            `Trigger weekly retrain to refresh.`,
+        );
+        return null;
+      }
+
       return cached;
     } catch {
       return null;

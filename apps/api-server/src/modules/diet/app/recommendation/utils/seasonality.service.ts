@@ -83,8 +83,28 @@ export class SeasonalityService {
   /** Redis 缓存 TTL: 4 小时 */
   private static readonly CACHE_TTL = 4 * 60 * 60;
 
-  /** 请求级内存缓存 — 由调用方在每次推荐请求前 preload */
-  private regionalCache: Map<string, SeasonalityInfo> = new Map();
+  /**
+   * P0-2 修复（2026-05-02）：按 regionCode 分桶的内存缓存
+   *
+   * 旧设计：`Map<foodId, SeasonalityInfo>` — Singleton 单层 map，
+   * 多 region 用户并发时互相覆盖（如 CN 用户数据被 AU 用户的 preload 替换），
+   * 导致同一 foodId 在不同 region 下读取到错误的 availability/monthWeights。
+   *
+   * 新设计：`Map<regionCode, Map<foodId, SeasonalityInfo>>` — 二级隔离。
+   * - 所有 getter 必须显式传入 regionCode（已经有的 caller 都已具备该上下文）
+   * - 不传 regionCode 时回退到聚合视图（向后兼容，但会打 warn）
+   * - clearCache(regionCode) 仅清单 region；clearCache() 清全部
+   */
+  private regionalCacheByRegion: Map<
+    string,
+    Map<string, SeasonalityInfo>
+  > = new Map();
+
+  /** 每个 region 缓存的最大保留时长（避免长期积累） */
+  private static readonly MAX_REGIONS_IN_MEMORY = 32;
+
+  /** LRU 跟踪：regionCode → 最近访问时间戳 */
+  private regionLastAccess: Map<string, number> = new Map();
 
   /**
    * 阶段 2.3：并发 preloadRegion 防重复加载 mutex
@@ -127,13 +147,16 @@ export class SeasonalityService {
   private async _doPreloadRegion(regionCode: string): Promise<void> {
     const cacheKey = `${SeasonalityService.CACHE_PREFIX}${regionCode}`;
 
+    // P0-2: 当前 region 的隔离 map（不存在则新建）
+    const regionMap = this.getOrCreateRegionMap(regionCode);
+
     // 尝试 Redis L2
     try {
       const cached =
         await this.redis.get<Record<string, SeasonalityInfo>>(cacheKey);
       if (cached) {
         for (const [foodId, info] of Object.entries(cached)) {
-          this.regionalCache.set(foodId, info);
+          regionMap.set(foodId, info);
         }
         this.logger.debug(
           `Seasonality cache hit for region=${regionCode}, ${Object.keys(cached).length} foods`,
@@ -189,7 +212,7 @@ export class SeasonalityService {
           priceUnit: row.priceUnit ?? null,
         };
         map[row.foodId] = info;
-        this.regionalCache.set(row.foodId, info);
+        regionMap.set(row.foodId, info);
       }
 
       // 写回 Redis
@@ -214,20 +237,92 @@ export class SeasonalityService {
   }
 
   /**
-   * 清空内存缓存 — 每次推荐请求结束后调用
+   * P0-2: 获取或创建指定 region 的内存 map，并执行 LRU 淘汰
    */
-  clearCache(): void {
-    this.regionalCache.clear();
+  private getOrCreateRegionMap(
+    regionCode: string,
+  ): Map<string, SeasonalityInfo> {
+    this.regionLastAccess.set(regionCode, Date.now());
+
+    const existing = this.regionalCacheByRegion.get(regionCode);
+    if (existing) return existing;
+
+    // LRU 淘汰：超过容量时删除最久未访问的 region
+    if (this.regionalCacheByRegion.size >= SeasonalityService.MAX_REGIONS_IN_MEMORY) {
+      let oldestRegion: string | null = null;
+      let oldestTs = Infinity;
+      for (const [r, ts] of this.regionLastAccess.entries()) {
+        if (ts < oldestTs) {
+          oldestTs = ts;
+          oldestRegion = r;
+        }
+      }
+      if (oldestRegion && oldestRegion !== regionCode) {
+        this.regionalCacheByRegion.delete(oldestRegion);
+        this.regionLastAccess.delete(oldestRegion);
+        this.logger.debug(
+          `[seasonality] LRU evicted region=${oldestRegion} (capacity=${SeasonalityService.MAX_REGIONS_IN_MEMORY})`,
+        );
+      }
+    }
+
+    const fresh = new Map<string, SeasonalityInfo>();
+    this.regionalCacheByRegion.set(regionCode, fresh);
+    return fresh;
+  }
+
+  /**
+   * P0-2: 读取指定 region + foodId 的 info（不会跨 region 污染）
+   *
+   * @param foodId 食物 ID
+   * @param regionCode 用户区域码；强烈建议传入。未传入时会回退聚合所有
+   *                   region 的 map，并打 warn — 这是过渡期的兼容路径，
+   *                   一旦所有 caller 改完应移除该兜底。
+   */
+  private getInfo(
+    foodId: string,
+    regionCode?: string | null,
+  ): SeasonalityInfo | undefined {
+    if (regionCode) {
+      this.regionLastAccess.set(regionCode, Date.now());
+      return this.regionalCacheByRegion.get(regionCode)?.get(foodId);
+    }
+    // 兼容路径：遍历所有 region map（保留旧行为，避免 caller 一次改完）
+    this.logger.warn(
+      `[seasonality] getInfo called without regionCode for foodId=${foodId}; ` +
+        `fallback to legacy aggregate lookup. Caller MUST be migrated.`,
+    );
+    for (const m of this.regionalCacheByRegion.values()) {
+      const hit = m.get(foodId);
+      if (hit) return hit;
+    }
+    return undefined;
+  }
+
+  /**
+   * 清空内存缓存
+   *
+   * @param regionCode 指定 region 时仅清该 region；不传则清全部
+   */
+  clearCache(regionCode?: string): void {
+    if (regionCode) {
+      this.regionalCacheByRegion.delete(regionCode);
+      this.regionLastAccess.delete(regionCode);
+    } else {
+      this.regionalCacheByRegion.clear();
+      this.regionLastAccess.clear();
+    }
   }
 
   /**
    * 阶段 3.1：获取食物的区域 availability（用于候选过滤）
    *
+   * @param regionCode 用户区域码（推荐传入；不传走兼容兜底）
    * @returns availability 字符串（'YEAR_ROUND'|'SEASONAL'|'RARE'|'LIMITED'|null）
    *          null 表示无区域数据，调用方应视为可用
    */
-  getAvailability(foodId: string): string | null {
-    return this.regionalCache.get(foodId)?.availability ?? null;
+  getAvailability(foodId: string, regionCode?: string | null): string | null {
+    return this.getInfo(foodId, regionCode)?.availability ?? null;
   }
 
   /**
@@ -235,8 +330,8 @@ export class SeasonalityService {
    *
    * @returns true = 禁止推荐；false / 无数据 = 允许
    */
-  isRegulatoryForbidden(foodId: string): boolean {
-    return this.regionalCache.get(foodId)?.regulatoryForbidden ?? false;
+  isRegulatoryForbidden(foodId: string, regionCode?: string | null): boolean {
+    return this.getInfo(foodId, regionCode)?.regulatoryForbidden ?? false;
   }
 
   /**
@@ -244,8 +339,8 @@ export class SeasonalityService {
    *
    * @returns FoodPriceInfo（priceMin/priceMax/currencyCode/priceUnit），无数据时四字段均为 null
    */
-  getPriceInfo(foodId: string): FoodPriceInfo {
-    const info = this.regionalCache.get(foodId);
+  getPriceInfo(foodId: string, regionCode?: string | null): FoodPriceInfo {
+    const info = this.getInfo(foodId, regionCode);
     if (!info) {
       return {
         priceMin: null,
@@ -306,7 +401,7 @@ export class SeasonalityService {
     const currentMonth = isSouthernHemisphere(regionCode ?? null)
       ? ((inputMonth - 1 + 6) % 12) + 1
       : inputMonth;
-    const info = this.regionalCache.get(foodId);
+    const info = this.getInfo(foodId, regionCode);
 
     // 无区域数据 → 中性分（置信度 0，完全衰减）
     if (!info) {

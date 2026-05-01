@@ -39,13 +39,13 @@ export class RegionalCandidateFilterService {
     if (!candidates.length) return candidates;
 
     const filtered = candidates.filter((food) => {
-      // 阶段 3.2：法规禁止
-      if (this.seasonalityService.isRegulatoryForbidden(food.id)) {
+      // 阶段 3.2：法规禁止（P0-2: 显式传 regionCode 防止跨 region 污染）
+      if (this.seasonalityService.isRegulatoryForbidden(food.id, regionCode)) {
         return false;
       }
 
       // 阶段 3.1：availability 不可用状态
-      const avail = this.seasonalityService.getAvailability(food.id);
+      const avail = this.seasonalityService.getAvailability(food.id, regionCode);
       if (avail !== null && UNAVAILABLE_STATUSES.has(avail)) {
         return false;
       }

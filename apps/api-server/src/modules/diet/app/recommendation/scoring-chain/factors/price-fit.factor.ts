@@ -74,9 +74,15 @@ export class PriceFitFactor implements ScoringFactor {
   readonly name = 'price-fit';
   readonly order = 20; // 在 regional-boost(15) 之后
 
-  /** P2-2.2: 注入的食物价格查询函数（来自 SeasonalityService.getPriceInfo） */
+  /** P2-2.2: 注入的食物价格查询函数（来自 SeasonalityService.getPriceInfo）
+   *  P0-2: 签名增加 regionCode，避免跨 region 缓存污染。
+   *        旧签名 (foodId) => FoodPriceInfo 仍兼容（regionCode 可选）
+   */
   constructor(
-    private readonly getPriceInfo: (foodId: string) => FoodPriceInfo,
+    private readonly getPriceInfo: (
+      foodId: string,
+      regionCode?: string | null,
+    ) => FoodPriceInfo,
   ) {}
 
   // ─── init 缓存 ───
@@ -123,11 +129,12 @@ export class PriceFitFactor implements ScoringFactor {
   computeAdjustment(
     food: FoodLibrary,
     _baseScore: number,
-    _ctx: PipelineContext,
+    ctx: PipelineContext,
   ): ScoringAdjustment | null {
     // ── 路径 A：精确预算 ──
     if (this.hasExactBudget && this.budgetPerMeal && this.userCurrency) {
-      const priceInfo = this.getPriceInfo(food.id);
+      // P0-2: 透传 regionCode 到 SeasonalityService，避免跨 region 缓存污染
+      const priceInfo = this.getPriceInfo(food.id, ctx.regionCode ?? null);
       const exactResult = this.tryExactPriceMatch(food, priceInfo);
       if (exactResult !== null) return exactResult; // 命中（含 currency_mismatch 跳过）
       // 否则 silent fallback 路径 B
