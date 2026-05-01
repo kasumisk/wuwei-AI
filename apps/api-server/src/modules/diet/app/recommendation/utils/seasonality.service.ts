@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../../../core/prisma/prisma.service';
 import { RedisCacheService } from '../../../../../core/redis/redis-cache.service';
+import { MetricsService } from '../../../../../core/metrics/metrics.service';
 import { isSouthernHemisphere } from '../../../../../common/config/regional-defaults';
 import {
   buildFoodRegionalFallbackWhere,
@@ -119,6 +120,7 @@ export class SeasonalityService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisCacheService,
+    private readonly metricsService: MetricsService,
   ) {}
 
   /**
@@ -279,24 +281,52 @@ export class SeasonalityService {
    *                   region 的 map，并打 warn — 这是过渡期的兼容路径，
    *                   一旦所有 caller 改完应移除该兜底。
    */
+  /**
+   * P0-4: foodRegionalInfoCoverage 采样计数器。
+   * SeasonalityService.getInfo 在单次推荐内会被多个食物多次调用，
+   * 直接每次 inc 会让 prom-client 客户端聚合开销不可忽略。
+   * 采样率 1/32 足以观察整体 region/season 命中率分布。
+   */
+  private coverageSampleCounter = 0;
+  private static readonly COVERAGE_SAMPLE_RATE = 32;
+
   private getInfo(
     foodId: string,
     regionCode?: string | null,
   ): SeasonalityInfo | undefined {
+    let result: SeasonalityInfo | undefined;
     if (regionCode) {
       this.regionLastAccess.set(regionCode, Date.now());
-      return this.regionalCacheByRegion.get(regionCode)?.get(foodId);
+      result = this.regionalCacheByRegion.get(regionCode)?.get(foodId);
+    } else {
+      // 兼容路径：遍历所有 region map（保留旧行为，避免 caller 一次改完）
+      this.logger.warn(
+        `[seasonality] getInfo called without regionCode for foodId=${foodId}; ` +
+          `fallback to legacy aggregate lookup. Caller MUST be migrated.`,
+      );
+      for (const m of this.regionalCacheByRegion.values()) {
+        const hit = m.get(foodId);
+        if (hit) {
+          result = hit;
+          break;
+        }
+      }
     }
-    // 兼容路径：遍历所有 region map（保留旧行为，避免 caller 一次改完）
-    this.logger.warn(
-      `[seasonality] getInfo called without regionCode for foodId=${foodId}; ` +
-        `fallback to legacy aggregate lookup. Caller MUST be migrated.`,
-    );
-    for (const m of this.regionalCacheByRegion.values()) {
-      const hit = m.get(foodId);
-      if (hit) return hit;
+
+    // P0-4: 采样埋点 food_regional_info_coverage
+    // status:
+    //   no_region — 调用未传 regionCode（链路问题，应该被消灭）
+    //   present   — 传了 regionCode 且查到该食物的区域信息
+    //   missing   — 传了 regionCode 但区域表没该食物（走默认中性分数）
+    this.coverageSampleCounter =
+      (this.coverageSampleCounter + 1) %
+      SeasonalityService.COVERAGE_SAMPLE_RATE;
+    if (this.coverageSampleCounter === 0) {
+      const status = !regionCode ? 'no_region' : result ? 'present' : 'missing';
+      this.metricsService.foodRegionalInfoCoverage.inc({ status });
     }
-    return undefined;
+
+    return result;
   }
 
   /**
