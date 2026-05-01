@@ -3,6 +3,7 @@ const PATH = {
   FILE_PRESIGNED: '/admin/files/presigned-url',
   USER_ADMIN: {
     LOGIN_BY_TOKEN: '/auth/login_by_token',
+    FIREBASE_GOOGLE_LOGIN: '/auth/firebase/google',
     AUTHEN_SEND_CODE: '/auth/send_code',
     AUTHEN_LOGIN: '/auth/login',
     INFO: '/auth/info',

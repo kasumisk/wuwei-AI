@@ -427,8 +427,14 @@ export interface PreferenceSignal {
   substitutionBoost: number;
   /** 菜系偏好 boost（来自 PreferencesProfile，±10%） */
   cuisineBoost: number;
-  /** 综合乘数 = 各信号加权合成 */
+  /** 综合乘数 = 各信号加权合成（clamp 后） */
   combined: number;
+  /**
+   * L7-fix: Beta 分布原始采样值（0~1），用于 trace/debug 可复现性分析。
+   * 记录 rawSample 可在日志中还原当次探索/利用的随机因子，便于排查
+   * "为何某食物得分异常高/低"。
+   */
+  thompsonSample: number;
 }
 
 /**

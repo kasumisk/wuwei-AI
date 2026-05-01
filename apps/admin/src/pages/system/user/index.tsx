@@ -7,8 +7,6 @@ import {
   Popconfirm,
   message,
   Modal,
-  Form,
-  Input,
   Checkbox,
   Spin,
   Alert,
@@ -19,7 +17,7 @@ import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
-  LockOutlined,
+  GoogleOutlined,
   UserOutlined,
   ReloadOutlined,
   TeamOutlined,
@@ -45,7 +43,7 @@ const { Text } = Typography;
 // 路由配置
 export const routeConfig = {
   name: 'UserManagement',
-  title: '用户管理',
+  title: '管理员白名单',
   icon: <UserOutlined />,
   order: 1,
   hideInMenu: false,
@@ -59,11 +57,9 @@ const UserManagement: React.FC = () => {
   const [currentRecord, setCurrentRecord] = useState<User | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
-  const [isPasswordModalVisible, setIsPasswordModalVisible] = useState(false);
   const [isRoleModalVisible, setIsRoleModalVisible] = useState(false);
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
   const actionRef = useRef<ActionType>(null);
-  const [passwordForm] = Form.useForm();
 
   // 获取所有角色
   const { data: rolesData } = useRoles({ pageSize: 100 });
@@ -157,29 +153,6 @@ const UserManagement: React.FC = () => {
     }
   };
 
-  // 打开重置密码弹窗
-  const showPasswordModal = (user: User) => {
-    setCurrentRecord(user);
-    setIsPasswordModalVisible(true);
-    passwordForm.resetFields();
-  };
-
-  // 重置密码
-  const handleResetPassword = async () => {
-    try {
-      const values = await passwordForm.validateFields();
-      if (currentRecord?.id) {
-        await userApi.resetPassword(currentRecord.id, values);
-        message.success('密码重置成功');
-        setIsPasswordModalVisible(false);
-        setCurrentRecord(null);
-        passwordForm.resetFields();
-      }
-    } catch (error: any) {
-      message.error(error.message || '重置密码失败');
-    }
-  };
-
   // 打开角色分配弹窗
   const showRoleModal = (user: User) => {
     setCurrentRecord(user);
@@ -237,7 +210,7 @@ const UserManagement: React.FC = () => {
       valueEnum: {
         '': { text: '全部' },
         admin: { text: '管理员' },
-        user: { text: '用户' },
+        super_admin: { text: '超级管理员' },
       },
       render: (_: any, record: UserInfoDto) => {
         // 优先显示 RBAC 角色
@@ -254,8 +227,8 @@ const UserManagement: React.FC = () => {
         }
         // 兼容旧角色字段
         return (
-          <Tag color={record.role === 'admin' ? 'blue' : 'default'}>
-            {record.role === 'admin' ? '管理员' : '用户'}
+          <Tag color={record.role === 'super_admin' ? 'gold' : 'blue'}>
+            {record.role === 'super_admin' ? '超级管理员' : '管理员'}
           </Tag>
         );
       },
@@ -320,16 +293,6 @@ const UserManagement: React.FC = () => {
               编辑
             </Button>
           </Permission>
-          <Permission permissions="user:update">
-            <Button
-              type="link"
-              size="small"
-              icon={<LockOutlined />}
-              onClick={() => showPasswordModal(record)}
-            >
-              重置密码
-            </Button>
-          </Permission>
           <Permission permissions="user:delete">
             <Popconfirm
               title="确定要删除该用户吗？"
@@ -356,7 +319,7 @@ const UserManagement: React.FC = () => {
 
   // 表单配置
   const formConfig: FormConfig = {
-    title: isEditMode ? '编辑用户' : '新增用户',
+    title: isEditMode ? '编辑管理员白名单' : '新增管理员白名单',
     layout: 'vertical',
     fields: [
       ...(isEditMode
@@ -366,28 +329,18 @@ const UserManagement: React.FC = () => {
               name: 'username',
               label: '用户名',
               type: 'text' as const,
-              required: true,
               fieldProps: {
-                placeholder: '请输入用户名',
-              },
-            },
-            {
-              name: 'password',
-              label: '密码',
-              type: 'password' as const,
-              required: true,
-              fieldProps: {
-                placeholder: '请输入密码',
+                placeholder: '可选，不填时按邮箱自动生成',
               },
             },
           ]),
       {
         name: 'email',
-        label: '邮箱',
+        label: 'Google 邮箱',
         type: 'text',
         required: true,
         fieldProps: {
-          placeholder: '请输入邮箱',
+          placeholder: '请输入允许登录后台的 Google 邮箱',
         },
       },
       {
@@ -413,39 +366,43 @@ const UserManagement: React.FC = () => {
         required: true,
         options: [
           { label: '管理员', value: 'admin' },
-          { label: '用户', value: 'user' },
+          { label: '超级管理员', value: 'super_admin' },
         ],
         fieldProps: {
           placeholder: '请选择角色',
         },
       },
-      ...(isEditMode
-        ? [
-            {
-              name: 'status',
-              label: '状态',
-              type: 'select' as const,
-              required: true,
-              options: [
-                { label: '正常', value: 'active' },
-                { label: '未激活', value: 'inactive' },
-                { label: '已停用', value: 'suspended' },
-              ],
-              fieldProps: {
-                placeholder: '请选择状态',
-              },
-            },
-          ]
-        : []),
+      {
+        name: 'status',
+        label: '白名单状态',
+        type: 'select' as const,
+        required: true,
+        options: [
+          { label: '正常，可登录后台', value: 'active' },
+          { label: '未激活，暂不放行', value: 'inactive' },
+          { label: '已停用，拒绝登录', value: 'suspended' },
+        ],
+        fieldProps: {
+          placeholder: '请选择状态',
+        },
+      },
     ],
   };
 
   return (
     <Card>
+      <Alert
+        type="info"
+        showIcon
+        icon={<GoogleOutlined />}
+        style={{ marginBottom: 16 }}
+        message="后台已切换为 Firebase Google 登录"
+        description="这里的管理员记录就是后台白名单。邮箱命中且状态为“正常”的 Google 账号，才能登录后台。"
+      />
       <ProTable<User>
         actionRef={actionRef}
         rowKey="id"
-        headerTitle="用户列表"
+        headerTitle="管理员白名单"
         columns={columns}
         request={async (params) => {
           try {
@@ -481,7 +438,7 @@ const UserManagement: React.FC = () => {
           </Button>,
           <Permission key="create-permission" permissions="user:create">
             <Button key="create" type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
-              新增用户
+              新增白名单
             </Button>
           </Permission>,
         ]}
@@ -502,31 +459,6 @@ const UserManagement: React.FC = () => {
         loading={createMutation.isPending || updateMutation.isPending}
         width={500}
       />
-
-      {/* 重置密码弹窗 */}
-      <Modal
-        title="重置密码"
-        open={isPasswordModalVisible}
-        onOk={handleResetPassword}
-        onCancel={() => {
-          setIsPasswordModalVisible(false);
-          setCurrentRecord(null);
-          passwordForm.resetFields();
-        }}
-      >
-        <Form form={passwordForm} layout="vertical">
-          <Form.Item
-            name="newPassword"
-            label="新密码"
-            rules={[
-              { required: true, message: '请输入新密码' },
-              { min: 6, message: '密码至少6个字符' },
-            ]}
-          >
-            <Input.Password placeholder="请输入新密码" />
-          </Form.Item>
-        </Form>
-      </Modal>
 
       {/* 角色分配弹窗 */}
       <Modal

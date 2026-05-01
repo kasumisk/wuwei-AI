@@ -21,6 +21,7 @@ import {
   validatePreferencesProfile,
 } from './preferences-profile';
 import type { EnrichedProfileContext } from '../../diet/app/recommendation/types/recommendation.types';
+import { normalizeCuisine } from '../../../common/utils/cuisine.util';
 
 // ─── 域画像聚合体 ───
 
@@ -117,11 +118,19 @@ export class ProfileFactory {
     const declared = ctx.declared;
 
     // 菜系偏好: 从 string[] 转换为权重 map
+    // Risk-6 修复（2026-05-02）: 写入前通过 normalizeCuisine 清洗历史脏数据，
+    //   防止 "sichuan" / "川菜" / "Sichuan" 等异形值在 cuisineWeights 中产生
+    //   多个不同 key，导致 scoring-chain 匹配时 cache key 永久失效。
     const cuisineWeights: Record<string, number> = {};
     const cuisineList =
       declared?.cuisinePreferences ?? ctx.cuisinePreferences ?? [];
     for (const cuisine of cuisineList) {
-      cuisineWeights[cuisine] = 0.8; // 声明偏好 = 0.8 权重
+      const normalized = normalizeCuisine(cuisine);
+      // normalizeCuisine 返回 null 表示无法识别，保留原始值兜底（截为小写）
+      const key = normalized ?? cuisine.toLowerCase().trim();
+      if (key) {
+        cuisineWeights[key] = 0.8; // 声明偏好 = 0.8 权重
+      }
     }
 
     // 多样性容忍度: 从行为画像推断

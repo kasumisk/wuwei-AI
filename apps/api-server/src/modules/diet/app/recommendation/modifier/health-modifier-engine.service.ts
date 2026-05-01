@@ -421,8 +421,25 @@ export class HealthModifierEngineService {
       modifiers.push(...bonusMods);
     }
 
+    // L11-fix: 对任何严重（severe）健康条件，强制 finalMultiplier ≤ 0.5，
+    //          防止高 preference 信号"覆盖"健康约束，导致危险食物仍出现在
+    //          推荐靠前位置。否决已在上方单独处理（return 0），此处仅处理
+    //          未否决但存在 severe 条件的场景（如糖尿病 severe + 高 preference food）。
+    const SEVERE_HEALTH_CLAMP = 0.5;
+    let finalMultiplier = Math.max(0, multiplier);
+
+    if (context?.healthConditions?.length) {
+      const pc =
+        precomputed ?? this.precomputeConditions(context.healthConditions);
+      const hasSevereCondition = pc.severityMap.size > 0
+        && [...pc.severityMap.values()].some((s) => s === 'severe');
+      if (hasSevereCondition && finalMultiplier > SEVERE_HEALTH_CLAMP) {
+        finalMultiplier = SEVERE_HEALTH_CLAMP;
+      }
+    }
+
     return {
-      finalMultiplier: Math.max(0, multiplier),
+      finalMultiplier,
       modifiers,
       isVetoed: false,
     };

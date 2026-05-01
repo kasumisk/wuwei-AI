@@ -472,6 +472,8 @@
   "recommendation.filter_reason.userRejected": "User recently rejected this food",
   "recommendation.food.suggestion.caloriesReached": "Daily calorie target reached",
   "recommendation.food.suggestion.noMoreFood": "Recommend no more food — try water or zero-calorie drinks",
+  "recommendation.food.suggestion.loading": "Loading recommendations, please wait",
+  "recommendation.food.suggestion.popularFallbackTip": "Showing popular foods while your personalized recommendation is being generated",
   "recommendation.health_modifier.celiac_disease.gluten": "Contains gluten",
   "recommendation.health_modifier.celiac_disease.wheat": "Contains wheat",
   "recommendation.health_modifier.diabetes_type2.highGI": "High glycemic food not suitable for type 2 diabetes",

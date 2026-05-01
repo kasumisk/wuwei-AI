@@ -201,12 +201,21 @@ export class PrecomputeService {
   // ─── Cron 调度 ───
 
   /**
-   * 每日凌晨 3:00 触发预计算
+   * P5 修复（2026-05-02）：每日 07:00 触发预计算
+   *
+   * 原定 03:00，但 weight-learner-daily（06:30）尚未运行，
+   * 导致预计算使用的是 T-1 的旧权重，新权重最长延迟 20.5h 才能生效。
+   *
+   * 调度依赖顺序（每日）：
+   *   04:15  cleanup-precomputed   — 清理过期记录
+   *   06:00  learned-ranking       — 每周一更新 segment 排序权重（LearnedRankingService）
+   *   06:30  weight-learner-daily  — 更新全局/区域/用户级评分权重（WeightLearnerService）
+   *   07:00  daily-precompute      — 用最新权重为活跃用户生成次日推荐 ← 本 Cron
    *
    * 1. 查找最近 7 天有饮食记录的活跃用户
    * 2. 为每个用户创建一个 BullMQ job，计算次日三餐推荐
    */
-  @Cron('0 3 * * *', { name: 'daily-precompute' })
+  @Cron('0 7 * * *', { name: 'daily-precompute' })
   async triggerDailyPrecompute(): Promise<void> {
     await this.redisCache.runWithLock(
       'precompute:daily',

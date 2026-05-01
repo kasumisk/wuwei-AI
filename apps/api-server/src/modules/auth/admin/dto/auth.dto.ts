@@ -52,6 +52,13 @@ export class LoginByTokenDto implements ILoginByTokenRequestDto {
   token: string;
 }
 
+export class FirebaseAdminLoginDto {
+  @ApiProperty({ description: 'Firebase ID Token' })
+  @IsString()
+  @IsNotEmpty({ message: 'common.validation.tokenRequired' })
+  idToken: string;
+}
+
 export class RegisterDto implements IRegisterRequestDto {
   @ApiProperty({ description: '用户名', example: 'newuser' })
   @IsString()

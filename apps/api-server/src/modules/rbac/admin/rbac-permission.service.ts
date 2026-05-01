@@ -34,7 +34,9 @@ export class RbacPermissionService {
   ) {}
 
   async findAll(query: RbacPermissionQueryDto) {
-    const { page = 1, pageSize = 10, code, name, type, status } = query;
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.pageSize) || 10;
+    const { code, name, type, status } = query;
 
     const where: any = {};
     if (code) where.code = { contains: code };

@@ -31,6 +31,14 @@ export interface LoginByTokenRequestDto {
 }
 
 /**
+ * Firebase Google 登录
+ */
+export interface FirebaseAdminLoginRequestDto {
+  /** Firebase ID Token */
+  idToken: string;
+}
+
+/**
  * 用户注册
  */
 export interface RegisterRequestDto {

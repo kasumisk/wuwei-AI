@@ -129,6 +129,49 @@ function resolveTimeSlot(hour: number): TimeSlot {
   return 'lateNight';
 }
 
+// ─── L8-fix: 消费场景 → 可接受的购买渠道映射 ───────────────────────────────
+//
+// pipeline-builder.service.ts 硬过滤时使用相同逻辑：
+//   若食物的 availableChannels 与 acceptableSources 有交集 → 保留（不过滤）。
+// 因此到达此因子的食物已通过渠道硬过滤，但 strategy-1 仍用精确的
+// AcquisitionChannel 枚举匹配，会将「通过硬过滤但不精确匹配」的食物
+// 再次施加 ×0.3 双重惩罚。此处复制同一映射，保证两处语义一致。
+// 注意：此映射应与 pipeline-builder.service.ts CHANNEL_TO_SOURCES 保持同步。
+const CHANNEL_TO_ACCEPTABLE_SOURCES: Record<string, Set<string>> = {
+  home_cook: new Set([
+    'supermarket', 'wet_market', 'farmers_market', 'online',
+    'specialty_store', 'butcher', 'butcher_shop', 'bakery',
+    'pharmacy', 'traditional_chinese_medicine_store', 'chinese_medicine_store',
+  ]),
+  delivery: new Set([
+    'restaurant', 'takeout', 'fast_food', 'delivery',
+    'convenience_store', 'bakery',
+  ]),
+  restaurant: new Set(['restaurant']),
+  convenience: new Set(['convenience_store', 'convenience', 'supermarket', 'bakery']),
+  canteen: new Set(['restaurant', 'canteen']),
+};
+
+/**
+ * 判断食物的 availableChannels 是否与当前消费场景兼容。
+ * 无 availableChannels 标注 → 默认全渠道可用 → 返回 true。
+ */
+function isFoodCompatibleWithChannel(
+  food: FoodLibrary,
+  channel: AcquisitionChannel,
+): boolean {
+  if (!food.availableChannels || food.availableChannels.length === 0) return true;
+  // 精确匹配（枚举值一致）
+  if (food.availableChannels.includes(channel)) return true;
+  if (channel === AcquisitionChannel.UNKNOWN) return true;
+  // 宽松匹配：查询渠道对应的可接受来源集合
+  const acceptableSources = CHANNEL_TO_ACCEPTABLE_SOURCES[channel];
+  if (acceptableSources) {
+    return food.availableChannels.some((ch) => acceptableSources.has(ch));
+  }
+  return false;
+}
+
 export class ChannelAvailabilityFactor implements ScoringFactor {
   readonly name = 'channel-availability';
   readonly order = 25; // 在 price-fit(20) 之后
@@ -154,8 +197,11 @@ export class ChannelAvailabilityFactor implements ScoringFactor {
   ): ScoringAdjustment | null {
     // 策略 1：食物有明确渠道标注
     if (food.availableChannels && food.availableChannels.length > 0) {
+      // L8-fix: 原逻辑仅做精确枚举匹配（food.availableChannels.includes(channel)），
+      //         导致已通过 pipeline-builder 硬过滤（宽松来源匹配）的食物在此因子
+      //         被再次施以 ×0.3 双重惩罚。改用与硬过滤相同的兼容性检查。
       const isAvail =
-        food.availableChannels.includes(this.channel) ||
+        isFoodCompatibleWithChannel(food, this.channel) ||
         this.channel === AcquisitionChannel.UNKNOWN;
 
       if (!isAvail) {

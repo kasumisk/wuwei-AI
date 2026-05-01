@@ -13,6 +13,7 @@ import { AdminUsers as AdminUser } from '@prisma/client';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { I18nService } from '../../../core/i18n';
 import { RedisCacheService } from '../../../core/redis/redis-cache.service';
+import { FirebaseAdminService } from '../app/firebase-admin.service';
 import {
   LoginDto,
   LoginByPhoneDto,
@@ -36,6 +37,7 @@ export class AdminService {
     private readonly jwtService: JwtService,
     private readonly i18n: I18nService,
     private readonly redis: RedisCacheService,
+    private readonly firebaseAdminService: FirebaseAdminService,
   ) {}
 
   /**
@@ -79,10 +81,7 @@ export class AdminService {
     // 生成 JWT
     const token = this.generateToken(user as any);
 
-    // 移除密码字段
-    const { password: _loginPwd, ...userWithoutPassword } = user;
-
-    return { token, user: userWithoutPassword as any };
+    return { token, user: this.sanitizeUser(user) as any };
   }
 
   /**
@@ -116,7 +115,7 @@ export class AdminService {
     // 生成 JWT
     const token = this.generateToken(user as any);
 
-    return { token, user: user as any };
+    return { token, user: this.sanitizeUser(user) as any };
   }
 
   /**
@@ -138,12 +137,68 @@ export class AdminService {
       // 生成新的 token
       const newToken = this.generateToken(user);
 
-      return { token: newToken, user: user as any };
+      return { token: newToken, user: this.sanitizeUser(user) as any };
     } catch {
       throw new UnauthorizedException(
         this.i18n.t('auth.tokenInvalidOrExpired'),
       );
     }
+  }
+
+  /**
+   * Firebase Google 登录
+   * - 仅允许在 admin_users 中已授权（白名单）的邮箱登录
+   * - 仅接受 Google provider
+   */
+  async loginWithFirebaseGoogle(idToken: string): Promise<LoginResponseDto> {
+    const decodedToken = await this.firebaseAdminService.verifyIdToken(idToken);
+    if (!decodedToken) {
+      throw new UnauthorizedException(this.i18n.t('auth.tokenInvalidOrExpired'));
+    }
+
+    const provider =
+      decodedToken.firebase?.sign_in_provider ?? decodedToken.sign_in_provider;
+    if (!provider || !['google.com', 'google'].includes(provider)) {
+      throw new UnauthorizedException('仅支持 Firebase Google 登录后台');
+    }
+
+    const email = decodedToken.email?.trim().toLowerCase();
+    if (!email) {
+      throw new UnauthorizedException('Google 账号缺少邮箱信息');
+    }
+
+    if (!decodedToken.email_verified) {
+      throw new UnauthorizedException('请使用已验证邮箱的 Google 账号登录');
+    }
+
+    const user = await this.prisma.adminUsers.findFirst({
+      where: {
+        email: {
+          equals: email,
+          mode: 'insensitive',
+        },
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('该邮箱未加入后台白名单');
+    }
+
+    if (user.status !== AdminUserStatus.ACTIVE) {
+      throw new UnauthorizedException(this.i18n.t('auth.accountDisabled'));
+    }
+
+    const updatedUser = await this.prisma.adminUsers.update({
+      where: { id: user.id },
+      data: {
+        lastLoginAt: new Date(),
+        avatar: user.avatar || decodedToken.picture || undefined,
+        nickname: user.nickname || decodedToken.name || undefined,
+      },
+    });
+
+    const token = this.generateToken(updatedUser);
+    return { token, user: this.sanitizeUser(updatedUser) as any };
   }
 
   /**
@@ -185,11 +240,7 @@ export class AdminService {
 
     // 生成 JWT
     const token = this.generateToken(user as any);
-
-    // 移除密码字段
-    const { password: _pwd, ...userWithoutPassword } = user;
-
-    return { token, user: userWithoutPassword as any };
+    return { token, user: this.sanitizeUser(user) as any };
   }
 
   /**
@@ -229,7 +280,7 @@ export class AdminService {
       throw new UnauthorizedException(this.i18n.t('auth.userNotFound'));
     }
 
-    return user as any;
+    return this.sanitizeUser(user) as any;
   }
 
   /**
@@ -254,7 +305,7 @@ export class AdminService {
     if (!updatedUser) {
       throw new BadRequestException(this.i18n.t('auth.updateFailed'));
     }
-    return updatedUser as any;
+    return this.sanitizeUser(updatedUser) as any;
   }
 
   /**
@@ -277,6 +328,12 @@ export class AdminService {
     };
 
     return this.jwtService.sign(payload);
+  }
+
+  private sanitizeUser(user: AdminUser | null): Omit<AdminUser, 'password'> | null {
+    if (!user) return null;
+    const { password: _password, ...rest } = user;
+    return rest;
   }
 
   /**

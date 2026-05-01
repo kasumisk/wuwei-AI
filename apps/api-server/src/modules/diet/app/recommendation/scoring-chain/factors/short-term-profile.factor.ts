@@ -14,7 +14,8 @@ import type {
 
 export class ShortTermProfileFactor implements ScoringFactor {
   readonly name = 'short-term-profile';
-  readonly order = 25;
+  // C3-fix: 原 order=25 与 ChannelAvailabilityFactor 冲突，调整为 27 以确保执行顺序确定
+  readonly order = 27;
 
   private shortTermProfile: ShortTermProfile | null = null;
   private mealType = '';

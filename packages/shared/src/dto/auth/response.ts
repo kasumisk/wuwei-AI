@@ -28,6 +28,8 @@ export interface UserDto {
   lastLoginAt?: Date | string;
   /** 头像 */
   avatar?: string;
+  /** 显示昵称 */
+  nickname?: string;
 }
 
 /**

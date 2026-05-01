@@ -26,7 +26,9 @@ export class RoleService {
    * 获取角色列表（分页）
    */
   async findAll(query: RoleQueryDto) {
-    const { page = 1, pageSize = 10, code, name, status } = query;
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.pageSize) || 10;
+    const { code, name, status } = query;
 
     const where: any = {};
 

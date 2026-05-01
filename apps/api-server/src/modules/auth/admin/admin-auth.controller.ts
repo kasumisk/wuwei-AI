@@ -14,6 +14,7 @@ import {
   LoginDto,
   LoginByPhoneDto,
   LoginByTokenDto,
+  FirebaseAdminLoginDto,
   RegisterDto,
   SendCodeDto,
   UpdateProfileDto,
@@ -64,6 +65,20 @@ export class AdminController {
   @ApiOperation({ summary: 'Token 登录' })
   async loginByToken(@Body() loginByTokenDto: LoginByTokenDto) {
     return this.adminService.loginByToken(loginByTokenDto.token);
+  }
+
+  /**
+   * Firebase Google 登录
+   */
+  @Public()
+  @Post('firebase/google')
+  @HttpCode(HttpStatus.OK)
+  @StrictThrottle(10, 60)
+  @ApiOperation({ summary: 'Firebase Google 登录' })
+  async loginWithFirebase(
+    @Body() firebaseLoginDto: FirebaseAdminLoginDto,
+  ): Promise<LoginResponseDto> {
+    return this.adminService.loginWithFirebaseGoogle(firebaseLoginDto.idToken);
   }
 
   /**

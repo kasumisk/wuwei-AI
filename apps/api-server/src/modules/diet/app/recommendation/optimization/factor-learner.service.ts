@@ -301,18 +301,17 @@ export class FactorLearnerService {
     feedbackCount: number,
   ): Promise<boolean> {
     try {
-      // 写入各因子强度
+      // L9-fix: 原逐字段 hSet 循环产生 N+1 次 round-trip（N 个因子 + 1 个 meta）。
+      //         改为一次 hMSet 批量写入，将 14 次 RTT 降至 1 次。
+      const fields: Record<string, string> = {};
       for (const [factorName, strength] of strengths) {
-        const ok = await this.redis.hSet(key, factorName, strength.toFixed(6));
-        if (!ok) return false;
+        fields[factorName] = strength.toFixed(6);
       }
-      // 写入反馈次数
-      const ok = await this.redis.hSet(
-        key,
-        META_FEEDBACK_COUNT,
-        String(feedbackCount),
-      );
+      fields[META_FEEDBACK_COUNT] = String(feedbackCount);
+
+      const ok = await this.redis.hMSet(key, fields);
       if (!ok) return false;
+
       // 设置 TTL（仅首次）
       await this.redis.expireNX(key, STATE_TTL_MS);
       return true;

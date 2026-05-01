@@ -472,6 +472,8 @@
   "recommendation.filter_reason.userRejected": "ユーザーが最近この食品を拒否しました",
   "recommendation.food.suggestion.caloriesReached": "本日のカロリー目標達成",
   "recommendation.food.suggestion.noMoreFood": "これ以上の食事は不要です。水かゼロカロリー飲料をどうぞ",
+  "recommendation.food.suggestion.loading": "レコメンドを読み込み中です、しばらくお待ちください",
+  "recommendation.food.suggestion.popularFallbackTip": "人気食品を表示しています。個人向けレコメンドを生成中です",
   "recommendation.health_modifier.celiac_disease.gluten": "グルテンを含みます",
   "recommendation.health_modifier.celiac_disease.wheat": "小麦を含みます",
   "recommendation.health_modifier.diabetes_type2.highGI": "高GI食品は2型糖尿病に適していません",

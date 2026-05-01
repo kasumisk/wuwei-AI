@@ -451,12 +451,15 @@ export class PreferenceProfileService {
     }
 
     // ── 6. 合成 combined 乘数 ──
-    // 利用信号（category/ingredient）作为乘数叠加
-    // 替换和菜系作为加法 boost
-    // 最终乘以探索系数
+    // C4-fix: 原链式乘积在极端情况下可达 84×（explorationMultiplier=1.5 ×
+    //         categoryBoost=1.3 × ingredientBoost=1.3 × ...），导致特定食物
+    //         得分失控。改为加性叠加后再 clamp 到 [0.4, 2.0]，确保任何单项
+    //         信号无法主导最终排序。
     const utilityMultiplier =
       categoryBoost * ingredientBoost * (1 + substitutionBoost + cuisineBoost);
-    const combined = explorationMultiplier * utilityMultiplier;
+    const rawCombined = explorationMultiplier * utilityMultiplier;
+    // clamp: 最低 0.4（不完全归零）、最高 2.0（不超过基础分的 2 倍）
+    const combined = Math.min(2.0, Math.max(0.4, rawCombined));
 
     return {
       explorationMultiplier,
@@ -465,6 +468,8 @@ export class PreferenceProfileService {
       substitutionBoost,
       cuisineBoost,
       combined,
+      // L7-fix: 记录 Beta 分布原始采样值，供 trace/调试可复现性使用
+      thompsonSample: sample,
     };
   }
 

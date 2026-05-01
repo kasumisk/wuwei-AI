@@ -76,18 +76,35 @@ export class PipelineContextFactory {
     const userId = req.userId ?? 'anonymous';
 
     // 阶段 1.5：缺失字段一次性警告（按 userId 去重）
+    // C1-fix: 改为结构化 warn，便于告警系统按 field/fallbackValue 聚合统计。
+    //         DB 已移除 @default，NULL 说明用户真正未设置区域/时区，
+    //         fallback 到 DEFAULT_* 是最后兜底，不应静默无声。
     if (!rawTimezone && !this.warnedMissingTimezone.has(userId)) {
       this.warnedMissingTimezone.add(userId);
       this.logger.warn(
-        `[RegionalTZ] userId=${userId} missing timezone, falling back to default "${DEFAULT_TIMEZONE}". ` +
-          `Please ensure UserProfiles.timezone is populated.`,
+        JSON.stringify({
+          event: 'profile_field_missing',
+          field: 'timezone',
+          userId,
+          fallbackValue: DEFAULT_TIMEZONE,
+          message:
+            'UserProfiles.timezone is NULL — falling back to DEFAULT_TIMEZONE. ' +
+            'Meal timing and seasonal scoring will be inaccurate for non-US users.',
+        }),
       );
     }
     if (!rawRegionCode && !this.warnedMissingRegion.has(userId)) {
       this.warnedMissingRegion.add(userId);
       this.logger.warn(
-        `[RegionalTZ] userId=${userId} missing regionCode, falling back to default "${DEFAULT_REGION_CODE}". ` +
-          `Please ensure UserProfiles.regionCode is populated.`,
+        JSON.stringify({
+          event: 'profile_field_missing',
+          field: 'regionCode',
+          userId,
+          fallbackValue: DEFAULT_REGION_CODE,
+          message:
+            'UserProfiles.regionCode is NULL — falling back to DEFAULT_REGION_CODE. ' +
+            'Regional boost and channel-availability scoring will be US-biased.',
+        }),
       );
     }
 

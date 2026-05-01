@@ -5,6 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { AdminRole, AdminUserStatus } from '../user.types';
 import {
   CreateUserDto,
@@ -122,35 +123,46 @@ export class AdminUserService {
    * 创建管理员用户
    */
   async create(createUserDto: CreateUserDto) {
+    const email = createUserDto.email.trim().toLowerCase();
+    const username = await this.buildUniqueUsername(
+      createUserDto.username?.trim() || this.deriveUsernameFromEmail(email),
+    );
+
     // 检查用户名是否已存在
     const existingByUsername = await this.prisma.adminUsers.findUnique({
-      where: { username: createUserDto.username },
+      where: { username },
     });
     if (existingByUsername) {
       throw new ConflictException(this.i18n.t('user.usernameTaken'));
     }
 
-    if (createUserDto.email) {
-      const existingByEmail = await this.prisma.adminUsers.findUnique({
-        where: { email: createUserDto.email },
-      });
-      if (existingByEmail) {
-        throw new ConflictException(this.i18n.t('user.emailTaken'));
-      }
+    const existingByEmail = await this.prisma.adminUsers.findFirst({
+      where: {
+        email: {
+          equals: email,
+          mode: 'insensitive',
+        },
+      },
+    });
+    if (existingByEmail) {
+      throw new ConflictException(this.i18n.t('user.emailTaken'));
     }
 
-    // 加密密码
-    const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
+    // Firebase Google 登录为主，本地密码只作兼容保留。
+    const rawPassword =
+      createUserDto.password || crypto.randomBytes(24).toString('hex');
+    const hashedPassword = await bcrypt.hash(rawPassword, 10);
 
     const savedUser = await this.prisma.adminUsers.create({
       data: {
-        username: createUserDto.username,
-        email: createUserDto.email,
+        username,
+        email,
         password: hashedPassword,
         role:
-          createUserDto.role === 'admin'
+          createUserDto.role === AdminRole.SUPER_ADMIN
             ? AdminRole.SUPER_ADMIN
-            : (AdminRole.ADMIN as any),
+            : AdminRole.ADMIN,
+        status: createUserDto.status || AdminUserStatus.ACTIVE,
         nickname: createUserDto.nickname,
         phone: createUserDto.phone,
       },
@@ -171,9 +183,15 @@ export class AdminUserService {
     }
 
     // 检查邮箱是否被其他用户使用
-    if (updateUserDto.email && updateUserDto.email !== user.email) {
-      const existingUser = await this.prisma.adminUsers.findUnique({
-        where: { email: updateUserDto.email },
+    const normalizedEmail = updateUserDto.email?.trim().toLowerCase();
+    if (normalizedEmail && normalizedEmail !== user.email?.toLowerCase()) {
+      const existingUser = await this.prisma.adminUsers.findFirst({
+        where: {
+          email: {
+            equals: normalizedEmail,
+            mode: 'insensitive',
+          },
+        },
       });
       if (existingUser) {
         throw new ConflictException(this.i18n.t('user.emailInUse'));
@@ -182,7 +200,10 @@ export class AdminUserService {
 
     const updatedUser = await this.prisma.adminUsers.update({
       where: { id },
-      data: updateUserDto as any,
+      data: {
+        ...updateUserDto,
+        email: normalizedEmail ?? updateUserDto.email,
+      } as any,
     });
 
     const { password, ...rest } = updatedUser;
@@ -301,5 +322,25 @@ export class AdminUserService {
     }
 
     return { message: this.i18n.t('user.rolesAssigned') };
+  }
+
+  private deriveUsernameFromEmail(email: string): string {
+    const [localPart] = email.split('@');
+    return localPart.replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 40) || 'admin';
+  }
+
+  private async buildUniqueUsername(base: string): Promise<string> {
+    let candidate = base;
+    let counter = 0;
+
+    while (true) {
+      const exists = await this.prisma.adminUsers.findUnique({
+        where: { username: candidate },
+      });
+      if (!exists) return candidate;
+
+      counter += 1;
+      candidate = `${base.slice(0, 32)}_${counter}`;
+    }
   }
 }

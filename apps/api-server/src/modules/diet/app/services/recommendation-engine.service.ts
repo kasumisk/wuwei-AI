@@ -1203,6 +1203,33 @@ export class RecommendationEngineService implements OnModuleInit {
    * 设计决策：不注入 AnalysisEventListener（food 模块），避免 DietModule ↔ FoodModule 循环依赖。
    * 通过 TieredCacheManager.createNamespace 的幂等性，两边共享同一个 namespace 实例。
    */
+  /**
+   * Risk-4 修复（2026-05-02）: 新用户无预计算缓存时的热门榜单 fallback
+   *
+   * 从已缓存食物池中按 popularity 降序取 topN 条，用于实时路径超时降级。
+   * 利用 foodPoolCache（TieredCache，L1 内存），调用耗时 <5ms。
+   *
+   * @param mealType 餐次（暂不按餐次过滤，热门榜单全餐通用）
+   * @param topN 返回条数，默认 5
+   */
+  async getTopPopularFoods(
+    mealType: string,
+    topN = 5,
+  ): Promise<FoodLibrary[]> {
+    try {
+      const allFoods = await this.foodPoolCache.getVerifiedFoods();
+      return allFoods
+        .filter((f) => (f.popularity ?? 0) > 0)
+        .sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0))
+        .slice(0, topN);
+    } catch (err) {
+      this.logger.warn(
+        `getTopPopularFoods 失败，返回空列表: ${(err as Error).message}`,
+      );
+      return [];
+    }
+  }
+
   private async getAnalysisProfile(
     userId: string,
   ): Promise<AnalysisShortTermProfile | null> {

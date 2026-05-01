@@ -23,7 +23,9 @@ export class PermissionTemplateService {
   ) {}
 
   async findAll(query: PermissionTemplateQueryDto) {
-    const { page = 1, pageSize = 20, code, name } = query;
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.pageSize) || 20;
+    const { code, name } = query;
 
     const where: any = {};
     if (code) where.code = { contains: code };

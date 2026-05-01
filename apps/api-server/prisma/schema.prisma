@@ -2226,19 +2226,21 @@ model UserProfiles {
   /// 是否愿意提前备餐（周末备菜等）
   mealPrepWilling           Boolean?                          @default(false) @map("meal_prep_willing")
   /// 所在地区代码（格式兼容 food-regional-info.util.ts parseFoodRegionScope：'US' / 'US-CA' / 'US-CA-LAX'）
-  /// 默认 US（北美英文用户）；与 DEFAULT_REGION_CODE 常量保持同步
-  regionCode                String?                           @default("US") @map("region_code") @db.VarChar(20)
+  /// C1-fix: 移除 DB 层 @default("US")，业务 fallback 统一由 pipeline-context-factory 处理；
+  ///          NULL = 用户尚未设置地区，不应静默被 DB 填为 US。
+  regionCode                String?                           @map("region_code") @db.VarChar(20)
   /// 当前新手引导步骤（0=未开始，步骤数递增）
   onboardingStep            Int?                              @default(0) @map("onboarding_step")
   /// 档案数据完整度 0.00-1.00（填写字段数/总字段数）
   dataCompleteness          Decimal?                          @default(0) @map("data_completeness") @db.Decimal(3, 2)
   /// 档案版本号（每次修改递增，用于触发重新计算推荐）
   profileVersion            Int?                              @default(1) @map("profile_version")
-  /// 用户时区（IANA 格式）；默认 America/New_York，与 DEFAULT_TIMEZONE 常量保持同步
-  timezone                  String                            @default("America/New_York") @db.VarChar(50)
+  /// 用户时区（IANA 格式）；C1-fix: 改为 nullable，业务 fallback 由 pipeline-context-factory 处理；
+  /// NULL = 用户尚未授权/设置时区，不应静默默认为 America/New_York（对非美用户严重错误）。
+  timezone                  String?                           @db.VarChar(50)
   /// 用户语言区域标签（BCP 47，如 "en-US" / "zh-CN"）；用于 i18n 文案及 regionCode 推断兜底
-  /// 默认 en-US，与 DEFAULT_LOCALE 常量保持同步
-  locale                    String?                           @default("en-US") @map("locale") @db.VarChar(10)
+  /// C1-fix: 移除 DB 层 @default("en-US")，NULL 表示用户未设置，由业务层决策 fallback。
+  locale                    String?                           @map("locale") @db.VarChar(10)
   /// 用户货币代码（ISO 4217，如 "USD" / "CNY"）；阶段 4.1 PriceFitFactor 使用
   currencyCode              String?                           @map("currency_code") @db.VarChar(3)
   /// 用户单餐预算（用户本地货币）；阶段 4.1 PriceFitFactor 使用

@@ -358,8 +358,22 @@ export class WeightLearnerService {
     }
 
     // ── 全局学习（按 goalType 分组）──
+    // C2-fix: 三路学习（global / region / user）共用同一 feedbacks 引用，
+    //         内部 Map.push() 操作不会相互影响（每路建立独立 Map），
+    //         但将来若任一路对元素做原地修改将产生隐性耦合。
+    //         此处为每一路传入独立浅拷贝，彻底切断共享引用。
+    //
+    // 三路样本集的语义边界：
+    //   global  = 全量 feedbacks（跨所有 userId/region，代表全局分布）
+    //   region  = 全量 feedbacks（learnRegionWeights 内部自行按 region 分组过滤）
+    //   user    = 全量 feedbacks（learnUserWeights 内部自行按 userId 分组过滤）
+    // 三路使用独立浅拷贝，防止任一路对数组/元素的原地修改影响其他路。
+    const globalFeedbacks = feedbacks.slice();
+    const regionFeedbacks = feedbacks.slice();
+    const userFeedbacks = feedbacks.slice();
+
     const globalGrouped = new Map<string, FeedbackWithScores[]>();
-    for (const fb of feedbacks) {
+    for (const fb of globalFeedbacks) {
       const group = globalGrouped.get(fb.goalType) || [];
       group.push(fb);
       globalGrouped.set(fb.goalType, group);
@@ -411,10 +425,10 @@ export class WeightLearnerService {
     }
 
     // ── 用户级学习（按 userId+goalType 分组）──
-    await this.learnUserWeights(feedbacks);
+    await this.learnUserWeights(userFeedbacks);
 
     // ── P3-2.6: 区域级学习（按 region+goalType 分组）──
-    await this.learnRegionWeights(feedbacks);
+    await this.learnRegionWeights(regionFeedbacks);
 
     return results;
   }

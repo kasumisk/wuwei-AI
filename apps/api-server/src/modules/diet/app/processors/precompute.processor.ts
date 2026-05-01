@@ -8,7 +8,14 @@
  * 1. 获取用户画像
  * 2. 获取用户当前摄入（默认 consumed=0，因为是预计算次日）
  * 3. 调用 RecommendationEngineService 生成各餐推荐
- * 4. 存储到 precomputed_recommendations 表
+ * 4. 存储到 precomputed_recommendations 表（按所有已知渠道各存一份）
+ *
+ * 5.3 修复（2026-05-02）：
+ *   原实现 savePrecomputed 不传 channel，全部写为 'unknown'，
+ *   导致 (userId, date, mealType, channel) 唯一索引的 channel 槽被
+ *   'unknown' 占满，真实渠道（app/web/miniprogram）查询时永远未命中。
+ *   现改为：推荐引擎只跑一次，结果复用，为每个已知渠道（含 unknown）
+ *   各 upsert 一条记录，确保所有渠道都能命中预计算缓存。
  */
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
@@ -29,6 +36,10 @@ import {
   UserProfileConstraints,
   MealTarget,
 } from '../recommendation/types/recommendation.types';
+import { KNOWN_CHANNELS } from '../recommendation/utils/channel';
+
+/** 5.3 修复: 批量预计算时写入的渠道列表（所有已知渠道，含 unknown 兜底） */
+const PRECOMPUTE_CHANNELS = KNOWN_CHANNELS;
 
 @Processor(QUEUE_NAMES.RECOMMENDATION_PRECOMPUTE)
 export class PrecomputeProcessor extends WorkerHost {
@@ -131,13 +142,22 @@ export class PrecomputeProcessor extends WorkerHost {
               userConstraints,
             );
 
-          // 4. 存储
-          await this.precomputeService.savePrecomputed(
-            userId,
-            date,
-            mealType,
-            result,
-            scenarioResults as unknown as Record<string, unknown>,
+          // 4. 5.3 修复: 为所有已知渠道各存一份预计算结果
+          //    推荐引擎只跑一次（渠道差异在实时路径体现），
+          //    预计算作为兜底缓存，所有渠道共享同一份结果内容。
+          //    这样无论用户从 app/web/miniprogram/api 哪个渠道访问，
+          //    都能命中预计算缓存，而不是因 channel='unknown' 独占唯一索引槽。
+          await Promise.all(
+            PRECOMPUTE_CHANNELS.map((channel) =>
+              this.precomputeService.savePrecomputed(
+                userId,
+                date,
+                mealType,
+                result,
+                scenarioResults as unknown as Record<string, unknown>,
+                channel,
+              ),
+            ),
           );
 
           // 更新 consumed（后续餐次基于已消耗量计算）
@@ -181,3 +201,4 @@ export class PrecomputeProcessor extends WorkerHost {
     }
   }
 }
+

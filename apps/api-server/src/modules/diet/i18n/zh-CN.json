@@ -472,6 +472,8 @@
   "recommendation.filter_reason.userRejected": "用户近期拒绝了该食物",
   "recommendation.food.suggestion.caloriesReached": "今日热量已达标",
   "recommendation.food.suggestion.noMoreFood": "建议不再进食，喝水或零卡饮品",
+  "recommendation.food.suggestion.loading": "正在加载推荐，请稍候",
+  "recommendation.food.suggestion.popularFallbackTip": "为您展示当前热门食物，个性化推荐正在生成中",
   "recommendation.health_modifier.celiac_disease.gluten": "含麸质成分",
   "recommendation.health_modifier.celiac_disease.wheat": "含小麦成分",
   "recommendation.health_modifier.diabetes_type2.highGI": "高升糖食物不适合2型糖尿病",

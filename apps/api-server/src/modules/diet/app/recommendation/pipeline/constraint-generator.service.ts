@@ -35,6 +35,9 @@ export class ConstraintGeneratorService {
     let maxSodium: number | undefined;
     let maxPurine: number | undefined;
     let maxFat: number | undefined;
+    // L10-fix: 单次请求中 getUserLocalHour 会被调用两次（薄弱时段检查 + 暴食风险
+    //          时段检查），且参数相同（同一 timezone）。提前计算一次供两处复用。
+    const localHourForConstraints = getUserLocalHour(timezone || DEFAULT_TIMEZONE);
 
     // 目标驱动
     if (goalType === 'fat_loss') {
@@ -153,7 +156,8 @@ export class ConstraintGeneratorService {
 
       // 薄弱时段 → 更严格约束
       // V5: 使用 IANA 时区替代 V4 的 timezoneOffset 数字
-      const hour = getUserLocalHour(timezone || DEFAULT_TIMEZONE);
+      // L10-fix: 复用方法顶部预先计算的 localHourForConstraints，不重复调用。
+      const hour = localHourForConstraints;
       const isWeakSlot = userProfile.weakTimeSlots?.some((slot) => {
         if (slot === 'afternoon' && hour >= 14 && hour < 17) return true;
         if (slot === 'evening' && hour >= 18 && hour < 21) return true;
@@ -188,7 +192,8 @@ export class ConstraintGeneratorService {
     // V6.3 P1-3: 暴食风险时段紧缩 — 当前小时处于用户的暴食高风险时段时，
     // 收紧卡路里上限，并排除高卡/甜品/油炸类食物
     let maxCalories = target.calories * tuning.calorieCeilingMultiplier;
-    const currentHour = getUserLocalHour(timezone || DEFAULT_TIMEZONE);
+    // L10-fix: 复用方法顶部预先计算的 localHourForConstraints，不重复调用。
+    const currentHour = localHourForConstraints;
     if (bingeRiskHours?.length && bingeRiskHours.includes(currentHour)) {
       maxCalories = target.calories * tuning.bingeRiskCalorieMultiplier;
       excludeTags.push('high_calorie', 'dessert', 'fried');

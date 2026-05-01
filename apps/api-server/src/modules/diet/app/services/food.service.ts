@@ -255,11 +255,15 @@ export class FoodService {
     }
 
     // V6 Phase 1.10: 优先查询预计算结果（延迟 < 200ms）
+    // 5.3 修复: getMealSuggestion 当前无 channel 入参（待接 client-context middleware）；
+    //   先传 'unknown' 以命中 processor 为 unknown 存储的兜底预计算缓存。
+    //   接入 X-Client-Type header 后，将 channel 透传至此并移除该注释。
     const todayStr = new Date().toISOString().slice(0, 10);
     const precomputed = await this.precomputeService.getPrecomputed(
       userId,
       todayStr,
       nextMeal,
+      'unknown',
     );
     if (precomputed) {
       const { result: mainRec, scenarioResults } = precomputed;
@@ -419,9 +423,22 @@ export class FoodService {
         }
       : undefined;
 
+    // Risk-4 修复（2026-05-02）: 实时路径超时保护 + 热门榜单 fallback
+    // 新用户无预计算缓存时，profileAggregator 多轮 Redis 查询 + 全量 food 池加载
+    // 可能导致延迟 >3s。使用 Promise.race 设置 2500ms 超时门槛，
+    // 超时后立即返回按 popularity 降序的热门榜单，避免用户长等。
+    // 后台完整推荐计算继续执行并写入预计算缓存，下次请求可命中。
+    /** 实时推荐超时阈值（ms） */
+    const REALTIME_TIMEOUT_MS = 2500;
+
+    /** 创建超时 Promise，resolve 为 null 表示超时 */
+    const timeoutPromise = new Promise<null>((resolve) =>
+      setTimeout(() => resolve(null), REALTIME_TIMEOUT_MS),
+    );
+
     // 并行获取：通用推荐 + 场景化推荐
     const startTime = Date.now();
-    const [mainRec, scenarioRecs] = await Promise.all([
+    const fullRecommendPromise = Promise.all([
       this.recommendationEngine.recommendMeal(
         userId,
         nextMeal,
@@ -441,6 +458,62 @@ export class FoodService {
         userConstraints,
       ),
     ]);
+
+    // Race: 完整推荐 vs 超时
+    const raceResult = await Promise.race([fullRecommendPromise, timeoutPromise]);
+
+    if (raceResult === null) {
+      // ─── 超时降级：返回热门榜单 ───
+      const latencyMs = Date.now() - startTime;
+      this.logger.warn(
+        `实时推荐超时 (>${REALTIME_TIMEOUT_MS}ms, elapsed=${latencyMs}ms), 降级到热门榜单: userId=${userId}, meal=${nextMeal}`,
+      );
+
+      // 后台继续完整推荐并触发预计算写入（fire-and-forget）
+      fullRecommendPromise.catch((err) =>
+        this.logger.warn(
+          `后台推荐计算失败 (userId=${userId}): ${(err as Error).message}`,
+        ),
+      );
+
+      const popularFoods =
+        await this.recommendationEngine.getTopPopularFoods(nextMeal);
+      const popularFoodText =
+        popularFoods.length > 0
+          ? popularFoods.map((f) => f.name).join('、')
+          : t('food.suggestion.loading', {}, locale);
+
+      this.eventEmitter.emit(
+        DomainEvents.RECOMMENDATION_GENERATED,
+        new RecommendationGeneratedEvent(userId, nextMeal, popularFoods.length, latencyMs, false),
+      );
+
+      const fallbackResult: MealSuggestionResponse = {
+        mealType: nextMeal,
+        remainingCalories: remaining,
+        suggestion: {
+          foods: popularFoodText,
+          foodItems: popularFoods.map((f) => ({
+            foodId: f.id,
+            name: f.name,
+            servingDesc: f.standardServingDesc || '1份',
+            calories: f.calories ?? 0,
+            protein: f.protein ?? 0,
+            fat: f.fat ?? 0,
+            carbs: f.carbs ?? 0,
+            category: f.category || '',
+          })),
+          calories: popularFoods.reduce((s, f) => s + (f.calories ?? 0), 0),
+          tip: t('food.suggestion.popularFallbackTip', {}, locale),
+        },
+      };
+
+      this.setToStickinessCache(cacheKey, fallbackResult, summary.totalCalories || 0);
+      return fallbackResult;
+    }
+
+    // ─── 正常路径：完整推荐成功 ───
+    const [mainRec, scenarioRecs] = raceResult;
     const latencyMs = Date.now() - startTime;
 
     // recommendByScenario 没有内置翻译注入，这里补注 displayName

@@ -11,18 +11,16 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import {
-  GetUsersQueryDto as IGetUsersQueryDto,
-  CreateUserDto as ICreateUserDto,
-  UpdateUserDto as IUpdateUserDto,
   ResetPasswordDto as IResetPasswordDto,
   ManagementUserStatus,
 } from '@ai-platform/shared';
-import { UserRole } from '@ai-platform/shared';
+
+type ManagementAdminRole = 'admin' | 'super_admin';
 
 /**
  * 获取用户列表查询参数
  */
-export class GetUsersQueryDto implements IGetUsersQueryDto {
+export class GetUsersQueryDto {
   @ApiProperty({ description: '页码', required: false, default: 1 })
   @IsOptional()
   @IsInt()
@@ -42,10 +40,14 @@ export class GetUsersQueryDto implements IGetUsersQueryDto {
   @IsString()
   keyword?: string;
 
-  @ApiProperty({ description: '角色筛选', enum: UserRole, required: false })
+  @ApiProperty({
+    description: '角色筛选',
+    enum: ['admin', 'super_admin'],
+    required: false,
+  })
   @IsOptional()
-  @IsEnum(UserRole)
-  role?: UserRole;
+  @IsEnum(['admin', 'super_admin'])
+  role?: ManagementAdminRole;
 
   @ApiProperty({
     description: '状态筛选',
@@ -60,28 +62,36 @@ export class GetUsersQueryDto implements IGetUsersQueryDto {
 /**
  * 创建用户 DTO
  */
-export class CreateUserDto implements ICreateUserDto {
-  @ApiProperty({ description: '用户名', example: 'newuser' })
+export class CreateUserDto {
+  @ApiProperty({
+    description: '用户名，不传时后端按邮箱自动生成',
+    example: 'newuser',
+    required: false,
+  })
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   @MinLength(3)
-  username: string;
+  username?: string;
 
   @ApiProperty({ description: '邮箱', example: 'user@example.com' })
   @IsEmail()
   @IsNotEmpty()
   email: string;
 
-  @ApiProperty({ description: '密码', example: 'password123' })
+  @ApiProperty({
+    description: '密码，Firebase Google 登录场景下可为空',
+    example: 'password123',
+    required: false,
+  })
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   @MinLength(6)
-  password: string;
+  password?: string;
 
-  @ApiProperty({ description: '角色', enum: UserRole })
-  @IsEnum(UserRole)
+  @ApiProperty({ description: '角色', enum: ['admin', 'super_admin'] })
+  @IsEnum(['admin', 'super_admin'])
   @IsNotEmpty()
-  role: UserRole;
+  role: ManagementAdminRole;
 
   @ApiProperty({ description: '昵称', required: false })
   @IsOptional()
@@ -92,12 +102,21 @@ export class CreateUserDto implements ICreateUserDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @ApiProperty({
+    description: '状态',
+    enum: ManagementUserStatus,
+    required: false,
+  })
+  @IsOptional()
+  @IsEnum(ManagementUserStatus)
+  status?: ManagementUserStatus;
 }
 
 /**
  * 更新用户 DTO
  */
-export class UpdateUserDto implements IUpdateUserDto {
+export class UpdateUserDto {
   @ApiProperty({ description: '邮箱', required: false })
   @IsOptional()
   @IsEmail()
@@ -113,10 +132,14 @@ export class UpdateUserDto implements IUpdateUserDto {
   @IsString()
   phone?: string;
 
-  @ApiProperty({ description: '角色', enum: UserRole, required: false })
+  @ApiProperty({
+    description: '角色',
+    enum: ['admin', 'super_admin'],
+    required: false,
+  })
   @IsOptional()
-  @IsEnum(UserRole)
-  role?: UserRole;
+  @IsEnum(['admin', 'super_admin'])
+  role?: ManagementAdminRole;
 
   @ApiProperty({
     description: '状态',

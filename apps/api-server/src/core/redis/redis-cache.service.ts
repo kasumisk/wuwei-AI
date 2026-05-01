@@ -386,6 +386,24 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * L9-fix: 批量写入 hash 字段（1 次 round-trip 替代 N 次 HSET 循环）。
+   *
+   * 使用 ioredis `hset(key, Record<string,string>)` 重载，
+   * 底层会自动展开为单个 HMSET 命令。
+   */
+  async hMSet(key: string, fields: Record<string, string>): Promise<boolean> {
+    if (!this._isConnected || !this.client) return false;
+    if (Object.keys(fields).length === 0) return true;
+    try {
+      await this.client.hset(key, fields);
+      return true;
+    } catch (err) {
+      this.logger.debug(`Redis HMSET failed for ${key}: ${err}`);
+      return false;
+    }
+  }
+
+  /**
    * 设置 key 过期时间（如果尚未设置）
    *
    * V6.6 注意：ioredis 的 pexpire 不支持 NX 选项（需 Redis 7.0+）。

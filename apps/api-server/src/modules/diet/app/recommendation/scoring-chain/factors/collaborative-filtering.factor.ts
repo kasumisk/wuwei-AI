@@ -13,7 +13,8 @@ import type {
 
 export class CollaborativeFilteringFactor implements ScoringFactor {
   readonly name = 'collaborative-filtering';
-  readonly order = 20;
+  // C3-fix: 原 order=20 与 PriceFitFactor 冲突，调整为 22 以确保执行顺序确定
+  readonly order = 22;
 
   private cfScores: Record<string, number> = {};
   private cfBoostCap = 0.15;

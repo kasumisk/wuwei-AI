@@ -15,6 +15,10 @@ export interface LoginByTokenParams {
   token: string;
 }
 
+export interface FirebaseAdminLoginParams {
+  idToken: string;
+}
+
 const authApi = {
   /**
    * Token 登录
@@ -22,6 +26,10 @@ const authApi = {
    */
   authBytoken: (params: LoginByTokenParams): Promise<LoginResponseDto> => {
     return request.post(PATH.USER_ADMIN.LOGIN_BY_TOKEN, params);
+  },
+
+  firebaseGoogleLogin: (params: FirebaseAdminLoginParams): Promise<LoginResponseDto> => {
+    return request.post(PATH.USER_ADMIN.FIREBASE_GOOGLE_LOGIN, params);
   },
 
   /**

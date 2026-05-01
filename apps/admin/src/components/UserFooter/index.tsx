@@ -10,6 +10,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useUserStore, useThemeStore } from '@/store';
 import type { MenuProps } from 'antd';
+import { signOutAdminFirebase } from '@/services/firebaseAuth';
 
 const { Text } = Typography;
 
@@ -23,7 +24,8 @@ const UserFooter: React.FC<UserFooterProps> = ({ collapsed = false }) => {
   const navigate = useNavigate();
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await signOutAdminFirebase().catch(() => undefined);
     logout();
     navigate('/login');
   };
@@ -38,7 +40,7 @@ const UserFooter: React.FC<UserFooterProps> = ({ collapsed = false }) => {
 
   const handleLogoutConfirm = () => {
     setLogoutModalVisible(false);
-    handleLogout();
+    void handleLogout();
   };
 
   const handleLogoutCancel = () => {

@@ -24,6 +24,7 @@ import {
   type ScoringChainResult,
   type ScoringFactor,
 } from './scoring-factor.interface';
+import { normalizeCuisine } from '../../../../../common/utils/cuisine.util';
 
 @Injectable()
 export class ScoringChainService {
@@ -43,6 +44,24 @@ export class ScoringChainService {
   registerFactors(factors: ScoringFactor[]): void {
     this.factors.push(...factors);
     this.factors.sort((a, b) => a.order - b.order);
+
+    // C3-fix: 注册后校验 order 唯一性，防止执行顺序非确定
+    const orderSet = new Set<number>();
+    const duplicates: string[] = [];
+    for (const f of this.factors) {
+      if (orderSet.has(f.order)) {
+        duplicates.push(`${f.name}(${f.order})`);
+      }
+      orderSet.add(f.order);
+    }
+    if (duplicates.length > 0) {
+      this.logger.error(
+        `[ScoringChain] Duplicate factor orders detected — execution order is non-deterministic! ` +
+          `Duplicates: [${duplicates.join(', ')}]. ` +
+          `Assign unique order values to each ScoringFactor.`,
+      );
+    }
+
     this.logger.log(
       `Registered ${factors.length} scoring factors, total=${this.factors.length}: ` +
         `[${this.factors.map((f) => `${f.name}(${f.order})`).join(', ')}]`,
@@ -230,11 +249,14 @@ export class ScoringChainService {
         if (results[i].finalScore > results[topIdx].finalScore) topIdx = i;
       }
       const topCuisine = results[topIdx].food.cuisine;
+      // C5-fix: 原用 .toLowerCase().trim()，与 preference-profile.service.ts 中
+      //         使用 normalizeCuisine() 查表的口径不一致（例如 "sichuan/川菜/Sichuan"
+      //         会有不同结果）。统一改用 normalizeCuisine 保证两处命中逻辑一致。
       const userCuisineSet = new Set(
-        userCuisines.map((c) => c.toLowerCase().trim()),
+        userCuisines.map((c) => normalizeCuisine(c)).filter((c) => c !== null),
       );
       const hit =
-        topCuisine && userCuisineSet.has(topCuisine.toLowerCase().trim());
+        topCuisine && userCuisineSet.has(normalizeCuisine(topCuisine));
       this.metricsService.cuisineAffinityHit.inc({
         hit: hit ? 'yes' : 'no',
       });

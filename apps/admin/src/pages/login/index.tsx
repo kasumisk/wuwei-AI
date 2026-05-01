@@ -1,20 +1,13 @@
-import { LoginFormPage, ProFormText, ProFormCaptcha } from '@ant-design/pro-components';
-import { LockOutlined, MailOutlined } from '@ant-design/icons';
-import { Tabs, ConfigProvider, theme, App } from 'antd';
+import { GoogleOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
+import { App, Button, Card, ConfigProvider, Space, Typography, theme } from 'antd';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useUserStore, useThemeStore } from '@/store';
 import authApi from '@/services/authService';
+import { signInAdminWithGoogle } from '@/services/firebaseAuth';
+import { useUserStore, useThemeStore } from '@/store';
 import type { ManualRouteConfig } from '@/types/route';
-import type { SendCodeRequestDto } from '@ai-platform/shared';
 
-type LoginType = 'email';
-
-// Validate email format
-const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-const isValidEmail = (email: string): boolean => {
-  return emailRegex.test(email);
-};
+const { Paragraph, Text, Title } = Typography;
 
 export const routeConfig: ManualRouteConfig = {
   meta: {
@@ -25,174 +18,95 @@ export const routeConfig: ManualRouteConfig = {
 };
 
 const LoginContent: React.FC = () => {
-  const [loginType, setLoginType] = useState<LoginType>('email');
   const [loading, setLoading] = useState(false);
-  const [captchaLoading, setCaptchaLoading] = useState(false);
-  const [email, setEmail] = useState<string>('');
   const navigate = useNavigate();
   const { setUser, setToken } = useUserStore();
   const { mode } = useThemeStore();
   const { message } = App.useApp();
 
-  const handleSubmit = async (values: Record<string, unknown>) => {
+  const handleGoogleLogin = async () => {
     setLoading(true);
     try {
-      const emailValue = values.email as string;
-      const captcha = values.captcha as string;
+      const idToken = await signInAdminWithGoogle();
+      const response = await authApi.firebaseGoogleLogin({ idToken });
 
-      // 调用登录接口
-      const loginParams = {
-        username: emailValue,
-        password: captcha,
-      };
-
-      const response = await authApi.login(loginParams);
-
-      console.log('token', response.token);
       setToken(response.token);
-
-      // 登录成功后获取用户信息
-      // const userInfo = await authApi.getUserInfo();
-
-      // // 更新用户状态
-      setUser({
-        ...response.user,
-      });
-
-      message.success('Login successful!');
+      setUser(response.user);
+      message.success('登录成功');
       navigate('/dashboard');
-    } catch (error) {
-      console.error('登录失败:', error);
-      message.error('Login failed, please check your email and verification code');
+    } catch (error: any) {
+      console.error('Firebase Google 登录失败:', error);
+      message.error(error?.message || '登录失败，请确认你已加入后台白名单');
     } finally {
       setLoading(false);
     }
   };
 
-  // 发送验证码
-  const handleGetCaptcha = async (emailValue: string) => {
-    setCaptchaLoading(true);
-    try {
-      if (!emailValue || !isValidEmail(emailValue)) {
-        message.error('Please enter a valid email address first');
-        throw new Error('Invalid email format');
-      }
-
-      const sendCodeParams: SendCodeRequestDto = {
-        phone: emailValue,
-        type: 'login',
-      };
-
-      await authApi.sendCode(sendCodeParams);
-      message.success('Verification code has been sent to your email');
-    } catch (error) {
-      if (error instanceof Error && error.message === 'Invalid email format') {
-        // Error message already displayed, no need to repeat
-      } else {
-        message.error('Failed to send verification code, please try again');
-      }
-      throw error; // 抛出错误以阻止倒计时
-    } finally {
-      setCaptchaLoading(false);
-    }
-  };
-
   const isDark = mode === 'dark';
-
-  // 动态样式配置
-  const containerStyle = {
-    backgroundColor: isDark ? 'rgba(0, 0, 0, 0.85)' : 'rgba(0, 0, 0, 0.65)',
-    backdropFilter: 'blur(4px)',
-  };
 
   return (
     <div
       style={{
-        backgroundColor: isDark ? '#141414' : 'white',
-        height: '100vh',
-        transition: 'background-color 0.3s ease',
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: isDark
+          ? 'radial-gradient(circle at top, #1f2937 0%, #0f172a 45%, #020617 100%)'
+          : 'radial-gradient(circle at top, #dbeafe 0%, #f8fafc 45%, #e2e8f0 100%)',
+        padding: 24,
       }}
     >
-      <LoginFormPage
-        backgroundImageUrl="https://mdn.alipayobjects.com/yuyan_qk0oxh/afts/img/V-_oS6r-i7wAAAAAAAAAAAAAFl94AQBr"
-        backgroundVideoUrl="https://gw.alipayobjects.com/v/huamei_gcee1x/afts/video/jXRBRK_VAwoAAAAAAAAAAAAAK4eUAQBr"
-        logo={<img alt="logo" src="/logo.svg" />}
-        title={<span className="text-white">Card3 Printer</span>}
-        containerStyle={containerStyle}
-        subTitle={<span className="text-white">Card3 Print Management System</span>}
-        loading={loading}
-        onFinish={handleSubmit}
+      <Card
+        style={{
+          width: '100%',
+          maxWidth: 440,
+          borderRadius: 20,
+          boxShadow: isDark
+            ? '0 24px 60px rgba(0, 0, 0, 0.35)'
+            : '0 24px 60px rgba(15, 23, 42, 0.12)',
+        }}
       >
-        <Tabs
-          centered
-          activeKey={loginType}
-          onChange={(activeKey) => setLoginType(activeKey as LoginType)}
-          items={[
-            {
-              key: 'email',
-              label: 'Email Login',
-            },
-          ]}
-        />
-        {loginType === 'email' && (
-          <>
-            <ProFormText
-              fieldProps={{
-                size: 'large',
-                prefix: <MailOutlined className={'prefixIcon'} />,
-                onChange: (e) => {
-                  setEmail(e.target.value);
-                },
-              }}
-              name="email"
-              placeholder={'Please enter your email'}
-              rules={[
-                {
-                  required: true,
-                  message: 'Please enter your email!',
-                },
-              ]}
-            />
-            <ProFormCaptcha
-              fieldProps={{
-                size: 'large',
-                prefix: <LockOutlined className={'prefixIcon'} />,
-              }}
-              captchaProps={{
-                size: 'large',
-                loading: captchaLoading,
-              }}
-              placeholder={'Please enter verification code'}
-              captchaTextRender={(timing, count) => {
-                if (timing) {
-                  return <span className="text-white">{`Resend in ${count}s`}</span>;
-                }
-                return 'Get Code';
-              }}
-              phoneName="email"
-              name="captcha"
-              rules={[
-                {
-                  required: true,
-                  message: 'Please enter verification code!',
-                },
-              ]}
-              onGetCaptcha={async () => {
-                await handleGetCaptcha(email);
-              }}
-            />
-          </>
-        )}
-        {/* <div
-          style={{
-            marginBottom: 24,
-          }}
-        >
-          <ProFormCheckbox noStyle name="autoLogin">
-            <span className='text-white'>Remember me</span>
-          </ProFormCheckbox>
-        </div> */}
-      </LoginFormPage>
+        <Space direction="vertical" size={20} style={{ width: '100%' }}>
+          <Space size={12} align="center">
+            <SafetyCertificateOutlined style={{ fontSize: 28, color: '#1677ff' }} />
+            <div>
+              <Title level={3} style={{ margin: 0 }}>
+                后台管理登录
+              </Title>
+              <Text type="secondary">Firebase Google Auth + 邮箱白名单</Text>
+            </div>
+          </Space>
+
+          <Paragraph type="secondary" style={{ marginBottom: 0 }}>
+            仅允许已加入后台白名单且状态为“正常”的 Google 账号访问后台。登录成功后，
+            后端会换发独立的 admin JWT，继续复用现有权限系统。
+          </Paragraph>
+
+          <Button
+            type="primary"
+            size="large"
+            icon={<GoogleOutlined />}
+            loading={loading}
+            onClick={handleGoogleLogin}
+            style={{ width: '100%', height: 48 }}
+          >
+            使用 Google 登录后台
+          </Button>
+
+          <div
+            style={{
+              borderRadius: 12,
+              padding: 12,
+              background: isDark ? 'rgba(255,255,255,0.04)' : '#f8fafc',
+            }}
+          >
+            <Text type="secondary">
+              没有权限时请联系超级管理员，在“系统管理 / 用户管理”中将你的邮箱加入白名单。
+            </Text>
+          </div>
+        </Space>
+      </Card>
     </div>
   );
 };
@@ -200,16 +114,13 @@ const LoginContent: React.FC = () => {
 const Login: React.FC = () => {
   const { mode, primaryColor } = useThemeStore();
 
-  // 根据主题模式配置样式
-  const themeConfig = {
-    token: {
-      colorPrimary: primaryColor,
-    },
-    algorithm: mode === 'dark' ? theme.darkAlgorithm : theme.defaultAlgorithm,
-  };
-
   return (
-    <ConfigProvider theme={themeConfig}>
+    <ConfigProvider
+      theme={{
+        token: { colorPrimary: primaryColor },
+        algorithm: mode === 'dark' ? theme.darkAlgorithm : theme.defaultAlgorithm,
+      }}
+    >
       <App>
         <LoginContent />
       </App>

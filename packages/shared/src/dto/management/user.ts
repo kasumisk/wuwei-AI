@@ -2,14 +2,14 @@
  * 用户管理相关的 DTO
  */
 
-import type { UserRole } from '../../types/user';
-
 // 管理模块专用的用户状态枚举
 export enum ManagementUserStatus {
   ACTIVE = 'active',
   INACTIVE = 'inactive',
   SUSPENDED = 'suspended',
 }
+
+export type ManagementAdminRole = 'admin' | 'super_admin';
 
 /**
  * 获取用户列表查询参数
@@ -22,7 +22,7 @@ export interface GetUsersQueryDto {
   /** 搜索关键词 */
   keyword?: string;
   /** 角色筛选 */
-  role?: UserRole;
+  role?: ManagementAdminRole;
   /** 状态筛选 */
   status?: ManagementUserStatus;
 }
@@ -31,18 +31,20 @@ export interface GetUsersQueryDto {
  * 创建用户
  */
 export interface CreateUserDto {
-  /** 用户名 */
-  username: string;
+  /** 用户名，不传时后端按邮箱自动生成 */
+  username?: string;
   /** 邮箱 */
   email: string;
-  /** 密码 */
-  password: string;
-  /** 角色 */
-  role: UserRole;
+  /** 密码，Firebase Google 登录场景下可为空 */
+  password?: string;
+  /** 后台角色 */
+  role: ManagementAdminRole;
   /** 昵称 */
   nickname?: string;
   /** 手机号 */
   phone?: string;
+  /** 状态 */
+  status?: ManagementUserStatus;
 }
 
 /**
@@ -56,7 +58,7 @@ export interface UpdateUserDto {
   /** 手机号 */
   phone?: string;
   /** 角色 */
-  role?: UserRole;
+  role?: ManagementAdminRole;
   /** 状态 */
   status?: ManagementUserStatus;
   /** 头像 */
@@ -86,7 +88,7 @@ export interface UserInfoDto {
   /** 手机号 */
   phone?: string;
   /** 角色（旧字段，兼容性保留） */
-  role: UserRole;
+  role: ManagementAdminRole;
   /** 状态 */
   status: ManagementUserStatus;
   /** 头像 */
