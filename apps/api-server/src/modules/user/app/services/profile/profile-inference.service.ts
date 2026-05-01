@@ -62,6 +62,8 @@ export class ProfileInferenceService {
           totalRecords: behavior.totalRecords ?? 0,
           // refreshInference 为手动触发，无法精确算 daysSinceLastRecord/usageDays
           // 此处留空，cron 会在批量更新时填充精确值
+          // P3-2.4: 注入 regionCode 用于按区域调阈值
+          regionCode: profile.regionCode ?? null,
         }
       : null;
     const segResult = inferUserSegment(profile.goal as GoalType, segBehavior);
@@ -69,6 +71,8 @@ export class ProfileInferenceService {
     const confidenceScores = {
       ...((inferred.confidenceScores as any) || {}),
       userSegment: segResult.confidence,
+      // P3-2.4: 记录推断时使用的 region（审计/调试用）
+      inferenceRegionCode: profile.regionCode ?? null,
     };
 
     // 最优餐次推断（基于行为数据）

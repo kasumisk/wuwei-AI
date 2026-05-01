@@ -160,6 +160,8 @@ export interface MealPolicyConfig {
  * - taste: 口味匹配度（用户口味偏好 vs 食物 flavorProfile）
  * - cost: 价格经济性（基于 estimatedCostLevel 反转）
  * - convenience: 便利性/可获取性（基于 prepTime + cookTime + skillRequired）
+ * - macroFit: 三大宏量营养素与目标的契合度
+ * - regionalFit: P3-2.11 区域+季节契合度（regionalBoost*0.6 + seasonality*0.4）
  */
 export const MULTI_OBJECTIVE_DIMENSIONS = [
   'health',
@@ -167,6 +169,7 @@ export const MULTI_OBJECTIVE_DIMENSIONS = [
   'cost',
   'convenience',
   'macroFit',
+  'regionalFit',
 ] as const;
 
 export type MultiObjectiveDimension =
@@ -183,7 +186,7 @@ export interface MultiObjectiveConfig {
    * 各维度偏好权重（0-1），用于从 Pareto 前沿中选择最优解
    * 缺失的维度使用默认权重
    *
-   * 默认值: { macroFit: 0.35, health: 0.25, taste: 0.2, cost: 0.1, convenience: 0.1 }
+   * 默认值: { macroFit: 0.30, health: 0.25, taste: 0.2, cost: 0.1, convenience: 0.1, regionalFit: 0.05 }
    */
   preferences?: Partial<Record<MultiObjectiveDimension, number>>;
 

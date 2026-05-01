@@ -68,20 +68,28 @@ const FACTOR_NARRATIVE_KEY: Record<string, string> = {
   'replacement-feedback': 'narrative.preference_match',
 };
 
-// ─── 营养素中文名映射 ───
-const NUTRIENT_CN: Record<string, string> = {
-  protein: '蛋白质',
-  fiber: '膳食纤维',
-  vitaminA: '维生素A',
-  vitaminC: '维生素C',
-  vitaminD: '维生素D',
-  vitaminE: '维生素E',
-  calcium: '钙',
-  iron: '铁',
-  potassium: '钾',
-  zinc: '锌',
-  magnesium: '镁',
-};
+// ─── 营养素标签：通过 i18n 取本地化名称（P3-3.1） ───
+// 历史 NUTRIENT_CN 硬编码中文导致 en/ja locale 输出仍是中文，
+// 现统一通过 t('explain.nutrient.{key}', {}, locale) 解析。
+function getNutrientLabel(nutrient: string, locale: Locale): string {
+  // i18n key 自动加 'recommendation.' 前缀，故使用 'explain.nutrient.xxx'
+  const translated = t(`explain.nutrient.${nutrient}`, {}, locale);
+  // t() miss 时回退原 key（避免暴露未翻译占位符）
+  if (!translated || translated === `explain.nutrient.${nutrient}`) {
+    return nutrient;
+  }
+  return translated;
+}
+
+// 多个营养素之间的连接词（locale 感知）
+function getAndConnector(locale: Locale): string {
+  const conn = t('narrative.and_connector', {}, locale);
+  if (!conn || conn === 'narrative.and_connector') {
+    // 回退（zh 用「和」，其他用「, 」）
+    return locale === 'zh-CN' ? '和' : ', ';
+  }
+  return conn;
+}
 
 @Injectable()
 export class NaturalLanguageExplainerService {
@@ -130,11 +138,17 @@ export class NaturalLanguageExplainerService {
         return val > 0;
       });
       if (matchingGaps.length > 0) {
+        const locale = ctx.locale as Locale;
         const gapNames = matchingGaps
           .slice(0, 2)
-          .map((g) => NUTRIENT_CN[g] || g)
-          .join('和');
-        nutritionNote = `${foodName}富含${gapNames}，有助于补充今日摄入不足`;
+          .map((g) => getNutrientLabel(g, locale))
+          .join(getAndConnector(locale));
+        // P3-3.1: 用 narrative.nutrition_gap i18n key 替代硬编码中文
+        nutritionNote = t(
+          'narrative.nutrition_gap',
+          { nutrient: gapNames, food: foodName },
+          locale,
+        );
       }
     }
 
@@ -204,7 +218,10 @@ export class NaturalLanguageExplainerService {
         return val > 0;
       });
       if (matchingGaps.length > 0) {
-        const gapName = NUTRIENT_CN[matchingGaps[0]] || matchingGaps[0];
+        const gapName = getNutrientLabel(
+          matchingGaps[0],
+          ctx.locale as Locale,
+        );
         reasons.push(
           t(
             'narrative.nutrition_gap',

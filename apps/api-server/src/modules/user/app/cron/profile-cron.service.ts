@@ -309,6 +309,7 @@ export class ProfileCronService {
       : 0;
 
     // 用户分段 — V5 3.4: 升级版 segmentation (含 new_user/returning_user/交叉分类)
+    // P3-2.4: 注入 regionCode 用于按区域调整阈值
     const segmentResult = inferUserSegment(profile.goal as any, {
       avgComplianceRate:
         behavior?.avgComplianceRate != null
@@ -317,6 +318,7 @@ export class ProfileCronService {
       totalRecords: behavior?.totalRecords ?? undefined,
       daysSinceLastRecord,
       usageDays,
+      regionCode: profile.regionCode ?? null,
     });
 
     // V6.5 Phase 3L: 多维特征流失预测（替代简单 5 条规则）
@@ -369,11 +371,19 @@ export class ProfileCronService {
       nutritionGaps: weeklyRecords.length >= 10 ? 0.7 : 0.4,
     };
 
+    // P3-3.3: cuisineAffinityRelative — 用户菜系偏好相对其 region 群体均值的比值
+    // userMean / regionMean，clip [0.2, 5.0]，无足够数据时为 null
+    const cuisineAffinityRelative = await this.computeCuisineAffinityRelative(
+      userId,
+      profile.regionCode ?? null,
+    );
+
     await updateInferred(this.prisma, userId, {
       userSegment: segmentResult.segment,
       churnRisk: Number(churnRisk.toFixed(2)),
       nutritionGaps: nutritionGaps,
       confidenceScores: confidenceScores,
+      cuisineAffinityRelative,
       lastComputedAt: new Date(),
     });
 
@@ -630,6 +640,109 @@ export class ProfileCronService {
       orderBy: { createdAt: 'desc' },
     });
     return record ? record.createdAt : null;
+  }
+
+  /**
+   * P3-3.3: 计算用户菜系亲和度（相对其所在 region 群体的均值）
+   *
+   * 数据源：recommendation_feedbacks (近 30d) JOIN food_taxonomies
+   *   - userMean[cuisine]   = 用户对该 cuisine 食物的 acceptance rate
+   *   - regionMean[cuisine] = region 群体对该 cuisine 的 acceptance rate
+   *   - relative[cuisine]   = clip(userMean / regionMean, 0.2, 5.0)
+   *
+   * 设计要点：
+   *   - 用户样本 < 5 条 → 返回 null（数据不足，使用 absolute 偏好）
+   *   - 单 cuisine 用户样本 < 3 条 → 跳过该 cuisine
+   *   - regionCode 缺省 → 整个对象为 null（无法做相对比较）
+   *   - regionMean 计算窗口同 30d；若该 region 该 cuisine 样本 < 30 → 跳过该 cuisine
+   *   - acceptance rate = (accept + replace * 0.5) / total，与 weight-learner 一致
+   *
+   * 性能：
+   *   - 每用户 2 个聚合 SQL；regionCode 维度做了天然分片，单查询行数受限
+   *   - 跑在 weekly cron（周一 03:00），全量用户耗时可控
+   */
+  private async computeCuisineAffinityRelative(
+    userId: string,
+    regionCode: string | null,
+  ): Promise<Record<string, number> | null> {
+    if (!regionCode) return null;
+    const country = regionCode.split('-')[0]?.toUpperCase();
+    if (!country) return null;
+
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    // userMean: 该用户对每种 cuisine 的 acceptance rate
+    // 用 raw SQL；FoodTaxonomies.foodId 是 uuid，feedback.foodId 是 varchar，需要转型
+    type CuisineAgg = { cuisine: string; total: bigint; weighted: number };
+
+    const userRows = await this.prisma.$queryRaw<CuisineAgg[]>`
+      SELECT ft.cuisine,
+             COUNT(*)::bigint AS total,
+             SUM(
+               CASE rf.action
+                 WHEN 'accept' THEN 1.0
+                 WHEN 'replace' THEN 0.5
+                 ELSE 0.0
+               END
+             )::float AS weighted
+      FROM recommendation_feedbacks rf
+      JOIN food_taxonomies ft ON ft.food_id::text = rf.food_id
+      WHERE rf.user_id = ${userId}::uuid
+        AND rf.created_at >= ${thirtyDaysAgo}
+        AND ft.cuisine IS NOT NULL
+        AND rf.food_id IS NOT NULL
+      GROUP BY ft.cuisine
+    `;
+
+    const userTotal = userRows.reduce((s, r) => s + Number(r.total), 0);
+    if (userTotal < 5) return null;
+
+    // regionMean: 同 region 群体（user_profiles.region_code = country）
+    // 注意：region_code 在 user_profiles 可能含子级（如 'US-CA'），用 LIKE 匹配
+    const regionRows = await this.prisma.$queryRaw<CuisineAgg[]>`
+      SELECT ft.cuisine,
+             COUNT(*)::bigint AS total,
+             SUM(
+               CASE rf.action
+                 WHEN 'accept' THEN 1.0
+                 WHEN 'replace' THEN 0.5
+                 ELSE 0.0
+               END
+             )::float AS weighted
+      FROM recommendation_feedbacks rf
+      JOIN user_profiles up ON up.user_id = rf.user_id
+      JOIN food_taxonomies ft ON ft.food_id::text = rf.food_id
+      WHERE rf.created_at >= ${thirtyDaysAgo}
+        AND ft.cuisine IS NOT NULL
+        AND rf.food_id IS NOT NULL
+        AND (up.region_code = ${country} OR up.region_code LIKE ${country + '-%'})
+      GROUP BY ft.cuisine
+    `;
+
+    const regionMean = new Map<string, number>();
+    for (const r of regionRows) {
+      const total = Number(r.total);
+      // 群体样本 >= 30 才做基线（避免长尾 cuisine 的噪声）
+      if (total < 30) continue;
+      regionMean.set(r.cuisine.toLowerCase(), r.weighted / total);
+    }
+
+    if (regionMean.size === 0) return null;
+
+    const result: Record<string, number> = {};
+    for (const r of userRows) {
+      const total = Number(r.total);
+      if (total < 3) continue;
+      const cuisine = r.cuisine.toLowerCase();
+      const rMean = regionMean.get(cuisine);
+      if (!rMean || rMean <= 0) continue;
+      const uMean = r.weighted / total;
+      const ratio = uMean / rMean;
+      // clip [0.2, 5.0]
+      result[cuisine] = Math.max(0.2, Math.min(5.0, Number(ratio.toFixed(3))));
+    }
+
+    return Object.keys(result).length > 0 ? result : null;
   }
 
   /**

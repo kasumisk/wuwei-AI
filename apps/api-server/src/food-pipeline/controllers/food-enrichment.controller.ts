@@ -191,22 +191,27 @@ export class FoodEnrichmentController {
     // FIX: 入队前清除 failed/stalled 的旧 job，防止 jobId 幂等机制阻塞重新入队
     // BullMQ 对 failed/completed 的 job 仍保留 jobId 记录（受 removeOnFail/removeOnComplete 上限控制）
     // 若旧 job 仍在 Redis 中，addBulk 会静默跳过，导致实际 waiting 数为 0
-    await Promise.all(
-      jobs.map(async (job) => {
-        const existing = await this.enrichmentQueue.getJob(job.opts.jobId);
-        if (existing) {
-          const state = await existing.getState();
-          // 只移除终态（failed/completed）或卡住的 job，不移除 waiting/active
-          if (
-            state === 'failed' ||
-            state === 'completed' ||
-            state === 'unknown'
-          ) {
-            await existing.remove();
+    // 分批并发（每批 100 条），避免大量入队时一次性打出数万个 Redis 请求导致超时
+    const CHUNK_SIZE = 100;
+    for (let i = 0; i < jobs.length; i += CHUNK_SIZE) {
+      const chunk = jobs.slice(i, i + CHUNK_SIZE);
+      await Promise.all(
+        chunk.map(async (job) => {
+          const existing = await this.enrichmentQueue.getJob(job.opts.jobId);
+          if (existing) {
+            const state = await existing.getState();
+            // 只移除终态（failed/completed）或卡住的 job，不移除 waiting/active
+            if (
+              state === 'failed' ||
+              state === 'completed' ||
+              state === 'unknown'
+            ) {
+              await existing.remove();
+            }
           }
-        }
-      }),
-    );
+        }),
+      );
+    }
 
     await this.enrichmentQueue.addBulk(jobs);
 
@@ -746,21 +751,26 @@ export class FoodEnrichmentController {
     }));
 
     // FIX: 入队前清除 failed/stalled 的旧 job，防止 jobId 幂等机制阻塞重新入队
-    await Promise.all(
-      jobs.map(async (job) => {
-        const existing = await this.enrichmentQueue.getJob(job.opts.jobId);
-        if (existing) {
-          const state = await existing.getState();
-          if (
-            state === 'failed' ||
-            state === 'completed' ||
-            state === 'unknown'
-          ) {
-            await existing.remove();
+    // 分批并发（每批 100 条），避免大量入队时一次性打出数万个 Redis 请求导致超时
+    const STAGED_CHUNK_SIZE = 100;
+    for (let i = 0; i < jobs.length; i += STAGED_CHUNK_SIZE) {
+      const chunk = jobs.slice(i, i + STAGED_CHUNK_SIZE);
+      await Promise.all(
+        chunk.map(async (job) => {
+          const existing = await this.enrichmentQueue.getJob(job.opts.jobId);
+          if (existing) {
+            const state = await existing.getState();
+            if (
+              state === 'failed' ||
+              state === 'completed' ||
+              state === 'unknown'
+            ) {
+              await existing.remove();
+            }
           }
-        }
-      }),
-    );
+        }),
+      );
+    }
 
     await this.enrichmentQueue.addBulk(jobs);
 

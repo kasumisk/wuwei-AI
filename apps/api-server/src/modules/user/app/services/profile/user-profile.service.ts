@@ -27,6 +27,7 @@ import {
   BehaviorData,
 } from '../../../user-profile-merge.helper';
 import { ProfileCacheService } from './profile-cache.service';
+import { getRegionMacroBias } from '../../../../../common/config/regional-defaults';
 import {
   OnboardingStep1Dto,
   OnboardingStep2Dto,
@@ -946,7 +947,11 @@ export class UserProfileService {
       gender,
     );
 
-    const macroTargets = this.calculateMacroTargets(recommendedCalories, goal);
+    const macroTargets = this.calculateMacroTargets(
+      recommendedCalories,
+      goal,
+      profile.regionCode ?? null,
+    );
 
     // 置信度 — exerciseProfile 可用时 TDEE 精度更高
     const hasExerciseDetail =
@@ -1127,6 +1132,7 @@ export class UserProfileService {
   private calculateMacroTargets(
     calories: number,
     goal: GoalType,
+    regionCode?: string | null,
   ): { proteinG: number; carbG: number; fatG: number } {
     // 不同目标的宏量分配比例 (protein/carb/fat)
     const ratios: Record<string, [number, number, number]> = {
@@ -1135,7 +1141,33 @@ export class UserProfileService {
       [GoalType.HEALTH]: [0.25, 0.5, 0.25],
       [GoalType.HABIT]: [0.25, 0.5, 0.25],
     };
-    const [pRatio, cRatio, fRatio] = ratios[goal] || ratios[GoalType.HEALTH];
+    const [pRatio0, cRatio0, fRatio0] =
+      ratios[goal] || ratios[GoalType.HEALTH];
+
+    // P3-2.4: 区域 macro 偏置（pp = 百分点）
+    // 偏置后做归一化：保证 p+c+f = 1（避免热量漂移）
+    const bias = getRegionMacroBias(regionCode);
+    let pRatio = pRatio0 + (bias.proteinPct ?? 0) / 100;
+    let cRatio = cRatio0 + (bias.carbsPct ?? 0) / 100;
+    let fRatio = fRatio0 + (bias.fatPct ?? 0) / 100;
+    // 防越界（任一比例不得 < 0.1 / > 0.7，超出则回退到 default）
+    if (
+      pRatio < 0.1 || pRatio > 0.7 ||
+      cRatio < 0.1 || cRatio > 0.7 ||
+      fRatio < 0.1 || fRatio > 0.7
+    ) {
+      pRatio = pRatio0;
+      cRatio = cRatio0;
+      fRatio = fRatio0;
+    }
+    // 归一化（防 bias 之和不为 0 的浮点误差）
+    const sum = pRatio + cRatio + fRatio;
+    if (sum > 0) {
+      pRatio /= sum;
+      cRatio /= sum;
+      fRatio /= sum;
+    }
+
     return {
       proteinG: Math.round((calories * pRatio) / 4),
       carbG: Math.round((calories * cRatio) / 4),

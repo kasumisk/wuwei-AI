@@ -53,6 +53,8 @@ export interface SegmentBehaviorInput {
   regionCode?: string | null;
 }
 
+import { getRegionSegmentTuning } from '../../../../common/config/regional-defaults';
+
 /**
  * 推断用户分段
  *
@@ -68,15 +70,17 @@ export function inferUserSegment(
   const records = behavior?.totalRecords ?? 0;
   const daysSinceActive = behavior?.daysSinceLastRecord ?? 0;
   const usageDays = behavior?.usageDays ?? 0;
+  // P3-2.4: 按 region 取 tuning（缺省 = DEFAULT_REGION_SEGMENT_TUNING）
+  const tuning = getRegionSegmentTuning(behavior?.regionCode);
   const flags: string[] = [];
 
-  // 新用户（使用天数 <7）
-  if (usageDays < 7 && records < 14) {
+  // 新用户（使用天数 < region.newUserUsageDays）
+  if (usageDays < tuning.newUserUsageDays && records < 14) {
     return { segment: 'new_user', confidence: 0.9, secondaryFlags: [] };
   }
 
-  // 回归用户（>14天不活跃 且 有足够历史数据）
-  if (daysSinceActive > 14 && records > 20) {
+  // 回归用户（不活跃天数 > region.returningInactiveDays 且 有足够历史数据）
+  if (daysSinceActive > tuning.returningInactiveDays && records > 20) {
     return { segment: 'returning_user', confidence: 0.8, secondaryFlags: [] };
   }
 
@@ -94,8 +98,8 @@ export function inferUserSegment(
     };
   }
 
-  // 高依从用户
-  if (compliance >= 0.7) {
+  // 高依从用户（阈值按 region 调整）
+  if (compliance >= tuning.highComplianceThreshold) {
     return {
       segment: goal === 'fat_loss' ? 'disciplined_loser' : 'active_maintainer',
       confidence: Math.min(1, compliance),

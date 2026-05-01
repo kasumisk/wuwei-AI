@@ -28,6 +28,13 @@ export interface InferredData {
   confidenceScores?: Record<string, any>;
   lastComputedAt?: string | Date | null;
   preferenceWeights?: Record<string, any> | null;
+  /**
+   * P3-3.3: 用户菜系亲和度（相对于其所在 region 群体的均值）
+   * key = cuisine 名（小写，如 'chinese'/'japanese'），value = userMean / regionMean，
+   * clip 到 [0.2, 5.0]。无足够数据 (< 5 条 feedback) 时整个对象为空。
+   * 用于 ranking 阶段的「相对偏好」boost，避免 region majority cuisine 被双重加分。
+   */
+  cuisineAffinityRelative?: Record<string, number> | null;
 }
 
 export interface BehaviorData {

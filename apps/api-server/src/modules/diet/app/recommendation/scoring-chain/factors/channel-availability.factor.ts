@@ -55,12 +55,21 @@ const CHANNEL_CATEGORY_MATRIX: Record<string, Record<string, number>> = {
   },
 };
 
-// ─── 渠道×时段可获得性系数 ───
+// ─── 渠道×时段可获得性系数（P3-3.2 区域分层） ───
 // 时段: morning=6-10, midday=10-14, evening=14-21, lateNight=21-6
+//
+// 设计：CHANNEL_TIME_MATRIX_BY_REGION[region][channel][slot]
+//   - 'default' = 现有矩阵原样（向后兼容；未指定 region 或 region 未配置都走此）
+//   - 国别覆盖只列与 default 有显著差异的项；其他自动 fallback 到 default
+// 区域差异调研依据：
+//   - 'CN'：午餐外卖 1130-1330 高峰更集中、深夜便利店更普及（24h 占比高）
+//   - 'JP'：便利店全时段高可获得性（24h コンビニ 文化）；居酒屋傍晚高峰
+//   - 'US'：早餐外送渗透率较低（home_cook 主导）；fast-food restaurant 全天稳定
+// 默认值（default）= 与历史完全一致，避免任何 region 缺省时改变行为。
 
 type TimeSlot = 'morning' | 'midday' | 'evening' | 'lateNight';
 
-const CHANNEL_TIME_MATRIX: Record<string, Record<TimeSlot, number>> = {
+const DEFAULT_CHANNEL_TIME_MATRIX: Record<string, Record<TimeSlot, number>> = {
   [AcquisitionChannel.HOME_COOK]:    { morning: 0.9, midday: 0.85, evening: 0.95, lateNight: 0.3 },
   [AcquisitionChannel.DELIVERY]:     { morning: 0.6, midday: 0.95, evening: 0.9,  lateNight: 0.4 },
   [AcquisitionChannel.CONVENIENCE]:  { morning: 0.85, midday: 0.85, evening: 0.85, lateNight: 0.9 },
@@ -68,6 +77,50 @@ const CHANNEL_TIME_MATRIX: Record<string, Record<TimeSlot, number>> = {
   [AcquisitionChannel.RESTAURANT]:   { morning: 0.5, midday: 0.9,  evening: 0.95, lateNight: 0.3 },
   [AcquisitionChannel.UNKNOWN]:      { morning: 0.8, midday: 0.9,  evening: 0.9,  lateNight: 0.5 },
 };
+
+const CHANNEL_TIME_MATRIX_BY_REGION: Record<
+  string,
+  Partial<Record<string, Partial<Record<TimeSlot, number>>>>
+> = {
+  // CN: 午餐外卖更集中、深夜便利店更强
+  CN: {
+    [AcquisitionChannel.DELIVERY]:    { midday: 0.98, lateNight: 0.5 },
+    [AcquisitionChannel.CONVENIENCE]: { lateNight: 0.95 },
+  },
+  // JP: 便利店全时段满级；居酒屋傍晚高峰
+  JP: {
+    [AcquisitionChannel.CONVENIENCE]: { morning: 0.95, midday: 0.95, evening: 0.95, lateNight: 0.95 },
+    [AcquisitionChannel.RESTAURANT]:  { evening: 0.97 },
+  },
+  // US: 早餐外送渗透率低；fast-food 全天稳定
+  US: {
+    [AcquisitionChannel.DELIVERY]:    { morning: 0.4 },
+    [AcquisitionChannel.RESTAURANT]:  { morning: 0.65, midday: 0.9, evening: 0.9, lateNight: 0.5 },
+  },
+};
+
+/**
+ * 取（channel, slot, region）的可获得性系数
+ *
+ * 解析顺序：region 覆盖 → default 矩阵 → UNKNOWN 行
+ */
+function getChannelTimeMultiplier(
+  channel: string,
+  slot: TimeSlot,
+  regionCode: string | null | undefined,
+): number {
+  // 优先 region override
+  const country = regionCode?.split('-')[0]?.toUpperCase();
+  if (country && CHANNEL_TIME_MATRIX_BY_REGION[country]) {
+    const ov = CHANNEL_TIME_MATRIX_BY_REGION[country][channel]?.[slot];
+    if (typeof ov === 'number') return ov;
+  }
+  // default 矩阵
+  return (
+    DEFAULT_CHANNEL_TIME_MATRIX[channel]?.[slot] ??
+    DEFAULT_CHANNEL_TIME_MATRIX[AcquisitionChannel.UNKNOWN][slot]
+  );
+}
 
 function resolveTimeSlot(hour: number): TimeSlot {
   if (hour >= 6 && hour < 10) return 'morning';

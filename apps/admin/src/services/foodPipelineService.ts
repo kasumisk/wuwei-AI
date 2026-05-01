@@ -967,7 +967,7 @@ export const enrichmentApi = {
     staged?: boolean;
     /** V8.0: 仅入队完整度 <= 此值的食物（0-100） */
     maxCompleteness?: number;
-  }): Promise<EnrichEnqueueResult> => request.post(`${ENRICHMENT_BASE}/enqueue`, data),
+  }): Promise<EnrichEnqueueResult> => request.post(`${ENRICHMENT_BASE}/enqueue`, data, { timeout: 120000 }),
 
   getStats: (): Promise<EnrichmentStatsResponse> => request.get(`${ENRICHMENT_BASE}/stats`),
 
@@ -1027,7 +1027,7 @@ export const enrichmentApi = {
 
   /** 分阶段批量入队补全任务（支持按阶段1-4分批处理） */
   enqueueStagedBatch: (data: EnqueueStagedBatchParams): Promise<EnqueueStagedBatchResult> =>
-    request.post(`${ENRICHMENT_BASE}/enqueue-staged`, data),
+    request.post(`${ENRICHMENT_BASE}/enqueue-staged`, data, { timeout: 120000 }),
 
   /** 全库补全进度统计（按字段维度） */
   getProgress: (): Promise<EnrichmentProgress> => request.get(`${ENRICHMENT_BASE}/progress`),

@@ -33,11 +33,14 @@ import { FoodLibrary } from '../../../../food/food.types';
 
 /** 默认偏好权重（宏量贴合优先，兼顾健康/口味） */
 const DEFAULT_PREFERENCES: Record<MultiObjectiveDimension, number> = {
-  macroFit: 0.35,
+  macroFit: 0.3,
   health: 0.25,
   taste: 0.2,
   cost: 0.1,
   convenience: 0.1,
+  // P3-2.11: regionalFit (regionalBoost*0.6 + seasonality*0.4)
+  // 默认权重 0.05（保守，仅在 Pareto 前沿存在多个候选时起辅助决断作用）
+  regionalFit: 0.05,
 };
 
 /** 默认口味偏好（中性，无特别偏好） */
@@ -223,7 +226,7 @@ export function extractRankedFoods(
 // ─── 目标维度计算 ───
 
 /**
- * 计算单个食物的 5 维目标向量
+ * 计算单个食物的 6 维目标向量
  */
 function computeObjectives(
   sf: ScoredFood,
@@ -237,7 +240,39 @@ function computeObjectives(
     cost: computeCostScore(sf.food),
     convenience: computeConvenienceScore(sf.food),
     macroFit: computeMacroFitScore(sf, mealTarget),
+    regionalFit: computeRegionalFitScore(sf),
   };
+}
+
+/**
+ * P3-2.11: 区域+季节契合度
+ *
+ * 公式: regionalBoost*0.6 + seasonalityScore*0.4
+ *   - regionalBoost: 来自 explanation.regionalBoost (FoodRegionalInfo 倍数, 默认 1.0)
+ *     映射到 [0, 1]: clip((boost - 0.5) / 1.0, 0, 1) — 0.5x→0, 1.5x→1.0
+ *   - seasonalityScore: explanation.dimensions.seasonality.score (已归一化到 0-1)
+ *
+ * 无任一数据时返回 0.5（中性，不奖不罚）
+ */
+function computeRegionalFitScore(sf: ScoredFood): number {
+  const exp = sf.explanation;
+  const regionalBoost = exp?.regionalBoost;
+  const seasonalityScore = exp?.dimensions?.seasonality?.raw;
+
+  let regionalNorm: number | null = null;
+  if (typeof regionalBoost === 'number') {
+    regionalNorm = Math.max(0, Math.min(1, (regionalBoost - 0.5) / 1.0));
+  }
+
+  let seasonNorm: number | null = null;
+  if (typeof seasonalityScore === 'number') {
+    seasonNorm = Math.max(0, Math.min(1, seasonalityScore));
+  }
+
+  if (regionalNorm == null && seasonNorm == null) return 0.5;
+  if (regionalNorm == null) return seasonNorm!;
+  if (seasonNorm == null) return regionalNorm;
+  return regionalNorm * 0.6 + seasonNorm * 0.4;
 }
 
 /**
