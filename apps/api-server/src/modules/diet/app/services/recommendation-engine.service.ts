@@ -53,6 +53,8 @@ import { FeatureFlagService } from '../../../feature-flag/feature-flag.service';
 import { v4 as uuidv4 } from 'uuid';
 import { PipelineContextFactory } from '../recommendation/context/pipeline-context-factory.service';
 import { RecommendationResultProcessor } from './recommendation-result-processor.service';
+import { SeasonalityService } from '../recommendation/utils/seasonality.service';
+import { DEFAULT_REGION_CODE } from '../../../../common/config/regional-defaults';
 import { t, type Locale } from '../recommendation/utils/i18n-messages';
 
 /** 反向解释 API 返回结构 */
@@ -125,6 +127,8 @@ export class RecommendationEngineService implements OnModuleInit {
     private readonly contextFactory: PipelineContextFactory,
     /** 推荐结果后处理器（模板填充 + 份量调整 + 聚合 + 菜谱 + 洞察） */
     private readonly resultProcessor: RecommendationResultProcessor,
+    /** 时令服务（区域+时区优化阶段 1.1b：每次推荐前预热区域时令缓存） */
+    private readonly seasonalityService: SeasonalityService,
   ) {}
 
   onModuleInit(): void {
@@ -196,6 +200,13 @@ export class RecommendationEngineService implements OnModuleInit {
       ? { ...enrichedProfile, ...this.pickDefinedFields(userProfile) }
       : enrichedProfile;
 
+    // 区域+时区优化（阶段 1.1b）：在评分前预热当前用户区域的 SeasonalityService 缓存。
+    // 修复 "preloadRegion 生产从未被调用 → seasonalityScore 永远 0.5" 的 Bug。
+    // 失败不阻塞推荐主流程（SeasonalityService 内部已有 try/catch）。
+    void this.seasonalityService.preloadRegion(
+      mergedProfile.regionCode || DEFAULT_REGION_CODE,
+    );
+
     // 菜谱优先模式 — 当策略配置 assembly.preferRecipe=true 时
     // 提前异步获取评分菜谱候选
     let scoredRecipes: ScoredRecipe[] | null = null;
@@ -258,6 +269,8 @@ export class RecommendationEngineService implements OnModuleInit {
           : null,
         // 厨房设备画像（HOME_COOK 场景下注入设备约束）
         kitchenProfile ?? null,
+        // 区域+时区优化 P0-1：透传用户时区，避免使用服务器时区
+        enrichedProfile.declared?.timezone,
       );
     } catch (err) {
       this.logger.warn(
@@ -322,7 +335,13 @@ export class RecommendationEngineService implements OnModuleInit {
     // 推荐成功后回写渠道使用行为（fire-and-forget，不阻塞返回）
     if (userId && sceneContext.channel) {
       this.sceneResolver
-        .recordChannelUsage(userId, mealType, sceneContext.channel)
+        .recordChannelUsage(
+          userId,
+          mealType,
+          sceneContext.channel,
+          // P0-1：用本地时区分桶
+          enrichedProfile.declared?.timezone,
+        )
         .catch((err) =>
           this.logger.warn(
             `SceneResolver.recordChannelUsage failed: ${(err as Error).message}`,
@@ -408,6 +427,11 @@ export class RecommendationEngineService implements OnModuleInit {
     const mergedProfile: EnrichedProfileContext = userProfile
       ? { ...enrichedProfile, ...this.pickDefinedFields(userProfile) }
       : enrichedProfile;
+
+    // 区域+时区优化（阶段 1.1b）：预热区域时令缓存（同 recommendMeal）
+    void this.seasonalityService.preloadRegion(
+      mergedProfile.regionCode || DEFAULT_REGION_CODE,
+    );
 
     const shortTermProfile = enrichedProfile.shortTerm;
     const contextualProfile = enrichedProfile.contextual;
@@ -574,6 +598,13 @@ export class RecommendationEngineService implements OnModuleInit {
       substitutions,
     } = req;
     const scoredRecipes = req.scoredRecipes;
+
+    // 区域+时区优化（阶段 1.1b）：从食物池推荐入口同样预热区域时令缓存。
+    // 该入口由 recommendMeal 内部调用，正常流程已 preload；当外部直接调用此入口时仍能保证缓存就绪。
+    void this.seasonalityService.preloadRegion(
+      userProfile?.regionCode || DEFAULT_REGION_CODE,
+    );
+
     const constraints = this.constraintGenerator.generateConstraints(
       goalType,
       consumed,

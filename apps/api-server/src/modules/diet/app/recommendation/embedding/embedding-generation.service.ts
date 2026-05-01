@@ -216,6 +216,8 @@ export class EmbeddingGenerationService {
       {
         attempts: 2,
         backoff: { type: 'exponential', delay: 2000 },
+        removeOnComplete: 500,
+        removeOnFail: 200,
       },
     );
 

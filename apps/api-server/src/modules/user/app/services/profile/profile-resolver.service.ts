@@ -35,6 +35,10 @@ import {
   ProfileFactory,
   DomainProfiles,
 } from '../../../domain/profile-factory';
+import {
+  DEFAULT_TIMEZONE,
+  DEFAULT_REGION_CODE,
+} from '../../../../../common/config/regional-defaults';
 
 /**
  * V7.0 Phase 2-F: 带领域画像的聚合结果
@@ -79,7 +83,7 @@ export class ProfileResolverService {
     // 上下文画像：需要 timezone + mealType，纯计算无 I/O
     let contextual: ContextualProfile | null = null;
     if (mealType) {
-      const timezone = declared?.timezone || 'Asia/Shanghai';
+      const timezone = declared?.timezone || DEFAULT_TIMEZONE;
       // V6.3 P2-9: 读取 exerciseSchedule 用于 post_exercise 场景检测
       const exerciseSchedule =
         (declared?.exerciseSchedule as Record<
@@ -163,8 +167,11 @@ export class ProfileResolverService {
       discipline: declared?.discipline || 'medium',
       allergens: (declared?.allergens as string[]) || [],
       healthConditions: (declared?.healthConditions as string[]) || [],
-      regionCode: declared?.regionCode || 'CN',
-      timezone: declared?.timezone || 'Asia/Shanghai',
+      regionCode: declared?.regionCode || DEFAULT_REGION_CODE,
+      timezone: declared?.timezone || DEFAULT_TIMEZONE,
+      // 区域+时区优化（阶段 1.4）：透传 locale 到顶层，供 ProfileAggregatorService.regionCode 兜底使用
+      // 注：declared.locale 在 prisma generate 后自动有类型，此处 (declared as any) 为过渡期写法
+      locale: (declared as Record<string, unknown> | null)?.['locale'] as string | undefined,
 
       // ── 声明画像 ──
       declared: declared
@@ -185,6 +192,17 @@ export class ProfileResolverService {
             canCook: declared.canCook ?? undefined,
             cookingSkillLevel: declared.cookingSkillLevel ?? undefined,
             budgetLevel: declared.budgetLevel ?? undefined,
+            // P2-2.2: budgetPerMeal/currencyCode 来自 UserProfiles 同名字段
+            budgetPerMeal:
+              (declared as Record<string, unknown>)?.['budgetPerMeal'] != null
+                ? Number(
+                    (declared as Record<string, unknown>)['budgetPerMeal'],
+                  )
+                : undefined,
+            currencyCode:
+              ((declared as Record<string, unknown>)?.['currencyCode'] as
+                | string
+                | undefined) ?? undefined,
             familySize: declared.familySize ?? undefined,
             cuisinePreferences:
               (declared.cuisinePreferences as string[]) ?? undefined,
@@ -200,6 +218,7 @@ export class ProfileResolverService {
             discipline: declared.discipline ?? undefined,
             regionCode: declared.regionCode ?? undefined,
             timezone: declared.timezone ?? undefined,
+            locale: (declared as Record<string, unknown>)?.['locale'] as string | undefined,
             exerciseSchedule:
               (declared.exerciseSchedule as Record<
                 string,

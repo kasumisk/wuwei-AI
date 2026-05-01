@@ -2,17 +2,22 @@
  * DeepSeek AI 客户端 + AI 结果验证清理
  *
  * 拆分自 food-enrichment.service.ts（步骤 3）。
- * 职责：
- *  - 持有 axios 实例、apiKey、maxRetries
- *  - callAIRaw: 原始 chat/completions 请求 + JSON 解析
- *  - callAI: callAIRaw + validateAndClean
+ * 职责（精简后）：
+ *  - callAIRaw / callAIForStage / callAI 三个入口
  *  - validateAndClean: AI 返回值类型校验、范围校验、字段清理
- *  - sleep / exponentialBackoff: 重试辅助
+ *  - sleep / exponentialBackoff: 重试辅助（应用层重试 3 次）
+ *
+ * 已下沉到 LlmService 的能力：
+ *  - 超时 / 鉴权 / HTTP 细节 / Circuit Breaker / Usage 记录
+ *
+ * 这里不传 userId，因为 enrichment 是系统级 cron / job，不计入用户配额
+ * （feature=FoodEnrichment 默认配额为 0=不限）。
  */
 
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios, { AxiosInstance } from 'axios';
+import { LlmService } from '../../../../core/llm/llm.service';
+import { LlmFeature } from '../../../../core/llm/llm.types';
 import {
   ENRICHABLE_STRING_FIELDS,
   JSON_ARRAY_FIELDS,
@@ -25,22 +30,21 @@ import type { EnrichmentTarget } from '../constants/enrichable-fields';
 import type { EnrichmentStage } from '../constants/enrichment-stages';
 import { ALL_COOKING_METHODS } from '../../../../modules/food/cooking-method.constants';
 
+const DEEPSEEK_BASE_URL = 'https://api.deepseek.com/v1';
+const DEEPSEEK_MODEL = 'deepseek-chat';
+const REQUEST_TIMEOUT_MS = 30_000;
+
 @Injectable()
 export class EnrichmentAiClient {
   readonly logger = new Logger(EnrichmentAiClient.name);
-  readonly client: AxiosInstance;
   readonly maxRetries = 3;
+  private readonly apiKey: string;
 
-  constructor(private readonly configService: ConfigService) {
-    const apiKey = this.configService.get<string>('DEEPSEEK_API_KEY') ?? '';
-    this.client = axios.create({
-      baseURL: 'https://api.deepseek.com/v1',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      timeout: 30000,
-    });
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly llm: LlmService,
+  ) {
+    this.apiKey = this.configService.get<string>('DEEPSEEK_API_KEY') ?? '';
   }
 
   // ─── 原始 AI 请求 ─────────────────────────────────────────────────────
@@ -53,28 +57,31 @@ export class EnrichmentAiClient {
       maxTokens?: number;
     },
   ): Promise<Record<string, any> | null> {
+    const systemPrompt =
+      options?.systemPrompt ??
+      '你是权威食品营养数据库专家。根据食物名称和已有数据，推算缺失字段。严格按JSON格式返回，数值基于每100g计算，禁止自由文本。';
+
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
-        const response = await this.client.post('/chat/completions', {
-          model: 'deepseek-chat',
-          response_format: { type: 'json_object' },
+        const result = await this.llm.chat({
+          feature: LlmFeature.FoodEnrichment,
+          // enrichment 是系统任务，不传 userId（不扣用户配额）
+          provider: 'deepseek',
+          apiKey: this.apiKey,
+          baseUrl: DEEPSEEK_BASE_URL,
+          model: DEEPSEEK_MODEL,
+          temperature: 0.1,
+          maxTokens: options?.maxTokens ?? 1200,
+          timeoutMs: REQUEST_TIMEOUT_MS,
+          responseFormat: { type: 'json_object' },
           messages: [
-            {
-              role: 'system',
-              content:
-                options?.systemPrompt ??
-                '你是权威食品营养数据库专家。根据食物名称和已有数据，推算缺失字段。严格按JSON格式返回，数值基于每100g计算，禁止自由文本。',
-            },
+            { role: 'system', content: systemPrompt },
             { role: 'user', content: prompt },
           ],
-          temperature: 0.1,
-          max_tokens: options?.maxTokens ?? 1200,
         });
 
-        const content = response.data.choices[0]?.message?.content;
-        if (!content) continue;
-
-        return JSON.parse(content) as Record<string, any>;
+        if (!result.content) continue;
+        return JSON.parse(result.content) as Record<string, any>;
       } catch (e) {
         this.logger.warn(
           `Attempt ${attempt} failed for "${foodName}": ${(e as Error).message}`,
@@ -99,21 +106,25 @@ export class EnrichmentAiClient {
   ): Promise<EnrichmentResult | null> {
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
-        const response = await this.client.post('/chat/completions', {
-          model: 'deepseek-chat',
-          response_format: { type: 'json_object' },
+        const result = await this.llm.chat({
+          feature: LlmFeature.FoodEnrichment,
+          provider: 'deepseek',
+          apiKey: this.apiKey,
+          baseUrl: DEEPSEEK_BASE_URL,
+          model: DEEPSEEK_MODEL,
+          temperature: 0.1,
+          maxTokens: stage.maxTokens,
+          timeoutMs: REQUEST_TIMEOUT_MS,
+          responseFormat: { type: 'json_object' },
           messages: [
             { role: 'system', content: buildStageSystemPrompt(stage) },
             { role: 'user', content: prompt },
           ],
-          temperature: 0.1,
-          max_tokens: stage.maxTokens,
         });
 
-        const content = response.data.choices[0]?.message?.content;
-        if (!content) continue;
+        if (!result.content) continue;
 
-        const raw = JSON.parse(content) as Record<string, any>;
+        const raw = JSON.parse(result.content) as Record<string, any>;
         const validated = this.validateAndClean(raw, requestedFields, 'foods');
         if (validated) return validated;
 

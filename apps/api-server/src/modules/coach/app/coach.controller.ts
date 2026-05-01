@@ -112,69 +112,41 @@ export class CoachController {
       );
       conversationId = context.conversationId;
 
-      // 2. 调用 OpenRouter 流式接口
-      const streamResponse = await this.coachService.createChatStream(
+      // 2. 调用 LLM 流式接口（AsyncIterable）
+      const stream = this.coachService.createChatStream(
+        user.id,
         context.messages,
       );
 
-      // 3. 解析 SSE 流
-      const reader = streamResponse.body as any;
-      // Node.js 的 fetch 返回 ReadableStream
-      if (!reader) {
-        throw new Error('No response body');
-      }
-
-      let buffer = '';
       let tokensUsed = 0;
 
-      // 使用 async iteration over the readable stream
-      for await (const chunk of reader) {
-        const text =
-          typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk);
-        buffer += text;
-
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (line.trim() === '') continue;
-          if (line.trim() === 'data: [DONE]') {
-            // 保存消息
-            await this.coachService.saveMessage(
-              conversationId,
-              user.id,
-              dto.message,
-              fullText,
-              tokensUsed,
-            );
-            res.write(
-              `data: ${JSON.stringify({ done: true, conversationId })}\n\n`,
-            );
-            res.end();
-            return;
-          }
-
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              const delta = data.choices?.[0]?.delta?.content;
-              if (delta) {
-                fullText += delta;
-                res.write(
-                  `data: ${JSON.stringify({ delta, conversationId })}\n\n`,
-                );
-              }
-              if (data.usage) {
-                tokensUsed = data.usage.total_tokens || 0;
-              }
-            } catch {
-              // 忽略无法解析的行
-            }
-          }
+      for await (const chunk of stream) {
+        if (chunk.delta) {
+          fullText += chunk.delta;
+          res.write(
+            `data: ${JSON.stringify({ delta: chunk.delta, conversationId })}\n\n`,
+          );
+        }
+        if (chunk.usage?.totalTokens) {
+          tokensUsed = chunk.usage.totalTokens;
+        }
+        if (chunk.done) {
+          await this.coachService.saveMessage(
+            conversationId,
+            user.id,
+            dto.message,
+            fullText,
+            tokensUsed,
+          );
+          res.write(
+            `data: ${JSON.stringify({ done: true, conversationId })}\n\n`,
+          );
+          res.end();
+          return;
         }
       }
 
-      // 流正常结束但没有 [DONE]
+      // 流正常结束但没有收到 done 标志（防御性）
       if (fullText) {
         await this.coachService.saveMessage(
           conversationId,
@@ -189,10 +161,14 @@ export class CoachController {
       }
       res.end();
     } catch (error) {
-      this.logger.error(`Coach chat error: ${(error as Error).message}`);
-      res.write(
-        `data: ${JSON.stringify({ error: this.i18n.t('coach.serviceUnavailable') })}\n\n`,
-      );
+      const err = error as Error;
+      const errName = err.constructor?.name;
+      let userMsg = this.i18n.t('coach.serviceUnavailable');
+      if (errName === 'LlmQuotaExceededError') {
+        userMsg = this.i18n.t('coach.quotaExceeded') || '今日配额已用完';
+      }
+      this.logger.error(`Coach chat error: ${err.message}`);
+      res.write(`data: ${JSON.stringify({ error: userMsg })}\n\n`);
       res.end();
     }
   }

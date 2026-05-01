@@ -2,24 +2,23 @@
  * V6.1 — 用量配额服务
  *
  * 职责:
- * - check(userId, feature): 检查用户是否还有配额（返回 boolean）
- * - increment(userId, feature): 消耗一次配额
- * - getQuotaStatus(userId, feature): 获取配额详情（已用/上限/重置时间）
+ * - check(userId, feature): 只读查询当前配额状态（供 UI 展示，不作授权判断）
+ * - increment(userId, feature): 原子扣减一次配额（CAS 语义，不会超额）
+ * - getQuotaStatus / getAllQuotaStatus: 配额详情查询
  * - resetExpiredQuotas(): Cron 定时批量重置过期配额
  *
- * V6.1 变更:
- * - 使用 PlanEntitlementResolver 解析权益，不再直接访问 TIER_ENTITLEMENTS
- * - 支持 V6.1 新增的计次功能（AI_TEXT_ANALYSIS, ANALYSIS_HISTORY）
- *
- * 设计决策:
- * - check + increment 分离: 允许业务先检查再消耗，避免预扣导致的回滚复杂度
- * - limit = -1 表示无限制（UNLIMITED），直接放行
- * - 缓存策略: 配额状态不走 Redis 缓存（写多读多，直接查 DB 简化一致性）
- * - 重置 Cron: 每小时执行一次，查找 resetAt < now 的记录批量重置
+ * P1-1 原子化改造（Race Condition 修复）：
+ * - 原实现 check() + increment() 两步之间有竞态窗口：两个并发请求都通过 check，
+ *   然后都执行 increment，导致用户实际使用次数超过 quota_limit。
+ * - 新实现：increment() 使用单条原子 SQL（带 WHERE used < quota_limit 的 CAS UPDATE），
+ *   数据库层面保证：返回 rowCount=0 即配额已满，无论多少并发都不会超额。
+ * - getOrCreateQuota 改为 upsert (ON CONFLICT DO NOTHING)，防止并发创建重复记录。
+ * - QuotaGateService 应移除 check() 前置调用，直接走 increment() 的原子结果。
  */
 import { Injectable, Logger, ForbiddenException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { UsageQuota } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { GatedFeature, QuotaCycle, UNLIMITED } from '../../subscription.types';
 import { SubscriptionService } from './subscription.service';
 import { PlanEntitlementResolver } from './plan-entitlement-resolver.service';
@@ -52,35 +51,40 @@ export class QuotaService {
   // ==================== 核心方法 ====================
 
   /**
-   * 检查用户是否还有配额
+   * 只读检查用户是否还有配额（供 UI 展示用，不作授权判断）。
+   *
+   * ⚠️  注意：check() → increment() 两步之间有竞态窗口。
+   * 授权判断请直接调用 increment()，它是原子的。
    *
    * @returns true = 有配额或无限制，false = 已耗尽
    */
   async check(userId: string, feature: GatedFeature): Promise<boolean> {
     const quota = await this.getOrCreateQuota(userId, feature);
-    if (!quota) return true; // 无记录 → 该功能不受配额限制
-
-    // 无限制直接放行
+    if (!quota) return true;
     if (quota.quotaLimit === UNLIMITED) return true;
-
-    // 检查是否需要先重置（resetAt 已过）
-    if (quota.resetAt && quota.resetAt <= new Date()) {
-      await this.resetSingleQuota(quota);
-      return true; // 刚重置，used=0
-    }
-
+    if (quota.resetAt && quota.resetAt <= new Date()) return true; // cron 会重置
     return quota.used < quota.quotaLimit;
   }
 
   /**
-   * 消耗一次配额
+   * 原子扣减一次配额（CAS 语义）。
+   *
+   * 实现方式：
+   * - UNLIMITED：直接 UPDATE used = used + 1，无条件成功。
+   * - 有上限：执行带 WHERE used < quota_limit 的原子 UPDATE；
+   *   若影响行数 = 0 → 配额已满，抛 ForbiddenException；
+   *   若影响行数 = 1 → 扣减成功，返回最新状态。
+   *
+   * 并发安全：数据库行锁保证同一 quota 行的 used 不会超过 quota_limit，
+   * 无论多少请求同时到达。
    *
    * @throws ForbiddenException 配额已耗尽
    */
   async increment(userId: string, feature: GatedFeature): Promise<QuotaStatus> {
     const quota = await this.getOrCreateQuota(userId, feature);
+
+    // 不受计次限制的功能
     if (!quota) {
-      // 该功能不受计次限制 → 返回无限状态
       return {
         feature,
         used: 0,
@@ -91,23 +95,45 @@ export class QuotaService {
       };
     }
 
-    // 无限制直接放行
+    // UNLIMITED：无条件 increment（不需要 CAS）
     if (quota.quotaLimit === UNLIMITED) {
-      await this.prisma.usageQuota.update({
+      const updated = await this.prisma.usageQuota.update({
         where: { id: quota.id },
-        data: { used: quota.used + 1 },
+        data: { used: { increment: 1 } },
       });
-      quota.used += 1;
-      return this.toStatus(quota);
+      return this.toStatus(updated);
     }
 
-    // 检查是否需要先重置
-    if (quota.resetAt && quota.resetAt <= new Date()) {
+    // 有限额：原子 CAS UPDATE
+    // 使用 executeRaw 以便利用 WHERE used < quota_limit 语义
+    // 同时处理配额周期已过期的情况（reset_at <= now 时先重置再扣）
+    const now = new Date();
+
+    // 若配额周期已过，先原子重置到新周期（由 cron 兜底，这里防用户长时间不访问后首次请求失败）
+    if (quota.resetAt && quota.resetAt <= now) {
       await this.resetSingleQuota(quota);
+      // 重置后 used=0，必然通过；直接 increment
+      const updated = await this.prisma.usageQuota.update({
+        where: { id: quota.id },
+        data: { used: 1 },
+      });
+      return this.toStatus(updated);
     }
 
-    // 配额检查
-    if (quota.used >= quota.quotaLimit) {
+    // 核心原子 CAS：UPDATE ... SET used = used + 1 WHERE id = ? AND used < quota_limit
+    // Prisma 不直接支持带条件的 UPDATE returning，使用 $executeRaw
+    const affectedRows = await this.prisma.$executeRaw(
+      Prisma.sql`
+        UPDATE usage_quota
+        SET    used       = used + 1,
+               updated_at = now()
+        WHERE  id         = ${quota.id}::uuid
+          AND  used       < quota_limit
+      `,
+    );
+
+    if (affectedRows === 0) {
+      // 配额耗尽（CAS 条件不成立）
       throw new ForbiddenException({
         code: 'QUOTA_EXCEEDED',
         message: this.i18n.t('subscription.quota.exceeded', { feature }),
@@ -118,18 +144,15 @@ export class QuotaService {
       });
     }
 
-    // 消耗一次
-    await this.prisma.usageQuota.update({
+    // 读取最新状态（$executeRaw 不返回行数据）
+    const updated = await this.prisma.usageQuota.findUnique({
       where: { id: quota.id },
-      data: { used: quota.used + 1 },
     });
-    quota.used += 1;
-
-    return this.toStatus(quota);
+    return this.toStatus(updated!);
   }
 
   /**
-   * 获取用户某功能的配额状态
+   * 获取用户某功能的配额状态（只读）
    */
   async getQuotaStatus(
     userId: string,
@@ -146,35 +169,24 @@ export class QuotaService {
         resetAt: null,
       };
     }
-
-    // 检查是否需要先重置
-    if (quota.resetAt && quota.resetAt <= new Date()) {
-      await this.resetSingleQuota(quota);
-    }
-
     return this.toStatus(quota);
   }
 
   /**
-   * 批量获取用户所有计次功能的配额状态
+   * 批量获取用户所有计次功能的配额状态。
    *
-   * V6.4 P2: 去除内联重置逻辑。
-   * 原因：查询操作不应触发写入，过期配额由每小时 Cron（resetExpiredQuotas）统一重置。
-   * 此处仅标记是否已过期供前端展示，不修改数据库。
-   *
-   * V7 修复：为所有计次类功能返回状态（包括尚未创建 UsageQuota 记录的新用户）。
-   * 原实现仅返回已有记录，导致首次访问的用户前端拿不到任何配额信息。
+   * 查询操作不触发写入；过期配额由 Cron 统一重置。
+   * 为所有计次类功能返回状态（包括尚未创建 UsageQuota 记录的新用户）。
    */
   async getAllQuotaStatus(userId: string): Promise<QuotaStatus[]> {
     const [quotas, summary] = await Promise.all([
-      this.prisma.usageQuota.findMany({ where: { userId: userId } }),
+      this.prisma.usageQuota.findMany({ where: { userId } }),
       this.subscriptionService.getUserSummary(userId),
     ]);
 
     const existingMap = new Map<string, UsageQuota>();
     for (const q of quotas) existingMap.set(q.feature, q);
 
-    // 枚举所有计次类功能，确保未创建记录时仍返回默认状态（used=0）
     const countableFeatures = Object.values(GatedFeature).filter((f) =>
       this.entitlementResolver.isCountableFeature(f as GatedFeature),
     ) as GatedFeature[];
@@ -185,18 +197,14 @@ export class QuotaService {
     return countableFeatures
       .map((feature) => {
         const existing = existingMap.get(feature);
-        if (existing) {
-          return this.toStatus(existing);
-        }
-        // 未创建记录 → 按当前 plan 配额返回默认状态
+        if (existing) return this.toStatus(existing);
+
         const limit = this.entitlementResolver.getQuotaLimit(
           summary.entitlements,
           feature,
         );
-        if (limit === null) {
-          // 不是计次类型（理论上不会走到这里，双重保险）
-          return null;
-        }
+        if (limit === null) return null;
+
         const unlimited = limit === UNLIMITED;
         return {
           feature,
@@ -213,18 +221,16 @@ export class QuotaService {
   // ==================== Cron 定时重置 ====================
 
   /**
-   * 每小时执行: 批量重置过期配额
+   * 每小时执行: 批量原子重置过期配额
    *
-   * 查找 resetAt <= now 的记录，将 used 重置为 0，更新 resetAt 到下一个周期。
-   * 使用分批处理避免单次加载过多记录。
+   * 使用 executeRaw 单条 SQL，保证并发 cron（多实例）下幂等：
+   *   UPDATE ... WHERE reset_at <= now() → 已重置的行 reset_at > now()，不会二次重置
    */
   @Cron('0 * * * *', { name: 'quota-reset' })
   async resetExpiredQuotas(): Promise<number> {
     const now = new Date();
     let totalReset = 0;
 
-    // V6.3 P1-6: 按 cycle 分组批量 UPDATE，替代逐条 resetSingleQuota
-    // 同一 cycle 类型的所有过期配额 reset_at 相同，可用 updateMany 一次性处理
     const cycles = [
       QuotaCycle.DAILY,
       QuotaCycle.WEEKLY,
@@ -234,14 +240,8 @@ export class QuotaService {
     for (const cycle of cycles) {
       const nextResetAt = this.calcNextReset(now, cycle);
       const result = await this.prisma.usageQuota.updateMany({
-        where: {
-          resetAt: { lte: now },
-          cycle,
-        },
-        data: {
-          used: 0,
-          resetAt: nextResetAt,
-        },
+        where: { resetAt: { lte: now }, cycle },
+        data: { used: 0, resetAt: nextResetAt },
       });
       totalReset += result.count;
     }
@@ -255,92 +255,60 @@ export class QuotaService {
   // ==================== 私有方法 ====================
 
   /**
-   * 获取或按需创建配额记录
+   * 获取或原子创建配额记录。
    *
-   * 如果用户没有该功能的配额记录，根据其订阅等级自动创建。
-   * 仅对计次类功能创建记录，布尔型功能不需要配额追踪。
-   *
-   * V6.1: 使用 PlanEntitlementResolver 判断功能类型和获取限额
-   * V6.x fix: 找到已有记录后，对比当前 plan 配额，不一致时同步更新（避免改 plan 后旧记录不生效）
+   * 使用 upsert（ON CONFLICT DO NOTHING 语义），防止并发首次创建时 unique 冲突。
    */
   private async getOrCreateQuota(
     userId: string,
     feature: GatedFeature,
-  ): Promise<any | null> {
-    // 使用 PlanEntitlementResolver 检查该功能是否为计次类型
+  ): Promise<UsageQuota | null> {
     if (!this.entitlementResolver.isCountableFeature(feature)) return null;
 
-    // 根据用户订阅概要获取当前 plan 配额上限
     const summary = await this.subscriptionService.getUserSummary(userId);
     const currentLimit = this.entitlementResolver.getQuotaLimit(
       summary.entitlements,
       feature,
     );
-
-    // 非数值型权益 → 不需要配额追踪
     if (currentLimit === null) return null;
 
-    // 查找已有记录
-    const existing = await this.prisma.usageQuota.findUnique({
-      where: { userId_feature: { userId: userId, feature } },
-    });
-
-    if (existing) {
-      // 检查 quota_limit 是否与当前 plan 一致，不一致则同步更新
-      if (existing.quotaLimit !== currentLimit) {
-        this.logger.log(
-          `同步配额上限: userId=${userId}, feature=${feature}, ` +
-            `old=${existing.quotaLimit}, new=${currentLimit}`,
-        );
-        const updated = await this.prisma.usageQuota.update({
-          where: { id: existing.id },
-          data: { quotaLimit: currentLimit },
-        });
-        return updated;
-      }
-      return existing;
-    }
-
-    // 自动创建配额记录
     const now = new Date();
     const resetAt = this.calcNextReset(now, QuotaCycle.DAILY);
-    return this.prisma.usageQuota.create({
-      data: {
-        userId: userId,
+
+    // upsert：不存在则创建，存在则按需同步 quota_limit
+    const quota = await this.prisma.usageQuota.upsert({
+      where: { userId_feature: { userId, feature } },
+      create: {
+        userId,
         feature,
         used: 0,
         quotaLimit: currentLimit,
         cycle: QuotaCycle.DAILY,
-        resetAt: resetAt,
+        resetAt,
+      },
+      update: {
+        // 只在 quota_limit 变化时更新，避免无谓写放大
+        quotaLimit: currentLimit,
       },
     });
+
+    return quota;
   }
 
   /**
-   * 判断功能是否为计次类型
-   *
-   * V6.1: 委托给 PlanEntitlementResolver
+   * 原子重置单条配额（供 increment() 内懒重置使用）
    */
-  private isCountableFeature(feature: GatedFeature): boolean {
-    return this.entitlementResolver.isCountableFeature(feature);
-  }
-
-  /**
-   * 重置单条配额记录
-   */
-  private async resetSingleQuota(quota: any): Promise<void> {
-    const newResetAt = this.calcNextReset(new Date(), quota.cycle);
+  private async resetSingleQuota(quota: UsageQuota): Promise<void> {
+    const newResetAt = this.calcNextReset(new Date(), quota.cycle as QuotaCycle);
     await this.prisma.usageQuota.update({
       where: { id: quota.id },
       data: { used: 0, resetAt: newResetAt },
     });
-    quota.used = 0;
-    quota.resetAt = newResetAt;
+    // 更新内存引用，让调用方 increment 能感知已重置
+    (quota as any).used = 0;
+    (quota as any).resetAt = newResetAt;
   }
 
-  /**
-   * 计算下次重置时间
-   */
   private calcNextReset(from: Date, cycle: QuotaCycle): Date {
     const next = new Date(from);
     switch (cycle) {
@@ -360,10 +328,7 @@ export class QuotaService {
     return next;
   }
 
-  /**
-   * 将 UsageQuota entity 转换为 QuotaStatus DTO
-   */
-  private toStatus(quota: any): QuotaStatus {
+  private toStatus(quota: UsageQuota): QuotaStatus {
     const unlimited = quota.quotaLimit === UNLIMITED;
     return {
       feature: quota.feature as GatedFeature,

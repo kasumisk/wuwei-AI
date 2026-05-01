@@ -1,0 +1,262 @@
+name: Deploy API Server to Cloud Run
+
+# 触发条件：
+#   - push to main（影响 api-server 或共享包）
+#   - 手动触发（支持选择 environment）
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/api-server/**'
+      - 'packages/**'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/deploy-api-server.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'production'
+        type: choice
+        options: [production, staging]
+      skip_migration:
+        description: 'Skip prisma migrate deploy'
+        required: false
+        default: 'false'
+        type: boolean
+
+# 同一时刻只允许一个 production deploy 运行（staging 不限）
+concurrency:
+  group: deploy-api-${{ github.event.inputs.environment || 'production' }}
+  cancel-in-progress: false   # 不取消进行中的部署，排队等待
+
+env:
+  REGION: us-west1
+  SERVICE: api-server
+  # Artifact Registry 仓库（格式: REGION-docker.pkg.dev/PROJECT/REPO）
+  # 完整镜像路径在 job 内拼接（含 PROJECT 来自 secret）
+  AR_REPO: us-west1-docker.pkg.dev
+  PNPM_VERSION: '10.28.2'
+  NODE_VERSION: '20'
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 1: CI 检查（type-check + lint）
+  # ─────────────────────────────────────────────────────────────────────────
+  ci:
+    name: CI checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check (api-server)
+        run: pnpm exec tsc --noEmit -p apps/api-server/tsconfig.json
+
+      - name: Lint (api-server)
+        run: pnpm --filter api-server lint
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 2: Build & Push Docker image to Artifact Registry
+  # ─────────────────────────────────────────────────────────────────────────
+  build-push:
+    name: Build & push image
+    needs: ci
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Google 官方 OIDC 认证（无需存储长期 service account key）
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.AR_REPO }} --quiet
+
+      - name: Docker meta (image tag)
+        id: meta
+        run: |
+          PROJECT=${{ secrets.GCP_PROJECT_ID }}
+          SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          IMAGE="${{ env.AR_REPO }}/${PROJECT}/docker/${{ env.SERVICE }}"
+          echo "image=${IMAGE}:${SHA}" >> "$GITHUB_OUTPUT"
+          echo "image_latest=${IMAGE}:latest" >> "$GITHUB_OUTPUT"
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/api-server/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}
+            ${{ steps.meta.outputs.image_latest }}
+          # BuildKit 内联缓存：复用上次 layer，大幅提速（无需额外 cache registry）
+          cache-from: type=registry,ref=${{ steps.meta.outputs.image_latest }}
+          cache-to: type=inline
+          provenance: false   # 关闭 SBOM attestation，减少 AR 存储
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 3: DB Migration（prisma migrate deploy）
+  # 在独立的 Cloud Run Job / gcloud run jobs execute 中执行，
+  # 复用同一镜像但覆盖 CMD；失败则阻断部署
+  # ─────────────────────────────────────────────────────────────────────────
+  migrate:
+    name: DB migration
+    needs: build-push
+    runs-on: ubuntu-latest
+    if: github.event.inputs.skip_migration != 'true'
+    environment:
+      name: ${{ github.event.inputs.environment || 'production' }}
+
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      # 创建或更新 Cloud Run Job（每次部署更新镜像）
+      - name: Update migration job image
+        run: |
+          IMAGE="${{ needs.build-push.outputs.image }}"
+          gcloud run jobs update ${{ env.SERVICE }}-migrate \
+            --image="${IMAGE}" \
+            --region=${{ env.REGION }} \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --command="node" \
+            --args="node_modules/.bin/prisma,migrate,deploy,--schema,prisma/schema.prisma" \
+            --set-secrets="DATABASE_URL=DATABASE_URL:latest,DIRECT_URL=DIRECT_URL:latest" \
+            --max-retries=1 \
+            --task-timeout=300s \
+            --quiet 2>/dev/null \
+          || gcloud run jobs create ${{ env.SERVICE }}-migrate \
+            --image="${IMAGE}" \
+            --region=${{ env.REGION }} \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --command="node" \
+            --args="node_modules/.bin/prisma,migrate,deploy,--schema,prisma/schema.prisma" \
+            --set-secrets="DATABASE_URL=DATABASE_URL:latest,DIRECT_URL=DIRECT_URL:latest" \
+            --max-retries=1 \
+            --task-timeout=300s
+
+      # 执行并等待完成（--wait 阻塞直到 job 结束）
+      - name: Run migration
+        run: |
+          gcloud run jobs execute ${{ env.SERVICE }}-migrate \
+            --region=${{ env.REGION }} \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --wait
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 4: Deploy to Cloud Run
+  # ─────────────────────────────────────────────────────────────────────────
+  deploy:
+    name: Deploy to Cloud Run
+    needs: [build-push, migrate]
+    # migrate 可能被 skip，但只要 build-push 成功且 migrate 未失败就继续
+    if: always() && needs.build-push.result == 'success' && needs.migrate.result != 'failure'
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event.inputs.environment || 'production' }}
+      url: ${{ steps.deploy.outputs.url }}
+
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Deploy to Cloud Run
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          image: ${{ needs.build-push.outputs.image }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          # 流量：部署后立即 100% 切新版本（金丝雀在 staging 完成，main 分支代表已验证）
+          tag: ${{ github.sha }}
+          flags: >-
+            --min-instances=1
+            --max-instances=10
+            --memory=1Gi
+            --cpu=1
+            --concurrency=80
+            --timeout=60s
+            --port=8080
+            --set-secrets=DATABASE_URL=DATABASE_URL:latest,DIRECT_URL=DIRECT_URL:latest,OPENROUTER_API_KEY=OPENROUTER_API_KEY:latest,DEEPSEEK_API_KEY=DEEPSEEK_API_KEY:latest,JWT_SECRET=JWT_SECRET:latest,REDIS_URL=REDIS_URL:latest
+            --service-account=${{ secrets.GCP_CLOUD_RUN_SA }}
+
+      - name: Show deployed URL
+        run: echo "Deployed to ${{ steps.deploy.outputs.url }}"
+
+      # 烟测：等服务就绪后 curl /health，非 200 则失败
+      - name: Smoke test
+        run: |
+          URL="${{ steps.deploy.outputs.url }}"
+          echo "Smoke testing ${URL}/health ..."
+          for i in 1 2 3 4 5; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${URL}/health" || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed (attempt ${i})"
+              exit 0
+            fi
+            echo "Attempt ${i}: got ${STATUS}, retrying in 10s..."
+            sleep 10
+          done
+          echo "Smoke test failed after 5 attempts"
+          exit 1
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 5: Notify on failure（可选 Slack / 仅在失败时运行）
+  # ─────────────────────────────────────────────────────────────────────────
+  notify-failure:
+    name: Notify on failure
+    needs: [ci, build-push, migrate, deploy]
+    if: failure() && secrets.SLACK_WEBHOOK_URL != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Slack notification
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": ":x: *API Server deploy failed* on `${{ github.ref_name }}`\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View run>"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK

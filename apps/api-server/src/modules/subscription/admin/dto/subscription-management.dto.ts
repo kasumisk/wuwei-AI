@@ -6,6 +6,8 @@ import {
   IsInt,
   IsBoolean,
   IsObject,
+  IsArray,
+  ValidateNested,
   Min,
   Max,
   IsUUID,
@@ -22,6 +24,41 @@ import {
 } from '../../subscription.types';
 
 // ==================== 订阅计划 ====================
+
+export class SubscriptionStoreProductInputDto {
+  @ApiProperty({ description: '支付/订阅 provider，例如 revenuecat / wechat_pay' })
+  @IsString()
+  provider: string;
+
+  @ApiProperty({ description: '商店，例如 app_store / play_store / wechat' })
+  @IsString()
+  store: string;
+
+  @ApiProperty({ description: '第三方商品 ID' })
+  @IsString()
+  productId: string;
+
+  @ApiPropertyOptional({ description: 'RevenueCat offering ID' })
+  @IsOptional()
+  @IsString()
+  offeringId?: string;
+
+  @ApiPropertyOptional({ description: 'RevenueCat package ID' })
+  @IsOptional()
+  @IsString()
+  packageId?: string;
+
+  @ApiPropertyOptional({ description: '商品环境', default: 'production' })
+  @IsOptional()
+  @IsString()
+  environment?: string;
+
+  @ApiPropertyOptional({ description: '是否启用', default: true })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  isActive?: boolean;
+}
 
 /**
  * 查询订阅计划列表
@@ -90,20 +127,15 @@ export class CreateSubscriptionPlanDto {
   @IsObject()
   entitlements: FeatureEntitlements;
 
-  @ApiPropertyOptional({ description: 'Apple IAP 产品 ID' })
+  @ApiPropertyOptional({
+    description: '第三方商品映射。付费海外套餐至少需要 revenuecat/app_store 与 revenuecat/play_store。',
+    type: [SubscriptionStoreProductInputDto],
+  })
   @IsOptional()
-  @IsString()
-  appleProductId?: string;
-
-  @ApiPropertyOptional({ description: 'Google Play 产品 ID' })
-  @IsOptional()
-  @IsString()
-  googleProductId?: string;
-
-  @ApiPropertyOptional({ description: '微信支付商品 ID' })
-  @IsOptional()
-  @IsString()
-  wechatProductId?: string;
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SubscriptionStoreProductInputDto)
+  storeProducts?: SubscriptionStoreProductInputDto[];
 
   @ApiPropertyOptional({ description: '排序权重' })
   @IsOptional()
@@ -153,20 +185,15 @@ export class UpdateSubscriptionPlanDto {
   @IsObject()
   entitlements?: FeatureEntitlements;
 
-  @ApiPropertyOptional({ description: 'Apple IAP 产品 ID' })
+  @ApiPropertyOptional({
+    description: '第三方商品映射。传入时按套餐整体替换。',
+    type: [SubscriptionStoreProductInputDto],
+  })
   @IsOptional()
-  @IsString()
-  appleProductId?: string;
-
-  @ApiPropertyOptional({ description: 'Google Play 产品 ID' })
-  @IsOptional()
-  @IsString()
-  googleProductId?: string;
-
-  @ApiPropertyOptional({ description: '微信支付商品 ID' })
-  @IsOptional()
-  @IsString()
-  wechatProductId?: string;
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SubscriptionStoreProductInputDto)
+  storeProducts?: SubscriptionStoreProductInputDto[];
 
   @ApiPropertyOptional({ description: '排序权重' })
   @IsOptional()
@@ -251,6 +278,39 @@ export class GetSubscriptionsQueryDto {
   @IsOptional()
   @IsString()
   endDate?: string;
+
+  @ApiPropertyOptional({ description: '是否存在退款记录' })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  hasRefundRecord?: boolean;
+
+  @ApiPropertyOptional({ description: '是否存在手动权益' })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  hasManualEntitlement?: boolean;
+
+  @ApiPropertyOptional({ description: '是否存在 RevenueCat 信号' })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  hasRevenueCatSignal?: boolean;
+
+  @ApiPropertyOptional({ description: 'Webhook 处理状态，例如 failed / processed' })
+  @IsOptional()
+  @IsString()
+  webhookProcessingStatus?: string;
+
+  @ApiPropertyOptional({ description: '排序字段，例如 createdAt / expiresAt / latestTransactionAt / latestWebhookAt' })
+  @IsOptional()
+  @IsString()
+  sortBy?: string;
+
+  @ApiPropertyOptional({ description: '排序方向 asc / desc' })
+  @IsOptional()
+  @IsString()
+  sortOrder?: string;
 }
 
 /**
@@ -275,6 +335,43 @@ export class ChangeSubscriptionPlanDto {
 
 export class SubscriptionResyncDto {
   @ApiPropertyOptional({ description: '重同步原因说明' })
+  @IsOptional()
+  @IsString()
+  reason?: string;
+}
+
+export class AdminSubscriptionActionDto {
+  @ApiPropertyOptional({ description: '操作原因说明' })
+  @IsOptional()
+  @IsString()
+  reason?: string;
+}
+
+export class GrantManualEntitlementDto {
+  @ApiProperty({ description: '权益编码' })
+  @IsString()
+  entitlementCode: string;
+
+  @ApiProperty({ description: '权益值，可为 boolean/number/string/json' })
+  value: unknown;
+
+  @ApiPropertyOptional({ description: '失效时间 ISO 字符串，不传表示长期有效' })
+  @IsOptional()
+  @IsString()
+  effectiveTo?: string;
+
+  @ApiPropertyOptional({ description: '授权原因说明' })
+  @IsOptional()
+  @IsString()
+  reason?: string;
+}
+
+export class RevokeManualEntitlementDto {
+  @ApiProperty({ description: '用户权益记录 ID' })
+  @IsUUID()
+  userEntitlementId: string;
+
+  @ApiPropertyOptional({ description: '撤销原因说明' })
   @IsOptional()
   @IsString()
   reason?: string;
@@ -385,6 +482,31 @@ export class GetSubscriptionTimelineQueryDto {
 
 export class GetSubscriptionAnomaliesQueryDto {
   @ApiPropertyOptional({ description: '每类异常返回条数', default: 20 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number = 20;
+}
+
+export class GetSubscriptionMaintenanceJobsQueryDto {
+  @ApiPropertyOptional({ description: '返回任务数', default: 20 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number = 20;
+}
+
+export class GetSubscriptionMaintenanceDlqQueryDto {
+  @ApiPropertyOptional({ description: 'DLQ 状态 pending / retried / discarded' })
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @ApiPropertyOptional({ description: '返回任务数', default: 20 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()

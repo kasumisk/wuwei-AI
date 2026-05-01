@@ -21,6 +21,12 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { FoodLibraryService } from './food-library.service';
+import { LlmService } from '../../../../core/llm/llm.service';
+import {
+  LlmFeature,
+  LlmQuotaExceededError,
+  LlmUnavailableError,
+} from '../../../../core/llm/llm.types';
 import {
   FoodAnalysisResultV61,
   AnalyzedFoodItem,
@@ -226,6 +232,8 @@ export class TextFoodAnalysisService {
     private readonly userContextBuilder: UserContextBuilderService,
     // V13.3: 注入 prompt schema service，取代模块级 free function
     private readonly promptSchema: AnalysisPromptSchemaService,
+    // Checkpoint 3: 统一 LLM 调用层（quota + breaker + recorder）
+    private readonly llm: LlmService,
   ) {
     // 复用与图片分析相同的 API 配置
     this.apiKey =
@@ -293,6 +301,7 @@ export class TextFoodAnalysisService {
       locale,
       userCtx,
       hints,
+      userId,
     );
 
     // V6.x: parsedFoods 上的营养值是 per-serving 实际摄入（数据契约见 AnalyzedFoodItem JSDoc），
@@ -414,6 +423,7 @@ export class TextFoodAnalysisService {
     locale?: Locale,
     userCtx?: any,
     hints?: string[],
+    userId?: string,
   ): Promise<ParsedFoodItem[]> {
     const results: ParsedFoodItem[] = [];
     const unmatchedTerms: Array<{
@@ -468,6 +478,7 @@ export class TextFoodAnalysisService {
         userCtx,
         locale,
         hints,
+        userId,
       );
       results.push(...llmResults);
 
@@ -480,6 +491,7 @@ export class TextFoodAnalysisService {
           userCtx,
           locale,
           hints,
+          userId,
         );
         results.push(...llmFullTextResults);
       }
@@ -894,6 +906,7 @@ export class TextFoodAnalysisService {
    * 调用 LLM 拆解未匹配的食物文本
    *
    * V3.4 P1.3: 支持用户上下文注入，构建决策导向的动态 system prompt
+   * Checkpoint 3: 改走统一 LlmService.chat（带 quota / breaker / usage record）
    */
   private async llmParseFoods(
     unmatchedText: string,
@@ -901,6 +914,7 @@ export class TextFoodAnalysisService {
     userCtx?: any,
     locale?: Locale,
     hints?: string[],
+    userId?: string,
   ): Promise<ParsedFoodItem[]> {
     if (!this.apiKey) {
       this.logger.warn('LLM API not configured, skipping LLM parsing');
@@ -936,38 +950,23 @@ export class TextFoodAnalysisService {
         userContent += `\n\n【估算指导】${hints.join('；')}`;
       }
 
-      const response = await fetch(`${this.baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.apiKey}`,
-          'HTTP-Referer': 'https://uway.dev-net.uk',
-          'X-Title': 'Wuwei Health',
-        },
-        body: JSON.stringify({
-          model: this.textModel,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            {
-              role: 'user',
-              content: userContent,
-            },
-          ],
-          max_tokens: 800,
-          temperature: 0.2,
-        }),
-        signal: AbortSignal.timeout(15000),
+      const result = await this.llm.chat({
+        feature: LlmFeature.FoodText,
+        userId,
+        provider: 'openrouter',
+        apiKey: this.apiKey,
+        baseUrl: this.baseUrl,
+        model: this.textModel,
+        temperature: 0.2,
+        maxTokens: 800,
+        timeoutMs: 15_000,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userContent },
+        ],
       });
 
-      if (!response.ok) {
-        const err = await response.text();
-        this.logger.error(`LLM API error: ${response.status} ${err}`);
-        return [];
-      }
-
-      const data = await response.json();
-      const content = data.choices?.[0]?.message?.content || '';
-      const parsed = this.parseLlmResponse(content);
+      const parsed = this.parseLlmResponse(result.content);
 
       // 并行查询所有 LLM 解析食物的食物库匹配
       const llmFoods = parsed.foods
@@ -1139,7 +1138,15 @@ export class TextFoodAnalysisService {
         resolved as Array<ParsedFoodItem & NutritionInput>,
       );
     } catch (err) {
-      this.logger.warn(`LLM text parsing failed: ${(err as Error).message}`);
+      // 配额耗尽：向上抛，由 controller 映射 429
+      if (err instanceof LlmQuotaExceededError) throw err;
+      // 上游不可用 / 其它错误：降级为空数组（保持与历史行为一致：
+      // 标准库匹配命中的食物仍能返回，未命中部分丢弃）
+      const reason =
+        err instanceof LlmUnavailableError
+          ? 'unavailable'
+          : (err as Error).message;
+      this.logger.warn(`LLM text parsing failed: ${reason}`);
       return [];
     }
   }

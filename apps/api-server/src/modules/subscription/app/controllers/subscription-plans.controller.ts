@@ -44,21 +44,7 @@ export class SubscriptionPlansController {
   async getActivePlans(): Promise<ApiResponse> {
     const plans = await this.subscriptionService.getActivePlans();
 
-    const list = plans.map((p: any) => ({
-      id: p.id,
-      name: p.name,
-      description: p.description,
-      tier: p.tier,
-      billingCycle: p.billingCycle,
-      priceCents: p.priceCents,
-      currency: p.currency,
-      entitlements: p.entitlements,
-      appleProductId: p.appleProductId,
-      googleProductId: p.googleProductId,
-      wechatProductId: p.wechatProductId,
-      sortOrder: p.sortOrder,
-      isActive: p.isActive,
-    }));
+    const list = plans.map((p: any) => this.serializePlanForClient(p));
 
     return {
       success: true,
@@ -66,6 +52,22 @@ export class SubscriptionPlansController {
       message: this.i18n.t('subscription.controller.fetchPlansSuccess'),
       data: { list },
     };
+  }
+
+  /**
+   * 获取当前用户订阅状态。
+   * GET /api/app/subscription/status
+   */
+  @Get('status')
+  @UseGuards(AppJwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '获取当前用户订阅状态' })
+  async getSubscriptionStatus(@Req() req: any): Promise<ApiResponse> {
+    const summary = await this.subscriptionService.getUserSummary(req.user.id);
+    return ResponseWrapper.success(
+      this.serializeSubscriptionStatus(summary),
+      'OK',
+    );
   }
 
   /**
@@ -95,44 +97,163 @@ export class SubscriptionPlansController {
       code: HttpStatus.OK,
       message: 'OK',
       data: {
-        tier: summary.tier,
-        status:
-          summary.subscriptionId == null
-            ? 'free'
-            : summary.autoRenew
-              ? 'active'
-              : 'cancelled',
-        accessState:
-          summary.tier === 'free' && !summary.subscriptionId
-            ? 'no_access'
-            : 'has_access',
-        autoRenew: summary.autoRenew,
-        willRenew: summary.autoRenew,
-        expiresAt: serializedExpiresAt,
-        subscriptionId: summary.subscriptionId,
-        planName: summary.planName,
-        lastSyncedAt: new Date().toISOString(),
+        ...this.serializeSubscriptionStatus(summary, serializedExpiresAt),
         quotas,
       },
     };
   }
 
   /**
-   * 触发当前用户的订阅同步。
-   *
-   * 当前提供最小骨架：
-   * - 为客户端购买成功 / restore 成功后提供统一入口
-   * - 后续接入 RevenueCat subscriber API 和异步 job 队列
+   * 客户端主动刷新当前用户订阅状态。
+   * 购买成功、App 前台恢复、RevenueCat 本地状态与后端不一致时调用。
    */
-  @Post('sync-trigger')
+  @Post('refresh')
   @UseGuards(AppJwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: '触发当前用户订阅同步' })
-  async triggerSubscriptionSync(@Req() req: any): Promise<ApiResponse> {
+  @ApiOperation({ summary: '刷新当前用户订阅状态' })
+  async refreshSubscription(@Req() req: any): Promise<ApiResponse> {
     const result = await this.revenueCatSyncService.triggerSyncForUser(
       req.user.id,
       'client_trigger',
     );
-    return ResponseWrapper.success(result, '订阅同步已触发');
+    const summary = await this.subscriptionService.getUserSummary(req.user.id);
+    return ResponseWrapper.success(
+      {
+        sync: result,
+        status: this.serializeSubscriptionStatus(summary),
+      },
+      '订阅状态已刷新',
+    );
+  }
+
+  /**
+   * 恢复购买后的服务端同步入口。
+   * Flutter 先调用 RevenueCat restorePurchases，再调用本接口收敛后端状态。
+   */
+  @Post('restore')
+  @UseGuards(AppJwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '恢复购买后刷新订阅状态' })
+  async restoreSubscription(@Req() req: any): Promise<ApiResponse> {
+    return this.refreshSubscription(req);
+  }
+
+  private serializeSubscriptionStatus(
+    summary: Awaited<ReturnType<SubscriptionService['getUserSummary']>>,
+    serializedExpiresAt?: string | null,
+  ) {
+    const expiresAt =
+      serializedExpiresAt !== undefined
+        ? serializedExpiresAt
+        : summary.expiresAt
+          ? new Date(summary.expiresAt).toISOString()
+          : null;
+    const hasAccess = summary.tier !== 'free' && !!summary.subscriptionId;
+    return {
+      tier: summary.tier,
+      status: summary.status,
+      accessState: hasAccess ? 'has_access' : 'no_access',
+      autoRenew: summary.autoRenew,
+      willRenew: summary.autoRenew,
+      expiresAt,
+      subscriptionId: summary.subscriptionId,
+      planName: summary.planName,
+      entitlements: summary.entitlements,
+      entitlementSource: summary.entitlementSource,
+      lastSyncedAt: new Date().toISOString(),
+    };
+  }
+
+  private serializePlanForClient(plan: any) {
+    const storeProducts = Array.isArray(plan.storeProducts)
+      ? plan.storeProducts
+      : [];
+
+    return {
+      id: plan.id,
+      name: plan.name,
+      description: plan.description,
+      tier: plan.tier,
+      billingCycle: plan.billingCycle,
+      priceCents: plan.priceCents,
+      currency: plan.currency,
+      entitlements: plan.entitlements,
+      storeProducts,
+      purchaseOptions: this.buildPurchaseOptions(plan, storeProducts),
+      clientDisplay: this.buildClientDisplay(plan),
+      sortOrder: plan.sortOrder,
+      isActive: plan.isActive,
+    };
+  }
+
+  private buildPurchaseOptions(plan: any, storeProducts: any[]) {
+    return storeProducts
+      .filter((item) => item?.isActive !== false)
+      .map((item) => {
+        const store = item?.store?.toString() ?? null;
+        const platform =
+          store === 'app_store'
+            ? 'ios'
+            : store === 'play_store'
+              ? 'android'
+              : 'external';
+
+        return {
+          provider: item?.provider?.toString() ?? '',
+          store,
+          platform,
+          productId: item?.productId?.toString() ?? '',
+          environment: item?.environment?.toString() ?? 'production',
+          billingCycle:
+            item?.billingCycle?.toString() ?? plan?.billingCycle?.toString(),
+          offeringId: item?.offeringId?.toString() ?? null,
+          packageId: item?.packageId?.toString() ?? null,
+          isActive: item?.isActive !== false,
+        };
+      })
+      .filter((item) => item.provider && item.productId);
+  }
+
+  private buildClientDisplay(plan: any) {
+    const billingCycle = plan?.billingCycle?.toString() ?? 'monthly';
+    const tier = plan?.tier?.toString() ?? 'free';
+    const name = plan?.name?.toString() ?? 'Plan';
+
+    const cycleLabel =
+      billingCycle === 'monthly'
+        ? 'month'
+        : billingCycle === 'yearly'
+          ? 'year'
+          : billingCycle === 'quarterly'
+            ? 'quarter'
+            : billingCycle === 'lifetime'
+              ? 'lifetime'
+              : billingCycle;
+
+    const title =
+      billingCycle === 'monthly'
+        ? `${name} Monthly`
+        : billingCycle === 'yearly'
+          ? `${name} Yearly`
+          : billingCycle === 'quarterly'
+            ? `${name} Quarterly`
+            : billingCycle === 'lifetime'
+              ? `${name} Lifetime`
+              : name;
+
+    const badge =
+      tier === 'premium'
+        ? 'Premium'
+        : billingCycle === 'yearly'
+          ? 'Best value'
+          : null;
+
+    return {
+      title,
+      subtitle: plan?.description?.toString() || `${name} access billed per ${cycleLabel}.`,
+      badge,
+      ctaLabel: `Subscribe ${name}`,
+      priceSuffix: billingCycle === 'lifetime' ? '' : `/${cycleLabel}`,
+    };
   }
 }

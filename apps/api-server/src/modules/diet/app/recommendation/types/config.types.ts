@@ -495,4 +495,10 @@ export interface ScoringContext {
   /** P0-3: 当日完整营养目标（四宏量），用于动态派生 MACRO_RANGES 奖励区间，
    *  修复 "MACRO_RANGES 硬编码与用户目标冲突导致 fat +73%" 的 Bug */
   dailyTarget?: MealTarget;
+  /**
+   * 区域+时区优化（阶段 1.2）：
+   * 用户本地当前月份 1-12，由 PipelineContextFactory 基于 timezone 计算后传入
+   * SeasonalityService.getSeasonalityScore，避免使用服务器时区。
+   */
+  currentMonth?: number;
 }

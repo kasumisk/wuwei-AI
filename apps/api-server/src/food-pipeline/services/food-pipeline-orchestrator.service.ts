@@ -1164,13 +1164,18 @@ export class FoodPipelineOrchestratorService {
     foodId: string,
     data: Record<string, any>,
   ): Promise<void> {
-    for (const [field, value] of Object.entries(data)) {
-      await this.prisma.$executeRawUnsafe(
-        `UPDATE foods SET "${field}" = $1 WHERE id = $2::uuid`,
-        value,
-        foodId,
-      );
-    }
+    const entries = Object.entries(data).filter(([, v]) => v != null);
+    if (entries.length === 0) return;
+
+    // P3-N1: 合并为单条 UPDATE，避免每字段一次 executeRawUnsafe
+    const setClauses = entries.map(([field], i) => `"${field}" = $${i + 1}`);
+    const values = entries.map(([, v]) => v);
+    // foodId 作为最后一个参数
+    await this.prisma.$executeRawUnsafe(
+      `UPDATE foods SET ${setClauses.join(', ')} WHERE id = $${entries.length + 1}::uuid`,
+      ...values,
+      foodId,
+    );
   }
 
   private resolveImportMetadata(importMetadata?: ImportMetadata): {
@@ -1342,17 +1347,22 @@ export class FoodPipelineOrchestratorService {
       return result;
     }
 
+    // P3-N1: 批量预查已有食品名称，避免循环内逐条 findFirst
+    const candidateNames = candidates.map((c) => c.name);
+    const existingFoods = await this.prisma.food.findMany({
+      where: { name: { in: candidateNames } },
+      select: { id: true, name: true, aliases: true },
+    });
+    const existingFoodMap = new Map(existingFoods.map((f) => [f.name, f]));
+
     for (const candidate of candidates) {
       try {
-        // 去重检查：按名称精确匹配
-        const existing = await this.prisma.food.findFirst({
-          where: {
-            OR: [
-              { name: candidate.name },
-              { aliases: { contains: candidate.name } },
-            ],
-          },
-        });
+        // 去重检查：内存查找（已批量预加载）
+        const existing =
+          existingFoodMap.get(candidate.name) ??
+          existingFoods.find(
+            (f) => f.aliases && f.aliases.includes(candidate.name),
+          );
 
         if (existing) {
           result.duplicates++;

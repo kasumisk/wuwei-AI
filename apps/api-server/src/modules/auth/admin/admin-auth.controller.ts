@@ -23,6 +23,7 @@ import { JwtAuthGuard } from './jwt-auth.guard';
 import { CurrentUser } from './current-user.decorator';
 import { LoginResponseDto } from '@ai-platform/shared';
 import { I18n, I18nContext } from '../../../core/i18n';
+import { StrictThrottle } from '../../../core/throttle/throttle.constants';
 
 @ApiTags('管理员认证')
 @Controller('auth')
@@ -35,6 +36,7 @@ export class AdminController {
   @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @StrictThrottle(5, 60)
   @ApiOperation({ summary: '用户名密码登录' })
   async login(@Body() loginDto: LoginDto): Promise<LoginResponseDto> {
     return this.adminService.login(loginDto);
@@ -46,6 +48,7 @@ export class AdminController {
   @Public()
   @Post('login/phone')
   @HttpCode(HttpStatus.OK)
+  @StrictThrottle(5, 60)
   @ApiOperation({ summary: '手机验证码登录' })
   async loginByPhone(@Body() loginByPhoneDto: LoginByPhoneDto) {
     return this.adminService.loginByPhone(loginByPhoneDto);
@@ -57,6 +60,7 @@ export class AdminController {
   @Public()
   @Post('login_by_token')
   @HttpCode(HttpStatus.OK)
+  @StrictThrottle(10, 60)
   @ApiOperation({ summary: 'Token 登录' })
   async loginByToken(@Body() loginByTokenDto: LoginByTokenDto) {
     return this.adminService.loginByToken(loginByTokenDto.token);
@@ -68,6 +72,7 @@ export class AdminController {
   @Public()
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
+  @StrictThrottle(3, 3600)
   @ApiOperation({ summary: '用户注册' })
   async register(@Body() registerDto: RegisterDto) {
     return this.adminService.register(registerDto);
@@ -79,6 +84,7 @@ export class AdminController {
   @Public()
   @Post('send_code')
   @HttpCode(HttpStatus.OK)
+  @StrictThrottle(3, 60)
   @ApiOperation({ summary: '发送验证码' })
   async sendCode(@Body() sendCodeDto: SendCodeDto, @I18n() i18n: I18nContext) {
     const { phone, email, type } = sendCodeDto;

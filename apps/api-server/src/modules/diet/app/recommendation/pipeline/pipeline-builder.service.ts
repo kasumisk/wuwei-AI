@@ -50,6 +50,7 @@ import {
   SemanticRecallItem,
 } from '../recall/recall-merger.service';
 import { RealisticFilterService } from '../filter/realistic-filter.service';
+import { RegionalCandidateFilterService } from '../filter/regional-candidate-filter.service';
 import { foodViolatesDietaryRestriction } from './food-filter.service';
 import { LifestyleScoringAdapter } from '../modifier/lifestyle-scoring-adapter.service';
 import { ScoringConfigService } from '../context/scoring-config.service';
@@ -58,6 +59,7 @@ import { MealCompositionScorer } from '../meal/meal-composition-scorer.service';
 import { StrategyAutoTuner } from '../../../../strategy/app/strategy-auto-tuner.service';
 import { PreferenceProfileService } from '../profile/preference-profile.service';
 import { ScoringChainService } from '../scoring-chain/scoring-chain.service';
+import { SeasonalityService } from '../utils/seasonality.service';
 import type { RecommendationStrategy } from '../types/recommendation-strategy.types';
 import type { PipelineStageTrace } from '../types/pipeline.types';
 import { writeStageBuffer, consumeStageBuffer } from '../types/pipeline.types';
@@ -72,6 +74,8 @@ import {
   PopularityFactor,
   ReplacementFeedbackFactor,
   RuleWeightFactor,
+  PriceFitFactor,
+  ChannelAvailabilityFactor,
 } from '../scoring-chain/factors';
 
 /**
@@ -146,6 +150,8 @@ export class PipelineBuilderService implements OnModuleInit {
     private readonly semanticRecallService: SemanticRecallService,
     private readonly recallMerger: RecallMergerService,
     private readonly realisticFilterService: RealisticFilterService,
+    /** 阶段 3.1/3.2：区域候选过滤（availability + 法规） */
+    private readonly regionalCandidateFilter: RegionalCandidateFilterService,
     private readonly lifestyleScoringAdapter: LifestyleScoringAdapter,
     private readonly scoringConfigService: ScoringConfigService,
     private readonly cfRecallService: CFRecallService,
@@ -155,6 +161,8 @@ export class PipelineBuilderService implements OnModuleInit {
     private readonly preferenceProfileService: PreferenceProfileService,
     /** 链式评分管道服务 */
     private readonly scoringChainService: ScoringChainService,
+    /** P2-2.2: 区域价格信息（PriceFitFactor 依赖） */
+    private readonly seasonalityService: SeasonalityService,
   ) {}
 
   // ─── 模块初始化时注册 10 个评分因子 ───
@@ -207,6 +215,13 @@ export class PipelineBuilderService implements OnModuleInit {
       new PopularityFactor(),
       new ReplacementFeedbackFactor(),
       new RuleWeightFactor(),
+      // 区域+时区优化（阶段 4.1 + P2-2.2）：价格适配软评分
+      // P2-2.2: 注入 SeasonalityService.getPriceInfo 让因子能查询食物的区域价格
+      new PriceFitFactor((foodId) =>
+        this.seasonalityService.getPriceInfo(foodId),
+      ),
+      // 渠道×时段可获得性（已取代 AvailabilityScorerService，P1-2 已删除）
+      new ChannelAvailabilityFactor(),
     ]);
 
     this.logger.log(
@@ -633,6 +648,8 @@ export class PipelineBuilderService implements OnModuleInit {
         scoringConfig,
         preferencesProfile: ctx.domainProfiles?.preferences,
         preferenceSignal,
+        // 区域+时区优化（阶段 1.2）：透传用户本地月份给 SeasonalityService
+        currentMonth: ctx.currentMonth,
       });
 
       return { food, score: detailed.score, explanation: detailed.explanation };
@@ -1154,6 +1171,12 @@ export class PipelineBuilderService implements OnModuleInit {
         });
         realistic = recalled;
       }
+
+      // 阶段 3.1/3.2：区域候选过滤（availability + 法规禁止）
+      realistic = this.regionalCandidateFilter.filter(
+        realistic,
+        ctx.regionCode ?? 'unknown',
+      );
 
       // 推荐策略 — acquisitionDifficulty 过滤
       // 如果策略设定了 acquisitionDifficultyMax，过滤掉获取难度超标的食物

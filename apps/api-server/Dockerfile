@@ -1,59 +1,115 @@
-###############################################
-# Stage 1: Builder - 在 monorepo 根目录构建
-# Docker context 必须设为 monorepo 根目录
-###############################################
-FROM node:20-alpine AS builder
+# syntax=docker/dockerfile:1.7
+###############################################################################
+# EatCheck API Server — Production Dockerfile
+#
+# Build context: monorepo root (NOT apps/api-server)
+#   docker build -f apps/api-server/Dockerfile -t eatcheck-api .
+#
+# 设计要点：
+#   - 多阶段构建：deps → builder → runner，运行镜像不带源码 / pnpm / 编译工具
+#   - 非 root 运行（USER node），降低逃逸影响面
+#   - dumb-init 作为 PID 1，正确转发 SIGTERM 给 Node（Cloud Run 优雅关机依赖）
+#   - Prisma Client 在 builder 阶段生成；schema 与 migrations 拷入运行镜像（migrate deploy 需要）
+#   - 不内置 npm / pnpm / 源码：减少镜像 ~150MB，攻击面更小
+###############################################################################
 
-RUN corepack enable && corepack prepare pnpm@10.28.2 --activate
+ARG NODE_VERSION=20.18.1
+ARG PNPM_VERSION=10.28.2
 
-WORKDIR /app
+# =============================================================================
+# Stage 1: deps —— 解析 + 安装全部依赖（含 dev，用于编译）
+# =============================================================================
+FROM node:${NODE_VERSION}-alpine AS deps
 
-# 先拷贝 package 文件以利用 Docker 缓存
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
+
+WORKDIR /repo
+
+# 仅拷贝清单文件以最大化 Docker layer 缓存命中
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY apps/api-server/package.json ./apps/api-server/
 COPY packages/constants/package.json ./packages/constants/
 COPY packages/shared/package.json ./packages/shared/
 
-RUN pnpm install --frozen-lockfile
+# 全量依赖（含 devDependencies）；--frozen-lockfile 保证可重复构建
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
 
-# 拷贝源码
-COPY packages/constants/ ./packages/constants/
-COPY packages/shared/ ./packages/shared/
-COPY apps/api-server/ ./apps/api-server/
+# =============================================================================
+# Stage 2: builder —— 编译 TS + 生成 Prisma Client
+# =============================================================================
+FROM node:${NODE_VERSION}-alpine AS builder
 
-# 按依赖顺序构建
-RUN pnpm --filter @ai-platform/constants run build
-RUN pnpm --filter @ai-platform/shared run build
-RUN cd apps/api-server && pnpm run build
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
-###############################################
-# Stage 2: Production - 最小化运行镜像
-###############################################
-FROM node:20-alpine
+WORKDIR /repo
 
-RUN corepack enable && corepack prepare pnpm@10.28.2 --activate
+# 复用 deps 阶段的 node_modules
+COPY --from=deps /repo/node_modules ./node_modules
+COPY --from=deps /repo/apps/api-server/node_modules ./apps/api-server/node_modules
+COPY --from=deps /repo/packages/constants/node_modules ./packages/constants/node_modules
+COPY --from=deps /repo/packages/shared/node_modules ./packages/shared/node_modules
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+COPY packages/constants ./packages/constants
+COPY packages/shared ./packages/shared
+COPY apps/api-server ./apps/api-server
+
+# 按依赖顺序构建：constants → shared → api-server
+RUN pnpm --filter @ai-platform/constants run build \
+ && pnpm --filter @ai-platform/shared run build \
+ && pnpm --filter api-server exec prisma generate \
+ && pnpm --filter api-server run build
+
+# 用 pnpm deploy 生成精简的 production node_modules
+# 输出到 /prod/api-server，仅包含运行期依赖，无 monorepo workspace 链接
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+    pnpm --filter api-server deploy --prod --legacy /prod/api-server
+
+# 把 prisma generate 产出的 client 拷进 deploy 输出
+# （pnpm deploy 不会自动带运行时生成的 .prisma/client 文件）
+RUN cp -r /repo/apps/api-server/node_modules/.prisma /prod/api-server/node_modules/.prisma 2>/dev/null || true \
+ && cp -r /repo/apps/api-server/node_modules/@prisma/client /prod/api-server/node_modules/@prisma/client 2>/dev/null || true
+
+# =============================================================================
+# Stage 3: runner —— 最小运行镜像
+# =============================================================================
+FROM node:${NODE_VERSION}-alpine AS runner
+
+# dumb-init: PID 1 信号转发；tini 也可，但 dumb-init 体积更小
+# tzdata: 部分 i18n / 日期格式化依赖
+RUN apk add --no-cache dumb-init tzdata \
+ && rm -rf /var/cache/apk/*
+
+ENV NODE_ENV=production \
+    TZ=UTC \
+    # Node 20+ 默认堆大小按容器内存；Cloud Run 1GB 给 Node 750MB 缓冲
+    NODE_OPTIONS="--max-old-space-size=768"
 
 WORKDIR /app
 
-# 拷贝 monorepo 根配置
-COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
+# 仅拷贝运行期需要的文件
+# - dist：编译产物
+# - node_modules：pnpm deploy 精简后的依赖（含 Prisma Client）
+# - package.json：运行期可能 require
+# - prisma：schema + migrations，用于 prisma migrate deploy
+# - static：静态资源（i18n JSON 等）
+COPY --from=builder --chown=node:node /prod/api-server/dist ./dist
+COPY --from=builder --chown=node:node /prod/api-server/node_modules ./node_modules
+COPY --from=builder --chown=node:node /prod/api-server/package.json ./package.json
+COPY --from=builder --chown=node:node /repo/apps/api-server/prisma ./prisma
+COPY --from=builder --chown=node:node /repo/apps/api-server/static ./static
 
-# 拷贝各包的 package.json
-COPY --from=builder /app/apps/api-server/package.json ./apps/api-server/
-COPY --from=builder /app/packages/constants/package.json ./packages/constants/
-COPY --from=builder /app/packages/shared/package.json ./packages/shared/
-
-# 仅安装生产依赖
-RUN pnpm install --frozen-lockfile --prod
-
-# 拷贝构建产物
-COPY --from=builder /app/apps/api-server/dist ./apps/api-server/dist
-COPY --from=builder /app/apps/api-server/static ./apps/api-server/static
-COPY --from=builder /app/packages/constants/dist ./packages/constants/dist
-COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
-
-WORKDIR /app/apps/api-server
+# 非 root 运行（node 用户由 node:alpine 自带，UID=1000）
+USER node
 
 EXPOSE 3000
 
+# Cloud Run 健康检查由平台侧基于 startup probe 完成；
+# 镜像内仍保留 HEALTHCHECK 便于本地 docker run / k8s
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+# dumb-init 作为 PID 1，确保 SIGTERM 正确传给 node（NestJS shutdown hooks 才会跑）
+ENTRYPOINT ["dumb-init", "--"]
 CMD ["node", "dist/main.js"]

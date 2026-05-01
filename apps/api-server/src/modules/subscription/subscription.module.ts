@@ -46,6 +46,8 @@ import { PaywallAnalyticsListener } from './app/listeners/paywall-analytics.list
 // 基于功能权益的访问门控
 import { FeatureGuard } from './app/guards/feature.guard';
 import { RevenueCatSyncService } from './app/services/revenuecat-sync.service';
+import { SubscriptionDomainSyncService } from './app/services/subscription-domain-sync.service';
+import { SubscriptionMaintenanceProcessor } from './admin/subscription-maintenance.processor';
 
 @Global()
 @Module({
@@ -69,6 +71,8 @@ import { RevenueCatSyncService } from './app/services/revenuecat-sync.service';
     PaywallAnalyticsListener, // V6.2: 付费墙分析监听器
     FeatureGuard, // 基于功能权益的访问门控
     RevenueCatSyncService,
+    SubscriptionDomainSyncService,
+    SubscriptionMaintenanceProcessor,
   ],
   exports: [
     PlanEntitlementResolver,
@@ -81,6 +85,7 @@ import { RevenueCatSyncService } from './app/services/revenuecat-sync.service';
     WechatPayService,
     FeatureGuard, // 基于功能权益的访问门控
     RevenueCatSyncService,
+    SubscriptionDomainSyncService,
   ],
 })
 export class SubscriptionModule {}

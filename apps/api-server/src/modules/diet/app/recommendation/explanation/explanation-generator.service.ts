@@ -47,6 +47,8 @@ import {
 } from '../types/recommendation.types';
 import { GoalType } from '../../../app/services/nutrition-score.service';
 import { t, Locale } from '../utils/i18n-messages';
+import { getUserLocalMonth } from '../../../../../common/utils/timezone.util';
+import { DEFAULT_TIMEZONE } from '../../../../../common/config/regional-defaults';
 import type { EffectiveGoal } from '../../../../user/app/services/goal/goal-phase.service';
 import type { GoalProgress } from '../../../../user/app/services/goal/goal-tracker.service';
 import type { SubstitutionPattern } from '../feedback/execution-tracker.service';
@@ -198,6 +200,26 @@ export class ExplanationGeneratorService {
         if (tag.reason) reasons.push(tag.reason);
         if (tag.highlight) highlights.push(tag.highlight);
       }
+    }
+
+    // ── P2-2.7: 区域+季节融入解释 ──
+    // 1a. 地区偏好（regionalBoost ≥ 1.08 触发，前置到 reasons[0]）
+    const regionalReason = this.buildRegionalReason(
+      explanation,
+      userProfile,
+      locale,
+    );
+    if (regionalReason) {
+      reasons.unshift(regionalReason);
+    }
+    // 1b. 季节性（seasonality.raw ≥ 0.7 触发，追加末尾，避免盖住核心营养理由）
+    const seasonalReason = this.buildSeasonalReason(
+      explanation,
+      userProfile,
+      locale,
+    );
+    if (seasonalReason) {
+      reasons.push(seasonalReason);
     }
 
     // ── 2. 健康条件相关提示 ──
@@ -364,6 +386,86 @@ export class ExplanationGeneratorService {
   }
 
   // ==================== 私有方法 ====================
+
+  /**
+   * P2-2.7: 构造区域偏好解释（regionalBoost ≥ 1.08 触发）
+   *
+   * 从 explanation.regionalBoost + userProfile.regionCode 生成本地化文案。
+   * regionCode 缺失或无 i18n 翻译时使用 generic 兜底。
+   */
+  private buildRegionalReason(
+    explanation: ScoringExplanation,
+    userProfile?: UserProfileConstraints | null,
+    locale?: Locale,
+  ): string | null {
+    const boost = explanation.regionalBoost ?? 1.0;
+    if (boost < 1.08) return null;
+    const regionCode = userProfile?.regionCode;
+    if (regionCode) {
+      return t(
+        'explain.reason.regionalLocal',
+        { region: regionCode },
+        locale,
+      );
+    }
+    return t('explain.reason.regionalLocalGeneric', {}, locale);
+  }
+
+  /**
+   * P2-2.7: 构造季节性解释（seasonality.raw ≥ 0.7 触发）
+   *
+   * 季节判断基于用户本地月份（南半球反相）：
+   * - 北半球：3-5 春 / 6-8 夏 / 9-11 秋 / 12-2 冬
+   * - 南半球（AU/NZ/AR/CL/ZA/BR/PE/UY）：反相
+   */
+  private buildSeasonalReason(
+    explanation: ScoringExplanation,
+    userProfile?: UserProfileConstraints | null,
+    locale?: Locale,
+  ): string | null {
+    const seasonRaw = explanation.dimensions?.seasonality?.raw ?? 0;
+    if (seasonRaw < 0.7) return null;
+
+    const tz = userProfile?.timezone ?? DEFAULT_TIMEZONE;
+    const month = getUserLocalMonth(tz);
+    const regionCode = userProfile?.regionCode;
+    const seasonKey = this.monthToSeason(month, regionCode);
+    const seasonLabel = t(`label.season.${seasonKey}`, {}, locale);
+    if (seasonLabel && seasonLabel !== `label.season.${seasonKey}`) {
+      return t('explain.reason.inSeason', { season: seasonLabel }, locale);
+    }
+    return t('explain.reason.inSeasonGeneric', {}, locale);
+  }
+
+  /** 月份→季节 key（spring/summer/autumn/winter），南半球自动反相 */
+  private monthToSeason(
+    month: number,
+    regionCode?: string,
+  ): 'spring' | 'summer' | 'autumn' | 'winter' {
+    const SOUTHERN = new Set([
+      'AU',
+      'NZ',
+      'AR',
+      'CL',
+      'ZA',
+      'BR',
+      'PE',
+      'UY',
+    ]);
+    const isSouth = !!regionCode && SOUTHERN.has(regionCode.toUpperCase());
+    // 北半球
+    let s: 'spring' | 'summer' | 'autumn' | 'winter';
+    if (month >= 3 && month <= 5) s = 'spring';
+    else if (month >= 6 && month <= 8) s = 'summer';
+    else if (month >= 9 && month <= 11) s = 'autumn';
+    else s = 'winter';
+    if (!isSouth) return s;
+    // 南半球反相：spring↔autumn, summer↔winter
+    if (s === 'spring') return 'autumn';
+    if (s === 'autumn') return 'spring';
+    if (s === 'summer') return 'winter';
+    return 'summer';
+  }
 
   /**
    * 对 10 维评分按加权分降序排列

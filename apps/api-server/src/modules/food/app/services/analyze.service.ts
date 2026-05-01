@@ -142,7 +142,12 @@ const ANALYSIS_CACHE_TTL_MS = 30 * 60 * 1000;
 @Injectable()
 export class AnalyzeService {
   private readonly logger = new Logger(AnalyzeService.name);
-  private readonly apiKey: string;
+  /**
+   * AI 服务是否可用（启动时检查 ENV）
+   * 真正的 API key 由 LlmService / VisionApiClient 在调用时使用，
+   * 这里只用于 submitAnalysis 的快速失败（避免无效入队）。
+   */
+  private readonly aiAvailable: boolean;
 
   constructor(
     private readonly configService: ConfigService,
@@ -159,13 +164,13 @@ export class AnalyzeService {
     private readonly i18n: I18nService,
     private readonly requestCtx: RequestContextService,
   ) {
-    // 仅用于 submitAnalysis 的前置校验（API Key 是否配置）
-    this.apiKey =
+    const apiKey =
       this.configService.get<string>('OPENROUTER_API_KEY') ||
       this.configService.get<string>('OPENAI_API_KEY') ||
       '';
+    this.aiAvailable = Boolean(apiKey);
 
-    if (!this.apiKey) {
+    if (!this.aiAvailable) {
       this.logger.warn('OPENROUTER_API_KEY 未配置，AI 分析功能将不可用');
     } else {
       this.logger.log('AI 分析调度服务已初始化');
@@ -185,7 +190,7 @@ export class AnalyzeService {
     userId?: string,
     locale?: Locale,
   ): Promise<{ requestId: string }> {
-    if (!this.apiKey) {
+    if (!this.aiAvailable) {
       throw new BadRequestException(this.i18n.t('food.aiServiceUnavailable'));
     }
 

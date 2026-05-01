@@ -74,6 +74,7 @@ import { QueueResilienceService } from './queue-resilience.service';
       { name: QUEUE_NAMES.EMBEDDING_GENERATION },
       { name: QUEUE_NAMES.FOOD_ENRICHMENT },
       { name: QUEUE_NAMES.FOOD_USDA_IMPORT },
+      { name: QUEUE_NAMES.SUBSCRIPTION_MAINTENANCE },
     ),
   ],
   providers: [

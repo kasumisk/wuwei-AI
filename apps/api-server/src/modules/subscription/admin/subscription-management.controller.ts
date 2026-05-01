@@ -22,11 +22,16 @@ import {
   ExtendSubscriptionDto,
   ChangeSubscriptionPlanDto,
   SubscriptionResyncDto,
+  AdminSubscriptionActionDto,
+  GrantManualEntitlementDto,
+  RevokeManualEntitlementDto,
   GetPaymentRecordsQueryDto,
   GetUsageQuotasQueryDto,
   GetTriggerStatsQueryDto,
   GetSubscriptionTimelineQueryDto,
   GetSubscriptionAnomaliesQueryDto,
+  GetSubscriptionMaintenanceJobsQueryDto,
+  GetSubscriptionMaintenanceDlqQueryDto,
 } from './dto/subscription-management.dto';
 import { ApiResponse } from '../../../common/types/response.type';
 import { I18nService } from '../../../core/i18n/i18n.service';
@@ -192,6 +197,104 @@ export class SubscriptionManagementController {
     };
   }
 
+  @Get('maintenance/jobs')
+  @ApiOperation({ summary: '获取订阅维护任务列表' })
+  async getSubscriptionMaintenanceJobs(
+    @Query() query: GetSubscriptionMaintenanceJobsQueryDto,
+  ): Promise<ApiResponse> {
+    const data =
+      await this.subscriptionManagementService.getSubscriptionMaintenanceJobs(
+        query,
+      );
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('subscription.controller.fetchSuccess'),
+      data,
+    };
+  }
+
+  @Get('maintenance/jobs/:jobId')
+  @ApiOperation({ summary: '获取订阅维护任务详情' })
+  async getSubscriptionMaintenanceJob(
+    @Param('jobId') jobId: string,
+  ): Promise<ApiResponse> {
+    const data =
+      await this.subscriptionManagementService.getSubscriptionMaintenanceJob(
+        jobId,
+      );
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('subscription.controller.fetchSuccess'),
+      data,
+    };
+  }
+
+  @Get('maintenance/dlq')
+  @ApiOperation({ summary: '获取订阅维护 DLQ 列表' })
+  async getSubscriptionMaintenanceDlq(
+    @Query() query: GetSubscriptionMaintenanceDlqQueryDto,
+  ): Promise<ApiResponse> {
+    const data =
+      await this.subscriptionManagementService.getSubscriptionMaintenanceDlq(
+        query,
+      );
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t('subscription.controller.fetchSuccess'),
+      data,
+    };
+  }
+
+  @Post('maintenance/dlq/:dlqId/replay')
+  @ApiOperation({ summary: '重放订阅维护 DLQ 任务' })
+  async replaySubscriptionMaintenanceDlq(
+    @Param('dlqId') dlqId: string,
+  ): Promise<ApiResponse> {
+    const data =
+      await this.subscriptionManagementService.replaySubscriptionMaintenanceDlq(
+        dlqId,
+      );
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: 'DLQ 任务已重放',
+      data,
+    };
+  }
+
+  @Post('maintenance/dlq/:dlqId/discard')
+  @ApiOperation({ summary: '丢弃订阅维护 DLQ 任务' })
+  async discardSubscriptionMaintenanceDlq(
+    @Param('dlqId') dlqId: string,
+  ): Promise<ApiResponse> {
+    const data =
+      await this.subscriptionManagementService.discardSubscriptionMaintenanceDlq(
+        dlqId,
+      );
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: 'DLQ 任务已丢弃',
+      data,
+    };
+  }
+
+  @Post('operations/rebuild-entitlements')
+  @ApiOperation({ summary: '重建当前有效订阅的用户权益快照' })
+  async rebuildUserEntitlements(): Promise<ApiResponse> {
+    const data =
+      await this.subscriptionManagementService.rebuildUserEntitlements();
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '用户权益快照已重建',
+      data,
+    };
+  }
+
   // ==================== 用户订阅管理 ====================
 
   @Get()
@@ -289,6 +392,74 @@ export class SubscriptionManagementController {
       success: true,
       code: HttpStatus.OK,
       message: this.i18n.t('subscription.controller.changePlanSuccess'),
+      data,
+    };
+  }
+
+  @Post(':id/refund')
+  @ApiOperation({ summary: '标记订阅为退款并撤销权益' })
+  async refundSubscription(
+    @Param('id') id: string,
+    @Body() dto: AdminSubscriptionActionDto,
+  ): Promise<ApiResponse> {
+    const data = await this.subscriptionManagementService.refundSubscription(
+      id,
+      dto,
+    );
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '订阅已标记为退款',
+      data,
+    };
+  }
+
+  @Post(':id/revoke')
+  @ApiOperation({ summary: '撤销订阅访问权限' })
+  async revokeSubscription(
+    @Param('id') id: string,
+    @Body() dto: AdminSubscriptionActionDto,
+  ): Promise<ApiResponse> {
+    const data = await this.subscriptionManagementService.revokeSubscription(
+      id,
+      dto,
+    );
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '订阅访问权限已撤销',
+      data,
+    };
+  }
+
+  @Post(':id/manual-entitlements')
+  @ApiOperation({ summary: '手动授予用户权益' })
+  async grantManualEntitlement(
+    @Param('id') id: string,
+    @Body() dto: GrantManualEntitlementDto,
+  ): Promise<ApiResponse> {
+    const data =
+      await this.subscriptionManagementService.grantManualEntitlement(id, dto);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '用户权益已授予',
+      data,
+    };
+  }
+
+  @Post(':id/manual-entitlements/revoke')
+  @ApiOperation({ summary: '撤销手动授予的用户权益' })
+  async revokeManualEntitlement(
+    @Param('id') id: string,
+    @Body() dto: RevokeManualEntitlementDto,
+  ): Promise<ApiResponse> {
+    const data =
+      await this.subscriptionManagementService.revokeManualEntitlement(id, dto);
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '手动权益已撤销',
       data,
     };
   }

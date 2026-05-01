@@ -228,8 +228,27 @@ export class PreferenceProfileService {
               case 'LIMITED':
                 boost = 0.8;
                 break;
+              case 'UNKNOWN':
+                // §5.4：已标记 UNKNOWN 与"无记录"语义不同
+                // 有记录但不确定 → 轻微衰减（比完全无数据保守一些）
+                boost = 0.85;
+                break;
             }
-            if (boost !== 1.0) {
+
+            // 区域+时区优化（深度分析 P1-3）：用 confidence + sourceUpdatedAt 二级衰减
+            // 1) confidence (0-1)：低置信度时把 boost 向 1.0 拉回
+            //    effective = (raw - 1) * confidence + 1
+            // 2) sourceUpdatedAt 陈旧（>180 天）额外打 0.9 折（向 1.0 收缩 10%）
+            const confidence = this.clamp01(info.confidence ?? 1);
+            if (confidence < 1) {
+              boost = (boost - 1) * confidence + 1;
+            }
+            if (this.isStaleSource(info.sourceUpdatedAt)) {
+              boost = (boost - 1) * 0.9 + 1;
+            }
+
+            // 衰减后接近 1.0 时不写入 map（节省下游遍历）
+            if (Math.abs(boost - 1.0) > 1e-3) {
               boostMap[info.foodId] = boost;
             }
           }
@@ -412,5 +431,31 @@ export class PreferenceProfileService {
     const u1 = Math.random();
     const u2 = Math.random();
     return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  }
+
+  /**
+   * 区域+时区优化（深度分析 P1-3）：把任意数值收敛到 [0, 1]
+   *
+   * 兼容 Prisma 可能返回 number / Decimal / null 的多种形态。
+   */
+  private clamp01(value: number | null | undefined): number {
+    const n = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(n)) return 1;
+    if (n <= 0) return 0;
+    if (n >= 1) return 1;
+    return n;
+  }
+
+  /**
+   * 区域+时区优化（深度分析 P1-3）：判断 sourceUpdatedAt 是否陈旧（>180 天）
+   *
+   * sourceUpdatedAt 缺失视为不陈旧（保守）—— 没有时间戳证据时不额外打折，
+   * 避免对历史导入的合法数据误伤。
+   */
+  private isStaleSource(sourceUpdatedAt: Date | null | undefined): boolean {
+    if (!sourceUpdatedAt) return false;
+    const ageMs = Date.now() - sourceUpdatedAt.getTime();
+    const STALE_THRESHOLD_MS = 180 * 24 * 60 * 60 * 1000;
+    return ageMs > STALE_THRESHOLD_MS;
   }
 }

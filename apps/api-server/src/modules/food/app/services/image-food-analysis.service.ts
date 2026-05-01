@@ -140,6 +140,7 @@ export class ImageFoodAnalysisService {
         systemPrompt,
         imageUrl,
         userHint,
+        userId,
         locale,
       );
       return this.resultParser.parse(content);

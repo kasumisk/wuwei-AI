@@ -3,46 +3,57 @@ import {
   CanActivate,
   ExecutionContext,
   UnauthorizedException,
+  Logger,
 } from '@nestjs/common';
 import { GatewayService } from '../gateway.service';
 
+/**
+ * V6.7 P0: API Key 网关守卫
+ * - 移除 console.log 凭据泄漏（原实现把 x-api-key 明文输出到日志）
+ * - 仅在非生产环境输出脱敏调试信息
+ */
 @Injectable()
 export class ApiKeyGuard implements CanActivate {
+  private readonly logger = new Logger(ApiKeyGuard.name);
+  private readonly isDev = process.env.NODE_ENV !== 'production';
+
   constructor(private readonly gatewayService: GatewayService) {}
+
+  private mask(value: unknown): string {
+    if (typeof value !== 'string' || value.length === 0) return '<empty>';
+    if (value.length <= 4) return '***';
+    return `***${value.slice(-4)}`;
+  }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
 
-    // 从请求头中获取 API Key 和 Secret
     const apiKey = request.headers['x-api-key'];
     const apiSecret = request.headers['x-api-secret'];
 
-    // 调试日志
-    console.log('🔍 [ApiKeyGuard] 接收到的请求头:');
-    console.log('   x-api-key:', apiKey);
-    console.log(
-      '   x-api-secret:',
-      apiSecret ? '***' + apiSecret.slice(-4) : undefined,
-    );
-    console.log('   所有请求头:', Object.keys(request.headers));
-
     if (!apiKey || !apiSecret) {
+      if (this.isDev) {
+        this.logger.debug(
+          `Missing credentials: key=${this.mask(apiKey)} secret=${this.mask(apiSecret)}`,
+        );
+      }
       throw new UnauthorizedException('缺少 API Key 或 API Secret');
     }
 
-    // 验证客户端
     const client = await this.gatewayService.validateClient(apiKey, apiSecret);
 
     if (!client) {
-      console.log('❌ [ApiKeyGuard] 客户端验证失败');
+      this.logger.warn(
+        `API Key validation failed: key=${this.mask(apiKey)}`,
+      );
       throw new UnauthorizedException('无效的 API Key 或 API Secret');
     }
 
-    console.log('✅ [ApiKeyGuard] 客户端验证成功:', client.name);
+    if (this.isDev) {
+      this.logger.debug(`Client authenticated: ${client.name}`);
+    }
 
-    // 将客户端信息附加到请求对象
     request.client = client;
-
     return true;
   }
 }

@@ -26,7 +26,7 @@ import {
 } from '../../../../common/types/response.type';
 import { TextFoodAnalysisService } from '../services/text-food-analysis.service';
 import { AnalyzeTextDto } from '../dto/analyze-text.dto';
-import { UserApiThrottle } from '../../../../core/throttle/throttle.constants';
+import { AiHeavyThrottle } from '../../../../core/throttle/throttle.constants';
 import { QuotaGateService } from '../../../subscription/app/services/quota-gate.service';
 import { ResultEntitlementService } from '../../../subscription/app/services/result-entitlement.service';
 import { PaywallTriggerService } from '../../../subscription/app/services/paywall-trigger.service';
@@ -52,7 +52,7 @@ export class FoodTextAnalyzeController {
 
   @Post('analyze-text')
   @HttpCode(HttpStatus.OK)
-  @UserApiThrottle(30, 60)
+  @AiHeavyThrottle(10, 60)
   @ApiOperation({ summary: '文本食物 AI 分析' })
   @ApiBody({ type: AnalyzeTextDto })
   async analyzeText(

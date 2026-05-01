@@ -21,6 +21,9 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
+import { getUserLocalDate } from '../../../../common/utils/timezone.util';
+import { DEFAULT_TIMEZONE } from '../../../../common/config/regional-defaults';
+import { RedisCacheService } from '../../../../core/redis/redis-cache.service';
 import { MealRecommendation } from '../recommendation/types/recommendation.types';
 import {
   DomainEvents,
@@ -59,6 +62,7 @@ export class PrecomputeService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly redisCache: RedisCacheService,
     @InjectQueue(QUEUE_NAMES.RECOMMENDATION_PRECOMPUTE)
     private readonly precomputeQueue: Queue,
   ) {}
@@ -182,6 +186,14 @@ export class PrecomputeService {
    */
   @Cron('0 3 * * *', { name: 'daily-precompute' })
   async triggerDailyPrecompute(): Promise<void> {
+    await this.redisCache.runWithLock(
+      'precompute:daily',
+      20 * 60 * 1000, // 20 分钟过期
+      () => this.doTriggerDailyPrecompute(),
+    );
+  }
+
+  private async doTriggerDailyPrecompute(): Promise<void> {
     this.logger.log('每日预计算开始...');
 
     const activeUserIds = await this.getActiveUserIds();
@@ -227,10 +239,12 @@ export class PrecomputeService {
   @OnEvent(DomainEvents.PROFILE_UPDATED, { async: true })
   async handleProfileUpdated(event: ProfileUpdatedEvent): Promise<void> {
     try {
-      const today = new Date().toISOString().slice(0, 10);
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+      // P2-2.12: 切日点用用户本地时区
+      const tz = await this.getUserTimezone(event.userId);
+      const today = getUserLocalDate(tz);
+      const tomorrowDate = new Date();
+      tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+      const tomorrowStr = getUserLocalDate(tz, tomorrowDate);
 
       const deleteResult =
         await this.prisma.precomputedRecommendations.deleteMany({
@@ -306,8 +320,9 @@ export class PrecomputeService {
     userId: string,
     trigger: string,
   ): Promise<void> {
-    const today = new Date().toISOString().slice(0, 10);
-    // 5 分钟时间窗口生成唯一 slot（同一 slot 内只入队一次）
+    // P2-2.12: 切日点用用户本地时区（debounceSlot 仍按服务器 5 分钟窗口，与时区无关）
+    const tz = await this.getUserTimezone(userId);
+    const today = getUserLocalDate(tz);
     const debounceSlot = Math.floor(Date.now() / (5 * 60 * 1000));
     const jobId = `precompute:event:${userId}:${today}:${debounceSlot}`;
 
@@ -325,6 +340,8 @@ export class PrecomputeService {
           backoff: { type: 'exponential' as const, delay: 5000 },
           // 延迟 30 秒执行，避免短时间内多次画像更新导致的重复计算
           delay: 30_000,
+          removeOnComplete: 500,
+          removeOnFail: 100,
         },
       );
 
@@ -351,12 +368,18 @@ export class PrecomputeService {
    */
   @Cron('15 4 * * *', { name: 'cleanup-precomputed' })
   async cleanupExpired(): Promise<void> {
-    const result = await this.prisma.precomputedRecommendations.deleteMany({
-      where: { expiresAt: { lt: new Date() } },
-    });
-    if (result.count > 0) {
-      this.logger.log(`清理过期预计算: ${result.count} 条`);
-    }
+    await this.redisCache.runWithLock(
+      'precompute:cleanup',
+      5 * 60 * 1000,
+      async () => {
+        const result = await this.prisma.precomputedRecommendations.deleteMany({
+          where: { expiresAt: { lt: new Date() } },
+        });
+        if (result.count > 0) {
+          this.logger.log(`清理过期预计算: ${result.count} 条`);
+        }
+      },
+    );
   }
 
   // ─── 私有方法 ───
@@ -393,5 +416,33 @@ export class PrecomputeService {
     }
 
     return userIds;
+  }
+
+  /**
+   * P2-2.12: 查询用户时区，缺失时回退 DEFAULT_TIMEZONE 并 warn
+   *
+   * 注意：仅供切日点计算使用，无 L1 缓存（事件级别调用频率较低，
+   * UserProfiles 自身已被全局 ProfileCacheService 覆盖；这里直接走 DB
+   * 避免循环依赖 ProfileResolver）。
+   */
+  private async getUserTimezone(userId: string): Promise<string> {
+    try {
+      const profile = await this.prisma.userProfiles.findUnique({
+        where: { userId },
+        select: { timezone: true },
+      });
+      const tz = profile?.timezone;
+      if (typeof tz === 'string' && tz.length > 0) {
+        return tz;
+      }
+    } catch (err) {
+      this.logger.warn(
+        `[P2-2.12] failed to load timezone for user=${userId}: ${(err as Error).message}`,
+      );
+    }
+    this.logger.warn(
+      `[P2-2.12] timezone missing for user=${userId}, fallback to ${DEFAULT_TIMEZONE}`,
+    );
+    return DEFAULT_TIMEZONE;
   }
 }

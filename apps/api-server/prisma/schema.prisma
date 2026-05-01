@@ -4,8 +4,12 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // 运行时连接（Neon 上请使用 PgBouncer pooled URL，需带 ?pgbouncer=true&connection_limit=1）
+  url       = env("DATABASE_URL")
+  // 仅 prisma migrate / introspect 使用（必须为 Neon direct/non-pooled URL）
+  // 本地开发可与 DATABASE_URL 相同；Cloud Run 部署须分别配置
+  directUrl = env("DIRECT_URL")
 }
 
 /// A/B 实验配置表 — 管理推荐引擎、UI 等各类 A/B 测试实验
@@ -905,25 +909,25 @@ model Food {
 
   // ─── 宏量营养素（per 100g 可食部分）────────────────────────────────────
   /// 热量，单位 kcal
-  calories Decimal  @db.Decimal(7, 1)
+  calories  Decimal  @db.Decimal(7, 1)
   /// 蛋白质，单位 g
-  protein  Decimal? @db.Decimal(6, 1)
+  protein   Decimal? @db.Decimal(6, 1)
   /// 脂肪总量，单位 g
-  fat      Decimal? @db.Decimal(6, 1)
+  fat       Decimal? @db.Decimal(6, 1)
   /// 碳水化合物，单位 g
-  carbs    Decimal? @db.Decimal(6, 1)
+  carbs     Decimal? @db.Decimal(6, 1)
   /// 膳食纤维，单位 g
-  fiber    Decimal? @db.Decimal(5, 1)
+  fiber     Decimal? @db.Decimal(5, 1)
   /// 总糖（添加糖 + 天然糖），单位 g
-  sugar    Decimal? @db.Decimal(5, 1)
+  sugar     Decimal? @db.Decimal(5, 1)
   /// 钠，单位 mg
-  sodium   Decimal? @db.Decimal(7, 1)
+  sodium    Decimal? @db.Decimal(7, 1)
   /// 钾，单位 mg
   potassium Decimal? @db.Decimal(7, 1)
   /// 钙，单位 mg
-  calcium  Decimal? @db.Decimal(7, 1)
+  calcium   Decimal? @db.Decimal(7, 1)
   /// 铁，单位 mg
-  iron     Decimal? @db.Decimal(5, 2)
+  iron      Decimal? @db.Decimal(5, 2)
 
   // ─── 健康评估（已迁移至 food_health_assessments，读写通过关联表）───────
   // glycemicIndex / glycemicLoad / isProcessed / isFried / processingLevel
@@ -1710,6 +1714,10 @@ model Subscription {
   @@index([expiresAt], map: "idx_subscription_expires")
   @@index([userId], map: "idx_subscription_user")
   @@index([userId, status], map: "idx_subscription_user_status")
+  @@index([status, expiresAt], map: "idx_subscription_status_expires")
+  @@index([userId, status, expiresAt(sort: Desc)], map: "idx_subscription_user_status_expires")
+  @@index([status, updatedAt(sort: Desc)], map: "idx_subscription_status_updated")
+  @@index([platformSubscriptionId], map: "idx_subscription_platform_sub")
   @@map("subscription")
 }
 
@@ -1848,43 +1856,144 @@ model SubscriptionAuditLogs {
   @@map("subscription_audit_logs")
 }
 
-/// 订阅套餐定义表 — 存储各会员档位的价格、权益和支付平台商品 ID
+/// 订阅套餐定义表 — 存储各会员档位、价格与默认权益。第三方商品映射统一存储在 subscription_store_products。
 model SubscriptionPlan {
   /// 主键 UUID
-  id              String         @id(map: "PK_subscription_plan") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id               String                        @id(map: "PK_subscription_plan") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   /// 套餐名称（如 "月度会员"、"年度会员"）
-  name            String         @db.VarChar(128)
+  name             String                        @db.VarChar(128)
   /// 套餐描述
-  description     String?
+  description      String?
   /// 套餐档位：free=免费, basic=基础, pro=专业, premium=尊享
-  tier            String         @db.VarChar(32)
+  tier             String                        @db.VarChar(32)
   /// 计费周期：monthly=月付, quarterly=季付, yearly=年付, lifetime=买断
-  billingCycle    String         @map("billing_cycle") @db.VarChar(32)
+  billingCycle     String                        @map("billing_cycle") @db.VarChar(32)
   /// 价格（分），如 2980 = 29.80 元
-  priceCents      Int            @map("price_cents")
+  priceCents       Int                           @map("price_cents")
   /// 货币代码（默认 CNY）
-  currency        String         @default("CNY") @db.VarChar(8)
+  currency         String                        @default("CNY") @db.VarChar(8)
   /// 套餐权益配置（JSON，如 { ai_analysis_daily: 100, coach_messages: 500 }）
-  entitlements    Json           @default("{}")
-  /// Apple App Store 内购商品 ID
-  appleProductId  String?        @map("apple_product_id") @db.VarChar(256)
-  /// Google Play 订阅商品 ID
-  googleProductId String?        @map("google_product_id") @db.VarChar(256)
-  /// 微信支付商品 ID
-  wechatProductId String?        @map("wechat_product_id") @db.VarChar(256)
+  entitlements     Json                          @default("{}")
   /// 套餐在列表中的排序值（值越小越靠前）
-  sortOrder       Int            @default(0) @map("sort_order")
+  sortOrder        Int                           @default(0) @map("sort_order")
   /// 是否上架（false=下架，不可新购）
-  isActive        Boolean        @default(true) @map("is_active")
+  isActive         Boolean                       @default(true) @map("is_active")
   /// 创建时间
-  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdAt        DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
   /// 最后更新时间
-  updatedAt       DateTime       @default(now()) @map("updated_at") @db.Timestamptz(6)
-  subscription    Subscription[]
+  updatedAt        DateTime                      @default(now()) @map("updated_at") @db.Timestamptz(6)
+  subscription     Subscription[]
+  storeProducts    SubscriptionStoreProduct[]
+  planEntitlements SubscriptionPlanEntitlement[]
 
+  @@unique([tier, billingCycle], map: "uq_subscription_plan_tier_cycle")
   @@index([isActive], map: "idx_subscription_plan_active")
   @@index([tier], map: "idx_subscription_plan_tier")
   @@map("subscription_plan")
+}
+
+/// Provider 客户身份映射表 — 记录内部用户与 RevenueCat / Stripe / PayPal 等 provider customer 的绑定关系
+model SubscriptionProviderCustomer {
+  id                         String    @id(map: "PK_subscription_provider_customers") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                     String    @map("user_id") @db.Uuid
+  provider                   String    @db.VarChar(32)
+  providerCustomerId         String    @map("provider_customer_id") @db.VarChar(256)
+  originalProviderCustomerId String?   @map("original_provider_customer_id") @db.VarChar(256)
+  aliases                    Json      @default("[]")
+  environment                String    @default("production") @db.VarChar(32)
+  status                     String    @default("active") @db.VarChar(32)
+  linkedAt                   DateTime  @default(now()) @map("linked_at") @db.Timestamptz(6)
+  lastSyncedAt               DateTime? @map("last_synced_at") @db.Timestamptz(6)
+  createdAt                  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                  DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([provider, environment, providerCustomerId], map: "uq_subscription_provider_customer")
+  @@index([userId, provider], map: "idx_subscription_provider_customer_user_provider")
+  @@map("subscription_provider_customers")
+}
+
+/// Store 商品映射表 — 将 Apple / Google / RevenueCat / 微信 / Stripe 商品映射到内部订阅计划
+model SubscriptionStoreProduct {
+  id               String           @id(map: "PK_subscription_store_products") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  planId           String           @map("plan_id") @db.Uuid
+  provider         String           @db.VarChar(32)
+  store            String?          @db.VarChar(32)
+  productId        String           @map("product_id") @db.VarChar(256)
+  environment      String           @default("production") @db.VarChar(32)
+  offeringId       String?          @map("offering_id") @db.VarChar(128)
+  packageId        String?          @map("package_id") @db.VarChar(128)
+  billingCycle     String           @map("billing_cycle") @db.VarChar(32)
+  currency         String?          @db.VarChar(8)
+  priceCents       Int?             @map("price_cents")
+  isActive         Boolean          @default(true) @map("is_active")
+  metadata         Json             @default("{}")
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime         @default(now()) @map("updated_at") @db.Timestamptz(6)
+  subscriptionPlan SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade, map: "fk_subscription_store_product_plan")
+
+  @@unique([provider, environment, store, productId], map: "uq_subscription_store_product_provider_store_product")
+  @@index([planId, isActive], map: "idx_subscription_store_product_plan_active")
+  @@index([provider, store], map: "idx_subscription_store_product_provider_store")
+  @@map("subscription_store_products")
+}
+
+/// 权益定义表 — 记录系统支持的原子权益
+model SubscriptionEntitlement {
+  id               String                        @id(map: "PK_subscription_entitlements") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code             String                        @unique(map: "uq_subscription_entitlement_code") @db.VarChar(64)
+  displayName      String?                       @map("display_name") @db.VarChar(128)
+  description      String?
+  valueType        String                        @default("json") @map("value_type") @db.VarChar(32)
+  defaultValue     Json                          @default("{}") @map("default_value")
+  status           String                        @default("active") @db.VarChar(32)
+  createdAt        DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime                      @default(now()) @map("updated_at") @db.Timestamptz(6)
+  planEntitlements SubscriptionPlanEntitlement[]
+
+  @@map("subscription_entitlements")
+}
+
+/// 计划权益映射表 — 将订阅计划映射到原子权益和值
+model SubscriptionPlanEntitlement {
+  id               String                  @id(map: "PK_subscription_plan_entitlements") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  planId           String                  @map("plan_id") @db.Uuid
+  entitlementCode  String                  @map("entitlement_code") @db.VarChar(64)
+  value            Json                    @default("{}")
+  isActive         Boolean                 @default(true) @map("is_active")
+  createdAt        DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime                @default(now()) @map("updated_at") @db.Timestamptz(6)
+  subscriptionPlan SubscriptionPlan        @relation(fields: [planId], references: [id], onDelete: Cascade, map: "fk_subscription_plan_entitlement_plan")
+  entitlement      SubscriptionEntitlement @relation(fields: [entitlementCode], references: [code], onDelete: Cascade, map: "fk_subscription_plan_entitlement_entitlement")
+
+  @@unique([planId, entitlementCode], map: "uq_subscription_plan_entitlement")
+  @@index([entitlementCode, isActive], map: "idx_subscription_plan_entitlement_code_active")
+  @@map("subscription_plan_entitlements")
+}
+
+/// 用户当前权益聚合表 — 后端判权的最终可缓存来源
+model UserEntitlement {
+  id                 String    @id(map: "PK_user_entitlements") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId             String    @map("user_id") @db.Uuid
+  entitlementCode    String    @map("entitlement_code") @db.VarChar(64)
+  sourceType         String    @map("source_type") @db.VarChar(32)
+  sourceKey          String    @map("source_key") @db.VarChar(128)
+  sourceId           String?   @map("source_id") @db.Uuid
+  subscriptionId     String?   @map("subscription_id") @db.Uuid
+  provider           String?   @db.VarChar(32)
+  providerCustomerId String?   @map("provider_customer_id") @db.VarChar(256)
+  status             String    @default("active") @db.VarChar(32)
+  value              Json      @default("{}")
+  effectiveFrom      DateTime  @map("effective_from") @db.Timestamptz(6)
+  effectiveTo        DateTime? @map("effective_to") @db.Timestamptz(6)
+  lastEventAt        DateTime? @map("last_event_at") @db.Timestamptz(6)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([userId, entitlementCode, sourceType, sourceKey], map: "uq_user_entitlement_source")
+  @@index([userId, status], map: "idx_user_entitlement_user_status")
+  @@index([entitlementCode, status], map: "idx_user_entitlement_code_status")
+  @@index([subscriptionId], map: "idx_user_entitlement_subscription")
+  @@map("user_entitlements")
 }
 
 /// 订阅触发日志表 — 记录用户触发付费引导的场景，用于转化率分析
@@ -1947,6 +2056,8 @@ model UsageRecords {
   id             String   @id(map: "PK_e511cf9f7dc53851569f87467a5") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   /// 调用方客户端 ID
   clientId       String   @map("client_id") @db.Uuid
+  /// 调用用户 ID（可选，系统级任务为空）
+  userId         String?  @map("user_id") @db.Uuid
   /// 请求唯一 ID（用于去重和追踪）
   requestId      String   @map("request_id") @db.VarChar(255)
   /// 调用的能力类型（如 text.generation/image.generation）
@@ -1957,21 +2068,53 @@ model UsageRecords {
   model          String   @db.VarChar(100)
   /// 请求状态：success=成功, failed=失败, timeout=超时
   status         String   @db.VarChar(20)
-  /// Token 使用量（JSON，含 prompt_tokens/completion_tokens/total_tokens）
+  /// Token 使用量（JSONB，含 prompt_tokens/completion_tokens/total_tokens）
   usage          Json
-  /// 本次请求费用（单位：美元或人民币，取决于 provider 设置）
+  /// 本次请求费用（单位：美元）
   cost           Decimal  @db.Decimal(10, 6)
   /// 响应时间，单位毫秒
   responseTime   Int      @map("response_time")
-  /// 扩展元数据（JSON）
+  /// 扩展元数据（JSONB）
   metadata       Json?
   /// 请求时间戳
   timestamp      DateTime @default(now()) @db.Timestamptz(6)
 
-  @@index([capabilityType, timestamp], map: "IDX_0616a784ab63d9f654498cd84b")
-  @@index([provider, timestamp], map: "IDX_1f7f090f5d081ae21593ab3844")
-  @@index([clientId, timestamp], map: "IDX_d397b87d28105b361b8f5a840d")
+  // ── 复合索引（覆盖主要查询模式）──────────────────────────────
+  @@index([capabilityType, timestamp(sort: Desc)], map: "idx_usage_records_feature_ts")
+  @@index([provider, timestamp(sort: Desc)], map: "idx_usage_records_provider_ts")
+  @@index([clientId, timestamp(sort: Desc)], map: "idx_usage_records_client_ts")
+  // 按用户查个人消费（配额报表 / 用户侧展示）
+  @@index([userId, timestamp(sort: Desc)], map: "idx_usage_records_user_ts")
+  // 归档 cron：按时间范围扫描旧记录（timestamp 升序快进）
+  @@index([timestamp], map: "idx_usage_records_timestamp")
+  // status 过滤（失败率统计 / 告警）
+  @@index([status, timestamp(sort: Desc)], map: "idx_usage_records_status_ts")
   @@map("usage_records")
+}
+
+/// usage_records 冷归档表（90 天以前的数据按月批量移入）
+/// 结构与 usage_records 完全一致，方便历史查询 JOIN
+/// 归档由 UsageArchiveCronService 每日凌晨执行（DELETE + INSERT batch）
+model UsageRecordsArchive {
+  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  clientId       String   @map("client_id") @db.Uuid
+  userId         String?  @map("user_id") @db.Uuid
+  requestId      String   @map("request_id") @db.VarChar(255)
+  capabilityType String   @map("capability_type") @db.VarChar(100)
+  provider       String   @db.VarChar(50)
+  model          String   @db.VarChar(100)
+  status         String   @db.VarChar(20)
+  usage          Json
+  cost           Decimal  @db.Decimal(10, 6)
+  responseTime   Int      @map("response_time")
+  metadata       Json?
+  timestamp      DateTime @db.Timestamptz(6)
+  /// 归档时间
+  archivedAt     DateTime @default(now()) @map("archived_at") @db.Timestamptz(6)
+
+  @@index([timestamp(sort: Desc)], map: "idx_usage_archive_timestamp")
+  @@index([userId, timestamp(sort: Desc)], map: "idx_usage_archive_user_ts")
+  @@map("usage_records_archive")
 }
 
 /// 用户成就解锁记录表 — 记录用户何时解锁了哪项成就
@@ -2082,16 +2225,24 @@ model UserProfiles {
   familySize                Int?                              @default(1) @map("family_size")
   /// 是否愿意提前备餐（周末备菜等）
   mealPrepWilling           Boolean?                          @default(false) @map("meal_prep_willing")
-  /// 所在地区代码（ISO 3166-1 alpha-2，影响食物季节性推荐，默认 CN）
-  regionCode                String?                           @default("CN") @map("region_code") @db.VarChar(5)
+  /// 所在地区代码（格式兼容 food-regional-info.util.ts parseFoodRegionScope：'US' / 'US-CA' / 'US-CA-LAX'）
+  /// 默认 US（北美英文用户）；与 DEFAULT_REGION_CODE 常量保持同步
+  regionCode                String?                           @default("US") @map("region_code") @db.VarChar(20)
   /// 当前新手引导步骤（0=未开始，步骤数递增）
   onboardingStep            Int?                              @default(0) @map("onboarding_step")
   /// 档案数据完整度 0.00-1.00（填写字段数/总字段数）
   dataCompleteness          Decimal?                          @default(0) @map("data_completeness") @db.Decimal(3, 2)
   /// 档案版本号（每次修改递增，用于触发重新计算推荐）
   profileVersion            Int?                              @default(1) @map("profile_version")
-  /// 用户时区（IANA 格式，如 "Asia/Shanghai"）
-  timezone                  String                            @default("Asia/Shanghai") @db.VarChar(50)
+  /// 用户时区（IANA 格式）；默认 America/New_York，与 DEFAULT_TIMEZONE 常量保持同步
+  timezone                  String                            @default("America/New_York") @db.VarChar(50)
+  /// 用户语言区域标签（BCP 47，如 "en-US" / "zh-CN"）；用于 i18n 文案及 regionCode 推断兜底
+  /// 默认 en-US，与 DEFAULT_LOCALE 常量保持同步
+  locale                    String?                           @default("en-US") @map("locale") @db.VarChar(10)
+  /// 用户货币代码（ISO 4217，如 "USD" / "CNY"）；阶段 4.1 PriceFitFactor 使用
+  currencyCode              String?                           @map("currency_code") @db.VarChar(3)
+  /// 用户单餐预算（用户本地货币）；阶段 4.1 PriceFitFactor 使用
+  budgetPerMeal             Decimal?                          @map("budget_per_meal") @db.Decimal(10, 2)
   recommendationPreferences Json?                             @default("{}") @map("recommendation_preferences") /// V6.5 Phase 3F: 用户推荐偏好 { popularityPreference, cookingEffort, budgetSensitivity }
   sleepQuality              String?                           @map("sleep_quality") @db.Text /// V6.6 Phase 2-C: 睡眠质量 poor|fair|good
   stressLevel               String?                           @map("stress_level") @db.Text /// V6.6 Phase 2-C: 压力水平 low|medium|high

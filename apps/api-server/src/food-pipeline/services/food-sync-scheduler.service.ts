@@ -4,6 +4,7 @@ import { FoodPipelineOrchestratorService } from './food-pipeline-orchestrator.se
 import { FoodConflictResolverService } from './processing/food-conflict-resolver.service';
 import { FoodQualityMonitorService } from './food-quality-monitor.service';
 import { PrismaService } from '../../core/prisma/prisma.service';
+import { RedisCacheService } from '../../core/redis/redis-cache.service';
 
 /**
  * 食物数据同步定时任务 (Phase 2/3)
@@ -17,6 +18,7 @@ export class FoodSyncSchedulerService {
     private readonly conflictResolver: FoodConflictResolverService,
     private readonly qualityMonitor: FoodQualityMonitorService,
     private readonly prisma: PrismaService,
+    private readonly redisCache: RedisCacheService,
   ) {}
 
   /**
@@ -25,6 +27,12 @@ export class FoodSyncSchedulerService {
    */
   @Cron('30 5 1 * *')
   async monthlyUsdaSync() {
+    await this.redisCache.runWithLock('food:usda-sync', 60 * 60 * 1000, () =>
+      this.doMonthlyUsdaSync(),
+    );
+  }
+
+  private async doMonthlyUsdaSync() {
     this.logger.log('Starting monthly USDA sync...');
     const commonCategories = [
       'chicken',
@@ -70,10 +78,16 @@ export class FoodSyncSchedulerService {
    */
   @Cron(CronExpression.EVERY_DAY_AT_4AM)
   async dailyConflictResolution() {
-    this.logger.log('Starting daily conflict resolution...');
-    const result = await this.conflictResolver.resolveAllPending();
-    this.logger.log(
-      `Daily conflict resolution: ${result.resolved} resolved, ${result.needsReview} need review`,
+    await this.redisCache.runWithLock(
+      'food:conflict-resolution',
+      30 * 60 * 1000,
+      async () => {
+        this.logger.log('Starting daily conflict resolution...');
+        const result = await this.conflictResolver.resolveAllPending();
+        this.logger.log(
+          `Daily conflict resolution: ${result.resolved} resolved, ${result.needsReview} need review`,
+        );
+      },
     );
   }
 
@@ -82,12 +96,20 @@ export class FoodSyncSchedulerService {
    */
   @Cron(CronExpression.EVERY_DAY_AT_5AM)
   async dailyScoreCalculation() {
-    this.logger.log('Starting daily score calculation...');
-    const result = await this.orchestrator.batchApplyRules({
-      limit: 1000,
-      recalcAll: false,
-    });
-    this.logger.log(`Score calculation done: ${result.processed} processed`);
+    await this.redisCache.runWithLock(
+      'food:score-calculation',
+      30 * 60 * 1000,
+      async () => {
+        this.logger.log('Starting daily score calculation...');
+        const result = await this.orchestrator.batchApplyRules({
+          limit: 1000,
+          recalcAll: false,
+        });
+        this.logger.log(
+          `Score calculation done: ${result.processed} processed`,
+        );
+      },
+    );
   }
 
   /**
@@ -95,10 +117,16 @@ export class FoodSyncSchedulerService {
    */
   @Cron('0 6 * * 1')
   async weeklyQualityReport() {
-    this.logger.log('Generating weekly quality report...');
-    const report = await this.qualityMonitor.generateReport();
-    this.logger.log(
-      `Quality Report: total=${report.totalFoods}, verified=${report.quality.verified}, pending_conflicts=${report.conflicts.pending}, translations=${report.translations.total}`,
+    await this.redisCache.runWithLock(
+      'food:quality-report',
+      30 * 60 * 1000,
+      async () => {
+        this.logger.log('Generating weekly quality report...');
+        const report = await this.qualityMonitor.generateReport();
+        this.logger.log(
+          `Quality Report: total=${report.totalFoods}, verified=${report.quality.verified}, pending_conflicts=${report.conflicts.pending}, translations=${report.translations.total}`,
+        );
+      },
     );
   }
 
@@ -108,9 +136,13 @@ export class FoodSyncSchedulerService {
    */
   @Cron('30 * * * *')
   async hourlyPopularityUpdate() {
-    // 基于 food_records 表统计最近7天的使用次数
-    try {
-      await this.prisma.$executeRawUnsafe(`
+    await this.redisCache.runWithLock(
+      'food:popularity-update',
+      10 * 60 * 1000,
+      async () => {
+        // 基于 food_records 表统计最近7天的使用次数
+        try {
+          await this.prisma.$executeRawUnsafe(`
         UPDATE foods f
         SET popularity = COALESCE(sub.usage_count, 0)
         FROM (
@@ -121,9 +153,11 @@ export class FoodSyncSchedulerService {
         ) sub
         WHERE f.id = sub.food_id
       `);
-    } catch (e) {
-      // food_records 表可能不关联，静默处理
-      this.logger.debug(`Popularity update skipped: ${e.message}`);
-    }
+        } catch (e) {
+          // food_records 表可能不关联，静默处理
+          this.logger.debug(`Popularity update skipped: ${e.message}`);
+        }
+      },
+    );
   }
 }

@@ -3,10 +3,15 @@
  *
  * V5 Phase 1.8: 统一使用 IANA 时区字符串替代 new Date().getHours() / toISOString().split('T')[0]
  * 所有涉及用户本地时间的计算都应通过此工具获取，避免服务器时区偏差。
+ *
+ * 区域+时区优化（阶段 1）：DEFAULT_TIMEZONE 来自 common/config/regional-defaults.ts，
+ * 当前默认 'America/New_York'，修改默认面向市场时只需改 regional-defaults.ts。
  */
 
-/** 默认时区 — 当用户未设置时区时使用 */
-export const DEFAULT_TIMEZONE = 'Asia/Shanghai';
+import { DEFAULT_TIMEZONE as REGIONAL_DEFAULT_TIMEZONE } from '../config/regional-defaults';
+
+/** 默认时区 — 当用户未设置时区时使用（re-export 自 regional-defaults，保留旧引用路径） */
+export const DEFAULT_TIMEZONE = REGIONAL_DEFAULT_TIMEZONE;
 
 /**
  * 获取用户本地日期字符串（YYYY-MM-DD 格式）
@@ -80,6 +85,31 @@ export function isUserLocalWeekend(
 ): boolean {
   const dow = getUserLocalDayOfWeek(timezone, date);
   return dow === 0 || dow === 6;
+}
+
+/**
+ * 区域+时区优化（阶段 1.2）：获取用户本地月份（1-12）
+ *
+ * 用于时令评分等基于月份的逻辑，避免使用服务器时区的 new Date().getMonth()
+ * 在跨日界点 / 南半球用户场景下产生偏差。
+ *
+ * @param timezone IANA 时区字符串
+ * @param date 可选，指定某个时间点；默认为当前时间
+ * @returns 1-12 月份
+ */
+export function getUserLocalMonth(
+  timezone: string = DEFAULT_TIMEZONE,
+  date: Date = new Date(),
+): number {
+  // 'numeric' month → "1".."12"
+  const monthStr = date.toLocaleString('en-US', {
+    timeZone: timezone,
+    month: 'numeric',
+  });
+  const m = Number(monthStr);
+  if (Number.isFinite(m) && m >= 1 && m <= 12) return m;
+  // 兜底：当地区无法解析时退回服务器月份
+  return new Date().getMonth() + 1;
 }
 
 /**

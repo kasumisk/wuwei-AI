@@ -32,6 +32,7 @@ procify-toolkit-firebase.json
 .env*.local
 .env.development
 .env.production
+.env.staging
 
 # Vercel
 .vercel
@@ -59,3 +60,8 @@ prisma/migrations
 /report/
 /test-results/
 /e2e/
+
+
+# build
+dist-staging
+backups

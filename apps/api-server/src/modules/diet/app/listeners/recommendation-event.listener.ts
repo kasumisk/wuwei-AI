@@ -22,6 +22,7 @@ import {
   TieredCacheNamespace,
 } from '../../../../core/cache/tiered-cache-manager';
 import { RedisCacheService } from '../../../../core/redis/redis-cache.service';
+import { getUserLocalDate } from '../../../../common/utils/timezone.util';
 
 /** 推荐统计指标（存储在 Redis 中） */
 interface RecommendationStats {
@@ -106,7 +107,9 @@ export class RecommendationEventListener implements OnModuleInit {
   private async updateDailyStats(
     event: RecommendationGeneratedEvent,
   ): Promise<void> {
-    const today = new Date().toISOString().slice(0, 10);
+    // P2-2.12: 切日点用 DEFAULT_TIMEZONE（global 聚合统计无 user 上下文，
+    // 用服务器统一时区比 UTC 更贴近运营关心的"昨天"语义）
+    const today = getUserLocalDate();
     const hashKey = this.redisCacheService.buildKey('rec_atomic', today);
 
     // 原子递增各维度计数器（并行执行，各自独立原子）

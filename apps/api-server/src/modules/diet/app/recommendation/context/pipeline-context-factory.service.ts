@@ -13,8 +13,14 @@
  * - 纯数据组装，无业务逻辑（不做 DB/Redis IO）
  * - ScoringConfigService.getTuning() 是同步内存读取，零 IO
  */
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ScoringConfigService } from './scoring-config.service';
+import {
+  DEFAULT_TIMEZONE,
+  getUserLocalMonth,
+  getUserLocalHour,
+} from '../../../../../common/utils/timezone.util';
+import { DEFAULT_REGION_CODE } from '../../../../../common/config/regional-defaults';
 import type {
   PipelineContext,
   MealFromPoolRequest,
@@ -41,6 +47,16 @@ export interface PipelineContextBuildParams {
 
 @Injectable()
 export class PipelineContextFactory {
+  private readonly logger = new Logger(PipelineContextFactory.name);
+
+  /**
+   * 阶段 1.5：timezone / regionCode 缺失警告去重集合。
+   * 同一 userId 只打印一次 WARN，避免高频推荐请求刷屏日志。
+   * 进程重启后自动清空（符合预期：重启后重新检测）。
+   */
+  private readonly warnedMissingTimezone = new Set<string>();
+  private readonly warnedMissingRegion = new Set<string>();
+
   constructor(private readonly scoringConfigService: ScoringConfigService) {}
 
   /**
@@ -53,6 +69,33 @@ export class PipelineContextFactory {
     req: MealFromPoolRequest,
     params: PipelineContextBuildParams,
   ): PipelineContext {
+    // 区域+时区优化（阶段 1.1）：统一从 userProfile 提取 timezone / regionCode，
+    // 并基于 timezone 计算用户本地当前月份，供下游 SeasonalityService 等使用。
+    const rawTimezone = req.userProfile?.timezone;
+    const rawRegionCode = req.userProfile?.regionCode;
+    const userId = req.userId ?? 'anonymous';
+
+    // 阶段 1.5：缺失字段一次性警告（按 userId 去重）
+    if (!rawTimezone && !this.warnedMissingTimezone.has(userId)) {
+      this.warnedMissingTimezone.add(userId);
+      this.logger.warn(
+        `[RegionalTZ] userId=${userId} missing timezone, falling back to default "${DEFAULT_TIMEZONE}". ` +
+          `Please ensure UserProfiles.timezone is populated.`,
+      );
+    }
+    if (!rawRegionCode && !this.warnedMissingRegion.has(userId)) {
+      this.warnedMissingRegion.add(userId);
+      this.logger.warn(
+        `[RegionalTZ] userId=${userId} missing regionCode, falling back to default "${DEFAULT_REGION_CODE}". ` +
+          `Please ensure UserProfiles.regionCode is populated.`,
+      );
+    }
+
+    const timezone = rawTimezone || DEFAULT_TIMEZONE;
+    const regionCode = rawRegionCode || DEFAULT_REGION_CODE;
+    const currentMonth = getUserLocalMonth(timezone);
+    const localHour = getUserLocalHour(timezone);
+
     return {
       // ── 核心字段 ──
       allFoods: req.allFoods,
@@ -67,6 +110,12 @@ export class PipelineContextFactory {
 
       // ── 用户标识 ──
       userId: req.userId,
+
+      // ── 区域+时区（阶段 1.1） ──
+      timezone,
+      currentMonth,
+      localHour,
+      regionCode,
 
       // ── 反馈/偏好 ──
       replacementWeightMap: params.replacementWeightMap,

@@ -39,6 +39,7 @@ import { SaveUserProfileDto } from '../../../../diet/app/dto/food.dto';
 import {
   DomainEvents,
   ProfileUpdatedEvent,
+  UserRegionChangedEvent,
 } from '../../../../../core/events/domain-events';
 import { PrismaService } from '../../../../../core/prisma/prisma.service';
 import { I18nService } from '../../../../../core/i18n';
@@ -578,6 +579,22 @@ export class UserProfileService {
         '用户更新声明画像',
       ),
     );
+
+    // 区域+时区优化（深度分析 P0-2）：regionCode 变更触发独立事件，
+    // 下游清画像缓存 + regional boost map 残留
+    const oldRegion = (oldProfile as any).regionCode ?? null;
+    const newRegion = (saved as any).regionCode ?? null;
+    if (newRegion && oldRegion !== newRegion) {
+      this.eventEmitter.emit(
+        DomainEvents.USER_REGION_CHANGED,
+        new UserRegionChangedEvent(
+          userId,
+          oldRegion,
+          newRegion,
+          'profile_update',
+        ),
+      );
+    }
 
     return saved;
   }

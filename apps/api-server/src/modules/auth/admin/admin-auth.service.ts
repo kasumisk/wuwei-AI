@@ -3,13 +3,16 @@ import {
   UnauthorizedException,
   BadRequestException,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { AdminRole, AdminUserStatus } from '../../user/user.types';
 import { AdminUsers as AdminUser } from '@prisma/client';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { I18nService } from '../../../core/i18n';
+import { RedisCacheService } from '../../../core/redis/redis-cache.service';
 import {
   LoginDto,
   LoginByPhoneDto,
@@ -24,14 +27,15 @@ import type {
 
 @Injectable()
 export class AdminService {
-  // 模拟验证码存储 (生产环境应使用 Redis)
-  private verificationCodes: Map<string, { code: string; expireAt: number }> =
-    new Map();
+  private readonly logger = new Logger(AdminService.name);
+  /** V6.7 P0: OTP 验证码 Redis TTL（5 分钟） */
+  private static readonly OTP_TTL_MS = 5 * 60 * 1000;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly i18n: I18nService,
+    private readonly redis: RedisCacheService,
   ) {}
 
   /**
@@ -90,7 +94,7 @@ export class AdminService {
     const { phone, code } = loginByPhoneDto;
 
     // 验证验证码
-    if (!this.verifyCode(phone, code)) {
+    if (!(await this.verifyCode(phone, code))) {
       throw new UnauthorizedException(this.i18n.t('auth.codeInvalidOrExpired'));
     }
 
@@ -189,20 +193,26 @@ export class AdminService {
   }
 
   /**
-   * 发送验证码
+   * V6.7 P0: 发送验证码
+   * - 使用 crypto.randomInt 生成加密安全的 6 位码
+   * - Redis 存储（多实例共享，TTL 自动过期）
+   * - 不在日志中输出验证码（防止 Cloud Logging 泄漏）
    */
-  sendCode(phone: string, type: string): SendCodeResponseDto {
-    // 生成 6 位验证码
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
+  async sendCode(phone: string, type: string): Promise<SendCodeResponseDto> {
+    // crypto.randomInt 生成 100000~999999 的加密安全随机数
+    const code = crypto.randomInt(100000, 1000000).toString();
 
-    // 存储验证码 (5分钟过期)
-    this.verificationCodes.set(phone, {
-      code,
-      expireAt: Date.now() + 5 * 60 * 1000,
-    });
+    const key = `admin:otp:${phone}`;
+    await this.redis.set(key, code, AdminService.OTP_TTL_MS);
+    // 重置失败计数
+    await this.redis.del(`admin:otp:fail:${phone}`);
 
-    // TODO: 实际环境中应该调用短信服务
-    console.log(`[验证码] 手机号: ${phone}, 验证码: ${code}, 类型: ${type}`);
+    // TODO: 实际环境中应该调用短信服务（不要在日志中打印验证码）
+    if (process.env.NODE_ENV !== 'production') {
+      this.logger.debug(`[OTP-DEV] phone=${phone} type=${type} code=${code}`);
+    } else {
+      this.logger.log(`OTP sent to phone (masked) type=${type}`);
+    }
 
     return { message: this.i18n.t('auth.smsSent') };
   }
@@ -270,26 +280,43 @@ export class AdminService {
   }
 
   /**
-   * 验证验证码
+   * V6.7 P0: 验证验证码
+   * - Redis 存储（跨实例一致）
+   * - 失败计数：5 次内连续失败锁定 15 分钟
+   * - timing-safe 比较防止时序侧信道
    */
-  private verifyCode(phone: string, code: string): boolean {
-    const storedCode = this.verificationCodes.get(phone);
+  private async verifyCode(phone: string, code: string): Promise<boolean> {
+    const failKey = `admin:otp:fail:${phone}`;
+    const codeKey = `admin:otp:${phone}`;
 
+    // 检查锁定
+    const failCountStr = await this.redis.get<string>(failKey);
+    const failCount = failCountStr ? parseInt(failCountStr, 10) : 0;
+    if (failCount >= 5) {
+      this.logger.warn(`OTP locked for phone (too many failed attempts)`);
+      return false;
+    }
+
+    const storedCode = await this.redis.get<string>(codeKey);
     if (!storedCode) {
       return false;
     }
 
-    if (Date.now() > storedCode.expireAt) {
-      this.verificationCodes.delete(phone);
+    // timing-safe 比较
+    const a = Buffer.from(storedCode);
+    const b = Buffer.from(code);
+    const ok =
+      a.length === b.length && crypto.timingSafeEqual(a as any, b as any);
+
+    if (!ok) {
+      // 失败计数 +1，TTL 15 分钟
+      await this.redis.set(failKey, String(failCount + 1), 15 * 60 * 1000);
       return false;
     }
 
-    if (storedCode.code !== code) {
-      return false;
-    }
-
-    // 验证成功后删除验证码
-    this.verificationCodes.delete(phone);
+    // 验证成功后删除验证码与失败计数
+    await this.redis.del(codeKey);
+    await this.redis.del(failKey);
     return true;
   }
 }

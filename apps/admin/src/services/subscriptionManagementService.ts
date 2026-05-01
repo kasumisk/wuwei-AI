@@ -12,12 +12,18 @@ import type { PageResponse } from '@ai-platform/shared';
 // ==================== 类型定义 ====================
 
 export type SubscriptionStatus =
+  | 'trial'
   | 'active'
+  | 'billing_retry'
   | 'expired'
   | 'cancelled'
   | 'canceled'
   | 'grace_period'
-  | 'paused';
+  | 'paused'
+  | 'refunded'
+  | 'revoked'
+  | 'transferred'
+  | 'unknown';
 export type SubscriptionTier = 'free' | 'pro' | 'premium';
 export type BillingCycle = 'monthly' | 'quarterly' | 'yearly' | 'lifetime';
 export type PaymentChannel =
@@ -37,13 +43,43 @@ export interface SubscriptionPlanDto {
   priceCents: number;
   currency: string;
   entitlements: Record<string, unknown>;
-  appleProductId?: string | null;
-  googleProductId?: string | null;
-  wechatProductId?: string | null;
+  storeProducts?: SubscriptionStoreProductDto[];
+  planEntitlements?: SubscriptionPlanEntitlementDto[];
   sortOrder: number;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SubscriptionStoreProductDto {
+  id: string;
+  planId: string;
+  provider: string;
+  store?: string | null;
+  productId: string;
+  environment: string;
+  offeringId?: string | null;
+  packageId?: string | null;
+  billingCycle: string;
+  isActive: boolean;
+}
+
+export interface SubscriptionStoreProductInputDto {
+  provider: string;
+  store: string;
+  productId: string;
+  offeringId?: string;
+  packageId?: string;
+  environment?: string;
+  isActive?: boolean;
+}
+
+export interface SubscriptionPlanEntitlementDto {
+  id: string;
+  planId: string;
+  entitlementCode: string;
+  value: unknown;
+  isActive: boolean;
 }
 
 export interface SubscriptionDto {
@@ -71,15 +107,71 @@ export interface SubscriptionDto {
   lastWebhookStatus?: string | null;
   lastWebhookError?: string | null;
   latestStoreProductId?: string | null;
+  latestMappedOfferingId?: string | null;
+  latestMappedPackageId?: string | null;
+  latestTransactionAt?: string | null;
+  latestTransactionType?: string | null;
+  latestWebhookAt?: string | null;
+  latestWebhookEventType?: string | null;
+  hasRefundRecord?: boolean;
+  hasManualEntitlement?: boolean;
+  hasRevenueCatSignal?: boolean;
   paymentRecords?: PaymentRecordDto[];
   usageQuotas?: UsageQuotaItem[];
+  userEntitlements?: UserEntitlementDto[];
+  providerCustomers?: SubscriptionProviderCustomerDto[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface UserEntitlementDto {
+  id: string;
+  userId: string;
+  entitlementCode: string;
+  sourceType: string;
+  sourceKey: string;
+  subscriptionId?: string | null;
+  provider?: string | null;
+  providerCustomerId?: string | null;
+  status: string;
+  value: unknown;
+  effectiveFrom: string;
+  effectiveTo?: string | null;
+  updatedAt: string;
+}
+
+export interface SubscriptionProviderCustomerDto {
+  id: string;
+  userId: string;
+  provider: string;
+  providerCustomerId: string;
+  originalProviderCustomerId?: string | null;
+  aliases: string[];
+  environment: string;
+  status: string;
+  lastSyncedAt?: string | null;
 }
 
 export interface PaymentRecordDto {
   id: string;
   userId: string;
+  user?: {
+    id: string;
+    nickname?: string;
+    email?: string;
+    avatar?: string;
+  } | null;
+  subscription?: {
+    id: string;
+    status?: string;
+    expiresAt?: string;
+    plan?: {
+      id: string;
+      name: string;
+      tier?: string;
+      billingCycle?: string;
+    } | null;
+  } | null;
   subscriptionId?: string | null;
   orderNo: string;
   amountCents: number;
@@ -103,6 +195,12 @@ export interface GetSubscriptionsQuery {
   keyword?: string;
   platformSubscriptionId?: string;
   productId?: string;
+  hasRefundRecord?: boolean;
+  hasManualEntitlement?: boolean;
+  hasRevenueCatSignal?: boolean;
+  webhookProcessingStatus?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
 }
 
 export interface SubscriptionsListResponse {
@@ -118,8 +216,10 @@ export interface GetPaymentRecordsQuery {
   pageSize?: number;
   userId?: string;
   paymentChannel?: PaymentChannel | '';
+  status?: string;
   startDate?: string;
   endDate?: string;
+  orderNo?: string;
 }
 
 export interface PaymentRecordsListResponse {
@@ -139,6 +239,22 @@ export interface ChangeSubscriptionPlanDto {
 }
 
 export interface SubscriptionResyncDto {
+  reason?: string;
+}
+
+export interface AdminSubscriptionActionDto {
+  reason?: string;
+}
+
+export interface GrantManualEntitlementDto {
+  entitlementCode: string;
+  value: unknown;
+  effectiveTo?: string;
+  reason?: string;
+}
+
+export interface RevokeManualEntitlementDto {
+  userEntitlementId: string;
   reason?: string;
 }
 
@@ -163,6 +279,7 @@ export interface SubscriptionAuditLogDto {
 export interface SubscriptionTransactionDto {
   id: string;
   subscriptionId?: string | null;
+  relatedSubscriptionId?: string | null;
   userId?: string | null;
   provider: string;
   providerEventId?: string | null;
@@ -171,6 +288,8 @@ export interface SubscriptionTransactionDto {
   environment?: string | null;
   runtimeEnv: string;
   storeProductId?: string | null;
+  mappedOfferingId?: string | null;
+  mappedPackageId?: string | null;
   transactionId?: string | null;
   originalTransactionId?: string | null;
   purchaseToken?: string | null;
@@ -186,6 +305,7 @@ export interface SubscriptionTransactionDto {
 
 export interface BillingWebhookEventDto {
   id: string;
+  subscriptionId?: string | null;
   provider: string;
   providerEventId: string;
   eventType?: string | null;
@@ -196,6 +316,8 @@ export interface BillingWebhookEventDto {
   environment?: string | null;
   runtimeEnv: string;
   productId?: string | null;
+  mappedOfferingId?: string | null;
+  mappedPackageId?: string | null;
   entitlementIds: string[];
   transactionId?: string | null;
   originalTransactionId?: string | null;
@@ -235,6 +357,9 @@ export interface SubscriptionAnomalySummary {
 export interface UnmappedProductAnomaly {
   source: 'webhook' | 'transaction';
   productId?: string | null;
+  relatedSubscriptionId?: string | null;
+  mappedOfferingId?: string | null;
+  mappedPackageId?: string | null;
   userId?: string | null;
   eventType?: string | null;
   happenedAt: string;
@@ -264,6 +389,61 @@ export interface SubscriptionAnomaliesResponse {
   activeWithoutRevenueCatSignals: ActiveWithoutRevenueCatSignalItem[];
 }
 
+export interface RebuildEntitlementsResponse {
+  mode: 'queued' | 'sync';
+  jobId?: string;
+  queuedAt: string;
+  action: 'rebuild_entitlements';
+  result?: {
+    subscriptions: number;
+  };
+}
+
+export interface SubscriptionMaintenanceDispatchResponse {
+  mode: 'queued' | 'sync';
+  jobId?: string;
+  queuedAt: string;
+  action: 'resync_subscription' | 'rebuild_entitlements';
+  result?: unknown;
+}
+
+export interface SubscriptionMaintenanceJobItem {
+  id: string;
+  name: string;
+  status: string;
+  data: Record<string, unknown>;
+  result: unknown;
+  failedReason: string | null;
+  summary: string;
+  attemptsMade: number;
+  processedOn: number | null;
+  finishedOn: number | null;
+  timestamp: number;
+}
+
+export interface SubscriptionMaintenanceJobsResponse {
+  counts: Record<string, number>;
+  list: SubscriptionMaintenanceJobItem[];
+}
+
+export interface SubscriptionMaintenanceDlqItem {
+  id: string;
+  queueName: string;
+  jobId: string;
+  jobData: Record<string, unknown>;
+  errorMessage: string;
+  attemptsMade: number;
+  status: string;
+  failedAt: string;
+  retriedAt: string | null;
+  createdAt: string;
+}
+
+export interface SubscriptionMaintenanceDlqResponse {
+  list: SubscriptionMaintenanceDlqItem[];
+  total: number;
+}
+
 export interface CreatePlanDto {
   name: string;
   description?: string;
@@ -272,8 +452,7 @@ export interface CreatePlanDto {
   priceCents: number;
   currency?: string;
   entitlements: Record<string, unknown>;
-  appleProductId?: string;
-  wechatProductId?: string;
+  storeProducts?: SubscriptionStoreProductInputDto[];
   sortOrder?: number;
 }
 
@@ -285,8 +464,7 @@ export interface UpdatePlanDto {
   priceCents?: number;
   currency?: string;
   entitlements?: Record<string, unknown>;
-  appleProductId?: string;
-  wechatProductId?: string;
+  storeProducts?: SubscriptionStoreProductInputDto[];
   sortOrder?: number;
   isActive?: boolean;
 }
@@ -384,14 +562,64 @@ export const subscriptionApi = {
   getSubscriptionAnomalies: (params?: { limit?: number }): Promise<SubscriptionAnomaliesResponse> =>
     request.get(`${PATH.ADMIN.SUBSCRIPTIONS}/anomalies`, params),
 
+  getSubscriptionMaintenanceJobs: (
+    params?: { limit?: number }
+  ): Promise<SubscriptionMaintenanceJobsResponse> =>
+    request.get(`${PATH.ADMIN.SUBSCRIPTIONS}/maintenance/jobs`, params),
+
+  getSubscriptionMaintenanceJob: (
+    jobId: string
+  ): Promise<SubscriptionMaintenanceJobItem> =>
+    request.get(`${PATH.ADMIN.SUBSCRIPTIONS}/maintenance/jobs/${jobId}`),
+
+  getSubscriptionMaintenanceDlq: (params?: {
+    limit?: number;
+    status?: string;
+  }): Promise<SubscriptionMaintenanceDlqResponse> =>
+    request.get(`${PATH.ADMIN.SUBSCRIPTIONS}/maintenance/dlq`, params),
+
+  replaySubscriptionMaintenanceDlq: (
+    dlqId: string
+  ): Promise<{ mode: 'queued'; jobId?: string }> =>
+    request.post(`${PATH.ADMIN.SUBSCRIPTIONS}/maintenance/dlq/${dlqId}/replay`, {}),
+
+  discardSubscriptionMaintenanceDlq: (
+    dlqId: string
+  ): Promise<{ id: string; status: 'discarded' }> =>
+    request.post(`${PATH.ADMIN.SUBSCRIPTIONS}/maintenance/dlq/${dlqId}/discard`, {}),
+
+  rebuildEntitlements: (): Promise<RebuildEntitlementsResponse> =>
+    request.post(`${PATH.ADMIN.SUBSCRIPTIONS}/operations/rebuild-entitlements`, {}),
+
   extendSubscription: (id: string, data: ExtendSubscriptionDto): Promise<SubscriptionDto> =>
     request.put(`${PATH.ADMIN.SUBSCRIPTIONS}/${id}/extend`, data),
 
   changeSubscriptionPlan: (id: string, data: ChangeSubscriptionPlanDto): Promise<SubscriptionDto> =>
     request.put(`${PATH.ADMIN.SUBSCRIPTIONS}/${id}/change-plan`, data),
 
-  resyncSubscription: (id: string, data: SubscriptionResyncDto): Promise<unknown> =>
+  resyncSubscription: (
+    id: string,
+    data: SubscriptionResyncDto
+  ): Promise<SubscriptionMaintenanceDispatchResponse> =>
     request.post(`${PATH.ADMIN.SUBSCRIPTIONS}/${id}/resync`, data),
+
+  refundSubscription: (id: string, data: AdminSubscriptionActionDto): Promise<SubscriptionDto> =>
+    request.post(`${PATH.ADMIN.SUBSCRIPTIONS}/${id}/refund`, data),
+
+  revokeSubscription: (id: string, data: AdminSubscriptionActionDto): Promise<SubscriptionDto> =>
+    request.post(`${PATH.ADMIN.SUBSCRIPTIONS}/${id}/revoke`, data),
+
+  grantManualEntitlement: (
+    id: string,
+    data: GrantManualEntitlementDto
+  ): Promise<UserEntitlementDto> =>
+    request.post(`${PATH.ADMIN.SUBSCRIPTIONS}/${id}/manual-entitlements`, data),
+
+  revokeManualEntitlement: (
+    id: string,
+    data: RevokeManualEntitlementDto
+  ): Promise<UserEntitlementDto> =>
+    request.post(`${PATH.ADMIN.SUBSCRIPTIONS}/${id}/manual-entitlements/revoke`, data),
 
   // --- Payment Records ---
   getPaymentRecords: (params?: GetPaymentRecordsQuery): Promise<PaymentRecordsListResponse> =>
@@ -493,10 +721,7 @@ export const useSubscriptionTimeline = (
   id: string,
   params?: SubscriptionTimelineQuery,
   enabled = true,
-  options?: Omit<
-    UseQueryOptions<SubscriptionTimelineResponse>,
-    'queryKey' | 'queryFn' | 'enabled'
-  >
+  options?: Omit<UseQueryOptions<SubscriptionTimelineResponse>, 'queryKey' | 'queryFn' | 'enabled'>
 ) =>
   useQuery({
     queryKey: subscriptionQueryKeys.timeline(id, params),
@@ -553,6 +778,66 @@ export const useResyncSubscription = (
   });
 };
 
+export const useRefundSubscription = (
+  options?: UseMutationOptions<SubscriptionDto, Error, { id: string; data: AdminSubscriptionActionDto }>
+) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }) => subscriptionApi.refundSubscription(id, data),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: subscriptionQueryKeys.all });
+      queryClient.invalidateQueries({ queryKey: subscriptionQueryKeys.detail(id) });
+      queryClient.invalidateQueries({ queryKey: subscriptionQueryKeys.timeline(id) });
+    },
+    ...options,
+  });
+};
+
+export const useRevokeSubscription = (
+  options?: UseMutationOptions<SubscriptionDto, Error, { id: string; data: AdminSubscriptionActionDto }>
+) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }) => subscriptionApi.revokeSubscription(id, data),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: subscriptionQueryKeys.all });
+      queryClient.invalidateQueries({ queryKey: subscriptionQueryKeys.detail(id) });
+      queryClient.invalidateQueries({ queryKey: subscriptionQueryKeys.timeline(id) });
+    },
+    ...options,
+  });
+};
+
+export const useGrantManualEntitlement = (
+  options?: UseMutationOptions<UserEntitlementDto, Error, { id: string; data: GrantManualEntitlementDto }>
+) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }) => subscriptionApi.grantManualEntitlement(id, data),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: subscriptionQueryKeys.detail(id) });
+      queryClient.invalidateQueries({ queryKey: subscriptionQueryKeys.timeline(id) });
+      queryClient.invalidateQueries({ queryKey: subscriptionQueryKeys.all });
+    },
+    ...options,
+  });
+};
+
+export const useRevokeManualEntitlement = (
+  options?: UseMutationOptions<UserEntitlementDto, Error, { id: string; data: RevokeManualEntitlementDto }>
+) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }) => subscriptionApi.revokeManualEntitlement(id, data),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: subscriptionQueryKeys.detail(id) });
+      queryClient.invalidateQueries({ queryKey: subscriptionQueryKeys.timeline(id) });
+      queryClient.invalidateQueries({ queryKey: subscriptionQueryKeys.all });
+    },
+    ...options,
+  });
+};
+
 // Payments
 export const usePaymentRecords = (
   params?: GetPaymentRecordsQuery,
@@ -584,6 +869,36 @@ export const useSubscriptionAnomalies = (
     queryKey: subscriptionQueryKeys.anomalies(params),
     queryFn: () => subscriptionApi.getSubscriptionAnomalies(params),
     staleTime: 60 * 1000,
+    ...options,
+  });
+
+export const useSubscriptionMaintenanceJobs = (
+  params?: { limit?: number },
+  options?: Omit<
+    UseQueryOptions<SubscriptionMaintenanceJobsResponse>,
+    'queryKey' | 'queryFn'
+  >
+) =>
+  useQuery({
+    queryKey: [...subscriptionQueryKeys.all, 'maintenance-jobs', params] as const,
+    queryFn: () => subscriptionApi.getSubscriptionMaintenanceJobs(params),
+    staleTime: 10 * 1000,
+    refetchInterval: 10 * 1000,
+    ...options,
+  });
+
+export const useSubscriptionMaintenanceDlq = (
+  params?: { limit?: number; status?: string },
+  options?: Omit<
+    UseQueryOptions<SubscriptionMaintenanceDlqResponse>,
+    'queryKey' | 'queryFn'
+  >
+) =>
+  useQuery({
+    queryKey: [...subscriptionQueryKeys.all, 'maintenance-dlq', params] as const,
+    queryFn: () => subscriptionApi.getSubscriptionMaintenanceDlq(params),
+    staleTime: 10 * 1000,
+    refetchInterval: 10 * 1000,
     ...options,
   });
 

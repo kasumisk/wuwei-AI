@@ -237,7 +237,15 @@ export class StrategyAutoTuner implements OnModuleInit, OnModuleDestroy {
    * 分析过去 7 天的效果矩阵，调整 segment→strategy 映射
    */
   @Cron('0 4 * * 1')
-  async autoTune(): Promise<AutoTuneResult> {
+  async autoTune(): Promise<void> {
+    await this.redis.runWithLock(
+      'strategy:auto-tune',
+      60 * 60 * 1000, // 1 小时过期
+      () => this.doAutoTune(),
+    );
+  }
+
+  private async doAutoTune(): Promise<void> {
     this.logger.log('开始策略自动调优...');
 
     const endDate = new Date();
@@ -248,13 +256,7 @@ export class StrategyAutoTuner implements OnModuleInit, OnModuleDestroy {
 
     if (stats.length === 0) {
       this.logger.log('效果数据不足，跳过自动调优');
-      return {
-        analyzedSegments: 0,
-        suggestions: [],
-        appliedCount: 0,
-        skippedCount: 0,
-        pendingCount: 0,
-      };
+      return;
     }
 
     // 2. V6.8: 找出每个 segment 的最佳策略（使用 Wilson lower bound）
@@ -377,8 +379,6 @@ export class StrategyAutoTuner implements OnModuleInit, OnModuleDestroy {
         `${result.appliedCount} 条自动应用, ${result.skippedCount} 条跳过, ` +
         `${result.pendingCount} 条待审核`,
     );
-
-    return result;
   }
 
   // ==================== 自适应探索率 ====================

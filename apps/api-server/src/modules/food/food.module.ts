@@ -1,4 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
+import { MulterModule } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 // App 端
 import { FoodLibraryController } from './app/controllers/food-library.controller';
 import { FoodLibraryService } from './app/services/food-library.service';
@@ -69,6 +71,24 @@ import { RecommendationModule } from '../diet/recommendation.module';
     RecommendationModule,
     UserModule,
     forwardRef(() => DecisionModule),
+    // V6.7 P0: food 图片分析上传 10MB 上限（与 controller MaxFileSizeValidator 一致），
+    // multer 边读边判断，超限立即断流，避免 OOM。
+    MulterModule.register({
+      storage: memoryStorage(),
+      limits: {
+        fileSize: 10 * 1024 * 1024,
+        files: 1,
+        fields: 10,
+        parts: 11,
+      },
+      fileFilter: (_req, file, cb) => {
+        if (!file.mimetype || !file.mimetype.startsWith('image/')) {
+          cb(new Error('Only image files are allowed') as any, false);
+          return;
+        }
+        cb(null, true);
+      },
+    }),
   ],
   controllers: [
     FoodLibraryController,

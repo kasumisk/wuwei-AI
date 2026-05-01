@@ -14,6 +14,7 @@ import {
   Form,
   InputNumber,
   Select,
+  Alert,
 } from 'antd';
 import {
   ReloadOutlined,
@@ -44,12 +45,18 @@ import {
 // ==================== 常量配置 ====================
 
 const statusConfig: Record<SubscriptionStatus, { color: string; text: string }> = {
+  trial: { color: 'cyan', text: '试用期' },
   active: { color: 'success', text: '生效中' },
+  billing_retry: { color: 'orange', text: '重试扣费' },
   expired: { color: 'default', text: '已过期' },
   cancelled: { color: 'warning', text: '已取消' },
   canceled: { color: 'warning', text: '已取消' },
   grace_period: { color: 'processing', text: '宽限期' },
   paused: { color: 'default', text: '已暂停' },
+  refunded: { color: 'magenta', text: '已退款' },
+  revoked: { color: 'volcano', text: '已撤销' },
+  transferred: { color: 'purple', text: '已转移' },
+  unknown: { color: 'default', text: '未知' },
 };
 
 const tierConfig: Record<SubscriptionTier, { color: string; text: string }> = {
@@ -72,6 +79,7 @@ const channelConfig: Record<PaymentChannel, { text: string }> = {
 const SubscriptionList: React.FC = () => {
   const navigate = useNavigate();
   const actionRef = useRef<ActionType>(null);
+  const [riskFilter, setRiskFilter] = useState<string>('all');
 
   // 延期弹窗
   const [extendVisible, setExtendVisible] = useState(false);
@@ -192,14 +200,20 @@ const SubscriptionList: React.FC = () => {
       valueType: 'select',
       valueEnum: {
         active: { text: '生效中', status: 'Success' },
+        trial: { text: '试用期', status: 'Processing' },
+        billing_retry: { text: '重试扣费', status: 'Warning' },
         expired: { text: '已过期', status: 'Default' },
         cancelled: { text: '已取消', status: 'Warning' },
         canceled: { text: '已取消', status: 'Warning' },
         grace_period: { text: '宽限期', status: 'Processing' },
         paused: { text: '已暂停', status: 'Default' },
+        refunded: { text: '已退款', status: 'Error' },
+        revoked: { text: '已撤销', status: 'Error' },
+        transferred: { text: '已转移', status: 'Default' },
+        unknown: { text: '未知', status: 'Default' },
       },
       render: (_: unknown, record: SubscriptionDto) => {
-        const cfg = statusConfig[record.status];
+        const cfg = statusConfig[record.status] ?? statusConfig.unknown;
         return <Tag color={cfg.color}>{cfg.text}</Tag>;
       },
     },
@@ -230,6 +244,26 @@ const SubscriptionList: React.FC = () => {
             ? `${record.latestStoreProductId.slice(0, 24)}${record.latestStoreProductId.length > 24 ? '...' : ''}`
             : '-'}
         </Tooltip>
+      ),
+    },
+    {
+      title: 'Offering/Package',
+      key: 'mappedRevenueCat',
+      width: 200,
+      search: false,
+      render: (_: unknown, record: SubscriptionDto) => (
+        <Space direction="vertical" size={2}>
+          <span style={{ fontSize: 12 }}>
+            {record.latestMappedOfferingId
+              ? `offering=${record.latestMappedOfferingId}`
+              : 'offering=-'}
+          </span>
+          <span style={{ fontSize: 12, color: '#666' }}>
+            {record.latestMappedPackageId
+              ? `package=${record.latestMappedPackageId}`
+              : 'package=-'}
+          </span>
+        </Space>
       ),
     },
     {
@@ -323,6 +357,52 @@ const SubscriptionList: React.FC = () => {
         ),
     },
     {
+      title: '最近交易',
+      key: 'latestTransaction',
+      width: 180,
+      search: false,
+      render: (_: unknown, record: SubscriptionDto) => (
+        <Space direction="vertical" size={2}>
+          <span style={{ fontSize: 12 }}>{record.latestTransactionType || '-'}</span>
+          <span style={{ fontSize: 12, color: '#666' }}>
+            {record.latestTransactionAt
+              ? new Date(record.latestTransactionAt).toLocaleString('zh-CN')
+              : '-'}
+          </span>
+        </Space>
+      ),
+    },
+    {
+      title: '最近 Webhook',
+      key: 'latestWebhook',
+      width: 180,
+      search: false,
+      render: (_: unknown, record: SubscriptionDto) => (
+        <Space direction="vertical" size={2}>
+          <span style={{ fontSize: 12 }}>{record.latestWebhookEventType || '-'}</span>
+          <span style={{ fontSize: 12, color: '#666' }}>
+            {record.latestWebhookAt
+              ? new Date(record.latestWebhookAt).toLocaleString('zh-CN')
+              : '-'}
+          </span>
+        </Space>
+      ),
+    },
+    {
+      title: '风险标记',
+      key: 'riskFlags',
+      width: 220,
+      search: false,
+      render: (_: unknown, record: SubscriptionDto) => (
+        <Space size={4} wrap>
+          {record.hasRefundRecord && <Tag color="magenta">已退款</Tag>}
+          {record.hasManualEntitlement && <Tag color="gold">手动权益</Tag>}
+          {record.hasRevenueCatSignal === false && <Tag color="error">无 RC 信号</Tag>}
+          {record.lastWebhookStatus === 'failed' && <Tag color="error">Webhook Failed</Tag>}
+        </Space>
+      ),
+    },
+    {
       title: '操作',
       key: 'actions',
       fixed: 'right',
@@ -338,7 +418,7 @@ const SubscriptionList: React.FC = () => {
           >
             详情
           </Button>
-          {record.status === 'active' && (
+          {['active', 'trial', 'grace_period', 'billing_retry'].includes(record.status) && (
             <>
               <Button
                 type="link"
@@ -459,6 +539,12 @@ const SubscriptionList: React.FC = () => {
 
       {/* 表格 */}
       <Card>
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message="列表已聚合最近交易、最近 Webhook、退款记录、手动权益和 RevenueCat 信号，用于快速排障。"
+        />
         <ProTable<SubscriptionDto>
           actionRef={actionRef}
           rowKey="id"
@@ -472,27 +558,55 @@ const SubscriptionList: React.FC = () => {
                 pageSize: params.pageSize,
                 status: params.status || undefined,
                 tier: params['plan,tier'] || params.tier || undefined,
-                paymentChannel: params.paymentChannel || undefined,
-                keyword: params.userId || undefined,
-                platformSubscriptionId: params.platformSubscriptionId || undefined,
-                productId: params.productId || undefined,
-              });
-              return { data: list || [], total: total || 0, success: true };
-            } catch {
-              return { data: [], total: 0, success: false };
-            }
-          }}
-        toolBarRender={() => [
-          <Button
-            key="anomalies"
-            icon={<WarningOutlined />}
-            onClick={() => navigate('/subscription/anomalies')}
-          >
-            异常看板
-          </Button>,
-          <Button
-            key="refresh"
-            icon={<ReloadOutlined />}
+              paymentChannel: params.paymentChannel || undefined,
+              keyword: params.userId || undefined,
+              platformSubscriptionId: params.platformSubscriptionId || undefined,
+              productId: params.productId || undefined,
+              hasRefundRecord: riskFilter === 'has_refund' ? true : undefined,
+              hasManualEntitlement:
+                riskFilter === 'manual_entitlement' ? true : undefined,
+              hasRevenueCatSignal:
+                riskFilter === 'no_rc_signal'
+                  ? false
+                  : riskFilter === 'has_rc_signal'
+                    ? true
+                    : undefined,
+              webhookProcessingStatus:
+                riskFilter === 'webhook_failed' ? 'failed' : undefined,
+            });
+            return { data: list || [], total: total || 0, success: true };
+          } catch {
+            return { data: [], total: 0, success: false };
+          }
+        }}
+          toolBarRender={() => [
+            <Select
+              key="risk-filter"
+              value={riskFilter}
+              style={{ width: 220 }}
+              onChange={(value) => {
+                setRiskFilter(value);
+                actionRef.current?.reload();
+              }}
+              options={[
+                { label: '全部订阅', value: 'all' },
+                { label: 'Webhook Failed', value: 'webhook_failed' },
+                { label: '无 RC 信号', value: 'no_rc_signal' },
+                { label: '有 RC 信号', value: 'has_rc_signal' },
+                { label: '已退款', value: 'has_refund' },
+                { label: '手动权益', value: 'manual_entitlement' },
+              ]}
+            />,
+            <Button
+              key="anomalies"
+              icon={<WarningOutlined />}
+              onClick={() => navigate('/subscription/anomalies')}
+            >
+              异常看板
+            </Button>,
+            <Button
+              key="refresh"
+              icon={<ReloadOutlined />}
               onClick={() => actionRef.current?.reload()}
             >
               刷新

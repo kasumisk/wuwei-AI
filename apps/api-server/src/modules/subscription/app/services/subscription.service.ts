@@ -22,6 +22,7 @@ import {
   NotFoundException,
   OnModuleInit,
 } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   SubscriptionPlan,
@@ -49,11 +50,15 @@ import {
   SubscriptionChangedEvent,
 } from '../../../../core/events/domain-events';
 import { I18nService } from '../../../../core/i18n/i18n.service';
+import { SubscriptionDomainSyncService } from './subscription-domain-sync.service';
+import { RedisCacheService } from '../../../../core/redis/redis-cache.service';
 
 /** 用户订阅状态概要（缓存友好的扁平结构） */
 export interface UserSubscriptionSummary {
   /** 当前等级（无订阅时为 free） */
   tier: SubscriptionTier;
+  /** 当前内部订阅状态（无订阅时为 free） */
+  status: SubscriptionStatus | 'free';
   /** 订阅 ID（无订阅时为 null） */
   subscriptionId: string | null;
   /** 计划名称 */
@@ -64,6 +69,8 @@ export interface UserSubscriptionSummary {
   autoRenew: boolean;
   /** 功能权益 */
   entitlements: FeatureEntitlements;
+  /** 权益来源 */
+  entitlementSource: 'user_entitlements' | 'plan';
 }
 
 /** 缓存 TTL: 5 分钟 */
@@ -82,6 +89,8 @@ export class SubscriptionService implements OnModuleInit {
     private readonly eventEmitter: EventEmitter2,
     private readonly entitlementResolver: PlanEntitlementResolver,
     private readonly i18n: I18nService,
+    private readonly domainSync: SubscriptionDomainSyncService,
+    private readonly redis: RedisCacheService,
   ) {}
 
   onModuleInit(): void {
@@ -100,6 +109,7 @@ export class SubscriptionService implements OnModuleInit {
     const saved = await this.prisma.subscriptionPlan.create({
       data: data as any,
     });
+    await this.domainSync.syncPlanCatalog(saved as any);
     this.logger.log(
       `订阅计划已创建: ${saved.name} (${saved.tier}/${saved.billingCycle})`,
     );
@@ -122,6 +132,7 @@ export class SubscriptionService implements OnModuleInit {
       where: { id: planId },
       data: data as any,
     });
+    await this.domainSync.syncPlanCatalog(updated as any);
     return updated as unknown as SubscriptionPlan;
   }
 
@@ -129,6 +140,12 @@ export class SubscriptionService implements OnModuleInit {
   async getActivePlans(): Promise<SubscriptionPlan[]> {
     const plans = await this.prisma.subscriptionPlan.findMany({
       where: { isActive: true },
+      include: {
+        storeProducts: {
+          where: { isActive: true },
+          orderBy: [{ provider: 'asc' }, { store: 'asc' }],
+        },
+      },
       orderBy: [{ sortOrder: 'asc' }, { priceCents: 'asc' }],
     });
     return plans as unknown as SubscriptionPlan[];
@@ -202,6 +219,11 @@ export class SubscriptionService implements OnModuleInit {
       },
     });
 
+    await this.domainSync.syncUserEntitlementsFromSubscription({
+      subscription: saved as any,
+      provider: params.paymentChannel,
+    });
+
     // 3. 初始化用量配额
     await this.initQuotas(params.userId, plan);
 
@@ -237,6 +259,11 @@ export class SubscriptionService implements OnModuleInit {
         cancelledAt: new Date(),
         autoRenew: false,
       },
+    });
+
+    await this.domainSync.syncUserEntitlementsFromSubscription({
+      subscription: saved as any,
+      provider: sub.paymentChannel,
     });
 
     await this.invalidateUserCache(userId);
@@ -287,6 +314,11 @@ export class SubscriptionService implements OnModuleInit {
         cancelledAt: null,
         autoRenew: true,
       },
+    });
+
+    await this.domainSync.syncUserEntitlementsFromSubscription({
+      subscription: saved as any,
+      provider: sub.paymentChannel,
     });
 
     await this.invalidateUserCache(userId);
@@ -428,14 +460,32 @@ export class SubscriptionService implements OnModuleInit {
 
   /**
    * 批量处理过期订阅
-   * 由 Cron 定时任务调用（如每小时一次）
+   *
+   * V6.7 P1-4: 加 @Cron 装饰器（每小时执行一次）+ Redis 分布式锁。
+   * 多实例部署（Cloud Run min-instances > 1）时，只有抢到锁的实例执行；
+   * 其余实例直接返回，避免重复处理同一批订阅。
+   *
+   * 锁 key: sub:expire:lock，TTL = 55 分钟（稍短于 Cron 间隔 60 分钟）。
+   * 使用 RedisCacheService.setNX 实现原子 SET NX PX。
+   * Redis 不可用时 setNX 返回 false，退化为所有实例均执行（幂等 updateMany 可接受）。
    *
    * 流程:
    * 1. 查找 expiresAt < now && status = ACTIVE 的记录
    * 2. 非自动续费: 直接标记 EXPIRED
    * 3. 自动续费: 标记 GRACE_PERIOD（3 天宽限）
    */
+  @Cron('0 * * * *', { name: 'subscription-process-expired' })
   async processExpiredSubscriptions(): Promise<number> {
+    // ── 分布式锁：同一时刻只有一个实例执行 ──
+    const LOCK_KEY = 'sub:expire:lock';
+    const LOCK_TTL_MS = 55 * 60 * 1000; // 55 分钟
+    const acquired = await this.redis.setNX(LOCK_KEY, '1', LOCK_TTL_MS);
+    if (!acquired) {
+      this.logger.debug(
+        'processExpiredSubscriptions: 锁被其他实例持有，跳过本次执行',
+      );
+      return 0;
+    }
     const now = new Date();
     const gracePeriodEndsAt = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
 
@@ -474,6 +524,16 @@ export class SubscriptionService implements OnModuleInit {
 
       // 事件和缓存失效仍需逐条（每条包含不同 userId/tier）
       for (const sub of expired) {
+        await this.domainSync.syncUserEntitlementsFromSubscription({
+          subscription: {
+            ...(sub as any),
+            status: sub.autoRenew
+              ? SubscriptionStatus.GRACE_PERIOD
+              : SubscriptionStatus.EXPIRED,
+            gracePeriodEndsAt: sub.autoRenew ? gracePeriodEndsAt : null,
+          },
+          provider: sub.paymentChannel,
+        });
         await this.invalidateUserCache(sub.userId);
         this.eventEmitter.emit(
           DomainEvents.SUBSCRIPTION_CHANGED,
@@ -507,6 +567,13 @@ export class SubscriptionService implements OnModuleInit {
       });
 
       for (const sub of graceExpired) {
+        await this.domainSync.syncUserEntitlementsFromSubscription({
+          subscription: {
+            ...(sub as any),
+            status: SubscriptionStatus.EXPIRED,
+          },
+          provider: sub.paymentChannel,
+        });
         await this.invalidateUserCache(sub.userId);
 
         // 重置为免费配额
@@ -610,6 +677,7 @@ export class SubscriptionService implements OnModuleInit {
       });
       return {
         tier: SubscriptionTier.FREE,
+        status: 'free',
         subscriptionId: null,
         planName: freePlan?.name ?? 'Free',
         expiresAt: null,
@@ -618,21 +686,54 @@ export class SubscriptionService implements OnModuleInit {
           SubscriptionTier.FREE,
           freePlan?.entitlements as any,
         ),
+        entitlementSource: 'plan',
       };
     }
+
+    const userEntitlements = await this.getActiveUserEntitlementValues(
+      userId,
+      activeSub.id,
+    );
 
     // 付费用户: 使用 resolver 合并 DB 中的权益与默认值
     return {
       tier: activeSub.subscriptionPlan.tier as SubscriptionTier,
+      status: activeSub.status as SubscriptionStatus,
       subscriptionId: activeSub.id,
       planName: activeSub.subscriptionPlan.name,
       expiresAt: activeSub.expiresAt,
       autoRenew: activeSub.autoRenew,
       entitlements: this.entitlementResolver.resolve(
         activeSub.subscriptionPlan.tier as SubscriptionTier,
-        activeSub.subscriptionPlan.entitlements as any,
+        Object.keys(userEntitlements).length > 0
+          ? userEntitlements
+          : (activeSub.subscriptionPlan.entitlements as any),
       ),
+      entitlementSource:
+        Object.keys(userEntitlements).length > 0 ? 'user_entitlements' : 'plan',
     };
+  }
+
+  private async getActiveUserEntitlementValues(
+    userId: string,
+    subscriptionId: string,
+  ): Promise<Record<string, unknown>> {
+    const now = new Date();
+    const rows = await this.prisma.userEntitlement.findMany({
+      where: {
+        userId,
+        subscriptionId,
+        status: 'active',
+        OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
+      },
+      select: {
+        entitlementCode: true,
+        value: true,
+      },
+    });
+    return Object.fromEntries(
+      rows.map((row) => [row.entitlementCode, row.value]),
+    );
   }
 
   /**

@@ -164,6 +164,7 @@ export class FoodScorerService {
       channel,
       effectiveGoal,
       preferencesProfile,
+      currentMonth,
     } = ctx;
 
     const servingCal = (Number(food.calories) * food.standardServingG) / 100;
@@ -275,9 +276,11 @@ export class FoodScorerService {
     );
 
     // 时令感知评分 — 基于区域时令数据
+    // 区域+时区优化（阶段 1.2）：透传用户本地月份，避免使用服务器时区的 new Date().getMonth()
     const seasonalityScore = this.seasonalityService.getSeasonalityScore(
       food.id,
       food.category,
+      currentMonth,
     );
 
     // 可执行性评分 — 综合大众化程度、价格合理性、获取便利性

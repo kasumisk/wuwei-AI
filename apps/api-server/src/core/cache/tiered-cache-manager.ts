@@ -11,25 +11,33 @@
  * 5. 可配置 — 每个 cache namespace 可独立配置 TTL、容量
  * 6. 降级安全 — Redis 不可用时自动降级为纯内存缓存
  *
- * 使用方式：
- * ```ts
- * // 在 Service 中注入并创建独立的 cache namespace
- * const cache = this.cacheManager.createNamespace<MyType>({
- *   namespace: 'profile',
- *   l1MaxEntries: 5000,
- *   l1TtlMs: 2 * 60 * 1000,   // 内存 2 分钟
- *   l2TtlMs: 10 * 60 * 1000,  // Redis 10 分钟
- * });
- *
- * // 使用 — 自动双层穿透 + singleflight
- * const data = await cache.getOrSet(userId, () => this.fetchFromDB(userId));
- *
- * // 失效
- * await cache.invalidate(userId);
- * ```
+ * V6.7 P1-2 跨实例 L1 失效（pub/sub）：
+ * - 多个 Cloud Run 实例各自持有独立的 L1 内存缓存。
+ * - 当某实例调用 invalidate() 时，其他实例的 L1 仍持有旧数据（最多 TTL 时间内不一致）。
+ * - 修复：invalidate() 在清 L1 + L2 后，通过 Redis PUBLISH 向全实例广播失效通知。
+ * - TieredCacheManager 在初始化时创建 subscriber 连接，订阅 CACHE_INVALIDATE_CHANNEL，
+ *   收到消息后清对应 namespace 的 L1 entry（不清 L2，由发布方已清）。
+ * - 降级安全：Redis pub/sub 不可用时，其他实例靠 L1 TTL 自然过期（最多 2 分钟延迟）。
  */
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
+import type Redis from 'ioredis';
 import { RedisCacheService } from '../redis/redis-cache.service';
+
+/** 跨实例失效广播 channel 名 */
+const CACHE_INVALIDATE_CHANNEL = 'cache:invalidate';
+
+/** 失效消息格式 */
+interface InvalidateMessage {
+  /** namespace 名称 */
+  ns: string;
+  /** 具体 key；undefined = invalidateAll（整个 namespace） */
+  key?: string;
+}
 
 // ─── 配置接口 ───
 
@@ -75,6 +83,8 @@ export class TieredCacheNamespace<T> {
   constructor(
     private readonly config: TieredCacheConfig,
     private readonly redis: RedisCacheService,
+    /** V6.7: 跨实例广播回调，由 TieredCacheManager 注入 */
+    private readonly broadcast: (msg: InvalidateMessage) => Promise<void>,
   ) {}
 
   /**
@@ -133,24 +143,42 @@ export class TieredCacheNamespace<T> {
   }
 
   /**
-   * 失效指定 key（L1 + L2）
+   * 失效指定 key（L1 + L2 + 广播其他实例清 L1）
+   *
+   * V6.7: 增加 Redis PUBLISH，通知同 channel 的其他进程清对应 L1 entry。
    */
   async invalidate(key: string): Promise<void> {
-    this.l1.delete(key);
-    this.refreshFactories.delete(key);
-    this.refreshingKeys.delete(key);
+    this.evictL1(key);
     const redisKey = this.buildRedisKey(key);
     await this.redis.del(redisKey);
+    // 广播（失败时降级：其他实例靠 TTL 自然过期）
+    await this.broadcast({ ns: this.config.namespace, key });
   }
 
   /**
-   * 按前缀批量失效
+   * 按前缀批量失效（L1 + L2 + 广播）
    */
   async invalidateAll(): Promise<void> {
     this.l1.clear();
     this.refreshFactories.clear();
     this.refreshingKeys.clear();
     await this.redis.delByPrefix(`${this.config.namespace}:`);
+    await this.broadcast({ ns: this.config.namespace });
+  }
+
+  /**
+   * 收到其他实例的失效广播时，仅清本地 L1（L2 已由广播发出方清理）
+   */
+  evictL1(key: string): void {
+    this.l1.delete(key);
+    this.refreshFactories.delete(key);
+    this.refreshingKeys.delete(key);
+  }
+
+  evictAllL1(): void {
+    this.l1.clear();
+    this.refreshFactories.clear();
+    this.refreshingKeys.clear();
   }
 
   /**
@@ -220,7 +248,7 @@ export class TieredCacheNamespace<T> {
       })
       .catch((err) => {
         this.logger.warn(
-          `[${this.config.namespace}] Refresh-ahead 失败: key=${key}, ${err.message}`,
+          `[${this.config.namespace}] Refresh-ahead 失败: key=${key}, ${(err as Error).message}`,
         );
       })
       .finally(() => {
@@ -272,14 +300,70 @@ export class TieredCacheNamespace<T> {
 /**
  * 统一缓存管理器
  *
- * 职责：为各业务模块创建独立的 TieredCacheNamespace 实例。
- * 每个 namespace 拥有独立的 L1 内存空间和配置，共享 L2 Redis 连接。
+ * 职责：
+ * - 为各业务模块创建独立的 TieredCacheNamespace 实例（每个 namespace 独立 L1 + 共享 L2）
+ * - 启动期订阅 Redis `cache:invalidate` channel，收到消息后清对应 namespace 的 L1
  */
 @Injectable()
-export class TieredCacheManager {
+export class TieredCacheManager implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(TieredCacheManager.name);
   private readonly namespaces = new Map<string, TieredCacheNamespace<any>>();
+  private subscriber: Redis | null = null;
 
   constructor(private readonly redis: RedisCacheService) {}
+
+  async onModuleInit(): Promise<void> {
+    this.subscriber = this.redis.createSubscriber();
+    if (!this.subscriber) {
+      this.logger.warn(
+        'Redis not available; L1 cross-instance invalidation disabled (TTL-based expiry only)',
+      );
+      return;
+    }
+
+    this.subscriber.on('message', (channel: string, message: string) => {
+      if (channel !== CACHE_INVALIDATE_CHANNEL) return;
+      try {
+        const msg = JSON.parse(message) as InvalidateMessage;
+        const ns = this.namespaces.get(msg.ns);
+        if (!ns) return;
+        if (msg.key !== undefined) {
+          ns.evictL1(msg.key);
+          this.logger.debug(
+            `[cache:invalidate] L1 evicted: ns=${msg.ns}, key=${msg.key}`,
+          );
+        } else {
+          ns.evictAllL1();
+          this.logger.debug(
+            `[cache:invalidate] L1 cleared: ns=${msg.ns}`,
+          );
+        }
+      } catch {
+        // 忽略格式异常（其他服务误发）
+      }
+    });
+
+    this.subscriber.on('error', (err: Error) => {
+      this.logger.warn(`Cache invalidate subscriber error: ${err.message}`);
+    });
+
+    await this.subscriber.subscribe(CACHE_INVALIDATE_CHANNEL);
+    this.logger.log(
+      `Subscribed to Redis channel: ${CACHE_INVALIDATE_CHANNEL}`,
+    );
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    if (this.subscriber) {
+      try {
+        await this.subscriber.unsubscribe(CACHE_INVALIDATE_CHANNEL);
+        this.subscriber.disconnect();
+      } catch {
+        // ignore
+      }
+      this.subscriber = null;
+    }
+  }
 
   /**
    * 创建或获取一个缓存 namespace
@@ -290,7 +374,14 @@ export class TieredCacheManager {
     const existing = this.namespaces.get(config.namespace);
     if (existing) return existing as TieredCacheNamespace<T>;
 
-    const ns = new TieredCacheNamespace<T>(config, this.redis);
+    const broadcast = async (msg: InvalidateMessage): Promise<void> => {
+      await this.redis.publish(
+        CACHE_INVALIDATE_CHANNEL,
+        JSON.stringify(msg),
+      );
+    };
+
+    const ns = new TieredCacheNamespace<T>(config, this.redis, broadcast);
     this.namespaces.set(config.namespace, ns);
     return ns;
   }

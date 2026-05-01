@@ -42,6 +42,12 @@ export const DomainEvents = {
 
   // V6.1 Phase 2: 订阅付费墙触发
   PAYWALL_TRIGGERED: 'subscription.paywall.triggered',
+
+  // 区域+时区优化（阶段 2.2）：food_regional_info 写入后触发，下游清对应地区缓存
+  REGION_DATA_CHANGED: 'food.region.data_changed',
+
+  // 区域+时区优化（深度分析 P0-2）：用户 regionCode 变更后触发，下游清该用户画像缓存
+  USER_REGION_CHANGED: 'user.region.changed',
 } as const;
 
 export type DomainEventName = (typeof DomainEvents)[keyof typeof DomainEvents];
@@ -367,5 +373,52 @@ export class PaywallTriggeredEvent {
     public readonly triggerScene: string,
     /** 触发功能 */
     public readonly feature: string,
+  ) {}
+}
+
+/**
+ * 区域+时区优化（阶段 2.2）：food_regional_info 写入后触发
+ *
+ * 监听方：
+ * - SeasonalityService → 清除 `seasonality:region:{countryCode}` 缓存，下次推荐重新 preload
+ * - PreferenceProfileService → 清除 `regional_boost:{countryCode}` 缓存
+ *
+ * 设计：payload 只携带 countryCode（如 'US'），缓存清除粒度为国家级别。
+ * 若需省/城市级精细化，改为携带完整 regionScope 字符串即可。
+ */
+export class RegionDataChangedEvent {
+  readonly eventName = DomainEvents.REGION_DATA_CHANGED;
+  readonly timestamp = new Date();
+
+  constructor(
+    /** 受影响的国家代码（ISO 3166-1 alpha-2，如 'US' / 'CN'） */
+    public readonly countryCode: string,
+    /** 触发来源（便于日志追踪） */
+    public readonly source: 'enrichment_apply' | 'admin_edit' | 'batch_import',
+    /** 受影响的食物 ID（可选，用于日志） */
+    public readonly foodId?: string,
+  ) {}
+}
+
+/**
+ * 区域+时区优化（深度分析 P0-2）：用户 regionCode 变更事件
+ *
+ * 触发时机：UserProfileService.update() 检测到 regionCode 字段实际变化时 emit。
+ * 下游 listener 应清理该用户的：
+ * - declared/aggregated profile 缓存（含 region 派生字段）
+ * - PreferenceProfile 中的 regional boost map（旧地区残留）
+ * - SceneResolver pattern key（行为分桶按本地时区，跨地区跨时区时桶意义变化）
+ */
+export class UserRegionChangedEvent {
+  readonly eventName = DomainEvents.USER_REGION_CHANGED;
+  readonly timestamp = new Date();
+
+  constructor(
+    public readonly userId: string,
+    /** 旧 regionCode，可能为 null（首次设置） */
+    public readonly previousRegionCode: string | null,
+    /** 新 regionCode（ISO 3166-1 alpha-2 / 'UNKNOWN'） */
+    public readonly currentRegionCode: string,
+    public readonly source: 'profile_update' | 'admin_edit' | 'migration',
   ) {}
 }

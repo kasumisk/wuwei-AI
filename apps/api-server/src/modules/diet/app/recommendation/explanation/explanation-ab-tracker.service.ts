@@ -17,6 +17,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../../../../core/prisma/prisma.service';
+import { RedisCacheService } from '../../../../../core/redis/redis-cache.service';
 
 /** 解释风格枚举 */
 export type ExplanationStyle = 'concise' | 'coaching';
@@ -28,7 +29,10 @@ export type ExplanationOutcome = 'accepted' | 'replaced' | 'skipped';
 export class ExplanationABTrackerService {
   private readonly logger = new Logger(ExplanationABTrackerService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly redisCache: RedisCacheService,
+  ) {}
 
   /**
    * V6.7: 2x2 列联表卡方检验，替代简单 10% 阈值
@@ -128,6 +132,14 @@ export class ExplanationABTrackerService {
    */
   @Cron('0 5 * * 1')
   async analyzeExplanationEffectiveness(): Promise<void> {
+    await this.redisCache.runWithLock(
+      'explanation-ab:analyze',
+      30 * 60 * 1000,
+      () => this.doAnalyzeExplanationEffectiveness(),
+    );
+  }
+
+  private async doAnalyzeExplanationEffectiveness(): Promise<void> {
     this.logger.log('Starting weekly explanation effectiveness analysis...');
 
     try {

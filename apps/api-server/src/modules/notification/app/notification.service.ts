@@ -133,6 +133,8 @@ export class NotificationService {
       await this.notificationQueue.add(`push-${type}`, jobData, {
         attempts: 3,
         backoff: { type: 'exponential', delay: 2000 },
+        removeOnComplete: 500,
+        removeOnFail: 200,
       });
     }
 

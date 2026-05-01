@@ -34,8 +34,18 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RedisCacheService.name);
   private client: Redis | null = null;
   private _isConnected = false;
+  /**
+   * V6.7 P1-6: 缓存 key 版本号后缀
+   *
+   * 通过 CACHE_VERSION 环境变量控制（默认 'v1'）。
+   * 滚动部署时修改版本号，所有旧 key 自动失效（无需手动 FLUSHDB）。
+   * 格式：{namespace}:{key}:{version} → 例如 sub_user:uid123:v2
+   */
+  private readonly cacheVersion: string;
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly configService: ConfigService) {
+    this.cacheVersion = configService.get<string>('CACHE_VERSION') || 'v1';
+  }
 
   /** Redis 是否可用 */
   get isConnected(): boolean {
@@ -285,10 +295,11 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * 构建标准化缓存 key
-   * 格式：namespace:segment1:segment2:...
+   * 格式：namespace:segment1:segment2:...:version
+   * V6.7 P1-6: 自动追加 CACHE_VERSION 后缀，滚动部署时一键失效旧缓存
    */
   buildKey(namespace: string, ...segments: string[]): string {
-    return [namespace, ...segments].join(':');
+    return [namespace, ...segments, this.cacheVersion].join(':');
   }
 
   /**
@@ -415,6 +426,34 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
     } catch (err) {
       this.logger.debug(`Redis INCR failed for ${key}: ${err}`);
       return -1;
+    }
+  }
+
+  /**
+   * V6.7: Pub/Sub — 发布消息到指定 channel（用于跨实例缓存失效通知）
+   * 失败时静默降级（Redis 不可用时 L1 靠 TTL 自然过期）
+   */
+  async publish(channel: string, message: string): Promise<void> {
+    if (!this._isConnected || !this.client) return;
+    try {
+      await this.client.publish(channel, message);
+    } catch (err) {
+      this.logger.debug(`Redis PUBLISH failed on ${channel}: ${err}`);
+    }
+  }
+
+  /**
+   * V6.7: 创建独立的 subscriber 连接（ioredis 要求 sub 连接不混用命令）
+   * 调用方负责监听 'message' 事件并在模块销毁时 disconnect()。
+   * 返回 null 表示 Redis 未配置或不可用。
+   */
+  createSubscriber(): Redis | null {
+    if (!this.client) return null;
+    try {
+      return this.client.duplicate();
+    } catch (err) {
+      this.logger.warn(`Failed to create Redis subscriber: ${err}`);
+      return null;
     }
   }
 

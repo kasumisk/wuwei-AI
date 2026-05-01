@@ -27,15 +27,18 @@ import {
   EditOutlined,
   SettingOutlined,
   QuestionCircleOutlined,
+  MinusCircleOutlined,
 } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
+import { useSearchParams } from 'react-router-dom';
 import {
   subscriptionApi,
   useCreatePlan,
   useUpdatePlan,
   useSubscriptionPlanById,
   type SubscriptionPlanDto,
+  type SubscriptionStoreProductInputDto,
   type SubscriptionTier,
   type BillingCycle,
 } from '@/services/subscriptionManagementService';
@@ -57,7 +60,43 @@ const cycleLabels: Record<BillingCycle, string> = {
   lifetime: '终身',
 };
 
-type MappingFilter = 'all' | 'fully_mapped' | 'apple_missing' | 'wechat_missing' | 'any_missing';
+const currencySymbols: Record<string, string> = {
+  USD: '$',
+  CNY: '¥',
+  EUR: '€',
+  GBP: '£',
+  JPY: '¥',
+};
+
+const providerOptions = [
+  { label: 'RevenueCat', value: 'revenuecat' },
+  { label: 'WeChat Pay', value: 'wechat_pay' },
+  { label: 'Stripe', value: 'stripe' },
+  { label: 'Alipay', value: 'alipay' },
+  { label: 'PayPal', value: 'paypal' },
+];
+
+const storeOptions = [
+  { label: 'App Store', value: 'app_store' },
+  { label: 'Google Play', value: 'play_store' },
+  { label: 'WeChat', value: 'wechat' },
+  { label: 'Stripe', value: 'stripe' },
+  { label: 'Alipay', value: 'alipay' },
+  { label: 'PayPal', value: 'paypal' },
+];
+
+const environmentOptions = [
+  { label: 'Production', value: 'production' },
+  { label: 'Sandbox', value: 'sandbox' },
+];
+
+type MappingFilter =
+  | 'all'
+  | 'fully_mapped'
+  | 'apple_missing'
+  | 'google_missing'
+  | 'wechat_missing'
+  | 'any_missing';
 
 /**
  * 计次配额功能：值为 number，-1 表示无限制
@@ -313,14 +352,19 @@ const QuotaDrawer: React.FC<QuotaDrawerProps> = ({ planId, onClose }) => {
 
 const SubscriptionPlanManagement: React.FC = () => {
   const actionRef = useRef<ActionType>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [modalVisible, setModalVisible] = useState(false);
   const [editingPlan, setEditingPlan] = useState<SubscriptionPlanDto | null>(null);
   const [quotaPlanId, setQuotaPlanId] = useState<string | null>(null);
   const [mappingFilter, setMappingFilter] = useState<MappingFilter>('all');
+  const [mappingKeyword, setMappingKeyword] = useState(searchParams.get('productId') ?? '');
+  const [matchedOnly, setMatchedOnly] = useState(searchParams.get('matchedOnly') === '1');
+  const [rebuildingEntitlements, setRebuildingEntitlements] = useState(false);
   const [form] = Form.useForm();
   const watchedTier = Form.useWatch('tier', form) as SubscriptionTier | undefined;
-  const watchedAppleProductId = Form.useWatch('appleProductId', form) as string | undefined;
-  const watchedWechatProductId = Form.useWatch('wechatProductId', form) as string | undefined;
+  const watchedCurrency = (Form.useWatch('currency', form) as string | undefined) ?? 'USD';
+  const watchedStoreProducts =
+    (Form.useWatch('storeProducts', form) as SubscriptionStoreProductInputDto[] | undefined) ?? [];
 
   const createMutation = useCreatePlan({
     onSuccess: () => {
@@ -346,6 +390,11 @@ const SubscriptionPlanManagement: React.FC = () => {
   const handleCreate = () => {
     setEditingPlan(null);
     form.resetFields();
+    form.setFieldsValue({
+      currency: 'USD',
+      sortOrder: 0,
+      storeProducts: buildDefaultStoreProducts(),
+    });
     setModalVisible(true);
   };
 
@@ -358,8 +407,7 @@ const SubscriptionPlanManagement: React.FC = () => {
       billingCycle: record.billingCycle,
       priceCents: record.priceCents,
       currency: record.currency,
-      appleProductId: record.appleProductId,
-      wechatProductId: record.wechatProductId,
+      storeProducts: normalizeStoreProducts(record.storeProducts),
       sortOrder: record.sortOrder,
       isActive: record.isActive,
     });
@@ -368,10 +416,10 @@ const SubscriptionPlanManagement: React.FC = () => {
 
   const handleSubmit = async () => {
     const values = await form.validateFields();
+    const storeProducts = buildStoreProductsPayload(values.storeProducts);
     const payload = {
       ...values,
-      appleProductId: values.appleProductId?.trim() || undefined,
-      wechatProductId: values.wechatProductId?.trim() || undefined,
+      storeProducts,
     };
 
     if (editingPlan) {
@@ -382,8 +430,7 @@ const SubscriptionPlanManagement: React.FC = () => {
           description: payload.description,
           currency: payload.currency,
           priceCents: payload.priceCents,
-          appleProductId: payload.appleProductId,
-          wechatProductId: payload.wechatProductId,
+          storeProducts: payload.storeProducts,
           sortOrder: payload.sortOrder,
           isActive: payload.isActive,
         },
@@ -396,31 +443,163 @@ const SubscriptionPlanManagement: React.FC = () => {
     }
   };
 
+  const handleRebuildEntitlements = async () => {
+    setRebuildingEntitlements(true);
+    try {
+      const result = await subscriptionApi.rebuildEntitlements();
+      message.success(
+        result.mode === 'queued'
+          ? `已提交后台任务，jobId=${result.jobId || '-'}`
+          : `已重建 ${result.result?.subscriptions ?? 0} 个有效订阅的用户权益`,
+      );
+    } catch (err: any) {
+      message.error(`重建失败: ${err.message}`);
+    } finally {
+      setRebuildingEntitlements(false);
+    }
+  };
+
   const requiresProductMapping = watchedTier != null && watchedTier !== 'free';
 
   const hasMappingValue = (value?: string | null) => (value?.trim().length ?? 0) > 0;
 
-  const buildMappingRules = (label: string) => [
+  const buildDefaultStoreProducts = (): SubscriptionStoreProductInputDto[] => [
     {
-      validator: async (_: unknown, value?: string) => {
-        if (!requiresProductMapping || hasMappingValue(value)) return;
-        throw new Error(`付费套餐请填写${label}`);
-      },
+      provider: 'revenuecat',
+      store: 'app_store',
+      productId: '',
+      offeringId: '',
+      packageId: '',
+      environment: 'production',
+      isActive: true,
+    },
+    {
+      provider: 'revenuecat',
+      store: 'play_store',
+      productId: '',
+      offeringId: '',
+      packageId: '',
+      environment: 'production',
+      isActive: true,
     },
   ];
 
+  const normalizeStoreProducts = (items?: SubscriptionPlanDto['storeProducts']) => {
+    if (!items || items.length === 0) return buildDefaultStoreProducts();
+    return items.map((item) => ({
+      provider: item.provider,
+      store: item.store ?? '',
+      productId: item.productId,
+      offeringId: item.offeringId ?? '',
+      packageId: item.packageId ?? '',
+      environment: item.environment || 'production',
+      isActive: item.isActive,
+    }));
+  };
+
+  const findStoreProduct = (record: SubscriptionPlanDto, provider: string, store: string) =>
+    record.storeProducts?.find(
+      (item) => item.provider === provider && item.store === store && item.isActive
+    );
+
+  const buildStoreProductsPayload = (
+    values: unknown
+  ): SubscriptionStoreProductInputDto[] => {
+    if (!Array.isArray(values)) return [];
+    return values
+      .map((item) => {
+        const row = (item ?? {}) as Record<string, unknown>;
+        const provider = typeof row.provider === 'string' ? row.provider.trim() : '';
+        const store = typeof row.store === 'string' ? row.store.trim() : '';
+        const productId = typeof row.productId === 'string' ? row.productId.trim() : '';
+        const offeringId = typeof row.offeringId === 'string' ? row.offeringId.trim() : '';
+        const packageId = typeof row.packageId === 'string' ? row.packageId.trim() : '';
+        const environment =
+          typeof row.environment === 'string' && row.environment.trim().length > 0
+            ? row.environment.trim()
+            : 'production';
+        const isActive = row.isActive !== false;
+        if (!provider || !store || !productId) return null;
+        return {
+          provider,
+          store,
+          productId,
+          offeringId: offeringId || undefined,
+          packageId: packageId || undefined,
+          environment,
+          isActive,
+        };
+      })
+      .filter((item): item is SubscriptionStoreProductInputDto => item !== null);
+  };
+
+  const getWatchedMappingState = () => {
+    const activeRows = watchedStoreProducts.filter(
+      (item) =>
+        item?.isActive !== false &&
+        hasMappingValue(item?.provider) &&
+        hasMappingValue(item?.store) &&
+        hasMappingValue(item?.productId)
+    );
+    const hasApple = activeRows.some(
+      (item) => item.provider === 'revenuecat' && item.store === 'app_store'
+    );
+    const hasGoogle = activeRows.some(
+      (item) => item.provider === 'revenuecat' && item.store === 'play_store'
+    );
+    const hasWechat = activeRows.some(
+      (item) => item.provider === 'wechat_pay' && item.store === 'wechat'
+    );
+    const duplicateKeys = new Set<string>();
+    const seenKeys = new Set<string>();
+    for (const item of activeRows) {
+      const key = `${item.provider}::${item.store}::${item.environment || 'production'}`;
+      if (seenKeys.has(key)) {
+        duplicateKeys.add(key);
+      } else {
+        seenKeys.add(key);
+      }
+    }
+
+    return {
+      activeRows,
+      hasApple,
+      hasGoogle,
+      hasWechat,
+      missingApple: requiresProductMapping && !hasApple,
+      missingGoogle: requiresProductMapping && !hasGoogle,
+      duplicateKeys: Array.from(duplicateKeys),
+    };
+  };
+  const watchedMappingState = getWatchedMappingState();
+
+  const formatMoney = (priceCents: number, currency: string) => {
+    const symbol = currencySymbols[currency.toUpperCase()] ?? `${currency.toUpperCase()} `;
+    return `${symbol}${(priceCents / 100).toFixed(2)}`;
+  };
+
   const getMappingState = (record: SubscriptionPlanDto) => {
     const requiresMapping = record.tier !== 'free';
-    const hasApple = hasMappingValue(record.appleProductId);
-    const hasWechat = hasMappingValue(record.wechatProductId);
+    const appleProduct = findStoreProduct(record, 'revenuecat', 'app_store');
+    const googleProduct = findStoreProduct(record, 'revenuecat', 'play_store');
+    const wechatProduct = findStoreProduct(record, 'wechat_pay', 'wechat');
+    const hasApple = hasMappingValue(appleProduct?.productId);
+    const hasGoogle = hasMappingValue(googleProduct?.productId);
+    const hasWechat = hasMappingValue(wechatProduct?.productId);
 
     return {
       requiresMapping,
       hasApple,
+      hasGoogle,
       hasWechat,
       missingApple: requiresMapping && !hasApple,
+      missingGoogle: requiresMapping && !hasGoogle,
       missingWechat: requiresMapping && !hasWechat,
-      fullyMapped: !requiresMapping || (hasApple && hasWechat),
+      fullyMapped: !requiresMapping || (hasApple && hasGoogle),
+      appleStoreProductId: appleProduct?.productId,
+      googleStoreProductId: googleProduct?.productId,
+      wechatStoreProductId: wechatProduct?.productId,
+      totalMappings: record.storeProducts?.filter((item) => item.isActive).length ?? 0,
     };
   };
 
@@ -431,14 +610,41 @@ const SubscriptionPlanManagement: React.FC = () => {
         return state.requiresMapping && state.fullyMapped;
       case 'apple_missing':
         return state.missingApple;
+      case 'google_missing':
+        return state.missingGoogle;
       case 'wechat_missing':
         return state.missingWechat;
       case 'any_missing':
-        return state.missingApple || state.missingWechat;
+        return state.missingApple || state.missingGoogle || state.missingWechat;
       case 'all':
       default:
         return true;
     }
+  };
+
+  const matchesMappingKeyword = (record: SubscriptionPlanDto) => {
+    const keyword = mappingKeyword.trim().toLowerCase();
+    if (!keyword) return true;
+    return (
+      record.name.toLowerCase().includes(keyword) ||
+      record.storeProducts?.some((item) =>
+        [item.productId, item.offeringId ?? '', item.packageId ?? '', item.provider, item.store ?? '']
+          .join(' ')
+          .toLowerCase()
+          .includes(keyword)
+      ) === true
+    );
+  };
+
+  const isMatchedMappingItem = (
+    item: NonNullable<SubscriptionPlanDto['storeProducts']>[number]
+  ) => {
+    const keyword = mappingKeyword.trim().toLowerCase();
+    if (!keyword) return false;
+    return [item.productId, item.offeringId ?? '', item.packageId ?? '', item.provider, item.store ?? '']
+      .join(' ')
+      .toLowerCase()
+      .includes(keyword);
   };
 
   const columns: ProColumns<SubscriptionPlanDto>[] = [
@@ -469,7 +675,7 @@ const SubscriptionPlanManagement: React.FC = () => {
       width: 110,
       render: (_: unknown, record: SubscriptionPlanDto) => (
         <span style={{ fontWeight: 600, color: '#722ed1' }}>
-          ¥{(record.priceCents / 100).toFixed(2)}
+          {formatMoney(record.priceCents, record.currency)}
         </span>
       ),
     },
@@ -479,6 +685,12 @@ const SubscriptionPlanManagement: React.FC = () => {
       width: 260,
       render: (_: unknown, record: SubscriptionPlanDto) => {
         const mappingState = getMappingState(record);
+        const visibleMappings =
+          record.storeProducts?.filter((item) => {
+            if (!item.isActive) return false;
+            if (!matchedOnly || !mappingKeyword.trim()) return true;
+            return isMatchedMappingItem(item);
+          }) ?? [];
         return (
           <Space direction="vertical" size={4}>
             <Space size={6} wrap>
@@ -498,6 +710,22 @@ const SubscriptionPlanManagement: React.FC = () => {
                 color={
                   !mappingState.requiresMapping
                     ? 'default'
+                    : mappingState.hasGoogle
+                      ? 'success'
+                      : 'error'
+                }
+              >
+                Google{' '}
+                {mappingState.requiresMapping
+                  ? mappingState.hasGoogle
+                    ? '已映射'
+                    : '缺失'
+                  : 'N/A'}
+              </Tag>
+              <Tag
+                color={
+                  !mappingState.requiresMapping
+                    ? 'default'
                     : mappingState.hasWechat
                       ? 'success'
                       : 'error'
@@ -511,8 +739,48 @@ const SubscriptionPlanManagement: React.FC = () => {
                   : 'N/A'}
               </Tag>
             </Space>
-            <Text style={{ fontSize: 12 }}>Apple: {record.appleProductId || '-'}</Text>
-            <Text style={{ fontSize: 12 }}>WeChat: {record.wechatProductId || '-'}</Text>
+            <Text style={{ fontSize: 12 }}>Apple: {mappingState.appleStoreProductId || '-'}</Text>
+            <Text style={{ fontSize: 12 }}>
+              Google: {mappingState.googleStoreProductId || '-'}
+            </Text>
+            <Text style={{ fontSize: 12 }}>WeChat: {mappingState.wechatStoreProductId || '-'}</Text>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              环境: {findStoreProduct(record, 'revenuecat', 'app_store')?.environment || 'production'}
+            </Text>
+            {visibleMappings.map((item) => (
+                <div
+                  key={`${item.provider}-${item.store}-${item.productId}`}
+                  style={{
+                    fontSize: 12,
+                    padding: '4px 6px',
+                    borderRadius: 6,
+                    background: isMatchedMappingItem(item) ? '#fff7e6' : 'transparent',
+                    border: isMatchedMappingItem(item) ? '1px solid #ffd591' : '1px solid transparent',
+                  }}
+                >
+                  <Text style={{ fontSize: 12 }}>
+                    {item.provider}/{item.store || '-'}: {item.productId}
+                  </Text>
+                  <br />
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    {item.offeringId ? `offering=${item.offeringId}` : 'offering=-'} /{' '}
+                    {item.packageId ? `package=${item.packageId}` : 'package=-'}
+                  </Text>
+                </div>
+              ))}
+            {matchedOnly &&
+              mappingKeyword.trim() &&
+              visibleMappings.length === 0 &&
+              record.storeProducts?.some((item) => item.isActive) && (
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  当前套餐没有命中映射明细
+                </Text>
+              )}
+            {mappingState.totalMappings > 0 && (
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                共 {mappingState.totalMappings} 条有效映射
+              </Text>
+            )}
           </Space>
         );
       },
@@ -598,7 +866,9 @@ const SubscriptionPlanManagement: React.FC = () => {
         request={async () => {
           try {
             const { list } = await subscriptionApi.getPlans();
-            const filteredList = (list || []).filter(matchesMappingFilter);
+            const filteredList = (list || []).filter(
+              (record) => matchesMappingFilter(record) && matchesMappingKeyword(record)
+            );
             return { data: filteredList, total: filteredList.length, success: true };
           } catch {
             return { data: [], total: 0, success: false };
@@ -620,10 +890,55 @@ const SubscriptionPlanManagement: React.FC = () => {
               { label: '全部套餐', value: 'all' },
               { label: '已完整映射', value: 'fully_mapped' },
               { label: '缺 Apple 映射', value: 'apple_missing' },
+              { label: '缺 Google 映射', value: 'google_missing' },
               { label: '缺微信映射', value: 'wechat_missing' },
               { label: '任一映射缺失', value: 'any_missing' },
             ]}
           />,
+          <Input
+            key="mapping-keyword"
+            value={mappingKeyword}
+            style={{ width: 260 }}
+            placeholder="搜索 product / offering / package"
+            allowClear
+            onChange={(event) => {
+              const nextValue = event.target.value;
+              setMappingKeyword(nextValue);
+              const nextParams = new URLSearchParams(searchParams);
+              if (nextValue.trim()) {
+                nextParams.set('productId', nextValue.trim());
+              } else {
+                nextParams.delete('productId');
+              }
+              setSearchParams(nextParams, { replace: true });
+              actionRef.current?.reload();
+            }}
+          />,
+          <Switch
+            key="matched-only"
+            checked={matchedOnly}
+            checkedChildren="只看命中"
+            unCheckedChildren="显示全部"
+            onChange={(checked) => {
+              setMatchedOnly(checked);
+              const nextParams = new URLSearchParams(searchParams);
+              if (checked) {
+                nextParams.set('matchedOnly', '1');
+              } else {
+                nextParams.delete('matchedOnly');
+              }
+              setSearchParams(nextParams, { replace: true });
+              actionRef.current?.reload();
+            }}
+          />,
+          <Button
+            key="rebuild-entitlements"
+            icon={<ReloadOutlined />}
+            loading={rebuildingEntitlements}
+            onClick={handleRebuildEntitlements}
+          >
+            重建权益
+          </Button>,
           <Button
             key="refresh"
             icon={<ReloadOutlined />}
@@ -646,19 +961,34 @@ const SubscriptionPlanManagement: React.FC = () => {
           setEditingPlan(null);
           form.resetFields();
         }}
-        width={480}
+        width={860}
       >
         <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
           {requiresProductMapping &&
-            (!hasMappingValue(watchedAppleProductId) ||
-              !hasMappingValue(watchedWechatProductId)) && (
+            (watchedMappingState.missingApple || watchedMappingState.missingGoogle) && (
               <Alert
                 type="warning"
                 showIcon
-                message="当前为付费套餐，建议同时配置 Apple / 微信商品映射。正式购买验单依赖精确商品 ID。"
+                message="当前为付费套餐，请配置 Apple / Google 商品映射。微信映射仅在大陆支付渠道启用时必需。"
                 style={{ marginBottom: 16 }}
               />
             )}
+          {requiresProductMapping && (
+            <Alert
+              type="info"
+              showIcon
+              style={{ marginBottom: 16 }}
+              message="创建后 RevenueCat 的 app_store / play_store 映射会作为主匹配源。页面现在会完整保存全部 storeProducts，不再丢失额外 provider 映射。"
+            />
+          )}
+          {watchedMappingState.duplicateKeys.length > 0 && (
+            <Alert
+              type="error"
+              showIcon
+              style={{ marginBottom: 16 }}
+              message={`存在重复的 provider/store/environment 活跃映射：${watchedMappingState.duplicateKeys.join(', ')}`}
+            />
+          )}
           <Form.Item
             name="name"
             label="套餐名称"
@@ -698,7 +1028,7 @@ const SubscriptionPlanManagement: React.FC = () => {
               <Space>
                 价格
                 <Text type="secondary" style={{ fontSize: 12 }}>
-                  （单位：分，1990 = ¥19.90）
+                  （单位：分）
                 </Text>
               </Space>
             }
@@ -707,29 +1037,214 @@ const SubscriptionPlanManagement: React.FC = () => {
             <InputNumber
               min={0}
               style={{ width: '100%' }}
-              placeholder="例如：1990 代表 ¥19.90"
-              addonBefore="¥"
-              formatter={(v) => (v ? `${(Number(v) / 100).toFixed(2)}` : '')}
-              parser={(v) => Math.round(parseFloat(v?.replace('¥', '') || '0') * 100) as any}
+              placeholder="例如：499 表示 4.99"
+              addonBefore={currencySymbols[watchedCurrency.toUpperCase()] ?? watchedCurrency.toUpperCase()}
             />
           </Form.Item>
-          <Form.Item name="currency" label="货币代码" initialValue="CNY">
+          <Form.Item name="currency" label="货币代码" initialValue="USD">
             <Input placeholder="例如：CNY / USD" />
           </Form.Item>
-          <Form.Item
-            name="appleProductId"
-            label="Apple 商品 ID"
-            rules={buildMappingRules('Apple 商品 ID')}
-          >
-            <Input placeholder="例如：eatcheck.monthly.v2" />
-          </Form.Item>
-          <Form.Item
-            name="wechatProductId"
-            label="微信商品 ID"
-            rules={buildMappingRules('微信商品 ID')}
-          >
-            <Input placeholder="例如：pro_monthly" />
-          </Form.Item>
+          <Divider orientation="left" orientationMargin={0}>
+            商品映射
+          </Divider>
+          <Form.List name="storeProducts">
+            {(fields, { add, remove }) => (
+              <>
+                <Space wrap style={{ marginBottom: 16 }}>
+                  <Button
+                    size="small"
+                    onClick={() =>
+                      add({
+                        provider: 'revenuecat',
+                        store: 'app_store',
+                        productId: '',
+                        offeringId: '',
+                        packageId: '',
+                        environment: 'production',
+                        isActive: true,
+                      })
+                    }
+                  >
+                    添加 App Store
+                  </Button>
+                  <Button
+                    size="small"
+                    onClick={() =>
+                      add({
+                        provider: 'revenuecat',
+                        store: 'play_store',
+                        productId: '',
+                        offeringId: '',
+                        packageId: '',
+                        environment: 'production',
+                        isActive: true,
+                      })
+                    }
+                  >
+                    添加 Google Play
+                  </Button>
+                  <Button
+                    size="small"
+                    onClick={() =>
+                      add({
+                        provider: 'wechat_pay',
+                        store: 'wechat',
+                        productId: '',
+                        offeringId: '',
+                        packageId: '',
+                        environment: 'production',
+                        isActive: true,
+                      })
+                    }
+                  >
+                    添加 WeChat
+                  </Button>
+                  <Button
+                    size="small"
+                    onClick={() =>
+                      add({
+                        provider: 'stripe',
+                        store: 'stripe',
+                        productId: '',
+                        offeringId: '',
+                        packageId: '',
+                        environment: 'production',
+                        isActive: true,
+                      })
+                    }
+                  >
+                    添加 Stripe
+                  </Button>
+                </Space>
+                <Space direction="vertical" size={12} style={{ display: 'flex', marginBottom: 16 }}>
+                  {fields.map((field) => (
+                    <Card key={field.key} size="small" style={{ background: '#fafafa' }}>
+                      <Row gutter={12}>
+                        <Col span={6}>
+                          <Form.Item
+                            {...field}
+                            name={[field.name, 'provider']}
+                            label="Provider"
+                            rules={[{ required: true, message: '请选择 provider' }]}
+                          >
+                            <Select options={providerOptions} />
+                          </Form.Item>
+                        </Col>
+                        <Col span={6}>
+                          <Form.Item
+                            {...field}
+                            name={[field.name, 'store']}
+                            label="Store"
+                            rules={[{ required: true, message: '请选择 store' }]}
+                          >
+                            <Select options={storeOptions} />
+                          </Form.Item>
+                        </Col>
+                        <Col span={6}>
+                          <Form.Item
+                            {...field}
+                            name={[field.name, 'environment']}
+                            label="环境"
+                            initialValue="production"
+                          >
+                            <Select options={environmentOptions} />
+                          </Form.Item>
+                        </Col>
+                        <Col span={6}>
+                          <Form.Item
+                            {...field}
+                            name={[field.name, 'isActive']}
+                            label="启用"
+                            valuePropName="checked"
+                            initialValue={true}
+                          >
+                            <Switch />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                      <Row gutter={12}>
+                        <Col span={12}>
+                          <Form.Item
+                            {...field}
+                            name={[field.name, 'productId']}
+                            label="商品 ID"
+                            rules={[{ required: true, message: '请输入商品 ID' }]}
+                          >
+                            <Input placeholder="例如：eatcheck.monthly.v2" />
+                          </Form.Item>
+                        </Col>
+                        <Col span={6}>
+                          <Form.Item
+                            {...field}
+                            name={[field.name, 'offeringId']}
+                            label="Offering ID"
+                          >
+                            <Input placeholder="例如：default" />
+                          </Form.Item>
+                        </Col>
+                        <Col span={6}>
+                          <Form.Item
+                            {...field}
+                            name={[field.name, 'packageId']}
+                            label="Package ID"
+                          >
+                            <Input placeholder="例如：\$rc_monthly" />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                      <Row gutter={12} align="middle">
+                        <Col span={24}>
+                          <Button
+                            danger
+                            icon={<MinusCircleOutlined />}
+                            onClick={() => remove(field.name)}
+                            style={{ width: '100%' }}
+                          >
+                            删除
+                          </Button>
+                        </Col>
+                      </Row>
+                    </Card>
+                  ))}
+                </Space>
+                <Button
+                  block
+                  icon={<PlusOutlined />}
+                  onClick={() =>
+                    add({
+                      provider: 'revenuecat',
+                      store: 'app_store',
+                      productId: '',
+                      offeringId: '',
+                      packageId: '',
+                      environment: 'production',
+                      isActive: true,
+                    })
+                  }
+                >
+                  新增商品映射
+                </Button>
+              </>
+            )}
+          </Form.List>
+          {watchedStoreProducts.length > 0 && (
+            <Card size="small" style={{ marginBottom: 16, background: '#fafafa' }}>
+              <Space direction="vertical" size={4}>
+                <Text strong style={{ fontSize: 12 }}>
+                  即将写入的商品映射
+                </Text>
+                {watchedStoreProducts.map((item, index) => (
+                  <Text key={`${item.provider}-${item.store}-${index}`} style={{ fontSize: 12 }}>
+                    {item.provider || '-'} / {item.store || '-'} / {item.environment || 'production'}
+                    : {item.productId?.trim() || '-'}
+                    {(item.offeringId?.trim()?.length ?? 0) > 0 ? ` / offering=${item.offeringId?.trim()}` : ''}
+                    {(item.packageId?.trim()?.length ?? 0) > 0 ? ` / package=${item.packageId?.trim()}` : ''}
+                    {item.isActive === false ? ' (disabled)' : ''}
+                  </Text>
+                ))}
+              </Space>
+            </Card>
+          )}
           <Form.Item name="sortOrder" label="排序权重" initialValue={0}>
             <InputNumber min={0} style={{ width: '100%' }} />
           </Form.Item>

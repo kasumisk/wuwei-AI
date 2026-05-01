@@ -7,11 +7,13 @@
  *    解决同一公司出口 IP 共享限流的问题
  * 2. **未认证请求**: 回退到 IP 限流（保护登录等公开接口）
  * 3. **多层限流**: 通过 ThrottlerModule 的 named throttlers 实现
- *    - 'default': 全局宽松限制（100 req/60s）
- *    - 'user-api': 用户级 API 限制（30 req/60s per user）
- *    - 'ai-heavy': AI 重计算接口限制（5 req/60s per user）
- * 4. **Admin 豁免**: /admin/* 路由全部跳过限流
- *    管理后台操作频率不可预测（如轮询队列状态），不应被限流约束
+ *    - 'default':  IP 级宽松兜底
+ *    - 'user-api': 用户级常规
+ *    - 'ai-heavy': 用户级 AI 重计算
+ *    - 'strict':   用户级低频高消耗（登录/注册/导出）
+ * 4. **Admin 限流**: /admin/* 路由仍然走限流（防暴力破解 admin 登录），
+ *    但因 admin 操作幅度大，建议在 admin controller 上显式放宽，
+ *    例如 @UserApiThrottle(300, 60)。健康检查 / metrics 端点仍跳过。
  *
  * 使用方式（Controller / Route 级别）：
  * ```
@@ -29,16 +31,25 @@ import { Request } from 'express';
 @Injectable()
 export class UserThrottlerGuard extends ThrottlerGuard {
   /**
-   * 覆盖 canActivate：对 /admin/* 路由直接放行，跳过所有限流检查。
-   * Admin 后台由 JwtAuthGuard + RolesGuard 双重保护，无需额外限流。
+   * 覆盖 canActivate：仅对探针端点跳过限流。
+   *
+   * 之前版本会对 /admin/* 整体跳过，导致 admin 登录接口零防护，
+   * 任何攻击者扫到路径后可无限暴力破解。现在已收紧。
    */
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<Request>();
-    // 兼容全局 prefix（如 /api/admin/...）和无前缀（/admin/...）两种情况
     const path = req.path ?? '';
-    if (path.startsWith('/admin') || path.includes('/admin/')) {
+
+    // 仅放行 K8s/Cloud Run 探针与 Prometheus 抓取端点
+    if (
+      path === '/health' ||
+      path.endsWith('/health') ||
+      path === '/metrics' ||
+      path.endsWith('/metrics')
+    ) {
       return true;
     }
+
     return super.canActivate(context);
   }
 
@@ -54,10 +65,10 @@ export class UserThrottlerGuard extends ThrottlerGuard {
     if (user?.id) {
       return `user:${user.id}`;
     }
-    // 未认证: 回退到 IP
+    // 未认证: 回退到 IP（含 X-Forwarded-For，兼容 Cloud Run 反代）
     const request = req as Request;
-    return (
-      request.ip || request.headers['x-forwarded-for']?.toString() || 'unknown'
-    );
+    const xff = request.headers['x-forwarded-for'];
+    const xffIp = Array.isArray(xff) ? xff[0] : xff?.split(',')[0]?.trim();
+    return xffIp || request.ip || 'unknown';
   }
 }

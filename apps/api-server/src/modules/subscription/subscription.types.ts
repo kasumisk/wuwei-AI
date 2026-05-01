@@ -24,12 +24,17 @@ export enum BillingCycle {
   MONTHLY = 'monthly',
   QUARTERLY = 'quarterly',
   YEARLY = 'yearly',
+  LIFETIME = 'lifetime',
 }
 
 /** 订阅状态 */
 export enum SubscriptionStatus {
+  /** 试用期 */
+  TRIAL = 'trial',
   /** 活跃中 */
   ACTIVE = 'active',
+  /** 扣款失败重试中 */
+  BILLING_RETRY = 'billing_retry',
   /** 已过期 */
   EXPIRED = 'expired',
   /** 已取消（当前周期结束后失效） */
@@ -38,6 +43,14 @@ export enum SubscriptionStatus {
   GRACE_PERIOD = 'grace_period',
   /** 暂停（用户主动暂停） */
   PAUSED = 'paused',
+  /** 已退款 */
+  REFUNDED = 'refunded',
+  /** 已撤销 */
+  REVOKED = 'revoked',
+  /** 转移到其他用户/账号 */
+  TRANSFERRED = 'transferred',
+  /** 未知状态，需要人工排查 */
+  UNKNOWN = 'unknown',
 }
 
 // ==================== 支付 ====================

@@ -128,6 +128,12 @@ export class QuotaGateService {
 
   /**
    * 处理计次类功能的访问检查
+   *
+   * P1-1 原子化改造：
+   * - 原实现先 check() 再 increment()，两步之间有竞态窗口（两个并发请求都通过 check，
+   *   然后都 increment，导致实际使用超过 quota_limit）。
+   * - 新实现：需要扣减时直接调用原子 increment()（内部 CAS SQL），由它决定允许/拒绝。
+   *   不需要扣减时（consumeQuota=false）仍调 check() 做只读查询。
    */
   private async handleCountableFeature(
     userId: string,
@@ -136,11 +142,37 @@ export class QuotaGateService {
     consumeQuota: boolean,
     scene?: string,
   ): Promise<AccessDecision> {
-    // 先检查配额
-    const hasQuota = await this.quotaService.check(userId, feature);
+    if (consumeQuota) {
+      // 直接原子扣减：increment() 内部 CAS 保证不超额
+      try {
+        await this.quotaService.increment(userId, feature);
+        return {
+          allowed: true,
+          quotaConsumed: true,
+          degradeMode: 'none',
+        };
+      } catch {
+        // ForbiddenException → 配额耗尽（或 UNLIMITED 以外的意外失败）
+        const quotaStatus = await this.quotaService
+          .getQuotaStatus(userId, feature)
+          .catch(() => null);
+        return {
+          allowed: false,
+          quotaConsumed: false,
+          degradeMode: 'none',
+          paywall: this.buildQuotaExhaustedPaywall(
+            feature,
+            tier,
+            quotaStatus,
+            scene,
+          ),
+        };
+      }
+    }
 
+    // 只检查不扣减（check 是只读的，UI 展示用）
+    const hasQuota = await this.quotaService.check(userId, feature);
     if (!hasQuota) {
-      // 配额耗尽 → 硬付费墙
       const quotaStatus = await this.quotaService.getQuotaStatus(
         userId,
         feature,
@@ -158,27 +190,6 @@ export class QuotaGateService {
       };
     }
 
-    // 配额充足，是否扣减
-    if (consumeQuota) {
-      try {
-        await this.quotaService.increment(userId, feature);
-        return {
-          allowed: true,
-          quotaConsumed: true,
-          degradeMode: 'none',
-        };
-      } catch {
-        // increment 内部也会检查配额，竞争条件下可能失败
-        return {
-          allowed: false,
-          quotaConsumed: false,
-          degradeMode: 'none',
-          paywall: this.buildQuotaExhaustedPaywall(feature, tier, null, scene),
-        };
-      }
-    }
-
-    // 只检查不扣减
     return {
       allowed: true,
       quotaConsumed: false,

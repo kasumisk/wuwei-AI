@@ -45,7 +45,8 @@ import { ScoringConfigService } from './app/recommendation/context/scoring-confi
 import { CFRecallService } from './app/recommendation/recall/cf-recall.service';
 import { SceneResolverService } from './app/recommendation/context/scene-resolver.service';
 import { RecipeAssemblerService } from './app/recommendation/meal/recipe-assembler.service';
-import { AvailabilityScorerService } from './app/recommendation/utils/availability-scorer.service';
+// 区域+时区优化（深度分析 P1-2）：AvailabilityScorerService 已删除，
+// 其逻辑已被 ChannelAvailabilityFactor（渠道×时段）+ RegionalBoostFactor + SeasonalityService（季节性）取代
 import { DailyPlanContextService } from './app/recommendation/context/daily-plan-context.service';
 import { RecommendationConfigService } from './app/recommendation/pipeline/recommendation.config';
 // V7.2
@@ -68,6 +69,12 @@ import { ExplanationABTrackerService } from './app/recommendation/explanation/ex
 import { NaturalLanguageExplainerService } from './app/recommendation/explanation/natural-language-explainer.service';
 // V7.6 P1-B: 画像聚合 Facade
 import { ProfileAggregatorService } from './app/recommendation/profile/profile-aggregator.service';
+// 区域+时区优化（阶段 2.2）：区域数据缓存主动失效 Listener
+import { RegionCacheInvalidationListener } from './app/recommendation/profile/region-cache-invalidation.listener';
+// 区域+时区优化（深度分析 P0-2）：用户 regionCode 变更缓存失效 Listener
+import { UserRegionCacheInvalidationListener } from './app/recommendation/profile/user-region-cache-invalidation.listener';
+// 区域+时区优化（阶段 3.1/3.2）：区域候选过滤
+import { RegionalCandidateFilterService } from './app/recommendation/filter/regional-candidate-filter.service';
 // V7.6 P1-C: 策略解析 Facade
 import { StrategyResolverFacade } from './app/recommendation/pipeline/strategy-resolver-facade.service';
 // V7.6 P2-B/C: 解释拆分子服务
@@ -109,7 +116,6 @@ const RECOMMENDATION_PROVIDERS = [
   CFRecallService,
   SceneResolverService,
   RecipeAssemblerService,
-  AvailabilityScorerService,
   DailyPlanContextService,
   RecommendationConfigService,
   // V7.2
@@ -141,6 +147,12 @@ const RECOMMENDATION_PROVIDERS = [
   PipelineContextFactory,
   // V8.0 P1-02: 推荐结果后处理器
   RecommendationResultProcessor,
+  // 区域+时区优化（阶段 2.2）：区域数据缓存主动失效 Listener
+  RegionCacheInvalidationListener,
+  // 区域+时区优化（深度分析 P0-2）：用户 regionCode 变更缓存失效 Listener
+  UserRegionCacheInvalidationListener,
+  // 区域+时区优化（阶段 3.1/3.2）：区域候选过滤
+  RegionalCandidateFilterService,
 ];
 
 @Module({

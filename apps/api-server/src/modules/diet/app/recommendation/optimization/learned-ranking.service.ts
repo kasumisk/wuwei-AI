@@ -19,6 +19,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../../../../core/prisma/prisma.service';
+import { RedisCacheService } from '../../../../../core/redis/redis-cache.service';
 import { FeatureFlagService } from '../../../../feature-flag/feature-flag.service';
 import { SCORE_DIMENSIONS } from '../types/recommendation.types';
 import {
@@ -78,6 +79,7 @@ export class LearnedRankingService implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly featureFlagService: FeatureFlagService,
     private readonly cacheManager: TieredCacheManager,
+    private readonly redisCache: RedisCacheService,
   ) {}
 
   onModuleInit(): void {
@@ -97,6 +99,14 @@ export class LearnedRankingService implements OnModuleInit {
    */
   @Cron('0 6 * * 1')
   async recomputeWeights(): Promise<void> {
+    await this.redisCache.runWithLock(
+      'learned-ranking:recompute',
+      60 * 60 * 1000, // 1 小时过期
+      () => this.doRecomputeWeights(),
+    );
+  }
+
+  private async doRecomputeWeights(): Promise<void> {
     // feature flag 检查（不传 userId，检查全局开关）
     const enabled = await this.featureFlagService.isEnabled(FF_LEARNED_RANKING);
     if (!enabled) {

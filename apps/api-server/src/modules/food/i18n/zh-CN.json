@@ -57,6 +57,7 @@
   "validation.textTooLong": "文本长度不能超过 500 字",
   "analyze.timeout": "AI 分析超时，请稍后重试",
   "analyze.failed": "AI 分析失败，请稍后重试",
+  "analyze.unavailable": "AI 服务暂时不可用，请稍后再试",
   "analyze.imageUnrecognizable": "无法识别图片内容，请上传更清晰的食物照片",
   "translationDuplicate": "该食物的 {{locale}} 翻译已存在"
 }

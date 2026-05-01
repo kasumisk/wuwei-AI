@@ -63,6 +63,8 @@ export class DeadLetterService {
     private readonly exportQueue: Queue,
     @InjectQueue(QUEUE_NAMES.RECIPE_GENERATION)
     private readonly recipeGenerationQueue: Queue,
+    @InjectQueue(QUEUE_NAMES.SUBSCRIPTION_MAINTENANCE)
+    private readonly subscriptionMaintenanceQueue: Queue,
   ) {
     // 注册所有队列实例
     this.queueMap.set(
@@ -75,6 +77,10 @@ export class DeadLetterService {
     this.queueMap.set(
       QUEUE_NAMES.RECIPE_GENERATION,
       this.recipeGenerationQueue,
+    );
+    this.queueMap.set(
+      QUEUE_NAMES.SUBSCRIPTION_MAINTENANCE,
+      this.subscriptionMaintenanceQueue,
     );
   }
 
@@ -183,7 +189,10 @@ export class DeadLetterService {
       throw new Error(`未知队列: ${dlqJob.queueName}`);
     }
 
-    const job = await queue.add('dlq-replay', dlqJob.jobData as any);
+    const job = await queue.add('dlq-replay', dlqJob.jobData as any, {
+      removeOnComplete: 200,
+      removeOnFail: 100,
+    });
 
     await this.prisma.deadLetterJobs.update({
       where: { id: dlqId },

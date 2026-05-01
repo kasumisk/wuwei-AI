@@ -99,7 +99,13 @@ export class PrismaService
 
   /**
    * 在 DATABASE_URL 后追加连接池查询参数。
-   * 如果 URL 中已有 connection_limit 或 pool_timeout，不会覆盖。
+   *
+   * 设计原则：
+   * - 如果 URL 已显式声明 connection_limit / pool_timeout / pgbouncer，
+   *   一概不覆盖（信任运维侧配置，例如 Neon Pooled URL 必须 connection_limit=1）。
+   * - 仅在 URL 完全没声明这两个参数时，按 ENV 默认值补齐。
+   * - 检测到 PgBouncer hostname（含 `-pooler`）或显式 `pgbouncer=true` 时
+   *   不再追加 pool_timeout（PgBouncer 自身排队，Prisma pool_timeout 反而会导致冲突）。
    */
   private static appendPoolParams(
     url: string,
@@ -110,11 +116,17 @@ export class PrismaService
 
     try {
       const u = new URL(url);
+      const isPgBouncer =
+        u.searchParams.get('pgbouncer') === 'true' ||
+        u.hostname.includes('-pooler') ||
+        u.hostname.includes('pgbouncer');
 
       if (!u.searchParams.has('connection_limit')) {
-        u.searchParams.set('connection_limit', String(connectionLimit));
+        // PgBouncer 推荐 connection_limit=1（每个 Prisma client 单连接，由 PgBouncer 复用）
+        const limit = isPgBouncer ? 1 : connectionLimit;
+        u.searchParams.set('connection_limit', String(limit));
       }
-      if (!u.searchParams.has('pool_timeout')) {
+      if (!u.searchParams.has('pool_timeout') && !isPgBouncer) {
         u.searchParams.set('pool_timeout', String(poolTimeout));
       }
 

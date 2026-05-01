@@ -20,6 +20,12 @@ import {
   AnalysisContextInput,
 } from './prompt/coach-prompt-builder.service';
 import { FoodAnalysisResultV61 } from '../../decision/types/analysis-result.types';
+import { LlmService } from '../../../core/llm/llm.service';
+import {
+  LlmFeature,
+  LlmMessage,
+  LlmStreamChunk,
+} from '../../../core/llm/llm.types';
 
 // V1.9: COACH_LABELS, cl(), PERSONA_PROMPTS 已提取到 CoachPromptBuilderService 和 coach-tone.config.ts
 
@@ -52,6 +58,7 @@ export class CoachService {
     private readonly promptBuilder: CoachPromptBuilderService,
     private readonly i18n: I18nService,
     private readonly requestCtx: RequestContextService,
+    private readonly llm: LlmService,
   ) {
     this.apiKey = this.configService.get<string>('OPENROUTER_API_KEY') || '';
     this.baseUrl =
@@ -256,35 +263,34 @@ export class CoachService {
   }
 
   /**
-   * 流式调用 OpenRouter（返回 ReadableStream for SSE）
+   * 流式调用 LLM（AsyncIterable，由 controller 写入 SSE 响应）
+   *
+   * 走 LlmService.chatStream → 内部裸 fetch SSE，配额 / 超时 / breaker 已下沉。
    */
-  async createChatStream(
+  async *createChatStream(
+    userId: string,
     messages: Array<{ role: string; content: string }>,
-  ): Promise<Response> {
-    const response = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.apiKey}`,
+  ): AsyncIterable<LlmStreamChunk> {
+    const llmMessages: LlmMessage[] = messages.map((m) => ({
+      role: m.role as LlmMessage['role'],
+      content: m.content,
+    }));
+
+    yield* this.llm.chatStream({
+      feature: LlmFeature.CoachChat,
+      userId,
+      provider: 'openrouter',
+      apiKey: this.apiKey,
+      baseUrl: this.baseUrl,
+      model: this.chatModel,
+      temperature: 0.7,
+      maxTokens: 400,
+      messages: llmMessages,
+      extraHeaders: {
         'HTTP-Referer': 'https://uway.dev-net.uk',
         'X-Title': 'Wuwei Health',
       },
-      body: JSON.stringify({
-        model: this.chatModel,
-        messages,
-        temperature: 0.7,
-        max_tokens: 400,
-        stream: true,
-      }),
     });
-
-    if (!response.ok) {
-      const err = await response.text();
-      this.logger.error(`OpenRouter API 错误: ${response.status} ${err}`);
-      throw new BadRequestException(this.i18n.t('coach.serviceUnavailable'));
-    }
-
-    return response;
   }
 
   /**

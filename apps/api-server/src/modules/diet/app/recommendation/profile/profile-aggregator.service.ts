@@ -42,6 +42,10 @@ import {
 } from '../feedback/execution-tracker.service';
 import { LearnedRankingService } from '../optimization/learned-ranking.service';
 import {
+  DEFAULT_REGION_CODE,
+} from '../../../../../common/config/regional-defaults';
+import { localeToFoodRegion } from '../../../../../common/utils/locale-region.util';
+import {
   RealtimeProfileService,
   type ShortTermProfile,
 } from '../../../../user/app/services/profile/realtime-profile.service';
@@ -149,10 +153,19 @@ export class ProfileAggregatorService {
       );
     }
 
-    const regionCode = enrichedProfile.regionCode || 'CN';
-    if (!enrichedProfile.regionCode) {
+    // 区域+时区优化（阶段 1.4）：regionCode 缺失时依次通过 locale 推断，最终兜底 DEFAULT_REGION_CODE
+    let regionCode = enrichedProfile.regionCode;
+    if (!regionCode) {
+      // 尝试用 locale（BCP 47）推断 regionCode（如 'en-US' → 'US'）
+      const inferredFromLocale = enrichedProfile.locale
+        ? localeToFoodRegion(enrichedProfile.locale)
+        : null;
+      regionCode = inferredFromLocale || DEFAULT_REGION_CODE;
       this.logger.warn(
-        `No regionCode for user=${userId}, falling back to 'CN'`,
+        `No regionCode for user=${userId}, ` +
+          (inferredFromLocale
+            ? `inferred '${regionCode}' from locale '${enrichedProfile.locale}'`
+            : `falling back to default '${DEFAULT_REGION_CODE}'`),
       );
     }
     const regionalBoostMap =

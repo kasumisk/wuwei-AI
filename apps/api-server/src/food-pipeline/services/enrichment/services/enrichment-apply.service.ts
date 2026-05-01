@@ -40,6 +40,11 @@ import {
 } from '../constants/nutrient-ranges';
 import { type EnrichmentResult } from '../constants/enrichment.types';
 import { EnrichmentCompletenessService } from './enrichment-completeness.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import {
+  DomainEvents,
+  RegionDataChangedEvent,
+} from '../../../../core/events/domain-events';
 
 /**
  * 所有拆分表字段的 camelCase 集合（foods 主表 Prisma model 中不存在这些字段）。
@@ -68,6 +73,7 @@ export class EnrichmentApplyService {
     private readonly prisma: PrismaService,
     private readonly provenanceRepo: FoodProvenanceRepository,
     private readonly completenessService: EnrichmentCompletenessService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   private computeCompletenessScore(
@@ -247,6 +253,13 @@ export class EnrichmentApplyService {
         },
       });
     });
+
+    // 区域+时区优化（阶段 2.2）：回退写入后主动失效对应地区缓存
+    const { countryCode } = parseFoodRegionScope(region);
+    this.eventEmitter.emit(
+      DomainEvents.REGION_DATA_CHANGED,
+      new RegionDataChangedEvent(countryCode, 'enrichment_apply', log.foodId),
+    );
 
     return {
       rolledBack: true,
@@ -718,6 +731,20 @@ export class EnrichmentApplyService {
           });
         }
       });
+    }
+
+    // 区域+时区优化（阶段 2.2）：批量写入完成后，为每个受影响的地区发一次缓存失效事件
+    // 多 region 可能映射同一 countryCode，用 Set 去重
+    if (activeOps.length > 0) {
+      const affectedCountries = new Set(
+        activeOps.map((op) => parseFoodRegionScope(op.region).countryCode),
+      );
+      for (const countryCode of affectedCountries) {
+        this.eventEmitter.emit(
+          DomainEvents.REGION_DATA_CHANGED,
+          new RegionDataChangedEvent(countryCode, 'enrichment_apply', foodId),
+        );
+      }
     }
 
     const regionsSummary: Record<

@@ -8,6 +8,12 @@ import {
 } from '../types/recommendation.types';
 import type { KitchenProfile } from '../../../../user/user.types';
 import {
+  DEFAULT_TIMEZONE,
+  getUserLocalHour,
+  getUserLocalDayOfWeek,
+  getUserLocalDate,
+} from '../../../../../common/utils/timezone.util';
+import {
   CookingMethod,
   EQUIPMENT_COOKING_MAP,
   STOVE_REQUIRED_METHODS,
@@ -97,7 +103,13 @@ export class SceneResolverService {
       primaryEatingLocation?: string | null;
     } | null,
     kitchenProfile?: KitchenProfile | null,
+    /**
+     * 区域+时区优化（深度分析 P0-1）：用户 IANA 时区
+     * 缺失时回退 DEFAULT_TIMEZONE，避免使用服务器时区导致 DST/跨时区错位
+     */
+    timezone?: string,
   ): Promise<SceneContext> {
+    const tz = timezone || DEFAULT_TIMEZONE;
     // Layer 1: 用户显式指定
     if (explicitChannel || explicitRealism) {
       const scene = this.buildExplicitScene(
@@ -111,7 +123,7 @@ export class SceneResolverService {
     // Layer 2: 行为学习（需要 userId）
     let behaviorScene: SceneContext | null = null;
     if (userId) {
-      behaviorScene = await this.learnFromHistory(userId, mealType);
+      behaviorScene = await this.learnFromHistory(userId, mealType, tz);
     }
 
     // Layer 3: 规则推断
@@ -119,6 +131,7 @@ export class SceneResolverService {
       mealType,
       contextualProfile,
       declaredProfile,
+      tz,
     );
 
     // Layer 4: 合并 / 默认
@@ -149,13 +162,16 @@ export class SceneResolverService {
     userId: string,
     mealType: string,
     channel: AcquisitionChannel,
+    /** 区域+时区优化 P0-1：用户 IANA 时区，缺失时回退 DEFAULT_TIMEZONE */
+    timezone?: string,
   ): Promise<void> {
     if (!this.redis.isConnected) return;
 
+    const tz = timezone || DEFAULT_TIMEZONE;
     const key = this.buildPatternKey(userId);
-    const dayOfWeek = new Date().getDay(); // 0=Sun, 6=Sat
+    const dayOfWeek = getUserLocalDayOfWeek(tz); // 0=Sun, 6=Sat（用户本地）
     const slotKey = `${dayOfWeek}_${mealType}`;
-    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const today = getUserLocalDate(tz); // YYYY-MM-DD（用户本地）
 
     try {
       type DateRecord = { date: string; count: number };
@@ -257,6 +273,8 @@ export class SceneResolverService {
   private async learnFromHistory(
     userId: string,
     mealType: string,
+    /** 区域+时区优化 P0-1：用户 IANA 时区 */
+    timezone: string = DEFAULT_TIMEZONE,
   ): Promise<SceneContext | null> {
     if (!this.redis.isConnected) return null;
 
@@ -273,7 +291,7 @@ export class SceneResolverService {
       const patterns = await this.redis.get<PatternMap>(key);
       if (!patterns) return null;
 
-      const dayOfWeek = new Date().getDay();
+      const dayOfWeek = getUserLocalDayOfWeek(timezone);
       const slotKey = `${dayOfWeek}_${mealType}`;
       const slot = patterns[slotKey];
       if (!slot || slot.length === 0) return null;
@@ -348,8 +366,10 @@ export class SceneResolverService {
       takeoutFrequency?: string;
       primaryEatingLocation?: string | null;
     } | null,
+    /** 区域+时区优化 P0-1：用户 IANA 时区 */
+    timezone: string = DEFAULT_TIMEZONE,
   ): SceneContext {
-    const hour = new Date().getHours();
+    const hour = getUserLocalHour(timezone);
 
     // 食堂场景（声明优先）
     if (declaredProfile?.primaryEatingLocation === 'canteen') {

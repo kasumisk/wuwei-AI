@@ -217,16 +217,19 @@ export class PermissionService {
       error?: string;
     }> = [];
 
+    // P3-N1: 批量预加载该客户端的所有权限，避免循环内逐条 findFirst
+    const existingPermissions =
+      await this.prisma.clientCapabilityPermissions.findMany({
+        where: { clientId },
+      });
+    const permissionMap = new Map(
+      existingPermissions.map((p) => [p.capabilityType, p]),
+    );
+
     for (const item of batchDto.permissions) {
       try {
-        // 查找现有权限
-        const permission =
-          await this.prisma.clientCapabilityPermissions.findFirst({
-            where: {
-              clientId: clientId,
-              capabilityType: item.capabilityType,
-            },
-          });
+        // 查找现有权限（内存查找，无 DB 查询）
+        const permission = permissionMap.get(item.capabilityType);
 
         if (permission) {
           // 更新现有权限

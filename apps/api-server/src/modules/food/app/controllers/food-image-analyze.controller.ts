@@ -52,7 +52,10 @@ import { AnalysisSessionService } from '../services/analysis-session.service';
 import { AnalyzeImageDto } from '../../../diet/app/dto/food.dto';
 import { RefineAnalysisDto } from '../dto/refine-analysis.dto';
 import type { Locale } from '../../../diet/app/recommendation/utils/i18n-messages';
-import { UserApiThrottle } from '../../../../core/throttle/throttle.constants';
+import {
+  AiHeavyThrottle,
+  UserApiThrottle,
+} from '../../../../core/throttle/throttle.constants';
 import { QuotaGateService } from '../../../subscription/app/services/quota-gate.service';
 import { ResultEntitlementService } from '../../../subscription/app/services/result-entitlement.service';
 import { PaywallTriggerService } from '../../../subscription/app/services/paywall-trigger.service';
@@ -87,6 +90,7 @@ export class FoodImageAnalyzeController {
 
   @Post('analyze')
   @HttpCode(HttpStatus.OK)
+  @AiHeavyThrottle(5, 60)
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: '上传食物图片 AI 分析（异步）' })

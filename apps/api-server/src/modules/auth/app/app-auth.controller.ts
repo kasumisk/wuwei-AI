@@ -31,6 +31,7 @@ import {
 } from './dto/auth.dto';
 import { Public } from '../../../core/decorators/public.decorator';
 import { IgnoreResponseInterceptor } from '../../../core/decorators/ignore-response-interceptor.decorator';
+import { StrictThrottle } from '../../../core/throttle/throttle.constants';
 import { AppJwtAuthGuard } from './app-jwt-auth.guard';
 import { CurrentAppUser } from './current-app-user.decorator';
 import { AppUserPayload } from './app-user-payload.type';
@@ -51,6 +52,7 @@ export class AppAuthController {
   @Public()
   @Post('anonymous')
   @HttpCode(HttpStatus.OK)
+  @StrictThrottle(10, 60)
   @ApiOperation({ summary: '匿名登录' })
   async anonymousLogin(
     @Body() dto: AnonymousLoginDto,
@@ -72,6 +74,7 @@ export class AppAuthController {
   @Public()
   @Post('firebase/login')
   @HttpCode(HttpStatus.OK)
+  @StrictThrottle(10, 60)
   @ApiOperation({ summary: 'Firebase 登录换业务 Token' })
   async firebaseLogin(
     @Body() dto: FirebaseLoginDto,
@@ -95,6 +98,7 @@ export class AppAuthController {
   @Public()
   @Post('phone/send-code')
   @HttpCode(HttpStatus.OK)
+  @StrictThrottle(3, 60)
   @ApiOperation({ summary: '发送短信验证码（开发模式：万能验证码 888888）' })
   async sendPhoneCode(@Body() dto: PhoneSendCodeDto): Promise<ApiResponse> {
     const data = await this.appAuthService.sendPhoneCode(dto.phone);
@@ -113,6 +117,7 @@ export class AppAuthController {
   @Public()
   @Post('phone/verify')
   @HttpCode(HttpStatus.OK)
+  @StrictThrottle(5, 60)
   @ApiOperation({ summary: '手机号验证码登录（新用户自动注册）' })
   async phoneLogin(
     @Body() dto: PhoneVerifyDto,
@@ -263,6 +268,7 @@ export class AppAuthController {
   @Public()
   @Post('email/register')
   @HttpCode(HttpStatus.CREATED)
+  @StrictThrottle(3, 3600)
   @ApiOperation({ summary: '邮箱注册' })
   async emailRegister(
     @Body() dto: EmailRegisterDto,
@@ -288,6 +294,7 @@ export class AppAuthController {
   @Public()
   @Post('email/login')
   @HttpCode(HttpStatus.OK)
+  @StrictThrottle(5, 60)
   @ApiOperation({ summary: '邮箱密码登录' })
   async emailLogin(
     @Body() dto: EmailLoginDto,
@@ -309,6 +316,7 @@ export class AppAuthController {
   @Public()
   @Post('email/code-login')
   @HttpCode(HttpStatus.OK)
+  @StrictThrottle(5, 60)
   @ApiOperation({ summary: '邮箱验证码登录' })
   async emailCodeLogin(
     @Body() dto: EmailCodeLoginDto,
@@ -330,6 +338,7 @@ export class AppAuthController {
   @Public()
   @Post('email/send-code')
   @HttpCode(HttpStatus.OK)
+  @StrictThrottle(3, 60)
   @ApiOperation({ summary: '发送邮箱验证码' })
   sendEmailCode(@Body() dto: SendEmailCodeDto): ApiResponse {
     const data = this.appAuthService.generateEmailCode(dto.email, dto.type);
@@ -348,6 +357,7 @@ export class AppAuthController {
   @Public()
   @Post('email/reset-password')
   @HttpCode(HttpStatus.OK)
+  @StrictThrottle(3, 3600)
   @ApiOperation({ summary: '重置密码' })
   async resetPassword(@Body() dto: ResetPasswordDto): Promise<ApiResponse> {
     const data = await this.appAuthService.resetPassword(

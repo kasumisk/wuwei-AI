@@ -32,27 +32,38 @@ export const THROTTLE_TIERS = {
 
 // ─── 默认限流参数（用于 ThrottlerModule.forRoot） ───
 
+/**
+ * 默认限流参数（用于 ThrottlerModule.forRoot）
+ *
+ * 上线参数（北美 Cloud Run 部署）：
+ * - default:  IP 级 100 req/60s — 防扫描 / 暴力破解的全局兜底
+ * - user-api: 用户级 60 req/60s — 普通业务接口
+ * - ai-heavy: 用户级 5  req/60s — AI / 视觉 / 推荐重计算（保护 OpenRouter 账单）
+ * - strict:   用户级 3  req/60s — 登录、注册、导出等低频高消耗
+ *
+ * 单接口可通过 @AiHeavyThrottle / @UserApiThrottle / @StrictThrottle 覆盖。
+ * 修改前请同步更新 docs/PRODUCTION_READINESS_REVIEW.md §7。
+ */
 export const THROTTLE_CONFIG = [
   {
     name: THROTTLE_TIERS.DEFAULT,
-    ttl: 60000, // 60 秒
-    limit: 10000, // 暂时放开，后续按接口细化
+    ttl: 60000,
+    limit: 200,
   },
   {
     name: THROTTLE_TIERS.USER_API,
     ttl: 60000,
-    limit: 10000,
+    limit: 120,
   },
   {
     name: THROTTLE_TIERS.AI_HEAVY,
     ttl: 60000,
-    limit: 10000,
+    limit: 10,
   },
   {
-    // V6.4: 新增独立 tier，避免与 AI_HEAVY 共享计数器
     name: THROTTLE_TIERS.STRICT,
     ttl: 60000,
-    limit: 10000,
+    limit: 6,
   },
 ];
 
@@ -90,7 +101,7 @@ export function UserApiThrottle(limit = 30, ttlSeconds = 60) {
  * 适用: 导出、批量操作等低频高消耗接口
  * V6.4: 使用独立 STRICT tier，不再与 AI_HEAVY 共享计数器
  */
-export function StrictThrottle(limit = 3, ttlSeconds = 60) {
+export function StrictThrottle(limit = 10, ttlSeconds = 60) {
   return applyDecorators(
     Throttle({
       [THROTTLE_TIERS.STRICT]: { limit, ttl: ttlSeconds * 1000 },

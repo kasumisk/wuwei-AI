@@ -110,6 +110,28 @@ export interface PipelineContext {
   tuning?: Required<RecommendationTuningConfig>;
   /** V7.9: 管道全链路追踪（各阶段写入，最终汇总） */
   trace?: PipelineTrace;
+  /**
+   * 区域+时区优化（阶段 1）：
+   * 用户 IANA 时区，缺失时回退 regional-defaults.ts 中的 DEFAULT_TIMEZONE
+   */
+  timezone?: string;
+  /**
+   * 区域+时区优化（阶段 1）：
+   * 用户本地当前月份 1-12，由 PipelineContextFactory 基于 timezone 计算
+   */
+  currentMonth?: number;
+  /**
+   * 区域+时区优化：
+   * 用户本地当前小时 0-23，由 PipelineContextFactory 基于 timezone 计算
+   * 供 ChannelAvailabilityFactor 等时段感知因子使用
+   */
+  localHour?: number;
+  /**
+   * 区域+时区优化（阶段 1）：
+   * 用户区域代码（ISO 3166-1 alpha-2 / 子区域如 'CN-GD'），缺失时由
+   * ProfileAggregator 用 locale 兜底，最终默认 'CN'
+   */
+  regionCode?: string;
 }
 
 // ==================== 用户画像类型 ====================
@@ -129,8 +151,14 @@ export interface UserProfileConstraints {
   cookingSkillLevel?: string;
   /** V6.2 3.4: 预算等级（'low'|'medium'|'high'），来自声明画像 */
   budgetLevel?: string;
+  /** P2-2.2: 用户每餐预算（精确值，单位为 currencyCode 对应币种），来自 UserProfiles.budget_per_meal */
+  budgetPerMeal?: number;
+  /** P2-2.2: 用户预算币种（ISO 4217，如 'USD'/'CNY'），来自 UserProfiles.currency_code */
+  currencyCode?: string;
   /** V6.2 3.4: 菜系偏好（如 ['中餐','日料']），来自声明画像 */
   cuisinePreferences?: string[];
+  /** 区域+时区优化（阶段 1.4）：用户语言区域标签（BCP 47），用于 regionCode 推断兜底 */
+  locale?: string;
 }
 
 /**
@@ -163,6 +191,10 @@ export interface EnrichedProfileContext extends UserProfileConstraints {
     canCook?: boolean;
     cookingSkillLevel?: string;
     budgetLevel?: string;
+    /** P2-2.2: 用户每餐预算（精确值），来自 UserProfiles.budget_per_meal */
+    budgetPerMeal?: number;
+    /** P2-2.2: 用户预算币种（ISO 4217），来自 UserProfiles.currency_code */
+    currencyCode?: string;
     familySize?: number;
     cuisinePreferences?: string[];
     foodPreferences?: string[];
@@ -174,6 +206,8 @@ export interface EnrichedProfileContext extends UserProfileConstraints {
     discipline?: string;
     regionCode?: string;
     timezone?: string;
+    /** 区域+时区优化（阶段 1.4）：用户语言区域标签（BCP 47），用于 regionCode 推断兜底 */
+    locale?: string;
     /** V6.3 P2-9: 每周运动计划，用于 post_exercise 场景检测 */
     exerciseSchedule?: Record<
       string,

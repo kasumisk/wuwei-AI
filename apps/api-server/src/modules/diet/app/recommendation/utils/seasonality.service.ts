@@ -32,6 +32,28 @@ export interface SeasonalityInfo {
   localPopularity: number;
   /** V7.0: 食物级月份权重（12元素数组 0-1），null 时回退品类级逻辑 */
   monthWeights: number[] | null;
+  /**
+   * 阶段 3.2: 法规信息（来自 food_regional_info.regulatory_info JSON）
+   * 结构示例: { forbidden: true, reason: "banned in US" }
+   * null 表示无法规限制数据
+   */
+  regulatoryForbidden: boolean;
+  /** P2-2.2: 该区域内食物最低价格（per_serving，单位为 currencyCode） */
+  priceMin: number | null;
+  /** P2-2.2: 该区域内食物最高价格（per_serving，单位为 currencyCode） */
+  priceMax: number | null;
+  /** P2-2.2: 价格币种（ISO 4217） */
+  currencyCode: string | null;
+  /** P2-2.2: 价格单位（如 per_serving / per_kg），null/per_serving 视为可比 */
+  priceUnit: string | null;
+}
+
+/** P2-2.2: 食物地区价格信息（PriceFitFactor 专用，对外提供精简视图） */
+export interface FoodPriceInfo {
+  priceMin: number | null;
+  priceMax: number | null;
+  currencyCode: string | null;
+  priceUnit: string | null;
 }
 
 /** 品类 → 典型旺季月份映射（基于中国饮食文化） */
@@ -63,6 +85,16 @@ export class SeasonalityService {
   /** 请求级内存缓存 — 由调用方在每次推荐请求前 preload */
   private regionalCache: Map<string, SeasonalityInfo> = new Map();
 
+  /**
+   * 阶段 2.3：并发 preloadRegion 防重复加载 mutex
+   *
+   * 同一进程内多个并发推荐请求可能同时调 preloadRegion(同一 regionCode)，
+   * 导致多次重复 DB 查询。用 Promise 作为 mutex：
+   * - 首次调用：创建并存储 Promise，后续复用同一 Promise
+   * - Promise resolve 后自动从 map 删除，下次请求重新走完整逻辑
+   */
+  private readonly preloadInProgress = new Map<string, Promise<void>>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisCacheService,
@@ -79,6 +111,19 @@ export class SeasonalityService {
   async preloadRegion(regionCode: string): Promise<void> {
     if (!regionCode) return;
 
+    // 阶段 2.3：并发防重复 — 若同 regionCode 已在加载中，等待同一 Promise
+    const inflight = this.preloadInProgress.get(regionCode);
+    if (inflight) return inflight;
+
+    const loadPromise = this._doPreloadRegion(regionCode).finally(() => {
+      this.preloadInProgress.delete(regionCode);
+    });
+    this.preloadInProgress.set(regionCode, loadPromise);
+    return loadPromise;
+  }
+
+  /** 实际加载逻辑（由 preloadRegion mutex 包裹） */
+  private async _doPreloadRegion(regionCode: string): Promise<void> {
     const cacheKey = `${SeasonalityService.CACHE_PREFIX}${regionCode}`;
 
     // 尝试 Redis L2
@@ -111,6 +156,12 @@ export class SeasonalityService {
           availability: true,
           localPopularity: true,
           monthWeights: true, // V7.0: 食物级月份权重
+          regulatoryInfo: true, // 阶段 3.2: 法规信息
+          // P2-2.2: 价格字段
+          priceMin: true,
+          priceMax: true,
+          currencyCode: true,
+          priceUnit: true,
         },
       });
 
@@ -120,10 +171,21 @@ export class SeasonalityService {
       )) {
         if (map[row.foodId]) continue;
 
+        const regulatoryForbidden =
+          row.regulatoryInfo !== null &&
+          typeof row.regulatoryInfo === 'object' &&
+          (row.regulatoryInfo as Record<string, unknown>)['forbidden'] === true;
+
         const info: SeasonalityInfo = {
           availability: row.availability,
           localPopularity: row.localPopularity,
           monthWeights: this.parseMonthWeights(row.monthWeights),
+          regulatoryForbidden,
+          // P2-2.2: 价格透传（Prisma Decimal → number）
+          priceMin: row.priceMin != null ? Number(row.priceMin) : null,
+          priceMax: row.priceMax != null ? Number(row.priceMax) : null,
+          currencyCode: row.currencyCode ?? null,
+          priceUnit: row.priceUnit ?? null,
         };
         map[row.foodId] = info;
         this.regionalCache.set(row.foodId, info);
@@ -158,11 +220,57 @@ export class SeasonalityService {
   }
 
   /**
+   * 阶段 3.1：获取食物的区域 availability（用于候选过滤）
+   *
+   * @returns availability 字符串（'YEAR_ROUND'|'SEASONAL'|'RARE'|'LIMITED'|null）
+   *          null 表示无区域数据，调用方应视为可用
+   */
+  getAvailability(foodId: string): string | null {
+    return this.regionalCache.get(foodId)?.availability ?? null;
+  }
+
+  /**
+   * 阶段 3.2：食物在当前区域是否被法规禁止
+   *
+   * @returns true = 禁止推荐；false / 无数据 = 允许
+   */
+  isRegulatoryForbidden(foodId: string): boolean {
+    return this.regionalCache.get(foodId)?.regulatoryForbidden ?? false;
+  }
+
+  /**
+   * P2-2.2: 获取食物的区域价格信息（用于 PriceFitFactor）
+   *
+   * @returns FoodPriceInfo（priceMin/priceMax/currencyCode/priceUnit），无数据时四字段均为 null
+   */
+  getPriceInfo(foodId: string): FoodPriceInfo {
+    const info = this.regionalCache.get(foodId);
+    if (!info) {
+      return {
+        priceMin: null,
+        priceMax: null,
+        currencyCode: null,
+        priceUnit: null,
+      };
+    }
+    return {
+      priceMin: info.priceMin,
+      priceMax: info.priceMax,
+      currencyCode: info.currencyCode,
+      priceUnit: info.priceUnit,
+    };
+  }
+
+  /**
    * 计算食物的时令性分数
    *
    * V7.0 优先级:
    * 1. month_weights 存在 → 用平滑插值（相邻月加权）
    * 2. availability + 品类峰值月份（V6.4 原有逻辑）
+   *
+   * 阶段 4.3 — seasonalityConfidence 衰减：
+   * 置信度低时将原始分向 0.5（中性）收缩，减少噪声数据对排序的影响。
+   * score_final = score_raw * confidence + 0.5 * (1 - confidence)
    *
    * @param foodId 食物 ID
    * @param category 食物品类（用于判断当季月份）
@@ -177,41 +285,58 @@ export class SeasonalityService {
     const currentMonth = month ?? new Date().getMonth() + 1;
     const info = this.regionalCache.get(foodId);
 
-    // 无区域数据 → 中性分
+    // 无区域数据 → 中性分（置信度 0，完全衰减）
     if (!info) {
       return 0.5;
     }
 
-    // V7.0: 食物级月份权重优先
+    // V7.0: 食物级月份权重优先（高置信度：confidence=0.9）
     if (info.monthWeights?.length === 12) {
-      return this.interpolateMonthWeight(info.monthWeights, currentMonth);
+      const raw = this.interpolateMonthWeight(info.monthWeights, currentMonth);
+      return this.applyConfidenceDecay(raw, 0.9);
     }
 
-    // V6.4 原有逻辑: 基于 availability
+    // V6.4 原有逻辑: 基于 availability（置信度因数据质量而异）
     if (!info.availability) {
       return 0.5;
     }
 
     switch (info.availability) {
       case 'YEAR_ROUND':
-        return 0.7;
+        // 稳定可用，高置信度
+        return this.applyConfidenceDecay(0.7, 0.85);
 
       case 'SEASONAL': {
         const peakMonths =
           CATEGORY_PEAK_MONTHS[category] ?? DEFAULT_PEAK_MONTHS;
         const isInSeason = peakMonths.includes(currentMonth);
-        return isInSeason ? 1.0 : 0.3;
+        // 季节性判断依赖品类映射，中等置信度
+        return this.applyConfidenceDecay(isInSeason ? 1.0 : 0.3, 0.75);
       }
 
       case 'RARE':
-        return 0.4;
+        // 数据稀疏，低置信度
+        return this.applyConfidenceDecay(0.4, 0.6);
 
       case 'LIMITED':
-        return 0.45;
+        // 区域限制，低置信度
+        return this.applyConfidenceDecay(0.45, 0.6);
 
       default:
         return 0.5;
     }
+  }
+
+  /**
+   * 阶段 4.3：置信度衰减 — 将原始分向 0.5 收缩
+   *
+   * score_final = score_raw * confidence + 0.5 * (1 - confidence)
+   *
+   * @param raw       原始时令分 (0~1)
+   * @param confidence 置信度 (0~1)，1=完全相信，0=完全退化为 0.5
+   */
+  private applyConfidenceDecay(raw: number, confidence: number): number {
+    return raw * confidence + 0.5 * (1 - confidence);
   }
 
   /**

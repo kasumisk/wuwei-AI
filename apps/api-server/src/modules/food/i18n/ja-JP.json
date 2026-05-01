@@ -57,6 +57,7 @@
   "validation.textTooLong": "テキストは 500 文字以内で入力してください",
   "analyze.timeout": "AI 分析がタイムアウトしました。再試行してください",
   "analyze.failed": "AI 分析に失敗しました。しばらくしてからお試しください",
+  "analyze.unavailable": "AI サービスが一時的に利用できません。しばらくしてからお試しください",
   "analyze.imageUnrecognizable": "画像内容を識別できません。より鮮明な食品写真をアップロードしてください",
   "translationDuplicate": "この食品の {{locale}} 翻訳は既に存在します"
 }

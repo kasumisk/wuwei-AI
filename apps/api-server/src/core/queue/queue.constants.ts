@@ -31,6 +31,9 @@ export const QUEUE_NAMES = {
 
   /** USDA 数据导入异步任务 */
   FOOD_USDA_IMPORT: 'food-usda-import',
+
+  /** 订阅后台维护任务：重同步/权益重建 */
+  SUBSCRIPTION_MAINTENANCE: 'subscription-maintenance',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -93,5 +96,11 @@ export const QUEUE_DEFAULT_OPTIONS: Record<
     maxRetries: 1,
     backoffType: 'exponential',
     backoffDelay: 5000,
+  },
+  [QUEUE_NAMES.SUBSCRIPTION_MAINTENANCE]: {
+    concurrency: 1,
+    maxRetries: 2,
+    backoffType: 'exponential',
+    backoffDelay: 3000,
   },
 };

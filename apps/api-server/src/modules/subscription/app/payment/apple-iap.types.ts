@@ -27,7 +27,7 @@ export interface AppleTransactionInfo {
   originalTransactionId: string;
   /** App 的 Bundle ID */
   bundleId: string;
-  /** 产品 ID（对应 SubscriptionPlan.appleProductId） */
+  /** 产品 ID（对应 subscription_store_products.product_id） */
   productId: string;
   /** 购买日期（毫秒时间戳） */
   purchaseDate: number;

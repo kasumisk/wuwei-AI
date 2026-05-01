@@ -57,6 +57,7 @@
   "validation.textTooLong": "Text must not exceed 500 characters.",
   "analyze.timeout": "AI analysis timed out, please retry.",
   "analyze.failed": "AI analysis failed, please try again later.",
+  "analyze.unavailable": "AI service is temporarily unavailable, please try again in a moment.",
   "analyze.imageUnrecognizable": "Unable to identify image content, please upload a clearer food photo.",
   "translationDuplicate": "A {{locale}} translation for this food already exists."
 }

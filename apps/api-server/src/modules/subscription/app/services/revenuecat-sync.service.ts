@@ -6,10 +6,12 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
+import * as crypto from 'crypto';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
+import { RedisCacheService } from '../../../../core/redis/redis-cache.service';
 import { SubscriptionService } from './subscription.service';
+import { SubscriptionDomainSyncService } from './subscription-domain-sync.service';
 import {
-  BillingCycle,
   PaymentChannel,
   SubscriptionStatus,
   SubscriptionTier,
@@ -97,28 +99,38 @@ export class RevenueCatSyncService {
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
     private readonly subscriptionService: SubscriptionService,
+    private readonly domainSync: SubscriptionDomainSyncService,
+    private readonly redis: RedisCacheService,
   ) {}
 
+  /**
+   * 校验 RevenueCat webhook 的 Authorization 头。
+   *
+   * 安全要求（生产）：
+   * - REVENUECAT_WEBHOOK_AUTH 必须配置，否则任何环境一律拒绝
+   * - 使用 timing-safe 比较，避免基于响应时间的 token 探测
+   * - 兼容 `Bearer xxx` 与裸 token 两种格式
+   */
   assertWebhookAuthorization(authHeader?: string): void {
-    const expected = this.configService.get<string>(
-      'REVENUECAT_WEBHOOK_AUTH',
-      '',
-    );
+    const expected = (
+      this.configService.get<string>('REVENUECAT_WEBHOOK_AUTH', '') ?? ''
+    ).trim();
 
     if (!expected) {
-      if (process.env.NODE_ENV === 'production') {
-        throw new UnauthorizedException('RevenueCat webhook auth is not set');
-      }
-
-      this.logger.warn(
-        'REVENUECAT_WEBHOOK_AUTH 未配置，非生产环境下放行 RevenueCat webhook',
+      // 任何环境缺失都拒绝（包括 staging）。绝不允许 webhook 裸奔。
+      this.logger.error(
+        'REVENUECAT_WEBHOOK_AUTH 未配置，拒绝所有 RevenueCat webhook 请求',
       );
-      return;
+      throw new UnauthorizedException('RevenueCat webhook auth is not set');
     }
 
-    const actual = (authHeader ?? '').trim();
-    const bearer = `Bearer ${expected}`;
-    if (actual !== expected && actual !== bearer) {
+    const raw = (authHeader ?? '').trim();
+    // 兼容 "Bearer xxx" 与 "xxx"
+    const actual = raw.replace(/^Bearer\s+/i, '').trim();
+
+    const a = Buffer.from(actual);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
       throw new UnauthorizedException('Invalid RevenueCat webhook auth');
     }
   }
@@ -156,22 +168,28 @@ export class RevenueCatSyncService {
         processingStatus: 'pending',
         rawPayload: payload as any,
       },
+      // update 分支：仅刷新 rawPayload（RC 偶尔补字段），其余字段保持不动。
+      // 特别地：不覆写 processingStatus——已处理的事件不应被重新触发。
       update: {
-        eventType: event?.type ?? null,
-        appUserId,
-        originalAppUserId: event?.original_app_user_id ?? null,
-        aliases: event?.aliases ?? [],
-        store: event?.store ?? null,
-        environment: event?.environment ?? null,
-        runtimeEnv,
-        productId: event?.product_id ?? null,
-        entitlementIds: event?.entitlement_ids ?? [],
-        transactionId: event?.transaction_id ?? null,
-        originalTransactionId: event?.original_transaction_id ?? null,
-        eventTimestamp,
         rawPayload: payload as any,
       },
     });
+
+    // 幂等保护：事件已成功处理过，直接返回 200，跳过重复同步。
+    // RC 在网络抖动时会重发相同 eventId；重复执行 triggerSyncForUser 无害但浪费资源。
+    if (webhookEvent.processingStatus === 'processed') {
+      this.logger.debug(
+        `RevenueCat webhook already processed, skipping sync | eventId=${providerEventId}`,
+      );
+      return {
+        accepted: true,
+        provider: 'revenuecat',
+        eventId: providerEventId,
+        eventType: event?.type ?? null,
+        appUserId,
+        queuedAt: new Date().toISOString(),
+      };
+    }
 
     const result: RevenueCatWebhookIngestResult = {
       accepted: true,
@@ -271,6 +289,14 @@ export class RevenueCatSyncService {
 
   @Cron('*/15 * * * *', { name: 'subscription-revenuecat-reconcile' })
   async reconcileRecentSubscriptions(): Promise<void> {
+    // 分布式锁：14 分钟 TTL（稍短于 Cron 间隔 15 分钟）
+    const acquired = await this.redis.setNX(
+      'rc:reconcile:lock',
+      '1',
+      14 * 60 * 1000,
+    );
+    if (!acquired) return;
+
     const recentSubs = await this.prisma.subscription.findMany({
       where: {
         status: {
@@ -298,6 +324,14 @@ export class RevenueCatSyncService {
 
   @Cron('*/10 * * * *', { name: 'subscription-revenuecat-webhook-retry' })
   async retryFailedWebhookEvents(): Promise<void> {
+    // 分布式锁：9 分钟 TTL（稍短于 Cron 间隔 10 分钟）
+    const acquired = await this.redis.setNX(
+      'rc:webhook-retry:lock',
+      '1',
+      9 * 60 * 1000,
+    );
+    if (!acquired) return;
+
     const failedEvents = await this.prisma.billingWebhookEvents.findMany({
       where: {
         provider: 'revenuecat',
@@ -337,11 +371,27 @@ export class RevenueCatSyncService {
 
   private getWebhookEventId(event?: RevenueCatEventLike | null): string {
     if (event?.id) return event.id;
+    const fingerprint = crypto
+      .createHash('sha256')
+      .update(
+        JSON.stringify({
+          type: event?.type ?? null,
+          app_user_id: event?.app_user_id ?? null,
+          original_app_user_id: event?.original_app_user_id ?? null,
+          event_timestamp_ms: event?.event_timestamp_ms ?? null,
+          product_id: event?.product_id ?? null,
+          transaction_id: event?.transaction_id ?? null,
+          original_transaction_id: event?.original_transaction_id ?? null,
+        }),
+      )
+      .digest('hex')
+      .slice(0, 32);
     return [
       'rc',
       event?.type ?? 'unknown',
       event?.app_user_id ?? event?.original_app_user_id ?? 'unknown',
-      event?.event_timestamp_ms ?? Date.now(),
+      event?.event_timestamp_ms ?? 'no_timestamp',
+      fingerprint,
     ].join(':');
   }
 
@@ -449,9 +499,23 @@ export class RevenueCatSyncService {
     const candidateCancelledAt = this.parseDate(
       candidate?.unsubscribe_detected_at,
     );
+    const candidateBillingIssueAt = this.parseDate(
+      candidate?.billing_issues_detected_at,
+    );
     const candidateRefundedAt = this.parseDate(candidate?.refunded_at);
     const providerSubscriptionKey =
       candidate?.original_transaction_id ?? candidate?.purchase_token ?? null;
+    const providerCustomerId =
+      snapshot.subscriber?.original_app_user_id ?? userId;
+
+    await this.domainSync.syncProviderCustomer({
+      userId,
+      provider: 'revenuecat',
+      providerCustomerId,
+      originalProviderCustomerId: snapshot.subscriber?.original_app_user_id,
+      aliases: snapshot.subscriber?.aliases ?? [],
+      environment: candidate?.is_sandbox ? 'sandbox' : 'production',
+    });
 
     const currentSub = await this.prisma.subscription.findFirst({
       where: {
@@ -476,47 +540,45 @@ export class RevenueCatSyncService {
 
     let matchedPlan = null as any;
     if (candidate?.productId) {
-      matchedPlan = await this.prisma.subscriptionPlan.findFirst({
-        where: {
-          isActive: true,
-          OR: [
-            { appleProductId: candidate.productId },
-            { googleProductId: candidate.productId },
-          ],
-        },
+      matchedPlan = await this.domainSync.findPlanByStoreProduct({
+        provider: 'revenuecat',
+        productId: candidate.productId,
+        store: candidate.store,
+        environment: candidate.is_sandbox ? 'sandbox' : 'production',
       });
-
-      if (!matchedPlan) {
-        const billingCycle = this.inferBillingCycleFromProductId(
-          candidate.productId,
-        );
-        matchedPlan = await this.prisma.subscriptionPlan.findFirst({
-          where: {
-            tier: SubscriptionTier.PRO,
-            isActive: true,
-            ...(billingCycle == null ? {} : { billingCycle }),
-          },
-          orderBy: [{ sortOrder: 'asc' }, { priceCents: 'asc' }],
-        });
-
-        if (matchedPlan) {
-          this.logger.warn(
-            `RevenueCat 商品未配置映射，按商品周期回退套餐: userId=${userId}, productId=${candidate.productId}, planId=${matchedPlan.id}, billingCycle=${matchedPlan.billingCycle}`,
-          );
-        }
-      }
     }
 
-    if (active && candidateExpiresAt && matchedPlan) {
+    if (currentSub && candidateRefundedAt) {
+      const updated = await this.prisma.subscription.update({
+        where: { id: currentSub.id },
+        data: {
+          status: SubscriptionStatus.REFUNDED,
+          autoRenew: false,
+          cancelledAt: candidateRefundedAt,
+          expiresAt: candidateRefundedAt,
+          gracePeriodEndsAt: null,
+        },
+      });
+      await this.domainSync.syncUserEntitlementsFromSubscription({
+        subscription: updated as any,
+        provider: 'revenuecat',
+        providerCustomerId,
+        lastEventAt: candidateRefundedAt,
+      });
+      action = 'refund';
+      cacheInvalidated = true;
+    } else if (active && candidateExpiresAt && matchedPlan) {
       const selectedCandidate = active;
       if (
         currentSub &&
         currentSub.planId === matchedPlan.id &&
         currentSub.platformSubscriptionId === providerSubscriptionKey
       ) {
-        const nextStatus = candidateCancelledAt
-          ? SubscriptionStatus.CANCELLED
-          : SubscriptionStatus.ACTIVE;
+        const nextStatus = this.determineRevenueCatStatus({
+          expiresAt: candidateExpiresAt,
+          cancelledAt: candidateCancelledAt,
+          billingIssueAt: candidateBillingIssueAt,
+        });
         const updated = await this.prisma.subscription.update({
           where: { id: currentSub.id },
           data: {
@@ -525,10 +587,19 @@ export class RevenueCatSyncService {
             ),
             expiresAt: candidateExpiresAt,
             status: nextStatus,
-            autoRenew: !candidateCancelledAt,
+            autoRenew: !candidateCancelledAt && !candidateBillingIssueAt,
             cancelledAt: candidateCancelledAt,
-            gracePeriodEndsAt: null,
+            gracePeriodEndsAt:
+              nextStatus === SubscriptionStatus.GRACE_PERIOD
+                ? candidateExpiresAt
+                : null,
           },
+        });
+        await this.domainSync.syncUserEntitlementsFromSubscription({
+          subscription: updated as any,
+          provider: 'revenuecat',
+          providerCustomerId,
+          lastEventAt: candidateExpiresAt,
         });
         targetSubscriptionId = updated.id;
         action = candidateCancelledAt ? 'cancel' : 'renew';
@@ -551,33 +622,38 @@ export class RevenueCatSyncService {
         action = 'activate';
         cacheInvalidated = true;
 
-        if (candidateCancelledAt) {
-          await this.prisma.subscription.update({
+        if (candidateCancelledAt || candidateBillingIssueAt) {
+          const status = this.determineRevenueCatStatus({
+            expiresAt: candidateExpiresAt,
+            cancelledAt: candidateCancelledAt,
+            billingIssueAt: candidateBillingIssueAt,
+          });
+          const adjusted = await this.prisma.subscription.update({
             where: { id: created.id },
             data: {
-              status: SubscriptionStatus.CANCELLED,
-              autoRenew: false,
+              status,
+              autoRenew: status === SubscriptionStatus.ACTIVE,
               cancelledAt: candidateCancelledAt,
+              gracePeriodEndsAt:
+                status === SubscriptionStatus.GRACE_PERIOD
+                  ? candidateExpiresAt
+                  : null,
             },
           });
-          action = 'activate_cancelled';
+          await this.domainSync.syncUserEntitlementsFromSubscription({
+            subscription: adjusted as any,
+            provider: 'revenuecat',
+            providerCustomerId,
+            lastEventAt: candidateBillingIssueAt ?? candidateCancelledAt,
+          });
+          action =
+            status === SubscriptionStatus.GRACE_PERIOD
+              ? 'activate_grace_period'
+              : 'activate_cancelled';
         }
       }
-    } else if (currentSub && candidateRefundedAt) {
-      await this.prisma.subscription.update({
-        where: { id: currentSub.id },
-        data: {
-          status: SubscriptionStatus.EXPIRED,
-          autoRenew: false,
-          cancelledAt: candidateRefundedAt,
-          expiresAt: candidateRefundedAt,
-          gracePeriodEndsAt: null,
-        },
-      });
-      action = 'refund';
-      cacheInvalidated = true;
     } else if (currentSub && candidateCancelledAt && candidateExpiresAt) {
-      await this.prisma.subscription.update({
+      const updated = await this.prisma.subscription.update({
         where: { id: currentSub.id },
         data: {
           status:
@@ -589,6 +665,12 @@ export class RevenueCatSyncService {
           expiresAt: candidateExpiresAt,
         },
       });
+      await this.domainSync.syncUserEntitlementsFromSubscription({
+        subscription: updated as any,
+        provider: 'revenuecat',
+        providerCustomerId,
+        lastEventAt: candidateCancelledAt,
+      });
       action = candidateExpiresAt > new Date() ? 'cancel' : 'expire';
       cacheInvalidated = true;
     } else if (
@@ -596,7 +678,7 @@ export class RevenueCatSyncService {
       candidateExpiresAt &&
       candidateExpiresAt <= new Date()
     ) {
-      await this.prisma.subscription.update({
+      const updated = await this.prisma.subscription.update({
         where: { id: currentSub.id },
         data: {
           status: SubscriptionStatus.EXPIRED,
@@ -604,6 +686,12 @@ export class RevenueCatSyncService {
           expiresAt: candidateExpiresAt,
           gracePeriodEndsAt: null,
         },
+      });
+      await this.domainSync.syncUserEntitlementsFromSubscription({
+        subscription: updated as any,
+        provider: 'revenuecat',
+        providerCustomerId,
+        lastEventAt: candidateExpiresAt,
       });
       action = 'expire';
       cacheInvalidated = true;
@@ -700,58 +788,48 @@ export class RevenueCatSyncService {
           ? 'cancelled'
           : 'success';
 
-    await this.prisma.subscriptionTransactions.create({
-      data: {
-        subscriptionId,
-        userId,
-        provider: 'revenuecat',
-        providerEventId: providerEventId ?? null,
-        transactionType: this.mapActionToTransactionType(action),
-        store: snapshot.store ?? null,
-        environment: snapshot.is_sandbox ? 'sandbox' : 'production',
-        runtimeEnv,
-        storeProductId: snapshot.productId,
-        transactionId,
-        originalTransactionId: snapshot.original_transaction_id ?? null,
-        purchaseToken: snapshot.purchase_token ?? null,
-        purchasedAt:
-          this.parseDate(snapshot.purchase_date) ??
-          this.parseDate(snapshot.original_purchase_date),
-        effectiveFrom:
-          this.parseDate(snapshot.purchase_date) ??
-          this.parseDate(snapshot.original_purchase_date),
-        effectiveTo: this.parseDate(snapshot.expires_date),
-        status,
-        rawSnapshot: snapshot as any,
-      },
-    });
-  }
-
-  private inferBillingCycleFromProductId(
-    productId: string,
-  ): BillingCycle | null {
-    const normalizedProductId = productId.toLowerCase();
-
-    if (
-      normalizedProductId.includes('year') ||
-      normalizedProductId.includes('annual')
-    ) {
-      return BillingCycle.YEARLY;
+    try {
+      await this.prisma.subscriptionTransactions.create({
+        data: {
+          subscriptionId,
+          userId,
+          provider: 'revenuecat',
+          providerEventId: providerEventId ?? null,
+          transactionType: this.mapActionToTransactionType(action),
+          store: snapshot.store ?? null,
+          environment: snapshot.is_sandbox ? 'sandbox' : 'production',
+          runtimeEnv,
+          storeProductId: snapshot.productId,
+          transactionId,
+          originalTransactionId: snapshot.original_transaction_id ?? null,
+          purchaseToken: snapshot.purchase_token ?? null,
+          purchasedAt:
+            this.parseDate(snapshot.purchase_date) ??
+            this.parseDate(snapshot.original_purchase_date),
+          effectiveFrom:
+            this.parseDate(snapshot.purchase_date) ??
+            this.parseDate(snapshot.original_purchase_date),
+          effectiveTo: this.parseDate(snapshot.expires_date),
+          status,
+          rawSnapshot: snapshot as any,
+        },
+      });
+    } catch (error: any) {
+      if (error?.code === 'P2002') {
+        this.logger.debug(
+          `忽略重复 RevenueCat 交易: transactionId=${transactionId ?? 'none'}, providerEventId=${providerEventId ?? 'none'}`,
+        );
+        return;
+      }
+      throw error;
     }
-    if (normalizedProductId.includes('quarter')) {
-      return BillingCycle.QUARTERLY;
-    }
-    if (normalizedProductId.includes('month')) {
-      return BillingCycle.MONTHLY;
-    }
-
-    return null;
   }
 
   private mapActionToTransactionType(action: string): string {
     switch (action) {
       case 'activate':
       case 'activate_cancelled':
+      case 'activate_grace_period':
         return 'initial_purchase';
       case 'renew':
         return 'renewal';
@@ -764,6 +842,17 @@ export class RevenueCatSyncService {
       default:
         return 'resync';
     }
+  }
+
+  private determineRevenueCatStatus(params: {
+    expiresAt: Date;
+    cancelledAt?: Date | null;
+    billingIssueAt?: Date | null;
+  }): SubscriptionStatus {
+    if (params.expiresAt <= new Date()) return SubscriptionStatus.EXPIRED;
+    if (params.cancelledAt) return SubscriptionStatus.CANCELLED;
+    if (params.billingIssueAt) return SubscriptionStatus.GRACE_PERIOD;
+    return SubscriptionStatus.ACTIVE;
   }
 
   private serializeSubscriptionState(

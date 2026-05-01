@@ -11,3 +11,7 @@ export { LifestyleBoostFactor } from './lifestyle-boost.factor';
 export { PopularityFactor } from './popularity.factor';
 export { ReplacementFeedbackFactor } from './replacement-feedback.factor';
 export { RuleWeightFactor } from './rule-weight.factor';
+// 区域+时区优化（阶段 4.1）：价格适配因子
+export { PriceFitFactor } from './price-fit.factor';
+// 渠道×时段可获得性因子（接通 AvailabilityScorerService 死代码路径）
+export { ChannelAvailabilityFactor } from './channel-availability.factor';

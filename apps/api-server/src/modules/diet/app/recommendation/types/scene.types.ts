@@ -80,8 +80,9 @@ export interface SceneContext {
 /**
  * V6.9 Phase 1-C: 渠道可获得性评分结果
  *
- * 由 AvailabilityScorerService 计算。
- * 替代静态 commonalityScore，提供渠道感知的可获得性。
+ * 历史由 AvailabilityScorerService 计算（P1-2 已删除）；
+ * 当前渠道×时段评分由 ChannelAvailabilityFactor 直接产出乘数，
+ * 本 interface 保留作为类型契约，供未来扩展使用。
  */
 export interface AvailabilityScore {
   /** 在当前渠道下的可获得性 0-1（0=几乎买不到，1=随处可见） */

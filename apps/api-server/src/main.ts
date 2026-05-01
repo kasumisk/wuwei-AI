@@ -14,6 +14,7 @@ import { I18nService } from './core/i18n';
 import { join } from 'path';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import * as bodyParser from 'body-parser';
+import helmet from 'helmet';
 
 async function bootstrap() {
   // ─── V6.4 P0: JWT 密钥启动校验 ───
@@ -46,9 +47,27 @@ async function bootstrap() {
   // 确保 SIGTERM/SIGINT 时正确关闭连接（Prisma、Redis、BullMQ）
   app.enableShutdownHooks();
 
-  // ─── V6.4 P0: 请求体大小限制（防 DoS） ───
-  app.use(bodyParser.json({ limit: '10mb' }));
-  app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
+  // ─── P0: Cloud Run / 反向代理信任 ───
+  // 启用后 req.ip 才会从 X-Forwarded-For 取真实用户 IP（限流、审计依赖）
+  app.set('trust proxy', 1);
+
+  // ─── P0: 安全响应头（helmet） ───
+  // - contentSecurityPolicy 关掉：仅 JSON API，未直出 HTML，开启反而会打架 Swagger 资源
+  // - crossOriginEmbedderPolicy 关掉：避免影响第三方资源（图片 / Firebase）
+  // - hidePoweredBy / noSniff / frameguard / hsts 等保留默认
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginEmbedderPolicy: false,
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
+
+  // ─── P0: 请求体大小限制（防 DoS） ───
+  // 图片上传走 multipart/form-data（FileInterceptor），不受这里限制；
+  // JSON / urlencoded 1MB 足够，超出 = 攻击或客户端 bug。
+  app.use(bodyParser.json({ limit: '1mb' }));
+  app.use(bodyParser.urlencoded({ limit: '1mb', extended: true }));
 
   const apiPrefix =
     configService.get<string>('app.apiPrefix', { infer: true }) || 'api';
@@ -147,13 +166,63 @@ async function bootstrap() {
 
   app.setGlobalPrefix(apiPrefix);
 
-  // 允许所有来源，无 CORS 限制
-  app.enableCors({
-    origin: true,
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['*'],
-  });
+  // ─── P0: CORS 白名单 ───
+  // 从 ENV CORS_ORIGINS 读取（逗号分隔），未配置时：
+  //   - 生产：完全禁用跨域（同源 API only）
+  //   - 非生产：放开 origin:true 便于本地开发
+  const corsOriginsEnv = (process.env.CORS_ORIGINS || '').trim();
+  const corsOrigins = corsOriginsEnv
+    ? corsOriginsEnv
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [];
+
+  if (corsOrigins.length > 0) {
+    app.enableCors({
+      origin: (origin, callback) => {
+        // 同源请求 / 移动端原生请求（无 Origin 头）一律放行
+        if (!origin) return callback(null, true);
+        if (corsOrigins.includes(origin)) return callback(null, true);
+        return callback(
+          new Error(`CORS blocked: origin ${origin} not in whitelist`),
+          false,
+        );
+      },
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowedHeaders: [
+        'Content-Type',
+        'Authorization',
+        'Accept-Language',
+        'X-Request-Id',
+        'X-Client-Version',
+        'X-Platform',
+      ],
+      exposedHeaders: ['X-Request-Id'],
+      maxAge: 600,
+    });
+    Logger.log(
+      `CORS whitelist enabled: ${corsOrigins.join(', ')}`,
+      'Bootstrap',
+    );
+  } else if (!isProduction) {
+    app.enableCors({
+      origin: true,
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    });
+    Logger.warn(
+      'CORS_ORIGINS 未配置，开发环境放开所有 origin',
+      'Bootstrap',
+    );
+  } else {
+    // 生产环境且未配置：默认拒绝跨域（移动端 Flutter 走原生 HTTP，不受影响）
+    Logger.log(
+      'CORS_ORIGINS 未配置，生产环境默认禁用 CORS（仅同源访问）',
+      'Bootstrap',
+    );
+  }
 
   // 设置 Swagger（仅非生产环境，或通过 ENABLE_SWAGGER=true 手动开启）
   if (!isProduction || process.env.ENABLE_SWAGGER === 'true') {
