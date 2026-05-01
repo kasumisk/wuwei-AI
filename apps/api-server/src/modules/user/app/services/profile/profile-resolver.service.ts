@@ -260,6 +260,9 @@ export class ProfileResolverService {
             preferenceWeights:
               (inferred.preferenceWeights as Record<string, number>) ??
               undefined,
+            cuisineAffinityRelative:
+              (inferred.cuisineAffinityRelative as Record<string, number>) ??
+              null,
           }
         : null,
 

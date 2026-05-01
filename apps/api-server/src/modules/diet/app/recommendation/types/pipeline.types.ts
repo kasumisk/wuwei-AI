@@ -60,6 +60,11 @@ export interface PipelineContext {
   userProfile?: UserProfileConstraints;
   preferenceProfile?: UserPreferenceProfile;
   regionalBoostMap?: Record<string, number>;
+  /**
+   * P3-3.5：用户 cuisine 偏好衍生的国家代码列表（已合并进 regionalBoostMap）。
+   * 仅作 trace 解释用途，下游评分链不直接读取。
+   */
+  cuisinePreferenceRegions?: string[];
   /** V4 Phase 4.4: 协同过滤推荐分（V6.7: food ID → 0~1） */
   cfScores?: Record<string, number>;
   /** V5 4.7: 在线学习后的权重覆盖（传递给 food-scorer） */
@@ -118,8 +123,9 @@ export interface PipelineContext {
   /**
    * 区域+时区优化（阶段 1）：
    * 用户本地当前月份 1-12，由 PipelineContextFactory 基于 timezone 计算
+   * P0-R2: 必填，禁止 fallback 到服务器时区（避免南半球翻转双重错误）
    */
-  currentMonth?: number;
+  currentMonth: number;
   /**
    * 区域+时区优化：
    * 用户本地当前小时 0-23，由 PipelineContextFactory 基于 timezone 计算
@@ -240,6 +246,8 @@ export interface EnrichedProfileContext extends UserProfileConstraints {
     optimalMealCount?: number;
     nutritionGaps?: string[];
     preferenceWeights?: Record<string, number>;
+    /** P3-3.3: 菜系相对偏好（用户 / region 群体均值，>1.0=高于群体） */
+    cuisineAffinityRelative?: Record<string, number> | null;
   } | null;
 
   /** 行为画像 — Cron 聚合的行为统计 */
@@ -365,6 +373,11 @@ export interface MealFromPoolRequest {
   preferenceProfile?: UserPreferenceProfile;
   /** 区域加分映射 */
   regionalBoostMap?: Record<string, number>;
+  /**
+   * P3-3.5：用户 cuisine 偏好衍生的国家代码列表（已合并进 regionalBoostMap）。
+   * 仅作 trace 解释用途，下游评分链不直接读取。
+   */
+  cuisinePreferenceRegions?: string[];
   /** 协同过滤评分 */
   cfScores?: Record<string, number>;
   /** V5 4.7: 在线学习后的权重覆盖 */

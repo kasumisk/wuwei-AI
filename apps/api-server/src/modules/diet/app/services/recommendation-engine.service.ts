@@ -55,6 +55,8 @@ import { PipelineContextFactory } from '../recommendation/context/pipeline-conte
 import { RecommendationResultProcessor } from './recommendation-result-processor.service';
 import { SeasonalityService } from '../recommendation/utils/seasonality.service';
 import { DEFAULT_REGION_CODE } from '../../../../common/config/regional-defaults';
+import { DEFAULT_TIMEZONE } from '../../../../common/config/regional-defaults';
+import { getUserLocalMonth } from '../../../../common/utils/timezone.util';
 import { t, type Locale } from '../recommendation/utils/i18n-messages';
 
 /** 反向解释 API 返回结构 */
@@ -188,6 +190,7 @@ export class RecommendationEngineService implements OnModuleInit {
       substitutions,
       learnedWeightOverrides,
       regionalBoostMap,
+      cuisinePreferenceRegions,
     } = profileData;
 
     // shortTerm 和 contextual 直接从 enrichedProfile 中获取
@@ -316,6 +319,7 @@ export class RecommendationEngineService implements OnModuleInit {
       userProfile: mergedProfile,
       preferenceProfile,
       regionalBoostMap,
+      cuisinePreferenceRegions,
       shortTermProfile,
       resolvedStrategy,
       contextualProfile,
@@ -1126,6 +1130,10 @@ export class RecommendationEngineService implements OnModuleInit {
       healthModifierCache: undefined,
       nutritionTargets,
       scoringConfig,
+      // P0-R2: 透传用户本地月份（基于 timezone 计算，禁止 fallback 到服务器时区）
+      currentMonth: getUserLocalMonth(
+        userProfile?.timezone || DEFAULT_TIMEZONE,
+      ),
     });
 
     const scored: ScoredFood = {
@@ -1150,6 +1158,7 @@ export class RecommendationEngineService implements OnModuleInit {
       .scoreFoodsWithServing(
         allFoods.filter((f) => f.id !== food.id),
         goalType,
+        getUserLocalMonth(userProfile?.timezone || DEFAULT_TIMEZONE),
         target,
         penaltyCtx,
         mealType,

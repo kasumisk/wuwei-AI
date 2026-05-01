@@ -7,6 +7,11 @@ import {
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { I18nService } from '../../../core/i18n';
 import { FoodProvenanceRepository } from '../repositories';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import {
+  DomainEvents,
+  RegionDataChangedEvent,
+} from '../../../core/events/domain-events';
 import {
   ENRICHABLE_FIELDS,
   JSON_ARRAY_FIELDS,
@@ -40,7 +45,42 @@ export class FoodLibraryManagementService {
     private readonly prisma: PrismaService,
     private readonly i18n: I18nService,
     private readonly provenanceRepo: FoodProvenanceRepository,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
+
+  /**
+   * P2-R6: admin 写 food / FoodRegionalInfo 后触发区域缓存失效
+   *
+   * 查询该 food 关联的所有 countryCode，逐个 emit REGION_DATA_CHANGED；
+   * 失败仅 warn，不阻断主流程。
+   */
+  private async emitRegionInvalidation(
+    foodId: string,
+    source: 'admin_edit' | 'batch_import',
+  ): Promise<void> {
+    try {
+      const regional = await this.prisma.foodRegionalInfo.findMany({
+        where: { foodId },
+        select: { countryCode: true },
+        distinct: ['countryCode'],
+      });
+      const countryCodes = regional.map((r) => r.countryCode);
+      // 即使无关联记录，也发一次 'US' 兜底（默认区域），以防默认 fallback 缓存 stale
+      if (countryCodes.length === 0) {
+        countryCodes.push('US');
+      }
+      for (const cc of countryCodes) {
+        this.eventEmitter.emit(
+          DomainEvents.REGION_DATA_CHANGED,
+          new RegionDataChangedEvent(cc, source, foodId),
+        );
+      }
+    } catch (err) {
+      this.logger.warn(
+        `[FoodAdmin] Failed to emit region invalidation for foodId=${foodId}: ${(err as Error).message}`,
+      );
+    }
+  }
 
   // ==================== DTO → DB 字段映射 ====================
   // After Prisma schema migration to camelCase field names, the DTO keys
@@ -524,6 +564,7 @@ export class FoodLibraryManagementService {
       '创建食物',
       'admin',
     );
+    await this.emitRegionInvalidation(saved.id, 'admin_edit');
     return saved;
   }
 
@@ -608,6 +649,7 @@ export class FoodLibraryManagementService {
         operator,
       );
     }
+    await this.emitRegionInvalidation(id, 'admin_edit');
     return saved;
   }
 
@@ -670,6 +712,8 @@ export class FoodLibraryManagementService {
   async remove(id: string): Promise<{ message: string }> {
     // V8.3: 使用 findOneSimple 避免不必要的关联查询
     const food = await this.findOneSimple(id);
+    // P2-R6: 删除前先收集 countryCode 并发事件，避免删除后无法查询
+    await this.emitRegionInvalidation(id, 'admin_edit');
     await this.prisma.food.delete({ where: { id } });
     return { message: `食物 "${food.name}" 已删除` };
   }
@@ -701,6 +745,7 @@ export class FoodLibraryManagementService {
           '批量导入',
           'admin',
         );
+        await this.emitRegionInvalidation(saved.id, 'batch_import');
         imported++;
       } catch (e) {
         errors.push(`${dto.code} (${dto.name}): ${e.message}`);
@@ -735,6 +780,7 @@ export class FoodLibraryManagementService {
       undefined,
       operator,
     );
+    await this.emitRegionInvalidation(id, 'admin_edit');
     return saved;
   }
 
@@ -761,6 +807,7 @@ export class FoodLibraryManagementService {
       undefined,
       operator,
     );
+    await this.emitRegionInvalidation(id, 'admin_edit');
     return saved;
   }
 

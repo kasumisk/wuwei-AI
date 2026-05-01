@@ -524,13 +524,13 @@ const SubscriptionPlanManagement: React.FC = () => {
           provider,
           store,
           productId,
-          offeringId: offeringId || undefined,
-          packageId: packageId || undefined,
+          ...(offeringId ? { offeringId } : {}),
+          ...(packageId ? { packageId } : {}),
           environment,
           isActive,
         };
       })
-      .filter((item): item is SubscriptionStoreProductInputDto => item !== null);
+      .filter((item): item is NonNullable<typeof item> => item !== null) as SubscriptionStoreProductInputDto[];
   };
 
   const getWatchedMappingState = () => {

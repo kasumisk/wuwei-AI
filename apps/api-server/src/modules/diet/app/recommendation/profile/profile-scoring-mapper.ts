@@ -12,6 +12,7 @@
 
 import { FoodLibrary } from '../../../../food/food.types';
 import { LifestyleProfile } from '../types/recommendation.types';
+import { isCuisinePreferred } from '../../../../../common/utils/cuisine.util';
 
 // ─── 口味强度计算辅助 ───
 
@@ -158,7 +159,12 @@ export function mapLifestyleToScoringFactors(
     // ─── 2. 菜系匹配 ───
     cuisineMatch: (food: FoodLibrary): number => {
       if (!lifestyle.cuisinePreferences?.length || !food.cuisine) return 1.0;
-      return lifestyle.cuisinePreferences.includes(food.cuisine) ? 1.08 : 1.0;
+      // P0-R3: 用规范化比较替代大小写敏感的 .includes()
+      // 修复点：原 `lifestyle.cuisinePreferences.includes(food.cuisine)` 在
+      //   "Chinese" vs "chinese" / "中餐" vs "chinese" 等场景下 miss
+      return isCuisinePreferred(food.cuisine, lifestyle.cuisinePreferences)
+        ? 1.08
+        : 1.0;
     },
 
     // ─── 3. 预算匹配 ───

@@ -499,8 +499,9 @@ export interface ScoringContext {
    * 区域+时区优化（阶段 1.2）：
    * 用户本地当前月份 1-12，由 PipelineContextFactory 基于 timezone 计算后传入
    * SeasonalityService.getSeasonalityScore，避免使用服务器时区。
+   * P0-R2: 必填，禁止 fallback。
    */
-  currentMonth?: number;
+  currentMonth: number;
   /**
    * P3-3.4：用户区域码（如 'AU' / 'AU-NSW' / 'CN-31'），
    * 透传给 SeasonalityService 用于南半球月份翻转判定。

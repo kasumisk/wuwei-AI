@@ -40,7 +40,7 @@ export class RestrictionChecksService {
     for (const food of foods) {
       const name = (food.name || '').toLowerCase();
       const cat = (food.category || '').toLowerCase();
-      const allergens: string[] = (food as any).allergens || [];
+      const allergens: string[] = food.allergens || [];
 
       for (const r of restrictions) {
         let violated = false;

@@ -124,6 +124,7 @@ export class PipelineContextFactory {
       userProfile: req.userProfile,
       preferenceProfile: req.preferenceProfile,
       regionalBoostMap: req.regionalBoostMap,
+      cuisinePreferenceRegions: req.cuisinePreferenceRegions,
 
       // ── 协同过滤 / 权重覆盖 ──
       cfScores: req.cfScores,

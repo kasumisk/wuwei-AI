@@ -27,6 +27,8 @@ const TRACKING_PROVIDERS = [
     ExecutionTrackerService, // → RecommendationEngineService
     RecommendationFeedbackService, // → RecommendationEngineService, DailyPlanService, FoodPlanController, WeeklyPlanService
     PreferenceProfileService, // → RecommendationEngineService, DailyPlanService, FoodPlanController, WeeklyPlanService, PipelineBuilderService, MealAssemblerService
+    // P3-PR1: ProfileAggregatorService 注入做四层权重融合
+    WeightLearnerService,
   ],
 })
 export class TrackingModule {}

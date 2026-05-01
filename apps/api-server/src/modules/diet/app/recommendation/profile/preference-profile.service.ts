@@ -5,6 +5,7 @@ import {
   buildFoodRegionalFallbackWhere,
   getFoodRegionSpecificity,
 } from '../../../../../common/utils/food-regional-info.util';
+import { normalizeCuisine } from '../../../../../common/utils/cuisine.util';
 import {
   UserPreferenceProfile,
   FoodFeedbackStats,
@@ -199,65 +200,149 @@ export class PreferenceProfileService {
     return this.redis.getOrSet<Record<string, number>>(
       cacheKey,
       PreferenceProfileService.CACHE_TTL_MS,
+      async () => this.computeBoostMapForRegion(region),
+    );
+  }
+
+  /**
+   * P3-3.5 / P1: 基于用户 cuisinePreferences 的 cuisine→country 附加 boost map
+   *
+   * 解决问题：用户在 NY 但喜欢日料，单纯按 user.regionCode='US' 查 FoodRegionalInfo
+   *   会让日本菜得不到 regional boost（甚至被本地 RARE 惩罚 ×0.7）。
+   *
+   * 实现：
+   * 1) cuisinePreferences → 去重原产 country 列表（排除用户当前 country，避免重复）
+   * 2) 对每个 country 复用 `computeBoostMapForRegion()` 拉取 boost
+   * 3) **多 country 取 max** —— 用户主动表达的偏好不应被任一国家的 RARE 拉低
+   * 4) 缓存按 `userCountryCode + cuisine 排序键` 复合 key
+   *
+   * 合并策略由 `mergeRegionalBoostMaps()` 实现（在 profile-aggregator 调用）。
+   *
+   * @param cuisinePreferences 用户声明菜系偏好（任意大小写/中文别名/英文）
+   * @param userCountryCode    用户当前国家（从 regionCode 解析），用于排除自身避免重复
+   */
+  async getCuisineRegionalBoostMap(
+    cuisinePreferences: readonly string[] | null | undefined,
+    userCountryCode: string | null,
+  ): Promise<Record<string, number>> {
+    // 延迟引用以避免无谓的依赖
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getCuisinePreferenceCountries } = require(
+      '../../../../../common/utils/cuisine.util',
+    ) as {
+      getCuisinePreferenceCountries: (
+        prefs: readonly string[] | null | undefined,
+        excludeCountryCode?: string | null,
+      ) => string[];
+    };
+
+    const countries = getCuisinePreferenceCountries(
+      cuisinePreferences,
+      userCountryCode,
+    );
+    if (countries.length === 0) return {};
+
+    // 缓存 key：稳定排序避免 ['JP','CN'] 与 ['CN','JP'] 命中两份
+    const sortedKey = countries.slice().sort().join(',');
+    const cacheKey = this.redis.buildKey(
+      `${PreferenceProfileService.NS_REGIONAL}:cuisine`,
+      sortedKey,
+    );
+
+    return this.redis.getOrSet<Record<string, number>>(
+      cacheKey,
+      PreferenceProfileService.CACHE_TTL_MS,
       async () => {
-        const boostMap: Record<string, number> = {};
-        try {
-          const infos = await this.prisma.foodRegionalInfo.findMany({
-            where: buildFoodRegionalFallbackWhere(region),
-          });
-
-          for (const info of infos.sort(
-            (a, b) =>
-              getFoodRegionSpecificity(b) - getFoodRegionSpecificity(a),
-          )) {
-            if (boostMap[info.foodId] !== undefined) continue;
-
-            let boost = 1.0;
-            switch (info.availability) {
-              case 'YEAR_ROUND':
-                // 高流行度的常见食物额外加分（范围扩大: 1.08→1.20, 1.02→1.05）
-                boost = (info.localPopularity ?? 0) > 50 ? 1.2 : 1.05;
-                break;
-              case 'SEASONAL':
-                boost = 0.9;
-                break;
-              case 'RARE':
-                // 罕见食物惩罚加大（0.85→0.70）
-                boost = 0.7;
-                break;
-              case 'LIMITED':
-                boost = 0.8;
-                break;
-              case 'UNKNOWN':
-                // §5.4：已标记 UNKNOWN 与"无记录"语义不同
-                // 有记录但不确定 → 轻微衰减（比完全无数据保守一些）
-                boost = 0.85;
-                break;
-            }
-
-            // 区域+时区优化（深度分析 P1-3）：用 confidence + sourceUpdatedAt 二级衰减
-            // 1) confidence (0-1)：低置信度时把 boost 向 1.0 拉回
-            //    effective = (raw - 1) * confidence + 1
-            // 2) sourceUpdatedAt 陈旧（>180 天）额外打 0.9 折（向 1.0 收缩 10%）
-            const confidence = this.clamp01(info.confidence ?? 1);
-            if (confidence < 1) {
-              boost = (boost - 1) * confidence + 1;
-            }
-            if (this.isStaleSource(info.sourceUpdatedAt)) {
-              boost = (boost - 1) * 0.9 + 1;
-            }
-
-            // 衰减后接近 1.0 时不写入 map（节省下游遍历）
-            if (Math.abs(boost - 1.0) > 1e-3) {
-              boostMap[info.foodId] = boost;
+        // 多国 boostMap 取 max
+        const merged: Record<string, number> = {};
+        for (const country of countries) {
+          const partial = await this.computeBoostMapForRegion(country);
+          for (const [foodId, boost] of Object.entries(partial)) {
+            // 仅保留正向 boost（>1.0）—— 异国菜系的本地 RARE 惩罚（<1.0）
+            // 不应反向流回用户。这里只想表达"用户喜欢的菜系，给原产地的 boost"。
+            if (boost > 1.0) {
+              merged[foodId] = Math.max(merged[foodId] ?? 1.0, boost);
             }
           }
-        } catch (err) {
-          this.logger.warn(`加载地区信息失败 [${region}]: ${err}`);
         }
-        return boostMap;
+        return merged;
       },
     );
+  }
+
+  /**
+   * 合并两个 boostMap：foodId 重叠时取 max（用户偏好优先）
+   *
+   * 用例：user-region map 标记某日料食物为 RARE×0.7，但用户偏好日料 →
+   *   cuisine-affinity map 给同食物 ×1.05 → merged 取 1.05（覆盖本地惩罚）
+   */
+  static mergeRegionalBoostMaps(
+    userRegion: Record<string, number>,
+    cuisineAffinity: Record<string, number>,
+  ): Record<string, number> {
+    if (Object.keys(cuisineAffinity).length === 0) return userRegion;
+    const merged: Record<string, number> = { ...userRegion };
+    for (const [foodId, boost] of Object.entries(cuisineAffinity)) {
+      const existing = merged[foodId] ?? 1.0;
+      merged[foodId] = Math.max(existing, boost);
+    }
+    return merged;
+  }
+
+  /**
+   * 内部：单 region 的 FoodRegionalInfo → boost map 计算（无缓存）
+   * 抽取自 `getRegionalBoostMap` 以便 cuisine affinity 复用
+   */
+  private async computeBoostMapForRegion(
+    region: string,
+  ): Promise<Record<string, number>> {
+    const boostMap: Record<string, number> = {};
+    try {
+      const infos = await this.prisma.foodRegionalInfo.findMany({
+        where: buildFoodRegionalFallbackWhere(region),
+      });
+
+      for (const info of infos.sort(
+        (a, b) => getFoodRegionSpecificity(b) - getFoodRegionSpecificity(a),
+      )) {
+        if (boostMap[info.foodId] !== undefined) continue;
+
+        let boost = 1.0;
+        switch (info.availability) {
+          case 'YEAR_ROUND':
+            boost = (info.localPopularity ?? 0) > 50 ? 1.2 : 1.05;
+            break;
+          case 'SEASONAL':
+            boost = 0.9;
+            break;
+          case 'RARE':
+            boost = 0.7;
+            break;
+          case 'LIMITED':
+            boost = 0.8;
+            break;
+          case 'UNKNOWN':
+            boost = 0.85;
+            break;
+        }
+
+        // confidence + sourceUpdatedAt 二级衰减
+        const confidence = this.clamp01(info.confidence ?? 1);
+        if (confidence < 1) {
+          boost = (boost - 1) * confidence + 1;
+        }
+        if (this.isStaleSource(info.sourceUpdatedAt)) {
+          boost = (boost - 1) * 0.9 + 1;
+        }
+
+        if (Math.abs(boost - 1.0) > 1e-3) {
+          boostMap[info.foodId] = boost;
+        }
+      }
+    } catch (err) {
+      this.logger.warn(`加载地区信息失败 [${region}]: ${err}`);
+    }
+    return boostMap;
   }
 
   /**
@@ -352,9 +437,14 @@ export class PreferenceProfileService {
 
     // ── 5. 菜系偏好 boost ──
     // 从 PreferencesProfile.cuisineWeights 读取，权重 [0,1] → boost [-0.1, +0.1]
+    // P0-R3: cuisineWeights key 已在 sanitizeCuisineWeights 规范化，
+    //        此处也对 food.cuisine 规范化以保证查表命中
     let cuisineBoost = 0;
     if (preferencesProfile?.cuisineWeights && food.cuisine) {
-      const cuisineWeight = preferencesProfile.cuisineWeights[food.cuisine];
+      const cuisineKey = normalizeCuisine(food.cuisine);
+      const cuisineWeight = cuisineKey
+        ? preferencesProfile.cuisineWeights[cuisineKey]
+        : undefined;
       if (cuisineWeight !== undefined) {
         cuisineBoost = (cuisineWeight - 0.5) * 0.2;
       }

@@ -282,17 +282,26 @@ export class SeasonalityService {
    *
    * @param foodId     食物 ID
    * @param category   食物品类（用于判断当季月份）
-   * @param month      当前月份 (1-12)，默认取系统当前月份
+   * @param month      当前月份 (1-12)，**必填**——必须由调用方根据用户时区传入
+   *                   （`pipeline-context-factory` 已用 `getUserLocalMonth(timezone)` 解析）。
+   *                   原 fallback `new Date().getMonth()` 会与南半球翻转叠加产生双重错误，已移除。
    * @param regionCode 用户区域码（如 'AU' / 'AU-NSW'），南半球地区会触发月份翻转
    * @returns 0~1 的时令分数
    */
   getSeasonalityScore(
     foodId: string,
     category: string,
-    month?: number,
+    month: number,
     regionCode?: string | null,
   ): number {
-    const inputMonth = month ?? new Date().getMonth() + 1;
+    // 防御：若调用方误传非法值，向上抛出而非静默走服务器时区
+    if (!Number.isInteger(month) || month < 1 || month > 12) {
+      throw new Error(
+        `[seasonality] month must be integer in [1,12], got ${month}. ` +
+        `调用方必须根据用户时区传入 ctx.currentMonth（pipeline-context-factory 已解析）。`,
+      );
+    }
+    const inputMonth = month;
     // P3-3.4: 南半球翻转 6 个月
     const currentMonth = isSouthernHemisphere(regionCode ?? null)
       ? ((inputMonth - 1 + 6) % 12) + 1
@@ -362,7 +371,7 @@ export class SeasonalityService {
    */
   getSeasonalityScores(
     foods: Array<{ id: string; category: string }>,
-    month?: number,
+    month: number,
     regionCode?: string | null,
   ): Map<string, number> {
     const result = new Map<string, number>();

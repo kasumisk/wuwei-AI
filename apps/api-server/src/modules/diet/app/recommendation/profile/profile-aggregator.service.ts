@@ -41,6 +41,9 @@ import {
   type SubstitutionPattern,
 } from '../feedback/execution-tracker.service';
 import { LearnedRankingService } from '../optimization/learned-ranking.service';
+import { WeightLearnerService } from '../optimization/weight-learner.service';
+import { SCORE_WEIGHTS } from '../types/scoring.types';
+import type { GoalType } from '../../services/nutrition-score.service';
 import {
   DEFAULT_REGION_CODE,
 } from '../../../../../common/config/regional-defaults';
@@ -80,8 +83,13 @@ export interface RecommendationProfileData {
   substitutions: SubstitutionPattern[];
   /** per-segment 学习权重（null = 未启用 / 无数据） */
   learnedWeightOverrides: number[] | null;
-  /** 地域偏好 boost 映射 */
+  /** 地域偏好 boost 映射（已合并 region + cuisine 双源） */
   regionalBoostMap: Record<string, number>;
+  /**
+   * P3-3.5：用户 cuisine 偏好对应的国家代码列表（去重、已排除用户当前 country）。
+   * 用于 RecommendationTrace 透出"为什么 boost 了这些 foods"。
+   */
+  cuisinePreferenceRegions: string[];
 }
 
 /**
@@ -107,6 +115,7 @@ export class ProfileAggregatorService {
     private readonly goalTrackerService: GoalTrackerService,
     private readonly executionTrackerService: ExecutionTrackerService,
     private readonly learnedRankingService: LearnedRankingService,
+    private readonly weightLearnerService: WeightLearnerService,
     private readonly realtimeProfile: RealtimeProfileService,
   ) {}
 
@@ -143,15 +152,6 @@ export class ProfileAggregatorService {
 
     // Phase 2: 依赖 enrichedProfile 的串行获取
     const userSegment = enrichedProfile.inferred?.userSegment;
-    let learnedWeightOverrides: number[] | null = null;
-    try {
-      learnedWeightOverrides =
-        await this.learnedRankingService.getLearnedWeights(userSegment, userId);
-    } catch (err) {
-      this.logger.debug(
-        `LearnedRankingService.getLearnedWeights failed (user=${userId}): ${(err as Error).message}`,
-      );
-    }
 
     // 区域+时区优化（阶段 1.4）：regionCode 缺失时依次通过 locale 推断，最终兜底 DEFAULT_REGION_CODE
     let regionCode = enrichedProfile.regionCode;
@@ -168,8 +168,74 @@ export class ProfileAggregatorService {
             : `falling back to default '${DEFAULT_REGION_CODE}'`),
       );
     }
+
+    // P3-2.6 / P3-PR1：weightLearner 四层融合（user×meal × region × global）优先；
+    // 无任何学习信号时回退到 segment 级 LearnedRankingService（旧路径）。
+    let learnedWeightOverrides: number[] | null = null;
+    const goalType = effectiveGoal?.goalType as GoalType | undefined;
+    if (goalType && SCORE_WEIGHTS[goalType]) {
+      try {
+        learnedWeightOverrides =
+          await this.weightLearnerService.getUserMealWeights(
+            userId,
+            goalType,
+            mealType,
+            SCORE_WEIGHTS[goalType],
+            regionCode,
+          );
+      } catch (err) {
+        this.logger.debug(
+          `WeightLearnerService.getUserMealWeights failed (user=${userId}): ${(err as Error).message}`,
+        );
+      }
+    }
+    if (!learnedWeightOverrides) {
+      try {
+        learnedWeightOverrides =
+          await this.learnedRankingService.getLearnedWeights(
+            userSegment,
+            userId,
+          );
+      } catch (err) {
+        this.logger.debug(
+          `LearnedRankingService.getLearnedWeights failed (user=${userId}): ${(err as Error).message}`,
+        );
+      }
+    }
+
     const regionalBoostMap =
       await this.preferenceProfileService.getRegionalBoostMap(regionCode);
+
+    // P3-3.5：cuisine 偏好衍生 boost map，与 region map 取 max 合并
+    const declaredCuisinePrefs =
+      (enrichedProfile.declared?.cuisinePreferences as
+        | string[]
+        | undefined) ?? null;
+    const cuisineBoostMap =
+      await this.preferenceProfileService.getCuisineRegionalBoostMap(
+        declaredCuisinePrefs,
+        regionCode,
+      );
+    const mergedRegionalBoostMap =
+      PreferenceProfileService.mergeRegionalBoostMaps(
+        regionalBoostMap,
+        cuisineBoostMap,
+      );
+
+    // P3-3.5：透出 cuisine 推断到的国家列表，供 trace 解释
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getCuisinePreferenceCountries } = require(
+      '../../../../../common/utils/cuisine.util',
+    ) as {
+      getCuisinePreferenceCountries: (
+        prefs: readonly string[] | null | undefined,
+        excludeCountryCode?: string | null,
+      ) => string[];
+    };
+    const cuisinePreferenceRegions = getCuisinePreferenceCountries(
+      declaredCuisinePrefs,
+      regionCode,
+    );
 
     return {
       recentFoodNames,
@@ -181,7 +247,8 @@ export class ProfileAggregatorService {
       kitchenProfile,
       substitutions,
       learnedWeightOverrides,
-      regionalBoostMap,
+      regionalBoostMap: mergedRegionalBoostMap,
+      cuisinePreferenceRegions,
     };
   }
 

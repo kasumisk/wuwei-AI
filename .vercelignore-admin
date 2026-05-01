@@ -23,10 +23,15 @@ scripts
 # 构建产物
 apps/admin/.vite
 dist
+dist-staging
+
+# 备份和暂存目录
+backups
+dist-staging
 
 # 日志目录
-**/logs
 logs
+**/logs
 
 # 测试和构建缓存
 **/coverage

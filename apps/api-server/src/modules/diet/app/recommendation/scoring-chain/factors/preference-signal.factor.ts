@@ -13,6 +13,7 @@
  *         sweet / fried / carbs / meat / spicy / light / seafood
  */
 import type { FoodLibrary } from '../../../../../food/food.types';
+import { normalizeCuisine } from '../../../../../../common/utils/cuisine.util';
 import type {
   EnrichedProfileContext,
   PipelineContext,
@@ -129,6 +130,8 @@ export class PreferenceSignalFactor implements ScoringFactor {
   /** V7.5: 声明偏好调参 */
   private declaredPrefPerMatch = 0.05;
   private declaredPrefCap = 0.15;
+  /** P3-3.3: 菜系相对偏好（用户/region 群体均值） */
+  private cuisineAffinityRelative: Record<string, number> | null = null;
 
   isApplicable(_ctx: PipelineContext): boolean {
     return true; // 始终适用，无数据时返回 1.0
@@ -161,6 +164,10 @@ export class PreferenceSignalFactor implements ScoringFactor {
       this.declaredPrefPerMatch = ctx.tuning.declaredPrefPerMatch;
       this.declaredPrefCap = ctx.tuning.declaredPrefCap;
     }
+
+    // P3-3.3: 菜系相对偏好
+    this.cuisineAffinityRelative =
+      (ctx.userProfile as any)?.inferred?.cuisineAffinityRelative ?? null;
   }
 
   computeAdjustment(
@@ -196,6 +203,23 @@ export class PreferenceSignalFactor implements ScoringFactor {
     if (grpW !== undefined) multiplier *= grpW;
     const nameW = this.foodNameWeights[food.name];
     if (nameW !== undefined) multiplier *= nameW;
+
+    // P3-3.3: 菜系相对偏好（cuisineAffinityRelative）
+    // relative ∈ [0.2, 5.0]；>1.0 表示比同 region 群体更偏好
+    // 映射到 multiplier：relative=1.0 → ×1.0，relative=2.0 → ×1.05，relative=0.5 → ×0.975
+    // P0-R3: cuisine 查表前规范化（cuisineAffinityRelative key 由 profile-cron 写入时已 toLowerCase）
+    if (this.cuisineAffinityRelative && food.cuisine) {
+      const cuisineKey = normalizeCuisine(food.cuisine);
+      const relative = cuisineKey
+        ? this.cuisineAffinityRelative[cuisineKey]
+        : undefined;
+      if (relative !== undefined) {
+        // log 压缩避免高 relative 值影响过大
+        const cuisineRelativeBoost = Math.log(Math.max(0.2, relative)) * 0.05;
+        multiplier *= 1 + cuisineRelativeBoost;
+        parts.push(`cuisineRel×${(1 + cuisineRelativeBoost).toFixed(3)}`);
+      }
+    }
 
     // 3. 声明偏好（结构化多字段映射，支持全部 7 个枚举）
     if (this.declaredFoodPrefs.length > 0) {

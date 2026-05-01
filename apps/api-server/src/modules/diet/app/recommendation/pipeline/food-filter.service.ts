@@ -329,7 +329,7 @@ export class FoodFilterService {
         if (FoodFilterService.MEAT_MAIN_INGREDIENTS.has(mi)) return true;
       } else if (r === 'lactose_free') {
         // 乳糖不耐受 — 排除含乳制品食物
-        const foodAllergens: string[] = (food as any).allergens || [];
+        const foodAllergens: string[] = food.allergens || [];
         if (
           foodAllergens.some(
             (a: string) => a === 'dairy' || a === 'milk' || a === 'lactose',
@@ -351,7 +351,7 @@ export class FoodFilterService {
         if ((food.name || '').toLowerCase().includes('beef')) return true;
       } else if (r === 'gluten_free') {
         // 无麸质 — 排除含麸质/小麦食物（复用 celiac 逻辑）
-        const foodAllergens: string[] = (food as any).allergens || [];
+        const foodAllergens: string[] = food.allergens || [];
         if (foodAllergens.some((a: string) => a === 'gluten' || a === 'wheat'))
           return true;
         if (fg === 'wheat' || fg === 'flour') return true;

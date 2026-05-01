@@ -18,6 +18,11 @@ packages
 docs
 scripts
 
+# 备份和暂存目录
+backups
+dist-staging
+logs
+
 # 构建产物（以防 gitignore 未覆盖）
 apps/web/.next
 dist

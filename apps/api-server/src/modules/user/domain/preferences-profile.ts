@@ -170,17 +170,31 @@ export function validatePreferencesProfile(
 
 /**
  * 清理菜系权重：clamp 到 [0, 1]，移除 NaN/无效值
+ *
+ * P0-R3: key 统一 normalizeCuisine（toLowerCase + 中文别名归一），
+ * 与 RegionalBoostFactor / cuisineMatch / preference-signal 全链路对齐。
  */
 function sanitizeCuisineWeights(
   weights?: Record<string, number> | null,
 ): Record<string, number> {
   if (!weights || typeof weights !== 'object') return {};
 
+  // 延迟引用以避免循环依赖（domain 层不直接依赖 common/utils）
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { normalizeCuisine } = require('../../../common/utils/cuisine.util') as {
+    normalizeCuisine: (v: unknown) => string | null;
+  };
+
   const result: Record<string, number> = {};
   for (const [cuisine, weight] of Object.entries(weights)) {
+    const key = normalizeCuisine(cuisine);
+    if (!key) continue;
     const w = Number(weight);
     if (!isNaN(w) && isFinite(w)) {
-      result[cuisine] = Math.max(0, Math.min(1, w));
+      // 同 key 取 max（多别名映射到同 key 时保留最强信号）
+      const clamped = Math.max(0, Math.min(1, w));
+      result[key] =
+        result[key] !== undefined ? Math.max(result[key], clamped) : clamped;
     }
   }
   return result;

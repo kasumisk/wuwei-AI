@@ -43,6 +43,8 @@ import {
   extractRankedFoods,
 } from '../optimization/multi-objective-optimizer';
 import { mapLifestyleToScoringFactors } from '../profile/profile-scoring-mapper';
+import { getUserLocalDate } from '../../../../../common/utils/timezone.util';
+import { DEFAULT_TIMEZONE } from '../../../../../common/config/regional-defaults';
 import { NutritionTargetService } from './nutrition-target.service';
 import { SemanticRecallService } from '../recall/semantic-recall.service';
 import {
@@ -650,6 +652,8 @@ export class PipelineBuilderService implements OnModuleInit {
         preferenceSignal,
         // 区域+时区优化（阶段 1.2）：透传用户本地月份给 SeasonalityService
         currentMonth: ctx.currentMonth,
+        // P3-3.4：透传区域码，南半球地区会触发月份翻转
+        regionCode: ctx.regionCode,
       });
 
       return { food, score: detailed.score, explanation: detailed.explanation };
@@ -717,12 +721,16 @@ export class PipelineBuilderService implements OnModuleInit {
    * 统一构建个性化营养目标
    */
   buildNutritionTargets(enrichedCtx?: EnrichedProfileContext) {
+    // P2-R4: 年龄计算改用用户本地年份（基于 timezone），避免服务器跨时区跨年误差
+    const userLocalYear = enrichedCtx?.timezone
+      ? parseInt(getUserLocalDate(enrichedCtx.timezone).slice(0, 4), 10)
+      : parseInt(getUserLocalDate(DEFAULT_TIMEZONE).slice(0, 4), 10);
     return this.nutritionTargetService.calculate(
       enrichedCtx?.declared
         ? {
             gender: enrichedCtx.declared.gender,
             age: enrichedCtx.declared.birthYear
-              ? new Date().getFullYear() - enrichedCtx.declared.birthYear
+              ? userLocalYear - enrichedCtx.declared.birthYear
               : undefined,
             goal: enrichedCtx.declared.goal as GoalType | undefined,
             weightKg: enrichedCtx.declared.weightKg,

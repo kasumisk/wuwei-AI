@@ -764,7 +764,7 @@ export const useChangeSubscriptionPlan = (
 };
 
 export const useResyncSubscription = (
-  options?: UseMutationOptions<unknown, Error, { id: string; data: SubscriptionResyncDto }>
+  options?: UseMutationOptions<SubscriptionMaintenanceDispatchResponse, Error, { id: string; data: SubscriptionResyncDto }>
 ) => {
   const queryClient = useQueryClient();
   return useMutation({

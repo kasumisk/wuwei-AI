@@ -3,26 +3,28 @@
 > 来源：`docs/RECOMMENDATION_REGIONAL_TIMEZONE_DEEP_ANALYSIS.md` §4 优先级表 P3 项
 >
 > 范围：本轮覆盖 §2.6（Weight-Learner region 分桶）、§2.4（Inferred Profile 注入 region）、§2.11（MOO 加本地化目标）、§3.x（画像 × 能力深度联动），先把所有实现细节、决策点、数据流、验证点写明，再分批落地。
+>
+> **落地进度（2026-05-01 更新）**：PR-1 ✅ PR-2 ✅ PR-3 ✅ PR-4 ✅ PR-5 ✅ —— 全部 tsc EXIT=0
 
 ---
 
 ## 0. 总览与编排
 
-| 子项 | 标题 | 主要文件 | PR 拆分建议 | 依赖 |
-|---|---|---|---|---|
-| P3-2.6 | Weight-Learner region 三层先验 | `optimization/weight-learner.service.ts` | PR-1 | 独立 |
-| P3-2.4 | 规则推断注入 region（非 LLM） | `services/profile/profile-inference.service.ts`、`segmentation.util.ts`、`profile-cron.service.ts` | PR-2 | 独立 |
-| P3-2.11 | MOO 增加 `regionalFit` 维度 | `optimization/multi-objective-optimizer.ts`、`strategy.types.ts` | PR-3 | 独立 |
-| P3-3.1 | 食物名翻译查漏补缺 | `food.service.ts`、`recommendation-engine.service.ts` | 合入 PR-3 | 独立 |
-| P3-3.2 | `CHANNEL_TIME_MATRIX` 按 region 分桶 | `scoring-chain/factors/channel-availability.factor.ts` | PR-4 | 独立 |
-| P3-3.3 | `inferred.dietary_preference` × region 群体相对偏好 | `profile-inference.service.ts`、`profile-cron.service.ts` | 合入 PR-2 | 依赖 P3-2.4 |
-| P3-3.4 | 季节冲突（北/南半球切换） | `utils/seasonality.service.ts` | PR-5 | 与 P2-2.7 已有 monthToSeason 协同 |
+| 子项 | 标题 | 主要文件 | PR 拆分建议 | 依赖 | 状态 |
+|---|---|---|---|---|---|
+| P3-2.6 | Weight-Learner region 三层先验 | `optimization/weight-learner.service.ts` | PR-1 | 独立 | ✅ 已落地 |
+| P3-2.4 | 规则推断注入 region（非 LLM） | `services/profile/profile-inference.service.ts`、`segmentation.util.ts`、`profile-cron.service.ts` | PR-2 | 独立 | ✅ 已落地 |
+| P3-2.11 | MOO 增加 `regionalFit` 维度 | `optimization/multi-objective-optimizer.ts`、`strategy.types.ts` | PR-3 | 独立 | ✅ 已落地 |
+| P3-3.1 | 食物名翻译查漏补缺 | `food.service.ts`、`recommendation-engine.service.ts` | 合入 PR-3 | 独立 | ✅ 已落地 |
+| P3-3.2 | `CHANNEL_TIME_MATRIX` 按 region 分桶 | `scoring-chain/factors/channel-availability.factor.ts` | PR-4 | 独立 | ✅ 已落地 |
+| P3-3.3 | `inferred.dietary_preference` × region 群体相对偏好 | `profile-inference.service.ts`、`profile-cron.service.ts` | 合入 PR-2 | 依赖 P3-2.4 | ✅ 已落地 |
+| P3-3.4 | 季节冲突（北/南半球切换） | `utils/seasonality.service.ts` | PR-5 | 与 P2-2.7 已有 monthToSeason 协同 | ✅ 已落地 |
 
 **审计文档 §2.4 偏差说明**：实际代码中 `ProfileInferenceService` **不调用 LLM**，全部为规则推断。本文档将 §2.4 重新定义为「**规则推断注入 region**」（segmentation 阈值、营养基线、churn 风险均按 region 调参），与代码现状对齐。
 
 ---
 
-## 1. P3-2.6 Weight-Learner region 三层先验
+## 1. P3-2.6 Weight-Learner region 三层先验 ✅
 
 ### 1.1 现状
 
@@ -166,7 +168,20 @@ private async writeRegionOffset(
 | sampleSize=10 的 region 数据 | 不写入（避免噪声）|
 | `clearAll` 调用 | 同步清 region 前缀 |
 
-### 1.8 监控
+### 1.8 落地实际情况（2026-05-01）
+
+| 设计点 | 实际落地 |
+|---|---|
+| `REGION_REDIS_PREFIX` / `MIN_REGION_FEEDBACK_COUNT=30` / `REGION_LEARNED_TTL=30d` | ✅ |
+| `learnRegionWeights()` 按 country×goalType / country×goalType×mealType 分组写 Redis | ✅ |
+| `getUserWeights/getUserMealWeights` 四层加权融合，全空返回 `null` | ✅ |
+| `resetAll` 清 `weight_learner:region:` 前缀 | ✅ |
+| feedback SQL `LEFT JOIN user_profiles` 取 `region_code` | ✅ |
+| `@Cron('30 6 * * *')` 每日触发 `learn()` | ✅ |
+| `profile-aggregator.service.ts` 注入 learner，优先 learner，fallback segment | ✅ |
+| `TrackingModule` export `WeightLearnerService` | ✅ |
+
+### 1.9 监控
 
 新增 metric：
 - `weight_learner.region.hit` — region offset 命中次数 / 总调用
@@ -174,7 +189,7 @@ private async writeRegionOffset(
 
 ---
 
-## 2. P3-2.4 规则推断注入 region
+## 2. P3-2.4 规则推断注入 region ✅
 
 ### 2.1 现状（与审计文档差异）
 
@@ -307,9 +322,11 @@ P3-3.3 在 P3-2.4 框架内实现：
 
 下游消费：`PreferenceFactor` 在打分时优先用 `cuisineAffinityRelative` 替代绝对偏好（兼容：缺失时回退绝对值）。
 
+> **落地（2026-05-01）**：`pipeline.types.ts` inferred 加 `cuisineAffinityRelative` 字段；`profile-resolver.service.ts` 透传；`preference-signal.factor.ts` init 读取 + computeAdjustment 以 `ln(relative)*0.05` 乘法叠加；tsc EXIT=0。
+
 ---
 
-## 3. P3-2.11 MOO 加本地化目标
+## 3. P3-2.11 MOO 加本地化目标 ✅
 
 ### 3.1 现状
 
@@ -391,7 +408,7 @@ const DEFAULT_PREFERENCES = {
 
 ---
 
-## 4. P3-3.1 食物名翻译查漏补缺
+## 4. P3-3.1 食物名翻译查漏补缺 ✅
 
 ### 4.1 现状
 
@@ -416,7 +433,7 @@ const DEFAULT_PREFERENCES = {
 
 ---
 
-## 5. P3-3.2 `CHANNEL_TIME_MATRIX` 按 region 分桶
+## 5. P3-3.2 `CHANNEL_TIME_MATRIX` 按 region 分桶 ✅
 
 ### 5.1 现状
 
@@ -495,7 +512,7 @@ export class ChannelAvailabilityFactor {
 
 ---
 
-## 6. P3-3.4 季节冲突（半球切换）
+## 6. P3-3.4 季节冲突（半球切换） ✅
 
 ### 6.1 现状
 
@@ -568,15 +585,64 @@ const month = isSouthernHemisphere(regionCode)
 
 ## 9. PR 拆分与排期建议
 
-| PR | 子项 | 工作量 | 风险 | 排期 |
-|---|---|---|---|---|
-| PR-1 | P3-2.6 Weight-Learner 三层先验 | 中 | 中（涉及 Redis 写入路径 + 学习算法） | W1 |
-| PR-2 | P3-2.4 + P3-3.3 规则推断注入 region | 中 | 低（默认值不动 → 等价旧行为） | W1 |
-| PR-3 | P3-2.11 MOO regionalFit + P3-3.1 i18n 查漏 | 小 | 低 | W2 |
-| PR-4 | P3-3.2 CHANNEL_TIME_MATRIX 分桶 | 小 | 低 | W2 |
-| PR-5 | P3-3.4 季节冲突 | 小（盘点为主） | 极低 | W2 |
+| PR | 子项 | 工作量 | 风险 | 排期 | 状态 |
+|---|---|---|---|---|---|
+| PR-1 | P3-2.6 Weight-Learner 三层先验 | 中 | 中（涉及 Redis 写入路径 + 学习算法） | W1 | ✅ 已落地 |
+| PR-2 | P3-2.4 + P3-3.3 规则推断注入 region | 中 | 低（默认值不动 → 等价旧行为） | W1 | ✅ 已落地 |
+| PR-3 | P3-2.11 MOO regionalFit + P3-3.1 i18n 查漏 | 小 | 低 | W2 | ✅ 已落地 |
+| PR-4 | P3-3.2 CHANNEL_TIME_MATRIX 分桶 | 小 | 低 | W2 | ✅ 已落地 |
+| PR-5 | P3-3.4 季节冲突 | 小（盘点为主） | 极低 | W2 | ✅ 已落地 |
 
 并行可行性：PR-1/2/3/4/5 之间无强依赖，可同时开工；PR-3 中 P3-3.1 需对全代码库做一次 grep 后再开 PR。
+
+---
+
+## 10. 二轮深度审计修复（R1–R9） ✅
+
+二轮审计在 P3 全量落地后又发现 9 处遗留风险点；以下 7 项已闭环（R8/R9 验证为可接受现状或在 P3-3.5 已透出 trace）。
+
+### R1 Cron 锁缺失 — `weight-learner.service.ts` ✅
+- 发现：`@Cron('30 6 * * *') learn()` 多实例并发会重复学习/重复写 Redis。
+- 基础设施：`RedisCacheService.runWithLock(lockName, ttlMs, fn)`（`redis-cache.service.ts:308`）已存在，6/7 cron 早已用。
+- 修复：拆出 `runDailyCron()` 入口包 `runWithLock('weight-learner-daily', 60*60*1000, ...)`，原 `learn()` 保留供单测调用。
+
+### R2 季节月份双时区 — `seasonality.service.ts` + pipeline ✅
+- 发现：`getSeasonalityScore` 内部 `new Date().getMonth()+1` 与 ctx.userLocalDate 错位。
+- 修复：`month` 入参由可选改为必填并校验范围 [1,12]；`PipelineContext.currentMonth: number` 必填；`pipeline-context-factory.service.ts:96` 用 `getUserLocalMonth(timezone)` 赋值；`food-scorer.service.ts` `scoreFood / scoreFoodsWithServing` 签名加 `currentMonth: number` 必填，全链路透传。
+
+### R3 Cuisine 大小写/别名 — 全链路规范化 ✅
+- 发现：`Sichuan` / `cantonese` / `szechuan` 等历史值与 canonical 12 项（前端 `onboarding-constants.ts:CUISINE_OPTIONS`）不一致，导致 cuisineMatch / cuisinePreferences 漏匹配。
+- 修复：`apps/api-server/src/common/utils/cuisine.util.ts` 新增 `normalizeCuisine()`（含 sichuan/cantonese/szechuan/szechwan → `chinese` 归并）+ `normalizeCuisineWeights()` 等 helpers；`preferences-profile.ts:sanitizeCuisineWeights`、`profile-scoring-mapper.ts:cuisineMatch`、`food-scorer.service.ts:432` fallback、`preference-signal.factor.ts:209 cuisineAffinityRelative` 全部接入。
+
+### R4 年龄基于 server timezone — `pipeline-builder.service.ts` ✅
+- 发现：`buildNutritionTargets` 用 `new Date().getFullYear() - birthYear`，跨年时刻服务器/用户在不同 UTC 偏移会算错 ±1。
+- 修复：改用 `getUserLocalDate(enrichedCtx?.timezone || DEFAULT_TIMEZONE).slice(0,4)` 取用户本地年份。
+
+### R5 `(food as any).allergens` 散布 ✅
+- 发现：`food-filter.service.ts:332,354`、`restriction-checks.service.ts:43` 用 `as any` 绕过类型，掩盖了 schema 演化风险。
+- 修复：确认 `FoodLibrary.allergens: string[]`（`food.types.ts:161`）+ `CheckableFoodItem.allergens?: string[]`（`decision/checks/types.ts:36`）已定义；删除三处 cast。
+
+### R6 admin 写后区域缓存 stale — `food-library-management.service.ts` ✅
+- 发现：admin 改 food 后，`SeasonalityService` / `PreferenceProfileService` 缓存（`seasonality:region:{cc}` / `regional_boost:{cc}` 前缀）不会失效；listener 只监听 enrichment apply。
+- 修复：注入 `EventEmitter2`，新增私有 `emitRegionInvalidation(foodId, source)`：查 `FoodRegionalInfo.distinct(countryCode)`（无关联回退 'US'），逐个发 `REGION_DATA_CHANGED`；在 `create / update / batchImport / toggleVerified / updateStatus / remove` 后调用（remove 在 delete **前**收集 cc）；`source` 复用现有 union `'admin_edit' | 'batch_import'`，避免改 schema。
+
+### R7 weight-learner offsets length 不校验 — `applyOffsets` ✅
+- 发现：`fuseOffsets` 已 `?? 0` 兜底，但 `applyOffsets(baseline, offsets)` 直接 `baseline[i] + offsets[i]`；当 `SCORE_DIMENSIONS` 维度变更而 Redis 缓存仍是老 length 时会 NaN 污染权重。
+- 修复：`loadOffsets` 已有 `expectedLen` 校验；额外在 `applyOffsets` 内加 length 不匹配 warn 日志 + `offsets[i] ?? 0` 兜底，避免 NaN 透出。
+
+### R8 其他 `as any` 残留 — 评估保留 ⚪
+- 评估：剩余 `as any` 集中在 prisma DTO → schema 字段映射处（`food-library-management.service.ts` `data: ... as any`），属于 prisma 类型与 DTO 交互的常规处理；强类型化收益与改动面不成比例，本轮保留。
+
+### R9 region bias trace 缺失 — P3-3.5 接线已透出 ✅
+- 修复（P3-3.5 完成）：`profile-aggregator.service.ts` 调 `getCuisineRegionalBoostMap` + `mergeRegionalBoostMaps`；`PipelineContext` 加 `cuisinePreferenceRegions?: string[]`；`recommendation-trace.service.ts:PipelineSnapshot` 写入；trace 中可观察菜系偏好如何转换为区域 boost。
+
+### 验收
+- `npx tsc --noEmit -p apps/api-server/tsconfig.json` 全绿。
+- 所有改动均向后兼容（无破坏性 schema 变更，DTO/参数皆 optional 或在调用方就近补默认）。
+
+### 遗留待办（不在本批次）
+- `scripts/normalize-cuisine.ts` 一次性数据补全脚本（DB 历史 cuisine 字段对齐 canonical）。
+- `apps/admin/src/pages/recipe/list/index.tsx:45-56 CUISINE_OPTIONS` 与前端 `onboarding-constants.ts` 同步至 12 项 canonical。
 
 ---
 

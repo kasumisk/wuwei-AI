@@ -94,6 +94,8 @@ interface PipelineSnapshot {
   userPreferences?: { loves?: string[]; avoids?: string[] };
   /** 区域加分映射大小 */
   regionalBoostMapSize: number;
+  /** P3-3.5：cuisine 偏好衍生的国家代码列表（去重，已排除用户当前 country） */
+  cuisinePreferenceRegions?: string[];
   /** 协同过滤评分数量 */
   cfScoresSize: number;
   /** 是否有短期画像 */
@@ -352,6 +354,7 @@ export class RecommendationTraceService {
       regionalBoostMapSize: ctx.regionalBoostMap
         ? Object.keys(ctx.regionalBoostMap).length
         : 0,
+      cuisinePreferenceRegions: ctx.cuisinePreferenceRegions,
       cfScoresSize: ctx.cfScores ? Object.keys(ctx.cfScores).length : 0,
       hasShortTermProfile: !!ctx.shortTermProfile,
       hasContextualProfile: !!ctx.contextualProfile,

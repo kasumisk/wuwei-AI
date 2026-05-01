@@ -16,6 +16,8 @@ import { ScoringChainService } from '../../app/recommendation/scoring-chain/scor
 import { ScoringConfigService } from '../../app/recommendation/context/scoring-config.service';
 import { HealthModifierEngineService } from '../../app/recommendation/modifier/health-modifier-engine.service';
 import { StrategyService } from '../../../strategy/app/strategy.service';
+import { DEFAULT_TIMEZONE } from '../../../../common/config/regional-defaults';
+import { getUserLocalMonth } from '../../../../common/utils/timezone.util';
 import {
   SimulateRecommendDto,
   WhyNotDto,
@@ -421,6 +423,8 @@ export class RecommendationDebugService {
       healthModifierCache: undefined,
       nutritionTargets: undefined,
       scoringConfig,
+      // P0-R2: 透传用户本地月份
+      currentMonth: getUserLocalMonth(profile.timezone || DEFAULT_TIMEZONE),
     });
 
     // 5. 10因子链式评分（单食物）

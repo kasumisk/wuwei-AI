@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { FoodLibrary } from '../../../../food/food.types';
 import { GoalType } from '../../services/nutrition-score.service';
+import { normalizeCuisine } from '../../../../../common/utils/cuisine.util';
 import {
   MealTarget,
   ScoredFood,
@@ -106,6 +107,8 @@ export class FoodScorerService {
   scoreFood(
     food: FoodLibrary,
     goalType: string,
+    /** P0-R2: 用户本地月份 1-12，必填，由调用方根据用户 timezone 透传 */
+    currentMonth: number,
     target?: MealTarget,
     penaltyContext?: HealthModifierContext,
     mealType?: string,
@@ -131,6 +134,7 @@ export class FoodScorerService {
       rankPolicy,
       nutritionGaps,
       nutritionTargets,
+      currentMonth,
     };
     return this.scoreFoodDetailed(ctx).score;
   }
@@ -429,7 +433,11 @@ export class FoodScorerService {
       rawScore *= 1 + cuisineBoost + substitutionBoost;
     } else if (preferencesProfile?.cuisineWeights && food.cuisine) {
       // Fallback: 保留 V7.0 inline 菜系计算（向后兼容）
-      const cuisineWeight = preferencesProfile.cuisineWeights[food.cuisine];
+      // P0-R3: food.cuisine 规范化后查 weight，与 cuisineWeights key（已 sanitize）对齐
+      const cuisineKey = normalizeCuisine(food.cuisine);
+      const cuisineWeight = cuisineKey
+        ? preferencesProfile.cuisineWeights[cuisineKey]
+        : undefined;
       if (cuisineWeight !== undefined) {
         // 将 [0, 1] 权重映射到 [-0.1, +0.1] boost
         cuisineBoost =
@@ -524,6 +532,8 @@ export class FoodScorerService {
   scoreFoodsWithServing(
     candidates: FoodLibrary[],
     goalType: string,
+    /** P0-R2: 用户本地月份 1-12，必填 */
+    currentMonth: number,
     target?: MealTarget,
     penaltyContext?: HealthModifierContext,
     mealType?: string,
@@ -541,6 +551,7 @@ export class FoodScorerService {
         score: this.scoreFood(
           food,
           goalType,
+          currentMonth,
           target,
           penaltyContext,
           mealType,
