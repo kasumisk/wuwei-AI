@@ -321,7 +321,13 @@ export class FoodFilterService {
         if (FoodFilterService.MEAT_MAIN_INGREDIENTS.has(mi)) return true;
         if (FoodFilterService.SEAFOOD_MAIN_INGREDIENTS.has(mi)) return true;
         if (fg === 'dairy' || fg === 'egg') return true;
-        if (mi === 'milk' || mi === 'egg' || mi === 'cheese' || mi === 'yogurt')
+        if (
+          mi === 'milk' ||
+          mi === 'egg' ||
+          mi === 'cheese' ||
+          mi === 'yogurt' ||
+          mi === 'cream'
+        )
           return true;
       } else if (r === 'pescatarian') {
         // 允许鱼/海鲜，排除其他肉类

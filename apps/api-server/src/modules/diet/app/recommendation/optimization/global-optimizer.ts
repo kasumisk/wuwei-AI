@@ -20,9 +20,9 @@ import { ScoredFood, MealTarget } from '../types/recommendation.types';
  *
  * 设计限制（实用性优先）：
  * - 不使用 LP/整数规划库（避免引入重量级依赖）
- * - 使用迭代贪心改进（iterative greedy improvement），最多 12 轮
+ * - 使用迭代贪心改进（iterative greedy improvement），默认最多 24 轮（参数 maxIterations）
  * - 每轮最多执行 1 个动作（替换或份量调整）
- * - 替换评分下降不超过 15%（保证推荐质量）
+ * - 替换分数下降不超过 25%（默认 minScoreRatio=0.75，保证推荐质量；可由调用方覆写）
  */
 
 // ─── V5 偏差权重配置（P1-1: fat/carbs 权重提升，覆盖四宏量均衡） ───
@@ -62,8 +62,8 @@ export interface OptimizationResult {
  *
  * @param meals 4 餐的食物选择 + 候选池
  * @param dailyTarget 全天营养目标
- * @param maxIterations 最大迭代轮数（V5 默认 12）
- * @param minScoreRatio 允许的最低评分比（替换后评分 / 替换前评分 >= 此值）
+ * @param maxIterations 最大迭代轮数（默认 24，与 minScoreRatio 协同收敛）
+ * @param minScoreRatio 允许的最低评分比（替换后评分 / 替换前评分 >= 此值；默认 0.75）
  */
 export function optimizeDailyPlan(
   meals: MealSlot[],
@@ -264,13 +264,13 @@ function findBestPortionAdjust(
 /**
  * 计算全天营养偏差率（V5: 6 维加权）
  *
- * 维度:
- * 1. 热量 (30%)
- * 2. 蛋白质 (25%)
- * 3. 碳水 (15%)
- * 4. 脂肪 (12%)
- * 5. 膳食纤维 (10%)
- * 6. 血糖负荷 (8%)
+ * 维度（权重以 DEVIATION_WEIGHTS 常量为准）:
+ * 1. 热量 (calories: 0.22)
+ * 2. 蛋白质 (protein: 0.22)
+ * 3. 脂肪 (fat: 0.20)
+ * 4. 碳水 (carbs: 0.20)
+ * 5. 膳食纤维 (fiber: 0.10)
+ * 6. 血糖负荷 (glycemicLoad: 0.06)
  *
  * 值域 [0, +∞)，0 表示完美匹配
  */

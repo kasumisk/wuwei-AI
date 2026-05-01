@@ -162,7 +162,9 @@ export function multiObjectiveOptimize(
   }
 
   // 6. 计算偏好加权综合分
-  //    使用加权切比雪夫距离的变体: 离理想点越近分越高
+  //    评分模型: 偏好加权和 + Pareto 层级奖励
+  //    （注：早期版本注释为"切比雪夫距离变体"，实际实现为加权线性和；
+  //     若需切比雪夫距离请改为 max_i(w_i * |1 - obj_i|)）
   //    compositeScore = Σ(w_i × objective_i) + Pareto 层级奖励
   for (const s of scored) {
     const weightedSum = MULTI_OBJECTIVE_DIMENSIONS.reduce((sum, dim) => {
