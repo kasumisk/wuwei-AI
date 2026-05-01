@@ -501,4 +501,10 @@ export interface ScoringContext {
    * SeasonalityService.getSeasonalityScore，避免使用服务器时区。
    */
   currentMonth?: number;
+  /**
+   * P3-3.4：用户区域码（如 'AU' / 'AU-NSW' / 'CN-31'），
+   * 透传给 SeasonalityService 用于南半球月份翻转判定。
+   * 未提供时按北半球（不翻转）处理。
+   */
+  regionCode?: string | null;
 }

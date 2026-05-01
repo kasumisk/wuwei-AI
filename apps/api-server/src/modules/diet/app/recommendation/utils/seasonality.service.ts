@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../../../core/prisma/prisma.service';
 import { RedisCacheService } from '../../../../../core/redis/redis-cache.service';
+import { isSouthernHemisphere } from '../../../../../common/config/regional-defaults';
 import {
   buildFoodRegionalFallbackWhere,
   getFoodRegionSpecificity,
@@ -272,17 +273,30 @@ export class SeasonalityService {
    * 置信度低时将原始分向 0.5（中性）收缩，减少噪声数据对排序的影响。
    * score_final = score_raw * confidence + 0.5 * (1 - confidence)
    *
-   * @param foodId 食物 ID
-   * @param category 食物品类（用于判断当季月份）
-   * @param month 当前月份 (1-12)，默认取系统当前月份
+   * P3-3.4 — 南半球月份翻转：
+   * monthWeights 与 CATEGORY_PEAK_MONTHS 数据均按北半球月份语义建立
+   * （蔬菜春夏旺=3-9 月、水果夏秋旺=5-10 月）。当用户处于南半球时，
+   * 实际季节相反（如 12 月对北半球冬而对南半球夏），故对入参月份做
+   * 6 个月翻转：effectiveMonth = ((month - 1 + 6) % 12) + 1。
+   * 通过 regionCode 触发；未传或非南半球地区保持原行为。
+   *
+   * @param foodId     食物 ID
+   * @param category   食物品类（用于判断当季月份）
+   * @param month      当前月份 (1-12)，默认取系统当前月份
+   * @param regionCode 用户区域码（如 'AU' / 'AU-NSW'），南半球地区会触发月份翻转
    * @returns 0~1 的时令分数
    */
   getSeasonalityScore(
     foodId: string,
     category: string,
     month?: number,
+    regionCode?: string | null,
   ): number {
-    const currentMonth = month ?? new Date().getMonth() + 1;
+    const inputMonth = month ?? new Date().getMonth() + 1;
+    // P3-3.4: 南半球翻转 6 个月
+    const currentMonth = isSouthernHemisphere(regionCode ?? null)
+      ? ((inputMonth - 1 + 6) % 12) + 1
+      : inputMonth;
     const info = this.regionalCache.get(foodId);
 
     // 无区域数据 → 中性分（置信度 0，完全衰减）
@@ -349,12 +363,13 @@ export class SeasonalityService {
   getSeasonalityScores(
     foods: Array<{ id: string; category: string }>,
     month?: number,
+    regionCode?: string | null,
   ): Map<string, number> {
     const result = new Map<string, number>();
     for (const food of foods) {
       result.set(
         food.id,
-        this.getSeasonalityScore(food.id, food.category, month),
+        this.getSeasonalityScore(food.id, food.category, month, regionCode),
       );
     }
     return result;

@@ -135,6 +135,7 @@ export class ChannelAvailabilityFactor implements ScoringFactor {
 
   private channel: AcquisitionChannel = AcquisitionChannel.UNKNOWN;
   private timeSlot: TimeSlot = 'midday';
+  private regionCode: string | null = null;
 
   isApplicable(ctx: PipelineContext): boolean {
     return ctx.channel !== undefined && ctx.channel !== null;
@@ -143,6 +144,7 @@ export class ChannelAvailabilityFactor implements ScoringFactor {
   init(ctx: PipelineContext): void {
     this.channel = ctx.channel ?? AcquisitionChannel.UNKNOWN;
     this.timeSlot = resolveTimeSlot(ctx.localHour ?? 12);
+    this.regionCode = ctx.regionCode ?? null;
   }
 
   computeAdjustment(
@@ -158,16 +160,18 @@ export class ChannelAvailabilityFactor implements ScoringFactor {
 
       if (!isAvail) {
         // 渠道不匹配 → 明显降权
-        const timeMultiplier =
-          CHANNEL_TIME_MATRIX[this.channel]?.[this.timeSlot] ??
-          CHANNEL_TIME_MATRIX[AcquisitionChannel.UNKNOWN][this.timeSlot];
+        const timeMultiplier = getChannelTimeMultiplier(
+          this.channel,
+          this.timeSlot,
+          this.regionCode,
+        );
         const multiplier = 0.3 * timeMultiplier;
         return {
           factorName: this.name,
           multiplier,
           additive: 0,
           explanationKey: null,
-          reason: `channel=${this.channel} not in availableChannels, time=${this.timeSlot}`,
+          reason: `channel=${this.channel} not in availableChannels, time=${this.timeSlot}, region=${this.regionCode ?? 'default'}`,
         };
       }
       return null; // 匹配 → 不调整
@@ -181,10 +185,12 @@ export class ChannelAvailabilityFactor implements ScoringFactor {
     const commonality = (food.commonalityScore ?? 50) / 100;
     const channelAvail = categoryScore * 0.6 + commonality * 0.4;
 
-    // 叠加时段系数
-    const timeMultiplier =
-      CHANNEL_TIME_MATRIX[this.channel]?.[this.timeSlot] ??
-      CHANNEL_TIME_MATRIX[AcquisitionChannel.UNKNOWN][this.timeSlot];
+    // 叠加时段系数（P3-3.2: 区域分层）
+    const timeMultiplier = getChannelTimeMultiplier(
+      this.channel,
+      this.timeSlot,
+      this.regionCode,
+    );
     const overall = channelAvail * timeMultiplier;
 
     // 将 overallAvailability (0-1) 映射到乘数：[0.5, 1.1]
@@ -196,7 +202,7 @@ export class ChannelAvailabilityFactor implements ScoringFactor {
       multiplier: Math.min(1.1, multiplier),
       additive: 0,
       explanationKey: null,
-      reason: `channel=${this.channel} cat=${food.category} avail=${overall.toFixed(2)} time=${this.timeSlot}`,
+      reason: `channel=${this.channel} cat=${food.category} avail=${overall.toFixed(2)} time=${this.timeSlot} region=${this.regionCode ?? 'default'}`,
     };
   }
 }
