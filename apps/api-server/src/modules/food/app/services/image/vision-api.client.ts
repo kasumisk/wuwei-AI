@@ -37,7 +37,7 @@ import {
 } from '../../../../../core/llm/llm.types';
 
 const REQUEST_TIMEOUT_MS = 30_000;
-const MAX_TOKENS = 1500;
+const MAX_TOKENS = 5000;
 const TEMPERATURE = 0.3;
 
 @Injectable()
@@ -177,6 +177,7 @@ export class VisionApiClient implements OnModuleInit {
       model,
       temperature: TEMPERATURE,
       maxTokens: MAX_TOKENS,
+      responseFormat: { type: 'json_object' },
       timeoutMs: REQUEST_TIMEOUT_MS,
       extraHeaders: {
         'HTTP-Referer': this.httpReferer,
@@ -201,7 +202,7 @@ export class VisionApiClient implements OnModuleInit {
     });
 
     this.logger.debug(
-      `Vision API ok: model=${model}, tokens=${result.usage.totalTokens}, cost=$${result.costUsd.toFixed(6)}`,
+      `Vision API ok: model=${model}, prompt=${result.usage.promptTokens}, completion=${result.usage.completionTokens}, total=${result.usage.totalTokens}, cost=$${result.costUsd.toFixed(6)}`,
     );
     return result.content;
   }

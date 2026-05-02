@@ -59,16 +59,18 @@ export class FoodTextAnalyzeController {
     @Body() dto: AnalyzeTextDto,
     @CurrentAppUser() user: AppUserPayload,
   ): Promise<ApiResponse> {
+    const locale = dto.locale || this.i18n.currentLocale();
     const summary = await this.subscriptionService.getUserSummary(user.id);
 
     const cacheKey = this.helper.buildTextAnalysisCacheKey(
       dto.text,
       dto.mealType,
       user.id,
-      dto.locale,
+      locale,
     );
     const cached = this.helper.getFromTextAnalysisCache(cacheKey);
     if (cached) {
+      await this.helper.localizeAnalysisResult(cached, locale);
       const trimmedResult = this.resultEntitlementService.trimResult(
         cached,
         summary.tier,
@@ -114,7 +116,7 @@ export class FoodTextAnalyzeController {
 
     await this.helper.localizeAnalysisResult(
       fullResult,
-      dto.locale || this.i18n.currentLocale(),
+      locale,
     );
 
     this.helper.setToTextAnalysisCache(cacheKey, fullResult);

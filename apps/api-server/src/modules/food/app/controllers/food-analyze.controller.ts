@@ -46,7 +46,10 @@ import { AnalyzeTextDto } from '../dto/analyze-text.dto';
 import { RefineAnalysisDto } from '../dto/refine-analysis.dto';
 import { SaveAnalysisToRecordDto } from '../dto/save-analysis.dto';
 import type { Locale } from '../../../diet/app/recommendation/utils/i18n-messages';
-import { UserApiThrottle } from '../../../../core/throttle/throttle.constants';
+import {
+  UserApiThrottle,
+  SkipThrottle,
+} from '../../../../core/throttle/throttle.constants';
 import { QuotaGateService } from '../../../subscription/app/services/quota-gate.service';
 import { ResultEntitlementService } from '../../../subscription/app/services/result-entitlement.service';
 import { PaywallTriggerService } from '../../../subscription/app/services/paywall-trigger.service';
@@ -143,6 +146,7 @@ export class FoodAnalyzeController {
     @Body() dto: AnalyzeTextDto,
     @CurrentAppUser() user: AppUserPayload,
   ): Promise<ApiResponse> {
+    const locale = dto.locale || this.i18n.currentLocale();
     // 1. 获取用户订阅信息（配额检查和结果裁剪都需要）
     const summary = await this.subscriptionService.getUserSummary(user.id);
 
@@ -151,10 +155,11 @@ export class FoodAnalyzeController {
       dto.text,
       dto.mealType,
       user.id,
-      dto.locale,
+      locale,
     );
     const cached = this.getFromTextAnalysisCache(cacheKey);
     if (cached) {
+      await this.localizeAnalysisResult(cached, locale);
       // 按订阅等级裁剪缓存结果（订阅可能已变更）
       const trimmedResult = this.resultEntitlementService.trimResult(
         cached,
@@ -205,7 +210,7 @@ export class FoodAnalyzeController {
 
     await this.localizeAnalysisResult(
       fullResult,
-      dto.locale || this.i18n.currentLocale(),
+      locale,
     );
 
     // V7.9 P3-4: 写入缓存（使用完整结果，裁剪在读取时按当前订阅等级执行）
@@ -923,6 +928,8 @@ export class FoodAnalyzeController {
    * - failed: 分析失败，error 中包含错误信息
    */
   @Get('analyze/:requestId')
+  @UserApiThrottle(120, 60)
+  @SkipThrottle({ 'ai-heavy': true, strict: true })
   @ApiOperation({ summary: '获取 AI 分析结果（轮询）' })
   @ApiParam({ name: 'requestId', description: '分析任务 ID' })
   async getAnalysisResult(

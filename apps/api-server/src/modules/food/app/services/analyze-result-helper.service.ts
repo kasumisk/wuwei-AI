@@ -17,6 +17,7 @@ import { FoodI18nService } from '../../../diet/app/services/food-i18n.service';
 import { DecisionSummaryService } from '../../../decision/decision/decision-summary.service';
 import { FoodAnalysisResultV61 } from '../../../decision/types/analysis-result.types';
 import { DecisionOutput } from '../../../decision/decision/food-decision.service';
+import { AnalyzedFoodItemLite } from './analysis-session.service';
 // V13.5: cl() 已迁移为 this.i18n.t('decision.xxx', locale, vars)
 
 // ─── 文本分析缓存配置 ───
@@ -139,6 +140,27 @@ export class AnalyzeResultHelperService {
         // Keep persisted summary when structured rebuild is unavailable.
       }
     }
+  }
+
+  async localizeLiteFoods(
+    foods: AnalyzedFoodItemLite[] | undefined,
+    locale: string,
+  ): Promise<AnalyzedFoodItemLite[] | undefined> {
+    if (!foods?.length) return foods;
+
+    const translatedByName = await this.foodI18nService.loadTranslationsByFoodNames(
+      foods.map((food) => food.name).filter(Boolean),
+      locale,
+    );
+
+    if (translatedByName.size === 0) {
+      return foods;
+    }
+
+    return foods.map((food) => ({
+      ...food,
+      name: translatedByName.get(food.name) ?? food.name,
+    }));
   }
 
   buildLocalizedHeadline(

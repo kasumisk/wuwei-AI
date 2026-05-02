@@ -55,6 +55,7 @@ import type { Locale } from '../../../diet/app/recommendation/utils/i18n-message
 import {
   AiHeavyThrottle,
   UserApiThrottle,
+  SkipThrottle,
 } from '../../../../core/throttle/throttle.constants';
 import { QuotaGateService } from '../../../subscription/app/services/quota-gate.service';
 import { ResultEntitlementService } from '../../../subscription/app/services/result-entitlement.service';
@@ -171,12 +172,14 @@ export class FoodImageAnalyzeController {
 
   @Get('analyze/:requestId')
   @UserApiThrottle(120, 60)
+  @SkipThrottle({ 'ai-heavy': true, strict: true })
   @ApiOperation({ summary: '获取 AI 分析结果（轮询）' })
   @ApiParam({ name: 'requestId', description: '分析任务 ID' })
   async getAnalysisResult(
     @Param('requestId') requestId: string,
     @CurrentAppUser() user: AppUserPayload,
   ): Promise<ApiResponse> {
+    const locale = this.i18n.currentLocale();
     const entry = await this.analyzeService.getAnalysisStatus(requestId);
 
     if (!entry) {
@@ -209,6 +212,7 @@ export class FoodImageAnalyzeController {
           this.i18n.t('food.analysisTaskNoPermission'),
         );
       }
+      const localizedFoods = await this.helper.localizeLiteFoods(nr.foods, locale);
       return ResponseWrapper.success(
         {
           requestId,
@@ -221,7 +225,7 @@ export class FoodImageAnalyzeController {
             threshold: Number(process.env.CONFIDENCE_HIGH_THRESHOLD ?? 0.75),
             reasons: nr.reasons,
           },
-          foods: nr.foods,
+          foods: localizedFoods,
           imageUrl: nr.imageUrl,
           expiresAt: nr.expiresAt,
           refineUrl: `/api/app/food/analyze/${requestId}/refine`,
@@ -302,7 +306,7 @@ export class FoodImageAnalyzeController {
 
     await this.helper.localizeAnalysisResult(
       v61ForTrim,
-      this.i18n.currentLocale(),
+      locale,
     );
 
     const trimmedResult = this.resultEntitlementService.trimResult(
@@ -355,6 +359,7 @@ export class FoodImageAnalyzeController {
     @Body() dto: RefineAnalysisDto,
     @CurrentAppUser() user: AppUserPayload,
   ): Promise<ApiResponse> {
+    const locale = this.i18n.currentLocale();
     const session = await this.analysisSessionService.getByRequestId(requestId);
     if (!session) {
       throw new NotFoundException(this.i18n.t('food.analysisTaskNotFound'));
@@ -405,10 +410,7 @@ export class FoodImageAnalyzeController {
       user.id,
     );
 
-    await this.helper.localizeAnalysisResult(
-      fullResult,
-      this.i18n.currentLocale(),
-    );
+    await this.helper.localizeAnalysisResult(fullResult, locale);
 
     const summary = await this.subscriptionService.getUserSummary(user.id);
     const trimmedResult = this.resultEntitlementService.trimResult(
