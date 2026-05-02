@@ -39,10 +39,10 @@ export class UserThrottlerGuard extends ThrottlerGuard {
    */
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<Request>();
-    const path = req.path ?? '';
+    const path = req.path ?? req.url ?? req.originalUrl ?? '';
 
     // 后台管理接口：完全豁免限流
-    if (path.startsWith('/admin/')) {
+    if (path.startsWith('/admin/') || path.startsWith('/api/admin/')) {
       return true;
     }
 

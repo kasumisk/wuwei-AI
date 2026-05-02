@@ -218,7 +218,7 @@ jobs:
             --concurrency=80
             --timeout=60s
             --port=8080
-            --set-secrets=DATABASE_URL=DATABASE_URL:latest,DIRECT_URL=DIRECT_URL:latest,OPENROUTER_API_KEY=OPENROUTER_API_KEY:latest,DEEPSEEK_API_KEY=DEEPSEEK_API_KEY:latest,JWT_SECRET=JWT_SECRET:latest,REDIS_URL=REDIS_URL:latest
+            --set-secrets=DATABASE_URL=DATABASE_URL:latest,DIRECT_URL=DIRECT_URL:latest,OPENROUTER_API_KEY=OPENROUTER_API_KEY:latest,DEEPSEEK_API_KEY=DEEPSEEK_API_KEY:latest,JWT_SECRET=JWT_SECRET:latest,REDIS_URL=REDIS_URL:latest,USDA_API_KEY=USDA_API_KEY:latest
             --service-account=${{ secrets.GCP_CLOUD_RUN_SA }}
 
       - name: Show deployed URL

@@ -264,6 +264,11 @@ export class UsdaFetcherService {
     pageNumber = 1,
     options: { foodCategory?: string; dataTypes?: string[] } = {},
   ): Promise<{ foods: NormalizedFoodData[]; totalHits: number }> {
+    if (!this.apiKey) {
+      throw new Error(
+        'USDA_API_KEY is not configured for the current server environment',
+      );
+    }
     const url = `${this.baseUrl}/foods/search`;
     try {
       const { data } = await firstValueFrom(
@@ -297,6 +302,10 @@ export class UsdaFetcherService {
    * 按 USDA fdcId 获取食物详情
    */
   async getById(fdcId: number): Promise<NormalizedFoodData | null> {
+    if (!this.apiKey) {
+      this.logger.warn('USDA_API_KEY is not configured; getById skipped');
+      return null;
+    }
     try {
       const url = `${this.baseUrl}/food/${fdcId}`;
       const { data } = await firstValueFrom(
@@ -317,6 +326,11 @@ export class UsdaFetcherService {
    * 批量获取食物数据
    */
   async batchGet(fdcIds: number[]): Promise<NormalizedFoodData[]> {
+    if (!this.apiKey) {
+      throw new Error(
+        'USDA_API_KEY is not configured for the current server environment',
+      );
+    }
     const url = `${this.baseUrl}/foods`;
     try {
       const { data } = await firstValueFrom(
@@ -434,9 +448,15 @@ export class UsdaFetcherService {
 
   private formatUsdaError(error: any): string {
     const status = error?.response?.status;
+    const responseData = error?.response?.data;
     const remoteMessage =
-      error?.response?.data?.error ||
-      error?.response?.data?.message ||
+      responseData?.error ||
+      responseData?.message ||
+      (typeof responseData === 'string'
+        ? responseData
+        : responseData
+          ? JSON.stringify(responseData)
+          : undefined) ||
       error?.response?.statusText;
     const message = remoteMessage || error?.message || 'Unknown error';
     return status ? `status ${status} - ${message}` : message;
