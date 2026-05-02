@@ -37,6 +37,10 @@ import {
   normalizeChannel,
   type RecommendationChannel,
 } from '../recommendation/utils/channel';
+import {
+  QuotaGateService,
+} from '../../../subscription/app/services/quota-gate.service';
+import { GatedFeature } from '../../../subscription/subscription.types';
 
 // ─── 常量 ───
 
@@ -71,6 +75,7 @@ export class PrecomputeService {
     @InjectQueue(QUEUE_NAMES.RECOMMENDATION_PRECOMPUTE)
     private readonly precomputeQueue: Queue,
     private readonly metricsService: MetricsService,
+    private readonly quotaGate: QuotaGateService,
   ) {}
 
   /**
@@ -341,6 +346,8 @@ export class PrecomputeService {
   /**
    * V6.3 P2-11: 触发单用户预计算
    *
+   * 权益检查: 仅对拥有 WEEKLY_PLAN 权益的用户入队，无权益用户直接跳过。
+   *
    * 防抖机制: 使用 jobId 实现 5 分钟防抖 — 同一用户在 5 分钟内的多次事件
    * 只会创建一个 job（BullMQ 的 jobId 唯一性保证）。
    *
@@ -351,6 +358,18 @@ export class PrecomputeService {
     userId: string,
     trigger: string,
   ): Promise<void> {
+    // 权益检查：无 WEEKLY_PLAN 权益的用户不预计算
+    const decision = await this.quotaGate.checkOnly(
+      userId,
+      GatedFeature.WEEKLY_PLAN,
+    );
+    if (!decision.allowed) {
+      this.logger.debug(
+        `跳过预计算（无权益）: userId=${userId}, trigger=${trigger}`,
+      );
+      return;
+    }
+
     // P2-2.12: 切日点用用户本地时区（debounceSlot 仍按服务器 5 分钟窗口，与时区无关）
     const tz = await this.getUserTimezone(userId);
     const today = getUserLocalDate(tz);
@@ -416,10 +435,14 @@ export class PrecomputeService {
   // ─── 私有方法 ───
 
   /**
-   * V6.2 3.6: 获取最近 7 天有饮食记录的活跃用户 ID（游标分页）
+   * V6.2 3.6 / V6.2.1: 获取最近 7 天有饮食记录且拥有 weekly_plan 权益的活跃用户 ID
+   *
+   * 权益过滤规则：
+   * - 用户必须拥有有效（active 或 grace）订阅
+   * - 所订阅套餐的 entitlements JSON 中 weekly_plan = true
+   * - 无权益用户不入队，不浪费计算资源
    *
    * 使用 raw SQL DISTINCT + LIMIT/OFFSET 分页，避免一次性加载全量。
-   * 由于只返回 user_id，内存占用已经较小，但在用户量级大时仍有好处。
    */
   private async getActiveUserIds(): Promise<string[]> {
     const since = new Date();
@@ -431,9 +454,17 @@ export class PrecomputeService {
 
     while (true) {
       const page = await this.prisma.$queryRawUnsafe<Array<{ userId: string }>>(
-        `SELECT DISTINCT user_id FROM food_records
-         WHERE created_at > $1
-         ORDER BY user_id
+        `SELECT DISTINCT fr.user_id
+         FROM food_records fr
+         INNER JOIN subscription s
+           ON s.user_id = fr.user_id
+           AND s.status IN ('active', 'grace')
+           AND s.expires_at > NOW()
+         INNER JOIN subscription_plan sp
+           ON sp.id = s.plan_id
+           AND (sp.entitlements->>'weekly_plan')::boolean = true
+         WHERE fr.created_at > $1
+         ORDER BY fr.user_id
          LIMIT $2 OFFSET $3`,
         since,
         PAGE_SIZE,

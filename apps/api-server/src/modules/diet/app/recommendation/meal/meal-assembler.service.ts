@@ -9,9 +9,14 @@ import {
 import { ScoredRecipe } from '../../../../recipe/recipe.types';
 import { AssemblyPolicyConfig } from '../../../../strategy/strategy.types';
 import { t, type Locale } from '../utils/i18n-messages';
+import { ClsServiceManager } from 'nestjs-cls';
 import { ExplanationGeneratorService } from '../explanation/explanation-generator.service';
 import { PreferenceProfileService } from '../profile/preference-profile.service';
 import { ScoringConfigService } from '../context/scoring-config.service';
+import { PortionScalingPolicyResolver } from './portion-scaling-policy.resolver';
+import { PortionScalingService } from './portion-scaling.service';
+import { MealPortionController } from './meal-portion-controller.service';
+import { type PortionScalingPolicy } from './portion-scaling-policy.types';
 
 /** V7.8 P2-B: food_form 排序优先级（数值越大越优先） */
 const FOOD_FORM_PRIORITY: Record<string, number> = {
@@ -19,6 +24,46 @@ const FOOD_FORM_PRIORITY: Record<string, number> = {
   semi_prepared: 1,
   ingredient: 0,
 };
+
+/**
+ * 根据缩放比例，从 commonPortions 中匹配最接近的份量名称。
+ * 未匹配到时回退到标准份量描述或纯克数。
+ */
+function resolveAdjustedServingDesc(
+  standardG: number,
+  standardServingDesc: string | undefined,
+  commonPortions: Array<{ name: string; grams: number }>,
+  ratio: number,
+): string | undefined {
+  if (Math.abs(ratio - 1) < 0.01) {
+    return undefined;
+  }
+  const adjustedG = Math.round(standardG * ratio);
+  if (commonPortions.length > 0) {
+    let best: { name: string; grams: number } | null = null;
+    let bestDiff = Infinity;
+    for (const p of commonPortions) {
+      const diff = Math.abs(p.grams - adjustedG);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        best = p;
+      }
+    }
+    if (best && bestDiff <= 10) {
+      return best.name;
+    }
+  }
+
+  const rawLocale = ClsServiceManager.getClsService()?.get('locale');
+  const locale = typeof rawLocale === 'string' ? rawLocale : undefined;
+  if (/^en(?:[-_]|$)/i.test(locale || '')) {
+    return `~${adjustedG}g`;
+  }
+  if (/^ja(?:[-_]|$)/i.test(locale || '')) {
+    return `約${adjustedG}g`;
+  }
+  return `约${adjustedG}g`;
+}
 
 @Injectable()
 export class MealAssemblerService {
@@ -28,6 +73,9 @@ export class MealAssemblerService {
     private readonly explanationGenerator: ExplanationGeneratorService,
     private readonly preferenceProfileService: PreferenceProfileService,
     private readonly scoringConfigService: ScoringConfigService,
+    private readonly policyResolver: PortionScalingPolicyResolver,
+    private readonly portionScaling: PortionScalingService,
+    private readonly mealPortionController: MealPortionController,
   ) {}
 
   /**
@@ -203,7 +251,7 @@ export class MealAssemblerService {
     // 第一轮: 逐个食物计算最佳缩放比，受边界约束
     const adjusted = picks.map((p) => {
       const portions = p.food.commonPortions || [];
-      let minRatio = 0.5;
+      let minRatio = 0.75;
       let maxRatio = scaleCap;
 
       if (portions.length > 0) {
@@ -215,7 +263,7 @@ export class MealAssemblerService {
         if (portionGrams.length > 0) {
           const minG = Math.min(...portionGrams);
           const maxG = Math.max(...portionGrams);
-          minRatio = Math.max(0.5, minG / standardG);
+          minRatio = Math.max(0.75, minG / standardG);
           maxRatio = Math.min(scaleCap, maxG / standardG);
         }
       }
@@ -227,6 +275,13 @@ export class MealAssemblerService {
       // 量化后再裁剪一次确保不越界
       const finalRatio = Math.max(minRatio, Math.min(maxRatio, quantizedRatio));
 
+      const adjustedDesc = resolveAdjustedServingDesc(
+        p.food.standardServingG || 100,
+        p.food.standardServingDesc,
+        p.food.commonPortions || [],
+        finalRatio,
+      );
+
       return {
         ...p,
         servingCalories: Math.round((p.servingCalories || 0) * finalRatio),
@@ -234,6 +289,10 @@ export class MealAssemblerService {
         servingFat: Math.round((p.servingFat || 0) * finalRatio),
         servingCarbs: Math.round((p.servingCarbs || 0) * finalRatio),
         servingFiber: Math.round((p.servingFiber || 0) * finalRatio),
+        food: {
+          ...p.food,
+          ...(adjustedDesc !== undefined ? { displayServingDesc: adjustedDesc } : {}),
+        } as any,
       };
     });
 
@@ -256,7 +315,7 @@ export class MealAssemblerService {
         const standardG = picks[i].food.standardServingG || 100;
 
         let maxR = scaleCap;
-        let minR = 0.5;
+        let minR = 0.75;
         if (portions.length > 0) {
           // #fix: 过滤无效 grams 值
           const portionGrams = portions
@@ -288,6 +347,18 @@ export class MealAssemblerService {
         const adjRatio =
           (adjusted[bestIdx].servingCalories + adj) /
           adjusted[bestIdx].servingCalories;
+        const bestPick = picks[bestIdx];
+        const totalRatio =
+          (bestPick.servingCalories || 0) > 0
+            ? Math.round(adjusted[bestIdx].servingCalories * adjRatio) /
+              bestPick.servingCalories
+            : 1;
+        const adjDesc = resolveAdjustedServingDesc(
+          bestPick.food.standardServingG || 100,
+          bestPick.food.standardServingDesc,
+          bestPick.food.commonPortions || [],
+          totalRatio,
+        );
         adjusted[bestIdx] = {
           ...adjusted[bestIdx],
           servingCalories: Math.round(
@@ -298,6 +369,10 @@ export class MealAssemblerService {
           ),
           servingFat: Math.round(adjusted[bestIdx].servingFat * adjRatio),
           servingCarbs: Math.round(adjusted[bestIdx].servingCarbs * adjRatio),
+          food: {
+            ...adjusted[bestIdx].food,
+            ...(adjDesc !== undefined ? { displayServingDesc: adjDesc } : {}),
+          } as any,
         };
       }
     }
@@ -410,8 +485,7 @@ export class MealAssemblerService {
       .map((p) =>
         t('display.foodItem', {
           name: p.food.name,
-          serving:
-            p.food.standardServingDesc || `${p.food.standardServingG || 100}g`,
+          serving: p.food.standardServingDesc || `${p.food.standardServingG || 100}g`,
           calories: p.servingCalories,
         }),
       )
@@ -707,6 +781,224 @@ export class MealAssemblerService {
       carbsBudget -= sf.servingCarbs || 0;
     }
 
+    return result;
+  }
+
+  // ─── V8.5: 策略感知份量缩放 ───
+
+  /**
+   * 为 allFoods 预计算策略缓存
+   *
+   * 应在推荐管道入口处调用一次，避免每个食物每次 adjustPortions 都重新推断。
+   */
+  resolvePolicies(allFoods: FoodLibrary[]): Map<string, PortionScalingPolicy> {
+    return this.policyResolver.resolveAll(allFoods);
+  }
+
+  /**
+   * 策略感知的份量缩放（V8.5）
+   *
+   * 替代旧版 adjustPortions 的统一全局缩放。
+   * 流程：
+   * 1. 先判断每餐食物数量是否过多 → 优先减少数量
+   * 2. 按策略分类：scalable/limited_scalable/fixed_unit/not_scalable/condiment
+   * 3. 固定单位的食物保持 1x
+   * 4. 可缩放食物按克重调整
+   * 5. 调味品小克重上限
+   *
+   * @param picks 已选食物
+   * @param policies 预计算的策略映射
+   * @param budget 热量预算
+   * @param mealType 餐次类型
+   * @param portionTendency 用户份量倾向
+   * @param allCandidates 候选池（用于替换无法缩放的食物）
+   * @returns 缩放后的 ScoredFood[] + 操作日志
+   */
+  adjustPortionsWithPolicy(
+    picks: ScoredFood[],
+    policies: Map<string, PortionScalingPolicy>,
+    budget: number,
+    mealType: string,
+    portionTendency?: string | null,
+    allCandidates?: ScoredFood[],
+  ): {
+    picks: ScoredFood[];
+    actions: string[];
+  } {
+    const actions: string[] = [];
+
+    if (picks.length === 0) return { picks, actions };
+
+    // Step 0: 确保每个 pick 都有策略（兜底计算）
+    for (const pick of picks) {
+      if (!policies.has(pick.food.id)) {
+        policies.set(
+          pick.food.id,
+          this.policyResolver.resolve(pick.food),
+        );
+      }
+    }
+
+    // Step 1: 热量超标时优先移除调味品/非核心食物
+    const { picks: afterPrune, didPrune, prunedNames } =
+      this.mealPortionController.handleCalorieOverflow(
+        picks,
+        policies,
+        budget,
+      );
+
+    if (didPrune) {
+      for (const name of prunedNames) {
+        actions.push(`移除 ${name}：非核心食物/调味品，优先精简`);
+      }
+      picks = afterPrune;
+    }
+
+    // Step 2: 控制每餐食物数量
+    const { kept, removed, removedReasons } =
+      this.mealPortionController.trimExcessFoods(picks, mealType, policies);
+
+    if (removed.length > 0) {
+      picks = kept;
+      actions.push(...removedReasons);
+    }
+
+    // 去重（确保政策地图中的每个 food 只出现一次）
+    const uniquePicks: ScoredFood[] = [];
+    const seen = new Set<string>();
+    for (const p of picks) {
+      if (!seen.has(p.food.id)) {
+        seen.add(p.food.id);
+        uniquePicks.push(p);
+      }
+    }
+    picks = uniquePicks;
+
+    // Step 3: 检查固定单位食物是否严重影响预算
+    // 如果某个固定单位食物热量超过预算 50% → 尝试替换
+    const fixedFoodsIssues: ScoredFood[] = [];
+    for (const p of picks) {
+      const policy = policies.get(p.food.id);
+      if (
+        policy &&
+        (policy.mode === 'fixed_unit' || policy.mode === 'not_scalable') &&
+        (p.servingCalories || 0) > budget * 0.5 &&
+        picks.length > 1
+      ) {
+        fixedFoodsIssues.push(p);
+      }
+    }
+
+    for (const issue of fixedFoodsIssues) {
+      if (allCandidates && allCandidates.length > 0) {
+        const replacement = allCandidates.find(
+          (c) =>
+            c.food.id !== issue.food.id &&
+            !picks.some((p) => p.food.id === c.food.id) &&
+            (c.servingCalories || 0) < budget * 0.5 &&
+            (c.servingCalories || 0) > 0,
+        );
+        if (replacement) {
+          picks = picks.map((p) =>
+            p.food.id === issue.food.id ? replacement : p,
+          );
+          actions.push(
+            `${issue.food.name} 过大不适合本餐，已替换为 ${replacement.food.name}`,
+          );
+        }
+      }
+    }
+
+    if (picks.length === 0) return { picks, actions };
+
+    // // Step 4: 按策略进行份量缩放
+    // const { adjusted, totalCal } = this.portionScaling.applyBatch(
+    //   picks,
+    //   policies,
+    //   budget,
+    //   portionTendency,
+    // );
+    //
+    // // 构建返回的 ScoredFood[]
+    // const result: ScoredFood[] = adjusted.map((r, i) => {
+    //   const original = picks[i] ?? picks[picks.length - 1];
+    //   return {
+    //     food: {
+    //       ...r.food,
+    //     } as any,
+    //     score: original.score,
+    //     servingCalories: r.servingCalories,
+    //     servingProtein: r.servingProtein,
+    //     servingFat: r.servingFat,
+    //     servingCarbs: r.servingCarbs,
+    //     servingFiber: r.servingFiber,
+    //     servingGL: original.servingGL,
+    //     explanation: original.explanation,
+    //   };
+    // });
+
+    // Step 4: 策略感知份量缩放
+    const { adjusted: portionResults } = this.portionScaling.applyBatch(
+      picks,
+      policies,
+      budget,
+      portionTendency,
+    );
+
+    const result: ScoredFood[] = portionResults.map((r, i) => {
+      const original = picks[i] ?? picks[picks.length - 1];
+      return {
+        food: r.food as any,
+        score: original.score,
+        servingCalories: r.servingCalories,
+        servingProtein: r.servingProtein,
+        servingFat: r.servingFat,
+        servingCarbs: r.servingCarbs,
+        servingFiber: r.servingFiber,
+        servingGL: original.servingGL,
+        explanation: {
+          ...original.explanation,
+          scalingNote: r.scalingNote,
+        } as any,
+      };
+    });
+
+    // 记录缩放操作
+    for (const r of portionResults) {
+      if (r.wasClamped) {
+        actions.push(`${r.food.name} ${r.scalingNote || '份量已裁剪至合理范围'}`);
+      } else if (r.ratio !== 1) {
+        actions.push(
+          `${r.food.name} 份量调整至 ${r.servingCalories}kcal (${Math.round(r.ratio * 100)}% 标准份)`,
+        );
+      }
+    }
+
+    return { picks: result, actions };
+  }
+
+  /**
+   * 端到端策略感知组合+缩放（V8.5）
+   *
+   * 将 trim + prune + portion scaling 打包为一步。
+   * 供 ResultProcessor 直接调用。
+   */
+  assembleWithPolicy(
+    picks: ScoredFood[],
+    policies: Map<string, PortionScalingPolicy>,
+    budget: number,
+    mealType: string,
+    portionTendency?: string | null,
+    allCandidates?: ScoredFood[],
+  ): ScoredFood[] {
+    const { picks: result } = this.adjustPortionsWithPolicy(
+      picks,
+      policies,
+      budget,
+      mealType,
+      portionTendency,
+      allCandidates,
+    );
     return result;
   }
 

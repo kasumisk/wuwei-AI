@@ -71,7 +71,7 @@ export class FoodEnrichmentProcessor extends WorkerHost {
 
     try {
       if (target === 'translations') {
-        await this.processTranslation(foodId, locales ?? ['en-US'], staged);
+        await this.processTranslation(foodId, locales ?? ['en-US']);
       } else if (target === 'regional') {
         const targetRegions = [
           ...new Set(
@@ -266,7 +266,6 @@ export class FoodEnrichmentProcessor extends WorkerHost {
   private async processTranslation(
     foodId: string,
     locales: string[],
-    staged: boolean,
   ): Promise<void> {
     const normalizedLocales = [...new Set(locales.filter(Boolean))];
     if (normalizedLocales.length === 0) {
@@ -292,42 +291,18 @@ export class FoodEnrichmentProcessor extends WorkerHost {
 
     if (Object.keys(validResults).length === 0) return;
 
-    // 判断是否需要 staged（任一 locale 置信度低于阈值则整体 staged）
-    const shouldStage =
-      staged ||
-      Object.values(validResults).some((r) =>
-        this.enrichmentService.shouldStage(r as any, false),
-      );
-
-    if (shouldStage) {
-      // staged 模式：仍按 locale 分组写入 staged（每个 locale 一条待审记录，保持语义清晰）
-      for (const [locale, result] of Object.entries(validResults)) {
-        const logId = await this.enrichmentService.stageEnrichment(
-          foodId,
-          result as any,
-          'translations',
-          [locale],
-          undefined,
-          'ai_enrichment_worker',
-        );
-        this.logger.log(
-          `Staged（translations/${locale}）foodId=${foodId}, logId=${logId}`,
-        );
-      }
-    } else {
-      // 直接入库模式：所有 locale 一次性写入，只产生一条 changelog
-      const res = await this.enrichmentService.applyTranslationEnrichment(
-        foodId,
-        validResults,
-        'ai_enrichment_worker',
-      );
-      const summary = Object.entries(res.localesSummary)
-        .map(([l, s]) => `${l}:${s.action}(${s.fields.length}字段)`)
-        .join(', ');
-      this.logger.log(
-        `直接入库（translations 汇总）foodId=${foodId}, ${summary}`,
-      );
-    }
+    // 翻译补全直接入库，不走 staged（与地区补全策略一致）
+    const res = await this.enrichmentService.applyTranslationEnrichment(
+      foodId,
+      validResults,
+      'ai_enrichment_worker',
+    );
+    const summary = Object.entries(res.localesSummary)
+      .map(([l, s]) => `${l}:${s.action}(${s.fields.length}字段)`)
+      .join(', ');
+    this.logger.log(
+      `直接入库（translations 汇总）foodId=${foodId}, ${summary}`,
+    );
   }
 
   // ─── 地区信息补全 ──────────────────────────────────────────────────────

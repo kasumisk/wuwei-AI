@@ -25,6 +25,7 @@ export type FoodTranslationMap = Map<string, string>;
 
 export interface FoodLocalization {
   name: string;
+  servingDesc?: string;
 }
 
 export type FoodLocalizationMap = Map<string, FoodLocalization>;
@@ -34,6 +35,16 @@ export class FoodI18nService {
   private readonly logger = new Logger(FoodI18nService.name);
 
   constructor(private readonly prisma: PrismaService) {}
+
+  private resolveServingDesc(
+    localized: FoodLocalization | undefined,
+    food: ScoredFood['food'],
+  ): string | undefined {
+    return (
+      localized?.servingDesc ??
+      food.standardServingDesc
+    );
+  }
 
   private isDefaultLocale(locale: string): boolean {
     return /^zh(?:[-_]|$)/i.test(locale);
@@ -77,12 +88,14 @@ export class FoodI18nService {
         select: {
           foodId: true,
           name: true,
+          servingDesc: true,
         },
       });
 
       for (const row of rows) {
         map.set(row.foodId, {
           name: row.name,
+          servingDesc: row.servingDesc ?? undefined,
         });
       }
 
@@ -169,9 +182,9 @@ export class FoodI18nService {
         ...sf,
         food: {
           ...sf.food,
-          // 覆盖 displayName（不影响 food.name，保持内部逻辑稳定）
           displayName: localized.name,
-          displayServingDesc: sf.food.standardServingDesc,
+          standardServingDesc: this.resolveServingDesc(localized, sf.food),
+          displayServingDesc: this.resolveServingDesc(localized, sf.food),
         } as any,
       };
     });

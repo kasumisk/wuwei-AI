@@ -29,9 +29,11 @@ import {
 } from '../../../../core/events/domain-events';
 import { PrecomputeService } from './precompute.service';
 import { t, type Locale } from '../recommendation/utils/i18n-messages';
+import { normalizeDietLocale } from '../recommendation/utils/locale.util';
 import type { DecisionValueTag } from '../recommendation/types/meal.types';
 import { RequestContextService } from '../../../../core/context/request-context.service';
 import { FoodI18nService } from './food-i18n.service';
+import { FoodLibrary } from '../../../food/food.types';
 
 // ─── V7.9 Phase 3-1: 推荐粘性缓存配置 ───
 
@@ -481,9 +483,15 @@ export class FoodService {
 
       const popularFoods =
         await this.recommendationEngine.getTopPopularFoods(nextMeal);
+      const popularLocalized = await this.foodI18nService.loadLocalizedDetails(
+        popularFoods.map((f) => f.id).filter(Boolean),
+        locale,
+      );
       const popularFoodText =
         popularFoods.length > 0
-          ? popularFoods.map((f) => f.name).join('、')
+          ? popularFoods
+              .map((f) => popularLocalized.get(f.id)?.name || f.name)
+              .join('、')
           : t('food.suggestion.loading', {}, locale);
 
       this.eventEmitter.emit(
@@ -497,6 +505,10 @@ export class FoodService {
         ),
       );
 
+      const toServing = (per100g: number | undefined | null, f: FoodLibrary): number => {
+        return Math.round((Number(per100g ?? 0) * (Number(f.standardServingG) || 100)) / 100);
+      };
+
       const fallbackResult: MealSuggestionResponse = {
         mealType: nextMeal,
         remainingCalories: remaining,
@@ -504,15 +516,21 @@ export class FoodService {
           foods: popularFoodText,
           foodItems: popularFoods.map((f) => ({
             foodId: f.id,
-            name: f.name,
-            servingDesc: f.standardServingDesc || '1份',
-            calories: f.calories ?? 0,
-            protein: f.protein ?? 0,
-            fat: f.fat ?? 0,
-            carbs: f.carbs ?? 0,
+            name: popularLocalized.get(f.id)?.name || f.name,
+            servingDesc:
+              popularLocalized.get(f.id)?.servingDesc ||
+              f.standardServingDesc ||
+              `${f.standardServingG || 100}g`,
+            calories: toServing(f.calories, f),
+            protein: toServing(f.protein, f),
+            fat: toServing(f.fat, f),
+            carbs: toServing(f.carbs, f),
             category: f.category || '',
           })),
-          calories: popularFoods.reduce((s, f) => s + (f.calories ?? 0), 0),
+          calories: popularFoods.reduce(
+            (s, f) => s + toServing(f.calories, f),
+            0,
+          ),
           tip: t('food.suggestion.popularFallbackTip', {}, locale),
         },
       };
@@ -529,7 +547,8 @@ export class FoodService {
     const [mainRec, scenarioRecs] = raceResult;
     const latencyMs = Date.now() - startTime;
 
-    // recommendByScenario 没有内置翻译注入，这里补注 displayName
+    // 最终返回前统一补注 displayName / displayServingDesc，避免任一路径漏掉 locale 化份量描述。
+    await this.foodI18nService.applyToMealRecommendation(mainRec, locale);
     await Promise.all(
       Object.values(scenarioRecs).map((rec) =>
         this.foodI18nService.applyToMealRecommendation(rec, locale),
@@ -642,8 +661,7 @@ export class FoodService {
       .map((pick) => ({
         foodId: pick.food?.id || '',
         name: pick.food?.displayName || pick.food?.name || '',
-        servingDesc:
-          pick.food?.displayServingDesc || pick.food?.standardServingDesc || '',
+        servingDesc: pick.food?.standardServingDesc || '',
         calories: Math.round(Number(pick.servingCalories) || 0),
         protein: Math.round(Number(pick.servingProtein) || 0),
         fat: Math.round(Number(pick.servingFat) || 0),
@@ -671,10 +689,7 @@ export class FoodService {
     return foods
       .map((p) => {
         const name = p.food?.displayName || p.food?.name || '';
-        const serving =
-          p.food?.displayServingDesc ||
-          p.food?.standardServingDesc ||
-          `${p.food?.standardServingG || 100}g`;
+        const serving = p.food?.standardServingDesc || `${p.food?.standardServingG || 100}g`;
         const calories = Math.round(Number(p.servingCalories) || 0);
         return t(
           'display.foodItem',
@@ -942,10 +957,7 @@ export class FoodService {
   }
 
   private getCurrentLocale(): Locale {
-    const locale = this.requestCtx.locale;
-    return locale === 'en-US' || locale === 'ja-JP' || locale === 'zh-CN'
-      ? locale
-      : 'zh-CN';
+    return normalizeDietLocale(this.requestCtx.locale);
   }
 
   private buildSuggestionTip(

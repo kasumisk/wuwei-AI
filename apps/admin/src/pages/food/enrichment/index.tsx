@@ -207,7 +207,9 @@ const EnrichmentPage: React.FC = () => {
     'waiting' | 'active' | 'completed' | 'failed' | 'delayed' | undefined
   >(undefined);
   const [stagedPage, setStagedPage] = useState(1);
+  const [stagedPageSize, setStagedPageSize] = useState(20);
   const [historyPage, setHistoryPage] = useState(1);
+  const [historyPageSize, setHistoryPageSize] = useState(20);
   const [rejectModal, setRejectModal] = useState<{ open: boolean; id: string }>({
     open: false,
     id: '',
@@ -245,11 +247,11 @@ const EnrichmentPage: React.FC = () => {
   const { data: jobs, refetch: refetchJobs } = useEnrichmentJobs(jobStatusFilter, 30);
   const { data: staged, refetch: refetchStaged } = useStagedEnrichments({
     page: stagedPage,
-    pageSize: 20,
+    pageSize: stagedPageSize,
   });
   const { data: history, refetch: refetchHistory } = useEnrichmentHistory({
     page: historyPage,
-    pageSize: 20,
+    pageSize: historyPageSize,
   });
 
   const scanMutation = useScanEnrichment({
@@ -1641,9 +1643,17 @@ const EnrichmentPage: React.FC = () => {
                   }}
                   pagination={{
                     current: stagedPage,
-                    pageSize: 20,
+                    pageSize: stagedPageSize,
                     total: staged?.total ?? 0,
-                    onChange: setStagedPage,
+                    showSizeChanger: true,
+                    pageSizeOptions: ['20', '50', '100', '200', '500', '1000', '5000'],
+                    onChange: (page, pageSize) => {
+                      setStagedPage(page);
+                      if (pageSize !== stagedPageSize) {
+                        setStagedPageSize(pageSize);
+                        setStagedPage(1);
+                      }
+                    },
                     showTotal: (t) => `共 ${t} 条`,
                   }}
                   scroll={{ x: 900 }}
@@ -1715,9 +1725,17 @@ const EnrichmentPage: React.FC = () => {
                   }}
                   pagination={{
                     current: historyPage,
-                    pageSize: 20,
+                    pageSize: historyPageSize,
                     total: history?.total ?? 0,
-                    onChange: setHistoryPage,
+                    showSizeChanger: true,
+                    pageSizeOptions: ['20', '50', '100', '200', '500', '1000', '5000'],
+                    onChange: (page, pageSize) => {
+                      setHistoryPage(page);
+                      if (pageSize !== historyPageSize) {
+                        setHistoryPageSize(pageSize);
+                        setHistoryPage(1);
+                      }
+                    },
                     showTotal: (t) => `共 ${t} 条`,
                   }}
                   scroll={{ x: 1000 }}

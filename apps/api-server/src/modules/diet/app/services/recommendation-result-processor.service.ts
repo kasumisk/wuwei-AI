@@ -37,6 +37,7 @@ import type { GoalProgress } from '../../../user/app/services/goal/goal-tracker.
 import type { DailyPlanState } from '../recommendation/types/meal.types';
 import { RequestContextService } from '../../../../core/context/request-context.service';
 import type { Locale } from '../recommendation/utils/i18n-messages';
+import { normalizeDietLocale } from '../recommendation/utils/locale.util';
 
 /** 后处理所需的上下文参数 */
 export interface ResultProcessingParams {
@@ -161,11 +162,24 @@ export class RecommendationResultProcessor {
       }
     }
 
-    // ── Step 2: 份量调整 ──
-    const adjustedPicks = this.mealAssembler.adjustPortions(
+    // ── Step 2: 份量调整（V8.5: 策略感知） ──
+    // 从 allCandidates + finalPicks 中收集所有食物，预计算策略
+    const allUniqueFoods = new Map<string, ScoredFood['food']>();
+    for (const p of [...finalPicks, ...allCandidates]) {
+      if (!allUniqueFoods.has(p.food.id)) {
+        allUniqueFoods.set(p.food.id, p.food);
+      }
+    }
+    const allFoodsForPolicy = Array.from(allUniqueFoods.values());
+    const policies = this.mealAssembler.resolvePolicies(allFoodsForPolicy);
+
+    const adjustedPicks = this.mealAssembler.assembleWithPolicy(
       templateFilledPicks,
+      policies,
       target.calories,
+      mealType,
       userProfile?.portionTendency,
+      allCandidates,
     );
 
     const toppedUpPicks = this.mealAssembler.ensureMinimumCalorieCoverage(
@@ -179,10 +193,13 @@ export class RecommendationResultProcessor {
     const finalizedPicks =
       toppedUpPicks.length === adjustedPicks.length
         ? adjustedPicks
-        : this.mealAssembler.adjustPortions(
+        : this.mealAssembler.assembleWithPolicy(
             toppedUpPicks,
+            policies,
             target.calories,
+            mealType,
             userProfile?.portionTendency,
+            allCandidates,
           );
 
     // ── Step 3: 结果聚合 ──
@@ -263,9 +280,6 @@ export class RecommendationResultProcessor {
   }
 
   private getCurrentLocale(): Locale {
-    const locale = this.requestCtx.locale;
-    return locale === 'en-US' || locale === 'ja-JP' || locale === 'zh-CN'
-      ? locale
-      : 'zh-CN';
+    return normalizeDietLocale(this.requestCtx.locale);
   }
 }

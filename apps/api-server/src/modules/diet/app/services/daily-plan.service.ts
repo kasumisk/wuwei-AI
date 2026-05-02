@@ -31,6 +31,7 @@ import {
   MealSlot,
 } from '../recommendation/optimization/global-optimizer';
 import { getSupportedLocales, t } from '../recommendation/utils/i18n-messages';
+import { normalizeDietLocale } from '../recommendation/utils/locale.util';
 import {
   getUserLocalDate,
   getUserLocalHour,
@@ -72,7 +73,6 @@ interface MealRecLike {
       name: string;
       displayName?: string;
       standardServingDesc?: string;
-      displayServingDesc?: string;
       standardServingG: number;
       category: string;
     };
@@ -100,7 +100,6 @@ function toMealPlan(
             foodId: sf.food?.id ?? '',
             name: sf.food?.displayName ?? sf.food?.name ?? '',
             servingDesc:
-              sf.food?.displayServingDesc ||
               sf.food?.standardServingDesc ||
               `${sf.food?.standardServingG || 100}g`,
             calories: sf.servingCalories ?? 0,
@@ -157,10 +156,7 @@ export class DailyPlanService {
   ) {}
 
   private getCurrentLocale(): Locale {
-    const locale = this.requestCtx.locale;
-    return locale === 'en-US' || locale === 'ja-JP' || locale === 'zh-CN'
-      ? locale
-      : 'zh-CN';
+    return normalizeDietLocale(this.requestCtx.locale);
   }
 
   /**
@@ -269,6 +265,13 @@ export class DailyPlanService {
           healthConditions: (profile.healthConditions as string[]) || [],
           regionCode: (profile.regionCode as string) || 'CN',
           timezone: profile.timezone ?? undefined,
+          // Final-fix P0-1: 透传 cuisinePreferences 供 CuisineRegionFilterService
+          // 用于跨 region cuisine 硬过滤（避免 US/JP 用户拿到纯中餐）
+          cuisinePreferences:
+            ((profile as any).cuisinePreferences as
+              | string[]
+              | null
+              | undefined) ?? undefined,
         }
       : undefined;
 
@@ -453,6 +456,13 @@ export class DailyPlanService {
           healthConditions: (profile.healthConditions as string[]) || [],
           regionCode: (profile.regionCode as string) || 'CN',
           timezone: profile.timezone ?? undefined,
+          // Final-fix P0-1: 透传 cuisinePreferences 供 CuisineRegionFilterService
+          // 用于跨 region cuisine 硬过滤（避免 US/JP 用户拿到纯中餐）
+          cuisinePreferences:
+            ((profile as any).cuisinePreferences as
+              | string[]
+              | null
+              | undefined) ?? undefined,
         }
       : undefined;
 
@@ -901,6 +911,7 @@ export class DailyPlanService {
         nutritionHighlights: exp.nutritionHighlights,
         healthTip: exp.healthTip,
         scoreBreakdown,
+        locale,
         // V6 2.7: 附带 V2 可视化数据（前端支持时使用）
         v2: v2Data,
       };
@@ -1128,7 +1139,7 @@ export class DailyPlanService {
 
   private localizeMealFoodItems(
     foodItems: MealFoodItem[] | undefined,
-    foodLocalizationMap: Map<string, { name: string }>,
+    foodLocalizationMap: Map<string, { name: string; servingDesc?: string }>,
   ): MealFoodItem[] | undefined {
     if (!foodItems) return foodItems;
 
@@ -1141,13 +1152,14 @@ export class DailyPlanService {
       return {
         ...item,
         name: localized.name,
+        servingDesc: localized.servingDesc ?? item.servingDesc,
       };
     });
   }
 
   private rebuildMealFoodsText(
     foodItems: MealFoodItem[] | undefined,
-    foodLocalizationMap: Map<string, { name: string }>,
+    foodLocalizationMap: Map<string, { name: string; servingDesc?: string }>,
     locale: Locale,
   ): string | undefined {
     if (!foodItems?.length) return undefined;
@@ -1161,7 +1173,7 @@ export class DailyPlanService {
           'display.foodItem',
           {
             name: localized?.name || item.name,
-            serving: item.servingDesc || '',
+            serving: localized?.servingDesc ?? item.servingDesc ?? '',
             calories: item.calories ?? 0,
           },
           locale,
@@ -1202,6 +1214,14 @@ export class DailyPlanService {
     locale: Locale,
   ): Record<string, MealFoodExplanation> | undefined {
     if (!explanations) return explanations;
+
+    const hasLocaleMismatch = Object.values(explanations).some((explanation) => {
+      const storedLocale = explanation.locale || explanation.v2?.locale;
+      return storedLocale && storedLocale !== locale;
+    });
+    if (hasLocaleMismatch) {
+      return undefined;
+    }
 
     const tagAliasMap = this.buildLocalizedAliasMap(
       [

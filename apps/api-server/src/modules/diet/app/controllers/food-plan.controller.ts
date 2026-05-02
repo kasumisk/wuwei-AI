@@ -108,7 +108,6 @@ export class FoodPlanController {
    * GET /api/app/food/daily-plan
    */
   @Get('daily-plan')
-  @RequireFeature(GatedFeature.FULL_DAY_PLAN)
   @ApiOperation({ summary: '获取今日饮食计划' })
   async getDailyPlan(
     @CurrentAppUser() user: AppUserPayload,
@@ -128,10 +127,12 @@ export class FoodPlanController {
    *
    * 返回包含 7 天的计划摘要和周均营养汇总。
    * 跨天多样性由 WeeklyPlanService 自动保证（V5 2.3 排除集传递）。
+   * 仅订阅用户（PRO/PREMIUM）可访问，需具备 WEEKLY_PLAN 权益。
    */
   @Get('weekly-plan')
+  @RequireFeature(GatedFeature.WEEKLY_PLAN)
   @UserApiThrottle(5, 60)
-  @ApiOperation({ summary: '获取本周饮食计划' })
+  @ApiOperation({ summary: '获取本周饮食计划（需订阅权益）' })
   async getWeeklyPlan(
     @CurrentAppUser() user: AppUserPayload,
   ): Promise<ApiResponse> {
@@ -149,7 +150,6 @@ export class FoodPlanController {
    * POST /api/app/food/daily-plan/adjust
    */
   @Post('daily-plan/adjust')
-  @RequireFeature(GatedFeature.FULL_DAY_PLAN)
   @AiHeavyThrottle(3, 60)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '触发饮食计划调整' })
@@ -181,7 +181,6 @@ export class FoodPlanController {
    * POST /api/app/food/daily-plan/regenerate
    */
   @Post('daily-plan/regenerate')
-  @RequireFeature(GatedFeature.FULL_DAY_PLAN)
   @AiHeavyThrottle(3, 60)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '强制重新生成今日饮食计划' })
@@ -268,7 +267,8 @@ export class FoodPlanController {
         subCategory: s.food.subCategory,
         mainIngredient: s.food.mainIngredient,
         servingDesc:
-          s.food.standardServingDesc || `${s.food.standardServingG}g`,
+          s.food.standardServingDesc ||
+          `${s.food.standardServingG}g`,
         servingCalories: s.servingCalories,
         servingProtein: s.servingProtein,
         servingFat: s.servingFat,

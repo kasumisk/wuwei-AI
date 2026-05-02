@@ -150,18 +150,68 @@ export class WeeklyPlanService {
       }
     }
 
-    // 并行生成所有缺失天的计划
-    const generatedPlans = await Promise.all(
-      missingDates.map((date) =>
-        this.dailyPlanService
-          .generatePlanForDate(userId, date, weekFoodNames, preloaded)
-          .then((plan) => ({ date, plan })),
-      ),
-    );
+    // Final-fix P0-2 V2：跨天重复修复（foodId 维度去重）
+    // 原实现按 name 维度计 frequency，但同一 foodId 在不同天经过 i18n 后
+    // 可能产生不同 name（如"红薯（蒸）"→ "Steamed Sweet Potato"），
+    // 导致同 foodId 出现 3-4 次仍未触发 cap → 用户体验差。
+    // 修复：frequency Map 用 foodId 作为 key；超 cap 的 foodId 把它在
+    // 各天出现过的所有 name 都加入 excludeSet（daily-plan 下游按 name 排除）。
+    const FREQUENCY_CAP = 2;
+    const foodIdFrequency = new Map<string, number>();
+    const foodIdToNames = new Map<string, Set<string>>();
+    // 已有计划先入账
+    for (const plan of existingPlans) {
+      this.extractFoodIdNameMap(plan, foodIdToNames);
+    }
+    for (const [id, names] of foodIdToNames) {
+      foodIdFrequency.set(id, names.size === 0 ? 0 : 1);
+      // 注：已有计划同 id 同天可能多 item，但保守按 1 计入；下方循环每新增一天 +1
+    }
+    const buildExcludeSet = (): Set<string> => {
+      const ex = new Set<string>();
+      for (const [id, count] of foodIdFrequency) {
+        if (count >= FREQUENCY_CAP) {
+          const names = foodIdToNames.get(id);
+          if (names) for (const n of names) ex.add(n);
+        }
+      }
+      // 兼容：把 weekFoodNames（已有计划）也并入软排除
+      for (const n of weekFoodNames) ex.add(n);
+      return ex;
+    };
 
-    // 将生成的食物名加入排除集（供后续查询/展示使用）
-    for (const { plan } of generatedPlans) {
-      this.extractFoodNames(plan, weekFoodNames);
+    const generatedPlans: { date: string; plan: any }[] = [];
+    for (const date of missingDates) {
+      const excludeSet = buildExcludeSet();
+      const plan = await this.dailyPlanService.generatePlanForDate(
+        userId,
+        date,
+        excludeSet,
+        preloaded,
+      );
+      // 累积新一天的 foodId 到频次表
+      const dayMap = new Map<string, Set<string>>();
+      this.extractFoodIdNameMap(plan, dayMap);
+      const dupItems: string[] = [];
+      for (const [id, names] of dayMap) {
+        const before = foodIdFrequency.get(id) ?? 0;
+        if (before >= FREQUENCY_CAP) {
+          dupItems.push(`${id.slice(0, 8)}[${[...names].join('|')}](${before + 1})`);
+        }
+        foodIdFrequency.set(id, before + 1);
+        if (!foodIdToNames.has(id)) foodIdToNames.set(id, new Set());
+        for (const n of names) {
+          foodIdToNames.get(id)!.add(n);
+          weekFoodNames.add(n); // 兼容外部统计
+        }
+      }
+      if (dupItems.length > 0) {
+        this.logger.warn(
+          `[WeeklyPlan][${userId.slice(0, 8)}] date=${date} ` +
+            `EXCEEDED CAP despite excludeSet: ${dupItems.join(', ')}`,
+        );
+      }
+      generatedPlans.push({ date, plan });
     }
 
     // 按原始日期顺序组装结果
@@ -253,6 +303,33 @@ export class WeeklyPlanService {
       if (!meal?.foodItems) continue;
       for (const item of meal.foodItems) {
         if (item.name) target.add(item.name);
+      }
+    }
+  }
+
+  /**
+   * Final-fix P0-2 V2: 从计划中提取所有 foodId + name 映射
+   * weekly-plan 用 foodId 维度做硬 cap（同 foodId 在不同天 i18n 出不同 name），
+   * 同时收集对应 names 推到 excludeSet（daily-plan 下游按 name 排除）。
+   */
+  private extractFoodIdNameMap(
+    plan: any,
+    target: Map<string, Set<string>>,
+  ): void {
+    const meals = [
+      plan.morningPlan,
+      plan.lunchPlan,
+      plan.dinnerPlan,
+      plan.snackPlan,
+    ];
+    for (const meal of meals) {
+      if (!meal?.foodItems) continue;
+      for (const item of meal.foodItems) {
+        const id = item.foodId as string | undefined;
+        const name = item.name as string | undefined;
+        if (!id || !name) continue;
+        if (!target.has(id)) target.set(id, new Set());
+        target.get(id)!.add(name);
       }
     }
   }

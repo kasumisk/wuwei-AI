@@ -126,8 +126,8 @@ const CAPABILITY_FEATURES: Array<{ key: string; label: string; tip: string }> = 
     tip: '是否基于用户目标推荐个性化替代食物',
   },
   { key: 'reports', label: '周报/月报', tip: '是否可生成饮食周报和月报' },
-  { key: 'full_day_plan', label: '全天膳食规划', tip: 'V2 每日三餐计划功能' },
   { key: 'full_day_linkage', label: '全天膳食联动', tip: 'V2 跨餐纠偏和下一餐联动建议' },
+  { key: 'weekly_plan', label: '周膳食规划', tip: '每周7天膳食计划，仅订阅用户可生成' },
   { key: 'recipe_generation', label: '食谱生成', tip: '是否可生成个性化食谱' },
   { key: 'health_trend', label: '健康趋势分析', tip: '是否可查看长期健康趋势图表' },
   { key: 'priority_ai', label: '优先 AI 响应', tip: '请求优先级高于免费用户' },
@@ -798,9 +798,9 @@ const SubscriptionPlanManagement: React.FC = () => {
           <Space size={4} wrap>
             <Tag style={{ fontSize: 11 }}>图片 {fmt(imgVal)}</Tag>
             <Tag style={{ fontSize: 11 }}>教练 {fmt(coachVal)}</Tag>
-            {!!e['full_day_plan'] && (
+            {!!e['weekly_plan'] && (
               <Tag color="blue" style={{ fontSize: 11 }}>
-                日计划
+                周计划
               </Tag>
             )}
             {!!e['behavior_analysis'] && (

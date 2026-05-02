@@ -172,10 +172,11 @@ export class FoodScorerService {
       regionCode,
     } = ctx;
 
-    const servingCal = (Number(food.calories) * food.standardServingG) / 100;
-    const servingProtein = ((food.protein || 0) * food.standardServingG) / 100;
-    const servingCarbs = ((food.carbs || 0) * food.standardServingG) / 100;
-    const servingFat = ((food.fat || 0) * food.standardServingG) / 100;
+    const servingG = Number(food.standardServingG) || 100;
+    const servingCal = (Number(food.calories) * servingG) / 100;
+    const servingProtein = ((food.protein || 0) * servingG) / 100;
+    const servingCarbs = ((food.carbs || 0) * servingG) / 100;
+    const servingFat = ((food.fat || 0) * servingG) / 100;
 
     const quality =
       food.qualityScore ||
@@ -913,7 +914,7 @@ export class FoodScorerService {
   ): number {
     // 优先使用个性化纤维目标，回退到中国膳食指南中值 27.5g
     const dailyFiberTarget = nutritionTargets?.fiber ?? 27.5;
-    const fiber = ((food.fiber || 0) * food.standardServingG) / 100; // 按份量换算
+    const fiber = ((food.fiber || 0) * (Number(food.standardServingG) || 100)) / 100; // 按份量换算
 
     // 获取餐次热量比例作为纤维分配比例
     const ratios = MEAL_RATIOS[goalType] || MEAL_RATIOS.health;

@@ -35,6 +35,7 @@ import {
 
 import { ReplacementFeedbackInjectorService } from '../recommendation/feedback/replacement-feedback-injector.service';
 import { RealisticFilterService } from '../recommendation/filter/realistic-filter.service';
+import { CuisineRegionFilterService } from '../recommendation/filter/cuisine-region-filter.service';
 import { FoodI18nService } from './food-i18n.service';
 import { RequestContextService } from '../../../../core/context/request-context.service';
 import { ScoringConfigService } from '../recommendation/context/scoring-config.service';
@@ -58,6 +59,7 @@ import { DEFAULT_REGION_CODE } from '../../../../common/config/regional-defaults
 import { DEFAULT_TIMEZONE } from '../../../../common/config/regional-defaults';
 import { getUserLocalMonth } from '../../../../common/utils/timezone.util';
 import { t, type Locale } from '../recommendation/utils/i18n-messages';
+import { normalizeDietLocale } from '../recommendation/utils/locale.util';
 
 /** 反向解释 API 返回结构 */
 export interface WhyNotResult {
@@ -100,6 +102,9 @@ export class RecommendationEngineService implements OnModuleInit {
     private readonly recipeService: RecipeService,
     /** 现实性过滤服务（场景动态 realism + 候选过滤） */
     private readonly realisticFilterService: RealisticFilterService,
+    /** Final-fix P0-1: 跨 region cuisine 硬过滤（在 recommendMealFromPool 入口
+     * 对 allFoods 整体过一次，避免下游 ensureMinCandidates 等 fallback 路径绕过） */
+    private readonly cuisineRegionFilter: CuisineRegionFilterService,
     /** 替换反馈权重注入服务 */
     private readonly replacementFeedbackInjector: ReplacementFeedbackInjectorService,
     /** 推荐结果多语言服务 */
@@ -146,16 +151,7 @@ export class RecommendationEngineService implements OnModuleInit {
   }
 
   private resolveLocale(locale?: string): Locale {
-    if (locale === 'en-US' || locale === 'ja-JP' || locale === 'zh-CN') {
-      return locale;
-    }
-
-    const requestLocale = this.requestCtx.locale;
-    return requestLocale === 'en-US' ||
-      requestLocale === 'ja-JP' ||
-      requestLocale === 'zh-CN'
-      ? requestLocale
-      : 'zh-CN';
+    return normalizeDietLocale(locale || this.requestCtx.locale);
   }
 
   // ─── 核心推荐函数 ───
@@ -1049,14 +1045,14 @@ export class RecommendationEngineService implements OnModuleInit {
       userProfile,
       userProfile?.timezone,
     );
-    const servingCal = (food.calories * food.standardServingG) / 100;
+    const servingCal = (food.calories * (Number(food.standardServingG) || 100)) / 100;
     if (servingCal > constraints.maxCalories) {
       filterReasons.push(t('filter_reason.calorieTooHigh', {}, resolvedLocale));
     }
 
     // 2d. 蛋白质不足
     if (constraints.minProtein > 0 && food.protein) {
-      const servingProtein = (food.protein * food.standardServingG) / 100;
+      const servingProtein = (food.protein * (Number(food.standardServingG) || 100)) / 100;
       if (servingProtein < constraints.minProtein) {
         filterReasons.push(
           resolvedLocale === 'en-US'

@@ -300,7 +300,7 @@ export class QuotaGateService {
         'subscription.featureName.personalizedAlternatives',
       [GatedFeature.REPORTS]: 'subscription.featureName.reports',
       [GatedFeature.DATA_EXPORT]: 'subscription.featureName.dataExport',
-      [GatedFeature.FULL_DAY_PLAN]: 'subscription.featureName.fullDayPlan',
+      [GatedFeature.WEEKLY_PLAN]: 'subscription.featureName.weeklyPlan',
       [GatedFeature.FULL_DAY_LINKAGE]:
         'subscription.featureName.fullDayLinkage',
       [GatedFeature.RECIPE_GENERATION]:

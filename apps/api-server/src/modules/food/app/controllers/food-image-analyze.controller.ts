@@ -90,7 +90,7 @@ export class FoodImageAnalyzeController {
 
   @Post('analyze')
   @HttpCode(HttpStatus.OK)
-  @AiHeavyThrottle(5, 60)
+  @AiHeavyThrottle(20, 60)
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: '上传食物图片 AI 分析（异步）' })
@@ -170,6 +170,7 @@ export class FoodImageAnalyzeController {
   // ─── GET analyze/:requestId ───
 
   @Get('analyze/:requestId')
+  @UserApiThrottle(120, 60)
   @ApiOperation({ summary: '获取 AI 分析结果（轮询）' })
   @ApiParam({ name: 'requestId', description: '分析任务 ID' })
   async getAnalysisResult(

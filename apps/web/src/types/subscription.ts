@@ -30,7 +30,7 @@ export type GatedFeature =
   | 'personalized_alternatives'
   | 'reports'
   | 'data_export'
-  | 'full_day_plan'
+  | 'weekly_plan'
   | 'full_day_linkage'
   | 'recipe_generation'
   | 'health_trend'
@@ -57,7 +57,7 @@ export interface FeatureEntitlements {
   deep_nutrition: boolean;
   personalized_alternatives: boolean;
   reports: boolean;
-  full_day_plan: boolean;
+  weekly_plan: boolean;
   full_day_linkage: boolean;
   recipe_generation: boolean;
   health_trend: boolean;

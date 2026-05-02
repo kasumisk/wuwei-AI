@@ -1,6 +1,7 @@
 // Enums and types extracted from entity files for use after TypeORM removal
 
 import type { ExplanationV2 } from './app/recommendation/types/scoring-explanation.interface';
+import type { Locale } from './app/recommendation/utils/i18n-messages';
 
 /**
  * 实验状态
@@ -69,6 +70,7 @@ export interface MealFoodExplanation {
   }>;
   healthTip?: string;
   scoreBreakdown?: Array<{ dimension: string; score: number }>;
+  locale?: Locale;
   /** V6 2.7: 完整 V2 可视化解释（可选，前端支持时使用） */
   v2?: ExplanationV2;
 }

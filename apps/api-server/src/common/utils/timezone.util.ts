@@ -14,6 +14,41 @@ import { DEFAULT_TIMEZONE as REGIONAL_DEFAULT_TIMEZONE } from '../config/regiona
 export const DEFAULT_TIMEZONE = REGIONAL_DEFAULT_TIMEZONE;
 
 /**
+ * Final-fix P1-7：非法/未知 IANA 时区 fallback
+ *
+ * 现状：用户 profile 可能写入非法 timezone（'GMT+8'/空字符串/老的 deprecated 'CST'），
+ * 直接传给 Intl.DateTimeFormat 会抛 RangeError: Invalid time zone specified。
+ * 在生产环境多处调用栈（recommend / scoring / 报表）都可能因此崩溃。
+ *
+ * 这里集中做一次 valid-check + warn-once 缓存，failure 走 DEFAULT_TIMEZONE。
+ * 调用者无需改动；valid 缓存避免热点 path 反复 try/catch。
+ */
+const tzValidCache = new Map<string, string>();
+const tzWarnedSet = new Set<string>();
+function safeTimezone(tz: string | null | undefined): string {
+  if (!tz) return DEFAULT_TIMEZONE;
+  const cached = tzValidCache.get(tz);
+  if (cached) return cached;
+  try {
+    // 真实使用 Intl 验证；非法时区会抛 RangeError
+    new Intl.DateTimeFormat('en-US', { timeZone: tz }).format(new Date());
+    tzValidCache.set(tz, tz);
+    return tz;
+  } catch {
+    if (!tzWarnedSet.has(tz)) {
+      tzWarnedSet.add(tz);
+      // 仅 warn 一次，避免日志爆炸
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[timezone.util] invalid timezone '${tz}', falling back to '${DEFAULT_TIMEZONE}'`,
+      );
+    }
+    tzValidCache.set(tz, DEFAULT_TIMEZONE);
+    return DEFAULT_TIMEZONE;
+  }
+}
+
+/**
  * 获取用户本地日期字符串（YYYY-MM-DD 格式）
  *
  * @param timezone IANA 时区字符串，如 'Asia/Shanghai'
@@ -24,8 +59,9 @@ export function getUserLocalDate(
   timezone: string = DEFAULT_TIMEZONE,
   date: Date = new Date(),
 ): string {
+  const tz = safeTimezone(timezone);
   // en-CA locale 保证输出 YYYY-MM-DD 格式
-  return date.toLocaleDateString('en-CA', { timeZone: timezone });
+  return date.toLocaleDateString('en-CA', { timeZone: tz });
 }
 
 /**
@@ -39,9 +75,10 @@ export function getUserLocalHour(
   timezone: string = DEFAULT_TIMEZONE,
   date: Date = new Date(),
 ): number {
+  const tz = safeTimezone(timezone);
   return Number(
     date.toLocaleString('en-US', {
-      timeZone: timezone,
+      timeZone: tz,
       hour: 'numeric',
       hour12: false,
     }),
@@ -59,9 +96,10 @@ export function getUserLocalDayOfWeek(
   timezone: string = DEFAULT_TIMEZONE,
   date: Date = new Date(),
 ): number {
+  const tz = safeTimezone(timezone);
   // 用 en-US locale 的 weekday: 'short' 拿到缩写，再映射为数字
   const weekdayStr = date.toLocaleDateString('en-US', {
-    timeZone: timezone,
+    timeZone: tz,
     weekday: 'short',
   });
   const map: Record<string, number> = {
@@ -101,9 +139,10 @@ export function getUserLocalMonth(
   timezone: string = DEFAULT_TIMEZONE,
   date: Date = new Date(),
 ): number {
+  const tz = safeTimezone(timezone);
   // 'numeric' month → "1".."12"
   const monthStr = date.toLocaleString('en-US', {
-    timeZone: timezone,
+    timeZone: tz,
     month: 'numeric',
   });
   const m = Number(monthStr);
@@ -148,9 +187,10 @@ export function getUserLocalDayBounds(
  * @param date 参考时间点（用于确定夏令时状态）
  */
 function getTimezoneOffsetMs(timezone: string, date: Date): number {
+  const tz = safeTimezone(timezone);
   // 构造两个格式化器：一个 UTC、一个目标时区
   const utcStr = date.toLocaleString('en-US', { timeZone: 'UTC' });
-  const tzStr = date.toLocaleString('en-US', { timeZone: timezone });
+  const tzStr = date.toLocaleString('en-US', { timeZone: tz });
   // 解析为 Date 对象计算差值（Date.parse 以本地时区解析，但两者一致所以差值正确）
   return new Date(tzStr).getTime() - new Date(utcStr).getTime();
 }

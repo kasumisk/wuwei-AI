@@ -34,14 +34,16 @@ export class ComparisonExplanationService {
 
     try {
       const raw = ClsServiceManager.getClsService()?.get('locale');
-      if (raw === 'en-US' || raw === 'zh-CN' || raw === 'ja-JP') {
-        return raw;
+      if (typeof raw === 'string') {
+        if (/^en(?:[-_]|$)/i.test(raw)) return 'en-US';
+        if (/^ja(?:[-_]|$)/i.test(raw)) return 'ja-JP';
+        if (/^zh(?:[-_]|$)/i.test(raw)) return 'zh-CN';
       }
     } catch {
       // Ignore missing CLS context and fallback below.
     }
 
-    return 'zh-CN';
+    return 'en-US';
   }
 
   /**

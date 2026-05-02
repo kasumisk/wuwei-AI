@@ -15,6 +15,7 @@
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { ScoringConfigService } from './scoring-config.service';
+import { CuisineRegionFilterService } from '../filter/cuisine-region-filter.service';
 import {
   DEFAULT_TIMEZONE,
   getUserLocalMonth,
@@ -57,7 +58,12 @@ export class PipelineContextFactory {
   private readonly warnedMissingTimezone = new Set<string>();
   private readonly warnedMissingRegion = new Set<string>();
 
-  constructor(private readonly scoringConfigService: ScoringConfigService) {}
+  constructor(
+    private readonly scoringConfigService: ScoringConfigService,
+    /** Final-fix P0-1: 在 ctx 构建入口对 allFoods 做一次性 cuisineRegionFilter，
+     * 让下游 ensureMinCandidates 等 fallback 路径也无法绕过 cuisine 约束 */
+    private readonly cuisineRegionFilter: CuisineRegionFilterService,
+  ) {}
 
   /**
    * 构建完整的 PipelineContext
@@ -115,7 +121,13 @@ export class PipelineContextFactory {
 
     return {
       // ── 核心字段 ──
-      allFoods: req.allFoods,
+      // Final-fix P0-1: 在入口处对 allFoods 做一次性 cuisine 区域过滤，
+      // 保证 ensureMinCandidates 等 fallback 路径也无法绕过 cuisine 约束
+      allFoods: this.cuisineRegionFilter.filter(
+        req.allFoods,
+        regionCode,
+        req.userProfile?.cuisinePreferences,
+      ),
       mealType: req.mealType,
       goalType: req.goalType,
       target: req.target,

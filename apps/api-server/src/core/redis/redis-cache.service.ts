@@ -34,6 +34,7 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RedisCacheService.name);
   private client: Redis | null = null;
   private _isConnected = false;
+  private _isConfigured = false;
   /**
    * V6.7 P1-6: 缓存 key 版本号后缀
    *
@@ -45,18 +46,93 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
 
   constructor(private readonly configService: ConfigService) {
     this.cacheVersion = configService.get<string>('CACHE_VERSION') || 'v1';
-  }
 
-  /** Redis 是否可用 */
-  get isConnected(): boolean {
-    return this._isConnected;
-  }
-
-  async onModuleInit(): Promise<void> {
+    // ─── 在构造函数中立即初始化 ioredis 客户端 ───────────────────────────
+    // 原因：ThrottlerModule.forRootAsync 的 useFactory 在依赖注入阶段（模块
+    // 实例化时）同步执行，早于 onModuleInit。若在 onModuleInit 才创建 client，
+    // useFactory 读到的 client 永远是 null，ThrottlerModule 始终使用内存存储，
+    // 导致计数器无法跨实例共享，且触发内存存储 bug（clearExpirationTimes 清掉
+    // 全局 timer）。
+    // ioredis 使用 lazyConnect:false，构造后立即开始建连，命令自动排队等待
+    // ready。onModuleInit 仅 ping() 确认连接就绪，不再重复创建 client。
     const redisUrl = this.configService.get<string>('REDIS_URL');
     const host = this.configService.get<string>('REDIS_HOST');
 
     if (!redisUrl && !host) {
+      return; // 未配置 Redis，保持 client=null，onModuleInit 打印 warn
+    }
+
+    const password =
+      this.configService.get<string>('REDIS_PASSWORD') || undefined;
+    const db = parseInt(
+      this.configService.get<string>('REDIS_DB') || '0',
+      10,
+    );
+
+    if (redisUrl) {
+      this.client = new Redis(redisUrl, {
+        password,
+        db,
+        maxRetriesPerRequest: 3,
+        enableReadyCheck: true,
+        lazyConnect: false,
+        connectTimeout: 5000,
+        commandTimeout: 2000,
+        retryStrategy: this.buildRetryStrategy(),
+      });
+    } else {
+      this.client = new Redis({
+        host: host!,
+        port: parseInt(
+          this.configService.get<string>('REDIS_PORT') || '6379',
+          10,
+        ),
+        password,
+        db,
+        maxRetriesPerRequest: 3,
+        enableReadyCheck: true,
+        lazyConnect: false,
+        connectTimeout: 5000,
+        commandTimeout: 2000,
+        retryStrategy: this.buildRetryStrategy(),
+      });
+    }
+
+    this._isConfigured = true;
+
+    this.client.on('error', (err: Error) => {
+      if (this._isConnected) {
+        this.logger.warn(`Redis connection error: ${err.message}`);
+      }
+      this._isConnected = false;
+    });
+
+    this.client.on('ready', () => {
+      this._isConnected = true;
+      this.logger.log('Redis connected successfully (ioredis)');
+    });
+
+    this.client.on('end', () => {
+      this._isConnected = false;
+    });
+  }
+
+  /** Redis 是否可用（已连接） */
+  get isConnected(): boolean {
+    return this._isConnected;
+  }
+
+  /**
+   * Redis 是否已配置（不代表已连接）。
+   * 用于 ThrottlerModule.forRootAsync useFactory：只要配置了 Redis 就传入
+   * client，无需等待连接就绪（ioredis 会自动排队命令）。
+   */
+  get isConfigured(): boolean {
+    return this._isConfigured;
+  }
+
+  async onModuleInit(): Promise<void> {
+    if (!this.client) {
       this.logger.warn(
         'Redis not configured (REDIS_URL / REDIS_HOST missing). Running in memory-only mode.',
       );
@@ -64,61 +140,7 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
     }
 
     try {
-      const password =
-        this.configService.get<string>('REDIS_PASSWORD') || undefined;
-      const db = parseInt(
-        this.configService.get<string>('REDIS_DB') || '0',
-        10,
-      );
-
-      if (redisUrl) {
-        // URL 模式：直接传给 ioredis（支持 redis:// 和 rediss://）
-        this.client = new Redis(redisUrl, {
-          password,
-          db,
-          maxRetriesPerRequest: 3,
-          enableReadyCheck: true,
-          lazyConnect: false,
-          connectTimeout: 5000,
-          commandTimeout: 2000,
-          retryStrategy: this.buildRetryStrategy(),
-        });
-      } else {
-        // Host/Port 模式
-        this.client = new Redis({
-          host: host!,
-          port: parseInt(
-            this.configService.get<string>('REDIS_PORT') || '6379',
-            10,
-          ),
-          password,
-          db,
-          maxRetriesPerRequest: 3,
-          enableReadyCheck: true,
-          lazyConnect: false,
-          connectTimeout: 5000,
-          commandTimeout: 2000,
-          retryStrategy: this.buildRetryStrategy(),
-        });
-      }
-
-      this.client.on('error', (err: Error) => {
-        if (this._isConnected) {
-          this.logger.warn(`Redis connection error: ${err.message}`);
-        }
-        this._isConnected = false;
-      });
-
-      this.client.on('ready', () => {
-        this._isConnected = true;
-        this.logger.log('Redis connected successfully (ioredis)');
-      });
-
-      this.client.on('end', () => {
-        this._isConnected = false;
-      });
-
-      // ioredis connects automatically; wait for 'ready' via ping
+      // 等待连接就绪，确保应用启动前 Redis 可用
       await this.client.ping();
       this._isConnected = true;
     } catch (err) {
@@ -126,6 +148,7 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
         `Failed to connect to Redis: ${err}. Falling back to memory cache.`,
       );
       this.client = null;
+      this._isConfigured = false;
       this._isConnected = false;
     }
   }

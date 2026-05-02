@@ -83,6 +83,7 @@ export enum PaymentStatus {
  *
  * V6.1 新增: AI_TEXT_ANALYSIS, PERSONALIZED_ALTERNATIVES, ANALYSIS_HISTORY,
  *            DEEP_NUTRITION, FULL_DAY_LINKAGE
+ * V6.2 变更: FULL_DAY_PLAN → WEEKLY_PLAN（全天膳食规划权益改为周膳食规划权益）
  */
 export enum GatedFeature {
   /** 每日推荐次数 */
@@ -107,8 +108,8 @@ export enum GatedFeature {
   REPORTS = 'reports',
   /** 数据导出 */
   DATA_EXPORT = 'data_export',
-  /** 全天膳食规划 */
-  FULL_DAY_PLAN = 'full_day_plan',
+  /** 周膳食规划（V6.2 变更：原全天膳食规划，权益升级为周计划） */
+  WEEKLY_PLAN = 'weekly_plan',
   /** 全天膳食联动建议（V6.1 新增：跨餐建议、下一餐纠偏） */
   FULL_DAY_LINKAGE = 'full_day_linkage',
   /** 食谱生成 */
@@ -151,7 +152,7 @@ export interface FeatureEntitlements {
   [GatedFeature.DEEP_NUTRITION]: boolean;
   [GatedFeature.PERSONALIZED_ALTERNATIVES]: boolean;
   [GatedFeature.REPORTS]: boolean;
-  [GatedFeature.FULL_DAY_PLAN]: boolean;
+  [GatedFeature.WEEKLY_PLAN]: boolean;
   [GatedFeature.FULL_DAY_LINKAGE]: boolean;
   [GatedFeature.RECIPE_GENERATION]: boolean;
   [GatedFeature.HEALTH_TREND]: boolean;
@@ -195,7 +196,7 @@ export const TIER_ENTITLEMENTS: Record<SubscriptionTier, FeatureEntitlements> =
       [GatedFeature.PERSONALIZED_ALTERNATIVES]: true,
       [GatedFeature.REPORTS]: true,
       [GatedFeature.DATA_EXPORT]: false,
-      [GatedFeature.FULL_DAY_PLAN]: false,
+      [GatedFeature.WEEKLY_PLAN]: false,
       [GatedFeature.FULL_DAY_LINKAGE]: false,
       [GatedFeature.RECIPE_GENERATION]: false,
       [GatedFeature.HEALTH_TREND]: false,
@@ -216,7 +217,7 @@ export const TIER_ENTITLEMENTS: Record<SubscriptionTier, FeatureEntitlements> =
       [GatedFeature.PERSONALIZED_ALTERNATIVES]: true,
       [GatedFeature.REPORTS]: true,
       [GatedFeature.DATA_EXPORT]: 'csv',
-      [GatedFeature.FULL_DAY_PLAN]: true,
+      [GatedFeature.WEEKLY_PLAN]: true,
       [GatedFeature.FULL_DAY_LINKAGE]: false,
       [GatedFeature.RECIPE_GENERATION]: false,
       [GatedFeature.HEALTH_TREND]: false,
@@ -237,7 +238,7 @@ export const TIER_ENTITLEMENTS: Record<SubscriptionTier, FeatureEntitlements> =
       [GatedFeature.PERSONALIZED_ALTERNATIVES]: true,
       [GatedFeature.REPORTS]: true,
       [GatedFeature.DATA_EXPORT]: 'pdf_excel',
-      [GatedFeature.FULL_DAY_PLAN]: true,
+      [GatedFeature.WEEKLY_PLAN]: true,
       [GatedFeature.FULL_DAY_LINKAGE]: true,
       [GatedFeature.RECIPE_GENERATION]: true,
       [GatedFeature.HEALTH_TREND]: true,

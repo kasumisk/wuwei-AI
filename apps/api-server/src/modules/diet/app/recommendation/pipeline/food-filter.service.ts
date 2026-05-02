@@ -90,12 +90,12 @@ export class FoodFilterService {
       // 策略：单份食物脂肪不得 > 本餐脂肪总上限的 80%（留 20% 给其他 role）
       if (constraint.maxMealFat != null && constraint.maxMealFat > 0) {
         const servingFat =
-          ((Number(food.fat) || 0) * food.standardServingG) / 100;
+          ((Number(food.fat) || 0) * (Number(food.standardServingG) || 100)) / 100;
         if (servingFat > constraint.maxMealFat * 0.8) return false;
       }
       if (constraint.maxMealCarbs != null && constraint.maxMealCarbs > 0) {
         const servingCarbs =
-          ((Number(food.carbs) || 0) * food.standardServingG) / 100;
+          ((Number(food.carbs) || 0) * (Number(food.standardServingG) || 100)) / 100;
         if (servingCarbs > constraint.maxMealCarbs * 0.8) return false;
       }
 
@@ -116,12 +116,12 @@ export class FoodFilterService {
       }
 
       // 6. 热量上限（硬约束）
-      const servingCal = (food.calories * food.standardServingG) / 100;
+      const servingCal = (food.calories * (Number(food.standardServingG) || 100)) / 100;
       if (servingCal > constraint.maxCalories) return false;
 
       // 7. 蛋白质下限（硬约束）
       if (constraint.minProtein > 0 && food.protein) {
-        const servingProtein = (food.protein * food.standardServingG) / 100;
+        const servingProtein = (food.protein * (Number(food.standardServingG) || 100)) / 100;
         if (servingProtein < constraint.minProtein) return false;
       }
 
@@ -488,7 +488,7 @@ export function foodViolatesDietaryRestriction(
       if (MEAT_FG.has(fg) || SEAFOOD_FG.has(fg)) return true;
       if (MEAT_MI.has(mi) || SEAFOOD_MI.has(mi)) return true;
       if (fg === 'dairy' || fg === 'egg') return true;
-      if (mi === 'milk' || mi === 'egg' || mi === 'cheese' || mi === 'yogurt')
+      if (mi === 'milk' || mi === 'egg' || mi === 'cheese' || mi === 'yogurt' || mi === 'cream')
         return true;
     } else if (r === 'pescatarian') {
       if (MEAT_FG.has(fg) || MEAT_MI.has(mi)) return true;

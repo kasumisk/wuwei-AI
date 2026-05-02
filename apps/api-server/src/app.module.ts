@@ -82,14 +82,17 @@ import { ScheduleModule } from '@nestjs/schedule';
     ScheduleModule.forRoot(),
     // V6 Phase 1.12 + V6.6 Phase 1-B: 分层限流，Redis 持久化存储（多实例安全）
     // Redis 不可用时 ThrottlerStorageRedisService 内部回退为内存存储
+    // 注意：useFactory 在依赖注入阶段执行，早于 onModuleInit，因此使用
+    // isConfigured（构造函数阶段即确定）而非 isConnected（onModuleInit 后才为 true）。
+    // ioredis 客户端在 RedisCacheService 构造函数中创建，连接异步建立，命令自动排队。
     ThrottlerModule.forRootAsync({
       imports: [CoreModule],
       inject: [RedisCacheService],
       useFactory: (redisCache: RedisCacheService) => ({
         throttlers: THROTTLE_CONFIG,
-        storage: redisCache.isConnected
+        storage: redisCache.isConfigured
           ? new ThrottlerStorageRedisService(redisCache.getClient())
-          : undefined, // undefined → 使用默认内存存储（Redis 不可用时降级）
+          : undefined, // undefined → 使用默认内存存储（Redis 未配置时降级）
       }),
     }),
     // 业务模块（12个）

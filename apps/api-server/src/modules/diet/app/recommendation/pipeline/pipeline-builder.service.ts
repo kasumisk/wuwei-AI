@@ -53,6 +53,8 @@ import {
 } from '../recall/recall-merger.service';
 import { RealisticFilterService } from '../filter/realistic-filter.service';
 import { RegionalCandidateFilterService } from '../filter/regional-candidate-filter.service';
+// Final-fix P0-1：跨 region cuisine 硬过滤
+import { CuisineRegionFilterService } from '../filter/cuisine-region-filter.service';
 import { foodViolatesDietaryRestriction } from './food-filter.service';
 import { LifestyleScoringAdapter } from '../modifier/lifestyle-scoring-adapter.service';
 import { ScoringConfigService } from '../context/scoring-config.service';
@@ -94,7 +96,7 @@ import {
 function ensureMinCandidates(
   filtered: FoodLibrary[],
   beforeCount: number,
-  ctx: Pick<PipelineContext, 'allFoods' | 'usedNames' | 'constraints'>,
+  ctx: Pick<PipelineContext, 'allFoods' | 'usedNames' | 'constraints' | 'userProfile' | 'channel'>,
   roleCategories: string[],
   opts?: {
     minCount?: number;
@@ -136,6 +138,33 @@ function ensureMinCandidates(
     const maxFt = ctx.constraints.maxFat;
     fallback = fallback.filter((f) => (Number(f.fat) || 0) <= maxFt);
   }
+  // Bug-R2-02: 兜底也必须遵守过敏原过滤（从 ctx.userProfile?.allergens 获取用户过敏原）
+  if (ctx.userProfile?.allergens?.length) {
+    fallback = filterByAllergens(fallback, ctx.userProfile.allergens);
+  }
+  // Final-fix P0-3：canCook=false 用户回退也必须遵守 channel 硬约束
+  // SceneResolver 在 canCook=false 时已设 channel=DELIVERY；这里把 home_cook
+  // 类纯烹饪食物从兜底集合中剔除，避免兜底引入"需要做饭"的食材给不会做饭的用户。
+  const enrichedDeclared = (ctx.userProfile as any)?.declared as
+    | { canCook?: boolean }
+    | undefined;
+  if (enrichedDeclared?.canCook === false && ctx.channel) {
+    const NON_COOK_ACCEPTABLE = new Set([
+      'restaurant',
+      'takeout',
+      'fast_food',
+      'delivery',
+      'convenience_store',
+      'convenience',
+      'bakery',
+      'canteen',
+    ]);
+    fallback = fallback.filter((f) => {
+      const channels = f.availableChannels;
+      if (!channels || channels.length === 0) return true;
+      return channels.some((ch) => NON_COOK_ACCEPTABLE.has(ch));
+    });
+  }
   if (opts?.sortFn) fallback = fallback.sort(opts.sortFn);
   return fallback.slice(0, limit);
 }
@@ -154,6 +183,8 @@ export class PipelineBuilderService implements OnModuleInit {
     private readonly realisticFilterService: RealisticFilterService,
     /** 阶段 3.1/3.2：区域候选过滤（availability + 法规） */
     private readonly regionalCandidateFilter: RegionalCandidateFilterService,
+    /** Final-fix P0-1：跨 region cuisine 硬过滤（country ↔ cuisine 交集） */
+    private readonly cuisineRegionFilter: CuisineRegionFilterService,
     private readonly lifestyleScoringAdapter: LifestyleScoringAdapter,
     private readonly scoringConfigService: ScoringConfigService,
     private readonly cfRecallService: CFRecallService,
@@ -219,8 +250,9 @@ export class PipelineBuilderService implements OnModuleInit {
       new RuleWeightFactor(),
       // 区域+时区优化（阶段 4.1 + P2-2.2）：价格适配软评分
       // P2-2.2: 注入 SeasonalityService.getPriceInfo 让因子能查询食物的区域价格
-      new PriceFitFactor((foodId) =>
-        this.seasonalityService.getPriceInfo(foodId),
+      // BUG-008: 必须透传 regionCode，否则 SeasonalityService 走 legacy fallback 并打印警告
+      new PriceFitFactor((foodId, regionCode) =>
+        this.seasonalityService.getPriceInfo(foodId, regionCode),
       ),
       // 渠道×时段可获得性（已取代 AvailabilityScorerService，P1-2 已删除）
       new ChannelAvailabilityFactor(),
@@ -309,8 +341,16 @@ export class PipelineBuilderService implements OnModuleInit {
     }
 
     // 过敏原过滤 — 统一使用 allergen-filter.util (V4 A6)
+    // Bug-R2-04: 过敏原过滤后必须有 ensureMinCandidates 保护，防止过度过滤
     if (ctx.userProfile?.allergens?.length) {
+      const beforeCount = candidates.length;
       candidates = filterByAllergens(candidates, ctx.userProfile.allergens);
+      candidates = ensureMinCandidates(
+        candidates,
+        beforeCount,
+        ctx,
+        roleCategories,
+      );
     }
 
     // 召回阶段 commonality/budget 快速预过滤
@@ -547,7 +587,7 @@ export class PipelineBuilderService implements OnModuleInit {
       return foodMealTypes.length === 0 || foodMealTypes.includes(ctx.mealType);
     });
 
-    // 兜底: 无候选时回退到全集（排除已选 + mealType 门控 + 饮食限制）
+    // 兜底: 无候选时回退到全集（排除已选 + mealType 门控 + 饮食限制 + 过敏原）
     if (candidates.length === 0) {
       candidates = ctx.allFoods.filter((f) => {
         if (ctx.usedNames.has(f.name)) return false;
@@ -560,8 +600,13 @@ export class PipelineBuilderService implements OnModuleInit {
           foodViolatesDietaryRestriction(f, ctx.constraints.dietaryRestrictions)
         )
           return false;
+        // Bug-R2-03: 兜底也必须遵守过敏原过滤
         return true;
       });
+      // Bug-R2-03: 兜底必须过滤过敏原
+      if (ctx.userProfile?.allergens?.length) {
+        candidates = filterByAllergens(candidates, ctx.userProfile.allergens);
+      }
     }
 
     return candidates;
@@ -1186,6 +1231,16 @@ export class PipelineBuilderService implements OnModuleInit {
         ctx.regionCode ?? 'unknown',
       );
 
+      // Final-fix P0-1：跨 region cuisine 硬过滤
+      // RegionalCandidateFilter 只剔除 RARE/LIMITED/forbidden，未在 food_regional_info
+      // 配置的食物默认放行 → US/JP 用户拿到纯中餐。这里基于 food.cuisine ↔ countryCode
+      // 映射，把不属于用户 country / cuisinePreferences 集合的食物剔除。
+      realistic = this.cuisineRegionFilter.filter(
+        realistic,
+        ctx.regionCode,
+        ctx.userProfile?.cuisinePreferences,
+      );
+
       // 推荐策略 — acquisitionDifficulty 过滤
       // 如果策略设定了 acquisitionDifficultyMax，过滤掉获取难度超标的食物
       const recStrategy = this.getRecommendationStrategy(ctx);
@@ -1235,18 +1290,14 @@ export class PipelineBuilderService implements OnModuleInit {
           fallbackUsed: 'basic_calorie_sort',
         });
         // Fallback: 按热量与目标的接近程度简单排序
+        // #fix: 使用 calcServingNutrition 计算每份营养素，避免直接使用 per-100g 值
         const targetCal = ctx.target.calories / (ctx.picks.length + 1 || 1);
         ranked = realistic
           .map((f) => ({
             food: f,
-            servingCalories: f.calories ?? 0,
-            servingProtein: f.protein ?? 0,
-            servingFat: f.fat ?? 0,
-            servingCarbs: f.carbs ?? 0,
-            servingFiber: f.fiber ?? 0,
-            servingGL: f.glycemicLoad ?? 0,
+            ...this.foodScorer.calcServingNutrition(f),
             score: 0,
-            servingGrams: 100,
+            servingGrams: Number(f.standardServingG) || 100,
             adjustedScore: 0,
             dimensionScores: {},
             tags: [],

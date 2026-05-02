@@ -169,6 +169,12 @@ export class ProfileResolverService {
       healthConditions: (declared?.healthConditions as string[]) || [],
       regionCode: declared?.regionCode || DEFAULT_REGION_CODE,
       timezone: declared?.timezone || DEFAULT_TIMEZONE,
+      // Final-fix P0-1：cuisinePreferences 透出到 UserProfileConstraints 顶层，
+      // 供 CuisineRegionFilterService 等基于 ctx.userProfile 的下游消费者使用
+      // （declared.cuisinePreferences 仅给画像/解释链使用）。
+      cuisinePreferences:
+        (declared?.cuisinePreferences as string[] | null | undefined) ??
+        undefined,
       // 区域+时区优化（阶段 1.4）：透传 locale 到顶层，供 ProfileAggregatorService.regionCode 兜底使用
       // 注：declared.locale 在 prisma generate 后自动有类型，此处 (declared as any) 为过渡期写法
       locale: (declared as Record<string, unknown> | null)?.['locale'] as

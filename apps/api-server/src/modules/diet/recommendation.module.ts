@@ -75,6 +75,8 @@ import { RegionCacheInvalidationListener } from './app/recommendation/profile/re
 import { UserRegionCacheInvalidationListener } from './app/recommendation/profile/user-region-cache-invalidation.listener';
 // 区域+时区优化（阶段 3.1/3.2）：区域候选过滤
 import { RegionalCandidateFilterService } from './app/recommendation/filter/regional-candidate-filter.service';
+// Final-fix P0-1：跨 region cuisine 硬过滤
+import { CuisineRegionFilterService } from './app/recommendation/filter/cuisine-region-filter.service';
 // V7.6 P1-C: 策略解析 Facade
 import { StrategyResolverFacade } from './app/recommendation/pipeline/strategy-resolver-facade.service';
 // V7.6 P2-B/C: 解释拆分子服务
@@ -84,6 +86,10 @@ import { ComparisonExplanationService } from './app/recommendation/explanation/c
 import { PipelineContextFactory } from './app/recommendation/context/pipeline-context-factory.service';
 // V8.0 P1-02: 推荐结果后处理器
 import { RecommendationResultProcessor } from './app/services/recommendation-result-processor.service';
+// V8.5: 份量缩放策略系统
+import { PortionScalingPolicyResolver } from './app/recommendation/meal/portion-scaling-policy.resolver';
+import { PortionScalingService } from './app/recommendation/meal/portion-scaling.service';
+import { MealPortionController } from './app/recommendation/meal/meal-portion-controller.service';
 
 /** 推荐管道核心 providers */
 const RECOMMENDATION_PROVIDERS = [
@@ -153,6 +159,12 @@ const RECOMMENDATION_PROVIDERS = [
   UserRegionCacheInvalidationListener,
   // 区域+时区优化（阶段 3.1/3.2）：区域候选过滤
   RegionalCandidateFilterService,
+  // Final-fix P0-1：跨 region cuisine 硬过滤
+  CuisineRegionFilterService,
+  // V8.5: 份量缩放策略系统
+  PortionScalingPolicyResolver,
+  PortionScalingService,
+  MealPortionController,
 ];
 
 @Module({

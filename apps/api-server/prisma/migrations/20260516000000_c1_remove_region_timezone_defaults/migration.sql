@@ -11,7 +11,10 @@
 -- timezone is also changed from NOT NULL → nullable, matching the intent that
 -- a missing value should be distinguishable from an explicit user choice.
 
-ALTER TABLE "UserProfiles"
+-- BUG-FIX (debug session 2026-05-02): Original migration referenced "UserProfiles"
+-- (camelCase), but the actual Postgres table is user_profiles (snake_case via @@map).
+-- Without this fix, `prisma migrate deploy` fails with 42P01 relation does not exist.
+ALTER TABLE "user_profiles"
   ALTER COLUMN "region_code" DROP DEFAULT,
   ALTER COLUMN "locale"      DROP DEFAULT,
   ALTER COLUMN "timezone"    DROP DEFAULT,

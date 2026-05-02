@@ -62,7 +62,7 @@ const FEATURE_META: Array<{
   { key: 'personalized_alternatives', label: '个性化替代方案', kind: 'boolean' },
   { key: 'reports', label: '周报/月报', kind: 'boolean' },
   { key: 'data_export', label: '数据导出', kind: 'export' },
-  { key: 'full_day_plan', label: '全天计划', kind: 'boolean' },
+  { key: 'weekly_plan', label: '周膳食规划', kind: 'boolean' },
   { key: 'full_day_linkage', label: '全天计划联动', kind: 'boolean' },
   { key: 'recipe_generation', label: '食谱生成', kind: 'boolean' },
   { key: 'health_trend', label: '健康趋势分析', kind: 'boolean' },
