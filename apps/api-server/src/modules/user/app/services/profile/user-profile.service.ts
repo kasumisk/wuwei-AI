@@ -27,7 +27,10 @@ import {
   BehaviorData,
 } from '../../../user-profile-merge.helper';
 import { ProfileCacheService } from './profile-cache.service';
-import { getRegionMacroBias } from '../../../../../common/config/regional-defaults';
+import {
+  DEFAULT_TIMEZONE,
+  getRegionMacroBias,
+} from '../../../../../common/config/regional-defaults';
 import {
   OnboardingStep1Dto,
   OnboardingStep2Dto,
@@ -107,14 +110,14 @@ export class UserProfileService {
   }
 
   /**
-   * 获取用户时区（IANA 格式），无档案时返回默认值 Asia/Shanghai
+   * 获取用户时区（IANA 格式），无档案时返回区域默认时区
    */
   async getTimezone(userId: string): Promise<string> {
     const profile = await this.prisma.userProfiles.findUnique({
       where: { userId: userId },
       select: { timezone: true },
     });
-    return profile?.timezone || 'Asia/Shanghai';
+    return profile?.timezone || DEFAULT_TIMEZONE;
   }
 
   async deleteAccount(userId: string, confirmationText: string): Promise<void> {

@@ -115,8 +115,24 @@ const IMPORT_MODE_OPTIONS: Array<{
   },
 ];
 
+const MAPPED_CATEGORY_LABELS: Record<string, string> = {
+  protein: '蛋白质类',
+  veggie: '蔬菜类',
+  fruit: '水果类',
+  grain: '谷物类',
+  dairy: '乳蛋类',
+  beverage: '饮品类',
+  snack: '零食类',
+  condiment: '调味类',
+  fat: '油脂类',
+  composite: '复合食品',
+};
+
 const getImportModeLabel = (mode: FoodImportMode) =>
   IMPORT_MODE_OPTIONS.find((item) => item.value === mode)?.label || mode;
+
+const getMappedCategoryLabel = (mappedCategory: string) =>
+  MAPPED_CATEGORY_LABELS[mappedCategory] || mappedCategory;
 
 const isImportMode = (value: unknown): value is FoodImportMode =>
   value === 'conservative' || value === 'fill_missing_only' || value === 'create_only';
@@ -946,7 +962,7 @@ const UsdaImportPage: React.FC = () => {
             value={selectedCategory || undefined}
             options={(categories || []).map((item) => ({
               value: item.value,
-              label: `${item.label} -> ${item.mappedCategory}`,
+              label: `${item.label} (${item.value}) -> ${getMappedCategoryLabel(item.mappedCategory)}`,
             }))}
             onChange={(value) => {
               setSelectedCategory(value);
@@ -1424,7 +1440,7 @@ const UsdaImportPage: React.FC = () => {
             <Select
               options={(categories || []).map((item) => ({
                 value: item.value,
-                label: `${item.label} -> ${item.mappedCategory}`,
+                label: `${item.label} (${item.value}) -> ${getMappedCategoryLabel(item.mappedCategory)}`,
               }))}
             />
           </Form.Item>

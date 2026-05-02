@@ -45,6 +45,34 @@ export interface UsdaCategoryOption {
   mappedCategory: string;
 }
 
+const USDA_CATEGORY_LABEL_ZH_MAP: Record<string, string> = {
+  'American Indian/Alaska Native Foods': '美洲印第安人与阿拉斯加原住民食品',
+  'Baby Foods': '婴儿食品',
+  'Baked Products': '烘焙制品',
+  'Beef Products': '牛肉制品',
+  Beverages: '饮料',
+  'Breakfast Cereals': '早餐谷物',
+  'Cereal Grains and Pasta': '谷物与意面',
+  'Dairy and Egg Products': '乳制品与蛋类',
+  'Fast Foods': '快餐食品',
+  'Fats and Oils': '脂肪与油脂',
+  'Finfish and Shellfish Products': '鱼类与贝类制品',
+  'Fruits and Fruit Juices': '水果与果汁',
+  'Lamb, Veal, and Game Products': '羊肉、小牛肉与野味制品',
+  'Legumes and Legume Products': '豆类及豆制品',
+  'Meals, Entrees, and Side Dishes': '主餐、主菜与配菜',
+  'Nut and Seed Products': '坚果与种子制品',
+  'Pork Products': '猪肉制品',
+  'Poultry Products': '禽类制品',
+  'Restaurant Foods': '餐厅食品',
+  'Sausages and Luncheon Meats': '香肠与冷切肉制品',
+  Snacks: '零食',
+  'Soups, Sauces, and Gravies': '汤、酱汁与肉汁',
+  'Spices and Herbs': '香料与草本',
+  Sweets: '甜食',
+  'Vegetables and Vegetable Products': '蔬菜及蔬菜制品',
+};
+
 export const USDA_IMPORT_PRESETS: UsdaImportPreset[] = [
   {
     key: 'core_protein',
@@ -388,12 +416,12 @@ export class UsdaFetcherService {
 
   getSupportedCategories(): UsdaCategoryOption[] {
     return Object.entries(this.CATEGORY_MAP)
-      .map(([label, mappedCategory]) => ({
-        value: label,
-        label,
+      .map(([value, mappedCategory]) => ({
+        value,
+        label: USDA_CATEGORY_LABEL_ZH_MAP[value] || value,
         mappedCategory,
       }))
-      .sort((a, b) => a.label.localeCompare(b.label));
+      .sort((a, b) => a.value.localeCompare(b.value));
   }
 
   private sleep(ms: number) {

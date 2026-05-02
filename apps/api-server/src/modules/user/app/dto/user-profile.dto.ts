@@ -389,6 +389,14 @@ export class UpdateDeclaredProfileDto {
   @IsString()
   regionCode?: string;
 
+  @ApiPropertyOptional({
+    description: 'IANA 时区标识，如 America/New_York',
+    example: 'America/New_York',
+  })
+  @IsOptional()
+  @IsString()
+  timezone?: string;
+
   // ─── V6.4 P1: 暴露 exerciseSchedule ───
   @ApiPropertyOptional({
     description: '每周运动计划',
