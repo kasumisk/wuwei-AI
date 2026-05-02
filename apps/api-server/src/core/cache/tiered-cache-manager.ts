@@ -334,9 +334,7 @@ export class TieredCacheManager implements OnModuleInit, OnModuleDestroy {
           );
         } else {
           ns.evictAllL1();
-          this.logger.debug(
-            `[cache:invalidate] L1 cleared: ns=${msg.ns}`,
-          );
+          this.logger.debug(`[cache:invalidate] L1 cleared: ns=${msg.ns}`);
         }
       } catch {
         // 忽略格式异常（其他服务误发）
@@ -348,9 +346,7 @@ export class TieredCacheManager implements OnModuleInit, OnModuleDestroy {
     });
 
     await this.subscriber.subscribe(CACHE_INVALIDATE_CHANNEL);
-    this.logger.log(
-      `Subscribed to Redis channel: ${CACHE_INVALIDATE_CHANNEL}`,
-    );
+    this.logger.log(`Subscribed to Redis channel: ${CACHE_INVALIDATE_CHANNEL}`);
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -375,10 +371,7 @@ export class TieredCacheManager implements OnModuleInit, OnModuleDestroy {
     if (existing) return existing as TieredCacheNamespace<T>;
 
     const broadcast = async (msg: InvalidateMessage): Promise<void> => {
-      await this.redis.publish(
-        CACHE_INVALIDATE_CHANNEL,
-        JSON.stringify(msg),
-      );
+      await this.redis.publish(CACHE_INVALIDATE_CHANNEL, JSON.stringify(msg));
     };
 
     const ns = new TieredCacheNamespace<T>(config, this.redis, broadcast);

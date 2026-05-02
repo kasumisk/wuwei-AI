@@ -21,7 +21,12 @@ import { UsageArchiveCronService } from './usage-archive-cron.service';
 
 @Global()
 @Module({
-  providers: [LlmService, UsageQuotaService, UsageRecorderService, UsageArchiveCronService],
+  providers: [
+    LlmService,
+    UsageQuotaService,
+    UsageRecorderService,
+    UsageArchiveCronService,
+  ],
   exports: [LlmService, UsageQuotaService, UsageRecorderService],
 })
 export class LlmModule {}

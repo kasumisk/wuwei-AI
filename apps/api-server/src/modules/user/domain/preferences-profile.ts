@@ -180,10 +180,11 @@ function sanitizeCuisineWeights(
   if (!weights || typeof weights !== 'object') return {};
 
   // 延迟引用以避免循环依赖（domain 层不直接依赖 common/utils）
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { normalizeCuisine } = require('../../../common/utils/cuisine.util') as {
-    normalizeCuisine: (v: unknown) => string | null;
-  };
+
+  const { normalizeCuisine } =
+    require('../../../common/utils/cuisine.util') as {
+      normalizeCuisine: (v: unknown) => string | null;
+    };
 
   const result: Record<string, number> = {};
   for (const [cuisine, weight] of Object.entries(weights)) {

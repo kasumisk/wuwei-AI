@@ -44,9 +44,7 @@ import { LearnedRankingService } from '../optimization/learned-ranking.service';
 import { WeightLearnerService } from '../optimization/weight-learner.service';
 import { SCORE_WEIGHTS } from '../types/scoring.types';
 import type { GoalType } from '../../services/nutrition-score.service';
-import {
-  DEFAULT_REGION_CODE,
-} from '../../../../../common/config/regional-defaults';
+import { DEFAULT_REGION_CODE } from '../../../../../common/config/regional-defaults';
 import { localeToFoodRegion } from '../../../../../common/utils/locale-region.util';
 import {
   RealtimeProfileService,
@@ -208,9 +206,7 @@ export class ProfileAggregatorService {
 
     // P3-3.5：cuisine 偏好衍生 boost map，与 region map 取 max 合并
     const declaredCuisinePrefs =
-      (enrichedProfile.declared?.cuisinePreferences as
-        | string[]
-        | undefined) ?? null;
+      enrichedProfile.declared?.cuisinePreferences ?? null;
     const cuisineBoostMap =
       await this.preferenceProfileService.getCuisineRegionalBoostMap(
         declaredCuisinePrefs,
@@ -223,15 +219,14 @@ export class ProfileAggregatorService {
       );
 
     // P3-3.5：透出 cuisine 推断到的国家列表，供 trace 解释
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { getCuisinePreferenceCountries } = require(
-      '../../../../../common/utils/cuisine.util',
-    ) as {
-      getCuisinePreferenceCountries: (
-        prefs: readonly string[] | null | undefined,
-        excludeCountryCode?: string | null,
-      ) => string[];
-    };
+
+    const { getCuisinePreferenceCountries } =
+      require('../../../../../common/utils/cuisine.util') as {
+        getCuisinePreferenceCountries: (
+          prefs: readonly string[] | null | undefined,
+          excludeCountryCode?: string | null,
+        ) => string[];
+      };
     const cuisinePreferenceRegions = getCuisinePreferenceCountries(
       declaredCuisinePrefs,
       regionCode,

@@ -53,7 +53,10 @@ const DEFAULT_TEMPERATURE = 0.7;
  * 调用方未传 inputCost/outputCost 时使用，仅用于 cost 入账估算。
  * 实际生产建议把价格表外置到 model_configs 表 + 走路由模式。
  */
-const FALLBACK_COST_USD_PER_1K: Record<string, { input: number; output: number }> = {
+const FALLBACK_COST_USD_PER_1K: Record<
+  string,
+  { input: number; output: number }
+> = {
   'gpt-4o': { input: 0.0025, output: 0.01 },
   'gpt-4o-mini': { input: 0.00015, output: 0.0006 },
   'gpt-4-turbo': { input: 0.01, output: 0.03 },
@@ -264,9 +267,7 @@ export class LlmService {
   // 流式执行路径
   // ─────────────────────────────────────────────────────────────────
 
-  private async *executeStream(
-    ctx: ExecCtx,
-  ): AsyncGenerator<LlmStreamChunk> {
+  private async *executeStream(ctx: ExecCtx): AsyncGenerator<LlmStreamChunk> {
     // 1. 配额预扣
     if (ctx.userId) {
       await this.quota.consume(ctx.userId, ctx.feature);
@@ -399,10 +400,17 @@ export class LlmService {
         provider: ctx.provider,
         model: ctx.model,
         status: 'failed',
-        usage: usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        usage: usage ?? {
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0,
+        },
         costUsd: 0,
         responseTimeMs: Date.now() - start,
-        metadata: { error: (err as Error).message, partialChars: totalDeltaChars },
+        metadata: {
+          error: (err as Error).message,
+          partialChars: totalDeltaChars,
+        },
       });
       throw err;
     } finally {
@@ -439,9 +447,7 @@ export class LlmService {
     });
     if (!res.ok) {
       const errText = await res.text().catch(() => '');
-      throw new Error(
-        `LLM upstream ${res.status}: ${errText.slice(0, 300)}`,
-      );
+      throw new Error(`LLM upstream ${res.status}: ${errText.slice(0, 300)}`);
     }
     return res;
   }
@@ -491,7 +497,11 @@ export class LlmService {
       return msg.content
         .map((b: unknown) => {
           if (typeof b === 'string') return b;
-          if (b && typeof b === 'object' && 'text' in (b as Record<string, unknown>)) {
+          if (
+            b &&
+            typeof b === 'object' &&
+            'text' in (b as Record<string, unknown>)
+          ) {
             return String((b as { text: unknown }).text ?? '');
           }
           return '';
@@ -503,18 +513,35 @@ export class LlmService {
 
   private extractUsage(msg: AIMessage): LlmTokenUsage {
     // LangChain 0.3：usage_metadata 是统一字段
-    const u = (msg as unknown as { usage_metadata?: { input_tokens?: number; output_tokens?: number; total_tokens?: number } })
-      .usage_metadata;
+    const u = (
+      msg as unknown as {
+        usage_metadata?: {
+          input_tokens?: number;
+          output_tokens?: number;
+          total_tokens?: number;
+        };
+      }
+    ).usage_metadata;
     if (u) {
       return {
         promptTokens: u.input_tokens ?? 0,
         completionTokens: u.output_tokens ?? 0,
-        totalTokens: u.total_tokens ?? (u.input_tokens ?? 0) + (u.output_tokens ?? 0),
+        totalTokens:
+          u.total_tokens ?? (u.input_tokens ?? 0) + (u.output_tokens ?? 0),
       };
     }
     // 老路径兜底
-    const meta = (msg as unknown as { response_metadata?: { tokenUsage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number } } })
-      .response_metadata;
+    const meta = (
+      msg as unknown as {
+        response_metadata?: {
+          tokenUsage?: {
+            promptTokens?: number;
+            completionTokens?: number;
+            totalTokens?: number;
+          };
+        };
+      }
+    ).response_metadata;
     const t = meta?.tokenUsage;
     return {
       promptTokens: t?.promptTokens ?? 0,

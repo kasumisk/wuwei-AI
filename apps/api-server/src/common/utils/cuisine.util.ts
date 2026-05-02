@@ -231,46 +231,45 @@ export function isCanonicalCuisine(value: unknown): value is CanonicalCuisine {
  * 一对多用于地理跨国概念（western / mediterranean / southeast_asian）。
  * `fast_food` / `other` 故意映射为 []，表示不参与 region affinity。
  */
-export const CUISINE_TO_COUNTRIES: Readonly<
-  Record<string, readonly string[]>
-> = {
-  // ── canonical 项 ──
-  chinese: ['CN'], // 含 sichuan / cantonese / szechuan（normalize 已归并）
-  japanese: ['JP'],
-  korean: ['KR'],
-  // 西餐：欧美主要英语+西欧国家
-  western: ['US', 'GB', 'FR', 'DE', 'IT', 'ES'],
-  italian: ['IT'],
-  mexican: ['MX'],
-  thai: ['TH'],
-  southeast_asian: ['TH', 'VN', 'ID', 'MY', 'PH', 'SG'],
-  indian: ['IN'],
-  mediterranean: ['IT', 'GR', 'ES', 'FR', 'TR', 'LB'],
-  fast_food: [], // 无原产国
-  other: [], // 不参与
-  // ── 历史 DB 可能出现的非 canonical 单国菜系 ──
-  // （EN_ALIASES 已把它们归到 mediterranean / western / southeast_asian，
-  //  这里保留显式映射作为防御：万一前端/admin 后续放开新选项，仍能解析）
-  french: ['FR'],
-  spanish: ['ES'],
-  greek: ['GR'],
-  turkish: ['TR'],
-  lebanese: ['LB'],
-  moroccan: ['MA'],
-  vietnamese: ['VN'],
-  indonesian: ['ID'],
-  malaysian: ['MY'],
-  filipino: ['PH'],
-  american: ['US'],
-  german: ['DE'],
-  british: ['GB'],
-  brazilian: ['BR'],
-  argentinian: ['AR'],
-  peruvian: ['PE'],
-  russian: ['RU'],
-  ethiopian: ['ET'],
-  middle_eastern: ['LB', 'TR', 'IL', 'JO', 'SA'],
-};
+export const CUISINE_TO_COUNTRIES: Readonly<Record<string, readonly string[]>> =
+  {
+    // ── canonical 项 ──
+    chinese: ['CN'], // 含 sichuan / cantonese / szechuan（normalize 已归并）
+    japanese: ['JP'],
+    korean: ['KR'],
+    // 西餐：欧美主要英语+西欧国家
+    western: ['US', 'GB', 'FR', 'DE', 'IT', 'ES'],
+    italian: ['IT'],
+    mexican: ['MX'],
+    thai: ['TH'],
+    southeast_asian: ['TH', 'VN', 'ID', 'MY', 'PH', 'SG'],
+    indian: ['IN'],
+    mediterranean: ['IT', 'GR', 'ES', 'FR', 'TR', 'LB'],
+    fast_food: [], // 无原产国
+    other: [], // 不参与
+    // ── 历史 DB 可能出现的非 canonical 单国菜系 ──
+    // （EN_ALIASES 已把它们归到 mediterranean / western / southeast_asian，
+    //  这里保留显式映射作为防御：万一前端/admin 后续放开新选项，仍能解析）
+    french: ['FR'],
+    spanish: ['ES'],
+    greek: ['GR'],
+    turkish: ['TR'],
+    lebanese: ['LB'],
+    moroccan: ['MA'],
+    vietnamese: ['VN'],
+    indonesian: ['ID'],
+    malaysian: ['MY'],
+    filipino: ['PH'],
+    american: ['US'],
+    german: ['DE'],
+    british: ['GB'],
+    brazilian: ['BR'],
+    argentinian: ['AR'],
+    peruvian: ['PE'],
+    russian: ['RU'],
+    ethiopian: ['ET'],
+    middle_eastern: ['LB', 'TR', 'IL', 'JO', 'SA'],
+  };
 
 /**
  * 单 cuisine 映射到原产国家列表

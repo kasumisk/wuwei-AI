@@ -250,7 +250,9 @@ export class SubscriptionPlansController {
 
     return {
       title,
-      subtitle: plan?.description?.toString() || `${name} access billed per ${cycleLabel}.`,
+      subtitle:
+        plan?.description?.toString() ||
+        `${name} access billed per ${cycleLabel}.`,
       badge,
       ctaLabel: `Subscribe ${name}`,
       priceSuffix: billingCycle === 'lifetime' ? '' : `/${cycleLabel}`,

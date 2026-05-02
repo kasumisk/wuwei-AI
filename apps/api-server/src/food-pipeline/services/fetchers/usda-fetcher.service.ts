@@ -379,7 +379,9 @@ export class UsdaFetcherService {
     };
   }
 
-  private normalizeFoodCategoryParam(foodCategory?: string): string | undefined {
+  private normalizeFoodCategoryParam(
+    foodCategory?: string,
+  ): string | undefined {
     if (!foodCategory) return undefined;
     return foodCategory.replaceAll('/', '%2F');
   }

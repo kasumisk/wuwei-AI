@@ -212,10 +212,7 @@ async function bootstrap() {
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     });
-    Logger.warn(
-      'CORS_ORIGINS 未配置，开发环境放开所有 origin',
-      'Bootstrap',
-    );
+    Logger.warn('CORS_ORIGINS 未配置，开发环境放开所有 origin', 'Bootstrap');
   } else {
     // 生产环境且未配置：默认拒绝跨域（移动端 Flutter 走原生 HTTP，不受影响）
     Logger.log(

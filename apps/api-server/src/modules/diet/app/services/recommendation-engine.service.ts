@@ -1212,10 +1212,7 @@ export class RecommendationEngineService implements OnModuleInit {
    * @param mealType 餐次（暂不按餐次过滤，热门榜单全餐通用）
    * @param topN 返回条数，默认 5
    */
-  async getTopPopularFoods(
-    mealType: string,
-    topN = 5,
-  ): Promise<FoodLibrary[]> {
+  async getTopPopularFoods(mealType: string, topN = 5): Promise<FoodLibrary[]> {
     try {
       const allFoods = await this.foodPoolCache.getVerifiedFoods();
       return allFoods

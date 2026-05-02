@@ -43,10 +43,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
       if (typeof exceptionResponse === 'string') {
         message = exceptionResponse;
-      } else if (
-        exceptionResponse &&
-        typeof exceptionResponse === 'object'
-      ) {
+      } else if (exceptionResponse && typeof exceptionResponse === 'object') {
         const responseObj = exceptionResponse as Record<string, unknown>;
         const rawMessage = responseObj.message ?? exception.message;
         message = Array.isArray(rawMessage)

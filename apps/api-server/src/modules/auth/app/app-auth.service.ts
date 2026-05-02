@@ -41,9 +41,7 @@ export class AppAuthService {
   ) {
     // clientId 可以为空（库仍可验证签名，但跳过 audience 校验）
     // 生产环境应设置 GOOGLE_CLIENT_ID 以验证 aud 字段
-    this.googleOAuthClient = new OAuth2Client(
-      process.env.GOOGLE_CLIENT_ID,
-    );
+    this.googleOAuthClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
   }
 
   // ==================== 匿名登录 ====================
@@ -588,9 +586,7 @@ export class AppAuthService {
     const key = `email_code:${email}`;
     void this.redisCache.set(key, code, AppAuthService.EMAIL_CODE_TTL_S);
 
-    this.logger.log(
-      `[邮箱验证码] email: ${email}, type: ${type}`,
-    );
+    this.logger.log(`[邮箱验证码] email: ${email}, type: ${type}`);
 
     return { message: this.i18n.t('auth.smsSent') };
   }

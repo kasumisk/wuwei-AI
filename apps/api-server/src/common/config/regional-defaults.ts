@@ -112,7 +112,9 @@ export function getRegionSegmentTuning(
 ): RegionSegmentTuning {
   if (!regionCode) return DEFAULT_REGION_SEGMENT_TUNING;
   const country = regionCode.split('-')[0]?.toUpperCase();
-  return (country && REGION_SEGMENT_TUNING[country]) || DEFAULT_REGION_SEGMENT_TUNING;
+  return (
+    (country && REGION_SEGMENT_TUNING[country]) || DEFAULT_REGION_SEGMENT_TUNING
+  );
 }
 
 /**

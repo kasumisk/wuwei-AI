@@ -13,7 +13,10 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
 import { FoodProvenanceRepository } from '../../../../modules/food/repositories';
-import { ENRICHABLE_FIELDS, type EnrichableField } from '../constants/enrichable-fields';
+import {
+  ENRICHABLE_FIELDS,
+  type EnrichableField,
+} from '../constants/enrichable-fields';
 
 @Injectable()
 export class EnrichmentReEnqueueService {

@@ -402,11 +402,7 @@ export class ExplanationGeneratorService {
     if (boost < 1.08) return null;
     const regionCode = userProfile?.regionCode;
     if (regionCode) {
-      return t(
-        'explain.reason.regionalLocal',
-        { region: regionCode },
-        locale,
-      );
+      return t('explain.reason.regionalLocal', { region: regionCode }, locale);
     }
     return t('explain.reason.regionalLocalGeneric', {}, locale);
   }
@@ -442,16 +438,7 @@ export class ExplanationGeneratorService {
     month: number,
     regionCode?: string,
   ): 'spring' | 'summer' | 'autumn' | 'winter' {
-    const SOUTHERN = new Set([
-      'AU',
-      'NZ',
-      'AR',
-      'CL',
-      'ZA',
-      'BR',
-      'PE',
-      'UY',
-    ]);
+    const SOUTHERN = new Set(['AU', 'NZ', 'AR', 'CL', 'ZA', 'BR', 'PE', 'UY']);
     const isSouth = !!regionCode && SOUTHERN.has(regionCode.toUpperCase());
     // 北半球
     let s: 'spring' | 'summer' | 'autumn' | 'winter';

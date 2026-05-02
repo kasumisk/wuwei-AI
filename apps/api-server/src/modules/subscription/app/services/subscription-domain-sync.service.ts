@@ -349,11 +349,12 @@ export class SubscriptionDomainSyncService {
     });
   }
 
-  private normalizeStoreProducts(
-    storeProducts: StoreProductInput[],
-  ): Array<
+  private normalizeStoreProducts(storeProducts: StoreProductInput[]): Array<
     Required<
-      Pick<StoreProductInput, 'provider' | 'store' | 'productId' | 'environment' | 'isActive'>
+      Pick<
+        StoreProductInput,
+        'provider' | 'store' | 'productId' | 'environment' | 'isActive'
+      >
     > & {
       offeringId: string | null;
       packageId: string | null;
@@ -380,18 +381,15 @@ export class SubscriptionDomainSyncService {
       const productEnvironment = item.environment?.trim() || environment;
       if (!provider || !store || !productId) continue;
 
-      byKey.set(
-        `${provider}:${productEnvironment}:${store}:${productId}`,
-        {
-          provider,
-          store,
-          productId,
-          offeringId: item.offeringId?.trim() || null,
-          packageId: item.packageId?.trim() || null,
-          environment: productEnvironment,
-          isActive: item.isActive ?? true,
-        },
-      );
+      byKey.set(`${provider}:${productEnvironment}:${store}:${productId}`, {
+        provider,
+        store,
+        productId,
+        offeringId: item.offeringId?.trim() || null,
+        packageId: item.packageId?.trim() || null,
+        environment: productEnvironment,
+        isActive: item.isActive ?? true,
+      });
     }
 
     return [...byKey.values()];

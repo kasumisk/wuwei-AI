@@ -299,7 +299,10 @@ export class QuotaService {
    * 原子重置单条配额（供 increment() 内懒重置使用）
    */
   private async resetSingleQuota(quota: UsageQuota): Promise<void> {
-    const newResetAt = this.calcNextReset(new Date(), quota.cycle as QuotaCycle);
+    const newResetAt = this.calcNextReset(
+      new Date(),
+      quota.cycle as QuotaCycle,
+    );
     await this.prisma.usageQuota.update({
       where: { id: quota.id },
       data: { used: 0, resetAt: newResetAt },

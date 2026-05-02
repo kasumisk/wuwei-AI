@@ -226,15 +226,14 @@ export class PreferenceProfileService {
     userCountryCode: string | null,
   ): Promise<Record<string, number>> {
     // 延迟引用以避免无谓的依赖
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { getCuisinePreferenceCountries } = require(
-      '../../../../../common/utils/cuisine.util',
-    ) as {
-      getCuisinePreferenceCountries: (
-        prefs: readonly string[] | null | undefined,
-        excludeCountryCode?: string | null,
-      ) => string[];
-    };
+
+    const { getCuisinePreferenceCountries } =
+      require('../../../../../common/utils/cuisine.util') as {
+        getCuisinePreferenceCountries: (
+          prefs: readonly string[] | null | undefined,
+          excludeCountryCode?: string | null,
+        ) => string[];
+      };
 
     const countries = getCuisinePreferenceCountries(
       cuisinePreferences,

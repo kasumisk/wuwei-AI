@@ -462,23 +462,33 @@ export class EnrichmentApplyService {
       const existing = existingMap.get(locale);
       const updates: Record<string, any> = {};
 
+      // 有记录则整条跳过，不做字段级补全（与 enrichment-i18n.service 策略一致）
+      if (existing) {
+        ops.push({
+          locale,
+          existing,
+          updates: {},
+          confidence: typeof confidence === 'number' ? confidence : 0.5,
+          reasoning: typeof reasoning === 'string' ? reasoning : undefined,
+          action: 'skipped',
+        });
+        continue;
+      }
+
       for (const [k, v] of Object.entries(fields)) {
         const prismaField = k;
         if (!allowedTranslationFields.has(prismaField)) continue;
         if (v === null || v === undefined) continue;
-        if (existing && (existing as any)[prismaField]) continue; // 不覆盖已有
         updates[prismaField] = v;
       }
 
       if (Object.keys(updates).length > 0) {
-        if (!existing?.source) updates.source = 'ai';
-        if (!existing?.quality) {
-          updates.quality =
-            typeof confidence === 'number'
-              ? Math.max(0, Math.min(1, confidence))
-              : 0.5;
-        }
-        if (!existing?.reviewStatus) updates.reviewStatus = 'AI_GENERATED';
+        updates.source = 'ai';
+        updates.quality =
+          typeof confidence === 'number'
+            ? Math.max(0, Math.min(1, confidence))
+            : 0.5;
+        updates.reviewStatus = 'AI_GENERATED';
       }
 
       ops.push({
@@ -625,6 +635,20 @@ export class EnrichmentApplyService {
       const { confidence, reasoning, ...fields } = result;
       const updates: Record<string, any> = {};
 
+      // 有记录则整条跳过，不做字段级补全（与 enrichment-i18n.service 策略一致）
+      if (existing) {
+        ops.push({
+          region,
+          scope,
+          existing,
+          updates: {},
+          confidence: typeof confidence === 'number' ? confidence : 0.5,
+          reasoning: typeof reasoning === 'string' ? reasoning : undefined,
+          action: 'skipped',
+        });
+        continue;
+      }
+
       for (const [k, v] of Object.entries(fields)) {
         if (v === null || v === undefined) continue;
 
@@ -632,17 +656,10 @@ export class EnrichmentApplyService {
         const value = this.normalizeRegionalFieldValue(field, v);
         if (value === undefined) continue;
 
-        if (
-          existing &&
-          (existing as any)[field] !== null &&
-          (existing as any)[field] !== undefined &&
-          (field !== 'availability' || (existing as any)[field] !== 'UNKNOWN')
-        )
-          continue;
         updates[field] = value;
       }
 
-      if (typeof confidence === 'number' && !existing?.confidence) {
+      if (typeof confidence === 'number') {
         updates.confidence = Math.max(0, Math.min(1, confidence));
       }
       if (
@@ -654,7 +671,7 @@ export class EnrichmentApplyService {
         updates.priceMax = updates.priceMin;
         updates.priceMin = min;
       }
-      if (!existing?.source && !updates.source) {
+      if (!updates.source) {
         updates.source = 'AI';
       }
 

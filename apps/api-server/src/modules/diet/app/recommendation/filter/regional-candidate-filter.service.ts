@@ -45,7 +45,10 @@ export class RegionalCandidateFilterService {
       }
 
       // 阶段 3.1：availability 不可用状态
-      const avail = this.seasonalityService.getAvailability(food.id, regionCode);
+      const avail = this.seasonalityService.getAvailability(
+        food.id,
+        regionCode,
+      );
       if (avail !== null && UNAVAILABLE_STATUSES.has(avail)) {
         return false;
       }

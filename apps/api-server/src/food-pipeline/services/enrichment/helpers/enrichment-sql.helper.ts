@@ -12,7 +12,10 @@ import {
   PORTION_GUIDE_FIELDS,
 } from '../../../../modules/food/food-split.helper';
 import { snakeToCamel } from '../constants/enrichable-fields';
-import { JSON_ARRAY_FIELDS, JSON_OBJECT_FIELDS } from '../constants/enrichable-fields';
+import {
+  JSON_ARRAY_FIELDS,
+  JSON_OBJECT_FIELDS,
+} from '../constants/enrichable-fields';
 
 /**
  * 给定 snake_case 或 camelCase 字段名，返回对应拆分表的列引用

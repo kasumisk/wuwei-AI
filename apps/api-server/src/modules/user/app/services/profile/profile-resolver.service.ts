@@ -171,7 +171,9 @@ export class ProfileResolverService {
       timezone: declared?.timezone || DEFAULT_TIMEZONE,
       // 区域+时区优化（阶段 1.4）：透传 locale 到顶层，供 ProfileAggregatorService.regionCode 兜底使用
       // 注：declared.locale 在 prisma generate 后自动有类型，此处 (declared as any) 为过渡期写法
-      locale: (declared as Record<string, unknown> | null)?.['locale'] as string | undefined,
+      locale: (declared as Record<string, unknown> | null)?.['locale'] as
+        | string
+        | undefined,
 
       // ── 声明画像 ──
       declared: declared
@@ -195,9 +197,7 @@ export class ProfileResolverService {
             // P2-2.2: budgetPerMeal/currencyCode 来自 UserProfiles 同名字段
             budgetPerMeal:
               (declared as Record<string, unknown>)?.['budgetPerMeal'] != null
-                ? Number(
-                    (declared as Record<string, unknown>)['budgetPerMeal'],
-                  )
+                ? Number((declared as Record<string, unknown>)['budgetPerMeal'])
                 : undefined,
             currencyCode:
               ((declared as Record<string, unknown>)?.['currencyCode'] as
@@ -218,7 +218,9 @@ export class ProfileResolverService {
             discipline: declared.discipline ?? undefined,
             regionCode: declared.regionCode ?? undefined,
             timezone: declared.timezone ?? undefined,
-            locale: (declared as Record<string, unknown>)?.['locale'] as string | undefined,
+            locale: (declared as Record<string, unknown>)?.['locale'] as
+              | string
+              | undefined,
             exerciseSchedule:
               (declared.exerciseSchedule as Record<
                 string,

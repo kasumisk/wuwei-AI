@@ -24,34 +24,76 @@ import { AcquisitionChannel } from '../../types/recommendation.types';
 
 const CHANNEL_CATEGORY_MATRIX: Record<string, Record<string, number>> = {
   [AcquisitionChannel.HOME_COOK]: {
-    protein: 0.9, grain: 0.95, veggie: 0.9, fruit: 0.85,
-    dairy: 0.85, composite: 0.6, snack: 0.7, beverage: 0.8,
-    fat: 0.9, condiment: 0.95,
+    protein: 0.9,
+    grain: 0.95,
+    veggie: 0.9,
+    fruit: 0.85,
+    dairy: 0.85,
+    composite: 0.6,
+    snack: 0.7,
+    beverage: 0.8,
+    fat: 0.9,
+    condiment: 0.95,
   },
   [AcquisitionChannel.DELIVERY]: {
-    protein: 0.7, grain: 0.8, veggie: 0.6, fruit: 0.4,
-    dairy: 0.5, composite: 0.9, snack: 0.5, beverage: 0.7,
-    fat: 0.3, condiment: 0.2,
+    protein: 0.7,
+    grain: 0.8,
+    veggie: 0.6,
+    fruit: 0.4,
+    dairy: 0.5,
+    composite: 0.9,
+    snack: 0.5,
+    beverage: 0.7,
+    fat: 0.3,
+    condiment: 0.2,
   },
   [AcquisitionChannel.CONVENIENCE]: {
-    protein: 0.3, grain: 0.6, veggie: 0.2, fruit: 0.5,
-    dairy: 0.8, composite: 0.7, snack: 0.95, beverage: 0.95,
-    fat: 0.1, condiment: 0.1,
+    protein: 0.3,
+    grain: 0.6,
+    veggie: 0.2,
+    fruit: 0.5,
+    dairy: 0.8,
+    composite: 0.7,
+    snack: 0.95,
+    beverage: 0.95,
+    fat: 0.1,
+    condiment: 0.1,
   },
   [AcquisitionChannel.CANTEEN]: {
-    protein: 0.8, grain: 0.9, veggie: 0.85, fruit: 0.5,
-    dairy: 0.4, composite: 0.85, snack: 0.3, beverage: 0.6,
-    fat: 0.3, condiment: 0.3,
+    protein: 0.8,
+    grain: 0.9,
+    veggie: 0.85,
+    fruit: 0.5,
+    dairy: 0.4,
+    composite: 0.85,
+    snack: 0.3,
+    beverage: 0.6,
+    fat: 0.3,
+    condiment: 0.3,
   },
   [AcquisitionChannel.RESTAURANT]: {
-    protein: 0.8, grain: 0.7, veggie: 0.7, fruit: 0.4,
-    dairy: 0.5, composite: 0.95, snack: 0.4, beverage: 0.8,
-    fat: 0.3, condiment: 0.3,
+    protein: 0.8,
+    grain: 0.7,
+    veggie: 0.7,
+    fruit: 0.4,
+    dairy: 0.5,
+    composite: 0.95,
+    snack: 0.4,
+    beverage: 0.8,
+    fat: 0.3,
+    condiment: 0.3,
   },
   [AcquisitionChannel.UNKNOWN]: {
-    protein: 0.7, grain: 0.8, veggie: 0.7, fruit: 0.6,
-    dairy: 0.6, composite: 0.7, snack: 0.6, beverage: 0.7,
-    fat: 0.5, condiment: 0.5,
+    protein: 0.7,
+    grain: 0.8,
+    veggie: 0.7,
+    fruit: 0.6,
+    dairy: 0.6,
+    composite: 0.7,
+    snack: 0.6,
+    beverage: 0.7,
+    fat: 0.5,
+    condiment: 0.5,
   },
 };
 
@@ -70,12 +112,42 @@ const CHANNEL_CATEGORY_MATRIX: Record<string, Record<string, number>> = {
 type TimeSlot = 'morning' | 'midday' | 'evening' | 'lateNight';
 
 const DEFAULT_CHANNEL_TIME_MATRIX: Record<string, Record<TimeSlot, number>> = {
-  [AcquisitionChannel.HOME_COOK]:    { morning: 0.9, midday: 0.85, evening: 0.95, lateNight: 0.3 },
-  [AcquisitionChannel.DELIVERY]:     { morning: 0.6, midday: 0.95, evening: 0.9,  lateNight: 0.4 },
-  [AcquisitionChannel.CONVENIENCE]:  { morning: 0.85, midday: 0.85, evening: 0.85, lateNight: 0.9 },
-  [AcquisitionChannel.CANTEEN]:      { morning: 0.8, midday: 0.95, evening: 0.7,  lateNight: 0.0 },
-  [AcquisitionChannel.RESTAURANT]:   { morning: 0.5, midday: 0.9,  evening: 0.95, lateNight: 0.3 },
-  [AcquisitionChannel.UNKNOWN]:      { morning: 0.8, midday: 0.9,  evening: 0.9,  lateNight: 0.5 },
+  [AcquisitionChannel.HOME_COOK]: {
+    morning: 0.9,
+    midday: 0.85,
+    evening: 0.95,
+    lateNight: 0.3,
+  },
+  [AcquisitionChannel.DELIVERY]: {
+    morning: 0.6,
+    midday: 0.95,
+    evening: 0.9,
+    lateNight: 0.4,
+  },
+  [AcquisitionChannel.CONVENIENCE]: {
+    morning: 0.85,
+    midday: 0.85,
+    evening: 0.85,
+    lateNight: 0.9,
+  },
+  [AcquisitionChannel.CANTEEN]: {
+    morning: 0.8,
+    midday: 0.95,
+    evening: 0.7,
+    lateNight: 0.0,
+  },
+  [AcquisitionChannel.RESTAURANT]: {
+    morning: 0.5,
+    midday: 0.9,
+    evening: 0.95,
+    lateNight: 0.3,
+  },
+  [AcquisitionChannel.UNKNOWN]: {
+    morning: 0.8,
+    midday: 0.9,
+    evening: 0.9,
+    lateNight: 0.5,
+  },
 };
 
 const CHANNEL_TIME_MATRIX_BY_REGION: Record<
@@ -84,18 +156,28 @@ const CHANNEL_TIME_MATRIX_BY_REGION: Record<
 > = {
   // CN: 午餐外卖更集中、深夜便利店更强
   CN: {
-    [AcquisitionChannel.DELIVERY]:    { midday: 0.98, lateNight: 0.5 },
+    [AcquisitionChannel.DELIVERY]: { midday: 0.98, lateNight: 0.5 },
     [AcquisitionChannel.CONVENIENCE]: { lateNight: 0.95 },
   },
   // JP: 便利店全时段满级；居酒屋傍晚高峰
   JP: {
-    [AcquisitionChannel.CONVENIENCE]: { morning: 0.95, midday: 0.95, evening: 0.95, lateNight: 0.95 },
-    [AcquisitionChannel.RESTAURANT]:  { evening: 0.97 },
+    [AcquisitionChannel.CONVENIENCE]: {
+      morning: 0.95,
+      midday: 0.95,
+      evening: 0.95,
+      lateNight: 0.95,
+    },
+    [AcquisitionChannel.RESTAURANT]: { evening: 0.97 },
   },
   // US: 早餐外送渗透率低；fast-food 全天稳定
   US: {
-    [AcquisitionChannel.DELIVERY]:    { morning: 0.4 },
-    [AcquisitionChannel.RESTAURANT]:  { morning: 0.65, midday: 0.9, evening: 0.9, lateNight: 0.5 },
+    [AcquisitionChannel.DELIVERY]: { morning: 0.4 },
+    [AcquisitionChannel.RESTAURANT]: {
+      morning: 0.65,
+      midday: 0.9,
+      evening: 0.9,
+      lateNight: 0.5,
+    },
   },
 };
 
@@ -139,16 +221,33 @@ function resolveTimeSlot(hour: number): TimeSlot {
 // 注意：此映射应与 pipeline-builder.service.ts CHANNEL_TO_SOURCES 保持同步。
 const CHANNEL_TO_ACCEPTABLE_SOURCES: Record<string, Set<string>> = {
   home_cook: new Set([
-    'supermarket', 'wet_market', 'farmers_market', 'online',
-    'specialty_store', 'butcher', 'butcher_shop', 'bakery',
-    'pharmacy', 'traditional_chinese_medicine_store', 'chinese_medicine_store',
+    'supermarket',
+    'wet_market',
+    'farmers_market',
+    'online',
+    'specialty_store',
+    'butcher',
+    'butcher_shop',
+    'bakery',
+    'pharmacy',
+    'traditional_chinese_medicine_store',
+    'chinese_medicine_store',
   ]),
   delivery: new Set([
-    'restaurant', 'takeout', 'fast_food', 'delivery',
-    'convenience_store', 'bakery',
+    'restaurant',
+    'takeout',
+    'fast_food',
+    'delivery',
+    'convenience_store',
+    'bakery',
   ]),
   restaurant: new Set(['restaurant']),
-  convenience: new Set(['convenience_store', 'convenience', 'supermarket', 'bakery']),
+  convenience: new Set([
+    'convenience_store',
+    'convenience',
+    'supermarket',
+    'bakery',
+  ]),
   canteen: new Set(['restaurant', 'canteen']),
 };
 
@@ -160,7 +259,8 @@ function isFoodCompatibleWithChannel(
   food: FoodLibrary,
   channel: AcquisitionChannel,
 ): boolean {
-  if (!food.availableChannels || food.availableChannels.length === 0) return true;
+  if (!food.availableChannels || food.availableChannels.length === 0)
+    return true;
   // 精确匹配（枚举值一致）
   if (food.availableChannels.includes(channel)) return true;
   if (channel === AcquisitionChannel.UNKNOWN) return true;

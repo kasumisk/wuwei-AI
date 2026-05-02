@@ -17,9 +17,7 @@ import {
   AI_OVERRIDABLE_FIELDS,
 } from '../constants/enrichable-fields';
 import { type EnrichmentResult } from '../constants/enrichment.types';
-import {
-  ALL_COOKING_METHODS,
-} from '../../../../modules/food/cooking-method.constants';
+import { ALL_COOKING_METHODS } from '../../../../modules/food/cooking-method.constants';
 import { FIELD_DESC } from '../constants/field-descriptions';
 
 // 这些常量用于 buildDirectFieldsPrompt 类型检查

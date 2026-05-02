@@ -34,7 +34,10 @@ import { UsdaImportJobData } from '../food-usda-import.processor';
 @Roles('admin', 'super_admin')
 @ApiBearerAuth()
 export class FoodPipelineController {
-  private buildSafeUsdaJobId(prefix: string, parts: Array<string | number | undefined>) {
+  private buildSafeUsdaJobId(
+    prefix: string,
+    parts: Array<string | number | undefined>,
+  ) {
     const normalized = parts
       .map((part) => String(part ?? ''))
       .map((part) => part.replace(/[^a-zA-Z0-9_-]+/g, '_'))
@@ -86,7 +89,8 @@ export class FoodPipelineController {
           QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_USDA_IMPORT].maxRetries + 1,
         backoff: {
           type: QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_USDA_IMPORT].backoffType,
-          delay: QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_USDA_IMPORT].backoffDelay,
+          delay:
+            QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_USDA_IMPORT].backoffDelay,
         },
         removeOnComplete: 200,
         removeOnFail: 100,
@@ -179,7 +183,8 @@ export class FoodPipelineController {
           QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_USDA_IMPORT].maxRetries + 1,
         backoff: {
           type: QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_USDA_IMPORT].backoffType,
-          delay: QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_USDA_IMPORT].backoffDelay,
+          delay:
+            QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_USDA_IMPORT].backoffDelay,
         },
         removeOnComplete: 200,
         removeOnFail: 100,
@@ -247,7 +252,8 @@ export class FoodPipelineController {
           QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_USDA_IMPORT].maxRetries + 1,
         backoff: {
           type: QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_USDA_IMPORT].backoffType,
-          delay: QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_USDA_IMPORT].backoffDelay,
+          delay:
+            QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_USDA_IMPORT].backoffDelay,
         },
         removeOnComplete: 200,
         removeOnFail: 100,
@@ -439,7 +445,6 @@ export class FoodPipelineController {
       data: result,
     };
   }
-
 
   // ==================== 数据质量监控 ====================
 

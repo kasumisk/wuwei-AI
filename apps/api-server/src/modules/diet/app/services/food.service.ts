@@ -460,7 +460,10 @@ export class FoodService {
     ]);
 
     // Race: 完整推荐 vs 超时
-    const raceResult = await Promise.race([fullRecommendPromise, timeoutPromise]);
+    const raceResult = await Promise.race([
+      fullRecommendPromise,
+      timeoutPromise,
+    ]);
 
     if (raceResult === null) {
       // ─── 超时降级：返回热门榜单 ───
@@ -485,7 +488,13 @@ export class FoodService {
 
       this.eventEmitter.emit(
         DomainEvents.RECOMMENDATION_GENERATED,
-        new RecommendationGeneratedEvent(userId, nextMeal, popularFoods.length, latencyMs, false),
+        new RecommendationGeneratedEvent(
+          userId,
+          nextMeal,
+          popularFoods.length,
+          latencyMs,
+          false,
+        ),
       );
 
       const fallbackResult: MealSuggestionResponse = {
@@ -508,7 +517,11 @@ export class FoodService {
         },
       };
 
-      this.setToStickinessCache(cacheKey, fallbackResult, summary.totalCalories || 0);
+      this.setToStickinessCache(
+        cacheKey,
+        fallbackResult,
+        summary.totalCalories || 0,
+      );
       return fallbackResult;
     }
 

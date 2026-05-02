@@ -96,10 +96,8 @@ export class SeasonalityService {
    * - 不传 regionCode 时回退到聚合视图（向后兼容，但会打 warn）
    * - clearCache(regionCode) 仅清单 region；clearCache() 清全部
    */
-  private regionalCacheByRegion: Map<
-    string,
-    Map<string, SeasonalityInfo>
-  > = new Map();
+  private regionalCacheByRegion: Map<string, Map<string, SeasonalityInfo>> =
+    new Map();
 
   /** 每个 region 缓存的最大保留时长（避免长期积累） */
   private static readonly MAX_REGIONS_IN_MEMORY = 32;
@@ -250,7 +248,10 @@ export class SeasonalityService {
     if (existing) return existing;
 
     // LRU 淘汰：超过容量时删除最久未访问的 region
-    if (this.regionalCacheByRegion.size >= SeasonalityService.MAX_REGIONS_IN_MEMORY) {
+    if (
+      this.regionalCacheByRegion.size >=
+      SeasonalityService.MAX_REGIONS_IN_MEMORY
+    ) {
       let oldestRegion: string | null = null;
       let oldestTs = Infinity;
       for (const [r, ts] of this.regionLastAccess.entries()) {
@@ -423,7 +424,7 @@ export class SeasonalityService {
     if (!Number.isInteger(month) || month < 1 || month > 12) {
       throw new Error(
         `[seasonality] month must be integer in [1,12], got ${month}. ` +
-        `调用方必须根据用户时区传入 ctx.currentMonth（pipeline-context-factory 已解析）。`,
+          `调用方必须根据用户时区传入 ctx.currentMonth（pipeline-context-factory 已解析）。`,
       );
     }
     const inputMonth = month;

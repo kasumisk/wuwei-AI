@@ -181,7 +181,10 @@ export class FoodDedupService {
       );
       if (nameSimilarity < 0.82) continue;
 
-      const nutritionSimilarity = this.calculateNutritionSimilarity(food, candidate);
+      const nutritionSimilarity = this.calculateNutritionSimilarity(
+        food,
+        candidate,
+      );
       const combined = nameSimilarity * 0.7 + nutritionSimilarity * 0.3;
       if (combined > 0.88) {
         return {
@@ -256,21 +259,22 @@ export class FoodDedupService {
 
     if (importMode === 'fill_missing_only') {
       if (incoming.allergens?.length) {
-        const existingAllergens = ((existing.taxonomy?.allergens as any[]) || []) as any[];
+        const existingAllergens = (existing.taxonomy?.allergens as any[]) || [];
         const incomingAllergens = incoming.allergens || [];
         merged.allergens = [
           ...new Set([...existingAllergens, ...incomingAllergens]),
         ];
       }
 
-      const existingTags = ((existing.taxonomy?.tags as any[]) || []) as any[];
-      const incomingTags = incoming.tags || incoming.importMetadata?.extraTags || [];
+      const existingTags = (existing.taxonomy?.tags as any[]) || [];
+      const incomingTags =
+        incoming.tags || incoming.importMetadata?.extraTags || [];
       merged.tags = [...new Set([...existingTags, ...incomingTags])];
 
       if (incoming.mealTypes?.length) {
         merged.mealTypes = [
           ...new Set([
-            ...((((existing.taxonomy?.mealTypes as any[]) || []) as any[])),
+            ...((existing.taxonomy?.mealTypes as any[]) || []),
             ...incoming.mealTypes,
           ]),
         ];
@@ -293,14 +297,14 @@ export class FoodDedupService {
 
     // 合并数组字段（去重取并集）
     if (incoming.allergens?.length) {
-      const existingAllergens = ((existing.taxonomy?.allergens as any[]) || []) as any[];
+      const existingAllergens = (existing.taxonomy?.allergens as any[]) || [];
       const incomingAllergens = incoming.allergens || [];
       merged.allergens = [
         ...new Set([...existingAllergens, ...incomingAllergens]),
       ];
     }
 
-    const existingTags = ((existing.taxonomy?.tags as any[]) || []) as any[];
+    const existingTags = (existing.taxonomy?.tags as any[]) || [];
     const incomingTags =
       incoming.tags || incoming.importMetadata?.extraTags || [];
     merged.tags = [...new Set([...existingTags, ...incomingTags])];
@@ -308,7 +312,7 @@ export class FoodDedupService {
     if (incoming.mealTypes?.length) {
       merged.mealTypes = [
         ...new Set([
-          ...((((existing.taxonomy?.mealTypes as any[]) || []) as any[])),
+          ...((existing.taxonomy?.mealTypes as any[]) || []),
           ...incoming.mealTypes,
         ]),
       ];
@@ -399,8 +403,10 @@ export class FoodDedupService {
     if (direct) return direct;
 
     return Object.entries(this.EN_TO_ZH_FOOD_ALIASES)
-      .filter(([english]) =>
-        normalizedEnglishName.includes(english) || english.includes(normalizedEnglishName),
+      .filter(
+        ([english]) =>
+          normalizedEnglishName.includes(english) ||
+          english.includes(normalizedEnglishName),
       )
       .flatMap(([, aliases]) => aliases);
   }

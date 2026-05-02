@@ -347,9 +347,7 @@ export class RecipeGenerationService {
         throw err;
       }
       if (err instanceof LlmUnavailableError) {
-        this.logger.error(
-          `LLM 服务不可用: ${err.message}, model=${modelId}`,
-        );
+        this.logger.error(`LLM 服务不可用: ${err.message}, model=${modelId}`);
         return [];
       }
       this.logger.error(`LLM 调用异常: ${err.message}, model=${modelId}`);

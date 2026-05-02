@@ -59,8 +59,16 @@ export interface ImportPreviewResult {
   estimatedConflictCount: number;
   samples: {
     created: Array<{ name: string; sourceId: string }>;
-    matchedUpdated: Array<{ name: string; existingName: string; fields: string[] }>;
-    matchedSkipped: Array<{ name: string; existingName: string; reason: string }>;
+    matchedUpdated: Array<{
+      name: string;
+      existingName: string;
+      fields: string[];
+    }>;
+    matchedSkipped: Array<{
+      name: string;
+      existingName: string;
+      reason: string;
+    }>;
     conflicts: Array<{ name: string; existingName: string; fields: string[] }>;
   };
   detailGroups: {
@@ -161,7 +169,11 @@ export class FoodPipelineOrchestratorService {
           await this.persistSingleFood(food, result, importMode);
         } catch (e) {
           result.errors++;
-          this.pushImportDetail(result, 'errors', `Error: ${food.name} - ${e.message}`);
+          this.pushImportDetail(
+            result,
+            'errors',
+            `Error: ${food.name} - ${e.message}`,
+          );
         }
       }
     } catch (e) {
@@ -269,14 +281,24 @@ export class FoodPipelineOrchestratorService {
   ): Promise<ImportPreviewResult> {
     const preset = USDA_IMPORT_PRESETS.find((item) => item.key === presetKey);
     if (!preset) {
-      return this.emptyPreview(importMode, [`Unknown USDA preset: ${presetKey}`]);
+      return this.emptyPreview(importMode, [
+        `Unknown USDA preset: ${presetKey}`,
+      ]);
     }
 
     const aggregated = new Map<string, NormalizedFoodData>();
-    const system: string[] = [`Preset: ${preset.label}`, `Import mode: ${importMode}`];
+    const system: string[] = [
+      `Preset: ${preset.label}`,
+      `Import mode: ${importMode}`,
+    ];
     for (const query of preset.queries) {
-      const result = await this.usdaFetcher.search(query, Math.min(maxItemsPerQuery, 200));
-      system.push(`Preset query "${query}": fetched ${result.foods.length}/${result.totalHits}`);
+      const result = await this.usdaFetcher.search(
+        query,
+        Math.min(maxItemsPerQuery, 200),
+      );
+      system.push(
+        `Preset query "${query}": fetched ${result.foods.length}/${result.totalHits}`,
+      );
       for (const food of result.foods) {
         aggregated.set(`${food.sourceType}:${food.sourceId}`, food);
       }
@@ -490,12 +512,16 @@ export class FoodPipelineOrchestratorService {
 
     for (const food of cleaned) {
       try {
-          await this.persistSingleFood(food, result, importMode);
-        } catch (e) {
-          result.errors++;
-          this.pushImportDetail(result, 'errors', `Error: ${food.name} - ${e.message}`);
-        }
+        await this.persistSingleFood(food, result, importMode);
+      } catch (e) {
+        result.errors++;
+        this.pushImportDetail(
+          result,
+          'errors',
+          `Error: ${food.name} - ${e.message}`,
+        );
       }
+    }
 
     this.logger.log(
       `Normalized import done: source=${sourceLabel}, created=${result.created}, updated=${result.updated}, skipped=${result.skipped}, errors=${result.errors}`,
@@ -876,7 +902,7 @@ export class FoodPipelineOrchestratorService {
     };
 
     for (const food of cleaned) {
-      const dup = await this.dedup.findDuplicate(food as CleanedFoodData);
+      const dup = await this.dedup.findDuplicate(food);
       if (!dup) {
         preview.estimatedCreated++;
         if (preview.samples.created.length < 8) {
@@ -905,7 +931,7 @@ export class FoodPipelineOrchestratorService {
 
       const mergedFields = this.dedup.mergeFood(
         dup.existingFood,
-        food as CleanedFoodData,
+        food,
         this.getSourcePriority(food.primarySource),
         importMode,
       );
@@ -1044,7 +1070,7 @@ export class FoodPipelineOrchestratorService {
 
   private async generateCode(): Promise<string> {
     const count = await this.prisma.food.count();
-      return `FOOD_G_${String(count + 1).padStart(5, '0')}`;
+    return `FOOD_G_${String(count + 1).padStart(5, '0')}`;
   }
 
   private sanitizeFoodMainWriteData<T extends Record<string, any>>(data: T): T {
@@ -1072,13 +1098,18 @@ export class FoodPipelineOrchestratorService {
         .split(',')
         .map((item: string) => item.trim())
         .filter(Boolean)
-        .filter((item: string, index: number, arr: string[]) => arr.indexOf(item) === index)
+        .filter(
+          (item: string, index: number, arr: string[]) =>
+            arr.indexOf(item) === index,
+        )
         .join(', ');
 
       sanitized.aliases = aliases;
     }
 
-    for (const [field, maxLength] of Object.entries(this.OPTIONAL_MAIN_FIELD_LIMITS)) {
+    for (const [field, maxLength] of Object.entries(
+      this.OPTIONAL_MAIN_FIELD_LIMITS,
+    )) {
       const value = sanitized[field];
       if (typeof value !== 'string') continue;
 
@@ -1152,7 +1183,9 @@ export class FoodPipelineOrchestratorService {
     );
   }
 
-  private pickLegacyRawMainFields(data: Record<string, any>): Record<string, any> {
+  private pickLegacyRawMainFields(
+    data: Record<string, any>,
+  ): Record<string, any> {
     return Object.fromEntries(
       Object.entries(data).filter(([field, value]) => {
         return this.LEGACY_RAW_MAIN_FIELDS.has(field) && value != null;

@@ -46,7 +46,9 @@ export class FoodUsdaImportProcessor extends WorkerHost {
   }
 
   async process(job: Job<UsdaImportJobData>) {
-    this.logger.log(`开始 USDA 导入任务: jobId=${job.id}, mode=${job.data.mode}`);
+    this.logger.log(
+      `开始 USDA 导入任务: jobId=${job.id}, mode=${job.data.mode}`,
+    );
 
     if (job.data.mode === 'keyword') {
       return this.orchestrator.importFromUsda(

@@ -138,9 +138,7 @@ export class FoodEnrichmentController {
         limit,
         offset,
         body.locales,
-        target === 'regional'
-          ? [...new Set(regionalRegions)]
-          : body.region,
+        target === 'regional' ? [...new Set(regionalRegions)] : body.region,
       );
     } else {
       foods = await this.enrichmentService.getFoodsNeedingEnrichment(
@@ -169,7 +167,8 @@ export class FoodEnrichmentController {
         staged: body.staged ?? false,
         locales: body.locales,
         region: body.region,
-        regions: target === 'regional' ? [...new Set(regionalRegions)] : undefined,
+        regions:
+          target === 'regional' ? [...new Set(regionalRegions)] : undefined,
       },
       opts: {
         // V8.4: jobId 幂等去重 — 同一 foodId 在队列中只保留一个 job

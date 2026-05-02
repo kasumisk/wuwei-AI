@@ -196,7 +196,10 @@ export class SubscriptionManagementService {
     if (!plan) {
       throw new NotFoundException(`订阅计划 #${id} 不存在`);
     }
-    this.assertValidStoreProducts(dto.tier ?? (plan.tier as any), dto.storeProducts);
+    this.assertValidStoreProducts(
+      dto.tier ?? (plan.tier as any),
+      dto.storeProducts,
+    );
 
     // 只更新传入的字段
     const updateData: any = {};
@@ -216,10 +219,7 @@ export class SubscriptionManagementService {
       where: { id },
       data: updateData,
     });
-    await this.domainSync.syncPlanCatalog(
-      updated as any,
-      dto.storeProducts,
-    );
+    await this.domainSync.syncPlanCatalog(updated as any, dto.storeProducts);
     return updated;
   }
 
@@ -474,7 +474,10 @@ export class SubscriptionManagementService {
       const refundCandidates = await this.prisma.paymentRecords.findMany({
         where: hasRefundRecord
           ? {
-              OR: [{ refundedAt: { not: null } }, { status: 'refunded' as any }],
+              OR: [
+                { refundedAt: { not: null } },
+                { status: 'refunded' as any },
+              ],
             }
           : {
               refundedAt: null,
@@ -493,7 +496,11 @@ export class SubscriptionManagementService {
       const matchedUserIds = [
         ...new Set(refundCandidates.map((item) => item.userId)),
       ];
-      if (hasRefundRecord && !matchedSubscriptionIds.length && !matchedUserIds.length) {
+      if (
+        hasRefundRecord &&
+        !matchedSubscriptionIds.length &&
+        !matchedUserIds.length
+      ) {
         return { list: [], total: 0, page, pageSize, totalPages: 0 };
       }
       where.AND = [
@@ -504,7 +511,9 @@ export class SubscriptionManagementService {
                 ...(matchedSubscriptionIds.length
                   ? [{ id: { in: matchedSubscriptionIds } }]
                   : []),
-                ...(matchedUserIds.length ? [{ userId: { in: matchedUserIds } }] : []),
+                ...(matchedUserIds.length
+                  ? [{ userId: { in: matchedUserIds } }]
+                  : []),
               ],
             }
           : {
@@ -512,7 +521,9 @@ export class SubscriptionManagementService {
                 ...(matchedSubscriptionIds.length
                   ? [{ id: { notIn: matchedSubscriptionIds } }]
                   : []),
-                ...(matchedUserIds.length ? [{ userId: { notIn: matchedUserIds } }] : []),
+                ...(matchedUserIds.length
+                  ? [{ userId: { notIn: matchedUserIds } }]
+                  : []),
               ],
             },
       ];
@@ -534,8 +545,14 @@ export class SubscriptionManagementService {
             .filter((value): value is string => !!value),
         ),
       ];
-      const matchedUserIds = [...new Set(manualCandidates.map((item) => item.userId))];
-      if (hasManualEntitlement && !matchedSubscriptionIds.length && !matchedUserIds.length) {
+      const matchedUserIds = [
+        ...new Set(manualCandidates.map((item) => item.userId)),
+      ];
+      if (
+        hasManualEntitlement &&
+        !matchedSubscriptionIds.length &&
+        !matchedUserIds.length
+      ) {
         return { list: [], total: 0, page, pageSize, totalPages: 0 };
       }
       where.AND = [
@@ -546,7 +563,9 @@ export class SubscriptionManagementService {
                 ...(matchedSubscriptionIds.length
                   ? [{ id: { in: matchedSubscriptionIds } }]
                   : []),
-                ...(matchedUserIds.length ? [{ userId: { in: matchedUserIds } }] : []),
+                ...(matchedUserIds.length
+                  ? [{ userId: { in: matchedUserIds } }]
+                  : []),
               ],
             }
           : {
@@ -554,7 +573,9 @@ export class SubscriptionManagementService {
                 ...(matchedSubscriptionIds.length
                   ? [{ id: { notIn: matchedSubscriptionIds } }]
                   : []),
-                ...(matchedUserIds.length ? [{ userId: { notIn: matchedUserIds } }] : []),
+                ...(matchedUserIds.length
+                  ? [{ userId: { notIn: matchedUserIds } }]
+                  : []),
               ],
             },
       ];
@@ -590,16 +611,14 @@ export class SubscriptionManagementService {
         ),
       ];
       const signalUserIds = [
-        ...new Set(
-          [
-            ...signalTransactions
-              .map((item) => item.userId)
-              .filter((value): value is string => !!value),
-            ...signalWebhooks
-              .map((item) => item.appUserId)
-              .filter((value): value is string => this.isUuid(value)),
-          ],
-        ),
+        ...new Set([
+          ...signalTransactions
+            .map((item) => item.userId)
+            .filter((value): value is string => !!value),
+          ...signalWebhooks
+            .map((item) => item.appUserId)
+            .filter((value): value is string => this.isUuid(value)),
+        ]),
       ];
 
       if (
@@ -619,7 +638,9 @@ export class SubscriptionManagementService {
                   ...(signalSubscriptionIds.length
                     ? [{ id: { in: signalSubscriptionIds } }]
                     : []),
-                  ...(signalUserIds.length ? [{ userId: { in: signalUserIds } }] : []),
+                  ...(signalUserIds.length
+                    ? [{ userId: { in: signalUserIds } }]
+                    : []),
                 ],
               }
             : {
@@ -627,7 +648,9 @@ export class SubscriptionManagementService {
                   ...(signalSubscriptionIds.length
                     ? [{ id: { notIn: signalSubscriptionIds } }]
                     : []),
-                  ...(signalUserIds.length ? [{ userId: { notIn: signalUserIds } }] : []),
+                  ...(signalUserIds.length
+                    ? [{ userId: { notIn: signalUserIds } }]
+                    : []),
                 ],
               },
         ];
@@ -636,7 +659,9 @@ export class SubscriptionManagementService {
           ...(where.AND ?? []),
           {
             OR: [
-              ...(signalUserIds.length ? [{ userId: { in: signalUserIds } }] : []),
+              ...(signalUserIds.length
+                ? [{ userId: { in: signalUserIds } }]
+                : []),
             ],
           },
         ];
@@ -666,54 +691,63 @@ export class SubscriptionManagementService {
         : [];
 
     const subscriptionIds = rawList.map((item) => item.id);
-    const [latestAudits, latestTransactions, latestWebhookEvents, paymentSignals, manualEntitlements, activeStoreProducts] =
-      await Promise.all([
-        this.prisma.subscriptionAuditLogs.findMany({
-          where: {
-            OR: [
-              { subscriptionId: { in: subscriptionIds } },
-              { userId: { in: userIds } },
-            ],
-          },
-          orderBy: { createdAt: 'desc' },
-          take: Math.max(subscriptionIds.length * 4, 20),
-        }),
-        this.prisma.subscriptionTransactions.findMany({
-          where: {
-            OR: [
-              { subscriptionId: { in: subscriptionIds } },
-              { userId: { in: userIds } },
-            ],
-          },
-          orderBy: { createdAt: 'desc' },
-          take: Math.max(subscriptionIds.length * 4, 20),
-        }),
-        this.prisma.billingWebhookEvents.findMany({
-          where: { appUserId: { in: userIds } },
-          orderBy: { receivedAt: 'desc' },
-          take: Math.max(subscriptionIds.length * 6, 30),
-        }),
-        this.prisma.paymentRecords.findMany({
-          where: {
-            OR: [{ subscriptionId: { in: subscriptionIds } }, { userId: { in: userIds } }],
-          },
-          orderBy: { createdAt: 'desc' },
-          take: Math.max(subscriptionIds.length * 4, 20),
-        }),
-        this.prisma.userEntitlement.findMany({
-          where: {
-            userId: { in: userIds },
-            sourceType: 'manual',
-            status: 'active',
-          },
-          select: { subscriptionId: true, userId: true },
-          take: Math.max(subscriptionIds.length * 2, 20),
-        }),
-        this.prisma.subscriptionStoreProduct.findMany({
-          where: { isActive: true },
-          select: { productId: true, offeringId: true, packageId: true },
-        }),
-      ]);
+    const [
+      latestAudits,
+      latestTransactions,
+      latestWebhookEvents,
+      paymentSignals,
+      manualEntitlements,
+      activeStoreProducts,
+    ] = await Promise.all([
+      this.prisma.subscriptionAuditLogs.findMany({
+        where: {
+          OR: [
+            { subscriptionId: { in: subscriptionIds } },
+            { userId: { in: userIds } },
+          ],
+        },
+        orderBy: { createdAt: 'desc' },
+        take: Math.max(subscriptionIds.length * 4, 20),
+      }),
+      this.prisma.subscriptionTransactions.findMany({
+        where: {
+          OR: [
+            { subscriptionId: { in: subscriptionIds } },
+            { userId: { in: userIds } },
+          ],
+        },
+        orderBy: { createdAt: 'desc' },
+        take: Math.max(subscriptionIds.length * 4, 20),
+      }),
+      this.prisma.billingWebhookEvents.findMany({
+        where: { appUserId: { in: userIds } },
+        orderBy: { receivedAt: 'desc' },
+        take: Math.max(subscriptionIds.length * 6, 30),
+      }),
+      this.prisma.paymentRecords.findMany({
+        where: {
+          OR: [
+            { subscriptionId: { in: subscriptionIds } },
+            { userId: { in: userIds } },
+          ],
+        },
+        orderBy: { createdAt: 'desc' },
+        take: Math.max(subscriptionIds.length * 4, 20),
+      }),
+      this.prisma.userEntitlement.findMany({
+        where: {
+          userId: { in: userIds },
+          sourceType: 'manual',
+          status: 'active',
+        },
+        select: { subscriptionId: true, userId: true },
+        take: Math.max(subscriptionIds.length * 2, 20),
+      }),
+      this.prisma.subscriptionStoreProduct.findMany({
+        where: { isActive: true },
+        select: { productId: true, offeringId: true, packageId: true },
+      }),
+    ]);
 
     const userMap = new Map(users.map((u) => [u.id, u]));
     const auditBySubscriptionId = new Map<
@@ -783,7 +817,10 @@ export class SubscriptionManagementService {
       }
     }
     for (const item of paymentSignals) {
-      if (item.subscriptionId && (item.refundedAt || item.status === ('refunded' as any))) {
+      if (
+        item.subscriptionId &&
+        (item.refundedAt || item.status === ('refunded' as any))
+      ) {
         refundSubscriptionIds.add(item.subscriptionId);
       }
       if (item.refundedAt || item.status === ('refunded' as any)) {
@@ -791,7 +828,8 @@ export class SubscriptionManagementService {
       }
     }
     for (const item of manualEntitlements) {
-      if (item.subscriptionId) manualEntitlementSubscriptionIds.add(item.subscriptionId);
+      if (item.subscriptionId)
+        manualEntitlementSubscriptionIds.add(item.subscriptionId);
       manualEntitlementUserIds.add(item.userId);
     }
 
@@ -844,8 +882,7 @@ export class SubscriptionManagementService {
         transactionBySubscriptionId.get(sub.id)?.transactionType ??
         transactionByUserId.get(sub.userId)?.transactionType ??
         null,
-      latestWebhookAt:
-        webhookByUserId.get(sub.userId)?.receivedAt ?? null,
+      latestWebhookAt: webhookByUserId.get(sub.userId)?.receivedAt ?? null,
       latestWebhookEventType:
         webhookByUserId.get(sub.userId)?.eventType ?? null,
       hasRefundRecord:
@@ -868,7 +905,8 @@ export class SubscriptionManagementService {
             : 0) -
             (b.latestTransactionAt
               ? new Date(b.latestTransactionAt).getTime()
-              : 0)) * direction
+              : 0)) *
+          direction
         );
       }
       if (sortBy === 'latestWebhookAt') {
@@ -979,34 +1017,34 @@ export class SubscriptionManagementService {
     const limit = query.limit ?? 50;
     const [audits, transactions, webhookEvents, activeStoreProducts] =
       await Promise.all([
-      this.prisma.subscriptionAuditLogs.findMany({
-        where: {
-          OR: [{ subscriptionId: id }, { userId: subscription.userId }],
-        },
-        orderBy: { createdAt: 'desc' },
-        take: limit,
-      }),
-      this.prisma.subscriptionTransactions.findMany({
-        where: {
-          OR: [{ subscriptionId: id }, { userId: subscription.userId }],
-        },
-        orderBy: { createdAt: 'desc' },
-        take: limit,
-      }),
-      this.prisma.billingWebhookEvents.findMany({
-        where: { appUserId: subscription.userId },
-        orderBy: { receivedAt: 'desc' },
-        take: limit,
-      }),
-      this.prisma.subscriptionStoreProduct.findMany({
-        where: { isActive: true },
-        select: {
-          productId: true,
-          offeringId: true,
-          packageId: true,
-        },
-      }),
-    ]);
+        this.prisma.subscriptionAuditLogs.findMany({
+          where: {
+            OR: [{ subscriptionId: id }, { userId: subscription.userId }],
+          },
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+        }),
+        this.prisma.subscriptionTransactions.findMany({
+          where: {
+            OR: [{ subscriptionId: id }, { userId: subscription.userId }],
+          },
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+        }),
+        this.prisma.billingWebhookEvents.findMany({
+          where: { appUserId: subscription.userId },
+          orderBy: { receivedAt: 'desc' },
+          take: limit,
+        }),
+        this.prisma.subscriptionStoreProduct.findMany({
+          where: { isActive: true },
+          select: {
+            productId: true,
+            offeringId: true,
+            packageId: true,
+          },
+        }),
+      ]);
 
     const mappingByProductId = new Map(
       activeStoreProducts.map((item) => [item.productId, item]),
@@ -1252,9 +1290,7 @@ export class SubscriptionManagementService {
       provider: updated.paymentChannel,
       lastEventAt: now,
     });
-    await this.subscriptionService.invalidateUserSummaryCache(
-      updated.userId,
-    );
+    await this.subscriptionService.invalidateUserSummaryCache(updated.userId);
     await this.createAdminAuditLog(updated, 'refund', dto.reason, {
       refundedAt: now.toISOString(),
     });
@@ -1286,19 +1322,14 @@ export class SubscriptionManagementService {
       provider: updated.paymentChannel,
       lastEventAt: now,
     });
-    await this.subscriptionService.invalidateUserSummaryCache(
-      updated.userId,
-    );
+    await this.subscriptionService.invalidateUserSummaryCache(updated.userId);
     await this.createAdminAuditLog(updated, 'revoke', dto.reason, {
       revokedAt: now.toISOString(),
     });
     return updated;
   }
 
-  async grantManualEntitlement(
-    id: string,
-    dto: GrantManualEntitlementDto,
-  ) {
+  async grantManualEntitlement(id: string, dto: GrantManualEntitlementDto) {
     const subscription = await this.prisma.subscription.findUnique({
       where: { id },
     });
@@ -1307,9 +1338,7 @@ export class SubscriptionManagementService {
     }
 
     const now = new Date();
-    const effectiveTo = dto.effectiveTo
-      ? new Date(dto.effectiveTo)
-      : null;
+    const effectiveTo = dto.effectiveTo ? new Date(dto.effectiveTo) : null;
     const sourceKey = `manual:${dto.entitlementCode}`;
 
     const record = await this.prisma.userEntitlement.upsert({
@@ -1361,10 +1390,7 @@ export class SubscriptionManagementService {
     return record;
   }
 
-  async revokeManualEntitlement(
-    id: string,
-    dto: RevokeManualEntitlementDto,
-  ) {
+  async revokeManualEntitlement(id: string, dto: RevokeManualEntitlementDto) {
     const subscription = await this.prisma.subscription.findUnique({
       where: { id },
     });
@@ -1474,14 +1500,7 @@ export class SubscriptionManagementService {
   async findPaymentRecords(query: GetPaymentRecordsQueryDto) {
     const page = Number(query.page) || 1;
     const pageSize = Number(query.pageSize) || 10;
-    const {
-      userId,
-      status,
-      channel,
-      startDate,
-      endDate,
-      orderNo,
-    } = query;
+    const { userId, status, channel, startDate, endDate, orderNo } = query;
 
     const where: any = {};
     if (userId) {
@@ -1539,11 +1558,14 @@ export class SubscriptionManagementService {
         : [];
 
     const userMap = new Map(users.map((u) => [u.id, u]));
-    const subscriptionMap = new Map(subscriptions.map((item) => [item.id, item]));
+    const subscriptionMap = new Map(
+      subscriptions.map((item) => [item.id, item]),
+    );
 
     const list = rawList.map((record) => {
-      const subscription =
-        record.subscriptionId ? subscriptionMap.get(record.subscriptionId) : null;
+      const subscription = record.subscriptionId
+        ? subscriptionMap.get(record.subscriptionId)
+        : null;
       return {
         ...record,
         user: userMap.get(record.userId) ?? null,
@@ -1629,17 +1651,13 @@ export class SubscriptionManagementService {
         this.prisma.subscription.count({
           where: { status: SubscriptionStatus.ACTIVE },
         }),
-        this.prisma.$queryRaw<
-          Array<{ tier: string | null; count: number }>
-        >`
+        this.prisma.$queryRaw<Array<{ tier: string | null; count: number }>>`
       SELECT p.tier, COUNT(s.id)::int as count
       FROM subscription s
       LEFT JOIN subscription_plan p ON p.id = s.plan_id
       WHERE s.status = ${SubscriptionStatus.ACTIVE}
       GROUP BY p.tier`,
-        this.prisma.$queryRaw<
-          Array<{ channel: string; count: number }>
-        >`
+        this.prisma.$queryRaw<Array<{ channel: string; count: number }>>`
       SELECT payment_channel as channel, COUNT(id)::int as count
       FROM subscription
       WHERE status = ${SubscriptionStatus.ACTIVE}
@@ -1702,10 +1720,13 @@ export class SubscriptionManagementService {
       }
     }
 
-    const byChannel = channelStats.reduce<Record<string, number>>((acc, item) => {
-      acc[item.channel] = Number(item.count ?? 0);
-      return acc;
-    }, {});
+    const byChannel = channelStats.reduce<Record<string, number>>(
+      (acc, item) => {
+        acc[item.channel] = Number(item.count ?? 0);
+        return acc;
+      },
+      {},
+    );
 
     return {
       totalSubscriptions,
@@ -1860,16 +1881,14 @@ export class SubscriptionManagementService {
       ]);
 
     const relatedUserIds = [
-      ...new Set(
-        [
-          ...failedWebhooks
-            .map((item) => item.appUserId)
-            .filter((value): value is string => this.isUuid(value)),
-          ...orphanTransactions
-            .map((item) => item.userId)
-            .filter((value): value is string => this.isUuid(value)),
-        ],
-      ),
+      ...new Set([
+        ...failedWebhooks
+          .map((item) => item.appUserId)
+          .filter((value): value is string => this.isUuid(value)),
+        ...orphanTransactions
+          .map((item) => item.userId)
+          .filter((value): value is string => this.isUuid(value)),
+      ]),
     ];
     const relatedSubscriptions = relatedUserIds.length
       ? await this.prisma.subscription.findMany({
@@ -1885,15 +1904,18 @@ export class SubscriptionManagementService {
       }
     }
 
-    const activeStoreProducts = await this.prisma.subscriptionStoreProduct.findMany({
-      where: { isActive: true },
-      select: {
-        productId: true,
-        offeringId: true,
-        packageId: true,
-      },
-    });
-    const mappedProductIds = new Set(activeStoreProducts.map((item) => item.productId));
+    const activeStoreProducts =
+      await this.prisma.subscriptionStoreProduct.findMany({
+        where: { isActive: true },
+        select: {
+          productId: true,
+          offeringId: true,
+          packageId: true,
+        },
+      });
+    const mappedProductIds = new Set(
+      activeStoreProducts.map((item) => item.productId),
+    );
     const mappingByProductId = new Map(
       activeStoreProducts.map((item) => [item.productId, item]),
     );
@@ -1927,7 +1949,8 @@ export class SubscriptionManagementService {
           source: 'webhook',
           productId: item.productId,
           mappedOfferingId:
-            item.productId && mappingByProductId.get(item.productId)?.offeringId,
+            item.productId &&
+            mappingByProductId.get(item.productId)?.offeringId,
           mappedPackageId:
             item.productId && mappingByProductId.get(item.productId)?.packageId,
           userId: item.appUserId,
@@ -2086,7 +2109,9 @@ export class SubscriptionManagementService {
       limit - 1,
       false,
     );
-    const list = await Promise.all(jobs.map((job) => this.serializeMaintenanceJob(job)));
+    const list = await Promise.all(
+      jobs.map((job) => this.serializeMaintenanceJob(job)),
+    );
 
     return {
       counts,

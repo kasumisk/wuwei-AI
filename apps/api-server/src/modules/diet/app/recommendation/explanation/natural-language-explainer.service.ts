@@ -218,10 +218,7 @@ export class NaturalLanguageExplainerService {
         return val > 0;
       });
       if (matchingGaps.length > 0) {
-        const gapName = getNutrientLabel(
-          matchingGaps[0],
-          ctx.locale as Locale,
-        );
+        const gapName = getNutrientLabel(matchingGaps[0], ctx.locale as Locale);
         reasons.push(
           t(
             'narrative.nutrition_gap',

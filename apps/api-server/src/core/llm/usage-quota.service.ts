@@ -157,7 +157,7 @@ export class UsageQuotaService {
     } else if (cycle === 'weekly') {
       // 重置到下周一 00:00 UTC
       const day = next.getUTCDay(); // 0=Sun
-      const daysUntilNextMonday = ((8 - day) % 7) || 7;
+      const daysUntilNextMonday = (8 - day) % 7 || 7;
       next.setUTCDate(next.getUTCDate() + daysUntilNextMonday);
     } else {
       next.setUTCMonth(next.getUTCMonth() + 1, 1);

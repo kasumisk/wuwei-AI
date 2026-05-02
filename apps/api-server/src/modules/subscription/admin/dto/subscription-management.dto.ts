@@ -26,7 +26,9 @@ import {
 // ==================== 订阅计划 ====================
 
 export class SubscriptionStoreProductInputDto {
-  @ApiProperty({ description: '支付/订阅 provider，例如 revenuecat / wechat_pay' })
+  @ApiProperty({
+    description: '支付/订阅 provider，例如 revenuecat / wechat_pay',
+  })
   @IsString()
   provider: string;
 
@@ -128,7 +130,8 @@ export class CreateSubscriptionPlanDto {
   entitlements: FeatureEntitlements;
 
   @ApiPropertyOptional({
-    description: '第三方商品映射。付费海外套餐至少需要 revenuecat/app_store 与 revenuecat/play_store。',
+    description:
+      '第三方商品映射。付费海外套餐至少需要 revenuecat/app_store 与 revenuecat/play_store。',
     type: [SubscriptionStoreProductInputDto],
   })
   @IsOptional()
@@ -297,12 +300,17 @@ export class GetSubscriptionsQueryDto {
   @IsBoolean()
   hasRevenueCatSignal?: boolean;
 
-  @ApiPropertyOptional({ description: 'Webhook 处理状态，例如 failed / processed' })
+  @ApiPropertyOptional({
+    description: 'Webhook 处理状态，例如 failed / processed',
+  })
   @IsOptional()
   @IsString()
   webhookProcessingStatus?: string;
 
-  @ApiPropertyOptional({ description: '排序字段，例如 createdAt / expiresAt / latestTransactionAt / latestWebhookAt' })
+  @ApiPropertyOptional({
+    description:
+      '排序字段，例如 createdAt / expiresAt / latestTransactionAt / latestWebhookAt',
+  })
   @IsOptional()
   @IsString()
   sortBy?: string;
@@ -501,7 +509,9 @@ export class GetSubscriptionMaintenanceJobsQueryDto {
 }
 
 export class GetSubscriptionMaintenanceDlqQueryDto {
-  @ApiPropertyOptional({ description: 'DLQ 状态 pending / retried / discarded' })
+  @ApiPropertyOptional({
+    description: 'DLQ 状态 pending / retried / discarded',
+  })
   @IsOptional()
   @IsString()
   status?: string;

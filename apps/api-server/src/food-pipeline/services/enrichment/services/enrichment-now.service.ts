@@ -5,12 +5,7 @@
  * 拆分自 food-enrichment.service.ts。
  */
 
-import {
-  forwardRef,
-  Inject,
-  Injectable,
-  Logger,
-} from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
 import { FoodProvenanceRepository } from '../../../../modules/food/repositories';
 import {
@@ -36,9 +31,7 @@ import {
   EnrichmentCompletenessService,
   COMPLETENESS_SOURCE_FIELDS,
 } from './enrichment-completeness.service';
-import {
-  EnrichmentStagingService,
-} from './enrichment-staging.service';
+import { EnrichmentStagingService } from './enrichment-staging.service';
 import { EnrichmentStageService } from './enrichment-stage.service';
 import { EnrichmentApplyService } from './enrichment-apply.service';
 

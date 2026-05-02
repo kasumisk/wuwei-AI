@@ -34,9 +34,7 @@ export class UserRegionCacheInvalidationListener {
   constructor(private readonly redis: RedisCacheService) {}
 
   @OnEvent(DomainEvents.USER_REGION_CHANGED, { async: true })
-  async handleUserRegionChanged(
-    event: UserRegionChangedEvent,
-  ): Promise<void> {
+  async handleUserRegionChanged(event: UserRegionChangedEvent): Promise<void> {
     const { userId, previousRegionCode, currentRegionCode, source } = event;
 
     this.logger.log(

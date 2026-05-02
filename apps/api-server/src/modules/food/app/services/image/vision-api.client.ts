@@ -189,11 +189,7 @@ export class VisionApiClient implements OnModuleInit {
           content: [
             {
               type: 'text',
-              text: this.promptSchema.getUserMessage(
-                'image',
-                userHint,
-                locale,
-              ),
+              text: this.promptSchema.getUserMessage('image', userHint, locale),
             },
             {
               type: 'image_url',

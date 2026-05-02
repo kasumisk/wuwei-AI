@@ -99,7 +99,7 @@ export class PriceFitFactor implements ScoringFactor {
     const hasExact =
       typeof declared?.['budgetPerMeal'] === 'number' &&
       typeof declared?.['currencyCode'] === 'string' &&
-      (declared['budgetPerMeal'] as number) > 0;
+      declared['budgetPerMeal'] > 0;
     const hasLegacy =
       !!ctx.userProfile?.budgetLevel &&
       ctx.userProfile.budgetLevel in BUDGET_MAX_COST;

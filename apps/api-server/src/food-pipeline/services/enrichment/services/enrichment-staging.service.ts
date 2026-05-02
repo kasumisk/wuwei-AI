@@ -21,7 +21,10 @@ import {
   getFoodSplitFromSql,
   buildPresentFieldSqlCondition,
 } from '../helpers/enrichment-sql.helper';
-import { type EnrichmentResult, type StagedEnrichment } from '../constants/enrichment.types';
+import {
+  type EnrichmentResult,
+  type StagedEnrichment,
+} from '../constants/enrichment.types';
 import {
   EnrichmentCompletenessService,
   COMPLETENESS_SOURCE_FIELDS,
@@ -43,7 +46,12 @@ export interface IEnrichmentApplyService {
     foodId: string,
     results: Record<string, Record<string, any>>,
     operator?: string,
-  ): Promise<{ localesSummary: Record<string, { action: 'created' | 'updated' | 'skipped'; fields: string[] }> }>;
+  ): Promise<{
+    localesSummary: Record<
+      string,
+      { action: 'created' | 'updated' | 'skipped'; fields: string[] }
+    >;
+  }>;
   applyRegionalEnrichment(
     foodId: string,
     region: string,

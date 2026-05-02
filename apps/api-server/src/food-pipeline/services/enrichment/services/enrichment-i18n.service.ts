@@ -36,7 +36,12 @@ export class EnrichmentI18nService {
     requestedFields: readonly string[],
     target: string,
   ): Promise<EnrichmentResult | null> {
-    return this.aiClient.callAI(foodName, prompt, requestedFields, target as any);
+    return this.aiClient.callAI(
+      foodName,
+      prompt,
+      requestedFields,
+      target as any,
+    );
   }
 
   async enrichTranslations(
@@ -63,18 +68,9 @@ export class EnrichmentI18nService {
 
     for (const targetLocale of normalizedLocales) {
       const existing = existingMap.get(targetLocale);
-      const missingTransFields: string[] = [];
-      if (!existing) {
-        missingTransFields.push('name', 'aliases', 'description');
-      } else {
-        if (!existing.name) missingTransFields.push('name');
-        if (!existing.aliases) missingTransFields.push('aliases');
-        if (!existing.description) missingTransFields.push('description');
-      }
-
-      if (missingTransFields.length > 0) {
-        localeFieldMap.set(targetLocale, missingTransFields);
-      }
+      // 只补全对应表中完全没有记录的 locale，有记录则跳过（不做字段级补全）
+      if (existing) continue;
+      localeFieldMap.set(targetLocale, ['name', 'aliases', 'description']);
     }
 
     if (localeFieldMap.size === 0) return {};
@@ -183,33 +179,20 @@ ${localeInstructions}
       where: { foodId: foodId, ...buildFoodRegionalWhere(region) },
     });
 
-    const missingFields: string[] = [];
-    if (!existing) {
-      missingFields.push(
-        'local_popularity',
-        'price_min',
-        'price_max',
-        'currency_code',
-        'price_unit',
-        'availability',
-        'month_weights',
-        'seasonality_confidence',
-        'regulatory_info',
-      );
-    } else {
-      if (!existing.localPopularity) missingFields.push('local_popularity');
-      if (existing.priceMin === null) missingFields.push('price_min');
-      if (existing.priceMax === null) missingFields.push('price_max');
-      if (!existing.currencyCode) missingFields.push('currency_code');
-      if (!existing.priceUnit) missingFields.push('price_unit');
-      if (existing.availability === 'UNKNOWN') missingFields.push('availability');
-      if (!existing.monthWeights) missingFields.push('month_weights');
-      if (!existing.seasonalityConfidence)
-        missingFields.push('seasonality_confidence');
-      if (!existing.regulatoryInfo) missingFields.push('regulatory_info');
-    }
+    // 只补全对应表中完全没有记录的 region，有记录则跳过（不做字段级补全）
+    if (existing) return null;
 
-    if (missingFields.length === 0) return null;
+    const missingFields = [
+      'local_popularity',
+      'price_min',
+      'price_max',
+      'currency_code',
+      'price_unit',
+      'availability',
+      'month_weights',
+      'seasonality_confidence',
+      'regulatory_info',
+    ];
 
     const prompt = `你正在为食品推荐系统补全 food_regional_info。请基于常识性食品知识、区域饮食习惯、零售可得性、季节性和法规常识做保守估算；不要假装有实时价格或官方统计。
 

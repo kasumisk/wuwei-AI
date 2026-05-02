@@ -35,13 +35,9 @@ import {
   type StageEnrichmentResult,
   type MultiStageEnrichmentResult,
 } from '../constants/enrichment-stages';
-import {
-  NUTRIENT_RANGES,
-} from '../constants/nutrient-ranges';
+import { NUTRIENT_RANGES } from '../constants/nutrient-ranges';
 import { FIELD_DESC } from '../constants/field-descriptions';
-import {
-  type EnrichmentResult,
-} from '../constants/enrichment.types';
+import { type EnrichmentResult } from '../constants/enrichment.types';
 import {
   getFieldSqlRef,
   getFoodSplitFromSql,

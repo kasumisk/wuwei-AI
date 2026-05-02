@@ -153,7 +153,9 @@ export class AdminService {
   async loginWithFirebaseGoogle(idToken: string): Promise<LoginResponseDto> {
     const decodedToken = await this.firebaseAdminService.verifyIdToken(idToken);
     if (!decodedToken) {
-      throw new UnauthorizedException(this.i18n.t('auth.tokenInvalidOrExpired'));
+      throw new UnauthorizedException(
+        this.i18n.t('auth.tokenInvalidOrExpired'),
+      );
     }
 
     const provider =
@@ -330,7 +332,9 @@ export class AdminService {
     return this.jwtService.sign(payload);
   }
 
-  private sanitizeUser(user: AdminUser | null): Omit<AdminUser, 'password'> | null {
+  private sanitizeUser(
+    user: AdminUser | null,
+  ): Omit<AdminUser, 'password'> | null {
     if (!user) return null;
     const { password: _password, ...rest } = user;
     return rest;

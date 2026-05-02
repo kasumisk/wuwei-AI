@@ -201,4 +201,3 @@ export class PrecomputeProcessor extends WorkerHost {
     }
   }
 }
-

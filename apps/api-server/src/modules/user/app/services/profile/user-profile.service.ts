@@ -584,7 +584,7 @@ export class UserProfileService {
     // 区域+时区优化（深度分析 P0-2）：regionCode 变更触发独立事件，
     // 下游清画像缓存 + regional boost map 残留
     const oldRegion = (oldProfile as any).regionCode ?? null;
-    const newRegion = (saved as any).regionCode ?? null;
+    const newRegion = saved.regionCode ?? null;
     if (newRegion && oldRegion !== newRegion) {
       this.eventEmitter.emit(
         DomainEvents.USER_REGION_CHANGED,
@@ -1141,8 +1141,7 @@ export class UserProfileService {
       [GoalType.HEALTH]: [0.25, 0.5, 0.25],
       [GoalType.HABIT]: [0.25, 0.5, 0.25],
     };
-    const [pRatio0, cRatio0, fRatio0] =
-      ratios[goal] || ratios[GoalType.HEALTH];
+    const [pRatio0, cRatio0, fRatio0] = ratios[goal] || ratios[GoalType.HEALTH];
 
     // P3-2.4: 区域 macro 偏置（pp = 百分点）
     // 偏置后做归一化：保证 p+c+f = 1（避免热量漂移）
@@ -1152,9 +1151,12 @@ export class UserProfileService {
     let fRatio = fRatio0 + (bias.fatPct ?? 0) / 100;
     // 防越界（任一比例不得 < 0.1 / > 0.7，超出则回退到 default）
     if (
-      pRatio < 0.1 || pRatio > 0.7 ||
-      cRatio < 0.1 || cRatio > 0.7 ||
-      fRatio < 0.1 || fRatio > 0.7
+      pRatio < 0.1 ||
+      pRatio > 0.7 ||
+      cRatio < 0.1 ||
+      cRatio > 0.7 ||
+      fRatio < 0.1 ||
+      fRatio > 0.7
     ) {
       pRatio = pRatio0;
       cRatio = cRatio0;

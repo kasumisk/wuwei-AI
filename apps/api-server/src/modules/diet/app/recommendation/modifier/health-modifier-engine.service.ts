@@ -431,8 +431,9 @@ export class HealthModifierEngineService {
     if (context?.healthConditions?.length) {
       const pc =
         precomputed ?? this.precomputeConditions(context.healthConditions);
-      const hasSevereCondition = pc.severityMap.size > 0
-        && [...pc.severityMap.values()].some((s) => s === 'severe');
+      const hasSevereCondition =
+        pc.severityMap.size > 0 &&
+        [...pc.severityMap.values()].some((s) => s === 'severe');
       if (hasSevereCondition && finalMultiplier > SEVERE_HEALTH_CLAMP) {
         finalMultiplier = SEVERE_HEALTH_CLAMP;
       }

@@ -29,13 +29,7 @@ export class AppDataQueryService {
   async findFoodRecords(query: GetFoodRecordsQueryDto) {
     const page = Number(query.page) || 1;
     const pageSize = Number(query.pageSize) || 20;
-    const {
-      userId,
-      mealType,
-      startDate,
-      endDate,
-      keyword,
-    } = query;
+    const { userId, mealType, startDate, endDate, keyword } = query;
 
     const where: any = {};
 

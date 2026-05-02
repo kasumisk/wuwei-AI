@@ -229,7 +229,11 @@ export class FoodConflictResolverService {
             continue;
           }
 
-          await this.applyResolvedValue(conflict.field, conflict.foodId, result.resolvedValue);
+          await this.applyResolvedValue(
+            conflict.field,
+            conflict.foodId,
+            result.resolvedValue,
+          );
           resolved++;
         } else {
           needsReview++;
@@ -370,7 +374,10 @@ export class FoodConflictResolverService {
     };
   }
 
-  private coerceResolvedValueForUpdate(field: string, resolvedValue: string): string | number {
+  private coerceResolvedValueForUpdate(
+    field: string,
+    resolvedValue: string,
+  ): string | number {
     if (
       this.CORE_NUMERIC_FIELDS.has(field) ||
       this.SUPPLEMENTAL_NUMERIC_FIELDS.has(field) ||
@@ -393,7 +400,11 @@ export class FoodConflictResolverService {
     ]).has(field);
   }
 
-  private async applyResolvedValue(field: string, foodId: string, resolvedValue: string) {
+  private async applyResolvedValue(
+    field: string,
+    foodId: string,
+    resolvedValue: string,
+  ) {
     const typedValue = this.coerceResolvedValueForField(field, resolvedValue);
 
     if (
@@ -416,7 +427,10 @@ export class FoodConflictResolverService {
     );
   }
 
-  private coerceResolvedValueForField(field: string, resolvedValue: string): any {
+  private coerceResolvedValueForField(
+    field: string,
+    resolvedValue: string,
+  ): any {
     if (
       this.CORE_NUMERIC_FIELDS.has(field) ||
       this.SUPPLEMENTAL_NUMERIC_FIELDS.has(field) ||
@@ -427,7 +441,12 @@ export class FoodConflictResolverService {
       return Number.isFinite(parsed) ? parsed : 0;
     }
 
-    if (field === 'glycemicLoad' || field === 'qualityScore' || field === 'satietyScore' || field === 'nutrientDensity') {
+    if (
+      field === 'glycemicLoad' ||
+      field === 'qualityScore' ||
+      field === 'satietyScore' ||
+      field === 'nutrientDensity'
+    ) {
       const parsed = Number(resolvedValue);
       return Number.isFinite(parsed) ? parsed : null;
     }
@@ -438,7 +457,12 @@ export class FoodConflictResolverService {
       return null;
     }
 
-    if (field === 'allergens' || field === 'mealTypes' || field === 'tags' || field === 'commonPortions') {
+    if (
+      field === 'allergens' ||
+      field === 'mealTypes' ||
+      field === 'tags' ||
+      field === 'commonPortions'
+    ) {
       try {
         const parsed = JSON.parse(resolvedValue);
         return Array.isArray(parsed) ? parsed : [];

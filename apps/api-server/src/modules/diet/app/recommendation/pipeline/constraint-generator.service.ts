@@ -37,7 +37,9 @@ export class ConstraintGeneratorService {
     let maxFat: number | undefined;
     // L10-fix: 单次请求中 getUserLocalHour 会被调用两次（薄弱时段检查 + 暴食风险
     //          时段检查），且参数相同（同一 timezone）。提前计算一次供两处复用。
-    const localHourForConstraints = getUserLocalHour(timezone || DEFAULT_TIMEZONE);
+    const localHourForConstraints = getUserLocalHour(
+      timezone || DEFAULT_TIMEZONE,
+    );
 
     // 目标驱动
     if (goalType === 'fat_loss') {

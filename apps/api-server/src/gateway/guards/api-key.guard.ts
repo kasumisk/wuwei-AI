@@ -43,9 +43,7 @@ export class ApiKeyGuard implements CanActivate {
     const client = await this.gatewayService.validateClient(apiKey, apiSecret);
 
     if (!client) {
-      this.logger.warn(
-        `API Key validation failed: key=${this.mask(apiKey)}`,
-      );
+      this.logger.warn(`API Key validation failed: key=${this.mask(apiKey)}`);
       throw new UnauthorizedException('无效的 API Key 或 API Secret');
     }
 
