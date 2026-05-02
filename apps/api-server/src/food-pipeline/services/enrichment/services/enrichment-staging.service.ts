@@ -264,7 +264,9 @@ export class EnrichmentStagingService {
     page: number;
     pageSize: number;
   }> {
-    const { page = 1, pageSize = 20, foodId, target } = params;
+    const page = Number(params.page) || 1;
+    const pageSize = Number(params.pageSize) || 20;
+    const { foodId, target } = params;
     const skip = (page - 1) * pageSize;
 
     const where: any = { action: 'ai_enrichment_staged' };
@@ -740,7 +742,9 @@ export class EnrichmentStagingService {
     page: number;
     pageSize: number;
   }> {
-    const { foodId, action, page = 1, pageSize = 20 } = params;
+    const { foodId, action } = params;
+    const page = Number(params.page) || 1;
+    const pageSize = Number(params.pageSize) || 20;
     const skip = (page - 1) * pageSize;
 
     const where: any = {

@@ -76,7 +76,9 @@ export class ContentManagementService {
   // ==================== 成就管理 ====================
 
   async findAchievements(query: GetAchievementsQueryDto) {
-    const { page = 1, pageSize = 20, keyword, category } = query;
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.pageSize) || 20;
+    const { keyword, category } = query;
 
     const where: any = {};
 
@@ -150,7 +152,9 @@ export class ContentManagementService {
   // ==================== 挑战管理 ====================
 
   async findChallenges(query: GetChallengesQueryDto) {
-    const { page = 1, pageSize = 20, keyword, type } = query;
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.pageSize) || 20;
+    const { keyword, type } = query;
 
     const where: any = {};
 

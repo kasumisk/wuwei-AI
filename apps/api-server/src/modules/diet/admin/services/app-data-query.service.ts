@@ -27,9 +27,9 @@ export class AppDataQueryService {
   // ==================== 饮食记录 ====================
 
   async findFoodRecords(query: GetFoodRecordsQueryDto) {
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.pageSize) || 20;
     const {
-      page = 1,
-      pageSize = 20,
       userId,
       mealType,
       startDate,
@@ -160,7 +160,9 @@ export class AppDataQueryService {
   // ==================== 每日计划 ====================
 
   async findDailyPlans(query: GetDailyPlansQueryDto) {
-    const { page = 1, pageSize = 20, userId, startDate, endDate } = query;
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.pageSize) || 20;
+    const { userId, startDate, endDate } = query;
 
     const where: any = {};
 
@@ -206,7 +208,9 @@ export class AppDataQueryService {
   // ==================== AI 对话 ====================
 
   async findConversations(query: GetCoachConversationsQueryDto) {
-    const { page = 1, pageSize = 20, userId, keyword } = query;
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.pageSize) || 20;
+    const { userId, keyword } = query;
 
     const where: any = {};
 
@@ -281,7 +285,9 @@ export class AppDataQueryService {
   // ==================== 推荐反馈 ====================
 
   async findRecommendationFeedback(query: GetRecommendationFeedbackQueryDto) {
-    const { page = 1, pageSize = 20, userId, action, mealType } = query;
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.pageSize) || 20;
+    const { userId, action, mealType } = query;
 
     const where: any = {};
 
@@ -338,7 +344,9 @@ export class AppDataQueryService {
   // ==================== AI 决策日志 ====================
 
   async findAiDecisionLogs(query: GetAiDecisionLogsQueryDto) {
-    const { page = 1, pageSize = 20, userId, decision, riskLevel } = query;
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.pageSize) || 20;
+    const { userId, decision, riskLevel } = query;
 
     const where: any = {};
 

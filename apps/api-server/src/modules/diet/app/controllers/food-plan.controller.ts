@@ -240,7 +240,7 @@ export class FoodPlanController {
           allergens: (profile.allergens as string[]) || [],
           healthConditions: (profile.healthConditions as string[]) || [],
           regionCode: (profile.regionCode as string) || 'CN',
-          timezone: profile.timezone,
+          timezone: profile.timezone ?? undefined,
         }
       : undefined;
 

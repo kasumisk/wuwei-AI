@@ -40,7 +40,9 @@ export class StrategyManagementService {
   // ==================== 策略列表 ====================
 
   async findStrategies(query: GetStrategiesQueryDto) {
-    const { page = 1, pageSize = 20, keyword, scope, status } = query;
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.pageSize) || 20;
+    const { keyword, scope, status } = query;
 
     const where = {
       ...(keyword && {
@@ -190,7 +192,9 @@ export class StrategyManagementService {
   }
 
   async getAssignments(strategyId: string, query: GetAssignmentsQueryDto) {
-    const { page = 1, pageSize = 20, isActive, assignmentType } = query;
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.pageSize) || 20;
+    const { isActive, assignmentType } = query;
 
     const where = {
       strategyId: strategyId,

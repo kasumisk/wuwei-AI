@@ -23,7 +23,9 @@ export class AppUserManagementService {
    * 获取 App 用户列表（分页）
    */
   async findAll(query: GetAppUsersQueryDto) {
-    const { page = 1, pageSize = 10, keyword, authType, status } = query;
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.pageSize) || 10;
+    const { keyword, authType, status } = query;
 
     const where: any = {};
 

@@ -35,14 +35,9 @@ export class AppVersionService {
    * 获取版本列表（分页）
    */
   async findAll(query: GetAppVersionsQueryDto) {
-    const {
-      page = 1,
-      pageSize = 10,
-      keyword,
-      platform,
-      status,
-      updateType,
-    } = query;
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.pageSize) || 10;
+    const { keyword, platform, status, updateType } = query;
 
     const where: any = {};
 

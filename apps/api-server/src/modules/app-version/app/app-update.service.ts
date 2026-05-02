@@ -177,7 +177,9 @@ export class AppUpdateService {
    * 获取版本更新历史
    */
   async getVersionHistory(query: GetVersionHistoryQueryDto) {
-    const { platform, page = 1, pageSize = 10, language } = query;
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.pageSize) || 10;
+    const { platform, language } = query;
 
     const where = {
       status: AppVersionStatus.PUBLISHED as any,

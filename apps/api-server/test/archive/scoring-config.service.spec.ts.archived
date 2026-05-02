@@ -1,7 +1,7 @@
 /**
  * V7.8 P2: ScoringConfigService 单元测试
  */
-import { ScoringConfigService } from '../src/modules/diet/app/recommendation/scoring-config.service';
+import { ScoringConfigService } from '../src/modules/diet/app/recommendation/context/scoring-config.service';
 import {
   createMockPrismaService,
   createMockRedisCacheService,

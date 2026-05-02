@@ -25,14 +25,9 @@ export class ModelService {
    * 获取模型列表（分页）
    */
   async findAll(query: GetModelsQueryDto) {
-    const {
-      page = 1,
-      pageSize = 10,
-      keyword,
-      providerId,
-      capabilityType,
-      status,
-    } = query;
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.pageSize) || 10;
+    const { keyword, providerId, capabilityType, status } = query;
 
     const where: any = {};
 

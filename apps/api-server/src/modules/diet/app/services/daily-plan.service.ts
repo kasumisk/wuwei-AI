@@ -268,7 +268,7 @@ export class DailyPlanService {
           allergens: (profile.allergens as string[]) || [],
           healthConditions: (profile.healthConditions as string[]) || [],
           regionCode: (profile.regionCode as string) || 'CN',
-          timezone: profile.timezone,
+          timezone: profile.timezone ?? undefined,
         }
       : undefined;
 
@@ -452,7 +452,7 @@ export class DailyPlanService {
           allergens: (profile.allergens as string[]) || [],
           healthConditions: (profile.healthConditions as string[]) || [],
           regionCode: (profile.regionCode as string) || 'CN',
-          timezone: profile.timezone,
+          timezone: profile.timezone ?? undefined,
         }
       : undefined;
 
@@ -685,7 +685,7 @@ export class DailyPlanService {
         goals.calories,
         profile,
         goalType,
-        profile?.timezone,
+        profile?.timezone ?? undefined,
         locale,
       ) + (compensationTip ? `；${compensationTip}` : '');
 
@@ -1036,7 +1036,7 @@ export class DailyPlanService {
         goals.calories,
         profile,
         goalType,
-        profile?.timezone,
+        profile?.timezone ?? undefined,
         locale,
       ),
     };

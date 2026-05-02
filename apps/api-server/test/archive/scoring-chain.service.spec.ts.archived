@@ -32,6 +32,7 @@ import { LifestyleBoostFactor } from '../src/modules/diet/app/recommendation/sco
 import {
   createMockFoodLibrary,
   createMockScoringConfigService,
+  createMockMetricsService,
 } from './helpers/mock-factories';
 import type { FoodLibrary } from '../src/modules/food/food.types';
 import type { PipelineContext } from '../src/modules/diet/app/recommendation/types/recommendation.types';
@@ -159,7 +160,7 @@ describe('ScoringChainService', () => {
   let service: ScoringChainService;
 
   beforeEach(() => {
-    service = new ScoringChainService();
+    service = new ScoringChainService(createMockMetricsService() as any);
   });
 
   // ════════════════════════════════════════════════════════════
@@ -464,7 +465,7 @@ describe('ScoringChainService', () => {
 
   describe('PreferenceSignalFactor 端到端', () => {
     it('should boost food matching loves preference', () => {
-      const svc = new ScoringChainService();
+      const svc = new ScoringChainService(createMockMetricsService() as any);
       svc.registerFactors([new PreferenceSignalFactor()]);
 
       const lovedFood = makeFood({
@@ -488,7 +489,7 @@ describe('ScoringChainService', () => {
     });
 
     it('should penalize food matching avoids preference', () => {
-      const svc = new ScoringChainService();
+      const svc = new ScoringChainService(createMockMetricsService() as any);
       svc.registerFactors([new PreferenceSignalFactor()]);
 
       const avoidedFood = makeFood({
@@ -517,7 +518,7 @@ describe('ScoringChainService', () => {
 
   describe('RegionalBoostFactor 端到端', () => {
     it('should apply regional boost from ctx.regionalBoostMap', () => {
-      const svc = new ScoringChainService();
+      const svc = new ScoringChainService(createMockMetricsService() as any);
       svc.registerFactors([new RegionalBoostFactor()]);
 
       const boostedFood = makeFood({ id: 'regional-1' });
@@ -538,7 +539,7 @@ describe('ScoringChainService', () => {
     });
 
     it('should not apply RegionalBoostFactor when regionalBoostMap is absent', () => {
-      const svc = new ScoringChainService();
+      const svc = new ScoringChainService(createMockMetricsService() as any);
       svc.registerFactors([new RegionalBoostFactor()]);
 
       const food = makeFood({ id: 'f1' });
@@ -556,7 +557,7 @@ describe('ScoringChainService', () => {
 
   describe('RuleWeightFactor 端到端', () => {
     it('should discount foods with __ruleWeight < 1.0', () => {
-      const svc = new ScoringChainService();
+      const svc = new ScoringChainService(createMockMetricsService() as any);
       svc.registerFactors([new RuleWeightFactor()]);
 
       const discountedFood = makeFood() as any;
@@ -575,7 +576,7 @@ describe('ScoringChainService', () => {
     });
 
     it('should not change score for foods without __ruleWeight', () => {
-      const svc = new ScoringChainService();
+      const svc = new ScoringChainService(createMockMetricsService() as any);
       svc.registerFactors([new RuleWeightFactor()]);
 
       const food = makeFood();
@@ -591,7 +592,7 @@ describe('ScoringChainService', () => {
 
   describe('10 因子注册后的顺序', () => {
     it('should register all 10 factors and sort by order', () => {
-      const svc = new ScoringChainService();
+      const svc = new ScoringChainService(createMockMetricsService() as any);
       svc.registerFactors([
         new PreferenceSignalFactor(),
         new RegionalBoostFactor(),
@@ -618,7 +619,7 @@ describe('ScoringChainService', () => {
     });
 
     it('should execute chain with no crashes on minimal context (all 10 factors)', () => {
-      const svc = new ScoringChainService();
+      const svc = new ScoringChainService(createMockMetricsService() as any);
       svc.registerFactors([
         new PreferenceSignalFactor(),
         new RegionalBoostFactor(),

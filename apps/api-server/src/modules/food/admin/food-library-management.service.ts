@@ -99,9 +99,9 @@ export class FoodLibraryManagementService {
   // ==================== 食物 CRUD ====================
 
   async findAll(query: GetFoodLibraryQueryDto) {
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.pageSize) || 20;
     const {
-      page = 1,
-      pageSize = 20,
       keyword,
       name,
       code,
@@ -1080,7 +1080,9 @@ export class FoodLibraryManagementService {
     page?: number;
     pageSize?: number;
   }) {
-    const { foodId, resolution, page = 1, pageSize = 20 } = query;
+    const { foodId, resolution } = query;
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.pageSize) || 20;
 
     const where: any = {};
     if (foodId) where.foodId = foodId;

@@ -117,8 +117,8 @@ export class NotificationController {
     @CurrentAppUser() user: AppUserPayload,
     @Query() query: NotificationListQueryDto,
   ): Promise<ApiResponse> {
-    const page = query.page || 1;
-    const limit = Math.min(query.limit || 20, 50);
+    const page = Number(query.page) || 1;
+    const limit = Math.min(Number(query.limit) || 20, 50);
     const data = await this.notificationService.getNotifications(
       user.id,
       page,

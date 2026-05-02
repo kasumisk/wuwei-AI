@@ -93,7 +93,9 @@ export class SubscriptionManagementService {
    * 获取订阅计划列表（分页）
    */
   async findPlans(query: GetSubscriptionPlansQueryDto) {
-    const { page = 1, pageSize = 10, tier, isActive } = query;
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.pageSize) || 10;
+    const { tier, isActive } = query;
 
     const where: any = {};
     if (tier) {
@@ -306,9 +308,9 @@ export class SubscriptionManagementService {
    * 获取用户订阅列表（分页，含用户和计划信息）
    */
   async findSubscriptions(query: GetSubscriptionsQueryDto) {
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.pageSize) || 10;
     const {
-      page = 1,
-      pageSize = 10,
       userId,
       status,
       tier,
@@ -1470,9 +1472,9 @@ export class SubscriptionManagementService {
    * 获取支付记录列表（分页，含用户信息）
    */
   async findPaymentRecords(query: GetPaymentRecordsQueryDto) {
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.pageSize) || 10;
     const {
-      page = 1,
-      pageSize = 10,
       userId,
       status,
       channel,

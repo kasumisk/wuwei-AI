@@ -100,9 +100,9 @@ export class AnalysisRecordManagementService {
    * 获取分析记录列表（分页 + 筛选）
    */
   async findAnalysisRecords(query: GetAnalysisRecordsQueryDto) {
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.pageSize) || 20;
     const {
-      page = 1,
-      pageSize = 20,
       userId,
       inputType,
       status,

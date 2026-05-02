@@ -29,7 +29,9 @@ export class ABExperimentManagementService {
   // ==================== 列表（分页 + 筛选） ====================
 
   async findExperiments(query: GetExperimentsQueryDto) {
-    const { page = 1, pageSize = 20, keyword, status, goalType } = query;
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.pageSize) || 20;
+    const { keyword, status, goalType } = query;
 
     const where: Prisma.AbExperimentsWhereInput = {};
 

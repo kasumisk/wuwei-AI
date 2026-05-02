@@ -253,10 +253,12 @@ export class ScoringChainService {
       //         使用 normalizeCuisine() 查表的口径不一致（例如 "sichuan/川菜/Sichuan"
       //         会有不同结果）。统一改用 normalizeCuisine 保证两处命中逻辑一致。
       const userCuisineSet = new Set(
-        userCuisines.map((c) => normalizeCuisine(c)).filter((c) => c !== null),
+        userCuisines
+          .map((c) => normalizeCuisine(c))
+          .filter((c): c is string => c !== null),
       );
-      const hit =
-        topCuisine && userCuisineSet.has(normalizeCuisine(topCuisine));
+      const normalizedTop = topCuisine ? normalizeCuisine(topCuisine) : null;
+      const hit = normalizedTop !== null && userCuisineSet.has(normalizedTop);
       this.metricsService.cuisineAffinityHit.inc({
         hit: hit ? 'yes' : 'no',
       });

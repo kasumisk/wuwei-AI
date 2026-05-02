@@ -27,7 +27,9 @@ export class AdminUserService {
    * 获取管理员用户列表（分页）
    */
   async findAll(query: GetUsersQueryDto) {
-    const { page = 1, pageSize = 10, keyword, role, status } = query;
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.pageSize) || 10;
+    const { keyword, role, status } = query;
 
     // Build where conditions
     const where: any = {};

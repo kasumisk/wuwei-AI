@@ -42,7 +42,9 @@ export class ClientService {
    * 获取客户端列表（分页）
    */
   async findAll(query: GetClientsQueryDto) {
-    const { page = 1, pageSize = 10, keyword, status } = query;
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.pageSize) || 10;
+    const { keyword, status } = query;
 
     const where: Prisma.ClientsWhereInput = {};
 

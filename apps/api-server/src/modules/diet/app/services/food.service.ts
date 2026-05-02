@@ -414,7 +414,7 @@ export class FoodService {
           allergens: (profile.allergens as string[]) || [],
           healthConditions: (profile.healthConditions as string[]) || [],
           regionCode: (profile.regionCode as string) || 'CN',
-          timezone: profile.timezone,
+          timezone: profile.timezone ?? undefined,
           // V6.2 3.4: 声明画像新字段接入推荐
           cookingSkillLevel: profile.cookingSkillLevel as string | undefined,
           budgetLevel: profile.budgetLevel as string | undefined,
@@ -1026,7 +1026,7 @@ export class FoodService {
           allergens: (profile.allergens as string[]) || [],
           healthConditions: (profile.healthConditions as string[]) || [],
           regionCode: (profile.regionCode as string) || 'CN',
-          timezone: profile.timezone,
+          timezone: profile.timezone ?? undefined,
         }
       : undefined;
 
