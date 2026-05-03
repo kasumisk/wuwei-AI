@@ -509,6 +509,19 @@ export class FoodService {
         return Math.round((Number(per100g ?? 0) * (Number(f.standardServingG) || 100)) / 100);
       };
 
+      const fallbackTotalProtein = popularFoods.reduce(
+        (s, f) => s + toServing(f.protein, f),
+        0,
+      );
+      const fallbackTotalFat = popularFoods.reduce(
+        (s, f) => s + toServing(f.fat, f),
+        0,
+      );
+      const fallbackTotalCarbs = popularFoods.reduce(
+        (s, f) => s + toServing(f.carbs, f),
+        0,
+      );
+
       const fallbackResult: MealSuggestionResponse = {
         mealType: nextMeal,
         remainingCalories: remaining,
@@ -532,6 +545,9 @@ export class FoodService {
             0,
           ),
           tip: t('food.suggestion.popularFallbackTip', {}, locale),
+          totalProtein: fallbackTotalProtein,
+          totalFat: fallbackTotalFat,
+          totalCarbs: fallbackTotalCarbs,
         },
       };
 

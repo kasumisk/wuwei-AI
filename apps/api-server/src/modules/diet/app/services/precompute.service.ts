@@ -57,6 +57,10 @@ const MEAL_TYPES = ['breakfast', 'lunch', 'dinner'] as const;
 /** 活跃用户判断: 最近 7 天有饮食记录 */
 const ACTIVE_USER_DAYS = 7;
 
+function buildPrecomputeJobId(parts: Array<string | number>): string {
+  return parts.join('_');
+}
+
 /** 预计算 job 数据结构 */
 export interface PrecomputeJobData {
   userId: string;
@@ -253,7 +257,7 @@ export class PrecomputeService {
       } satisfies PrecomputeJobData,
       opts: {
         // 同一用户同一天不重复计算
-        jobId: `precompute:${userId}:${tomorrowStr}`,
+        jobId: buildPrecomputeJobId(['precompute', userId, tomorrowStr]),
         attempts: 2,
         backoff: { type: 'exponential' as const, delay: 5000 },
       },
@@ -374,7 +378,13 @@ export class PrecomputeService {
     const tz = await this.getUserTimezone(userId);
     const today = getUserLocalDate(tz);
     const debounceSlot = Math.floor(Date.now() / (5 * 60 * 1000));
-    const jobId = `precompute:event:${userId}:${today}:${debounceSlot}`;
+    const jobId = buildPrecomputeJobId([
+      'precompute',
+      'event',
+      userId,
+      today,
+      debounceSlot,
+    ]);
 
     try {
       await this.precomputeQueue.add(
