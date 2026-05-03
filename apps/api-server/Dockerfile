@@ -21,7 +21,11 @@ ARG PNPM_VERSION=10.28.2
 # =============================================================================
 FROM node:${NODE_VERSION}-alpine AS deps
 
-RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
+# 升级 corepack 到 0.31+，否则会报 "Cannot find matching keyid"
+# (node 20.18.1 内置 corepack 0.29，对新 pnpm 签名 key 校验失败)
+RUN npm install -g corepack@latest \
+ && corepack enable \
+ && corepack prepare pnpm@${PNPM_VERSION} --activate
 
 WORKDIR /repo
 
@@ -40,7 +44,9 @@ RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
 # =============================================================================
 FROM node:${NODE_VERSION}-alpine AS builder
 
-RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
+RUN npm install -g corepack@latest \
+ && corepack enable \
+ && corepack prepare pnpm@${PNPM_VERSION} --activate
 
 WORKDIR /repo
 
@@ -58,18 +64,21 @@ COPY apps/api-server ./apps/api-server
 # 按依赖顺序构建：constants → shared → api-server
 RUN pnpm --filter @ai-platform/constants run build \
  && pnpm --filter @ai-platform/shared run build \
- && pnpm --filter api-server exec prisma generate \
- && pnpm --filter api-server run build
+ && pnpm --filter @ai-platform/server exec prisma generate \
+ && pnpm --filter @ai-platform/server run build
 
 # 用 pnpm deploy 生成精简的 production node_modules
 # 输出到 /prod/api-server，仅包含运行期依赖，无 monorepo workspace 链接
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
-    pnpm --filter api-server deploy --prod --legacy /prod/api-server
+    pnpm --filter @ai-platform/server deploy --prod --legacy /prod/api-server
 
-# 把 prisma generate 产出的 client 拷进 deploy 输出
-# （pnpm deploy 不会自动带运行时生成的 .prisma/client 文件）
-RUN cp -r /repo/apps/api-server/node_modules/.prisma /prod/api-server/node_modules/.prisma 2>/dev/null || true \
- && cp -r /repo/apps/api-server/node_modules/@prisma/client /prod/api-server/node_modules/@prisma/client 2>/dev/null || true
+# 在 deploy 输出目录中重新生成 Prisma Client
+# 关键: prisma generate 会把 .prisma/client 写到 @prisma/client 同级
+# pnpm 模式下 = .pnpm/@prisma+client@.../node_modules/.prisma/client
+# pnpm deploy 不会保留这部分,所以必须在 deploy 后再 generate 一次
+RUN cp -r /repo/apps/api-server/prisma /prod/api-server/prisma \
+ && cd /prod/api-server \
+ && ./node_modules/.bin/prisma generate --schema=prisma/schema.prisma
 
 # =============================================================================
 # Stage 3: runner —— 最小运行镜像
@@ -108,7 +117,7 @@ EXPOSE 3000
 # Cloud Run 健康检查由平台侧基于 startup probe 完成；
 # 镜像内仍保留 HEALTHCHECK 便于本地 docker run / k8s
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 # dumb-init 作为 PID 1，确保 SIGTERM 正确传给 node（NestJS shutdown hooks 才会跑）
 ENTRYPOINT ["dumb-init", "--"]

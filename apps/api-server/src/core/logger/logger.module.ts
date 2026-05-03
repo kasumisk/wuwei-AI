@@ -57,9 +57,7 @@ const cloudRunJsonFormat = winston.format((info) => {
       useFactory: (configService: ConfigService<Config>) => {
         const logLevel =
           configService.get<string>('logger.level', { infer: true }) || 'info';
-        const isProduction =
-          configService.get<string>('nodeEnv', { infer: true }) ===
-          'production';
+        const isProduction = process.env.NODE_ENV === 'production';
 
         /** Console transport: production → JSON (Cloud Run), dev → colorized printf */
         const consoleTransport = isProduction

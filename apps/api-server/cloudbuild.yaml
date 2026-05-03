@@ -1,0 +1,32 @@
+# Cloud Build config for EatCheck api-server image
+# Used by: scripts/deploy-cloudrun.sh build
+#
+# Substitutions:
+#   _IMAGE  : 完整镜像引用 (例 us-east1-docker.pkg.dev/<proj>/eatcheck/api-server:<tag>)
+#   _LATEST : latest tag 引用 (同上, 但 :latest)
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build'
+    env:
+      - 'DOCKER_BUILDKIT=1'
+    args:
+      - 'build'
+      - '-f'
+      - 'apps/api-server/Dockerfile'
+      - '-t'
+      - '${_IMAGE}'
+      - '-t'
+      - '${_LATEST}'
+      - '--cache-from'
+      - '${_LATEST}'
+      - '.'
+
+images:
+  - '${_IMAGE}'
+  - '${_LATEST}'
+
+options:
+  machineType: 'E2_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: '1800s'

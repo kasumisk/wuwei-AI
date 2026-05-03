@@ -35,13 +35,17 @@ import { QueueResilienceService } from './queue-resilience.service';
         if (redisUrl) {
           try {
             const url = new URL(redisUrl);
+            // rediss:// 表示 TLS（Upstash / 多数托管 Redis 默认 TLS-only）
+            const useTls = url.protocol === 'rediss:';
             return {
               connection: {
                 host: url.hostname,
                 port: parseInt(url.port, 10) || 6379,
                 password: url.password || password,
+                username: url.username || undefined,
                 db: parseInt(url.pathname?.slice(1) || '0', 10) || db,
                 maxRetriesPerRequest: null, // BullMQ 要求此项为 null
+                ...(useTls ? { tls: {} } : {}),
               },
             };
           } catch {

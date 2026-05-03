@@ -1,0 +1,69 @@
+# =============================================================================
+# .gcloudignore — 控制 `gcloud builds submit .` 上传到 Cloud Storage 的源
+# 仅保留 api-server 镜像构建所需的最小上下文
+# 注意：Cloud Build 拿到这个 tarball 后才用 .dockerignore 过滤 docker daemon 上下文
+# =============================================================================
+
+# 默认 gcloud 行为：若存在 .gitignore 则继承；这里显式声明，避免遗漏
+#!include:.gitignore
+
+# 反白：根 .gitignore 排除了 prisma/migrations（一般用于 CI 临时输出），
+# 但 api-server 的 migration 文件必须打包进镜像，否则 prisma migrate deploy
+# 会找不到迁移
+!apps/api-server/prisma/migrations
+!apps/api-server/prisma/migrations/**
+
+# Git / IDE / OS
+.git
+.gitignore
+.gitattributes
+.github
+.husky
+.cursor
+.vscode
+.idea
+.DS_Store
+
+# Node 工件（Cloud Build 会在容器内重新安装/构建）
+**/node_modules
+**/dist
+**/build
+**/coverage
+**/.turbo
+**/.next
+**/.cache
+
+# 环境变量 —— 永远不上传
+.env
+.env.*
+**/.env
+**/.env.*
+!apps/api-server/.env.example
+
+# 文档 / 测试
+docs
+**/*.md
+!README.md
+**/__tests__
+**/test
+**/tests
+**/*.test.ts
+**/*.spec.ts
+
+# 与 api-server 镜像无关的子项目
+apps/web
+apps/admin
+apps/miniapp
+
+# 与 api-server 镜像无关的 monorepo 包
+packages/types
+packages/utils
+
+# 仅本地/CI 用
+docker-compose*.yml
+Dockerfile.dev
+*.log
+tmp
+temp
+*.tmp
+*.tgz

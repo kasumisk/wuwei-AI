@@ -7,9 +7,21 @@ import {
   RoleStatus,
 } from '../modules/rbac/rbac.types';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { seedSubscriptionPlans } from './seeds/seed-subscription-plans.shared';
 
 const prisma = new PrismaClient();
+
+/**
+ * 生成 24 位强随机密码（base64url，无歧义字符）
+ */
+function generateRandomPassword(length = 24): string {
+  return crypto
+    .randomBytes(Math.ceil((length * 3) / 4))
+    .toString('base64')
+    .replace(/[+/=]/g, '')
+    .slice(0, length);
+}
 
 /**
  * 系统完整初始化脚本
@@ -344,13 +356,20 @@ async function initSystem() {
     }
 
     // ========== 5. 创建管理员用户 ==========
-    console.log('\n📦 第五步：创建管理员用户...\n');
+    console.log('\n📦 第五步：创建/确保超级管理员用户...\n');
 
-    const adminUsername = 'admin';
-    const adminPassword = 'admin123';
+    // 支持环境变量覆盖（生产部署灵活）；默认 xiehaiji@gmail.com
+    const adminEmail = process.env.SUPER_ADMIN_EMAIL || 'xiehaiji@gmail.com';
+    const adminUsername = process.env.SUPER_ADMIN_USERNAME || 'xiehaiji';
+    // 优先使用显式传入的密码；否则随机生成（仅本次输出）
+    const explicitPassword = process.env.SUPER_ADMIN_PASSWORD;
+    const adminPassword = explicitPassword || generateRandomPassword(24);
+    const passwordIsRandom = !explicitPassword;
 
     let admin = await prisma.adminUsers.findFirst({
-      where: { username: adminUsername },
+      where: {
+        OR: [{ email: adminEmail }, { username: adminUsername }],
+      },
     });
 
     if (!admin) {
@@ -358,19 +377,45 @@ async function initSystem() {
       admin = await prisma.adminUsers.create({
         data: {
           username: adminUsername,
-          email: 'admin@example.com',
+          email: adminEmail,
           password: hashedPassword,
           role: AdminRole.SUPER_ADMIN as unknown as 'super_admin',
           status: AdminUserStatus.ACTIVE as unknown as 'active',
-          nickname: '系统管理员',
-          avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=admin',
+          nickname: '系统超级管理员',
+          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(adminUsername)}`,
         },
       });
-      console.log(`  ✅ 创建管理员: ${admin.username}`);
-      console.log(`     用户名: ${adminUsername}`);
-      console.log(`     密码: ${adminPassword}`);
+      console.log(`  ✅ 创建超级管理员: ${admin.username} <${admin.email}>`);
     } else {
-      console.log(`  ⏭️  管理员已存在: ${admin.username}`);
+      // 已存在 → 确保 email/username/role/status 正确（幂等）
+      const updates: Record<string, unknown> = {};
+      if (admin.email !== adminEmail) updates.email = adminEmail;
+      if (admin.username !== adminUsername) updates.username = adminUsername;
+      if (admin.role !== (AdminRole.SUPER_ADMIN as unknown as 'super_admin')) {
+        updates.role = AdminRole.SUPER_ADMIN as unknown as 'super_admin';
+      }
+      if (
+        admin.status !== (AdminUserStatus.ACTIVE as unknown as 'active')
+      ) {
+        updates.status = AdminUserStatus.ACTIVE as unknown as 'active';
+      }
+      // 仅当显式传入密码时才覆盖；随机密码不能静默覆盖已有账号
+      if (explicitPassword) {
+        updates.password = await bcrypt.hash(explicitPassword, 10);
+      }
+      if (Object.keys(updates).length > 0) {
+        admin = await prisma.adminUsers.update({
+          where: { id: admin.id },
+          data: updates,
+        });
+        console.log(
+          `  ♻️  更新已有超级管理员: ${admin.username} <${admin.email}> (字段: ${Object.keys(updates).join(', ')})`,
+        );
+      } else {
+        console.log(
+          `  ⏭️  超级管理员已存在且无需更新: ${admin.username} <${admin.email}>`,
+        );
+      }
     }
 
     // ========== 6. 为管理员分配 SUPER_ADMIN 角色 ==========
@@ -398,16 +443,31 @@ async function initSystem() {
     // ========== 完成 ==========
     console.log('\n' + '='.repeat(60));
     console.log('✨ 系统初始化完成！\n');
-    console.log('🚀 管理员登录信息：');
+    console.log('🚀 超级管理员登录信息：');
     console.log(`   用户名: ${adminUsername}`);
-    console.log(`   密码: ${adminPassword}`);
-    console.log(`   角色: SUPER_ADMIN (拥有所有权限)\n`);
+    console.log(`   邮箱:   ${adminEmail}`);
+    if (passwordIsRandom && admin) {
+      // 仅当本次新建/未提供显式密码时才打印；已存在账号未重置密码时不打印
+      const isFreshOrJustReset =
+        admin.createdAt &&
+        Date.now() - new Date(admin.createdAt).getTime() < 60_000;
+      if (isFreshOrJustReset) {
+        console.log(`   密码:   ${adminPassword}   ← ⚠️ 仅本次显示一次,请立即保存`);
+      } else {
+        console.log(`   密码:   <未变更，保留已有密码>`);
+      }
+    } else if (explicitPassword) {
+      console.log(`   密码:   <已使用 SUPER_ADMIN_PASSWORD 环境变量>`);
+    }
+    console.log(`   角色:   SUPER_ADMIN (拥有所有权限)\n`);
     console.log('📊 初始化统计：');
     console.log(`   角色数: ${savedRoles.size}`);
     console.log(`   权限数: ${savedPermissions.size}`);
     console.log(`   管理员: 1 个\n`);
     console.log('⚠️  重要提示：');
-    console.log('   请在生产环境中立即修改默认密码！');
+    console.log('   1. 请在登录后立即修改默认密码');
+    console.log('   2. 启用 2FA 双因素认证（如系统已支持）');
+    console.log('   3. 此脚本可重复执行（幂等），不会破坏已有数据');
     console.log('='.repeat(60) + '\n');
   } catch (error) {
     console.error('❌ 初始化失败:', error);

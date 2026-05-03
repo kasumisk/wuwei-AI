@@ -26,11 +26,37 @@
 import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
+import { createServer } from 'http';
 import { AppModule } from './app.module';
+
+/**
+ * Cloud Run Service 强制要求容器启动后监听 PORT —— 否则 startup probe 失败。
+ * Worker 本身不需要 HTTP，这里挂一个极简服务器仅响应 /health 与根路径，
+ * 让 Cloud Run 认为容器已就绪。所有非健康检查路径都返回 404。
+ */
+function startHealthServer(port: number): void {
+  const server = createServer((req, res) => {
+    if (req.url === '/health' || req.url === '/' || req.url === '/healthz') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'ok', role: 'worker' }));
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
+  server.listen(port, '0.0.0.0', () => {
+    Logger.log(`Worker health endpoint listening on :${port}`, 'WorkerBootstrap');
+  });
+}
 
 async function bootstrapWorker(): Promise<void> {
   const nodeEnv = process.env.NODE_ENV || 'development';
   const isProduction = nodeEnv === 'production';
+  const port = parseInt(process.env.PORT || '8080', 10);
+
+  // 先启动 HTTP probe 服务器，让 Cloud Run startup probe 立刻通过；
+  // AppModule 初始化（含 Prisma / Redis 连接 + BullMQ worker 注册）在后台进行。
+  startHealthServer(port);
 
   // JWT_SECRET 在 worker 进程也是必须 —— 内部任务可能签发短期 token、
   // 比如续费成功后给前端推送时复用 JwtService

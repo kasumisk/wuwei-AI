@@ -39,14 +39,11 @@ docs
 # 不参与 api-server 镜像的其他 monorepo 子项
 apps/web
 apps/admin
-apps/mobile
-apps/flutter-app
-apps/miniprogram
+apps/miniapp
 
 # 不参与 api-server 的包
-packages/eslint-config
-packages/typescript-config
-packages/ui
+packages/types
+packages/utils
 
 # CI / 本地开发工具
 .github
