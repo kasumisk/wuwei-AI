@@ -9,6 +9,7 @@
     "dev:test": "vite --host --mode=test",
     "build": "tsc -b && vite build",
     "build:production": "tsc -b && vite build",
+    "build:staging": "tsc -b && vite build --mode=staging",
     "build:test": "tsc -b && vite build --mode=test",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
