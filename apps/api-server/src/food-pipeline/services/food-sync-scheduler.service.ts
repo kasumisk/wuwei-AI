@@ -1,16 +1,22 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { FoodPipelineOrchestratorService } from './food-pipeline-orchestrator.service';
-import { FoodConflictResolverService } from './processing/food-conflict-resolver.service';
-import { FoodQualityMonitorService } from './food-quality-monitor.service';
+import { CronBackend, CronHandlerRegistry } from '../../core/cron';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { RedisCacheService } from '../../core/redis/redis-cache.service';
+import { FoodPipelineOrchestratorService } from './food-pipeline-orchestrator.service';
+import { FoodQualityMonitorService } from './food-quality-monitor.service';
+import { FoodConflictResolverService } from './processing/food-conflict-resolver.service';
 
 /**
  * 食物数据同步定时任务 (Phase 2/3)
+ *
+ * V7 Cron 解耦：
+ *   - @Cron 装饰的 *Tick() 是 in-proc 入口（开发/测试）；带 shouldRunInProc() 守卫
+ *   - 同名去 Tick 后缀的方法是真正的业务逻辑，外部 HTTP 触发（Cloud Scheduler）也调它
+ *   - runWithLock 同时保护两条入口，防止并发
  */
 @Injectable()
-export class FoodSyncSchedulerService {
+export class FoodSyncSchedulerService implements OnModuleInit {
   private readonly logger = new Logger(FoodSyncSchedulerService.name);
 
   constructor(
@@ -19,13 +25,36 @@ export class FoodSyncSchedulerService {
     private readonly qualityMonitor: FoodQualityMonitorService,
     private readonly prisma: PrismaService,
     private readonly redisCache: RedisCacheService,
+    private readonly cronBackend: CronBackend,
+    private readonly cronRegistry: CronHandlerRegistry,
   ) {}
+
+  onModuleInit() {
+    this.cronRegistry.register('food-sync-monthly-usda', () => this.monthlyUsdaSync());
+    this.cronRegistry.register('food-sync-daily-conflict-resolution', () =>
+      this.dailyConflictResolution(),
+    );
+    this.cronRegistry.register('food-sync-daily-score-calculation', () =>
+      this.dailyScoreCalculation(),
+    );
+    this.cronRegistry.register('food-sync-weekly-quality-report', () =>
+      this.weeklyQualityReport(),
+    );
+    this.cronRegistry.register('food-sync-hourly-popularity-update', () =>
+      this.hourlyPopularityUpdate(),
+    );
+  }
 
   /**
    * 每月1号凌晨 5:30 同步 USDA 常见食物数据
    * V6.4: 从 03:00 移到 05:30 避免与 daily-precompute / weeklySegmentation 叠加
    */
   @Cron('30 5 1 * *')
+  async monthlyUsdaSyncTick() {
+    if (!this.cronBackend.shouldRunInProc()) return;
+    await this.monthlyUsdaSync();
+  }
+
   async monthlyUsdaSync() {
     await this.redisCache.runWithLock('food:usda-sync', 60 * 60 * 1000, () =>
       this.doMonthlyUsdaSync(),
@@ -77,6 +106,11 @@ export class FoodSyncSchedulerService {
    * 每天凌晨4点自动解决冲突
    */
   @Cron(CronExpression.EVERY_DAY_AT_4AM)
+  async dailyConflictResolutionTick() {
+    if (!this.cronBackend.shouldRunInProc()) return;
+    await this.dailyConflictResolution();
+  }
+
   async dailyConflictResolution() {
     await this.redisCache.runWithLock(
       'food:conflict-resolution',
@@ -95,6 +129,11 @@ export class FoodSyncSchedulerService {
    * 每天凌晨5点批量计算分数
    */
   @Cron(CronExpression.EVERY_DAY_AT_5AM)
+  async dailyScoreCalculationTick() {
+    if (!this.cronBackend.shouldRunInProc()) return;
+    await this.dailyScoreCalculation();
+  }
+
   async dailyScoreCalculation() {
     await this.redisCache.runWithLock(
       'food:score-calculation',
@@ -116,6 +155,11 @@ export class FoodSyncSchedulerService {
    * 每周一凌晨6点生成质量报告
    */
   @Cron('0 6 * * 1')
+  async weeklyQualityReportTick() {
+    if (!this.cronBackend.shouldRunInProc()) return;
+    await this.weeklyQualityReport();
+  }
+
   async weeklyQualityReport() {
     await this.redisCache.runWithLock(
       'food:quality-report',
@@ -135,6 +179,11 @@ export class FoodSyncSchedulerService {
    * V6.4: 从 :00 移到 :30 避免与 quota-reset 同时执行
    */
   @Cron('30 * * * *')
+  async hourlyPopularityUpdateTick() {
+    if (!this.cronBackend.shouldRunInProc()) return;
+    await this.hourlyPopularityUpdate();
+  }
+
   async hourlyPopularityUpdate() {
     await this.redisCache.runWithLock(
       'food:popularity-update',

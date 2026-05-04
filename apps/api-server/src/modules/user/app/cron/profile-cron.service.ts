@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { ProfileCacheService } from '../services/profile/profile-cache.service';
 import { inferUserSegment } from '../services/segmentation.util';
@@ -7,6 +7,7 @@ import {
   getUserLocalHour,
   DEFAULT_TIMEZONE,
 } from '../../../../common/utils/timezone.util';
+import { CronBackend, CronHandlerRegistry } from '../../../../core/cron';
 import { RedisCacheService } from '../../../../core/redis/redis-cache.service';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
 import { StrategySelectorService } from '../../../strategy/app/strategy-selector.service';
@@ -22,9 +23,13 @@ import {
  *
  * - 每日 02:00 → 更新 avgComplianceRate, streakDays, mealTimingPatterns
  * - 每周一 03:00 → 更新 userSegment, churnRisk, nutritionGaps
+ *
+ * V7 Cron 解耦：
+ *   - @Cron 装饰的 *Tick() 是 in-proc 入口（开发/测试）；带 shouldRunInProc() 守卫
+ *   - 同名去 Tick 的业务方法是真正的实现，外部 HTTP 触发（Cloud Scheduler）也调它
  */
 @Injectable()
-export class ProfileCronService {
+export class ProfileCronService implements OnModuleInit {
   private readonly logger = new Logger(ProfileCronService.name);
 
   constructor(
@@ -35,13 +40,32 @@ export class ProfileCronService {
     private readonly strategySelectorService: StrategySelectorService,
     /** V6.5 Phase 3L: 多维特征流失预测 */
     private readonly churnPredictionService: ChurnPredictionService,
+    private readonly cronBackend: CronBackend,
+    private readonly cronRegistry: CronHandlerRegistry,
   ) {}
+
+  onModuleInit() {
+    this.cronRegistry.register('user-profile-daily-update', () =>
+      this.dailyProfileUpdate(),
+    );
+    this.cronRegistry.register('user-profile-weekly-segmentation', () =>
+      this.weeklySegmentationUpdate(),
+    );
+    this.cronRegistry.register('user-profile-biweekly-preference-decay', () =>
+      this.biweeklyPreferenceDecay(),
+    );
+  }
 
   // ================================================================
   //  每日 02:00 — 行为数据滑动窗口更新
   // ================================================================
 
   @Cron('0 2 * * *')
+  async dailyProfileUpdateTick(): Promise<void> {
+    if (!this.cronBackend.shouldRunInProc()) return;
+    await this.dailyProfileUpdate();
+  }
+
   async dailyProfileUpdate(): Promise<void> {
     // V5 1.11: 分布式锁，多实例部署时只有一个实例执行
     await this.redisCacheService.runWithLock(
@@ -243,6 +267,11 @@ export class ProfileCronService {
   // ================================================================
 
   @Cron('0 3 * * 1')
+  async weeklySegmentationUpdateTick(): Promise<void> {
+    if (!this.cronBackend.shouldRunInProc()) return;
+    await this.weeklySegmentationUpdate();
+  }
+
   async weeklySegmentationUpdate(): Promise<void> {
     // V5 1.11: 分布式锁
     await this.redisCacheService.runWithLock(
@@ -416,6 +445,11 @@ export class ProfileCronService {
    * - 衰减后清理权重已回归到 [0.98, 1.02] 的键（视为无偏好）
    */
   @Cron('30 4 1,15 * *')
+  async biweeklyPreferenceDecayTick(): Promise<void> {
+    if (!this.cronBackend.shouldRunInProc()) return;
+    await this.biweeklyPreferenceDecay();
+  }
+
   async biweeklyPreferenceDecay(): Promise<void> {
     // V5 1.11: 分布式锁
     await this.redisCacheService.runWithLock(

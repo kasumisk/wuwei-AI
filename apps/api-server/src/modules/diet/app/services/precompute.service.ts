@@ -14,7 +14,7 @@
  * - 命中 → 直接返回（延迟 < 200ms），标记 isUsed
  * - 未命中 → 回退到实时计算（现有逻辑不变）
  */
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -24,6 +24,7 @@ import { PrismaService } from '../../../../core/prisma/prisma.service';
 import { getUserLocalDate } from '../../../../common/utils/timezone.util';
 import { DEFAULT_TIMEZONE } from '../../../../common/config/regional-defaults';
 import { RedisCacheService } from '../../../../core/redis/redis-cache.service';
+import { CronBackend, CronHandlerRegistry } from '../../../../core/cron';
 import { MealRecommendation } from '../recommendation/types/recommendation.types';
 import {
   DomainEvents,
@@ -32,15 +33,12 @@ import {
   FeedbackSubmittedEvent,
 } from '../../../../core/events/domain-events';
 import { QUEUE_NAMES } from '../../../../core/queue/queue.constants';
+import { QueueProducer } from '../../../../core/queue/queue-producer.service';
 import { MetricsService } from '../../../../core/metrics/metrics.service';
 import {
   normalizeChannel,
   type RecommendationChannel,
 } from '../recommendation/utils/channel';
-import {
-  QuotaGateService,
-} from '../../../subscription/app/services/quota-gate.service';
-import { GatedFeature } from '../../../subscription/subscription.types';
 
 // ─── 常量 ───
 
@@ -69,7 +67,7 @@ export interface PrecomputeJobData {
 }
 
 @Injectable()
-export class PrecomputeService {
+export class PrecomputeService implements OnModuleInit {
   private readonly logger = new Logger(PrecomputeService.name);
 
   constructor(
@@ -78,9 +76,21 @@ export class PrecomputeService {
     private readonly redisCache: RedisCacheService,
     @InjectQueue(QUEUE_NAMES.RECOMMENDATION_PRECOMPUTE)
     private readonly precomputeQueue: Queue,
+    // V7: 统一入队抽象
+    private readonly queueProducer: QueueProducer,
     private readonly metricsService: MetricsService,
-    private readonly quotaGate: QuotaGateService,
+    private readonly cronBackend: CronBackend,
+    private readonly cronRegistry: CronHandlerRegistry,
   ) {}
+
+  onModuleInit() {
+    this.cronRegistry.register('recommendation-daily-precompute', () =>
+      this.triggerDailyPrecompute(),
+    );
+    this.cronRegistry.register('recommendation-cleanup-precomputed', () =>
+      this.cleanupExpired(),
+    );
+  }
 
   /**
    * V8.0: 获取当前策略版本
@@ -225,6 +235,11 @@ export class PrecomputeService {
    * 2. 为每个用户创建一个 BullMQ job，计算次日三餐推荐
    */
   @Cron('0 7 * * *', { name: 'daily-precompute' })
+  async triggerDailyPrecomputeTick(): Promise<void> {
+    if (!this.cronBackend.shouldRunInProc()) return;
+    await this.triggerDailyPrecompute();
+  }
+
   async triggerDailyPrecompute(): Promise<void> {
     await this.redisCache.runWithLock(
       'precompute:daily',
@@ -263,7 +278,7 @@ export class PrecomputeService {
       },
     }));
 
-    await this.precomputeQueue.addBulk(jobs);
+    await this.queueProducer.enqueueBulk(QUEUE_NAMES.RECOMMENDATION_PRECOMPUTE, jobs);
     this.logger.log(
       `预计算任务已入队: ${activeUserIds.length} 个用户, 日期=${tomorrowStr}`,
     );
@@ -350,8 +365,6 @@ export class PrecomputeService {
   /**
    * V6.3 P2-11: 触发单用户预计算
    *
-   * 权益检查: 仅对拥有 WEEKLY_PLAN 权益的用户入队，无权益用户直接跳过。
-   *
    * 防抖机制: 使用 jobId 实现 5 分钟防抖 — 同一用户在 5 分钟内的多次事件
    * 只会创建一个 job（BullMQ 的 jobId 唯一性保证）。
    *
@@ -362,18 +375,6 @@ export class PrecomputeService {
     userId: string,
     trigger: string,
   ): Promise<void> {
-    // 权益检查：无 WEEKLY_PLAN 权益的用户不预计算
-    const decision = await this.quotaGate.checkOnly(
-      userId,
-      GatedFeature.WEEKLY_PLAN,
-    );
-    if (!decision.allowed) {
-      this.logger.debug(
-        `跳过预计算（无权益）: userId=${userId}, trigger=${trigger}`,
-      );
-      return;
-    }
-
     // P2-2.12: 切日点用用户本地时区（debounceSlot 仍按服务器 5 分钟窗口，与时区无关）
     const tz = await this.getUserTimezone(userId);
     const today = getUserLocalDate(tz);
@@ -387,7 +388,8 @@ export class PrecomputeService {
     ]);
 
     try {
-      await this.precomputeQueue.add(
+      await this.queueProducer.enqueue(
+        QUEUE_NAMES.RECOMMENDATION_PRECOMPUTE,
         `event-precompute-${userId}`,
         {
           userId,
@@ -427,6 +429,11 @@ export class PrecomputeService {
    * V6.4: 从 04:00 移到 04:15 避免与 dailyConflictResolution 同时执行
    */
   @Cron('15 4 * * *', { name: 'cleanup-precomputed' })
+  async cleanupExpiredTick(): Promise<void> {
+    if (!this.cronBackend.shouldRunInProc()) return;
+    await this.cleanupExpired();
+  }
+
   async cleanupExpired(): Promise<void> {
     await this.redisCache.runWithLock(
       'precompute:cleanup',
@@ -445,13 +452,9 @@ export class PrecomputeService {
   // ─── 私有方法 ───
 
   /**
-   * V6.2 3.6 / V6.2.1: 获取最近 7 天有饮食记录且拥有 weekly_plan 权益的活跃用户 ID
+   * V6.2 3.6 / V6.2.1: 获取最近 7 天有饮食记录的活跃用户 ID
    *
-   * 权益过滤规则：
-   * - 用户必须拥有有效（active 或 grace）订阅
-   * - 所订阅套餐的 entitlements JSON 中 weekly_plan = true
-   * - 无权益用户不入队，不浪费计算资源
-   *
+   * 预计算用于提升 meal-suggestion 响应速度，不应受订阅权益影响。
    * 使用 raw SQL DISTINCT + LIMIT/OFFSET 分页，避免一次性加载全量。
    */
   private async getActiveUserIds(): Promise<string[]> {
@@ -463,16 +466,9 @@ export class PrecomputeService {
     let offset = 0;
 
     while (true) {
-      const page = await this.prisma.$queryRawUnsafe<Array<{ userId: string }>>(
+      const page = await this.prisma.$queryRawUnsafe<Array<{ user_id: string }>>(
         `SELECT DISTINCT fr.user_id
          FROM food_records fr
-         INNER JOIN subscription s
-           ON s.user_id = fr.user_id
-           AND s.status IN ('active', 'grace')
-           AND s.expires_at > NOW()
-         INNER JOIN subscription_plan sp
-           ON sp.id = s.plan_id
-           AND (sp.entitlements->>'weekly_plan')::boolean = true
          WHERE fr.created_at > $1
          ORDER BY fr.user_id
          LIMIT $2 OFFSET $3`,
@@ -482,7 +478,7 @@ export class PrecomputeService {
       );
 
       if (page.length === 0) break;
-      userIds.push(...page.map((r) => r.userId));
+      userIds.push(...page.map((r) => r.user_id));
       if (page.length < PAGE_SIZE) break;
       offset += PAGE_SIZE;
     }

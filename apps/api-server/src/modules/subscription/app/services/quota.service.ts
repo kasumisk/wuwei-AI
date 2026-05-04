@@ -15,7 +15,7 @@
  * - getOrCreateQuota 改为 upsert (ON CONFLICT DO NOTHING)，防止并发创建重复记录。
  * - QuotaGateService 应移除 check() 前置调用，直接走 increment() 的原子结果。
  */
-import { Injectable, Logger, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, ForbiddenException, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { UsageQuota } from '@prisma/client';
 import { Prisma } from '@prisma/client';
@@ -23,6 +23,7 @@ import { GatedFeature, QuotaCycle, UNLIMITED } from '../../subscription.types';
 import { SubscriptionService } from './subscription.service';
 import { PlanEntitlementResolver } from './plan-entitlement-resolver.service';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
+import { CronBackend, CronHandlerRegistry } from '../../../../core/cron';
 import { I18nService } from '../../../../core/i18n/i18n.service';
 
 /** 单个功能的配额状态 */
@@ -38,7 +39,7 @@ export interface QuotaStatus {
 }
 
 @Injectable()
-export class QuotaService {
+export class QuotaService implements OnModuleInit {
   private readonly logger = new Logger(QuotaService.name);
 
   constructor(
@@ -46,7 +47,15 @@ export class QuotaService {
     private readonly subscriptionService: SubscriptionService,
     private readonly entitlementResolver: PlanEntitlementResolver,
     private readonly i18n: I18nService,
+    private readonly cronBackend: CronBackend,
+    private readonly cronRegistry: CronHandlerRegistry,
   ) {}
+
+  onModuleInit() {
+    this.cronRegistry.register('subscription-quota-reset', () =>
+      this.resetExpiredQuotas(),
+    );
+  }
 
   // ==================== 核心方法 ====================
 
@@ -227,6 +236,11 @@ export class QuotaService {
    *   UPDATE ... WHERE reset_at <= now() → 已重置的行 reset_at > now()，不会二次重置
    */
   @Cron('0 * * * *', { name: 'quota-reset' })
+  async resetExpiredQuotasTick(): Promise<void> {
+    if (!this.cronBackend.shouldRunInProc()) return;
+    await this.resetExpiredQuotas();
+  }
+
   async resetExpiredQuotas(): Promise<number> {
     const now = new Date();
     let totalReset = 0;

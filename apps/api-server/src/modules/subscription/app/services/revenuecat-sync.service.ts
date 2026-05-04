@@ -2,6 +2,7 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  OnModuleInit,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -9,6 +10,7 @@ import { Cron } from '@nestjs/schedule';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
 import { RedisCacheService } from '../../../../core/redis/redis-cache.service';
+import { CronBackend, CronHandlerRegistry } from '../../../../core/cron';
 import { SubscriptionService } from './subscription.service';
 import { SubscriptionDomainSyncService } from './subscription-domain-sync.service';
 import {
@@ -92,7 +94,7 @@ type SelectedSubscription = RevenueCatSubscriptionSnapshot & {
 };
 
 @Injectable()
-export class RevenueCatSyncService {
+export class RevenueCatSyncService implements OnModuleInit {
   private readonly logger = new Logger(RevenueCatSyncService.name);
 
   constructor(
@@ -101,7 +103,18 @@ export class RevenueCatSyncService {
     private readonly subscriptionService: SubscriptionService,
     private readonly domainSync: SubscriptionDomainSyncService,
     private readonly redis: RedisCacheService,
+    private readonly cronBackend: CronBackend,
+    private readonly cronRegistry: CronHandlerRegistry,
   ) {}
+
+  onModuleInit(): void {
+    this.cronRegistry.register('subscription-revenuecat-reconcile', () =>
+      this.reconcileRecentSubscriptions(),
+    );
+    this.cronRegistry.register('subscription-revenuecat-webhook-retry', () =>
+      this.retryFailedWebhookEvents(),
+    );
+  }
 
   /**
    * 校验 RevenueCat webhook 的 Authorization 头。
@@ -288,6 +301,11 @@ export class RevenueCatSyncService {
   }
 
   @Cron('*/15 * * * *', { name: 'subscription-revenuecat-reconcile' })
+  async reconcileRecentSubscriptionsTick(): Promise<void> {
+    if (!this.cronBackend.shouldRunInProc()) return;
+    await this.reconcileRecentSubscriptions();
+  }
+
   async reconcileRecentSubscriptions(): Promise<void> {
     // 分布式锁：14 分钟 TTL（稍短于 Cron 间隔 15 分钟）
     const acquired = await this.redis.setNX(
@@ -323,6 +341,11 @@ export class RevenueCatSyncService {
   }
 
   @Cron('*/10 * * * *', { name: 'subscription-revenuecat-webhook-retry' })
+  async retryFailedWebhookEventsTick(): Promise<void> {
+    if (!this.cronBackend.shouldRunInProc()) return;
+    await this.retryFailedWebhookEvents();
+  }
+
   async retryFailedWebhookEvents(): Promise<void> {
     // 分布式锁：9 分钟 TTL（稍短于 Cron 间隔 10 分钟）
     const acquired = await this.redis.setNX(

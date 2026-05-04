@@ -13,13 +13,15 @@
  * 并发控制：3 个并发 worker（避免 AI API 并发过高）
  */
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
+import { Logger, OnModuleInit } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   QUEUE_NAMES,
   QUEUE_DEFAULT_OPTIONS,
   DeadLetterService,
+  TaskHandlerRegistry,
+  processorAsHandler,
 } from '../../../../core/queue';
 import { AnalyzeService } from '../services/analyze.service';
 import type { Locale } from '../../../diet/app/recommendation/utils/i18n-messages';
@@ -40,7 +42,7 @@ export interface FoodAnalysisJobData {
 @Processor(QUEUE_NAMES.FOOD_ANALYSIS, {
   concurrency: QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_ANALYSIS].concurrency,
 })
-export class FoodAnalysisProcessor extends WorkerHost {
+export class FoodAnalysisProcessor extends WorkerHost implements OnModuleInit {
   private readonly logger = new Logger(FoodAnalysisProcessor.name);
 
   constructor(
@@ -49,8 +51,17 @@ export class FoodAnalysisProcessor extends WorkerHost {
     private readonly eventEmitter: EventEmitter2,
     // V6.5 Phase 2A: DLQ 服务
     private readonly deadLetterService: DeadLetterService,
+    private readonly registry: TaskHandlerRegistry,
   ) {
     super();
+  }
+
+  onModuleInit(): void {
+    this.registry.register(
+      QUEUE_NAMES.FOOD_ANALYSIS,
+      '*',
+      processorAsHandler(this),
+    );
   }
 
   /**

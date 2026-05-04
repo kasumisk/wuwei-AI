@@ -13,9 +13,10 @@
  *  Neon Serverless Postgres 暂不支持声明式分区（Declarative Partitioning）
  *  的自动裂变，手动归档更易控制且无需改现有 ORM 查询。
  */
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
+import { CronBackend, CronHandlerRegistry } from '../cron';
 
 /** 超过此天数的记录移入归档表 */
 const ARCHIVE_DAYS = 90;
@@ -27,16 +28,29 @@ const BATCH_SIZE = 500;
 const MAX_BATCHES_PER_RUN = 40; // 最多 20,000 行/次
 
 @Injectable()
-export class UsageArchiveCronService {
+export class UsageArchiveCronService implements OnModuleInit {
   private readonly logger = new Logger(UsageArchiveCronService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cronBackend: CronBackend,
+    private readonly cronRegistry: CronHandlerRegistry,
+  ) {}
+
+  onModuleInit(): void {
+    this.cronRegistry.register('usage-archive', () => this.runArchiveCron());
+  }
 
   /**
    * 每日 UTC 02:00 执行归档
    * 若需手动触发，可直接调用 archiveOldRecords()
    */
   @Cron('0 2 * * *', { name: 'usage-archive', timeZone: 'UTC' })
+  async runArchiveCronTick(): Promise<void> {
+    if (!this.cronBackend.shouldRunInProc()) return;
+    await this.runArchiveCron();
+  }
+
   async runArchiveCron(): Promise<void> {
     this.logger.log('Usage archive cron started');
     const start = Date.now();

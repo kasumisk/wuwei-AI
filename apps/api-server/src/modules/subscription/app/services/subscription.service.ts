@@ -52,6 +52,7 @@ import {
 import { I18nService } from '../../../../core/i18n/i18n.service';
 import { SubscriptionDomainSyncService } from './subscription-domain-sync.service';
 import { RedisCacheService } from '../../../../core/redis/redis-cache.service';
+import { CronBackend, CronHandlerRegistry } from '../../../../core/cron';
 
 /** 用户订阅状态概要（缓存友好的扁平结构） */
 export interface UserSubscriptionSummary {
@@ -91,6 +92,8 @@ export class SubscriptionService implements OnModuleInit {
     private readonly i18n: I18nService,
     private readonly domainSync: SubscriptionDomainSyncService,
     private readonly redis: RedisCacheService,
+    private readonly cronBackend: CronBackend,
+    private readonly cronRegistry: CronHandlerRegistry,
   ) {}
 
   onModuleInit(): void {
@@ -100,6 +103,9 @@ export class SubscriptionService implements OnModuleInit {
       l1TtlMs: 2 * 60 * 1000, // L1: 2 分钟
       l2TtlMs: CACHE_TTL_MS, // L2: 5 分钟
     });
+    this.cronRegistry.register('subscription-process-expired', () =>
+      this.processExpiredSubscriptions(),
+    );
   }
 
   // ==================== 计划管理（Admin） ====================
@@ -475,6 +481,11 @@ export class SubscriptionService implements OnModuleInit {
    * 3. 自动续费: 标记 GRACE_PERIOD（3 天宽限）
    */
   @Cron('0 * * * *', { name: 'subscription-process-expired' })
+  async processExpiredSubscriptionsTick(): Promise<void> {
+    if (!this.cronBackend.shouldRunInProc()) return;
+    await this.processExpiredSubscriptions();
+  }
+
   async processExpiredSubscriptions(): Promise<number> {
     // ── 分布式锁：同一时刻只有一个实例执行 ──
     const LOCK_KEY = 'sub:expire:lock';

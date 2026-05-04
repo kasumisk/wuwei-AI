@@ -44,6 +44,12 @@ export interface PipelineContextBuildParams {
   replacementWeightMap?: Map<string, number> | null;
   /** 跨餐营养补偿覆盖（由调用方实时计算后传入，覆盖 req 中的原始值） */
   crossMealAdjustment?: CrossMealAdjustment;
+  /**
+   * 预过滤后的食物列表（已经过 cuisineRegionFilter）。
+   * 当调用方在循环外预先过滤时传入，避免 build() 内重复过滤。
+   * 若未提供，build() 将对 req.allFoods 执行一次 cuisineRegionFilter。
+   */
+  preFilteredAllFoods?: import('../../../../food/food.types').FoodLibrary[];
 }
 
 @Injectable()
@@ -122,8 +128,10 @@ export class PipelineContextFactory {
     return {
       // ── 核心字段 ──
       // Final-fix P0-1: 在入口处对 allFoods 做一次性 cuisine 区域过滤，
-      // 保证 ensureMinCandidates 等 fallback 路径也无法绕过 cuisine 约束
-      allFoods: this.cuisineRegionFilter.filter(
+      // 保证 ensureMinCandidates 等 fallback 路径也无法绕过 cuisine 约束。
+      // 性能优化：调用方可在循环外预过滤并通过 params.preFilteredAllFoods 传入，
+      // 避免多场景/多 role 重复执行相同过滤（1393 条食物 × N 次 → 1 次）。
+      allFoods: params.preFilteredAllFoods ?? this.cuisineRegionFilter.filter(
         req.allFoods,
         regionCode,
         req.userProfile?.cuisinePreferences,

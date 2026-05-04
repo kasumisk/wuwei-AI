@@ -345,8 +345,16 @@ export class TieredCacheManager implements OnModuleInit, OnModuleDestroy {
       this.logger.warn(`Cache invalidate subscriber error: ${err.message}`);
     });
 
-    await this.subscriber.subscribe(CACHE_INVALIDATE_CHANNEL);
-    this.logger.log(`Subscribed to Redis channel: ${CACHE_INVALIDATE_CHANNEL}`);
+    try {
+      await this.subscriber.subscribe(CACHE_INVALIDATE_CHANNEL);
+      this.logger.log(`Subscribed to Redis channel: ${CACHE_INVALIDATE_CHANNEL}`);
+    } catch (err) {
+      this.logger.warn(
+        `Cache invalidate subscribe disabled: ${(err as Error).message}`,
+      );
+      this.subscriber.disconnect();
+      this.subscriber = null;
+    }
   }
 
   async onModuleDestroy(): Promise<void> {

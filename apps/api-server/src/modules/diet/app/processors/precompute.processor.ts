@@ -18,12 +18,14 @@
  *   各 upsert 一条记录，确保所有渠道都能命中预计算缓存。
  */
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
+import { Logger, OnModuleInit } from '@nestjs/common';
 import { Job } from 'bullmq';
 import {
   QUEUE_NAMES,
   QUEUE_DEFAULT_OPTIONS,
   DeadLetterService,
+  TaskHandlerRegistry,
+  processorAsHandler,
 } from '../../../../core/queue';
 import {
   PrecomputeService,
@@ -42,7 +44,7 @@ import { KNOWN_CHANNELS } from '../recommendation/utils/channel';
 const PRECOMPUTE_CHANNELS = KNOWN_CHANNELS;
 
 @Processor(QUEUE_NAMES.RECOMMENDATION_PRECOMPUTE)
-export class PrecomputeProcessor extends WorkerHost {
+export class PrecomputeProcessor extends WorkerHost implements OnModuleInit {
   private readonly logger = new Logger(PrecomputeProcessor.name);
 
   constructor(
@@ -52,8 +54,17 @@ export class PrecomputeProcessor extends WorkerHost {
     private readonly nutritionScore: NutritionScoreService,
     // V6.5 Phase 2A: DLQ 服务
     private readonly deadLetterService: DeadLetterService,
+    private readonly registry: TaskHandlerRegistry,
   ) {
     super();
+  }
+
+  onModuleInit(): void {
+    this.registry.register(
+      QUEUE_NAMES.RECOMMENDATION_PRECOMPUTE,
+      '*',
+      processorAsHandler(this),
+    );
   }
 
   async process(job: Job<PrecomputeJobData>): Promise<void> {
@@ -74,7 +85,7 @@ export class PrecomputeProcessor extends WorkerHost {
       // 从 declared 画像构造 DailyGoalProfile，调用 calculateDailyGoals
       const goalType = declared.goal || 'health';
       const goals = this.nutritionScore.calculateDailyGoals({
-        weightKg: declared.weightKg?.toNumber() ?? null,
+        weightKg: declared.weightKg != null ? Number(declared.weightKg) : null,
         dailyCalorieGoal: declared.dailyCalorieGoal,
         goal: goalType,
       });

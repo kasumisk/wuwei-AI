@@ -22,6 +22,7 @@ import { PrismaService } from '../../../../../core/prisma/prisma.service';
 import { RedisCacheService } from '../../../../../core/redis/redis-cache.service';
 import { FeatureFlagService } from '../../../../feature-flag/feature-flag.service';
 import { MetricsService } from '../../../../../core/metrics/metrics.service';
+import { CronBackend, CronHandlerRegistry } from '../../../../../core/cron';
 import { SCORE_DIMENSIONS } from '../types/recommendation.types';
 import {
   TieredCacheManager,
@@ -86,6 +87,8 @@ export class LearnedRankingService implements OnModuleInit {
     private readonly cacheManager: TieredCacheManager,
     private readonly redisCache: RedisCacheService,
     private readonly metricsService: MetricsService,
+    private readonly cronBackend: CronBackend,
+    private readonly cronRegistry: CronHandlerRegistry,
   ) {}
 
   onModuleInit(): void {
@@ -95,6 +98,9 @@ export class LearnedRankingService implements OnModuleInit {
       l1TtlMs: 8 * 24 * 3600 * 1000,
       l2TtlMs: 8 * 24 * 3600 * 1000,
     }) as any;
+    this.cronRegistry.register('learned-ranking-weekly-recompute', () =>
+      this.recomputeWeights(),
+    );
   }
 
   /**
@@ -103,7 +109,12 @@ export class LearnedRankingService implements OnModuleInit {
    *
    * V6.7 Phase 3-A: 分群列表从 DB 动态获取（替代硬编码）
    */
-  @Cron('0 6 * * 1')
+  @Cron('0 6 * * 1', { name: 'learned-ranking-weekly-recompute' })
+  async recomputeWeightsTick(): Promise<void> {
+    if (!this.cronBackend.shouldRunInProc()) return;
+    await this.recomputeWeights();
+  }
+
   async recomputeWeights(): Promise<void> {
     await this.redisCache.runWithLock(
       'learned-ranking:recompute',

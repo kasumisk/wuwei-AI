@@ -63,6 +63,12 @@ export class DeadLetterService {
     private readonly exportQueue: Queue,
     @InjectQueue(QUEUE_NAMES.RECIPE_GENERATION)
     private readonly recipeGenerationQueue: Queue,
+    @InjectQueue(QUEUE_NAMES.EMBEDDING_GENERATION)
+    private readonly embeddingGenerationQueue: Queue,
+    @InjectQueue(QUEUE_NAMES.FOOD_ENRICHMENT)
+    private readonly foodEnrichmentQueue: Queue,
+    @InjectQueue(QUEUE_NAMES.FOOD_USDA_IMPORT)
+    private readonly foodUsdaImportQueue: Queue,
     @InjectQueue(QUEUE_NAMES.SUBSCRIPTION_MAINTENANCE)
     private readonly subscriptionMaintenanceQueue: Queue,
   ) {
@@ -77,6 +83,15 @@ export class DeadLetterService {
     this.queueMap.set(
       QUEUE_NAMES.RECIPE_GENERATION,
       this.recipeGenerationQueue,
+    );
+    this.queueMap.set(
+      QUEUE_NAMES.EMBEDDING_GENERATION,
+      this.embeddingGenerationQueue,
+    );
+    this.queueMap.set(QUEUE_NAMES.FOOD_ENRICHMENT, this.foodEnrichmentQueue);
+    this.queueMap.set(
+      QUEUE_NAMES.FOOD_USDA_IMPORT,
+      this.foodUsdaImportQueue,
     );
     this.queueMap.set(
       QUEUE_NAMES.SUBSCRIPTION_MAINTENANCE,

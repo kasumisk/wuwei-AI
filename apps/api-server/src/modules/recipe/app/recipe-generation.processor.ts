@@ -11,12 +11,14 @@
  * 并发控制：2 个并发 worker
  */
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
+import { Logger, OnModuleInit } from '@nestjs/common';
 import { Job } from 'bullmq';
 import {
   QUEUE_NAMES,
   QUEUE_DEFAULT_OPTIONS,
   DeadLetterService,
+  TaskHandlerRegistry,
+  processorAsHandler,
 } from '../../../core/queue';
 import {
   RecipeGenerationService,
@@ -27,7 +29,10 @@ import { RecipeManagementService } from '../admin/recipe-management.service';
 @Processor(QUEUE_NAMES.RECIPE_GENERATION, {
   concurrency: QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.RECIPE_GENERATION].concurrency,
 })
-export class RecipeGenerationProcessor extends WorkerHost {
+export class RecipeGenerationProcessor
+  extends WorkerHost
+  implements OnModuleInit
+{
   private readonly logger = new Logger(RecipeGenerationProcessor.name);
 
   constructor(
@@ -35,8 +40,17 @@ export class RecipeGenerationProcessor extends WorkerHost {
     private readonly recipeManagementService: RecipeManagementService,
     // V6.5 Phase 2A: DLQ 服务
     private readonly deadLetterService: DeadLetterService,
+    private readonly registry: TaskHandlerRegistry,
   ) {
     super();
+  }
+
+  onModuleInit(): void {
+    this.registry.register(
+      QUEUE_NAMES.RECIPE_GENERATION,
+      '*',
+      processorAsHandler(this),
+    );
   }
 
   /**

@@ -59,7 +59,7 @@ import { JwtAuthGuard } from '../../modules/auth/admin/jwt-auth.guard';
 import { RolesGuard } from '../../modules/rbac/admin/roles.guard';
 import { Roles } from '../../modules/rbac/admin/roles.decorator';
 import { ApiResponse } from '../../common/types/response.type';
-import { QUEUE_NAMES, QUEUE_DEFAULT_OPTIONS } from '../../core/queue';
+import { QUEUE_NAMES, QUEUE_DEFAULT_OPTIONS, QueueProducer } from '../../core/queue';
 import {
   FoodEnrichmentService,
   ENRICHABLE_FIELDS,
@@ -79,6 +79,8 @@ export class FoodEnrichmentController {
     private readonly enrichmentService: FoodEnrichmentService,
     @InjectQueue(QUEUE_NAMES.FOOD_ENRICHMENT)
     private readonly enrichmentQueue: Queue,
+    // V7: 统一入队抽象
+    private readonly queueProducer: QueueProducer,
   ) {}
 
   // ==================== 扫描缺失字段 ====================
@@ -212,7 +214,7 @@ export class FoodEnrichmentController {
       );
     }
 
-    await this.enrichmentQueue.addBulk(jobs);
+    await this.queueProducer.enqueueBulk(QUEUE_NAMES.FOOD_ENRICHMENT, jobs);
 
     return {
       success: true,
@@ -771,7 +773,7 @@ export class FoodEnrichmentController {
       );
     }
 
-    await this.enrichmentQueue.addBulk(jobs);
+    await this.queueProducer.enqueueBulk(QUEUE_NAMES.FOOD_ENRICHMENT, jobs);
 
     return {
       success: true,
@@ -896,7 +898,7 @@ export class FoodEnrichmentController {
       },
     }));
 
-    await this.enrichmentQueue.addBulk(jobs);
+    await this.queueProducer.enqueueBulk(QUEUE_NAMES.FOOD_ENRICHMENT, jobs);
 
     return {
       success: true,
@@ -1010,7 +1012,8 @@ export class FoodEnrichmentController {
               await existingJob.remove();
             }
           }
-          await this.enrichmentQueue.add(
+          await this.queueProducer.enqueue(
+            QUEUE_NAMES.FOOD_ENRICHMENT,
             'enrich',
             {
               foodId: food.id,

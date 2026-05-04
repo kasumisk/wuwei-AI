@@ -1231,15 +1231,8 @@ export class PipelineBuilderService implements OnModuleInit {
         ctx.regionCode ?? 'unknown',
       );
 
-      // Final-fix P0-1：跨 region cuisine 硬过滤
-      // RegionalCandidateFilter 只剔除 RARE/LIMITED/forbidden，未在 food_regional_info
-      // 配置的食物默认放行 → US/JP 用户拿到纯中餐。这里基于 food.cuisine ↔ countryCode
-      // 映射，把不属于用户 country / cuisinePreferences 集合的食物剔除。
-      realistic = this.cuisineRegionFilter.filter(
-        realistic,
-        ctx.regionCode,
-        ctx.userProfile?.cuisinePreferences,
-      );
+      // NOTE: cuisineRegionFilter 已在 PipelineContextFactory.build() 对 ctx.allFoods
+      // 做过一次性全量过滤，recalled/realistic 均为其子集，无需在每个 role 重复执行。
 
       // 推荐策略 — acquisitionDifficulty 过滤
       // 如果策略设定了 acquisitionDifficultyMax，过滤掉获取难度超标的食物

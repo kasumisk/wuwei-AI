@@ -11,7 +11,7 @@
  * 如果 Firebase 未初始化（如开发环境），推送会被跳过但站内信仍然保留。
  */
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
+import { Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Job } from 'bullmq';
 import * as admin from 'firebase-admin';
@@ -19,6 +19,8 @@ import {
   QUEUE_NAMES,
   QUEUE_DEFAULT_OPTIONS,
   DeadLetterService,
+  TaskHandlerRegistry,
+  processorAsHandler,
 } from '../../../core/queue';
 import {
   NotificationService,
@@ -26,7 +28,10 @@ import {
 } from './notification.service';
 
 @Processor(QUEUE_NAMES.NOTIFICATION)
-export class NotificationProcessor extends WorkerHost {
+export class NotificationProcessor
+  extends WorkerHost
+  implements OnModuleInit
+{
   private readonly logger = new Logger(NotificationProcessor.name);
   private firebaseApp: admin.app.App | null = null;
 
@@ -35,6 +40,7 @@ export class NotificationProcessor extends WorkerHost {
     private readonly configService: ConfigService,
     // V6.5 Phase 2A: DLQ 服务
     private readonly deadLetterService: DeadLetterService,
+    private readonly registry: TaskHandlerRegistry,
   ) {
     super();
     // 尝试获取已初始化的 Firebase App 实例
@@ -47,11 +53,28 @@ export class NotificationProcessor extends WorkerHost {
     }
   }
 
+  onModuleInit(): void {
+    this.registry.register(
+      QUEUE_NAMES.NOTIFICATION,
+      '*',
+      processorAsHandler(this),
+    );
+  }
+
   async process(job: Job<NotificationJobData>): Promise<void> {
     const { notificationId, userId, type, title, body, data } = job.data;
     this.logger.debug(
       `处理推送: notificationId=${notificationId}, userId=${userId}, type=${type}`,
     );
+
+    // Guard: userId 必须是合法 UUID，否则 Prisma 会抛出 Inconsistent column data 错误
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!userId || !uuidRegex.test(userId)) {
+      this.logger.warn(
+        `send-push: invalid userId "${userId}", discarding job ${job.id}`,
+      );
+      return; // 返回而不抛出，避免无意义重试
+    }
 
     // 获取用户活跃设备令牌
     const tokens = await this.notificationService.getActiveDeviceTokens(userId);

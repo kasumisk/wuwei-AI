@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
+import { resolveRedisOptions } from './redis-options';
 
 /**
  * Redis 缓存服务 (V6.6 Phase 1-B: node-redis → ioredis 迁移)
@@ -55,46 +56,43 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
     // 全局 timer）。
     // ioredis 使用 lazyConnect:false，构造后立即开始建连，命令自动排队等待
     // ready。onModuleInit 仅 ping() 确认连接就绪，不再重复创建 client。
-    const redisUrl = this.configService.get<string>('REDIS_URL');
-    const host = this.configService.get<string>('REDIS_HOST');
-
-    if (!redisUrl && !host) {
+    //
+    // V7：通过 resolveRedisOptions(prefix='CACHE') 优先读 CACHE_REDIS_URL，
+    //     向后兼容 legacy REDIS_URL / REDIS_HOST。
+    const opts = resolveRedisOptions(this.configService, 'CACHE');
+    if (!opts) {
       return; // 未配置 Redis，保持 client=null，onModuleInit 打印 warn
     }
 
-    const password =
-      this.configService.get<string>('REDIS_PASSWORD') || undefined;
-    const db = parseInt(
-      this.configService.get<string>('REDIS_DB') || '0',
-      10,
-    );
+    this.logger.log(`Redis (cache) using config from: ${opts.source}`);
 
-    if (redisUrl) {
-      this.client = new Redis(redisUrl, {
-        password,
-        db,
-        maxRetriesPerRequest: 3,
-        enableReadyCheck: true,
-        lazyConnect: false,
-        connectTimeout: 5000,
-        commandTimeout: 2000,
-        retryStrategy: this.buildRetryStrategy(),
-      });
+    // Upstash serverless Redis 会在 ~30-60s 空闲后强制断开 TCP 连接。
+    // keepAlive: 15000 — 每 15s 发一次 TCP keepalive probe，防止空闲断连。
+    // enableOfflineQueue: false — 断连期间命令直接抛错走降级，不排队堆积。
+    // autoResendUnfulfilledCommands: false — 重连后不自动重发未完成命令（避免重复副作用）。
+    const SHARED_OPTS = {
+      maxRetriesPerRequest: 3,
+      enableReadyCheck: true,
+      lazyConnect: false,
+      connectTimeout: 5000,
+      commandTimeout: 2000,
+      keepAlive: 15000,
+      enableOfflineQueue: false,
+      autoResendUnfulfilledCommands: false,
+      retryStrategy: this.buildRetryStrategy(),
+    };
+
+    if (opts.url) {
+      this.client = new Redis(opts.url, SHARED_OPTS);
     } else {
       this.client = new Redis({
-        host: host!,
-        port: parseInt(
-          this.configService.get<string>('REDIS_PORT') || '6379',
-          10,
-        ),
-        password,
-        db,
-        maxRetriesPerRequest: 3,
-        enableReadyCheck: true,
-        lazyConnect: false,
-        connectTimeout: 5000,
-        commandTimeout: 2000,
-        retryStrategy: this.buildRetryStrategy(),
+        host: opts.host,
+        port: opts.port,
+        password: opts.password,
+        username: opts.username,
+        db: opts.db,
+        ...(opts.tls ? { tls: {} } : {}),
+        ...SHARED_OPTS,
       });
     }
 
@@ -134,7 +132,7 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit(): Promise<void> {
     if (!this.client) {
       this.logger.warn(
-        'Redis not configured (REDIS_URL / REDIS_HOST missing). Running in memory-only mode.',
+        'Redis not configured (CACHE_REDIS_URL / REDIS_URL / REDIS_HOST missing). Running in memory-only mode.',
       );
       return;
     }
@@ -172,7 +170,7 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
   getClient(): Redis {
     if (!this.client) {
       throw new Error(
-        'Redis client is not initialized. Check REDIS_URL / REDIS_HOST configuration.',
+        'Redis client is not initialized. Check CACHE_REDIS_URL / REDIS_URL / REDIS_HOST configuration.',
       );
     }
     return this.client;

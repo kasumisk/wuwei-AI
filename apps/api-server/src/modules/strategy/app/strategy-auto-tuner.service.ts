@@ -27,6 +27,7 @@ import {
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { RedisCacheService } from '../../../core/redis/redis-cache.service';
+import { CronBackend, CronHandlerRegistry } from '../../../core/cron';
 import { FeatureFlagService } from '../../feature-flag/feature-flag.service';
 
 // ==================== 类型 ====================
@@ -106,6 +107,8 @@ export class StrategyAutoTuner implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly redis: RedisCacheService,
     private readonly featureFlagService: FeatureFlagService,
+    private readonly cronBackend: CronBackend,
+    private readonly cronRegistry: CronHandlerRegistry,
   ) {}
 
   // ==================== 启动与销毁 ====================
@@ -142,6 +145,9 @@ export class StrategyAutoTuner implements OnModuleInit, OnModuleDestroy {
       );
       this.seedDefaults();
     }
+    this.cronRegistry.register('strategy-auto-tune-weekly', () =>
+      this.autoTune(),
+    );
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -236,7 +242,12 @@ export class StrategyAutoTuner implements OnModuleInit, OnModuleDestroy {
    * 每周一 04:00 执行策略自动调优
    * 分析过去 7 天的效果矩阵，调整 segment→strategy 映射
    */
-  @Cron('0 4 * * 1')
+  @Cron('0 4 * * 1', { name: 'strategy-auto-tune-weekly' })
+  async autoTuneTick(): Promise<void> {
+    if (!this.cronBackend.shouldRunInProc()) return;
+    await this.autoTune();
+  }
+
   async autoTune(): Promise<void> {
     await this.redis.runWithLock(
       'strategy:auto-tune',

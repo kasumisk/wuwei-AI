@@ -25,7 +25,7 @@ import { FoodRuleEngineService } from '../services/processing/food-rule-engine.s
 import { FoodQualityMonitorService } from '../services/food-quality-monitor.service';
 import { FoodEnrichmentService } from '../services/food-enrichment.service';
 import { USDA_IMPORT_PRESETS } from '../services/fetchers/usda-fetcher.service';
-import { QUEUE_DEFAULT_OPTIONS, QUEUE_NAMES } from '../../core/queue';
+import { QUEUE_DEFAULT_OPTIONS, QUEUE_NAMES, QueueProducer } from '../../core/queue';
 import { UsdaImportJobData } from '../food-usda-import.processor';
 
 @ApiTags('管理后台 - 食物数据管道')
@@ -57,6 +57,8 @@ export class FoodPipelineController {
     private readonly enrichmentService: FoodEnrichmentService,
     @InjectQueue(QUEUE_NAMES.FOOD_USDA_IMPORT)
     private readonly usdaImportQueue: Queue<UsdaImportJobData>,
+    // V7: 统一入队抽象
+    private readonly queueProducer: QueueProducer,
   ) {}
 
   // ==================== USDA 数据导入 ====================
@@ -71,7 +73,8 @@ export class FoodPipelineController {
       importMode?: 'conservative' | 'fill_missing_only' | 'create_only';
     },
   ): Promise<ApiResponse> {
-    const job = await this.usdaImportQueue.add(
+    const job = await this.queueProducer.enqueue(
+      QUEUE_NAMES.FOOD_USDA_IMPORT,
       'usda-import-keyword',
       {
         mode: 'keyword',
@@ -100,7 +103,7 @@ export class FoodPipelineController {
       success: true,
       code: HttpStatus.ACCEPTED,
       message: '导入任务已入队',
-      data: { jobId: job.id, status: 'queued' },
+      data: { jobId: job.jobId, status: 'queued' },
     };
   }
 
@@ -165,7 +168,8 @@ export class FoodPipelineController {
       importMode?: 'conservative' | 'fill_missing_only' | 'create_only';
     },
   ): Promise<ApiResponse> {
-    const job = await this.usdaImportQueue.add(
+    const job = await this.queueProducer.enqueue(
+      QUEUE_NAMES.FOOD_USDA_IMPORT,
       'usda-import-preset',
       {
         mode: 'preset',
@@ -194,7 +198,7 @@ export class FoodPipelineController {
       success: true,
       code: HttpStatus.ACCEPTED,
       message: '预设导入任务已入队',
-      data: { jobId: job.id, status: 'queued' },
+      data: { jobId: job.jobId, status: 'queued' },
     };
   }
 
@@ -232,7 +236,8 @@ export class FoodPipelineController {
       importMode?: 'conservative' | 'fill_missing_only' | 'create_only';
     },
   ): Promise<ApiResponse> {
-    const job = await this.usdaImportQueue.add(
+    const job = await this.queueProducer.enqueue(
+      QUEUE_NAMES.FOOD_USDA_IMPORT,
       'usda-import-category',
       {
         mode: 'category',
@@ -263,7 +268,7 @@ export class FoodPipelineController {
       success: true,
       code: HttpStatus.ACCEPTED,
       message: '分类导入任务已入队',
-      data: { jobId: job.id, status: 'queued' },
+      data: { jobId: job.jobId, status: 'queued' },
     };
   }
 

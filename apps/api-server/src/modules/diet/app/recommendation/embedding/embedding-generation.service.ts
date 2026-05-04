@@ -23,7 +23,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../../../../../core/prisma/prisma.service';
-import { QUEUE_NAMES, QueueResilienceService } from '../../../../../core/queue';
+import { QUEUE_NAMES, QueueResilienceService, QueueProducer } from '../../../../../core/queue';
 import {
   DomainEvents,
   CandidatePromotedEvent,
@@ -59,7 +59,10 @@ export class EmbeddingGenerationService {
     @InjectQueue(QUEUE_NAMES.EMBEDDING_GENERATION)
     private readonly embeddingQueue: Queue,
     private readonly prisma: PrismaService,
+    // V6: 队列弹性服务（保留供其他路径用）
     private readonly resilience: QueueResilienceService,
+    // V7: 统一入队抽象
+    private readonly queueProducer: QueueProducer,
   ) {}
 
   // ─── 事件驱动：食物晋升时自动触发 embedding 生成 ───
@@ -209,8 +212,8 @@ export class EmbeddingGenerationService {
     source: EmbeddingJobData['source'],
   ): Promise<void> {
     const data: EmbeddingJobData = { foodIds, source };
-    const result = await this.resilience.safeEnqueue(
-      this.embeddingQueue,
+    const result = await this.queueProducer.enqueue(
+      QUEUE_NAMES.EMBEDDING_GENERATION,
       'generate-embeddings',
       data,
       {

@@ -2998,3 +2998,71 @@ model FoodFieldProvenance {
   @@index([status], map: "idx_food_field_provenance_status")
   @@map("food_field_provenance")
 }
+
+/// 全局幂等键表：替代 Redis setNX，用于 Cloud Tasks/Scheduler/Webhook 等关键链路的幂等控制。
+/// 核心约束：(scope, key) UNIQUE；插入冲突即视为重复执行 → 直接返回上次结果或 204。
+/// status: pending(执行中) / succeeded / failed
+/// 适用场景：subscription/payment webhook、Cloud Tasks taskId 去重、Scheduler 同分钟多次触发去重。
+model IdempotencyKey {
+  /// 主键 UUID
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 业务域，如 "rc-webhook" / "task:food-analysis" / "cron:reconcile"
+  scope       String    @db.VarChar(64)
+  /// 幂等键，业务侧自定义（如 webhook event_id、Cloud Tasks taskId、cron 触发时间窗口）
+  key         String    @db.VarChar(256)
+  /// 执行状态
+  status      String    @default("pending") @db.VarChar(16)
+  /// 上次执行结果快照（可选，命中重复时直接回放）
+  result      Json?
+  /// 失败原因
+  errorMessage String?  @map("error_message") @db.VarChar(1000)
+  /// 创建时间
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 完成时间（status 转 terminal 时写入）
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(6)
+  /// 过期时间（用于定期清理；NULL 表示永不过期）
+  expiresAt   DateTime? @map("expires_at") @db.Timestamptz(6)
+
+  @@unique([scope, key], map: "uq_idempotency_keys_scope_key")
+  @@index([expiresAt], map: "idx_idempotency_keys_expires_at")
+  @@index([scope, status], map: "idx_idempotency_keys_scope_status")
+  @@map("idempotency_keys")
+}
+
+/// Cloud Tasks / Cloud Run Jobs / Scheduler 执行日志表。
+/// 用途：可观测（替代 BullMQ 的 jobs 列表）、排障、DLQ 重放、SLO 计算。
+/// 写入时机：
+///   - Cloud Tasks handler 入口写 status=running，结束时更新为 succeeded/failed。
+///   - Cloud Run Job 启动时写一条 running，结束写 terminal。
+///   - Scheduler 触发的 cron 由 InternalCronController 统一记录。
+model TaskExecutionLog {
+  /// 主键 UUID
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 后端类型：cloud-tasks / cloud-run-job / scheduler / bullmq(双轨期遗留)
+  backend       String    @db.VarChar(32)
+  /// 队列/Job/Cron 名称，如 "food-analysis" / "subscription-reconcile-cron"
+  taskName      String    @map("task_name") @db.VarChar(128)
+  /// 外部任务 ID（Cloud Tasks taskId / Run Job execution name / scheduler job id）
+  externalId    String?   @map("external_id") @db.VarChar(256)
+  /// 状态：running / succeeded / failed / dead
+  status        String    @default("running") @db.VarChar(16)
+  /// 重试次数
+  attempt       Int       @default(0)
+  /// payload 摘要（避免存全量；可存 hash + 关键字段）
+  payloadDigest Json?     @map("payload_digest")
+  /// 失败原因
+  errorMessage  String?   @map("error_message")
+  /// 失败堆栈
+  errorStack    String?   @map("error_stack")
+  /// 开始时间
+  startedAt     DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  /// 结束时间
+  finishedAt    DateTime? @map("finished_at") @db.Timestamptz(6)
+  /// 耗时（毫秒）
+  durationMs    Int?      @map("duration_ms")
+
+  @@index([taskName, startedAt(sort: Desc)], map: "idx_task_execution_log_task_started")
+  @@index([status, startedAt(sort: Desc)], map: "idx_task_execution_log_status_started")
+  @@index([externalId], map: "idx_task_execution_log_external_id")
+  @@map("task_execution_log")
+}

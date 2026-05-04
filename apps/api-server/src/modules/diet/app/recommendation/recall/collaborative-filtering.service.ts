@@ -1,7 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../../../../core/prisma/prisma.service';
 import { RedisCacheService } from '../../../../../core/redis/redis-cache.service';
+import { CronBackend, CronHandlerRegistry } from '../../../../../core/cron';
 import { SemanticRecallService } from './semantic-recall.service';
 
 /**
@@ -83,7 +84,7 @@ const CF_CONFIG = {
 };
 
 @Injectable()
-export class CollaborativeFilteringService {
+export class CollaborativeFilteringService implements OnModuleInit {
   private readonly logger = new Logger(CollaborativeFilteringService.name);
 
   /** 内存缓存：完整交互矩阵 */
@@ -119,7 +120,18 @@ export class CollaborativeFilteringService {
     private readonly prisma: PrismaService,
     private readonly redisCache: RedisCacheService,
     private readonly semanticRecall: SemanticRecallService,
+    private readonly cronBackend: CronBackend,
+    private readonly cronRegistry: CronHandlerRegistry,
   ) {}
+
+  onModuleInit(): void {
+    this.cronRegistry.register('cf-incremental-daily', () =>
+      this.scheduledIncrementalUpdate(),
+    );
+    this.cronRegistry.register('cf-full-rebuild-weekly', () =>
+      this.scheduledFullRebuild(),
+    );
+  }
 
   // ================================================================
   //  V6.7 Phase 2-D: 用户目标加载
@@ -165,7 +177,12 @@ export class CollaborativeFilteringService {
    * 只重算昨天有新交互的用户行 + 涉及食物的物品相似列
    * 复杂度: O(k*n)，k = 变化用户/食物数
    */
-  @Cron('0 1 * * 1-6')
+  @Cron('0 1 * * 1-6', { name: 'cf-incremental-daily' })
+  async scheduledIncrementalUpdateTick(): Promise<void> {
+    if (!this.cronBackend.shouldRunInProc()) return;
+    await this.scheduledIncrementalUpdate();
+  }
+
   async scheduledIncrementalUpdate(): Promise<void> {
     await this.redisCache.runWithLock('cf_matrix_rebuild', 10 * 60 * 1000, () =>
       this.doIncrementalUpdate(),
@@ -175,7 +192,12 @@ export class CollaborativeFilteringService {
   /**
    * 每周日全量重建（保留原有逻辑兜底）
    */
-  @Cron('0 1 * * 0')
+  @Cron('0 1 * * 0', { name: 'cf-full-rebuild-weekly' })
+  async scheduledFullRebuildTick(): Promise<void> {
+    if (!this.cronBackend.shouldRunInProc()) return;
+    await this.scheduledFullRebuild();
+  }
+
   async scheduledFullRebuild(): Promise<void> {
     await this.redisCache.runWithLock('cf_matrix_rebuild', 10 * 60 * 1000, () =>
       this.doScheduledRebuild(),

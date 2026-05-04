@@ -5,7 +5,11 @@ import { Queue } from 'bullmq';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { NutritionScoreBreakdown } from '../../../diet/app/services/nutrition-score.service';
 import { RedisCacheService } from '../../../../core/redis/redis-cache.service';
-import { QUEUE_NAMES, QUEUE_DEFAULT_OPTIONS } from '../../../../core/queue';
+import {
+  QUEUE_NAMES,
+  QUEUE_DEFAULT_OPTIONS,
+  QueueProducer,
+} from '../../../../core/queue';
 import { FoodAnalysisJobData } from '../processors/food-analysis.processor';
 import { ImageFoodAnalysisService } from './image-food-analysis.service';
 import {
@@ -154,6 +158,8 @@ export class AnalyzeService {
     private readonly redisCacheService: RedisCacheService,
     @InjectQueue(QUEUE_NAMES.FOOD_ANALYSIS)
     private readonly foodAnalysisQueue: Queue<FoodAnalysisJobData>,
+    // V7: 统一入队抽象（路由 BullMQ / Cloud Tasks）
+    private readonly queueProducer: QueueProducer,
     // V6.1 Phase 2.3: 核心图片分析逻辑委托给 ImageFoodAnalysisService
     private readonly imageFoodAnalysisService: ImageFoodAnalysisService,
     // V6.1 Phase 2.6: 域事件发射
@@ -205,17 +211,18 @@ export class AnalyzeService {
 
     // 向 BullMQ 队列提交任务
     const queueConfig = QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_ANALYSIS];
-    await this.foodAnalysisQueue.add(
-      'analyze', // job name
+    await this.queueProducer.enqueue(
+      QUEUE_NAMES.FOOD_ANALYSIS,
+      'analyze',
       { requestId, imageUrl, mealType, userId, locale: resolvedLocale },
       {
-        attempts: queueConfig.maxRetries + 1, // BullMQ attempts 包含首次执行
+        attempts: queueConfig.maxRetries + 1,
         backoff: {
           type: queueConfig.backoffType,
           delay: queueConfig.backoffDelay,
         },
-        removeOnComplete: 100, // 保留最近 100 个完成的 job
-        removeOnFail: 50, // 保留最近 50 个失败的 job
+        removeOnComplete: 100,
+        removeOnFail: 50,
       },
     );
 

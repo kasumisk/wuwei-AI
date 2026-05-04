@@ -439,6 +439,15 @@ export class RecommendationEngineService implements OnModuleInit {
     // 跨场景去重：外卖 → 便利店 → 在家做，累积已用食物名
     const usedAcrossScenarios = new Set<string>(recentFoodNames);
 
+    // 性能优化：三个场景共享同一用户（regionCode/cuisinePreferences 相同），
+    // 在循环外预过滤一次，避免 contextFactory.build() 内重复过滤 1393 条食物 × 3 次。
+    const regionCode = mergedProfile.regionCode || DEFAULT_REGION_CODE;
+    const preFilteredAllFoods = this.cuisineRegionFilter.filter(
+      allFoods,
+      regionCode,
+      mergedProfile.cuisinePreferences,
+    );
+
     // 场景配置：channel + sceneType + realismLevel
     const SCENARIO_CONFIGS: Array<{
       key: 'takeout' | 'convenience' | 'homeCook';
@@ -511,7 +520,7 @@ export class RecommendationEngineService implements OnModuleInit {
           sceneContext,
           userId,
         } as MealFromPoolRequest,
-        { constraints, picks, usedNames },
+        { constraints, picks, usedNames, preFilteredAllFoods },
       );
 
       const sceneAdjustedRealism = this.realisticFilterService.adjustForScene(

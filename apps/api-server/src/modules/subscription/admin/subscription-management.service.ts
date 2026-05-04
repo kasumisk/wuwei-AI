@@ -49,6 +49,7 @@ import {
   QUEUE_DEFAULT_OPTIONS,
   QUEUE_NAMES,
   QueueResilienceService,
+  QueueProducer,
 } from '../../../core/queue';
 import { DeadLetterService } from '../../../core/queue/dead-letter.service';
 import type { SubscriptionStoreProductInputDto } from './dto/subscription-management.dto';
@@ -85,6 +86,8 @@ export class SubscriptionManagementService {
     private readonly deadLetterService: DeadLetterService,
     @InjectQueue(QUEUE_NAMES.SUBSCRIPTION_MAINTENANCE)
     private readonly subscriptionMaintenanceQueue: Queue,
+    // V7: 统一入队抽象
+    private readonly queueProducer: QueueProducer,
   ) {}
 
   // ==================== 订阅计划管理 ====================
@@ -232,8 +235,8 @@ export class SubscriptionManagementService {
     };
     const queueConfig =
       QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.SUBSCRIPTION_MAINTENANCE];
-    const enqueueResult = await this.queueResilienceService.safeEnqueue(
-      this.subscriptionMaintenanceQueue,
+    const enqueueResult = await this.queueProducer.enqueue(
+      QUEUE_NAMES.SUBSCRIPTION_MAINTENANCE,
       jobData.action,
       jobData,
       {
@@ -1091,8 +1094,8 @@ export class SubscriptionManagementService {
     };
     const queueConfig =
       QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.SUBSCRIPTION_MAINTENANCE];
-    const enqueueResult = await this.queueResilienceService.safeEnqueue(
-      this.subscriptionMaintenanceQueue,
+    const enqueueResult = await this.queueProducer.enqueue(
+      QUEUE_NAMES.SUBSCRIPTION_MAINTENANCE,
       jobData.action,
       jobData,
       {

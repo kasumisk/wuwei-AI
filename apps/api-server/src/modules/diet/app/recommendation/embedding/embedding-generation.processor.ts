@@ -10,22 +10,39 @@
  * 配合 DeadLetterService：重试耗尽后存入 DLQ
  */
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
+import { Logger, OnModuleInit } from '@nestjs/common';
 import { Job } from 'bullmq';
-import { QUEUE_NAMES, DeadLetterService } from '../../../../../core/queue';
+import {
+  QUEUE_NAMES,
+  DeadLetterService,
+  TaskHandlerRegistry,
+  processorAsHandler,
+} from '../../../../../core/queue';
 import { PrismaService } from '../../../../../core/prisma/prisma.service';
 import { computeFoodEmbedding } from '../recall/food-embedding';
 import type { EmbeddingJobData } from './embedding-generation.service';
 
 @Processor(QUEUE_NAMES.EMBEDDING_GENERATION)
-export class EmbeddingGenerationProcessor extends WorkerHost {
+export class EmbeddingGenerationProcessor
+  extends WorkerHost
+  implements OnModuleInit
+{
   private readonly logger = new Logger(EmbeddingGenerationProcessor.name);
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly deadLetterService: DeadLetterService,
+    private readonly registry: TaskHandlerRegistry,
   ) {
     super();
+  }
+
+  onModuleInit(): void {
+    this.registry.register(
+      QUEUE_NAMES.EMBEDDING_GENERATION,
+      '*',
+      processorAsHandler(this),
+    );
   }
 
   /**

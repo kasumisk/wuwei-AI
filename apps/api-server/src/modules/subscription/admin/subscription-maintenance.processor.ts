@@ -1,10 +1,12 @@
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
+import { Logger, OnModuleInit } from '@nestjs/common';
 import { Job } from 'bullmq';
 import {
   DeadLetterService,
   QUEUE_DEFAULT_OPTIONS,
   QUEUE_NAMES,
+  TaskHandlerRegistry,
+  processorAsHandler,
 } from '../../../core/queue';
 import { SubscriptionManagementService } from './subscription-management.service';
 
@@ -25,14 +27,26 @@ type SubscriptionMaintenanceJobData =
   concurrency:
     QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.SUBSCRIPTION_MAINTENANCE].concurrency,
 })
-export class SubscriptionMaintenanceProcessor extends WorkerHost {
+export class SubscriptionMaintenanceProcessor
+  extends WorkerHost
+  implements OnModuleInit
+{
   private readonly logger = new Logger(SubscriptionMaintenanceProcessor.name);
 
   constructor(
     private readonly subscriptionManagementService: SubscriptionManagementService,
     private readonly deadLetterService: DeadLetterService,
+    private readonly registry: TaskHandlerRegistry,
   ) {
     super();
+  }
+
+  onModuleInit(): void {
+    this.registry.register(
+      QUEUE_NAMES.SUBSCRIPTION_MAINTENANCE,
+      '*',
+      processorAsHandler(this),
+    );
   }
 
   async process(job: Job<SubscriptionMaintenanceJobData>) {

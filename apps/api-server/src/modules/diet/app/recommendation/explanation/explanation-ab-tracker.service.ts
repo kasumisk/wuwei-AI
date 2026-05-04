@@ -14,10 +14,11 @@
  *    卡方检验显著且样本 >= 50 时自动更新全局策略的 explain.preferredStyle
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../../../../core/prisma/prisma.service';
 import { RedisCacheService } from '../../../../../core/redis/redis-cache.service';
+import { CronBackend, CronHandlerRegistry } from '../../../../../core/cron';
 
 /** 解释风格枚举 */
 export type ExplanationStyle = 'concise' | 'coaching';
@@ -26,13 +27,21 @@ export type ExplanationStyle = 'concise' | 'coaching';
 export type ExplanationOutcome = 'accepted' | 'replaced' | 'skipped';
 
 @Injectable()
-export class ExplanationABTrackerService {
+export class ExplanationABTrackerService implements OnModuleInit {
   private readonly logger = new Logger(ExplanationABTrackerService.name);
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly redisCache: RedisCacheService,
+    private readonly cronBackend: CronBackend,
+    private readonly cronRegistry: CronHandlerRegistry,
   ) {}
+
+  onModuleInit(): void {
+    this.cronRegistry.register('explanation-ab-weekly-analyze', () =>
+      this.analyzeExplanationEffectiveness(),
+    );
+  }
 
   /**
    * V6.7: 2x2 列联表卡方检验，替代简单 10% 阈值
@@ -130,7 +139,12 @@ export class ExplanationABTrackerService {
    * 2. 差异 > 10% 且各组样本 >= 50 时，更新全局激活策略的
    *    config.explain.preferredStyle[segment] = 'concise'|'coaching'
    */
-  @Cron('0 5 * * 1')
+  @Cron('0 5 * * 1', { name: 'explanation-ab-weekly-analyze' })
+  async analyzeExplanationEffectivenessTick(): Promise<void> {
+    if (!this.cronBackend.shouldRunInProc()) return;
+    await this.analyzeExplanationEffectiveness();
+  }
+
   async analyzeExplanationEffectiveness(): Promise<void> {
     await this.redisCache.runWithLock(
       'explanation-ab:analyze',

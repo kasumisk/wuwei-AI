@@ -18,6 +18,7 @@ import { Queue } from 'bullmq';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { QUEUE_NAMES } from '../../../core/queue/queue.constants';
+import { QueueProducer } from '../../../core/queue/queue-producer.service';
 import { I18nService } from '../../../core/i18n/i18n.service';
 
 // ─── 类型定义 ───
@@ -86,6 +87,8 @@ export class NotificationService {
     @InjectQueue(QUEUE_NAMES.NOTIFICATION)
     private readonly notificationQueue: Queue,
     private readonly i18n: I18nService,
+    // V7: 统一入队抽象，按 QUEUE_BACKEND 路由到 BullMQ 或 Cloud Tasks
+    private readonly queueProducer: QueueProducer,
   ) {}
 
   // ─── 发送通知（核心方法） ───
@@ -130,7 +133,7 @@ export class NotificationService {
         body,
         data,
       };
-      await this.notificationQueue.add(`push-${type}`, jobData, {
+      await this.queueProducer.enqueue(QUEUE_NAMES.NOTIFICATION, `push-${type}`, jobData, {
         attempts: 3,
         backoff: { type: 'exponential', delay: 2000 },
         removeOnComplete: 500,

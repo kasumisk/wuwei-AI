@@ -1,10 +1,12 @@
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
+import { Logger, OnModuleInit } from '@nestjs/common';
 import { Job } from 'bullmq';
 import {
   DeadLetterService,
   QUEUE_DEFAULT_OPTIONS,
   QUEUE_NAMES,
+  TaskHandlerRegistry,
+  processorAsHandler,
 } from '../core/queue';
 import {
   FoodImportMode,
@@ -35,14 +37,24 @@ export type UsdaImportJobData =
 @Processor(QUEUE_NAMES.FOOD_USDA_IMPORT, {
   concurrency: QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_USDA_IMPORT].concurrency,
 })
-export class FoodUsdaImportProcessor extends WorkerHost {
+export class FoodUsdaImportProcessor extends WorkerHost implements OnModuleInit {
   private readonly logger = new Logger(FoodUsdaImportProcessor.name);
 
   constructor(
     private readonly orchestrator: FoodPipelineOrchestratorService,
     private readonly deadLetterService: DeadLetterService,
+    private readonly registry: TaskHandlerRegistry,
   ) {
     super();
+  }
+
+  /** V7: 同时把 process() 注册到 Cloud Tasks HTTP dispatcher */
+  onModuleInit(): void {
+    this.registry.register(
+      QUEUE_NAMES.FOOD_USDA_IMPORT,
+      '*',
+      processorAsHandler(this),
+    );
   }
 
   async process(job: Job<UsdaImportJobData>) {

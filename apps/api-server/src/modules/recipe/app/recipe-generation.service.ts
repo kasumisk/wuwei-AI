@@ -6,6 +6,7 @@ import {
   QUEUE_NAMES,
   QUEUE_DEFAULT_OPTIONS,
 } from '../../../core/queue/queue.constants';
+import { QueueProducer } from '../../../core/queue/queue-producer.service';
 import { RecipeManagementService } from '../admin/recipe-management.service';
 import { CreateRecipeDto } from '../admin/dto/recipe-management.dto';
 import { LlmService } from '../../../core/llm/llm.service';
@@ -166,6 +167,8 @@ export class RecipeGenerationService {
     private readonly recipeManagementService: RecipeManagementService,
     @InjectQueue(QUEUE_NAMES.RECIPE_GENERATION)
     private readonly generationQueue: Queue,
+    // V7: 统一入队抽象
+    private readonly queueProducer: QueueProducer,
     private readonly llm: LlmService,
   ) {
     this.apiKey =
@@ -262,7 +265,8 @@ export class RecipeGenerationService {
       };
 
       const opts = QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.RECIPE_GENERATION];
-      const job = await this.generationQueue.add(
+      const result = await this.queueProducer.enqueue(
+        QUEUE_NAMES.RECIPE_GENERATION,
         'generate-batch',
         {
           request: batchRequest,
@@ -278,8 +282,8 @@ export class RecipeGenerationService {
         },
       );
 
-      if (job.id) {
-        jobIds.push(job.id);
+      if (result.jobId) {
+        jobIds.push(result.jobId);
       }
     }
 

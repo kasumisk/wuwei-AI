@@ -23,12 +23,14 @@
  */
 
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
+import { Logger, OnModuleInit } from '@nestjs/common';
 import { Job } from 'bullmq';
 import {
   QUEUE_NAMES,
   QUEUE_DEFAULT_OPTIONS,
   DeadLetterService,
+  TaskHandlerRegistry,
+  processorAsHandler,
 } from '../core/queue';
 import {
   FoodEnrichmentService,
@@ -39,14 +41,26 @@ import { localesToFoodRegions } from '../common/utils/locale-region.util';
 @Processor(QUEUE_NAMES.FOOD_ENRICHMENT, {
   concurrency: QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_ENRICHMENT].concurrency,
 })
-export class FoodEnrichmentProcessor extends WorkerHost {
+export class FoodEnrichmentProcessor
+  extends WorkerHost
+  implements OnModuleInit
+{
   private readonly logger = new Logger(FoodEnrichmentProcessor.name);
 
   constructor(
     private readonly enrichmentService: FoodEnrichmentService,
     private readonly deadLetterService: DeadLetterService,
+    private readonly registry: TaskHandlerRegistry,
   ) {
     super();
+  }
+
+  onModuleInit(): void {
+    this.registry.register(
+      QUEUE_NAMES.FOOD_ENRICHMENT,
+      '*',
+      processorAsHandler(this),
+    );
   }
 
   async process(job: Job<EnrichmentJobData>): Promise<void> {

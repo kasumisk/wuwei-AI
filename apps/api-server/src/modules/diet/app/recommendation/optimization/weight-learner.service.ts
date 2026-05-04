@@ -1,7 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../../../../core/prisma/prisma.service';
 import { RedisCacheService } from '../../../../../core/redis/redis-cache.service';
+import { CronBackend, CronHandlerRegistry } from '../../../../../core/cron';
 import { GoalType } from '../../services/nutrition-score.service';
 import { SCORE_DIMENSIONS, SCORE_WEIGHTS } from '../types/recommendation.types';
 
@@ -124,13 +125,19 @@ interface FeedbackWithScores {
  * - 全部异步，不阻塞推荐请求
  */
 @Injectable()
-export class WeightLearnerService {
+export class WeightLearnerService implements OnModuleInit {
   private readonly logger = new Logger(WeightLearnerService.name);
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisCacheService,
+    private readonly cronBackend: CronBackend,
+    private readonly cronRegistry: CronHandlerRegistry,
   ) {}
+
+  onModuleInit(): void {
+    this.cronRegistry.register('weight-learner-daily', () => this.runDailyCron());
+  }
 
   /**
    * 获取指定 goalType 的全局学习后权重
@@ -331,6 +338,11 @@ export class WeightLearnerService {
   // P3-PR1: 每日 06:30 执行（避开 learned-ranking 的周一 06:00）
   // P1-R1: 多副本部署下用 Redis 分布式锁防重复执行（TTL 1h，足够单次任务跑完）
   @Cron('30 6 * * *', { name: 'weight-learner-daily' })
+  async runDailyCronTick(): Promise<void> {
+    if (!this.cronBackend.shouldRunInProc()) return;
+    await this.runDailyCron();
+  }
+
   async runDailyCron(): Promise<void> {
     await this.redis.runWithLock(
       'weight-learner-daily',

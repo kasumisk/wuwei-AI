@@ -11,12 +11,14 @@
  * 并发控制：2 个并发 worker（导出是低频高消耗操作）
  */
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
+import { Logger, OnModuleInit } from '@nestjs/common';
 import { Job } from 'bullmq';
 import {
   QUEUE_NAMES,
   QUEUE_DEFAULT_OPTIONS,
   DeadLetterService,
+  TaskHandlerRegistry,
+  processorAsHandler,
 } from '../../../../core/queue';
 import {
   TieredCacheManager,
@@ -39,7 +41,7 @@ export interface ExportCacheEntry {
 @Processor(QUEUE_NAMES.EXPORT, {
   concurrency: QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.EXPORT].concurrency,
 })
-export class ExportProcessor extends WorkerHost {
+export class ExportProcessor extends WorkerHost implements OnModuleInit {
   private readonly logger = new Logger(ExportProcessor.name);
   private readonly cache: TieredCacheNamespace<ExportCacheEntry>;
 
@@ -51,6 +53,7 @@ export class ExportProcessor extends WorkerHost {
     private readonly cacheManager: TieredCacheManager,
     // V6.5 Phase 2A: DLQ 服务
     private readonly deadLetterService: DeadLetterService,
+    private readonly registry: TaskHandlerRegistry,
   ) {
     super();
     this.cache = this.cacheManager.createNamespace<ExportCacheEntry>({
@@ -59,6 +62,14 @@ export class ExportProcessor extends WorkerHost {
       l1TtlMs: 10 * 60 * 1000, // 10 min L1
       l2TtlMs: ExportProcessor.RESULT_L2_TTL_MS,
     });
+  }
+
+  onModuleInit(): void {
+    this.registry.register(
+      QUEUE_NAMES.EXPORT,
+      '*',
+      processorAsHandler(this),
+    );
   }
 
   /**

@@ -30,6 +30,7 @@ IMAGE_NAME="api-server"
 API_SERVICE="${API_SERVICE:-eatcheck-api}"
 WORKER_SERVICE="${WORKER_SERVICE:-eatcheck-worker}"
 MIGRATE_JOB="${MIGRATE_JOB:-eatcheck-migrate}"
+CRON_JOB="${CRON_JOB:-eatcheck-cron-runner}"
 
 RUNTIME_SA="eatcheck-runtime@${PROJECT_ID}.iam.gserviceaccount.com"
 IMAGE_BASE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${IMAGE_NAME}"
@@ -45,6 +46,12 @@ PUBLIC_KEYS=(
   AI_GATEWAY_PROVIDER OPENROUTER_BASE_URL
   VISION_MODEL VISION_MODEL_FALLBACK
   STORAGE_ENDPOINT STORAGE_BUCKET STORAGE_PUBLIC_URL
+  # ---- Queue / Cron / Cloud Tasks 解耦后新增（非敏感）----
+  QUEUE_BACKEND_DEFAULT CRON_BACKEND ENFORCE_INTERNAL_AUTH
+  GCP_PROJECT_ID CLOUD_TASKS_LOCATION
+  CLOUD_TASKS_HANDLER_URL CLOUD_TASKS_OIDC_SA_EMAIL CLOUD_TASKS_OIDC_AUDIENCE
+  CRON_NAME
+  # 注：CLOUD_TASKS_INTERNAL_TOKEN / CACHE_REDIS_URL / QUEUE_REDIS_URL 走 Secret Manager
 )
 
 # Cloud Run 平台保留键 —— 不能 --set-env-vars
@@ -134,10 +141,15 @@ cmd_secrets() {
   log "✅ 已同步 $count_secret 个 secret，跳过 $count_skip 个公开键"
 }
 
-# 构造 --set-env-vars 与 --set-secrets 参数
+# 构造部署参数：
+#   - PUBLIC 键写入临时 yaml 文件（--env-vars-file），规避值含 @ / , 的转义问题
+#   - SECRET 键拼成逗号分隔的 --set-secrets 字符串（值均为 secret-name:latest，不含特殊符号）
+# 输出:
+#   ENVFILE<<<  /tmp 临时 yaml 路径
+#   SECRETS<<<  key=secret:latest,... 逗号分隔
 build_env_args() {
   require_env_file
-  local env_vars=""
+  local tmpfile; tmpfile="$(mktemp /tmp/cloudrun-env-XXXXXX.yaml)"
   local secrets=""
 
   while IFS= read -r line || [[ -n "$line" ]]; do
@@ -147,20 +159,33 @@ build_env_args() {
     local value="${BASH_REMATCH[2]}"
     value="${value%\"}"; value="${value#\"}"
     value="${value%\'}"; value="${value#\'}"
-    [[ -z "$value" ]] && continue
     if is_reserved_key "$key"; then continue; fi
 
     if is_public_key "$key"; then
-      # 用 ^@^ 作分隔符避免逗号冲突
-      [[ -n "$env_vars" ]] && env_vars+="@"
-      env_vars+="${key}=${value}"
+      # 公开键：值为空则跳过（不写入 env vars）
+      [[ -z "$value" ]] && continue
+      # yaml 格式：KEY: 'value'（单引号转义内部单引号为 ''）
+      local escaped_value="${value//\'/\'\'}"
+      printf "%s: '%s'\n" "$key" "$escaped_value" >> "$tmpfile"
     else
-      [[ -n "$secrets" ]] && secrets+="@"
+      # Secret 键：值为空时检查 Secret Manager 是否已有版本，有则仍挂载
+      if [[ -z "$value" ]]; then
+        if gcloud secrets versions list "eatcheck-${key}" --project="$PROJECT_ID" \
+             --filter="state=enabled" --limit=1 --format='value(name)' >/dev/null 2>&1 \
+           && [[ -n "$(gcloud secrets versions list "eatcheck-${key}" --project="$PROJECT_ID" \
+             --filter="state=enabled" --limit=1 --format='value(name)' 2>/dev/null)" ]]; then
+          # Secret Manager 有值，挂载（跳过同步写入）
+          true
+        else
+          continue
+        fi
+      fi
+      [[ -n "$secrets" ]] && secrets+=","
       secrets+="${key}=eatcheck-${key}:latest"
     fi
   done < "$ENV_FILE"
 
-  echo "ENV_VARS<<<${env_vars}"
+  echo "ENVFILE<<<${tmpfile}"
   echo "SECRETS<<<${secrets}"
 }
 
@@ -169,18 +194,59 @@ resolve_image() {
   echo "${IMAGE_BASE}:${tag}"
 }
 
-cmd_api() {
+# 通用 gcloud run deploy 包装，自动清理临时文件
+_run_deploy_service() {
+  local svc="$1"; shift
   local image; image="$(resolve_image)"
-  log "部署 $API_SERVICE → $image"
   local parsed; parsed="$(build_env_args)"
-  local env_vars; env_vars="$(echo "$parsed" | grep '^ENV_VARS<<<' | sed 's/^ENV_VARS<<<//')"
+  local envfile; envfile="$(echo "$parsed" | grep '^ENVFILE<<<' | sed 's/^ENVFILE<<<//')"
   local secrets;  secrets="$(echo "$parsed"  | grep '^SECRETS<<<'  | sed 's/^SECRETS<<<//')"
 
-  gcloud run deploy "$API_SERVICE" \
-    --project="$PROJECT_ID" \
-    --region="$REGION" \
+  local secret_args=()
+  [[ -n "$secrets" ]] && secret_args=(--set-secrets="$secrets")
+
+  gcloud run deploy "$svc" \
+    --project="$PROJECT_ID" --region="$REGION" \
     --image="$image" \
     --service-account="$RUNTIME_SA" \
+    --env-vars-file="$envfile" \
+    "${secret_args[@]}" \
+    "$@" \
+    --quiet
+
+  rm -f "$envfile"
+}
+
+# 通用 gcloud run jobs create/update 包装
+_run_job_deploy() {
+  local job="$1"; shift
+  local image; image="$(resolve_image)"
+  local parsed; parsed="$(build_env_args)"
+  local envfile; envfile="$(echo "$parsed" | grep '^ENVFILE<<<' | sed 's/^ENVFILE<<<//')"
+  local secrets;  secrets="$(echo "$parsed"  | grep '^SECRETS<<<'  | sed 's/^SECRETS<<<//')"
+
+  local secret_args=()
+  [[ -n "$secrets" ]] && secret_args=(--set-secrets="$secrets")
+
+  local action="create"
+  gcloud run jobs describe "$job" --project="$PROJECT_ID" --region="$REGION" >/dev/null 2>&1 \
+    && action="update"
+
+  gcloud run jobs "$action" "$job" \
+    --project="$PROJECT_ID" --region="$REGION" \
+    --image="$image" \
+    --service-account="$RUNTIME_SA" \
+    --env-vars-file="$envfile" \
+    "${secret_args[@]}" \
+    "$@" \
+    --quiet
+
+  rm -f "$envfile"
+}
+
+cmd_api() {
+  log "部署 $API_SERVICE"
+  _run_deploy_service "$API_SERVICE" \
     --platform=managed \
     --allow-unauthenticated \
     --port=3000 \
@@ -190,11 +256,8 @@ cmd_api() {
     --timeout=300 \
     --execution-environment=gen2 \
     --cpu-boost \
-    --set-env-vars="^@^${env_vars}" \
-    --set-secrets="^@^${secrets}" \
     --command="dumb-init" \
-    --args="--,node,dist/main.js" \
-    --quiet
+    --args="--,node,dist/main.js"
   log "✅ $API_SERVICE 部署完成"
   gcloud run services describe "$API_SERVICE" \
     --project="$PROJECT_ID" --region="$REGION" \
@@ -202,74 +265,50 @@ cmd_api() {
 }
 
 cmd_worker() {
-  local image; image="$(resolve_image)"
-  log "部署 $WORKER_SERVICE → $image"
-  local parsed; parsed="$(build_env_args)"
-  local env_vars; env_vars="$(echo "$parsed" | grep '^ENV_VARS<<<' | sed 's/^ENV_VARS<<<//')"
-  local secrets;  secrets="$(echo "$parsed"  | grep '^SECRETS<<<'  | sed 's/^SECRETS<<<//')"
-
-  gcloud run deploy "$WORKER_SERVICE" \
-    --project="$PROJECT_ID" \
-    --region="$REGION" \
-    --image="$image" \
-    --service-account="$RUNTIME_SA" \
+  log "部署 $WORKER_SERVICE"
+  _run_deploy_service "$WORKER_SERVICE" \
     --platform=managed \
     --no-allow-unauthenticated \
     --no-cpu-throttling \
     --cpu=1 --memory=1Gi \
-    --min-instances=1 --max-instances=1 \
+    --min-instances=0 --max-instances=1 \
     --execution-environment=gen2 \
-    --set-env-vars="^@^${env_vars}" \
-    --set-secrets="^@^${secrets}" \
     --command="dumb-init" \
-    --args="--,node,dist/worker.js" \
-    --quiet
+    --args="--,node,dist/worker.js"
   log "✅ $WORKER_SERVICE 部署完成"
 }
 
 cmd_migrate() {
-  local image; image="$(resolve_image)"
-  log "创建/更新 Cloud Run Job: $MIGRATE_JOB → $image"
-  local parsed; parsed="$(build_env_args)"
-  local env_vars; env_vars="$(echo "$parsed" | grep '^ENV_VARS<<<' | sed 's/^ENV_VARS<<<//')"
-  local secrets;  secrets="$(echo "$parsed"  | grep '^SECRETS<<<'  | sed 's/^SECRETS<<<//')"
-
-  # Job 内执行的命令: 先 migrate deploy(用 DIRECT_URL),再跑 init-system
-  # prisma 已在 dependencies, 通过 node_modules/.bin 调用 CLI
+  log "创建/更新 Cloud Run Job: $MIGRATE_JOB"
   local job_cmd='cd /app && ./node_modules/.bin/prisma migrate deploy --schema=prisma/schema.prisma && node dist/scripts/init-system.js'
+  _run_job_deploy "$MIGRATE_JOB" \
+    --cpu=1 --memory=1Gi \
+    --max-retries=1 --task-timeout=900 \
+    --command="/bin/sh" \
+    --args="-c,${job_cmd}"
 
-  if gcloud run jobs describe "$MIGRATE_JOB" --project="$PROJECT_ID" --region="$REGION" >/dev/null 2>&1; then
-    gcloud run jobs update "$MIGRATE_JOB" \
-      --project="$PROJECT_ID" --region="$REGION" \
-      --image="$image" \
-      --service-account="$RUNTIME_SA" \
-      --cpu=1 --memory=1Gi \
-      --max-retries=1 --task-timeout=900 \
-      --set-env-vars="^@^${env_vars}" \
-      --set-secrets="^@^${secrets}" \
-      --command="/bin/sh" \
-      --args="-c,$job_cmd" \
-      --quiet
-  else
-    gcloud run jobs create "$MIGRATE_JOB" \
-      --project="$PROJECT_ID" --region="$REGION" \
-      --image="$image" \
-      --service-account="$RUNTIME_SA" \
-      --cpu=1 --memory=1Gi \
-      --max-retries=1 --task-timeout=900 \
-      --set-env-vars="^@^${env_vars}" \
-      --set-secrets="^@^${secrets}" \
-      --command="/bin/sh" \
-      --args="-c,$job_cmd" \
-      --quiet
-  fi
-
-  log "▶️  执行 Job: $MIGRATE_JOB (这会跑迁移 + 初始化超管,完成前请勿打断)"
+  log "▶️  执行 Job: $MIGRATE_JOB"
   gcloud run jobs execute "$MIGRATE_JOB" \
     --project="$PROJECT_ID" --region="$REGION" \
     --wait --quiet
-  log "✅ 迁移 + 初始化完成。日志中若包含一次性密码,请立即保存"
-  log "   查看完整日志: gcloud logging read 'resource.type=cloud_run_job AND resource.labels.job_name=${MIGRATE_JOB}' --project=$PROJECT_ID --limit=200 --format='value(textPayload)' --freshness=10m"
+  log "✅ 迁移 + 初始化完成"
+  log "   查看日志: gcloud logging read 'resource.type=cloud_run_job AND resource.labels.job_name=${MIGRATE_JOB}' --project=$PROJECT_ID --limit=200 --format='value(textPayload)' --freshness=10m"
+}
+
+cmd_cron() {
+  log "创建/更新 Cloud Run Job: $CRON_JOB"
+  _run_job_deploy "$CRON_JOB" \
+    --cpu=1 --memory=1Gi \
+    --max-retries=1 --task-timeout=3600 \
+    --command="dumb-init" \
+    --args="--,node,dist/cron-runner.js"
+  # CRON_BACKEND=external 额外注入（不在 env 文件里作为固定值，避免 migrate job 也被打上）
+  gcloud run jobs update "$CRON_JOB" \
+    --project="$PROJECT_ID" --region="$REGION" \
+    --update-env-vars="CRON_BACKEND=external" \
+    --quiet
+  log "✅ $CRON_JOB Job 已就绪"
+  log "   触发示例: gcloud run jobs execute $CRON_JOB --region=$REGION --update-env-vars=CRON_NAME=<name> --wait"
 }
 
 cmd_all() {
@@ -280,6 +319,7 @@ cmd_all() {
   cmd_migrate
   cmd_api
   cmd_worker
+  cmd_cron
   log "🎉 全流程完成"
   cmd_status
 }
@@ -302,7 +342,8 @@ cmd_logs() {
     api)     name="$API_SERVICE" ;;
     worker)  name="$WORKER_SERVICE" ;;
     migrate) name="$MIGRATE_JOB"; resource_type="cloud_run_job" ;;
-    *) die "未知目标: $target (api|worker|migrate)" ;;
+    cron)    name="$CRON_JOB"; resource_type="cloud_run_job" ;;
+    *) die "未知目标: $target (api|worker|migrate|cron)" ;;
   esac
   local label="service_name"
   [[ "$resource_type" == "cloud_run_job" ]] && label="job_name"
@@ -318,6 +359,7 @@ case "${1:-}" in
   api)      cmd_api ;;
   worker)   cmd_worker ;;
   migrate)  cmd_migrate ;;
+  cron)     cmd_cron ;;
   all)      cmd_all ;;
   status)   cmd_status ;;
   logs)     cmd_logs "${2:-api}" ;;
@@ -329,11 +371,12 @@ Commands:
   build      Cloud Build 构建并推送镜像
   secrets    同步 $ENV_FILE 到 Secret Manager
   migrate    部署 + 执行迁移 Job (prisma migrate deploy + init-system)
+  cron       部署 cron-runner Cloud Run Job (重 cron 备用入口；CRON_NAME 选具体任务)
   api        部署 eatcheck-api HTTP 服务
   worker     部署 eatcheck-worker 常驻服务
   all        以上全部按顺序
   status     查看部署状态
-  logs <api|worker|migrate>  查看日志
+  logs <api|worker|migrate|cron>  查看日志
 EOF
     exit 1
     ;;
