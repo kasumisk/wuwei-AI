@@ -131,6 +131,11 @@ export class CollaborativeFilteringService implements OnModuleInit {
     this.cronRegistry.register('cf-full-rebuild-weekly', () =>
       this.scheduledFullRebuild(),
     );
+
+    // 启动预热：异步预建交互矩阵，避免第一次请求冷启动超时
+    this.getOrBuildMatrix().catch((err) =>
+      this.logger.warn(`CF matrix warmup failed: ${err?.message}`),
+    );
   }
 
   // ================================================================
