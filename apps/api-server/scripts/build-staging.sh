@@ -87,14 +87,11 @@ fi
 log "[2/3] SSH → ${VM_INSTANCE}，执行 git pull + build"
 
 ssh_exec bash -lc "
-set -euo pipefail
+# 先加载 nvm（需在 set -u 之前，避免 nvm.sh 内部未定义变量触发报错）
+export NVM_DIR=\"\$HOME/.nvm\"
+[ -s \"\$NVM_DIR/nvm.sh\" ] && source \"\$NVM_DIR/nvm.sh\"
 
-# 补全常见工具路径（gcloud ssh 非交互式环境可能不加载 .bashrc）
-export PATH=\"\$HOME/.local/share/pnpm:\$HOME/.nvm/versions/node/\$(ls \$HOME/.nvm/versions/node 2>/dev/null | tail -1)/bin:/usr/local/bin:/usr/bin:\$PATH\"
-# 兼容 nvm 方式安装的 node
-[ -s \"\$HOME/.nvm/nvm.sh\" ] && source \"\$HOME/.nvm/nvm.sh\"
-# 兼容 volta
-[ -s \"\$HOME/.volta/env\" ] && source \"\$HOME/.volta/env\"
+set -euo pipefail
 
 echo \"--- node: \$(node -v), pnpm: \$(pnpm -v), pm2: \$(pm2 -v) ---\"
 
