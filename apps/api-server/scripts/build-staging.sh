@@ -91,7 +91,8 @@ set -euo pipefail
 
 echo '--- git pull ---'
 cd ${REPO_DIR}
-git pull
+git fetch origin
+git reset --hard origin/main
 
 echo '--- pnpm install ---'
 pnpm install --frozen-lockfile
