@@ -34,13 +34,16 @@ import type { DecisionValueTag } from '../recommendation/types/meal.types';
 import { RequestContextService } from '../../../../core/context/request-context.service';
 import { FoodI18nService } from './food-i18n.service';
 import { FoodLibrary } from '../../../food/food.types';
+import { RedisCacheService } from '../../../../core/redis/redis-cache.service';
 
 // ─── V7.9 Phase 3-1: 推荐粘性缓存配置 ───
 
-/** 粘性缓存 TTL（毫秒），同一用户+餐次在此时间内返回相同推荐 */
-const STICKINESS_CACHE_TTL_MS = 5 * 60 * 1000; // 5分钟
-/** 粘性缓存最大条目数（防止内存泄漏） */
+/** 粘性缓存 TTL（毫秒），同一用户+餐次在此时间内返回相同推荐（Redis 持久化，跨实例共享） */
+const STICKINESS_CACHE_TTL_MS = 30 * 60 * 1000; // 30分钟
+/** 粘性缓存最大条目数（防止内存泄漏，仅用于 fallback in-memory cache） */
 const STICKINESS_CACHE_MAX_SIZE = 500;
+/** Redis 粘性缓存 key 前缀 */
+const STICKINESS_REDIS_PREFIX = 'stickiness:v1:';
 
 interface SuggestionFoodItem {
   foodId: string;
@@ -80,6 +83,11 @@ interface MealSuggestionResponse {
   scenarios?: MealSuggestionScenario[];
 }
 
+interface MealSuggestionOptions {
+  mealType?: string;
+  skipPrecomputed?: boolean;
+}
+
 /** 粘性缓存条目 */
 interface StickinessCacheEntry {
   /** 缓存键 */
@@ -109,6 +117,7 @@ export class FoodService {
     private readonly precomputeService: PrecomputeService,
     private readonly requestCtx: RequestContextService,
     private readonly foodI18nService: FoodI18nService,
+    private readonly redisCache: RedisCacheService,
   ) {}
 
   /**
@@ -197,6 +206,7 @@ export class FoodService {
   async getMealSuggestion(
     userId: string,
     forceRefresh = false,
+    options?: MealSuggestionOptions,
   ): Promise<MealSuggestionResponse> {
     const locale = this.getCurrentLocale();
     const [summary, profile] = await Promise.all([
@@ -211,11 +221,13 @@ export class FoodService {
     const hour = getUserLocalHour(tz);
     const mealRatios = MEAL_RATIOS[goalType] || MEAL_RATIOS.health;
 
-    let nextMeal: string;
-    if (hour < 9) nextMeal = 'breakfast';
-    else if (hour < 14) nextMeal = 'lunch';
-    else if (hour < 17) nextMeal = 'snack';
-    else nextMeal = 'dinner';
+    let nextMeal = options?.mealType;
+    if (!nextMeal) {
+      if (hour < 9) nextMeal = 'breakfast';
+      else if (hour < 14) nextMeal = 'lunch';
+      else if (hour < 17) nextMeal = 'snack';
+      else nextMeal = 'dinner';
+    }
 
     const ratio = mealRatios[nextMeal] || 0.25;
     const calBudget = Math.min(Math.round(goals.calories * ratio), remaining);
@@ -242,7 +254,7 @@ export class FoodService {
     // ─── V7.9 Phase 3-1: 粘性缓存检查 ───
     const cacheKey = this.buildStickinessCacheKey(userId, nextMeal, locale);
     if (!forceRefresh) {
-      const cached = this.getFromStickinessCache(
+      const cached = await this.getFromStickinessCache(
         cacheKey,
         summary.totalCalories || 0,
       );
@@ -261,12 +273,14 @@ export class FoodService {
     //   先传 'unknown' 以命中 processor 为 unknown 存储的兜底预计算缓存。
     //   接入 X-Client-Type header 后，将 channel 透传至此并移除该注释。
     const todayStr = new Date().toISOString().slice(0, 10);
-    const precomputed = await this.precomputeService.getPrecomputed(
-      userId,
-      todayStr,
-      nextMeal,
-      'unknown',
-    );
+    const precomputed = options?.skipPrecomputed
+      ? null
+      : await this.precomputeService.getPrecomputed(
+          userId,
+          todayStr,
+          nextMeal,
+          'unknown',
+        );
     if (precomputed) {
       const { result: mainRec, scenarioResults } = precomputed;
 
@@ -653,6 +667,21 @@ export class FoodService {
     return result;
   }
 
+  async adjustMealSuggestion(
+    userId: string,
+    _reason: string,
+    mealType?: string,
+  ): Promise<MealSuggestionResponse> {
+    if (mealType) {
+      this.invalidateMealSuggestionCache(userId, mealType);
+    }
+
+    return this.getMealSuggestion(userId, true, {
+      mealType,
+      skipPrecomputed: true,
+    });
+  }
+
   private toSuggestionFoodItems(
     picks?: Array<{
       food?: {
@@ -734,43 +763,75 @@ export class FoodService {
   }
 
   /**
-   * 从粘性缓存读取
+   * 从粘性缓存读取（Redis 优先，in-memory fallback）
    *
    * 失效条件：
-   * 1. 超过 TTL（5分钟）
+   * 1. 超过 TTL（30分钟）
    * 2. 用户已摄入热量变化（说明记录了新饮食，推荐应更新）
    */
-  private getFromStickinessCache(
+  private async getFromStickinessCache(
     key: string,
     currentConsumedCalories: number,
-  ): StickinessCacheEntry['result'] | null {
+  ): Promise<StickinessCacheEntry['result'] | null> {
+    const redisKey = `${STICKINESS_REDIS_PREFIX}${key}`;
+    try {
+      if (this.redisCache.isConfigured) {
+        const entry = await this.redisCache.get<StickinessCacheEntry>(redisKey);
+        if (entry) {
+          // 已摄入热量变化则失效
+          if (Math.abs(currentConsumedCalories - entry.consumedCalories) > 10) {
+            void this.redisCache.del(redisKey);
+            return null;
+          }
+          return entry.result;
+        }
+        return null;
+      }
+    } catch (e) {
+      this.logger.warn(`[StickinessCache] Redis get failed, fallback to in-memory: ${e}`);
+    }
+    // in-memory fallback
     const entry = this.stickinessCache.get(key);
     if (!entry) return null;
-
     const now = Date.now();
-    // 条件1: TTL 过期
     if (now - entry.createdAt > STICKINESS_CACHE_TTL_MS) {
       this.stickinessCache.delete(key);
       return null;
     }
-    // 条件2: 已摄入热量变化（用户记录了新饮食）
     if (Math.abs(currentConsumedCalories - entry.consumedCalories) > 10) {
       this.stickinessCache.delete(key);
       return null;
     }
-
     return entry.result;
   }
 
   /**
-   * 写入粘性缓存（含容量淘汰）
+   * 写入粘性缓存（Redis 优先，in-memory fallback）
    */
   private setToStickinessCache(
     key: string,
     result: StickinessCacheEntry['result'],
     consumedCalories: number,
   ): void {
-    // 容量淘汰：超过上限时清理最旧的一半
+    const entry: StickinessCacheEntry = {
+      key,
+      result,
+      createdAt: Date.now(),
+      consumedCalories,
+    };
+    const redisKey = `${STICKINESS_REDIS_PREFIX}${key}`;
+    // 异步写 Redis，不阻塞响应
+    if (this.redisCache.isConfigured) {
+      this.redisCache.set(redisKey, entry, STICKINESS_CACHE_TTL_MS).catch((e) => {
+        this.logger.warn(`[StickinessCache] Redis set failed, fallback to in-memory: ${e}`);
+        this._setInMemoryStickinessCache(key, entry);
+      });
+    } else {
+      this._setInMemoryStickinessCache(key, entry);
+    }
+  }
+
+  private _setInMemoryStickinessCache(key: string, entry: StickinessCacheEntry): void {
     if (this.stickinessCache.size >= STICKINESS_CACHE_MAX_SIZE) {
       const entries = Array.from(this.stickinessCache.entries()).sort(
         (a, b) => a[1].createdAt - b[1].createdAt,
@@ -780,13 +841,7 @@ export class FoodService {
         this.stickinessCache.delete(entries[i][0]);
       }
     }
-
-    this.stickinessCache.set(key, {
-      key,
-      result,
-      createdAt: Date.now(),
-      consumedCalories,
-    });
+    this.stickinessCache.set(key, entry);
   }
 
   /**
@@ -799,16 +854,22 @@ export class FoodService {
     const locales: Locale[] = ['zh-CN', 'en-US', 'ja-JP'];
     if (mealType) {
       for (const locale of locales) {
-        this.stickinessCache.delete(
-          `${userId}:${mealType}:${locale}:${dateStr}`,
-        );
+        const key = `${userId}:${mealType}:${locale}:${dateStr}`;
+        this.stickinessCache.delete(key);
+        if (this.redisCache.isConfigured) {
+          void this.redisCache.del(`${STICKINESS_REDIS_PREFIX}${key}`);
+        }
       }
       return;
     }
 
     for (const mt of ['breakfast', 'lunch', 'snack', 'dinner']) {
       for (const locale of locales) {
-        this.stickinessCache.delete(`${userId}:${mt}:${locale}:${dateStr}`);
+        const key = `${userId}:${mt}:${locale}:${dateStr}`;
+        this.stickinessCache.delete(key);
+        if (this.redisCache.isConfigured) {
+          void this.redisCache.del(`${STICKINESS_REDIS_PREFIX}${key}`);
+        }
       }
     }
   }
