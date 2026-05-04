@@ -36,6 +36,8 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
   private client: Redis | null = null;
   private _isConnected = false;
   private _isConfigured = false;
+  /** 应用层 keepalive timer，每 20s ping 一次防止 Upstash 空闲断连 */
+  private keepaliveTimer: ReturnType<typeof setInterval> | null = null;
   /**
    * V6.7 P1-6: 缓存 key 版本号后缀
    *
@@ -103,15 +105,18 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
         this.logger.warn(`Redis connection error: ${err.message}`);
       }
       this._isConnected = false;
+      this.stopKeepalive();
     });
 
     this.client.on('ready', () => {
       this._isConnected = true;
       this.logger.log('Redis connected successfully (ioredis)');
+      this.startKeepalive();
     });
 
     this.client.on('end', () => {
       this._isConnected = false;
+      this.stopKeepalive();
     });
   }
 
@@ -142,22 +147,44 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
       await this.client.ping();
       this._isConnected = true;
     } catch (err) {
+      // 启动时 ping 失败（如 Upstash cold start / 网络抖动）——
+      // 保留 client，让 ioredis retryStrategy 自动重连。
+      // 不销毁 client，否则 ready 事件永远不会触发，Redis 永久失效。
       this.logger.warn(
-        `Failed to connect to Redis: ${err}. Falling back to memory cache.`,
+        `Redis ping failed at startup: ${err}. Will retry in background (retryStrategy active).`,
       );
-      this.client = null;
-      this._isConfigured = false;
       this._isConnected = false;
+      // _isConfigured 保持 true，ioredis 继续持有连接并重试
     }
   }
 
   async onModuleDestroy(): Promise<void> {
+    this.stopKeepalive();
     if (this.client) {
       try {
         this.client.disconnect();
       } catch {
         // Ignore disconnect errors
       }
+    }
+  }
+
+  /** 每 20s 发一次 PING，防止 Upstash 应用层 idle timeout（~30-60s）断连 */
+  private startKeepalive(): void {
+    this.stopKeepalive();
+    this.keepaliveTimer = setInterval(() => {
+      if (this.client && this._isConnected) {
+        this.client.ping().catch(() => {
+          // ping 失败时 error 事件会处理，此处静默
+        });
+      }
+    }, 20_000);
+  }
+
+  private stopKeepalive(): void {
+    if (this.keepaliveTimer) {
+      clearInterval(this.keepaliveTimer);
+      this.keepaliveTimer = null;
     }
   }
 
