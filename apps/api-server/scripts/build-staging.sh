@@ -17,9 +17,10 @@
 set -Eeuo pipefail
 
 # ─── 配置（按实际修改） ──────────────────────────────────────────────────────
+VM_PROJECT="flutter-scaffold-4fd6c"           # GCP 项目 ID
 VM_INSTANCE="openclaw"                        # GCP 实例名
 VM_USER="xiehaiji"                            # VM 登录用户
-VM_ZONE="asia-east2-a"                                    # GCP zone，留空则用 gcloud 默认 zone
+VM_ZONE="asia-east2-a"                        # GCP zone
 REPO_DIR="/home/xiehaiji/wuwei-api"           # VM 上的仓库根目录
 PM2_NAME="wuwei-api"                          # pm2 进程名
 
@@ -53,7 +54,7 @@ ssh_exec() {
   if [ "$SSH_MODE" = "gcloud" ]; then
     local zone_flag=""
     [ -n "$VM_ZONE" ] && zone_flag="--zone=$VM_ZONE"
-    gcloud compute ssh "${VM_USER}@${VM_INSTANCE}" $zone_flag -- "$@"
+    gcloud compute ssh "${VM_USER}@${VM_INSTANCE}" --project="${VM_PROJECT}" $zone_flag -- "$@"
   else
     ssh "${VM_USER}@${VM_INSTANCE}" "$@"
   fi
