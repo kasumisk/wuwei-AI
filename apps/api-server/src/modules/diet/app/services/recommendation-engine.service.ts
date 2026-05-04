@@ -442,7 +442,7 @@ export class RecommendationEngineService implements OnModuleInit {
     const shortTermProfile = enrichedProfile.shortTerm;
     const contextualProfile = enrichedProfile.contextual;
 
-    // 跨场景去重：外卖 → 便利店 → 在家做，累积已用食物名
+    // 跨场景去重种子：使用近期食物名，各场景独立去重（并行化后不共享累积状态）
     const usedAcrossScenarios = new Set<string>(recentFoodNames);
 
     // 性能优化：三个场景共享同一用户（regionCode/cuisinePreferences 相同），
@@ -481,10 +481,9 @@ export class RecommendationEngineService implements OnModuleInit {
       },
     ];
 
-    // 串行执行三个场景，保证 usedAcrossScenarios 跨场景去重有效
-    const results: Record<string, MealRecommendation> = {};
-
-    for (const scenarioConfig of SCENARIO_CONFIGS) {
+    const runScenario = async (
+      scenarioConfig: (typeof SCENARIO_CONFIGS)[number],
+    ): Promise<MealRecommendation> => {
       const _ts = Date.now();
       const sceneContext: SceneContext = {
         channel: scenarioConfig.channel,
@@ -537,9 +536,6 @@ export class RecommendationEngineService implements OnModuleInit {
       );
 
       const mealPolicy = resolvedStrategy?.config?.meal;
-      // P0-A 根因#3 修复：按当餐蛋白目标动态构建 role 数组，突破 3 protein slot 天花板。
-      // 原硬编码 MEAL_ROLES 每餐 1 个 protein slot，减脂 152g/日目标物理不可达（天花板 ~105g）。
-      // 优先级：策略覆盖 > 动态派生 > 兜底增肌/普通模板
       const dynamicRoles = buildMealRoles(mealType, target.protein);
       const defaultRoles =
         goalType === 'muscle_gain'
@@ -559,11 +555,6 @@ export class RecommendationEngineService implements OnModuleInit {
         sceneAdjustedRealism,
       );
 
-      // 累积本场景选出的食物，让后续场景避开
-      for (const p of finalPicks) {
-        usedAcrossScenarios.add(p.food.name);
-      }
-
       const result = await this.resultProcessor.process({
         finalPicks,
         allCandidates,
@@ -576,16 +567,17 @@ export class RecommendationEngineService implements OnModuleInit {
         userId,
       });
 
-      results[scenarioConfig.key] = result;
       this.logger.log(`[TIMING] recommendByScenario scenario=${scenarioConfig.key}: ${Date.now() - _ts}ms uid=${userId}`);
-    }
+      return result;
+    };
+
+    // 三个场景并行执行（各自独立 usedNames，去掉串行跨场景去重换取性能）
+    const [takeout, convenience, homeCook] = await Promise.all(
+      SCENARIO_CONFIGS.map(runScenario),
+    );
 
     this.logger.log(`[TIMING] recommendByScenario total: ${Date.now() - _t0}ms uid=${userId}`);
-    return {
-      takeout: results['takeout'],
-      convenience: results['convenience'],
-      homeCook: results['homeCook'],
-    };
+    return { takeout, convenience, homeCook };
   }
 
   // ─── 从食物池推荐（三阶段 Pipeline: Recall → Rank → Rerank） ───

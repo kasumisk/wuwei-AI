@@ -171,50 +171,52 @@ export class ProfileAggregatorService {
 
     // P3-2.6 / P3-PR1：weightLearner 四层融合（user×meal × region × global）优先；
     // 无任何学习信号时回退到 segment 级 LearnedRankingService（旧路径）。
-    let learnedWeightOverrides: number[] | null = null;
+    // regionalBoostMap 和 cuisineBoostMap 与 weightLearner 完全独立，并行获取。
     const goalType = effectiveGoal?.goalType as GoalType | undefined;
-    const _t2 = Date.now();
-    if (goalType && SCORE_WEIGHTS[goalType]) {
-      try {
-        learnedWeightOverrides =
-          await this.weightLearnerService.getUserMealWeights(
-            userId,
-            goalType,
-            mealType,
-            SCORE_WEIGHTS[goalType],
-            regionCode,
-          );
-      } catch (err) {
-        this.logger.debug(
-          `WeightLearnerService.getUserMealWeights failed (user=${userId}): ${(err as Error).message}`,
-        );
-      }
-    }
-    if (!learnedWeightOverrides) {
-      try {
-        learnedWeightOverrides =
-          await this.learnedRankingService.getLearnedWeights(
-            userSegment,
-            userId,
-          );
-      } catch (err) {
-        this.logger.debug(
-          `LearnedRankingService.getLearnedWeights failed (user=${userId}): ${(err as Error).message}`,
-        );
-      }
-    }
-
-    const regionalBoostMap =
-      await this.preferenceProfileService.getRegionalBoostMap(regionCode);
-
-    // P3-3.5：cuisine 偏好衍生 boost map，与 region map 取 max 合并
     const declaredCuisinePrefs =
       enrichedProfile.declared?.cuisinePreferences ?? null;
-    const cuisineBoostMap =
-      await this.preferenceProfileService.getCuisineRegionalBoostMap(
-        declaredCuisinePrefs,
-        regionCode,
-      );
+
+    const _t2 = Date.now();
+    const [weightLearnerResult, regionalBoostMap, cuisineBoostMap] =
+      await Promise.all([
+        // weightLearner → learnedRanking fallback
+        (async (): Promise<number[] | null> => {
+          if (goalType && SCORE_WEIGHTS[goalType]) {
+            try {
+              const w = await this.weightLearnerService.getUserMealWeights(
+                userId,
+                goalType,
+                mealType,
+                SCORE_WEIGHTS[goalType],
+                regionCode,
+              );
+              if (w) return w;
+            } catch (err) {
+              this.logger.debug(
+                `WeightLearnerService.getUserMealWeights failed (user=${userId}): ${(err as Error).message}`,
+              );
+            }
+          }
+          try {
+            return await this.learnedRankingService.getLearnedWeights(
+              userSegment,
+              userId,
+            );
+          } catch (err) {
+            this.logger.debug(
+              `LearnedRankingService.getLearnedWeights failed (user=${userId}): ${(err as Error).message}`,
+            );
+            return null;
+          }
+        })(),
+        this.preferenceProfileService.getRegionalBoostMap(regionCode),
+        this.preferenceProfileService.getCuisineRegionalBoostMap(
+          declaredCuisinePrefs,
+          regionCode,
+        ),
+      ]);
+
+    const learnedWeightOverrides = weightLearnerResult;
     const mergedRegionalBoostMap =
       PreferenceProfileService.mergeRegionalBoostMaps(
         regionalBoostMap,
