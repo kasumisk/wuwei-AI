@@ -65,8 +65,8 @@ const CF_CONFIG = {
   TOP_K_SIMILAR: 20,
   /** 矩阵内存缓存 TTL（秒）— V5 2.10: Cron 每日重建，TTL 延长到 25h 兜底 */
   MATRIX_CACHE_TTL: 90000,
-  /** CF 分数缓存 TTL（秒） */
-  SCORE_CACHE_TTL: 1800,
+  /** CF 分数缓存 TTL（毫秒） — RedisCacheService.set 接受毫秒 */
+  SCORE_CACHE_TTL: 1800 * 1000,
   /** 最低相似度阈值 */
   MIN_SIMILARITY: 0.05,
   /** 隐式信号衰减（天数） — 超过此天数的记录信号减半 */
