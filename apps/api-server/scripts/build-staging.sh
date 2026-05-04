@@ -19,7 +19,7 @@ set -Eeuo pipefail
 # ─── 配置（按实际修改） ──────────────────────────────────────────────────────
 VM_INSTANCE="openclaw"                        # GCP 实例名
 VM_USER="xiehaiji"                            # VM 登录用户
-VM_ZONE=""                                    # GCP zone，留空则用 gcloud 默认 zone
+VM_ZONE="asia-east2-a"                                    # GCP zone，留空则用 gcloud 默认 zone
 REPO_DIR="/home/xiehaiji/wuwei-api"           # VM 上的仓库根目录
 PM2_NAME="wuwei-api"                          # pm2 进程名
 
