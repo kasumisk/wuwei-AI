@@ -166,6 +166,7 @@ export class RecommendationEngineService implements OnModuleInit {
     userProfile?: UserProfileConstraints,
     additionalExcludeNames?: string[],
   ): Promise<MealRecommendation> {
+    const _t0 = Date.now();
     // 通过 ProfileAggregatorService 聚合全部画像数据
     const [allFoods, profileData, resolvedStrategy, analysisProfile] =
       await Promise.all([
@@ -174,6 +175,7 @@ export class RecommendationEngineService implements OnModuleInit {
         this.strategyFacade.resolveStrategyForUser(userId, goalType),
         this.getAnalysisProfile(userId),
       ]);
+    this.logger.log(`[TIMING] recommendMeal phase1(getAllFoods+aggregateForRecommendation+strategy+analysis): ${Date.now() - _t0}ms uid=${userId}`);
 
     const {
       recentFoodNames,
@@ -351,7 +353,9 @@ export class RecommendationEngineService implements OnModuleInit {
 
     // 多语言食物名覆盖（非 zh 时从 food_translations 读取）
     const locale = this.requestCtx.locale;
-    return this.foodI18nService.applyToMealRecommendation(result, locale);
+    const _finalResult = await this.foodI18nService.applyToMealRecommendation(result, locale);
+    this.logger.log(`[TIMING] recommendMeal total: ${Date.now() - _t0}ms uid=${userId}`);
+    return _finalResult;
   }
 
   /**
@@ -413,6 +417,7 @@ export class RecommendationEngineService implements OnModuleInit {
     convenience: MealRecommendation;
     homeCook: MealRecommendation;
   }> {
+    const _t0 = Date.now();
     // 聚合画像数据（与 recommendMeal 一致）
     const [allFoods, scenarioData, resolvedStrategy, analysisProfile] =
       await Promise.all([
@@ -421,6 +426,7 @@ export class RecommendationEngineService implements OnModuleInit {
         this.strategyFacade.resolveStrategyForUser(userId, goalType),
         this.getAnalysisProfile(userId),
       ]);
+    this.logger.log(`[TIMING] recommendByScenario phase1(getAllFoods+aggregateForScenario+strategy+analysis): ${Date.now() - _t0}ms uid=${userId}`);
     const { recentFoodNames, enrichedProfile } = scenarioData;
 
     // 合并调用方传入的 userProfile 覆盖
@@ -479,6 +485,7 @@ export class RecommendationEngineService implements OnModuleInit {
     const results: Record<string, MealRecommendation> = {};
 
     for (const scenarioConfig of SCENARIO_CONFIGS) {
+      const _ts = Date.now();
       const sceneContext: SceneContext = {
         channel: scenarioConfig.channel,
         sceneType: scenarioConfig.sceneType,
@@ -570,8 +577,10 @@ export class RecommendationEngineService implements OnModuleInit {
       });
 
       results[scenarioConfig.key] = result;
+      this.logger.log(`[TIMING] recommendByScenario scenario=${scenarioConfig.key}: ${Date.now() - _ts}ms uid=${userId}`);
     }
 
+    this.logger.log(`[TIMING] recommendByScenario total: ${Date.now() - _t0}ms uid=${userId}`);
     return {
       takeout: results['takeout'],
       convenience: results['convenience'],

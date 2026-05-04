@@ -127,6 +127,7 @@ export class ProfileAggregatorService {
     userId: string,
     mealType: string,
   ): Promise<RecommendationProfileData> {
+    const _t0 = Date.now();
     // Phase 1: 并行获取独立画像数据
     const [
       recentFoodNames,
@@ -147,6 +148,7 @@ export class ProfileAggregatorService {
       this.userProfileService.getKitchenProfile(userId),
       this.executionTrackerService.getTopSubstitutions(userId),
     ]);
+    this.logger.log(`[TIMING] aggregateForRecommendation phase1(parallel): ${Date.now() - _t0}ms uid=${userId}`);
 
     // Phase 2: 依赖 enrichedProfile 的串行获取
     const userSegment = enrichedProfile.inferred?.userSegment;
@@ -171,6 +173,7 @@ export class ProfileAggregatorService {
     // 无任何学习信号时回退到 segment 级 LearnedRankingService（旧路径）。
     let learnedWeightOverrides: number[] | null = null;
     const goalType = effectiveGoal?.goalType as GoalType | undefined;
+    const _t2 = Date.now();
     if (goalType && SCORE_WEIGHTS[goalType]) {
       try {
         learnedWeightOverrides =
@@ -231,6 +234,8 @@ export class ProfileAggregatorService {
       declaredCuisinePrefs,
       regionCode,
     );
+    this.logger.log(`[TIMING] aggregateForRecommendation phase2(weightLearner+regionalBoost+cuisineBoost): ${Date.now() - _t2}ms uid=${userId}`);
+    this.logger.log(`[TIMING] aggregateForRecommendation total: ${Date.now() - _t0}ms uid=${userId}`);
 
     return {
       recentFoodNames,
