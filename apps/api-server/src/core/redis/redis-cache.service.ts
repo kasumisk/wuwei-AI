@@ -203,6 +203,14 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
     return this.client;
   }
 
+  /** 给 ioredis 命令加 deadline 保护（reconnecting 期间命令会排队，commandTimeout 无效） */
+  private withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+    return Promise.race([
+      promise,
+      new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+    ]);
+  }
+
   /**
    * 获取缓存值
    * @returns 反序列化后的值，或 null（未命中/Redis 不可用）
@@ -210,7 +218,7 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
   async get<T>(key: string): Promise<T | null> {
     if (!this._isConnected || !this.client) return null;
     try {
-      const raw = await this.client.get(key);
+      const raw = await this.withTimeout(this.client.get(key), 800, null);
       if (raw === null) return null;
       return JSON.parse(raw) as T;
     } catch (err) {
@@ -228,7 +236,11 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
       return keys.map(() => null);
     }
     try {
-      const raws = await this.client.mget(...keys);
+      const raws = await this.withTimeout(
+        this.client.mget(...keys),
+        800,
+        keys.map(() => null),
+      );
       return raws.map((raw) => {
         if (raw === null || raw === undefined) return null;
         try {
@@ -252,7 +264,11 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
     try {
       const serialized = JSON.stringify(value);
       // ioredis: set(key, value, 'PX', milliseconds)
-      await this.client.set(key, serialized, 'PX', ttlMs);
+      await this.withTimeout(
+        this.client.set(key, serialized, 'PX', ttlMs),
+        800,
+        null,
+      );
       return true;
     } catch (err) {
       this.logger.debug(`Redis SET failed for ${key}: ${err}`);
