@@ -90,6 +90,8 @@ export class CollaborativeFilteringService implements OnModuleInit {
   /** 内存缓存：完整交互矩阵 */
   private cachedMatrix: UserInteractionVector[] | null = null;
   private matrixBuiltAt = 0;
+  /** singleflight: 防止并发请求同时触发重建（connection_limit=1 下关键） */
+  private matrixBuildPromise: Promise<UserInteractionVector[]> | null = null;
 
   /**
    * V5 4.2: 食物-食物相似矩阵（item-based CF）
@@ -131,11 +133,10 @@ export class CollaborativeFilteringService implements OnModuleInit {
     this.cronRegistry.register('cf-full-rebuild-weekly', () =>
       this.scheduledFullRebuild(),
     );
-
-    // 启动预热：异步预建交互矩阵，避免第一次请求冷启动超时
-    this.getOrBuildMatrix().catch((err) =>
-      this.logger.warn(`CF matrix warmup failed: ${err?.message}`),
-    );
+    // 注意：不在此处预热 getOrBuildMatrix()。
+    // Production 使用 Neon PgBouncer（connection_limit=1），
+    // 启动时抢占唯一 DB 连接会导致首批请求全部 pool timeout。
+    // 矩阵由首次 getCFScores() 调用懒加载，内存缓存保证只建一次。
   }
 
   // ================================================================
@@ -781,23 +782,36 @@ export class CollaborativeFilteringService implements OnModuleInit {
       return this.cachedMatrix;
     }
 
-    this.cachedMatrix = await this.buildInteractionMatrix();
-    this.matrixBuiltAt = now;
-
-    // V6.7 Phase 2-D: 加载用户目标（lazy init 路径也需要）
-    if (this.userGoals.size === 0) {
-      await this.loadUserGoals();
+    // singleflight: 若已有构建中的 Promise，直接复用，避免并发重建占满 DB 连接
+    if (this.matrixBuildPromise) {
+      return this.matrixBuildPromise;
     }
 
-    // V6.7 Phase 3-F: 加载食物品类（lazy init 路径也需要）
-    if (this.foodCategories.size === 0) {
-      await this.loadFoodCategories();
-    }
+    this.matrixBuildPromise = (async () => {
+      try {
+        this.cachedMatrix = await this.buildInteractionMatrix();
+        this.matrixBuiltAt = Date.now();
 
-    // V5 4.2: 同步构建食物相似矩阵
-    this.buildItemSimilarityMatrix(this.cachedMatrix);
+        // V6.7 Phase 2-D: 加载用户目标（lazy init 路径也需要）
+        if (this.userGoals.size === 0) {
+          await this.loadUserGoals();
+        }
 
-    return this.cachedMatrix;
+        // V6.7 Phase 3-F: 加载食物品类（lazy init 路径也需要）
+        if (this.foodCategories.size === 0) {
+          await this.loadFoodCategories();
+        }
+
+        // V5 4.2: 同步构建食物相似矩阵
+        this.buildItemSimilarityMatrix(this.cachedMatrix);
+
+        return this.cachedMatrix;
+      } finally {
+        this.matrixBuildPromise = null;
+      }
+    })();
+
+    return this.matrixBuildPromise;
   }
 
   /**
