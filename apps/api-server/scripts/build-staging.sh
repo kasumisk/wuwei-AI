@@ -83,7 +83,7 @@ else
 fi
 
 # ─── 2. SSH 进 VM 执行部署 ────────────────────────────────────────────────────
-log "[2/3] SSH → $VM_INSTANCE，执行 git pull + build"
+log "[2/3] SSH → ${VM_INSTANCE}，执行 git pull + build"
 
 ssh_exec bash -lc "
 set -euo pipefail
