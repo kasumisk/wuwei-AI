@@ -24,9 +24,25 @@ export function usePlanAdjust() {
     },
   });
 
+  const adjustSuggestionMutation = useMutation({
+    mutationFn: ({
+      reason,
+      mealType,
+    }: {
+      reason: string;
+      mealType?: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+    }) => recommendationService.adjustMealSuggestion(reason, mealType),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['meal-suggestion'] });
+    },
+  });
+
   return {
     adjustPlan: adjustMutation.mutateAsync,
+    adjustSuggestion: adjustSuggestionMutation.mutateAsync,
     isAdjusting: adjustMutation.isPending,
+    isAdjustingSuggestion: adjustSuggestionMutation.isPending,
     adjustError: adjustMutation.error,
+    adjustSuggestionError: adjustSuggestionMutation.error,
   };
 }

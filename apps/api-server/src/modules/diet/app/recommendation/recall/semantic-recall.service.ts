@@ -18,6 +18,11 @@ export interface SemanticRecallOptions {
   maxPerCategory?: number;
   /** 最低相似度阈值（默认 0.3） */
   minSimilarity?: number;
+  /**
+   * 食物 ID → 品类 映射（由调用方从 allFoods 预建）。
+   * 传入后 enforceCategoryDiversity 不再查 DB，避免高并发时连接排队。
+   */
+  categoryMap?: Map<string, string>;
 }
 
 /**
@@ -109,7 +114,7 @@ export class SemanticRecallService {
     excludeIds: string[] = [],
   ): Promise<string[]> {
     // 规范化参数：支持旧签名 (userId, limit, excludeIds) 和新签名 (userId, options)
-    const options: Required<SemanticRecallOptions> =
+    const options: Required<Omit<SemanticRecallOptions, 'categoryMap'>> & { categoryMap?: Map<string, string> } =
       typeof limitOrOptions === 'number'
         ? {
             topK: limitOrOptions,
@@ -122,6 +127,7 @@ export class SemanticRecallService {
             excludeIds: limitOrOptions.excludeIds ?? excludeIds,
             maxPerCategory: limitOrOptions.maxPerCategory ?? 5,
             minSimilarity: limitOrOptions.minSimilarity ?? 0.3,
+            categoryMap: limitOrOptions.categoryMap,
           };
 
     try {
@@ -146,7 +152,7 @@ export class SemanticRecallService {
    */
   async recallWithMetadata(
     userId: string,
-    options: Required<SemanticRecallOptions>,
+    options: Required<Omit<SemanticRecallOptions, 'categoryMap'>> & { categoryMap?: Map<string, string> },
   ): Promise<SemanticRecallResult[]> {
     // 1. 获取多兴趣画像向量（含缓存）
     const interestVectors = await this.getMultiInterestProfile(userId);
@@ -192,6 +198,7 @@ export class SemanticRecallService {
       Array.from(allCandidates.values()),
       options.topK,
       options.maxPerCategory,
+      options.categoryMap,
     );
   }
 
@@ -395,21 +402,27 @@ export class SemanticRecallService {
     candidates: SemanticRecallResult[],
     topK: number,
     maxPerCategory: number,
+    categoryMapFromCaller?: Map<string, string>,
   ): Promise<SemanticRecallResult[]> {
     if (candidates.length <= topK) {
-      // 候选不超过 topK，不需要品类限制
       return candidates;
     }
 
-    // 查询品类信息
-    const foodIds = candidates.map((c) => c.foodId);
-    const foods = await this.prisma.food.findMany({
-      where: { id: { in: foodIds } },
-      select: { id: true, category: true },
-    });
-    const categoryMap = new Map<string, string>();
-    for (const f of foods) {
-      categoryMap.set(f.id, f.category ?? 'unknown');
+    // 优先使用调用方传入的 categoryMap（来自 allFoods，无需查 DB）
+    let categoryMap: Map<string, string>;
+    if (categoryMapFromCaller && categoryMapFromCaller.size > 0) {
+      categoryMap = categoryMapFromCaller;
+    } else {
+      // 降级：查 DB（兼容旧调用方）
+      const foodIds = candidates.map((c) => c.foodId);
+      const foods = await this.prisma.food.findMany({
+        where: { id: { in: foodIds } },
+        select: { id: true, category: true },
+      });
+      categoryMap = new Map<string, string>();
+      for (const f of foods) {
+        categoryMap.set(f.id, f.category ?? 'unknown');
+      }
     }
 
     // 按相似度降序排序

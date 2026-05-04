@@ -278,6 +278,7 @@ export class TextFoodAnalysisService {
     localHourOverride?: number,
     hints?: string[],
   ): Promise<FoodAnalysisResultV61> {
+    const startedAt = Date.now();
     // 1. 预处理文本
     const cleanedText = this.preprocessText(text);
     if (!cleanedText) {
@@ -286,15 +287,27 @@ export class TextFoodAnalysisService {
       );
     }
 
+    this.logger.log(
+      `[TextAnalysisService] start userId=${userId || 'anonymous'} mealType=${mealType || 'none'} locale=${locale || 'default'} textLength=${cleanedText.length} hints=${hints?.length || 0}`,
+    );
+
     // 2. 拆分多个食物词条（简单分隔符拆分）
     const foodTerms = this.splitFoodTerms(cleanedText);
+    this.logger.log(
+      `[TextAnalysisService] split terms=${foodTerms.length} expected=${this.estimateExpectedFoodCount(cleanedText)} userId=${userId || 'anonymous'}`,
+    );
 
     // V3.4 P1.3: 构建用户上下文（用于动态 LLM Prompt）
+    const userContextStartedAt = Date.now();
     const userCtx = userId
       ? await this.userContextBuilder.build(userId, locale).catch(() => null)
       : null;
+    this.logger.log(
+      `[TextAnalysisService] userContext ${Date.now() - userContextStartedAt}ms userId=${userId || 'anonymous'} hit=${!!userCtx}`,
+    );
 
     // 3. 逐个匹配标准食物库 + LLM 补位
+    const resolveStartedAt = Date.now();
     const parsedFoods = await this.resolveAllFoods(
       foodTerms,
       cleanedText,
@@ -302,6 +315,10 @@ export class TextFoodAnalysisService {
       userCtx,
       hints,
       userId,
+    );
+    const libraryMatchCount = parsedFoods.filter((f) => !!f.libraryMatch).length;
+    this.logger.log(
+      `[TextAnalysisService] resolveAllFoods ${Date.now() - resolveStartedAt}ms parsed=${parsedFoods.length} libraryMatches=${libraryMatchCount} inferred=${parsedFoods.length - libraryMatchCount} userId=${userId || 'anonymous'}`,
     );
 
     // V6.x: parsedFoods 上的营养值是 per-serving 实际摄入（数据契约见 AnalyzedFoodItem JSDoc），
@@ -335,7 +352,8 @@ export class TextFoodAnalysisService {
       };
     });
 
-    return this.analysisPipeline.execute({
+    const pipelineStartedAt = Date.now();
+    const result = await this.analysisPipeline.execute({
       inputType: 'text',
       rawText: text,
       mealType,
@@ -351,6 +369,10 @@ export class TextFoodAnalysisService {
       })),
       prebuiltUserContext: userCtx || undefined,
     });
+    this.logger.log(
+      `[TextAnalysisService] pipeline ${Date.now() - pipelineStartedAt}ms foods=${result.foods?.length || 0} total=${Date.now() - startedAt}ms userId=${userId || 'anonymous'}`,
+    );
+    return result;
   }
 
   // ==================== Step 1: 预处理 ====================
@@ -937,7 +959,7 @@ export class TextFoodAnalysisService {
         : this.promptSchema.buildBasePrompt(undefined, locale);
 
       this.logger.log(
-        `[LLM] Text parsing call | input: "${unmatchedText.slice(0, 80)}"`,
+        `[LLM] Text parsing call inputLength=${unmatchedText.length} hints=${hints?.length || 0} userId=${userId || 'anonymous'}`,
       );
 
       // 将 hints 拼接到 user message 末尾（作为估算指导，不作为食物词条）
@@ -950,6 +972,7 @@ export class TextFoodAnalysisService {
         userContent += `\n\n【估算指导】${hints.join('；')}`;
       }
 
+      const llmStartedAt = Date.now();
       const result = await this.llm.chat({
         feature: LlmFeature.FoodText,
         userId,
@@ -965,6 +988,9 @@ export class TextFoodAnalysisService {
           { role: 'user', content: userContent },
         ],
       });
+      this.logger.log(
+        `[LLM] Text parsing completed in ${Date.now() - llmStartedAt}ms userId=${userId || 'anonymous'}`,
+      );
 
       const parsed = this.parseLlmResponse(result.content);
 
@@ -1134,9 +1160,13 @@ export class TextFoodAnalysisService {
 
       // V3.6 P1.2: 校验并纠偏 LLM 估算的营养数据（热力学一致性）
       // resolved items always have protein/fat/carbs/calories set as numbers
-      return validateAndCorrectFoods(
+      const validated = validateAndCorrectFoods(
         resolved as Array<ParsedFoodItem & NutritionInput>,
       );
+      this.logger.log(
+        `[LLM] Text parsing resolved parsed=${parsed.foods.length} validated=${validated.length} userId=${userId || 'anonymous'}`,
+      );
+      return validated;
     } catch (err) {
       // 配额耗尽：向上抛，由 controller 映射 429
       if (err instanceof LlmQuotaExceededError) throw err;

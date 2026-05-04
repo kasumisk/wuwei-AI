@@ -9,26 +9,22 @@ import Redis from 'ioredis';
 import { resolveRedisOptions } from './redis-options';
 
 /**
- * Redis 缓存服务 (V6.6 Phase 1-B: node-redis → ioredis 迁移)
+ * Redis 缓存服务 (V6.7 ioredis)
  *
  * 职责：
  * - 管理 Redis 连接生命周期（ioredis 内置重连）
- * - 提供 get/set/del 等基础操作（API 与 V6.5 完全兼容）
+ * - 提供 get/set/del 等基础操作
  * - setNX：分布式锁 / 幂等控制
  * - getOrSet：缓存穿透保护（cache-aside）
- * - buildKey：统一 key 命名空间，避免冲突
+ * - buildKey：统一 key 命名空间
  * - Redis 不可用时优雅降级（所有操作返回 null / 不抛异常）
  * - getClient()：暴露原生 ioredis 实例，供 ThrottlerStorageRedis 使用
  *
- * 迁移说明（V6.5 → V6.6）:
- * - 底层从 node-redis v5 换为 ioredis（支持连接池 / BullMQ 兼容）
- * - ioredis API 差异：
- *   - node-redis: client.set(key, val, { PX: ms })
- *   - ioredis:    client.set(key, val, 'PX', ms)
- *   - node-redis: client.pExpire(key, ms, 'NX')
- *   - ioredis:    client.pexpire(key, ms)（无 NX 选项，用 Lua 脚本实现）
- *   - hGetAll 对不存在 key 返回 {} (node-redis) vs {} (ioredis) — 一致
- * - 所有原有公共方法签名不变，调用方零修改
+ * 关键设计：
+ * - isReady getter 检查 client.status === 'ready'，非 ready 状态直接跳过
+ *   所有 Redis 操作，避免命令在 reconnecting 期间无限排队等待。
+ * - enableOfflineQueue: false — offline 状态命令直接报错走降级。
+ * - reconnecting 事件 → _isConnected = false，isReady 返回 false。
  */
 @Injectable()
 export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
@@ -39,9 +35,7 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
   /** 应用层 keepalive timer，每 20s ping 一次防止 Upstash 空闲断连 */
   private keepaliveTimer: ReturnType<typeof setInterval> | null = null;
   /**
-   * V6.7 P1-6: 缓存 key 版本号后缀
-   *
-   * 通过 CACHE_VERSION 环境变量控制（默认 'v1'）。
+   * 缓存 key 版本号后缀（CACHE_VERSION 环境变量，默认 'v1'）
    * 滚动部署时修改版本号，所有旧 key 自动失效（无需手动 FLUSHDB）。
    * 格式：{namespace}:{key}:{version} → 例如 sub_user:uid123:v2
    */
@@ -53,25 +47,14 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
     // ─── 在构造函数中立即初始化 ioredis 客户端 ───────────────────────────
     // 原因：ThrottlerModule.forRootAsync 的 useFactory 在依赖注入阶段（模块
     // 实例化时）同步执行，早于 onModuleInit。若在 onModuleInit 才创建 client，
-    // useFactory 读到的 client 永远是 null，ThrottlerModule 始终使用内存存储，
-    // 导致计数器无法跨实例共享，且触发内存存储 bug（clearExpirationTimes 清掉
-    // 全局 timer）。
-    // ioredis 使用 lazyConnect:false，构造后立即开始建连，命令自动排队等待
-    // ready。onModuleInit 仅 ping() 确认连接就绪，不再重复创建 client。
-    //
-    // V7：通过 resolveRedisOptions(prefix='CACHE') 优先读 CACHE_REDIS_URL，
-    //     向后兼容 legacy REDIS_URL / REDIS_HOST。
+    // useFactory 读到的 client 永远是 null，ThrottlerModule 始终使用内存存储。
     const opts = resolveRedisOptions(this.configService, 'CACHE');
     if (!opts) {
-      return; // 未配置 Redis，保持 client=null，onModuleInit 打印 warn
+      return; // 未配置 Redis，onModuleInit 打印 warn
     }
 
     this.logger.log(`Redis (cache) using config from: ${opts.source}`);
 
-    // Upstash serverless Redis 会在 ~30-60s 空闲后强制断开 TCP 连接。
-    // keepAlive: 15000 — 每 15s 发一次 TCP keepalive probe，防止空闲断连。
-    // enableOfflineQueue: false — 断连期间命令直接抛错走降级，不排队堆积。
-    // autoResendUnfulfilledCommands: false — 重连后不自动重发未完成命令（避免重复副作用）。
     const SHARED_OPTS = {
       maxRetriesPerRequest: 3,
       enableReadyCheck: true,
@@ -108,6 +91,12 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
       this.stopKeepalive();
     });
 
+    this.client.on('reconnecting', () => {
+      // reconnecting 期间命令会在 ioredis 内部排队，即使 enableOfflineQueue:false
+      // 也无法阻止。通过 _isConnected=false + isReady 检查确保所有操作直接跳过。
+      this._isConnected = false;
+    });
+
     this.client.on('ready', () => {
       this._isConnected = true;
       this.logger.log('Redis connected successfully (ioredis)');
@@ -120,16 +109,10 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** Redis 是否可用（已连接） */
   get isConnected(): boolean {
     return this._isConnected;
   }
 
-  /**
-   * Redis 是否已配置（不代表已连接）。
-   * 用于 ThrottlerModule.forRootAsync useFactory：只要配置了 Redis 就传入
-   * client，无需等待连接就绪（ioredis 会自动排队命令）。
-   */
   get isConfigured(): boolean {
     return this._isConfigured;
   }
@@ -143,18 +126,13 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
     }
 
     try {
-      // 等待连接就绪，确保应用启动前 Redis 可用
       await this.client.ping();
       this._isConnected = true;
     } catch (err) {
-      // 启动时 ping 失败（如 Upstash cold start / 网络抖动）——
-      // 保留 client，让 ioredis retryStrategy 自动重连。
-      // 不销毁 client，否则 ready 事件永远不会触发，Redis 永久失效。
       this.logger.warn(
         `Redis ping failed at startup: ${err}. Will retry in background (retryStrategy active).`,
       );
       this._isConnected = false;
-      // _isConfigured 保持 true，ioredis 继续持有连接并重试
     }
   }
 
@@ -164,19 +142,17 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
       try {
         this.client.disconnect();
       } catch {
-        // Ignore disconnect errors
+        // ignore
       }
     }
   }
 
-  /** 每 20s 发一次 PING，防止 Upstash 应用层 idle timeout（~30-60s）断连 */
+  /** 每 20s 发一次 PING，防止空闲断连 */
   private startKeepalive(): void {
     this.stopKeepalive();
     this.keepaliveTimer = setInterval(() => {
       if (this.client && this._isConnected) {
-        this.client.ping().catch(() => {
-          // ping 失败时 error 事件会处理，此处静默
-        });
+        this.client.ping().catch(() => {});
       }
     }, 20_000);
   }
@@ -189,10 +165,7 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 暴露原生 ioredis 实例
-   * 用于 nestjs-throttler-storage-redis 及其他需要原生客户端的模块
-   *
-   * @throws Error 如果 Redis 未配置
+   * 暴露原生 ioredis 实例，供 ThrottlerModule 使用。
    */
   getClient(): Redis {
     if (!this.client) {
@@ -203,7 +176,16 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
     return this.client;
   }
 
-  /** 给 ioredis 命令加 deadline 保护（reconnecting 期间命令会排队，commandTimeout 无效） */
+  /**
+   * Redis 客户端是否处于可用状态（ready）。
+   * 除 ready 之外的所有状态（connecting/reconnecting/end 等）均视为不可用，
+   * 直接跳过 Redis 操作，避免命令在 ioredis 内部队列中无限等待。
+   */
+  private get isReady(): boolean {
+    return this._isConnected && !!this.client && this.client.status === 'ready';
+  }
+
+  /** 给 ioredis 命令加 deadline 保护 */
   private withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
     return Promise.race([
       promise,
@@ -211,14 +193,12 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
     ]);
   }
 
-  /**
-   * 获取缓存值
-   * @returns 反序列化后的值，或 null（未命中/Redis 不可用）
-   */
+  // ─── 核心读写 ─────────────────────────────────────────────────────────────
+
   async get<T>(key: string): Promise<T | null> {
-    if (!this._isConnected || !this.client) return null;
+    if (!this.isReady) return null;
     try {
-      const raw = await this.withTimeout(this.client.get(key), 800, null);
+      const raw = await this.withTimeout(this.client!.get(key), 800, null);
       if (raw === null) return null;
       return JSON.parse(raw) as T;
     } catch (err) {
@@ -227,17 +207,13 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /**
-   * V6.2 Phase 2.13: 批量获取缓存值
-   * 使用 Redis MGET 命令一次网络往返获取多个 key
-   */
   async mget<T>(keys: string[]): Promise<(T | null)[]> {
-    if (!this._isConnected || !this.client || keys.length === 0) {
+    if (!this.isReady || keys.length === 0) {
       return keys.map(() => null);
     }
     try {
       const raws = await this.withTimeout(
-        this.client.mget(...keys),
+        this.client!.mget(...keys),
         800,
         keys.map(() => null),
       );
@@ -255,17 +231,12 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /**
-   * 设置缓存值
-   * @param ttlMs TTL 毫秒
-   */
   async set(key: string, value: unknown, ttlMs: number): Promise<boolean> {
-    if (!this._isConnected || !this.client) return false;
+    if (!this.isReady) return false;
     try {
       const serialized = JSON.stringify(value);
-      // ioredis: set(key, value, 'PX', milliseconds)
       await this.withTimeout(
-        this.client.set(key, serialized, 'PX', ttlMs),
+        this.client!.set(key, serialized, 'PX', ttlMs),
         800,
         null,
       );
@@ -276,13 +247,10 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /**
-   * 删除缓存
-   */
   async del(key: string): Promise<boolean> {
-    if (!this._isConnected || !this.client) return false;
+    if (!this.isReady) return false;
     try {
-      await this.client.del(key);
+      await this.client!.del(key);
       return true;
     } catch (err) {
       this.logger.debug(`Redis DEL failed for ${key}: ${err}`);
@@ -290,16 +258,13 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /**
-   * 按前缀批量删除（使用 SCAN 迭代，避免 KEYS 阻塞）
-   */
   async delByPrefix(prefix: string): Promise<number> {
-    if (!this._isConnected || !this.client) return 0;
+    if (!this.isReady) return 0;
     try {
       let deleted = 0;
       let cursor = '0';
       do {
-        const [nextCursor, keys] = await this.client.scan(
+        const [nextCursor, keys] = await this.client!.scan(
           cursor,
           'MATCH',
           `${prefix}*`,
@@ -308,7 +273,7 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
         );
         cursor = nextCursor;
         if (keys.length > 0) {
-          await this.client.del(...keys);
+          await this.client!.del(...keys);
           deleted += keys.length;
         }
       } while (cursor !== '0');
@@ -319,19 +284,11 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  // ==================== V5 Phase 1.5 新增 ====================
-
-  /**
-   * SET NX（仅当 key 不存在时设置）
-   * 用于分布式锁 / 幂等控制
-   */
   async setNX(key: string, value: unknown, ttlMs: number): Promise<boolean> {
-    if (!this._isConnected || !this.client) return false;
+    if (!this.isReady) return false;
     try {
       const serialized = JSON.stringify(value);
-      // ioredis: set(key, value, 'PX', ms, 'NX')
-      const result = await this.client.set(key, serialized, 'PX', ttlMs, 'NX');
-      // ioredis: 成功返回 'OK'，失败（key 已存在）返回 null
+      const result = await this.client!.set(key, serialized, 'PX', ttlMs, 'NX');
       return result === 'OK';
     } catch (err) {
       this.logger.debug(`Redis SETNX failed for ${key}: ${err}`);
@@ -339,9 +296,6 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /**
-   * 缓存穿透保护（cache-aside 模式）
-   */
   async getOrSet<T>(
     key: string,
     ttlMs: number,
@@ -349,49 +303,31 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
   ): Promise<T> {
     const cached = await this.get<T>(key);
     if (cached !== null) return cached;
-
     const value = await factory();
-
     this.set(key, value, ttlMs).catch(() => {});
-
     return value;
   }
 
-  /**
-   * 构建标准化缓存 key
-   * 格式：namespace:segment1:segment2:...:version
-   * V6.7 P1-6: 自动追加 CACHE_VERSION 后缀，滚动部署时一键失效旧缓存
-   */
   buildKey(namespace: string, ...segments: string[]): string {
     return [namespace, ...segments, this.cacheVersion].join(':');
   }
 
-  /**
-   * 分布式锁保护的任务执行器（适用于 Cron 等需要防重复执行的场景）
-   */
   async runWithLock(
     lockName: string,
     ttlMs: number,
     fn: () => Promise<void>,
   ): Promise<boolean> {
     const lockKey = this.buildKey('cron_lock', lockName);
-
-    if (!this._isConnected || !this.client) {
+    if (!this.isReady) {
       this.logger.debug(`Redis 不可用，降级执行 Cron: ${lockName}`);
       await fn();
       return true;
     }
-
-    const acquired = await this.setNX(
-      lockKey,
-      process.env.HOSTNAME || 'default',
-      ttlMs,
-    );
+    const acquired = await this.setNX(lockKey, process.env.HOSTNAME || 'default', ttlMs);
     if (!acquired) {
       this.logger.log(`Cron ${lockName} 已在其他实例执行中，跳过`);
       return false;
     }
-
     try {
       await fn();
       return true;
@@ -400,34 +336,22 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  // ==================== V6.3 P1-7: Hash 原子操作 ====================
+  // ─── Hash 操作 ────────────────────────────────────────────────────────────
 
-  /**
-   * 原子递增 Hash 字段（HINCRBY）
-   */
-  async hIncrBy(
-    key: string,
-    field: string,
-    increment = 1,
-  ): Promise<number | null> {
-    if (!this._isConnected || !this.client) return null;
+  async hIncrBy(key: string, field: string, increment = 1): Promise<number | null> {
+    if (!this.isReady) return null;
     try {
-      return await this.client.hincrby(key, field, increment);
+      return await this.client!.hincrby(key, field, increment);
     } catch (err) {
       this.logger.debug(`Redis HINCRBY failed for ${key}:${field}: ${err}`);
       return null;
     }
   }
 
-  /**
-   * 获取 Hash 所有字段（HGETALL）
-   * ioredis: 不存在的 key 返回 {} (empty object)
-   */
   async hGetAll(key: string): Promise<Record<string, string> | null> {
-    if (!this._isConnected || !this.client) return null;
+    if (!this.isReady) return null;
     try {
-      const result = await this.client.hgetall(key);
-      // ioredis returns {} for non-existent key (same as node-redis)
+      const result = await this.client!.hgetall(key);
       return result || {};
     } catch (err) {
       this.logger.debug(`Redis HGETALL failed for ${key}: ${err}`);
@@ -435,13 +359,10 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /**
-   * 设置 Hash 中一个字段的值（HSET）
-   */
   async hSet(key: string, field: string, value: string): Promise<boolean> {
-    if (!this._isConnected || !this.client) return false;
+    if (!this.isReady) return false;
     try {
-      await this.client.hset(key, field, value);
+      await this.client!.hset(key, field, value);
       return true;
     } catch (err) {
       this.logger.debug(`Redis HSET failed for ${key}:${field}: ${err}`);
@@ -449,17 +370,11 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /**
-   * L9-fix: 批量写入 hash 字段（1 次 round-trip 替代 N 次 HSET 循环）。
-   *
-   * 使用 ioredis `hset(key, Record<string,string>)` 重载，
-   * 底层会自动展开为单个 HMSET 命令。
-   */
   async hMSet(key: string, fields: Record<string, string>): Promise<boolean> {
-    if (!this._isConnected || !this.client) return false;
+    if (!this.isReady) return false;
     if (Object.keys(fields).length === 0) return true;
     try {
-      await this.client.hset(key, fields);
+      await this.client!.hset(key, fields);
       return true;
     } catch (err) {
       this.logger.debug(`Redis HMSET failed for ${key}: ${err}`);
@@ -467,17 +382,10 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /**
-   * 设置 key 过期时间（如果尚未设置）
-   *
-   * V6.6 注意：ioredis 的 pexpire 不支持 NX 选项（需 Redis 7.0+）。
-   * 此处用 Lua 脚本实现幂等：仅当 TTL = -1（无过期）时才设置。
-   */
   async expireNX(key: string, ttlMs: number): Promise<boolean> {
-    if (!this._isConnected || !this.client) return false;
+    if (!this.isReady) return false;
     try {
-      // Lua: 仅当 key 存在且无过期时间时设置 pexpire
-      const result = await this.client.eval(
+      const result = await this.client!.eval(
         `local ttl = redis.call('PTTL', KEYS[1])
          if ttl == -1 then
            return redis.call('PEXPIRE', KEYS[1], ARGV[1])
@@ -494,15 +402,12 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /**
-   * V6.5 Phase 1G: 原子递增计数器
-   */
   async incr(key: string, ttlMs?: number): Promise<number> {
-    if (!this._isConnected || !this.client) return -1;
+    if (!this.isReady) return -1;
     try {
-      const result = await this.client.incr(key);
+      const result = await this.client!.incr(key);
       if (result === 1 && ttlMs && ttlMs > 0) {
-        await this.client.pexpire(key, ttlMs);
+        await this.client!.pexpire(key, ttlMs);
       }
       return result;
     } catch (err) {
@@ -511,24 +416,17 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /**
-   * V6.7: Pub/Sub — 发布消息到指定 channel（用于跨实例缓存失效通知）
-   * 失败时静默降级（Redis 不可用时 L1 靠 TTL 自然过期）
-   */
+  // ─── Pub/Sub ──────────────────────────────────────────────────────────────
+
   async publish(channel: string, message: string): Promise<void> {
-    if (!this._isConnected || !this.client) return;
+    if (!this.isReady) return;
     try {
-      await this.client.publish(channel, message);
+      await this.client!.publish(channel, message);
     } catch (err) {
       this.logger.debug(`Redis PUBLISH failed on ${channel}: ${err}`);
     }
   }
 
-  /**
-   * V6.7: 创建独立的 subscriber 连接（ioredis 要求 sub 连接不混用命令）
-   * 调用方负责监听 'message' 事件并在模块销毁时 disconnect()。
-   * 返回 null 表示 Redis 未配置或不可用。
-   */
   createSubscriber(): Redis | null {
     if (!this.client) return null;
     try {
@@ -539,18 +437,15 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  // ==================== 私有方法 ====================
+  // ─── 私有工具 ─────────────────────────────────────────────────────────────
 
-  /**
-   * ioredis 重连策略（指数退避，最大 10 次）
-   */
   private buildRetryStrategy() {
     return (times: number): number | null => {
       if (times > 10) {
         this.logger.warn(
           'Redis reconnect limit reached. Falling back to memory cache.',
         );
-        return null; // ioredis: return null to stop retrying
+        return null;
       }
       return Math.min(times * 500, 5000);
     };

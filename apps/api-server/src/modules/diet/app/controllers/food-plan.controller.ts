@@ -81,7 +81,7 @@ export class FoodPlanController {
    * 差异化推荐与独立缓存。当前所有渠道共享 'unknown' 缓存键。
    */
   @Get('meal-suggestion')
-  @UserApiThrottle(10, 60)
+  @UserApiThrottle(15, 60)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '获取下一餐推荐' })
   async getMealSuggestion(
@@ -89,8 +89,10 @@ export class FoodPlanController {
     @Query('refresh') refresh?: string,
     @Query('_t') timestamp?: string,
   ): Promise<ApiResponse> {
-    // FIX: 支持 ?refresh=1 或 ?_t=<timestamp> 强制跳过粘性缓存
-    const forceRefresh = !!refresh || !!timestamp;
+    // 仅 ?refresh=1 显式跳过粘性缓存。
+    // 前端常带 ?_t=<timestamp> 作为 HTTP cache-busting 参数，不应绕过服务端推荐缓存。
+    void timestamp;
+    const forceRefresh = !!refresh;
     const suggestion = await this.foodService.getMealSuggestion(
       user.id,
       forceRefresh,
@@ -150,7 +152,7 @@ export class FoodPlanController {
    * POST /api/app/food/daily-plan/adjust
    */
   @Post('daily-plan/adjust')
-  @AiHeavyThrottle(3, 60)
+  @AiHeavyThrottle(9, 60)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '触发饮食计划调整' })
   async adjustDailyPlan(
@@ -177,11 +179,43 @@ export class FoodPlanController {
   }
 
   /**
+   * 仅替换下一餐推荐，不写回 daily-plan
+   * POST /api/app/food/meal-suggestion/adjust
+   */
+  @Post('meal-suggestion/adjust')
+  @AiHeavyThrottle(9, 60)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '仅替换下一餐推荐' })
+  async adjustMealSuggestion(
+    @CurrentAppUser() user: AppUserPayload,
+    @Body() dto: AdjustPlanDto,
+  ): Promise<ApiResponse> {
+    const suggestion = await this.foodService.adjustMealSuggestion(
+      user.id,
+      dto.reason,
+      dto.mealType,
+    );
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: this.i18n.t(
+        'diet.recommendation.response.replacedMealRecommendation',
+        {
+          meal: this.i18n.t(
+            `diet.recommendation.meal.label.${dto.mealType || suggestion.mealType}`,
+          ),
+        },
+      ),
+      data: suggestion,
+    };
+  }
+
+  /**
    * 强制重新生成今日计划（删除缓存后重新推荐）
    * POST /api/app/food/daily-plan/regenerate
    */
   @Post('daily-plan/regenerate')
-  @AiHeavyThrottle(3, 60)
+  @AiHeavyThrottle(5, 60)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '强制重新生成今日饮食计划' })
   async regenerateDailyPlan(
@@ -335,7 +369,7 @@ export class FoodPlanController {
    *   mealType:  餐次 (breakfast/lunch/dinner/snack)
    */
   @Post('explain-why-not')
-  @UserApiThrottle(10, 60)
+  @UserApiThrottle(15, 60)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '反向解释 — 为什么不推荐某食物' })
   async explainWhyNot(
@@ -367,7 +401,7 @@ export class FoodPlanController {
    *   days?: 统计窗口天数（默认 30）
    */
   @Get('feedback-stats')
-  @UserApiThrottle(20, 60)
+  @UserApiThrottle(30, 60)
   @ApiOperation({ summary: '获取多维反馈统计' })
   async getFeedbackDimensionStats(
     @CurrentAppUser() user: AppUserPayload,

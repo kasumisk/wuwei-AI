@@ -73,7 +73,7 @@ export class FoodAnalysisHistoryController {
   // ─── GET analysis/history ───
 
   @Get('analysis/history')
-  @UserApiThrottle(30, 60)
+  @UserApiThrottle(45, 60)
   @ApiOperation({ summary: '获取分析历史列表' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'pageSize', required: false, type: Number })
@@ -173,7 +173,7 @@ export class FoodAnalysisHistoryController {
   // ─── GET analysis/:analysisId ───
 
   @Get('analysis/:analysisId')
-  @UserApiThrottle(30, 60)
+  @UserApiThrottle(45, 60)
   @ApiOperation({ summary: '获取分析详情' })
   @ApiParam({ name: 'analysisId', description: '分析记录 ID' })
   async getAnalysisDetail(
@@ -281,7 +281,7 @@ export class FoodAnalysisHistoryController {
   // ─── DELETE analysis/:analysisId ───
 
   @Delete('analysis/:analysisId')
-  @UserApiThrottle(20, 60)
+  @UserApiThrottle(30, 60)
   @ApiOperation({ summary: '删除分析记录' })
   @ApiParam({ name: 'analysisId', description: '分析记录 ID' })
   async deleteAnalysis(

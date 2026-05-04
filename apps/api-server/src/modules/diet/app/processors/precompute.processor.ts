@@ -37,11 +37,27 @@ import { NutritionScoreService } from '../services/nutrition-score.service';
 import {
   UserProfileConstraints,
   MealTarget,
+  MealRecommendation,
 } from '../recommendation/types/recommendation.types';
-import { KNOWN_CHANNELS } from '../recommendation/utils/channel';
+/**
+ * 当前生产库仍存在旧唯一约束 (user_id, date, meal_type)，不含 channel。
+ * 因此预计算暂时只能写入单条 unknown 记录，避免多 channel upsert 持续冲突。
+ */
+const PRECOMPUTE_CHANNELS = ['unknown'] as const;
 
-/** 5.3 修复: 批量预计算时写入的渠道列表（所有已知渠道，含 unknown 兜底） */
-const PRECOMPUTE_CHANNELS = KNOWN_CHANNELS;
+function selectPrimaryScenarioResult(
+  scenarioResults: {
+    takeout: MealRecommendation;
+    convenience: MealRecommendation;
+    homeCook: MealRecommendation;
+  },
+): MealRecommendation {
+  return (
+    scenarioResults.takeout ??
+    scenarioResults.convenience ??
+    scenarioResults.homeCook
+  );
+}
 
 @Processor(QUEUE_NAMES.RECOMMENDATION_PRECOMPUTE)
 export class PrecomputeProcessor extends WorkerHost implements OnModuleInit {
@@ -130,18 +146,8 @@ export class PrecomputeProcessor extends WorkerHost implements OnModuleInit {
             carbs: Math.round(goals.carbs * ratio),
           };
 
-          // 主推荐
-          const result = await this.recommendationEngine.recommendMeal(
-            userId,
-            mealType,
-            goalType,
-            consumed,
-            budget,
-            dailyTarget,
-            userConstraints,
-          );
-
-          // 场景化推荐
+          // 预计算与实时接口对齐：仅计算三场景推荐。
+          // result 字段存默认主场景（当前取 takeout 优先），供旧读取方兼容。
           const scenarioResults =
             await this.recommendationEngine.recommendByScenario(
               userId,
@@ -152,6 +158,7 @@ export class PrecomputeProcessor extends WorkerHost implements OnModuleInit {
               dailyTarget,
               userConstraints,
             );
+          const result = selectPrimaryScenarioResult(scenarioResults);
 
           // 4. 5.3 修复: 为所有已知渠道各存一份预计算结果
           //    推荐引擎只跑一次（渠道差异在实时路径体现），

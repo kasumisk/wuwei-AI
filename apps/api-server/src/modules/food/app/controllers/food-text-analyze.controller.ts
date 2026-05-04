@@ -15,6 +15,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { AppJwtAuthGuard } from '../../../auth/app/app-jwt-auth.guard';
@@ -40,6 +41,8 @@ import { AnalyzeResultHelperService } from '../services/analyze-result-helper.se
 @UseGuards(AppJwtAuthGuard)
 @ApiBearerAuth()
 export class FoodTextAnalyzeController {
+  private readonly logger = new Logger(FoodTextAnalyzeController.name);
+
   constructor(
     private readonly textFoodAnalysisService: TextFoodAnalysisService,
     private readonly quotaGateService: QuotaGateService,
@@ -52,91 +55,135 @@ export class FoodTextAnalyzeController {
 
   @Post('analyze-text')
   @HttpCode(HttpStatus.OK)
-  @AiHeavyThrottle(10, 60)
+  @AiHeavyThrottle(15, 60)
   @ApiOperation({ summary: '文本食物 AI 分析' })
   @ApiBody({ type: AnalyzeTextDto })
   async analyzeText(
     @Body() dto: AnalyzeTextDto,
     @CurrentAppUser() user: AppUserPayload,
   ): Promise<ApiResponse> {
+    const startedAt = Date.now();
     const locale = dto.locale || this.i18n.currentLocale();
-    const summary = await this.subscriptionService.getUserSummary(user.id);
+    const meta = `userId=${user.id} mealType=${dto.mealType || 'none'} locale=${locale} textLength=${dto.text?.trim().length || 0}`;
+    this.logger.log(`[AnalyzeText] start ${meta}`);
 
-    const cacheKey = this.helper.buildTextAnalysisCacheKey(
-      dto.text,
-      dto.mealType,
-      user.id,
-      locale,
-    );
-    const cached = this.helper.getFromTextAnalysisCache(cacheKey);
-    if (cached) {
-      await this.helper.localizeAnalysisResult(cached, locale);
+    try {
+      const summaryStartedAt = Date.now();
+      const summary = await this.subscriptionService.getUserSummary(user.id);
+      this.logger.log(
+        `[AnalyzeText] summary loaded in ${Date.now() - summaryStartedAt}ms ${meta} tier=${summary.tier}`,
+      );
+
+      const cacheKey = this.helper.buildTextAnalysisCacheKey(
+        dto.text,
+        dto.mealType,
+        user.id,
+        locale,
+      );
+      const cached = this.helper.getFromTextAnalysisCache(cacheKey);
+      if (cached) {
+        this.logger.log(
+          `[AnalyzeText] cache hit key=${cacheKey} ${meta} ageMs=${Date.now() - startedAt}`,
+        );
+        await this.helper.localizeAnalysisResult(cached, locale);
+        const trimmedResult = this.resultEntitlementService.trimResult(
+          cached,
+          summary.tier,
+          summary.entitlements,
+        );
+        this.logger.log(
+          `[AnalyzeText] cached success total=${Date.now() - startedAt}ms key=${cacheKey} ${meta}`,
+        );
+        return ResponseWrapper.success(
+          trimmedResult,
+          this.i18n.t('food.analyzeCompleteCached'),
+        );
+      }
+
+      this.logger.log(`[AnalyzeText] cache miss key=${cacheKey} ${meta}`);
+
+      const quotaStartedAt = Date.now();
+      const access = await this.quotaGateService.checkAccess({
+        userId: user.id,
+        feature: GatedFeature.AI_TEXT_ANALYSIS,
+        scene: 'food_text_analysis',
+        consumeQuota: true,
+      });
+      this.logger.log(
+        `[AnalyzeText] quota checked in ${Date.now() - quotaStartedAt}ms allowed=${access.allowed} key=${cacheKey} ${meta}`,
+      );
+
+      if (!access.allowed) {
+        const paywallDisplay =
+          await this.paywallTriggerService.handleAccessDecision(
+            access,
+            user.id,
+            GatedFeature.AI_TEXT_ANALYSIS,
+            summary.tier,
+          );
+        const errorMessage =
+          access.paywall?.message ?? this.i18n.t('food.textQuotaExceeded');
+        this.logger.warn(
+          `[AnalyzeText] quota denied total=${Date.now() - startedAt}ms key=${cacheKey} ${meta}`,
+        );
+        if (paywallDisplay) {
+          return ResponseWrapper.error(errorMessage, 403, paywallDisplay);
+        }
+        return ResponseWrapper.error(errorMessage, 403);
+      }
+
+      const analysisStartedAt = Date.now();
+      const fullResult = await this.textFoodAnalysisService.analyze(
+        dto.text,
+        dto.mealType,
+        user.id,
+        (dto.locale as any) || undefined,
+        dto.contextOverride?.localHour,
+        dto.hints,
+      );
+      this.logger.log(
+        `[AnalyzeText] core analysis finished in ${Date.now() - analysisStartedAt}ms key=${cacheKey} foods=${fullResult.foods?.length || 0} ${meta}`,
+      );
+
+      const localizeStartedAt = Date.now();
+      await this.helper.localizeAnalysisResult(
+        fullResult,
+        locale,
+      );
+      this.logger.log(
+        `[AnalyzeText] localization finished in ${Date.now() - localizeStartedAt}ms key=${cacheKey} ${meta}`,
+      );
+
+      this.helper.setToTextAnalysisCache(cacheKey, fullResult);
+
       const trimmedResult = this.resultEntitlementService.trimResult(
-        cached,
+        fullResult,
         summary.tier,
         summary.entitlements,
       );
+
+      const hiddenFields = trimmedResult.entitlement?.fieldsHidden ?? [];
+      if (hiddenFields.length > 0) {
+        this.paywallTriggerService
+          .recordResultTrimTrigger(user.id, summary.tier, hiddenFields)
+          .catch(() => {});
+      }
+
+      this.logger.log(
+        `[AnalyzeText] success total=${Date.now() - startedAt}ms key=${cacheKey} hiddenFields=${hiddenFields.length} ${meta}`,
+      );
+
       return ResponseWrapper.success(
         trimmedResult,
-        this.i18n.t('food.analyzeCompleteCached'),
+        this.i18n.t('food.analyzeComplete'),
       );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `[AnalyzeText] failed after ${Date.now() - startedAt}ms ${meta}: ${message}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw error;
     }
-
-    const access = await this.quotaGateService.checkAccess({
-      userId: user.id,
-      feature: GatedFeature.AI_TEXT_ANALYSIS,
-      scene: 'food_text_analysis',
-      consumeQuota: true,
-    });
-
-    if (!access.allowed) {
-      const paywallDisplay =
-        await this.paywallTriggerService.handleAccessDecision(
-          access,
-          user.id,
-          GatedFeature.AI_TEXT_ANALYSIS,
-          summary.tier,
-        );
-      const errorMessage =
-        access.paywall?.message ?? this.i18n.t('food.textQuotaExceeded');
-      if (paywallDisplay) {
-        return ResponseWrapper.error(errorMessage, 403, paywallDisplay);
-      }
-      return ResponseWrapper.error(errorMessage, 403);
-    }
-
-    const fullResult = await this.textFoodAnalysisService.analyze(
-      dto.text,
-      dto.mealType,
-      user.id,
-      (dto.locale as any) || undefined,
-      dto.contextOverride?.localHour,
-      dto.hints,
-    );
-
-    await this.helper.localizeAnalysisResult(
-      fullResult,
-      locale,
-    );
-
-    this.helper.setToTextAnalysisCache(cacheKey, fullResult);
-
-    const trimmedResult = this.resultEntitlementService.trimResult(
-      fullResult,
-      summary.tier,
-      summary.entitlements,
-    );
-
-    const hiddenFields = trimmedResult.entitlement?.fieldsHidden ?? [];
-    if (hiddenFields.length > 0) {
-      this.paywallTriggerService
-        .recordResultTrimTrigger(user.id, summary.tier, hiddenFields)
-        .catch(() => {});
-    }
-
-    return ResponseWrapper.success(
-      trimmedResult,
-      this.i18n.t('food.analyzeComplete'),
-    );
   }
 }

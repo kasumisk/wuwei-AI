@@ -53,17 +53,17 @@ export const THROTTLE_CONFIG = [
   {
     name: THROTTLE_TIERS.USER_API,
     ttl: 60000,
-    limit: 120,
+    limit: 150,
   },
   {
     name: THROTTLE_TIERS.AI_HEAVY,
     ttl: 60000,
-    limit: 10,
+    limit: 15,
   },
   {
     name: THROTTLE_TIERS.STRICT,
     ttl: 60000,
-    limit: 6,
+    limit: 9,
   },
 ];
 

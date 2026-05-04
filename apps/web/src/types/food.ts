@@ -88,6 +88,7 @@ export interface ReplacementCandidate {
 export interface AnalysisResult {
   // ── 基础 ──
   requestId: string;
+  analysisId?: string;
   inputType?: 'text' | 'image';
   mealType: string;
   imageUrl?: string;

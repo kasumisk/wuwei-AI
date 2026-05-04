@@ -521,12 +521,19 @@ export class PipelineBuilderService implements OnModuleInit {
           5,
         );
         const excludeIds = candidates.map((f) => f.id);
-        // 1. 语义召回
-        const semanticIds = await this.semanticRecallService.recallSimilarFoods(
-          ctx.userId,
-          semanticLimit,
-          excludeIds,
-        );
+        const cfLimit = Math.max(Math.ceil(semanticLimit * 0.5), 5);
+        // 预建 categoryMap 供语义召回 enforceCategoryDiversity 使用，避免查 DB
+        const categoryMap = new Map(ctx.allFoods.map((f) => [f.id, f.category ?? 'unknown']));
+        // 1+3+4 并行：语义召回、CF召回、评分配置快照同时发出
+        const [semanticIds, cfCandidates, scoringConfig] = await Promise.all([
+          this.semanticRecallService.recallSimilarFoods(
+            ctx.userId,
+            { topK: semanticLimit, excludeIds, categoryMap },
+          ),
+          this.cfRecallService.recall(ctx.userId, new Set(excludeIds), cfLimit),
+          this.scoringConfigService.getConfig(),
+        ]);
+
         // 2. 将语义召回 ID 映射为 SemanticRecallItem
         //    Bug4-fix: 语义路也要遵守 mealType 门控，防止 breakfast 食物泄漏到 lunch
         const semanticIdSet = new Set(semanticIds);
@@ -540,18 +547,6 @@ export class PipelineBuilderService implements OnModuleInit {
                 (f.mealTypes || []).includes(ctx.mealType)),
           )
           .map((f) => ({ food: f, semanticScore: 0.5 }));
-
-        // 3. CF 召回第三路
-        const cfCandidates = ctx.userId
-          ? await this.cfRecallService.recall(
-              ctx.userId,
-              new Set(excludeIds),
-              Math.max(Math.ceil(semanticLimit * 0.5), 5),
-            )
-          : [];
-
-        // 4. 获取评分配置快照
-        const scoringConfig = await this.scoringConfigService.getConfig();
 
         // 5. 三路合并
         const ruleCandidateCount = candidates.length;
@@ -659,11 +654,13 @@ export class PipelineBuilderService implements OnModuleInit {
     >();
 
     const candidateIds = candidates.map((f) => f.id).filter(Boolean);
+    const _tPreload = Date.now();
     await this.healthModifierEngine.preloadL2Cache(
       candidateIds,
       penaltyCtx,
       healthModifierCache,
     );
+    this.logger.log(`[TIMING] preloadL2Cache: ${Date.now() - _tPreload}ms (ids=${candidateIds.length})`);
     const preloadedIds = new Set(healthModifierCache.keys());
 
     // Phase A: 计算基础分（FoodScorer + PreferenceSignal）
@@ -1152,18 +1149,47 @@ export class PipelineBuilderService implements OnModuleInit {
     allCandidates: ScoredFood[];
     degradations: PipelineDegradation[];
   }> {
+    const _tPipeline = Date.now();
     const picks = ctx.picks;
     const usedNames = ctx.usedNames;
     const allCandidates: ScoredFood[] = [];
     const degradations: PipelineDegradation[] = [];
-    const trace = ctx.trace; // 管道追踪（可选）
+    const trace = ctx.trace; // 管道追踪（可ړ）
+
+    // 性能优化：在角色循环前，对 allFoods 做一次性全局约束预过滤
+    // recallCandidates 内部每个 role 都会重复 mealType/dietaryRestrictions/allergens 过滤
+    // 提前过滤一次可将每次 recall 的输入从 ~1400 条降至更小的子集
+    const _tPreFilter = Date.now();
+    let preFilteredFoods = ctx.allFoods.filter((f) => {
+      // mealType 门控
+      const foodMealTypes: string[] = (f as any).mealTypes || [];
+      if (foodMealTypes.length > 0 && !foodMealTypes.includes(ctx.mealType)) return false;
+      // 饮食限制
+      if (
+        ctx.constraints.dietaryRestrictions?.length &&
+        foodViolatesDietaryRestriction(f, ctx.constraints.dietaryRestrictions)
+      ) return false;
+      return true;
+    });
+    // 过敏原过滤（用与 recallCandidates 相同的工具函数）
+    if (ctx.userProfile?.allergens?.length) {
+      preFilteredFoods = filterByAllergens(preFilteredFoods, ctx.userProfile.allergens);
+    }
+    this.logger.log(`[TIMING] executeRolePipeline preFilter: ${Date.now() - _tPreFilter}ms (${ctx.allFoods.length}→${preFilteredFoods.length}) roles=${roles.join(',')}`);
+
+    // 临时替换 ctx.allFoods 供 recallCandidates 使用（recall 阶段只读）
+    const originalAllFoods = ctx.allFoods;
+    (ctx as any).allFoods = preFilteredFoods;
 
     for (const role of roles) {
+      const _tRole = Date.now();
       // Stage 1: Recall
       let recalled: FoodLibrary[];
       const recallStart = trace ? Date.now() : 0;
+      const _tRecall = Date.now();
       try {
         recalled = await this.recallCandidates(ctx, role);
+        this.logger.log(`[TIMING] role=${role} recall: ${Date.now() - _tRecall}ms (result=${recalled.length})`);
       } catch (e) {
         this.logger.error(
           `Recall failed for role "${role}", using unfiltered fallback: ${e}`,
@@ -1271,8 +1297,10 @@ export class PipelineBuilderService implements OnModuleInit {
       // Stage 2: Rank
       let ranked: ScoredFood[];
       const rankStart = trace ? Date.now() : 0;
+      const _tRank = Date.now();
       try {
         ranked = await this.rankCandidates(ctx, realistic);
+        this.logger.log(`[TIMING] role=${role} rank: ${Date.now() - _tRank}ms (candidates=${realistic.length})`);
       } catch (e) {
         this.logger.error(
           `Ranking failed for role "${role}", using basic calorie sort: ${e}`,
@@ -1447,6 +1475,9 @@ export class PipelineBuilderService implements OnModuleInit {
         usedNames.add(selected.food.name);
       }
     }
+
+    // 恢复 ctx.allFoods（ensureMinCandidates fallback 和后续 P-β/P-ε 阶段需要完整食物池）
+    (ctx as any).allFoods = originalAllFoods;
 
     // P-β 修复：累积蛋白下限守门（与 P-α cumFatGuard 对称）
     // 角色循环仅单食物 top-1，即使每角色评分最佳，累加后本餐蛋白常低于目标 30-50%，
@@ -1629,6 +1660,8 @@ export class PipelineBuilderService implements OnModuleInit {
         `Pipeline completed with ${degradations.length} degradation(s): ${degradations.map((d) => d.stage).join(', ')}`,
       );
     }
+
+    this.logger.log(`[TIMING] executeRolePipeline total: ${Date.now() - _tPipeline}ms (roles=${roles.length})`);
 
     // 填充 trace summary
     if (trace) {

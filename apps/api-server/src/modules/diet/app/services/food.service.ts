@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, RequestTimeoutException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   UpdateFoodRecordDto,
@@ -88,6 +88,19 @@ interface MealSuggestionOptions {
   skipPrecomputed?: boolean;
 }
 
+interface MealSuggestionContext {
+  locale: Locale;
+  summary: Awaited<ReturnType<FoodService['getTodaySummary']>>;
+  profile: Awaited<ReturnType<UserProfileService['getProfile']>>;
+  goals: MealTarget;
+  goalType: string;
+  remaining: number;
+  nextMeal: string;
+  budget: MealTarget;
+  cacheKey: string;
+  todayStr: string;
+}
+
 /** 粘性缓存条目 */
 interface StickinessCacheEntry {
   /** 缓存键 */
@@ -99,6 +112,10 @@ interface StickinessCacheEntry {
   /** 用户当时的已摄入热量（用于判断是否失效） */
   consumedCalories: number;
 }
+
+type ScenarioRecommendations = Awaited<
+  ReturnType<RecommendationEngineService['recommendByScenario']>
+>;
 
 @Injectable()
 export class FoodService {
@@ -208,36 +225,19 @@ export class FoodService {
     forceRefresh = false,
     options?: MealSuggestionOptions,
   ): Promise<MealSuggestionResponse> {
-    const locale = this.getCurrentLocale();
-    const [summary, profile] = await Promise.all([
-      this.getTodaySummary(userId),
-      this.userProfileService.getProfile(userId),
-    ]);
-    const goals = this.nutritionScoreService.calculateDailyGoals(profile);
-    const goalType = profile?.goal || 'health';
-    const goal = summary.calorieGoal || goals.calories;
-    const remaining = Math.max(0, goal - summary.totalCalories);
-    const tz = profile?.timezone || DEFAULT_TIMEZONE;
-    const hour = getUserLocalHour(tz);
-    const mealRatios = MEAL_RATIOS[goalType] || MEAL_RATIOS.health;
-
-    let nextMeal = options?.mealType;
-    if (!nextMeal) {
-      if (hour < 9) nextMeal = 'breakfast';
-      else if (hour < 14) nextMeal = 'lunch';
-      else if (hour < 17) nextMeal = 'snack';
-      else nextMeal = 'dinner';
-    }
-
-    const ratio = mealRatios[nextMeal] || 0.25;
-    const calBudget = Math.min(Math.round(goals.calories * ratio), remaining);
-    const proteinRem = Math.max(0, goals.protein - (summary.totalProtein || 0));
-    const budget = {
-      calories: calBudget,
-      protein: Math.round(proteinRem * ratio),
-      fat: Math.round(goals.fat * ratio),
-      carbs: Math.round(goals.carbs * ratio),
-    };
+    const ctx = await this.buildMealSuggestionContext(userId, options);
+    const {
+      locale,
+      summary,
+      profile,
+      goals,
+      goalType,
+      remaining,
+      nextMeal,
+      budget,
+      cacheKey,
+      todayStr,
+    } = ctx;
 
     if (remaining <= 0) {
       return {
@@ -252,14 +252,15 @@ export class FoodService {
     }
 
     // ─── V7.9 Phase 3-1: 粘性缓存检查 ───
-    const cacheKey = this.buildStickinessCacheKey(userId, nextMeal, locale);
     if (!forceRefresh) {
       const cached = await this.getFromStickinessCache(
         cacheKey,
         summary.totalCalories || 0,
       );
       if (cached) {
-        this.logger.debug(`粘性缓存命中: userId=${userId}, meal=${nextMeal}`);
+        this.logger.log(
+          `[MealSuggestion] stickiness hit userId=${userId} meal=${nextMeal} locale=${locale} scenarios=${cached.scenarios?.length ?? 0}`,
+        );
         return cached;
       }
     } else {
@@ -272,7 +273,6 @@ export class FoodService {
     // 5.3 修复: getMealSuggestion 当前无 channel 入参（待接 client-context middleware）；
     //   先传 'unknown' 以命中 processor 为 unknown 存储的兜底预计算缓存。
     //   接入 X-Client-Type header 后，将 channel 透传至此并移除该注释。
-    const todayStr = new Date().toISOString().slice(0, 10);
     const precomputed = options?.skipPrecomputed
       ? null
       : await this.precomputeService.getPrecomputed(
@@ -282,126 +282,11 @@ export class FoodService {
           'unknown',
         );
     if (precomputed) {
-      const { result: mainRec, scenarioResults } = precomputed;
-
-      // 预计算结果没有经过推荐引擎的实时翻译注入，这里补注 displayName
-      await this.foodI18nService.applyToMealRecommendation(
-        mainRec as any,
-        locale,
+      const result = await this.buildMealSuggestionFromPrecomputed(
+        userId,
+        precomputed,
+        ctx,
       );
-      if (scenarioResults) {
-        await Promise.all(
-          Object.values(scenarioResults).map((rec) =>
-            this.foodI18nService.applyToMealRecommendation(rec as any, locale),
-          ),
-        );
-      }
-
-      // 发布推荐生成事件（标记来自预计算）
-      this.eventEmitter.emit(
-        DomainEvents.RECOMMENDATION_GENERATED,
-        new RecommendationGeneratedEvent(
-          userId,
-          nextMeal,
-          mainRec.foods?.length ?? 0,
-          0, // latencyMs ≈ 0（预计算命中）
-          true, // fromPrecompute
-        ),
-      );
-
-      const scenarios = scenarioResults
-        ? Object.entries(scenarioResults).map(([key, rec]) => {
-            const scenarioLabels: Record<string, string> = {
-              takeout: t('scenario.takeout', {}, locale),
-              convenience: t('scenario.convenience', {}, locale),
-              homeCook: t('scenario.homeCook', {}, locale),
-            };
-            const r = rec as {
-              displayText?: string;
-              totalCalories?: number;
-              tip?: string;
-              totalProtein?: number;
-              totalFat?: number;
-              totalCarbs?: number;
-              foods?: Array<{
-                food?: {
-                  id?: string;
-                  name?: string;
-                  category?: string;
-                  standardServingDesc?: string;
-                };
-                servingCalories?: number;
-                servingProtein?: number;
-                servingFat?: number;
-                servingCarbs?: number;
-              }>;
-            };
-            const scenarioCalories = r.totalCalories || 0;
-            return {
-              scenario: scenarioLabels[key] || key,
-              foods: this.rebuildDisplayText(
-                r.foods,
-                r.displayText || '',
-                locale,
-              ),
-              foodItems: this.toSuggestionFoodItems(r.foods),
-              calories: scenarioCalories,
-              tip: this.buildSuggestionTip(
-                nextMeal,
-                goalType,
-                budget,
-                scenarioCalories,
-                locale,
-              ),
-              totalProtein: r.totalProtein,
-              totalFat: r.totalFat,
-              totalCarbs: r.totalCarbs,
-            };
-          })
-        : undefined;
-
-      this.logger.debug(
-        `预计算命中: userId=${userId}, meal=${nextMeal}, date=${todayStr}`,
-      );
-
-      // V7.9 P3-5: 生成决策价值标签
-      const decisionValueTags = this.generateDecisionValueTags(
-        mainRec.totalCalories,
-        mainRec.totalProtein,
-        mainRec.totalFat,
-        mainRec.totalCarbs,
-        remaining,
-        goals,
-        summary,
-        goalType,
-        locale,
-      );
-
-      const result = {
-        mealType: nextMeal,
-        remainingCalories: remaining,
-        suggestion: {
-          foods: this.rebuildDisplayText(
-            mainRec.foods,
-            mainRec.displayText,
-            locale,
-          ),
-          foodItems: this.toSuggestionFoodItems(mainRec.foods),
-          calories: mainRec.totalCalories,
-          tip: this.buildSuggestionTip(
-            nextMeal,
-            goalType,
-            budget,
-            Math.max(mainRec.totalCalories || 0, 0),
-            locale,
-          ),
-          totalProtein: mainRec.totalProtein,
-          totalFat: mainRec.totalFat,
-          totalCarbs: mainRec.totalCarbs,
-        },
-        decisionValueTags,
-        scenarios,
-      };
 
       // V7.9 P3-1: 写入粘性缓存
       this.setToStickinessCache(cacheKey, result, summary.totalCalories || 0);
@@ -439,151 +324,96 @@ export class FoodService {
         }
       : undefined;
 
-    // Risk-4 修复（2026-05-02）: 实时路径超时保护 + 热门榜单 fallback
-    // 新用户无预计算缓存时，profileAggregator 多轮 Redis 查询 + 全量 food 池加载
-    // 可能导致延迟 >3s。使用 Promise.race 设置 2500ms 超时门槛，
-    // 超时后立即返回按 popularity 降序的热门榜单，避免用户长等。
-    // 后台完整推荐计算继续执行并写入预计算缓存，下次请求可命中。
-    /** 实时推荐超时阈值（ms） */
-    const REALTIME_TIMEOUT_MS = 2500;
+     // 实时路径统一为「三场景推荐」：takeout / convenience / homeCook。
+     // suggestion 字段仅是默认场景的投影，避免再额外计算一套 recommendMeal。
+     /**
+      * 实时推荐超时阈值（ms）
+      * 生产日志显示首个 miss 用户在 summary/profile/precompute 检查之外，
+      * recommendByScenario 本身偶尔还需要接近 4s；3500ms 仍会把这类首个冷请求
+      * 误判为超时。先提高到 5000ms，优先减少首次生成 408。
+      */
+     const REALTIME_TIMEOUT_MS = 5000;
 
     /** 创建超时 Promise，resolve 为 null 表示超时 */
     const timeoutPromise = new Promise<null>((resolve) =>
       setTimeout(() => resolve(null), REALTIME_TIMEOUT_MS),
     );
 
-    // 并行获取：通用推荐 + 场景化推荐
-    const startTime = Date.now();
-    const fullRecommendPromise = Promise.all([
-      this.recommendationEngine.recommendMeal(
-        userId,
-        nextMeal,
-        goalType,
-        consumed,
-        budget,
-        dailyTarget,
-        userConstraints,
-      ),
-      this.recommendationEngine.recommendByScenario(
-        userId,
-        nextMeal,
-        goalType,
-        consumed,
-        budget,
-        dailyTarget,
-        userConstraints,
-      ),
-    ]);
+     const startTime = Date.now();
+     const scenarioRecommendPromise = this.recommendationEngine.recommendByScenario(
+       userId,
+       nextMeal,
+       goalType,
+      consumed,
+      budget,
+       dailyTarget,
+       userConstraints,
+     );
 
-    // Race: 完整推荐 vs 超时
-    const raceResult = await Promise.race([
-      fullRecommendPromise,
-      timeoutPromise,
-    ]);
+     const raceResult = await Promise.race([
+       scenarioRecommendPromise,
+       timeoutPromise,
+     ]);
 
-    if (raceResult === null) {
-      // ─── 超时降级：返回热门榜单 ───
+     if (raceResult === null) {
+      // ─── 超时：直接抛错，不再用热门榜单兜底误导用户 ───
       const latencyMs = Date.now() - startTime;
       this.logger.warn(
-        `实时推荐超时 (>${REALTIME_TIMEOUT_MS}ms, elapsed=${latencyMs}ms), 降级到热门榜单: userId=${userId}, meal=${nextMeal}`,
+        `实时推荐超时 (>${REALTIME_TIMEOUT_MS}ms, elapsed=${latencyMs}ms), 直接报错: userId=${userId}, meal=${nextMeal}`,
       );
 
-      // 后台继续完整推荐并触发预计算写入（fire-and-forget）
-      fullRecommendPromise.catch((err) =>
-        this.logger.warn(
-          `后台推荐计算失败 (userId=${userId}): ${(err as Error).message}`,
-        ),
-      );
-
-      const popularFoods =
-        await this.recommendationEngine.getTopPopularFoods(nextMeal);
-      const popularLocalized = await this.foodI18nService.loadLocalizedDetails(
-        popularFoods.map((f) => f.id).filter(Boolean),
-        locale,
-      );
-      const popularFoodText =
-        popularFoods.length > 0
-          ? popularFoods
-              .map((f) => popularLocalized.get(f.id)?.name || f.name)
-              .join('、')
-          : t('food.suggestion.loading', {}, locale);
-
-      this.eventEmitter.emit(
-        DomainEvents.RECOMMENDATION_GENERATED,
-        new RecommendationGeneratedEvent(
-          userId,
-          nextMeal,
-          popularFoods.length,
-          latencyMs,
-          false,
-        ),
-      );
-
-      const toServing = (per100g: number | undefined | null, f: FoodLibrary): number => {
-        return Math.round((Number(per100g ?? 0) * (Number(f.standardServingG) || 100)) / 100);
-      };
-
-      const fallbackTotalProtein = popularFoods.reduce(
-        (s, f) => s + toServing(f.protein, f),
-        0,
-      );
-      const fallbackTotalFat = popularFoods.reduce(
-        (s, f) => s + toServing(f.fat, f),
-        0,
-      );
-      const fallbackTotalCarbs = popularFoods.reduce(
-        (s, f) => s + toServing(f.carbs, f),
-        0,
-      );
-
-      const fallbackResult: MealSuggestionResponse = {
-        mealType: nextMeal,
-        remainingCalories: remaining,
-        suggestion: {
-          foods: popularFoodText,
-          foodItems: popularFoods.map((f) => ({
-            foodId: f.id,
-            name: popularLocalized.get(f.id)?.name || f.name,
-            servingDesc:
-              popularLocalized.get(f.id)?.servingDesc ||
-              f.standardServingDesc ||
-              `${f.standardServingG || 100}g`,
-            calories: toServing(f.calories, f),
-            protein: toServing(f.protein, f),
-            fat: toServing(f.fat, f),
-            carbs: toServing(f.carbs, f),
-            category: f.category || '',
-          })),
-          calories: popularFoods.reduce(
-            (s, f) => s + toServing(f.calories, f),
-            0,
+       // 后台继续完整三场景推荐，成功后写入粘性缓存；下一次请求直接命中。
+       scenarioRecommendPromise
+         .then(async (scenarioRecs) => {
+           await Promise.all(
+             Object.values(scenarioRecs).map((rec) =>
+               this.foodI18nService.applyToMealRecommendation(rec, locale),
+             ),
+           );
+           const result = this.buildMealSuggestionFromScenarios(
+             scenarioRecs,
+             nextMeal,
+             remaining,
+             goalType,
+             budget,
+             goals,
+             summary,
+             locale,
+           );
+           this.setToStickinessCache(
+             cacheKey,
+             result,
+             summary.totalCalories || 0,
+           );
+         })
+         .catch((err) =>
+           this.logger.warn(
+             `后台推荐计算失败 (userId=${userId}): ${(err as Error).message}`,
           ),
-          tip: t('food.suggestion.popularFallbackTip', {}, locale),
-          totalProtein: fallbackTotalProtein,
-          totalFat: fallbackTotalFat,
-          totalCarbs: fallbackTotalCarbs,
-        },
-      };
+        );
 
-      this.setToStickinessCache(
-        cacheKey,
-        fallbackResult,
-        summary.totalCalories || 0,
+      throw new RequestTimeoutException(
+        'Meal suggestion generation timed out. Please retry.',
       );
-      return fallbackResult;
     }
 
-    // ─── 正常路径：完整推荐成功 ───
-    const [mainRec, scenarioRecs] = raceResult;
-    const latencyMs = Date.now() - startTime;
-
-    // 最终返回前统一补注 displayName / displayServingDesc，避免任一路径漏掉 locale 化份量描述。
-    await this.foodI18nService.applyToMealRecommendation(mainRec, locale);
-    await Promise.all(
-      Object.values(scenarioRecs).map((rec) =>
-        this.foodI18nService.applyToMealRecommendation(rec, locale),
-      ),
-    );
+     const scenarioRecs = raceResult;
+     const latencyMs = Date.now() - startTime;
+     await Promise.all(
+       Object.values(scenarioRecs).map((rec) =>
+         this.foodI18nService.applyToMealRecommendation(rec, locale),
+       ),
+     );
+     const result = this.buildMealSuggestionFromScenarios(
+       scenarioRecs,
+       nextMeal,
+       remaining,
+       goalType,
+       budget,
+       goals,
+       summary,
+       locale,
+     );
 
     // V6 Phase 1.2: 发布推荐生成事件
     this.eventEmitter.emit(
@@ -591,13 +421,87 @@ export class FoodService {
       new RecommendationGeneratedEvent(
         userId,
         nextMeal,
-        mainRec.foods?.length ?? 0,
-        latencyMs,
-        false, // fromPrecompute — Phase 1.10 预计算实现后会根据实际情况设置
-      ),
+         result.scenarios?.length ?? 0,
+         latencyMs,
+         false, // fromPrecompute — Phase 1.10 预计算实现后会根据实际情况设置
+       ),
+     );
+
+    // V7.9 P3-1: 写入粘性缓存
+    this.setToStickinessCache(cacheKey, result, summary.totalCalories || 0);
+    this.logger.log(
+      `[MealSuggestion] realtime success userId=${userId} meal=${nextMeal} locale=${locale} scenarios=${result.scenarios?.length ?? 0} primary="${result.suggestion.foods}"`,
     );
 
-    const scenarios = Object.entries(scenarioRecs).map(([key, rec]) => {
+    return result;
+  }
+
+  private buildMealSuggestionFromScenarios(
+    scenarioRecs: ScenarioRecommendations,
+    nextMeal: string,
+    remaining: number,
+    goalType: string,
+    budget: MealTarget,
+    goals: MealTarget,
+    summary: { totalCalories?: number; totalProtein?: number; totalFat?: number; totalCarbs?: number },
+    locale: Locale,
+  ): MealSuggestionResponse {
+    const scenarios = this.buildScenarioSuggestions(
+      scenarioRecs,
+      nextMeal,
+      goalType,
+      budget,
+      locale,
+    );
+    const primaryScenario = this.selectPrimaryScenario(scenarios);
+    this.logger.log(
+      `[MealSuggestion] scenarios built meal=${nextMeal} locale=${locale} count=${scenarios.length} primary="${primaryScenario.scenario}"`,
+    );
+
+    const decisionValueTags = this.generateDecisionValueTags(
+      primaryScenario.calories,
+      primaryScenario.totalProtein ?? 0,
+      primaryScenario.totalFat ?? 0,
+      primaryScenario.totalCarbs ?? 0,
+      remaining,
+      goals,
+      summary,
+      goalType,
+      locale,
+    );
+
+    return {
+      mealType: nextMeal,
+      remainingCalories: remaining,
+      suggestion: {
+        foods: primaryScenario.foods,
+        foodItems: primaryScenario.foodItems,
+        calories: primaryScenario.calories,
+        tip: primaryScenario.tip,
+        totalProtein: primaryScenario.totalProtein,
+        totalFat: primaryScenario.totalFat,
+        totalCarbs: primaryScenario.totalCarbs,
+      },
+      decisionValueTags,
+      scenarios,
+    };
+  }
+
+  private selectPrimaryScenario(
+    scenarios: MealSuggestionScenario[],
+  ): MealSuggestionScenario {
+    // 默认展示更通用的 takeout-like 第一项；如果未来前端明确传偏好渠道，可在此切换。
+    return scenarios[0];
+  }
+
+  private buildScenarioSuggestions(
+    scenarioRecs: ScenarioRecommendations,
+    nextMeal: string,
+    goalType: string,
+    budget: MealTarget,
+    locale: Locale,
+  ): MealSuggestionScenario[] {
+    return Object.entries(scenarioRecs).map(([key, rec]) => {
       const scenarioLabels: Record<string, string> = {
         takeout: t('scenario.takeout', {}, locale),
         convenience: t('scenario.convenience', {}, locale),
@@ -621,57 +525,32 @@ export class FoodService {
         totalCarbs: rec.totalCarbs,
       };
     });
-
-    // V7.9 P3-5: 生成决策价值标签
-    const decisionValueTags = this.generateDecisionValueTags(
-      mainRec.totalCalories,
-      mainRec.totalProtein,
-      mainRec.totalFat,
-      mainRec.totalCarbs,
-      remaining,
-      goals,
-      summary,
-      goalType,
-      locale,
-    );
-
-    const result = {
-      mealType: nextMeal,
-      remainingCalories: remaining,
-      suggestion: {
-        foods: this.rebuildDisplayText(
-          mainRec.foods,
-          mainRec.displayText,
-          locale,
-        ),
-        foodItems: this.toSuggestionFoodItems(mainRec.foods),
-        calories: mainRec.totalCalories,
-        tip: this.buildSuggestionTip(
-          nextMeal,
-          goalType,
-          budget,
-          mainRec.totalCalories,
-          locale,
-        ),
-        totalProtein: mainRec.totalProtein,
-        totalFat: mainRec.totalFat,
-        totalCarbs: mainRec.totalCarbs,
-      },
-      decisionValueTags,
-      scenarios,
-    };
-
-    // V7.9 P3-1: 写入粘性缓存
-    this.setToStickinessCache(cacheKey, result, summary.totalCalories || 0);
-
-    return result;
   }
+
 
   async adjustMealSuggestion(
     userId: string,
     _reason: string,
     mealType?: string,
   ): Promise<MealSuggestionResponse> {
+    const ctx = await this.buildMealSuggestionContext(userId, { mealType });
+    const current = await this.getExistingMealSuggestion(userId, ctx);
+
+    const rotated = current
+      ? this.rotateMealSuggestionScenarios(current)
+      : null;
+    if (rotated) {
+      this.setToStickinessCache(
+        ctx.cacheKey,
+        rotated,
+        ctx.summary.totalCalories || 0,
+      );
+      this.logger.log(
+        `[MealSuggestion] adjust reused scenarios userId=${userId} meal=${rotated.mealType} locale=${ctx.locale} scenarios=${rotated.scenarios?.length ?? 0} primary="${rotated.suggestion.foods}"`,
+      );
+      return rotated;
+    }
+
     if (mealType) {
       this.invalidateMealSuggestionCache(userId, mealType);
     }
@@ -680,6 +559,233 @@ export class FoodService {
       mealType,
       skipPrecomputed: true,
     });
+  }
+
+  private async buildMealSuggestionContext(
+    userId: string,
+    options?: MealSuggestionOptions,
+  ): Promise<MealSuggestionContext> {
+    const locale = this.getCurrentLocale();
+    const [summary, profile] = await Promise.all([
+      this.getTodaySummary(userId),
+      this.userProfileService.getProfile(userId),
+    ]);
+    const goals = this.nutritionScoreService.calculateDailyGoals(profile);
+    const goalType = profile?.goal || 'health';
+    const goal = summary.calorieGoal || goals.calories;
+    const remaining = Math.max(0, goal - summary.totalCalories);
+    const tz = profile?.timezone || DEFAULT_TIMEZONE;
+    const hour = getUserLocalHour(tz);
+    const mealRatios = MEAL_RATIOS[goalType] || MEAL_RATIOS.health;
+
+    let nextMeal = options?.mealType;
+    if (!nextMeal) {
+      if (hour < 9) nextMeal = 'breakfast';
+      else if (hour < 14) nextMeal = 'lunch';
+      else if (hour < 17) nextMeal = 'snack';
+      else nextMeal = 'dinner';
+    }
+
+    const ratio = mealRatios[nextMeal] || 0.25;
+    const calBudget = Math.min(Math.round(goals.calories * ratio), remaining);
+    const proteinRem = Math.max(0, goals.protein - (summary.totalProtein || 0));
+    const budget: MealTarget = {
+      calories: calBudget,
+      protein: Math.round(proteinRem * ratio),
+      fat: Math.round(goals.fat * ratio),
+      carbs: Math.round(goals.carbs * ratio),
+    };
+
+    return {
+      locale,
+      summary,
+      profile,
+      goals,
+      goalType,
+      remaining,
+      nextMeal,
+      budget,
+      cacheKey: this.buildStickinessCacheKey(userId, nextMeal, locale),
+      todayStr: new Date().toISOString().slice(0, 10),
+    };
+  }
+
+  private async getExistingMealSuggestion(
+    userId: string,
+    ctx: MealSuggestionContext,
+  ): Promise<MealSuggestionResponse | null> {
+    const cached = await this.getFromStickinessCache(
+      ctx.cacheKey,
+      ctx.summary.totalCalories || 0,
+    );
+    if (cached) {
+      this.logger.log(
+        `[MealSuggestion] stickiness hit userId=${userId} meal=${ctx.nextMeal} locale=${ctx.locale} scenarios=${cached.scenarios?.length ?? 0}`,
+      );
+      return cached;
+    }
+
+    const precomputed = await this.precomputeService.getPrecomputed(
+      userId,
+      ctx.todayStr,
+      ctx.nextMeal,
+      'unknown',
+    );
+    if (!precomputed) {
+      return null;
+    }
+
+    const result = await this.buildMealSuggestionFromPrecomputed(
+      userId,
+      precomputed,
+      ctx,
+    );
+    this.setToStickinessCache(
+      ctx.cacheKey,
+      result,
+      ctx.summary.totalCalories || 0,
+    );
+    return result;
+  }
+
+  private async buildMealSuggestionFromPrecomputed(
+    userId: string,
+    precomputed: NonNullable<Awaited<ReturnType<PrecomputeService['getPrecomputed']>>>,
+    ctx: MealSuggestionContext,
+  ): Promise<MealSuggestionResponse> {
+    const { result: mainRec, scenarioResults } = precomputed;
+
+    await this.foodI18nService.applyToMealRecommendation(mainRec as any, ctx.locale);
+    if (scenarioResults) {
+      await Promise.all(
+        Object.values(scenarioResults).map((rec) =>
+          this.foodI18nService.applyToMealRecommendation(rec as any, ctx.locale),
+        ),
+      );
+    }
+
+    this.eventEmitter.emit(
+      DomainEvents.RECOMMENDATION_GENERATED,
+      new RecommendationGeneratedEvent(
+        userId,
+        ctx.nextMeal,
+        mainRec.foods?.length ?? 0,
+        0,
+        true,
+      ),
+    );
+
+    const scenarios = scenarioResults
+      ? Object.entries(scenarioResults).map(([key, rec]) => {
+          const scenarioLabels: Record<string, string> = {
+            takeout: t('scenario.takeout', {}, ctx.locale),
+            convenience: t('scenario.convenience', {}, ctx.locale),
+            homeCook: t('scenario.homeCook', {}, ctx.locale),
+          };
+          const r = rec as {
+            displayText?: string;
+            totalCalories?: number;
+            totalProtein?: number;
+            totalFat?: number;
+            totalCarbs?: number;
+            foods?: Array<{
+              food?: {
+                id?: string;
+                name?: string;
+                category?: string;
+                standardServingDesc?: string;
+              };
+              servingCalories?: number;
+              servingProtein?: number;
+              servingFat?: number;
+              servingCarbs?: number;
+            }>;
+          };
+          const scenarioCalories = r.totalCalories || 0;
+          return {
+            scenario: scenarioLabels[key] || key,
+            foods: this.rebuildDisplayText(r.foods, r.displayText || '', ctx.locale),
+            foodItems: this.toSuggestionFoodItems(r.foods),
+            calories: scenarioCalories,
+            tip: this.buildSuggestionTip(
+              ctx.nextMeal,
+              ctx.goalType,
+              ctx.budget,
+              scenarioCalories,
+              ctx.locale,
+            ),
+            totalProtein: r.totalProtein,
+            totalFat: r.totalFat,
+            totalCarbs: r.totalCarbs,
+          };
+        })
+      : undefined;
+
+    this.logger.debug(
+      `预计算命中: userId=${userId}, meal=${ctx.nextMeal}, date=${ctx.todayStr}`,
+    );
+    this.logger.log(
+      `[MealSuggestion] precomputed hit userId=${userId} meal=${ctx.nextMeal} locale=${ctx.locale} scenarios=${scenarios?.length ?? 0}`,
+    );
+
+    return {
+      mealType: ctx.nextMeal,
+      remainingCalories: ctx.remaining,
+      suggestion: {
+        foods: this.rebuildDisplayText(mainRec.foods, mainRec.displayText, ctx.locale),
+        foodItems: this.toSuggestionFoodItems(mainRec.foods),
+        calories: mainRec.totalCalories,
+        tip: this.buildSuggestionTip(
+          ctx.nextMeal,
+          ctx.goalType,
+          ctx.budget,
+          Math.max(mainRec.totalCalories || 0, 0),
+          ctx.locale,
+        ),
+        totalProtein: mainRec.totalProtein,
+        totalFat: mainRec.totalFat,
+        totalCarbs: mainRec.totalCarbs,
+      },
+      decisionValueTags: this.generateDecisionValueTags(
+        mainRec.totalCalories,
+        mainRec.totalProtein,
+        mainRec.totalFat,
+        mainRec.totalCarbs,
+        ctx.remaining,
+        ctx.goals,
+        ctx.summary,
+        ctx.goalType,
+        ctx.locale,
+      ),
+      scenarios,
+    };
+  }
+
+  private rotateMealSuggestionScenarios(
+    suggestion: MealSuggestionResponse,
+  ): MealSuggestionResponse | null {
+    const scenarios = suggestion.scenarios;
+    if (!Array.isArray(scenarios) || scenarios.length < 2) {
+      return null;
+    }
+
+    const [currentPrimary, ...rest] = scenarios;
+    const nextPrimary = rest[0];
+    const rotatedScenarios = [...rest, currentPrimary];
+
+    return {
+      ...suggestion,
+      suggestion: {
+        foods: nextPrimary.foods,
+        foodItems: nextPrimary.foodItems,
+        calories: nextPrimary.calories,
+        tip: nextPrimary.tip,
+        totalProtein: nextPrimary.totalProtein,
+        totalFat: nextPrimary.totalFat,
+        totalCarbs: nextPrimary.totalCarbs,
+      },
+      scenarios: rotatedScenarios,
+    };
   }
 
   private toSuggestionFoodItems(
@@ -780,11 +886,15 @@ export class FoodService {
         if (entry) {
           // 已摄入热量变化则失效
           if (Math.abs(currentConsumedCalories - entry.consumedCalories) > 10) {
+            this.logger.log(
+              `[MealSuggestion] stickiness invalidated by calories key=${key} current=${currentConsumedCalories} cached=${entry.consumedCalories}`,
+            );
             void this.redisCache.del(redisKey);
             return null;
           }
           return entry.result;
         }
+        this.logger.log(`[MealSuggestion] stickiness miss key=${key} source=redis`);
         return null;
       }
     } catch (e) {
@@ -792,13 +902,20 @@ export class FoodService {
     }
     // in-memory fallback
     const entry = this.stickinessCache.get(key);
-    if (!entry) return null;
+    if (!entry) {
+      this.logger.log(`[MealSuggestion] stickiness miss key=${key} source=memory`);
+      return null;
+    }
     const now = Date.now();
     if (now - entry.createdAt > STICKINESS_CACHE_TTL_MS) {
+      this.logger.log(`[MealSuggestion] stickiness expired key=${key} source=memory`);
       this.stickinessCache.delete(key);
       return null;
     }
     if (Math.abs(currentConsumedCalories - entry.consumedCalories) > 10) {
+      this.logger.log(
+        `[MealSuggestion] stickiness invalidated by calories key=${key} source=memory current=${currentConsumedCalories} cached=${entry.consumedCalories}`,
+      );
       this.stickinessCache.delete(key);
       return null;
     }

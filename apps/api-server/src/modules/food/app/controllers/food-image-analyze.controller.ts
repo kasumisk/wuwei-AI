@@ -91,7 +91,7 @@ export class FoodImageAnalyzeController {
 
   @Post('analyze')
   @HttpCode(HttpStatus.OK)
-  @AiHeavyThrottle(20, 60)
+  @AiHeavyThrottle(30, 60)
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: '上传食物图片 AI 分析（异步）' })
@@ -171,7 +171,7 @@ export class FoodImageAnalyzeController {
   // ─── GET analyze/:requestId ───
 
   @Get('analyze/:requestId')
-  @UserApiThrottle(120, 60)
+  @UserApiThrottle(180, 60)
   @SkipThrottle({ 'ai-heavy': true, strict: true })
   @ApiOperation({ summary: '获取 AI 分析结果（轮询）' })
   @ApiParam({ name: 'requestId', description: '分析任务 ID' })
@@ -350,7 +350,7 @@ export class FoodImageAnalyzeController {
 
   @Post('analyze/:requestId/refine')
   @HttpCode(HttpStatus.OK)
-  @UserApiThrottle(10, 60)
+  @UserApiThrottle(15, 60)
   @ApiOperation({ summary: '低置信度分析结果修正（不扣配额）' })
   @ApiParam({ name: 'requestId', description: '首次图片分析 requestId' })
   @ApiBody({ type: RefineAnalysisDto })
@@ -447,7 +447,7 @@ export class FoodImageAnalyzeController {
   // ─── GET analyze-quick/:foodId ───
 
   @Get('analyze-quick/:foodId')
-  @UserApiThrottle(60, 60)
+  @UserApiThrottle(90, 60)
   @ApiOperation({ summary: '按食物ID快捷分析（零AI成本）' })
   @ApiParam({ name: 'foodId', description: '食物库 ID' })
   async analyzeQuickByFoodId(

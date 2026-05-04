@@ -39,7 +39,7 @@ interface NextMealCardProps {
 }
 
 export function NextMealCard({ suggestion, summary: _summary, profile }: NextMealCardProps) {
-  const { adjustPlan, isAdjusting } = usePlanAdjust();
+  const { adjustSuggestion, isAdjustingSuggestion } = usePlanAdjust();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -126,8 +126,8 @@ export function NextMealCard({ suggestion, summary: _summary, profile }: NextMea
 
   const handleSwap = useCallback(
     async (reason?: string) => {
-      try {
-        await adjustPlan({
+        try {
+        await adjustSuggestion({
           reason: reason || '用户不想吃当前推荐，请换一个',
           mealType: suggestion.mealType as 'breakfast' | 'lunch' | 'dinner' | 'snack',
         });
@@ -139,7 +139,7 @@ export function NextMealCard({ suggestion, summary: _summary, profile }: NextMea
         toast({ title: '换一个失败，请稍后再试', variant: 'destructive' });
       }
     },
-    [adjustPlan, suggestion.mealType, toast]
+    [adjustSuggestion, suggestion.mealType, toast]
   );
 
   if (!content) return null;
@@ -180,7 +180,7 @@ export function NextMealCard({ suggestion, summary: _summary, profile }: NextMea
         )}
 
         {/* Food name */}
-        {isAdjusting ? (
+        {isAdjustingSuggestion ? (
           <div className="py-4 flex items-center gap-2">
             <span className="w-4 h-4 border-2 border-primary border-t-transparent  animate-spin inline-block" />
             <span className="text-xs text-muted-foreground">换推荐中...</span>
@@ -230,7 +230,7 @@ export function NextMealCard({ suggestion, summary: _summary, profile }: NextMea
           {/* Primary: eaten */}
           <button
             onClick={handleEaten}
-            disabled={isAdjusting || isLogging || eaten}
+            disabled={isAdjustingSuggestion || isLogging || eaten}
             className={`w-full py-2.5  text-sm font-bold transition-all active:scale-[0.97] disabled:opacity-60 ${
               eaten ? 'bg-green-100 text-green-700' : 'bg-primary/10 text-primary'
             }`}
@@ -261,21 +261,21 @@ export function NextMealCard({ suggestion, summary: _summary, profile }: NextMea
                   })
                   .catch(() => {});
               }}
-              disabled={isAdjusting || eaten || liked}
+              disabled={isAdjustingSuggestion || eaten || liked}
               className={`flex-1 py-2  text-xs font-bold transition-all active:scale-[0.97] disabled:opacity-50 ${liked ? 'bg-green-100 text-green-700 border border-green-300' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
             >
               {liked ? '✅ 已选' : '👍 喜欢'}
             </button>
             <button
               onClick={() => handleSwap()}
-              disabled={isAdjusting || eaten}
+              disabled={isAdjustingSuggestion || eaten}
               className="flex-1 py-2  text-xs font-bold bg-muted text-muted-foreground hover:bg-muted/80 transition-all active:scale-[0.97] disabled:opacity-50"
             >
               🔄 换一个
             </button>
             <button
               onClick={() => setShowDislike(true)}
-              disabled={isAdjusting || eaten}
+              disabled={isAdjustingSuggestion || eaten}
               className="flex-1 py-2  text-xs font-bold bg-muted text-muted-foreground hover:bg-muted/80 transition-all active:scale-[0.97] disabled:opacity-50"
             >
               👎 不想吃
@@ -290,7 +290,7 @@ export function NextMealCard({ suggestion, summary: _summary, profile }: NextMea
                 <button
                   key={r.key}
                   onClick={() => handleSwap(`用户不想吃：${r.label}`)}
-                  disabled={isAdjusting}
+                  disabled={isAdjustingSuggestion}
                   className="w-full text-left px-3 py-2 rounded-lg bg-card text-xs text-foreground hover:bg-muted/60 transition-colors active:scale-[0.98] disabled:opacity-50"
                 >
                   {r.label}

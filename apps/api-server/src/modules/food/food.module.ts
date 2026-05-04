@@ -4,7 +4,6 @@ import { memoryStorage } from 'multer';
 // App 端
 import { FoodLibraryController } from './app/controllers/food-library.controller';
 import { FoodLibraryService } from './app/services/food-library.service';
-import { FoodAnalyzeController } from './app/controllers/food-analyze.controller';
 // Phase 7: 拆分子控制器
 import { FoodImageAnalyzeController } from './app/controllers/food-image-analyze.controller';
 import { FoodTextAnalyzeController } from './app/controllers/food-text-analyze.controller';
@@ -92,7 +91,6 @@ import { RecommendationModule } from '../diet/recommendation.module';
   ],
   controllers: [
     FoodLibraryController,
-    FoodAnalyzeController,
     // Phase 7: 新拆分子控制器
     FoodImageAnalyzeController,
     FoodTextAnalyzeController,

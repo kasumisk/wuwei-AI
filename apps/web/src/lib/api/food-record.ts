@@ -227,7 +227,8 @@ function mapAnalysisData(raw: RawAnalysisData, overrideRequestId?: string): Anal
   }));
 
   return {
-    requestId: overrideRequestId || raw.analysisId || '',
+    requestId: overrideRequestId || '',
+    analysisId: raw.analysisId,
     inputType: raw.inputType,
     mealType: raw.inputSnapshot?.mealType || 'lunch',
     imageUrl: raw.inputSnapshot?.imageUrl,
@@ -371,8 +372,16 @@ async function pollAnalyzeResult(requestId: string): Promise<AnalyzeImageOutcome
       // 新协议: data.result 为统一结构；兜底兼容历史混合响应
       // data.analysisId 是后端写回的真实数据库 ID，优先使用（供 analyze-save）
       const payload = data.result ?? data;
-      const realAnalysisId = data.analysisId ?? requestId;
-      return { stage: 'final', result: mapAnalysisData(payload, realAnalysisId) };
+      return {
+        stage: 'final',
+        result: mapAnalysisData(
+          {
+            ...payload,
+            analysisId: data.analysisId ?? payload.analysisId,
+          },
+          requestId
+        ),
+      };
     }
     if (data.status === 'failed') throw new Error(data.error || 'AI 分析失败');
     await sleep(1500);
@@ -600,7 +609,7 @@ export const foodRecordService = {
   /** 获取单个分析详情 */
   getAnalysisDetail: async (analysisId: string): Promise<AnalysisResult> => {
     const raw = await unwrap<RawAnalysisData>(clientGet(`/app/food/analysis/${analysisId}`));
-    return mapAnalysisData(raw);
+    return mapAnalysisData({ ...raw, analysisId: raw.analysisId ?? analysisId });
   },
 
   // ── V8: Food Log 统一接口 ──

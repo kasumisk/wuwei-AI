@@ -36,7 +36,7 @@ export class FoodLibraryController {
    * GET /api/foods/search?q=宫保鸡丁&limit=10
    */
   @Get('search')
-  @UserApiThrottle(30, 60)
+  @UserApiThrottle(45, 60)
   @ApiOperation({ summary: '搜索食物' })
   @ApiQuery({ name: 'q', required: true, description: '搜索关键词' })
   @ApiQuery({ name: 'limit', required: false, description: '返回条数，默认10' })
@@ -71,7 +71,7 @@ export class FoodLibraryController {
    * GET /api/foods/popular?category=主食&limit=20
    */
   @Get('popular')
-  @UserApiThrottle(30, 60)
+  @UserApiThrottle(45, 60)
   @ApiOperation({ summary: '获取热门食物' })
   @ApiQuery({ name: 'category', required: false })
   @ApiQuery({ name: 'limit', required: false })
@@ -97,7 +97,7 @@ export class FoodLibraryController {
    * GET /api/foods/categories
    */
   @Get('categories')
-  @UserApiThrottle(30, 60)
+  @UserApiThrottle(45, 60)
   @ApiOperation({ summary: '获取食物分类列表' })
   async categories(): Promise<ApiResponse> {
     const categories = await this.foodLibraryService.getCategories();
@@ -114,7 +114,7 @@ export class FoodLibraryController {
    * GET /api/foods?limit=500
    */
   @Get()
-  @UserApiThrottle(10, 60)
+  @UserApiThrottle(15, 60)
   @ApiOperation({ summary: '获取所有食物（分页）' })
   @ApiQuery({ name: 'limit', required: false })
   async findAll(@Query('limit') limit?: string): Promise<ApiResponse> {
@@ -134,7 +134,7 @@ export class FoodLibraryController {
    * GET /api/foods/by-name/:name
    */
   @Get('by-name/:name')
-  @UserApiThrottle(30, 60)
+  @UserApiThrottle(45, 60)
   @ApiOperation({ summary: '按名称获取食物详情' })
   async findByName(@Param('name') name: string): Promise<ApiResponse> {
     const food = await this.foodLibraryService.findByName(
@@ -155,7 +155,7 @@ export class FoodLibraryController {
    * GET /api/foods/:id
    */
   @Get(':id')
-  @UserApiThrottle(30, 60)
+  @UserApiThrottle(45, 60)
   @ApiOperation({ summary: '按ID获取食物详情' })
   async findById(@Param('id') id: string): Promise<ApiResponse> {
     const food = await this.foodLibraryService.findById(id);

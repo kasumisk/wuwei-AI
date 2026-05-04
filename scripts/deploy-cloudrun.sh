@@ -251,7 +251,7 @@ cmd_api() {
     --allow-unauthenticated \
     --port=3000 \
     --cpu=1 --memory=1Gi \
-    --min-instances=0 --max-instances=5 \
+    --min-instances=1 --max-instances=5 \
     --concurrency=80 \
     --timeout=300 \
     --execution-environment=gen2 \

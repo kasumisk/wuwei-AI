@@ -55,7 +55,7 @@ export class FoodAnalysisSaveController {
 
   @Post('analyze-save')
   @HttpCode(HttpStatus.CREATED)
-  @UserApiThrottle(20, 60)
+  @UserApiThrottle(30, 60)
   @ApiOperation({ summary: '保存分析结果为饮食记录' })
   @ApiBody({ type: SaveAnalysisToRecordDto })
   async saveAnalysisToRecord(

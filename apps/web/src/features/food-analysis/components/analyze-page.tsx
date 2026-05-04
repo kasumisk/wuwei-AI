@@ -456,9 +456,9 @@ export function AnalyzePage() {
         /* ignore snapshot errors */
       }
       let savedResult: { id?: string } | null = null;
-      if (result.requestId) {
+      if (result.analysisId) {
         savedResult = await saveAnalysis({
-          analysisId: result.requestId,
+          analysisId: result.analysisId,
           mealType,
         });
       } else {
