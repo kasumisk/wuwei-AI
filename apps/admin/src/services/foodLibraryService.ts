@@ -239,6 +239,8 @@ export interface GetFoodLibraryQuery {
   category?: string;
   status?: string;
   isVerified?: boolean;
+  /** 是否有图片地址（基于 imageUrl） */
+  hasImageUrl?: boolean;
   primarySource?: string;
   /** V8.0: 最小数据完整度（0-100） */
   minCompleteness?: number;

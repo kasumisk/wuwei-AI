@@ -107,6 +107,7 @@ export class FoodLibraryManagementService {
       code,
       category,
       isVerified,
+      hasImageUrl,
       primarySource,
       status,
       minCompleteness,
@@ -174,6 +175,17 @@ export class FoodLibraryManagementService {
       conditions.push(`f.is_verified = $${paramIdx}`);
       params.push(boolVal);
       paramIdx++;
+    }
+    if (hasImageUrl !== undefined) {
+      const boolVal =
+        typeof hasImageUrl === 'string'
+          ? (hasImageUrl as string) === 'true'
+          : Boolean(hasImageUrl);
+      conditions.push(
+        boolVal
+          ? `NULLIF(BTRIM(f.image_url), '') IS NOT NULL`
+          : `NULLIF(BTRIM(f.image_url), '') IS NULL`,
+      );
     }
     if (primarySource) {
       conditions.push(`f.primary_source = $${paramIdx}`);

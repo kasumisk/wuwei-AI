@@ -138,6 +138,19 @@ const FoodLibraryList: React.FC = () => {
       fixed: 'left',
       copyable: true,
     },
+     {
+      title: 'thumbnailUrl',
+      dataIndex: 'thumbnailUrl',
+      width: 220,
+      search: false,
+      ellipsis: true,
+      render: (value, _) =>
+        _.thumbnailUrl ? (
+          <img src={_.thumbnailUrl} rel="noreferrer" />
+        ) : (
+          '-'
+        ),
+    },
     {
       title: '名称',
       dataIndex: 'name',
@@ -227,6 +240,17 @@ const FoodLibraryList: React.FC = () => {
         </Tooltip>
       ),
     },
+    {
+      title: '图片地址',
+      dataIndex: 'hasImageUrl',
+      hideInTable: true,
+      valueType: 'select',
+      valueEnum: {
+        true: { text: '有图片地址' },
+        false: { text: '无图片地址' },
+      },
+    },
+   
     {
       title: '来源',
       dataIndex: 'primarySource',
@@ -511,7 +535,7 @@ const FoodLibraryList: React.FC = () => {
         columns={columns}
         actionRef={actionRef}
         request={async (params, sort) => {
-          const { current, pageSize, isVerified, enrichmentStatus, ...rest } = params;
+          const { current, pageSize, isVerified, hasImageUrl, enrichmentStatus, ...rest } = params;
           // 处理 ProTable 排序参数：{ dataCompleteness: 'ascend' | 'descend' }
           let sortBy: string | undefined;
           let sortOrder: 'asc' | 'desc' | undefined;
@@ -528,6 +552,9 @@ const FoodLibraryList: React.FC = () => {
             // isVerified 从 ProTable 传来是字符串 "true"/"false"，需转为布尔
             ...(isVerified !== undefined && isVerified !== ''
               ? { isVerified: isVerified === 'true' || isVerified === true }
+              : {}),
+            ...(hasImageUrl !== undefined && hasImageUrl !== ''
+              ? { hasImageUrl: hasImageUrl === 'true' || hasImageUrl === true }
               : {}),
             ...(enrichmentStatus ? { enrichmentStatus } : {}),
             ...(sortBy ? { sortBy, sortOrder: sortOrder ?? 'desc' } : {}),

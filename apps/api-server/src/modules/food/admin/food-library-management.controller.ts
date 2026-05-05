@@ -45,8 +45,25 @@ export class FoodLibraryManagementController {
 
   @Get()
   @ApiOperation({ summary: '获取食物库列表' })
-  async findAll(@Query() query: GetFoodLibraryQueryDto): Promise<ApiResponse> {
-    const data = await this.foodLibraryService.findAll(query);
+  async findAll(
+    @Query() query: GetFoodLibraryQueryDto,
+    @Query('isVerified') isVerifiedRaw?: string,
+    @Query('hasImageUrl') hasImageUrlRaw?: string,
+  ): Promise<ApiResponse> {
+    const parseBooleanQuery = (
+      raw: string | undefined,
+      fallback: boolean | undefined,
+    ): boolean | undefined => {
+      if (raw === 'true') return true;
+      if (raw === 'false') return false;
+      return fallback;
+    };
+
+    const data = await this.foodLibraryService.findAll({
+      ...query,
+      isVerified: parseBooleanQuery(isVerifiedRaw, query.isVerified),
+      hasImageUrl: parseBooleanQuery(hasImageUrlRaw, query.hasImageUrl),
+    });
     return {
       success: true,
       code: HttpStatus.OK,

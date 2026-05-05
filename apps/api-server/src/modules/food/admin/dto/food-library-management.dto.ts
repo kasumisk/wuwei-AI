@@ -11,8 +11,16 @@ import {
   IsEnum,
   ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+
+const toOptionalBoolean = ({ value }: { value: unknown }) => {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value === 'boolean') return value;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return value;
+};
 
 // ==================== 查询 DTO ====================
 
@@ -64,8 +72,14 @@ export class GetFoodLibraryQueryDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()
-  @Type(() => Boolean)
+  @Transform(toOptionalBoolean)
   isVerified?: boolean;
+
+  @ApiPropertyOptional({ description: '按是否有图片地址筛选（基于 imageUrl）' })
+  @IsOptional()
+  @IsBoolean()
+  @Transform(toOptionalBoolean)
+  hasImageUrl?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
