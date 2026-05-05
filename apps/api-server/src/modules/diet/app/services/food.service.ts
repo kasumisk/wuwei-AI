@@ -40,7 +40,7 @@ import { RedisCacheService } from '../../../../core/redis/redis-cache.service';
 // ─── V7.9 Phase 3-1: 推荐粘性缓存配置 ───
 
 /** 粘性缓存 TTL（毫秒），同一用户+餐次在此时间内返回相同推荐（Redis 持久化，跨实例共享） */
-const STICKINESS_CACHE_TTL_MS = 30 * 60 * 1000; // 30分钟
+const STICKINESS_CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2小时
 /** 粘性缓存最大条目数（防止内存泄漏，仅用于 fallback in-memory cache） */
 const STICKINESS_CACHE_MAX_SIZE = 500;
 /** Redis 粘性缓存 key 前缀 */
