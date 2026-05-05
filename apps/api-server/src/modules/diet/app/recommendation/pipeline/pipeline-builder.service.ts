@@ -1144,12 +1144,17 @@ export class PipelineBuilderService implements OnModuleInit {
     ctx: PipelineContext,
     roles: string[],
     sceneAdjustedRealism: any,
+    reqId?: string,
+    scenarioKey?: string,
   ): Promise<{
     picks: ScoredFood[];
     allCandidates: ScoredFood[];
     degradations: PipelineDegradation[];
   }> {
     const _tPipeline = Date.now();
+    const rid = reqId ?? '-';
+    const scn = scenarioKey ?? '-';
+    const tag = `reqId=${rid} scn=${scn}`;
     const picks = ctx.picks;
     const usedNames = ctx.usedNames;
     const allCandidates: ScoredFood[] = [];
@@ -1175,7 +1180,7 @@ export class PipelineBuilderService implements OnModuleInit {
     if (ctx.userProfile?.allergens?.length) {
       preFilteredFoods = filterByAllergens(preFilteredFoods, ctx.userProfile.allergens);
     }
-    this.logger.log(`[TIMING] executeRolePipeline preFilter: ${Date.now() - _tPreFilter}ms (${ctx.allFoods.length}→${preFilteredFoods.length}) roles=${roles.join(',')}`);
+    this.logger.log(`[PERF ${tag}] preFilter=${Date.now() - _tPreFilter}ms (${ctx.allFoods.length}→${preFilteredFoods.length}) roles=${roles.join(',')}`);
 
     // 临时替换 ctx.allFoods 供 recallCandidates 使用（recall 阶段只读）
     const originalAllFoods = ctx.allFoods;
@@ -1183,13 +1188,14 @@ export class PipelineBuilderService implements OnModuleInit {
 
     for (const role of roles) {
       const _tRole = Date.now();
+      let _tRecallMs = 0, _tFilterMs = 0, _tRankMs = 0, _tMoMs = 0, _tRerankMs = 0;
       // Stage 1: Recall
       let recalled: FoodLibrary[];
       const recallStart = trace ? Date.now() : 0;
       const _tRecall = Date.now();
       try {
         recalled = await this.recallCandidates(ctx, role);
-        this.logger.log(`[TIMING] role=${role} recall: ${Date.now() - _tRecall}ms (result=${recalled.length})`);
+        _tRecallMs = Date.now() - _tRecall;
       } catch (e) {
         this.logger.error(
           `Recall failed for role "${role}", using unfiltered fallback: ${e}`,
@@ -1231,6 +1237,7 @@ export class PipelineBuilderService implements OnModuleInit {
       // 现实性过滤
       let realistic: FoodLibrary[];
       const filterStart = trace ? Date.now() : 0;
+      const _tFilter = Date.now();
       const recalledCount = recalled.length;
       try {
         realistic = this.realisticFilterService.filterByRealism(
@@ -1297,10 +1304,11 @@ export class PipelineBuilderService implements OnModuleInit {
       // Stage 2: Rank
       let ranked: ScoredFood[];
       const rankStart = trace ? Date.now() : 0;
+      _tFilterMs = Date.now() - _tFilter;
       const _tRank = Date.now();
       try {
         ranked = await this.rankCandidates(ctx, realistic);
-        this.logger.log(`[TIMING] role=${role} rank: ${Date.now() - _tRank}ms (candidates=${realistic.length})`);
+        _tRankMs = Date.now() - _tRank;
       } catch (e) {
         this.logger.error(
           `Ranking failed for role "${role}", using basic calorie sort: ${e}`,
@@ -1352,6 +1360,7 @@ export class PipelineBuilderService implements OnModuleInit {
       // 多目标优化（永远启用 — 根因#1 修复：去掉 enabled gate，
       // 改为策略通过 preferences 权重控制各维度影响力，避免默认路径退回 10 维健康排序）
       let finalRanked: ScoredFood[];
+      const _tMo = Date.now();
       try {
         const moConfig = ctx.resolvedStrategy?.config?.multiObjective ?? {};
         finalRanked =
@@ -1383,12 +1392,15 @@ export class PipelineBuilderService implements OnModuleInit {
       // 收集候选
       const optimizerLimit = ctx.tuning?.optimizerCandidateLimit ?? 8;
       allCandidates.push(...finalRanked.slice(0, optimizerLimit));
+      _tMoMs = Date.now() - _tMo;
 
       // Stage 3: Rerank → Top-1
       let selected: ScoredFood | null;
       const rerankStart = trace ? Date.now() : 0;
+      const _tRerank = Date.now();
       try {
         selected = this.rerankAndSelect(ctx, finalRanked);
+        _tRerankMs = Date.now() - _tRerank;
       } catch (e) {
         this.logger.error(
           `Rerank failed for role "${role}", using top-1 from rank: ${e}`,
@@ -1474,10 +1486,12 @@ export class PipelineBuilderService implements OnModuleInit {
         picks.push(selected);
         usedNames.add(selected.food.name);
       }
+      this.logger.log(`[PERF ${tag}] role=${role} total=${Date.now() - _tRole}ms recall=${_tRecallMs}ms(${recalledCount}) filter=${_tFilterMs}ms(${realistic.length}) rank=${_tRankMs}ms mo=${_tMoMs}ms rerank=${_tRerankMs}ms`);
     }
 
     // 恢复 ctx.allFoods（ensureMinCandidates fallback 和后续 P-β/P-ε 阶段需要完整食物池）
     (ctx as any).allFoods = originalAllFoods;
+    const _tPostRoles = Date.now();
 
     // P-β 修复：累积蛋白下限守门（与 P-α cumFatGuard 对称）
     // 角色循环仅单食物 top-1，即使每角色评分最佳，累加后本餐蛋白常低于目标 30-50%，
@@ -1661,7 +1675,7 @@ export class PipelineBuilderService implements OnModuleInit {
       );
     }
 
-    this.logger.log(`[TIMING] executeRolePipeline total: ${Date.now() - _tPipeline}ms (roles=${roles.length})`);
+    this.logger.log(`[PERF ${tag}] pipeline total=${Date.now() - _tPipeline}ms postRoles=${Date.now() - _tPostRoles}ms picks=${picks.length} cands=${allCandidates.length}`);
 
     // 填充 trace summary
     if (trace) {

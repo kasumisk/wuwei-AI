@@ -1,5 +1,6 @@
 import { Injectable, Logger, RequestTimeoutException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { randomUUID } from 'crypto';
 import {
   UpdateFoodRecordDto,
   FoodRecordQueryDto,
@@ -295,6 +296,11 @@ export class FoodService {
     }
 
     // 预计算未命中 → 回退到实时计算（现有逻辑不变）
+    const reqId = randomUUID().slice(0, 8);
+    const _tMiss = Date.now();
+    this.logger.log(
+      `[PERF reqId=${reqId}] miss-start userId=${userId} meal=${nextMeal} locale=${locale} consumedKcal=${summary.totalCalories ?? 0}`,
+    );
 
     // V5 1.10: 使用统一的 MEAL_RATIOS 替代硬编码比例
     // FIX: 用全天目标热量 × 餐次比例计算单餐预算，而非剩余热量 × 比例（后者在已摄入多时会严重低估预算）
@@ -348,6 +354,7 @@ export class FoodService {
       budget,
        dailyTarget,
        userConstraints,
+       reqId,
      );
 
      const raceResult = await Promise.race([
@@ -429,6 +436,9 @@ export class FoodService {
 
     // V7.9 P3-1: 写入粘性缓存
     this.setToStickinessCache(cacheKey, result, summary.totalCalories || 0);
+    this.logger.log(
+      `[PERF reqId=${reqId}] miss-end totalMs=${Date.now() - _tMiss} scenarioRecMs=${latencyMs} userId=${userId} meal=${nextMeal} scenarios=${result.scenarios?.length ?? 0}`,
+    );
     this.logger.log(
       `[MealSuggestion] realtime success userId=${userId} meal=${nextMeal} locale=${locale} scenarios=${result.scenarios?.length ?? 0} primary="${result.suggestion.foods}"`,
     );

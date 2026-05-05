@@ -412,21 +412,26 @@ export class RecommendationEngineService implements OnModuleInit {
     target: MealTarget,
     dailyTarget: MealTarget,
     userProfile?: UserProfileConstraints,
+    reqId?: string,
   ): Promise<{
     takeout: MealRecommendation;
     convenience: MealRecommendation;
     homeCook: MealRecommendation;
   }> {
     const _t0 = Date.now();
+    const rid = reqId ?? '-';
     // 聚合画像数据（与 recommendMeal 一致）
+    const _tAllFoods = Date.now();
+    const allFoodsP = this.getAllFoods().then((r) => { (globalThis as any).__perf_af = Date.now() - _tAllFoods; return r; });
+    const _tAgg = Date.now();
+    const aggP = this.profileAggregator.aggregateForScenario(userId, mealType).then((r) => { (globalThis as any).__perf_agg = Date.now() - _tAgg; return r; });
+    const _tStrat = Date.now();
+    const stratP = this.strategyFacade.resolveStrategyForUser(userId, goalType).then((r) => { (globalThis as any).__perf_strat = Date.now() - _tStrat; return r; });
+    const _tAna = Date.now();
+    const anaP = this.getAnalysisProfile(userId).then((r) => { (globalThis as any).__perf_ana = Date.now() - _tAna; return r; });
     const [allFoods, scenarioData, resolvedStrategy, analysisProfile] =
-      await Promise.all([
-        this.getAllFoods(),
-        this.profileAggregator.aggregateForScenario(userId, mealType),
-        this.strategyFacade.resolveStrategyForUser(userId, goalType),
-        this.getAnalysisProfile(userId),
-      ]);
-    this.logger.log(`[TIMING] recommendByScenario phase1(getAllFoods+aggregateForScenario+strategy+analysis): ${Date.now() - _t0}ms uid=${userId}`);
+      await Promise.all([allFoodsP, aggP, stratP, anaP]);
+    this.logger.log(`[PERF reqId=${rid}] scenarios.phase1=${Date.now() - _t0}ms allFoods=${(globalThis as any).__perf_af}ms(${allFoods.length}) aggregate=${(globalThis as any).__perf_agg}ms strategy=${(globalThis as any).__perf_strat}ms analysis=${(globalThis as any).__perf_ana}ms uid=${userId}`);
     const { recentFoodNames, enrichedProfile } = scenarioData;
 
     // 合并调用方传入的 userProfile 覆盖
@@ -485,6 +490,7 @@ export class RecommendationEngineService implements OnModuleInit {
       scenarioConfig: (typeof SCENARIO_CONFIGS)[number],
     ): Promise<MealRecommendation> => {
       const _ts = Date.now();
+      const _tCtx = Date.now();
       const sceneContext: SceneContext = {
         channel: scenarioConfig.channel,
         sceneType: scenarioConfig.sceneType,
@@ -534,6 +540,7 @@ export class RecommendationEngineService implements OnModuleInit {
         mealType,
         contextualProfile?.dayType as string | undefined,
       );
+      const _tCtxDone = Date.now() - _tCtx;
 
       const mealPolicy = resolvedStrategy?.config?.meal;
       const dynamicRoles = buildMealRoles(mealType, target.protein);
@@ -553,8 +560,12 @@ export class RecommendationEngineService implements OnModuleInit {
         ctx,
         roles,
         sceneAdjustedRealism,
+        rid,
+        scenarioConfig.key,
       );
+      const _tPipelineDone = Date.now() - _ts - _tCtxDone;
 
+      const _tProc = Date.now();
       const result = await this.resultProcessor.process({
         finalPicks,
         allCandidates,
@@ -566,17 +577,19 @@ export class RecommendationEngineService implements OnModuleInit {
         sceneContext,
         userId,
       });
+      const _tProcDone = Date.now() - _tProc;
 
-      this.logger.log(`[TIMING] recommendByScenario scenario=${scenarioConfig.key}: ${Date.now() - _ts}ms uid=${userId}`);
+      this.logger.log(`[PERF reqId=${rid}] scenario=${scenarioConfig.key} total=${Date.now() - _ts}ms ctx=${_tCtxDone}ms pipeline=${_tPipelineDone}ms postProc=${_tProcDone}ms picks=${finalPicks.length} uid=${userId}`);
       return result;
     };
 
     // 三个场景并行执行（各自独立 usedNames，去掉串行跨场景去重换取性能）
+    const _tParallel = Date.now();
     const [takeout, convenience, homeCook] = await Promise.all(
       SCENARIO_CONFIGS.map(runScenario),
     );
 
-    this.logger.log(`[TIMING] recommendByScenario total: ${Date.now() - _t0}ms uid=${userId}`);
+    this.logger.log(`[PERF reqId=${rid}] scenarios.parallel3=${Date.now() - _tParallel}ms total=${Date.now() - _t0}ms uid=${userId}`);
     return { takeout, convenience, homeCook };
   }
 
