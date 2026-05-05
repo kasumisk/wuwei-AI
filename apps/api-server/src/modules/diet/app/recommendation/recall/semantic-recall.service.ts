@@ -71,6 +71,20 @@ export class SemanticRecallService {
   /** 用户语义画像 Redis 缓存 TTL（1 小时） */
   private static readonly PROFILE_TTL_MS = 3600_000;
 
+  /**
+   * V8.3 P0 perf: 空 profile 哨兵 TTL（5 分钟）
+   * 冷启动用户每个请求 9 路 role 都会调用 getMultiInterestProfile，
+   * 若 buildMultiInterestProfile 返回 null（反馈不足）则之前不写缓存，
+   * 导致每路都跑一次 Prisma 90 天反馈查询（73-313ms × 5-9 次）。
+   * 写入空数组哨兵后，5 分钟内复用 Redis，0 DB 查询。
+   */
+  private static readonly EMPTY_PROFILE_TTL_MS = 300_000;
+
+  /**
+   * V8.3 P0 perf: 进程内 singleflight，合并同一请求内 9 路对同一 userId 的并发查询
+   */
+  private profileInflight: Map<string, Promise<number[][] | null>> = new Map();
+
   /** 最少正向反馈数量（低于此值无法构建有意义的画像） */
   private static readonly MIN_POSITIVE_FEEDBACKS = 3;
 
@@ -241,11 +255,29 @@ export class SemanticRecallService {
   ): Promise<number[][] | null> {
     const cacheKey = this.redis.buildKey('semantic_profile_v67', userId);
 
-    // 尝试从缓存读取
+    // 1. Redis 缓存（含空数组哨兵）
     const cached = await this.redis.get<number[][]>(cacheKey);
-    if (cached && cached.length > 0) return cached;
+    if (cached !== null && cached !== undefined) {
+      // 空数组 = 哨兵，表示该用户反馈不足
+      return cached.length > 0 ? cached : null;
+    }
 
-    // 缓存未命中，构建画像
+    // 2. V8.3 P0: 进程内 singleflight — 合并 9 路并发
+    const inflight = this.profileInflight.get(userId);
+    if (inflight) return inflight;
+
+    const promise = this.computeAndCacheProfile(userId, cacheKey).finally(() => {
+      this.profileInflight.delete(userId);
+    });
+    this.profileInflight.set(userId, promise);
+    return promise;
+  }
+
+  /** V8.3 P0: 实际构建 + 写缓存（含空哨兵） */
+  private async computeAndCacheProfile(
+    userId: string,
+    cacheKey: string,
+  ): Promise<number[][] | null> {
     const profile = await this.buildMultiInterestProfile(userId);
     if (profile && profile.length > 0) {
       await this.redis.set(
@@ -253,9 +285,15 @@ export class SemanticRecallService {
         profile,
         SemanticRecallService.PROFILE_TTL_MS,
       );
+      return profile;
     }
-
-    return profile;
+    // V8.3 P0: 写入空数组哨兵，避免冷启动用户每次都查 DB
+    await this.redis.set(
+      cacheKey,
+      [],
+      SemanticRecallService.EMPTY_PROFILE_TTL_MS,
+    );
+    return null;
   }
 
   /**
