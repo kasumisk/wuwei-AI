@@ -92,6 +92,13 @@ export class CollaborativeFilteringService implements OnModuleInit {
   private matrixBuiltAt = 0;
   /** singleflight: 防止并发请求同时触发重建（connection_limit=1 下关键） */
   private matrixBuildPromise: Promise<UserInteractionVector[]> | null = null;
+  /**
+   * V8.3 P0 perf: per-userId singleflight for getCFScores.
+   * 同一请求内 9 个角色（3 场景 × 3 role）会并发调用 getCFScores(userId)，
+   * 若 cache miss 又是冷启动用户，每个调用都会独立跑 semanticColdStartFallback
+   * (semantic recall + 30 ANN search) ≈ 1s+。合并为单飞后只跑一次。
+   */
+  private cfScoresInflight: Map<string, Promise<CFScoreMap>> = new Map();
 
   /**
    * V5 4.2: 食物-食物相似矩阵（item-based CF）
@@ -530,6 +537,26 @@ export class CollaborativeFilteringService implements OnModuleInit {
   async getCFScores(userId: string): Promise<CFScoreMap> {
     // 1. 尝试缓存
     const cacheKey = `cf:scores:${userId}`;
+    const cached = await this.redisCache.get<CFScoreMap>(cacheKey);
+    if (cached) return cached;
+
+    // V8.3 P0: per-userId singleflight — 合并同一请求内 9 路并发
+    const inflight = this.cfScoresInflight.get(userId);
+    if (inflight) return inflight;
+
+    const promise = this.computeCFScores(userId, cacheKey).finally(() => {
+      this.cfScoresInflight.delete(userId);
+    });
+    this.cfScoresInflight.set(userId, promise);
+    return promise;
+  }
+
+  /** V8.3 P0: 抽出实际计算逻辑供 singleflight 包裹 */
+  private async computeCFScores(
+    userId: string,
+    cacheKey: string,
+  ): Promise<CFScoreMap> {
+    // double-check：可能其他调用已写入缓存
     const cached = await this.redisCache.get<CFScoreMap>(cacheKey);
     if (cached) return cached;
 
