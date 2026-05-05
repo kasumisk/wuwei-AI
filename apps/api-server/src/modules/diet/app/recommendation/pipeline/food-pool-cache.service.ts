@@ -44,6 +44,22 @@ const REFRESH_AHEAD_MS = 2 * 60 * 1000;
 /** L1 容量上限：20 条（10 个品类 + 余量） */
 const L1_MAX_ENTRIES = 20;
 
+// ==================== Step 6 P0：cold path L2 写入 + warmup ====================
+
+/**
+ * L2 Redis key（全量已验证食物池）
+ * 版本号 v1：未来 schema 不兼容变更时升 v2 自然失效旧数据，无需手动清理。
+ */
+const L2_VERIFIED_FOODS_KEY = 'food_pool:verified_all:v1';
+/** L2 Redis key（品类微量营养素均值），与 verified_foods 同生命周期 */
+const L2_CATEGORY_MICRO_AVG_KEY = 'food_pool:category_micro_avg:v1';
+
+/**
+ * 启动时是否预热 L1（fire-and-forget，不阻塞 onModuleInit）
+ * 默认 true；本地开发若想跳过可设 FOOD_POOL_WARMUP=false
+ */
+const WARMUP_ON_BOOT = process.env.FOOD_POOL_WARMUP !== 'false';
+
 // ARB-2026-04: food 上帝表已拆分，food-pool 查询通过 JOIN 4 张分表获取完整数据。
 // 此列表仅保留 foods 主表中仍存在的列；分表字段在 buildFoodPoolSQL() 中通过 JOIN 引入。
 const FOOD_POOL_SELECTABLE_COLUMNS: string[] = [
@@ -350,6 +366,33 @@ export class FoodPoolCacheService implements OnModuleInit {
       l2TtlMs: L2_TTL_MS,
       refreshAheadMs: REFRESH_AHEAD_MS, // V6 1.7: stale-while-revalidate
     });
+
+    // Step 6 P0-B：启动时 fire-and-forget 预热全量食物池 L1+L2
+    // 不阻塞 onModuleInit；首请求几乎不会再撞 cold DB（除非 warmup 还没完成）
+    // 多实例同时启动也安全：getVerifiedFoods singleflight + L2 互相覆盖最终一致
+    if (WARMUP_ON_BOOT) {
+      void this.warmupVerifiedFoods();
+    }
+  }
+
+  /**
+   * Step 6 P0-B：启动预热（不阻塞模块初始化）
+   * 调用 getVerifiedFoods 走完整 L1→L2→DB 三层；首次启动会触发 DB 查询并写 L2，
+   * 之后每个实例冷启都能直接命中 L2（0 次 DB）。
+   */
+  private async warmupVerifiedFoods(): Promise<void> {
+    const t0 = Date.now();
+    try {
+      const foods = await this.getVerifiedFoods();
+      this.logger.log(
+        `[food-pool warmup] L1+L2 ready: ${foods.length} foods in ${Date.now() - t0}ms`,
+      );
+    } catch (err) {
+      // warmup 失败不影响服务启动，首请求会走正常 cold path 兜底
+      this.logger.warn(
+        `[food-pool warmup] failed in ${Date.now() - t0}ms: ${(err as Error).message}`,
+      );
+    }
   }
 
   /**
@@ -366,12 +409,12 @@ export class FoodPoolCacheService implements OnModuleInit {
       return this.allFoodsL1;
     }
 
-    // 2. singleflight：并发请求共享同一次 DB 查询
+    // 2. singleflight：并发请求共享同一次"L2→DB"加载
     if (this.allFoodsSingleflight) {
       return this.allFoodsSingleflight;
     }
 
-    this.allFoodsSingleflight = this.loadAllFoodsFromDB().finally(() => {
+    this.allFoodsSingleflight = this.loadFromL2OrDB().finally(() => {
       this.allFoodsSingleflight = null;
     });
 
@@ -379,26 +422,95 @@ export class FoodPoolCacheService implements OnModuleInit {
   }
 
   /**
+   * Step 6 P0-A/D：先查 L2 Redis，命中即回填 L1 + microAverages（避免 DB 回表）；
+   * miss 才走 DB 全表查询，查完异步回写 L2（不阻塞返回）。
+   *
+   * Cloud Run 多实例场景下，第一个实例 warmup 写好 L2 后，后续实例冷启动
+   * 直接命中 L2（~10–50ms，跨网络），完全跳过 DB 全表 + JOIN。
+   */
+  private async loadFromL2OrDB(): Promise<FoodLibrary[]> {
+    // 尝试 L2 Redis（已内置 800ms 超时与失败兜底）
+    const tL2 = Date.now();
+    const [cachedFoods, cachedMicro] = await Promise.all([
+      this.redis.get<FoodLibrary[]>(L2_VERIFIED_FOODS_KEY),
+      this.redis.get<Array<[string, MicroNutrientDefaults]>>(
+        L2_CATEGORY_MICRO_AVG_KEY,
+      ),
+    ]);
+    const l2Ms = Date.now() - tL2;
+
+    if (cachedFoods && cachedFoods.length > 0) {
+      // 回填 L1
+      this.allFoodsL1 = cachedFoods;
+      this.allFoodsL1ExpiresAt = Date.now() + L1_TTL_MS;
+
+      // 回填 microAverages（如 L2 缺失则同步重算 — 仅 CPU，单次约 5–15ms）
+      if (cachedMicro && cachedMicro.length > 0) {
+        this.categoryMicroAverages = new Map(cachedMicro);
+      } else {
+        this.categoryMicroAverages = buildCategoryMicroAverages(cachedFoods);
+        // 异步补写 microAverages L2，不阻塞返回
+        void this.redis.set(
+          L2_CATEGORY_MICRO_AVG_KEY,
+          Array.from(this.categoryMicroAverages.entries()),
+          L2_TTL_MS,
+        );
+      }
+
+      this.logger.log(
+        `[food-pool] L2 hit: ${cachedFoods.length} foods in ${l2Ms}ms (DB skipped)`,
+      );
+      return cachedFoods;
+    }
+
+    // L2 miss，走 DB 全表
+    return this.loadAllFoodsFromDB(l2Ms);
+  }
+
+  /**
    * 全量食物池单次 DB 查询（替代 10 个分片 × 1 连接的串行瓶颈）
    * 查询完成后同步更新 L1 内存缓存 + 分片 L1（供 getVerifiedFoodsByCategory 使用）
+   *
+   * Step 6 P0-A/D：DB 加载完后，异步并行写入 L2 Redis，
+   * 使后续实例冷启可命中 L2（~10–50ms）跳过 DB 全表 + JOIN。
    */
-  private async loadAllFoodsFromDB(): Promise<FoodLibrary[]> {
+  private async loadAllFoodsFromDB(
+    l2ProbeMs = 0,
+  ): Promise<FoodLibrary[]> {
+    const tDb = Date.now();
     const sql = this.buildFoodPoolSQL('WHERE f.is_verified = true');
     const rows: any[] = await this.prisma.$queryRawUnsafe(sql);
+    const dbMs = Date.now() - tDb;
 
+    const tMap = Date.now();
     const allFoods = rows.map((row) => mapRowToFoodLibrary(normalizeRow(row)));
+    const mapMs = Date.now() - tMap;
 
     // 回填 L1 全量缓存
     this.allFoodsL1 = allFoods;
     this.allFoodsL1ExpiresAt = Date.now() + L1_TTL_MS;
 
     // 回填微量营养素均值
+    const tMicro = Date.now();
     if (allFoods.length > 0) {
       this.categoryMicroAverages = buildCategoryMicroAverages(allFoods);
     }
+    const microMs = Date.now() - tMicro;
 
-    this.logger.debug(
-      `Food pool (all) loaded from DB: ${allFoods.length} foods`,
+    // Step 6 P0-A/D：异步写入 L2（不阻塞返回；失败已被 redis-cache 内部吞掉）
+    if (allFoods.length > 0) {
+      void this.redis.set(L2_VERIFIED_FOODS_KEY, allFoods, L2_TTL_MS);
+      if (this.categoryMicroAverages) {
+        void this.redis.set(
+          L2_CATEGORY_MICRO_AVG_KEY,
+          Array.from(this.categoryMicroAverages.entries()),
+          L2_TTL_MS,
+        );
+      }
+    }
+
+    this.logger.log(
+      `[food-pool] DB load: ${allFoods.length} foods L2probe=${l2ProbeMs}ms db=${dbMs}ms map=${mapMs}ms micro=${microMs}ms`,
     );
 
     return allFoods;
@@ -522,6 +634,9 @@ export class FoodPoolCacheService implements OnModuleInit {
     this.cache.invalidateAll().catch(() => {
       /* non-critical */
     });
+    // Step 6 P0：清理新加的 L2 全量 key
+    void this.redis.del(L2_VERIFIED_FOODS_KEY);
+    void this.redis.del(L2_CATEGORY_MICRO_AVG_KEY);
     this.logger.log(
       'Food pool cache invalidated: all shards cleared (L1 + L2)',
     );
@@ -538,6 +653,9 @@ export class FoodPoolCacheService implements OnModuleInit {
     this.cache.invalidate(category).catch(() => {
       /* non-critical */
     });
+    // Step 6 P0：分片变化也意味着全量 L2 失效
+    void this.redis.del(L2_VERIFIED_FOODS_KEY);
+    void this.redis.del(L2_CATEGORY_MICRO_AVG_KEY);
     this.logger.log(`Food pool shard [${category}] invalidated`);
   }
 
