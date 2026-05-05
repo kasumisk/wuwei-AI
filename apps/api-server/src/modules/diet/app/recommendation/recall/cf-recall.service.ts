@@ -34,12 +34,17 @@ export class CFRecallService {
     userId: string,
     excludedIds: Set<string>,
     topK: number,
+    perfTag?: string,
   ): Promise<CFRecallResult[]> {
+    const tStart = Date.now();
     try {
+      const tBeforeScores = Date.now();
       const cfMap: CFScoreMap = await this.cf.getCFScores(userId);
+      const tAfterScores = Date.now();
       const { scores } = cfMap;
+      const scoreCount = Object.keys(scores).length;
 
-      return Object.entries(scores)
+      const result = Object.entries(scores)
         .filter(
           ([id, score]) =>
             score > CFRecallService.MIN_CF_SCORE && !excludedIds.has(id),
@@ -47,6 +52,17 @@ export class CFRecallService {
         .sort((a, b) => b[1] - a[1])
         .slice(0, topK)
         .map(([id, score]) => ({ foodId: id, cfScore: score }));
+      const tEnd = Date.now();
+
+      if (tEnd - tStart > 50) {
+        this.logger.log(
+          `[PERF cf-recall${perfTag ? ' ' + perfTag : ''}] total=${tEnd - tStart}ms ` +
+            `getCFScores=${tAfterScores - tBeforeScores}ms ` +
+            `filter+sort=${tEnd - tAfterScores}ms ` +
+            `scoreCount=${scoreCount} returned=${result.length}`,
+        );
+      }
+      return result;
     } catch (err) {
       this.logger.warn(
         `CF 召回失败 (userId=${userId}): ${(err as Error).message}`,

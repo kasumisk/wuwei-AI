@@ -281,6 +281,7 @@ export class PipelineBuilderService implements OnModuleInit {
   async recallCandidates(
     ctx: PipelineContext,
     role: string,
+    perfTag?: string,
   ): Promise<FoodLibrary[]> {
     // MealPolicy 覆盖角色→品类映射
     const mealPolicy = ctx.resolvedStrategy?.config?.meal;
@@ -530,7 +531,7 @@ export class PipelineBuilderService implements OnModuleInit {
             ctx.userId,
             { topK: semanticLimit, excludeIds, categoryMap },
           ),
-          this.cfRecallService.recall(ctx.userId, new Set(excludeIds), cfLimit),
+          this.cfRecallService.recall(ctx.userId, new Set(excludeIds), cfLimit, perfTag ? `${perfTag} role=${role}` : `role=${role}`),
           this.scoringConfigService.getConfig(),
         ]);
 
@@ -1194,7 +1195,7 @@ export class PipelineBuilderService implements OnModuleInit {
       const recallStart = trace ? Date.now() : 0;
       const _tRecall = Date.now();
       try {
-        recalled = await this.recallCandidates(ctx, role);
+        recalled = await this.recallCandidates(ctx, role, tag);
         _tRecallMs = Date.now() - _tRecall;
       } catch (e) {
         this.logger.error(

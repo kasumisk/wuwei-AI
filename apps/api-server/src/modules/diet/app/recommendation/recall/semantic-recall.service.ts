@@ -154,16 +154,27 @@ export class SemanticRecallService {
     userId: string,
     options: Required<Omit<SemanticRecallOptions, 'categoryMap'>> & { categoryMap?: Map<string, string> },
   ): Promise<SemanticRecallResult[]> {
+    const tStart = Date.now();
     // 1. 获取多兴趣画像向量（含缓存）
     const interestVectors = await this.getMultiInterestProfile(userId);
-    if (!interestVectors || interestVectors.length === 0) return [];
+    const tProfile = Date.now();
+    if (!interestVectors || interestVectors.length === 0) {
+      if (tProfile - tStart > 50) {
+        this.logger.log(
+          `[PERF semantic-recall] empty-profile total=${tProfile - tStart}ms userId=${userId}`,
+        );
+      }
+      return [];
+    }
 
     // 2. 每个兴趣向量分别 ANN 搜索，去重合并
     const allCandidates = new Map<string, SemanticRecallResult>();
     const perVectorLimit = Math.ceil(options.topK / interestVectors.length) * 2; // 多召回一些，后续去重+品类过滤会减少
 
+    let annTotalMs = 0;
     for (let idx = 0; idx < interestVectors.length; idx++) {
       const vector = interestVectors[idx];
+      const tAnnStart = Date.now();
       const results = await this.vectorSearch.findSimilarByVector(
         vector,
         perVectorLimit,
@@ -172,6 +183,7 @@ export class SemanticRecallService {
           minSimilarity: options.minSimilarity,
         },
       );
+      annTotalMs += Date.now() - tAnnStart;
 
       for (const r of results) {
         if (!allCandidates.has(r.foodId)) {
@@ -190,16 +202,33 @@ export class SemanticRecallService {
         }
       }
     }
+    const tAnn = Date.now();
 
-    if (allCandidates.size === 0) return [];
+    if (allCandidates.size === 0) {
+      if (tAnn - tStart > 50) {
+        this.logger.log(
+          `[PERF semantic-recall] no-candidates total=${tAnn - tStart}ms profile=${tProfile - tStart}ms ann=${annTotalMs}ms vectors=${interestVectors.length}`,
+        );
+      }
+      return [];
+    }
 
     // 3. 品类分散
-    return this.enforceCategoryDiversity(
+    const out = await this.enforceCategoryDiversity(
       Array.from(allCandidates.values()),
       options.topK,
       options.maxPerCategory,
       options.categoryMap,
     );
+    const tEnd = Date.now();
+    if (tEnd - tStart > 50) {
+      this.logger.log(
+        `[PERF semantic-recall] total=${tEnd - tStart}ms ` +
+          `profile=${tProfile - tStart}ms ann=${annTotalMs}ms(x${interestVectors.length}) ` +
+          `diversity=${tEnd - tAnn}ms candidates=${allCandidates.size} returned=${out.length}`,
+      );
+    }
+    return out;
   }
 
   /**
