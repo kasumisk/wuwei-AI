@@ -122,6 +122,10 @@ pm2 show ${PM2_NAME} | grep -E 'status|restart|uptime'
 
 # ─── 3. 验证 ─────────────────────────────────────────────────────────────────
 log "[3/3] 验证部署结果"
-ssh_exec bash -lc "pm2 show ${PM2_NAME} | grep -E 'status|restart|uptime|pid'"
+ssh_exec bash -lc "
+export NVM_DIR=\"\$HOME/.nvm\"
+[ -s \"\$NVM_DIR/nvm.sh\" ] && source \"\$NVM_DIR/nvm.sh\"
+pm2 show ${PM2_NAME} | grep -E 'status|restart|uptime|pid'
+"
 
 ok "部署完成！git sha: ${GIT_SHA}"
