@@ -11,6 +11,11 @@ import * as crypto from 'crypto';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
 import { RedisCacheService } from '../../../../core/redis/redis-cache.service';
 import { CronBackend, CronHandlerRegistry } from '../../../../core/cron';
+import {
+  QUEUE_DEFAULT_OPTIONS,
+  QUEUE_NAMES,
+  QueueProducer,
+} from '../../../../core/queue';
 import { SubscriptionService } from './subscription.service';
 import { SubscriptionDomainSyncService } from './subscription-domain-sync.service';
 import {
@@ -105,6 +110,7 @@ export class RevenueCatSyncService implements OnModuleInit {
     private readonly redis: RedisCacheService,
     private readonly cronBackend: CronBackend,
     private readonly cronRegistry: CronHandlerRegistry,
+    private readonly queueProducer: QueueProducer,
   ) {}
 
   onModuleInit(): void {
@@ -146,6 +152,38 @@ export class RevenueCatSyncService implements OnModuleInit {
     if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
       throw new UnauthorizedException('Invalid RevenueCat webhook auth');
     }
+  }
+
+  /**
+   * 通过 RevenueCat appUserId（非 UUID）解析内部 userId。
+   *
+   * RevenueCat 匿名用户的 app_user_id 格式为 "$RCAnonymousID:xxx"；
+   * 登录后 RC 会保留旧别名。我们在 subscriptionProviderCustomer 表中存储了
+   * providerCustomerId 和 aliases，据此反查。
+   */
+  private async resolveUserIdFromAlias(
+    appUserId: string,
+  ): Promise<string | null> {
+    // 1. 直接按 providerCustomerId 查
+    const byCustomerId =
+      await this.prisma.subscriptionProviderCustomer.findFirst({
+        where: {
+          provider: 'revenuecat',
+          providerCustomerId: appUserId,
+        },
+        select: { userId: true },
+      });
+    if (byCustomerId) return byCustomerId.userId;
+
+    // 2. 按 aliases JSON 数组查（PostgreSQL @> 操作符）
+    const byAlias = await this.prisma.subscriptionProviderCustomer.findFirst({
+      where: {
+        provider: 'revenuecat',
+        aliases: { array_contains: appUserId },
+      },
+      select: { userId: true },
+    });
+    return byAlias?.userId ?? null;
   }
 
   async ingestWebhook(
@@ -222,24 +260,62 @@ export class RevenueCatSyncService implements OnModuleInit {
       ].join(' | '),
     );
 
-    if (appUserId && this.isUuid(appUserId)) {
-      try {
-        await this.triggerSyncForUser(
-          appUserId,
-          'revenuecat_webhook',
-          webhookEvent.id,
-          providerEventId,
+    if (appUserId) {
+      // 非 UUID appUserId: RevenueCat 匿名用户 ($RCAnonymousID:xxx) 或自定义字符串。
+      // 尝试通过 subscriptionProviderCustomer 别名表解析出真实 userId。
+      // 无论 UUID 与否，一律入队异步处理，避免同步阻塞 webhook 响应。
+      const resolvedUserId = this.isUuid(appUserId)
+        ? appUserId
+        : await this.resolveUserIdFromAlias(appUserId);
+
+      if (!resolvedUserId) {
+        this.logger.warn(
+          `RevenueCat webhook: 无法解析 appUserId 到内部用户 (appUserId=${appUserId})，` +
+            `已落库 webhookEventId=${webhookEvent.id}，等待 reconcile cron 重试`,
         );
-        await this.markWebhookProcessed(webhookEvent.id);
-      } catch (error) {
-        await this.markWebhookFailed(webhookEvent.id, error);
-        throw error;
+        // 不标记 processed — 留给 retryFailedWebhookEvents / reconcile cron 重试
+      } else {
+        const queueConfig =
+          QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.SUBSCRIPTION_MAINTENANCE];
+        const enqueueResult = await this.queueProducer.enqueue(
+          QUEUE_NAMES.SUBSCRIPTION_MAINTENANCE,
+          'process_revenuecat_event',
+          {
+            action: 'process_revenuecat_event' as const,
+            userId: resolvedUserId,
+            webhookEventId: webhookEvent.id,
+            providerEventId,
+            source: 'revenuecat_webhook' as const,
+          },
+          {
+            attempts: queueConfig.maxRetries + 1,
+            backoff: {
+              type: queueConfig.backoffType,
+              delay: queueConfig.backoffDelay,
+            },
+            removeOnComplete: 50,
+            removeOnFail: 100,
+            jobId: `rc-webhook:${webhookEvent.id}`,
+          },
+        );
+
+        if (enqueueResult.mode === 'sync') {
+          // BullMQ 降级：Redis 不可用时同步执行，保证事件不丢失
+          try {
+            await this.triggerSyncForUser(
+              resolvedUserId,
+              'revenuecat_webhook',
+              webhookEvent.id,
+              providerEventId,
+            );
+            await this.markWebhookProcessed(webhookEvent.id);
+          } catch (error) {
+            await this.markWebhookFailed(webhookEvent.id, error);
+            throw error;
+          }
+        }
+        // 'queued' / 'tasks' 路径: processor 负责调用 triggerSyncForUser + markWebhookProcessed
       }
-    } else if (appUserId) {
-      this.logger.warn(
-        `RevenueCat webhook appUserId 不是 UUID，跳过用户摘要预热: ${appUserId}`,
-      );
-      await this.markWebhookProcessed(webhookEvent.id);
     }
 
     return result;
@@ -718,10 +794,38 @@ export class RevenueCatSyncService implements OnModuleInit {
       });
       action = 'expire';
       cacheInvalidated = true;
-    } else if (candidate?.productId && !matchedPlan) {
+    } else if (!candidate && currentSub) {
+      // C5a: RC 返回空订阅快照（无任何购买记录），但本地有 active 订阅。
+      // 这通常意味着退款/撤销事件，直接将本地订阅标记为 REVOKED。
       this.logger.warn(
-        `RevenueCat 商品未映射到 subscription_plan，跳过本地订阅收敛: userId=${userId}, productId=${candidate.productId}`,
+        `RevenueCat 快照无活跃订阅，但本地存在订阅记录，强制撤销: userId=${userId}, subscriptionId=${currentSub.id}`,
       );
+      const revoked = await this.prisma.subscription.update({
+        where: { id: currentSub.id },
+        data: {
+          status: SubscriptionStatus.REVOKED,
+          autoRenew: false,
+          expiresAt: new Date(), // 立即失效
+          gracePeriodEndsAt: null,
+        },
+      });
+      await this.domainSync.syncUserEntitlementsFromSubscription({
+        subscription: revoked as any,
+        provider: 'revenuecat',
+        providerCustomerId,
+        lastEventAt: new Date(),
+      });
+      action = 'revoke';
+      cacheInvalidated = true;
+    } else if (candidate?.productId && !matchedPlan) {
+      // C5b: 商品未映射到 subscription_plan — 这是配置问题，不能静默跳过。
+      // 抛出异常使 BullMQ job 进入 failed 状态，触发 dead-letter 存储和告警。
+      const msg =
+        `RevenueCat 商品未映射到 subscription_plan: userId=${userId}, productId=${candidate.productId}` +
+        `${providerEventId ? `, providerEventId=${providerEventId}` : ''}` +
+        `. 请在管理后台添加商品映射后重新处理该 webhook event。`;
+      this.logger.error(msg);
+      throw new Error(msg);
     }
 
     if (cacheInvalidated) {
@@ -899,7 +1003,7 @@ export class RevenueCatSyncService implements OnModuleInit {
     };
   }
 
-  private async markWebhookProcessed(webhookEventId: string): Promise<void> {
+  async markWebhookProcessed(webhookEventId: string): Promise<void> {
     await this.prisma.billingWebhookEvents.update({
       where: { id: webhookEventId },
       data: {
@@ -910,7 +1014,7 @@ export class RevenueCatSyncService implements OnModuleInit {
     });
   }
 
-  private async markWebhookFailed(
+  async markWebhookFailed(
     webhookEventId: string,
     error: unknown,
   ): Promise<void> {

@@ -651,34 +651,32 @@ export class SubscriptionService implements OnModuleInit {
   ): Promise<UserSubscriptionSummary> {
     const now = new Date();
 
-    // 查找有效订阅（ACTIVE 或 GRACE_PERIOD 或 CANCELLED 但未过期）
-    const sub = await this.prisma.subscription.findFirst({
+    // 查找有效订阅：
+    // - ACTIVE / GRACE_PERIOD: expiresAt 或 gracePeriodEndsAt 必须 > now，防止过期记录残留
+    // - CANCELLED: expiresAt > now（用户取消但周期未到）
+    const activeSub = await this.prisma.subscription.findFirst({
       where: {
         OR: [
-          { userId: userId, status: SubscriptionStatus.ACTIVE },
-          { userId: userId, status: SubscriptionStatus.GRACE_PERIOD },
+          {
+            userId,
+            status: SubscriptionStatus.ACTIVE,
+            expiresAt: { gt: now },
+          },
+          {
+            userId,
+            status: SubscriptionStatus.GRACE_PERIOD,
+            gracePeriodEndsAt: { gt: now },
+          },
+          {
+            userId,
+            status: SubscriptionStatus.CANCELLED,
+            expiresAt: { gt: now },
+          },
         ],
       },
       include: { subscriptionPlan: true },
       orderBy: { expiresAt: 'desc' },
     });
-
-    // 额外检查: CANCELLED 但尚未过期的订阅仍然有效
-    const cancelledButValid = sub
-      ? null
-      : await this.prisma.subscription.findFirst({
-          where: {
-            userId: userId,
-            status: SubscriptionStatus.CANCELLED,
-          },
-          include: { subscriptionPlan: true },
-          orderBy: { expiresAt: 'desc' },
-        });
-
-    const activeSub =
-      cancelledButValid && cancelledButValid.expiresAt > now
-        ? cancelledButValid
-        : sub;
 
     if (!activeSub || !activeSub.subscriptionPlan) {
       // 免费用户: 从 DB subscription_plan 表读 tier='free' 的权益，
