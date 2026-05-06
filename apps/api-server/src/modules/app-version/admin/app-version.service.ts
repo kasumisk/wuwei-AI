@@ -17,6 +17,21 @@ import {
 
 @Injectable()
 export class AppVersionService {
+  /** appVersionPackages.fileSize 是 DB BigInt，JSON 无法序列化，统一转 Number */
+  private serializeVersion<T extends { appVersionPackages?: any[] }>(
+    version: T,
+  ): T {
+    if (!version.appVersionPackages) return version;
+    return {
+      ...version,
+      appVersionPackages: version.appVersionPackages.map((pkg) => ({
+        ...pkg,
+        fileSize:
+          typeof pkg.fileSize === 'bigint' ? Number(pkg.fileSize) : pkg.fileSize,
+      })),
+    };
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly i18n: I18nService,
@@ -73,7 +88,7 @@ export class AppVersionService {
       this.prisma.appVersions.count({ where }),
     ]);
 
-    return { list, total, page, pageSize };
+    return { list: list.map((v) => this.serializeVersion(v)), total, page, pageSize };
   }
 
   /**
@@ -91,7 +106,7 @@ export class AppVersionService {
       );
     }
 
-    return version;
+    return this.serializeVersion(version);
   }
 
   /**
