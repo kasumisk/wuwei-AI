@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Signing in...</title>
+    <meta name="robots" content="noindex" />
+    <script>
+      (function () {
+        var link = window.location.href;
+        var target = 'eatcheck:///auth/callback?link=' + encodeURIComponent(link);
+        window.location.replace(target);
+        setTimeout(function () {
+          document.getElementById('hint').style.display = 'block';
+          document.getElementById('open-app').setAttribute('href', target);
+        }, 1200);
+      })();
+    </script>
+  </head>
+  <body>
+    <p>Opening EatCheck...</p>
+    <p id="hint" style="display:none;">
+      If the app did not open automatically, tap
+      <a id="open-app" href="#">Open EatCheck</a>.
+    </p>
+  </body>
+  </html>

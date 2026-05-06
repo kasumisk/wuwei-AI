@@ -21,13 +21,23 @@ export class AppVersionPackageService {
     private readonly i18n: I18nService,
   ) {}
 
+  /** appVersionPackages.fileSize 是 DB BigInt，JSON 无法序列化，统一转 Number */
+  private serializePkg(pkg: any): any {
+    if (!pkg) return pkg;
+    return {
+      ...pkg,
+      fileSize: typeof pkg.fileSize === 'bigint' ? Number(pkg.fileSize) : pkg.fileSize,
+    };
+  }
+
   /** 获取某版本的所有渠道包 */
   async findByVersion(versionId: string) {
     await this.assertVersionExists(versionId);
-    return this.prisma.appVersionPackages.findMany({
+    const pkgs = await this.prisma.appVersionPackages.findMany({
       where: { versionId },
       orderBy: { channel: 'asc' },
     });
+    return pkgs.map((p) => this.serializePkg(p));
   }
 
   /** 创建渠道包 */
@@ -57,7 +67,7 @@ export class AppVersionPackageService {
       );
     }
 
-    return this.prisma.appVersionPackages.create({
+    return this.serializePkg(await this.prisma.appVersionPackages.create({
       data: {
         versionId,
         platform: dto.platform,
@@ -67,7 +77,7 @@ export class AppVersionPackageService {
         checksum: dto.checksum,
         enabled: dto.enabled ?? true,
       },
-    });
+    }));
   }
 
   /** 更新渠道包 */
@@ -78,10 +88,10 @@ export class AppVersionPackageService {
   ) {
     const pkg = await this.findOne(versionId, packageId);
 
-    return this.prisma.appVersionPackages.update({
+    return this.serializePkg(await this.prisma.appVersionPackages.update({
       where: { id: pkg.id },
       data: dto,
-    });
+    }));
   }
 
   /** 删除渠道包 */
@@ -100,10 +110,10 @@ export class AppVersionPackageService {
   async toggleEnabled(versionId: string, packageId: string) {
     const pkg = await this.findOne(versionId, packageId);
 
-    return this.prisma.appVersionPackages.update({
+    return this.serializePkg(await this.prisma.appVersionPackages.update({
       where: { id: pkg.id },
       data: { enabled: !pkg.enabled },
-    });
+    }));
   }
 
   private async findOne(versionId: string, packageId: string) {
