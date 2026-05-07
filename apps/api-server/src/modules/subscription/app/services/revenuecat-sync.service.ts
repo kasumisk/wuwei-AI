@@ -365,27 +365,34 @@ export class RevenueCatSyncService implements OnModuleInit {
       orderBy: { expiresAt: 'desc' },
     });
 
+    const beforeSummary = await this.subscriptionService.getUserSummary(userId);
+
     // 对纯手工会员 / 微信 / 支付宝用户，不要走 RevenueCat 快照收敛，
     // 否则会因 RC 空快照把本地非 RC 订阅误撤销为 free。
-    if (!currentSubscription && source === 'client_trigger') {
-      const summary = await this.subscriptionService.getUserSummary(userId);
-      result.currentTier = summary.tier;
-      result.currentSubscriptionId = summary.subscriptionId;
+    // 但 free/首次购买场景必须允许向 RC 拉快照，否则客户端购买成功后后端永远收敛不到新订阅。
+    if (
+      !currentSubscription &&
+      source === 'client_trigger' &&
+      beforeSummary.tier !== SubscriptionTier.FREE &&
+      beforeSummary.subscriptionId
+    ) {
+      result.currentTier = beforeSummary.tier;
+      result.currentSubscriptionId = beforeSummary.subscriptionId;
       result.snapshotFetched = false;
       this.logger.log(
         [
           'RevenueCat sync skipped',
           `source=${source}`,
           `userId=${userId}`,
-          `tier=${summary.tier}`,
-          'reason=no_active_rc_subscription',
+          `tier=${beforeSummary.tier}`,
+          'reason=non_rc_subscription_without_local_rc_record',
         ].join(' | '),
       );
       return result;
     }
 
-    const beforeSummary = await this.subscriptionService.getUserSummary(userId);
-    const snapshot = await this.fetchSubscriberSnapshot(userId);
+    const subscriberLookupId = await this.resolveSubscriberLookupId(userId);
+    const snapshot = await this.fetchSubscriberSnapshot(subscriberLookupId);
     result.snapshotFetched = true;
 
     const syncOutcome = await this.applySubscriberSnapshot({
@@ -585,6 +592,44 @@ export class RevenueCatSyncService implements OnModuleInit {
     }
 
     return (await response.json()) as RevenueCatSubscriberResponse;
+  }
+
+  private async resolveSubscriberLookupId(userId: string): Promise<string> {
+    const providerCustomerModel = (this.prisma as any)
+      .subscriptionProviderCustomer;
+    if (!providerCustomerModel) {
+      return userId;
+    }
+
+    const preferredEnvironment =
+      this.configService.get<string>('SUBSCRIPTION_STORE_ENV') ?? 'production';
+
+    const providerCustomer = await providerCustomerModel.findFirst({
+      where: {
+        userId,
+        provider: 'revenuecat',
+        status: 'active',
+        environment: preferredEnvironment,
+      },
+      orderBy: [{ lastSyncedAt: 'desc' }, { updatedAt: 'desc' }],
+      select: { providerCustomerId: true },
+    });
+
+    if (providerCustomer?.providerCustomerId) {
+      return providerCustomer.providerCustomerId;
+    }
+
+    const fallbackProviderCustomer = await providerCustomerModel.findFirst({
+      where: {
+        userId,
+        provider: 'revenuecat',
+        status: 'active',
+      },
+      orderBy: [{ lastSyncedAt: 'desc' }, { updatedAt: 'desc' }],
+      select: { providerCustomerId: true },
+    });
+
+    return fallbackProviderCustomer?.providerCustomerId || userId;
   }
 
   private selectSubscription(

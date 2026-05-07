@@ -236,6 +236,13 @@ export class DecisionFeedbackDto {
   })
   @IsIn(['helpful', 'unhelpful', 'wrong'])
   feedback: 'helpful' | 'unhelpful' | 'wrong';
+
+  @ApiPropertyOptional({
+    description: '实际结果（用于后验分析，如 blood_sugar_ok/overeat）',
+  })
+  @IsOptional()
+  @IsString()
+  actualOutcome?: string;
 }
 
 // ========== Summary DTO ==========

@@ -681,12 +681,26 @@ export class SubscriptionService implements OnModuleInit {
       const freePlan = await this.prisma.subscriptionPlan.findFirst({
         where: { tier: SubscriptionTier.FREE },
       });
+      const latestTerminalSub = await this.prisma.subscription.findFirst({
+        where: {
+          userId,
+          status: {
+            in: [SubscriptionStatus.REFUNDED, SubscriptionStatus.REVOKED],
+          },
+        },
+        include: { subscriptionPlan: true },
+        orderBy: { updatedAt: 'desc' },
+      });
+
       return {
         tier: SubscriptionTier.FREE,
-        status: 'free',
-        subscriptionId: null,
-        planName: freePlan?.name ?? 'Free',
-        expiresAt: null,
+        status:
+          (latestTerminalSub?.status as SubscriptionStatus | undefined) ??
+          'free',
+        subscriptionId: latestTerminalSub?.id ?? null,
+        planName:
+          latestTerminalSub?.subscriptionPlan?.name ?? freePlan?.name ?? 'Free',
+        expiresAt: latestTerminalSub?.expiresAt ?? null,
         autoRenew: false,
         entitlements: this.entitlementResolver.resolve(
           SubscriptionTier.FREE,

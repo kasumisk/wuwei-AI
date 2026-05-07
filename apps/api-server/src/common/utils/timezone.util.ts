@@ -168,13 +168,40 @@ export function getUserLocalDayBounds(
   date: Date = new Date(),
 ): { startOfDay: Date; endOfDay: Date } {
   const localDate = getUserLocalDate(timezone, date);
-  // localDate = 'YYYY-MM-DD'，构造该日本地午夜的 UTC 时间
-  // 先用 Intl 获取精确的时区偏移量（分钟）
-  const offsetMs = getTimezoneOffsetMs(timezone, date);
-  // 本地午夜 = UTC 午夜 - 时区偏移
-  const startOfDay = new Date(`${localDate}T00:00:00.000Z`);
-  startOfDay.setTime(startOfDay.getTime() - offsetMs);
-  const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+  return getUserLocalDayBoundsForDateKey(timezone, localDate);
+}
+
+/**
+ * 根据指定的用户本地日期字符串（YYYY-MM-DD）计算对应的 UTC 日界。
+ *
+ * 用于按用户时区查询历史记录，避免把 date=YYYY-MM-DD 误按 UTC 自然日解释。
+ */
+export function getUserLocalDayBoundsForDateKey(
+  timezone: string = DEFAULT_TIMEZONE,
+  localDate: string,
+): { startOfDay: Date; endOfDay: Date } {
+  const approxStartUtc = new Date(`${localDate}T00:00:00.000Z`);
+  const offsetAtApprox = getTimezoneOffsetMs(timezone, approxStartUtc);
+  const candidateStart = new Date(approxStartUtc.getTime() - offsetAtApprox);
+  const offsetAtCandidate = getTimezoneOffsetMs(timezone, candidateStart);
+  const startOfDay = new Date(approxStartUtc.getTime() - offsetAtCandidate);
+
+  const nextLocalDate = new Date(`${localDate}T00:00:00.000Z`);
+  nextLocalDate.setUTCDate(nextLocalDate.getUTCDate() + 1);
+  const nextDateKey = nextLocalDate.toISOString().slice(0, 10);
+  const nextApproxStartUtc = new Date(`${nextDateKey}T00:00:00.000Z`);
+  const nextOffsetAtApprox = getTimezoneOffsetMs(timezone, nextApproxStartUtc);
+  const nextCandidateStart = new Date(
+    nextApproxStartUtc.getTime() - nextOffsetAtApprox,
+  );
+  const nextOffsetAtCandidate = getTimezoneOffsetMs(
+    timezone,
+    nextCandidateStart,
+  );
+  const endOfDay = new Date(
+    nextApproxStartUtc.getTime() - nextOffsetAtCandidate,
+  );
+
   return { startOfDay, endOfDay };
 }
 

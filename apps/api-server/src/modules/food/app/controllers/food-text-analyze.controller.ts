@@ -29,6 +29,7 @@ import { TextFoodAnalysisService } from '../services/text-food-analysis.service'
 import { AnalyzeTextDto } from '../dto/analyze-text.dto';
 import { AiHeavyThrottle } from '../../../../core/throttle/throttle.constants';
 import { QuotaGateService } from '../../../subscription/app/services/quota-gate.service';
+import { QuotaService } from '../../../subscription/app/services/quota.service';
 import { ResultEntitlementService } from '../../../subscription/app/services/result-entitlement.service';
 import { PaywallTriggerService } from '../../../subscription/app/services/paywall-trigger.service';
 import { SubscriptionService } from '../../../subscription/app/services/subscription.service';
@@ -46,6 +47,7 @@ export class FoodTextAnalyzeController {
   constructor(
     private readonly textFoodAnalysisService: TextFoodAnalysisService,
     private readonly quotaGateService: QuotaGateService,
+    private readonly quotaService: QuotaService,
     private readonly resultEntitlementService: ResultEntitlementService,
     private readonly paywallTriggerService: PaywallTriggerService,
     private readonly subscriptionService: SubscriptionService,
@@ -63,6 +65,7 @@ export class FoodTextAnalyzeController {
     @CurrentAppUser() user: AppUserPayload,
   ): Promise<ApiResponse> {
     const startedAt = Date.now();
+    let quotaConsumed = false;
     const locale = dto.locale || this.i18n.currentLocale();
     const meta = `userId=${user.id} mealType=${dto.mealType || 'none'} locale=${locale} textLength=${dto.text?.trim().length || 0}`;
     this.logger.log(`[AnalyzeText] start ${meta}`);
@@ -109,6 +112,7 @@ export class FoodTextAnalyzeController {
         scene: 'food_text_analysis',
         consumeQuota: true,
       });
+      quotaConsumed = access.allowed && access.quotaConsumed;
       this.logger.log(
         `[AnalyzeText] quota checked in ${Date.now() - quotaStartedAt}ms allowed=${access.allowed} key=${cacheKey} ${meta}`,
       );
@@ -173,11 +177,18 @@ export class FoodTextAnalyzeController {
         `[AnalyzeText] success total=${Date.now() - startedAt}ms key=${cacheKey} hiddenFields=${hiddenFields.length} ${meta}`,
       );
 
+      quotaConsumed = false;
+
       return ResponseWrapper.success(
         trimmedResult,
         this.i18n.t('food.analyzeComplete'),
       );
     } catch (error) {
+      if (quotaConsumed) {
+        await this.quotaService
+          .rollback(user.id, GatedFeature.AI_TEXT_ANALYSIS)
+          .catch(() => undefined);
+      }
       const message = error instanceof Error ? error.message : String(error);
       this.logger.error(
         `[AnalyzeText] failed after ${Date.now() - startedAt}ms ${meta}: ${message}`,

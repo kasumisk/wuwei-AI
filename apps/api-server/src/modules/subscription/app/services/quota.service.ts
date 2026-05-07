@@ -161,6 +161,43 @@ export class QuotaService implements OnModuleInit {
   }
 
   /**
+   * 回滚一次已扣减的配额。
+   *
+   * 用于请求在扣额后、业务成功前失败的场景；不会把 used 降到 0 以下。
+   */
+  async rollback(userId: string, feature: GatedFeature): Promise<QuotaStatus> {
+    const quota = await this.getOrCreateQuota(userId, feature);
+    if (!quota) {
+      return {
+        feature,
+        used: 0,
+        limit: UNLIMITED,
+        remaining: UNLIMITED,
+        unlimited: true,
+        resetAt: null,
+      };
+    }
+
+    if (quota.quotaLimit === UNLIMITED) {
+      return this.toStatus(quota);
+    }
+
+    await this.prisma.$executeRaw(
+      Prisma.sql`
+        UPDATE usage_quota
+        SET    used       = GREATEST(used - 1, 0),
+               updated_at = now()
+        WHERE  id         = ${quota.id}::uuid
+      `,
+    );
+
+    const updated = await this.prisma.usageQuota.findUnique({
+      where: { id: quota.id },
+    });
+    return this.toStatus(updated!);
+  }
+
+  /**
    * 获取用户某功能的配额状态（只读）
    */
   async getQuotaStatus(

@@ -161,7 +161,8 @@ export class FoodService {
     page: number;
     limit: number;
   }> {
-    return this.foodRecordService.getRecords(userId, query);
+    const tz = await this.userProfileService.getTimezone(userId);
+    return this.foodRecordService.getRecords(userId, query, tz);
   }
 
   /**
@@ -178,10 +179,7 @@ export class FoodService {
       dto,
     );
 
-    // 异步更新每日汇总
-    this.dailySummaryService
-      .updateDailySummary(userId, record.recordedAt)
-      .catch((err) => this.logger.error(`更新每日汇总失败: ${err.message}`));
+    await this.dailySummaryService.updateDailySummary(userId, record.recordedAt);
 
     return record;
   }
@@ -192,13 +190,8 @@ export class FoodService {
    */
   async deleteRecord(userId: string, recordId: string): Promise<void> {
     const deleted = await this.foodRecordService.deleteRecord(userId, recordId);
-    // 异步更新当日汇总，不阻塞删除响应
     const recordDate = deleted.recordedAt ?? deleted.createdAt;
-    this.dailySummaryService
-      .updateDailySummary(userId, recordDate)
-      .catch((err) => {
-        this.logger.warn(`删除记录后更新日汇总失败: ${(err as Error).message}`);
-      });
+    await this.dailySummaryService.updateDailySummary(userId, recordDate);
   }
 
   /**
@@ -1300,9 +1293,7 @@ export class FoodService {
   async createRecord(userId: string, dto: CreateFoodRecordDto): Promise<any> {
     const saved = await this.foodRecordService.createRecord(userId, dto);
 
-    this.dailySummaryService
-      .updateDailySummary(userId, saved.recordedAt)
-      .catch((err) => this.logger.error(`更新每日汇总失败: ${err.message}`));
+    await this.dailySummaryService.updateDailySummary(userId, saved.recordedAt);
 
     this.eventEmitter.emit(
       DomainEvents.MEAL_RECORDED,

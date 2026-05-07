@@ -990,6 +990,14 @@ export class FoodAnalyzeController {
       );
     }
 
+    const linkedSession =
+      await this.analysisSessionService.getByRequestId(requestId);
+    if (linkedSession && linkedSession.userId !== user.id) {
+      throw new ForbiddenException(
+        this.i18n.t('food.analysisTaskNoPermission'),
+      );
+    }
+
     // V6.1 Phase 2.5: completed — 将队列结果转为统一结构并按订阅裁剪
 
     // 获取用户订阅信息
@@ -1006,7 +1014,7 @@ export class FoodAnalyzeController {
 
     // 将旧格式结果适配为 V61 进行裁剪
     const v61ForTrim: FoodAnalysisResultV61 = {
-      analysisId: requestId,
+      analysisId: entry.analysisId ?? requestId,
       inputType: 'image',
       inputSnapshot: { imageUrl: rawData.imageUrl },
       foods: (rawData.foods || []).map((f) => ({
@@ -1084,15 +1092,10 @@ export class FoodAnalyzeController {
         });
     }
 
-    // 置信度驱动 V1：高置信度直出时也反查 session，便于前端联动
-    const linkedSession =
-      await this.analysisSessionService.getByRequestId(requestId);
-
     return ResponseWrapper.success(
       {
         requestId,
-        // 优先用数据库 analysisId（供 analyze-save），fallback 为 requestId（兼容旧逻辑）
-        analysisId: entry.analysisId ?? requestId,
+        analysisId: entry.analysisId ?? null,
         analysisSessionId: linkedSession?.id,
         status: 'completed',
         stage: 'final' as const,

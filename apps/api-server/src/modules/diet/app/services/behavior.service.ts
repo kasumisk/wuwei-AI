@@ -4,6 +4,8 @@ import {
   Optional,
   Inject,
   forwardRef,
+  ForbiddenException,
+  NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
@@ -91,19 +93,39 @@ export class BehaviorService {
    * 记录用户对 AI 决策的反馈
    */
   async logFeedback(
+    userId: string,
     recordId: string,
     followed: boolean,
     feedback: string,
+    actualOutcome?: string,
   ): Promise<void> {
     const log = await this.prisma.aiDecisionLogs.findFirst({
-      where: { recordId: recordId },
+      where: { recordId: recordId, userId },
     });
     if (log) {
       await this.prisma.aiDecisionLogs.update({
         where: { id: log.id },
-        data: { userFollowed: followed, userFeedback: feedback },
+        data: {
+          userFollowed: followed,
+          userFeedback: feedback,
+          actualOutcome: actualOutcome ?? null,
+        },
       });
+      return;
     }
+
+    const record = await this.prisma.foodRecords.findUnique({
+      where: { id: recordId },
+      select: { userId: true },
+    });
+    if (!record) {
+      throw new NotFoundException('Food record not found');
+    }
+    if (record.userId !== userId) {
+      throw new ForbiddenException('No permission to update decision feedback');
+    }
+
+    throw new NotFoundException('Decision log not found');
   }
 
   /**
