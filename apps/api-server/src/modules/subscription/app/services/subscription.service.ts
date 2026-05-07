@@ -545,6 +545,11 @@ export class SubscriptionService implements OnModuleInit {
           },
           provider: sub.paymentChannel,
         });
+
+        if (!sub.autoRenew) {
+          await this.resetUserQuotasToFreePlan(sub.userId);
+        }
+
         await this.invalidateUserCache(sub.userId);
         this.eventEmitter.emit(
           DomainEvents.SUBSCRIPTION_CHANGED,
@@ -588,15 +593,7 @@ export class SubscriptionService implements OnModuleInit {
         await this.invalidateUserCache(sub.userId);
 
         // 重置为免费配额
-        const freePlan = await this.prisma.subscriptionPlan.findFirst({
-          where: {
-            tier: SubscriptionTier.FREE,
-            isActive: true,
-          },
-        });
-        if (freePlan) {
-          await this.initQuotas(sub.userId, freePlan);
-        }
+        await this.resetUserQuotasToFreePlan(sub.userId);
 
         this.eventEmitter.emit(
           DomainEvents.SUBSCRIPTION_CHANGED,
@@ -835,5 +832,35 @@ export class SubscriptionService implements OnModuleInit {
    */
   async invalidateUserSummaryCache(userId: string): Promise<void> {
     await this.invalidateUserCache(userId);
+  }
+
+  async resetUserQuotasToFreePlan(userId: string): Promise<void> {
+    const freePlan = await this.prisma.subscriptionPlan.findFirst({
+      where: {
+        tier: SubscriptionTier.FREE,
+        isActive: true,
+      },
+    });
+
+    if (!freePlan) {
+      this.logger.warn(`未找到有效免费计划，跳过配额回落: userId=${userId}`);
+      return;
+    }
+
+    await this.initQuotas(userId, freePlan);
+  }
+
+  async syncUserQuotasToPlan(userId: string, planId: string): Promise<void> {
+    const plan = await this.prisma.subscriptionPlan.findUnique({
+      where: { id: planId },
+    });
+
+    if (!plan) {
+      throw new NotFoundException(
+        this.i18n.t('subscription.error.planNotFound'),
+      );
+    }
+
+    await this.initQuotas(userId, plan);
   }
 }

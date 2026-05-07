@@ -29,6 +29,7 @@ import {
   GetSubscriptionsQueryDto,
   ExtendSubscriptionDto,
   ChangeSubscriptionPlanDto,
+  AdminSetUserSubscriptionDto,
   SubscriptionResyncDto,
   AdminSubscriptionActionDto,
   GrantManualEntitlementDto,
@@ -1293,6 +1294,7 @@ export class SubscriptionManagementService {
       provider: updated.paymentChannel,
       lastEventAt: now,
     });
+    await this.subscriptionService.resetUserQuotasToFreePlan(updated.userId);
     await this.subscriptionService.invalidateUserSummaryCache(updated.userId);
     await this.createAdminAuditLog(updated, 'refund', dto.reason, {
       refundedAt: now.toISOString(),
@@ -1325,6 +1327,7 @@ export class SubscriptionManagementService {
       provider: updated.paymentChannel,
       lastEventAt: now,
     });
+    await this.subscriptionService.resetUserQuotasToFreePlan(updated.userId);
     await this.subscriptionService.invalidateUserSummaryCache(updated.userId);
     await this.createAdminAuditLog(updated, 'revoke', dto.reason, {
       revokedAt: now.toISOString(),
@@ -1436,6 +1439,160 @@ export class SubscriptionManagementService {
       },
     );
     return updated;
+  }
+
+  async setUserManualSubscription(
+    userId: string,
+    dto: AdminSetUserSubscriptionDto,
+  ) {
+    const [user, plan] = await Promise.all([
+      this.prisma.appUsers.findUnique({ where: { id: userId } }),
+      this.prisma.subscriptionPlan.findUnique({ where: { id: dto.planId } }),
+    ]);
+
+    if (!user) {
+      throw new NotFoundException(`用户 #${userId} 不存在`);
+    }
+    if (!plan) {
+      throw new NotFoundException(`订阅计划 #${dto.planId} 不存在`);
+    }
+    if (!plan.isActive) {
+      throw new BadRequestException('不能授予未启用的订阅计划');
+    }
+    if (plan.tier === SubscriptionTier.FREE) {
+      throw new BadRequestException('不能将 free 套餐作为会员授予');
+    }
+
+    const startsAt = dto.startsAt ? new Date(dto.startsAt) : new Date();
+    const expiresAt = new Date(dto.expiresAt);
+    if (Number.isNaN(startsAt.getTime()) || Number.isNaN(expiresAt.getTime())) {
+      throw new BadRequestException('startsAt / expiresAt 必须是合法 ISO 时间');
+    }
+    if (expiresAt <= startsAt) {
+      throw new BadRequestException('expiresAt 必须晚于 startsAt');
+    }
+
+    const existingManualSub = await this.prisma.subscription.findFirst({
+      where: {
+        userId,
+        paymentChannel: PaymentChannel.MANUAL,
+        OR: [
+          { status: SubscriptionStatus.ACTIVE },
+          { status: SubscriptionStatus.GRACE_PERIOD },
+          { status: SubscriptionStatus.CANCELLED, expiresAt: { gt: new Date() } },
+        ],
+      },
+      orderBy: { expiresAt: 'desc' },
+    });
+
+    if (existingManualSub) {
+      await this.prisma.subscription.updateMany({
+        where: {
+          userId,
+          id: { not: existingManualSub.id },
+          status: {
+            in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.GRACE_PERIOD],
+          },
+        },
+        data: {
+          status: SubscriptionStatus.EXPIRED,
+          autoRenew: false,
+          gracePeriodEndsAt: null,
+        },
+      });
+
+      const updated = await this.prisma.subscription.update({
+        where: { id: existingManualSub.id },
+        data: {
+          planId: dto.planId,
+          startsAt,
+          expiresAt,
+          status: SubscriptionStatus.ACTIVE,
+          cancelledAt: null,
+          gracePeriodEndsAt: null,
+          autoRenew: false,
+        },
+      });
+
+      await this.domainSync.syncUserEntitlementsFromSubscription({
+        subscription: updated as any,
+        provider: PaymentChannel.MANUAL,
+        lastEventAt: new Date(),
+      });
+      await this.subscriptionService.invalidateUserSummaryCache(userId);
+      await this.subscriptionService.syncUserQuotasToPlan(userId, dto.planId);
+
+      await this.createAdminAuditLog(
+        updated,
+        'update_manual_subscription',
+        dto.reason,
+        {
+          previousPlanId: existingManualSub.planId,
+          planId: dto.planId,
+          startsAt: startsAt.toISOString(),
+          expiresAt: expiresAt.toISOString(),
+        },
+      );
+
+      return this.getSubscriptionDetail(updated.id);
+    }
+
+    const created = await this.subscriptionService.createSubscription({
+      userId,
+      planId: dto.planId,
+      paymentChannel: PaymentChannel.MANUAL,
+      platformSubscriptionId: `admin-manual:${userId}:${Date.now()}`,
+      startsAt,
+      expiresAt,
+    });
+
+    const manualSubscription = await this.prisma.subscription.update({
+      where: { id: created.id },
+      data: { autoRenew: false },
+    });
+
+    await this.createAdminAuditLog(
+      manualSubscription,
+      'set_manual_subscription',
+      dto.reason,
+      {
+        planId: dto.planId,
+        tier: plan.tier,
+        billingCycle: plan.billingCycle,
+        startsAt: startsAt.toISOString(),
+        expiresAt: expiresAt.toISOString(),
+      },
+    );
+
+    return this.getSubscriptionDetail(manualSubscription.id);
+  }
+
+  async revokeUserManualSubscription(userId: string, dto: AdminSubscriptionActionDto) {
+    const user = await this.prisma.appUsers.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException(`用户 #${userId} 不存在`);
+    }
+
+    const subscription = await this.prisma.subscription.findFirst({
+      where: {
+        userId,
+        paymentChannel: PaymentChannel.MANUAL,
+        OR: [
+          { status: SubscriptionStatus.ACTIVE, expiresAt: { gt: new Date() } },
+          { status: SubscriptionStatus.GRACE_PERIOD, gracePeriodEndsAt: { gt: new Date() } },
+          { status: SubscriptionStatus.CANCELLED, expiresAt: { gt: new Date() } },
+        ],
+      },
+      orderBy: { expiresAt: 'desc' },
+    });
+
+    if (!subscription) {
+      throw new NotFoundException('该用户不存在可撤销的人工会员');
+    }
+
+    return this.revokeSubscription(subscription.id, {
+      reason: dto.reason ?? 'Admin revoke manual subscription',
+    });
   }
 
   private async createAdminAuditLog(

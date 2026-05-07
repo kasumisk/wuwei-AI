@@ -39,6 +39,7 @@ import {
 import { PrismaService } from '../../../../core/prisma/prisma.service';
 import { I18nService } from '../../../../core/i18n';
 import { AnalyzeResultHelperService } from '../services/analyze-result-helper.service';
+import { BehaviorService } from '../../../diet/app/services/behavior.service';
 
 @ApiTags('App 食物分析')
 @Controller('app/food')
@@ -51,6 +52,7 @@ export class FoodAnalysisSaveController {
     private readonly eventEmitter: EventEmitter2,
     private readonly i18n: I18nService,
     private readonly helper: AnalyzeResultHelperService,
+    private readonly behaviorService: BehaviorService,
   ) {}
 
   @Post('analyze-save')
@@ -118,6 +120,25 @@ export class FoodAnalysisSaveController {
       user.id,
       createDto as any,
     );
+
+    await this.behaviorService.logDecision({
+      userId: user.id,
+      recordId: record.id,
+      inputContext: {
+        analysisId: dto.analysisId,
+        inputType: analysisRecord.inputType,
+        mealType,
+        foods: result.foods?.map((f) => f.name) ?? [],
+      },
+      inputImageUrl: analysisRecord.imageUrl ?? undefined,
+      decision: createDto.decision,
+      riskLevel: createDto.riskLevel,
+      fullResponse: {
+        decision: result.decision,
+        explanation: result.explanation,
+        summary: result.summary,
+      },
+    });
 
     this.eventEmitter.emit(
       DomainEvents.ANALYSIS_SAVED_TO_RECORD,

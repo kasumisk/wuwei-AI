@@ -104,11 +104,13 @@ export function NextMealCard({ suggestion, summary: _summary, profile }: NextMea
           mealType: suggestion.mealType,
           advice: content.tip,
           source: 'recommend',
+          recommendationTraceId: content.traceId ?? suggestion.traceId,
         }),
         foodPlanService
           .submitFeedback({
             mealType: suggestion.mealType,
             foodName: content.foods,
+            traceId: content.traceId ?? suggestion.traceId,
             action: 'accepted',
             goalType: profile?.goal,
           })
@@ -256,6 +258,7 @@ export function NextMealCard({ suggestion, summary: _summary, profile }: NextMea
                   .submitFeedback({
                     mealType: suggestion.mealType,
                     foodName: content.foods,
+                    traceId: content.traceId ?? suggestion.traceId,
                     action: 'accepted',
                     goalType: profile?.goal,
                   })

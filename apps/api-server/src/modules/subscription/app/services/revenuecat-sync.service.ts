@@ -341,6 +341,49 @@ export class RevenueCatSyncService implements OnModuleInit {
       return result;
     }
 
+    const currentSubscription = await this.prisma.subscription.findFirst({
+      where: {
+        OR: [
+          {
+            userId,
+            paymentChannel: { in: [PaymentChannel.APPLE_IAP, PaymentChannel.GOOGLE_PLAY] },
+            status: SubscriptionStatus.ACTIVE,
+          },
+          {
+            userId,
+            paymentChannel: { in: [PaymentChannel.APPLE_IAP, PaymentChannel.GOOGLE_PLAY] },
+            status: SubscriptionStatus.GRACE_PERIOD,
+          },
+          {
+            userId,
+            paymentChannel: { in: [PaymentChannel.APPLE_IAP, PaymentChannel.GOOGLE_PLAY] },
+            status: SubscriptionStatus.CANCELLED,
+            expiresAt: { gte: new Date() },
+          },
+        ],
+      },
+      orderBy: { expiresAt: 'desc' },
+    });
+
+    // 对纯手工会员 / 微信 / 支付宝用户，不要走 RevenueCat 快照收敛，
+    // 否则会因 RC 空快照把本地非 RC 订阅误撤销为 free。
+    if (!currentSubscription && source === 'client_trigger') {
+      const summary = await this.subscriptionService.getUserSummary(userId);
+      result.currentTier = summary.tier;
+      result.currentSubscriptionId = summary.subscriptionId;
+      result.snapshotFetched = false;
+      this.logger.log(
+        [
+          'RevenueCat sync skipped',
+          `source=${source}`,
+          `userId=${userId}`,
+          `tier=${summary.tier}`,
+          'reason=no_active_rc_subscription',
+        ].join(' | '),
+      );
+      return result;
+    }
+
     const beforeSummary = await this.subscriptionService.getUserSummary(userId);
     const snapshot = await this.fetchSubscriberSnapshot(userId);
     result.snapshotFetched = true;
@@ -393,6 +436,9 @@ export class RevenueCatSyncService implements OnModuleInit {
 
     const recentSubs = await this.prisma.subscription.findMany({
       where: {
+        paymentChannel: {
+          in: [PaymentChannel.APPLE_IAP, PaymentChannel.GOOGLE_PLAY],
+        },
         status: {
           in: [
             SubscriptionStatus.ACTIVE,
@@ -619,10 +665,25 @@ export class RevenueCatSyncService implements OnModuleInit {
     const currentSub = await this.prisma.subscription.findFirst({
       where: {
         OR: [
-          { userId, status: SubscriptionStatus.ACTIVE },
-          { userId, status: SubscriptionStatus.GRACE_PERIOD },
           {
             userId,
+            paymentChannel: {
+              in: [PaymentChannel.APPLE_IAP, PaymentChannel.GOOGLE_PLAY],
+            },
+            status: SubscriptionStatus.ACTIVE,
+          },
+          {
+            userId,
+            paymentChannel: {
+              in: [PaymentChannel.APPLE_IAP, PaymentChannel.GOOGLE_PLAY],
+            },
+            status: SubscriptionStatus.GRACE_PERIOD,
+          },
+          {
+            userId,
+            paymentChannel: {
+              in: [PaymentChannel.APPLE_IAP, PaymentChannel.GOOGLE_PLAY],
+            },
             status: SubscriptionStatus.CANCELLED,
             expiresAt: { gte: new Date() },
           },

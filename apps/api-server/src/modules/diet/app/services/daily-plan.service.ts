@@ -67,6 +67,7 @@ export interface PreloadedContext {
 /** MealRecommendation 兼容输入 — 同时支持完整 ScoredFood 和简化结构 */
 interface MealRecLike {
   displayText: string;
+  traceId?: string;
   foods: Array<{
     food: {
       id: string;
@@ -110,6 +111,7 @@ function toMealPlan(
           }),
         )
       : undefined,
+    traceId: rec.traceId,
     calories: rec.totalCalories,
     protein: rec.totalProtein,
     fat: rec.totalFat,

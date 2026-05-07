@@ -341,6 +341,26 @@ export class ChangeSubscriptionPlanDto {
   newPlanId: string;
 }
 
+export class AdminSetUserSubscriptionDto {
+  @ApiProperty({ description: '目标套餐 ID（必须是已启用的非 free 套餐）' })
+  @IsUUID()
+  planId: string;
+
+  @ApiProperty({ description: '到期时间 ISO 字符串' })
+  @IsString()
+  expiresAt: string;
+
+  @ApiPropertyOptional({ description: '生效时间 ISO 字符串，默认当前时间' })
+  @IsOptional()
+  @IsString()
+  startsAt?: string;
+
+  @ApiPropertyOptional({ description: '后台备注/原因说明' })
+  @IsOptional()
+  @IsString()
+  reason?: string;
+}
+
 export class SubscriptionResyncDto {
   @ApiPropertyOptional({ description: '重同步原因说明' })
   @IsOptional()

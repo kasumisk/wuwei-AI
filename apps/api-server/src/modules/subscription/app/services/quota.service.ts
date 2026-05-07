@@ -203,16 +203,26 @@ export class QuotaService implements OnModuleInit {
     const now = new Date();
     const defaultResetAt = this.calcNextReset(now, QuotaCycle.DAILY);
 
-    return countableFeatures
-      .map((feature) => {
+    const statuses = await Promise.all(
+      countableFeatures.map(async (feature) => {
         const existing = existingMap.get(feature);
-        if (existing) return this.toStatus(existing);
-
         const limit = this.entitlementResolver.getQuotaLimit(
           summary.entitlements,
           feature,
         );
         if (limit === null) return null;
+
+        if (existing) {
+          if (existing.quotaLimit === limit) {
+            return this.toStatus(existing);
+          }
+
+          const updated = await this.prisma.usageQuota.update({
+            where: { id: existing.id },
+            data: { quotaLimit: limit },
+          });
+          return this.toStatus(updated);
+        }
 
         const unlimited = limit === UNLIMITED;
         return {
@@ -223,8 +233,10 @@ export class QuotaService implements OnModuleInit {
           unlimited,
           resetAt: defaultResetAt,
         } as QuotaStatus;
-      })
-      .filter((s): s is QuotaStatus => s !== null);
+      }),
+    );
+
+    return statuses.filter((s): s is QuotaStatus => s !== null);
   }
 
   // ==================== Cron 定时重置 ====================

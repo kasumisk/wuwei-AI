@@ -66,11 +66,13 @@ interface MealSuggestionScenario {
   totalProtein?: number;
   totalFat?: number;
   totalCarbs?: number;
+  traceId?: string;
 }
 
 interface MealSuggestionResponse {
   mealType: string;
   remainingCalories: number;
+  traceId?: string;
   suggestion: {
     foods: string;
     foodItems?: SuggestionFoodItem[];
@@ -79,6 +81,7 @@ interface MealSuggestionResponse {
     totalProtein?: number;
     totalFat?: number;
     totalCarbs?: number;
+    traceId?: string;
   };
   decisionValueTags?: DecisionValueTag[];
   scenarios?: MealSuggestionScenario[];
@@ -262,6 +265,9 @@ export class FoodService {
         this.logger.log(
           `[MealSuggestion] stickiness hit userId=${userId} meal=${nextMeal} locale=${locale} scenarios=${cached.scenarios?.length ?? 0}`,
         );
+        if (!cached.traceId && cached.suggestion.traceId) {
+          cached.traceId = cached.suggestion.traceId;
+        }
         return cached;
       }
     } else {
@@ -371,25 +377,28 @@ export class FoodService {
 
        // 后台继续完整三场景推荐，成功后写入粘性缓存；下一次请求直接命中。
        scenarioRecommendPromise
-         .then(async (scenarioRecs) => {
-           await Promise.all(
-             Object.values(scenarioRecs).map((rec) =>
-               this.foodI18nService.applyToMealRecommendation(rec, locale),
-             ),
-           );
-           const result = this.buildMealSuggestionFromScenarios(
-             scenarioRecs,
+          .then(async (scenarioRecs) => {
+            await Promise.all(
+              Object.values(scenarioRecs).map((rec) =>
+                this.foodI18nService.applyToMealRecommendation(rec, locale),
+              ),
+            );
+            const result = this.buildMealSuggestionFromScenarios(
+              scenarioRecs,
              nextMeal,
              remaining,
              goalType,
              budget,
              goals,
-             summary,
-             locale,
-           );
-           this.setToStickinessCache(
-             cacheKey,
-             result,
+              summary,
+              locale,
+            );
+            if (!result.traceId && result.suggestion.traceId) {
+              result.traceId = result.suggestion.traceId;
+            }
+            this.setToStickinessCache(
+              cacheKey,
+              result,
              summary.totalCalories || 0,
            );
          })
@@ -421,6 +430,9 @@ export class FoodService {
        summary,
        locale,
      );
+     if (!result.traceId && result.suggestion.traceId) {
+       result.traceId = result.suggestion.traceId;
+     }
 
     // V6 Phase 1.2: 发布推荐生成事件
     this.eventEmitter.emit(
@@ -483,6 +495,7 @@ export class FoodService {
     return {
       mealType: nextMeal,
       remainingCalories: remaining,
+      traceId: primaryScenario.traceId,
       suggestion: {
         foods: primaryScenario.foods,
         foodItems: primaryScenario.foodItems,
@@ -491,6 +504,7 @@ export class FoodService {
         totalProtein: primaryScenario.totalProtein,
         totalFat: primaryScenario.totalFat,
         totalCarbs: primaryScenario.totalCarbs,
+        traceId: primaryScenario.traceId,
       },
       decisionValueTags,
       scenarios,
@@ -533,6 +547,7 @@ export class FoodService {
         totalProtein: rec.totalProtein,
         totalFat: rec.totalFat,
         totalCarbs: rec.totalCarbs,
+        traceId: rec.traceId,
       };
     });
   }
@@ -727,6 +742,7 @@ export class FoodService {
             totalProtein: r.totalProtein,
             totalFat: r.totalFat,
             totalCarbs: r.totalCarbs,
+            traceId: (rec as { traceId?: string }).traceId,
           };
         })
       : undefined;
@@ -741,6 +757,7 @@ export class FoodService {
     return {
       mealType: ctx.nextMeal,
       remainingCalories: ctx.remaining,
+      traceId: (mainRec as { traceId?: string }).traceId,
       suggestion: {
         foods: this.rebuildDisplayText(mainRec.foods, mainRec.displayText, ctx.locale),
         foodItems: this.toSuggestionFoodItems(mainRec.foods),
@@ -755,6 +772,7 @@ export class FoodService {
         totalProtein: mainRec.totalProtein,
         totalFat: mainRec.totalFat,
         totalCarbs: mainRec.totalCarbs,
+        traceId: (mainRec as { traceId?: string }).traceId,
       },
       decisionValueTags: this.generateDecisionValueTags(
         mainRec.totalCalories,
@@ -785,6 +803,7 @@ export class FoodService {
 
     return {
       ...suggestion,
+      traceId: nextPrimary.traceId,
       suggestion: {
         foods: nextPrimary.foods,
         foodItems: nextPrimary.foodItems,
@@ -793,6 +812,7 @@ export class FoodService {
         totalProtein: nextPrimary.totalProtein,
         totalFat: nextPrimary.totalFat,
         totalCarbs: nextPrimary.totalCarbs,
+        traceId: nextPrimary.traceId,
       },
       scenarios: rotatedScenarios,
     };

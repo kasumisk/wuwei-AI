@@ -177,6 +177,7 @@ export interface MealRecommendation {
   totalProtein: number;
   totalFat: number;
   totalCarbs: number;
+  traceId?: string;
   displayText: string;
   tip: string;
   /** V6.3 P3-1: 整餐层面的搭配解释 */

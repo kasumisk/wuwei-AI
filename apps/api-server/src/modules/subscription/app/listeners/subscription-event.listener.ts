@@ -17,6 +17,7 @@ import {
 } from '../../../../core/events/domain-events';
 import { QuotaService } from '../services/quota.service';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
+import { PaywallTriggerService } from '../services/paywall-trigger.service';
 
 @Injectable()
 export class SubscriptionEventListener {
@@ -25,6 +26,7 @@ export class SubscriptionEventListener {
   constructor(
     private readonly quotaService: QuotaService,
     private readonly prisma: PrismaService,
+    private readonly paywallTriggerService: PaywallTriggerService,
   ) {}
 
   /**
@@ -49,6 +51,13 @@ export class SubscriptionEventListener {
       // 降级场景: 重置配额为新等级对应的额度
       if (this.isDowngrade(event.previousTier, event.newTier)) {
         await this.handleDowngrade(event);
+      }
+
+      if (this.shouldMarkConverted(event)) {
+        await this.paywallTriggerService.markConverted(
+          event.userId,
+          event.newTier as any,
+        );
       }
     } catch (err) {
       // 事件处理失败不应影响订阅主流程
@@ -90,5 +99,9 @@ export class SubscriptionEventListener {
     // 配额重置由 SubscriptionService.processExpiredSubscriptions 中的
     // initQuotas(freePlan) 已处理，此处仅记录日志供运营分析
     // 未来扩展: 可在此发送降级通知、触发挽回策略等
+  }
+
+  private shouldMarkConverted(event: SubscriptionChangedEvent): boolean {
+    return ['purchase', 'activate', 'upgrade'].includes(event.reason);
   }
 }

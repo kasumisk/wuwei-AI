@@ -145,6 +145,11 @@ export class RecommendationFeedbackDto {
   @IsUUID()
   foodId?: string;
 
+  @ApiPropertyOptional({ description: '推荐追踪 ID' })
+  @IsOptional()
+  @IsUUID()
+  traceId?: string;
+
   @ApiProperty({
     enum: ['accepted', 'replaced', 'skipped'],
     description: '用户操作',

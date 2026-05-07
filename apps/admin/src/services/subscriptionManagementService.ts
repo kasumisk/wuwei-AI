@@ -189,6 +189,7 @@ export interface PaymentRecordDto {
 export interface GetSubscriptionsQuery {
   page?: number;
   pageSize?: number;
+  userId?: string;
   status?: SubscriptionStatus | '';
   tier?: SubscriptionTier | '';
   paymentChannel?: PaymentChannel | '';
@@ -236,6 +237,13 @@ export interface ExtendSubscriptionDto {
 
 export interface ChangeSubscriptionPlanDto {
   newPlanId: string;
+}
+
+export interface AdminSetUserSubscriptionDto {
+  planId: string;
+  startsAt?: string;
+  expiresAt: string;
+  reason?: string;
 }
 
 export interface SubscriptionResyncDto {
@@ -621,6 +629,18 @@ export const subscriptionApi = {
   ): Promise<UserEntitlementDto> =>
     request.post(`${PATH.ADMIN.SUBSCRIPTIONS}/${id}/manual-entitlements/revoke`, data),
 
+  setUserManualSubscription: (
+    userId: string,
+    data: AdminSetUserSubscriptionDto
+  ): Promise<SubscriptionDto> =>
+    request.post(`${PATH.ADMIN.SUBSCRIPTIONS}/users/${userId}/manual-subscription`, data),
+
+  revokeUserManualSubscription: (
+    userId: string,
+    data: AdminSubscriptionActionDto
+  ): Promise<SubscriptionDto> =>
+    request.post(`${PATH.ADMIN.SUBSCRIPTIONS}/users/${userId}/manual-subscription/revoke`, data),
+
   // --- Payment Records ---
   getPaymentRecords: (params?: GetPaymentRecordsQuery): Promise<PaymentRecordsListResponse> =>
     request.get(`${PATH.ADMIN.SUBSCRIPTIONS}/payments`, params),
@@ -832,6 +852,32 @@ export const useRevokeManualEntitlement = (
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: subscriptionQueryKeys.detail(id) });
       queryClient.invalidateQueries({ queryKey: subscriptionQueryKeys.timeline(id) });
+      queryClient.invalidateQueries({ queryKey: subscriptionQueryKeys.all });
+    },
+    ...options,
+  });
+};
+
+export const useSetUserManualSubscription = (
+  options?: UseMutationOptions<SubscriptionDto, Error, { userId: string; data: AdminSetUserSubscriptionDto }>
+) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, data }) => subscriptionApi.setUserManualSubscription(userId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: subscriptionQueryKeys.all });
+    },
+    ...options,
+  });
+};
+
+export const useRevokeUserManualSubscription = (
+  options?: UseMutationOptions<SubscriptionDto, Error, { userId: string; data: AdminSubscriptionActionDto }>
+) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, data }) => subscriptionApi.revokeUserManualSubscription(userId, data),
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: subscriptionQueryKeys.all });
     },
     ...options,

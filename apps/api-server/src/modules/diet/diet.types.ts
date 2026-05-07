@@ -47,6 +47,8 @@ export interface MealPlan {
   foods: string;
   /** 结构化食物列表 — 用于替换定位和反馈记录 */
   foodItems?: MealFoodItem[];
+  /** 推荐追踪 ID（用于反馈归因/记餐归因） */
+  traceId?: string;
   calories: number;
   protein: number;
   fat: number;

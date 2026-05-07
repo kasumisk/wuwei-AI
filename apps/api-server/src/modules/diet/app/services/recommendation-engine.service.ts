@@ -577,6 +577,33 @@ export class RecommendationEngineService implements OnModuleInit {
         sceneContext,
         userId,
       });
+
+      const traceEnabled = userId
+        ? await this.featureFlagService.isEnabled('pipeline_trace_enabled', userId)
+        : await this.featureFlagService.isEnabled('pipeline_trace_enabled');
+      if (traceEnabled) {
+        const traceId = uuidv4();
+        result.traceId = traceId;
+        this.traceService
+          .recordTrace({
+            traceId,
+            userId,
+            mealType,
+            goalType,
+            channel: scenarioConfig.channel,
+            strategyId: resolvedStrategy?.strategyId ?? undefined,
+            strategyVersion: resolvedStrategy?.resolvedAt?.toString() ?? undefined,
+            pipelineContext: ctx,
+            topFoods: finalPicks,
+            foodPoolSize: ctx.allFoods.length,
+            durationMs: Date.now() - _ts,
+          })
+          .catch((err) => {
+            this.logger.warn(
+              `Scenario trace persistence failed for user ${userId}: ${(err as Error).message}`,
+            );
+          });
+      }
       const _tProcDone = Date.now() - _tProc;
 
       this.logger.log(`[PERF reqId=${rid}] scenario=${scenarioConfig.key} total=${Date.now() - _ts}ms ctx=${_tCtxDone}ms pipeline=${_tPipelineDone}ms postProc=${_tProcDone}ms picks=${finalPicks.length} uid=${userId}`);
