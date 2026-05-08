@@ -144,9 +144,9 @@ const FoodLibraryList: React.FC = () => {
       width: 220,
       search: false,
       ellipsis: true,
-      render: (value, _) =>
-        _.thumbnailUrl ? (
-          <img src={_.thumbnailUrl} rel="noreferrer" />
+      render: (_, record) =>
+        record.thumbnailUrl ? (
+          <img src={record.thumbnailUrl} rel="noreferrer" />
         ) : (
           '-'
         ),

@@ -190,7 +190,14 @@ export class RevenueCatSyncService implements OnModuleInit {
     payload: RevenueCatWebhookPayload,
   ): Promise<RevenueCatWebhookIngestResult> {
     const event = payload?.event ?? null;
-    const appUserId = event?.app_user_id ?? event?.original_app_user_id ?? null;
+    // TRANSFER 事件的 app_user_id 可能为空，尝试从 transferred_to / aliases 里取新用户 ID
+    const transferredTo = (event as any)?.transferred_to;
+    const appUserId =
+      event?.app_user_id ??
+      event?.original_app_user_id ??
+      (Array.isArray(transferredTo) ? (transferredTo[0] ?? null) : (transferredTo ?? null)) ??
+      (Array.isArray(event?.aliases) ? (event.aliases[0] ?? null) : null) ??
+      null;
     const providerEventId = this.getWebhookEventId(event);
     const runtimeEnv = this.getRuntimeEnv();
     const eventTimestamp = this.fromTimestampMs(event?.event_timestamp_ms);
@@ -327,6 +334,35 @@ export class RevenueCatSyncService implements OnModuleInit {
     webhookEventId?: string,
     providerEventId?: string,
   ): Promise<RevenueCatSyncTriggerResult> {
+    const lockKey = `subscription:rc-sync:${userId}`;
+    const lockTtlMs = 8 * 1000; // reduced from 15s — webhook retries handle contention
+    const lockToken = `${source}:${providerEventId ?? webhookEventId ?? 'direct'}:${Date.now()}`;
+
+    if (this.redis.isConfigured) {
+      const acquired = await this.redis.setNX(lockKey, lockToken, lockTtlMs);
+      if (!acquired) {
+        if (source === 'revenuecat_webhook') {
+          // Webhook processing must not be silently dropped — throw so BullMQ
+          // retries via its backoff schedule rather than marking as processed.
+          throw new Error(
+            `RevenueCat sync lock busy (userId=${userId}), webhook will be retried`,
+          );
+        }
+        // client_trigger: silent skip is acceptable; the client will poll again.
+        this.logger.log(
+          `RevenueCat sync skipped due to in-flight sync: userId=${userId}, source=${source}`,
+        );
+        return {
+          accepted: true,
+          source,
+          userId,
+          queuedAt: new Date().toISOString(),
+          webhookEventId: webhookEventId ?? null,
+        };
+      }
+    }
+
+    try {
     const queuedAt = new Date().toISOString();
     const result: RevenueCatSyncTriggerResult = {
       accepted: true,
@@ -424,6 +460,11 @@ export class RevenueCatSyncService implements OnModuleInit {
     );
 
     return result;
+    } finally {
+      if (this.redis.isConfigured) {
+        await this.redis.del(lockKey);
+      }
+    }
   }
 
   @Cron('*/15 * * * *', { name: 'subscription-revenuecat-reconcile' })
@@ -455,18 +496,42 @@ export class RevenueCatSyncService implements OnModuleInit {
         },
       },
       orderBy: { updatedAt: 'desc' },
-      take: 20,
+      take: 50,
+      select: { userId: true },
     });
 
-    for (const sub of recentSubs) {
+    // Deduplicate by userId — a user with N subscription rows must only be
+    // synced once per reconcile tick, otherwise each row generates another
+    // triggerSyncForUser call which (when providerSubscriptionKey is null)
+    // can create a new orphan row on every iteration, leading to exponential growth.
+    const uniqueUserIds = [...new Set(recentSubs.map((s) => s.userId))];
+
+    for (const userId of uniqueUserIds) {
       try {
-        await this.triggerSyncForUser(sub.userId, 'client_trigger');
+        await this.triggerSyncForUser(userId, 'client_trigger');
       } catch (error) {
         this.logger.warn(
-          `RevenueCat reconcile failed: userId=${sub.userId}, error=${error instanceof Error ? error.message : String(error)}`,
+          `RevenueCat reconcile failed: userId=${userId}, error=${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }
+  }
+
+  async backfillPlatformSubscriptionIdsFromRevenueCat(): Promise<number> {
+    const result = await this.prisma.$executeRaw`
+      UPDATE subscription s
+      SET platform_subscription_id = bwe.original_transaction_id,
+          updated_at = NOW()
+      FROM billing_webhook_events bwe
+      WHERE bwe.provider = 'revenuecat'
+        AND bwe.original_transaction_id IS NOT NULL
+        AND s.user_id = bwe.app_user_id::uuid
+        AND s.payment_channel IN ('apple_iap', 'google_play')
+        AND s.platform_subscription_id IS NULL
+        AND s.created_at <= bwe.received_at
+        AND s.expires_at >= (bwe.event_timestamp - INTERVAL '1 hour')
+    `;
+    return Number(result);
   }
 
   @Cron('*/10 * * * *', { name: 'subscription-revenuecat-webhook-retry' })
@@ -601,29 +666,29 @@ export class RevenueCatSyncService implements OnModuleInit {
       return userId;
     }
 
-    const preferredEnvironment =
-      this.configService.get<string>('SUBSCRIPTION_STORE_ENV') ?? 'production';
-
     const providerCustomer = await providerCustomerModel.findFirst({
       where: {
         userId,
         provider: 'revenuecat',
         status: 'active',
-        environment: preferredEnvironment,
       },
       orderBy: [{ lastSyncedAt: 'desc' }, { updatedAt: 'desc' }],
-      select: { providerCustomerId: true },
+      select: { providerCustomerId: true, environment: true },
     });
 
     if (providerCustomer?.providerCustomerId) {
       return providerCustomer.providerCustomerId;
     }
 
+    const preferredEnvironment =
+      this.configService.get<string>('SUBSCRIPTION_STORE_ENV') ?? 'production';
+
     const fallbackProviderCustomer = await providerCustomerModel.findFirst({
       where: {
         userId,
         provider: 'revenuecat',
         status: 'active',
+        environment: preferredEnvironment,
       },
       orderBy: [{ lastSyncedAt: 'desc' }, { updatedAt: 'desc' }],
       select: { providerCustomerId: true },
@@ -681,6 +746,12 @@ export class RevenueCatSyncService implements OnModuleInit {
     const { userId, source, snapshot, webhookEventId, providerEventId } =
       params;
     const runtimeEnv = this.getRuntimeEnv();
+    const webhookEvent = webhookEventId
+      ? await this.prisma.billingWebhookEvents.findUnique({
+          where: { id: webhookEventId },
+          select: { originalTransactionId: true },
+        })
+      : null;
     const { latest, active } = this.selectSubscription(
       snapshot.subscriber?.subscriptions,
     );
@@ -694,7 +765,10 @@ export class RevenueCatSyncService implements OnModuleInit {
     );
     const candidateRefundedAt = this.parseDate(candidate?.refunded_at);
     const providerSubscriptionKey =
-      candidate?.original_transaction_id ?? candidate?.purchase_token ?? null;
+      candidate?.original_transaction_id ??
+      webhookEvent?.originalTransactionId ??
+      candidate?.purchase_token ??
+      null;
     const providerCustomerId =
       snapshot.subscriber?.original_app_user_id ?? userId;
 
@@ -707,36 +781,49 @@ export class RevenueCatSyncService implements OnModuleInit {
       environment: candidate?.is_sandbox ? 'sandbox' : 'production',
     });
 
-    const currentSub = await this.prisma.subscription.findFirst({
-      where: {
-        OR: [
-          {
+    // Prefer exact match by platformSubscriptionId (prevents wrong-row updates
+    // that would violate the unique constraint on user_id+payment_channel+platform_subscription_id).
+    // Falls back to finding any live subscription for the user when the key is
+    // unknown (e.g. client_trigger with no original_transaction_id in snapshot).
+    const iapChannels = [PaymentChannel.APPLE_IAP, PaymentChannel.GOOGLE_PLAY];
+    let currentSub = providerSubscriptionKey
+      ? await this.prisma.subscription.findFirst({
+          where: {
             userId,
-            paymentChannel: {
-              in: [PaymentChannel.APPLE_IAP, PaymentChannel.GOOGLE_PLAY],
-            },
-            status: SubscriptionStatus.ACTIVE,
+            paymentChannel: { in: iapChannels },
+            platformSubscriptionId: providerSubscriptionKey,
           },
-          {
-            userId,
-            paymentChannel: {
-              in: [PaymentChannel.APPLE_IAP, PaymentChannel.GOOGLE_PLAY],
+          include: { subscriptionPlan: true },
+          orderBy: { expiresAt: 'desc' },
+        })
+      : null;
+
+    if (!currentSub) {
+      currentSub = await this.prisma.subscription.findFirst({
+        where: {
+          OR: [
+            {
+              userId,
+              paymentChannel: { in: iapChannels },
+              status: SubscriptionStatus.ACTIVE,
             },
-            status: SubscriptionStatus.GRACE_PERIOD,
-          },
-          {
-            userId,
-            paymentChannel: {
-              in: [PaymentChannel.APPLE_IAP, PaymentChannel.GOOGLE_PLAY],
+            {
+              userId,
+              paymentChannel: { in: iapChannels },
+              status: SubscriptionStatus.GRACE_PERIOD,
             },
-            status: SubscriptionStatus.CANCELLED,
-            expiresAt: { gte: new Date() },
-          },
-        ],
-      },
-      include: { subscriptionPlan: true },
-      orderBy: { expiresAt: 'desc' },
-    });
+            {
+              userId,
+              paymentChannel: { in: iapChannels },
+              status: SubscriptionStatus.CANCELLED,
+              expiresAt: { gte: new Date() },
+            },
+          ],
+        },
+        include: { subscriptionPlan: true },
+        orderBy: { expiresAt: 'desc' },
+      });
+    }
 
     const beforeState = this.serializeSubscriptionState(currentSub);
     let action = 'noop';
@@ -759,6 +846,8 @@ export class RevenueCatSyncService implements OnModuleInit {
         data: {
           status: SubscriptionStatus.REFUNDED,
           autoRenew: false,
+          platformSubscriptionId:
+            providerSubscriptionKey ?? currentSub.platformSubscriptionId,
           cancelledAt: candidateRefundedAt,
           expiresAt: candidateRefundedAt,
           gracePeriodEndsAt: null,
@@ -777,7 +866,12 @@ export class RevenueCatSyncService implements OnModuleInit {
       if (
         currentSub &&
         currentSub.planId === matchedPlan.id &&
-        currentSub.platformSubscriptionId === providerSubscriptionKey
+        (currentSub.platformSubscriptionId === providerSubscriptionKey ||
+          !currentSub.platformSubscriptionId ||
+          // When providerSubscriptionKey is unknown (no original_transaction_id
+          // in snapshot), reuse the found subscription instead of creating a
+          // duplicate row. The platformSubscriptionId will stay unchanged.
+          !providerSubscriptionKey)
       ) {
         const nextStatus = this.determineRevenueCatStatus({
           expiresAt: candidateExpiresAt,
@@ -790,6 +884,8 @@ export class RevenueCatSyncService implements OnModuleInit {
             paymentChannel: this.mapStoreToPaymentChannel(
               selectedCandidate.store,
             ),
+            platformSubscriptionId:
+              providerSubscriptionKey ?? currentSub.platformSubscriptionId,
             expiresAt: candidateExpiresAt,
             status: nextStatus,
             autoRenew: !candidateCancelledAt && !candidateBillingIssueAt,
@@ -866,6 +962,8 @@ export class RevenueCatSyncService implements OnModuleInit {
               ? SubscriptionStatus.CANCELLED
               : SubscriptionStatus.EXPIRED,
           autoRenew: false,
+          platformSubscriptionId:
+            providerSubscriptionKey ?? currentSub.platformSubscriptionId,
           cancelledAt: candidateCancelledAt,
           expiresAt: candidateExpiresAt,
         },
@@ -888,6 +986,8 @@ export class RevenueCatSyncService implements OnModuleInit {
         data: {
           status: SubscriptionStatus.EXPIRED,
           autoRenew: false,
+          platformSubscriptionId:
+            providerSubscriptionKey ?? currentSub.platformSubscriptionId,
           expiresAt: candidateExpiresAt,
           gracePeriodEndsAt: null,
         },
@@ -902,27 +1002,42 @@ export class RevenueCatSyncService implements OnModuleInit {
       cacheInvalidated = true;
     } else if (!candidate && currentSub) {
       // C5a: RC 返回空订阅快照（无任何购买记录），但本地有 active 订阅。
-      // 这通常意味着退款/撤销事件，直接将本地订阅标记为 REVOKED。
-      this.logger.warn(
-        `RevenueCat 快照无活跃订阅，但本地存在订阅记录，强制撤销: userId=${userId}, subscriptionId=${currentSub.id}`,
-      );
-      const revoked = await this.prisma.subscription.update({
-        where: { id: currentSub.id },
-        data: {
-          status: SubscriptionStatus.REVOKED,
-          autoRenew: false,
-          expiresAt: new Date(), // 立即失效
-          gracePeriodEndsAt: null,
-        },
-      });
-      await this.domainSync.syncUserEntitlementsFromSubscription({
-        subscription: revoked as any,
-        provider: 'revenuecat',
-        providerCustomerId,
-        lastEventAt: new Date(),
-      });
-      action = 'revoke';
-      cacheInvalidated = true;
+      //
+      // 注意：RC Sandbox 购买后快照同步存在延迟（数秒~数分钟），reconcile cron
+      // 可能在 webhook 到达前先跑，此时 RC 快照为空并不代表真正撤销。
+      // 因此：
+      //  - webhook 触发（source=revenuecat_webhook）：确实是 RC 推送的空快照，可以撤销
+      //  - cron/client_trigger：不确定，跳过撤销，等待下一次 webhook 或 reconcile
+      if (source === 'revenuecat_webhook') {
+        this.logger.warn(
+          `RevenueCat webhook 快照无活跃订阅，强制撤销: userId=${userId}, subscriptionId=${currentSub.id}`,
+        );
+        const revoked = await this.prisma.subscription.update({
+          where: { id: currentSub.id },
+          data: {
+            status: SubscriptionStatus.REVOKED,
+            autoRenew: false,
+            platformSubscriptionId:
+              providerSubscriptionKey ?? currentSub.platformSubscriptionId,
+            expiresAt: new Date(),
+            gracePeriodEndsAt: null,
+          },
+        });
+        await this.domainSync.syncUserEntitlementsFromSubscription({
+          subscription: revoked as any,
+          provider: 'revenuecat',
+          providerCustomerId,
+          lastEventAt: new Date(),
+        });
+        action = 'revoke';
+        cacheInvalidated = true;
+      } else {
+        // cron / client_trigger：快照为空可能是同步延迟，跳过撤销，保留本地订阅状态
+        this.logger.log(
+          `RevenueCat 快照暂无活跃订阅（source=${source}），跳过撤销，等待 webhook 确认: userId=${userId}, subscriptionId=${currentSub.id}`,
+        );
+        action = 'noop';
+      }
     } else if (candidate?.productId && !matchedPlan) {
       // C5b: 商品未映射到 subscription_plan — 这是配置问题，不能静默跳过。
       // 抛出异常使 BullMQ job 进入 failed 状态，触发 dead-letter 存储和告警。

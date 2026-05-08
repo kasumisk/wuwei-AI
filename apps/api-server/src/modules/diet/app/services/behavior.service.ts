@@ -179,8 +179,13 @@ export class BehaviorService {
         // 修复 B2: 不达标归零
         streakDays = 0;
       }
+    } else {
+      // 昨日无记录：若 lastStreakDate 不是昨天，说明用户中断超过1天，streak 归零
+      // 避免历史残留 streakDays 被注入 AI prompt 造成虚假连续天数
+      if (profile.lastStreakDate && profile.lastStreakDate !== yesterdayStr) {
+        streakDays = 0;
+      }
     }
-    // 如果昨日无记录（首日或刚注册），不改变 streak
 
     // 修复 B3: 合规率按天计算（近 30 天滑动窗口）
     const thirtyDaysAgo = new Date();

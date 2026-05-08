@@ -111,8 +111,15 @@ export interface SubscriptionDto {
   latestMappedPackageId?: string | null;
   latestTransactionAt?: string | null;
   latestTransactionType?: string | null;
+  latestOriginalTransactionId?: string | null;
   latestWebhookAt?: string | null;
   latestWebhookEventType?: string | null;
+  latestAppUserId?: string | null;
+  latestOriginalAppUserId?: string | null;
+  latestAliases?: string[];
+  latestProviderCustomerId?: string | null;
+  latestOriginalProviderCustomerId?: string | null;
+  latestProviderCustomerEnvironment?: string | null;
   hasRefundRecord?: boolean;
   hasManualEntitlement?: boolean;
   hasRevenueCatSignal?: boolean;

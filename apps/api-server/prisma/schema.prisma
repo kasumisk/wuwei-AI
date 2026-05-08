@@ -1718,6 +1718,7 @@ model Subscription {
   @@index([userId, status, expiresAt(sort: Desc)], map: "idx_subscription_user_status_expires")
   @@index([status, updatedAt(sort: Desc)], map: "idx_subscription_status_updated")
   @@index([platformSubscriptionId], map: "idx_subscription_platform_sub")
+  @@unique([userId, paymentChannel, platformSubscriptionId], map: "uq_subscription_user_channel_platform_sub")
   @@map("subscription")
 }
 

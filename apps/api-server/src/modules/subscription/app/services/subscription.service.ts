@@ -108,6 +108,43 @@ export class SubscriptionService implements OnModuleInit {
     );
   }
 
+  private getEffectiveSubscriptionStatus(subscription: {
+    status: SubscriptionStatus;
+    autoRenew?: boolean | null;
+    expiresAt?: Date | null;
+    gracePeriodEndsAt?: Date | null;
+  }): SubscriptionStatus {
+    const now = Date.now();
+    const expiresAt = subscription.expiresAt?.getTime() ?? null;
+    const gracePeriodEndsAt = subscription.gracePeriodEndsAt?.getTime() ?? null;
+
+    if (
+      subscription.status === SubscriptionStatus.ACTIVE &&
+      expiresAt !== null &&
+      expiresAt <= now
+    ) {
+      return SubscriptionStatus.EXPIRED;
+    }
+
+    if (
+      subscription.status === SubscriptionStatus.GRACE_PERIOD &&
+      gracePeriodEndsAt !== null &&
+      gracePeriodEndsAt <= now
+    ) {
+      return SubscriptionStatus.EXPIRED;
+    }
+
+    if (
+      subscription.status === SubscriptionStatus.CANCELLED &&
+      expiresAt !== null &&
+      expiresAt <= now
+    ) {
+      return SubscriptionStatus.EXPIRED;
+    }
+
+    return subscription.status;
+  }
+
   // ==================== 计划管理（Admin） ====================
 
   /** 创建订阅计划 */
@@ -200,6 +237,58 @@ export class SubscriptionService implements OnModuleInit {
         this.i18n.t('subscription.error.planNotFound'),
       );
 
+    const normalizedPlatformSubscriptionId =
+      params.platformSubscriptionId?.trim() || null;
+
+    if (normalizedPlatformSubscriptionId) {
+      const existing = await this.prisma.subscription.findFirst({
+        where: {
+          userId: params.userId,
+          paymentChannel: params.paymentChannel,
+          platformSubscriptionId: normalizedPlatformSubscriptionId,
+        },
+        orderBy: [{ expiresAt: 'desc' }, { createdAt: 'desc' }],
+      });
+
+      if (existing) {
+        const saved = await this.prisma.subscription.update({
+          where: { id: existing.id },
+          data: {
+            planId: params.planId,
+            startsAt: params.startsAt ?? existing.startsAt,
+            expiresAt: params.expiresAt,
+            status: SubscriptionStatus.ACTIVE,
+            autoRenew: true,
+            cancelledAt: null,
+            gracePeriodEndsAt: null,
+            platformSubscriptionId: normalizedPlatformSubscriptionId,
+          },
+        });
+
+        await this.domainSync.syncUserEntitlementsFromSubscription({
+          subscription: saved as any,
+          provider: params.paymentChannel,
+        });
+
+        await this.initQuotas(params.userId, plan);
+        await this.invalidateUserCache(params.userId);
+        this.eventEmitter.emit(
+          DomainEvents.SUBSCRIPTION_CHANGED,
+          new SubscriptionChangedEvent(
+            params.userId,
+            SubscriptionTier.FREE,
+            plan.tier,
+            'purchase',
+          ),
+        );
+
+        this.logger.log(
+          `用户 ${params.userId} 订阅已复用: ${plan.name} -> ${params.expiresAt.toISOString()} | subscriptionId=${saved.id}`,
+        );
+        return saved as unknown as Subscription;
+      }
+    }
+
     // 1. 失效旧订阅
     await this.prisma.subscription.updateMany({
       where: {
@@ -217,7 +306,7 @@ export class SubscriptionService implements OnModuleInit {
         userId: params.userId,
         planId: params.planId,
         paymentChannel: params.paymentChannel,
-        platformSubscriptionId: params.platformSubscriptionId ?? null,
+        platformSubscriptionId: normalizedPlatformSubscriptionId,
         startsAt: params.startsAt ?? new Date(),
         expiresAt: params.expiresAt,
         status: SubscriptionStatus.ACTIVE,
@@ -657,12 +746,10 @@ export class SubscriptionService implements OnModuleInit {
           {
             userId,
             status: SubscriptionStatus.ACTIVE,
-            expiresAt: { gt: now },
           },
           {
             userId,
             status: SubscriptionStatus.GRACE_PERIOD,
-            gracePeriodEndsAt: { gt: now },
           },
           {
             userId,
@@ -675,7 +762,22 @@ export class SubscriptionService implements OnModuleInit {
       orderBy: { expiresAt: 'desc' },
     });
 
-    if (!activeSub || !activeSub.subscriptionPlan) {
+    const effectiveStatus = activeSub
+      ? this.getEffectiveSubscriptionStatus(activeSub as any)
+      : null;
+
+    const hasAccess =
+      !!activeSub &&
+      ((effectiveStatus === SubscriptionStatus.ACTIVE &&
+        !!activeSub.expiresAt &&
+        activeSub.expiresAt > now) ||
+        (effectiveStatus === SubscriptionStatus.GRACE_PERIOD &&
+          (activeSub.gracePeriodEndsAt ?? activeSub.expiresAt) > now) ||
+        (effectiveStatus === SubscriptionStatus.CANCELLED &&
+          !!activeSub.expiresAt &&
+          activeSub.expiresAt > now));
+
+    if (!activeSub || !activeSub.subscriptionPlan || !hasAccess) {
       // 免费用户: 从 DB subscription_plan 表读 tier='free' 的权益，
       // 不使用硬编码的 TIER_ENTITLEMENTS，以确保 DB 中的配额修改生效
       const freePlan = await this.prisma.subscriptionPlan.findFirst({
@@ -718,7 +820,7 @@ export class SubscriptionService implements OnModuleInit {
     // 付费用户: 使用 resolver 合并 DB 中的权益与默认值
     return {
       tier: activeSub.subscriptionPlan.tier as SubscriptionTier,
-      status: activeSub.status as SubscriptionStatus,
+      status: effectiveStatus as SubscriptionStatus,
       subscriptionId: activeSub.id,
       planName: activeSub.subscriptionPlan.name,
       expiresAt: activeSub.expiresAt,

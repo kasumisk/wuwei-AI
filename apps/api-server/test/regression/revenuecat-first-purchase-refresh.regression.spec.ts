@@ -164,4 +164,61 @@ describe('RevenueCat refresh first purchase regression', () => {
     );
     expect(fetchSpy).toHaveBeenCalledWith('prod-user');
   });
+
+  it('prefers the most recently synced active provider customer across environments', async () => {
+    const findFirst = jest
+      .fn()
+      .mockResolvedValueOnce({
+        providerCustomerId: 'sandbox-user',
+        environment: 'sandbox',
+      });
+    const service = new RevenueCatSyncService(
+      {
+        get: jest.fn((key: string) =>
+          key == 'SUBSCRIPTION_STORE_ENV' ? 'production' : 'secret',
+        ),
+      } as any,
+      {
+        subscription: { findFirst: jest.fn().mockResolvedValue(null) },
+        subscriptionProviderCustomer: {
+          findFirst,
+        },
+      } as any,
+      {
+        getUserSummary: jest.fn().mockResolvedValue({
+          tier: SubscriptionTier.FREE,
+          subscriptionId: null,
+        }),
+        invalidateUserSummaryCache: jest.fn(),
+      } as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      { register: jest.fn() } as any,
+      {} as any,
+    );
+
+    const fetchSpy = jest
+      .spyOn(service as any, 'fetchSubscriberSnapshot')
+      .mockResolvedValue({ subscriber: {} });
+    jest
+      .spyOn(service as any, 'applySubscriberSnapshot')
+      .mockResolvedValue({ cacheInvalidated: false });
+
+    await service.triggerSyncForUser(
+      '550e8400-e29b-41d4-a716-446655440000',
+      'client_trigger',
+    );
+
+    expect(findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.not.objectContaining({ environment: 'production' }),
+        select: expect.objectContaining({
+          providerCustomerId: true,
+          environment: true,
+        }),
+      }),
+    );
+    expect(fetchSpy).toHaveBeenCalledWith('sandbox-user');
+  });
 });

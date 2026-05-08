@@ -270,12 +270,37 @@ const SubscriptionList: React.FC = () => {
       title: '平台订阅ID',
       dataIndex: 'platformSubscriptionId',
       width: 180,
-      render: (_: unknown, record: SubscriptionDto) => (
-        <Tooltip title={record.platformSubscriptionId || '-'}>
-          {record.platformSubscriptionId
-            ? `${record.platformSubscriptionId.slice(0, 20)}${record.platformSubscriptionId.length > 20 ? '...' : ''}`
+      render: (_: unknown, record: SubscriptionDto) => {
+        const subscriptionChainId = record.platformSubscriptionId || record.latestOriginalTransactionId;
+        return (
+        <Tooltip title={subscriptionChainId || '-'}>
+          {subscriptionChainId
+            ? `${subscriptionChainId.slice(0, 20)}${subscriptionChainId.length > 20 ? '...' : ''}`
             : '-'}
         </Tooltip>
+        );
+      },
+    },
+    {
+      title: 'RC链路',
+      key: 'rcLinkage',
+      width: 240,
+      search: false,
+      render: (_: unknown, record: SubscriptionDto) => (
+        <Space direction="vertical" size={2}>
+          <span style={{ fontSize: 12 }}>
+            customer=
+            {record.latestProviderCustomerId
+              ? `${record.latestProviderCustomerId.slice(0, 20)}${record.latestProviderCustomerId.length > 20 ? '...' : ''}`
+              : '-'}
+          </span>
+          <span style={{ fontSize: 12, color: '#666' }}>
+            chain=
+            {record.latestOriginalTransactionId
+              ? `${record.latestOriginalTransactionId.slice(0, 20)}${record.latestOriginalTransactionId.length > 20 ? '...' : ''}`
+              : '-'}
+          </span>
+        </Space>
       ),
     },
     {

@@ -91,6 +91,47 @@ export class SubscriptionManagementService {
     private readonly queueProducer: QueueProducer,
   ) {}
 
+  private getEffectiveSubscriptionStatus(subscription: {
+    status: SubscriptionStatus | string;
+    autoRenew?: boolean | null;
+    expiresAt?: Date | string | null;
+    gracePeriodEndsAt?: Date | string | null;
+  }): SubscriptionStatus | string {
+    const now = Date.now();
+    const expiresAt = subscription.expiresAt
+      ? new Date(subscription.expiresAt).getTime()
+      : null;
+    const gracePeriodEndsAt = subscription.gracePeriodEndsAt
+      ? new Date(subscription.gracePeriodEndsAt).getTime()
+      : null;
+
+    if (
+      subscription.status === SubscriptionStatus.ACTIVE &&
+      expiresAt !== null &&
+      expiresAt <= now
+    ) {
+      return SubscriptionStatus.EXPIRED;
+    }
+
+    if (
+      subscription.status === SubscriptionStatus.GRACE_PERIOD &&
+      gracePeriodEndsAt !== null &&
+      gracePeriodEndsAt <= now
+    ) {
+      return SubscriptionStatus.EXPIRED;
+    }
+
+    if (
+      subscription.status === SubscriptionStatus.CANCELLED &&
+      expiresAt !== null &&
+      expiresAt <= now
+    ) {
+      return SubscriptionStatus.EXPIRED;
+    }
+
+    return subscription.status;
+  }
+
   // ==================== 订阅计划管理 ====================
 
   /**
@@ -702,6 +743,7 @@ export class SubscriptionManagementService {
       paymentSignals,
       manualEntitlements,
       activeStoreProducts,
+      providerCustomers,
     ] = await Promise.all([
       this.prisma.subscriptionAuditLogs.findMany({
         where: {
@@ -751,6 +793,13 @@ export class SubscriptionManagementService {
         where: { isActive: true },
         select: { productId: true, offeringId: true, packageId: true },
       }),
+      this.prisma.subscriptionProviderCustomer.findMany({
+        where: {
+          userId: { in: userIds },
+          provider: 'revenuecat',
+        },
+        orderBy: [{ lastSyncedAt: 'desc' }, { updatedAt: 'desc' }],
+      }),
     ]);
 
     const userMap = new Map(users.map((u) => [u.id, u]));
@@ -774,6 +823,10 @@ export class SubscriptionManagementService {
     const failedWebhookByUserId = new Map<
       string,
       (typeof latestWebhookEvents)[number]
+    >();
+    const providerCustomerByUserId = new Map<
+      string,
+      (typeof providerCustomers)[number]
     >();
     const refundSubscriptionIds = new Set<string>();
     const refundUserIds = new Set<string>();
@@ -836,69 +889,95 @@ export class SubscriptionManagementService {
         manualEntitlementSubscriptionIds.add(item.subscriptionId);
       manualEntitlementUserIds.add(item.userId);
     }
+    for (const item of providerCustomers) {
+      if (!providerCustomerByUserId.has(item.userId)) {
+        providerCustomerByUserId.set(item.userId, item);
+      }
+    }
 
-    const aggregatedList = rawList.map((sub) => ({
-      ...sub,
-      plan: sub.subscriptionPlan,
-      user: userMap.get(sub.userId) ?? null,
-      lastSyncedAt:
-        auditBySubscriptionId.get(sub.id)?.createdAt ??
-        auditByUserId.get(sub.userId)?.createdAt ??
-        webhookByUserId.get(sub.userId)?.processedAt ??
-        webhookByUserId.get(sub.userId)?.receivedAt ??
-        null,
-      lastSyncSource:
-        auditBySubscriptionId.get(sub.id)?.actorType ??
-        auditByUserId.get(sub.userId)?.actorType ??
-        (webhookByUserId.get(sub.userId) ? 'webhook' : null),
-      lastSyncStatus: failedWebhookByUserId.has(sub.userId)
-        ? 'failed'
-        : auditBySubscriptionId.get(sub.id) ||
-            auditByUserId.get(sub.userId) ||
-            webhookByUserId.get(sub.userId)
-          ? 'ok'
-          : 'unknown',
-      lastWebhookStatus:
-        webhookByUserId.get(sub.userId)?.processingStatus ?? null,
-      lastWebhookError:
-        failedWebhookByUserId.get(sub.userId)?.lastError ?? null,
-      latestStoreProductId:
-        transactionBySubscriptionId.get(sub.id)?.storeProductId ??
-        transactionByUserId.get(sub.userId)?.storeProductId ??
-        null,
-      latestMappedOfferingId:
-        mappingByProductId.get(
+    const aggregatedList = rawList.map((sub) => {
+      const effectiveStatus = this.getEffectiveSubscriptionStatus(sub);
+      return {
+        ...sub,
+        status: effectiveStatus,
+        plan: sub.subscriptionPlan,
+        user: userMap.get(sub.userId) ?? null,
+        lastSyncedAt:
+          auditBySubscriptionId.get(sub.id)?.createdAt ??
+          auditByUserId.get(sub.userId)?.createdAt ??
+          webhookByUserId.get(sub.userId)?.processedAt ??
+          webhookByUserId.get(sub.userId)?.receivedAt ??
+          null,
+        lastSyncSource:
+          auditBySubscriptionId.get(sub.id)?.actorType ??
+          auditByUserId.get(sub.userId)?.actorType ??
+          (webhookByUserId.get(sub.userId) ? 'webhook' : null),
+        lastSyncStatus: failedWebhookByUserId.has(sub.userId)
+          ? 'failed'
+          : auditBySubscriptionId.get(sub.id) ||
+              auditByUserId.get(sub.userId) ||
+              webhookByUserId.get(sub.userId)
+            ? 'ok'
+            : 'unknown',
+        lastWebhookStatus:
+          webhookByUserId.get(sub.userId)?.processingStatus ?? null,
+        lastWebhookError:
+          failedWebhookByUserId.get(sub.userId)?.lastError ?? null,
+        latestStoreProductId:
           transactionBySubscriptionId.get(sub.id)?.storeProductId ??
-            transactionByUserId.get(sub.userId)?.storeProductId ??
-            '',
-        )?.offeringId ?? null,
-      latestMappedPackageId:
-        mappingByProductId.get(
-          transactionBySubscriptionId.get(sub.id)?.storeProductId ??
-            transactionByUserId.get(sub.userId)?.storeProductId ??
-            '',
-        )?.packageId ?? null,
-      latestTransactionAt:
-        transactionBySubscriptionId.get(sub.id)?.createdAt ??
-        transactionByUserId.get(sub.userId)?.createdAt ??
-        null,
-      latestTransactionType:
-        transactionBySubscriptionId.get(sub.id)?.transactionType ??
-        transactionByUserId.get(sub.userId)?.transactionType ??
-        null,
-      latestWebhookAt: webhookByUserId.get(sub.userId)?.receivedAt ?? null,
-      latestWebhookEventType:
-        webhookByUserId.get(sub.userId)?.eventType ?? null,
-      hasRefundRecord:
-        refundSubscriptionIds.has(sub.id) || refundUserIds.has(sub.userId),
-      hasManualEntitlement:
-        manualEntitlementSubscriptionIds.has(sub.id) ||
-        manualEntitlementUserIds.has(sub.userId),
-      hasRevenueCatSignal:
-        transactionBySubscriptionId.has(sub.id) ||
-        transactionByUserId.has(sub.userId) ||
-        webhookByUserId.has(sub.userId),
-    }));
+          transactionByUserId.get(sub.userId)?.storeProductId ??
+          null,
+        latestMappedOfferingId:
+          mappingByProductId.get(
+            transactionBySubscriptionId.get(sub.id)?.storeProductId ??
+              transactionByUserId.get(sub.userId)?.storeProductId ??
+              '',
+          )?.offeringId ?? null,
+        latestMappedPackageId:
+          mappingByProductId.get(
+            transactionBySubscriptionId.get(sub.id)?.storeProductId ??
+              transactionByUserId.get(sub.userId)?.storeProductId ??
+              '',
+          )?.packageId ?? null,
+        latestTransactionAt:
+          transactionBySubscriptionId.get(sub.id)?.createdAt ??
+          transactionByUserId.get(sub.userId)?.createdAt ??
+          null,
+        latestTransactionType:
+          transactionBySubscriptionId.get(sub.id)?.transactionType ??
+          transactionByUserId.get(sub.userId)?.transactionType ??
+          null,
+        latestOriginalTransactionId:
+          transactionBySubscriptionId.get(sub.id)?.originalTransactionId ??
+          transactionByUserId.get(sub.userId)?.originalTransactionId ??
+          null,
+        latestWebhookAt: webhookByUserId.get(sub.userId)?.receivedAt ?? null,
+        latestWebhookEventType:
+          webhookByUserId.get(sub.userId)?.eventType ?? null,
+        latestAppUserId: webhookByUserId.get(sub.userId)?.appUserId ?? null,
+        latestOriginalAppUserId:
+          webhookByUserId.get(sub.userId)?.originalAppUserId ?? null,
+        latestAliases: Array.isArray(webhookByUserId.get(sub.userId)?.aliases)
+          ? ((webhookByUserId.get(sub.userId)?.aliases as string[]) ?? [])
+          : [],
+        latestProviderCustomerId:
+          providerCustomerByUserId.get(sub.userId)?.providerCustomerId ?? null,
+        latestOriginalProviderCustomerId:
+          providerCustomerByUserId.get(sub.userId)?.originalProviderCustomerId ??
+          null,
+        latestProviderCustomerEnvironment:
+          providerCustomerByUserId.get(sub.userId)?.environment ?? null,
+        hasRefundRecord:
+          refundSubscriptionIds.has(sub.id) || refundUserIds.has(sub.userId),
+        hasManualEntitlement:
+          manualEntitlementSubscriptionIds.has(sub.id) ||
+          manualEntitlementUserIds.has(sub.userId),
+        hasRevenueCatSignal:
+          transactionBySubscriptionId.has(sub.id) ||
+          transactionByUserId.has(sub.userId) ||
+          webhookByUserId.has(sub.userId),
+      };
+    });
 
     const sortedList = [...aggregatedList].sort((a, b) => {
       const direction = sortOrder === 'asc' ? 1 : -1;
@@ -995,14 +1074,41 @@ export class SubscriptionManagementService {
       }),
     ]);
 
+    const latestRevenueCatCustomer = providerCustomers.find(
+      (item) => item.provider === 'revenuecat',
+    );
+    const latestWebhookEvent = await this.prisma.billingWebhookEvents.findFirst({
+      where: { appUserId: subscription.userId },
+      orderBy: { receivedAt: 'desc' },
+    });
+    const latestTransaction = await this.prisma.subscriptionTransactions.findFirst({
+      where: {
+        OR: [{ subscriptionId: id }, { userId: subscription.userId }],
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
     return {
       ...subscription,
+      status: this.getEffectiveSubscriptionStatus(subscription),
       plan: subscription.subscriptionPlan,
       user,
       paymentRecords,
       usageQuotas,
       userEntitlements,
       providerCustomers,
+      latestOriginalTransactionId: latestTransaction?.originalTransactionId ?? null,
+      latestAppUserId: latestWebhookEvent?.appUserId ?? null,
+      latestOriginalAppUserId: latestWebhookEvent?.originalAppUserId ?? null,
+      latestAliases: Array.isArray(latestWebhookEvent?.aliases)
+        ? ((latestWebhookEvent?.aliases as string[]) ?? [])
+        : [],
+      latestProviderCustomerId:
+        latestRevenueCatCustomer?.providerCustomerId ?? null,
+      latestOriginalProviderCustomerId:
+        latestRevenueCatCustomer?.originalProviderCustomerId ?? null,
+      latestProviderCustomerEnvironment:
+        latestRevenueCatCustomer?.environment ?? null,
     };
   }
 
@@ -1726,13 +1832,16 @@ export class SubscriptionManagementService {
       const subscription = record.subscriptionId
         ? subscriptionMap.get(record.subscriptionId)
         : null;
+      const effectiveStatus = subscription
+        ? this.getEffectiveSubscriptionStatus(subscription)
+        : null;
       return {
         ...record,
         user: userMap.get(record.userId) ?? null,
         subscription: subscription
           ? {
               id: subscription.id,
-              status: subscription.status,
+              status: effectiveStatus,
               expiresAt: subscription.expiresAt,
               plan: subscription.subscriptionPlan
                 ? {

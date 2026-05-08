@@ -1,7 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "cd apps/web && pnpm build",
-  "installCommand": "pnpm install --filter=@ai-platform/web...",
-  "framework": "nextjs",
-  "outputDirectory": "apps/web/.next"
+  "version": 2,
+  "framework": null,
+  "installCommand": "pnpm install",
+  "buildCommand": "pnpm turbo build --filter=@ai-platform/admin",
+  "outputDirectory": "apps/admin/dist",
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }
