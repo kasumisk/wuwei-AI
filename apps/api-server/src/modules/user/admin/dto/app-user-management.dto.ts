@@ -33,6 +33,14 @@ export class GetAppUsersQueryDto {
   keyword?: string;
 
   @ApiProperty({
+    description: 'App User ID（RevenueCat appUserId / 内部用户 UUID），精确匹配',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  appUserId?: string;
+
+  @ApiProperty({
     description: '认证方式筛选',
     enum: ['anonymous', 'google', 'email'],
     required: false,

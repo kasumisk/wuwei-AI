@@ -32,6 +32,7 @@ export interface GetAppUsersQuery {
   page?: number;
   pageSize?: number;
   keyword?: string;
+  appUserId?: string;
   authType?: AppUserAuthType | '';
   status?: AppUserStatus | '';
 }
