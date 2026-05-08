@@ -117,7 +117,7 @@ export function DecisionCard({ result, recordId, onAnalyzeAlternative }: Decisio
                   disabled={explainLoading !== null}
                   className="w-full py-2 rounded-lg text-xs font-bold bg-white/60 border border-current/10 hover:bg-white/80 active:scale-[0.98] transition-all disabled:opacity-50"
                 >
-                  {explainLoading ? '分析中...' : `🤔 为什么不推荐「${result.foods[0]?.name}」？`}
+                  {explainLoading ? '分析中...' : `🤔 为什么「${result.foods[0]?.name}」不太适合我？`}
                 </button>
               ) : (
                 <div className="bg-white/60  p-3">

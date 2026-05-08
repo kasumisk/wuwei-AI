@@ -1015,12 +1015,12 @@
   },
   "food": {
     "decision": {
-      "safe": "推荐食用",
-      "limit": "适量食用",
-      "avoid": "建议避免",
-      "riskLow": "低风险",
-      "riskMedium": "中风险",
-      "riskHigh": "高风险",
+      "safe": "较适合",
+      "limit": "适量即可",
+      "avoid": "可考虑替代",
+      "riskLow": "关注度低",
+      "riskMedium": "值得留意",
+      "riskHigh": "需多加留意",
       "nutritionScore": "营养评分",
       "macroDistribution": "宏量素分布",
       "alternatives": "替代方案",

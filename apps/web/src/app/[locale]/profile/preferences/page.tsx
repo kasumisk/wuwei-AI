@@ -58,7 +58,7 @@ const DIVERSITY_OPTS = [
 const MEAL_PATTERN_OPTS = [
   { value: 'frequent_small', label: '少食多餐', desc: '每天 4-6 次小份' },
   { value: 'standard_three', label: '一日三餐', desc: '标准三餐规律' },
-  { value: 'intermittent_fasting', label: '间歇禁食', desc: '16:8 等方案' },
+  { value: 'intermittent_fasting', label: '轻断食', desc: '16:8 等进食窗口方案' },
 ] as const;
 
 const FLAVOR_OPTS = [
@@ -68,7 +68,7 @@ const FLAVOR_OPTS = [
 ] as const;
 
 const REALISM_OPTS = [
-  { value: 'strict', label: '严格', desc: '必须精准可执行' },
+  { value: 'strict', label: '严格', desc: '尽量精准可执行' },
   { value: 'normal', label: '正常', desc: '允许偶尔偏差' },
   { value: 'relaxed', label: '宽松', desc: '仅提供大方向' },
   { value: 'off', label: '关闭', desc: '不做限制' },

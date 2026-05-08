@@ -1031,12 +1031,12 @@
   },
   "food": {
     "decision": {
-      "safe": "Recommended",
-      "limit": "Eat in Moderation",
-      "avoid": "Avoid",
-      "riskLow": "Low Risk",
-      "riskMedium": "Medium Risk",
-      "riskHigh": "High Risk",
+      "safe": "Good Fit",
+      "limit": "Moderate",
+      "avoid": "Consider Alternatives",
+      "riskLow": "Low Concern",
+      "riskMedium": "Worth Noting",
+      "riskHigh": "High Concern",
       "nutritionScore": "Nutrition Score",
       "macroDistribution": "Macro Distribution",
       "alternatives": "Alternatives",

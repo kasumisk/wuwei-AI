@@ -1039,12 +1039,12 @@
   },
   "food": {
     "decision": {
-      "safe": "Recommandé",
-      "limit": "À modérer",
-      "avoid": "À éviter",
-      "riskLow": "Risque faible",
-      "riskMedium": "Risque moyen",
-      "riskHigh": "Risque élevé",
+      "safe": "Bon choix",
+      "limit": "Avec modération",
+      "avoid": "Alternatives possibles",
+      "riskLow": "Faible préoccupation",
+      "riskMedium": "À noter",
+      "riskHigh": "Préoccupation élevée",
       "nutritionScore": "Score nutritionnel",
       "macroDistribution": "Distribution macro",
       "alternatives": "Alternatives",

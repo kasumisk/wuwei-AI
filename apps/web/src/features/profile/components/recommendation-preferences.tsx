@@ -49,7 +49,7 @@ const DIVERSITY_OPTIONS: { value: DiversityTolerance; label: string; desc: strin
 const MEAL_PATTERN_OPTIONS: { value: MealPattern; label: string; desc: string }[] = [
   { value: 'frequent_small', label: '少食多餐', desc: '每天 4-6 次小份进食' },
   { value: 'standard_three', label: '一日三餐', desc: '标准三餐规律进食' },
-  { value: 'intermittent_fasting', label: '间歇性禁食', desc: '16:8 或 18:6 等禁食方案' },
+  { value: 'intermittent_fasting', label: '轻断食', desc: '16:8 或 18:6 等进食窗口方案' },
 ];
 
 const FLAVOR_OPTIONS: { value: FlavorOpenness; label: string; desc: string }[] = [
@@ -59,7 +59,7 @@ const FLAVOR_OPTIONS: { value: FlavorOpenness; label: string; desc: string }[] =
 ];
 
 const REALISM_OPTIONS: { value: RealismLevel; label: string; desc: string }[] = [
-  { value: 'strict', label: '严格', desc: '方案必须精准可执行' },
+  { value: 'strict', label: '严格', desc: '方案尽量精准可执行' },
   { value: 'normal', label: '正常', desc: '允许偶尔偏差' },
   { value: 'relaxed', label: '宽松', desc: '仅提供大方向' },
   { value: 'off', label: '关闭', desc: '不做可行性限制' },

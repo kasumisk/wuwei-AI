@@ -9,15 +9,15 @@
 
 const CONFIG: Record<string, { label: string; className: string }> = {
   EAT: {
-    label: '✅ 建议吃',
+    label: '✅ 较适合',
     className: 'bg-emerald-100 text-emerald-700 border-emerald-200',
   },
   LIMIT: {
-    label: '⚠️ 适量吃',
+    label: '⚠️ 适量即可',
     className: 'bg-amber-100 text-amber-700 border-amber-200',
   },
   AVOID: {
-    label: '🚫 建议避免',
+    label: '💡 可考虑替代',
     className: 'bg-red-100 text-red-700 border-red-200',
   },
   NEUTRAL: {

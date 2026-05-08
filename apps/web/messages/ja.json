@@ -1032,11 +1032,11 @@
   "food": {
     "decision": {
       "safe": "おすすめ",
-      "limit": "適量で",
-      "avoid": "避けること推奨",
-      "riskLow": "低リスク",
-      "riskMedium": "中リスク",
-      "riskHigh": "高リスク",
+      "limit": "適量で楽しめます",
+      "avoid": "代替食品をご検討ください",
+      "riskLow": "低懸念",
+      "riskMedium": "ご留意ください",
+      "riskHigh": "要注意",
       "nutritionScore": "栄養スコア",
       "macroDistribution": "マクロ栄養素",
       "alternatives": "代替案",
