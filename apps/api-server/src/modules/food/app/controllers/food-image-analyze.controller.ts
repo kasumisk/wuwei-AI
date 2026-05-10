@@ -272,6 +272,7 @@ export class FoodImageAnalyzeController {
       inputType: 'image',
       inputSnapshot: { imageUrl: rawData.imageUrl },
       foods: (rawData.foods || []).map((f) => ({
+        ...(f as any),
         name: f.name,
         quantity: f.quantity,
         category: f.category,

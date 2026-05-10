@@ -698,5 +698,9 @@
   "ui.text.reviewManual": "手動レビュー",
   "ui.text.unknown": "不明",
   "ui.tone.encouraging": "励まし型",
-  "prompt.nameField": "フィールド制約:\n- 食品名は `name` フィールドのみに返すこと\n- `name` は日本語で返すこと\n- `nameEn`、`nameZh`、その他の別名フィールドは返さないこと"
+  "prompt.nameField": "フィールド制約:\n- 食品名は `name` フィールドのみに返すこと\n- `name` は日本語で返すこと\n- `nameEn`、`nameZh`、その他の別名フィールドは返さないこと",
+  "prompt.phase1.schema": "{\n  \"foods\": [\n    {\n      \"name\": \"食品名（日本語）\",\n      \"quantity\": \"量の説明（例：1人前、200g、1杯）\",\n      \"estimatedWeightGrams\": \"数字（ユーザーが実際に食べたグラム数）\",\n      \"category\": \"grain/vegetable/fruit/meat/seafood/dairy/egg/legume/nut/fat/beverage/condiment/snack/other\",\n      \"confidence\": \"0〜1（認識信頼度）\"\n    }\n  ],\n  \"summary\": \"この食事の特徴を一文で要約\"\n}",
+  "prompt.phase1.rules": "ルール：\n- 食品名と分量の推定のみ行い、栄養データは不要\n- 各食品を個別にリストアップし、複合料理は主要成分に分解する（例：牛肉ラーメン→麺+牛肉+スープ）\n- estimatedWeightGrams：ご飯1杯約200g、卵1個約50g、ステーキ1枚約150g\n- 食品でない場合は空の foods 配列を返す",
+  "prompt.nutritionFill.system": "あなたは栄養データベースの専門家です。食品名に基づいて、標準的な栄養データ（可食部100gあたり）を返してください。\nJSONのみ出力し、説明は不要です。\n\n出力形式：\n{\n  \"foods\": [\n    {\n      \"name\": \"入力の name をそのまま返す（マッチングに使用）\",\n      \"calories\": \"数字（kcal/100g）\",\n      \"protein\": \"数字（g/100g）\",\n      \"fat\": \"数字（g/100g）\",\n      \"carbs\": \"数字（g/100g）\",\n      \"fiber\": \"数字（g/100g）またはnull\",\n      \"sodium\": \"数字（mg/100g）またはnull\",\n      \"sugar\": \"数字（g/100g）またはnull\",\n      \"saturatedFat\": \"数字（g/100g）またはnull\",\n      \"transFat\": \"数字（g/100g）またはnull\",\n      \"cholesterol\": \"数字（mg/100g）またはnull\",\n      \"glycemicLoad\": \"数字（0-50）またはnull\",\n      \"qualityScore\": \"数字0〜10\",\n      \"satietyScore\": \"数字0〜10\",\n      \"processingLevel\": \"数字1〜4\",\n      \"allergens\": [\"アレルゲン配列、なければ[]\"],\n      \"tags\": [\"タグ配列、なければ[]\"],\n      \"purine\": \"数字（mg/100g）またはnull\",\n      \"fodmapLevel\": \"low/medium/high またはnull\",\n      \"oxalateLevel\": \"low/medium/high またはnull\",\n      \"standardServingG\": \"数字（標準1人前のグラム数）\"\n    }\n  ]\n}\n\n参考：USDA FoodData Central または中国食物成分表。\n不確かなフィールドはnullにし、極端な値を推測しないでください。",
+  "prompt.nutritionFill.user": "以下の食品の栄養データを提供してください："
 }

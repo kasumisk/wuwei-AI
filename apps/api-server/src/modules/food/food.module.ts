@@ -24,6 +24,7 @@ import { ImagePromptBuilder } from './app/services/image/image-prompt.builder';
 import { AnalysisPromptSchemaService } from './app/services/analysis-prompt-schema.service';
 import { ImageResultParser } from './app/services/image/image-result.parser';
 import { FoodLibraryMatcher } from './app/services/image/food-library-matcher.service';
+import { ImageNutritionFillService } from './app/services/image/image-nutrition-fill.service';
 import { LegacyResultAdapter } from './app/services/image/mappers/legacy-result.adapter';
 // 置信度驱动 V1：Session + 判定
 import { AnalysisSessionService } from './app/services/analysis-session.service';
@@ -116,6 +117,7 @@ import { RecommendationModule } from '../diet/recommendation.module';
     AnalysisPromptSchemaService,
     ImageResultParser,
     FoodLibraryMatcher,
+    ImageNutritionFillService,
     LegacyResultAdapter,
     // 置信度驱动 V1
     AnalysisSessionService,

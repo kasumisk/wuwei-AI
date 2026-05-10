@@ -33,10 +33,14 @@ export class AppUserManagementService {
     if (appUserId) {
       where.id = appUserId;
     } else if (keyword) {
+      const isUuid =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          keyword,
+        );
       where.OR = [
         { nickname: { contains: keyword, mode: 'insensitive' } },
         { email: { contains: keyword, mode: 'insensitive' } },
-        { id: { equals: keyword } },
+        ...(isUuid ? [{ id: { equals: keyword } }] : []),
       ];
     }
 

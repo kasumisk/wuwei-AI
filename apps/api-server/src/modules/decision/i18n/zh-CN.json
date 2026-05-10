@@ -698,5 +698,9 @@
   "ui.text.reviewManual": "人工复核",
   "ui.text.unknown": "未知",
   "ui.tone.encouraging": "鼓励型",
-  "prompt.nameField": "字段约束：\n- 食物名只返回在 `name` 字段中\n- `name` 必须使用中文\n- 不要返回 `nameEn`、`nameZh` 或其他额外命名字段"
+  "prompt.nameField": "字段约束：\n- 食物名只返回在 `name` 字段中\n- `name` 必须使用中文\n- 不要返回 `nameEn`、`nameZh` 或其他额外命名字段",
+  "prompt.phase1.schema": "{\n  \"foods\": [\n    {\n      \"name\": \"食物名称（中文）\",\n      \"quantity\": \"份量描述（如 一份、200g、一碗）\",\n      \"estimatedWeightGrams\": \"数字（用户实际食用克数）\",\n      \"category\": \"grain/vegetable/fruit/meat/seafood/dairy/egg/legume/nut/fat/beverage/condiment/snack/other\",\n      \"confidence\": \"0到1（识别置信度）\"\n    }\n  ],\n  \"summary\": \"一句话总结这顿饭的特点\"\n}",
+  "prompt.phase1.rules": "规则：\n- 只需识别食物名称和估算份量，不需要营养数据\n- 每种食物单独列出，组合食物拆解为主要组成（如牛肉面→面条+牛肉+汤底）\n- estimatedWeightGrams：一碗米饭约200g，一个鸡蛋约50g，一份牛排约150g\n- 如描述不是食物，返回空 foods 数组",
+  "prompt.nutritionFill.system": "你是营养数据库专家。根据食物名称，返回标准营养数据（per 100g 可食部分）。\n只输出 JSON，不加任何解释。\n\n输出格式：\n{\n  \"foods\": [\n    {\n      \"name\": \"同输入中的 name，原样返回（用于匹配）\",\n      \"calories\": \"数字（千卡/100g）\",\n      \"protein\": \"数字（克/100g）\",\n      \"fat\": \"数字（克/100g）\",\n      \"carbs\": \"数字（克/100g）\",\n      \"fiber\": \"数字（克/100g）或null\",\n      \"sodium\": \"数字（毫克/100g）或null\",\n      \"sugar\": \"数字（克/100g）或null\",\n      \"saturatedFat\": \"数字（克/100g）或null\",\n      \"transFat\": \"数字（克/100g）或null\",\n      \"cholesterol\": \"数字（毫克/100g）或null\",\n      \"glycemicLoad\": \"数字（0-50）或null\",\n      \"qualityScore\": \"数字0到10\",\n      \"satietyScore\": \"数字0到10\",\n      \"processingLevel\": \"数字1到4\",\n      \"allergens\": [\"过敏原数组，无则[]\"],\n      \"tags\": [\"标签数组，无则[]\"],\n      \"purine\": \"数字（mg/100g）或null\",\n      \"fodmapLevel\": \"low/medium/high 或null\",\n      \"oxalateLevel\": \"low/medium/high 或null\",\n      \"standardServingG\": \"数字（标准一份克数）\"\n    }\n  ]\n}\n\n参考来源：USDA FoodData Central 或中国食物成分表。\n如不确定某字段，填 null，不要猜测极端值。",
+  "prompt.nutritionFill.user": "请提供以下食物的营养数据："
 }

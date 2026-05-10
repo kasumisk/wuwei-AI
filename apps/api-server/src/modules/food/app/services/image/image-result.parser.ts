@@ -85,14 +85,13 @@ export class ImageResultParser {
         .trim();
       parsed = JSON.parse(cleaned);
     } catch {
-      this.logger.warn(
-        `AI response parse to AnalyzedFoodItem[] failed: ${content.substring(0, 200)}`,
-      );
       return [];
     }
 
     const rawFoods = Array.isArray(parsed.foods) ? parsed.foods : [];
-    if (rawFoods.length === 0) return [];
+    if (rawFoods.length === 0) {
+      return [];
+    }
 
     // 1. 缺失字段补齐
     for (const f of rawFoods) {

@@ -8,11 +8,10 @@
  * 输出：systemPrompt（送给 Vision API）和派生的 userId/goalType（供调用方做评分等后续处理）。
  */
 import { Injectable } from '@nestjs/common';
-import { BehaviorService } from '../../../../diet/app/services/behavior.service';
 import { UserContextBuilderService } from '../../../../decision/analyze/user-context-builder.service';
-import { buildTonePrompt } from '../../../../coach/app/config/coach-tone.config';
 import { AnalysisPromptSchemaService } from '../analysis-prompt-schema.service';
 import type { Locale } from '../../../../diet/app/recommendation/utils/i18n-messages';
+import type { UnifiedUserContext } from '../../../../decision/types/analysis-result.types';
 
 export interface BuiltImagePrompt {
   systemPrompt: string;
@@ -26,7 +25,6 @@ export interface BuiltImagePrompt {
 @Injectable()
 export class ImagePromptBuilder {
   constructor(
-    private readonly behaviorService: BehaviorService,
     private readonly userContextBuilder: UserContextBuilderService,
     private readonly promptSchema: AnalysisPromptSchemaService,
   ) {}
@@ -34,61 +32,21 @@ export class ImagePromptBuilder {
   async build(
     userId: string | undefined,
     locale?: Locale,
+    prebuiltCtx?: UnifiedUserContext,
   ): Promise<BuiltImagePrompt> {
-    const ctx = await this.userContextBuilder.build(userId);
-    const userContext = this.userContextBuilder.formatAsPromptString(ctx);
+    const ctx = prebuiltCtx ?? (await this.userContextBuilder.build(userId));
 
-    const [behaviorContext, personaPrompt] = await Promise.all([
-      this.loadBehaviorContext(userId),
-      this.loadPersonaPrompt(userId, ctx.goalType, locale),
-    ]);
-
-    const userContextBlock = this.promptSchema.buildUserContextPrompt({
-      goalType: ctx.goalType,
-      nutritionPriority: ctx.nutritionPriority || [],
-      healthConditions: ctx.healthConditions || [],
-      budgetStatus: ctx.budgetStatus || 'under_target',
-      locale,
-    });
-
-    const fullContext = [
-      personaPrompt,
-      userContext,
-      behaviorContext,
-      userContextBlock,
-    ]
-      .filter(Boolean)
-      .join('\n\n');
-
+    // Vision API is used only for food recognition + weight estimation.
+    // Coaching context belongs in the decision pipeline — NOT here. Including it
+    // causes the model to generate 1000+ coaching tokens instead of the ~100
+    // needed for food identification, inflating latency from ~1s to 9-23s.
     return {
-      systemPrompt: this.promptSchema.buildGoalAwarePrompt(
-        ctx.goalType,
-        fullContext,
-        locale,
-      ),
+      systemPrompt: this.promptSchema.buildPhase1Prompt(locale),
       goalType: ctx.goalType,
       profile: ctx.profile,
       healthConditions: ctx.healthConditions || [],
       nutritionPriority: ctx.nutritionPriority || [],
       budgetStatus: ctx.budgetStatus || 'under_target',
     };
-  }
-
-  private async loadBehaviorContext(userId?: string): Promise<string> {
-    if (!userId) return '';
-    return this.behaviorService.getBehaviorContext(userId).catch(() => '');
-  }
-
-  private async loadPersonaPrompt(
-    userId: string | undefined,
-    goalType: string,
-    locale?: Locale,
-  ): Promise<string> {
-    if (!userId) return '';
-    const profile = await this.behaviorService
-      .getProfile(userId)
-      .catch(() => null);
-    const style = profile?.coachStyle || 'friendly';
-    return buildTonePrompt(style, goalType, locale);
   }
 }
