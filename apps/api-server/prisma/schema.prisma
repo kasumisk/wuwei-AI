@@ -1022,6 +1022,8 @@ model Food {
   healthAssessment  FoodHealthAssessment?
   taxonomy          FoodTaxonomy?
   portionGuide      FoodPortionGuide?
+  imageJobs         FoodImageEnrichmentJob[]
+  imageCandidates   FoodImageCandidate[]
 
   @@index([searchWeight], map: "IDX_5f8b45ec9d0608cffe04d3afbe")
   @@index([barcode], map: "IDX_foods_barcode")
@@ -1039,6 +1041,111 @@ model Food {
   @@index([dataCompleteness], map: "idx_foods_data_completeness")
   @@index([lastEnrichedAt], map: "idx_foods_last_enriched_at")
   @@map("foods")
+}
+
+// ============================================================================
+// V8.4: 图片生成任务表 & 候选图表
+// food_image_enrichment_jobs — 每次图片生成任务的生命周期记录
+// food_image_candidates      — 每次生成的候选图（含 Vision 评分），审核通过后写回 foods
+// ============================================================================
+
+/// V8.4: 图片生成任务（ComfyUI / Replicate）生命周期记录
+/// 与 foods 多对1 关联；每个 job 可产生多张候选图
+model FoodImageEnrichmentJob {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  foodId              String    @map("food_id") @db.Uuid
+  /// 任务状态：pending / running / completed / failed
+  status              String    @default("pending") @db.VarChar(20)
+  /// 生成时使用的搜索/提示词
+  searchQuery         String?   @map("search_query") @db.VarChar(500)
+  /// 目标语言区域（影响 prompt 风格）
+  searchLocale        String?   @map("search_locale") @db.VarChar(10)
+  /// 区域市场（影响食物样式）
+  searchRegion        String?   @map("search_region") @db.VarChar(10)
+  /// 生成来源：comfyui / replicate / manual
+  provider            String    @default("comfyui") @db.VarChar(20)
+  /// 本次任务产生的候选图总数
+  candidateCount      Int       @default(0) @map("candidate_count")
+  /// 审核通过并写回 foods 的候选图 ID
+  selectedCandidateId String?   @map("selected_candidate_id") @db.Uuid
+  /// 失败原因
+  errorMessage        String?   @map("error_message")
+  /// 已重试次数
+  retryCount          Int       @default(0) @map("retry_count")
+  /// 是否试运行（不写回 foods）
+  dryRun              Boolean   @default(false) @map("dry_run")
+  /// 是否强制刷新（忽略已有图片）
+  forceRefresh        Boolean   @default(false) @map("force_refresh")
+  startedAt           DateTime? @map("started_at") @db.Timestamptz(6)
+  finishedAt          DateTime? @map("finished_at") @db.Timestamptz(6)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  food       Food                 @relation(fields: [foodId], references: [id], onDelete: Cascade)
+  candidates FoodImageCandidate[]
+
+  @@index([status], map: "idx_food_image_job_status")
+  @@index([foodId, status], map: "idx_food_image_job_food_status")
+  @@index([createdAt(sort: Desc)], map: "idx_food_image_job_created")
+  @@map("food_image_enrichment_jobs")
+}
+
+/// V8.4: 图片候选记录 — 每次生成后的单张候选图，含所有评分维度
+model FoodImageCandidate {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  foodId              String   @map("food_id") @db.Uuid
+  jobId               String   @map("job_id") @db.Uuid
+  /// 生成/抓取的原始图片 URL（可能是 ComfyUI 临时 URL 或 R2 URL）
+  imageUrl            String   @map("image_url") @db.VarChar(2000)
+  /// 缩略图原始 URL
+  thumbnailUrl        String?  @map("thumbnail_url") @db.VarChar(2000)
+  /// 已上传 R2 的正式 CDN URL
+  storedUrl           String?  @map("stored_url") @db.VarChar(1000)
+  /// 已上传 R2 的缩略图 CDN URL
+  storedThumbnailUrl  String?  @map("stored_thumbnail_url") @db.VarChar(1000)
+  /// 来源：comfyui / replicate
+  source              String   @db.VarChar(20)
+  /// 来源页面 URL（若有）
+  sourcePageUrl       String?  @map("source_page_url") @db.VarChar(2000)
+  /// 图片原始宽度 px
+  width               Int?
+  /// 图片原始高度 px
+  height              Int?
+  mimeType            String?  @map("mime_type") @db.VarChar(50)
+  fileSizeBytes       Int?     @map("file_size")
+  /// 图片内容 hash（去重用）
+  hash                String?  @db.VarChar(64)
+  /// Vision：食物匹配度 0-100
+  matchScore          Int?     @map("match_score")
+  /// Vision：整体质量分 0-100
+  qualityScore        Int?     @map("quality_score")
+  /// Vision：美观度 0-100
+  aestheticScore      Int?     @map("aesthetic_score")
+  /// Vision：安全性 0-100
+  safetyScore         Int?     @map("safety_score")
+  /// 综合最终得分（用于排序选优）
+  finalScore          Int?     @map("final_score")
+  /// Vision 审核理由
+  aiReason            String?  @map("ai_reason")
+  /// Vision 是否判断为食物图
+  isFoodImage         Boolean? @map("is_food_image")
+  /// Vision 是否判断为目标食物
+  isMatchedFood       Boolean? @map("is_matched_food")
+  /// 候选状态：pending / approved / rejected / uploaded
+  status              String   @default("pending") @db.VarChar(20)
+  rejectionReason     String?  @map("rejection_reason") @db.VarChar(500)
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  food Food                    @relation(fields: [foodId], references: [id], onDelete: Cascade)
+  job  FoodImageEnrichmentJob  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, hash], map: "uq_food_image_candidate_job_hash")
+  @@index([foodId], map: "idx_food_image_candidate_food")
+  @@index([jobId], map: "idx_food_image_candidate_job")
+  @@index([finalScore(sort: Desc)], map: "idx_food_image_candidate_score")
+  @@index([status], map: "idx_food_image_candidate_status")
+  @@map("food_image_candidates")
 }
 
 // ============================================================================

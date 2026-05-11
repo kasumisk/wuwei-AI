@@ -30,9 +30,15 @@ import { EnrichmentNowService } from './services/enrichment/services/enrichment-
 import { EnrichmentReEnqueueService } from './services/enrichment/services/enrichment-reenqueue.service';
 import { FoodEnrichmentProcessor } from './food-enrichment.processor';
 import { FoodUsdaImportProcessor } from './food-usda-import.processor';
+// Image Enrichment
+import { FoodImageEnrichmentService } from './services/image-enrichment/food-image-enrichment.service';
+import { FoodImageEnrichmentAdminService } from './services/image-enrichment/food-image-enrichment-admin.service';
+import { FoodImageEnrichmentProcessor } from './food-image-enrichment.processor';
+import { ComfyUIService } from './services/image-enrichment/comfyui.service';
 // Controllers
 import { FoodPipelineController } from './controllers/food-pipeline.controller';
 import { FoodEnrichmentController } from './controllers/food-enrichment.controller';
+import { FoodImageEnrichmentController } from './controllers/food-image-enrichment.controller';
 import { QUEUE_NAMES } from '../core/queue';
 import { FoodModule } from '../modules/food/food.module';
 
@@ -42,6 +48,7 @@ import { FoodModule } from '../modules/food/food.module';
     HttpModule.register({ timeout: 30000 }),
     BullModule.registerQueue({ name: QUEUE_NAMES.FOOD_ENRICHMENT }),
     BullModule.registerQueue({ name: QUEUE_NAMES.FOOD_USDA_IMPORT }),
+    BullModule.registerQueue({ name: QUEUE_NAMES.FOOD_IMAGE_GENERATION }),
     forwardRef(() => FoodModule),
     // V6.5 Phase 1J: ScheduleModule.forRoot() 已迁移到 AppModule（全局唯一注册）
   ],
@@ -75,8 +82,17 @@ import { FoodModule } from '../modules/food/food.module';
     FoodEnrichmentService,
     FoodEnrichmentProcessor,
     FoodUsdaImportProcessor,
+    // Image Enrichment
+    ComfyUIService,
+    FoodImageEnrichmentService,
+    FoodImageEnrichmentAdminService,
+    FoodImageEnrichmentProcessor,
   ],
-  controllers: [FoodPipelineController, FoodEnrichmentController],
+  controllers: [
+    FoodPipelineController,
+    FoodEnrichmentController,
+    FoodImageEnrichmentController,
+  ],
   exports: [
     FoodRuleEngineService,
     FoodPipelineOrchestratorService,

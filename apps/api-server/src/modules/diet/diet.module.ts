@@ -26,10 +26,12 @@ import { FoodSummaryController } from './app/controllers/food-summary.controller
 import { FoodPlanController } from './app/controllers/food-plan.controller';
 import { FoodBehaviorController } from './app/controllers/food-behavior.controller';
 import { FoodNutritionController } from './app/controllers/food-nutrition.controller';
+import { DailyStatusController } from './app/controllers/daily-status.controller';
 // 领域服务（不属于推荐/解释/追踪子模块）
 import { FoodService } from './app/services/food.service';
 import { FoodRecordService } from './app/services/food-record.service';
 import { DailySummaryService } from './app/services/daily-summary.service';
+import { DailyStatusService } from './app/services/daily-status.service';
 import { DailyPlanService } from './app/services/daily-plan.service';
 import { NutritionScoreService } from './app/services/nutrition-score.service';
 import { BehaviorService } from './app/services/behavior.service';
@@ -76,6 +78,7 @@ import { BingeInterventionService } from './admin/services/binge-intervention.se
     FoodPlanController,
     FoodBehaviorController,
     FoodNutritionController,
+    DailyStatusController,
     ContentManagementController,
     ABExperimentManagementController,
     RecommendationDebugController,
@@ -89,6 +92,7 @@ import { BingeInterventionService } from './admin/services/binge-intervention.se
     FoodService,
     FoodRecordService,
     DailySummaryService,
+    DailyStatusService,
     DailyPlanService,
     NutritionScoreService,
     BehaviorService,
@@ -116,6 +120,7 @@ import { BingeInterventionService } from './admin/services/binge-intervention.se
     FoodService,
     FoodRecordService,
     DailySummaryService,
+    DailyStatusService,
     BehaviorService,
     NutritionScoreService,
     ContentManagementService,

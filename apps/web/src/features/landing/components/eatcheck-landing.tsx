@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { motion, useReducedMotion, useScroll, useTransform, type Variants } from 'framer-motion';
 import { EMAIL_ADDRESS } from '@/lib/constants/config';
 import { EatCheckHeroLottie } from '@/features/landing/components/eatcheck-hero-lottie';
+import { IosDownloadLink } from '@/features/landing/components/ios-download-link';
 
 type EatCheckLandingProps = {
   homeHref: string;
@@ -105,7 +106,17 @@ function RevealBlock({ children, className = '' }: { children: React.ReactNode; 
   );
 }
 
-function MagneticLink({ href, children, variant = 'primary' }: { href: string; children: React.ReactNode; variant?: 'primary' | 'secondary' }) {
+function MagneticLink({
+  href,
+  children,
+  variant = 'primary',
+  external = false,
+}: {
+  href: string;
+  children: React.ReactNode;
+  variant?: 'primary' | 'secondary';
+  external?: boolean;
+}) {
   const base =
     'group relative inline-flex items-center justify-center overflow-hidden rounded-full px-6 py-3.5 text-sm font-semibold tracking-[-0.01em] transition will-change-transform focus:outline-none focus:ring-4';
   const styles =
@@ -115,13 +126,23 @@ function MagneticLink({ href, children, variant = 'primary' }: { href: string; c
 
   return (
     <motion.div whileHover={{ y: -2, scale: 1.015 }} whileTap={{ scale: 0.985 }} transition={{ duration: 0.2 }}>
-      <Link href={href} className={`${base} ${styles}`}>
-        <span className="absolute inset-0 translate-y-full bg-emerald-600/90 transition-transform duration-500 ease-out group-hover:translate-y-0" />
-        <span className="relative z-10 flex items-center gap-2">
-          {children}
-          <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
-        </span>
-      </Link>
+      {external ? (
+        <a href={href} target="_blank" rel="noreferrer" className={`${base} ${styles}`}>
+          <span className="absolute inset-0 translate-y-full bg-emerald-600/90 transition-transform duration-500 ease-out group-hover:translate-y-0" />
+          <span className="relative z-10 flex items-center gap-2">
+            {children}
+            <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
+          </span>
+        </a>
+      ) : (
+        <Link href={href} className={`${base} ${styles}`}>
+          <span className="absolute inset-0 translate-y-full bg-emerald-600/90 transition-transform duration-500 ease-out group-hover:translate-y-0" />
+          <span className="relative z-10 flex items-center gap-2">
+            {children}
+            <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
+          </span>
+        </Link>
+      )}
     </motion.div>
   );
 }
@@ -163,7 +184,7 @@ function Header({ privacyHref, termsHref }: Pick<EatCheckLandingProps, 'privacyH
   );
 }
 
-function Hero({ homeHref }: Pick<EatCheckLandingProps, 'homeHref'>) {
+function Hero({ homeHref: _homeHref }: Pick<EatCheckLandingProps, 'homeHref'>) {
   const shouldReduceMotion = useReducedMotion();
   const { scrollYProgress } = useScroll();
   const y = useTransform(scrollYProgress, [0, 0.25], shouldReduceMotion ? [0, 0] : [0, -44]);
@@ -185,7 +206,7 @@ function Hero({ homeHref }: Pick<EatCheckLandingProps, 'homeHref'>) {
           Log a meal. Read the pattern. Make the next choice with less guesswork. Built for wellness reflection, not diagnosis.
         </motion.p>
         <motion.div variants={reveal} className="mt-9 flex flex-col gap-3 sm:flex-row">
-          <MagneticLink href={homeHref}>Download / Coming Soon</MagneticLink>
+          <IosDownloadLink />
           <MagneticLink href="#trust" variant="secondary">Read the safety notes</MagneticLink>
         </motion.div>
       </motion.div>
@@ -424,7 +445,7 @@ function SubscriptionValue() {
   );
 }
 
-function FinalCta({ homeHref }: Pick<EatCheckLandingProps, 'homeHref'>) {
+function FinalCta({ homeHref: _homeHref }: Pick<EatCheckLandingProps, 'homeHref'>) {
   return (
     <section className="mx-auto w-full max-w-6xl px-5 py-20 sm:px-6 lg:px-8 lg:py-28">
       <RevealBlock>
@@ -444,7 +465,7 @@ function FinalCta({ homeHref }: Pick<EatCheckLandingProps, 'homeHref'>) {
               Start with one meal. Keep the record honest. Let the pattern become easier to see.
             </p>
             <div className="mt-9">
-              <MagneticLink href={homeHref}>Download / Coming Soon</MagneticLink>
+              <IosDownloadLink />
             </div>
           </div>
         </div>

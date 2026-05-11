@@ -1509,3 +1509,275 @@ export const useReEnqueueEnrichment = (
     ...options,
   });
 };
+
+// ==================== 图片生成管道 ====================
+
+export interface ImageEnrichmentScanResult {
+  totalFoods: number;
+  covered: number;
+  missingImage: number;
+  missingThumbnail: number;
+  coveragePercent: number;
+}
+
+export interface ImageEnrichmentEnqueueParams {
+  onlyMissing?: boolean;
+  foodGroup?: string[];
+  primarySource?: string[];
+  isVerified?: boolean;
+  dishType?: string[];
+  minDishPriority?: number;
+  maxDishPriority?: number;
+  limit?: number;
+  force?: boolean;
+  premiumThreshold?: number;
+}
+
+export interface ImageEnrichmentClearParams {
+  foodGroup?: string[];
+  primarySource?: string[];
+  isVerified?: boolean;
+  dishType?: string[];
+  limit?: number;
+}
+
+export interface ImageEnrichmentEnqueueResult {
+  enqueued: number;
+  skipped: number;
+  foodIds: string[];
+}
+
+export interface ImageEnrichmentNowResult {
+  foodId: string;
+  imageUrl: string;
+  visionScore: number;
+  visionMatch: boolean;
+}
+
+export interface ImageEnrichmentJobsResult {
+  counts: {
+    waiting: number;
+    active: number;
+    completed: number;
+    failed: number;
+    delayed: number;
+  };
+  active: Array<{ jobId: string; foodId: string; foodName: string; startedAt: number }>;
+  recent: Array<{
+    jobId: string;
+    foodId: string;
+    foodName: string;
+    imageUrl: string | null;
+    thumbnailUrl: string | null;
+    qualityScore: number;
+    candidateStatus: string | null;
+    status: 'completed' | 'failed';
+    finishedAt: number;
+    error?: string;
+  }>;
+}
+
+export interface ImageEnrichmentClearParams {
+  foodGroup?: string;
+  primarySource?: string;
+  isVerified?: boolean;
+  dishType?: string;
+  limit?: number;
+}
+
+export interface ImageEnrichmentClearResult {
+  cleared: number;
+}
+
+const imageEnrichmentApi = {
+  scan: (): Promise<ImageEnrichmentScanResult> =>
+    request.get(PATH.ADMIN.FOOD_IMAGE_ENRICHMENT_SCAN),
+
+  jobs: (): Promise<ImageEnrichmentJobsResult> =>
+    request.get(PATH.ADMIN.FOOD_IMAGE_ENRICHMENT_JOBS),
+
+  enqueue: (params: ImageEnrichmentEnqueueParams): Promise<ImageEnrichmentEnqueueResult> =>
+    request.post(PATH.ADMIN.FOOD_IMAGE_ENRICHMENT_ENQUEUE, params),
+
+  enrichNow: (foodId: string): Promise<ImageEnrichmentNowResult> =>
+    request.post(PATH.ADMIN.FOOD_IMAGE_ENRICHMENT_NOW(foodId), {}),
+
+  clear: (params: ImageEnrichmentClearParams): Promise<ImageEnrichmentClearResult> =>
+    request.post(PATH.ADMIN.FOOD_IMAGE_ENRICHMENT_CLEAR, params),
+
+  clearQueue: (): Promise<{ cleared: number; detail: Record<string, number> }> =>
+    request.post(PATH.ADMIN.FOOD_IMAGE_ENRICHMENT_QUEUE_CLEAR, {}),
+};
+
+const imageQueryKeys = {
+  scan: ['imageEnrichment', 'scan'] as const,
+  jobs: ['imageEnrichment', 'jobs'] as const,
+};
+
+export const useImageEnrichmentScan = () =>
+  useQuery({
+    queryKey: imageQueryKeys.scan,
+    queryFn: () => imageEnrichmentApi.scan(),
+    staleTime: 30 * 1000,
+  });
+
+export const useImageEnrichmentJobs = (enabled = true) =>
+  useQuery({
+    queryKey: imageQueryKeys.jobs,
+    queryFn: () => imageEnrichmentApi.jobs(),
+    refetchInterval: enabled ? 3000 : false,
+    staleTime: 0,
+  });
+
+export const useImageEnrichmentEnqueue = (
+  options?: UseMutationOptions<ImageEnrichmentEnqueueResult, Error, ImageEnrichmentEnqueueParams>
+) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (params) => imageEnrichmentApi.enqueue(params),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: imageQueryKeys.scan });
+    },
+    ...options,
+  });
+};
+
+export const useImageEnrichmentNow = (
+  options?: UseMutationOptions<ImageEnrichmentNowResult, Error, string>
+) =>
+  useMutation({
+    mutationFn: (foodId) => imageEnrichmentApi.enrichNow(foodId),
+    ...options,
+  });
+
+export const useImageEnrichmentClear = (
+  options?: UseMutationOptions<ImageEnrichmentClearResult, Error, ImageEnrichmentClearParams>
+) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (params) => imageEnrichmentApi.clear(params),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: imageQueryKeys.scan });
+    },
+    ...options,
+  });
+};
+
+export const useImageEnrichmentQueueClear = (
+  options?: UseMutationOptions<{ cleared: number; detail: Record<string, number> }, Error, void>
+) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => imageEnrichmentApi.clearQueue(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: imageQueryKeys.jobs });
+    },
+    ...options,
+  });
+};
+
+// ─── 候选图 ───────────────────────────────────────────────────────────────────
+
+export interface ImageEnrichmentCandidate {
+  id: string;
+  foodId: string;
+  foodName: string;
+  jobId: string;
+  storedUrl: string | null;
+  storedThumbnailUrl: string | null;
+  source: string;
+  qualityScore: number | null;
+  matchScore: number | null;
+  finalScore: number | null;
+  aiReason: string | null;
+  isFoodImage: boolean | null;
+  isMatchedFood: boolean | null;
+  status: string;
+  rejectionReason: string | null;
+  createdAt: number;
+}
+
+export interface ImageEnrichmentCandidatesResult {
+  total: number;
+  items: ImageEnrichmentCandidate[];
+}
+
+export interface ImageEnrichmentCandidatesParams {
+  foodId?: string;
+  status?: string[];
+  page?: number;
+  pageSize?: number;
+}
+
+export interface ImageEnrichmentApproveResult {
+  candidateId: string;
+  foodId: string;
+  imageUrl: string;
+  thumbnailUrl: string | null;
+}
+
+export interface ImageEnrichmentRejectResult {
+  candidateId: string;
+  status: 'rejected';
+}
+
+const candidatesApi = {
+  list: (params: ImageEnrichmentCandidatesParams): Promise<ImageEnrichmentCandidatesResult> => {
+    const query = new URLSearchParams();
+    if (params.foodId) query.set('foodId', params.foodId);
+    if (params.status?.length) query.set('status', params.status.join(','));
+    if (params.page) query.set('page', String(params.page));
+    if (params.pageSize) query.set('pageSize', String(params.pageSize));
+    const qs = query.toString();
+    return request.get(`${PATH.ADMIN.FOOD_IMAGE_ENRICHMENT_CANDIDATES}${qs ? `?${qs}` : ''}`);
+  },
+
+  approve: (candidateIds: string[]): Promise<ImageEnrichmentApproveResult[]> =>
+    request.post(PATH.ADMIN.FOOD_IMAGE_ENRICHMENT_APPROVE, { candidateIds }),
+
+  reject: (candidateIds: string[], reason?: string): Promise<ImageEnrichmentRejectResult[]> =>
+    request.post(PATH.ADMIN.FOOD_IMAGE_ENRICHMENT_REJECT, { candidateIds, reason }),
+};
+
+const candidateQueryKeys = {
+  list: (params: ImageEnrichmentCandidatesParams) =>
+    ['imageEnrichment', 'candidates', params] as const,
+};
+
+export const useImageEnrichmentCandidates = (
+  params: ImageEnrichmentCandidatesParams,
+  options?: { enabled?: boolean },
+) =>
+  useQuery({
+    queryKey: candidateQueryKeys.list(params),
+    queryFn: () => candidatesApi.list(params),
+    staleTime: 5 * 1000,
+    enabled: options?.enabled !== false,
+  });
+
+export const useImageEnrichmentApprove = (
+  options?: UseMutationOptions<ImageEnrichmentApproveResult[], Error, string[]>,
+) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (ids) => candidatesApi.approve(ids),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['imageEnrichment', 'candidates'] });
+      queryClient.invalidateQueries({ queryKey: imageQueryKeys.scan });
+    },
+    ...options,
+  });
+};
+
+export const useImageEnrichmentReject = (
+  options?: UseMutationOptions<ImageEnrichmentRejectResult[], Error, { ids: string[]; reason?: string }>,
+) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ids, reason }) => candidatesApi.reject(ids, reason),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['imageEnrichment', 'candidates'] });
+    },
+    ...options,
+  });
+};

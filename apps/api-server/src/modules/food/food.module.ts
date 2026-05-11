@@ -161,6 +161,8 @@ import { RecommendationModule } from '../diet/recommendation.module';
     FoodRepository,
     FoodEmbeddingRepository,
     FoodProvenanceRepository,
+    // 图片补全流水线复用 Vision 审核客户端
+    VisionApiClient,
   ],
 })
 export class FoodModule {}
