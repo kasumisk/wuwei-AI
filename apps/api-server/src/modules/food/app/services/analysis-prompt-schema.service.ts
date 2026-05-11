@@ -68,6 +68,11 @@ interface HealthEstimationInstruction {
 
 const FALLBACK_LOCALE: Locale = 'en-US';
 
+// Phase 1 schema and rules are now stored in i18n files under:
+//   decision.prompt.phase1.schema
+//   decision.prompt.phase1.rules
+// This enables multilingual support for zh-CN / en-US / ja-JP.
+
 // ==================== Service ====================
 
 @Injectable()
@@ -118,9 +123,27 @@ export class AnalysisPromptSchemaService {
   }
 
   /**
-   * Build complete food analysis base prompt (unified system role + JSON schema + rules + name-field constraint)
+   * Phase 1 prompt for two-phase image analysis.
+   * Ultra-slim: Vision only identifies foods + estimates weight, no nutrition.
+   * Nutrition filled by library matcher + text LLM in Phase 2.
    */
-  buildBasePrompt(_mode?: 'text' | 'image', locale?: Locale): string {
+  buildPhase1Prompt(locale?: Locale): string {
+    const loc = (locale ?? this.i18n.currentLocale()) as I18nLocale;
+    return [
+      this.i18n.t('decision.prompt.systemRole', loc),
+      '',
+      this.i18n.t('decision.prompt.jsonOnly', loc),
+      this.i18n.t('decision.prompt.phase1.schema', loc),
+      '',
+      this.i18n.t('decision.prompt.phase1.rules', loc),
+    ].join('\n');
+  }
+
+  /**
+   * Build base prompt for text analysis.
+   * For image analysis, use buildPhase1Prompt() instead.
+   */
+  buildBasePrompt(mode?: 'text' | 'image', locale?: Locale): string {
     const loc = (locale ?? this.i18n.currentLocale()) as I18nLocale;
     return [
       this.i18n.t('decision.prompt.systemRole', loc),

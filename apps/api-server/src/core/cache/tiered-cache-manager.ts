@@ -156,6 +156,18 @@ export class TieredCacheNamespace<T> {
   }
 
   /**
+   * 按 namespace 内部 key 前缀批量失效。
+   * 用于 key 中含用户/日期/时区等变体时一次清掉同一天所有缓存。
+   */
+  async invalidateByPrefix(prefix: string): Promise<void> {
+    for (const key of [...this.l1.keys()]) {
+      if (key.startsWith(prefix)) this.evictL1(key);
+    }
+    await this.redis.delByPrefix(`${this.config.namespace}:${prefix}`);
+    await this.broadcast({ ns: this.config.namespace });
+  }
+
+  /**
    * 按前缀批量失效（L1 + L2 + 广播）
    */
   async invalidateAll(): Promise<void> {
@@ -347,7 +359,9 @@ export class TieredCacheManager implements OnModuleInit, OnModuleDestroy {
 
     try {
       await this.subscriber.subscribe(CACHE_INVALIDATE_CHANNEL);
-      this.logger.log(`Subscribed to Redis channel: ${CACHE_INVALIDATE_CHANNEL}`);
+      this.logger.log(
+        `Subscribed to Redis channel: ${CACHE_INVALIDATE_CHANNEL}`,
+      );
     } catch (err) {
       this.logger.warn(
         `Cache invalidate subscribe disabled: ${(err as Error).message}`,

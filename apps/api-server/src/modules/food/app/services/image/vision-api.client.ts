@@ -201,9 +201,6 @@ export class VisionApiClient implements OnModuleInit {
       ],
     });
 
-    this.logger.debug(
-      `Vision API ok: model=${model}, prompt=${result.usage.promptTokens}, completion=${result.usage.completionTokens}, total=${result.usage.totalTokens}, cost=$${result.costUsd.toFixed(6)}`,
-    );
     return result.content;
   }
 }

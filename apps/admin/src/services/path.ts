@@ -71,6 +71,17 @@ const PATH = {
     BINGE_INTERVENTION: '/admin/binge-intervention',
     // 食谱管理
     RECIPES: '/admin/recipes',
+    // 图片生成管道
+    FOOD_IMAGE_ENRICHMENT: '/admin/food-pipeline/image-enrichment',
+    FOOD_IMAGE_ENRICHMENT_SCAN: '/admin/food-pipeline/image-enrichment/scan',
+    FOOD_IMAGE_ENRICHMENT_JOBS: '/admin/food-pipeline/image-enrichment/jobs',
+    FOOD_IMAGE_ENRICHMENT_ENQUEUE: '/admin/food-pipeline/image-enrichment/enqueue',
+    FOOD_IMAGE_ENRICHMENT_NOW: (foodId: string) => `/admin/food-pipeline/image-enrichment/${foodId}/now`,
+    FOOD_IMAGE_ENRICHMENT_CLEAR: '/admin/food-pipeline/image-enrichment/clear',
+    FOOD_IMAGE_ENRICHMENT_QUEUE_CLEAR: '/admin/food-pipeline/image-enrichment/queue/clear',
+    FOOD_IMAGE_ENRICHMENT_CANDIDATES: '/admin/food-pipeline/image-enrichment/candidates',
+    FOOD_IMAGE_ENRICHMENT_APPROVE: '/admin/food-pipeline/image-enrichment/candidates/approve',
+    FOOD_IMAGE_ENRICHMENT_REJECT: '/admin/food-pipeline/image-enrichment/candidates/reject',
   },
 };
 

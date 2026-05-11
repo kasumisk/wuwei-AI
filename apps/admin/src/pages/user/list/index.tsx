@@ -15,6 +15,7 @@ import {
   Statistic,
   Avatar,
   Tooltip,
+  Typography,
 } from 'antd';
 import {
   EditOutlined,
@@ -27,6 +28,7 @@ import {
   GoogleOutlined,
   MailOutlined,
   EyeOutlined,
+  CopyOutlined,
 } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
@@ -41,6 +43,8 @@ import {
   type AppUserDto,
   type AppUserStatus,
 } from '@/services/appUserManagementService';
+
+const { Text } = Typography;
 
 // ==================== 常量配置 ====================
 
@@ -158,10 +162,36 @@ const AppUserManagement: React.FC = () => {
             <div style={{ fontWeight: 500, lineHeight: 1.4 }}>
               {record.nickname || <span style={{ color: '#bbb' }}>无昵称</span>}
             </div>
-            <div style={{ fontSize: 11, color: '#999', lineHeight: 1.4 }}>
-              <Tooltip title={record.id}>{record.id.slice(0, 8)}...</Tooltip>
-            </div>
           </div>
+        </Space>
+      ),
+    },
+    {
+      title: 'App User ID',
+      dataIndex: 'id',
+      width: 220,
+      ellipsis: true,
+      // 允许在 ProTable 搜索栏中作为独立字段搜索
+      renderFormItem: () => (
+        <Input placeholder="粘贴 App User ID / RC appUserId" allowClear />
+      ),
+      render: (_: any, record: AppUserDto) => (
+        <Space size={4}>
+          <Text
+            style={{ fontSize: 12, fontFamily: 'monospace', color: '#595959' }}
+            ellipsis={{ tooltip: record.id }}
+          >
+            {record.id}
+          </Text>
+          <Tooltip title="复制">
+            <CopyOutlined
+              style={{ cursor: 'pointer', color: '#1677ff', fontSize: 12 }}
+              onClick={() => {
+                navigator.clipboard.writeText(record.id);
+                message.success('已复制 App User ID');
+              }}
+            />
+          </Tooltip>
         </Space>
       ),
     },
@@ -321,13 +351,14 @@ const AppUserManagement: React.FC = () => {
         rowKey="id"
         headerTitle="App 用户管理"
         columns={columns}
-        scroll={{ x: 1200 }}
+        scroll={{ x: 1400 }}
         request={async (params) => {
           try {
             const { list, total } = await appUserApi.getAppUsers({
               page: params.current,
               pageSize: params.pageSize,
               keyword: params.nickname || params.email,
+              appUserId: params.id || undefined,
               authType: params.authType || undefined,
               status: params.status || undefined,
             });

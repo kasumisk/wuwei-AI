@@ -45,8 +45,8 @@
     "headlineHighlight": "健康生活。",
     "description": "体验为您的健康而设计的 AI 营养助手。无畏健康提供个性化饮食指导、智能膳食规划和切实可行的健康建议，助您达成健康目标。",
     "testimonial": {
-      "author": "陈医生",
-      "authorTitle": "认证营养师",
+      "author": "陈营养顾问",
+      "authorTitle": "健康营养顾问",
       "content": "无畏健康彻底改变了我指导客户的方式。它的 AI 驱动膳食规划和营养分析非常准确且易于使用。"
     },
     "footer": {
@@ -1015,12 +1015,12 @@
   },
   "food": {
     "decision": {
-      "safe": "推荐食用",
-      "limit": "适量食用",
-      "avoid": "建议避免",
-      "riskLow": "低风险",
-      "riskMedium": "中风险",
-      "riskHigh": "高风险",
+      "safe": "较适合",
+      "limit": "适量即可",
+      "avoid": "可考虑替代",
+      "riskLow": "关注度低",
+      "riskMedium": "值得留意",
+      "riskHigh": "需多加留意",
       "nutritionScore": "营养评分",
       "macroDistribution": "宏量素分布",
       "alternatives": "替代方案",

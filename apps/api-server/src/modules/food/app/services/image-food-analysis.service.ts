@@ -29,10 +29,12 @@ import { AnalysisResult } from './analyze.service';
 import { Locale } from '../../../diet/app/recommendation/utils/i18n-messages';
 import { AnalysisPipelineService } from '../../../decision/analyze/analysis-pipeline.service';
 import { AnalysisPersistenceService } from '../../../decision/analyze/analysis-persistence.service';
+import { UserContextBuilderService } from '../../../decision/analyze/user-context-builder.service';
 import { VisionApiClient } from './image/vision-api.client';
 import { ImagePromptBuilder } from './image/image-prompt.builder';
 import { ImageResultParser } from './image/image-result.parser';
 import { FoodLibraryMatcher } from './image/food-library-matcher.service';
+import { ImageNutritionFillService } from './image/image-nutrition-fill.service';
 import { LegacyResultAdapter } from './image/mappers/legacy-result.adapter';
 
 @Injectable()
@@ -42,10 +44,12 @@ export class ImageFoodAnalysisService {
   constructor(
     private readonly analysisPipeline: AnalysisPipelineService,
     private readonly persistence: AnalysisPersistenceService,
+    private readonly userContextBuilder: UserContextBuilderService,
     private readonly visionApi: VisionApiClient,
     private readonly promptBuilder: ImagePromptBuilder,
     private readonly resultParser: ImageResultParser,
     private readonly libraryMatcher: FoodLibraryMatcher,
+    private readonly nutritionFill: ImageNutritionFillService,
     private readonly legacyAdapter: LegacyResultAdapter,
     private readonly i18n: I18nService,
   ) {}
@@ -66,38 +70,44 @@ export class ImageFoodAnalysisService {
     return { legacy: this.legacyAdapter.toLegacyResult(v61), v61 };
   }
 
-  /**
-   * 完整图片分析：AI 识别 → 食物库匹配 → 委托统一管道（评分 / 决策 / 组装）。
-   */
   async analyzeToV61(
     imageUrl: string,
     mealType: string | undefined,
     userId: string,
     locale?: Locale,
   ): Promise<FoodAnalysisResultV61> {
+    // Build user context ONCE, reuse everywhere below.
+    const ctx = await this.userContextBuilder.build(userId, locale);
     const foods = await this.analyzeImageToFoods(
       imageUrl,
       mealType,
       userId,
       locale,
+      ctx,
     );
 
     // Post-analysis 食物库匹配：补 foodLibraryId + 校准营养
     await this.libraryMatcher.matchAll(foods);
 
-    return this.analysisPipeline.executeWithOptions(
+    // Phase 2 文本 LLM 补全：对未命中食物填充营养数据
+    await this.nutritionFill.fillMissing(foods, userId, locale);
+
+    const result = await this.analysisPipeline.executeWithOptions(
       {
         inputType: 'image',
         imageUrl,
         mealType,
         userId,
+        locale,
         foods,
+        prebuiltUserContext: ctx,
       },
       {
         persistRecord: false,
         emitCompletedEvent: false,
       },
     );
+    return result;
   }
 
   /**
@@ -131,9 +141,14 @@ export class ImageFoodAnalysisService {
     mealType: string | undefined,
     userId: string,
     locale?: Locale,
+    prebuiltCtx?: any,
   ): Promise<AnalyzedFoodItem[]> {
     const userHint = mealType ? `User hint: this is ${mealType}. ` : '';
-    const { systemPrompt } = await this.promptBuilder.build(userId, locale);
+    const { systemPrompt } = await this.promptBuilder.build(
+      userId,
+      locale,
+      prebuiltCtx,
+    );
 
     try {
       const content = await this.visionApi.complete(
@@ -143,7 +158,21 @@ export class ImageFoodAnalysisService {
         userId,
         locale,
       );
-      return this.resultParser.parse(content);
+      const foods = this.resultParser.parse(content);
+      if (foods.length > 0) return foods;
+
+      try {
+        const retryContent = await this.visionApi.complete(
+          systemPrompt,
+          imageUrl,
+          `${userHint}Important: do not return an empty foods array if any edible item is visible. Return the most likely 1-8 food candidates with lower confidence when uncertain, and reserve an empty array only for clearly non-food images. `,
+          userId,
+          locale,
+        );
+        return this.resultParser.parse(retryContent);
+      } catch (retryErr) {
+        return foods;
+      }
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
       this.logger.error(`AI image analysis error: ${(err as Error).message}`);

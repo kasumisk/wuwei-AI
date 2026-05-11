@@ -15,6 +15,7 @@ import {
 import { FoodRecordService } from './food-record.service';
 import { DailySummaryService } from './daily-summary.service';
 import {
+  getUserLocalDate,
   getUserLocalHour,
   DEFAULT_TIMEZONE,
 } from '../../../../common/utils/timezone.util';
@@ -36,6 +37,7 @@ import { RequestContextService } from '../../../../core/context/request-context.
 import { FoodI18nService } from './food-i18n.service';
 import { FoodLibrary } from '../../../food/food.types';
 import { RedisCacheService } from '../../../../core/redis/redis-cache.service';
+import { DailyStatusService } from './daily-status.service';
 
 // ─── V7.9 Phase 3-1: 推荐粘性缓存配置 ───
 
@@ -66,11 +68,13 @@ interface MealSuggestionScenario {
   totalProtein?: number;
   totalFat?: number;
   totalCarbs?: number;
+  traceId?: string;
 }
 
 interface MealSuggestionResponse {
   mealType: string;
   remainingCalories: number;
+  traceId?: string;
   suggestion: {
     foods: string;
     foodItems?: SuggestionFoodItem[];
@@ -79,6 +83,7 @@ interface MealSuggestionResponse {
     totalProtein?: number;
     totalFat?: number;
     totalCarbs?: number;
+    traceId?: string;
   };
   decisionValueTags?: DecisionValueTag[];
   scenarios?: MealSuggestionScenario[];
@@ -136,6 +141,7 @@ export class FoodService {
     private readonly requestCtx: RequestContextService,
     private readonly foodI18nService: FoodI18nService,
     private readonly redisCache: RedisCacheService,
+    private readonly dailyStatusService: DailyStatusService,
   ) {}
 
   /**
@@ -158,7 +164,8 @@ export class FoodService {
     page: number;
     limit: number;
   }> {
-    return this.foodRecordService.getRecords(userId, query);
+    const tz = await this.userProfileService.getTimezone(userId);
+    return this.foodRecordService.getRecords(userId, query, tz);
   }
 
   /**
@@ -175,10 +182,10 @@ export class FoodService {
       dto,
     );
 
-    // 异步更新每日汇总
-    this.dailySummaryService
-      .updateDailySummary(userId, record.recordedAt)
-      .catch((err) => this.logger.error(`更新每日汇总失败: ${err.message}`));
+    await this.dailySummaryService.updateDailySummary(
+      userId,
+      record.recordedAt,
+    );
 
     return record;
   }
@@ -189,13 +196,8 @@ export class FoodService {
    */
   async deleteRecord(userId: string, recordId: string): Promise<void> {
     const deleted = await this.foodRecordService.deleteRecord(userId, recordId);
-    // 异步更新当日汇总，不阻塞删除响应
     const recordDate = deleted.recordedAt ?? deleted.createdAt;
-    this.dailySummaryService
-      .updateDailySummary(userId, recordDate)
-      .catch((err) => {
-        this.logger.warn(`删除记录后更新日汇总失败: ${(err as Error).message}`);
-      });
+    await this.dailySummaryService.updateDailySummary(userId, recordDate);
   }
 
   /**
@@ -262,6 +264,9 @@ export class FoodService {
         this.logger.log(
           `[MealSuggestion] stickiness hit userId=${userId} meal=${nextMeal} locale=${locale} scenarios=${cached.scenarios?.length ?? 0}`,
         );
+        if (!cached.traceId && cached.suggestion.traceId) {
+          cached.traceId = cached.suggestion.traceId;
+        }
         return cached;
       }
     } else {
@@ -330,72 +335,76 @@ export class FoodService {
         }
       : undefined;
 
-     // 实时路径统一为「三场景推荐」：takeout / convenience / homeCook。
-     // suggestion 字段仅是默认场景的投影，避免再额外计算一套 recommendMeal。
-     /**
-      * 实时推荐超时阈值（ms）
-      * 生产日志显示首个 miss 用户在 summary/profile/precompute 检查之外，
-      * recommendByScenario 本身偶尔还需要接近 4s；3500ms 仍会把这类首个冷请求
-      * 误判为超时。先提高到 5000ms，优先减少首次生成 408。
-      */
-     const REALTIME_TIMEOUT_MS = 5000;
+    // 实时路径统一为「三场景推荐」：takeout / convenience / homeCook。
+    // suggestion 字段仅是默认场景的投影，避免再额外计算一套 recommendMeal。
+    /**
+     * 实时推荐超时阈值（ms）
+     * 生产日志显示首个 miss 用户在 summary/profile/precompute 检查之外，
+     * recommendByScenario 本身偶尔还需要接近 4s；3500ms 仍会把这类首个冷请求
+     * 误判为超时。先提高到 5000ms，优先减少首次生成 408。
+     */
+    const REALTIME_TIMEOUT_MS = 5000;
 
     /** 创建超时 Promise，resolve 为 null 表示超时 */
     const timeoutPromise = new Promise<null>((resolve) =>
       setTimeout(() => resolve(null), REALTIME_TIMEOUT_MS),
     );
 
-     const startTime = Date.now();
-     const scenarioRecommendPromise = this.recommendationEngine.recommendByScenario(
-       userId,
-       nextMeal,
-       goalType,
-      consumed,
-      budget,
-       dailyTarget,
-       userConstraints,
-       reqId,
-     );
+    const startTime = Date.now();
+    const scenarioRecommendPromise =
+      this.recommendationEngine.recommendByScenario(
+        userId,
+        nextMeal,
+        goalType,
+        consumed,
+        budget,
+        dailyTarget,
+        userConstraints,
+        reqId,
+      );
 
-     const raceResult = await Promise.race([
-       scenarioRecommendPromise,
-       timeoutPromise,
-     ]);
+    const raceResult = await Promise.race([
+      scenarioRecommendPromise,
+      timeoutPromise,
+    ]);
 
-     if (raceResult === null) {
+    if (raceResult === null) {
       // ─── 超时：直接抛错，不再用热门榜单兜底误导用户 ───
       const latencyMs = Date.now() - startTime;
       this.logger.warn(
         `实时推荐超时 (>${REALTIME_TIMEOUT_MS}ms, elapsed=${latencyMs}ms), 直接报错: userId=${userId}, meal=${nextMeal}`,
       );
 
-       // 后台继续完整三场景推荐，成功后写入粘性缓存；下一次请求直接命中。
-       scenarioRecommendPromise
-         .then(async (scenarioRecs) => {
-           await Promise.all(
-             Object.values(scenarioRecs).map((rec) =>
-               this.foodI18nService.applyToMealRecommendation(rec, locale),
-             ),
-           );
-           const result = this.buildMealSuggestionFromScenarios(
-             scenarioRecs,
-             nextMeal,
-             remaining,
-             goalType,
-             budget,
-             goals,
-             summary,
-             locale,
-           );
-           this.setToStickinessCache(
-             cacheKey,
-             result,
-             summary.totalCalories || 0,
-           );
-         })
-         .catch((err) =>
-           this.logger.warn(
-             `后台推荐计算失败 (userId=${userId}): ${(err as Error).message}`,
+      // 后台继续完整三场景推荐，成功后写入粘性缓存；下一次请求直接命中。
+      scenarioRecommendPromise
+        .then(async (scenarioRecs) => {
+          await Promise.all(
+            Object.values(scenarioRecs).map((rec) =>
+              this.foodI18nService.applyToMealRecommendation(rec, locale),
+            ),
+          );
+          const result = this.buildMealSuggestionFromScenarios(
+            scenarioRecs,
+            nextMeal,
+            remaining,
+            goalType,
+            budget,
+            goals,
+            summary,
+            locale,
+          );
+          if (!result.traceId && result.suggestion.traceId) {
+            result.traceId = result.suggestion.traceId;
+          }
+          this.setToStickinessCache(
+            cacheKey,
+            result,
+            summary.totalCalories || 0,
+          );
+        })
+        .catch((err) =>
+          this.logger.warn(
+            `后台推荐计算失败 (userId=${userId}): ${(err as Error).message}`,
           ),
         );
 
@@ -404,23 +413,26 @@ export class FoodService {
       );
     }
 
-     const scenarioRecs = raceResult;
-     const latencyMs = Date.now() - startTime;
-     await Promise.all(
-       Object.values(scenarioRecs).map((rec) =>
-         this.foodI18nService.applyToMealRecommendation(rec, locale),
-       ),
-     );
-     const result = this.buildMealSuggestionFromScenarios(
-       scenarioRecs,
-       nextMeal,
-       remaining,
-       goalType,
-       budget,
-       goals,
-       summary,
-       locale,
-     );
+    const scenarioRecs = raceResult;
+    const latencyMs = Date.now() - startTime;
+    await Promise.all(
+      Object.values(scenarioRecs).map((rec) =>
+        this.foodI18nService.applyToMealRecommendation(rec, locale),
+      ),
+    );
+    const result = this.buildMealSuggestionFromScenarios(
+      scenarioRecs,
+      nextMeal,
+      remaining,
+      goalType,
+      budget,
+      goals,
+      summary,
+      locale,
+    );
+    if (!result.traceId && result.suggestion.traceId) {
+      result.traceId = result.suggestion.traceId;
+    }
 
     // V6 Phase 1.2: 发布推荐生成事件
     this.eventEmitter.emit(
@@ -428,11 +440,11 @@ export class FoodService {
       new RecommendationGeneratedEvent(
         userId,
         nextMeal,
-         result.scenarios?.length ?? 0,
-         latencyMs,
-         false, // fromPrecompute — Phase 1.10 预计算实现后会根据实际情况设置
-       ),
-     );
+        result.scenarios?.length ?? 0,
+        latencyMs,
+        false, // fromPrecompute — Phase 1.10 预计算实现后会根据实际情况设置
+      ),
+    );
 
     // V7.9 P3-1: 写入粘性缓存
     this.setToStickinessCache(cacheKey, result, summary.totalCalories || 0);
@@ -453,7 +465,12 @@ export class FoodService {
     goalType: string,
     budget: MealTarget,
     goals: MealTarget,
-    summary: { totalCalories?: number; totalProtein?: number; totalFat?: number; totalCarbs?: number },
+    summary: {
+      totalCalories?: number;
+      totalProtein?: number;
+      totalFat?: number;
+      totalCarbs?: number;
+    },
     locale: Locale,
   ): MealSuggestionResponse {
     const scenarios = this.buildScenarioSuggestions(
@@ -483,6 +500,7 @@ export class FoodService {
     return {
       mealType: nextMeal,
       remainingCalories: remaining,
+      traceId: primaryScenario.traceId,
       suggestion: {
         foods: primaryScenario.foods,
         foodItems: primaryScenario.foodItems,
@@ -491,6 +509,7 @@ export class FoodService {
         totalProtein: primaryScenario.totalProtein,
         totalFat: primaryScenario.totalFat,
         totalCarbs: primaryScenario.totalCarbs,
+        traceId: primaryScenario.traceId,
       },
       decisionValueTags,
       scenarios,
@@ -533,10 +552,10 @@ export class FoodService {
         totalProtein: rec.totalProtein,
         totalFat: rec.totalFat,
         totalCarbs: rec.totalCarbs,
+        traceId: rec.traceId,
       };
     });
   }
-
 
   async adjustMealSuggestion(
     userId: string,
@@ -660,16 +679,24 @@ export class FoodService {
 
   private async buildMealSuggestionFromPrecomputed(
     userId: string,
-    precomputed: NonNullable<Awaited<ReturnType<PrecomputeService['getPrecomputed']>>>,
+    precomputed: NonNullable<
+      Awaited<ReturnType<PrecomputeService['getPrecomputed']>>
+    >,
     ctx: MealSuggestionContext,
   ): Promise<MealSuggestionResponse> {
     const { result: mainRec, scenarioResults } = precomputed;
 
-    await this.foodI18nService.applyToMealRecommendation(mainRec as any, ctx.locale);
+    await this.foodI18nService.applyToMealRecommendation(
+      mainRec as any,
+      ctx.locale,
+    );
     if (scenarioResults) {
       await Promise.all(
         Object.values(scenarioResults).map((rec) =>
-          this.foodI18nService.applyToMealRecommendation(rec as any, ctx.locale),
+          this.foodI18nService.applyToMealRecommendation(
+            rec as any,
+            ctx.locale,
+          ),
         ),
       );
     }
@@ -714,7 +741,11 @@ export class FoodService {
           const scenarioCalories = r.totalCalories || 0;
           return {
             scenario: scenarioLabels[key] || key,
-            foods: this.rebuildDisplayText(r.foods, r.displayText || '', ctx.locale),
+            foods: this.rebuildDisplayText(
+              r.foods,
+              r.displayText || '',
+              ctx.locale,
+            ),
             foodItems: this.toSuggestionFoodItems(r.foods),
             calories: scenarioCalories,
             tip: this.buildSuggestionTip(
@@ -727,6 +758,7 @@ export class FoodService {
             totalProtein: r.totalProtein,
             totalFat: r.totalFat,
             totalCarbs: r.totalCarbs,
+            traceId: (rec as { traceId?: string }).traceId,
           };
         })
       : undefined;
@@ -741,8 +773,13 @@ export class FoodService {
     return {
       mealType: ctx.nextMeal,
       remainingCalories: ctx.remaining,
+      traceId: (mainRec as { traceId?: string }).traceId,
       suggestion: {
-        foods: this.rebuildDisplayText(mainRec.foods, mainRec.displayText, ctx.locale),
+        foods: this.rebuildDisplayText(
+          mainRec.foods,
+          mainRec.displayText,
+          ctx.locale,
+        ),
         foodItems: this.toSuggestionFoodItems(mainRec.foods),
         calories: mainRec.totalCalories,
         tip: this.buildSuggestionTip(
@@ -755,6 +792,7 @@ export class FoodService {
         totalProtein: mainRec.totalProtein,
         totalFat: mainRec.totalFat,
         totalCarbs: mainRec.totalCarbs,
+        traceId: (mainRec as { traceId?: string }).traceId,
       },
       decisionValueTags: this.generateDecisionValueTags(
         mainRec.totalCalories,
@@ -785,6 +823,7 @@ export class FoodService {
 
     return {
       ...suggestion,
+      traceId: nextPrimary.traceId,
       suggestion: {
         foods: nextPrimary.foods,
         foodItems: nextPrimary.foodItems,
@@ -793,6 +832,7 @@ export class FoodService {
         totalProtein: nextPrimary.totalProtein,
         totalFat: nextPrimary.totalFat,
         totalCarbs: nextPrimary.totalCarbs,
+        traceId: nextPrimary.traceId,
       },
       scenarios: rotatedScenarios,
     };
@@ -850,7 +890,8 @@ export class FoodService {
     return foods
       .map((p) => {
         const name = p.food?.displayName || p.food?.name || '';
-        const serving = p.food?.standardServingDesc || `${p.food?.standardServingG || 100}g`;
+        const serving =
+          p.food?.standardServingDesc || `${p.food?.standardServingG || 100}g`;
         const calories = Math.round(Number(p.servingCalories) || 0);
         return t(
           'display.foodItem',
@@ -904,21 +945,29 @@ export class FoodService {
           }
           return entry.result;
         }
-        this.logger.log(`[MealSuggestion] stickiness miss key=${key} source=redis`);
+        this.logger.log(
+          `[MealSuggestion] stickiness miss key=${key} source=redis`,
+        );
         return null;
       }
     } catch (e) {
-      this.logger.warn(`[StickinessCache] Redis get failed, fallback to in-memory: ${e}`);
+      this.logger.warn(
+        `[StickinessCache] Redis get failed, fallback to in-memory: ${e}`,
+      );
     }
     // in-memory fallback
     const entry = this.stickinessCache.get(key);
     if (!entry) {
-      this.logger.log(`[MealSuggestion] stickiness miss key=${key} source=memory`);
+      this.logger.log(
+        `[MealSuggestion] stickiness miss key=${key} source=memory`,
+      );
       return null;
     }
     const now = Date.now();
     if (now - entry.createdAt > STICKINESS_CACHE_TTL_MS) {
-      this.logger.log(`[MealSuggestion] stickiness expired key=${key} source=memory`);
+      this.logger.log(
+        `[MealSuggestion] stickiness expired key=${key} source=memory`,
+      );
       this.stickinessCache.delete(key);
       return null;
     }
@@ -949,16 +998,23 @@ export class FoodService {
     const redisKey = `${STICKINESS_REDIS_PREFIX}${key}`;
     // 异步写 Redis，不阻塞响应
     if (this.redisCache.isConfigured) {
-      this.redisCache.set(redisKey, entry, STICKINESS_CACHE_TTL_MS).catch((e) => {
-        this.logger.warn(`[StickinessCache] Redis set failed, fallback to in-memory: ${e}`);
-        this._setInMemoryStickinessCache(key, entry);
-      });
+      this.redisCache
+        .set(redisKey, entry, STICKINESS_CACHE_TTL_MS)
+        .catch((e) => {
+          this.logger.warn(
+            `[StickinessCache] Redis set failed, fallback to in-memory: ${e}`,
+          );
+          this._setInMemoryStickinessCache(key, entry);
+        });
     } else {
       this._setInMemoryStickinessCache(key, entry);
     }
   }
 
-  private _setInMemoryStickinessCache(key: string, entry: StickinessCacheEntry): void {
+  private _setInMemoryStickinessCache(
+    key: string,
+    entry: StickinessCacheEntry,
+  ): void {
     if (this.stickinessCache.size >= STICKINESS_CACHE_MAX_SIZE) {
       const entries = Array.from(this.stickinessCache.entries()).sort(
         (a, b) => a[1].createdAt - b[1].createdAt,
@@ -1280,9 +1336,8 @@ export class FoodService {
   async createRecord(userId: string, dto: CreateFoodRecordDto): Promise<any> {
     const saved = await this.foodRecordService.createRecord(userId, dto);
 
-    this.dailySummaryService
-      .updateDailySummary(userId, saved.recordedAt)
-      .catch((err) => this.logger.error(`更新每日汇总失败: ${err.message}`));
+    await this.dailySummaryService.updateDailySummary(userId, saved.recordedAt);
+    await this.invalidateDailyStatusCache(userId, saved.recordedAt);
 
     this.eventEmitter.emit(
       DomainEvents.MEAL_RECORDED,
@@ -1305,5 +1360,14 @@ export class FoodService {
   async queryRecords(userId: string, query: FoodRecordQueryDto): Promise<any> {
     const tz = await this.userProfileService.getTimezone(userId);
     return this.foodRecordService.queryRecords(userId, query, tz);
+  }
+
+  private async invalidateDailyStatusCache(
+    userId: string,
+    recordDate: Date,
+  ): Promise<void> {
+    const tz = await this.userProfileService.getTimezone(userId);
+    const date = getUserLocalDate(tz, recordDate);
+    await this.dailyStatusService.invalidateUserDate(userId, date);
   }
 }

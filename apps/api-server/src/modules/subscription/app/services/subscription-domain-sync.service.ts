@@ -91,7 +91,14 @@ export class SubscriptionDomainSyncService {
       include: { subscriptionPlan: true },
       orderBy: { updatedAt: 'desc' },
     });
-    return productionFallback?.subscriptionPlan ?? null;
+    if (productionFallback?.subscriptionPlan) return productionFallback.subscriptionPlan;
+
+    const anyEnvironmentFallback = await productModel.findFirst({
+      where: baseWhere,
+      include: { subscriptionPlan: true },
+      orderBy: [{ updatedAt: 'desc' }, { environment: 'asc' }],
+    });
+    return anyEnvironmentFallback?.subscriptionPlan ?? null;
   }
 
   async syncProviderCustomer(params: {

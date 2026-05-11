@@ -15,6 +15,7 @@ import {
 } from '../dto/food.dto';
 import {
   getUserLocalDayBounds,
+  getUserLocalDayBoundsForDateKey,
   DEFAULT_TIMEZONE,
 } from '../../../../common/utils/timezone.util';
 
@@ -49,6 +50,7 @@ export class FoodRecordService {
   async getRecords(
     userId: string,
     query: FoodRecordQueryDto,
+    timezone: string = DEFAULT_TIMEZONE,
   ): Promise<{
     items: any[];
     total: number;
@@ -61,10 +63,11 @@ export class FoodRecordService {
     const where: any = { userId: userId };
 
     if (query.date) {
-      // Filter by date: use raw SQL DATE() or construct day bounds
-      const dayStart = new Date(`${query.date}T00:00:00.000Z`);
-      const dayEnd = new Date(`${query.date}T23:59:59.999Z`);
-      where.recordedAt = { gte: dayStart, lte: dayEnd };
+      const { startOfDay, endOfDay } = getUserLocalDayBoundsForDateKey(
+        timezone,
+        query.date,
+      );
+      where.recordedAt = { gte: startOfDay, lte: endOfDay };
     }
 
     const [items, total] = await Promise.all([
@@ -194,13 +197,18 @@ export class FoodRecordService {
     let endOfDay: Date;
 
     if (query.startDate && query.endDate) {
-      // 日期范围查询
-      startOfDay = new Date(`${query.startDate}T00:00:00.000Z`);
-      endOfDay = new Date(`${query.endDate}T23:59:59.999Z`);
+      startOfDay = getUserLocalDayBoundsForDateKey(
+        timezone,
+        query.startDate,
+      ).startOfDay;
+      endOfDay = getUserLocalDayBoundsForDateKey(
+        timezone,
+        query.endDate,
+      ).endOfDay;
     } else if (query.date) {
-      // 单日查询
-      startOfDay = new Date(`${query.date}T00:00:00.000Z`);
-      endOfDay = new Date(`${query.date}T23:59:59.999Z`);
+      const bounds = getUserLocalDayBoundsForDateKey(timezone, query.date);
+      startOfDay = bounds.startOfDay;
+      endOfDay = bounds.endOfDay;
     } else {
       // 默认今日
       const bounds = getUserLocalDayBounds(timezone);

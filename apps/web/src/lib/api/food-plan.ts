@@ -62,6 +62,7 @@ export const foodPlanService = {
     mealType: string;
     foodName: string;
     foodId?: string;
+    traceId?: string;
     action: FeedbackAction;
     replacementFood?: string;
     recommendationScore?: number;

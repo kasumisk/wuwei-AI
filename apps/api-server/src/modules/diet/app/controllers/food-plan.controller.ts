@@ -342,6 +342,7 @@ export class FoodPlanController {
       mealType: dto.mealType,
       foodName: dto.foodName,
       foodId: dto.foodId,
+      traceId: dto.traceId,
       action: dto.action,
       replacementFood: dto.replacementFood,
       recommendationScore: dto.recommendationScore,

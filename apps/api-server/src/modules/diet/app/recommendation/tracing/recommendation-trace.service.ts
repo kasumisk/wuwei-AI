@@ -26,6 +26,8 @@ import type { PipelineTrace } from '../types/pipeline.types';
 
 /** 推荐 Trace 输入参数 */
 export interface TraceInput {
+  /** 指定 trace 主键 ID，便于请求内透传归因 */
+  traceId?: string;
   /** 用户 ID */
   userId: string;
   /** 餐次类型 */
@@ -132,8 +134,15 @@ interface ScoreStats {
 @Injectable()
 export class RecommendationTraceService {
   private readonly logger = new Logger(RecommendationTraceService.name);
+  private static readonly UUID_REGEX =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
   constructor(private readonly prisma: PrismaService) {}
+
+  private toUuidOrNull(value?: string | null): string | null {
+    if (!value) return null;
+    return RecommendationTraceService.UUID_REGEX.test(value) ? value : null;
+  }
 
   /**
    * 记录推荐 Trace — 异步写入，不阻塞推荐响应
@@ -147,14 +156,16 @@ export class RecommendationTraceService {
       );
       const topFoodsSnapshot = this.buildTopFoodsSnapshot(input.topFoods);
       const scoreStats = this.calcScoreStats(input.topFoods);
+      const strategyId = this.toUuidOrNull(input.strategyId);
 
       const trace = await this.prisma.recommendationTraces.create({
         data: {
+          ...(input.traceId ? { id: input.traceId } : {}),
           userId: input.userId,
           mealType: input.mealType,
           goalType: input.goalType,
           channel: input.channel || 'unknown',
-          strategyId: input.strategyId ?? null,
+          strategyId,
           strategyVersion: input.strategyVersion ?? null,
           experimentId: input.experimentId ?? null,
           groupId: input.groupId ?? null,
@@ -198,14 +209,16 @@ export class RecommendationTraceService {
       );
       const topFoodsSnapshot = this.buildTopFoodsSnapshot(input.topFoods);
       const scoreStats = this.calcScoreStats(input.topFoods);
+      const strategyId = this.toUuidOrNull(input.strategyId);
 
       const trace = await this.prisma.recommendationTraces.create({
         data: {
+          ...(input.traceId ? { id: input.traceId } : {}),
           userId: input.userId,
           mealType: input.mealType,
           goalType: input.goalType,
           channel: input.channel || 'unknown',
-          strategyId: input.strategyId ?? null,
+          strategyId,
           strategyVersion: input.strategyVersion ?? null,
           experimentId: input.experimentId ?? null,
           groupId: input.groupId ?? null,

@@ -116,6 +116,37 @@ export class StorageService implements OnModuleInit {
   }
 
   /**
+   * 以指定 key 上传文件（食物图片等需要固定路径的场景）
+   */
+  async uploadWithKey(
+    buffer: Buffer,
+    key: string,
+    mimeType: string,
+  ): Promise<UploadResult> {
+    this.ensureClient();
+    const md5 = this.computeMd5(buffer);
+    await this.s3Client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: buffer,
+        ContentType: mimeType,
+        ContentLength: buffer.length,
+        Metadata: { md5 },
+      }),
+    );
+    this.logger.log(`File uploaded (custom key): ${key} (${buffer.length} bytes)`);
+    return {
+      key,
+      url: this.getPublicUrl(key),
+      size: buffer.length,
+      md5,
+      mimeType,
+      originalName: key.split('/').pop() ?? key,
+    };
+  }
+
+  /**
    * 上传文件（Buffer）
    */
   async upload(

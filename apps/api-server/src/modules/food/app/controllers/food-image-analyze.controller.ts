@@ -58,6 +58,7 @@ import {
   SkipThrottle,
 } from '../../../../core/throttle/throttle.constants';
 import { QuotaGateService } from '../../../subscription/app/services/quota-gate.service';
+import { QuotaService } from '../../../subscription/app/services/quota.service';
 import { ResultEntitlementService } from '../../../subscription/app/services/result-entitlement.service';
 import { PaywallTriggerService } from '../../../subscription/app/services/paywall-trigger.service';
 import { SubscriptionService } from '../../../subscription/app/services/subscription.service';
@@ -78,6 +79,7 @@ export class FoodImageAnalyzeController {
     private readonly storageService: StorageService,
     private readonly textFoodAnalysisService: TextFoodAnalysisService,
     private readonly quotaGateService: QuotaGateService,
+    private readonly quotaService: QuotaService,
     private readonly resultEntitlementService: ResultEntitlementService,
     private readonly paywallTriggerService: PaywallTriggerService,
     private readonly subscriptionService: SubscriptionService,
@@ -112,60 +114,73 @@ export class FoodImageAnalyzeController {
     @CurrentAppUser() user: AppUserPayload,
   ): Promise<ApiResponse> {
     const summary = await this.subscriptionService.getUserSummary(user.id);
-    const access = await this.quotaGateService.checkAccess({
-      userId: user.id,
-      feature: GatedFeature.AI_IMAGE_ANALYSIS,
-      scene: 'food_image_analysis',
-      consumeQuota: true,
-    });
+    let quotaConsumed = false;
+    try {
+      const access = await this.quotaGateService.checkAccess({
+        userId: user.id,
+        feature: GatedFeature.AI_IMAGE_ANALYSIS,
+        scene: 'food_image_analysis',
+        consumeQuota: true,
+      });
+      quotaConsumed = access.allowed && access.quotaConsumed;
 
-    if (!access.allowed) {
-      const paywallDisplay =
-        await this.paywallTriggerService.handleAccessDecision(
-          access,
-          user.id,
-          GatedFeature.AI_IMAGE_ANALYSIS,
-          summary.tier,
-        );
-      const errorMessage =
-        access.paywall?.message ?? this.i18n.t('food.imageQuotaExceeded');
-      if (paywallDisplay) {
-        return ResponseWrapper.error(errorMessage, 403, paywallDisplay);
+      if (!access.allowed) {
+        const paywallDisplay =
+          await this.paywallTriggerService.handleAccessDecision(
+            access,
+            user.id,
+            GatedFeature.AI_IMAGE_ANALYSIS,
+            summary.tier,
+          );
+        const errorMessage =
+          access.paywall?.message ?? this.i18n.t('food.imageQuotaExceeded');
+        if (paywallDisplay) {
+          return ResponseWrapper.error(errorMessage, 403, paywallDisplay);
+        }
+        return ResponseWrapper.error(errorMessage, 403);
       }
-      return ResponseWrapper.error(errorMessage, 403);
-    }
 
-    const uploaded = await this.storageService.upload(
-      file.buffer,
-      file.originalname,
-      file.mimetype,
-      'food-images',
-    );
+      const uploaded = await this.storageService.upload(
+        file.buffer,
+        file.originalname,
+        file.mimetype,
+        'food-images',
+      );
 
-    const { requestId } = await this.analyzeService.submitAnalysis(
-      uploaded.url,
-      dto.mealType,
-      user.id,
-      (dto.locale as Locale | undefined) || undefined,
-    );
+      const { requestId } = await this.analyzeService.submitAnalysis(
+        uploaded.url,
+        dto.mealType,
+        user.id,
+        (dto.locale as Locale | undefined) || undefined,
+      );
 
-    const session = await this.analysisSessionService.createSession({
-      userId: user.id,
-      requestId,
-      mealType: dto.mealType,
-      imageUrl: uploaded.url,
-    });
-
-    return ResponseWrapper.success(
-      {
+      const session = await this.analysisSessionService.createSession({
+        userId: user.id,
         requestId,
-        analysisSessionId: session.id,
-        status: 'processing',
-        stage: 'analyzing' as const,
+        mealType: dto.mealType,
         imageUrl: uploaded.url,
-      },
-      this.i18n.t('food.analyzeSubmitted'),
-    );
+      });
+
+      quotaConsumed = false;
+
+      return ResponseWrapper.success(
+        {
+          requestId,
+          analysisSessionId: session.id,
+          status: 'processing',
+          stage: 'analyzing' as const,
+          imageUrl: uploaded.url,
+        },
+        this.i18n.t('food.analyzeSubmitted'),
+      );
+    } catch (error) {
+      if (quotaConsumed) {
+        await this.quotaService
+          .rollback(user.id, GatedFeature.AI_IMAGE_ANALYSIS)
+          .catch(() => undefined);
+      }
+      throw error;
+    }
   }
 
   // ─── GET analyze/:requestId ───
@@ -234,6 +249,14 @@ export class FoodImageAnalyzeController {
       );
     }
 
+    const linkedSession =
+      await this.analysisSessionService.getByRequestId(requestId);
+    if (linkedSession && linkedSession.userId !== user.id) {
+      throw new ForbiddenException(
+        this.i18n.t('food.analysisTaskNoPermission'),
+      );
+    }
+
     // completed — 裁剪并返回
     const userSummary = await this.subscriptionService.getUserSummary(user.id);
     const rawData = entry.data;
@@ -245,10 +268,11 @@ export class FoodImageAnalyzeController {
     }
 
     const v61ForTrim: FoodAnalysisResultV61 = {
-      analysisId: requestId,
+      analysisId: entry.analysisId ?? requestId,
       inputType: 'image',
       inputSnapshot: { imageUrl: rawData.imageUrl },
       foods: (rawData.foods || []).map((f) => ({
+        ...(f as any),
         name: f.name,
         quantity: f.quantity,
         category: f.category,
@@ -322,13 +346,10 @@ export class FoodImageAnalyzeController {
         .catch(() => {});
     }
 
-    const linkedSession =
-      await this.analysisSessionService.getByRequestId(requestId);
-
     return ResponseWrapper.success(
       {
         requestId,
-        analysisId: entry.analysisId ?? requestId,
+        analysisId: entry.analysisId ?? null,
         analysisSessionId: linkedSession?.id,
         status: 'completed',
         stage: 'final' as const,

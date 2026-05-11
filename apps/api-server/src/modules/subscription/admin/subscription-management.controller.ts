@@ -21,6 +21,7 @@ import {
   GetSubscriptionsQueryDto,
   ExtendSubscriptionDto,
   ChangeSubscriptionPlanDto,
+  AdminSetUserSubscriptionDto,
   SubscriptionResyncDto,
   AdminSubscriptionActionDto,
   GrantManualEntitlementDto,
@@ -460,6 +461,46 @@ export class SubscriptionManagementController {
       success: true,
       code: HttpStatus.OK,
       message: '手动权益已撤销',
+      data,
+    };
+  }
+
+  @Post('users/:userId/manual-subscription')
+  @ApiOperation({ summary: '管理员为指定用户人工设置会员' })
+  @Roles('super_admin')
+  async setUserManualSubscription(
+    @Param('userId') userId: string,
+    @Body() dto: AdminSetUserSubscriptionDto,
+  ): Promise<ApiResponse> {
+    const data =
+      await this.subscriptionManagementService.setUserManualSubscription(
+        userId,
+        dto,
+      );
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '会员已设置',
+      data,
+    };
+  }
+
+  @Post('users/:userId/manual-subscription/revoke')
+  @ApiOperation({ summary: '撤销指定用户的人工会员' })
+  @Roles('super_admin')
+  async revokeUserManualSubscription(
+    @Param('userId') userId: string,
+    @Body() dto: AdminSubscriptionActionDto,
+  ): Promise<ApiResponse> {
+    const data =
+      await this.subscriptionManagementService.revokeUserManualSubscription(
+        userId,
+        dto,
+      );
+    return {
+      success: true,
+      code: HttpStatus.OK,
+      message: '人工会员已撤销',
       data,
     };
   }

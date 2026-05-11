@@ -497,10 +497,16 @@ const SubscriptionDetail: React.FC = () => {
                   <Descriptions.Item label="平台订阅ID">
                     {renderCopyable(subscription.platformSubscriptionId)}
                   </Descriptions.Item>
+                  <Descriptions.Item label="RC Customer ID">
+                    {renderCopyable(subscription.latestProviderCustomerId)}
+                  </Descriptions.Item>
                   <Descriptions.Item label="自动续费">
                     <Tag color={subscription.autoRenew ? 'green' : 'default'}>
                       {subscription.autoRenew ? '是' : '否'}
                     </Tag>
+                  </Descriptions.Item>
+                  <Descriptions.Item label="RC 原始链路ID">
+                    {renderCopyable(subscription.latestOriginalTransactionId)}
                   </Descriptions.Item>
                   <Descriptions.Item label="开始时间">
                     {new Date(subscription.startsAt).toLocaleString('zh-CN')}
@@ -514,6 +520,17 @@ const SubscriptionDetail: React.FC = () => {
                         已过期
                       </Tag>
                     )}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="最新 appUserId">
+                    {renderCopyable(subscription.latestAppUserId)}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="原始 appUserId">
+                    {renderCopyable(subscription.latestOriginalAppUserId)}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="Aliases" span={2}>
+                    {(subscription.latestAliases ?? []).length
+                      ? (subscription.latestAliases ?? []).join(', ')
+                      : '-'}
                   </Descriptions.Item>
                   {(subscription.canceledAt || subscription.cancelledAt) && (
                     <Descriptions.Item label="取消时间" span={2}>
@@ -569,6 +586,18 @@ const SubscriptionDetail: React.FC = () => {
                             dataIndex: 'providerCustomerId',
                             ellipsis: true,
                             render: (value?: string | null) => renderCopyable(value),
+                          },
+                          {
+                            title: 'Original Customer ID',
+                            dataIndex: 'originalProviderCustomerId',
+                            ellipsis: true,
+                            render: (value?: string | null) => renderCopyable(value),
+                          },
+                          {
+                            title: 'Aliases',
+                            dataIndex: 'aliases',
+                            render: (value?: string[]) =>
+                              value?.length ? value.join(', ') : '-',
                           },
                           { title: '状态', dataIndex: 'status', width: 100 },
                           {

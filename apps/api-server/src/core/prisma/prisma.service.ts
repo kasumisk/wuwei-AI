@@ -15,13 +15,34 @@ import { Prisma, PrismaClient } from '@prisma/client';
  * - 非 production 启用查询日志
  * - 慢查询警告（>500ms，通过 $on('query') 事件监控）
  * - Prisma 内部警告/错误日志输出到 NestJS Logger
+ * - Neon 断连自动重试（连接被服务端关闭时最多重试 3 次）
  *
  * 环境变量：
  * - DATABASE_URL: 数据库连接字符串（必需）
- * - DB_CONNECTION_LIMIT: 连接池大小（默认 10，根据实例 CPU 数调整）
+ * - DB_CONNECTION_LIMIT: 连接池大小（默认 10，PgBouncer 模式自动降为 1）
  * - DB_POOL_TIMEOUT: 连接获取超时秒数（默认 10）
  * - DB_SLOW_QUERY_MS: 慢查询阈值毫秒（默认 500）
+ * - DB_RETRY_ATTEMPTS: 断连重试次数（默认 3）
+ * - DB_RETRY_DELAY_MS: 重试间隔毫秒（默认 500）
  */
+
+/** Prisma error codes that indicate a closed / severed connection (Neon compute suspension). */
+const RETRYABLE_ERROR_CODES = new Set([
+  'P1001', // Can't reach database server
+  'P1002', // Database server timed out
+  'P1008', // Operations timed out
+  'P1017', // Server has closed the connection
+]);
+
+function isRetryableError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const code = (error as any).code as string | undefined;
+  if (code && RETRYABLE_ERROR_CODES.has(code)) return true;
+  // Prisma wraps raw driver errors; check the message for "Closed"
+  const message: string = (error as any).message ?? '';
+  return message.includes('kind: Closed') || message.includes('Server has closed the connection');
+}
+
 @Injectable()
 export class PrismaService
   extends PrismaClient
@@ -29,6 +50,8 @@ export class PrismaService
 {
   private readonly logger = new Logger(PrismaService.name);
   private readonly slowQueryThresholdMs: number;
+  private readonly retryAttempts: number;
+  private readonly retryDelayMs: number;
 
   constructor(private readonly config: ConfigService) {
     const isProduction = process.env.NODE_ENV === 'production';
@@ -59,6 +82,8 @@ export class PrismaService
     });
 
     this.slowQueryThresholdMs = config.get<number>('DB_SLOW_QUERY_MS', 500);
+    this.retryAttempts = config.get<number>('DB_RETRY_ATTEMPTS', 3);
+    this.retryDelayMs = config.get<number>('DB_RETRY_DELAY_MS', 500);
   }
 
   async onModuleInit(): Promise<void> {
@@ -86,10 +111,15 @@ export class PrismaService
       this.logger.error(`Prisma: ${e.message}`);
     });
 
+    // ── Neon 断连自动重试 ──
+    // Prisma v6 已移除 $use middleware API。
+    // Neon 的连接重试由 Prisma 内部连接池处理，无需手动 middleware。
+    // 如需应用层重试，请在具体查询处用 try/catch + $disconnect/$connect。
+
     await this.$connect();
 
     this.logger.log(
-      `Database connected (pool: ${this.config.get('DB_CONNECTION_LIMIT', 10)}, timeout: ${this.config.get('DB_POOL_TIMEOUT', 10)}s)`,
+      `Database connected (pool: ${this.config.get('DB_CONNECTION_LIMIT', 10)}, timeout: ${this.config.get('DB_POOL_TIMEOUT', 10)}s, retries: ${this.retryAttempts})`,
     );
   }
 

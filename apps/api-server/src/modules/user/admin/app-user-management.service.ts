@@ -25,14 +25,22 @@ export class AppUserManagementService {
   async findAll(query: GetAppUsersQueryDto) {
     const page = Number(query.page) || 1;
     const pageSize = Number(query.pageSize) || 10;
-    const { keyword, authType, status } = query;
+    const { keyword, appUserId, authType, status } = query;
 
     const where: any = {};
 
-    if (keyword) {
+    // appUserId 精确匹配（对应 RC appUserId = 内部 UUID）
+    if (appUserId) {
+      where.id = appUserId;
+    } else if (keyword) {
+      const isUuid =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          keyword,
+        );
       where.OR = [
         { nickname: { contains: keyword, mode: 'insensitive' } },
         { email: { contains: keyword, mode: 'insensitive' } },
+        ...(isUuid ? [{ id: { equals: keyword } }] : []),
       ];
     }
 

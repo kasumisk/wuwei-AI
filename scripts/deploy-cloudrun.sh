@@ -149,7 +149,9 @@ cmd_secrets() {
 #   SECRETS<<<  key=secret:latest,... 逗号分隔
 build_env_args() {
   require_env_file
-  local tmpfile; tmpfile="$(mktemp /tmp/cloudrun-env-XXXXXX.yaml)"
+  local tmpfile; tmpfile="$(mktemp /tmp/cloudrun-env-XXXXXX)"
+  mv "$tmpfile" "${tmpfile}.yaml"
+  tmpfile="${tmpfile}.yaml"
   local secrets=""
 
   while IFS= read -r line || [[ -n "$line" ]]; do

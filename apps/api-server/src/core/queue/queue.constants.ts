@@ -34,6 +34,9 @@ export const QUEUE_NAMES = {
 
   /** 订阅后台维护任务：重同步/权益重建 */
   SUBSCRIPTION_MAINTENANCE: 'subscription-maintenance',
+
+  /** 食物图片 AI 生成：FLUX.1 Dev via Replicate → Vision 审核 → WebP → CDN */
+  FOOD_IMAGE_GENERATION: 'food-image-generation',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -102,5 +105,12 @@ export const QUEUE_DEFAULT_OPTIONS: Record<
     maxRetries: 2,
     backoffType: 'exponential',
     backoffDelay: 3000,
+  },
+  // 图片生成：并发 2（Replicate API 限制），失败后退 30s 再试
+  [QUEUE_NAMES.FOOD_IMAGE_GENERATION]: {
+    concurrency: 2,
+    maxRetries: 3,
+    backoffType: 'exponential',
+    backoffDelay: 30000,
   },
 };

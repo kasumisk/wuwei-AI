@@ -9,6 +9,7 @@ import {
   processorAsHandler,
 } from '../../../core/queue';
 import { SubscriptionManagementService } from './subscription-management.service';
+import { RevenueCatSyncService } from '../app/services/revenuecat-sync.service';
 
 type SubscriptionMaintenanceJobData =
   | {
@@ -21,6 +22,13 @@ type SubscriptionMaintenanceJobData =
       subscriptionId: string;
       requestedBy: 'admin';
       reason?: string;
+    }
+  | {
+      action: 'process_revenuecat_event';
+      userId: string;
+      webhookEventId: string;
+      providerEventId: string | null;
+      source: 'revenuecat_webhook' | 'client_trigger';
     };
 
 @Processor(QUEUE_NAMES.SUBSCRIPTION_MAINTENANCE, {
@@ -35,6 +43,7 @@ export class SubscriptionMaintenanceProcessor
 
   constructor(
     private readonly subscriptionManagementService: SubscriptionManagementService,
+    private readonly revenueCatSyncService: RevenueCatSyncService,
     private readonly deadLetterService: DeadLetterService,
     private readonly registry: TaskHandlerRegistry,
   ) {
@@ -58,8 +67,28 @@ export class SubscriptionMaintenanceProcessor
       return this.subscriptionManagementService.performRebuildUserEntitlements();
     }
 
+    if (job.data.action === 'process_revenuecat_event') {
+      const { userId, webhookEventId, providerEventId, source } = job.data;
+      try {
+        await this.revenueCatSyncService.triggerSyncForUser(
+          userId,
+          source,
+          webhookEventId,
+          providerEventId ?? undefined,
+        );
+        await this.revenueCatSyncService.markWebhookProcessed(webhookEventId);
+      } catch (error) {
+        await this.revenueCatSyncService.markWebhookFailed(
+          webhookEventId,
+          error,
+        );
+        throw error; // BullMQ 捕获后按 attempts/backoff 重试
+      }
+      return;
+    }
+
     return this.subscriptionManagementService.performResyncSubscription(
-      job.data.subscriptionId,
+      (job.data as Extract<SubscriptionMaintenanceJobData, { action: 'resync_subscription' }>).subscriptionId,
       { reason: job.data.reason },
     );
   }

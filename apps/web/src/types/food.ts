@@ -281,6 +281,7 @@ export interface MealScenario {
 export interface MealSuggestion {
   mealType: string;
   remainingCalories: number;
+  traceId?: string;
   suggestion: {
     foods: string;
     foodItems: FoodItem[];
@@ -289,8 +290,9 @@ export interface MealSuggestion {
     totalProtein?: number;
     totalFat?: number;
     totalCarbs?: number;
+    traceId?: string;
   };
-  scenarios?: MealScenario[];
+  scenarios?: Array<MealScenario & { traceId?: string }>;
 }
 
 // ── 每日计划 ──

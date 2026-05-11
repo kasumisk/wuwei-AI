@@ -45,8 +45,8 @@
     "headlineHighlight": "栄養で支える知性。",
     "description": "あなたの健康のためにデザインされたAI栄養アシスタントを体験してください。uWay Healthは、パーソナライズされた食事ガイダンス、スマートな食事プランニング、そしてあなたの目標に合わせた実用的な健康アドバイスを提供します。",
     "testimonial": {
-      "author": "Dr. Emily Chen",
-      "authorTitle": "認定栄養士",
+      "author": "Emily Chen",
+      "authorTitle": "健康栄養コンサルタント",
       "content": "uWay Healthは、クライアントへのガイダンス方法を一変させました。AIによる食事プランニングと栄養分析は非常に正確で使いやすいです。"
     },
     "footer": {
@@ -1032,11 +1032,11 @@
   "food": {
     "decision": {
       "safe": "おすすめ",
-      "limit": "適量で",
-      "avoid": "避けること推奨",
-      "riskLow": "低リスク",
-      "riskMedium": "中リスク",
-      "riskHigh": "高リスク",
+      "limit": "適量で楽しめます",
+      "avoid": "代替食品をご検討ください",
+      "riskLow": "低懸念",
+      "riskMedium": "ご留意ください",
+      "riskHigh": "要注意",
       "nutritionScore": "栄養スコア",
       "macroDistribution": "マクロ栄養素",
       "alternatives": "代替案",

@@ -43,7 +43,7 @@ export const DECISION_CONFIG: Record<
   },
   LIMIT: {
     emoji: '🟠',
-    label: '建议少吃',
+    label: '可适量',
     bgClass: 'bg-orange-50 border-orange-200',
     textClass: 'text-orange-800',
     badgeClass: 'bg-orange-100 text-orange-800',
@@ -51,7 +51,7 @@ export const DECISION_CONFIG: Record<
   },
   AVOID: {
     emoji: '🔴',
-    label: '不建议',
+    label: '可考虑替代',
     bgClass: 'bg-red-50 border-red-200',
     textClass: 'text-red-800',
     badgeClass: 'bg-red-100 text-red-800',
@@ -64,8 +64,8 @@ export const DECISION_CONFIG_COMPACT: Record<string, { label: string; bg: string
   {
     SAFE: { label: '健康', bg: 'bg-green-100', text: 'text-green-800' },
     OK: { label: '注意', bg: 'bg-yellow-100', text: 'text-yellow-800' },
-    LIMIT: { label: '少吃', bg: 'bg-orange-100', text: 'text-orange-800' },
-    AVOID: { label: '不建议', bg: 'bg-red-100', text: 'text-red-800' },
+    LIMIT: { label: '可适量', bg: 'bg-orange-100', text: 'text-orange-800' },
+    AVOID: { label: '可替代', bg: 'bg-red-100', text: 'text-red-800' },
   };
 
 // ── 目标标签 ──

@@ -150,7 +150,7 @@ importers:
         version: 5.5.2
       '@langchain/community':
         specifier: ^1.0.4
-        version: 1.1.12(@aws-crypto/sha256-js@5.2.0)(@aws-sdk/client-s3@3.995.0)(@aws-sdk/credential-provider-node@3.972.10)(@browserbasehq/sdk@2.6.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.58.2)(deepmerge@4.3.1)(dotenv@16.6.1)(openai@6.18.0(ws@8.19.0)(zod@3.25.76))(zod@3.25.76))(@google-cloud/storage@7.19.0)(@ibm-cloud/watsonx-ai@1.7.7)(@langchain/core@1.1.19(@opentelemetry/api@1.9.0)(openai@6.18.0(ws@8.19.0)(zod@3.25.76)))(@opentelemetry/api@1.9.0)(@smithy/util-utf8@2.3.0)(@upstash/redis@1.37.0)(crypto-js@4.2.0)(fast-xml-parser@5.3.6)(firebase-admin@13.7.0)(google-auth-library@10.6.2)(ibm-cloud-sdk-core@5.4.6)(ignore@5.3.2)(ioredis@5.10.1)(jsonwebtoken@9.0.3)(lodash@4.17.23)(mysql2@3.15.3)(openai@6.18.0(ws@8.19.0)(zod@3.25.76))(pg@8.18.0)(playwright@1.58.2)(redis@5.11.0)(typeorm@0.3.28(ioredis@5.10.1)(mysql2@3.15.3)(pg@8.18.0)(redis@5.11.0)(ts-node@10.9.2(@swc/core@1.15.11)(@types/node@22.19.7)(typescript@5.8.3)))(ws@8.19.0)
+        version: 1.1.12(@aws-crypto/sha256-js@5.2.0)(@aws-sdk/client-s3@3.995.0)(@aws-sdk/credential-provider-node@3.972.10)(@browserbasehq/sdk@2.6.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.58.2)(deepmerge@4.3.1)(dotenv@16.6.1)(openai@6.18.0(ws@8.19.0)(zod@3.25.76))(zod@3.25.76))(@google-cloud/storage@7.19.0)(@ibm-cloud/watsonx-ai@1.7.7)(@langchain/core@1.1.19(@opentelemetry/api@1.9.0)(openai@6.18.0(ws@8.19.0)(zod@3.25.76)))(@opentelemetry/api@1.9.0)(@smithy/util-utf8@2.3.0)(@upstash/redis@1.37.0)(crypto-js@4.2.0)(fast-xml-parser@5.3.6)(firebase-admin@13.7.0)(google-auth-library@10.6.2)(ibm-cloud-sdk-core@5.4.6)(ignore@5.3.2)(ioredis@5.10.1)(jsonwebtoken@9.0.3)(lodash@4.17.23)(mysql2@3.15.3)(openai@6.18.0(ws@8.19.0)(zod@3.25.76))(pg@8.18.0)(playwright@1.58.2)(redis@5.11.0)(replicate@1.4.0)(typeorm@0.3.28(ioredis@5.10.1)(mysql2@3.15.3)(pg@8.18.0)(redis@5.11.0)(ts-node@10.9.2(@swc/core@1.15.11)(@types/node@22.19.7)(typescript@5.8.3)))(ws@8.19.0)
       '@langchain/core':
         specifier: ^1.0.6
         version: 1.1.19(@opentelemetry/api@1.9.0)(openai@6.18.0(ws@8.19.0)(zod@3.25.76))
@@ -283,6 +283,9 @@ importers:
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
+      replicate:
+        specifier: ^1.4.0
+        version: 1.4.0
       rxjs:
         specifier: ^7.8.1
         version: 7.8.2
@@ -12288,6 +12291,10 @@ packages:
   remark-rehype@11.1.2:
     resolution: {integrity: sha512-Dh7l57ianaEoIpzbp0PC9UKAdCSVklD8E5Rpw7ETfbTl3FqcOOgq5q2LVDhgGCkaBv7p24JXikPdvhhmHvKMsw==}
 
+  replicate@1.4.0:
+    resolution: {integrity: sha512-1ufKejfUVz/azy+5TnzQP7U1+MHVWZ6psnQ06az8byUUnRhT+DZ/MvewzB1NQYBVMgNKR7xPDtTwlcP5nv/5+w==}
+    engines: {git: '>=2.11.0', node: '>=18.0.0', npm: '>=7.19.0', yarn: '>=1.7.0'}
+
   require-directory@2.1.1:
     resolution: {integrity: sha512-fGxEI7+wsG9xrvdjsrlmL22OMTTiHRwAMroiEeMgq8gzoLC/PQr7RsRDSTLUg/bZAZtF+TVIkHc6/4RIKrui+Q==}
     engines: {node: '>=0.10.0'}
@@ -17431,7 +17438,7 @@ snapshots:
       - openai
       - ws
 
-  '@langchain/community@1.1.12(@aws-crypto/sha256-js@5.2.0)(@aws-sdk/client-s3@3.995.0)(@aws-sdk/credential-provider-node@3.972.10)(@browserbasehq/sdk@2.6.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.58.2)(deepmerge@4.3.1)(dotenv@16.6.1)(openai@6.18.0(ws@8.19.0)(zod@3.25.76))(zod@3.25.76))(@google-cloud/storage@7.19.0)(@ibm-cloud/watsonx-ai@1.7.7)(@langchain/core@1.1.19(@opentelemetry/api@1.9.0)(openai@6.18.0(ws@8.19.0)(zod@3.25.76)))(@opentelemetry/api@1.9.0)(@smithy/util-utf8@2.3.0)(@upstash/redis@1.37.0)(crypto-js@4.2.0)(fast-xml-parser@5.3.6)(firebase-admin@13.7.0)(google-auth-library@10.6.2)(ibm-cloud-sdk-core@5.4.6)(ignore@5.3.2)(ioredis@5.10.1)(jsonwebtoken@9.0.3)(lodash@4.17.23)(mysql2@3.15.3)(openai@6.18.0(ws@8.19.0)(zod@3.25.76))(pg@8.18.0)(playwright@1.58.2)(redis@5.11.0)(typeorm@0.3.28(ioredis@5.10.1)(mysql2@3.15.3)(pg@8.18.0)(redis@5.11.0)(ts-node@10.9.2(@swc/core@1.15.11)(@types/node@22.19.7)(typescript@5.8.3)))(ws@8.19.0)':
+  '@langchain/community@1.1.12(@aws-crypto/sha256-js@5.2.0)(@aws-sdk/client-s3@3.995.0)(@aws-sdk/credential-provider-node@3.972.10)(@browserbasehq/sdk@2.6.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.58.2)(deepmerge@4.3.1)(dotenv@16.6.1)(openai@6.18.0(ws@8.19.0)(zod@3.25.76))(zod@3.25.76))(@google-cloud/storage@7.19.0)(@ibm-cloud/watsonx-ai@1.7.7)(@langchain/core@1.1.19(@opentelemetry/api@1.9.0)(openai@6.18.0(ws@8.19.0)(zod@3.25.76)))(@opentelemetry/api@1.9.0)(@smithy/util-utf8@2.3.0)(@upstash/redis@1.37.0)(crypto-js@4.2.0)(fast-xml-parser@5.3.6)(firebase-admin@13.7.0)(google-auth-library@10.6.2)(ibm-cloud-sdk-core@5.4.6)(ignore@5.3.2)(ioredis@5.10.1)(jsonwebtoken@9.0.3)(lodash@4.17.23)(mysql2@3.15.3)(openai@6.18.0(ws@8.19.0)(zod@3.25.76))(pg@8.18.0)(playwright@1.58.2)(redis@5.11.0)(replicate@1.4.0)(typeorm@0.3.28(ioredis@5.10.1)(mysql2@3.15.3)(pg@8.18.0)(redis@5.11.0)(ts-node@10.9.2(@swc/core@1.15.11)(@types/node@22.19.7)(typescript@5.8.3)))(ws@8.19.0)':
     dependencies:
       '@browserbasehq/stagehand': 1.14.0(@playwright/test@1.58.2)(deepmerge@4.3.1)(dotenv@16.6.1)(openai@6.18.0(ws@8.19.0)(zod@3.25.76))(zod@3.25.76)
       '@ibm-cloud/watsonx-ai': 1.7.7
@@ -17466,6 +17473,7 @@ snapshots:
       pg: 8.18.0
       playwright: 1.58.2
       redis: 5.11.0
+      replicate: 1.4.0
       typeorm: 0.3.28(ioredis@5.10.1)(mysql2@3.15.3)(pg@8.18.0)(redis@5.11.0)(ts-node@10.9.2(@swc/core@1.15.11)(@types/node@22.19.7)(typescript@5.8.3))
       ws: 8.19.0
     transitivePeerDependencies:
@@ -20258,7 +20266,7 @@ snapshots:
 
   '@types/node-fetch@2.6.13':
     dependencies:
-      '@types/node': 22.19.7
+      '@types/node': 24.10.11
       form-data: 4.0.5
 
   '@types/node@18.19.130':
@@ -27466,6 +27474,10 @@ snapshots:
       mdast-util-to-hast: 13.2.1
       unified: 11.0.5
       vfile: 6.0.3
+
+  replicate@1.4.0:
+    optionalDependencies:
+      readable-stream: 4.7.0
 
   require-directory@2.1.1: {}
 

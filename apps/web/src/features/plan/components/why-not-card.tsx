@@ -39,10 +39,10 @@ export function WhyNotCard({ onExplain, isExplaining, result }: WhyNotCardProps)
         {/* 标题 */}
         <div className="flex items-center gap-2 mb-3">
           <span className="text-lg">🤔</span>
-          <h3 className="font-bold text-sm">为什么不推荐某食物？</h3>
+          <h3 className="font-bold text-sm">为什么这个食物不太适合我？</h3>
         </div>
         <p className="text-xs text-muted-foreground mb-4">
-          输入你想吃但没被推荐的食物，AI 会解释原因并给出建议
+          输入你好奇的食物，AI 会结合你的健康目标解释原因并给出参考建议
         </p>
 
         {/* 输入 */}

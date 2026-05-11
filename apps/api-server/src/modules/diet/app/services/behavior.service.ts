@@ -4,6 +4,8 @@ import {
   Optional,
   Inject,
   forwardRef,
+  ForbiddenException,
+  NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
@@ -91,19 +93,39 @@ export class BehaviorService {
    * 记录用户对 AI 决策的反馈
    */
   async logFeedback(
+    userId: string,
     recordId: string,
     followed: boolean,
     feedback: string,
+    actualOutcome?: string,
   ): Promise<void> {
     const log = await this.prisma.aiDecisionLogs.findFirst({
-      where: { recordId: recordId },
+      where: { recordId: recordId, userId },
     });
     if (log) {
       await this.prisma.aiDecisionLogs.update({
         where: { id: log.id },
-        data: { userFollowed: followed, userFeedback: feedback },
+        data: {
+          userFollowed: followed,
+          userFeedback: feedback,
+          actualOutcome: actualOutcome ?? null,
+        },
       });
+      return;
     }
+
+    const record = await this.prisma.foodRecords.findUnique({
+      where: { id: recordId },
+      select: { userId: true },
+    });
+    if (!record) {
+      throw new NotFoundException('Food record not found');
+    }
+    if (record.userId !== userId) {
+      throw new ForbiddenException('No permission to update decision feedback');
+    }
+
+    throw new NotFoundException('Decision log not found');
   }
 
   /**
@@ -157,8 +179,13 @@ export class BehaviorService {
         // 修复 B2: 不达标归零
         streakDays = 0;
       }
+    } else {
+      // 昨日无记录：若 lastStreakDate 不是昨天，说明用户中断超过1天，streak 归零
+      // 避免历史残留 streakDays 被注入 AI prompt 造成虚假连续天数
+      if (profile.lastStreakDate && profile.lastStreakDate !== yesterdayStr) {
+        streakDays = 0;
+      }
     }
-    // 如果昨日无记录（首日或刚注册），不改变 streak
 
     // 修复 B3: 合规率按天计算（近 30 天滑动窗口）
     const thirtyDaysAgo = new Date();

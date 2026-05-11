@@ -73,12 +73,15 @@ export class FoodBehaviorController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'AI 决策反馈' })
   async decisionFeedback(
+    @CurrentAppUser() user: AppUserPayload,
     @Body() dto: DecisionFeedbackDto,
   ): Promise<ApiResponse> {
     await this.behaviorService.logFeedback(
+      user.id,
       dto.recordId,
       dto.followed,
       dto.feedback,
+      dto.actualOutcome,
     );
     return {
       success: true,

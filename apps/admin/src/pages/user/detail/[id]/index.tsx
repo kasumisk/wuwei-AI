@@ -16,6 +16,11 @@ import {
   Statistic,
   Avatar,
   Badge,
+  Modal,
+  Form,
+  Select,
+  DatePicker,
+  message,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -46,10 +51,15 @@ import { contentApi, type FoodRecordDto } from '@/services/contentManagementServ
 import {
   useSubscriptions,
   usePaymentRecords,
+  useSubscriptionPlans,
+  useSetUserManualSubscription,
+  useRevokeUserManualSubscription,
   type PaymentRecordDto,
 } from '@/services/subscriptionManagementService';
 import { useUserStrategy } from '@/services/recommendDebugService';
 import { useQuery } from '@tanstack/react-query';
+import dayjs from 'dayjs';
+import { useUserStore } from '@/store';
 
 // ==================== 常量映射 ====================
 
@@ -581,23 +591,114 @@ const TIER_LABELS_SUB: Record<string, string> = {
   premium: 'Premium',
 };
 
+const CHANNEL_LABELS: Record<string, string> = {
+  manual: '人工设置',
+  apple_iap: 'Apple IAP',
+  google_play: 'Google Play',
+  wechat_pay: '微信支付',
+  alipay: '支付宝',
+};
+
 const SubscriptionTab: React.FC<{ userId: string }> = ({ userId }) => {
-  const { data: subData, isLoading: subLoading } = useSubscriptions({ pageSize: 5 });
-  const { data: payData, isLoading: payLoading } = usePaymentRecords({ userId, pageSize: 10 });
+  const currentAdmin = useUserStore((state) => state.user);
+  const canManageManualMembership = currentAdmin?.role === 'super_admin';
+  const [manualVisible, setManualVisible] = useState(false);
+  const [manualForm] = Form.useForm();
+  const {
+    data: subData,
+    isLoading: subLoading,
+    refetch: refetchSubscriptions,
+  } = useSubscriptions({ userId, pageSize: 20 });
+  const {
+    data: payData,
+    isLoading: payLoading,
+    refetch: refetchPayments,
+  } = usePaymentRecords({ userId, pageSize: 10 });
+  const { data: plansData } = useSubscriptionPlans();
+  const setManualMutation = useSetUserManualSubscription({
+    onSuccess: async () => {
+      await Promise.all([refetchSubscriptions(), refetchPayments()]);
+      message.success('会员已设置');
+      setManualVisible(false);
+      manualForm.resetFields();
+    },
+  });
+  const revokeManualMutation = useRevokeUserManualSubscription({
+    onSuccess: async () => {
+      await Promise.all([refetchSubscriptions(), refetchPayments()]);
+      message.success('人工会员已撤销');
+    },
+  });
 
   if (subLoading || payLoading) return <Spin />;
 
   const subs = subData?.list || [];
   const payments = payData?.list || [];
+  const activeManualSub = subs.find(
+    (item) => item.paymentChannel === 'manual' && ['active', 'grace_period', 'cancelled', 'canceled'].includes(item.status)
+  );
+  const currentMembership = subs.find((item) => ['active', 'grace_period', 'cancelled', 'canceled'].includes(item.status));
+  const grantablePlans = (plansData?.list || []).filter((plan) => plan.isActive && plan.tier !== 'free');
 
   if (!subs.length && !payments.length) {
-    return <Empty description="该用户暂无订阅记录" />;
+    return (
+      <Card
+        title="订阅记录"
+        size="small"
+        extra={canManageManualMembership ? <Button type="primary" onClick={() => setManualVisible(true)}>人工设置会员</Button> : null}
+      >
+        <Empty description="该用户暂无订阅记录" />
+        {canManageManualMembership ? <Modal
+          title="人工设置会员"
+          open={manualVisible}
+          onOk={() => {
+            manualForm.validateFields().then((values) => {
+              setManualMutation.mutate({
+                userId,
+                data: {
+                  planId: values.planId,
+                  startsAt: values.startsAt?.toISOString?.(),
+                  expiresAt: values.expiresAt.toISOString(),
+                  reason: values.reason || undefined,
+                },
+              });
+            });
+          }}
+          confirmLoading={setManualMutation.isPending}
+          onCancel={() => {
+            setManualVisible(false);
+            manualForm.resetFields();
+          }}
+        >
+          <Form form={manualForm} layout="vertical" style={{ marginTop: 16 }}>
+            <Form.Item name="planId" label="会员套餐" rules={[{ required: true, message: '请选择会员套餐' }]}>
+              <Select placeholder="选择套餐" options={grantablePlans.map((plan) => ({ label: `${plan.name} (${TIER_LABELS_SUB[plan.tier] || plan.tier})`, value: plan.id }))} />
+            </Form.Item>
+            <Form.Item name="startsAt" label="生效时间" initialValue={dayjs()}>
+              <DatePicker showTime style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item name="expiresAt" label="到期时间" rules={[{ required: true, message: '请选择到期时间' }]}>
+              <DatePicker showTime style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item name="reason" label="原因说明" initialValue="Admin manual subscription grant">
+              <Select
+                options={[
+                  { label: 'Admin manual subscription grant', value: 'Admin manual subscription grant' },
+                  { label: 'Compensation / goodwill', value: 'Compensation / goodwill' },
+                  { label: 'Internal test access', value: 'Internal test access' },
+                ]}
+              />
+            </Form.Item>
+          </Form>
+        </Modal> : null}
+      </Card>
+    );
   }
 
   const subColumns = [
     {
       title: '套餐',
-      dataIndex: 'tier',
+      dataIndex: ['plan', 'tier'],
       width: 100,
       render: (v: string) => (
         <Tag color={v === 'premium' ? 'purple' : v === 'pro' ? 'blue' : 'default'}>
@@ -616,7 +717,7 @@ const SubscriptionTab: React.FC<{ userId: string }> = ({ userId }) => {
     },
     {
       title: '计费周期',
-      dataIndex: 'billingCycle',
+      dataIndex: ['plan', 'billingCycle'],
       width: 100,
       render: (v: string) =>
         v === 'monthly' ? '月付' : v === 'yearly' ? '年付' : v === 'lifetime' ? '终身' : v,
@@ -628,13 +729,13 @@ const SubscriptionTab: React.FC<{ userId: string }> = ({ userId }) => {
     },
     {
       title: '开始时间',
-      dataIndex: 'startDate',
+      dataIndex: 'startsAt',
       width: 120,
       render: (v: string) => (v ? new Date(v).toLocaleDateString('zh-CN') : '-'),
     },
     {
       title: '到期时间',
-      dataIndex: 'endDate',
+      dataIndex: 'expiresAt',
       width: 120,
       render: (v: string) => (v ? new Date(v).toLocaleDateString('zh-CN') : '-'),
     },
@@ -669,7 +770,70 @@ const SubscriptionTab: React.FC<{ userId: string }> = ({ userId }) => {
 
   return (
     <div>
-      <Card title="订阅记录" size="small" style={{ marginBottom: 16 }}>
+      <Card
+        title="订阅记录"
+        size="small"
+        style={{ marginBottom: 16 }}
+        extra={
+          <Space>
+            {canManageManualMembership && activeManualSub ? (
+              <Button
+                danger
+                loading={revokeManualMutation.isPending}
+                onClick={() =>
+                  Modal.confirm({
+                    title: '撤销人工会员',
+                    content: '这会立即撤销该用户当前的人工会员并回落权益，是否继续？',
+                    onOk: () =>
+                      revokeManualMutation.mutate({
+                        userId,
+                        data: { reason: 'Admin revoke manual subscription' },
+                      }),
+                  })
+                }
+              >
+                撤销人工会员
+              </Button>
+            ) : null}
+            {canManageManualMembership ? (
+              <Button
+                type="primary"
+                onClick={() => {
+                  manualForm.setFieldsValue({
+                    planId: activeManualSub?.planId,
+                    startsAt: activeManualSub?.startsAt
+                      ? dayjs(activeManualSub.startsAt)
+                      : dayjs(),
+                    expiresAt: activeManualSub?.expiresAt
+                      ? dayjs(activeManualSub.expiresAt)
+                      : undefined,
+                    reason: activeManualSub
+                      ? 'Admin manual subscription update'
+                      : 'Admin manual subscription grant',
+                  });
+                  setManualVisible(true);
+                }}
+              >
+                {activeManualSub ? '更新人工会员' : '人工设置会员'}
+              </Button>
+            ) : null}
+          </Space>
+        }
+      >
+        {currentMembership ? (
+          <Descriptions size="small" bordered column={2} style={{ marginBottom: 12 }}>
+            <Descriptions.Item label="当前会员档位">
+              <Tag color={currentMembership.plan?.tier === 'premium' ? 'purple' : 'blue'}>
+                {TIER_LABELS_SUB[currentMembership.plan?.tier || ''] || currentMembership.plan?.name || '-'}
+              </Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label="会员来源">
+              <Tag color={currentMembership.paymentChannel === 'manual' ? 'gold' : 'cyan'}>
+                {CHANNEL_LABELS[currentMembership.paymentChannel] || currentMembership.paymentChannel}
+              </Tag>
+            </Descriptions.Item>
+          </Descriptions>
+        ) : null}
         <Table dataSource={subs} columns={subColumns} rowKey="id" size="small" pagination={false} />
       </Card>
       {payments.length > 0 && (
@@ -683,6 +847,50 @@ const SubscriptionTab: React.FC<{ userId: string }> = ({ userId }) => {
           />
         </Card>
       )}
+      {canManageManualMembership ? <Modal
+        title={activeManualSub ? '更新人工会员' : '人工设置会员'}
+        open={manualVisible}
+        onOk={() => {
+          manualForm.validateFields().then((values) => {
+            setManualMutation.mutate({
+              userId,
+              data: {
+                planId: values.planId,
+                startsAt: values.startsAt?.toISOString?.(),
+                expiresAt: values.expiresAt.toISOString(),
+                reason: values.reason || undefined,
+              },
+            });
+          });
+        }}
+        confirmLoading={setManualMutation.isPending}
+        onCancel={() => {
+          setManualVisible(false);
+          manualForm.resetFields();
+        }}
+      >
+        <Form form={manualForm} layout="vertical" style={{ marginTop: 16 }}>
+            <Form.Item name="planId" label="会员套餐" rules={[{ required: true, message: '请选择会员套餐' }]}>
+              <Select placeholder="选择套餐" options={grantablePlans.map((plan) => ({ label: `${plan.name} (${TIER_LABELS_SUB[plan.tier] || plan.tier})`, value: plan.id }))} />
+            </Form.Item>
+            <Form.Item name="startsAt" label="生效时间">
+              <DatePicker showTime style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item name="expiresAt" label="到期时间" rules={[{ required: true, message: '请选择到期时间' }]}> 
+              <DatePicker showTime style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item name="reason" label="原因说明">
+              <Select
+                options={[
+                  { label: 'Admin manual subscription grant', value: 'Admin manual subscription grant' },
+                  { label: 'Admin manual subscription update', value: 'Admin manual subscription update' },
+                  { label: 'Compensation / goodwill', value: 'Compensation / goodwill' },
+                  { label: 'Internal test access', value: 'Internal test access' },
+                ]}
+              />
+            </Form.Item>
+        </Form>
+      </Modal> : null}
     </div>
   );
 };
