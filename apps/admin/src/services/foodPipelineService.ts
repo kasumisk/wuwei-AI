@@ -1577,14 +1577,6 @@ export interface ImageEnrichmentJobsResult {
   }>;
 }
 
-export interface ImageEnrichmentClearParams {
-  foodGroup?: string;
-  primarySource?: string;
-  isVerified?: boolean;
-  dishType?: string;
-  limit?: number;
-}
-
 export interface ImageEnrichmentClearResult {
   cleared: number;
 }
