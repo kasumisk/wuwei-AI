@@ -17,6 +17,7 @@ import { GoalTrackerService } from '../../user/app/services/goal/goal-tracker.se
 import { GoalPhaseService } from '../../user/app/services/goal/goal-phase.service';
 import { RealtimeProfileService } from '../../user/app/services/profile/realtime-profile.service';
 import { BehaviorService } from '../../diet/app/services/behavior.service';
+import { RedisCacheService } from '../../../core/redis/redis-cache.service';
 import {
   getUserLocalHour,
   DEFAULT_TIMEZONE,
@@ -89,6 +90,9 @@ function buildHealthConditionGuidance(
 export class UserContextBuilderService {
   private readonly logger = new Logger(UserContextBuilderService.name);
 
+  /** UserContext Redis 缓存 TTL（毫秒）*/
+  private static readonly USER_CTX_TTL_MS = 60_000;
+
   constructor(
     private readonly foodService: FoodService,
     private readonly nutritionScoreService: NutritionScoreService,
@@ -98,10 +102,14 @@ export class UserContextBuilderService {
     private readonly realtimeProfileService: RealtimeProfileService,
     private readonly behaviorService: BehaviorService,
     private readonly i18n: I18nService,
+    private readonly redis: RedisCacheService,
   ) {}
 
   /**
    * 构建结构化用户上下文
+   *
+   * Redis 缓存（60s TTL）：每次 analyze 都要调用，内含 6 个并行 DB 查询，
+   * 用户数据在 60s 内变化极小，缓存可大幅降低 DB 压力并减少延迟。
    */
   async build(
     userId?: string,
@@ -135,6 +143,20 @@ export class UserContextBuilderService {
     };
 
     if (!userId) return defaults;
+
+    // ── Redis cache-aside（60s TTL）────────────────────────────────────────
+    const cacheKey = this.redis.buildKey('user_ctx', userId);
+    try {
+      const hit = await this.redis.get<UnifiedUserContext>(cacheKey);
+      if (hit) {
+        // localHour 是运行时时间，不应用缓存值，保持最新
+        hit.localHour = getUserLocalHour(hit.profile?.timezone ?? DEFAULT_TIMEZONE);
+        this.logger.debug(`[UserContext] redis cache hit userId=${userId}`);
+        return hit;
+      }
+    } catch {
+      // Redis 不可用时降级到 DB 查询
+    }
 
     try {
       const [
@@ -257,7 +279,7 @@ export class UserContextBuilderService {
         ? (effectiveGoal.weightAdjustment as Partial<Record<string, number>>)
         : undefined;
 
-      return {
+      const result: UnifiedUserContext = {
         goalType,
         goalLabel:
           // i18n-allow-dynamic
@@ -294,6 +316,13 @@ export class UserContextBuilderService {
           completenessRatio,
         },
       };
+
+      // 写入 Redis 缓存（fire-and-forget，不阻塞返回）
+      this.redis
+        .set(cacheKey, result, UserContextBuilderService.USER_CTX_TTL_MS)
+        .catch(() => {});
+
+      return result;
     } catch (err) {
       this.logger.warn(
         `Failed to build user context: ${(err as Error).message}`,

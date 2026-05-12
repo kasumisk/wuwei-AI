@@ -143,17 +143,15 @@ export class AnalysisPromptSchemaService {
    * Build base prompt for text analysis.
    * For image analysis, use buildPhase1Prompt() instead.
    */
-  buildBasePrompt(mode?: 'text' | 'image', locale?: Locale): string {
+  buildBasePrompt(mode?: 'text' | 'image', locale?: Locale): string { // i18n-fix-2026-05-12
     const loc = (locale ?? this.i18n.currentLocale()) as I18nLocale;
     return [
       this.i18n.t('decision.prompt.systemRole', loc),
       '',
       this.i18n.t('decision.prompt.jsonOnly', loc),
-      this.i18n.t('decision.prompt.schema.foods', loc),
+      this.i18n.t('decision.prompt.schema.slim', loc),
       '',
-      this.i18n.t('decision.prompt.rules', loc),
-      '',
-      this.i18n.t('decision.prompt.nameField', loc),
+      this.i18n.t('decision.prompt.rules.slim', loc),
     ].join('\n');
   }
 
@@ -248,3 +246,4 @@ export class AnalysisPromptSchemaService {
     return [basePrompt, focusBlock, userContext].join('\n\n');
   }
 }
+

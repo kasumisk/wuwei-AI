@@ -7,15 +7,19 @@ import {
   upsertFoodSplitTables,
   FOOD_SPLIT_INCLUDE,
 } from '../../food-split.helper';
+import { RedisCacheService } from '../../../../core/redis/redis-cache.service';
 
 @Injectable()
 export class FoodLibraryService {
   private readonly logger = new Logger(FoodLibraryService.name);
+  /** 食物搜索缓存 TTL（毫秒），搜索结果相对稳定，30 分钟 */
+  private static readonly SEARCH_CACHE_TTL_MS = 1_800_000;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly foodService: FoodService,
     private readonly i18n: I18nService,
+    private readonly redis: RedisCacheService,
   ) {}
 
   /**
@@ -28,6 +32,18 @@ export class FoodLibraryService {
    */
   async search(q: string, limit: number = 10) {
     const safeLimit = Math.min(Math.max(limit, 1), 50);
+
+    // Redis cache-aside（30min TTL）：搜索词 + limit 作为 key
+    const cacheKey = this.redis.buildKey('food_search', `${q}:${safeLimit}`);
+    try {
+      const hit = await this.redis.get<unknown[]>(cacheKey);
+      if (hit) {
+        this.logger.debug(`[FoodLibrary] search cache hit q="${q}" limit=${safeLimit}`);
+        return hit;
+      }
+    } catch {
+      // Redis 不可用时降级到 DB 查询
+    }
 
     // pg_trgm similarity 搜索（利用已有 GIN 索引）
     const results = await this.prisma.$queryRawUnsafe(
@@ -84,6 +100,11 @@ export class FoodLibraryService {
       `%${q}%`,
       safeLimit,
     );
+
+    // 写入 Redis 缓存（fire-and-forget）
+    this.redis
+      .set(cacheKey, results, FoodLibraryService.SEARCH_CACHE_TTL_MS)
+      .catch(() => {});
 
     return results;
   }

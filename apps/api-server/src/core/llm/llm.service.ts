@@ -245,7 +245,7 @@ export class LlmService {
       modelKwargs.response_format = ctx.responseFormat;
     }
 
-    const model = new ChatOpenAI({
+     const model = new ChatOpenAI({
       apiKey: ctx.apiKey,
       model: ctx.model,
       configuration: ctx.baseUrl ? { baseURL: ctx.baseUrl } : undefined,
@@ -255,6 +255,10 @@ export class LlmService {
       streaming: false,
       // LangChain 自带 timeout 作为兜底（breaker timeout 已生效）
       timeout: ctx.timeoutMs,
+      // 禁用 LangChain 内置重试：重试策略由 CircuitBreaker 管理，
+      // 默认 maxRetries=6 + 指数退避会叠加到 breaker timeout 内，
+      // 导致单次 fire() 实际等待远超 timeoutMs
+      maxRetries: 0,
       modelKwargs: Object.keys(modelKwargs).length ? modelKwargs : undefined,
     });
 

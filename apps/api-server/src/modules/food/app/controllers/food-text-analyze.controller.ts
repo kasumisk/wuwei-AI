@@ -50,6 +50,14 @@ import { AnalysisSessionService } from '../services/analysis-session.service';
 @ApiBearerAuth()
 export class FoodTextAnalyzeController {
   private readonly logger = new Logger(FoodTextAnalyzeController.name);
+  /**
+   * In-flight LLM 请求去重表（thundering herd 保护）
+   *
+   * 当相同 cacheKey 有多个并发 cache miss 时，只发起一次 LLM 调用，
+   * 后续相同 key 的请求等待第一个 Promise resolve 即可。
+   * 完成后（无论成功或失败）从 Map 中删除，避免内存泄漏。
+   */
+  private readonly inFlightAnalysis = new Map<string, Promise<any>>();
 
   constructor(
     private readonly textFoodAnalysisService: TextFoodAnalysisService,
@@ -66,7 +74,7 @@ export class FoodTextAnalyzeController {
 
   @Post('analyze-text')
   @HttpCode(HttpStatus.OK)
-  @AiHeavyThrottle(15, 60)
+  @AiHeavyThrottle(100, 60) // 100/min：缓存命中 ~5ms 不应受限；LLM 配额保护由 quotaGateService 负责
   @ApiOperation({ summary: '文本食物 AI 分析' })
   @ApiBody({ type: AnalyzeTextDto })
   async analyzeText(
@@ -94,18 +102,7 @@ export class FoodTextAnalyzeController {
       );
       const cached = this.helper.getFromTextAnalysisCache(cacheKey);
       if (cached) {
-        const cachedAnalysisId = cached.analysisId?.trim();
-        const persistedRecord = cachedAnalysisId
-          ? await this.prisma.foodAnalysisRecords.findUnique({
-              where: { id: cachedAnalysisId },
-              select: { id: true },
-            })
-          : null;
-        if (!cachedAnalysisId || !persistedRecord) {
-          this.logger.warn(
-            `[AnalyzeText] stale cache ignored key=${cacheKey} analysisId=${cachedAnalysisId || 'missing'} ${meta}`,
-          );
-        } else {
+        // 内存缓存命中：直接返回，不再做冗余DB验证（内存缓存10min TTL，结果是新鲜的）
         this.logger.log(
           `[AnalyzeText] cache hit key=${cacheKey} ${meta} ageMs=${Date.now() - startedAt}`,
         );
@@ -122,7 +119,6 @@ export class FoodTextAnalyzeController {
           trimmedResult,
           this.i18n.t('food.analyzeCompleteCached'),
         );
-        }
       }
 
       this.logger.log(`[AnalyzeText] cache miss key=${cacheKey} ${meta}`);
@@ -159,17 +155,29 @@ export class FoodTextAnalyzeController {
       }
 
       const analysisStartedAt = Date.now();
-      const fullResult = await this.textFoodAnalysisService.analyze(
-        dto.text,
-        dto.mealType,
-        user.id,
-        (dto.locale as any) || undefined,
-        dto.contextOverride?.localHour,
-        dto.hints,
-        {
-          awaitPersistence: true,
-        },
-      );
+
+      // ── Thundering herd 去重：相同 cacheKey 同时 miss 时只发一次 LLM ──────
+      let inFlightPromise = this.inFlightAnalysis.get(cacheKey);
+      if (!inFlightPromise) {
+        inFlightPromise = this.textFoodAnalysisService
+          .analyze(
+            dto.text,
+            dto.mealType,
+            user.id,
+            (dto.locale as any) || undefined,
+            dto.contextOverride?.localHour,
+            dto.hints,
+            { awaitPersistence: false },
+          )
+          .finally(() => {
+            this.inFlightAnalysis.delete(cacheKey);
+          });
+        this.inFlightAnalysis.set(cacheKey, inFlightPromise);
+        this.logger.debug(`[AnalyzeText] in-flight registered key=${cacheKey}`);
+      } else {
+        this.logger.debug(`[AnalyzeText] in-flight coalesced key=${cacheKey}`);
+      }
+      const fullResult = await inFlightPromise;
       this.logger.log(
         `[AnalyzeText] core analysis finished in ${Date.now() - analysisStartedAt}ms key=${cacheKey} foods=${fullResult.foods?.length || 0} ${meta}`,
       );

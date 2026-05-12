@@ -236,19 +236,26 @@ export class TextFoodAnalysisService {
     // Checkpoint 3: 统一 LLM 调用层（quota + breaker + recorder）
     private readonly llm: LlmService,
   ) {
-    // 复用与图片分析相同的 API 配置
-    this.apiKey =
-      this.configService.get<string>('OPENROUTER_API_KEY') ||
-      this.configService.get<string>('OPENAI_API_KEY') ||
-      '';
-    this.baseUrl =
-      this.configService.get<string>('OPENROUTER_BASE_URL') ||
-      'https://openrouter.ai/api/v1';
+    // 优先使用 DeepSeek 官方 API（更快），回退到 OpenRouter
+    const deepseekKey = this.configService.get<string>('DEEPSEEK_API_KEY');
+    const openrouterKey = this.configService.get<string>('OPENROUTER_API_KEY');
+    if (deepseekKey) {
+      this.apiKey = deepseekKey;
+      this.baseUrl =
+        this.configService.get<string>('DEEPSEEK_BASE_URL') ||
+        'https://api.deepseek.com/v1';
+    } else {
+      this.apiKey =
+        openrouterKey || this.configService.get<string>('OPENAI_API_KEY') || '';
+      this.baseUrl =
+        this.configService.get<string>('OPENROUTER_BASE_URL') ||
+        'https://openrouter.ai/api/v1';
+    }
     // 文本分析用轻量模型，成本更低
     this.textModel =
       this.configService.get<string>('TEXT_ANALYSIS_MODEL') ||
       this.configService.get<string>('VISION_MODEL') ||
-      'deepseek/deepseek-chat-v3';
+      'deepseek-chat';
   }
 
   // ==================== 主入口 ====================
@@ -585,10 +592,15 @@ export class TextFoodAnalysisService {
       const { quantity, foodName } = this.extractQuantity(term);
       return { term, quantity, foodName };
     });
+    const libraryBatch1Start = Date.now();
     const matchResults = await Promise.all(
       termData.map((td) =>
         this.matchFoodLibrary(td.foodName).catch(() => null),
       ),
+    );
+    const libraryBatch1Hits = matchResults.filter(Boolean).length;
+    this.logger.log(
+      `[TextAnalysisService] libraryBatch1 ${Date.now() - libraryBatch1Start}ms terms=${termData.length} hits=${libraryBatch1Hits} userId=${userId || 'anonymous'}`,
     );
 
     for (let i = 0; i < termData.length; i++) {
@@ -620,6 +632,7 @@ export class TextFoodAnalysisService {
 
     // 3b. 未命中的词条走 LLM 拆解
     if (unmatchedTerms.length > 0) {
+      const llmParseStart = Date.now();
       const llmResults = await this.llmParseFoods(
         unmatchedTerms.map((t) => t.term).join(', '),
         originalText,
@@ -627,6 +640,9 @@ export class TextFoodAnalysisService {
         locale,
         hints,
         userId,
+      );
+      this.logger.log(
+        `[TextAnalysisService] llmParseFoods ${Date.now() - llmParseStart}ms unmatched=${unmatchedTerms.length} results=${llmResults.length} userId=${userId || 'anonymous'}`,
       );
       results.push(...llmResults);
 
@@ -1085,6 +1101,10 @@ export class TextFoodAnalysisService {
         : this.promptSchema.buildBasePrompt(undefined, locale);
 
       this.logger.log(
+        `[LLM] systemPrompt preview: ${systemPrompt.slice(0, 300).replace(/\n/g, '\\n')}`,
+      );
+
+      this.logger.log(
         `[LLM] Text parsing call inputLength=${unmatchedText.length} hints=${hints?.length || 0} userId=${userId || 'anonymous'}`,
       );
 
@@ -1107,7 +1127,7 @@ export class TextFoodAnalysisService {
         baseUrl: this.baseUrl,
         model: this.textModel,
         temperature: 0.2,
-        maxTokens: 800,
+        maxTokens: 2500,
         timeoutMs: 15_000,
         messages: [
           { role: 'system', content: systemPrompt },
@@ -1124,8 +1144,13 @@ export class TextFoodAnalysisService {
       const llmFoods = parsed.foods
         .map((f) => ({ ...f, llmName: this.normalizeFoodTerm(f.name || '') }))
         .filter((f) => f.llmName);
+      const libraryBatch2Start = Date.now();
       const libraryMatches = await Promise.all(
         llmFoods.map((f) => this.matchFoodLibrary(f.llmName).catch(() => null)),
+      );
+      const libraryBatch2Hits = libraryMatches.filter(Boolean).length;
+      this.logger.log(
+        `[TextAnalysisService] libraryBatch2 ${Date.now() - libraryBatch2Start}ms foods=${llmFoods.length} hits=${libraryBatch2Hits} userId=${userId || 'anonymous'}`,
       );
 
       const resolved: ParsedFoodItem[] = [];
@@ -1134,6 +1159,12 @@ export class TextFoodAnalysisService {
         const libraryMatch = libraryMatches[i];
 
         if (libraryMatch) {
+          // Preserve the LLM's locale-appropriate display name.
+          // buildFromLibraryMatch uses the library's stored (Chinese) name, which
+          // localizeAnalysisResult may later override via food_i18n.
+          // When food_i18n has no entry for the request locale, we fall back to
+          // the LLM name (already in the right language) instead of the Chinese library name.
+          const llmDisplayName = f.name?.trim() || f.llmName;
           const servingGrams = this.resolveServingGrams(
             f.quantity,
             libraryMatch.match,
@@ -1143,6 +1174,28 @@ export class TextFoodAnalysisService {
             f.quantity,
             servingGrams,
           );
+          // Use the LLM's locale-appropriate name as display name.
+          // normalizedName keeps the library's stored name for internal matching.
+          // localizeAnalysisResult will override name via food_i18n when available.
+          fromLibrary.name = llmDisplayName;
+          // Fill scoring fields from LLM when library record has no data.
+          // These fields drive decision accuracy but are often missing in older DB records.
+          if (fromLibrary.qualityScore == null && f.qualityScore != null)
+            fromLibrary.qualityScore = f.qualityScore;
+          if (fromLibrary.satietyScore == null && f.satietyScore != null)
+            fromLibrary.satietyScore = f.satietyScore;
+          if (fromLibrary.processingLevel == null && f.processingLevel != null)
+            fromLibrary.processingLevel = f.processingLevel;
+          if (fromLibrary.fodmapLevel == null && f.fodmapLevel != null)
+            fromLibrary.fodmapLevel = f.fodmapLevel as any;
+          if (fromLibrary.purine == null && f.purine != null)
+            fromLibrary.purine = Number(f.purine) || undefined;
+          if (fromLibrary.oxalateLevel == null && f.oxalateLevel != null)
+            fromLibrary.oxalateLevel = f.oxalateLevel as any;
+          if (fromLibrary.glycemicLoad == null && f.glycemicLoad != null)
+            fromLibrary.glycemicLoad = f.glycemicLoad;
+          if (fromLibrary.glycemicIndex == null && f.glycemicIndex != null)
+            fromLibrary.glycemicIndex = f.glycemicIndex;
           fromLibrary.confidence = Math.max(
             fromLibrary.confidence,
             libraryMatch.simScore >= 1 ? 0.9 : 0.72,
