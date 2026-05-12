@@ -17,7 +17,12 @@ describe('ConstraintGeneratorService', () => {
   };
 
   const defaultConsumed = { calories: 800, protein: 40 };
-  const defaultDailyTarget = { calories: 2000, protein: 100, fat: 65, carbs: 250 };
+  const defaultDailyTarget = {
+    calories: 2000,
+    protein: 100,
+    fat: 65,
+    carbs: 250,
+  };
 
   beforeEach(() => {
     service = new ConstraintGeneratorService(

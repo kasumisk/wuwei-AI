@@ -45,9 +45,9 @@ describe('V8.2 FoodInfra Repository 冒烟', () => {
         $executeRawUnsafe: jest.fn().mockResolvedValue(1),
         $executeRaw: jest.fn().mockResolvedValue(1),
         $queryRaw: jest.fn().mockResolvedValue([{ vec: '[0.1,0.2,0.3]' }]),
-        $queryRawUnsafe: jest.fn().mockResolvedValue([
-          { foodId: 'a', distance: 0.01 },
-        ]),
+        $queryRawUnsafe: jest
+          .fn()
+          .mockResolvedValue([{ foodId: 'a', distance: 0.01 }]),
         foodEmbedding: {
           findUnique: jest.fn().mockResolvedValue({
             foodId: 'a',
@@ -67,7 +67,7 @@ describe('V8.2 FoodInfra Repository 冒烟', () => {
         vector: new Array(96).fill(0.1),
       });
       expect(prisma.$executeRawUnsafe).toHaveBeenCalledTimes(1);
-      const sql = (prisma.$executeRawUnsafe.mock.calls[0][0] as string);
+      const sql = prisma.$executeRawUnsafe.mock.calls[0][0] as string;
       expect(sql).toContain('"model_name"');
       expect(sql).toContain('"dimension"');
       // 不能是被弃用的列名 "dim"（V8.2 重命名为 dimension）
@@ -84,9 +84,7 @@ describe('V8.2 FoodInfra Repository 冒烟', () => {
     });
 
     it('readVector: 解析 pgvector 文本为数组', async () => {
-      const v = await repo.readVector(
-        '00000000-0000-0000-0000-000000000001',
-      );
+      const v = await repo.readVector('00000000-0000-0000-0000-000000000001');
       expect(v).toEqual([0.1, 0.2, 0.3]);
     });
 
@@ -94,9 +92,7 @@ describe('V8.2 FoodInfra Repository 冒烟', () => {
       prisma.$queryRaw.mockRejectedValueOnce(
         new Error('pgvector type "vector" does not exist'),
       );
-      const v = await repo.readVector(
-        '00000000-0000-0000-0000-000000000001',
-      );
+      const v = await repo.readVector('00000000-0000-0000-0000-000000000001');
       expect(v).toBeNull();
     });
 

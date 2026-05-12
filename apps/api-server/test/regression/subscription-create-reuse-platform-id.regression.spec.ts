@@ -58,7 +58,9 @@ describe('SubscriptionService createSubscription platform id reuse regression', 
       } as any,
       { emit: jest.fn() } as any,
       {
-        resolve: jest.fn().mockImplementation((_tier, entitlements) => entitlements ?? {}),
+        resolve: jest
+          .fn()
+          .mockImplementation((_tier, entitlements) => entitlements ?? {}),
         listCountableFeatures: jest.fn().mockReturnValue([]),
       } as any,
       { t: jest.fn((key: string) => key) } as any,

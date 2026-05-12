@@ -96,7 +96,10 @@ export class ImageNutritionFillService {
       category: f.category,
     }));
 
-    const systemPrompt = this.i18n.t('decision.prompt.nutritionFill.system', loc);
+    const systemPrompt = this.i18n.t(
+      'decision.prompt.nutritionFill.system',
+      loc,
+    );
     const userPrefix = this.i18n.t('decision.prompt.nutritionFill.user', loc);
     const userMessage = `${userPrefix}\n${JSON.stringify(foodList, null, 2)}`;
 
@@ -106,7 +109,6 @@ export class ImageNutritionFillService {
         { role: 'user', content: userMessage },
       ],
       feature: LlmFeature.FoodText,
-      userId,
       provider: 'openrouter',
       model: this.textModel,
       apiKey: this.apiKey,
@@ -118,7 +120,10 @@ export class ImageNutritionFillService {
 
     const raw = result.content.trim();
     const jsonStr = raw.startsWith('```')
-      ? raw.replace(/```(?:json)?\n?/g, '').replace(/```$/g, '').trim()
+      ? raw
+          .replace(/```(?:json)?\n?/g, '')
+          .replace(/```$/g, '')
+          .trim()
       : raw;
 
     const parsed = JSON.parse(jsonStr);
@@ -129,9 +134,7 @@ export class ImageNutritionFillService {
     foods: AnalyzedFoodItem[],
     filled: Record<string, any>[],
   ): void {
-    const byName = new Map(
-      filled.map((f) => [f.name?.toLowerCase(), f]),
-    );
+    const byName = new Map(filled.map((f) => [f.name?.toLowerCase(), f]));
 
     for (const food of foods) {
       const key = food.name?.toLowerCase();
@@ -152,8 +155,7 @@ export class ImageNutritionFillService {
       if (fill.fiber != null) food.fiber = round1(Number(fill.fiber) * ratio);
       if (fill.sodium != null)
         food.sodium = Math.round(Number(fill.sodium) * ratio);
-      if (fill.sugar != null)
-        food.sugar = round1(Number(fill.sugar) * ratio);
+      if (fill.sugar != null) food.sugar = round1(Number(fill.sugar) * ratio);
       if (fill.saturatedFat != null)
         food.saturatedFat = round1(Number(fill.saturatedFat) * ratio);
       if (fill.transFat != null)
@@ -164,10 +166,14 @@ export class ImageNutritionFillService {
         food.purine = round1(Number(fill.purine) * ratio);
 
       // Non-scaled fields
-      if (fill.glycemicLoad != null) food.glycemicLoad = Number(fill.glycemicLoad);
-      if (fill.qualityScore != null) food.qualityScore = Number(fill.qualityScore);
-      if (fill.satietyScore != null) food.satietyScore = Number(fill.satietyScore);
-      if (fill.processingLevel != null) food.processingLevel = fill.processingLevel;
+      if (fill.glycemicLoad != null)
+        food.glycemicLoad = Number(fill.glycemicLoad);
+      if (fill.qualityScore != null)
+        food.qualityScore = Number(fill.qualityScore);
+      if (fill.satietyScore != null)
+        food.satietyScore = Number(fill.satietyScore);
+      if (fill.processingLevel != null)
+        food.processingLevel = fill.processingLevel;
       if (fill.fodmapLevel != null) food.fodmapLevel = fill.fodmapLevel;
       if (fill.oxalateLevel != null) food.oxalateLevel = fill.oxalateLevel;
       if (fill.allergens) food.allergens = fill.allergens;
@@ -182,8 +188,7 @@ export class ImageNutritionFillService {
     const grams = food.estimatedWeightGrams || 100;
     const cat = food.category || '';
     return (
-      (cat === 'condiment' && grams <= 20) ||
-      grams <= 5 // < 5g is always negligible
+      (cat === 'condiment' && grams <= 20) || grams <= 5 // < 5g is always negligible
     );
   }
 

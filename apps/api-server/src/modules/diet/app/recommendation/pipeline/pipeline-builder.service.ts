@@ -96,7 +96,10 @@ import {
 function ensureMinCandidates(
   filtered: FoodLibrary[],
   beforeCount: number,
-  ctx: Pick<PipelineContext, 'allFoods' | 'usedNames' | 'constraints' | 'userProfile' | 'channel'>,
+  ctx: Pick<
+    PipelineContext,
+    'allFoods' | 'usedNames' | 'constraints' | 'userProfile' | 'channel'
+  >,
   roleCategories: string[],
   opts?: {
     minCount?: number;
@@ -524,14 +527,22 @@ export class PipelineBuilderService implements OnModuleInit {
         const excludeIds = candidates.map((f) => f.id);
         const cfLimit = Math.max(Math.ceil(semanticLimit * 0.5), 5);
         // 预建 categoryMap 供语义召回 enforceCategoryDiversity 使用，避免查 DB
-        const categoryMap = new Map(ctx.allFoods.map((f) => [f.id, f.category ?? 'unknown']));
+        const categoryMap = new Map(
+          ctx.allFoods.map((f) => [f.id, f.category ?? 'unknown']),
+        );
         // 1+3+4 并行：语义召回、CF召回、评分配置快照同时发出
         const [semanticIds, cfCandidates, scoringConfig] = await Promise.all([
-          this.semanticRecallService.recallSimilarFoods(
+          this.semanticRecallService.recallSimilarFoods(ctx.userId, {
+            topK: semanticLimit,
+            excludeIds,
+            categoryMap,
+          }),
+          this.cfRecallService.recall(
             ctx.userId,
-            { topK: semanticLimit, excludeIds, categoryMap },
+            new Set(excludeIds),
+            cfLimit,
+            perfTag ? `${perfTag} role=${role}` : `role=${role}`,
           ),
-          this.cfRecallService.recall(ctx.userId, new Set(excludeIds), cfLimit, perfTag ? `${perfTag} role=${role}` : `role=${role}`),
           this.scoringConfigService.getConfig(),
         ]);
 
@@ -661,7 +672,9 @@ export class PipelineBuilderService implements OnModuleInit {
       penaltyCtx,
       healthModifierCache,
     );
-    this.logger.log(`[TIMING] preloadL2Cache: ${Date.now() - _tPreload}ms (ids=${candidateIds.length})`);
+    this.logger.log(
+      `[TIMING] preloadL2Cache: ${Date.now() - _tPreload}ms (ids=${candidateIds.length})`,
+    );
     const preloadedIds = new Set(healthModifierCache.keys());
 
     // Phase A: 计算基础分（FoodScorer + PreferenceSignal）
@@ -1169,19 +1182,26 @@ export class PipelineBuilderService implements OnModuleInit {
     let preFilteredFoods = ctx.allFoods.filter((f) => {
       // mealType 门控
       const foodMealTypes: string[] = (f as any).mealTypes || [];
-      if (foodMealTypes.length > 0 && !foodMealTypes.includes(ctx.mealType)) return false;
+      if (foodMealTypes.length > 0 && !foodMealTypes.includes(ctx.mealType))
+        return false;
       // 饮食限制
       if (
         ctx.constraints.dietaryRestrictions?.length &&
         foodViolatesDietaryRestriction(f, ctx.constraints.dietaryRestrictions)
-      ) return false;
+      )
+        return false;
       return true;
     });
     // 过敏原过滤（用与 recallCandidates 相同的工具函数）
     if (ctx.userProfile?.allergens?.length) {
-      preFilteredFoods = filterByAllergens(preFilteredFoods, ctx.userProfile.allergens);
+      preFilteredFoods = filterByAllergens(
+        preFilteredFoods,
+        ctx.userProfile.allergens,
+      );
     }
-    this.logger.log(`[PERF ${tag}] preFilter=${Date.now() - _tPreFilter}ms (${ctx.allFoods.length}→${preFilteredFoods.length}) roles=${roles.join(',')}`);
+    this.logger.log(
+      `[PERF ${tag}] preFilter=${Date.now() - _tPreFilter}ms (${ctx.allFoods.length}→${preFilteredFoods.length}) roles=${roles.join(',')}`,
+    );
 
     // 临时替换 ctx.allFoods 供 recallCandidates 使用（recall 阶段只读）
     const originalAllFoods = ctx.allFoods;
@@ -1189,7 +1209,11 @@ export class PipelineBuilderService implements OnModuleInit {
 
     for (const role of roles) {
       const _tRole = Date.now();
-      let _tRecallMs = 0, _tFilterMs = 0, _tRankMs = 0, _tMoMs = 0, _tRerankMs = 0;
+      let _tRecallMs = 0,
+        _tFilterMs = 0,
+        _tRankMs = 0,
+        _tMoMs = 0,
+        _tRerankMs = 0;
       // Stage 1: Recall
       let recalled: FoodLibrary[];
       const recallStart = trace ? Date.now() : 0;
@@ -1487,7 +1511,9 @@ export class PipelineBuilderService implements OnModuleInit {
         picks.push(selected);
         usedNames.add(selected.food.name);
       }
-      this.logger.log(`[PERF ${tag}] role=${role} total=${Date.now() - _tRole}ms recall=${_tRecallMs}ms(${recalledCount}) filter=${_tFilterMs}ms(${realistic.length}) rank=${_tRankMs}ms mo=${_tMoMs}ms rerank=${_tRerankMs}ms`);
+      this.logger.log(
+        `[PERF ${tag}] role=${role} total=${Date.now() - _tRole}ms recall=${_tRecallMs}ms(${recalledCount}) filter=${_tFilterMs}ms(${realistic.length}) rank=${_tRankMs}ms mo=${_tMoMs}ms rerank=${_tRerankMs}ms`,
+      );
     }
 
     // 恢复 ctx.allFoods（ensureMinCandidates fallback 和后续 P-β/P-ε 阶段需要完整食物池）
@@ -1676,7 +1702,9 @@ export class PipelineBuilderService implements OnModuleInit {
       );
     }
 
-    this.logger.log(`[PERF ${tag}] pipeline total=${Date.now() - _tPipeline}ms postRoles=${Date.now() - _tPostRoles}ms picks=${picks.length} cands=${allCandidates.length}`);
+    this.logger.log(
+      `[PERF ${tag}] pipeline total=${Date.now() - _tPipeline}ms postRoles=${Date.now() - _tPostRoles}ms picks=${picks.length} cands=${allCandidates.length}`,
+    );
 
     // 填充 trace summary
     if (trace) {

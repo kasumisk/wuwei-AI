@@ -35,7 +35,10 @@ export interface TaskHandlerContext {
   };
 }
 
-export type TaskHandler = (data: unknown, ctx: TaskHandlerContext) => Promise<unknown>;
+export type TaskHandler = (
+  data: unknown,
+  ctx: TaskHandlerContext,
+) => Promise<unknown>;
 
 @Injectable()
 export class TaskHandlerRegistry {

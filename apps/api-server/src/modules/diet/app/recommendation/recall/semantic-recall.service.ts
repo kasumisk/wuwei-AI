@@ -128,7 +128,9 @@ export class SemanticRecallService {
     excludeIds: string[] = [],
   ): Promise<string[]> {
     // 规范化参数：支持旧签名 (userId, limit, excludeIds) 和新签名 (userId, options)
-    const options: Required<Omit<SemanticRecallOptions, 'categoryMap'>> & { categoryMap?: Map<string, string> } =
+    const options: Required<Omit<SemanticRecallOptions, 'categoryMap'>> & {
+      categoryMap?: Map<string, string>;
+    } =
       typeof limitOrOptions === 'number'
         ? {
             topK: limitOrOptions,
@@ -166,7 +168,9 @@ export class SemanticRecallService {
    */
   async recallWithMetadata(
     userId: string,
-    options: Required<Omit<SemanticRecallOptions, 'categoryMap'>> & { categoryMap?: Map<string, string> },
+    options: Required<Omit<SemanticRecallOptions, 'categoryMap'>> & {
+      categoryMap?: Map<string, string>;
+    },
   ): Promise<SemanticRecallResult[]> {
     const tStart = Date.now();
     // 1. 获取多兴趣画像向量（含缓存）
@@ -266,9 +270,11 @@ export class SemanticRecallService {
     const inflight = this.profileInflight.get(userId);
     if (inflight) return inflight;
 
-    const promise = this.computeAndCacheProfile(userId, cacheKey).finally(() => {
-      this.profileInflight.delete(userId);
-    });
+    const promise = this.computeAndCacheProfile(userId, cacheKey).finally(
+      () => {
+        this.profileInflight.delete(userId);
+      },
+    );
     this.profileInflight.set(userId, promise);
     return promise;
   }

@@ -186,7 +186,11 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** 给 ioredis 命令加 deadline 保护 */
-  private withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  private withTimeout<T>(
+    promise: Promise<T>,
+    ms: number,
+    fallback: T,
+  ): Promise<T> {
     return Promise.race([
       promise,
       new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
@@ -323,7 +327,11 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
       await fn();
       return true;
     }
-    const acquired = await this.setNX(lockKey, process.env.HOSTNAME || 'default', ttlMs);
+    const acquired = await this.setNX(
+      lockKey,
+      process.env.HOSTNAME || 'default',
+      ttlMs,
+    );
     if (!acquired) {
       this.logger.log(`Cron ${lockName} 已在其他实例执行中，跳过`);
       return false;
@@ -338,7 +346,11 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
 
   // ─── Hash 操作 ────────────────────────────────────────────────────────────
 
-  async hIncrBy(key: string, field: string, increment = 1): Promise<number | null> {
+  async hIncrBy(
+    key: string,
+    field: string,
+    increment = 1,
+  ): Promise<number | null> {
     if (!this.isReady) return null;
     try {
       return await this.client!.hincrby(key, field, increment);

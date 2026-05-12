@@ -139,8 +139,7 @@ export function writeReport(opts: ReportOptions): string {
 }
 
 export function shortErr(err: unknown, lines = 4): string {
-  const msg =
-    (err as Error)?.stack || (err as Error)?.message || String(err);
+  const msg = (err as Error)?.stack || (err as Error)?.message || String(err);
   return msg.split('\n').slice(0, lines).join(' | ');
 }
 

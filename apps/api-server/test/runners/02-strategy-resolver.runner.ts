@@ -87,9 +87,7 @@ async function main() {
       ? '_None._'
       : cells
           .filter((c) => !c.ok)
-          .map(
-            (c) => `- ${c.user} (${c.goal}): ${(c.err || '').slice(0, 200)}`,
-          )
+          .map((c) => `- ${c.user} (${c.goal}): ${(c.err || '').slice(0, 200)}`)
           .join('\n');
 
   const file = writeReport({

@@ -40,10 +40,7 @@ export class FoodI18nService {
     localized: FoodLocalization | undefined,
     food: ScoredFood['food'],
   ): string | undefined {
-    return (
-      localized?.servingDesc ??
-      food.standardServingDesc
-    );
+    return localized?.servingDesc ?? food.standardServingDesc;
   }
 
   private isDefaultLocale(locale: string): boolean {

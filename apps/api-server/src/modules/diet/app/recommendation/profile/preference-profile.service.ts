@@ -103,9 +103,9 @@ export class PreferenceProfileService {
       foodName: string;
       createdAt: Date | string;
     }> = await this.prisma.$queryRawUnsafe(
-       // BUG-006: foods.id 是 uuid，recommendation_feedbacks.food_id 是 varchar，
-       // PG 不会做隐式转换。先在子查询里 sanitize，再以同 uuid 类型 JOIN。
-       `SELECT rf.action, rf.food_name, rf.created_at,
+      // BUG-006: foods.id 是 uuid，recommendation_feedbacks.food_id 是 varchar，
+      // PG 不会做隐式转换。先在子查询里 sanitize，再以同 uuid 类型 JOIN。
+      `SELECT rf.action, rf.food_name, rf.created_at,
               fl.category, fl.main_ingredient, fl.food_group
        FROM (
          SELECT action, food_name, created_at,

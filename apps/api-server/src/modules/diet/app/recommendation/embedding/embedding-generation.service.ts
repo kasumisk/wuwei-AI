@@ -23,7 +23,11 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../../../../../core/prisma/prisma.service';
-import { QUEUE_NAMES, QueueResilienceService, QueueProducer } from '../../../../../core/queue';
+import {
+  QUEUE_NAMES,
+  QueueResilienceService,
+  QueueProducer,
+} from '../../../../../core/queue';
 import {
   DomainEvents,
   CandidatePromotedEvent,

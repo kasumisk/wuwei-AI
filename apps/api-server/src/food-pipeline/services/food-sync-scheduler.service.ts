@@ -30,7 +30,9 @@ export class FoodSyncSchedulerService implements OnModuleInit {
   ) {}
 
   onModuleInit() {
-    this.cronRegistry.register('food-sync-monthly-usda', () => this.monthlyUsdaSync());
+    this.cronRegistry.register('food-sync-monthly-usda', () =>
+      this.monthlyUsdaSync(),
+    );
     this.cronRegistry.register('food-sync-daily-conflict-resolution', () =>
       this.dailyConflictResolution(),
     );

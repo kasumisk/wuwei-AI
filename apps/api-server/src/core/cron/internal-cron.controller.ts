@@ -50,7 +50,8 @@ export class InternalCronController {
   async dispatch(
     @Param('cronName') cronName: string,
     @Headers('x-cloudscheduler-jobname') schedulerJobName: string | undefined,
-    @Headers('x-cloudscheduler-scheduletime') schedulerScheduleTime: string | undefined,
+    @Headers('x-cloudscheduler-scheduletime')
+    schedulerScheduleTime: string | undefined,
   ): Promise<{ ok: true; cronName: string }> {
     const handler = this.registry.resolve(cronName);
     if (!handler) {
@@ -61,9 +62,9 @@ export class InternalCronController {
     }
 
     // Cloud Scheduler 注入的可识别外部 ID：组合 job name + schedule time 作为幂等键
-    const externalId = [schedulerJobName, schedulerScheduleTime]
-      .filter(Boolean)
-      .join('|') || null;
+    const externalId =
+      [schedulerJobName, schedulerScheduleTime].filter(Boolean).join('|') ||
+      null;
 
     // 幂等防护：同 cronName + scheduleTime（即同一次计划触发）已有 running/succeeded 则跳过。
     // Scheduler 在 HTTP 超时时会重试，防止同一 scheduleTime 的 cron 被执行两次。

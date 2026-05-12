@@ -148,7 +148,9 @@ export class ProfileAggregatorService {
       this.userProfileService.getKitchenProfile(userId),
       this.executionTrackerService.getTopSubstitutions(userId),
     ]);
-    this.logger.log(`[TIMING] aggregateForRecommendation phase1(parallel): ${Date.now() - _t0}ms uid=${userId}`);
+    this.logger.log(
+      `[TIMING] aggregateForRecommendation phase1(parallel): ${Date.now() - _t0}ms uid=${userId}`,
+    );
 
     // Phase 2: 依赖 enrichedProfile 的串行获取
     const userSegment = enrichedProfile.inferred?.userSegment;
@@ -236,8 +238,12 @@ export class ProfileAggregatorService {
       declaredCuisinePrefs,
       regionCode,
     );
-    this.logger.log(`[TIMING] aggregateForRecommendation phase2(weightLearner+regionalBoost+cuisineBoost): ${Date.now() - _t2}ms uid=${userId}`);
-    this.logger.log(`[TIMING] aggregateForRecommendation total: ${Date.now() - _t0}ms uid=${userId}`);
+    this.logger.log(
+      `[TIMING] aggregateForRecommendation phase2(weightLearner+regionalBoost+cuisineBoost): ${Date.now() - _t2}ms uid=${userId}`,
+    );
+    this.logger.log(
+      `[TIMING] aggregateForRecommendation total: ${Date.now() - _t0}ms uid=${userId}`,
+    );
 
     return {
       recentFoodNames,

@@ -22,6 +22,10 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { I18nService } from '../../../../core/i18n';
 import {
+  LlmQuotaExceededError,
+  LlmUnavailableError,
+} from '../../../../core/llm/llm.types';
+import {
   FoodAnalysisResultV61,
   AnalyzedFoodItem,
 } from '../../../decision/types/analysis-result.types';
@@ -174,6 +178,12 @@ export class ImageFoodAnalysisService {
         return foods;
       }
     } catch (err) {
+      if (err instanceof LlmQuotaExceededError) {
+        throw err;
+      }
+      if (err instanceof LlmUnavailableError) {
+        throw new BadRequestException(this.i18n.t('food.analyze.timeout'));
+      }
       if (err instanceof BadRequestException) throw err;
       this.logger.error(`AI image analysis error: ${(err as Error).message}`);
       throw new BadRequestException(this.i18n.t('food.analyze.timeout'));

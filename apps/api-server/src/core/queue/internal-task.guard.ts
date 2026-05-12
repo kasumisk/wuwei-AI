@@ -42,10 +42,13 @@ export class InternalTaskGuard implements CanActivate {
     const expectedToken = this.config.get<string>('CLOUD_TASKS_INTERNAL_TOKEN');
     if (!expectedToken) {
       // 生产环境必须配置；防止误部署导致 endpoint 完全裸奔
-      this.logger.error('CLOUD_TASKS_INTERNAL_TOKEN not set in production-like env');
+      this.logger.error(
+        'CLOUD_TASKS_INTERNAL_TOKEN not set in production-like env',
+      );
       throw new UnauthorizedException('internal auth not configured');
     }
-    const presentedToken = (req.headers['x-internal-token'] as string | undefined) ?? '';
+    const presentedToken =
+      (req.headers['x-internal-token'] as string | undefined) ?? '';
     if (!safeEqual(presentedToken, expectedToken)) {
       throw new UnauthorizedException('invalid internal token');
     }
@@ -57,7 +60,10 @@ export class InternalTaskGuard implements CanActivate {
 
     const audience = this.resolveAudience(req);
     try {
-      const ticket = await this.oauth.verifyIdToken({ idToken: m[1], audience });
+      const ticket = await this.oauth.verifyIdToken({
+        idToken: m[1],
+        audience,
+      });
       const payload = ticket.getPayload();
       if (!payload?.email_verified) throw new Error('email not verified');
       const expectedSa = this.config.get<string>('CLOUD_TASKS_OIDC_SA_EMAIL');
@@ -65,7 +71,9 @@ export class InternalTaskGuard implements CanActivate {
         throw new Error(`unexpected SA: ${payload.email}`);
       }
     } catch (err) {
-      throw new UnauthorizedException(`oidc verify failed: ${(err as Error).message}`);
+      throw new UnauthorizedException(
+        `oidc verify failed: ${(err as Error).message}`,
+      );
     }
     return true;
   }
@@ -77,8 +85,11 @@ export class InternalTaskGuard implements CanActivate {
    * 显式 ENFORCE_INTERNAL_AUTH=true 可强制开启鉴权（用于本地联调 OIDC）。
    */
   private shouldBypass(): boolean {
-    if (this.config.get<string>('ENFORCE_INTERNAL_AUTH') === 'true') return false;
-    const env = (this.config.get<string>('NODE_ENV') ?? 'development').toLowerCase();
+    if (this.config.get<string>('ENFORCE_INTERNAL_AUTH') === 'true')
+      return false;
+    const env = (
+      this.config.get<string>('NODE_ENV') ?? 'development'
+    ).toLowerCase();
     return env === 'test' || env === 'development';
   }
 
@@ -90,7 +101,8 @@ export class InternalTaskGuard implements CanActivate {
   private resolveAudience(req: Request): string {
     const explicit = this.config.get<string>('CLOUD_TASKS_OIDC_AUDIENCE');
     if (explicit) return explicit;
-    const proto = (req.headers['x-forwarded-proto'] as string | undefined) ?? 'https';
+    const proto =
+      (req.headers['x-forwarded-proto'] as string | undefined) ?? 'https';
     const host = req.headers.host;
     return `${proto}://${host}${req.path}`;
   }

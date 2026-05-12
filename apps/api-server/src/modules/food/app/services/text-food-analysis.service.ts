@@ -43,6 +43,7 @@ import {
 } from '../../../decision/analyze/nutrition-sanity-validator';
 import { UserContextBuilderService } from '../../../decision/analyze/user-context-builder.service';
 import { AnalysisPromptSchemaService } from './analysis-prompt-schema.service';
+import { RefinedFoodInputDto } from '../dto/refine-analysis.dto';
 
 // ==================== 常量 ====================
 
@@ -277,6 +278,12 @@ export class TextFoodAnalysisService {
     locale?: Locale,
     localHourOverride?: number,
     hints?: string[],
+    options?: {
+      persistRecord?: boolean;
+      emitCompletedEvent?: boolean;
+      analysisId?: string;
+      awaitPersistence?: boolean;
+    },
   ): Promise<FoodAnalysisResultV61> {
     const startedAt = Date.now();
     // 1. 预处理文本
@@ -316,7 +323,9 @@ export class TextFoodAnalysisService {
       hints,
       userId,
     );
-    const libraryMatchCount = parsedFoods.filter((f) => !!f.libraryMatch).length;
+    const libraryMatchCount = parsedFoods.filter(
+      (f) => !!f.libraryMatch,
+    ).length;
     this.logger.log(
       `[TextAnalysisService] resolveAllFoods ${Date.now() - resolveStartedAt}ms parsed=${parsedFoods.length} libraryMatches=${libraryMatchCount} inferred=${parsedFoods.length - libraryMatchCount} userId=${userId || 'anonymous'}`,
     );
@@ -353,25 +362,142 @@ export class TextFoodAnalysisService {
     });
 
     const pipelineStartedAt = Date.now();
-    const result = await this.analysisPipeline.execute({
-      inputType: 'text',
-      rawText: text,
-      mealType,
-      userId,
-      locale,
-      localHourOverride,
-      foods: parsedFoods.map((f) => this.toAnalyzedFoodItem(f)),
-      scoringFoods,
-      parsedFoodMeta: parsedFoods.map((f) => ({
-        name: f.name,
-        quantity: f.quantity,
-        fromLibrary: !!f.libraryMatch,
-      })),
-      prebuiltUserContext: userCtx || undefined,
-    });
+    const result = await this.analysisPipeline.executeWithOptions(
+      {
+        inputType: 'text',
+        rawText: text,
+        mealType,
+        userId,
+        locale,
+        localHourOverride,
+        foods: parsedFoods.map((f) => this.toAnalyzedFoodItem(f)),
+        scoringFoods,
+        parsedFoodMeta: parsedFoods.map((f) => ({
+          name: f.name,
+          quantity: f.quantity,
+          fromLibrary: !!f.libraryMatch,
+        })),
+        prebuiltUserContext: userCtx || undefined,
+      },
+      options,
+    );
     this.logger.log(
       `[TextAnalysisService] pipeline ${Date.now() - pipelineStartedAt}ms foods=${result.foods?.length || 0} total=${Date.now() - startedAt}ms userId=${userId || 'anonymous'}`,
     );
+    return result;
+  }
+
+  async recomputeFromStructuredFoods(
+    foods: RefinedFoodInputDto[],
+    mealType?: string,
+    userId?: string,
+    locale?: Locale,
+    options?: {
+      persistRecord?: boolean;
+      emitCompletedEvent?: boolean;
+      analysisId?: string;
+      awaitPersistence?: boolean;
+    },
+  ): Promise<FoodAnalysisResultV61> {
+    const startedAt = Date.now();
+    const normalizedFoods = foods
+      .map((food) => ({
+        ...food,
+        name: (food.name || '').trim(),
+        estimatedWeightGrams: Math.round(
+          Number(food.estimatedWeightGrams) || 0,
+        ),
+      }))
+      .filter((food) => food.name && food.estimatedWeightGrams > 0);
+
+    if (normalizedFoods.length === 0) {
+      throw new BadRequestException(
+        t('decision.error.invalidInput', {}, locale),
+      );
+    }
+
+    this.logger.log(
+      `[TextAnalysisService] recompute structured start userId=${userId || 'anonymous'} mealType=${mealType || 'none'} locale=${locale || 'default'} foods=${normalizedFoods.length}`,
+    );
+
+    const userContextStartedAt = Date.now();
+    const userCtx = userId
+      ? await this.userContextBuilder.build(userId, locale).catch(() => null)
+      : null;
+    this.logger.log(
+      `[TextAnalysisService] recompute structured userContext ${Date.now() - userContextStartedAt}ms userId=${userId || 'anonymous'} hit=${!!userCtx}`,
+    );
+
+    const resolveStartedAt = Date.now();
+    const parsedFoods = this.mergeParsedFoods(
+      await Promise.all(
+        normalizedFoods.map((food) =>
+          this.buildStructuredParsedFood(food).catch(() =>
+            this.buildStructuredParsedFoodFallback(food),
+          ),
+        ),
+      ),
+    );
+    const libraryMatchCount = parsedFoods.filter(
+      (food) => !!food.libraryMatch,
+    ).length;
+    this.logger.log(
+      `[TextAnalysisService] recompute structured resolve ${Date.now() - resolveStartedAt}ms parsed=${parsedFoods.length} libraryMatches=${libraryMatchCount} inferred=${parsedFoods.length - libraryMatchCount} userId=${userId || 'anonymous'}`,
+    );
+
+    const scoringFoods: ScoringFoodItem[] = parsedFoods.map((f) => {
+      const grams = f.estimatedWeightGrams || f.standardServingG || 100;
+      return {
+        name: f.name,
+        confidence: f.confidence,
+        calories: f.calories || 0,
+        protein: f.protein || 0,
+        fat: f.fat || 0,
+        carbs: f.carbs || 0,
+        fiber: f.fiber != null ? f.fiber || 0 : undefined,
+        sodium: f.sodium != null ? f.sodium || 0 : undefined,
+        saturatedFat:
+          f.saturatedFat != null ? Number(f.saturatedFat) || 0 : undefined,
+        addedSugar:
+          f.addedSugar != null ? Number(f.addedSugar) || 0 : undefined,
+        estimatedWeightGrams: grams,
+        transFat: f.transFat != null ? Number(f.transFat) || 0 : undefined,
+        cholesterol:
+          f.cholesterol != null ? Number(f.cholesterol) || 0 : undefined,
+        glycemicLoad: f.glycemicLoad,
+        nutrientDensity: f.nutrientDensity,
+        fodmapLevel: f.fodmapLevel,
+        purine: f.purine,
+        oxalateLevel: f.oxalateLevel,
+        libraryMatch: f.libraryMatch,
+      };
+    });
+
+    const pipelineStartedAt = Date.now();
+    const result = await this.analysisPipeline.executeWithOptions(
+      {
+        inputType: 'text',
+        rawText: normalizedFoods
+          .map((food) => `${food.name} ${food.estimatedWeightGrams}g`)
+          .join(', '),
+        mealType,
+        userId,
+        locale,
+        foods: parsedFoods.map((f) => this.toAnalyzedFoodItem(f)),
+        scoringFoods,
+        parsedFoodMeta: parsedFoods.map((f) => ({
+          name: f.name,
+          quantity: f.quantity,
+          fromLibrary: !!f.libraryMatch,
+        })),
+        prebuiltUserContext: userCtx || undefined,
+      },
+      options,
+    );
+    this.logger.log(
+      `[TextAnalysisService] recompute structured pipeline ${Date.now() - pipelineStartedAt}ms foods=${result.foods?.length || 0} total=${Date.now() - startedAt}ms userId=${userId || 'anonymous'}`,
+    );
+
     return result;
   }
 
@@ -1319,6 +1445,61 @@ export class TextFoodAnalysisService {
         sodiumPer100g != null ? Math.round(sodiumPer100g * ratio) : undefined,
       estimated: true,
     };
+  }
+
+  private async buildStructuredParsedFood(
+    food: RefinedFoodInputDto,
+  ): Promise<ParsedFoodItem> {
+    const displayName = food.name.trim();
+    const normalizedName = this.normalizeFoodTerm(displayName);
+    const quantity = `${food.estimatedWeightGrams}g`;
+
+    const matchResult = normalizedName
+      ? await this.matchFoodLibrary(normalizedName)
+      : null;
+    if (matchResult) {
+      const parsed = this.buildFromLibraryMatch(
+        matchResult.match,
+        quantity,
+        food.estimatedWeightGrams,
+      );
+      parsed.name = displayName;
+      parsed.normalizedName = normalizedName || displayName;
+      parsed.quantity = quantity;
+      parsed.estimatedWeightGrams = food.estimatedWeightGrams;
+      parsed.confidence = matchResult.simScore >= 1 ? 0.98 : 0.92;
+      return parsed;
+    }
+
+    const zeroCal = this.tryZeroCaloriePassthrough(normalizedName, quantity);
+    if (zeroCal) {
+      zeroCal.name = displayName;
+      zeroCal.normalizedName = normalizedName || displayName;
+      zeroCal.quantity = quantity;
+      zeroCal.estimatedWeightGrams = food.estimatedWeightGrams;
+      zeroCal.confidence = 0.98;
+      return zeroCal;
+    }
+
+    return this.buildStructuredParsedFoodFallback(food);
+  }
+
+  private buildStructuredParsedFoodFallback(
+    food: RefinedFoodInputDto,
+  ): ParsedFoodItem {
+    const displayName = food.name.trim();
+    const normalizedName = this.normalizeFoodTerm(displayName);
+    const quantity = `${food.estimatedWeightGrams}g`;
+    const fallback = this.buildHeuristicFallbackFood(
+      normalizedName || displayName,
+      quantity,
+    );
+    fallback.name = displayName;
+    fallback.normalizedName = normalizedName || displayName;
+    fallback.quantity = quantity;
+    fallback.estimatedWeightGrams = food.estimatedWeightGrams;
+    fallback.confidence = Math.max(fallback.confidence, 0.72);
+    return fallback;
   }
 
   /**

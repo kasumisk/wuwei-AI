@@ -33,7 +33,8 @@ export class GetAppUsersQueryDto {
   keyword?: string;
 
   @ApiProperty({
-    description: 'App User ID（RevenueCat appUserId / 内部用户 UUID），精确匹配',
+    description:
+      'App User ID（RevenueCat appUserId / 内部用户 UUID），精确匹配',
     required: false,
   })
   @IsOptional()

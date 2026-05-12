@@ -97,9 +97,12 @@ export class FoodImageEnrichmentController {
   // ─── 清空图片字段 ──────────────────────────────────────────────────────────
 
   @Post('clear')
-  @ApiOperation({ summary: '清空已有图片字段（imageUrl / thumbnailUrl），用于重置重跑' })
+  @ApiOperation({
+    summary: '清空已有图片字段（imageUrl / thumbnailUrl），用于重置重跑',
+  })
   async clearImages(
-    @Body() body: {
+    @Body()
+    body: {
       foodGroup?: string | string[];
       primarySource?: string | string[];
       isVerified?: boolean;
@@ -175,7 +178,10 @@ export class FoodImageEnrichmentController {
   async rejectCandidates(
     @Body() body: { candidateIds: string[]; reason?: string },
   ): Promise<ApiResponse> {
-    const data = await this.service.rejectCandidates(body.candidateIds, body.reason);
+    const data = await this.service.rejectCandidates(
+      body.candidateIds,
+      body.reason,
+    );
     return {
       success: true,
       code: HttpStatus.OK,

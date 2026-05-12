@@ -88,7 +88,11 @@ export class CloudTasksClient implements OnModuleDestroy {
 
   /** 仅生产环境会真实调用。返回创建后的 task name（含全路径）。 */
   async createHttpTask(opts: CreateHttpTaskOptions): Promise<string> {
-    const parent = this.client.queuePath(this.projectId, this.location, opts.queueName);
+    const parent = this.client.queuePath(
+      this.projectId,
+      this.location,
+      opts.queueName,
+    );
     const url = this.buildHandlerUrl(opts.queueName, opts.pathOverride);
     const audience = this.oidcAudience ?? new URL(url).origin;
 
@@ -128,7 +132,8 @@ export class CloudTasksClient implements OnModuleDestroy {
       ...(opts.scheduleDelaySeconds && opts.scheduleDelaySeconds > 0
         ? {
             scheduleTime: {
-              seconds: Math.floor(Date.now() / 1000) + opts.scheduleDelaySeconds,
+              seconds:
+                Math.floor(Date.now() / 1000) + opts.scheduleDelaySeconds,
             },
           }
         : {}),

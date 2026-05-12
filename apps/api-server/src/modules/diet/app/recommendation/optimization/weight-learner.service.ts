@@ -136,7 +136,9 @@ export class WeightLearnerService implements OnModuleInit {
   ) {}
 
   onModuleInit(): void {
-    this.cronRegistry.register('weight-learner-daily', () => this.runDailyCron());
+    this.cronRegistry.register('weight-learner-daily', () =>
+      this.runDailyCron(),
+    );
   }
 
   /**

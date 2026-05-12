@@ -67,7 +67,8 @@ export class QueueProducer {
      * Cloud Tasks 仅生产环境注入；测试环境若未设 QUEUE_BACKEND=tasks，
      * 即使该类不存在也不会被调用（Optional + 运行时检查）。
      */
-    @Optional() @Inject(CloudTasksClient)
+    @Optional()
+    @Inject(CloudTasksClient)
     private readonly cloudTasks?: CloudTasksClient,
   ) {}
 
@@ -84,7 +85,8 @@ export class QueueProducer {
     opts: EnqueueOptions = {},
   ): Promise<EnqueueResult> {
     const backend = this.resolveBackend(queueName);
-    if (backend === 'tasks') return this.enqueueViaCloudTasks(queueName, jobName, data, opts);
+    if (backend === 'tasks')
+      return this.enqueueViaCloudTasks(queueName, jobName, data, opts);
     return this.enqueueViaBullMQ(queueName, jobName, data, opts);
   }
 
@@ -94,11 +96,16 @@ export class QueueProducer {
    * 失败项以 { mode: 'sync' } 返回（调用方可据此补偿或告警）。
    * bullmq 后端：走 addBulk，整体失败降级为 sync。
    */
-  async enqueueBulk<T>(queueName: QueueName, jobs: BulkJob<T>[]): Promise<EnqueueResult[]> {
+  async enqueueBulk<T>(
+    queueName: QueueName,
+    jobs: BulkJob<T>[],
+  ): Promise<EnqueueResult[]> {
     const backend = this.resolveBackend(queueName);
     if (backend === 'tasks') {
       const results = await Promise.allSettled(
-        jobs.map((j) => this.enqueueViaCloudTasks(queueName, j.name, j.data, j.opts ?? {})),
+        jobs.map((j) =>
+          this.enqueueViaCloudTasks(queueName, j.name, j.data, j.opts ?? {}),
+        ),
       );
       return results.map((r, i) => {
         if (r.status === 'fulfilled') return r.value;
@@ -159,7 +166,10 @@ export class QueueProducer {
           opts: this.toBullOpts(j.opts ?? {}),
         })),
       );
-      return added.map((job) => ({ mode: 'queued', jobId: job.id ?? undefined }));
+      return added.map((job) => ({
+        mode: 'queued',
+        jobId: job.id ?? undefined,
+      }));
     } catch (err) {
       this.logger.warn(
         `BullMQ enqueueBulk failed (queue=${queueName}); sync fallback: ${(err as Error).message}`,
@@ -176,10 +186,13 @@ export class QueueProducer {
   }
 
   private getQueue(queueName: string): Queue | null {
-    if (this.queueCache.has(queueName)) return this.queueCache.get(queueName) ?? null;
+    if (this.queueCache.has(queueName))
+      return this.queueCache.get(queueName) ?? null;
     let queue: Queue | null = null;
     try {
-      queue = this.moduleRef.get<Queue>(getQueueToken(queueName), { strict: false });
+      queue = this.moduleRef.get<Queue>(getQueueToken(queueName), {
+        strict: false,
+      });
     } catch {
       queue = null;
     }
@@ -204,12 +217,16 @@ export class QueueProducer {
 
     // BullMQ payload 直接用 data；Cloud Tasks 需要 jobName 才能在 handler 端分发到正确的 processor 方法。
     const body = { jobName, data };
-    const internalToken = this.config.get<string>('CLOUD_TASKS_INTERNAL_TOKEN') ?? '';
+    const internalToken =
+      this.config.get<string>('CLOUD_TASKS_INTERNAL_TOKEN') ?? '';
     const taskName = await this.cloudTasks.createHttpTask({
       queueName,
       payload: body,
       taskId: opts.jobId,
-      scheduleDelaySeconds: typeof opts.delay === 'number' ? Math.ceil(opts.delay / 1000) : undefined,
+      scheduleDelaySeconds:
+        typeof opts.delay === 'number'
+          ? Math.ceil(opts.delay / 1000)
+          : undefined,
       dispatchDeadlineSeconds: opts.dispatchDeadlineSeconds ?? 600,
       // 路由到 /internal/tasks/{queueName}/{jobName}
       pathOverride: `/${queueName}/${jobName}`,

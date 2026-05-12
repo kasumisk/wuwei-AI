@@ -94,7 +94,14 @@ async function main(): Promise<void> {
       logger.log(`cron=${cronName} 执行成功`);
     } catch (err) {
       const e = err as Error;
-      await logExecution(prisma, cronName, 'failed', startedAt, e.message, e.stack);
+      await logExecution(
+        prisma,
+        cronName,
+        'failed',
+        startedAt,
+        e.message,
+        e.stack,
+      );
       logger.error(`cron=${cronName} 执行失败: ${e.message}`, e.stack);
       // 让 Cloud Run Job 标记失败 → Scheduler 自动重试（按 Job 重试策略）
       await app.close();

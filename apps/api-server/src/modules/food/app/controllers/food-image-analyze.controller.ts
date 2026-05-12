@@ -211,7 +211,7 @@ export class FoodImageAnalyzeController {
     if (entry.status === 'failed') {
       return ResponseWrapper.error(
         entry.error || this.i18n.t('food.analyzeFailed'),
-        HttpStatus.OK,
+        failedAnalysisCode(entry.error),
         { requestId, status: 'failed', error: entry.error },
       );
     }
@@ -227,7 +227,10 @@ export class FoodImageAnalyzeController {
           this.i18n.t('food.analysisTaskNoPermission'),
         );
       }
-      const localizedFoods = await this.helper.localizeLiteFoods(nr.foods, locale);
+      const localizedFoods = await this.helper.localizeLiteFoods(
+        nr.foods,
+        locale,
+      );
       return ResponseWrapper.success(
         {
           requestId,
@@ -328,10 +331,7 @@ export class FoodImageAnalyzeController {
       entitlement: { tier: userSummary.tier as any, fieldsHidden: [] },
     };
 
-    await this.helper.localizeAnalysisResult(
-      v61ForTrim,
-      locale,
-    );
+    await this.helper.localizeAnalysisResult(v61ForTrim, locale);
 
     const trimmedResult = this.resultEntitlementService.trimResult(
       v61ForTrim,
@@ -608,4 +608,16 @@ export class FoodImageAnalyzeController {
       ? parts.join(this.i18n.t('food.quickReason.separator'))
       : this.i18n.t('food.quickReason.moderate');
   }
+}
+
+function failedAnalysisCode(error?: string | null): number {
+  const message = error?.toLowerCase() ?? '';
+  if (
+    message.includes('quota exceeded') ||
+    message.includes('quota') ||
+    message.includes('limit')
+  ) {
+    return HttpStatus.FORBIDDEN;
+  }
+  return HttpStatus.BAD_REQUEST;
 }

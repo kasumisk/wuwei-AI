@@ -10,7 +10,10 @@ describe('FoodRecordService timezone date query regression', () => {
         count,
       },
     };
-    const service = new FoodRecordService(prisma as any, { t: jest.fn() } as any);
+    const service = new FoodRecordService(
+      prisma as any,
+      { t: jest.fn() } as any,
+    );
 
     await service.queryRecords(
       'user-1',

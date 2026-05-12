@@ -291,7 +291,9 @@ export class MealAssemblerService {
         servingFiber: Math.round((p.servingFiber || 0) * finalRatio),
         food: {
           ...p.food,
-          ...(adjustedDesc !== undefined ? { displayServingDesc: adjustedDesc } : {}),
+          ...(adjustedDesc !== undefined
+            ? { displayServingDesc: adjustedDesc }
+            : {}),
         } as any,
       };
     });
@@ -485,7 +487,8 @@ export class MealAssemblerService {
       .map((p) =>
         t('display.foodItem', {
           name: p.food.name,
-          serving: p.food.standardServingDesc || `${p.food.standardServingG || 100}g`,
+          serving:
+            p.food.standardServingDesc || `${p.food.standardServingG || 100}g`,
           calories: p.servingCalories,
         }),
       )
@@ -832,20 +835,20 @@ export class MealAssemblerService {
     // Step 0: 确保每个 pick 都有策略（兜底计算）
     for (const pick of picks) {
       if (!policies.has(pick.food.id)) {
-        policies.set(
-          pick.food.id,
-          this.policyResolver.resolve(pick.food),
-        );
+        policies.set(pick.food.id, this.policyResolver.resolve(pick.food));
       }
     }
 
     // Step 1: 热量超标时优先移除调味品/非核心食物
-    const { picks: afterPrune, didPrune, prunedNames } =
-      this.mealPortionController.handleCalorieOverflow(
-        picks,
-        policies,
-        budget,
-      );
+    const {
+      picks: afterPrune,
+      didPrune,
+      prunedNames,
+    } = this.mealPortionController.handleCalorieOverflow(
+      picks,
+      policies,
+      budget,
+    );
 
     if (didPrune) {
       for (const name of prunedNames) {
@@ -966,7 +969,9 @@ export class MealAssemblerService {
     // 记录缩放操作
     for (const r of portionResults) {
       if (r.wasClamped) {
-        actions.push(`${r.food.name} ${r.scalingNote || '份量已裁剪至合理范围'}`);
+        actions.push(
+          `${r.food.name} ${r.scalingNote || '份量已裁剪至合理范围'}`,
+        );
       } else if (r.ratio !== 1) {
         actions.push(
           `${r.food.name} 份量调整至 ${r.servingCalories}kcal (${Math.round(r.ratio * 100)}% 标准份)`,

@@ -45,7 +45,10 @@ function startHealthServer(port: number): void {
     res.end();
   });
   server.listen(port, '0.0.0.0', () => {
-    Logger.log(`Worker health endpoint listening on :${port}`, 'WorkerBootstrap');
+    Logger.log(
+      `Worker health endpoint listening on :${port}`,
+      'WorkerBootstrap',
+    );
   });
 }
 

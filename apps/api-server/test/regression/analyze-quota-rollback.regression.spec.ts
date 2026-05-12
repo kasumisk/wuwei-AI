@@ -22,7 +22,9 @@ describe('analysis quota rollback regression', () => {
       providers: [
         {
           provide: TextFoodAnalysisService,
-          useValue: { analyze: jest.fn().mockRejectedValue(new Error('llm failed')) },
+          useValue: {
+            analyze: jest.fn().mockRejectedValue(new Error('llm failed')),
+          },
         },
         {
           provide: QuotaGateService,
@@ -40,7 +42,10 @@ describe('analysis quota rollback regression', () => {
         },
         {
           provide: PaywallTriggerService,
-          useValue: { handleAccessDecision: jest.fn(), recordResultTrimTrigger: jest.fn() },
+          useValue: {
+            handleAccessDecision: jest.fn(),
+            recordResultTrimTrigger: jest.fn(),
+          },
         },
         {
           provide: SubscriptionService,
@@ -51,7 +56,13 @@ describe('analysis quota rollback regression', () => {
             }),
           },
         },
-        { provide: I18nService, useValue: { t: jest.fn().mockReturnValue('ok'), currentLocale: jest.fn().mockReturnValue('en-US') } },
+        {
+          provide: I18nService,
+          useValue: {
+            t: jest.fn().mockReturnValue('ok'),
+            currentLocale: jest.fn().mockReturnValue('en-US'),
+          },
+        },
         {
           provide: AnalyzeResultHelperService,
           useValue: {
@@ -70,7 +81,10 @@ describe('analysis quota rollback regression', () => {
       controller.analyzeText({ text: 'apple' } as any, { id: 'user-1' } as any),
     ).rejects.toThrow('llm failed');
 
-    expect(quotaService.rollback).toHaveBeenCalledWith('user-1', 'ai_text_analysis');
+    expect(quotaService.rollback).toHaveBeenCalledWith(
+      'user-1',
+      'ai_text_analysis',
+    );
   });
 
   it('rolls back image-analysis quota when upload fails after quota is consumed', async () => {
@@ -81,7 +95,9 @@ describe('analysis quota rollback regression', () => {
         { provide: AnalyzeService, useValue: { submitAnalysis: jest.fn() } },
         {
           provide: StorageService,
-          useValue: { upload: jest.fn().mockRejectedValue(new Error('upload failed')) },
+          useValue: {
+            upload: jest.fn().mockRejectedValue(new Error('upload failed')),
+          },
         },
         { provide: TextFoodAnalysisService, useValue: {} },
         {
@@ -95,14 +111,25 @@ describe('analysis quota rollback regression', () => {
         },
         { provide: QuotaService, useValue: quotaService },
         { provide: ResultEntitlementService, useValue: {} },
-        { provide: PaywallTriggerService, useValue: { handleAccessDecision: jest.fn() } },
+        {
+          provide: PaywallTriggerService,
+          useValue: { handleAccessDecision: jest.fn() },
+        },
         {
           provide: SubscriptionService,
-          useValue: { getUserSummary: jest.fn().mockResolvedValue({ tier: 'free' }) },
+          useValue: {
+            getUserSummary: jest.fn().mockResolvedValue({ tier: 'free' }),
+          },
         },
         { provide: PrismaService, useValue: {} },
-        { provide: AnalysisSessionService, useValue: { createSession: jest.fn() } },
-        { provide: I18nService, useValue: { t: jest.fn().mockReturnValue('ok') } },
+        {
+          provide: AnalysisSessionService,
+          useValue: { createSession: jest.fn() },
+        },
+        {
+          provide: I18nService,
+          useValue: { t: jest.fn().mockReturnValue('ok') },
+        },
         { provide: AnalyzeResultHelperService, useValue: {} },
       ],
     }).compile();
@@ -121,6 +148,9 @@ describe('analysis quota rollback regression', () => {
       ),
     ).rejects.toThrow('upload failed');
 
-    expect(quotaService.rollback).toHaveBeenCalledWith('user-1', 'ai_image_analysis');
+    expect(quotaService.rollback).toHaveBeenCalledWith(
+      'user-1',
+      'ai_image_analysis',
+    );
   });
 });

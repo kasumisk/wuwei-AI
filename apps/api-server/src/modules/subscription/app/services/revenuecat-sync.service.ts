@@ -195,7 +195,9 @@ export class RevenueCatSyncService implements OnModuleInit {
     const appUserId =
       event?.app_user_id ??
       event?.original_app_user_id ??
-      (Array.isArray(transferredTo) ? (transferredTo[0] ?? null) : (transferredTo ?? null)) ??
+      (Array.isArray(transferredTo)
+        ? (transferredTo[0] ?? null)
+        : (transferredTo ?? null)) ??
       (Array.isArray(event?.aliases) ? (event.aliases[0] ?? null) : null) ??
       null;
     const providerEventId = this.getWebhookEventId(event);
@@ -363,103 +365,110 @@ export class RevenueCatSyncService implements OnModuleInit {
     }
 
     try {
-    const queuedAt = new Date().toISOString();
-    const result: RevenueCatSyncTriggerResult = {
-      accepted: true,
-      source,
-      userId,
-      queuedAt,
-      webhookEventId: webhookEventId ?? null,
-    };
+      const queuedAt = new Date().toISOString();
+      const result: RevenueCatSyncTriggerResult = {
+        accepted: true,
+        source,
+        userId,
+        queuedAt,
+        webhookEventId: webhookEventId ?? null,
+      };
 
-    if (!this.isUuid(userId)) {
-      this.logger.warn(`跳过 RevenueCat 同步，非法 userId: ${userId}`);
-      return result;
-    }
+      if (!this.isUuid(userId)) {
+        this.logger.warn(`跳过 RevenueCat 同步，非法 userId: ${userId}`);
+        return result;
+      }
 
-    const currentSubscription = await this.prisma.subscription.findFirst({
-      where: {
-        OR: [
-          {
-            userId,
-            paymentChannel: { in: [PaymentChannel.APPLE_IAP, PaymentChannel.GOOGLE_PLAY] },
-            status: SubscriptionStatus.ACTIVE,
-          },
-          {
-            userId,
-            paymentChannel: { in: [PaymentChannel.APPLE_IAP, PaymentChannel.GOOGLE_PLAY] },
-            status: SubscriptionStatus.GRACE_PERIOD,
-          },
-          {
-            userId,
-            paymentChannel: { in: [PaymentChannel.APPLE_IAP, PaymentChannel.GOOGLE_PLAY] },
-            status: SubscriptionStatus.CANCELLED,
-            expiresAt: { gte: new Date() },
-          },
-        ],
-      },
-      orderBy: { expiresAt: 'desc' },
-    });
+      const currentSubscription = await this.prisma.subscription.findFirst({
+        where: {
+          OR: [
+            {
+              userId,
+              paymentChannel: {
+                in: [PaymentChannel.APPLE_IAP, PaymentChannel.GOOGLE_PLAY],
+              },
+              status: SubscriptionStatus.ACTIVE,
+            },
+            {
+              userId,
+              paymentChannel: {
+                in: [PaymentChannel.APPLE_IAP, PaymentChannel.GOOGLE_PLAY],
+              },
+              status: SubscriptionStatus.GRACE_PERIOD,
+            },
+            {
+              userId,
+              paymentChannel: {
+                in: [PaymentChannel.APPLE_IAP, PaymentChannel.GOOGLE_PLAY],
+              },
+              status: SubscriptionStatus.CANCELLED,
+              expiresAt: { gte: new Date() },
+            },
+          ],
+        },
+        orderBy: { expiresAt: 'desc' },
+      });
 
-    const beforeSummary = await this.subscriptionService.getUserSummary(userId);
+      const beforeSummary =
+        await this.subscriptionService.getUserSummary(userId);
 
-    // 对纯手工会员 / 微信 / 支付宝用户，不要走 RevenueCat 快照收敛，
-    // 否则会因 RC 空快照把本地非 RC 订阅误撤销为 free。
-    // 但 free/首次购买场景必须允许向 RC 拉快照，否则客户端购买成功后后端永远收敛不到新订阅。
-    if (
-      !currentSubscription &&
-      source === 'client_trigger' &&
-      beforeSummary.tier !== SubscriptionTier.FREE &&
-      beforeSummary.subscriptionId
-    ) {
-      result.currentTier = beforeSummary.tier;
-      result.currentSubscriptionId = beforeSummary.subscriptionId;
-      result.snapshotFetched = false;
+      // 对纯手工会员 / 微信 / 支付宝用户，不要走 RevenueCat 快照收敛，
+      // 否则会因 RC 空快照把本地非 RC 订阅误撤销为 free。
+      // 但 free/首次购买场景必须允许向 RC 拉快照，否则客户端购买成功后后端永远收敛不到新订阅。
+      if (
+        !currentSubscription &&
+        source === 'client_trigger' &&
+        beforeSummary.tier !== SubscriptionTier.FREE &&
+        beforeSummary.subscriptionId
+      ) {
+        result.currentTier = beforeSummary.tier;
+        result.currentSubscriptionId = beforeSummary.subscriptionId;
+        result.snapshotFetched = false;
+        this.logger.log(
+          [
+            'RevenueCat sync skipped',
+            `source=${source}`,
+            `userId=${userId}`,
+            `tier=${beforeSummary.tier}`,
+            'reason=non_rc_subscription_without_local_rc_record',
+          ].join(' | '),
+        );
+        return result;
+      }
+
+      const subscriberLookupId = await this.resolveSubscriberLookupId(userId);
+      const snapshot = await this.fetchSubscriberSnapshot(subscriberLookupId);
+      result.snapshotFetched = true;
+
+      const syncOutcome = await this.applySubscriberSnapshot({
+        userId,
+        source,
+        snapshot,
+        webhookEventId,
+        providerEventId,
+      });
+
+      if (syncOutcome.cacheInvalidated) {
+        await this.subscriptionService.invalidateUserSummaryCache(userId);
+      }
+
+      const summary = syncOutcome.cacheInvalidated
+        ? await this.subscriptionService.getUserSummary(userId)
+        : beforeSummary;
+
+      result.currentTier = summary.tier;
+      result.currentSubscriptionId = summary.subscriptionId;
+
       this.logger.log(
         [
-          'RevenueCat sync skipped',
+          'RevenueCat sync triggered',
           `source=${source}`,
           `userId=${userId}`,
-          `tier=${beforeSummary.tier}`,
-          'reason=non_rc_subscription_without_local_rc_record',
+          `tier=${summary.tier}`,
         ].join(' | '),
       );
+
       return result;
-    }
-
-    const subscriberLookupId = await this.resolveSubscriberLookupId(userId);
-    const snapshot = await this.fetchSubscriberSnapshot(subscriberLookupId);
-    result.snapshotFetched = true;
-
-    const syncOutcome = await this.applySubscriberSnapshot({
-      userId,
-      source,
-      snapshot,
-      webhookEventId,
-      providerEventId,
-    });
-
-    if (syncOutcome.cacheInvalidated) {
-      await this.subscriptionService.invalidateUserSummaryCache(userId);
-    }
-
-    const summary = syncOutcome.cacheInvalidated
-      ? await this.subscriptionService.getUserSummary(userId)
-      : beforeSummary;
-
-    result.currentTier = summary.tier;
-    result.currentSubscriptionId = summary.subscriptionId;
-
-    this.logger.log(
-      [
-        'RevenueCat sync triggered',
-        `source=${source}`,
-        `userId=${userId}`,
-        `tier=${summary.tier}`,
-      ].join(' | '),
-    );
-
-    return result;
     } finally {
       if (this.redis.isConfigured) {
         await this.redis.del(lockKey);

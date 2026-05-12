@@ -19,6 +19,7 @@
  *   budget_conscious → 预算敏感（性价比优先 + 预算过滤）
  */
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import {
   StrategyConfig,
@@ -711,7 +712,20 @@ export class StrategySeedService implements OnModuleInit {
   constructor(private readonly prisma: PrismaService) {}
 
   async onModuleInit(): Promise<void> {
-    await this.seedPresetStrategies();
+    try {
+      await this.seedPresetStrategies();
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2021'
+      ) {
+        this.logger.warn(
+          'strategy table missing, skip preset strategy seeding in this environment',
+        );
+        return;
+      }
+      throw error;
+    }
   }
 
   /**

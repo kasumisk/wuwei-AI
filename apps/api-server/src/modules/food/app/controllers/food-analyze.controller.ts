@@ -91,6 +91,18 @@ interface TextAnalysisCacheEntry {
   createdAt: number;
 }
 
+function failedAnalysisCode(error?: string | null): number {
+  const message = error?.toLowerCase() ?? '';
+  if (
+    message.includes('quota exceeded') ||
+    message.includes('quota') ||
+    message.includes('limit')
+  ) {
+    return HttpStatus.FORBIDDEN;
+  }
+  return HttpStatus.BAD_REQUEST;
+}
+
 @ApiTags('App 食物分析')
 @Controller('app/food')
 @UseGuards(AppJwtAuthGuard)
@@ -208,10 +220,7 @@ export class FoodAnalyzeController {
       dto.hints,
     );
 
-    await this.localizeAnalysisResult(
-      fullResult,
-      locale,
-    );
+    await this.localizeAnalysisResult(fullResult, locale);
 
     // V7.9 P3-4: 写入缓存（使用完整结果，裁剪在读取时按当前订阅等级执行）
     this.setToTextAnalysisCache(cacheKey, fullResult);
@@ -952,7 +961,7 @@ export class FoodAnalyzeController {
     if (entry.status === 'failed') {
       return ResponseWrapper.error(
         entry.error || this.i18n.t('food.analyzeFailed'),
-        HttpStatus.OK,
+        failedAnalysisCode(entry.error),
         { requestId, status: 'failed', error: entry.error },
       );
     }
@@ -1143,7 +1152,8 @@ export class FoodAnalyzeController {
         const localized = food.foodLibraryId
           ? localizedById.get(food.foodLibraryId)
           : undefined;
-        const localizedName = localized?.name ?? translatedByName.get(food.name);
+        const localizedName =
+          localized?.name ?? translatedByName.get(food.name);
         if (localizedName) {
           food.name = localizedName;
         }

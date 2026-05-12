@@ -40,7 +40,10 @@ function isRetryableError(error: unknown): boolean {
   if (code && RETRYABLE_ERROR_CODES.has(code)) return true;
   // Prisma wraps raw driver errors; check the message for "Closed"
   const message: string = (error as any).message ?? '';
-  return message.includes('kind: Closed') || message.includes('Server has closed the connection');
+  return (
+    message.includes('kind: Closed') ||
+    message.includes('Server has closed the connection')
+  );
 }
 
 @Injectable()

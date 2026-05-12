@@ -89,10 +89,7 @@ export class DeadLetterService {
       this.embeddingGenerationQueue,
     );
     this.queueMap.set(QUEUE_NAMES.FOOD_ENRICHMENT, this.foodEnrichmentQueue);
-    this.queueMap.set(
-      QUEUE_NAMES.FOOD_USDA_IMPORT,
-      this.foodUsdaImportQueue,
-    );
+    this.queueMap.set(QUEUE_NAMES.FOOD_USDA_IMPORT, this.foodUsdaImportQueue);
     this.queueMap.set(
       QUEUE_NAMES.SUBSCRIPTION_MAINTENANCE,
       this.subscriptionMaintenanceQueue,

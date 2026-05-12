@@ -54,7 +54,11 @@ const DEFAULT_LOCALES = [
 type Locale = (typeof DEFAULT_LOCALES)[number];
 
 type SourceKind = 'cjk-template' | 'english-direct' | 'grams-fallback';
-type Strategy = 'zh-direct' | 'english-direct' | 'localized-from-english' | 'grams-fallback';
+type Strategy =
+  | 'zh-direct'
+  | 'english-direct'
+  | 'localized-from-english'
+  | 'grams-fallback';
 type FractionItem = 'pie' | 'pizza' | 'cake' | 'crust';
 
 interface CandidateRow {
@@ -770,7 +774,10 @@ const TERM_REPLACEMENTS: Record<string, Array<[RegExp, string]>> = {
     [/\bstrawberry\b/gi, '草莓'],
   ],
   'ja-JP': [
-    [/\bhotcakes\s+with\s+margarine\s*&\s*syrup\b/gi, 'ホットケーキ マーガリンとシロップ付き'],
+    [
+      /\bhotcakes\s+with\s+margarine\s*&\s*syrup\b/gi,
+      'ホットケーキ マーガリンとシロップ付き',
+    ],
     [/\bwith margarine\s*&\s*syrup\b/gi, 'マーガリンとシロップ付き'],
     [/\bwith skin\b/gi, '皮付き'],
     [/\bwith milk\b/gi, '牛乳入り'],
@@ -832,7 +839,10 @@ const TERM_REPLACEMENTS: Record<string, Array<[RegExp, string]>> = {
     [/\bstrawberry\b/gi, 'いちご'],
   ],
   'ko-KR': [
-    [/\bhotcakes\s+with\s+margarine\s*&\s*syrup\b/gi, '핫케이크 마가린과 시럽 포함'],
+    [
+      /\bhotcakes\s+with\s+margarine\s*&\s*syrup\b/gi,
+      '핫케이크 마가린과 시럽 포함',
+    ],
     [/\bwith margarine\s*&\s*syrup\b/gi, '마가린과 시럽 포함'],
     [/\bwith skin\b/gi, '껍질 포함'],
     [/\bwith milk\b/gi, '우유 포함'],
@@ -963,7 +973,9 @@ function localizeInch(value: string, locale: string): string {
     case 'ko-KR':
       return `${value}인치`;
     case 'es-ES':
-      return /^1(?:\.0+)?$/.test(value) ? `${value} pulgada` : `${value} pulgadas`;
+      return /^1(?:\.0+)?$/.test(value)
+        ? `${value} pulgada`
+        : `${value} pulgadas`;
     default:
       return `${value}-inch`;
   }
@@ -983,23 +995,53 @@ function localizeFractionOf(
       case 'zh-CN':
         if (item === 'cake' && modifier === 'round') return '圆形蛋糕';
         if (item === 'cake' && modifier === 'layer') return '夹层蛋糕';
-        return item === 'pie' ? '派' : item === 'pizza' ? '披萨' : item === 'cake' ? '蛋糕' : '饼皮';
+        return item === 'pie'
+          ? '派'
+          : item === 'pizza'
+            ? '披萨'
+            : item === 'cake'
+              ? '蛋糕'
+              : '饼皮';
       case 'zh-TW':
         if (item === 'cake' && modifier === 'round') return '圓形蛋糕';
         if (item === 'cake' && modifier === 'layer') return '夾層蛋糕';
-        return item === 'pie' ? '派' : item === 'pizza' ? '披薩' : item === 'cake' ? '蛋糕' : '餅皮';
+        return item === 'pie'
+          ? '派'
+          : item === 'pizza'
+            ? '披薩'
+            : item === 'cake'
+              ? '蛋糕'
+              : '餅皮';
       case 'ja-JP':
         if (item === 'cake' && modifier === 'round') return '丸型ケーキ';
         if (item === 'cake' && modifier === 'layer') return 'レイヤーケーキ';
-        return item === 'pie' ? 'パイ' : item === 'pizza' ? 'ピザ' : item === 'cake' ? 'ケーキ' : 'クラスト';
+        return item === 'pie'
+          ? 'パイ'
+          : item === 'pizza'
+            ? 'ピザ'
+            : item === 'cake'
+              ? 'ケーキ'
+              : 'クラスト';
       case 'ko-KR':
         if (item === 'cake' && modifier === 'round') return '원형 케이크';
         if (item === 'cake' && modifier === 'layer') return '레이어 케이크';
-        return item === 'pie' ? '파이' : item === 'pizza' ? '피자' : item === 'cake' ? '케이크' : '크러스트';
+        return item === 'pie'
+          ? '파이'
+          : item === 'pizza'
+            ? '피자'
+            : item === 'cake'
+              ? '케이크'
+              : '크러스트';
       case 'es-ES':
         if (item === 'cake' && modifier === 'round') return 'pastel redondo';
         if (item === 'cake' && modifier === 'layer') return 'pastel de capas';
-        return item === 'pie' ? 'pastel' : item === 'pizza' ? 'pizza' : item === 'cake' ? 'pastel' : 'corteza';
+        return item === 'pie'
+          ? 'pastel'
+          : item === 'pizza'
+            ? 'pizza'
+            : item === 'cake'
+              ? 'pastel'
+              : 'corteza';
       default:
         return item;
     }
@@ -1038,7 +1080,11 @@ function localizeSquare(value: string, locale: string): string {
   }
 }
 
-function localizeDimension(value: string, kind: 'diameter' | 'long', locale: string): string {
+function localizeDimension(
+  value: string,
+  kind: 'diameter' | 'long',
+  locale: string,
+): string {
   const localizedSize = localizeInch(value, locale);
 
   switch (locale) {
@@ -1082,16 +1128,40 @@ function localizeMeasurementPhrases(label: string, locale: string): string {
     `(${INCH_VALUE_RE.replace('(?:\\.\\d+)?', '(?:\\.\\d+)?')})\\s*of\\s*(${INCH_VALUE_RE})\\s*(?:-\\s*inch|\\s*inch|")\\s+(?:(round|layer)\\s+)?(pie|pizza|cake|crust)\\b`,
     'gi',
   );
-  const inchCubeRe = new RegExp(`(${INCH_VALUE_RE})\\s*(?:-\\s*inch|\\s*inch|")\\s+cube\\b`, 'gi');
-  const inchSquareRe = new RegExp(`(${INCH_VALUE_RE})\\s*(?:-\\s*inch|\\s*inch|")\\s+square\\b`, 'gi');
-  const inchDiameterRe = new RegExp(`(${INCH_VALUE_RE})\\s*(?:-\\s*inch|\\s*inch|")\\s+diameter\\b`, 'gi');
-  const inchLongRe = new RegExp(`(${INCH_VALUE_RE})\\s*(?:-\\s*inch|\\s*inch|")\\s+long\\b`, 'gi');
-  const inchPieceRe = new RegExp(`(${INCH_VALUE_RE})\\s*(?:-\\s*inch|\\s*inch|")\\s+piece\\b`, 'gi');
-  const inchValueOnlyRe = new RegExp(`(${INCH_VALUE_RE})\\s*(?:-\\s*inch|\\s*inch|")`, 'gi');
+  const inchCubeRe = new RegExp(
+    `(${INCH_VALUE_RE})\\s*(?:-\\s*inch|\\s*inch|")\\s+cube\\b`,
+    'gi',
+  );
+  const inchSquareRe = new RegExp(
+    `(${INCH_VALUE_RE})\\s*(?:-\\s*inch|\\s*inch|")\\s+square\\b`,
+    'gi',
+  );
+  const inchDiameterRe = new RegExp(
+    `(${INCH_VALUE_RE})\\s*(?:-\\s*inch|\\s*inch|")\\s+diameter\\b`,
+    'gi',
+  );
+  const inchLongRe = new RegExp(
+    `(${INCH_VALUE_RE})\\s*(?:-\\s*inch|\\s*inch|")\\s+long\\b`,
+    'gi',
+  );
+  const inchPieceRe = new RegExp(
+    `(${INCH_VALUE_RE})\\s*(?:-\\s*inch|\\s*inch|")\\s+piece\\b`,
+    'gi',
+  );
+  const inchValueOnlyRe = new RegExp(
+    `(${INCH_VALUE_RE})\\s*(?:-\\s*inch|\\s*inch|")`,
+    'gi',
+  );
 
   out = out.replace(
     fractionOfSizeItemRe,
-    (_match, fraction: string, size: string, modifier: string | undefined, item: FractionItem) =>
+    (
+      _match,
+      fraction: string,
+      size: string,
+      modifier: string | undefined,
+      item: FractionItem,
+    ) =>
       localizeFractionOf(fraction, size, item, locale, modifier?.toLowerCase()),
   );
 
@@ -1112,17 +1182,36 @@ function localizeMeasurementPhrases(label: string, locale: string): string {
     }
   });
 
-  out = out.replace(inchSquareRe, (_match, size: string) => localizeSquare(size, locale));
+  out = out.replace(inchSquareRe, (_match, size: string) =>
+    localizeSquare(size, locale),
+  );
 
-  out = out.replace(inchDiameterRe, (_match, size: string) => localizeDimension(size, 'diameter', locale));
+  out = out.replace(inchDiameterRe, (_match, size: string) =>
+    localizeDimension(size, 'diameter', locale),
+  );
 
-  out = out.replace(inchLongRe, (_match, size: string) => localizeDimension(size, 'long', locale));
+  out = out.replace(inchLongRe, (_match, size: string) =>
+    localizeDimension(size, 'long', locale),
+  );
 
-  out = out.replace(inchPieceRe, (_match, size: string) => localizeSizeFirstPiece(size, locale));
+  out = out.replace(inchPieceRe, (_match, size: string) =>
+    localizeSizeFirstPiece(size, locale),
+  );
 
-  out = out.replace(inchValueOnlyRe, (_match, size: string) => localizeInch(size, locale));
+  out = out.replace(inchValueOnlyRe, (_match, size: string) =>
+    localizeInch(size, locale),
+  );
 
-  out = out.replace(/\s*&\s*/g, locale === 'es-ES' ? ' y ' : locale === 'ja-JP' ? ' と ' : locale === 'ko-KR' ? ' 및 ' : '和');
+  out = out.replace(
+    /\s*&\s*/g,
+    locale === 'es-ES'
+      ? ' y '
+      : locale === 'ja-JP'
+        ? ' と '
+        : locale === 'ko-KR'
+          ? ' 및 '
+          : '和',
+  );
 
   out = out.replace(/\((\d+(?:\.\d+)?)\s*mL\)/gi, (_match, value: string) => {
     switch (locale) {
@@ -1164,7 +1253,11 @@ function normalizeSourceText(input: string | null | undefined): string {
     .trim();
 }
 
-function normalizeChineseForLocale(input: string, locale: string, grams: number): string {
+function normalizeChineseForLocale(
+  input: string,
+  locale: string,
+  grams: number,
+): string {
   const source = normalizeSourceText(input);
   const perMatch = source.match(/^每\s*(\d+(?:\.\d+)?)\s*(?:g|克)$/i);
   if (perMatch) {
@@ -1178,7 +1271,10 @@ function normalizeChineseForLocale(input: string, locale: string, grams: number)
 
   let text = source.replace(/克/g, 'g');
   if (locale === 'zh-TW') {
-    text = text.replace(/约/g, '約').replace(/个/g, '個').replace(/汤匙/g, '湯匙');
+    text = text
+      .replace(/约/g, '約')
+      .replace(/个/g, '個')
+      .replace(/汤匙/g, '湯匙');
   }
 
   if (!text) return `${grams}g`;
@@ -1287,14 +1383,23 @@ function applyLabelReplacements(label: string, locale: string): string {
   if (locale === 'ja-JP') {
     localized = localized
       .replace(/\b([^\s()]+)\s+皮付き\b/g, '皮付き$1')
-      .replace(/ホットケーキ\s+添え\s+マーガリン\s+と\s+シロップ/g, 'ホットケーキ マーガリンとシロップ付き')
-      .replace(/\s+マーガリン\s+と\s+シロップ付き/g, ' マーガリンとシロップ付き');
+      .replace(
+        /ホットケーキ\s+添え\s+マーガリン\s+と\s+シロップ/g,
+        'ホットケーキ マーガリンとシロップ付き',
+      )
+      .replace(
+        /\s+マーガリン\s+と\s+シロップ付き/g,
+        ' マーガリンとシロップ付き',
+      );
   }
 
   if (locale === 'ko-KR') {
     localized = localized
       .replace(/\b([^\s()]+)\s+껍질 포함\b/g, '껍질 포함 $1')
-      .replace(/핫케이크\s+함께\s+마가린\s+및\s+시럽/g, '핫케이크 마가린과 시럽 포함')
+      .replace(
+        /핫케이크\s+함께\s+마가린\s+및\s+시럽/g,
+        '핫케이크 마가린과 시럽 포함',
+      )
       .replace(/\s+마가린\s+및\s+시럽 포함/g, ' 마가린과 시럽 포함');
   }
 
@@ -1306,8 +1411,14 @@ function polishLocalizedServingDesc(text: string, locale: string): string {
 
   if (locale === 'ja-JP') {
     out = out
-      .replace(/\(([^()]*?)(\d+(?:-\d+\/\d+|\/\d+|(?:\.\d+)?)インチ)\s+直径([^()]*)\)/g, '($1直径$2$3)')
-      .replace(/(\d+(?:\.\d+)?)インチパイの(\d+\/\d+)\s+クラスト/g, '$1インチパイクラストの$2')
+      .replace(
+        /\(([^()]*?)(\d+(?:-\d+\/\d+|\/\d+|(?:\.\d+)?)インチ)\s+直径([^()]*)\)/g,
+        '($1直径$2$3)',
+      )
+      .replace(
+        /(\d+(?:\.\d+)?)インチパイの(\d+\/\d+)\s+クラスト/g,
+        '$1インチパイクラストの$2',
+      )
       .replace(/(\d+(?:\/\d+)?)果実\b/g, '$1個')
       .replace(/(\d+)枚パティ\s+グレービー付き/g, 'グレービー付きパティ$1枚')
       .replace(/(\d+)個ロール\s+アイシング付き/g, 'アイシング付きロール$1個')
@@ -1316,9 +1427,18 @@ function polishLocalizedServingDesc(text: string, locale: string): string {
 
   if (locale === 'ko-KR') {
     out = out
-      .replace(/\(([^()]*?)(\d+(?:-\d+\/\d+|\/\d+|(?:\.\d+)?)인치)\s+지름([^()]*)\)/g, '($1지름 $2$3)')
-      .replace(/(\d+(?:\.\d+)?)인치\s+파이의\s+(\d+\/\d+)\s+크러스트/g, '$1인치 파이 크러스트 $2')
-      .replace(/(\d+(?:\.\d+)?)인치\s+크러스트의\s+(\d+\/\d+)/g, '$1인치 크러스트 $2')
+      .replace(
+        /\(([^()]*?)(\d+(?:-\d+\/\d+|\/\d+|(?:\.\d+)?)인치)\s+지름([^()]*)\)/g,
+        '($1지름 $2$3)',
+      )
+      .replace(
+        /(\d+(?:\.\d+)?)인치\s+파이의\s+(\d+\/\d+)\s+크러스트/g,
+        '$1인치 파이 크러스트 $2',
+      )
+      .replace(
+        /(\d+(?:\.\d+)?)인치\s+크러스트의\s+(\d+\/\d+)/g,
+        '$1인치 크러스트 $2',
+      )
       .replace(/(\d+(?:\/\d+)?)\s+과일\b/g, '$1개')
       .replace(/(\d+)\s+장\s+패티\b/g, '패티 $1장')
       .replace(/(\d+)\s+장 패티\s+그레이비 포함/g, '그레이비 포함 패티 $1장')
@@ -1329,12 +1449,27 @@ function polishLocalizedServingDesc(text: string, locale: string): string {
   if (locale === 'es-ES') {
     out = out
       .replace(/\b(\d+(?:\/\d+)?)\s+mediano\s+fruta\b/g, '$1 fruta mediana')
-      .replace(/\b(\d+(?:\/\d+)?)\s+mediano\s+panqueque\b/g, '$1 panqueque mediano')
-      .replace(/\b(\d+(?:\/\d+)?)\s+mediano\s+tortilla\b/g, '$1 tortilla mediana')
+      .replace(
+        /\b(\d+(?:\/\d+)?)\s+mediano\s+panqueque\b/g,
+        '$1 panqueque mediano',
+      )
+      .replace(
+        /\b(\d+(?:\/\d+)?)\s+mediano\s+tortilla\b/g,
+        '$1 tortilla mediana',
+      )
       .replace(/\b([2-9]\d*)\s+panqueque\b/g, '$1 panqueques')
-      .replace(/\b([2-9]\d*)\s+panqueques\s+mediano\b/g, '$1 panqueques medianos')
-      .replace(/\b([2-9]\d*)\s+panqueque\s+mediano\b/g, '$1 panqueques medianos')
-      .replace(/\b(\d+\/\d+)\s+de\s+pastel\s+de\s+(\d+(?:\.\d+)?)\s+pulgadas\s+corteza\b/g, '$1 de corteza de $2 pulgadas');
+      .replace(
+        /\b([2-9]\d*)\s+panqueques\s+mediano\b/g,
+        '$1 panqueques medianos',
+      )
+      .replace(
+        /\b([2-9]\d*)\s+panqueque\s+mediano\b/g,
+        '$1 panqueques medianos',
+      )
+      .replace(
+        /\b(\d+\/\d+)\s+de\s+pastel\s+de\s+(\d+(?:\.\d+)?)\s+pulgadas\s+corteza\b/g,
+        '$1 de corteza de $2 pulgadas',
+      );
   }
 
   return out.replace(/\s+/g, ' ').trim();
@@ -1378,7 +1513,10 @@ function formatQuantityLabel(
   return grams ? `${amount} ${label} (${grams}g)` : `${amount} ${label}`;
 }
 
-function localizeFromEnglishCanonical(canonical: string, locale: string): string {
+function localizeFromEnglishCanonical(
+  canonical: string,
+  locale: string,
+): string {
   const source = normalizeSourceText(canonical);
 
   const perMatch = source.match(/^per\s+(\d+(?:\.\d+)?)g$/i);
@@ -1400,28 +1538,56 @@ function localizeFromEnglishCanonical(canonical: string, locale: string): string
     const [, amount, label] = amountMatch;
 
     if (/^\d+\/\d+$/.test(amount) && /^of\b/i.test(label)) {
-      const fullyLocalized = applyLabelReplacements(`${amount} ${label}`, locale);
-      return polishLocalizedServingDesc(grams ? `${fullyLocalized} (${grams}g)` : fullyLocalized, locale);
+      const fullyLocalized = applyLabelReplacements(
+        `${amount} ${label}`,
+        locale,
+      );
+      return polishLocalizedServingDesc(
+        grams ? `${fullyLocalized} (${grams}g)` : fullyLocalized,
+        locale,
+      );
     }
 
-    if (new RegExp(`^${INCH_VALUE_RE}\\s*(?:-\\s*inch|\\s*inch|")\\b`, 'i').test(`${amount} ${label}`)) {
-      const fullyLocalized = applyLabelReplacements(`${amount} ${label}`, locale);
-      return polishLocalizedServingDesc(grams ? `${fullyLocalized} (${grams}g)` : fullyLocalized, locale);
+    if (
+      new RegExp(`^${INCH_VALUE_RE}\\s*(?:-\\s*inch|\\s*inch|")\\b`, 'i').test(
+        `${amount} ${label}`,
+      )
+    ) {
+      const fullyLocalized = applyLabelReplacements(
+        `${amount} ${label}`,
+        locale,
+      );
+      return polishLocalizedServingDesc(
+        grams ? `${fullyLocalized} (${grams}g)` : fullyLocalized,
+        locale,
+      );
     }
 
-    return polishLocalizedServingDesc(formatQuantityLabel(amount, label, grams, locale), locale);
+    return polishLocalizedServingDesc(
+      formatQuantityLabel(amount, label, grams, locale),
+      locale,
+    );
   }
 
-  return polishLocalizedServingDesc(applyLabelReplacements(source, locale), locale);
+  return polishLocalizedServingDesc(
+    applyLabelReplacements(source, locale),
+    locale,
+  );
 }
 
-function buildServingDesc(
-  row: CandidateRow,
-): { value: string; sourceKind: SourceKind; strategy: Strategy } {
+function buildServingDesc(row: CandidateRow): {
+  value: string;
+  sourceKind: SourceKind;
+  strategy: Strategy;
+} {
   const source = normalizeSourceText(row.standardServingDesc);
   const locale = row.locale;
 
-  if (source && CJK_RE.test(source) && (locale === 'zh-CN' || locale === 'zh-TW')) {
+  if (
+    source &&
+    CJK_RE.test(source) &&
+    (locale === 'zh-CN' || locale === 'zh-TW')
+  ) {
     return {
       value: normalizeChineseForLocale(source, locale, row.standardServingG),
       sourceKind: 'cjk-template',
@@ -1429,7 +1595,10 @@ function buildServingDesc(
     };
   }
 
-  const canonical = toEnglishCanonical(row.standardServingDesc, row.standardServingG);
+  const canonical = toEnglishCanonical(
+    row.standardServingDesc,
+    row.standardServingG,
+  );
 
   if (locale === 'en-US' || locale === 'AU') {
     return {
@@ -1473,7 +1642,9 @@ function chunk<T>(items: T[], size: number): T[][] {
 
 function printStatMap(title: string, stats: Record<string, number>) {
   console.log(`\n${title}`);
-  for (const [key, value] of Object.entries(stats).sort((a, b) => b[1] - a[1])) {
+  for (const [key, value] of Object.entries(stats).sort(
+    (a, b) => b[1] - a[1],
+  )) {
     console.log(`  ${key}: ${value}`);
   }
 }
@@ -1521,7 +1692,10 @@ async function main() {
     sourceStats[built.sourceKind] = (sourceStats[built.sourceKind] || 0) + 1;
     strategyStats[built.strategy] = (strategyStats[built.strategy] || 0) + 1;
 
-    if (!nextServingDesc || nextServingDesc === normalizeSourceText(row.currentServingDesc)) {
+    if (
+      !nextServingDesc ||
+      nextServingDesc === normalizeSourceText(row.currentServingDesc)
+    ) {
       continue;
     }
 

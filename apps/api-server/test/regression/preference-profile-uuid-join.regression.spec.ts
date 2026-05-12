@@ -30,13 +30,13 @@ function makeRedisPassthrough(): RedisCacheService {
 describe('BUG-006 regression: buildPreferenceProfile SQL 防止 uuid=varchar JOIN', () => {
   it('生成的 SQL 必须把 food_id 在子查询里 sanitize 成 uuid 后再 JOIN', async () => {
     const queryRawUnsafe = jest.fn().mockResolvedValue([]); // 空 → 走 empty 分支
-    const prisma = { $queryRawUnsafe: queryRawUnsafe } as unknown as PrismaService;
+    const prisma = {
+      $queryRawUnsafe: queryRawUnsafe,
+    } as unknown as PrismaService;
     const redis = makeRedisPassthrough();
 
     const svc = new PreferenceProfileService(prisma, redis);
-    await svc.getUserPreferenceProfile(
-      '11111111-1111-1111-1111-111111111111',
-    );
+    await svc.getUserPreferenceProfile('11111111-1111-1111-1111-111111111111');
 
     expect(queryRawUnsafe).toHaveBeenCalled();
     const sql = queryRawUnsafe.mock.calls[0][0] as string;
@@ -54,7 +54,9 @@ describe('BUG-006 regression: buildPreferenceProfile SQL 防止 uuid=varchar JOI
 
   it('user_id 也必须 cast 成 uuid（防止反向漂移）', async () => {
     const queryRawUnsafe = jest.fn().mockResolvedValue([]);
-    const prisma = { $queryRawUnsafe: queryRawUnsafe } as unknown as PrismaService;
+    const prisma = {
+      $queryRawUnsafe: queryRawUnsafe,
+    } as unknown as PrismaService;
     const redis = makeRedisPassthrough();
 
     const svc = new PreferenceProfileService(prisma, redis);
@@ -84,7 +86,9 @@ describe('BUG-006 regression: buildPreferenceProfile SQL 防止 uuid=varchar JOI
         createdAt: new Date(),
       },
     ]);
-    const prisma = { $queryRawUnsafe: queryRawUnsafe } as unknown as PrismaService;
+    const prisma = {
+      $queryRawUnsafe: queryRawUnsafe,
+    } as unknown as PrismaService;
     const redis = makeRedisPassthrough();
 
     const svc = new PreferenceProfileService(prisma, redis);

@@ -82,7 +82,8 @@ export class IdempotencyService {
     }
     const { scope, key } = opts;
     const retryFailed = opts.retryFailed ?? true;
-    const ttlSeconds = opts.ttlSeconds ?? IdempotencyService.DEFAULT_TTL_SECONDS;
+    const ttlSeconds =
+      opts.ttlSeconds ?? IdempotencyService.DEFAULT_TTL_SECONDS;
     const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
 
     // 1) 尝试占位（INSERT pending）。冲突立即转入重复处理分支。
@@ -128,7 +129,9 @@ export class IdempotencyService {
 
     // status === 'failed'
     if (!retryFailed) {
-      this.logger.debug(`Idempotency replay (failed, no retry): ${scope}/${key}`);
+      this.logger.debug(
+        `Idempotency replay (failed, no retry): ${scope}/${key}`,
+      );
       return {
         executed: false,
         result: (existing.result as T | null) ?? undefined,
@@ -175,7 +178,9 @@ export class IdempotencyService {
       return { executed: true, result };
     } catch (err) {
       const message =
-        err instanceof Error ? err.message.slice(0, 1000) : String(err).slice(0, 1000);
+        err instanceof Error
+          ? err.message.slice(0, 1000)
+          : String(err).slice(0, 1000);
       await this.prisma.idempotencyKey
         .update({
           where: { scope_key: { scope, key } },
@@ -197,17 +202,22 @@ export class IdempotencyService {
 
   private isUniqueViolation(err: unknown): boolean {
     return (
-      err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002'
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2002'
     );
   }
 
-  private toJsonOrNull(value: unknown): Prisma.InputJsonValue | typeof Prisma.JsonNull {
+  private toJsonOrNull(
+    value: unknown,
+  ): Prisma.InputJsonValue | typeof Prisma.JsonNull {
     if (value === undefined || value === null) return Prisma.JsonNull;
     try {
       // 通过 JSON 往返一次确保可序列化
       return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
     } catch {
-      this.logger.warn('Idempotency result not JSON-serializable; storing NULL');
+      this.logger.warn(
+        'Idempotency result not JSON-serializable; storing NULL',
+      );
       return Prisma.JsonNull;
     }
   }

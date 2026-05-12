@@ -129,7 +129,10 @@ function createService() {
     goalTrackerService as any,
     executionTrackerService as any,
     learnedRankingService as any,
-    { learnWeights: jest.fn().mockResolvedValue(null), getLearnedWeights: jest.fn().mockResolvedValue(null) } as any, // weightLearnerService
+    {
+      learnWeights: jest.fn().mockResolvedValue(null),
+      getLearnedWeights: jest.fn().mockResolvedValue(null),
+    } as any, // weightLearnerService
     realtimeProfile as any,
   );
 

@@ -131,11 +131,13 @@ export class PipelineContextFactory {
       // 保证 ensureMinCandidates 等 fallback 路径也无法绕过 cuisine 约束。
       // 性能优化：调用方可在循环外预过滤并通过 params.preFilteredAllFoods 传入，
       // 避免多场景/多 role 重复执行相同过滤（1393 条食物 × N 次 → 1 次）。
-      allFoods: params.preFilteredAllFoods ?? this.cuisineRegionFilter.filter(
-        req.allFoods,
-        regionCode,
-        req.userProfile?.cuisinePreferences,
-      ),
+      allFoods:
+        params.preFilteredAllFoods ??
+        this.cuisineRegionFilter.filter(
+          req.allFoods,
+          regionCode,
+          req.userProfile?.cuisinePreferences,
+        ),
       mealType: req.mealType,
       goalType: req.goalType,
       target: req.target,

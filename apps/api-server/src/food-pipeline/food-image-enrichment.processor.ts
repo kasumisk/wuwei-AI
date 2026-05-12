@@ -21,9 +21,13 @@ import {
 } from './services/image-enrichment/food-image-enrichment.service';
 
 @Processor(QUEUE_NAMES.FOOD_IMAGE_GENERATION, {
-  concurrency: QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_IMAGE_GENERATION].concurrency,
+  concurrency:
+    QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_IMAGE_GENERATION].concurrency,
 })
-export class FoodImageEnrichmentProcessor extends WorkerHost implements OnModuleInit {
+export class FoodImageEnrichmentProcessor
+  extends WorkerHost
+  implements OnModuleInit
+{
   private readonly logger = new Logger(FoodImageEnrichmentProcessor.name);
 
   constructor(
@@ -42,20 +46,28 @@ export class FoodImageEnrichmentProcessor extends WorkerHost implements OnModule
     );
   }
 
-  async process(job: Job<ImageEnrichmentJobPayload>): Promise<ImageEnrichmentResult> {
+  async process(
+    job: Job<ImageEnrichmentJobPayload>,
+  ): Promise<ImageEnrichmentResult> {
     const { foodId, foodName } = job.data;
     const maxAttempts =
       job.opts?.attempts ??
       QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_IMAGE_GENERATION].maxRetries + 1;
 
-    this.logger.log(`[job=${job.id}] 开始: foodId=${foodId} name="${foodName}" attempt=${job.attemptsMade + 1}/${maxAttempts}`);
+    this.logger.log(
+      `[job=${job.id}] 开始: foodId=${foodId} name="${foodName}" attempt=${job.attemptsMade + 1}/${maxAttempts}`,
+    );
 
     try {
       const result = await this.imageEnrichment.enrich(job.data);
       if (result.skipped) {
-        this.logger.log(`[job=${job.id}] 跳过: foodId=${foodId} reason=${result.skipReason}`);
+        this.logger.log(
+          `[job=${job.id}] 跳过: foodId=${foodId} reason=${result.skipReason}`,
+        );
       } else {
-        this.logger.log(`[job=${job.id}] 完成: foodId=${foodId} score=${result.qualityScore}`);
+        this.logger.log(
+          `[job=${job.id}] 完成: foodId=${foodId} score=${result.qualityScore}`,
+        );
       }
       return result; // BullMQ 存入 job.returnvalue
     } catch (err) {
@@ -67,13 +79,18 @@ export class FoodImageEnrichmentProcessor extends WorkerHost implements OnModule
   }
 
   @OnWorkerEvent('failed')
-  async onFailed(job: Job<ImageEnrichmentJobPayload>, error: Error): Promise<void> {
+  async onFailed(
+    job: Job<ImageEnrichmentJobPayload>,
+    error: Error,
+  ): Promise<void> {
     const maxAttempts =
       job.opts?.attempts ??
       QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_IMAGE_GENERATION].maxRetries + 1;
 
     if (job.attemptsMade >= maxAttempts) {
-      this.logger.error(`[job=${job.id}] 最终失败，写入 DLQ: foodId=${job.data.foodId}`);
+      this.logger.error(
+        `[job=${job.id}] 最终失败，写入 DLQ: foodId=${job.data.foodId}`,
+      );
       await this.deadLetterService.storeFailedJob(
         QUEUE_NAMES.FOOD_IMAGE_GENERATION,
         job.id ?? 'unknown',

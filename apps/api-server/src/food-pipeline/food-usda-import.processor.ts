@@ -37,7 +37,10 @@ export type UsdaImportJobData =
 @Processor(QUEUE_NAMES.FOOD_USDA_IMPORT, {
   concurrency: QUEUE_DEFAULT_OPTIONS[QUEUE_NAMES.FOOD_USDA_IMPORT].concurrency,
 })
-export class FoodUsdaImportProcessor extends WorkerHost implements OnModuleInit {
+export class FoodUsdaImportProcessor
+  extends WorkerHost
+  implements OnModuleInit
+{
   private readonly logger = new Logger(FoodUsdaImportProcessor.name);
 
   constructor(

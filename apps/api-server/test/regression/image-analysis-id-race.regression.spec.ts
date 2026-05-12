@@ -57,7 +57,9 @@ describe('FoodImageAnalyzeController analysisId race regression', () => {
         { provide: QuotaService, useValue: {} },
         {
           provide: ResultEntitlementService,
-          useValue: { trimResult: jest.fn().mockImplementation((value) => value) },
+          useValue: {
+            trimResult: jest.fn().mockImplementation((value) => value),
+          },
         },
         {
           provide: PaywallTriggerService,
@@ -82,13 +84,18 @@ describe('FoodImageAnalyzeController analysisId race regression', () => {
         },
         {
           provide: AnalyzeResultHelperService,
-          useValue: { localizeLiteFoods: jest.fn(), localizeAnalysisResult: jest.fn() },
+          useValue: {
+            localizeLiteFoods: jest.fn(),
+            localizeAnalysisResult: jest.fn(),
+          },
         },
       ],
     }).compile();
 
     const controller = moduleRef.get(FoodImageAnalyzeController);
-    const response = await controller.getAnalysisResult('req-1', { id: 'user-1' } as any);
+    const response = await controller.getAnalysisResult('req-1', {
+      id: 'user-1',
+    } as any);
 
     expect(response.success).toBe(true);
     expect(response.data.requestId).toBe('req-1');
@@ -138,7 +145,9 @@ describe('FoodImageAnalyzeController analysisId race regression', () => {
         { provide: QuotaService, useValue: {} },
         {
           provide: ResultEntitlementService,
-          useValue: { trimResult: jest.fn().mockImplementation((value) => value) },
+          useValue: {
+            trimResult: jest.fn().mockImplementation((value) => value),
+          },
         },
         {
           provide: PaywallTriggerService,
@@ -163,7 +172,10 @@ describe('FoodImageAnalyzeController analysisId race regression', () => {
         },
         {
           provide: AnalyzeResultHelperService,
-          useValue: { localizeLiteFoods: jest.fn(), localizeAnalysisResult: jest.fn() },
+          useValue: {
+            localizeLiteFoods: jest.fn(),
+            localizeAnalysisResult: jest.fn(),
+          },
         },
       ],
     }).compile();
@@ -173,5 +185,59 @@ describe('FoodImageAnalyzeController analysisId race regression', () => {
     await expect(
       controller.getAnalysisResult('req-1', { id: 'user-1' } as any),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('returns 403 business code when polling failed image analysis quota error', async () => {
+    const moduleRef = await Test.createTestingModule({
+      controllers: [FoodImageAnalyzeController],
+      providers: [
+        {
+          provide: AnalyzeService,
+          useValue: {
+            getAnalysisStatus: jest.fn().mockResolvedValue({
+              status: 'failed',
+              error:
+                'Quota exceeded for user user-1 on feature food.image: 20/20',
+            }),
+          },
+        },
+        { provide: StorageService, useValue: {} },
+        { provide: TextFoodAnalysisService, useValue: {} },
+        { provide: AnalysisSessionService, useValue: {} },
+        { provide: QuotaGateService, useValue: {} },
+        { provide: QuotaService, useValue: {} },
+        { provide: ResultEntitlementService, useValue: {} },
+        { provide: PaywallTriggerService, useValue: {} },
+        { provide: SubscriptionService, useValue: {} },
+        { provide: PrismaService, useValue: {} },
+        {
+          provide: I18nService,
+          useValue: {
+            currentLocale: jest.fn().mockReturnValue('en-US'),
+            t: jest.fn().mockReturnValue('quota exceeded'),
+          },
+        },
+        {
+          provide: AnalyzeResultHelperService,
+          useValue: {
+            localizeLiteFoods: jest.fn(),
+            localizeAnalysisResult: jest.fn(),
+          },
+        },
+      ],
+    }).compile();
+
+    const controller = moduleRef.get(FoodImageAnalyzeController);
+    const response = await controller.getAnalysisResult('req-1', {
+      id: 'user-1',
+    } as any);
+
+    expect(response.success).toBe(false);
+    expect(response.code).toBe(403);
+    expect(response.data).toEqual({
+      requestId: 'req-1',
+      status: 'failed',
+      error: 'Quota exceeded for user user-1 on feature food.image: 20/20',
+    });
   });
 });

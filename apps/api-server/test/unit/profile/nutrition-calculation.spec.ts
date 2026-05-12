@@ -9,7 +9,11 @@
  * Private methods accessed via (svc as any) — intentional in unit tests.
  */
 
-import { ActivityLevel, GoalSpeed, GoalType } from '../../../src/modules/user/user.types';
+import {
+  ActivityLevel,
+  GoalSpeed,
+  GoalType,
+} from '../../../src/modules/user/user.types';
 
 // ─── Minimal stub — only what the constructor needs ───────────────────────────
 
@@ -22,7 +26,9 @@ class StubRequestContext {}
 
 // Lazy import to avoid NestJS DI bootstrap
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { UserProfileService } = require('../../../src/modules/user/app/services/profile/user-profile.service');
+const {
+  UserProfileService,
+} = require('../../../src/modules/user/app/services/profile/user-profile.service');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -80,7 +86,12 @@ describe('NutritionCalculation — golden cases', () => {
     it('recommendedCalories = 2073 (fat_loss 0.80, steady 0.00)', () => {
       const bmr: number = svc.calculateBMR(profile);
       const tdee: number = svc.calculateTDEE(bmr, ActivityLevel.MODERATE);
-      const cal: number = svc.calculateRecommendedCalories(tdee, GoalType.FAT_LOSS, GoalSpeed.STEADY, 'male');
+      const cal: number = svc.calculateRecommendedCalories(
+        tdee,
+        GoalType.FAT_LOSS,
+        GoalSpeed.STEADY,
+        'male',
+      );
       expect(cal).toBe(2073);
     });
 
@@ -116,7 +127,12 @@ describe('NutritionCalculation — golden cases', () => {
     it('recommendedCalories = 1940 (muscle_gain 1.10, aggressive −0.05)', () => {
       const bmr: number = svc.calculateBMR(profile);
       const tdee: number = svc.calculateTDEE(bmr, ActivityLevel.LIGHT);
-      const cal: number = svc.calculateRecommendedCalories(tdee, GoalType.MUSCLE_GAIN, GoalSpeed.AGGRESSIVE, 'female');
+      const cal: number = svc.calculateRecommendedCalories(
+        tdee,
+        GoalType.MUSCLE_GAIN,
+        GoalSpeed.AGGRESSIVE,
+        'female',
+      );
       expect(cal).toBe(1940);
     });
 
@@ -133,7 +149,7 @@ describe('NutritionCalculation — golden cases', () => {
     const profile = {
       gender: 'male',
       birthYear: 1991, // age 35
-      heightCm: 180,   // irrelevant — Katch-McArdle ignores height
+      heightCm: 180, // irrelevant — Katch-McArdle ignores height
       weightKg: 90,
       bodyFatPercent: 25,
     };
@@ -152,7 +168,12 @@ describe('NutritionCalculation — golden cases', () => {
     it('recommendedCalories = 1645 (fat_loss 0.80, aggressive −0.05)', () => {
       const bmr: number = svc.calculateBMR(profile);
       const tdee: number = svc.calculateTDEE(bmr, ActivityLevel.SEDENTARY);
-      const cal: number = svc.calculateRecommendedCalories(tdee, GoalType.FAT_LOSS, GoalSpeed.AGGRESSIVE, 'male');
+      const cal: number = svc.calculateRecommendedCalories(
+        tdee,
+        GoalType.FAT_LOSS,
+        GoalSpeed.AGGRESSIVE,
+        'male',
+      );
       expect(cal).toBe(1645);
     });
 
@@ -167,12 +188,22 @@ describe('NutritionCalculation — golden cases', () => {
   // ── Safety floor ───────────────────────────────────────────────────────────
   describe('Safety floor', () => {
     it('male floor = 1500 kcal even when TDEE is tiny', () => {
-      const cal: number = svc.calculateRecommendedCalories(1000, GoalType.FAT_LOSS, GoalSpeed.AGGRESSIVE, 'male');
+      const cal: number = svc.calculateRecommendedCalories(
+        1000,
+        GoalType.FAT_LOSS,
+        GoalSpeed.AGGRESSIVE,
+        'male',
+      );
       expect(cal).toBe(1500);
     });
 
     it('female floor = 1200 kcal even when TDEE is tiny', () => {
-      const cal: number = svc.calculateRecommendedCalories(800, GoalType.FAT_LOSS, GoalSpeed.AGGRESSIVE, 'female');
+      const cal: number = svc.calculateRecommendedCalories(
+        800,
+        GoalType.FAT_LOSS,
+        GoalSpeed.AGGRESSIVE,
+        'female',
+      );
       expect(cal).toBe(1200);
     });
   });

@@ -474,9 +474,7 @@ export class FoodPoolCacheService implements OnModuleInit {
    * Step 6 P0-A/D：DB 加载完后，异步并行写入 L2 Redis，
    * 使后续实例冷启可命中 L2（~10–50ms）跳过 DB 全表 + JOIN。
    */
-  private async loadAllFoodsFromDB(
-    l2ProbeMs = 0,
-  ): Promise<FoodLibrary[]> {
+  private async loadAllFoodsFromDB(l2ProbeMs = 0): Promise<FoodLibrary[]> {
     const tDb = Date.now();
     const sql = this.buildFoodPoolSQL('WHERE f.is_verified = true');
     const rows: any[] = await this.prisma.$queryRawUnsafe(sql);

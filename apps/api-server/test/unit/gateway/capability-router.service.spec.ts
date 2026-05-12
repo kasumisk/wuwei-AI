@@ -284,9 +284,7 @@ describe('CapabilityRouter', () => {
     });
 
     it('应该处理没有权限配置的情况', async () => {
-      mockPrisma.clientCapabilityPermissions.findFirst.mockResolvedValue(
-        null,
-      );
+      mockPrisma.clientCapabilityPermissions.findFirst.mockResolvedValue(null);
       mockPrisma.modelConfigs.findMany.mockResolvedValue([mockModelConfig]);
 
       const result = await service.route('client-1', 'TEXT_GENERATION');

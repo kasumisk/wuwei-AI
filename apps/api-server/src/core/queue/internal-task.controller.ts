@@ -39,7 +39,10 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { InternalTaskGuard } from './internal-task.guard';
-import { TaskHandlerRegistry, type TaskHandlerContext } from './task-handler.registry';
+import {
+  TaskHandlerRegistry,
+  type TaskHandlerContext,
+} from './task-handler.registry';
 
 interface TaskBody {
   /** 与 path 中的 jobName 必须一致；冗余便于日志/防错路由 */
@@ -65,7 +68,8 @@ export class InternalTaskController {
     @Param('jobName') jobName: string,
     @Body() body: TaskBody,
     @Headers('x-cloudtasks-taskname') taskName: string | undefined,
-    @Headers('x-cloudtasks-taskretrycount') retryCountHeader: string | undefined,
+    @Headers('x-cloudtasks-taskretrycount')
+    retryCountHeader: string | undefined,
     @Headers('x-cloudtasks-queuename') headerQueueName: string | undefined,
   ): Promise<{ ok: true; status: 'succeeded' | 'dead' }> {
     // 防呆：path 与 body.jobName 不一致直接 400（Producer 应当保证一致）
@@ -99,7 +103,13 @@ export class InternalTaskController {
     };
 
     const startedAt = Date.now();
-    const logRow = await this.startLog(queueName, jobName, taskName, attempt, body?.data);
+    const logRow = await this.startLog(
+      queueName,
+      jobName,
+      taskName,
+      attempt,
+      body?.data,
+    );
 
     try {
       await handler(body?.data, ctx);

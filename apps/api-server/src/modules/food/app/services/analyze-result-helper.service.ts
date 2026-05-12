@@ -73,7 +73,8 @@ export class AnalyzeResultHelperService {
         const localized = food.foodLibraryId
           ? localizedById.get(food.foodLibraryId)
           : undefined;
-        const localizedName = localized?.name ?? translatedByName.get(food.name);
+        const localizedName =
+          localized?.name ?? translatedByName.get(food.name);
         if (localizedName) {
           food.name = localizedName;
         }
@@ -148,10 +149,11 @@ export class AnalyzeResultHelperService {
   ): Promise<AnalyzedFoodItemLite[] | undefined> {
     if (!foods?.length) return foods;
 
-    const translatedByName = await this.foodI18nService.loadTranslationsByFoodNames(
-      foods.map((food) => food.name).filter(Boolean),
-      locale,
-    );
+    const translatedByName =
+      await this.foodI18nService.loadTranslationsByFoodNames(
+        foods.map((food) => food.name).filter(Boolean),
+        locale,
+      );
 
     if (translatedByName.size === 0) {
       return foods;

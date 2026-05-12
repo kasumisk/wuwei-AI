@@ -27,7 +27,9 @@ export class AppVersionService {
       appVersionPackages: version.appVersionPackages.map((pkg) => ({
         ...pkg,
         fileSize:
-          typeof pkg.fileSize === 'bigint' ? Number(pkg.fileSize) : pkg.fileSize,
+          typeof pkg.fileSize === 'bigint'
+            ? Number(pkg.fileSize)
+            : pkg.fileSize,
       })),
     };
   }
@@ -88,7 +90,12 @@ export class AppVersionService {
       this.prisma.appVersions.count({ where }),
     ]);
 
-    return { list: list.map((v) => this.serializeVersion(v)), total, page, pageSize };
+    return {
+      list: list.map((v) => this.serializeVersion(v)),
+      total,
+      page,
+      pageSize,
+    };
   }
 
   /**

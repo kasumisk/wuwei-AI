@@ -29,7 +29,10 @@ describe('RevenueCat refresh first purchase regression', () => {
       .spyOn(service as any, 'applySubscriberSnapshot')
       .mockResolvedValue({ cacheInvalidated: false });
 
-    await service.triggerSyncForUser('550e8400-e29b-41d4-a716-446655440000', 'client_trigger');
+    await service.triggerSyncForUser(
+      '550e8400-e29b-41d4-a716-446655440000',
+      'client_trigger',
+    );
 
     expect(fetchSpy).toHaveBeenCalled();
   });
@@ -67,11 +70,9 @@ describe('RevenueCat refresh first purchase regression', () => {
   });
 
   it('prefers linked RevenueCat provider customer id when refreshing snapshot', async () => {
-    const findFirst = jest
-      .fn()
-      .mockResolvedValueOnce({
-        providerCustomerId: '$RCAnonymousID:linked-user',
-      });
+    const findFirst = jest.fn().mockResolvedValueOnce({
+      providerCustomerId: '$RCAnonymousID:linked-user',
+    });
     const service = new RevenueCatSyncService(
       {
         get: jest.fn((key: string) =>
@@ -114,11 +115,9 @@ describe('RevenueCat refresh first purchase regression', () => {
   });
 
   it('prefers provider customer id from the current store environment', async () => {
-    const findFirst = jest
-      .fn()
-      .mockResolvedValueOnce({
-        providerCustomerId: 'prod-user',
-      });
+    const findFirst = jest.fn().mockResolvedValueOnce({
+      providerCustomerId: 'prod-user',
+    });
     const service = new RevenueCatSyncService(
       {
         get: jest.fn((key: string) =>
@@ -166,12 +165,10 @@ describe('RevenueCat refresh first purchase regression', () => {
   });
 
   it('prefers the most recently synced active provider customer across environments', async () => {
-    const findFirst = jest
-      .fn()
-      .mockResolvedValueOnce({
-        providerCustomerId: 'sandbox-user',
-        environment: 'sandbox',
-      });
+    const findFirst = jest.fn().mockResolvedValueOnce({
+      providerCustomerId: 'sandbox-user',
+      environment: 'sandbox',
+    });
     const service = new RevenueCatSyncService(
       {
         get: jest.fn((key: string) =>

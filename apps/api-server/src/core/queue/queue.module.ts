@@ -41,7 +41,9 @@ const cloudTasksProvider: Provider = {
 };
 
 function isCloudTasksEnabled(config: ConfigService): boolean {
-  const def = (config.get<string>('QUEUE_BACKEND_DEFAULT', 'bullmq') ?? 'bullmq').toLowerCase();
+  const def = (
+    config.get<string>('QUEUE_BACKEND_DEFAULT', 'bullmq') ?? 'bullmq'
+  ).toLowerCase();
   if (def === 'tasks') return true;
   for (const name of Object.values(QUEUE_NAMES)) {
     const k = `QUEUE_BACKEND_${name.toUpperCase().replace(/-/g, '_')}`;

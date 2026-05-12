@@ -65,11 +65,7 @@ export class ExportProcessor extends WorkerHost implements OnModuleInit {
   }
 
   onModuleInit(): void {
-    this.registry.register(
-      QUEUE_NAMES.EXPORT,
-      '*',
-      processorAsHandler(this),
-    );
+    this.registry.register(QUEUE_NAMES.EXPORT, '*', processorAsHandler(this));
   }
 
   /**

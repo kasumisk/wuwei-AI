@@ -91,7 +91,8 @@ export class SubscriptionDomainSyncService {
       include: { subscriptionPlan: true },
       orderBy: { updatedAt: 'desc' },
     });
-    if (productionFallback?.subscriptionPlan) return productionFallback.subscriptionPlan;
+    if (productionFallback?.subscriptionPlan)
+      return productionFallback.subscriptionPlan;
 
     const anyEnvironmentFallback = await productModel.findFirst({
       where: baseWhere,

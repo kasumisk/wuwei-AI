@@ -162,30 +162,6 @@ export class DailyStatusService implements OnModuleInit {
     records: any[],
     goals: { calories: number; protein: number; fat: number; carbs: number },
   ) {
-    const row = await this.prisma.dailySummaries.findFirst({
-      where: { userId, date: new Date(date) },
-    });
-    if (row) {
-      return {
-        totalCalories: row.totalCalories,
-        calorieGoal: row.calorieGoal ?? goals.calories,
-        mealCount: row.mealCount,
-        remaining: Math.max(
-          0,
-          (row.calorieGoal ?? goals.calories) - row.totalCalories,
-        ),
-        totalProtein: Number(row.totalProtein) || 0,
-        totalFat: Number(row.totalFat) || 0,
-        totalCarbs: Number(row.totalCarbs) || 0,
-        avgQuality: Number(row.avgQuality) || 0,
-        avgSatiety: Number(row.avgSatiety) || 0,
-        nutritionScore: row.nutritionScore ?? 0,
-        proteinGoal: Number(row.proteinGoal) || goals.protein,
-        fatGoal: Number(row.fatGoal) || goals.fat,
-        carbsGoal: Number(row.carbsGoal) || goals.carbs,
-      };
-    }
-
     const totalCalories = records.reduce((sum, r) => sum + r.totalCalories, 0);
     const totalProtein = records.reduce(
       (sum, r) => sum + (Number(r.totalProtein) || 0),

@@ -239,12 +239,12 @@ deploy_web() {
     prepare_web_env "$env"
 
     if [ "$env" = "staging" ]; then
-        # staging: 使用 Preview 部署（不带 --prod）
-        echo -e "${CYAN}Staging 部署模式（Preview）...${NC}"
+        # staging: 部署到 staging 项目的 production 域名
+        echo -e "${CYAN}Staging 部署模式（Production of staging project）...${NC}"
         if [ "$is_new_project" = true ]; then
-            vercel --name eatcheck-web-staging --yes
+            vercel --name eatcheck-web-staging --prod --yes
         else
-            vercel --force
+            vercel --prod --force
         fi
     elif [ "$mode" = "preview" ]; then
         echo -e "${YELLOW}预览部署模式...${NC}"
@@ -334,11 +334,11 @@ deploy_admin() {
     cp "$ROOT_DIR/.vercelignore-admin" "$ROOT_DIR/.vercelignore"
 
     if [ "$env" = "staging" ]; then
-        echo -e "${CYAN}Staging 部署模式（Preview）...${NC}"
+        echo -e "${CYAN}Staging 部署模式（Production of staging project）...${NC}"
         if [ "$is_new_project" = true ]; then
-            vercel --name eatcheck-admin-staging --yes
+            vercel --name eatcheck-admin-staging --prod --yes
         else
-            vercel --force
+            vercel --prod --force
         fi
     elif [ "$mode" = "preview" ]; then
         echo -e "${YELLOW}预览部署模式...${NC}"

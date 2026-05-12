@@ -12,7 +12,10 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { QueueProducer } from '../../../core/queue/queue-producer.service';
-import { QUEUE_NAMES, QUEUE_DEFAULT_OPTIONS } from '../../../core/queue/queue.constants';
+import {
+  QUEUE_NAMES,
+  QUEUE_DEFAULT_OPTIONS,
+} from '../../../core/queue/queue.constants';
 import {
   FoodImageEnrichmentService,
   ImageEnrichmentJobPayload,
@@ -26,7 +29,12 @@ export interface ImageEnrichmentJobsResult {
     failed: number;
     delayed: number;
   };
-  active: Array<{ jobId: string; foodId: string; foodName: string; startedAt: number }>;
+  active: Array<{
+    jobId: string;
+    foodId: string;
+    foodName: string;
+    startedAt: number;
+  }>;
   recent: Array<{
     jobId: string;
     foodId: string;
@@ -109,7 +117,9 @@ export class FoodImageEnrichmentAdminService {
     const [totalFoods, missingImage, missingThumbnail] = await Promise.all([
       this.prisma.food.count({ where: { status: 'active' } }),
       this.prisma.food.count({ where: { status: 'active', imageUrl: null } }),
-      this.prisma.food.count({ where: { status: 'active', thumbnailUrl: null } }),
+      this.prisma.food.count({
+        where: { status: 'active', thumbnailUrl: null },
+      }),
     ]);
 
     const covered = totalFoods - missingImage;
@@ -118,19 +128,24 @@ export class FoodImageEnrichmentAdminService {
       missingImage,
       missingThumbnail,
       covered,
-      coveragePercent: totalFoods > 0 ? Math.round((covered / totalFoods) * 100) : 0,
+      coveragePercent:
+        totalFoods > 0 ? Math.round((covered / totalFoods) * 100) : 0,
     };
   }
 
   // ─── 清空队列 ─────────────────────────────────────────────────────────────
 
-  async clearQueue(): Promise<{ cleared: number; detail: Record<string, number> }> {
-    const [waitingCount, delayedCount, activeCount, failedCount] = await Promise.all([
-      this.imageQueue.getWaitingCount(),
-      this.imageQueue.getDelayedCount(),
-      this.imageQueue.getActiveCount(),
-      this.imageQueue.getFailedCount(),
-    ]);
+  async clearQueue(): Promise<{
+    cleared: number;
+    detail: Record<string, number>;
+  }> {
+    const [waitingCount, delayedCount, activeCount, failedCount] =
+      await Promise.all([
+        this.imageQueue.getWaitingCount(),
+        this.imageQueue.getDelayedCount(),
+        this.imageQueue.getActiveCount(),
+        this.imageQueue.getFailedCount(),
+      ]);
 
     // drain(true) 清除 waiting + delayed；clean 清除 failed/completed 历史
     await Promise.all([
@@ -145,7 +160,12 @@ export class FoodImageEnrichmentAdminService {
     );
     return {
       cleared: total,
-      detail: { waiting: waitingCount, delayed: delayedCount, active: activeCount, failed: failedCount },
+      detail: {
+        waiting: waitingCount,
+        delayed: delayedCount,
+        active: activeCount,
+        failed: failedCount,
+      },
     };
   }
 
@@ -178,24 +198,38 @@ export class FoodImageEnrichmentAdminService {
 
     const where: Record<string, any> = { status: 'active' };
     if (onlyMissing) where.imageUrl = null;
-    if (foodGroup && (!Array.isArray(foodGroup) || foodGroup.length > 0)) where.foodGroup = Array.isArray(foodGroup) ? { in: foodGroup } : foodGroup;
-    if (primarySource && (!Array.isArray(primarySource) || primarySource.length > 0)) where.primarySource = Array.isArray(primarySource) ? { in: primarySource } : primarySource;
+    if (foodGroup && (!Array.isArray(foodGroup) || foodGroup.length > 0))
+      where.foodGroup = Array.isArray(foodGroup)
+        ? { in: foodGroup }
+        : foodGroup;
+    if (
+      primarySource &&
+      (!Array.isArray(primarySource) || primarySource.length > 0)
+    )
+      where.primarySource = Array.isArray(primarySource)
+        ? { in: primarySource }
+        : primarySource;
     if (isVerified !== undefined) where.isVerified = isVerified;
-    if (dishType && (!Array.isArray(dishType) || dishType.length > 0)) where.foodForm = Array.isArray(dishType) ? { in: dishType } : dishType;
+    if (dishType && (!Array.isArray(dishType) || dishType.length > 0))
+      where.foodForm = Array.isArray(dishType) ? { in: dishType } : dishType;
     if (minDishPriority !== undefined || maxDishPriority !== undefined) {
       where.dishPriority = {};
-      if (minDishPriority !== undefined) where.dishPriority.gte = minDishPriority;
-      if (maxDishPriority !== undefined) where.dishPriority.lte = maxDishPriority;
+      if (minDishPriority !== undefined)
+        where.dishPriority.gte = minDishPriority;
+      if (maxDishPriority !== undefined)
+        where.dishPriority.lte = maxDishPriority;
     }
 
     // 排除候选图表中已有生成结果的食物（uploaded / review_needed / approved）
     // force=true 时跳过此过滤，允许重新生成
     if (!force) {
-      const alreadyGeneratedIds = await this.prisma.foodImageCandidate.findMany({
-        where: { status: { in: ['uploaded', 'review_needed', 'approved'] } },
-        select: { foodId: true },
-        distinct: ['foodId'],
-      });
+      const alreadyGeneratedIds = await this.prisma.foodImageCandidate.findMany(
+        {
+          where: { status: { in: ['uploaded', 'review_needed', 'approved'] } },
+          select: { foodId: true },
+          distinct: ['foodId'],
+        },
+      );
       const excludeIds = alreadyGeneratedIds.map((r) => r.foodId);
       if (excludeIds.length > 0) {
         where.id = { notIn: excludeIds };
@@ -205,26 +239,23 @@ export class FoodImageEnrichmentAdminService {
     const foods = await this.prisma.food.findMany({
       where,
       take: limit,
-        select: {
-          id: true,
-          code: true,
-          name: true,
-          category: true,
-          foodForm: true,
-          foodGroup: true,
-          ingredientList: true,
-          dishPriority: true,
-          foodTranslations: {
-            where: { locale: 'en-US' },
-            select: { name: true },
-            take: 1,
-          },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        category: true,
+        foodForm: true,
+        foodGroup: true,
+        ingredientList: true,
+        dishPriority: true,
+        foodTranslations: {
+          where: { locale: 'en-US' },
+          select: { name: true },
+          take: 1,
         },
-        orderBy: [
-          { dishPriority: 'desc' },
-          { commonalityScore: 'desc' },
-        ],
-      });
+      },
+      orderBy: [{ dishPriority: 'desc' }, { commonalityScore: 'desc' }],
+    });
 
     const jobs: ImageEnrichmentJobPayload[] = foods.map((f) => ({
       foodId: f.id,
@@ -296,7 +327,9 @@ export class FoodImageEnrichmentAdminService {
       category: food.category ?? undefined,
       foodForm: food.foodForm ?? undefined,
       foodGroup: food.foodGroup ?? undefined,
-      ingredientList: food.ingredientList?.length ? food.ingredientList : undefined,
+      ingredientList: food.ingredientList?.length
+        ? food.ingredientList
+        : undefined,
       force,
       premium: (food.dishPriority ?? 0) >= 80,
     });
@@ -307,7 +340,13 @@ export class FoodImageEnrichmentAdminService {
   async jobs(limit = 30): Promise<ImageEnrichmentJobsResult> {
     const [counts, activeJobs, recentDbJobs] = await Promise.all([
       // BullMQ 仍用于统计 waiting/active/delayed 等实时队列数
-      this.imageQueue.getJobCounts('waiting', 'active', 'completed', 'failed', 'delayed'),
+      this.imageQueue.getJobCounts(
+        'waiting',
+        'active',
+        'completed',
+        'failed',
+        'delayed',
+      ),
       this.imageQueue.getActive(),
       // 最近结果改从 DB 读取，不受 BullMQ 内存上限约束
       this.prisma.foodImageEnrichmentJob.findMany({
@@ -323,7 +362,9 @@ export class FoodImageEnrichmentAdminService {
           createdAt: true,
           candidates: {
             // 取候选表中任意有效状态的最优图（按分数降序）
-            where: { status: { in: ['uploaded', 'review_needed', 'approved'] } },
+            where: {
+              status: { in: ['uploaded', 'review_needed', 'approved'] },
+            },
             orderBy: { finalScore: 'desc' },
             take: 1,
             select: {
@@ -338,23 +379,25 @@ export class FoodImageEnrichmentAdminService {
       }),
     ]);
 
-    const recent: ImageEnrichmentJobsResult['recent'] = recentDbJobs.map((j) => {
-      const best = j.candidates[0];
-      return {
-        jobId: j.id,
-        foodId: j.foodId,
-        foodName: j.food?.name ?? '',
-        imageUrl: best?.storedUrl ?? null,
-        thumbnailUrl: best?.storedThumbnailUrl ?? null,
-        qualityScore: best?.qualityScore ?? -1,
-        candidateStatus: best?.status ?? null,
-        status: j.status as 'completed' | 'failed',
-        finishedAt: j.finishedAt
-          ? new Date(j.finishedAt).getTime()
-          : new Date((j as any).createdAt).getTime(),
-        error: j.errorMessage ?? undefined,
-      };
-    });
+    const recent: ImageEnrichmentJobsResult['recent'] = recentDbJobs.map(
+      (j) => {
+        const best = j.candidates[0];
+        return {
+          jobId: j.id,
+          foodId: j.foodId,
+          foodName: j.food?.name ?? '',
+          imageUrl: best?.storedUrl ?? null,
+          thumbnailUrl: best?.storedThumbnailUrl ?? null,
+          qualityScore: best?.qualityScore ?? -1,
+          candidateStatus: best?.status ?? null,
+          status: j.status as 'completed' | 'failed',
+          finishedAt: j.finishedAt
+            ? new Date(j.finishedAt).getTime()
+            : new Date((j as any).createdAt).getTime(),
+          error: j.errorMessage ?? undefined,
+        };
+      },
+    );
 
     return {
       counts: {
@@ -383,16 +426,32 @@ export class FoodImageEnrichmentAdminService {
     dishType?: string | string[];
     limit?: number;
   }): Promise<{ cleared: number }> {
-    const { foodGroup, primarySource, isVerified, dishType, limit = 10000 } = opts;
+    const {
+      foodGroup,
+      primarySource,
+      isVerified,
+      dishType,
+      limit = 10000,
+    } = opts;
 
     const where: Record<string, any> = {
       status: 'active',
       OR: [{ imageUrl: { not: null } }, { thumbnailUrl: { not: null } }],
     };
-    if (foodGroup && (!Array.isArray(foodGroup) || foodGroup.length > 0)) where.foodGroup = Array.isArray(foodGroup) ? { in: foodGroup } : foodGroup;
-    if (primarySource && (!Array.isArray(primarySource) || primarySource.length > 0)) where.primarySource = Array.isArray(primarySource) ? { in: primarySource } : primarySource;
+    if (foodGroup && (!Array.isArray(foodGroup) || foodGroup.length > 0))
+      where.foodGroup = Array.isArray(foodGroup)
+        ? { in: foodGroup }
+        : foodGroup;
+    if (
+      primarySource &&
+      (!Array.isArray(primarySource) || primarySource.length > 0)
+    )
+      where.primarySource = Array.isArray(primarySource)
+        ? { in: primarySource }
+        : primarySource;
     if (isVerified !== undefined) where.isVerified = isVerified;
-    if (dishType && (!Array.isArray(dishType) || dishType.length > 0)) where.foodForm = Array.isArray(dishType) ? { in: dishType } : dishType;
+    if (dishType && (!Array.isArray(dishType) || dishType.length > 0))
+      where.foodForm = Array.isArray(dishType) ? { in: dishType } : dishType;
 
     // 先查 id 列表（避免全表 updateMany 无 limit 控制）
     const ids = await this.prisma.food.findMany({
@@ -515,7 +574,9 @@ export class FoodImageEnrichmentAdminService {
         }),
       ]);
 
-      this.logger.log(`approve candidateId=${candidateId} foodId=${candidate.foodId}`);
+      this.logger.log(
+        `approve candidateId=${candidateId} foodId=${candidate.foodId}`,
+      );
       results.push({
         candidateId,
         foodId: candidate.foodId,
@@ -542,6 +603,9 @@ export class FoodImageEnrichmentAdminService {
     });
 
     this.logger.log(`reject ${candidateIds.length} 张候选图`);
-    return candidateIds.map((id) => ({ candidateId: id, status: 'rejected' as const }));
+    return candidateIds.map((id) => ({
+      candidateId: id,
+      status: 'rejected' as const,
+    }));
   }
 }

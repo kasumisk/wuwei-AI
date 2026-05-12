@@ -59,7 +59,11 @@ import { JwtAuthGuard } from '../../modules/auth/admin/jwt-auth.guard';
 import { RolesGuard } from '../../modules/rbac/admin/roles.guard';
 import { Roles } from '../../modules/rbac/admin/roles.decorator';
 import { ApiResponse } from '../../common/types/response.type';
-import { QUEUE_NAMES, QUEUE_DEFAULT_OPTIONS, QueueProducer } from '../../core/queue';
+import {
+  QUEUE_NAMES,
+  QUEUE_DEFAULT_OPTIONS,
+  QueueProducer,
+} from '../../core/queue';
 import {
   FoodEnrichmentService,
   ENRICHABLE_FIELDS,

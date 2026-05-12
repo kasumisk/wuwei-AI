@@ -26,7 +26,8 @@ export class AppVersionPackageService {
     if (!pkg) return pkg;
     return {
       ...pkg,
-      fileSize: typeof pkg.fileSize === 'bigint' ? Number(pkg.fileSize) : pkg.fileSize,
+      fileSize:
+        typeof pkg.fileSize === 'bigint' ? Number(pkg.fileSize) : pkg.fileSize,
     };
   }
 
@@ -67,17 +68,19 @@ export class AppVersionPackageService {
       );
     }
 
-    return this.serializePkg(await this.prisma.appVersionPackages.create({
-      data: {
-        versionId,
-        platform: dto.platform,
-        channel: dto.channel,
-        downloadUrl,
-        fileSize: dto.fileSize ?? 0,
-        checksum: dto.checksum,
-        enabled: dto.enabled ?? true,
-      },
-    }));
+    return this.serializePkg(
+      await this.prisma.appVersionPackages.create({
+        data: {
+          versionId,
+          platform: dto.platform,
+          channel: dto.channel,
+          downloadUrl,
+          fileSize: dto.fileSize ?? 0,
+          checksum: dto.checksum,
+          enabled: dto.enabled ?? true,
+        },
+      }),
+    );
   }
 
   /** 更新渠道包 */
@@ -88,10 +91,12 @@ export class AppVersionPackageService {
   ) {
     const pkg = await this.findOne(versionId, packageId);
 
-    return this.serializePkg(await this.prisma.appVersionPackages.update({
-      where: { id: pkg.id },
-      data: dto,
-    }));
+    return this.serializePkg(
+      await this.prisma.appVersionPackages.update({
+        where: { id: pkg.id },
+        data: dto,
+      }),
+    );
   }
 
   /** 删除渠道包 */
@@ -110,10 +115,12 @@ export class AppVersionPackageService {
   async toggleEnabled(versionId: string, packageId: string) {
     const pkg = await this.findOne(versionId, packageId);
 
-    return this.serializePkg(await this.prisma.appVersionPackages.update({
-      where: { id: pkg.id },
-      data: { enabled: !pkg.enabled },
-    }));
+    return this.serializePkg(
+      await this.prisma.appVersionPackages.update({
+        where: { id: pkg.id },
+        data: { enabled: !pkg.enabled },
+      }),
+    );
   }
 
   private async findOne(versionId: string, packageId: string) {

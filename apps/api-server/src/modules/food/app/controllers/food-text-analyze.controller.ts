@@ -12,10 +12,14 @@ import {
   Controller,
   Post,
   Body,
+  Param,
   UseGuards,
   HttpCode,
   HttpStatus,
   Logger,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { AppJwtAuthGuard } from '../../../auth/app/app-jwt-auth.guard';
@@ -27,6 +31,7 @@ import {
 } from '../../../../common/types/response.type';
 import { TextFoodAnalysisService } from '../services/text-food-analysis.service';
 import { AnalyzeTextDto } from '../dto/analyze-text.dto';
+import { RefineTextAnalysisDto } from '../dto/refine-text-analysis.dto';
 import { AiHeavyThrottle } from '../../../../core/throttle/throttle.constants';
 import { QuotaGateService } from '../../../subscription/app/services/quota-gate.service';
 import { QuotaService } from '../../../subscription/app/services/quota.service';
@@ -36,6 +41,8 @@ import { SubscriptionService } from '../../../subscription/app/services/subscrip
 import { GatedFeature } from '../../../subscription/subscription.types';
 import { I18nService } from '../../../../core/i18n';
 import { AnalyzeResultHelperService } from '../services/analyze-result-helper.service';
+import { PrismaService } from '../../../../core/prisma/prisma.service';
+import { AnalysisSessionService } from '../services/analysis-session.service';
 
 @ApiTags('App 食物分析')
 @Controller('app/food')
@@ -53,6 +60,8 @@ export class FoodTextAnalyzeController {
     private readonly subscriptionService: SubscriptionService,
     private readonly i18n: I18nService,
     private readonly helper: AnalyzeResultHelperService,
+    private readonly prisma: PrismaService,
+    private readonly analysisSessionService: AnalysisSessionService,
   ) {}
 
   @Post('analyze-text')
@@ -85,6 +94,18 @@ export class FoodTextAnalyzeController {
       );
       const cached = this.helper.getFromTextAnalysisCache(cacheKey);
       if (cached) {
+        const cachedAnalysisId = cached.analysisId?.trim();
+        const persistedRecord = cachedAnalysisId
+          ? await this.prisma.foodAnalysisRecords.findUnique({
+              where: { id: cachedAnalysisId },
+              select: { id: true },
+            })
+          : null;
+        if (!cachedAnalysisId || !persistedRecord) {
+          this.logger.warn(
+            `[AnalyzeText] stale cache ignored key=${cacheKey} analysisId=${cachedAnalysisId || 'missing'} ${meta}`,
+          );
+        } else {
         this.logger.log(
           `[AnalyzeText] cache hit key=${cacheKey} ${meta} ageMs=${Date.now() - startedAt}`,
         );
@@ -101,6 +122,7 @@ export class FoodTextAnalyzeController {
           trimmedResult,
           this.i18n.t('food.analyzeCompleteCached'),
         );
+        }
       }
 
       this.logger.log(`[AnalyzeText] cache miss key=${cacheKey} ${meta}`);
@@ -144,16 +166,16 @@ export class FoodTextAnalyzeController {
         (dto.locale as any) || undefined,
         dto.contextOverride?.localHour,
         dto.hints,
+        {
+          awaitPersistence: true,
+        },
       );
       this.logger.log(
         `[AnalyzeText] core analysis finished in ${Date.now() - analysisStartedAt}ms key=${cacheKey} foods=${fullResult.foods?.length || 0} ${meta}`,
       );
 
       const localizeStartedAt = Date.now();
-      await this.helper.localizeAnalysisResult(
-        fullResult,
-        locale,
-      );
+      await this.helper.localizeAnalysisResult(fullResult, locale);
       this.logger.log(
         `[AnalyzeText] localization finished in ${Date.now() - localizeStartedAt}ms key=${cacheKey} ${meta}`,
       );
@@ -174,7 +196,7 @@ export class FoodTextAnalyzeController {
       }
 
       this.logger.log(
-        `[AnalyzeText] success total=${Date.now() - startedAt}ms key=${cacheKey} hiddenFields=${hiddenFields.length} ${meta}`,
+        `[AnalyzeText] success total=${Date.now() - startedAt}ms key=${cacheKey} hiddenFields=${hiddenFields.length} analysisId=${fullResult.analysisId || 'missing'} ${meta}`,
       );
 
       quotaConsumed = false;
@@ -196,5 +218,125 @@ export class FoodTextAnalyzeController {
       );
       throw error;
     }
+  }
+
+  @Post('analysis/:analysisId/refine')
+  @HttpCode(HttpStatus.OK)
+  @AiHeavyThrottle(15, 60)
+  @ApiOperation({ summary: '文字分析结果修正并重算完整汇总' })
+  @ApiBody({ type: RefineTextAnalysisDto })
+  async refineTextAnalysis(
+    @Param('analysisId') analysisId: string,
+    @Body() dto: RefineTextAnalysisDto,
+    @CurrentAppUser() user: AppUserPayload,
+  ): Promise<ApiResponse> {
+    const locale = dto.locale || this.i18n.currentLocale();
+    const record = await this.prisma.foodAnalysisRecords.findUnique({
+      where: { id: analysisId },
+      select: {
+        id: true,
+        userId: true,
+        status: true,
+        mealType: true,
+      },
+    });
+
+    if (!record) {
+      throw new NotFoundException(this.i18n.t('food.analysisRecordNotFound'));
+    }
+    if (record.userId !== user.id) {
+      throw new ForbiddenException(
+        this.i18n.t('food.analysisNoPermissionEdit'),
+      );
+    }
+    if (record.status !== 'completed') {
+      throw new BadRequestException(this.i18n.t('food.analysisIncomplete'));
+    }
+
+    let derivedText: string;
+    try {
+      derivedText = this.analysisSessionService.buildDerivedText(
+        dto.foods,
+        dto.userNote,
+      );
+    } catch (e) {
+      throw new BadRequestException(
+        (e as Error).message || this.i18n.t('food.correctedListInvalid'),
+      );
+    }
+
+    const fullResult =
+      await this.textFoodAnalysisService.recomputeFromStructuredFoods(
+        dto.foods,
+        record.mealType ?? undefined,
+        user.id,
+        (locale as any) || undefined,
+        {
+          analysisId: record.id,
+          persistRecord: false,
+          emitCompletedEvent: false,
+        },
+      );
+
+    const matchedFoodCount = fullResult.foods.filter(
+      (food) => !!food.foodLibraryId,
+    ).length;
+
+    await this.prisma.foodAnalysisRecords.update({
+      where: { id: record.id },
+      data: {
+        rawText: derivedText,
+        mealType: record.mealType ?? null,
+        recognizedPayload: {
+          terms: dto.foods.map((food) => ({
+            name: food.name,
+            quantity: `${Math.round(food.estimatedWeightGrams)}克`,
+            fromLibrary: false,
+          })),
+          foods: fullResult.foods,
+        } as any,
+        normalizedPayload: {
+          foods: fullResult.foods,
+        } as any,
+        nutritionPayload: {
+          foods: fullResult.foods,
+          totals: fullResult.totals,
+          score: fullResult.score,
+          analysisState: fullResult.analysisState,
+          confidenceDiagnostics: fullResult.confidenceDiagnostics,
+        } as any,
+        decisionPayload: {
+          decision: fullResult.decision,
+          alternatives: fullResult.alternatives,
+          explanation: fullResult.explanation,
+          summary: fullResult.summary,
+          evidencePack: fullResult.evidencePack,
+          shouldEatAction: fullResult.shouldEatAction,
+          structuredDecision: fullResult.structuredDecision,
+          foodAnalysisPackage: fullResult.foodAnalysisPackage,
+          contextualAnalysis: fullResult.contextualAnalysis,
+          unifiedUserContext: fullResult.unifiedUserContext,
+          coachActionPlan: fullResult.coachActionPlan,
+        } as any,
+        confidenceScore: fullResult.score.confidenceScore,
+        qualityScore: fullResult.score.healthScore,
+        matchedFoodCount,
+        candidateFoodCount: fullResult.foods.length - matchedFoodCount,
+      },
+    });
+
+    await this.helper.localizeAnalysisResult(fullResult, locale);
+
+    const summary = await this.subscriptionService.getUserSummary(user.id);
+    const trimmedResult = this.resultEntitlementService.trimResult(
+      fullResult,
+      summary.tier,
+      summary.entitlements,
+    );
+
+    return ResponseWrapper.success(
+      trimmedResult,
+      this.i18n.t('food.refineSuccess'),
+    );
   }
 }

@@ -87,8 +87,20 @@ export class FoodImageEnrichmentService {
 
   // ─── 公开入口 ─────────────────────────────────────────────────────────────
 
-  async enrich(payload: ImageEnrichmentJobPayload): Promise<ImageEnrichmentResult> {
-    const { foodId, foodCode, foodName, foodNameEn, category, foodForm, foodGroup, ingredientList, force } = payload;
+  async enrich(
+    payload: ImageEnrichmentJobPayload,
+  ): Promise<ImageEnrichmentResult> {
+    const {
+      foodId,
+      foodCode,
+      foodName,
+      foodNameEn,
+      category,
+      foodForm,
+      foodGroup,
+      ingredientList,
+      force,
+    } = payload;
 
     // 1. 已有图片且不强制 → 跳过
     if (!force) {
@@ -109,7 +121,12 @@ export class FoodImageEnrichmentService {
     }
 
     const promptName = foodNameEn || foodName;
-    const prompt = this.buildPrompt(promptName, { category, foodForm, foodGroup, ingredientList });
+    const prompt = this.buildPrompt(promptName, {
+      category,
+      foodForm,
+      foodGroup,
+      ingredientList,
+    });
 
     // 2. 创建 DB 任务记录
     const dbJob = await this.prisma.foodImageEnrichmentJob.create({
@@ -123,7 +140,9 @@ export class FoodImageEnrichmentService {
       },
     });
 
-    this.logger.log(`[${foodId}] 开始生成 jobId=${dbJob.id} name="${promptName}"`);
+    this.logger.log(
+      `[${foodId}] 开始生成 jobId=${dbJob.id} name="${promptName}"`,
+    );
 
     try {
       // 3. ComfyUI 生成 + Vision 审核，最多重试 MAX_VISION_RETRIES 次
@@ -160,7 +179,8 @@ export class FoodImageEnrichmentService {
 
       // Vision 未通过：保存候选图（status=review_needed）后正常完成 job
       // 不抛错、不触发 BullMQ 重试，由人工在候选图列表中决定是否通过
-      const visionPassed = review!.match && review!.qualityScore >= MIN_QUALITY_SCORE;
+      const visionPassed =
+        review!.match && review!.qualityScore >= MIN_QUALITY_SCORE;
       if (!visionPassed) {
         this.logger.warn(
           `[${foodId}] Vision 审核未通过，保存待人工审核: ${lastRejectReason}`,
@@ -169,8 +189,14 @@ export class FoodImageEnrichmentService {
 
       // 4. Sharp 压缩
       const [webpFull, webpThumb] = await Promise.all([
-        sharp(rawBuffer!).resize(IMAGE_SIZE, IMAGE_SIZE, { fit: 'cover' }).webp({ quality: WEBP_QUALITY }).toBuffer(),
-        sharp(rawBuffer!).resize(THUMB_SIZE, THUMB_SIZE, { fit: 'cover' }).webp({ quality: THUMB_QUALITY }).toBuffer(),
+        sharp(rawBuffer!)
+          .resize(IMAGE_SIZE, IMAGE_SIZE, { fit: 'cover' })
+          .webp({ quality: WEBP_QUALITY })
+          .toBuffer(),
+        sharp(rawBuffer!)
+          .resize(THUMB_SIZE, THUMB_SIZE, { fit: 'cover' })
+          .webp({ quality: THUMB_QUALITY })
+          .toBuffer(),
       ]);
 
       // 5. 上传到候选目录（与正式 foods/ 目录隔离，可随时整体清理）
@@ -294,10 +320,20 @@ export class FoodImageEnrichmentService {
     return this.buildIngredientPrompt(foodName, category);
   }
 
-  private isBeverage(category?: string, foodGroup?: string, name?: string): boolean {
+  private isBeverage(
+    category?: string,
+    foodGroup?: string,
+    name?: string,
+  ): boolean {
     if (category === 'beverage') return true;
     if (foodGroup?.toLowerCase().includes('beverages')) return true;
-    if (name && /饮|茶|咖|奶|汁|水|酒|汤|juice|tea|coffee|milk|water|drink|soda/i.test(name)) return true;
+    if (
+      name &&
+      /饮|茶|咖|奶|汁|水|酒|汤|juice|tea|coffee|milk|water|drink|soda/i.test(
+        name,
+      )
+    )
+      return true;
     return false;
   }
 
@@ -315,7 +351,9 @@ export class FoodImageEnrichmentService {
     const hasChinese = /[\u4e00-\u9fff]/.test(foodName);
     const isChineseStyle =
       hasChinese ||
-      /rice|noodle|dumpling|congee|bun|tofu|wonton|fried rice|lo mein/i.test(foodName);
+      /rice|noodle|dumpling|congee|bun|tofu|wonton|fried rice|lo mein/i.test(
+        foodName,
+      );
 
     // 最多附加 2 个主食材，避免 prompt 过长分散注意力
     const ingredientHint =
@@ -352,9 +390,7 @@ export class FoodImageEnrichmentService {
    */
   private buildIngredientPrompt(foodName: string, category?: string): string {
     const isMeat =
-      category === 'meat' ||
-      category === 'seafood' ||
-      category === 'protein';
+      category === 'meat' || category === 'seafood' || category === 'protein';
 
     if (isMeat) {
       return (
@@ -396,7 +432,10 @@ export class FoodImageEnrichmentService {
 
   // ─── Vision 审核 ──────────────────────────────────────────────────────────
 
-  private async reviewWithVision(imageBuffer: Buffer, foodName: string): Promise<VisionReview> {
+  private async reviewWithVision(
+    imageBuffer: Buffer,
+    foodName: string,
+  ): Promise<VisionReview> {
     // ComfyUI 输出为 PNG；转 webp 后再 base64，减小传输体积
     const webpBuf = await sharp(imageBuffer).webp({ quality: 80 }).toBuffer();
     const dataUrl = `data:image/webp;base64,${webpBuf.toString('base64')}`;
@@ -417,12 +456,7 @@ export class FoodImageEnrichmentService {
       `{"match":true,"qualityScore":72,"issues":["slightly over-smooth surface"]}`;
 
     try {
-      const raw = await this.vision.complete(
-        systemPrompt,
-        dataUrl,
-        '',
-        '',
-      );
+      const raw = await this.vision.complete(systemPrompt, dataUrl, '', '');
       const json = raw.match(/\{[\s\S]*\}/)?.[0];
       if (!json) throw new Error('No JSON in vision response');
       const parsed = JSON.parse(json) as VisionReview;
@@ -432,7 +466,9 @@ export class FoodImageEnrichmentService {
         issues: Array.isArray(parsed.issues) ? parsed.issues : [],
       };
     } catch (err) {
-      this.logger.warn(`Vision 审核异常，标记 review_needed: ${(err as Error).message}`);
+      this.logger.warn(
+        `Vision 审核异常，标记 review_needed: ${(err as Error).message}`,
+      );
       return { match: true, qualityScore: 0, issues: ['vision review failed'] };
     }
   }

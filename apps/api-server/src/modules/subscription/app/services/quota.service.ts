@@ -15,7 +15,12 @@
  * - getOrCreateQuota 改为 upsert (ON CONFLICT DO NOTHING)，防止并发创建重复记录。
  * - QuotaGateService 应移除 check() 前置调用，直接走 increment() 的原子结果。
  */
-import { Injectable, Logger, ForbiddenException, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ForbiddenException,
+  OnModuleInit,
+} from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { UsageQuota } from '@prisma/client';
 import { Prisma } from '@prisma/client';

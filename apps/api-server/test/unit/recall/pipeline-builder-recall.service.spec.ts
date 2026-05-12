@@ -75,7 +75,9 @@ function createService(): PipelineBuilderService {
     mockSemanticRecall as any,
     mockRecallMerger as any,
     mockRealisticFilter as any,
-    { filterByRegion: jest.fn(async (_ctx: any, foods: any[]) => foods) } as any, // regionalCandidateFilter
+    {
+      filterByRegion: jest.fn(async (_ctx: any, foods: any[]) => foods),
+    } as any, // regionalCandidateFilter
     mockLifestyleAdapter as any,
     mockScoringConfig as any,
     mockCfRecall as any,
@@ -83,7 +85,10 @@ function createService(): PipelineBuilderService {
     mockStrategyAutoTuner as any,
     mockPreferenceProfile as any,
     mockScoringChain as any,
-    { getSeasonalScore: jest.fn().mockReturnValue(0.5), getPriceInfo: jest.fn().mockReturnValue(null) } as any, // seasonalityService
+    {
+      getSeasonalScore: jest.fn().mockReturnValue(0.5),
+      getPriceInfo: jest.fn().mockReturnValue(null),
+    } as any, // seasonalityService
   );
 }
 

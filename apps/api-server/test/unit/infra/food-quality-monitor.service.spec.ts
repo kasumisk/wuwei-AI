@@ -84,12 +84,16 @@ describe('FoodQualityMonitorService', () => {
     expect(sql).toContain('COUNT(ha.glycemic_index)::int AS glycemic_index');
     expect(sql).toContain('LEFT JOIN food_nutrition_details nd');
     expect(sql).toContain('LEFT JOIN food_health_assessments ha');
-    expect(result.find((item: any) => item.field === 'vitamin_a')).toMatchObject({
+    expect(
+      result.find((item: any) => item.field === 'vitamin_a'),
+    ).toMatchObject({
       filledCount: 9,
       totalCount: 10,
       percentage: 90,
     });
-    expect(result.find((item: any) => item.field === 'glycemic_index')).toMatchObject({
+    expect(
+      result.find((item: any) => item.field === 'glycemic_index'),
+    ).toMatchObject({
       filledCount: 7,
       totalCount: 10,
       percentage: 70,

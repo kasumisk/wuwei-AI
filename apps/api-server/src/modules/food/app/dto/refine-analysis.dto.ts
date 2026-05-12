@@ -26,9 +26,9 @@ import { ApiProperty } from '@nestjs/swagger';
  * - quantity 字段保留用于审计/展示，不再参与文本拼接。
  */
 export class RefinedFoodInputDto {
-  @ApiProperty({ description: '食物名称（必填）', maxLength: 80 })
+  @ApiProperty({ description: '食物名称（必填）', maxLength: 300 })
   @IsString()
-  @MaxLength(80)
+  @MaxLength(300)
   name!: string;
 
   @ApiProperty({

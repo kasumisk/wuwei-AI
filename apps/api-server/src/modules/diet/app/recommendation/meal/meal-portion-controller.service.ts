@@ -41,8 +41,8 @@ export class MealPortionController {
     removed: ScoredFood[];
     removedReasons: string[];
   } {
-    const range = MEAL_FOOD_COUNT_RANGE[mealType] ??
-      MEAL_FOOD_COUNT_RANGE['lunch'];
+    const range =
+      MEAL_FOOD_COUNT_RANGE[mealType] ?? MEAL_FOOD_COUNT_RANGE['lunch'];
 
     if (picks.length <= range.max) {
       return { kept: [...picks], removed: [], removedReasons: [] };
@@ -77,17 +77,11 @@ export class MealPortionController {
           `${item.food.food.name}：调味品/微量食物，留作营养参考`,
         );
       } else if (item.policy?.mode === PortionScalingMode.NOT_SCALABLE) {
-        removedReasons.push(
-          `${item.food.food.name}：套餐不适合缩减，已替换`,
-        );
+        removedReasons.push(`${item.food.food.name}：套餐不适合缩减，已替换`);
       } else if (!item.policy?.isCoreMealRole) {
-        removedReasons.push(
-          `${item.food.food.name}：非核心食物，优先精简`,
-        );
+        removedReasons.push(`${item.food.food.name}：非核心食物，优先精简`);
       } else {
-        removedReasons.push(
-          `${item.food.food.name}：超过本餐食物数量上限`,
-        );
+        removedReasons.push(`${item.food.food.name}：超过本餐食物数量上限`);
       }
     }
 
@@ -143,22 +137,19 @@ export class MealPortionController {
 
     // Step 2: 移除非核心且高热量食物
     const nonCoreByName = new Set(prunedNames);
-    const trimmed = current
-      .filter((p) => {
-        const policy = policies.get(p.food.id);
-        const cal = p.servingCalories || 0;
-        // 去除调味品 + 非核心且高热量（超过预算33%）
-        if (
-          policy?.mode === PortionScalingMode.CONDIMENT_OR_MICRO ||
-          (!policy?.isCoreMealRole &&
-            cal > budget * 0.33 &&
-            current.length > 3)
-        ) {
-          prunedNames.push(p.food.name);
-          return false;
-        }
-        return true;
-      });
+    const trimmed = current.filter((p) => {
+      const policy = policies.get(p.food.id);
+      const cal = p.servingCalories || 0;
+      // 去除调味品 + 非核心且高热量（超过预算33%）
+      if (
+        policy?.mode === PortionScalingMode.CONDIMENT_OR_MICRO ||
+        (!policy?.isCoreMealRole && cal > budget * 0.33 && current.length > 3)
+      ) {
+        prunedNames.push(p.food.name);
+        return false;
+      }
+      return true;
+    });
 
     if (trimmed.length < current.length) {
       current = trimmed;
@@ -247,24 +238,40 @@ export class MealPortionController {
 
   private isStapleRole(food: ScoredFood): boolean {
     const staples = new Set([
-      'grain', 'staple', 'bread', 'rice', 'noodle', 'pasta',
+      'grain',
+      'staple',
+      'bread',
+      'rice',
+      'noodle',
+      'pasta',
     ]);
-    return staples.has((food.food.category || '').toLowerCase()) ||
-      staples.has((food.food.subCategory || '').toLowerCase());
+    return (
+      staples.has((food.food.category || '').toLowerCase()) ||
+      staples.has((food.food.subCategory || '').toLowerCase())
+    );
   }
 
   private isProteinRole(food: ScoredFood): boolean {
     const proteins = new Set([
-      'meat', 'seafood', 'egg', 'dairy', 'legume', 'protein',
+      'meat',
+      'seafood',
+      'egg',
+      'dairy',
+      'legume',
+      'protein',
     ]);
-    return proteins.has((food.food.category || '').toLowerCase()) ||
-      proteins.has((food.food.subCategory || '').toLowerCase());
+    return (
+      proteins.has((food.food.category || '').toLowerCase()) ||
+      proteins.has((food.food.subCategory || '').toLowerCase())
+    );
   }
 
   private isVeggieRole(food: ScoredFood): boolean {
     const veggies = new Set(['vegetable', 'veggie', 'fruit']);
-    return veggies.has((food.food.category || '').toLowerCase()) ||
-      veggies.has((food.food.subCategory || '').toLowerCase());
+    return (
+      veggies.has((food.food.category || '').toLowerCase()) ||
+      veggies.has((food.food.subCategory || '').toLowerCase())
+    );
   }
 
   private checkRoleCoverage(picks: ScoredFood[]): {

@@ -164,10 +164,12 @@ export class AnalysisPipelineService {
     options?: {
       persistRecord?: boolean;
       emitCompletedEvent?: boolean;
+      analysisId?: string;
+      awaitPersistence?: boolean;
     },
   ): Promise<FoodAnalysisResultV61> {
     // Stage 1: Analyze
-    const analyze = await this.runAnalyze(input);
+    const analyze = await this.runAnalyze(input, options?.analysisId);
 
     // Stage 2: Decide — V5.0: delegated to DecisionStageService
     const decide = await this.decisionStageService.run({
@@ -247,11 +249,16 @@ export class AnalysisPipelineService {
 
     // 持久化（fire-and-forget，不阻塞响应）
     if (input.userId && options?.persistRecord != false) {
-      this.persistRecord(input, analyze.analysisId, result).catch((err) =>
-        this.logger.error(
-          `Analysis record persistence failed: ${(err as Error).message}`,
-        ),
-      );
+      const persistTask = this.persistRecord(input, analyze.analysisId, result);
+      if (options?.awaitPersistence) {
+        await persistTask;
+      } else {
+        persistTask.catch((err) =>
+          this.logger.error(
+            `Analysis record persistence failed: ${(err as Error).message}`,
+          ),
+        );
+      }
     }
 
     // 事件发射
@@ -278,8 +285,11 @@ export class AnalysisPipelineService {
    *
    * 纯分析，不包含任何决策逻辑。
    */
-  private async runAnalyze(input: PipelineInput): Promise<AnalyzeStageResult> {
-    const analysisId = crypto.randomUUID();
+  private async runAnalyze(
+    input: PipelineInput,
+    analysisIdOverride?: string,
+  ): Promise<AnalyzeStageResult> {
+    const analysisId = analysisIdOverride ?? crypto.randomUUID();
 
     // 营养汇总
     const totals =

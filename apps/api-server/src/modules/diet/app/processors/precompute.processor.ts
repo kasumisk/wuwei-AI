@@ -45,13 +45,11 @@ import {
  */
 const PRECOMPUTE_CHANNELS = ['unknown'] as const;
 
-function selectPrimaryScenarioResult(
-  scenarioResults: {
-    takeout: MealRecommendation;
-    convenience: MealRecommendation;
-    homeCook: MealRecommendation;
-  },
-): MealRecommendation {
+function selectPrimaryScenarioResult(scenarioResults: {
+  takeout: MealRecommendation;
+  convenience: MealRecommendation;
+  homeCook: MealRecommendation;
+}): MealRecommendation {
   return (
     scenarioResults.takeout ??
     scenarioResults.convenience ??

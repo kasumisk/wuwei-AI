@@ -103,7 +103,13 @@ export class PortionScalingPolicyResolver {
       };
     }
 
-    if (dt === 'soup' || dt === 'salad' || dt === 'main_dish' || dt === 'bread' || dt === 'pastry') {
+    if (
+      dt === 'soup' ||
+      dt === 'salad' ||
+      dt === 'main_dish' ||
+      dt === 'bread' ||
+      dt === 'pastry'
+    ) {
       return null; // 走后续 rules，不在此处决策
     }
 
@@ -115,8 +121,9 @@ export class PortionScalingPolicyResolver {
       return {
         mode: PortionScalingMode.CONDIMENT_OR_MICRO,
         minRatio: 0.2,
-        maxRatio: this.config.condimentMaxGrams /
-          (Math.max(food.standardServingG || 100, 1)),
+        maxRatio:
+          this.config.condimentMaxGrams /
+          Math.max(food.standardServingG || 100, 1),
         ratioStep: 0.25,
         inferredFrom: [`dishType=sauce`],
         isCoreMealRole: false,
@@ -146,29 +153,56 @@ export class PortionScalingPolicyResolver {
   // ═════════════════════════════════════════════════════════════════════════
 
   private FIXED_UNIT_NAMES = new Set([
-    'piece', 'pieces', '个', '颗', '只', '条', '片',
-    'cup', 'cups', '杯', '罐',
-    'bottle', 'bottles', '瓶', '盒', '桶',
-    'pack', 'package', '袋', '包',
-    'can', 'cans', '听',
-    'serving', '份',
-    'bar', '根',
-    'egg', 'eggs', '鸡蛋',
+    'piece',
+    'pieces',
+    '个',
+    '颗',
+    '只',
+    '条',
+    '片',
+    'cup',
+    'cups',
+    '杯',
+    '罐',
+    'bottle',
+    'bottles',
+    '瓶',
+    '盒',
+    '桶',
+    'pack',
+    'package',
+    '袋',
+    '包',
+    'can',
+    'cans',
+    '听',
+    'serving',
+    '份',
+    'bar',
+    '根',
+    'egg',
+    'eggs',
+    '鸡蛋',
   ]);
 
   /** ingredient 类食物中常见的"按个/只/颗"单位名 — 单证据即可判定 FIXED_UNIT */
   private STRONG_SINGLE_UNIT = new Set([
-    '个', '颗', '只', '条', '片', '根',
-    'piece', 'pieces', 'pieces',
+    '个',
+    '颗',
+    '只',
+    '条',
+    '片',
+    '根',
+    'piece',
+    'pieces',
+    'pieces',
   ]);
 
   private resolveFromCommonPortions(
     food: FoodLibrary,
   ): PortionScalingPolicy | null {
     const portions =
-      food.commonPortions ||
-      food.portionGuide?.commonPortions ||
-      [];
+      food.commonPortions || food.portionGuide?.commonPortions || [];
     if (!portions.length) return null;
 
     const fixedUnitHits: string[] = [];
@@ -225,9 +259,17 @@ export class PortionScalingPolicyResolver {
     // 单证据但明确是包装/瓶装/盒装 → fixed_unit
     if (
       fixedUnitHits.length === 1 &&
-      ['bottle', 'bottles', '瓶', '盒', 'pack', 'package', '袋', '罐', '桶'].some(
-        (u) => fixedUnitHits.includes(u),
-      )
+      [
+        'bottle',
+        'bottles',
+        '瓶',
+        '盒',
+        'pack',
+        'package',
+        '袋',
+        '罐',
+        '桶',
+      ].some((u) => fixedUnitHits.includes(u))
     ) {
       return {
         mode: PortionScalingMode.FIXED_UNIT,
@@ -247,7 +289,16 @@ export class PortionScalingPolicyResolver {
   }
 
   private inferUnitType(hits: string[]): PortionScalingPolicy['unitType'] {
-    const grainLike = new Set(['个', '颗', '只', '条', '片', '根', 'piece', 'pieces']);
+    const grainLike = new Set([
+      '个',
+      '颗',
+      '只',
+      '条',
+      '片',
+      '根',
+      'piece',
+      'pieces',
+    ]);
     const bottleLike = new Set(['瓶', '盒', '罐', '桶', 'bottle', 'bottles']);
     const packLike = new Set(['袋', '包', 'pack', 'package']);
     const cupLike = new Set(['杯', 'cup', 'cups']);
@@ -263,22 +314,30 @@ export class PortionScalingPolicyResolver {
   // 规则层3: category 判断
   // ═════════════════════════════════════════════════════════════════════════
 
-  private resolveFromCategory(
-    food: FoodLibrary,
-  ): PortionScalingPolicy | null {
+  private resolveFromCategory(food: FoodLibrary): PortionScalingPolicy | null {
     const cat = (food.category || '').toLowerCase();
     const sub = (food.subCategory || '').toLowerCase();
 
     // 调味品
-    if (cat === 'condiment' || cat === 'sauce' || cat === 'oil' ||
-        sub === 'oil' || sub === 'sauce' || sub === 'dressing') {
+    if (
+      cat === 'condiment' ||
+      cat === 'sauce' ||
+      cat === 'oil' ||
+      sub === 'oil' ||
+      sub === 'sauce' ||
+      sub === 'dressing'
+    ) {
       return {
         mode: PortionScalingMode.CONDIMENT_OR_MICRO,
         minRatio: 0.2,
-        maxRatio: this.config.condimentMaxGrams /
-          (Math.max(food.standardServingG || 100, 1)),
+        maxRatio:
+          this.config.condimentMaxGrams /
+          Math.max(food.standardServingG || 100, 1),
         ratioStep: 0.25,
-        inferredFrom: [`category=${cat}`, ...(sub ? [`subCategory=${sub}`] : [])],
+        inferredFrom: [
+          `category=${cat}`,
+          ...(sub ? [`subCategory=${sub}`] : []),
+        ],
         isCoreMealRole: false,
         unitType: 'gram',
         isPrimaryRecommendation: false,
@@ -320,9 +379,7 @@ export class PortionScalingPolicyResolver {
   // 规则层4: foodForm 组合判断
   // ═════════════════════════════════════════════════════════════════════════
 
-  private resolveFromFoodForm(
-    food: FoodLibrary,
-  ): PortionScalingPolicy | null {
+  private resolveFromFoodForm(food: FoodLibrary): PortionScalingPolicy | null {
     const form = (food.foodForm || '').toLowerCase();
     if (!form) return null;
 
@@ -367,19 +424,37 @@ export class PortionScalingPolicyResolver {
   // ═════════════════════════════════════════════════════════════════════════
 
   private CONDIMENT_TAGS = new Set([
-    'condiment', 'sauce', 'dressing', 'oil',
-    'seasoning', 'spice', '调味料', '调味品',
-    '酱', '油',
+    'condiment',
+    'sauce',
+    'dressing',
+    'oil',
+    'seasoning',
+    'spice',
+    '调味料',
+    '调味品',
+    '酱',
+    '油',
   ]);
 
   private COMBO_TAGS = new Set([
-    'combo', 'set_meal', 'meal_set', '套餐',
-    'bento', 'lunch_box', '便当',
+    'combo',
+    'set_meal',
+    'meal_set',
+    '套餐',
+    'bento',
+    'lunch_box',
+    '便当',
   ]);
 
   private PACKAGED_TAGS = new Set([
-    'packaged', 'pack', 'bottled', 'canned', '包装',
-    '袋装', '瓶装', '罐装',
+    'packaged',
+    'pack',
+    'bottled',
+    'canned',
+    '包装',
+    '袋装',
+    '瓶装',
+    '罐装',
   ]);
 
   private resolveFromTags(food: FoodLibrary): PortionScalingPolicy | null {
@@ -404,8 +479,9 @@ export class PortionScalingPolicyResolver {
       return {
         mode: PortionScalingMode.CONDIMENT_OR_MICRO,
         minRatio: 0.2,
-        maxRatio: this.config.condimentMaxGrams /
-          (Math.max(food.standardServingG || 100, 1)),
+        maxRatio:
+          this.config.condimentMaxGrams /
+          Math.max(food.standardServingG || 100, 1),
         ratioStep: 0.25,
         inferredFrom: ['tags:condiment/sauce'],
         isCoreMealRole: false,
@@ -436,21 +512,19 @@ export class PortionScalingPolicyResolver {
   // ═════════════════════════════════════════════════════════════════════════
 
   private EXTERNAL_CHANNELS = new Set([
-    'restaurant', 'delivery', 'takeout', 'fast_food', 'convenience',
+    'restaurant',
+    'delivery',
+    'takeout',
+    'fast_food',
+    'convenience',
   ]);
 
-  private resolveFromChannels(
-    food: FoodLibrary,
-  ): PortionScalingPolicy | null {
+  private resolveFromChannels(food: FoodLibrary): PortionScalingPolicy | null {
     const channels =
-      food.availableChannels ||
-      food.taxonomy?.availableChannels ||
-      [];
+      food.availableChannels || food.taxonomy?.availableChannels || [];
     if (!channels.length) return null;
 
-    const externalOnly = channels.every((ch) =>
-      this.EXTERNAL_CHANNELS.has(ch),
-    );
+    const externalOnly = channels.every((ch) => this.EXTERNAL_CHANNELS.has(ch));
     if (externalOnly && channels.length > 0 && channels.length <= 3) {
       // 只在餐厅/外卖渠道可获取 → 更偏向固定份
       return this.buildLimitedScalablePolicy(food, [
@@ -470,9 +544,7 @@ export class PortionScalingPolicyResolver {
     inferredFrom: string[],
   ): PortionScalingPolicy {
     const stdG = Math.max(
-      food.standardServingG ||
-        food.portionGuide?.standardServingG ||
-        100,
+      food.standardServingG || food.portionGuide?.standardServingG || 100,
       1,
     );
 
@@ -509,8 +581,15 @@ export class PortionScalingPolicyResolver {
    */
   private isStapleCategory(food: FoodLibrary): boolean {
     const core = new Set([
-      'grain', 'meat', 'seafood', 'egg', 'vegetable',
-      'fruit', 'dairy', 'legume', 'staple',
+      'grain',
+      'meat',
+      'seafood',
+      'egg',
+      'vegetable',
+      'fruit',
+      'dairy',
+      'legume',
+      'staple',
     ]);
     return core.has((food.category || '').toLowerCase());
   }

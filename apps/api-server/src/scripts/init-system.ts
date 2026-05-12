@@ -394,9 +394,7 @@ async function initSystem() {
       if (admin.role !== (AdminRole.SUPER_ADMIN as unknown as 'super_admin')) {
         updates.role = AdminRole.SUPER_ADMIN as unknown as 'super_admin';
       }
-      if (
-        admin.status !== (AdminUserStatus.ACTIVE as unknown as 'active')
-      ) {
+      if (admin.status !== (AdminUserStatus.ACTIVE as unknown as 'active')) {
         updates.status = AdminUserStatus.ACTIVE as unknown as 'active';
       }
       // 仅当显式传入密码时才覆盖；随机密码不能静默覆盖已有账号
@@ -452,7 +450,9 @@ async function initSystem() {
         admin.createdAt &&
         Date.now() - new Date(admin.createdAt).getTime() < 60_000;
       if (isFreshOrJustReset) {
-        console.log(`   密码:   ${adminPassword}   ← ⚠️ 仅本次显示一次,请立即保存`);
+        console.log(
+          `   密码:   ${adminPassword}   ← ⚠️ 仅本次显示一次,请立即保存`,
+        );
       } else {
         console.log(`   密码:   <未变更，保留已有密码>`);
       }

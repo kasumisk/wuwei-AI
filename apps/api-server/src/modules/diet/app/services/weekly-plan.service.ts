@@ -196,7 +196,9 @@ export class WeeklyPlanService {
       for (const [id, names] of dayMap) {
         const before = foodIdFrequency.get(id) ?? 0;
         if (before >= FREQUENCY_CAP) {
-          dupItems.push(`${id.slice(0, 8)}[${[...names].join('|')}](${before + 1})`);
+          dupItems.push(
+            `${id.slice(0, 8)}[${[...names].join('|')}](${before + 1})`,
+          );
         }
         foodIdFrequency.set(id, before + 1);
         if (!foodIdToNames.has(id)) foodIdToNames.set(id, new Set());

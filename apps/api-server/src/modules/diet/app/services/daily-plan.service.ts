@@ -1217,10 +1217,12 @@ export class DailyPlanService {
   ): Record<string, MealFoodExplanation> | undefined {
     if (!explanations) return explanations;
 
-    const hasLocaleMismatch = Object.values(explanations).some((explanation) => {
-      const storedLocale = explanation.locale || explanation.v2?.locale;
-      return storedLocale && storedLocale !== locale;
-    });
+    const hasLocaleMismatch = Object.values(explanations).some(
+      (explanation) => {
+        const storedLocale = explanation.locale || explanation.v2?.locale;
+        return storedLocale && storedLocale !== locale;
+      },
+    );
     if (hasLocaleMismatch) {
       return undefined;
     }

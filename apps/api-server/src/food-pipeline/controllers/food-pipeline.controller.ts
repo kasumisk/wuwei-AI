@@ -25,7 +25,11 @@ import { FoodRuleEngineService } from '../services/processing/food-rule-engine.s
 import { FoodQualityMonitorService } from '../services/food-quality-monitor.service';
 import { FoodEnrichmentService } from '../services/food-enrichment.service';
 import { USDA_IMPORT_PRESETS } from '../services/fetchers/usda-fetcher.service';
-import { QUEUE_DEFAULT_OPTIONS, QUEUE_NAMES, QueueProducer } from '../../core/queue';
+import {
+  QUEUE_DEFAULT_OPTIONS,
+  QUEUE_NAMES,
+  QueueProducer,
+} from '../../core/queue';
 import { UsdaImportJobData } from '../food-usda-import.processor';
 
 @ApiTags('管理后台 - 食物数据管道')

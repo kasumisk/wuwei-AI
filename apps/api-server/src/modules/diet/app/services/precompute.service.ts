@@ -278,7 +278,10 @@ export class PrecomputeService implements OnModuleInit {
       },
     }));
 
-    await this.queueProducer.enqueueBulk(QUEUE_NAMES.RECOMMENDATION_PRECOMPUTE, jobs);
+    await this.queueProducer.enqueueBulk(
+      QUEUE_NAMES.RECOMMENDATION_PRECOMPUTE,
+      jobs,
+    );
     this.logger.log(
       `预计算任务已入队: ${activeUserIds.length} 个用户, 日期=${tomorrowStr}`,
     );
@@ -466,7 +469,9 @@ export class PrecomputeService implements OnModuleInit {
     let offset = 0;
 
     while (true) {
-      const page = await this.prisma.$queryRawUnsafe<Array<{ user_id: string }>>(
+      const page = await this.prisma.$queryRawUnsafe<
+        Array<{ user_id: string }>
+      >(
         `SELECT DISTINCT fr.user_id
          FROM food_records fr
          WHERE fr.created_at > $1

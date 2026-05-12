@@ -301,8 +301,7 @@ export class FoodPlanController {
         subCategory: s.food.subCategory,
         mainIngredient: s.food.mainIngredient,
         servingDesc:
-          s.food.standardServingDesc ||
-          `${s.food.standardServingG}g`,
+          s.food.standardServingDesc || `${s.food.standardServingG}g`,
         servingCalories: s.servingCalories,
         servingProtein: s.servingProtein,
         servingFat: s.servingFat,

@@ -33,16 +33,17 @@ async function main() {
 
   const t0 = Date.now();
   const allFoods = await pool.getVerifiedFoods();
-  logger.log(`Loaded ${allFoods.length} verified foods in ${Date.now() - t0}ms`);
+  logger.log(
+    `Loaded ${allFoods.length} verified foods in ${Date.now() - t0}ms`,
+  );
 
   const cells: Cell[] = [];
   for (const u of users) {
     const start = Date.now();
     try {
-      const restrictions =
-        ((u.profile.dietaryRestrictions as string[]) || []).map((s) =>
-          s.toLowerCase(),
-        );
+      const restrictions = (
+        (u.profile.dietaryRestrictions as string[]) || []
+      ).map((s) => s.toLowerCase());
       const allergens = ((u.profile.allergens as string[]) || []).map((s) =>
         s.toLowerCase(),
       );
@@ -53,7 +54,8 @@ async function main() {
           : typeof f.aliases === 'string'
             ? [f.aliases]
             : [];
-        const hay = `${f.name} ${aliasArr.join(' ')} ${f.mainIngredient || ''} ${(f.ingredientList || []).join(' ')}`.toLowerCase();
+        const hay =
+          `${f.name} ${aliasArr.join(' ')} ${f.mainIngredient || ''} ${(f.ingredientList || []).join(' ')}`.toLowerCase();
         for (const a of allergens) if (a && hay.includes(a)) return false;
         for (const r of restrictions) if (r && hay.includes(r)) return false;
         return true;

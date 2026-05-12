@@ -169,7 +169,9 @@ function countDuplicates(items: string[]): string[] {
   return Array.from(duplicates).sort();
 }
 
-function fingerprintRecommendation(rec: MealRecommendation): RecommendationFingerprint {
+function fingerprintRecommendation(
+  rec: MealRecommendation,
+): RecommendationFingerprint {
   const foods = (rec.foods || []).map((item) => item.food.name);
   const explanation = [
     rec.displayText || '',
@@ -194,9 +196,9 @@ function fingerprintRecommendation(rec: MealRecommendation): RecommendationFinge
 function fingerprintPlan(plan: any): PlanFingerprint {
   const mealKeys = ['morningPlan', 'lunchPlan', 'dinnerPlan', 'snackPlan'];
   const sections = mealKeys.map((key) => {
-    const items = ((plan?.[key]?.foodItems || []) as Array<{ name: string }>).map(
-      (item) => item.name,
-    );
+    const items = (
+      (plan?.[key]?.foodItems || []) as Array<{ name: string }>
+    ).map((item) => item.name);
     return `${key}:${items.join(' > ')}`;
   });
   const allItems = mealKeys.flatMap((key) =>
@@ -222,7 +224,10 @@ function buildStabilitySummary(
   const explanationCount = new Map<string, number>();
 
   for (const fp of fingerprints) {
-    signatureCount.set(fp.signature, (signatureCount.get(fp.signature) || 0) + 1);
+    signatureCount.set(
+      fp.signature,
+      (signatureCount.get(fp.signature) || 0) + 1,
+    );
     explanationCount.set(
       fp.explanation,
       (explanationCount.get(fp.explanation) || 0) + 1,
@@ -241,10 +246,17 @@ function buildStabilitySummary(
     }
   }
 
-  const duplicateEvents = fingerprints.filter((fp) => fp.duplicates.length > 0).length;
-  const abnormalEvents = fingerprints.filter((fp) => fp.abnormalFoods.length > 0).length;
+  const duplicateEvents = fingerprints.filter(
+    (fp) => fp.duplicates.length > 0,
+  ).length;
+  const abnormalEvents = fingerprints.filter(
+    (fp) => fp.abnormalFoods.length > 0,
+  ).length;
   const topSignatureCount = topSignatures[0]?.count || 0;
-  const topExplanationCount = Math.max(0, ...Array.from(explanationCount.values()));
+  const topExplanationCount = Math.max(
+    0,
+    ...Array.from(explanationCount.values()),
+  );
 
   return {
     total,
@@ -277,7 +289,10 @@ function buildPlanStabilitySummary(
   return buildStabilitySummary(latencies, mapped, errors);
 }
 
-function macroTarget(user: E2EUser, mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack') {
+function macroTarget(
+  user: E2EUser,
+  mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack',
+) {
   return macroSplit(user.dailyCal, mealType, user.goal, user.weightKg);
 }
 
@@ -434,13 +449,19 @@ async function runConcurrentLoad(
     const goal = goals[index % goals.length];
     const regionCode = regions[index % regions.length];
     const timezone = timezones[index % timezones.length];
-    const { meal, daily } = macroSplit(user.dailyCal, mealType, goal, user.weightKg);
+    const { meal, daily } = macroSplit(
+      user.dailyCal,
+      mealType,
+      goal,
+      user.weightKg,
+    );
     const profileOverride = {
       regionCode,
       timezone,
       locale: user.locale,
       budgetPerMeal: index % 3 === 0 ? 0 : index % 3 === 1 ? 25 : 999,
-      budgetLevel: index % 3 === 0 ? 'low' : index % 3 === 1 ? 'medium' : 'high',
+      budgetLevel:
+        index % 3 === 0 ? 'low' : index % 3 === 1 ? 'medium' : 'high',
     };
     const runScenario = index % 2 === 1;
 
@@ -494,8 +515,12 @@ async function runConcurrentLoad(
   await Promise.all(tasks.map((task) => task()));
 
   const signatures = new Set(fingerprints.map((fp) => fp.signature));
-  const duplicateEvents = fingerprints.filter((fp) => fp.duplicates.length > 0).length;
-  const abnormalEvents = fingerprints.filter((fp) => fp.abnormalFoods.length > 0).length;
+  const duplicateEvents = fingerprints.filter(
+    (fp) => fp.duplicates.length > 0,
+  ).length;
+  const abnormalEvents = fingerprints.filter(
+    (fp) => fp.abnormalFoods.length > 0,
+  ).length;
 
   return {
     concurrency,
@@ -506,10 +531,16 @@ async function runConcurrentLoad(
     p95LatencyMs: round(percentile(latencies, 95), 2),
     p99LatencyMs: round(percentile(latencies, 99), 2),
     fallbackRate: round(ratio(fallbackCount, Math.max(1, fingerprints.length))),
-    duplicateHitRate: round(ratio(duplicateEvents, Math.max(1, fingerprints.length))),
-    abnormalHitRate: round(ratio(abnormalEvents, Math.max(1, fingerprints.length))),
+    duplicateHitRate: round(
+      ratio(duplicateEvents, Math.max(1, fingerprints.length)),
+    ),
+    abnormalHitRate: round(
+      ratio(abnormalEvents, Math.max(1, fingerprints.length)),
+    ),
     scenarioErrorRate: round(ratio(scenarioErrors, Math.ceil(concurrency / 2))),
-    crossUserDriftRate: round(ratio(signatures.size, Math.max(1, fingerprints.length))),
+    crossUserDriftRate: round(
+      ratio(signatures.size, Math.max(1, fingerprints.length)),
+    ),
   };
 }
 
@@ -519,7 +550,12 @@ async function getRecommendationSignature(
   goalType: GoalType,
   mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack',
 ): Promise<string> {
-  const { meal, daily } = macroSplit(user.dailyCal, mealType, goalType, user.weightKg);
+  const { meal, daily } = macroSplit(
+    user.dailyCal,
+    mealType,
+    goalType,
+    user.weightKg,
+  );
   const rec = await engine.recommendMeal(
     user.id,
     mealType,
@@ -543,7 +579,9 @@ async function runWeightLearnerValidation(
   user: E2EUser,
 ): Promise<LearningSummary['weightLearner']> {
   const mealType = 'lunch';
-  const goalType = (user.goal in SCORE_WEIGHTS ? user.goal : 'health') as GoalType;
+  const goalType = (
+    user.goal in SCORE_WEIGHTS ? user.goal : 'health'
+  ) as GoalType;
   const base = SCORE_WEIGHTS[goalType];
   const beforeWeights = await weightLearner.getUserMealWeights(
     user.id,
@@ -564,17 +602,25 @@ async function runWeightLearnerValidation(
       getRecommendationSignature(engine, user, goalType, mealType),
     ),
   );
-  const beforeConcentration = Math.max(
-    ...Array.from(
-      beforeBatch.reduce((map, sig) => {
-        map.set(sig, (map.get(sig) || 0) + 1);
-        return map;
-      }, new Map<string, number>()).values(),
-    ),
-  ) / Math.max(1, beforeBatch.length);
+  const beforeConcentration =
+    Math.max(
+      ...Array.from(
+        beforeBatch
+          .reduce((map, sig) => {
+            map.set(sig, (map.get(sig) || 0) + 1);
+            return map;
+          }, new Map<string, number>())
+          .values(),
+      ),
+    ) / Math.max(1, beforeBatch.length);
 
   for (let i = 0; i < 12; i++) {
-    const { meal, daily } = macroSplit(user.dailyCal, mealType, goalType, user.weightKg);
+    const { meal, daily } = macroSplit(
+      user.dailyCal,
+      mealType,
+      goalType,
+      user.weightKg,
+    );
     const rec = await engine.recommendMeal(
       user.id,
       mealType,
@@ -623,23 +669,31 @@ async function runWeightLearnerValidation(
       getRecommendationSignature(engine, user, goalType, mealType),
     ),
   );
-  const afterConcentration = Math.max(
-    ...Array.from(
-      afterBatch.reduce((map, sig) => {
-        map.set(sig, (map.get(sig) || 0) + 1);
-        return map;
-      }, new Map<string, number>()).values(),
-    ),
-  ) / Math.max(1, afterBatch.length);
+  const afterConcentration =
+    Math.max(
+      ...Array.from(
+        afterBatch
+          .reduce((map, sig) => {
+            map.set(sig, (map.get(sig) || 0) + 1);
+            return map;
+          }, new Map<string, number>())
+          .values(),
+      ),
+    ) / Math.max(1, afterBatch.length);
 
-  const deltaL1 = afterWeights && beforeWeights
-    ? afterWeights.reduce(
-        (sum, weight, index) => sum + Math.abs(weight - (beforeWeights[index] || 0)),
-        0,
-      )
-    : afterWeights
-      ? afterWeights.reduce((sum, weight, index) => sum + Math.abs(weight - base[index]), 0)
-      : 0;
+  const deltaL1 =
+    afterWeights && beforeWeights
+      ? afterWeights.reduce(
+          (sum, weight, index) =>
+            sum + Math.abs(weight - (beforeWeights[index] || 0)),
+          0,
+        )
+      : afterWeights
+        ? afterWeights.reduce(
+            (sum, weight, index) => sum + Math.abs(weight - base[index]),
+            0,
+          )
+        : 0;
 
   return {
     beforeWeights,
@@ -660,7 +714,9 @@ async function runFactorLearnerValidation(
   feedbackService: RecommendationFeedbackService,
   user: E2EUser,
 ): Promise<LearningSummary['factorLearner']> {
-  const goalType = (user.goal in SCORE_WEIGHTS ? user.goal : 'health') as GoalType;
+  const goalType = (
+    user.goal in SCORE_WEIGHTS ? user.goal : 'health'
+  ) as GoalType;
   const passiveFeedbackCountBefore = await factorLearner.getFeedbackCount(
     user.id,
     goalType,
@@ -714,12 +770,20 @@ async function runFactorLearnerValidation(
     await factorLearner.updateFactorWeights(user.id, goalType, attributions);
   }
 
-  const redisBacked = await factorLearner.getUserFactorAdjustments(user.id, goalType);
-  const originalHGetAll = (factorLearner as any).redis.hGetAll.bind((factorLearner as any).redis);
+  const redisBacked = await factorLearner.getUserFactorAdjustments(
+    user.id,
+    goalType,
+  );
+  const originalHGetAll = (factorLearner as any).redis.hGetAll.bind(
+    (factorLearner as any).redis,
+  );
   (factorLearner as any).redis.hGetAll = async () => {
     throw new Error('forced redis read failure');
   };
-  const fallbackRead = await factorLearner.getUserFactorAdjustments(user.id, goalType);
+  const fallbackRead = await factorLearner.getUserFactorAdjustments(
+    user.id,
+    goalType,
+  );
   (factorLearner as any).redis.hGetAll = originalHGetAll;
 
   const manualAdjustments = Object.fromEntries(
@@ -838,9 +902,9 @@ async function runLongRunningLoad(
       const mealType = (['breakfast', 'lunch', 'dinner', 'snack'] as const)[
         requestIndex % 4
       ];
-      const goalType = (['fat_loss', 'muscle_gain', 'health', 'habit'] as GoalType[])[
-        requestIndex % 4
-      ];
+      const goalType = (
+        ['fat_loss', 'muscle_gain', 'health', 'habit'] as GoalType[]
+      )[requestIndex % 4];
       const { meal, daily } = macroSplit(
         user.dailyCal,
         mealType,
@@ -884,7 +948,10 @@ async function runLongRunningLoad(
       map.set(item, (map.get(item) || 0) + 1);
       return map;
     }, new Map<string, number>());
-    return ratio(Math.max(0, ...Array.from(counts.values())), Math.max(1, items.length));
+    return ratio(
+      Math.max(0, ...Array.from(counts.values())),
+      Math.max(1, items.length),
+    );
   };
 
   return {
@@ -911,108 +978,120 @@ async function runExtremeCases(
   user: E2EUser,
 ): Promise<ExtremeCaseResult[]> {
   const baseMealType = 'lunch';
-  const goalType = (user.goal in SCORE_WEIGHTS ? user.goal : 'health') as GoalType;
-  const { meal, daily } = macroSplit(user.dailyCal, baseMealType, goalType, user.weightKg);
+  const goalType = (
+    user.goal in SCORE_WEIGHTS ? user.goal : 'health'
+  ) as GoalType;
+  const { meal, daily } = macroSplit(
+    user.dailyCal,
+    baseMealType,
+    goalType,
+    user.weightKg,
+  );
 
-  const cases: Array<{ name: string; run: () => Promise<MealRecommendation> }> = [
-    {
-      name: 'empty-profile',
-      run: () =>
-        engine.recommendMeal(
-          user.id,
-          baseMealType,
-          goalType,
-          { calories: 0, protein: 0 },
-          meal,
-          daily,
-          {},
-        ),
-    },
-    {
-      name: 'budget-zero',
-      run: () =>
-        engine.recommendMeal(
-          user.id,
-          baseMealType,
-          goalType,
-          { calories: 0, protein: 0 },
-          meal,
-          daily,
-          { budgetPerMeal: 0, budgetLevel: 'low', regionCode: user.region },
-        ),
-    },
-    {
-      name: 'budget-huge',
-      run: () =>
-        engine.recommendMeal(
-          user.id,
-          baseMealType,
-          goalType,
-          { calories: 0, protein: 0 },
-          meal,
-          daily,
-          { budgetPerMeal: 999999, budgetLevel: 'high', regionCode: user.region },
-        ),
-    },
-    {
-      name: 'region-missing',
-      run: () =>
-        engine.recommendMeal(
-          user.id,
-          baseMealType,
-          goalType,
-          { calories: 0, protein: 0 },
-          meal,
-          daily,
-          { timezone: user.profile.timezone ?? 'UTC' },
-        ),
-    },
-    {
-      name: 'timezone-invalid',
-      run: () =>
-        engine.recommendMeal(
-          user.id,
-          baseMealType,
-          goalType,
-          { calories: 0, protein: 0 },
-          meal,
-          daily,
-          {
-            regionCode: user.region,
-            timezone: 'Mars/Phobos',
-          },
-        ),
-    },
-    {
-      name: 'channel-invalid',
-      run: async () => {
-        const profile = await profileAggregator.aggregateForRecommendation(
-          user.id,
-          baseMealType,
-        );
-        const allFoods = await engine.getAllFoods();
-        return engine.recommendMealFromPool({
-          allFoods,
-          mealType: baseMealType,
-          goalType,
-          consumed: { calories: 0, protein: 0 },
-          target: meal,
-          dailyTarget: daily,
-          excludeNames: [],
-          userId: user.id,
-          userProfile: {
-            ...profile.enrichedProfile,
-            regionCode: user.region,
-            timezone: user.profile.timezone ?? 'UTC',
-          },
-          feedbackStats: profile.feedbackStats,
-          preferenceProfile: profile.preferenceProfile,
-          regionalBoostMap: profile.regionalBoostMap,
-          channel: 'illegal-channel' as any,
-        });
+  const cases: Array<{ name: string; run: () => Promise<MealRecommendation> }> =
+    [
+      {
+        name: 'empty-profile',
+        run: () =>
+          engine.recommendMeal(
+            user.id,
+            baseMealType,
+            goalType,
+            { calories: 0, protein: 0 },
+            meal,
+            daily,
+            {},
+          ),
       },
-    },
-  ];
+      {
+        name: 'budget-zero',
+        run: () =>
+          engine.recommendMeal(
+            user.id,
+            baseMealType,
+            goalType,
+            { calories: 0, protein: 0 },
+            meal,
+            daily,
+            { budgetPerMeal: 0, budgetLevel: 'low', regionCode: user.region },
+          ),
+      },
+      {
+        name: 'budget-huge',
+        run: () =>
+          engine.recommendMeal(
+            user.id,
+            baseMealType,
+            goalType,
+            { calories: 0, protein: 0 },
+            meal,
+            daily,
+            {
+              budgetPerMeal: 999999,
+              budgetLevel: 'high',
+              regionCode: user.region,
+            },
+          ),
+      },
+      {
+        name: 'region-missing',
+        run: () =>
+          engine.recommendMeal(
+            user.id,
+            baseMealType,
+            goalType,
+            { calories: 0, protein: 0 },
+            meal,
+            daily,
+            { timezone: user.profile.timezone ?? 'UTC' },
+          ),
+      },
+      {
+        name: 'timezone-invalid',
+        run: () =>
+          engine.recommendMeal(
+            user.id,
+            baseMealType,
+            goalType,
+            { calories: 0, protein: 0 },
+            meal,
+            daily,
+            {
+              regionCode: user.region,
+              timezone: 'Mars/Phobos',
+            },
+          ),
+      },
+      {
+        name: 'channel-invalid',
+        run: async () => {
+          const profile = await profileAggregator.aggregateForRecommendation(
+            user.id,
+            baseMealType,
+          );
+          const allFoods = await engine.getAllFoods();
+          return engine.recommendMealFromPool({
+            allFoods,
+            mealType: baseMealType,
+            goalType,
+            consumed: { calories: 0, protein: 0 },
+            target: meal,
+            dailyTarget: daily,
+            excludeNames: [],
+            userId: user.id,
+            userProfile: {
+              ...profile.enrichedProfile,
+              regionCode: user.region,
+              timezone: user.profile.timezone ?? 'UTC',
+            },
+            feedbackStats: profile.feedbackStats,
+            preferenceProfile: profile.preferenceProfile,
+            regionalBoostMap: profile.regionalBoostMap,
+            channel: 'illegal-channel' as any,
+          });
+        },
+      },
+    ];
 
   const results: ExtremeCaseResult[] = [];
   for (const item of cases) {
@@ -1021,9 +1100,13 @@ async function runExtremeCases(
       name: item.name,
       ok: result.ok,
       fallbackOk:
-        !!result.value && Array.isArray(result.value.foods) && result.value.foods.length > 0,
+        !!result.value &&
+        Array.isArray(result.value.foods) &&
+        result.value.foods.length > 0,
       latencyMs: result.latencyMs,
-      signature: result.value ? fingerprintRecommendation(result.value).signature : undefined,
+      signature: result.value
+        ? fingerprintRecommendation(result.value).signature
+        : undefined,
       error: result.error,
     });
   }
@@ -1038,9 +1121,17 @@ function identifyRisks(params: {
   longRun: Awaited<ReturnType<typeof runLongRunningLoad>>;
   extremes: ExtremeCaseResult[];
   redisAfter: RedisPrefixStats[];
-  logSummary: { warns: number; errors: number; seasonalityMissingRegionWarns: number };
+  logSummary: {
+    warns: number;
+    errors: number;
+    seasonalityMissingRegionWarns: number;
+  };
 }): Array<{ level: 'P0' | 'P1' | 'P2'; issue: string; evidence: string }> {
-  const risks: Array<{ level: 'P0' | 'P1' | 'P2'; issue: string; evidence: string }> = [];
+  const risks: Array<{
+    level: 'P0' | 'P1' | 'P2';
+    issue: string;
+    evidence: string;
+  }> = [];
 
   if (params.learning.factorLearner.passiveActivated === false) {
     risks.push({
@@ -1064,8 +1155,7 @@ function identifyRisks(params: {
     risks.push({
       level: 'P1',
       issue: '长时间运行存在明显内存增长',
-      evidence:
-        `heap +${params.longRun.heapDeltaMb}MB, rss +${params.longRun.rssDeltaMb}MB after ${params.longRun.total} calls.`,
+      evidence: `heap +${params.longRun.heapDeltaMb}MB, rss +${params.longRun.rssDeltaMb}MB after ${params.longRun.total} calls.`,
     });
   }
 
@@ -1083,7 +1173,11 @@ function identifyRisks(params: {
     });
   }
 
-  if (params.concurrent.some((item) => item.errorRate > 0.02 || item.p99LatencyMs > 3000)) {
+  if (
+    params.concurrent.some(
+      (item) => item.errorRate > 0.02 || item.p99LatencyMs > 3000,
+    )
+  ) {
     risks.push({
       level: 'P1',
       issue: '高并发下存在稳定性或性能瓶颈',
@@ -1108,7 +1202,9 @@ function identifyRisks(params: {
   }
 
   if (
-    params.redisAfter.find((item) => item.prefix === 'seasonality:region:undefined') ||
+    params.redisAfter.find(
+      (item) => item.prefix === 'seasonality:region:undefined',
+    ) ||
     params.redisAfter.find((item) => item.prefix === 'seasonality:region:null')
   ) {
     risks.push({
@@ -1172,13 +1268,19 @@ async function main() {
       scanPrefix(redis, 'weight_learner:'),
       scanPrefix(redis, 'strategy:segment_map'),
     ]);
-    const cacheCounterBefore = await getCounterSnapshot(metrics.cacheOperations);
+    const cacheCounterBefore = await getCounterSnapshot(
+      metrics.cacheOperations,
+    );
 
     await seasonalityService.preloadRegion('CN');
     await seasonalityService.preloadRegion('US');
 
     const stableMeal = await runStableMealCalls(engine, primaryUser, 60);
-    const stablePlan = await runStableDailyPlanCalls(dailyPlanService, primaryUser, 50);
+    const stablePlan = await runStableDailyPlanCalls(
+      dailyPlanService,
+      primaryUser,
+      50,
+    );
     const concurrent = [] as ConcurrentSummary[];
     for (const level of [20, 50, 100]) {
       concurrent.push(await runConcurrentLoad(engine, users, level));
@@ -1194,7 +1296,11 @@ async function main() {
     );
 
     const longRun = await runLongRunningLoad(engine, users);
-    const extremes = await runExtremeCases(engine, profileAggregator, primaryUser);
+    const extremes = await runExtremeCases(
+      engine,
+      profileAggregator,
+      primaryUser,
+    );
 
     const cacheCounterAfter = await getCounterSnapshot(metrics.cacheOperations);
     const cacheAfter = await Promise.all([
@@ -1207,10 +1313,22 @@ async function main() {
     const cacheDelta = diffCounter(cacheCounterBefore, cacheCounterAfter);
 
     const seasonalRegionsInMemory = Array.from(
-      ((seasonalityService as any).regionalCacheByRegion as Map<string, Map<string, unknown>>).keys(),
+      (
+        (seasonalityService as any).regionalCacheByRegion as Map<
+          string,
+          Map<string, unknown>
+        >
+      ).keys(),
     );
-    const preloadInflight = ((seasonalityService as any).preloadInProgress as Map<string, Promise<void>>).size;
-    const feedbackStatsCacheSize = ((feedbackService as any).feedbackStatsCache as Map<string, unknown>).size;
+    const preloadInflight = (
+      (seasonalityService as any).preloadInProgress as Map<
+        string,
+        Promise<void>
+      >
+    ).size;
+    const feedbackStatsCacheSize = (
+      (feedbackService as any).feedbackStatsCache as Map<string, unknown>
+    ).size;
     const factorRedisKey = `factor_learner:${primaryUser.id}:${primaryUser.goal}`;
     const factorRedisPayload = await redis.hGetAll(factorRedisKey);
     const healthContextA = healthModifier.hashContext({
@@ -1276,7 +1394,16 @@ async function main() {
       '## 并发情况',
       '',
       markdownTable(
-        ['concurrency', 'success', 'errorRate', 'avgMs', 'p95Ms', 'p99Ms', 'fallbackRate', 'scenarioErrorRate'],
+        [
+          'concurrency',
+          'success',
+          'errorRate',
+          'avgMs',
+          'p95Ms',
+          'p99Ms',
+          'fallbackRate',
+          'scenarioErrorRate',
+        ],
         concurrent.map((item) => [
           String(item.concurrency),
           `${item.success}/${item.total}`,
@@ -1298,20 +1425,78 @@ async function main() {
           ['推荐一致性 same-input daily-plan', String(stablePlan.consistency)],
           ['推荐多样性 meal', String(stableMeal.diversity)],
           ['推荐多样性 daily-plan', String(stablePlan.diversity)],
-          ['cache 命中率', String(round(ratio(cacheHit, cacheHit + cacheMiss)))],
+          [
+            'cache 命中率',
+            String(round(ratio(cacheHit, cacheHit + cacheMiss))),
+          ],
           ['平均响应时间', String(round(mean(overallLatencies), 2))],
-          ['P95 延迟', String(Math.max(stableMeal.p95LatencyMs, stablePlan.p95LatencyMs, ...concurrent.map((c) => c.p95LatencyMs), longRun.p95LatencyMs))],
-          ['P99 延迟', String(Math.max(stableMeal.p99LatencyMs, stablePlan.p99LatencyMs, ...concurrent.map((c) => c.p99LatencyMs), longRun.p99LatencyMs))],
-          ['错误率', String(round(mean([stableMeal.errorRate, stablePlan.errorRate, ...concurrent.map((c) => c.errorRate), longRun.errorRate])))],
-          ['fallback 触发率', String(round(mean([stableMeal.driftRate, ...concurrent.map((c) => c.fallbackRate), longRun.fallbackRate])))],
-          ['learning 变化趋势 Weight deltaL1', String(learning.weightLearner.deltaL1)],
+          [
+            'P95 延迟',
+            String(
+              Math.max(
+                stableMeal.p95LatencyMs,
+                stablePlan.p95LatencyMs,
+                ...concurrent.map((c) => c.p95LatencyMs),
+                longRun.p95LatencyMs,
+              ),
+            ),
+          ],
+          [
+            'P99 延迟',
+            String(
+              Math.max(
+                stableMeal.p99LatencyMs,
+                stablePlan.p99LatencyMs,
+                ...concurrent.map((c) => c.p99LatencyMs),
+                longRun.p99LatencyMs,
+              ),
+            ),
+          ],
+          [
+            '错误率',
+            String(
+              round(
+                mean([
+                  stableMeal.errorRate,
+                  stablePlan.errorRate,
+                  ...concurrent.map((c) => c.errorRate),
+                  longRun.errorRate,
+                ]),
+              ),
+            ),
+          ],
+          [
+            'fallback 触发率',
+            String(
+              round(
+                mean([
+                  stableMeal.driftRate,
+                  ...concurrent.map((c) => c.fallbackRate),
+                  longRun.fallbackRate,
+                ]),
+              ),
+            ),
+          ],
+          [
+            'learning 变化趋势 Weight deltaL1',
+            String(learning.weightLearner.deltaL1),
+          ],
         ],
       ),
       '',
       '## 连续调用稳定性',
       '',
       markdownTable(
-        ['case', 'consistency', 'diversity', 'explanationConsistency', 'driftRate', 'duplicateHitRate', 'abnormalHitRate', 'avgMs'],
+        [
+          'case',
+          'consistency',
+          'diversity',
+          'explanationConsistency',
+          'driftRate',
+          'duplicateHitRate',
+          'abnormalHitRate',
+          'avgMs',
+        ],
         [
           [
             'recommendMeal x60',
@@ -1353,7 +1538,8 @@ async function main() {
         ]),
       ),
       '',
-      '- SeasonalityService memory regions: ' + seasonalRegionsInMemory.join(', '),
+      '- SeasonalityService memory regions: ' +
+        seasonalRegionsInMemory.join(', '),
       `- Seasonality inflight preload count after tests: ${preloadInflight}`,
       `- HealthModifier context hash isolation sample: dairy=${healthContextA}, peanut=${healthContextB}`,
       `- FactorLearner redis key sample: ${factorRedisKey}`,
@@ -1366,30 +1552,49 @@ async function main() {
       '### WeightLearner',
       '',
       markdownTable(
-        ['beforeSignature', 'afterSignature', 'changed', 'deltaL1', 'convergedSecondRun', 'concentrationBefore', 'concentrationAfter'],
-        [[
-          learning.weightLearner.beforeSignature.slice(0, 80),
-          learning.weightLearner.afterSignature.slice(0, 80),
-          String(learning.weightLearner.changed),
-          String(learning.weightLearner.deltaL1),
-          String(learning.weightLearner.convergedOnSecondRun),
-          String(learning.weightLearner.concentrationBefore),
-          String(learning.weightLearner.concentrationAfter),
-        ]],
+        [
+          'beforeSignature',
+          'afterSignature',
+          'changed',
+          'deltaL1',
+          'convergedSecondRun',
+          'concentrationBefore',
+          'concentrationAfter',
+        ],
+        [
+          [
+            learning.weightLearner.beforeSignature.slice(0, 80),
+            learning.weightLearner.afterSignature.slice(0, 80),
+            String(learning.weightLearner.changed),
+            String(learning.weightLearner.deltaL1),
+            String(learning.weightLearner.convergedOnSecondRun),
+            String(learning.weightLearner.concentrationBefore),
+            String(learning.weightLearner.concentrationAfter),
+          ],
+        ],
       ),
       '',
       '### FactorLearner',
       '',
       markdownTable(
-        ['passiveFeedbackBefore', 'passiveFeedbackAfter', 'passiveActivated', 'minAdjustment', 'maxAdjustment', 'fallbackConsistent'],
-        [[
-          String(learning.factorLearner.passiveFeedbackCountBefore),
-          String(learning.factorLearner.passiveFeedbackCountAfter),
-          String(learning.factorLearner.passiveActivated),
-          String(learning.factorLearner.minAdjustment),
-          String(learning.factorLearner.maxAdjustment),
-          String(learning.factorLearner.fallbackConsistent),
-        ]],
+        [
+          'passiveFeedbackBefore',
+          'passiveFeedbackAfter',
+          'passiveActivated',
+          'minAdjustment',
+          'maxAdjustment',
+          'fallbackConsistent',
+        ],
+        [
+          [
+            String(learning.factorLearner.passiveFeedbackCountBefore),
+            String(learning.factorLearner.passiveFeedbackCountAfter),
+            String(learning.factorLearner.passiveActivated),
+            String(learning.factorLearner.minAdjustment),
+            String(learning.factorLearner.maxAdjustment),
+            String(learning.factorLearner.fallbackConsistent),
+          ],
+        ],
       ),
       '',
       `- manual factorAdjustments: ${JSON.stringify(learning.factorLearner.manualAdjustments)}`,
@@ -1411,24 +1616,45 @@ async function main() {
       '## 长时间运行测试',
       '',
       markdownTable(
-        ['totalCalls', 'avgMs', 'p95Ms', 'p99Ms', 'errorRate', 'fallbackRate', 'first100Consistency', 'last100Consistency'],
-        [[
-          String(longRun.total),
-          String(longRun.avgLatencyMs),
-          String(longRun.p95LatencyMs),
-          String(longRun.p99LatencyMs),
-          String(longRun.errorRate),
-          String(longRun.fallbackRate),
-          String(longRun.first100Consistency),
-          String(longRun.last100Consistency),
-        ]],
+        [
+          'totalCalls',
+          'avgMs',
+          'p95Ms',
+          'p99Ms',
+          'errorRate',
+          'fallbackRate',
+          'first100Consistency',
+          'last100Consistency',
+        ],
+        [
+          [
+            String(longRun.total),
+            String(longRun.avgLatencyMs),
+            String(longRun.p95LatencyMs),
+            String(longRun.p99LatencyMs),
+            String(longRun.errorRate),
+            String(longRun.fallbackRate),
+            String(longRun.first100Consistency),
+            String(longRun.last100Consistency),
+          ],
+        ],
       ),
       '',
       markdownTable(
         ['memory', 'startMb', 'endMb', 'deltaMb'],
         [
-          ['heapUsed', String(longRun.heapStartMb), String(longRun.heapEndMb), String(longRun.heapDeltaMb)],
-          ['rss', String(longRun.rssStartMb), String(longRun.rssEndMb), String(longRun.rssDeltaMb)],
+          [
+            'heapUsed',
+            String(longRun.heapStartMb),
+            String(longRun.heapEndMb),
+            String(longRun.heapDeltaMb),
+          ],
+          [
+            'rss',
+            String(longRun.rssStartMb),
+            String(longRun.rssEndMb),
+            String(longRun.rssDeltaMb),
+          ],
         ],
       ),
       '',
@@ -1448,7 +1674,9 @@ async function main() {
       '## 发现问题',
       '',
       ...(risks.length > 0
-        ? risks.map((risk) => `- [${risk.level}] ${risk.issue}: ${risk.evidence}`)
+        ? risks.map(
+            (risk) => `- [${risk.level}] ${risk.issue}: ${risk.evidence}`,
+          )
         : ['- 未发现达到 P0/P1 门槛的新问题。']),
       '',
       '## 风险评估 (P0/P1/P2)',

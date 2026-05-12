@@ -135,7 +135,9 @@ export class StorageService implements OnModuleInit {
         Metadata: { md5 },
       }),
     );
-    this.logger.log(`File uploaded (custom key): ${key} (${buffer.length} bytes)`);
+    this.logger.log(
+      `File uploaded (custom key): ${key} (${buffer.length} bytes)`,
+    );
     return {
       key,
       url: this.getPublicUrl(key),

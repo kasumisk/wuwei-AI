@@ -18,6 +18,7 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -42,6 +43,9 @@ import { I18nService } from '../../../../core/i18n';
 import { AnalyzeResultHelperService } from '../services/analyze-result-helper.service';
 import { BehaviorService } from '../../../diet/app/services/behavior.service';
 import { DailySummaryService } from '../../../diet/app/services/daily-summary.service';
+import { DailyStatusService } from '../../../diet/app/services/daily-status.service';
+import { UserProfileService } from '../../../user/app/services/profile/user-profile.service';
+import { getUserLocalDate } from '../../../../common/utils/timezone.util';
 
 type ExistingSaveRecordResult = {
   id: string;
@@ -66,6 +70,8 @@ type CreatedSaveRecordResult = {
 @UseGuards(AppJwtAuthGuard)
 @ApiBearerAuth()
 export class FoodAnalysisSaveController {
+  private readonly logger = new Logger(FoodAnalysisSaveController.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventEmitter: EventEmitter2,
@@ -73,6 +79,8 @@ export class FoodAnalysisSaveController {
     private readonly helper: AnalyzeResultHelperService,
     private readonly behaviorService: BehaviorService,
     private readonly dailySummaryService: DailySummaryService,
+    private readonly dailyStatusService: DailyStatusService,
+    private readonly userProfileService: UserProfileService,
   ) {}
 
   @Post('analyze-save')
@@ -84,6 +92,10 @@ export class FoodAnalysisSaveController {
     @Body() dto: SaveAnalysisToRecordDto,
     @CurrentAppUser() user: AppUserPayload,
   ): Promise<ApiResponse> {
+    this.logger.log(
+      `[AnalyzeSave] start userId=${user.id} analysisId=${dto.analysisId} mealType=${dto.mealType || 'none'} recordedAt=${dto.recordedAt || 'now'}`,
+    );
+
     const record = await this.prisma.$transaction<
       ExistingSaveRecordResult | CreatedSaveRecordResult
     >(
@@ -100,6 +112,9 @@ export class FoodAnalysisSaveController {
           select: { id: true },
         });
         if (existingRecord) {
+          this.logger.log(
+            `[AnalyzeSave] existing record hit userId=${user.id} analysisId=${dto.analysisId} recordId=${existingRecord.id}`,
+          );
           return { id: existingRecord.id, existed: true };
         }
 
@@ -108,20 +123,33 @@ export class FoodAnalysisSaveController {
         });
 
         if (!analysisRecord) {
-          throw new NotFoundException(this.i18n.t('food.analysisRecordNotFound'));
+          this.logger.warn(
+            `[AnalyzeSave] analysis record missing userId=${user.id} analysisId=${dto.analysisId}`,
+          );
+          throw new NotFoundException(
+            this.i18n.t('food.analysisRecordNotFound'),
+          );
         }
         if (analysisRecord.userId !== user.id) {
+          this.logger.warn(
+            `[AnalyzeSave] analysis ownership mismatch requester=${user.id} owner=${analysisRecord.userId} analysisId=${dto.analysisId}`,
+          );
           throw new ForbiddenException(
             this.i18n.t('food.analysisNoPermissionEdit'),
           );
         }
         if (analysisRecord.status !== 'completed') {
+          this.logger.warn(
+            `[AnalyzeSave] analysis incomplete userId=${user.id} analysisId=${dto.analysisId} status=${analysisRecord.status}`,
+          );
           throw new BadRequestException(this.i18n.t('food.analysisIncomplete'));
         }
 
         const result = this.helper.reconstructAnalysisResult(analysisRecord);
         const mealType =
-          dto.mealType || (analysisRecord.mealType as MealType) || MealType.LUNCH;
+          dto.mealType ||
+          (analysisRecord.mealType as MealType) ||
+          MealType.LUNCH;
 
         const createDto = {
           analysisId: dto.analysisId,
@@ -182,6 +210,10 @@ export class FoodAnalysisSaveController {
           },
         });
 
+        this.logger.log(
+          `[AnalyzeSave] created record userId=${user.id} analysisId=${dto.analysisId} recordId=${saved.id} totalCalories=${saved.totalCalories}`,
+        );
+
         return {
           ...saved,
           existed: false,
@@ -205,6 +237,10 @@ export class FoodAnalysisSaveController {
       );
     }
 
+    this.logger.log(
+      `[AnalyzeSave] success userId=${user.id} analysisId=${dto.analysisId} recordId=${record.id}`,
+    );
+
     await this.behaviorService.logDecision({
       userId: user.id,
       recordId: record.id,
@@ -224,16 +260,16 @@ export class FoodAnalysisSaveController {
       },
     });
 
-    this.dailySummaryService
-      .updateDailySummary(user.id, record.recordedAt)
-      .catch(() => undefined);
+    await this.dailySummaryService.updateDailySummary(user.id, record.recordedAt);
+    await this.invalidateDailyStatusCache(user.id, record.recordedAt);
 
     this.eventEmitter.emit(
       DomainEvents.MEAL_RECORDED,
       new MealRecordedEvent(
         user.id,
         record.mealType || 'unknown',
-        (record.result.foods?.map((f: any) => f.name).filter(Boolean) || []) as string[],
+        (record.result.foods?.map((f: any) => f.name).filter(Boolean) ||
+          []) as string[],
         record.totalCalories || 0,
         RecordSource.DECISION,
         record.id,
@@ -256,6 +292,18 @@ export class FoodAnalysisSaveController {
     return ResponseWrapper.success(
       { recordId: record.id, analysisId: dto.analysisId },
       this.i18n.t('food.analyzeSavedAsRecord'),
+    );
+  }
+
+  private async invalidateDailyStatusCache(
+    userId: string,
+    recordedAt: Date,
+  ): Promise<void> {
+    const timezone = await this.userProfileService.getTimezone(userId);
+    const date = getUserLocalDate(timezone, recordedAt);
+    await this.dailyStatusService.invalidateUserDate(userId, date);
+    this.logger.log(
+      `[AnalyzeSave] invalidated daily-status cache userId=${userId} date=${date}`,
     );
   }
 }

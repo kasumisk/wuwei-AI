@@ -41,7 +41,9 @@ describe('SubscriptionService terminal status summary regression', () => {
       } as any,
       { emit: jest.fn() } as any,
       {
-        resolve: jest.fn().mockImplementation((_tier, entitlements) => entitlements ?? {}),
+        resolve: jest
+          .fn()
+          .mockImplementation((_tier, entitlements) => entitlements ?? {}),
       } as any,
       { t: jest.fn((key: string) => key) } as any,
       {} as any,
@@ -101,7 +103,9 @@ describe('SubscriptionService terminal status summary regression', () => {
       } as any,
       { emit: jest.fn() } as any,
       {
-        resolve: jest.fn().mockImplementation((_tier, entitlements) => entitlements ?? {}),
+        resolve: jest
+          .fn()
+          .mockImplementation((_tier, entitlements) => entitlements ?? {}),
       } as any,
       { t: jest.fn((key: string) => key) } as any,
       {} as any,

@@ -22,7 +22,9 @@ export class CronBackend {
   private readonly mode: CronBackendMode;
 
   constructor(private readonly config: ConfigService) {
-    const raw = (this.config.get<string>('CRON_BACKEND') ?? 'inproc').toLowerCase();
+    const raw = (
+      this.config.get<string>('CRON_BACKEND') ?? 'inproc'
+    ).toLowerCase();
     this.mode = raw === 'external' ? 'external' : 'inproc';
     this.logger.log(`CRON_BACKEND=${this.mode}`);
   }

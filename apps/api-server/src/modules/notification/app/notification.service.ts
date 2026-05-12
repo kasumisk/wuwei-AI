@@ -133,12 +133,17 @@ export class NotificationService {
         body,
         data,
       };
-      await this.queueProducer.enqueue(QUEUE_NAMES.NOTIFICATION, `push-${type}`, jobData, {
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 2000 },
-        removeOnComplete: 500,
-        removeOnFail: 200,
-      });
+      await this.queueProducer.enqueue(
+        QUEUE_NAMES.NOTIFICATION,
+        `push-${type}`,
+        jobData,
+        {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 2000 },
+          removeOnComplete: 500,
+          removeOnFail: 200,
+        },
+      );
     }
 
     return saved;

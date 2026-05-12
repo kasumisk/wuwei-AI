@@ -72,9 +72,7 @@ function scalingSuffix(policy: PortionScalingPolicy, ratio: number): string {
 export class PortionScalingService {
   private readonly logger = new Logger(PortionScalingService.name);
 
-  constructor(
-    private readonly policyResolver: PortionScalingPolicyResolver,
-  ) {}
+  constructor(private readonly policyResolver: PortionScalingPolicyResolver) {}
 
   /**
    * 按策略缩放单个食物
@@ -100,21 +98,13 @@ export class PortionScalingService {
 
     switch (policy.mode) {
       case PortionScalingMode.SCALABLE:
-        actualRatio = this.clampRatio(
-          targetRatio,
-          policy,
-          standardG,
-        );
+        actualRatio = this.clampRatio(targetRatio, policy, standardG);
         wasClamped = actualRatio !== targetRatio;
         actualRatio = this.quantizeRatio(actualRatio, policy);
         break;
 
       case PortionScalingMode.LIMITED_SCALABLE:
-        actualRatio = this.clampRatio(
-          targetRatio,
-          policy,
-          standardG,
-        );
+        actualRatio = this.clampRatio(targetRatio, policy, standardG);
         wasClamped = actualRatio !== targetRatio;
         // limited_scalable 用 0.25 步进后钳制
         actualRatio = this.quantizeRatio(actualRatio, policy);
@@ -134,10 +124,7 @@ export class PortionScalingService {
 
       case PortionScalingMode.CONDIMENT_OR_MICRO:
         // 可小克重缩放但严格上限
-        actualRatio = Math.min(
-          targetRatio,
-          policy.maxRatio,
-        );
+        actualRatio = Math.min(targetRatio, policy.maxRatio);
         actualRatio = Math.max(actualRatio, policy.minRatio);
         wasClamped = actualRatio !== targetRatio;
         actualRatio = this.quantizeRatio(actualRatio, policy);
@@ -162,9 +149,7 @@ export class PortionScalingService {
       food.food.standardServingDesc ||
         food.food.portionGuide?.standardServingDesc ||
         undefined,
-      food.food.commonPortions ||
-        food.food.portionGuide?.commonPortions ||
-        [],
+      food.food.commonPortions || food.food.portionGuide?.commonPortions || [],
       policy,
       ratio,
     );
@@ -183,7 +168,7 @@ export class PortionScalingService {
       food: {
         ...food.food,
         ...(adjustedDesc !== undefined
-          ? { displayServingDesc: adjustedDesc } as any
+          ? ({ displayServingDesc: adjustedDesc } as any)
           : {}),
       },
       ratio,
@@ -218,13 +203,13 @@ export class PortionScalingService {
     const scalable: { food: ScoredFood; policy: PortionScalingPolicy }[] = [];
     const limited: { food: ScoredFood; policy: PortionScalingPolicy }[] = [];
     const fixed: { food: ScoredFood; policy: PortionScalingPolicy }[] = [];
-    const notScalable: { food: ScoredFood; policy: PortionScalingPolicy }[] = [];
+    const notScalable: { food: ScoredFood; policy: PortionScalingPolicy }[] =
+      [];
     const condiments: { food: ScoredFood; policy: PortionScalingPolicy }[] = [];
 
     for (const pick of picks) {
       const policy =
-        policies.get(pick.food.id) ??
-        this.policyResolver.resolve(pick.food);
+        policies.get(pick.food.id) ?? this.policyResolver.resolve(pick.food);
 
       switch (policy.mode) {
         case PortionScalingMode.SCALABLE:
@@ -305,16 +290,16 @@ export class PortionScalingService {
 
     // 调味品：小范围调整
     for (const g of condiments) {
-      const targetRatio = scalableTotalCal > 0
-        ? (remainingBudget / scalableTotalCal) * tendencyFactor
-        : 1;
+      const targetRatio =
+        scalableTotalCal > 0
+          ? (remainingBudget / scalableTotalCal) * tendencyFactor
+          : 1;
       results.push(this.applyToFood(g.food, g.policy, targetRatio));
     }
 
     // scalable 食物：优先缩放
     if (scalable.length > 0 && scalableTotalCal > 0) {
-      let globalRatio =
-        (remainingBudget / scalableTotalCal) * tendencyFactor;
+      let globalRatio = (remainingBudget / scalableTotalCal) * tendencyFactor;
 
       // A 轮：先对 scalable 做缩放
       for (const g of scalable) {
@@ -329,8 +314,7 @@ export class PortionScalingService {
       }
     } else if (allScalable.length > 0 && scalableTotalCal > 0) {
       // 只有 limited，无 scalable
-      const globalRatio =
-        (remainingBudget / scalableTotalCal) * tendencyFactor;
+      const globalRatio = (remainingBudget / scalableTotalCal) * tendencyFactor;
 
       for (const g of allScalable) {
         results.push(this.applyToFood(g.food, g.policy, globalRatio));
@@ -339,10 +323,7 @@ export class PortionScalingService {
       // 只有 fixed/not → 保持原始值
     }
 
-    const totalCal = results.reduce(
-      (s, r) => s + r.servingCalories,
-      0,
-    );
+    const totalCal = results.reduce((s, r) => s + r.servingCalories, 0);
 
     return { adjusted: results, totalCal };
   }
@@ -356,16 +337,10 @@ export class PortionScalingService {
     policy: PortionScalingPolicy,
     standardG: number,
   ): number {
-    return Math.max(
-      policy.minRatio,
-      Math.min(policy.maxRatio, ratio),
-    );
+    return Math.max(policy.minRatio, Math.min(policy.maxRatio, ratio));
   }
 
-  private quantizeRatio(
-    ratio: number,
-    policy: PortionScalingPolicy,
-  ): number {
+  private quantizeRatio(ratio: number, policy: PortionScalingPolicy): number {
     if (policy.ratioStep <= 0) return ratio;
     const step = policy.ratioStep;
     const q = Math.round(ratio / step) * step;

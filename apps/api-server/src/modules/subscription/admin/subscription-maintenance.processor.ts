@@ -88,7 +88,12 @@ export class SubscriptionMaintenanceProcessor
     }
 
     return this.subscriptionManagementService.performResyncSubscription(
-      (job.data as Extract<SubscriptionMaintenanceJobData, { action: 'resync_subscription' }>).subscriptionId,
+      (
+        job.data as Extract<
+          SubscriptionMaintenanceJobData,
+          { action: 'resync_subscription' }
+        >
+      ).subscriptionId,
       { reason: job.data.reason },
     );
   }

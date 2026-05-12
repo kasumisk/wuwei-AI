@@ -67,8 +67,7 @@ export class FoodLibraryMatcher {
       food.sodium = Math.round(Number(match.sodium) * ratio);
 
     // 扩展营养（比例缩放）— 不论置信度，始终用库值覆盖（库比 Vision 准确）
-    if (match.sugar != null)
-      food.sugar = round1(Number(match.sugar) * ratio);
+    if (match.sugar != null) food.sugar = round1(Number(match.sugar) * ratio);
     if (match.saturated_fat != null)
       food.saturatedFat = round1(Number(match.saturated_fat) * ratio);
     if (match.trans_fat != null)
@@ -83,10 +82,8 @@ export class FoodLibraryMatcher {
       food.glycemicLoad = Number(match.glycemic_load);
     if (match.processing_level != null)
       food.processingLevel = match.processing_level;
-    if (match.fodmap_level != null)
-      food.fodmapLevel = match.fodmap_level;
-    if (match.oxalate_level != null)
-      food.oxalateLevel = match.oxalate_level;
+    if (match.fodmap_level != null) food.fodmapLevel = match.fodmap_level;
+    if (match.oxalate_level != null) food.oxalateLevel = match.oxalate_level;
 
     // 分类 / 标签 / 过敏原
     if (match.allergens) food.allergens = match.allergens;
@@ -104,6 +101,5 @@ export class FoodLibraryMatcher {
     if (match.foodForm && !food.foodForm) food.foodForm = match.foodForm;
     if (match.flavorProfile) food.flavorProfile = match.flavorProfile;
     if (match.compatibility) food.compatibility = match.compatibility;
-
   }
 }

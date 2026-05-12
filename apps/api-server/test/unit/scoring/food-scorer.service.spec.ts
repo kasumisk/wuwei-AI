@@ -708,7 +708,9 @@ describe('FoodScorerService', () => {
         // servingCal = 267*150/100 = 400.5 ≈ 400
       });
 
-      const result = service.scoreFoodDetailed({ food, goalType: 'health',
+      const result = service.scoreFoodDetailed({
+        food,
+        goalType: 'health',
         currentMonth: 6,
       });
 
@@ -1486,7 +1488,12 @@ describe('FoodScorerService', () => {
     });
 
     it('should handle empty candidates array in scoreFoodsWithServing', () => {
-      const result = service.scoreFoodsWithServing([], 'health', 6, defaultTarget);
+      const result = service.scoreFoodsWithServing(
+        [],
+        'health',
+        6,
+        defaultTarget,
+      );
       expect(result).toEqual([]);
     });
 

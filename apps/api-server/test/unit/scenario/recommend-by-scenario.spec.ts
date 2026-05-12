@@ -236,7 +236,12 @@ function createEngine() {
     mockFeatureFlagService as any,
     mockContextFactory as any,
     mockResultProcessor as any,
-    { getSeasonalScore: jest.fn().mockReturnValue(0.5), getPriceInfo: jest.fn().mockReturnValue(null), warmRegionCache: jest.fn().mockResolvedValue(undefined), preloadRegion: jest.fn().mockResolvedValue(undefined) } as any, // seasonalityService
+    {
+      getSeasonalScore: jest.fn().mockReturnValue(0.5),
+      getPriceInfo: jest.fn().mockReturnValue(null),
+      warmRegionCache: jest.fn().mockResolvedValue(undefined),
+      preloadRegion: jest.fn().mockResolvedValue(undefined),
+    } as any, // seasonalityService
   );
 
   // Manually init cache namespace (onModuleInit)

@@ -28,10 +28,7 @@ import {
 } from './notification.service';
 
 @Processor(QUEUE_NAMES.NOTIFICATION)
-export class NotificationProcessor
-  extends WorkerHost
-  implements OnModuleInit
-{
+export class NotificationProcessor extends WorkerHost implements OnModuleInit {
   private readonly logger = new Logger(NotificationProcessor.name);
   private firebaseApp: admin.app.App | null = null;
 
@@ -68,7 +65,8 @@ export class NotificationProcessor
     );
 
     // Guard: userId 必须是合法 UUID，否则 Prisma 会抛出 Inconsistent column data 错误
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!userId || !uuidRegex.test(userId)) {
       this.logger.warn(
         `send-push: invalid userId "${userId}", discarding job ${job.id}`,

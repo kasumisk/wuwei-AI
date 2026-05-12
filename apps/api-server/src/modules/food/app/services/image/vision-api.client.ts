@@ -170,7 +170,6 @@ export class VisionApiClient implements OnModuleInit {
   ): Promise<string> {
     const result = await this.llm.chat({
       feature: LlmFeature.FoodImage,
-      userId,
       provider: 'openrouter',
       apiKey: this.apiKey,
       baseUrl: this.baseUrl,

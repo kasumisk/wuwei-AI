@@ -42,7 +42,8 @@ export class ComfyUIService {
 
   constructor(private readonly config: ConfigService) {
     this.baseUrl =
-      this.config.get<string>('COMFYUI_BASE_URL') ?? 'http://117.50.178.130:8188';
+      this.config.get<string>('COMFYUI_BASE_URL') ??
+      'http://117.50.178.130:8188';
   }
 
   // ─── 公开 API ──────────────────────────────────────────────────────────────
@@ -62,13 +63,20 @@ export class ComfyUIService {
     });
 
     if (!res.ok) {
-      throw new Error(`ComfyUI /prompt 失败: ${res.status} ${await res.text()}`);
+      throw new Error(
+        `ComfyUI /prompt 失败: ${res.status} ${await res.text()}`,
+      );
     }
 
-    const data = (await res.json()) as { prompt_id: string; node_errors: Record<string, unknown> };
+    const data = (await res.json()) as {
+      prompt_id: string;
+      node_errors: Record<string, unknown>;
+    };
 
     if (data.node_errors && Object.keys(data.node_errors).length > 0) {
-      throw new Error(`ComfyUI workflow 错误: ${JSON.stringify(data.node_errors)}`);
+      throw new Error(
+        `ComfyUI workflow 错误: ${JSON.stringify(data.node_errors)}`,
+      );
     }
 
     this.logger.debug(`[${foodId}] ComfyUI 已提交 promptId=${data.prompt_id}`);
@@ -87,7 +95,9 @@ export class ComfyUIService {
       });
 
       if (!res.ok) {
-        this.logger.warn(`ComfyUI /history/${promptId} 返回 ${res.status}，继续轮询`);
+        this.logger.warn(
+          `ComfyUI /history/${promptId} 返回 ${res.status}，继续轮询`,
+        );
         continue;
       }
 
@@ -98,19 +108,30 @@ export class ComfyUIService {
 
       const status = job?.status;
       if (status?.status_str === 'success' && status?.completed) {
-        const images: ComfyUIImageOutput[] = job?.outputs?.[SAVE_NODE_ID]?.images ?? [];
+        const images: ComfyUIImageOutput[] =
+          job?.outputs?.[SAVE_NODE_ID]?.images ?? [];
         if (images.length === 0) {
-          throw new Error(`ComfyUI 任务成功但无图片输出 (promptId=${promptId})`);
+          throw new Error(
+            `ComfyUI 任务成功但无图片输出 (promptId=${promptId})`,
+          );
         }
         return images[0];
       }
 
-      if (status?.status_str && status.status_str !== 'success' && status?.completed) {
-        throw new Error(`ComfyUI 任务失败: ${status.status_str} (promptId=${promptId})`);
+      if (
+        status?.status_str &&
+        status.status_str !== 'success' &&
+        status?.completed
+      ) {
+        throw new Error(
+          `ComfyUI 任务失败: ${status.status_str} (promptId=${promptId})`,
+        );
       }
     }
 
-    throw new Error(`ComfyUI 轮询超时（${MAX_POLL_ATTEMPTS * POLL_INTERVAL_MS / 1000}s）promptId=${promptId}`);
+    throw new Error(
+      `ComfyUI 轮询超时（${(MAX_POLL_ATTEMPTS * POLL_INTERVAL_MS) / 1000}s）promptId=${promptId}`,
+    );
   }
 
   /**
@@ -132,7 +153,9 @@ export class ComfyUIService {
         return Buffer.from(await res.arrayBuffer());
       } catch (err) {
         lastErr = err as Error;
-        this.logger.warn(`ComfyUI 下载图片失败 (attempt ${i + 1}/3): ${(err as Error).message}`);
+        this.logger.warn(
+          `ComfyUI 下载图片失败 (attempt ${i + 1}/3): ${(err as Error).message}`,
+        );
         await sleep(2_000);
       }
     }

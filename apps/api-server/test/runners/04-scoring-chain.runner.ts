@@ -53,7 +53,12 @@ async function main() {
   for (const u of users) {
     for (const meal of MEAL_TYPES) {
       const start = Date.now();
-      const { meal: mealTarget } = macroSplit(u.dailyCal, meal, u.goal, u.weightKg);
+      const { meal: mealTarget } = macroSplit(
+        u.dailyCal,
+        meal,
+        u.goal,
+        u.weightKg,
+      );
       let invalid = 0;
       const scores: number[] = [];
       try {

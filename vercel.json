@@ -3,7 +3,12 @@
   "version": 2,
   "framework": null,
   "installCommand": "pnpm install",
-  "buildCommand": "pnpm turbo build --filter=@ai-platform/admin",
+  "buildCommand": "pnpm --filter=@ai-platform/admin build:staging",
   "outputDirectory": "apps/admin/dist",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
 }

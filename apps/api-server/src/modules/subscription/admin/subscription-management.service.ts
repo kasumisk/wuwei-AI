@@ -963,8 +963,8 @@ export class SubscriptionManagementService {
         latestProviderCustomerId:
           providerCustomerByUserId.get(sub.userId)?.providerCustomerId ?? null,
         latestOriginalProviderCustomerId:
-          providerCustomerByUserId.get(sub.userId)?.originalProviderCustomerId ??
-          null,
+          providerCustomerByUserId.get(sub.userId)
+            ?.originalProviderCustomerId ?? null,
         latestProviderCustomerEnvironment:
           providerCustomerByUserId.get(sub.userId)?.environment ?? null,
         hasRefundRecord:
@@ -1077,16 +1077,19 @@ export class SubscriptionManagementService {
     const latestRevenueCatCustomer = providerCustomers.find(
       (item) => item.provider === 'revenuecat',
     );
-    const latestWebhookEvent = await this.prisma.billingWebhookEvents.findFirst({
-      where: { appUserId: subscription.userId },
-      orderBy: { receivedAt: 'desc' },
-    });
-    const latestTransaction = await this.prisma.subscriptionTransactions.findFirst({
-      where: {
-        OR: [{ subscriptionId: id }, { userId: subscription.userId }],
+    const latestWebhookEvent = await this.prisma.billingWebhookEvents.findFirst(
+      {
+        where: { appUserId: subscription.userId },
+        orderBy: { receivedAt: 'desc' },
       },
-      orderBy: { createdAt: 'desc' },
-    });
+    );
+    const latestTransaction =
+      await this.prisma.subscriptionTransactions.findFirst({
+        where: {
+          OR: [{ subscriptionId: id }, { userId: subscription.userId }],
+        },
+        orderBy: { createdAt: 'desc' },
+      });
 
     return {
       ...subscription,
@@ -1097,7 +1100,8 @@ export class SubscriptionManagementService {
       usageQuotas,
       userEntitlements,
       providerCustomers,
-      latestOriginalTransactionId: latestTransaction?.originalTransactionId ?? null,
+      latestOriginalTransactionId:
+        latestTransaction?.originalTransactionId ?? null,
       latestAppUserId: latestWebhookEvent?.appUserId ?? null,
       latestOriginalAppUserId: latestWebhookEvent?.originalAppUserId ?? null,
       latestAliases: Array.isArray(latestWebhookEvent?.aliases)
@@ -1585,7 +1589,10 @@ export class SubscriptionManagementService {
         OR: [
           { status: SubscriptionStatus.ACTIVE },
           { status: SubscriptionStatus.GRACE_PERIOD },
-          { status: SubscriptionStatus.CANCELLED, expiresAt: { gt: new Date() } },
+          {
+            status: SubscriptionStatus.CANCELLED,
+            expiresAt: { gt: new Date() },
+          },
         ],
       },
       orderBy: { expiresAt: 'desc' },
@@ -1673,8 +1680,13 @@ export class SubscriptionManagementService {
     return this.getSubscriptionDetail(manualSubscription.id);
   }
 
-  async revokeUserManualSubscription(userId: string, dto: AdminSubscriptionActionDto) {
-    const user = await this.prisma.appUsers.findUnique({ where: { id: userId } });
+  async revokeUserManualSubscription(
+    userId: string,
+    dto: AdminSubscriptionActionDto,
+  ) {
+    const user = await this.prisma.appUsers.findUnique({
+      where: { id: userId },
+    });
     if (!user) {
       throw new NotFoundException(`用户 #${userId} 不存在`);
     }
@@ -1685,8 +1697,14 @@ export class SubscriptionManagementService {
         paymentChannel: PaymentChannel.MANUAL,
         OR: [
           { status: SubscriptionStatus.ACTIVE, expiresAt: { gt: new Date() } },
-          { status: SubscriptionStatus.GRACE_PERIOD, gracePeriodEndsAt: { gt: new Date() } },
-          { status: SubscriptionStatus.CANCELLED, expiresAt: { gt: new Date() } },
+          {
+            status: SubscriptionStatus.GRACE_PERIOD,
+            gracePeriodEndsAt: { gt: new Date() },
+          },
+          {
+            status: SubscriptionStatus.CANCELLED,
+            expiresAt: { gt: new Date() },
+          },
         ],
       },
       orderBy: { expiresAt: 'desc' },
