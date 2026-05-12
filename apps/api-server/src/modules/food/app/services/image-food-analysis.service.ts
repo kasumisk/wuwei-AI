@@ -162,7 +162,7 @@ export class ImageFoodAnalysisService {
         userId,
         locale,
       );
-      this.logger.debug(`[Phase1 raw] ${content.slice(0, 500)}`);
+      this.logger.warn(`[Phase1 raw] ${content.slice(0, 800)}`);
       const foods = this.resultParser.parse(content);
       if (foods.length > 0) return foods;
 
@@ -174,7 +174,7 @@ export class ImageFoodAnalysisService {
           userId,
           locale,
         );
-        this.logger.debug(`[Phase1 retry raw] ${retryContent.slice(0, 500)}`);
+        this.logger.warn(`[Phase1 retry raw] ${retryContent.slice(0, 800)}`);
         return this.resultParser.parse(retryContent);
       } catch (retryErr) {
         return foods;

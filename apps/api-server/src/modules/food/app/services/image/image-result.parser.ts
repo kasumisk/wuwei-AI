@@ -85,6 +85,7 @@ export class ImageResultParser {
         .trim();
       parsed = JSON.parse(cleaned);
     } catch {
+      this.logger.warn(`[ImageResultParser] JSON.parse failed, content preview: ${content.slice(0, 300)}`);
       return [];
     }
 

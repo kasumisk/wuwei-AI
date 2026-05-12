@@ -21,9 +21,10 @@ import { LlmFeature } from '../../../../../core/llm/llm.types';
 import { I18nService, I18nLocale } from '../../../../../core/i18n';
 import type { Locale } from '../../../../diet/app/recommendation/utils/i18n-messages';
 
-const TEXT_MAX_TOKENS = 1200;
+const TEXT_MAX_TOKENS = 5000; // each food item ~300 tokens; 10 items = 3000
 const TEXT_TEMPERATURE = 0.2;
-const TEXT_TIMEOUT_MS = 15_000;
+// nutrition fill 属于图片链路，超时放宽到 30s，与 LlmService 默认值一致
+const TEXT_TIMEOUT_MS = 30_000;
 
 // Nutrition fill schema is now stored in i18n files under:
 //   decision.prompt.nutritionFill.system  (system prompt with schema)
@@ -42,16 +43,24 @@ export class ImageNutritionFillService {
     private readonly llm: LlmService,
     private readonly i18n: I18nService,
   ) {
-    this.apiKey =
-      this.config.get<string>('OPENROUTER_API_KEY') ||
-      this.config.get<string>('OPENAI_API_KEY') ||
-      '';
-    this.baseUrl =
-      this.config.get<string>('OPENROUTER_BASE_URL') ||
-      'https://openrouter.ai/api/v1';
+    // 优先 DeepSeek 官方 API，回退到 OpenRouter（与文本分析链路一致）
+    const deepseekKey = this.config.get<string>('DEEPSEEK_API_KEY');
+    const openrouterKey = this.config.get<string>('OPENROUTER_API_KEY');
+    if (deepseekKey) {
+      this.apiKey = deepseekKey;
+      this.baseUrl =
+        this.config.get<string>('DEEPSEEK_BASE_URL') ||
+        'https://api.deepseek.com/v1';
+    } else {
+      this.apiKey =
+        openrouterKey || this.config.get<string>('OPENAI_API_KEY') || '';
+      this.baseUrl =
+        this.config.get<string>('OPENROUTER_BASE_URL') ||
+        'https://openrouter.ai/api/v1';
+    }
     this.textModel =
       this.config.get<string>('NUTRITION_FILL_MODEL') ||
-      'google/gemini-2.0-flash-001';
+      'deepseek-chat';
   }
 
   /**
@@ -108,8 +117,11 @@ export class ImageNutritionFillService {
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userMessage },
       ],
-      feature: LlmFeature.FoodText,
-      provider: 'openrouter',
+      // FoodImage 熔断器：与文本分析 (FoodText) 隔离，避免图片链路超时污染文本链路
+      feature: LlmFeature.FoodImage,
+      provider: this.config.get<string>('DEEPSEEK_API_KEY')
+        ? 'deepseek'
+        : 'openrouter',
       model: this.textModel,
       apiKey: this.apiKey,
       baseUrl: this.baseUrl,
