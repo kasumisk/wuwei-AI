@@ -88,8 +88,13 @@ export class ImageResultParser {
       return [];
     }
 
-    const rawFoods = Array.isArray(parsed.foods) ? parsed.foods : [];
+    const rawFoods = (Array.isArray(parsed.foods) ? parsed.foods : []).filter(
+      (f) => f !== null && typeof f === 'object' && !Array.isArray(f),
+    );
     if (rawFoods.length === 0) {
+      this.logger.warn(
+        `[ImageResultParser] parsed.foods had no valid object items (original length: ${Array.isArray(parsed.foods) ? (parsed.foods as unknown[]).length : 0})`,
+      );
       return [];
     }
 
