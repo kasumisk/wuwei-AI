@@ -26,24 +26,24 @@ export class FoodLibraryMatcher {
   /**
    * 并发匹配多条 foods。已带 foodLibraryId 的会跳过。
    */
-  async matchAll(foods: AnalyzedFoodItem[]): Promise<void> {
-    await Promise.all(foods.map((food) => this.matchOne(food)));
+  async matchAll(foods: AnalyzedFoodItem[], locale?: string): Promise<void> {
+    await Promise.all(foods.map((food) => this.matchOne(food, locale)));
   }
 
-  private async matchOne(food: AnalyzedFoodItem): Promise<void> {
+  private async matchOne(food: AnalyzedFoodItem, locale?: string): Promise<void> {
     if (food.foodLibraryId) return;
 
     try {
       if (!food.name) return;
-      const hit = await this.search(food.name);
+      const hit = await this.search(food.name, locale);
       if (hit) this.applyMatch(food, hit);
     } catch {
       // 单条搜索失败不影响整批
     }
   }
 
-  private async search(name: string): Promise<any | null> {
-    const results = (await this.foodLibraryService.search(name, 1)) as any[];
+  private async search(name: string, locale?: string): Promise<any | null> {
+    const results = (await this.foodLibraryService.search(name, 1, locale)) as any[];
     const top = results?.[0];
     if (!top || top.sim_score < MATCH_THRESHOLD) return null;
     return top;

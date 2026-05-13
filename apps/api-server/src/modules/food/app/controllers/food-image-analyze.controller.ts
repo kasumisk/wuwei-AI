@@ -202,6 +202,50 @@ export class FoodImageAnalyzeController {
     }
 
     if (entry.status === 'processing') {
+      // nutrition_filled 阶段：营养补全已完成，决策引擎尚未运行。
+      // 含完整食物列表（有营养数值），比 foods_identified 更丰富。
+      if (
+        entry.stage === 'nutrition_filled' &&
+        entry.nutritionFilledFoods?.length
+      ) {
+        return ResponseWrapper.success(
+          {
+            requestId,
+            status: 'processing',
+            stage: 'nutrition_filled' as const,
+            foods: entry.nutritionFilledFoods,
+          },
+          this.i18n.t('food.analyzeInProgress'),
+        );
+      }
+
+      // foods_identified 阶段：阶段 1 已完成，食物已识别，营养/决策计算仍在后台进行。
+      // 把食物列表提前返回给客户端展示，stage 保持 processing 让客户端继续轮询。
+      if (entry.stage === 'foods_identified' && entry.identifiedFoods?.length) {
+        return ResponseWrapper.success(
+          {
+            requestId,
+            status: 'processing',
+            stage: 'foods_identified' as const,
+            identifiedFoods: entry.identifiedFoods,
+          },
+          this.i18n.t('food.analyzeInProgress'),
+        );
+      }
+
+      // vision_done 阶段：Vision LLM 已返回，原始食物名已知，matchAll 尚未完成。
+      if (entry.stage === 'vision_done' && entry.visionDoneFoods?.length) {
+        return ResponseWrapper.success(
+          {
+            requestId,
+            status: 'processing',
+            stage: 'vision_done' as const,
+            visionDoneFoods: entry.visionDoneFoods,
+          },
+          this.i18n.t('food.analyzeInProgress'),
+        );
+      }
+
       return ResponseWrapper.success(
         { requestId, status: 'processing', stage: 'analyzing' as const },
         this.i18n.t('food.analyzeInProgress'),
