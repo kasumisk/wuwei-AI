@@ -12,7 +12,7 @@ describe('RecipeGenerationService routed mode', () => {
     maxDifficulty: 2,
   };
 
-  const llmContent = JSON.stringify({
+  const aiRuntimeContent = JSON.stringify({
     recipes: [
       {
         name: '清炒西兰花',
@@ -29,9 +29,9 @@ describe('RecipeGenerationService routed mode', () => {
     const configService = {
       get: jest.fn((key: string) => config[key]),
     } as unknown as ConfigService;
-    const llm = {
-      chat: jest.fn().mockResolvedValue({ content: llmContent }),
-      chatRouted: jest.fn().mockResolvedValue({ content: llmContent }),
+    const aiRuntime = {
+      chat: jest.fn().mockResolvedValue({ content: aiRuntimeContent }),
+      chatRouted: jest.fn().mockResolvedValue({ content: aiRuntimeContent }),
     };
 
     const service = new RecipeGenerationService(
@@ -39,42 +39,42 @@ describe('RecipeGenerationService routed mode', () => {
       {} as any,
       {} as any,
       {} as any,
-      llm as any,
+      aiRuntime as any,
     );
 
-    return { service, llm };
+    return { service, aiRuntime };
   }
 
   it('uses direct OpenRouter mode by default', async () => {
-    const { service, llm } = createService({
+    const { service, aiRuntime } = createService({
       OPENROUTER_API_KEY: 'openrouter-key',
       OPENROUTER_BASE_URL: 'https://openrouter.ai/api/v1',
     });
 
-    const recipes = await service.callLLM(request);
+    const recipes = await service.callAiRuntime(request);
 
     expect(recipes).toHaveLength(1);
-    expect(llm.chat).toHaveBeenCalledWith(
+    expect(aiRuntime.chat).toHaveBeenCalledWith(
       expect.objectContaining({
         provider: 'openrouter',
         apiKey: 'openrouter-key',
         baseUrl: 'https://openrouter.ai/api/v1',
       }),
     );
-    expect(llm.chatRouted).not.toHaveBeenCalled();
+    expect(aiRuntime.chatRouted).not.toHaveBeenCalled();
   });
 
   it('uses routed mode when recipe routed client is configured', async () => {
-    const { service, llm } = createService({
+    const { service, aiRuntime } = createService({
       RECIPE_LLM_ROUTED_CLIENT_ID: 'app-client',
       RECIPE_LLM_ROUTED_REGION: 'CN',
       RECIPE_LLM_ROUTED_MODEL: 'qwen-plus',
     });
 
-    const recipes = await service.callLLM(request);
+    const recipes = await service.callAiRuntime(request);
 
     expect(recipes).toHaveLength(1);
-    expect(llm.chatRouted).toHaveBeenCalledWith(
+    expect(aiRuntime.chatRouted).toHaveBeenCalledWith(
       expect.objectContaining({
         clientId: 'app-client',
         capabilityType: 'text.generation',
@@ -82,6 +82,6 @@ describe('RecipeGenerationService routed mode', () => {
         region: 'CN',
       }),
     );
-    expect(llm.chat).not.toHaveBeenCalled();
+    expect(aiRuntime.chat).not.toHaveBeenCalled();
   });
 });

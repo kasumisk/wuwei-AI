@@ -1,14 +1,10 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../core/prisma/prisma.service';
-import { CapabilityRouter } from './services/capability-router.service';
 
 @Injectable()
 export class GatewayService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly capabilityRouter: CapabilityRouter,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * 验证客户端 API Key 和 Secret

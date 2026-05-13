@@ -343,7 +343,7 @@
   "ctx.prompt.protein": "Protein: {{remaining}}g remaining (target {{goal}}g, consumed {{consumed}}g)",
   "diag.auditLow": "Recent manual audit accuracy is low — coach output should be more conservative",
   "diag.avoidLowConfidence": "Current recommendation is strict — consider manual review or clearer input",
-  "diag.categoryMismatch": "Category mismatch: \"{{name}}\" LLM={{llmCategory}} vs DB={{dbCategory}}",
+  "diag.categoryMismatch": "Category mismatch: \"{{name}}\" AI runtime={{aiRuntimeCategory}} vs DB={{dbCategory}}",
   "diag.normalizationLow": "Normalization hit rate is low — some foods are not stably mapped to the library",
   "diag.nutritionEstimationLow": "Nutrition estimation contains many inferred values — treat conclusions as conservative estimates",
   "diag.recognitionLow": "Recognition confidence is low — input may contain ambiguity",

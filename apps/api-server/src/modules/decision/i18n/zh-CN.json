@@ -338,7 +338,7 @@
   "ctx.prompt.protein": "蛋白质：剩余 {{remaining}}g（总目标 {{goal}}g，已摄入 {{consumed}}g）",
   "diag.auditLow": "近期人工审核准确率偏低，建议教练输出更保守",
   "diag.avoidLowConfidence": "当前建议偏严格，适合配合人工复核或更清晰输入",
-  "diag.categoryMismatch": "分类不一致：「{{name}}」LLM={{llmCategory}} vs 数据库={{dbCategory}}",
+  "diag.categoryMismatch": "分类不一致：「{{name}}」AI runtime={{aiRuntimeCategory}} vs 数据库={{dbCategory}}",
   "diag.normalizationLow": "标准化命中率偏低，部分食物未稳定映射到食物库",
   "diag.nutritionEstimationLow": "营养估算包含较多推断值，建议将结论视为保守估算",
   "diag.recognitionLow": "识别置信度偏低，原始输入可能存在歧义",

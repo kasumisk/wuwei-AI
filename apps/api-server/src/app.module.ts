@@ -39,7 +39,7 @@ import { CapabilitiesModule } from './modules/capabilities/capabilities.module';
 // 系统服务
 import { HealthModule } from './health/health.module';
 import { GatewayModule } from './gateway/gateway.module';
-import { LlmModule } from './core/llm/llm.module';
+import { AiRuntimeModule } from './core/ai-runtime';
 import { CompressModule } from './compress/compress.module';
 import { FoodPipelineModule } from './food-pipeline/food-pipeline.module';
 // 全局
@@ -124,8 +124,8 @@ import { ScheduleModule } from '@nestjs/schedule';
     // 系统服务
     HealthModule,
     GatewayModule,
-    // V7 Checkpoint 2: 统一 LLM 调用层（直连模式 + 配额 + 熔断 + cost 入账）
-    LlmModule,
+    // V7 Checkpoint 2: 统一 AI runtime 调用层（直连模式 + 配额 + 熔断 + cost 入账）
+    AiRuntimeModule,
     CompressModule,
     FoodPipelineModule,
   ],

@@ -99,7 +99,7 @@ export class ConfidenceDiagnosticsService {
       );
     }
 
-    // V4.9 P3.4: Category mismatch detection (LLM category vs library category)
+    // V4.9 P3.4: Category mismatch detection (AI runtime category vs library category)
     const categoryMismatches = await this.detectCategoryMismatches(foods);
     if (categoryMismatches.length > 0) {
       qualitySignals.push('category_mismatch');
@@ -107,7 +107,7 @@ export class ConfidenceDiagnosticsService {
         uncertaintyReasons.push(
           this.i18n.t('decision.diag.categoryMismatch', locale, {
             name: mm.name,
-            llmCategory: translateEnum('foodCategory', mm.llmCategory, locale),
+            aiRuntimeCategory: translateEnum('foodCategory', mm.aiRuntimeCategory, locale),
             dbCategory: translateEnum('foodCategory', mm.dbCategory, locale),
           }),
         );
@@ -192,14 +192,14 @@ export class ConfidenceDiagnosticsService {
   }
 
   /**
-   * V4.9 P3.4: Detect category mismatches between LLM-assigned and DB categories
+   * V4.9 P3.4: Detect category mismatches between AI runtime-assigned and DB categories
    */
   private async detectCategoryMismatches(
     foods: AnalyzedFoodItem[],
-  ): Promise<Array<{ name: string; llmCategory: string; dbCategory: string }>> {
+  ): Promise<Array<{ name: string; aiRuntimeCategory: string; dbCategory: string }>> {
     const mismatches: Array<{
       name: string;
-      llmCategory: string;
+      aiRuntimeCategory: string;
       dbCategory: string;
     }> = [];
 
@@ -218,7 +218,7 @@ export class ConfidenceDiagnosticsService {
       if (dbCategory && food.category && dbCategory !== food.category) {
         mismatches.push({
           name: food.name,
-          llmCategory: food.category,
+          aiRuntimeCategory: food.category,
           dbCategory,
         });
       }

@@ -1,8 +1,8 @@
 import { EnrichmentAiClient } from '../../../src/food-pipeline/services/enrichment/services/ai-client.service';
-import { LlmFeature } from '../../../src/core/llm/llm.types';
+import { AiRuntimeFeature } from '../../../src/core/ai-runtime/ai-runtime.types';
 
-describe('EnrichmentAiClient routed LLM mode', () => {
-  const llm = {
+describe('EnrichmentAiClient routed AI runtime mode', () => {
+  const aiRuntime = {
     chat: jest.fn(),
     chatRouted: jest.fn(),
   };
@@ -16,11 +16,11 @@ describe('EnrichmentAiClient routed LLM mode', () => {
       get: jest.fn((key: string) => config[key]),
     };
 
-    return new EnrichmentAiClient(configService as any, llm as any);
+    return new EnrichmentAiClient(configService as any, aiRuntime as any);
   }
 
   it('keeps direct DeepSeek mode when LLM_ROUTED_CLIENT_ID is not configured', async () => {
-    llm.chat.mockResolvedValue({
+    aiRuntime.chat.mockResolvedValue({
       content: '{"confidence":0.8,"reasoning":"ok"}',
     });
     const client = createClient({
@@ -30,20 +30,20 @@ describe('EnrichmentAiClient routed LLM mode', () => {
     const result = await client.callAIRaw('apple', 'prompt');
 
     expect(result).toEqual({ confidence: 0.8, reasoning: 'ok' });
-    expect(llm.chat).toHaveBeenCalledWith(
+    expect(aiRuntime.chat).toHaveBeenCalledWith(
       expect.objectContaining({
-        feature: LlmFeature.FoodEnrichment,
+        feature: AiRuntimeFeature.FoodEnrichment,
         provider: 'deepseek',
         apiKey: 'deepseek-key',
         baseUrl: 'https://api.deepseek.com/v1',
         model: 'deepseek-chat',
       }),
     );
-    expect(llm.chatRouted).not.toHaveBeenCalled();
+    expect(aiRuntime.chatRouted).not.toHaveBeenCalled();
   });
 
   it('uses chatRouted when LLM_ROUTED_CLIENT_ID is configured', async () => {
-    llm.chatRouted.mockResolvedValue({
+    aiRuntime.chatRouted.mockResolvedValue({
       content: '{"confidence":0.9,"reasoning":"routed"}',
     });
     const client = createClient({
@@ -57,10 +57,10 @@ describe('EnrichmentAiClient routed LLM mode', () => {
     });
 
     expect(result).toEqual({ confidence: 0.9, reasoning: 'routed' });
-    expect(llm.chatRouted).toHaveBeenCalledWith(
+    expect(aiRuntime.chatRouted).toHaveBeenCalledWith(
       expect.objectContaining({
         clientId: 'app-client',
-        feature: LlmFeature.FoodEnrichment,
+        feature: AiRuntimeFeature.FoodEnrichment,
         capabilityType: 'text.generation',
         requestedModel: 'qwen-plus',
         region: 'CN',
@@ -68,6 +68,6 @@ describe('EnrichmentAiClient routed LLM mode', () => {
         responseFormat: { type: 'json_object' },
       }),
     );
-    expect(llm.chat).not.toHaveBeenCalled();
+    expect(aiRuntime.chat).not.toHaveBeenCalled();
   });
 });

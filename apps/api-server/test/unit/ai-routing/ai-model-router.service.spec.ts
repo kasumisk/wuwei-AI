@@ -1,15 +1,15 @@
 /**
- * CapabilityRouter 单元测试 — V7.7 重写
+ * AiModelRouter 单元测试 — V7.7 重写
  *
  * V7.7 变更：TypeORM repository mock → Prisma mock（对齐 V7.4+ 实现）
  * 使用直接构造函数注入 mock，与 v6.9~v7.4 集成测试一致的风格。
  */
 
 import { NotFoundException } from '@nestjs/common';
-import { CapabilityRouter } from '../../../src/gateway/services/capability-router.service';
+import { AiModelRouter } from '../../../src/core/ai-routing';
 
-describe('CapabilityRouter', () => {
-  let service: CapabilityRouter;
+describe('AiModelRouter', () => {
+  let service: AiModelRouter;
   let mockPrisma: any;
 
   const mockProvider = {
@@ -62,7 +62,7 @@ describe('CapabilityRouter', () => {
       },
     };
 
-    service = new CapabilityRouter(mockPrisma);
+    service = new AiModelRouter(mockPrisma);
   });
 
   // ═══════════════════════════════════════════════════════════

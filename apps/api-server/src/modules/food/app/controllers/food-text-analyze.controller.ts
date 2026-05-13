@@ -51,9 +51,9 @@ import { AnalysisSessionService } from '../services/analysis-session.service';
 export class FoodTextAnalyzeController {
   private readonly logger = new Logger(FoodTextAnalyzeController.name);
   /**
-   * In-flight LLM 请求去重表（thundering herd 保护）
+   * In-flight AI runtime 请求去重表（thundering herd 保护）
    *
-   * 当相同 cacheKey 有多个并发 cache miss 时，只发起一次 LLM 调用，
+   * 当相同 cacheKey 有多个并发 cache miss 时，只发起一次 AI runtime 调用，
    * 后续相同 key 的请求等待第一个 Promise resolve 即可。
    * 完成后（无论成功或失败）从 Map 中删除，避免内存泄漏。
    */
@@ -74,7 +74,7 @@ export class FoodTextAnalyzeController {
 
   @Post('analyze-text')
   @HttpCode(HttpStatus.OK)
-  @AiHeavyThrottle(100, 60) // 100/min：缓存命中 ~5ms 不应受限；LLM 配额保护由 quotaGateService 负责
+  @AiHeavyThrottle(100, 60) // 100/min：缓存命中 ~5ms 不应受限；AI runtime 配额保护由 quotaGateService 负责
   @ApiOperation({ summary: '文本食物 AI 分析' })
   @ApiBody({ type: AnalyzeTextDto })
   async analyzeText(
@@ -156,7 +156,7 @@ export class FoodTextAnalyzeController {
 
       const analysisStartedAt = Date.now();
 
-      // ── Thundering herd 去重：相同 cacheKey 同时 miss 时只发一次 LLM ──────
+      // ── Thundering herd 去重：相同 cacheKey 同时 miss 时只发一次 AI runtime ──────
       let inFlightPromise = this.inFlightAnalysis.get(cacheKey);
       if (!inFlightPromise) {
         inFlightPromise = this.textFoodAnalysisService

@@ -597,7 +597,7 @@ ${replyLang}，每条消息不超过 150 字，不要使用 Markdown 格式。`;
 
   /**
    * V3.3: 将 StructuredDecision 格式化为 prompt 片段
-   * 输出四维因素评分 + 多维原因，供 LLM 理解决策依据
+   * 输出四维因素评分 + 多维原因，供 AI runtime 理解决策依据
    */
   private formatStructuredDecision(
     sd: StructuredDecision,
@@ -760,7 +760,7 @@ ${replyLang}，每条消息不超过 150 字，不要使用 Markdown 格式。`;
   /**
    * V2.2: 基于结构化摘要构建精简教练上下文
    *
-   * 相比原始 20 段数据，摘要版本更紧凑，LLM 更容易抓住重点
+   * 相比原始 20 段数据，摘要版本更紧凑，AI runtime 更容易抓住重点
    */
   private formatSummaryContext(
     analysisContext: AnalysisContextInput,

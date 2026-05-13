@@ -9,23 +9,27 @@
  * 字段映射：
  *  - clientId 必填（schema 强制）；系统调用时使用环境变量 `SYSTEM_CLIENT_ID`
  *    或一个保留 UUID（默认 `00000000-0000-0000-0000-000000000000`）
- *  - capabilityType = LlmFeature 字符串值
+ *  - capabilityType = AiRuntimeFeature 字符串值
  *  - status: success | failed | timeout
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { LlmFeature, LlmTokenUsage, LlmProvider } from './llm.types';
+import {
+  AiRuntimeFeature,
+  AiRuntimeTokenUsage,
+  AiRuntimeProvider,
+} from './ai-runtime.types';
 
 export interface UsageRecordInput {
   clientId: string;
   /** 发起调用的用户 ID（可选，系统级任务传 undefined） */
   userId?: string;
   requestId: string;
-  feature: LlmFeature;
-  provider: LlmProvider;
+  feature: AiRuntimeFeature;
+  provider: AiRuntimeProvider;
   model: string;
   status: 'success' | 'failed' | 'timeout';
-  usage: LlmTokenUsage;
+  usage: AiRuntimeTokenUsage;
   costUsd: number;
   responseTimeMs: number;
   metadata?: Record<string, unknown>;
@@ -44,7 +48,7 @@ export class UsageRecorderService {
   }
 
   /**
-   * 异步记录一次 LLM 调用。永远不会抛错。
+   * 异步记录一次 AI runtime 调用。永远不会抛错。
    * 调用方应直接 `void recorder.record(...)` 不 await。
    */
   record(input: UsageRecordInput): void {
@@ -71,6 +75,9 @@ export class UsageRecorderService {
           prompt_tokens: input.usage.promptTokens,
           completion_tokens: input.usage.completionTokens,
           total_tokens: input.usage.totalTokens,
+          promptTokens: input.usage.promptTokens,
+          completionTokens: input.usage.completionTokens,
+          totalTokens: input.usage.totalTokens,
         },
         cost: input.costUsd.toFixed(6),
         responseTime: Math.round(input.responseTimeMs),

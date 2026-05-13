@@ -306,7 +306,7 @@ const cost = adapter.calculateCostWithCache(
 
 ### 本项目相关
 
-- 适配器代码: `apps/server/src/gateway/adapters/deepseek.adapter.ts`
+- 适配器代码: `apps/api-server/src/core/ai-runtime/adapters/deepseek.adapter.ts`
 - 测试脚本: `apps/server/src/gateway/test-gateway.ts`
 - 初始化脚本: `apps/server/src/gateway/init-test-data.ts`
 

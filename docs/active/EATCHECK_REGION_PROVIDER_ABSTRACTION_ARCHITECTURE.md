@@ -11,9 +11,9 @@
 根据当前仓库检查，EatCheck 已具备做“全球主架构 + 中国区域化适配层”的基础：
 
 - 后端为 NestJS + Prisma + PostgreSQL，位于 `apps/api-server`。
-- AI Gateway 已存在，位于 `apps/api-server/src/gateway`，并已有 `OpenAIAdapter`、`OpenRouterAdapter`、`DeepSeekAdapter`、`QwenAdapter`。
+- AI Gateway 已存在，位于 `apps/api-server/src/gateway`；模型 provider adapter 已收敛到 `apps/api-server/src/core/ai-runtime/adapters`，包含 `OpenAIAdapter`、`OpenRouterAdapter`、`DeepSeekAdapter`、`QwenAdapter`。
 - AI provider/model 管理已存在，位于 `apps/api-server/src/modules/provider`，Prisma 中已有 `Providers`、`ModelConfigs`、`ClientCapabilityPermissions` 等模型。
-- 统一 LLM 调用入口已存在，位于 `apps/api-server/src/core/llm/llm.service.ts`，当前仍偏“直连模式”，注释中也标明路由模式待后续实现。
+- 统一 AI Runtime 调用入口已存在，位于 `apps/api-server/src/core/ai-runtime/ai-runtime.service.ts`，文本/流式文本已通过 `AiModelRouter` 进入区域化模型路由，失败时可按 provider/model fallback。
 - 用户区域、时区、语言概念已存在，位于 `apps/api-server/src/common/config/regional-defaults.ts`、`timezone.util.ts`、`locale-region.util.ts`。
 - 推荐链路已经开始传递 `regionCode`，并有 `FoodRegionalInfo`、季节性、地域 boost、渠道可获得性等区域化能力。
 - Auth 侧已有 Firebase、Google token fallback、手机号、微信、小程序、邮箱等能力，但目前集中在 `AppAuthService`，尚未抽象为区域可替换 provider。
@@ -148,9 +148,9 @@ Phase 1 默认策略：
 - `CN` 仅作为能力配置存在，不默认启用正式生产流量。
 - 允许通过 admin/config 或环境变量强制特定测试用户进入 `CN` profile。
 
-### 2. AIProvider / AI Gateway 统一化
+### 2. AIProvider / AI Runtime 统一化
 
-现状：AI Gateway adapter 已有，`BaseCapabilityAdapter` 已定义生成文本、流式文本、图像生成、音频转文本等能力。下一步不是新写一套 AI 抽象，而是把业务模块统一收敛到 Gateway/LLM Router。
+现状：AI provider runtime adapter 已收敛到 `apps/api-server/src/core/ai-runtime`，`BaseCapabilityAdapter` 已定义生成文本、流式文本、图像生成、音频转文本等能力。Provider/Model 后台配置仍位于 `apps/api-server/src/modules/provider`，负责写入 `providers` / `model_configs`。Gateway 目录只保留外部 API 门面、DTO、Guard 和 API Client 校验。
 
 目标：
 
@@ -158,10 +158,10 @@ Phase 1 默认策略：
 Food Analyze / Coach / Enrichment / Recommendation Explain
         |
         v
-LlmRouterService / AI Gateway
+AiRuntimeService / AI Runtime
         |
         v
-CapabilityRouter + RegionStrategy
+AiModelRouter + RegionStrategy
         |
         v
 OpenAI / OpenRouter / DeepSeek / Qwen
@@ -169,8 +169,10 @@ OpenAI / OpenRouter / DeepSeek / Qwen
 
 需要补齐：
 
-- `LlmService` 增加 routed 模式，避免业务模块直接传 `apiKey/baseUrl/model`。
-- `CapabilityRouter.route()` 增加 `region`、`locale`、`feature`、`dataSensitivity` 参数。
+- `AiRuntimeService` 已增加 routed 模式，业务模块逐步避免直接传 `apiKey/baseUrl/model`；外部 Gateway 文本生成也已收敛到 `AiRuntimeService.chatRouted()`。
+- `AiRuntimeService.chatRouted()` 已承接 provider fallback，Gateway 不再需要在文本生成路径重复实现 fallback、cost、usage 记录。
+- `AiRuntimeService.chatRoutedStream()` 已承接流式文本路由；首 token 前可 fallback，已经开始输出后不跨 provider 拼接。
+- `AiModelRouter.route()` 已支持 `region`，后续继续补 `locale`、`feature`、`dataSensitivity` 参数。
 - `Providers` / `ModelConfigs` 增加区域适用范围字段，例如 `regions`、`blockedRegions`、`dataResidencyMode`。
 - 业务模块只表达能力需求，例如 `food_image_analysis`、`coach_chat`、`food_enrichment`，不关心供应商。
 
@@ -366,8 +368,8 @@ Provider/Model：
 
 - 建立 Notion 项目文档结构：架构总览、决策记录、Provider 抽象、Region Strategy、合规清单、实施任务。
 - 新增 `RegionStrategyService` 与 `/api/app/capabilities`。
-- 将 AI 业务调用逐步收敛到 routed `LlmService` / AI Gateway。
-- 给 `CapabilityRouter` 增加 region/context 参数。
+- 将 AI 业务调用逐步收敛到 routed `AiRuntimeService` / AI runtime。
+- 给 `AiModelRouter` 增加 region/context 参数。
 - 梳理 `AuthProviderRegistry`，先包装现有 Firebase、Phone、WeChat 能力，不改变 API 行为。
 - 梳理 `BillingProvider`，先包装 RevenueCat 和 WeChatPay，不改变订阅权益模型。
 - Provider/model/admin 配置增加 region 维度。
@@ -418,7 +420,7 @@ Provider/Model：
 
 - 创建 `RegionStrategyService`。
 - 创建 `/api/app/capabilities`。
-- AI 调用禁止新增直连 provider，统一走 `LlmService` 或 Gateway。
+- AI 调用禁止新增直连 provider，统一走 `AiRuntimeService` 或 Gateway。
 - Provider/model 配置补 region 字段方案。
 - Notion 中建立架构与决策文档入口。
 

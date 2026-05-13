@@ -7,7 +7,7 @@
  *  - 启动期校验 API key
  *  - 屏蔽具体 HTTP 细节，向上仅暴露 `complete()` 和向用户友好的 i18n 错误
  *
- * 不再在本类内做（已下沉到 `LlmService`）：
+ * 不再在本类内做（已下沉到 `AiRuntimeService`）：
  *  - 配额扣减（quota）
  *  - Circuit Breaker（按 feature 自动隔离）
  *  - 超时控制
@@ -29,13 +29,13 @@ import { ConfigService } from '@nestjs/config';
 import { I18nService } from '../../../../../core/i18n';
 import type { Locale } from '../../../../diet/app/recommendation/utils/i18n-messages';
 import { AnalysisPromptSchemaService } from '../analysis-prompt-schema.service';
-import { LlmService } from '../../../../../core/llm/llm.service';
+import { AiRuntimeService } from '../../../../../core/ai-runtime/ai-runtime.service';
 import { RegionAiModelRoutingService } from '../../../../../core/region';
 import {
-  LlmFeature,
-  LlmQuotaExceededError,
-  LlmUnavailableError,
-} from '../../../../../core/llm/llm.types';
+  AiRuntimeFeature,
+  AiRuntimeQuotaExceededError,
+  AiRuntimeUnavailableError,
+} from '../../../../../core/ai-runtime/ai-runtime.types';
 
 const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_TOKENS = 5000;
@@ -51,10 +51,10 @@ export class VisionApiClient implements OnModuleInit {
     private readonly config: ConfigService,
     private readonly i18n: I18nService,
     private readonly promptSchema: AnalysisPromptSchemaService,
-    private readonly llm: LlmService,
+    private readonly aiRuntime: AiRuntimeService,
     private readonly aiModelRouting: RegionAiModelRoutingService,
   ) {
-    // OpenRouter 流量归因 headers（透传给 LlmService，仅在 stream 路径生效；
+    // OpenRouter 流量归因 headers（透传给 AiRuntimeService，仅在 stream 路径生效；
     // 非流式路径走 LangChain SDK，无法塞 headers，OpenRouter 仍可工作但无归因）
     this.httpReferer =
       this.config.get<string>('OPENROUTER_HTTP_REFERER') ||
@@ -82,18 +82,18 @@ export class VisionApiClient implements OnModuleInit {
   }
 
   /**
-   * 调用 vision 模型，返回 LLM 文本输出。
+   * 调用 vision 模型，返回 AI runtime 文本输出。
    *
-   * 已统一处理（在 LlmService 内）：配额、breaker、超时、usage/cost 记录。
+   * 已统一处理（在 AiRuntimeService 内）：配额、breaker、超时、usage/cost 记录。
    * 本方法仅负责：
    *   - 构造多模态 messages
-   *   - 主模型失败时切 fallback 模型重试一次（LlmService 内不重试）
+   *   - 主模型失败时切 fallback 模型重试一次（AiRuntimeService 内不重试）
    *   - 把统一异常映射到 i18n 业务异常
    *
    * 抛出：
    *   - ServiceUnavailableException：上游不可用 / 熔断打开（i18n: food.analyze.unavailable）
    *   - BadRequestException：业务超时 / 失败（i18n: food.analyze.timeout / failed）
-   *   - LlmQuotaExceededError：用户配额耗尽，由上层映射 HTTP 429
+   *   - AiRuntimeQuotaExceededError：用户配额耗尽，由上层映射 HTTP 429
    */
   async complete(
     systemPrompt: string,
@@ -119,10 +119,10 @@ export class VisionApiClient implements OnModuleInit {
       );
     } catch (err) {
       // 配额耗尽：直接上抛
-      if (err instanceof LlmQuotaExceededError) throw err;
+      if (err instanceof AiRuntimeQuotaExceededError) throw err;
 
       // 上游不可用：尝试 fallback 一次
-      if (err instanceof LlmUnavailableError) {
+      if (err instanceof AiRuntimeUnavailableError) {
         if (!route.fallbackModel) {
           this.logger.error(
             `Vision model ${route.model} unavailable and no fallback configured`,
@@ -148,7 +148,8 @@ export class VisionApiClient implements OnModuleInit {
             locale,
           );
         } catch (fallbackErr) {
-          if (fallbackErr instanceof LlmQuotaExceededError) throw fallbackErr;
+          if (fallbackErr instanceof AiRuntimeQuotaExceededError)
+            throw fallbackErr;
           this.logger.error(
             `Vision fallback model also failed: ${(fallbackErr as Error).message}`,
           );
@@ -164,7 +165,7 @@ export class VisionApiClient implements OnModuleInit {
     }
   }
 
-  /** 单次 LlmService 调用（不含 fallback 重试） */
+  /** 单次 AiRuntimeService 调用（不含 fallback 重试） */
   private async invoke(
     model: string,
     provider: string,
@@ -176,8 +177,8 @@ export class VisionApiClient implements OnModuleInit {
     userId: string,
     locale?: Locale,
   ): Promise<string> {
-    const result = await this.llm.chat({
-      feature: LlmFeature.FoodImage,
+    const result = await this.aiRuntime.chat({
+      feature: AiRuntimeFeature.FoodImage,
       provider,
       apiKey,
       baseUrl,

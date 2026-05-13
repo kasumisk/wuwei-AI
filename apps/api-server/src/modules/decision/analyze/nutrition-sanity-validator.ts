@@ -15,7 +15,7 @@
  * 设计原则：
  * - 纯函数，无状态，无副作用，可独立单元测试
  * - 不修改原始数据，返回新对象
- * - 只校验 AI/LLM 估算数据，标准库数据信任度高无需校验
+ * - 只校验 AI/AI runtime 估算数据，标准库数据信任度高无需校验
  */
 
 /** 每类食物的默认宏量比例（kcal%），用于纠偏。V4.9: 统一为 DB 14 分类 */
@@ -117,7 +117,7 @@ export function isPlausiblePer100gCalories(
 /**
  * 校验并纠偏单个食物项的营养数据
  *
- * @param input 食物营养数据（来自 AI/LLM 估算）
+ * @param input 食物营养数据（来自 AI/AI runtime 估算）
  * @returns 校验结果，包含纠偏建议
  */
 export function validateNutrition(input: NutritionInput): SanityResult {
@@ -176,7 +176,7 @@ export function validateNutrition(input: NutritionInput): SanityResult {
 }
 
 /**
- * 批量校验食物列表（用于 LLM 返回的 foods 数组）
+ * 批量校验食物列表（用于 AI runtime 返回的 foods 数组）
  *
  * @param foods 食物数组
  * @returns 纠偏后的食物数组（仅修改不一致的项）

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CapabilityType, toDbCapabilityType } from '@ai-platform/shared';
-import type { LlmProvider } from '../llm/llm.types';
+import type { AiRuntimeProvider } from '../ai-runtime/ai-runtime.types';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegionStrategyService } from './region-strategy.service';
 import type {
@@ -14,7 +14,7 @@ export type RegionAiModelFeature = 'foodTextAnalysis' | 'foodImageAnalysis';
 
 export interface ResolvedRegionAiModelRoute {
   region: RuntimeRegion;
-  provider: LlmProvider;
+  provider: AiRuntimeProvider;
   model: string;
   fallbackModel?: string;
   apiKey: string;
@@ -74,7 +74,7 @@ export class RegionAiModelRoutingService {
   }
 
   private async resolveFromModelConfig(
-    provider: LlmProvider,
+    provider: AiRuntimeProvider,
     modelName: string,
   ): Promise<Omit<
     ResolvedRegionAiModelRoute,
@@ -110,7 +110,7 @@ export class RegionAiModelRoutingService {
     };
   }
 
-  private normalizeProvider(route: RegionAiModelRoute): LlmProvider {
+  private normalizeProvider(route: RegionAiModelRoute): AiRuntimeProvider {
     if (route.provider) return route.provider.toLowerCase();
 
     if (route.primaryModel.startsWith('qwen/')) return 'openrouter';
@@ -118,7 +118,7 @@ export class RegionAiModelRoutingService {
     return 'openrouter';
   }
 
-  private resolveApiKey(provider: LlmProvider): string {
+  private resolveApiKey(provider: AiRuntimeProvider): string {
     switch (provider) {
       case 'deepseek':
         return this.config.get<string>('DEEPSEEK_API_KEY') || '';
@@ -138,7 +138,7 @@ export class RegionAiModelRoutingService {
     }
   }
 
-  private resolveBaseUrl(provider: LlmProvider): string {
+  private resolveBaseUrl(provider: AiRuntimeProvider): string {
     switch (provider) {
       case 'deepseek':
         return (

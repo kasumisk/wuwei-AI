@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { QwenAdapter } from '../../../src/gateway/adapters/qwen.adapter';
+import { QwenAdapter } from '../../../src/core/ai-runtime/adapters/qwen.adapter';
 import axios from 'axios';
 import { firstValueFrom, take, toArray } from 'rxjs';
 

@@ -338,7 +338,7 @@
   "ctx.prompt.protein": "タンパク質：残り {{remaining}}g（目標 {{goal}}g、摂取済み {{consumed}}g）",
   "diag.auditLow": "最近の手動審査精度が低い — コーチ出力をより保守的にすべきです",
   "diag.avoidLowConfidence": "現在の推奨は厳格 — 手動レビューまたはより明確な入力を検討してください",
-  "diag.categoryMismatch": "カテゴリ不一致：「{{name}}」LLM={{llmCategory}} vs DB={{dbCategory}}",
+  "diag.categoryMismatch": "カテゴリ不一致：「{{name}}」AI runtime={{aiRuntimeCategory}} vs DB={{dbCategory}}",
   "diag.normalizationLow": "標準化ヒット率が低い — 一部の食品が食物ライブラリに安定してマッピングされていません",
   "diag.nutritionEstimationLow": "栄養推定に推論値が多い — 結論は保守的な推定として扱ってください",
   "diag.recognitionLow": "認識信頼度が低い — 入力が曖昧な可能性があります",

@@ -15,7 +15,7 @@
  * 以及所有扩展营养字段）一律存储 **per-serving 实际摄入值**，
  * 即已乘以 estimatedWeightGrams/100 后的真实摄入量。
  *
- * 上游所有生成路径（buildFromLibraryMatch、llmParseFoods fallback、
+ * 上游所有生成路径（buildFromLibraryMatch、aiRuntimeParseFoods fallback、
  * buildHeuristicFallbackFood、image parseToAnalyzedFoods、applyLibraryMatch）
  * 必须在写入 AnalyzedFoodItem 前完成 per-100g → per-serving 的换算。
  *

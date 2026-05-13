@@ -2,7 +2,7 @@
  * Nutrition Aggregation
  *
  * 数据契约（V6.x 起）：AnalyzedFoodItem 上的所有营养字段均已是
- * **per-serving 实际摄入值**（由各上游路径——食物库匹配、LLM 解析、
+ * **per-serving 实际摄入值**（由各上游路径——食物库匹配、AI runtime 解析、
  * 启发式兜底、图片分析——在生成 AnalyzedFoodItem 时按
  * estimatedWeightGrams/100 完成换算）。
  *

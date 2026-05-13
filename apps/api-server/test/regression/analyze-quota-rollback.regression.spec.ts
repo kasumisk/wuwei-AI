@@ -23,7 +23,7 @@ describe('analysis quota rollback regression', () => {
         {
           provide: TextFoodAnalysisService,
           useValue: {
-            analyze: jest.fn().mockRejectedValue(new Error('llm failed')),
+            analyze: jest.fn().mockRejectedValue(new Error('aiRuntime failed')),
           },
         },
         {
@@ -79,7 +79,7 @@ describe('analysis quota rollback regression', () => {
 
     await expect(
       controller.analyzeText({ text: 'apple' } as any, { id: 'user-1' } as any),
-    ).rejects.toThrow('llm failed');
+    ).rejects.toThrow('aiRuntime failed');
 
     expect(quotaService.rollback).toHaveBeenCalledWith(
       'user-1',

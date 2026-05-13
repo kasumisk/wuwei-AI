@@ -145,7 +145,7 @@ export class FoodAnalyzeController {
    * V7.9 Phase 3-4: 文本分析缓存（相同输入+餐次在10分钟内返回缓存结果）
    * - 输入食物名称或自然语言描述
    * - 优先匹配标准食物库（零 AI 成本）
-   * - 未命中走 LLM 拆解
+   * - 未命中走 AI runtime 拆解
    * - 返回统一 FoodAnalysisResultV61
    * - 集成配额门控 + 结果权益裁剪
    */

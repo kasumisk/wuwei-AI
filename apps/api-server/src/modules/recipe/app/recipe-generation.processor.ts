@@ -3,7 +3,7 @@
  *
  * 异步处理菜谱生成 job：
  * 1. 消费 recipe-generation 队列中的批次任务
- * 2. 调用 RecipeGenerationService.callLLM() 生成菜谱
+ * 2. 调用 RecipeGenerationService.callAiRuntime() 生成菜谱
  * 3. 调用 RecipeManagementService.createBatch() 批量入库
  * 4. 日志记录成功/失败
  *
@@ -66,12 +66,12 @@ export class RecipeGenerationProcessor
     );
 
     try {
-      // 1. 调用 LLM 生成菜谱 DTO
-      const recipes = await this.recipeGenerationService.callLLM(request);
+      // 1. 调用 AI runtime 生成菜谱 DTO
+      const recipes = await this.recipeGenerationService.callAiRuntime(request);
 
       if (recipes.length === 0) {
         this.logger.warn(
-          `菜谱生成 LLM 返回空结果: requestId=${requestId}, batch=${batchIndex + 1}, jobId=${job.id}`,
+          `菜谱生成 AI runtime 返回空结果: requestId=${requestId}, batch=${batchIndex + 1}, jobId=${job.id}`,
         );
         return;
       }

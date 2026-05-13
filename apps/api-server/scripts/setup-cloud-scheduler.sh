@@ -71,7 +71,7 @@ JOBS=(
   "cf-incremental-daily|0 1 * * 1-6|周一-周六 01:00 协同过滤增量更新"
   "cf-full-rebuild-weekly|0 1 * * 0|每周日 01:00 协同过滤全量重建"
 
-  # core/llm (1)
+  # core/ai-runtime (1)
   "usage-archive|0 2 * * *|每日 UTC 02:00 LLM 用量归档"
 )
 

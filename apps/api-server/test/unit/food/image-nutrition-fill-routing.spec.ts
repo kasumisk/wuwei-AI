@@ -1,9 +1,9 @@
 import { ImageNutritionFillService } from '../../../src/modules/food/app/services/image/image-nutrition-fill.service';
-import { LlmFeature } from '../../../src/core/llm/llm.types';
+import { AiRuntimeFeature } from '../../../src/core/ai-runtime/ai-runtime.types';
 
 describe('ImageNutritionFillService model routing', () => {
-  it('uses food text analysis route for nutrition fill LLM calls', async () => {
-    const llm = {
+  it('uses food text analysis route for nutrition fill AI runtime calls', async () => {
+    const aiRuntime = {
       chat: jest.fn().mockResolvedValue({
         content: JSON.stringify({
           foods: [
@@ -34,7 +34,7 @@ describe('ImageNutritionFillService model routing', () => {
       }),
     };
     const service = new ImageNutritionFillService(
-      llm as any,
+      aiRuntime as any,
       i18n as any,
       aiModelRouting as any,
     );
@@ -53,9 +53,9 @@ describe('ImageNutritionFillService model routing', () => {
     expect(aiModelRouting.resolveFoodTextAnalysis).toHaveBeenCalledWith({
       locale: 'en-US',
     });
-    expect(llm.chat).toHaveBeenCalledWith(
+    expect(aiRuntime.chat).toHaveBeenCalledWith(
       expect.objectContaining({
-        feature: LlmFeature.FoodImage,
+        feature: AiRuntimeFeature.FoodImage,
         provider: 'deepseek',
         model: 'deepseek-chat',
         apiKey: 'deepseek-key',

@@ -112,7 +112,7 @@ export class CoachController {
       );
       conversationId = context.conversationId;
 
-      // 2. 调用 LLM 流式接口（AsyncIterable）
+      // 2. 调用 AI runtime 流式接口（AsyncIterable）
       const stream = this.coachService.createChatStream(
         user.id,
         context.messages,
@@ -164,7 +164,7 @@ export class CoachController {
       const err = error as Error;
       const errName = err.constructor?.name;
       let userMsg = this.i18n.t('coach.serviceUnavailable');
-      if (errName === 'LlmQuotaExceededError') {
+      if (errName === 'AiRuntimeQuotaExceededError') {
         userMsg = this.i18n.t('coach.quotaExceeded') || '今日配额已用完';
       }
       this.logger.error(`Coach chat error: ${err.message}`);

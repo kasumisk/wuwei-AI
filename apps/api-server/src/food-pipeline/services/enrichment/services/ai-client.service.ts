@@ -7,7 +7,7 @@
  *  - validateAndClean: AI 返回值类型校验、范围校验、字段清理
  *  - sleep / exponentialBackoff: 重试辅助（应用层重试 3 次）
  *
- * 已下沉到 LlmService 的能力：
+ * 已下沉到 AiRuntimeService 的能力：
  *  - 超时 / 鉴权 / HTTP 细节 / Circuit Breaker / Usage 记录
  *
  * 这里不传 userId，因为 enrichment 是系统级 cron / job，不计入用户配额
@@ -16,8 +16,8 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { LlmService } from '../../../../core/llm/llm.service';
-import { LlmFeature } from '../../../../core/llm/llm.types';
+import { AiRuntimeService } from '../../../../core/ai-runtime/ai-runtime.service';
+import { AiRuntimeFeature } from '../../../../core/ai-runtime/ai-runtime.types';
 import type { RuntimeRegion } from '../../../../core/region';
 import {
   ENRICHABLE_STRING_FIELDS,
@@ -47,7 +47,7 @@ export class EnrichmentAiClient {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly llm: LlmService,
+    private readonly aiRuntime: AiRuntimeService,
   ) {
     this.apiKey = this.configService.get<string>('DEEPSEEK_API_KEY') ?? '';
     this.routedClientId =
@@ -75,7 +75,7 @@ export class EnrichmentAiClient {
 
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
-        const result = await this.callLlmJson(
+        const result = await this.callAiRuntimeJson(
           systemPrompt,
           prompt,
           options?.maxTokens ?? 1200,
@@ -107,7 +107,7 @@ export class EnrichmentAiClient {
   ): Promise<EnrichmentResult | null> {
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
-        const result = await this.callLlmJson(
+        const result = await this.callAiRuntimeJson(
           buildStageSystemPrompt(stage),
           prompt,
           stage.maxTokens,
@@ -153,9 +153,13 @@ export class EnrichmentAiClient {
     return null;
   }
 
-  private callLlmJson(systemPrompt: string, prompt: string, maxTokens: number) {
+  private callAiRuntimeJson(
+    systemPrompt: string,
+    prompt: string,
+    maxTokens: number,
+  ) {
     const baseOptions = {
-      feature: LlmFeature.FoodEnrichment,
+      feature: AiRuntimeFeature.FoodEnrichment,
       temperature: 0.1,
       maxTokens,
       timeoutMs: REQUEST_TIMEOUT_MS,
@@ -167,7 +171,7 @@ export class EnrichmentAiClient {
     };
 
     if (this.routedClientId) {
-      return this.llm.chatRouted({
+      return this.aiRuntime.chatRouted({
         ...baseOptions,
         clientId: this.routedClientId,
         capabilityType: TEXT_GENERATION_CAPABILITY,
@@ -176,7 +180,7 @@ export class EnrichmentAiClient {
       });
     }
 
-    return this.llm.chat({
+    return this.aiRuntime.chat({
       ...baseOptions,
       // enrichment 是系统任务，不传 userId（不扣用户配额）
       provider: 'deepseek',

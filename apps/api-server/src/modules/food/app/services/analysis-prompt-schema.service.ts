@@ -106,7 +106,7 @@ export class AnalysisPromptSchemaService {
   // ─── Public API ───
 
   /**
-   * Get LLM user message for text or image analysis
+   * Get AI runtime user message for text or image analysis
    */
   getUserMessage(
     mode: 'text' | 'image',
@@ -125,7 +125,7 @@ export class AnalysisPromptSchemaService {
   /**
    * Phase 1 prompt for two-phase image analysis.
    * Ultra-slim: Vision only identifies foods + estimates weight, no nutrition.
-   * Nutrition filled by library matcher + text LLM in Phase 2.
+   * Nutrition filled by library matcher + text AI runtime in Phase 2.
    */
   buildPhase1Prompt(locale?: Locale): string {
     const loc = (locale ?? this.i18n.currentLocale()) as I18nLocale;

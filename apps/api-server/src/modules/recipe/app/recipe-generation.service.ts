@@ -9,12 +9,12 @@ import {
 import { QueueProducer } from '../../../core/queue/queue-producer.service';
 import { RecipeManagementService } from '../admin/recipe-management.service';
 import { CreateRecipeDto } from '../admin/dto/recipe-management.dto';
-import { LlmService } from '../../../core/llm/llm.service';
+import { AiRuntimeService } from '../../../core/ai-runtime/ai-runtime.service';
 import {
-  LlmFeature,
-  LlmQuotaExceededError,
-  LlmUnavailableError,
-} from '../../../core/llm/llm.types';
+  AiRuntimeFeature,
+  AiRuntimeQuotaExceededError,
+  AiRuntimeUnavailableError,
+} from '../../../core/ai-runtime/ai-runtime.types';
 import type { RuntimeRegion } from '../../../core/region';
 
 // ==================== Types ====================
@@ -105,7 +105,7 @@ export interface RecipeGenerationJobData {
   batchSize: number;
 }
 
-// ==================== LLM Prompt ====================
+// ==================== AI runtime Prompt ====================
 
 const RECIPE_GENERATION_SYSTEM_PROMPT = `你是专业的中式/西式菜谱创作营养师。根据用户要求，生成健康菜谱。
 
@@ -175,7 +175,7 @@ export class RecipeGenerationService {
     private readonly generationQueue: Queue,
     // V7: 统一入队抽象
     private readonly queueProducer: QueueProducer,
-    private readonly llm: LlmService,
+    private readonly aiRuntime: AiRuntimeService,
   ) {
     this.apiKey =
       this.configService.get<string>('OPENROUTER_API_KEY') ||
@@ -259,7 +259,7 @@ export class RecipeGenerationService {
   async generateSync(
     request: RecipeGenerationRequest,
   ): Promise<{ mode: 'sync'; created: number; errors: string[] }> {
-    const rawRecipes = await this.callLLM(request);
+    const rawRecipes = await this.callAiRuntime(request);
     const result = await this.recipeManagementService.createBatch(rawRecipes);
     return { mode: 'sync', ...result };
   }
@@ -311,13 +311,15 @@ export class RecipeGenerationService {
     return { mode: 'async', jobIds };
   }
 
-  // ==================== LLM 调用 ====================
+  // ==================== AI runtime 调用 ====================
 
   /**
-   * 调用 LLM 生成菜谱，返回 CreateRecipeDto[]
+   * 调用 AI runtime 生成菜谱，返回 CreateRecipeDto[]
    * 根据请求复杂度自动选择模型层级
    */
-  async callLLM(request: RecipeGenerationRequest): Promise<CreateRecipeDto[]> {
+  async callAiRuntime(
+    request: RecipeGenerationRequest,
+  ): Promise<CreateRecipeDto[]> {
     if (!this.apiKey && !this.routedClientId) {
       this.logger.warn('AI API Key 未配置，无法生成菜谱');
       return [];
@@ -339,8 +341,8 @@ export class RecipeGenerationService {
     const userPrompt = this.buildUserPrompt(request);
 
     try {
-      const result = await this.callLlmForRecipes({
-        feature: LlmFeature.RecipeGeneration,
+      const result = await this.callAiRuntimeForRecipes({
+        feature: AiRuntimeFeature.RecipeGeneration,
         model: modelId,
         temperature: routeConfig.temperature,
         maxTokens: routeConfig.maxTokens,
@@ -352,27 +354,31 @@ export class RecipeGenerationService {
       });
 
       if (!result.content) {
-        this.logger.warn('LLM 返回空内容');
+        this.logger.warn('AI runtime 返回空内容');
         return [];
       }
 
-      return this.parseLLMResponse(result.content, request);
+      return this.parseAiRuntimeResponse(result.content, request);
     } catch (err: any) {
-      if (err instanceof LlmQuotaExceededError) {
+      if (err instanceof AiRuntimeQuotaExceededError) {
         // 后台任务不应被配额限制（feature 配额=0），但保险起见上抛
         throw err;
       }
-      if (err instanceof LlmUnavailableError) {
-        this.logger.error(`LLM 服务不可用: ${err.message}, model=${modelId}`);
+      if (err instanceof AiRuntimeUnavailableError) {
+        this.logger.error(
+          `AI runtime 服务不可用: ${err.message}, model=${modelId}`,
+        );
         return [];
       }
-      this.logger.error(`LLM 调用异常: ${err.message}, model=${modelId}`);
+      this.logger.error(
+        `AI runtime 调用异常: ${err.message}, model=${modelId}`,
+      );
       return [];
     }
   }
 
-  private callLlmForRecipes(options: {
-    feature: LlmFeature;
+  private callAiRuntimeForRecipes(options: {
+    feature: AiRuntimeFeature;
     model: string;
     temperature: number;
     maxTokens: number;
@@ -380,7 +386,7 @@ export class RecipeGenerationService {
     messages: { role: 'system' | 'user'; content: string }[];
   }) {
     if (this.routedClientId) {
-      return this.llm.chatRouted({
+      return this.aiRuntime.chatRouted({
         feature: options.feature,
         clientId: this.routedClientId,
         capabilityType: TEXT_GENERATION_CAPABILITY,
@@ -393,7 +399,7 @@ export class RecipeGenerationService {
       });
     }
 
-    return this.llm.chat({
+    return this.aiRuntime.chat({
       feature: options.feature,
       // 后台批量生成，无 userId（管理员触发）
       provider: 'openrouter',
@@ -475,7 +481,7 @@ export class RecipeGenerationService {
     return parts.join('\n');
   }
 
-  private parseLLMResponse(
+  private parseAiRuntimeResponse(
     content: string,
     request: RecipeGenerationRequest,
   ): CreateRecipeDto[] {
@@ -483,7 +489,7 @@ export class RecipeGenerationService {
       // 尝试提取 JSON
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        this.logger.warn('LLM 返回内容无法解析为 JSON');
+        this.logger.warn('AI runtime 返回内容无法解析为 JSON');
         return [];
       }
 
@@ -491,7 +497,7 @@ export class RecipeGenerationService {
       const rawRecipes = parsed.recipes || parsed.data || [];
 
       if (!Array.isArray(rawRecipes) || rawRecipes.length === 0) {
-        this.logger.warn('LLM 返回的菜谱数组为空');
+        this.logger.warn('AI runtime 返回的菜谱数组为空');
         return [];
       }
 
@@ -538,7 +544,7 @@ export class RecipeGenerationService {
         }),
       );
     } catch (err: any) {
-      this.logger.error(`菜谱 LLM 响应解析失败: ${err.message}`);
+      this.logger.error(`菜谱 AI runtime 响应解析失败: ${err.message}`);
       return [];
     }
   }

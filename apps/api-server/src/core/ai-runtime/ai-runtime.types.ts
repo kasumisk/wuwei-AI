@@ -1,8 +1,8 @@
 /**
- * core/llm — 统一 LLM 调用层
+ * core/ai-runtime — 统一 AI runtime 调用层
  *
  * 设计目标（参见审查报告 §6）：
- *  1. 所有 LLM 调用必须经过 CircuitBreaker（之前裸跑）
+ *  1. 所有 AI runtime 调用必须经过 CircuitBreaker（之前裸跑）
  *  2. 所有调用必须有显式 timeout（默认 30s）
  *  3. 所有用户级调用必须先扣配额（防止个人账号被滥刷）
  *  4. 所有调用必须落 UsageRecords（成本可观测）
@@ -12,7 +12,7 @@
  */
 
 /**
- * LLM 功能枚举 — 与配额表 (`usage_quota.feature`) 对齐
+ * AI runtime 功能枚举 — 与配额表 (`usage_quota.feature`) 对齐
  *
  * 当前主要消费者：
  *   - FoodText / FoodImage：食物分析系统（同步 + 异步队列）
@@ -23,21 +23,23 @@
  *   1. 在此处加常量
  *   2. 在 UsageQuotaService.DEFAULT_QUOTA 中给出默认上限
  */
-export enum LlmFeature {
+export enum AiRuntimeFeature {
   /** 食物文本分析（同步路径） */
   FoodText = 'food.text',
   /** 食物图片分析（异步队列路径） */
   FoodImage = 'food.image',
   /** 食物库 enrichment（系统级补全任务，不计用户配额） */
   FoodEnrichment = 'food.enrichment',
+  /** 外部 Gateway 文本生成能力 */
+  GatewayTextGeneration = 'text.generation',
   /** 教练对话 */
   CoachChat = 'coach.chat',
   /** 食谱生成 */
   RecipeGeneration = 'recipe.generation',
 }
 
-/** Provider 标识 — 写入 UsageRecords.provider，与 capability-router 解析结果一致 */
-export type LlmProvider =
+/** Provider 标识 — 写入 UsageRecords.provider，与 AiModelRouter 解析结果一致 */
+export type AiRuntimeProvider =
   | 'openai'
   | 'openrouter'
   | 'deepseek'
@@ -51,7 +53,7 @@ export type LlmProvider =
  * 仅 user 消息会用到 image_url；system/assistant 仍只能传字符串。
  * 当 content 为字符串时为纯文本消息（最常见路径）。
  */
-export type LlmContentBlock =
+export type AiRuntimeContentBlock =
   | { type: 'text'; text: string }
   | {
       type: 'image_url';
@@ -64,29 +66,29 @@ export type LlmContentBlock =
     };
 
 /** 单条消息（与 LangChain `BaseMessage` 兼容的最小子集） */
-export interface LlmMessage {
+export interface AiRuntimeMessage {
   role: 'system' | 'user' | 'assistant';
   /**
    * 字符串：纯文本消息
    * 数组：多模态（仅 user 角色应使用）
    */
-  content: string | LlmContentBlock[];
+  content: string | AiRuntimeContentBlock[];
 }
 
 /** Token 用量 */
-export interface LlmTokenUsage {
+export interface AiRuntimeTokenUsage {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
 }
 
 /** chat / chatViaRouter 公共选项 */
-export interface LlmChatOptionsBase {
+export interface AiRuntimeChatOptionsBase {
   /** 业务功能标识，用于配额、断路器命名、metric 标签 */
-  feature: LlmFeature;
+  feature: AiRuntimeFeature;
   /** 用户 ID（扣配额）；为空时不扣配额，仅做 client/系统调用 */
   userId?: string;
-  /** 客户端 ID（B2B 网关客户端）；走 capability-router 时必填 */
+  /** 客户端 ID（B2B 网关客户端）；走 AiModelRouter 时必填 */
   clientId?: string;
   /** 请求追踪 ID；不传则随机生成 */
   requestId?: string;
@@ -97,11 +99,15 @@ export interface LlmChatOptionsBase {
   /** 透传 LangChain ChatModel 的额外参数 */
   temperature?: number;
   maxTokens?: number;
+  topP?: number;
+  frequencyPenalty?: number;
+  presencePenalty?: number;
+  stop?: string[];
 }
 
 /** 直连模式 chat 选项（业务模块直接指定 provider/key/model） */
-export interface LlmDirectChatOptions extends LlmChatOptionsBase {
-  provider: LlmProvider;
+export interface AiRuntimeDirectChatOptions extends AiRuntimeChatOptionsBase {
+  provider: AiRuntimeProvider;
   /** API Key（敏感，禁止落日志） */
   apiKey: string;
   /** API Base URL，例如 https://openrouter.ai/api/v1 */
@@ -109,7 +115,7 @@ export interface LlmDirectChatOptions extends LlmChatOptionsBase {
   /** 模型名 */
   model: string;
   /** 消息体 */
-  messages: LlmMessage[];
+  messages: AiRuntimeMessage[];
   /**
    * 透传到 OpenAI 兼容 API 的 response_format。
    * 例如 { type: 'json_object' } 强制 JSON 模式。
@@ -123,27 +129,27 @@ export interface LlmDirectChatOptions extends LlmChatOptionsBase {
   extraHeaders?: Record<string, string>;
 }
 
-/** CapabilityRouter 路由模式 chat 选项 */
-export interface LlmRoutedChatOptions extends LlmChatOptionsBase {
-  /** B2B/app client id；用于 CapabilityRouter 权限、模型白名单与 provider 策略 */
+/** AiModelRouter 路由模式 chat 选项 */
+export interface AiRuntimeRoutedChatOptions extends AiRuntimeChatOptionsBase {
+  /** B2B/app client id；用于 AiModelRouter 权限、模型白名单与 provider 策略 */
   clientId: string;
-  /** CapabilityRouter 能力类型，如 TEXT_GENERATION / IMAGE_GENERATION */
+  /** AiModelRouter 能力类型，如 TEXT_GENERATION / IMAGE_GENERATION */
   capabilityType: string;
   /** 可选指定模型；仍会经过权限与区域过滤 */
   requestedModel?: string;
   /** RegionStrategy 输出的运行区域；用于 provider/model region 过滤 */
   region?: 'GLOBAL' | 'CN';
   /** 消息体 */
-  messages: LlmMessage[];
+  messages: AiRuntimeMessage[];
   responseFormat?: { type: 'json_object' | 'text' };
   extraHeaders?: Record<string, string>;
 }
 
-export interface LlmChatResult {
+export interface AiRuntimeChatResult {
   content: string;
-  provider: LlmProvider;
+  provider: AiRuntimeProvider;
   model: string;
-  usage: LlmTokenUsage;
+  usage: AiRuntimeTokenUsage;
   costUsd: number;
   latencyMs: number;
   /** 透传原始 response_metadata（调试用，生产慎用） */
@@ -155,36 +161,38 @@ export interface LlmChatResult {
  * - delta：本次 token 增量（可能为空字符串，调用方应自行容错）
  * - done：true 表示流结束，此时 usage 才会被填充（部分 provider 才有）
  */
-export interface LlmStreamChunk {
+export interface AiRuntimeStreamChunk {
   delta: string;
   done: boolean;
-  usage?: LlmTokenUsage;
+  usage?: AiRuntimeTokenUsage;
+  provider?: AiRuntimeProvider;
+  model?: string;
 }
 
 /** 抛出此错误时表示用户配额耗尽，HTTP 层应返回 429 */
-export class LlmQuotaExceededError extends Error {
+export class AiRuntimeQuotaExceededError extends Error {
   constructor(
     public readonly userId: string,
-    public readonly feature: LlmFeature,
+    public readonly feature: AiRuntimeFeature,
     public readonly used: number,
     public readonly limit: number,
   ) {
     super(
       `Quota exceeded for user ${userId} on feature ${feature}: ${used}/${limit}`,
     );
-    this.name = 'LlmQuotaExceededError';
+    this.name = 'AiRuntimeQuotaExceededError';
   }
 }
 
 /** Circuit breaker 打开时抛出，HTTP 层应返回 503 */
-export class LlmUnavailableError extends Error {
+export class AiRuntimeUnavailableError extends Error {
   constructor(
-    public readonly feature: LlmFeature,
+    public readonly feature: AiRuntimeFeature,
     cause?: unknown,
   ) {
     super(
-      `LLM service unavailable for ${feature}${cause ? `: ${(cause as Error).message ?? cause}` : ''}`,
+      `AI runtime service unavailable for ${feature}${cause ? `: ${(cause as Error).message ?? cause}` : ''}`,
     );
-    this.name = 'LlmUnavailableError';
+    this.name = 'AiRuntimeUnavailableError';
   }
 }

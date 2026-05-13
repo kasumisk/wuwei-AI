@@ -5,7 +5,7 @@
  *
  * After Phase 1 Vision identifies foods (name/quantity/weight/category/confidence)
  * and the library matcher fills nutrition for DB hits, this service fills the gaps for
- * unmatched foods using a cheap text LLM (no image, no vision cost).
+ * unmatched foods using a cheap text AI runtime (no image, no vision cost).
  *
  * Text models are ~10x cheaper and ~5x faster than vision models for this task,
  * making the two-phase approach significantly faster for multi-food images.
@@ -15,15 +15,15 @@
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { AnalyzedFoodItem } from '../../../../decision/types/analysis-result.types';
-import { LlmService } from '../../../../../core/llm/llm.service';
-import { LlmFeature } from '../../../../../core/llm/llm.types';
+import { AiRuntimeService } from '../../../../../core/ai-runtime/ai-runtime.service';
+import { AiRuntimeFeature } from '../../../../../core/ai-runtime/ai-runtime.types';
 import { I18nService, I18nLocale } from '../../../../../core/i18n';
 import type { Locale } from '../../../../diet/app/recommendation/utils/i18n-messages';
 import { RegionAiModelRoutingService } from '../../../../../core/region';
 
 const TEXT_MAX_TOKENS = 5000; // each food item ~300 tokens; 10 items = 3000
 const TEXT_TEMPERATURE = 0.2;
-// nutrition fill 属于图片链路，超时放宽到 30s，与 LlmService 默认值一致
+// nutrition fill 属于图片链路，超时放宽到 30s，与 AiRuntimeService 默认值一致
 const TEXT_TIMEOUT_MS = 30_000;
 
 // Nutrition fill schema is now stored in i18n files under:
@@ -36,7 +36,7 @@ export class ImageNutritionFillService {
   private readonly logger = new Logger(ImageNutritionFillService.name);
 
   constructor(
-    private readonly llm: LlmService,
+    private readonly aiRuntime: AiRuntimeService,
     private readonly i18n: I18nService,
     private readonly aiModelRouting: RegionAiModelRoutingService,
   ) {}
@@ -62,7 +62,7 @@ export class ImageNutritionFillService {
     if (unmatched.length === 0) return;
 
     try {
-      const filled = await this.callTextLlm(unmatched, userId, locale);
+      const filled = await this.callTextAiRuntime(unmatched, userId, locale);
       this.applyFillResults(unmatched, filled);
     } catch (err) {
       // Non-fatal: unmatched foods will have minimal nutrition data from Phase 1
@@ -72,7 +72,7 @@ export class ImageNutritionFillService {
     }
   }
 
-  private async callTextLlm(
+  private async callTextAiRuntime(
     foods: AnalyzedFoodItem[],
     userId: string,
     locale?: Locale,
@@ -93,17 +93,17 @@ export class ImageNutritionFillService {
 
     if (!route.apiKey) {
       throw new Error(
-        `LLM API not configured for provider=${route.provider}, region=${route.region}`,
+        `AI runtime API not configured for provider=${route.provider}, region=${route.region}`,
       );
     }
 
-    const result = await this.llm.chat({
+    const result = await this.aiRuntime.chat({
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userMessage },
       ],
       // FoodImage 熔断器：与文本分析 (FoodText) 隔离，避免图片链路超时污染文本链路
-      feature: LlmFeature.FoodImage,
+      feature: AiRuntimeFeature.FoodImage,
       provider: route.provider,
       model: route.model,
       apiKey: route.apiKey,

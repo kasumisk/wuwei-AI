@@ -20,12 +20,12 @@ import {
   AnalysisContextInput,
 } from './prompt/coach-prompt-builder.service';
 import { FoodAnalysisResultV61 } from '../../decision/types/analysis-result.types';
-import { LlmService } from '../../../core/llm/llm.service';
+import { AiRuntimeService } from '../../../core/ai-runtime/ai-runtime.service';
 import {
-  LlmFeature,
-  LlmMessage,
-  LlmStreamChunk,
-} from '../../../core/llm/llm.types';
+  AiRuntimeFeature,
+  AiRuntimeMessage,
+  AiRuntimeStreamChunk,
+} from '../../../core/ai-runtime/ai-runtime.types';
 
 // V1.9: COACH_LABELS, cl(), PERSONA_PROMPTS 已提取到 CoachPromptBuilderService 和 coach-tone.config.ts
 
@@ -58,7 +58,7 @@ export class CoachService {
     private readonly promptBuilder: CoachPromptBuilderService,
     private readonly i18n: I18nService,
     private readonly requestCtx: RequestContextService,
-    private readonly llm: LlmService,
+    private readonly aiRuntime: AiRuntimeService,
   ) {
     this.apiKey = this.configService.get<string>('OPENROUTER_API_KEY') || '';
     this.baseUrl =
@@ -263,21 +263,21 @@ export class CoachService {
   }
 
   /**
-   * 流式调用 LLM（AsyncIterable，由 controller 写入 SSE 响应）
+   * 流式调用 AI runtime（AsyncIterable，由 controller 写入 SSE 响应）
    *
-   * 走 LlmService.chatStream → 内部裸 fetch SSE，配额 / 超时 / breaker 已下沉。
+   * 走 AiRuntimeService.chatStream → 内部裸 fetch SSE，配额 / 超时 / breaker 已下沉。
    */
   async *createChatStream(
     userId: string,
     messages: Array<{ role: string; content: string }>,
-  ): AsyncIterable<LlmStreamChunk> {
-    const llmMessages: LlmMessage[] = messages.map((m) => ({
-      role: m.role as LlmMessage['role'],
+  ): AsyncIterable<AiRuntimeStreamChunk> {
+    const aiRuntimeMessages: AiRuntimeMessage[] = messages.map((m) => ({
+      role: m.role as AiRuntimeMessage['role'],
       content: m.content,
     }));
 
-    yield* this.llm.chatStream({
-      feature: LlmFeature.CoachChat,
+    yield* this.aiRuntime.chatStream({
+      feature: AiRuntimeFeature.CoachChat,
       userId,
       provider: 'openrouter',
       apiKey: this.apiKey,
@@ -285,7 +285,7 @@ export class CoachService {
       model: this.chatModel,
       temperature: 0.7,
       maxTokens: 400,
-      messages: llmMessages,
+      messages: aiRuntimeMessages,
       extraHeaders: {
         'HTTP-Referer': 'https://uway.dev-net.uk',
         'X-Title': 'Wuwei Health',

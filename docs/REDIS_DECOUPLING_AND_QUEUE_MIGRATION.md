@@ -120,7 +120,7 @@ REDIS_URL=rediss://...  # 单实例，BullMQ + Cache 共用
 
 | 频率 | 任务 | 文件 | 迁移目标 |
 |---|---|---|---|
-| `0 2 * * *` | usage-archive | `core/llm/usage-archive-cron.service.ts:39` | Scheduler → Run Job |
+| `0 2 * * *` | usage-archive | `core/ai-runtime/usage-archive-cron.service.ts:39` | Scheduler → Run Job |
 | `0 2 * * *` | dailyProfileUpdate | `user/.../profile-cron.service.ts:44` | Scheduler → Run Job |
 | `0 3 * * 1` | weeklySegmentationUpdate | `profile-cron.service.ts:245` | Scheduler → Run Job |
 | `30 4 1,15 * *` | biweeklyPreferenceDecay | `profile-cron.service.ts:418` | Scheduler → Run Job |

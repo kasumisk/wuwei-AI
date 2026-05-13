@@ -410,7 +410,7 @@ File：
 - 后台 override 会影响 `/api/app/capabilities` 返回的 effective profile。
 - `authMethods` / `billingMethods` 默认由 provider registry 输出；后台配置 override 后优先生效。
 - 管理后台页面 `/system/region-strategy` 已接入完整查看、编辑、重置流程。
-- `CapabilityRouter` 已支持按 provider/model 的 region metadata 过滤模型。
+- `AiModelRouter` 已支持按 provider/model 的 region metadata 过滤模型。
 - food enrichment 已可通过环境变量进入 routed AI Gateway。
 
 当前 seed 约定：

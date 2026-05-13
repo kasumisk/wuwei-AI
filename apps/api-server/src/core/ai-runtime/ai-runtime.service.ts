@@ -1,7 +1,7 @@
 /**
- * LlmService — 统一 LLM 调用入口（V7 安全基线）
+ * AiRuntimeService — 统一 AI runtime 调用入口（V7 安全基线）
  *
- * 在每次外部 LLM 调用前后强制以下不可绕过的步骤：
+ * 在每次外部 AI runtime 调用前后强制以下不可绕过的步骤：
  *   1. 配额预扣（如果传了 userId）—— 防个人滥用
  *   2. CircuitBreaker 包裹 —— 防 OpenAI / OpenRouter 抖动击穿
  *   3. 显式 timeout —— 防请求挂死耗 socket
@@ -11,11 +11,11 @@
  * 当前提供三种模式：
  *   - chat()       非流式直连（LangChain ChatOpenAI invoke）
  *   - chatStream() 流式直连（裸 fetch SSE，breaker 仅保护连接建立）
- *   - chatRouted() 基于 CapabilityRouter 解析 provider/model/key 后复用 chat 执行链
+ *   - chatRouted() 基于 AiModelRouter 解析 provider/model/key 后复用 chat 执行链
  *
- * 公共契约：成功返回 LlmChatResult；失败抛业务可识别的 Error
- *   - LlmQuotaExceededError  → 调用方应映射 HTTP 429
- *   - LlmUnavailableError    → 调用方应映射 HTTP 503
+ * 公共契约：成功返回 AiRuntimeChatResult；失败抛业务可识别的 Error
+ *   - AiRuntimeQuotaExceededError  → 调用方应映射 HTTP 429
+ *   - AiRuntimeUnavailableError    → 调用方应映射 HTTP 503
  *   - 其它 Error             → 调用方应映射 HTTP 500
  */
 import { Injectable, Logger } from '@nestjs/common';
@@ -31,19 +31,19 @@ import { CircuitBreakerService } from '../circuit-breaker/circuit-breaker.servic
 import { MetricsService } from '../metrics/metrics.service';
 import { UsageQuotaService } from './usage-quota.service';
 import { UsageRecorderService } from './usage-recorder.service';
-import { CapabilityRouter } from '../../gateway/services/capability-router.service';
+import { AiModelRouter } from '../ai-routing';
 import {
-  LlmChatResult,
-  LlmContentBlock,
-  LlmDirectChatOptions,
-  LlmFeature,
-  LlmMessage,
-  LlmProvider,
-  LlmRoutedChatOptions,
-  LlmStreamChunk,
-  LlmTokenUsage,
-  LlmUnavailableError,
-} from './llm.types';
+  AiRuntimeChatResult,
+  AiRuntimeContentBlock,
+  AiRuntimeDirectChatOptions,
+  AiRuntimeFeature,
+  AiRuntimeMessage,
+  AiRuntimeProvider,
+  AiRuntimeRoutedChatOptions,
+  AiRuntimeStreamChunk,
+  AiRuntimeTokenUsage,
+  AiRuntimeUnavailableError,
+} from './ai-runtime.types';
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_TEMPERATURE = 0.7;
@@ -66,15 +66,15 @@ const FALLBACK_COST_USD_PER_1K: Record<
 };
 
 @Injectable()
-export class LlmService {
-  private readonly logger = new Logger(LlmService.name);
+export class AiRuntimeService {
+  private readonly logger = new Logger(AiRuntimeService.name);
 
   constructor(
     private readonly circuitBreaker: CircuitBreakerService,
     private readonly metrics: MetricsService,
     private readonly quota: UsageQuotaService,
     private readonly recorder: UsageRecorderService,
-    private readonly capabilityRouter: CapabilityRouter,
+    private readonly aiModelRouter: AiModelRouter,
   ) {}
 
   /**
@@ -82,7 +82,9 @@ export class LlmService {
    *
    * 适用场景：food/coach/recipe 等模块从 ENV 读 OPENROUTER_API_KEY 直接调用。
    */
-  async chat(options: LlmDirectChatOptions): Promise<LlmChatResult> {
+  async chat(
+    options: AiRuntimeDirectChatOptions,
+  ): Promise<AiRuntimeChatResult> {
     return this.executeChat({
       messages: options.messages,
       feature: options.feature,
@@ -92,6 +94,10 @@ export class LlmService {
       timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       temperature: options.temperature ?? DEFAULT_TEMPERATURE,
       maxTokens: options.maxTokens,
+      topP: options.topP,
+      frequencyPenalty: options.frequencyPenalty,
+      presencePenalty: options.presencePenalty,
+      stop: options.stop,
       provider: options.provider,
       model: options.model,
       apiKey: options.apiKey,
@@ -105,18 +111,20 @@ export class LlmService {
   }
 
   /**
-   * 路由模式 chat —— 业务模块只传 capability + region，由 CapabilityRouter
+   * 路由模式 chat —— 业务模块只传 capability + region，由 AiModelRouter
    * 解析实际 provider/model/apiKey/baseUrl，再进入统一执行链。
    */
-  async chatRouted(options: LlmRoutedChatOptions): Promise<LlmChatResult> {
-    const routing = await this.capabilityRouter.route(
+  async chatRouted(
+    options: AiRuntimeRoutedChatOptions,
+  ): Promise<AiRuntimeChatResult> {
+    const routing = await this.aiModelRouter.route(
       options.clientId,
       options.capabilityType,
       options.requestedModel,
       options.region ? { region: options.region } : undefined,
     );
 
-    return this.executeChat({
+    const execCtx = {
       messages: options.messages,
       feature: options.feature,
       userId: options.userId,
@@ -126,6 +134,10 @@ export class LlmService {
         options.timeoutMs ?? routing.config?.timeout ?? DEFAULT_TIMEOUT_MS,
       temperature: options.temperature ?? DEFAULT_TEMPERATURE,
       maxTokens: options.maxTokens,
+      topP: options.topP,
+      frequencyPenalty: options.frequencyPenalty,
+      presencePenalty: options.presencePenalty,
+      stop: options.stop,
       provider: this.normalizeProviderName(routing.provider?.name),
       model: routing.model,
       apiKey: routing.apiKey,
@@ -136,7 +148,47 @@ export class LlmService {
       outputCostPer1k: this.toNumber(
         routing.modelConfig?.outputCostPer1kTokens,
       ),
-    });
+    };
+
+    try {
+      return await this.executeChat(execCtx);
+    } catch (err) {
+      if (routing.config?.fallbackEnabled === false) {
+        throw err;
+      }
+
+      const fallbackRouting = await this.aiModelRouter.fallback(
+        options.clientId,
+        options.capabilityType,
+        [routing.provider?.id ?? routing.provider?.name].filter(Boolean),
+      );
+
+      if (!fallbackRouting) {
+        throw err;
+      }
+
+      this.logger.warn(
+        `AI runtime routed call failed for provider=${routing.provider?.name}, model=${routing.model}; falling back to provider=${fallbackRouting.provider?.name}, model=${fallbackRouting.model}`,
+      );
+
+      return this.executeChat({
+        ...execCtx,
+        provider: this.normalizeProviderName(fallbackRouting.provider?.name),
+        model: fallbackRouting.model,
+        apiKey: fallbackRouting.apiKey,
+        baseUrl: fallbackRouting.endpoint,
+        timeoutMs:
+          options.timeoutMs ??
+          fallbackRouting.config?.timeout ??
+          DEFAULT_TIMEOUT_MS,
+        inputCostPer1k: this.toNumber(
+          fallbackRouting.modelConfig?.inputCostPer1kTokens,
+        ),
+        outputCostPer1k: this.toNumber(
+          fallbackRouting.modelConfig?.outputCostPer1kTokens,
+        ),
+      });
+    }
   }
 
   /**
@@ -151,7 +203,9 @@ export class LlmService {
    * 调用方负责消费完整个 AsyncIterable；中途 break 也会触发 fetch 的
    * AbortController，但 quota 不会退款（已视为成功消费）。
    */
-  chatStream(options: LlmDirectChatOptions): AsyncGenerator<LlmStreamChunk> {
+  chatStream(
+    options: AiRuntimeDirectChatOptions,
+  ): AsyncGenerator<AiRuntimeStreamChunk> {
     return this.executeStream({
       messages: options.messages,
       feature: options.feature,
@@ -161,6 +215,10 @@ export class LlmService {
       timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       temperature: options.temperature ?? DEFAULT_TEMPERATURE,
       maxTokens: options.maxTokens,
+      topP: options.topP,
+      frequencyPenalty: options.frequencyPenalty,
+      presencePenalty: options.presencePenalty,
+      stop: options.stop,
       provider: options.provider,
       model: options.model,
       apiKey: options.apiKey,
@@ -172,14 +230,109 @@ export class LlmService {
     });
   }
 
+  /**
+   * 路由模式流式 chat。
+   *
+   * 注意：只有在尚未向调用方输出任何 chunk 前失败，才会尝试 fallback。
+   * 一旦已经输出 token，就不再切换 provider，避免客户端收到跨模型拼接文本。
+   */
+  async *chatRoutedStream(
+    options: AiRuntimeRoutedChatOptions,
+  ): AsyncGenerator<AiRuntimeStreamChunk> {
+    const routing = await this.aiModelRouter.route(
+      options.clientId,
+      options.capabilityType,
+      options.requestedModel,
+      options.region ? { region: options.region } : undefined,
+    );
+
+    const execCtx: ExecCtx = {
+      messages: options.messages,
+      feature: options.feature,
+      userId: options.userId,
+      clientId: options.clientId,
+      requestId: options.requestId ?? randomUUID(),
+      timeoutMs:
+        options.timeoutMs ?? routing.config?.timeout ?? DEFAULT_TIMEOUT_MS,
+      temperature: options.temperature ?? DEFAULT_TEMPERATURE,
+      maxTokens: options.maxTokens,
+      topP: options.topP,
+      frequencyPenalty: options.frequencyPenalty,
+      presencePenalty: options.presencePenalty,
+      stop: options.stop,
+      provider: this.normalizeProviderName(routing.provider?.name),
+      model: routing.model,
+      apiKey: routing.apiKey,
+      baseUrl: routing.endpoint,
+      responseFormat: options.responseFormat,
+      extraHeaders: options.extraHeaders,
+      inputCostPer1k: this.toNumber(routing.modelConfig?.inputCostPer1kTokens),
+      outputCostPer1k: this.toNumber(
+        routing.modelConfig?.outputCostPer1kTokens,
+      ),
+    };
+
+    let emitted = false;
+    try {
+      for await (const chunk of this.executeStream(execCtx)) {
+        emitted = emitted || !!chunk.delta || chunk.done;
+        yield { ...chunk, provider: execCtx.provider, model: execCtx.model };
+      }
+    } catch (err) {
+      if (emitted || routing.config?.fallbackEnabled === false) {
+        throw err;
+      }
+
+      const fallbackRouting = await this.aiModelRouter.fallback(
+        options.clientId,
+        options.capabilityType,
+        [routing.provider?.id ?? routing.provider?.name].filter(Boolean),
+      );
+
+      if (!fallbackRouting) {
+        throw err;
+      }
+
+      const fallbackCtx: ExecCtx = {
+        ...execCtx,
+        provider: this.normalizeProviderName(fallbackRouting.provider?.name),
+        model: fallbackRouting.model,
+        apiKey: fallbackRouting.apiKey,
+        baseUrl: fallbackRouting.endpoint,
+        timeoutMs:
+          options.timeoutMs ??
+          fallbackRouting.config?.timeout ??
+          DEFAULT_TIMEOUT_MS,
+        inputCostPer1k: this.toNumber(
+          fallbackRouting.modelConfig?.inputCostPer1kTokens,
+        ),
+        outputCostPer1k: this.toNumber(
+          fallbackRouting.modelConfig?.outputCostPer1kTokens,
+        ),
+      };
+
+      this.logger.warn(
+        `AI runtime routed stream failed before first token for provider=${routing.provider?.name}, model=${routing.model}; falling back to provider=${fallbackRouting.provider?.name}, model=${fallbackRouting.model}`,
+      );
+
+      for await (const chunk of this.executeStream(fallbackCtx)) {
+        yield {
+          ...chunk,
+          provider: fallbackCtx.provider,
+          model: fallbackCtx.model,
+        };
+      }
+    }
+  }
+
   // ─────────────────────────────────────────────────────────────────
   // 内部统一执行路径
   // ─────────────────────────────────────────────────────────────────
 
-  private async executeChat(ctx: ExecCtx): Promise<LlmChatResult> {
+  private async executeChat(ctx: ExecCtx): Promise<AiRuntimeChatResult> {
     // 1. 配额预扣（仅当 userId 存在）
     if (ctx.userId) {
-      await this.quota.consume(ctx.userId, ctx.feature); // 抛 LlmQuotaExceededError
+      await this.quota.consume(ctx.userId, ctx.feature); // 抛 AiRuntimeQuotaExceededError
     }
 
     const start = Date.now();
@@ -193,7 +346,7 @@ export class LlmService {
 
     try {
       // 2. CircuitBreaker 包裹（按 feature 拆分，避免一个 feature 崩了影响别的）
-      const breakerKey = `llm.${ctx.feature}`;
+      const breakerKey = `aiRuntime.${ctx.feature}`;
       const breaker = this.circuitBreaker.getBreaker(breakerKey, {
         timeout: ctx.timeoutMs,
         errorThresholdPercentage: 50,
@@ -215,7 +368,7 @@ export class LlmService {
 
       // 3. metrics
       this.metrics.recommendationStageDuration.observe(
-        { stage: `llm.${ctx.feature}` },
+        { stage: `aiRuntime.${ctx.feature}` },
         latencyMs / 1000,
       );
 
@@ -266,9 +419,9 @@ export class LlmService {
         },
       });
 
-      // CircuitBreaker open 或 timeout → 转为 LlmUnavailableError
+      // CircuitBreaker open 或 timeout → 转为 AiRuntimeUnavailableError
       if (isTimeout || this.isBreakerOpen(err)) {
-        throw new LlmUnavailableError(ctx.feature, err);
+        throw new AiRuntimeUnavailableError(ctx.feature, err);
       }
       throw err;
     }
@@ -280,6 +433,14 @@ export class LlmService {
     if (ctx.responseFormat) {
       modelKwargs.response_format = ctx.responseFormat;
     }
+    if (ctx.topP !== undefined) modelKwargs.top_p = ctx.topP;
+    if (ctx.frequencyPenalty !== undefined) {
+      modelKwargs.frequency_penalty = ctx.frequencyPenalty;
+    }
+    if (ctx.presencePenalty !== undefined) {
+      modelKwargs.presence_penalty = ctx.presencePenalty;
+    }
+    if (ctx.stop?.length) modelKwargs.stop = ctx.stop;
 
     const model = new ChatOpenAI({
       apiKey: ctx.apiKey,
@@ -307,7 +468,9 @@ export class LlmService {
   // 流式执行路径
   // ─────────────────────────────────────────────────────────────────
 
-  private async *executeStream(ctx: ExecCtx): AsyncGenerator<LlmStreamChunk> {
+  private async *executeStream(
+    ctx: ExecCtx,
+  ): AsyncGenerator<AiRuntimeStreamChunk> {
     // 1. 配额预扣
     if (ctx.userId) {
       await this.quota.consume(ctx.userId, ctx.feature);
@@ -323,7 +486,7 @@ export class LlmService {
     };
 
     // 2. CircuitBreaker 仅保护「打开连接 + 200 校验」
-    const breakerKey = `llm.${ctx.feature}`;
+    const breakerKey = `aiRuntime.${ctx.feature}`;
     const breaker = this.circuitBreaker.getBreaker(breakerKey, {
       timeout: ctx.timeoutMs,
       errorThresholdPercentage: 50,
@@ -360,7 +523,7 @@ export class LlmService {
         metadata: { error: (err as Error).message ?? String(err) },
       });
       if (isTimeout || this.isBreakerOpen(err)) {
-        throw new LlmUnavailableError(ctx.feature, err);
+        throw new AiRuntimeUnavailableError(ctx.feature, err);
       }
       throw err;
     }
@@ -370,10 +533,13 @@ export class LlmService {
     if (!reader) {
       clearTimeout(timeoutHandle);
       await refundOnce();
-      throw new LlmUnavailableError(ctx.feature, new Error('empty SSE body'));
+      throw new AiRuntimeUnavailableError(
+        ctx.feature,
+        new Error('empty SSE body'),
+      );
     }
 
-    let usage: LlmTokenUsage | undefined;
+    let usage: AiRuntimeTokenUsage | undefined;
     let totalDeltaChars = 0;
     let buffer = '';
     let streamFailed = false;
@@ -471,6 +637,14 @@ export class LlmService {
       stream: true,
     };
     if (ctx.maxTokens) body.max_tokens = ctx.maxTokens;
+    if (ctx.topP !== undefined) body.top_p = ctx.topP;
+    if (ctx.frequencyPenalty !== undefined) {
+      body.frequency_penalty = ctx.frequencyPenalty;
+    }
+    if (ctx.presencePenalty !== undefined) {
+      body.presence_penalty = ctx.presencePenalty;
+    }
+    if (ctx.stop?.length) body.stop = ctx.stop;
     if (ctx.responseFormat) body.response_format = ctx.responseFormat;
     // OpenAI: stream_options.include_usage = true 才会在结尾返回 usage
     body.stream_options = { include_usage: true };
@@ -487,7 +661,9 @@ export class LlmService {
     });
     if (!res.ok) {
       const errText = await res.text().catch(() => '');
-      throw new Error(`LLM upstream ${res.status}: ${errText.slice(0, 300)}`);
+      throw new Error(
+        `AI runtime upstream ${res.status}: ${errText.slice(0, 300)}`,
+      );
     }
     return res;
   }
@@ -495,11 +671,11 @@ export class LlmService {
   private recordSuccess(
     ctx: ExecCtx,
     start: number,
-    usage: LlmTokenUsage | undefined,
+    usage: AiRuntimeTokenUsage | undefined,
     deltaChars: number,
   ): void {
     const latencyMs = Date.now() - start;
-    const finalUsage: LlmTokenUsage = usage ?? {
+    const finalUsage: AiRuntimeTokenUsage = usage ?? {
       promptTokens: 0,
       // 没拿到 usage 时按字符数粗估（极不准，仅作为上限保险）
       completionTokens: Math.ceil(deltaChars / 4),
@@ -511,7 +687,7 @@ export class LlmService {
       ctx.outputCostPer1k,
     );
     this.metrics.recommendationStageDuration.observe(
-      { stage: `llm.${ctx.feature}.stream` },
+      { stage: `aiRuntime.${ctx.feature}.stream` },
       latencyMs / 1000,
     );
     this.recorder.record({
@@ -551,7 +727,7 @@ export class LlmService {
     return '';
   }
 
-  private extractUsage(msg: AIMessage): LlmTokenUsage {
+  private extractUsage(msg: AIMessage): AiRuntimeTokenUsage {
     // LangChain 0.3：usage_metadata 是统一字段
     const u = (
       msg as unknown as {
@@ -591,7 +767,7 @@ export class LlmService {
   }
 
   private computeCost(
-    usage: LlmTokenUsage,
+    usage: AiRuntimeTokenUsage,
     inputPer1k: number,
     outputPer1k: number,
   ): number {
@@ -617,7 +793,7 @@ export class LlmService {
     return msg.includes('breaker is open') || msg.includes('circuit breaker');
   }
 
-  private normalizeProviderName(providerName: unknown): LlmProvider {
+  private normalizeProviderName(providerName: unknown): AiRuntimeProvider {
     return String(providerName ?? 'unknown')
       .trim()
       .toLowerCase();
@@ -639,15 +815,19 @@ export class LlmService {
 }
 
 interface ExecCtx {
-  messages: LlmMessage[];
-  feature: LlmFeature;
+  messages: AiRuntimeMessage[];
+  feature: AiRuntimeFeature;
   userId?: string;
   clientId?: string;
   requestId: string;
   timeoutMs: number;
   temperature: number;
   maxTokens?: number;
-  provider: LlmProvider;
+  topP?: number;
+  frequencyPenalty?: number;
+  presencePenalty?: number;
+  stop?: string[];
+  provider: AiRuntimeProvider;
   model: string;
   apiKey: string;
   baseUrl?: string;
@@ -663,7 +843,7 @@ interface ExecCtx {
  * - system / assistant：仅接受字符串，多模态数组会被拼成纯文本兜底
  * - user：原生支持数组形式（HumanMessage 内部透传到 OpenAI content 数组）
  */
-function toLangChainMessage(m: LlmMessage): BaseMessage {
+function toLangChainMessage(m: AiRuntimeMessage): BaseMessage {
   if (m.role === 'system') {
     return new SystemMessage(coerceToText(m.content));
   }
@@ -680,9 +860,9 @@ function toLangChainMessage(m: LlmMessage): BaseMessage {
 }
 
 /** 转 OpenAI Chat Completions message（流式裸 fetch 路径） */
-function toOpenAIMessage(m: LlmMessage): {
+function toOpenAIMessage(m: AiRuntimeMessage): {
   role: 'system' | 'user' | 'assistant';
-  content: string | LlmContentBlock[];
+  content: string | AiRuntimeContentBlock[];
 } {
   if (m.role !== 'user' && Array.isArray(m.content)) {
     // system/assistant 不应带多模态；安全降级到纯文本
@@ -692,7 +872,7 @@ function toOpenAIMessage(m: LlmMessage): {
 }
 
 /** 多模态数组 → 纯文本（仅取 text 块），用于 system/assistant 兜底 */
-function coerceToText(content: string | LlmContentBlock[]): string {
+function coerceToText(content: string | AiRuntimeContentBlock[]): string {
   if (typeof content === 'string') return content;
   return content
     .map((b) => (b.type === 'text' ? b.text : ''))

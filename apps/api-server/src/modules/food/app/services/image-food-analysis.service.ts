@@ -22,9 +22,9 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { I18nService } from '../../../../core/i18n';
 import {
-  LlmQuotaExceededError,
-  LlmUnavailableError,
-} from '../../../../core/llm/llm.types';
+  AiRuntimeQuotaExceededError,
+  AiRuntimeUnavailableError,
+} from '../../../../core/ai-runtime/ai-runtime.types';
 import {
   FoodAnalysisResultV61,
   AnalyzedFoodItem,
@@ -93,7 +93,7 @@ export class ImageFoodAnalysisService {
     // Post-analysis 食物库匹配：补 foodLibraryId + 校准营养
     await this.libraryMatcher.matchAll(foods);
 
-    // Phase 2 文本 LLM 补全：对未命中食物填充营养数据
+    // Phase 2 文本 AI runtime 补全：对未命中食物填充营养数据
     await this.nutritionFill.fillMissing(foods, userId, locale);
 
     const result = await this.analysisPipeline.executeWithOptions(
@@ -180,10 +180,10 @@ export class ImageFoodAnalysisService {
         return foods;
       }
     } catch (err) {
-      if (err instanceof LlmQuotaExceededError) {
+      if (err instanceof AiRuntimeQuotaExceededError) {
         throw err;
       }
-      if (err instanceof LlmUnavailableError) {
+      if (err instanceof AiRuntimeUnavailableError) {
         throw new BadRequestException(this.i18n.t('food.analyze.timeout'));
       }
       if (err instanceof BadRequestException) throw err;

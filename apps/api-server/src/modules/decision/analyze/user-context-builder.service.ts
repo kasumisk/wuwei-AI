@@ -53,7 +53,7 @@ function getGoalContext(
 /**
  * V3.4 P1.1: 根据健康条件生成专用 AI 指令块
  *
- * 目的：让 Vision AI / LLM 在分析时优先关注对该用户最重要的营养维度
+ * 目的：让 Vision AI / AI runtime 在分析时优先关注对该用户最重要的营养维度
  */
 function buildHealthConditionGuidance(
   i18n: I18nService,

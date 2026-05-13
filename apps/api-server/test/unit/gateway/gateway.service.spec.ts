@@ -8,7 +8,6 @@
 import { UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { GatewayService } from '../../../src/gateway/gateway.service';
-import { CapabilityRouter } from '../../../src/gateway/services/capability-router.service';
 
 // Mock bcrypt
 jest.mock('bcrypt');
@@ -17,7 +16,6 @@ const mockedBcrypt = bcrypt as jest.Mocked<typeof bcrypt>;
 describe('GatewayService', () => {
   let service: GatewayService;
   let mockPrisma: any;
-  let mockCapabilityRouter: any;
 
   // 使用 snake_case 字段名（Prisma schema 格式）
   const mockClient = {
@@ -43,12 +41,7 @@ describe('GatewayService', () => {
       },
     };
 
-    mockCapabilityRouter = {
-      route: jest.fn(),
-      fallback: jest.fn(),
-    };
-
-    service = new GatewayService(mockPrisma, mockCapabilityRouter);
+    service = new GatewayService(mockPrisma);
   });
 
   // ═══════════════════════════════════════════════════════════

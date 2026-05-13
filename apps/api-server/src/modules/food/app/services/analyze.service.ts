@@ -148,7 +148,7 @@ export class AnalyzeService {
   private readonly logger = new Logger(AnalyzeService.name);
   /**
    * AI 服务是否可用（启动时检查 ENV）
-   * 真正的 API key 由 LlmService / VisionApiClient 在调用时使用，
+   * 真正的 API key 由 AiRuntimeService / VisionApiClient 在调用时使用，
    * 这里只用于 submitAnalysis 的快速失败（避免无效入队）。
    */
   private readonly aiAvailable: boolean;

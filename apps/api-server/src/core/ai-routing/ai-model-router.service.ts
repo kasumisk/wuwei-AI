@@ -3,8 +3,8 @@ import {
   capabilityLookupValues,
   toDbCapabilityType,
 } from '@ai-platform/shared';
-import { PrismaService } from '../../core/prisma/prisma.service';
-import type { RuntimeRegion } from '../../core/region';
+import { PrismaService } from '../prisma/prisma.service';
+import type { RuntimeRegion } from '../region';
 
 export interface RouteResult {
   modelConfig: any;
@@ -20,7 +20,7 @@ export interface CapabilityRouteOptions {
 }
 
 @Injectable()
-export class CapabilityRouter {
+export class AiModelRouter {
   constructor(private readonly prisma: PrismaService) {}
 
   /**

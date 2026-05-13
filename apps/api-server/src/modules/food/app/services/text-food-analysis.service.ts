@@ -3,7 +3,7 @@
  *
  * 职责:
  * - 接收食物文本描述（标准词或自然语言），返回统一的 FoodAnalysisResultV61
- * - 优先匹配标准食物库（零 AI 成本），未命中再走 LLM 规则拆解
+ * - 优先匹配标准食物库（零 AI 成本），未命中再走 AI runtime 规则拆解
  * - 复用现有 FoodService、UserProfileService、BehaviorService、NutritionScoreService
  *
  * 设计文档参考: Section 4.1, 9.1, 12.1
@@ -11,7 +11,7 @@
  * 处理流程:
  * 1. InputPreprocessor: 去空格、统一简繁/大小写/常见别称
  * 2. FoodNormalizationService: 精确名/别名匹配 → FoodLibrary
- * 3. TextParseService: 未命中则走 LLM 拆解组合食物和数量
+ * 3. TextParseService: 未命中则走 AI runtime 拆解组合食物和数量
  * 4. PortionEstimationService: 估算克重、份数
  * 5. NutritionEstimationService: 优先标准库营养，次选估算
  * 6. FoodDecisionService: 结合目标/禁忌/当前摄入给出建议
@@ -20,12 +20,12 @@
  */
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { FoodLibraryService } from './food-library.service';
-import { LlmService } from '../../../../core/llm/llm.service';
+import { AiRuntimeService } from '../../../../core/ai-runtime/ai-runtime.service';
 import {
-  LlmFeature,
-  LlmQuotaExceededError,
-  LlmUnavailableError,
-} from '../../../../core/llm/llm.types';
+  AiRuntimeFeature,
+  AiRuntimeQuotaExceededError,
+  AiRuntimeUnavailableError,
+} from '../../../../core/ai-runtime/ai-runtime.types';
 import { RegionAiModelRoutingService } from '../../../../core/region';
 import {
   FoodAnalysisResultV61,
@@ -95,7 +95,7 @@ const QUANTITY_GRAMS_MAP: Record<string, number> = {
   一条: 120,
 };
 
-/** 食物类别默认营养模板（每100g），用于无法命中标准库和LLM时的保底估算 */
+/** 食物类别默认营养模板（每100g），用于无法命中标准库和AI runtime时的保底估算 */
 const CATEGORY_DEFAULT_NUTRITION: Record<
   string,
   { calories: number; protein: number; fat: number; carbs: number }
@@ -114,7 +114,7 @@ const CATEGORY_DEFAULT_NUTRITION: Record<
 /**
  * 每 100g 热量物理上限（kcal/100g）。
  * 来源：纯脂肪 ~900；坚果/油炸 ~600；常规熟食 ~300-400。
- * 用于检测 LLM 返回值是否把 per-serving 误当 per-100g。
+ * 用于检测 AI runtime 返回值是否把 per-serving 误当 per-100g。
  */
 const CALORIES_PER_100G_HARD_CAP: Record<string, number> = {
   fat: 950, // 纯油脂理论最大值（100g 全脂肪 = 900kcal）
@@ -139,7 +139,7 @@ const CALORIES_PER_100G_HARD_CAP: Record<string, number> = {
 };
 const CALORIES_PER_100G_DEFAULT_CAP = 400;
 
-// ==================== LLM Prompt ====================
+// ==================== AI runtime Prompt ====================
 
 /**
  * V5.0: 文本分析 prompt 使用统一 buildBasePrompt + buildUserContextPrompt
@@ -160,8 +160,8 @@ type ParsedFoodItem = AnalyzedFoodItem & {
   libraryMatch?: any;
 };
 
-/** LLM 返回的解析结构 */
-interface LlmTextParseResult {
+/** AI runtime 返回的解析结构 */
+interface AiRuntimeTextParseResult {
   foods: Array<{
     name: string;
     nameEn?: string;
@@ -201,7 +201,7 @@ interface LlmTextParseResult {
     processingLevel?: number;
     /** V4.5: 总糖（克） */
     sugar?: number | null;
-    /** V4.5: LLM 置信度 0-1 */
+    /** V4.5: AI runtime 置信度 0-1 */
     confidence?: number;
     standardServingG?: number;
     standardServingDesc?: string;
@@ -225,12 +225,12 @@ export class TextFoodAnalysisService {
     private readonly foodLibraryService: FoodLibraryService,
     // V2.1: 统一分析管道（替代手工编排）
     private readonly analysisPipeline: AnalysisPipelineService,
-    // V3.4 P1.3: 用户上下文（LLM 动态 prompt）
+    // V3.4 P1.3: 用户上下文（AI runtime 动态 prompt）
     private readonly userContextBuilder: UserContextBuilderService,
     // V13.3: 注入 prompt schema service，取代模块级 free function
     private readonly promptSchema: AnalysisPromptSchemaService,
-    // Checkpoint 3: 统一 LLM 调用层（quota + breaker + recorder）
-    private readonly llm: LlmService,
+    // Checkpoint 3: 统一 AI runtime 调用层（quota + breaker + recorder）
+    private readonly aiRuntime: AiRuntimeService,
     private readonly aiModelRouting: RegionAiModelRoutingService,
   ) {}
 
@@ -242,7 +242,7 @@ export class TextFoodAnalysisService {
    * 完整流程:
    * 1. 预处理文本
    * 2. 尝试匹配标准食物库
-   * 3. 未命中走 LLM 拆解
+   * 3. 未命中走 AI runtime 拆解
    * 4. 估份量 + 估营养
    * 5. 输出决策建议
    * 6. 组装统一结果结构
@@ -287,7 +287,7 @@ export class TextFoodAnalysisService {
       `[TextAnalysisService] split terms=${foodTerms.length} expected=${this.estimateExpectedFoodCount(cleanedText)} userId=${userId || 'anonymous'}`,
     );
 
-    // V3.4 P1.3: 构建用户上下文（用于动态 LLM Prompt）
+    // V3.4 P1.3: 构建用户上下文（用于动态 AI runtime Prompt）
     const userContextStartedAt = Date.now();
     const userCtx = userId
       ? await this.userContextBuilder.build(userId, locale).catch(() => null)
@@ -296,7 +296,7 @@ export class TextFoodAnalysisService {
       `[TextAnalysisService] userContext ${Date.now() - userContextStartedAt}ms userId=${userId || 'anonymous'} hit=${!!userCtx}`,
     );
 
-    // 3. 逐个匹配标准食物库 + LLM 补位
+    // 3. 逐个匹配标准食物库 + AI runtime 补位
     const resolveStartedAt = Date.now();
     const parsedFoods = await this.resolveAllFoods(
       foodTerms,
@@ -546,7 +546,7 @@ export class TextFoodAnalysisService {
   // ==================== Step 3: 食物解析 ====================
 
   /**
-   * 解析所有食物词条: 标准库优先 → LLM 补位
+   * 解析所有食物词条: 标准库优先 → AI runtime 补位
    */
   private async resolveAllFoods(
     foodTerms: string[],
@@ -606,10 +606,10 @@ export class TextFoodAnalysisService {
       }
     }
 
-    // 3b. 未命中的词条走 LLM 拆解
+    // 3b. 未命中的词条走 AI runtime 拆解
     if (unmatchedTerms.length > 0) {
-      const llmParseStart = Date.now();
-      const llmResults = await this.llmParseFoods(
+      const aiRuntimeParseStart = Date.now();
+      const aiRuntimeResults = await this.aiRuntimeParseFoods(
         unmatchedTerms.map((t) => t.term).join(', '),
         originalText,
         userCtx,
@@ -618,14 +618,14 @@ export class TextFoodAnalysisService {
         userId,
       );
       this.logger.log(
-        `[TextAnalysisService] llmParseFoods ${Date.now() - llmParseStart}ms unmatched=${unmatchedTerms.length} results=${llmResults.length} userId=${userId || 'anonymous'}`,
+        `[TextAnalysisService] aiRuntimeParseFoods ${Date.now() - aiRuntimeParseStart}ms unmatched=${unmatchedTerms.length} results=${aiRuntimeResults.length} userId=${userId || 'anonymous'}`,
       );
-      results.push(...llmResults);
+      results.push(...aiRuntimeResults);
 
-      // 仅当 LLM 返回零结果且有多词条时，才对完整原文进行全量重试
-      // （避免大多数场景下的第二次 LLM 调用，节省 5-15s）
-      if (llmResults.length === 0 && unmatchedTerms.length > 1) {
-        const llmFullTextResults = await this.llmParseFoods(
+      // 仅当 AI runtime 返回零结果且有多词条时，才对完整原文进行全量重试
+      // （避免大多数场景下的第二次 AI runtime 调用，节省 5-15s）
+      if (aiRuntimeResults.length === 0 && unmatchedTerms.length > 1) {
+        const aiRuntimeFullTextResults = await this.aiRuntimeParseFoods(
           originalText,
           originalText,
           userCtx,
@@ -633,12 +633,12 @@ export class TextFoodAnalysisService {
           hints,
           userId,
         );
-        results.push(...llmFullTextResults);
+        results.push(...aiRuntimeFullTextResults);
       }
 
-      // Bug 5a 修复: 仅当 LLM 完全无结果时，才启用启发式保底
-      // 若 LLM 有任何返回，视为已覆盖所有未命中词条（避免组合食物拆解后原词重复入账）
-      if (llmResults.length === 0) {
+      // Bug 5a 修复: 仅当 AI runtime 完全无结果时，才启用启发式保底
+      // 若 AI runtime 有任何返回，视为已覆盖所有未命中词条（避免组合食物拆解后原词重复入账）
+      if (aiRuntimeResults.length === 0) {
         const coveredKeys = new Set(
           results.map((r) => this.normalizeFoodKey(r.name)),
         );
@@ -672,7 +672,7 @@ export class TextFoodAnalysisService {
 
     const merged = this.mergeParsedFoods(results);
 
-    // 3c. 如果全部为空（匹配失败 + LLM 也无结果），返回降级结果
+    // 3c. 如果全部为空（匹配失败 + AI runtime 也无结果），返回降级结果
     if (merged.length === 0) {
       this.logger.warn(
         `Text analysis could not identify any food: "${originalText}"`,
@@ -767,7 +767,7 @@ export class TextFoodAnalysisService {
       !/\b(with|and|combo|set|meal|dinner|lunch|breakfast)\b/i.test(foodName) &&
       foodName.trim().split(/\s+/).length <= 3;
 
-    // 模糊匹配 sim_score 准入门槛：收紧到 0.72，宁可走 LLM 也不要错匹配库
+    // 模糊匹配 sim_score 准入门槛：收紧到 0.72，宁可走 AI runtime 也不要错匹配库
     const SIM_ACCEPT_THRESHOLD = 0.72;
     // includes 反向匹配（query.includes(name)）的最小覆盖率：库名长度需达到 query 70% 以上
     const REVERSE_INCLUDE_MIN_RATIO = 0.7;
@@ -1040,15 +1040,15 @@ export class TextFoodAnalysisService {
     };
   }
 
-  // ==================== Step 3b: LLM 补位 ====================
+  // ==================== Step 3b: AI runtime 补位 ====================
 
   /**
-   * 调用 LLM 拆解未匹配的食物文本
+   * 调用 AI runtime 拆解未匹配的食物文本
    *
    * V3.4 P1.3: 支持用户上下文注入，构建决策导向的动态 system prompt
-   * Checkpoint 3: 改走统一 LlmService.chat（带 quota / breaker / usage record）
+   * Checkpoint 3: 改走统一 AiRuntimeService.chat（带 quota / breaker / usage record）
    */
-  private async llmParseFoods(
+  private async aiRuntimeParseFoods(
     unmatchedText: string,
     _originalText: string,
     userCtx?: any,
@@ -1059,7 +1059,7 @@ export class TextFoodAnalysisService {
     const route = await this.aiModelRouting.resolveFoodTextAnalysis({ locale });
     if (!route.apiKey) {
       this.logger.warn(
-        `LLM API not configured for provider=${route.provider}, region=${route.region}; skipping LLM parsing`,
+        `AI runtime API not configured for provider=${route.provider}, region=${route.region}; skipping AI runtime parsing`,
       );
       return [];
     }
@@ -1080,11 +1080,11 @@ export class TextFoodAnalysisService {
         : this.promptSchema.buildBasePrompt(undefined, locale);
 
       this.logger.log(
-        `[LLM] systemPrompt preview: ${systemPrompt.slice(0, 300).replace(/\n/g, '\\n')}`,
+        `[AI runtime] systemPrompt preview: ${systemPrompt.slice(0, 300).replace(/\n/g, '\\n')}`,
       );
 
       this.logger.log(
-        `[LLM] Text parsing call inputLength=${unmatchedText.length} hints=${hints?.length || 0} userId=${userId || 'anonymous'} region=${route.region} provider=${route.provider} model=${route.model}`,
+        `[AI runtime] Text parsing call inputLength=${unmatchedText.length} hints=${hints?.length || 0} userId=${userId || 'anonymous'} region=${route.region} provider=${route.provider} model=${route.model}`,
       );
 
       // 将 hints 拼接到 user message 末尾（作为估算指导，不作为食物词条）
@@ -1097,9 +1097,9 @@ export class TextFoodAnalysisService {
         userContent += `\n\n【估算指导】${hints.join('；')}`;
       }
 
-      const llmStartedAt = Date.now();
-      const result = await this.llm.chat({
-        feature: LlmFeature.FoodText,
+      const aiRuntimeStartedAt = Date.now();
+      const result = await this.aiRuntime.chat({
+        feature: AiRuntimeFeature.FoodText,
         userId,
         provider: route.provider,
         apiKey: route.apiKey,
@@ -1114,36 +1114,41 @@ export class TextFoodAnalysisService {
         ],
       });
       this.logger.log(
-        `[LLM] Text parsing completed in ${Date.now() - llmStartedAt}ms userId=${userId || 'anonymous'}`,
+        `[AI runtime] Text parsing completed in ${Date.now() - aiRuntimeStartedAt}ms userId=${userId || 'anonymous'}`,
       );
 
-      const parsed = this.parseLlmResponse(result.content);
+      const parsed = this.parseAiRuntimeResponse(result.content);
 
-      // 并行查询所有 LLM 解析食物的食物库匹配
-      const llmFoods = parsed.foods
-        .map((f) => ({ ...f, llmName: this.normalizeFoodTerm(f.name || '') }))
-        .filter((f) => f.llmName);
+      // 并行查询所有 AI runtime 解析食物的食物库匹配
+      const aiRuntimeFoods = parsed.foods
+        .map((f) => ({
+          ...f,
+          aiRuntimeName: this.normalizeFoodTerm(f.name || ''),
+        }))
+        .filter((f) => f.aiRuntimeName);
       const libraryBatch2Start = Date.now();
       const libraryMatches = await Promise.all(
-        llmFoods.map((f) => this.matchFoodLibrary(f.llmName).catch(() => null)),
+        aiRuntimeFoods.map((f) =>
+          this.matchFoodLibrary(f.aiRuntimeName).catch(() => null),
+        ),
       );
       const libraryBatch2Hits = libraryMatches.filter(Boolean).length;
       this.logger.log(
-        `[TextAnalysisService] libraryBatch2 ${Date.now() - libraryBatch2Start}ms foods=${llmFoods.length} hits=${libraryBatch2Hits} userId=${userId || 'anonymous'}`,
+        `[TextAnalysisService] libraryBatch2 ${Date.now() - libraryBatch2Start}ms foods=${aiRuntimeFoods.length} hits=${libraryBatch2Hits} userId=${userId || 'anonymous'}`,
       );
 
       const resolved: ParsedFoodItem[] = [];
-      for (let i = 0; i < llmFoods.length; i++) {
-        const f = llmFoods[i];
+      for (let i = 0; i < aiRuntimeFoods.length; i++) {
+        const f = aiRuntimeFoods[i];
         const libraryMatch = libraryMatches[i];
 
         if (libraryMatch) {
-          // Preserve the LLM's locale-appropriate display name.
+          // Preserve the AI runtime's locale-appropriate display name.
           // buildFromLibraryMatch uses the library's stored (Chinese) name, which
           // localizeAnalysisResult may later override via food_i18n.
           // When food_i18n has no entry for the request locale, we fall back to
-          // the LLM name (already in the right language) instead of the Chinese library name.
-          const llmDisplayName = f.name?.trim() || f.llmName;
+          // the AI runtime name (already in the right language) instead of the Chinese library name.
+          const aiRuntimeDisplayName = f.name?.trim() || f.aiRuntimeName;
           const servingGrams = this.resolveServingGrams(
             f.quantity,
             libraryMatch.match,
@@ -1153,11 +1158,11 @@ export class TextFoodAnalysisService {
             f.quantity,
             servingGrams,
           );
-          // Use the LLM's locale-appropriate name as display name.
+          // Use the AI runtime's locale-appropriate name as display name.
           // normalizedName keeps the library's stored name for internal matching.
           // localizeAnalysisResult will override name via food_i18n when available.
-          fromLibrary.name = llmDisplayName;
-          // Fill scoring fields from LLM when library record has no data.
+          fromLibrary.name = aiRuntimeDisplayName;
+          // Fill scoring fields from AI runtime when library record has no data.
           // These fields drive decision accuracy but are often missing in older DB records.
           if (fromLibrary.qualityScore == null && f.qualityScore != null)
             fromLibrary.qualityScore = f.qualityScore;
@@ -1185,8 +1190,8 @@ export class TextFoodAnalysisService {
 
         const fallbackGrams = f.estimatedWeightGrams || DEFAULT_SERVING_GRAMS;
 
-        // ==== Bug #2 修复：检测 LLM 返回的"假 per-100g"（实为 per-serving）====
-        // LLM 偶尔会忽略 per-100g 约定，按一份的总量返回。
+        // ==== Bug #2 修复：检测 AI runtime 返回的"假 per-100g"（实为 per-serving）====
+        // AI runtime 偶尔会忽略 per-100g 约定，按一份的总量返回。
         // 例如海南鸡饭 calories=600（实际是一份 350g 的总量），
         // 经 ratio 3.5 缩放后 = 2100kcal，验证器仅做宏量自洽时无法发现。
         // 检测方法：与按类别的 per-100g 物理上限对比。
@@ -1201,13 +1206,13 @@ export class TextFoodAnalysisService {
         const baseConfidence = looksLikePerServing ? 0.45 : 0.7;
         if (looksLikePerServing) {
           this.logger.warn(
-            `[LLM] Suspicious per-100g for "${f.llmName}": calories=${reportedCalPer100g} > cap ${cap} (cat=${f.category}). Treat as per-serving (no ratio scaling).`,
+            `[AI runtime] Suspicious per-100g for "${f.aiRuntimeName}": calories=${reportedCalPer100g} > cap ${cap} (cat=${f.category}). Treat as per-serving (no ratio scaling).`,
           );
         }
 
         resolved.push({
-          name: f.llmName,
-          normalizedName: f.llmName,
+          name: f.aiRuntimeName,
+          normalizedName: f.aiRuntimeName,
           nameEn: f.nameEn ?? undefined,
           quantity: f.quantity,
           estimatedWeightGrams: fallbackGrams,
@@ -1226,7 +1231,7 @@ export class TextFoodAnalysisService {
             f.sodium != null
               ? Math.round((f.sodium || 0) * fallbackRatio)
               : undefined,
-          // V6.x: 扩展营养字段同样需按 fallbackRatio 缩放（LLM 输出 per-100g）
+          // V6.x: 扩展营养字段同样需按 fallbackRatio 缩放（AI runtime 输出 per-100g）
           saturatedFat:
             f.saturatedFat != null
               ? Math.round((Number(f.saturatedFat) || 0) * fallbackRatio * 10) /
@@ -1316,25 +1321,25 @@ export class TextFoodAnalysisService {
         });
       }
 
-      // V3.6 P1.2: 校验并纠偏 LLM 估算的营养数据（热力学一致性）
+      // V3.6 P1.2: 校验并纠偏 AI runtime 估算的营养数据（热力学一致性）
       // resolved items always have protein/fat/carbs/calories set as numbers
       const validated = validateAndCorrectFoods(
         resolved as Array<ParsedFoodItem & NutritionInput>,
       );
       this.logger.log(
-        `[LLM] Text parsing resolved parsed=${parsed.foods.length} validated=${validated.length} userId=${userId || 'anonymous'}`,
+        `[AI runtime] Text parsing resolved parsed=${parsed.foods.length} validated=${validated.length} userId=${userId || 'anonymous'}`,
       );
       return validated;
     } catch (err) {
       // 配额耗尽：向上抛，由 controller 映射 429
-      if (err instanceof LlmQuotaExceededError) throw err;
+      if (err instanceof AiRuntimeQuotaExceededError) throw err;
       // 上游不可用 / 其它错误：降级为空数组（保持与历史行为一致：
       // 标准库匹配命中的食物仍能返回，未命中部分丢弃）
       const reason =
-        err instanceof LlmUnavailableError
+        err instanceof AiRuntimeUnavailableError
           ? 'unavailable'
           : (err as Error).message;
-      this.logger.warn(`LLM text parsing failed: ${reason}`);
+      this.logger.warn(`AI runtime text parsing failed: ${reason}`);
       return [];
     }
   }
@@ -1535,7 +1540,7 @@ export class TextFoodAnalysisService {
   }
 
   /**
-   * 关键词估算钠含量（mg/100g），用于 LLM/食物库都未命中时的安全兜底。
+   * 关键词估算钠含量（mg/100g），用于 AI runtime/食物库都未命中时的安全兜底。
    */
   private estimateSodiumByKeywords(
     foodName: string,
@@ -1564,13 +1569,13 @@ export class TextFoodAnalysisService {
 
   /**
    * P9: 零热量饮品旁路 — 食物库缺少"白开水/纯净水/凉白开/矿泉水/无糖茶"等条目时，
-   * LLM 容易给水类胡乱估热量（曾出现 500g/900kcal）。
-   * 这里在进入 LLM fallback 前命中关键词，直接合成一个 0kcal beverage 条目。
+   * AI runtime 容易给水类胡乱估热量（曾出现 500g/900kcal）。
+   * 这里在进入 AI runtime fallback 前命中关键词，直接合成一个 0kcal beverage 条目。
    *
    * 命中规则（保守）：
    * - 名称含"水"且不含会污染语义的字（汤/果/糖/盐/调/咸/油 等） → 视为白水
    * - 名称含"凉白开/温开水/沸水/苏打水(无糖)" 也算
-   * 不命中场景（继续走 LLM）：可乐、椰子水、橙汁、汤、糖水、咖啡、奶茶
+   * 不命中场景（继续走 AI runtime）：可乐、椰子水、橙汁、汤、糖水、咖啡、奶茶
    */
   private tryZeroCaloriePassthrough(
     foodName: string,
@@ -1726,9 +1731,9 @@ export class TextFoodAnalysisService {
   }
 
   /**
-   * 解析 LLM 返回的 JSON 文本
+   * 解析 AI runtime 返回的 JSON 文本
    */
-  private parseLlmResponse(content: string): LlmTextParseResult {
+  private parseAiRuntimeResponse(content: string): AiRuntimeTextParseResult {
     try {
       const cleaned = content
         .replace(/```json\s*/g, '')
@@ -1741,7 +1746,7 @@ export class TextFoodAnalysisService {
       };
     } catch {
       this.logger.warn(
-        `LLM response parse failed: ${content.substring(0, 200)}`,
+        `AI runtime response parse failed: ${content.substring(0, 200)}`,
       );
       return { foods: [] };
     }
@@ -1757,7 +1762,7 @@ export class TextFoodAnalysisService {
    * 数据契约：输出的 AnalyzedFoodItem 上所有营养字段均为 per-serving（实际摄入量）。
    *
    * food.calories/protein/fat/carbs/fiber/sodium/saturatedFat/addedSugar 等
-   * 在上游（buildFromLibraryMatch、llmParseFoods fallback、buildHeuristicFallbackFood）
+   * 在上游（buildFromLibraryMatch、aiRuntimeParseFoods fallback、buildHeuristicFallbackFood）
    * 已完成 per-serving 换算，此处直接透传；
    * 而 lib?.* 优先取值的扩展营养字段（transFat、cholesterol、omega3、omega6、
    * solubleFiber、vitaminD、potassium、zinc、sugar 等）来自 food_library 的 per-100g 原始值，

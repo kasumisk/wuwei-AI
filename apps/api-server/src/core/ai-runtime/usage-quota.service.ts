@@ -2,7 +2,7 @@
  * UsageQuotaService — 用户级配额预扣 / 退还
  *
  * 设计要点：
- *  1. 调用方在发起 LLM 请求 *之前* 调用 `consume()` 原子扣减
+ *  1. 调用方在发起 AI runtime 请求 *之前* 调用 `consume()` 原子扣减
  *  2. 若调用失败（非业务错误，比如 timeout / 5xx）调用 `refund()` 退还，避免误扣
  *  3. 业务错误（4xx，content_filter 等）算作"已消费"，不退还
  *  4. 没有 quota 行时按 default 创建（lazy init）
@@ -15,7 +15,10 @@
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { LlmFeature, LlmQuotaExceededError } from './llm.types';
+import {
+  AiRuntimeFeature,
+  AiRuntimeQuotaExceededError,
+} from './ai-runtime.types';
 
 interface QuotaPolicy {
   limit: number; // 0 = unlimited
@@ -28,12 +31,13 @@ interface QuotaPolicy {
  *
  * TODO: 上线前需与产品/运营对齐数值。这里先用保守默认值。
  */
-const DEFAULT_QUOTA: Record<LlmFeature, QuotaPolicy> = {
-  [LlmFeature.FoodText]: { limit: 50, cycle: 'daily' },
-  [LlmFeature.FoodImage]: { limit: 20, cycle: 'daily' },
-  [LlmFeature.FoodEnrichment]: { limit: 0, cycle: 'daily' }, // 系统级补全任务
-  [LlmFeature.CoachChat]: { limit: 100, cycle: 'daily' },
-  [LlmFeature.RecipeGeneration]: { limit: 10, cycle: 'daily' },
+const DEFAULT_QUOTA: Record<AiRuntimeFeature, QuotaPolicy> = {
+  [AiRuntimeFeature.FoodText]: { limit: 50, cycle: 'daily' },
+  [AiRuntimeFeature.FoodImage]: { limit: 20, cycle: 'daily' },
+  [AiRuntimeFeature.FoodEnrichment]: { limit: 0, cycle: 'daily' }, // 系统级补全任务
+  [AiRuntimeFeature.GatewayTextGeneration]: { limit: 0, cycle: 'daily' },
+  [AiRuntimeFeature.CoachChat]: { limit: 100, cycle: 'daily' },
+  [AiRuntimeFeature.RecipeGeneration]: { limit: 10, cycle: 'daily' },
 };
 
 @Injectable()
@@ -44,9 +48,9 @@ export class UsageQuotaService {
 
   /**
    * 预扣一次配额。
-   * @throws LlmQuotaExceededError 用户配额已耗尽
+   * @throws AiRuntimeQuotaExceededError 用户配额已耗尽
    */
-  async consume(userId: string, feature: LlmFeature): Promise<void> {
+  async consume(userId: string, feature: AiRuntimeFeature): Promise<void> {
     const policy = DEFAULT_QUOTA[feature];
     if (!policy || policy.limit === 0) {
       // 不限额功能直接放行（仍记录使用量，便于后续审计）
@@ -93,7 +97,7 @@ export class UsageQuotaService {
     }
 
     // 行存在但扣不下去 = 配额耗尽
-    throw new LlmQuotaExceededError(
+    throw new AiRuntimeQuotaExceededError(
       userId,
       feature,
       existing.used,
@@ -105,7 +109,7 @@ export class UsageQuotaService {
    * 退还一次预扣（调用失败且应当不计费时）。
    * 永不抛错 —— 退款失败只记日志。
    */
-  async refund(userId: string, feature: LlmFeature): Promise<void> {
+  async refund(userId: string, feature: AiRuntimeFeature): Promise<void> {
     try {
       await this.prisma.$executeRaw`
         UPDATE usage_quota
@@ -124,7 +128,7 @@ export class UsageQuotaService {
   /** 不限额功能也记录使用量（best-effort，不阻塞主流程，不抛错） */
   private async incrementUsageBestEffort(
     userId: string,
-    feature: LlmFeature,
+    feature: AiRuntimeFeature,
     cycle: 'daily' | 'weekly' | 'monthly' = 'daily',
   ): Promise<void> {
     try {

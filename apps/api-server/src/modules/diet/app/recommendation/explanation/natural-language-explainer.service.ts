@@ -9,7 +9,7 @@
  * 2. generateWhyThisDish() — 为单个食物生成结构化的"为什么推荐"解释
  *
  * 设计原则：
- * - 不依赖 AI/LLM，纯模板拼接 + 规则优先级排序
+ * - 不依赖 AI/AI runtime，纯模板拼接 + 规则优先级排序
  * - 最多输出 3 个理由点，避免信息过载
  * - 支持 i18n（通过 NarrativeContext.locale）
  */

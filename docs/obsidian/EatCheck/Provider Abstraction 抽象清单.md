@@ -28,18 +28,18 @@ tags:
 
 当前已有基础：
 
-- `apps/api-server/src/gateway/adapters/base.adapter.ts`
+- `apps/api-server/src/core/ai-runtime/adapters/base.adapter.ts`
 - `OpenAIAdapter`
 - `OpenRouterAdapter`
 - `DeepSeekAdapter`
 - `QwenAdapter`
-- `CapabilityRouter`
-- `LlmService`
+- `AiModelRouter`
+- `AiRuntimeService`
 
 当前进展：
 
-- `LlmService.chatRouted()` 已新增
-- `CapabilityRouter.route()` 已增加 `region` 参数
+- `AiRuntimeService.chatRouted()` 已新增
+- `AiModelRouter.route()` 已增加 `region` 参数
 - Provider `metadata` 与 Model `configMetadata` 已支持 `regions`、`blockedRegions`
 - `seed-data.ts` 已为 OpenAI、Anthropic、DeepSeek、Qwen、OpenRouter 写入默认 region metadata
 - `seed-data.ts` 已初始化项目当前使用的模型：

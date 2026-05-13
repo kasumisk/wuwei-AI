@@ -70,11 +70,11 @@ export class AnalyzeTextDto {
   contextOverride?: ContextOverrideDto;
 
   /**
-   * 分析提示（不作为食物词条，仅作为 LLM 推断指导）
+   * 分析提示（不作为食物词条，仅作为 AI runtime 推断指导）
    * 例如 ["每种食物请按常见份量估算", "注明主要做法"]
    */
   @ApiPropertyOptional({
-    description: '分析提示（不参与食物拆分，仅用于指导 LLM 估算）',
+    description: '分析提示（不参与食物拆分，仅用于指导 AI runtime 估算）',
     example: ['每种食物请按常见份量估算'],
     type: [String],
   })

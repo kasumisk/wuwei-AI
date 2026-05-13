@@ -9,7 +9,6 @@ import {
   HttpStatus,
   Sse,
   MessageEvent,
-  Res,
   Header,
 } from '@nestjs/common';
 import {
@@ -17,12 +16,11 @@ import {
   ApiOperation,
   ApiResponse as SwaggerResponse,
 } from '@nestjs/swagger';
-import { Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { Observable, map, catchError, finalize, tap } from 'rxjs';
+import { Observable } from 'rxjs';
 import { GatewayService } from './gateway.service';
-import { CapabilityRouter } from './services/capability-router.service';
-import { AdapterFactory } from './adapters/adapter.factory';
+import { AiModelRouter } from '../core/ai-routing';
+import { AdapterFactory } from '../core/ai-runtime';
 import { ApiKeyGuard } from './guards/api-key.guard';
 import { CapabilityPermissionGuard } from './guards/capability-permission.guard';
 import { RateLimitGuard } from './guards/rate-limit.guard';
@@ -31,6 +29,8 @@ import { ApiResponse } from '../common/types/response.type';
 import { GenerateTextDto } from './dto/generate-text.dto';
 import { GenerateImageDto } from './dto/generate-image.dto';
 import { IgnoreResponseInterceptor } from '../core/decorators/ignore-response-interceptor.decorator';
+import { AiRuntimeService } from '../core/ai-runtime/ai-runtime.service';
+import { AiRuntimeFeature } from '../core/ai-runtime/ai-runtime.types';
 
 @ApiTags('Gateway - AI 能力网关')
 @Controller('gateway')
@@ -40,8 +40,9 @@ export class GatewayController {
 
   constructor(
     private readonly gatewayService: GatewayService,
-    private readonly capabilityRouter: CapabilityRouter,
+    private readonly aiModelRouter: AiModelRouter,
     private readonly adapterFactory: AdapterFactory,
+    private readonly aiRuntime: AiRuntimeService,
   ) {}
 
   /**
@@ -56,32 +57,9 @@ export class GatewayController {
     @Body() body: GenerateTextDto,
   ): Promise<ApiResponse> {
     const { client, capabilityType } = request;
-    const startTime = Date.now();
     const requestId = uuidv4();
 
     try {
-      // 1. 路由到最佳提供商（传递请求的模型）
-      const routing = await this.capabilityRouter.route(
-        client.id,
-        capabilityType,
-        body.model, // 传递用户请求的模型
-      );
-
-      if (!routing) {
-        throw new HttpException(
-          '没有可用的提供商配置',
-          HttpStatus.SERVICE_UNAVAILABLE,
-        );
-      }
-
-      this.logger.log(
-        `Routing request to ${routing.provider.name} with model ${routing.model} for client ${client.id} (requested: ${body.model || 'auto'})`,
-      );
-
-      // 2. 获取适配器
-      const adapter = this.adapterFactory.getAdapter(routing.provider.name);
-
-      // 3. 验证请求参数（必须有 messages 或 prompt）
       this.logger.debug(`[Gateway] Request body:`, {
         hasMessages: !!body.messages,
         messagesLength: body.messages?.length,
@@ -96,14 +74,16 @@ export class GatewayController {
         );
       }
 
-      // 4. 确定使用的模型（优先使用请求中指定的model，否则使用路由选择的默认model）
-      const modelToUse = body.model || routing.model;
-
-      // 5. 调用 API 生成文本
-      const result = await adapter.generateText({
-        messages: body.messages,
-        prompt: body.prompt,
-        model: modelToUse,
+      const result = await this.aiRuntime.chatRouted({
+        clientId: client.id,
+        capabilityType,
+        requestedModel: body.model,
+        feature: AiRuntimeFeature.GatewayTextGeneration,
+        requestId,
+        messages:
+          body.messages && body.messages.length > 0
+            ? body.messages
+            : [{ role: 'user', content: body.prompt ?? '' }],
         temperature: body.temperature,
         maxTokens: body.maxTokens,
         topP: body.topP,
@@ -112,34 +92,8 @@ export class GatewayController {
         stop: body.stop,
       });
 
-      const latency = Date.now() - startTime;
-
-      // 4. 计算成本
-      const cost = adapter.calculateCost(result.usage);
-
-      // 5. 记录使用情况
-      await this.gatewayService.recordUsage({
-        clientId: client.id,
-        requestId,
-        capabilityType,
-        provider: routing.provider.name,
-        model: result.model,
-        status: 'success',
-        usage: {
-          inputTokens: result.usage.promptTokens,
-          outputTokens: result.usage.completionTokens,
-          totalTokens: result.usage.totalTokens,
-        },
-        cost,
-        responseTime: latency,
-        metadata: {
-          finishReason: result.finishReason,
-          ...result.metadata,
-        },
-      });
-
       this.logger.log(
-        `Request completed successfully for client ${client.id}, latency: ${latency}ms, cost: $${cost.toFixed(6)}`,
+        `Gateway text request completed for client ${client.id}, provider=${result.provider}, model=${result.model}, latency=${result.latencyMs}ms, cost=$${result.costUsd.toFixed(6)}`,
       );
 
       return {
@@ -147,138 +101,23 @@ export class GatewayController {
         code: 200,
         message: '文本生成成功',
         data: {
-          text: result.text,
+          text: result.content,
           model: result.model,
-          provider: routing.provider.name,
+          provider: result.provider,
           usage: {
             promptTokens: result.usage.promptTokens,
             completionTokens: result.usage.completionTokens,
             totalTokens: result.usage.totalTokens,
           },
-          cost,
-          latency,
-          finishReason: result.finishReason,
+          cost: result.costUsd,
+          latency: result.latencyMs,
         },
       };
     } catch (error) {
-      const latency = Date.now() - startTime;
-
       this.logger.error(
         `Text generation failed for client ${client.id}: ${error.message}`,
         error.stack,
       );
-
-      // 尝试故障转移
-      try {
-        const routing = await this.capabilityRouter.route(
-          client.id,
-          capabilityType,
-        );
-
-        if (routing) {
-          const fallbackRouting = await this.capabilityRouter.fallback(
-            client.id,
-            capabilityType,
-            [routing.provider.name],
-          );
-
-          if (fallbackRouting) {
-            this.logger.log(
-              `Attempting fallback to ${fallbackRouting.provider.name} for client ${client.id}`,
-            );
-
-            const fallbackAdapter = this.adapterFactory.getAdapter(
-              fallbackRouting.provider.name,
-            );
-            const fallbackResult = await fallbackAdapter.generateText({
-              messages: body.messages,
-              prompt: body.prompt,
-              model: fallbackRouting.model,
-              temperature: body.temperature,
-              maxTokens: body.maxTokens,
-              topP: body.topP,
-              frequencyPenalty: body.frequencyPenalty,
-              presencePenalty: body.presencePenalty,
-              stop: body.stop,
-            });
-
-            const fallbackLatency = Date.now() - startTime;
-            const fallbackCost = fallbackAdapter.calculateCost(
-              fallbackResult.usage,
-            );
-
-            await this.gatewayService.recordUsage({
-              clientId: client.id,
-              requestId,
-              capabilityType,
-              provider: fallbackRouting.provider.name,
-              model: fallbackResult.model,
-              status: 'success',
-              usage: {
-                inputTokens: fallbackResult.usage.promptTokens,
-                outputTokens: fallbackResult.usage.completionTokens,
-                totalTokens: fallbackResult.usage.totalTokens,
-              },
-              cost: fallbackCost,
-              responseTime: fallbackLatency,
-              metadata: {
-                fallback: true,
-                originalProvider: routing.provider.name,
-                finishReason: fallbackResult.finishReason,
-              },
-            });
-
-            this.logger.log(
-              `Fallback completed successfully for client ${client.id}`,
-            );
-
-            return {
-              success: true,
-              code: 200,
-              message: '文本生成成功（故障转移）',
-              data: {
-                text: fallbackResult.text,
-                model: fallbackResult.model,
-                provider: fallbackRouting.provider.name,
-                usage: {
-                  promptTokens: fallbackResult.usage.promptTokens,
-                  completionTokens: fallbackResult.usage.completionTokens,
-                  totalTokens: fallbackResult.usage.totalTokens,
-                },
-                cost: fallbackCost,
-                latency: fallbackLatency,
-                finishReason: fallbackResult.finishReason,
-                fallback: true,
-              },
-            };
-          }
-        }
-      } catch (fallbackError) {
-        this.logger.error(
-          `Fallback also failed for client ${client.id}: ${fallbackError.message}`,
-          fallbackError.stack,
-        );
-      }
-
-      // 记录失败
-      await this.gatewayService.recordUsage({
-        clientId: client.id,
-        requestId,
-        capabilityType,
-        provider: 'unknown',
-        model: 'unknown',
-        status: 'failed',
-        usage: {
-          inputTokens: 0,
-          outputTokens: 0,
-          totalTokens: 0,
-        },
-        cost: 0,
-        responseTime: latency,
-        metadata: {
-          error: error.message,
-        },
-      });
 
       throw new HttpException(
         error.message || '文本生成失败',
@@ -305,29 +144,9 @@ export class GatewayController {
   ): Promise<Observable<MessageEvent>> {
     this.logger.log('Stream request received');
     const { client, capabilityType } = request;
-    const startTime = Date.now();
     const requestId = uuidv4();
 
     try {
-      // 1. 路由到最佳提供商（传递请求的模型）
-      const routing = await this.capabilityRouter.route(
-        client.id,
-        capabilityType,
-        body.model, // 传递用户请求的模型
-      );
-
-      if (!routing) {
-        throw new HttpException(
-          '没有可用的提供商配置',
-          HttpStatus.SERVICE_UNAVAILABLE,
-        );
-      }
-
-      this.logger.log(
-        `[Stream] Routing request to ${routing.provider.name} for client ${client.id} (requested: ${body.model || 'auto'})`,
-      );
-
-      // 2. 验证请求参数
       if (!body.messages && !body.prompt) {
         throw new HttpException(
           '请提供 messages 或 prompt 参数',
@@ -335,86 +154,50 @@ export class GatewayController {
         );
       }
 
-      // 3. 获取适配器
-      const adapter = this.adapterFactory.getAdapter(routing.provider.name);
-
-      // 4. 确定使用的模型
-      const modelToUse = body.model || routing.model;
-
-      // 用于累积统计
-      let totalTokens = 0;
-      let promptTokens = 0;
-      let completionTokens = 0;
-      let generatedText = '';
-
-      // 5. 返回流式 Observable
-      return adapter
-        .generateTextStream({
-          messages: body.messages,
-          prompt: body.prompt,
-          model: modelToUse,
+      return new Observable<MessageEvent>((subscriber) => {
+        const stream = this.aiRuntime.chatRoutedStream({
+          clientId: client.id,
+          capabilityType,
+          requestedModel: body.model,
+          feature: AiRuntimeFeature.GatewayTextGeneration,
+          requestId,
+          messages:
+            body.messages && body.messages.length > 0
+              ? body.messages
+              : [{ role: 'user', content: body.prompt ?? '' }],
           temperature: body.temperature,
           maxTokens: body.maxTokens,
           topP: body.topP,
           frequencyPenalty: body.frequencyPenalty,
           presencePenalty: body.presencePenalty,
           stop: body.stop,
-        })
-        .pipe(
-          tap((chunk) => {
-            // 累积生成的文本
-            if (chunk.delta) {
-              generatedText += chunk.delta;
-            }
-            // 更新 token 统计
-            if (chunk.usage) {
-              promptTokens = chunk.usage.promptTokens || promptTokens;
-              completionTokens =
-                chunk.usage.completionTokens || completionTokens;
-              totalTokens = chunk.usage.totalTokens || totalTokens;
-            }
-          }),
-          map(
-            (chunk): MessageEvent => ({
-              id: requestId,
-              data: {
+        });
+        let cancelled = false;
+
+        void (async () => {
+          try {
+            for await (const chunk of stream) {
+              if (cancelled) break;
+              subscriber.next({
                 id: requestId,
-                delta: chunk.delta,
-                usage: chunk.usage,
-                finishReason: chunk.finishReason,
-                model: chunk.model || modelToUse,
-                provider: routing.provider.name,
-              },
-            }),
-          ),
-          catchError((error) => {
+                data: {
+                  id: requestId,
+                  delta: chunk.delta,
+                  usage: chunk.usage,
+                  finishReason: chunk.done ? 'stop' : undefined,
+                  model: chunk.model,
+                  provider: chunk.provider,
+                  done: chunk.done,
+                },
+              });
+            }
+            if (!cancelled) subscriber.complete();
+          } catch (error) {
             this.logger.error(
               `[Stream] Error for client ${client.id}: ${error.message}`,
               error.stack,
             );
-
-            // 记录失败
-            this.gatewayService
-              .recordUsage({
-                clientId: client.id,
-                requestId,
-                capabilityType,
-                provider: routing.provider.name,
-                model: modelToUse,
-                status: 'failed',
-                usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-                cost: 0,
-                responseTime: Date.now() - startTime,
-                metadata: { error: error.message },
-              })
-              .catch((recordError) => {
-                this.logger.error(
-                  `Failed to record usage: ${recordError.message}`,
-                );
-              });
-
-            // Return the error event as a value, do not throw
-            return new Observable<MessageEvent>((subscriber) => {
+            if (!cancelled) {
               subscriber.next({
                 data: {
                   error: true,
@@ -423,50 +206,15 @@ export class GatewayController {
                 },
               });
               subscriber.complete();
-            });
-          }),
-          finalize(() => {
-            const latency = Date.now() - startTime;
+            }
+          }
+        })();
 
-            // 流结束时记录使用情况
-            const cost = adapter.calculateCost({
-              promptTokens,
-              completionTokens,
-              totalTokens,
-            });
-
-            this.gatewayService
-              .recordUsage({
-                clientId: client.id,
-                requestId,
-                capabilityType,
-                provider: routing.provider.name,
-                model: modelToUse,
-                status: 'success',
-                usage: {
-                  inputTokens: promptTokens,
-                  outputTokens: completionTokens,
-                  totalTokens,
-                },
-                cost,
-                responseTime: latency,
-                metadata: {
-                  streaming: true,
-                  textLength: generatedText.length,
-                },
-              })
-              .then(() => {
-                this.logger.log(
-                  `[Stream] Completed for client ${client.id}, latency: ${latency}ms, cost: $${cost.toFixed(6)}`,
-                );
-              })
-              .catch((recordError) => {
-                this.logger.error(
-                  `Failed to record usage: ${recordError.message}`,
-                );
-              });
-          }),
-        );
+        return () => {
+          cancelled = true;
+          void stream.return(undefined);
+        };
+      });
     } catch (error) {
       this.logger.error(
         `[Stream] Setup failed for client ${client.id}: ${error.message}`,
@@ -497,10 +245,7 @@ export class GatewayController {
 
     try {
       // 1. 路由到最佳提供商
-      const routing = await this.capabilityRouter.route(
-        client.id,
-        capabilityType,
-      );
+      const routing = await this.aiModelRouter.route(client.id, capabilityType);
 
       if (!routing) {
         throw new HttpException(
@@ -586,13 +331,13 @@ export class GatewayController {
 
       // 尝试故障转移
       try {
-        const routing = await this.capabilityRouter.route(
+        const routing = await this.aiModelRouter.route(
           client.id,
           capabilityType,
         );
 
         if (routing) {
-          const fallbackRouting = await this.capabilityRouter.fallback(
+          const fallbackRouting = await this.aiModelRouter.fallback(
             client.id,
             capabilityType,
             [routing.provider.name],

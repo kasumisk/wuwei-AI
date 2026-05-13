@@ -8,7 +8,7 @@ export enum MatchType {
   EXACT = 'exact',
   /** 别名匹配 */
   ALIAS = 'alias',
-  /** 语义匹配（文本链路 LLM 归一） */
+  /** 语义匹配（文本链路 AI runtime 归一） */
   SEMANTIC = 'semantic',
   /** 视觉猜测（图片链路 AI 识别） */
   VISION_GUESS = 'vision_guess',

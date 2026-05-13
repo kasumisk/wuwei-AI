@@ -1,7 +1,7 @@
 /**
  * 图片分析结果解析器
  *
- * 将 LLM 返回的 JSON 文本解析为 AnalyzedFoodItem[]：
+ * 将 AI runtime 返回的 JSON 文本解析为 AnalyzedFoodItem[]：
  *  1. 剥离 ```json ... ``` 代码块包裹
  *  2. 缺失宏量营养素时按 category 粗估补齐
  *  3. 调用 nutrition-sanity-validator 做热力学一致性纠偏

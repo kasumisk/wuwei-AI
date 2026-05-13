@@ -7,12 +7,12 @@
 ## 测试文件结构
 
 ```
-apps/server/test/
+apps/api-server/test/
 ├── jest-unit.json                      # 单元测试 Jest 配置
 ├── jest-e2e.json                       # E2E 测试 Jest 配置
-├── qwen.adapter.spec.ts                # Qwen 适配器测试 (30+ 测试用例)
-├── gateway.service.spec.ts             # Gateway 服务测试 (20+ 测试用例)
-├── capability-router.service.spec.ts   # 路由服务测试 (20+ 测试用例)
+├── unit/ai-runtime/qwen.adapter.spec.ts               # Qwen 适配器测试 (30+ 测试用例)
+├── unit/gateway/gateway.service.spec.ts               # Gateway 服务测试 (20+ 测试用例)
+├── unit/ai-routing/ai-model-router.service.spec.ts    # 路由服务测试 (20+ 测试用例)
 └── app.e2e-spec.ts                     # E2E 测试
 ```
 
@@ -95,7 +95,7 @@ apps/server/test/
 
 **总计：20+ 测试用例**
 
-### 3. CapabilityRouter (capability-router.service.spec.ts)
+### 3. AiModelRouter (ai-model-router.service.spec.ts)
 
 **测试覆盖：**
 
@@ -188,7 +188,7 @@ npm run test:unit
 ```bash
 npm run test:unit -- qwen.adapter.spec.ts
 npm run test:unit -- gateway.service.spec.ts
-npm run test:unit -- capability-router.service.spec.ts
+npm run test:unit -- ai-model-router.service.spec.ts
 ```
 
 ### 查看测试覆盖率
