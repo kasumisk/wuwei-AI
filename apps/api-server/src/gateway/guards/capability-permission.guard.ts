@@ -4,6 +4,10 @@ import {
   ExecutionContext,
   ForbiddenException,
 } from '@nestjs/common';
+import {
+  capabilityLookupValues,
+  normalizeCapabilityType,
+} from '@ai-platform/shared';
 import { PrismaService } from '../../core/prisma/prisma.service';
 
 @Injectable()
@@ -30,7 +34,7 @@ export class CapabilityPermissionGuard implements CanActivate {
     const permission = await this.prisma.clientCapabilityPermissions.findFirst({
       where: {
         clientId: client.id,
-        capabilityType: capabilityType,
+        capabilityType: { in: capabilityLookupValues(capabilityType) },
         enabled: true,
       },
     });
@@ -40,7 +44,7 @@ export class CapabilityPermissionGuard implements CanActivate {
     }
 
     // 将能力类型和权限配置附加到请求对象
-    request.capabilityType = capabilityType;
+    request.capabilityType = normalizeCapabilityType(capabilityType);
     request.permission = permission;
 
     return true;

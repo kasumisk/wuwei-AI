@@ -21,6 +21,13 @@ import { useProviders } from '@/services/providerService';
 import { useModels } from '@/services/modelService';
 import ConfigurableProForm from '@/components/ProForm';
 import type { FormConfig } from '@/types/form';
+import { CapabilityType } from '@ai-platform/shared';
+import {
+  getModelCapabilityOption,
+  MODEL_CAPABILITY_GROUPED_SELECT_OPTIONS,
+  normalizeCapabilityType,
+  toModelCapabilitySubmitValue,
+} from '@/constants/modelCapabilities';
 
 // 路由配置
 export const routeConfig = {
@@ -33,16 +40,13 @@ export const routeConfig = {
   requireAdmin: true,
 };
 
-const CapabilityTypes = {
-  'text.generation': '文本生成',
-  'text.completion': '文本补全',
-  'text.embedding': '文本向量化',
-  'image.generation': '图像生成',
-  'image.edit': '图像编辑',
-  'speech.to_text': '语音转文字',
-  'text.to_speech': '文字转语音',
-  translation: '翻译',
-  moderation: '内容审核',
+const toArray = (value?: string[] | string | null): string[] => {
+  if (Array.isArray(value)) return value.filter(Boolean);
+  if (!value) return [];
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
 };
 
 type ModelSelectionStrategy = 'any' | 'provider' | 'specific';
@@ -69,13 +73,11 @@ const PermissionManagement: React.FC = () => {
   const { data: providersData } = useProviders({ page: 1, pageSize: 100 });
   const { data: modelsData } = useModels({ page: 1, pageSize: 100 });
 
-  const permissions = (permissionsData as any) || [];
+  const permissions = Array.isArray(permissionsData)
+    ? permissionsData
+    : ((permissionsData as any)?.list ?? []);
   const providers = (providersData as any)?.list || [];
   const models = (modelsData as any)?.list || [];
-
-  console.log('permissions', permissions, permissionsData);
-  console.log('providers', providers);
-  console.log('models', models);
 
   const createMutation = useCreatePermission({
     onSuccess: () => {
@@ -122,12 +124,11 @@ const PermissionManagement: React.FC = () => {
       title: '能力类型',
       dataIndex: 'capabilityType',
       width: 160,
-      render: (_: any, record: PermissionInfoDto) => (
-        <Tag color="blue">
-          {CapabilityTypes[record.capabilityType as keyof typeof CapabilityTypes] ||
-            record.capabilityType}
-        </Tag>
-      ),
+      render: (_: any, record: PermissionInfoDto) => {
+        const normalized = normalizeCapabilityType(record.capabilityType);
+        const option = getModelCapabilityOption(normalized);
+        return <Tag color={option?.color || 'blue'}>{option?.label || normalized}</Tag>;
+      },
     },
     {
       title: '状态',
@@ -146,11 +147,13 @@ const PermissionManagement: React.FC = () => {
       title: '模型限制',
       width: 180,
       render: (_: any, record: PermissionInfoDto) => {
-        if (record.allowedModels && record.allowedModels.length > 0) {
-          return <Tag color="green">{record.allowedModels.length} 个指定模型</Tag>;
+        const allowedModels = toArray(record.allowedModels as any);
+        const allowedProviders = toArray(record.allowedProviders as any);
+        if (allowedModels.length > 0) {
+          return <Tag color="green">{allowedModels.length} 个指定模型</Tag>;
         }
-        if (record.allowedProviders && record.allowedProviders.length > 0) {
-          return <Tag color="cyan">{record.allowedProviders.length} 个提供商</Tag>;
+        if (allowedProviders.length > 0) {
+          return <Tag color="cyan">{allowedProviders.length} 个提供商</Tag>;
         }
         return <Tag>任意可用模型</Tag>;
       },
@@ -222,10 +225,9 @@ const PermissionManagement: React.FC = () => {
         disabled: isEditMode,
         fieldProps: {
           placeholder: '请选择能力类型',
-          options: Object.entries(CapabilityTypes).map(([k, v]) => ({
-            label: v,
-            value: k,
-          })),
+          showSearch: true,
+          optionFilterProp: 'label',
+          options: MODEL_CAPABILITY_GROUPED_SELECT_OPTIONS,
         },
       },
       {
@@ -302,7 +304,7 @@ const PermissionManagement: React.FC = () => {
                 placeholder: '选择模型',
                 showSearch: true,
                 options: models.map((m: any) => ({
-                  label: `${m.displayName} (${m.providerName})`,
+                  label: `${m.displayName || m.modelName} (${m.provider?.name || m.providerName || m.providerId || '-'})`,
                   value: m.modelName,
                 })),
                 filterOption: (input: string, option: any) =>
@@ -394,9 +396,11 @@ const PermissionManagement: React.FC = () => {
     setCurrentRecord(record);
 
     let strategy: ModelSelectionStrategy = 'any';
-    if (record.allowedModels && record.allowedModels.length > 0) {
+    const allowedModels = toArray(record.allowedModels as any);
+    const allowedProviders = toArray(record.allowedProviders as any);
+    if (allowedModels.length > 0) {
       strategy = 'specific';
-    } else if (record.allowedProviders && record.allowedProviders.length > 0) {
+    } else if (allowedProviders.length > 0) {
       strategy = 'provider';
     }
     setModelStrategy(strategy);
@@ -422,7 +426,7 @@ const PermissionManagement: React.FC = () => {
 
     const payload = {
       clientId: selectedClientId!,
-      capabilityType: values.capabilityType,
+      capabilityType: toModelCapabilitySubmitValue(values.capabilityType) as CapabilityType,
       enabled: values.enabled,
       rateLimit: values.rateLimit,
       quotaLimit: values.quotaLimit,
@@ -520,19 +524,19 @@ const PermissionManagement: React.FC = () => {
           initialValues={
             currentRecord
               ? {
-                  capabilityType: currentRecord.capabilityType,
+                  capabilityType: normalizeCapabilityType(currentRecord.capabilityType),
                   enabled: currentRecord.enabled,
                   rateLimit: currentRecord.rateLimit,
                   quotaLimit: currentRecord.quotaLimit,
                   modelStrategy:
-                    currentRecord.allowedModels && currentRecord.allowedModels.length > 0
+                    toArray(currentRecord.allowedModels as any).length > 0
                       ? 'specific'
-                      : currentRecord.allowedProviders && currentRecord.allowedProviders.length > 0
+                      : toArray(currentRecord.allowedProviders as any).length > 0
                         ? 'provider'
                         : 'any',
-                  allowedProviders: currentRecord.allowedProviders,
+                  allowedProviders: toArray(currentRecord.allowedProviders as any),
                   preferredProvider: currentRecord.preferredProvider,
-                  allowedModels: currentRecord.allowedModels,
+                  allowedModels: toArray(currentRecord.allowedModels as any),
                   maxConcurrentRequests: currentRecord.config?.maxConcurrentRequests,
                   fallbackEnabled: currentRecord.config?.fallbackEnabled ?? true,
                   costLimit: currentRecord.config?.costLimit,

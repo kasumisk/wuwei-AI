@@ -14,12 +14,12 @@
  * vs Vision full schema: ~400 tokens/food (response alone).
  */
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { AnalyzedFoodItem } from '../../../../decision/types/analysis-result.types';
 import { LlmService } from '../../../../../core/llm/llm.service';
 import { LlmFeature } from '../../../../../core/llm/llm.types';
 import { I18nService, I18nLocale } from '../../../../../core/i18n';
 import type { Locale } from '../../../../diet/app/recommendation/utils/i18n-messages';
+import { RegionAiModelRoutingService } from '../../../../../core/region';
 
 const TEXT_MAX_TOKENS = 5000; // each food item ~300 tokens; 10 items = 3000
 const TEXT_TEMPERATURE = 0.2;
@@ -34,34 +34,12 @@ const TEXT_TIMEOUT_MS = 30_000;
 @Injectable()
 export class ImageNutritionFillService {
   private readonly logger = new Logger(ImageNutritionFillService.name);
-  private readonly apiKey: string;
-  private readonly baseUrl: string;
-  private readonly textModel: string;
 
   constructor(
-    private readonly config: ConfigService,
     private readonly llm: LlmService,
     private readonly i18n: I18nService,
-  ) {
-    // 优先 DeepSeek 官方 API，回退到 OpenRouter（与文本分析链路一致）
-    const deepseekKey = this.config.get<string>('DEEPSEEK_API_KEY');
-    const openrouterKey = this.config.get<string>('OPENROUTER_API_KEY');
-    if (deepseekKey) {
-      this.apiKey = deepseekKey;
-      this.baseUrl =
-        this.config.get<string>('DEEPSEEK_BASE_URL') ||
-        'https://api.deepseek.com/v1';
-    } else {
-      this.apiKey =
-        openrouterKey || this.config.get<string>('OPENAI_API_KEY') || '';
-      this.baseUrl =
-        this.config.get<string>('OPENROUTER_BASE_URL') ||
-        'https://openrouter.ai/api/v1';
-    }
-    this.textModel =
-      this.config.get<string>('NUTRITION_FILL_MODEL') ||
-      'deepseek-chat';
-  }
+    private readonly aiModelRouting: RegionAiModelRoutingService,
+  ) {}
 
   /**
    * Fill nutrition for all foods that don't have a foodLibraryId (library miss).
@@ -111,6 +89,13 @@ export class ImageNutritionFillService {
     );
     const userPrefix = this.i18n.t('decision.prompt.nutritionFill.user', loc);
     const userMessage = `${userPrefix}\n${JSON.stringify(foodList, null, 2)}`;
+    const route = await this.aiModelRouting.resolveFoodTextAnalysis({ locale });
+
+    if (!route.apiKey) {
+      throw new Error(
+        `LLM API not configured for provider=${route.provider}, region=${route.region}`,
+      );
+    }
 
     const result = await this.llm.chat({
       messages: [
@@ -119,12 +104,10 @@ export class ImageNutritionFillService {
       ],
       // FoodImage 熔断器：与文本分析 (FoodText) 隔离，避免图片链路超时污染文本链路
       feature: LlmFeature.FoodImage,
-      provider: this.config.get<string>('DEEPSEEK_API_KEY')
-        ? 'deepseek'
-        : 'openrouter',
-      model: this.textModel,
-      apiKey: this.apiKey,
-      baseUrl: this.baseUrl,
+      provider: route.provider,
+      model: route.model,
+      apiKey: route.apiKey,
+      baseUrl: route.baseUrl,
       maxTokens: TEXT_MAX_TOKENS,
       temperature: TEXT_TEMPERATURE,
       timeoutMs: TEXT_TIMEOUT_MS,

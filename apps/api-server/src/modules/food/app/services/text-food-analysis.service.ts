@@ -19,7 +19,6 @@
  * 8. 异步保存 food_analysis_records
  */
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { FoodLibraryService } from './food-library.service';
 import { LlmService } from '../../../../core/llm/llm.service';
 import {
@@ -27,6 +26,7 @@ import {
   LlmQuotaExceededError,
   LlmUnavailableError,
 } from '../../../../core/llm/llm.types';
+import { RegionAiModelRoutingService } from '../../../../core/region';
 import {
   FoodAnalysisResultV61,
   AnalyzedFoodItem,
@@ -220,12 +220,8 @@ interface LlmTextParseResult {
 @Injectable()
 export class TextFoodAnalysisService {
   private readonly logger = new Logger(TextFoodAnalysisService.name);
-  private readonly apiKey: string;
-  private readonly baseUrl: string;
-  private readonly textModel: string;
 
   constructor(
-    private readonly configService: ConfigService,
     private readonly foodLibraryService: FoodLibraryService,
     // V2.1: 统一分析管道（替代手工编排）
     private readonly analysisPipeline: AnalysisPipelineService,
@@ -235,28 +231,8 @@ export class TextFoodAnalysisService {
     private readonly promptSchema: AnalysisPromptSchemaService,
     // Checkpoint 3: 统一 LLM 调用层（quota + breaker + recorder）
     private readonly llm: LlmService,
-  ) {
-    // 优先使用 DeepSeek 官方 API（更快），回退到 OpenRouter
-    const deepseekKey = this.configService.get<string>('DEEPSEEK_API_KEY');
-    const openrouterKey = this.configService.get<string>('OPENROUTER_API_KEY');
-    if (deepseekKey) {
-      this.apiKey = deepseekKey;
-      this.baseUrl =
-        this.configService.get<string>('DEEPSEEK_BASE_URL') ||
-        'https://api.deepseek.com/v1';
-    } else {
-      this.apiKey =
-        openrouterKey || this.configService.get<string>('OPENAI_API_KEY') || '';
-      this.baseUrl =
-        this.configService.get<string>('OPENROUTER_BASE_URL') ||
-        'https://openrouter.ai/api/v1';
-    }
-    // 文本分析用轻量模型，成本更低
-    this.textModel =
-      this.configService.get<string>('TEXT_ANALYSIS_MODEL') ||
-      this.configService.get<string>('VISION_MODEL') ||
-      'deepseek-chat';
-  }
+    private readonly aiModelRouting: RegionAiModelRoutingService,
+  ) {}
 
   // ==================== 主入口 ====================
 
@@ -1080,8 +1056,11 @@ export class TextFoodAnalysisService {
     hints?: string[],
     userId?: string,
   ): Promise<ParsedFoodItem[]> {
-    if (!this.apiKey) {
-      this.logger.warn('LLM API not configured, skipping LLM parsing');
+    const route = await this.aiModelRouting.resolveFoodTextAnalysis({ locale });
+    if (!route.apiKey) {
+      this.logger.warn(
+        `LLM API not configured for provider=${route.provider}, region=${route.region}; skipping LLM parsing`,
+      );
       return [];
     }
 
@@ -1105,7 +1084,7 @@ export class TextFoodAnalysisService {
       );
 
       this.logger.log(
-        `[LLM] Text parsing call inputLength=${unmatchedText.length} hints=${hints?.length || 0} userId=${userId || 'anonymous'}`,
+        `[LLM] Text parsing call inputLength=${unmatchedText.length} hints=${hints?.length || 0} userId=${userId || 'anonymous'} region=${route.region} provider=${route.provider} model=${route.model}`,
       );
 
       // 将 hints 拼接到 user message 末尾（作为估算指导，不作为食物词条）
@@ -1122,10 +1101,10 @@ export class TextFoodAnalysisService {
       const result = await this.llm.chat({
         feature: LlmFeature.FoodText,
         userId,
-        provider: 'openrouter',
-        apiKey: this.apiKey,
-        baseUrl: this.baseUrl,
-        model: this.textModel,
+        provider: route.provider,
+        apiKey: route.apiKey,
+        baseUrl: route.baseUrl,
+        model: route.model,
         temperature: 0.2,
         maxTokens: 2500,
         timeoutMs: 15_000,

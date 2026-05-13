@@ -10,6 +10,7 @@ import { WechatAuthService } from './app/wechat-auth.service';
 import { AppJwtStrategy } from './app/app-jwt.strategy';
 import { AppJwtAuthGuard } from './app/app-jwt-auth.guard';
 import { FirebaseAdminService } from './app/firebase-admin.service';
+import { AppAuthProviderRegistry } from './app/providers/app-auth-provider.registry';
 // Admin 端
 import { AdminController } from './admin/admin-auth.controller';
 import { AdminService } from './admin/admin-auth.service';
@@ -46,6 +47,7 @@ import { JwtAuthGuard } from './admin/jwt-auth.guard';
     SmsService,
     WechatAuthService,
     FirebaseAdminService,
+    AppAuthProviderRegistry,
     AppJwtStrategy,
     AppJwtAuthGuard,
     // Admin 端
@@ -55,6 +57,7 @@ import { JwtAuthGuard } from './admin/jwt-auth.guard';
   ],
   exports: [
     AppAuthService,
+    AppAuthProviderRegistry,
     AdminService,
     AppJwtAuthGuard,
     JwtAuthGuard,

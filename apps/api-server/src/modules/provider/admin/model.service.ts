@@ -12,7 +12,12 @@ import {
   GetModelsQueryDto,
   TestModelDto,
 } from './dto/model-management.dto';
-import { ModelStatus } from '@ai-platform/shared';
+import {
+  CapabilityType,
+  ModelStatus,
+  toApiCapabilityType,
+  toDbCapabilityType,
+} from '@ai-platform/shared';
 
 @Injectable()
 export class ModelService {
@@ -45,7 +50,7 @@ export class ModelService {
     }
 
     if (capabilityType) {
-      where.capabilityType = capabilityType;
+      where.capabilityType = toDbCapabilityType(capabilityType);
     }
 
     if (status) {
@@ -72,7 +77,7 @@ export class ModelService {
       providerName: model.providers?.name || 'Unknown',
       modelName: model.modelName,
       displayName: model.displayName,
-      capabilityType: model.capabilityType,
+      capabilityType: toApiCapabilityType(model.capabilityType),
       enabled: model.enabled,
       priority: model.priority,
       status: model.status,
@@ -138,7 +143,7 @@ export class ModelService {
       providerName: model.providers?.name || 'Unknown',
       modelName: model.modelName,
       displayName: model.displayName,
-      capabilityType: model.capabilityType,
+      capabilityType: toApiCapabilityType(model.capabilityType),
       enabled: model.enabled,
       priority: model.priority,
       status: model.status,
@@ -198,7 +203,9 @@ export class ModelService {
       where: {
         providerId: createModelDto.providerId,
         modelName: createModelDto.modelName,
-        capabilityType: createModelDto.capabilityType as any,
+        capabilityType: toDbCapabilityType(
+          createModelDto.capabilityType,
+        ) as any,
       },
     });
 
@@ -217,7 +224,9 @@ export class ModelService {
         providerId: createModelDto.providerId,
         modelName: createModelDto.modelName,
         displayName: createModelDto.displayName,
-        capabilityType: createModelDto.capabilityType as any,
+        capabilityType: toDbCapabilityType(
+          createModelDto.capabilityType,
+        ) as any,
         enabled: createModelDto.enabled ?? true,
         priority: createModelDto.priority ?? 0,
         status: ModelStatus.ACTIVE,
@@ -426,7 +435,7 @@ export class ModelService {
         output: {
           message: this.i18n.t('provider.model.testSuccess'),
           modelName: model.modelName,
-          capabilityType: model.capabilityType,
+          capabilityType: toApiCapabilityType(model.capabilityType),
         },
         latency,
         usage,
@@ -457,7 +466,7 @@ export class ModelService {
   async findByCapabilityType(capabilityType: string) {
     const models = await this.prisma.modelConfigs.findMany({
       where: {
-        capabilityType: capabilityType as any,
+        capabilityType: toDbCapabilityType(capabilityType) as any,
         enabled: true,
       },
       include: { providers: true },

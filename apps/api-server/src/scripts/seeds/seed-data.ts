@@ -5,9 +5,13 @@ import {
   ModelStatus,
   Currency,
   CapabilityType,
+  toDbCapabilityType,
 } from '@ai-platform/shared';
 
 const prisma = new PrismaClient();
+const TEXT_GENERATION_CAPABILITY = toDbCapabilityType(
+  CapabilityType.TEXT_GENERATION,
+)!;
 
 async function seed() {
   try {
@@ -27,7 +31,11 @@ async function seed() {
         timeout: 30000,
         retryCount: 3,
         status: ProviderStatus.ACTIVE,
-        metadata: { description: 'OpenAI official API' },
+        metadata: {
+          description: 'OpenAI official API',
+          regions: ['GLOBAL'],
+          blockedRegions: ['CN'],
+        },
       },
       {
         name: 'Anthropic',
@@ -39,7 +47,30 @@ async function seed() {
         timeout: 30000,
         retryCount: 3,
         status: ProviderStatus.ACTIVE,
-        metadata: { description: 'Anthropic Claude API' },
+        metadata: {
+          description: 'Anthropic Claude API',
+          regions: ['GLOBAL'],
+          blockedRegions: ['CN'],
+        },
+      },
+      {
+        name: 'OpenRouter',
+        type: ProviderType.CUSTOM,
+        baseUrl:
+          process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
+        apiKey: process.env.OPENROUTER_API_KEY || 'sk-placeholder-change-me',
+        enabled: Boolean(process.env.OPENROUTER_API_KEY),
+        healthCheckUrl: 'https://openrouter.ai/api/v1/models',
+        timeout: 45000,
+        retryCount: 2,
+        status: process.env.OPENROUTER_API_KEY
+          ? ProviderStatus.ACTIVE
+          : ProviderStatus.INACTIVE,
+        metadata: {
+          description: 'OpenRouter compatible API',
+          regions: ['GLOBAL'],
+          blockedRegions: ['CN'],
+        },
       },
       {
         name: 'DeepSeek',
@@ -51,7 +82,10 @@ async function seed() {
         timeout: 30000,
         retryCount: 3,
         status: ProviderStatus.ACTIVE,
-        metadata: { description: 'DeepSeek API' },
+        metadata: {
+          description: 'DeepSeek API',
+          regions: ['GLOBAL', 'CN'],
+        },
       },
       {
         name: 'Qwen',
@@ -64,7 +98,10 @@ async function seed() {
         timeout: 30000,
         retryCount: 3,
         status: ProviderStatus.INACTIVE,
-        metadata: { description: '阿里云通义千问 API' },
+        metadata: {
+          description: '阿里云通义千问 API',
+          regions: ['CN'],
+        },
       },
     ];
 
@@ -75,9 +112,15 @@ async function seed() {
       });
       if (existing) {
         console.log(
-          `  ⏭️  Provider "${providerData.name}" already exists, skipping`,
+          `  ℹ️  Provider "${providerData.name}" already exists, updating metadata`,
         );
-        savedProviders.push(existing);
+        const updated = await prisma.providers.update({
+          where: { id: existing.id },
+          data: {
+            metadata: providerData.metadata,
+          },
+        });
+        savedProviders.push(updated);
       } else {
         const saved = await prisma.providers.create({ data: providerData });
         savedProviders.push(saved);
@@ -89,6 +132,7 @@ async function seed() {
     console.log('\n🤖 Seeding Models...');
 
     const openai = savedProviders.find((p) => p.name === 'OpenAI');
+    const openrouter = savedProviders.find((p) => p.name === 'OpenRouter');
     const anthropic = savedProviders.find((p) => p.name === 'Anthropic');
     const deepseek = savedProviders.find((p) => p.name === 'DeepSeek');
     const qwen = savedProviders.find((p) => p.name === 'Qwen');
@@ -101,7 +145,7 @@ async function seed() {
               providerId: openai.id,
               modelName: 'gpt-4-turbo',
               displayName: 'GPT-4 Turbo',
-              capabilityType: CapabilityType.TEXT_GENERATION,
+              capabilityType: TEXT_GENERATION_CAPABILITY,
               enabled: true,
               priority: 1,
               status: ModelStatus.ACTIVE,
@@ -114,12 +158,13 @@ async function seed() {
               streaming: true,
               functionCalling: true,
               vision: false,
+              configMetadata: { regions: ['GLOBAL'] },
             },
             {
               providerId: openai.id,
               modelName: 'gpt-4o',
               displayName: 'GPT-4o',
-              capabilityType: CapabilityType.TEXT_GENERATION,
+              capabilityType: TEXT_GENERATION_CAPABILITY,
               enabled: true,
               priority: 2,
               status: ModelStatus.ACTIVE,
@@ -132,12 +177,13 @@ async function seed() {
               streaming: true,
               functionCalling: true,
               vision: true,
+              configMetadata: { regions: ['GLOBAL'] },
             },
             {
               providerId: openai.id,
               modelName: 'gpt-3.5-turbo',
               displayName: 'GPT-3.5 Turbo',
-              capabilityType: CapabilityType.TEXT_GENERATION,
+              capabilityType: TEXT_GENERATION_CAPABILITY,
               enabled: true,
               priority: 3,
               status: ModelStatus.ACTIVE,
@@ -150,6 +196,83 @@ async function seed() {
               streaming: true,
               functionCalling: true,
               vision: false,
+              configMetadata: { regions: ['GLOBAL'] },
+            },
+          ]
+        : []),
+      // OpenRouter Models
+      ...(openrouter
+        ? [
+            {
+              providerId: openrouter.id,
+              modelName: 'qwen/qwen3-vl-32b-instruct',
+              displayName: 'Qwen3 VL 32B Instruct (OpenRouter)',
+              capabilityType: TEXT_GENERATION_CAPABILITY,
+              enabled: true,
+              priority: 1,
+              status: ModelStatus.ACTIVE,
+              inputCostPer1kTokens: 0,
+              outputCostPer1kTokens: 0,
+              currency: Currency.USD,
+              maxTokens: 4096,
+              maxRequestsPerMinute: 200,
+              contextWindow: 32768,
+              streaming: true,
+              functionCalling: false,
+              vision: true,
+              configMetadata: {
+                regions: ['GLOBAL'],
+                featureKeys: ['food_image_analysis'],
+                envKey: 'VISION_MODEL',
+                fallbackModel: 'qwen/qwen-vl-plus',
+              },
+            },
+            {
+              providerId: openrouter.id,
+              modelName: 'qwen/qwen-vl-plus',
+              displayName: 'Qwen VL Plus (OpenRouter)',
+              capabilityType: TEXT_GENERATION_CAPABILITY,
+              enabled: true,
+              priority: 2,
+              status: ModelStatus.ACTIVE,
+              inputCostPer1kTokens: 0,
+              outputCostPer1kTokens: 0,
+              currency: Currency.USD,
+              maxTokens: 4096,
+              maxRequestsPerMinute: 200,
+              contextWindow: 32768,
+              streaming: true,
+              functionCalling: false,
+              vision: true,
+              configMetadata: {
+                regions: ['GLOBAL'],
+                featureKeys: ['food_image_analysis'],
+                envKey: 'VISION_MODEL_FALLBACK',
+                fallbackFor: 'qwen/qwen3-vl-32b-instruct',
+              },
+            },
+            {
+              providerId: openrouter.id,
+              modelName: 'deepseek/deepseek-chat-v3-0324',
+              displayName: 'DeepSeek Chat V3 0324 (OpenRouter)',
+              capabilityType: TEXT_GENERATION_CAPABILITY,
+              enabled: true,
+              priority: 3,
+              status: ModelStatus.ACTIVE,
+              inputCostPer1kTokens: 0,
+              outputCostPer1kTokens: 0,
+              currency: Currency.USD,
+              maxTokens: 4096,
+              maxRequestsPerMinute: 300,
+              contextWindow: 64000,
+              streaming: true,
+              functionCalling: true,
+              vision: false,
+              configMetadata: {
+                regions: ['GLOBAL'],
+                featureKeys: ['recipe_generation', 'coach_chat'],
+                envKey: 'RECIPE_MODEL_STRONG',
+              },
             },
           ]
         : []),
@@ -160,7 +283,7 @@ async function seed() {
               providerId: anthropic.id,
               modelName: 'claude-3-opus-20240229',
               displayName: 'Claude 3 Opus',
-              capabilityType: CapabilityType.TEXT_GENERATION,
+              capabilityType: TEXT_GENERATION_CAPABILITY,
               enabled: true,
               priority: 1,
               status: ModelStatus.ACTIVE,
@@ -173,12 +296,13 @@ async function seed() {
               streaming: true,
               functionCalling: true,
               vision: true,
+              configMetadata: { regions: ['GLOBAL'] },
             },
             {
               providerId: anthropic.id,
               modelName: 'claude-3-sonnet-20240229',
               displayName: 'Claude 3 Sonnet',
-              capabilityType: CapabilityType.TEXT_GENERATION,
+              capabilityType: TEXT_GENERATION_CAPABILITY,
               enabled: true,
               priority: 2,
               status: ModelStatus.ACTIVE,
@@ -191,6 +315,7 @@ async function seed() {
               streaming: true,
               functionCalling: true,
               vision: true,
+              configMetadata: { regions: ['GLOBAL'] },
             },
           ]
         : []),
@@ -201,7 +326,7 @@ async function seed() {
               providerId: deepseek.id,
               modelName: 'deepseek-chat',
               displayName: 'DeepSeek Chat',
-              capabilityType: CapabilityType.TEXT_GENERATION,
+              capabilityType: TEXT_GENERATION_CAPABILITY,
               enabled: true,
               priority: 1,
               status: ModelStatus.ACTIVE,
@@ -214,12 +339,17 @@ async function seed() {
               streaming: true,
               functionCalling: true,
               vision: false,
+              configMetadata: {
+                regions: ['GLOBAL', 'CN'],
+                featureKeys: ['food_text_analysis'],
+                envKey: 'TEXT_ANALYSIS_MODEL',
+              },
             },
             {
               providerId: deepseek.id,
               modelName: 'deepseek-coder',
               displayName: 'DeepSeek Coder',
-              capabilityType: CapabilityType.TEXT_GENERATION,
+              capabilityType: TEXT_GENERATION_CAPABILITY,
               enabled: true,
               priority: 2,
               status: ModelStatus.ACTIVE,
@@ -232,6 +362,7 @@ async function seed() {
               streaming: true,
               functionCalling: true,
               vision: false,
+              configMetadata: { regions: ['GLOBAL', 'CN'] },
             },
           ]
         : []),
@@ -242,7 +373,7 @@ async function seed() {
               providerId: qwen.id,
               modelName: 'qwen-max',
               displayName: 'Qwen Max',
-              capabilityType: CapabilityType.TEXT_GENERATION,
+              capabilityType: TEXT_GENERATION_CAPABILITY,
               enabled: false,
               priority: 1,
               status: ModelStatus.INACTIVE,
@@ -255,6 +386,7 @@ async function seed() {
               streaming: true,
               functionCalling: true,
               vision: false,
+              configMetadata: { regions: ['CN'] },
             },
           ]
         : []),
@@ -271,8 +403,14 @@ async function seed() {
 
       if (existing) {
         console.log(
-          `  ⏭️  Model "${modelData.modelName}" already exists, skipping`,
+          `  ℹ️  Model "${modelData.modelName}" already exists, updating region metadata`,
         );
+        await prisma.modelConfigs.update({
+          where: { id: existing.id },
+          data: {
+            configMetadata: (modelData as any).configMetadata,
+          },
+        });
       } else {
         await prisma.modelConfigs.create({ data: modelData as any });
         console.log(`  ✅ Created model: ${modelData.displayName}`);

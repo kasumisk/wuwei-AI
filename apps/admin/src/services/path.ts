@@ -58,6 +58,7 @@ const PATH = {
     CHURN_PREDICTION: '/admin/churn-prediction',
     // 功能开关
     FEATURE_FLAGS: '/admin/feature-flags',
+    REGION_STRATEGY: '/admin/region-strategy',
     // 评分参数配置
     SCORING_CONFIG: '/admin/scoring-config',
     // V1.7: 每日评分权重配置

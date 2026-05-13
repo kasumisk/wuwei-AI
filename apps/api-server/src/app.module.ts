@@ -34,6 +34,8 @@ import { StrategyModule } from './modules/strategy/strategy.module';
 import { SubscriptionModule } from './modules/subscription/subscription.module';
 // V6.3 P2-6: 菜谱模块
 import { RecipeModule } from './modules/recipe/recipe.module';
+// App 能力配置（区域策略、登录/支付/AI 能力下发）
+import { CapabilitiesModule } from './modules/capabilities/capabilities.module';
 // 系统服务
 import { HealthModule } from './health/health.module';
 import { GatewayModule } from './gateway/gateway.module';
@@ -118,6 +120,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     SubscriptionModule,
     // V6.3 P2-6: 菜谱模块（CRUD + 评分）
     RecipeModule,
+    CapabilitiesModule,
     // 系统服务
     HealthModule,
     GatewayModule,

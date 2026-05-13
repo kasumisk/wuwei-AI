@@ -18,9 +18,11 @@ import { LlmService } from './llm.service';
 import { UsageQuotaService } from './usage-quota.service';
 import { UsageRecorderService } from './usage-recorder.service';
 import { UsageArchiveCronService } from './usage-archive-cron.service';
+import { GatewayModule } from '../../gateway/gateway.module';
 
 @Global()
 @Module({
+  imports: [GatewayModule],
   providers: [
     LlmService,
     UsageQuotaService,

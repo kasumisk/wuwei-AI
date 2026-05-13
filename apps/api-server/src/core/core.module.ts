@@ -8,6 +8,7 @@ import { RequestContextModule } from './context/request-context.module';
 import { I18nModule } from './i18n';
 import { IdempotencyModule } from './idempotency';
 import { CronModule } from './cron';
+import { RegionModule } from './region';
 
 /**
  * V6.4: 移除 AllExceptionsFilter 注册
@@ -34,6 +35,8 @@ import { CronModule } from './cron';
     IdempotencyModule,
     // V7 Cron 解耦：CronBackend + CronHandlerRegistry + InternalCronController
     CronModule,
+    // Region Strategy：区域能力、供应商选择与合规开关的统一入口
+    RegionModule,
   ],
   exports: [
     ConfigModule,
@@ -44,6 +47,7 @@ import { CronModule } from './cron';
     I18nModule,
     IdempotencyModule,
     CronModule,
+    RegionModule,
   ],
 })
 export class CoreModule {}

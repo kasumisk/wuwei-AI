@@ -91,6 +91,26 @@ export class CreatePermissionDto implements ICreatePermissionDto {
   preferredProvider?: string;
 
   @ApiProperty({
+    description: '允许的提供商列表',
+    type: [String],
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  allowedProviders?: string[];
+
+  @ApiProperty({
+    description: '允许的模型列表',
+    type: [String],
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  allowedModels?: string[];
+
+  @ApiProperty({
     description: '配置',
     type: PermissionConfigDto,
     required: false,
@@ -126,6 +146,26 @@ export class UpdatePermissionDto implements IUpdatePermissionDto {
   @IsOptional()
   @IsString()
   preferredProvider?: string;
+
+  @ApiProperty({
+    description: '允许的提供商列表',
+    type: [String],
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  allowedProviders?: string[];
+
+  @ApiProperty({
+    description: '允许的模型列表',
+    type: [String],
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  allowedModels?: string[];
 
   @ApiProperty({
     description: '配置',

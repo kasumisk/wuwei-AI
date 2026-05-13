@@ -400,4 +400,7 @@ export const routeConfig = {
   order: 16,
   requireAuth: true,
   requireAdmin: true,
+  meta: { 
+    hideInMenu: true,
+  }
 };

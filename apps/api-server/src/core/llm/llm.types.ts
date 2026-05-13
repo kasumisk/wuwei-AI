@@ -123,6 +123,22 @@ export interface LlmDirectChatOptions extends LlmChatOptionsBase {
   extraHeaders?: Record<string, string>;
 }
 
+/** CapabilityRouter 路由模式 chat 选项 */
+export interface LlmRoutedChatOptions extends LlmChatOptionsBase {
+  /** B2B/app client id；用于 CapabilityRouter 权限、模型白名单与 provider 策略 */
+  clientId: string;
+  /** CapabilityRouter 能力类型，如 TEXT_GENERATION / IMAGE_GENERATION */
+  capabilityType: string;
+  /** 可选指定模型；仍会经过权限与区域过滤 */
+  requestedModel?: string;
+  /** RegionStrategy 输出的运行区域；用于 provider/model region 过滤 */
+  region?: 'GLOBAL' | 'CN';
+  /** 消息体 */
+  messages: LlmMessage[];
+  responseFormat?: { type: 'json_object' | 'text' };
+  extraHeaders?: Record<string, string>;
+}
+
 export interface LlmChatResult {
   content: string;
   provider: LlmProvider;

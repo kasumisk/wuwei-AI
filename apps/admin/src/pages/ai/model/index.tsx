@@ -23,6 +23,14 @@ import {
 } from '@/services/modelService';
 import { ModelStatus } from '@ai-platform/shared';
 import { useProviders } from '@/services/providerService';
+import {
+  getModelCapabilityOption,
+  isVisionModelCapabilitySelection,
+  MODEL_CAPABILITY_SELECT_OPTIONS,
+  MODEL_CAPABILITY_VISION_TEXT_VALUE,
+  MODEL_CAPABILITY_VALUE_ENUM,
+  toModelCapabilitySubmitValue,
+} from '@/constants/modelCapabilities';
 
 const ModelManagement: React.FC = () => {
   const [currentRecord, setCurrentRecord] = useState<ModelInfoDto | null>(null);
@@ -105,17 +113,11 @@ const ModelManagement: React.FC = () => {
       dataIndex: 'capabilityType',
       width: 120,
       valueType: 'select',
-      valueEnum: {
-        '': { text: '全部' },
-        chat: { text: 'Chat' },
-        completion: { text: 'Completion' },
-        embedding: { text: 'Embedding' },
-        'image-generation': { text: 'Image Generation' },
-        'speech-to-text': { text: 'Speech to Text' },
-        'text-to-speech': { text: 'Text to Speech' },
-        moderation: { text: 'Moderation' },
+      valueEnum: MODEL_CAPABILITY_VALUE_ENUM,
+      render: (_: any, record: ModelInfoDto) => {
+        const option = getModelCapabilityOption(record.capabilityType, record.features);
+        return <Tag color={option?.color}>{option?.label || record.capabilityType}</Tag>;
       },
-      render: (_: any, record: ModelInfoDto) => <Tag>{record.capabilityType}</Tag>,
     },
     {
       title: '状态',
@@ -254,19 +256,15 @@ const ModelManagement: React.FC = () => {
             type: 'select',
             required: true,
             colProps: { span: 12 },
-            options: [
-              { label: 'Chat', value: 'chat' },
-              { label: 'Completion', value: 'completion' },
-              { label: 'Embedding', value: 'embedding' },
-              { label: 'Image Generation', value: 'image-generation' },
-              { label: 'Speech to Text', value: 'speech-to-text' },
-              { label: 'Text to Speech', value: 'text-to-speech' },
-              { label: 'Moderation', value: 'moderation' },
-            ],
+            options: MODEL_CAPABILITY_SELECT_OPTIONS,
             fieldProps: {
               placeholder: '选择能力类型',
               disabled: isEditMode,
+              showSearch: true,
+              optionFilterProp: 'label',
             },
+            tooltip:
+              '使用统一 CapabilityType 值，例如 text.generation。食物文本分析、图片后的营养补全都归入文本生成。',
           },
           {
             name: 'modelName',
@@ -481,6 +479,10 @@ const ModelManagement: React.FC = () => {
       streaming: record.features?.streaming ?? false,
       functionCalling: record.features?.functionCalling ?? false,
       vision: record.features?.vision ?? false,
+      capabilityType:
+        record.capabilityType === 'text.generation' && record.features?.vision
+          ? MODEL_CAPABILITY_VISION_TEXT_VALUE
+          : record.capabilityType,
       endpoint: record.configOverride?.endpoint,
       customApiKey: record.configOverride?.customApiKey,
       customTimeout: record.configOverride?.customTimeout,
@@ -511,7 +513,7 @@ const ModelManagement: React.FC = () => {
     const features = {
       streaming: values.streaming,
       functionCalling: values.functionCalling,
-      vision: values.vision,
+      vision: isVisionModelCapabilitySelection(values.capabilityType) ? true : values.vision,
     };
 
     // 配置覆盖（只包含有值的字段）
@@ -529,7 +531,7 @@ const ModelManagement: React.FC = () => {
       providerId: values.providerId,
       modelName: values.modelName,
       displayName: values.displayName,
-      capabilityType: values.capabilityType,
+      capabilityType: toModelCapabilitySubmitValue(values.capabilityType),
       enabled: values.enabled,
       priority: values.priority,
       pricing,
@@ -557,17 +559,21 @@ const ModelManagement: React.FC = () => {
         columns={columns}
         request={async (params) => {
           try {
+            const isVisionFilter = isVisionModelCapabilitySelection(params.capabilityType);
             const { list, total } = await modelApi.getModels({
               page: params.current,
               pageSize: params.pageSize,
               keyword: params.displayName || params.modelName,
-              capabilityType: params.capabilityType,
+              capabilityType: toModelCapabilitySubmitValue(params.capabilityType) as any,
               status: params.status,
             });
+            const data = isVisionFilter
+              ? (list || []).filter((model) => model.features?.vision)
+              : list || [];
 
             return {
-              data: list || [],
-              total: total || 0,
+              data,
+              total: isVisionFilter ? data.length : total || 0,
               success: true,
             };
           } catch (error) {
@@ -632,4 +638,7 @@ export const routeConfig = {
   order: 17,
   requireAuth: true,
   requireAdmin: true,
+  meta: {
+    hideInMenu: true,
+  },
 };

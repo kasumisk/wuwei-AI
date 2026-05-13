@@ -2,7 +2,6 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
-  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { I18nService } from '../../../core/i18n/i18n.service';
@@ -10,7 +9,9 @@ import {
   CreatePermissionDto,
   UpdatePermissionDto,
   BatchUpdatePermissionsDto,
+  capabilityLookupValues,
   CapabilityType,
+  normalizeCapabilityType,
 } from '@ai-platform/shared';
 
 @Injectable()
@@ -40,7 +41,7 @@ export class PermissionService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return permissions;
+    return permissions.map((permission) => this.toPermissionInfo(permission));
   }
 
   /**
@@ -61,7 +62,7 @@ export class PermissionService {
       );
     }
 
-    return permission;
+    return this.toPermissionInfo(permission);
   }
 
   /**
@@ -81,11 +82,15 @@ export class PermissionService {
       );
     }
 
+    const capabilityType = this.normalizeCapabilityType(
+      createPermissionDto.capabilityType,
+    );
+
     // 检查是否已存在相同的权限
     const existing = await this.prisma.clientCapabilityPermissions.findFirst({
       where: {
         clientId: createPermissionDto.clientId,
-        capabilityType: createPermissionDto.capabilityType,
+        capabilityType: { in: this.capabilityLookupValues(capabilityType) },
       },
     });
 
@@ -93,15 +98,15 @@ export class PermissionService {
       throw new ConflictException(
         this.i18n.t('client.clientPermission.alreadyExists', {
           clientId: createPermissionDto.clientId,
-          capability: createPermissionDto.capabilityType,
+          capability: capabilityType,
         }),
       );
     }
 
-    return await this.prisma.clientCapabilityPermissions.create({
+    const permission = await this.prisma.clientCapabilityPermissions.create({
       data: {
         clientId: createPermissionDto.clientId,
-        capabilityType: createPermissionDto.capabilityType,
+        capabilityType,
         enabled: createPermissionDto.enabled,
         rateLimit: createPermissionDto.rateLimit,
         quotaLimit: createPermissionDto.quotaLimit,
@@ -112,6 +117,7 @@ export class PermissionService {
         config: createPermissionDto.config,
       },
     });
+    return this.toPermissionInfo(permission);
   }
 
   /**
@@ -164,10 +170,11 @@ export class PermissionService {
         updatePermissionDto.allowedModels?.join(',') ?? null;
     }
 
-    return await this.prisma.clientCapabilityPermissions.update({
+    const updated = await this.prisma.clientCapabilityPermissions.update({
       where: { id: permissionId },
       data: updateData,
     });
+    return this.toPermissionInfo(updated);
   }
 
   /**
@@ -223,13 +230,19 @@ export class PermissionService {
         where: { clientId },
       });
     const permissionMap = new Map(
-      existingPermissions.map((p) => [p.capabilityType, p]),
+      existingPermissions.map((p) => [
+        this.normalizeCapabilityType(p.capabilityType),
+        p,
+      ]),
     );
 
     for (const item of batchDto.permissions) {
       try {
+        const capabilityType = this.normalizeCapabilityType(
+          item.capabilityType,
+        ) as CapabilityType;
         // 查找现有权限（内存查找，无 DB 查询）
-        const permission = permissionMap.get(item.capabilityType);
+        const permission = permissionMap.get(capabilityType);
 
         if (permission) {
           // 更新现有权限
@@ -245,7 +258,7 @@ export class PermissionService {
             data: updateData,
           });
           results.push({
-            capabilityType: item.capabilityType,
+            capabilityType,
             action: 'updated',
             success: true,
           });
@@ -254,21 +267,23 @@ export class PermissionService {
           await this.prisma.clientCapabilityPermissions.create({
             data: {
               clientId: clientId,
-              capabilityType: item.capabilityType,
+              capabilityType,
               enabled: item.enabled,
               rateLimit: item.rateLimit || 60,
               quotaLimit: item.quotaLimit,
             },
           });
           results.push({
-            capabilityType: item.capabilityType,
+            capabilityType,
             action: 'created',
             success: true,
           });
         }
       } catch (error) {
         results.push({
-          capabilityType: item.capabilityType,
+          capabilityType: this.normalizeCapabilityType(
+            item.capabilityType,
+          ) as CapabilityType,
           action: 'failed',
           success: false,
           error: error.message,
@@ -291,10 +306,14 @@ export class PermissionService {
     clientId: string,
     capabilityType: string,
   ): Promise<boolean> {
+    const normalizedCapabilityType =
+      this.normalizeCapabilityType(capabilityType);
     const permission = await this.prisma.clientCapabilityPermissions.findFirst({
       where: {
         clientId: clientId,
-        capabilityType: capabilityType,
+        capabilityType: {
+          in: this.capabilityLookupValues(normalizedCapabilityType),
+        },
         enabled: true,
       },
     });
@@ -306,13 +325,46 @@ export class PermissionService {
    * 获取客户端的权限配置
    */
   async getPermissionConfig(clientId: string, capabilityType: string) {
+    const normalizedCapabilityType =
+      this.normalizeCapabilityType(capabilityType);
     const permission = await this.prisma.clientCapabilityPermissions.findFirst({
       where: {
         clientId: clientId,
-        capabilityType: capabilityType,
+        capabilityType: {
+          in: this.capabilityLookupValues(normalizedCapabilityType),
+        },
       },
     });
 
-    return permission || null;
+    return permission ? this.toPermissionInfo(permission) : null;
+  }
+
+  private normalizeCapabilityType(value: string): string {
+    return normalizeCapabilityType(value) || value;
+  }
+
+  private capabilityLookupValues(value: string): string[] {
+    return capabilityLookupValues(value);
+  }
+
+  private parseCsvList(value?: string | null): string[] {
+    if (!value) return [];
+    return value
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  private toPermissionInfo(permission: any) {
+    return {
+      ...permission,
+      capabilityType: this.normalizeCapabilityType(permission.capabilityType),
+      quotaLimit:
+        typeof permission.quotaLimit === 'bigint'
+          ? Number(permission.quotaLimit)
+          : permission.quotaLimit,
+      allowedProviders: this.parseCsvList(permission.allowedProviders),
+      allowedModels: this.parseCsvList(permission.allowedModels),
+    };
   }
 }

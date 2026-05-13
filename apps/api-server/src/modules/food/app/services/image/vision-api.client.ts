@@ -30,6 +30,7 @@ import { I18nService } from '../../../../../core/i18n';
 import type { Locale } from '../../../../diet/app/recommendation/utils/i18n-messages';
 import { AnalysisPromptSchemaService } from '../analysis-prompt-schema.service';
 import { LlmService } from '../../../../../core/llm/llm.service';
+import { RegionAiModelRoutingService } from '../../../../../core/region';
 import {
   LlmFeature,
   LlmQuotaExceededError,
@@ -43,10 +44,6 @@ const TEMPERATURE = 0.3;
 @Injectable()
 export class VisionApiClient implements OnModuleInit {
   private readonly logger = new Logger(VisionApiClient.name);
-  private readonly apiKey: string;
-  private readonly baseUrl: string;
-  private readonly model: string;
-  private readonly fallbackModel: string;
   private readonly httpReferer: string;
   private readonly siteTitle: string;
 
@@ -55,18 +52,8 @@ export class VisionApiClient implements OnModuleInit {
     private readonly i18n: I18nService,
     private readonly promptSchema: AnalysisPromptSchemaService,
     private readonly llm: LlmService,
+    private readonly aiModelRouting: RegionAiModelRoutingService,
   ) {
-    this.apiKey =
-      this.config.get<string>('OPENROUTER_API_KEY') ||
-      this.config.get<string>('OPENAI_API_KEY') ||
-      '';
-    this.baseUrl =
-      this.config.get<string>('OPENROUTER_BASE_URL') ||
-      'https://openrouter.ai/api/v1';
-    this.model =
-      this.config.get<string>('VISION_MODEL') || 'qwen/qwen3-vl-32b-instruct';
-    this.fallbackModel =
-      this.config.get<string>('VISION_MODEL_FALLBACK') || 'qwen/qwen-vl-plus';
     // OpenRouter 流量归因 headers（透传给 LlmService，仅在 stream 路径生效；
     // 非流式路径走 LangChain SDK，无法塞 headers，OpenRouter 仍可工作但无归因）
     this.httpReferer =
@@ -82,10 +69,10 @@ export class VisionApiClient implements OnModuleInit {
    * - 生产环境无 OPENROUTER_API_KEY 直接抛错（让 Cloud Run 启动失败比线上 500 风暴更安全）
    * - 非生产仅 warn，便于本地无 key 跑联调
    */
-  onModuleInit(): void {
-    if (!this.apiKey) {
-      const msg =
-        'OPENROUTER_API_KEY (or OPENAI_API_KEY) is not configured; Vision API will fail';
+  async onModuleInit(): Promise<void> {
+    const route = await this.aiModelRouting.resolveFoodImageAnalysis();
+    if (!route.apiKey) {
+      const msg = `${route.provider.toUpperCase()} API key is not configured; Vision API will fail`;
       if (process.env.NODE_ENV === 'production') {
         this.logger.error(msg);
         throw new Error(msg);
@@ -115,9 +102,15 @@ export class VisionApiClient implements OnModuleInit {
     userId: string,
     locale?: Locale,
   ): Promise<string> {
+    const route = await this.aiModelRouting.resolveFoodImageAnalysis({
+      locale,
+    });
     try {
       return await this.invoke(
-        this.model,
+        route.model,
+        route.provider,
+        route.apiKey,
+        route.baseUrl,
         systemPrompt,
         imageUrl,
         userHint,
@@ -130,12 +123,24 @@ export class VisionApiClient implements OnModuleInit {
 
       // 上游不可用：尝试 fallback 一次
       if (err instanceof LlmUnavailableError) {
+        if (!route.fallbackModel) {
+          this.logger.error(
+            `Vision model ${route.model} unavailable and no fallback configured`,
+          );
+          throw new ServiceUnavailableException(
+            this.i18n.t('food.analyze.unavailable'),
+          );
+        }
+
         this.logger.warn(
-          `Vision primary model ${this.model} unavailable, falling back to ${this.fallbackModel}`,
+          `Vision primary model ${route.model} unavailable, falling back to ${route.fallbackModel}`,
         );
         try {
           return await this.invoke(
-            this.fallbackModel,
+            route.fallbackModel,
+            route.provider,
+            route.apiKey,
+            route.baseUrl,
             systemPrompt,
             imageUrl,
             userHint,
@@ -162,6 +167,9 @@ export class VisionApiClient implements OnModuleInit {
   /** 单次 LlmService 调用（不含 fallback 重试） */
   private async invoke(
     model: string,
+    provider: string,
+    apiKey: string,
+    baseUrl: string,
     systemPrompt: string,
     imageUrl: string,
     userHint: string,
@@ -170,9 +178,9 @@ export class VisionApiClient implements OnModuleInit {
   ): Promise<string> {
     const result = await this.llm.chat({
       feature: LlmFeature.FoodImage,
-      provider: 'openrouter',
-      apiKey: this.apiKey,
-      baseUrl: this.baseUrl,
+      provider,
+      apiKey,
+      baseUrl,
       model,
       temperature: TEMPERATURE,
       maxTokens: MAX_TOKENS,

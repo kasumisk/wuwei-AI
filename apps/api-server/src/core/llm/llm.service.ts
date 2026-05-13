@@ -8,12 +8,10 @@
  *   4. 失败时退还配额、记 metric 'failed'
  *   5. 成功后 fire-and-forget 落 UsageRecords + 更新 latency histogram
  *
- * 当前提供两种模式：
+ * 当前提供三种模式：
  *   - chat()       非流式直连（LangChain ChatOpenAI invoke）
  *   - chatStream() 流式直连（裸 fetch SSE，breaker 仅保护连接建立）
- *
- * 路由模式（基于 client_id 走 CapabilityRouter）暂不启用，待 B2B gateway
- * 业务上线时再实现 LlmRouterService。
+ *   - chatRouted() 基于 CapabilityRouter 解析 provider/model/key 后复用 chat 执行链
  *
  * 公共契约：成功返回 LlmChatResult；失败抛业务可识别的 Error
  *   - LlmQuotaExceededError  → 调用方应映射 HTTP 429
@@ -33,6 +31,7 @@ import { CircuitBreakerService } from '../circuit-breaker/circuit-breaker.servic
 import { MetricsService } from '../metrics/metrics.service';
 import { UsageQuotaService } from './usage-quota.service';
 import { UsageRecorderService } from './usage-recorder.service';
+import { CapabilityRouter } from '../../gateway/services/capability-router.service';
 import {
   LlmChatResult,
   LlmContentBlock,
@@ -40,6 +39,7 @@ import {
   LlmFeature,
   LlmMessage,
   LlmProvider,
+  LlmRoutedChatOptions,
   LlmStreamChunk,
   LlmTokenUsage,
   LlmUnavailableError,
@@ -74,6 +74,7 @@ export class LlmService {
     private readonly metrics: MetricsService,
     private readonly quota: UsageQuotaService,
     private readonly recorder: UsageRecorderService,
+    private readonly capabilityRouter: CapabilityRouter,
   ) {}
 
   /**
@@ -100,6 +101,41 @@ export class LlmService {
       // 直连模式从内置 fallback 表估算成本
       inputCostPer1k: FALLBACK_COST_USD_PER_1K[options.model]?.input ?? 0,
       outputCostPer1k: FALLBACK_COST_USD_PER_1K[options.model]?.output ?? 0,
+    });
+  }
+
+  /**
+   * 路由模式 chat —— 业务模块只传 capability + region，由 CapabilityRouter
+   * 解析实际 provider/model/apiKey/baseUrl，再进入统一执行链。
+   */
+  async chatRouted(options: LlmRoutedChatOptions): Promise<LlmChatResult> {
+    const routing = await this.capabilityRouter.route(
+      options.clientId,
+      options.capabilityType,
+      options.requestedModel,
+      options.region ? { region: options.region } : undefined,
+    );
+
+    return this.executeChat({
+      messages: options.messages,
+      feature: options.feature,
+      userId: options.userId,
+      clientId: options.clientId,
+      requestId: options.requestId ?? randomUUID(),
+      timeoutMs:
+        options.timeoutMs ?? routing.config?.timeout ?? DEFAULT_TIMEOUT_MS,
+      temperature: options.temperature ?? DEFAULT_TEMPERATURE,
+      maxTokens: options.maxTokens,
+      provider: this.normalizeProviderName(routing.provider?.name),
+      model: routing.model,
+      apiKey: routing.apiKey,
+      baseUrl: routing.endpoint,
+      responseFormat: options.responseFormat,
+      extraHeaders: options.extraHeaders,
+      inputCostPer1k: this.toNumber(routing.modelConfig?.inputCostPer1kTokens),
+      outputCostPer1k: this.toNumber(
+        routing.modelConfig?.outputCostPer1kTokens,
+      ),
     });
   }
 
@@ -245,7 +281,7 @@ export class LlmService {
       modelKwargs.response_format = ctx.responseFormat;
     }
 
-     const model = new ChatOpenAI({
+    const model = new ChatOpenAI({
       apiKey: ctx.apiKey,
       model: ctx.model,
       configuration: ctx.baseUrl ? { baseURL: ctx.baseUrl } : undefined,
@@ -579,6 +615,26 @@ export class LlmService {
   private isBreakerOpen(err: unknown): boolean {
     const msg = (err as Error)?.message?.toLowerCase() ?? '';
     return msg.includes('breaker is open') || msg.includes('circuit breaker');
+  }
+
+  private normalizeProviderName(providerName: unknown): LlmProvider {
+    return String(providerName ?? 'unknown')
+      .trim()
+      .toLowerCase();
+  }
+
+  private toNumber(value: unknown): number {
+    if (typeof value === 'number') return value;
+    if (typeof value === 'string') return Number(value) || 0;
+    if (
+      value &&
+      typeof value === 'object' &&
+      'toNumber' in value &&
+      typeof (value as { toNumber: unknown }).toNumber === 'function'
+    ) {
+      return (value as { toNumber: () => number }).toNumber();
+    }
+    return 0;
   }
 }
 

@@ -92,6 +92,38 @@ describe('CapabilityRouter', () => {
       });
     });
 
+    it('应该把 API capabilityType 映射为 Prisma enum 值查询模型配置', async () => {
+      mockPrisma.clientCapabilityPermissions.findFirst.mockResolvedValue({
+        ...mockPermission,
+        capabilityType: 'text.generation',
+      });
+      mockPrisma.modelConfigs.findMany.mockResolvedValue([mockModelConfig]);
+
+      await service.route('client-1', 'text.generation');
+
+      expect(
+        mockPrisma.clientCapabilityPermissions.findFirst,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            capabilityType: expect.objectContaining({
+              in: expect.arrayContaining([
+                'text.generation',
+                'text_generation',
+              ]),
+            }),
+          }),
+        }),
+      );
+      expect(mockPrisma.modelConfigs.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            capabilityType: 'text_generation',
+          }),
+        }),
+      );
+    });
+
     it('应该使用自定义端点和 API Key', async () => {
       const customModelConfig = {
         ...mockModelConfig,
@@ -311,6 +343,88 @@ describe('CapabilityRouter', () => {
 
       expect(result.config.maxTokens).toBe(4096);
       expect(result.config.temperature).toBe(0.7);
+    });
+
+    it('应该按 region 过滤 provider metadata 中不适用的模型', async () => {
+      const globalProvider = {
+        ...mockProvider,
+        id: 'provider-global',
+        name: 'OpenAI',
+        metadata: { regions: ['GLOBAL'], blockedRegions: ['CN'] },
+      };
+      const chinaProvider = {
+        ...mockProvider,
+        id: 'provider-cn',
+        name: 'Qwen',
+        metadata: { regions: ['CN'] },
+      };
+      const globalModel = {
+        ...mockModelConfig,
+        id: 'model-global',
+        modelName: 'gpt-4o',
+        providerId: globalProvider.id,
+        providers: globalProvider,
+      };
+      const chinaModel = {
+        ...mockModelConfig,
+        id: 'model-cn',
+        modelName: 'qwen-plus',
+        providerId: chinaProvider.id,
+        providers: chinaProvider,
+      };
+
+      mockPrisma.clientCapabilityPermissions.findFirst.mockResolvedValue(
+        mockPermission,
+      );
+      mockPrisma.modelConfigs.findMany.mockResolvedValue([
+        globalModel,
+        chinaModel,
+      ]);
+
+      const result = await service.route(
+        'client-1',
+        'TEXT_GENERATION',
+        undefined,
+        {
+          region: 'CN',
+        },
+      );
+
+      expect(result.model).toBe('qwen-plus');
+    });
+
+    it('应该按 region 过滤 model configMetadata 中不适用的模型', async () => {
+      const globalModel = {
+        ...mockModelConfig,
+        id: 'model-global',
+        modelName: 'gpt-4o',
+        configMetadata: { regions: ['GLOBAL'] },
+      };
+      const chinaModel = {
+        ...mockModelConfig,
+        id: 'model-cn',
+        modelName: 'deepseek-chat',
+        configMetadata: { regions: ['CN'] },
+      };
+
+      mockPrisma.clientCapabilityPermissions.findFirst.mockResolvedValue(
+        mockPermission,
+      );
+      mockPrisma.modelConfigs.findMany.mockResolvedValue([
+        globalModel,
+        chinaModel,
+      ]);
+
+      const result = await service.route(
+        'client-1',
+        'TEXT_GENERATION',
+        undefined,
+        {
+          region: 'CN',
+        },
+      );
+
+      expect(result.model).toBe('deepseek-chat');
     });
   });
 

@@ -48,6 +48,7 @@ import { FeatureGuard } from './app/guards/feature.guard';
 import { RevenueCatSyncService } from './app/services/revenuecat-sync.service';
 import { SubscriptionDomainSyncService } from './app/services/subscription-domain-sync.service';
 import { SubscriptionMaintenanceProcessor } from './admin/subscription-maintenance.processor';
+import { BillingProviderRegistry } from './app/providers/billing-provider.registry';
 
 @Global()
 @Module({
@@ -73,6 +74,7 @@ import { SubscriptionMaintenanceProcessor } from './admin/subscription-maintenan
     RevenueCatSyncService,
     SubscriptionDomainSyncService,
     SubscriptionMaintenanceProcessor,
+    BillingProviderRegistry,
   ],
   exports: [
     PlanEntitlementResolver,
@@ -86,6 +88,7 @@ import { SubscriptionMaintenanceProcessor } from './admin/subscription-maintenan
     FeatureGuard, // 基于功能权益的访问门控
     RevenueCatSyncService,
     SubscriptionDomainSyncService,
+    BillingProviderRegistry,
   ],
 })
 export class SubscriptionModule {}

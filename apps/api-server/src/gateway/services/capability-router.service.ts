@@ -1,5 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  capabilityLookupValues,
+  toDbCapabilityType,
+} from '@ai-platform/shared';
 import { PrismaService } from '../../core/prisma/prisma.service';
+import type { RuntimeRegion } from '../../core/region';
 
 export interface RouteResult {
   modelConfig: any;
@@ -8,6 +13,10 @@ export interface RouteResult {
   endpoint: string;
   apiKey: string;
   config: any;
+}
+
+export interface CapabilityRouteOptions {
+  region?: RuntimeRegion;
 }
 
 @Injectable()
@@ -24,12 +33,13 @@ export class CapabilityRouter {
     clientId: string,
     capabilityType: string,
     requestedModel?: string,
+    options?: CapabilityRouteOptions,
   ): Promise<RouteResult> {
     // 获取客户端权限配置
     const permission = await this.prisma.clientCapabilityPermissions.findFirst({
       where: {
         clientId: clientId,
-        capabilityType: capabilityType,
+        capabilityType: { in: capabilityLookupValues(capabilityType) },
         enabled: true,
       },
     });
@@ -49,7 +59,7 @@ export class CapabilityRouter {
 
     // Build where clause for model query
     const modelWhere: any = {
-      capabilityType: capabilityType as any,
+      capabilityType: toDbCapabilityType(capabilityType) as any,
       enabled: true,
       providers: { enabled: true },
     };
@@ -84,6 +94,11 @@ export class CapabilityRouter {
           m.providers &&
           lowerProviders.includes(m.providers.name.toLowerCase()),
       );
+    }
+
+    const routeRegion = options?.region;
+    if (routeRegion) {
+      models = models.filter((m) => this.supportsRegion(m, routeRegion));
     }
 
     // 如果客户端指定了首选提供商，提升其优先级（排序）
@@ -143,7 +158,7 @@ export class CapabilityRouter {
     excludeProviderIds: string[],
   ): Promise<RouteResult | null> {
     const modelWhere: any = {
-      capabilityType: capabilityType as any,
+      capabilityType: toDbCapabilityType(capabilityType) as any,
       enabled: true,
       providers: { enabled: true },
     };
@@ -181,5 +196,49 @@ export class CapabilityRouter {
         ...((selected.configMetadata as object) || {}),
       },
     };
+  }
+
+  private supportsRegion(modelConfig: any, region: RuntimeRegion): boolean {
+    return (
+      this.metadataSupportsRegion(modelConfig?.providers?.metadata, region) &&
+      this.metadataSupportsRegion(modelConfig?.configMetadata, region)
+    );
+  }
+
+  private metadataSupportsRegion(
+    metadata: unknown,
+    region: RuntimeRegion,
+  ): boolean {
+    if (!metadata || typeof metadata !== 'object') return true;
+
+    const record = metadata as Record<string, unknown>;
+    const blockedRegions = this.toRegionList(record.blockedRegions);
+    if (blockedRegions.includes(region)) return false;
+
+    const regions = this.toRegionList(record.regions);
+    if (regions.length > 0 && !regions.includes(region)) return false;
+
+    return true;
+  }
+
+  private toRegionList(value: unknown): RuntimeRegion[] {
+    if (Array.isArray(value)) {
+      return value
+        .map((item) => String(item).trim().toUpperCase())
+        .filter((item): item is RuntimeRegion => this.isRuntimeRegion(item));
+    }
+
+    if (typeof value === 'string') {
+      return value
+        .split(',')
+        .map((item) => item.trim().toUpperCase())
+        .filter((item): item is RuntimeRegion => this.isRuntimeRegion(item));
+    }
+
+    return [];
+  }
+
+  private isRuntimeRegion(value: string): value is RuntimeRegion {
+    return value === 'GLOBAL' || value === 'CN';
   }
 }

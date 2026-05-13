@@ -52,6 +52,14 @@ import {
   useTestModel,
   type ModelInfoDto,
 } from '@/services/modelService';
+import {
+  getModelCapabilityOption,
+  isVisionModelCapabilitySelection,
+  MODEL_CAPABILITY_GROUPED_SELECT_OPTIONS,
+  MODEL_CAPABILITY_VISION_TEXT_VALUE,
+  MODEL_CAPABILITY_VALUE_ENUM,
+  toModelCapabilitySubmitValue,
+} from '@/constants/modelCapabilities';
 
 const { Text } = Typography;
 
@@ -479,7 +487,10 @@ const ModelTab: React.FC = () => {
       providerId: record.providerId,
       modelName: record.modelName,
       displayName: record.displayName,
-      capabilityType: record.capabilityType,
+      capabilityType:
+        record.capabilityType === 'text.generation' && record.features?.vision
+          ? MODEL_CAPABILITY_VISION_TEXT_VALUE
+          : record.capabilityType,
       enabled: record.enabled,
       priority: record.priority,
     });
@@ -488,10 +499,17 @@ const ModelTab: React.FC = () => {
 
   const handleSubmit = async () => {
     const values = await form.validateFields();
+    const payload = {
+      ...values,
+      capabilityType: toModelCapabilitySubmitValue(values.capabilityType),
+      features: isVisionModelCapabilitySelection(values.capabilityType)
+        ? { vision: true, streaming: true, functionCalling: false }
+        : undefined,
+    };
     if (editing) {
-      updateMutation.mutate({ id: editing.id, data: values });
+      updateMutation.mutate({ id: editing.id, data: payload });
     } else {
-      createMutation.mutate(values);
+      createMutation.mutate(payload);
     }
   };
 
@@ -529,7 +547,14 @@ const ModelTab: React.FC = () => {
       title: '能力类型',
       dataIndex: 'capabilityType',
       width: 120,
-      render: (v) => <Tag color="blue">{v as string}</Tag>,
+      valueType: 'select',
+      valueEnum: MODEL_CAPABILITY_VALUE_ENUM,
+      render: (_, record) => {
+        const option = getModelCapabilityOption(record.capabilityType, record.features);
+        return (
+          <Tag color={option?.color || 'default'}>{option?.label || record.capabilityType}</Tag>
+        );
+      },
     },
     {
       title: '提供商',
@@ -636,16 +661,20 @@ const ModelTab: React.FC = () => {
         columns={columns}
         actionRef={actionRef}
         request={async (params) => {
+          const isVisionFilter = isVisionModelCapabilitySelection(params.capabilityType);
           const res = await modelApi.getModels({
             page: params.current,
             pageSize: params.pageSize,
             keyword: params.modelName,
-            capabilityType: params.capabilityType,
+            capabilityType: toModelCapabilitySubmitValue(params.capabilityType) as any,
           });
-          setAllData((res as any).list || []);
+          const data = isVisionFilter
+            ? ((res as any).list || []).filter((model: ModelInfoDto) => model.features?.vision)
+            : (res as any).list || [];
+          setAllData(data);
           return {
-            data: (res as any).list || [],
-            total: (res as any).total || 0,
+            data,
+            total: isVisionFilter ? data.length : (res as any).total || 0,
             success: true,
           };
         }}
@@ -701,13 +730,10 @@ const ModelTab: React.FC = () => {
           </Form.Item>
           <Form.Item name="capabilityType" label="能力类型" rules={[{ required: true }]}>
             <Select
-              options={[
-                { label: '对话', value: 'chat' },
-                { label: '分析', value: 'analysis' },
-                { label: '推荐', value: 'recommendation' },
-                { label: '嵌入', value: 'embedding' },
-                { label: '图像', value: 'image' },
-              ]}
+              showSearch
+              optionFilterProp="label"
+              options={MODEL_CAPABILITY_GROUPED_SELECT_OPTIONS}
+              placeholder="选择统一 CapabilityType"
             />
           </Form.Item>
           <Form.Item name="enabled" label="启用状态" valuePropName="checked">

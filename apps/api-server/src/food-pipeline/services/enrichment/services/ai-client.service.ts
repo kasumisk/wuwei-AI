@@ -18,6 +18,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { LlmService } from '../../../../core/llm/llm.service';
 import { LlmFeature } from '../../../../core/llm/llm.types';
+import type { RuntimeRegion } from '../../../../core/region';
 import {
   ENRICHABLE_STRING_FIELDS,
   JSON_ARRAY_FIELDS,
@@ -33,18 +34,29 @@ import { ALL_COOKING_METHODS } from '../../../../modules/food/cooking-method.con
 const DEEPSEEK_BASE_URL = 'https://api.deepseek.com/v1';
 const DEEPSEEK_MODEL = 'deepseek-chat';
 const REQUEST_TIMEOUT_MS = 30_000;
+const TEXT_GENERATION_CAPABILITY = 'text.generation';
 
 @Injectable()
 export class EnrichmentAiClient {
   readonly logger = new Logger(EnrichmentAiClient.name);
   readonly maxRetries = 3;
   private readonly apiKey: string;
+  private readonly routedClientId: string | null;
+  private readonly routedRegion: RuntimeRegion | undefined;
+  private readonly routedModel: string | undefined;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly llm: LlmService,
   ) {
     this.apiKey = this.configService.get<string>('DEEPSEEK_API_KEY') ?? '';
+    this.routedClientId =
+      this.configService.get<string>('LLM_ROUTED_CLIENT_ID')?.trim() || null;
+    this.routedRegion = this.toRuntimeRegion(
+      this.configService.get<string>('LLM_ROUTED_REGION'),
+    );
+    this.routedModel =
+      this.configService.get<string>('LLM_ROUTED_MODEL')?.trim() || undefined;
   }
 
   // ─── 原始 AI 请求 ─────────────────────────────────────────────────────
@@ -63,22 +75,11 @@ export class EnrichmentAiClient {
 
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
-        const result = await this.llm.chat({
-          feature: LlmFeature.FoodEnrichment,
-          // enrichment 是系统任务，不传 userId（不扣用户配额）
-          provider: 'deepseek',
-          apiKey: this.apiKey,
-          baseUrl: DEEPSEEK_BASE_URL,
-          model: DEEPSEEK_MODEL,
-          temperature: 0.1,
-          maxTokens: options?.maxTokens ?? 1200,
-          timeoutMs: REQUEST_TIMEOUT_MS,
-          responseFormat: { type: 'json_object' },
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: prompt },
-          ],
-        });
+        const result = await this.callLlmJson(
+          systemPrompt,
+          prompt,
+          options?.maxTokens ?? 1200,
+        );
 
         if (!result.content) continue;
         return JSON.parse(result.content) as Record<string, any>;
@@ -106,21 +107,11 @@ export class EnrichmentAiClient {
   ): Promise<EnrichmentResult | null> {
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
-        const result = await this.llm.chat({
-          feature: LlmFeature.FoodEnrichment,
-          provider: 'deepseek',
-          apiKey: this.apiKey,
-          baseUrl: DEEPSEEK_BASE_URL,
-          model: DEEPSEEK_MODEL,
-          temperature: 0.1,
-          maxTokens: stage.maxTokens,
-          timeoutMs: REQUEST_TIMEOUT_MS,
-          responseFormat: { type: 'json_object' },
-          messages: [
-            { role: 'system', content: buildStageSystemPrompt(stage) },
-            { role: 'user', content: prompt },
-          ],
-        });
+        const result = await this.callLlmJson(
+          buildStageSystemPrompt(stage),
+          prompt,
+          stage.maxTokens,
+        );
 
         if (!result.content) continue;
 
@@ -160,6 +151,45 @@ export class EnrichmentAiClient {
 
     this.logger.error(`All AI attempts failed for "${foodName}"`);
     return null;
+  }
+
+  private callLlmJson(systemPrompt: string, prompt: string, maxTokens: number) {
+    const baseOptions = {
+      feature: LlmFeature.FoodEnrichment,
+      temperature: 0.1,
+      maxTokens,
+      timeoutMs: REQUEST_TIMEOUT_MS,
+      responseFormat: { type: 'json_object' as const },
+      messages: [
+        { role: 'system' as const, content: systemPrompt },
+        { role: 'user' as const, content: prompt },
+      ],
+    };
+
+    if (this.routedClientId) {
+      return this.llm.chatRouted({
+        ...baseOptions,
+        clientId: this.routedClientId,
+        capabilityType: TEXT_GENERATION_CAPABILITY,
+        requestedModel: this.routedModel,
+        region: this.routedRegion,
+      });
+    }
+
+    return this.llm.chat({
+      ...baseOptions,
+      // enrichment 是系统任务，不传 userId（不扣用户配额）
+      provider: 'deepseek',
+      apiKey: this.apiKey,
+      baseUrl: DEEPSEEK_BASE_URL,
+      model: DEEPSEEK_MODEL,
+    });
+  }
+
+  private toRuntimeRegion(value?: string | null): RuntimeRegion | undefined {
+    const normalized = value?.trim().toUpperCase();
+    if (normalized === 'GLOBAL' || normalized === 'CN') return normalized;
+    return undefined;
   }
 
   // ─── AI 结果验证与清理 ────────────────────────────────────────────────

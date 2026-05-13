@@ -7,6 +7,7 @@ import { FoodLibraryService } from './app/services/food-library.service';
 // Phase 7: 拆分子控制器
 import { FoodImageAnalyzeController } from './app/controllers/food-image-analyze.controller';
 import { FoodTextAnalyzeController } from './app/controllers/food-text-analyze.controller';
+import { FoodTextAnalysisDevController } from './app/controllers/food-text-analysis-dev.controller';
 import { FoodAnalysisHistoryController } from './app/controllers/food-analysis-history.controller';
 import { FoodAnalysisSaveController } from './app/controllers/food-analysis-save.controller';
 import { AnalyzeResultHelperService } from './app/services/analyze-result-helper.service';
@@ -95,6 +96,7 @@ import { RecommendationModule } from '../diet/recommendation.module';
     // Phase 7: 新拆分子控制器
     FoodImageAnalyzeController,
     FoodTextAnalyzeController,
+    FoodTextAnalysisDevController,
     FoodAnalysisHistoryController,
     FoodAnalysisSaveController,
     FoodAnalysisReportController,
