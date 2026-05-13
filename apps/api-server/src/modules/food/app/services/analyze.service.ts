@@ -12,6 +12,7 @@ import {
 } from '../../../../core/queue';
 import { FoodAnalysisJobData } from '../processors/food-analysis.processor';
 import { ImageFoodAnalysisService } from './image-food-analysis.service';
+import { AnalyzedFoodItem } from '../../../decision/types/analysis-result.types';
 import {
   AnalysisSessionService,
   AnalyzedFoodItemLite,
@@ -95,11 +96,33 @@ export type AnalysisStatus = 'processing' | 'completed' | 'failed';
 
 /**
  * 置信度驱动的饮食图片分析 V1：链路阶段
- * - analyzing    — Vision 调用中（status=processing 时同义）
- * - needs_review — 低置信度，等待用户 refine（status=completed，但仅含 foods 骨架）
- * - final        — 完整结果就绪（status=completed，含完整 AnalysisResult）
+ * - analyzing          — Vision 调用中（status=processing 时同义）
+ * - vision_done        — Vision LLM 已返回原始食物名列表，matchAll 尚未开始（status=processing）
+ * - foods_identified   — 阶段 1 完成：已识别食物列表（含 foodLibraryId），营养/决策计算仍在后台（status=processing）
+ * - nutrition_filled   — 营养补全完成，决策引擎尚未运行（status=processing）
+ * - needs_review       — 低置信度，等待用户 refine（status=completed，但仅含 foods 骨架）
+ * - final              — 完整结果就绪（status=completed，含完整 AnalysisResult）
  */
-export type AnalysisStage = 'analyzing' | 'needs_review' | 'final';
+export type AnalysisStage =
+  | 'analyzing'
+  | 'vision_done'
+  | 'foods_identified'
+  | 'nutrition_filled'
+  | 'needs_review'
+  | 'final';
+
+/** foods_identified 阶段返回的轻量食物条目 */
+export interface IdentifiedFoodItem {
+  name: string;
+  /** 食物分类 */
+  category?: string;
+  /** 预估重量（克） */
+  estimatedWeightGrams?: number;
+  /** 识别置信度 0-1 */
+  confidence?: number;
+  /** 食物库 id（匹配到时非空） */
+  foodLibraryId?: string;
+}
 
 /** Redis 中存储的分析结果 wrapper */
 export interface AnalysisCacheEntry {
@@ -109,6 +132,20 @@ export interface AnalysisCacheEntry {
   data?: AnalysisResult;
   /** 持久化后的数据库 analysisId，供 analyze-save 使用 */
   analysisId?: string;
+  /**
+   * vision_done 阶段：Vision LLM 原始识别的食物名称列表（matchAll 尚未执行）。
+   * 客户端可用于展示"AI 正在识别到 X 种食物..."的提示文案。
+   */
+  visionDoneFoods?: Array<{ name: string; confidence?: number }>;
+  /**
+   * foods_identified 阶段：已识别食物列表（营养计算尚未完成）。
+   * 客户端可提前展示食物名称，同时继续轮询等待 final。
+   */
+  identifiedFoods?: IdentifiedFoodItem[];
+  /**
+   * nutrition_filled 阶段：营养补全完成的食物列表（含卡路里等数值，决策尚未运行）。
+   */
+  nutritionFilledFoods?: IdentifiedFoodItem[];
   /** 低置信度时仅有该字段（data 保持 undefined，避免把低质量数据误当最终结果） */
   needsReview?: {
     analysisSessionId: string;
@@ -259,12 +296,74 @@ export class AnalyzeService {
     userId?: string,
     locale?: Locale,
   ): Promise<void> {
+    // vision_done 回调：Vision LLM 完成后、matchAll 开始前，写中间状态到 Redis。
+    const onVisionDone = async (foods: AnalyzedFoodItem[]) => {
+      const visionDoneFoods = foods.map((f) => ({
+        name: f.name,
+        confidence: (f as any).confidence,
+      }));
+      await this.cacheAnalysisStatus(requestId, {
+        status: 'processing',
+        stage: 'vision_done',
+        visionDoneFoods,
+        createdAt: Date.now(),
+      });
+      this.logger.log(
+        `vision_done: requestId=${requestId}, count=${visionDoneFoods.length}`,
+      );
+    };
+
+    // foods_identified 回调：库匹配完毕后立即写 foods_identified 到 Redis。
+    const onFoodsIdentified = async (
+      foods: AnalyzedFoodItem[],
+    ) => {
+      const identifiedFoods: IdentifiedFoodItem[] = foods.map((f) => ({
+        name: f.name,
+        category: f.category,
+        estimatedWeightGrams: f.estimatedWeightGrams,
+        confidence: (f as any).confidence,
+        foodLibraryId: f.foodLibraryId ?? undefined,
+      }));
+      await this.cacheAnalysisStatus(requestId, {
+        status: 'processing',
+        stage: 'foods_identified',
+        identifiedFoods,
+        createdAt: Date.now(),
+      });
+      this.logger.log(
+        `foods_identified: requestId=${requestId}, count=${identifiedFoods.length}`,
+      );
+    };
+
+    // nutrition_filled 回调：nutritionFill 完成后、决策引擎开始前，写中间状态到 Redis。
+    const onNutritionFilled = async (foods: AnalyzedFoodItem[]) => {
+      const nutritionFilledFoods: IdentifiedFoodItem[] = foods.map((f) => ({
+        name: f.name,
+        category: f.category,
+        estimatedWeightGrams: f.estimatedWeightGrams,
+        confidence: (f as any).confidence,
+        foodLibraryId: f.foodLibraryId ?? undefined,
+      }));
+      await this.cacheAnalysisStatus(requestId, {
+        status: 'processing',
+        stage: 'nutrition_filled',
+        nutritionFilledFoods,
+        createdAt: Date.now(),
+      });
+      this.logger.log(
+        `nutrition_filled: requestId=${requestId}, count=${nutritionFilledFoods.length}`,
+      );
+    };
+
     const { legacy: result, v61 } =
       await this.imageFoodAnalysisService.executeAnalysisBundle(
         imageUrl,
         mealType,
         userId,
         locale,
+        onVisionDone,
+        onFoodsIdentified,
+        onNutritionFilled,
       );
 
     // 置信度驱动 V1：feature flag + session 查找

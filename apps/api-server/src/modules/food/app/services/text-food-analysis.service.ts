@@ -571,7 +571,7 @@ export class TextFoodAnalysisService {
     const libraryBatch1Start = Date.now();
     const matchResults = await Promise.all(
       termData.map((td) =>
-        this.matchFoodLibrary(td.foodName).catch(() => null),
+        this.matchFoodLibrary(td.foodName, locale).catch(() => null),
       ),
     );
     const libraryBatch1Hits = matchResults.filter(Boolean).length;
@@ -753,6 +753,7 @@ export class TextFoodAnalysisService {
    */
   private async matchFoodLibrary(
     foodName: string,
+    locale?: Locale,
   ): Promise<{ match: any; simScore: number } | null> {
     const hasCompositeDelimiter = /[+＋,，、；;/／|｜＆&]/.test(foodName);
     // 复合菜品尾字（饭/面/粉/汤/煲/锅/堡/卷/串/丼/炒等）：禁止用"短库名 includes 长输入"反匹配
@@ -778,14 +779,15 @@ export class TextFoodAnalysisService {
       for (const query of lookupQueries) {
         // 精确匹配
         const exact = await this.foodLibraryService
-          .findByName(query)
+          .findByName(query, locale)
           .catch(() => null);
         if (exact) return { match: exact, simScore: 1.0 };
 
-        // 模糊搜索：遍历候选并择优，避免“只看第一条”漏匹配
+        // 模糊搜索：遍历候选并择优，避免"只看第一条"漏匹配
         const results = (await this.foodLibraryService.search(
           query,
           8,
+          locale,
         )) as any[];
         if (!results.length) continue;
 

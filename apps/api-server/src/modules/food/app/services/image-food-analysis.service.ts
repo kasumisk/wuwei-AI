@@ -63,14 +63,29 @@ export class ImageFoodAnalysisService {
   /**
    * 同时返回 legacy + V61。
    * AnalyzeService.processAnalysis 把 legacy 写入缓存，V61 给入库管道。
+   *
+   * @param onVisionDone       - 可选回调，Vision LLM 解析完成后、matchAll 开始前触发，返回原始食物名称列表。
+   * @param onFoodsIdentified  - 可选回调，食物库匹配完成后触发，含 foodLibraryId。
+   * @param onNutritionFilled  - 可选回调，营养补全完成后、决策引擎开始前触发，含完整营养数据。
    */
   async executeAnalysisBundle(
     imageUrl: string,
     mealType?: string,
     userId?: string,
     locale?: Locale,
+    onVisionDone?: (foods: AnalyzedFoodItem[]) => Promise<void>,
+    onFoodsIdentified?: (foods: AnalyzedFoodItem[]) => Promise<void>,
+    onNutritionFilled?: (foods: AnalyzedFoodItem[]) => Promise<void>,
   ): Promise<{ legacy: AnalysisResult; v61: FoodAnalysisResultV61 }> {
-    const v61 = await this.analyzeToV61(imageUrl, mealType, userId!, locale);
+    const v61 = await this.analyzeToV61(
+      imageUrl,
+      mealType,
+      userId!,
+      locale,
+      onVisionDone,
+      onFoodsIdentified,
+      onNutritionFilled,
+    );
     return { legacy: this.legacyAdapter.toLegacyResult(v61), v61 };
   }
 
@@ -79,9 +94,17 @@ export class ImageFoodAnalysisService {
     mealType: string | undefined,
     userId: string,
     locale?: Locale,
+    onVisionDone?: (foods: AnalyzedFoodItem[]) => Promise<void>,
+    onFoodsIdentified?: (foods: AnalyzedFoodItem[]) => Promise<void>,
+    onNutritionFilled?: (foods: AnalyzedFoodItem[]) => Promise<void>,
   ): Promise<FoodAnalysisResultV61> {
+    const t0 = Date.now();
+
     // Build user context ONCE, reuse everywhere below.
     const ctx = await this.userContextBuilder.build(userId, locale);
+    const tCtx = Date.now();
+    this.logger.log(`[timing] userContext: ${tCtx - t0}ms`);
+
     const foods = await this.analyzeImageToFoods(
       imageUrl,
       mealType,
@@ -89,12 +112,47 @@ export class ImageFoodAnalysisService {
       locale,
       ctx,
     );
+    const tVision = Date.now();
+    this.logger.log(
+      `[timing] visionLLM: ${tVision - tCtx}ms, foods=${foods.length}`,
+    );
 
-    // Post-analysis 食物库匹配：补 foodLibraryId + 校准营养
-    await this.libraryMatcher.matchAll(foods);
+    // ── vision_done 回调：Vision LLM 完成，食物名已拿到，matchAll 尚未开始 ──────
+    if (onVisionDone) {
+      await onVisionDone(foods).catch((err) => {
+        this.logger.warn(
+          `onVisionDone callback error: ${(err as Error).message}`,
+        );
+      });
+    }
+
+    // Post-analysis 食物库匹配：补 foodLibraryId + 校准营养（传 locale 启用翻译表匹配）
+    await this.libraryMatcher.matchAll(foods, locale);
+    const tMatch = Date.now();
+    this.logger.log(`[timing] matchAll: ${tMatch - tVision}ms`);
+
+    // ── foods_identified 回调：库匹配完成，foodLibraryId 已填充 ──────────────
+    if (onFoodsIdentified) {
+      await onFoodsIdentified(foods).catch((err) => {
+        this.logger.warn(
+          `onFoodsIdentified callback error: ${(err as Error).message}`,
+        );
+      });
+    }
 
     // Phase 2 文本 AI runtime 补全：对未命中食物填充营养数据
     await this.nutritionFill.fillMissing(foods, userId, locale);
+    const tFill = Date.now();
+    this.logger.log(`[timing] nutritionFill: ${tFill - tMatch}ms`);
+
+    // ── nutrition_filled 回调：完整营养数据就绪，决策引擎尚未运行 ────────────
+    if (onNutritionFilled) {
+      await onNutritionFilled(foods).catch((err) => {
+        this.logger.warn(
+          `onNutritionFilled callback error: ${(err as Error).message}`,
+        );
+      });
+    }
 
     const result = await this.analysisPipeline.executeWithOptions(
       {
@@ -111,6 +169,11 @@ export class ImageFoodAnalysisService {
         emitCompletedEvent: false,
       },
     );
+    const tPipeline = Date.now();
+    this.logger.log(
+      `[timing] analysisPipeline: ${tPipeline - tFill}ms | total: ${tPipeline - t0}ms`,
+    );
+
     return result;
   }
 

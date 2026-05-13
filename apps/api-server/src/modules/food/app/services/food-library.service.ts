@@ -29,12 +29,14 @@ export class FoodLibraryService {
    * 1. 先用 pg_trgm similarity 匹配（阈值 0.2），结果按相似度 + search_weight 排序
    * 2. 如果 similarity 结果不足，追加 ILIKE 兜底
    * 3. 已有 GIN 索引 idx_foods_name_trgm / idx_foods_aliases_trgm 支持
+   * 4. 当 locale 非中文时同时匹配 food_translations 表（idx_food_translations_name_trgm 索引）
    */
-  async search(q: string, limit: number = 10) {
+  async search(q: string, limit: number = 10, locale?: string) {
     const safeLimit = Math.min(Math.max(limit, 1), 50);
 
-    // Redis cache-aside（30min TTL）：搜索词 + limit 作为 key
-    const cacheKey = this.redis.buildKey('food_search', `${q}:${safeLimit}`);
+    // Redis cache-aside（30min TTL）：locale + 搜索词 + limit 作为 key（不同语言结果不同）
+    const localeKey = locale ?? 'zh';
+    const cacheKey = this.redis.buildKey('food_search', `${localeKey}:${q}:${safeLimit}`);
     try {
       const hit = await this.redis.get<unknown[]>(cacheKey);
       if (hit) {
@@ -45,61 +47,122 @@ export class FoodLibraryService {
       // Redis 不可用时降级到 DB 查询
     }
 
+    // 判断是否需要多语言翻译匹配（中文 locale 直接走主表即可）
+    const isChineseLocale =
+      !locale || locale.startsWith('zh') || locale === 'zh';
+
     // pg_trgm similarity 搜索（利用已有 GIN 索引）
-    const results = await this.prisma.$queryRawUnsafe(
-      `SELECT
-         f.id, f.code, f.name, f.aliases, f.barcode, f.status,
-         f.category, f.sub_category, f.food_group,
-         f.calories, f.protein, f.fat, f.carbs, f.fiber, f.sugar,
-         nd.added_sugar AS added_sugar, nd.natural_sugar AS natural_sugar, nd.saturated_fat AS saturated_fat, nd.trans_fat AS trans_fat,
-         nd.cholesterol AS cholesterol, f.sodium, f.potassium, f.calcium, f.iron,
-         nd.vitamin_a AS vitamin_a, nd.vitamin_c AS vitamin_c, nd.vitamin_d AS vitamin_d, nd.vitamin_e AS vitamin_e,
-         nd.vitamin_b12 AS vitamin_b12, nd.folate AS folate, nd.zinc AS zinc, nd.magnesium AS magnesium, nd.purine AS purine, nd.phosphorus AS phosphorus,
-         ha.glycemic_index AS glycemic_index, ha.glycemic_load AS glycemic_load,
-         ha.is_processed AS is_processed, ha.is_fried AS is_fried, ha.processing_level AS processing_level,
-         tx.allergens AS allergens, ha.quality_score AS quality_score, ha.satiety_score AS satiety_score, ha.nutrient_density AS nutrient_density,
-         tx.meal_types AS meal_types, tx.tags AS tags, f.main_ingredient, tx.compatibility AS compatibility,
-         pg.standard_serving_g AS standard_serving_g, pg.standard_serving_desc AS standard_serving_desc, pg.common_portions AS common_portions,
-         f.image_url, f.thumbnail_url,
-         f.primary_source, f.primary_source_id,
-         f.data_version, f.confidence, f.is_verified,
-         f.verified_by, f.verified_at, f.search_weight, f.popularity,
-         tx.cuisine AS cuisine, tx.flavor_profile AS flavor_profile, pg.cooking_methods AS cooking_methods,
-         pg.required_equipment AS required_equipment, pg.serving_temperature AS serving_temperature,
-         tx.texture_tags AS texture_tags, tx.dish_type AS dish_type, f.food_form, f.dish_priority,
-         f.ingredient_list,
-         pg.prep_time_minutes AS prep_time_minutes, pg.cook_time_minutes AS cook_time_minutes, pg.skill_required AS skill_required,
-         pg.estimated_cost_level AS estimated_cost_level, pg.shelf_life_days AS shelf_life_days,
-         ha.fodmap_level AS fodmap_level, ha.oxalate_level AS oxalate_level,
-         tx.available_channels AS available_channels, f.commonality_score,
-         -- V7.9 营养素字段
-         nd.vitamin_b6 AS vitamin_b6, nd.omega3 AS omega3, nd.omega6 AS omega6,
-         nd.soluble_fiber AS soluble_fiber, nd.insoluble_fiber AS insoluble_fiber, pg.water_content_percent AS water_content_percent,
-         f.acquisition_difficulty,
-          -- 补全元数据
-           f.data_completeness, f.enrichment_status, f.last_enriched_at,
-          -- V8.1 审核
-         f.review_status, f.reviewed_by, f.reviewed_at,
-         f.created_at, f.updated_at,
-         GREATEST(
-           similarity(f.name, $1),
-           similarity(COALESCE(f.aliases, ''), $1)
-         ) AS sim_score
-       FROM foods f
-       LEFT JOIN food_nutrition_details nd ON nd.food_id = f.id
-       LEFT JOIN food_health_assessments ha ON ha.food_id = f.id
-       LEFT JOIN food_taxonomies tx ON tx.food_id = f.id
-       LEFT JOIN food_portion_guides pg ON pg.food_id = f.id
-       WHERE similarity(f.name, $1) > 0.2
-          OR similarity(COALESCE(f.aliases, ''), $1) > 0.2
-          OR f.name ILIKE $2
-          OR f.aliases ILIKE $2
-       ORDER BY sim_score DESC, f.search_weight DESC, f.name ASC
-       LIMIT $3`,
-      q,
-      `%${q}%`,
-      safeLimit,
-    );
+    // 非中文 locale 时同时 LEFT JOIN food_translations，把翻译名纳入相似度计算
+    const results = isChineseLocale
+      ? await this.prisma.$queryRawUnsafe(
+          `SELECT
+             f.id, f.code, f.name, f.aliases, f.barcode, f.status,
+             f.category, f.sub_category, f.food_group,
+             f.calories, f.protein, f.fat, f.carbs, f.fiber, f.sugar,
+             nd.added_sugar AS added_sugar, nd.natural_sugar AS natural_sugar, nd.saturated_fat AS saturated_fat, nd.trans_fat AS trans_fat,
+             nd.cholesterol AS cholesterol, f.sodium, f.potassium, f.calcium, f.iron,
+             nd.vitamin_a AS vitamin_a, nd.vitamin_c AS vitamin_c, nd.vitamin_d AS vitamin_d, nd.vitamin_e AS vitamin_e,
+             nd.vitamin_b12 AS vitamin_b12, nd.folate AS folate, nd.zinc AS zinc, nd.magnesium AS magnesium, nd.purine AS purine, nd.phosphorus AS phosphorus,
+             ha.glycemic_index AS glycemic_index, ha.glycemic_load AS glycemic_load,
+             ha.is_processed AS is_processed, ha.is_fried AS is_fried, ha.processing_level AS processing_level,
+             tx.allergens AS allergens, ha.quality_score AS quality_score, ha.satiety_score AS satiety_score, ha.nutrient_density AS nutrient_density,
+             tx.meal_types AS meal_types, tx.tags AS tags, f.main_ingredient, tx.compatibility AS compatibility,
+             pg.standard_serving_g AS standard_serving_g, pg.standard_serving_desc AS standard_serving_desc, pg.common_portions AS common_portions,
+             f.image_url, f.thumbnail_url,
+             f.primary_source, f.primary_source_id,
+             f.data_version, f.confidence, f.is_verified,
+             f.verified_by, f.verified_at, f.search_weight, f.popularity,
+             tx.cuisine AS cuisine, tx.flavor_profile AS flavor_profile, pg.cooking_methods AS cooking_methods,
+             pg.required_equipment AS required_equipment, pg.serving_temperature AS serving_temperature,
+             tx.texture_tags AS texture_tags, tx.dish_type AS dish_type, f.food_form, f.dish_priority,
+             f.ingredient_list,
+             pg.prep_time_minutes AS prep_time_minutes, pg.cook_time_minutes AS cook_time_minutes, pg.skill_required AS skill_required,
+             pg.estimated_cost_level AS estimated_cost_level, pg.shelf_life_days AS shelf_life_days,
+             ha.fodmap_level AS fodmap_level, ha.oxalate_level AS oxalate_level,
+             tx.available_channels AS available_channels, f.commonality_score,
+             nd.vitamin_b6 AS vitamin_b6, nd.omega3 AS omega3, nd.omega6 AS omega6,
+             nd.soluble_fiber AS soluble_fiber, nd.insoluble_fiber AS insoluble_fiber, pg.water_content_percent AS water_content_percent,
+             f.acquisition_difficulty,
+             f.data_completeness, f.enrichment_status, f.last_enriched_at,
+             f.review_status, f.reviewed_by, f.reviewed_at,
+             f.created_at, f.updated_at,
+             GREATEST(
+               similarity(f.name, $1),
+               similarity(COALESCE(f.aliases, ''), $1)
+             ) AS sim_score
+           FROM foods f
+           LEFT JOIN food_nutrition_details nd ON nd.food_id = f.id
+           LEFT JOIN food_health_assessments ha ON ha.food_id = f.id
+           LEFT JOIN food_taxonomies tx ON tx.food_id = f.id
+           LEFT JOIN food_portion_guides pg ON pg.food_id = f.id
+           WHERE similarity(f.name, $1) > 0.2
+              OR similarity(COALESCE(f.aliases, ''), $1) > 0.2
+              OR f.name ILIKE $2
+              OR f.aliases ILIKE $2
+           ORDER BY sim_score DESC, f.search_weight DESC, f.name ASC
+           LIMIT $3`,
+          q,
+          `%${q}%`,
+          safeLimit,
+        )
+      : await this.prisma.$queryRawUnsafe(
+          // 非中文：LEFT JOIN food_translations，翻译名参与相似度打分
+          `SELECT
+             f.id, f.code, f.name, f.aliases, f.barcode, f.status,
+             f.category, f.sub_category, f.food_group,
+             f.calories, f.protein, f.fat, f.carbs, f.fiber, f.sugar,
+             nd.added_sugar AS added_sugar, nd.natural_sugar AS natural_sugar, nd.saturated_fat AS saturated_fat, nd.trans_fat AS trans_fat,
+             nd.cholesterol AS cholesterol, f.sodium, f.potassium, f.calcium, f.iron,
+             nd.vitamin_a AS vitamin_a, nd.vitamin_c AS vitamin_c, nd.vitamin_d AS vitamin_d, nd.vitamin_e AS vitamin_e,
+             nd.vitamin_b12 AS vitamin_b12, nd.folate AS folate, nd.zinc AS zinc, nd.magnesium AS magnesium, nd.purine AS purine, nd.phosphorus AS phosphorus,
+             ha.glycemic_index AS glycemic_index, ha.glycemic_load AS glycemic_load,
+             ha.is_processed AS is_processed, ha.is_fried AS is_fried, ha.processing_level AS processing_level,
+             tx.allergens AS allergens, ha.quality_score AS quality_score, ha.satiety_score AS satiety_score, ha.nutrient_density AS nutrient_density,
+             tx.meal_types AS meal_types, tx.tags AS tags, f.main_ingredient, tx.compatibility AS compatibility,
+             pg.standard_serving_g AS standard_serving_g, pg.standard_serving_desc AS standard_serving_desc, pg.common_portions AS common_portions,
+             f.image_url, f.thumbnail_url,
+             f.primary_source, f.primary_source_id,
+             f.data_version, f.confidence, f.is_verified,
+             f.verified_by, f.verified_at, f.search_weight, f.popularity,
+             tx.cuisine AS cuisine, tx.flavor_profile AS flavor_profile, pg.cooking_methods AS cooking_methods,
+             pg.required_equipment AS required_equipment, pg.serving_temperature AS serving_temperature,
+             tx.texture_tags AS texture_tags, tx.dish_type AS dish_type, f.food_form, f.dish_priority,
+             f.ingredient_list,
+             pg.prep_time_minutes AS prep_time_minutes, pg.cook_time_minutes AS cook_time_minutes, pg.skill_required AS skill_required,
+             pg.estimated_cost_level AS estimated_cost_level, pg.shelf_life_days AS shelf_life_days,
+             ha.fodmap_level AS fodmap_level, ha.oxalate_level AS oxalate_level,
+             tx.available_channels AS available_channels, f.commonality_score,
+             nd.vitamin_b6 AS vitamin_b6, nd.omega3 AS omega3, nd.omega6 AS omega6,
+             nd.soluble_fiber AS soluble_fiber, nd.insoluble_fiber AS insoluble_fiber, pg.water_content_percent AS water_content_percent,
+             f.acquisition_difficulty,
+             f.data_completeness, f.enrichment_status, f.last_enriched_at,
+             f.review_status, f.reviewed_by, f.reviewed_at,
+             f.created_at, f.updated_at,
+             GREATEST(
+               similarity(f.name, $1),
+               similarity(COALESCE(f.aliases, ''), $1),
+               COALESCE(similarity(ft.name, $1), 0),
+               COALESCE(similarity(COALESCE(ft.aliases, ''), $1), 0)
+             ) AS sim_score
+           FROM foods f
+           LEFT JOIN food_nutrition_details nd ON nd.food_id = f.id
+           LEFT JOIN food_health_assessments ha ON ha.food_id = f.id
+           LEFT JOIN food_taxonomies tx ON tx.food_id = f.id
+           LEFT JOIN food_portion_guides pg ON pg.food_id = f.id
+           LEFT JOIN food_translations ft ON ft.food_id = f.id AND ft.locale = $4
+           WHERE similarity(f.name, $1) > 0.2
+              OR similarity(COALESCE(f.aliases, ''), $1) > 0.2
+              OR (ft.name IS NOT NULL AND similarity(ft.name, $1) > 0.2)
+              OR (ft.aliases IS NOT NULL AND similarity(ft.aliases, $1) > 0.2)
+              OR f.name ILIKE $2
+              OR ft.name ILIKE $2
+           ORDER BY sim_score DESC, f.search_weight DESC, f.name ASC
+           LIMIT $3`,
+          q,
+          `%${q}%`,
+          safeLimit,
+          locale,
+        );
 
     // 写入 Redis 缓存（fire-and-forget）
     this.redis
@@ -145,12 +208,25 @@ export class FoodLibraryService {
 
   /**
    * 按名称精确查找（SEO 落地页使用）
+   *
+   * 当 locale 为非中文时，先查主表中文名，miss 后查 food_translations 翻译名。
    */
-  async findByName(name: string) {
-    const food = await this.prisma.food.findFirst({
+  async findByName(name: string, locale?: string) {
+    // 1. 先精确匹配主表中文名
+    let food = await this.prisma.food.findFirst({
       where: { name },
       include: FOOD_SPLIT_INCLUDE,
     });
+
+    // 2. miss 且 locale 非中文时，查翻译表
+    if (!food && locale && !locale.startsWith('zh') && locale !== 'zh') {
+      const trans = await this.prisma.foodTranslations.findFirst({
+        where: { name, locale },
+        include: { foods: { include: FOOD_SPLIT_INCLUDE } },
+      });
+      food = (trans as any)?.foods ?? null;
+    }
+
     if (!food) {
       throw new NotFoundException(
         this.i18n.t('food.foodNotFoundByName', { name }),

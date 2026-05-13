@@ -133,7 +133,12 @@ export class ImageNutritionFillService {
 
     for (const food of foods) {
       const key = food.name?.toLowerCase();
-      const fill = byName.get(key);
+      // 先精确匹配，miss 时做 includes 模糊匹配（容忍 LLM 返回名与输入名微差）
+      const fill =
+        byName.get(key) ??
+        [...byName.entries()].find(
+          ([k]) => k && key && (k.includes(key) || key.includes(k)),
+        )?.[1];
       if (!fill) continue;
 
       const grams = food.estimatedWeightGrams || 100;
