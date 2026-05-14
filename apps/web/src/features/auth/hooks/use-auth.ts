@@ -181,17 +181,10 @@ export function useAuth() {
   );
 
   const restoreAuth = useCallback(async () => {
-    // 等待 persist hydration 完成，避免刷新时 token 尚未恢复就被匿名登录覆盖。
+    // 等待 persist hydration 完成，避免刷新时 token 尚未恢复就被误判为未登录。
     if (!hydrated) return;
     if (initialized) return;
     if (!token) {
-      // 无 token: 自动匿名登录，让用户零门槛体验
-      try {
-        const res = await appAuthService.anonymousLogin(getDeviceId());
-        setAuth(res.user, res.token);
-      } catch {
-        // 匿名登录失败（网络等）不阻塞，用户仍可浏览
-      }
       setInitialized();
       return;
     }

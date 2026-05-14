@@ -4,6 +4,7 @@ import { JsonLd } from '@/lib/seo/JsonLd';
 import { siteConfig } from '@/lib/seo/metadata';
 import { getPublicShare, trackShareView } from '@/lib/share/api';
 import type { PublicShareResponse, ShareMetric, ShareSnapshot } from '@/lib/share/types';
+import Link from 'next/link';
 
 type PageProps = {
   params: Promise<{ token: string }>;
@@ -70,17 +71,9 @@ export default async function SharePage({ params }: PageProps) {
 
           <section className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col px-5 py-6 sm:px-8 lg:px-10">
             <header className="flex items-center justify-between">
-              <a href="/" className="flex items-center gap-3" aria-label="EatCheck home">
-                <span className="grid h-10 w-10 place-items-center rounded-2xl border border-white/12 bg-white/10 text-sm font-black shadow-2xl backdrop-blur-xl">
-                  EC
-                </span>
-                <span>
-                  <span className="block text-sm font-bold tracking-[-0.03em]">EatCheck</span>
-                  <span className="block text-[10px] uppercase tracking-[0.24em] text-emerald-100/50">
-                    AI Health
-                  </span>
-                </span>
-              </a>
+              <Link href="/" className="flex items-center gap-3" aria-label="EatCheck home">
+                <img src={'/logo.png'} className='h-12' />
+              </Link>
               <a
                 href={appStoreUrl}
                 className="rounded-full border border-white/14 bg-white/10 px-4 py-2 text-sm font-semibold text-emerald-50 shadow-[0_16px_60px_rgba(0,0,0,0.24)] backdrop-blur-xl transition hover:bg-white/16"
