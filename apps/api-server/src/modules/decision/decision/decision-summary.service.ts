@@ -589,9 +589,13 @@ export class DecisionSummaryService {
     locale?: I18nLocale,
   ): string | undefined {
     const constraints = [
-      ...(ctx.allergens || []),
-      ...(ctx.dietaryRestrictions || []),
-      ...(ctx.healthConditions || []),
+      ...translateEnumList('allergen', ctx.allergens, locale),
+      ...translateEnumList(
+        'dietaryRestriction',
+        ctx.dietaryRestrictions,
+        locale,
+      ),
+      ...translateEnumList('healthCondition', ctx.healthConditions, locale),
     ].filter(Boolean);
 
     if (constraints.length === 0) return undefined;

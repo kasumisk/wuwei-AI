@@ -191,19 +191,57 @@ export class FoodSyncSchedulerService implements OnModuleInit {
       'food:popularity-update',
       10 * 60 * 1000,
       async () => {
-        // 基于 food_records 表统计最近7天的使用次数
+        // 基于 food_records.foods JSON 数组统计最近7天的使用次数。
+        // food_records 当前没有顶层 food_id 列；保存记录时食物项可能只有 name，
+        // 未来若补充 foodId/libraryMatch.id，本 SQL 会优先使用结构化 ID。
         try {
           await this.prisma.$executeRawUnsafe(`
-        UPDATE foods f
-        SET popularity = COALESCE(sub.usage_count, 0)
-        FROM (
-          SELECT fr.food_id, COUNT(*) as usage_count
-          FROM food_records fr
-          WHERE fr.created_at >= NOW() - INTERVAL '7 days'
-          GROUP BY fr.food_id
-        ) sub
-        WHERE f.id = sub.food_id
-      `);
+            WITH record_foods AS (
+              SELECT
+                NULLIF(
+                  COALESCE(
+                    item->>'foodId',
+                    item->>'food_id',
+                    item->>'libraryFoodId',
+                    item#>>'{libraryMatch,id}'
+                  ),
+                  ''
+                ) AS raw_food_id,
+                NULLIF(item->>'name', '') AS food_name
+              FROM food_records fr
+              CROSS JOIN LATERAL jsonb_array_elements(
+                CASE
+                  WHEN jsonb_typeof(fr.foods) = 'array' THEN fr.foods
+                  ELSE '[]'::jsonb
+                END
+              ) AS item
+              WHERE fr.created_at >= NOW() - INTERVAL '7 days'
+            ),
+            resolved AS (
+              SELECT f.id AS food_id
+              FROM record_foods rf
+              JOIN foods f
+                ON f.id = CASE
+                  WHEN rf.raw_food_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                    THEN rf.raw_food_id::uuid
+                  ELSE NULL
+                END
+                OR (
+                  rf.raw_food_id IS NULL
+                  AND rf.food_name IS NOT NULL
+                  AND lower(f.name) = lower(rf.food_name)
+                )
+            ),
+            usage AS (
+              SELECT food_id, COUNT(*)::int AS usage_count
+              FROM resolved
+              GROUP BY food_id
+            )
+            UPDATE foods f
+            SET popularity = usage.usage_count
+            FROM usage
+            WHERE f.id = usage.food_id
+          `);
         } catch (e) {
           // food_records 表可能不关联，静默处理
           this.logger.debug(`Popularity update skipped: ${e.message}`);

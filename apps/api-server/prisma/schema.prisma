@@ -208,6 +208,7 @@ model AppUsers {
   strategyAssignments StrategyAssignment[]
   notifications       Notification[]
   weightHistories     WeightHistory[]
+  growthShares        GrowthShares[]
 
   @@index([deviceId], map: "IDX_601d4f4be742d3ca28891c0207")
   @@map("app_users")
@@ -752,6 +753,50 @@ model FoodRecords {
   @@index([analysisId], map: "idx_food_record_analysis_id")
   @@index([userId, recordedAt(sort: Desc)], map: "idx_food_records_user_recorded")
   @@map("food_records")
+}
+
+/// 增长分享表 — 存储 AI 分析结果的公开分享快照，支持 OG 图片、SEO 分享页与下载转化链路
+model GrowthShares {
+  /// 主键 UUID
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 公开分享 token，出现在 /share/:token URL 中
+  token       String    @unique @db.VarChar(32)
+  /// 分享创建用户；用户删除后分享仍可按策略保留快照
+  userId      String?   @map("user_id") @db.Uuid
+  /// 分享类型：meal_score / compare / shock_insight / weekly_summary
+  shareType   String    @map("share_type") @db.VarChar(32)
+  /// 来源类型：analysis / record / custom
+  sourceType  String    @map("source_type") @db.VarChar(32)
+  /// 来源记录 ID；custom 分享可为空
+  sourceId    String?   @map("source_id") @db.Uuid
+  /// 可见性：private / unlisted / public_indexed
+  visibility  String    @default("unlisted") @db.VarChar(20)
+  /// 分享内容快照。分享页、OG 图、SEO 均只读此快照，不回读实时分析结果
+  snapshot    Json
+  /// 快照语言，如 en-US / zh-CN / ja-JP
+  locale      String?   @db.VarChar(10)
+  /// SEO/OG 标题冗余字段，便于索引和后台运营
+  title       String?   @db.VarChar(180)
+  /// SEO/OG 描述冗余字段
+  description String?   @db.VarChar(320)
+  /// 状态：active / revoked / expired
+  status      String    @default("active") @db.VarChar(20)
+  /// 分享过期时间；为空表示长期有效
+  expiresAt   DateTime? @map("expires_at") @db.Timestamptz(6)
+  /// 分享页浏览次数
+  viewCount   Int       @default(0) @map("view_count")
+  /// CTA 点击次数
+  clickCount  Int       @default(0) @map("click_count")
+  /// 创建时间
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 最后更新时间
+  updatedAt   DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  user        AppUsers? @relation(fields: [userId], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "fk_growth_shares_user")
+
+  @@index([userId, createdAt(sort: Desc)], map: "idx_growth_shares_user_created")
+  @@index([sourceType, sourceId], map: "idx_growth_shares_source")
+  @@index([status, visibility], map: "idx_growth_shares_status_visibility")
+  @@map("growth_shares")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments

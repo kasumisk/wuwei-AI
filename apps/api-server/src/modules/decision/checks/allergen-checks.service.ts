@@ -8,6 +8,7 @@
  */
 import { Injectable } from '@nestjs/common';
 import { I18nService, I18nLocale } from '../../../core/i18n';
+import { translateEnum } from '../../../common/i18n/enum-i18n';
 import type { CheckResult, CheckableFoodItem } from './types';
 import type { UnifiedUserContext } from '../types/analysis-result.types';
 
@@ -58,8 +59,9 @@ export class AllergenChecksService {
 
     if (matchedAllergen) {
       const loc = locale ?? this.i18n.currentLocale();
+      const allergenLabel = translateEnum('allergen', matchedAllergen, loc);
       const message = this.i18n.t('decision.check.allergen', loc, {
-        allergen: matchedAllergen,
+        allergen: allergenLabel,
       });
       return {
         triggered: true,
@@ -70,7 +72,7 @@ export class AllergenChecksService {
           category: 'allergen',
           severity: 'critical',
           message,
-          data: { allergen: matchedAllergen },
+          data: { allergen: allergenLabel, allergenCode: matchedAllergen },
         },
       };
     }

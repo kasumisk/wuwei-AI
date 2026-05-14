@@ -20,6 +20,7 @@ import {
 } from '../types/analysis-result.types';
 import { NutritionScoreBreakdown } from '../../diet/app/services/nutrition-score.service';
 import { I18nService, I18nLocale } from '../../../core/i18n';
+import { translateEnumList } from '../../../common/i18n/enum-i18n';
 import { DecisionFoodItem } from './food-decision.service';
 
 import { AllergenChecksService } from '../checks/allergen-checks.service';
@@ -350,10 +351,15 @@ export class DecisionExplainerService {
     }> = [];
 
     if (input.allergenCheck.triggered) {
+      const allergenLabels = translateEnumList(
+        'allergen',
+        input.allergenCheck.allergens,
+        locale,
+      );
       const msg = this.i18n.t(
         'decision.chain.step.allergen.triggered',
         locale,
-        { allergens: input.allergenCheck.allergens.join(', ') },
+        { allergens: allergenLabels.join(', ') },
       );
       decisionFactors.push(msg);
       conflictNodes.push({

@@ -8,6 +8,7 @@ import {
 import { matchAllergens } from '../filter/allergen-filter.util';
 import { RedisCacheService } from '../../../../../core/redis/redis-cache.service';
 import { MetricsService } from '../../../../../core/metrics/metrics.service';
+import { translateEnumList } from '../../../../../common/i18n/enum-i18n';
 import { t } from '../utils/i18n-messages';
 
 // ==================== 类型 ====================
@@ -317,7 +318,7 @@ export class HealthModifierEngineService {
       const matched = matchAllergens(food, context.allergens);
       if (matched.length > 0) {
         const reason = t('health.veto.allergen', {
-          matched: matched.join(', '),
+          matched: translateEnumList('allergen', matched).join(', '),
         });
         return {
           finalMultiplier: 0,
