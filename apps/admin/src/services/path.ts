@@ -59,6 +59,15 @@ const PATH = {
     // 功能开关
     FEATURE_FLAGS: '/admin/feature-flags',
     REGION_STRATEGY: '/admin/region-strategy',
+    PUSH_OVERVIEW: '/admin/push/overview',
+    PUSH_DEVICES: '/admin/push/devices',
+    PUSH_LOGS: '/admin/push/logs',
+    PUSH_TEST: '/admin/push/test',
+    PUSH_USER_DETAIL: (userId: string) => `/admin/push/users/${userId}/detail`,
+    PUSH_PROVIDER_HEALTH: '/admin/push/providers/health',
+    PUSH_CRON_TRIGGER: '/admin/push/cron/trigger',
+    PUSH_LOG_RETRY: (id: string) => `/admin/push/logs/${id}/retry`,
+    PUSH_CLEANUP_INVALID_TOKENS: '/admin/push/maintenance/cleanup-invalid-tokens',
     // 评分参数配置
     SCORING_CONFIG: '/admin/scoring-config',
     // V1.7: 每日评分权重配置
@@ -77,7 +86,8 @@ const PATH = {
     FOOD_IMAGE_ENRICHMENT_SCAN: '/admin/food-pipeline/image-enrichment/scan',
     FOOD_IMAGE_ENRICHMENT_JOBS: '/admin/food-pipeline/image-enrichment/jobs',
     FOOD_IMAGE_ENRICHMENT_ENQUEUE: '/admin/food-pipeline/image-enrichment/enqueue',
-    FOOD_IMAGE_ENRICHMENT_NOW: (foodId: string) => `/admin/food-pipeline/image-enrichment/${foodId}/now`,
+    FOOD_IMAGE_ENRICHMENT_NOW: (foodId: string) =>
+      `/admin/food-pipeline/image-enrichment/${foodId}/now`,
     FOOD_IMAGE_ENRICHMENT_CLEAR: '/admin/food-pipeline/image-enrichment/clear',
     FOOD_IMAGE_ENRICHMENT_QUEUE_CLEAR: '/admin/food-pipeline/image-enrichment/queue/clear',
     FOOD_IMAGE_ENRICHMENT_CANDIDATES: '/admin/food-pipeline/image-enrichment/candidates',

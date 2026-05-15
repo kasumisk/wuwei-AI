@@ -207,6 +207,9 @@ model AppUsers {
   /// ARB-2026-04: userBehaviorProfiles merged into UserProfiles.behaviorData
   strategyAssignments StrategyAssignment[]
   notifications       Notification[]
+  pushDeviceTokens    PushDeviceToken[]
+  pushLogs            PushNotificationLog[]
+  pushPreference      UserNotificationPreference?
   weightHistories     WeightHistory[]
   growthShares        GrowthShares[]
 
@@ -1462,6 +1465,88 @@ model NotificationPreference {
   @@map("notification_preference")
 }
 
+/// Push 设备 Token 表 — 区域化、Provider 可插拔的移动端推送令牌
+model PushDeviceToken {
+  id           String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String                 @map("user_id") @db.Uuid
+  token        String                 @db.VarChar(1024)
+  deviceId     String                 @map("device_id") @db.VarChar(200)
+  platform     PushPlatform
+  pushRegion   PushRegion             @default(GLOBAL) @map("push_region")
+  providerType PushProviderType       @map("provider_type")
+  timezone     String                 @default("UTC") @db.VarChar(64)
+  locale       String                 @default("en") @db.VarChar(16)
+  appVersion   String?                @map("app_version") @db.VarChar(64)
+  deviceBrand  String?                @map("device_brand") @db.VarChar(64)
+  romType      String?                @map("rom_type") @db.VarChar(64)
+  isActive     Boolean                @default(true) @map("is_active")
+  disabledAt   DateTime?              @map("disabled_at") @db.Timestamptz(6)
+  invalidatedAt DateTime?             @map("invalidated_at") @db.Timestamptz(6)
+  lastSeenAt    DateTime              @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  createdAt     DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime              @default(now()) @map("updated_at") @db.Timestamptz(6)
+  user          AppUsers              @relation(fields: [userId], references: [id], onDelete: Cascade, map: "fk_push_device_token_user")
+  logs          PushNotificationLog[]
+
+  @@unique([providerType, token], map: "uq_push_device_token_provider_token")
+  @@unique([userId, deviceId, providerType], map: "uq_push_device_token_user_device_provider")
+  @@index([userId, isActive], map: "idx_push_device_token_user_active")
+  @@index([pushRegion, providerType, isActive], map: "idx_push_device_token_provider_active")
+  @@map("push_device_tokens")
+}
+
+/// Push 发送日志 — 每次设备级推送都记录成功/失败与 Provider 响应
+model PushNotificationLog {
+  id             String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String                 @map("user_id") @db.Uuid
+  deviceTokenId  String?                @map("device_token_id") @db.Uuid
+  notificationType PushNotificationType @map("notification_type")
+  providerType   PushProviderType       @map("provider_type")
+  pushRegion     PushRegion             @default(GLOBAL) @map("push_region")
+  status         PushDeliveryStatus
+  title          String                 @db.VarChar(200)
+  body           String                 @db.VarChar(500)
+  payload        Json?
+  providerMessageId String?             @map("provider_message_id") @db.VarChar(255)
+  errorCode      String?                @map("error_code") @db.VarChar(100)
+  errorMessage   String?                @map("error_message")
+  scheduledFor   DateTime?              @map("scheduled_for") @db.Timestamptz(6)
+  sentAt         DateTime?              @map("sent_at") @db.Timestamptz(6)
+  createdAt      DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  user           AppUsers               @relation(fields: [userId], references: [id], onDelete: Cascade, map: "fk_push_notification_log_user")
+  deviceToken    PushDeviceToken?       @relation(fields: [deviceTokenId], references: [id], onDelete: SetNull, map: "fk_push_notification_log_device_token")
+
+  @@index([userId, notificationType, createdAt], map: "idx_push_log_user_type_created")
+  @@index([deviceTokenId, createdAt], map: "idx_push_log_device_created")
+  @@index([status, createdAt], map: "idx_push_log_status_created")
+  @@map("push_notification_logs")
+}
+
+/// Push 用户偏好 — 每用户一条，按留存型推送类型控制开关与发送时间
+model UserNotificationPreference {
+  id                         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                     String   @unique(map: "uq_user_notification_preference_user") @map("user_id") @db.Uuid
+  pushEnabled                Boolean  @default(true) @map("push_enabled")
+  dailyCheckInEnabled        Boolean  @default(true) @map("daily_check_in_enabled")
+  noAnalysisTodayEnabled     Boolean  @default(true) @map("no_analysis_today_enabled")
+  weeklyReportEnabled        Boolean  @default(true) @map("weekly_report_enabled")
+  analysisFollowUpEnabled    Boolean  @default(true) @map("analysis_follow_up_enabled")
+  premiumUpgradeHintEnabled  Boolean  @default(true) @map("premium_upgrade_hint_enabled")
+  timezone                   String   @default("UTC") @db.VarChar(64)
+  locale                     String   @default("en") @db.VarChar(16)
+  quietStart                 String   @default("22:00") @map("quiet_start") @db.VarChar(5)
+  quietEnd                   String   @default("08:00") @map("quiet_end") @db.VarChar(5)
+  dailyReminderTime          String   @default("09:00") @map("daily_reminder_time") @db.VarChar(5)
+  noAnalysisReminderTime     String   @default("19:00") @map("no_analysis_reminder_time") @db.VarChar(5)
+  weeklyReportDay            Int      @default(1) @map("weekly_report_day")
+  weeklyReportTime           String   @default("09:00") @map("weekly_report_time") @db.VarChar(5)
+  createdAt                  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                  DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  user                       AppUsers @relation(fields: [userId], references: [id], onDelete: Cascade, map: "fk_user_notification_preference_user")
+
+  @@map("user_notification_preferences")
+}
+
 /// 支付记录表 — 存储每笔充值/订阅支付的流水信息
 model PaymentRecords {
   /// 主键 UUID
@@ -2499,6 +2584,52 @@ enum app_versions_status_enum {
 enum app_versions_updateType_enum {
   optional
   force
+}
+
+enum PushRegion {
+  GLOBAL
+  CHINA_MAINLAND
+  EU
+  JAPAN
+  KOREA
+
+  @@map("push_region_enum")
+}
+
+enum PushProviderType {
+  FCM
+  JPUSH
+  HUAWEI
+  MOCK
+
+  @@map("push_provider_type_enum")
+}
+
+enum PushPlatform {
+  IOS
+  ANDROID
+  WEB
+
+  @@map("push_platform_enum")
+}
+
+enum PushNotificationType {
+  DAILY_CHECK_IN
+  NO_ANALYSIS_TODAY
+  WEEKLY_REPORT_READY
+  ANALYSIS_FOLLOW_UP
+  PREMIUM_UPGRADE_HINT
+
+  @@map("push_notification_type_enum")
+}
+
+enum PushDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+
+  @@map("push_delivery_status_enum")
 }
 
 // REMOVED 2026-04 (ARB Review): capability_type_enum -> merged into model_configs_capabilitytype_enum
