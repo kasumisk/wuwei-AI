@@ -24,6 +24,7 @@ import { translateEnumList } from '../../../common/i18n/enum-i18n';
 import { DecisionFoodItem } from './food-decision.service';
 
 import { AllergenChecksService } from '../checks/allergen-checks.service';
+import type { AllergenFoodMatch } from '../checks/allergen-match';
 import { RestrictionChecksService } from '../checks/restriction-checks.service';
 import {
   DynamicThresholdsService,
@@ -35,7 +36,7 @@ import {
 export interface DecisionChainInput {
   baseScore: number;
   scoreBreakdown?: NutritionScoreBreakdown;
-  allergenCheck: { triggered: boolean; allergens: string[] };
+  allergenCheck: { triggered: boolean; matches: AllergenFoodMatch[] };
   healthCheck: { triggered: boolean; conditions: string[] };
   timingCheck: { isLateNight: boolean; localHour: number };
   dailyBudgetCheck: { remainingCalories: number; mealCalories: number };
@@ -90,6 +91,18 @@ export class DecisionExplainerService {
     private readonly allergenChecks: AllergenChecksService,
     private readonly restrictionChecks: RestrictionChecksService,
   ) {}
+
+  private formatAllergenMatchDetails(
+    matches: AllergenFoodMatch[],
+    locale?: I18nLocale,
+  ): string[] {
+    return matches.map((match) =>
+      this.i18n.t('decision.allergen.matchDetail', locale, {
+        food: match.foodName,
+        allergen: translateEnumList('allergen', [match.foodAllergen], locale)[0],
+      }),
+    );
+  }
 
   // ==================== V3.7 P2.1: 从 DecisionEngineService 提取的文案生成 ====================
 
@@ -351,15 +364,18 @@ export class DecisionExplainerService {
     }> = [];
 
     if (input.allergenCheck.triggered) {
-      const allergenLabels = translateEnumList(
-        'allergen',
-        input.allergenCheck.allergens,
+      const allergenDetails = this.formatAllergenMatchDetails(
+        input.allergenCheck.matches,
         locale,
       );
       const msg = this.i18n.t(
         'decision.chain.step.allergen.triggered',
         locale,
-        { allergens: allergenLabels.join(', ') },
+        {
+          allergens: allergenDetails.join(
+            this.i18n.t('decision.separator.list', locale),
+          ),
+        },
       );
       decisionFactors.push(msg);
       conflictNodes.push({

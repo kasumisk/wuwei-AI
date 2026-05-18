@@ -10,6 +10,7 @@ import { BehaviorService } from './behavior.service';
 import {
   getUserLocalDate,
   getUserLocalDayBounds,
+  getUserLocalDayBoundsForDateKey,
   getUserLocalHour,
 } from '../../../../common/utils/timezone.util';
 import { I18nService } from '../../../../core/i18n';
@@ -251,9 +252,32 @@ export class DailySummaryService {
       orderBy: { date: 'asc' },
     });
 
-    const byDate = new Map(
+    let byDate = new Map(
       rows.map((row) => [this.toDateKey(row.date), row] as const),
     );
+
+    const refreshed = await this.refreshRecentSummariesIfNeeded(
+      userId,
+      tz,
+      startKey,
+      todayKey,
+      byDate,
+    );
+    if (refreshed) {
+      const refreshedRows = await this.prisma.dailySummaries.findMany({
+        where: {
+          userId: userId,
+          date: {
+            gte: new Date(`${startKey}T00:00:00.000Z`),
+            lte: new Date(`${todayKey}T00:00:00.000Z`),
+          },
+        },
+        orderBy: { date: 'asc' },
+      });
+      byDate = new Map(
+        refreshedRows.map((row) => [this.toDateKey(row.date), row] as const),
+      );
+    }
     let previousRecorded: DailySummaryInsightView | null = null;
 
     return Array.from({ length: safeDays }, (_, index) => {
@@ -534,13 +558,74 @@ export class DailySummaryService {
     );
   }
 
+  private async refreshRecentSummariesIfNeeded(
+    userId: string,
+    timezone: string,
+    startKey: string,
+    endKey: string,
+    summariesByDate: Map<
+      string,
+      { mealCount: number; nutritionScore: number; updatedAt: Date }
+    >,
+  ): Promise<boolean> {
+    const { startOfDay } = getUserLocalDayBoundsForDateKey(timezone, startKey);
+    const { endOfDay } = getUserLocalDayBoundsForDateKey(timezone, endKey);
+    const records = await this.prisma.foodRecords.findMany({
+      where: {
+        userId,
+        recordedAt: { gte: startOfDay, lte: endOfDay },
+      },
+      select: { recordedAt: true, updatedAt: true },
+      orderBy: { recordedAt: 'asc' },
+    });
+
+    const latestRecordByDate = new Map<string, Date>();
+    for (const record of records) {
+      const dateKey = getUserLocalDate(timezone, record.recordedAt);
+      if (dateKey < startKey || dateKey > endKey) continue;
+      const latest = latestRecordByDate.get(dateKey);
+      if (!latest || record.updatedAt > latest) {
+        latestRecordByDate.set(dateKey, record.updatedAt);
+      }
+    }
+
+    const staleDateKeys: string[] = [];
+    for (const [dateKey, latestRecordUpdate] of latestRecordByDate.entries()) {
+      const summary = summariesByDate.get(dateKey);
+      if (
+        !summary ||
+        summary.mealCount <= 0 ||
+        summary.nutritionScore <= 0 ||
+        summary.updatedAt < latestRecordUpdate
+      ) {
+        staleDateKeys.push(dateKey);
+      }
+    }
+
+    for (const dateKey of staleDateKeys) {
+      await this.updateDailySummaryForDateKey(userId, timezone, dateKey);
+    }
+    return staleDateKeys.length > 0;
+  }
+
   /**
    * 更新某天的每日汇总
    */
   async updateDailySummary(userId: string, recordDate: Date): Promise<void> {
     const tz = await this.userProfileService.getTimezone(userId);
     const date = getUserLocalDate(tz, recordDate);
-    const { startOfDay, endOfDay } = getUserLocalDayBounds(tz, recordDate);
+    await this.updateDailySummaryForDateKey(userId, tz, date);
+  }
+
+  private async updateDailySummaryForDateKey(
+    userId: string,
+    timezone: string,
+    date: string,
+  ): Promise<void> {
+    const { startOfDay, endOfDay } = getUserLocalDayBoundsForDateKey(
+      timezone,
+      date,
+    );
 
     const records = await this.foodRecordService.getRecordsByDateRange(
       userId,
@@ -616,13 +701,17 @@ export class DailySummaryService {
     }
 
     // P1.2: 修复 fallback — 有记录时用真实值，无记录不虚高
-    // V1.3: 注入 localHour 实现时间感知评分
-    const localHour = getUserLocalHour(tz);
+    // V1.3: 只有今日注入 localHour；历史日按全天结算，避免趋势分被当前小时放宽。
+    const localHour =
+      date === getUserLocalDate(timezone)
+        ? getUserLocalHour(timezone)
+        : undefined;
     // V1.4: 聚合每餐决策信号
     const mealSignals = this.nutritionScoreService.aggregateMealSignals(
       records,
       Number((profile as any)?.mealsPerDay) || 3,
     );
+    const { avgGI, totalCarbsFromFoods } = this.aggregateGlycemicData(records);
     const scoreResult = this.nutritionScoreService.calculateScore(
       {
         calories: totalCalories,
@@ -636,6 +725,8 @@ export class DailySummaryService {
         targetFat: goals.fat,
         foodQuality: records.length > 0 ? avgQuality || 3 : 0,
         satiety: records.length > 0 ? avgSatiety || 3 : 0,
+        glycemicIndex: avgGI || undefined,
+        carbsPerServing: totalCarbsFromFoods || undefined,
       },
       goalType,
       stabilityData,
@@ -673,6 +764,7 @@ export class DailySummaryService {
       recommendExecutionCount: records.filter(
         (r) => (r as any).source === 'recommend',
       ).length,
+      updatedAt: new Date(),
     };
 
     if (summary) {

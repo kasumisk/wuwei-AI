@@ -43,7 +43,7 @@ import {
   estimateQuality as _estimateQuality,
   estimateSatiety as _estimateSatiety,
 } from '../../food/app/config/nutrition-estimator';
-import { matchAllergenInFoods } from '../checks/allergen-match';
+import { collectAllergenMatches } from '../checks/allergen-match';
 import { ContextualAnalysis } from '../types/analysis-result.types';
 import { PreferenceProfileService } from '../../diet/app/recommendation/profile/preference-profile.service';
 import { FoodI18nService } from '../../diet/app/services/food-i18n.service';
@@ -343,11 +343,8 @@ export class FoodDecisionService {
 
     // 仅使用食物库结构化 allergens 字段进行精确匹配
     // V4.0: 使用共享过敏原展开工具
-    const matchAllergen = (a: string): boolean =>
-      matchAllergenInFoods(a, foods);
-    const allergenTriggered =
-      ctx.allergens.length > 0 && ctx.allergens.some(matchAllergen);
-    const triggeredAllergens = ctx.allergens.filter(matchAllergen);
+    const allergenMatches = collectAllergenMatches(ctx.allergens, foods);
+    const allergenTriggered = allergenMatches.length > 0;
 
     const healthTriggered = ctx.healthConditions.length > 0;
     const isLateNight = ctx.localHour >= 21 || ctx.localHour < 5;
@@ -358,7 +355,7 @@ export class FoodDecisionService {
         scoreBreakdown: breakdown,
         allergenCheck: {
           triggered: allergenTriggered,
-          allergens: triggeredAllergens,
+          matches: allergenMatches,
         },
         healthCheck: {
           triggered: healthTriggered,

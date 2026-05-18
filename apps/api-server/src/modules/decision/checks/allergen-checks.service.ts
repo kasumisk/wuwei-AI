@@ -11,57 +11,45 @@ import { I18nService, I18nLocale } from '../../../core/i18n';
 import { translateEnum } from '../../../common/i18n/enum-i18n';
 import type { CheckResult, CheckableFoodItem } from './types';
 import type { UnifiedUserContext } from '../types/analysis-result.types';
-
-/**
- * 过敏原别名展开表（与 allergen-filter.util.ts 保持同步）
- * 将用户画像标准键 → 食物库 allergens[] 中可能出现的等价键
- */
-const ALLERGEN_EXPAND_MAP: Record<string, string[]> = {
-  gluten: ['gluten', 'wheat'],
-  dairy: ['dairy', 'milk', 'lactose'],
-  egg: ['egg', 'eggs'],
-  fish: ['fish'],
-  shellfish: ['shellfish', 'shrimp'],
-  tree_nuts: ['tree_nuts', 'tree_nut', 'nuts'],
-  peanuts: ['peanuts', 'peanut', 'nuts'],
-  soy: ['soy', 'soybeans'],
-  sesame: ['sesame'],
-  // 兼容旧键
-  peanut: ['peanuts', 'peanut', 'nuts'],
-  tree_nut: ['tree_nuts', 'tree_nut', 'nuts'],
-  milk: ['dairy', 'milk', 'lactose'],
-  eggs: ['egg', 'eggs'],
-  soybeans: ['soy', 'soybeans'],
-  wheat: ['gluten', 'wheat'],
-};
+import {
+  ALLERGEN_EXPAND,
+  collectAllergenMatches,
+  matchAllergenInFoods,
+} from './allergen-match';
 
 @Injectable()
 export class AllergenChecksService {
   constructor(private readonly i18n: I18nService) {}
+
+  getMatches(
+    foods: CheckableFoodItem[],
+    ctx: Pick<UnifiedUserContext, 'allergens'>,
+  ) {
+    return collectAllergenMatches(ctx.allergens, foods);
+  }
 
   check(
     foods: CheckableFoodItem[],
     ctx: Pick<UnifiedUserContext, 'allergens'>,
     locale?: I18nLocale,
   ): CheckResult | null {
-    if (!ctx.allergens || ctx.allergens.length === 0) return null;
+    const matches = this.getMatches(foods, ctx);
+    const match = matches[0];
 
-    const matchedAllergen = ctx.allergens.find((userAllergen) => {
-      const expandedKeys = ALLERGEN_EXPAND_MAP[userAllergen.toLowerCase()] ?? [
-        userAllergen.toLowerCase(),
-      ];
-      return foods.some(
-        (f) =>
-          Array.isArray(f.allergens) &&
-          f.allergens.some((fa) => expandedKeys.includes(fa.toLowerCase())),
-      );
-    });
-
-    if (matchedAllergen) {
+    if (match) {
       const loc = locale ?? this.i18n.currentLocale();
-      const allergenLabel = translateEnum('allergen', matchedAllergen, loc);
+      const allergenLabel = translateEnum('allergen', match.foodAllergen, loc);
+      const detailSeparator = this.i18n.t('decision.separator.list', loc);
+      const details = matches.map((item) =>
+        this.i18n.t('decision.allergen.matchDetail', loc, {
+          food: item.foodName,
+          allergen: translateEnum('allergen', item.foodAllergen, loc),
+        }),
+      );
       const message = this.i18n.t('decision.check.allergen', loc, {
         allergen: allergenLabel,
+        food: match.foodName,
+        details: details.join(detailSeparator),
       });
       return {
         triggered: true,
@@ -72,7 +60,13 @@ export class AllergenChecksService {
           category: 'allergen',
           severity: 'critical',
           message,
-          data: { allergen: allergenLabel, allergenCode: matchedAllergen },
+          data: {
+            allergen: allergenLabel,
+            allergenCode: match.foodAllergen,
+            userAllergenCode: match.userAllergen,
+            foodName: match.foodName,
+            matchedSummary: details.join(detailSeparator),
+          },
         },
       };
     }
@@ -80,43 +74,4 @@ export class AllergenChecksService {
   }
 }
 
-// ==================== V4.0: 共享过敏原展开工具（保持纯函数 export） ====================
-
-/**
- * V4.0: 过敏原别名展开映射
- * 从 food-decision.service.ts 提取的共享常量
- */
-export const ALLERGEN_EXPAND: Record<string, string[]> = {
-  gluten: ['gluten', 'wheat'],
-  dairy: ['dairy', 'milk', 'lactose'],
-  egg: ['egg', 'eggs'],
-  fish: ['fish'],
-  shellfish: ['shellfish', 'shrimp'],
-  tree_nuts: ['tree_nuts', 'tree_nut', 'nuts'],
-  peanuts: ['peanuts', 'peanut', 'nuts'],
-  soy: ['soy', 'soybeans'],
-  sesame: ['sesame'],
-  peanut: ['peanuts', 'peanut', 'nuts'],
-  tree_nut: ['tree_nuts', 'tree_nut', 'nuts'],
-  milk: ['dairy', 'milk', 'lactose'],
-  eggs: ['egg', 'eggs'],
-  soybeans: ['soy', 'soybeans'],
-  wheat: ['gluten', 'wheat'],
-};
-
-/**
- * V4.0: 检查食物列表是否匹配指定过敏原
- */
-export function matchAllergenInFoods(
-  allergen: string,
-  foods: Array<{ allergens?: string[] }>,
-): boolean {
-  const keys = ALLERGEN_EXPAND[allergen.toLowerCase()] ?? [
-    allergen.toLowerCase(),
-  ];
-  return foods.some(
-    (f) =>
-      Array.isArray(f.allergens) &&
-      f.allergens.some((fa) => keys.includes(fa.toLowerCase())),
-  );
-}
+export { ALLERGEN_EXPAND, collectAllergenMatches, matchAllergenInFoods };

@@ -1,6 +1,7 @@
 export {
   AllergenChecksService,
   ALLERGEN_EXPAND,
+  collectAllergenMatches,
   matchAllergenInFoods,
 } from './allergen-checks.service';
 export { RestrictionChecksService } from './restriction-checks.service';

@@ -44,3 +44,41 @@ export function matchAllergenInFoods(
       f.allergens.some((fa) => keys.includes(fa.toLowerCase())),
   );
 }
+
+export interface AllergenFoodMatch {
+  userAllergen: string;
+  foodAllergen: string;
+  foodName: string;
+}
+
+export function collectAllergenMatches(
+  userAllergens: string[] | undefined,
+  foods: Array<{ name: string; allergens?: string[] }>,
+): AllergenFoodMatch[] {
+  if (!userAllergens?.length) return [];
+
+  const matches: AllergenFoodMatch[] = [];
+  const seen = new Set<string>();
+
+  for (const userAllergen of userAllergens) {
+    const keys = ALLERGEN_EXPAND[userAllergen.toLowerCase()] ?? [
+      userAllergen.toLowerCase(),
+    ];
+    for (const food of foods) {
+      if (!Array.isArray(food.allergens)) continue;
+      for (const foodAllergen of food.allergens) {
+        if (!keys.includes(foodAllergen.toLowerCase())) continue;
+        const dedupeKey = `${userAllergen.toLowerCase()}|${foodAllergen.toLowerCase()}|${food.name}`;
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
+        matches.push({
+          userAllergen,
+          foodAllergen,
+          foodName: food.name,
+        });
+      }
+    }
+  }
+
+  return matches;
+}
