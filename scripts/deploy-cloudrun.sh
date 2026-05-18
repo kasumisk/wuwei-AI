@@ -45,7 +45,7 @@ PUBLIC_KEYS=(
   CORS_ORIGINS
   AI_GATEWAY_PROVIDER OPENROUTER_BASE_URL
   VISION_MODEL VISION_MODEL_FALLBACK
-  STORAGE_ENDPOINT STORAGE_BUCKET STORAGE_PUBLIC_URL
+  STORAGE_ENDPOINT STORAGE_BUCKET STORAGE_PUBLIC_URL APP_PUBLIC_URL
   # ---- Queue / Cron / Cloud Tasks 解耦后新增（非敏感）----
   QUEUE_BACKEND_DEFAULT CRON_BACKEND ENFORCE_INTERNAL_AUTH
   GCP_PROJECT_ID CLOUD_TASKS_LOCATION
@@ -145,14 +145,16 @@ cmd_secrets() {
 #   - PUBLIC 键写入临时 yaml 文件（--env-vars-file），规避值含 @ / , 的转义问题
 #   - SECRET 键拼成逗号分隔的 --set-secrets 字符串（值均为 secret-name:latest，不含特殊符号）
 # 输出:
-#   ENVFILE<<<  /tmp 临时 yaml 路径
-#   SECRETS<<<  key=secret:latest,... 逗号分隔
+#   ENVFILE<<<         /tmp 临时 yaml 路径
+#   SECRETS<<<         key=secret:latest,... 逗号分隔
+#   REMOVE_SECRETS<<<  key1,key2,... 需要移除的旧 secret env 绑定
 build_env_args() {
   require_env_file
   local tmpfile; tmpfile="$(mktemp /tmp/cloudrun-env-XXXXXX)"
   mv "$tmpfile" "${tmpfile}.yaml"
   tmpfile="${tmpfile}.yaml"
   local secrets=""
+  local remove_secrets=""
 
   while IFS= read -r line || [[ -n "$line" ]]; do
     [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
@@ -169,6 +171,8 @@ build_env_args() {
       # yaml 格式：KEY: 'value'（单引号转义内部单引号为 ''）
       local escaped_value="${value//\'/\'\'}"
       printf "%s: '%s'\n" "$key" "$escaped_value" >> "$tmpfile"
+      [[ -n "$remove_secrets" ]] && remove_secrets+=","
+      remove_secrets+="$key"
     else
       # Secret 键：值为空时检查 Secret Manager 是否已有版本，有则仍挂载
       if [[ -z "$value" ]]; then
@@ -189,6 +193,7 @@ build_env_args() {
 
   echo "ENVFILE<<<${tmpfile}"
   echo "SECRETS<<<${secrets}"
+  echo "REMOVE_SECRETS<<<${remove_secrets}"
 }
 
 resolve_image() {
@@ -203,9 +208,18 @@ _run_deploy_service() {
   local parsed; parsed="$(build_env_args)"
   local envfile; envfile="$(echo "$parsed" | grep '^ENVFILE<<<' | sed 's/^ENVFILE<<<//')"
   local secrets;  secrets="$(echo "$parsed"  | grep '^SECRETS<<<'  | sed 's/^SECRETS<<<//')"
+  local remove_secrets; remove_secrets="$(echo "$parsed" | grep '^REMOVE_SECRETS<<<' | sed 's/^REMOVE_SECRETS<<<//')"
 
   local secret_args=()
   [[ -n "$secrets" ]] && secret_args=(--set-secrets="$secrets")
+
+  if [[ -n "$remove_secrets" ]] \
+    && gcloud run services describe "$svc" --project="$PROJECT_ID" --region="$REGION" >/dev/null 2>&1; then
+    gcloud run services update "$svc" \
+      --project="$PROJECT_ID" --region="$REGION" \
+      --remove-secrets="$remove_secrets" \
+      --quiet
+  fi
 
   gcloud run deploy "$svc" \
     --project="$PROJECT_ID" --region="$REGION" \
@@ -226,6 +240,7 @@ _run_job_deploy() {
   local parsed; parsed="$(build_env_args)"
   local envfile; envfile="$(echo "$parsed" | grep '^ENVFILE<<<' | sed 's/^ENVFILE<<<//')"
   local secrets;  secrets="$(echo "$parsed"  | grep '^SECRETS<<<'  | sed 's/^SECRETS<<<//')"
+  local remove_secrets; remove_secrets="$(echo "$parsed" | grep '^REMOVE_SECRETS<<<' | sed 's/^REMOVE_SECRETS<<<//')"
 
   local secret_args=()
   [[ -n "$secrets" ]] && secret_args=(--set-secrets="$secrets")
@@ -233,6 +248,13 @@ _run_job_deploy() {
   local action="create"
   gcloud run jobs describe "$job" --project="$PROJECT_ID" --region="$REGION" >/dev/null 2>&1 \
     && action="update"
+
+  if [[ "$action" == "update" && -n "$remove_secrets" ]]; then
+    gcloud run jobs update "$job" \
+      --project="$PROJECT_ID" --region="$REGION" \
+      --remove-secrets="$remove_secrets" \
+      --quiet
+  fi
 
   gcloud run jobs "$action" "$job" \
     --project="$PROJECT_ID" --region="$REGION" \
