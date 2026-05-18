@@ -212,9 +212,37 @@ model AppUsers {
   pushPreference      UserNotificationPreference?
   weightHistories     WeightHistory[]
   growthShares        GrowthShares[]
+  appFeedbacks        AppFeedbacks[]
 
   @@index([deviceId], map: "IDX_601d4f4be742d3ca28891c0207")
   @@map("app_users")
+}
+
+/// App 用户反馈表 — 记录用户从客户端提交的问题、建议和账号订阅反馈
+model AppFeedbacks {
+  /// 主键 UUID
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 关联的用户 ID
+  userId    String   @map("user_id") @db.Uuid
+  /// 反馈类型：general / bug / suggestion / account / other
+  category  String   @default("general") @db.VarChar(30)
+  /// 反馈正文
+  content   String   @db.Text
+  /// 用户可选联系方式
+  contact   String?  @db.VarChar(120)
+  /// 处理状态：open / reviewing / resolved / closed
+  status    String   @default("open") @db.VarChar(30)
+  /// 附加上下文（客户端版本、设备信息等）
+  metadata  Json?    @default("{}") @db.JsonB
+  /// 创建时间
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 最后更新时间
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  appUsers  AppUsers @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_app_feedbacks_user")
+
+  @@index([userId, createdAt(sort: Desc)], map: "idx_app_feedbacks_user_created")
+  @@index([status, createdAt(sort: Desc)], map: "idx_app_feedbacks_status_created")
+  @@map("app_feedbacks")
 }
 
 /// App 版本安装包表 — 存储每个版本对应的各平台、各渠道安装包信息

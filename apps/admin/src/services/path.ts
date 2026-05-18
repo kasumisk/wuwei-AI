@@ -68,6 +68,11 @@ const PATH = {
     PUSH_CRON_TRIGGER: '/admin/push/cron/trigger',
     PUSH_LOG_RETRY: (id: string) => `/admin/push/logs/${id}/retry`,
     PUSH_CLEANUP_INVALID_TOKENS: '/admin/push/maintenance/cleanup-invalid-tokens',
+    FEEDBACK: '/admin/feedback',
+    FEEDBACK_STATISTICS: '/admin/feedback/statistics',
+    FEEDBACK_DETAIL: (id: string) => `/admin/feedback/${id}`,
+    FEEDBACK_STATUS: (id: string) => `/admin/feedback/${id}/status`,
+    FEEDBACK_NOTES: (id: string) => `/admin/feedback/${id}/notes`,
     // 评分参数配置
     SCORING_CONFIG: '/admin/scoring-config',
     // V1.7: 每日评分权重配置

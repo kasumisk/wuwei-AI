@@ -24,6 +24,7 @@ import { ProviderModule } from './modules/provider/provider.module';
 import { AppVersionModule } from './modules/app-version/app-version.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { FileModule } from './modules/file/file.module';
+import { FeedbackModule } from './modules/feedback/feedback.module';
 // V6 Phase 1.5: 功能开关
 import { FeatureFlagModule } from './modules/feature-flag/feature-flag.module';
 // V6 Phase 1.11: 通知推送
@@ -112,6 +113,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     AppVersionModule,
     AnalyticsModule,
     FileModule,
+    FeedbackModule,
     // V6 Phase 1.5: 功能开关（@Global，全局可用）
     FeatureFlagModule,
     // V6 Phase 1.11: 通知推送（@Global，全局可用）
